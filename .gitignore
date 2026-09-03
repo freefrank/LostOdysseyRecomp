@@ -1,0 +1,31 @@
+# 构建产物
+build/
+out/
+cmake-build-*/
+.vs/
+.idea/
+*.user
+
+# 游戏数据：永远不入库
+LostOdysseyRecompLib/private/*
+!LostOdysseyRecompLib/private/.gitkeep
+*.xex
+*.iso
+*.xcp
+*.god
+*.upk
+*.xxx
+*.lop
+*.xma
+*.bik
+*.pdb.bak
+
+# 重编译生成物（体积巨大，由工具重新生成）
+LostOdysseyRecompLib/ppc/*.cpp
+LostOdysseyRecompLib/ppc/*.h
+LostOdysseyRecompLib/shader/*.hlsl
+LostOdysseyRecompLib/shader/*.bin
+
+# 工具缓存
+.cache/
+*.log
