@@ -4,6 +4,7 @@
 #include <file.h>
 #include <image.h>
 #include <cstdio>
+#include <string>
 
 int main(int argc, char** argv)
 {
@@ -37,5 +38,16 @@ int main(int argc, char** argv)
     fwrite(image.data.get(), 1, image.size, out);
     fclose(out);
     printf("wrote %u bytes to %s\n", image.size, argv[2]);
+
+    // Symbols known at load time: import thunks named after xboxkrnl/xam exports.
+    std::string symPath = std::string(argv[2]) + ".sym";
+    FILE* sym = fopen(symPath.c_str(), "w");
+    if (sym)
+    {
+        for (const auto& s : image.symbols)
+            fprintf(sym, "%08zx %zx %d %s\n", s.address, s.size, (int)s.type, s.name.c_str());
+        fclose(sym);
+        printf("wrote %zu symbols to %s\n", image.symbols.size(), symPath.c_str());
+    }
     return 0;
 }

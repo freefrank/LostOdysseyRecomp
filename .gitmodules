@@ -7,3 +7,6 @@
 [submodule "thirdparty/plume"]
 	path = thirdparty/plume
 	url = https://github.com/renderbag/plume.git
+[submodule "tools/reverse-skill"]
+	path = tools/reverse-skill
+	url = https://github.com/zhaoxuya520/reverse-skill.git

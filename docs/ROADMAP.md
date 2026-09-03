@@ -4,8 +4,8 @@
 
 ## 阶段 0：准备
 - [x] 建立仓库骨架、子模块
-- [ ] 提取游戏数据：default.xex 与四张盘的内容，放入 `LostOdysseyRecompLib/private/`
-- [ ] 确认 XEX 版本（区域、TU 更新补丁），记录到 `docs/notes/xex.md`
+- [x] 提取游戏数据：四张盘已用 tools/god_extract.py 解到 `LostOdysseyRecompLib/private/disc1..4`
+- [x] 确认 XEX 版本：v4、PAL+JP 区域、无 TU，见 `docs/notes/xex.md`
 - [ ] Ghidra 装 360 加载器，导入 XEX，跑 XenonAnalyse 生成初版跳转表
 - [ ] 在 Xenia 里跑通游戏，作为行为参照，学会用它的日志和 GPU trace
 

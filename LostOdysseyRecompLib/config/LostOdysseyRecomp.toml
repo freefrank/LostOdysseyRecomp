@@ -3,7 +3,7 @@
 # 格式参考 tools/XenonRecomp/README.md 与 UnleashedRecompLib/config/SWA.toml
 
 [main]
-file_path = "../private/default.xex"
+file_path = "../private/disc1/default.xex"
 out_directory_path = "../ppc"
 switch_table_file_path = "switch_tables.toml"
 
@@ -17,17 +17,17 @@ non_argument_as_local = false
 non_volatile_as_local = false
 
 # 编译器生成的寄存器保存/恢复函数，用 XenonAnalyse 或 Ghidra 搜索
-restgprlr_14_address = 0x00000000
-savegprlr_14_address = 0x00000000
-restfpr_14_address   = 0x00000000
-savefpr_14_address   = 0x00000000
-restvmx_14_address   = 0x00000000
-savevmx_14_address   = 0x00000000
-restvmx_64_address   = 0x00000000
-savevmx_64_address   = 0x00000000
+restgprlr_14_address = 0x82B7A700
+savegprlr_14_address = 0x82B7A6B0
+restfpr_14_address   = 0x82B7B17C
+savefpr_14_address   = 0x82B7B130
+restvmx_14_address   = 0x82DF2D98
+savevmx_14_address   = 0x82DF2B00
+restvmx_64_address   = 0x82DF2E2C
+savevmx_64_address   = 0x82DF2B94
 
-longjmp_address = 0x00000000
-setjmp_address  = 0x00000000
+# longjmp_address = TODO
+# setjmp_address  = TODO
 
 # 手动指定函数边界：{ address, size }
 functions = [
@@ -35,6 +35,9 @@ functions = [
 
 # 指令 XenonRecomp 无法处理时在此跳过：{ data, size }
 invalid_instructions = [
+    { data = 0x00000000, size = 4 },  # padding between functions
+    { data = 0x82B7A940, size = 8 },  # C++ frame handler descriptor (handler ptr + scope table), 2165 occurrences
+    { data = 0x830D9F4C, size = 8 },  # C specific frame handler descriptor, 35 occurrences
 ]
 
 [midasm_hook]
