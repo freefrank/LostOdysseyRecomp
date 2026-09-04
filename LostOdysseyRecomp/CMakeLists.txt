@@ -54,3 +54,13 @@ endif()
 if(WIN32)
     target_link_libraries(LostOdysseyRecomp PRIVATE winmm)
 endif()
+
+# Offline shader translator check (shares gpu/shader with the runtime).
+add_executable(LoShaderTool
+    ${CMAKE_SOURCE_DIR}/tools/xenos_shader_tool/main.cpp
+    ${LO_RUNTIME_ROOT}/gpu/shader/xenos_translator.cpp
+    ${LO_RUNTIME_ROOT}/gpu/shader/dxc_compiler.cpp)
+target_include_directories(LoShaderTool PRIVATE ${LO_RUNTIME_ROOT})
+target_compile_features(LoShaderTool PRIVATE cxx_std_20)
+target_compile_definitions(LoShaderTool PRIVATE NOMINMAX)
+target_link_libraries(LoShaderTool PRIVATE fmt::fmt)
