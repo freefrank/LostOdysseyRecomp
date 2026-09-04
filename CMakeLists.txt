@@ -3,6 +3,14 @@ project(LostOdysseyRecomp LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(BUILD_SHARED_LIBS OFF)
+
+# Sandy Bridge baseline (AVX): lets simde map VMX ops to real SSE4.1/AVX intrinsics
+# instead of scalar fallbacks (which pull in C23 roundeven*). Same as UnleashedRecomp.
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    add_compile_options(-march=sandybridge)
+endif()
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 # 阶段 1 之前这里只是占位。生成 ppc/ 之后再按 UnleashedRecomp 的
 # CMake 结构拆成 LostOdysseyRecompLib（重编译产物）与 LostOdysseyRecomp（运行时）。
@@ -14,6 +22,23 @@ if(LO_BUILD_TOOLS)
     add_subdirectory(tools/XenosRecomp)
 endif()
 
+option(LO_BUILD_RUNTIME "Build the LostOdysseyRecomp runtime executable" ON)
+option(LO_BUILD_GPU "Build the plume-based GPU backend" OFF)
+
 if(LO_BUILD_RECOMP_LIB)
     add_subdirectory(LostOdysseyRecompLib)
+endif()
+
+if(LO_BUILD_RUNTIME)
+    if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        message(FATAL_ERROR "The runtime requires clang-cl")
+    endif()
+    # XenonRecomp's tree provides XenonUtils (XEX loading), fmt, xxHash and simde.
+    if(NOT LO_BUILD_TOOLS)
+        set(THIRDPARTY_ROOT ${CMAKE_SOURCE_DIR}/tools/XenonRecomp/thirdparty)
+        add_subdirectory(tools/XenonRecomp/thirdparty)
+        add_subdirectory(tools/XenonRecomp/XenonUtils)
+    endif()
+    add_subdirectory(thirdparty)
+    add_subdirectory(LostOdysseyRecomp)
 endif()

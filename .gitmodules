@@ -10,3 +10,13 @@
 [submodule "tools/reverse-skill"]
 	path = tools/reverse-skill
 	url = https://github.com/zhaoxuya520/reverse-skill.git
+[submodule "thirdparty/o1heap"]
+	path = thirdparty/o1heap
+	url = https://github.com/pavel-kirienko/o1heap.git
+[submodule "thirdparty/unordered_dense"]
+	path = thirdparty/unordered_dense
+	url = https://github.com/martinus/unordered_dense.git
+[submodule "thirdparty/SDL"]
+	path = thirdparty/SDL
+	url = https://github.com/libsdl-org/SDL.git
+	branch = release-2.30.x

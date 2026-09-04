@@ -36,3 +36,4 @@ tools/xenia*.exe
 tools/xenia*/
 tools/ghidra_*/
 tools/ghidra_*.zip
+LostOdysseyRecomp/kernel/imports_stubs.cpp
