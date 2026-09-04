@@ -47,6 +47,24 @@ static LONG WINAPI CrashFilter(EXCEPTION_POINTERS* info)
             ppc->r1.u32, ppc->r3.u32, ppc->r4.u32, ppc->r5.u32, ppc->r13.u32, (unsigned long long)ppc->lr, (unsigned long long)ppc->ctr.u64);
     }
 
+    // LO_CRASH_DUMP=<guest address>: print 256 bytes of guest memory (as
+    // ASCII and UTF-16) - handy for reading the game's own fatal-error text.
+    if (const char* dumpEnv = getenv("LO_CRASH_DUMP"))
+    {
+        uint32_t addr = strtoul(dumpEnv, nullptr, 16);
+        auto* p = static_cast<const uint8_t*>(g_memory.Translate(addr));
+        std::string ascii, wide;
+        for (int i = 0; i < 256; i++)
+            ascii += (p[i] >= 0x20 && p[i] < 0x7F) ? char(p[i]) : '.';
+        for (int i = 0; i < 256; i += 2)
+        {
+            uint16_t c = (uint16_t(p[i]) << 8) | p[i + 1];
+            wide += (c >= 0x20 && c < 0x7F) ? char(c) : '.';
+        }
+        fprintf(stderr, "[crash] guest %08X ascii: %s\n", addr, ascii.c_str());
+        fprintf(stderr, "[crash] guest %08X utf16: %s\n", addr, wide.c_str());
+    }
+
     HANDLE process = GetCurrentProcess();
     SymSetOptions(SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS | SYMOPT_LOAD_LINES);
     SymInitialize(process, nullptr, TRUE);

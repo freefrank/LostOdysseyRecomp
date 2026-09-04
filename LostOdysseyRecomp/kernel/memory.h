@@ -40,6 +40,7 @@ struct Memory
         return PPC_LOOKUP_FUNC(base, guest);
     }
 
+    void InstallFunctionTracers();
     void InsertFunction(uint32_t guest, PPCFunc* host)
     {
         PPC_LOOKUP_FUNC(base, guest) = host;

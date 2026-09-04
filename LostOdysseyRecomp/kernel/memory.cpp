@@ -2,6 +2,7 @@
 #include "memory.h"
 #include <os/logger.h>
 #include <set>
+#include <utility>
 #include <mutex>
 
 Memory g_memory;
@@ -16,6 +17,52 @@ static void MissingFunction(PPCContext& ctx, uint8_t* base)
     if (seen.insert(ctx.ctr.u32).second)
         LOG_ERROR("call to unrecompiled guest function ctr={:#x} lr={:#x} r3={:#x} r4={:#x}", ctx.ctr.u32, uint32_t(ctx.lr), ctx.r3.u32, ctx.r4.u32);
     ctx.r3.u64 = 0;
+}
+
+// LO_TRACE_FUNCS=<file with one hex guest address per line>: wraps up to 64
+// function table slots so the first calls into each are logged with the
+// caller's LR. Used to check whether a suspected function is really called.
+static PPCFunc* s_tracedReal[64];
+static uint32_t s_tracedAddr[64];
+
+template<int N>
+static void TracedFunction(PPCContext& ctx, uint8_t* base)
+{
+    static std::atomic<int> hits{ 0 };
+    if (hits++ < 3)
+        LOG_INFO("enter {:#x} lr={:#x} r3={:#x} r4={:#x}", s_tracedAddr[N], uint32_t(ctx.lr), ctx.r3.u32, ctx.r4.u32);
+    s_tracedReal[N](ctx, base);
+}
+
+template<int... Ns>
+static PPCFunc* TracerFor(int n, std::integer_sequence<int, Ns...>)
+{
+    static PPCFunc* table[] = { &TracedFunction<Ns>... };
+    return table[n];
+}
+
+void Memory::InstallFunctionTracers()
+{
+    const char* path = getenv("LO_TRACE_FUNCS");
+    if (!path)
+        return;
+    FILE* f = fopen(path, "r");
+    if (!f)
+        return;
+    char line[64];
+    int n = 0;
+    while (n < 64 && fgets(line, sizeof(line), f))
+    {
+        uint32_t addr = strtoul(line, nullptr, 16);
+        if (addr < PPC_CODE_BASE || addr >= PPC_CODE_BASE + PPC_CODE_SIZE)
+            continue;
+        s_tracedAddr[n] = addr;
+        s_tracedReal[n] = FindFunction(addr);
+        InsertFunction(addr, TracerFor(n, std::make_integer_sequence<int, 64>{}));
+        n++;
+    }
+    fclose(f);
+    LOG_WARNING("tracing {} functions", n);
 }
 
 Memory::Memory()
@@ -54,6 +101,7 @@ Memory::Memory()
         if (PPCFuncMappings[i].host != nullptr)
             InsertFunction(PPCFuncMappings[i].guest, PPCFuncMappings[i].host);
     }
+    InstallFunctionTracers();
 }
 
 void* MmGetHostAddress(uint32_t ptr)
