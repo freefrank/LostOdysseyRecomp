@@ -1333,6 +1333,9 @@ PPC_FUNC(__imp__vswprintf)
     auto* dest = reinterpret_cast<be<uint16_t>*>(base + ctx.r3.u32);
     const char* format = reinterpret_cast<const char*>(base + ctx.r4.u32);
     std::string s = GuestFormatVaList(base, format, ctx.r5.u32, true);
+    static const bool tracePrintf = getenv("LO_TRACE_PRINTF") != nullptr;
+    if (tracePrintf)
+        LOG_KERNEL("vswprintf dest={:#x} len={} lr={:#x} '{}'", ctx.r3.u32, s.size(), uint32_t(ctx.lr), s.substr(0, 80));
     for (size_t i = 0; i < s.size(); i++)
         dest[i] = uint16_t(uint8_t(s[i]));
     dest[s.size()] = 0;

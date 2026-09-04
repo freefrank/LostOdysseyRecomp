@@ -183,7 +183,25 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
             if (pulsePolls < 20)
             {
                 pulsePolls++;
-                gp.wButtons |= XAMINPUT_GAMEPAD_START;
+                // LO_AUTO_BUTTONS: comma-free string of button letters used per
+                // pulse in order (s=START, a, b, x, y, u/d/l/r=dpad), last repeats.
+                static const char* seq = getenv("LO_AUTO_BUTTONS") ? getenv("LO_AUTO_BUTTONS") : "s";
+                static uint32_t pulseIndex = 0, lastPulseFrame = 0;
+                if (lastPulseFrame != pulseFrame) { if (lastPulseFrame) pulseIndex++; lastPulseFrame = pulseFrame; }
+                size_t n = strlen(seq);
+                char c = n ? seq[pulseIndex < n ? pulseIndex : n - 1] : 's';
+                switch (c)
+                {
+                case 'a': gp.wButtons |= XAMINPUT_GAMEPAD_A; break;
+                case 'b': gp.wButtons |= XAMINPUT_GAMEPAD_B; break;
+                case 'x': gp.wButtons |= XAMINPUT_GAMEPAD_X; break;
+                case 'y': gp.wButtons |= XAMINPUT_GAMEPAD_Y; break;
+                case 'u': gp.wButtons |= XAMINPUT_GAMEPAD_DPAD_UP; break;
+                case 'd': gp.wButtons |= XAMINPUT_GAMEPAD_DPAD_DOWN; break;
+                case 'l': gp.wButtons |= XAMINPUT_GAMEPAD_DPAD_LEFT; break;
+                case 'r': gp.wButtons |= XAMINPUT_GAMEPAD_DPAD_RIGHT; break;
+                default: gp.wButtons |= XAMINPUT_GAMEPAD_START; break;
+                }
             }
         }
     }

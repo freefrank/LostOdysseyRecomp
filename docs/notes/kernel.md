@@ -71,3 +71,27 @@ NtReadFile 带 Event 时读完直接置位事件。目录信息结构按 Xenia �
 - 虚拟存储设备只有 ID 1（HDD，20 GiB / 10 GiB 空闲，同 Xenia）；`XMsgStartIORequest(0xFB, 0xB0006/0xB0007)` 是
   XGI 的 UserSetContext / UserSetPropertyEx，直接成功即可。
 - 测试钩子：`LO_AUTO_START=<帧>` 之后每 240 帧按 20 次 Start，用于无人值守穿过标题；键盘映射见 hid.cpp。
+
+## 新游戏进入战斗场景的崩溃（阶段 3 待办，2026-09-03 分析）
+
+复现：`LO_AUTO_START=1100 LO_AUTO_BUTTONS=saaaaaaaa`（标题后每 240 帧按一次键：先 Start 再连按 A）→ 打开
+`xenon_scr/event/obj.fpd` 后崩在 `sub_822B98C8+0xc43`（ppc_recomp.2.cpp:1118），调用栈
+`sub_822B5938 ← sub_82AD9800 ← sub_82ABC400(RPBattle__Scene, bsSMsys_Idling) ← sub_82ABD958(bpPawn)`。
+
+结构还原（对照 UE3 源码）：`sub_822B98C8(this=USkeletalMeshComponent, ..., &this[732])` 是 UpdateSkelPose/ComposeSkeleton
+一类：`this+640` SkeletalMesh，`this+648` Animations → `sub_822B4B78` = Cast<UAnimTree>，AnimTree `+244/+212` =
+`SkelControlLists`（FSkelControlListHead 16 字节 {FName, USkelControlBase* @8, INT}），`this+808/812/816` =
+`TArray<BYTE> SkelControlIndex`（Data/Num/Max）。循环里 `Idx = SkelControlIndex(bone); if (Idx != 255)
+Control = SkelControlLists(Idx).ControlHead; Control->flags@88`。
+
+现场：Num=63、Max=118，但只有前 61 字节是 255/有效索引（FF 00 FF FF 01 02 03 04 FF…），第 61、62 字节是
+分配块里的旧内容（每次运行不同：一次是残留的宽字符串 "Solider : bsSMsys_Idling"，一次是随机字节），骨骼 61 取到
+0x20/0x26 → 越过 5 项的列表 → 垃圾指针 0xD → 读 0x65 崩溃。网格本身有 63 根骨骼（USkeletalMesh+0x78 与 +0x88 两个
+Num=63 的数组）。结论：初始化 SkelControlIndex 的路径按 61 填充却把 Num 设成 63。尚未找到该初始化函数（搜索
+`,808(r`+`stbx`/`li r4,255`/`li r4,-1`/`addi rN,rM,808` 均未命中，可能通过 TArray 辅助函数以结构指针操作）。
+下一步用 Ghidra 反编译 sub_822B98C8 的调用者与 SkeletalMeshComponent 的 InitSkelControls 等价函数。
+
+已排除：页分配器复用（`LO_PAGE_QUARANTINE=1` 延迟复用后仍崩）、宿主 `vswprintf` 钩子越界（`LO_TRACE_PRINTF=1`
+未见该字符串）、stvlx/stvrx 语义、临界区/自旋锁原子性（实现检查正常）。
+调试手段：`LO_CRASH_DUMP="r27+0x328*,r19+0xf4*"`（寄存器相对地址，`*` 跟随指针）在崩溃时转储客体内存；崩溃处理器
+现在打印全部 32 个通用寄存器。

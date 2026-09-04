@@ -172,7 +172,24 @@ uint32_t PageAllocator::Alloc(Region& region, uint32_t size, uint32_t alignment,
             }
         }
         if (page == UINT32_MAX)
-            return 0;
+        {
+            // Out of fresh pages: release the oldest half of the quarantine and retry.
+            if (region.quarantine.empty())
+                return 0;
+            size_t release = std::max<size_t>(1, region.quarantine.size() / 2);
+            for (size_t k = 0; k < release; k++)
+            {
+                auto [qAddress, qSize] = region.quarantine[k];
+                uint32_t qFirst = (qAddress - region.begin) / PAGE_SIZE;
+                for (uint32_t i = 0; i < qSize / PAGE_SIZE && qFirst + i < region.used.size(); i++)
+                    region.used[qFirst + i] = 0;
+            }
+            region.quarantine.erase(region.quarantine.begin(), region.quarantine.begin() + release);
+            for (uint32_t p = 0; p + pageCount <= region.used.size(); p += alignPages)
+                if (tryRange(p)) { page = p; break; }
+            if (page == UINT32_MAX)
+                return 0;
+        }
     }
 
     for (uint32_t i = 0; i < pageCount; i++)
@@ -208,6 +225,15 @@ bool PageAllocator::Free(Region& region, uint32_t address, uint32_t size)
     }
 
     std::lock_guard lock(region.mutex);
+    // LO_PAGE_QUARANTINE: debugging aid, freed pages are only handed out again
+    // once nothing else is left, so a guest use-after-free lands in dead memory
+    // instead of silently corrupting live objects.
+    static const bool quarantine = getenv("LO_PAGE_QUARANTINE") != nullptr;
+    if (quarantine)
+    {
+        region.quarantine.push_back({ address, RoundUp(size, PAGE_SIZE) });
+        return true;
+    }
     uint32_t first = (address - region.begin) / PAGE_SIZE;
     uint32_t count = RoundUp(size, PAGE_SIZE) / PAGE_SIZE;
     for (uint32_t i = 0; i < count && first + i < region.used.size(); i++)

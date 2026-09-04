@@ -61,7 +61,8 @@ struct PageAllocator
     {
         uint32_t begin;
         uint32_t end;
-        std::vector<uint8_t> used; // one byte per page
+        std::vector<uint8_t> used;
+        std::vector<std::pair<uint32_t, uint32_t>> quarantine; // freed (address, size) awaiting reuse // one byte per page
         Mutex mutex;
     };
 
