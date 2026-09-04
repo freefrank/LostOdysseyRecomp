@@ -53,3 +53,21 @@ NtReadFile 带 Event 时读完直接置位事件。目录信息结构按 Xenia �
 - XexGetModuleSection('HashSec') 返回 NOT_IMPLEMENTED
 - 网络全部报无网络
 - Xam 内容/存档只做了目录映射
+
+## XAM 用户档案与 UI（2026-09-03，进入主菜单的关键）
+
+- **登录状态靠通知，不靠 `XamUserGetSigninState`**：游戏按 Start 后并不查询登录状态，而是依赖启动时收到的
+  `XN_SYS_SIGNINCHANGED`（MSGID(0,0xA)，参数 = 已登录用户位掩码）。Xenia 在第一个监听器注册时补发
+  `XN_SYS_UI(0)`、`XN_SYS_SIGNINCHANGED(1)`、`XN_SYS_STORAGEDEVICESCHANGED(0)`，Live 区再发
+  `XN_LIVE_CONNECTIONCHANGED(0x001510F1)`、`XN_LIVE_LINK_STATE_CHANGED(0)`。缺这些会弹 "not signed into a gamer profile"。
+- **"档案存储空间不足"** = 写入 `XPROFILE_TITLE_SPECIFIC1`（0x63E83FFF，1000 字节二进制）后读回不是 TITLE 来源，
+  或成就枚举器创建失败。`XUSER_PROFILE_SETTING` 为 40 字节（source @0，user_index/xuid @8，id @16，
+  X_USER_DATA @24：type @24，size @32 / ptr @36），二进制载荷紧跟设置数组之后。设置持久化在
+  `LO_PROFILE_DIR`（默认 exe 目录下 `profile/`）。`XamUserCreateAchievementEnumerator` 返回成功 + 空枚举器，
+  条目 36 字节（带字符串标志再加缓冲）。
+- **overlapped 完成约定**：带 overlapped 的 XAM 调用要返回 `ERROR_IO_PENDING`，把结果写进 Error / dwExtendedError /
+  Length，触发 hEvent，若有 pCompletionRoutine 则以用户 APC 调用 `(result, length, overlapped)`。同步返回
+  `ERROR_SUCCESS` 会被游戏当成"取消"（设备选择器弹 "If you don't select a storage device"）。
+- 虚拟存储设备只有 ID 1（HDD，20 GiB / 10 GiB 空闲，同 Xenia）；`XMsgStartIORequest(0xFB, 0xB0006/0xB0007)` 是
+  XGI 的 UserSetContext / UserSetPropertyEx，直接成功即可。
+- 测试钩子：`LO_AUTO_START=<帧>` 之后每 240 帧按 20 次 Start，用于无人值守穿过标题；键盘映射见 hid.cpp。
