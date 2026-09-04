@@ -1,5 +1,5 @@
 diff --git a/XenonRecomp/recompiler.cpp b/XenonRecomp/recompiler.cpp
-index fa91527..fe4bf44 100644
+index fa91527..cbaf852 100644
 --- a/XenonRecomp/recompiler.cpp
 +++ b/XenonRecomp/recompiler.cpp
 @@ -1877,6 +1877,8 @@ bool Recompiler::Recompile(
@@ -142,13 +142,13 @@ index fa91527..fe4bf44 100644
 +        break;
 +
 +    case PPC_INST_MULHD:
-+        println("\t{}.s64 = int64_t((__int128({}.s64) * __int128({}.s64)) >> 64);", r(insn.operands[0]), r(insn.operands[1]), r(insn.operands[2]));
++        println("\t{}.s64 = int64_t((__int128_t({}.s64) * __int128_t({}.s64)) >> 64);", r(insn.operands[0]), r(insn.operands[1]), r(insn.operands[2]));
 +        if (strchr(insn.opcode->name, '.'))
 +            println("\t{}.compare<int32_t>({}.s32, 0, {});", cr(0), r(insn.operands[0]), xer());
 +        break;
 +
 +    case PPC_INST_MULHDU:
-+        println("\t{}.u64 = uint64_t((unsigned __int128({}.u64) * unsigned __int128({}.u64)) >> 64);", r(insn.operands[0]), r(insn.operands[1]), r(insn.operands[2]));
++        println("\t{}.u64 = uint64_t((__uint128_t({}.u64) * __uint128_t({}.u64)) >> 64);", r(insn.operands[0]), r(insn.operands[1]), r(insn.operands[2]));
 +        if (strchr(insn.opcode->name, '.'))
 +            println("\t{}.compare<int32_t>({}.s32, 0, {});", cr(0), r(insn.operands[0]), xer());
 +        break;
