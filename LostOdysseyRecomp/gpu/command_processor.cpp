@@ -594,6 +594,22 @@ namespace gpu
                 LOG_INFO("swap #{} frontbuffer {:#x} {}x{} (magic {:#x})", swaps, frontbuffer, width, height, magic);
             renderer::Flush();
             {
+                // Frame pacing: the game advances its simulation per presented frame
+                // and ran at 30 fps on the console, so cap presentation at LO_FPS
+                // (default 30, 0 = uncapped) instead of letting it run several times
+                // too fast on a modern GPU.
+                static const uint32_t fpsCap = getenv("LO_FPS") ? strtoul(getenv("LO_FPS"), nullptr, 10) : 30;
+                if (fpsCap)
+                {
+                    static auto next = std::chrono::steady_clock::now();
+                    const auto period = std::chrono::nanoseconds(1000000000ull / fpsCap);
+                    const auto now = std::chrono::steady_clock::now();
+                    next += period;
+                    if (next > now + period) next = now + period; // fell far behind: resync
+                    if (next > now) std::this_thread::sleep_until(next);
+                }
+            }
+            {
                 // LO_DUMP_THREADS_AT=<swap>: print every guest thread's wait state once.
                 static const uint32_t dumpAt = getenv("LO_DUMP_THREADS_AT") ? strtoul(getenv("LO_DUMP_THREADS_AT"), nullptr, 10) : 0;
                 if (dumpAt && swaps == dumpAt)
@@ -604,10 +620,12 @@ namespace gpu
             {
                 static const uint32_t shotSwap = getenv("LO_SCREENSHOT_SWAP") ? strtoul(getenv("LO_SCREENSHOT_SWAP"), nullptr, 10) : 0;
                 static const uint32_t shotEvery = getenv("LO_SCREENSHOT_EVERY") ? strtoul(getenv("LO_SCREENSHOT_EVERY"), nullptr, 10) : 0;
-                if ((shotSwap && swaps == shotSwap) || (shotEvery && (swaps % shotEvery) == 0))
+                // LO_SCREENSHOT_COUNT=<n>: capture n consecutive frames from LO_SCREENSHOT_SWAP.
+                static const uint32_t shotCount = getenv("LO_SCREENSHOT_COUNT") ? strtoul(getenv("LO_SCREENSHOT_COUNT"), nullptr, 10) : 1;
+                if ((shotSwap && swaps >= shotSwap && swaps < shotSwap + shotCount) || (shotEvery && (swaps % shotEvery) == 0))
                 {
                     std::string path = getenv("LO_SCREENSHOT_PATH") ? getenv("LO_SCREENSHOT_PATH") : "screenshot.ppm";
-                    if (shotEvery)
+                    if (shotEvery || shotCount > 1)
                     {
                         size_t dot = path.rfind('.');
                         path = path.substr(0, dot) + fmt::format("_{}", swaps) + (dot == std::string::npos ? "" : path.substr(dot));

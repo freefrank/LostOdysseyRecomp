@@ -24,10 +24,21 @@ index 34add40..ea3672e 100644
                          {
                              blocks.emplace_back(lBase, 0);
 diff --git a/XenonRecomp/recompiler.cpp b/XenonRecomp/recompiler.cpp
-index fa91527..81b1438 100644
+index fa91527..d52472e 100644
 --- a/XenonRecomp/recompiler.cpp
 +++ b/XenonRecomp/recompiler.cpp
-@@ -1877,6 +1877,8 @@ bool Recompiler::Recompile(
+@@ -1260,7 +1260,9 @@ bool Recompiler::Recompile(
+         break;
+ 
+     case PPC_INST_MFTB:
+-        println("\t{}.u64 = __rdtsc();", r(insn.operands[0]));
++        // LostOdysseyRecomp: the guest timebase must tick at the frequency the kernel
++        // reports (KeQueryPerformanceFrequency), not at the host TSC rate.
++        println("\t{}.u64 = PPCTimeBase();", r(insn.operands[0]));
+         break;
+ 
+     case PPC_INST_MR:
+@@ -1877,6 +1879,8 @@ bool Recompiler::Recompile(
  
      case PPC_INST_VCMPGTUH:
          println("\tsimde_mm_store_si128((simde__m128i*){}.u8, simde_mm_cmpgt_epu16(simde_mm_load_si128((simde__m128i*){}.u16), simde_mm_load_si128((simde__m128i*){}.u16)));", v(insn.operands[0]), v(insn.operands[1]), v(insn.operands[2]));
@@ -36,7 +47,7 @@ index fa91527..81b1438 100644
          break;
  
      case PPC_INST_VEXPTEFP:
-@@ -2212,6 +2214,38 @@ bool Recompiler::Recompile(
+@@ -2212,6 +2216,38 @@ bool Recompiler::Recompile(
              println("\t{} = {};", v(insn.operands[0]), vTemp());
              break;
  
@@ -75,7 +86,7 @@ index fa91527..81b1438 100644
          default:
              println("\t__builtin_debugtrap();");
              break;
-@@ -2263,6 +2297,165 @@ bool Recompiler::Recompile(
+@@ -2263,6 +2299,165 @@ bool Recompiler::Recompile(
          println("\t{}.u64 = {}.u64 ^ {};", r(insn.operands[0]), r(insn.operands[1]), insn.operands[2] << 16);
          break;
  
@@ -242,13 +253,34 @@ index fa91527..81b1438 100644
          return false;
      }
 diff --git a/XenonUtils/ppc_context.h b/XenonUtils/ppc_context.h
-index 31a86cd..064b0f4 100644
+index 31a86cd..954d33d 100644
 --- a/XenonUtils/ppc_context.h
 +++ b/XenonUtils/ppc_context.h
-@@ -105,6 +105,33 @@
+@@ -8,6 +8,7 @@
+ #include <climits>
+ #include <cmath>
+ #include <csetjmp>
++#include <chrono>
+ #include <cstdint>
+ #include <cstdlib>
+ #include <cstring>
+@@ -105,6 +106,46 @@
  #define PPC_CALL_FUNC(x) x(ctx, base)
  #endif
  
++// LostOdysseyRecomp: guest timebase (mftb). The Xbox 360 timebase runs at
++// 49.875 MHz and titles divide mftb deltas by KeQueryPerformanceFrequency, so
++// the two must agree; derive it from the host monotonic clock instead of the
++// host TSC (which ticks ~70x faster and made the game run at that speed).
++#define PPC_TIMEBASE_FREQUENCY 49875000ull
++inline uint64_t PPCTimeBase()
++{
++    const auto now = std::chrono::steady_clock::now().time_since_epoch();
++    const auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
++    return uint64_t(ns / 1000000000) * PPC_TIMEBASE_FREQUENCY +
++           (uint64_t(ns % 1000000000) * PPC_TIMEBASE_FREQUENCY) / 1000000000ull;
++}
++
 +// LostOdysseyRecomp: IEEE half -> float, used by the vupkd3d128 unpack types.
 +inline float PPCHalfToFloat(uint16_t h)
 +{
