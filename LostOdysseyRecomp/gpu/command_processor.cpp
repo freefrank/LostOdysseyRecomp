@@ -593,6 +593,12 @@ namespace gpu
             if ((swaps % 60) == 1)
                 LOG_INFO("swap #{} frontbuffer {:#x} {}x{} (magic {:#x})", swaps, frontbuffer, width, height, magic);
             renderer::Flush();
+            {
+                // LO_DUMP_THREADS_AT=<swap>: print every guest thread's wait state once.
+                static const uint32_t dumpAt = getenv("LO_DUMP_THREADS_AT") ? strtoul(getenv("LO_DUMP_THREADS_AT"), nullptr, 10) : 0;
+                if (dumpAt && swaps == dumpAt)
+                    ::DumpGuestThreadStates();
+            }
             video::PresentFrontbuffer(frontbuffer, width, height, ReadRegister(0x231B));
             video::PumpEvents();
             {
@@ -826,9 +832,30 @@ namespace gpu
 
         case PM4_EVENT_WRITE_ZPD:
         {
+            // ZPASS_DONE: the hardware writes the depth sample counters into the
+            // xe_gpu_depth_sample_counts record (8 little-endian dwords: Total_A/B,
+            // ZFail_A/B, ZPass_A/B, StencilFail_A/B) at RB_SAMPLE_COUNT_ADDR. D3D
+            // issues one event for the BEGIN record and one for the END record and
+            // reports end - begin as the occlusion query result; UE3 culls objects
+            // whose query says zero pixels. Without real queries, hand out a
+            // growing count like Xenia's fake mode so every query reads as visible.
             uint32_t initiator = reader.ReadAndSwap();
             WriteRegister(REG_VGT_EVENT_INITIATOR, initiator & 0x3F);
             reader.Advance(count - 1);
+            uint32_t address = ReadRegister(0x2325) & 0x1FFFFFFF; // RB_SAMPLE_COUNT_ADDR
+            if (address)
+            {
+                static uint32_t fakeSamples = 0;
+                fakeSamples += 0x10000;
+                auto* record = reinterpret_cast<uint32_t*>(TranslatePhysical(address & ~3u));
+                record[0] = fakeSamples; record[1] = 0;   // Total
+                record[2] = 0;           record[3] = 0;   // ZFail
+                record[4] = fakeSamples; record[5] = 0;   // ZPass
+                record[6] = 0;           record[7] = 0;   // StencilFail
+                static uint32_t logged = 0;
+                if (logged++ < 4)
+                    LOG_INFO("occlusion query record at {:#x} <- {} samples", address, fakeSamples);
+            }
             return true;
         }
 

@@ -130,3 +130,19 @@ D3D9 顶点流 0 对应 fetch 槽 95（6 dword 组 31 的后两个 dword）。
 A. UnleashedRecomp 路线：钩住游戏内静态链接的 D3D9 函数，用 plume 重写；需要在 Ghidra 里定位这些函数。
 B. 扩展本命令处理器为完整 Xenos 模拟（解析 draw/状态/fetch 常量/着色器，XenosRecomp 翻译着色器），
    等价于重写 Xenia 的 GPU 后端，通用但工作量大。
+
+## 战斗场景排查记录（2026-09-04 夜）
+
+- **ALU 常量相对寻址**：`const_0_rel_abs/const_1_rel_abs` 按"第几个常量操作数"（src1..src3 顺序）编码，不按操作数位置
+  （Xenia `AluInstruction::src_const_is_addressed`）。之前按位置取标志，蒙皮着色器的 `c[8+a0]` 全变成 `c[8]`。已修。
+- **VTX_W0_FMT**：置 1 表示着色器输出的就是 w（Xenia `kSysFlag_WNotReciprocal`），为 0 才取倒数；之前反了。已修。
+- **遮挡查询**：EVENT_WRITE_ZPD 现在往 RB_SAMPLE_COUNT_ADDR 指向的记录写递增计数（Xenia fake 模式），否则 UE3 把所有物体
+  当作被遮挡剔除。
+- **渲染目标 dump 会误导**：场景 RT 在 resolve 之后被清除，帧末 dump 只剩 UI；要看 `LO_SCREENSHOT_RESOLVED=1` 导出的
+  resolve 结果。HDR 场景缓冲（resolve 目标 fmt 32，来自 EDRAM base 0x2d0 的 fmt 3/10/12 视图）里已能看到士兵队列，
+  但最终合成输出为黑：8888 中间缓冲（0xaac000）几乎全白，怀疑后处理读了不支持的深度纹理（格式 22/23 → 哑纹理）或
+  EDRAM 同一 tile 基址被以 fmt 0/3/10/12 交替解释（Xenia 用 ownership transfer 转换，我们按 (base,fmt,pitch) 分成不同宿主纹理）。
+- 调试开关：`LO_DRAW_TRACE=<帧> LO_DRAW_TRACE_COUNT=<n>`（逐绘制/resolve 详情，含常量与顶点流头部）、`LO_DEBUG_VS=<hash>`
+  限定到某个顶点着色器、`LO_PS_DEBUG=<n>`（≥n 索引的绘制输出品红）、`LO_VS_DEBUG=<n>`（替换成固定三角形并把原始 oPos
+  经 TEXCOORD15 编码进颜色）、`LO_VS_RAW`（跳过 VTE 尾声）、`LO_NO_DEPTH/LO_NO_CULL/LO_NO_ALPHATEST`、`LO_DUMP_THREADS_AT=<帧>`。
+  着色器磁盘缓存文件名带翻译器版本（当前 `_v8`），改 HLSL 生成后要递增。

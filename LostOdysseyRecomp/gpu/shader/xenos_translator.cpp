@@ -686,9 +686,15 @@ float4 max4(float4 src0)
                         regFormatted = fmt::format("r{}", reg);
                     else
                     {
-                        bool relative = (operand == VECTOR_0 || operand == SCALAR_CONSTANT_0) ? instr.const0Relative : instr.const1Relative;
-                        if (operand == VECTOR_2 || operand == SCALAR_0 || operand == SCALAR_1)
-                            relative = instr.const1Relative;
+                        // The two relative-addressing flags belong to the first and second
+                        // *constant* operands in src1..src3 order, not to operand positions
+                        // (Xenia ParseAluInstructionOperand): src2 is slot 1 only when src1
+                        // is a constant, src3 is slot 1 when src1 or src2 is one.
+                        const uint32_t srcIndex = (operand == VECTOR_0) ? 1 : (operand == VECTOR_1) ? 2 : 3;
+                        uint32_t constSlot = 0;
+                        if (srcIndex >= 2 && !instr.src1Select) constSlot = 1;
+                        if (srcIndex >= 3 && !instr.src2Select) constSlot = 1;
+                        bool relative = constSlot == 0 ? instr.const0Relative : instr.const1Relative;
                         if (relative)
                             regFormatted = fmt::format("XeConst({} + {})", reg, instr.constAddressRegisterRelative ? "a0" : "aL");
                         else
@@ -1040,16 +1046,25 @@ float4 max4(float4 src0)
                     out += "\t\telse if (func == 3) pass = a <= ref; else if (func == 4) pass = a > ref; else if (func == 5) pass = a != ref;\n";
                     out += "\t\telse if (func == 6) pass = a >= ref;\n";
                     out += "\t\tif (!pass) discard;\n\t}\n";
+                    // Debug aid (LO_PS_DEBUG): paint every surviving fragment magenta.
+                    out += "\tif (xeFlags & 2u) oC0 = (xeFlags & 4u) ? float4(i15.w > 0.0 ? 1.0 : 0.0, saturate(log2(abs(i15.w) + 1.0) / 16.0), saturate(log2(abs(i15.z) + 1.0) / 16.0), 1.0) : float4(1.0, 0.0, 1.0, 1.0);\n";
                     if (result.writesDepth)
                         out += "\toDepth = oDepthVec.x;\n";
                 }
                 else
                 {
+                    out += "\tif ((xeFlags & 8u) == 0u) {\n";
                     out += "\tif (xeVtxFmt & 1u) oPos.xy *= oPos.w;\n";
                     out += "\tif (xeVtxFmt & 2u) oPos.z *= oPos.w;\n";
-                    out += "\tif (xeVtxFmt & 4u) oPos.w = rcp(oPos.w);\n";
+                    // PA_CL_VTE_CNTL.VTX_W0_FMT=1 means the shader already outputs w
+                    // rather than 1/w (Xenia kSysFlag_WNotReciprocal); only without
+                    // it is the reciprocal taken.
+                    out += "\tif ((xeVtxFmt & 4u) == 0u) oPos.w = rcp(oPos.w);\n";
                     out += "\toPos.xyz = oPos.xyz * xeNdcScale.xyz + xeNdcOffset.xyz * oPos.w;\n";
                     out += "\toPos.xy += xeHalfPixelOffset * oPos.w;\n";
+                    out += "\t}\n";
+                    // Debug aid (LO_VS_DEBUG): replace every triangle by one fixed on-screen triangle.
+                    out += "\tif (xeFlags & 4u) { o15 = oPos; uint k = xeVertexId % 3u; oPos = float4(k == 0u ? -0.6 : (k == 1u ? 0.6 : 0.0), k == 2u ? 0.6 : -0.6, 0.5, 1.0); }\n";
                 }
             }
 

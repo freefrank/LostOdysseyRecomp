@@ -496,7 +496,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 std::string cachePath;
                 if (!shaderCacheDir.empty())
                 {
-                    cachePath = fmt::format("{}/{}_{:016x}.dxil", shaderCacheDir, pixel ? "ps" : "vs", hash);
+                    // The cache name carries a translator version so changes to the
+                    // generated HLSL don't resurrect stale DXIL.
+                    cachePath = fmt::format("{}/{}_{:016x}_v8.dxil", shaderCacheDir, pixel ? "ps" : "vs", hash);
                     std::ifstream in(cachePath, std::ios::binary);
                     if (in)
                         dxil.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
@@ -859,6 +861,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 uint32_t modeCull = key.modeCull;
                 bool cullFront = modeCull & 1, cullBack = (modeCull >> 1) & 1;
                 desc.cullMode = (cullFront && cullBack) ? RenderCullMode::NONE : cullFront ? RenderCullMode::FRONT : cullBack ? RenderCullMode::BACK : RenderCullMode::NONE;
+                static const bool noCull = getenv("LO_NO_CULL") != nullptr; // debugging
+                if (noCull)
+                    desc.cullMode = RenderCullMode::NONE;
                 desc.frontFace = ((modeCull >> 2) & 1) ? RenderFrontFace::CLOCKWISE : RenderFrontFace::COUNTER_CLOCKWISE;
 
                 switch (key.prim)
@@ -1076,7 +1081,23 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     shared.halfPixel[1] = -1.0f / viewport.height;
                 }
                 uint32_t colorControl = Reg(REG_RB_COLORCONTROL);
-                if (colorControl & 8)
+                // LO_PS_DEBUG=<n>: paint draws with at least n indices magenta.
+                static const uint32_t psDebugMin = getenv("LO_PS_DEBUG") ? std::max(1ul, strtoul(getenv("LO_PS_DEBUG"), nullptr, 10)) : 0;
+                // LO_DEBUG_VS=<hex hash>: restrict the debug overrides to one vertex shader.
+                static const uint64_t debugVs = getenv("LO_DEBUG_VS") ? strtoull(getenv("LO_DEBUG_VS"), nullptr, 16) : 0;
+                const bool debugMatch = !debugVs || key.vs == debugVs;
+                if (psDebugMin && info.indexCount >= psDebugMin && debugMatch)
+                    shared.flags |= 2;
+                // LO_VS_DEBUG=<n>: draws with at least n indices become a fixed triangle.
+                static const uint32_t vsDebugMin = getenv("LO_VS_DEBUG") ? std::max(1ul, strtoul(getenv("LO_VS_DEBUG"), nullptr, 10)) : 0;
+                if (vsDebugMin && info.indexCount >= vsDebugMin && debugMatch)
+                    shared.flags |= 4;
+                // LO_VS_RAW=1: skip the VTE epilogue (raw shader clip-space output).
+                static const bool vsRaw = getenv("LO_VS_RAW") != nullptr;
+                if (vsRaw)
+                    shared.flags |= 8;
+                static const bool noAlphaTest = getenv("LO_NO_ALPHATEST") != nullptr; // debugging
+                if ((colorControl & 8) && !noAlphaTest)
                 {
                     shared.flags |= 1;
                     shared.alphaTest[0] = RegF(REG_RB_ALPHA_REF);
@@ -1243,6 +1264,52 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 static uint32_t drawLogs = 0;
                 static const uint32_t traceFrame = getenv("LO_DRAW_TRACE") ? strtoul(getenv("LO_DRAW_TRACE"), nullptr, 10) : 0;
                 static const uint32_t traceCount = getenv("LO_DRAW_TRACE_COUNT") ? strtoul(getenv("LO_DRAW_TRACE_COUNT"), nullptr, 10) : 1;
+                if (traceFrame && frame >= traceFrame && frame < traceFrame + traceCount && info.indexCount >= 200)
+                {
+                    // Extra detail for big draws: constants the 3D path relies on and
+                    // the head of every vertex stream (as floats).
+                    std::string detail;
+                    for (uint32_t ci : { 0u, 8u, 9u, 10u, 233u, 234u, 235u, 236u, 254u, 255u })
+                        detail += fmt::format(" c{}=({:g},{:g},{:g},{:g})", ci, RegF(REG_ALU_CONSTANTS + ci * 4), RegF(REG_ALU_CONSTANTS + ci * 4 + 1), RegF(REG_ALU_CONSTANTS + ci * 4 + 2), RegF(REG_ALU_CONSTANTS + ci * 4 + 3));
+                    for (uint32_t slot = 0; slot < kVertexFetchSlots; slot++)
+                    {
+                        if (!((vs->info.vertexFetchSlotMask[slot >> 6] >> (slot & 63)) & 1))
+                            continue;
+                        uint32_t d0 = Reg(REG_FETCH_CONSTANTS + slot * 2), d1 = Reg(REG_FETCH_CONSTANTS + slot * 2 + 1);
+                        detail += fmt::format(" vf{}=[type {} addr {:#x} dwords {} endian {}:", slot, d0 & 3, d0 & ~3u, (d1 >> 2) & 0xFFFFFF, d1 & 3);
+                        const uint32_t* src = reinterpret_cast<const uint32_t*>(Phys(d0 & ~3u));
+                        for (int i = 0; i < 10; i++)
+                        {
+                            uint32_t v = GpuSwap(src[i], d1 & 3); float f; memcpy(&f, &v, 4);
+                            detail += fmt::format(" {:g}/{:#x}", f, v);
+                        }
+                        detail += "]";
+                    }
+                    {
+                        std::string consts;
+                        for (uint32_t ci = 0; ci < 256; ci++)
+                        {
+                            float v[4]; bool any = false;
+                            for (int k = 0; k < 4; k++) { v[k] = RegF(REG_ALU_CONSTANTS + ci * 4 + k); any |= v[k] != 0.0f; }
+                            if (any) consts += fmt::format(" c{}=({:g},{:g},{:g},{:g})", ci, v[0], v[1], v[2], v[3]);
+                        }
+                        LOG_INFO("renderer: draw consts{}", consts);
+                    }
+                    if (info.indexed)
+                    {
+                        detail += fmt::format(" idx=[base {:#x} words {} endian {} 32bit {} offset {}:", info.indexBase, info.indexBufferWords, info.indexEndian, info.index32, int32_t(Reg(REG_VGT_INDX_OFFSET)));
+                        const uint8_t* src = Phys(info.indexBase);
+                        for (int i = 0; i < 12; i++)
+                        {
+                            uint32_t v;
+                            if (info.index32) { memcpy(&v, src + i * 4, 4); v = GpuSwap(v, info.indexEndian); }
+                            else { uint16_t s16; memcpy(&s16, src + i * 2, 2); v = GpuSwap(s16, info.indexEndian) & 0xFFFF; }
+                            detail += fmt::format(" {}", v);
+                        }
+                        detail += "]";
+                    }
+                    LOG_INFO("renderer: draw detail{}", detail);
+                }
                 if (drawLogs < 24 || (traceFrame && frame >= traceFrame && frame < traceFrame + traceCount))
                 {
                     drawLogs++;
@@ -1361,6 +1428,16 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
 
                 uint32_t colorInfo = Reg(REG_RB_COLOR_INFO + (srcSelect < 4 ? (srcSelect == 0 ? 0 : 2 + (srcSelect - 1)) : 0));
+                {
+                    static const uint32_t traceFrame = getenv("LO_DRAW_TRACE") ? strtoul(getenv("LO_DRAW_TRACE"), nullptr, 10) : 0;
+                    static const uint32_t traceCount = getenv("LO_DRAW_TRACE_COUNT") ? strtoul(getenv("LO_DRAW_TRACE_COUNT"), nullptr, 10) : 1;
+                    if (traceFrame && frame >= traceFrame && frame < traceFrame + traceCount)
+                    {
+                        const bool existed = renderTargets.count(RenderTargetKey{ colorInfo & 0xFFF, (colorInfo >> 16) & 0xF, pitch, 0, false }) != 0;
+                        LOG_INFO("renderer: resolve f{} src sel={} base={:#x} fmt={} pitch={} h={} existed={} -> {:#x} destfmt={} rect ({},{}) {}x{} destPitch={} destHeight={} clear={:#x}",
+                            frame, srcSelect, colorInfo & 0xFFF, (colorInfo >> 16) & 0xF, pitch, rtHeight, existed, destBase, destFormat, x0, y0, copyWidth, copyHeight, destPitch, destHeight, copyControl & 0x300);
+                    }
+                }
                 HostTexture* color = GetRenderTarget(colorInfo & 0xFFF, (colorInfo >> 16) & 0xF, pitch, rtHeight, false);
                 if (!resolveReadback)
                 {
