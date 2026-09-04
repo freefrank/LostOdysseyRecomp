@@ -55,20 +55,22 @@ namespace gpu
             uint32_t size;      // bytes
             uint32_t readOffset;
             uint32_t writeOffset;
+            bool ring;          // primary buffer wraps; indirect buffers are linear
 
             uint32_t ReadCount() const
             {
+                if (!ring)
+                    return writeOffset > readOffset ? writeOffset - readOffset : 0;
                 return writeOffset >= readOffset ? writeOffset - readOffset : size - readOffset + writeOffset;
             }
             uint32_t ReadAndSwap();
             void Advance(uint32_t dwords);
-            uint32_t GuestOffset() const { return readOffset; }
         };
 
         void WorkerMain();
         void VsyncMain();
         void InterruptMain();
-        void DispatchInterrupt(uint32_t source);
+        void DispatchInterrupt(uint32_t source, uint32_t cpu);
 
         uint32_t ExecutePrimaryBuffer(uint32_t readIndex, uint32_t writeIndex);
         void ExecuteIndirectBuffer(uint32_t physicalAddress, uint32_t dwordCount);
@@ -90,7 +92,9 @@ namespace gpu
 
         uint32_t m_interruptCallback = 0;
         uint32_t m_interruptUserData = 0;
-        std::atomic<uint32_t> m_pendingInterrupts{ 0 }; // bit per source
+        Mutex m_interruptMutex;
+        std::vector<std::pair<uint32_t, uint32_t>> m_pendingInterrupts; // (source, cpu)
+        std::atomic<uint32_t> m_interruptSignal{ 0 };
         uint64_t m_binMask = 0xFFFFFFFFFFFFFFFFull;
         uint64_t m_binSelect = 0xFFFFFFFFFFFFFFFFull;
 

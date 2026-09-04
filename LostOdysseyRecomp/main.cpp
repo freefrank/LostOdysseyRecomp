@@ -7,6 +7,7 @@
 #include <kernel/xam.h>
 #include <kernel/io/file_system.h>
 #include <gpu/command_processor.h>
+#include <apu/audio.h>
 #include <os/logger.h>
 
 #ifdef _WIN32
@@ -37,6 +38,7 @@ static std::filesystem::path FindGameRoot(int argc, char* argv[])
 }
 
 void InstallCrashHandler();
+void InstallPhysicalWatchpoint();
 
 int main(int argc, char* argv[])
 {
@@ -56,6 +58,7 @@ int main(int argc, char* argv[])
         LOG_ERROR("failed to reserve the 4 GiB guest address space");
         return 1;
     }
+    InstallPhysicalWatchpoint();
 
     g_userHeap.Init();
     g_pageAllocator.Init();
@@ -72,6 +75,7 @@ int main(int argc, char* argv[])
 
     XexLoader::StartTimeStampThread();
     gpu::g_commandProcessor.Init();
+    apu::Init();
 
     LOG_INFO("starting guest at {:#x}", entry);
     GuestThread::Start({ entry, 0, 0 });

@@ -1,9 +1,22 @@
 #include <stdafx.h>
 #include "memory.h"
 #include <os/logger.h>
+#include <set>
+#include <mutex>
 
 Memory g_memory;
 PageAllocator g_pageAllocator;
+
+// Called through the function table for addresses without recompiled code.
+static void MissingFunction(PPCContext& ctx, uint8_t* base)
+{
+    static std::mutex mutex;
+    static std::set<uint32_t> seen;
+    std::lock_guard lock(mutex);
+    if (seen.insert(ctx.ctr.u32).second)
+        LOG_ERROR("call to unrecompiled guest function ctr={:#x} lr={:#x} r3={:#x} r4={:#x}", ctx.ctr.u32, uint32_t(ctx.lr), ctx.r3.u32, ctx.r4.u32);
+    ctx.r3.u64 = 0;
+}
 
 Memory::Memory()
 {
@@ -29,6 +42,12 @@ Memory::Memory()
 
     mprotect(base, 4096, PROT_NONE);
 #endif
+
+    // Every code address the recompiler did not emit a function for gets a
+    // logging stub instead of a null pointer, so a virtual call into a missed
+    // function reports the guest address instead of jumping to host 0.
+    for (uint32_t guest = PPC_CODE_BASE; guest < PPC_CODE_BASE + PPC_CODE_SIZE; guest += 4)
+        InsertFunction(guest, MissingFunction);
 
     for (size_t i = 0; PPCFuncMappings[i].guest != 0; i++)
     {

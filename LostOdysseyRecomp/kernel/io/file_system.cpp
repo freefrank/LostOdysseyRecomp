@@ -11,6 +11,16 @@
 
 // Semantics follow Xenia's kernel/xboxkrnl/xboxkrnl_io.cc (BSD-3).
 
+void EnqueueUserApc(uint32_t routine, uint32_t context, uint32_t arg1, uint32_t arg2);
+
+// Completion routines are delivered as user APCs on the issuing thread; the
+// low bit of the routine pointer means "do not post to an IO completion port".
+static void QueueIoApc(uint32_t apcRoutine, uint32_t apcContext, XIO_STATUS_BLOCK* iosb, uint32_t status)
+{
+    if ((apcRoutine & ~1u) && apcContext && status == STATUS_SUCCESS)
+        EnqueueUserApc(apcRoutine & ~1u, apcContext, g_memory.MapVirtual(iosb), 0);
+}
+
 namespace
 {
     std::filesystem::path g_gameRoot;
@@ -381,6 +391,7 @@ uint32_t NtReadFile(FileHandle* handle, uint32_t Event, uint32_t ApcRoutine, uin
     _fseeki64(handle->file, int64_t(offset), SEEK_SET);
     size_t read = fread(Buffer, 1, Length, handle->file);
     handle->position = offset + read;
+    LOG_KERNEL("{} off={:#x} len={:#x} -> {:#x}{}", handle->path.filename().string(), offset, Length, read, Event ? " (event)" : "");
 
     uint32_t status = STATUS_SUCCESS;
     if (read == 0 && Length != 0)
@@ -391,6 +402,8 @@ uint32_t NtReadFile(FileHandle* handle, uint32_t Event, uint32_t ApcRoutine, uin
         IoStatusBlock->Status = status;
         IoStatusBlock->Information = uint32_t(read);
     }
+
+    QueueIoApc(ApcRoutine, ApcContext, IoStatusBlock, status);
 
     // Async reads: signal the event the caller passed, like the kernel does
     // on completion.
@@ -426,6 +439,7 @@ uint32_t NtWriteFile(FileHandle* handle, uint32_t Event, uint32_t ApcRoutine, ui
         IoStatusBlock->Status = STATUS_SUCCESS;
         IoStatusBlock->Information = uint32_t(written);
     }
+    QueueIoApc(ApcRoutine, ApcContext, IoStatusBlock, STATUS_SUCCESS);
     if (Event != 0)
     {
         extern void KernelSignalEventHandle(uint32_t handle);
@@ -739,6 +753,7 @@ uint32_t NtReadFileScatter(FileHandle* handle, uint32_t Event, uint32_t ApcRouti
     }
     handle->position = offset + total;
     if (IoStatusBlock) { IoStatusBlock->Status = STATUS_SUCCESS; IoStatusBlock->Information = total; }
+    QueueIoApc(ApcRoutine, ApcContext, IoStatusBlock, STATUS_SUCCESS);
     if (Event != 0)
     {
         extern void KernelSignalEventHandle(uint32_t handle);

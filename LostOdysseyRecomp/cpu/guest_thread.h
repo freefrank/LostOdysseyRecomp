@@ -13,6 +13,8 @@ struct GuestThreadContext
 
     GuestThreadContext(uint32_t cpuNumber);
     ~GuestThreadContext();
+
+    void SetCpuNumber(uint32_t cpuNumber);
 };
 
 struct GuestThreadParams

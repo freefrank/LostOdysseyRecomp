@@ -42,6 +42,11 @@ GuestThreadContext::GuestThreadContext(uint32_t cpuNumber)
     SetPPCContext(ppcContext);
 }
 
+void GuestThreadContext::SetCpuNumber(uint32_t cpuNumber)
+{
+    *(thread + 0x10C) = uint8_t(cpuNumber);
+}
+
 GuestThreadContext::~GuestThreadContext()
 {
     g_pageAllocator.Free(g_pageAllocator.virtualRegion, g_memory.MapVirtual(thread));

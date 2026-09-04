@@ -10,6 +10,7 @@
 #include "xex_loader.h"
 #include "guest_printf.h"
 #include <gpu/command_processor.h>
+#include <apu/audio.h>
 #include <os/logger.h>
 #include <csetjmp>
 
@@ -17,6 +18,140 @@
 // (BSD-3) kernel/xboxkrnl; structure follows UnleashedRecomp (GPLv3).
 // Anything not implemented here gets a logging stub from
 // tools/gen_import_stubs.py (kernel/imports_stubs.cpp).
+
+// ---------------------------------------------------------------------------
+// Stall diagnostics: every blocking kernel call records what it waits on.
+// ---------------------------------------------------------------------------
+
+struct ThreadWaitState
+{
+    uint32_t threadId = 0;
+    uint32_t pcr = 0;
+    const char* what = "running";
+    uint32_t object = 0;
+    uint32_t lr = 0;
+    uint32_t r1 = 0;
+    uint64_t since = 0;
+    PPCContext* ctx = nullptr; // live context, read racily for diagnostics only
+};
+
+static Mutex g_waitStatesMutex;
+static std::vector<ThreadWaitState*> g_waitStates;
+
+// Clears the live-context pointer when the host thread exits so the watchdog
+// never dereferences a dead guest context.
+struct ThreadWaitStateGuard
+{
+    ThreadWaitState* state = nullptr;
+    ~ThreadWaitStateGuard()
+    {
+        if (state)
+        {
+            std::lock_guard lock(g_waitStatesMutex);
+            state->ctx = nullptr;
+            state->what = "exited";
+        }
+    }
+};
+
+static ThreadWaitState& CurrentWaitState()
+{
+    thread_local ThreadWaitStateGuard guard;
+    if (!guard.state)
+    {
+        guard.state = new ThreadWaitState();
+        guard.state->threadId = GuestThread::GetCurrentThreadId();
+        guard.state->ctx = g_ppcContext;
+        std::lock_guard lock(g_waitStatesMutex);
+        g_waitStates.push_back(guard.state);
+    }
+    return *guard.state;
+}
+
+struct WaitScope
+{
+    ThreadWaitState& st;
+    WaitScope(const char* what, uint32_t object) : st(CurrentWaitState())
+    {
+        st.what = what;
+        st.object = object;
+        st.lr = g_ppcContext ? uint32_t(g_ppcContext->lr) : 0;
+        st.pcr = g_ppcContext ? g_ppcContext->r13.u32 : 0;
+        st.r1 = g_ppcContext ? g_ppcContext->r1.u32 : 0;
+        st.since = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    }
+    ~WaitScope() { st.what = "running"; st.object = 0; }
+};
+
+void DumpGuestThreadStates()
+{
+    uint64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    std::lock_guard lock(g_waitStatesMutex);
+    LOG_WARNING("guest thread states ({} threads):", g_waitStates.size());
+    for (auto* st : g_waitStates)
+    {
+        if (st->what[0] == 'e') // exited
+            continue;
+        bool running = st->what[0] == 'r';
+        uint32_t liveLr = st->ctx ? uint32_t(st->ctx->lr) : 0;
+        uint32_t liveR1 = st->ctx ? st->ctx->r1.u32 : 0;
+        if (running && (liveLr == 0x82BECACC || liveLr == 0)) // idle pool thread / unknown
+            continue;
+
+        // Guest backtrace: back chain at [r1], saved LR at [caller_r1 - 8].
+        std::string bt;
+        uint32_t frame = running ? liveR1 : st->r1;
+        for (int i = 0; i < 12 && frame >= 0x1000 && frame < 0x7C000000; i++)
+        {
+            uint32_t caller = *reinterpret_cast<be<uint32_t>*>(g_memory.Translate(frame));
+            if (caller <= frame || caller >= 0x7C000000)
+                break;
+            uint32_t ret = *reinterpret_cast<be<uint32_t>*>(g_memory.Translate(caller - 8));
+            if (ret < 0x82000000 || ret >= 0x83400000)
+                break;
+            bt += fmt::format(" {:#x}", ret);
+            frame = caller;
+        }
+        LOG_WARNING("  tid={:#x} pcr={:#x} {} obj={:#x} lr={:#x} liveLr={:#x} for {} ms bt:{}", st->threadId, st->pcr, st->what, st->object, st->lr, liveLr, running ? 0 : now - st->since, bt);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// User APCs. Async file completion routines (ReadFileEx et al.) are queued on
+// the issuing thread and run the next time it performs an alertable wait, at
+// which point the wait returns STATUS_USER_APC. Mirrors xenia-canary
+// XThread::EnqueueApc / xeProcessUserApcs.
+// ---------------------------------------------------------------------------
+
+struct UserApc
+{
+    uint32_t routine;
+    uint32_t context;
+    uint32_t arg1;
+    uint32_t arg2;
+};
+
+static thread_local std::vector<UserApc> t_userApcs;
+
+void EnqueueUserApc(uint32_t routine, uint32_t context, uint32_t arg1, uint32_t arg2)
+{
+    t_userApcs.push_back({ routine, context, arg1, arg2 });
+}
+
+// Returns true when at least one APC ran.
+static bool DeliverUserApcs()
+{
+    if (t_userApcs.empty())
+        return false;
+
+    while (!t_userApcs.empty())
+    {
+        UserApc apc = t_userApcs.front();
+        t_userApcs.erase(t_userApcs.begin());
+        GuestToHostFunction<void>(apc.routine, apc.context, apc.arg1, apc.arg2);
+    }
+    return true;
+}
 
 // ---------------------------------------------------------------------------
 // Dispatcher objects
@@ -232,11 +367,17 @@ void KernelSignalEventHandle(uint32_t handle)
 static uint32_t NtCreateEvent(be<uint32_t>* handle, void* objAttributes, uint32_t eventType, uint32_t initialState)
 {
     *handle = GetKernelHandle(CreateKernelObject<Event>(!eventType, !!initialState));
+    static const bool traceEvents = getenv("LO_TRACE_EVENTS") != nullptr;
+    if (traceEvents)
+        LOG_KERNEL("-> {:#x} manualReset={} initial={} lr={:#x}", uint32_t(*handle), eventType == 0, initialState, uint32_t(g_ppcContext->lr));
     return STATUS_SUCCESS;
 }
 
 static uint32_t NtSetEvent(uint32_t handle, be<uint32_t>* previousState)
 {
+    static const bool traceEvents = getenv("LO_TRACE_EVENTS") != nullptr;
+    if (traceEvents)
+        LOG_KERNEL("handle={:#x} lr={:#x}", handle, uint32_t(g_ppcContext->lr));
     if (!IsKernelObject(handle))
         return STATUS_INVALID_HANDLE;
     auto* ev = static_cast<Event*>(GetKernelObject(handle));
@@ -273,6 +414,9 @@ static uint32_t NtClearEvent(uint32_t handle)
 
 static bool KeSetEvent(XKEVENT* pEvent, uint32_t Increment, bool Wait)
 {
+    static const bool traceEvents = getenv("LO_TRACE_EVENTS") != nullptr;
+    if (traceEvents)
+        LOG_KERNEL("event={:#x} lr={:#x}", g_memory.MapVirtual(pEvent), uint32_t(g_ppcContext->lr));
     bool result = QueryKernelObject<Event>(*pEvent)->Set();
     ++g_keSetEventGeneration;
     g_keSetEventGeneration.notify_all();
@@ -286,6 +430,9 @@ static bool KeResetEvent(XKEVENT* pEvent)
 
 static uint32_t KeWaitForSingleObject(XDISPATCHER_HEADER* Object, uint32_t WaitReason, uint32_t WaitMode, bool Alertable, be<int64_t>* Timeout)
 {
+    WaitScope scope("KeWaitForSingleObject", g_memory.MapVirtual(Object));
+    if (Alertable && DeliverUserApcs())
+        return STATUS_USER_APC;
     const uint32_t timeout = GuestTimeoutToMilliseconds(Timeout);
     auto* obj = ResolveWaitObject(Object);
     if (!obj)
@@ -295,6 +442,9 @@ static uint32_t KeWaitForSingleObject(XDISPATCHER_HEADER* Object, uint32_t WaitR
 
 static uint32_t KeWaitForMultipleObjects(uint32_t Count, xpointer<XDISPATCHER_HEADER>* Objects, uint32_t WaitType, uint32_t WaitReason, uint32_t WaitMode, uint32_t Alertable, be<int64_t>* Timeout)
 {
+    WaitScope scope("KeWaitForMultipleObjects", Count ? uint32_t(Objects[0].ptr) : 0);
+    if (Alertable && DeliverUserApcs())
+        return STATUS_USER_APC;
     const uint32_t timeout = GuestTimeoutToMilliseconds(Timeout);
 
     if (WaitType == 0) // wait all
@@ -331,6 +481,9 @@ static uint32_t KeWaitForMultipleObjects(uint32_t Count, xpointer<XDISPATCHER_HE
 
 static uint32_t NtWaitForSingleObjectEx(uint32_t Handle, uint32_t WaitMode, uint32_t Alertable, be<int64_t>* Timeout)
 {
+    WaitScope scope("NtWaitForSingleObjectEx", Handle);
+    if (Alertable && DeliverUserApcs())
+        return STATUS_USER_APC;
     uint32_t timeout = GuestTimeoutToMilliseconds(Timeout);
     if (Handle == CURRENT_THREAD_HANDLE)
         return STATUS_TIMEOUT;
@@ -343,7 +496,17 @@ static uint32_t NtWaitForSingleObjectEx(uint32_t Handle, uint32_t WaitMode, uint
 
 static uint32_t NtWaitForMultipleObjectsEx(uint32_t Count, be<uint32_t>* Handles, uint32_t WaitType, uint32_t WaitMode, uint32_t Alertable, be<int64_t>* Timeout)
 {
+    WaitScope scope("NtWaitForMultipleObjectsEx", Count ? uint32_t(Handles[0]) : 0);
+    if (Alertable && DeliverUserApcs())
+        return STATUS_USER_APC;
     const uint32_t timeout = GuestTimeoutToMilliseconds(Timeout);
+    static const bool traceEvents = getenv("LO_TRACE_EVENTS") != nullptr;
+    if (traceEvents)
+    {
+        std::string hs;
+        for (uint32_t i = 0; i < Count; i++) hs += fmt::format(" {:#x}", uint32_t(Handles[i]));
+        LOG_KERNEL("count={} waitAll={} timeout={} handles:{} lr={:#x}", Count, WaitType == 0, timeout, hs, uint32_t(g_ppcContext->lr));
+    }
     std::vector<KernelObject*> objs(Count, nullptr);
     for (size_t i = 0; i < Count; i++)
         if (IsKernelObject(Handles[i]))
@@ -442,6 +605,7 @@ static void RtlInitializeCriticalSectionAndSpinCount(XRTL_CRITICAL_SECTION* cs, 
 
 static void RtlEnterCriticalSection(XRTL_CRITICAL_SECTION* cs)
 {
+    WaitScope scope("RtlEnterCriticalSection", g_memory.MapVirtual(cs));
     uint32_t thisThread = g_ppcContext->r13.u32;
     std::atomic_ref owningThread(cs->OwningThread);
 
@@ -482,6 +646,7 @@ static void RtlLeaveCriticalSection(XRTL_CRITICAL_SECTION* cs)
 
 static void KfAcquireSpinLock(uint32_t* spinLock)
 {
+    WaitScope scope("KfAcquireSpinLock", g_memory.MapVirtual(spinLock));
     std::atomic_ref ref(*spinLock);
     while (true)
     {
@@ -547,8 +712,7 @@ static thread_local jmp_buf* t_terminateJump = nullptr;
 
 static uint32_t ExCreateThread(be<uint32_t>* handle, uint32_t stackSize, be<uint32_t>* threadId, uint32_t xApiThreadStartup, uint32_t startAddress, uint32_t startContext, uint32_t creationFlags)
 {
-    LOG_KERNEL("stack={:#x} startup={:#x} start={:#x} ctx={:#x} flags={:#x}", stackSize, xApiThreadStartup, startAddress, startContext, creationFlags);
-
+    static const bool traceThreads = getenv("LO_TRACE_THREADS") != nullptr;
     GuestThreadParams params{};
     if (xApiThreadStartup != 0)
     {
@@ -562,6 +726,8 @@ static uint32_t ExCreateThread(be<uint32_t>* handle, uint32_t stackSize, be<uint
         params.value = startContext;
     }
     params.flags = creationFlags;
+    if (traceThreads)
+        LOG_KERNEL("stack={:#x} startup={:#x} start={:#x} ctx={:#x} flags={:#x}", stackSize, xApiThreadStartup, startAddress, startContext, creationFlags);
 
     uint32_t hostThreadId;
     auto* hThread = GuestThread::Start(params, &hostThreadId);
@@ -573,7 +739,8 @@ static uint32_t ExCreateThread(be<uint32_t>* handle, uint32_t stackSize, be<uint
 
 static void ExTerminateThread(uint32_t exitCode)
 {
-    LOG_KERNEL("exit code {:#x}", exitCode);
+    if (exitCode != 0)
+        LOG_KERNEL("exit code {:#x}", exitCode);
     if (t_terminateJump)
         longjmp(*t_terminateJump, 1);
     std::_Exit(int(exitCode));
@@ -655,14 +822,21 @@ static uint32_t KeResumeThread(uint32_t handle)
 
 static uint32_t KeDelayExecutionThread(uint32_t WaitMode, bool Alertable, be<int64_t>* Timeout)
 {
+    WaitScope scope("KeDelayExecutionThread", 0);
+    if (Alertable && DeliverUserApcs())
+        return STATUS_USER_APC;
     uint32_t timeout = GuestTimeoutToMilliseconds(Timeout);
+    if (timeout >= 10 && timeout != INFINITE)
+        LOG_KERNEL("sleep {} ms", timeout);
     if (timeout == 0)
         std::this_thread::yield();
     else if (timeout != INFINITE)
         std::this_thread::sleep_for(std::chrono::milliseconds(timeout));
     else
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    return Alertable ? STATUS_USER_APC : STATUS_SUCCESS;
+    if (Alertable && DeliverUserApcs())
+        return STATUS_USER_APC;
+    return STATUS_SUCCESS;
 }
 
 static uint32_t ObReferenceObjectByHandle(uint32_t handle, uint32_t objectType, be<uint32_t>* object)
@@ -748,7 +922,9 @@ static uint32_t NtAllocateVirtualMemory(be<uint32_t>* baseAddressPtr, be<uint32_
 
     *baseAddressPtr = address;
     *regionSizePtr = alignedSize;
-    LOG_KERNEL("base={:#x} size={:#x} type={:#x} -> {:#x}", baseAddress, regionSize, allocationType, address);
+    static const bool traceMem = getenv("LO_TRACE_MEM") != nullptr;
+    if (traceMem)
+        LOG_KERNEL("base={:#x} size={:#x} type={:#x} -> {:#x}", baseAddress, regionSize, allocationType, address);
     return STATUS_SUCCESS;
 }
 
@@ -770,7 +946,9 @@ static uint32_t NtFreeVirtualMemory(be<uint32_t>* baseAddressPtr, be<uint32_t>* 
         LOG_KERNEL("free of unknown region {:#x}", baseAddress);
         return STATUS_SUCCESS;
     }
-    LOG_KERNEL("base={:#x} size={:#x} type={:#x}", baseAddress, regionSize, freeType);
+    static const bool traceMem = getenv("LO_TRACE_MEM") != nullptr;
+    if (traceMem)
+        LOG_KERNEL("base={:#x} size={:#x} type={:#x}", baseAddress, regionSize, freeType);
     return STATUS_SUCCESS;
 }
 
@@ -1588,9 +1766,50 @@ static uint32_t XMsgStartIORequestEx(uint32_t App, uint32_t Message, XXOVERLAPPE
 {
     return XMsgStartIORequest(App, Message, overlapped, Buffer, szBuffer);
 }
-static uint32_t XMsgInProcessCall(uint32_t app, uint32_t message, be<uint32_t>* param1, be<uint32_t>* param2)
+// XAM in-process app messages. App 0xFA is XMP (music player); the game polls
+// its state every frame. Semantics per Xenia kernel/xam/apps/xmp_app.cc.
+static uint32_t XMsgInProcessCall(uint32_t app, uint32_t message, be<uint32_t>* param1, uint32_t param2)
 {
-    LOG_KERNEL("app={:#x} msg={:#x}", app, message);
+    if (app == 0xFA)
+    {
+        switch (message)
+        {
+        case 0x00070009: // XMPGetStatus(xmp_client, state_ptr) -> idle
+        {
+            if (param1 && param1[1])
+                *reinterpret_cast<be<uint32_t>*>(g_memory.Translate(param1[1])) = 0; // kIdle
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            return 0;
+        }
+        case 0x0007001B: // XMPGetPlaybackController(xmp_client, controller_ptr, locked_ptr)
+        {
+            if (param1)
+            {
+                if (param1[1]) *reinterpret_cast<be<uint32_t>*>(g_memory.Translate(param1[1])) = 0;
+                if (param1[2]) *reinterpret_cast<be<uint32_t>*>(g_memory.Translate(param1[2])) = 0;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            return 0;
+        }
+        case 0x0007000B: // XMPGetVolume(xmp_client, volume_ptr)
+            if (param1 && param1[1])
+                *reinterpret_cast<be<float>*>(g_memory.Translate(param1[1])) = 1.0f;
+            return 0;
+        case 0x00070029: // XMPGetPlaybackBehavior(xmp_client, playback_mode_ptr, repeat_mode_ptr, unk3_ptr)
+            if (param1)
+                for (int i = 1; i <= 3; i++)
+                    if (param1[i]) *reinterpret_cast<be<uint32_t>*>(g_memory.Translate(param1[i])) = 0;
+            return 0;
+        default:
+            break;
+        }
+    }
+
+    static ankerl::unordered_dense::map<uint64_t, uint32_t> seen;
+    uint64_t key = (uint64_t(app) << 32) | message;
+    if (seen[key]++ < 3)
+        LOG_KERNEL("app={:#x} msg={:#x} p1={:#x} p2={:#x} [p1]={:#x} [p1+4]={:#x}", app, message,
+            g_memory.MapVirtual(param1), param2, param1 ? uint32_t(param1[0]) : 0, param1 ? uint32_t(param1[1]) : 0);
     return 0;
 }
 static uint32_t XMsgCancelIORequest(XXOVERLAPPED*, uint32_t) { return 0; }
@@ -1622,15 +1841,21 @@ static void XamSwapCancel() {}
 // Audio: stub until the APU lands.
 static uint32_t XAudioRegisterRenderDriverClient(be<uint32_t>* callback, be<uint32_t>* driver)
 {
-    LOG_KERNEL("callback={:#x}", uint32_t(callback[0]));
+    // callback[0] = function, callback[1] = user parameter
+    apu::RegisterClient(callback[0], callback[1]);
     if (driver) *driver = 0x41554449; // 'AUDI'
     return 0;
 }
-static uint32_t XAudioUnregisterRenderDriverClient(uint32_t) { return 0; }
-static uint32_t XAudioSubmitRenderDriverFrame(uint32_t, void*) { return 0; }
+static uint32_t XAudioUnregisterRenderDriverClient(uint32_t) { apu::UnregisterClient(); return 0; }
+static uint32_t XAudioSubmitRenderDriverFrame(uint32_t, void* samples) { apu::SubmitFrame(samples); return 0; }
 static uint32_t XAudioGetVoiceCategoryVolumeChangeMask(uint32_t, be<uint32_t>* mask) { if (mask) *mask = 0; return 0; }
 static uint32_t XAudioGetVoiceCategoryVolume(uint32_t, be<float>* volume) { if (volume) *volume = 1.0f; return 0; }
-static uint32_t XMACreateContext(be<uint32_t>* context) { if (context) *context = 0; return STATUS_NOT_IMPLEMENTED; }
+static uint32_t XMACreateContext(be<uint32_t>* context)
+{
+    LOG_KERNEL("XMACreateContext (unsupported)");
+    if (context) *context = 0;
+    return STATUS_NOT_IMPLEMENTED;
+}
 static void XMAReleaseContext(uint32_t) {}
 
 // Networking: report no network.

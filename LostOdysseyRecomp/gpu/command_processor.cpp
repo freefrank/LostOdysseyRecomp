@@ -5,9 +5,34 @@
 #include <kernel/function.h>
 #include <os/logger.h>
 
+void DumpGuestThreadStates();
+
 namespace gpu
 {
     CommandProcessor g_commandProcessor;
+    static std::atomic<uint32_t> g_swapCount{ 0 };
+    static std::atomic<uint32_t> g_traceBudget{ 0 };
+
+    // Ring of recently executed packets, dumped when the parser derails.
+    struct PacketRecord { uint32_t header; uint32_t offset; uint32_t d0, d1, d2; bool ring; };
+    static PacketRecord g_history[64];
+    static uint32_t g_historyPos = 0;
+
+    static void DumpHistory(const char* why)
+    {
+        LOG_WARNING("packet history ({}):", why);
+        for (uint32_t i = 0; i < 64; i++)
+        {
+            auto& r = g_history[(g_historyPos + i) % 64];
+            if (r.header == 0 && r.d0 == 0 && r.d1 == 0)
+                continue;
+            uint32_t type = r.header >> 30;
+            uint32_t op = (r.header >> 8) & 0x7F;
+            uint32_t count = ((r.header >> 16) & 0x3FFF) + 1;
+            LOG_WARNING("  {} @{:#x} hdr={:#010x} type={} op={:#x} count={} [{:#x} {:#x} {:#x}]",
+                r.ring ? "ring" : "ib  ", r.offset, r.header, type, op, count, r.d0, r.d1, r.d2);
+        }
+    }
 
     namespace
     {
@@ -56,9 +81,11 @@ namespace gpu
 
     uint32_t CommandProcessor::Reader::ReadAndSwap()
     {
+        if (!ring && readOffset >= size)
+            return 0;
         uint32_t v = ByteSwap(*reinterpret_cast<uint32_t*>(base + readOffset));
         readOffset += 4;
-        if (readOffset >= size)
+        if (ring && readOffset >= size)
             readOffset -= size;
         return v;
     }
@@ -66,8 +93,9 @@ namespace gpu
     void CommandProcessor::Reader::Advance(uint32_t dwords)
     {
         readOffset += dwords * 4;
-        while (readOffset >= size)
-            readOffset -= size;
+        if (ring)
+            while (readOffset >= size)
+                readOffset -= size;
     }
 
     uint8_t* CommandProcessor::TranslatePhysical(uint32_t physicalAddress)
@@ -103,7 +131,8 @@ namespace gpu
     {
         m_running = false;
         m_writePtrIndex.notify_all();
-        m_pendingInterrupts.notify_all();
+        m_interruptSignal++;
+        m_interruptSignal.notify_all();
         for (auto* t : { &m_worker, &m_vsync, &m_interruptThread })
             if (t->joinable())
                 t->join();
@@ -112,7 +141,9 @@ namespace gpu
     void CommandProcessor::InitializeRingBuffer(uint32_t physicalAddress, uint32_t sizeLog2)
     {
         m_primaryBufferPhysical = physicalAddress;
-        m_primaryBufferSize = 1u << sizeLog2;
+        // size_log2 counts 8-byte units (Xenia: 1 << (size_log2 + 3)); D3D's
+        // 4 KiB "log2 = 12" ring is really 32 KiB and WPTR runs to 0x2000.
+        m_primaryBufferSize = 1u << (sizeLog2 + 3);
         m_readPtrIndex = 0;
         LOG_INFO("ring buffer at physical {:#x} size {:#x}", physicalAddress, m_primaryBufferSize);
     }
@@ -130,6 +161,9 @@ namespace gpu
 
     void CommandProcessor::UpdateWritePointer(uint32_t dwordIndex)
     {
+        static const bool traceIb = getenv("LO_TRACE_IB") != nullptr;
+        if (traceIb)
+            LOG_INFO("swap#{} WPTR <- {:#x} (rd {:#x})", g_swapCount.load(), dwordIndex, m_readPtrIndex);
         m_writePtrIndex = dwordIndex;
         m_writePtrIndex.notify_all();
     }
@@ -139,15 +173,43 @@ namespace gpu
         if (index >= REGISTER_COUNT)
             return;
 
+        // Read-only status registers: the interrupt handler acknowledges the
+        // vblank by writing here, but Xenia's ReadRegister always reports the
+        // constant, so keep ours constant too.
+        switch (index)
+        {
+        case REG_RB_EDRAM_TIMING:
+        case REG_RB_BC_CONTROL:
+        case REG_D1MODE_V_COUNTER:
+        case REG_INTERRUPT_STATUS:
+        case REG_D1MODE_VIEWPORT_SIZE:
+            *reinterpret_cast<be<uint32_t>*>(g_memory.Translate(MMIO_BASE + index * 4)) = m_registers[index];
+            return;
+        default:
+            break;
+        }
+
         m_registers[index] = value;
+
+        // Guest code reads registers back with plain loads from the MMIO
+        // window (the D3D interrupt handler inspects the scratch registers),
+        // so keep the big-endian memory image in sync.
+        *reinterpret_cast<be<uint32_t>*>(g_memory.Translate(MMIO_BASE + index * 4)) = value;
 
         if (index >= REG_SCRATCH_REG0 && index <= REG_SCRATCH_REG7)
         {
+            // SCRATCH_UMSK / SCRATCH_ADDR are programmed by D3D through plain
+            // (non-eieio) MMIO stores that never reach WriteRegister, so read
+            // them from the memory window rather than the register file.
             uint32_t scratchReg = index - REG_SCRATCH_REG0;
-            if ((1u << scratchReg) & m_registers[REG_SCRATCH_UMSK])
+            uint32_t umsk = *reinterpret_cast<be<uint32_t>*>(g_memory.Translate(MMIO_BASE + REG_SCRATCH_UMSK * 4));
+            uint32_t scratchAddr = *reinterpret_cast<be<uint32_t>*>(g_memory.Translate(MMIO_BASE + REG_SCRATCH_ADDR * 4));
+            if ((1u << scratchReg) & umsk)
             {
-                uint32_t scratchAddr = m_registers[REG_SCRATCH_ADDR];
                 *reinterpret_cast<be<uint32_t>*>(TranslatePhysical(scratchAddr + scratchReg * 4)) = value;
+                static uint32_t logged = 0;
+                if (logged++ < 4 || (g_swapCount >= 110 && scratchReg <= 1))
+                    LOG_INFO("scratch writeback reg{} = {:#x} -> physical {:#x} (umsk {:#x}) swap #{}", scratchReg, value, scratchAddr + scratchReg * 4, umsk, g_swapCount.load());
             }
         }
         else if (index == REG_COHER_STATUS_HOST)
@@ -160,6 +222,8 @@ namespace gpu
     {
         if (index >= REGISTER_COUNT)
             return 0;
+        if (m_registers[index] == 0)
+            return *reinterpret_cast<be<uint32_t>*>(g_memory.Translate(MMIO_BASE + index * 4));
         return m_registers[index];
     }
 
@@ -168,6 +232,8 @@ namespace gpu
         uint32_t index = (address & 0xFFFF) / 4;
         if (index == REG_CP_RB_WPTR)
             UpdateWritePointer(value);
+        else if (g_traceBudget > 0)
+            LOG_INFO("mmio write reg {:#x} = {:#x}", index, value);
         WriteRegister(index, value);
     }
 
@@ -192,6 +258,9 @@ namespace gpu
                 uint32_t mirrored = *reinterpret_cast<be<uint32_t>*>(g_memory.Translate(MMIO_BASE + REG_CP_RB_WPTR * 4));
                 if (mirrored != writePtr && mirrored < m_primaryBufferSize / 4)
                 {
+                    static const bool traceIb = getenv("LO_TRACE_IB") != nullptr;
+                    if (traceIb)
+                        LOG_INFO("swap#{} WPTR mirror {:#x} (was {:#x}, rd {:#x})", g_swapCount.load(), mirrored, writePtr, m_readPtrIndex);
                     writePtr = mirrored;
                     m_writePtrIndex = mirrored;
                 }
@@ -214,17 +283,45 @@ namespace gpu
         }
     }
 
+    // The vblank ISR runs on its own guest thread so a CP-triggered interrupt
+    // handler that spins waiting for a vblank cannot deadlock against it (on
+    // hardware the two arrive on different CPUs).
     void CommandProcessor::VsyncMain()
     {
+        GuestThreadContext ctx(2); // Xenia dispatches vblanks on CPU 2
+        auto next = std::chrono::steady_clock::now();
         while (m_running)
         {
-            std::this_thread::sleep_for(std::chrono::microseconds(16667));
+            next += std::chrono::microseconds(16667);
+            std::this_thread::sleep_until(next);
             ++m_counter;
-            if (m_interruptCallback)
+
+            // Watchdog: no swap for 5 seconds -> dump what every guest thread waits on.
             {
-                m_pendingInterrupts |= 1u << 0;
-                m_pendingInterrupts.notify_all();
+                static uint32_t lastSwaps = 0, stillFrames = 0, dumps = 0;
+                uint32_t swaps = g_swapCount.load();
+                if (swaps == lastSwaps)
+                {
+                    if (++stillFrames == 300 && swaps > 0 && dumps++ < 2)
+                    {
+                        ::DumpGuestThreadStates();
+                    }
+                }
+                else
+                {
+                    lastSwaps = swaps;
+                    stillFrames = 0;
+                }
             }
+            if (!m_interruptCallback)
+                continue;
+            auto* blk = reinterpret_cast<be<uint32_t>*>(TranslatePhysical(0xB000));
+            uint32_t b0 = blk[0], b1 = blk[1];
+            ctx.ppcContext.r3.u64 = 0;
+            ctx.ppcContext.r4.u64 = m_interruptUserData;
+            g_memory.FindFunction(m_interruptCallback)(ctx.ppcContext, g_memory.base);
+            if (g_swapCount >= 110 && (uint32_t(blk[0]) != b0 || uint32_t(blk[1]) != b1))
+                LOG_INFO("vblank isr changed block [{:#x} {:#x}] -> [{:#x} {:#x}] (swap #{})", b0, b1, uint32_t(blk[0]), uint32_t(blk[1]), g_swapCount.load());
         }
     }
 
@@ -235,32 +332,55 @@ namespace gpu
         GuestThreadContext ctx(2);
         while (m_running)
         {
-            uint32_t pending = m_pendingInterrupts.exchange(0);
-            if (pending == 0)
+            std::pair<uint32_t, uint32_t> item;
             {
-                m_pendingInterrupts.wait(0);
-                continue;
-            }
-            for (uint32_t source = 0; source < 2; source++)
-            {
-                if (!(pending & (1u << source)) || !m_interruptCallback)
+                std::lock_guard lock(m_interruptMutex);
+                if (m_pendingInterrupts.empty())
+                {
+                    uint32_t signal = m_interruptSignal.load();
+                    m_interruptMutex.unlock();
+                    m_interruptSignal.wait(signal);
+                    m_interruptMutex.lock();
                     continue;
-                ctx.ppcContext.r3.u64 = source;
-                ctx.ppcContext.r4.u64 = m_interruptUserData;
-                g_memory.FindFunction(m_interruptCallback)(ctx.ppcContext, g_memory.base);
+                }
+                item = m_pendingInterrupts.front();
+                m_pendingInterrupts.erase(m_pendingInterrupts.begin());
             }
+
+            if (!m_interruptCallback)
+                continue;
+
+            // The handler clears "its" CPU bit in the D3D interrupt block, so
+            // the PCR must report the CPU the interrupt was aimed at.
+            ctx.SetCpuNumber(item.second);
+            ctx.ppcContext.r3.u64 = item.first;
+            ctx.ppcContext.r4.u64 = m_interruptUserData;
+            auto* blk = reinterpret_cast<be<uint32_t>*>(TranslatePhysical(0xB000));
+            bool trace = g_swapCount >= 110;
+            if (trace)
+                LOG_INFO("isr source={} cpu={} block=[{:#x} {:#x} {:#x} {:#x} {:#x} {:#x}]", item.first, item.second,
+                    uint32_t(blk[0]), uint32_t(blk[1]), uint32_t(blk[2]), uint32_t(blk[3]), uint32_t(blk[4]), uint32_t(blk[5]));
+            g_memory.FindFunction(m_interruptCallback)(ctx.ppcContext, g_memory.base);
+            if (trace)
+                LOG_INFO("isr done block=[{:#x} {:#x} {:#x} {:#x} {:#x} {:#x}]",
+                    uint32_t(blk[0]), uint32_t(blk[1]), uint32_t(blk[2]), uint32_t(blk[3]), uint32_t(blk[4]), uint32_t(blk[5]));
         }
     }
 
-    void CommandProcessor::DispatchInterrupt(uint32_t source)
+    void CommandProcessor::DispatchInterrupt(uint32_t source, uint32_t cpu)
     {
-        m_pendingInterrupts |= 1u << source;
-        m_pendingInterrupts.notify_all();
+        {
+            std::lock_guard lock(m_interruptMutex);
+            m_pendingInterrupts.emplace_back(source, cpu);
+        }
+        m_interruptSignal++;
+        m_interruptSignal.notify_all();
     }
 
     uint32_t CommandProcessor::ExecutePrimaryBuffer(uint32_t readIndex, uint32_t writeIndex)
     {
-        Reader reader{ TranslatePhysical(m_primaryBufferPhysical), m_primaryBufferSize, readIndex * 4, writeIndex * 4 };
+        Reader reader{ TranslatePhysical(m_primaryBufferPhysical), m_primaryBufferSize,
+            (readIndex * 4) % m_primaryBufferSize, (writeIndex * 4) % m_primaryBufferSize, true };
         while (reader.ReadCount())
         {
             if (!ExecutePacket(reader))
@@ -274,30 +394,31 @@ namespace gpu
 
     void CommandProcessor::ExecuteIndirectBuffer(uint32_t physicalAddress, uint32_t dwordCount)
     {
-        Reader reader{ TranslatePhysical(physicalAddress), dwordCount * 4, 0, dwordCount * 4 };
-        // Linear buffer: writeOffset == size means "everything readable".
-        reader.writeOffset = dwordCount * 4;
-        uint32_t consumed = 0;
-        while (consumed < dwordCount * 4)
+        Reader reader{ TranslatePhysical(physicalAddress), dwordCount * 4, 0, dwordCount * 4, false };
+        while (reader.ReadCount())
         {
-            uint32_t before = reader.readOffset;
             if (!ExecutePacket(reader))
             {
                 LOG_ERROR("indirect buffer {:#x}: bad packet at dword {}", physicalAddress, reader.readOffset / 4);
                 break;
             }
-            uint32_t after = reader.readOffset;
-            consumed += after >= before ? after - before : reader.size - before + after;
-            if (after == 0 && before != 0)
-                break; // wrapped == end of linear buffer
         }
     }
 
     bool CommandProcessor::ExecutePacket(Reader& reader)
     {
+        const uint32_t offset = reader.readOffset;
         const uint32_t packet = reader.ReadAndSwap();
         if (packet == 0)
             return true;
+
+        {
+            auto& r = g_history[g_historyPos++ % 64];
+            r.header = packet; r.offset = offset; r.ring = reader.ring;
+            r.d0 = ByteSwap(*reinterpret_cast<uint32_t*>(reader.base + reader.readOffset % reader.size));
+            r.d1 = ByteSwap(*reinterpret_cast<uint32_t*>(reader.base + (reader.readOffset + 4) % reader.size));
+            r.d2 = ByteSwap(*reinterpret_cast<uint32_t*>(reader.base + (reader.readOffset + 8) % reader.size));
+        }
 
         switch (packet >> 30)
         {
@@ -337,6 +458,15 @@ namespace gpu
         const uint32_t opcode = (packet >> 8) & 0x7F;
         const uint32_t count = ((packet >> 16) & 0x3FFF) + 1;
 
+        if (g_traceBudget > 0)
+        {
+            --g_traceBudget;
+            uint32_t peek0 = ByteSwap(*reinterpret_cast<uint32_t*>(reader.base + reader.readOffset % reader.size));
+            uint32_t peek1 = ByteSwap(*reinterpret_cast<uint32_t*>(reader.base + (reader.readOffset + 4) % reader.size));
+            uint32_t peek2 = ByteSwap(*reinterpret_cast<uint32_t*>(reader.base + (reader.readOffset + 8) % reader.size));
+            LOG_INFO("pm4 {} op={:#x} count={} [{:#x} {:#x} {:#x}]", reader.ring ? "ring" : "ib", opcode, count, peek0, peek1, peek2);
+        }
+
         if (packet & 1)
         {
             bool anyPass = (m_binSelect & m_binMask) != 0;
@@ -358,9 +488,9 @@ namespace gpu
         case PM4_INTERRUPT:
         {
             uint32_t cpuMask = reader.ReadAndSwap();
-            for (int n = 0; n < 6; n++)
+            for (uint32_t n = 0; n < 6; n++)
                 if (cpuMask & (1u << n))
-                    DispatchInterrupt(1);
+                    DispatchInterrupt(1, n);
             reader.Advance(count - 1);
             return true;
         }
@@ -373,9 +503,11 @@ namespace gpu
             uint32_t height = reader.ReadAndSwap();
             reader.Advance(count - 4);
             ++m_counter;
-            static uint32_t swaps = 0;
-            if ((swaps++ % 60) == 0)
+            uint32_t swaps = ++g_swapCount;
+            if ((swaps % 60) == 1)
                 LOG_INFO("swap #{} frontbuffer {:#x} {}x{} (magic {:#x})", swaps, frontbuffer, width, height, magic);
+            if (swaps == 118 && getenv("LO_GPU_TRACE"))
+                g_traceBudget = 400;
             return true;
         }
 
@@ -384,18 +516,60 @@ namespace gpu
         {
             uint32_t listPtr = reader.ReadAndSwap();
             uint32_t listLength = reader.ReadAndSwap() & 0xFFFFF;
+            static const bool traceIb = getenv("LO_TRACE_IB") != nullptr;
+            if (traceIb && reader.ring)
+                LOG_INFO("swap#{} ring rd={:#x} wr={:#x} IB [{:#x} {:#x}]", g_swapCount.load(), reader.readOffset, reader.writeOffset, listPtr, listLength);
             ExecuteIndirectBuffer(listPtr, listLength);
             return true;
         }
 
         case PM4_WAIT_REG_MEM:
         {
-            uint32_t waitInfo = reader.ReadAndSwap();
-            uint32_t pollRegAddr = reader.ReadAndSwap();
-            uint32_t ref = reader.ReadAndSwap();
-            uint32_t mask = reader.ReadAndSwap();
-            uint32_t wait = reader.ReadAndSwap();
+            // The CPU may still be filling this buffer when we get here (on
+            // hardware the GPU lags behind); re-read until the operands parse.
+            const uint32_t operandOffset = reader.readOffset;
+            uint32_t waitInfo = 0, pollRegAddr = 0, ref = 0, mask = 0, wait = 0;
+            for (int attempt = 0; attempt < 200; attempt++)
+            {
+                reader.readOffset = operandOffset;
+                waitInfo = reader.ReadAndSwap();
+                pollRegAddr = reader.ReadAndSwap();
+                ref = reader.ReadAndSwap();
+                mask = reader.ReadAndSwap();
+                wait = reader.ReadAndSwap();
+                bool memWait = (waitInfo & 0x10) != 0;
+                if ((waitInfo & ~0x1FFu) == 0 && (memWait || pollRegAddr < REGISTER_COUNT))
+                {
+                    if (attempt > 0)
+                        LOG_INFO("WAIT_REG_MEM operands became valid after {} ms", attempt);
+                    break;
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
             bool isMemory = (waitInfo & 0x10) != 0;
+            if ((!isMemory && pollRegAddr >= REGISTER_COUNT) || (waitInfo & ~0x1FFu))
+            {
+                // Operands are not a WAIT_REG_MEM: the buffer was recycled by
+                // the CPU before we got here. Skip instead of stalling forever.
+                static uint32_t dumped = 0;
+                if (dumped++ < 3)
+                {
+                    DumpHistory("WAIT_REG_MEM with corrupt operands, skipping");
+                    // Does another physical alias hold the real packet?
+                    uint32_t ibPhys = uint32_t(reader.base - static_cast<uint8_t*>(g_memory.Translate(0xA0000000u)));
+                    for (uint32_t alias : { 0xA0000000u, 0xC0000000u, 0xE0000000u })
+                    {
+                        auto* p = reinterpret_cast<be<uint32_t>*>(g_memory.Translate(alias + ibPhys));
+                        std::string words;
+                        for (int i = 0; i < 11; i++) words += fmt::format(" {:#x}", uint32_t(p[i]));
+                        LOG_WARNING("  alias {:#x}+{:#x}:{}", alias, ibPhys, words);
+                    }
+                }
+                return true;
+            }
+            if (g_traceBudget > 0 || (g_swapCount >= 110 && isMemory && (pollRegAddr & ~3u) >= 0xB000 && (pollRegAddr & ~3u) < 0xB020))
+                LOG_INFO("WAIT_REG_MEM {} {:#x} op={} ref={:#x} mask={:#x} value now {:#x} swap #{}", isMemory ? "mem" : "reg", pollRegAddr, waitInfo & 7, ref, mask,
+                    isMemory ? GpuSwap(*reinterpret_cast<uint32_t*>(TranslatePhysical(pollRegAddr & ~3u)), pollRegAddr & 3) : 0, g_swapCount.load());
             auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
             while (m_running)
             {
@@ -424,8 +598,8 @@ namespace gpu
                     break;
                 if (std::chrono::steady_clock::now() > deadline)
                 {
-                    LOG_WARNING("WAIT_REG_MEM timeout ({} {:#x} ref {:#x} mask {:#x} value {:#x})", isMemory ? "mem" : "reg", pollRegAddr, ref, mask, value);
-                    break;
+                    LOG_WARNING("WAIT_REG_MEM stalled 5s ({} {:#x} ref {:#x} mask {:#x} value {:#x}), still waiting", isMemory ? "mem" : "reg", pollRegAddr, ref, mask, value);
+                    deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
                 }
                 if (wait >= 0x100)
                     std::this_thread::sleep_for(std::chrono::milliseconds(wait / 0x100));

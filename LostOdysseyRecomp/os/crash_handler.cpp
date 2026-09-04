@@ -43,8 +43,8 @@ static LONG WINAPI CrashFilter(EXCEPTION_POINTERS* info)
 
     if (auto* ppc = GetPPCContext())
     {
-        fprintf(stderr, "[crash] guest r1=%08X r3=%08X r4=%08X r5=%08X r13=%08X lr=%08llX\n",
-            ppc->r1.u32, ppc->r3.u32, ppc->r4.u32, ppc->r5.u32, ppc->r13.u32, (unsigned long long)ppc->lr);
+        fprintf(stderr, "[crash] guest r1=%08X r3=%08X r4=%08X r5=%08X r13=%08X lr=%08llX ctr=%08llX\n",
+            ppc->r1.u32, ppc->r3.u32, ppc->r4.u32, ppc->r5.u32, ppc->r13.u32, (unsigned long long)ppc->lr, (unsigned long long)ppc->ctr.u64);
     }
 
     HANDLE process = GetCurrentProcess();
