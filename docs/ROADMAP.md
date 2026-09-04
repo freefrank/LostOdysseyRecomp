@@ -7,7 +7,7 @@
 - [x] 提取游戏数据：四张盘已用 tools/god_extract.py 解到 `LostOdysseyRecompLib/private/disc1..4`
 - [x] 确认 XEX 版本：v4、PAL+JP 区域、无 TU，见 `docs/notes/xex.md`
 - [x] XenonAnalyse 生成初版跳转表（841 张）；Ghidra 尚未安装，符号定位暂用 tools/ 下脚本
-- [ ] 在 Xenia 里跑通游戏，作为行为参照，学会用它的日志和 GPU trace
+- [~] Xenia Canary 已放在 tools/xenia_canary.exe，尚未跑通游戏
 
 ## 阶段 1：重编译产出可编译
 - [x] 填写 TOML：save/rest 地址、invalid_instructions、80 条显式函数边界、setjmp/longjmp
