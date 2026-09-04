@@ -2,6 +2,7 @@
 #include "video.h"
 #include <kernel/memory.h>
 #include <os/logger.h>
+#include <hid/hid.h>
 
 #include <SDL.h>
 #include <SDL_syswm.h>
@@ -123,6 +124,8 @@ namespace gpu::video
             LOG_WARNING("video: window creation failed: {}", SDL_GetError());
             return false;
         }
+        // This thread owns the SDL event loop from now on.
+        hid::SetExternalEventPump(true);
 
 #ifdef LO_GPU_PLUME
         SDL_SysWMinfo wmInfo{};
@@ -194,6 +197,8 @@ namespace gpu::video
         SDL_Event event;
         while (SDL_PollEvent(&event))
         {
+            if (event.type == SDL_CONTROLLERDEVICEADDED || event.type == SDL_CONTROLLERDEVICEREMOVED)
+                hid::HandleControllerEvent(event.type, event.cdevice.which);
             if (event.type == SDL_QUIT)
             {
                 LOG_INFO("video: window closed, exiting");

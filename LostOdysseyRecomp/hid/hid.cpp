@@ -2,6 +2,7 @@
 #include "hid.h"
 #include <kernel/xdm.h>
 #include <os/logger.h>
+#include <atomic>
 #include <SDL.h>
 
 // SDL game controller -> XInput state. Player 1 only for now; the keyboard
@@ -17,18 +18,24 @@ namespace
     {
         if (g_controller)
             return;
-        for (int i = 0; i < SDL_NumJoysticks(); i++)
+        int count = SDL_NumJoysticks();
+        for (int i = 0; i < count; i++)
         {
             if (SDL_IsGameController(i))
             {
                 g_controller = SDL_GameControllerOpen(i);
                 if (g_controller)
                 {
-                    LOG_INFO("controller: {}", SDL_GameControllerName(g_controller));
+                    LOG_INFO("controller: {} ({} joysticks)", SDL_GameControllerName(g_controller), count);
                     break;
                 }
+                LOG_WARNING("controller: open failed for joystick {}: {}", i, SDL_GetError());
             }
+            else
+                LOG_INFO("controller: joystick {} '{}' has no game controller mapping", i, SDL_JoystickNameForIndex(i));
         }
+        if (!g_controller)
+            LOG_INFO("controller: none yet ({} joysticks), keyboard fallback active", count);
     }
 }
 
@@ -42,24 +49,41 @@ void hid::Init()
     OpenFirstController();
 }
 
-void hid::Poll()
+static std::atomic<bool> g_externalPump{ false };
+
+void hid::SetExternalEventPump(bool external)
+{
+    g_externalPump = external;
+}
+
+void hid::HandleControllerEvent(uint32_t eventType, int32_t which)
 {
     std::lock_guard lock(g_hidMutex);
+    if (eventType == SDL_CONTROLLERDEVICEADDED)
+    {
+        if (!g_controller)
+            OpenFirstController();
+    }
+    else if (eventType == SDL_CONTROLLERDEVICEREMOVED && g_controller &&
+        SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(g_controller)) == which)
+    {
+        LOG_INFO("controller removed");
+        SDL_GameControllerClose(g_controller);
+        g_controller = nullptr;
+    }
+}
+
+void hid::Poll()
+{
+    if (g_externalPump)
+        return;
     SDL_Event e;
     while (SDL_PollEvent(&e))
     {
-        if (e.type == SDL_CONTROLLERDEVICEADDED)
-            OpenFirstController();
-        else if (e.type == SDL_CONTROLLERDEVICEREMOVED && g_controller &&
-            SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(g_controller)) == e.cdevice.which)
-        {
-            SDL_GameControllerClose(g_controller);
-            g_controller = nullptr;
-        }
+        if (e.type == SDL_CONTROLLERDEVICEADDED || e.type == SDL_CONTROLLERDEVICEREMOVED)
+            HandleControllerEvent(e.type, e.cdevice.which);
         else if (e.type == SDL_QUIT)
-        {
             std::_Exit(0);
-        }
     }
 }
 
