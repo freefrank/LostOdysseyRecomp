@@ -592,10 +592,16 @@ namespace gpu
             video::PumpEvents();
             {
                 static const uint32_t shotSwap = getenv("LO_SCREENSHOT_SWAP") ? strtoul(getenv("LO_SCREENSHOT_SWAP"), nullptr, 10) : 0;
-                if (shotSwap && swaps == shotSwap)
+                static const uint32_t shotEvery = getenv("LO_SCREENSHOT_EVERY") ? strtoul(getenv("LO_SCREENSHOT_EVERY"), nullptr, 10) : 0;
+                if ((shotSwap && swaps == shotSwap) || (shotEvery && (swaps % shotEvery) == 0))
                 {
-                    const char* path = getenv("LO_SCREENSHOT_PATH") ? getenv("LO_SCREENSHOT_PATH") : "screenshot.ppm";
-                    LOG_INFO("screenshot at swap {} -> {} ({})", swaps, path, video::SaveScreenshot(path) ? "ok" : "failed");
+                    std::string path = getenv("LO_SCREENSHOT_PATH") ? getenv("LO_SCREENSHOT_PATH") : "screenshot.ppm";
+                    if (shotEvery)
+                    {
+                        size_t dot = path.rfind('.');
+                        path = path.substr(0, dot) + fmt::format("_{}", swaps) + (dot == std::string::npos ? "" : path.substr(dot));
+                    }
+                    LOG_INFO("screenshot at swap {} -> {} ({})", swaps, path, video::SaveScreenshot(path.c_str()) ? "ok" : "failed");
                 }
             }
             if (g_gpuStats)

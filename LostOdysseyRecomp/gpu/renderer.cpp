@@ -1124,9 +1124,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 // Convert each pixel to four floats, then to the destination format, tiled.
                 const uint8_t* src = static_cast<const uint8_t*>(readback->map());
                 static uint32_t resolveLogs = 0;
-                if (resolveLogs < 12)
+                if (resolveLogs++ < 12 || (destBase == 0x70f000 && (resolveLogs % 120) == 0))
                 {
-                    resolveLogs++;
                     uint32_t nonZero = 0;
                     for (uint32_t y = 0; y < copyHeight; y += 8)
                         for (uint32_t x = 0; x < copyWidth; x += 8)

@@ -94,6 +94,24 @@ D3D9 顶点流 0 对应 fetch 槽 95（6 dword 组 31 的后两个 dword）。
    写到前缓冲后现有呈现层自然显示，这就是"第一帧"的验证路径。
 7. Xenos 清屏就是深度模式/颜色模式的矩形绘制，无需特殊处理；alpha test 在 PS 末尾按 RB_COLORCONTROL（func:3 @0, enable @3）。
 
+## 绘制后端现状（gpu/renderer.cpp，2026-09-03）
+
+已实现：EDRAM 颜色/深度目标 → 宿主纹理（键 base/format/pitch/高度推断）；管线与着色器缓存（翻译器 + DXC，
+`LO_SHADER_CACHE_DIR` 落盘）；顶点流按 fetch 常量整块拷入上传环并做字节序交换，着色器通过共享常量里的每槽偏移
+读取同一个 ByteAddressBuffer；索引缓冲 16/32 位；QuadList/TriangleFan 转索引、RectList 用几何着色器补第四点；
+纹理 8_8_8_8 / DXT1 / DXT3 / DXT5 / 5_6_5 / 4_4_4_4 / 1_5_5_5 / 8 / 8_8 / 16F / 32F 解 tiling 上传；采样器调色板
+（64 个，D3D12 采样器堆上限 2048 所以不能每绘制 32 个）；resolve 回读到客体内存（目标 8_8_8_8 与 16_16_16_16_FLOAT，
+源支持 RGBA8/RGBA16F/RG16F/R32F/RG32F），支持 copy 后清屏。标题画面 "Press START" 正确显示。
+
+已知问题 / 待做：
+- 每帧约 11 次 resolve 各带一次 GPU 同步 + CPU tile 化 1280x720，帧率只有约 16 fps；应改为懒回读（仅当目标被读时）或 GPU 端 tile。
+- 深度 resolve 未实现（阴影/深度纹理）；纹理格式 23（k_24_8_FLOAT 深度作纹理）、29（k_16_16_16_16_EXPAND）未支持。
+- 纹理缓存没有失效机制（只在 resolve 覆盖时清除），CPU 动态更新的纹理会显示旧内容。
+- 纹理 swizzle（fetch 常量 dword3）、mip、立方体/3D 纹理上传、多渲染目标、模板、混合常量色未实现。
+- 标题超时后进入开场影片（`xenon_mov.fpd` 内为 ASF/WMV，偏移 0x1000 起），播放器不出帧、画面黑 1–2 分钟后回到标题；
+  期间绘制统计与标题完全一致，怀疑播放器卡在 `XMACreateContext` 桩返回失败上。
+- plume 补丁：`copyTextureRegion` 目标为缓冲时 `setSamplePositions(nullptr)` 崩溃，见 `tools/patches/plume-lostodyssey.patch`。
+
 ## 渲染路线（原始备选）
 
 A. UnleashedRecomp 路线：钩住游戏内静态链接的 D3D9 函数，用 plume 重写；需要在 Ghidra 里定位这些函数。
