@@ -204,3 +204,36 @@ min/max/mean，`LO_PS_TEXDEBUG=1` 让像素着色器输出最后一次贴图采�
 
 现状：战斗场景构图正确（天空渐变、山脉、士兵、UI），帧间差异 0.2 左右无闪烁。剩余问题是前景人物仍是纯黑剪影，
 即光照没有落到角色上。
+
+## 前景人物纯黑的根因：像素着色器常量只上传了 224 个 vec4（2026-09-04 深夜三）
+
+ALU 常量文件两半各 256 个 vec4：顶点着色器 0x4000–0x43FF，像素着色器 0x4400–0x47FF（与 Xenia 的
+`XE_GPU_REG_SHADER_CONSTANT_000_X = 0x4000` / `_256_X = 0x4400` 一致）。翻译出的 HLSL 两个阶段都声明
+`cbuffer XeConstants { float4 c[256]; }`，但渲染器只把 224 个 vec4 拷进上传环：
+
+```cpp
+uint32_t vsConstants[256 * 4], psConstants[224 * 4];   // 错
+for (uint32_t i = 0; i < 224 * 4; i++) psConstants[i] = Reg(REG_ALU_CONSTANTS + 256 * 4 + i);
+```
+
+角色材质的像素着色器（本作战斗场景是 `ps 2bcb2fea0078fc52`）恰好用 `c[253] / c[254] / c[255]` 存光照方向与
+缩放，越界部分读回 0，于是
+
+```
+r7.y = saturate(dot(r6.wyz, c[254].xyz));   // → 0
+r5.xyz = r6.xzw * c[255].xyz;               // → 0
+oC0.xyz = Σ (r7.* * i1..i3 * 贴图)          // → 全 0
+```
+
+整条光照链乘成 0，人物输出纯黑；远处物体因为深度雾把黑色混向雾色，才呈现"近黑远白"。改成 256 个 vec4 后
+角色材质、地面、云层全部出现。
+
+排查方法（可复用）：`LO_GPU_STATS=1` 现在会打印每帧被静默丢弃的绘制数（按 mode / shader / pitch / pipeline /
+upload / index / scissor 分类，附图元类型掩码）——先用它排除"绘制根本没提交"，再用 `LO_DRAW_TRACE` 拿到该帧
+每个绘制的 vs/ps 哈希与常量，用 `LO_SHADER_HLSL_DIR` 导出对应 HLSL 静态阅读，`LO_DUMP_DRAW_SEQ` 逐绘制导出
+颜色目标定位是哪一笔画坏的。本作一帧约 570 个绘制，其中 ~430 个是 mode 5 深度预通道（含带遮罩变体
+`ps fce57e1b46577a69`，只输出 0/1），真正的 3D 材质通道只有 4 笔大绘制（地形 1 笔 + 角色 3 笔）。
+
+注：翻译器里的 `#define FLT_MIN asfloat(0xff7fffff)` 其实是 **-FLT_MAX**，所以
+`clamp(log2(x), FLT_MIN, FLT_MAX)` 实现的是 Xenos 的 `LOGC`（log2 的 -INF 钳到 -FLT_MAX），语义正确，
+只是宏名有误导性。

@@ -257,6 +257,14 @@ namespace gpu::renderer
 
             std::string shaderCacheDir;
             uint32_t drawsThisFrame = 0;
+            // Draws that never reached the command list, by reason. A pass that
+            // is missing from the image usually shows up here rather than as a
+            // warning, because every one of these paths returns silently.
+            struct DropStats
+            {
+                uint32_t mode, modeMask, shader, pitch, pipeline, upload, index, scissor, primMask;
+                bool Any() const { return mode || shader || pitch || pipeline || upload || index || scissor; }
+            } drops{};
             uint32_t frame = 0;
             std::set<uint32_t> loggedFormats;
 
@@ -1388,24 +1396,37 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     return;
                 }
                 if (modeControl != 4 && modeControl != 5)
+                {
+                    drops.mode++;
+                    drops.modeMask |= 1u << modeControl;
                     return;
+                }
 
                 // Shaders come from the command processor's last IM_LOAD.
                 uint32_t vsCount = 0, psCount = 0;
                 const uint32_t* vsWords = g_commandProcessor.GetActiveShader(false, vsCount);
                 const uint32_t* psWords = g_commandProcessor.GetActiveShader(true, psCount);
                 if (!vsWords || vsCount == 0)
+                {
+                    drops.shader++;
                     return;
+                }
                 Shader* vs = GetShader(false, vsWords, vsCount);
                 Shader* ps = psWords && psCount ? GetShader(true, psWords, psCount) : nullptr;
                 if (!vs)
+                {
+                    drops.shader++;
                     return;
+                }
 
                 // Render targets.
                 uint32_t surfaceInfo = Reg(REG_RB_SURFACE_INFO);
                 uint32_t pitch = surfaceInfo & 0x3FFF;
                 if (pitch == 0)
+                {
+                    drops.pitch++;
                     return;
+                }
                 uint32_t scissorBr = Reg(REG_PA_SC_WINDOW_SCISSOR_BR);
                 uint32_t scissorTl = Reg(REG_PA_SC_WINDOW_SCISSOR_TL);
                 uint32_t rtHeight = GuessTargetHeight(pitch, (scissorBr >> 16) & 0x3FFF);
@@ -1434,13 +1455,23 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 key.depthFormat = depth ? uint32_t(depth->format) : 0;
                 RenderPipeline* pipeline = GetPipeline(key, vs, ps, color->format, depth ? depth->format : RenderFormat::UNKNOWN);
                 if (!pipeline)
+                {
+                    drops.pipeline++;
+                    drops.primMask |= 1u << (info.primitiveType & 31);
                     return;
+                }
 
                 // Constants.
                 auto tConst0 = std::chrono::steady_clock::now();
-                uint32_t vsConstants[256 * 4], psConstants[224 * 4];
+                // Both halves of the ALU constant file are 256 vec4 wide
+                // (0x4000-0x43FF for the vertex shader, 0x4400-0x47FF for the
+                // pixel shader) and the translated HLSL declares float4 c[256]
+                // for either stage. Uploading fewer left the tail reading back
+                // as zero, which zeroed the light terms of every character
+                // material - they index c[253..255].
+                uint32_t vsConstants[256 * 4], psConstants[256 * 4];
                 for (uint32_t i = 0; i < 256 * 4; i++) vsConstants[i] = Reg(REG_ALU_CONSTANTS + i);
-                for (uint32_t i = 0; i < 224 * 4; i++) psConstants[i] = Reg(REG_ALU_CONSTANTS + 256 * 4 + i);
+                for (uint32_t i = 0; i < 256 * 4; i++) psConstants[i] = Reg(REG_ALU_CONSTANTS + 256 * 4 + i);
 
                 SharedConstants shared{};
                 for (uint32_t i = 0; i < 8; i++) shared.bools[i] = Reg(REG_BOOL_CONSTANTS + i);
@@ -1600,7 +1631,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 uint64_t psOffset = Upload(psConstants, sizeof(psConstants));
                 uint64_t sharedOffset = Upload(&shared, sizeof(shared));
                 if (vsOffset == UINT64_MAX || psOffset == UINT64_MAX || sharedOffset == UINT64_MAX)
+                {
+                    drops.upload++;
                     return;
+                }
 
                 // Index buffer / primitive conversion.
                 std::vector<uint32_t> indices;
@@ -1657,7 +1691,11 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (useIndices)
                     indexCount = uint32_t(indices.size());
                 if (indexCount == 0)
+                {
+                    drops.index++;
+                    drops.primMask |= 1u << (info.primitiveType & 31);
                     return;
+                }
 
                 tIndex += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - tIndex0).count();
 
@@ -1676,7 +1714,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 scissor.left = std::clamp(scissor.left, 0, int32_t(pitch)); scissor.right = std::clamp(scissor.right, 0, int32_t(pitch));
                 scissor.top = std::clamp(scissor.top, 0, int32_t(rtHeight)); scissor.bottom = std::clamp(scissor.bottom, 0, int32_t(rtHeight));
                 if (scissor.right <= scissor.left || scissor.bottom <= scissor.top)
+                {
+                    drops.scissor++;
                     return;
+                }
                 commandList->setScissors(&scissor, 1);
                 commandList->setPipeline(pipeline);
                 commandList->setGraphicsPipelineLayout(pipelineLayout.get());
@@ -2360,6 +2401,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (stats && r.dummyBindings)
                     LOG_INFO("renderer frame {}: {} texture slots fell back to the dummy", r.frame, r.dummyBindings);
                 r.dummyBindings = 0;
+                if (stats && r.drops.Any())
+                    LOG_INFO("renderer frame {}: dropped draws - mode {} (modes {:#x}) shader {} pitch {} pipeline {} upload {} index {} scissor {} (prims {:#x})",
+                        r.frame, r.drops.mode, r.drops.modeMask, r.drops.shader, r.drops.pitch, r.drops.pipeline, r.drops.upload, r.drops.index, r.drops.scissor, r.drops.primMask);
                 if (stats && r.textureReuploads)
                     LOG_INFO("renderer frame {}: {} textures re-uploaded after a guest write", r.frame, r.textureReuploads);
                 r.textureReuploads = 0;
@@ -2369,6 +2413,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             }
             g_renderer->frame++;
             g_renderer->drawsThisFrame = 0;
+            g_renderer->drops = {};
         }
     }
 
