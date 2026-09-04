@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 #include <filesystem>
 #include <string_view>
 
@@ -9,6 +11,9 @@
 // save/cache directory.
 struct FileSystem
 {
+    // Name of the most recently opened game file, for the GPU heartbeat log.
+    static std::string LastOpenedFile();
+
     static void Init(const std::filesystem::path& gameRoot);
 
     // Resolve a guest path to a host path. Returns an empty path when the

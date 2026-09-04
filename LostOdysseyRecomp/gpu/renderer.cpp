@@ -148,6 +148,7 @@ namespace gpu::renderer
             uint32_t guestAddress = 0, guestBytes = 0;
             uint64_t guestHash = 0;
             uint64_t checkedFrame = ~0ull;
+            uint64_t clearedFrame = ~0ull;   // LO_CLEAR_RT debugging
         };
 
         struct RenderTargetKey
@@ -234,7 +235,61 @@ namespace gpu::renderer
                 uint32_t destFormat = 0, destPitch = 0;
                 uint64_t frame = 0;
             };
-            std::unordered_map<uint32_t, ResolvedSurface> resolved;
+            // Keyed by destination address, one entry per destination format: the
+            // title resolves the HDR scene to a scratch buffer as FP16 and then the
+            // very same EDRAM tiles, reinterpreted as fixed 2_10_10_10, to the same
+            // address. A single entry per address let the second resolve evict the
+            // first, so the composite's fetch of the FP16 surface missed and fell
+            // back to guest memory.
+            std::unordered_map<uint32_t, std::vector<ResolvedSurface>> resolved;
+
+            // The entry at `base` whose destination format the fetch can read.
+            ResolvedSurface* FindResolved(uint32_t base, uint32_t fetchFormat)
+            {
+                auto it = resolved.find(base);
+                if (it == resolved.end())
+                    return nullptr;
+                for (ResolvedSurface& rs : it->second)
+                    if (rs.tex && ResolveFormatMatches(fetchFormat, rs.destFormat))
+                        return &rs;
+                return nullptr;
+            }
+
+            // The entry at `base` written most recently - what the presenter and the
+            // debug dumps want, since they ask for a surface, not a format.
+            ResolvedSurface* NewestResolved(uint32_t base)
+            {
+                auto it = resolved.find(base);
+                if (it == resolved.end())
+                    return nullptr;
+                ResolvedSurface* best = nullptr;
+                for (ResolvedSurface& rs : it->second)
+                    if (rs.tex && (!best || rs.frame >= best->frame))
+                        best = &rs;
+                return best;
+            }
+
+            ResolvedSurface& ResolvedSlot(uint32_t base, uint32_t destFormat)
+            {
+                std::vector<ResolvedSurface>& list = resolved[base];
+                for (ResolvedSurface& rs : list)
+                    if (rs.destFormat == destFormat)
+                        return rs;
+                list.emplace_back();
+                list.back().destFormat = destFormat;
+                return list.back();
+            }
+
+            void DropResolved(uint32_t base, uint32_t destFormat)
+            {
+                auto it = resolved.find(base);
+                if (it == resolved.end())
+                    return;
+                for (auto rs = it->second.begin(); rs != it->second.end(); ++rs)
+                    if (rs->destFormat == destFormat) { it->second.erase(rs); break; }
+                if (it->second.empty())
+                    resolved.erase(it);
+            }
             bool resolveReadback = false; // LO_RESOLVE_READBACK=1: legacy CPU write-back into guest memory
             bool textureRevalidate = true; // LO_TEXTURE_STATIC=1 disables re-hashing cached textures
             uint32_t textureReuploads = 0;
@@ -876,8 +931,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 height = std::clamp<uint32_t>((height + 31) & ~31u, 32, 2048);
                 // Depth formats (D24S8 / D24FS8) alias the same tiles and share our
                 // host format, so they are one target.
-                // One host texture per (base, pitch, class). Views of the same tiles
-                // through another class are reached by an ownership transfer below.
+                // One host texture per (base, pitch, storage class).
                 const uint32_t colorClass = depth ? 0u : ColorClassOf(format);
                 RenderTargetKey key{ base, colorClass, pitch, 0, depth };
                 auto it = renderTargets.find(key);
@@ -915,15 +969,23 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             // previous owner wrote through the guest bit representation.
             std::map<std::pair<uint32_t, uint32_t>, uint32_t> tileOwner;
 
-            HostTexture* AcquireColorTarget(uint32_t base, uint32_t format, uint32_t pitch, uint32_t height)
+            // `forRead` marks the resolve path, which is the only place the previous
+            // owner's bits matter: the title renders the HDR scene as 7e3 and then
+            // resolves the very same tiles as fixed-point 2_10_10_10, which on the
+            // console is one buffer read two ways. A draw, by contrast, is about to
+            // overwrite what it touches, and converting first only costs a pass and
+            // rounds the values twice - so transfers stay off there.
+            HostTexture* AcquireColorTarget(uint32_t base, uint32_t format, uint32_t pitch, uint32_t height, bool forRead = false)
             {
                 const uint32_t colorClass = ColorClassOf(format);
                 HostTexture* target = GetRenderTarget(base, format, pitch, height, false);
-                // Off by default: this title's passes overwrite the tiles they reuse, and
-                // reinterpreting the previous owner's bits corrupts them (the channel
-                // order of the packed word still needs checking against Xenia's
-                // XeResolveSwapRedBlue). LO_EDRAM_TRANSFER=1 enables it for testing.
-                static const bool doTransfer = getenv("LO_EDRAM_TRANSFER") != nullptr;
+                // Off by default until the conversion is verified against Xenia (with it
+                // on, the composite comes out noisy). LO_EDRAM_TRANSFER=read converts
+                // before resolves only, =draw before draws as well.
+                static const char* transferMode = getenv("LO_EDRAM_TRANSFER");
+                const bool doTransfer = transferMode &&
+                    ((forRead && (strcmp(transferMode, "read") == 0 || strcmp(transferMode, "draw") == 0 || strcmp(transferMode, "1") == 0)) ||
+                     strcmp(transferMode, "draw") == 0);
                 auto owner = tileOwner.find({ base, pitch });
                 if (doTransfer && owner != tileOwner.end() && owner->second != colorClass)
                 {
@@ -1018,10 +1080,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 static const bool noDepthFetch = getenv("LO_NO_DEPTH_FETCH") != nullptr;
                 if (noDepthFetch && (format == 22 || format == 23))
                     return &dummyTexture2D;
-                if (auto rit = resolved.find(base); rit != resolved.end() && rit->second.tex && ResolveFormatMatches(format, rit->second.destFormat))
+                if (ResolvedSurface* rs = FindResolved(base, format))
                 {
-                    Transition(*rit->second.tex, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
-                    return rit->second.tex.get();
+                    Transition(*rs->tex, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
+                    return rs->tex.get();
                 }
                 auto it = textures.find(key);
                 if (it != textures.end())
@@ -1442,6 +1504,24 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (depth)
                     Transition(*depth, RenderTextureLayout::DEPTH_WRITE, RenderBarrierStage::GRAPHICS);
 
+                // LO_CLEAR_RT=1: wipe every colour target the first time a frame
+                // touches it. Targets normally survive across frames, so a
+                // per-draw dump shows last frame's image until something covers
+                // it - which makes it impossible to tell which draw of THIS
+                // frame painted a given pixel.
+                // LO_CLEAR_RT=magenta paints the wipe bright instead of black, so
+                // anything the frame leaves untouched stands out in the final image.
+                static const char* clearTargets = getenv("LO_CLEAR_RT");
+                if (clearTargets && color->clearedFrame != frame)
+                {
+                    static const bool loud = strcmp(clearTargets, "magenta") == 0;
+                    color->clearedFrame = frame;
+                    commandList->setFramebuffer(GetFramebuffer(color, nullptr));
+                    commandList->clearColor(0, loud ? RenderColor(1.0f, 0.0f, 1.0f, 1.0f) : RenderColor(0.0f, 0.0f, 0.0f, 0.0f));
+                    if (loud)
+                        LOG_INFO("renderer: frame {} wiped target base={:#x} fmt={} pitch={} {}x{}", frame, colorInfo & 0xFFF, (colorInfo >> 16) & 0xF, pitch, color->width, color->height);
+                }
+
                 // Pipeline.
                 PipelineKey key{};
                 key.vs = Fnv1a(vsWords, vsCount * 4);
@@ -1791,7 +1871,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             uint32_t f0 = Reg(REG_FETCH_CONSTANTS + slot * 6), f1 = Reg(REG_FETCH_CONSTANTS + slot * 6 + 1), f2 = Reg(REG_FETCH_CONSTANTS + slot * 6 + 2);
                             if ((f0 & 3) != 2) { texs += fmt::format(" t{}=[none]", slot); continue; }
                             uint32_t base = (f1 >> 12) << 12;
-                            bool fromResolve = resolved.count(base) != 0;
+                            bool fromResolve = FindResolved(base, f1 & 0x3F) != nullptr;
                             texs += fmt::format(" t{}=[fmt {} {}x{} at {:#x}{}]", slot, f1 & 0x3F, (f2 & 0x1FFF) + 1, ((f2 >> 13) & 0x1FFF) + 1, base, fromResolve ? " resolved" : "");
                         }
                     }
@@ -1800,8 +1880,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (drawLogs < 24 || (traceFrame && frame >= traceFrame && frame < traceFrame + traceCount))
                 {
                     drawLogs++;
-                    LOG_INFO("renderer: draw f{} prim={} n={} idx={} vs={:016x} ps={:016x} rt={:#x}/{} {}x{} depth={:#x} dinfo={:#x} vp=({},{} {}x{} z {}..{}) vte={:#x} scissor=({},{})-({},{}) ndc=({},{}) off=({},{}) mode={} c255=({:g},{:g},{:g},{:g})",
+                    LOG_INFO("renderer: draw f{} prim={} n={} idx={} vs={:016x} ps={:016x} rt={:#x}/{} {}x{} depth={:#x} dinfo={:#x} blend={:#x} mask={:#x} cull={:#x} colorctl={:#x} aref={:g} vp=({},{} {}x{} z {}..{}) vte={:#x} scissor=({},{})-({},{}) ndc=({},{}) off=({},{}) mode={} c255=({:g},{:g},{:g},{:g})",
                         frame, info.primitiveType, indexCount, useIndices, key.vs, key.ps, colorInfo & 0xFFF, (colorInfo >> 16) & 0xF, pitch, rtHeight, depthControl, depthInfo,
+                        key.blend, key.colorMask, key.modeCull, Reg(REG_RB_COLORCONTROL), RegF(REG_RB_ALPHA_REF),
                         viewport.x, viewport.y, viewport.width, viewport.height, viewport.minDepth, viewport.maxDepth, vte,
                         scissor.left, scissor.top, scissor.right, scissor.bottom, shared.ndcScale[0], shared.ndcScale[1], shared.ndcOffset[0], shared.ndcOffset[1], modeControl,
                         RegF(REG_ALU_CONSTANTS + 255 * 4), RegF(REG_ALU_CONSTANTS + 255 * 4 + 1), RegF(REG_ALU_CONSTANTS + 255 * 4 + 2), RegF(REG_ALU_CONSTANTS + 255 * 4 + 3));
@@ -1912,7 +1993,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 
                 // Debug snapshot goes last: it flushes, which would drop the
                 // pipeline state the clear replay above still relies on.
-                DumpDrawStep(*color);
+                DumpDrawStep(*color, key.vs);
             }
 
             // Writes any colour/depth texture to a PPM, tonemapping FP16 by clamping.
@@ -1963,11 +2044,25 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             // LO_DUMP_DRAW_SEQ=<frame> + LO_DUMP_DRAW_EVERY=<n>: snapshot the bound
             // colour target every n draws of that frame, so the draw that ruins the
             // image can be identified from a single run.
-            void DumpDrawStep(HostTexture& color)
+            // With LO_DUMP_DRAW_VS=<hex hash> the frame number is only a lower bound:
+            // the dump fires after every draw of that vertex shader in the first
+            // frame at or past it that uses the shader. Frame numbers drift between
+            // runs (the dumps themselves slow the game), shader hashes do not.
+            void DumpDrawStep(HostTexture& color, uint64_t vsHash)
             {
                 static const uint32_t dumpFrame = getenv("LO_DUMP_DRAW_SEQ") ? strtoul(getenv("LO_DUMP_DRAW_SEQ"), nullptr, 10) : 0;
                 static const uint32_t every = getenv("LO_DUMP_DRAW_EVERY") ? std::max(1ul, strtoul(getenv("LO_DUMP_DRAW_EVERY"), nullptr, 10)) : 25;
-                if (!dumpFrame || frame != dumpFrame || (drawsThisFrame % every) != 0)
+                static const uint64_t dumpVs = getenv("LO_DUMP_DRAW_VS") ? strtoull(getenv("LO_DUMP_DRAW_VS"), nullptr, 16) : 0;
+                static uint64_t lockedFrame = 0;
+                if (!dumpFrame)
+                    return;
+                if (dumpVs)
+                {
+                    if (vsHash != dumpVs || frame < dumpFrame || (lockedFrame && frame != lockedFrame))
+                        return;
+                    lockedFrame = frame;
+                }
+                else if (frame != dumpFrame || (drawsThisFrame % every) != 0)
                     return;
                 const char* dir = getenv("LO_DUMP_RESOLVE_DIR");
                 DumpTexture(color, fmt::format("{}/draw{:04}_{}x{}.ppm", dir ? dir : ".", drawsThisFrame, color.width, color.height), "draw step");
@@ -2048,7 +2143,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 Begin();
                 const uint32_t texW = std::clamp<uint32_t>(std::max(destPitch, x0 + w), 1, 8192);
                 const uint32_t texH = std::clamp<uint32_t>(std::max(destHeight, y0 + h), 1, 8192);
-                ResolvedSurface& rs = resolved[destBase];
+                ResolvedSurface& rs = ResolvedSlot(destBase, destFormat);
                 if (!rs.tex || rs.tex->format != RenderFormat::R32_FLOAT || rs.tex->width != texW || rs.tex->height != texH)
                 {
                     if (rs.tex) retiredTextures.push_back(std::move(rs.tex));
@@ -2060,7 +2155,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     rs.tex->layout = RenderTextureLayout::UNKNOWN;
                     if (!rs.tex->texture)
                     {
-                        resolved.erase(destBase);
+                        DropResolved(destBase, destFormat);
                         return;
                     }
                     static uint32_t created = 0;
@@ -2095,7 +2190,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 // The destination's own format decides what the surface holds, so the
                 // frontbuffer stays 8888 even though EDRAM is kept in FP16.
                 const RenderFormat destHost = (destFormat == 32 || destFormat == 7) ? RenderFormat::R16G16B16A16_FLOAT : RenderFormat::R8G8B8A8_UNORM;
-                ResolvedSurface& rs = resolved[destBase];
+                ResolvedSurface& rs = ResolvedSlot(destBase, destFormat);
                 if (!rs.tex || rs.tex->format != destHost || rs.tex->width != texW || rs.tex->height != texH)
                 {
                     if (rs.tex) retiredTextures.push_back(std::move(rs.tex));
@@ -2108,7 +2203,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     if (!rs.tex->texture)
                     {
                         LOG_WARNING("renderer: resolved surface creation failed ({}x{})", texW, texH);
-                        resolved.erase(destBase);
+                        DropResolved(destBase, destFormat);
                         return;
                     }
                     static uint32_t created = 0;
@@ -2206,7 +2301,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             frame, srcSelect, colorInfo & 0xFFF, (colorInfo >> 16) & 0xF, pitch, rtHeight, existed, destBase, destFormat, x0, y0, copyWidth, copyHeight, destPitch, destHeight, copyControl & 0x300);
                     }
                 }
-                HostTexture* color = AcquireColorTarget(colorInfo & 0xFFF, (colorInfo >> 16) & 0xF, pitch, rtHeight);
+                HostTexture* color = AcquireColorTarget(colorInfo & 0xFFF, (colorInfo >> 16) & 0xF, pitch, rtHeight, true);
                 if (!resolveReadback)
                 {
                     ResolveOnGpu(*color, destBase, destFormat, destPitch, destHeight, x0, y0, copyWidth, copyHeight);
@@ -2427,10 +2522,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
     {
         if (!g_renderer)
             return nullptr;
-        auto it = g_renderer->resolved.find(physicalAddress & 0x1FFFFFFF);
-        if (it == g_renderer->resolved.end() || !it->second.tex)
+        auto* rs = g_renderer->NewestResolved(physicalAddress & 0x1FFFFFFF);
+        if (!rs)
             return nullptr;
-        HostTexture& tex = *it->second.tex;
+        HostTexture& tex = *rs->tex;
         g_renderer->Begin();
         g_renderer->Transition(tex, RenderTextureLayout::COPY_SOURCE, RenderBarrierStage::COPY);
         g_renderer->Flush();
@@ -2444,9 +2539,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
     {
         std::vector<uint32_t> out;
         if (g_renderer)
-            for (auto& [address, surface] : g_renderer->resolved)
-                if (surface.tex)
-                    out.push_back(address);
+            for (auto& [address, surfaces] : g_renderer->resolved)
+                for (auto& surface : surfaces)
+                    if (surface.tex) { out.push_back(address); break; }
         return out;
     }
 
@@ -2508,10 +2603,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
     {
         if (!g_renderer)
             return false;
-        auto it = g_renderer->resolved.find(physicalAddress & 0x1FFFFFFF);
-        if (it == g_renderer->resolved.end() || !it->second.tex)
+        auto* rs = g_renderer->NewestResolved(physicalAddress & 0x1FFFFFFF);
+        if (!rs)
             return false;
-        return ReadbackTexture(*it->second.tex, pixels, width, height);
+        return ReadbackTexture(*rs->tex, pixels, width, height);
     }
 
     void DumpRenderTargets(const char* prefix)

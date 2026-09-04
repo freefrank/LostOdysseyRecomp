@@ -237,3 +237,27 @@ upload / index / scissor 分类，附图元类型掩码）——先用它排除"
 注：翻译器里的 `#define FLT_MIN asfloat(0xff7fffff)` 其实是 **-FLT_MAX**，所以
 `clamp(log2(x), FLT_MIN, FLT_MAX)` 实现的是 Xenos 的 `LOGC`（log2 的 -INF 钳到 -FLT_MAX），语义正确，
 只是宏名有误导性。
+
+## 调试基础设施与战斗帧结构（2026-09-04 下午）
+
+日志：每行前缀 `[运行秒数 t线程标签]`；每 60 个 swap 一条 `heartbeat`（fps、每帧 draw 数、frontbuffer、最近打开的游戏文件）；
+游戏文件打开升为 info（`xenon_mov.fpd` = 影片、`xenon_battle.fpd` = 战斗加载）；每帧刷屏的 isr / scratch writeback 日志
+降为 `LO_VERBOSE=1` 才输出。启动时打印时间、命令行和所有 `LO_*` 开关。配合 `--quiet-kernel` 一次运行约 1200 行。
+
+自动测试序列（`LO_AUTO_PULSE=6 LO_AUTO_BUTTONS="s@300,a@600,b@900,u@1100,a@1300,s@2000,k@2100,a@2200"`）：
+影片从 swap ~1440 开始，START@2000 弹出暂停菜单、BACK@2100 跳过，swap ~2160（约 72 秒）进入开场战斗；
+在 1500/1560 按会因为影片还在加载而无效（之前每轮白等 3 分钟）。帧号在不同运行间会漂移（导出/追踪会拖慢游戏），
+按帧号触发的导出改用 `LO_DUMP_DRAW_VS=<hash>`（在 `LO_DUMP_DRAW_SEQ` 之后第一次出现该 VS 的那一帧，每个该 VS 的
+draw 后导出一次）。其他新增开关：`LO_CLEAR_RT=1|magenta`（每帧首次绑定时擦除颜色目标，品红能直接暴露"整帧没写过"的
+像素）、`LO_EDRAM_TRANSFER=read|draw`（ownership transfer，默认关）、`LO_GPU_STATS=1` 现在也打印按原因分类的丢弃 draw 数。
+draw trace 行新增 blend / mask / cull / colorctl / aref。
+
+resolve 缓存改为按 (目标地址, 目标格式) 存多份：本作把同一片 EDRAM 先按 7e3 resolve 成 FP16、再按 fmt 10 resolve 成
+2_10_10_10，都写到 0x9fa0000，单键缓存会让后者顶掉前者。
+
+开场战斗一帧的结构（frame trace）：~430 个 mode 5 深度绘制（预通道 + 阴影；带遮罩变体用 ps fce57e1b，只输出 0/1），
+3D 材质通道只有 4 笔：地形+天空 1 笔（vs 03184cec / ps 311b1400，正常）、角色 3 笔（vs 4053f2a2 / ps 2bcb2fea），
+然后 4 张全屏雾面片、粒子四边形、resolve、后处理、UI。**角色 3 笔与地形那笔的 blend/mask/cull/alpha/depth 状态、
+目标纹理完全相同，顶点流、索引、世界/视投矩阵与预通道逐位一致，但它们的像素从未被写入**（品红擦除、强制品红输出
+两个实验都证明片元没到达目标）。当前最强假设：两个不同 HLSL 程序里同一串 MAD 被 DXC 以不同方式合并/重排，z 差
+一个 ulp，`GEQUAL` 把整个角色拒掉；待对照 Xenia 的 dxbc_shader_translator 与我们翻译器里 `precise` 的作用范围验证。

@@ -1,5 +1,6 @@
 #include <stdafx.h>
 #include "file_system.h"
+#include <mutex>
 #include <cpu/guest_thread.h>
 #include <kernel/xam.h>
 #include <kernel/xdm.h>
@@ -7,6 +8,10 @@
 #include <os/logger.h>
 #ifdef _WIN32
 #include <io.h>
+
+static std::mutex g_lastOpenedMutex;
+static std::string g_lastOpenedFile;
+
 #endif
 
 // Semantics follow Xenia's kernel/xboxkrnl/xboxkrnl_io.cc (BSD-3).
@@ -356,8 +361,18 @@ static uint32_t OpenFileHandle(be<uint32_t>* FileHandleOut, uint32_t DesiredAcce
         IoStatusBlock->Status = STATUS_SUCCESS;
         IoStatusBlock->Information = information;
     }
-    LOG_KERNEL("'{}' -> {} ({} bytes{})", name, hostPath.string(), handle->size, handle->isDirectory ? ", dir" : "");
+    LOG_INFO("open '{}' -> {} ({} bytes{})", name, hostPath.string(), handle->size, handle->isDirectory ? ", dir" : "");
+    {
+        std::lock_guard lock(g_lastOpenedMutex);
+        g_lastOpenedFile = hostPath.filename().string();
+    }
     return STATUS_SUCCESS;
+}
+
+std::string FileSystem::LastOpenedFile()
+{
+    std::lock_guard lock(g_lastOpenedMutex);
+    return g_lastOpenedFile;
 }
 
 uint32_t NtCreateFile(be<uint32_t>* FileHandle, uint32_t DesiredAccess, XOBJECT_ATTRIBUTES* Attributes,

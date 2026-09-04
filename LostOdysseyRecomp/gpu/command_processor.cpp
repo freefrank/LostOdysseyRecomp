@@ -6,6 +6,8 @@
 #include <kernel/memory.h>
 #include <kernel/function.h>
 #include <os/logger.h>
+#include <chrono>
+#include <kernel/io/file_system.h>
 #include <set>
 #include <mutex>
 
@@ -282,7 +284,7 @@ namespace gpu
                 *reinterpret_cast<be<uint32_t>*>(TranslatePhysical(scratchAddr + scratchReg * 4)) = value;
                 static uint32_t logged = 0;
                 if (logged++ < 4 || (g_swapCount >= 110 && scratchReg <= 1))
-                    LOG_INFO("scratch writeback reg{} = {:#x} -> physical {:#x} (umsk {:#x}) swap #{}", scratchReg, value, scratchAddr + scratchReg * 4, umsk, g_swapCount.load());
+                    LOG_VERBOSE("scratch writeback reg{} = {:#x} -> physical {:#x} (umsk {:#x}) swap #{}", scratchReg, value, scratchAddr + scratchReg * 4, umsk, g_swapCount.load());
             }
         }
         else if (index == REG_COHER_STATUS_HOST)
@@ -406,7 +408,7 @@ namespace gpu
             ctx.ppcContext.r4.u64 = m_interruptUserData;
             g_memory.FindFunction(m_interruptCallback)(ctx.ppcContext, g_memory.base);
             if (g_swapCount >= 110 && (uint32_t(blk[0]) != b0 || uint32_t(blk[1]) != b1))
-                LOG_INFO("vblank isr changed block [{:#x} {:#x}] -> [{:#x} {:#x}] (swap #{})", b0, b1, uint32_t(blk[0]), uint32_t(blk[1]), g_swapCount.load());
+                LOG_VERBOSE("vblank isr changed block [{:#x} {:#x}] -> [{:#x} {:#x}] (swap #{})", b0, b1, uint32_t(blk[0]), uint32_t(blk[1]), g_swapCount.load());
         }
     }
 
@@ -443,11 +445,11 @@ namespace gpu
             auto* blk = reinterpret_cast<be<uint32_t>*>(TranslatePhysical(0xB000));
             bool trace = g_swapCount >= 110;
             if (trace)
-                LOG_INFO("isr source={} cpu={} block=[{:#x} {:#x} {:#x} {:#x} {:#x} {:#x}]", item.first, item.second,
+                LOG_VERBOSE("isr source={} cpu={} block=[{:#x} {:#x} {:#x} {:#x} {:#x} {:#x}]", item.first, item.second,
                     uint32_t(blk[0]), uint32_t(blk[1]), uint32_t(blk[2]), uint32_t(blk[3]), uint32_t(blk[4]), uint32_t(blk[5]));
             g_memory.FindFunction(m_interruptCallback)(ctx.ppcContext, g_memory.base);
             if (trace)
-                LOG_INFO("isr done block=[{:#x} {:#x} {:#x} {:#x} {:#x} {:#x}]",
+                LOG_VERBOSE("isr done block=[{:#x} {:#x} {:#x} {:#x} {:#x} {:#x}]",
                     uint32_t(blk[0]), uint32_t(blk[1]), uint32_t(blk[2]), uint32_t(blk[3]), uint32_t(blk[4]), uint32_t(blk[5]));
         }
     }
@@ -590,8 +592,21 @@ namespace gpu
             ++m_counter;
             uint32_t swaps = ++g_swapCount;
             g_presentedSwaps = swaps;
+            // Heartbeat: one line every 60 presented frames with the pace and the
+            // last game file the title opened, which is the cheapest "where is
+            // it now" indicator (movie archives, map packages, save data...).
             if ((swaps % 60) == 1)
-                LOG_INFO("swap #{} frontbuffer {:#x} {}x{} (magic {:#x})", swaps, frontbuffer, width, height, magic);
+            {
+                static auto lastBeat = std::chrono::steady_clock::now();
+                static uint32_t lastBeatSwaps = 0;
+                const auto now = std::chrono::steady_clock::now();
+                const double dt = std::chrono::duration<double>(now - lastBeat).count();
+                const double fps = dt > 0.0 && swaps > lastBeatSwaps ? double(swaps - lastBeatSwaps) / dt : 0.0;
+                lastBeat = now;
+                lastBeatSwaps = swaps;
+                LOG_INFO("heartbeat: swap #{} {:.1f} fps, {} draws/frame, frontbuffer {:#x} {}x{}, last file '{}'",
+                    swaps, fps, g_frame.draws, frontbuffer, width, height, FileSystem::LastOpenedFile());
+            }
             renderer::Flush();
             {
                 // Frame pacing: the game advances its simulation per presented frame
