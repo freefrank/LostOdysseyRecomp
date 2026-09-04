@@ -43,7 +43,26 @@ source 0 时检查 MMIO 0x1951 的 bit0 再调 vblank 处理 `sub_827B4680`（�
   间接包和 WPTR 更新。
 - 命令处理器对 WAIT_REG_MEM 的非法操作数仍容错（重读 200 ms 后跳过），正常情况下不应触发。
 
-## 渲染路线（待定）
+## 标题流程的绘制统计（LO_GPU_STATS=1，run43）
+
+- 第 1–1140 帧（logo/加载）：每帧 1 个深度清屏（prim 8 rect，mode 5）+ 2 个 QuadList 四边形
+  （auto-index 4 顶点，vs `ee5b1e880e971ce1` 30 dword / ps `31386e31cf9a84ed` 15 dword，mode 4）
+  + 1 次 resolve（mode 6，rect 3 顶点，RB_COPY_DEST_BASE=0x70F000 即前缓冲，1280x720，
+  RB_COPY_DEST_INFO=0x1000300 → 8_8_8_8）。顶点在 fetch[0]（物理 0x691C18，8in32），fetch[31] 后半是第二路顶点流。
+- 第 1200 帧起进入标题场景：每帧 80–130 个绘制、50–80 次着色器加载、8–11 次 resolve；
+  大量 prim 1 单点绘制（16x16 剪裁，写 EDRAM base 0）、prim 4 三角形列表（索引 DMA）；
+  resolve 目标包括 0x9F90000 / 0x9BF0000 等纹理内存（copyCtl 0x4 = 深度拷贝）。
+- 120 秒内共 25 个不同着色器，最大几十个 dword——标题画面着色器很简单。
+- 微码转储在 `LostOdysseyRecompLib/private/shaders/{vs,ps}_<fnv1a64>.bin`（大端原始微码，无 D3D9 容器）。
+
+## 渲染路线（已定：B，Xenos 模拟 + plume）
+
+理由：绘制流已经完整经过命令处理器；D3D 库是静态链接的，路线 A 需要先在 Ghidra 里恢复上百个 D3D 入口。
+分步：① SDL 窗口 + plume D3D12 设备/交换链，XE_SWAP 时呈现；② EDRAM 渲染目标缓存（按 base/format/pitch）
+与 mode 6 resolve → 宿主纹理并回写客体内存；③ 绘制：fetch 常量→顶点缓冲、微码→HLSL（改造 XenosRecomp
+的翻译器接受原始微码，顶点输入由 vfetch 指令推导）、DXC 运行期编译并缓存；④ 纹理 fetch 常量→解 tiling/字节序。
+
+## 渲染路线（原始备选）
 
 A. UnleashedRecomp 路线：钩住游戏内静态链接的 D3D9 函数，用 plume 重写；需要在 Ghidra 里定位这些函数。
 B. 扩展本命令处理器为完整 Xenos 模拟（解析 draw/状态/fetch 常量/着色器，XenosRecomp 翻译着色器），
