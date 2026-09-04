@@ -10,7 +10,7 @@
 - [ ] 在 Xenia 里跑通游戏，作为行为参照，学会用它的日志和 GPU trace
 
 ## 阶段 1：重编译产出可编译
-- [x] 填写 TOML：save/rest 地址、invalid_instructions、170→80 条显式函数边界（setjmp/longjmp 待定位）
+- [x] 填写 TOML：save/rest 地址、invalid_instructions、80 条显式函数边界、setjmp/longjmp
 - [x] XenonRecomp 零错误、零未实现指令产出（run 15，本地补丁补了 30 条指令）
 - [ ] 生成的 C++ 能在 MSVC 和 Clang 下编译通过
 - [ ] XenosRecomp 处理全部着色器，记录不支持的指令

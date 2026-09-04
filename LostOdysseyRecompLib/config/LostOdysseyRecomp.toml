@@ -26,8 +26,8 @@ savevmx_14_address   = 0x82DF2B00
 restvmx_64_address   = 0x82DF2E2C
 savevmx_64_address   = 0x82DF2B94
 
-# longjmp_address = TODO
-# setjmp_address  = TODO
+longjmp_address = 0x82DF3060
+setjmp_address  = 0x82DF34A0
 
 # 手动指定函数边界：{ address, size }
 functions = [
