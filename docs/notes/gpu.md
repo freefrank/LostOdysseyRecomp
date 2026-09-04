@@ -62,6 +62,38 @@ source 0 时检查 MMIO 0x1951 的 bit0 再调 vblank 处理 `sub_827B4680`（�
 与 mode 6 resolve → 宿主纹理并回写客体内存；③ 绘制：fetch 常量→顶点缓冲、微码→HLSL（改造 XenosRecomp
 的翻译器接受原始微码，顶点输入由 vfetch 指令推导）、DXC 运行期编译并缓存；④ 纹理 fetch 常量→解 tiling/字节序。
 
+
+## 着色器翻译器（gpu/shader/，已完成并验证）
+
+`xenos_translator.cpp`：原始微码 → HLSL（SM 6.0），`dxc_compiler.cpp` 运行期通过 dxcompiler.dll 编译。
+`LoShaderTool <dir|bin> [--print] [--out dir]`（`tools/build_target.bat LoShaderTool`）离线验证：25 个标题流程着色器全部通过。
+绑定约定（与绘制后端共享）：b0 = `float4 c[256]`（VS 用 0x4000 起、PS 用 0x4400 起的 ALU 常量），
+b1 = XeShared（bool/loop 常量、NDC 缩放偏移、VTE 标志、alpha test），t0-95/space0 = 顶点 fetch 槽的
+ByteAddressBuffer（CPU 先按 fetch 常量的 endian 做 32/16 位交换），t/space1..3 = 2D/3D/Cube 纹理，s0-31 采样器。
+插值器固定 16 个 TEXCOORD；PS 的 r0..r15 直接由 i0..i15 初始化。VS 末尾按 PA_CL_VTE_CNTL 位 8-10 还原
+（xy 已除 w、z 已除 w、w 为 1/w），再乘 NDC 缩放/偏移（对应 Xenia 的 CompleteVertexOrDomainShader）。
+D3D9 顶点流 0 对应 fetch 槽 95（6 dword 组 31 的后两个 dword）。
+
+## 绘制后端设计（下一步，gpu/renderer.cpp，尚未开始）
+
+1. EDRAM 渲染目标缓存：键 (RB_COLOR_INFO.color_base 12 位 tile, color_format 4 位 @16, RB_SURFACE_INFO.surface_pitch 14 位, msaa @16)；
+   深度键 (RB_DEPTH_INFO.depth_base, depth_format @16)。高度取剪裁 PA_SC_WINDOW_SCISSOR_BR（br_x:14 @0, br_y:14 @16）。
+2. 管线缓存键：vs/ps 哈希 + RB_BLENDCONTROL0（src:5 @0, op:3 @5, dst:5 @8, alpha src @16, op @21, dst @24）
+   + RB_COLOR_MASK（每 RT 4 位）+ RB_DEPTHCONTROL（stencil @0, z @1, zwrite @2, zfunc:3 @4）
+   + PA_SU_SC_MODE_CNTL（cull_front @0, cull_back @1, face @2）+ 图元类型 + RT 格式。
+3. 图元：RectList(8) 3 顶点→2 三角（v3 = v0 + v2 - v1）；QuadList(13)→索引三角；TriangleFan 转换；PointList 先按点画。
+   索引：VGT_DMA_BASE + VGT_DMA_SIZE（num_words:24, swap_mode:2 @30），index_size 由 initiator bit 11。
+4. 顶点流：fetch 常量 type 3：dword0 address:30（<<2 = 字节）, dword1 endian:2 + size:24（dword）；整块拷进上传环并交换字节序。
+5. 纹理 fetch 常量（6 dword）：d0 type:2 sign:8 clamp:9 pitch:9@22(×32 texel) tiled@31；d1 format:6 endian:2 base_address:20@12(<<12)；
+   d2 2D width:13/height:13（+1）；d3 num_format@0 swizzle:12@1 exp_adjust:6@13 滤波；d5 dimension:2@9 mip_address:20@12。
+   格式枚举见 Xenia xenos.h TextureFormat（k_8_8_8_8=6, DXT1=18, DXT2_3=19, DXT4_5=20, k_5_6_5=4, k_8=2, k_4_4_4_4=15）。
+   解 tiling 用 `video::TiledOffset2D`（压缩格式以 4x4 块为单位）。
+6. Resolve（RB_MODECONTROL edram_mode 6 的绘制）：RB_COPY_CONTROL（copy_src_select:3 @0，4=深度；color_clear @8, depth_clear @9,
+   copy_command:2 @20），RB_COPY_DEST_BASE 物理地址，RB_COPY_DEST_PITCH（pitch:14 @0, height:14 @16），
+   RB_COPY_DEST_INFO（endian:3 @0, format:6 @7, swap @24）。做法：RT → 回读缓冲 → CPU tile 化写回客体内存；
+   写到前缓冲后现有呈现层自然显示，这就是"第一帧"的验证路径。
+7. Xenos 清屏就是深度模式/颜色模式的矩形绘制，无需特殊处理；alpha test 在 PS 末尾按 RB_COLORCONTROL（func:3 @0, enable @3）。
+
 ## 渲染路线（原始备选）
 
 A. UnleashedRecomp 路线：钩住游戏内静态链接的 D3D9 函数，用 plume 重写；需要在 Ghidra 里定位这些函数。
