@@ -53,6 +53,17 @@ namespace
 
 void hid::Init()
 {
+    static bool initialised = false;
+    if (initialised)
+        return;
+    initialised = true;
+    // RawInput delivers WM_INPUT to the thread that initialised the joystick
+    // subsystem; ours never pumps messages for it. Use XInput/WGI polled from
+    // SDL's own joystick thread instead so button state updates regardless of
+    // which thread pumps events.
+    SDL_SetHint(SDL_HINT_JOYSTICK_RAWINPUT, "0");
+    SDL_SetHint(SDL_HINT_JOYSTICK_THREAD, "1");
+    SDL_SetHint(SDL_HINT_XINPUT_ENABLED, "1");
     if (SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER | SDL_INIT_EVENTS) != 0)
     {
         LOG_WARNING("SDL controller init failed: {}", SDL_GetError());
@@ -73,8 +84,17 @@ void hid::HandleControllerEvent(uint32_t eventType, int32_t which)
     std::lock_guard lock(g_hidMutex);
     if (eventType == SDL_CONTROLLERDEVICEADDED)
     {
-        if (!g_controller)
-            OpenFirstController();
+        // Re-evaluate so a later-enumerated Xbox pad wins over a non-Xbox one.
+        if (g_controller)
+        {
+            SDL_GameControllerType current = SDL_GameControllerGetType(g_controller);
+            bool currentIsXbox = current == SDL_CONTROLLER_TYPE_XBOX360 || current == SDL_CONTROLLER_TYPE_XBOXONE;
+            if (currentIsXbox)
+                return;
+            SDL_GameControllerClose(g_controller);
+            g_controller = nullptr;
+        }
+        OpenFirstController();
     }
     else if (eventType == SDL_CONTROLLERDEVICEREMOVED && g_controller &&
         SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(g_controller)) == which)
@@ -112,6 +132,8 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
 
     if (g_controller)
     {
+        if (!g_externalPump)
+            SDL_GameControllerUpdate();
         auto btn = [&](SDL_GameControllerButton b) { return SDL_GameControllerGetButton(g_controller, b) != 0; };
         auto axis = [&](SDL_GameControllerAxis a) { return SDL_GameControllerGetAxis(g_controller, a); };
 
@@ -136,6 +158,16 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
         gp.sThumbLY = int16_t(-axis(SDL_CONTROLLER_AXIS_LEFTY) - 1);
         gp.sThumbRX = axis(SDL_CONTROLLER_AXIS_RIGHTX);
         gp.sThumbRY = int16_t(-axis(SDL_CONTROLLER_AXIS_RIGHTY) - 1);
+    }
+
+    {
+        static const bool trace = getenv("LO_TRACE_INPUT") != nullptr;
+        static uint16_t lastButtons = 0;
+        if (trace && gp.wButtons != lastButtons)
+        {
+            LOG_INFO("input: buttons {:#06x} (controller {})", gp.wButtons, g_controller ? "yes" : "no");
+            lastButtons = gp.wButtons;
+        }
     }
 
     // Test hook: LO_AUTO_START=<swap> holds START for ~30 polls once that many

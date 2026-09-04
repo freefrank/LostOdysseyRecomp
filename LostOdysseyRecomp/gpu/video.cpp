@@ -124,7 +124,10 @@ namespace gpu::video
             LOG_WARNING("video: window creation failed: {}", SDL_GetError());
             return false;
         }
-        // This thread owns the SDL event loop from now on.
+        // This thread owns the SDL event loop from now on; the controller
+        // subsystem is initialised here too so its message window (if any)
+        // lives on the pumping thread.
+        hid::Init();
         hid::SetExternalEventPump(true);
 
 #ifdef LO_GPU_PLUME

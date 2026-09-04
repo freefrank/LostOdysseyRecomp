@@ -77,7 +77,8 @@ int main(int argc, char* argv[])
     XexLoader::StartTimeStampThread();
     gpu::g_commandProcessor.Init();
     apu::Init();
-    hid::Init();
+    if (getenv("LO_HEADLESS"))
+        hid::Init(); // otherwise the video thread initialises it
 
     LOG_INFO("starting guest at {:#x}", entry);
     GuestThread::Start({ entry, 0, 0 });
