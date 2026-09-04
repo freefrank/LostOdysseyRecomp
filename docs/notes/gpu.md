@@ -146,3 +146,15 @@ B. 扩展本命令处理器为完整 Xenos 模拟（解析 draw/状态/fetch 常
   限定到某个顶点着色器、`LO_PS_DEBUG=<n>`（≥n 索引的绘制输出品红）、`LO_VS_DEBUG=<n>`（替换成固定三角形并把原始 oPos
   经 TEXCOORD15 编码进颜色）、`LO_VS_RAW`（跳过 VTE 尾声）、`LO_NO_DEPTH/LO_NO_CULL/LO_NO_ALPHATEST`、`LO_DUMP_THREADS_AT=<帧>`。
   着色器磁盘缓存文件名带翻译器版本（当前 `_v8`），改 HLSL 生成后要递增。
+
+### 后续修正（同夜）
+- 深度目标按 (base, pitch) 共享 D24S8/D24FS8；视口 z 变换（PA_CL_VPORT_ZSCALE/ZOFFSET）改在顶点着色器里做（Xenia 方式），
+  宿主视口固定 0..1，反向深度（scale -1, offset 1 + GREATER_EQUAL + 清 0）因此可用。
+- **清屏就是画矩形**：360 D3D 的 Clear 是 vte=0x300 的屏幕空间 rect 绘制（深度 func ALWAYS + 写），而且常用另一个
+  surface pitch/位深清同一片 EDRAM（1280 宽 32bpp 的主深度用 640 宽的矩形清）。我们按 (base,pitch) 分纹理，所以
+  `DrawImpl` 末尾识别这类绘制：深度目标用矩形的 z 做 `clearDepthStencil`，颜色目标把矩形通过拉伸的视口重放到同基址的
+  其他纹理。之前主深度一直残留 Loading 画面的 1.0，GE 测试把整个场景都挡掉了。
+- 深度 resolve：把深度平面拷到 R32_FLOAT 的 resolved surface，fetch 格式 22/23 读它（`.x` 即写入的深度值）。
+- fetch 格式 27/28/29（_EXPAND）按 Xenia 当作 float16，与 resolve 目标 30/31/32 匹配。
+- 现状：HDR 场景缓冲里能看到士兵队列（很暗），合成后的最终画面只有微弱轮廓；地形（n=8994 的绘制）没出现。
+  下一步：查材质贴图/光照（不支持的贴图格式、光照常量）与 EDRAM 同基址不同格式（fmt 0/3/10/12）的解释。

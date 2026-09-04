@@ -498,7 +498,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 {
                     // The cache name carries a translator version so changes to the
                     // generated HLSL don't resurrect stale DXIL.
-                    cachePath = fmt::format("{}/{}_{:016x}_v8.dxil", shaderCacheDir, pixel ? "ps" : "vs", hash);
+                    cachePath = fmt::format("{}/{}_{:016x}_v9.dxil", shaderCacheDir, pixel ? "ps" : "vs", hash);
                     std::ifstream in(cachePath, std::ios::binary);
                     if (in)
                         dxil.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
@@ -562,7 +562,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 // by tile base, format and pitch only and grow the texture when a
                 // taller extent shows up.
                 height = std::clamp<uint32_t>((height + 31) & ~31u, 32, 2048);
-                RenderTargetKey key{ base, format, pitch, 0, depth };
+                // Depth formats (D24S8 / D24FS8) alias the same tiles and share our
+                // host format, so they are one target.
+                RenderTargetKey key{ base, depth ? 0u : format, pitch, 0, depth };
                 auto it = renderTargets.find(key);
                 if (it != renderTargets.end())
                 {
@@ -630,7 +632,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 case 18: out = { RenderFormat::BC1_UNORM, 4, 4, 8, false }; return true;        // DXT1
                 case 19: out = { RenderFormat::BC2_UNORM, 4, 4, 16, false }; return true;       // DXT2/3
                 case 20: out = { RenderFormat::BC3_UNORM, 4, 4, 16, false }; return true;       // DXT4/5
-                case 32: out = { RenderFormat::R16G16B16A16_FLOAT, 1, 1, 8, false }; return true;
+                case 32: case 29: out = { RenderFormat::R16G16B16A16_FLOAT, 1, 1, 8, false }; return true; // 29 = _EXPAND, float16 per Xenia
+                case 31: case 28: out = { RenderFormat::R16G16_FLOAT, 1, 1, 4, false }; return true;
+                case 30: case 27: out = { RenderFormat::R16_FLOAT, 1, 1, 2, false }; return true;
                 case 36: out = { RenderFormat::R32_FLOAT, 1, 1, 4, false }; return true;
                 default: return false;
                 }
@@ -638,9 +642,15 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 
             // A texture fetch at a resolved address reads the resolve's output when
             // the formats agree (the *_AS_16_16_16_16 aliases fetch the same bits).
+            static constexpr uint32_t kDepthResolveTag = 0x1000; // destFormat tag for depth resolves
+
             static bool ResolveFormatMatches(uint32_t fetchFormat, uint32_t destFormat)
             {
+                if (destFormat & kDepthResolveTag) return fetchFormat == 22 || fetchFormat == 23; // k_24_8(_FLOAT) reads the depth plane
                 if (fetchFormat == destFormat) return true;
+                if (fetchFormat == 29) return destFormat == 32;                      // k_16_16_16_16_EXPAND is float16 (Xenia)
+                if (fetchFormat == 28) return destFormat == 31;
+                if (fetchFormat == 27) return destFormat == 30;
                 if (destFormat == 7) return fetchFormat == 54;                       // k_2_10_10_10
                 if (destFormat == 6) return fetchFormat == 14 || fetchFormat == 50 || fetchFormat == 62; // k_8_8_8_8 aliases
                 return false;
@@ -1072,8 +1082,15 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     shared.ndcOffset[0] = -1.0f;
                     shared.ndcOffset[1] = 1.0f;
                 }
-                if (vte & 0x10) { viewport.minDepth = std::clamp(zo, 0.0f, 1.0f); viewport.maxDepth = std::clamp(zo + zs, 0.0f, 1.0f); }
-                if (viewport.maxDepth <= viewport.minDepth) { viewport.minDepth = 0.0f; viewport.maxDepth = 1.0f; }
+                // Z scale/offset map NDC z to the depth range; a negative scale (reversed
+                // depth, the usual Xenos setup with GREATER_EQUAL tests and clear-to-0)
+                // is expressed as minDepth > maxDepth, which D3D12 allows.
+                // Applied in the vertex shader (z' = z * scale + offset) as Xenia does,
+                // so a reversed range (scale -1, offset 1) needs no reversed host viewport.
+                shared.ndcScale[2] = (vte & 0x10) ? zs : 1.0f;
+                shared.ndcOffset[2] = (vte & 0x20) ? zo : 0.0f;
+                viewport.minDepth = 0.0f;
+                viewport.maxDepth = 1.0f;
                 shared.vtxFmt = (vte >> 8) & 7;
                 if ((Reg(REG_PA_SU_VTX_CNTL) & 1) == 0)
                 {
@@ -1264,7 +1281,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 static uint32_t drawLogs = 0;
                 static const uint32_t traceFrame = getenv("LO_DRAW_TRACE") ? strtoul(getenv("LO_DRAW_TRACE"), nullptr, 10) : 0;
                 static const uint32_t traceCount = getenv("LO_DRAW_TRACE_COUNT") ? strtoul(getenv("LO_DRAW_TRACE_COUNT"), nullptr, 10) : 1;
-                if (traceFrame && frame >= traceFrame && frame < traceFrame + traceCount && info.indexCount >= 200)
+                if (traceFrame && frame >= traceFrame && frame < traceFrame + traceCount && (info.indexCount >= 200 || info.primitiveType == 8))
                 {
                     // Extra detail for big draws: constants the 3D path relies on and
                     // the head of every vertex stream (as floats).
@@ -1310,11 +1327,29 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     }
                     LOG_INFO("renderer: draw detail{}", detail);
                 }
+                if (traceFrame && frame >= traceFrame && frame < traceFrame + traceCount)
+                {
+                    std::string texs;
+                    for (Shader* sh : { ps, vs })
+                    {
+                        if (!sh) continue;
+                        for (uint32_t slot = 0; slot < kTextureSlots; slot++)
+                        {
+                            if (!((sh->info.textureSlotMask >> slot) & 1)) continue;
+                            uint32_t f0 = Reg(REG_FETCH_CONSTANTS + slot * 6), f1 = Reg(REG_FETCH_CONSTANTS + slot * 6 + 1), f2 = Reg(REG_FETCH_CONSTANTS + slot * 6 + 2);
+                            if ((f0 & 3) != 2) { texs += fmt::format(" t{}=[none]", slot); continue; }
+                            uint32_t base = (f1 >> 12) << 12;
+                            bool fromResolve = resolved.count(base) != 0;
+                            texs += fmt::format(" t{}=[fmt {} {}x{} at {:#x}{}]", slot, f1 & 0x3F, (f2 & 0x1FFF) + 1, ((f2 >> 13) & 0x1FFF) + 1, base, fromResolve ? " resolved" : "");
+                        }
+                    }
+                    LOG_INFO("renderer: draw textures{}", texs);
+                }
                 if (drawLogs < 24 || (traceFrame && frame >= traceFrame && frame < traceFrame + traceCount))
                 {
                     drawLogs++;
-                    LOG_INFO("renderer: draw f{} prim={} n={} idx={} vs={:016x} ps={:016x} rt={:#x}/{} {}x{} vp=({},{} {}x{} z {}..{}) vte={:#x} scissor=({},{})-({},{}) ndc=({},{}) off=({},{}) mode={} c255=({:g},{:g},{:g},{:g})",
-                        frame, info.primitiveType, indexCount, useIndices, key.vs, key.ps, colorInfo & 0xFFF, (colorInfo >> 16) & 0xF, pitch, rtHeight,
+                    LOG_INFO("renderer: draw f{} prim={} n={} idx={} vs={:016x} ps={:016x} rt={:#x}/{} {}x{} depth={:#x} dinfo={:#x} vp=({},{} {}x{} z {}..{}) vte={:#x} scissor=({},{})-({},{}) ndc=({},{}) off=({},{}) mode={} c255=({:g},{:g},{:g},{:g})",
+                        frame, info.primitiveType, indexCount, useIndices, key.vs, key.ps, colorInfo & 0xFFF, (colorInfo >> 16) & 0xF, pitch, rtHeight, depthControl, depthInfo,
                         viewport.x, viewport.y, viewport.width, viewport.height, viewport.minDepth, viewport.maxDepth, vte,
                         scissor.left, scissor.top, scissor.right, scissor.bottom, shared.ndcScale[0], shared.ndcScale[1], shared.ndcOffset[0], shared.ndcOffset[1], modeControl,
                         RegF(REG_ALU_CONSTANTS + 255 * 4), RegF(REG_ALU_CONSTANTS + 255 * 4 + 1), RegF(REG_ALU_CONSTANTS + 255 * 4 + 2), RegF(REG_ALU_CONSTANTS + 255 * 4 + 3));
@@ -1333,9 +1368,133 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     commandList->drawInstanced(indexCount, 1, uint32_t(baseVertex), 0);
                 }
                 drawsThisFrame++;
+
+                // Xbox 360 D3D clears a surface by drawing a screen-space rectangle
+                // with ALWAYS depth/colour writes, usually through a different surface
+                // pitch (and bit depth) than the scene uses, so the rectangle covers
+                // the target's EDRAM tiles rather than its pixels. Every (base, pitch)
+                // is a separate texture here, so propagate the clear to every other
+                // target starting at the same tile base: depth targets get a real clear
+                // with the rectangle's z, colour targets get the rectangle replayed
+                // through a viewport that stretches it over the whole texture.
+                const bool screenSpaceRect = info.primitiveType == 8 && !info.indexed && info.indexCount <= 6 && (vte & 0x100);
+                const bool depthClearDraw = screenSpaceRect && depth && (depthControl & 4) && ((depthControl >> 4) & 7) == 7;
+                const bool colorClearDraw = screenSpaceRect && colorWrites && (!depth || !(depthControl & 2));
+                if (depthClearDraw || colorClearDraw)
+                {
+                    // Rectangle extent in the draw's own surface space, from the first vertex stream.
+                    float minX = 0, minY = 0, maxX = float(pitch), maxY = float(rtHeight), rectZ = 0.0f;
+                    for (uint32_t slot = 0; slot < kVertexFetchSlots; slot++)
+                    {
+                        if (!((vs->info.vertexFetchSlotMask[slot >> 6] >> (slot & 63)) & 1)) continue;
+                        uint32_t d0 = Reg(REG_FETCH_CONSTANTS + slot * 2), d1 = Reg(REG_FETCH_CONSTANTS + slot * 2 + 1);
+                        uint32_t sizeDwords = (d1 >> 2) & 0xFFFFFF;
+                        uint32_t stride = info.indexCount ? sizeDwords / info.indexCount : 0;
+                        if ((d0 & 3) != 3 || stride < 3) break;
+                        const uint32_t* src = reinterpret_cast<const uint32_t*>(Phys(d0 & ~3u));
+                        minX = minY = 1e9f; maxX = maxY = -1e9f;
+                        for (uint32_t v = 0; v < info.indexCount; v++)
+                        {
+                            float xyz[3];
+                            for (int k = 0; k < 3; k++) { uint32_t w = GpuSwap(src[v * stride + k], d1 & 3); memcpy(&xyz[k], &w, 4); }
+                            minX = std::min(minX, xyz[0]); maxX = std::max(maxX, xyz[0]);
+                            minY = std::min(minY, xyz[1]); maxY = std::max(maxY, xyz[1]);
+                            if (v == 0) rectZ = xyz[2];
+                        }
+                        break;
+                    }
+                    if (vte & 0x10) rectZ = rectZ * shared.ndcScale[2] + shared.ndcOffset[2];
+                    rectZ = std::clamp(rectZ, 0.0f, 1.0f);
+                    // NDC bounds of the rectangle as the shader sees it.
+                    const float nx0 = minX * shared.ndcScale[0] + shared.ndcOffset[0], nx1 = maxX * shared.ndcScale[0] + shared.ndcOffset[0];
+                    const float ny0 = maxY * shared.ndcScale[1] + shared.ndcOffset[1], ny1 = minY * shared.ndcScale[1] + shared.ndcOffset[1]; // ny0 bottom, ny1 top
+
+                    std::vector<RenderTargetKey> others;
+                    for (auto& [k, tex] : renderTargets)
+                    {
+                        if (!tex || k.pitch == pitch) continue;
+                        if (depthClearDraw && k.depth && k.base == (depthInfo & 0xFFF)) others.push_back(k);
+                        if (colorClearDraw && !k.depth && k.base == (colorInfo & 0xFFF)) others.push_back(k);
+                    }
+                    static uint32_t logged = 0;
+                    for (const RenderTargetKey& k : others)
+                    {
+                        HostTexture* target = renderTargets[k].get();
+                        if (k.depth)
+                        {
+                            Transition(*target, RenderTextureLayout::DEPTH_WRITE, RenderBarrierStage::GRAPHICS);
+                            commandList->setFramebuffer(GetFramebuffer(nullptr, target));
+                            commandList->clearDepthStencil(true, false, rectZ, 0);
+                            if (logged++ < 8)
+                                LOG_INFO("renderer: depth clear rect (pitch {}, {}x{} .. {}x{}) -> cleared depth base={:#x} pitch={} to {}", pitch, minX, minY, maxX, maxY, k.base, k.pitch, rectZ);
+                            continue;
+                        }
+                        if (target->format != color->format || nx1 <= nx0 || ny1 <= ny0)
+                            continue;
+                        HostTexture* otherDepth = depth ? GetRenderTarget(depthInfo & 0xFFF, (depthInfo >> 16) & 1, k.pitch, target->height, true) : nullptr;
+                        if (otherDepth && (otherDepth->width != target->width || otherDepth->height != target->height))
+                            continue;
+                        Transition(*target, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
+                        if (otherDepth)
+                            Transition(*otherDepth, RenderTextureLayout::DEPTH_WRITE, RenderBarrierStage::GRAPHICS);
+                        commandList->setFramebuffer(GetFramebuffer(target, otherDepth));
+                        // Viewport such that the rectangle's NDC bounds land on the full texture.
+                        const float vpW = 2.0f * float(target->width) / (nx1 - nx0);
+                        const float vpH = 2.0f * float(target->height) / (ny1 - ny0);
+                        RenderViewport stretched(-(nx0 + 1.0f) * 0.5f * vpW, -(1.0f - ny1) * 0.5f * vpH, vpW, vpH);
+                        commandList->setViewports(&stretched, 1);
+                        RenderRect fullRect{ 0, 0, int32_t(target->width), int32_t(target->height) };
+                        commandList->setScissors(&fullRect, 1);
+                        commandList->drawInstanced(indexCount, 1, uint32_t(baseVertex), 0);
+                        if (logged++ < 8)
+                            LOG_INFO("renderer: colour clear rect (pitch {}) replayed into base={:#x} pitch={} {}x{}", pitch, k.base, k.pitch, target->width, target->height);
+                    }
+                }
             }
 
             // ---- resolve --------------------------------------------------------------------
+            // Depth resolve: the depth plane is copied into an R32_FLOAT surface that
+            // k_24_8 / k_24_8_FLOAT fetches read (.x = stored depth, our reversed
+            // range included, exactly what the guest wrote).
+            void ResolveDepthOnGpu(HostTexture& depth, uint32_t destBase, uint32_t destFormat, uint32_t destPitch, uint32_t destHeight,
+                                   uint32_t x0, uint32_t y0, uint32_t w, uint32_t h)
+            {
+                Begin();
+                const uint32_t texW = std::clamp<uint32_t>(std::max(destPitch, x0 + w), 1, 8192);
+                const uint32_t texH = std::clamp<uint32_t>(std::max(destHeight, y0 + h), 1, 8192);
+                ResolvedSurface& rs = resolved[destBase];
+                if (!rs.tex || rs.tex->format != RenderFormat::R32_FLOAT || rs.tex->width != texW || rs.tex->height != texH)
+                {
+                    rs.tex = std::make_unique<HostTexture>();
+                    rs.tex->format = RenderFormat::R32_FLOAT;
+                    rs.tex->width = texW;
+                    rs.tex->height = texH;
+                    rs.tex->texture = device->createTexture(RenderTextureDesc::Texture2D(texW, texH, 1, RenderFormat::R32_FLOAT));
+                    rs.tex->layout = RenderTextureLayout::UNKNOWN;
+                    if (!rs.tex->texture)
+                    {
+                        resolved.erase(destBase);
+                        return;
+                    }
+                    static uint32_t created = 0;
+                    if (created++ < 8)
+                        LOG_INFO("renderer: resolved depth surface {:#x} {}x{} dest fmt={}", destBase, texW, texH, destFormat & 0xFFF);
+                }
+                rs.destFormat = destFormat;
+                rs.destPitch = destPitch;
+                rs.frame = frame;
+                w = std::min(w, texW - x0);
+                h = std::min(h, texH - y0);
+                if (w == 0 || h == 0)
+                    return;
+                Transition(depth, RenderTextureLayout::COPY_SOURCE, RenderBarrierStage::COPY);
+                Transition(*rs.tex, RenderTextureLayout::COPY_DEST, RenderBarrierStage::COPY);
+                RenderBox box{ int32_t(x0), int32_t(y0), int32_t(x0 + w), int32_t(y0 + h), 0, 1 };
+                commandList->copyTextureRegion(RenderTextureCopyLocation::Subresource(rs.tex->texture.get()),
+                    RenderTextureCopyLocation::Subresource(depth.texture.get(), 0), x0, y0, 0, &box);
+                Transition(*rs.tex, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
+            }
+
             // Copies the resolve rectangle into the host texture standing in for the
             // destination memory (destPitch x destHeight texels, rectangle placed at its
             // window position). No GPU sync, no tiling, no guest memory writes.
@@ -1415,8 +1574,19 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 bool depthCopy = srcSelect == 4;
                 if (depthCopy)
                 {
-                    static bool warned = false;
-                    if (!warned) { LOG_WARNING("renderer: depth resolve not implemented"); warned = true; }
+                    uint32_t depthInfo = Reg(REG_RB_DEPTH_INFO);
+                    HostTexture* depthRt = GetRenderTarget(depthInfo & 0xFFF, (depthInfo >> 16) & 1, pitch, rtHeight, true);
+                    if (depthRt && !resolveReadback)
+                    {
+                        ResolveDepthOnGpu(*depthRt, destBase, destFormat | kDepthResolveTag, destPitch, destHeight, x0, y0, copyWidth, copyHeight);
+                        InvalidateRange(destBase, ((destPitch + 31) & ~31u) * copyHeight * 4);
+                    }
+                    else
+                    {
+                        static bool warned = false;
+                        if (!warned) { LOG_WARNING("renderer: depth resolve readback not implemented"); warned = true; }
+                    }
+                    Begin();
                     if (copyControl & 0x200) ClearDepthTarget(pitch, rtHeight);
                     return;
                 }
@@ -1672,10 +1842,13 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
     static bool ReadbackTexture(HostTexture& tex, std::vector<uint32_t>& pixels, uint32_t& width, uint32_t& height)
     {
         uint32_t bpp = 0;
+        RenderFormat copyFormat = tex.format;
         switch (tex.format)
         {
         case RenderFormat::R8G8B8A8_UNORM: bpp = 4; break;
         case RenderFormat::R16G16B16A16_FLOAT: bpp = 8; break;
+        case RenderFormat::D32_FLOAT_S8_UINT: bpp = 4; copyFormat = RenderFormat::R32_FLOAT; break; // depth plane only
+        case RenderFormat::R32_FLOAT: bpp = 4; break;
         default: return false;
         }
         const uint32_t rowPitch = (tex.width * bpp + 255) & ~255u;
@@ -1684,8 +1857,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
         g_renderer->Begin();
         g_renderer->Transition(tex, RenderTextureLayout::COPY_SOURCE, RenderBarrierStage::COPY);
         g_renderer->commandList->copyTextureRegion(
-            RenderTextureCopyLocation::PlacedFootprint(g_renderer->readback.get(), tex.format, tex.width, tex.height, 1, rowPitch / bpp, 0),
-            RenderTextureCopyLocation::Subresource(tex.texture.get()));
+            RenderTextureCopyLocation::PlacedFootprint(g_renderer->readback.get(), copyFormat, tex.width, tex.height, 1, rowPitch / bpp, 0),
+            RenderTextureCopyLocation::Subresource(tex.texture.get(), 0));
         g_renderer->Flush();
         const uint8_t* src = static_cast<const uint8_t*>(g_renderer->readback->map());
         width = tex.width;
@@ -1696,7 +1869,13 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             const uint8_t* row = src + size_t(y) * rowPitch;
             for (uint32_t x = 0; x < width; x++)
             {
-                if (bpp == 4)
+                if (tex.format == RenderFormat::D32_FLOAT_S8_UINT || tex.format == RenderFormat::R32_FLOAT)
+                {
+                    float d; memcpy(&d, row + size_t(x) * 4, 4);
+                    uint32_t g = uint32_t(std::clamp(d, 0.0f, 1.0f) * 255.0f + 0.5f);
+                    pixels[size_t(y) * width + x] = g | (g << 8) | (g << 16) | 0xFF000000u;
+                }
+                else if (bpp == 4)
                     memcpy(&pixels[size_t(y) * width + x], row + size_t(x) * 4, 4);
                 else
                 {
@@ -1731,12 +1910,12 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
         std::vector<uint32_t> pixels;
         for (auto& [key, tex] : g_renderer->renderTargets)
         {
-            if (key.depth || !tex)
+            if (!tex)
                 continue;
             uint32_t w = 0, h = 0;
             if (!ReadbackTexture(*tex, pixels, w, h))
                 continue;
-            std::string path = fmt::format("{}_rt_{:x}_{}_{}x{}.ppm", prefix, key.base, key.format, w, h);
+            std::string path = fmt::format("{}_{}_{:x}_{}_{}x{}.ppm", prefix, key.depth ? "depth" : "rt", key.base, key.format, w, h);
             FILE* f = fopen(path.c_str(), "wb");
             if (!f)
                 continue;

@@ -1000,7 +1000,7 @@ float4 max4(float4 src0)
                 else
                 {
                     out += "\tin uint xeVertexId : SV_VertexID,\n";
-                    out += "\tout float4 oPos : SV_Position";
+                    out += "\tout precise float4 oPos : SV_Position";
                     for (uint32_t i = 0; i < 16; i++)
                         print(",\n\tout float4 o{0} : TEXCOORD{0}", i);
                 }

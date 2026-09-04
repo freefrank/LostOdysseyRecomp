@@ -26,7 +26,7 @@
 - [ ] 存档系统
 - [ ] 四张盘的数据合并与读盘路径重定向
 - [ ] 过场、战斗、千年之梦、大地图逐一验证
-- [ ] 修复全部崩溃，通关一次（2026-09-04：新游戏进入 RPBattle__Scene 的崩溃已修，根因是 XenonAnalyse 把 bdzlr 当无条件返回截断了 memset，见 notes/recomp.md；新游戏 → Settings → 保存 → Loading 画面可达）
+- [ ] 修复全部崩溃，通关一次（2026-09-04：新游戏进入 RPBattle__Scene 的崩溃已修（memset 被截断，见 notes/recomp.md）；新游戏 → Settings → 保存 → Loading → 开场战斗可达，战斗 UI 可操作、约 30 fps；3D 场景经 HDR 链路已出现但很暗，见 notes/gpu.md）
 
 ## 阶段 4：现代化
 - [ ] 任意分辨率与宽屏，UI 布局修正
