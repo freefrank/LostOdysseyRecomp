@@ -170,39 +170,82 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
         }
     }
 
-    // Test hook: LO_AUTO_START=<swap> holds START for ~30 polls once that many
-    // frames were presented, so the title screen can be passed unattended.
+    // Test hooks for unattended runs, driven by the presented-swap counter:
+    //   LO_AUTO_START=<swap>            pulse a button for 20 polls every 240 swaps
+    //   LO_AUTO_BUTTONS=<letters>       from that swap on (s=START, a, b, x, y,
+    //                                   u/d/l/r = dpad); the last letter repeats.
+    //   LO_AUTO_BUTTONS=a@1250,s@1500   swap-stamped form: each entry pulses its
+    //                                   button for 20 polls starting at that swap
+    //                                   (LO_AUTO_START not needed).
     {
         static const uint32_t autoStartSwap = getenv("LO_AUTO_START") ? strtoul(getenv("LO_AUTO_START"), nullptr, 10) : 0;
-        // Pulse START for 20 polls every 240 frames once past the threshold.
-        uint32_t swaps = ::g_presentedSwaps.load();
-        static uint32_t pulseFrame = 0, pulsePolls = 0;
-        if (autoStartSwap && swaps >= autoStartSwap)
+        static const char* seq = getenv("LO_AUTO_BUTTONS") ? getenv("LO_AUTO_BUTTONS") : "s";
+        static const bool stamped = strchr(seq, '@') != nullptr;
+        // LO_AUTO_PULSE=<polls>: how many consecutive polls a press is held (default 20).
+        static const uint32_t pulseLength = getenv("LO_AUTO_PULSE") ? std::max(1ul, strtoul(getenv("LO_AUTO_PULSE"), nullptr, 10)) : 20;
+        static uint32_t totalPolls = 0, pollsAtLastPress = 0;
+        const uint32_t swaps = ::g_presentedSwaps.load();
+        char pressed = 0;
+        totalPolls++;
+
+        if (stamped)
         {
+            // Parse once: "<letter>@<swap>" entries separated by commas.
+            struct Entry { char button; uint32_t swap; };
+            static std::vector<Entry> entries = [] {
+                std::vector<Entry> v;
+                for (const char* p = seq; *p;)
+                {
+                    while (*p == ',' || *p == ' ') p++;
+                    if (!*p) break;
+                    char b = *p++;
+                    uint32_t at = 0;
+                    if (*p == '@') at = strtoul(p + 1, const_cast<char**>(&p), 10);
+                    v.push_back({ b, at });
+                    while (*p && *p != ',') p++;
+                }
+                return v;
+            }();
+            static size_t index = 0;
+            static uint32_t polls = 0;
+            if (index < entries.size() && swaps >= entries[index].swap)
+            {
+                if (polls == 0)
+                {
+                    LOG_INFO("auto input: '{}' at swap {} ({} polls since the previous press)", entries[index].button, swaps, totalPolls - pollsAtLastPress);
+                    pollsAtLastPress = totalPolls;
+                }
+                pressed = entries[index].button;
+                if (++polls >= pulseLength) { polls = 0; index++; }
+            }
+        }
+        else if (autoStartSwap && swaps >= autoStartSwap)
+        {
+            static uint32_t pulseFrame = 0, pulsePolls = 0, pulseIndex = 0, lastPulseFrame = 0;
             if (swaps >= pulseFrame + 240) { pulseFrame = swaps; pulsePolls = 0; }
-            if (pulsePolls < 20)
+            if (pulsePolls < pulseLength)
             {
                 pulsePolls++;
-                // LO_AUTO_BUTTONS: comma-free string of button letters used per
-                // pulse in order (s=START, a, b, x, y, u/d/l/r=dpad), last repeats.
-                static const char* seq = getenv("LO_AUTO_BUTTONS") ? getenv("LO_AUTO_BUTTONS") : "s";
-                static uint32_t pulseIndex = 0, lastPulseFrame = 0;
                 if (lastPulseFrame != pulseFrame) { if (lastPulseFrame) pulseIndex++; lastPulseFrame = pulseFrame; }
                 size_t n = strlen(seq);
-                char c = n ? seq[pulseIndex < n ? pulseIndex : n - 1] : 's';
-                switch (c)
-                {
-                case 'a': gp.wButtons |= XAMINPUT_GAMEPAD_A; break;
-                case 'b': gp.wButtons |= XAMINPUT_GAMEPAD_B; break;
-                case 'x': gp.wButtons |= XAMINPUT_GAMEPAD_X; break;
-                case 'y': gp.wButtons |= XAMINPUT_GAMEPAD_Y; break;
-                case 'u': gp.wButtons |= XAMINPUT_GAMEPAD_DPAD_UP; break;
-                case 'd': gp.wButtons |= XAMINPUT_GAMEPAD_DPAD_DOWN; break;
-                case 'l': gp.wButtons |= XAMINPUT_GAMEPAD_DPAD_LEFT; break;
-                case 'r': gp.wButtons |= XAMINPUT_GAMEPAD_DPAD_RIGHT; break;
-                default: gp.wButtons |= XAMINPUT_GAMEPAD_START; break;
-                }
+                pressed = n ? seq[pulseIndex < n ? pulseIndex : n - 1] : 's';
+                if (pulsePolls == 1)
+                    LOG_INFO("auto input: '{}' at swap {}", pressed, swaps);
             }
+        }
+
+        switch (pressed)
+        {
+        case 0: break;
+        case 'a': gp.wButtons |= XAMINPUT_GAMEPAD_A; break;
+        case 'b': gp.wButtons |= XAMINPUT_GAMEPAD_B; break;
+        case 'x': gp.wButtons |= XAMINPUT_GAMEPAD_X; break;
+        case 'y': gp.wButtons |= XAMINPUT_GAMEPAD_Y; break;
+        case 'u': gp.wButtons |= XAMINPUT_GAMEPAD_DPAD_UP; break;
+        case 'd': gp.wButtons |= XAMINPUT_GAMEPAD_DPAD_DOWN; break;
+        case 'l': gp.wButtons |= XAMINPUT_GAMEPAD_DPAD_LEFT; break;
+        case 'r': gp.wButtons |= XAMINPUT_GAMEPAD_DPAD_RIGHT; break;
+        default: gp.wButtons |= XAMINPUT_GAMEPAD_START; break;
         }
     }
 

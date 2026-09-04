@@ -15,6 +15,7 @@
 #include "guest_printf.h"
 #include <gpu/command_processor.h>
 #include <apu/audio.h>
+#include <apu/xma.h>
 #include <os/logger.h>
 #include <csetjmp>
 
@@ -2020,13 +2021,17 @@ static uint32_t XAudioUnregisterRenderDriverClient(uint32_t) { apu::UnregisterCl
 static uint32_t XAudioSubmitRenderDriverFrame(uint32_t, void* samples) { apu::SubmitFrame(samples); return 0; }
 static uint32_t XAudioGetVoiceCategoryVolumeChangeMask(uint32_t, be<uint32_t>* mask) { if (mask) *mask = 0; return 0; }
 static uint32_t XAudioGetVoiceCategoryVolume(uint32_t, be<float>* volume) { if (volume) *volume = 1.0f; return 0; }
+// XMA contexts live in the array published through the XMA register block;
+// see apu/xma.cpp. Xenia: XMACreateContext returns X_STATUS_NO_MEMORY when
+// the 320 contexts are exhausted.
 static uint32_t XMACreateContext(be<uint32_t>* context)
 {
-    LOG_KERNEL("XMACreateContext (unsupported)");
-    if (context) *context = 0;
-    return STATUS_NOT_IMPLEMENTED;
+    const uint32_t guest = apu::xma::AllocateContext();
+    if (context) *context = guest;
+    LOG_KERNEL("XMACreateContext -> {:#x}", guest);
+    return guest ? STATUS_SUCCESS : STATUS_NO_MEMORY;
 }
-static void XMAReleaseContext(uint32_t) {}
+static void XMAReleaseContext(uint32_t context) { apu::xma::ReleaseContext(context); }
 
 // Networking: report no network.
 static uint32_t NetDll_XNetStartup(uint32_t, uint32_t) { return 0; }

@@ -94,6 +94,17 @@ VPKSHUS 的惯例传 (vB, vA)。这些实现尚未经测试验证，运行期若
 剩余告警：830DA0BC 起 4 个数据字（`46000201` 等，夹在导入桩的 `mtctr r11; bctr` 之间）在函数
 重编译循环里无法解码，只输出为注释，不会被执行，可忽略。
 
+## bclr 的条件性（XenonAnalyse 边界分析修正，2026-09-04）
+
+上游 `Function::Analyze` 用 `!(BO & 0x10)` 判断 `bclr/bcctr` 是否有条件，只看了"忽略 CR"位，没看"忽略 CTR"位
+（0x04）。`bdzlr`（BO=0x12）/`bdnzlr`（BO=0x10）因此被当成无条件返回，函数在那里截止，后续指令被切成独立函数。
+本镜像里命中的是 CRT `memset`（0x82B7BC40）的字节尾部 `stb; bdzlr; stb; bdzlr; stb; blr`：长度 %4 为 2 或 3 时
+少写 1~2 个字节。表现为 `USkeletalMeshComponent::SkelControlIndex` 63 项只有 61 项被填成 255，进战斗场景
+越界崩溃（见 kernel.md）。修正为 `(BO & 0x14) != 0x14`，同时把该分支里 `SearchBlock(lBase)` 的相对偏移改成绝对
+地址（原来永远查不到，重复扫描）。修正在 `tools/patches/XenonRecomp-lostodyssey.patch`（XenonAnalyse/function.cpp）。
+重跑后函数数减 2（0x82B7BCD0/0x82B7BCD8 并回 memset），无其他变化；`baseline_func_mapping.txt` 中已删掉这两行。
+XenonRecomp 只重写内容变化的文件，但函数数变化会让 175 号之后的分文件全部重新编号、重新编译。
+
 ## 待办
 - [x] setjmp = 0x82DF34A0（带全局钩子检查的入口，7 处 bl；本体 0x82DF34B4 保存 f14-f31/r13-r31/v 到 r3），longjmp = 0x82DF3060（21 处调用，手工恢复 FPR 后经 0x82DF334C 调 RtlUnwind）
 - [ ] .embsec_* 段的性质（8 个小代码段，名字乱码，.pdata 覆盖到 8312D330）

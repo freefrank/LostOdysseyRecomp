@@ -72,6 +72,28 @@ NtReadFile 带 Event 时读完直接置位事件。目录信息结构按 Xenia �
   XGI 的 UserSetContext / UserSetPropertyEx，直接成功即可。
 - 测试钩子：`LO_AUTO_START=<帧>` 之后每 240 帧按 20 次 Start，用于无人值守穿过标题；键盘映射见 hid.cpp。
 
+## XMA 硬件解码器模拟（apu/xma.cpp，2026-09-04）
+
+游戏只导入 `XMACreateContext`/`XMAReleaseContext`，其余全靠静态链接的 XAudio 驱动直接操作硬件：
+- 上下文数组：320 个 64 字节的 `XMA_CONTEXT_DATA`（布局见 Xenia `apu/xma_context.h`），物理地址由寄存器
+  `0x7FEA1800`（dword 索引 0x600）发布，驱动用 `lwbrx` 读一次（`sub_82CC55C8`），之后用
+  `MmGetPhysicalAddress(ctx) - base >> 6` 算索引。
+- 寄存器（小端，`stwbrx` 写）：`0x650+n` Kick、`0x690+n` Lock、`0x6A0+n` Clear（n = 上下文号/32，位 = 上下文号%32）；
+  `0x606` CurrentContextIndex 由 `sub_82CC5938` 读后 `^0x200` 与各上下文比较，0 表示"空闲"即可。
+  客体 MMIO 在我们这里就是普通内存，所以由工作线程每 1 ms 轮询这 30 个字（原子 exchange 清零）。
+- 解码器目前是 Xenia `XmaContextFake` 的等价物：按输出环剩余空间推进输入包（每包 4/8 个子帧）、写静音、
+  更新 read/write offset，环满时清 `output_buffer_valid`。真解码（XMA2 = WMA Pro 变种，Xenia 用 ffmpeg）以后替换 `Work()`。
+- 效果：`XMACreateContext` 不再失败，标题 BGM 上下文持续 kick、指针推进；`LO_TRACE_XMA=1` 打印细节。
+
+## 标题到新游戏的流程与无人值守按键（2026-09-04）
+
+按 presented-swap 计时（`hid.cpp` 测试钩子）：约 250 帧出现 "Press START"（之前是黑屏的开场影片/logo）；
+`s@300` → 主菜单（New Game / Continue / A Thousand Years of Dreams，默认 New Game）；`a@600` → 调
+`XamShowDeviceSelectorUI` 后进入 **Settings** 界面（新游戏前的设置，13 行，上下移动光标，左右改值，A 在 Brightness
+上开亮度对话框）；`b` → "Save these settings? Yes/No" 对话框，默认 No，选 No 回到 Settings。
+钩子语法：`LO_AUTO_BUTTONS="s@300,a@600,b@900,..."`（每项在指定帧按住 `LO_AUTO_PULSE` 次轮询，默认 20），
+日志 `auto input: 'x' at swap N (M polls since the previous press)` 可算轮询率。
+
 ## 新游戏进入战斗场景的崩溃（阶段 3 待办，2026-09-03 分析）
 
 复现：`LO_AUTO_START=1100 LO_AUTO_BUTTONS=saaaaaaaa`（标题后每 240 帧按一次键：先 Start 再连按 A）→ 打开
@@ -87,11 +109,14 @@ Control = SkelControlLists(Idx).ControlHead; Control->flags@88`。
 现场：Num=63、Max=118，但只有前 61 字节是 255/有效索引（FF 00 FF FF 01 02 03 04 FF…），第 61、62 字节是
 分配块里的旧内容（每次运行不同：一次是残留的宽字符串 "Solider : bsSMsys_Idling"，一次是随机字节），骨骼 61 取到
 0x20/0x26 → 越过 5 项的列表 → 垃圾指针 0xD → 读 0x65 崩溃。网格本身有 63 根骨骼（USkeletalMesh+0x78 与 +0x88 两个
-Num=63 的数组）。结论：初始化 SkelControlIndex 的路径按 61 填充却把 Num 设成 63。尚未找到该初始化函数（搜索
-`,808(r`+`stbx`/`li r4,255`/`li r4,-1`/`addi rN,rM,808` 均未命中，可能通过 TArray 辅助函数以结构指针操作）。
-下一步用 Ghidra 反编译 sub_822B98C8 的调用者与 SkeletalMeshComponent 的 InitSkelControls 等价函数。
+Num=63 的数组）。
 
-已排除：页分配器复用（`LO_PAGE_QUARANTINE=1` 延迟复用后仍崩）、宿主 `vswprintf` 钩子越界（`LO_TRACE_PRINTF=1`
-未见该字符串）、stvlx/stvrx 语义、临界区/自旋锁原子性（实现检查正常）。
+**根因（2026-09-04）**：不是游戏逻辑，是重编译器截断了 CRT `memset`（`sub_82B7BC40`）。`InitSkelControls`
+（`sub_8258E688`：`SkelControlIndex.Empty(); Add(RefSkeleton.Num()); memset(Data, 255, Num); 再按
+SkelControlLists 逐项 MatchRefBone 填索引`）调用 memset 填 63 字节，而 memset 的字节尾部是
+`stb; bdzlr; stb; bdzlr; stb; blr`——XenonAnalyse 把 `bdzlr`（BO=0x12）当成无条件 `blr`，函数在第一个 `bdzlr`
+处结束，后面两条 `stb` 被切成两个独立"函数"（0x82B7BCD0/0x82B7BCD8），于是长度 %4 == 2/3 的 memset 少写 1~2
+个字节。修复见 `docs/notes/recomp.md`"bclr 条件性"一节。之前排除的嫌疑（页复用、vswprintf、stvlx、锁）都对。
+
 调试手段：`LO_CRASH_DUMP="r27+0x328*,r19+0xf4*"`（寄存器相对地址，`*` 跟随指针）在崩溃时转储客体内存；崩溃处理器
 现在打印全部 32 个通用寄存器。

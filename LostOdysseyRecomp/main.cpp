@@ -8,6 +8,7 @@
 #include <kernel/io/file_system.h>
 #include <gpu/command_processor.h>
 #include <apu/audio.h>
+#include <apu/xma.h>
 #include <hid/hid.h>
 #include <os/logger.h>
 
@@ -77,6 +78,7 @@ int main(int argc, char* argv[])
     XexLoader::StartTimeStampThread();
     gpu::g_commandProcessor.Init();
     apu::Init();
+    apu::xma::Init();
     if (getenv("LO_HEADLESS"))
         hid::Init(); // otherwise the video thread initialises it
 

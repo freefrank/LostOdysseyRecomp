@@ -1,3 +1,28 @@
+diff --git a/XenonAnalyse/function.cpp b/XenonAnalyse/function.cpp
+index 34add40..ea3672e 100644
+--- a/XenonAnalyse/function.cpp
++++ b/XenonAnalyse/function.cpp
+@@ -180,13 +180,17 @@ Function Function::Analyze(const void* code, size_t size, size_t base)
+                 }
+                 else if (op == PPC_OP_CTR)
+                 {
+-                    // 5th bit of BO tells cpu to ignore the counter, which is a blr/bctr otherwise it's conditional
+-                    const bool conditional = !(PPC_BO(instruction) & 0x10);
++                    // BO[0] (0x10) makes the branch ignore the CR condition and BO[2] (0x04)
++                    // makes it ignore the counter; only with both set is this an
++                    // unconditional blr/bctr. bdzlr/bdnzlr (BO 0x12/0x10) still fall
++                    // through when the counter disagrees, e.g. the byte tail of the CRT
++                    // memset ("stb; bdzlr; stb; bdzlr; stb; blr").
++                    const bool conditional = (PPC_BO(instruction) & 0x14) != 0x14;
+                     if (conditional)
+                     {
+                         // right block's just going to return
+                         const size_t lBase = (addr - base) + 4;
+-                        size_t lBlock = fn.SearchBlock(lBase);
++                        size_t lBlock = fn.SearchBlock(base + lBase);
+                         if (lBlock == -1)
+                         {
+                             blocks.emplace_back(lBase, 0);
 diff --git a/XenonRecomp/recompiler.cpp b/XenonRecomp/recompiler.cpp
 index fa91527..cbaf852 100644
 --- a/XenonRecomp/recompiler.cpp
