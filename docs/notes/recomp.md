@@ -81,4 +81,4 @@ VPKSHUS 的惯例传 (vB, vA)。这些实现尚未经测试验证，运行期若
 ## 待办
 - [x] setjmp = 0x82DF34A0（带全局钩子检查的入口，7 处 bl；本体 0x82DF34B4 保存 f14-f31/r13-r31/v 到 r3），longjmp = 0x82DF3060（21 处调用，手工恢复 FPR 后经 0x82DF334C 调 RtlUnwind）
 - [ ] .embsec_* 段的性质（8 个小代码段，名字乱码，.pdata 覆盖到 8312D330）
-- [ ] 装 LLVM（clang-cl）后编译 ppc/ 输出，看第一轮编译错误
+- [x] clang-cl 22 全量编译通过（out/smoke/all，目标文件共约 250 MB）
