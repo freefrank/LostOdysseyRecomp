@@ -23,7 +23,7 @@ if(LO_BUILD_TOOLS)
 endif()
 
 option(LO_BUILD_RUNTIME "Build the LostOdysseyRecomp runtime executable" ON)
-option(LO_BUILD_GPU "Build the plume-based GPU backend" OFF)
+option(LO_BUILD_GPU "Build the plume-based GPU backend" ON)
 
 if(LO_BUILD_RECOMP_LIB)
     add_subdirectory(LostOdysseyRecompLib)

@@ -42,6 +42,15 @@ target_link_libraries(LostOdysseyRecomp PRIVATE
     o1heap
     SDL2::SDL2-static)
 
+if(LO_BUILD_GPU)
+    target_link_libraries(LostOdysseyRecomp PRIVATE plume)
+    target_include_directories(LostOdysseyRecomp PRIVATE ${CMAKE_SOURCE_DIR}/thirdparty/plume)
+    target_compile_definitions(LostOdysseyRecomp PRIVATE LO_GPU_PLUME=1)
+    if(WIN32)
+        target_link_libraries(LostOdysseyRecomp PRIVATE d3d12 dxgi)
+    endif()
+endif()
+
 if(WIN32)
     target_link_libraries(LostOdysseyRecomp PRIVATE winmm)
 endif()

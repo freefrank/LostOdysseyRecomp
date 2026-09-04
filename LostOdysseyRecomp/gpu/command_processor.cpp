@@ -1,5 +1,6 @@
 #include <stdafx.h>
 #include "command_processor.h"
+#include "video.h"
 #include <cpu/guest_thread.h>
 #include <kernel/memory.h>
 #include <kernel/function.h>
@@ -311,6 +312,7 @@ namespace gpu
 
     void CommandProcessor::WorkerMain()
     {
+        video::Init();
         uint32_t idle = 0;
         while (m_running)
         {
@@ -334,7 +336,10 @@ namespace gpu
             if (writePtr == 0xBAADF00D || m_readPtrIndex == writePtr || m_primaryBufferSize == 0)
             {
                 if (++idle > 200)
+                {
+                    video::PumpEvents();
                     std::this_thread::sleep_for(std::chrono::microseconds(500));
+                }
                 else
                     std::this_thread::yield();
                 continue;
@@ -571,6 +576,16 @@ namespace gpu
             uint32_t swaps = ++g_swapCount;
             if ((swaps % 60) == 1)
                 LOG_INFO("swap #{} frontbuffer {:#x} {}x{} (magic {:#x})", swaps, frontbuffer, width, height, magic);
+            video::PresentFrontbuffer(frontbuffer, width, height, ReadRegister(0x231B));
+            video::PumpEvents();
+            {
+                static const uint32_t shotSwap = getenv("LO_SCREENSHOT_SWAP") ? strtoul(getenv("LO_SCREENSHOT_SWAP"), nullptr, 10) : 0;
+                if (shotSwap && swaps == shotSwap)
+                {
+                    const char* path = getenv("LO_SCREENSHOT_PATH") ? getenv("LO_SCREENSHOT_PATH") : "screenshot.ppm";
+                    LOG_INFO("screenshot at swap {} -> {} ({})", swaps, path, video::SaveScreenshot(path) ? "ok" : "failed");
+                }
+            }
             if (g_gpuStats)
             {
                 if ((swaps % 60) == 0 || swaps < 5)
