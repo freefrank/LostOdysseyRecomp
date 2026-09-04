@@ -63,11 +63,17 @@ XenonRecomp 的边界分析把 `bctr` 当尾调用，不在 .pdata 里的叶函�
    指向 .text 的 4 字节对齐指针，要求：不在 .pdata 函数内、前一个字是 blr/bctr/b/0 填充、
    不是开关表标签、不是**基线映射表**（`config/baseline_func_mapping.txt`，用不含指针专属函数的配置
    跑一遍 XenonRecomp 得到的 `ppc_func_mapping.cpp`，重编译器自己能发现的 63032 个起点）里已有的起点。
-   命中 56 个，同时作为硬符号截断前面的函数；规则 2 挑选"拥有跳转表的函数"时不把它们算作候选，
-   否则会把跳转表错误地归给某个可能只是标签的地址。不加基线过滤时会误报 5000+ 个（重编译器靠
+   命中 43 个，同时作为硬符号截断前面的函数。不加基线过滤时会误报 5000+ 个（重编译器靠
    返回后顺延等方式发现的函数），并产生 `// ERROR`；每次改动后用 `grep -l '// ERROR' ppc/*.cpp` 检查必须为 0。运行期 `kernel/memory.cpp` 把函数表所有空槽填成 `MissingFunction` 记录桩，
    日志出现 "call to unrecompiled guest function" 就说明还有漏网之鱼。
-生成结果写进 TOML 的 `functions = [...]`（138 项）。迭代到第 8 轮收敛：0 未解析目标、0 跳转表错误。
+5. **代码中物化的地址**：`lis rX,hi` + `addi/ori rX,rX,lo`（64 字节窗口内）拼出的 .text 地址，
+   同样要求不在 .pdata、不在基线映射、不是开关表标签，且前一个字必须是 `blr` 或 0 填充——
+   允许 `b` 的话会把计算跳转（`lis/addi` 基标签 + `bctr`）的 case 标签当成函数，产生 15 个错误文件。
+   运行期日志 "call to unrecompiled guest function ctr=0x82CF21C0" 就是这类（无静态引用、运行时填进对象）。
+   规则 2 挑选"拥有跳转表的函数"时，候选包含规则 4/5 的起点：表在某个指针专属函数之后，就归它。
+   脚本默认**不再**把重编译输出里的 `// ERROR` 目标累积进 `branch_targets.txt`（错误切分导致的假目标
+   会永久污染它），需要时设 `LO_ACCUMULATE_ERRORS=1`。
+生成结果写进 TOML 的 `functions = [...]`（116 项，含 47 个指针专属函数）。迭代到第 8 轮收敛：0 未解析目标、0 跳转表错误。
 
 ## 生成结果
 

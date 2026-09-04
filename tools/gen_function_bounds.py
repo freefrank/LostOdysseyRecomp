@@ -11,7 +11,7 @@ Rules:
   * extra manual entries can be listed in config/function_bounds_manual.txt (address size)
 Usage: gen_function_bounds.py <image.bin> <switch_tables.toml> <ppc dir> <out .inc> [manual.txt]
 """
-import bisect, glob, re, struct, sys
+import bisect, glob, os, re, struct, sys
 
 BASE = 0x82000000
 TEXT0, TEXT1 = 0x82290000, 0x82290000 + 0xE4AA6C
@@ -49,8 +49,12 @@ def main(image, switch_toml, ppc_dir, out, manual=None):
         errs |= set(int(x, 16) for x in open(acc_path).read().split())
     except FileNotFoundError:
         pass
-    for f in glob.glob(f"{ppc_dir}/ppc_recomp.*.cpp"):
-        errs |= set(int(x, 16) for x in re.findall(r"// ERROR ([0-9A-F]+)", open(f).read()))
+    # Only harvest new "// ERROR" targets from the recompiler output when asked
+    # (LO_ACCUMULATE_ERRORS=1): errors caused by a wrong split must never
+    # become permanent function starts.
+    if os.environ.get("LO_ACCUMULATE_ERRORS"):
+        for f in glob.glob(f"{ppc_dir}/ppc_recomp.*.cpp"):
+            errs |= set(int(x, 16) for x in re.findall(r"// ERROR ([0-9A-F]+)", open(f).read()))
     with open(acc_path, "w") as fh:
         fh.write("\n".join(f"{a:08X}" for a in sorted(errs)) + "\n")
 
@@ -85,6 +89,34 @@ def main(image, switch_toml, ppc_dir, out, manual=None):
             if prev in (0x4E800020, 0x4E800420, 0) or (prev >> 26) == 18:
                 vt_targets.add(w)
 
+    # Addresses materialised in code with lis/addi or lis/ori (function
+    # pointers stored into objects at runtime, e.g. hand-built vtables) are
+    # invisible to both the data scan and the branch analysis.
+    if known_starts:
+        pending = {}
+        for a in range(TEXT0, TEXT1, 4):
+            w = u32(a)
+            op = w >> 26
+            if op == 15 and ((w >> 16) & 0x1F) == 0:                 # lis rD, imm
+                pending[(w >> 21) & 0x1F] = ((w & 0xFFFF) << 16, a)
+            elif op in (14, 24):                                    # addi rD,rA,imm / ori rA,rS,imm
+                rs = (w >> 16) & 0x1F if op == 14 else (w >> 21) & 0x1F
+                rd = (w >> 21) & 0x1F if op == 14 else (w >> 16) & 0x1F
+                if rs in pending and a - pending[rs][1] <= 64:
+                    hi = pending[rs][0]
+                    lo = w & 0xFFFF
+                    t = (hi + (lo - 0x10000 if (op == 14 and lo & 0x8000) else lo)) & 0xFFFFFFFF
+                    if (TEXT0 < t < TEXT1 and (t & 3) == 0 and pfunc(t)[0] is None
+                            and t not in known_starts and t not in switch_labels):
+                        # Only after blr/padding: case blocks of computed
+                        # jumps end with an unconditional b and their base
+                        # label is materialised exactly like this.
+                        prev = u32(t - 4)
+                        if prev in (0x4E800020, 0):
+                            vt_targets.add(t)
+                if rd in pending and rd != rs:
+                    del pending[rd]
+
     bounds = {}
     hard0 = sorted(set(pstarts) | bl_targets)                 # symbols the recompiler itself knows
     soft0 = sorted(set(hard0) | errs)
@@ -112,9 +144,10 @@ def main(image, switch_toml, ppc_dir, out, manual=None):
         d = re.search(r"default = (0x[0-9A-Fa-f]+)", blk)
         if d:
             labels.append(int(d.group(1), 16))
-        # The function owning the table is the nearest symbol the recompiler
-        # knows; pointer-only targets must not steal it (they may be labels).
-        f = soft0[bisect.bisect_right(soft0, sb) - 1]
+        # The function owning the table is the nearest preceding symbol,
+        # pointer-only function starts included (a table that lies past such a
+        # start belongs to that function, not to the one before it).
+        f = soft[bisect.bisect_right(soft, sb) - 1]
         pb, psz = pfunc(sb)
         if pb is not None and f == pb and all(pb <= l < pb + psz for l in labels):
             continue

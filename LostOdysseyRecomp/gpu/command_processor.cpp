@@ -4,6 +4,8 @@
 #include <kernel/memory.h>
 #include <kernel/function.h>
 #include <os/logger.h>
+#include <set>
+#include <mutex>
 
 void DumpGuestThreadStates();
 
@@ -31,6 +33,62 @@ namespace gpu
             uint32_t count = ((r.header >> 16) & 0x3FFF) + 1;
             LOG_WARNING("  {} @{:#x} hdr={:#010x} type={} op={:#x} count={} [{:#x} {:#x} {:#x}]",
                 r.ring ? "ring" : "ib  ", r.offset, r.header, type, op, count, r.d0, r.d1, r.d2);
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Draw statistics and shader capture (LO_GPU_STATS=1, LO_SHADER_DUMP_DIR).
+    // Purely diagnostic: tells us what the title screen actually draws before
+    // a renderer exists.
+    // -----------------------------------------------------------------------
+    struct FrameStats
+    {
+        uint32_t draws = 0, indexed = 0, autoIndex = 0, copies = 0, shaderLoads = 0;
+        uint32_t prim[64] = {};
+        uint32_t constantWrites = 0;
+    };
+    static FrameStats g_frame;
+    static uint64_t g_activeShader[2] = {};      // [0]=vertex [1]=pixel
+    static uint32_t g_activeShaderSize[2] = {};
+    static std::mutex g_shaderMutex;
+    static std::set<uint64_t> g_seenShaders;
+    static const bool g_gpuStats = getenv("LO_GPU_STATS") != nullptr;
+    static uint32_t g_detailBudget = 0;
+
+    static uint64_t HashWords(const uint32_t* words, uint32_t count)
+    {
+        uint64_t h = 0xcbf29ce484222325ull;
+        for (uint32_t i = 0; i < count; i++)
+        {
+            h ^= words[i];
+            h *= 0x100000001b3ull;
+        }
+        return h;
+    }
+
+    // words point at big-endian microcode in guest memory.
+    static void CaptureShader(uint32_t type, const uint32_t* words, uint32_t count)
+    {
+        if (type > 1 || count == 0 || count > 0x10000)
+            return;
+        uint64_t hash = HashWords(words, count);
+        g_activeShader[type] = hash;
+        g_activeShaderSize[type] = count;
+        g_frame.shaderLoads++;
+
+        std::lock_guard lock(g_shaderMutex);
+        if (!g_seenShaders.insert(hash).second)
+            return;
+        if (g_gpuStats)
+            LOG_INFO("new {} shader {:016x} ({} dwords), {} distinct so far", type ? "pixel" : "vertex", hash, count, g_seenShaders.size());
+        if (const char* dir = getenv("LO_SHADER_DUMP_DIR"))
+        {
+            std::string path = fmt::format("{}/{}_{:016x}.bin", dir, type ? "ps" : "vs", hash);
+            if (FILE* f = fopen(path.c_str(), "wb"))
+            {
+                fwrite(words, 4, count, f);
+                fclose(f);
+            }
         }
     }
 
@@ -63,6 +121,13 @@ namespace gpu
             PM4_CONTEXT_UPDATE = 0x5e,
             PM4_DRAW_INDX = 0x22,
             PM4_DRAW_INDX_2 = 0x36,
+            PM4_IM_LOAD = 0x27,
+            PM4_IM_LOAD_IMMEDIATE = 0x2B,
+            PM4_SET_CONSTANT = 0x2D,
+            PM4_SET_CONSTANT2 = 0x55,
+            PM4_LOAD_ALU_CONSTANT = 0x2F,
+            PM4_SET_SHADER_CONSTANTS = 0x56,
+            PM4_INVALIDATE_STATE = 0x3B,
         };
 
         constexpr uint32_t kSwapSignature = 0x53574150; // 'SWAP'
@@ -506,6 +571,21 @@ namespace gpu
             uint32_t swaps = ++g_swapCount;
             if ((swaps % 60) == 1)
                 LOG_INFO("swap #{} frontbuffer {:#x} {}x{} (magic {:#x})", swaps, frontbuffer, width, height, magic);
+            if (g_gpuStats)
+            {
+                if ((swaps % 60) == 0 || swaps < 5)
+                {
+                    std::string prims;
+                    for (uint32_t i = 0; i < 64; i++)
+                        if (g_frame.prim[i])
+                            prims += fmt::format(" p{}={}", i, g_frame.prim[i]);
+                    LOG_INFO("frame {} stats: draws={} indexed={} auto={} copies={} shaderLoads={} constWrites={}{}",
+                        swaps, g_frame.draws, g_frame.indexed, g_frame.autoIndex, g_frame.copies, g_frame.shaderLoads, g_frame.constantWrites, prims);
+                }
+                if (swaps == 120 || swaps == 600 || swaps == 1500 || swaps == 3000)
+                    g_detailBudget = 60;
+            }
+            g_frame = FrameStats{};
             if (swaps == 118 && getenv("LO_GPU_TRACE"))
                 g_traceBudget = 400;
             return true;
@@ -734,8 +814,146 @@ namespace gpu
             reader.Advance(count);
             return true;
 
+        case PM4_SET_CONSTANT:
+        case PM4_LOAD_ALU_CONSTANT:
+        {
+            uint32_t address = 0;
+            if (opcode == PM4_LOAD_ALU_CONSTANT)
+                address = reader.ReadAndSwap() & 0x3FFFFFFF;
+            uint32_t offsetType = reader.ReadAndSwap();
+            uint32_t index = offsetType & 0x7FF;
+            uint32_t type = (offsetType >> 16) & 0xFF;
+            uint32_t n = count - 1;
+            if (opcode == PM4_LOAD_ALU_CONSTANT)
+            {
+                n = reader.ReadAndSwap() & 0xFFF;
+            }
+            static const uint32_t bases[] = { 0x4000, 0x4800, 0x4900, 0x4908, 0x2000 };
+            if (type < 5)
+            {
+                index += bases[type];
+                g_frame.constantWrites += n;
+                if (opcode == PM4_LOAD_ALU_CONSTANT)
+                {
+                    auto* src = reinterpret_cast<be<uint32_t>*>(TranslatePhysical(address));
+                    for (uint32_t i = 0; i < n; i++)
+                        WriteRegister(index + i, src[i]);
+                }
+                else
+                {
+                    for (uint32_t i = 0; i < n; i++)
+                        WriteRegister(index + i, reader.ReadAndSwap());
+                }
+            }
+            else if (opcode == PM4_SET_CONSTANT)
+                reader.Advance(count - 1);
+            return true;
+        }
+
+        case PM4_SET_CONSTANT2:
+        case PM4_SET_SHADER_CONSTANTS:
+        {
+            uint32_t index = reader.ReadAndSwap() & 0xFFFF;
+            g_frame.constantWrites += count - 1;
+            for (uint32_t i = 0; i < count - 1; i++)
+                WriteRegister(index + i, reader.ReadAndSwap());
+            return true;
+        }
+
+        case PM4_IM_LOAD:
+        {
+            uint32_t addrType = reader.ReadAndSwap();
+            uint32_t startSize = reader.ReadAndSwap();
+            uint32_t sizeDwords = startSize & 0xFFFF;
+            CaptureShader(addrType & 3, reinterpret_cast<uint32_t*>(TranslatePhysical(addrType & ~3u)), sizeDwords);
+            reader.Advance(count - 2);
+            return true;
+        }
+
+        case PM4_IM_LOAD_IMMEDIATE:
+        {
+            uint32_t type = reader.ReadAndSwap();
+            uint32_t startSize = reader.ReadAndSwap();
+            uint32_t sizeDwords = startSize & 0xFFFF;
+            CaptureShader(type & 3, reinterpret_cast<uint32_t*>(reader.base + reader.readOffset % reader.size), sizeDwords);
+            reader.Advance(count - 2);
+            return true;
+        }
+
+        case PM4_INVALIDATE_STATE:
+            reader.Advance(count);
+            return true;
+
+        case PM4_DRAW_INDX:
+        case PM4_DRAW_INDX_2:
+        {
+            uint32_t consumed = 0;
+            if (opcode == PM4_DRAW_INDX)
+            {
+                reader.ReadAndSwap(); // viz query condition
+                consumed++;
+            }
+            uint32_t initiator = reader.ReadAndSwap();
+            consumed++;
+            WriteRegister(0x21FC, initiator);
+            uint32_t primType = initiator & 0x3F;
+            uint32_t sourceSelect = (initiator >> 6) & 3;
+            uint32_t numIndices = initiator >> 16;
+            uint32_t dmaBase = 0, dmaSize = 0;
+            if (sourceSelect == 0 && consumed + 2 <= count)
+            {
+                dmaBase = reader.ReadAndSwap();
+                dmaSize = reader.ReadAndSwap();
+                consumed += 2;
+                WriteRegister(0x21FA, dmaBase);
+                WriteRegister(0x21FB, dmaSize);
+            }
+            reader.Advance(count - consumed);
+
+            g_frame.draws++;
+            g_frame.prim[primType & 63]++;
+            if (sourceSelect == 0) g_frame.indexed++;
+            if (sourceSelect == 2) g_frame.autoIndex++;
+            uint32_t modeControl = ReadRegister(0x2208);
+            bool isCopy = (modeControl & 7) == 6; // xenos::ModeControl::kCopy
+            if (isCopy) g_frame.copies++;
+
+            if (g_gpuStats && g_detailBudget == 60)
+            {
+                // Once per detailed frame: every non-zero fetch constant slot
+                // (0x4800 + 6 dwords each) and the first vertex ALU constants.
+                for (uint32_t slot = 0; slot < 96; slot++)
+                {
+                    uint32_t w[6];
+                    bool any = false;
+                    for (int k = 0; k < 6; k++) { w[k] = ReadRegister(0x4800 + slot * 6 + k); any |= w[k] != 0; }
+                    if (any)
+                        LOG_INFO("  fetch[{}] = {:#x} {:#x} {:#x} {:#x} {:#x} {:#x}", slot, w[0], w[1], w[2], w[3], w[4], w[5]);
+                }
+                for (uint32_t c = 0; c < 8; c++)
+                    LOG_INFO("  vsconst c{} = {:#x} {:#x} {:#x} {:#x}", c, ReadRegister(0x4000 + c * 4), ReadRegister(0x4001 + c * 4), ReadRegister(0x4002 + c * 4), ReadRegister(0x4003 + c * 4));
+                LOG_INFO("  viewport xs={:#x} xo={:#x} ys={:#x} yo={:#x} zs={:#x} zo={:#x} vte={:#x} su_sc={:#x} colorctl={:#x} copyDestInfo={:#x}",
+                    ReadRegister(0x210F), ReadRegister(0x2110), ReadRegister(0x2111), ReadRegister(0x2112), ReadRegister(0x2113), ReadRegister(0x2114),
+                    ReadRegister(0x2206), ReadRegister(0x2205), ReadRegister(0x2202), ReadRegister(0x231B));
+            }
+            if (g_gpuStats && g_detailBudget > 0)
+            {
+                g_detailBudget--;
+                if (isCopy)
+                    LOG_INFO("  resolve: copyCtl={:#x} dest={:#x} pitch={:#x} destInfo={:#x} surf={:#x} color={:#x} depth={:#x}",
+                        ReadRegister(0x2318), ReadRegister(0x2319), ReadRegister(0x231A), ReadRegister(0x231B),
+                        ReadRegister(0x2000), ReadRegister(0x2001), ReadRegister(0x2002));
+                else
+                    LOG_INFO("  draw prim={} n={} src={} vs={:016x}/{} ps={:016x}/{} color={:#x} depth={:#x} surf={:#x} mode={:#x} blend={:#x} depthCtl={:#x} scissor={:#x}-{:#x} pgm={:#x} idx={:#x}/{:#x}",
+                        primType, numIndices, sourceSelect, g_activeShader[0], g_activeShaderSize[0], g_activeShader[1], g_activeShaderSize[1],
+                        ReadRegister(0x2001), ReadRegister(0x2002), ReadRegister(0x2000), modeControl, ReadRegister(0x2201), ReadRegister(0x2200),
+                        ReadRegister(0x2081), ReadRegister(0x2082), ReadRegister(0x2180), dmaBase, dmaSize);
+            }
+            return true;
+        }
+
         default:
-            // Draw calls, constants, shader loads: no renderer yet, skip.
+            // Remaining state packets: no renderer yet, skip.
             reader.Advance(count);
             return true;
         }
