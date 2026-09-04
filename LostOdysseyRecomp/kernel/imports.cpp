@@ -9,6 +9,7 @@
 #include "xdm.h"
 #include "xex_loader.h"
 #include "guest_printf.h"
+#include <gpu/command_processor.h>
 #include <os/logger.h>
 #include <csetjmp>
 
@@ -1342,11 +1343,6 @@ static uint32_t XeKeysConsoleSignatureVerification(uint32_t, uint32_t, uint32_t)
 // Video (Vd*) - minimal until the GPU backend lands
 // ---------------------------------------------------------------------------
 
-static uint32_t g_graphicsInterruptCallback = 0;
-static uint32_t g_graphicsInterruptUserData = 0;
-static uint32_t g_ringBufferAddress = 0;
-static uint32_t g_ringBufferSize = 0;
-
 static void VdQueryVideoMode(XVIDEO_MODE* vm)
 {
     memset(vm, 0, sizeof(XVIDEO_MODE));
@@ -1384,21 +1380,19 @@ static void VdGetCurrentDisplayGamma(be<uint32_t>* type, be<float>* power)
 
 static void VdSetGraphicsInterruptCallback(uint32_t callback, uint32_t userData)
 {
-    g_graphicsInterruptCallback = callback;
-    g_graphicsInterruptUserData = userData;
     LOG_KERNEL("callback={:#x} data={:#x}", callback, userData);
+    gpu::g_commandProcessor.SetInterruptCallback(callback, userData);
 }
 
-static void VdInitializeRingBuffer(uint32_t address, uint32_t sizeLog2)
+static void VdInitializeRingBuffer(uint32_t physicalAddress, uint32_t sizeLog2)
 {
-    g_ringBufferAddress = address;
-    g_ringBufferSize = 1u << sizeLog2;
-    LOG_KERNEL("ring buffer {:#x} size {:#x}", address, g_ringBufferSize);
+    gpu::g_commandProcessor.InitializeRingBuffer(physicalAddress, sizeLog2);
 }
 
-static void VdEnableRingBufferRPtrWriteBack(uint32_t address, uint32_t blockSize)
+static void VdEnableRingBufferRPtrWriteBack(uint32_t physicalAddress, uint32_t blockSizeLog2)
 {
-    LOG_KERNEL("rptr writeback {:#x} block {:#x}", address, blockSize);
+    LOG_KERNEL("rptr writeback {:#x} block 2^{}", physicalAddress, blockSizeLog2);
+    gpu::g_commandProcessor.EnableReadPointerWriteBack(physicalAddress, blockSizeLog2);
 }
 
 static void VdSetSystemCommandBufferGpuIdentifierAddress(uint32_t address)
@@ -1408,8 +1402,13 @@ static void VdSetSystemCommandBufferGpuIdentifierAddress(uint32_t address)
 
 static void VdGetSystemCommandBuffer(be<uint32_t>* buffer, be<uint32_t>* value)
 {
-    if (buffer) *buffer = 0;
-    if (value) *value = 0;
+    if (buffer)
+    {
+        memset(buffer, 0, 0x94);
+        buffer[0] = 0xBEEF0000;
+    }
+    if (value)
+        *value = 0xBEEF0001;
 }
 
 static void VdInitializeEngines(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t) { LOG_KERNEL("engines initialized"); }
@@ -1423,13 +1422,38 @@ static void VdEnableDisableClockGating(uint32_t) {}
 static void VdCallGraphicsNotificationRoutines(uint32_t) {}
 static void VdInitializeScalerCommandBuffer(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t) {}
 
-static void VdSwap(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, uint32_t a5, uint32_t a6, uint32_t a7, uint32_t a8)
+// VdSwap: the caller reserves 64 dwords in the primary ring buffer. Fill them
+// with the front buffer fetch constant plus an XE_SWAP packet the command
+// processor understands (Xenia's scheme), padded with type-2 NOPs.
+static void VdSwap(be<uint32_t>* bufferPtr, be<uint32_t>* fetchPtr, uint32_t unk2, uint32_t unk3, uint32_t unk4,
+    be<uint32_t>* frontbufferPtr, be<uint32_t>* textureFormatPtr, be<uint32_t>* colorSpacePtr, be<uint32_t>* width, be<uint32_t>* height)
 {
-    static uint32_t frame = 0;
-    if ((frame++ % 60) == 0)
-        LOG_KERNEL("frame {} ({:#x} {:#x} {:#x})", frame, a1, a2, a3);
-    // Pace the game like a 60 Hz vblank until the GPU backend presents.
-    std::this_thread::sleep_for(std::chrono::milliseconds(16));
+    uint32_t fetch[6]{};
+    for (int i = 0; i < 6; i++)
+        fetch[i] = fetchPtr ? uint32_t(fetchPtr[i]) : 0;
+
+    // dword_0 bits 0..? : base_address is the top bits (address >> 12) in fetch dword 0 low 20 bits? Xenia:
+    // base_address field occupies bits [0..19] of dword_0 shifted; keep the fetch as-is and only
+    // patch the address via the same virtual->physical rule as MmGetPhysicalAddress.
+    uint32_t frontVirtual = frontbufferPtr ? uint32_t(*frontbufferPtr) : 0;
+    uint32_t frontPhysical = frontVirtual & 0x1FFFFFFF;
+
+    for (int i = 0; i < 64; i++)
+        bufferPtr[i] = 0;
+
+    uint32_t offset = 0;
+    bufferPtr[offset++] = (0u << 30) | ((6 - 1) << 16) | 0x4800; // type0: SHADER_CONSTANT_FETCH_00_0 (0x4800), 6 dwords
+    for (int i = 0; i < 6; i++)
+        bufferPtr[offset++] = fetch[i];
+
+    bufferPtr[offset++] = (3u << 30) | ((4 - 1) << 16) | (0x64 << 8); // type3 XE_SWAP, 4 dwords
+    bufferPtr[offset++] = 0x53574150; // 'SWAP'
+    bufferPtr[offset++] = frontPhysical;
+    bufferPtr[offset++] = width ? uint32_t(*width) : 0;
+    bufferPtr[offset++] = height ? uint32_t(*height) : 0;
+
+    for (uint32_t i = offset; i < 64; i++)
+        bufferPtr[i] = 2u << 30; // type2 NOP
 }
 
 // ---------------------------------------------------------------------------

@@ -6,6 +6,7 @@
 #include <kernel/xex_loader.h>
 #include <kernel/xam.h>
 #include <kernel/io/file_system.h>
+#include <gpu/command_processor.h>
 #include <os/logger.h>
 
 #ifdef _WIN32
@@ -70,6 +71,7 @@ int main(int argc, char* argv[])
         return 1;
 
     XexLoader::StartTimeStampThread();
+    gpu::g_commandProcessor.Init();
 
     LOG_INFO("starting guest at {:#x}", entry);
     GuestThread::Start({ entry, 0, 0 });
