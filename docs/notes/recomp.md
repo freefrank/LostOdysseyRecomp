@@ -105,6 +105,14 @@ VPKSHUS 的惯例传 (vB, vA)。这些实现尚未经测试验证，运行期若
 重跑后函数数减 2（0x82B7BCD0/0x82B7BCD8 并回 memset），无其他变化；`baseline_func_mapping.txt` 中已删掉这两行。
 XenonRecomp 只重写内容变化的文件，但函数数变化会让 175 号之后的分文件全部重新编号、重新编译。
 
+## vupkd3d128 解包（2026-09-04）
+
+上游只实现了 D3DCOLOR 与 SHORT_2 两种，其余类型生成 `__builtin_debugtrap()`；本镜像有 36 处 FLOAT16_4（IMM=20，
+XAudio 的半精度转换，新游戏进战斗时命中并以 BREAKPOINT 崩溃）和 1 处 FLOAT16_2（IMM=12）。补丁按 Xenia 的通道映射实现了
+类型 2（UINT_2101010）、3（FLOAT16_2）、4（SHORT_4）、5（FLOAT16_4）：打包数据在最后一/两个 PPC 字（宿主 u32[0]/u32[1]），
+结果 x..w 对应宿主 f32[3..0]；`PPCHalfToFloat` 放在 XenonUtils/ppc_context.h（重编译时随头文件复制到 ppc/）。
+现在输出里只剩 1 处 `blrl` 的 trap。
+
 ## 待办
 - [x] setjmp = 0x82DF34A0（带全局钩子检查的入口，7 处 bl；本体 0x82DF34B4 保存 f14-f31/r13-r31/v 到 r3），longjmp = 0x82DF3060（21 处调用，手工恢复 FPR 后经 0x82DF334C 调 RtlUnwind）
 - [ ] .embsec_* 段的性质（8 个小代码段，名字乱码，.pdata 覆盖到 8312D330）

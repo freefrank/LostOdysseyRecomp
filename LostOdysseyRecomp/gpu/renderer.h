@@ -1,6 +1,9 @@
 #pragma once
 
 #include <cstdint>
+#include <vector>
+
+namespace plume { struct RenderTexture; }
 
 // Xenos draw backend on plume: turns the command processor's register state
 // plus a DRAW_INDX packet into host draws, emulates EDRAM render targets as
@@ -31,4 +34,16 @@ namespace gpu::renderer
 
     // Guest memory range was written by the GPU (resolve) or is known dirty.
     void InvalidateGuestRange(uint32_t physicalAddress, uint32_t size);
+
+    // Resolves stay on the GPU: the surface last resolved to a guest physical
+    // address lives in a host texture. AcquireResolvedSurface flushes pending
+    // work and hands that texture over in COPY_SOURCE layout (format is a
+    // plume::RenderFormat), or returns nullptr when nothing was resolved there.
+    plume::RenderTexture* AcquireResolvedSurface(uint32_t physicalAddress, uint32_t& width, uint32_t& height, uint32_t& format);
+    // Reads such a surface back as R8G8B8A8 pixels (screenshots, debugging).
+    bool ReadbackResolvedSurface(uint32_t physicalAddress, std::vector<uint32_t>& pixels, uint32_t& width, uint32_t& height);
+    // Physical addresses of every surface currently held (debugging dumps).
+    std::vector<uint32_t> GetResolvedAddresses();
+    // Writes every colour render target as <prefix>_rt_<base>_<fmt>_<w>x<h>.ppm (debugging).
+    void DumpRenderTargets(const char* prefix);
 }

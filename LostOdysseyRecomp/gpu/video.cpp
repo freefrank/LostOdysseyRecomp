@@ -1,5 +1,6 @@
 #include <stdafx.h>
 #include "video.h"
+#include "renderer.h"
 #include <kernel/memory.h>
 #include <os/logger.h>
 #include <hid/hid.h>
@@ -38,6 +39,8 @@ namespace gpu::video
 
         std::vector<uint32_t> g_pixels;   // last untiled frame, R8G8B8A8
         uint32_t g_frameWidth = 0, g_frameHeight = 0;
+        bool g_frameOnGpu = false;        // last frame came straight from a resolved surface
+        uint32_t g_frontbufferPhysical = 0;
 
 #ifdef LO_GPU_PLUME
         std::unique_ptr<plume::RenderInterface> g_interface;
@@ -216,6 +219,51 @@ namespace gpu::video
         if (width == 0 || height == 0 || width > kMaxWidth || height > kMaxHeight)
             return;
 
+#ifdef LO_GPU_PLUME
+        // Fast path: the frontbuffer was resolved on the GPU, copy it straight
+        // into the swap chain. LO_PRESENT_CPU=1 forces the untiling path below.
+        static const bool cpuPresent = getenv("LO_PRESENT_CPU") != nullptr;
+        if (g_available && !cpuPresent)
+        {
+            uint32_t rw = 0, rh = 0, rf = 0;
+            plume::RenderTexture* source = renderer::AcquireResolvedSurface(physicalAddress & 0x1FFFFFFF, rw, rh, rf);
+            if (source && plume::RenderFormat(rf) == kSwapChainFormat)
+            {
+                g_frameWidth = width;
+                g_frameHeight = height;
+                g_frontbufferPhysical = physicalAddress & 0x1FFFFFFF;
+                g_frameOnGpu = true;
+                if (g_swapChain->needsResize())
+                    g_swapChain->resize();
+                if (g_swapChain->isEmpty())
+                    return;
+                uint32_t imageIndex = 0;
+                if (!g_swapChain->acquireTexture(g_acquireSemaphore.get(), &imageIndex))
+                    return;
+                plume::RenderTexture* backBuffer = g_swapChain->getTexture(imageIndex);
+                const uint32_t copyWidth = std::min({ width, rw, g_swapChain->getWidth() });
+                const uint32_t copyHeight = std::min({ height, rh, g_swapChain->getHeight() });
+
+                g_commandList->begin();
+                g_commandList->barriers(plume::RenderBarrierStage::COPY, plume::RenderTextureBarrier(backBuffer, plume::RenderTextureLayout::COPY_DEST));
+                plume::RenderBox box(0, 0, int32_t(copyWidth), int32_t(copyHeight), 0, 1);
+                g_commandList->copyTextureRegion(plume::RenderTextureCopyLocation::Subresource(backBuffer),
+                    plume::RenderTextureCopyLocation::Subresource(source), 0, 0, 0, &box);
+                g_commandList->barriers(plume::RenderBarrierStage::NONE, plume::RenderTextureBarrier(backBuffer, plume::RenderTextureLayout::PRESENT));
+                g_commandList->end();
+
+                const plume::RenderCommandList* lists[] = { g_commandList.get() };
+                plume::RenderCommandSemaphore* waitSemaphore = g_acquireSemaphore.get();
+                plume::RenderCommandSemaphore* signalSemaphore = g_releaseSemaphore.get();
+                g_queue->executeCommandLists(lists, 1, &waitSemaphore, 1, &signalSemaphore, 1, g_fence.get());
+                g_swapChain->present(imageIndex, &signalSemaphore, 1);
+                g_queue->waitForCommandFence(g_fence.get());
+                return;
+            }
+        }
+#endif
+        g_frameOnGpu = false;
+
         // Untile: 32bpp blocks, pitch rounded up to a 32-block macro tile.
         const uint32_t pitchBlocks = (width + 31) & ~31u;
         const uint32_t endian = copyDestInfo & 7;
@@ -277,8 +325,55 @@ namespace gpu::video
 #endif
     }
 
+    static bool WritePpm(const char* path, const std::vector<uint32_t>& pixels, uint32_t width, uint32_t height)
+    {
+        FILE* f = fopen(path, "wb");
+        if (!f)
+            return false;
+        fprintf(f, "P6\n%u %u\n255\n", width, height);
+        std::vector<uint8_t> row(size_t(width) * 3);
+        for (uint32_t y = 0; y < height; y++)
+        {
+            for (uint32_t x = 0; x < width; x++)
+            {
+                uint32_t p = pixels[size_t(y) * width + x];
+                row[x * 3 + 0] = uint8_t(p);
+                row[x * 3 + 1] = uint8_t(p >> 8);
+                row[x * 3 + 2] = uint8_t(p >> 16);
+            }
+            fwrite(row.data(), 1, row.size(), f);
+        }
+        fclose(f);
+        return true;
+    }
+
     bool SaveScreenshot(const char* path)
     {
+        // LO_SCREENSHOT_RESOLVED=1: also dump every GPU-resolved surface (HDR
+        // scene buffers etc.) as <path>_<address>.ppm for renderer debugging.
+        static const bool dumpResolved = getenv("LO_SCREENSHOT_RESOLVED") != nullptr;
+        if (dumpResolved)
+        {
+            {
+                std::string p = path;
+                size_t dot = p.rfind('.');
+                renderer::DumpRenderTargets(p.substr(0, dot).c_str());
+            }
+            std::vector<uint32_t> pixels;
+            for (uint32_t address : renderer::GetResolvedAddresses())
+            {
+                uint32_t w = 0, h = 0;
+                if (renderer::ReadbackResolvedSurface(address, pixels, w, h))
+                {
+                    std::string p = path;
+                    size_t dot = p.rfind('.');
+                    p = p.substr(0, dot) + fmt::format("_{:x}", address) + (dot == std::string::npos ? "" : p.substr(dot));
+                    WritePpm(p.c_str(), pixels, w, h);
+                }
+            }
+        }
+        if (g_frameOnGpu && !renderer::ReadbackResolvedSurface(g_frontbufferPhysical, g_pixels, g_frameWidth, g_frameHeight))
+            return false;
         if (g_pixels.empty())
             return false;
         FILE* f = fopen(path, "wb");

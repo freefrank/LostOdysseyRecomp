@@ -58,6 +58,7 @@ namespace gpu::renderer
         constexpr uint32_t REG_LOOP_CONSTANTS = 0x4908;
 
         constexpr uint32_t kUploadRingSize = 96u << 20;
+        constexpr uint32_t kVertexArenaSize = 256u << 20;   // persistent, byte-swapped copies of guest vertex buffers
         constexpr uint32_t kReadbackSize = 32u << 20;
         constexpr uint32_t kVertexFetchSlots = 96;
         constexpr uint32_t kTextureSlots = 32;
@@ -75,6 +76,20 @@ namespace gpu::renderer
             case 3: return (value >> 16) | (value << 16);
             default: return value;
             }
+        }
+
+        // Upload heaps are write-combined: never read them back. Swap on the way in.
+        void CopySwapped(void* dst, const void* src, size_t dwords, uint32_t endian)
+        {
+            if ((endian & 3) == 0)
+            {
+                memcpy(dst, src, dwords * 4);
+                return;
+            }
+            const uint32_t* s = static_cast<const uint32_t*>(src);
+            uint32_t* d = static_cast<uint32_t*>(dst);
+            for (size_t i = 0; i < dwords; i++)
+                d[i] = GpuSwap(s[i], endian);
         }
 
         void SwapBuffer(uint32_t* data, size_t dwords, uint32_t endian)
@@ -168,6 +183,19 @@ namespace gpu::renderer
 
             std::unique_ptr<RenderBuffer> uploadRing;
             uint8_t* uploadMapped = nullptr;
+
+            // Vertex buffers live in a persistent arena keyed by (address, size,
+            // endian). A fetch constant may describe a multi-megabyte buffer for a
+            // draw that touches a few hundred vertices, so copying per draw is
+            // hopeless; instead each buffer is uploaded once and re-validated with
+            // a sampled hash of the guest memory when it is referenced again.
+            std::unique_ptr<RenderBuffer> vertexArena;
+            uint8_t* arenaMapped = nullptr;
+            uint64_t arenaOffset = 0;
+            struct VertexEntry { uint64_t offset; uint64_t hash; uint64_t lastFrame; };
+            std::unordered_map<uint64_t, VertexEntry> vertexCache;
+            uint32_t vertexUploads = 0, vertexRevalidations = 0;
+            size_t vertexBytesUploaded = 0;
             uint64_t uploadOffset = 0;
             std::unique_ptr<RenderBuffer> readback;
 
@@ -187,7 +215,33 @@ namespace gpu::renderer
             std::unordered_map<uint64_t, Shader> shaders[2];
             std::unordered_map<PipelineKey, std::unique_ptr<RenderPipeline>, PipelineKeyHash> pipelines;
             std::unordered_map<RenderTargetKey, std::unique_ptr<HostTexture>, RenderTargetKeyHash> renderTargets;
+            std::vector<std::unique_ptr<HostTexture>> retiredTextures; // replaced targets, freed after the next Flush
             std::unordered_map<TextureKey, std::unique_ptr<HostTexture>, TextureKeyHash> textures;
+
+            // Resolve results kept on the GPU, keyed by guest physical address.
+            // The game samples them through fetch constants pointing at the
+            // same address, and the presenter copies the frontbuffer from here.
+            struct ResolvedSurface
+            {
+                std::unique_ptr<HostTexture> tex;
+                uint32_t destFormat = 0, destPitch = 0;
+                uint64_t frame = 0;
+            };
+            std::unordered_map<uint32_t, ResolvedSurface> resolved;
+            bool resolveReadback = false; // LO_RESOLVE_READBACK=1: legacy CPU write-back into guest memory
+
+            // Per-frame timing of the expensive paths (LO_GPU_STATS).
+            struct ScopedTimer
+            {
+                double& acc;
+                std::chrono::steady_clock::time_point t0 = std::chrono::steady_clock::now();
+                ~ScopedTimer() { acc += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count(); }
+            };
+            double tDraw = 0, tShader = 0, tPipeline = 0, tTexture = 0, tResolve = 0, tFlush = 0;
+            double tConst = 0, tSets = 0, tVertex = 0, tBind = 0, tIndex = 0, tRecord = 0;
+            uint32_t nShader = 0, nPipeline = 0, nTexture = 0, nResolve = 0;
+            size_t texBytes = 0;
+            void ResetTimers() { tDraw = tShader = tPipeline = tTexture = tResolve = tFlush = 0; tConst = tSets = tVertex = tBind = tIndex = tRecord = 0; nShader = nPipeline = nTexture = nResolve = 0; texBytes = 0; }
             std::map<uint64_t, std::unique_ptr<RenderSampler>> samplers;
             std::map<std::pair<const RenderTexture*, const RenderTexture*>, std::unique_ptr<RenderFramebuffer>> framebuffers;
 
@@ -208,7 +262,10 @@ namespace gpu::renderer
                 fence = device->createCommandFence();
                 uploadRing = device->createBuffer(RenderBufferDesc::UploadBuffer(kUploadRingSize));
                 uploadMapped = static_cast<uint8_t*>(uploadRing->map());
+                vertexArena = device->createBuffer(RenderBufferDesc::UploadBuffer(kVertexArenaSize));
+                arenaMapped = static_cast<uint8_t*>(vertexArena->map());
                 readback = device->createBuffer(RenderBufferDesc::ReadbackBuffer(kReadbackSize));
+                resolveReadback = getenv("LO_RESOLVE_READBACK") != nullptr;
                 dummyBuffer = device->createBuffer(RenderBufferDesc::DefaultBuffer(256));
 
                 // Layout: root CBVs b0 (VS constants) b1 (shared) b2 (PS constants) in space0;
@@ -236,7 +293,7 @@ namespace gpu::renderer
 
                 staticSet0 = setBuilders[0].create(device);
                 for (uint32_t i = 0; i < kVertexFetchSlots; i++)
-                    staticSet0->setBuffer(vfetchDescriptorBase + i, uploadRing.get(), kUploadRingSize);
+                    staticSet0->setBuffer(vfetchDescriptorBase + i, vertexArena.get(), kVertexArenaSize);
                 RenderSampler* defaultSampler = GetSampler(0x2 | (0x2 << 2) | (0x1 << 4)); // linear, wrap
                 for (uint32_t i = 0; i < kSamplerPalette; i++)
                     staticSet0->setSampler(samplerDescriptorBase + i, defaultSampler);
@@ -312,7 +369,11 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 listOpen = false;
                 const RenderCommandList* lists[] = { commandList.get() };
                 queue->executeCommandLists(lists, 1, nullptr, 0, nullptr, 0, fence.get());
-                queue->waitForCommandFence(fence.get());
+                {
+                    ScopedTimer timer{ tFlush };
+                    queue->waitForCommandFence(fence.get());
+                }
+                retiredTextures.clear();
                 uploadOffset = 0;
                 for (auto& used : setPoolUsed)
                     used = 0;
@@ -336,6 +397,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 uploadOffset = offset + size;
                 return offset;
             }
+
+            // plume's shader-visible heap holds 65536 views; every draw takes three
+            // 32-slot sets, so the pools are capped and the frame is split when full.
+            static constexpr uint32_t kMaxSetsPerKind = 500;
 
             RenderDescriptorSet* AcquireSet(int which)
             {
@@ -420,6 +485,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     return it->second.valid ? &it->second : nullptr;
 
                 Shader& entry = cache[hash];
+                ScopedTimer timer{ tShader };
+                nShader++;
                 std::vector<uint32_t> swapped(count);
                 for (uint32_t i = 0; i < count; i++)
                     swapped[i] = ByteSwap(words[i]);
@@ -488,10 +555,27 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 
             HostTexture* GetRenderTarget(uint32_t base, uint32_t format, uint32_t pitch, uint32_t height, bool depth)
             {
-                RenderTargetKey key{ base, format, pitch, height, depth };
+                // EDRAM targets have no intrinsic height and ours is only guessed
+                // from the scissor, so draws and resolves may disagree on it: key
+                // by tile base, format and pitch only and grow the texture when a
+                // taller extent shows up.
+                height = std::clamp<uint32_t>((height + 31) & ~31u, 32, 2048);
+                RenderTargetKey key{ base, format, pitch, 0, depth };
                 auto it = renderTargets.find(key);
                 if (it != renderTargets.end())
-                    return it->second.get();
+                {
+                    if (it->second->height >= height)
+                        return it->second.get();
+                    height = std::max(height, it->second->height);
+                    const RenderTexture* old = it->second->texture.get();
+                    for (auto fb = framebuffers.begin(); fb != framebuffers.end();)
+                    {
+                        if (fb->first.first == old || fb->first.second == old) fb = framebuffers.erase(fb);
+                        else ++fb;
+                    }
+                    retiredTextures.push_back(std::move(it->second));
+                    renderTargets.erase(it);
+                }
 
                 auto tex = std::make_unique<HostTexture>();
                 tex->format = depth ? RenderFormat::D32_FLOAT_S8_UINT : ColorFormat(format);
@@ -538,6 +622,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 case 3: out = { RenderFormat::R8G8B8A8_UNORM, 1, 1, 2, true }; return true;     // k_1_5_5_5
                 case 4: out = { RenderFormat::R8G8B8A8_UNORM, 1, 1, 2, true }; return true;     // k_5_6_5
                 case 6: out = { RenderFormat::R8G8B8A8_UNORM, 1, 1, 4, false }; return true;    // k_8_8_8_8
+                case 7: case 54: out = { RenderFormat::R8G8B8A8_UNORM, 1, 1, 4, true }; return true; // k_2_10_10_10(_AS_16_16_16_16), truncated to 8 bits
                 case 10: out = { RenderFormat::R8G8_UNORM, 1, 1, 2, false }; return true;       // k_8_8
                 case 15: out = { RenderFormat::R8G8B8A8_UNORM, 1, 1, 2, true }; return true;    // k_4_4_4_4
                 case 18: out = { RenderFormat::BC1_UNORM, 4, 4, 8, false }; return true;        // DXT1
@@ -547,6 +632,16 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 case 36: out = { RenderFormat::R32_FLOAT, 1, 1, 4, false }; return true;
                 default: return false;
                 }
+            }
+
+            // A texture fetch at a resolved address reads the resolve's output when
+            // the formats agree (the *_AS_16_16_16_16 aliases fetch the same bits).
+            static bool ResolveFormatMatches(uint32_t fetchFormat, uint32_t destFormat)
+            {
+                if (fetchFormat == destFormat) return true;
+                if (destFormat == 7) return fetchFormat == 54;                       // k_2_10_10_10
+                if (destFormat == 6) return fetchFormat == 14 || fetchFormat == 50 || fetchFormat == 62; // k_8_8_8_8 aliases
+                return false;
             }
 
             static uint32_t Expand(uint32_t v, uint32_t bits) { return bits == 0 ? 255 : (v * 255 + ((1u << bits) - 1) / 2) / ((1u << bits) - 1); }
@@ -567,10 +662,17 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
 
                 TextureKey key{ base, format, width, height, (tiled ? 1u : 0u) | (endian << 1) | (pitch32 << 3) | (dimension << 12) };
+                if (auto rit = resolved.find(base); rit != resolved.end() && rit->second.tex && ResolveFormatMatches(format, rit->second.destFormat))
+                {
+                    Transition(*rit->second.tex, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
+                    return rit->second.tex.get();
+                }
                 auto it = textures.find(key);
                 if (it != textures.end())
                     return it->second.get();
 
+                ScopedTimer timer{ tTexture };
+                nTexture++;
                 TextureFormatInfo fi;
                 if (!GetTextureFormat(format, fi) || base == 0)
                 {
@@ -621,6 +723,12 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                 dst[0] = uint8_t(Expand(v & 31, 5)); dst[1] = uint8_t(Expand((v >> 5) & 63, 6)); dst[2] = uint8_t(Expand(v >> 11, 5)); dst[3] = 255; break;
                             case 15: // 4_4_4_4
                                 dst[0] = uint8_t(Expand(v & 15, 4)); dst[1] = uint8_t(Expand((v >> 4) & 15, 4)); dst[2] = uint8_t(Expand((v >> 8) & 15, 4)); dst[3] = uint8_t(Expand(v >> 12, 4)); break;
+                            case 7: case 54: // 2_10_10_10: r in the low bits, a in the top two
+                            {
+                                uint32_t w; memcpy(&w, block.data(), 4);
+                                dst[0] = uint8_t((w & 0x3FF) >> 2); dst[1] = uint8_t(((w >> 10) & 0x3FF) >> 2); dst[2] = uint8_t(((w >> 20) & 0x3FF) >> 2); dst[3] = uint8_t(Expand(w >> 30, 2));
+                                break;
+                            }
                             }
                         }
                     }
@@ -640,6 +748,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     return nullptr;
                 }
 
+                texBytes += staging.size();
                 uint64_t offset = Upload(staging.data(), staging.size(), 512);
                 if (offset == UINT64_MAX)
                     return nullptr;
@@ -713,6 +822,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 auto it = pipelines.find(key);
                 if (it != pipelines.end())
                     return it->second.get();
+                ScopedTimer timer{ tPipeline };
+                nPipeline++;
 
                 RenderGraphicsPipelineDesc desc;
                 desc.pipelineLayout = pipelineLayout.get();
@@ -725,6 +836,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 desc.depthEnabled = (depthControl & 2) != 0 && depthFormat != RenderFormat::UNKNOWN;
                 desc.depthWriteEnabled = (depthControl & 4) != 0;
                 desc.depthFunction = desc.depthEnabled ? Compare((depthControl >> 4) & 7) : RenderComparisonFunction::ALWAYS;
+                static const bool noDepth = getenv("LO_NO_DEPTH") != nullptr; // debugging: pass every fragment
+                if (noDepth)
+                    desc.depthFunction = RenderComparisonFunction::ALWAYS;
                 desc.depthClipEnabled = true;
                 desc.depthTargetFormat = depthFormat;
 
@@ -762,6 +876,81 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 return result;
             }
 
+            // ---- vertex buffers ------------------------------------------------------------
+            // Cheap change detection: everything for small buffers, otherwise the
+            // head, the tail and 64 evenly spread 64-byte windows.
+            static uint64_t SampleHash(const uint8_t* data, size_t bytes)
+            {
+                uint64_t h = 0x9E3779B97F4A7C15ull ^ bytes;
+                auto mix = [&](const uint8_t* q, size_t n)
+                {
+                    for (size_t i = 0; i + 8 <= n; i += 8)
+                    {
+                        uint64_t v; memcpy(&v, q + i, 8);
+                        h = (h ^ v) * 0x100000001B3ull;
+                        h ^= h >> 29;
+                    }
+                };
+                if (bytes <= 8192)
+                {
+                    mix(data, bytes);
+                    return h;
+                }
+                mix(data, 512);
+                mix(data + bytes - 512, 512);
+                const size_t step = (bytes - 1024) / 64;
+                for (int i = 0; i < 64; i++)
+                    mix(data + 512 + size_t(i) * step, 64);
+                return h;
+            }
+
+            // Returns the arena offset of the swapped copy of a guest vertex buffer.
+            uint64_t GetVertexBuffer(uint32_t address, uint32_t sizeDwords, uint32_t endian)
+            {
+                const size_t bytes = size_t(sizeDwords) * 4;
+                const uint64_t key = (uint64_t(address) << 32) | (uint64_t(sizeDwords) << 2) | endian;
+                const uint8_t* guest = Phys(address);
+                const uint64_t hash = SampleHash(guest, bytes);
+                auto it = vertexCache.find(key);
+                if (it != vertexCache.end())
+                {
+                    if (it->second.hash == hash)
+                    {
+                        it->second.lastFrame = frame;
+                        return it->second.offset;
+                    }
+                    vertexRevalidations++;
+                    // Changed contents: re-upload in place when it fits the same slot.
+                    CopySwapped(arenaMapped + it->second.offset, guest, sizeDwords, endian);
+                    it->second.hash = hash;
+                    it->second.lastFrame = frame;
+                    vertexBytesUploaded += bytes;
+                    return it->second.offset;
+                }
+
+                // Allocate (16-byte aligned, 16 bytes of slack for the shader's
+                // last fetch); when the arena is full, drain the GPU and start over.
+                const size_t needed = ((bytes + 16 + 15) & ~size_t(15));
+                if (arenaOffset + needed > kVertexArenaSize)
+                {
+                    if (needed > kVertexArenaSize)
+                        return UINT64_MAX;
+                    Flush();
+                    Begin();
+                    arenaOffset = 0;
+                    vertexCache.clear();
+                    LOG_INFO("renderer: vertex arena reset");
+                }
+                const uint64_t offset = arenaOffset;
+                arenaOffset += needed;
+                CopySwapped(arenaMapped + offset, guest, sizeDwords, endian);
+                memset(arenaMapped + offset + bytes, 0, 16);
+                vertexCache.emplace(key, VertexEntry{ offset, hash, frame });
+                vertexUploads++;
+                vertexBytesUploaded += bytes;
+                return offset;
+            }
+
             // ---- draw -------------------------------------------------------------------
             struct SharedConstants
             {
@@ -779,6 +968,19 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 
             void Draw(const DrawInfo& info)
             {
+                ScopedTimer timer{ tDraw };
+                DrawImpl(info);
+            }
+
+            void DrawImpl(const DrawInfo& info)
+            {
+                // Out of descriptor sets: submit what we have before this draw
+                // uploads anything (Flush rewinds the upload ring and the pools).
+                if (setPoolUsed[1] >= kMaxSetsPerKind)
+                {
+                    Flush();
+                    Begin();
+                }
                 Begin();
 
                 uint32_t modeControl = Reg(REG_RB_MODECONTROL) & 7;
@@ -837,6 +1039,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     return;
 
                 // Constants.
+                auto tConst0 = std::chrono::steady_clock::now();
                 uint32_t vsConstants[256 * 4], psConstants[224 * 4];
                 for (uint32_t i = 0; i < 256 * 4; i++) vsConstants[i] = Reg(REG_ALU_CONSTANTS + i);
                 for (uint32_t i = 0; i < 224 * 4; i++) psConstants[i] = Reg(REG_ALU_CONSTANTS + 256 * 4 + i);
@@ -880,16 +1083,20 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     shared.alphaTest[1] = float(colorControl & 7);
                 }
 
-                uint64_t vsOffset = Upload(vsConstants, sizeof(vsConstants));
-                uint64_t psOffset = Upload(psConstants, sizeof(psConstants));
-                if (vsOffset == UINT64_MAX || psOffset == UINT64_MAX)
-                    return;
+                tConst += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - tConst0).count();
 
                 // Descriptor sets: vertex fetch buffers + samplers, textures.
                 RenderDescriptorSet* set0 = staticSet0.get();
-                RenderDescriptorSet* set1 = AcquireSet(1);
-                RenderDescriptorSet* set2 = AcquireSet(2);
-                RenderDescriptorSet* set3 = AcquireSet(3);
+                RenderDescriptorSet* set1;
+                RenderDescriptorSet* set2;
+                RenderDescriptorSet* set3;
+                {
+                    ScopedTimer timer{ tSets };
+                    set1 = AcquireSet(1);
+                    set2 = AcquireSet(2);
+                    set3 = AcquireSet(3);
+                }
+                auto tVertex0 = std::chrono::steady_clock::now();
                 for (uint32_t slot = 0; slot < kVertexFetchSlots; slot++)
                 {
                     if (!((vs->info.vertexFetchSlotMask[slot >> 6] >> (slot & 63)) & 1))
@@ -902,16 +1109,16 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     uint32_t sizeDwords = (d1 >> 2) & 0xFFFFFF;
                     if (sizeDwords == 0 || sizeDwords > (16u << 20))
                         continue;
-                    size_t bytes = size_t(sizeDwords) * 4 + 16;
-                    uint64_t offset = Upload(nullptr, bytes, 16);
+                    uint64_t offset = GetVertexBuffer(address, sizeDwords, d1 & 3);
                     if (offset == UINT64_MAX)
                         continue;
-                    memcpy(uploadMapped + offset, Phys(address), bytes);
-                    SwapBuffer(reinterpret_cast<uint32_t*>(uploadMapped + offset), bytes / 4, d1 & 3);
                     shared.vfetchOffset[slot] = uint32_t(offset);
                 }
 
+                tVertex += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - tVertex0).count();
+
                 // Textures used by the pixel and vertex shaders.
+                auto tBind0 = std::chrono::steady_clock::now();
                 auto bindTextures = [&](Shader* s)
                 {
                     if (!s) return;
@@ -937,9 +1144,13 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 };
                 bindTextures(ps);
                 bindTextures(vs);
+                tBind += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - tBind0).count();
+                auto tIndex0 = std::chrono::steady_clock::now();
 
+                uint64_t vsOffset = Upload(vsConstants, sizeof(vsConstants));
+                uint64_t psOffset = Upload(psConstants, sizeof(psConstants));
                 uint64_t sharedOffset = Upload(&shared, sizeof(shared));
-                if (sharedOffset == UINT64_MAX)
+                if (vsOffset == UINT64_MAX || psOffset == UINT64_MAX || sharedOffset == UINT64_MAX)
                     return;
 
                 // Index buffer / primitive conversion.
@@ -999,7 +1210,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (indexCount == 0)
                     return;
 
+                tIndex += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - tIndex0).count();
+
                 // Record.
+                ScopedTimer recordTimer{ tRecord };
                 RenderFramebuffer* framebuffer = GetFramebuffer(color, depth);
                 commandList->setFramebuffer(framebuffer);
                 commandList->setViewports(&viewport, 1);
@@ -1027,11 +1241,13 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 
                 int32_t baseVertex = int32_t(Reg(REG_VGT_INDX_OFFSET));
                 static uint32_t drawLogs = 0;
-                if (drawLogs < 24)
+                static const uint32_t traceFrame = getenv("LO_DRAW_TRACE") ? strtoul(getenv("LO_DRAW_TRACE"), nullptr, 10) : 0;
+                static const uint32_t traceCount = getenv("LO_DRAW_TRACE_COUNT") ? strtoul(getenv("LO_DRAW_TRACE_COUNT"), nullptr, 10) : 1;
+                if (drawLogs < 24 || (traceFrame && frame >= traceFrame && frame < traceFrame + traceCount))
                 {
                     drawLogs++;
-                    LOG_INFO("renderer: draw prim={} n={} idx={} vs={:016x} ps={:016x} rt={:#x}/{} {}x{} vp=({},{} {}x{} z {}..{}) vte={:#x} scissor=({},{})-({},{}) ndc=({},{}) off=({},{}) mode={} c255=({:g},{:g},{:g},{:g})",
-                        info.primitiveType, indexCount, useIndices, key.vs, key.ps, colorInfo & 0xFFF, (colorInfo >> 16) & 0xF, pitch, rtHeight,
+                    LOG_INFO("renderer: draw f{} prim={} n={} idx={} vs={:016x} ps={:016x} rt={:#x}/{} {}x{} vp=({},{} {}x{} z {}..{}) vte={:#x} scissor=({},{})-({},{}) ndc=({},{}) off=({},{}) mode={} c255=({:g},{:g},{:g},{:g})",
+                        frame, info.primitiveType, indexCount, useIndices, key.vs, key.ps, colorInfo & 0xFFF, (colorInfo >> 16) & 0xF, pitch, rtHeight,
                         viewport.x, viewport.y, viewport.width, viewport.height, viewport.minDepth, viewport.maxDepth, vte,
                         scissor.left, scissor.top, scissor.right, scissor.bottom, shared.ndcScale[0], shared.ndcScale[1], shared.ndcOffset[0], shared.ndcOffset[1], modeControl,
                         RegF(REG_ALU_CONSTANTS + 255 * 4), RegF(REG_ALU_CONSTANTS + 255 * 4 + 1), RegF(REG_ALU_CONSTANTS + 255 * 4 + 2), RegF(REG_ALU_CONSTANTS + 255 * 4 + 3));
@@ -1053,7 +1269,57 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             }
 
             // ---- resolve --------------------------------------------------------------------
+            // Copies the resolve rectangle into the host texture standing in for the
+            // destination memory (destPitch x destHeight texels, rectangle placed at its
+            // window position). No GPU sync, no tiling, no guest memory writes.
+            void ResolveOnGpu(HostTexture& color, uint32_t destBase, uint32_t destFormat, uint32_t destPitch, uint32_t destHeight,
+                              uint32_t x0, uint32_t y0, uint32_t w, uint32_t h)
+            {
+                Begin();
+                const uint32_t texW = std::clamp<uint32_t>(std::max(destPitch, x0 + w), 1, 8192);
+                const uint32_t texH = std::clamp<uint32_t>(std::max(destHeight, y0 + h), 1, 8192);
+                ResolvedSurface& rs = resolved[destBase];
+                if (!rs.tex || rs.tex->format != color.format || rs.tex->width != texW || rs.tex->height != texH)
+                {
+                    rs.tex = std::make_unique<HostTexture>();
+                    rs.tex->format = color.format;
+                    rs.tex->width = texW;
+                    rs.tex->height = texH;
+                    rs.tex->texture = device->createTexture(RenderTextureDesc::Texture2D(texW, texH, 1, color.format));
+                    rs.tex->layout = RenderTextureLayout::UNKNOWN;
+                    if (!rs.tex->texture)
+                    {
+                        LOG_WARNING("renderer: resolved surface creation failed ({}x{})", texW, texH);
+                        resolved.erase(destBase);
+                        return;
+                    }
+                    static uint32_t created = 0;
+                    if (created++ < 16)
+                        LOG_INFO("renderer: resolved surface {:#x} {}x{} host fmt={} dest fmt={}", destBase, texW, texH, uint32_t(color.format), destFormat);
+                }
+                rs.destFormat = destFormat;
+                rs.destPitch = destPitch;
+                rs.frame = frame;
+                w = std::min(w, texW - x0);
+                h = std::min(h, texH - y0);
+                if (w == 0 || h == 0)
+                    return;
+                Transition(color, RenderTextureLayout::COPY_SOURCE, RenderBarrierStage::COPY);
+                Transition(*rs.tex, RenderTextureLayout::COPY_DEST, RenderBarrierStage::COPY);
+                RenderBox box{ int32_t(x0), int32_t(y0), int32_t(x0 + w), int32_t(y0 + h), 0, 1 };
+                commandList->copyTextureRegion(RenderTextureCopyLocation::Subresource(rs.tex->texture.get()),
+                    RenderTextureCopyLocation::Subresource(color.texture.get()), x0, y0, 0, &box);
+                Transition(*rs.tex, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
+            }
+
             void Resolve()
+            {
+                ScopedTimer timer{ tResolve };
+                nResolve++;
+                ResolveImpl();
+            }
+
+            void ResolveImpl()
             {
                 uint32_t copyControl = Reg(REG_RB_COPY_CONTROL);
                 uint32_t srcSelect = copyControl & 7;
@@ -1087,7 +1353,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     if (copyControl & 0x200) ClearDepthTarget(pitch, rtHeight);
                     return;
                 }
-                if (destFormat != 6 && destFormat != 32)
+                if (resolveReadback && destFormat != 6 && destFormat != 7 && destFormat != 32)
                 {
                     if (loggedFormats.insert(0x100 + destFormat).second)
                         LOG_WARNING("renderer: unsupported resolve destination format {}", destFormat);
@@ -1096,6 +1362,13 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 
                 uint32_t colorInfo = Reg(REG_RB_COLOR_INFO + (srcSelect < 4 ? (srcSelect == 0 ? 0 : 2 + (srcSelect - 1)) : 0));
                 HostTexture* color = GetRenderTarget(colorInfo & 0xFFF, (colorInfo >> 16) & 0xF, pitch, rtHeight, false);
+                if (!resolveReadback)
+                {
+                    ResolveOnGpu(*color, destBase, destFormat, destPitch, destHeight, x0, y0, copyWidth, copyHeight);
+                    InvalidateRange(destBase, ((destPitch + 31) & ~31u) * copyHeight * (destFormat == 32 ? 8 : 4));
+                }
+                else
+                {
                 uint32_t hostBpp = 0;
                 switch (color->format)
                 {
@@ -1124,7 +1397,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 // Convert each pixel to four floats, then to the destination format, tiled.
                 const uint8_t* src = static_cast<const uint8_t*>(readback->map());
                 static uint32_t resolveLogs = 0;
-                if (resolveLogs++ < 12 || (destBase == 0x70f000 && (resolveLogs % 120) == 0))
+                static const uint32_t traceFrame = getenv("LO_DRAW_TRACE") ? strtoul(getenv("LO_DRAW_TRACE"), nullptr, 10) : 0;
+                static const uint32_t traceCount = getenv("LO_DRAW_TRACE_COUNT") ? strtoul(getenv("LO_DRAW_TRACE_COUNT"), nullptr, 10) : 1;
+                if (resolveLogs++ < 12 || (destBase == 0x70f000 && (resolveLogs % 120) == 0) || (traceFrame && frame >= traceFrame && frame < traceFrame + traceCount))
                 {
                     uint32_t nonZero = 0;
                     for (uint32_t y = 0; y < copyHeight; y += 8)
@@ -1173,6 +1448,16 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             v = GpuSwap(v, destEndian);
                             memcpy(dst + offset, &v, 4);
                         }
+                        else if (destFormat == 7) // k_2_10_10_10
+                        {
+                            uint32_t v = 0;
+                            for (int c = 0; c < 3; c++)
+                                v |= uint32_t(std::clamp(px[c], 0.0f, 1.0f) * 1023.0f + 0.5f) << (c * 10);
+                            v |= uint32_t(std::clamp(px[3], 0.0f, 1.0f) * 3.0f + 0.5f) << 30;
+                            uint32_t offset = video::TiledOffset2D(x, y, pitchBlocks, 2);
+                            v = GpuSwap(v, destEndian);
+                            memcpy(dst + offset, &v, 4);
+                        }
                         else // k_16_16_16_16_FLOAT
                         {
                             uint32_t offset = video::TiledOffset2D(x, y, pitchBlocks, 3);
@@ -1185,7 +1470,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     }
                 }
                 readback->unmap();
-                InvalidateRange(destBase, pitchBlocks * copyHeight * (destFormat == 6 ? 4 : 8));
+                InvalidateRange(destBase, pitchBlocks * copyHeight * (destFormat == 32 ? 8 : 4));
+                }
 
                 Begin();
                 if (copyControl & 0x100)
@@ -1251,7 +1537,23 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
     {
         if (g_renderer)
         {
+            static const bool stats = getenv("LO_GPU_STATS") != nullptr;
+            static auto lastFrame = std::chrono::steady_clock::now();
             g_renderer->Flush();
+            if (stats)
+            {
+                auto now = std::chrono::steady_clock::now();
+                double frameMs = std::chrono::duration<double, std::milli>(now - lastFrame).count();
+                lastFrame = now;
+                Renderer& r = *g_renderer;
+                if (frameMs > 150.0 || (r.frame % 60) == 0)
+                    LOG_INFO("renderer frame {}: {:.0f} ms, draws {} ({:.0f} ms: const {:.0f} sets {:.0f} vertex {:.0f} bind {:.0f} index {:.0f} record {:.0f}), shaders {} ({:.0f} ms), pipelines {} ({:.0f} ms), textures {} ({:.0f} ms, {} KB), vertex uploads {}+{} ({} KB, arena {} MB), resolves {} ({:.0f} ms), gpu wait {:.0f} ms",
+                        r.frame, frameMs, r.drawsThisFrame, r.tDraw, r.tConst, r.tSets, r.tVertex, r.tBind, r.tIndex, r.tRecord, r.nShader, r.tShader, r.nPipeline, r.tPipeline, r.nTexture, r.tTexture, r.texBytes / 1024,
+                        r.vertexUploads, r.vertexRevalidations, r.vertexBytesUploaded / 1024, r.arenaOffset >> 20, r.nResolve, r.tResolve, r.tFlush);
+                r.ResetTimers();
+                r.vertexUploads = r.vertexRevalidations = 0;
+                r.vertexBytesUploaded = 0;
+            }
             g_renderer->frame++;
             g_renderer->drawsThisFrame = 0;
         }
@@ -1262,11 +1564,128 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
         if (g_renderer)
             g_renderer->InvalidateRange(physicalAddress, size);
     }
+
+    plume::RenderTexture* AcquireResolvedSurface(uint32_t physicalAddress, uint32_t& width, uint32_t& height, uint32_t& format)
+    {
+        if (!g_renderer)
+            return nullptr;
+        auto it = g_renderer->resolved.find(physicalAddress & 0x1FFFFFFF);
+        if (it == g_renderer->resolved.end() || !it->second.tex)
+            return nullptr;
+        HostTexture& tex = *it->second.tex;
+        g_renderer->Begin();
+        g_renderer->Transition(tex, RenderTextureLayout::COPY_SOURCE, RenderBarrierStage::COPY);
+        g_renderer->Flush();
+        width = tex.width;
+        height = tex.height;
+        format = uint32_t(tex.format);
+        return tex.texture.get();
+    }
+
+    std::vector<uint32_t> GetResolvedAddresses()
+    {
+        std::vector<uint32_t> out;
+        if (g_renderer)
+            for (auto& [address, surface] : g_renderer->resolved)
+                if (surface.tex)
+                    out.push_back(address);
+        return out;
+    }
+
+    static bool ReadbackTexture(HostTexture& tex, std::vector<uint32_t>& pixels, uint32_t& width, uint32_t& height)
+    {
+        uint32_t bpp = 0;
+        switch (tex.format)
+        {
+        case RenderFormat::R8G8B8A8_UNORM: bpp = 4; break;
+        case RenderFormat::R16G16B16A16_FLOAT: bpp = 8; break;
+        default: return false;
+        }
+        const uint32_t rowPitch = (tex.width * bpp + 255) & ~255u;
+        if (size_t(rowPitch) * tex.height > kReadbackSize)
+            return false;
+        g_renderer->Begin();
+        g_renderer->Transition(tex, RenderTextureLayout::COPY_SOURCE, RenderBarrierStage::COPY);
+        g_renderer->commandList->copyTextureRegion(
+            RenderTextureCopyLocation::PlacedFootprint(g_renderer->readback.get(), tex.format, tex.width, tex.height, 1, rowPitch / bpp, 0),
+            RenderTextureCopyLocation::Subresource(tex.texture.get()));
+        g_renderer->Flush();
+        const uint8_t* src = static_cast<const uint8_t*>(g_renderer->readback->map());
+        width = tex.width;
+        height = tex.height;
+        pixels.resize(size_t(width) * height);
+        for (uint32_t y = 0; y < height; y++)
+        {
+            const uint8_t* row = src + size_t(y) * rowPitch;
+            for (uint32_t x = 0; x < width; x++)
+            {
+                if (bpp == 4)
+                    memcpy(&pixels[size_t(y) * width + x], row + size_t(x) * 4, 4);
+                else
+                {
+                    uint32_t v = 0;
+                    for (int c = 0; c < 4; c++)
+                    {
+                        uint16_t hf; memcpy(&hf, row + size_t(x) * 8 + c * 2, 2);
+                        v |= uint32_t(std::clamp(HalfToFloat(hf), 0.0f, 1.0f) * 255.0f + 0.5f) << (c * 8);
+                    }
+                    pixels[size_t(y) * width + x] = v;
+                }
+            }
+        }
+        g_renderer->readback->unmap();
+        return true;
+    }
+
+    bool ReadbackResolvedSurface(uint32_t physicalAddress, std::vector<uint32_t>& pixels, uint32_t& width, uint32_t& height)
+    {
+        if (!g_renderer)
+            return false;
+        auto it = g_renderer->resolved.find(physicalAddress & 0x1FFFFFFF);
+        if (it == g_renderer->resolved.end() || !it->second.tex)
+            return false;
+        return ReadbackTexture(*it->second.tex, pixels, width, height);
+    }
+
+    void DumpRenderTargets(const char* prefix)
+    {
+        if (!g_renderer)
+            return;
+        std::vector<uint32_t> pixels;
+        for (auto& [key, tex] : g_renderer->renderTargets)
+        {
+            if (key.depth || !tex)
+                continue;
+            uint32_t w = 0, h = 0;
+            if (!ReadbackTexture(*tex, pixels, w, h))
+                continue;
+            std::string path = fmt::format("{}_rt_{:x}_{}_{}x{}.ppm", prefix, key.base, key.format, w, h);
+            FILE* f = fopen(path.c_str(), "wb");
+            if (!f)
+                continue;
+            fprintf(f, "P6%c%u %u%c255%c", 10, w, h, 10, 10);
+            std::vector<uint8_t> row(size_t(w) * 3);
+            for (uint32_t y = 0; y < h; y++)
+            {
+                for (uint32_t x = 0; x < w; x++)
+                {
+                    uint32_t p = pixels[size_t(y) * w + x];
+                    row[x * 3 + 0] = uint8_t(p); row[x * 3 + 1] = uint8_t(p >> 8); row[x * 3 + 2] = uint8_t(p >> 16);
+                }
+                fwrite(row.data(), 1, row.size(), f);
+            }
+            fclose(f);
+        }
+    }
 #else
     bool Init() { return false; }
     void Shutdown() {}
     void Draw(const DrawInfo&) {}
     void Flush() {}
     void InvalidateGuestRange(uint32_t, uint32_t) {}
+    plume::RenderTexture* AcquireResolvedSurface(uint32_t, uint32_t&, uint32_t&, uint32_t&) { return nullptr; }
+    bool ReadbackResolvedSurface(uint32_t, std::vector<uint32_t>&, uint32_t&, uint32_t&) { return false; }
+    std::vector<uint32_t> GetResolvedAddresses() { return {}; }
+    void DumpRenderTargets(const char*) {}
 #endif
 }

@@ -104,8 +104,21 @@ D3D9 顶点流 0 对应 fetch 槽 95（6 dword 组 31 的后两个 dword）。
 源支持 RGBA8/RGBA16F/RG16F/R32F/RG32F），支持 copy 后清屏。标题画面 "Press START" 正确显示。
 
 已知问题 / 待做：
-- 每帧约 11 次 resolve 各带一次 GPU 同步 + CPU tile 化 1280x720，帧率只有约 16 fps；应改为懒回读（仅当目标被读时）或 GPU 端 tile。
-- 深度 resolve 未实现（阴影/深度纹理）；纹理格式 23（k_24_8_FLOAT 深度作纹理）、29（k_16_16_16_16_EXPAND）未支持。
+- （已改，2026-09-04）resolve 留在 GPU 上：`ResolveOnGpu` 把渲染目标矩形拷进一张按目标地址键入的宿主纹理
+  （`resolved[destBase]`，尺寸 destPitch × destHeight，矩形放在窗口坐标处），不再同步等待 GPU、不再 CPU tile 化、
+  不再写客体内存。`GetTexture` 先查该表（格式兼容规则 `ResolveFormatMatches`：6↔14/50/62，7↔54），前缓冲由
+  `video::PresentFrontbuffer` 通过 `renderer::AcquireResolvedSurface` 直接拷进交换链；截图走 `ReadbackResolvedSurface`。
+  `LO_RESOLVE_READBACK=1` 回到旧的 CPU 回写路径，`LO_PRESENT_CPU=1` 强制旧的前缓冲 untile 路径。
+- （已改，2026-09-04）顶点缓冲不再每个绘制整段拷贝：fetch 常量描述的缓冲可能有几 MB 而绘制只用几百个顶点，战斗场景
+  550 个绘制曾要 12 s/帧。现在按（地址、大小、字节序）键入 256 MB 常驻 upload 缓冲（`vertexArena`），首次上传并字节交换，
+  之后用抽样哈希（头尾各 512 B + 64 个 64 B 窗口）检测变化；arena 满了就 Flush 后清空重来。set0 的 vfetch 槽全部指向 arena。
+- （已改）plume 的 shader-visible 描述符堆只有 65536 项，每个绘制 3 个 32 槽的集合；池上限 500 个/种，超过就在绘制开始前
+  Flush 拆帧。常量块的上传挪到顶点/贴图之后，避免中途 Flush 让已上传的偏移失效。
+- `LO_GPU_STATS=1` 现在每 60 帧（或帧耗时 >150 ms 时）打印分阶段耗时：绘制、着色器编译、管线创建、贴图上传、顶点上传、resolve、GPU 等待。
+- 待办：战斗场景 400–600 个绘制仍要 200–450 ms（每绘制约 0.5 ms 的 CPU 开销），需要进一步定位；每帧还有 100+ 个
+  "新"顶点缓冲（动态缓冲每帧换地址）填满 arena。
+- 深度 resolve 未实现（阴影/深度纹理）；纹理格式 22/23（k_24_8(_FLOAT) 深度作纹理）、29（k_16_16_16_16_EXPAND）未支持；
+  7/54（k_2_10_10_10 及其 AS_16_16_16_16 别名）按 8 位截断上传，resolve 目标格式 7 已支持（HDR 场景缓冲）。
 - 纹理缓存没有失效机制（只在 resolve 覆盖时清除），CPU 动态更新的纹理会显示旧内容。
 - 纹理 swizzle（fetch 常量 dword3）、mip、立方体/3D 纹理上传、多渲染目标、模板、混合常量色未实现。
 - 标题超时后进入开场影片（`xenon_mov.fpd` 内为 ASF/WMV，偏移 0x1000 起），播放器不出帧、画面黑 1–2 分钟后回到标题；

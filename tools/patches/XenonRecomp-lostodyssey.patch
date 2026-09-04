@@ -24,7 +24,7 @@ index 34add40..ea3672e 100644
                          {
                              blocks.emplace_back(lBase, 0);
 diff --git a/XenonRecomp/recompiler.cpp b/XenonRecomp/recompiler.cpp
-index fa91527..cbaf852 100644
+index fa91527..81b1438 100644
 --- a/XenonRecomp/recompiler.cpp
 +++ b/XenonRecomp/recompiler.cpp
 @@ -1877,6 +1877,8 @@ bool Recompiler::Recompile(
@@ -36,7 +36,46 @@ index fa91527..cbaf852 100644
          break;
  
      case PPC_INST_VEXPTEFP:
-@@ -2263,6 +2265,165 @@ bool Recompiler::Recompile(
+@@ -2212,6 +2214,38 @@ bool Recompiler::Recompile(
+             println("\t{} = {};", v(insn.operands[0]), vTemp());
+             break;
+ 
++        // LostOdysseyRecomp: remaining D3D unpack types, lane mapping per Xenia
++        // (ppc_emit_altivec.cc / x64_seq_vector.cc). Packed data sits in the last
++        // PPC word(s) (host u32[0], u32[1]); results go to x..w = host f32[3..0].
++        case 2: // 2_10_10_10 in the last word: xyz signed 10-bit as 3.0 + n*2^-22, w unsigned 2-bit as 1.0 + n
++            println("\t{}.u32 = {}.u32[0];", temp(), v(insn.operands[1]));
++            println("\t{}.s32[3] = 0x40400000 + (int32_t({}.u32 << 22) >> 22);", vTemp(), temp());
++            println("\t{}.s32[2] = 0x40400000 + (int32_t({}.u32 << 12) >> 22);", vTemp(), temp());
++            println("\t{}.s32[1] = 0x40400000 + (int32_t({}.u32 << 2) >> 22);", vTemp(), temp());
++            println("\t{}.u32[0] = 0x3F800000 + ({}.u32 >> 30);", vTemp(), temp());
++            println("\t{} = {};", v(insn.operands[0]), vTemp());
++            break;
++
++        case 3: // 2 half floats in the last word -> (x, y, 0, 1)
++            println("\t{}.f32[3] = PPCHalfToFloat({}.u16[1]);", vTemp(), v(insn.operands[1]));
++            println("\t{}.f32[2] = PPCHalfToFloat({}.u16[0]);", vTemp(), v(insn.operands[1]));
++            println("\t{}.f32[1] = 0.0f;", vTemp());
++            println("\t{}.f32[0] = 1.0f;", vTemp());
++            println("\t{} = {};", v(insn.operands[0]), vTemp());
++            break;
++
++        case 4: // 4 shorts in the last two words: 3.0 + n*2^-22
++            for (size_t i = 0; i < 4; i++)
++                println("\t{}.s32[{}] = 0x40400000 + {}.s16[{}];", vTemp(), i, v(insn.operands[1]), i);
++            println("\t{} = {};", v(insn.operands[0]), vTemp());
++            break;
++
++        case 5: // 4 half floats in the last two words
++            for (size_t i = 0; i < 4; i++)
++                println("\t{}.f32[{}] = PPCHalfToFloat({}.u16[{}]);", vTemp(), i, v(insn.operands[1]), i);
++            println("\t{} = {};", v(insn.operands[0]), vTemp());
++            break;
++
+         default:
+             println("\t__builtin_debugtrap();");
+             break;
+@@ -2263,6 +2297,165 @@ bool Recompiler::Recompile(
          println("\t{}.u64 = {}.u64 ^ {};", r(insn.operands[0]), r(insn.operands[1]), insn.operands[2] << 16);
          break;
  
@@ -202,3 +241,41 @@ index fa91527..cbaf852 100644
      default:
          return false;
      }
+diff --git a/XenonUtils/ppc_context.h b/XenonUtils/ppc_context.h
+index 31a86cd..064b0f4 100644
+--- a/XenonUtils/ppc_context.h
++++ b/XenonUtils/ppc_context.h
+@@ -105,6 +105,33 @@
+ #define PPC_CALL_FUNC(x) x(ctx, base)
+ #endif
+ 
++// LostOdysseyRecomp: IEEE half -> float, used by the vupkd3d128 unpack types.
++inline float PPCHalfToFloat(uint16_t h)
++{
++    uint32_t sign = uint32_t(h & 0x8000) << 16;
++    uint32_t exp = (h >> 10) & 0x1F;
++    uint32_t mant = h & 0x3FF;
++    uint32_t bits;
++    if (exp == 0)
++    {
++        if (mant == 0)
++            bits = sign;
++        else
++        {
++            exp = 113;
++            while (!(mant & 0x400)) { mant <<= 1; exp--; }
++            bits = sign | (exp << 23) | ((mant & 0x3FF) << 13);
++        }
++    }
++    else if (exp == 31)
++        bits = sign | 0x7F800000 | (mant << 13);
++    else
++        bits = sign | ((exp + 112) << 23) | (mant << 13);
++    float f;
++    memcpy(&f, &bits, 4);
++    return f;
++}
++
+ #define PPC_MEMORY_SIZE 0x100000000ull
+ 
+ #define PPC_LOOKUP_FUNC(x, y) *(PPCFunc**)(x + PPC_IMAGE_BASE + PPC_IMAGE_SIZE + (uint64_t(uint32_t(y) - PPC_CODE_BASE) * 2))
