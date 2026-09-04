@@ -3,6 +3,7 @@
 #include <kernel/xdm.h>
 #include <os/logger.h>
 #include <atomic>
+extern std::atomic<uint32_t> g_presentedSwaps;
 #include <vector>
 #include <SDL.h>
 
@@ -135,6 +136,24 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
         gp.sThumbLY = int16_t(-axis(SDL_CONTROLLER_AXIS_LEFTY) - 1);
         gp.sThumbRX = axis(SDL_CONTROLLER_AXIS_RIGHTX);
         gp.sThumbRY = int16_t(-axis(SDL_CONTROLLER_AXIS_RIGHTY) - 1);
+    }
+
+    // Test hook: LO_AUTO_START=<swap> holds START for ~30 polls once that many
+    // frames were presented, so the title screen can be passed unattended.
+    {
+        static const uint32_t autoStartSwap = getenv("LO_AUTO_START") ? strtoul(getenv("LO_AUTO_START"), nullptr, 10) : 0;
+        // Pulse START for 20 polls every 240 frames once past the threshold.
+        uint32_t swaps = ::g_presentedSwaps.load();
+        static uint32_t pulseFrame = 0, pulsePolls = 0;
+        if (autoStartSwap && swaps >= autoStartSwap)
+        {
+            if (swaps >= pulseFrame + 240) { pulseFrame = swaps; pulsePolls = 0; }
+            if (pulsePolls < 20)
+            {
+                pulsePolls++;
+                gp.wButtons |= XAMINPUT_GAMEPAD_START;
+            }
+        }
     }
 
     // Keyboard fallback (only when SDL video is up; harmless otherwise).

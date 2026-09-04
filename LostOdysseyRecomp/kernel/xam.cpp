@@ -109,6 +109,25 @@ uint32_t XamNotifyCreateListener(uint64_t qwAreas)
 {
     auto* listener = CreateKernelObject<XamListener>();
     listener->areas = qwAreas;
+
+    // Games expect the dashboard's startup notifications on their first
+    // listener (Xenia KernelState::RegisterNotifyListener): the UI is closed,
+    // user 0 is signed in locally, storage devices settled; Live disconnected.
+    static bool notifiedSystem = false, notifiedLive = false;
+    if (!notifiedSystem && (qwAreas & 1))
+    {
+        notifiedSystem = true;
+        listener->notifications.emplace_back(MSGID(0, 0x0009), 0); // XN_SYS_UI
+        listener->notifications.emplace_back(MSGID(0, 0x000A), 1); // XN_SYS_SIGNINCHANGED, user mask
+        listener->notifications.emplace_back(MSGID(0, 0x000B), 0); // XN_SYS_STORAGEDEVICESCHANGED
+    }
+    if (!notifiedLive && (qwAreas & 2))
+    {
+        notifiedLive = true;
+        listener->notifications.emplace_back(MSGID(1, 0x0001), 0x001510F1); // XN_LIVE_CONNECTIONCHANGED: logon disconnected
+        listener->notifications.emplace_back(MSGID(1, 0x0002), 0);          // XN_LIVE_LINK_STATE_CHANGED
+    }
+    LOG_KERNEL("areas={:#x} -> {:#x}", qwAreas, GetKernelHandle(listener));
     return GetKernelHandle(listener);
 }
 
@@ -170,18 +189,35 @@ uint32_t XamContentCreateEnumerator(uint32_t dwUserIndex, uint32_t DeviceID, uin
     return 0;
 }
 
+void KernelSignalEventHandle(uint32_t handle);
+
+// An enumerator with nothing in it (achievements, friends...).
+uint32_t XamCreateEmptyEnumerator()
+{
+    return GetKernelHandle(CreateKernelObject<XamEnumeratorBase>());
+}
+
 uint32_t XamEnumerate(uint32_t hEnum, uint32_t dwFlags, void* pvBuffer, uint32_t cbBuffer, be<uint32_t>* pcItemsReturned, XXOVERLAPPED* pOverlapped)
 {
+    if (!IsKernelObject(hEnum))
+        return ERROR_INVALID_HANDLE;
     auto* enumerator = GetKernelObject<XamEnumeratorBase>(hEnum);
     const auto count = enumerator->Next(pvBuffer);
+    const uint32_t result = count == -1 ? ERROR_NO_MORE_FILES : ERROR_SUCCESS;
 
-    if (count == -1)
-        return ERROR_NO_MORE_FILES;
-
-    if (pcItemsReturned)
+    if (count != -1 && pcItemsReturned)
         *pcItemsReturned = count;
 
-    return ERROR_SUCCESS;
+    // Asynchronous form: the outcome travels through the overlapped block.
+    if (pOverlapped)
+    {
+        pOverlapped->Error = result;
+        pOverlapped->Length = count == -1 ? 0 : uint32_t(count);
+        if (pOverlapped->hEvent)
+            KernelSignalEventHandle(pOverlapped->hEvent);
+        return ERROR_IO_PENDING;
+    }
+    return result;
 }
 
 extern std::filesystem::path GetSavePath();
@@ -253,10 +289,14 @@ uint32_t XamContentClose(const char* szRootName, XXOVERLAPPED* pOverlapped)
 
 uint32_t XamContentGetDeviceData(uint32_t DeviceID, XDEVICE_DATA* pDeviceData)
 {
+    LOG_KERNEL("device={:#x}", DeviceID);
+    if (DeviceID != 1)
+        return 0x48F; // ERROR_DEVICE_NOT_CONNECTED
+    // Same fiction as Xenia: a 20 GiB drive with 10 GiB free.
     pDeviceData->DeviceID = DeviceID;
     pDeviceData->DeviceType = XCONTENTDEVICETYPE_HDD;
-    pDeviceData->ulDeviceBytes = 0x10000000;
-    pDeviceData->ulDeviceFreeBytes = 0x10000000;
+    pDeviceData->ulDeviceBytes = 20ull << 30;
+    pDeviceData->ulDeviceFreeBytes = 10ull << 30;
     const char name[] = "Hard Drive";
     for (size_t i = 0; i < sizeof(name); i++)
         pDeviceData->wszName[i] = name[i];

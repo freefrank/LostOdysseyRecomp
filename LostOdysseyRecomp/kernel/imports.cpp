@@ -1,4 +1,8 @@
 #include <stdafx.h>
+#include <vector>
+#include <mutex>
+#include <map>
+#include <filesystem>
 #include <cpu/ppc_context.h>
 #include <cpu/guest_thread.h>
 #include "function.h"
@@ -1638,10 +1642,16 @@ static void VdSwap(be<uint32_t>* bufferPtr, be<uint32_t>* fetchPtr, uint32_t unk
 // XAM misc
 // ---------------------------------------------------------------------------
 
-static uint32_t XamUserGetSigninState(uint32_t userIndex) { return userIndex == 0 ? 1 : 0; }
+static uint32_t XamUserGetSigninState(uint32_t userIndex)
+{
+    uint32_t state = userIndex == 0 ? 1 : 0;
+    LOG_KERNEL("user={} -> {} lr={:#x}", userIndex, state, uint32_t(g_ppcContext->lr));
+    return state;
+}
 
 static uint32_t XamUserGetXUID(uint32_t userIndex, uint32_t type, be<uint64_t>* xuid)
 {
+    LOG_KERNEL("user={} type={:#x} lr={:#x}", userIndex, type, uint32_t(g_ppcContext->lr));
     if (userIndex != 0)
         return ERROR_NO_SUCH_USER;
     if (xuid)
@@ -1663,61 +1673,212 @@ static uint32_t XamLoaderSetLaunchData(void*, uint32_t) { return 0; }
 static void XamLoaderTerminateTitle() { LOG_INFO("title terminated"); std::_Exit(0); }
 static uint32_t XamLoaderLaunchTitle(const char* path, uint32_t) { LOG_INFO("launch title '{}'", path ? path : ""); return 0; }
 
+// ---------------------------------------------------------------------------
+// Profile settings. Titles write their save-slot metadata into the gamer
+// profile (XPROFILE_TITLE_SPECIFIC1..3, 1000 bytes each) and read it back to
+// confirm the profile's storage device has room; a "not set" answer after a
+// write is what produces the "not enough free space" dialog. Settings are
+// kept per id and persisted under LO_PROFILE_DIR (default ./profile).
+// Layouts follow Xenia's user_profile.h / user_data.h:
+//   X_USER_PROFILE_SETTING (40 bytes): source @0, user_index/xuid @8,
+//   setting_id @16, X_USER_DATA @24 { type @24, union @32 (size @32, ptr @36 for binary/wstring) }.
+// ---------------------------------------------------------------------------
+
+struct ProfileSetting
+{
+    uint8_t type = 0xFF;
+    std::vector<uint8_t> data;
+};
+static std::map<uint32_t, ProfileSetting> g_profileSettings;
+static std::mutex g_profileMutex;
+
+static std::string ProfileSettingPath(uint32_t id)
+{
+    const char* dir = getenv("LO_PROFILE_DIR");
+    return fmt::format("{}/setting_{:08x}.bin", dir ? dir : "profile", id);
+}
+
+static ProfileSetting* FindProfileSetting(uint32_t id)
+{
+    auto it = g_profileSettings.find(id);
+    if (it != g_profileSettings.end())
+        return it->second.type == 0xFF ? nullptr : &it->second;
+    ProfileSetting& entry = g_profileSettings[id];
+    if (FILE* f = fopen(ProfileSettingPath(id).c_str(), "rb"))
+    {
+        uint8_t type = 0;
+        if (fread(&type, 1, 1, f) == 1)
+        {
+            entry.type = type;
+            uint8_t buf[4096];
+            size_t n;
+            while ((n = fread(buf, 1, sizeof(buf), f)) > 0)
+                entry.data.insert(entry.data.end(), buf, buf + n);
+        }
+        fclose(f);
+    }
+    return entry.type == 0xFF ? nullptr : &entry;
+}
+
+static void StoreProfileSetting(uint32_t id, uint8_t type, const uint8_t* data, size_t size)
+{
+    ProfileSetting& entry = g_profileSettings[id];
+    entry.type = type;
+    entry.data.assign(data, data + size);
+    const char* dir = getenv("LO_PROFILE_DIR");
+    std::filesystem::create_directories(dir ? dir : "profile");
+    if (FILE* f = fopen(ProfileSettingPath(id).c_str(), "wb"))
+    {
+        fwrite(&type, 1, 1, f);
+        if (size)
+            fwrite(data, 1, size, f);
+        fclose(f);
+    }
+}
+
+// Completes an XOVERLAPPED the way the dashboard does (Xenia
+// KernelState::CompleteOverlappedEx): result and extended error, length,
+// then the event and/or the completion routine (delivered as a user APC on
+// the calling thread). Callers hand back ERROR_IO_PENDING afterwards.
+static void CompleteOverlapped(XXOVERLAPPED* overlapped, uint32_t error, uint32_t length)
+{
+    if (!overlapped)
+        return;
+    overlapped->Error = error;
+    overlapped->dwExtendedError = error;
+    overlapped->Length = length;
+    if (overlapped->hEvent)
+        KernelSignalEventHandle(overlapped->hEvent);
+    if (overlapped->pCompletionRoutine)
+        EnqueueUserApc(overlapped->pCompletionRoutine, error, length, g_memory.MapVirtual(overlapped));
+}
+
+// UI blades: notify XN_SYS_UI open/close around the (instant) interaction.
+static void NotifyUiOpenClose()
+{
+    XamNotifyEnqueueEvent(MSGID(0, 0x0009), 1);
+    XamNotifyEnqueueEvent(MSGID(0, 0x0009), 0);
+}
+
 static uint32_t XamUserReadProfileSettings(uint32_t titleId, uint32_t userIndex, uint32_t xuidCount, uint64_t* xuids,
     uint32_t settingCount, be<uint32_t>* settingIds, be<uint32_t>* bufferSize, void* buffer, XXOVERLAPPED* overlapped)
 {
-    // Layout: XUSER_READ_PROFILE_SETTING_RESULT { count, settings[] } with each
-    // XUSER_PROFILE_SETTING being 0x38 bytes. Report every setting as "not set".
-    uint32_t needed = 8 + settingCount * 0x38;
+    if (settingCount == 0 || settingCount > 32 || !bufferSize)
+        return ERROR_INVALID_PARAMETER;
+
+    uint32_t needed = 8 + settingCount * 40;
+    for (uint32_t i = 0; i < settingCount; i++)
+    {
+        uint32_t key = settingIds[i];
+        uint32_t type = key >> 28;
+        if (type == 4 || type == 6) // WSTRING / BINARY carry their payload after the array
+            needed += (key >> 16) & 0xFFF;
+    }
+    {
+        std::string ids;
+        for (uint32_t i = 0; i < settingCount; i++) ids += fmt::format(" {:#x}", uint32_t(settingIds[i]));
+        LOG_KERNEL("user={} settings=[{} ] bufferSize={} needed={}", userIndex, ids, uint32_t(*bufferSize), needed);
+    }
     if (buffer == nullptr || uint32_t(*bufferSize) < needed)
     {
         *bufferSize = needed;
-        return 122; // ERROR_INSUFFICIENT_BUFFER
+        return ERROR_INSUFFICIENT_BUFFER;
     }
+    if (userIndex != 0 && xuidCount == 0)
+    {
+        CompleteOverlapped(overlapped, ERROR_NO_SUCH_USER, 0);
+        return overlapped ? ERROR_IO_PENDING : ERROR_NO_SUCH_USER;
+    }
+
+    std::lock_guard lock(g_profileMutex);
     memset(buffer, 0, needed);
-    auto* p = reinterpret_cast<be<uint32_t>*>(buffer);
-    p[0] = settingCount;
-    p[1] = g_memory.MapVirtual(p + 2);
-    auto* settings = reinterpret_cast<uint8_t*>(p + 2);
+    auto* header = reinterpret_cast<be<uint32_t>*>(buffer);
+    uint8_t* settings = reinterpret_cast<uint8_t*>(header + 2);
+    uint8_t* payload = settings + settingCount * 40;
+    header[0] = settingCount;
+    header[1] = g_memory.MapVirtual(settings);
     for (uint32_t i = 0; i < settingCount; i++)
     {
-        auto* s = reinterpret_cast<be<uint32_t>*>(settings + i * 0x38);
-        s[0] = 0; // source: not set
-        s[1] = userIndex;
-        s[2] = settingIds[i];
+        uint8_t* s = settings + i * 40;
+        uint32_t key = settingIds[i];
+        uint32_t type = key >> 28;
+        *reinterpret_cast<be<uint64_t>*>(s + 8) = ~0ull;
+        *reinterpret_cast<be<uint32_t>*>(s + 8) = userIndex;
+        *reinterpret_cast<be<uint32_t>*>(s + 16) = key;
+        s[24] = uint8_t(type);
+
+        ProfileSetting* stored = FindProfileSetting(key);
+        if (stored)
+        {
+            *reinterpret_cast<be<uint32_t>*>(s + 0) = 2; // TITLE
+            if (type == 4 || type == 6)
+            {
+                uint32_t capacity = (key >> 16) & 0xFFF;
+                uint32_t size = uint32_t(std::min<size_t>(stored->data.size(), capacity));
+                memcpy(payload, stored->data.data(), size);
+                *reinterpret_cast<be<uint32_t>*>(s + 32) = size;
+                *reinterpret_cast<be<uint32_t>*>(s + 36) = g_memory.MapVirtual(payload);
+                payload += capacity;
+            }
+            else
+                memcpy(s + 32, stored->data.data(), std::min<size_t>(stored->data.size(), 8));
+        }
+        else
+        {
+            // Unknown to us: scalar settings get an OS default of zero, blobs stay empty.
+            *reinterpret_cast<be<uint32_t>*>(s + 0) = (type == 4 || type == 6) ? 0 : 1;
+            if (type == 4 || type == 6)
+                payload += (key >> 16) & 0xFFF;
+        }
     }
-    if (overlapped)
-    {
-        overlapped->Error = 0;
-        overlapped->Length = needed;
-        if (overlapped->hEvent)
-            KernelSignalEventHandle(overlapped->hEvent);
-    }
-    return ERROR_SUCCESS;
+    CompleteOverlapped(overlapped, ERROR_SUCCESS, needed);
+    return overlapped ? ERROR_IO_PENDING : ERROR_SUCCESS;
 }
 
-static uint32_t XamUserWriteProfileSettings(uint32_t, uint32_t, uint32_t, void*, XXOVERLAPPED* overlapped)
+static uint32_t XamUserWriteProfileSettings(uint32_t titleId, uint32_t userIndex, uint32_t count, void* settingsPtr, XXOVERLAPPED* overlapped)
 {
-    if (overlapped)
+    LOG_KERNEL("title={:#x} user={} count={}", titleId, userIndex, count);
+    std::lock_guard lock(g_profileMutex);
+    auto* settings = static_cast<const uint8_t*>(settingsPtr);
+    for (uint32_t i = 0; i < count && settings; i++)
     {
-        overlapped->Error = 0;
-        if (overlapped->hEvent)
-            KernelSignalEventHandle(overlapped->hEvent);
+        const uint8_t* s = settings + i * 40;
+        uint32_t key = *reinterpret_cast<const be<uint32_t>*>(s + 16);
+        uint8_t type = s[24];
+        if (type == 4 || type == 6)
+        {
+            uint32_t size = *reinterpret_cast<const be<uint32_t>*>(s + 32);
+            uint32_t ptr = *reinterpret_cast<const be<uint32_t>*>(s + 36);
+            if (size > 0x10000 || (size && !ptr))
+                continue;
+            StoreProfileSetting(key, type, size ? static_cast<const uint8_t*>(g_memory.Translate(ptr)) : nullptr, size);
+        }
+        else
+            StoreProfileSetting(key, type, s + 32, 8);
+        LOG_KERNEL("  setting {:#x} type {} stored", key, type);
     }
-    return ERROR_SUCCESS;
+    CompleteOverlapped(overlapped, ERROR_SUCCESS, 0);
+    return overlapped ? ERROR_IO_PENDING : ERROR_SUCCESS;
 }
 
-static uint32_t XamShowSigninUI(uint32_t, uint32_t) { XamNotifyEnqueueEvent(MSGID(0, 0x0009), 0); return 0; }
+static uint32_t XamShowSigninUI(uint32_t panes, uint32_t flags)
+{
+    LOG_KERNEL("panes={} flags={:#x}", panes, flags);
+    // Pretend the sign-in blade opened and closed with user 0 signed in.
+    XamNotifyEnqueueEvent(MSGID(0, 0x0009), 1);
+    XamNotifyEnqueueEvent(MSGID(0, 0x0009), 0);
+    XamNotifyEnqueueEvent(MSGID(0, 0x000A), 1);
+    return 0;
+}
 static uint32_t XamShowDeviceSelectorUI(uint32_t userIndex, uint32_t contentType, uint32_t contentFlags, uint64_t totalRequested, be<uint32_t>* deviceId, XXOVERLAPPED* overlapped)
 {
-    if (deviceId) *deviceId = 1;
-    if (overlapped)
-    {
-        overlapped->Error = 0;
-        if (overlapped->hEvent)
-            KernelSignalEventHandle(overlapped->hEvent);
-    }
-    return ERROR_SUCCESS;
+    LOG_KERNEL("user={} type={:#x} flags={:#x} requested={:#x} overlapped={}", userIndex, contentType, contentFlags, totalRequested, overlapped != nullptr);
+    if (!deviceId)
+        return ERROR_INVALID_PARAMETER;
+    *deviceId = 1; // the one virtual hard drive (XamContentGetDeviceData)
+    NotifyUiOpenClose();
+    CompleteOverlapped(overlapped, ERROR_SUCCESS, 0);
+    return overlapped ? ERROR_IO_PENDING : ERROR_SUCCESS;
 }
 static uint32_t XamShowMessageBoxUI(uint32_t, be<uint16_t>*, be<uint16_t>*, uint32_t cButtons, uint32_t, uint32_t, uint32_t, be<uint32_t>* result, XXOVERLAPPED* overlapped)
 {
@@ -1743,11 +1904,17 @@ static uint32_t XamContentGetCreator(uint32_t userIndex, const XCONTENT_DATA*, b
 static uint32_t XamContentGetDeviceState(uint32_t, XXOVERLAPPED*) { return 0; }
 static uint32_t XamContentFlush(const char*, XXOVERLAPPED*) { return 0; }
 static uint32_t XamContentSetThumbnail(const char*, void*, uint32_t, XXOVERLAPPED*) { return 0; }
-static uint32_t XamUserCreateAchievementEnumerator(uint32_t, uint32_t, uint64_t, uint32_t, uint32_t, uint32_t, be<uint32_t>* bufferSize, be<uint32_t>* handle)
+static uint32_t XamUserCreateAchievementEnumerator(uint32_t titleId, uint32_t userIndex, uint64_t xuid, uint32_t flags, uint32_t offset, uint32_t count, be<uint32_t>* bufferSize, be<uint32_t>* handle)
 {
-    if (bufferSize) *bufferSize = 0;
-    if (handle) *handle = GUEST_INVALID_HANDLE_VALUE;
-    return ERROR_NO_MORE_FILES;
+    LOG_KERNEL("title={:#x} user={} flags={:#x} offset={} count={}", titleId, userIndex, flags, offset, count);
+    if (!count || !bufferSize || !handle || userIndex >= 4)
+        return ERROR_INVALID_PARAMETER;
+    // X_ACHIEVEMENT_DETAILS is 36 bytes; the string variants append a text
+    // buffer. We have no achievement database yet, so the enumerator is empty
+    // and XamEnumerate reports ERROR_NO_MORE_FILES (Xenia: XAchievementEnumerator).
+    *bufferSize = count * (36 + ((flags & 7) ? 512 : 0));
+    *handle = XamCreateEmptyEnumerator();
+    return ERROR_SUCCESS;
 }
 
 static uint32_t XMsgStartIORequest(uint32_t App, uint32_t Message, XXOVERLAPPED* overlapped, void* Buffer, uint32_t szBuffer)

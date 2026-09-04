@@ -15,6 +15,10 @@ namespace gpu
 {
     CommandProcessor g_commandProcessor;
     static std::atomic<uint32_t> g_swapCount{ 0 };
+}
+std::atomic<uint32_t> g_presentedSwaps{ 0 }; // global mirror for other subsystems (hid test hook)
+namespace gpu
+{
     static std::atomic<uint32_t> g_traceBudget{ 0 };
 
     // Ring of recently executed packets, dumped when the parser derails.
@@ -585,6 +589,7 @@ namespace gpu
             reader.Advance(count - 4);
             ++m_counter;
             uint32_t swaps = ++g_swapCount;
+            g_presentedSwaps = swaps;
             if ((swaps % 60) == 1)
                 LOG_INFO("swap #{} frontbuffer {:#x} {}x{} (magic {:#x})", swaps, frontbuffer, width, height, magic);
             renderer::Flush();
