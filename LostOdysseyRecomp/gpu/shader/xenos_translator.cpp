@@ -24,6 +24,10 @@ namespace xenos
     {
         constexpr char kSwizzles[] = { 'x', 'y', 'z', 'w' };
 
+        // Pixel shaders may use implicit derivatives; vertex shaders must not.
+        const char* const kPixelSampleMacro = "#define XE_SAMPLE(t, s, uv) t.Sample(s, uv)\n";
+        const char* const kVertexSampleMacro = "#define XE_SAMPLE(t, s, uv) t.SampleLevel(s, uv, 0.0)\n";
+
         const char* const kCommonHlsl = R"HLSL(
 // ---- Xenos shader prelude (LostOdysseyRecomp) ----
 #define FLT_MIN asfloat(0xff7fffff)
@@ -44,6 +48,7 @@ cbuffer XeShared : register(b1, space0)
     uint xeVtxFmt;          // PA_CL_VTE_CNTL bits 8..10: xy already /w, z already /w, w is 1/w
     uint xeFlags;           // bit0: alpha test enable
     float4 xeAlphaTest;     // x = reference, y = compare function
+    float4 xeColorMax;      // per-channel range of the bound EDRAM format
     uint4 xeVfetchOffset[24]; // byte offset of each vertex fetch slot inside its buffer
     uint4 xeSamplerIndex[8];  // sampler palette index per texture fetch slot
 };
@@ -183,12 +188,12 @@ float4 XeTex2D(Texture2D<float4> t, SamplerState s, float2 uv, float2 offset)
 {
     uint2 dims;
     t.GetDimensions(dims.x, dims.y);
-    return t.Sample(s, uv + offset / float2(dims));
+    return XE_SAMPLE(t, s, uv + offset / float2(dims));
 }
 
 float4 XeTex3D(Texture3D<float4> t, SamplerState s, float3 uvw)
 {
-    return t.Sample(s, uvw);
+    return XE_SAMPLE(t, s, uvw);
 }
 
 struct CubeMapData
@@ -199,7 +204,7 @@ struct CubeMapData
 
 float4 XeTexCube(TextureCube<float4> t, SamplerState s, float3 coord, inout CubeMapData cubeMapData)
 {
-    return t.Sample(s, cubeMapData.cubeMapDirections[uint(coord.z) & 1]);
+    return XE_SAMPLE(t, s, cubeMapData.cubeMapDirections[uint(coord.z) & 1]);
 }
 
 float2 XeWeights2D(Texture2D<float4> t, float2 uv, float2 offset)
@@ -627,6 +632,12 @@ float4 max4(float4 src0)
                 printDstSwizzle(instr.dstSwizzle, true);
                 out += ";\n";
                 printDstSwizzle01(instr.dstRegister, instr.dstSwizzle);
+                // LO_PS_TEXDEBUG: remember the last sampled value.
+                if (isPixelShader && instr.opcode != FetchOpcode::GetTextureWeights)
+                {
+                    indent();
+                    println("xeDbgTex = r{};", instr.dstRegister);
+                }
 
                 if (instr.isPredicated)
                 {
@@ -968,6 +979,7 @@ float4 max4(float4 src0)
             // --- pass 2 -----------------------------------------------------
             void EmitDeclarations()
             {
+                out += isPixelShader ? kPixelSampleMacro : kVertexSampleMacro;
                 out += kCommonHlsl;
                 out += '\n';
                 for (uint32_t slot : vfetchSlots)
@@ -1009,6 +1021,7 @@ float4 max4(float4 src0)
                 for (uint32_t i = 0; i <= maxTemp; i++)
                     println("\tfloat4 r{} = 0.0;", i);
                 out += "\tfloat4 xeDiscard = 0.0;\n";
+                out += "\tfloat4 xeDbgTex = float4(0.0, 0.0, 0.0, 1.0);\n";
                 out += "\tint a0 = 0;\n\tint aL = 0;\n\tbool p0 = false;\n\tfloat ps = 0.0;\n";
                 out += "\tuint xeVfetchBase = 0u;\n";
                 out += "\tCubeMapData cubeMapData = (CubeMapData)0;\n";
@@ -1046,6 +1059,12 @@ float4 max4(float4 src0)
                     out += "\t\telse if (func == 3) pass = a <= ref; else if (func == 4) pass = a > ref; else if (func == 5) pass = a != ref;\n";
                     out += "\t\telse if (func == 6) pass = a >= ref;\n";
                     out += "\t\tif (!pass) discard;\n\t}\n";
+                    // EDRAM formats 8_8_8_8 and 2_10_10_10 are fixed point and 2_10_10_10_FLOAT
+                    // is 7e3: the hardware clamps the pixel output to their range. Our render
+                    // targets are FP16 for all of them, so the clamp has to be explicit.
+                    out += "\toC0 = clamp(oC0, -xeColorMax, xeColorMax);\n";
+                    // Debug aid (LO_PS_TEXDEBUG): show the last texture fetch result.
+                    out += "\tif (xeFlags & 16u) oC0 = float4(xeDbgTex.rgb, 1.0);\n";
                     // Debug aid (LO_PS_DEBUG): paint every surviving fragment magenta.
                     out += "\tif (xeFlags & 2u) oC0 = (xeFlags & 4u) ? float4(i15.w > 0.0 ? 1.0 : 0.0, saturate(log2(abs(i15.w) + 1.0) / 16.0), saturate(log2(abs(i15.z) + 1.0) / 16.0), 1.0) : float4(1.0, 0.0, 1.0, 1.0);\n";
                     if (result.writesDepth)

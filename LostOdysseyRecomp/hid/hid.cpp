@@ -245,6 +245,9 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
         case 'd': gp.wButtons |= XAMINPUT_GAMEPAD_DPAD_DOWN; break;
         case 'l': gp.wButtons |= XAMINPUT_GAMEPAD_DPAD_LEFT; break;
         case 'r': gp.wButtons |= XAMINPUT_GAMEPAD_DPAD_RIGHT; break;
+        case 'k': gp.wButtons |= XAMINPUT_GAMEPAD_BACK; break;
+        case 'L': gp.wButtons |= XAMINPUT_GAMEPAD_LEFT_SHOULDER; break;
+        case 'R': gp.wButtons |= XAMINPUT_GAMEPAD_RIGHT_SHOULDER; break;
         default: gp.wButtons |= XAMINPUT_GAMEPAD_START; break;
         }
     }

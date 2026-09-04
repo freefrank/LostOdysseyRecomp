@@ -59,6 +59,8 @@ namespace gpu::renderer
 
         constexpr uint32_t kUploadRingSize = 96u << 20;
         constexpr uint32_t kVertexArenaSize = 256u << 20;   // persistent, byte-swapped copies of guest vertex buffers
+        constexpr uint32_t kUploadHeadroom = 24u << 20;     // per-draw slack checked before a draw records anything
+        constexpr uint32_t kArenaHeadroom = 32u << 20;
         constexpr uint32_t kReadbackSize = 32u << 20;
         constexpr uint32_t kVertexFetchSlots = 96;
         constexpr uint32_t kTextureSlots = 32;
@@ -141,6 +143,11 @@ namespace gpu::renderer
             RenderTextureLayout layout = RenderTextureLayout::UNKNOWN;
             RenderFormat format = RenderFormat::UNKNOWN;
             uint32_t width = 0, height = 0;
+            // Guest-memory footprint and a sampled hash of it, so a texture the
+            // title streams in after we first uploaded it is noticed and re-read.
+            uint32_t guestAddress = 0, guestBytes = 0;
+            uint64_t guestHash = 0;
+            uint64_t checkedFrame = ~0ull;
         };
 
         struct RenderTargetKey
@@ -229,6 +236,9 @@ namespace gpu::renderer
             };
             std::unordered_map<uint32_t, ResolvedSurface> resolved;
             bool resolveReadback = false; // LO_RESOLVE_READBACK=1: legacy CPU write-back into guest memory
+            bool textureRevalidate = true; // LO_TEXTURE_STATIC=1 disables re-hashing cached textures
+            uint32_t textureReuploads = 0;
+            uint32_t dummyBindings = 0;
 
             // Per-frame timing of the expensive paths (LO_GPU_STATS).
             struct ScopedTimer
@@ -266,6 +276,7 @@ namespace gpu::renderer
                 arenaMapped = static_cast<uint8_t*>(vertexArena->map());
                 readback = device->createBuffer(RenderBufferDesc::ReadbackBuffer(kReadbackSize));
                 resolveReadback = getenv("LO_RESOLVE_READBACK") != nullptr;
+                textureRevalidate = getenv("LO_TEXTURE_STATIC") == nullptr;
                 dummyBuffer = device->createBuffer(RenderBufferDesc::DefaultBuffer(256));
 
                 // Layout: root CBVs b0 (VS constants) b1 (shared) b2 (PS constants) in space0;
@@ -306,17 +317,121 @@ namespace gpu::renderer
                     shaderCacheDir = dir;
 
                 CompileRectListGs();
+                CompileBlitShaders();
                 LOG_INFO("renderer: initialised");
                 return true;
             }
 
             void CreateDummyTexture(HostTexture& tex, RenderTextureDimension dim, RenderTextureFlags flags)
             {
-                RenderTextureDesc desc = RenderTextureDesc::Texture(dim, 1, 1, 1, 1, flags & RenderTextureFlag::CUBE ? 6 : 1, RenderFormat::R8G8B8A8_UNORM, flags);
+                const uint32_t slices = (flags & RenderTextureFlag::CUBE) ? 6u : 1u;
+                RenderTextureDesc desc = RenderTextureDesc::Texture(dim, 1, 1, 1, 1, slices, RenderFormat::R8G8B8A8_UNORM, flags);
                 tex.texture = device->createTexture(desc);
                 tex.format = RenderFormat::R8G8B8A8_UNORM;
                 tex.width = tex.height = 1;
                 tex.layout = RenderTextureLayout::UNKNOWN;
+                if (!tex.texture)
+                    return;
+                // Texture memory starts undefined: a slot that falls back to the dummy
+                // would otherwise sample garbage. Give it opaque black.
+                const uint8_t black[4] = { 0, 0, 0, 255 };
+                Begin();
+                uint64_t offset = Upload(black, sizeof(black), 512);
+                if (offset == UINT64_MAX)
+                    return;
+                Transition(tex, RenderTextureLayout::COPY_DEST, RenderBarrierStage::COPY);
+                for (uint32_t slice = 0; slice < slices; slice++)
+                    commandList->copyTextureRegion(
+                        RenderTextureCopyLocation::Subresource(tex.texture.get(), 0, slice),
+                        RenderTextureCopyLocation::PlacedFootprint(uploadRing.get(), RenderFormat::R8G8B8A8_UNORM, 1, 1, 1, 64, offset));
+                Transition(tex, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
+            }
+
+            // Full-screen blit that reinterprets one render target into another
+            // format. SV_Position is the same pixel in both, so a Load() needs no
+            // constants and the viewport alone selects the rectangle.
+            std::unique_ptr<RenderShader> blitVs, blitPs;
+            std::map<uint32_t, std::unique_ptr<RenderPipeline>> blitPipelines;
+
+            void CompileBlitShaders()
+            {
+                const char* vsSrc =
+                    "void main(uint id : SV_VertexID, out float4 pos : SV_Position)\n"
+                    "{\n"
+                    "    float2 uv = float2((id << 1) & 2, id & 2);\n"
+                    "    pos = float4(uv * float2(2.0, -2.0) + float2(-1.0, 1.0), 0.0, 1.0);\n"
+                    "}\n";
+                const char* psSrc =
+                    "Texture2D<float4> src : register(t0, space1);\n"
+                    "float4 main(float4 pos : SV_Position) : SV_Target\n"
+                    "{\n"
+                    "    return src.Load(int3(int2(pos.xy), 0));\n"
+                    "}\n";
+                xenos::CompiledShader v = xenos::CompileHlsl(vsSrc, "main", "vs_6_0");
+                xenos::CompiledShader f = xenos::CompileHlsl(psSrc, "main", "ps_6_0");
+                if (!v.ok || !f.ok)
+                {
+                    LOG_WARNING("renderer: blit shader compilation failed: {}{}", v.errors, f.errors);
+                    return;
+                }
+                blitVs = device->createShader(v.dxil.data(), v.dxil.size(), "main", RenderShaderFormat::DXIL);
+                blitPs = device->createShader(f.dxil.data(), f.dxil.size(), "main", RenderShaderFormat::DXIL);
+            }
+
+            RenderPipeline* GetBlitPipeline(RenderFormat targetFormat)
+            {
+                auto it = blitPipelines.find(uint32_t(targetFormat));
+                if (it != blitPipelines.end())
+                    return it->second.get();
+                if (!blitVs || !blitPs)
+                    return nullptr;
+                RenderGraphicsPipelineDesc desc;
+                desc.pipelineLayout = pipelineLayout.get();
+                desc.vertexShader = blitVs.get();
+                desc.pixelShader = blitPs.get();
+                desc.depthEnabled = false;
+                desc.depthWriteEnabled = false;
+                desc.depthFunction = RenderComparisonFunction::ALWAYS;
+                desc.depthTargetFormat = RenderFormat::UNKNOWN;
+                desc.renderTargetFormat[0] = targetFormat;
+                desc.renderTargetCount = 1;
+                desc.renderTargetBlend[0].renderTargetWriteMask = 0xF;
+                desc.cullMode = RenderCullMode::NONE;
+                desc.primitiveTopology = RenderPrimitiveTopology::TRIANGLE_LIST;
+                auto pipeline = device->createGraphicsPipeline(desc);
+                RenderPipeline* result = pipeline.get();
+                blitPipelines.emplace(uint32_t(targetFormat), std::move(pipeline));
+                return result;
+            }
+
+            // Copies rect (x0,y0,w,h) from src into dst at the same position,
+            // converting formats along the way.
+            bool BlitRegion(HostTexture& src, HostTexture& dst, uint32_t x0, uint32_t y0, uint32_t w, uint32_t h)
+            {
+                RenderPipeline* pipeline = GetBlitPipeline(dst.format);
+                if (!pipeline)
+                    return false;
+                Begin();
+                Transition(src, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
+                Transition(dst, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
+                RenderDescriptorSet* set1 = AcquireSet(1);
+                set1->setTexture(0, src.texture.get(), RenderTextureLayout::SHADER_READ);
+                commandList->setFramebuffer(GetFramebuffer(&dst, nullptr));
+                RenderViewport viewport(static_cast<float>(x0), static_cast<float>(y0), static_cast<float>(w), static_cast<float>(h));
+                commandList->setViewports(&viewport, 1);
+                RenderRect scissor{ int32_t(x0), int32_t(y0), int32_t(x0 + w), int32_t(y0 + h) };
+                commandList->setScissors(&scissor, 1);
+                commandList->setPipeline(pipeline);
+                commandList->setGraphicsPipelineLayout(pipelineLayout.get());
+                commandList->setGraphicsRootDescriptor(RenderBufferReference(uploadRing.get(), 0), 0);
+                commandList->setGraphicsRootDescriptor(RenderBufferReference(uploadRing.get(), 0), 1);
+                commandList->setGraphicsRootDescriptor(RenderBufferReference(uploadRing.get(), 0), 2);
+                commandList->setGraphicsDescriptorSet(staticSet0.get(), 0);
+                commandList->setGraphicsDescriptorSet(set1, 1);
+                commandList->setGraphicsDescriptorSet(AcquireSet(2), 2);
+                commandList->setGraphicsDescriptorSet(AcquireSet(3), 3);
+                commandList->drawInstanced(3, 1, 0, 0);
+                return true;
             }
 
             void CompileRectListGs()
@@ -498,7 +613,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 {
                     // The cache name carries a translator version so changes to the
                     // generated HLSL don't resurrect stale DXIL.
-                    cachePath = fmt::format("{}/{}_{:016x}_v9.dxil", shaderCacheDir, pixel ? "ps" : "vs", hash);
+                    cachePath = fmt::format("{}/{}_{:016x}_v14.dxil", shaderCacheDir, pixel ? "ps" : "vs", hash);
                     std::ifstream in(cachePath, std::ios::binary);
                     if (in)
                         dxil.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
@@ -564,7 +679,12 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 height = std::clamp<uint32_t>((height + 31) & ~31u, 32, 2048);
                 // Depth formats (D24S8 / D24FS8) alias the same tiles and share our
                 // host format, so they are one target.
-                RenderTargetKey key{ base, depth ? 0u : format, pitch, 0, depth };
+                // Every colour format is a view of the same EDRAM tiles: this title
+                // draws the base pass through the 8_8_8_8 view and resolves it through
+                // the 2_10_10_10 view in the same frame. Keeping one host texture per
+                // (base, pitch) is what makes those views agree; the format is the
+                // widest one so the HDR passes keep their range.
+                RenderTargetKey key{ base, 0, pitch, 0, depth };
                 auto it = renderTargets.find(key);
                 if (it != renderTargets.end())
                 {
@@ -582,7 +702,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
 
                 auto tex = std::make_unique<HostTexture>();
-                tex->format = depth ? RenderFormat::D32_FLOAT_S8_UINT : ColorFormat(format);
+                tex->format = depth ? RenderFormat::D32_FLOAT_S8_UINT : RenderFormat::R16G16B16A16_FLOAT;
                 tex->width = pitch;
                 tex->height = height;
                 RenderTextureDesc desc = RenderTextureDesc::Texture2D(pitch, height, 1, tex->format, depth ? RenderTextureFlag::DEPTH_TARGET : RenderTextureFlag::RENDER_TARGET);
@@ -681,16 +801,45 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
                 auto it = textures.find(key);
                 if (it != textures.end())
-                    return it->second.get();
+                {
+                    HostTexture* cached = it->second.get();
+                    // Titles stream texture data in after the first draw that uses
+                    // it, so a cached upload can be all zeroes forever. Re-hash the
+                    // guest bytes once per frame and re-upload when they change.
+                    if (!textureRevalidate || cached->checkedFrame == frame || cached->guestBytes == 0)
+                        return cached;
+                    cached->checkedFrame = frame;
+                    const uint64_t now = SampleHash(Phys(cached->guestAddress), cached->guestBytes);
+                    if (now == cached->guestHash)
+                        return cached;
+                    textureReuploads++;
+                    retiredTextures.push_back(std::move(it->second));
+                    textures.erase(it);
+                }
 
                 ScopedTimer timer{ tTexture };
                 nTexture++;
                 TextureFormatInfo fi;
-                if (!GetTextureFormat(format, fi) || base == 0)
+                if (!GetTextureFormat(format, fi))
                 {
                     if (loggedFormats.insert(format).second)
                         LOG_WARNING("renderer: unsupported texture format {} ({}x{} at {:#x})", format, width, height, base);
                     return nullptr;
+                }
+                // A fetch constant with no base address stores its data in the mip
+                // chain instead; take the largest available level and scale the
+                // dimensions to it (Xenia: mip_address / mip_min_level).
+                uint32_t sourceAddress = base;
+                if (sourceAddress == 0)
+                {
+                    const uint32_t mipAddress = (fetch[5] >> 12) << 12;
+                    const uint32_t mipMin = std::max<uint32_t>(1, (fetch[4] >> 2) & 0xF);
+                    if (mipAddress == 0)
+                        return nullptr;
+                    sourceAddress = mipAddress;
+                    width = std::max<uint32_t>(1, width >> mipMin);
+                    height = std::max<uint32_t>(1, height >> mipMin);
+                    pitch32 = std::max<uint32_t>(1, pitch32 >> mipMin);
                 }
 
                 // Guest layout: blocks, pitch in blocks aligned to the 32-block macro tile.
@@ -700,19 +849,25 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 pitchBlocks = (pitchBlocks + 31) & ~31u;
                 uint32_t bpbLog2 = fi.bytesPerBlock == 1 ? 0 : fi.bytesPerBlock == 2 ? 1 : fi.bytesPerBlock == 4 ? 2 : fi.bytesPerBlock == 8 ? 3 : 4;
 
-                const uint8_t* src = Phys(base);
+                const uint8_t* src = Phys(sourceAddress);
                 uint32_t hostBpp = fi.convertToRgba8 ? 4 : fi.bytesPerBlock;
                 uint32_t rowBytes = blocksX * hostBpp;
                 uint32_t rowPitch = (rowBytes + 255) & ~255u;
-                std::vector<uint8_t> staging(size_t(rowPitch) * blocksY);
+                // Cube faces sit back to back, each face's tiled image padded to the
+                // 4 KB subresource alignment (xenos.h kTextureSubresourceAlignment).
+                const uint32_t faces = dimension == 3 ? 6u : 1u;
+                const uint32_t blocksYAligned = (blocksY + 31) & ~31u;
+                const uint32_t faceStride = ((pitchBlocks * blocksYAligned * fi.bytesPerBlock) + 4095u) & ~4095u;
+                std::vector<uint8_t> staging(size_t(rowPitch) * blocksY * faces);
                 std::vector<uint8_t> block(fi.bytesPerBlock);
+                for (uint32_t f = 0; f < faces; f++)
                 for (uint32_t by = 0; by < blocksY; by++)
                 {
-                    uint8_t* dstRow = staging.data() + size_t(by) * rowPitch;
+                    uint8_t* dstRow = staging.data() + (size_t(f) * blocksY + by) * rowPitch;
                     for (uint32_t bx = 0; bx < blocksX; bx++)
                     {
                         uint32_t offset = tiled ? video::TiledOffset2D(bx, by, pitchBlocks, bpbLog2) : (by * pitchBlocks + bx) * fi.bytesPerBlock;
-                        memcpy(block.data(), src + offset, fi.bytesPerBlock);
+                        memcpy(block.data(), src + size_t(f) * faceStride + offset, fi.bytesPerBlock);
                         // Endian swap within the block.
                         if (endian == 1 || (endian == 2 && fi.bytesPerBlock == 2))
                             for (uint32_t i = 0; i + 1 < fi.bytesPerBlock; i += 2) std::swap(block[i], block[i + 1]);
@@ -750,9 +905,16 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 tex->format = fi.host;
                 tex->width = width;
                 tex->height = height;
+                tex->guestAddress = sourceAddress;
+                tex->guestBytes = uint32_t(std::min<uint64_t>(uint64_t(pitchBlocks) * blocksY * fi.bytesPerBlock * faces, 64u << 20));
+                tex->guestHash = SampleHash(src, tex->guestBytes);
+                tex->checkedFrame = frame;
                 uint32_t texWidth = fi.blockWidth > 1 ? blocksX * fi.blockWidth : width;
                 uint32_t texHeight = fi.blockHeight > 1 ? blocksY * fi.blockHeight : height;
-                tex->texture = device->createTexture(RenderTextureDesc::Texture2D(texWidth, texHeight, 1, fi.host));
+                if (dimension == 3)
+                    tex->texture = device->createTexture(RenderTextureDesc::Texture(RenderTextureDimension::TEXTURE_2D, texWidth, texHeight, 1, 1, 6, fi.host, RenderTextureFlag::CUBE));
+                else
+                    tex->texture = device->createTexture(RenderTextureDesc::Texture2D(texWidth, texHeight, 1, fi.host));
                 tex->layout = RenderTextureLayout::UNKNOWN;
                 if (!tex->texture)
                 {
@@ -765,9 +927,11 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (offset == UINT64_MAX)
                     return nullptr;
                 Transition(*tex, RenderTextureLayout::COPY_DEST, RenderBarrierStage::COPY);
-                commandList->copyTextureRegion(
-                    RenderTextureCopyLocation::Subresource(tex->texture.get()),
-                    RenderTextureCopyLocation::PlacedFootprint(uploadRing.get(), fi.host, texWidth, texHeight, 1, (rowPitch / hostBpp) * fi.blockWidth, offset));
+                for (uint32_t f = 0; f < faces; f++)
+                    commandList->copyTextureRegion(
+                        RenderTextureCopyLocation::Subresource(tex->texture.get(), 0, f),
+                        RenderTextureCopyLocation::PlacedFootprint(uploadRing.get(), fi.host, texWidth, texHeight, 1, (rowPitch / hostBpp) * fi.blockWidth,
+                            offset + uint64_t(f) * rowPitch * blocksY));
                 Transition(*tex, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
 
                 HostTexture* result = tex.get();
@@ -781,7 +945,14 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 {
                     uint32_t texSize = it->first.width * it->first.height * 4; // conservative
                     bool overlap = it->first.address < address + size && address < it->first.address + texSize;
-                    if (overlap) it = textures.erase(it); else ++it;
+                    if (overlap)
+                    {
+                        // The command list being recorded may still reference it, so
+                        // hand it to the retired list (freed after the next fence wait).
+                        retiredTextures.push_back(std::move(it->second));
+                        it = textures.erase(it);
+                    }
+                    else ++it;
                 }
             }
 
@@ -934,28 +1105,18 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         it->second.lastFrame = frame;
                         return it->second.offset;
                     }
+                    // Contents changed. Overwriting in place would corrupt draws
+                    // already recorded into the open command list from this slot, so
+                    // allocate a fresh one; the old bytes die with the arena reset.
                     vertexRevalidations++;
-                    // Changed contents: re-upload in place when it fits the same slot.
-                    CopySwapped(arenaMapped + it->second.offset, guest, sizeDwords, endian);
-                    it->second.hash = hash;
-                    it->second.lastFrame = frame;
-                    vertexBytesUploaded += bytes;
-                    return it->second.offset;
+                    vertexCache.erase(it);
                 }
 
                 // Allocate (16-byte aligned, 16 bytes of slack for the shader's
                 // last fetch); when the arena is full, drain the GPU and start over.
                 const size_t needed = ((bytes + 16 + 15) & ~size_t(15));
                 if (arenaOffset + needed > kVertexArenaSize)
-                {
-                    if (needed > kVertexArenaSize)
-                        return UINT64_MAX;
-                    Flush();
-                    Begin();
-                    arenaOffset = 0;
-                    vertexCache.clear();
-                    LOG_INFO("renderer: vertex arena reset");
-                }
+                    return UINT64_MAX; // DrawImpl resets the arena between draws
                 const uint64_t offset = arenaOffset;
                 arenaOffset += needed;
                 CopySwapped(arenaMapped + offset, guest, sizeDwords, endian);
@@ -977,6 +1138,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 uint32_t vtxFmt;
                 uint32_t flags;
                 float alphaTest[4];
+                float colorMax[4];
                 uint32_t vfetchOffset[96];
                 uint32_t samplerIndex[32];
             };
@@ -991,10 +1153,22 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             {
                 // Out of descriptor sets: submit what we have before this draw
                 // uploads anything (Flush rewinds the upload ring and the pools).
-                if (setPoolUsed[1] >= kMaxSetsPerKind)
+                // All resource recycling happens BETWEEN draws: a Flush inside one
+                // would rewind the descriptor pools and upload ring that this draw's
+                // already-recorded state points at.
+                const bool poolsFull = setPoolUsed[1] >= kMaxSetsPerKind;
+                const bool ringLow = uploadOffset + kUploadHeadroom > kUploadRingSize;
+                const bool arenaLow = arenaOffset + kArenaHeadroom > kVertexArenaSize;
+                if (poolsFull || ringLow || arenaLow)
                 {
                     Flush();
                     Begin();
+                    if (arenaLow)
+                    {
+                        arenaOffset = 0;
+                        vertexCache.clear();
+                        LOG_INFO("renderer: vertex arena reset");
+                    }
                 }
                 Begin();
 
@@ -1097,6 +1271,15 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     shared.halfPixel[0] = 1.0f / viewport.width;
                     shared.halfPixel[1] = -1.0f / viewport.height;
                 }
+                // Range of the bound colour format, clamped in the shader epilogue.
+                {
+                    const uint32_t cfmt = (colorInfo >> 16) & 0xF;
+                    float m = 1.0f;            // 8_8_8_8, 8_8_8_8_GAMMA, 2_10_10_10, _AS_10_10_10_10
+                    if (cfmt == 3 || cfmt == 12) m = 31.875f;   // 2_10_10_10_FLOAT (7e3)
+                    else if (cfmt >= 4) m = 65504.0f;           // 16_16(_16_16)(_FLOAT), 32_FLOAT
+                    shared.colorMax[0] = shared.colorMax[1] = shared.colorMax[2] = m;
+                    shared.colorMax[3] = (cfmt == 3 || cfmt == 12 || cfmt <= 2 || cfmt == 10) ? 1.0f : m;
+                }
                 uint32_t colorControl = Reg(REG_RB_COLORCONTROL);
                 // LO_PS_DEBUG=<n>: paint draws with at least n indices magenta.
                 static const uint32_t psDebugMin = getenv("LO_PS_DEBUG") ? std::max(1ul, strtoul(getenv("LO_PS_DEBUG"), nullptr, 10)) : 0;
@@ -1113,6 +1296,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 static const bool vsRaw = getenv("LO_VS_RAW") != nullptr;
                 if (vsRaw)
                     shared.flags |= 8;
+                static const bool texDebug = getenv("LO_PS_TEXDEBUG") != nullptr; // debugging: show the sampled texture
+                if (texDebug)
+                    shared.flags |= 16;
                 static const bool noAlphaTest = getenv("LO_NO_ALPHATEST") != nullptr; // debugging
                 if ((colorControl & 8) && !noAlphaTest)
                 {
@@ -1166,18 +1352,26 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             continue;
                         uint32_t fetch[6];
                         for (int i = 0; i < 6; i++) fetch[i] = Reg(REG_FETCH_CONSTANTS + slot * 6 + i);
-                        if ((fetch[0] & 3) != 2)
-                            continue;
+                        const uint32_t declared = s->info.textureDimension[slot];
+                        RenderDescriptorSet* set = declared == 2 ? set2 : declared == 3 ? set3 : set1;
+                        HostTexture* dummy = declared == 2 ? &dummyTexture3D : declared == 3 ? &dummyTextureCube : &dummyTexture2D;
                         uint32_t dimension = (fetch[5] >> 9) & 3; // 0 1D, 1 2D, 2 3D, 3 cube
-                        HostTexture* tex = GetTexture(fetch, dimension);
+                        HostTexture* tex = (fetch[0] & 3) == 2 ? GetTexture(fetch, dimension) : nullptr;
                         if (!tex)
+                        {
+                            // Descriptor sets are pooled and reused, so a slot the
+                            // shader reads must always be written: otherwise it keeps
+                            // the texture some earlier draw left there.
+                            set->setTexture(slot, dummy->texture.get(), RenderTextureLayout::SHADER_READ);
+                            shared.samplerIndex[slot] = 0;
+                            dummyBindings++;
                             continue;
+                        }
                         uint32_t d3 = fetch[3];
                         uint64_t samplerKey = ((d3 >> 19) & 3) | (((d3 >> 21) & 3) << 2) | (((d3 >> 23) & 3) << 4)
                             | (((fetch[0] >> 10) & 7) << 6) | (((fetch[0] >> 13) & 7) << 9) | (((fetch[0] >> 16) & 7) << 12);
                         shared.samplerIndex[slot] = GetSamplerIndex(samplerKey);
-                        RenderDescriptorSet* target = s->info.textureDimension[slot] == 2 ? set2 : s->info.textureDimension[slot] == 3 ? set3 : set1;
-                        target->setTexture(slot, tex->texture.get(), RenderTextureLayout::SHADER_READ);
+                        set->setTexture(slot, tex->texture.get(), RenderTextureLayout::SHADER_READ);
                     }
                 };
                 bindTextures(ps);
@@ -1431,6 +1625,13 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         }
                         if (target->format != color->format || nx1 <= nx0 || ny1 <= ny0)
                             continue;
+                        // The rectangle covers a run of EDRAM tiles, not a fraction of
+                        // the other view's image: the same bytes span fewer rows in a
+                        // wider target. Rows scale by the pitch ratio (same bpp here,
+                        // the host formats are equal).
+                        const uint32_t clearedRows = uint32_t(std::ceil(std::max(0.0f, maxY - minY)));
+                        uint32_t mappedRows = uint32_t((uint64_t(clearedRows) * pitch + k.pitch - 1) / k.pitch);
+                        mappedRows = std::clamp<uint32_t>(mappedRows, 1, target->height);
                         HostTexture* otherDepth = depth ? GetRenderTarget(depthInfo & 0xFFF, (depthInfo >> 16) & 1, k.pitch, target->height, true) : nullptr;
                         if (otherDepth && (otherDepth->width != target->width || otherDepth->height != target->height))
                             continue;
@@ -1440,16 +1641,81 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         commandList->setFramebuffer(GetFramebuffer(target, otherDepth));
                         // Viewport such that the rectangle's NDC bounds land on the full texture.
                         const float vpW = 2.0f * float(target->width) / (nx1 - nx0);
-                        const float vpH = 2.0f * float(target->height) / (ny1 - ny0);
+                        const float vpH = 2.0f * float(mappedRows) / (ny1 - ny0);
                         RenderViewport stretched(-(nx0 + 1.0f) * 0.5f * vpW, -(1.0f - ny1) * 0.5f * vpH, vpW, vpH);
                         commandList->setViewports(&stretched, 1);
-                        RenderRect fullRect{ 0, 0, int32_t(target->width), int32_t(target->height) };
+                        RenderRect fullRect{ 0, 0, int32_t(target->width), int32_t(mappedRows) };
                         commandList->setScissors(&fullRect, 1);
                         commandList->drawInstanced(indexCount, 1, uint32_t(baseVertex), 0);
                         if (logged++ < 8)
-                            LOG_INFO("renderer: colour clear rect (pitch {}) replayed into base={:#x} pitch={} {}x{}", pitch, k.base, k.pitch, target->width, target->height);
+                            LOG_INFO("renderer: colour clear rect (pitch {}, {} rows) replayed into base={:#x} pitch={} {}x{} rows", pitch, clearedRows, k.base, k.pitch, target->width, mappedRows);
                     }
                 }
+            }
+
+            // LO_DUMP_RESOLVE_SEQ=<frame>: dump every resolve of that frame in order.
+            uint32_t resolveSeq = 0;
+            void DumpResolveStep(HostTexture& tex, uint32_t destBase)
+            {
+                static const uint32_t dumpFrame = getenv("LO_DUMP_RESOLVE_SEQ") ? strtoul(getenv("LO_DUMP_RESOLVE_SEQ"), nullptr, 10) : 0;
+                if (!dumpFrame || frame != dumpFrame)
+                    return;
+                uint32_t bpp = tex.format == RenderFormat::R8G8B8A8_UNORM ? 4 : tex.format == RenderFormat::R16G16B16A16_FLOAT ? 8 : tex.format == RenderFormat::R32_FLOAT ? 4 : 0;
+                if (!bpp)
+                    return;
+                const uint32_t rowPitch = (tex.width * bpp + 255) & ~255u;
+                if (size_t(rowPitch) * tex.height > kReadbackSize)
+                    return;
+                Transition(tex, RenderTextureLayout::COPY_SOURCE, RenderBarrierStage::COPY);
+                commandList->copyTextureRegion(
+                    RenderTextureCopyLocation::PlacedFootprint(readback.get(), tex.format == RenderFormat::R32_FLOAT ? RenderFormat::R32_FLOAT : tex.format, tex.width, tex.height, 1, rowPitch / bpp, 0),
+                    RenderTextureCopyLocation::Subresource(tex.texture.get(), 0));
+                Flush();
+                Begin();
+                const uint8_t* src = static_cast<const uint8_t*>(readback->map());
+                const char* dir = getenv("LO_DUMP_RESOLVE_DIR");
+                std::string path = fmt::format("{}/seq{:02}_{:x}.ppm", dir ? dir : ".", resolveSeq++, destBase);
+                if (FILE* f = fopen(path.c_str(), "wb"))
+                {
+                    fprintf(f, "P6%c%u %u%c255%c", 10, tex.width, tex.height, 10, 10);
+                    std::vector<uint8_t> row(size_t(tex.width) * 3);
+                    for (uint32_t y = 0; y < tex.height; y++)
+                    {
+                        const uint8_t* r = src + size_t(y) * rowPitch;
+                        for (uint32_t x = 0; x < tex.width; x++)
+                        {
+                            float rgb[3] = { 0, 0, 0 };
+                            if (bpp == 4 && tex.format == RenderFormat::R8G8B8A8_UNORM)
+                                for (int c = 0; c < 3; c++) rgb[c] = r[x * 4 + c] / 255.0f;
+                            else if (bpp == 8)
+                                for (int c = 0; c < 3; c++) { uint16_t h; memcpy(&h, r + x * 8 + c * 2, 2); rgb[c] = HalfToFloat(h); }
+                            else { float d; memcpy(&d, r + x * 4, 4); rgb[0] = rgb[1] = rgb[2] = d; }
+                            for (int c = 0; c < 3; c++)
+                                row[x * 3 + c] = uint8_t(std::clamp(rgb[c], 0.0f, 1.0f) * 255.0f + 0.5f);
+                        }
+                        fwrite(row.data(), 1, row.size(), f);
+                    }
+                    fclose(f);
+                }
+                // Raw statistics: tells apart "shading is too bright" from "the bits
+                // are being interpreted as the wrong format".
+                double sum = 0; float lo = 1e30f, hi = -1e30f; uint32_t over1 = 0, samples = 0;
+                for (uint32_t y = 0; y < tex.height; y += 4)
+                {
+                    const uint8_t* r = src + size_t(y) * rowPitch;
+                    for (uint32_t x = 0; x < tex.width; x += 4)
+                    {
+                        float v = 0;
+                        if (bpp == 8) { uint16_t h; memcpy(&h, r + size_t(x) * 8, 2); v = HalfToFloat(h); }
+                        else if (tex.format == RenderFormat::R32_FLOAT) memcpy(&v, r + size_t(x) * 4, 4);
+                        else v = r[size_t(x) * 4] / 255.0f;
+                        sum += v; lo = std::min(lo, v); hi = std::max(hi, v); samples++;
+                        if (v > 1.0f) over1++;
+                    }
+                }
+                readback->unmap();
+                LOG_INFO("renderer: resolve step {} -> {:#x} dumped ({}x{}) red min={:g} max={:g} mean={:g} over1={}%",
+                    resolveSeq - 1, destBase, tex.width, tex.height, lo, hi, sum / std::max(1u, samples), over1 * 100 / std::max(1u, samples));
             }
 
             // ---- resolve --------------------------------------------------------------------
@@ -1465,6 +1731,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 ResolvedSurface& rs = resolved[destBase];
                 if (!rs.tex || rs.tex->format != RenderFormat::R32_FLOAT || rs.tex->width != texW || rs.tex->height != texH)
                 {
+                    if (rs.tex) retiredTextures.push_back(std::move(rs.tex));
                     rs.tex = std::make_unique<HostTexture>();
                     rs.tex->format = RenderFormat::R32_FLOAT;
                     rs.tex->width = texW;
@@ -1493,6 +1760,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 commandList->copyTextureRegion(RenderTextureCopyLocation::Subresource(rs.tex->texture.get()),
                     RenderTextureCopyLocation::Subresource(depth.texture.get(), 0), x0, y0, 0, &box);
                 Transition(*rs.tex, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
+                DumpResolveStep(*rs.tex, destBase);
             }
 
             // Copies the resolve rectangle into the host texture standing in for the
@@ -1504,14 +1772,18 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 Begin();
                 const uint32_t texW = std::clamp<uint32_t>(std::max(destPitch, x0 + w), 1, 8192);
                 const uint32_t texH = std::clamp<uint32_t>(std::max(destHeight, y0 + h), 1, 8192);
+                // The destination's own format decides what the surface holds, so the
+                // frontbuffer stays 8888 even though EDRAM is kept in FP16.
+                const RenderFormat destHost = (destFormat == 32 || destFormat == 7) ? RenderFormat::R16G16B16A16_FLOAT : RenderFormat::R8G8B8A8_UNORM;
                 ResolvedSurface& rs = resolved[destBase];
-                if (!rs.tex || rs.tex->format != color.format || rs.tex->width != texW || rs.tex->height != texH)
+                if (!rs.tex || rs.tex->format != destHost || rs.tex->width != texW || rs.tex->height != texH)
                 {
+                    if (rs.tex) retiredTextures.push_back(std::move(rs.tex));
                     rs.tex = std::make_unique<HostTexture>();
-                    rs.tex->format = color.format;
+                    rs.tex->format = destHost;
                     rs.tex->width = texW;
                     rs.tex->height = texH;
-                    rs.tex->texture = device->createTexture(RenderTextureDesc::Texture2D(texW, texH, 1, color.format));
+                    rs.tex->texture = device->createTexture(RenderTextureDesc::Texture2D(texW, texH, 1, destHost, RenderTextureFlag::RENDER_TARGET));
                     rs.tex->layout = RenderTextureLayout::UNKNOWN;
                     if (!rs.tex->texture)
                     {
@@ -1530,12 +1802,18 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 h = std::min(h, texH - y0);
                 if (w == 0 || h == 0)
                     return;
-                Transition(color, RenderTextureLayout::COPY_SOURCE, RenderBarrierStage::COPY);
-                Transition(*rs.tex, RenderTextureLayout::COPY_DEST, RenderBarrierStage::COPY);
-                RenderBox box{ int32_t(x0), int32_t(y0), int32_t(x0 + w), int32_t(y0 + h), 0, 1 };
-                commandList->copyTextureRegion(RenderTextureCopyLocation::Subresource(rs.tex->texture.get()),
-                    RenderTextureCopyLocation::Subresource(color.texture.get()), x0, y0, 0, &box);
+                if (rs.tex->format == color.format)
+                {
+                    Transition(color, RenderTextureLayout::COPY_SOURCE, RenderBarrierStage::COPY);
+                    Transition(*rs.tex, RenderTextureLayout::COPY_DEST, RenderBarrierStage::COPY);
+                    RenderBox box{ int32_t(x0), int32_t(y0), int32_t(x0 + w), int32_t(y0 + h), 0, 1 };
+                    commandList->copyTextureRegion(RenderTextureCopyLocation::Subresource(rs.tex->texture.get()),
+                        RenderTextureCopyLocation::Subresource(color.texture.get()), x0, y0, 0, &box);
+                }
+                else if (!BlitRegion(color, *rs.tex, x0, y0, w, h))
+                    return;
                 Transition(*rs.tex, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
+                DumpResolveStep(*rs.tex, destBase);
             }
 
             void Resolve()
@@ -1797,6 +2075,12 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     LOG_INFO("renderer frame {}: {:.0f} ms, draws {} ({:.0f} ms: const {:.0f} sets {:.0f} vertex {:.0f} bind {:.0f} index {:.0f} record {:.0f}), shaders {} ({:.0f} ms), pipelines {} ({:.0f} ms), textures {} ({:.0f} ms, {} KB), vertex uploads {}+{} ({} KB, arena {} MB), resolves {} ({:.0f} ms), gpu wait {:.0f} ms",
                         r.frame, frameMs, r.drawsThisFrame, r.tDraw, r.tConst, r.tSets, r.tVertex, r.tBind, r.tIndex, r.tRecord, r.nShader, r.tShader, r.nPipeline, r.tPipeline, r.nTexture, r.tTexture, r.texBytes / 1024,
                         r.vertexUploads, r.vertexRevalidations, r.vertexBytesUploaded / 1024, r.arenaOffset >> 20, r.nResolve, r.tResolve, r.tFlush);
+                if (stats && r.dummyBindings)
+                    LOG_INFO("renderer frame {}: {} texture slots fell back to the dummy", r.frame, r.dummyBindings);
+                r.dummyBindings = 0;
+                if (stats && r.textureReuploads)
+                    LOG_INFO("renderer frame {}: {} textures re-uploaded after a guest write", r.frame, r.textureReuploads);
+                r.textureReuploads = 0;
                 r.ResetTimers();
                 r.vertexUploads = r.vertexRevalidations = 0;
                 r.vertexBytesUploaded = 0;

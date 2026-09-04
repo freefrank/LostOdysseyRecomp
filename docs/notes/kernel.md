@@ -120,3 +120,14 @@ SkelControlLists 逐项 MatchRefBone 填索引`）调用 memset 填 63 字节，
 
 调试手段：`LO_CRASH_DUMP="r27+0x328*,r19+0xf4*"`（寄存器相对地址，`*` 跟随指针）在崩溃时转储客体内存；崩溃处理器
 现在打印全部 32 个通用寄存器。
+
+## 游戏内计时与开场影片（2026-09-04）
+
+- **倍速的根因**：上游 XenonRecomp 把 `mftb`（读时基寄存器）直接映射成宿主的 `__rdtsc()`。宿主 TSC 约 3.6 GHz，而内核
+  通过 `KeQueryPerformanceFrequency` 告诉游戏的是 Xbox 360 的 49.875 MHz，游戏用 mftb 差值除以该频率算每帧时间，
+  于是内部时钟快约 72 倍。改成 `PPCTimeBase()`（由单调时钟换算到 49.875 MHz）。
+  验证：标题画面 "Press START" 的闪烁周期在 30 fps 下 60 帧、60 fps 下 120 帧，都等于 2.0 秒真实时间。
+- `LO_FPS=<n>` 在 XE_SWAP 处限帧，默认 30（主机帧率），0 = 不限。逻辑按真实时间推进，限帧只影响流畅度。
+- **开场影片**：约 200 秒，没有 WMV 解码器所以全黑。游戏内 **Start 暂停 → Back(Select) 跳过**；A/B/X/Y/方向键在暂停界面
+  无效。无人值守测试用 `LO_AUTO_BUTTONS` 的 `k`（Back）、`L`/`R`（肩键）。
+  试过让 `NtReadFile` 对 `xenon_mov.fpd` 返回 EOF 来跳过，播放器会崩溃，已回退。
