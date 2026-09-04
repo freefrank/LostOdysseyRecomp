@@ -49,6 +49,7 @@ cbuffer XeShared : register(b1, space0)
     uint xeFlags;           // bit0: alpha test enable
     float4 xeAlphaTest;     // x = reference, y = compare function
     float4 xeColorMax;      // per-channel range of the bound EDRAM format
+    uint4 xeTransfer;       // x = source EDRAM class, y = destination class (transfer blit)
     uint4 xeVfetchOffset[24]; // byte offset of each vertex fetch slot inside its buffer
     uint4 xeSamplerIndex[8];  // sampler palette index per texture fetch slot
 };

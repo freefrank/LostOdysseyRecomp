@@ -260,6 +260,22 @@ namespace gpu::renderer
             uint32_t frame = 0;
             std::set<uint32_t> loggedFormats;
 
+            struct SharedConstants
+            {
+                uint32_t bools[8];
+                uint32_t loops[32];
+                float ndcScale[4];
+                float ndcOffset[4];
+                float halfPixel[2];
+                uint32_t vtxFmt;
+                uint32_t flags;
+                float alphaTest[4];
+                float colorMax[4];
+                uint32_t transfer[4];
+                uint32_t vfetchOffset[96];
+                uint32_t samplerIndex[32];
+            };
+
             // ---- lifecycle -----------------------------------------------------
             bool Init()
             {
@@ -318,6 +334,7 @@ namespace gpu::renderer
 
                 CompileRectListGs();
                 CompileBlitShaders();
+                CompileTransferShader();
                 LOG_INFO("renderer: initialised");
                 return true;
             }
@@ -352,6 +369,130 @@ namespace gpu::renderer
             // constants and the viewport alone selects the rectangle.
             std::unique_ptr<RenderShader> blitVs, blitPs;
             std::map<uint32_t, std::unique_ptr<RenderPipeline>> blitPipelines;
+
+            // Reinterprets one EDRAM class as another: pack the source value into the
+            // guest's 32-bit word, then unpack it the way the new class reads it.
+            std::unique_ptr<RenderShader> transferPs;
+            std::map<uint32_t, std::unique_ptr<RenderPipeline>> transferPipelines;
+
+            void CompileTransferShader()
+            {
+                const char* psSrc =
+                    "Texture2D<float4> src : register(t0, space1);\n"
+                    "cbuffer XeShared : register(b1, space0) {\n"
+                    "  uint4 pad0[2]; uint4 pad1[8]; float4 pad2; float4 pad3; float4 pad4;\n"
+                    "  float4 pad5; float4 xeColorMax; uint4 xeTransfer;\n"
+                    "};\n"
+                    "float Float7e3To32(uint f10) {\n"
+                    "  f10 &= 0x3FFu; if (f10 == 0u) return 0.0;\n"
+                    "  uint mantissa = f10 & 0x7Fu, exponent = f10 >> 7;\n"
+                    "  if (exponent == 0u) { uint lz = firstbithigh(mantissa); uint shift = 7u - lz;\n"
+                    "    exponent = uint(int(1) - int(shift)); mantissa = (mantissa << shift) & 0x7Fu; }\n"
+                    "  return asfloat(((exponent + 124u) << 23) | (mantissa << 16));\n"
+                    "}\n"
+                    "uint Float32To7e3(float f) {\n"
+                    "  if (!(f > 0.0)) return 0u;\n"
+                    "  uint u = asuint(f);\n"
+                    "  if (u >= 0x41FF73FFu) return 0x3FFu;\n"
+                    "  if (u < 0x3E800000u) { uint shift = min(125u - (u >> 23), 24u);\n"
+                    "    u = (0x800000u | (u & 0x7FFFFFu)) >> shift; }\n"
+                    "  else { u += 0xC2000000u; }\n"
+                    "  return ((u + 0x7FFFu + ((u >> 16) & 1u)) >> 16) & 0x3FFu;\n"
+                    "}\n"
+                    "uint PackGuest(float4 v, uint cls) {\n"
+                    "  if (cls == 0u) { uint4 c = uint4(saturate(v) * 255.0 + 0.5);\n"
+                    "    return c.r | (c.g << 8) | (c.b << 16) | (c.a << 24); }\n"
+                    "  uint a = uint(saturate(v.a) * 3.0 + 0.5);\n"
+                    "  uint3 c;\n"
+                    "  if (cls == 1u) c = uint3(saturate(v.rgb) * 1023.0 + 0.5);\n"
+                    "  else c = uint3(Float32To7e3(v.r), Float32To7e3(v.g), Float32To7e3(v.b));\n"
+                    "  return c.r | (c.g << 10) | (c.b << 20) | (a << 30);\n"
+                    "}\n"
+                    "float4 UnpackGuest(uint w, uint cls) {\n"
+                    "  if (cls == 0u) return float4(uint4(w, w >> 8, w >> 16, w >> 24) & 0xFFu) * (1.0 / 255.0);\n"
+                    "  float alpha = float(w >> 30) * (1.0 / 3.0);\n"
+                    "  uint3 c = uint3(w, w >> 10, w >> 20) & 0x3FFu;\n"
+                    "  if (cls == 1u) return float4(float3(c) * (1.0 / 1023.0), alpha);\n"
+                    "  return float4(Float7e3To32(c.x), Float7e3To32(c.y), Float7e3To32(c.z), alpha);\n"
+                    "}\n"
+                    "float4 main(float4 pos : SV_Position) : SV_Target {\n"
+                    "  float4 v = src.Load(int3(int2(pos.xy), 0));\n"
+                    "  return UnpackGuest(PackGuest(v, xeTransfer.x), xeTransfer.y);\n"
+                    "}\n";
+                xenos::CompiledShader f = xenos::CompileHlsl(psSrc, "main", "ps_6_0");
+                if (!f.ok)
+                {
+                    LOG_WARNING("renderer: transfer shader compilation failed: {}", f.errors);
+                    return;
+                }
+                transferPs = device->createShader(f.dxil.data(), f.dxil.size(), "main", RenderShaderFormat::DXIL);
+            }
+
+            RenderPipeline* GetTransferPipeline(RenderFormat targetFormat)
+            {
+                auto it = transferPipelines.find(uint32_t(targetFormat));
+                if (it != transferPipelines.end())
+                    return it->second.get();
+                if (!blitVs || !transferPs)
+                    return nullptr;
+                RenderGraphicsPipelineDesc desc;
+                desc.pipelineLayout = pipelineLayout.get();
+                desc.vertexShader = blitVs.get();
+                desc.pixelShader = transferPs.get();
+                desc.depthEnabled = false;
+                desc.depthWriteEnabled = false;
+                desc.depthFunction = RenderComparisonFunction::ALWAYS;
+                desc.depthTargetFormat = RenderFormat::UNKNOWN;
+                desc.renderTargetFormat[0] = targetFormat;
+                desc.renderTargetCount = 1;
+                desc.renderTargetBlend[0].renderTargetWriteMask = 0xF;
+                desc.cullMode = RenderCullMode::NONE;
+                desc.primitiveTopology = RenderPrimitiveTopology::TRIANGLE_LIST;
+                auto pipeline = device->createGraphicsPipeline(desc);
+                RenderPipeline* result = pipeline.get();
+                transferPipelines.emplace(uint32_t(targetFormat), std::move(pipeline));
+                return result;
+            }
+
+            void TransferRegion(HostTexture& src, HostTexture& dst, uint32_t srcClass, uint32_t dstClass)
+            {
+                // Only the 32-bit classes share a word layout; wider ones are left alone.
+                if (srcClass > kClass7e3 || dstClass > kClass7e3)
+                    return;
+                RenderPipeline* pipeline = GetTransferPipeline(dst.format);
+                if (!pipeline)
+                    return;
+                SharedConstants transferConstants{};
+                transferConstants.transfer[0] = srcClass;
+                transferConstants.transfer[1] = dstClass;
+                uint64_t offset = Upload(&transferConstants, sizeof(transferConstants));
+                if (offset == UINT64_MAX)
+                    return;
+                const uint32_t w = std::min(src.width, dst.width);
+                const uint32_t h = std::min(src.height, dst.height);
+                Begin();
+                Transition(src, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
+                Transition(dst, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
+                RenderDescriptorSet* set1 = AcquireSet(1);
+                set1->setTexture(0, src.texture.get(), RenderTextureLayout::SHADER_READ);
+                commandList->setFramebuffer(GetFramebuffer(&dst, nullptr));
+                RenderViewport viewport(0.0f, 0.0f, static_cast<float>(w), static_cast<float>(h));
+                commandList->setViewports(&viewport, 1);
+                RenderRect scissor{ 0, 0, int32_t(w), int32_t(h) };
+                commandList->setScissors(&scissor, 1);
+                commandList->setPipeline(pipeline);
+                commandList->setGraphicsPipelineLayout(pipelineLayout.get());
+                commandList->setGraphicsRootDescriptor(RenderBufferReference(uploadRing.get(), offset), 0);
+                commandList->setGraphicsRootDescriptor(RenderBufferReference(uploadRing.get(), offset), 1);
+                commandList->setGraphicsRootDescriptor(RenderBufferReference(uploadRing.get(), offset), 2);
+                commandList->setGraphicsDescriptorSet(staticSet0.get(), 0);
+                commandList->setGraphicsDescriptorSet(set1, 1);
+                commandList->setGraphicsDescriptorSet(AcquireSet(2), 2);
+                commandList->setGraphicsDescriptorSet(AcquireSet(3), 3);
+                commandList->drawInstanced(3, 1, 0, 0);
+                transfers++;
+            }
+            uint32_t transfers = 0;
 
             void CompileBlitShaders()
             {
@@ -606,6 +747,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 for (uint32_t i = 0; i < count; i++)
                     swapped[i] = ByteSwap(words[i]);
                 entry.info = xenos::TranslateShader(swapped.data(), count, pixel);
+                // LO_SHADER_HLSL_DIR: write the generated HLSL under the same hash the
+                // draw trace prints, so a specific pass can be inspected offline.
+                if (const char* hlslDir = getenv("LO_SHADER_HLSL_DIR"))
+                    std::ofstream(fmt::format("{}/{}_{:016x}.hlsl", hlslDir, pixel ? "ps" : "vs", hash)) << entry.info.hlsl;
 
                 std::vector<uint8_t> dxil;
                 std::string cachePath;
@@ -613,7 +758,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 {
                     // The cache name carries a translator version so changes to the
                     // generated HLSL don't resurrect stale DXIL.
-                    cachePath = fmt::format("{}/{}_{:016x}_v14.dxil", shaderCacheDir, pixel ? "ps" : "vs", hash);
+                    cachePath = fmt::format("{}/{}_{:016x}_v15.dxil", shaderCacheDir, pixel ? "ps" : "vs", hash);
                     std::ifstream in(cachePath, std::ios::binary);
                     if (in)
                         dxil.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
@@ -656,6 +801,50 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 return std::clamp<uint32_t>(h, 32, 2048);
             }
 
+            // EDRAM colour formats that share a bit layout and interpretation form one
+            // "class". Tiles bound through a different class hold the same bits but
+            // mean something else, so switching class needs a conversion pass
+            // (Xenia calls this ownership transfer).
+            enum ColorClass : uint32_t
+            {
+                kClass8888 = 0,      // k_8_8_8_8, k_8_8_8_8_GAMMA
+                kClass2101010 = 1,   // k_2_10_10_10, _AS_10_10_10_10 (fixed point)
+                kClass7e3 = 2,       // k_2_10_10_10_FLOAT, _FLOAT_AS_16_16_16_16
+                kClass16F2 = 3,      // k_16_16(_FLOAT)
+                kClass16F4 = 4,      // k_16_16_16_16(_FLOAT)
+                kClass32F = 5,
+                kClass32F2 = 6,
+            };
+
+            static uint32_t ColorClassOf(uint32_t xenosFormat)
+            {
+                switch (xenosFormat)
+                {
+                case 0: case 1: return kClass8888;
+                case 2: case 10: return kClass2101010;
+                case 3: case 12: return kClass7e3;
+                case 4: case 6: return kClass16F2;
+                case 5: case 7: return kClass16F4;
+                case 14: return kClass32F;
+                case 15: return kClass32F2;
+                default: return kClass8888;
+                }
+            }
+
+            // All classes live in FP16 host textures: an 8-bit or 10-bit unorm value is
+            // exact in half precision, and keeping one host format keeps resolves and
+            // framebuffers simple. Only the interpretation differs between classes.
+            static RenderFormat ClassHostFormat(uint32_t colorClass)
+            {
+                switch (colorClass)
+                {
+                case kClass16F2: return RenderFormat::R16G16_FLOAT;
+                case kClass32F: return RenderFormat::R32_FLOAT;
+                case kClass32F2: return RenderFormat::R32G32_FLOAT;
+                default: return RenderFormat::R16G16B16A16_FLOAT;
+                }
+            }
+
             static RenderFormat ColorFormat(uint32_t xenosFormat)
             {
                 switch (xenosFormat)
@@ -679,12 +868,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 height = std::clamp<uint32_t>((height + 31) & ~31u, 32, 2048);
                 // Depth formats (D24S8 / D24FS8) alias the same tiles and share our
                 // host format, so they are one target.
-                // Every colour format is a view of the same EDRAM tiles: this title
-                // draws the base pass through the 8_8_8_8 view and resolves it through
-                // the 2_10_10_10 view in the same frame. Keeping one host texture per
-                // (base, pitch) is what makes those views agree; the format is the
-                // widest one so the HDR passes keep their range.
-                RenderTargetKey key{ base, 0, pitch, 0, depth };
+                // One host texture per (base, pitch, class). Views of the same tiles
+                // through another class are reached by an ownership transfer below.
+                const uint32_t colorClass = depth ? 0u : ColorClassOf(format);
+                RenderTargetKey key{ base, colorClass, pitch, 0, depth };
                 auto it = renderTargets.find(key);
                 if (it != renderTargets.end())
                 {
@@ -702,7 +889,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
 
                 auto tex = std::make_unique<HostTexture>();
-                tex->format = depth ? RenderFormat::D32_FLOAT_S8_UINT : RenderFormat::R16G16B16A16_FLOAT;
+                tex->format = depth ? RenderFormat::D32_FLOAT_S8_UINT : ClassHostFormat(colorClass);
                 tex->width = pitch;
                 tex->height = height;
                 RenderTextureDesc desc = RenderTextureDesc::Texture2D(pitch, height, 1, tex->format, depth ? RenderTextureFlag::DEPTH_TARGET : RenderTextureFlag::RENDER_TARGET);
@@ -714,6 +901,30 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 HostTexture* result = tex.get();
                 renderTargets.emplace(key, std::move(tex));
                 return result;
+            }
+
+            // Hands the tiles at (base, pitch) to `colorClass`, converting whatever the
+            // previous owner wrote through the guest bit representation.
+            std::map<std::pair<uint32_t, uint32_t>, uint32_t> tileOwner;
+
+            HostTexture* AcquireColorTarget(uint32_t base, uint32_t format, uint32_t pitch, uint32_t height)
+            {
+                const uint32_t colorClass = ColorClassOf(format);
+                HostTexture* target = GetRenderTarget(base, format, pitch, height, false);
+                // Off by default: this title's passes overwrite the tiles they reuse, and
+                // reinterpreting the previous owner's bits corrupts them (the channel
+                // order of the packed word still needs checking against Xenia's
+                // XeResolveSwapRedBlue). LO_EDRAM_TRANSFER=1 enables it for testing.
+                static const bool doTransfer = getenv("LO_EDRAM_TRANSFER") != nullptr;
+                auto owner = tileOwner.find({ base, pitch });
+                if (doTransfer && owner != tileOwner.end() && owner->second != colorClass)
+                {
+                    auto prev = renderTargets.find(RenderTargetKey{ base, owner->second, pitch, 0, false });
+                    if (prev != renderTargets.end() && prev->second && prev->second->texture && target && target->texture)
+                        TransferRegion(*prev->second, *target, owner->second, colorClass);
+                }
+                tileOwner[{ base, pitch }] = colorClass;
+                return target;
             }
 
             RenderFramebuffer* GetFramebuffer(HostTexture* color, HostTexture* depth)
@@ -794,6 +1005,11 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
 
                 TextureKey key{ base, format, width, height, (tiled ? 1u : 0u) | (endian << 1) | (pitch32 << 3) | (dimension << 12) };
+                // LO_NO_DEPTH_FETCH=1: hand shaders a constant instead of the resolved
+                // depth, to tell depth-driven artefacts from shading ones.
+                static const bool noDepthFetch = getenv("LO_NO_DEPTH_FETCH") != nullptr;
+                if (noDepthFetch && (format == 22 || format == 23))
+                    return &dummyTexture2D;
                 if (auto rit = resolved.find(base); rit != resolved.end() && rit->second.tex && ResolveFormatMatches(format, rit->second.destFormat))
                 {
                     Transition(*rit->second.tex, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
@@ -1035,6 +1251,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 rt.dstBlendAlpha = BlendFactor((blend >> 24) & 0x1F);
                 rt.blendEnabled = !(rt.srcBlend == RenderBlend::ONE && rt.dstBlend == RenderBlend::ZERO && rt.blendOp == RenderBlendOperation::ADD &&
                                     rt.srcBlendAlpha == RenderBlend::ONE && rt.dstBlendAlpha == RenderBlend::ZERO && rt.blendOpAlpha == RenderBlendOperation::ADD);
+                static const bool noBlend = getenv("LO_NO_BLEND") != nullptr; // debugging
+                if (noBlend)
+                    rt.blendEnabled = false;
                 rt.renderTargetWriteMask = uint8_t(key.colorMask & 0xF);
                 desc.renderTargetFormat[0] = rtFormat;
                 desc.renderTargetCount = rtFormat != RenderFormat::UNKNOWN ? 1 : 0;
@@ -1128,21 +1347,6 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             }
 
             // ---- draw -------------------------------------------------------------------
-            struct SharedConstants
-            {
-                uint32_t bools[8];
-                uint32_t loops[32];
-                float ndcScale[4];
-                float ndcOffset[4];
-                float halfPixel[2];
-                uint32_t vtxFmt;
-                uint32_t flags;
-                float alphaTest[4];
-                float colorMax[4];
-                uint32_t vfetchOffset[96];
-                uint32_t samplerIndex[32];
-            };
-
             void Draw(const DrawInfo& info)
             {
                 ScopedTimer timer{ tDraw };
@@ -1151,6 +1355,11 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 
             void DrawImpl(const DrawInfo& info)
             {
+                // LO_DRAW_LIMIT=<n>: only record the first n draws of each frame,
+                // to bisect which pass ruins the image.
+                static const uint32_t drawLimit = getenv("LO_DRAW_LIMIT") ? strtoul(getenv("LO_DRAW_LIMIT"), nullptr, 10) : 0;
+                if (drawLimit && drawsThisFrame >= drawLimit)
+                    return;
                 // Out of descriptor sets: submit what we have before this draw
                 // uploads anything (Flush rewinds the upload ring and the pools).
                 // All resource recycling happens BETWEEN draws: a Flush inside one
@@ -1205,7 +1414,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 uint32_t depthInfo = Reg(REG_RB_DEPTH_INFO);
                 uint32_t depthControl = Reg(REG_RB_DEPTHCONTROL);
                 bool colorWrites = modeControl == 4;
-                HostTexture* color = GetRenderTarget(colorInfo & 0xFFF, (colorInfo >> 16) & 0xF, pitch, rtHeight, false);
+                HostTexture* color = AcquireColorTarget(colorInfo & 0xFFF, (colorInfo >> 16) & 0xF, pitch, rtHeight);
                 HostTexture* depth = (depthControl & 3) ? GetRenderTarget(depthInfo & 0xFFF, (depthInfo >> 16) & 1, pitch, rtHeight, true) : nullptr;
 
                 Transition(*color, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
@@ -1274,6 +1483,14 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 // Range of the bound colour format, clamped in the shader epilogue.
                 {
                     const uint32_t cfmt = (colorInfo >> 16) & 0xF;
+                    {
+                        // RB_COLOR_INFO.color_exp_bias (signed 6 bits at +20) scales what
+                        // the hardware writes to EDRAM; log which values the title uses.
+                        const int32_t bias = int32_t(colorInfo << 6) >> 26;
+                        static std::set<int32_t> seenBias;
+                        if (seenBias.insert(bias | (int32_t(cfmt) << 8)).second)
+                            LOG_INFO("renderer: colour format {} uses exp_bias {}", cfmt, bias);
+                    }
                     float m = 1.0f;            // 8_8_8_8, 8_8_8_8_GAMMA, 2_10_10_10, _AS_10_10_10_10
                     if (cfmt == 3 || cfmt == 12) m = 31.875f;   // 2_10_10_10_FLOAT (7e3)
                     else if (cfmt >= 4) m = 65504.0f;           // 16_16(_16_16)(_FLOAT), 32_FLOAT
@@ -1651,6 +1868,68 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             LOG_INFO("renderer: colour clear rect (pitch {}, {} rows) replayed into base={:#x} pitch={} {}x{} rows", pitch, clearedRows, k.base, k.pitch, target->width, mappedRows);
                     }
                 }
+
+                // Debug snapshot goes last: it flushes, which would drop the
+                // pipeline state the clear replay above still relies on.
+                DumpDrawStep(*color);
+            }
+
+            // Writes any colour/depth texture to a PPM, tonemapping FP16 by clamping.
+            // Used by the resolve and draw-step dumps; costs a full GPU sync per call.
+            void DumpTexture(HostTexture& tex, const std::string& path, const char* what)
+            {
+                uint32_t bpp = tex.format == RenderFormat::R8G8B8A8_UNORM ? 4 : tex.format == RenderFormat::R16G16B16A16_FLOAT ? 8 : tex.format == RenderFormat::R32_FLOAT ? 4 : 0;
+                if (!bpp)
+                    return;
+                const uint32_t rowPitch = (tex.width * bpp + 255) & ~255u;
+                if (size_t(rowPitch) * tex.height > kReadbackSize)
+                    return;
+                Begin();
+                Transition(tex, RenderTextureLayout::COPY_SOURCE, RenderBarrierStage::COPY);
+                commandList->copyTextureRegion(
+                    RenderTextureCopyLocation::PlacedFootprint(readback.get(), tex.format, tex.width, tex.height, 1, rowPitch / bpp, 0),
+                    RenderTextureCopyLocation::Subresource(tex.texture.get(), 0));
+                Flush();
+                Begin();
+                const uint8_t* src = static_cast<const uint8_t*>(readback->map());
+                if (FILE* f = fopen(path.c_str(), "wb"))
+                {
+                    fprintf(f, "P6%c%u %u%c255%c", 10, tex.width, tex.height, 10, 10);
+                    std::vector<uint8_t> row(size_t(tex.width) * 3);
+                    for (uint32_t y = 0; y < tex.height; y++)
+                    {
+                        const uint8_t* r = src + size_t(y) * rowPitch;
+                        for (uint32_t x = 0; x < tex.width; x++)
+                        {
+                            float rgb[3] = { 0, 0, 0 };
+                            if (bpp == 8)
+                                for (int c = 0; c < 3; c++) { uint16_t h; memcpy(&h, r + size_t(x) * 8 + c * 2, 2); rgb[c] = HalfToFloat(h); }
+                            else if (tex.format == RenderFormat::R32_FLOAT)
+                            { float d; memcpy(&d, r + size_t(x) * 4, 4); rgb[0] = rgb[1] = rgb[2] = d; }
+                            else
+                                for (int c = 0; c < 3; c++) rgb[c] = r[size_t(x) * 4 + c] / 255.0f;
+                            for (int c = 0; c < 3; c++)
+                                row[x * 3 + c] = uint8_t(std::clamp(rgb[c], 0.0f, 1.0f) * 255.0f + 0.5f);
+                        }
+                        fwrite(row.data(), 1, row.size(), f);
+                    }
+                    fclose(f);
+                }
+                readback->unmap();
+                LOG_INFO("renderer: {} -> {}", what, path);
+            }
+
+            // LO_DUMP_DRAW_SEQ=<frame> + LO_DUMP_DRAW_EVERY=<n>: snapshot the bound
+            // colour target every n draws of that frame, so the draw that ruins the
+            // image can be identified from a single run.
+            void DumpDrawStep(HostTexture& color)
+            {
+                static const uint32_t dumpFrame = getenv("LO_DUMP_DRAW_SEQ") ? strtoul(getenv("LO_DUMP_DRAW_SEQ"), nullptr, 10) : 0;
+                static const uint32_t every = getenv("LO_DUMP_DRAW_EVERY") ? std::max(1ul, strtoul(getenv("LO_DUMP_DRAW_EVERY"), nullptr, 10)) : 25;
+                if (!dumpFrame || frame != dumpFrame || (drawsThisFrame % every) != 0)
+                    return;
+                const char* dir = getenv("LO_DUMP_RESOLVE_DIR");
+                DumpTexture(color, fmt::format("{}/draw{:04}_{}x{}.ppm", dir ? dir : ".", drawsThisFrame, color.width, color.height), "draw step");
             }
 
             // LO_DUMP_RESOLVE_SEQ=<frame>: dump every resolve of that frame in order.
@@ -1886,7 +2165,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             frame, srcSelect, colorInfo & 0xFFF, (colorInfo >> 16) & 0xF, pitch, rtHeight, existed, destBase, destFormat, x0, y0, copyWidth, copyHeight, destPitch, destHeight, copyControl & 0x300);
                     }
                 }
-                HostTexture* color = GetRenderTarget(colorInfo & 0xFFF, (colorInfo >> 16) & 0xF, pitch, rtHeight, false);
+                HostTexture* color = AcquireColorTarget(colorInfo & 0xFFF, (colorInfo >> 16) & 0xF, pitch, rtHeight);
                 if (!resolveReadback)
                 {
                     ResolveOnGpu(*color, destBase, destFormat, destPitch, destHeight, x0, y0, copyWidth, copyHeight);
@@ -2075,6 +2354,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     LOG_INFO("renderer frame {}: {:.0f} ms, draws {} ({:.0f} ms: const {:.0f} sets {:.0f} vertex {:.0f} bind {:.0f} index {:.0f} record {:.0f}), shaders {} ({:.0f} ms), pipelines {} ({:.0f} ms), textures {} ({:.0f} ms, {} KB), vertex uploads {}+{} ({} KB, arena {} MB), resolves {} ({:.0f} ms), gpu wait {:.0f} ms",
                         r.frame, frameMs, r.drawsThisFrame, r.tDraw, r.tConst, r.tSets, r.tVertex, r.tBind, r.tIndex, r.tRecord, r.nShader, r.tShader, r.nPipeline, r.tPipeline, r.nTexture, r.tTexture, r.texBytes / 1024,
                         r.vertexUploads, r.vertexRevalidations, r.vertexBytesUploaded / 1024, r.arenaOffset >> 20, r.nResolve, r.tResolve, r.tFlush);
+                if (stats && r.transfers)
+                    LOG_INFO("renderer frame {}: {} EDRAM ownership transfers", r.frame, r.transfers);
+                r.transfers = 0;
                 if (stats && r.dummyBindings)
                     LOG_INFO("renderer frame {}: {} texture slots fell back to the dummy", r.frame, r.dummyBindings);
                 r.dummyBindings = 0;

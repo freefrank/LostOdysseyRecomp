@@ -184,3 +184,23 @@ B. 扩展本命令处理器为完整 Xenos 模拟（解析 draw/状态/fetch 常
 
 调试开关新增：`LO_DUMP_RESOLVE_SEQ=<帧> LO_DUMP_RESOLVE_DIR=<目录>` 按顺序导出该帧每次 resolve 的结果并打印原始浮点
 min/max/mean，`LO_PS_TEXDEBUG=1` 让像素着色器输出最后一次贴图采样值，`LO_TEXTURE_STATIC=1` 关闭贴图复验。
+
+## EDRAM 格式类与 Xenia 对照（2026-09-04 深夜二）
+
+对照 Xenia canary（`d3d12_render_target_cache.cc` / `dxbc_shader_translator_om.cc`）核对后的结论：
+
+- Xenia 按 `RenderTargetKey::resource_format` 建宿主纹理，`_AS_*` 变体由 `GetStorageColorFormat` 折叠掉
+  （10→2，12→3），所以 2/10 一张、3/12 一张、0/1 一张。我们改成同样的"格式类"划分。
+- **k_2_10_10_10_FLOAT（7e3）在 Xenia 里就是 `R16G16B16A16_FLOAT`，不做每次绘制的量化**；7e3 的打包只在
+  ownership transfer 和 resolve 前的 dump 时发生。所以 HDR 通道必须用浮点目标 —— 之前把颜色目标降成 8888 时，
+  7e3 通道的 0..31.875 被硬件钳到 1.0，整幅画面爆白，这就是"材质没加载"的直接原因。
+- Xenia 在 RTV 路径**不**在像素着色器里钳位（靠宿主 UNORM 格式自然钳）；我们所有类都用 FP16，所以保留显式
+  钳位（定点 1.0，7e3 31.875，浮点 65504）。
+- `color_exp_bias` 本作全为 0，排除。深度 D24FS8 在 Xenia 是 float32 且把客体 [0,2) 映射到宿主 [0,1)；我们不做
+  这个重映射，宿主深度即客体深度，客体以 fetch 格式 22/23 读回时拿到的正是客体值，一致。
+- **Ownership transfer 已实现但默认关闭**（`LO_EDRAM_TRANSFER=1` 打开）：按 Xenia 的做法把源值打包成客体 32 位字
+  再按目标类解包（含 7e3 的 `Float32To7e3`/`Float7e3To32`）。打开后画面出现品红/绿偏色，怀疑打包的通道顺序还需
+  对照 Xenia 的 `XeResolveSwapRedBlue_8_8_8_8`。本作各通道是顺序覆盖同一片 tile，关掉后画面正确。
+
+现状：战斗场景构图正确（天空渐变、山脉、士兵、UI），帧间差异 0.2 左右无闪烁。剩余问题是前景人物仍是纯黑剪影，
+即光照没有落到角色上。
