@@ -1,0 +1,27 @@
+# Jump tables XenonAnalyse misses. Append this file to switch_tables.toml after regenerating it.
+
+# ---- SHORT OFFSET JUMPTABLE (manual) ----
+# 82FB21AC: lis r12,0x8217 ; addi r12,0x1340   -> u16 offset table at 0x82171340 (16 entries, range check cmplwi r24,0xF @82FB1E78)
+# 82FB21BC: lis r12,0x82FB ; addi r12,0x1CA8   -> label base 0x82FB1CA8
+[[switch]]
+base = 0x82FB21AC
+r = 24
+default = 0x82FB21D4
+labels = [
+    0x82FB21D4,
+    0x82FB21D4,
+    0x82FB1CA8,
+    0x82FB21D4,
+    0x82FB21D4,
+    0x82FB21D4,
+    0x82FB21D4,
+    0x82FB1CA8,
+    0x82FB1CA8,
+    0x82FB21D4,
+    0x82FB1CA8,
+    0x82FB1CA8,
+    0x82FB21D4,
+    0x82FB21D4,
+    0x82FB21D4,
+    0x82FB21D4,
+]

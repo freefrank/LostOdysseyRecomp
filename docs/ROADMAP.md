@@ -6,12 +6,12 @@
 - [x] 建立仓库骨架、子模块
 - [x] 提取游戏数据：四张盘已用 tools/god_extract.py 解到 `LostOdysseyRecompLib/private/disc1..4`
 - [x] 确认 XEX 版本：v4、PAL+JP 区域、无 TU，见 `docs/notes/xex.md`
-- [ ] Ghidra 装 360 加载器，导入 XEX，跑 XenonAnalyse 生成初版跳转表
+- [x] XenonAnalyse 生成初版跳转表（841 张）；Ghidra 尚未安装，符号定位暂用 tools/ 下脚本
 - [ ] 在 Xenia 里跑通游戏，作为行为参照，学会用它的日志和 GPU trace
 
 ## 阶段 1：重编译产出可编译
-- [ ] 填写 TOML：save/rest gpr/fpr/vmx 地址、setjmp/longjmp、函数边界
-- [ ] 处理 XenonRecomp 报告的无效指令和未识别函数
+- [x] 填写 TOML：save/rest 地址、invalid_instructions、170→80 条显式函数边界（setjmp/longjmp 待定位）
+- [~] XenonRecomp 零错误产出（run 13）；剩 vandc/mulhdu/vavguh 三条指令未实现，需 fork 补
 - [ ] 生成的 C++ 能在 MSVC 和 Clang 下编译通过
 - [ ] XenosRecomp 处理全部着色器，记录不支持的指令
 

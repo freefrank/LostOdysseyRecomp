@@ -1,0 +1,2 @@
+# address size   -- manual function boundaries merged by tools/gen_function_bounds.py
+827C39F8 18      # small stub that otherwise flows into pdata function 827C3A10 and steals its switch table

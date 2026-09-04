@@ -35,10 +35,45 @@
 
 ## 跳转表
 
-XenonAnalyse 首轮检测到 841 张，写入 `config/switch_tables.toml`。
-后续 XenonRecomp 报错或运行时崩溃指向 `mtctr r0 / bctr` 附近时，回来手工补。
+XenonAnalyse 检测到 841 张（全部为绝对地址表），写入 `config/switch_tables.toml`。
+漏检的表手工写在 `config/switch_tables_manual.toml`，重新跑 XenonAnalyse 后要重新 append。
+目前手工补了一张：82FB21AC 的 u16 偏移表（16 项）。
+
+## invalid_instructions
+
+函数之间夹着两类 8 字节的异常处理描述符（handler 指针 + 作用域表指针），第一字分别是
+`0x82B7A940`（C++ frame handler，2165 处）和 `0x830D9F4C`（C specific handler，35 处），
+以及 4 字节零填充。不跳过它们，XenonRecomp 的 pass2 边界分析会把描述符当代码吞掉后面整个函数
+并在带跳转表的函数上死循环（表现为零输出挂死）。另有 `.text` 尾部 830DA0BC 起四个不可解码的数据字。
+
+## 显式函数边界（tools/gen_function_bounds.py）
+
+XenonRecomp 的边界分析把 `bctr` 当尾调用，不在 .pdata 里的叶函数只要带跳转表就会被截短，
+截短后函数内部的 `b` 变成"跳出函数"的未解析目标（首轮 91 个 switch 站点、96 个未解析目标）。
+脚本规则：
+1. 每个 `// ERROR <addr>` 目标成为一个函数（到下一个符号，且不超出所在 pdata 函数末尾），
+   目标跨轮累积在 `config/branch_targets.txt`；
+2. 每张 label 未被所在 pdata 函数覆盖的跳转表，从最近符号起、到最远 label 之后的下一个
+   pdata/bl 符号止，生成一个函数；
+3. `config/function_bounds_manual.txt` 放手工条目（目前一条：827C39F8 大小 0x18，
+   否则它流进 pdata 函数 827C3A10 抢走其跳转表）。
+生成结果写进 TOML 的 `functions = [...]`。迭代到第 8 轮收敛：0 未解析目标、0 跳转表错误。
+
+## 生成结果
+
+`LostOdysseyRecompLib/ppc/`：250 个文件，252 MB，62808 个函数。用 MSVC 编出来的 XenonRecomp
+（`tools/xexdump/CMakeLists.txt` 里把 `__builtin_bswap*` 映射到 MSVC 内建）跑一轮约 90 秒。
+
+## 未实现指令（需要 fork XenonRecomp 补实现）
+
+| 指令 | 位置 | 说明 |
+|---|---|---|
+| vandc ×3 | 822A4430 822A4534 822A4548 | 向量 AND-NOT，`_mm_andnot_si128` |
+| mulhdu ×2 | 822EFEF4 822EFF10 | 无符号 64×64 高 64 位，`_umul128` |
+| vavguh ×2 | 8312A040 8312A050 | 向量无符号半字平均，`_mm_avg_epu16`；位于 .embsec_ 段 |
 
 ## 待办
-- [ ] setjmp / longjmp：找 RtlUnwind（xboxkrnl 序号 0x147）导入桩的调用者，longjmp 调用它，setjmp 紧随其后
-- [ ] .embsec_* 段的性质
-- [ ] XenonRecomp 首轮输出的错误清单
+- [ ] setjmp / longjmp：`__imp__RtlUnwind` 桩在 0x830DA28C，找它的调用者（longjmp），setjmp 紧随其后
+- [ ] .embsec_* 段的性质（8 个小代码段，名字乱码，.pdata 覆盖到 8312D330）
+- [ ] fork XenonRecomp 补上面三条指令
+- [ ] 装 LLVM（clang-cl）后编译 ppc/ 输出，看第一轮编译错误
