@@ -64,16 +64,21 @@ XenonRecomp 的边界分析把 `bctr` 当尾调用，不在 .pdata 里的叶函�
 `LostOdysseyRecompLib/ppc/`：250 个文件，252 MB，62808 个函数。用 MSVC 编出来的 XenonRecomp
 （`tools/xexdump/CMakeLists.txt` 里把 `__builtin_bswap*` 映射到 MSVC 内建）跑一轮约 90 秒。
 
-## 未实现指令（需要 fork XenonRecomp 补实现）
+## 上游 XenonRecomp 缺失的指令（已在本地补丁中实现）
 
-| 指令 | 位置 | 说明 |
-|---|---|---|
-| vandc ×3 | 822A4430 822A4534 822A4548 | 向量 AND-NOT，`_mm_andnot_si128` |
-| mulhdu ×2 | 822EFEF4 822EFF10 | 无符号 64×64 高 64 位，`_umul128` |
-| vavguh ×2 | 8312A040 8312A050 | 向量无符号半字平均，`_mm_avg_epu16`；位于 .embsec_ 段 |
+上游对 5985 处指令报 Unrecognized（3129 处在 .embsec 段），全部是 16 位向量运算及少量标量：
+vslh 2351、vsrah 979、vsubshs 901、vspltish 604、vandc 265、vmaxsh 238、vminsh 92、vpkswss 81、
+vctuxs 78、vcmpgtsh(.) 82、vcmpgtsw. 48、vaddsws 45、eqv 30、vaddsbs 26、vnor 20、vrlh 18、
+vcmpequh(.) 24、vavguh 16、vsrh 12、vpkuhus 12、vpkswus 12、mulhd 12、mulhdu 8、vsububm 7、
+vpkshss 7、vsrab 6、vpkuwus 6、cror/crorc 4、frsqrte 1；另 vcmpgtuh. 30 处缺 CR6 写回。
+实现在 `tools/patches/XenonRecomp-lostodyssey.patch`（对子模块 recompiler.cpp 的补丁，
+`tools/build_tools.bat` 编译前自动应用）。向量元素在宿主中是反序存放的，pack 类指令按上游
+VPKSHUS 的惯例传 (vB, vA)。这些实现尚未经测试验证，运行期若音频/DSP 路径出错优先怀疑这里。
+
+剩余告警：830DA0BC 起 4 个数据字（`46000201` 等，夹在导入桩的 `mtctr r11; bctr` 之间）在函数
+重编译循环里无法解码，只输出为注释，不会被执行，可忽略。
 
 ## 待办
 - [ ] setjmp / longjmp：`__imp__RtlUnwind` 桩在 0x830DA28C，找它的调用者（longjmp），setjmp 紧随其后
 - [ ] .embsec_* 段的性质（8 个小代码段，名字乱码，.pdata 覆盖到 8312D330）
-- [ ] fork XenonRecomp 补上面三条指令
 - [ ] 装 LLVM（clang-cl）后编译 ppc/ 输出，看第一轮编译错误
