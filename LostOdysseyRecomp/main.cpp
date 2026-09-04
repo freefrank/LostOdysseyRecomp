@@ -8,6 +8,7 @@
 #include <kernel/io/file_system.h>
 #include <gpu/command_processor.h>
 #include <apu/audio.h>
+#include <hid/hid.h>
 #include <os/logger.h>
 
 #ifdef _WIN32
@@ -76,6 +77,7 @@ int main(int argc, char* argv[])
     XexLoader::StartTimeStampThread();
     gpu::g_commandProcessor.Init();
     apu::Init();
+    hid::Init();
 
     LOG_INFO("starting guest at {:#x}", entry);
     GuestThread::Start({ entry, 0, 0 });
