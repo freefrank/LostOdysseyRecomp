@@ -6,7 +6,7 @@
 - [x] 建立仓库骨架、子模块
 - [x] 提取游戏数据：四张盘已用 tools/god_extract.py 解到 `LostOdysseyRecompLib/private/disc1..4`
 - [x] 确认 XEX 版本：v4、PAL+JP 区域、无 TU，见 `docs/notes/xex.md`
-- [x] XenonAnalyse 生成初版跳转表（841 张）；Ghidra 尚未安装，符号定位暂用 tools/ 下脚本
+- [x] XenonAnalyse 生成初版跳转表（841 张）；Ghidra 12.1.3 + XEXLoaderWV 已装，default.xex 已 headless 导入
 - [~] Xenia Canary 已放在 tools/xenia_canary.exe，尚未跑通游戏
 
 ## 阶段 1：重编译产出可编译

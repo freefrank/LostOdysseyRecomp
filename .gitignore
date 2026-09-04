@@ -34,3 +34,5 @@ LostOdysseyRecompLib/shader/*.bin
 tools/xenia_canary.exe
 tools/xenia*.exe
 tools/xenia*/
+tools/ghidra_*/
+tools/ghidra_*.zip
