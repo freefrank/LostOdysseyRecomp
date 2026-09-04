@@ -2,10 +2,20 @@
 
 #include <cstdint>
 
+namespace plume
+{
+    struct RenderDevice;
+    struct RenderCommandQueue;
+}
+
 // Host presentation layer: SDL window + plume render device. Owned by the
 // command processor thread, which is the only thread that calls into it.
 namespace gpu::video
 {
+    // Shared with the draw backend (nullptr when no device is available).
+    plume::RenderDevice* GetDevice();
+    plume::RenderCommandQueue* GetQueue();
+
     // Creates the window and the render device. Safe to call repeatedly;
     // returns false when no device is available (the game keeps running
     // headless in that case).

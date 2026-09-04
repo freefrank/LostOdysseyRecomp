@@ -64,6 +64,24 @@ namespace gpu::video
         }
     }
 
+    plume::RenderDevice* GetDevice()
+    {
+#ifdef LO_GPU_PLUME
+        return g_available ? g_device.get() : nullptr;
+#else
+        return nullptr;
+#endif
+    }
+
+    plume::RenderCommandQueue* GetQueue()
+    {
+#ifdef LO_GPU_PLUME
+        return g_available ? g_queue.get() : nullptr;
+#else
+        return nullptr;
+#endif
+    }
+
     uint32_t TiledOffset2D(uint32_t x, uint32_t y, uint32_t pitchBlocks, uint32_t bytesPerBlockLog2)
     {
         // Macro tiles are 32x32 blocks; the pitch is given in blocks.

@@ -44,7 +44,21 @@ cbuffer XeShared : register(b1, space0)
     uint xeVtxFmt;          // PA_CL_VTE_CNTL bits 8..10: xy already /w, z already /w, w is 1/w
     uint xeFlags;           // bit0: alpha test enable
     float4 xeAlphaTest;     // x = reference, y = compare function
+    uint4 xeVfetchOffset[24]; // byte offset of each vertex fetch slot inside its buffer
+    uint4 xeSamplerIndex[8];  // sampler palette index per texture fetch slot
 };
+
+uint XeVfetchOffset(uint slot)
+{
+    return xeVfetchOffset[slot >> 2][slot & 3];
+}
+
+SamplerState xeSamplers[64] : register(s0, space0);
+
+SamplerState XeSampler(uint slot)
+{
+    return xeSamplers[xeSamplerIndex[slot >> 2][slot & 3]];
+}
 
 float4 XeConst(int index)
 {
@@ -522,7 +536,7 @@ float4 max4(float4 src0)
                 }
                 else
                 {
-                    std::string expr = fmt::format("{}(vfetch{}, xeVfetchBase + {}u, {}, {})", fn, slot,
+                    std::string expr = fmt::format("{0}(vfetch{1}, XeVfetchOffset({1}u) + xeVfetchBase + {2}u, {3}, {4})", fn, slot,
                         uint32_t(int32_t(instr.offset) * 4), instr.formatCompAll ? "true" : "false", instr.numFormatAll ? "false" : "true");
                     if (instr.expAdjust != 0)
                         expr = fmt::format("({} * {})", expr, std::ldexp(1.0f, instr.expAdjust));
@@ -586,7 +600,7 @@ float4 max4(float4 src0)
                     {
                     case TextureDimension::Texture1D:
                     case TextureDimension::Texture2D:
-                        print("XeTex2D(tex2D_{0}, samp_{0}, ", slot);
+                        print("XeTex2D(tex2D_{0}, XeSampler({0}u), ", slot);
                         if (instr.dimension == TextureDimension::Texture1D)
                         {
                             out += "float2(";
@@ -598,12 +612,12 @@ float4 max4(float4 src0)
                         print(", float2({}, {}))", instr.offsetX * 0.5f, instr.offsetY * 0.5f);
                         break;
                     case TextureDimension::Texture3D:
-                        print("XeTex3D(tex3D_{0}, samp_{0}, ", slot);
+                        print("XeTex3D(tex3D_{0}, XeSampler({0}u), ", slot);
                         printSrcRegister(3);
                         out += ")";
                         break;
                     case TextureDimension::TextureCube:
-                        print("XeTexCube(texCube_{0}, samp_{0}, ", slot);
+                        print("XeTexCube(texCube_{0}, XeSampler({0}u), ", slot);
                         printSrcRegister(3);
                         out += ", cubeMapData)";
                         break;
@@ -960,7 +974,6 @@ float4 max4(float4 src0)
                     case TextureDimension::TextureCube: println("TextureCube<float4> texCube_{0} : register(t{0}, space3);", slot); break;
                     default: println("Texture2D<float4> tex2D_{0} : register(t{0}, space1);", slot); break;
                     }
-                    println("SamplerState samp_{0} : register(s{0}, space0);", slot);
                 }
                 out += "void XeNoKill(float x) {}\n\n";
 
@@ -1290,6 +1303,13 @@ float4 max4(float4 src0)
                 Emit();
                 // Conditional end blocks use a flag declared up front.
                 out.insert(out.find("\tuint xeVfetchBase = 0u;\n"), "\tbool xeEnd = false;\n");
+                // Both stages share one pipeline layout: pixel shader constants live in b2.
+                if (isPixelShader)
+                {
+                    size_t pos = out.find("cbuffer XeConstants : register(b0, space0)");
+                    if (pos != std::string::npos)
+                        out.replace(pos, strlen("cbuffer XeConstants : register(b0, space0)"), "cbuffer XeConstants : register(b2, space0)");
+                }
                 result.hlsl = std::move(out);
                 return std::move(result);
             }

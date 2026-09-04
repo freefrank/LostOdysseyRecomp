@@ -1,6 +1,7 @@
 #include <stdafx.h>
 #include "command_processor.h"
 #include "video.h"
+#include "renderer.h"
 #include <cpu/guest_thread.h>
 #include <kernel/memory.h>
 #include <kernel/function.h>
@@ -51,6 +52,7 @@ namespace gpu
     static FrameStats g_frame;
     static uint64_t g_activeShader[2] = {};      // [0]=vertex [1]=pixel
     static uint32_t g_activeShaderSize[2] = {};
+    static std::vector<uint32_t> g_activeShaderWords[2]; // big-endian copy for the renderer
     static std::mutex g_shaderMutex;
     static std::set<uint64_t> g_seenShaders;
     static const bool g_gpuStats = getenv("LO_GPU_STATS") != nullptr;
@@ -75,6 +77,7 @@ namespace gpu
         uint64_t hash = HashWords(words, count);
         g_activeShader[type] = hash;
         g_activeShaderSize[type] = count;
+        g_activeShaderWords[type].assign(words, words + count);
         g_frame.shaderLoads++;
 
         std::lock_guard lock(g_shaderMutex);
@@ -310,9 +313,17 @@ namespace gpu
 
     // -----------------------------------------------------------------------
 
+    const uint32_t* CommandProcessor::GetActiveShader(bool pixel, uint32_t& dwordCount) const
+    {
+        auto& words = g_activeShaderWords[pixel ? 1 : 0];
+        dwordCount = uint32_t(words.size());
+        return words.empty() ? nullptr : words.data();
+    }
+
     void CommandProcessor::WorkerMain()
     {
-        video::Init();
+        if (video::Init())
+            renderer::Init();
         uint32_t idle = 0;
         while (m_running)
         {
@@ -576,6 +587,7 @@ namespace gpu
             uint32_t swaps = ++g_swapCount;
             if ((swaps % 60) == 1)
                 LOG_INFO("swap #{} frontbuffer {:#x} {}x{} (magic {:#x})", swaps, frontbuffer, width, height, magic);
+            renderer::Flush();
             video::PresentFrontbuffer(frontbuffer, width, height, ReadRegister(0x231B));
             video::PumpEvents();
             {
@@ -924,6 +936,18 @@ namespace gpu
                 WriteRegister(0x21FB, dmaSize);
             }
             reader.Advance(count - consumed);
+
+            {
+                renderer::DrawInfo di;
+                di.primitiveType = primType;
+                di.indexCount = numIndices;
+                di.indexed = sourceSelect == 0;
+                di.indexBase = dmaBase & ~3u;
+                di.indexBufferWords = dmaSize & 0xFFFFFF;
+                di.indexEndian = dmaSize >> 30;
+                di.index32 = ((initiator >> 11) & 1) != 0;
+                renderer::Draw(di);
+            }
 
             g_frame.draws++;
             g_frame.prim[primType & 63]++;
