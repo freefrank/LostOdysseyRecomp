@@ -3,6 +3,7 @@
 #include <kernel/xdm.h>
 #include <os/logger.h>
 #include <atomic>
+#include <vector>
 #include <SDL.h>
 
 // SDL game controller -> XInput state. Player 1 only for now; the keyboard
@@ -19,7 +20,17 @@ namespace
         if (g_controller)
             return;
         int count = SDL_NumJoysticks();
-        for (int i = 0; i < count; i++)
+        // Prefer an Xbox-type pad when several controllers are attached.
+        std::vector<int> order;
+        for (int pass = 0; pass < 2; pass++)
+            for (int i = 0; i < count; i++)
+            {
+                SDL_GameControllerType type = SDL_GameControllerTypeForIndex(i);
+                bool xbox = type == SDL_CONTROLLER_TYPE_XBOX360 || type == SDL_CONTROLLER_TYPE_XBOXONE;
+                if ((pass == 0) == xbox)
+                    order.push_back(i);
+            }
+        for (int i : order)
         {
             if (SDL_IsGameController(i))
             {
