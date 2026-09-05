@@ -10,6 +10,7 @@
 #include <kernel/io/file_system.h>
 #include <set>
 #include <mutex>
+#include <fstream>
 
 void DumpGuestThreadStates();
 
@@ -657,10 +658,29 @@ namespace gpu
                 static const uint32_t shotEvery = getenv("LO_SCREENSHOT_EVERY") ? strtoul(getenv("LO_SCREENSHOT_EVERY"), nullptr, 10) : 0;
                 // LO_SCREENSHOT_COUNT=<n>: capture n consecutive frames from LO_SCREENSHOT_SWAP.
                 static const uint32_t shotCount = getenv("LO_SCREENSHOT_COUNT") ? strtoul(getenv("LO_SCREENSHOT_COUNT"), nullptr, 10) : 1;
-                if ((shotSwap && swaps >= shotSwap && swaps < shotSwap + shotCount) || (shotEvery && (swaps % shotEvery) == 0))
+                // Trigger a bounded burst after reaching the desired scene, without
+                // guessing startup/loading frame counts. File: nonzero serial, count.
+                static const char* requestPath = getenv("LO_SCREENSHOT_REQUEST");
+                static uint64_t lastRequest = 0;
+                static uint32_t requestedShots = 0;
+                if (requestPath)
+                {
+                    uint64_t serial = 0;
+                    uint32_t count = 0;
+                    std::ifstream request(requestPath);
+                    if (request >> serial >> count && serial && serial != lastRequest)
+                    {
+                        lastRequest = serial;
+                        requestedShots = std::min(count, 600u);
+                        LOG_INFO("screenshot request {}: {} frames starting at swap {}", serial, requestedShots, swaps);
+                    }
+                }
+                const bool requestedShot = requestedShots != 0;
+                if (requestedShot) --requestedShots;
+                if (requestedShot || (shotSwap && swaps >= shotSwap && swaps < shotSwap + shotCount) || (shotEvery && (swaps % shotEvery) == 0))
                 {
                     std::string path = getenv("LO_SCREENSHOT_PATH") ? getenv("LO_SCREENSHOT_PATH") : "screenshot.ppm";
-                    if (shotEvery || shotCount > 1)
+                    if (requestedShot || shotEvery || shotCount > 1)
                     {
                         size_t dot = path.rfind('.');
                         path = path.substr(0, dot) + fmt::format("_{}", swaps) + (dot == std::string::npos ? "" : path.substr(dot));

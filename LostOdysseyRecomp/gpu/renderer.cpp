@@ -3,6 +3,8 @@
 #include "video.h"
 #include "command_processor.h"
 #include "depth_format.h"
+#include "depth_clear_layout.h"
+#include "polygon_offset.h"
 #include "texture_layout.h"
 #include "shader/xenos_translator.h"
 #include "shader/dxc_compiler.h"
@@ -148,6 +150,7 @@ namespace gpu::renderer
             RenderTextureLayout layout = RenderTextureLayout::UNKNOWN;
             RenderFormat format = RenderFormat::UNKNOWN;
             uint32_t width = 0, height = 0;
+            uint32_t depthMsaa = 0;
             // Guest-memory footprint and a sampled hash of it, so a texture the
             // title streams in after we first uploaded it is noticed and re-read.
             uint32_t guestAddress = 0, guestBytes = 0;
@@ -183,6 +186,8 @@ namespace gpu::renderer
             uint64_t vs, ps;
             uint32_t blend, depthControl, modeCull, colorMask, prim, rtFormat, depthFormat, flags;
             uint32_t stencilRefMask, stencilRefMaskBack;
+            int32_t depthBias;
+            uint32_t slopeBias;
             bool operator==(const PipelineKey& o) const { return memcmp(this, &o, sizeof(o)) == 0; }
         };
         struct PipelineKeyHash { size_t operator()(const PipelineKey& k) const { return size_t(Fnv1a(&k, sizeof(k))); } };
@@ -342,6 +347,37 @@ namespace gpu::renderer
             uint32_t frame = 0;
             uint32_t captureFrame = 0;
             uint64_t captureRequest = 0;
+            uint64_t psTraceRequest = 0, psTraceHash = 0;
+            uint32_t psTraceRemaining = 0, psTraceFirst = 0, psTraceCount = 0, psTraceDraws = 0;
+
+            // Separate from full capture: no resource readbacks or GPU waits.
+            // File: serial frames shader_hex first_constant constant_count.
+            void PollPsTraceRequest()
+            {
+                if (psTraceRemaining)
+                {
+                    LOG_INFO("renderer: ps trace end f{} ps={:016x} draws={} truncated={}",
+                        frame, psTraceHash, psTraceDraws, psTraceDraws > 64);
+                    --psTraceRemaining;
+                }
+                psTraceDraws = 0;
+                static const char* path = getenv("LO_PS_TRACE_REQUEST");
+                if (!path) return;
+                uint64_t serial = 0, hash = 0;
+                uint32_t frames = 0, first = 0, count = 0;
+                std::ifstream in(path);
+                if (!(in >> serial >> frames >> std::hex >> hash >> std::dec >> first >> count) ||
+                    !serial || serial == psTraceRequest || frames > 600 || first >= 256 ||
+                    !count || count > 16 || count > 256 - first)
+                    return;
+                psTraceRequest = serial;
+                psTraceHash = hash;
+                psTraceRemaining = frames;
+                psTraceFirst = first;
+                psTraceCount = count;
+                LOG_INFO("renderer: ps trace request {} next-frame={} frames={} ps={:016x} constants={}+{}",
+                    serial, frame + 1, frames, hash, first, count);
+            }
 
             // An opt-in request file contains a changing nonzero integer. Poll
             // only at a frame boundary, so every diagnostic sees the same frame.
@@ -797,10 +833,20 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (it != samplerPalette.end())
                     return it->second;
                 if (samplerPalette.size() >= kSamplerPalette)
+                {
+                    static bool reported = false;
+                    if (!reported)
+                    {
+                        reported = true;
+                        LOG_WARNING("renderer: sampler palette exhausted: key={:#x}, capacity={}; using slot 0", key, kSamplerPalette);
+                    }
                     return 0;
+                }
                 uint32_t index = uint32_t(samplerPalette.size());
                 samplerPalette.emplace(key, index);
                 staticSet0->setSampler(samplerDescriptorBase + index, GetSampler(key));
+                if (getenv("LO_TRACE_SAMPLERS"))
+                    LOG_INFO("renderer: sampler palette slot={} key={:#x}", index, key);
                 return index;
             }
 
@@ -865,7 +911,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 {
                     // The cache name carries a translator version so changes to the
                     // generated HLSL don't resurrect stale DXIL.
-                    cachePath = fmt::format("{}/{}_{:016x}_v19.dxil", shaderCacheDir, pixel ? "ps" : "vs", hash);
+                    cachePath = fmt::format("{}/{}_{:016x}_v20.dxil", shaderCacheDir, pixel ? "ps" : "vs", hash);
                     std::ifstream in(cachePath, std::ios::binary);
                     if (in)
                         dxil.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
@@ -1439,6 +1485,15 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     desc.depthFunction = RenderComparisonFunction::ALWAYS;
                 desc.depthClipEnabled = true;
                 desc.depthTargetFormat = depthFormat;
+                desc.depthBias = key.depthBias;
+                desc.slopeScaledDepthBias = std::bit_cast<float>(key.slopeBias);
+                if (getenv("LO_TRACE_POLYGON_OFFSET") && (key.modeCull & 0x3800))
+                {
+                    static uint32_t reports = 0;
+                    if (reports++ < 128)
+                        LOG_INFO("renderer: polygon offset vs={:016x} ps={:016x} mode={:#x} depth={:#x} bias={} slope={}",
+                            key.vs, key.ps, key.modeCull, key.depthControl, key.depthBias, desc.slopeScaledDepthBias);
+                }
                 desc.stencilEnabled = (depthControl & 1) != 0 && depthFormat != RenderFormat::UNKNOWN;
                 if (desc.stencilEnabled)
                 {
@@ -1653,6 +1708,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 bool colorWrites = modeControl == 4;
                 HostTexture* color = AcquireColorTarget(colorInfo & 0xFFF, (colorInfo >> 16) & 0xF, pitch, rtHeight);
                 HostTexture* depth = (depthControl & 3) ? GetRenderTarget(depthInfo & 0xFFF, (depthInfo >> 16) & 1, pitch, rtHeight, true) : nullptr;
+                if (depth) depth->depthMsaa = (surfaceInfo >> 16) & 3;
 
                 Transition(*color, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
                 if (depth)
@@ -1693,7 +1749,24 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     if (debugNoDepth && (!debugVsForDepth || key.vs == debugVsForDepth))
                         key.depthControl = (key.depthControl & ~0x70u) | (7u << 4);
                 }
-                key.modeCull = Reg(REG_PA_SU_SC_MODE_CNTL) & 7;
+                key.modeCull = Reg(REG_PA_SU_SC_MODE_CNTL) & 0x3807;
+                if (depth && (depthControl & 2))
+                {
+                    // The supported polygonal draws are triangles, fans, strips
+                    // and quads. Rectangle lists use the separate PARA enable.
+                    const bool polygonal = info.primitiveType == 4 || info.primitiveType == 5 ||
+                        info.primitiveType == 6 || info.primitiveType == 13;
+                    const auto bias = gpu::GetPolygonOffset(key.modeCull, polygonal,
+                        (depthInfo & (1u << 16)) != 0,
+                        RegF(0x2380), RegF(0x2381), RegF(0x2382), RegF(0x2383));
+                    // Same-binary A/B regression switch; normal rendering applies
+                    // guest bias without changing exposure or shadow materials.
+                    static const bool disableBias = getenv("LO_NO_POLYGON_OFFSET") != nullptr;
+                    if (!disableBias) {
+                        key.depthBias = bias.constant;
+                        key.slopeBias = std::bit_cast<uint32_t>(bias.slope);
+                    }
+                }
                 key.colorMask = colorWrites ? (Reg(REG_RB_COLOR_MASK) & 0xF) : 0;
                 key.prim = info.primitiveType;
                 key.rtFormat = uint32_t(color->format);
@@ -2043,6 +2116,19 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 
                 int32_t baseVertex = int32_t(Reg(REG_VGT_INDX_OFFSET));
                 static uint32_t drawLogs = 0;
+                if (psTraceRemaining && ps && key.ps == psTraceHash)
+                {
+                    if (++psTraceDraws <= 64)
+                    {
+                        std::string values;
+                        for (uint32_t ci = psTraceFirst; ci < psTraceFirst + psTraceCount; ++ci)
+                        {
+                            const uint32_t* v = psConstants + ci * 4;
+                            values += fmt::format(" c{}={:08x},{:08x},{:08x},{:08x}", ci, v[0], v[1], v[2], v[3]);
+                        }
+                        LOG_INFO("renderer: ps trace f{} ps={:016x} indices={}{}", frame, key.ps, info.indexCount, values);
+                    }
+                }
                 const uint32_t traceFrame = TraceFrame();
                 static const uint32_t traceCount = getenv("LO_DRAW_TRACE_COUNT") ? strtoul(getenv("LO_DRAW_TRACE_COUNT"), nullptr, 10) : 1;
                 if (traceFrame && frame >= traceFrame && frame < traceFrame + traceCount && (info.indexCount >= 200 || info.primitiveType == 8))
@@ -2093,6 +2179,19 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
                 if (traceFrame && frame >= traceFrame && frame < traceFrame + traceCount)
                 {
+                    // Capture the actual uploaded PS bank as well as the VS data.
+                    // Lighting changes cannot be diagnosed from bone matrices alone.
+                    if (ps)
+                    {
+                        std::string values;
+                        for (uint32_t ci = 0; ci < 256; ci++)
+                        {
+                            const uint32_t* v = psConstants + ci * 4;
+                            if (!(v[0] | v[1] | v[2] | v[3])) continue;
+                            values += fmt::format(" c{}={:08x},{:08x},{:08x},{:08x}", ci, v[0], v[1], v[2], v[3]);
+                        }
+                        LOG_INFO("renderer: draw psconsts f{} ps={:016x} upload={:#x}{}", frame, key.ps, psOffset, values);
+                    }
                     std::string texs;
                     for (Shader* sh : { ps, vs })
                     {
@@ -2105,6 +2204,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             uint32_t base = (f1 >> 12) << 12;
                             bool fromResolve = FindResolved(base, f1 & 0x3F) != nullptr;
                             texs += fmt::format(" t{}=[fmt {} {}x{} at {:#x}{} sign={:#x} swizzle={:#x}]", slot, f1 & 0x3F, (f2 & 0x1FFF) + 1, ((f2 >> 13) & 0x1FFF) + 1, base, fromResolve ? " resolved" : "", (f0 >> 2) & 0xFF, (Reg(REG_FETCH_CONSTANTS + slot * 6 + 3) >> 1) & 0xFFF);
+                            texs += fmt::format(" fetch{}={:08x},{:08x},{:08x},{:08x},{:08x},{:08x}", slot, f0, f1, f2,
+                                Reg(REG_FETCH_CONSTANTS + slot * 6 + 3), Reg(REG_FETCH_CONSTANTS + slot * 6 + 4), Reg(REG_FETCH_CONSTANTS + slot * 6 + 5));
                         }
                     }
                     LOG_INFO("renderer: draw textures{}", texs);
@@ -2243,9 +2344,19 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         {
                             Transition(*target, RenderTextureLayout::DEPTH_WRITE, RenderBarrierStage::GRAPHICS);
                             commandList->setFramebuffer(GetFramebuffer(nullptr, target));
-                            commandList->clearDepthStencil(true, false, rectZ, 0);
-                            if (logged++ < 8)
-                                LOG_INFO("renderer: depth clear rect (pitch {}, {}x{} .. {}x{}) -> cleared depth base={:#x} pitch={} to {}", pitch, minX, minY, maxX, maxY, k.base, k.pitch, rectZ);
+                            const DepthClearRect sourceRect{int32_t(std::ceil(minX)), int32_t(std::ceil(minY)),
+                                int32_t(std::ceil(maxX)), int32_t(std::ceil(maxY))};
+                            const auto mapped = MapDepthClear(pitch, (surfaceInfo >> 16) & 3, sourceRect,
+                                k.pitch, target->height, target->depthMsaa);
+                            std::vector<RenderRect> clearRects;
+                            clearRects.reserve(mapped.size());
+                            for (const auto& r : mapped) clearRects.push_back({r.left, r.top, r.right, r.bottom});
+                            // A zero rectangle count means a whole-resource clear in
+                            // the graphics API, so an empty mapping must be skipped.
+                            if (!clearRects.empty())
+                                commandList->clearDepthStencil(true, false, rectZ, 0, clearRects.data(), uint32_t(clearRects.size()));
+                            if (logged++ < 8 || frame == captureFrame)
+                                LOG_INFO("renderer: depth clear f{} rect (pitch {}, {}x{} .. {}x{}) -> depth base={:#x} pitch={} size={}x{} to {} msaa={}->{} regions={}", frame, pitch, minX, minY, maxX, maxY, k.base, k.pitch, target->width, target->height, rectZ, (surfaceInfo >> 16) & 3, target->depthMsaa, clearRects.size());
                             continue;
                         }
                         if (target->format != color->format || nx1 <= nx0 || ny1 <= ny0)
@@ -2376,6 +2487,19 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 const uint8_t* src = static_cast<const uint8_t*>(readback->map());
                 const char* dir = getenv("LO_DUMP_RESOLVE_DIR");
                 std::string path = fmt::format("{}/f{}_seq{:02}_{:x}.ppm", dir ? dir : ".", frame, resolveSeq++, destBase);
+                // The preview quantizes depth to eight bits, hiding the small
+                // differences involved in shadow comparisons. Keep exact R32
+                // values beside explicitly requested resolve captures.
+                if (tex.format == RenderFormat::R32_FLOAT)
+                {
+                    const auto rawPath = std::filesystem::path(path).replace_extension(".f32");
+                    if (FILE* raw = fopen(rawPath.string().c_str(), "wb"))
+                    {
+                        for (uint32_t y = 0; y < tex.height; ++y)
+                            fwrite(src + size_t(y) * rowPitch, sizeof(float), tex.width, raw);
+                        fclose(raw);
+                    }
+                }
                 if (FILE* f = fopen(path.c_str(), "wb"))
                 {
                     fprintf(f, "P6%c%u %u%c255%c", 10, tex.width, tex.height, 10, 10);
@@ -2809,6 +2933,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 r.vertexUploads = r.vertexRevalidations = 0;
                 r.vertexBytesUploaded = 0;
             }
+            g_renderer->PollPsTraceRequest();
             g_renderer->frame++;
             g_renderer->PollCaptureRequest();
             g_renderer->drawsThisFrame = 0;

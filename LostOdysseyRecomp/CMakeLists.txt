@@ -68,6 +68,17 @@ target_compile_features(LoStorageTest PRIVATE cxx_std_20)
 target_precompile_headers(LoStorageTest REUSE_FROM LostOdysseyRecomp)
 target_link_libraries(LoStorageTest PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,LINK_LIBRARIES>)
 
+# Guest string formatting regression without starting the game.
+add_executable(LoGuestPrintfTest
+    ${LO_RUNTIME_ROOT}/kernel/guest_printf.cpp
+    ${CMAKE_SOURCE_DIR}/tools/tests/guest_printf_test.cpp)
+target_include_directories(LoGuestPrintfTest PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,INCLUDE_DIRECTORIES>)
+target_compile_definitions(LoGuestPrintfTest PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,COMPILE_DEFINITIONS>)
+target_compile_options(LoGuestPrintfTest PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,COMPILE_OPTIONS>)
+target_compile_features(LoGuestPrintfTest PRIVATE cxx_std_20)
+target_precompile_headers(LoGuestPrintfTest REUSE_FROM LostOdysseyRecomp)
+target_link_libraries(LoGuestPrintfTest PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,LINK_LIBRARIES>)
+
 # Offline shader translator check (shares gpu/shader with the runtime).
 add_executable(LoShaderTool
     ${CMAKE_SOURCE_DIR}/tools/xenos_shader_tool/main.cpp
@@ -88,6 +99,10 @@ target_include_directories(LoTextureLayoutTest PRIVATE ${LO_RUNTIME_ROOT})
 target_compile_features(LoTextureLayoutTest PRIVATE cxx_std_20)
 
 # Tests the exact address mappings used by the runtime, without game assets.
+add_executable(LoCriticalSectionTest ${CMAKE_SOURCE_DIR}/tools/tests/critical_section_test.cpp)
+target_include_directories(LoCriticalSectionTest PRIVATE ${LO_RUNTIME_ROOT})
+target_compile_features(LoCriticalSectionTest PRIVATE cxx_std_23)
+
 add_executable(LoMemoryAliasTest
     ${CMAKE_SOURCE_DIR}/tools/tests/memory_alias_test.cpp
     ${LO_RUNTIME_ROOT}/kernel/guest_address_space.cpp)
@@ -111,5 +126,16 @@ if(WIN32)
         target_compile_features(LoStencilTest PRIVATE cxx_std_20)
         target_compile_definitions(LoStencilTest PRIVATE NOMINMAX)
         target_link_libraries(LoStencilTest PRIVATE plume d3d12 dxgi)
+        add_executable(LoPolygonOffsetTest
+            ${CMAKE_SOURCE_DIR}/tools/tests/polygon_offset_test.cpp
+            ${LO_RUNTIME_ROOT}/gpu/shader/dxc_compiler.cpp)
+        target_include_directories(LoPolygonOffsetTest PRIVATE ${LO_RUNTIME_ROOT} ${CMAKE_SOURCE_DIR}/thirdparty/plume)
+        target_compile_features(LoPolygonOffsetTest PRIVATE cxx_std_20)
+        target_compile_definitions(LoPolygonOffsetTest PRIVATE NOMINMAX)
+        target_link_libraries(LoPolygonOffsetTest PRIVATE plume d3d12 dxgi)
     endif()
 endif()
+
+add_executable(LoDepthClearLayoutTest ${CMAKE_SOURCE_DIR}/tools/tests/depth_clear_layout_test.cpp)
+target_include_directories(LoDepthClearLayoutTest PRIVATE ${LO_RUNTIME_ROOT})
+target_compile_features(LoDepthClearLayoutTest PRIVATE cxx_std_20)

@@ -236,6 +236,18 @@ float4 XeTex3D(Texture3D<float4> t, SamplerState s, float3 uvw)
     return XE_SAMPLE(t, s, uvw);
 }
 
+float4 XeTex2DLevelZero(Texture2D<float4> t, SamplerState s, float2 uv, float2 offset)
+{
+    uint2 dims;
+    t.GetDimensions(dims.x, dims.y);
+    return t.SampleLevel(s, uv + offset / float2(dims), 0.0);
+}
+
+float4 XeTex3DLevelZero(Texture3D<float4> t, SamplerState s, float3 uvw)
+{
+    return t.SampleLevel(s, uvw, 0.0);
+}
+
 struct CubeMapData
 {
     float3 cubeMapDirections[2];
@@ -245,6 +257,11 @@ struct CubeMapData
 float4 XeTexCube(TextureCube<float4> t, SamplerState s, float3 coord, inout CubeMapData cubeMapData)
 {
     return XE_SAMPLE(t, s, cubeMapData.cubeMapDirections[uint(coord.z) & 1]);
+}
+
+float4 XeTexCubeLevelZero(TextureCube<float4> t, SamplerState s, float3 coord, inout CubeMapData cubeMapData)
+{
+    return t.SampleLevel(s, cubeMapData.cubeMapDirections[uint(coord.z) & 1], 0.0);
 }
 
 float2 XeWeights2D(Texture2D<float4> t, float2 uv, float2 offset)
@@ -641,12 +658,19 @@ float4 max4(float4 src0)
                 }
                 else
                 {
+                    // Predicated shadow PCF taps explicitly disable computed LOD.
+                    // Implicit derivatives in that divergent branch are undefined.
+                    // Register LOD/gradients and instruction bias remain separate
+                    // paths; do not reinterpret those as an explicit zero LOD.
+                    const bool levelZero = !instr.useCompLod && !instr.useRegLod &&
+                        !instr.useRegGradients && instr.lodBias == 0;
+                    const char* sampleSuffix = levelZero ? "LevelZero" : "";
                     out += "XeTextureResult(";
                     switch (instr.dimension)
                     {
                     case TextureDimension::Texture1D:
                     case TextureDimension::Texture2D:
-                        print("XeTex2D(tex2D_{0}, XeSampler({0}u), ", slot);
+                        print("XeTex2D{1}(tex2D_{0}, XeSampler({0}u), ", slot, sampleSuffix);
                         if (instr.dimension == TextureDimension::Texture1D)
                         {
                             out += "float2(";
@@ -658,12 +682,12 @@ float4 max4(float4 src0)
                         print(", float2({}, {}))", instr.offsetX * 0.5f, instr.offsetY * 0.5f);
                         break;
                     case TextureDimension::Texture3D:
-                        print("XeTex3D(tex3D_{0}, XeSampler({0}u), ", slot);
+                        print("XeTex3D{1}(tex3D_{0}, XeSampler({0}u), ", slot, sampleSuffix);
                         printSrcRegister(3);
                         out += ")";
                         break;
                     case TextureDimension::TextureCube:
-                        print("XeTexCube(texCube_{0}, XeSampler({0}u), ", slot);
+                        print("XeTexCube{1}(texCube_{0}, XeSampler({0}u), ", slot, sampleSuffix);
                         printSrcRegister(3);
                         out += ", cubeMapData)";
                         break;
