@@ -4,6 +4,7 @@
 
 | Start here | Purpose |
 |---|---|
+| [Work report](WORK_REPORT_2026-09-05.md) | Latest repair outcomes, evidence and next acceptance checks |
 | [Status ledger](STATUS.md) | Published changes, local work and all nine active issues |
 | [Synchronization](PUBLISHING.md) | One public history, Gitea/GitHub dual push and archive policy |
 | [Build guide](BUILDING.md) | Prerequisites, generation, running and storage |

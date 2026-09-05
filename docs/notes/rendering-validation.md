@@ -66,3 +66,11 @@ Xenia 对照条件见 [对照记录](xenia-render-comparison.md)。
 设置 `LO_BACKGROUND=1` 后，SDL 从创建时使用隐藏窗口，D3D12 渲染和游戏截图仍然执行，不显示窗口或占用焦点。它不同于停用视频初始化的 `LO_HEADLESS`。通过 `LO_TEST_INPUT_FILE` 提交进程内输入，不注入系统键鼠；运行记录见 [攻略测试](walkthrough-testing.md)。后台运行仍消耗 CPU/GPU，测试结束应停止独立进程。
 
 资源解析致命错误会记录原始资源名与调用者，随后保留游戏原本的报错和退出行为；日志不再只显示笼统的 dirty disc 提示。
+
+### 到达场景后请求连续帧
+
+设置 LO_SCREENSHOT_REQUEST 为独立测试目录中的请求文件路径；写入两个整数：非零序号和帧数，例如 1 120。在下一次 Present 后开始采集，最多600帧，沿用 LO_SCREENSHOT_PATH 并附加 swap 编号。相同序号不重复采集，新序号可再次触发；帧数0取消尚未完成的请求。默认未启用时不读文件。不要与会造成 GPU 同步的逐 draw/resolve 捕获同时用于性能比较。
+
+运行时构建与独立后台验证通过：5帧、同序号改为50仍保持5帧、新序号3帧得到总计8帧、零帧请求不新增文件，8张PPM均可解码。本地证据 out/screenshot-request-test。
+
+Frame alignment: renderer draw/resolve frame F is displayed in screenshot swap F+1. Verified by final 0x714000 resolves against consecutive screenshots. Use the final resolve for exact trace matching; same-numbered swap images are the previous rendered frame.

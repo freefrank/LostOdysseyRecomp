@@ -4,6 +4,8 @@ Reviewed **2026-09-05** against code, runtime evidence and user feedback. This i
 
 ## Published versus local
 
+Current local Git HEAD: `0f1bfc9`. The later repairs below remain uncommitted; historical publication entries do not describe the current dirty working tree.
+
 | Scope | Repository status | Validation |
 |---|---|---|
 | Title, geometry/material and post-battle whiteout fixes; basic debug victory/storage | Published through `d944148` and earlier | Selected opening scenes |
@@ -17,19 +19,21 @@ Local results do not guarantee identical behavior from a clean checkout. See [de
 
 ## Active issues
 
-| # | User report / request | Status and next validation |
-|---|---|---|
-| 1 | Kaim/enemy self-shadow flicker | Open. Missing polygon offset is a lead, not a verified fix. |
-| 2 | Fire-hit black/red checker flicker | Open. Xenia also glitches; use the user's console reference. |
-| 3 | Encounter shadows absent/flickering | Open. Separate from animation recovery. |
-| 4 | Ring outer ring missing | Open. Resource/switch crash repairs do not prove ring rendering; test held/released RT. |
-| 5 | Broken crates show black effects | Open. Capture destruction and render passes. |
-| 6 | Current map ID/name in debug menu | Implemented. Native definitions and localized table; three opening areas verified. See [map info](notes/debug-map-info.md). |
-| 7 | Optional save-anywhere | Pending. CheckSavePoint activates interaction; it is not a pure permission check. |
-| 8 | Window hangs on reaching Gorge camp | Unresolved. Independent route reached camp and restored control; latest user run had not hung. Neither proves a fix. |
-| 9 | Sound output; background audio/dialogue disappear | Partial. Output and loop-boundary repair exist; remaining voices and loop subframes need validation. |
+Current implementation and evidence are summarized in the [2026-09-05 work report](WORK_REPORT_2026-09-05.md). The latest local executable is **10F4D144…**; its shadow-clear change has passed build and mapping tests, but has **not yet been run in game**.
 
-Manual save success was confirmed by the user. A separate process loaded a copied **Gorge** save and reached camp naturally. No camp save/reload or full playthrough is claimed. See [camp investigation](notes/third-map-hang.md).
+| # | User report / request | Current result and remaining work |
+|---|---|---|
+| 1 | Kaim/enemy self-shadow flicker | Open. Polygon offset and explicit zero-LOD sampling are implemented; no complete visual validation. |
+| 2 | Fire-hit black/red checker flicker | Open. Console reference and captured lighting inputs retained; Xenia also glitches. |
+| 3 | Encounter shadows absent/flickering | Local clear bug identified: partial clears wiped an entire aliased shadow target. Tile/MSAA coverage mapping implemented and tested; in-game atlas and visual regression pending. |
+| 4 | Ring outer ring missing | Verified in selected encounters: visible changing outer ring, RT release, Good and 101 damage; repeated after natural victory. See [Ring evidence](notes/battle-ring-resource.md). |
+| 5 | Broken crates show black effects | Open; no verified fix. |
+| 6 | Current map ID/name | Published, verified in opening areas. See [map info](notes/debug-map-info.md). |
+| 7 | Optional save-anywhere | Local backend and save/restart/load verified, including native save-point behavior and camp permissions. Desktop checkbox interaction/layout pending. See [save-anywhere](notes/save-anywhere.md). |
+| 8 | Camp/window hangs | Big-endian critical-section deadlock fixed and tested. Separate intermittent GPU query/wait pointer corruption remains unresolved. A successful route is not a complete stability result. |
+| 9 | Sound output and missing voices | Initial output published. Local I/O locking, XMA command/cursor and packet-skip fixes tested. Camp → vehicle CG → city gate/control passed without the former stable decoder errors. Full dialogue audibility and long-run stability remain unverified. |
+
+Manual save success was confirmed by the user. These are scoped results, not full-game completion. See [audio](notes/audio-output.md), [critical sections](notes/critical-section-endian.md) and [query failures](notes/third-map-hang.md).
 
 ## Outside validated support
 
