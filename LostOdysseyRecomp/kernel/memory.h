@@ -5,7 +5,7 @@
 #define MEM_RESERVE 0x00002000
 #endif
 
-// The whole 4 GiB guest address space is one host allocation. Guest pointers are
+// The whole 4 GiB guest address space is one contiguous host range. Guest pointers are
 // offsets from `base`; the recompiled function lookup table lives right after the
 // XEX image (see PPC_LOOKUP_FUNC in ppc_context.h).
 struct Memory
@@ -67,7 +67,7 @@ struct PageAllocator
     };
 
     Region virtualRegion;   // 0x00100000 .. 0x7F000000
-    Region physicalRegion;  // 0xA0000000 .. 0xFFF00000
+    Region physicalRegion;  // 0xA0000000 .. 0xC0000000
 
     void Init();
 

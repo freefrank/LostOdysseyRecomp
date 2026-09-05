@@ -1,5 +1,6 @@
 #include <stdafx.h>
 #include "memory.h"
+#include "guest_address_space.h"
 #include <os/logger.h>
 #include <set>
 #include <utility>
@@ -67,28 +68,9 @@ void Memory::InstallFunctionTracers()
 
 Memory::Memory()
 {
-#ifdef _WIN32
-    base = (uint8_t*)VirtualAlloc((void*)0x100000000ull, PPC_MEMORY_SIZE, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-
-    if (base == nullptr)
-        base = (uint8_t*)VirtualAlloc(nullptr, PPC_MEMORY_SIZE, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-
-    if (base == nullptr)
+    base = GuestAddressSpace::Allocate();
+    if (!base)
         return;
-
-    DWORD oldProtect;
-    VirtualProtect(base, 4096, PAGE_NOACCESS, &oldProtect);
-#else
-    base = (uint8_t*)mmap((void*)0x100000000ull, PPC_MEMORY_SIZE, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
-
-    if (base == (uint8_t*)MAP_FAILED)
-        base = (uint8_t*)mmap(NULL, PPC_MEMORY_SIZE, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
-
-    if (base == nullptr)
-        return;
-
-    mprotect(base, 4096, PROT_NONE);
-#endif
 
     // Every code address the recompiler did not emit a function for gets a
     // logging stub instead of a null pointer, so a virtual call into a missed
@@ -121,7 +103,8 @@ void PageAllocator::Init()
     virtualRegion.used.assign((virtualRegion.end - virtualRegion.begin) / PAGE_SIZE, 0);
 
     physicalRegion.begin = 0xA0000000;
-    physicalRegion.end = 0xFFF00000;
+    // Allocate each physical page once; C and E are aliases of A.
+    physicalRegion.end = 0xC0000000;
     physicalRegion.used.assign((physicalRegion.end - physicalRegion.begin) / PAGE_SIZE, 0);
 }
 

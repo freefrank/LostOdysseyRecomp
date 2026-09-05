@@ -54,6 +54,11 @@ namespace gpu
         uint32_t draws = 0, indexed = 0, autoIndex = 0, copies = 0, shaderLoads = 0;
         uint32_t prim[64] = {};
         uint32_t constantWrites = 0;
+        // Type-3 packets we have no handler for, by opcode. A pass the title issues
+        // through a packet we skip (binned draws, conditional execution...) shows up
+        // here and nowhere else.
+        uint32_t unknownOpcode[128] = {};
+        uint32_t zpdEvents = 0, zpdBegin = 0, zpdEnd = 0, zpdSentinel = 0;
     };
     static FrameStats g_frame;
     static uint64_t g_activeShader[2] = {};      // [0]=vertex [1]=pixel
@@ -656,8 +661,12 @@ namespace gpu
                     for (uint32_t i = 0; i < 64; i++)
                         if (g_frame.prim[i])
                             prims += fmt::format(" p{}={}", i, g_frame.prim[i]);
-                    LOG_INFO("frame {} stats: draws={} indexed={} auto={} copies={} shaderLoads={} constWrites={}{}",
-                        swaps, g_frame.draws, g_frame.indexed, g_frame.autoIndex, g_frame.copies, g_frame.shaderLoads, g_frame.constantWrites, prims);
+                    std::string unknown;
+                    for (uint32_t i = 0; i < 128; i++)
+                        if (g_frame.unknownOpcode[i])
+                            unknown += fmt::format(" op{:#x}={}", i, g_frame.unknownOpcode[i]);
+                    LOG_INFO("frame {} stats: draws={} indexed={} auto={} copies={} shaderLoads={} constWrites={} zpd={} (begin {} end {} sentinel {}){} unhandled:{}",
+                        swaps, g_frame.draws, g_frame.indexed, g_frame.autoIndex, g_frame.copies, g_frame.shaderLoads, g_frame.constantWrites, g_frame.zpdEvents, g_frame.zpdBegin, g_frame.zpdEnd, g_frame.zpdSentinel, prims, unknown.empty() ? " none" : unknown.c_str());
                 }
                 if (swaps == 120 || swaps == 600 || swaps == 1500 || swaps == 3000)
                     g_detailBudget = 60;
@@ -875,19 +884,65 @@ namespace gpu
             uint32_t initiator = reader.ReadAndSwap();
             WriteRegister(REG_VGT_EVENT_INITIATOR, initiator & 0x3F);
             reader.Advance(count - 1);
+            g_frame.zpdEvents++;
             uint32_t address = ReadRegister(0x2325) & 0x1FFFFFFF; // RB_SAMPLE_COUNT_ADDR
             if (address)
             {
-                static uint32_t fakeSamples = 0;
-                fakeSamples += 0x10000;
-                auto* record = reinterpret_cast<uint32_t*>(TranslatePhysical(address & ~3u));
-                record[0] = fakeSamples; record[1] = 0;   // Total
-                record[2] = 0;           record[3] = 0;   // ZFail
-                record[4] = fakeSamples; record[5] = 0;   // ZPass
-                record[6] = 0;           record[7] = 0;   // StencilFail
+                // Record layout after Xenia's XenosZPDReport: 32-byte records in
+                // 64-byte slots, END record at the slot base, BEGIN record at +0x20;
+                // D3D stamps 0xFFFFFEED into ZPass_A (or ZFail_A) of a record it is
+                // waiting for. LO_ZPD_MODE selects how the counters are faked:
+                //   grow  - every event overwrites its record with a growing count
+                //           (previous behaviour; BEGIN records get clobbered too)
+                //   xenia - Xenia's conventional fake: only records still carrying
+                //           the sentinel are written, with a count that walks down
+                //           from the upper to the lower threshold; BEGIN untouched
+                //   begin0- like xenia, but BEGIN records are zeroed as Xenia's
+                //           real-query path does, so end - begin stays positive
+                //   none  - leave the records alone (what the guest does then tells
+                //           us whether it gates rendering on them)
+                static const char* zpdMode = getenv("LO_ZPD_MODE") ? getenv("LO_ZPD_MODE") : "grow";
+                const uint32_t recordBase = address & ~0x1Fu;
+                const bool isBegin = (recordBase & 0x3F) == 0x20;
+                auto* record = reinterpret_cast<uint32_t*>(TranslatePhysical(recordBase));
+                const bool sentinel = record[4] == 0xEDFEFFFFu || record[4] == 0xFFFFFEEDu || record[2] == 0xEDFEFFFFu || record[2] == 0xFFFFFEEDu;
+                if (isBegin) g_frame.zpdBegin++; else g_frame.zpdEnd++;
+                if (sentinel) g_frame.zpdSentinel++;
                 static uint32_t logged = 0;
-                if (logged++ < 4)
-                    LOG_INFO("occlusion query record at {:#x} <- {} samples", address, fakeSamples);
+                if (logged < 24)
+                {
+                    logged++;
+                    LOG_INFO("occlusion query event #{}: addr {:#x} ({} record) before=[{:#x} {:#x} {:#x} {:#x} {:#x} {:#x} {:#x} {:#x}] sentinel={} mode={}",
+                        logged, address, isBegin ? "BEGIN" : "END", record[0], record[1], record[2], record[3], record[4], record[5], record[6], record[7], sentinel, zpdMode);
+                }
+                auto writeCount = [&](uint32_t n)
+                {
+                    record[0] = n; record[1] = 0;   // Total
+                    record[2] = 0; record[3] = 0;   // ZFail
+                    record[4] = n; record[5] = 0;   // ZPass
+                    record[6] = 0; record[7] = 0;   // StencilFail
+                };
+                if (strcmp(zpdMode, "none") == 0)
+                {
+                }
+                else if (strcmp(zpdMode, "xenia") == 0 || strcmp(zpdMode, "begin0") == 0)
+                {
+                    // Xenia's defaults: the fake count walks from 100 down to 80.
+                    static uint32_t fakeDown = 100;
+                    if (isBegin && strcmp(zpdMode, "begin0") == 0)
+                        memset(record, 0, 32);
+                    else if (sentinel)
+                    {
+                        fakeDown = fakeDown <= 80 ? 100 : fakeDown - 1;
+                        writeCount(fakeDown);
+                    }
+                }
+                else
+                {
+                    static uint32_t fakeSamples = 0;
+                    fakeSamples += 0x10000;
+                    writeCount(fakeSamples);
+                }
             }
             return true;
         }
@@ -1013,10 +1068,12 @@ namespace gpu
                 di.primitiveType = primType;
                 di.indexCount = numIndices;
                 di.indexed = sourceSelect == 0;
-                di.indexBase = dmaBase & ~3u;
                 di.indexBufferWords = dmaSize & 0xFFFFFF;
                 di.indexEndian = dmaSize >> 30;
                 di.index32 = ((initiator >> 11) & 1) != 0;
+                // VGT_DMA_BASE is aligned to the index element size. Keeping
+                // bit 1 for 16-bit indices is essential for mesh subranges.
+                di.indexBase = dmaBase & (di.index32 ? ~3u : ~1u);
                 renderer::Draw(di);
             }
 
@@ -1063,7 +1120,17 @@ namespace gpu
         }
 
         default:
-            // Remaining state packets: no renderer yet, skip.
+            // Remaining state packets: no renderer yet, skip - but count them, so a
+            // draw or predication packet we never implemented cannot vanish silently.
+            g_frame.unknownOpcode[opcode & 127]++;
+            {
+                static uint32_t logged = 0;
+                if (logged < 32 && (opcode == 0x34 || opcode == 0x35 || opcode == 0x44 || opcode == 0x23 || opcode == 0x24 || opcode == 0x25))
+                {
+                    logged++;
+                    LOG_WARNING("pm4: unhandled draw/predication opcode {:#x} (count {}) at swap #{}", opcode, count, g_swapCount.load());
+                }
+            }
             reader.Advance(count);
             return true;
         }

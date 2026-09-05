@@ -6,6 +6,8 @@
 // constants are plain register arrays, vertex inputs are decoded from vfetch
 // instructions against ByteAddressBuffers, interpolators are fixed TEXCOORDs.
 // Instruction semantics were checked against Xenia's ucode.h.
+// Piecewise gamma conversion follows Xenia's xenos.cc (Copyright 2020 Ben
+// Vanik, BSD 3-Clause); see thirdparty/xenia-LICENSE.txt.
 
 #include "xenos_translator.h"
 #include "xenos_shader_code.h"
@@ -52,6 +54,7 @@ cbuffer XeShared : register(b1, space0)
     uint4 xeTransfer;       // x = source EDRAM class, y = destination class (transfer blit)
     uint4 xeVfetchOffset[24]; // byte offset of each vertex fetch slot inside its buffer
     uint4 xeSamplerIndex[8];  // sampler palette index per texture fetch slot
+    uint4 xeTextureInfo[8];   // source signs (8 bits), then fetch swizzle (12 bits)
 };
 
 uint XeVfetchOffset(uint slot)
@@ -69,6 +72,42 @@ SamplerState XeSampler(uint slot)
 float4 XeConst(int index)
 {
     return c[clamp(index, 0, 255)];
+}
+
+// Xbox 360 piecewise gamma decode, as used by Xenia's PWLGammaToLinear.
+float XeGammaToLinear(float gamma)
+{
+    gamma = saturate(gamma);
+    float scale = gamma >= (192.0 / 255.0) ? 8.0 :
+        (gamma >= (96.0 / 255.0) ? 4.0 : (gamma >= (64.0 / 255.0) ? 2.0 : 1.0));
+    float offset = scale == 8.0 ? -1024.0 : (scale == 4.0 ? -256.0 : (scale == 2.0 ? -64.0 : 0.0));
+    float decoded = gamma * (255.0 * scale) + offset;
+    return (decoded + trunc(decoded * (scale / 1024.0))) / 1023.0;
+}
+
+float4 XeDecodeTexture(float4 value, uint info)
+{
+    if (info & (1u << 20)) value = value.bgra;
+    // Signed float formats already arrive signed from the host resource.
+    // Gamma and unsigned-bias operate on source channels, before swizzling.
+    [unroll] for (uint i = 0; i < 4; ++i)
+    {
+        uint sign = (info >> (i * 2)) & 3u;
+        if (sign == 3u) value[i] = XeGammaToLinear(value[i]);
+        else if (sign == 2u) value[i] = value[i] * 2.0 - 1.0;
+    }
+    float4 result;
+    [unroll] for (uint j = 0; j < 4; ++j)
+    {
+        uint component = (info >> (8u + j * 3u)) & 7u;
+        result[j] = component < 4u ? value[component] : (component == 5u ? 1.0 : 0.0);
+    }
+    return result;
+}
+
+float4 XeTextureResult(float4 value, uint slot)
+{
+    return XeDecodeTexture(value, xeTextureInfo[slot >> 2][slot & 3]);
 }
 
 bool XeBool(uint index)
@@ -602,6 +641,7 @@ float4 max4(float4 src0)
                 }
                 else
                 {
+                    out += "XeTextureResult(";
                     switch (instr.dimension)
                     {
                     case TextureDimension::Texture1D:
@@ -628,7 +668,7 @@ float4 max4(float4 src0)
                         out += ", cubeMapData)";
                         break;
                     }
-                    out += '.';
+                    print(", {}u).", slot);
                 }
                 printDstSwizzle(instr.dstSwizzle, true);
                 out += ";\n";
@@ -707,6 +747,8 @@ float4 max4(float4 src0)
                         if (srcIndex >= 2 && !instr.src1Select) constSlot = 1;
                         if (srcIndex >= 3 && !instr.src2Select) constSlot = 1;
                         bool relative = constSlot == 0 ? instr.const0Relative : instr.const1Relative;
+                        if (relative)
+                            result.usesRelativeConstants = true;
                         if (relative)
                             regFormatted = fmt::format("XeConst({} + {})", reg, instr.constAddressRegisterRelative ? "a0" : "aL");
                         else
@@ -809,17 +851,20 @@ float4 max4(float4 src0)
                 uint32_t vectorWriteMask = instr.vectorWriteMask;
                 if (instr.exportData)
                     vectorWriteMask &= ~instr.scalarWriteMask;
+                std::string vectorDestination;
                 if (vectorWriteMask != 0)
                 {
-                    indent();
-                    if (!exportRegister.empty())
-                        print("{}.", exportRegister);
-                    else
-                        print("r{}.", instr.vectorDest);
+                    vectorDestination = !exportRegister.empty() ? exportRegister : fmt::format("r{}", instr.vectorDest);
+                    vectorDestination += '.';
+                    std::string swizzle;
                     for (uint32_t i = 0; i < 4; i++)
                         if ((vectorWriteMask >> i) & 1)
-                            out += kSwizzles[i];
-                    out += " = ";
+                            swizzle += kSwizzles[i];
+                    vectorDestination += swizzle;
+                    // Vector and scalar ALUs read the old GPR state. Commit both
+                    // results only after computing the scalar operation (Xenia).
+                    indent();
+                    print("xePV.{} = ", swizzle);
                     if (instr.vectorSaturate)
                         out += "saturate(";
                     switch (instr.vectorOpcode)
@@ -935,6 +980,13 @@ float4 max4(float4 src0)
                     }
                 }
 
+                if (!vectorDestination.empty())
+                {
+                    indent();
+                    println("{} = xePV.{};", vectorDestination,
+                        vectorDestination.substr(vectorDestination.find('.') + 1));
+                }
+
                 uint32_t scalarWriteMask = instr.scalarWriteMask;
                 if (instr.exportData)
                     scalarWriteMask &= ~instr.vectorWriteMask;
@@ -1023,7 +1075,7 @@ float4 max4(float4 src0)
                     println("\tfloat4 r{} = 0.0;", i);
                 out += "\tfloat4 xeDiscard = 0.0;\n";
                 out += "\tfloat4 xeDbgTex = float4(0.0, 0.0, 0.0, 1.0);\n";
-                out += "\tint a0 = 0;\n\tint aL = 0;\n\tbool p0 = false;\n\tfloat ps = 0.0;\n";
+                out += "\tfloat4 xePV = 0.0;\n\tint a0 = 0;\n\tint aL = 0;\n\tbool p0 = false;\n\tfloat ps = 0.0;\n";
                 out += "\tuint xeVfetchBase = 0u;\n";
                 out += "\tCubeMapData cubeMapData = (CubeMapData)0;\n";
                 if (isPixelShader)
@@ -1067,7 +1119,11 @@ float4 max4(float4 src0)
                     // Debug aid (LO_PS_TEXDEBUG): show the last texture fetch result.
                     out += "\tif (xeFlags & 16u) oC0 = float4(xeDbgTex.rgb, 1.0);\n";
                     // Debug aid (LO_PS_DEBUG): paint every surviving fragment magenta.
-                    out += "\tif (xeFlags & 2u) oC0 = (xeFlags & 4u) ? float4(i15.w > 0.0 ? 1.0 : 0.0, saturate(log2(abs(i15.w) + 1.0) / 16.0), saturate(log2(abs(i15.z) + 1.0) / 16.0), 1.0) : float4(1.0, 0.0, 1.0, 1.0);\n";
+                    // Debug paint: flag 2 alone is flat magenta; with flag 4 (the vertex
+                    // shader replaced the position by a fixed triangle and exported the
+                    // real one in o15) the colour encodes the real vertex's NDC position:
+                    // R = x/w, G = y/w mapped from [-1,1] to [0,1], B = z/w, white if w <= 0.
+                    out += "\tif (xeFlags & 2u) oC0 = (xeFlags & 4u) ? (i15.w > 0.0 ? float4(saturate(i15.x / i15.w * 0.5 + 0.5), saturate(i15.y / i15.w * 0.5 + 0.5), saturate(i15.z / i15.w), 1.0) : float4(1.0, 1.0, 1.0, 1.0)) : float4(1.0, 0.0, 1.0, 1.0);\n";
                     if (result.writesDepth)
                         out += "\toDepth = oDepthVec.x;\n";
                 }

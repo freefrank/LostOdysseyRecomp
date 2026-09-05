@@ -37,3 +37,12 @@ tools/xenia*/
 tools/ghidra_*/
 tools/ghidra_*.zip
 LostOdysseyRecomp/kernel/imports_stubs.cpp
+
+# Local analysis indexes and Xenia runtime data
+.codegraph/
+tools/cache_host/
+tools/content/
+tools/screenshots/
+tools/recent.toml
+tools/xconfig.settings
+tools/xenia-canary.config.toml

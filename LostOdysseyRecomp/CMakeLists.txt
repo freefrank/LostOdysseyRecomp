@@ -52,7 +52,7 @@ if(LO_BUILD_GPU)
 endif()
 
 if(WIN32)
-    target_link_libraries(LostOdysseyRecomp PRIVATE winmm)
+    target_link_libraries(LostOdysseyRecomp PRIVATE winmm onecore)
 endif()
 
 # Offline shader translator check (shares gpu/shader with the runtime).
@@ -64,3 +64,30 @@ target_include_directories(LoShaderTool PRIVATE ${LO_RUNTIME_ROOT})
 target_compile_features(LoShaderTool PRIVATE cxx_std_20)
 target_compile_definitions(LoShaderTool PRIVATE NOMINMAX)
 target_link_libraries(LoShaderTool PRIVATE fmt::fmt)
+
+# Tests the exact address mappings used by the runtime, without game assets.
+add_executable(LoMemoryAliasTest
+    ${CMAKE_SOURCE_DIR}/tools/tests/memory_alias_test.cpp
+    ${LO_RUNTIME_ROOT}/kernel/guest_address_space.cpp)
+target_include_directories(LoMemoryAliasTest PRIVATE ${LO_RUNTIME_ROOT})
+target_compile_features(LoMemoryAliasTest PRIVATE cxx_std_20)
+if(WIN32)
+    target_link_libraries(LoMemoryAliasTest PRIVATE onecore)
+    add_executable(LoShaderAluTest
+        ${CMAKE_SOURCE_DIR}/tools/tests/shader_alu_test.cpp
+        ${LO_RUNTIME_ROOT}/gpu/shader/xenos_translator.cpp
+        ${LO_RUNTIME_ROOT}/gpu/shader/dxc_compiler.cpp)
+    target_include_directories(LoShaderAluTest PRIVATE ${LO_RUNTIME_ROOT})
+    target_compile_features(LoShaderAluTest PRIVATE cxx_std_20)
+    target_compile_definitions(LoShaderAluTest PRIVATE NOMINMAX)
+    target_link_libraries(LoShaderAluTest PRIVATE fmt::fmt d3d12 dxgi)
+    if(LO_BUILD_GPU)
+        add_executable(LoStencilTest
+            ${CMAKE_SOURCE_DIR}/tools/tests/stencil_test.cpp
+            ${LO_RUNTIME_ROOT}/gpu/shader/dxc_compiler.cpp)
+        target_include_directories(LoStencilTest PRIVATE ${LO_RUNTIME_ROOT} ${CMAKE_SOURCE_DIR}/thirdparty/plume)
+        target_compile_features(LoStencilTest PRIVATE cxx_std_20)
+        target_compile_definitions(LoStencilTest PRIVATE NOMINMAX)
+        target_link_libraries(LoStencilTest PRIVATE plume d3d12 dxgi)
+    endif()
+endif()

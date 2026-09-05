@@ -38,4 +38,18 @@ docs/                     路线图、逆向笔记、决策记录
 
 ## 构建
 
-尚未可构建。见 [docs/ROADMAP.md](docs/ROADMAP.md)。
+Windows 运行时已可用 clang-cl 构建；需要本地已提取的游戏数据、重编译产物及子模块。
+在仓库根目录用 PowerShell 执行：
+
+```powershell
+.\tools\build_runtime.bat
+.\out\build\windows-clang\LostOdysseyRecomp\LostOdysseyRecomp.exe --game .\LostOdysseyRecompLib\private\disc1 --quiet-kernel
+```
+
+构建脚本使用本机 Visual Studio 2022 Build Tools 和 LLVM；具体路径见脚本。
+目前可进入标题、菜单和开场战斗；已修复角色黑色剪影、网格破面、后期轮廓偏移及纹理 gamma 缺失，并恢复开场战斗的金属高光。更多场景及阴影细节仍需验证。
+音频为静音占位、WMV 影片未解码。Windows 运行时需要 Windows 10 1803 或更新版本。
+阶段状态见 [docs/ROADMAP.md](docs/ROADMAP.md)，接手入口见 [docs/notes/handoff.md](docs/notes/handoff.md)。
+
+首次检出需应用 [依赖补丁](tools/patches/README.md)。渲染回归测试、实机复现条件及验证范围见
+[渲染验证说明](docs/notes/rendering-validation.md)。Linux 目前只验证了物理地址别名测试，尚未验证完整游戏运行。

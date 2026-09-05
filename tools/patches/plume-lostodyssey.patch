@@ -1,10 +1,8 @@
 diff --git a/plume_d3d12.cpp b/plume_d3d12.cpp
-index 2cdcf18..15fd3b8 100644
+index 2cdcf18..24219ad 100644
 --- a/plume_d3d12.cpp
 +++ b/plume_d3d12.cpp
-@@ -2312,9 +2312,14 @@ namespace plume {
- 
-         const D3D12_TEXTURE_COPY_LOCATION copyDstLocation = toD3D12(dstLocation);
+@@ -2314,5 +2314,10 @@ namespace plume {
          const D3D12_TEXTURE_COPY_LOCATION copySrcLocation = toD3D12(srcLocation);
 -        setSamplePositions(dstLocation.texture);
 +        // LostOdysseyRecomp: the destination may be a buffer (texture readback).
@@ -17,5 +15,7 @@ index 2cdcf18..15fd3b8 100644
 +            resetSamplePositions();
 +        }
      }
- 
-     void D3D12CommandList::copyBuffer(const RenderBuffer *dstBuffer, const RenderBuffer *srcBuffer) {
+@@ -3077,2 +3082,3 @@ namespace plume {
+     D3D12GraphicsPipeline::D3D12GraphicsPipeline(D3D12Device *device, const RenderGraphicsPipelineDesc &desc) : D3D12Pipeline(device, Type::Graphics) {
++        stencilRef = desc.stencilReference;
+         assert(desc.pipelineLayout != nullptr);

@@ -2,6 +2,7 @@
 #include "renderer.h"
 #include "video.h"
 #include "command_processor.h"
+#include "depth_format.h"
 #include "shader/xenos_translator.h"
 #include "shader/dxc_compiler.h"
 #include <kernel/memory.h>
@@ -16,6 +17,7 @@
 #include <cmath>
 #include <fstream>
 #include <set>
+#include <tuple>
 #include <map>
 #include <memory>
 #include <unordered_map>
@@ -40,6 +42,8 @@ namespace gpu::renderer
         constexpr uint32_t REG_VGT_INDX_OFFSET = 0x2102;
         constexpr uint32_t REG_RB_COLOR_MASK = 0x2104;
         constexpr uint32_t REG_RB_ALPHA_REF = 0x210E;
+        constexpr uint32_t REG_RB_STENCILREFMASK_BF = 0x210C;
+        constexpr uint32_t REG_RB_STENCILREFMASK = 0x210D;
         constexpr uint32_t REG_PA_CL_VPORT_XSCALE = 0x210F;
         constexpr uint32_t REG_RB_DEPTHCONTROL = 0x2200;
         constexpr uint32_t REG_RB_BLENDCONTROL0 = 0x2201;
@@ -177,6 +181,7 @@ namespace gpu::renderer
         {
             uint64_t vs, ps;
             uint32_t blend, depthControl, modeCull, colorMask, prim, rtFormat, depthFormat, flags;
+            uint32_t stencilRefMask, stencilRefMaskBack;
             bool operator==(const PipelineKey& o) const { return memcmp(this, &o, sizeof(o)) == 0; }
         };
         struct PipelineKeyHash { size_t operator()(const PipelineKey& k) const { return size_t(Fnv1a(&k, sizeof(k))); } };
@@ -232,7 +237,9 @@ namespace gpu::renderer
             struct ResolvedSurface
             {
                 std::unique_ptr<HostTexture> tex;
+                std::unordered_map<uint64_t, std::unique_ptr<HostTexture>> fetchViews;
                 uint32_t destFormat = 0, destPitch = 0;
+                bool swapRedBlue = false;
                 uint64_t frame = 0;
             };
             // Keyed by destination address, one entry per destination format: the
@@ -317,9 +324,20 @@ namespace gpu::renderer
             // warning, because every one of these paths returns silently.
             struct DropStats
             {
-                uint32_t mode, modeMask, shader, pitch, pipeline, upload, index, scissor, primMask;
-                bool Any() const { return mode || shader || pitch || pipeline || upload || index || scissor; }
+                uint32_t mode, modeMask, shader, pitch, pipeline, upload, index, scissor, primMask, vfetchSkips;
+                bool Any() const { return mode || shader || pitch || pipeline || upload || index || scissor || vfetchSkips; }
             } drops{};
+
+            // Legacy mode census for relative-constant VS candidates. Mode 4
+            // can still have a zero colour mask; sceneDraws only counts the
+            // full-width 7e3 heuristic, not every visible material pass.
+            struct SkinStats { uint32_t depthDraws, colorDraws, colorIndices, sceneDraws, sceneIndices; } skin{};
+            // Relative addressing is a candidate marker, not proof of skinning.
+            // Keep the actual target and output state so shadow/mask passes do
+            // not get mistaken for the character's visible material pass.
+            using RelativeDrawKey = std::tuple<uint32_t, uint32_t, uint32_t, uint32_t, uint64_t, uint64_t, uint32_t, uint32_t>;
+            struct RelativeDrawStats { uint32_t draws = 0, indices = 0; };
+            std::map<RelativeDrawKey, RelativeDrawStats> relativeDraws;
             uint32_t frame = 0;
             std::set<uint32_t> loggedFormats;
 
@@ -337,6 +355,7 @@ namespace gpu::renderer
                 uint32_t transfer[4];
                 uint32_t vfetchOffset[96];
                 uint32_t samplerIndex[32];
+                uint32_t textureInfo[32];
             };
 
             // ---- lifecycle -----------------------------------------------------
@@ -821,7 +840,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 {
                     // The cache name carries a translator version so changes to the
                     // generated HLSL don't resurrect stale DXIL.
-                    cachePath = fmt::format("{}/{}_{:016x}_v15.dxil", shaderCacheDir, pixel ? "ps" : "vs", hash);
+                    cachePath = fmt::format("{}/{}_{:016x}_v19.dxil", shaderCacheDir, pixel ? "ps" : "vs", hash);
                     std::ifstream in(cachePath, std::ios::binary);
                     if (in)
                         dxil.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
@@ -878,6 +897,59 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 kClass32F = 5,
                 kClass32F2 = 6,
             };
+
+            // 20e4 depth (D24FS8, [0, 2)) and 7e3 colour (k_2_10_10_10_FLOAT) packing,
+            // after xenia/gpu/xenos.cc Float32To20e4 / Float7e3To32.
+            static uint32_t Float32To20e4(float f32)
+            {
+                if (!(f32 > 0.0f))
+                    return 0;
+                uint32_t u; memcpy(&u, &f32, 4);
+                if (u >= 0x3FFFFFF8u)
+                    return 0xFFFFFF;
+                if (u < 0x38800000u)
+                {
+                    uint32_t shift = std::min<uint32_t>(113u - (u >> 23), 24u);
+                    u = (0x800000u | (u & 0x7FFFFFu)) >> shift;
+                }
+                else
+                    u += 0xC8000000u;
+                return (u >> 3) & 0xFFFFFF;
+            }
+
+            static float Float7e3To32(uint32_t f10)
+            {
+                f10 &= 0x3FF;
+                if (!f10)
+                    return 0.0f;
+                uint32_t mantissa = f10 & 0x7F, exponent = f10 >> 7;
+                if (!exponent)
+                {
+                    uint32_t lz = 0;
+                    while (!((mantissa << lz) & 0x80)) lz++;
+                    exponent = uint32_t(1 - int32_t(lz));
+                    mantissa = (mantissa << lz) & 0x7F;
+                }
+                uint32_t u = ((exponent + 124u) << 23) | (mantissa << 16);
+                float f; memcpy(&f, &u, 4);
+                return f;
+            }
+
+            // What a colour view of the given class reads from a 32-bit EDRAM word.
+            static RenderColor UnpackGuestWord(uint32_t word, uint32_t colorClass)
+            {
+                switch (colorClass)
+                {
+                case kClass8888:
+                    return RenderColor(float(word & 0xFF) / 255.0f, float((word >> 8) & 0xFF) / 255.0f, float((word >> 16) & 0xFF) / 255.0f, float(word >> 24) / 255.0f);
+                case kClass2101010:
+                    return RenderColor(float(word & 0x3FF) / 1023.0f, float((word >> 10) & 0x3FF) / 1023.0f, float((word >> 20) & 0x3FF) / 1023.0f, float(word >> 30) / 3.0f);
+                case kClass7e3:
+                    return RenderColor(Float7e3To32(word), Float7e3To32(word >> 10), Float7e3To32(word >> 20), float(word >> 30) / 3.0f);
+                default:
+                    return RenderColor(0.0f, 0.0f, 0.0f, 0.0f);   // 16_16 / 32-bit float classes: only the zero word is exact
+                }
+            }
 
             static uint32_t ColorClassOf(uint32_t xenosFormat)
             {
@@ -979,13 +1051,13 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             {
                 const uint32_t colorClass = ColorClassOf(format);
                 HostTexture* target = GetRenderTarget(base, format, pitch, height, false);
-                // Off by default until the conversion is verified against Xenia (with it
-                // on, the composite comes out noisy). LO_EDRAM_TRANSFER=read converts
-                // before resolves only, =draw before draws as well.
-                static const char* transferMode = getenv("LO_EDRAM_TRANSFER");
-                const bool doTransfer = transferMode &&
-                    ((forRead && (strcmp(transferMode, "read") == 0 || strcmp(transferMode, "draw") == 0 || strcmp(transferMode, "1") == 0)) ||
-                     strcmp(transferMode, "draw") == 0);
+                // Default: convert before resolves. Together with the depth-fill colour
+                // wipe this reproduces the title's post chain (scene as 7e3, distortion
+                // written as 2_10_10_10, resolved again as 7e3). LO_EDRAM_TRANSFER=draw
+                // also converts before draws, =0 disables the conversion.
+                static const char* transferMode = getenv("LO_EDRAM_TRANSFER") ? getenv("LO_EDRAM_TRANSFER") : "read";
+                const bool doTransfer = strcmp(transferMode, "0") != 0 && strcmp(transferMode, "none") != 0 &&
+                    (forRead || strcmp(transferMode, "draw") == 0);
                 auto owner = tileOwner.find({ base, pitch });
                 if (doTransfer && owner != tileOwner.end() && owner->second != colorClass)
                 {
@@ -1082,6 +1154,33 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     return &dummyTexture2D;
                 if (ResolvedSurface* rs = FindResolved(base, format))
                 {
+                    // Resolve pitch describes memory storage, whereas normalized
+                    // sampling and GetDimensions use the fetch's logical size.
+                    // For example, the 428-wide blur texture has a 448-pixel pitch.
+                    // Sampling the padded resource shifts every subsequent blur pass.
+                    if (dimension == 1 && width <= rs->tex->width && height <= rs->tex->height &&
+                        (width != rs->tex->width || height != rs->tex->height))
+                    {
+                        const uint64_t viewKey = (uint64_t(width) << 32) | height;
+                        auto& view = rs->fetchViews[viewKey];
+                        if (!view || view->format != rs->tex->format)
+                        {
+                            if (view) retiredTextures.push_back(std::move(view));
+                            view = std::make_unique<HostTexture>();
+                            view->format = rs->tex->format;
+                            view->width = width;
+                            view->height = height;
+                            view->texture = device->createTexture(RenderTextureDesc::Texture2D(width, height, 1, view->format));
+                        }
+                        if (!view->texture) return nullptr;
+                        Transition(*rs->tex, RenderTextureLayout::COPY_SOURCE, RenderBarrierStage::COPY);
+                        Transition(*view, RenderTextureLayout::COPY_DEST, RenderBarrierStage::COPY);
+                        RenderBox box{ 0, 0, int32_t(width), int32_t(height), 0, 1 };
+                        commandList->copyTextureRegion(RenderTextureCopyLocation::Subresource(view->texture.get()),
+                            RenderTextureCopyLocation::Subresource(rs->tex->texture.get()), 0, 0, 0, &box);
+                        Transition(*view, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
+                        return view.get();
+                    }
                     Transition(*rs->tex, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
                     return rs->tex.get();
                 }
@@ -1310,6 +1409,31 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     desc.depthFunction = RenderComparisonFunction::ALWAYS;
                 desc.depthClipEnabled = true;
                 desc.depthTargetFormat = depthFormat;
+                desc.stencilEnabled = (depthControl & 1) != 0 && depthFormat != RenderFormat::UNKNOWN;
+                if (desc.stencilEnabled)
+                {
+                    if (getenv("LO_STENCIL_TRACE"))
+                        LOG_INFO("renderer: stencil pipeline vs={:016x} ps={:016x} ctl={:#x} refs={:#x}/{:#x} mask={:#x}", key.vs, key.ps, depthControl, key.stencilRefMask, key.stencilRefMaskBack, key.colorMask);
+                    static constexpr RenderStencilOp ops[] = {
+                        RenderStencilOp::KEEP, RenderStencilOp::ZERO, RenderStencilOp::REPLACE,
+                        RenderStencilOp::INCREMENT_AND_CLAMP, RenderStencilOp::DECREMENT_AND_CLAMP,
+                        RenderStencilOp::INVERT, RenderStencilOp::INCREMENT_AND_WRAP, RenderStencilOp::DECREMENT_AND_WRAP };
+                    auto face = [&](uint32_t control) {
+                        RenderStencilFaceDesc f;
+                        f.compareFunction = Compare(control & 7);
+                        f.failOp = ops[(control >> 3) & 7];
+                        f.passOp = ops[(control >> 6) & 7];
+                        f.depthFailOp = ops[(control >> 9) & 7];
+                        return f;
+                    };
+                    desc.stencilReference = key.stencilRefMask & 0xFF;
+                    desc.stencilReadMask = (key.stencilRefMask >> 8) & 0xFF;
+                    desc.stencilWriteMask = (key.stencilRefMask >> 16) & 0xFF;
+                    desc.stencilFrontFace = face(depthControl >> 8);
+                    desc.stencilBackFace = (depthControl & 0x80) ? face(depthControl >> 20) : desc.stencilFrontFace;
+                    if ((depthControl & 0x80) && key.stencilRefMask != key.stencilRefMaskBack)
+                        LOG_WARNING("renderer: distinct front/back stencil masks {:#x}/{:#x}", key.stencilRefMask, key.stencilRefMaskBack);
+                }
 
                 uint32_t blend = key.blend;
                 RenderBlendDesc& rt = desc.renderTargetBlend[0];
@@ -1527,7 +1651,18 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 key.vs = Fnv1a(vsWords, vsCount * 4);
                 key.ps = ps ? Fnv1a(psWords, psCount * 4) : 0;
                 key.blend = Reg(REG_RB_BLENDCONTROL0);
-                key.depthControl = depthControl & 0x7F;
+                key.depthControl = depthControl;
+                key.stencilRefMask = Reg(REG_RB_STENCILREFMASK) & 0xFFFFFF;
+                key.stencilRefMaskBack = Reg(REG_RB_STENCILREFMASK_BF) & 0xFFFFFF;
+                // LO_DEBUG_NODEPTH=1 (+ LO_DEBUG_VS=<hash>): depth test ALWAYS for the
+                // selected draws only, to tell "rejected by the depth test" from
+                // "never rasterised" without disturbing the rest of the frame.
+                {
+                    static const bool debugNoDepth = getenv("LO_DEBUG_NODEPTH") != nullptr;
+                    static const uint64_t debugVsForDepth = getenv("LO_DEBUG_VS") ? strtoull(getenv("LO_DEBUG_VS"), nullptr, 16) : 0;
+                    if (debugNoDepth && (!debugVsForDepth || key.vs == debugVsForDepth))
+                        key.depthControl = (key.depthControl & ~0x70u) | (7u << 4);
+                }
                 key.modeCull = Reg(REG_PA_SU_SC_MODE_CNTL) & 7;
                 key.colorMask = colorWrites ? (Reg(REG_RB_COLOR_MASK) & 0xF) : 0;
                 key.prim = info.primitiveType;
@@ -1649,22 +1784,44 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     set3 = AcquireSet(3);
                 }
                 auto tVertex0 = std::chrono::steady_clock::now();
+                static const uint32_t vfTraceFrame = getenv("LO_DRAW_TRACE") ? strtoul(getenv("LO_DRAW_TRACE"), nullptr, 10) : 0;
+                static const uint32_t vfTraceCount = getenv("LO_DRAW_TRACE_COUNT") ? strtoul(getenv("LO_DRAW_TRACE_COUNT"), nullptr, 10) : 1;
+                const bool vfTrace = vfTraceFrame && frame >= vfTraceFrame && frame < vfTraceFrame + vfTraceCount;
+                std::string vfTraceLine;
                 for (uint32_t slot = 0; slot < kVertexFetchSlots; slot++)
                 {
                     if (!((vs->info.vertexFetchSlotMask[slot >> 6] >> (slot & 63)) & 1))
                         continue;
                     uint32_t d0 = Reg(REG_FETCH_CONSTANTS + slot * 2);
                     uint32_t d1 = Reg(REG_FETCH_CONSTANTS + slot * 2 + 1);
-                    if ((d0 & 3) != 3)
-                        continue;
+                    // A slot the shader reads but we cannot bind is a silent failure: the
+                    // shader then fetches from arena offset 0, i.e. some other draw's data.
+                    const char* skip = nullptr;
                     uint32_t address = d0 & ~3u;
                     uint32_t sizeDwords = (d1 >> 2) & 0xFFFFFF;
-                    if (sizeDwords == 0 || sizeDwords > (16u << 20))
+                    uint64_t offset = UINT64_MAX;
+                    if ((d0 & 3) != 3) skip = "not a vertex fetch constant";
+                    else if (sizeDwords == 0 || sizeDwords > (16u << 20)) skip = "bad size";
+                    else if ((offset = GetVertexBuffer(address, sizeDwords, d1 & 3)) == UINT64_MAX) skip = "upload failed";
+                    if (skip)
+                    {
+                        drops.vfetchSkips++;
+                        if (vfTrace)
+                            vfTraceLine += fmt::format(" vf{}=SKIP({} d0={:#x} d1={:#x})", slot, skip, d0, d1);
                         continue;
-                    uint64_t offset = GetVertexBuffer(address, sizeDwords, d1 & 3);
-                    if (offset == UINT64_MAX)
-                        continue;
+                    }
                     shared.vfetchOffset[slot] = uint32_t(offset);
+                    if (vfTrace)
+                        vfTraceLine += fmt::format(" vf{}=arena+{:#x}({:#x},{}dw,e{})", slot, offset, address, sizeDwords, d1 & 3);
+                }
+                if (vfTrace)
+                {
+                    // Raw words of the constants the position math reads, so two draws can
+                    // be compared bit for bit rather than to the six digits of {:g}.
+                    std::string raw;
+                    for (uint32_t ci = 0; ci <= 10; ci++)
+                        raw += fmt::format(" c{}={:08x},{:08x},{:08x},{:08x}", ci, Reg(REG_ALU_CONSTANTS + ci * 4), Reg(REG_ALU_CONSTANTS + ci * 4 + 1), Reg(REG_ALU_CONSTANTS + ci * 4 + 2), Reg(REG_ALU_CONSTANTS + ci * 4 + 3));
+                    LOG_INFO("renderer: draw vfetch{} | indxOffset={} raw{}", vfTraceLine, int32_t(Reg(REG_VGT_INDX_OFFSET)), raw);
                 }
 
                 tVertex += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - tVertex0).count();
@@ -1692,10 +1849,17 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             // the texture some earlier draw left there.
                             set->setTexture(slot, dummy->texture.get(), RenderTextureLayout::SHADER_READ);
                             shared.samplerIndex[slot] = 0;
+                            shared.textureInfo[slot] = 0x68800u;
                             dummyBindings++;
                             continue;
                         }
                         uint32_t d3 = fetch[3];
+                        shared.textureInfo[slot] = ((fetch[0] >> 2) & 0xFF) | (((d3 >> 1) & 0xFFF) << 8);
+                        // GPU resolves retain canonical RGBA for presentation.
+                        // Recreate COPY_DEST_SWAP at the guest texture-read boundary,
+                        // before applying that fetch's source signs and swizzle.
+                        if (ResolvedSurface* rs = FindResolved((fetch[1] >> 12) << 12, fetch[1] & 0x3F))
+                            if (rs->swapRedBlue) shared.textureInfo[slot] |= 1u << 20;
                         uint64_t samplerKey = ((d3 >> 19) & 3) | (((d3 >> 21) & 3) << 2) | (((d3 >> 23) & 3) << 4)
                             | (((fetch[0] >> 10) & 7) << 6) | (((fetch[0] >> 13) & 7) << 9) | (((fetch[0] >> 16) & 7) << 12);
                         shared.samplerIndex[slot] = GetSamplerIndex(samplerKey);
@@ -1778,6 +1942,44 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
 
                 tIndex += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - tIndex0).count();
+
+                // Offline vertex replay: capture one frame of relative-addressed
+                // draws with their constants, indices and current guest streams.
+                // Stream files are swapped CPU snapshots, not upload-heap reads.
+                if (const char* captureDir = getenv("LO_GEOMETRY_CAPTURE_DIR"))
+                {
+                    static const uint32_t captureFrame = getenv("LO_GEOMETRY_CAPTURE_FRAME")
+                        ? strtoul(getenv("LO_GEOMETRY_CAPTURE_FRAME"), nullptr, 10) : 2400;
+                    static uint32_t captureDraw = 0;
+                    if (frame == captureFrame && vs->info.usesRelativeConstants)
+                    {
+                        std::filesystem::create_directories(captureDir);
+                        const std::string prefix = fmt::format("{}/{:04}", captureDir, captureDraw++);
+                        auto save = [](const std::string& path, const void* data, size_t size)
+                        {
+                            std::ofstream(path, std::ios::binary).write(static_cast<const char*>(data), size);
+                        };
+                        save(prefix + ".constants.bin", vsConstants, sizeof(vsConstants));
+                        save(prefix + ".shared.bin", &shared, sizeof(shared));
+                        save(prefix + ".indices.bin", indices.data(), indices.size() * sizeof(uint32_t));
+                        std::ofstream meta(prefix + ".txt");
+                        meta << fmt::format("vs={:016x}\nps={:016x}\nmode={}\ncount={}\nbase_vertex={}\nindexed={}\nviewport={} {} {} {}\n",
+                            key.vs, key.ps, modeControl, indexCount, int32_t(Reg(REG_VGT_INDX_OFFSET)), useIndices,
+                            viewport.x, viewport.y, viewport.width, viewport.height);
+                        for (uint32_t slot = 0; slot < kVertexFetchSlots; ++slot)
+                        {
+                            if (!((vs->info.vertexFetchSlotMask[slot >> 6] >> (slot & 63)) & 1)) continue;
+                            uint32_t d0 = Reg(REG_FETCH_CONSTANTS + slot * 2), d1 = Reg(REG_FETCH_CONSTANTS + slot * 2 + 1);
+                            uint32_t words = (d1 >> 2) & 0xFFFFFF;
+                            std::vector<uint32_t> stream(words);
+                            CopySwapped(stream.data(), Phys(d0 & ~3u), words, d1 & 3);
+                            const std::string name = fmt::format("vb_{:016x}.bin", Fnv1a(stream.data(), stream.size() * 4));
+                            const std::string path = std::string(captureDir) + "/" + name;
+                            if (!std::filesystem::exists(path)) save(path, stream.data(), stream.size() * 4);
+                            meta << fmt::format("fetch{}={} address={:#x} words={} endian={}\n", slot, name, d0 & ~3u, words, d1 & 3);
+                        }
+                    }
+                }
 
                 // Record.
                 ScopedTimer recordTimer{ tRecord };
@@ -1872,7 +2074,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             if ((f0 & 3) != 2) { texs += fmt::format(" t{}=[none]", slot); continue; }
                             uint32_t base = (f1 >> 12) << 12;
                             bool fromResolve = FindResolved(base, f1 & 0x3F) != nullptr;
-                            texs += fmt::format(" t{}=[fmt {} {}x{} at {:#x}{}]", slot, f1 & 0x3F, (f2 & 0x1FFF) + 1, ((f2 >> 13) & 0x1FFF) + 1, base, fromResolve ? " resolved" : "");
+                            texs += fmt::format(" t{}=[fmt {} {}x{} at {:#x}{} sign={:#x} swizzle={:#x}]", slot, f1 & 0x3F, (f2 & 0x1FFF) + 1, ((f2 >> 13) & 0x1FFF) + 1, base, fromResolve ? " resolved" : "", (f0 >> 2) & 0xFF, (Reg(REG_FETCH_CONSTANTS + slot * 6 + 3) >> 1) & 0xFFF);
                         }
                     }
                     LOG_INFO("renderer: draw textures{}", texs);
@@ -1880,9 +2082,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (drawLogs < 24 || (traceFrame && frame >= traceFrame && frame < traceFrame + traceCount))
                 {
                     drawLogs++;
-                    LOG_INFO("renderer: draw f{} prim={} n={} idx={} vs={:016x} ps={:016x} rt={:#x}/{} {}x{} depth={:#x} dinfo={:#x} blend={:#x} mask={:#x} cull={:#x} colorctl={:#x} aref={:g} vp=({},{} {}x{} z {}..{}) vte={:#x} scissor=({},{})-({},{}) ndc=({},{}) off=({},{}) mode={} c255=({:g},{:g},{:g},{:g})",
+                    LOG_INFO("renderer: draw f{} prim={} n={} idx={} vs={:016x} ps={:016x} rt={:#x}/{} {}x{} depth={:#x} dinfo={:#x} blend={:#x} mask={:#x} cull={:#x} colorctl={:#x} aref={:g} ring(vs={:#x} ps={:#x} sh={:#x}) vp=({},{} {}x{} z {}..{}) vte={:#x} scissor=({},{})-({},{}) ndc=({},{}) off=({},{}) mode={} c255=({:g},{:g},{:g},{:g})",
                         frame, info.primitiveType, indexCount, useIndices, key.vs, key.ps, colorInfo & 0xFFF, (colorInfo >> 16) & 0xF, pitch, rtHeight, depthControl, depthInfo,
-                        key.blend, key.colorMask, key.modeCull, Reg(REG_RB_COLORCONTROL), RegF(REG_RB_ALPHA_REF),
+                        key.blend, key.colorMask, key.modeCull, Reg(REG_RB_COLORCONTROL), RegF(REG_RB_ALPHA_REF), vsOffset, psOffset, sharedOffset,
                         viewport.x, viewport.y, viewport.width, viewport.height, viewport.minDepth, viewport.maxDepth, vte,
                         scissor.left, scissor.top, scissor.right, scissor.bottom, shared.ndcScale[0], shared.ndcScale[1], shared.ndcOffset[0], shared.ndcOffset[1], modeControl,
                         RegF(REG_ALU_CONSTANTS + 255 * 4), RegF(REG_ALU_CONSTANTS + 255 * 4 + 1), RegF(REG_ALU_CONSTANTS + 255 * 4 + 2), RegF(REG_ALU_CONSTANTS + 255 * 4 + 3));
@@ -1901,6 +2103,30 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     commandList->drawInstanced(indexCount, 1, uint32_t(baseVertex), 0);
                 }
                 drawsThisFrame++;
+                if (vs->info.usesRelativeConstants)
+                {
+                    static const bool traceRelative = getenv("LO_RELATIVE_DRAW_STATS") != nullptr;
+                    if (traceRelative)
+                    {
+                        auto& group = relativeDraws[{modeControl, colorInfo, pitch, rtHeight,
+                            key.vs, key.ps, key.colorMask, ps ? ps->info.colorTargetsWritten : 0}];
+                        group.draws++;
+                        group.indices += indexCount;
+                    }
+                    if (modeControl == 4)
+                    {
+                        skin.colorDraws++;
+                        skin.colorIndices += indexCount;
+                        // The scene target: full-width HDR colour, i.e. what the
+                        // player actually sees, as opposed to shadow and mask passes.
+                        if (pitch >= 1280 && ColorClassOf((colorInfo >> 16) & 0xF) == kClass7e3)
+                        {
+                            skin.sceneDraws++;
+                            skin.sceneIndices += indexCount;
+                        }
+                    }
+                    else skin.depthDraws++;
+                }
 
                 // Xbox 360 D3D clears a surface by drawing a screen-space rectangle
                 // with ALWAYS depth/colour writes, usually through a different surface
@@ -1941,6 +2167,36 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     // NDC bounds of the rectangle as the shader sees it.
                     const float nx0 = minX * shared.ndcScale[0] + shared.ndcOffset[0], nx1 = maxX * shared.ndcScale[0] + shared.ndcOffset[0];
                     const float ny0 = maxY * shared.ndcScale[1] + shared.ndcOffset[1], ny1 = minY * shared.ndcScale[1] + shared.ndcOffset[1]; // ny0 bottom, ny1 top
+
+                    // The 360's D3D Clear() of a colour surface is this depth-only fill
+                    // (mode 5, zfunc ALWAYS, z write) issued with RB_DEPTH_INFO.base set
+                    // to the COLOUR surface's tiles: EDRAM is one memory, so the depth
+                    // word it stores is what a colour view of the same tiles reads back
+                    // (Xenia reproduces it as a depth->colour ownership transfer). Wipe
+                    // every colour view of those tiles to the unpacked word; without
+                    // this the scene, the distortion map and the luminance target kept
+                    // the previous frame's image.
+                    if (depthClearDraw && !colorWrites && minX <= 0.0f && minY <= 0.0f)
+                    {
+                        const bool depthFloat = ((depthInfo >> 16) & 1) != 0;
+                        const uint32_t depth24 = depthFloat ? Float32To20e4(rectZ) : PackDepth24Unorm(rectZ);
+                        const uint32_t word = (depth24 << 8) | (Reg(REG_RB_STENCILREFMASK) & 0xFF);
+                        static uint32_t loggedFills = 0;
+                        for (auto& [k, tex] : renderTargets)
+                        {
+                            if (!tex || k.depth || k.base != (depthInfo & 0xFFF))
+                                continue;
+                            RenderColor value = UnpackGuestWord(word, k.format);
+                            Transition(*tex, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
+                            commandList->setFramebuffer(GetFramebuffer(tex.get(), nullptr));
+                            commandList->clearColor(0, value);
+                            if (loggedFills++ < 12)
+                                LOG_INFO("renderer: depth fill (base={:#x} pitch={} msaa={} rect {}x{} z={} word={:#x}) wiped colour view class {} pitch {} to ({:g},{:g},{:g},{:g})",
+                                    depthInfo & 0xFFF, pitch, (surfaceInfo >> 16) & 3, maxX, maxY, rectZ, word, k.format, k.pitch, value.r, value.g, value.b, value.a);
+                        }
+                        // Re-bind the fill's own framebuffer for the draw that follows.
+                        commandList->setFramebuffer(GetFramebuffer(color, depth));
+                    }
 
                     std::vector<RenderTargetKey> others;
                     for (auto& [k, tex] : renderTargets)
@@ -2164,6 +2420,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
                 rs.destFormat = destFormat;
                 rs.destPitch = destPitch;
+                rs.swapRedBlue = false;
                 rs.frame = frame;
                 w = std::min(w, texW - x0);
                 h = std::min(h, texH - y0);
@@ -2213,6 +2470,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 rs.destFormat = destFormat;
                 rs.destPitch = destPitch;
                 rs.frame = frame;
+                rs.swapRedBlue = ((Reg(REG_RB_COPY_DEST_INFO) >> 24) & 1) != 0;
                 w = std::min(w, texW - x0);
                 h = std::min(h, texH - y0);
                 if (w == 0 || h == 0)
@@ -2496,9 +2754,24 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (stats && r.dummyBindings)
                     LOG_INFO("renderer frame {}: {} texture slots fell back to the dummy", r.frame, r.dummyBindings);
                 r.dummyBindings = 0;
+                if (stats && (r.skin.depthDraws || r.skin.colorDraws))
+                    LOG_INFO("renderer frame {}: relative-constant draws - mode5 {} mode4 {} ({} indices), full-width 7e3 {} ({} indices)",
+                        r.frame, r.skin.depthDraws, r.skin.colorDraws, r.skin.colorIndices, r.skin.sceneDraws, r.skin.sceneIndices);
+                r.skin = {};
+                if (r.frame % 60 == 0)
+                {
+                    for (const auto& [key, count] : r.relativeDraws)
+                    {
+                        const auto& [mode, colorInfo, pitch, height, vs, ps, mask, outputs] = key;
+                        LOG_INFO("renderer frame {}: relative draws mode={} rt={:#x}/{} {}x{} vs={:016x} ps={:016x} mask={:#x} outputs={:#x} draws={} indices={}",
+                            r.frame, mode, colorInfo & 0xFFF, (colorInfo >> 16) & 0xF, pitch, height,
+                            vs, ps, mask, outputs, count.draws, count.indices);
+                    }
+                }
+                r.relativeDraws.clear();
                 if (stats && r.drops.Any())
-                    LOG_INFO("renderer frame {}: dropped draws - mode {} (modes {:#x}) shader {} pitch {} pipeline {} upload {} index {} scissor {} (prims {:#x})",
-                        r.frame, r.drops.mode, r.drops.modeMask, r.drops.shader, r.drops.pitch, r.drops.pipeline, r.drops.upload, r.drops.index, r.drops.scissor, r.drops.primMask);
+                    LOG_INFO("renderer frame {}: dropped draws - mode {} (modes {:#x}) shader {} pitch {} pipeline {} upload {} index {} scissor {} (prims {:#x}); vertex fetch slots left unbound {}",
+                        r.frame, r.drops.mode, r.drops.modeMask, r.drops.shader, r.drops.pitch, r.drops.pipeline, r.drops.upload, r.drops.index, r.drops.scissor, r.drops.primMask, r.drops.vfetchSkips);
                 if (stats && r.textureReuploads)
                     LOG_INFO("renderer frame {}: {} textures re-uploaded after a guest write", r.frame, r.textureReuploads);
                 r.textureReuploads = 0;

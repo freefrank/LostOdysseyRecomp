@@ -7,7 +7,7 @@
 - [x] 提取游戏数据：四张盘已用 tools/god_extract.py 解到 `LostOdysseyRecompLib/private/disc1..4`
 - [x] 确认 XEX 版本：v4、PAL+JP 区域、无 TU，见 `docs/notes/xex.md`
 - [x] XenonAnalyse 生成初版跳转表（841 张）；Ghidra 12.1.3 + XEXLoaderWV 已装，default.xex 已 headless 导入
-- [~] Xenia Canary 已放在 tools/xenia_canary.exe，尚未跑通游戏
+- [x] Xenia Canary 已实际运行至开场战斗并保存同机位原图对照（2026-09-04，见 notes/xenia-render-comparison.md）
 
 ## 阶段 1：重编译产出可编译
 - [x] 填写 TOML：save/rest 地址、invalid_instructions、80 条显式函数边界、setjmp/longjmp
@@ -26,7 +26,10 @@
 - [ ] 存档系统
 - [ ] 四张盘的数据合并与读盘路径重定向
 - [ ] 过场、战斗、千年之梦、大地图逐一验证
-- [ ] 修复全部崩溃，通关一次（2026-09-04：新游戏进入 RPBattle__Scene 的崩溃已修（memset 被截断，见 notes/recomp.md）；新游戏 → Settings → 保存 → Loading → 开场战斗可达，战斗 UI 可操作、约 30 fps；3D 场景经 HDR 链路已出现但很暗，见 notes/gpu.md）
+- [x] 开场战斗角色黑色剪影修复（2026-09-04：A/C 物理地址别名共享内存，E 偏移一页；正常遮挡逻辑下角色材质恢复；Windows/Linux 别名测试通过，详见 notes/physical-alias-rendering.md）
+- [x] 开场战斗角色破面、后期轮廓偏移与纹理 gamma 缺失修复（2026-09-04：16 位索引对齐、resolve 逻辑尺寸、纹理解码；D3D12 数值测试与 Xenia 场景对照，详见 notes/rendering-index-and-resolve.md）
+- [x] 开场战斗光照高光恢复（2026-09-04：接通 stencil、修复 D3D12 参考值丢失及 D24 清理溢出；GPU 测试与同机位实跑，见 notes/lighting-stencil-depth-clear.md）
+- [ ] 修复全部崩溃，通关一次（2026-09-04：进入 RPBattle__Scene 的 memset 截断崩溃已修，见 notes/recomp.md；已验证新游戏进入开场战斗、目标选择和攻击后的镜头切换，尚未验证战斗结束或通关。当前渲染状态与验证入口见 notes/handoff.md）
 
 ## 阶段 4：现代化
 - [ ] 任意分辨率与宽屏，UI 布局修正

@@ -1,6 +1,13 @@
 # GPU 笔记
 
-## 现状
+> 当前状态：黑色剪影、网格破面、后期偏移、纹理 gamma 和开场战斗高光问题已修复。
+> 从 [交接入口](handoff.md) 阅读当前结论、测试与待办；本文是按时间追加的历史分析。
+> 下面的早期假设保留作调查记录；尤其“遮挡查询已排除”已被推翻。
+
+> 2026-09-04 17 点之后的续接见 [handoff.md](handoff.md)。最新普查澄清：75 次 mode 4 相对寻址候选中，
+> 74 次颜色写掩码为 0；不能将其称为 75 次角色颜色绘制。下文保留历史排查过程，结论以最新证据为准。
+
+## 初期状态（历史记录，已被后续实现取代）
 
 `LostOdysseyRecomp/gpu/command_processor.cpp` 是一个最小的 Xenos 命令处理器（参照 Xenia `gpu/command_processor.cc`）：
 消费主环形缓冲和间接缓冲，执行 CPU 会同步等待的包，跳过所有绘制/状态/着色器包。没有任何画面输出。
@@ -261,3 +268,35 @@ resolve 缓存改为按 (目标地址, 目标格式) 存多份：本作把同一
 目标纹理完全相同，顶点流、索引、世界/视投矩阵与预通道逐位一致，但它们的像素从未被写入**（品红擦除、强制品红输出
 两个实验都证明片元没到达目标）。当前最强假设：两个不同 HLSL 程序里同一串 MAD 被 DXC 以不同方式合并/重排，z 差
 一个 ulp，`GEQUAL` 把整个角色拒掉；待对照 Xenia 的 dxbc_shader_translator 与我们翻译器里 `precise` 的作用范围验证。
+
+## 修正：所谓"角色绘制"其实是地形；蒙皮网格没有颜色通道（2026-09-04 傍晚）
+
+- trace 里 `draw consts/detail/textures` 行打印在对应 `draw fN` 行**之前**，之前把细节配错了一行。配对正确后，
+  vs 4053f2a2 / ps 2bcb2fea 的三笔是地面/地平面（逐绘制导出里它们之后出现的是地面），不是角色。角色形状的深度来自
+  带遮罩的蒙皮预通道（vs 31bde3e2 / 702c643d + ps fce57e1b，mode 5）。**任何一帧的 mode 4 里都没有蒙皮 VS 的绘制。**
+- 命令处理器新增未处理 opcode 直方图（frame stats 的 `unhandled:`）：战斗帧为 none，所以蒙皮颜色绘制根本不在环里，
+  是 guest 自己没发。
+- 遮挡查询已排除：每帧 53 对 BEGIN/END 都用同一个槽（END 0x23f000 带哨兵 0xEDFEFFFF，BEGIN 0x23f020 清零，与 Xenia
+  的 XenosZPDReport 布局一致）；`LO_ZPD_MODE=none|xenia|begin0|grow` 四种语义下每帧 draw 数都不变，游戏既不等它也不据此剔除。
+- 360 的 D3D Clear()：mode 5、zfunc ALWAYS 的矩形填充，`RB_DEPTH_INFO.base` 指向**颜色**目标的 tile（pitch 640、4x MSAA、
+  640x360 = 1280x720 1x 的同一批 tile）。现在会把该 base 上所有颜色视图清成按各自格式类解包的深度字（`UnpackGuestWord`，
+  Float32To20e4/Float7e3To32 移植自 Xenia xenos.cc）。单独开它场景会全黑：之后畸变通道以 fmt 2 写、resolve 按 fmt 3 读，
+  必须配合 resolve 时的 ownership transfer（`LO_EDRAM_TRANSFER=read`）。
+- 排查工具：`LO_DEBUG_NODEPTH=1`（配合 `LO_DEBUG_VS`）只对指定 VS 关深度测试；`LO_VS_DEBUG` 固定三角形模式下 PS 调试色现在
+  编码真实顶点的 NDC（R=x/w, G=y/w, B=z/w，w≤0 为白）。
+
+
+## 最新结论：物理别名缺失使遮挡查询读到零（2026-09-04，Codex）
+
+角色黑色剪影已在正常开场战斗复跑中修复。此前“遮挡查询已排除”的判断不成立：
+GPU 写 `0xA…`，guest GetData 读同一物理地址的 `0xC…`，旧地址空间让二者互相独立。
+CPU 因此清除了角色可见性位，材质 base pass 根本没有提交。
+
+新增 `kernel/guest_address_space.cpp`：A/C 使用同一 backing，E 按 Xenia 语义偏移 4 KiB；
+物理分配器限制在 A 区，避免经别名重复分配。没有在正式程序中禁用遮挡剔除。
+详见 [物理别名与渲染修复](physical-alias-rendering.md)，其中记录 Ghidra 函数地址与查询布局。
+
+Windows 运行时构建通过；独立别名回归测试在 Windows 和 WSL Manjaro 均通过。
+`out/render-alias-fixed/shot_2400.png` 和 `shot_9300.png` 已目视检查：Kaim、士兵材质和光圈恢复。
+第 9301 个 swap 的日志为 30.0 fps，1353 draws/frame。未据此宣称全部渲染正确或通关完成；
+真实 GPU occlusion counter 仍沿用已有近似实现，未在本次改动中引入硬件查询。

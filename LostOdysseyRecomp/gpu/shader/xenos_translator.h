@@ -30,6 +30,9 @@ namespace xenos
         bool writesDepth = false;
         uint32_t colorTargetsWritten = 0;   // bitmask oC0..oC3
         bool usesPointSize = false;
+        // Relative ALU constant addressing (c[N + a0/aL]). Used by bone-matrix
+        // indexing, but not sufficient on its own to identify a character mesh.
+        bool usesRelativeConstants = false;
     };
 
     // dwords: microcode in *host* byte order (already swapped from big-endian).
