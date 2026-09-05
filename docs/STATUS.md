@@ -11,7 +11,7 @@ Reviewed **2026-09-05** against code, runtime evidence and user feedback. This i
 | XMA decoding, stereo PCM and loop handling | Published `21d6523` | Build, loop tests and runtime samples; sound gaps remain |
 | Encounter recovery, printf/switch repair, storage refinements | Local uncommitted code | Selected natural victories and save/reload checks |
 | Coordinate and POI teleport | Published with this feature | Hypocenter backend gates/POIs; Gorge window controls, movement and return |
-| Map ID/name menu | Investigation only | Numeric IDs found; full feature pending |
+| Map ID/name menu | Published with this feature | Title unknown state; map 2 Hypocenter, map 4 Gorge, live transition from 2 to 3 Edge of Wasteland |
 
 Local results do not guarantee identical behavior from a clean checkout. See [dependency patches](../tools/patches/README.md).
 
@@ -24,7 +24,7 @@ Local results do not guarantee identical behavior from a clean checkout. See [de
 | 3 | Encounter shadows absent/flickering | Open. Separate from animation recovery. |
 | 4 | Ring outer ring missing | Open. Resource/switch crash repairs do not prove ring rendering; test held/released RT. |
 | 5 | Broken crates show black effects | Open. Capture destruction and render passes. |
-| 6 | Current map ID/name in debug menu | Pending. Match native records and localized labels. |
+| 6 | Current map ID/name in debug menu | Implemented. Native definitions and localized table; three opening areas verified. See [map info](notes/debug-map-info.md). |
 | 7 | Optional save-anywhere | Pending. CheckSavePoint activates interaction; it is not a pure permission check. |
 | 8 | Window hangs on reaching Gorge camp | Unresolved. Independent route reached camp and restored control; latest user run had not hung. Neither proves a fix. |
 | 9 | Sound output; background audio/dialogue disappear | Partial. Output and loop-boundary repair exist; remaining voices and loop subframes need validation. |

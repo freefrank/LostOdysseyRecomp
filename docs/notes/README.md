@@ -8,6 +8,7 @@
 |---|
 | [音频输出初版（2026-09-05）](audio-output.md) |
 | [戒指战斗资源名缺少语言后缀（2026-09-04）](battle-ring-resource.md) |
+| [Debug 地图 ID 和本地化名称（2026-09-05）](debug-map-info.md) |
 | [Debug 人物传送：逆向依据与验证边界（2026-09-04）](debug-teleport.md) |
 | [随机遇敌动画与战斗停滞调查（2026-09-04，主角与战斗停滞已修复，敌人待查）](encounter-animation.md) |
 | [GPU 当前说明（2026-09-05）](gpu.md) |

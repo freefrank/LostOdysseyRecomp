@@ -1,6 +1,7 @@
 #include <stdafx.h>
 #include "battle_menu.h"
 #include "teleport.h"
+#include "map_info.h"
 #include <os/logger.h>
 #include <cmath>
 #include <cwchar>
@@ -11,6 +12,7 @@ namespace
 {
     HWND menu = nullptr;
     HWND statusLabel = nullptr;
+    HWND mapLabel = nullptr;
     HWND positionLabel = nullptr;
     HWND teleportStatus = nullptr;
     HWND coordinates[3]{};
@@ -129,7 +131,7 @@ void debug_menu::Toggle()
         RegisterClassW(&wc);
         menu = CreateWindowExW(WS_EX_APPWINDOW, wc.lpszClassName, L"Lost Odyssey — Debug Menu (F1)",
             WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU, CW_USEDEFAULT, CW_USEDEFAULT,
-            560, 680, nullptr, nullptr, wc.hInstance, nullptr);
+            560, 745, nullptr, nullptr, wc.hInstance, nullptr);
         if (!menu) { LOG_ERROR("debug menu: CreateWindow failed {}", GetLastError()); return; }
         Control(L"STATIC", L"剧情调试 / Story debug", 0, 20, 18, 440, 24);
         statusLabel = Control(L"STATIC", L"", 0, 20, 52, 440, 45);
@@ -159,6 +161,7 @@ void debug_menu::Toggle()
         poiDetails = Control(L"STATIC", L"", 0, 20, 550, 500, 42);
         Control(L"STATIC", L"自动读取已加载地图；列表不包含尚未加载的区域。", 0, 20, 601, 500, 24);
     }
+    if (!mapLabel) mapLabel = Control(L"STATIC", L"", 0, 20, 635, 500, 60);
     ShowWindow(menu, IsWindowVisible(menu) ? SW_HIDE : SW_SHOW);
     LOG_INFO("debug menu: window visible {}", IsWindowVisible(menu) != FALSE);
     Update();
@@ -189,6 +192,13 @@ void debug_menu::Update()
                 DispatchMessageW(&message);
             }
         }
+    }
+    if (mapLabel && IsWindowVisible(menu)) {
+        const auto map = GetMapInfo();
+        std::wstring text = L"当前地图 / Map: 加载中或尚未识别";
+        if (map.available) text = L"地图 ID / Map ID: " + std::to_wstring(map.id) + L"  [" + map.package + L"]\n" +
+            (map.name.empty() ? L"地图名称尚未加载 / Name unavailable" : map.name);
+        SetLabel(mapLabel, text.c_str());
     }
     if (statusLabel && IsWindowVisible(menu)) SetLabel(statusLabel, Status());
     if (positionLabel && IsWindowVisible(menu))

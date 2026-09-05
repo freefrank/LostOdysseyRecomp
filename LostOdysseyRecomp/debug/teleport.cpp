@@ -6,6 +6,7 @@
 #include <cmath>
 #include "teleport.h"
 #include "map_poi.h"
+#include "map_info.h"
 
 extern "C" PPC_FUNC(__imp__sub_82290B60);
 extern "C" PPC_FUNC(__imp__sub_822FA548);
@@ -401,5 +402,5 @@ PPC_FUNC(sub_82290B60)
         LOG_INFO("teleport scene hook this={:#x} caller={:#x}", ctx.r3.u32, uint32_t(ctx.lr));
     const bool engine = ctx.r3.u32 == PPC_LOAD_U32(0x83315FB4);
     __imp__sub_82290B60(ctx, base);
-    if (engine) Tick(ctx, base);
+    if (engine) { debug_menu::UpdateMapInfo(base); Tick(ctx, base); }
 }
