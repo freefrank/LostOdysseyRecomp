@@ -6,9 +6,9 @@ Reviewed **2026-09-05** against code, runtime evidence and user feedback. This i
 
 | Scope | Repository status | Validation |
 |---|---|---|
-| Title, geometry/material and post-battle whiteout fixes; basic debug victory/storage | Published through `bab63c8` and earlier | Selected opening scenes |
-| Persistent logs and GPU stall stages | Published `7a5446f` | Seven-second test-thread suspension detected; resumed at 30 fps |
-| XMA decoding, stereo PCM and loop handling | Published `18d0d77` | Build, loop tests and runtime samples; sound gaps remain |
+| Title, geometry/material and post-battle whiteout fixes; basic debug victory/storage | Published through `d944148` and earlier | Selected opening scenes |
+| Persistent logs and GPU stall stages | Published `81f955d` | Seven-second test-thread suspension detected; resumed at 30 fps |
+| XMA decoding, stereo PCM and loop handling | Published `21d6523` | Build, loop tests and runtime samples; sound gaps remain |
 | Encounter recovery, printf/switch repair, storage refinements | Local uncommitted code | Selected natural victories and save/reload checks |
 | Coordinate and POI teleport | Local uncommitted code | Hypocenter enumeration, movement, return and invalidation |
 | Map ID/name menu | Investigation only | Numeric IDs found; full feature pending |
