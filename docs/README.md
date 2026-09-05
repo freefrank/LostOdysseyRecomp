@@ -5,6 +5,7 @@
 | Start here | Purpose |
 |---|---|
 | [Status ledger](STATUS.md) | Published changes, local work and all nine active issues |
+| [Synchronization](PUBLISHING.md) | One public history, Gitea/GitHub dual push and archive policy |
 | [Build guide](BUILDING.md) | Prerequisites, generation, running and storage |
 | [Roadmap](ROADMAP.md) | Priorities and completion criteria |
 | [Handoff](notes/handoff.md) | Continuation context and source map |

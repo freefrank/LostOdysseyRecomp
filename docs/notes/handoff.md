@@ -44,3 +44,7 @@
 | 调试与输入 | `debug/`、`hid/hid.cpp` |
 
 测试入口见[渲染验证](rendering-validation.md)、[攻略测试](walkthrough-testing.md)、[存档](save-storage.md)、[营地](third-map-hang.md)。`out/`截图/日志仅在本地。历史会话与逆向工具索引见[归档](../archive/README.md)和[Ghidra说明](../../tools/ghidra/README.md)。
+
+## 仓库同步
+
+当前主目录已迁移到清洗后的公开历史。提交完成后运行 `tools/push_all.ps1`，核对 Gitea 和 GitHub 的 main 一致。旧历史只在 Gitea archive 分支保留，不合并、不推到 GitHub。`out/github-release` 已完成使命，不再作为独立开发目录。流程见[同步说明](../PUBLISHING.md)。
