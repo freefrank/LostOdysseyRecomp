@@ -10,7 +10,7 @@ Reviewed **2026-09-05** against code, runtime evidence and user feedback. This i
 | Persistent logs and GPU stall stages | Published `81f955d` | Seven-second test-thread suspension detected; resumed at 30 fps |
 | XMA decoding, stereo PCM and loop handling | Published `21d6523` | Build, loop tests and runtime samples; sound gaps remain |
 | Encounter recovery, printf/switch repair, storage refinements | Local uncommitted code | Selected natural victories and save/reload checks |
-| Coordinate and POI teleport | Local uncommitted code | Hypocenter enumeration, movement, return and invalidation |
+| Coordinate and POI teleport | Published with this feature | Hypocenter backend gates/POIs; Gorge window controls, movement and return |
 | Map ID/name menu | Investigation only | Numeric IDs found; full feature pending |
 
 Local results do not guarantee identical behavior from a clean checkout. See [dependency patches](../tools/patches/README.md).

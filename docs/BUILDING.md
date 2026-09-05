@@ -41,6 +41,7 @@ Pop-Location
 |---|---|
 | `LO_LOG_FILE=<path>` | Append logs to a selected file; `0` disables the duplicate file sink. Default: a separate timestamped file under `logs/`. |
 | `LO_BACKGROUND=1` | Hidden rendering window; background audio is muted by default. |
+| `LO_DEBUG_MENU_OPEN=1` | Open the Windows debug panel at startup for UI validation; default is closed. |
 | `LO_HEADLESS=1` | No video device/window; not equivalent to hidden rendering. |
 | `LO_AUDIO_MUTE=1` | Mute device output. |
 | `LO_AUDIO_CAPTURE=<path>` | Up to 60 seconds of raw 48kHz stereo float PCM before mute. |

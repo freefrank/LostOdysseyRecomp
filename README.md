@@ -36,10 +36,10 @@ _Reviewed September 5, 2026._
 | Gameplay | Opening battles and selected encounters run; independent testing reached Gorge camp. No complete playthrough. |
 | Graphics | Geometry, material and post-battle whiteout fixes exist. Shadows, fire-hit effects, Ring outer ring and broken-crate effects remain problematic. |
 | Audio | XMA decoding, stereo PCM output and a loop-boundary correction are implemented. Background audio and dialogue can still disappear. |
-| Saves and debug | Manual saving is confirmed in the development build. F1 supports battle victory; local teleport work is tracked separately. |
+| Saves and debug | Manual saving is confirmed in the development build. F1 supports battle victory, coordinate bookmarks and same-map POI teleport. |
 | Stability | Persistent logs and GPU stall diagnostics exist. The reported camp hang is not conclusively fixed. |
 
-Some encounter, storage and teleport changes remain **local and uncommitted**. These results describe the development workspace, not a clean-checkout guarantee. See the [status ledger](docs/STATUS.md).
+Some encounter and storage changes remain **local and uncommitted**. These results describe the development workspace, not a clean-checkout guarantee. See the [status ledger](docs/STATUS.md).
 
 ## Build and run
 

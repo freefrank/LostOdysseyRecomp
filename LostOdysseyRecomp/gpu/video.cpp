@@ -121,8 +121,11 @@ namespace gpu::video
             return false;
         }
 
+        // Background regression runs still render and capture the swap chain,
+        // but must never show a window or take focus from the desktop user.
+        const bool background = getenv("LO_BACKGROUND") != nullptr;
         g_window = SDL_CreateWindow("Lost Odyssey Recompiled", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-            1280, 720, SDL_WINDOW_SHOWN);
+            1280, 720, background ? SDL_WINDOW_HIDDEN : SDL_WINDOW_SHOWN);
         if (!g_window)
         {
             LOG_WARNING("video: window creation failed: {}", SDL_GetError());
@@ -201,6 +204,7 @@ namespace gpu::video
     {
         if (!g_window)
             return;
+        debug_menu::Update();
         SDL_Event event;
         while (SDL_PollEvent(&event))
         {
@@ -217,7 +221,6 @@ namespace gpu::video
                 std::_Exit(0);
             }
         }
-        debug_menu::Update();
     }
 
     void PresentFrontbuffer(uint32_t physicalAddress, uint32_t width, uint32_t height, uint32_t copyDestInfo)
