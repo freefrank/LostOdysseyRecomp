@@ -1,6 +1,6 @@
 # Ghidra 脚本
 
-2026-09-05核对。当前本地使用Ghidra 12.1.3、XEXLoaderWV和JDK 21；这些工具及私有分析工程不随仓库分发。包装脚本[headless.bat](headless.bat)包含本机路径，换机需调整。
+2026-09-05核对。当前本地使用Ghidra 12.1.3、XEXLoaderWV和JDK 21；这些工具及私有分析工程不随仓库分发。包装脚本[headless.bat](headless.bat)通过 `GHIDRA_HOME` 和 `JAVA_HOME` 指定安装位置。
 
 | 已有脚本 | 用途 |
 |---|---|

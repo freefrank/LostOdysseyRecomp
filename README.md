@@ -43,7 +43,7 @@ Some encounter, storage and teleport changes remain **local and uncommitted**. T
 
 ## Build and run
 
-Prepare your own extracted data, dependencies and generated sources using the [build guide](docs/BUILDING.md). Helper scripts contain machine-specific Visual Studio and LLVM paths.
+Prepare your own extracted data, dependencies and generated sources using the [build guide](docs/BUILDING.md). Helper scripts discover installed tools; custom paths can be supplied through environment variables.
 
 ```powershell
 .\tools\build_runtime.bat

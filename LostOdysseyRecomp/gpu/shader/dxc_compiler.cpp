@@ -6,6 +6,9 @@
 #include <objidl.h>
 #include <dxcapi.h>
 #include <mutex>
+#include <filesystem>
+#include <algorithm>
+#include <vector>
 
 namespace xenos
 {
@@ -23,14 +26,32 @@ namespace xenos
             HMODULE module = LoadLibraryW(L"dxcompiler.dll");
             if (!module)
             {
-                // Fall back to the Windows SDK copy.
-                const wchar_t* candidates[] = {
-                    L"%ProgramFiles(x86)%\\Windows Kits\\10\\bin\\10.0.26100.0\\x64\\dxcompiler.dll",
-                    L"%ProgramFiles(x86)%\\Windows Kits\\10\\bin\\10.0.22621.0\\x64\\dxcompiler.dll",
-                };
-                for (auto* path : candidates)
+                // Allow custom installations without embedding workstation paths.
+                wchar_t configuredPath[32768];
+                DWORD length = GetEnvironmentVariableW(L"LO_DXC_PATH", configuredPath, 32768);
+                if (length && length < 32768)
+                    module = LoadLibraryW(configuredPath);
+            }
+            if (!module)
+            {
+                wchar_t programFiles[32768];
+                DWORD length = GetEnvironmentVariableW(L"ProgramFiles(x86)", programFiles, 32768);
+                std::vector<std::filesystem::path> candidates;
+                if (length && length < 32768)
                 {
-                    module = LoadLibraryW(path);
+                    const auto sdkBin = std::filesystem::path(programFiles) / L"Windows Kits" / L"10" / L"bin";
+                    std::error_code error;
+                    std::filesystem::directory_iterator entry(sdkBin, error), end;
+                    while (!error && entry != end)
+                    {
+                        candidates.push_back(entry->path() / L"x64" / L"dxcompiler.dll");
+                        entry.increment(error);
+                    }
+                }
+                std::sort(candidates.rbegin(), candidates.rend());
+                for (const auto& path : candidates)
+                {
+                    module = LoadLibraryW(path.c_str());
                     if (module)
                         break;
                 }

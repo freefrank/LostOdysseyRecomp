@@ -1,8 +1,7 @@
 @echo off
 rem Build XenonRecomp, XenonAnalyse and xexdump with MSVC into out\build\tools
 setlocal
-call "%ProgramFiles(x86)%\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat" >nul || exit /b 1
-set "PATH=%ProgramFiles(x86)%\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja;%PATH%"
+call "%~dp0setup_windows.bat" || exit /b 1
 cd /d "%~dp0.."
 rem apply local XenonRecomp patch (idempotent: skip if already applied)
 git -C tools/XenonRecomp apply --check --reverse ../patches/XenonRecomp-lostodyssey.patch >nul 2>&1 || git -C tools/XenonRecomp apply ../patches/XenonRecomp-lostodyssey.patch || exit /b 1

@@ -67,7 +67,6 @@ GPU 遮挡计数仍是已有的近似实现，不能当作真实硬件查询结�
 
 [gpu.md](../../notes/gpu.md) 按时间保留早期分析，其中“遮挡查询已排除”等判断已经被后续证据推翻。
 以本页和各专项笔记中的最终验证为准，不再重复禁用遮挡或强开 mask 的实验。
-
 项目逆向技能入口为 `tools/reverse-skill/README_AI.md`；Ghidra 导出脚本为 `tools/ghidra/ExportFunctions.java`。
 
 人物传送已完成首轮后台验证：实际位移、记录点返回、输入绝对坐标、恢复普通行走、游戏菜单/戒指教学/战斗禁用均通过，见[传送记录](../../notes/debug-teleport.md)。重启使用最终运行时后按F1；所有本轮游戏副本位于out/，原始save/profile保持不变。

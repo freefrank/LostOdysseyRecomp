@@ -10,7 +10,7 @@
 
 ## 原始数据（本地路径，不入库）
 
-`<game-data-directory>`，GOD 格式（Games on Demand），TitleID `4D5307FA`，
+用户自备的四盘数据目录，GOD 格式（Games on Demand），TitleID `4D5307FA`，
 内容类型 `00007000`。来源标记为"CH"，项目所有者说明为亚洲多语言版；不要仅凭目录名确定繁体中文支持范围。不同区域的XEX地址未经本轮对照，
 参考 re:Blue / 其他项目的地址时不可直接照抄。
 

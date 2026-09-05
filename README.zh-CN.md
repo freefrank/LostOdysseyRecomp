@@ -43,7 +43,7 @@ _核对日期：2026 年 9 月 5 日。_
 
 ## 构建与运行
 
-请按[构建指南](docs/BUILDING.md)准备自己的游戏数据、依赖及生成代码。辅助脚本包含本机 Visual Studio 和 LLVM 路径。
+请按[构建指南](docs/BUILDING.md)准备自己的游戏数据、依赖及生成代码。辅助脚本自动查找工具，自定义安装位置可通过环境变量指定。
 
 ```powershell
 .\tools\build_runtime.bat
