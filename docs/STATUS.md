@@ -4,14 +4,14 @@ Reviewed **2026-09-05** against code, runtime evidence and user feedback. This i
 
 ## Published versus local
 
-Current local Git HEAD: `0f1bfc9`. The later repairs below remain uncommitted; historical publication entries do not describe the current dirty working tree.
+Code checkpoint: runtime `2a4f47d`, debug/encounter `42c543f`, graphics `c4fc9e4`. These commits include the later repairs and tests. Submission does not change the validation boundaries below.
 
 | Scope | Repository status | Validation |
 |---|---|---|
 | Title, geometry/material and post-battle whiteout fixes; basic debug victory/storage | Published through `d944148` and earlier | Selected opening scenes |
 | Persistent logs and GPU stall stages | Published `81f955d` | Seven-second test-thread suspension detected; resumed at 30 fps |
 | XMA decoding, stereo PCM and loop handling | Published `21d6523` | Build, loop tests and runtime samples; sound gaps remain |
-| Encounter recovery, printf/switch repair, storage refinements | Local uncommitted code | Selected natural victories and save/reload checks |
+| Encounter recovery, printf/switch repair, storage refinements | Committed `2a4f47d` / `42c543f` | Selected natural victories and save/reload checks |
 | Coordinate and POI teleport | Published with this feature | Hypocenter backend gates/POIs; Gorge window controls, movement and return |
 | Map ID/name menu | Published with this feature | Title unknown state; map 2 Hypocenter, map 4 Gorge, live transition from 2 to 3 Edge of Wasteland |
 
