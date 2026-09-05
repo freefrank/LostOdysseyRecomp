@@ -53,6 +53,15 @@ namespace apu::xma
                     reinterpret_cast<uint32_t*>(guest)[i] = ByteSwap(d[i]);
             }
 
+            void StoreDecoded(void* guest) const
+            {
+                // The consumer advances DWORD 9 while decoding. Writing the
+                // snapshot back rolls its read cursor backwards. Publish only
+                // words updated by the decoder, leaving consumer fields alone.
+                for (unsigned i : {0u, 1u, 2u, 4u})
+                    reinterpret_cast<uint32_t*>(guest)[i] = ByteSwap(d[i]);
+            }
+
             uint32_t input0PacketCount() const { return Bits(d[0], 0, 12); }
             uint32_t loopCount() const { return Bits(d[0], 12, 8); }
             void setLoopCount(uint32_t v) { SetBits(d[0], 12, 8, v); }
@@ -103,12 +112,19 @@ namespace apu::xma
             std::array<uint8_t, 2048> pcm{};
             std::array<uint8_t, 4096 + AV_INPUT_BUFFER_PADDING_SIZE> compressed{};
             uint32_t frameBits = 0, copiedBits = 0, packetsSkip = 0;
+            struct WorkSnapshot { ContextData data; uint32_t skip, copied; };
+            std::array<WorkSnapshot, 8> workHistory{};
+            uint32_t workHistoryCount = 0;
+            uint32_t publishedInputOffset = 0;
+            bool hasPublishedInputOffset = false;
             AVCodecContext* decoder = nullptr;
             AVFrame* frame = nullptr;
             AVPacket* packet = nullptr;
             void Reset()
             {
                 remainingSubframes = pcmOffset = frameBits = copiedBits = packetsSkip = 0;
+                workHistoryCount = 0;
+                hasPublishedInputOffset = false;
                 avcodec_free_context(&decoder);
                 av_frame_free(&frame);
                 av_packet_free(&packet);
@@ -123,6 +139,7 @@ namespace apu::xma
         std::atomic<bool> g_running{ false };
         std::atomic<uint32_t> g_allocatedCount{ 0 };
         bool g_trace = false;
+        bool g_traceContextWrites = false;
 
         uint32_t* Register(uint32_t index)
         {
@@ -131,11 +148,6 @@ namespace apu::xma
 
         // Registers are little-endian to the guest (stwbrx/lwbrx), so the host
         // reads and writes them natively.
-        uint32_t ExchangeRegister(uint32_t index, uint32_t value)
-        {
-            return std::atomic_ref<uint32_t>(*Register(index)).exchange(value);
-        }
-
         uint8_t* ContextHost(uint32_t id)
         {
             return static_cast<uint8_t*>(g_memory.Translate(g_arrayGuest + id * kContextSize));
@@ -318,7 +330,55 @@ namespace apu::xma
                 if (decoded < 0 || ctx.frame->nb_samples != 512 || ctx.frame->format != AV_SAMPLE_FMT_FLTP)
                 {
                     static unsigned errors = 0;
-                    if (errors++ < 16) LOG_WARNING("xma frame decode failed: {}", decoded);
+                    if (errors++ < 16)
+                    {
+                        const uint32_t id = uint32_t(&ctx - g_contexts);
+                        LOG_WARNING("xma frame decode failed: result={} context={} stereo={} input={} offset={} bytes={}",
+                            decoded, id, data.isStereo(), data.currentBuffer(), data.inputReadOffset(), bytes + 1);
+                        // Exact decoder input, not a later guest-buffer snapshot.
+                        // Opt-in and bounded; these private samples stay local.
+                        if (const char* directory = getenv("LO_XMA_ERROR_CAPTURE_DIR"))
+                        {
+                            std::error_code error;
+                            std::filesystem::create_directories(directory, error);
+                            const auto prefix = std::filesystem::path(directory) / fmt::format("error-{}-context-{}", errors, id);
+                            const auto packetPath = prefix.string() + ".frame";
+                            if (!error && !std::filesystem::exists(packetPath))
+                            {
+                                std::ofstream packetFile(packetPath, std::ios::binary);
+                                packetFile.write(reinterpret_cast<const char*>(ctx.compressed.data()), bytes + 1);
+                                std::ofstream stateFile(prefix.string() + ".txt");
+                                stateFile << "result " << decoded << " channels " << (data.isStereo() ? 2 : 1)
+                                          << " rate " << data.sampleRate() << "\n";
+                                for (uint32_t word : data.d) stateFile << fmt::format("{:08X} ", word);
+                                stateFile << "\npacket " << packetIndex << " offset " << offset
+                                          << " pending_skip " << ctx.packetsSkip << "\n";
+                                const uint32_t historyCount = std::min(ctx.workHistoryCount, 8u);
+                                for (uint32_t h = 0; h < historyCount; ++h)
+                                {
+                                    const auto& snapshot = ctx.workHistory[(ctx.workHistoryCount - historyCount + h) % 8];
+                                    stateFile << "work skip " << snapshot.skip << " copied " << snapshot.copied << " words ";
+                                    for (uint32_t word : snapshot.data.d) stateFile << fmt::format("{:08X} ", word);
+                                    stateFile << "\n";
+                                }
+                                // Preserve the interleaved packet headers along with
+                                // the failed frame. Later streaming refills can replace
+                                // this data before an external sampler observes it.
+                                if (errors == 1)
+                                {
+                                    for (unsigned buffer = 0; buffer < 2; ++buffer)
+                                    {
+                                        const uint32_t pointer = buffer ? data.input1Ptr() : data.input0Ptr();
+                                        const uint32_t packets = buffer ? data.input1PacketCount() : data.input0PacketCount();
+                                        if (!pointer || !packets || !data.inputValid(buffer != 0)) continue;
+                                        const size_t size = size_t(std::min(packets, 32u)) * kBytesPerPacket;
+                                        std::ofstream inputFile(prefix.string() + fmt::format("-input{}.bin", buffer), std::ios::binary);
+                                        inputFile.write(reinterpret_cast<const char*>(Physical(pointer)), size);
+                                    }
+                                }
+                            }
+                        }
+                    }
                     return;
                 }
                 const uint32_t channels = data.isStereo() ? 2 : 1;
@@ -361,6 +421,14 @@ namespace apu::xma
             data.Load(guest);
             if (!data.outputValid())
                 return;
+            const ContextData original = data;
+            if (getenv("LO_XMA_ERROR_CAPTURE_DIR"))
+                ctx.workHistory[ctx.workHistoryCount++ % 8] = { data, ctx.packetsSkip, ctx.copiedBits };
+            // The guest may select the stream's first packet when submitting
+            // a new block. A pending skip is relative to our published cursor;
+            // applying it again to that explicit cursor selects another stream.
+            if (ctx.hasPublishedInputOffset && data.inputReadOffset() != ctx.publishedInputOffset)
+                ctx.packetsSkip = 0;
 
             Ring ring{ Physical(data.outputPtr()), data.outputBlockCount() * kOutputBytesPerBlock,
                        data.outputReadOffset() * kOutputBytesPerBlock, data.outputWriteOffset() * kOutputBytesPerBlock };
@@ -373,7 +441,6 @@ namespace apu::xma
             const int32_t minimumBlocks = data.isStereo() ? 2 : 1;
             if (minimumBlocks > ctx.freeBlocks)
             {
-                data.Store(guest);
                 return;
             }
             for (int guard = 0; ctx.freeBlocks >= minimumBlocks && guard < 4096; guard++)
@@ -386,7 +453,25 @@ namespace apu::xma
             data.setOutputWriteOffset(ring.write / kOutputBytesPerBlock);
             if (ring.read == ring.write)
                 data.setOutputValid(false);
-            data.Store(guest);
+            if (g_traceContextWrites)
+            {
+                // Observe guest changes during decoding before the full context
+                // writeback. Do not merge fields or alter synchronization here.
+                ContextData current;
+                current.Load(guest);
+                static unsigned reports = 0;
+                for (unsigned word = 0; word < 16; ++word)
+                    if (current.d[word] != original.d[word] && reports < 64)
+                    {
+                        ++reports;
+                        LOG_WARNING("xma: concurrent context write id={} word={} before={:08X} guest={:08X} decoded={:08X} published={}",
+                            id, word, original.d[word], current.d[word], data.d[word],
+                            word == 0 || word == 1 || word == 2 || word == 4);
+                    }
+            }
+            data.StoreDecoded(guest);
+            ctx.publishedInputOffset = data.inputReadOffset();
+            ctx.hasPublishedInputOffset = true;
             if (g_trace)
                 LOG_INFO("xma: context {} worked: in={}/{} read {} write {} valid {}", id, data.input0Valid(), data.input1Valid(),
                     data.outputReadOffset(), data.outputWriteOffset(), data.outputValid());
@@ -397,34 +482,43 @@ namespace apu::xma
             while (g_running)
             {
                 bool didWork = false;
-                for (uint32_t group = 0; group < kRegisterGroups; group++)
+                for (uint32_t id = 0; id < kContextCount; ++id)
                 {
-                    if (uint32_t bits = ExchangeRegister(kRegLock0 + group, 0))
-                    {
-                        for (; bits; bits &= bits - 1)
-                            g_contexts[group * 32 + std::countr_zero(bits)].enabled = false;
-                    }
-                    if (uint32_t bits = ExchangeRegister(kRegClear0 + group, 0))
-                    {
-                        std::lock_guard lock(g_mutex);
-                        for (; bits; bits &= bits - 1)
-                            ClearContext(group * 32 + std::countr_zero(bits));
-                    }
-                    if (uint32_t bits = ExchangeRegister(kRegKick0 + group, 0))
-                    {
-                        std::lock_guard lock(g_mutex);
-                        for (; bits; bits &= bits - 1)
-                        {
-                            const uint32_t id = group * 32 + std::countr_zero(bits);
-                            g_contexts[id].enabled = true;
-                            Work(id);
-                            didWork = true;
-                        }
-                    }
+                    if (!g_contexts[id].enabled.load()) continue;
+                    std::lock_guard lock(g_mutex);
+                    Work(id);
+                    didWork = true;
                 }
                 std::this_thread::sleep_for(std::chrono::microseconds(didWork ? 250 : 1000));
             }
         }
+    }
+
+    bool WriteCommand(uint32_t address, uint32_t value)
+    {
+        if ((address & 3) || address < kRegisterBase) return false;
+        const uint32_t reg = (address - kRegisterBase) / 4;
+        uint32_t first;
+        if (reg >= kRegKick0 && reg < kRegKick0 + kRegisterGroups) first = kRegKick0;
+        else if (reg >= kRegLock0 && reg < kRegLock0 + kRegisterGroups) first = kRegLock0;
+        else if (reg >= kRegClear0 && reg < kRegClear0 + kRegisterGroups) first = kRegClear0;
+        else return false;
+
+        // These are commands, not mailboxes containing only the last write.
+        // Serialize with decoding so lock/clear completes before the guest
+        // updates or reuses the context, matching Xenia's context mutex.
+        std::lock_guard lock(g_mutex);
+        if (!g_arrayGuest) return false;
+        *Register(reg) = value;
+        for (uint32_t bits = value; bits; bits &= bits - 1)
+        {
+            const uint32_t id = (reg - first) * 32 + std::countr_zero(bits);
+            if (first == kRegKick0) g_contexts[id].enabled = true;
+            else if (first == kRegLock0) g_contexts[id].enabled = false;
+            else ClearContext(id);
+            if (g_trace) LOG_INFO("xma command: register={:#x} context={}", reg, id);
+        }
+        return true;
     }
 
     void Init()
@@ -432,6 +526,7 @@ namespace apu::xma
         if (g_arrayGuest)
             return;
         g_trace = getenv("LO_TRACE_XMA") != nullptr;
+        g_traceContextWrites = getenv("LO_TRACE_XMA_CONTEXT_WRITES") != nullptr;
         g_arrayGuest = g_pageAllocator.Alloc(g_pageAllocator.physicalRegion, kContextCount * kContextSize, 0x1000);
         if (!g_arrayGuest)
         {

@@ -13,6 +13,7 @@
 #include "xdm.h"
 #include "xex_loader.h"
 #include "guest_printf.h"
+#include "critical_section.h"
 #include "io/file_system.h"
 #include <gpu/command_processor.h>
 #include <apu/audio.h>
@@ -592,6 +593,9 @@ static uint32_t NtReleaseMutant(uint32_t Handle, be<int32_t>* PreviousCount)
 // Critical sections / spin locks / TLS
 // ---------------------------------------------------------------------------
 
+static_assert(offsetof(XRTL_CRITICAL_SECTION, RecursionCount) == 0x14);
+static_assert(offsetof(XRTL_CRITICAL_SECTION, OwningThread) == 0x18);
+
 static uint32_t RtlInitializeCriticalSection(XRTL_CRITICAL_SECTION* cs)
 {
     cs->Header.Absolute = 0;
@@ -612,42 +616,17 @@ static void RtlInitializeCriticalSectionAndSpinCount(XRTL_CRITICAL_SECTION* cs, 
 static void RtlEnterCriticalSection(XRTL_CRITICAL_SECTION* cs)
 {
     WaitScope scope("RtlEnterCriticalSection", g_memory.MapVirtual(cs));
-    uint32_t thisThread = g_ppcContext->r13.u32;
-    std::atomic_ref owningThread(cs->OwningThread);
-
-    while (true)
-    {
-        uint32_t previousOwner = 0;
-        if (owningThread.compare_exchange_weak(previousOwner, thisThread) || previousOwner == thisThread)
-        {
-            cs->RecursionCount++;
-            return;
-        }
-        owningThread.wait(previousOwner);
-    }
+    GuestCriticalSection::Enter(cs->RecursionCount, cs->OwningThread, g_ppcContext->r13.u32);
 }
 
 static bool RtlTryEnterCriticalSection(XRTL_CRITICAL_SECTION* cs)
 {
-    uint32_t thisThread = g_ppcContext->r13.u32;
-    std::atomic_ref owningThread(cs->OwningThread);
-    uint32_t previousOwner = 0;
-    if (owningThread.compare_exchange_weak(previousOwner, thisThread) || previousOwner == thisThread)
-    {
-        cs->RecursionCount++;
-        return true;
-    }
-    return false;
+    return GuestCriticalSection::TryEnter(cs->RecursionCount, cs->OwningThread, g_ppcContext->r13.u32);
 }
 
 static void RtlLeaveCriticalSection(XRTL_CRITICAL_SECTION* cs)
 {
-    cs->RecursionCount--;
-    if (cs->RecursionCount != 0)
-        return;
-    std::atomic_ref owningThread(cs->OwningThread);
-    owningThread.store(0);
-    owningThread.notify_one();
+    GuestCriticalSection::Leave(cs->RecursionCount, cs->OwningThread);
 }
 
 static void KfAcquireSpinLock(uint32_t* spinLock)
@@ -1897,7 +1876,12 @@ static uint32_t XamShowMessageBoxUI(uint32_t, be<uint16_t>*, be<uint16_t>*, uint
     return ERROR_SUCCESS;
 }
 static uint32_t XamShowMessageBoxUIEx() { return ERROR_SUCCESS; }
-static uint32_t XamShowDirtyDiscErrorUI(uint32_t) { LOG_ERROR("dirty disc error UI requested"); return 0; }
+static uint32_t XamShowDirtyDiscErrorUI(uint32_t)
+{
+    LOG_ERROR("dirty disc error UI requested, caller={:#x}", g_ppcContext ? uint32_t(g_ppcContext->lr) : 0);
+    DumpGuestThreadStates();
+    return 0;
+}
 static void XamEnableInactivityProcessing(uint32_t, uint32_t) {}
 static void XamResetInactivity(uint32_t) {}
 static uint32_t XamContentGetCreator(uint32_t userIndex, const XCONTENT_DATA*, be<uint32_t>* isCreator, be<uint64_t>* xuid, XXOVERLAPPED* overlapped)

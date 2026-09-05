@@ -151,7 +151,7 @@ void XamRegisterContent(const XCONTENT_DATA& data, const std::string_view& root)
 {
     std::lock_guard lock(g_contentMutex);
     const auto idx = data.dwContentType - 1;
-    g_contentRegistry[idx].emplace(StringHash(data.szFileName), XHOSTCONTENT_DATA{ data }).first->second.szRoot = root;
+    g_contentRegistry[idx].insert_or_assign(StringHash(data.szFileName), XHOSTCONTENT_DATA{ data }).first->second.szRoot = root;
 }
 
 uint32_t XamNotifyCreateListener(uint64_t qwAreas)
@@ -298,9 +298,11 @@ static uint32_t ContentCreate(uint32_t dwUserIndex, const char* szRootName, cons
     if (mode == 2 /* CREATE_ALWAYS */ || mode == 1 /* CREATE_NEW */ || mode == 4 /* OPEN_ALWAYS */)
     {
         if (pdwDisposition)
-            *pdwDisposition = exists ? XCONTENT_EXISTING : XCONTENT_NEW;
+            // CREATE_ALWAYS reports a new content object even when replacing
+            // an existing slot (Xenia xeXamContentCreate).
+            *pdwDisposition = exists && mode != 2 ? XCONTENT_EXISTING : XCONTENT_NEW;
 
-        if (!exists)
+        if (!exists || mode == 2)
         {
             std::filesystem::path rootPath;
             if (pContentData->dwContentType == XCONTENTTYPE_SAVEDATA)
@@ -312,6 +314,24 @@ static uint32_t ContentCreate(uint32_t dwUserIndex, const char* szRootName, cons
 
             const std::string root = (const char*)rootPath.u8string().c_str();
             std::error_code ec;
+            if (exists && mode == 2)
+            {
+                // Match CREATE_ALWAYS's container replacement semantics. Only
+                // save containers are writable here; never clear the game root
+                // or a redirected/symlinked directory for another content type.
+                if (pContentData->dwContentType != XCONTENTTYPE_SAVEDATA)
+                    return ERROR_ACCESS_DENIED;
+                const auto saveRoot = std::filesystem::weakly_canonical(GetSavePath(), ec);
+                if (ec) return ERROR_ACCESS_DENIED;
+                const auto target = std::filesystem::weakly_canonical(rootPath, ec);
+                if (ec || target.parent_path() != saveRoot)
+                    return ERROR_ACCESS_DENIED;
+                const bool symlink = std::filesystem::is_symlink(rootPath, ec);
+                if (ec || symlink)
+                    return ERROR_ACCESS_DENIED;
+                std::filesystem::remove_all(target, ec);
+                if (ec) return ERROR_ACCESS_DENIED;
+            }
             std::filesystem::create_directories(rootPath, ec);
             if (ec) return ERROR_ACCESS_DENIED;
             if (pContentData->dwContentType == XCONTENTTYPE_SAVEDATA)

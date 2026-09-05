@@ -18,6 +18,52 @@ namespace apu
         SDL_AudioDeviceID g_device = 0;
         constexpr uint32_t kStereoFrameBytes = XAUDIO_NUM_SAMPLES * 2 * sizeof(float);
 
+        void CaptureRequested(const float* stereo, uint32_t frame)
+        {
+            static const char* requestPath = getenv("LO_AUDIO_CAPTURE_REQUEST");
+            if (!requestPath) return;
+            static uint64_t serial = 0;
+            static uint32_t remaining = 0;
+            static std::ofstream output;
+            if ((frame % 32) == 0)
+            {
+                std::ifstream request(requestPath);
+                uint64_t next = 0;
+                uint32_t seconds = 0;
+                if ((request >> next >> seconds) && next && next != serial && seconds <= 60)
+                {
+                    if (output.is_open()) output.close();
+                    serial = next;
+                    remaining = 0;
+                    if (seconds)
+                    {
+                        auto path = std::filesystem::path(requestPath);
+                        path.replace_filename(path.stem().string() + "-" + std::to_string(serial) + ".f32");
+                        std::error_code ec;
+                        const bool exists = std::filesystem::exists(path, ec);
+                        if (!exists && !ec)
+                        {
+                            output.clear();
+                            output.open(path, std::ios::binary);
+                            if (output) remaining = seconds * XAUDIO_SAMPLES_HZ;
+                        }
+                        if (!remaining) LOG_WARNING("audio capture {} could not create a new file", serial);
+                    }
+                    LOG_INFO("audio capture request {}: samples={} start_frame={}", serial, remaining, frame);
+                }
+            }
+            if (!remaining) return;
+            const auto count = std::min(remaining, uint32_t(XAUDIO_NUM_SAMPLES));
+            output.write(reinterpret_cast<const char*>(stereo), count * 2 * sizeof(float));
+            remaining -= count;
+            if (!output || !remaining)
+            {
+                LOG_INFO("audio capture {} ended: success={} remaining={}", serial, bool(output), remaining);
+                remaining = 0;
+                output.close();
+            }
+        }
+
         void DriverMain()
         {
             GuestThreadContext ctx(3);
@@ -96,6 +142,7 @@ namespace apu
             peak = std::max({peak, std::abs(stereo[i * 2]), std::abs(stereo[i * 2 + 1])});
         }
         uint32_t n = ++g_framesSubmitted;
+        CaptureRequested(stereo.data(), n);
         // Bounded diagnostic capture, before mute; raw f32le, 48 kHz stereo.
         static std::ofstream capture;
         if (n == 1)

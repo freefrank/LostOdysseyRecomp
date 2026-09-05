@@ -4,6 +4,8 @@
 #include <kernel/xam.h>
 #include <kernel/io/file_system.h>
 #include <stdexcept>
+#include <apu/xma.h>
+#include <gpu/ppc_mmio.h>
 
 PPC_FUNC(__imp__XamContentCreateEx);
 PPC_FUNC(__imp__XamContentClose);
@@ -43,21 +45,102 @@ static uint32_t Call(PPCFunc* function, std::initializer_list<uint32_t> args)
 
 template<typename T> static uint32_t Addr(T* p) { return g_memory.MapVirtual(p); }
 
+static void CheckConcurrentReads(uint32_t file)
+{
+    constexpr unsigned workers = 4, iterations = 2000, count = 256;
+    std::atomic<unsigned> ready{0}, failures{0};
+    std::array<std::thread, workers> threads;
+    for (unsigned worker = 0; worker < workers; ++worker)
+    {
+        auto* bytes = static_cast<uint8_t*>(g_userHeap.Alloc(count));
+        auto* iosb = static_cast<XIO_STATUS_BLOCK*>(g_userHeap.Alloc(sizeof(XIO_STATUS_BLOCK)));
+        auto* offset = g_userHeap.Alloc<be<uint64_t>>();
+        *offset = worker * 257;
+        threads[worker] = std::thread([=, &ready, &failures] {
+            ++ready;
+            while (ready.load() != workers) std::this_thread::yield();
+            for (unsigned attempt = 0; attempt < iterations; ++attempt)
+            {
+                const auto status = Call(__imp__NtReadFile, {file,0,0,0,Addr(iosb),Addr(bytes),count,Addr(offset)});
+                bool valid = status == 0 && iosb->Information == count;
+                for (unsigned i = 0; i < count; ++i)
+                    valid &= bytes[i] == uint8_t((worker * 257 + i) * 37 + 11);
+                if (!valid) ++failures;
+            }
+            g_userHeap.Free(bytes);
+            g_userHeap.Free(iosb);
+            g_userHeap.Free(offset);
+        });
+    }
+    for (auto& thread : threads) thread.join();
+    std::printf("concurrent positioned reads: %u mismatches / %u requests\n", failures.load(), workers * iterations);
+    Check(failures == 0, "shared file handle must preserve each request's offset");
+}
+
+// Exercise the real MMIO bridge and decoder worker without private audio data.
+static void CheckXmaCommands()
+{
+    apu::xma::Init();
+    std::array<be<uint32_t>*, 32> contexts{};
+    const uint32_t output = g_pageAllocator.Alloc(g_pageAllocator.physicalRegion, 8192, 4096);
+    Check(output != 0, "XMA test output allocation");
+    for (unsigned i = 0; i < contexts.size(); ++i)
+    {
+        const uint32_t address = apu::xma::AllocateContext();
+        Check(address != 0, "XMA test context allocation");
+        contexts[i] = static_cast<be<uint32_t>*>(g_memory.Translate(address));
+        contexts[i][0] = 0x00300000;
+        contexts[i][1] = 0x80000000;
+        contexts[i][9] = 3;
+    }
+    for (unsigned i = 0; i < contexts.size(); ++i)
+    {
+        LoMmioStore32(g_memory.base, 0x7FEA1A80, ByteSwap(1u << i));
+        Check((uint32_t(contexts[i][0]) & 0x00300000) == 0 &&
+              (uint32_t(contexts[i][1]) & 0x80000000) == 0 && uint32_t(contexts[i][9]) == 0,
+              "each clear command must complete before MMIO returns");
+        contexts[i][0] = 2u << 22;
+        contexts[i][1] = 0x80000000;
+        contexts[i][7] = output & 0x1fffffff;
+    }
+    // Empty input makes every requested context finish without FFmpeg data.
+    // Consecutive one-bit stores must not replace earlier unprocessed kicks.
+    for (unsigned i = 0; i < contexts.size(); ++i)
+        LoMmioStore32(g_memory.base, 0x7FEA1940, ByteSwap(1u << i));
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    unsigned pending;
+    do
+    {
+        pending = 0;
+        for (auto* context : contexts) pending += (uint32_t(context[1]) >> 31);
+        if (!pending) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    } while (std::chrono::steady_clock::now() < deadline);
+    Check(pending == 0, "all 32 separately kicked contexts must run");
+    apu::xma::Shutdown();
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    std::puts("PASS: 32 synchronous XMA clears and 32 consecutive MMIO kicks");
+}
+
 int main(int argc, char** argv)
 {
     try
     {
-        Check(argc == 3, "usage: LoStorageTest write|read <isolated directory>");
+        Check(argc == 3, "usage: LoStorageTest write|read|overwrite|read-overwritten <isolated directory>");
         std::filesystem::create_directories(argv[2]);
         std::filesystem::current_path(argv[2]);
         g_userHeap.Init();
         g_pageAllocator.Init();
+        if (std::string_view(argv[1]) == "xma-commands") { CheckXmaCommands(); return 0; }
         FileSystem::Init(std::filesystem::absolute("game"));
         XamInit();
-        const bool writing = std::string_view(argv[1]) == "write";
+        const std::string_view mode(argv[1]);
+        Check(mode == "write" || mode == "overwrite" || mode == "read" || mode == "read-overwritten", "invalid test mode");
+        const bool overwrite = mode == "overwrite" || mode == "read-overwritten";
+        const bool writing = mode == "write" || mode == "overwrite";
         auto* content = g_userHeap.Alloc<XCONTENT_DATA>();
         *content = XamMakeContent(1, "StorageIntegration");
-        content->szDisplayName[0] = 'T';
+        content->szDisplayName[0] = overwrite ? 'U' : 'T';
         auto* root = static_cast<char*>(g_userHeap.Alloc(32));
         strcpy(root, "SaVeTest");
         auto* disposition = g_userHeap.Alloc<be<uint32_t>>();
@@ -75,11 +158,21 @@ int main(int argc, char** argv)
             XCONTENT_DATA listed{};
             Check(XamEnumerate(handle,0,&listed,sizeof(listed),&count,nullptr) == 0 && count == 1,
                 "persisted content must be discoverable");
-            Check(std::string_view(listed.szFileName) == content->szFileName && listed.szDisplayName[0] == 'T', "metadata round trip");
+            Check(std::string_view(listed.szFileName) == content->szFileName && listed.szDisplayName[0] == (overwrite?'U':'T'), "metadata round trip");
             DestroyKernelObject(handle);
         }
-        Check(Call(__imp__XamContentCreateEx, {0,Addr(root),Addr(content),writing?1u:3u,Addr(disposition),Addr(license),0,0,Addr(ov)}) == ERROR_IO_PENDING, "create/open async return");
+        if (writing && overwrite)
+        {
+            Check(std::filesystem::exists(FileSystem::GetSaveRoot()/content->szFileName/"payload.bin"), "overwrite requires existing content");
+            std::ofstream(FileSystem::GetSaveRoot()/content->szFileName/"stale.bin") << "old";
+        }
+        Check(Call(__imp__XamContentCreateEx, {0,Addr(root),Addr(content),writing?(overwrite?2u:1u):3u,Addr(disposition),Addr(license),0,0,Addr(ov)}) == ERROR_IO_PENDING, "create/open async return");
         Check(ov->Error == 0 && ov->dwExtendedError == 0 && ov->Length == (writing?1u:2u), "completion disposition");
+        if (writing && overwrite)
+        {
+            Check(!std::filesystem::exists(FileSystem::GetSaveRoot()/content->szFileName/"stale.bin"), "CREATE_ALWAYS clears old container files");
+            Check(!std::filesystem::exists(FileSystem::GetSaveRoot()/content->szFileName/"payload.bin"), "CREATE_ALWAYS permits a fresh FILE_CREATE");
+        }
         Check(GetKernelObject(*event)->Wait(0) == STATUS_SUCCESS, "completion event signaled");
         Check(!FileSystem::ResolvePath("SAVETEST:\\payload.bin").empty(), "case-insensitive root");
         auto* name = static_cast<char*>(g_userHeap.Alloc(64));
@@ -97,6 +190,7 @@ int main(int argc, char** argv)
         Check(Call(writing?__imp__NtWriteFile:__imp__NtReadFile, {*file,0,0,0,Addr(iosb),Addr(bytes),4096,Addr(offset)}) == 0 && iosb->Information == 4096, "payload IO");
         if (!writing) for (unsigned i=0;i<4096;i++) Check(bytes[i] == uint8_t(i*37+11), "payload bytes after restart");
         Check(Call(__imp__NtFlushBuffersFile,{*file,Addr(iosb)}) == 0, "flush payload");
+        if (!writing) CheckConcurrentReads(*file);
         DestroyKernelObject(*file);
         if (writing)
         {

@@ -60,7 +60,7 @@ namespace
         }
     };
 
-    std::string Format(uint8_t* base, const char* format, ArgSource& args)
+    std::string Format(uint8_t* base, const char* format, ArgSource& args, bool wideFormat)
     {
         std::string out;
         char spec[32];
@@ -142,9 +142,12 @@ namespace
             {
                 uint32_t ptr = (uint32_t)args.NextInt();
                 std::string str;
+                // Xenon CRT follows the function's width for %s, reverses it
+                // for %S, and lets h/l/w override either default (as in Xenia).
+                const bool wideString = isWide || (!isShort && ((conv == 'S') != wideFormat));
                 if (ptr == 0)
                     str = "(null)";
-                else if (isWide || conv == 'S')
+                else if (wideString)
                 {
                     auto* w = reinterpret_cast<const be<uint16_t>*>(base + ptr);
                     for (size_t i = 0; w[i] != 0 && i < 4096; i++)
@@ -196,11 +199,11 @@ namespace
 std::string GuestFormat(PPCContext& ctx, uint8_t* base, const char* format, size_t firstArg, bool wideFormat)
 {
     RegisterArgSource src(ctx, base, firstArg);
-    return Format(base, NarrowFormat(base, format, wideFormat).c_str(), src);
+    return Format(base, NarrowFormat(base, format, wideFormat).c_str(), src, wideFormat);
 }
 
 std::string GuestFormatVaList(uint8_t* base, const char* format, uint32_t vaList, bool wideFormat)
 {
     VaListArgSource src(base, vaList);
-    return Format(base, NarrowFormat(base, format, wideFormat).c_str(), src);
+    return Format(base, NarrowFormat(base, format, wideFormat).c_str(), src, wideFormat);
 }

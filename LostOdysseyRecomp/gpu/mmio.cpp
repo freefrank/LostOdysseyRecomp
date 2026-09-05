@@ -1,6 +1,7 @@
 #include <stdafx.h>
 #include "command_processor.h"
 #include "ppc_mmio.h"
+#include <apu/xma.h>
 #include <os/logger.h>
 
 // MMIO stores from recompiled code. Values arrive in guest (native) order;
@@ -14,6 +15,7 @@ static inline bool IsGpuRegister(uint32_t ea)
 
 extern "C" void LoMmioStore32(uint8_t* base, uint32_t ea, uint32_t value)
 {
+    if (apu::xma::WriteCommand(ea, __builtin_bswap32(value))) return;
     *(volatile uint32_t*)(base + ea) = __builtin_bswap32(value);
     if (IsGpuRegister(ea))
         gpu::g_commandProcessor.MmioWrite32(ea, value);

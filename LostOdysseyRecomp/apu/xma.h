@@ -5,8 +5,7 @@
 // XMAReleaseContext; everything else happens through the 320-entry context
 // array in physical memory and the MMIO registers at 0x7FEA0000, which the
 // statically linked XAudio driver pokes directly (stwbrx / lwbrx). Guest MMIO
-// is plain memory for us, so a worker thread polls the kick/lock/clear
-// register words instead of trapping the accesses.
+// commands are dispatched on each store; a worker decodes enabled contexts.
 //
 // Assemble XMA frames across packet/input-buffer boundaries and decode them
 // with Xenia's FFmpeg XMAFRAMES codec. The guest consumes big-endian int16
@@ -19,6 +18,9 @@ namespace apu::xma
     constexpr uint32_t kContextCount = 320;
     constexpr uint32_t kContextSize = 64;
     constexpr uint32_t kRegisterBase = 0x7FEA0000;
+
+    // Value is the little-endian register value after the MMIO byte swap.
+    bool WriteCommand(uint32_t address, uint32_t value);
 
     void Init();
     void Shutdown();

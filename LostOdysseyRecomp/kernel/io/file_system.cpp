@@ -133,6 +133,8 @@ namespace
 
 struct FileHandle : KernelObject
 {
+    // CRT stream locks protect individual calls, not seek + transfer pairs.
+    std::mutex ioMutex;
     std::filesystem::path path;
     FILE* file = nullptr;
     bool isDirectory = false;
@@ -395,6 +397,8 @@ uint32_t NtReadFile(FileHandle* handle, uint32_t Event, uint32_t ApcRoutine, uin
     if (!handle || IsInvalidKernelObject(handle) || !handle->file)
         return STATUS_INVALID_HANDLE;
 
+    std::lock_guard ioLock(handle->ioMutex);
+
     uint64_t offset = handle->position;
     if (ByteOffset)
     {
@@ -437,6 +441,8 @@ uint32_t NtWriteFile(FileHandle* handle, uint32_t Event, uint32_t ApcRoutine, ui
     if (!handle || IsInvalidKernelObject(handle) || !handle->file || !handle->writable)
         return STATUS_INVALID_HANDLE;
 
+    std::lock_guard ioLock(handle->ioMutex);
+
     uint64_t offset = handle->position;
     if (ByteOffset)
     {
@@ -470,8 +476,12 @@ uint32_t NtWriteFile(FileHandle* handle, uint32_t Event, uint32_t ApcRoutine, ui
 
 uint32_t NtFlushBuffersFile(FileHandle* handle, XIO_STATUS_BLOCK* IoStatusBlock)
 {
-    const uint32_t status = !handle || IsInvalidKernelObject(handle) || !handle->file ? STATUS_INVALID_HANDLE :
-        (fflush(handle->file) == 0 ? STATUS_SUCCESS : 0xC0000185u);
+    uint32_t status = STATUS_INVALID_HANDLE;
+    if (handle && !IsInvalidKernelObject(handle) && handle->file)
+    {
+        std::lock_guard ioLock(handle->ioMutex);
+        status = fflush(handle->file) == 0 ? STATUS_SUCCESS : 0xC0000185u;
+    }
     if (IoStatusBlock) { IoStatusBlock->Status = status; IoStatusBlock->Information = 0; }
     return status;
 }
@@ -481,6 +491,8 @@ uint32_t NtQueryInformationFile(FileHandle* handle, XIO_STATUS_BLOCK* IoStatusBl
 {
     if (!handle || IsInvalidKernelObject(handle))
         return STATUS_INVALID_HANDLE;
+
+    std::lock_guard ioLock(handle->ioMutex);
 
     uint32_t info = 0;
     uint32_t status = STATUS_SUCCESS;
@@ -560,6 +572,8 @@ uint32_t NtSetInformationFile(FileHandle* handle, XIO_STATUS_BLOCK* IoStatusBloc
 {
     if (!handle || IsInvalidKernelObject(handle))
         return STATUS_INVALID_HANDLE;
+
+    std::lock_guard ioLock(handle->ioMutex);
 
     uint32_t status = STATUS_SUCCESS;
     switch (FileInformationClass)
@@ -757,6 +771,8 @@ uint32_t NtReadFileScatter(FileHandle* handle, uint32_t Event, uint32_t ApcRouti
 {
     if (!handle || IsInvalidKernelObject(handle) || !handle->file)
         return STATUS_INVALID_HANDLE;
+
+    std::lock_guard ioLock(handle->ioMutex);
 
     uint64_t offset = ByteOffset ? uint64_t(*ByteOffset) : handle->position;
     _fseeki64(handle->file, int64_t(offset), SEEK_SET);
