@@ -3,6 +3,7 @@
 #include "video.h"
 #include "command_processor.h"
 #include "depth_format.h"
+#include "texture_layout.h"
 #include "shader/xenos_translator.h"
 #include "shader/dxc_compiler.h"
 #include <kernel/memory.h>
@@ -339,6 +340,30 @@ namespace gpu::renderer
             struct RelativeDrawStats { uint32_t draws = 0, indices = 0; };
             std::map<RelativeDrawKey, RelativeDrawStats> relativeDraws;
             uint32_t frame = 0;
+            uint32_t captureFrame = 0;
+            uint64_t captureRequest = 0;
+
+            // An opt-in request file contains a changing nonzero integer. Poll
+            // only at a frame boundary, so every diagnostic sees the same frame.
+            void PollCaptureRequest()
+            {
+                static const char* path = getenv("LO_CAPTURE_REQUEST");
+                if (!path) return;
+                uint64_t request = 0;
+                std::ifstream in(path);
+                if (in >> request && request && request != captureRequest)
+                {
+                    captureRequest = request;
+                    captureFrame = frame;
+                    LOG_INFO("renderer: capture request {} at frame {}", request, frame);
+                }
+            }
+
+            uint32_t TraceFrame() const
+            {
+                static const uint32_t configured = getenv("LO_DRAW_TRACE") ? strtoul(getenv("LO_DRAW_TRACE"), nullptr, 10) : 0;
+                return captureFrame ? captureFrame : configured;
+            }
             std::set<uint32_t> loggedFormats;
 
             struct SharedConstants
@@ -1041,21 +1066,19 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             // previous owner wrote through the guest bit representation.
             std::map<std::pair<uint32_t, uint32_t>, uint32_t> tileOwner;
 
-            // `forRead` marks the resolve path, which is the only place the previous
-            // owner's bits matter: the title renders the HDR scene as 7e3 and then
-            // resolves the very same tiles as fixed-point 2_10_10_10, which on the
-            // console is one buffer read two ways. A draw, by contrast, is about to
-            // overwrite what it touches, and converting first only costs a pass and
-            // rounds the values twice - so transfers stay off there.
+            // Draws also need the previous owner's bits: blending, write masks,
+            // depth/stencil rejection and partial coverage preserve destination
+            // pixels. In the tank intro the title restores the saved scene as
+            // fixed 2_10_10_10, then blends light into the same tiles as 7e3.
+            // Skipping that transfer retains the old white attenuation clear.
             HostTexture* AcquireColorTarget(uint32_t base, uint32_t format, uint32_t pitch, uint32_t height, bool forRead = false)
             {
                 const uint32_t colorClass = ColorClassOf(format);
                 HostTexture* target = GetRenderTarget(base, format, pitch, height, false);
-                // Default: convert before resolves. Together with the depth-fill colour
-                // wipe this reproduces the title's post chain (scene as 7e3, distortion
-                // written as 2_10_10_10, resolved again as 7e3). LO_EDRAM_TRANSFER=draw
-                // also converts before draws, =0 disables the conversion.
-                static const char* transferMode = getenv("LO_EDRAM_TRANSFER") ? getenv("LO_EDRAM_TRANSFER") : "read";
+                // Convert on both draw and resolve by default. The old resolve-only
+                // behavior remains opt-in for diagnostic A/B runs (=read); =0/none
+                // disables transfers entirely.
+                static const char* transferMode = getenv("LO_EDRAM_TRANSFER") ? getenv("LO_EDRAM_TRANSFER") : "draw";
                 const bool doTransfer = strcmp(transferMode, "0") != 0 && strcmp(transferMode, "none") != 0 &&
                     (forRead || strcmp(transferMode, "draw") == 0);
                 auto owner = tileOwner.find({ base, pitch });
@@ -1146,7 +1169,11 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     height = ((fetch[2] >> 11) & 0x7FF) + 1;
                 }
 
-                TextureKey key{ base, format, width, height, (tiled ? 1u : 0u) | (endian << 1) | (pitch32 << 3) | (dimension << 12) };
+                const bool packedMips = ((fetch[5] >> 11) & 1) != 0;
+                const uint32_t originalWidth = width, originalHeight = height;
+                const uint32_t sourceMip = base == 0 ? std::max<uint32_t>(1, (fetch[4] >> 2) & 0xF) : 0;
+                const uint32_t sourceAddress = base ? base : (fetch[5] >> 12) << 12;
+                TextureKey key{ sourceAddress, format, width, height, (tiled ? 1u : 0u) | (endian << 1) | (pitch32 << 3) | (dimension << 12) | (uint32_t(packedMips) << 14) | (sourceMip << 15) };
                 // LO_NO_DEPTH_FETCH=1: hand shaders a constant instead of the resolved
                 // depth, to tell depth-driven artefacts from shading ones.
                 static const bool noDepthFetch = getenv("LO_NO_DEPTH_FETCH") != nullptr;
@@ -1214,23 +1241,25 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 // A fetch constant with no base address stores its data in the mip
                 // chain instead; take the largest available level and scale the
                 // dimensions to it (Xenia: mip_address / mip_min_level).
-                uint32_t sourceAddress = base;
-                if (sourceAddress == 0)
+                if (base == 0)
                 {
-                    const uint32_t mipAddress = (fetch[5] >> 12) << 12;
-                    const uint32_t mipMin = std::max<uint32_t>(1, (fetch[4] >> 2) & 0xF);
-                    if (mipAddress == 0)
+                    if (sourceAddress == 0)
                         return nullptr;
-                    sourceAddress = mipAddress;
-                    width = std::max<uint32_t>(1, width >> mipMin);
-                    height = std::max<uint32_t>(1, height >> mipMin);
-                    pitch32 = std::max<uint32_t>(1, pitch32 >> mipMin);
+                    width = std::max<uint32_t>(1, width >> sourceMip);
+                    height = std::max<uint32_t>(1, height >> sourceMip);
+                    pitch32 = std::max<uint32_t>(1, pitch32 >> sourceMip);
                 }
 
+                // Even level zero lives inside the packed tail when a texture's
+                // shorter dimension is <= 16. Apply the block origin before
+                // tiling; adding an offset to the resulting byte address is wrong.
+                const TextureBlockOffset packedOffset = packedMips && dimension != 2
+                    ? PackedMipOffset2D(originalWidth, originalHeight, sourceMip, fi.blockWidth, fi.blockHeight)
+                    : TextureBlockOffset{};
                 // Guest layout: blocks, pitch in blocks aligned to the 32-block macro tile.
                 uint32_t blocksX = (width + fi.blockWidth - 1) / fi.blockWidth;
                 uint32_t blocksY = (height + fi.blockHeight - 1) / fi.blockHeight;
-                uint32_t pitchBlocks = std::max<uint32_t>((pitch32 * 32) / fi.blockWidth, blocksX);
+                uint32_t pitchBlocks = std::max<uint32_t>((pitch32 * 32) / fi.blockWidth, packedOffset.x + blocksX);
                 pitchBlocks = (pitchBlocks + 31) & ~31u;
                 uint32_t bpbLog2 = fi.bytesPerBlock == 1 ? 0 : fi.bytesPerBlock == 2 ? 1 : fi.bytesPerBlock == 4 ? 2 : fi.bytesPerBlock == 8 ? 3 : 4;
 
@@ -1241,7 +1270,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 // Cube faces sit back to back, each face's tiled image padded to the
                 // 4 KB subresource alignment (xenos.h kTextureSubresourceAlignment).
                 const uint32_t faces = dimension == 3 ? 6u : 1u;
-                const uint32_t blocksYAligned = (blocksY + 31) & ~31u;
+                const uint32_t blocksYAligned = (packedOffset.y + blocksY + 31) & ~31u;
                 const uint32_t faceStride = ((pitchBlocks * blocksYAligned * fi.bytesPerBlock) + 4095u) & ~4095u;
                 std::vector<uint8_t> staging(size_t(rowPitch) * blocksY * faces);
                 std::vector<uint8_t> block(fi.bytesPerBlock);
@@ -1251,7 +1280,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     uint8_t* dstRow = staging.data() + (size_t(f) * blocksY + by) * rowPitch;
                     for (uint32_t bx = 0; bx < blocksX; bx++)
                     {
-                        uint32_t offset = tiled ? video::TiledOffset2D(bx, by, pitchBlocks, bpbLog2) : (by * pitchBlocks + bx) * fi.bytesPerBlock;
+                        const uint32_t sx = bx + packedOffset.x, sy = by + packedOffset.y;
+                        uint32_t offset = tiled ? video::TiledOffset2D(sx, sy, pitchBlocks, bpbLog2) : (sy * pitchBlocks + sx) * fi.bytesPerBlock;
                         memcpy(block.data(), src + size_t(f) * faceStride + offset, fi.bytesPerBlock);
                         // Endian swap within the block.
                         if (endian == 1 || (endian == 2 && fi.bytesPerBlock == 2))
@@ -1291,7 +1321,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 tex->width = width;
                 tex->height = height;
                 tex->guestAddress = sourceAddress;
-                tex->guestBytes = uint32_t(std::min<uint64_t>(uint64_t(pitchBlocks) * blocksY * fi.bytesPerBlock * faces, 64u << 20));
+                tex->guestBytes = uint32_t(std::min<uint64_t>(uint64_t(faceStride) * faces, 64u << 20));
                 tex->guestHash = SampleHash(src, tex->guestBytes);
                 tex->checkedFrame = frame;
                 uint32_t texWidth = fi.blockWidth > 1 ? blocksX * fi.blockWidth : width;
@@ -1784,7 +1814,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     set3 = AcquireSet(3);
                 }
                 auto tVertex0 = std::chrono::steady_clock::now();
-                static const uint32_t vfTraceFrame = getenv("LO_DRAW_TRACE") ? strtoul(getenv("LO_DRAW_TRACE"), nullptr, 10) : 0;
+                const uint32_t vfTraceFrame = TraceFrame();
                 static const uint32_t vfTraceCount = getenv("LO_DRAW_TRACE_COUNT") ? strtoul(getenv("LO_DRAW_TRACE_COUNT"), nullptr, 10) : 1;
                 const bool vfTrace = vfTraceFrame && frame >= vfTraceFrame && frame < vfTraceFrame + vfTraceCount;
                 std::string vfTraceLine;
@@ -2013,7 +2043,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 
                 int32_t baseVertex = int32_t(Reg(REG_VGT_INDX_OFFSET));
                 static uint32_t drawLogs = 0;
-                static const uint32_t traceFrame = getenv("LO_DRAW_TRACE") ? strtoul(getenv("LO_DRAW_TRACE"), nullptr, 10) : 0;
+                const uint32_t traceFrame = TraceFrame();
                 static const uint32_t traceCount = getenv("LO_DRAW_TRACE_COUNT") ? strtoul(getenv("LO_DRAW_TRACE_COUNT"), nullptr, 10) : 1;
                 if (traceFrame && frame >= traceFrame && frame < traceFrame + traceCount && (info.indexCount >= 200 || info.primitiveType == 8))
                 {
@@ -2306,7 +2336,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             // runs (the dumps themselves slow the game), shader hashes do not.
             void DumpDrawStep(HostTexture& color, uint64_t vsHash)
             {
-                static const uint32_t dumpFrame = getenv("LO_DUMP_DRAW_SEQ") ? strtoul(getenv("LO_DUMP_DRAW_SEQ"), nullptr, 10) : 0;
+                const uint32_t dumpFrame = captureFrame ? captureFrame : (getenv("LO_DUMP_DRAW_SEQ") ? strtoul(getenv("LO_DUMP_DRAW_SEQ"), nullptr, 10) : 0);
                 static const uint32_t every = getenv("LO_DUMP_DRAW_EVERY") ? std::max(1ul, strtoul(getenv("LO_DUMP_DRAW_EVERY"), nullptr, 10)) : 25;
                 static const uint64_t dumpVs = getenv("LO_DUMP_DRAW_VS") ? strtoull(getenv("LO_DUMP_DRAW_VS"), nullptr, 16) : 0;
                 static uint64_t lockedFrame = 0;
@@ -2321,14 +2351,14 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 else if (frame != dumpFrame || (drawsThisFrame % every) != 0)
                     return;
                 const char* dir = getenv("LO_DUMP_RESOLVE_DIR");
-                DumpTexture(color, fmt::format("{}/draw{:04}_{}x{}.ppm", dir ? dir : ".", drawsThisFrame, color.width, color.height), "draw step");
+                DumpTexture(color, fmt::format("{}/f{}_draw{:04}_{}x{}.ppm", dir ? dir : ".", frame, drawsThisFrame, color.width, color.height), "draw step");
             }
 
             // LO_DUMP_RESOLVE_SEQ=<frame>: dump every resolve of that frame in order.
             uint32_t resolveSeq = 0;
             void DumpResolveStep(HostTexture& tex, uint32_t destBase)
             {
-                static const uint32_t dumpFrame = getenv("LO_DUMP_RESOLVE_SEQ") ? strtoul(getenv("LO_DUMP_RESOLVE_SEQ"), nullptr, 10) : 0;
+                const uint32_t dumpFrame = captureFrame ? captureFrame : (getenv("LO_DUMP_RESOLVE_SEQ") ? strtoul(getenv("LO_DUMP_RESOLVE_SEQ"), nullptr, 10) : 0);
                 if (!dumpFrame || frame != dumpFrame)
                     return;
                 uint32_t bpp = tex.format == RenderFormat::R8G8B8A8_UNORM ? 4 : tex.format == RenderFormat::R16G16B16A16_FLOAT ? 8 : tex.format == RenderFormat::R32_FLOAT ? 4 : 0;
@@ -2345,7 +2375,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 Begin();
                 const uint8_t* src = static_cast<const uint8_t*>(readback->map());
                 const char* dir = getenv("LO_DUMP_RESOLVE_DIR");
-                std::string path = fmt::format("{}/seq{:02}_{:x}.ppm", dir ? dir : ".", resolveSeq++, destBase);
+                std::string path = fmt::format("{}/f{}_seq{:02}_{:x}.ppm", dir ? dir : ".", frame, resolveSeq++, destBase);
                 if (FILE* f = fopen(path.c_str(), "wb"))
                 {
                     fprintf(f, "P6%c%u %u%c255%c", 10, tex.width, tex.height, 10, 10);
@@ -2550,7 +2580,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 
                 uint32_t colorInfo = Reg(REG_RB_COLOR_INFO + (srcSelect < 4 ? (srcSelect == 0 ? 0 : 2 + (srcSelect - 1)) : 0));
                 {
-                    static const uint32_t traceFrame = getenv("LO_DRAW_TRACE") ? strtoul(getenv("LO_DRAW_TRACE"), nullptr, 10) : 0;
+                    const uint32_t traceFrame = TraceFrame();
                     static const uint32_t traceCount = getenv("LO_DRAW_TRACE_COUNT") ? strtoul(getenv("LO_DRAW_TRACE_COUNT"), nullptr, 10) : 1;
                     if (traceFrame && frame >= traceFrame && frame < traceFrame + traceCount)
                     {
@@ -2595,7 +2625,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 // Convert each pixel to four floats, then to the destination format, tiled.
                 const uint8_t* src = static_cast<const uint8_t*>(readback->map());
                 static uint32_t resolveLogs = 0;
-                static const uint32_t traceFrame = getenv("LO_DRAW_TRACE") ? strtoul(getenv("LO_DRAW_TRACE"), nullptr, 10) : 0;
+                const uint32_t traceFrame = TraceFrame();
                 static const uint32_t traceCount = getenv("LO_DRAW_TRACE_COUNT") ? strtoul(getenv("LO_DRAW_TRACE_COUNT"), nullptr, 10) : 1;
                 if (resolveLogs++ < 12 || (destBase == 0x70f000 && (resolveLogs % 120) == 0) || (traceFrame && frame >= traceFrame && frame < traceFrame + traceCount))
                 {
@@ -2780,6 +2810,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 r.vertexBytesUploaded = 0;
             }
             g_renderer->frame++;
+            g_renderer->PollCaptureRequest();
             g_renderer->drawsThisFrame = 0;
             g_renderer->drops = {};
         }

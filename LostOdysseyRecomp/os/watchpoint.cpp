@@ -19,6 +19,7 @@ static thread_local uint64_t t_pendingFault = 0;
 static thread_local bool t_pendingWrite = false;
 namespace gpu { extern std::atomic<uint32_t> g_swapCount; }
 static std::atomic<int> s_hits = 0;
+static bool s_writeOnly = false;
 
 static void ArmWatchPage()
 {
@@ -69,7 +70,8 @@ static LONG WINAPI WatchHandler(EXCEPTION_POINTERS* info)
         if (fault < (uint64_t)s_watchPage || fault >= (uint64_t)s_watchPage + 0x1000)
             return EXCEPTION_CONTINUE_SEARCH;
         t_pendingFault = 0;
-        if (fault >= (uint64_t)s_watchLo && fault < (uint64_t)s_watchHi && s_hits < 600)
+        if (fault >= (uint64_t)s_watchLo && fault < (uint64_t)s_watchHi && s_hits < 600 &&
+            (!s_writeOnly || rec->ExceptionInformation[0] == 1))
         {
             s_hits++;
             t_pendingWrite = rec->ExceptionInformation[0] == 1;
@@ -117,6 +119,21 @@ void InstallPhysicalWatchpoint()
     ArmWatchPage();
     LOG_WARNING("watching physical {:#x}..{:#x}", phys, phys + len);
 }
+
+void ArmGuestWriteWatchpoint(uint32_t address, uint32_t length)
+{
+    if (s_watchPage) return;
+    SymSetOptions(SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS);
+    SymInitialize(GetCurrentProcess(), nullptr, TRUE);
+    s_writeOnly = true;
+    s_watchLo = static_cast<uint8_t*>(g_memory.Translate(address));
+    s_watchHi = s_watchLo + length;
+    s_watchPage = reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(s_watchLo) & ~uintptr_t(0xFFF));
+    AddVectoredExceptionHandler(1, WatchHandler);
+    ArmWatchPage();
+    LOG_INFO("watching guest writes {:#x}..{:#x}", address, address + length);
+}
 #else
 void InstallPhysicalWatchpoint() {}
+void ArmGuestWriteWatchpoint(uint32_t, uint32_t) {}
 #endif

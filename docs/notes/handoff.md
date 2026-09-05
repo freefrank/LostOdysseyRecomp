@@ -2,16 +2,21 @@
 
 ## 当前状态
 
+用户确认 debug 判胜可跳过战斗、修复后手动存档成功；独立进程已从存档副本进入地图，见 [存档调查](save-storage.md)。当前在调查后续遇敌 T 字姿势、选攻击不执行与敌人光影闪烁。
+
 Windows D3D12 已验证标题、菜单、开场战斗、攻击目标选择及攻击后镜头切换。
+最新续修已通过首场战斗后的实时演出并进入重型坦克战斗，见 [战后白屏修复](post-battle-whiteout.md)。
 本轮依次修复：
 
 | 问题 | 根因与实现 | 详细记录 |
 |---|---|---|
+| 标题动态背景纯黑 | 小尺寸纹理 level 0 位于 packed mip 尾部，上传忽略块偏移 | [标题背景](title-packed-mips.md) |
 | 角色黑色剪影 | A/C 物理地址未共享，客体读不到 GPU 遮挡结果；E 别名偏移一页 | [物理内存别名](physical-alias-rendering.md) |
 | 角色网格破面 | 16 位索引 DMA 起点被错误按 4 字节对齐 | [几何与后期](rendering-index-and-resolve.md) |
 | 后期轮廓偏移 | 428×242 的纹理按 448×242 行距资源采样 | [几何与后期](rendering-index-and-resolve.md) |
 | 材质颜色偏差 | 缺失纹理 gamma、fetch swizzle 和 resolve R/B 配套解释；补齐 ALU 并行读语义 | [着色器与纹理](rendering-index-and-resolve.md) |
 | 金属高光缺失 | stencil 状态未接通、plume 参考值丢失、D24 清理端点溢出 | [光影](lighting-stencil-depth-clear.md) |
+| 战后演出整屏白色 | 场景恢复后以另一格式继续叠加光照，draw 前缺少 EDRAM 内容转换 | [战后白屏](post-battle-whiteout.md) |
 
 Shader cache 版本为 v19。保持正常深度、客体遮挡开关及景深，没有用曝光或强制颜色写掩码补偿。
 GPU 遮挡计数仍是已有的近似实现，不能当作真实硬件查询结果。
@@ -23,13 +28,16 @@ GPU 遮挡计数仍是已有的近似实现，不能当作真实硬件查询结�
 - [Xenia 对照条件和原始观察](xenia-render-comparison.md)
 - 本地最新证据：`out/render-light-depthpack/shot_2400.png`、`shot_3000.png`。
 - 本地对照页：`out/xenia-comparison/comparison-lighting.html`。
+- 最新战后演出证据：`out/cg-white-transfer/`；对照页 `out/xenia-comparison/comparison-cg.html`。
 
 `out/` 中的日志、游戏截图、捕获数据不随仓库分发。角色待机动作不同，当前对照不支持逐像素一致或性能提升的结论。
 
 ## 下一步
 
-1. 继续以 Xenia 同场景对照检查阴影边缘、局部光照和后处理，保留本轮基线，每次只改一个变量。
-2. 验证战斗结束、后续场景及存档；目前未验证通关。
+主角火焰受击在 Xenia 中也有 glitch（用户已确认），不能把该效果当作正确基线；需要独立取证或原机参考。攻击力 debug menu 已登记在 [需求说明](../debug-menu-requirements.md)，尚未实现。
+
+1. 继续以 Xenia 同场景对照检查粒子、光晕、阴影边缘和后处理，保留本轮基线，每次只改一个变量。EDRAM 转换现在默认 draw + resolve；read 是历史错误行为对照。
+2. 验证重型坦克战斗结束、更后续场景及存档；目前未验证通关。
 3. plume 只提供一组 stencil reference/read/write mask；当前场景没有启用双面且两组值不同的 draw，其他场景需要继续检查。
 4. 完整 Linux/Vulkan 运行、音频真解码、WMV 和四盘合并仍未完成，见 [路线图](../ROADMAP.md)。
 

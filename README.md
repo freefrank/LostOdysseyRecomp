@@ -47,7 +47,9 @@ Windows 运行时已可用 clang-cl 构建；需要本地已提取的游戏数�
 ```
 
 构建脚本使用本机 Visual Studio 2022 Build Tools 和 LLVM；具体路径见脚本。
+调试期间默认关闭手柄震动；需要恢复时，在启动游戏前设置 `$env:LO_CONTROLLER_RUMBLE='1'`。
 目前可进入标题、菜单和开场战斗；已修复角色黑色剪影、网格破面、后期轮廓偏移及纹理 gamma 缺失，并恢复开场战斗的金属高光。更多场景及阴影细节仍需验证。
+首场战斗后的实时演出白屏也已修复，已进入重型坦克战斗，见 [修复记录](docs/notes/post-battle-whiteout.md)。
 音频为静音占位、WMV 影片未解码。Windows 运行时需要 Windows 10 1803 或更新版本。
 阶段状态见 [docs/ROADMAP.md](docs/ROADMAP.md)，接手入口见 [docs/notes/handoff.md](docs/notes/handoff.md)。
 

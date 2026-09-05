@@ -4,6 +4,7 @@
 #include <kernel/memory.h>
 #include <os/logger.h>
 #include <hid/hid.h>
+#include <debug/battle_menu.h>
 
 #include <SDL.h>
 #include <SDL_syswm.h>
@@ -203,6 +204,10 @@ namespace gpu::video
         SDL_Event event;
         while (SDL_PollEvent(&event))
         {
+            if (event.type == SDL_KEYDOWN && getenv("LO_TRACE_INPUT"))
+                LOG_INFO("video key: {} repeat {}", event.key.keysym.sym, event.key.repeat);
+            if (event.type == SDL_KEYDOWN && !event.key.repeat && event.key.keysym.sym == SDLK_F1)
+                debug_menu::Toggle();
             if (event.type == SDL_CONTROLLERDEVICEADDED || event.type == SDL_CONTROLLERDEVICEREMOVED)
                 hid::HandleControllerEvent(event.type, event.cdevice.which);
             if (event.type == SDL_QUIT)
@@ -212,6 +217,7 @@ namespace gpu::video
                 std::_Exit(0);
             }
         }
+        debug_menu::Update();
     }
 
     void PresentFrontbuffer(uint32_t physicalAddress, uint32_t width, uint32_t height, uint32_t copyDestInfo)

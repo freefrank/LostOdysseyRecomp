@@ -21,6 +21,9 @@ public class ExportFunctions extends GhidraScript {
                 Address at = toAddr(Long.parseUnsignedLong(args[i].replace("0x", ""), 16));
                 Function f = getFunctionContaining(at);
                 if (f == null) f = getFunctionAt(at);
+                // Some valid entry points have no function in the imported XEX.
+                // Headless callers use -readOnly, so this analysis is discarded.
+                if (f == null && disassemble(at)) f = createFunction(at, null);
                 out.println("\n// Requested " + at + ": " + (f == null ? "NO FUNCTION" : f.getName()));
                 if (f == null) continue;
                 out.println("// Entry " + f.getEntryPoint());

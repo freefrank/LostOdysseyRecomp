@@ -228,7 +228,7 @@ std::filesystem::path FileSystem::ResolvePath(std::string_view path)
         }
     }
 
-    std::string_view hostRoot = XamGetRootPath(root);
+    const std::string hostRoot = XamGetRootPath(root);
     if (hostRoot.empty())
     {
         LOG_WARNING("unknown root '{}' in '{}'", root, path);
@@ -258,17 +258,18 @@ static uint32_t OpenFileHandle(be<uint32_t>* FileHandleOut, uint32_t DesiredAcce
 {
     std::string name = GuestAnsiString(Attributes ? Attributes->Name.get() : nullptr);
     const uint32_t rootDirectory = Attributes ? uint32_t(Attributes->RootDirectory) : 0;
+    std::filesystem::path hostPath;
     LOG_KERNEL("open '{}' root={:#x} access={:#x} disposition={} options={:#x}", name, rootDirectory, DesiredAccess, CreateDisposition, CreateOptions);
 
     // Relative to another (file or directory) handle?
     if (rootDirectory != 0 && rootDirectory != GUEST_INVALID_HANDLE_VALUE && IsKernelObject(rootDirectory))
     {
         auto* parent = GetKernelObject<FileHandle>(rootDirectory);
-        std::filesystem::path full = parent->path / std::u8string_view((const char8_t*)name.c_str());
-        name = (const char*)full.u8string().c_str();
+        std::replace(name.begin(), name.end(), '\\', '/');
+        hostPath = parent->path / std::u8string_view((const char8_t*)name.c_str());
     }
 
-    std::filesystem::path hostPath = FileSystem::ResolvePath(name);
+    if (hostPath.empty()) hostPath = FileSystem::ResolvePath(name);
     const bool wantWrite = (DesiredAccess & 0x40000000) != 0 || (DesiredAccess & 0x2) != 0 || (DesiredAccess & 0x4) != 0;
 
     std::error_code ec;
@@ -433,42 +434,46 @@ uint32_t NtReadFile(FileHandle* handle, uint32_t Event, uint32_t ApcRoutine, uin
 uint32_t NtWriteFile(FileHandle* handle, uint32_t Event, uint32_t ApcRoutine, uint32_t ApcContext,
     XIO_STATUS_BLOCK* IoStatusBlock, const void* Buffer, uint32_t Length, be<uint64_t>* ByteOffset)
 {
-    if (!handle || IsInvalidKernelObject(handle) || !handle->file)
+    if (!handle || IsInvalidKernelObject(handle) || !handle->file || !handle->writable)
         return STATUS_INVALID_HANDLE;
 
     uint64_t offset = handle->position;
     if (ByteOffset)
     {
         uint64_t v = *ByteOffset;
-        if (v != 0xFFFFFFFFFFFFFFFEull)
+        if (v == 0xFFFFFFFFFFFFFFFFull) offset = handle->size;
+        else if (v != 0xFFFFFFFFFFFFFFFEull)
             offset = v;
     }
 
-    _fseeki64(handle->file, int64_t(offset), SEEK_SET);
-    size_t written = fwrite(Buffer, 1, Length, handle->file);
+    const bool seekOk = _fseeki64(handle->file, int64_t(offset), SEEK_SET) == 0;
+    size_t written = seekOk ? fwrite(Buffer, 1, Length, handle->file) : 0;
+    const bool flushOk = fflush(handle->file) == 0;
+    const uint32_t status = seekOk && written == Length && flushOk ? STATUS_SUCCESS : 0xC0000185u;
     handle->position = offset + written;
     handle->size = std::max(handle->size, handle->position);
 
     if (IoStatusBlock)
     {
-        IoStatusBlock->Status = STATUS_SUCCESS;
+        IoStatusBlock->Status = status;
         IoStatusBlock->Information = uint32_t(written);
     }
-    QueueIoApc(ApcRoutine, ApcContext, IoStatusBlock, STATUS_SUCCESS);
+    LOG_INFO("write '{}' offset={} bytes={}/{} status={:#x}", handle->path.string(), offset, written, Length, status);
+    QueueIoApc(ApcRoutine, ApcContext, IoStatusBlock, status);
     if (Event != 0)
     {
         extern void KernelSignalEventHandle(uint32_t handle);
         KernelSignalEventHandle(Event);
     }
-    return STATUS_SUCCESS;
+    return status;
 }
 
 uint32_t NtFlushBuffersFile(FileHandle* handle, XIO_STATUS_BLOCK* IoStatusBlock)
 {
-    if (handle && !IsInvalidKernelObject(handle) && handle->file)
-        fflush(handle->file);
-    if (IoStatusBlock) { IoStatusBlock->Status = STATUS_SUCCESS; IoStatusBlock->Information = 0; }
-    return STATUS_SUCCESS;
+    const uint32_t status = !handle || IsInvalidKernelObject(handle) || !handle->file ? STATUS_INVALID_HANDLE :
+        (fflush(handle->file) == 0 ? STATUS_SUCCESS : 0xC0000185u);
+    if (IoStatusBlock) { IoStatusBlock->Status = status; IoStatusBlock->Information = 0; }
+    return status;
 }
 
 uint32_t NtQueryInformationFile(FileHandle* handle, XIO_STATUS_BLOCK* IoStatusBlock, void* FileInformation,

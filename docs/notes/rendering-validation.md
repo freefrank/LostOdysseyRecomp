@@ -10,15 +10,18 @@
 .\tools\build_runtime.bat LoMemoryAliasTest
 .\tools\build_runtime.bat LoShaderAluTest
 .\tools\build_runtime.bat LoStencilTest
+.\tools\build_runtime.bat LoTextureLayoutTest
 .\out\build\windows-clang\LostOdysseyRecomp\LoMemoryAliasTest.exe
 .\out\build\windows-clang\LostOdysseyRecomp\LoShaderAluTest.exe
 .\out\build\windows-clang\LostOdysseyRecomp\LoStencilTest.exe
+.\out\build\windows-clang\LostOdysseyRecomp\LoTextureLayoutTest.exe
 ```
 
-三个测试本身不读取游戏资产；当前整体 CMake 配置仍依赖本地项目构建环境。
+四个测试本身不读取游戏资产；当前整体 CMake 配置仍依赖本地项目构建环境。
 
 | 测试 | 覆盖 | 平台验证 |
 |---|---|---|
+| LoTextureLayoutTest | 14 个 packed mip 块偏移用例，包括微小 BC 贴图和长条纹理 | Windows |
 | LoMemoryAliasTest | A/C/E 共享写入、E 的一页偏移及释放 | Windows、WSL Manjaro |
 | LoShaderAluTest | 真实 GPU ALU 旧值读取、后续结果、gamma、swizzle 和 resolve R/B 往返 | Windows D3D12 |
 | LoStencilTest | 左半写 stencil=3，EQUAL/NOT_EQUAL 的 GPU 像素读回；D24 端点静态断言 | Windows D3D12，LO_BUILD_GPU=ON |
@@ -27,7 +30,7 @@
 
 ## 实机复现
 
-使用 Disc 1，默认 30 fps、默认 EDRAM transfer 和 shader cache v19。
+使用 Disc 1，默认 30 fps、默认 EDRAM transfer（draw + resolve）和 shader cache v19。
 从仓库根目录设置自动输入后启动：
 
 ```powershell
@@ -51,6 +54,7 @@ Xenia 对照条件见 [对照记录](xenia-render-comparison.md)。
 
 ## 已知范围
 
-已验证开场材质、模型完整性、后期轮廓和金属高光改善；未验证战斗结束、通关或全部阴影细节。
+已验证开场材质、模型完整性、后期轮廓和金属高光改善；未验证重型坦克战斗结束、通关或全部阴影细节。
+后续已追加首场战斗后演出及重型坦克战斗验证，见 [白屏修复记录](post-battle-whiteout.md)。
 未调整曝光，也未关闭正常深度、客体遮挡开关或景深。遮挡计数仍为近似实现。
 模板正反面不同参考值/掩码尚有限制，本场景没有触发对应警告。

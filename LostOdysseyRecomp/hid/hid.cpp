@@ -252,6 +252,24 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
         }
     }
 
+    // Reproducible field movement for local scene tests: x,y,firstSwap,lastSwap.
+    // Disabled by default, bounded to one interval, no persistent controller state.
+    {
+        struct StickReplay { int x=0, y=0; unsigned first=0, last=0; bool valid=false; };
+        static const StickReplay replay = [] {
+            StickReplay r;
+            if (const char* s = getenv("LO_AUTO_STICK"))
+                r.valid = sscanf(s, "%d,%d,%u,%u", &r.x, &r.y, &r.first, &r.last) == 4 && r.last > r.first;
+            return r;
+        }();
+        const uint32_t frame = g_presentedSwaps.load();
+        if (replay.valid && frame >= replay.first && frame < replay.last)
+        {
+            gp.sThumbLX = int16_t(std::clamp(replay.x, -32768, 32767));
+            gp.sThumbLY = int16_t(std::clamp(replay.y, -32768, 32767));
+        }
+    }
+
     // Keyboard fallback (only when SDL video is up; harmless otherwise).
     int numKeys = 0;
     const Uint8* keys = SDL_GetKeyboardState(&numKeys);
@@ -280,8 +298,14 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
 
 uint32_t hid::SetState(uint32_t dwUserIndex, XAMINPUT_VIBRATION* pVibration)
 {
+    // Keep local debugging quiet. Opt in explicitly to restore controller rumble.
+    static const bool rumbleEnabled = [] {
+        const char* value = getenv("LO_CONTROLLER_RUMBLE");
+        return value && strcmp(value, "1") == 0;
+    }();
     if (dwUserIndex != 0)
         return ERROR_DEVICE_NOT_CONNECTED;
+    if (!rumbleEnabled) return ERROR_SUCCESS;
     std::lock_guard lock(g_hidMutex);
     if (g_controller)
         SDL_GameControllerRumble(g_controller, pVibration->wLeftMotorSpeed, pVibration->wRightMotorSpeed, 100);

@@ -61,15 +61,63 @@ static std::array<ankerl::unordered_dense::map<uint64_t, XHOSTCONTENT_DATA>, 3> 
 static std::unordered_set<XamListener*> g_listeners{};
 static ankerl::unordered_dense::map<uint64_t, std::string> g_rootMap;
 static Mutex g_xamMutex;
+static std::recursive_mutex g_contentMutex;
+
+static std::string NormalizeRoot(std::string_view root)
+{
+    if (!root.empty() && root.back() == ':') root.remove_suffix(1);
+    std::string result(root);
+    std::transform(result.begin(), result.end(), result.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+    return result;
+}
+
+extern std::filesystem::path GetSavePath();
+
+static bool ValidContentName(const XCONTENT_DATA& data)
+{
+    if (!memchr(data.szFileName, 0, sizeof(data.szFileName))) return false;
+    const std::string_view name(data.szFileName);
+    return !name.empty() && name != "." && name != ".." && name.find_first_of("/\\:") == std::string_view::npos;
+}
+
+static void DiscoverSavedContent()
+{
+    std::error_code ec;
+    for (const auto& entry : std::filesystem::directory_iterator(GetSavePath(), ec))
+    {
+        if (!entry.is_directory(ec)) continue;
+        XCONTENT_DATA data{};
+        std::ifstream in(entry.path() / ".lo-content", std::ios::binary);
+        if (!in.read(reinterpret_cast<char*>(&data), sizeof(data)) ||
+            data.dwContentType != XCONTENTTYPE_SAVEDATA || !ValidContentName(data) ||
+            entry.path().filename().string() != data.szFileName) continue;
+        XamRegisterContent(data, entry.path().string());
+    }
+}
+
+struct ContentEnumerator : XamEnumeratorBase
+{
+    std::vector<XCONTENT_DATA> items;
+    uint32_t fetch;
+    size_t cursor = 0;
+    uint32_t Next(void* buffer) override
+    {
+        if (cursor == items.size()) return uint32_t(-1);
+        const uint32_t count = uint32_t(std::min<size_t>(fetch, items.size() - cursor));
+        if (buffer) memcpy(buffer, items.data() + cursor, count * sizeof(XCONTENT_DATA));
+        cursor += count;
+        return count;
+    }
+};
 
 void XamInit()
 {
 }
 
-std::string_view XamGetRootPath(const std::string_view& root)
+std::string XamGetRootPath(const std::string_view& root)
 {
     std::lock_guard lock(g_xamMutex);
-    const auto result = g_rootMap.find(StringHash(root));
+    const auto result = g_rootMap.find(StringHash(NormalizeRoot(root)));
     if (result == g_rootMap.end())
         return "";
     return result->second;
@@ -78,7 +126,7 @@ std::string_view XamGetRootPath(const std::string_view& root)
 void XamRootCreate(const std::string_view& root, const std::string_view& path)
 {
     std::lock_guard lock(g_xamMutex);
-    g_rootMap.insert_or_assign(StringHash(root), std::string(path));
+    g_rootMap.insert_or_assign(StringHash(NormalizeRoot(root)), std::string(path));
     LOG_KERNEL("root '{}' -> '{}'", root, path);
 }
 
@@ -101,6 +149,7 @@ XCONTENT_DATA XamMakeContent(uint32_t type, const std::string_view& name)
 
 void XamRegisterContent(const XCONTENT_DATA& data, const std::string_view& root)
 {
+    std::lock_guard lock(g_contentMutex);
     const auto idx = data.dwContentType - 1;
     g_contentRegistry[idx].emplace(StringHash(data.szFileName), XHOSTCONTENT_DATA{ data }).first->second.szRoot = root;
 }
@@ -172,15 +221,20 @@ bool XNotifyGetNext(uint32_t hNotification, uint32_t dwMsgFilter, be<uint32_t>* 
 uint32_t XamContentCreateEnumerator(uint32_t dwUserIndex, uint32_t DeviceID, uint32_t dwContentType,
     uint32_t dwContentFlags, uint32_t cItem, be<uint32_t>* pcbBuffer, be<uint32_t>* phEnum)
 {
+    std::lock_guard lock(g_contentMutex);
     if (dwUserIndex != 0)
     {
         GuestThread::SetLastError(ERROR_NO_SUCH_USER);
         return 0xFFFFFFFF;
     }
 
+    if (dwContentType < 1 || dwContentType > 3 || !phEnum || !cItem || cItem > 4096)
+        return ERROR_INVALID_PARAMETER;
+    DiscoverSavedContent();
     const auto& registry = g_contentRegistry[dwContentType - 1];
-    const auto& values = registry | std::views::values;
-    auto* enumerator = CreateKernelObject<XamEnumerator<decltype(values.begin())>>(cItem, sizeof(_XCONTENT_DATA), values.begin(), values.end());
+    auto* enumerator = CreateKernelObject<ContentEnumerator>();
+    enumerator->fetch = cItem;
+    for (const auto& [key, value] : registry) enumerator->items.push_back(value);
 
     if (pcbBuffer)
         *pcbBuffer = sizeof(_XCONTENT_DATA) * cItem;
@@ -202,6 +256,10 @@ uint32_t XamEnumerate(uint32_t hEnum, uint32_t dwFlags, void* pvBuffer, uint32_t
     if (!IsKernelObject(hEnum))
         return ERROR_INVALID_HANDLE;
     auto* enumerator = GetKernelObject<XamEnumeratorBase>(hEnum);
+    if (auto* content = dynamic_cast<ContentEnumerator*>(enumerator);
+        content && (!pvBuffer || cbBuffer < sizeof(XCONTENT_DATA) * content->fetch))
+        return ERROR_INSUFFICIENT_BUFFER;
+    if (pcItemsReturned) *pcItemsReturned = 0;
     const auto count = enumerator->Next(pvBuffer);
     const uint32_t result = count == -1 ? ERROR_NO_MORE_FILES : ERROR_SUCCESS;
 
@@ -211,10 +269,7 @@ uint32_t XamEnumerate(uint32_t hEnum, uint32_t dwFlags, void* pvBuffer, uint32_t
     // Asynchronous form: the outcome travels through the overlapped block.
     if (pOverlapped)
     {
-        pOverlapped->Error = result;
-        pOverlapped->Length = count == -1 ? 0 : uint32_t(count);
-        if (pOverlapped->hEvent)
-            KernelSignalEventHandle(pOverlapped->hEvent);
+        CompleteOverlapped(pOverlapped, result, count == -1 ? 0 : uint32_t(count));
         return ERROR_IO_PENDING;
     }
     return result;
@@ -223,13 +278,20 @@ uint32_t XamEnumerate(uint32_t hEnum, uint32_t dwFlags, void* pvBuffer, uint32_t
 extern std::filesystem::path GetSavePath();
 extern std::filesystem::path GetGamePath();
 
-uint32_t XamContentCreateEx(uint32_t dwUserIndex, const char* szRootName, const XCONTENT_DATA* pContentData,
+static uint32_t ContentCreate(uint32_t dwUserIndex, const char* szRootName, const XCONTENT_DATA* pContentData,
     uint32_t dwContentFlags, be<uint32_t>* pdwDisposition, be<uint32_t>* pdwLicenseMask,
     uint32_t dwFileCacheSize, uint64_t uliContentSize, PXXOVERLAPPED pOverlapped)
 {
+    std::lock_guard lock(g_contentMutex);
+    if (!szRootName || !*szRootName || !pContentData || !ValidContentName(*pContentData) ||
+        pContentData->dwContentType < 1 || pContentData->dwContentType > 3)
+        return ERROR_INVALID_PARAMETER;
+    DiscoverSavedContent();
     const auto& registry = g_contentRegistry[pContentData->dwContentType - 1];
     const auto exists = registry.contains(StringHash(pContentData->szFileName));
     const auto mode = dwContentFlags & 0xF;
+    if (mode == 1 && exists) return ERROR_ALREADY_EXISTS;
+    if (pdwLicenseMask) *pdwLicenseMask = 0;
 
     LOG_KERNEL("root='{}' file='{}' type={} mode={} exists={}", szRootName, pContentData->szFileName, (uint32_t)pContentData->dwContentType, mode, exists);
 
@@ -249,10 +311,17 @@ uint32_t XamContentCreateEx(uint32_t dwUserIndex, const char* szRootName, const 
                 rootPath = GetGamePath();
 
             const std::string root = (const char*)rootPath.u8string().c_str();
-            XamRegisterContent(*pContentData, root);
-
             std::error_code ec;
             std::filesystem::create_directories(rootPath, ec);
+            if (ec) return ERROR_ACCESS_DENIED;
+            if (pContentData->dwContentType == XCONTENTTYPE_SAVEDATA)
+            {
+                std::ofstream metadata(rootPath / ".lo-content", std::ios::binary | std::ios::trunc);
+                metadata.write(reinterpret_cast<const char*>(pContentData), sizeof(*pContentData));
+                metadata.close();
+                if (!metadata) return ERROR_WRITE_FAULT;
+            }
+            XamRegisterContent(*pContentData, root);
             XamRootCreate(szRootName, root);
         }
         else
@@ -280,11 +349,44 @@ uint32_t XamContentCreateEx(uint32_t dwUserIndex, const char* szRootName, const 
     return ERROR_PATH_NOT_FOUND;
 }
 
+uint32_t XamContentCreateEx(uint32_t dwUserIndex, const char* szRootName, const XCONTENT_DATA* pContentData,
+    uint32_t dwContentFlags, be<uint32_t>* pdwDisposition, be<uint32_t>* pdwLicenseMask,
+    uint32_t dwFileCacheSize, uint64_t uliContentSize, PXXOVERLAPPED pOverlapped)
+{
+    be<uint32_t> disposition = 0;
+    const uint32_t result = ContentCreate(dwUserIndex, szRootName, pContentData, dwContentFlags,
+        &disposition, pdwLicenseMask, dwFileCacheSize, uliContentSize, nullptr);
+    if (pdwDisposition) *pdwDisposition = disposition;
+    if (pOverlapped)
+    {
+        // Xenia xeXamContentCreate: completion length carries create/open disposition;
+        // errors use FUNCTION_FAILED plus an HRESULT in dwExtendedError.
+        pOverlapped->dwExtendedError = result ? (0x80070000u | result) : 0;
+        // Set the extended result before signaling the event / queueing the APC.
+        pOverlapped->Error = result ? ERROR_FUNCTION_FAILED : ERROR_SUCCESS;
+        pOverlapped->Length = disposition;
+        if (pOverlapped->hEvent) KernelSignalEventHandle(pOverlapped->hEvent);
+        // Use the shared completion dispatcher for callback-only operations below.
+        if (pOverlapped->pCompletionRoutine)
+        {
+            extern void EnqueueUserApc(uint32_t routine, uint32_t arg1, uint32_t arg2, uint32_t arg3);
+            EnqueueUserApc(pOverlapped->pCompletionRoutine, pOverlapped->Error, disposition,
+                g_memory.MapVirtual(pOverlapped));
+        }
+    }
+    LOG_INFO("content create '{}' mode={} -> {} disposition={} async={}", szRootName ? szRootName : "",
+        dwContentFlags & 15, result, uint32_t(disposition), pOverlapped != nullptr);
+    return pOverlapped ? ERROR_IO_PENDING : result;
+}
+
 uint32_t XamContentClose(const char* szRootName, XXOVERLAPPED* pOverlapped)
 {
-    std::lock_guard lock(g_xamMutex);
-    g_rootMap.erase(StringHash(szRootName));
-    return 0;
+    {
+        std::lock_guard lock(g_xamMutex);
+        g_rootMap.erase(StringHash(NormalizeRoot(szRootName)));
+    }
+    CompleteOverlapped(pOverlapped, ERROR_SUCCESS, 0);
+    return pOverlapped ? ERROR_IO_PENDING : ERROR_SUCCESS;
 }
 
 uint32_t XamContentGetDeviceData(uint32_t DeviceID, XDEVICE_DATA* pDeviceData)

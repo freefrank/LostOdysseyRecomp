@@ -55,6 +55,18 @@ if(WIN32)
     target_link_libraries(LostOdysseyRecomp PRIVATE winmm onecore)
 endif()
 
+# Integration test uses the actual guest import bridge and storage implementation.
+set(LO_STORAGE_TEST_SOURCES ${LO_RUNTIME_SOURCES})
+list(FILTER LO_STORAGE_TEST_SOURCES EXCLUDE REGEX "/main\\.cpp$")
+add_executable(LoStorageTest ${LO_STORAGE_TEST_SOURCES} ${LO_IMPORT_STUBS}
+    ${CMAKE_SOURCE_DIR}/tools/tests/storage_test.cpp)
+target_include_directories(LoStorageTest PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,INCLUDE_DIRECTORIES>)
+target_compile_definitions(LoStorageTest PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,COMPILE_DEFINITIONS>)
+target_compile_options(LoStorageTest PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,COMPILE_OPTIONS>)
+target_compile_features(LoStorageTest PRIVATE cxx_std_20)
+target_precompile_headers(LoStorageTest REUSE_FROM LostOdysseyRecomp)
+target_link_libraries(LoStorageTest PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,LINK_LIBRARIES>)
+
 # Offline shader translator check (shares gpu/shader with the runtime).
 add_executable(LoShaderTool
     ${CMAKE_SOURCE_DIR}/tools/xenos_shader_tool/main.cpp
@@ -64,6 +76,11 @@ target_include_directories(LoShaderTool PRIVATE ${LO_RUNTIME_ROOT})
 target_compile_features(LoShaderTool PRIVATE cxx_std_20)
 target_compile_definitions(LoShaderTool PRIVATE NOMINMAX)
 target_link_libraries(LoShaderTool PRIVATE fmt::fmt)
+
+# Tests packed mip block origins without game assets.
+add_executable(LoTextureLayoutTest ${CMAKE_SOURCE_DIR}/tools/tests/texture_layout_test.cpp)
+target_include_directories(LoTextureLayoutTest PRIVATE ${LO_RUNTIME_ROOT})
+target_compile_features(LoTextureLayoutTest PRIVATE cxx_std_20)
 
 # Tests the exact address mappings used by the runtime, without game assets.
 add_executable(LoMemoryAliasTest

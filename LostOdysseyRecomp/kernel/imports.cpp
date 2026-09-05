@@ -13,6 +13,7 @@
 #include "xdm.h"
 #include "xex_loader.h"
 #include "guest_printf.h"
+#include "io/file_system.h"
 #include <gpu/command_processor.h>
 #include <apu/audio.h>
 #include <apu/xma.h>
@@ -1744,7 +1745,7 @@ static void StoreProfileSetting(uint32_t id, uint8_t type, const uint8_t* data, 
 // KernelState::CompleteOverlappedEx): result and extended error, length,
 // then the event and/or the completion routine (delivered as a user APC on
 // the calling thread). Callers hand back ERROR_IO_PENDING afterwards.
-static void CompleteOverlapped(XXOVERLAPPED* overlapped, uint32_t error, uint32_t length)
+void CompleteOverlapped(XXOVERLAPPED* overlapped, uint32_t error, uint32_t length)
 {
     if (!overlapped)
         return;
@@ -1899,15 +1900,49 @@ static uint32_t XamShowMessageBoxUIEx() { return ERROR_SUCCESS; }
 static uint32_t XamShowDirtyDiscErrorUI(uint32_t) { LOG_ERROR("dirty disc error UI requested"); return 0; }
 static void XamEnableInactivityProcessing(uint32_t, uint32_t) {}
 static void XamResetInactivity(uint32_t) {}
-static uint32_t XamContentGetCreator(uint32_t userIndex, const XCONTENT_DATA*, be<uint32_t>* isCreator, be<uint64_t>* xuid, XXOVERLAPPED*)
+static uint32_t XamContentGetCreator(uint32_t userIndex, const XCONTENT_DATA*, be<uint32_t>* isCreator, be<uint64_t>* xuid, XXOVERLAPPED* overlapped)
 {
     if (isCreator) *isCreator = 1;
     if (xuid) *xuid = 0xE000000000000001ull;
-    return 0;
+    CompleteOverlapped(overlapped, ERROR_SUCCESS, 0);
+    return overlapped ? ERROR_IO_PENDING : ERROR_SUCCESS;
 }
-static uint32_t XamContentGetDeviceState(uint32_t, XXOVERLAPPED*) { return 0; }
-static uint32_t XamContentFlush(const char*, XXOVERLAPPED*) { return 0; }
-static uint32_t XamContentSetThumbnail(const char*, void*, uint32_t, XXOVERLAPPED*) { return 0; }
+static uint32_t XamContentGetDeviceState(uint32_t device, XXOVERLAPPED* overlapped)
+{
+    const uint32_t result = device == 1 ? ERROR_SUCCESS : ERROR_DEVICE_NOT_CONNECTED;
+    CompleteOverlapped(overlapped, result, 0);
+    return overlapped ? ERROR_IO_PENDING : result;
+}
+static uint32_t XamContentFlush(const char*, XXOVERLAPPED* overlapped)
+{
+    CompleteOverlapped(overlapped, ERROR_SUCCESS, 0);
+    return overlapped ? ERROR_IO_PENDING : ERROR_SUCCESS;
+}
+static uint32_t XamContentSetThumbnail(uint32_t userIndex, const XCONTENT_DATA* content,
+    const void* buffer, uint32_t size, XXOVERLAPPED* overlapped)
+{
+    uint32_t result = ERROR_INVALID_PARAMETER;
+    if (userIndex == 0 && content && buffer && size && size <= (16u << 20) &&
+        memchr(content->szFileName, 0, sizeof(content->szFileName)))
+    {
+        const std::string name(content->szFileName);
+        if (!name.empty() && name != "." && name != ".." && name.find_first_of("/\\:") == std::string::npos)
+        {
+            const auto root = FileSystem::GetSaveRoot() / name;
+            std::error_code ec;
+            if (std::filesystem::is_directory(root, ec))
+            {
+                std::ofstream out(root / ".lo-thumbnail.png", std::ios::binary | std::ios::trunc);
+                out.write(static_cast<const char*>(buffer), size);
+                out.close();
+                result = out ? ERROR_SUCCESS : ERROR_WRITE_FAULT;
+            }
+            else result = ERROR_PATH_NOT_FOUND;
+        }
+    }
+    CompleteOverlapped(overlapped, result, 0);
+    return overlapped ? ERROR_IO_PENDING : result;
+}
 static uint32_t XamUserCreateAchievementEnumerator(uint32_t titleId, uint32_t userIndex, uint64_t xuid, uint32_t flags, uint32_t offset, uint32_t count, be<uint32_t>* bufferSize, be<uint32_t>* handle)
 {
     LOG_KERNEL("title={:#x} user={} flags={:#x} offset={} count={}", titleId, userIndex, flags, offset, count);

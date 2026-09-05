@@ -1,4 +1,6 @@
 #pragma once
+
+void CompleteOverlapped(XXOVERLAPPED* overlapped, uint32_t error, uint32_t length);
 #include <xbox.h>
 
 #define MSGID(Area, Number) (uint32_t)((uint16_t)(Area) << 16 | (uint16_t)(Number))
@@ -10,7 +12,7 @@ void XamInit();
 XCONTENT_DATA XamMakeContent(uint32_t type, const std::string_view& name);
 void XamRegisterContent(const XCONTENT_DATA& data, const std::string_view& root);
 
-std::string_view XamGetRootPath(const std::string_view& root);
+std::string XamGetRootPath(const std::string_view& root);
 void XamRootCreate(const std::string_view& root, const std::string_view& path);
 
 uint32_t XamNotifyCreateListener(uint64_t qwAreas);

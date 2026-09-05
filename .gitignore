@@ -31,6 +31,10 @@ LostOdysseyRecompLib/shader/*.bin
 *.log
 
 # 本地工具二进制（Xenia Canary 放在 tools/ 下，不入库）
+/save/
+/profile/
+/cache/
+/work/
 tools/xenia_canary.exe
 tools/xenia*.exe
 tools/xenia*/

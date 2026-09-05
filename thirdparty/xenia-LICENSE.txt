@@ -1,6 +1,9 @@
 Xenia gamma conversion reference: src/xenia/gpu/xenos.cc
 Copyright 2020 Ben Vanik. All rights reserved.
 
+Xenia packed mip layout reference: src/xenia/gpu/texture_util.cc
+Copyright 2022 Ben Vanik. All rights reserved.
+
 Copyright (c) 2015, Ben Vanik.
 All rights reserved.
 
