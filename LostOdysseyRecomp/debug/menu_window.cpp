@@ -2,6 +2,7 @@
 #include "battle_menu.h"
 #include "teleport.h"
 #include "map_info.h"
+#include "save_anywhere.h"
 #include <os/logger.h>
 #include <cmath>
 #include <cwchar>
@@ -56,6 +57,9 @@ namespace
         {
             if (LOWORD(wparam) == 100) debug_menu::RequestVictory();
             if (LOWORD(wparam) == 101) debug_menu::CancelVictory();
+            if (LOWORD(wparam) == 102)
+                debug_menu::SetSaveAnywhereEnabled(
+                    SendMessageW(reinterpret_cast<HWND>(lparam), BM_GETCHECK, 0, 0) == BST_CHECKED);
             const int id = LOWORD(wparam);
             if (id >= 10) invalidCoordinates = false;
             if (id == 10) debug_menu::RequestSavePosition();
@@ -131,7 +135,7 @@ void debug_menu::Toggle()
         RegisterClassW(&wc);
         menu = CreateWindowExW(WS_EX_APPWINDOW, wc.lpszClassName, L"Lost Odyssey — Debug Menu (F1)",
             WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU, CW_USEDEFAULT, CW_USEDEFAULT,
-            560, 745, nullptr, nullptr, wc.hInstance, nullptr);
+            560, 815, nullptr, nullptr, wc.hInstance, nullptr);
         if (!menu) { LOG_ERROR("debug menu: CreateWindow failed {}", GetLastError()); return; }
         Control(L"STATIC", L"剧情调试 / Story debug", 0, 20, 18, 440, 24);
         statusLabel = Control(L"STATIC", L"", 0, 20, 52, 440, 45);
@@ -160,6 +164,10 @@ void debug_menu::Toggle()
         poiButton = Control(L"BUTTON", L"传送到此 POI", BS_PUSHBUTTON, 385, 510, 135, 30, 31);
         poiDetails = Control(L"STATIC", L"", 0, 20, 550, 500, 42);
         Control(L"STATIC", L"自动读取已加载地图；列表不包含尚未加载的区域。", 0, 20, 601, 500, 24);
+        HWND saveToggle = Control(L"BUTTON", L"随时存档 / Save anywhere", BS_AUTOCHECKBOX,
+            20, 702, 500, 25, 102);
+        SendMessageW(saveToggle, BM_SETCHECK, SaveAnywhereEnabled() ? BST_CHECKED : BST_UNCHECKED, 0);
+        Control(L"STATIC", L"切换后重新进入 System 菜单，再选择 Save。", 0, 20, 735, 500, 25);
     }
     if (!mapLabel) mapLabel = Control(L"STATIC", L"", 0, 20, 635, 500, 60);
     ShowWindow(menu, IsWindowVisible(menu) ? SW_HIDE : SW_SHOW);

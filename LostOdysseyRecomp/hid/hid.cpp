@@ -293,6 +293,52 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
         if (keys[SDL_SCANCODE_L]) gp.sThumbLX = 32767;
     }
 
+    // Background integration input, opt-in per test process. A new serial starts
+    // One bounded pulse: "serial hexButtonMask leftX leftY polls [LT RT]".
+    // Optional analog triggers are 0..255; the legacy five fields imply zero. No OS input.
+    if (const char* path = getenv("LO_TEST_INPUT_FILE"))
+    {
+        static unsigned lastSerial = 0, pollsLeft = 0, buttons = 0, pollCount = 0;
+        static int leftX = 0, leftY = 0, leftTrigger = 0, rightTrigger = 0;
+        if (++pollCount % 12 == 0)
+        {
+            if (FILE* file = fopen(path, "r"))
+            {
+                unsigned serial = 0, mask = 0, duration = 0;
+                int x = 0, y = 0, lt = 0, rt = 0;
+                const int fields = fscanf(file, "%u %x %d %d %u %d %d",
+                    &serial, &mask, &x, &y, &duration, &lt, &rt);
+                const bool valid = fields == 5 || fields == 7;
+                fclose(file);
+                if (valid && serial != lastSerial)
+                {
+                    lastSerial = serial;
+                    buttons = mask & 0xffff;
+                    leftX = std::clamp(x, -32768, 32767);
+                    leftY = std::clamp(y, -32768, 32767);
+                    leftTrigger = std::clamp(lt, 0, 255);
+                    rightTrigger = std::clamp(rt, 0, 255);
+                    pollsLeft = std::min(duration, 6000u);
+                    LOG_INFO("background test input: serial={} buttons={:#x} stick={},{} polls={} triggers={},{}",
+                        serial, buttons, leftX, leftY, pollsLeft, leftTrigger, rightTrigger);
+                }
+            }
+        }
+        // Test trigger state releases at the pulse boundary, including a
+        // zero-duration command; never leave the prior RT value latched.
+        gp.bLeftTrigger = 0;
+        gp.bRightTrigger = 0;
+        if (pollsLeft)
+        {
+            --pollsLeft;
+            gp.bLeftTrigger = uint8_t(leftTrigger);
+            gp.bRightTrigger = uint8_t(rightTrigger);
+            gp.wButtons |= uint16_t(buttons);
+            gp.sThumbLX = int16_t(leftX);
+            gp.sThumbLY = int16_t(leftY);
+        }
+    }
+
     return ERROR_SUCCESS;
 }
 

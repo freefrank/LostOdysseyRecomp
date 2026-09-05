@@ -89,20 +89,6 @@ PPC_FUNC(sub_828BB378)
     }
 }
 
-extern "C" PPC_FUNC(__imp__sub_82AF6290);
-PPC_FUNC(sub_82AF6290)
-{
-    static const bool experiment = getenv("LO_TEST_NORMAL_MODEL") != nullptr;
-    const uint32_t data = PPC_LOAD_U32(ctx.r3.u32+0x20);
-    const uint32_t model = data ? PPC_LOAD_U32(data+0x80) : 0;
-    if (experiment && model == 11) {
-        LOG_INFO("model A/B: temporarily constructing Kaim with normal model 0 (saved model 11)");
-        PPC_STORE_U32(data+0x80,0);
-        __imp__sub_82AF6290(ctx,base);
-        PPC_STORE_U32(data+0x80,model);
-    } else __imp__sub_82AF6290(ctx,base);
-}
-
 extern "C" PPC_FUNC(__imp__sub_829E6AF8);
 PPC_FUNC(sub_829E6AF8)
 {

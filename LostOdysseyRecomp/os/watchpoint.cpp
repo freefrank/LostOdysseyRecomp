@@ -17,6 +17,8 @@ static uint8_t* s_watchHi = nullptr;
 static thread_local bool t_rearm = false;
 static thread_local uint64_t t_pendingFault = 0;
 static thread_local bool t_pendingWrite = false;
+static thread_local bool t_checkValue = false;
+static thread_local uint32_t t_previousValue = 0;
 namespace gpu { extern std::atomic<uint32_t> g_swapCount; }
 static std::atomic<int> s_hits = 0;
 static bool s_writeOnly = false;
@@ -70,7 +72,10 @@ static LONG WINAPI WatchHandler(EXCEPTION_POINTERS* info)
         if (fault < (uint64_t)s_watchPage || fault >= (uint64_t)s_watchPage + 0x1000)
             return EXCEPTION_CONTINUE_SEARCH;
         t_pendingFault = 0;
-        if (fault >= (uint64_t)s_watchLo && fault < (uint64_t)s_watchHi && s_hits < 600 &&
+        t_checkValue = s_writeOnly && rec->ExceptionInformation[0] == 1 && s_watchHi - s_watchLo == 4;
+        if (t_checkValue)
+            t_previousValue = *reinterpret_cast<be<uint32_t>*>(s_watchLo);
+        else if (fault >= (uint64_t)s_watchLo && fault < (uint64_t)s_watchHi && s_hits < 600 &&
             (!s_writeOnly || rec->ExceptionInformation[0] == 1))
         {
             s_hits++;
@@ -87,6 +92,18 @@ static LONG WINAPI WatchHandler(EXCEPTION_POINTERS* info)
     if (rec->ExceptionCode == STATUS_SINGLE_STEP && t_rearm)
     {
         t_rearm = false;
+        if (t_checkValue)
+        {
+            t_checkValue = false;
+            const uint32_t value = *reinterpret_cast<be<uint32_t>*>(s_watchLo);
+            if (value != t_previousValue && s_hits++ < 600)
+            {
+                // Observe the value after the instruction, including SIMD stores
+                // starting before the watched word and bulk copies across it.
+                LogHit(info, reinterpret_cast<uint64_t>(s_watchLo), true);
+                fprintf(stderr, "[watch] value 0x%08X -> 0x%08X (after instruction)\n", t_previousValue, value);
+            }
+        }
         if (t_pendingFault)
         {
             uint32_t v = *reinterpret_cast<be<uint32_t>*>(t_pendingFault & ~uint64_t(3));

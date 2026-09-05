@@ -1,11 +1,13 @@
 #include <stdafx.h>
 #include <os/logger.h>
 #include "battle_menu.h"
+#include "opening_state.h"
 
 extern std::atomic<uint32_t> g_presentedSwaps;
 extern "C" PPC_FUNC(__imp__sub_8238A640);
 extern "C" PPC_FUNC(__imp__sub_82AAA7C8);
 extern "C" PPC_FUNC(__imp__sub_82AC6D88);
+void ArmGuestWriteWatchpoint(uint32_t address, uint32_t length);
 
 namespace
 {
@@ -52,6 +54,12 @@ PPC_FUNC(sub_8238A640)
 {
     const uint32_t core = ctx.r3.u32;
     const uint32_t phase = PPC_LOAD_U32(core + 0x38);
+    static const bool watchResource = getenv("LO_TRACE_PERSISTENT_MODEL") != nullptr;
+    if (watchResource && core == 0x832ca0e8 && g_presentedSwaps >= 2300)
+    {
+        const uint32_t data = PPC_LOAD_U32(core + 0x20);
+        if (data) ArmGuestWriteWatchpoint(data + 0x80, 4);
+    }
     static uint32_t previousPhase = ~0u;
     static uint64_t previousTick = 0;
     const uint64_t now = Now();
@@ -77,6 +85,7 @@ PPC_FUNC(sub_8238A640)
             PPCContext saved = ctx;
             const uint32_t resultManager = PPC_LOAD_U32(0x83291dc0);
             if (!resultManager) { state = State::Unavailable; __imp__sub_8238A640(ctx, base); return; }
+            debug_menu::CompleteOpeningResourceTransition(base, core);
             ctx.r4.u64 = 11;
             ctx.r5.u64 = 1;
             __imp__sub_82AAA7C8(ctx, base);

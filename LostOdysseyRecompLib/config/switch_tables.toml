@@ -10763,6 +10763,17 @@ labels = [
 ]
 
 [[switch]]
+base = 0x82B14808
+r = 10
+default = 0x82B148BC
+labels = [
+    0x82B14830,
+    0x82B14878,
+    0x82B14890,
+    0x82B148A4,
+]
+
+[[switch]]
 base = 0x82B148CC
 r = 11
 default = 0x82B14A10
