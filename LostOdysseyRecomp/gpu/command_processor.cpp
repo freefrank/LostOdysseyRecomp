@@ -17,6 +17,9 @@ namespace gpu
 {
     CommandProcessor g_commandProcessor;
     static std::atomic<uint32_t> g_swapCount{ 0 };
+    static std::atomic<uint32_t> g_completedSwaps{ 0 };
+    static std::atomic<uint32_t> g_lastOpcode{ 0 };
+    static std::atomic<const char*> g_workerStage{ "initializing" };
 }
 std::atomic<uint32_t> g_presentedSwaps{ 0 }; // global mirror for other subsystems (hid test hook)
 namespace gpu
@@ -357,6 +360,7 @@ namespace gpu
 
             if (writePtr == 0xBAADF00D || m_readPtrIndex == writePtr || m_primaryBufferSize == 0)
             {
+                g_workerStage = "idle/event pump";
                 if (++idle > 200)
                 {
                     video::PumpEvents();
@@ -368,6 +372,7 @@ namespace gpu
             }
             idle = 0;
 
+            g_workerStage = "PM4 execution";
             m_readPtrIndex = ExecutePrimaryBuffer(m_readPtrIndex, writePtr);
 
             if (m_readPtrWritebackPhysical)
@@ -391,11 +396,13 @@ namespace gpu
             // Watchdog: no swap for 5 seconds -> dump what every guest thread waits on.
             {
                 static uint32_t lastSwaps = 0, stillFrames = 0, dumps = 0;
-                uint32_t swaps = g_swapCount.load();
+                uint32_t swaps = g_completedSwaps.load();
                 if (swaps == lastSwaps)
                 {
                     if (++stillFrames == 300 && swaps > 0 && dumps++ < 2)
                     {
+                        LOG_WARNING("GPU progress stalled: completed={} submitted={} stage={} opcode={:#x}",
+                            swaps, g_swapCount.load(), g_workerStage.load(), g_lastOpcode.load());
                         ::DumpGuestThreadStates();
                     }
                 }
@@ -403,6 +410,7 @@ namespace gpu
                 {
                     lastSwaps = swaps;
                     stillFrames = 0;
+                    dumps = 0;
                 }
             }
             if (!m_interruptCallback)
@@ -548,6 +556,8 @@ namespace gpu
     bool CommandProcessor::ExecutePacketType3(Reader& reader, uint32_t packet)
     {
         const uint32_t opcode = (packet >> 8) & 0x7F;
+        g_lastOpcode = opcode;
+        g_workerStage = "PM4 execution";
         const uint32_t count = ((packet >> 16) & 0x3FFF) + 1;
 
         if (g_traceBudget > 0)
@@ -612,6 +622,7 @@ namespace gpu
                 LOG_INFO("heartbeat: swap #{} {:.1f} fps, {} draws/frame, frontbuffer {:#x} {}x{}, last file '{}'",
                     swaps, fps, g_frame.draws, frontbuffer, width, height, FileSystem::LastOpenedFile());
             }
+            g_workerStage = "renderer flush";
             renderer::Flush();
             {
                 // Frame pacing: the game advances its simulation per presented frame
@@ -635,8 +646,12 @@ namespace gpu
                 if (dumpAt && swaps == dumpAt)
                     ::DumpGuestThreadStates();
             }
+            g_workerStage = "frontbuffer present";
             video::PresentFrontbuffer(frontbuffer, width, height, ReadRegister(0x231B));
+            g_workerStage = "window event pump";
             video::PumpEvents();
+            g_completedSwaps = swaps;
+            g_workerStage = "post-present capture/statistics";
             {
                 static const uint32_t shotSwap = getenv("LO_SCREENSHOT_SWAP") ? strtoul(getenv("LO_SCREENSHOT_SWAP"), nullptr, 10) : 0;
                 static const uint32_t shotEvery = getenv("LO_SCREENSHOT_EVERY") ? strtoul(getenv("LO_SCREENSHOT_EVERY"), nullptr, 10) : 0;
@@ -736,6 +751,7 @@ namespace gpu
             if (g_traceBudget > 0 || (g_swapCount >= 110 && isMemory && (pollRegAddr & ~3u) >= 0xB000 && (pollRegAddr & ~3u) < 0xB020))
                 LOG_INFO("WAIT_REG_MEM {} {:#x} op={} ref={:#x} mask={:#x} value now {:#x} swap #{}", isMemory ? "mem" : "reg", pollRegAddr, waitInfo & 7, ref, mask,
                     isMemory ? GpuSwap(*reinterpret_cast<uint32_t*>(TranslatePhysical(pollRegAddr & ~3u)), pollRegAddr & 3) : 0, g_swapCount.load());
+            g_workerStage = "WAIT_REG_MEM";
             auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
             while (m_running)
             {

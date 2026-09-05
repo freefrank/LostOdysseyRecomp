@@ -21,6 +21,8 @@ namespace os::logger
 {
     inline std::mutex g_mutex;
     inline bool g_kernelTrace = true;
+    // Opened once by main; intentionally kept open until process termination.
+    inline FILE* g_file = nullptr;
     inline const bool g_verbose = getenv("LO_VERBOSE") != nullptr;
 
     // Every line carries the seconds since the process started and a short
@@ -63,10 +65,15 @@ namespace os::logger
 
         std::lock_guard lock(g_mutex);
         std::string msg = fmt::format(format, std::forward<Args>(args)...);
-        if (func)
-            fmt::print(stderr, "[{:9.3f} t{:04x}] {} {}: {}\n", ElapsedSeconds(), ThreadTag(), Prefix(type), func, msg);
-        else
-            fmt::print(stderr, "[{:9.3f} t{:04x}] {} {}\n", ElapsedSeconds(), ThreadTag(), Prefix(type), msg);
+        const auto line = func
+            ? fmt::format("[{:9.3f} t{:04x}] {} {}: {}\n", ElapsedSeconds(), ThreadTag(), Prefix(type), func, msg)
+            : fmt::format("[{:9.3f} t{:04x}] {} {}\n", ElapsedSeconds(), ThreadTag(), Prefix(type), msg);
+        if (g_file)
+        {
+            fwrite(line.data(), 1, line.size(), g_file);
+            fflush(g_file);
+        }
+        fwrite(line.data(), 1, line.size(), stderr);
         fflush(stderr);
     }
 }

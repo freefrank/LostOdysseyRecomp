@@ -47,6 +47,26 @@ void InstallPhysicalWatchpoint();
 
 int main(int argc, char* argv[])
 {
+    // Keep each run separately, including launches without a terminal. Tests
+    // can select a path or disable the duplicate sink with LO_LOG_FILE=0.
+    const char* logOverride = getenv("LO_LOG_FILE");
+    if (!logOverride || strcmp(logOverride, "0") != 0)
+    {
+        const auto ticks = std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        const std::filesystem::path logPath = logOverride ? logOverride
+            : fmt::format("logs/runtime-{}.log", ticks);
+        std::error_code ec;
+        if (logPath.has_parent_path())
+            std::filesystem::create_directories(logPath.parent_path(), ec);
+#ifdef _WIN32
+        os::logger::g_file = _wfopen(logPath.c_str(), L"ab");
+#else
+        os::logger::g_file = fopen(logPath.c_str(), "ab");
+#endif
+        if (os::logger::g_file) LOG_INFO("log file: {}", logPath.string());
+        else LOG_WARNING("could not open log file: {}", logPath.string());
+    }
     InstallCrashHandler();
 #ifdef _WIN32
     timeBeginPeriod(1);
