@@ -8,9 +8,9 @@
 // is plain memory for us, so a worker thread polls the kick/lock/clear
 // register words instead of trapping the accesses.
 //
-// The decoder itself is a stand-in: it consumes input packets at the rate the
-// output ring drains and writes silence, so XMA voices "play" (and finish)
-// without producing sound. A real XMA2 decoder can replace Work() later.
+// Assemble XMA frames across packet/input-buffer boundaries and decode them
+// with Xenia's FFmpeg XMAFRAMES codec. The guest consumes big-endian int16
+// subframes from its output ring.
 
 #include <cstdint>
 

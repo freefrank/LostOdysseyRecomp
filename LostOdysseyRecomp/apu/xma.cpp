@@ -1,7 +1,13 @@
 #include <stdafx.h>
 #include "xma.h"
+#include "xma_loop.h"
 #include <kernel/memory.h>
 #include <os/logger.h>
+#include <cmath>
+extern "C" {
+#include <libavcodec/avcodec.h>
+}
+
 
 namespace apu::xma
 {
@@ -59,6 +65,9 @@ namespace apu::xma
             void setOutputWriteOffset(uint32_t v) { SetBits(d[0], 27, 5, v); }
 
             uint32_t input1PacketCount() const { return Bits(d[1], 0, 12); }
+            uint32_t sampleRate() const { constexpr uint32_t rates[] = {24000,32000,44100,48000}; return rates[Bits(d[1],27,2)]; }
+            uint32_t skipCount() const { return Bits(d[1],24,3); }
+            void setSkipCount(uint32_t n) { SetBits(d[1],24,3,n); }
             uint32_t subframeDecodeCount() const { return Bits(d[1], 20, 4); }
             bool isStereo() const { return Bits(d[1], 29, 1); }
             bool outputValid() const { return Bits(d[1], 31, 1); }
@@ -89,7 +98,21 @@ namespace apu::xma
         {
             std::atomic<bool> allocated{ false };
             std::atomic<bool> enabled{ false };
-            uint32_t remainingSubframes = 0;       // of the "decoded" frame
+            uint32_t remainingSubframes = 0;
+            uint32_t pcmOffset = 0;
+            std::array<uint8_t, 2048> pcm{};
+            std::array<uint8_t, 4096 + AV_INPUT_BUFFER_PADDING_SIZE> compressed{};
+            uint32_t frameBits = 0, copiedBits = 0, packetsSkip = 0;
+            AVCodecContext* decoder = nullptr;
+            AVFrame* frame = nullptr;
+            AVPacket* packet = nullptr;
+            void Reset()
+            {
+                remainingSubframes = pcmOffset = frameBits = copiedBits = packetsSkip = 0;
+                avcodec_free_context(&decoder);
+                av_frame_free(&frame);
+                av_packet_free(&packet);
+            }
             int32_t freeBlocks = 0;                 // in the output ring
         };
 
@@ -134,12 +157,13 @@ namespace apu::xma
                 if (write < read) return read - write;
                 return (capacity - write) + read;
             }
-            void WriteZero(uint32_t count)
+            void Write(const uint8_t* source, uint32_t count)
             {
                 while (count)
                 {
                     uint32_t chunk = std::min(count, capacity - write);
-                    memset(data + write, 0, chunk);
+                    memcpy(data + write, source, chunk);
+                    source += chunk;
                     write = (write + chunk) % capacity;
                     count -= chunk;
                 }
@@ -158,7 +182,7 @@ namespace apu::xma
             data.setOutputWriteOffset(0);
             data.setInputReadOffset(kBitsPerPacketHeader);
             data.Store(guest);
-            g_contexts[id].remainingSubframes = 0;
+            g_contexts[id].Reset();
             if (g_trace) LOG_INFO("xma: clear context {}", id);
         }
 
@@ -170,48 +194,161 @@ namespace apu::xma
             data.setInputReadOffset(kBitsPerPacketHeader);
         }
 
-        void UpdateLoopStatus(ContextData& data)
+        bool UpdateLoopStatus(ContextData& data, bool bufferEnded)
         {
-            if (data.loopCount() == 0)
-                return;
-            const uint32_t loopStart = std::max(kBitsPerPacketHeader, data.loopStart());
-            const uint32_t loopEnd = std::max(kBitsPerPacketHeader, data.loopEnd());
-            if (data.inputReadOffset() != loopEnd)
-                return;
-            data.setInputReadOffset(loopStart);
-            if (data.loopCount() != 255)
-                data.setLoopCount(data.loopCount() - 1);
+            auto offset = data.inputReadOffset();
+            auto count = data.loopCount();
+            if (!RestartLoop(data.loopStart(), data.loopEnd(), bufferEnded, offset, count)) return false;
+            data.setInputReadOffset(offset);
+            data.setLoopCount(count);
+            return true;
         }
 
-        // Advance over one input packet; a real decoder would parse it here.
+        uint32_t ReadBits(const uint8_t* source, uint32_t offset, uint32_t count)
+        {
+            uint32_t result = 0;
+            for (uint32_t i = 0; i < count; ++i)
+                result = (result << 1) | ((source[(offset+i)/8] >> (7-(offset+i)%8)) & 1);
+            return result;
+        }
+
+        bool PrepareDecoder(Context& ctx, const ContextData& data)
+        {
+            const int channels = data.isStereo() ? 2 : 1;
+            if (ctx.decoder && ctx.decoder->channels == channels && ctx.decoder->sample_rate == int(data.sampleRate())) return true;
+            avcodec_free_context(&ctx.decoder);
+            const AVCodec* codec = avcodec_find_decoder(AV_CODEC_ID_XMAFRAMES);
+            if (!codec) return false;
+            ctx.decoder = avcodec_alloc_context3(codec);
+            if (!ctx.decoder) return false;
+            ctx.decoder->channels = channels;
+            ctx.decoder->sample_rate = data.sampleRate();
+            ctx.decoder->thread_count = 1;
+            if (!ctx.frame) ctx.frame = av_frame_alloc();
+            if (!ctx.packet) ctx.packet = av_packet_alloc();
+            if (!ctx.frame || !ctx.packet || avcodec_open2(ctx.decoder, codec, nullptr) < 0)
+            {
+                avcodec_free_context(&ctx.decoder);
+                return false;
+            }
+            return true;
+        }
+
+        // Assemble one XMA frame across 2 KB packets and alternating input
+        // buffers. Packet skip counts select this stream in multichannel data.
+        // Bit layout and the XMAFRAMES padding byte follow Xenia's xma_context.
         void ProcessPacket(Context& ctx, ContextData& data)
         {
-            if (!data.anyInputValid() || ctx.remainingSubframes > 0)
-                return;
-            UpdateLoopStatus(data);
-            const uint32_t packets = data.currentPacketCount();
-            const uint32_t current = data.inputReadOffset() / kBitsPerPacket;
-            if (current >= packets)
+            if (ctx.remainingSubframes || !data.anyInputValid()) return;
+            for (unsigned guard = 0; guard < 8192; ++guard)
             {
-                SwapInputBuffer(data);
+                if (!data.inputValid(data.currentBuffer())) return;
+                // Check before retiring the last packet: advancing past an
+                // end-of-packet loop point must not invalidate a looping voice.
+                if (!ctx.copiedBits && UpdateLoopStatus(data,
+                    data.inputReadOffset() / kBitsPerPacket >= data.currentPacketCount()))
+                    ctx.packetsSkip = 0;
+                uint32_t packetIndex = data.inputReadOffset() / kBitsPerPacket;
+                if (packetIndex >= data.currentPacketCount())
+                {
+                    ctx.packetsSkip += packetIndex - data.currentPacketCount();
+                    SwapInputBuffer(data);
+                    data.setInputReadOffset(0);
+                    continue;
+                }
+                if (ctx.packetsSkip)
+                {
+                    const auto skip = std::min(ctx.packetsSkip, data.currentPacketCount() - packetIndex);
+                    ctx.packetsSkip -= skip;
+                    data.setInputReadOffset((packetIndex + skip) * kBitsPerPacket);
+                    continue;
+                }
+                const auto* packet = Physical(data.currentBuffer() ? data.input1Ptr() : data.input0Ptr()) + packetIndex * kBytesPerPacket;
+                uint32_t offset = data.inputReadOffset() % kBitsPerPacket;
+                if (offset < kBitsPerPacketHeader)
+                {
+                    offset = ctx.copiedBits ? kBitsPerPacketHeader : ReadBits(packet, 6, 15) + kBitsPerPacketHeader;
+                    data.setInputReadOffset(packetIndex * kBitsPerPacket + offset);
+                }
+                auto nextPacket = [&] {
+                    data.setInputReadOffset((packetIndex + 1) * kBitsPerPacket);
+                    ctx.packetsSkip = packet[3];
+                };
+                if (offset >= kBitsPerPacket) { nextPacket(); continue; }
+                if (!ctx.copiedBits)
+                {
+                    ctx.compressed.fill(0);
+                    ctx.frameBits = 15;
+                }
+                uint32_t count = std::min(ctx.frameBits - ctx.copiedBits, kBitsPerPacket - offset);
+                for (uint32_t i = 0; i < count; ++i)
+                {
+                    const uint32_t bit = ReadBits(packet, offset+i, 1);
+                    const uint32_t target = ctx.copiedBits+i;
+                    ctx.compressed[1+target/8] |= uint8_t(bit << (7-target%8));
+                }
+                ctx.copiedBits += count;
+                offset += count;
+                data.setInputReadOffset(packetIndex * kBitsPerPacket + offset);
+                if (ctx.frameBits == 15 && ctx.copiedBits == 15)
+                {
+                    ctx.frameBits = ReadBits(ctx.compressed.data()+1, 0, 15);
+                    if (ctx.frameBits < 16 || ctx.frameBits >= 0x7fff)
+                    {
+                        ctx.copiedBits = ctx.frameBits = 0;
+                        nextPacket();
+                        continue;
+                    }
+                }
+                if (ctx.copiedBits < ctx.frameBits)
+                {
+                    if (offset == kBitsPerPacket) nextPacket();
+                    continue;
+                }
+                const bool more = ReadBits(ctx.compressed.data()+1, ctx.frameBits-1, 1) != 0;
+                const uint32_t bytes = (ctx.frameBits + 7) / 8;
+                ctx.compressed[0] = uint8_t((bytes*8 - ctx.frameBits) << 2);
+                ctx.copiedBits = ctx.frameBits = 0;
+                if (!more || offset == kBitsPerPacket) nextPacket();
+                if (!PrepareDecoder(ctx, data)) return;
+                ctx.packet->data = ctx.compressed.data();
+                ctx.packet->size = int(bytes + 1);
+                const int sent = avcodec_send_packet(ctx.decoder, ctx.packet);
+                const int decoded = sent >= 0 ? avcodec_receive_frame(ctx.decoder, ctx.frame) : sent;
+                if (decoded < 0 || ctx.frame->nb_samples != 512 || ctx.frame->format != AV_SAMPLE_FMT_FLTP)
+                {
+                    static unsigned errors = 0;
+                    if (errors++ < 16) LOG_WARNING("xma frame decode failed: {}", decoded);
+                    return;
+                }
+                const uint32_t channels = data.isStereo() ? 2 : 1;
+                for (uint32_t i = 0; i < 512; ++i)
+                    for (uint32_t c = 0; c < channels; ++c)
+                    {
+                        const float value = reinterpret_cast<float*>(ctx.frame->data[c])[i];
+                        const int16_t sample = int16_t(std::lrint(std::clamp(std::isfinite(value) ? value : 0.0f, -1.0f, 1.0f) * 32767.0f));
+                        const uint16_t big = ByteSwap(uint16_t(sample));
+                        memcpy(ctx.pcm.data() + (i*channels+c)*2, &big, 2);
+                    }
+                const uint32_t skip = std::min(4u, data.skipCount());
+                data.setSkipCount(data.skipCount()-skip);
+                ctx.pcmOffset = skip * 256 * channels;
+                ctx.remainingSubframes = 4 - skip;
                 return;
             }
-            const uint32_t next = current + 1;
-            if (next >= packets)
-                SwapInputBuffer(data);
-            else
-                data.setInputReadOffset(next * kBitsPerPacket + kBitsPerPacketHeader);
-            ctx.remainingSubframes = 4u << (data.isStereo() ? 1 : 0);
         }
 
         void Consume(Context& ctx, ContextData& data, Ring& ring)
         {
-            if (!ctx.remainingSubframes)
-                return;
-            const uint32_t blocks = std::min<uint32_t>(ctx.remainingSubframes, std::max<uint32_t>(1, data.subframeDecodeCount()));
-            ring.WriteZero(blocks * kOutputBytesPerBlock);
-            ctx.freeBlocks -= int32_t(blocks);
-            ctx.remainingSubframes -= blocks;
+            const uint32_t channels = data.isStereo() ? 2 : 1;
+            const uint32_t subframes = std::min({ctx.remainingSubframes,
+                std::max(1u, data.subframeDecodeCount()), uint32_t(ctx.freeBlocks) / channels});
+            const uint32_t bytes = subframes * kOutputBytesPerBlock * channels;
+            if (!bytes) return;
+            ring.Write(ctx.pcm.data()+ctx.pcmOffset, bytes);
+            ctx.pcmOffset += bytes;
+            ctx.freeBlocks -= int32_t(subframes * channels);
+            ctx.remainingSubframes -= subframes;
         }
 
         void Work(uint32_t id)
@@ -233,7 +370,7 @@ namespace apu::xma
                 return;
             }
             ctx.freeBlocks = int32_t(ring.WriteCount() / kOutputBytesPerBlock);
-            const int32_t minimumBlocks = int32_t(std::max<uint32_t>(1, data.subframeDecodeCount())) * 2 - 1;
+            const int32_t minimumBlocks = data.isStereo() ? 2 : 1;
             if (minimumBlocks > ctx.freeBlocks)
             {
                 data.Store(guest);
@@ -243,7 +380,7 @@ namespace apu::xma
             {
                 ProcessPacket(ctx, data);
                 Consume(ctx, data, ring);
-                if (!data.anyInputValid() || data.errorStatus() == 4)
+                if ((!data.anyInputValid() && !ctx.remainingSubframes) || data.errorStatus() == 4)
                     break;
             }
             data.setOutputWriteOffset(ring.write / kOutputBytesPerBlock);
@@ -317,7 +454,7 @@ namespace apu::xma
         g_running = true;
         g_worker = std::thread(WorkerMain);
         g_worker.detach();
-        LOG_INFO("xma: {} contexts at {:#x} (physical {:#x}), silent stand-in decoder", kContextCount, g_arrayGuest, g_arrayGuest & 0x1FFFFFFF);
+        LOG_INFO("xma: {} contexts at {:#x} (physical {:#x}), FFmpeg XMA frame decoder", kContextCount, g_arrayGuest, g_arrayGuest & 0x1FFFFFFF);
     }
 
     void Shutdown()
@@ -336,7 +473,7 @@ namespace apu::xma
             {
                 memset(ContextHost(id), 0, kContextSize);
                 g_contexts[id].enabled = false;
-                g_contexts[id].remainingSubframes = 0;
+                g_contexts[id].Reset();
                 const uint32_t n = ++g_allocatedCount;
                 if (g_trace || n <= 4)
                     LOG_INFO("xma: allocated context {} ({} live)", id, n);
@@ -356,6 +493,7 @@ namespace apu::xma
         if (g_contexts[id].allocated.exchange(false))
         {
             g_contexts[id].enabled = false;
+            g_contexts[id].Reset();
             memset(ContextHost(id), 0, kContextSize);
             --g_allocatedCount;
             if (g_trace) LOG_INFO("xma: released context {}", id);

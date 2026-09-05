@@ -10,6 +10,7 @@ target_include_directories(o1heap PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/o1heap/o1h
 # o1heap defaults to __builtin_clzl, which is 32-bit on Windows (LLP64) and corrupts every bin index.
 target_compile_definitions(o1heap PRIVATE O1HEAP_CLZ=__builtin_clzll)
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/SDL")
+include("${CMAKE_CURRENT_SOURCE_DIR}/ffmpeg.cmake")
 
 # plume is added once the GPU backend lands (phase 2, rendering).
 if(LO_BUILD_GPU)

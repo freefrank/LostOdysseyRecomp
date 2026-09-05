@@ -1,0 +1,176 @@
+# Xenia FFmpeg fork provides the frame-level XMA decoder (LGPL-2.1-or-later).
+# Pinned source and explicit source lists follow its generated premake files.
+include(FetchContent)
+FetchContent_Declare(lo_ffmpeg
+    GIT_REPOSITORY https://github.com/xenia-project/FFmpeg.git
+    GIT_TAG 15ece0882e8d5875051ff5b73c5a8326f7cee9f5
+    SOURCE_SUBDIR no-cmake-project)
+FetchContent_MakeAvailable(lo_ffmpeg)
+
+add_library(lo_avutil STATIC
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/adler32.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/aes.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/aes_ctr.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/audio_fifo.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/avstring.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/avsscanf.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/base64.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/blowfish.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/bprint.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/buffer.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/cast5.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/camellia.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/channel_layout.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/color_utils.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/cpu.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/crc.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/des.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/dict.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/display.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/dovi_meta.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/downmix_info.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/encryption_info.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/error.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/eval.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/fifo.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/file.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/file_open.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/float_dsp.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/fixed_dsp.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/frame.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/hash.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/hdr_dynamic_metadata.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/hmac.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/hwcontext.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/imgutils.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/integer.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/intmath.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/lfg.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/lls.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/log.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/log2_tab.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/mathematics.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/mastering_display_metadata.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/md5.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/mem.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/murmur3.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/opt.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/parseutils.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/pixdesc.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/pixelutils.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/random_seed.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/rational.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/reverse.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/rc4.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/ripemd.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/samplefmt.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/sha.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/sha512.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/slicethread.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/spherical.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/stereo3d.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/threadmessage.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/time.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/timecode.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/tree.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/twofish.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/utils.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/xga_font_data.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/xtea.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/tea.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/tx.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/tx_float.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/tx_double.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/tx_int32.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/video_enc_params.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/film_grain_params.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/x86/cpu.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/x86/fixed_dsp_init.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/x86/float_dsp_init.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/x86/imgutils_init.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavutil/x86/lls_init.c"
+)
+target_include_directories(lo_avutil PUBLIC "${lo_ffmpeg_SOURCE_DIR}")
+target_compile_definitions(lo_avutil PRIVATE HAVE_AV_CONFIG_H _USE_MATH_DEFINES)
+if(WIN32)
+    target_include_directories(lo_avutil PRIVATE "${lo_ffmpeg_SOURCE_DIR}/compat/atomics/win32")
+    target_link_libraries(lo_avutil PRIVATE bcrypt)
+else()
+    target_include_directories(lo_avutil PRIVATE "${lo_ffmpeg_SOURCE_DIR}/compat/atomics/gcc")
+endif()
+target_compile_options(lo_avutil PRIVATE -w -O2)
+
+add_library(lo_avcodec STATIC
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/ac3_parser.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/adts_parser.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/allcodecs.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/avcodec.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/avdct.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/avpacket.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/avpicture.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/bitstream.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/bitstream_filter.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/bitstream_filters.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/bsf.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/codec_desc.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/codec_par.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/d3d11va.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/decode.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/dirac.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/dv_profile.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/encode.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/imgconvert.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/jni.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/mathtables.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/mediacodec.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/mpeg12framerate.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/options.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/parser.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/parsers.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/profiles.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/qsv_api.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/raw.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/utils.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/vorbis_parser.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/xiph.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/faandct.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/faanidct.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/fdctdsp.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/jfdctfst.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/jfdctint.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/idctdsp.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/simple_idct.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/jrevdct.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/mdct_float.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/mdct_fixed_32.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/sinewin.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/wma_freqs.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/wmaprodec.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/wma.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/wma_common.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/null_bsf.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/pthread.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/pthread_slice.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/pthread_frame.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/avfft.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/fft_float.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/fft_fixed_32.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/fft_init_table.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/file_open.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/x86/constants.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/x86/fdctdsp_init.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/x86/fft_init.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/x86/idctdsp_init.c"
+    "${lo_ffmpeg_SOURCE_DIR}/libavcodec/x86/fdct.c"
+)
+target_include_directories(lo_avcodec PUBLIC "${lo_ffmpeg_SOURCE_DIR}")
+target_compile_definitions(lo_avcodec PRIVATE HAVE_AV_CONFIG_H _USE_MATH_DEFINES)
+if(WIN32)
+    target_include_directories(lo_avcodec PRIVATE "${lo_ffmpeg_SOURCE_DIR}/compat/atomics/win32")
+    target_link_libraries(lo_avcodec PRIVATE bcrypt)
+else()
+    target_include_directories(lo_avcodec PRIVATE "${lo_ffmpeg_SOURCE_DIR}/compat/atomics/gcc")
+endif()
+target_compile_options(lo_avcodec PRIVATE -w -O2)
+
+target_link_libraries(lo_avcodec PUBLIC lo_avutil)

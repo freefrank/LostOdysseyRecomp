@@ -41,6 +41,7 @@ target_link_libraries(LostOdysseyRecomp PRIVATE
     xxHash::xxhash
     o1heap
     SDL2::SDL2-static)
+target_link_libraries(LostOdysseyRecomp PRIVATE lo_avcodec)
 
 if(LO_BUILD_GPU)
     target_link_libraries(LostOdysseyRecomp PRIVATE plume)
@@ -78,6 +79,10 @@ target_compile_definitions(LoShaderTool PRIVATE NOMINMAX)
 target_link_libraries(LoShaderTool PRIVATE fmt::fmt)
 
 # Tests packed mip block origins without game assets.
+add_executable(LoXmaLoopTest ${CMAKE_SOURCE_DIR}/tools/tests/xma_loop_test.cpp)
+target_include_directories(LoXmaLoopTest PRIVATE ${LO_RUNTIME_ROOT})
+target_compile_features(LoXmaLoopTest PRIVATE cxx_std_20)
+
 add_executable(LoTextureLayoutTest ${CMAKE_SOURCE_DIR}/tools/tests/texture_layout_test.cpp)
 target_include_directories(LoTextureLayoutTest PRIVATE ${LO_RUNTIME_ROOT})
 target_compile_features(LoTextureLayoutTest PRIVATE cxx_std_20)
