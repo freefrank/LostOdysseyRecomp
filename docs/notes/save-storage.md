@@ -1,6 +1,8 @@
 # 手动存档失败（2026-09-04）
 
-用户确认 `Save failed` 出现在菜单/存档点手动存档。修复后用户确认保存成功；`save/user00/save.bin` 实际写入 206000 字节，独立诊断进程从其副本读档并进入 Ipsilon 山地存档点。完整存档系统兼容性仍需后续验证。
+> 2026-09-05 同步：本文保留逐轮取证记录；相关新增代码仍有本地未提交部分，发布范围见[当前状态](../STATUS.md)。历史 PID 和测试中状态不代表进程仍在运行。
+
+用户确认 `Save failed` 出现在菜单/存档点手动存档。修复后用户确认保存成功；`save/user00/save.bin` 实际写入 206000 字节，独立诊断进程从其副本读档并进入 Highlands of Wohl - Hypocenter 存档点。完整存档系统兼容性仍需后续验证。
 
 ## 修复
 
@@ -29,3 +31,13 @@
 已通过：异步完成事件、disposition、大小写 root、4096 字节真实写入、缩略图 ABI、close/flush、创建碰撞的异步 HRESULT。第二个独立进程可枚举并逐字节读回 payload。本地证据在 `out/storage-integration-1/`。
 
 游戏内保存由用户确认，存档副本读档由 `out/animation-trace/shot_960.png` 验证。保存日志入口为 `out/save-validation/run.log`。完整内容管理兼容性（删除、所有截断模式、跨用户管理）仍未完成。
+
+## 已有槽位覆盖修复
+
+后续遇敌验证时，旧实现的新建保存成功，但覆盖已有槽位仍出现 Save failed。对照 Xenia xeXamContentCreate，CREATE_ALWAYS 应重建容器并报告 disposition=1；旧实现报告 2，且未刷新内容元数据。
+
+现在 mode=2 重建 savedata 容器、写入新 metadata 并替换注册表项。删除范围必须是规范化 save 根目录的直接子目录，拒绝符号链接和非 savedata 内容。测试数据、游戏资产和原始用户存档分别隔离。
+
+`out/storage-overwrite-20260904/` 的 write、read、overwrite、read-overwritten 四次独立调用均通过；覆盖测试还检查旧 payload/marker 已移除、元数据 T→U、4096 字节读回一致。游戏 `out/encounter-reload/run.log` 确认 mode=2 disposition=1、206000 字节写入，存档列表正常更新至 550G / 00:11，未再出现 Save failed。
+
+最终版本四阶段测试在 `out/storage-overwrite-final/` 再次通过。`out/overwrite-final-reload/` 的新进程已读回本轮覆盖后的存档，进入 Hypocenter 存档点，凯姆普通资源 model=0 正确保持。

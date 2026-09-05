@@ -1,5 +1,7 @@
 # 路线图
 
+2026-09-05同步。`[x]`表示所述范围已有验证，不代表全游戏完成；哪些改动已推送见[状态总表](STATUS.md)。
+
 状态标记：`[ ]` 未开始 `[~]` 进行中 `[x]` 完成
 
 ## 阶段 0：准备
@@ -19,24 +21,42 @@
 - [x] 标题动态背景恢复（2026-09-04：小尺寸纹理 level 0 的 packed mip 偏移；实跑确认灰色背景持续变化，见 notes/title-packed-mips.md）
 - [x] 内核 HLE：线程、同步、内存、文件系统、XAM 用户档案（游戏可稳定运行到标题场景循环，60 fps swap）
 - [x] 渲染后端：plume + D3D12，先画出第一帧（2026-09-03：标题画面 "Press START" 正确显示；实现见 gpu/renderer.cpp，状态见 notes/gpu.md）
-- [ ] 音频：XMA 上下文/寄存器已模拟（apu/xma.cpp，静音占位解码，XAudio 音轨可推进）；真解码（ffmpeg XMA2）与 PCM 输出未做；开场 WMV 影片仍黑屏
+- [~] 音频：已接入 Xenia FFmpeg XMAFRAMES 解码和 SDL 48kHz 双声道输出，后台标题/读档/地图捕获非零 PCM；循环终点跨越修正及环境音回跳已局部验证；对白、长音轨与循环子帧仍待验证，见 notes/audio-output.md；开场 WMV 影片仍黑屏
 - [x] 输入：SDL 手柄映射（hid/，键盘回退）
 - [x] 调试期间默认关闭手柄震动；`LO_CONTROLLER_RUMBLE=1` 可恢复（2026-09-04，按用户要求）
 - [x] 游戏进入标题画面并可进入主菜单/设置菜单（2026-09-03，登录与存档设备检查已过）
 
 ## 阶段 3：可通关
-- [ ] 随机遇敌双方 T 姿势、攻击卡在执行阶段及敌人闪烁：已独立复现，正在追踪动画配置与骨骼更新，见 notes/encounter-animation.md
+- [~] 后续遇敌：已修复开场资源遗留导致的主角 T 姿势和攻击停滞，独立副本通过普通攻击、反击、自然胜利；敌人地图姿态与闪烁待查，见 notes/encounter-animation.md
 - [x] Windows debug 判胜路径：调用游戏胜利阶段与结果初始化，用户实测确认可跳过战斗（2026-09-04）
 - [ ] 主角火焰受击 glitch：用户确认 Xenia 也异常，需独立诊断或原机参考，不能直接复制 Xenia 效果
 - [ ] 游戏内 debug menu：临时修改主角攻击力/倍率，便于快速推进剧情；只影响主角、可恢复且不写入存档，见 [需求说明](debug-menu-requirements.md)
-- [~] 存档系统：异步完成、缩略图 ABI、持久化枚举和 NT 写入修复；用户确认手动保存成功，独立进程已读取副本进入地图，完整兼容性仍待验证，见 notes/save-storage.md
+- [~] 存档系统：异步完成、缩略图 ABI、持久化枚举和 NT 写入修复；用户确认手动保存成功；补齐 CREATE_ALWAYS 覆盖语义，游戏覆盖保存及独立进程读回通过，完整兼容性仍待验证，见 notes/save-storage.md
 - [ ] 四张盘的数据合并与读盘路径重定向
 - [ ] 过场、战斗、千年之梦、大地图逐一验证
+- [~] 按攻略后台推进：Hypocenter残骸/Ram与戒指教学通过；修正戒指资源宽printf后缀及遗漏switch，后续战斗已自然胜利，已确认Wasteland早期战斗及后续Gorge读档；已从Gorge存档副本启动并沿正常路线到营地；营地新保存/读回未验证，见 notes/walkthrough-testing.md、notes/battle-ring-resource.md
 - [x] 开场战斗角色黑色剪影修复（2026-09-04：A/C 物理地址别名共享内存，E 偏移一页；正常遮挡逻辑下角色材质恢复；Windows/Linux 别名测试通过，详见 notes/physical-alias-rendering.md）
 - [x] 开场战斗角色破面、后期轮廓偏移与纹理 gamma 缺失修复（2026-09-04：16 位索引对齐、resolve 逻辑尺寸、纹理解码；D3D12 数值测试与 Xenia 场景对照，详见 notes/rendering-index-and-resolve.md）
 - [x] 开场战斗光照高光恢复（2026-09-04：接通 stencil、修复 D3D12 参考值丢失及 D24 清理溢出；GPU 测试与同机位实跑，见 notes/lighting-stencil-depth-clear.md）
 - [x] 首场战斗后的实时演出白屏修复（2026-09-04：EDRAM 在 draw 前进行格式转换，恢复场景及炮口火焰，进入重型坦克战斗；见 notes/post-battle-whiteout.md）
 - [ ] 修复全部崩溃，通关一次（2026-09-04：进入 RPBattle__Scene 的 memset 截断崩溃已修，见 notes/recomp.md；已验证新游戏、首场战斗后演出及重型坦克战斗，尚未验证重型坦克战斗结束或通关。当前渲染状态与验证入口见 notes/handoff.md）
+
+
+- [x] Debug menu 同地图人物传送：坐标、记录点返回和轴向微调；后台原生传送/返回/恢复行走及游戏菜单拒绝验证通过，见 notes/debug-teleport.md。
+- [x] 当前地图 POI 传送列表：自动枚举已加载地图的存档、出入口、机关及拾取点；Hypocenter 存档点、机关附近落点、出口附近与旧编号拒绝已后台验证，见 notes/debug-teleport.md。
+
+## 当前九项反馈
+
+完整证据和发布状态见[总表](STATUS.md)。
+
+- [ ] 人物自阴影、遇敌主角无影与敌人阴影闪烁。
+- [ ] 火焰受击黑红格子；Xenia同样异常，以实机参考为准。
+- [ ] Ring外环；资源读取崩溃修复不等于渲染通过。
+- [ ] 第二地图箱子破坏特效黑色。
+- [ ] Debug menu当前地图ID和本地化名字。
+- [ ] 随时存档开关及保存/重启读回。
+- [~] 营地无响应：后台路径及最新用户复测未卡住，仍未定位。文件日志/GPU诊断已推送。
+- [~] 声音输出已推送；部分背景音/对白丢失仍待修复。
 
 ## 阶段 4：现代化
 - [ ] 任意分辨率与宽屏，UI 布局修正

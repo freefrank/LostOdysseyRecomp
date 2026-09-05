@@ -1,66 +1,46 @@
-# 接手入口（2026-09-04）
+# 接手入口（2026-09-05）
 
-## 当前状态
+先读[状态总表](../STATUS.md)、[路线图](../ROADMAP.md)，再读对应专项记录。[旧交接](../archive/2026-09-04/handoff.md)仅供历史追溯。
 
-用户确认 debug 判胜可跳过战斗、修复后手动存档成功；独立进程已从存档副本进入地图，见 [存档调查](save-storage.md)。当前在调查后续遇敌 T 字姿势、选攻击不执行与敌人光影闪烁。
+## 当前基线与未提交改动
 
-Windows D3D12 已验证标题、菜单、开场战斗、攻击目标选择及攻击后镜头切换。
-最新续修已通过首场战斗后的实时演出并进入重型坦克战斗，见 [战后白屏修复](post-battle-whiteout.md)。
-本轮依次修复：
+`7a5446f` 已推送文件日志/GPU停帧诊断，`18d0d77` 已推送 XMA/PCM 初版及循环终点修正。它们不是全部音频、光影或营地稳定性的完成标志。
 
-| 问题 | 根因与实现 | 详细记录 |
-|---|---|---|
-| 标题动态背景纯黑 | 小尺寸纹理 level 0 位于 packed mip 尾部，上传忽略块偏移 | [标题背景](title-packed-mips.md) |
-| 角色黑色剪影 | A/C 物理地址未共享，客体读不到 GPU 遮挡结果；E 别名偏移一页 | [物理内存别名](physical-alias-rendering.md) |
-| 角色网格破面 | 16 位索引 DMA 起点被错误按 4 字节对齐 | [几何与后期](rendering-index-and-resolve.md) |
-| 后期轮廓偏移 | 428×242 的纹理按 448×242 行距资源采样 | [几何与后期](rendering-index-and-resolve.md) |
-| 材质颜色偏差 | 缺失纹理 gamma、fetch swizzle 和 resolve R/B 配套解释；补齐 ALU 并行读语义 | [着色器与纹理](rendering-index-and-resolve.md) |
-| 金属高光缺失 | stencil 状态未接通、plume 参考值丢失、D24 清理端点溢出 | [光影](lighting-stencil-depth-clear.md) |
-| 战后演出整屏白色 | 场景恢复后以另一格式继续叠加光照，draw 前缺少 EDRAM 内容转换 | [战后白屏](post-battle-whiteout.md) |
+工作区仍含未提交的遇敌资源恢复、宽printf与switch修正、存档细节、传送/POI、输入和诊断代码。不要用一次文档提交混入这些代码；先检查 `git status` 和专项证据。生成 PPC 和游戏资产不提交；依赖修改通过[补丁](../../tools/patches/README.md)分发。
 
-Shader cache 版本为 v19。保持正常深度、客体遮挡开关及景深，没有用曝光或强制颜色写掩码补偿。
-GPU 遮挡计数仍是已有的近似实现，不能当作真实硬件查询结果。
+## 最近实际结果
 
-## 验证入口
+- 用户确认手动保存成功。独立进程从用户存档副本载入 **Highlands of Wohl - Gorge（u12_0）**，沿正常路线触发演出并进入营地，控制恢复。未完成营地新存档读回，未通关。
+- 用户曾报告营地窗口无响应但日志继续。后台未复现，最新用户试跑暂未卡住；根因仍未知。主动暂停测试GPU所得 WAIT_REG_MEM 报告只是诊断验证，不是用户卡死根因。
+- 用户确认背景音和部分对白消失，其它声音仍在。循环终点跨越修正通过离线和部分环境音回跳采样；长音轨、对白和循环子帧未完成。
+- 人物/敌人阴影、火焰黑红格子、Ring外环、箱子黑色特效均仍待修。Xenia火焰本身也有glitch，以用户实机参考为正确性依据。
+- F1判胜、同地图传送和POI已有局部验证；地图ID/名称、随时存档、攻击力调整尚未实现。
 
-- [构建、回归测试与实机复现](rendering-validation.md)
-- [依赖补丁应用方式](../../tools/patches/README.md)
-- [Xenia 对照条件和原始观察](xenia-render-comparison.md)
-- 本地最新证据：`out/render-light-depthpack/shot_2400.png`、`shot_3000.png`。
-- 本地对照页：`out/xenia-comparison/comparison-lighting.html`。
-- 最新战后演出证据：`out/cg-white-transfer/`；对照页 `out/xenia-comparison/comparison-cg.html`。
+## 执行约定
 
-`out/` 中的日志、游戏截图、捕获数据不随仓库分发。角色待机动作不同，当前对照不支持逐像素一致或性能提升的结论。
+用户2026-09-05最新授权：可使用电脑、桌面和前台游戏；每项feature或bugfix验证后单独commit并push，无需再问。此前仅后台/禁止push的限制已被覆盖。仍保留用户原始save/profile，回归使用独立副本。
 
-## 下一步
+本任务配置每30分钟自动续跑；这是定时触发，不代表始终有agent运行。每次先检查实际进程和agent状态，结束不再需要的独立捕获副本。未完成九项继续跟踪，全部完成后暂停自动续跑。
 
-主角火焰受击在 Xenia 中也有 glitch（用户已确认），不能把该效果当作正确基线；需要独立取证或原机参考。攻击力 debug menu 已登记在 [需求说明](../debug-menu-requirements.md)，尚未实现。
+## 接下来的调查
 
-1. 继续以 Xenia 同场景对照检查粒子、光晕、阴影边缘和后处理，保留本轮基线，每次只改一个变量。EDRAM 转换现在默认 draw + resolve；read 是历史错误行为对照。
-2. 验证重型坦克战斗结束、更后续场景及存档；目前未验证通关。
-3. plume 只提供一组 stencil reference/read/write mask；当前场景没有启用双面且两组值不同的 draw，其他场景需要继续检查。
-4. 完整 Linux/Vulkan 运行、音频真解码、WMV 和四盘合并仍未完成，见 [路线图](../ROADMAP.md)。
+1. 音频继续验证不同音轨启动、输入缓冲切换与循环子帧。见[音频](audio-output.md)。
+2. 缺失polygon offset只是阴影候选；补齐后需要GPU及同场景对照，不能直接标修复。见[GPU](gpu.md)。
+3. Ring测试使用持续RT/释放，A或右肩键不能代替。资源崩溃已通过局部回归，不等于外环可见。
+4. 原生地图定义插入 `82A0D648` 提供ID与包名：2=u11_0_scrw、3=u13_0_scrw、4=u12_0_scrw。内部开发地名可能过时，需关联实际本地化显示名。
+5. `fcController.CheckSavePoint` 的 `829EC140 → 82A16DC0` 会激活存档交互；不是可直接强制true的菜单门禁。随时存档需找到正常保存流程和可用性判断。
 
 ## 代码地图
 
-路径相对于 `LostOdysseyRecomp/`：
+路径相对 `LostOdysseyRecomp/`：
 
-- `main.cpp`：加载客体、启动 GPU/APU 和重编译入口。
-- `kernel/guest_address_space.cpp`、`memory.cpp`：共享物理映射和页分配；`xex_loader.cpp`：镜像与导入。
-- `gpu/command_processor.cpp`：PM4、寄存器、DRAW_INDX、resolve 和同步。
-- `gpu/renderer.cpp`：plume D3D12、EDRAM、资源缓存、管线状态及诊断捕获。
-- `gpu/shader/xenos_translator.cpp`：Xenos microcode → HLSL；`dxc_compiler.cpp`：DXIL 编译。
-- `gpu/depth_format.h`：D24 打包边界处理。
-- `gpu/video.cpp`、`hid/hid.cpp`：呈现、截图及自动输入。
-- `apu/audio.cpp`、`apu/xma.cpp`：当前音频占位实现。
+| 子系统 | 文件 |
+|---|---|
+| 入口/日志 | `main.cpp`、`os/logger.h` |
+| 客体内存/导入 | `kernel/guest_address_space.cpp`、`memory.cpp`、`xex_loader.cpp` |
+| GPU | `gpu/command_processor.cpp`、`renderer.cpp`、`video.cpp` |
+| 着色器 | `gpu/shader/xenos_translator.cpp`、`dxc_compiler.cpp` |
+| 音频 | `apu/audio.cpp`、`xma.cpp`、`xma_loop.h` |
+| 调试与输入 | `debug/`、`hid/hid.cpp` |
 
-## 历史调查的阅读顺序
-
-此前调查停在蒙皮 draw 普查。续接发现相对寻址候选的
-75 次 mode 4 draw 中有 74 次关闭颜色写入，不能把它们称为 75 次角色颜色绘制。
-随后追踪客体提交条件，确认 GPU 写 A 别名、GetData 读 C 别名才是黑色剪影根因。
-
-[gpu.md](gpu.md) 按时间保留早期分析，其中“遮挡查询已排除”等判断已经被后续证据推翻。
-以本页和各专项笔记中的最终验证为准，不再重复禁用遮挡或强开 mask 的实验。
-
-项目逆向技能入口为 `tools/reverse-skill/README_AI.md`；Ghidra 导出脚本为 `tools/ghidra/ExportFunctions.java`。
+测试入口见[渲染验证](rendering-validation.md)、[攻略测试](walkthrough-testing.md)、[存档](save-storage.md)、[营地](third-map-hang.md)。`out/`截图/日志仅在本地。历史会话与逆向工具索引见[归档](../archive/README.md)和[Ghidra说明](../../tools/ghidra/README.md)。

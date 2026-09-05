@@ -1,5 +1,7 @@
 # 渲染验证（2026-09-04）
 
+> 2026-09-05状态同步：本页的开场截图基线是历史固定场景。当前未解决项目见[状态页](../STATUS.md)；后续Gorge营地已后台到达，但不能据此认定用户窗口卡死已修复。
+
 ## 构建与回归测试
 
 先按 [依赖补丁说明](../../tools/patches/README.md) 准备子模块，并准备 README 中所列本地游戏数据、重编译产物和 Windows 工具链。
@@ -46,7 +48,7 @@ $env:LO_SCREENSHOT_PATH = 'out/render-check/shot.ppm'
 
 自动输入按 swap 计数；本轮第 2400 帧为攻击目标列表，第 3000 帧为正面角色近景。
 如果状态偏离，先确认菜单与输入时序，不把不同镜头当作渲染回归。
-logger 输出在 stderr；日志和截图放在 ignored 的 `out/` 目录。
+logger输出在stderr，并默认将每次运行写入工作目录`logs/runtime-<时间戳>.log`；可设`LO_LOG_FILE`。本例stderr和截图在ignored的`out/`目录。完整工作目录约定见[构建指南](../BUILDING.md)。
 
 本轮基线：`out/render-final/`（几何与纹理修复后）。
 光影最终结果：`out/render-light-depthpack/`；中间实验 `render-light-stencil-ref/` 的红色偏光不是最终结果。
@@ -58,3 +60,9 @@ Xenia 对照条件见 [对照记录](xenia-render-comparison.md)。
 后续已追加首场战斗后演出及重型坦克战斗验证，见 [白屏修复记录](post-battle-whiteout.md)。
 未调整曝光，也未关闭正常深度、客体遮挡开关或景深。遮挡计数仍为近似实现。
 模板正反面不同参考值/掩码尚有限制，本场景没有触发对应警告。
+
+## 隐藏窗口的后台测试
+
+设置 `LO_BACKGROUND=1` 后，SDL 从创建时使用隐藏窗口，D3D12 渲染和游戏截图仍然执行，不显示窗口或占用焦点。它不同于停用视频初始化的 `LO_HEADLESS`。通过 `LO_TEST_INPUT_FILE` 提交进程内输入，不注入系统键鼠；运行记录见 [攻略测试](walkthrough-testing.md)。后台运行仍消耗 CPU/GPU，测试结束应停止独立进程。
+
+资源解析致命错误会记录原始资源名与调用者，随后保留游戏原本的报错和退出行为；日志不再只显示笼统的 dirty disc 提示。

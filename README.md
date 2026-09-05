@@ -1,57 +1,84 @@
-# LostOdysseyRecomp
+<div align="center">
 
-Lost Odyssey（失落的奥德赛，Xbox 360，2007）的非官方 PC 移植，采用静态重编译方式：
-用 XenonRecomp 把原始 PowerPC 代码翻译成 C++，再配合重写的内核层与 D3D12/Vulkan 渲染后端，
-让游戏作为原生 Windows/Linux 程序运行，而不是在模拟器里跑。
+# Lost Odyssey Recompiled
 
-参照项目：
-- [UnleashedRecomp](https://github.com/hedge-dev/UnleashedRecomp)（架构范本）
-- [re:Blue](https://github.com/zolaware/reblue)（同为 Mistwalker 作品，2026-08 公开）
-- [XenonRecomp](https://github.com/hedge-dev/XenonRecomp) / [XenosRecomp](https://github.com/hedge-dev/XenosRecomp)
-- [plume](https://github.com/renderbag/plume)（D3D12 + Vulkan 抽象层）
+**An experimental native PC port of Lost Odyssey for Xbox 360.**
 
-## 目标
+PowerPC static recompilation · Xenos shaders · Windows / D3D12
 
-1. 游戏可以从头玩到尾，行为与原版逐帧一致
-2. 任意分辨率、宽屏、高帧率，读盘等待消失
-3. 现代光影：HDR、高分辨率阴影、TAA/DLSS/FSR、SSAO，后续视精力扩展
-4. Steam Deck / Linux 通过 Vulkan 后端支持
+[简体中文](README.zh-CN.md) · [Status](docs/STATUS.md) · [Build guide](docs/BUILDING.md) · [Documentation](docs/README.md)
 
-## 法律说明
+</div>
 
-本仓库只包含移植代码，不包含任何游戏资产。使用者必须自行提供从自己拥有的正版光盘
-提取的游戏数据。任何 XEX、UPK、音视频文件一律不得提交到仓库。
+---
 
-## 目录结构
+> **Early development.** Selected opening battles and early exploration routes run. This is not a complete or fully compatible port: rendering, audio and progression issues remain. No game assets are included.
 
-```
-LostOdysseyRecomp/        运行时：内核 HLE、渲染、音频、输入、补丁、UI、安装器
-LostOdysseyRecompLib/     重编译产物与配置
-  config/                 XenonRecomp 的 TOML 配置、跳转表
-  private/                本地放置 default.xex 等原始数据（已 gitignore）
-  ppc/                    XenonRecomp 生成的 C++（已 gitignore）
-  shader/                 XenosRecomp 生成的 HLSL（已 gitignore）
-tools/                    XenonRecomp、XenosRecomp 子模块，Ghidra 脚本
-thirdparty/               plume 及其他第三方库
-docs/                     路线图、逆向笔记、决策记录
-```
+## About
 
-## 构建
+LostOdysseyRecomp translates PowerPC game code into C++ with **XenonRecomp**, implements Xbox 360 services on the host, and translates Xenos shaders for **plume**. The tested platform is **Windows / Direct3D 12**. Linux and Vulkan remain development targets.
 
-Windows 运行时已可用 clang-cl 构建；需要本地已提取的游戏数据、重编译产物及子模块。
-在仓库根目录用 PowerShell 执行：
+Reliable gameplay and faithful rendering come first. Higher resolutions, unlocked frame rates, HDR and upscaling are future work, not available features.
+
+## Game edition and languages
+
+Development uses the **Asian multilingual release** supplied by the project owner. The local Disc 1 XEX has title ID `4D5307FA`, media ID `39F7D748`, title/base version `0.0.0.4` and region mask `0x00FFF900`. This mask is not an Asia-only retail identifier; match the executable details rather than relying on a region label alone.
+
+Current runtime testing uses **English**. The source edition is multilingual, but that does not mean every language is implemented or verified in this port. Other regional executables and title updates are not validated. See [edition evidence](docs/notes/xex.md).
+
+## Current progress
+
+_Reviewed September 5, 2026._
+
+| Area | Evidence and limits |
+| :--- | :--- |
+| Title and input | Animated background, menus, SDL controllers and keyboard input work in tested scenes. |
+| Gameplay | Opening battles and selected encounters run; independent testing reached Gorge camp. No complete playthrough. |
+| Graphics | Geometry, material and post-battle whiteout fixes exist. Shadows, fire-hit effects, Ring outer ring and broken-crate effects remain problematic. |
+| Audio | XMA decoding, stereo PCM output and a loop-boundary correction are implemented. Background audio and dialogue can still disappear. |
+| Saves and debug | Manual saving is confirmed in the development build. F1 supports battle victory; local teleport work is tracked separately. |
+| Stability | Persistent logs and GPU stall diagnostics exist. The reported camp hang is not conclusively fixed. |
+
+Some encounter, storage and teleport changes remain **local and uncommitted**. These results describe the development workspace, not a clean-checkout guarantee. See the [status ledger](docs/STATUS.md).
+
+## Build and run
+
+Prepare your own extracted data, dependencies and generated sources using the [build guide](docs/BUILDING.md). Helper scripts contain machine-specific Visual Studio and LLVM paths.
 
 ```powershell
 .\tools\build_runtime.bat
-.\out\build\windows-clang\LostOdysseyRecomp\LostOdysseyRecomp.exe --game .\LostOdysseyRecompLib\private\disc1 --quiet-kernel
+$gameData = (Resolve-Path .\LostOdysseyRecompLib\private\disc1).Path
+Push-Location .\out\build\windows-clang\LostOdysseyRecomp
+.\LostOdysseyRecomp.exe --game $gameData --quiet-kernel
+Pop-Location
 ```
 
-构建脚本使用本机 Visual Studio 2022 Build Tools 和 LLVM；具体路径见脚本。
-调试期间默认关闭手柄震动；需要恢复时，在启动游戏前设置 `$env:LO_CONTROLLER_RUMBLE='1'`。
-目前可进入标题、菜单和开场战斗；已修复角色黑色剪影、网格破面、后期轮廓偏移及纹理 gamma 缺失，并恢复开场战斗的金属高光。更多场景及阴影细节仍需验证。
-首场战斗后的实时演出白屏也已修复，已进入重型坦克战斗，见 [修复记录](docs/notes/post-battle-whiteout.md)。
-音频为静音占位、WMV 影片未解码。Windows 运行时需要 Windows 10 1803 或更新版本。
-阶段状态见 [docs/ROADMAP.md](docs/ROADMAP.md)，接手入口见 [docs/notes/handoff.md](docs/notes/handoff.md)。
+Keep the working directory consistent so the intended save/profile folders are used.
 
-首次检出需应用 [依赖补丁](tools/patches/README.md)。渲染回归测试、实机复现条件及验证范围见
-[渲染验证说明](docs/notes/rendering-validation.md)。Linux 目前只验证了物理地址别名测试，尚未验证完整游戏运行。
+| Action | Keyboard |
+| :--- | :--- |
+| Start / Back | Enter / Backspace |
+| A / B / X / Y | Z / X / A / S |
+| D-pad / left stick | Arrow keys / I, J, K, L |
+| Left / right shoulder | Q / W |
+| Debug menu | F1 |
+
+Rumble is disabled by default; `LO_CONTROLLER_RUMBLE=1` enables it. Use a controller's right trigger for Ring actions; a shoulder binding is not a trigger binding.
+
+## Development
+
+| Directory | Contents |
+| :--- | :--- |
+| `LostOdysseyRecomp/` | Host kernel, graphics, audio, input and debugging |
+| `LostOdysseyRecompLib/` | Configuration; ignored `private/` game data and generated `ppc/` code |
+| `tools/` | Recompilers, dependency patches and Ghidra scripts |
+| `thirdparty/` | Rendering, audio and other dependencies |
+| `docs/` | Current status, guides, research and historical archives |
+
+[Roadmap](docs/ROADMAP.md) · [Handoff](docs/notes/handoff.md) · [Rendering tests](docs/notes/rendering-validation.md) · [Audio](docs/notes/audio-output.md) · [Archive](docs/archive/README.md)
+
+## Credits and game data
+
+With research and tools from [UnleashedRecomp](https://github.com/hedge-dev/UnleashedRecomp), [re:Blue](https://github.com/zolaware/reblue), [XenonRecomp](https://github.com/hedge-dev/XenonRecomp), [XenosRecomp](https://github.com/hedge-dev/XenosRecomp), [plume](https://github.com/renderbag/plume) and [Xenia](https://github.com/xenia-project/xenia). Audio uses the pinned [Xenia FFmpeg fork](https://github.com/xenia-project/FFmpeg), with its [license](thirdparty/ffmpeg-LICENSE.txt).
+
+Lost Odyssey and its assets belong to their respective owners. This is an unofficial project. Supply data extracted from your own discs; do not submit game executables, resource archives, textures, audio, video, generated game code or captures. Dependencies retain their respective licenses.
