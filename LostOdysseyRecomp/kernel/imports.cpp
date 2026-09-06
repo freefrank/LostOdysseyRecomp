@@ -2018,11 +2018,12 @@ static uint32_t XamTaskSchedule(uint32_t callback, uint32_t context, be<uint32_t
 static uint32_t XamTaskShouldExit(uint32_t) { return 0; }
 static uint32_t XamTaskCloseHandle(uint32_t) { return 0; }
 
-// Multi-disc: all four discs are merged into one directory tree, so a swap
-// request completes immediately.
+// Imported discs keep distinct FPI/FPD pairs. Select the target before waking
+// the guest, which then reloads its original archive index without a dashboard.
 static uint32_t XamSwapDisc(uint32_t discNumber, uint32_t completionEvent, uint32_t message)
 {
-    LOG_INFO("XamSwapDisc to disc {} (merged data, completing immediately)", discNumber);
+    if (discNumber < 1 || discNumber > 4) return 87; // ERROR_INVALID_PARAMETER
+    if (!FileSystem::SelectDisc(discNumber)) return 21; // ERROR_NOT_READY
     if (completionEvent)
         KernelSignalEventHandle(completionEvent);
     return 0;

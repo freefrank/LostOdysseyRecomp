@@ -16,6 +16,7 @@ PPC_FUNC(__imp__NtCreateFile);
 PPC_FUNC(__imp__NtWriteFile);
 PPC_FUNC(__imp__NtReadFile);
 PPC_FUNC(__imp__NtFlushBuffersFile);
+PPC_FUNC(__imp__XamSwapDisc);
 
 static void Check(bool condition, const char* message)
 {
@@ -44,6 +45,71 @@ static uint32_t Call(PPCFunc* function, std::initializer_list<uint32_t> args)
 }
 
 template<typename T> static uint32_t Addr(T* p) { return g_memory.MapVirtual(p); }
+
+static void CheckDiscs(const std::filesystem::path& root, bool rejected = false)
+{
+    FileSystem::Init(root / "disc1");
+    XamInit();
+    auto* event = g_userHeap.Alloc<be<uint32_t>>();
+    if (rejected)
+    {
+        Check(Call(__imp__NtCreateEvent,{Addr(event),0,0,0,0}) == 0,"create failure event");
+        Check(Call(__imp__XamSwapDisc,{2,*event,0}) == 21,"reject unavailable/inconsistent disc");
+        Check(GetKernelObject(*event)->Wait(0) != 0,"rejected disc must not signal completion");
+        Check(FileSystem::ResolvePath("game:\\LO.fpi") == root/"disc1"/"LO.fpi","rejected disc retains old root");
+        DestroyKernelObject(*event);
+        std::puts("PASS: rejected disc retains mount and leaves completion event unsignaled");
+        return;
+    }
+    auto* handle = g_userHeap.Alloc<be<uint32_t>>();
+    auto* iosb = static_cast<XIO_STATUS_BLOCK*>(g_userHeap.Alloc(sizeof(XIO_STATUS_BLOCK)));
+    auto* offset = g_userHeap.Alloc<be<uint64_t>>();
+    auto* buffer = static_cast<char*>(g_userHeap.Alloc(4096));
+    auto* name = static_cast<char*>(g_userHeap.Alloc(128));
+    auto* ansi = g_userHeap.Alloc<XANSI_STRING>();
+    auto* attributes = g_userHeap.Alloc<XOBJECT_ATTRIBUTES>();
+    auto open = [&](const char* path) {
+        strcpy(name, path);
+        ansi->Buffer = name; ansi->Length = uint16_t(strlen(name)); ansi->MaximumLength = uint16_t(strlen(name)+1);
+        *attributes = {}; attributes->Name = ansi;
+        Check(Call(__imp__NtCreateFile, {Addr(handle),0x80000000,Addr(attributes),Addr(iosb),0,0,1,1,0x40}) == 0, "open disc resource");
+        return uint32_t(*handle);
+    };
+    auto verify = [&](uint32_t h, const std::filesystem::path& original, uint64_t position) {
+        *offset = position;
+        Check(Call(__imp__NtReadFile, {h,0,0,0,Addr(iosb),Addr(buffer),4096,Addr(offset)}) == 0, "read disc resource");
+        std::array<char,4096> expected{};
+        std::ifstream source(original, std::ios::binary); source.seekg(position); source.read(expected.data(),expected.size());
+        Check(size_t(source.gcount()) == iosb->Information && !memcmp(buffer,expected.data(),size_t(source.gcount())), "resource bytes match target volume");
+    };
+    const uint32_t old = open("game:\\LO.fpi");
+    for (uint32_t disc : {1,2,3,4,2,1})
+    {
+        Check(Call(__imp__NtCreateEvent,{Addr(event),0,0,0,0}) == 0, "create disc event");
+        Check(Call(__imp__XamSwapDisc,{disc,*event,0}) == 0, "select installed disc via guest import");
+        Check(GetKernelObject(*event)->Wait(0) == 0, "disc event only after selection");
+        DestroyKernelObject(*event);
+        const auto directory = root / ("disc" + std::to_string(disc));
+        for (const char* alias : {"game:\\LO.fpi", "d:\\LO.fpi", "\\Device\\Cdrom0\\LO.fpi", "\\??\\game:\\LO.fpi", "LO.fpi"})
+        {
+            auto h = open(alias); verify(h,directory/"LO.fpi",0); DestroyKernelObject(h);
+        }
+        for (const char* archive : {"xenon_event.fpd", "xenon_field.fpd", "xenon_mov.fpd", "xenon_snd.fpd"})
+        {
+            const auto source = directory/archive;
+            const auto position = (std::filesystem::file_size(source)/2/2048)*2048;
+            auto h = open((std::string("game:\\")+archive).c_str()); verify(h,source,position); DestroyKernelObject(h);
+        }
+        verify(old,root/"disc1"/"LO.fpi",0);
+        std::printf("PASS disc %u: five path aliases, four distinct archive reads, old handle retained\n",disc);
+    }
+    DestroyKernelObject(old);
+    Check(Call(__imp__NtCreateEvent,{Addr(event),0,0,0,0}) == 0,"create failure event");
+    Check(Call(__imp__XamSwapDisc,{5,*event,0}) == 87,"reject invalid disc");
+    Check(GetKernelObject(*event)->Wait(0) != 0,"failed selection must not signal success");
+    DestroyKernelObject(*event);
+    Check(FileSystem::ResolvePath("game:\\LO.fpi") == root/"disc1"/"LO.fpi","failed selection retains root");
+}
 
 static void CheckConcurrentReads(uint32_t file)
 {
@@ -126,11 +192,13 @@ int main(int argc, char** argv)
 {
     try
     {
-        Check(argc == 3, "usage: LoStorageTest write|read|overwrite|read-overwritten <isolated directory>");
+        Check(argc == 3 || argc == 4, "usage: LoStorageTest <mode> <isolated directory> [disc-set directory]");
         std::filesystem::create_directories(argv[2]);
         std::filesystem::current_path(argv[2]);
         g_userHeap.Init();
         g_pageAllocator.Init();
+        if (std::string_view(argv[1]) == "discs" || std::string_view(argv[1]) == "disc-rejected")
+        { Check(argc == 4,"discs requires absolute disc-set directory"); CheckDiscs(argv[3], std::string_view(argv[1]) == "disc-rejected"); return 0; }
         if (std::string_view(argv[1]) == "xma-commands") { CheckXmaCommands(); return 0; }
         FileSystem::Init(std::filesystem::absolute("game"));
         XamInit();

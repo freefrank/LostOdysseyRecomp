@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <cstdint>
 
 #include <filesystem>
 #include <string_view>
@@ -15,6 +16,9 @@ struct FileSystem
     static std::string LastOpenedFile();
 
     static void Init(const std::filesystem::path& gameRoot);
+    // Atomically select an installed volume. Existing file handles retain their
+    // original volume until the guest closes them during its index reload.
+    static bool SelectDisc(uint32_t discNumber);
 
     // Resolve a guest path to a host path. Returns an empty path when the
     // device is unknown.

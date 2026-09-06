@@ -18,6 +18,12 @@ SUPPORTED = {
     3: '0d7965a11fb9d102856e26c7fb462b888cb57a1fedc474378b9ae2cceccf6570',
     4: '893914d1bf334f06508b5d54fa20004ee642a53ffcc6137500c10655c3831916',
 }
+EU_SUPPORTED = {
+    1: '175ae53d109d480a83bebbd186e7b6871f7b03ce80af69ab388db2f747640de3',
+    2: '1d8a78379349e4583957d34148d5dbf8a091955edb6c6877bc24bdc9c7b87541',
+    3: 'dd323967d7f4b99b48c00aa6a15a643c96df525e539669e9be49a876513b86f6',
+    4: '9204ba8b91836853ae1e9f0dc49090abd5e63709935599c5551c23b28ecf48d4',
+}
 
 
 class ImportError(ValueError):
@@ -229,10 +235,12 @@ def prepare(path, stack, validate=True):
             else source.read(xex.offset, xex.size))
     info = execution(data)
     info['sha256'] = hashlib.sha256(data).hexdigest()
+    info['edition'] = ('asia' if SUPPORTED.get(info['disc']) == info['sha256'] else
+                       'usa-europe' if EU_SUPPORTED.get(info['disc']) == info['sha256'] else 'unknown')
     if validate:
         if info['title'] != '4D5307FA':
             raise ImportError(f"Wrong game: Title ID {info['title']} (expected 4D5307FA)")
-        if SUPPORTED.get(info['disc']) != info['sha256']:
+        if info['edition'] == 'unknown' or info['discs'] != 4:
             raise ImportError('This XEX version is not supported by this build')
         root_files = {e.name.casefold() for e in entries}
         required = {'lo.fpd', 'lo.fpi'} | {f'xenon_{name}.fpd' for name in
@@ -261,6 +269,9 @@ def install(source_path, game_dir, progress=lambda done, total, label: None, can
         numbers = [info['disc'] for _, _, info in discs]
         if len(numbers) != len(set(numbers)):
             raise ImportError('Multiple copies of the same disc selected')
+        editions = {info['edition'] for _, _, info in discs}
+        if len(editions) != 1:
+            raise ImportError('Cannot mix Asia and USA/Europe discs in one installation')
         game_dir.mkdir(parents=True, exist_ok=True)
         lock_path = game_dir / '.import.lock'
         try:
@@ -275,6 +286,14 @@ def install(source_path, game_dir, progress=lambda done, total, label: None, can
         for n in numbers:
             if (game_dir / f'disc{n}').exists():
                 raise ImportError(f'Disc {n} is already installed; existing files were kept')
+        # Inspect the actual XEX, including installations made before edition
+        # metadata existed. Do not trust an editable import-info.json label.
+        for n in range(1, 5):
+            existing = game_dir / f'disc{n}'
+            if existing.exists():
+                _, _, installed = prepare(existing, stack)
+                if installed['disc'] != n or installed['edition'] not in editions:
+                    raise ImportError('Cannot mix Asia and USA/Europe discs in one installation')
         total = sum(e.size for _, entries, _ in discs for e in entries)
         if shutil.disk_usage(game_dir).free < total + 64 * 1024**2:
             raise ImportError('Not enough free space for the selected discs')

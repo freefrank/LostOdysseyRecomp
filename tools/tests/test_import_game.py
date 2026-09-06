@@ -62,6 +62,48 @@ class ImportTests(unittest.TestCase):
         for name, data in files(disc).items():
             self.assertEqual((self.dest / f'disc{disc}' / name).read_bytes(), data)
 
+    def eu_folder(self, disc=1):
+        source = self.folder(disc)
+        data = bytearray(xex(disc))
+        struct.pack_into('>II', data, 36, 3, 3)
+        (source / 'default.xex').write_bytes(data)
+        hashes = patch.dict(imp.EU_SUPPORTED, {disc: hashlib.sha256(data).hexdigest()})
+        hashes.start()
+        self.addCleanup(hashes.stop)
+        return source
+
+    def test_europe_four_discs(self):
+        for n in range(1, 5):
+            self.eu_folder(n)
+        self.assertEqual(imp.install(self.root, self.dest.parent / 'eu-installed'), [1, 2, 3, 4])
+
+    def test_mixed_source_editions_rejected(self):
+        self.folder(1)
+        self.eu_folder(2)
+        with self.assertRaisesRegex(imp.ImportError, 'Cannot mix'):
+            imp.install(self.root, self.dest.parent / 'mixed')
+
+    def test_mixed_existing_edition_rejected_without_metadata(self):
+        imp.install(self.folder(1), self.dest)
+        (self.dest / 'disc1' / 'import-info.json').unlink()
+        with self.assertRaisesRegex(imp.ImportError, 'Cannot mix'):
+            imp.install(self.eu_folder(2), self.dest)
+        self.check_output()
+        self.assertFalse((self.dest / 'disc2').exists())
+        self.assertFalse((self.dest / '.import.lock').exists())
+
+    def test_europe_incremental_import(self):
+        self.assertEqual(imp.install(self.eu_folder(1), self.dest), [1])
+        self.assertEqual(imp.install(self.eu_folder(2), self.dest), [2])
+
+    def test_unknown_xex_rejected(self):
+        source = self.folder()
+        with (source / 'default.xex').open('ab') as f:
+            f.write(b'modified')
+        with self.assertRaisesRegex(imp.ImportError, 'not supported'):
+            imp.install(source, self.dest)
+        self.assertFalse(self.dest.exists())
+
     def test_folder_and_xex_then_add_disc(self):
         self.assertEqual(imp.install(self.folder() / 'default.xex', self.dest), [1])
         self.assertEqual(imp.install(self.folder(2), self.dest), [2])

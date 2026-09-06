@@ -1,5 +1,6 @@
 #include <stdafx.h>
 #include "file_system.h"
+#include "disc_set.h"
 #include <mutex>
 #include <cpu/guest_thread.h>
 #include <kernel/xam.h>
@@ -29,6 +30,9 @@ static void QueueIoApc(uint32_t apcRoutine, uint32_t apcContext, XIO_STATUS_BLOC
 namespace
 {
     std::filesystem::path g_gameRoot;
+    std::filesystem::path g_discRoot;
+    DiscSet::Identity g_discIdentity;
+    std::mutex g_discMutex;
     std::filesystem::path g_saveRoot;
     std::filesystem::path g_cacheRoot;
 
@@ -159,6 +163,8 @@ struct FileHandle : KernelObject
 void FileSystem::Init(const std::filesystem::path& gameRoot)
 {
     g_gameRoot = gameRoot;
+    g_discRoot = gameRoot;
+    g_discIdentity = DiscSet::ReadIdentity(gameRoot);
     g_saveRoot = std::filesystem::absolute("save");
     g_cacheRoot = std::filesystem::absolute("cache");
     std::error_code ec;
@@ -168,6 +174,22 @@ void FileSystem::Init(const std::filesystem::path& gameRoot)
     XamRootCreate("game", (const char*)g_gameRoot.u8string().c_str());
     XamRootCreate("d", (const char*)g_gameRoot.u8string().c_str());
     XamRootCreate("cache", (const char*)g_cacheRoot.u8string().c_str());
+}
+
+bool FileSystem::SelectDisc(uint32_t discNumber)
+{
+    std::lock_guard lock(g_discMutex);
+    if (discNumber < 1 || discNumber > 4 || !g_discIdentity.edition) return false;
+    const auto target = discNumber == g_discIdentity.disc ? g_gameRoot :
+        g_gameRoot.parent_path() / ("disc" + std::to_string(discNumber));
+    if (!DiscSet::Validate(target, {g_discIdentity.edition, discNumber}))
+    {
+        LOG_ERROR("disc {} unavailable or incomplete: {}; import this disc with InstallGame", discNumber, target.string());
+        return false;
+    }
+    g_discRoot = target;
+    LOG_INFO("automatically selected installed disc {}: {}", discNumber, target.string());
+    return true;
 }
 
 std::filesystem::path FileSystem::GetGameRoot() { return g_gameRoot; }
@@ -230,7 +252,14 @@ std::filesystem::path FileSystem::ResolvePath(std::string_view path)
         }
     }
 
-    const std::string hostRoot = XamGetRootPath(root);
+    const std::string hostRoot = [&] {
+        if (root == "game" || root == "d")
+        {
+            std::lock_guard lock(g_discMutex);
+            return std::string(reinterpret_cast<const char*>(g_discRoot.u8string().c_str()));
+        }
+        return XamGetRootPath(root);
+    }();
     if (hostRoot.empty())
     {
         LOG_WARNING("unknown root '{}' in '{}'", root, path);

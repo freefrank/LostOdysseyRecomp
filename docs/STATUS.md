@@ -12,13 +12,23 @@ Recent dialogue, shadow, window-responsiveness, settings and startup-preparation
 
 [Release notes](RELEASE-v0.1.md) · [Installation](INSTALLING.md) · [Build and packaging evidence](notes/release-packaging.md)
 
+## v0.2 release candidate
+
+The user has authorized committing and publishing v0.2. The candidate covers the USA/Europe import/language work and automatic installed-disc selection below. **Publication has not happened yet**; v0.1 remains the published release. Local package validation does not establish that a final release artifact has been built or uploaded. See [candidate release notes](RELEASE-v0.2.md).
+
+The audited USA/Europe version `0.0.0.3` four-disc set is now accepted by the importer. Strict XEX hashes identify the edition; mixed editions are rejected both within an input set and when appending to an existing installation. Existing discs are checked from their actual XEX files. Runtime edition detection precedes setup/configuration, and missing-data first launch imports before presenting edition-specific game-language choices. USA/Europe offers English, Japanese, German, French, Spanish and Italian; the Asian game-language list and five interface translations remain unchanged.
+
+The Release build, 19 importer tests and 11 isolated setup tests passed. All 60 files in a real four-disc import (23,063,969,792 bytes) matched the source ISO SHA256 hashes. All six language starts passed; English, German, French, Spanish and Italian title menus and the Japanese original brightness/settings page were visually confirmed. This covers menus/settings, not gameplay. The host voice selector now reads the resource-provided language list instead of assuming three choices; the five USA/Europe voice options and the three Asian voice options completed visually checked cycles. These changes are included in the **unpublished v0.2 candidate**, not v0.1. The earlier language-support package passed all manifest hashes, frozen importer self-test and a 30-second rendered runtime check with PATH limited to System32. The main development executable and user save/profile were preserved. See [USA/Europe evidence and remaining coverage](notes/europe-support.md).
+
+The subsequent local disc-selection change switches game paths to the requested installed disc before completing `XamSwapDisc`. It validates edition/disc identity, the original FPI and archive ranges, leaves existing handles open on their original files and preserves the current mount on failure. Both audited editions passed storage alias/read tests, and seven malformed/valid installation cases passed. The original disc manager completed 1 → 2 → 3 → 4 → 1 for both USA/Europe and Asia while reloading each target FPI and continuing rendering. The Asian final title menu was visually confirmed without a disc-change dialog. All 19 importer tests passed again, and the final Release build succeeded. The updated local package passed every manifest hash, frozen importer self-test and a 30-second rendered/captured launch with PATH limited to System32. Four storage write/read/overwrite/read-overwritten regressions also passed. This is controlled runtime coverage, not chapter-boundary gameplay or user acceptance. See [disc selection](notes/disc-selection.md).
+
 ## Implemented and validated features
 
 | Area | Current result | Validation boundary |
 |---|---|---|
-| Importer | Portable GUI accepts folders, XEX, XDVDFS ISO and GOD; supports the tested four-disc Asian XEX set. All 60 imported files matched the original extraction. | Importing four discs does not establish later-disc progression or automatic disc-switch compatibility. |
-| First launch | Language and graphics setup runs before game initialization; the importer opens when files are missing. | Fresh language settings reached the actual Chinese game menu in the same process. |
-| Settings | Original options and save confirmation retained; horizontal tabs; English, Japanese, Korean, Traditional and Simplified Chinese UI/game-language choices; FXAA, output scaling and display modes. | Window preview, timeout rollback, save confirmation and selected localized menus tested. Fullscreen, mouse and mixed-DPI behavior need broader desktop testing. |
+| Importer (v0.1) | Portable GUI accepts folders, XEX, XDVDFS ISO and GOD; supports the tested four-disc Asian XEX set. All 60 imported files matched the original extraction. | Importing four discs does not establish later-disc progression or automatic disc-switch compatibility. |
+| First launch (v0.1) | Language and graphics setup runs before game initialization; the importer opens when files are missing. | Fresh language settings reached the actual Chinese game menu in the same process. |
+| Settings (v0.1) | Original options and save confirmation retained; horizontal tabs; English, Japanese, Korean, Traditional and Simplified Chinese UI/game-language choices; FXAA, output scaling and display modes. | Window preview, timeout rollback, save confirmation and selected localized menus tested. Fullscreen, mouse and mixed-DPI behavior need broader desktop testing. |
 | Shader discovery | Built-in index covers 52 resource files and finds the same 2,000 shaders as the full scan. Unrecognized layouts retain a scan fallback. | Local discovery improved from 36.2 to 1.1 seconds; this is discovery time, not total startup time. |
 | Shader preparation | Uses logical CPU threads minus one, minimum one, and persistent cache reuse. | On a 16-thread PC, 15 workers reduced preparation from 53.4 to 6.7 seconds in a controlled comparison. 1,998 successful DXIL outputs were byte-identical; two failures remain. Runtime variants and PSO creation can still cause first-use stalls. |
 | Title and input | Animated title, menus, SDL controllers and keyboard input work in tested scenes. | Rumble is disabled by default; `LO_CONTROLLER_RUMBLE=1` enables it. |
@@ -52,7 +62,7 @@ Older executable hashes in investigation notes identify test artifacts, not the 
 The reported voice problem is resolved, as reconfirmed by the user on 2026-09-06. The following are coverage tasks, not evidence that the voice defect remains open.
 
 - Additional audio scenes, encounters, cutscenes, A Thousand Years of Dreams and world-map progression require regression testing.
-- WMV playback, later-disc integration and a complete playthrough are not validated.
+- WMV playback, chapter-boundary progression and a complete playthrough are not validated; controlled installed-disc selection is recorded separately above.
 - Fullscreen/exclusive modes, mouse interaction and mixed-DPI behavior need broader desktop acceptance testing.
 
 ## Next development goals

@@ -15,6 +15,7 @@
 #include <ctime>
 #include <chrono>
 #include "settings/first_run.h"
+#include "settings/config.h"
 
 #ifdef _WIN32
 #include <timeapi.h>
@@ -123,10 +124,6 @@ int main(int argc, char* argv[])
         LOG_INFO("LO_* switches:{}", switches.empty() ? " (none)" : switches.c_str());
     }
 
-    if(requestedSetup || (!getenv("LO_BACKGROUND") && !getenv("LO_HEADLESS") && !std::filesystem::exists("settings.ini"))) {
-        if(!settings::FirstRunSetup()) return 0;
-        if(setupOnly) return 0;
-    }
     auto gameRoot=FindGameRoot(argc,argv);
 #ifdef _WIN32
     if(!explicitGame && !std::filesystem::exists(gameRoot/"default.xex") && std::filesystem::exists("InstallGame.exe")) {
@@ -140,6 +137,11 @@ int main(int argc, char* argv[])
         if(!std::filesystem::exists(gameRoot/"default.xex")) return 0;
     }
 #endif
+    settings::ConfigureGameLanguages(gameRoot / "default.xex");
+    if(requestedSetup || (!getenv("LO_BACKGROUND") && !getenv("LO_HEADLESS") && !std::filesystem::exists("settings.ini"))) {
+        if(!settings::FirstRunSetup()) return 0;
+        if(setupOnly) return 0;
+    }
     if (g_memory.base == nullptr)
     {
         LOG_ERROR("failed to reserve the 4 GiB guest address space");

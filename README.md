@@ -17,7 +17,11 @@ Windows x64 · Direct3D 12 · PowerPC static recompilation
 > [!IMPORTANT]
 > **v0.1 is an early testing release.** Opening areas and selected scenes have been tested; a complete playthrough has not. Rendering and stability issues remain. You must supply your own supported game files.
 
-## Start playing
+## v0.2 release candidate
+
+**v0.2 is being prepared and is not published yet.** It adds the audited USA/Europe four-disc edition, edition-specific game and voice language choices, import before first-run setup, and automatic access to imported discs. Once all four discs are imported, no manual disc swap is required. Both editions passed controlled original-manager switching tests; chapter-boundary gameplay and a complete playthrough remain unverified. See the [v0.2 candidate notes](docs/RELEASE-v0.2.md).
+
+## Start playing (published v0.1)
 
 1. **Download and extract** the entire Windows release ZIP to a writable folder.
 2. **Run `LostOdysseyRecomp.exe`** and choose your language and graphics settings.
@@ -69,7 +73,11 @@ The v0.1 package passed hosted Windows CI, importer checks and an isolated cold 
 
 Development uses the **Asian multilingual release**. Disc 1 has title ID `4D5307FA`, media ID `39F7D748`, title/base version `0.0.0.4` and region mask `0x00FFF900`. The importer checks the supported XEX hashes; a region label alone is insufficient.
 
-Language options do not imply a complete playthrough in every language. Other regional executables, title updates and modified XEX files are not validated. See [edition evidence](docs/notes/xex.md).
+The v0.2 candidate also supports the audited **USA/Europe version 0.0.0.3** four-disc set, with strict XEX checks and protection against mixing editions. Game-language choices follow the installed edition: English/Japanese/German/French/Spanish/Italian for USA/Europe; the Asian choices remain unchanged. The settings interface retains its existing five translations. **This support is not included in v0.1.** See [USA/Europe support and validation](docs/notes/europe-support.md).
+
+The v0.2 candidate automatically selects an already imported disc when the original game requests it, with no disc-selection button required. With all four discs imported, players do not need to swap discs manually. Storage tests and controlled original-manager 1 → 2 → 3 → 4 → 1 sequences passed for both audited editions. Chapter-boundary gameplay remains unverified. This feature is not included in v0.1; see [disc-selection evidence](docs/notes/disc-selection.md).
+
+Language options do not imply a complete playthrough in every language. Regional builds outside the audited sets, title updates and modified XEX files are not validated. See [edition evidence](docs/notes/xex.md).
 
 </details>
 

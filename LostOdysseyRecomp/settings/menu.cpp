@@ -55,6 +55,22 @@ uint32_t ConfigAddress(uint8_t *base)
     uint32_t storage = PPC_LOAD_U32(object + 4);
     return storage ? PPC_LOAD_U32(storage + 0x18) : 0;
 }
+uint32_t VoiceCount(uint8_t *base)
+{
+    // The original 82482028/82482038 access this resource-populated list.
+    return std::clamp(uint32_t(PPC_LOAD_U8(0x8336A5F0 + 419)), 1u, 10u);
+}
+uint32_t VoiceLanguage(uint8_t *base, uint32_t index)
+{
+    return PPC_LOAD_U16(0x8336A5F0 + 288 + std::min(index, VoiceCount(base) - 1) * 2);
+}
+const wchar_t *VoiceName(uint8_t *base, uint32_t index)
+{
+    constexpr const wchar_t *names[] = {L"English", L"English", L"日本語", L"Deutsch", L"Français",
+                                       L"Español", L"Italiano", L"한국어", L"繁體中文", L"简体中文"};
+    const auto language = VoiceLanguage(base, index);
+    return language < std::size(names) ? names[language] : L"Unknown";
+}
 void Publish(uint8_t *base, uint32_t config)
 {
     Snapshot next;
@@ -80,8 +96,7 @@ void Publish(uint8_t *base, uint32_t config)
     }
     else if (tab == 1)
     {
-        const wchar_t *voices[] = {L"English", L"日本語", L"한국어"};
-        add(L"Voice language", L"語音語言", voices[std::min(PPC_LOAD_U32(config + 24), 2u)]);
+        add(L"Voice language", L"語音語言", VoiceName(base, PPC_LOAD_U32(config + 24)));
         add(L"Music", L"音樂音量", std::to_wstring(PPC_LOAD_U32(config + 8)) + L"%");
         add(L"Sound effects", L"音效音量", std::to_wstring(PPC_LOAD_U32(config + 12)) + L"%");
     }
@@ -268,6 +283,8 @@ PPC_FUNC(sub_822F19B0)
         status.clear();
         Publish(base, config);
         LOG_INFO("settings: replacement opened at guest menu {:#x}", menu);
+        for (uint32_t i = 0; i < VoiceCount(base); ++i)
+            LOG_INFO("settings: voice option {} -> language {}", i, VoiceLanguage(base, i));
     }
     uint16_t input = pending.exchange(0);
     if (int selected = mouseTab.exchange(-1); selected >= 0)
@@ -343,7 +360,7 @@ PPC_FUNC(sub_822F19B0)
         else if (tab == 1)
         {
             if (row == 0)
-                PPC_STORE_U32(config + 24, cycle(PPC_LOAD_U32(config + 24), 3));
+                PPC_STORE_U32(config + 24, cycle(PPC_LOAD_U32(config + 24), VoiceCount(base)));
             else
             {
                 auto offset = row == 1 ? 8 : 12;
@@ -373,7 +390,7 @@ PPC_FUNC(sub_822F19B0)
             if (row == 0)
                 edit.uiLanguage = cycle(edit.uiLanguage, 5);
             if (row == 1)
-                edit.gameLanguage = GameLanguageIds[cycle(GameLanguageIndex(edit.gameLanguage), 5)];
+                edit.gameLanguage = GameLanguageIds[cycle(GameLanguageIndex(edit.gameLanguage), uint32_t(GameLanguageIds.size()))];
         }
     }
     if (changed)

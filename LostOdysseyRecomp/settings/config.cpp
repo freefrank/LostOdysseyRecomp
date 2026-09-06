@@ -60,6 +60,39 @@ Config &Current()
     return config;
 }
 } // namespace
+void ConfigureGameLanguages(const std::filesystem::path &xexPath)
+{
+    // Read bounded XEX execution metadata directly; works for manually extracted
+    // folders as well as the installer. Import-time SHA256 validates the build.
+    std::ifstream input(xexPath, std::ios::binary);
+    std::array<unsigned char, 65536> data{};
+    input.read(reinterpret_cast<char *>(data.data()), data.size());
+    const size_t size = size_t(input.gcount());
+    auto be32 = [&](size_t offset) -> uint32_t {
+        return (uint32_t(data[offset]) << 24) | (uint32_t(data[offset + 1]) << 16) |
+               (uint32_t(data[offset + 2]) << 8) | data[offset + 3];
+    };
+    bool europe = false;
+    if (size >= 24 && memcmp(data.data(), "XEX2", 4) == 0)
+    {
+        const uint32_t count = be32(20);
+        if (count <= 1024 && 24 + size_t(count) * 8 <= size)
+            for (uint32_t i = 0; i < count; ++i)
+                if (be32(24 + i * 8) == 0x40006)
+                {
+                    const size_t offset = be32(28 + i * 8);
+                    if (offset + 24 > size) break;
+                    constexpr uint32_t mediaIds[] = {0x368DE6DD, 0x1888BE4E, 0x6DD59D08, 0x0C0E80B5};
+                    const auto disc = data[offset + 18];
+                    europe = be32(offset + 12) == 0x4D5307FA && be32(offset + 4) == 3 &&
+                             disc >= 1 && disc <= 4 && data[offset + 19] == 4 && be32(offset) == mediaIds[disc - 1];
+                    break;
+                }
+    }
+    GameLanguageIds = europe ? std::span<const uint32_t>(EuropeLanguageIds) : std::span<const uint32_t>(AsiaLanguageIds);
+    GameLanguageNames = europe ? std::span<const wchar_t *const>(EuropeLanguageNames) : std::span<const wchar_t *const>(AsiaLanguageNames);
+    LOG_INFO("game edition: {}; {} game languages", europe ? "USA/Europe" : "Asia/default", GameLanguageIds.size());
+}
 Config GetConfig()
 {
     std::lock_guard lock(mutex);

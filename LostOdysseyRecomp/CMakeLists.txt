@@ -72,6 +72,16 @@ target_compile_features(LoStorageTest PRIVATE cxx_std_20)
 target_precompile_headers(LoStorageTest REUSE_FROM LostOdysseyRecomp)
 target_link_libraries(LoStorageTest PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,LINK_LIBRARIES>)
 
+# Isolated original-game disc request probe; not included in release packages.
+add_executable(LoDiscRuntimeTest EXCLUDE_FROM_ALL ${LO_RUNTIME_SOURCES} ${LO_IMPORT_STUBS}
+    ${CMAKE_SOURCE_DIR}/tools/tests/disc_runtime_probe.cpp)
+target_include_directories(LoDiscRuntimeTest PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,INCLUDE_DIRECTORIES>)
+target_compile_definitions(LoDiscRuntimeTest PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,COMPILE_DEFINITIONS>)
+target_compile_options(LoDiscRuntimeTest PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,COMPILE_OPTIONS>)
+target_compile_features(LoDiscRuntimeTest PRIVATE cxx_std_20)
+target_precompile_headers(LoDiscRuntimeTest REUSE_FROM LostOdysseyRecomp)
+target_link_libraries(LoDiscRuntimeTest PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,LINK_LIBRARIES>)
+
 # Guest string formatting regression without starting the game.
 add_executable(LoGuestPrintfTest
     ${LO_RUNTIME_ROOT}/kernel/guest_printf.cpp

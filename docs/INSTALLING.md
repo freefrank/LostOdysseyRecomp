@@ -1,8 +1,12 @@
 # Installing Lost Odyssey Recompiled
 
+This guide describes **v0.2**.
+
 1. Extract the entire Windows release ZIP to a writable folder, outside Program Files.
-2. Run **LostOdysseyRecomp.exe**. On first launch, choose interface/game language and graphics settings.
-3. If game files are missing, the importer opens. Select your source; the game continues after import.
+2. Run **LostOdysseyRecomp.exe**. If game files are missing, the importer opens; select your source.
+3. On first launch, choose interface/game language and graphics settings. The game continues after setup and shader preparation.
+
+These steps describe v0.2 behavior. The published **v0.1** opens setup before import and accepts only the Asian set; USA/Europe support below is not included in v0.1.
 
 You can also run **InstallGame.exe** separately to import additional discs. Disc 1 is required to start.
 
@@ -21,15 +25,31 @@ The importer searches five folder levels and reads the XEX disc numbers, so dire
 and container ordering do not matter. `$SystemUpdate` is not imported. Other content types,
 including DLC/STFS packages, are not installed by this importer.
 
-Only the tested Asian multilingual XEX set is accepted: Title ID `4D5307FA`, version 4,
-with Media IDs `39F7D748`, `0EF8CEA8`, `309E3386`, `7B21A91D` for discs 1–4.
-The importer also verifies each XEX SHA256 against the supported build.
-Other regions, title updates and modified XEX files need separate compatibility work.
+The v0.2 importer accepts these audited sets, both with Title ID `4D5307FA`:
+
+| Edition | Version | Media IDs, discs 1–4 |
+|---|---|---|
+| Asian multilingual | 4 | `39F7D748`, `0EF8CEA8`, `309E3386`, `7B21A91D` |
+| USA/Europe (not in v0.1) | 3 | `368DE6DD`, `1888BE4E`, `6DD59D08`, `0C0E80B5` |
+
+Each XEX SHA256 must match the supported build. Discs from different editions cannot be mixed,
+either in a single import or when adding to an existing installation. Other builds, title updates
+and modified XEX files need separate compatibility work.
+
+Game-language choices follow the installed edition: English, Japanese, German, French, Spanish
+and Italian for USA/Europe; English, Japanese, Korean, Traditional Chinese and Simplified Chinese
+for the audited Asian set. The settings interface retains its existing five translations.
+A saved game-language choice unavailable in the current edition falls back to English.
 
 Discs are copied to `game/disc1` through `game/disc4` by default. You can select an external
 game destination; the executable reads `game-path.txt` next to InstallGame.exe.
-Importing all four discs does not imply that every later-disc scene or automatic disc switch
-has been tested in this experimental runtime.
+In v0.2, the original game's disc request automatically selects the
+corresponding imported `discN` directory. No manual disc-selection button is required. Keep all
+four discs from the same edition under the same parent directory. The original game reloads
+the target disc's own index and archives; the importer does not merge them into one rewritten index.
+If the target is missing, from another edition or incomplete, the request fails and the current
+mount remains selected. Import the required disc with InstallGame.exe. This feature is not in v0.1.
+Controlled switching tests do not establish chapter-boundary progression or full-game compatibility.
 
 ## Existing data and cancellation
 
