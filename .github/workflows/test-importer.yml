@@ -1,0 +1,16 @@
+name: Importer tests
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m unittest discover -s tools/tests -p test_import_game.py -v
+      - name: Test shader index and scan fallback
+        shell: cmd
+        run: call tools\test_shader_index.bat

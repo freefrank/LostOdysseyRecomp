@@ -14,9 +14,11 @@
 #include <cstring>
 #include <ctime>
 #include <chrono>
+#include "settings/first_run.h"
 
 #ifdef _WIN32
 #include <timeapi.h>
+#include <shellapi.h>
 #endif
 
 // Runtime entry: set up guest memory, load default.xex and run its entry point
@@ -32,7 +34,14 @@ static std::filesystem::path FindGameRoot(int argc, char* argv[])
     }
 
     // Default: the extracted disc 1 next to the executable, or the dev tree.
-    const char* candidates[] = { "game", "../../../LostOdysseyRecompLib/private/disc1", "LostOdysseyRecompLib/private/disc1" };
+    std::ifstream location("game-path.txt");
+    std::string selected;
+    if (std::getline(location,selected) && !selected.empty()) {
+        if (selected.back()=='\r') selected.pop_back();
+        const auto disc=std::filesystem::u8path(selected)/"disc1";
+        if (std::filesystem::exists(disc/"default.xex")) return disc;
+    }
+    const char* candidates[] = { "game/disc1", "game", "../../../LostOdysseyRecompLib/private/disc1", "LostOdysseyRecompLib/private/disc1" };
     for (auto c : candidates)
     {
         std::error_code ec;
@@ -47,6 +56,21 @@ void InstallPhysicalWatchpoint();
 
 int main(int argc, char* argv[])
 {
+    bool explicitGame=false, requestedSetup=false, setupOnly=false;
+    for(int i=1;i<argc;++i) {
+        explicitGame |= strcmp(argv[i],"--game")==0;
+        requestedSetup |= strcmp(argv[i],"--setup")==0 || strcmp(argv[i],"--setup-only")==0;
+        setupOnly |= strcmp(argv[i],"--setup-only")==0;
+    }
+#ifdef _WIN32
+    // Direct launches keep all portable data beside the executable. Explicit
+    // --game launches retain their caller's working directory for isolated tests.
+    if(!explicitGame) {
+        wchar_t executable[32768]{};
+        if(GetModuleFileNameW(nullptr,executable,32768))
+            std::filesystem::current_path(std::filesystem::path(executable).parent_path());
+    }
+#endif
     // Keep each run separately, including launches without a terminal. Tests
     // can select a path or disable the duplicate sink with LO_LOG_FILE=0.
     const char* logOverride = getenv("LO_LOG_FILE");
@@ -99,6 +123,23 @@ int main(int argc, char* argv[])
         LOG_INFO("LO_* switches:{}", switches.empty() ? " (none)" : switches.c_str());
     }
 
+    if(requestedSetup || (!getenv("LO_BACKGROUND") && !getenv("LO_HEADLESS") && !std::filesystem::exists("settings.ini"))) {
+        if(!settings::FirstRunSetup()) return 0;
+        if(setupOnly) return 0;
+    }
+    auto gameRoot=FindGameRoot(argc,argv);
+#ifdef _WIN32
+    if(!explicitGame && !std::filesystem::exists(gameRoot/"default.xex") && std::filesystem::exists("InstallGame.exe")) {
+        const auto installer=std::filesystem::absolute("InstallGame.exe").wstring();
+        SHELLEXECUTEINFOW launch{sizeof(launch)};
+        launch.fMask=SEE_MASK_NOCLOSEPROCESS; launch.lpFile=installer.c_str(); launch.nShow=SW_SHOWNORMAL;
+        launch.lpParameters=L"--return-to-game";
+        if(!ShellExecuteExW(&launch)) return 1;
+        if(launch.hProcess) { WaitForSingleObject(launch.hProcess,INFINITE); CloseHandle(launch.hProcess); }
+        gameRoot=FindGameRoot(argc,argv);
+        if(!std::filesystem::exists(gameRoot/"default.xex")) return 0;
+    }
+#endif
     if (g_memory.base == nullptr)
     {
         LOG_ERROR("failed to reserve the 4 GiB guest address space");
@@ -109,7 +150,6 @@ int main(int argc, char* argv[])
     g_userHeap.Init();
     g_pageAllocator.Init();
 
-    const auto gameRoot = FindGameRoot(argc, argv);
     LOG_INFO("game root: {}", gameRoot.string());
 
     FileSystem::Init(gameRoot);

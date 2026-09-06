@@ -1,5 +1,14 @@
 # Project status
 
+## v0.1 packaging and first launch (2026-09-05)
+
+The portable installer, runtime dependency audit, first-launch language/graphics setup and
+built-in shader resource index have passed local validation. All 60 imported game files matched
+the original extraction. The indexed path returned the same 2,000 shaders as the full scan,
+reducing local discovery from 36.2 seconds to 1.1 seconds. Fresh settings applied to the actual
+Chinese game menu in the same process. See [release notes](RELEASE-v0.1.md) and
+[pipeline details](notes/release-packaging.md). CI publication is tracked by the v0.1 release.
+
 ## 设置菜单（2026-09-05）
 
 新设置页已接回原入口，保留原选项和保存确认，增加五语言界面、游戏语言、FXAA、输出缩放、显示模式及禁用的 DLSS／帧生成占位。窗口分辨率预览、超时还原、确认保存、繁体游戏主菜单与原亮度页返回均已后台验证；全屏模式、鼠标与跨 DPI 尚待桌面验收。测试版为 `out/settings-preview.exe`，原主程序保留。详见 [设置菜单](notes/settings-menu.md)。

@@ -15,6 +15,9 @@ inline const wchar_t *Translate(uint32_t language, const wchar_t *en, const wcha
         const wchar_t *key, *japanese, *korean, *simplified;
     };
     static constexpr Entry entries[] = {
+        {L"Interface language", L"画面の言語", L"인터페이스 언어", L"界面语言"},
+        {L"Window mode", L"表示モード", L"화면 모드", L"显示模式"},
+        {L"DLSS / Frame generation", L"DLSS / フレーム生成", L"DLSS / 프레임 생성", L"DLSS / 帧生成"},
         {L"On", L"オン", L"켜기", L"开"},
         {L"Off", L"オフ", L"끄기", L"关"},
         {L"Fast", L"速い", L"빠르게", L"快"},

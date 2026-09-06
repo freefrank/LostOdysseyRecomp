@@ -1,0 +1,66 @@
+name: Windows Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    # Only trusted manual/tag builds use this ephemeral runner. PR tests are hosted.
+    runs-on: ${{ fromJSON(vars.LO_RELEASE_RUNNER || '"windows-2022"') }}
+    timeout-minutes: 180
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test importer and install packaging tools
+        run: |
+          python -m unittest discover -s tools/tests -p test_import_game.py -v
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python -m pip install -r tools/release/requirements.txt
+      - name: Retrieve and verify private build input
+        env:
+          LO_BUILD_XEX_URL: ${{ secrets.LO_BUILD_XEX_URL }}
+        run: python tools/release/fetch_build_input.py
+      - name: Generate game code
+        shell: cmd
+        run: |
+          call tools\build_tools.bat || exit /b 1
+          out\build\tools\xexdump.exe LostOdysseyRecompLib\private\disc1\default.xex LostOdysseyRecompLib\private\image_disc1.bin || exit /b 1
+          out\build\tools\XenonRecomp\XenonRecomp\XenonRecomp.exe LostOdysseyRecompLib\config\LostOdysseyRecomp.toml tools\XenonRecomp\XenonUtils\ppc_context.h || exit /b 1
+      - name: Build Release
+        shell: cmd
+        env:
+          LO_BUILD_JOBS: '2'
+        run: call tools\build_release.bat
+      - name: Package runtime and importer
+        run: |
+          if ($env:GITHUB_REF -like 'refs/tags/v*') {
+            python tools/package_release.py --version $env:GITHUB_REF_NAME
+          } else {
+            python tools/package_release.py
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LostOdysseyRecomp-windows-x64
+          path: |
+            out/releases/LostOdysseyRecomp-*.zip
+            out/releases/LostOdysseyRecomp-*.sha256
+          if-no-files-found: error
+      - name: Create draft release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $assets = Get-ChildItem out/releases/LostOdysseyRecomp-*.zip,out/releases/LostOdysseyRecomp-*.sha256 | ForEach-Object FullName
+          gh release create $env:GITHUB_REF_NAME --verify-tag --draft --generate-notes @assets

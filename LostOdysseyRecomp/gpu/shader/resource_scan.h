@@ -1,6 +1,7 @@
 #pragma once
 
 #include "cache.h"
+#include "resource_index.h"
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
@@ -14,8 +15,7 @@ namespace fs = std::filesystem;
 inline uint32_t ReadBE(const uint8_t* p) {
     return (uint32_t(p[0]) << 24) | (uint32_t(p[1]) << 16) | (uint32_t(p[2]) << 8) | p[3];
 }
-inline uint64_t Hash(std::span<const uint8_t> bytes) {
-    uint64_t h = 0xcbf29ce484222325ULL;
+inline uint64_t Hash(std::span<const uint8_t> bytes, uint64_t h = 0xcbf29ce484222325ULL) {
     for (auto b : bytes) h = (h ^ b) * 0x100000001b3ULL;
     return h;
 }
@@ -39,9 +39,69 @@ inline std::span<const uint8_t> Microcode(std::span<const uint8_t> data, bool& p
     if (size < 12 || size % 12 || uint64_t(offset)+size > phys) return {};
     return data.subspan(virt+offset, size);
 }
-struct Result { size_t shaders = 0; bool reused = false; std::string error; };
+// Bounded probes identify known resource layouts; every indexed shader is also
+// hashed before any indexed outputs for this file are published. These probes
+// are not a whole-file integrity check for unrelated game assets.
+inline uint64_t Fingerprint(std::ifstream& in, uint64_t length, uint64_t& bytesRead) {
+    const uint64_t sample = std::min<uint64_t>(length, 4096);
+    const uint64_t offsets[] = {0, length/4, length/2, length-sample};
+    std::vector<uint8_t> bytes(sample);
+    uint64_t hash = 0xcbf29ce484222325ULL;
+    for (auto offset : offsets) {
+        const auto amount = std::min<uint64_t>(sample, length-offset);
+        in.clear(); in.seekg(offset);
+        if (!in.read(reinterpret_cast<char*>(bytes.data()), amount)) throw std::runtime_error("short resource probe");
+        bytesRead += amount;
+        hash = Hash(std::span(bytes).first(amount), hash);
+    }
+    return hash;
+}
+inline bool ExtractIndexed(const fs::path& file, const fs::path& source,
+                           std::span<const IndexFile> index, std::set<std::string>& names,
+                           uint64_t& bytesRead) {
+    const auto length = fs::file_size(file);
+    const auto filename = file.filename().string();
+    bool probed = false;
+    uint64_t fingerprint = 0;
+    std::ifstream in(file, std::ios::binary);
+    for (const auto& profile : index) {
+        if (profile.name != filename || profile.size != length) continue;
+        if (!probed) { fingerprint = Fingerprint(in, length, bytesRead); probed = true; }
+        if (profile.fingerprint != fingerprint) continue;
+        std::vector<std::pair<std::string, std::vector<uint8_t>>> prepared;
+        bool valid = true;
+        for (const auto& entry : profile.entries) {
+            if (entry.size < 12 || entry.size > 262144 || entry.size % 12 ||
+                entry.offset > length || entry.size > length-entry.offset) { valid=false; break; }
+            std::vector<uint8_t> code(entry.size);
+            in.clear(); in.seekg(entry.offset);
+            if (!in.read(reinterpret_cast<char*>(code.data()), code.size())) { valid=false; break; }
+            bytesRead += code.size();
+            if (Hash(code) != entry.hash) { valid=false; break; }
+            auto name = SourceName(entry.pixel, code);
+            if (!names.contains(name)) prepared.emplace_back(std::move(name), std::move(code));
+        }
+        if (!valid) continue;
+        for (const auto& [name, code] : prepared) {
+            std::ofstream out(source / name, std::ios::binary | std::ios::trunc);
+            out.write(reinterpret_cast<const char*>(code.data()), code.size()); out.close();
+            if (!out) throw std::runtime_error("cannot write indexed shader");
+            names.insert(name);
+        }
+        return true; // Includes verified resources containing no shader containers.
+    }
+    return false;
+}
+struct Result {
+    size_t shaders = 0;
+    bool reused = false;
+    std::string error;
+    size_t indexedFiles = 0, scannedFiles = 0;
+    uint64_t bytesRead = 0;
+};
 inline Result Scan(const fs::path& root, const fs::path& cacheDir,
-                   const std::function<void(uint32_t,uint32_t)>& progress) {
+                   const std::function<void(uint32_t,uint32_t)>& progress,
+                   std::span<const IndexFile> index = builtin::files) {
     Result result;
     try {
         std::vector<fs::path> roots{root}, files;
@@ -60,7 +120,7 @@ inline Result Scan(const fs::path& root, const fs::path& cacheDir,
         std::sort(files.begin(), files.end());
         if (files.empty()) { result.error = "no FPD game resources found"; return result; }
         std::ostringstream identity;
-        identity << "resource-scanner-v1\n";
+        identity << "resource-scanner-v2\n";
         uint64_t totalBytes = 0;
         for (const auto& file : files) {
             const auto size = fs::file_size(file); totalBytes += size;
@@ -95,13 +155,21 @@ inline Result Scan(const fs::path& root, const fs::path& cacheDir,
         std::set<std::string> names;
         uint64_t completed=0;
         for (const auto& file : files) {
+            const auto length=fs::file_size(file);
+            if (ExtractIndexed(file, source, index, names, result.bytesRead)) {
+                ++result.indexedFiles;
+                completed += length;
+                progress(uint32_t(completed/1048576),uint32_t((totalBytes+1048575)/1048576));
+                continue;
+            }
+            ++result.scannedFiles;
             std::ifstream in(file, std::ios::binary);
             if (!in) throw std::runtime_error("cannot read " + file.string());
-            const auto length=fs::file_size(file);
             for (uint64_t base=0; base<length; base+=chunk) {
                 in.clear(); in.seekg(base);
                 const auto amount=std::min<uint64_t>(bytes.size(),length-base);
                 if (!in.read(reinterpret_cast<char*>(bytes.data()), amount)) throw std::runtime_error("short resource read");
+                result.bytesRead += amount;
                 const auto core=std::min<uint64_t>(chunk,length-base);
                 for (size_t i=0; i<core && i+36<=amount; ++i) {
                     if (bytes[i]!=0x10 || bytes[i+1]!=0x2a || bytes[i+2]!=0x11) continue;

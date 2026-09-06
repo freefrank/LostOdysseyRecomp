@@ -4,11 +4,10 @@
 project(LostOdysseyRecompLib LANGUAGES CXX)
 
 file(GLOB LO_PPC_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/ppc/ppc_recomp.*.cpp")
-list(APPEND LO_PPC_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/ppc/ppc_func_mapping.cpp")
-
-if(NOT LO_PPC_SOURCES)
+if(NOT LO_PPC_SOURCES OR NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/ppc/ppc_func_mapping.cpp")
     message(FATAL_ERROR "No recompiled sources in LostOdysseyRecompLib/ppc; run XenonRecomp first")
 endif()
+list(APPEND LO_PPC_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/ppc/ppc_func_mapping.cpp")
 
 add_library(LostOdysseyRecompLib STATIC ${LO_PPC_SOURCES})
 target_include_directories(LostOdysseyRecompLib PUBLIC

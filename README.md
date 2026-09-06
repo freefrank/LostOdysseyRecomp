@@ -6,7 +6,7 @@
 
 PowerPC static recompilation · Xenos shaders · Windows / D3D12
 
-[简体中文](README.zh-CN.md) · [Status](docs/STATUS.md) · [Build guide](docs/BUILDING.md) · [Documentation](docs/README.md)
+[简体中文](README.zh-CN.md) · [Install](docs/INSTALLING.md) · [Status](docs/STATUS.md) · [Build guide](docs/BUILDING.md) · [Documentation](docs/README.md)
 
 </div>
 

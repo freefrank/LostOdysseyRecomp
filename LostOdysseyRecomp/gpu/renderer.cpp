@@ -905,14 +905,19 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             {
                 if (shaderCacheDir.empty() || getenv("LO_NO_SHADER_PREPARE")) return;
                 video::SetShaderPreparationProgress(0, 1, true);
+                const auto inventoryStarted = std::chrono::steady_clock::now();
                 const auto extracted = xenos::resources::Scan(FileSystem::GetGameRoot(), shaderCacheDir,
                     [](uint32_t done, uint32_t total) {
                         video::SetShaderPreparationProgress(done, total, true);
                         video::PumpEvents();
-                    });
+                    }, getenv("LO_SHADER_FULL_SCAN") ? std::span<const xenos::resources::IndexFile>{}
+                                                     : std::span<const xenos::resources::IndexFile>{xenos::resources::builtin::files});
                 if (!extracted.error.empty()) LOG_WARNING("renderer: resource shader preparation: {}", extracted.error);
                 LOG_INFO("renderer: resource shader inventory: {} shaders ({})", extracted.shaders,
                     extracted.reused ? "reused" : "extracted");
+                LOG_INFO("renderer: shader inventory {} indexed files, {} scanned files, {} bytes read, {} ms",
+                    extracted.indexedFiles, extracted.scannedFiles, extracted.bytesRead,
+                    std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-inventoryStarted).count());
                 const auto source = std::filesystem::path(shaderCacheDir) / "source";
                 std::error_code ec;
                 std::filesystem::create_directories(source, ec);

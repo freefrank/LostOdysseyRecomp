@@ -6,7 +6,7 @@
 
 PowerPC 静态重编译 · Xenos 着色器 · Windows / D3D12
 
-[English](README.md) · [项目状态](docs/STATUS.md) · [构建指南](docs/BUILDING.md) · [文档导航](docs/README.md)
+[English](README.md) · [安装指南](docs/INSTALLING.md) · [项目状态](docs/STATUS.md) · [构建指南](docs/BUILDING.md) · [文档导航](docs/README.md)
 
 </div>
 

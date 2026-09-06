@@ -20,6 +20,10 @@ add_custom_command(
     VERBATIM)
 
 add_executable(LostOdysseyRecomp ${LO_RUNTIME_SOURCES} ${LO_IMPORT_STUBS})
+if(WIN32)
+    # Keep the existing main/CRT initialization while avoiding a console on double-click.
+    target_link_options(LostOdysseyRecomp PRIVATE /SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup)
+endif()
 
 target_include_directories(LostOdysseyRecomp PRIVATE
     ${LO_RUNTIME_ROOT}
