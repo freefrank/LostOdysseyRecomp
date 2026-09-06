@@ -4,6 +4,7 @@
 #include "map_info.h"
 #include "save_anywhere.h"
 #include <os/logger.h>
+#include <gpu/renderer.h>
 #include <cmath>
 #include <cwchar>
 #include <cwctype>
@@ -24,9 +25,10 @@ namespace
     uint64_t poiRevision = ~uint64_t(0);
     std::vector<debug_menu::MapPoi> displayedPois;
     HWND saveToggle = nullptr;
+    HWND captureButton = nullptr, captureStatus = nullptr;
     struct LayoutControl { HWND window; int x, y, width, height; };
     std::vector<LayoutControl> layoutControls;
-    constexpr int contentWidth = 540, contentHeight = 710;
+    constexpr int contentWidth = 540, contentHeight = 850;
     int scrollX = 0, scrollY = 0, wheelRemainder = 0;
 
     void Layout(HWND window)
@@ -132,6 +134,7 @@ namespace
         }
         if (message == WM_COMMAND)
         {
+            if (LOWORD(wparam) == 103) gpu::renderer::RequestDebugCapture();
             if (LOWORD(wparam) == 100) debug_menu::RequestVictory();
             if (LOWORD(wparam) == 101) debug_menu::CancelVictory();
             if (LOWORD(wparam) == 102)
@@ -247,6 +250,8 @@ void debug_menu::Toggle()
         poiButton = Control(L"BUTTON", L"传送到此 POI", BS_PUSHBUTTON, 379, 592, 135, 30, 31);
         poiDetails = Control(L"STATIC", L"", 0, 24, 628, 490, 36);
         Control(L"STATIC", L"POI 仅含已加载区域；传送到达后仍会触发游戏事件。", 0, 24, 672, 490, 24);
+        captureButton = Control(L"BUTTON", L"截取渲染状态 / Capture render state", BS_PUSHBUTTON, 24, 714, 490, 30, 103);
+        captureStatus = Control(L"STATIC", L"截取下一完整帧；导出期间可能短暂停顿。", 0, 24, 750, 490, 80);
         // Fit the initial window to the current monitor; scrolling keeps every control reachable.
         MONITORINFO monitor{sizeof(MONITORINFO)};
         if (GetMonitorInfoW(MonitorFromWindow(menu, MONITOR_DEFAULTTONEAREST), &monitor))
@@ -268,6 +273,12 @@ void debug_menu::Toggle()
 void debug_menu::Update()
 {
 #ifdef _WIN32
+    if (captureStatus && IsWindowVisible(menu))
+    {
+        const auto status = gpu::renderer::DebugCaptureStatus();
+        if (!status.empty()) SetLabel(captureStatus, status.c_str());
+        EnableWindow(captureButton, !gpu::renderer::DebugCaptureBusy());
+    }
     // Optional startup visibility for repeatable UI validation without injected keys.
     static bool openOnStartup = getenv("LO_DEBUG_MENU_OPEN") != nullptr;
     if (openOnStartup) { openOnStartup = false; Toggle(); }

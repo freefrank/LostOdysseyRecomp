@@ -399,6 +399,10 @@ namespace gpu::video
         SDL_Event event;
         while (SDL_PollEvent(&event))
         {
+            if (event.type == SDL_KEYDOWN || event.type == SDL_KEYUP)
+                hid::HandleKeyboardEvent(event.key.keysym.scancode, event.type == SDL_KEYDOWN);
+            if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_FOCUS_LOST)
+                hid::ClearKeyboardState();
             if(event.type==SDL_MOUSEBUTTONDOWN) {
                 int w=0,h=0; SDL_GetWindowSize(g_window,&w,&h);
                 const float scale=std::min(w/1280.0f,h/720.0f);

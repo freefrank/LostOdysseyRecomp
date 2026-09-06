@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <vector>
+#include <string>
 
 namespace plume { struct RenderTexture; }
 
@@ -25,6 +26,11 @@ namespace gpu::renderer
     // Initialises against the presenter's device; returns false without a GPU.
     bool Init();
     void Shutdown();
+    // UI thread requests; render thread captures the next complete frame.
+    void RequestDebugCapture();
+    std::wstring DebugCaptureStatus();
+    bool DebugCaptureBusy();
+    void FinishDebugCapture(uint32_t frontbuffer);
 
     // Called for every DRAW_INDX / DRAW_INDX_2 after the registers were updated.
     void Draw(const DrawInfo& info);

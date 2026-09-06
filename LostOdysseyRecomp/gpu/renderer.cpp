@@ -30,9 +30,65 @@
 #include <memory>
 #include <unordered_map>
 #include <vector>
+#include <mutex>
 
 namespace gpu::renderer
 {
+    namespace {
+        std::mutex captureMutex;
+        bool captureBusy = false, capturePending = false;
+        std::wstring captureStatus;
+        bool CompressCapture(const std::filesystem::path& directory, std::filesystem::path& archive)
+        {
+#ifdef _WIN32
+            archive = directory;
+            archive += L".zip";
+            auto temporary = archive;
+            temporary += L".partial";
+            // PowerShell single-quoted literals escape only apostrophes. No shell
+            // interpolation of capture paths; use the system executable directly.
+            auto literal = [](const std::wstring& value) {
+                std::wstring result = L"'";
+                for (auto c : value) { result += c; if (c == L'\'') result += c; }
+                return result + L"'";
+            };
+            wchar_t systemDirectory[MAX_PATH]{};
+            if (!GetSystemDirectoryW(systemDirectory, MAX_PATH)) return false;
+            const auto executable = std::filesystem::path(systemDirectory) / L"WindowsPowerShell/v1.0/powershell.exe";
+            std::wstring command = L"\"" + executable.wstring() + L"\" -NoLogo -NoProfile -NonInteractive -Command \"$ErrorActionPreference='Stop'; Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::CreateFromDirectory(" +
+                literal(directory.wstring()) + L"," + literal(temporary.wstring()) + L",[System.IO.Compression.CompressionLevel]::Optimal,$false)\"";
+            STARTUPINFOW startup{}; startup.cb = sizeof(startup);
+            PROCESS_INFORMATION process{};
+            if (!CreateProcessW(executable.c_str(), command.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &startup, &process)) return false;
+            const auto wait = WaitForSingleObject(process.hProcess, 60000);
+            if (wait != WAIT_OBJECT_0) { TerminateProcess(process.hProcess, 1); WaitForSingleObject(process.hProcess, INFINITE); }
+            DWORD code = 1;
+            GetExitCodeProcess(process.hProcess, &code);
+            CloseHandle(process.hThread); CloseHandle(process.hProcess);
+            std::error_code error;
+            if (wait == WAIT_OBJECT_0 && code == 0)
+            {
+                std::filesystem::rename(temporary, archive, error);
+                if (!error) return true;
+            }
+            std::filesystem::remove(temporary, error);
+#endif
+            return false;
+        }
+    }
+    void RequestDebugCapture()
+    {
+        std::lock_guard lock(captureMutex);
+        if (captureBusy) return;
+#ifdef LO_GPU_PLUME
+        captureBusy = capturePending = true;
+        captureStatus = L"等待下一完整帧 / Waiting for next frame";
+#else
+        captureStatus = L"当前构建不支持渲染捕获 / Renderer unavailable";
+#endif
+    }
+    std::wstring DebugCaptureStatus() { std::lock_guard lock(captureMutex); return captureStatus; }
+    bool DebugCaptureBusy() { std::lock_guard lock(captureMutex); return captureBusy; }
 #ifdef LO_GPU_PLUME
     using namespace plume;
 
@@ -352,6 +408,45 @@ namespace gpu::renderer
             uint32_t frame = 0;
             uint32_t captureFrame = 0;
             uint64_t captureRequest = 0;
+            std::string debugCaptureDir;
+            std::ofstream debugTrace;
+            uint32_t debugDraw = 0;
+            std::vector<uint32_t> debugRegisters;
+            std::set<uint64_t> debugShaders;
+
+            void BeginDebugCapture()
+            {
+                std::lock_guard lock(captureMutex);
+                if (!capturePending) return;
+                capturePending = false;
+                try
+                {
+                    const auto stamp = std::chrono::system_clock::now().time_since_epoch().count();
+                    const auto path = std::filesystem::absolute(std::filesystem::path("captures") / fmt::format("render-{}-f{}", stamp, frame));
+                    std::filesystem::create_directories(path);
+                    debugCaptureDir = path.string();
+                    debugTrace.open(path / "render-state.txt", std::ios::trunc);
+                    if (!debugTrace) throw std::runtime_error("Cannot write render-state.txt");
+                    debugTrace << "Frame " << frame << "\nRegister index/value pairs are hex. First draw is a full register snapshot; later draws contain changes.\n";
+                    const auto& description = device->getDescription();
+                    debugTrace << fmt::format("GPU: {} driver_raw={}\n", description.name, description.driverVersion);
+                    debugDraw = 0;
+                    debugRegisters.clear();
+                    debugShaders.clear();
+                    resolveSeq = 0;
+                    captureFrame = frame;
+                    captureStatus = L"正在截取 / Capturing: " + path.wstring();
+                    LOG_INFO("render capture started: {}", debugCaptureDir);
+                }
+                catch (const std::exception& e)
+                {
+                    LOG_ERROR("render capture: {}", e.what());
+                    debugCaptureDir.clear();
+                    debugTrace.close();
+                    captureBusy = false;
+                    captureStatus = L"捕获失败：无法创建输出 / Cannot create capture output";
+                }
+            }
             uint64_t psTraceRequest = 0, psTraceHash = 0;
             uint32_t psTraceRemaining = 0, psTraceFirst = 0, psTraceCount = 0, psTraceDraws = 0;
 
@@ -388,6 +483,8 @@ namespace gpu::renderer
             // only at a frame boundary, so every diagnostic sees the same frame.
             void PollCaptureRequest()
             {
+                BeginDebugCapture();
+                if (!debugCaptureDir.empty()) return;
                 static const char* path = getenv("LO_CAPTURE_REQUEST");
                 if (!path) return;
                 uint64_t request = 0;
@@ -1779,6 +1876,20 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             void Draw(const DrawInfo& info)
             {
                 ScopedTimer timer{ tDraw };
+                if (!debugCaptureDir.empty())
+                {
+                    debugTrace << fmt::format("draw {} prim={} indices={} indexed={} base={:#x} words={} endian={} index32={}\n",
+                        debugDraw++, info.primitiveType, info.indexCount, info.indexed, info.indexBase, info.indexBufferWords, info.indexEndian, info.index32);
+                    const bool first = debugRegisters.empty();
+                    if (first) debugRegisters.resize(REGISTER_COUNT);
+                    for (uint32_t i = 0; i < debugRegisters.size(); ++i)
+                    {
+                        const auto value = Reg(i);
+                        if (first || debugRegisters[i] != value)
+                            debugTrace << fmt::format("{:04x} {:08x}\n", i, value);
+                        debugRegisters[i] = value;
+                    }
+                }
                 DrawImpl(info);
             }
 
@@ -2295,6 +2406,20 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         LOG_INFO("renderer: ps trace f{} ps={:016x} indices={}{}", frame, key.ps, info.indexCount, values);
                     }
                 }
+                if (!debugCaptureDir.empty())
+                {
+                    debugTrace << fmt::format("shaders vs={:016x} ps={:016x}\n", key.vs, key.ps);
+                    for (const auto& entry : {std::make_pair(key.vs, vs), std::make_pair(key.ps, ps)})
+                    {
+                        if (!entry.second) continue;
+                        const auto path = std::filesystem::path(debugCaptureDir) / fmt::format("{:016x}.hlsl", entry.first);
+                        if (debugShaders.insert(entry.first).second)
+                        {
+                            std::ofstream out(path); out << entry.second->info.hlsl; out.close();
+                            if (out.fail()) debugTrace.setstate(std::ios::failbit);
+                        }
+                    }
+                }
                 const uint32_t traceFrame = TraceFrame();
                 static const uint32_t traceCount = getenv("LO_DRAW_TRACE_COUNT") ? strtoul(getenv("LO_DRAW_TRACE_COUNT"), nullptr, 10) : 1;
                 if (traceFrame && frame >= traceFrame && frame < traceFrame + traceCount && (info.indexCount >= 200 || info.primitiveType == 8 || info.indexCount == 36))
@@ -2633,7 +2758,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
                 else if (frame != dumpFrame || (drawsThisFrame % every) != 0)
                     return;
-                const char* dir = getenv("LO_DUMP_RESOLVE_DIR");
+                const char* dir = debugCaptureDir.empty() ? getenv("LO_DUMP_RESOLVE_DIR") : debugCaptureDir.c_str();
                 DumpTexture(color, fmt::format("{}/f{}_draw{:04}_{}x{}.ppm", dir ? dir : ".", frame, drawsThisFrame, color.width, color.height), "draw step");
             }
 
@@ -2657,8 +2782,19 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 Flush();
                 Begin();
                 const uint8_t* src = static_cast<const uint8_t*>(readback->map());
-                const char* dir = getenv("LO_DUMP_RESOLVE_DIR");
+                const char* dir = debugCaptureDir.empty() ? getenv("LO_DUMP_RESOLVE_DIR") : debugCaptureDir.c_str();
                 std::string path = fmt::format("{}/f{}_seq{:02}_{:x}.ppm", dir ? dir : ".", frame, resolveSeq++, destBase);
+                if (!debugCaptureDir.empty())
+                {
+                    const auto rawPath = std::filesystem::path(path).replace_extension(".bin");
+                    std::ofstream raw(rawPath, std::ios::binary);
+                    for (uint32_t y = 0; y < tex.height; ++y)
+                        raw.write(reinterpret_cast<const char*>(src + size_t(y) * rowPitch), size_t(tex.width) * bpp);
+                    raw.close();
+                    debugTrace << fmt::format("resolve {} draw={} address={:#x} width={} height={} plume_format={} bpp={} raw_ok={} (packed rows, little endian)\n",
+                        rawPath.filename().string(), debugDraw, destBase, tex.width, tex.height, uint32_t(tex.format), bpp, !raw.fail());
+                    if (raw.fail()) debugTrace.setstate(std::ios::failbit);
+                }
                 // The preview quantizes depth to eight bits, hiding the small
                 // differences involved in shadow comparisons. Keep exact R32
                 // values beside explicitly requested resolve captures.
@@ -3057,6 +3193,66 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             g_renderer->Draw(info);
     }
 
+    void FinishDebugCapture(uint32_t frontbuffer)
+    {
+        if (!g_renderer || g_renderer->debugCaptureDir.empty()) return;
+        auto& r = *g_renderer;
+        bool ok = false;
+        try
+        {
+            std::vector<uint32_t> pixels;
+            uint32_t width = 0, height = 0;
+            if (ReadbackResolvedSurface(frontbuffer, pixels, width, height))
+            {
+                std::ofstream out(std::filesystem::path(r.debugCaptureDir) / "screenshot.ppm", std::ios::binary);
+                out << "P6\n" << width << ' ' << height << "\n255\n";
+                for (auto pixel : pixels)
+                {
+                    const char rgb[] = {char(pixel), char(pixel >> 8), char(pixel >> 16)};
+                    out.write(rgb, 3);
+                }
+                out.close();
+                ok = !out.fail();
+                // A standard top-down 32-bit BMP can be opened directly on Windows.
+                std::ofstream bmp(std::filesystem::path(r.debugCaptureDir) / "screenshot.bmp", std::ios::binary);
+                auto put = [&](uint32_t value, int bytes) { for (int i = 0; i < bytes; ++i) bmp.put(char(value >> (8 * i))); };
+                bmp.write("BM", 2); put(54 + width * height * 4, 4); put(0, 4); put(54, 4);
+                put(40, 4); put(width, 4); put(uint32_t(-int32_t(height)), 4); put(1, 2); put(32, 2);
+                put(0, 4); put(width * height * 4, 4); put(0, 4); put(0, 4); put(0, 4); put(0, 4);
+                for (auto pixel : pixels) { bmp.put(char(pixel >> 16)); bmp.put(char(pixel >> 8)); bmp.put(char(pixel)); bmp.put(0); }
+                bmp.close();
+                ok = ok && !bmp.fail();
+            }
+            r.debugTrace << fmt::format("end frame={} frontbuffer={:#x} size={}x{} submitted_draws={} screenshot={}\n",
+                r.frame, frontbuffer, width, height, r.drawsThisFrame, ok);
+            r.debugTrace << fmt::format("drops mode={} shader={} pitch={} pipeline={} upload={} index={} scissor={} dummy_bindings={}\n",
+                r.drops.mode, r.drops.shader, r.drops.pitch, r.drops.pipeline, r.drops.upload, r.drops.index, r.drops.scissor, r.dummyBindings);
+            r.debugTrace.close();
+            ok = ok && !r.debugTrace.fail();
+        }
+        catch (const std::exception& e) { LOG_ERROR("render capture finish: {}", e.what()); }
+        LOG_INFO("render capture {}: {}", ok ? "saved" : "incomplete", r.debugCaptureDir);
+        std::filesystem::path archive;
+        bool compressed = false;
+        if (ok)
+        {
+            { std::lock_guard lock(captureMutex); captureStatus = L"正在压缩 ZIP / Compressing ZIP"; }
+            try { compressed = CompressCapture(std::filesystem::path(r.debugCaptureDir), archive); }
+            catch (const std::exception& e) { LOG_ERROR("render capture ZIP: {}", e.what()); }
+            LOG_INFO("render capture ZIP {}: {}", compressed ? "saved" : "failed", compressed ? archive.string() : r.debugCaptureDir);
+        }
+        {
+            std::lock_guard lock(captureMutex);
+            captureStatus = compressed ? L"ZIP 已保存 / ZIP saved: " + archive.wstring() :
+                (ok ? L"ZIP 失败，原始文件保留 / ZIP failed: " : L"导出不完整 / Incomplete: ") + std::filesystem::path(r.debugCaptureDir).wstring();
+            captureBusy = false;
+        }
+        r.debugTrace.close();
+        r.debugTrace.clear();
+        r.debugCaptureDir.clear();
+        r.captureFrame = 0;
+    }
+
     void Flush()
     {
         if (g_renderer)
@@ -3241,6 +3437,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
         }
     }
 #else
+    void FinishDebugCapture(uint32_t) {}
     bool Init() { return false; }
     void Shutdown() {}
     void Draw(const DrawInfo&) {}

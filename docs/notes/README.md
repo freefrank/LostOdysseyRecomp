@@ -2,12 +2,18 @@
 
 先读[当前状态](../STATUS.md)和[接手入口](handoff.md)。日期化实验保留证据，不自动代表当前功能支持。过期GPU、内核和旧交接已移到[归档](../archive/README.md)。
 
-最新汇总：[2026-09-05成果与交接](../WORK_REPORT_2026-09-05.md)。
+当前进度：[v0.2 状态与待办](../STATUS.md) · [路线图](../ROADMAP.zh-CN.md)。历史汇总：[2026-09-05成果与交接](../WORK_REPORT_2026-09-05.md)。
 
 ## 现有文档
 
 | 专项笔记 |
 |---|
+| [多手柄与键盘输入（本地未发布）](controller-input.md) |
+| [Debug Menu 渲染状态捕获（本地未发布）](render-state-capture.md) |
+| [两套零售版本兼容、语言与发布验证](europe-support.md) |
+| [自动读取已导入盘与原版管理器验证](disc-selection.md) |
+| [Windows 发布打包与 CI](release-packaging.md) |
+| [文本语言互补补丁研究（2026-09-06 用户暂停，无成品）](text-language-patch.md) |
 | [Map12 海报黑斑与深度偏移](map12-poster-depth.md) |
 | [窗口事件线程与无响应修正](window-event-pump.md) |
 | [启动深度清除崩溃](startup-depth-clear-crash.md) |

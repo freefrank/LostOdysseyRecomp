@@ -624,6 +624,10 @@ namespace gpu
                     swaps, fps, g_frame.draws, frontbuffer, width, height, FileSystem::LastOpenedFile());
             }
             g_workerStage = "renderer flush";
+            // Optional deterministic trigger for isolated capture validation.
+            static const uint32_t captureSwap = getenv("LO_DEBUG_CAPTURE_SWAP") ? strtoul(getenv("LO_DEBUG_CAPTURE_SWAP"), nullptr, 10) : 0;
+            if (captureSwap && swaps == captureSwap) renderer::RequestDebugCapture();
+            renderer::FinishDebugCapture(frontbuffer);
             renderer::Flush();
             {
                 // Frame pacing: the game advances its simulation per presented frame

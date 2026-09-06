@@ -2,21 +2,36 @@
 
 [简体中文](ROADMAP.zh-CN.md) · [Current status](STATUS.md)
 
-Updated against v0.1 and user acceptance on **2026-09-06**. `[x]` means the stated scope has evidence, not that the entire game is complete. Dated notes retain earlier experiment states; [STATUS.md](STATUS.md) is the current release and validation ledger.
+Updated against v0.2 and user acceptance on **2026-09-06**. `[x]` means the stated scope has evidence, not that the entire game is complete. Dated notes retain earlier experiment states; [STATUS.md](STATUS.md) is the current release and validation ledger.
 
 Legend: `[ ]` planned / outstanding · `[~]` in progress · `[x]` validated within the stated scope.
 
-## Latest milestone: v0.1
+## Pending release: v0.2.1
 
-The Windows release, game importer, first-launch setup, five-language settings, built-in shader resource index and parallel preparation are published. Recent dialogue, ground-shadow, poster and window-responsiveness repairs are included. See [release notes](RELEASE-v0.1.md).
+The candidate adds next-frame F1 render capture with automatic ZIP and combined SDL controller/keyboard input with E/R triggers. Local build and scoped tests passed; hosted release verification and publication are pending. This is not an AMD rendering fix. See [capture](notes/render-state-capture.md) and [input](notes/controller-input.md).
+
+## Latest milestone: v0.2
+
+v0.2 is published: both audited editions, edition-specific text/voice choices, import before setup and automatic installed-disc selection are included. The sets correspond to [Redump 11817: USA, Europe, version 0.0.0.3](https://redump.info/disc/11817) and [Redump 39111: Europe, Asia, version 0.0.0.4](https://redump.info/disc/39111). Import-time XEX hashes remain strict; this is not a complete ISO-to-Redump hash verification. Both original disc managers passed controlled 1 → 2 → 3 → 4 → 1 sequences, not chapter-boundary story progression. See [v0.2 notes](RELEASE-v0.2.md) and [disc selection](notes/disc-selection.md).
+
+v0.1 remains the historical first Windows release with the importer, first-launch setup, five-language interface, shader index/parallel preparation and dialogue, ground-shadow, poster and window-responsiveness repairs. See [v0.1 notes](RELEASE-v0.1.md).
 
 **The reported voice issue is resolved and user-confirmed.** The original and repaired vehicle dialogue sound normal. XMA continuation-packet handling now preserves new frames without changing sample rate or volume: the tested dialogue recovered from 2,129 to 4,062 frames, and its timing slope against the original changed from 0.547 to 1.000. Another 34 multichannel buffers / 4,264 frames decoded without errors. Other scenes and loop subframe boundaries remain routine regression coverage, not an open status for the resolved dialogue report. See [audio evidence](notes/audio-output.md).
+
+## Near-term priorities
+
+1. Diagnose intermittent GPU query/wait failures and long-session stability.
+2. Fix fire-hit checker effects and black crate-destruction effects; resolve the two failing resource shaders.
+3. Expand chapter-boundary, save/reload, encounter and multilingual regression, including both editions. Automatic path selection is implemented; actual story transitions still need coverage.
+4. Complete fullscreen/exclusive, mouse and mixed-DPI acceptance. Map 13 shadow improvement needs controlled regression, not a reopened defect report.
+
+Modern graphics remain later work. **Text-language complement patch research was paused by the user on 2026-09-06**: no finished patch, no runtime code change and no inclusion in v0.2. Voice changes are outside that research scope. See [paused research](notes/text-language-patch.md).
 
 ## Phase 0: Preparation
 
 - [x] Establish the repository skeleton and submodules.
 - [x] Extract all four discs with `tools/god_extract.py` into the ignored `LostOdysseyRecompLib/private/disc1..4` directories.
-- [x] Identify the supported XEX: version 4, no title update, Asian multilingual set. Match executable details and hashes rather than the region label alone; see [XEX evidence](notes/xex.md).
+- [x] Identify both supported XEX sets: Europe, Asia version 4 and USA, Europe version 3; title updates remain outside the audited sets. Match executable details and hashes rather than the region label alone; see [XEX evidence](notes/xex.md).
 - [x] Generate the initial 841 jump tables with XenonAnalyse; install Ghidra 12.1.3 and XEXLoaderWV and import `default.xex` headlessly.
 - [x] Run Xenia Canary through the opening battle and capture matching-camera references. See [comparison](notes/xenia-render-comparison.md).
 
@@ -44,7 +59,8 @@ The Windows release, game importer, first-launch setup, five-language settings, 
 - [ ] Diagnose fire-hit rendering glitches with original-console references; Xenia also shows issues and is not a sufficient visual target by itself.
 - [ ] Add temporary protagonist attack/damage adjustments to the debug menu, reversible and excluded from saves. [Requirements](debug-menu-requirements.md).
 - [~] Save system: asynchronous completion, thumbnail ABI, persistent enumeration, NT writes and CREATE_ALWAYS semantics repaired. Manual saves, overwrite and independent-process reload passed. Broader compatibility remains unverified. [Storage](notes/save-storage.md).
-- [ ] Validate four-disc runtime integration and disc-path redirection. Importing all four discs is implemented; later-disc progression and switching are not established.
+- [x] Automatically select imported discs and reload their original indexes; both editions passed storage routing and original-manager switching tests. [Evidence](notes/disc-selection.md).
+- [ ] Validate real chapter-boundary story transitions and subsequent save/reload on both editions; controlled manager tests do not establish full progression.
 - [ ] Validate cutscenes, battles, A Thousand Years of Dreams and the world map individually.
 - [~] Follow the walkthrough using isolated saves: Hypocenter wreckage/Ram and Ring tutorial, natural victories, early Wasteland encounters, Gorge camp, vehicle sequence and city-gate control have scoped evidence. The user reached Map 13. This is not a complete playthrough. [Walkthrough](notes/walkthrough-testing.md) · [Ring](notes/battle-ring-resource.md).
 - [x] Fix black character silhouettes in the opening battle through correct physical-address aliasing: A/C share memory; E has a one-page offset. Windows/Linux alias tests and scene checks passed. [Evidence](notes/physical-alias-rendering.md).
@@ -59,7 +75,7 @@ The Windows release, game importer, first-launch setup, five-language settings, 
 
 - [x] Ground projections: corrected stale guest pixel-shader use in mode-5 stencil draws; camp movement and targeted GPU tests passed, and the user reports projections are basically fixed. More maps/encounters remain regression targets. [Shadows](notes/shadow-texture-lod.md).
 - [x] Map 12 poster black patches: polygon-offset repair passed a 300-frame A/B and shallow-depth occlusion regression. Broader near-plane/map coverage remains. [Poster evidence](notes/map12-poster-depth.md).
-- [~] Map 13 character-surface shadows: the user reported improvement and was satisfied with the result. Controlled regression remains outstanding; a shared cause with the poster defect is not proven.
+- [ ] Map 13 character-surface shadow regression: the user reported improvement and was satisfied with the result. Controlled regression remains outstanding; a shared cause with the poster defect is not proven.
 - [ ] Fire-hit black/red checker effects; use original-console references because Xenia also glitches.
 - [x] Ring outer ring: visible and changing in tested encounters; releasing RT produced Good and 101 damage in a recorded test. The user confirmed normal controller behavior. This closes the reported path, not every battle scenario. [Ring evidence](notes/battle-ring-resource.md).
 - [ ] Black crate-destruction effects in the second map.
@@ -81,8 +97,8 @@ Compatibility and stability come first. Future graphics features below have no c
 - [ ] Complete desktop acceptance for fullscreen/exclusive modes, mouse and mixed DPI.
 - [ ] Add more anti-aliasing options beyond FXAA, including investigation of temporal AA.
 - [ ] Support higher internal rendering resolutions, render scaling and widescreen with correct UI layout.
-- [ ] Investigate modern upscaling, including DLSS/FSR. Existing output scaling is not temporal upscaling; DLSS is a disabled placeholder in v0.1.
-- [ ] Investigate frame generation (FG); the v0.1 option is a disabled placeholder.
+- [ ] Investigate modern upscaling, including DLSS/FSR. Existing output scaling is not temporal upscaling; DLSS is a disabled placeholder in v0.2.
+- [ ] Investigate frame generation (FG); the v0.2 option is a disabled placeholder.
 - [ ] Unlock frame rates and identify logic fixed at 30 fps.
 - [ ] Add HDR output and tone mapping.
 - [ ] Add higher-resolution shadows.

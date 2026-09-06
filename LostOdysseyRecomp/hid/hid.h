@@ -8,6 +8,8 @@ namespace hid
     // forwards controller hot-plug events here and Poll() stops pumping.
     void SetExternalEventPump(bool external);
     void HandleControllerEvent(uint32_t eventType, int32_t deviceIndexOrInstance);
+    void HandleKeyboardEvent(int32_t scancode, bool pressed);
+    void ClearKeyboardState();
 
     uint32_t GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState);
     uint32_t SetState(uint32_t dwUserIndex, XAMINPUT_VIBRATION* pVibration);

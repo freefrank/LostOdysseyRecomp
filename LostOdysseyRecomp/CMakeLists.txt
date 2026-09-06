@@ -94,6 +94,14 @@ target_precompile_headers(LoGuestPrintfTest REUSE_FROM LostOdysseyRecomp)
 target_link_libraries(LoGuestPrintfTest PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,LINK_LIBRARIES>)
 
 # Offline shader translator check (shares gpu/shader with the runtime).
+add_executable(LoHidTest ${CMAKE_SOURCE_DIR}/tools/tests/hid_test.cpp ${LO_RUNTIME_ROOT}/hid/hid.cpp)
+target_include_directories(LoHidTest PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,INCLUDE_DIRECTORIES>)
+target_compile_definitions(LoHidTest PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,COMPILE_DEFINITIONS>)
+target_compile_options(LoHidTest PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,COMPILE_OPTIONS>)
+target_compile_features(LoHidTest PRIVATE cxx_std_20)
+target_precompile_headers(LoHidTest REUSE_FROM LostOdysseyRecomp)
+target_link_libraries(LoHidTest PRIVATE fmt::fmt SDL2::SDL2-static xxHash::xxhash)
+
 add_executable(LoShaderTool
     ${CMAKE_SOURCE_DIR}/tools/xenos_shader_tool/main.cpp
     ${LO_RUNTIME_ROOT}/gpu/shader/xenos_translator.cpp

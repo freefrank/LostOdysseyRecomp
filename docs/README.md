@@ -4,10 +4,14 @@
 
 | Start here | Purpose |
 |---|---|
+| [v0.2 release notes](RELEASE-v0.2.md) | Published edition support, languages and automatic disc selection |
+| [Supported editions](notes/europe-support.md) | USA, Europe and Europe, Asia evidence; exact XEX validation |
+| [Automatic disc selection](notes/disc-selection.md) | Implemented manager flow and remaining story-transition coverage |
+| [Text-language patch research](notes/text-language-patch.md) | Paused by the user on 2026-09-06; no finished patch or runtime change |
 | [Installation](INSTALLING.md) | Import ISO, extracted folders/XEX or GOD discs |
 | [Release packaging](notes/release-packaging.md) | Windows build artifacts, dependencies and CI input |
 | [Shader index](notes/shader-resource-index.md) | Built-in locations, fallback and cold-start comparison |
-| [Work report](WORK_REPORT_2026-09-05.md) | Latest repair outcomes, evidence and next acceptance checks |
+| [Work report](WORK_REPORT_2026-09-05.md) | Historical 2026-09-05 repair outcomes and evidence |
 | [Status ledger](STATUS.md) | Published changes, resolved reports, open defects and regression coverage |
 | [Synchronization](PUBLISHING.md) | One public history, Gitea/GitHub dual push and archive policy |
 | [Build guide](BUILDING.md) | Prerequisites, generation, running and storage |

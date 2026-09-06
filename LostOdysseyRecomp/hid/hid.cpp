@@ -13,43 +13,37 @@ extern std::atomic<uint32_t> g_presentedSwaps;
 
 namespace
 {
-    SDL_GameController* g_controller = nullptr;
+    std::vector<SDL_GameController*> g_controllers;
+    std::array<Uint8, SDL_NUM_SCANCODES> g_keys{};
     Mutex g_hidMutex;
     uint32_t g_packet = 0;
 
-    void OpenFirstController()
+    void OpenControllers()
     {
-        if (g_controller)
-            return;
-        int count = SDL_NumJoysticks();
-        // Prefer an Xbox-type pad when several controllers are attached.
-        std::vector<int> order;
-        for (int pass = 0; pass < 2; pass++)
-            for (int i = 0; i < count; i++)
-            {
-                SDL_GameControllerType type = SDL_GameControllerTypeForIndex(i);
-                bool xbox = type == SDL_CONTROLLER_TYPE_XBOX360 || type == SDL_CONTROLLER_TYPE_XBOXONE;
-                if ((pass == 0) == xbox)
-                    order.push_back(i);
-            }
-        for (int i : order)
+        for (int i = 0; i < SDL_NumJoysticks(); ++i)
         {
-            if (SDL_IsGameController(i))
+            const auto id = SDL_JoystickGetDeviceInstanceID(i);
+            const bool opened = std::any_of(g_controllers.begin(), g_controllers.end(), [&](auto* pad) {
+                return SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pad)) == id;
+            });
+            if (opened || !SDL_IsGameController(i)) continue;
+            if (auto* pad = SDL_GameControllerOpen(i))
             {
-                g_controller = SDL_GameControllerOpen(i);
-                if (g_controller)
-                {
-                    LOG_INFO("controller: {} ({} joysticks)", SDL_GameControllerName(g_controller), count);
-                    break;
-                }
-                LOG_WARNING("controller: open failed for joystick {}: {}", i, SDL_GetError());
+                g_controllers.push_back(pad);
+                LOG_INFO("controller added: {} instance={} ({} connected)", SDL_GameControllerName(pad), id, g_controllers.size());
             }
-            else
-                LOG_INFO("controller: joystick {} '{}' has no game controller mapping", i, SDL_JoystickNameForIndex(i));
+            else LOG_WARNING("controller: open failed: {}", SDL_GetError());
         }
-        if (!g_controller)
-            LOG_INFO("controller: none yet ({} joysticks), keyboard fallback active", count);
     }
+
+    void MergeStick(int16_t& x, int16_t& y, int16_t candidateX, int16_t candidateY, int deadzone)
+    {
+        const auto magnitude = [](int16_t a, int16_t b) { return int64_t(a) * a + int64_t(b) * b; };
+        if (magnitude(candidateX, candidateY) > int64_t(deadzone) * deadzone &&
+            magnitude(candidateX, candidateY) > magnitude(x, y))
+        { x = candidateX; y = candidateY; }
+    }
+
 }
 
 void hid::Init()
@@ -70,7 +64,7 @@ void hid::Init()
         LOG_WARNING("SDL controller init failed: {}", SDL_GetError());
         return;
     }
-    OpenFirstController();
+    OpenControllers();
 }
 
 static std::atomic<bool> g_externalPump{ false };
@@ -83,27 +77,29 @@ void hid::SetExternalEventPump(bool external)
 void hid::HandleControllerEvent(uint32_t eventType, int32_t which)
 {
     std::lock_guard lock(g_hidMutex);
-    if (eventType == SDL_CONTROLLERDEVICEADDED)
+    if (eventType == SDL_CONTROLLERDEVICEADDED) OpenControllers();
+    else if (eventType == SDL_CONTROLLERDEVICEREMOVED)
     {
-        // Re-evaluate so a later-enumerated Xbox pad wins over a non-Xbox one.
-        if (g_controller)
-        {
-            SDL_GameControllerType current = SDL_GameControllerGetType(g_controller);
-            bool currentIsXbox = current == SDL_CONTROLLER_TYPE_XBOX360 || current == SDL_CONTROLLER_TYPE_XBOXONE;
-            if (currentIsXbox)
-                return;
-            SDL_GameControllerClose(g_controller);
-            g_controller = nullptr;
-        }
-        OpenFirstController();
+        std::erase_if(g_controllers, [&](auto* pad) {
+            if (SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pad)) != which) return false;
+            LOG_INFO("controller removed: instance={}", which);
+            SDL_GameControllerClose(pad);
+            return true;
+        });
     }
-    else if (eventType == SDL_CONTROLLERDEVICEREMOVED && g_controller &&
-        SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(g_controller)) == which)
-    {
-        LOG_INFO("controller removed");
-        SDL_GameControllerClose(g_controller);
-        g_controller = nullptr;
-    }
+}
+
+void hid::HandleKeyboardEvent(int32_t scancode, bool pressed)
+{
+    std::lock_guard lock(g_hidMutex);
+    if (scancode >= 0 && scancode < SDL_NUM_SCANCODES) g_keys[scancode] = pressed;
+}
+
+void hid::ClearKeyboardState()
+{
+    std::lock_guard lock(g_hidMutex);
+    g_keys.fill(0);
+
 }
 
 void hid::Poll()
@@ -115,6 +111,10 @@ void hid::Poll()
     {
         if (e.type == SDL_CONTROLLERDEVICEADDED || e.type == SDL_CONTROLLERDEVICEREMOVED)
             HandleControllerEvent(e.type, e.cdevice.which);
+        else if (e.type == SDL_KEYDOWN || e.type == SDL_KEYUP)
+            HandleKeyboardEvent(e.key.keysym.scancode, e.type == SDL_KEYDOWN);
+        else if (e.type == SDL_WINDOWEVENT && e.window.event == SDL_WINDOWEVENT_FOCUS_LOST)
+            ClearKeyboardState();
         else if (e.type == SDL_QUIT)
             std::_Exit(0);
     }
@@ -128,15 +128,16 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
     Poll();
 
     std::lock_guard lock(g_hidMutex);
+    *pState = {};
     pState->dwPacketNumber = ++g_packet;
     auto& gp = pState->Gamepad;
 
-    if (g_controller)
+    if (!g_externalPump) SDL_GameControllerUpdate();
+    for (auto* controller : g_controllers)
     {
-        if (!g_externalPump)
-            SDL_GameControllerUpdate();
-        auto btn = [&](SDL_GameControllerButton b) { return SDL_GameControllerGetButton(g_controller, b) != 0; };
-        auto axis = [&](SDL_GameControllerAxis a) { return SDL_GameControllerGetAxis(g_controller, a); };
+        if (!SDL_GameControllerGetAttached(controller)) continue;
+        auto btn = [&](SDL_GameControllerButton b) { return SDL_GameControllerGetButton(controller, b) != 0; };
+        auto axis = [&](SDL_GameControllerAxis a) { return SDL_GameControllerGetAxis(controller, a); };
 
         if (btn(SDL_CONTROLLER_BUTTON_DPAD_UP)) gp.wButtons |= XAMINPUT_GAMEPAD_DPAD_UP;
         if (btn(SDL_CONTROLLER_BUTTON_DPAD_DOWN)) gp.wButtons |= XAMINPUT_GAMEPAD_DPAD_DOWN;
@@ -153,12 +154,11 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
         if (btn(SDL_CONTROLLER_BUTTON_X)) gp.wButtons |= XAMINPUT_GAMEPAD_X;
         if (btn(SDL_CONTROLLER_BUTTON_Y)) gp.wButtons |= XAMINPUT_GAMEPAD_Y;
 
-        gp.bLeftTrigger = uint8_t(axis(SDL_CONTROLLER_AXIS_TRIGGERLEFT) >> 7);
-        gp.bRightTrigger = uint8_t(axis(SDL_CONTROLLER_AXIS_TRIGGERRIGHT) >> 7);
-        gp.sThumbLX = axis(SDL_CONTROLLER_AXIS_LEFTX);
-        gp.sThumbLY = int16_t(-axis(SDL_CONTROLLER_AXIS_LEFTY) - 1);
-        gp.sThumbRX = axis(SDL_CONTROLLER_AXIS_RIGHTX);
-        gp.sThumbRY = int16_t(-axis(SDL_CONTROLLER_AXIS_RIGHTY) - 1);
+        gp.bLeftTrigger = std::max(gp.bLeftTrigger, uint8_t(std::max(0, int(axis(SDL_CONTROLLER_AXIS_TRIGGERLEFT))) >> 7));
+        gp.bRightTrigger = std::max(gp.bRightTrigger, uint8_t(std::max(0, int(axis(SDL_CONTROLLER_AXIS_TRIGGERRIGHT))) >> 7));
+        auto flip = [](int16_t value) { return int16_t(std::min(32767, -int(value))); };
+        MergeStick(gp.sThumbLX, gp.sThumbLY, axis(SDL_CONTROLLER_AXIS_LEFTX), flip(axis(SDL_CONTROLLER_AXIS_LEFTY)), 7849);
+        MergeStick(gp.sThumbRX, gp.sThumbRY, axis(SDL_CONTROLLER_AXIS_RIGHTX), flip(axis(SDL_CONTROLLER_AXIS_RIGHTY)), 8689);
     }
 
     {
@@ -166,7 +166,7 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
         static uint16_t lastButtons = 0;
         if (trace && gp.wButtons != lastButtons)
         {
-            LOG_INFO("input: buttons {:#06x} (controller {})", gp.wButtons, g_controller ? "yes" : "no");
+            LOG_INFO("input: buttons {:#06x} (controller {})", gp.wButtons, !g_controllers.empty() ? "yes" : "no");
             lastButtons = gp.wButtons;
         }
     }
@@ -271,10 +271,9 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
         }
     }
 
-    // Keyboard fallback (only when SDL video is up; harmless otherwise).
-    int numKeys = 0;
-    const Uint8* keys = SDL_GetKeyboardState(&numKeys);
-    if (keys && numKeys)
+    // Event-thread snapshot: keyboard remains available with any number of pads.
+    const auto& keys = g_keys;
+    if (!keys.empty())
     {
         if (keys[SDL_SCANCODE_UP]) gp.wButtons |= XAMINPUT_GAMEPAD_DPAD_UP;
         if (keys[SDL_SCANCODE_DOWN]) gp.wButtons |= XAMINPUT_GAMEPAD_DPAD_DOWN;
@@ -288,6 +287,8 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
         if (keys[SDL_SCANCODE_S]) gp.wButtons |= XAMINPUT_GAMEPAD_Y;
         if (keys[SDL_SCANCODE_Q]) gp.wButtons |= XAMINPUT_GAMEPAD_LEFT_SHOULDER;
         if (keys[SDL_SCANCODE_W]) gp.wButtons |= XAMINPUT_GAMEPAD_RIGHT_SHOULDER;
+        if (keys[SDL_SCANCODE_E]) gp.bLeftTrigger = 255;
+        if (keys[SDL_SCANCODE_R]) gp.bRightTrigger = 255;
         if (keys[SDL_SCANCODE_I]) gp.sThumbLY = 32767;
         if (keys[SDL_SCANCODE_K]) gp.sThumbLY = -32768;
         if (keys[SDL_SCANCODE_J]) gp.sThumbLX = -32768;
@@ -368,8 +369,8 @@ uint32_t hid::SetState(uint32_t dwUserIndex, XAMINPUT_VIBRATION* pVibration)
         return ERROR_DEVICE_NOT_CONNECTED;
     if (!rumbleEnabled) return ERROR_SUCCESS;
     std::lock_guard lock(g_hidMutex);
-    if (g_controller)
-        SDL_GameControllerRumble(g_controller, pVibration->wLeftMotorSpeed, pVibration->wRightMotorSpeed, 100);
+    for (auto* controller : g_controllers)
+        SDL_GameControllerRumble(controller, pVibration->wLeftMotorSpeed, pVibration->wRightMotorSpeed, 100);
     return ERROR_SUCCESS;
 }
 

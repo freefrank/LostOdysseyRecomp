@@ -56,6 +56,12 @@ jobs:
           call tools\setup_windows.bat || exit /b 1
           cmake --build out/build/release --target LoStorageTest --parallel 2 || exit /b 1
           python tools/tests/disc_set_test.py out/build/release/LostOdysseyRecomp/LoStorageTest.exe || exit /b 1
+      - name: Test controller and keyboard input
+        shell: cmd
+        run: |
+          call tools\setup_windows.bat || exit /b 1
+          cmake --build out/build/release --target LoHidTest --parallel 2 || exit /b 1
+          out\build\release\LostOdysseyRecomp\LoHidTest.exe || exit /b 1
       - name: Package runtime and importer
         run: |
           if ($env:GITHUB_REF -like 'refs/tags/v*') {
