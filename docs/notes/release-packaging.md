@@ -33,25 +33,23 @@ SHA256 file. Dependency license texts accompany the binaries.
 
 `test-importer.yml` runs public fixture tests on pushes and pull requests without game data.
 `release.yml` builds when dispatched manually or when a `v*` tag is pushed.
-By default it uses hosted Windows 2022. Repository variable `LO_RELEASE_RUNNER` can select
-a trusted ephemeral Windows runner with JSON labels, for example
-`["self-hosted","Windows","X64","lo-release"]`. Its process environment supplies
-`LO_BUILD_XEX_PATH` pointing to a local supported Disc 1 XEX, avoiding any game input upload.
-Register it with `--ephemeral`; run one trusted release job and remove its registration
-afterwards. Never route pull-request jobs to that runner. Public tests stay on hosted Windows.
+It uses hosted Windows 2022. Private inputs are checked out from a pinned commit of
+`freefrank/LostOdysseyRecomp-build-inputs` using a read-only deploy key stored in the
+`LO_BUILD_INPUT_KEY` Actions secret. Pull-request tests never access this key or repository.
 It produces a downloadable Actions artifact; a version tag also creates a **draft** GitHub release.
 
 The public checkout intentionally does not contain the original XEX or generated PPC files.
-For hosted builds, configure the repository Actions secret **LO_BUILD_XEX_URL** with a private HTTPS URL serving
-the supported Disc 1 default.xex. A short-lived signed URL is suitable for a manual run.
-The download is validated against the same pinned XEX SHA256 as the importer. The URL and game
+The private repository contains only the supported Disc 1 default.xex and a provenance note.
+The input is validated against the importer's pinned SHA256 before code generation. Game
 contents are never printed or uploaded as artifacts. Missing or wrong input fails the build.
-This secret is only used by the release workflow, never the pull-request test workflow.
+For another private repository, update the checkout repository/ref and install a read-only
+deploy key. Local provisioning accepts `LO_BUILD_XEX_PATH`; the helper also supports a private
+HTTPS `LO_BUILD_XEX_URL` for alternate hosts.
 
 The pipeline builds xexdump and XenonRecomp, generates the image symbol list and PPC code,
 applies the checked-in dependency patches, builds Release, then packages the runtime.
 It requires no ISO or archive assets on the runner. A successful local build is not evidence
-that the hosted workflow has run; configure the private input and dispatch it after pushing.
+that the hosted workflow has run; check the actual Actions result before publishing.
 
 ## Verification
 
