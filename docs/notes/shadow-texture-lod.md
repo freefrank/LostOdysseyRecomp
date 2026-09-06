@@ -62,3 +62,43 @@ capture1另抓f7254全draw/resolve，得到screen seq01 9c00000和shadow seq02 a
 2026-09-05 实现跨pitch深度clear覆盖映射：新增gpu/depth_clear_layout.h，按80x16 sample tile与1x/2x/4x布局，把源局部矩形切成目标clear rect列表；Draw记录depth view的MSAA布局，替换原整图clear。空映射必须跳过API（0个rect在API中代表全图）。保留现有depth-only清除语义，不改颜色别名清除。目标仍是单采样host texture，因此部分sample覆盖会清对应host像素；不声称完整MSAA仿真。
 
 tools/tests/depth_clear_layout_test.cpp通过：右侧atlas清除保留左侧、pitch减半跨tile换行、目标外空覆盖，以及9种源/目标MSAA组合与独立逐sample地址枚举对照。日志out/depth-clear-layout-test.log。runtime构建out/build-depth-clear-layout.log通过，EXE 10F4D144B6E1BF99546D9FA6BA35556FD5C187A1A61DBD68D822B998470DD3E1。尚未运行新构建，不能宣称实际阴影已恢复；下一步新副本相同遇敌capture，核对日志msaa与左右atlas实际内容，再扩展火焰/营地。不要把仍活着的旧13472当修正版。当前CIM旧31720已消失，未调查退出原因；其余旧测试保留，无提交。
+
+## 2026-09-05 用户反馈与9693E361新证据
+用户明确：所有地图都会出现地面角色投影消失，当前版本相比之前有改善。不是自阴影明暗反馈。
+独立副本44712，out/ground-shadow-current-01，营地save/profile来源audio-request-01，EXE为9693E361。静止1293–1412共120帧；一次右移输入1后3211–3450共240帧。contact.png/movement-contact.png保留，包含雾、相机和行走变化，不用整体像素差替代投影判断。
+完整capture1=f1737含3份f32与所有draw/resolve；shadow seq03为864x864，全有限，非1像素100455，其中0像素29805；图中保留多个人物轮廓。这只能说明该帧阴影图未被整张清空，尚未关联消失时刻，不能宣称剩余问题已定位。
+下一步将角色地面投影可见/消失对应帧与shadow mask及深度源对齐，检查共用投影采样/stencil/resolve链。现场input1/shots3/capture1已完成，进程保留，未改渲染。
+
+
+2026-09-05 移动触发补证：9693/44712 按右移90polls、左上(-22000,22000)70polls后，f12611/seq133地面mask主角只剩碎片，NPC完整；draw225已缺失。第一次atlas为seq130，CPU使用同帧深度和第一个PS矩阵可投出完整主角及长影（out/ground-shadow-current-01/cpu-projection9.png，近似单点采样，不包含模板/裁剪）。371E/46136同路线f1489复现；实际投影/volume clip control皆0x80000，clip_disable翻译无效，渲染试改已撤回。下一步模板与边界几何，尚非修复完成。
+
+
+### 2026-09-05 移动后地面投影修正：14F09F15
+
+- 根因：`RB_MODECONTROL=5`应忽略上次IM_LOAD的PS。旧代码仍绑定PS1936817ead3b7b7d，它的SV_Depth来自插值r1.z；模板体VS97f07e5d73418e64不写这个插值，实际得到残留常量深度，破坏depth-fail模板计数。后续体可能继承无深度导出的d55 PS，因而角色/绘制顺序/位置改变时表现不同。
+- 修正：只在mode4解析和绑定guest PS。mode5仍执行原几何、深度和模板状态。撤回无效clip试改与绕过模板诊断开关。捕获增加36索引体几何及最多24个stream dword、clip寄存器，正常渲染无调试覆盖。
+- GPU定向测试：`LoStencilTest`增加几何z=0、存储z=0.5、GREATER_EQUAL条件；残留PS导出z=1会走相反模板路径，无PS正确使用几何深度；两组均得到预期像素，原非零reference测试也通过。另两个深度清除测试通过。日志`out/shadow-depthonly-*-test.log`。
+- 实际修正版：`out/ground-shadow-depthonly-fixed-01/Playtest.exe`，SHA256 `14F09F15CFB23B451821E013E5C9F02CAD906D39D487F52916EB1142D4371084`。f4738/seq04、f7128/seq22、f8354/seq40为各帧第一份b0d9000投影遮罩，均有主角及地面投影。f8354共554个draw，161个mode5全部PS=0。截图两组共330帧；并非所有帧逐帧审核，已检查移动取样及三个完整捕获。
+- 路线控制：右90polls，左上70polls，然后再左上70、右下25。相同polls因实际位置/碰撞/运行节奏导致路线端点有偏差，图像对照是同营地相近位置，不是相同相机矩阵的逐像素A/B。原失败帧9693/f12611和371E/f1489已保留。修正后主角投影在多个移动后位置保留，完整跨地图、遇敌和长期稳定性不在本次证据范围。
+- 原图与对照：`out/ground-shadow-depthonly-fixed-01/comparison.png`，`mask1/2/3.png`、`screen1/3.png`；失败原图`out/ground-shadow-current-01/mask9.png`。没有提交或推送，也未改用户原始save/profile。
+- 参考：Xenia `draw_util.cc::IsPixelShaderNeededWithRasterization`只在kColorDepth使用guest PS，见 https://github.com/xenia-project/xenia/blob/master/src/xenia/gpu/draw_util.cc 。本地参考`out/shadow-reference/draw_util.cc`。
+
+完成捕获后核对完整路径，停止本轮旧研究副本44712/46136/35500以释放GPU；修正版42672保留在后台营地，input4/shots2/capture3完成，未操作其他历史进程。
+
+
+## Map 12/13 新反馈与初步诊断
+
+2026-09-05：用户确认当前人物脚下投影基本修复；Map 13 动态阴影落在人物表面仍闪烁。Map 12 实时过场墙面/海报有硬边黑斑闪烁，用户截图保留在 out/map12-blackpatch-01，尚未证明两者同源。
+
+328352E9 独立 out/map13-shadow-01 使用当前用户存档副本，实际是峡谷早期存档，不是 Map 13。f4112 完整捕获471 draws，其中143个 mode5 全部PS=0；screen深度921600值、shadow深度746496值全部有限。60连续截图已保存，不能以此关闭Map 13问题。32416捕获后按完整路径核对停止。
+
+改用较后方的 out/audio-request-01 营地存档副本，out/map13-shadow-02 PID45076仍为328352E9。实际地图日志4→5装甲车→9乌拉大门，已恢复行走；尚未进入Map12/13，无新渲染修正。启用截图/全draw捕获/地图日志/磁盘shader缓存，但遗漏LO_TELEPORT_COMMAND_FILE，当前副本尚未实际使用POI传送。用户授权沿既有攻略继续并使用POI；下一次启动需启用完整诊断接口。
+
+
+2026-09-05 用户操作 Map12 现场：PID40932 / FB225C29，地图日志确认 id12 Monorail - The Great Gate Station。请求301捕获连续120帧17970–18089及17970完整draw/resolve/原始深度，保存在out/user-shadow-session-20260905-161210。map12-poster-pair.png对比17970与17990，海报人物头部明显出现不规则深色块，静止视角附近随帧改变；视觉复现确认。不能据此判定与Map13同因或属于真实动态阴影，根因未定。完整绘制捕获只有17970，不能代替17990故障帧绘制数据。用户控制游戏，未输入或移动人物。
+
+
+2026-09-05 Map13周期阴影闪烁已捕获：用户明确环境阴影扫过每个人物时闪烁。请求303连续600帧94701–95300；map13-shadow-adjacent.png中94925/94926/94927/94928凯姆右臂/裤腿连续暗→亮→暗→亮。与角色姿势小幅变化不成比例，确认视觉异常但根因仍未确定。原版静态参考original-map13-reference.png不能证明原版时序表现。当前RT用Texture2D默认RenderMultisampling COUNT_1（renderer.cpp1100/plume_render_interface_types.h781），MSAA未完整还原是候选，不能把整片明暗跳变直接定为AA；需要阴影深度/过滤与覆盖对照。
+
+
+730E2653用户Map13实际复查：PID31336，请求401连续600帧3797–4396，相同附近机位；4213→4214→4215右臂/裤腿亮→暗→亮仍存在（shadow-flicker-confirmed.png）。固定裤腿ROI相邻均值差>8：旧24/599，新18/599，反向连续大跳各2次；不能用数量差认定改善，非严格同动画相位AB。max step旧13.04新13.24。窗口修正未消除Map13闪烁，与Map12同源仍未证明。证据out/user-window-fixed-20260905-171424/shadow-comparison.json及shadow-flicker-confirmed.png。

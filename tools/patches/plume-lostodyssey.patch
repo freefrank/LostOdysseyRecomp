@@ -1,8 +1,29 @@
 diff --git a/plume_d3d12.cpp b/plume_d3d12.cpp
-index 2cdcf18..24219ad 100644
+index 2cdcf18..8c13658 100644
 --- a/plume_d3d12.cpp
 +++ b/plume_d3d12.cpp
-@@ -2312,9 +2312,14 @@ namespace plume {
+@@ -2287,7 +2287,19 @@ namespace plume {
+         if (clearStencil) {
+             clearFlags |= D3D12_CLEAR_FLAG_STENCIL;
+         }
+-        d3d->ClearDepthStencilView(targetFramebuffer->depthHandle, clearFlags, depthValue, stencilValue, clearRectsCount, (clearRectsCount > 0) ? rectVector.data() : nullptr);
++        // Large tile-derived rectangle lists trigger a fast-fail in NVIDIA's
++        // D3D12 driver (720 rectangles on 616.56). Keep identical coverage,
++        // but bound each driver call. Zero rectangles retains the full clear.
++        constexpr uint32_t clearBatchSize = 16;
++        if (clearRectsCount == 0) {
++            d3d->ClearDepthStencilView(targetFramebuffer->depthHandle, clearFlags, depthValue, stencilValue, 0, nullptr);
++        }
++        else {
++            for (uint32_t first = 0; first < clearRectsCount; first += clearBatchSize) {
++                const uint32_t count = std::min(clearBatchSize, clearRectsCount - first);
++                d3d->ClearDepthStencilView(targetFramebuffer->depthHandle, clearFlags, depthValue, stencilValue, count, rectVector.data() + first);
++            }
++        }
+     }
+ 
+     void D3D12CommandList::copyBufferRegion(RenderBufferReference dstBuffer, RenderBufferReference srcBuffer, uint64_t size) {
+@@ -2312,9 +2324,14 @@ namespace plume {
  
          const D3D12_TEXTURE_COPY_LOCATION copyDstLocation = toD3D12(dstLocation);
          const D3D12_TEXTURE_COPY_LOCATION copySrcLocation = toD3D12(srcLocation);
@@ -19,7 +40,7 @@ index 2cdcf18..24219ad 100644
      }
  
      void D3D12CommandList::copyBuffer(const RenderBuffer *dstBuffer, const RenderBuffer *srcBuffer) {
-@@ -3075,6 +3080,7 @@ namespace plume {
+@@ -3075,6 +3092,7 @@ namespace plume {
      // D3D12GraphicsPipeline
  
      D3D12GraphicsPipeline::D3D12GraphicsPipeline(D3D12Device *device, const RenderGraphicsPipelineDesc &desc) : D3D12Pipeline(device, Type::Graphics) {

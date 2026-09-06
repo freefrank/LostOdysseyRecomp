@@ -8,7 +8,11 @@
 
 | 专项笔记 |
 |---|
-| [音频输出初版（2026-09-05）](audio-output.md) |
+| [Map12 海报黑斑与深度偏移](map12-poster-depth.md) |
+| [窗口事件线程与无响应修正](window-event-pump.md) |
+| [启动深度清除崩溃](startup-depth-clear-crash.md) |
+| [首次启动着色器准备与覆盖边界（2026-09-05）](shader-preparation.md) |
+| [音频输出与对白修复（2026-09-05）](audio-output.md) |
 | [戒指战斗资源名缺少语言后缀（2026-09-04）](battle-ring-resource.md) |
 | [临界区大小端与线程死锁（2026-09-05）](critical-section-endian.md) |
 | [Debug 地图 ID 和本地化名称（2026-09-05）](debug-map-info.md) |

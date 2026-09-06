@@ -9,7 +9,8 @@ namespace plume
 }
 
 // Host presentation layer: SDL window + plume render device. Owned by the
-// command processor thread, which is the only thread that calls into it.
+// command processor thread; on Windows the SDL/Debug Menu windows have a
+// dedicated owner thread so GPU stalls cannot block their message pump.
 namespace gpu::video
 {
     // Shared with the draw backend (nullptr when no device is available).
@@ -22,8 +23,10 @@ namespace gpu::video
     bool Init();
     void Shutdown();
 
-    // Drains window messages. Must be called from the thread that called Init.
+    // Drains messages on non-Windows hosts; Windows pumps on its window thread.
     void PumpEvents();
+    // Updates the title on the window owner thread. total=0 restores the title.
+    void SetShaderPreparationProgress(uint32_t completed, uint32_t total, bool scanning = false);
 
     // Untiles the guest frontbuffer (a tiled 32bpp texture written by the
     // GPU resolve) into an upload buffer and presents it.

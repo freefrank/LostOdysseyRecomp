@@ -7,7 +7,27 @@ extern std::atomic<uint32_t> g_presentedSwaps;
 extern "C" PPC_FUNC(__imp__sub_8238A640);
 extern "C" PPC_FUNC(__imp__sub_82AAA7C8);
 extern "C" PPC_FUNC(__imp__sub_82AC6D88);
+extern "C" PPC_FUNC(__imp__sub_82B15960);
 void ArmGuestWriteWatchpoint(uint32_t address, uint32_t length);
+
+// Observe the guest's ring update on its owning thread; never edit its values.
+PPC_FUNC(sub_82B15960)
+{
+    const uint32_t ring = ctx.r3.u32;
+    __imp__sub_82B15960(ctx, base);
+    static const bool trace = getenv("LO_RING_TRACE") != nullptr;
+    if (!trace) return;
+    const auto number = [&](uint32_t offset) {
+        const uint32_t bits = PPC_LOAD_U32(ring + offset);
+        float value;
+        memcpy(&value, &bits, sizeof(value));
+        return value;
+    };
+    LOG_INFO("ring: swap={} object={:#x} phase={} input={} visual={} time={} progress={} perfect={} size={} center={},{} alpha={},{}",
+        g_presentedSwaps.load(), ring, PPC_LOAD_U8(ring + 2), PPC_LOAD_U8(ring + 4),
+        PPC_LOAD_U8(ring + 0x5c), number(0xc), number(0x18), number(0x20),
+        number(0x64), number(0x24), number(0x28), number(0x78), number(0x88));
+}
 
 namespace
 {

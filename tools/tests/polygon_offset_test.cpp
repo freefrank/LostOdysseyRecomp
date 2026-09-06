@@ -126,6 +126,51 @@ int main() {
       std::printf("pixel %d,%d: %u %u %u\n", x, y, pixel[0], pixel[1], pixel[2]);
     }
     readback->unmap();
+    // Map12: two lighting/base vertex transforms differ by about 7e-8 at
+    // reversed depth 0.012. The integer approximation is too small there.
+    const auto layerBias = gpu::GetPolygonOffset(1u << 11, true, true, 0, 1e-6f, 0, 0);
+    const std::string prefix = "float4 main(uint id:SV_VertexID):SV_Position { float2 uv=float2((id<<1)&2,id&2); return float4(uv*float2(2,-2)+float2(-1,1),";
+    auto layerVs = shader((prefix + "0.012-0.00000007,1); }").c_str(), "vs_6_0");
+    auto offsetVs = shader((prefix + "0.012-0.00000007+" + std::to_string(layerBias.absolute) + ",1); }").c_str(), "vs_6_0");
+    desc.vertexShader = layerVs.get();
+    desc.depthFunction = RenderComparisonFunction::GREATER_EQUAL;
+    desc.depthBias = layerBias.constant;
+    desc.slopeScaledDepthBias = 0;
+    auto legacyLayer = device->createGraphicsPipeline(desc);
+    desc.vertexShader = offsetVs.get();
+    desc.depthBias = 0;
+    auto absoluteLayer = device->createGraphicsPipeline(desc);
+    commands->begin();
+    commands->barriers(RenderBarrierStage::GRAPHICS,
+        RenderTextureBarrier(color.get(), RenderTextureLayout::COLOR_WRITE));
+    commands->setFramebuffer(fb.get());
+    commands->clearColor(0, RenderColor(0, 0, 1, 1));
+    commands->clearDepthStencil(true, false, 0.012f, 0);
+    RenderRect occluder{2, 0, 3, 1};
+    commands->clearDepthStencil(true, false, 0.02f, 0, &occluder, 1);
+    commands->setViewports(&vp, 1);
+    commands->setGraphicsPipelineLayout(layout.get());
+    for (int x = 0; x < 3; ++x) {
+      RenderRect column{x, 0, x + 1, 1};
+      commands->setScissors(&column, 1);
+      commands->setPipeline(x == 0 ? legacyLayer.get() : absoluteLayer.get());
+      commands->drawInstanced(3, 1, 0, 0);
+    }
+    commands->barriers(RenderBarrierStage::COPY,
+        RenderTextureBarrier(color.get(), RenderTextureLayout::COPY_SOURCE));
+    commands->copyTextureRegion(
+        RenderTextureCopyLocation::PlacedFootprint(readback.get(), RenderFormat::R8G8B8A8_UNORM, 8, 2, 1, 64, 0),
+        RenderTextureCopyLocation::Subresource(color.get(), 0));
+    commands->end();
+    queue->executeCommandLists(lists, 1, nullptr, 0, nullptr, 0, fence.get());
+    queue->waitForCommandFence(fence.get());
+    pixels = static_cast<const unsigned char *>(readback->map());
+    for (int x = 0; x < 3; ++x) {
+      const bool redLayer = x == 1;
+      pass &= pixels[x * 4] == (redLayer ? 255 : 0) && pixels[x * 4 + 2] == (redLayer ? 0 : 255);
+      std::printf("shallow layer %d: %u %u %u\n", x, pixels[x*4], pixels[x*4+1], pixels[x*4+2]);
+    }
+    readback->unmap();
     std::puts(pass ? "PASS: GPU polygon bias sign, culling, PARA and slope"
                    : "FAIL: GPU polygon bias mismatch");
     return pass ? 0 : 1;

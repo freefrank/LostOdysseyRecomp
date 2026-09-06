@@ -8,6 +8,9 @@
 #include "texture_layout.h"
 #include "shader/xenos_translator.h"
 #include "shader/dxc_compiler.h"
+#include "shader/cache.h"
+#include "shader/resource_scan.h"
+#include <kernel/io/file_system.h>
 #include <kernel/memory.h>
 #include <os/logger.h>
 
@@ -17,6 +20,8 @@
 #endif
 
 #include <algorithm>
+#include <atomic>
+#include <thread>
 #include <cmath>
 #include <fstream>
 #include <set>
@@ -474,10 +479,21 @@ namespace gpu::renderer
 
                 if (const char* dir = getenv("LO_SHADER_CACHE_DIR"))
                     shaderCacheDir = dir;
+                else
+                    shaderCacheDir = "cache/shaders";
+                if (!shaderCacheDir.empty()) {
+                    std::error_code ec;
+                    std::filesystem::create_directories(shaderCacheDir, ec);
+                    if (ec) {
+                        LOG_WARNING("renderer: shader cache unavailable: {}", ec.message());
+                        shaderCacheDir.clear();
+                    } else LOG_INFO("renderer: shader cache {}", shaderCacheDir);
+                }
 
                 CompileRectListGs();
                 CompileBlitShaders();
                 CompileTransferShader();
+                PrepareKnownShaders();
                 LOG_INFO("renderer: initialised");
                 return true;
             }
@@ -885,6 +901,123 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             }
 
             // ---- shaders ------------------------------------------------------------
+            void PrepareKnownShaders()
+            {
+                if (shaderCacheDir.empty() || getenv("LO_NO_SHADER_PREPARE")) return;
+                video::SetShaderPreparationProgress(0, 1, true);
+                const auto extracted = xenos::resources::Scan(FileSystem::GetGameRoot(), shaderCacheDir,
+                    [](uint32_t done, uint32_t total) {
+                        video::SetShaderPreparationProgress(done, total, true);
+                        video::PumpEvents();
+                    });
+                if (!extracted.error.empty()) LOG_WARNING("renderer: resource shader preparation: {}", extracted.error);
+                LOG_INFO("renderer: resource shader inventory: {} shaders ({})", extracted.shaders,
+                    extracted.reused ? "reused" : "extracted");
+                const auto source = std::filesystem::path(shaderCacheDir) / "source";
+                std::error_code ec;
+                std::filesystem::create_directories(source, ec);
+                if (ec) return;
+                std::vector<std::filesystem::path> paths;
+                for (std::filesystem::directory_iterator it(source, ec), end; !ec && it != end; it.increment(ec)) {
+                    const auto name = it->path().filename().string();
+                    if (it->path().extension() == ".bin" && (name.starts_with("vs_") || name.starts_with("ps_")))
+                        paths.push_back(it->path());
+                }
+                std::sort(paths.begin(), paths.end());
+                const auto started = std::chrono::steady_clock::now();
+                // Only CPU translation, DXC and independent cache files run in
+                // parallel. The renderer's maps, counters and device stay on
+                // the command processor thread.
+                struct PreparedSource {
+                    std::vector<uint32_t> words;
+                    bool pixel = false;
+                    std::string error;
+                };
+                std::vector<PreparedSource> prepared(paths.size());
+                const unsigned logicalThreads = std::thread::hardware_concurrency();
+                const unsigned requestedWorkers = getenv("LO_SHADER_PREPARE_SERIAL") ? 1u :
+                    (logicalThreads > 1 ? logicalThreads - 1 : 1u);
+                const auto workerCount = std::min<size_t>(requestedWorkers, paths.size());
+                std::atomic<size_t> next{0}, completed{0}, compiledCount{0}, cachedCount{0};
+                auto worker = [&] {
+                    for (;;) {
+                        const size_t index = next.fetch_add(1);
+                        if (index >= paths.size()) return;
+                        auto& item = prepared[index];
+                        try {
+                            const auto& path = paths[index];
+                            std::ifstream in(path, std::ios::binary | std::ios::ate);
+                            const auto size = in.tellg();
+                            if (size < 12 || size > 0x40000 || size % 4 != 0)
+                                throw std::runtime_error("invalid microcode size");
+                            item.words.resize(size_t(size)/4); in.seekg(0);
+                            if (!in.read(reinterpret_cast<char*>(item.words.data()), size))
+                                throw std::runtime_error("cannot read microcode");
+                            item.pixel = path.filename().string().starts_with("ps_");
+                            const auto bytes = std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(item.words.data()),size_t(size));
+                            // Canonical names guarantee that two workers cannot
+                            // write the same shader via different source aliases.
+                            if (path.filename().string() != xenos::resources::SourceName(item.pixel,bytes))
+                                throw std::runtime_error("microcode hash does not match its filename");
+                            const auto cachePath = std::filesystem::path(shaderCacheDir) /
+                                xenos::cache::FileName(item.pixel, Fnv1a(item.words.data(),size_t(size)));
+                            std::ifstream cached(cachePath,std::ios::binary);
+                            std::vector<uint8_t> dxil((std::istreambuf_iterator<char>(cached)),{});
+                            cached.close();
+                            if (xenos::cache::CompleteContainer(dxil)) { ++cachedCount; }
+                            else {
+                                std::vector<uint32_t> swapped(item.words.size());
+                                std::transform(item.words.begin(),item.words.end(),swapped.begin(),[](uint32_t word) { return ByteSwap(word); });
+                                const auto translated = xenos::TranslateShader(swapped.data(),uint32_t(swapped.size()),item.pixel);
+                                // CompileHlsl creates separate DXC COM instances
+                                // per call; DLL loading is protected by call_once.
+                                auto compiled = xenos::CompileHlsl(translated.hlsl,"main",item.pixel ? "ps_6_0" : "vs_6_0");
+                                if (!compiled.ok) item.error = std::move(compiled.errors);
+                                else {
+                                    std::ofstream out(cachePath,std::ios::binary | std::ios::trunc);
+                                    out.write(reinterpret_cast<const char*>(compiled.dxil.data()),compiled.dxil.size()); out.close();
+                                    if (!out) throw std::runtime_error("cannot write compiled shader cache");
+                                    ++compiledCount;
+                                }
+                                if (!compiled.ok && item.error.empty()) item.error="DXC compilation failed";
+                            }
+                        } catch (const std::exception& e) { item.error=e.what(); }
+                        ++completed;
+                    }
+                };
+                LOG_INFO("renderer: shader precompile: {} logical threads, {} workers, {} shaders",
+                    logicalThreads,workerCount,paths.size());
+                std::vector<std::jthread> workers;
+                try {
+                    for (size_t i=0; i<workerCount; ++i) workers.emplace_back(worker);
+                } catch (const std::system_error& e) {
+                    LOG_WARNING("renderer: started only {} shader workers: {}",workers.size(),e.what());
+                    if (workers.empty()) worker();
+                }
+                while (completed.load() < paths.size()) {
+                    video::SetShaderPreparationProgress(uint32_t(completed.load()),uint32_t(paths.size()));
+                    video::PumpEvents();
+                    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                }
+                for (auto& thread : workers) thread.join();
+                LOG_INFO("renderer: parallel shader phase: {} compiled, {} cached, {:.0f} ms", compiledCount.load(),cachedCount.load(),
+                    std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-started).count());
+                uint32_t done = 0, failed = 0;
+                for (const auto& item : prepared) {
+                    video::SetShaderPreparationProgress(uint32_t(paths.size()), uint32_t(paths.size()));
+                    video::PumpEvents();
+                    if (!item.error.empty()) {
+                        LOG_WARNING("renderer: precompile {} failed: {}",paths[done].filename().string(),item.error);
+                        ++failed;
+                    } else if (!GetShader(item.pixel,item.words.data(),uint32_t(item.words.size()))) ++failed;
+                    ++done;
+                }
+                video::SetShaderPreparationProgress(0, 0);
+                if (done) LOG_INFO("renderer: prepared {} known shaders, {} failed, {:.0f} ms", done, failed,
+                    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now()-started).count());
+                ResetTimers();
+            }
+
             Shader* GetShader(bool pixel, const uint32_t* words, uint32_t count)
             {
                 uint64_t hash = Fnv1a(words, count * 4);
@@ -894,6 +1027,14 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     return it->second.valid ? &it->second : nullptr;
 
                 Shader& entry = cache[hash];
+                if (!shaderCacheDir.empty()) {
+                    const auto source = std::filesystem::path(shaderCacheDir) / "source";
+                    std::error_code ec;
+                    std::filesystem::create_directories(source, ec);
+                    const auto path = source / fmt::format("{}_{:016x}.bin", pixel ? "ps" : "vs", hash);
+                    if (!ec && !std::filesystem::exists(path, ec))
+                        std::ofstream(path, std::ios::binary).write(reinterpret_cast<const char*>(words), size_t(count)*4);
+                }
                 ScopedTimer timer{ tShader };
                 nShader++;
                 std::vector<uint32_t> swapped(count);
@@ -911,10 +1052,14 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 {
                     // The cache name carries a translator version so changes to the
                     // generated HLSL don't resurrect stale DXIL.
-                    cachePath = fmt::format("{}/{}_{:016x}_v20.dxil", shaderCacheDir, pixel ? "ps" : "vs", hash);
+                    cachePath = (std::filesystem::path(shaderCacheDir) / xenos::cache::FileName(pixel, hash)).string();
                     std::ifstream in(cachePath, std::ios::binary);
                     if (in)
                         dxil.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+                    if (!dxil.empty() && !xenos::cache::CompleteContainer(dxil)) {
+                        LOG_WARNING("renderer: ignoring incomplete shader cache {}", cachePath);
+                        dxil.clear();
+                    }
                 }
                 if (dxil.empty())
                 {
@@ -1683,7 +1828,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     return;
                 }
                 Shader* vs = GetShader(false, vsWords, vsCount);
-                Shader* ps = psWords && psCount ? GetShader(true, psWords, psCount) : nullptr;
+                // RB_MODECONTROL=5 is depth-only: the last loaded pixel shader
+                // is inactive, including its discard and depth exports. Running
+                // a stale shadow-depth PS here corrupts stencil volume tests.
+                Shader* ps = modeControl == 4 && psWords && psCount ? GetShader(true, psWords, psCount) : nullptr;
                 if (!vs)
                 {
                     drops.shader++;
@@ -1750,6 +1898,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         key.depthControl = (key.depthControl & ~0x70u) | (7u << 4);
                 }
                 key.modeCull = Reg(REG_PA_SU_SC_MODE_CNTL) & 0x3807;
+                float layerDepthOffset = 0.0f;
                 if (depth && (depthControl & 2))
                 {
                     // The supported polygonal draws are triangles, fans, strips
@@ -1765,6 +1914,17 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     if (!disableBias) {
                         key.depthBias = bias.constant;
                         key.slopeBias = std::bit_cast<uint32_t>(bias.slope);
+                        // Read-only lighting layers need the guest's absolute bias.
+                        // A D32 integer bias shrinks with the primitive's exponent:
+                        // at Map12's reversed depth ~0.012, 24 ULPs are only ~2e-8,
+                        // smaller than the base/light VS rounding difference. Keep
+                        // depth writers on their existing rasterizer bias path.
+                        static const bool legacyLayerBias = getenv("LO_LEGACY_LAYER_BIAS") != nullptr;
+                        if (!legacyLayerBias && modeControl == 4 && ps && !ps->info.writesDepth && !(depthControl & 4) &&
+                            (depthInfo & (1u << 16)) && bias.absolute != 0.0f) {
+                            layerDepthOffset = bias.absolute;
+                            key.depthBias = 0;
+                        }
                     }
                 }
                 key.colorMask = colorWrites ? (Reg(REG_RB_COLOR_MASK) & 0xF) : 0;
@@ -1821,6 +1981,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 // so a reversed range (scale -1, offset 1) needs no reversed host viewport.
                 shared.ndcScale[2] = (vte & 0x10) ? zs : 1.0f;
                 shared.ndcOffset[2] = (vte & 0x20) ? zo : 0.0f;
+                shared.ndcOffset[2] += layerDepthOffset;
                 viewport.minDepth = 0.0f;
                 viewport.maxDepth = 1.0f;
                 shared.vtxFmt = (vte >> 8) & 7;
@@ -2131,7 +2292,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
                 const uint32_t traceFrame = TraceFrame();
                 static const uint32_t traceCount = getenv("LO_DRAW_TRACE_COUNT") ? strtoul(getenv("LO_DRAW_TRACE_COUNT"), nullptr, 10) : 1;
-                if (traceFrame && frame >= traceFrame && frame < traceFrame + traceCount && (info.indexCount >= 200 || info.primitiveType == 8))
+                if (traceFrame && frame >= traceFrame && frame < traceFrame + traceCount && (info.indexCount >= 200 || info.primitiveType == 8 || info.indexCount == 36))
                 {
                     // Extra detail for big draws: constants the 3D path relies on and
                     // the head of every vertex stream (as floats).
@@ -2145,7 +2306,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         uint32_t d0 = Reg(REG_FETCH_CONSTANTS + slot * 2), d1 = Reg(REG_FETCH_CONSTANTS + slot * 2 + 1);
                         detail += fmt::format(" vf{}=[type {} addr {:#x} dwords {} endian {}:", slot, d0 & 3, d0 & ~3u, (d1 >> 2) & 0xFFFFFF, d1 & 3);
                         const uint32_t* src = reinterpret_cast<const uint32_t*>(Phys(d0 & ~3u));
-                        for (int i = 0; i < 10; i++)
+                        for (uint32_t i = 0; i < std::min(24u, (d1 >> 2) & 0xFFFFFF); i++)
                         {
                             uint32_t v = GpuSwap(src[i], d1 & 3); float f; memcpy(&f, &v, 4);
                             detail += fmt::format(" {:g}/{:#x}", f, v);
@@ -2213,6 +2374,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (drawLogs < 24 || (traceFrame && frame >= traceFrame && frame < traceFrame + traceCount))
                 {
                     drawLogs++;
+                    LOG_INFO("renderer: clip f{} vs={:016x} ps={:016x} control={:#x}", frame, key.vs, key.ps, Reg(0x2204));
                     LOG_INFO("renderer: draw f{} prim={} n={} idx={} vs={:016x} ps={:016x} rt={:#x}/{} {}x{} depth={:#x} dinfo={:#x} blend={:#x} mask={:#x} cull={:#x} colorctl={:#x} aref={:g} ring(vs={:#x} ps={:#x} sh={:#x}) vp=({},{} {}x{} z {}..{}) vte={:#x} scissor=({},{})-({},{}) ndc=({},{}) off=({},{}) mode={} c255=({:g},{:g},{:g},{:g})",
                         frame, info.primitiveType, indexCount, useIndices, key.vs, key.ps, colorInfo & 0xFFF, (colorInfo >> 16) & 0xF, pitch, rtHeight, depthControl, depthInfo,
                         key.blend, key.colorMask, key.modeCull, Reg(REG_RB_COLORCONTROL), RegF(REG_RB_ALPHA_REF), vsOffset, psOffset, sharedOffset,
@@ -2354,7 +2516,12 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             // A zero rectangle count means a whole-resource clear in
                             // the graphics API, so an empty mapping must be skipped.
                             if (!clearRects.empty())
+                            {
+                                if (getenv("LO_TRACE_CLEAR_CALL"))
+                                    LOG_INFO("clear begin f{} base={} pitch={} size={}x{} count={} z={}", frame, k.base, k.pitch, target->width, target->height, clearRects.size(), rectZ);
                                 commandList->clearDepthStencil(true, false, rectZ, 0, clearRects.data(), uint32_t(clearRects.size()));
+                                if (getenv("LO_TRACE_CLEAR_CALL")) LOG_INFO("clear end");
+                            }
                             if (logged++ < 8 || frame == captureFrame)
                                 LOG_INFO("renderer: depth clear f{} rect (pitch {}, {}x{} .. {}x{}) -> depth base={:#x} pitch={} size={}x{} to {} msaa={}->{} regions={}", frame, pitch, minX, minY, maxX, maxY, k.base, k.pitch, target->width, target->height, rectZ, (surfaceInfo >> 16) & 3, target->depthMsaa, clearRects.size());
                             continue;

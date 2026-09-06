@@ -339,6 +339,16 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
         }
     }
 
+    // Trace the final guest-facing value, including any opt-in test override.
+    static const bool ringTrace = getenv("LO_RING_TRACE") != nullptr;
+    static uint32_t lastTraceSwap = ~0u;
+    const uint32_t traceSwap = g_presentedSwaps.load();
+    if (ringTrace && traceSwap != lastTraceSwap)
+    {
+        lastTraceSwap = traceSwap;
+        LOG_INFO("ring input: swap={} LT={} RT={} buttons={:#x}", traceSwap,
+            gp.bLeftTrigger, gp.bRightTrigger, gp.wButtons);
+    }
     return ERROR_SUCCESS;
 }
 

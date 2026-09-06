@@ -119,6 +119,11 @@ if(WIN32)
     target_compile_definitions(LoShaderAluTest PRIVATE NOMINMAX)
     target_link_libraries(LoShaderAluTest PRIVATE fmt::fmt d3d12 dxgi)
     if(LO_BUILD_GPU)
+        add_executable(LoDepthClearGpuTest ${CMAKE_SOURCE_DIR}/tools/tests/depth_clear_gpu_test.cpp)
+        target_include_directories(LoDepthClearGpuTest PRIVATE ${LO_RUNTIME_ROOT} ${CMAKE_SOURCE_DIR}/thirdparty/plume)
+        target_compile_features(LoDepthClearGpuTest PRIVATE cxx_std_20)
+        target_compile_definitions(LoDepthClearGpuTest PRIVATE NOMINMAX)
+        target_link_libraries(LoDepthClearGpuTest PRIVATE plume d3d12 dxgi)
         add_executable(LoStencilTest
             ${CMAKE_SOURCE_DIR}/tools/tests/stencil_test.cpp
             ${LO_RUNTIME_ROOT}/gpu/shader/dxc_compiler.cpp)

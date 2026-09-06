@@ -17,6 +17,9 @@
 #endif
 
 #include <vector>
+#include <future>
+#include <thread>
+#include <atomic>
 
 #ifdef LO_GPU_PLUME
 namespace plume
@@ -35,6 +38,62 @@ namespace gpu::video
         constexpr uint32_t kMaxHeight = 1080;
 
         SDL_Window* g_window = nullptr;
+        std::atomic<uint64_t> g_shaderProgress{0};
+#ifdef _WIN32
+        std::jthread g_windowThread;
+        HWND g_nativeWindow = nullptr;
+        HWND g_preparationWindow = nullptr;
+        LRESULT CALLBACK PreparationWindowProc(HWND window, UINT message, WPARAM wparam, LPARAM lparam)
+        {
+            if (message == WM_ERASEBKGND) return 1;
+            if (message == WM_PAINT || message == WM_PRINTCLIENT) {
+                PAINTSTRUCT paint{};
+                HDC target=message == WM_PRINTCLIENT ? reinterpret_cast<HDC>(wparam) : BeginPaint(window,&paint);
+                RECT bounds{}; GetClientRect(window,&bounds);
+                // Compose the complete frame offscreen. Clearing the visible DC
+                // first exposes a blank text area between GDI drawing batches.
+                HDC dc=CreateCompatibleDC(target);
+                HBITMAP bitmap=CreateCompatibleBitmap(target,std::max(1L,bounds.right),std::max(1L,bounds.bottom));
+                if (!dc || !bitmap) {
+                    if (bitmap) DeleteObject(bitmap);
+                    if (dc) DeleteDC(dc);
+                    if (message == WM_PAINT) EndPaint(window,&paint);
+                    return 0;
+                }
+                auto oldBitmap=SelectObject(dc,bitmap);
+                HBRUSH background=CreateSolidBrush(RGB(20,24,31));
+                FillRect(dc,&bounds,background); DeleteObject(background);
+                const uint64_t state=g_shaderProgress.load();
+                const uint32_t total=uint32_t(state>>32)&0x7fffffff, done=uint32_t(state);
+                const bool scanning=(state>>63)!=0;
+                SetBkMode(dc,TRANSPARENT); SetTextColor(dc,RGB(235,238,242));
+                HFONT font=CreateFontW(-28,0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,
+                    OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,L"Segoe UI");
+                auto old=SelectObject(dc,font);
+                RECT title{20,bounds.bottom/2-85,bounds.right-20,bounds.bottom/2-35};
+                DrawTextW(dc,scanning ? L"Finding game shaders" : L"Preparing shaders",-1,&title,DT_CENTER|DT_SINGLELINE);
+                SelectObject(dc,GetStockObject(DEFAULT_GUI_FONT));
+                const auto detail=std::to_wstring(done)+L" / "+std::to_wstring(total)+(scanning ? L" MB" : L"");
+                RECT count{20,bounds.bottom/2-35,bounds.right-20,bounds.bottom/2};
+                DrawTextW(dc,detail.c_str(),-1,&count,DT_CENTER|DT_SINGLELINE);
+                const int width=std::min(480,std::max(0,int(bounds.right)-80));
+                RECT bar{(bounds.right-width)/2,bounds.bottom/2+8,(bounds.right+width)/2,bounds.bottom/2+14};
+                HBRUSH track=CreateSolidBrush(RGB(51,58,70)); FillRect(dc,&bar,track); DeleteObject(track);
+                bar.right=bar.left+int(total ? uint64_t(width)*std::min(done,total)/total : 0);
+                HBRUSH fill=CreateSolidBrush(RGB(111,177,218)); FillRect(dc,&bar,fill); DeleteObject(fill);
+                SetTextColor(dc,RGB(157,168,184));
+                RECT hint{20,bounds.bottom/2+45,bounds.right-20,bounds.bottom/2+95};
+                DrawTextW(dc,L"The game will continue automatically.\nFuture launches reuse the shader cache.",-1,&hint,DT_CENTER);
+                SelectObject(dc,old); DeleteObject(font);
+                BitBlt(target,0,0,bounds.right,bounds.bottom,dc,0,0,SRCCOPY);
+                SelectObject(dc,oldBitmap); DeleteObject(bitmap); DeleteDC(dc);
+                if (message == WM_PAINT) EndPaint(window,&paint);
+                return 0;
+            }
+            return DefWindowProcW(window,message,wparam,lparam);
+        }
+#endif
+        void PumpWindowEvents();
         bool g_initAttempted = false;
         bool g_available = false;
 
@@ -115,36 +174,75 @@ namespace gpu::video
             return false;
         }
 
-        if (SDL_InitSubSystem(SDL_INIT_VIDEO) != 0)
-        {
-            LOG_WARNING("video: SDL video init failed: {}", SDL_GetError());
-            return false;
-        }
+        auto createWindow = [] {
+            if (SDL_InitSubSystem(SDL_INIT_VIDEO) != 0)
+            {
+                LOG_WARNING("video: SDL video init failed: {}", SDL_GetError());
+                return false;
+            }
 
-        // Background regression runs still render and capture the swap chain,
-        // but must never show a window or take focus from the desktop user.
-        const bool background = getenv("LO_BACKGROUND") != nullptr;
-        g_window = SDL_CreateWindow("Lost Odyssey Recompiled", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-            1280, 720, background ? SDL_WINDOW_HIDDEN : SDL_WINDOW_SHOWN);
-        if (!g_window)
+            // Background regression runs still render and capture the swap chain,
+            // but must never show a window or take focus from the desktop user.
+            const bool background = getenv("LO_BACKGROUND") != nullptr;
+            g_window = SDL_CreateWindow("Lost Odyssey Recompiled", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+                1280, 720, background ? SDL_WINDOW_HIDDEN : SDL_WINDOW_SHOWN);
+            if (!g_window)
+            {
+                LOG_WARNING("video: window creation failed: {}", SDL_GetError());
+                return false;
+            }
+            // This thread owns the SDL event loop from now on; the controller
+            // subsystem is initialised here too so its message window (if any)
+            // lives on the pumping thread.
+            hid::Init();
+            hid::SetExternalEventPump(true);
+#ifdef _WIN32
+            SDL_SysWMinfo info{};
+            SDL_VERSION(&info.version);
+            if (!SDL_GetWindowWMInfo(g_window, &info))
+            {
+                LOG_WARNING("video: native window lookup failed: {}", SDL_GetError());
+                SDL_DestroyWindow(g_window);
+                g_window = nullptr;
+                return false;
+            }
+            g_nativeWindow = info.info.win.window;
+#endif
+            return true;
+        };
+#ifdef _WIN32
+        // GPU waits, shader compilation and capture I/O must not starve Win32
+        // messages. Create, pump and destroy SDL windows on their own thread.
+        std::promise<bool> ready;
+        auto initialized = ready.get_future();
+        g_windowThread = std::jthread([createWindow, ready = std::move(ready)](std::stop_token stop) mutable {
+            const bool success = createWindow();
+            LOG_INFO("video: window thread {} (independent event pump)", GetCurrentThreadId());
+            ready.set_value(success);
+            if (!success) return;
+            while (!stop.stop_requested())
+            {
+                PumpWindowEvents();
+                // Bound latency even with no SDL events (native Debug Menu).
+                MsgWaitForMultipleObjectsEx(0, nullptr, 8, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+            }
+            SDL_DestroyWindow(g_window);
+            g_window = nullptr;
+        });
+        if (!initialized.get())
         {
-            LOG_WARNING("video: window creation failed: {}", SDL_GetError());
+            g_windowThread.join();
             return false;
         }
-        // This thread owns the SDL event loop from now on; the controller
-        // subsystem is initialised here too so its message window (if any)
-        // lives on the pumping thread.
-        hid::Init();
-        hid::SetExternalEventPump(true);
+        LOG_INFO("video: render thread {}", GetCurrentThreadId());
+#else
+        if (!createWindow()) return false;
+#endif
 
 #ifdef LO_GPU_PLUME
-        SDL_SysWMinfo wmInfo{};
-        SDL_VERSION(&wmInfo.version);
-        SDL_GetWindowWMInfo(g_window, &wmInfo);
-
 #ifdef _WIN32
         g_interface = plume::CreateD3D12Interface();
-        plume::RenderWindow renderWindow = wmInfo.info.win.window;
+        plume::RenderWindow renderWindow = g_nativeWindow;
 #else
         plume::RenderWindow renderWindow{};
 #endif
@@ -192,16 +290,72 @@ namespace gpu::video
         g_device.reset();
         g_interface.reset();
 #endif
+#ifdef _WIN32
+        g_windowThread.request_stop();
+        if (g_windowThread.joinable()) g_windowThread.join();
+#else
         if (g_window)
         {
             SDL_DestroyWindow(g_window);
             g_window = nullptr;
         }
+#endif
         g_available = false;
     }
 
     void PumpEvents()
     {
+#ifndef _WIN32
+        PumpWindowEvents();
+#endif
+    }
+
+    void SetShaderPreparationProgress(uint32_t completed, uint32_t total, bool scanning)
+    {
+        g_shaderProgress.store((uint64_t(total) << 32) | completed | (scanning ? (1ULL << 63) : 0));
+    }
+
+    namespace {
+    void PumpWindowEvents()
+    {
+        static uint64_t shownProgress = 0;
+        static auto lastProgressPaint = std::chrono::steady_clock::time_point{};
+        const uint64_t progress = g_shaderProgress.load();
+        const auto now = std::chrono::steady_clock::now();
+        // Scanning can publish hundreds of updates per second. Keep UI updates
+        // at 10 Hz, but show phase transitions and completion immediately.
+        const bool phaseChanged = (progress >> 32) != (shownProgress >> 32);
+        if (g_window && progress != shownProgress &&
+            (phaseChanged || now-lastProgressPaint >= std::chrono::milliseconds(100))) {
+            const uint32_t total = uint32_t(progress >> 32) & 0x7fffffffu;
+            const bool scanning = (progress >> 63) != 0;
+            const auto title = total ? fmt::format("Lost Odyssey Recompiled - {} {}/{}{}",
+                scanning ? "Scanning game shaders" : "Preparing shaders", uint32_t(progress), total, scanning ? " MB" : "")
+                                     : std::string("Lost Odyssey Recompiled");
+            SDL_SetWindowTitle(g_window, title.c_str());
+#ifdef _WIN32
+            // The window thread owns the preparation overlay and stays responsive
+            // while the command processor scans resources or waits for DXC.
+            if (total && g_nativeWindow) {
+                if (!g_preparationWindow) {
+                    WNDCLASSW cls{}; cls.lpfnWndProc=PreparationWindowProc;
+                    cls.hInstance=GetModuleHandleW(nullptr); cls.lpszClassName=L"LOShaderPreparation";
+                    cls.hCursor=LoadCursorW(nullptr,MAKEINTRESOURCEW(32512)); RegisterClassW(&cls);
+                    g_preparationWindow=CreateWindowExW(WS_EX_NOACTIVATE,cls.lpszClassName,L"",WS_CHILD|WS_VISIBLE,
+                        0,0,1,1,g_nativeWindow,nullptr,cls.hInstance,nullptr);
+                }
+                RECT rect{}; GetClientRect(g_nativeWindow,&rect);
+                RECT childRect{}; GetClientRect(g_preparationWindow,&childRect);
+                if (childRect.right!=rect.right || childRect.bottom!=rect.bottom)
+                    MoveWindow(g_preparationWindow,0,0,rect.right,rect.bottom,FALSE);
+                InvalidateRect(g_preparationWindow,nullptr,FALSE);
+            } else if (g_preparationWindow) {
+                DestroyWindow(g_preparationWindow); g_preparationWindow=nullptr;
+            }
+#endif
+            shownProgress = progress;
+            lastProgressPaint = now;
+        }
         if (!g_window)
             return;
         debug_menu::Update();
@@ -222,6 +376,8 @@ namespace gpu::video
             }
         }
     }
+
+    } // namespace
 
     void PresentFrontbuffer(uint32_t physicalAddress, uint32_t width, uint32_t height, uint32_t copyDestInfo)
     {

@@ -117,6 +117,61 @@ int main() {
                   pixels[x * 4 + 2]);
     }
     readback->unmap();
+    // A stale shadow PS exports depth=1, while the volume's geometric depth
+    // is 0. With GREATER_EQUAL against 0.5 these take opposite stencil paths.
+    // Depth-only rendering must therefore bind no guest pixel shader.
+    auto exportedDepth = shader(
+        "void main(out float4 c:SV_Target,out float z:SV_Depth) "
+        "{ c=0; z=1; }", "ps_6_0");
+    for (bool stalePixelShader : {true, false}) {
+      RenderGraphicsPipelineDesc volumeDesc = desc;
+      volumeDesc.pixelShader = stalePixelShader ? exportedDepth.get() : nullptr;
+      volumeDesc.renderTargetBlend[0].renderTargetWriteMask = 0;
+      volumeDesc.depthEnabled = true;
+      volumeDesc.depthWriteEnabled = false;
+      volumeDesc.depthFunction = RenderComparisonFunction::GREATER_EQUAL;
+      volumeDesc.stencilWriteMask = 255;
+      volumeDesc.stencilFrontFace.compareFunction = RenderComparisonFunction::ALWAYS;
+      volumeDesc.stencilFrontFace.passOp = RenderStencilOp::KEEP;
+      volumeDesc.stencilFrontFace.depthFailOp = RenderStencilOp::REPLACE;
+      volumeDesc.stencilBackFace = volumeDesc.stencilFrontFace;
+      auto volume = device->createGraphicsPipeline(volumeDesc);
+      commands->begin();
+      commands->barriers(RenderBarrierStage::GRAPHICS,
+          RenderTextureBarrier(color.get(), RenderTextureLayout::COLOR_WRITE));
+      commands->setFramebuffer(fb.get());
+      commands->clearColor(0, RenderColor(0, 0, 0, 1));
+      commands->clearDepthStencil(true, true, 0.5f, 0);
+      commands->setViewports(&vp, 1);
+      commands->setScissors(&full, 1);
+      commands->setGraphicsPipelineLayout(layout.get());
+      commands->setPipeline(volume.get());
+      commands->drawInstanced(3, 1, 0, 0);
+      commands->setPipeline(equal.get());
+      commands->drawInstanced(3, 1, 0, 0);
+      commands->setPipeline(notEqual.get());
+      commands->drawInstanced(3, 1, 0, 0);
+      commands->barriers(RenderBarrierStage::COPY,
+          RenderTextureBarrier(color.get(), RenderTextureLayout::COPY_SOURCE));
+      commands->copyTextureRegion(RenderTextureCopyLocation::PlacedFootprint(
+          readback.get(), RenderFormat::R8G8B8A8_UNORM, 8, 1, 1, 64, 0),
+          RenderTextureCopyLocation::Subresource(color.get(), 0));
+      commands->end();
+      queue->executeCommandLists(lists, 1, nullptr, 0, nullptr, 0, fence.get());
+      queue->waitForCommandFence(fence.get());
+      pixels = static_cast<const unsigned char *>(readback->map());
+      bool casePass = true;
+      for (int x = 0; x < 8; ++x) {
+        casePass &= pixels[x * 4] == (stalePixelShader ? 0 : 255) &&
+                    pixels[x * 4 + 1] == 0 &&
+                    pixels[x * 4 + 2] == (stalePixelShader ? 255 : 0);
+      }
+      readback->unmap();
+      pass &= casePass;
+      std::printf("%s: %s stencil uses %s depth\n", casePass ? "PASS" : "FAIL",
+          stalePixelShader ? "stale PS" : "depth-only",
+          stalePixelShader ? "exported" : "geometric");
+    }
     std::puts(pass ? "PASS: nonzero stencil reference masks lighting"
                    : "FAIL: stencil mask mismatch");
     return pass ? 0 : 1;

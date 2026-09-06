@@ -8,6 +8,7 @@ namespace gpu {
 struct PolygonOffset {
     int32_t constant = 0;
     float slope = 0;
+    float absolute = 0;
 };
 
 // Xenos face selection and D3D floating-depth approximation, as documented by
@@ -39,6 +40,6 @@ inline PolygonOffset GetPolygonOffset(uint32_t mode, bool polygonal, bool float2
     const double magnitude = std::ceil(double(std::abs(offset)) *
                                       (float24 ? 2097152.0 : 16777215.0)) * unit;
     const auto constant = int32_t(std::min(magnitude, double(std::numeric_limits<int32_t>::max())));
-    return {offset < 0 ? -constant : constant, scale * (1.0f / 16.0f)};
+    return {offset < 0 ? -constant : constant, scale * (1.0f / 16.0f), offset};
 }
 } // namespace gpu

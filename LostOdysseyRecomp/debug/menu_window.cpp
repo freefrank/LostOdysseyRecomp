@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cwchar>
 #include <cwctype>
+#include <algorithm>
 
 #ifdef _WIN32
 namespace
@@ -22,6 +23,53 @@ namespace
     HWND poiList = nullptr, poiButton = nullptr, poiDetails = nullptr;
     uint64_t poiRevision = ~uint64_t(0);
     std::vector<debug_menu::MapPoi> displayedPois;
+    HWND saveToggle = nullptr;
+    struct LayoutControl { HWND window; int x, y, width, height; };
+    std::vector<LayoutControl> layoutControls;
+    constexpr int contentWidth = 540, contentHeight = 710;
+    int scrollX = 0, scrollY = 0, wheelRemainder = 0;
+
+    void Layout(HWND window)
+    {
+        RECT client{};
+        GetClientRect(window, &client);
+        // Keep both bars present so adding one cannot change the other axis's range.
+        SCROLLINFO horizontal{sizeof(SCROLLINFO), SIF_RANGE | SIF_PAGE | SIF_POS | SIF_DISABLENOSCROLL,
+            0, contentWidth - 1, UINT(client.right), scrollX};
+        SCROLLINFO vertical{sizeof(SCROLLINFO), SIF_RANGE | SIF_PAGE | SIF_POS | SIF_DISABLENOSCROLL,
+            0, contentHeight - 1, UINT(client.bottom), scrollY};
+        SetScrollInfo(window, SB_HORZ, &horizontal, TRUE);
+        SetScrollInfo(window, SB_VERT, &vertical, TRUE);
+        scrollX = GetScrollPos(window, SB_HORZ);
+        scrollY = GetScrollPos(window, SB_VERT);
+        for (const auto& control : layoutControls)
+            MoveWindow(control.window, control.x - scrollX, control.y - scrollY,
+                control.width, control.height, FALSE);
+        RedrawWindow(window, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
+    }
+
+    void RevealFocus()
+    {
+        const HWND focus = GetFocus();
+        RECT client{};
+        GetClientRect(menu, &client);
+        for (const auto& control : layoutControls)
+        {
+            if (control.window != focus) continue;
+            // A combo's creation height includes its popup, not its closed field.
+            RECT visible{};
+            GetWindowRect(focus, &visible);
+            const int height = visible.bottom - visible.top;
+            if (control.x < scrollX) scrollX = control.x;
+            else if (control.x + control.width > scrollX + client.right)
+                scrollX = control.x + control.width - client.right;
+            if (control.y < scrollY) scrollY = control.y;
+            else if (control.y + height > scrollY + client.bottom)
+                scrollY = control.y + height - client.bottom;
+            Layout(menu);
+            break;
+        }
+    }
 
     void SetLabel(HWND label, const wchar_t* text)
     {
@@ -53,6 +101,35 @@ namespace
 
     LRESULT CALLBACK MenuProc(HWND window, UINT message, WPARAM wparam, LPARAM lparam)
     {
+        if (message == WM_SIZE) { Layout(window); return 0; }
+        if (message == WM_VSCROLL || message == WM_HSCROLL)
+        {
+            const int bar = message == WM_VSCROLL ? SB_VERT : SB_HORZ;
+            SCROLLINFO info{sizeof(SCROLLINFO), SIF_ALL};
+            GetScrollInfo(window, bar, &info);
+            int position = info.nPos;
+            switch (LOWORD(wparam))
+            {
+            case SB_LINEUP: position -= 28; break;
+            case SB_LINEDOWN: position += 28; break;
+            case SB_PAGEUP: position -= int(info.nPage); break;
+            case SB_PAGEDOWN: position += int(info.nPage); break;
+            case SB_THUMBTRACK: case SB_THUMBPOSITION: position = info.nTrackPos; break;
+            case SB_TOP: position = 0; break;
+            case SB_BOTTOM: position = info.nMax; break;
+            }
+            (bar == SB_VERT ? scrollY : scrollX) = position;
+            Layout(window);
+            return 0;
+        }
+        if (message == WM_MOUSEWHEEL)
+        {
+            wheelRemainder += GET_WHEEL_DELTA_WPARAM(wparam);
+            scrollY -= (wheelRemainder / WHEEL_DELTA) * 84;
+            wheelRemainder %= WHEEL_DELTA;
+            Layout(window);
+            return 0;
+        }
         if (message == WM_COMMAND)
         {
             if (LOWORD(wparam) == 100) debug_menu::RequestVictory();
@@ -112,10 +189,11 @@ namespace
     HWND Control(const wchar_t* type, const wchar_t* text, DWORD style,
         int x, int y, int width, int height, int id = 0)
     {
-        const DWORD tabStop = (std::wcscmp(type, L"STATIC") == 0) ? 0 : WS_TABSTOP;
+        const DWORD tabStop = (std::wcscmp(type, L"STATIC") == 0 || (style & 0xf) == BS_GROUPBOX) ? 0 : WS_TABSTOP;
         HWND control = CreateWindowW(type, text, WS_CHILD | WS_VISIBLE | tabStop | style,
             x, y, width, height, menu, reinterpret_cast<HMENU>(intptr_t(id)), GetModuleHandleW(nullptr), nullptr);
         SendMessageW(control, WM_SETFONT, reinterpret_cast<WPARAM>(GetStockObject(DEFAULT_GUI_FONT)), TRUE);
+        layoutControls.push_back({control, x, y, width, height});
         return control;
     }
 }
@@ -130,46 +208,57 @@ void debug_menu::Toggle()
         wc.lpfnWndProc = MenuProc;
         wc.hInstance = GetModuleHandleW(nullptr);
         wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
-        wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
+        wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_BTNFACE + 1);
         wc.lpszClassName = L"LostOdysseyDebugMenu";
         RegisterClassW(&wc);
         menu = CreateWindowExW(WS_EX_APPWINDOW, wc.lpszClassName, L"Lost Odyssey — Debug Menu (F1)",
-            WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU, CW_USEDEFAULT, CW_USEDEFAULT,
-            560, 815, nullptr, nullptr, wc.hInstance, nullptr);
+            WS_OVERLAPPEDWINDOW | WS_VSCROLL | WS_HSCROLL | WS_CLIPCHILDREN, CW_USEDEFAULT, CW_USEDEFAULT,
+            580, 760, nullptr, nullptr, wc.hInstance, nullptr);
         if (!menu) { LOG_ERROR("debug menu: CreateWindow failed {}", GetLastError()); return; }
-        Control(L"STATIC", L"剧情调试 / Story debug", 0, 20, 18, 440, 24);
-        statusLabel = Control(L"STATIC", L"", 0, 20, 52, 440, 45);
-        Control(L"BUTTON", L"当前战斗判胜 / Win battle", BS_PUSHBUTTON, 20, 105, 265, 34, 100);
-        Control(L"BUTTON", L"取消请求", BS_PUSHBUTTON, 300, 105, 155, 34, 101);
-        Control(L"STATIC", L"一次性请求；在战斗判定点执行。\n窗口不会暂停游戏。F1 打开/关闭。", 0, 20, 158, 440, 48);
-        Control(L"STATIC", L"人物传送 / Teleport（仅当前地图）", 0, 20, 212, 500, 24);
-        positionLabel = Control(L"STATIC", L"", 0, 20, 242, 500, 24);
-        teleportButtons[0] = Control(L"BUTTON", L"记住当前位置", BS_PUSHBUTTON, 20, 275, 150, 30, 10);
-        teleportButtons[1] = Control(L"BUTTON", L"返回记录位置", BS_PUSHBUTTON, 180, 275, 150, 30, 11);
-        teleportButtons[2] = Control(L"BUTTON", L"填入当前坐标", BS_PUSHBUTTON, 340, 275, 180, 30, 12);
+        Control(L"STATIC", L"F1 打开/关闭 · 本窗口不会暂停游戏", 0, 20, 14, 500, 24);
+        Control(L"STATIC", L"常用 / Quick settings", 0, 20, 42, 500, 20);
+        saveToggle = Control(L"BUTTON", L"随时存档 / Save anywhere", BS_AUTOCHECKBOX,
+            24, 66, 490, 25, 102);
+        Control(L"STATIC", L"开启后重新进入 System 菜单，再选择 Save。", 0, 24, 97, 490, 24);
+        Control(L"STATIC", L"当前地图 / Map", 0, 20, 136, 500, 20);
+        mapLabel = Control(L"STATIC", L"", 0, 24, 160, 490, 60);
+        Control(L"STATIC", L"战斗 / Battle", 0, 20, 236, 500, 20);
+        statusLabel = Control(L"STATIC", L"", 0, 24, 258, 490, 40);
+        Control(L"BUTTON", L"当前战斗判胜 / Win battle", BS_PUSHBUTTON, 24, 300, 300, 30, 100);
+        Control(L"BUTTON", L"取消请求", BS_PUSHBUTTON, 334, 300, 180, 30, 101);
+        Control(L"STATIC", L"一次性请求；在战斗判定点执行。", 0, 24, 339, 490, 24);
+        Control(L"STATIC", L"人物传送 / Teleport（仅当前地图）", 0, 20, 378, 500, 20);
+        positionLabel = Control(L"STATIC", L"", 0, 24, 402, 490, 24);
+        teleportButtons[0] = Control(L"BUTTON", L"记住当前位置", BS_PUSHBUTTON, 24, 432, 150, 30, 10);
+        teleportButtons[1] = Control(L"BUTTON", L"返回记录位置", BS_PUSHBUTTON, 184, 432, 150, 30, 11);
+        teleportButtons[2] = Control(L"BUTTON", L"填入当前坐标", BS_PUSHBUTTON, 344, 432, 170, 30, 12);
         const wchar_t* axes[] = {L"X", L"Y", L"Z"};
         for (int i = 0; i < 3; ++i)
         {
-            Control(L"STATIC", axes[i], 0, 20 + i * 125, 320, 20, 24);
-            coordinates[i] = Control(L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL, 40 + i * 125, 315, 100, 28);
+            Control(L"STATIC", axes[i], 0, 24 + i * 124, 478, 18, 24);
+            coordinates[i] = Control(L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL, 42 + i * 124, 474, 98, 28);
         }
-        teleportButtons[3] = Control(L"BUTTON", L"传送到坐标", BS_PUSHBUTTON, 405, 315, 115, 30, 13);
+        teleportButtons[3] = Control(L"BUTTON", L"传送到坐标", BS_PUSHBUTTON, 402, 474, 112, 30, 13);
         const wchar_t* offsets[] = {L"X −100", L"X +100", L"Y −100", L"Y +100", L"Z −100", L"Z +100"};
         for (int i = 0; i < 6; ++i)
-            teleportButtons[4+i] = Control(L"BUTTON", offsets[i], BS_PUSHBUTTON, 20+i*84, 355, 80, 30, 20+i);
-        teleportStatus = Control(L"STATIC", L"", 0, 20, 397, 500, 40);
-        Control(L"STATIC", L"仅同地图坐标；到达目标仍会触发游戏事件。", 0, 20, 445, 500, 24);
-        Control(L"STATIC", L"当前地图 POI / 兴趣点", 0, 20, 482, 500, 24);
-        poiList = Control(L"COMBOBOX", L"", CBS_DROPDOWNLIST | WS_VSCROLL, 20, 510, 355, 220, 30);
-        poiButton = Control(L"BUTTON", L"传送到此 POI", BS_PUSHBUTTON, 385, 510, 135, 30, 31);
-        poiDetails = Control(L"STATIC", L"", 0, 20, 550, 500, 42);
-        Control(L"STATIC", L"自动读取已加载地图；列表不包含尚未加载的区域。", 0, 20, 601, 500, 24);
-        HWND saveToggle = Control(L"BUTTON", L"随时存档 / Save anywhere", BS_AUTOCHECKBOX,
-            20, 702, 500, 25, 102);
-        SendMessageW(saveToggle, BM_SETCHECK, SaveAnywhereEnabled() ? BST_CHECKED : BST_UNCHECKED, 0);
-        Control(L"STATIC", L"切换后重新进入 System 菜单，再选择 Save。", 0, 20, 735, 500, 25);
+            teleportButtons[4+i] = Control(L"BUTTON", offsets[i], BS_PUSHBUTTON, 24+i*83, 514, 75, 30, 20+i);
+        teleportStatus = Control(L"STATIC", L"", 0, 24, 550, 490, 36);
+        poiList = Control(L"COMBOBOX", L"", CBS_DROPDOWNLIST | WS_VSCROLL, 24, 592, 345, 220, 30);
+        poiButton = Control(L"BUTTON", L"传送到此 POI", BS_PUSHBUTTON, 379, 592, 135, 30, 31);
+        poiDetails = Control(L"STATIC", L"", 0, 24, 628, 490, 36);
+        Control(L"STATIC", L"POI 仅含已加载区域；传送到达后仍会触发游戏事件。", 0, 24, 672, 490, 24);
+        // Fit the initial window to the current monitor; scrolling keeps every control reachable.
+        MONITORINFO monitor{sizeof(MONITORINFO)};
+        if (GetMonitorInfoW(MonitorFromWindow(menu, MONITOR_DEFAULTTONEAREST), &monitor))
+        {
+            const auto& area = monitor.rcWork;
+            const int width = std::min(580L, area.right - area.left);
+            const int height = std::min(760L, area.bottom - area.top);
+            SetWindowPos(menu, nullptr, area.left + (area.right - area.left - width) / 2,
+                area.top + (area.bottom - area.top - height) / 2, width, height, SWP_NOZORDER | SWP_NOACTIVATE);
+        }
+        Layout(menu);
     }
-    if (!mapLabel) mapLabel = Control(L"STATIC", L"", 0, 20, 635, 500, 60);
     ShowWindow(menu, IsWindowVisible(menu) ? SW_HIDE : SW_SHOW);
     LOG_INFO("debug menu: window visible {}", IsWindowVisible(menu) != FALSE);
     Update();
@@ -199,8 +288,11 @@ void debug_menu::Update()
                 TranslateMessage(&message);
                 DispatchMessageW(&message);
             }
+            if (message.message == WM_KEYDOWN && message.wParam == VK_TAB) RevealFocus();
         }
     }
+    if (saveToggle && IsWindowVisible(menu))
+        SendMessageW(saveToggle, BM_SETCHECK, SaveAnywhereEnabled() ? BST_CHECKED : BST_UNCHECKED, 0);
     if (mapLabel && IsWindowVisible(menu)) {
         const auto map = GetMapInfo();
         std::wstring text = L"当前地图 / Map: 加载中或尚未识别";
