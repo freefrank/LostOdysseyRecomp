@@ -70,4 +70,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $assets = Get-ChildItem out/releases/LostOdysseyRecomp-*.zip,out/releases/LostOdysseyRecomp-*.sha256 | ForEach-Object FullName
+          $existing = gh release view $env:GITHUB_REF_NAME --json isDraft 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host 'Release already exists; preserving its reviewed assets.'
+            exit 0
+          }
           gh release create $env:GITHUB_REF_NAME --verify-tag --draft --generate-notes @assets
