@@ -11,6 +11,7 @@
 | [Map12 海报黑斑与深度偏移](map12-poster-depth.md) |
 | [窗口事件线程与无响应修正](window-event-pump.md) |
 | [启动深度清除崩溃](startup-depth-clear-crash.md) |
+| [设置菜单、语言与显示选项（2026-09-05）](settings-menu.md) |
 | [首次启动着色器准备与覆盖边界（2026-09-05）](shader-preparation.md) |
 | [音频输出与对白修复（2026-09-05）](audio-output.md) |
 | [戒指战斗资源名缺少语言后缀（2026-09-04）](battle-ring-resource.md) |

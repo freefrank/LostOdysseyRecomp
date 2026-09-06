@@ -25,6 +25,7 @@ namespace gpu::video
 
     // Drains messages on non-Windows hosts; Windows pumps on its window thread.
     void PumpEvents();
+    bool DisplayModeFailed();
     // Updates the title on the window owner thread. total=0 restores the title.
     void SetShaderPreparationProgress(uint32_t completed, uint32_t total, bool scanning = false);
 

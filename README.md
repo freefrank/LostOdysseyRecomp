@@ -18,7 +18,7 @@ PowerPC static recompilation · Xenos shaders · Windows / D3D12
 
 LostOdysseyRecomp translates PowerPC game code into C++ with **XenonRecomp**, implements Xbox 360 services on the host, and translates Xenos shaders for **plume**. The tested platform is **Windows / Direct3D 12**. Linux and Vulkan remain development targets.
 
-Reliable gameplay and faithful rendering come first. Higher resolutions, unlocked frame rates, HDR and upscaling are future work, not available features.
+Reliable gameplay and faithful rendering come first. The local [settings menu](docs/notes/settings-menu.md) adds English, Japanese, Korean, Traditional and Simplified Chinese UI, game language, FXAA and output-resolution scaling; DLSS and frame generation are disabled placeholders. Higher internal rendering resolutions, unlocked frame rates, HDR and upscaling remain future work. Fullscreen modes still need desktop acceptance testing.
 
 ## Game edition and languages
 

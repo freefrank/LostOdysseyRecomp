@@ -1,6 +1,9 @@
 #include <stdafx.h>
 #include "video.h"
 #include "renderer.h"
+#include "presentation.h"
+#include <settings/config.h>
+#include <settings/menu.h>
 #include <kernel/memory.h>
 #include <os/logger.h>
 #include <hid/hid.h>
@@ -39,6 +42,11 @@ namespace gpu::video
 
         SDL_Window* g_window = nullptr;
         std::atomic<uint64_t> g_shaderProgress{0};
+        std::atomic<int> g_displayMode{-1};
+        std::atomic<uint64_t> g_displaySize{0};
+        std::atomic<bool> g_displayFailed{false},g_reapplyWindow{false};
+        std::vector<uint32_t> g_menuPixels;
+        uint64_t g_menuRevision=0;
 #ifdef _WIN32
         std::jthread g_windowThread;
         HWND g_nativeWindow = nullptr;
@@ -112,6 +120,12 @@ namespace gpu::video
         std::unique_ptr<plume::RenderCommandSemaphore> g_releaseSemaphore;
         std::unique_ptr<plume::RenderSwapChain> g_swapChain;
         std::unique_ptr<plume::RenderBuffer> g_uploadBuffer;
+        std::unique_ptr<Presentation> g_presentation;
+        std::unique_ptr<plume::RenderTexture> g_cpuFrame;
+        uint32_t g_cpuWidth=0,g_cpuHeight=0;
+        uint32_t g_lastPresentedImage=0;
+        bool g_hasPresentedImage=false;
+        bool g_forceSwapResize=false;
         constexpr plume::RenderFormat kSwapChainFormat = plume::RenderFormat::R8G8B8A8_UNORM;
         constexpr uint32_t kSwapChainBuffers = 3;
 #endif
@@ -184,8 +198,9 @@ namespace gpu::video
             // Background regression runs still render and capture the swap chain,
             // but must never show a window or take focus from the desktop user.
             const bool background = getenv("LO_BACKGROUND") != nullptr;
+            const auto config=settings::GetConfig();
             g_window = SDL_CreateWindow("Lost Odyssey Recompiled", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-                1280, 720, background ? SDL_WINDOW_HIDDEN : SDL_WINDOW_SHOWN);
+                config.width, config.height, SDL_WINDOW_RESIZABLE | (background ? SDL_WINDOW_HIDDEN : SDL_WINDOW_SHOWN));
             if (!g_window)
             {
                 LOG_WARNING("video: window creation failed: {}", SDL_GetError());
@@ -266,6 +281,8 @@ namespace gpu::video
         g_releaseSemaphore = g_device->createCommandSemaphore();
         g_swapChain = g_queue->createSwapChain(plume::RenderSwapChainDesc(renderWindow, kSwapChainFormat, kSwapChainBuffers));
         g_uploadBuffer = g_device->createBuffer(plume::RenderBufferDesc::UploadBuffer(kMaxWidth * kMaxHeight * 4));
+        g_presentation=std::make_unique<Presentation>();
+        if(!g_presentation->Init(g_device.get())) g_presentation.reset();
 
         LOG_INFO("video: {} on {}", "D3D12", g_device->getDescription().name);
         g_available = true;
@@ -280,7 +297,12 @@ namespace gpu::video
         {
             // Nothing in flight after the last present's fence wait.
         }
+        g_cpuFrame.reset();
+        g_presentation.reset();
         g_uploadBuffer.reset();
+#ifdef _WIN32
+        if(g_swapChain) static_cast<plume::D3D12SwapChain*>(g_swapChain.get())->d3d->SetFullscreenState(FALSE,nullptr);
+#endif
         g_swapChain.reset();
         g_releaseSemaphore.reset();
         g_acquireSemaphore.reset();
@@ -314,6 +336,7 @@ namespace gpu::video
     {
         g_shaderProgress.store((uint64_t(total) << 32) | completed | (scanning ? (1ULL << 63) : 0));
     }
+    bool DisplayModeFailed() { return g_displayFailed.load(); }
 
     namespace {
     void PumpWindowEvents()
@@ -358,10 +381,30 @@ namespace gpu::video
         }
         if (!g_window)
             return;
+        static settings::Config applied;
+        static bool displayInitialized=false;
+        const auto config=settings::GetConfig();
+        if(g_reapplyWindow.exchange(false) || !displayInitialized || config.width!=applied.width || config.height!=applied.height || config.windowMode!=applied.windowMode) {
+            // SDL operations remain on the message-owning thread. Hidden tests
+            // must never change the user's desktop display mode.
+            const auto mode=getenv("LO_BACKGROUND")?settings::WindowMode::Windowed:config.windowMode;
+            const int result=SDL_SetWindowFullscreen(g_window,mode==settings::WindowMode::Borderless?SDL_WINDOW_FULLSCREEN_DESKTOP:0);
+            g_displayFailed=result!=0;
+            if(mode!=settings::WindowMode::Borderless) SDL_SetWindowSize(g_window,config.width,config.height);
+            g_displaySize.store(uint64_t(config.width)<<32|config.height);
+            g_displayMode.store(int(mode));
+            applied=config; displayInitialized=true;
+        }
         debug_menu::Update();
         SDL_Event event;
         while (SDL_PollEvent(&event))
         {
+            if(event.type==SDL_MOUSEBUTTONDOWN) {
+                int w=0,h=0; SDL_GetWindowSize(g_window,&w,&h);
+                const float scale=std::min(w/1280.0f,h/720.0f);
+                if(scale>0) settings::PointerClick((event.button.x-(w-1280*scale)*0.5f)/scale,
+                    (event.button.y-(h-720*scale)*0.5f)/scale,event.button.button==SDL_BUTTON_RIGHT);
+            }
             if (event.type == SDL_KEYDOWN && getenv("LO_TRACE_INPUT"))
                 LOG_INFO("video key: {} repeat {}", event.key.keysym.sym, event.key.repeat);
             if (event.type == SDL_KEYDOWN && !event.key.repeat && event.key.keysym.sym == SDLK_F1)
@@ -385,10 +428,36 @@ namespace gpu::video
             return;
 
 #ifdef LO_GPU_PLUME
+        if(g_swapChain) {
+#ifdef _WIN32
+            static int appliedMode=-1;
+            static uint64_t appliedSize=0;
+            const int mode=g_displayMode.load(); const uint64_t size=g_displaySize.load();
+            if(mode>=0 && (mode!=appliedMode || size!=appliedSize)) {
+                auto* swap=static_cast<plume::D3D12SwapChain*>(g_swapChain.get());
+                HRESULT result=swap->d3d->SetFullscreenState(FALSE,nullptr);
+                if(mode==int(settings::WindowMode::Exclusive)) {
+                    DXGI_MODE_DESC target{}; target.Width=uint32_t(size>>32); target.Height=uint32_t(size);
+                    target.Format=DXGI_FORMAT_R8G8B8A8_UNORM;
+                    result=swap->d3d->ResizeTarget(&target);
+                    if(SUCCEEDED(result)) result=swap->d3d->SetFullscreenState(TRUE,nullptr);
+                }
+                BOOL exclusive=FALSE; swap->d3d->GetFullscreenState(&exclusive,nullptr);
+                if(FAILED(result) || (mode==int(settings::WindowMode::Exclusive) && !exclusive)) g_displayFailed=true;
+                if(appliedMode==int(settings::WindowMode::Exclusive) && mode!=appliedMode) g_reapplyWindow=true;
+                LOG_INFO("display mode: requested={} exclusive={} result={:#x}",mode,bool(exclusive),uint32_t(result));
+                // Flip-model swap chains require ResizeBuffers after a
+                // fullscreen transition even when the dimensions are unchanged.
+                g_forceSwapResize=true;
+                appliedMode=mode; appliedSize=size;
+            }
+#endif
+        }
+        const bool menu=settings::DrawMenu(g_menuPixels,g_menuRevision);
         // Fast path: the frontbuffer was resolved on the GPU, copy it straight
         // into the swap chain. LO_PRESENT_CPU=1 forces the untiling path below.
         static const bool cpuPresent = getenv("LO_PRESENT_CPU") != nullptr;
-        if (g_available && !cpuPresent)
+        if (g_available && !cpuPresent && !menu)
         {
             uint32_t rw = 0, rh = 0, rf = 0;
             plume::RenderTexture* source = renderer::AcquireResolvedSurface(physicalAddress & 0x1FFFFFFF, rw, rh, rf);
@@ -398,8 +467,10 @@ namespace gpu::video
                 g_frameHeight = height;
                 g_frontbufferPhysical = physicalAddress & 0x1FFFFFFF;
                 g_frameOnGpu = true;
-                if (g_swapChain->needsResize())
-                    g_swapChain->resize();
+                if (g_forceSwapResize || g_swapChain->needsResize()) {
+                    if(!g_swapChain->resize()) { if(g_forceSwapResize) g_displayFailed=true; return; }
+                    g_forceSwapResize=false; g_hasPresentedImage=false;
+                }
                 if (g_swapChain->isEmpty())
                     return;
                 uint32_t imageIndex = 0;
@@ -410,10 +481,14 @@ namespace gpu::video
                 const uint32_t copyHeight = std::min({ height, rh, g_swapChain->getHeight() });
 
                 g_commandList->begin();
-                g_commandList->barriers(plume::RenderBarrierStage::COPY, plume::RenderTextureBarrier(backBuffer, plume::RenderTextureLayout::COPY_DEST));
-                plume::RenderBox box(0, 0, int32_t(copyWidth), int32_t(copyHeight), 0, 1);
-                g_commandList->copyTextureRegion(plume::RenderTextureCopyLocation::Subresource(backBuffer),
-                    plume::RenderTextureCopyLocation::Subresource(source), 0, 0, 0, &box);
+                if(g_presentation) g_presentation->Draw(g_commandList.get(),source,backBuffer,std::min(width,rw),std::min(height,rh),
+                    g_swapChain->getWidth(),g_swapChain->getHeight(),settings::GetConfig().fxaa);
+                else {
+                    g_commandList->barriers(plume::RenderBarrierStage::COPY, plume::RenderTextureBarrier(backBuffer, plume::RenderTextureLayout::COPY_DEST));
+                    plume::RenderBox box(0, 0, int32_t(copyWidth), int32_t(copyHeight), 0, 1);
+                    g_commandList->copyTextureRegion(plume::RenderTextureCopyLocation::Subresource(backBuffer),
+                        plume::RenderTextureCopyLocation::Subresource(source), 0, 0, 0, &box);
+                }
                 g_commandList->barriers(plume::RenderBarrierStage::NONE, plume::RenderTextureBarrier(backBuffer, plume::RenderTextureLayout::PRESENT));
                 g_commandList->end();
 
@@ -423,6 +498,7 @@ namespace gpu::video
                 g_queue->executeCommandLists(lists, 1, &waitSemaphore, 1, &signalSemaphore, 1, g_fence.get());
                 g_swapChain->present(imageIndex, &signalSemaphore, 1);
                 g_queue->waitForCommandFence(g_fence.get());
+                g_lastPresentedImage=imageIndex; g_hasPresentedImage=true;
                 return;
             }
         }
@@ -430,6 +506,11 @@ namespace gpu::video
         g_frameOnGpu = false;
 
         // Untile: 32bpp blocks, pitch rounded up to a 32-block macro tile.
+#ifdef LO_GPU_PLUME
+        if(menu) { width=1280; height=720; g_pixels=g_menuPixels; g_frameWidth=width; g_frameHeight=height; }
+        else
+#endif
+        {
         const uint32_t pitchBlocks = (width + 31) & ~31u;
         const uint32_t endian = copyDestInfo & 7;
         const uint8_t* src = static_cast<const uint8_t*>(g_memory.Translate(0xA0000000u + (physicalAddress & 0x1FFFFFFF)));
@@ -447,13 +528,16 @@ namespace gpu::video
                 dst[x] = GpuSwap(v, endian);
             }
         }
+        }
 
 #ifdef LO_GPU_PLUME
         if (!g_available)
             return;
 
-        if (g_swapChain->needsResize())
-            g_swapChain->resize();
+        if (g_forceSwapResize || g_swapChain->needsResize()) {
+            if(!g_swapChain->resize()) { if(g_forceSwapResize) g_displayFailed=true; return; }
+            g_forceSwapResize=false; g_hasPresentedImage=false;
+        }
         if (g_swapChain->isEmpty())
             return;
 
@@ -472,12 +556,19 @@ namespace gpu::video
         const uint32_t copyHeight = std::min(height, g_swapChain->getHeight());
 
         g_commandList->begin();
-        g_commandList->barriers(plume::RenderBarrierStage::COPY, plume::RenderTextureBarrier(backBuffer, plume::RenderTextureLayout::COPY_DEST));
+        if(!g_cpuFrame || g_cpuWidth!=width || g_cpuHeight!=height) {
+            g_cpuFrame=g_device->createTexture(plume::RenderTextureDesc::Texture2D(width,height,1,kSwapChainFormat));
+            g_cpuWidth=width; g_cpuHeight=height;
+        }
+        auto* uploadTarget=g_presentation?g_cpuFrame.get():backBuffer;
+        g_commandList->barriers(plume::RenderBarrierStage::COPY, plume::RenderTextureBarrier(uploadTarget, plume::RenderTextureLayout::COPY_DEST));
         plume::RenderBox box(0, 0, int32_t(copyWidth), int32_t(copyHeight), 0, 1);
         g_commandList->copyTextureRegion(
-            plume::RenderTextureCopyLocation::Subresource(backBuffer),
+            plume::RenderTextureCopyLocation::Subresource(uploadTarget),
             plume::RenderTextureCopyLocation::PlacedFootprint(g_uploadBuffer.get(), kSwapChainFormat, width, height, 1, rowPitch / 4),
-            0, 0, 0, &box);
+            0, 0, 0, g_presentation?nullptr:&box);
+        if(g_presentation) g_presentation->Draw(g_commandList.get(),g_cpuFrame.get(),backBuffer,width,height,
+            g_swapChain->getWidth(),g_swapChain->getHeight(),!menu && settings::GetConfig().fxaa);
         g_commandList->barriers(plume::RenderBarrierStage::NONE, plume::RenderTextureBarrier(backBuffer, plume::RenderTextureLayout::PRESENT));
         g_commandList->end();
 
@@ -487,6 +578,7 @@ namespace gpu::video
         g_queue->executeCommandLists(lists, 1, &waitSemaphore, 1, &signalSemaphore, 1, g_fence.get());
         g_swapChain->present(imageIndex, &signalSemaphore, 1);
         g_queue->waitForCommandFence(g_fence.get());
+        g_lastPresentedImage=imageIndex; g_hasPresentedImage=true;
 #endif
     }
 
@@ -514,6 +606,23 @@ namespace gpu::video
 
     bool SaveScreenshot(const char* path)
     {
+#ifdef LO_GPU_PLUME
+        if(getenv("LO_SCREENSHOT_PRESENTED") && g_hasPresentedImage && g_swapChain) {
+            const uint32_t w=g_swapChain->getWidth(),h=g_swapChain->getHeight(),pitch=(w*4+255)&~255u;
+            if(!w || !h) return false;
+            auto readback=g_device->createBuffer(plume::RenderBufferDesc::ReadbackBuffer(uint64_t(pitch)*h));
+            auto* frame=g_swapChain->getTexture(g_lastPresentedImage);
+            g_commandList->begin();
+            g_commandList->barriers(plume::RenderBarrierStage::COPY,plume::RenderTextureBarrier(frame,plume::RenderTextureLayout::COPY_SOURCE));
+            g_commandList->copyTextureRegion(plume::RenderTextureCopyLocation::PlacedFootprint(readback.get(),kSwapChainFormat,w,h,1,pitch/4),plume::RenderTextureCopyLocation::Subresource(frame));
+            g_commandList->barriers(plume::RenderBarrierStage::NONE,plume::RenderTextureBarrier(frame,plume::RenderTextureLayout::PRESENT));
+            g_commandList->end(); const plume::RenderCommandList* lists[]={g_commandList.get()};
+            g_queue->executeCommandLists(lists,1,nullptr,0,nullptr,0,g_fence.get()); g_queue->waitForCommandFence(g_fence.get());
+            std::vector<uint32_t> pixels(size_t(w)*h); const auto* data=static_cast<const uint8_t*>(readback->map());
+            for(uint32_t y=0;y<h;y++) memcpy(pixels.data()+size_t(y)*w,data+size_t(y)*pitch,w*4);
+            readback->unmap(); return WritePpm(path,pixels,w,h);
+        }
+#endif
         // LO_SCREENSHOT_RESOLVED=1: also dump every GPU-resolved surface (HDR
         // scene buffers etc.) as <path>_<address>.ppm for renderer debugging.
         static const bool dumpResolved = getenv("LO_SCREENSHOT_RESOLVED") != nullptr;

@@ -11,6 +11,7 @@
 | [Roadmap](ROADMAP.md) | Priorities and completion criteria |
 | [Handoff](notes/handoff.md) | Continuation context and source map |
 | [Debug requirements](debug-menu-requirements.md) | Available and requested controls |
+| [Settings menu](notes/settings-menu.md) | Options, language, presentation and validation boundaries |
 | [Research index](notes/README.md) | Subsystem evidence |
 | [Archive](archive/README.md) | Superseded snapshots |
 

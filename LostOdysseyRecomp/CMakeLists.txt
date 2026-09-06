@@ -131,6 +131,15 @@ if(WIN32)
         target_compile_features(LoStencilTest PRIVATE cxx_std_20)
         target_compile_definitions(LoStencilTest PRIVATE NOMINMAX)
         target_link_libraries(LoStencilTest PRIVATE plume d3d12 dxgi)
+        add_executable(LoPresentationTest
+            ${CMAKE_SOURCE_DIR}/tools/tests/presentation_test.cpp
+            ${LO_RUNTIME_ROOT}/gpu/presentation.cpp
+            ${LO_RUNTIME_ROOT}/gpu/shader/dxc_compiler.cpp)
+        target_include_directories(LoPresentationTest PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,INCLUDE_DIRECTORIES>)
+        target_compile_definitions(LoPresentationTest PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,COMPILE_DEFINITIONS>)
+        target_compile_features(LoPresentationTest PRIVATE cxx_std_20)
+        target_precompile_headers(LoPresentationTest REUSE_FROM LostOdysseyRecomp)
+        target_link_libraries(LoPresentationTest PRIVATE plume d3d12 dxgi fmt::fmt)
         add_executable(LoPolygonOffsetTest
             ${CMAKE_SOURCE_DIR}/tools/tests/polygon_offset_test.cpp
             ${LO_RUNTIME_ROOT}/gpu/shader/dxc_compiler.cpp)

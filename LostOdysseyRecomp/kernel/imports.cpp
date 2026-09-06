@@ -1,4 +1,5 @@
 #include <stdafx.h>
+#include <settings/config.h>
 #include <vector>
 #include <mutex>
 #include <map>
@@ -1381,7 +1382,7 @@ static uint32_t ExGetXConfigSetting(uint16_t Category, uint16_t Setting, void* B
         {
         case 0x0001: case 0x0002: case 0x0003: case 0x0004: case 0x0005: case 0x0006: case 0x0007:
             data[0] = 0; break; // time zone settings
-        case 0x0009: data[0] = ByteSwap(1u); break;           // language: English (1). Japanese = 2
+        case 0x0009: data[0] = ByteSwap(settings::GameLanguage()); break;
         case 0x000A: data[0] = ByteSwap(0x00040000u); break;  // video flags: widescreen, 720p
         case 0x000C: data[0] = ByteSwap(1u); break;           // retail flags
         case 0x000E: data[0] = ByteSwap(103u); break;         // country
@@ -1527,7 +1528,7 @@ static uint32_t VdQueryVideoFlags() { return 0x00000006; } // widescreen + HD
 static uint32_t XGetVideoMode(XVIDEO_MODE* vm) { VdQueryVideoMode(vm); return 0; }
 static uint32_t XGetAVPack() { return 0x00000006; } // HDMI
 static uint32_t XGetGameRegion() { return 0x03FF; }
-static uint32_t XGetLanguage() { return 1; }
+static uint32_t XGetLanguage() { return settings::GameLanguage(); }
 
 static void VdGetCurrentDisplayInformation(uint32_t* info)
 {

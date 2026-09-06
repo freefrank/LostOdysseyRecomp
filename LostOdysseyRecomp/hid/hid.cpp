@@ -6,6 +6,7 @@
 extern std::atomic<uint32_t> g_presentedSwaps;
 #include <vector>
 #include <SDL.h>
+#include <settings/menu.h>
 
 // SDL game controller -> XInput state. Player 1 only for now; the keyboard
 // mirrors the pad so the game can be driven without a controller.
@@ -339,6 +340,10 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
         }
     }
 
+    if (settings::FilterInput(gp.wButtons, gp.sThumbLX, gp.sThumbLY)) {
+        gp.sThumbLX=gp.sThumbLY=gp.sThumbRX=gp.sThumbRY=0;
+        gp.bLeftTrigger=gp.bRightTrigger=0;
+    }
     // Trace the final guest-facing value, including any opt-in test override.
     static const bool ringTrace = getenv("LO_RING_TRACE") != nullptr;
     static uint32_t lastTraceSwap = ~0u;
