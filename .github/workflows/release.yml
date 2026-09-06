@@ -10,8 +10,7 @@ permissions:
 
 jobs:
   release:
-    # Only trusted manual/tag builds use this ephemeral runner. PR tests are hosted.
-    runs-on: ${{ fromJSON(vars.LO_RELEASE_RUNNER || '"windows-2022"') }}
+    runs-on: windows-2022
     timeout-minutes: 180
     permissions:
       contents: write
@@ -28,9 +27,17 @@ jobs:
           python -m unittest discover -s tools/tests -p test_import_game.py -v
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           python -m pip install -r tools/release/requirements.txt
-      - name: Retrieve and verify private build input
+      - name: Retrieve private build input
+        uses: actions/checkout@v4
+        with:
+          repository: freefrank/LostOdysseyRecomp-build-inputs
+          ref: 0f119ca8d91c94cf09fd2ecd8268229d8b1eeb97
+          path: out/build-input
+          ssh-key: ${{ secrets.LO_BUILD_INPUT_KEY }}
+          persist-credentials: false
+      - name: Verify private build input
         env:
-          LO_BUILD_XEX_URL: ${{ secrets.LO_BUILD_XEX_URL }}
+          LO_BUILD_XEX_PATH: out/build-input/default.xex
         run: python tools/release/fetch_build_input.py
       - name: Generate game code
         shell: cmd
