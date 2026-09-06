@@ -2,6 +2,8 @@
 
 # Lost Odyssey Recompiled
 
+![Lost Odyssey — Press START](docs/images/title-screen.png)
+
 **An experimental native PC port of Lost Odyssey for Xbox 360.**
 
 PowerPC static recompilation · Xenos shaders · Windows / D3D12

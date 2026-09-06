@@ -2,6 +2,8 @@
 
 # Lost Odyssey Recompiled
 
+![Lost Odyssey — Press START](docs/images/title-screen.png)
+
 **《失落的奥德赛》Xbox 360 版的实验性原生 PC 移植。**
 
 PowerPC 静态重编译 · Xenos 着色器 · Windows / D3D12
