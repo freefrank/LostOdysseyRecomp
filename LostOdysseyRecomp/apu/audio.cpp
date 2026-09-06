@@ -159,10 +159,17 @@ namespace apu
             return value && std::strcmp(value, "1") == 0;
         }();
         if (mute) stereo.fill(0);
-        if (g_device && SDL_GetQueuedAudioSize(g_device) < kStereoFrameBytes * 16)
-            SDL_QueueAudio(g_device, stereo.data(), sizeof(stereo));
+        static uint32_t queueDrops = 0, queueErrors = 0;
+        if (g_device)
+        {
+            if (SDL_GetQueuedAudioSize(g_device) < kStereoFrameBytes * 16)
+            {
+                if (SDL_QueueAudio(g_device, stereo.data(), sizeof(stereo)) != 0) ++queueErrors;
+            }
+            else ++queueDrops;
+        }
         if (n == 1 || (n % 1875) == 0) // every ~10 s
-            LOG_INFO("audio frames submitted: {} peak={} queued={} mute={}", n, peak,
-                g_device ? SDL_GetQueuedAudioSize(g_device) : 0, mute);
+            LOG_INFO("audio frames submitted: {} peak={} queued={} mute={} queue_drops={} queue_errors={}", n, peak,
+                g_device ? SDL_GetQueuedAudioSize(g_device) : 0, mute, queueDrops, queueErrors);
     }
 }

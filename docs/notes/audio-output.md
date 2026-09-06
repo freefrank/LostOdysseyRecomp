@@ -1,4 +1,10 @@
-# 音频输出初版（2026-09-05）
+# 音频输出与对白修复（2026-09-05）
+
+## 当前结论
+
+**已修复并获用户试听确认。** 跨包帧尾曾使续接包的新帧被跳过，造成对白近两倍速。修复后同段装甲车游戏混音与原始对白时间比例为 1.000；4062 帧完整恢复，34 个多声道输入缓冲共4264帧均无解码错误。构建135DCA79已安装，save/profile未改。全游戏声音、循环子帧和开场WMV仍不在本次完整验证范围。
+
+`LO_AUDIO_DIAGNOSTICS=1` 可启用每个XMA上下文的解码、跳过、写入、错误与显式游标更新计数；SDL队列日志同时记录丢弃和提交错误。私有音频与录音只保留在本地ignored的out目录。
 
 当前汇总见[成果报告](../WORK_REPORT_2026-09-05.md)和[状态总表](../STATUS.md)。下文按实验时间保留证据，早期未完成状态不代表最新结果。
 
@@ -111,3 +117,23 @@ B608555F后台独立副本xma-exact-error-01 PID5708读营地、上车（shot344
 2026-09-05：518AF9B5新修正版31720 xma-offset-fix-01后台同camp路线，shot1176营地/2273登车/2945车内/3855CG/5103夜间车辆/7075后段。至244秒未出现xma frame decode failed、Reserved bit或invalid fill bits；旧版同CG起始即稳定失败，此次越过该点。vehicle-xma.json/later-xma.json各21次采样，后者context3–6输入13–15种位置、输出13–15种，存在推进及音轨生命周期更替；前者一段长停顿，不能仅以零错误宣布全部声音恢复。audio-request-1.f32完整60秒，audio2在244秒开始60秒捕获，未听辨；尚未到城门控制恢复。进程保留，input8/shots6，采样/截图命令完成，无提交。下轮继续同PID，勿重新走营地。
 
 2026-09-05：继续同一518AF9B5 PID31720，无重启。shot8947已到城门，input9左移30poll后shot9703主角从门边移到左侧，确认剧情结束切图及控制恢复。至345秒没有XMA frame decode failed/Reserved bit/invalid fill bits或query保存寄存器异常，原来CG开头稳定错误已在完整营地→装甲车→城门路线消失。此结果支持本次显式位置更新后清除残留skip修正；不证明间歇GPU崩溃永久解决，也不证明所有对白已听辨完整。audio1/2均60秒各23040000字节完成，原始PCM本地保留。现场input9/shots8/audio2完成，进程保留，工具结束，无提交。下一步应保留此音频基线，继续图形问题或对实际对白做单独验证，勿重复营地路线仅换日志。
+
+2026-09-05 对白速度诊断：用户明确普通交谈/过场似乎都有，音调基本不变，进一步确认每句对白都加速到听不清，按持续性故障处理。旧用户41308于209.722秒正常窗口关闭退出（日志），非本轮终止。新增LO_AUDIO_DIAGNOSTICS（默认关闭）：每context累计decoded/skipped/written/pending样本、errors/seeks、10秒及release/clear报告；audio日志补queue_drops/queue_errors，不改变播放速度或解码行为。31F95351测试版out/audio-diagnostics.exe编译链接通过，包含未安装的进度界面缓冲修复，主exe未替换。
+独立完整save+profile+cache副本out/audio-diagnostics-map13，29664自动退出；Map13运行30秒：44100Hz轨written442880→884096→1325312，48000Hz轨同样每秒接近48000，skipped/errors/queue drops/queue errors均0。30秒PCM完整11520000bytes finite，未听辨。首轮截图请求格式误写为1，未出图；第二轮out/audio-diagnostics-dialogue改1 1，shot_881.ppm确认与Composed Soldier Lagas交谈字幕。该交谈前后仍只有4条持续音轨，未定位独立语音轨；因此不能用环境音/最终48k时钟正常否定用户报告，也不能宣称对白速度已修复。下一步需获取一段可辨认的过场对白并把源解码PCM与最终混音按内容/时长对照，检查guest混音/重采样和流片段连续性。
+
+2026-09-05 用户听辨确认：map13-conversation无人物语音；vehicle-scene-1末尾人声难辨；vehicle-scene-2多人声难辨。此异常已在SubmitFrame捕获PCM内存在，排查优先解码/guest混音。根据xma-offset-fix-01/run.log磁盘读取，原始xenon_snd.fpd在0x3D502000/0x3D795800均有XWAV，分别抽取为out/dialogue-listening/source-*.xwv。参考vgmstream官方src/meta/xwav.c（Lost Odyssey旧XWAV），下载官方r2117 win64 CLI到out/audio-reference/vgmstream-r2117，独立解码：前者5声道48k 43.317s，中置全零；后者6声道48k 57.090s，中置非零，已导出original-voice-reference.wav（源第3–20s中置，不变速不变调）。仍需用户确认人声可懂程度及与过场对应，不把独立解码成功视为听感证明。尝试0.5s中置片段与现有混音波形相关未找到稳定时间映射，尚不能判断原因；初版float32在静音处数值不稳定产生非法相关>1，已改double并屏蔽低能量窗，旧结果不采用。未启动游戏、未改运行行为。
+
+
+2026-09-05 独立对白已找到，纠正此前中置声道误判：用户确认 original-voice-reference.wav 无人声，不能作为对白样本。对 xenon_snd.fpd 的 461 个 XWAV 枚举得到 201 个 mono；0x185C3800 单声道48k/43.3173125秒与0x3D502000五声道环境音时长完全一致，且运行时读0x185E3800位于此mono资源内（此前误当BGM）。vgmstream独立解码到 out/dialogue-listening/voice-candidate-0x185c3800.wav，本地faster-whisper tiny.en识别完整Officer Seth/43rd Magic Division/You two are walking miracles台词，对应用户确认有乱码人声的vehicle-scene-2。导出未变速单句 dialogue-original-1/2/3.wav（原始19–23.5、23.5–26.5、26.5–30.5秒）。并非从混音分离，而是原始独立资源。
+短波形35ms窗口与旧运行时audio-request-1.f32对照：17个相关系数>0.92的匹配点，source20.875→capture20.151、source28.625→capture24.2956875。线性拟合capture=0.54676732*source+8.70109617，约1.83倍时间压缩；短窗口仍高度相似，支持跳过/消耗片段而非普通提高采样率变尖，但根因尚未定位。低相关候选会错匹配，未筛选fit无效，只有高相关点采用。证据voice-alignment.json。独立资源可识别完整句子，游戏混音中同句时间确实缩短，不能再据此前Map13无对白样本速率正常否定。无运行行为修改、未安装新exe、未动save/profile。
+
+
+## 2026-09-05 对白倍速：跨包帧尾丢包修正（验证中）
+用户确认 dialogue-original-1/2/3 原始对白正常。当前 ProcessPacket 在跨包帧拼接完毕后，错误地把此帧 more=0 再作用于当前的续接包；实际上原包已经在收集尾部时前进过一次。于是续接包中后续新帧被整包跳过，FFmpeg 仍成功解码保留下来的帧，不会报错。
+xma.cpp 增加跨包状态，跨包帧的 more=0 不再额外前进；完整本包帧的结束标志和物理包末尾处理保留。状态随Context Reset及新帧清零，跨输入缓冲继续保留。未修改采样率/播放速度/音量。
+原始 mono 0x185C3800：包头合计4062帧，旧拆帧2129帧，新拆帧4062帧，均无FFmpeg错误。固定版PCM与vgmstream参考对齐576样本后，1秒对白相关0.999999985，全段RMS误差1.80e-5（16bit量化量级）。证据out/dialogue-listening/mono-fixed/comparison.json。34个此前捕获的多声道输入缓冲用修正拆帧均零错误，out/xma-command-camp-01/dialogue-bitstreams/offline-split-fixed/results.json。
+编译与链接通过，out/voice-fixed.exe/.pdb；独立out/voice-fixed-camp游戏回归正在运行，原始save/profile不动，主安装尚未更新。不得仅据离线成功宣称运行时修复已通过。
+
+
+2026-09-05 对白倍速135DCA79运行时回归通过并安装：独立voice-fixed-camp PID37560从营地登车进入同一过场，60秒游戏混音完整23040000字节，最终finally退出。实际混音中三句完整台词可被本地识别，导出out/dialogue-listening/dialogue-ingame-fixed.wav（捕获28–42s，未变速）。原始source20.5/21/25.5/27/27.5/28/28.5与游戏capture31.6053125/32.1053125/36.6053125/38.1053125/38.6053125/39.1053125/39.6053125对应，7点相关>0.92，时间斜率1.000000，旧版0.546767。证据voice-fixed-alignment.json。新日志无XMA解码错误、SDL queue drops/errors，34多声道缓冲4264帧离线均零错误。故同段装甲车对白倍速已通过游戏内验证；未据此宣称所有地图音频问题均清零。
+确认无游戏进程后，将out/voice-fixed.exe/.pdb安装到主构建目录并逐个hash核对；SHA256 135DCA79C9E03C5E0D86E77D1F7B07FF1D44FA5D13D5C16BE879C5EE128B4E54。原13个save/profile文件hash前后一致，旧主7ABDBAFD保留在out/parallel-prepare.exe/.pdb。该构建也包含之前待安装的进度窗口离屏绘制修正。未启动可见游戏，无提交推送。

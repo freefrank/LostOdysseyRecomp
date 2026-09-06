@@ -103,8 +103,25 @@ namespace apu::xma
             uint32_t currentPacketCount() const { return currentBuffer() ? input1PacketCount() : input0PacketCount(); }
         };
 
+        bool g_audioDiagnostics = false;
+
         struct Context
         {
+            uint64_t decodedSamples = 0, skippedSamples = 0, writtenSamples = 0;
+            uint64_t decodeErrors = 0, explicitSeeks = 0;
+            std::chrono::steady_clock::time_point diagnosticStart{}, diagnosticReport{};
+            void ReportSamples(const char* reason, uint32_t id)
+            {
+                if (!g_audioDiagnostics || diagnosticStart == std::chrono::steady_clock::time_point{}) return;
+                const auto now = std::chrono::steady_clock::now();
+                if (!reason && now - diagnosticReport < std::chrono::seconds(10)) return;
+                diagnosticReport = now;
+                LOG_INFO("xma samples: context={} reason={} elapsed_ms={} rate={} channels={} decoded={} skipped={} written={} pending={} errors={} seeks={}",
+                    id, reason ? reason : "interval",
+                    std::chrono::duration_cast<std::chrono::milliseconds>(now - diagnosticStart).count(),
+                    decoder ? decoder->sample_rate : 0, decoder ? decoder->channels : 0,
+                    decodedSamples, skippedSamples, writtenSamples, remainingSubframes * 128, decodeErrors, explicitSeeks);
+            }
             std::atomic<bool> allocated{ false };
             std::atomic<bool> enabled{ false };
             uint32_t remainingSubframes = 0;
@@ -112,6 +129,7 @@ namespace apu::xma
             std::array<uint8_t, 2048> pcm{};
             std::array<uint8_t, 4096 + AV_INPUT_BUFFER_PADDING_SIZE> compressed{};
             uint32_t frameBits = 0, copiedBits = 0, packetsSkip = 0;
+            bool frameCrossedPacket = false;
             struct WorkSnapshot { ContextData data; uint32_t skip, copied; };
             std::array<WorkSnapshot, 8> workHistory{};
             uint32_t workHistoryCount = 0;
@@ -122,7 +140,10 @@ namespace apu::xma
             AVPacket* packet = nullptr;
             void Reset()
             {
+                decodedSamples = skippedSamples = writtenSamples = decodeErrors = explicitSeeks = 0;
+                diagnosticStart = diagnosticReport = {};
                 remainingSubframes = pcmOffset = frameBits = copiedBits = packetsSkip = 0;
+                frameCrossedPacket = false;
                 workHistoryCount = 0;
                 hasPublishedInputOffset = false;
                 avcodec_free_context(&decoder);
@@ -184,6 +205,7 @@ namespace apu::xma
 
         void ClearContext(uint32_t id)
         {
+            g_contexts[id].ReportSamples("clear", id);
             ContextData data;
             uint8_t* guest = ContextHost(id);
             data.Load(guest);
@@ -291,6 +313,7 @@ namespace apu::xma
                 {
                     ctx.compressed.fill(0);
                     ctx.frameBits = 15;
+                    ctx.frameCrossedPacket = false;
                 }
                 uint32_t count = std::min(ctx.frameBits - ctx.copiedBits, kBitsPerPacket - offset);
                 for (uint32_t i = 0; i < count; ++i)
@@ -314,14 +337,22 @@ namespace apu::xma
                 }
                 if (ctx.copiedBits < ctx.frameBits)
                 {
-                    if (offset == kBitsPerPacket) nextPacket();
+                    if (offset == kBitsPerPacket)
+                    {
+                        ctx.frameCrossedPacket = true;
+                        nextPacket();
+                    }
                     continue;
                 }
                 const bool more = ReadBits(ctx.compressed.data()+1, ctx.frameBits-1, 1) != 0;
                 const uint32_t bytes = (ctx.frameBits + 7) / 8;
                 ctx.compressed[0] = uint8_t((bytes*8 - ctx.frameBits) << 2);
                 ctx.copiedBits = ctx.frameBits = 0;
-                if (!more || offset == kBitsPerPacket) nextPacket();
+                // A split frame's trailer describes its starting packet. We
+                // already advanced to the continuation packet, whose new
+                // frames follow this tail. Advancing again discards them.
+                if ((!more && !ctx.frameCrossedPacket) || offset == kBitsPerPacket) nextPacket();
+                ctx.frameCrossedPacket = false;
                 if (!PrepareDecoder(ctx, data)) return;
                 ctx.packet->data = ctx.compressed.data();
                 ctx.packet->size = int(bytes + 1);
@@ -329,6 +360,7 @@ namespace apu::xma
                 const int decoded = sent >= 0 ? avcodec_receive_frame(ctx.decoder, ctx.frame) : sent;
                 if (decoded < 0 || ctx.frame->nb_samples != 512 || ctx.frame->format != AV_SAMPLE_FMT_FLTP)
                 {
+                    if (g_audioDiagnostics) ++ctx.decodeErrors;
                     static unsigned errors = 0;
                     if (errors++ < 16)
                     {
@@ -391,6 +423,11 @@ namespace apu::xma
                         memcpy(ctx.pcm.data() + (i*channels+c)*2, &big, 2);
                     }
                 const uint32_t skip = std::min(4u, data.skipCount());
+                if (g_audioDiagnostics)
+                {
+                    ctx.decodedSamples += 512;
+                    ctx.skippedSamples += skip * 128;
+                }
                 data.setSkipCount(data.skipCount()-skip);
                 ctx.pcmOffset = skip * 256 * channels;
                 ctx.remainingSubframes = 4 - skip;
@@ -409,6 +446,7 @@ namespace apu::xma
             ctx.pcmOffset += bytes;
             ctx.freeBlocks -= int32_t(subframes * channels);
             ctx.remainingSubframes -= subframes;
+            if (g_audioDiagnostics) ctx.writtenSamples += subframes * 128;
         }
 
         void Work(uint32_t id)
@@ -422,13 +460,18 @@ namespace apu::xma
             if (!data.outputValid())
                 return;
             const ContextData original = data;
+            if (g_audioDiagnostics && ctx.diagnosticStart == std::chrono::steady_clock::time_point{})
+                ctx.diagnosticStart = ctx.diagnosticReport = std::chrono::steady_clock::now();
             if (getenv("LO_XMA_ERROR_CAPTURE_DIR"))
                 ctx.workHistory[ctx.workHistoryCount++ % 8] = { data, ctx.packetsSkip, ctx.copiedBits };
             // The guest may select the stream's first packet when submitting
             // a new block. A pending skip is relative to our published cursor;
             // applying it again to that explicit cursor selects another stream.
             if (ctx.hasPublishedInputOffset && data.inputReadOffset() != ctx.publishedInputOffset)
+            {
                 ctx.packetsSkip = 0;
+                if (g_audioDiagnostics) ++ctx.explicitSeeks;
+            }
 
             Ring ring{ Physical(data.outputPtr()), data.outputBlockCount() * kOutputBytesPerBlock,
                        data.outputReadOffset() * kOutputBytesPerBlock, data.outputWriteOffset() * kOutputBytesPerBlock };
@@ -472,6 +515,7 @@ namespace apu::xma
             data.StoreDecoded(guest);
             ctx.publishedInputOffset = data.inputReadOffset();
             ctx.hasPublishedInputOffset = true;
+            ctx.ReportSamples(nullptr, id);
             if (g_trace)
                 LOG_INFO("xma: context {} worked: in={}/{} read {} write {} valid {}", id, data.input0Valid(), data.input1Valid(),
                     data.outputReadOffset(), data.outputWriteOffset(), data.outputValid());
@@ -526,6 +570,7 @@ namespace apu::xma
         if (g_arrayGuest)
             return;
         g_trace = getenv("LO_TRACE_XMA") != nullptr;
+        g_audioDiagnostics = getenv("LO_AUDIO_DIAGNOSTICS") != nullptr;
         g_traceContextWrites = getenv("LO_TRACE_XMA_CONTEXT_WRITES") != nullptr;
         g_arrayGuest = g_pageAllocator.Alloc(g_pageAllocator.physicalRegion, kContextCount * kContextSize, 0x1000);
         if (!g_arrayGuest)
@@ -587,6 +632,7 @@ namespace apu::xma
         std::lock_guard lock(g_mutex);
         if (g_contexts[id].allocated.exchange(false))
         {
+            g_contexts[id].ReportSamples("release", id);
             g_contexts[id].enabled = false;
             g_contexts[id].Reset();
             memset(ContextHost(id), 0, kContextSize);
