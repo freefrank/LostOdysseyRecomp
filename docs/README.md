@@ -8,13 +8,14 @@
 | [Release packaging](notes/release-packaging.md) | Windows build artifacts, dependencies and CI input |
 | [Shader index](notes/shader-resource-index.md) | Built-in locations, fallback and cold-start comparison |
 | [Work report](WORK_REPORT_2026-09-05.md) | Latest repair outcomes, evidence and next acceptance checks |
-| [Status ledger](STATUS.md) | Published changes, local work and all nine active issues |
+| [Status ledger](STATUS.md) | Published changes, resolved reports, open defects and regression coverage |
 | [Synchronization](PUBLISHING.md) | One public history, Gitea/GitHub dual push and archive policy |
 | [Build guide](BUILDING.md) | Prerequisites, generation, running and storage |
-| [Roadmap](ROADMAP.md) | Priorities and completion criteria |
+| [Roadmap](ROADMAP.md) / [简体中文](ROADMAP.zh-CN.md) | Priorities and completion criteria |
 | [Handoff](notes/handoff.md) | Continuation context and source map |
 | [Debug requirements](debug-menu-requirements.md) | Available and requested controls |
 | [Settings menu](notes/settings-menu.md) | Options, language, presentation and validation boundaries |
+| [Documentation agent](agents/documentation.md) | On-demand synchronization workflow and review checks |
 | [Research index](notes/README.md) | Subsystem evidence |
 | [Archive](archive/README.md) | Superseded snapshots |
 

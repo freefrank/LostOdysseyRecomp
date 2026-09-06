@@ -10,7 +10,7 @@ Windows x64 · Direct3D 12 · PowerPC 静态重编译
 
 ### [下载 v0.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.1) · [安装指南](docs/INSTALLING.md) · [反馈问题](https://github.com/freefrank/LostOdysseyRecomp/issues)
 
-[English](README.md) · [项目状态](docs/STATUS.md) · [路线图](docs/ROADMAP.md) · [从源码构建](docs/BUILDING.md)
+[English](README.md) · [项目状态](docs/STATUS.md) · [路线图](docs/ROADMAP.zh-CN.md) · [从源码构建](docs/BUILDING.md)
 
 </div>
 
@@ -58,9 +58,9 @@ DLSS 和帧生成目前为**禁用占位**。更高内部渲染分辨率、帧�
 
 当前优先保证游戏流程和原版渲染行为。项目使用 **XenonRecomp** 将 PowerPC 代码翻译为 C++，在宿主侧实现 Xbox 360 服务，并通过 **plume** 渲染翻译后的 Xenos 着色器。
 
-v0.1 发布包已通过 Windows 托管 CI、导入器检查和隔离冷启动。地面投影及海报修复已有定向验证，用户已确认 RT 操作下的 Ring 判定正常。对白倍速修复在已测试的装甲车场景中通过了原始音轨对照。
+v0.1 发布包已通过 Windows 托管 CI、导入器检查和隔离冷启动。地面投影及海报修复已有定向验证，用户已确认 RT 操作下的 Ring 判定正常。对白倍速问题已解决并经用户确认，修复在装甲车场景中通过了原始音轨对照。
 
-**仍需排查与覆盖：**人物表面阴影回归、火焰受击和箱子破坏特效、偶发 GPU 查询／等待故障，以及更多音频和游戏流程。仍有两个已知着色器预编译失败项。上述结果不代表全游戏兼容。
+**待修复问题：**火焰受击和箱子破坏特效、偶发 GPU 查询／等待故障。人物表面阴影、其他音频场景和更广泛的游戏流程属于回归覆盖。仍有两个已知着色器预编译失败项。上述结果不代表全游戏兼容。
 
 [详细状态与验证证据](docs/STATUS.md) · [v0.1 发布说明](docs/RELEASE-v0.1.md)
 
@@ -110,7 +110,7 @@ Pop-Location
 | `thirdparty/` | 渲染、音频及其他依赖 |
 | `docs/` | 当前状态、指南、逆向记录与历史归档 |
 
-[路线图](docs/ROADMAP.md) · [接手入口](docs/notes/handoff.md) · [渲染测试](docs/notes/rendering-validation.md) · [音频](docs/notes/audio-output.md) · [归档](docs/archive/README.md)
+[路线图](docs/ROADMAP.zh-CN.md) · [接手入口](docs/notes/handoff.md) · [渲染测试](docs/notes/rendering-validation.md) · [音频](docs/notes/audio-output.md) · [归档](docs/archive/README.md)
 
 </details>
 

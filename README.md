@@ -58,9 +58,9 @@ DLSS and frame generation are **disabled placeholders**. Higher internal renderi
 
 Reliable gameplay and faithful rendering come first. The project translates PowerPC code into C++ with **XenonRecomp**, implements Xbox 360 services on the host, and renders translated Xenos shaders through **plume**.
 
-The v0.1 package passed hosted Windows CI, importer checks and an isolated cold launch. Ground-shadow and poster fixes have targeted validation; the user confirmed Ring timing works with RT. The accelerated-dialogue repair passed comparison against the original audio in the tested vehicle scene.
+The v0.1 package passed hosted Windows CI, importer checks and an isolated cold launch. Ground-shadow and poster fixes have targeted validation; the user confirmed Ring timing works with RT. The accelerated-dialogue issue is resolved and user-confirmed; the repair passed comparison against the original audio in the tested vehicle scene.
 
-**Still under investigation:** character-surface shadow regressions, fire-hit and broken-crate effects, intermittent GPU query/wait failures, and broader audio and progression coverage. Two known shader-preparation failures remain. These results do not establish full-game compatibility.
+**Open defects:** fire-hit and broken-crate effects, and intermittent GPU query/wait failures. Character-surface shadows, additional audio scenes and broader progression remain regression coverage. Two known shader-preparation failures remain. These results do not establish full-game compatibility.
 
 [Detailed status and evidence](docs/STATUS.md) · [v0.1 release notes](docs/RELEASE-v0.1.md)
 
