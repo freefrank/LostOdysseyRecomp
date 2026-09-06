@@ -1,6 +1,6 @@
 # Automatic selection of imported discs
 
-Status: **2026-09-06, local and unpublished**. The user requested implementation; no gameplay acceptance has been supplied. This follows the local USA/Europe import/language work and is not included in v0.1 or the earlier language-support test ZIP. No commit, push or release was performed.
+Status: **2026-09-06, included in published v0.2**. Commit `dcc946299cdc2984783793ad5871a0ad0b90a2c9` and its `v0.2` tag were pushed to both remotes. The dated local test packages below preserve pre-release evidence; they are not the official release artifact. Chapter-boundary gameplay and a complete playthrough remain unverified.
 
 ## Behavior
 
@@ -34,3 +34,7 @@ The ZIP is `out/disc-selection-preview/LostOdysseyRecomp-windows-x64-2d9ce9f6-de
 The extracted local copy uses `game-path.txt` to select the isolated complete USA/Europe four-disc import. The main development executable remains at its previous `135dca79` hash prefix; user save/profile were preserved. This is a local test package, with no commit, push or public release.
 
 See [USA/Europe support](europe-support.md), [installation](../INSTALLING.md), [XEX evidence](xex.md) and [project status](../STATUS.md).
+
+## v0.2 publication
+
+The [official v0.2 release](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.2) was published at 2026-09-06 17:16 UTC after hosted Windows CI passed. The 38,185,445-byte ZIP has SHA256 `b125dae559a8d62d6ff79d0bcc80fd6af44fee6a41100db787b8bfca61facab6`. Download, API digest, checksum file and manifest matched; the importer self-test and 30-second isolated rendered German-menu launch passed. See [release verification](../STATUS.md). Earlier statements about local-only packages describe those experiments, not current publication status.

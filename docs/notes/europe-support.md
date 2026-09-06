@@ -1,6 +1,6 @@
 # USA/Europe edition support
 
-Status: **2026-09-06, local and unpublished**. The user requested implementation after a four-disc compatibility audit. These changes are not included in the published v0.1, and no commit, push or release was performed for them.
+Status: **2026-09-06, included in published v0.2**. Commit `dcc946299cdc2984783793ad5871a0ad0b90a2c9` and its `v0.2` tag were pushed to both remotes. The dated local test packages below preserve pre-release evidence; they are not the official release artifact. Chapter-boundary gameplay and a complete playthrough remain unverified.
 
 ## Compatibility evidence
 
@@ -44,3 +44,7 @@ All packaged manifest file hashes were verified, and frozen `InstallGame.exe --s
 The user subsequently requested automatic access to imported discs. Local runtime now validates and selects the requested disc before completing `XamSwapDisc`; the original game reloads that disc's own index and archives without a disc-selection button. The previous immediate-completion stub is no longer the current implementation. Both editions passed storage tests, and both original managers completed controlled 1 → 2 → 3 → 4 → 1 sequences with each target FPI reloaded. The updated package in `out/disc-selection-preview/` passed manifest hashes, frozen importer self-test and a 30-second rendered/captured launch with PATH limited to System32; the package above predates this addition. Its hashes and final storage regression evidence are recorded in the disc-selection note. See [disc-selection implementation and evidence](disc-selection.md).
 
 Chapter-boundary gameplay, full-language text/audio completeness and a complete playthrough remain unverified. A successful import or controlled manager sequence does not establish those results. See [project status](../STATUS.md), [installation](../INSTALLING.md), [XEX history](xex.md) and [settings evidence](settings-menu.md).
+
+## v0.2 publication
+
+The [official v0.2 release](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.2) was published at 2026-09-06 17:16 UTC after hosted Windows CI passed. The 38,185,445-byte ZIP has SHA256 `b125dae559a8d62d6ff79d0bcc80fd6af44fee6a41100db787b8bfca61facab6`. Download, API digest, checksum file and manifest matched; the importer self-test and 30-second isolated rendered German-menu launch passed. See [release verification](../STATUS.md). Earlier statements about local-only packages describe those experiments, not current publication status.

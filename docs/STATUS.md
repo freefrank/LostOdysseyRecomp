@@ -1,24 +1,24 @@
 # Project status
 
-Reviewed **2026-09-06** against the v0.1 release, recorded tests and subsequent user feedback. This page describes current results; dated investigation notes retain the history of individual experiments.
+Reviewed **2026-09-06** against the v0.2 release, recorded tests and subsequent user feedback. This page describes current results; dated investigation notes retain the history of individual experiments.
 
 ## Published release
 
-[v0.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.1) was built from `2a3ffcc` by [hosted Windows CI](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34010819664). The downloaded package passed payload hashes, importer self-test and a 40-second isolated cold launch. The release ZIP is byte-identical to the reviewed CI artifact, with a versioned filename.
+[v0.2](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.2) was published on **2026-09-06 at 17:16 UTC** and is the latest full release, not a draft or prerelease. Its tag points to `dcc946299cdc2984783793ad5871a0ad0b90a2c9`; the code and tag were pushed to both remotes. [Hosted Windows CI](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34047138263) passed, including importer and disc-set tests.
 
-Recent dialogue, shadow, window-responsiveness, settings and startup-preparation changes are included in this release. Older notes describing them as local or uncommitted refer to the time of those experiments, not their current publication status. Source builds apply the tracked [dependency patches](../tools/patches/README.md).
+The official `LostOdysseyRecomp-windows-x64-v0.2.zip` is 38,185,445 bytes, SHA256 `b125dae559a8d62d6ff79d0bcc80fd6af44fee6a41100db787b8bfca61facab6`. The downloaded ZIP matches the public API digest and checksum file. All manifest hashes, commit/version fields and `development_build=false` were verified; no original game files are included. The packaged importer self-test passed, followed by a 30-second isolated launch with a minimal PATH and a visually confirmed German title menu. Evidence: `out/eu-import-audit/release-v0.2-result.json` and `out/eu-import-audit/release-v0.2-smoke`.
 
-**Validation remains limited to opening areas and selected scenes. There has been no complete playthrough or exhaustive four-disc compatibility test.**
+The preceding [v0.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.1) was built from `2a3ffcc` and retains its historical release contents. Dated local/uncommitted notes describe their original test stage; USA/Europe and automatic-disc-selection changes are now included in v0.2. Source builds apply the tracked [dependency patches](../tools/patches/README.md).
 
-[Release notes](RELEASE-v0.1.md) · [Installation](INSTALLING.md) · [Build and packaging evidence](notes/release-packaging.md)
+**Validation remains limited to opening areas, selected scenes and controlled disc-manager requests. Chapter-boundary story transitions and a complete playthrough remain unverified.**
 
-## v0.2 release candidate
+[Release notes](RELEASE-v0.2.md) · [Installation](INSTALLING.md) · [Build and packaging evidence](notes/release-packaging.md)
 
-The user has authorized committing and publishing v0.2. The candidate covers the USA/Europe import/language work and automatic installed-disc selection below. **Publication has not happened yet**; v0.1 remains the published release. Local package validation does not establish that a final release artifact has been built or uploaded. See [candidate release notes](RELEASE-v0.2.md).
+## v0.2 implementation and validation
 
 The audited USA/Europe version `0.0.0.3` four-disc set is now accepted by the importer. Strict XEX hashes identify the edition; mixed editions are rejected both within an input set and when appending to an existing installation. Existing discs are checked from their actual XEX files. Runtime edition detection precedes setup/configuration, and missing-data first launch imports before presenting edition-specific game-language choices. USA/Europe offers English, Japanese, German, French, Spanish and Italian; the Asian game-language list and five interface translations remain unchanged.
 
-The Release build, 19 importer tests and 11 isolated setup tests passed. All 60 files in a real four-disc import (23,063,969,792 bytes) matched the source ISO SHA256 hashes. All six language starts passed; English, German, French, Spanish and Italian title menus and the Japanese original brightness/settings page were visually confirmed. This covers menus/settings, not gameplay. The host voice selector now reads the resource-provided language list instead of assuming three choices; the five USA/Europe voice options and the three Asian voice options completed visually checked cycles. These changes are included in the **unpublished v0.2 candidate**, not v0.1. The earlier language-support package passed all manifest hashes, frozen importer self-test and a 30-second rendered runtime check with PATH limited to System32. The main development executable and user save/profile were preserved. See [USA/Europe evidence and remaining coverage](notes/europe-support.md).
+The Release build, 19 importer tests and 11 isolated setup tests passed. All 60 files in a real four-disc import (23,063,969,792 bytes) matched the source ISO SHA256 hashes. All six language starts passed; English, German, French, Spanish and Italian title menus and the Japanese original brightness/settings page were visually confirmed. This covers menus/settings, not gameplay. The host voice selector now reads the resource-provided language list instead of assuming three choices; the five USA/Europe voice options and the three Asian voice options completed visually checked cycles. These changes are included in the **published v0.2 release**, not v0.1. The earlier language-support package passed all manifest hashes, frozen importer self-test and a 30-second rendered runtime check with PATH limited to System32. The main development executable and user save/profile were preserved. See [USA/Europe evidence and remaining coverage](notes/europe-support.md).
 
 The subsequent local disc-selection change switches game paths to the requested installed disc before completing `XamSwapDisc`. It validates edition/disc identity, the original FPI and archive ranges, leaves existing handles open on their original files and preserves the current mount on failure. Both audited editions passed storage alias/read tests, and seven malformed/valid installation cases passed. The original disc manager completed 1 → 2 → 3 → 4 → 1 for both USA/Europe and Asia while reloading each target FPI and continuing rendering. The Asian final title menu was visually confirmed without a disc-change dialog. All 19 importer tests passed again, and the final Release build succeeded. The updated local package passed every manifest hash, frozen importer self-test and a 30-second rendered/captured launch with PATH limited to System32. Four storage write/read/overwrite/read-overwritten regressions also passed. This is controlled runtime coverage, not chapter-boundary gameplay or user acceptance. See [disc selection](notes/disc-selection.md).
 
@@ -72,7 +72,7 @@ The reported voice problem is resolved, as reconfirmed by the user on 2026-09-06
 3. Add higher internal rendering resolutions and scaling/upscaling options, including investigation of DLSS/FSR.
 4. Investigate frame generation (FG).
 
-These are future goals with no committed release date. **DLSS and FG are disabled placeholders in v0.1.** Existing output-resolution scaling is not higher internal rendering resolution or temporal upscaling. Unlocked frame rates, HDR, Linux/Vulkan gameplay and Steam Deck validation also remain future work. See the [roadmap](ROADMAP.md).
+These are future goals with no committed release date. **DLSS and FG are disabled placeholders in v0.2.** Existing output-resolution scaling is not higher internal rendering resolution or temporal upscaling. Unlocked frame rates, HDR, Linux/Vulkan gameplay and Steam Deck validation also remain future work. See the [roadmap](ROADMAP.md).
 
 ## Maintenance
 
