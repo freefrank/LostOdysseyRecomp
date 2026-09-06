@@ -2,15 +2,15 @@
 
 [简体中文](ROADMAP.zh-CN.md) · [Current status](STATUS.md)
 
-Updated against v0.2 and user acceptance on **2026-09-06**. `[x]` means the stated scope has evidence, not that the entire game is complete. Dated notes retain earlier experiment states; [STATUS.md](STATUS.md) is the current release and validation ledger.
+Updated against v0.2.1 and user acceptance on **2026-09-06**. `[x]` means the stated scope has evidence, not that the entire game is complete. Dated notes retain earlier experiment states; [STATUS.md](STATUS.md) is the current release and validation ledger.
 
 Legend: `[ ]` planned / outstanding · `[~]` in progress · `[x]` validated within the stated scope.
 
-## Pending release: v0.2.1
+## Latest milestone: v0.2.1
 
-The candidate adds next-frame F1 render capture with automatic ZIP and combined SDL controller/keyboard input with E/R triggers. Local build and scoped tests passed; hosted release verification and publication are pending. This is not an AMD rendering fix. See [capture](notes/render-state-capture.md) and [input](notes/controller-input.md).
+[v0.2.1 is published](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.2.1), adding next-frame F1 render capture with automatic ZIP and combined SDL controller/keyboard input with E/R triggers. Hosted CI, including LoHidTest, and official-package hash, installer and isolated rendering/capture checks passed. Physical controller and gameplay switching coverage remains outstanding. This is not an AMD rendering fix. See [capture](notes/render-state-capture.md) and [input](notes/controller-input.md).
 
-## Latest milestone: v0.2
+## Previous milestone: v0.2
 
 v0.2 is published: both audited editions, edition-specific text/voice choices, import before setup and automatic installed-disc selection are included. The sets correspond to [Redump 11817: USA, Europe, version 0.0.0.3](https://redump.info/disc/11817) and [Redump 39111: Europe, Asia, version 0.0.0.4](https://redump.info/disc/39111). Import-time XEX hashes remain strict; this is not a complete ISO-to-Redump hash verification. Both original disc managers passed controlled 1 → 2 → 3 → 4 → 1 sequences, not chapter-boundary story progression. See [v0.2 notes](RELEASE-v0.2.md) and [disc selection](notes/disc-selection.md).
 

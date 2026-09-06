@@ -1,6 +1,6 @@
 # Debug Menu render-state capture
 
-Status: **2026-09-06, v0.2.1 release candidate, publication pending**. This diagnostic feature is not included in the published v0.2. It is not an AMD rendering fix or a compatibility claim.
+Status: **2026-09-06, released in v0.2.1**. This diagnostic feature was not included in v0.2. It is not an AMD rendering fix or a compatibility claim.
 
 ## Use
 
@@ -38,10 +38,14 @@ The build passed (`out/build-render-capture.log`). On an isolated NVIDIA RTX 508
 - Runtime evidence is in `out/render-capture-test/runtime.log`. This covers a title/menu scene and the actual button command path, not physical mouse usability, complete UI layout/DPI acceptance, battle rendering or AMD behavior.
 - The latest build deduplicates shader exports with a set and checks shader output stream failure explicitly. The pre-ZIP preview SHA256 was `4B282C003386B236C5E16A15E27733B85593FF74AB5030195783406707B3CDF7`. With `captures` deliberately created as a file, `out/render-capture-failure-test/runtime.log` reported the directory-creation failure at 6.154 seconds and continued rendering at about 30 fps beyond 28 seconds without crashing. This validates that specific output-directory failure, not every disk-error path.
 
-The local preview is `out/render-capture-preview/LostOdysseyRecomp.exe`; both owned isolated processes were stopped, and the original executable baseline was restored and hash-checked. The feature is included in the v0.2.1 candidate; publication is pending. No game operation, commit, push or publication was performed by the documentation workflow.
+The local preview is `out/render-capture-preview/LostOdysseyRecomp.exe`; both owned isolated processes were stopped, and the original executable baseline was restored and hash-checked. The feature is included in published v0.2.1. No game operation, commit, push or publication was performed by the documentation workflow.
 
 ## Automatic ZIP follow-up
 
-The ZIP-enabled build passed (`out/build-render-capture-zip.log`). Isolated ZIP validation passed in `out/render-capture-zip-test/validation.json`: frame 400 produced 60 files, 91,363,708 raw bytes and an 11,701,650-byte ZIP. Python `ZipFile.testzip` passed, archive filenames exactly matched the raw directory and every archived file SHA256 matched its original. The runtime log records raw completion at 16.591 seconds and ZIP completion at 17.916 seconds, about 1.325 seconds for compression. Rendering returned to about 30 fps through 38.885 seconds after ZIP completion; the owned isolated process was stopped. Timeout and other compression failure paths have not been exercised. This addition is included in the v0.2.1 candidate; publication is pending.
+The ZIP-enabled build passed (`out/build-render-capture-zip.log`). Isolated ZIP validation passed in `out/render-capture-zip-test/validation.json`: frame 400 produced 60 files, 91,363,708 raw bytes and an 11,701,650-byte ZIP. Python `ZipFile.testzip` passed, archive filenames exactly matched the raw directory and every archived file SHA256 matched its original. The runtime log records raw completion at 16.591 seconds and ZIP completion at 17.916 seconds, about 1.325 seconds for compression. Rendering returned to about 30 fps through 38.885 seconds after ZIP completion; the owned isolated process was stopped. Timeout and other compression failure paths have not been exercised. This addition is included in published v0.2.1.
+
+## Official v0.2.1 package validation
+
+The published package passed all 44 manifest hashes and installer self-test. Its isolated cold-cache run rendered a visually checked German title menu for 54 seconds. Frame 400 produced a 12,307,207-byte ZIP with 60 entries; CRC checks and every archived file SHA256 matched the raw output. ZIP completion was logged at 43.798 seconds, followed by about 30 fps from 48.758 through 54.757 seconds. Evidence: `out/release-v0.2.1/package-validation.json` and `out/release-v0.2.1/smoke/runtime.log` with its captures. The test process exited, the main executable baseline remained `135DCA79`, and user saves were untouched. This remains title/menu diagnostic validation, not AMD or battle-rendering acceptance.
 
 See [project status](../STATUS.md) and [research index](README.md).

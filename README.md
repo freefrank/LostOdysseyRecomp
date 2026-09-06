@@ -8,18 +8,18 @@ Windows x64 · Direct3D 12 · PowerPC static recompilation
 
 <img src="docs/images/title-screen.png" alt="Lost Odyssey title screen — Press START" width="960">
 
-### [Download v0.2](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.2) · [Installation guide](docs/INSTALLING.md) · [Report an issue](https://github.com/freefrank/LostOdysseyRecomp/issues)
+### [Download v0.2.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.2.1) · [Installation guide](docs/INSTALLING.md) · [Report an issue](https://github.com/freefrank/LostOdysseyRecomp/issues)
 
 [简体中文](README.zh-CN.md) · [Project status](docs/STATUS.md) · [Roadmap](docs/ROADMAP.md) · [Build from source](docs/BUILDING.md)
 
 </div>
 
 > [!IMPORTANT]
-> **v0.2 is an early testing release.** Opening areas and selected scenes have been tested; a complete playthrough has not. Rendering and stability issues remain. You must supply your own supported game files.
+> **v0.2.1 is an early testing release.** Opening areas and selected scenes have been tested; a complete playthrough has not. Rendering and stability issues remain. You must supply your own supported game files.
 
-## v0.2.1 release candidate
+## New in v0.2.1
 
-**v0.2.1 is pending publication; v0.2 remains the current download.** The candidate adds F1 next-frame render capture with automatic ZIP output and simultaneous SDL-mapped controllers/keyboard input, including E/R triggers. Capture is diagnostic, not an AMD fix.
+**v0.2.1 is released.** It adds F1 next-frame render capture with automatic ZIP output and simultaneous SDL-mapped controllers/keyboard input, including E/R triggers. Capture is diagnostic, not an AMD fix.
 
 ## New in v0.2
 
@@ -108,12 +108,12 @@ Keep the working directory consistent so the intended save/profile folders are u
 | A / B / X / Y | Z / X / A / S |
 | D-pad / left stick | Arrow keys / I, J, K, L |
 | Left / right shoulder | Q / W |
-| Left / right trigger (v0.2.1 candidate) | E / R |
+| Left / right trigger (v0.2.1) | E / R |
 | Debug menu | F1 |
 
-**v0.2.1 candidate input update (publication pending):** all SDL-mapped controllers and the keyboard can be used without selecting an active device. Inputs merge into player 1; this is not multiplayer support. Hotplug and mixed input passed SDL virtual-device tests; physical models and gameplay switching still need validation. Unmapped joysticks need an SDL controller mapping. See [input evidence](docs/notes/controller-input.md).
+**v0.2.1 input update:** all SDL-mapped controllers and the keyboard can be used without selecting an active device. Inputs merge into player 1; this is not multiplayer support. Hotplug and mixed input passed SDL virtual-device tests; physical models and gameplay switching still need validation. Unmapped joysticks need an SDL controller mapping. See [input evidence](docs/notes/controller-input.md).
 
-Rumble is disabled by default; `LO_CONTROLLER_RUMBLE=1` enables it. For Ring actions, published v0.2 uses the controller's right trigger; the v0.2.1 candidate also maps R to RT. A shoulder binding is not a trigger binding.
+Rumble is disabled by default; `LO_CONTROLLER_RUMBLE=1` enables it. For Ring actions, published v0.2 uses the controller's right trigger; v0.2.1 also maps R to RT. A shoulder binding is not a trigger binding.
 
 ### Development
 

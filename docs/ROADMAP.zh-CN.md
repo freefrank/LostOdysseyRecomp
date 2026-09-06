@@ -2,15 +2,15 @@
 
 [English](ROADMAP.md) · [当前状态（英文）](STATUS.md)
 
-更新于 **2026-09-06**，以 v0.2 和最新用户验收为准。`[x]` 表示所述范围已完成验证，不代表全游戏通关。历史调查记录保留当时状态；当前进度以 [STATUS.md](STATUS.md) 为准。
+更新于 **2026-09-06**，以 v0.2.1 和最新用户验收为准。`[x]` 表示所述范围已完成验证，不代表全游戏通关。历史调查记录保留当时状态；当前进度以 [STATUS.md](STATUS.md) 为准。
 
 状态：`[ ]` 计划／待完成 · `[~]` 进行中 · `[x]` 已在所述范围验证。
 
-## 待发布：v0.2.1
+## 最新里程碑：v0.2.1
 
-候选版增加 F1 下一帧渲染捕获及自动 ZIP、SDL 多手柄与键盘混合输入及 E/R 扳机。本地构建和限定范围测试通过，托管发布验证与正式发布尚待完成。这不是 AMD 渲染修复。见[捕获](notes/render-state-capture.md)和[输入](notes/controller-input.md)。
+[v0.2.1 已发布](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.2.1)，增加 F1 下一帧渲染捕获及自动 ZIP、SDL 多手柄与键盘混合输入及 E/R 扳机。托管 CI（含 LoHidTest）、正式包哈希、安装器及隔离渲染／捕获验证均通过；实体手柄和游戏中切换仍待覆盖。这不是 AMD 渲染修复。见[捕获](notes/render-state-capture.md)和[输入](notes/controller-input.md)。
 
-## 最新里程碑：v0.2
+## 历史里程碑：v0.2
 
 v0.2 已发布，包含两套已核对版本、按版本提供的文本／语音选项、先导入后设置及自动读取已导入盘。对应 [Redump 11817：USA, Europe，0.0.0.3](https://redump.info/disc/11817) 与 [Redump 39111：Europe, Asia，0.0.0.4](https://redump.info/disc/39111)。导入仍严格核对 XEX 哈希，不代表完成整张 ISO 的 Redump 哈希比对。两版原管理器均通过 1 → 2 → 3 → 4 → 1 受控流程，章节交界剧情仍未覆盖。见 [v0.2 发布说明](RELEASE-v0.2.md)和[自动选盘](notes/disc-selection.md)。
 

@@ -2,15 +2,17 @@
 
 ## 2026-09-06 当前交接
 
-用户已授权准备 v0.2.1，包含 F1 渲染捕获自动 ZIP 与多手柄／键盘 E/R 输入；本地测试已通过，托管最终产物验证与发布尚待完成。参见[捕获](render-state-capture.md)与[输入](controller-input.md)，不代表 AMD 缺陷已修复；文本补丁仍暂停。
+[v0.2.1 已正式发布](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.2.1)，包含 F1 渲染捕获自动 ZIP 与多手柄／键盘 E/R 输入；托管 CI、正式包验证及隔离启动／捕获均通过。参见[捕获](render-state-capture.md)与[输入](controller-input.md)，不代表 AMD 缺陷已修复；文本补丁仍暂停。
 
-最新公开版本为 [v0.2](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.2)，代码标签指向 `dcc9462`，发布记录提交为 `b572d0a`，均已双推。完整托管 CI、正式包校验和隔离渲染启动通过。当前进度与近期 TODO 以 [STATUS](../STATUS.md) 和[中文路线图](../ROADMAP.zh-CN.md)为准；以下 2026-09-05 的构建名、PID、授权与实验安排保留作历史记录，不是新的执行指令。
+用户先选择关闭本仓库 Gitea Actions，API PATCH `has_actions=false` 后 GET 已确认；随后用户启动 Windows runner 并要求重开，现已 PATCH `has_actions=true` 并 GET 确认开启。`win-t640` 心跳为 `2026-09-06T19:24:52Z`，已在线，但标签仍只有 `windows-latest`／`windows`，无法匹配 7 个旧任务要求的 `windows-2022`；标签匹配待处理，历史队列记录保留。`git ls-remote` 已确认 Gitea 的 `main` 与 `v0.2.1` 完好，代码镜像继续双推。GitHub [正式 CI 34053765472](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34053765472) 全部步骤成功，包括 LoHidTest。
+
+最新公开版本为 v0.2.1，标签指向 `906d7c039f7e709c57af2c5278a43e259bfba8e5`，两远端标签均已确认。正式 ZIP 为 38,203,314 字节，SHA256 为 `cd583a6a28b47a1b2e7e31984052cd4eb6c953f5df333198f41540114eb4afb3`；44 项 manifest 哈希、安装器自测通过。冷缓存隔离运行 54 秒，德文标题菜单目视正常；frame 400 的 ZIP 共 60 项，每项 CRC／SHA256 校验通过，压缩后恢复约 30 fps。证据见 `out/release-v0.2.1/package-validation.json` 和 `out/release-v0.2.1/smoke/runtime.log`。此前 v0.2 的代码标签 `dcc9462`、发布记录提交 `b572d0a` 保留为历史。当前进度与近期 TODO 以 [STATUS](../STATUS.md) 和[中文路线图](../ROADMAP.zh-CN.md)为准；以下 2026-09-05 的构建名、PID、授权与实验安排保留作历史记录，不是新的执行指令。
 
 v0.2 新增 USA/Europe `0.0.0.3` 兼容，保留 Europe/Asia `0.0.0.4`，对应用户确认的 [Redump #11817](https://redump.info/disc/11817) 与 [#39111](https://redump.info/disc/39111)。两版已通过自动选盘受控流程，章节交界剧情和完整通关仍待验证。
 
 **跨版本文本补充补丁已由用户挂起。** 当前只有只读清单解析和资源定位，无可用补丁、无运行时或游戏数据修改。不要自动恢复；[研究记录](text-language-patch.md)保存已知结论。语音补充不在范围内。
 
-本轮仅整理文档，README 已以两条 Redump 记录澄清名称；没有提交或推送这些后续文档修改。既有依赖修改继续由 tracked patches 管理，勿更改子模块指针。主开发程序、原始游戏数据和存档保持原状。
+发布状态文档已同步；README 已以两条 Redump 记录澄清名称。既有依赖修改继续由 tracked patches 管理，勿更改子模块指针。主开发程序、原始游戏数据和存档保持原状。
 
 ## 2026-09-05 历史交接
 

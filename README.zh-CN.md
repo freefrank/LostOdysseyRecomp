@@ -8,18 +8,18 @@ Windows x64 · Direct3D 12 · PowerPC 静态重编译
 
 <img src="docs/images/title-screen.png" alt="失落的奥德赛标题画面 — Press START" width="960">
 
-### [下载 v0.2](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.2) · [安装指南](docs/INSTALLING.md) · [反馈问题](https://github.com/freefrank/LostOdysseyRecomp/issues)
+### [下载 v0.2.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.2.1) · [安装指南](docs/INSTALLING.md) · [反馈问题](https://github.com/freefrank/LostOdysseyRecomp/issues)
 
 [English](README.md) · [项目状态](docs/STATUS.md) · [路线图](docs/ROADMAP.zh-CN.md) · [从源码构建](docs/BUILDING.md)
 
 </div>
 
 > [!IMPORTANT]
-> **v0.2 是早期测试版。** 已测试开场区域和部分场景，尚未通关。渲染和稳定性仍有问题。请自行提供受支持版本的游戏文件。
+> **v0.2.1 是早期测试版。** 已测试开场区域和部分场景，尚未通关。渲染和稳定性仍有问题。请自行提供受支持版本的游戏文件。
 
-## v0.2.1 发布候选
+## v0.2.1 新增功能
 
-**v0.2.1 尚待发布，当前下载仍为 v0.2。** 候选版增加 F1 下一完整帧渲染捕获及自动 ZIP、多 SDL 已映射手柄与键盘同时可用，以及 E/R 扳机。捕获用于诊断，不是 AMD 修复。
+**v0.2.1 已发布。** 本版增加 F1 下一完整帧渲染捕获及自动 ZIP、多 SDL 已映射手柄与键盘同时可用，以及 E/R 扳机。捕获用于诊断，不是 AMD 修复。
 
 ## v0.2 新增功能
 
@@ -108,12 +108,12 @@ Pop-Location
 | A / B / X / Y | Z / X / A / S |
 | 十字键 / 左摇杆 | 方向键 / I、J、K、L |
 | 左 / 右肩键 | Q / W |
-| 左 / 右扳机（v0.2.1 候选版） | E / R |
+| 左 / 右扳机（v0.2.1） | E / R |
 | 调试菜单 | F1 |
 
-**v0.2.1 候选输入更新（尚待发布）：**所有 SDL 已映射手柄与键盘可直接交替使用，无需选择当前设备。输入合并到玩家 1，不代表多人模式。热插拔及混合输入已通过 SDL 虚拟设备测试，实体型号和游戏中切换仍待验证；未映射摇杆需要 SDL 手柄映射。见[输入证据](docs/notes/controller-input.md)。
+**v0.2.1 输入更新：**所有 SDL 已映射手柄与键盘可直接交替使用，无需选择当前设备。输入合并到玩家 1，不代表多人模式。热插拔及混合输入已通过 SDL 虚拟设备测试，实体型号和游戏中切换仍待验证；未映射摇杆需要 SDL 手柄映射。见[输入证据](docs/notes/controller-input.md)。
 
-默认关闭震动，`LO_CONTROLLER_RUMBLE=1` 可开启。已发布 v0.2 的 Ring 使用手柄右扳机，v0.2.1 候选版也可用 R 键输入 RT；肩键不等于扳机。
+默认关闭震动，`LO_CONTROLLER_RUMBLE=1` 可开启。已发布 v0.2 的 Ring 使用手柄右扳机，v0.2.1 也可用 R 键输入 RT；肩键不等于扳机。
 
 ### 开发导航
 
