@@ -2,48 +2,81 @@
 
 # Lost Odyssey Recompiled
 
-![Lost Odyssey — Press START](docs/images/title-screen.png)
-
 **《失落的奥德赛》Xbox 360 版的实验性原生 PC 移植。**
 
-PowerPC 静态重编译 · Xenos 着色器 · Windows / D3D12
+Windows x64 · Direct3D 12 · PowerPC 静态重编译
 
-[English](README.md) · [安装指南](docs/INSTALLING.md) · [项目状态](docs/STATUS.md) · [构建指南](docs/BUILDING.md) · [文档导航](docs/README.md)
+<img src="docs/images/title-screen.png" alt="失落的奥德赛标题画面 — Press START" width="960">
+
+### [下载 v0.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.1) · [安装指南](docs/INSTALLING.md) · [反馈问题](https://github.com/freefrank/LostOdysseyRecomp/issues)
+
+[English](README.md) · [项目状态](docs/STATUS.md) · [路线图](docs/ROADMAP.md) · [从源码构建](docs/BUILDING.md)
 
 </div>
 
----
+> [!IMPORTANT]
+> **v0.1 是早期测试版。** 已测试开场区域和部分场景，尚未通关。渲染和稳定性仍有问题。请自行提供受支持版本的游戏文件。
 
-> **仍处于早期开发。** 部分开场战斗和早期探索路线已能运行，但尚未通关，也未实现完整兼容。渲染、声音和流程仍有问题。仓库不包含游戏资产。
+## 开始游戏
 
-## 项目介绍
+1. **下载并完整解压** Windows 发布包，放在可写入的文件夹中。
+2. **运行 `LostOdysseyRecomp.exe`**，选择语言和图形设置。
+3. **按提示导入游戏文件**。支持已提取文件夹、`default.xex`、XDVDFS ISO 或 GOD 容器；导入与着色器预编译完成后继续进入游戏。
 
-使用 **XenonRecomp** 将游戏 PowerPC 代码翻译为 C++，在宿主侧实现 Xbox 360 服务，并翻译 Xenos 着色器，通过 **plume** 渲染。目前实际验证的平台是 **Windows / Direct3D 12**；Linux 和 Vulkan 仍是开发目标。
+发布包不需要安装 Python 或 Visual Studio。后续启动会复用着色器缓存；更新程序时请保留存档和档案文件夹。
 
-当前优先保证游戏流程和原版渲染行为。本地[新设置菜单](docs/notes/settings-menu.md)提供英／日／韩／繁中／简中界面、游戏语言、FXAA 和输出分辨率缩放；DLSS、帧生成为禁用占位。提高内部渲染分辨率、帧率解锁、HDR 和现代超分辨率仍属于未来规划。全屏模式尚待桌面实测。
-
-## 游戏版本与语言
-
-开发基于项目所有者提供的**亚洲多语言版**。本地 Disc 1 XEX 的 Title ID 为 `4D5307FA`、Media ID 为 `39F7D748`、标题/基础版本为 `0.0.0.4`，区域掩码为 `0x00FFF900`。此掩码不是“亚洲独占”的零售版本标识，核对数据时应同时匹配可执行文件信息。
-
-当前移植版实际使用**英语**测试。原版包含多语言不代表移植版已完整实现或验证每种语言；其他区域的可执行文件和 Title Update 也未验证。详见[版本证据](docs/notes/xex.md)。
-
-## 当前进展
-
-_核对日期：2026 年 9 月 5 日。_
-
-| 范围 | 已有证据与限制 |
+| 要求 | 支持范围 |
 | :--- | :--- |
-| 标题与输入 | 已验证动态背景、菜单、SDL 手柄和键盘输入。 |
-| 流程 | 开场战斗和部分遇敌已运行；独立副本到达 Gorge 营地。尚未通关。 |
-| 画面 | 几何、材质及战后白屏已有修复；阴影、火焰受击、Ring 外环和箱子破坏特效仍有问题。 |
-| 声音 | 已实现 XMA 解码、双声道 PCM 输出及循环终点修正；背景音和部分对白仍会消失。 |
-| 存档与调试 | 开发版手动保存已确认。F1 支持战斗判胜、坐标记录、同地图 POI 传送及当前地图 ID/名称。 |
-| 稳定性 | 已有文件日志和 GPU 停帧诊断。营地卡死尚未明确修复。 |
+| 系统 | Windows x64、支持 AVX 的 CPU、Direct3D 12 图形驱动 |
+| 游戏数据 | 已测试的亚洲多语言版；启动需要 Disc 1 |
+| 其他光盘 | 通过 `InstallGame.exe` 追加导入；后续光盘流程尚未完整验证 |
 
-部分遇敌和存档改动仍**仅在本地、尚未提交**。上述结果描述开发工作区，不是干净检出的完整保证，详见[状态页](docs/STATUS.md)。
+支持的光盘版本、文件位置和更新方式见[安装指南](docs/INSTALLING.md)。
 
-## 构建与运行
+## 实机画面
+
+| Ring 战斗 | 城市探索 |
+| :---: | :---: |
+| ![凯姆攻击时的 Ring 判定界面](docs/images/ring-battle.png) | ![工业城市探索场景](docs/images/city-exploration.png) |
+
+*截图来自 v0.1 发布前的开发构建，未经修图。*
+
+## v0.1 提供的功能
+
+| 功能 | 说明 |
+| :--- | :--- |
+| 游戏导入器 | 支持文件夹、XEX、ISO 和 GOD；复制原始文件 |
+| 首次启动设置 | 游戏初始化前选择语言和图形选项 |
+| 语言设置 | 英语、日语、韩语、繁体中文、简体中文界面，以及游戏语言选择 |
+| 图形设置 | FXAA、输出分辨率和显示模式；全屏及跨 DPI 行为仍需更多测试 |
+| 着色器预编译 | 内置资源索引、多线程编译、缓存复用 |
+| 输入与调试 | 手柄和键盘输入；F1 菜单提供地图信息与同地图 POI 传送 |
+
+DLSS 和帧生成目前为**禁用占位**。更高内部渲染分辨率、帧率解锁、HDR，以及 Linux / Vulkan 游戏运行仍属于开发目标。
+
+## 开发状态
+
+当前优先保证游戏流程和原版渲染行为。项目使用 **XenonRecomp** 将 PowerPC 代码翻译为 C++，在宿主侧实现 Xbox 360 服务，并通过 **plume** 渲染翻译后的 Xenos 着色器。
+
+v0.1 发布包已通过 Windows 托管 CI、导入器检查和隔离冷启动。地面投影及海报修复已有定向验证，用户已确认 RT 操作下的 Ring 判定正常。对白倍速修复在已测试的装甲车场景中通过了原始音轨对照。
+
+**仍需排查与覆盖：**人物表面阴影回归、火焰受击和箱子破坏特效、偶发 GPU 查询／等待故障，以及更多音频和游戏流程。仍有两个已知着色器预编译失败项。上述结果不代表全游戏兼容。
+
+[详细状态与验证证据](docs/STATUS.md) · [v0.1 发布说明](docs/RELEASE-v0.1.md)
+
+<details>
+<summary><strong>游戏版本与兼容性详情</strong></summary>
+
+开发使用**亚洲多语言版**。Disc 1 的 Title ID 为 `4D5307FA`、Media ID 为 `39F7D748`、标题／基础版本为 `0.0.0.4`、区域掩码为 `0x00FFF900`。导入器会核对受支持的 XEX 哈希，不能仅凭区域名称判断。
+
+提供语言选项不代表每种语言都已通关验证。其他区域可执行文件、Title Update 和修改后的 XEX 尚未验证，详见[版本证据](docs/notes/xex.md)。
+
+</details>
+
+<details>
+<summary><strong>构建命令与仓库目录</strong></summary>
+
+### 构建与运行
 
 请按[构建指南](docs/BUILDING.md)准备自己的游戏数据、依赖及生成代码。辅助脚本自动查找工具，自定义安装位置可通过环境变量指定。
 
@@ -67,7 +100,7 @@ Pop-Location
 
 默认关闭震动，`LO_CONTROLLER_RUMBLE=1` 可开启。Ring 使用手柄右扳机，肩键不等于扳机。
 
-## 开发导航
+### 开发导航
 
 | 目录 | 内容 |
 | :--- | :--- |
@@ -78,6 +111,8 @@ Pop-Location
 | `docs/` | 当前状态、指南、逆向记录与历史归档 |
 
 [路线图](docs/ROADMAP.md) · [接手入口](docs/notes/handoff.md) · [渲染测试](docs/notes/rendering-validation.md) · [音频](docs/notes/audio-output.md) · [归档](docs/archive/README.md)
+
+</details>
 
 ## 致谢与游戏数据
 
