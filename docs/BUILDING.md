@@ -35,7 +35,11 @@ Push-Location .\out\build\windows-clang\LostOdysseyRecomp
 Pop-Location
 ```
 
-`save/`, `profile/`, `cache/` and default `logs/` are relative to the process working directory, not automatically the executable location. `LO_PROFILE_DIR` overrides the profile location. Back up saves before testing; use an independent working directory and copies of save/profile for regressions.
+With explicit `--game`, `save/`, `profile/`, `cache/` and default `logs/` remain relative to the
+process working directory, allowing isolated regression runs. Launching without `--game`
+first selects the executable directory, then resolves `game-path.txt` or the adjacent `game`
+folder. A fresh installation opens initial settings before guest startup. `LO_PROFILE_DIR`
+overrides the profile location. Back up saves before testing; use independent save/profile copies.
 
 | Setting | Effect |
 |---|---|

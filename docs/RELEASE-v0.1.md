@@ -1,6 +1,6 @@
 # Lost Odyssey Recompiled v0.1
 
-First experimental Windows x64 release. Requires Windows 10/11, a Direct3D 12 GPU,
+First experimental Windows x64 release. Requires Windows 10/11, an AVX-capable x64 CPU, a Direct3D 12 GPU,
 and your own supported four-disc Asian edition of Lost Odyssey. Game files are not included.
 
 - Portable runtime with required DXC libraries and a graphical game importer.

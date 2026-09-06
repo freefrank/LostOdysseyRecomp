@@ -53,6 +53,13 @@ that the hosted workflow has run; check the actual Actions result before publish
 
 ## Verification
 
+Hosted build 34010819664 completed successfully for commit `2a3ffcc` and supplied v0.1.
+The published ZIP SHA256 is
+`f7ffb324c789d2d86e3df6c7d715066dff70ea6ec276de910e0113c08d98d9d1` (38,183,265 bytes).
+Only the download filename was changed; the archive bytes match the CI artifact. Isolated
+validation ran the installer self-test with a system-only PATH and the packaged game for
+40 seconds. The shader index covered 52 files with no full scans; game language 9 was selected.
+
 ```powershell
 python -m unittest discover -s tools/tests -p test_import_game.py -v
 python tools/installer/import_game.py <source>

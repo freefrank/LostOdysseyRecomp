@@ -2,6 +2,13 @@
 
 ## v0.1 packaging and first launch (2026-09-05)
 
+[v0.1 is published](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.1), built from
+`2a3ffcc` by [hosted Windows CI](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34010819664).
+The downloaded CI package passed payload hashes, installer self-test and a 40-second isolated
+cold launch. Language 9 and all 52 indexed resource files were active; the two known shader
+preparation failures remain. The release ZIP is byte-identical to the CI artifact, with a
+versioned download filename.
+
 The portable installer, runtime dependency audit, first-launch language/graphics setup and
 built-in shader resource index have passed local validation. All 60 imported game files matched
 the original extraction. The indexed path returned the same 2,000 shaders as the full scan,
