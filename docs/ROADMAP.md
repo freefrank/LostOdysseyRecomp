@@ -66,7 +66,7 @@ v0.1 remains the historical first Windows release with the importer, first-launc
 
 The following is the retained compatibility and regression backlog. The v0.4.1 section above defines the current development scope.
 
-1. [ ] Shadow investigation suspended after the user's ten-minute limit: the first-battle report is not locally confirmed; Map 13 evidence remains separate and unresolved.
+1. [ ] Kaim's opening-battle body-shadow investigation remains suspended after the requested v0.4.0 recheck and final one-minute limit on 2026-09-07. Official-package tests on Radeon 8060S did not confirm the RX 9060 XT report; no root cause or fix is established. Resume with reporter video/log/settings and normal/abnormal captures. Map 13 remains unresolved, and a relationship is unknown. [Evidence and limits](notes/kaim-body-shadow-v040.md).
 2. [~] Collect player acceptance for the expanded shader and recorded-pipeline preparation shipped in v0.3.0. Local tests establish source coverage and real draw reuse, not complete stutter elimination or unseen first-use PSO coverage.
 3. [~] Investigate blurry or garbled text against original-console and Xenia references; work in progress. This is separate from the paused text-language complement patch.
 4. [ ] Regress shadow flicker during the fire-breath phase. The same player reported that it appeared to disappear; this is one observation, not a comprehensive fix claim. Fire-hit checker effects remain a separate open issue.
