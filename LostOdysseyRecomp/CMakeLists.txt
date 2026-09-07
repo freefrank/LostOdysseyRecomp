@@ -72,6 +72,16 @@ target_compile_features(LoStorageTest PRIVATE cxx_std_20)
 target_precompile_headers(LoStorageTest REUSE_FROM LostOdysseyRecomp)
 target_link_libraries(LoStorageTest PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,LINK_LIBRARIES>)
 
+# Actual generated function-table and script-handler regression for issue #5.
+add_executable(LoGuestDispatchTest EXCLUDE_FROM_ALL ${LO_STORAGE_TEST_SOURCES} ${LO_IMPORT_STUBS}
+    ${CMAKE_SOURCE_DIR}/tools/tests/guest_dispatch_test.cpp)
+target_include_directories(LoGuestDispatchTest PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,INCLUDE_DIRECTORIES>)
+target_compile_definitions(LoGuestDispatchTest PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,COMPILE_DEFINITIONS>)
+target_compile_options(LoGuestDispatchTest PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,COMPILE_OPTIONS>)
+target_compile_features(LoGuestDispatchTest PRIVATE cxx_std_20)
+target_precompile_headers(LoGuestDispatchTest REUSE_FROM LostOdysseyRecomp)
+target_link_libraries(LoGuestDispatchTest PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,LINK_LIBRARIES>)
+
 # Isolated original-game disc request probe; not included in release packages.
 add_executable(LoDiscRuntimeTest EXCLUDE_FROM_ALL ${LO_RUNTIME_SOURCES} ${LO_IMPORT_STUBS}
     ${CMAKE_SOURCE_DIR}/tools/tests/disc_runtime_probe.cpp)
@@ -144,6 +154,23 @@ target_include_directories(LoMemoryAliasTest PRIVATE ${LO_RUNTIME_ROOT})
 target_compile_features(LoMemoryAliasTest PRIVATE cxx_std_20)
 if(WIN32)
     target_link_libraries(LoMemoryAliasTest PRIVATE onecore)
+    # Includes the production allocator with native API fault replacements.
+    add_executable(LoMemoryFailureTest EXCLUDE_FROM_ALL
+        ${CMAKE_SOURCE_DIR}/tools/tests/memory_failure_test.cpp)
+    target_include_directories(LoMemoryFailureTest PRIVATE ${LO_RUNTIME_ROOT})
+    target_compile_features(LoMemoryFailureTest PRIVATE cxx_std_20)
+    target_compile_definitions(LoMemoryFailureTest PRIVATE NOMINMAX)
+
+    # Translates and compiles HLSL with DXC, without a GPU or game assets.
+    add_executable(LoRenderResolutionShaderTest EXCLUDE_FROM_ALL
+        ${CMAKE_SOURCE_DIR}/tools/tests/render_resolution_shader_test.cpp
+        ${LO_RUNTIME_ROOT}/gpu/shader/xenos_translator.cpp
+        ${LO_RUNTIME_ROOT}/gpu/shader/dxc_compiler.cpp)
+    target_include_directories(LoRenderResolutionShaderTest PRIVATE ${LO_RUNTIME_ROOT})
+    target_compile_features(LoRenderResolutionShaderTest PRIVATE cxx_std_20)
+    target_compile_definitions(LoRenderResolutionShaderTest PRIVATE NOMINMAX)
+    target_link_libraries(LoRenderResolutionShaderTest PRIVATE fmt::fmt)
+
     add_executable(LoShaderAluTest EXCLUDE_FROM_ALL
         ${CMAKE_SOURCE_DIR}/tools/tests/shader_alu_test.cpp
         ${LO_RUNTIME_ROOT}/gpu/shader/xenos_translator.cpp
@@ -153,6 +180,15 @@ if(WIN32)
     target_compile_definitions(LoShaderAluTest PRIVATE NOMINMAX)
     target_link_libraries(LoShaderAluTest PRIVATE fmt::fmt d3d12 dxgi)
     if(LO_BUILD_GPU)
+        add_executable(LoRenderResolutionGpuTest EXCLUDE_FROM_ALL
+            ${CMAKE_SOURCE_DIR}/tools/tests/render_resolution_gpu_test.cpp
+            ${LO_RUNTIME_ROOT}/gpu/shader/xenos_translator.cpp
+            ${LO_RUNTIME_ROOT}/gpu/shader/dxc_compiler.cpp)
+        target_include_directories(LoRenderResolutionGpuTest PRIVATE ${LO_RUNTIME_ROOT} ${CMAKE_SOURCE_DIR}/thirdparty/plume)
+        target_compile_features(LoRenderResolutionGpuTest PRIVATE cxx_std_20)
+        target_compile_definitions(LoRenderResolutionGpuTest PRIVATE NOMINMAX)
+        set_target_properties(LoRenderResolutionGpuTest PROPERTIES DISABLE_PRECOMPILE_HEADERS ON)
+        target_link_libraries(LoRenderResolutionGpuTest PRIVATE plume d3d12 dxgi fmt::fmt)
         add_executable(LoResolveCopyGpuTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/resolve_copy_gpu_test.cpp)
         target_include_directories(LoResolveCopyGpuTest PRIVATE ${CMAKE_SOURCE_DIR}/thirdparty/plume)
         target_compile_features(LoResolveCopyGpuTest PRIVATE cxx_std_20)
@@ -203,6 +239,10 @@ target_include_directories(LoDepthClearLayoutTest PRIVATE ${LO_RUNTIME_ROOT})
 target_compile_features(LoDepthClearLayoutTest PRIVATE cxx_std_20)
 
 # Host-only fixtures do not require guest generation or the runtime PCH.
+add_executable(LoRenderResolutionTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/render_resolution_test.cpp)
+target_include_directories(LoRenderResolutionTest PRIVATE ${LO_RUNTIME_ROOT})
+target_compile_features(LoRenderResolutionTest PRIVATE cxx_std_20)
+
 add_executable(LoTemporalSceneTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/temporal_scene_test.cpp)
 target_include_directories(LoTemporalSceneTest PRIVATE ${LO_RUNTIME_ROOT})
 target_compile_features(LoTemporalSceneTest PRIVATE cxx_std_20)
@@ -210,6 +250,10 @@ target_compile_features(LoTemporalSceneTest PRIVATE cxx_std_20)
 add_executable(LoTemporalMathTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/temporal_math_test.cpp)
 target_include_directories(LoTemporalMathTest PRIVATE ${LO_RUNTIME_ROOT})
 target_compile_features(LoTemporalMathTest PRIVATE cxx_std_20)
+
+add_executable(LoTemporalHistoryDiagnosticTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/temporal_history_diagnostic_test.cpp)
+target_include_directories(LoTemporalHistoryDiagnosticTest PRIVATE ${LO_RUNTIME_ROOT})
+target_compile_features(LoTemporalHistoryDiagnosticTest PRIVATE cxx_std_20)
 
 add_executable(LoFramePacerTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/frame_pacer_test.cpp)
 target_include_directories(LoFramePacerTest PRIVATE ${LO_RUNTIME_ROOT})

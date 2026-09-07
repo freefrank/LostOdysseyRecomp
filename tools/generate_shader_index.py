@@ -17,8 +17,16 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('root', type=Path, help='Folder containing disc1..disc4')
     parser.add_argument('output', type=Path)
+    parser.add_argument("--additional-root", type=Path, action="append", default=[], help="Merge another edition into the same metadata")
     args = parser.parse_args()
-    files = sorted(args.root.glob('disc[1-4]/*.fpd'))
+    if args.output.exists():
+        parser.error('Output already exists; choose a new path')
+    files = []
+    for root in [args.root, *args.additional_root]:
+        candidates = sorted(root.glob('disc[1-4]/*.fpd'))
+        if not candidates:
+            parser.error(f'No disc resources found in {root}')
+        files.extend(candidates)
     if not files:
         raise SystemExit('No disc resources found')
     profiles, seen = [], set()

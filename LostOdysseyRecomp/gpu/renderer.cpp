@@ -1,6 +1,7 @@
 #include "scene_aa_provenance.h"
 #include <stdafx.h>
 #include "renderer.h"
+#include "render_resolution.h"
 #include "video.h"
 #include "command_processor.h"
 #include "depth_format.h"
@@ -46,6 +47,7 @@
 namespace gpu::renderer
 {
     namespace {
+        std::atomic<uint64_t> outputSize{(uint64_t(1280) << 32) | 720};
         std::mutex captureMutex;
         bool captureBusy = false, capturePending = false;
         std::wstring captureStatus;
@@ -140,7 +142,7 @@ namespace gpu::renderer
         constexpr uint32_t kVertexArenaSize = 256u << 20;   // persistent, byte-swapped copies of guest vertex buffers
         constexpr uint32_t kUploadHeadroom = 24u << 20;     // per-draw slack checked before a draw records anything
         constexpr uint32_t kArenaHeadroom = 32u << 20;
-        constexpr uint32_t kReadbackSize = 32u << 20;
+        constexpr uint32_t kReadbackSize = 128u << 20;
         constexpr uint32_t kVertexFetchSlots = 96;
         constexpr uint32_t kTextureSlots = 32;
 
@@ -225,6 +227,9 @@ namespace gpu::renderer
             RenderTextureLayout layout = RenderTextureLayout::UNKNOWN;
             RenderFormat format = RenderFormat::UNKNOWN;
             uint32_t width = 0, height = 0;
+            uint32_t guestWidth = 0, guestHeight = 0;
+            uint32_t resolutionHeight = 720;
+            uint32_t Scale(uint32_t value) const { return resolution::Scale(value, resolutionHeight); }
             uint32_t depthMsaa = 0;
             // Guest-memory footprint and a sampled hash of it, so a texture the
             // title streams in after we first uploaded it is noticed and re-read.
@@ -342,6 +347,9 @@ namespace gpu::renderer
             uint64_t temporalSupportedFrame=~0ull;
             uint32_t temporalJitterDraws=0,temporalJitterMisses=0;
             uint64_t temporalEpoch=1,temporalFramesLogged=0,temporalSubmittedFrame=~0ull;
+            uint64_t resolutionConfigFrame=~0ull;
+            resolution::Size internalSize{}, requestedInternalSize{};
+            bool resolutionAllocationFailed=false;
             std::chrono::steady_clock::time_point temporalFrameTime=std::chrono::steady_clock::now();
             std::unique_ptr<gpu::Presentation> sceneProcessor;
             std::unique_ptr<RenderTexture> sceneAAOutput;
@@ -555,7 +563,7 @@ namespace gpu::renderer
                     if (!bpp) continue;
                     const uint32_t pitch = (width * bpp + 255) & ~255u;
                     const uint32_t offset = (resolveTraceBytes + 511) & ~511u;
-                    constexpr uint32_t capacity = 64u << 20;
+                    constexpr uint32_t capacity = 128u << 20; // 4K source + TAA output + R32 depth.
                     if (uint64_t(offset) + uint64_t(pitch) * height > capacity) continue;
                     if (!resolveTraceBuffer) resolveTraceBuffer = device->createBuffer(RenderBufferDesc::ReadbackBuffer(capacity));
                     if (!resolveTraceBuffer) continue;
@@ -643,6 +651,7 @@ namespace gpu::renderer
                 uint32_t vfetchOffset[96];
                 uint32_t samplerIndex[32];
                 uint32_t textureInfo[32];
+                uint32_t textureSize[32]; // packed guest width/height; physical resolves may be larger.
             };
 
             // ---- lifecycle -----------------------------------------------------
@@ -817,7 +826,7 @@ namespace gpu::renderer
                     "  return float4(Float7e3To32(c.x), Float7e3To32(c.y), Float7e3To32(c.z), alpha);\n"
                     "}\n"
                     "float4 main(float4 pos : SV_Position) : SV_Target {\n"
-                    "  float4 v = src.Load(int3(int2(pos.xy), 0));\n"
+                    "  float4 v = src.Load(int3(int2(pos.xy * asfloat(xeTransfer.z)), 0));\n"
                     "  return UnpackGuest(PackGuest(v, xeTransfer.x), xeTransfer.y);\n"
                     "}\n";
                 xenos::CompiledShader f = xenos::CompileHlsl(psSrc, "main", "ps_6_0");
@@ -866,11 +875,12 @@ namespace gpu::renderer
                 SharedConstants transferConstants{};
                 transferConstants.transfer[0] = srcClass;
                 transferConstants.transfer[1] = dstClass;
+                transferConstants.transfer[2] = std::bit_cast<uint32_t>(float(src.resolutionHeight) / dst.resolutionHeight);
                 uint64_t offset = Upload(&transferConstants, sizeof(transferConstants));
                 if (offset == UINT64_MAX)
                     return;
-                const uint32_t w = std::min(src.width, dst.width);
-                const uint32_t h = std::min(src.height, dst.height);
+                const uint32_t w = dst.Scale(std::min(src.guestWidth, dst.guestWidth));
+                const uint32_t h = dst.Scale(std::min(src.guestHeight, dst.guestHeight));
                 Begin();
                 Transition(src, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
                 Transition(dst, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
@@ -1208,7 +1218,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     if (workers.empty()) worker();
                 }
                 while (completed.load() < jobs.size()) {
-                    video::SetShaderPreparationProgress(uint32_t(completed.load()), uint32_t(jobs.size()), false, true);
+                    video::SetShaderPreparationProgress(uint32_t(completed.load()), uint32_t(jobs.size()),
+                        video::PreparationStage::Pipelines, video::PreparationUnit::Pipelines);
                     video::PumpEvents();
                     std::this_thread::sleep_for(std::chrono::milliseconds(10));
                 }
@@ -1255,23 +1266,39 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             void PrepareKnownShaders()
             {
                 if (shaderCacheDir.empty() || getenv("LO_NO_SHADER_PREPARE")) return;
-                video::SetShaderPreparationProgress(0, 1, true);
+                video::SetShaderPreparationProgress(0, 1, video::PreparationStage::CacheValidation, video::PreparationUnit::Files);
                 const auto inventoryStarted = std::chrono::steady_clock::now();
                 const auto extracted = xenos::resources::Scan(FileSystem::GetGameRoot(), shaderCacheDir,
-                    [](uint32_t done, uint32_t total) {
-                        video::SetShaderPreparationProgress(done, total, true);
+                    [](const xenos::resources::ScanProgress& progress) {
+                        using namespace xenos::resources;
+                        auto stage = progress.stage == ScanStage::CacheValidation ? video::PreparationStage::CacheValidation :
+                            progress.stage == ScanStage::IndexedExtraction ? video::PreparationStage::IndexedExtraction : video::PreparationStage::FallbackScan;
+                        auto unit = progress.unit == ScanUnit::Bytes ? video::PreparationUnit::MiB :
+                            progress.unit == ScanUnit::Entries ? video::PreparationUnit::Entries : video::PreparationUnit::Files;
+                        uint64_t done = progress.completed, total = progress.total;
+                        if (progress.unit == ScanUnit::Bytes) { done /= 1048576; total = (total + 1048575) / 1048576; }
+                        video::SetShaderPreparationProgress(uint32_t(std::min<uint64_t>(done,UINT32_MAX)),
+                            uint32_t(std::min<uint64_t>(total,UINT32_MAX)),stage,unit);
                         video::PumpEvents();
                     }, getenv("LO_SHADER_FULL_SCAN") ? std::span<const xenos::resources::IndexFile>{}
-                                                     : std::span<const xenos::resources::IndexFile>{xenos::resources::builtin::files});
+                                                     : std::span<const xenos::resources::IndexFile>{xenos::resources::builtin::files},
+                       getenv("LO_SHADER_FULL_SCAN") ? std::span<const xenos::resources::CpxIndexPackage>{}
+                                                     : std::span<const xenos::resources::CpxIndexPackage>{xenos::resources::builtin::cpxPackages},
+                       getenv("LO_SHADER_FULL_SCAN") ? std::span<const xenos::resources::CpxIndexArchive>{}
+                                                     : std::span<const xenos::resources::CpxIndexArchive>{xenos::resources::builtin::cpxArchives},
+                       getenv("LO_SHADER_FULL_SCAN") != nullptr);
                 if (!extracted.error.empty()) LOG_WARNING("renderer: resource shader preparation: {}", extracted.error);
                 LOG_INFO("renderer: resource shader inventory: {} shaders ({})", extracted.shaders,
                     extracted.reused ? "reused" : "extracted");
                 LOG_INFO("renderer: shader inventory {} indexed files, {} scanned files, {} bytes read, {} ms",
                     extracted.indexedFiles, extracted.scannedFiles, extracted.bytesRead,
                     std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-inventoryStarted).count());
+                if (extracted.cacheBytesRead)
+                    LOG_INFO("renderer: resource cache validation: {} source bytes read", extracted.cacheBytesRead);
                 if (!extracted.reused)
-                    LOG_INFO("renderer: CPX shader scan: {} packages, {} unique decoded, {} decoded bytes",
-                        extracted.cpxPackages, extracted.decodedPackages, extracted.decodedBytes);
+                    LOG_INFO("renderer: CPX shader discovery: {} packages, {} indexed, {} fallback, {} duplicate, {} decoded (full/partial), {} decoded bytes",
+                        extracted.cpxPackages, extracted.indexedPackages, extracted.fallbackPackages, extracted.duplicatePackages,
+                        extracted.decodedPackages, extracted.decodedBytes);
                 const auto source = std::filesystem::path(shaderCacheDir) / "source";
                 std::error_code ec;
                 std::filesystem::create_directories(source, ec);
@@ -1583,6 +1610,42 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
             }
 
+            void ApplyInternalResolution()
+            {
+                if (resolutionConfigFrame == frame) return;
+                const bool first = resolutionConfigFrame == ~0ull;
+                resolutionConfigFrame = frame;
+                const uint64_t output = outputSize.load(std::memory_order_relaxed);
+                const auto config = settings::GetConfig();
+                const auto requested = resolution::ResolveInternalSize(config.internalResolution, uint32_t(output >> 32), uint32_t(output));
+                const bool requestChanged = requested != requestedInternalSize;
+                if (requestChanged) {
+                    requestedInternalSize = requested;
+                    resolutionAllocationFailed = false;
+                }
+                const auto effective = resolveReadback || resolutionAllocationFailed ? resolution::Size{} : requested;
+                if (effective == internalSize && !first && !requestChanged) return;
+                // Resize only between renderer frames. Complete all references
+                // before destroying framebuffer views and the resources they use.
+                if (effective != internalSize) {
+                    Flush();
+                    framebuffers.clear();
+                    renderTargets.clear();
+                    resolved.clear();
+                    tileOwner.clear();
+                    if (temporalHistory) temporalHistory->Reset();
+                    temporalScene.Reset(frame);
+                    temporalSupportedFrame = ~0ull;
+                    sceneAAAppliedFrame = ~0ull;
+                    sceneAAConfigFrame = ~0ull;
+                    ++temporalEpoch;
+                }
+                internalSize = effective;
+                LOG_INFO("renderer: internal resolution f{} requested={}x{} effective={}x{} output={}x{} mode={} cpu_readback={} allocation_fallback={}",
+                    frame, requested.width, requested.height, effective.width, effective.height,
+                    uint32_t(output >> 32), uint32_t(output), config.internalResolution, resolveReadback, resolutionAllocationFailed);
+            }
+
             HostTexture* GetRenderTarget(uint32_t base, uint32_t format, uint32_t pitch, uint32_t height, bool depth)
             {
                 // EDRAM targets have no intrinsic height and ours is only guessed
@@ -1598,9 +1661,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 auto it = renderTargets.find(key);
                 if (it != renderTargets.end())
                 {
-                    if (it->second->height >= height)
+                    if (it->second->guestHeight >= height)
                         return it->second.get();
-                    height = std::max(height, it->second->height);
+                    height = std::max(height, it->second->guestHeight);
                     const RenderTexture* old = it->second->texture.get();
                     for (auto fb = framebuffers.begin(); fb != framebuffers.end();)
                     {
@@ -1614,14 +1677,20 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 auto tex = std::make_unique<HostTexture>();
                 tex->allocationSerial = ++nextTargetAllocation;
                 tex->format = depth ? RenderFormat::D32_FLOAT_S8_UINT : ClassHostFormat(colorClass);
-                tex->width = pitch;
-                tex->height = height;
-                RenderTextureDesc desc = RenderTextureDesc::Texture2D(pitch, height, 1, tex->format, depth ? RenderTextureFlag::DEPTH_TARGET : RenderTextureFlag::RENDER_TARGET);
+                tex->guestWidth = pitch;
+                tex->guestHeight = height;
+                tex->resolutionHeight = resolution::TargetHeight(pitch, height, internalSize.height);
+                tex->width = std::max(1u, tex->Scale(pitch));
+                tex->height = std::max(1u, tex->Scale(height));
+                RenderTextureDesc desc = RenderTextureDesc::Texture2D(tex->width, tex->height, 1, tex->format, depth ? RenderTextureFlag::DEPTH_TARGET : RenderTextureFlag::RENDER_TARGET);
                 tex->texture = device->createTexture(desc);
                 tex->layout = RenderTextureLayout::UNKNOWN;
-                if (!tex->texture)
-                    LOG_WARNING("renderer: render target creation failed");
-                LOG_INFO("renderer: new {} target base={:#x} fmt={} {}x{}", depth ? "depth" : "color", base, format, pitch, height);
+                if (!tex->texture) {
+                    resolutionAllocationFailed = true;
+                    LOG_ERROR("renderer: render target allocation failed guest={}x{} physical={}x{}; native resolution fallback next frame", pitch, height, tex->width, tex->height);
+                    return nullptr;
+                }
+                LOG_INFO("renderer: new {} target base={:#x} fmt={} guest={}x{} physical={}x{} scale_height={}", depth ? "depth" : "color", base, format, pitch, height, tex->width, tex->height, tex->resolutionHeight);
                 HostTexture* result = tex.get();
                 renderTargets.emplace(key, std::move(tex));
                 return result;
@@ -1746,28 +1815,37 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     return &dummyTexture2D;
                 if (ResolvedSurface* rs = FindResolved(base, format))
                 {
+                    const uint32_t physicalWidth = std::max(1u, rs->tex->Scale(width));
+                    const uint32_t physicalHeight = std::max(1u, rs->tex->Scale(height));
                     // Resolve pitch describes memory storage, whereas normalized
                     // sampling and GetDimensions use the fetch's logical size.
                     // For example, the 428-wide blur texture has a 448-pixel pitch.
                     // Sampling the padded resource shifts every subsequent blur pass.
-                    if (dimension == 1 && width <= rs->tex->width && height <= rs->tex->height &&
-                        (width != rs->tex->width || height != rs->tex->height))
+                    if (dimension == 1 && width <= rs->tex->guestWidth && height <= rs->tex->guestHeight &&
+                        (width != rs->tex->guestWidth || height != rs->tex->guestHeight))
                     {
                         const uint64_t viewKey = (uint64_t(width) << 32) | height;
                         auto& view = rs->fetchViews[viewKey];
-                        if (!view || view->format != rs->tex->format)
+                        if (!view || view->format != rs->tex->format || view->width != physicalWidth || view->height != physicalHeight)
                         {
                             if (view) retiredTextures.push_back(std::move(view));
                             view = std::make_unique<HostTexture>();
                             view->format = rs->tex->format;
-                            view->width = width;
-                            view->height = height;
-                            view->texture = device->createTexture(RenderTextureDesc::Texture2D(width, height, 1, view->format));
+                            view->guestWidth = width;
+                            view->guestHeight = height;
+                            view->resolutionHeight = rs->tex->resolutionHeight;
+                            view->width = physicalWidth;
+                            view->height = physicalHeight;
+                            view->texture = device->createTexture(RenderTextureDesc::Texture2D(physicalWidth, physicalHeight, 1, view->format));
                         }
-                        if (!view->texture) return nullptr;
+                        if (!view->texture) {
+                            resolutionAllocationFailed = true;
+                            LOG_ERROR("renderer: fetch view allocation failed guest={}x{} physical={}x{}; native resolution fallback next frame", width, height, physicalWidth, physicalHeight);
+                            return nullptr;
+                        }
                         Transition(*rs->tex, RenderTextureLayout::COPY_SOURCE, RenderBarrierStage::COPY);
                         Transition(*view, RenderTextureLayout::COPY_DEST, RenderBarrierStage::COPY);
-                        RenderBox box{ 0, 0, int32_t(width), int32_t(height), 0, 1 };
+                        RenderBox box{ 0, 0, int32_t(physicalWidth), int32_t(physicalHeight), 0, 1 };
                         commandList->copyTextureRegion(RenderTextureCopyLocation::Subresource(view->texture.get()),
                             RenderTextureCopyLocation::Subresource(rs->tex->texture.get()), 0, 0, 0, &box);
                         Transition(*view, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
@@ -2182,6 +2260,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 
             void DrawImpl(const DrawInfo& info)
             {
+                ApplyInternalResolution();
                 // LO_DRAW_LIMIT=<n>: only record the first n draws of each frame,
                 // to bisect which pass ruins the image.
                 static const uint32_t drawLimit = getenv("LO_DRAW_LIMIT") ? strtoul(getenv("LO_DRAW_LIMIT"), nullptr, 10) : 0;
@@ -2259,6 +2338,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 bool colorWrites = modeControl == 4;
                 HostTexture* color = AcquireColorTarget(colorInfo & 0xFFF, (colorInfo >> 16) & 0xF, pitch, rtHeight);
                 HostTexture* depth = (depthControl & 3) ? GetRenderTarget(depthInfo & 0xFFF, (depthInfo >> 16) & 1, pitch, rtHeight, true) : nullptr;
+                if (!color || !color->texture || ((depthControl & 3) && (!depth || !depth->texture))) {
+                    ++drops.pitch;
+                    return;
+                }
                 if (depth) depth->depthMsaa = (surfaceInfo >> 16) & 3;
 
                 Transition(*color, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
@@ -2379,7 +2462,11 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         temporalHistory->Reset();temporalSupportedFrame=~0ull;temporalJitter=temporalForcedJitter;++temporalEpoch;
                     }
                 }
-                if(temporalExperiment&&temporalHistory)temporalHistory->BeginFrame(frame,temporalEpoch);
+                if(temporalExperiment&&temporalHistory) {
+                    static const char* diagnosticStart=getenv("LO_TEMPORAL_LOG_START_FRAME");
+                    static const uint64_t diagnosticFrame=diagnosticStart?strtoull(diagnosticStart,nullptr,10):0;
+                    temporalHistory->BeginFrame(frame,temporalEpoch,diagnosticStart&&frame>=diagnosticFrame&&temporalFramesLogged<256);
+                }
                 std::optional<temporal::SceneResolve> temporalSceneCopy;
                 bool sceneAARecorded=false,temporalAARecorded=false;
                 std::optional<temporal::SceneAnchor> temporalDrawAnchor;
@@ -2423,6 +2510,12 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     shared.halfPixel[0] = 1.0f / viewport.width;
                     shared.halfPixel[1] = -1.0f / viewport.height;
                 }
+                // Shader constants stay in guest coordinates; only rasterization
+                // and API pixel rectangles move to the physical target grid.
+                const double rasterScale = double(color->resolutionHeight) / 720.0;
+                RenderViewport rasterViewport = viewport;
+                rasterViewport.x *= rasterScale; rasterViewport.y *= rasterScale;
+                rasterViewport.width *= rasterScale; rasterViewport.height *= rasterScale;
                 const int temporalSlot=temporal::PositionVPSlot(key.vs);
                 const bool temporalViewport=viewport.x==0&&viewport.y==0&&viewport.width==1280&&viewport.height==720&&
                     vte==0x43f&&shared.ndcScale[0]==1&&shared.ndcScale[1]==1&&shared.ndcScale[2]==-1&&
@@ -2431,7 +2524,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     temporal::SceneAnchor anchor;
                     std::copy_n(vsConstants+temporalSlot*4,16,anchor.vpBits.begin());
                     anchor.depthAllocation=depth->allocationSerial;
-                    anchor.viewport={viewport.x,viewport.y,viewport.width,viewport.height,shared.ndcScale[1],shared.halfPixel[0],shared.halfPixel[1]};
+                    anchor.viewport={rasterViewport.x,rasterViewport.y,rasterViewport.width,rasterViewport.height,shared.ndcScale[1],shared.halfPixel[0],shared.halfPixel[1]};
                     temporalDrawAnchor=anchor;
                 }
                 if(temporalExperiment&&temporalJitter&&temporalSlot>=0&&temporalViewport) {
@@ -2444,8 +2537,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         for(unsigned row=0;row<4;++row) {
                             auto* values=vsConstants+(temporalSlot+row)*4;
                             const float w=std::bit_cast<float>(values[3]);
-                            values[0]=std::bit_cast<uint32_t>(std::bit_cast<float>(values[0])+2*jx/1280*w);
-                            values[1]=std::bit_cast<uint32_t>(std::bit_cast<float>(values[1])-2*jy/720*w);
+                            values[0]=std::bit_cast<uint32_t>(std::bit_cast<float>(values[0])+2*jx/rasterViewport.width*w);
+                            values[1]=std::bit_cast<uint32_t>(std::bit_cast<float>(values[1])-2*jy/rasterViewport.height*w);
                         }
                         ++temporalJitterDraws;
                     } else ++temporalJitterMisses;
@@ -2641,8 +2734,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         }
                         RenderTexture* temporalDisplay=nullptr;
                         if(temporalSceneCopy && fullSceneCopy && s==ps && slot==0 &&
-                           viewport.width==tex->width && viewport.height==tex->height &&
-                           viewport.width==temporalScene.Anchor().viewport.width && viewport.height==temporalScene.Anchor().viewport.height) {
+                           rasterViewport.width==tex->width && rasterViewport.height==tex->height &&
+                           rasterViewport.width==temporalScene.Anchor().viewport.width && rasterViewport.height==temporalScene.Anchor().viewport.height) {
                             temporalScene.ObserveColor(*temporalSceneCopy);
                             if(temporalExperiment && temporalHistory && temporalScene.Ready() && tex->format==RenderFormat::R8G8B8A8_UNORM) {
                                 Transition(*tex,RenderTextureLayout::COPY_SOURCE,RenderBarrierStage::COPY);
@@ -2678,6 +2771,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         }
                         uint32_t d3 = fetch[3];
                         shared.textureInfo[slot] = ((fetch[0] >> 2) & 0xFF) | (((d3 >> 1) & 0xFFF) << 8);
+                        shared.textureSize[slot] = tex->guestWidth | (tex->guestHeight << 16);
                         // GPU resolves retain canonical RGBA for presentation.
                         // Recreate COPY_DEST_SWAP at the guest texture-read boundary,
                         // before applying that fetch's source signs and swizzle.
@@ -2788,7 +2882,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         std::ofstream meta(prefix + ".txt");
                         meta << fmt::format("vs={:016x}\nps={:016x}\nmode={}\ncount={}\nbase_vertex={}\nindexed={}\nviewport={} {} {} {}\n",
                             key.vs, key.ps, modeControl, indexCount, int32_t(Reg(REG_VGT_INDX_OFFSET)), useIndices,
-                            viewport.x, viewport.y, viewport.width, viewport.height);
+                            rasterViewport.x, rasterViewport.y, rasterViewport.width, rasterViewport.height);
                         for (uint32_t slot = 0; slot < kVertexFetchSlots; ++slot)
                         {
                             if (!((vs->info.vertexFetchSlotMask[slot >> 6] >> (slot & 63)) & 1)) continue;
@@ -2808,7 +2902,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 ScopedTimer recordTimer{ tRecord };
                 RenderFramebuffer* framebuffer = GetFramebuffer(color, depth);
                 commandList->setFramebuffer(framebuffer);
-                commandList->setViewports(&viewport, 1);
+                commandList->setViewports(&rasterViewport, 1);
                 RenderRect scissor(int32_t(scissorTl & 0x3FFF), int32_t((scissorTl >> 16) & 0x3FFF), int32_t(scissorBr & 0x3FFF), int32_t((scissorBr >> 16) & 0x3FFF));
                 uint32_t windowOffset = Reg(REG_PA_SC_WINDOW_OFFSET);
                 if (!(scissorTl & 0x80000000u) && windowOffset)
@@ -2818,6 +2912,15 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
                 scissor.left = std::clamp(scissor.left, 0, int32_t(pitch)); scissor.right = std::clamp(scissor.right, 0, int32_t(pitch));
                 scissor.top = std::clamp(scissor.top, 0, int32_t(rtHeight)); scissor.bottom = std::clamp(scissor.bottom, 0, int32_t(rtHeight));
+                scissor.left = int32_t(color->Scale(uint32_t(scissor.left))); scissor.right = int32_t(color->Scale(uint32_t(scissor.right)));
+                scissor.top = int32_t(color->Scale(uint32_t(scissor.top))); scissor.bottom = int32_t(color->Scale(uint32_t(scissor.bottom)));
+                // Height is a historical EDRAM allocation estimate. Attachments
+                // may have different padding while covering the same draw; keep
+                // that draw and constrain it to their common physical extent.
+                const int32_t attachmentWidth = int32_t(depth ? std::min(color->width, depth->width) : color->width);
+                const int32_t attachmentHeight = int32_t(depth ? std::min(color->height, depth->height) : color->height);
+                scissor.left = std::min(scissor.left, attachmentWidth); scissor.right = std::min(scissor.right, attachmentWidth);
+                scissor.top = std::min(scissor.top, attachmentHeight); scissor.bottom = std::min(scissor.bottom, attachmentHeight);
                 if (scissor.right <= scissor.left || scissor.bottom <= scissor.top)
                 {
                     drops.scissor++;
@@ -2971,10 +3074,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 drawsThisFrame++;
                 if(temporalSceneCopy)temporalSubmittedFrame=frame;
                 if(fullSceneCopy)color->aaProvenance.Invalidate(frame,color->allocationSerial,
-                    viewport.width>=color->aaValidWidth && viewport.height>=color->aaValidHeight);
+                    rasterViewport.width>=color->aaValidWidth && rasterViewport.height>=color->aaValidHeight);
                 if(sceneAARecorded||temporalAARecorded) {
                     color->aaProvenance.MarkFull(frame,color->allocationSerial);
-                    color->aaValidWidth=uint32_t(viewport.width);color->aaValidHeight=uint32_t(viewport.height);
+                    color->aaValidWidth=uint32_t(rasterViewport.width);color->aaValidHeight=uint32_t(rasterViewport.height);
                     if(temporalAARecorded)temporalSupportedFrame=frame;
                     sceneAAAppliedFrame=frame;sceneAAAllocation=color->allocationSerial;
                     static const uint64_t logStart=getenv("LO_SCENE_AA_LOG_START_FRAME")?strtoull(getenv("LO_SCENE_AA_LOG_START_FRAME"),nullptr,10):~0ull;
@@ -2991,7 +3094,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         temporal::SceneAnchor anchor;
                         std::copy_n(vsConstants + 233 * 4, 16, anchor.vpBits.begin());
                         anchor.depthAllocation = depth->allocationSerial;
-                        anchor.viewport = {viewport.x, viewport.y, viewport.width, viewport.height,
+                        anchor.viewport = {rasterViewport.x, rasterViewport.y, rasterViewport.width, rasterViewport.height,
                             shared.ndcScale[1], shared.halfPixel[0], shared.halfPixel[1]};
                         temporalScene.ObserveCamera(anchor);
                     }
@@ -3114,10 +3217,11 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             const DepthClearRect sourceRect{int32_t(std::ceil(minX)), int32_t(std::ceil(minY)),
                                 int32_t(std::ceil(maxX)), int32_t(std::ceil(maxY))};
                             const auto mapped = MapDepthClear(pitch, (surfaceInfo >> 16) & 3, sourceRect,
-                                k.pitch, target->height, target->depthMsaa);
+                                k.pitch, target->guestHeight, target->depthMsaa);
                             std::vector<RenderRect> clearRects;
                             clearRects.reserve(mapped.size());
-                            for (const auto& r : mapped) clearRects.push_back({r.left, r.top, r.right, r.bottom});
+                            for (const auto& r : mapped) clearRects.push_back({int32_t(target->Scale(uint32_t(r.left))), int32_t(target->Scale(uint32_t(r.top))),
+                                int32_t(target->Scale(uint32_t(r.right))), int32_t(target->Scale(uint32_t(r.bottom)))});
                             // A zero rectangle count means a whole-resource clear in
                             // the graphics API, so an empty mapping must be skipped.
                             if (!clearRects.empty())
@@ -3139,8 +3243,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         // the host formats are equal).
                         const uint32_t clearedRows = uint32_t(std::ceil(std::max(0.0f, maxY - minY)));
                         uint32_t mappedRows = uint32_t((uint64_t(clearedRows) * pitch + k.pitch - 1) / k.pitch);
-                        mappedRows = std::clamp<uint32_t>(mappedRows, 1, target->height);
-                        HostTexture* otherDepth = depth ? GetRenderTarget(depthInfo & 0xFFF, (depthInfo >> 16) & 1, k.pitch, target->height, true) : nullptr;
+                        mappedRows = target->Scale(std::clamp<uint32_t>(mappedRows, 1, target->guestHeight));
+                        HostTexture* otherDepth = depth ? GetRenderTarget(depthInfo & 0xFFF, (depthInfo >> 16) & 1, k.pitch, target->guestHeight, true) : nullptr;
                         if (otherDepth && (otherDepth->width != target->width || otherDepth->height != target->height))
                             continue;
                         Transition(*target, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
@@ -3337,8 +3441,16 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                    uint32_t x0, uint32_t y0, uint32_t w, uint32_t h)
             {
                 Begin();
-                const uint32_t texW = std::clamp<uint32_t>(std::max(destPitch, x0 + w), 1, 8192);
-                const uint32_t texH = std::clamp<uint32_t>(std::max(destHeight, y0 + h), 1, 8192);
+                const uint32_t guestW = std::clamp<uint32_t>(std::max(destPitch, x0 + w), 1, 8192);
+                const uint32_t guestH = std::clamp<uint32_t>(std::max(destHeight, y0 + h), 1, 8192);
+                const uint32_t texW = std::max(1u, depth.Scale(guestW)), texH = std::max(1u, depth.Scale(guestH));
+                if (texW > 16384 || texH > 16384) {
+                    resolutionAllocationFailed = true;
+                    LOG_ERROR("renderer: depth resolve exceeds texture limit physical={}x{}; native resolution fallback next frame", texW, texH);
+                    return;
+                }
+                w = depth.Scale(x0 + w) - depth.Scale(x0); h = depth.Scale(y0 + h) - depth.Scale(y0);
+                x0 = depth.Scale(x0); y0 = depth.Scale(y0);
                 ResolvedSurface& rs = ResolvedSlot(destBase, destFormat);
                 if (!rs.tex || rs.tex->format != RenderFormat::R32_FLOAT || rs.tex->width != texW || rs.tex->height != texH)
                 {
@@ -3349,16 +3461,20 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     rs.tex->format = RenderFormat::R32_FLOAT;
                     rs.tex->width = texW;
                     rs.tex->height = texH;
+                    rs.tex->guestWidth = guestW; rs.tex->guestHeight = guestH;
+                    rs.tex->resolutionHeight = depth.resolutionHeight;
                     rs.tex->texture = device->createTexture(RenderTextureDesc::Texture2D(texW, texH, 1, RenderFormat::R32_FLOAT));
                     rs.tex->layout = RenderTextureLayout::UNKNOWN;
                     if (!rs.tex->texture)
                     {
+                        resolutionAllocationFailed = true;
+                        LOG_ERROR("renderer: depth resolve allocation failed guest={}x{} physical={}x{}; native resolution fallback next frame", guestW, guestH, texW, texH);
                         DropResolved(destBase, destFormat);
                         return;
                     }
                     static uint32_t created = 0;
                     if (created++ < 8)
-                        LOG_INFO("renderer: resolved depth surface {:#x} {}x{} dest fmt={}", destBase, texW, texH, destFormat & 0xFFF);
+                        LOG_INFO("renderer: resolved depth surface {:#x} guest={}x{} physical={}x{} dest fmt={}", destBase, guestW, guestH, texW, texH, destFormat & 0xFFF);
                 }
                 rs.destFormat = destFormat;
                 rs.destPitch = destPitch;
@@ -3396,8 +3512,16 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                               uint32_t x0, uint32_t y0, uint32_t w, uint32_t h)
             {
                 Begin();
-                const uint32_t texW = std::clamp<uint32_t>(std::max(destPitch, x0 + w), 1, 8192);
-                const uint32_t texH = std::clamp<uint32_t>(std::max(destHeight, y0 + h), 1, 8192);
+                const uint32_t guestW = std::clamp<uint32_t>(std::max(destPitch, x0 + w), 1, 8192);
+                const uint32_t guestH = std::clamp<uint32_t>(std::max(destHeight, y0 + h), 1, 8192);
+                const uint32_t texW = std::max(1u, color.Scale(guestW)), texH = std::max(1u, color.Scale(guestH));
+                if (texW > 16384 || texH > 16384) {
+                    resolutionAllocationFailed = true;
+                    LOG_ERROR("renderer: color resolve exceeds texture limit physical={}x{}; native resolution fallback next frame", texW, texH);
+                    return;
+                }
+                w = color.Scale(x0 + w) - color.Scale(x0); h = color.Scale(y0 + h) - color.Scale(y0);
+                x0 = color.Scale(x0); y0 = color.Scale(y0);
                 // The destination's own format decides what the surface holds, so the
                 // frontbuffer stays 8888 even though EDRAM is kept in FP16.
                 const RenderFormat destHost = (destFormat == 32 || destFormat == 7) ? RenderFormat::R16G16B16A16_FLOAT : RenderFormat::R8G8B8A8_UNORM;
@@ -3411,11 +3535,14 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     rs.tex->format = destHost;
                     rs.tex->width = texW;
                     rs.tex->height = texH;
+                    rs.tex->guestWidth = guestW; rs.tex->guestHeight = guestH;
+                    rs.tex->resolutionHeight = color.resolutionHeight;
                     rs.tex->texture = device->createTexture(RenderTextureDesc::Texture2D(texW, texH, 1, destHost, RenderTextureFlag::RENDER_TARGET));
                     rs.tex->layout = RenderTextureLayout::UNKNOWN;
                     if (!rs.tex->texture)
                     {
-                        LOG_WARNING("renderer: resolved surface creation failed ({}x{})", texW, texH);
+                        resolutionAllocationFailed = true;
+                        LOG_ERROR("renderer: color resolve allocation failed guest={}x{} physical={}x{}; native resolution fallback next frame", guestW, guestH, texW, texH);
                         DropResolved(destBase, destFormat);
                         return;
                     }
@@ -3430,7 +3557,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     commandList->clearColor(0, RenderColor(0, 0, 0, 0));
                     static uint32_t created = 0;
                     if (created++ < 16)
-                        LOG_INFO("renderer: resolved surface {:#x} {}x{} host fmt={} dest fmt={}", destBase, texW, texH, uint32_t(color.format), destFormat);
+                        LOG_INFO("renderer: resolved surface {:#x} guest={}x{} physical={}x{} host fmt={} dest fmt={}", destBase, guestW, guestH, texW, texH, uint32_t(color.format), destFormat);
                 }
                 rs.destFormat = destFormat;
                 rs.destPitch = destPitch;
@@ -3533,6 +3660,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     }
                 }
                 HostTexture* color = AcquireColorTarget(colorInfo & 0xFFF, (colorInfo >> 16) & 0xF, pitch, rtHeight, true);
+                if (!color || !color->texture) return;
                 if (!resolveReadback)
                 {
                     ResolveOnGpu(*color, destBase, destFormat, destPitch, destHeight, x0, y0, copyWidth, copyHeight);
@@ -3651,9 +3779,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     RenderColor c(float((clear >> 16) & 0xFF) / 255.0f, float((clear >> 8) & 0xFF) / 255.0f, float(clear & 0xFF) / 255.0f, float(clear >> 24) / 255.0f);
                     Transition(*color, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
                     commandList->setFramebuffer(GetFramebuffer(color, nullptr));
-                    RenderRect rect{ int32_t(x0), int32_t(y0), int32_t(x1), int32_t(y1) };
+                    RenderRect rect{ int32_t(color->Scale(x0)), int32_t(color->Scale(y0)), int32_t(color->Scale(x1)), int32_t(color->Scale(y1)) };
                     commandList->clearColor(0, c, &rect, 1);
-                    color->aaProvenance.Invalidate(frame,color->allocationSerial,x0==0&&y0==0&&x1==color->width&&y1==color->height);
+                    color->aaProvenance.Invalidate(frame,color->allocationSerial,x0==0&&y0==0&&x1==color->guestWidth&&y1==color->guestHeight);
                 }
                 if (copyControl & 0x200)
                     ClearDepthTarget(pitch, rtHeight);
@@ -3663,6 +3791,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             {
                 uint32_t depthInfo = Reg(REG_RB_DEPTH_INFO);
                 HostTexture* depth = GetRenderTarget(depthInfo & 0xFFF, (depthInfo >> 16) & 1, pitch, rtHeight, true);
+                if (!depth || !depth->texture) return;
                 Transition(*depth, RenderTextureLayout::DEPTH_WRITE, RenderBarrierStage::GRAPHICS);
                 commandList->setFramebuffer(GetFramebuffer(nullptr, depth));
                 uint32_t clear = Reg(REG_RB_DEPTH_CLEAR);
@@ -3734,6 +3863,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                          << ",\"host_format\":" << uint32_t(rs.tex->format)
                          << ",\"depth\":" << ((rs.destFormat & Renderer::kDepthResolveTag) ? "true" : "false")
                          << ",\"storage\":[" << rs.tex->width << ',' << rs.tex->height << ']'
+                         << ",\"guest_storage\":[" << rs.tex->guestWidth << ',' << rs.tex->guestHeight << ']'
+                         << ",\"resolution_height\":" << rs.tex->resolutionHeight
                          << ",\"pitch\":" << rs.destPitch << ",\"last_write_frame\":" << rs.frame
                          << ",\"last_write_ordinal\":" << rs.writeOrdinal
                          << ",\"last_write_rect\":[" << rs.writeX << ',' << rs.writeY << ',' << rs.writeWidth << ',' << rs.writeHeight << ']'
@@ -3880,6 +4011,32 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 static const uint32_t temporalLogStart=getenv("LO_TEMPORAL_LOG_START_FRAME")?strtoul(getenv("LO_TEMPORAL_LOG_START_FRAME"),nullptr,10):0;
                 if(r.frame>=temporalLogStart&&r.temporalFramesLogged<256) {
                     LOG_INFO("renderer temporal f{} epoch={} ready={} completed={} reused={} reason={} depth={} color={} gap={} jitter_draws={} jitter_misses={}",r.frame,r.temporalEpoch,r.temporalScene.Ready(),complete,owner->Reused(),uint32_t(r.temporalScene.Reason()),r.temporalScene.Depth().ordinal,r.temporalScene.Color().ordinal,gap,r.temporalJitterDraws,r.temporalJitterMisses);
+                    const auto& diagnostic=owner->Diagnostics();
+                    if(diagnostic.captured) {
+                        std::string reasons;
+                        for(uint32_t bit=1;bit<=(1u<<9);bit<<=1)if(diagnostic.rejected&bit) {
+                            if(!reasons.empty())reasons+='|';
+                            reasons+=temporal::HistoryReuseRejectionName(temporal::HistoryReuseRejection(bit));
+                        }
+                        const auto& state=diagnostic.state;
+                        LOG_INFO("renderer temporal gates f{} mask={:#x} reasons={} valid={} previous_completed={} stable={}/{} allow_history={} frames={}/{} epochs={}/{} allocations={}/{} camera_checks={}",
+                            r.frame,diagnostic.rejected,reasons.empty()?"none":reasons,state.valid,state.previousCompleted,state.currentStable,state.previousStable,state.allowHistory,
+                            state.currentFrame,state.previousFrame,state.currentEpoch,state.previousEpoch,state.currentAllocation,state.previousAllocation,diagnostic.cameraChecksAvailable);
+                        auto logCamera=[&](const char* which,const std::optional<temporal::Camera>& camera) {
+                            if(!camera) {LOG_INFO("renderer temporal camera f{} {} missing",r.frame,which);return;}
+                            std::string vp;for(double value:camera->VP())vp+=fmt::format("{:.9g},",value);
+                            const auto& v=camera->Raster();
+                            LOG_INFO("renderer temporal camera f{} {} raster=({:.17g},{:.17g},{:.17g},{:.17g}) ndc_y={:.17g} half_pixel=({:.17g},{:.17g}) vp=[{}]",
+                                r.frame,which,v.x,v.y,v.width,v.height,v.ndcYSign,v.halfPixelNdcX,v.halfPixelNdcY,vp);
+                        };
+                        logCamera("current",diagnostic.currentCamera);logCamera("previous",diagnostic.previousCamera);
+                        if(diagnostic.cameraChecksAvailable)
+                            LOG_INFO("renderer temporal depth_range f{} valid={} lower_bound={:.17g} far_world_w={:.17g} near_world_w={:.17g}",
+                                r.frame,diagnostic.depthRange.valid,diagnostic.depthRange.lowerBound,diagnostic.depthRange.farWorldW,diagnostic.depthRange.nearWorldW);
+                        if(diagnostic.cameraChecksAvailable&&diagnostic.depthRange.valid)for(const auto& probe:diagnostic.probes)
+                            LOG_INFO("renderer temporal probe f{} depth={:.9g} rejection={} projected_valid={} projected=({:.17g},{:.17g},{:.17g}) delta_fraction=({:.17g},{:.17g}) quarter_screen_rejected={}",
+                                r.frame,probe.depth,uint32_t(probe.rejection),probe.projectedValid,probe.projected.x,probe.projected.y,probe.projected.depth,probe.deltaXFraction,probe.deltaYFraction,probe.quarterScreenRejected);
+                    }
                     ++r.temporalFramesLogged;
                 }
                 if(!complete||gap) {owner->Reset();r.temporalSupportedFrame=~0ull;++r.temporalEpoch;}
@@ -3931,6 +4088,15 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
         static const uint64_t start=getenv("LO_SCENE_AA_LOG_START_FRAME")?strtoull(getenv("LO_SCENE_AA_LOG_START_FRAME"),nullptr,10):~0ull;
         if(surface->frame>=start&&surface->frame-start<128)LOG_INFO("renderer scene AA present f{} address={:#x} coverage={} skip_final={}",surface->frame,physicalAddress,uint32_t(coverage),scene_aa::SkipFinalAA(coverage));
         return scene_aa::SkipFinalAA(coverage);
+    }
+
+    void ScaleResolvedSize(uint32_t physicalAddress, uint32_t& width, uint32_t& height)
+    {
+        if (!g_renderer) return;
+        const auto* surface = g_renderer->NewestResolved(physicalAddress & 0x1FFFFFFF);
+        if (!surface || !surface->tex) return;
+        width = surface->tex->Scale(width);
+        height = surface->tex->Scale(height);
     }
 
     std::vector<uint32_t> GetResolvedAddresses()
@@ -4041,6 +4207,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
     void FinishDebugCapture(uint32_t) {}
     bool Init() { return false; }
     void Shutdown() {}
+    void ScaleResolvedSize(uint32_t, uint32_t&, uint32_t&) {}
     void Draw(const DrawInfo&) {}
     void Flush() {}
     void InvalidateGuestRange(uint32_t, uint32_t) {}
@@ -4050,4 +4217,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
     std::vector<uint32_t> GetResolvedAddresses() { return {}; }
     void DumpRenderTargets(const char*) {}
 #endif
+    void SetOutputSize(uint32_t width, uint32_t height)
+    {
+        if (width && height) outputSize.store((uint64_t(width) << 32) | height, std::memory_order_relaxed);
+    }
 }

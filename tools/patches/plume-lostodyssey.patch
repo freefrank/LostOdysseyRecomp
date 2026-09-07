@@ -1,5 +1,5 @@
 diff --git a/plume_d3d12.cpp b/plume_d3d12.cpp
-index 2cdcf18..d8fb0cd 100644
+index 2cdcf18f3b2e1729c2ff63684329c9c26770748c..e261120b85e22bf6cb30f5f52a5ea8fa1ac0b7fc 100644
 --- a/plume_d3d12.cpp
 +++ b/plume_d3d12.cpp
 @@ -2287,7 +2287,19 @@ namespace plume {
@@ -40,7 +40,18 @@ index 2cdcf18..d8fb0cd 100644
      }
 
      void D3D12CommandList::copyBuffer(const RenderBuffer *dstBuffer, const RenderBuffer *srcBuffer) {
-@@ -3075,6 +3092,7 @@ namespace plume {
+@@ -2957,7 +2974,9 @@ namespace plume {
+     }
+
+     std::unique_ptr<RenderTexture> D3D12Pool::createTexture(const RenderTextureDesc &desc) {
+-        return std::make_unique<D3D12Texture>(device, this, desc);
++        auto texture = std::make_unique<D3D12Texture>(device, this, desc);
++        if (texture->d3d == nullptr) return nullptr;
++        return texture;
+     }
+
+     // D3D12Shader
+@@ -3075,6 +3094,7 @@ namespace plume {
      // D3D12GraphicsPipeline
 
      D3D12GraphicsPipeline::D3D12GraphicsPipeline(D3D12Device *device, const RenderGraphicsPipelineDesc &desc) : D3D12Pipeline(device, Type::Graphics) {
@@ -48,7 +59,7 @@ index 2cdcf18..d8fb0cd 100644
          assert(desc.pipelineLayout != nullptr);
 
          topology = toD3D12(desc.primitiveTopology);
-@@ -3910,7 +3928,9 @@ namespace plume {
+@@ -3910,7 +3930,9 @@ namespace plume {
      }
 
      std::unique_ptr<RenderPipeline> D3D12Device::createGraphicsPipeline(const RenderGraphicsPipelineDesc &desc) {
@@ -59,3 +70,14 @@ index 2cdcf18..d8fb0cd 100644
      }
 
      std::unique_ptr<RenderPipeline> D3D12Device::createRaytracingPipeline(const RenderRaytracingPipelineDesc &desc, const RenderPipeline *previousPipeline) {
+@@ -3931,7 +3953,9 @@ namespace plume {
+     }
+
+     std::unique_ptr<RenderTexture> D3D12Device::createTexture(const RenderTextureDesc &desc) {
+-        return std::make_unique<D3D12Texture>(this, nullptr, desc);
++        auto texture = std::make_unique<D3D12Texture>(this, nullptr, desc);
++        if (texture->d3d == nullptr) return nullptr;
++        return texture;
+     }
+
+     std::unique_ptr<RenderAccelerationStructure> D3D12Device::createAccelerationStructure(const RenderAccelerationStructureDesc &desc) {

@@ -34,6 +34,7 @@ bool bypass = false, sawModal = false;
 uint32_t lastMenu = 0;
 std::wstring status;
 constexpr uint32_t resolutions[][2] = {{1280, 720}, {1600, 900}, {1920, 1080}, {2560, 1440}, {3840, 2160}};
+constexpr int internalResolutions[] = {0, 720, 1080, 1440, 2160};
 const wchar_t *Tr(const wchar_t *en, const wchar_t *zh)
 {
     return Translate(edit.uiLanguage, en, zh);
@@ -97,6 +98,9 @@ void Publish(uint8_t *base, uint32_t config)
                                   Tr(L"Exclusive fullscreen", L"獨占全螢幕")};
         add(L"Display mode", L"顯示模式", modes[uint32_t(edit.windowMode)]);
         add(L"Output resolution", L"輸出解析度", std::to_wstring(edit.width) + L" × " + std::to_wstring(edit.height));
+        add(L"Internal resolution", L"內部解析度", edit.internalResolution == 0
+            ? Tr(L"Auto (match output)", L"自動（跟隨輸出）")
+            : std::to_wstring(edit.internalResolution * 16 / 9) + L" × " + std::to_wstring(edit.internalResolution));
         add(L"Anti-aliasing", L"抗鋸齒", edit.antialiasing == 3 ? Tr(L"TAA (Experimental)", L"TAA（實驗性）") : edit.antialiasing == 2 ? L"SMAA" : edit.antialiasing == 1 ? L"FXAA" : Tr(L"Off", L"關"));
         add(L"Upscaling quality", L"縮放品質", edit.scalingQuality == 0
             ? Tr(L"Standard", L"標準") : Tr(L"High", L"高"));
@@ -122,15 +126,18 @@ void Publish(uint8_t *base, uint32_t config)
         next.help = Tr(L"Game language takes effect after restarting. Requires matching language assets.",
                        L"遊戲語言重新啟動後生效，需要對應語言資源。中文遊戲文本需要亞洲版資源。");
     if (tab == 2 && row == 1)
-        next.help = Tr(L"Scales the original game image to the output resolution. Borderless uses the desktop size.",
-                       L"將原始遊戲畫面縮放至輸出解析度；無邊框模式使用桌面尺寸。");
-    if (tab == 2 && row == 2 && edit.antialiasing == 3)
+        next.help = Tr(L"Sets the output size. Borderless fullscreen uses the desktop size.",
+                       L"設定輸出尺寸；無邊框全螢幕使用桌面尺寸。");
+    if (tab == 2 && row == 2)
+        next.help = Tr(L"Scene detail up to 4K. Auto follows output; higher values use more GPU power.",
+                       L"場景細節最高 4K。自動跟隨輸出；較高解析度需要更多 GPU 效能。");
+    if (tab == 2 && row == 3 && edit.antialiasing == 3)
         next.help = Tr(L"Camera-based TAA; moving effects may trail. Unsupported scenes use SMAA.",
                        L"以相機重投影的 TAA；動態特效可能拖影。不支援的場景使用 SMAA。");
-    if (tab == 2 && row == 3)
-        next.help = Tr(L"Matches window output automatically. Internal size is fixed; quality changes only spatial filtering.",
-                       L"自動匹配視窗輸出。內部解析度固定，品質僅改變空間取樣濾鏡。");
     if (tab == 2 && row == 4)
+        next.help = Tr(L"Controls filtering when internal and output sizes differ. Scene detail uses Internal resolution.",
+                       L"控制內部與輸出尺寸不同時的取樣濾鏡。場景細節由內部解析度決定。");
+    if (tab == 2 && row == 5)
         next.help = edit.frameRate == 120
             ? Tr(L"120 FPS is experimental and requires LO_EXPERIMENTAL_120; otherwise runs at 60 FPS.",
                  L"120 FPS 為實驗性功能，需啟用 LO_EXPERIMENTAL_120，否則以 60 FPS 執行。")
@@ -341,12 +348,12 @@ PPC_FUNC(sub_822F19B0)
         row = 0;
         status.clear();
     }
-    const int count = tab == 0 ? 8 : tab == 1 ? 3 : tab == 2 ? 7 : 3;
+    const int count = tab == 0 ? 8 : tab == 1 ? 3 : tab == 2 ? 8 : 3;
     if (input & 1)
         row = (row + count - 1) % count;
     if (input & 2)
         row = (row + 1) % count;
-    const bool action = (tab == 0 && row == 7) || (tab == 2 && row >= 5) || (tab == 3 && row == 2);
+    const bool action = (tab == 0 && row == 7) || (tab == 2 && row >= 6) || (tab == 3 && row == 2);
     const int delta = (input & 4) ? -1 : ((input & 8) || ((input & 0x1000) && !action)) ? 1 : 0;
     auto cycle = [&](uint32_t value, uint32_t count) {
         return uint32_t((int(value) + int(count) + delta) % int(count));
@@ -392,12 +399,20 @@ PPC_FUNC(sub_822F19B0)
             }
             if (row == 2)
             {
+                uint32_t index = 0;
+                for (uint32_t i = 0; i < std::size(internalResolutions); ++i)
+                    if (edit.internalResolution == internalResolutions[i])
+                        index = i;
+                edit.internalResolution = internalResolutions[cycle(index, uint32_t(std::size(internalResolutions)))];
+            }
+            if (row == 3)
+            {
                 edit.antialiasing = cycle(edit.antialiasing, 4);
                 edit.fxaa = edit.antialiasing == 1;
             }
-            if (row == 3)
-                edit.scalingQuality = cycle(edit.scalingQuality, 2);
             if (row == 4)
+                edit.scalingQuality = cycle(edit.scalingQuality, 2);
+            if (row == 5)
             {
                 constexpr uint32_t rates[] = {30, 60, 120};
                 const uint32_t index = edit.frameRate == 120 ? 2u : edit.frameRate == 60 ? 1u : 0u;
@@ -428,7 +443,7 @@ PPC_FUNC(sub_822F19B0)
         __imp__sub_82870E38(call, base);
         status = Tr(L"Game defaults restored.", L"遊戲預設設定已恢復。");
     }
-    if ((input & 0x1000) && tab == 2 && row == 6)
+    if ((input & 0x1000) && tab == 2 && row == 7)
     {
         previousDisplay = GetConfig();
         PreviewConfig(edit);
@@ -444,7 +459,7 @@ PPC_FUNC(sub_822F19B0)
                      ? Tr(L"Saved. Restart the game to apply text language.", L"已儲存。重新啟動遊戲後套用文本語言。")
                      : Tr(L"Could not save settings.", L"無法儲存設定。");
     }
-    if ((input & 0x1000) && tab == 2 && row == 5)
+    if ((input & 0x1000) && tab == 2 && row == 6)
     {
         // Hand the original calibration screen its own brightness row.
         const uint32_t list = menu + 0x558, table = PPC_LOAD_U32(list + 0x84);

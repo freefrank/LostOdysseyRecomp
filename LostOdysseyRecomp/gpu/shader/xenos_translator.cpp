@@ -55,6 +55,7 @@ cbuffer XeShared : register(b1, space0)
     uint4 xeVfetchOffset[24]; // byte offset of each vertex fetch slot inside its buffer
     uint4 xeSamplerIndex[8];  // sampler palette index per texture fetch slot
     uint4 xeTextureInfo[8];   // source signs (8 bits), then fetch swizzle (12 bits)
+    uint4 xeTextureSize[8];   // packed logical guest width/height, independent of render scaling
 };
 
 uint XeVfetchOffset(uint slot)
@@ -224,11 +225,18 @@ float4 XeVF_32_32_32_32_FLOAT(ByteAddressBuffer b, uint a, bool sgn, bool nrm)
 }
 
 // ---- texture fetch ----
-float4 XeTex2D(Texture2D<float4> t, SamplerState s, float2 uv, float2 offset)
+float2 XeTextureDimensions(Texture2D<float4> t, uint slot)
 {
+    uint packed = xeTextureSize[slot >> 2][slot & 3];
+    if (packed != 0) return float2(packed & 65535u, packed >> 16);
     uint2 dims;
     t.GetDimensions(dims.x, dims.y);
-    return XE_SAMPLE(t, s, uv + offset / float2(dims));
+    return float2(dims);
+}
+float4 XeTex2D(Texture2D<float4> t, SamplerState s, float2 uv, float2 offset, uint slot, bool denormalized)
+{
+    float2 dims = XeTextureDimensions(t, slot);
+    return XE_SAMPLE(t, s, (denormalized ? uv / dims : uv) + offset / dims);
 }
 
 float4 XeTex3D(Texture3D<float4> t, SamplerState s, float3 uvw)
@@ -236,11 +244,10 @@ float4 XeTex3D(Texture3D<float4> t, SamplerState s, float3 uvw)
     return XE_SAMPLE(t, s, uvw);
 }
 
-float4 XeTex2DLevelZero(Texture2D<float4> t, SamplerState s, float2 uv, float2 offset)
+float4 XeTex2DLevelZero(Texture2D<float4> t, SamplerState s, float2 uv, float2 offset, uint slot, bool denormalized)
 {
-    uint2 dims;
-    t.GetDimensions(dims.x, dims.y);
-    return t.SampleLevel(s, uv + offset / float2(dims), 0.0);
+    float2 dims = XeTextureDimensions(t, slot);
+    return t.SampleLevel(s, (denormalized ? uv / dims : uv) + offset / dims, 0.0);
 }
 
 float4 XeTex3DLevelZero(Texture3D<float4> t, SamplerState s, float3 uvw)
@@ -264,11 +271,9 @@ float4 XeTexCubeLevelZero(TextureCube<float4> t, SamplerState s, float3 coord, i
     return t.SampleLevel(s, cubeMapData.cubeMapDirections[uint(coord.z) & 1], 0.0);
 }
 
-float2 XeWeights2D(Texture2D<float4> t, float2 uv, float2 offset)
+float2 XeWeights2D(Texture2D<float4> t, float2 uv, float2 offset, uint slot, bool denormalized)
 {
-    uint2 dims;
-    t.GetDimensions(dims.x, dims.y);
-    return select(isnan(uv), 0.0, frac(uv * float2(dims) + offset - 0.5));
+    return select(isnan(uv), 0.0, frac((denormalized ? uv : uv * XeTextureDimensions(t, slot)) + offset - 0.5));
 }
 
 float4 cube(float4 value, inout CubeMapData cubeMapData)
@@ -653,7 +658,7 @@ float4 max4(float4 src0)
                 {
                     print("float4(XeWeights2D(tex2D_{}, ", slot);
                     printSrcRegister(2);
-                    println(", float2({}, {})), 0.0, 0.0).", instr.offsetX * 0.5f, instr.offsetY * 0.5f);
+                    println(", float2({}, {}), {}u, {}), 0.0, 0.0).", instr.offsetX * 0.5f, instr.offsetY * 0.5f, slot, instr.texCoordDenorm != 0);
                     out.pop_back(); // keep the trailing '.' for the swizzle below
                 }
                 else
@@ -679,7 +684,7 @@ float4 max4(float4 src0)
                         }
                         else
                             printSrcRegister(2);
-                        print(", float2({}, {}))", instr.offsetX * 0.5f, instr.offsetY * 0.5f);
+                        print(", float2({}, {}), {}u, {})", instr.offsetX * 0.5f, instr.offsetY * 0.5f, slot, instr.texCoordDenorm != 0);
                         break;
                     case TextureDimension::Texture3D:
                         print("XeTex3D{1}(tex3D_{0}, XeSampler({0}u), ", slot, sampleSuffix);

@@ -44,6 +44,43 @@ namespace gpu::video
 
         SDL_Window* g_window = nullptr;
         std::atomic<uint64_t> g_shaderProgress{0};
+        constexpr uint64_t kProgressMask = (1ull << 28) - 1;
+        const wchar_t* PreparationTitle(PreparationStage stage) {
+            switch (stage) {
+            case PreparationStage::CacheValidation: return L"Validating shader cache";
+            case PreparationStage::IndexedExtraction: return L"Extracting indexed shaders";
+            case PreparationStage::FallbackScan: return L"Scanning game resources";
+            case PreparationStage::Pipelines: return L"Preparing pipelines";
+            default: return L"Compiling shaders";
+            }
+        }
+        const char* PreparationTitleNarrow(PreparationStage stage) {
+            switch (stage) {
+            case PreparationStage::CacheValidation: return "Validating shader cache";
+            case PreparationStage::IndexedExtraction: return "Extracting indexed shaders";
+            case PreparationStage::FallbackScan: return "Scanning game resources";
+            case PreparationStage::Pipelines: return "Preparing pipelines";
+            default: return "Compiling shaders";
+            }
+        }
+        const wchar_t* PreparationSuffix(PreparationUnit unit) {
+            switch (unit) {
+            case PreparationUnit::Files: return L" files";
+            case PreparationUnit::MiB: return L" MiB";
+            case PreparationUnit::Entries: return L" entries";
+            case PreparationUnit::Pipelines: return L" pipelines";
+            default: return L" shaders";
+            }
+        }
+        const char* PreparationSuffixNarrow(PreparationUnit unit) {
+            switch (unit) {
+            case PreparationUnit::Files: return " files";
+            case PreparationUnit::MiB: return " MiB";
+            case PreparationUnit::Entries: return " entries";
+            case PreparationUnit::Pipelines: return " pipelines";
+            default: return " shaders";
+            }
+        }
         std::atomic<int> g_displayMode{-1};
         std::atomic<uint64_t> g_displaySize{0};
         std::atomic<bool> g_displayFailed{false},g_reapplyWindow{false};
@@ -74,17 +111,17 @@ namespace gpu::video
                 HBRUSH background=CreateSolidBrush(RGB(20,24,31));
                 FillRect(dc,&bounds,background); DeleteObject(background);
                 const uint64_t state=g_shaderProgress.load();
-                const uint32_t total=uint32_t(state>>32)&0x3fffffff, done=uint32_t(state);
-                const bool scanning=(state>>63)!=0;
-                const bool pipelines=(state&(1ULL<<62))!=0;
+                const uint32_t total=uint32_t((state>>28)&kProgressMask), done=uint32_t(state&kProgressMask);
+                const auto stage=PreparationStage((state>>56)&15);
+                const auto unit=PreparationUnit(state>>60);
                 SetBkMode(dc,TRANSPARENT); SetTextColor(dc,RGB(235,238,242));
                 HFONT font=CreateFontW(-28,0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,
                     OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,L"Segoe UI");
                 auto old=SelectObject(dc,font);
                 RECT title{20,bounds.bottom/2-85,bounds.right-20,bounds.bottom/2-35};
-                DrawTextW(dc,scanning ? L"Finding game shaders" : pipelines ? L"Preparing pipelines" : L"Preparing shaders",-1,&title,DT_CENTER|DT_SINGLELINE);
+                DrawTextW(dc,PreparationTitle(stage),-1,&title,DT_CENTER|DT_SINGLELINE);
                 SelectObject(dc,GetStockObject(DEFAULT_GUI_FONT));
-                const auto detail=std::to_wstring(done)+L" / "+std::to_wstring(total)+(scanning ? L" MB" : L"");
+                const auto detail=std::to_wstring(done)+L" / "+std::to_wstring(total)+PreparationSuffix(unit);
                 RECT count{20,bounds.bottom/2-35,bounds.right-20,bounds.bottom/2};
                 DrawTextW(dc,detail.c_str(),-1,&count,DT_CENTER|DT_SINGLELINE);
                 const int width=std::min(480,std::max(0,int(bounds.right)-80));
@@ -337,9 +374,10 @@ namespace gpu::video
 #endif
     }
 
-    void SetShaderPreparationProgress(uint32_t completed, uint32_t total, bool scanning, bool pipelines)
+    void SetShaderPreparationProgress(uint32_t completed, uint32_t total, PreparationStage stage, PreparationUnit unit)
     {
-        g_shaderProgress.store((uint64_t(total) << 32) | completed | (scanning ? (1ULL << 63) : 0) | (pipelines ? (1ULL << 62) : 0));
+        g_shaderProgress.store((std::min<uint64_t>(total,kProgressMask) << 28) |
+            std::min<uint64_t>(completed,kProgressMask) | (uint64_t(stage) << 56) | (uint64_t(unit) << 60));
     }
     bool DisplayModeFailed() { return g_displayFailed.load(); }
 
@@ -352,14 +390,15 @@ namespace gpu::video
         const auto now = std::chrono::steady_clock::now();
         // Scanning can publish hundreds of updates per second. Keep UI updates
         // at 10 Hz, but show phase transitions and completion immediately.
-        const bool phaseChanged = (progress >> 32) != (shownProgress >> 32);
+        const bool phaseChanged = (progress >> 56) != (shownProgress >> 56);
+        const uint32_t total = uint32_t((progress >> 28) & kProgressMask);
+        const uint32_t done = uint32_t(progress & kProgressMask);
         if (g_window && progress != shownProgress &&
-            (phaseChanged || now-lastProgressPaint >= std::chrono::milliseconds(100))) {
-            const uint32_t total = uint32_t(progress >> 32) & 0x3fffffffu;
-            const bool scanning = (progress >> 63) != 0;
-            const bool pipelines = (progress & (1ULL << 62)) != 0;
+            (phaseChanged || done == total || now-lastProgressPaint >= std::chrono::milliseconds(100))) {
+            const auto stage=PreparationStage((progress>>56)&15);
+            const auto unit=PreparationUnit(progress>>60);
             const auto title = total ? fmt::format("Lost Odyssey Recompiled - {} {}/{}{}",
-                scanning ? "Scanning game shaders" : pipelines ? "Preparing pipelines" : "Preparing shaders", uint32_t(progress), total, scanning ? " MB" : "")
+                PreparationTitleNarrow(stage), done, total, PreparationSuffixNarrow(unit))
                                      : std::string("Lost Odyssey Recompiled");
             SDL_SetWindowTitle(g_window, title.c_str());
 #ifdef _WIN32
@@ -471,6 +510,7 @@ namespace gpu::video
         if (g_available && g_swapChain->isEmpty()) return;
         const uint32_t menuWidth = g_available ? g_swapChain->getWidth() : 1280;
         const uint32_t menuHeight = g_available ? g_swapChain->getHeight() : 720;
+        renderer::SetOutputSize(menuWidth, menuHeight);
         const auto presentationConfig = settings::GetConfig();
         gpu::SetFrameRateTarget(presentationConfig.frameRate);
         const PresentationOptions presentationOptions{
@@ -486,8 +526,11 @@ namespace gpu::video
             plume::RenderTexture* source = renderer::AcquireResolvedSurface(physicalAddress & 0x1FFFFFFF, rw, rh, rf);
             if (source && plume::RenderFormat(rf) == kSwapChainFormat)
             {
-                g_frameWidth = width;
-                g_frameHeight = height;
+                uint32_t sourceWidth=width, sourceHeight=height;
+                renderer::ScaleResolvedSize(physicalAddress & 0x1FFFFFFF, sourceWidth, sourceHeight);
+                sourceWidth=std::min(sourceWidth,rw); sourceHeight=std::min(sourceHeight,rh);
+                g_frameWidth = sourceWidth;
+                g_frameHeight = sourceHeight;
                 g_frontbufferPhysical = physicalAddress & 0x1FFFFFFF;
                 g_frameOnGpu = true;
                 if (g_forceSwapResize || g_swapChain->needsResize()) {
@@ -500,15 +543,15 @@ namespace gpu::video
                 if (!g_swapChain->acquireTexture(g_acquireSemaphore.get(), &imageIndex))
                     return;
                 plume::RenderTexture* backBuffer = g_swapChain->getTexture(imageIndex);
-                const uint32_t copyWidth = std::min({ width, rw, g_swapChain->getWidth() });
-                const uint32_t copyHeight = std::min({ height, rh, g_swapChain->getHeight() });
+                const uint32_t copyWidth = std::min(sourceWidth, g_swapChain->getWidth());
+                const uint32_t copyHeight = std::min(sourceHeight, g_swapChain->getHeight());
 
                 g_commandList->begin();
                 if(g_presentation) {
                     if(renderer::SceneAAApplied(physicalAddress & 0x1FFFFFFF))
-                        g_presentation->DrawComposited(g_commandList.get(),source,backBuffer,std::min(width,rw),std::min(height,rh),
+                        g_presentation->DrawComposited(g_commandList.get(),source,backBuffer,sourceWidth,sourceHeight,
                             g_swapChain->getWidth(),g_swapChain->getHeight(),presentationOptions.scalingFilter);
-                    else g_presentation->Draw(g_commandList.get(),source,backBuffer,std::min(width,rw),std::min(height,rh),
+                    else g_presentation->Draw(g_commandList.get(),source,backBuffer,sourceWidth,sourceHeight,
                         g_swapChain->getWidth(),g_swapChain->getHeight(),presentationOptions);
                 }
                 else {

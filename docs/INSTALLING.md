@@ -1,12 +1,12 @@
 # Installing Lost Odyssey Recompiled
 
-This guide describes **v0.2**.
+This guide covers installation of the current Windows packages, including local development builds.
 
 1. Extract the entire Windows release ZIP to a writable folder, outside Program Files.
 2. Run **LostOdysseyRecomp.exe**. If game files are missing, the importer opens; select your source.
 3. On first launch, choose interface/game language and graphics settings. The game continues after setup and shader preparation.
 
-These steps describe v0.2 behavior. The published **v0.1** opens setup before import and accepts only the Asian set; USA/Europe support below is not included in v0.1.
+Historical **v0.1** packages open setup before import and accept only the Asian set; USA/Europe support below is not included in v0.1.
 
 You can also run **InstallGame.exe** separately to import additional discs. Disc 1 is required to start.
 
@@ -25,7 +25,7 @@ The importer searches five folder levels and reads the XEX disc numbers, so dire
 and container ordering do not matter. `$SystemUpdate` is not imported. Other content types,
 including DLC/STFS packages, are not installed by this importer.
 
-The v0.2 importer accepts these audited sets, both with Title ID `4D5307FA`:
+The importer accepts these audited sets, both with Title ID `4D5307FA`:
 
 | Edition | Version | Media IDs, discs 1–4 |
 |---|---|---|
@@ -43,7 +43,7 @@ A saved game-language choice unavailable in the current edition falls back to En
 
 Discs are copied to `game/disc1` through `game/disc4` by default. You can select an external
 game destination; the executable reads `game-path.txt` next to InstallGame.exe.
-In v0.2, the original game's disc request automatically selects the
+The original game's disc request automatically selects the
 corresponding imported `discN` directory. No manual disc-selection button is required. Keep all
 four discs from the same edition under the same parent directory. The original game reloads
 the target disc's own index and archives; the importer does not merge them into one rewritten index.

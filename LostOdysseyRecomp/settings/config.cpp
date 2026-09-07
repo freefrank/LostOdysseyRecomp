@@ -10,6 +10,9 @@ namespace
 std::mutex mutex;
 Config Validate(Config value)
 {
+    if (value.internalResolution != 0 && value.internalResolution != 720 && value.internalResolution != 1080 &&
+        value.internalResolution != 1440 && value.internalResolution != 2160)
+        value.internalResolution = 0;
     if (value.scalingQuality > 1) value.scalingQuality = 1;
     if (value.antialiasing > 3) value.antialiasing = 0;
     value.fxaa = value.antialiasing == 1;
@@ -42,6 +45,7 @@ Config Read()
         const auto name = key.substr(0, equal);
         // Presence wins over the legacy key even if the new value is malformed.
         if (name == "antialiasing") { hasAntialiasing = true; value.antialiasing = 0; }
+        if (name == "internal_resolution") value.internalResolution = 0;
         uint32_t number = 0;
         const auto digits = key.substr(equal + 1);
         auto parsed = std::from_chars(digits.data(), digits.data() + digits.size(), number);
@@ -58,6 +62,8 @@ Config Read()
             value.width = number;
         else if (key == "height")
             value.height = number;
+        else if (key == "internal_resolution")
+            value.internalResolution = number <= 2160 ? int(number) : 0;
         else if (key == "window_mode")
             value.windowMode = WindowMode(number);
         else if (key == "antialiasing")
@@ -136,6 +142,7 @@ static bool WriteConfig(const Config &value)
            << "\ndebug_language=" << value.debugLanguage
            << "\nantialiasing=" << value.antialiasing << "\nframe_rate=" << value.frameRate
            << "\nscaling_quality=" << value.scalingQuality
+           << "\ninternal_resolution=" << value.internalResolution
            << "\nfxaa=" << value.fxaa << '\n';
     output.flush();
     if (!output)
@@ -152,8 +159,9 @@ static bool WriteConfig(const Config &value)
     if (error)
         return false;
 #endif
-    LOG_INFO("settings saved: {}x{} mode={} FXAA={} language={} (game language applies at restart)", value.width,
-             value.height, uint32_t(value.windowMode), value.fxaa, value.gameLanguage);
+    LOG_INFO("settings saved: {}x{} internal_resolution={} mode={} AA={} language={} (game language applies at restart)",
+             value.width, value.height, value.internalResolution, uint32_t(value.windowMode), value.antialiasing,
+             value.gameLanguage);
     return true;
 }
 bool SaveConfig(const Config &requested)

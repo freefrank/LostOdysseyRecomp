@@ -2,6 +2,7 @@
 #include <cpu/guest_thread.h>
 #include <kernel/function.h>
 #include <kernel/memory.h>
+#include <kernel/guest_address_space.h>
 #include <kernel/heap.h>
 #include <kernel/xex_loader.h>
 #include <kernel/xam.h>
@@ -163,7 +164,32 @@ int main(int argc, char* argv[])
     }
     if (g_memory.base == nullptr)
     {
-        LOG_ERROR("failed to reserve the 4 GiB guest address space");
+        const auto failure = GuestAddressSpace::GetFailureInfo();
+        LOG_ERROR("failed to initialize the 4 GiB guest address space: operation={} view={} address={:#x} size={:#x} offset={:#x}",
+                  GuestAddressSpace::FailureOperationName(failure.operation), failure.viewIndex,
+                  failure.address, failure.size, failure.offset);
+#ifdef _WIN32
+        char message[1024]{};
+        DWORD length = FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+                                      nullptr, failure.error, MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US),
+                                      message, DWORD(std::size(message)), nullptr);
+        while (length && (message[length - 1] == '\r' || message[length - 1] == '\n'))
+            message[--length] = '\0';
+        LOG_ERROR("guest address space: Win32 error={} ({:#x}): {}", failure.error, failure.error,
+                  length ? message : "English system error description unavailable");
+        if (failure.preferredReservationError)
+            LOG_ERROR("guest address space: preferred-address reservation also failed with Win32 error={} ({:#x})",
+                      failure.preferredReservationError, failure.preferredReservationError);
+        MEMORYSTATUSEX memoryStatus{sizeof(memoryStatus)};
+        if (GlobalMemoryStatusEx(&memoryStatus))
+            LOG_ERROR("host memory at error report (bytes): available_commit={} total_commit={} available_physical={} total_physical={} available_virtual={}",
+                      memoryStatus.ullAvailPageFile, memoryStatus.ullTotalPageFile, memoryStatus.ullAvailPhys,
+                      memoryStatus.ullTotalPhys, memoryStatus.ullAvailVirtual);
+        if (failure.error == ERROR_COMMITMENT_LIMIT)
+            LOG_ERROR("Windows reported its commit limit was reached. Close memory-heavy applications or increase Windows paging-file capacity, then retry.");
+#else
+        LOG_ERROR("guest address space: errno={}: {}", failure.error, std::strerror(int(failure.error)));
+#endif
         return 1;
     }
     InstallPhysicalWatchpoint();

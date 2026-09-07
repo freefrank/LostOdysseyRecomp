@@ -17,13 +17,14 @@ inline uint32_t ReadLE(const uint8_t* p) {
 // Same thirteen archive slots consumed by the original loader. Never interpret
 // untrusted packed filenames as host paths. No resource is written or unpacked
 // here: this table only supplies bounded reads within its adjacent FPD files.
-inline ResourceExtents ReadResourceExtents(const std::filesystem::path& file) {
+inline ResourceExtents ReadResourceExtents(const std::filesystem::path& file, uint64_t* bytesRead = nullptr) {
     std::ifstream input(file, std::ios::binary | std::ios::ate);
     const auto length = input.tellg();
     if (length < 64 || length > 1024 * 1024) throw std::runtime_error("invalid FPI size");
     std::vector<uint8_t> bytes(static_cast<size_t>(length));
     input.seekg(0);
     if (!input.read(reinterpret_cast<char*>(bytes.data()), length)) throw std::runtime_error("short FPI read");
+    if (bytesRead) *bytesRead += bytes.size();
     auto u16 = [&](size_t p) { return uint32_t(bytes[p]) | uint32_t(bytes[p+1]) << 8; };
     auto u32 = [&](size_t p) { return ReadLE(bytes.data()+p); };
     const uint64_t used = u16(12) * 2048u;

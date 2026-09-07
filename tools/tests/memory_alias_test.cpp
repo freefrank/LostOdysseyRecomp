@@ -11,7 +11,10 @@ int main()
         uint8_t* base = GuestAddressSpace::Allocate();
         if (!base)
         {
-            std::fprintf(stderr, "Guest address space allocation failed\n");
+            const auto failure = GuestAddressSpace::GetFailureInfo();
+            std::fprintf(stderr, "Guest address space allocation failed: %s, error=%u view=%d size=%llu offset=%llu\n",
+                         GuestAddressSpace::FailureOperationName(failure.operation), failure.error, failure.viewIndex,
+                         static_cast<unsigned long long>(failure.size), static_cast<unsigned long long>(failure.offset));
             return 1;
         }
         auto word = [base](uint32_t address) -> volatile uint32_t& {

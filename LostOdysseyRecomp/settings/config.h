@@ -34,6 +34,7 @@ struct Config
     uint32_t debugLanguage = 0; // Independent tool UI: 0 English, 1 Simplified Chinese.
     uint32_t gameLanguage = 1;
     uint32_t width = 1280, height = 720;
+    int internalResolution = 0; // 0 follows output (up to 4K); 720/1080/1440/2160 select scene height.
     WindowMode windowMode = WindowMode::Windowed;
     uint32_t antialiasing = 0; // 0 Off, 1 FXAA, 2 SMAA, 3 experimental camera-based TAA.
     uint32_t frameRate = 30;

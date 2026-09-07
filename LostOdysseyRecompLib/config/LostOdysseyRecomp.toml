@@ -113,8 +113,12 @@ functions = [
     { address = 0x82AD9408, size = 0xA8 },
     { address = 0x82AE09A8, size = 0x70 },
     { address = 0x82AF21E8, size = 0xC0 },
-    { address = 0x82AFA2E8, size = 0x158 },
-    { address = 0x82AFD038, size = 0x1E0 },
+    # Separate indirect-only leaf entries after the preceding restgprlr tails.
+    # Keeping them inside the previous bound leaves their dispatch slots missing (#5).
+    { address = 0x82AFA2E8, size = 0xA0 },
+    { address = 0x82AFA388, size = 0xB4 },
+    { address = 0x82AFD038, size = 0x118 },
+    { address = 0x82AFD150, size = 0xC8 },
     { address = 0x82B02E70, size = 0x8 },
     { address = 0x82B120E0, size = 0xD0 },
     { address = 0x82B69CA8, size = 0x268 },

@@ -26,6 +26,11 @@ namespace gpu::renderer
     // Initialises against the presenter's device; returns false without a GPU.
     bool Init();
     void Shutdown();
+    // Report the actual swapchain extent; the next renderer frame applies Auto.
+    void SetOutputSize(uint32_t width, uint32_t height);
+    // Convert the guest frontbuffer content extent to this surface's physical
+    // pixels (storage padding remains excluded).
+    void ScaleResolvedSize(uint32_t physicalAddress, uint32_t& width, uint32_t& height);
     // UI thread requests; render thread captures the next complete frame.
     void RequestDebugCapture();
     std::wstring DebugCaptureStatus();

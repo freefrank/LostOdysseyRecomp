@@ -68,11 +68,21 @@ See the [installation guide](docs/INSTALLING.md) for accepted disc versions, fil
 | Shader preparation | Built-in resource index, parallel compilation and cache reuse |
 | Input and debug | Controller and keyboard input; F1 menu with map information and same-map POI teleport |
 
-Published v0.3.0 has **disabled DLSS/frame-generation placeholders**; local v0.4.0 development removes those controls. Higher internal rendering resolutions, unlocked frame rates, HDR, Linux and Vulkan gameplay remain development targets.
+Published v0.3.0 has **disabled DLSS/frame-generation placeholders**; v0.4.0 development removes those controls. Internal-resolution controls and higher frame rates are available in development builds; HDR, Linux and Vulkan gameplay remain future targets.
 
 ## Development status
 
-**v0.4.0 is in local development.** It adds output-resolution Settings text, bilingual Debug controls, SMAA 1x, selectable experimental camera-based TAA, automatic Standard/High spatial scaling and 30/60/120 FPS controls. Selected tests and actual Map2 movement verify the TAA path and removal of repeated AA from later UI; guest UI still renders at 720p. Unsupported TAA paths fall back to SMAA. Debug switching passed in a live Map2 tutorial state. Graphics preview, timeout rollback, Keep and same-process reopening passed, including TAA and 60-FPS selection. The 60-FPS implementation passed bounded movement, dialogue, menu and Ring core-timing checks; the static camp averaged 59.80 FPS. Precise Ring release/Perfect and wider gameplay remain regression coverage, without a whole-game locked-60 claim. The optional 120 FPS target may be deferred. DLSS/FSR feasibility research is complete; vendor backends and missing native motion/color-space inputs remain future work. See the [development evidence and limits](docs/notes/v0.4.0-development.md); this work remains local, unpushed and unpublished, has no new user acceptance, and the published download remains v0.3.0.
+**v0.4.0 is in development.** It adds output-resolution Settings text, bilingual Debug controls, SMAA 1x, selectable experimental camera-based TAA, automatic Standard/High spatial scaling and 30/60/120 FPS controls. Earlier v7 tests and actual Map2 movement verify the TAA path and removal of repeated AA from later UI; that build kept guest rendering at 720p. Unsupported TAA paths fall back to SMAA. Debug switching passed in a live Map2 tutorial state. Graphics preview, timeout rollback, Keep and same-process reopening passed, including TAA and 60-FPS selection. The 60-FPS implementation passed bounded movement, dialogue, menu and Ring core-timing checks; the static camp averaged 59.80 FPS. Precise Ring release/Perfect and wider gameplay remain regression coverage, without a whole-game locked-60 claim. The optional 120 FPS target may be deferred. DLSS/FSR feasibility research is complete; vendor backends and missing native motion/color-space inputs remain future work. See the [development evidence and limits](docs/notes/v0.4.0-development.md); this work remains Unreleased, has no new user acceptance, and the published download remains v0.3.0.
+
+Latest development follow-up:
+
+- **Shader discovery:** combined Asian and USA/Europe metadata automatically matches the imported resources, with no region setting. Both editions use 52 indexed resource files and CPX extraction without fallback; all 20,686 sources match full-scan baselines, and the new package passed bounded Map2 checks in both editions. Fast discovery reads required content only; unknown layouts retain fallback and an explicit full-scan mode remains available. This is not whole-resource integrity or full-game validation.
+- **Internal resolution:** Auto follows output up to 4K, with manual 720p/1080p/1440p/2160p. Bounded Map2 checks verified actual scene/depth/TAA sizes and finer detail; build-v3 Graphics preview, rollback and Keep passed.
+- **Experimental TAA:** corrected invalid camera reference points at the projection infinity boundary. Native-720p and Auto 4K runs each reused history in all 256 logged frames.
+- **Issue #5:** repaired two missing dispatch entries; 56 generated-function checks passed. The reported battle still needs reproduction.
+- **Issue #6:** added startup-memory diagnostics with 186 injected checks passed; the original cause remains unknown.
+
+These changes remain Unreleased; new-build visual acceptance and broader coverage are pending. See the [follow-up summary, package and evidence](docs/notes/handoff-v0.4.0-followup.md).
 
 Reliable gameplay and faithful rendering come first. The project translates PowerPC code into C++ with **XenonRecomp**, implements Xbox 360 services on the host, and renders translated Xenos shaders through **plume**.
 

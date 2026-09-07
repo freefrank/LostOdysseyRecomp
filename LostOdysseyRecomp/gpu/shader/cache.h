@@ -7,7 +7,7 @@
 
 namespace xenos::cache {
 // Shared by the runtime and offline compiler. Bump for translation changes.
-inline constexpr unsigned Version = 20;
+inline constexpr unsigned Version = 21;
 inline std::string FileName(bool pixel, uint64_t hash) {
     char name[64];
     std::snprintf(name, sizeof(name), "%s_%016llx_v%u.dxil",
