@@ -10,6 +10,7 @@
 |---|
 | [v0.4.0 开发历史与验证边界](v0.4.0-development.md) |
 | [v0.4.0 后续实现、正式包与验收范围](handoff-v0.4.0-followup.md) |
+| [凯姆首战身体阴影 v0.4.0 复查（2026-09-07 用户挂起，未确认复现）](kaim-body-shadow-v040.md) |
 | [DLSS/FSR 时域超分研究：官方契约、当前证据与后续接入](temporal-upscaling-feasibility.md) |
 | [多手柄与键盘输入（本地未发布）](controller-input.md) |
 | [Debug Menu 渲染状态捕获（本地未发布）](render-state-capture.md) |
