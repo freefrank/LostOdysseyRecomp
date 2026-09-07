@@ -54,6 +54,8 @@ See [settings](notes/settings-menu.md), [shader preparation](notes/shader-prepar
 
 ## Repairs and user feedback
 
+**Fix verified and user accepted — 2026-09-06:** Full initialization of newly allocated placed resolve render targets fixes the tested AMD black title/background and depth-of-field path; framebuffer retirement now removes cached views safely. Technical review, AMD GPU regression/negative control, layout tests, title/opening-battle checks, and final-build copied-save/random-battle regression passed. NVIDIA RTX 5080 follow-up passed GPU/layout tests and title/settings/Map 12 comparisons without new darkening. The user then reported no glitches in the manual NVIDIA run; log review found no error/fatal or device-removed records and no new merge blocker, while retaining the documented shader warnings. Commit **`43ce0e53`** is merged into local `main` without conflicts. It remains **unpublished**, is not included in v0.2.1, and has not been pushed or released. NVIDIA battle and complete-playthrough regression remain additional coverage. See [resolve initialization evidence](notes/amd-resolve-initialization.md).
+
 | Report | Current result | Remaining verification |
 |---|---|---|
 | Startup driver crash during depth clear | Batched rectangle clearing replaced the failing full clear path; targeted tests and startup runs passed. | Broader driver/hardware coverage. [Evidence](notes/startup-depth-clear-crash.md). |

@@ -2,7 +2,7 @@
 
 ## 2026-09-06 当前交接
 
-[v0.2.1 已正式发布](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.2.1)，包含 F1 渲染捕获自动 ZIP 与多手柄／键盘 E/R 输入；托管 CI、正式包验证及隔离启动／捕获均通过。参见[捕获](render-state-capture.md)与[输入](controller-input.md)，不代表 AMD 缺陷已修复；文本补丁仍暂停。
+[v0.2.1 已正式发布](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.2.1)，包含 F1 渲染捕获自动 ZIP 与多手柄／键盘 E/R 输入；托管 CI、正式包验证及隔离启动／捕获均通过。参见[捕获](render-state-capture.md)与[输入](controller-input.md)。AMD resolve 初始化修复 `43ce0e53` 已通过 AMD 与 NVIDIA 定向验证，用户确认未发现 glitch；日志未见新增合并阻塞，已授权本地合入 `main`，当前合并无冲突、待完成合并提交，尚未推送或发布，也不在 v0.2.1 中。参见[专项证据](amd-resolve-initialization.md)；文本补丁仍暂停。
 
 用户先选择关闭本仓库 Gitea Actions，API PATCH `has_actions=false` 后 GET 已确认；随后用户启动 Windows runner 并要求重开，现已 PATCH `has_actions=true` 并 GET 确认开启。`win-t640` 心跳为 `2026-09-06T19:24:52Z`，已在线，但标签仍只有 `windows-latest`／`windows`，无法匹配 7 个旧任务要求的 `windows-2022`；标签匹配待处理，历史队列记录保留。`git ls-remote` 已确认 Gitea 的 `main` 与 `v0.2.1` 完好，代码镜像继续双推。GitHub [正式 CI 34053765472](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34053765472) 全部步骤成功，包括 LoHidTest。
 
