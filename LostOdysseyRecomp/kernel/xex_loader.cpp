@@ -2,6 +2,7 @@
 #include "xex_loader.h"
 #include "memory.h"
 #include "heap.h"
+#include <kernel/io/file_system.h>
 #include <os/logger.h>
 #include <file.h>
 #include <image.h>
@@ -57,7 +58,7 @@ uint32_t XexLoader::Load(const std::filesystem::path& xexPath)
     const auto file = LoadFile(xexPath);
     if (file.empty())
     {
-        LOG_ERROR("failed to read {}", xexPath.string());
+        LOG_ERROR("failed to read {}", FileSystem::PathUtf8(xexPath));
         return 0;
     }
 

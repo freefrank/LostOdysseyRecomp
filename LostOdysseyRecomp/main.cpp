@@ -31,7 +31,7 @@ static std::filesystem::path FindGameRoot(int argc, char* argv[])
     for (int i = 1; i + 1 < argc; i++)
     {
         if (strcmp(argv[i], "--game") == 0)
-            return argv[i + 1];
+            return std::filesystem::u8path(argv[i + 1]);
     }
 
     // Default: the extracted disc 1 next to the executable, or the dev tree.
@@ -57,6 +57,23 @@ void InstallPhysicalWatchpoint();
 
 int main(int argc, char* argv[])
 {
+#ifdef _WIN32
+    // The CRT's narrow argv can best-fit Unicode (for example acute -> prime)
+    // before we see it. Decode the original Windows command line instead.
+    int wideArgc = 0;
+    auto wideArgv = CommandLineToArgvW(GetCommandLineW(), &wideArgc);
+    if (!wideArgv) return 1;
+    std::vector<std::string> utf8Arguments;
+    utf8Arguments.reserve(wideArgc);
+    for (int i = 0; i < wideArgc; ++i)
+        utf8Arguments.push_back(FileSystem::PathUtf8(std::filesystem::path(wideArgv[i])));
+    LocalFree(wideArgv);
+    std::vector<char*> argumentPointers;
+    for (auto& argument : utf8Arguments) argumentPointers.push_back(argument.data());
+    argumentPointers.push_back(nullptr);
+    argc = wideArgc;
+    argv = argumentPointers.data();
+#endif
     bool explicitGame=false, requestedSetup=false, setupOnly=false;
     for(int i=1;i<argc;++i) {
         explicitGame |= strcmp(argv[i],"--game")==0;
@@ -89,8 +106,8 @@ int main(int argc, char* argv[])
 #else
         os::logger::g_file = fopen(logPath.c_str(), "ab");
 #endif
-        if (os::logger::g_file) LOG_INFO("log file: {}", logPath.string());
-        else LOG_WARNING("could not open log file: {}", logPath.string());
+        if (os::logger::g_file) LOG_INFO("log file: {}", FileSystem::PathUtf8(logPath));
+        else LOG_WARNING("could not open log file: {}", FileSystem::PathUtf8(logPath));
     }
     InstallCrashHandler();
 #ifdef _WIN32
@@ -152,7 +169,7 @@ int main(int argc, char* argv[])
     g_userHeap.Init();
     g_pageAllocator.Init();
 
-    LOG_INFO("game root: {}", gameRoot.string());
+    LOG_INFO("game root: {}", FileSystem::PathUtf8(gameRoot));
 
     FileSystem::Init(gameRoot);
     XamInit();

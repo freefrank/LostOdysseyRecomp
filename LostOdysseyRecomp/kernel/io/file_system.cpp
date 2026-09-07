@@ -184,11 +184,11 @@ bool FileSystem::SelectDisc(uint32_t discNumber)
         g_gameRoot.parent_path() / ("disc" + std::to_string(discNumber));
     if (!DiscSet::Validate(target, {g_discIdentity.edition, discNumber}))
     {
-        LOG_ERROR("disc {} unavailable or incomplete: {}; import this disc with InstallGame", discNumber, target.string());
+        LOG_ERROR("disc {} unavailable or incomplete: {}; import this disc with InstallGame", discNumber, PathUtf8(target));
         return false;
     }
     g_discRoot = target;
-    LOG_INFO("automatically selected installed disc {}: {}", discNumber, target.string());
+    LOG_INFO("automatically selected installed disc {}: {}", discNumber, PathUtf8(target));
     return true;
 }
 
@@ -321,7 +321,7 @@ static uint32_t OpenFileHandle(be<uint32_t>* FileHandleOut, uint32_t DesiredAcce
         if (!exists)
         {
             if (IoStatusBlock) { IoStatusBlock->Status = STATUS_OBJECT_NAME_NOT_FOUND; IoStatusBlock->Information = 0; }
-            LOG_KERNEL("'{}' -> not found ({})", name, hostPath.string());
+            LOG_KERNEL("'{}' -> not found ({})", name, FileSystem::PathUtf8(hostPath));
             return STATUS_OBJECT_NAME_NOT_FOUND;
         }
         information = 1; // FILE_OPENED
@@ -378,7 +378,7 @@ static uint32_t OpenFileHandle(be<uint32_t>* FileHandleOut, uint32_t DesiredAcce
         {
             DestroyKernelObject(handle);
             if (IoStatusBlock) { IoStatusBlock->Status = STATUS_ACCESS_DENIED; IoStatusBlock->Information = 0; }
-            LOG_KERNEL("'{}' -> open failed ({})", name, hostPath.string());
+            LOG_KERNEL("'{}' -> open failed ({})", name, FileSystem::PathUtf8(hostPath));
             return STATUS_ACCESS_DENIED;
         }
         handle->writable = wantWrite;
@@ -393,7 +393,7 @@ static uint32_t OpenFileHandle(be<uint32_t>* FileHandleOut, uint32_t DesiredAcce
         IoStatusBlock->Status = STATUS_SUCCESS;
         IoStatusBlock->Information = information;
     }
-    LOG_INFO("open '{}' -> {} ({} bytes{})", name, hostPath.string(), handle->size, handle->isDirectory ? ", dir" : "");
+    LOG_INFO("open '{}' -> {} ({} bytes{})", name, FileSystem::PathUtf8(hostPath), handle->size, handle->isDirectory ? ", dir" : "");
     {
         std::lock_guard lock(g_lastOpenedMutex);
         g_lastOpenedFile = hostPath.filename().string();
@@ -493,7 +493,7 @@ uint32_t NtWriteFile(FileHandle* handle, uint32_t Event, uint32_t ApcRoutine, ui
         IoStatusBlock->Status = status;
         IoStatusBlock->Information = uint32_t(written);
     }
-    LOG_INFO("write '{}' offset={} bytes={}/{} status={:#x}", handle->path.string(), offset, written, Length, status);
+    LOG_INFO("write '{}' offset={} bytes={}/{} status={:#x}", FileSystem::PathUtf8(handle->path), offset, written, Length, status);
     QueueIoApc(ApcRoutine, ApcContext, IoStatusBlock, status);
     if (Event != 0)
     {
@@ -667,7 +667,7 @@ uint32_t NtQueryVolumeInformationFile(FileHandle* handle, XIO_STATUS_BLOCK* IoSt
     case FileFsDeviceInformation:
     {
         auto* p = reinterpret_cast<be<uint32_t>*>(FsInformation);
-        p[0] = handle && !IsInvalidKernelObject(handle) && handle->path.string().starts_with(g_gameRoot.string()) ? 2 /* FILE_DEVICE_CD_ROM */ : 7 /* FILE_DEVICE_DISK */;
+        p[0] = handle && !IsInvalidKernelObject(handle) && handle->path.native().starts_with(g_gameRoot.native()) ? 2 /* FILE_DEVICE_CD_ROM */ : 7 /* FILE_DEVICE_DISK */;
         p[1] = 0;
         info = 8;
         break;
