@@ -8,16 +8,20 @@ Windows x64 · Direct3D 12 · PowerPC static recompilation
 
 <img src="docs/images/title-screen.png" alt="Lost Odyssey title screen — Press START" width="960">
 
-### [Download v0.3.0](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.3.0) · [Installation guide](docs/INSTALLING.md) · [Report an issue](https://github.com/freefrank/LostOdysseyRecomp/issues)
+### [Download v0.4.0](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.4.0) · [Installation guide](docs/INSTALLING.md) · [Report an issue](https://github.com/freefrank/LostOdysseyRecomp/issues)
 
 [简体中文](README.zh-CN.md) · [Project status](docs/STATUS.md) · [Roadmap](docs/ROADMAP.md) · [Build from source](docs/BUILDING.md)
 
 </div>
 
 > [!IMPORTANT]
-> **v0.3.0 is an early testing release.** Opening areas and selected scenes have been tested; a complete playthrough has not. Rendering and stability issues remain. You must supply your own supported game files.
+> **v0.4.0 is an early testing release.** Opening areas and selected scenes have been tested; a complete playthrough has not. Rendering and stability issues remain. You must supply your own supported game files.
 
-## New in v0.3.0
+## New in v0.4.0
+
+Real internal resolution up to 4K, SMAA and experimental camera-based TAA, Standard/High filtering, saved frame-rate controls and automatic Asian/USA-Europe CPX indexing are included. Settings text renders at output resolution and Debug labels switch independently between English and Simplified Chinese. See the [changelog](CHANGELOG.md). Existing translated-shader caches rebuild after updating.
+
+## Previously in v0.3.0
 
 v0.3.0 is released. It expands discovery into compressed shader resources and XEX sources, generates bounded vertex-shader variants, and prepares previously recorded graphics pipelines on later launches. Initial scanning and compilation may take several minutes; later launches reuse caches. Coverage remains incomplete and this does not eliminate all stutter. See [validation details](docs/notes/shader-preparation.md).
 
@@ -57,32 +61,26 @@ See the [installation guide](docs/INSTALLING.md) for accepted disc versions, fil
 
 *Unmodified screenshots from development builds leading up to v0.1.*
 
-## Included in v0.2
+## Current features
 
 | Feature | What to expect |
 | :--- | :--- |
 | Game importer | Folder, XEX, ISO and GOD input; original source files are copied |
 | First-launch setup | Language and graphics settings before game initialization |
 | Language settings | English, Japanese, Korean, Traditional and Simplified Chinese interface options; game language selection |
-| Graphics settings | FXAA, output resolution and display-mode controls; fullscreen and mixed-DPI behavior need more testing |
+| Graphics settings | Auto/manual internal resolution up to 4K, Off/FXAA/SMAA/experimental TAA, Standard/High filtering, 30/60 FPS and output/display controls; fullscreen and mixed DPI need more testing |
 | Shader preparation | Built-in resource index, parallel compilation and cache reuse |
-| Input and debug | Controller and keyboard input; F1 menu with map information and same-map POI teleport |
+| Input and debug | Controller and keyboard input; English/Simplified Chinese F1 menu with capture, map information and same-map POI teleport |
 
-Published v0.3.0 has **disabled DLSS/frame-generation placeholders**; v0.4.0 development removes those controls. Internal-resolution controls and higher frame rates are available in development builds; HDR, Linux and Vulkan gameplay remain future targets.
+DLSS, FSR and frame generation are not implemented; v0.4.0 removes the former disabled controls. HDR, Linux and Vulkan gameplay remain future targets.
 
-## Development status
+## Validation and remaining work
 
-**v0.4.0 is in development.** It adds output-resolution Settings text, bilingual Debug controls, SMAA 1x, selectable experimental camera-based TAA, automatic Standard/High spatial scaling and 30/60/120 FPS controls. Earlier v7 tests and actual Map2 movement verify the TAA path and removal of repeated AA from later UI; that build kept guest rendering at 720p. Unsupported TAA paths fall back to SMAA. Debug switching passed in a live Map2 tutorial state. Graphics preview, timeout rollback, Keep and same-process reopening passed, including TAA and 60-FPS selection. The 60-FPS implementation passed bounded movement, dialogue, menu and Ring core-timing checks; the static camp averaged 59.80 FPS. Precise Ring release/Perfect and wider gameplay remain regression coverage, without a whole-game locked-60 claim. The optional 120 FPS target may be deferred. DLSS/FSR feasibility research is complete; vendor backends and missing native motion/color-space inputs remain future work. See the [development evidence and limits](docs/notes/v0.4.0-development.md); this work remains Unreleased, has no new user acceptance, and the published download remains v0.3.0.
+The v0.4.0 Windows package passed release CI, all 45 manifest entries and the installer self-test. Both audited editions passed isolated official-package Map2 startup at Auto 1080p/TAA with verified bundled compiler libraries. This is a bounded static scene check, not full-game or new player visual acceptance.
 
-Latest development follow-up:
+TAA remains experimental, lacks native object-motion vectors and falls back to SMAA on unsupported paths. Selected movement, dialogue and Ring core-timing checks passed for 60 FPS, but whole-game locked 60 and precise Ring release/Perfect are unverified. The unvalidated 120 FPS option requires `LO_EXPERIMENTAL_120=1`; otherwise it runs at an effective 60 FPS.
 
-- **Shader discovery:** combined Asian and USA/Europe metadata automatically matches the imported resources, with no region setting. Both editions use 52 indexed resource files and CPX extraction without fallback; all 20,686 sources match full-scan baselines, and the new package passed bounded Map2 checks in both editions. Fast discovery reads required content only; unknown layouts retain fallback and an explicit full-scan mode remains available. This is not whole-resource integrity or full-game validation.
-- **Internal resolution:** Auto follows output up to 4K, with manual 720p/1080p/1440p/2160p. Bounded Map2 checks verified actual scene/depth/TAA sizes and finer detail; build-v3 Graphics preview, rollback and Keep passed.
-- **Experimental TAA:** corrected invalid camera reference points at the projection infinity boundary. Native-720p and Auto 4K runs each reused history in all 256 logged frames.
-- **Issue #5:** repaired two missing dispatch entries; 56 generated-function checks passed. The reported battle still needs reproduction.
-- **Issue #6:** added startup-memory diagnostics with 186 injected checks passed; the original cause remains unknown.
-
-These changes remain Unreleased; new-build visual acceptance and broader coverage are pending. See the [follow-up summary, package and evidence](docs/notes/handoff-v0.4.0-followup.md).
+The two missing dispatch entries investigated for Issue #5 are repaired, but the original battle still needs retesting. Issue #6 has added startup-memory diagnostics; its original-machine cause and recovery remain unknown. New-build visual acceptance and broader gameplay coverage remain pending. See [release validation](docs/STATUS.md), [development evidence](docs/notes/v0.4.0-development.md) and the [follow-up record](docs/notes/handoff-v0.4.0-followup.md).
 
 Reliable gameplay and faithful rendering come first. The project translates PowerPC code into C++ with **XenonRecomp**, implements Xbox 360 services on the host, and renders translated Xenos shaders through **plume**.
 

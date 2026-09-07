@@ -1,12 +1,20 @@
 # v0.4.0 后续开发交接（2026-09-07）
 
+## 2026-09-07：v0.4.0 正式发布
+
+[v0.4.0](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.4.0) 已于 2026-09-07 21:56:34 UTC 从标签提交 `40362d78285d9ad829d2b0f6143d4fc54d3514d8` 发布，CI `34163445379` 成功。正式 ZIP 为 42,556,481 字节，SHA256 `92bf89f19d6eca3f6c2ec5c4a04d9ef372d0cadc9b3117546027e6e32e749cc1`；45 项 manifest 与 System32-only PATH 下安装器自测通过。正式 EXE SHA256 为 `6cbb1360c36a0492df78098a244c72bf4bba93e4f75052aab0e093c1ae30a09e`，匿名公开下载与受测 ZIP 一致。
+
+两版均通过普通便携 game-path 路径启动，实际 EXE 和 DXC／DXIL 路径及哈希已核对。Map2 Auto 1080p／TAA3 达到有效 1920×1080，无分配回退及 error／fatal／critical 日志。各空发现缓存命中 52 文件、零扫描／CPX 回退，20,686 来源哈希与各版保留的完整扫描基准一致；亚洲／美欧分别读取 142,093,208／142,289,816 字节。编译缓存为此前任务副本，不作全冷性能对照。两张截图已检查，静态结果不证明时序伪影已修复；两个已知预编译失败仍保留。7 项用户文件及两份 seed 哈希不变，任务进程由 harness 结束（exit 1，不记作自然退出验证）。
+
+证据见 `out/release-v0.4.0/{package-validation.json,installer-self-test.json,smoke-result.json,release-published.json,public-verification.json}` 及 [STATUS](../STATUS.md)。发布说明按用户要求在标签之后改为独立英文／简体中文区块，属于文案排版调整，未改变标签或产物内容；公开正文与当前 changelog 版本正文一致。新构建画质验收、Issue #5 原战斗和 Issue #6 原机器诊断仍未完成。下文旧提交前说明和冻结开发包记录保留各自时点，不作为当前发布状态。
+
 ## 2026-09-07 提交前状态说明
 
 本次准备将 v0.4.0 开发内容合入 `main`，不创建 tag 或 Release。下方旧记录中的“未提交／未推送”描述各自产物交付时点，不代表后续 Git 状态；旧包的基础提交、dirty 身份和哈希保持原样，不因后续源码提交而改写。视觉验收、#5 原战斗复测和 #6 原机器诊断仍待完成。
 
 ## 本轮改动概括
 
-本轮在 `c548b48` 基础上完成下列实现及限定验证；这些内容属于 v0.4.0 Unreleased 开发范围，公开版本仍为 v0.3.0。
+本轮在 `c548b48` 基础上完成下列实现及限定验证；这些实现已纳入 v0.4.0 正式版；下文保留开发时的限定证据。
 
 | 改动 | 已记录结果 |
 |---|---|
@@ -17,7 +25,7 @@
 | Issue #6 | 补充启动分配失败阶段、OS 错误及内存诊断，186 项注入检查通过；未改变映射策略，原机器根因仍未知。 |
 | Plume 依赖补丁 | 两处原生纹理创建失败返回 null；固定 HEAD 应用补丁后 Git 规范化内容与当前源一致，原有改动保留。 |
 
-最新[开发包](../../out/v0.4.0-followup/packages-both-editions/LostOdysseyRecomp-windows-x64-c548b480-dev.zip)：ZIP SHA256 `ed8e0627…`，EXE SHA256 `c75946a3…`；45 项 manifest、安装器和两版 Map2 实跑核验通过，7 项用户文件保持。旧包和旧证据保留。
+此前[开发包](../../out/v0.4.0-followup/packages-both-editions/LostOdysseyRecomp-windows-x64-c548b480-dev.zip)：ZIP SHA256 `ed8e0627…`，EXE SHA256 `c75946a3…`；45 项 manifest、安装器和两版 Map2 实跑核验通过，7 项用户文件保持。旧包和旧证据保留。
 
 这些结果不代表整体启动／FPS 收益或全游戏画质验收；新版本视觉反馈、#5 原战斗和 #6 原机器仍待复查。旧 freeze 的独立窗口线程修复属于既有工作，本轮仅做关联检索。
 
