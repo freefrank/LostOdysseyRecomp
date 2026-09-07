@@ -38,6 +38,14 @@ It uses hosted Windows 2022. Private inputs are checked out from a pinned commit
 `LO_BUILD_INPUT_KEY` Actions secret. Pull-request tests never access this key or repository.
 It produces a downloadable Actions artifact; a version tag also creates a **draft** GitHub release.
 
+Draft release notes come from the matching version section in the tagged `CHANGELOG.md`.
+`tools/release/extract_release_notes.py` accepts a linked or plain version heading (for example,
+`### [v0.4.0](...)` or `### v0.2`), retaining its body and nested headings until the next heading
+at the same or a higher level. Missing, duplicate or empty version sections fail release creation;
+there is no generated-notes fallback. Existing releases retain their reviewed notes and assets.
+Run the focused extraction checks with
+`python -m unittest discover -s tools/tests -p test_release_notes.py -v`.
+
 The public checkout intentionally does not contain the original XEX or generated PPC files.
 The private repository contains only the supported Disc 1 default.xex and a provenance note.
 The input is validated against the importer's pinned SHA256 before code generation. Game

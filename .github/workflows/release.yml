@@ -86,4 +86,6 @@ jobs:
             Write-Host 'Release already exists; preserving its reviewed assets.'
             exit 0
           }
-          gh release create $env:RELEASE_TAG --verify-tag --draft --generate-notes @assets
+          python tools/release/extract_release_notes.py --changelog CHANGELOG.md --version $env:RELEASE_TAG --output out/releases/release-notes.md
+          if ($LASTEXITCODE -ne 0) { throw 'Could not extract release notes from CHANGELOG.md.' }
+          gh release create $env:RELEASE_TAG --verify-tag --draft --notes-file out/releases/release-notes.md @assets
