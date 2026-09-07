@@ -5,11 +5,14 @@
 #include "depth_format.h"
 #include "depth_clear_layout.h"
 #include "polygon_offset.h"
+#include "pipeline_cache.h"
 #include "texture_layout.h"
 #include "shader/xenos_translator.h"
 #include "shader/dxc_compiler.h"
 #include "shader/cache.h"
 #include "shader/resource_scan.h"
+#include "shader/resource_xex.h"
+#include "shader/resource_variants.h"
 #include <kernel/io/file_system.h>
 #include <kernel/memory.h>
 #include <os/logger.h>
@@ -24,11 +27,13 @@
 #include <thread>
 #include <cmath>
 #include <fstream>
+#include <future>
 #include <set>
 #include <tuple>
 #include <map>
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include <mutex>
 
@@ -242,16 +247,8 @@ namespace gpu::renderer
             bool valid = false;
         };
 
-        struct PipelineKey
-        {
-            uint64_t vs, ps;
-            uint32_t blend, depthControl, modeCull, colorMask, prim, rtFormat, depthFormat, flags;
-            uint32_t stencilRefMask, stencilRefMaskBack;
-            int32_t depthBias;
-            uint32_t slopeBias;
-            bool operator==(const PipelineKey& o) const { return memcmp(this, &o, sizeof(o)) == 0; }
-        };
-        struct PipelineKeyHash { size_t operator()(const PipelineKey& k) const { return size_t(Fnv1a(&k, sizeof(k))); } };
+        using PipelineKey = gpu::pipeline_cache::Key;
+        using PipelineKeyHash = gpu::pipeline_cache::KeyHash;
 
         struct Renderer
         {
@@ -294,6 +291,13 @@ namespace gpu::renderer
 
             std::unordered_map<uint64_t, Shader> shaders[2];
             std::unordered_map<PipelineKey, std::unique_ptr<RenderPipeline>, PipelineKeyHash> pipelines;
+            // Full state recipes are portable; driver blobs and object pointers
+            // are never persisted. Render maps stay on the command thread.
+            static constexpr uint32_t kPipelineRecipeVersion = 1;
+            std::unordered_set<PipelineKey, PipelineKeyHash> pipelineRecipes, preparedPipelineKeys, usedPreparedPipelineKeys;
+            std::future<gpu::pipeline_cache::WriteResult> pipelineWrite;
+            bool pipelineCacheEnabled = false, pipelineRecipesDirty = false;
+            uint64_t preparedPipelineHits = 0, runtimePipelineCreates = 0;
             std::unordered_map<RenderTargetKey, std::unique_ptr<HostTexture>, RenderTargetKeyHash> renderTargets;
             std::vector<std::unique_ptr<HostTexture>> retiredTextures; // replaced targets, freed after the next Flush
             std::unordered_map<TextureKey, std::unique_ptr<HostTexture>, TextureKeyHash> textures;
@@ -591,6 +595,7 @@ namespace gpu::renderer
                 CompileBlitShaders();
                 CompileTransferShader();
                 PrepareKnownShaders();
+                PrepareKnownPipelines();
                 LOG_INFO("renderer: initialised");
                 return true;
             }
@@ -1007,6 +1012,104 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             }
 
             // ---- shaders ------------------------------------------------------------
+            static bool ValidPipelineRecipe(const PipelineKey& key)
+            {
+                // Only host formats emitted by GetRenderTarget are accepted.
+                const auto color = static_cast<RenderFormat>(key.rtFormat);
+                const auto depth = static_cast<RenderFormat>(key.depthFormat);
+                const bool colorValid = color == RenderFormat::UNKNOWN || color == RenderFormat::R8G8B8A8_UNORM ||
+                    color == RenderFormat::R16G16_FLOAT || color == RenderFormat::R16G16B16A16_FLOAT ||
+                    color == RenderFormat::R32_FLOAT || color == RenderFormat::R32G32_FLOAT;
+                return key.vs != 0 && key.prim <= 32 && colorValid &&
+                    (depth == RenderFormat::UNKNOWN || depth == RenderFormat::D32_FLOAT_S8_UINT);
+            }
+
+            void PrepareKnownPipelines()
+            {
+                pipelineCacheEnabled = !shaderCacheDir.empty() && !getenv("LO_NO_PIPELINE_CACHE");
+                if (!pipelineCacheEnabled) return;
+                const auto path = std::filesystem::path(shaderCacheDir) / "pipelines.bin";
+                const auto loaded = gpu::pipeline_cache::Load(path, xenos::cache::Version, kPipelineRecipeVersion, ValidPipelineRecipe);
+                if (!loaded.error.empty()) LOG_WARNING("renderer: ignoring pipeline recipes: {}", loaded.error);
+                for (const auto& key : loaded.keys) pipelineRecipes.insert(key);
+                // Disabling precreation is a same-binary control. Learning remains
+                // enabled so replay coverage can be measured independently.
+                if (getenv("LO_NO_PIPELINE_PREPARE") || getenv("LO_NO_SHADER_PREPARE")) return;
+                struct Job { PipelineKey key; Shader* vs; Shader* ps; std::unique_ptr<RenderPipeline> pipeline; };
+                std::vector<Job> jobs;
+                size_t missingShaders = 0;
+                for (const auto& key : loaded.keys) {
+                    const auto vs = shaders[0].find(key.vs), ps = shaders[1].find(key.ps);
+                    if (vs == shaders[0].end() || !vs->second.valid ||
+                        (key.ps && (ps == shaders[1].end() || !ps->second.valid))) { ++missingShaders; continue; }
+                    jobs.push_back({key, &vs->second, key.ps ? &ps->second : nullptr, {}});
+                }
+                const auto started = std::chrono::steady_clock::now();
+                std::atomic<size_t> next{0}, completed{0};
+                auto worker = [&] {
+                    for (;;) {
+                        const size_t i = next.fetch_add(1);
+                        if (i >= jobs.size()) return;
+                        auto& job = jobs[i];
+                        try { job.pipeline = CreatePipeline(job.key, job.vs, job.ps, false); }
+                        catch (const std::exception& e) { LOG_WARNING("renderer: pipeline precreation: {}", e.what()); }
+                        ++completed;
+                    }
+                };
+                const unsigned logical = std::thread::hardware_concurrency();
+                const auto count = std::min<size_t>(jobs.size(), getenv("LO_PIPELINE_PREPARE_SERIAL") ? 1u :
+                    std::min(4u, logical > 1 ? logical - 1 : 1u));
+                std::vector<std::jthread> workers;
+                try { for (size_t i = 0; i < count; ++i) workers.emplace_back(worker); }
+                catch (const std::system_error& e) {
+                    LOG_WARNING("renderer: started only {} pipeline workers: {}", workers.size(), e.what());
+                    if (workers.empty()) worker();
+                }
+                while (completed.load() < jobs.size()) {
+                    video::SetShaderPreparationProgress(uint32_t(completed.load()), uint32_t(jobs.size()), false, true);
+                    video::PumpEvents();
+                    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                }
+                for (auto& thread : workers) thread.join();
+                size_t failed = 0;
+                for (auto& job : jobs) {
+                    if (!job.pipeline) { ++failed; continue; }
+                    preparedPipelineKeys.insert(job.key);
+                    pipelines.emplace(job.key, std::move(job.pipeline));
+                }
+                video::SetShaderPreparationProgress(0, 0);
+                LOG_INFO("renderer: pipeline preparation: {} recipes, {} ready, {} missing shaders, {} failed, {} workers, {:.0f} ms",
+                    loaded.keys.size(), preparedPipelineKeys.size(), missingShaders, failed, workers.size(),
+                    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now()-started).count());
+            }
+
+            void SavePipelineRecipes(bool force = false)
+            {
+                if (!pipelineCacheEnabled || (!force && frame % 60)) return;
+                if (pipelineWrite.valid()) {
+                    if (!force && pipelineWrite.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
+                    try {
+                        const auto result = pipelineWrite.get();
+                        if (!result.ok) {
+                            LOG_WARNING("renderer: pipeline recipe write failed: {}", result.error);
+                            pipelineRecipesDirty = true;
+                        }
+                    } catch (const std::exception& e) {
+                        LOG_WARNING("renderer: pipeline recipe writer: {}", e.what());
+                        pipelineRecipesDirty = true;
+                    }
+                }
+                if (!pipelineRecipesDirty) return;
+                try {
+                    std::vector<PipelineKey> snapshot(pipelineRecipes.begin(), pipelineRecipes.end());
+                    const auto path = std::filesystem::path(shaderCacheDir) / "pipelines.bin";
+                    pipelineWrite = std::async(std::launch::async, [path, snapshot = std::move(snapshot)] {
+                        return gpu::pipeline_cache::Write(path, snapshot, xenos::cache::Version, kPipelineRecipeVersion, ValidPipelineRecipe);
+                    });
+                    pipelineRecipesDirty = false;
+                } catch (const std::exception& e) { LOG_WARNING("renderer: pipeline recipe writer: {}", e.what()); }
+            }
+
             void PrepareKnownShaders()
             {
                 if (shaderCacheDir.empty() || getenv("LO_NO_SHADER_PREPARE")) return;
@@ -1024,10 +1127,27 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 LOG_INFO("renderer: shader inventory {} indexed files, {} scanned files, {} bytes read, {} ms",
                     extracted.indexedFiles, extracted.scannedFiles, extracted.bytesRead,
                     std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-inventoryStarted).count());
+                if (!extracted.reused)
+                    LOG_INFO("renderer: CPX shader scan: {} packages, {} unique decoded, {} decoded bytes",
+                        extracted.cpxPackages, extracted.decodedPackages, extracted.decodedBytes);
                 const auto source = std::filesystem::path(shaderCacheDir) / "source";
                 std::error_code ec;
                 std::filesystem::create_directories(source, ec);
                 if (ec) return;
+                try {
+                    const auto staticCount = xenos::resources::ExtractXexShaders(
+                        {static_cast<const uint8_t*>(g_memory.Translate(0x82000000)), 0x185C60}, source);
+                    const auto generated = xenos::resources::variants::GenerateFixedVariants(source,
+                        [&](uint64_t, std::span<const uint8_t> code) { xenos::resources::SaveSource(source, false, code); });
+                    const auto linked = xenos::resources::variants::GenerateLinkedVariants(source,
+                        [&](uint64_t, std::span<const uint8_t> code) { xenos::resources::SaveSource(source, false, code); });
+                    LOG_INFO("renderer: shader source expansion: {} static XEX, {} fixed VS candidates, {} verified bases, {} invalid bases",
+                        staticCount, generated.generated, generated.verifiedBases, generated.invalidBases);
+                    LOG_INFO("renderer: linked VS expansion: {} new candidates, {} verified VS bases, {} verified PS sources, {} invalid sources",
+                        linked.generated, linked.verifiedBases, linked.verifiedPixelSources, linked.invalidBases + linked.invalidPixelSources);
+                } catch (const std::exception& e) {
+                    LOG_WARNING("renderer: shader source expansion: {}", e.what());
+                }
                 std::vector<std::filesystem::path> paths;
                 for (std::filesystem::directory_iterator it(source, ec), end; !ec && it != end; it.increment(ec)) {
                     const auto name = it->path().filename().string();
@@ -1717,13 +1837,31 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 return table[f & 7];
             }
 
-            RenderPipeline* GetPipeline(const PipelineKey& key, Shader* vs, Shader* ps, RenderFormat rtFormat, RenderFormat depthFormat)
+            RenderPipeline* GetPipeline(const PipelineKey& key, Shader* vs, Shader* ps, RenderFormat, RenderFormat)
             {
                 auto it = pipelines.find(key);
-                if (it != pipelines.end())
+                if (it != pipelines.end()) {
                     return it->second.get();
+                }
                 ScopedTimer timer{ tPipeline };
                 nPipeline++;
+                ++runtimePipelineCreates;
+                auto pipeline = CreatePipeline(key, vs, ps, true);
+                RenderPipeline* result = pipeline.get();
+                // A failed speculative creation must not poison the draw cache.
+                if (result) {
+                    pipelines.emplace(key, std::move(pipeline));
+                    if (pipelineCacheEnabled && pipelineRecipes.size() < gpu::pipeline_cache::kMaxRecords &&
+                        gpu::pipeline_cache::IsValid(key) && ValidPipelineRecipe(key) && pipelineRecipes.insert(key).second)
+                        pipelineRecipesDirty = true;
+                }
+                return result;
+            }
+
+            std::unique_ptr<RenderPipeline> CreatePipeline(const PipelineKey& key, Shader* vs, Shader* ps, bool trace)
+            {
+                const auto rtFormat = static_cast<RenderFormat>(key.rtFormat);
+                const auto depthFormat = static_cast<RenderFormat>(key.depthFormat);
 
                 RenderGraphicsPipelineDesc desc;
                 desc.pipelineLayout = pipelineLayout.get();
@@ -1743,7 +1881,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 desc.depthTargetFormat = depthFormat;
                 desc.depthBias = key.depthBias;
                 desc.slopeScaledDepthBias = std::bit_cast<float>(key.slopeBias);
-                if (getenv("LO_TRACE_POLYGON_OFFSET") && (key.modeCull & 0x3800))
+                if (trace && getenv("LO_TRACE_POLYGON_OFFSET") && (key.modeCull & 0x3800))
                 {
                     static uint32_t reports = 0;
                     if (reports++ < 128)
@@ -1753,7 +1891,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 desc.stencilEnabled = (depthControl & 1) != 0 && depthFormat != RenderFormat::UNKNOWN;
                 if (desc.stencilEnabled)
                 {
-                    if (getenv("LO_STENCIL_TRACE"))
+                    if (trace && getenv("LO_STENCIL_TRACE"))
                         LOG_INFO("renderer: stencil pipeline vs={:016x} ps={:016x} ctl={:#x} refs={:#x}/{:#x} mask={:#x}", key.vs, key.ps, depthControl, key.stencilRefMask, key.stencilRefMaskBack, key.colorMask);
                     static constexpr RenderStencilOp ops[] = {
                         RenderStencilOp::KEEP, RenderStencilOp::ZERO, RenderStencilOp::REPLACE,
@@ -1772,7 +1910,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     desc.stencilWriteMask = (key.stencilRefMask >> 16) & 0xFF;
                     desc.stencilFrontFace = face(depthControl >> 8);
                     desc.stencilBackFace = (depthControl & 0x80) ? face(depthControl >> 20) : desc.stencilFrontFace;
-                    if ((depthControl & 0x80) && key.stencilRefMask != key.stencilRefMaskBack)
+                    if (trace && (depthControl & 0x80) && key.stencilRefMask != key.stencilRefMaskBack)
                         LOG_WARNING("renderer: distinct front/back stencil masks {:#x}/{:#x}", key.stencilRefMask, key.stencilRefMaskBack);
                 }
 
@@ -1810,10 +1948,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 default: desc.primitiveTopology = RenderPrimitiveTopology::TRIANGLE_LIST; break;
                 }
 
-                auto pipeline = device->createGraphicsPipeline(desc);
-                RenderPipeline* result = pipeline.get();
-                pipelines.emplace(key, std::move(pipeline));
-                return result;
+                return device->createGraphicsPipeline(desc);
             }
 
             // ---- vertex buffers ------------------------------------------------------------
@@ -2535,6 +2670,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     commandList->drawInstanced(indexCount, 1, uint32_t(baseVertex), 0);
                 }
                 drawsThisFrame++;
+                if (preparedPipelineKeys.contains(key)) {
+                    ++preparedPipelineHits;
+                    usedPreparedPipelineKeys.insert(key);
+                }
                 if (vs->info.usesRelativeConstants)
                 {
                     static const bool traceRelative = getenv("LO_RELATIVE_DRAW_STATS") != nullptr;
@@ -3200,6 +3339,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
         if (g_renderer)
         {
             g_renderer->Flush();
+            g_renderer->SavePipelineRecipes(true);
             delete g_renderer;
             g_renderer = nullptr;
         }
@@ -3319,6 +3459,11 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 r.vertexUploads = r.vertexRevalidations = 0;
                 r.vertexBytesUploaded = 0;
             }
+            g_renderer->SavePipelineRecipes();
+            if (stats && g_renderer->frame % 600 == 0)
+                LOG_INFO("renderer: pipeline reuse frame {}: {} prepared hits, {}/{} prepared keys used, {} runtime creates, {} recipes",
+                    g_renderer->frame, g_renderer->preparedPipelineHits, g_renderer->usedPreparedPipelineKeys.size(),
+                    g_renderer->preparedPipelineKeys.size(), g_renderer->runtimePipelineCreates, g_renderer->pipelineRecipes.size());
             g_renderer->PollPsTraceRequest();
             g_renderer->frame++;
             g_renderer->PollCaptureRequest();

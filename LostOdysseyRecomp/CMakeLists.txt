@@ -116,6 +116,18 @@ add_executable(LoXmaLoopTest ${CMAKE_SOURCE_DIR}/tools/tests/xma_loop_test.cpp)
 target_include_directories(LoXmaLoopTest PRIVATE ${LO_RUNTIME_ROOT})
 target_compile_features(LoXmaLoopTest PRIVATE cxx_std_20)
 
+add_executable(LoPipelineCacheTest ${CMAKE_SOURCE_DIR}/tools/tests/pipeline_cache_test.cpp)
+target_include_directories(LoPipelineCacheTest PRIVATE ${LO_RUNTIME_ROOT})
+target_compile_features(LoPipelineCacheTest PRIVATE cxx_std_20)
+
+add_executable(LoCpxDecodeTest ${CMAKE_SOURCE_DIR}/tools/tests/cpx_decode_test.cpp)
+target_include_directories(LoCpxDecodeTest PRIVATE ${LO_RUNTIME_ROOT})
+target_compile_features(LoCpxDecodeTest PRIVATE cxx_std_20)
+
+add_executable(LoShaderResourceVariantsTest ${CMAKE_SOURCE_DIR}/tools/tests/shader_resource_variants_test.cpp)
+target_include_directories(LoShaderResourceVariantsTest PRIVATE ${LO_RUNTIME_ROOT})
+target_compile_features(LoShaderResourceVariantsTest PRIVATE cxx_std_20)
+
 add_executable(LoTextureLayoutTest ${CMAKE_SOURCE_DIR}/tools/tests/texture_layout_test.cpp)
 target_include_directories(LoTextureLayoutTest PRIVATE ${LO_RUNTIME_ROOT})
 target_compile_features(LoTextureLayoutTest PRIVATE cxx_std_20)

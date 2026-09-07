@@ -2,6 +2,12 @@
 
 Reviewed **2026-09-06** against the v0.2.2 release, recorded tests and subsequent user feedback. This page describes current results; dated investigation notes retain the history of individual experiments.
 
+## Preparing v0.3.0
+
+The user authorized commit, push and publication on 2026-09-07. Release commit, CI and package checks are pending; v0.2.2 remains the published release. The scope is CPX/FPI shader discovery, four verified XEX shaders, 354 fixed plus 1,891 linked VS candidates, and persistence/preparation of previously recorded pipelines. Suspended temporal-shadow diagnostics are excluded. Release authorization is not new visual or stutter acceptance.
+
+Local validation generated 22,935 shader sources with 22,933 successful compilations and the same two failures; the new linked set covers two of 29 missing VS samples. The RTX 5080 pipeline A/B prepared 233 recipes in 22 ms and used 205 in 8,609,548 submitted draws; runtime creates were zero versus 220 with preparation off. Both runs had no logged >150 ms frames, so no stutter/FPS improvement is claimed. Driver/OS caches were not cleared, inputs were not frame-deterministic, and unseen scenes/first-use PSOs remain outside that proof. See [detailed evidence](notes/shader-preparation.md).
+
 ## Published release
 
 [v0.2.2](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.2.2) is the latest full release (`draft=false`, `prerelease=false`), published on **2026-09-07 at 03:11:10 UTC** (2026-09-06 local), from `f03efe370d444db1a8a9c1213c240da697f58504`. The tag is on both remotes. [Hosted CI 34077788392](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34077788392) passed every step.
@@ -53,7 +59,7 @@ All SDL-mapped controllers now merge into player 1 with the keyboard always avai
 | Importer | Introduced in v0.1; v0.2 accepts both audited four-disc editions from folders, XEX, XDVDFS ISO and GOD, with strict XEX hashes and mixed-edition rejection. | Complete imported-file hashes passed; import alone does not establish story progression. |
 | First launch | Introduced in v0.1; v0.2 imports missing data before presenting edition-specific language/graphics setup, then initializes the game. | Eleven isolated setup tests and localized menu checks passed; the published-package smoke test also passed. |
 | Settings | Original options/save confirmation, five interface translations, FXAA, output scaling and display modes retained. v0.2 chooses game text languages by edition and voice options from resources. | Both editions' voice selectors and six USA, Europe menu/settings languages tested. Fullscreen, mouse and mixed-DPI desktop coverage remains. |
-| Shader discovery | Built-in index covers 52 resource files and finds the same 2,000 shaders as the full scan. Unrecognized layouts retain a scan fallback. | Local discovery improved from 36.2 to 1.1 seconds; this is discovery time, not total startup time. |
+| Shader discovery | v0.3.0 preparation adds bounded CPX/FPI discovery, verified XEX sources and fixed/linked VS generation, while retaining naked-container indexes and fallback scans. | Local four-disc CPX/raw union: 20,686 byte-verified sources; with XEX and VS candidates: 22,935. First scanning/compilation can take minutes; caches are reused later. The historical 2,000-source index timing does not describe expanded scanning. |
 | Shader preparation | Uses logical CPU threads minus one, minimum one, and persistent cache reuse. | On a 16-thread PC, 15 workers reduced preparation from 53.4 to 6.7 seconds in a controlled comparison. 1,998 successful DXIL outputs were byte-identical; two failures remain. Runtime variants and PSO creation can still cause first-use stalls. |
 | Title and input | Animated title, menus, SDL controllers and keyboard input work in tested scenes. | Rumble is disabled by default; `LO_CONTROLLER_RUMBLE=1` enables it. |
 | Saves and debug | Manual save/overwrite/reload, optional save-anywhere backend, map ID/name, coordinate bookmarks and same-map POI teleport implemented. F1 layout exposes the save toggle and supports resizing/scrolling. | Non-save-point save/reload, native save-point permissions and camp transitions tested. UI tests cover three sizes and checkbox callbacks; broader gameplay and multi-DPI acceptance remain. |

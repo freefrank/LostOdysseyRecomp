@@ -69,3 +69,103 @@ LoShaderTool <microcode-directory> --cache <runtime-cache-directory>
 
 
 当前安装状态：135DCA79已包含并行预编译与进度离屏绘制修正，原save/profile未改。上文64FDB4ED“待安装”为历史状态；可见扫描全过程的防闪烁仍待用户复查。
+
+## 2026-09-07 UTC：首战冷暖对照与离线资源覆盖调查
+
+本节为新的本地调查证据；上文安装 hash 和 Map12 数字保留为当时记录。本轮使用正式 v0.2.2（SHA256 `ccc63c3f95495ae4d0052ce6d4ee0f62c20897bb17f64bb79079b55a40a75c48`）、RTX 5080 和美／欧版盘1副本。阴影调查按用户十分钟止损条件继续挂起，本节不将其与卡顿合并归因。
+
+### 已观察到的首战长帧
+
+空应用 shader 缓存启动、正常预编译后，renderer f1270／1274／1275／1321 分别记录 700／1301／155／166 ms，其中 shader 处理为 617／1168／120／129 ms，pipeline 为 14／20／3／2 ms，GPU wait 为 1／3／1／2 ms。四帧均发生在首战引入阶段、第一次安排的玩家攻击之前，不能直接解释玩家报告中的每次攻击卡顿。
+
+初始资源准备仍只有2000个来源、1998份成功 DXIL 和两项既有失败，发现后的准备阶段耗时8941 ms。游玩新增119个资源清单以外的来源（72 PS／47 VS），成功 DXIL 累计2117份。暖运行复用这些缓存，启动准备2119个来源、命中2117份、并行阶段没有新编译，仍有相同两项失败，耗时1808 ms；相同输入序列的 renderer f1–4000 未记录超过150 ms的帧，也未增加 DXIL 文件名。
+
+新增微码／DXIL、冷运行的 shader 处理耗时和暖运行消失的对应长帧共同指向这些大停顿中的首次 shader 工作覆盖缺口。该计时包含翻译、缓存处理和对象创建，不是 DXC 独立耗时；日志只记录每60帧及超过150 ms的帧，不能计算完整帧耗时分位数或排除较小卡顿。驱动／操作系统缓存未清，不能推广到全冷机器或完整攻击动画报告。两轮主比较窗口没有连续截图、PS trace 或 resolve readback。
+
+证据：`out/firstbattle-stutter-cold-01/report.md` 及两轮 `runtime.log`、`timing-rows.json`、`timing-summary.json`；暖运行目录 `out/firstbattle-stutter-warm-01`。
+
+### 从 XEX 和资源推导额外来源
+
+用户要求从 XEX 与全部资源离线推导，避免把2000个原始扫描结果视为完整清单。目前已确认：
+
+- 24个去重后的命名 CPX 材质包解码为44,011,017字节，独立编译的原始 PPC decoder 与 Python 移植对全24包逐字节一致。提取9559个唯一微码（9139 PS／420 VS），其中8390个在旧2000清单之外，合并至少10390个来源。该解码验证只覆盖这24包。
+- 提取先从资源独立生成，再与运行时缓存核对；52个首战新增 PS 为完整字节精确匹配。不是通过运行时缓存反填生成，也未用相似 hash 代替 shader。
+- XEX 恢复4个唯一静态微码，其中3个精确匹配首战新增来源；另找到原始 VS fetch patch、输出链接及调用路径，为继续推导提供依据。
+- 基于原始 SDK 元数据、8个固定 declaration 构造器和 fetch patch 逻辑，离线生成354个 VS 候选，其中17个精确匹配首战新增 VS。stride 使用紧凑大小和16字节对齐大小，仍是布局推断；其余337个候选未证明可达。后续编译结果见下节，不能称已覆盖所有运行时变体。
+- 全部14,594个 CPX 条目的离线扫描已完成，最终提取和编译结果见下节；前述24包数字为较早的有限样本。
+
+证据：`out/shader-resource-research/decoded-material-report.md`、`out/shader-xex-research/report.md`、`out/shader-vertex-research/report.md`。这些是 ignored 本地研究产物，未分发游戏微码。以上为早期有限样本，完整提取、编译及首战验证结果见下节；增加候选数量本身不是性能修复。本轮没有验收修复、新发布或提交／推送，也没有把离线研究接入运行时。
+
+### 同日续：完整 CPX 扫描与隔离编译
+
+旧2000不是配置上限，而是扫描裸露 SDK 容器的结果；正式启动扫描器尚未解压 CPX。按 archive SHA256／offset／size 去重得到14,594个 CPX extent，再按压缩内容去重得到10,198个 payload。C++ 离线 decoder 用55.19秒处理7,670,454,413个解码字节，报告0错误，只保留微码与来源信息，没有输出完整解压游戏。原 PPC、Python 和 C++ 对24个完整材质包的44,011,017字节逐字节一致；这是样本交叉验证，不能称全量均与原 PPC 比较过。
+
+| 去重来源集合 | 唯一微码数 |
+|---|---:|
+| 全部解码 CPX | 20,482（19,874 PS／608 VS） |
+| CPX 与旧裸 FPD 来源合并 | 20,686 |
+| 再加入4个具有 PM4 发射调用证据的 XEX 静态 shader | 20,690 |
+| 再加入354个固定 declaration VS 候选 | 21,044 |
+
+21,044个来源经当前 LoShaderTool／DXC、15个 worker 检查，105.22秒内成功21,042个，仅 `ps_78af7d75d932c582` 与 `vs_291187f5ef8ba74a` 两项既有失败。612个来源带 translator notes，包括未 patch 的 VS fetch 模板；成功编译不证明实际 draw 正确或候选有用。
+
+该21,044集合精确覆盖首战119个新增来源中的90个。进一步按原 SDK fetch／VS-PS 链接逻辑扩展到6534个 VS 候选后，精确覆盖提升到93个（71 PS／22 VS），仍缺1 PS／25 VS。较大的候选集并未全数包含在上述编译测试中，stride／binding 可达性仍未证明；生成输入不读取运行时缓存，运行时119个来源只用于独立事后比对。
+
+随后只读核对 `out/firstbattle-stutter-offline-02/async-menu-ps.json` 与对应 `.bin`：XEX `AsyncMenuPixelShader` HLSL 运行时编译创建的对象，全局 `0x83262F00` 指向 `0x0060F560`，descriptor 为 `0x0060F60C`，60字节微码的 FNV 为 `f1cc033418e7b30f`，SHA256 为 `8b60f7619a04f737199f01da3bf26ecd3d1f5783d9d19c1baf21abff0ffcf8d9`，确认为唯一残余 PS。首战新增72个 PS 的来源因此均已解释，但这是运行时身份取证；未独立重放原 HLSL 编译器，也未把读取的 raw 反填候选，离线精确推导覆盖仍为93，另有25个 VS 待恢复布局等关系。
+
+证据：`out/shader-offline/report.md`、`compile-summary.json`、`final-holdout-comparison.json`、`full-cpx/inventory.json` 与 `full-cpx/fast-reference-check.json`（后四项均位于 `out/shader-offline/` 下）。CPX 提取尚未接入正式 startup scanner，没有验收性能修复或新发布。
+
+### 同日续：正式程序的 source-only 验证
+
+`out/firstbattle-stutter-offline-01` 使用官方 v0.2.2、21,044个离线来源和0份初始 DXIL，由正式包自己的编译器启动准备：21,042个编译成功、两项既有失败，准备耗时103,616 ms。游玩只新增29个来源（1 PS／28 VS），全部属于原119个首战样本。这支持来源覆盖改善；未导入离线工具产生的 DXIL，因为其编译器环境与正式包不同，产物字节并不一致。
+
+该轮战斗载入与另一项解包搜索重叠，407／357 ms两帧不能作为无干扰性能对照；240秒上限结束时场景截图尚未落盘，不算视觉验收。
+
+无解包／编译重任务干扰的同序列复验 `out/firstbattle-stutter-offline-02` 已完成。官方程序从21,044个来源／0份 DXIL 启动，并行阶段21,042个编译、0命中、79,144 ms；总准备21,044个、两项既有失败、96,827 ms。最终21,073个来源／21,071份 DXIL，新增29个（1 PS／28 VS），初始来源未改，新增微码均与原冷运行 holdout 逐字节相同。
+
+renderer f1–4000仅有两帧超过150 ms：f1269为301 ms（shader243／pipeline12／wait1 ms），f1273为261 ms（shader200／pipeline15／wait1 ms）。原冷运行同序列有700／1301／155／166 ms四帧，暖运行没有该阈值事件。这是该序列观测到的改善，仍有首次 shader 工作；驱动／OS缓存未清、日志不是完整帧分布，不能推广到所有攻击、场景或 AMD，也不能由此宣称卡顿已修复。
+
+测量窗后的 `shot_4079.png` 已由父代理目视确认首战攻击菜单与凯姆。runner运行238.91秒，最后计时到f4140，最终主动结束已核实归属的PID42480；exit1来自清理，不是崩溃。开发EXE／PDB的原D584876D／E8244EEB完整hash断言保持不变。完整证据位于该目录的 `report.md`、计时和缓存对比记录。
+
+本轮研究验证完成；下一步是将CPX提取正式集成到启动扫描器并保持来源／失效校验，恢复mesh声明与stream stride关系，独立重放原HLSL编译路径，以及单独验证PSO准备。尚无验收修复，未集成正式扫描器、未提交／推送，发布状态不变。
+
+## 2026-09-07 UTC：按“接入，我来测试”完成本地接入
+
+上节“未集成”是离线研究阶段的状态。当前本地 `PrepareKnownShaders` 已调用扩展发现流程，尚未提交／推送／发布，用户视觉和卡顿验收仍待进行。
+
+`resource_fpi.h` 严格校验FPI范围并使用固定13个archive映射；`cpx_decode.h` 限制单包解码为128 MiB，分配前检查block table，失败清空输出。`resource_scan.h` 使用 `v3-cpx` 清单，把FPI与FPD身份共同纳入缓存失效；裸容器index命中后仍扫描CPX，payload去重先以hash筛选再比较原压缩字节。`resource_xex.h` 从已加载XEX读取并精确hash验证4个静态shader；`resource_variants.h` 从77个已知原VS及元数据生成354个有限候选，只按精确hash复用缓存，不替换draw所用shader，也不嵌入游戏微码。
+
+`tools/test_shader_index.bat` 的旧用例及新增CPX／FPI／清单迁移／损坏输入fixture通过；decoder合成用例及24个原PPC参考包44,011,017字节比较通过。77个原始VS共40,536字节生成的354个候选与独立原型逐字节一致，`/W4 /WX` 和生成器 `--check` 通过。四盘全新scanner提取20,686个裸容器／CPX来源，全部与参考逐字节一致：84.600秒、28个indexed／24个fallback、读取26,143,351,797字节；这是完整扫描耗时，不能当成纯CPX解码耗时。
+
+正式游戏构建通过，证据 `out/shader-integrated/build.log`、`scanner-tests.log`、`scanner-comparison.json` 与 `full-scan.log`（后三项同目录）。新EXE SHA256为 `deb313651223f6b084614e1abbb3fa62a974c7e8bbd02886f775d9987155b091`。
+
+隔离启动检查已完成：初始缓存0文件，未导入source或DXIL；自动发现20,686个CPX／裸容器来源、4个XEX静态来源、354个VS候选，共21,044个，77个base校验通过、0 invalid。运行时扫描81,943 ms，准备94,979 ms，21,042个成功，仅两项既有失败。自动生成的全部21,044个来源与离线参考逐字节相同，另有4个菜单运行时来源；日志没有error级记录。脚本运行到1020帧后主动停止PID23280，exit1为主动停止。`shot_911.png`已查看，实际为原生Settings界面，不能写成首战通过或卡顿验收。
+
+用户测试入口 `out/shader-integrated/play/Play.cmd` 与 `Launch.ps1` 已完成，并由父代理启动预览PID57112。使用原亚洲版盘、中文设置和save/profile独立副本，复制内容与原文件逐字节一致，独立cache并清除其它LO诊断开关。切换亚洲版会重新扫描一次；这是用户预览，不是冷缓存性能比较。主目录EXE／PDB已恢复D584876D／E8244EEB基线。证据 `out/shader-integrated/runtime-comparison.json`、`runtime-check/run.json`、`runtime-check/runtime.log`、`play/last-run.json`（后三项同根目录）。用户画面／卡顿验收仍待进行，未提交／推送／发布，阴影调查继续挂起。
+
+## 2026-09-07 UTC：动态 VS 链接候选与已记录管线预创建
+
+按用户后续要求，本地新增 `GenerateLinkedVariants`：从原资源77个VS与86个PS生成1891个净新增链接候选，连同旧354个共2245个，新增候选全部与独立Python结果逐字节一致。本次29个运行时缺失VS样本中匹配2个；来源总数从21,044增至22,935，启动新增编译1891个、缓存命中21,042个，共22,933成功，仍为两项既有失败。精确字节匹配不代表所有候选可达，也未覆盖全部动态布局。
+
+`pipeline_cache.h` 保存完整pipeline Key，使用版本校验、校验和与原子写，最多16,384条。运行时每60帧异步checkpoint；启动最多4个worker沿用实际 `CreatePipeline` 路径，成功才加入缓存，缺shader则跳过并回到运行时创建，失败不污染缓存。界面显示 `Preparing pipelines`。`LO_NO_PIPELINE_PREPARE` 只跳过预创建；`LO_NO_PIPELINE_CACHE` 完全关闭记录和读入；`LO_PIPELINE_PREPARE_SERIAL` 用于串行对照。SDL_QUIT路径的 `_Exit` 绕过Shutdown，最后一次周期之后的新记录可能丢失，不能保证每次关闭都会flush。
+
+fixture以 `/W4 /WX` 通过192个损坏、192个截断及边界／原子写失败检查。`out/shader-pipeline-preview/build-02.log` 构建通过；build-03的实际draw计数修正已构建通过（exit0），最终EXE SHA256为 `1c8d98d93b7a10db9252829a669801c664c8236cfc4e7167445cbf473afe3749`，主EXE已恢复原D584完整hash，证据 `out/shader-pipeline-preview/build-final.json`。首次record运行到7380帧，截图确认首战喷火，记录233个recipe；初始没有PSO，预创建数为0。seed仅导入独立21,044个原始来源及匹配DXIL，运行另有30个新source及1891个生成来源，证据 `out/shader-pipeline-preview/record`。control／warm最终验证见下段。
+
+纯资源推导全部首用PSO尚未接入。虽已解析22个包、27,251个typed shader和821个material map，仍缺完整shader绑定与pass状态；当前预创建依赖之前实际记录的recipe。用户视觉／卡顿验收待做；以上均为本地未提交／推送／发布改动，不属于v0.2.2，首战闪烁调查继续挂起。
+
+### 同日续：记录管线预创建 A/B 完成
+
+control与warm均使用最终EXE `1c8d98d93b7a10db9252829a669801c664c8236cfc4e7167445cbf473afe3749`、相同初始pipeline文件SHA256 `40a5478afb5a4f657689f2ba43c68f7336799676a7a6645003737c3146403efb`、22,965个source／22,963份DXIL，按相同输入脚本分别运行到7380帧后主动停止。warm以4个worker在22 ms准备233个recipe，全部ready，0 missing／0 failed。
+
+到f7200，control发生220次运行时pipeline创建；warm为0次，实际提交draw命中预创建pipeline共8,609,548次，使用205／233个预创建Key。该计数已修正为实际draw提交命中，不是仅查询cache。两组f1–7200均没有超过150 ms的日志帧，因此本轮证明已记录PSO能提前创建并被实际绘制使用，不声称测得卡顿或帧率改善。
+
+父代理已查看control `shot_7237.png` 与warm `shot_7258.png`，均为首战凯姆；动画与火焰时序不同，相同输入脚本不是逐帧确定性录像，实际Key数量差异不能当作严格逐帧性能胜利。驱动／OS缓存未清，不证明全新场景覆盖或完全没有PSO记录的首轮性能。两轮无error／critical／device error，只有相同frame0 pitch24丢弃，pipeline drops为0，两项既有shader编译失败仍保留。证据为 `out/shader-pipeline-preview/control` 和 `warm` 下的 `runtime.log`、`run.json`；首轮record是从21,044个原来源及暖DXIL验证新增链接来源并学习233个recipe，与本次A/B分开。
+
+新用户测试入口为 `out/shader-pipeline-preview/play/Play.cmd`，采用独立cache、上一轮shader-integrated玩家settings/profile副本和原亚洲盘；入口已准备完成，尚未启动本轮用户预览。用户视觉／卡顿验收待完成，未提交／推送／发布。
+
+最终 `out/shader-pipeline-preview/summary.json` 对replay-seed的45,929个文件逐SHA256核对：control／warm均0 mismatch，aggregate为 `466fedfe339b4f8b0d084918bcc1048aa9e95d6dbcec0899c678ddba86603554`，两组新增source为0。`player-preview.json` 确认旧shader-integrated玩家副本的3个save、1个profile、1个settings共5文件复制后逐SHA一致；主EXE／PDB基线恢复已核对，本轮游戏进程均已退出。
+
+
+## 2026-09-07：v0.3.0 发布准备
+
+用户已授权commit／push／正式发布v0.3.0；当前为Preparing，尚待发布提交、CI及正式包验证。范围为CPX/FPI扫描、4个XEX静态shader、354个固定与1891个链接VS候选，以及已记录PSO的持久化／启动预创建。不包含挂起的连续shadow trace诊断或闪烁修复。发布授权不替代玩家视觉／卡顿验收；以上本地研究和预览的“未提交”保留为当时状态，最终发布状态以本节及CHANGELOG为准。

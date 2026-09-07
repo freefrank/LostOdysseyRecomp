@@ -61,9 +61,10 @@ installation and can be removed once no importer is running.
 The same applies to a stale `.import.lock` left by a crash; never remove it while importing.
 
 Saves, profile, logs and shader caches are kept beside the executable. Keep those folders when
-updating the program. First startup reads shaders using a built-in location index and prepares them;
-unrecognized resource layouts fall back to scanning the affected files.
-later starts reuse the generated cache. A cold shader cache is intentionally not distributed.
+updating the program. Startup discovers shaders in indexed and compressed resources, then prepares
+them; unrecognized layouts retain a scan fallback. Initial scanning and compilation may take several
+minutes. Later starts reuse the generated shader cache and prepare previously recorded graphics
+pipelines. Shader coverage remains incomplete. A cold shader cache is intentionally not distributed.
 
 The first-run settings page saves before game initialization, so the selected language works
 on that launch. Existing settings skip this page. Use `--setup` to open it again; closing it

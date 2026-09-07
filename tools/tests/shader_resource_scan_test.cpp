@@ -7,6 +7,21 @@ static void Require(bool value, const char* why) { if (!value) throw std::runtim
 static void Put(std::vector<uint8_t>& b, size_t offset, uint32_t value) {
     for (int i=0;i<4;++i) b[offset+i]=uint8_t(value >> (24-i*8));
 }
+static void PutLE(std::vector<uint8_t>& b, size_t offset, uint32_t value) {
+    for (int i=0;i<4;++i) b[offset+i]=uint8_t(value >> (i*8));
+}
+static std::vector<uint8_t> LiteralCpx(std::span<const uint8_t> input) {
+    std::vector<uint8_t> encoded(24+(input.size()*9+7)/8);
+    encoded[0]='c'; encoded[1]='p'; encoded[2]='x'; encoded[4]=0x10; encoded[6]=1;
+    PutLE(encoded,8,uint32_t(encoded.size())); PutLE(encoded,12,uint32_t(input.size())); PutLE(encoded,16,20);
+    encoded[22]=uint8_t(input.size()-1); encoded[23]=uint8_t((input.size()-1)>>8);
+    size_t bit=0;
+    for (auto byte : input) {
+        ++bit; // literal marker
+        for (int i=7;i>=0;--i,++bit) encoded[24+bit/8]|=((byte>>i)&1)<<(7-bit%8);
+    }
+    return encoded;
+}
 int main(int argc, char** argv) {
     try {
         if (argc==4) {
@@ -67,6 +82,45 @@ int main(int argc, char** argv) {
         const auto mixed=Scan(root/"game",root/"mixed",[](auto,auto){},{&profile,1});
         Require(mixed.error.empty() && mixed.shaders==1 && mixed.indexedFiles==1 && mixed.scannedFiles==1,
                 "per-file fallback and shared deduplication");
-        std::cout << "PASS: framing, stage, overflow, chunk boundary, dedup, reuse, recovery, index, bounded reads, hash/layout/mixed fallback\n";
+        // Public synthetic fixture: literal-coded CPX hides the SDK container
+        // from the naked scan. Two FPI extents carry identical compressed bytes.
+        const auto compressed=LiteralCpx(container);
+        const auto game=root/"cpx-game"; fs::create_directories(game);
+        constexpr const char* archives[]={"LO.fpd","xenon_chr.fpd","xenon_event.fpd","xenon_field.fpd",
+            "xenon_obj.fpd","xenon_scr.fpd","xenon_sys.fpd","xenon_vfx.fpd","xenon_world.fpd",
+            "xenon_battle.fpd","xenon_loc.fpd","xenon_mov.fpd","xenon_snd.fpd"};
+        for (const auto* name : archives) std::ofstream(game/name,std::ios::binary).close();
+        std::vector<uint8_t> archive(8192);
+        std::copy(compressed.begin(),compressed.end(),archive.begin()+2048);
+        std::copy(compressed.begin(),compressed.end(),archive.begin()+6144);
+        std::ofstream(game/"LO.fpd",std::ios::binary).write(reinterpret_cast<char*>(archive.data()),archive.size());
+        std::vector<uint8_t> fpi(2048); fpi[12]=1; fpi[20]=1; fpi[21]=4; fpi[24]=1; fpi[26]=13;
+        constexpr size_t entries=64+13*48;
+        PutLE(fpi,28,2); PutLE(fpi,32,64); PutLE(fpi,36,entries); PutLE(fpi,40,entries+48);
+        for (size_t i=0;i<13;++i) PutLE(fpi,64+i*48+4,uint32_t(entries+(i?48:0)-(64+i*48)));
+        PutLE(fpi,entries+8,1); PutLE(fpi,entries+16,uint32_t(compressed.size()));
+        PutLE(fpi,entries+24+8,3); PutLE(fpi,entries+24+16,uint32_t(compressed.size()));
+        auto writeFpi=[&] { std::ofstream(game/"LO.fpi",std::ios::binary).write(reinterpret_cast<char*>(fpi.data()),fpi.size()); };
+        writeFpi();
+        const auto cpx=Scan(game,root/"cpx-cache",[](auto,auto){});
+        Require(cpx.error.empty() && cpx.shaders==1 && cpx.cpxPackages==2 && cpx.decodedPackages==1 && cpx.decodedBytes==120,
+            "FPI CPX discovery and exact-payload deduplication");
+        const auto cpxWarm=Scan(game,root/"cpx-cache",[](auto,auto){});
+        Require(cpxWarm.error.empty() && cpxWarm.reused && !cpxWarm.decodedPackages,"CPX manifest reuse");
+        // Old discovery versions cannot hide newly supported compressed sources.
+        const auto manifest=root/"cpx-cache/resources.manifest";
+        { std::ifstream in(manifest,std::ios::binary); std::string text((std::istreambuf_iterator<char>(in)),{});
+          in.close(); text.replace(0,text.find('\n'),"resource-scanner-v2"); std::ofstream(manifest,std::ios::binary)<<text; }
+        const auto migrated=Scan(game,root/"cpx-cache",[](auto,auto){});
+        Require(migrated.error.empty() && !migrated.reused && migrated.decodedPackages==1,"old discovery manifest invalidation");
+        PutLE(fpi,entries+16,0xffffffff); writeFpi();
+        const auto invalidFpi=Scan(game,root/"invalid-fpi",[](auto,auto){});
+        Require(!invalidFpi.error.empty() && !fs::exists(root/"invalid-fpi/resources.manifest"),"invalid FPI never completes manifest");
+        PutLE(fpi,entries+16,uint32_t(compressed.size())); writeFpi();
+        archive[2048+16]=0xff;
+        std::ofstream(game/"LO.fpd",std::ios::binary).write(reinterpret_cast<char*>(archive.data()),archive.size());
+        const auto invalidCpx=Scan(game,root/"invalid-cpx",[](auto,auto){});
+        Require(!invalidCpx.error.empty() && !fs::exists(root/"invalid-cpx/resources.manifest"),"malformed CPX never completes manifest");
+        std::cout << "PASS: framing, stage, overflow, chunk boundary, dedup, reuse, recovery, index, bounded reads, hash/layout/mixed fallback, CPX/FPI extraction, migration, malformed input\n";
     } catch (const std::exception& e) { std::cerr << e.what() << '\n'; return 1; }
 }

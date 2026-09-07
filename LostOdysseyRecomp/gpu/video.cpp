@@ -72,14 +72,15 @@ namespace gpu::video
                 HBRUSH background=CreateSolidBrush(RGB(20,24,31));
                 FillRect(dc,&bounds,background); DeleteObject(background);
                 const uint64_t state=g_shaderProgress.load();
-                const uint32_t total=uint32_t(state>>32)&0x7fffffff, done=uint32_t(state);
+                const uint32_t total=uint32_t(state>>32)&0x3fffffff, done=uint32_t(state);
                 const bool scanning=(state>>63)!=0;
+                const bool pipelines=(state&(1ULL<<62))!=0;
                 SetBkMode(dc,TRANSPARENT); SetTextColor(dc,RGB(235,238,242));
                 HFONT font=CreateFontW(-28,0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,
                     OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,L"Segoe UI");
                 auto old=SelectObject(dc,font);
                 RECT title{20,bounds.bottom/2-85,bounds.right-20,bounds.bottom/2-35};
-                DrawTextW(dc,scanning ? L"Finding game shaders" : L"Preparing shaders",-1,&title,DT_CENTER|DT_SINGLELINE);
+                DrawTextW(dc,scanning ? L"Finding game shaders" : pipelines ? L"Preparing pipelines" : L"Preparing shaders",-1,&title,DT_CENTER|DT_SINGLELINE);
                 SelectObject(dc,GetStockObject(DEFAULT_GUI_FONT));
                 const auto detail=std::to_wstring(done)+L" / "+std::to_wstring(total)+(scanning ? L" MB" : L"");
                 RECT count{20,bounds.bottom/2-35,bounds.right-20,bounds.bottom/2};
@@ -332,9 +333,9 @@ namespace gpu::video
 #endif
     }
 
-    void SetShaderPreparationProgress(uint32_t completed, uint32_t total, bool scanning)
+    void SetShaderPreparationProgress(uint32_t completed, uint32_t total, bool scanning, bool pipelines)
     {
-        g_shaderProgress.store((uint64_t(total) << 32) | completed | (scanning ? (1ULL << 63) : 0));
+        g_shaderProgress.store((uint64_t(total) << 32) | completed | (scanning ? (1ULL << 63) : 0) | (pipelines ? (1ULL << 62) : 0));
     }
     bool DisplayModeFailed() { return g_displayFailed.load(); }
 
@@ -350,10 +351,11 @@ namespace gpu::video
         const bool phaseChanged = (progress >> 32) != (shownProgress >> 32);
         if (g_window && progress != shownProgress &&
             (phaseChanged || now-lastProgressPaint >= std::chrono::milliseconds(100))) {
-            const uint32_t total = uint32_t(progress >> 32) & 0x7fffffffu;
+            const uint32_t total = uint32_t(progress >> 32) & 0x3fffffffu;
             const bool scanning = (progress >> 63) != 0;
+            const bool pipelines = (progress & (1ULL << 62)) != 0;
             const auto title = total ? fmt::format("Lost Odyssey Recompiled - {} {}/{}{}",
-                scanning ? "Scanning game shaders" : "Preparing shaders", uint32_t(progress), total, scanning ? " MB" : "")
+                scanning ? "Scanning game shaders" : pipelines ? "Preparing pipelines" : "Preparing shaders", uint32_t(progress), total, scanning ? " MB" : "")
                                      : std::string("Lost Odyssey Recompiled");
             SDL_SetWindowTitle(g_window, title.c_str());
 #ifdef _WIN32

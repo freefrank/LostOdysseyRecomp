@@ -6,7 +6,14 @@ One record of completed changes, with unpublished work separated from verified r
 
 ## Unreleased / 未发布
 
-No completed changes awaiting release are recorded here. / 当前没有登记待发布的已完成改动。
+### v0.3.0 — Preparing / 待发布
+
+Release authorized; commit, CI and package publication are pending. / 已获发布授权，发布提交、CI和正式包发布待完成。
+
+- Discover shaders inside CPX resources and the loaded XEX, and derive bounded vertex-fetch/output-link variants before gameplay. / 游戏开始前扫描CPX资源与已加载XEX中的shader，并推导有限顶点提取／输出链接变体。
+- Persist previously used pipeline recipes and prepare them in parallel on later launches, with validated cache files and runtime fallback. / 持久化实际使用过的管线记录，在后续启动并行预创建，校验缓存并保留运行时回退。
+
+Local build, fixtures and first-battle pipeline reuse checks passed. Two known shader failures remain; no measured FPS/stutter improvement, complete first-use PSO coverage, shadow-flicker fix or new player visual acceptance is claimed. / 本地构建、fixture和首战管线复用验证通过；两个已知shader失败仍在，不宣称测得帧率／卡顿改善、覆盖全部首用PSO、修复阴影闪烁或新增玩家视觉验收。
 
 ## Published / 已发布
 

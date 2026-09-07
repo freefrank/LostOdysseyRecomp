@@ -27,7 +27,7 @@ namespace gpu::video
     void PumpEvents();
     bool DisplayModeFailed();
     // Updates the title on the window owner thread. total=0 restores the title.
-    void SetShaderPreparationProgress(uint32_t completed, uint32_t total, bool scanning = false);
+    void SetShaderPreparationProgress(uint32_t completed, uint32_t total, bool scanning = false, bool pipelines = false);
 
     // Untiles the guest frontbuffer (a tiled 32bpp texture written by the
     // GPU resolve) into an upload buffer and presents it.

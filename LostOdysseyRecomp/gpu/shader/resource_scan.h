@@ -2,6 +2,8 @@
 
 #include "cache.h"
 #include "resource_index.h"
+#include "resource_fpi.h"
+#include "cpx_decode.h"
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
@@ -21,6 +23,20 @@ inline uint64_t Hash(std::span<const uint8_t> bytes, uint64_t h = 0xcbf29ce48422
 }
 inline std::string SourceName(bool pixel, std::span<const uint8_t> bytes) {
     return cache::FileName(pixel, Hash(bytes)).substr(0, 19) + ".bin";
+}
+inline void SaveSource(const fs::path& source, bool pixel, std::span<const uint8_t> code) {
+    const auto filename = SourceName(pixel, code);
+    // Avoid rewriting a valid source, but repair interrupted or corrupted writes.
+    std::ifstream old(source/filename, std::ios::binary | std::ios::ate);
+    if (old && old.tellg() == std::streamoff(code.size())) {
+        std::vector<uint8_t> existing(code.size()); old.seekg(0);
+        if (old.read(reinterpret_cast<char*>(existing.data()), existing.size()) &&
+            std::equal(existing.begin(), existing.end(), code.begin())) return;
+    }
+    old.close();
+    std::ofstream out(source/filename, std::ios::binary | std::ios::trunc);
+    out.write(reinterpret_cast<const char*>(code.data()), code.size()); out.close();
+    if (!out) throw std::runtime_error("cannot write shader source");
 }
 // SDK container layout also documented in tools/XenosRecomp/XenosRecomp/shader.h.
 // Validate both the container framing and the embedded constant-table stage.
@@ -98,13 +114,24 @@ struct Result {
     std::string error;
     size_t indexedFiles = 0, scannedFiles = 0;
     uint64_t bytesRead = 0;
+    size_t cpxPackages = 0, decodedPackages = 0;
+    uint64_t decodedBytes = 0;
 };
+inline void ExtractContainers(std::span<const uint8_t> data, size_t core, const fs::path& source,
+                              std::set<std::string>& names) {
+    for (size_t i=0; i<core && i+36<=data.size(); ++i) {
+        if (data[i]!=0x10 || data[i+1]!=0x2a || data[i+2]!=0x11) continue;
+        bool pixel=false;
+        auto code=Microcode(data.subspan(i),pixel);
+        if (!code.empty() && names.insert(SourceName(pixel,code)).second) SaveSource(source,pixel,code);
+    }
+}
 inline Result Scan(const fs::path& root, const fs::path& cacheDir,
                    const std::function<void(uint32_t,uint32_t)>& progress,
                    std::span<const IndexFile> index = builtin::files) {
     Result result;
     try {
-        std::vector<fs::path> roots{root}, files;
+        std::vector<fs::path> roots{root}, files, indexes;
         const auto name = root.filename().string();
         // Development four-disc layout. A standalone --game directory scans itself only.
         if (name == "disc1" || name == "disc2" || name == "disc3" || name == "disc4") {
@@ -114,19 +141,26 @@ inline Result Scan(const fs::path& root, const fs::path& cacheDir,
                 if (fs::is_directory(p)) roots.push_back(p);
             }
         }
-        for (const auto& dir : roots)
+        for (const auto& dir : roots) {
+            if (fs::is_regular_file(dir/"LO.fpi")) indexes.push_back(dir/"LO.fpi");
             for (const auto& entry : fs::directory_iterator(dir))
                 if (entry.is_regular_file() && entry.path().extension() == ".fpd") files.push_back(entry.path());
+        }
         std::sort(files.begin(), files.end());
         if (files.empty()) { result.error = "no FPD game resources found"; return result; }
         std::ostringstream identity;
-        identity << "resource-scanner-v2\n";
+        identity << "resource-scanner-v3-cpx\n";
         uint64_t totalBytes = 0;
         for (const auto& file : files) {
             const auto size = fs::file_size(file); totalBytes += size;
             identity << fs::absolute(file).generic_string() << '\t' << size << '\t'
                      << fs::last_write_time(file).time_since_epoch().count() << '\n';
         }
+        // FPI changes also invalidate the discovery cache. Like FPD identity,
+        // this is a size/mtime fingerprint, not a full game-integrity digest.
+        for (const auto& file : indexes)
+            identity << fs::absolute(file).generic_string() << '\t' << fs::file_size(file) << '\t'
+                     << fs::last_write_time(file).time_since_epoch().count() << '\n';
         const auto source = cacheDir / "source";
         fs::create_directories(source);
         const auto manifest = cacheDir / "resources.manifest";
@@ -153,6 +187,13 @@ inline Result Scan(const fs::path& root, const fs::path& cacheDir,
         constexpr size_t chunk = 4*1024*1024, overlap = 65536+262144;
         std::vector<uint8_t> bytes(chunk+overlap);
         std::set<std::string> names;
+        ResourceExtents extents;
+        for (const auto& file : indexes) {
+            auto parsed = ReadResourceExtents(file);
+            extents.merge(parsed);
+        }
+        struct SeenPackage { fs::path file; uint64_t offset; uint32_t size; };
+        std::map<uint64_t,std::vector<SeenPackage>> seenPackages;
         uint64_t completed=0;
         for (const auto& file : files) {
             const auto length=fs::file_size(file);
@@ -160,33 +201,62 @@ inline Result Scan(const fs::path& root, const fs::path& cacheDir,
                 ++result.indexedFiles;
                 completed += length;
                 progress(uint32_t(completed/1048576),uint32_t((totalBytes+1048575)/1048576));
-                continue;
-            }
-            ++result.scannedFiles;
-            std::ifstream in(file, std::ios::binary);
-            if (!in) throw std::runtime_error("cannot read " + file.string());
-            for (uint64_t base=0; base<length; base+=chunk) {
-                in.clear(); in.seekg(base);
-                const auto amount=std::min<uint64_t>(bytes.size(),length-base);
-                if (!in.read(reinterpret_cast<char*>(bytes.data()), amount)) throw std::runtime_error("short resource read");
-                result.bytesRead += amount;
-                const auto core=std::min<uint64_t>(chunk,length-base);
-                for (size_t i=0; i<core && i+36<=amount; ++i) {
-                    if (bytes[i]!=0x10 || bytes[i+1]!=0x2a || bytes[i+2]!=0x11) continue;
-                    bool pixel=false;
-                    auto code=Microcode(std::span<const uint8_t>(bytes.data()+i,amount-i),pixel);
-                    if (code.empty()) continue;
-                    const auto filename=SourceName(pixel,code);
-                    if (names.insert(filename).second) {
-                        std::ofstream out(source / filename,std::ios::binary | std::ios::trunc);
-                        out.write(reinterpret_cast<const char*>(code.data()),code.size()); out.close();
-                        if (!out) throw std::runtime_error("cannot write extracted shader");
-                    }
+            } else {
+                ++result.scannedFiles;
+                std::ifstream in(file, std::ios::binary);
+                if (!in) throw std::runtime_error("cannot read " + file.string());
+                for (uint64_t base=0; base<length; base+=chunk) {
+                    in.clear(); in.seekg(base);
+                    const auto amount=std::min<uint64_t>(bytes.size(),length-base);
+                    if (!in.read(reinterpret_cast<char*>(bytes.data()), amount)) throw std::runtime_error("short resource read");
+                    result.bytesRead += amount;
+                    const auto core=std::min<uint64_t>(chunk,length-base);
+                    ExtractContainers(std::span<const uint8_t>(bytes.data(),amount),core,source,names);
+                    progress(uint32_t((completed+base+core)/1048576),uint32_t((totalBytes+1048575)/1048576));
                 }
-                progress(uint32_t((completed+base+core)/1048576),uint32_t((totalBytes+1048575)/1048576));
+                completed+=length;
             }
-            completed+=length;
         }
+        // Scan compressed payloads even when the naked-container offset index
+        // matches. Content hashes only shortlist duplicates; byte comparison
+        // against the original extent prevents a hash collision hiding input.
+        size_t extentCount=0, extentDone=0;
+        for (const auto& [file, records] : extents) extentCount+=records.size();
+        std::vector<uint8_t> encoded, decoded, previous;
+        for (const auto& [file, records] : extents) {
+            std::ifstream in(file,std::ios::binary);
+            if (!in) throw std::runtime_error("cannot read CPX archive");
+            for (const auto& record : records) {
+                progress(uint32_t(extentDone++),uint32_t(extentCount));
+                if (record.size < 16) continue;
+                uint8_t header[16]; in.clear(); in.seekg(record.offset);
+                if (!in.read(reinterpret_cast<char*>(header),16)) throw std::runtime_error("short CPX header read");
+                result.bytesRead+=16;
+                if (header[0]!='c' || header[1]!='p' || header[2]!='x') continue;
+                ++result.cpxPackages;
+                if (record.size > 128u*1024*1024 || ReadLE(header+8)!=record.size ||
+                    ReadLE(header+12)>cpx::kMaxDecodedSize) throw std::runtime_error("invalid CPX extent size");
+                encoded.resize(record.size); in.clear(); in.seekg(record.offset);
+                if (!in.read(reinterpret_cast<char*>(encoded.data()),encoded.size())) throw std::runtime_error("short CPX payload read");
+                result.bytesRead+=encoded.size();
+                const auto hash=Hash(encoded);
+                bool duplicate=false;
+                for (const auto& candidate : seenPackages[hash]) {
+                    if (candidate.size!=record.size) continue;
+                    std::ifstream original(candidate.file,std::ios::binary);
+                    original.seekg(candidate.offset); previous.resize(candidate.size);
+                    if (!original.read(reinterpret_cast<char*>(previous.data()),previous.size())) throw std::runtime_error("short CPX comparison read");
+                    result.bytesRead+=previous.size();
+                    if (previous==encoded) { duplicate=true; break; }
+                }
+                if (duplicate) continue;
+                if (!cpx::Decode(encoded,decoded)) throw std::runtime_error("invalid CPX block stream in " + file.filename().string());
+                seenPackages[hash].push_back({file,record.offset,record.size});
+                ++result.decodedPackages; result.decodedBytes+=decoded.size();
+                ExtractContainers(decoded,decoded.size(),source,names);
+            }
+        }
+        progress(uint32_t(extentCount),uint32_t(extentCount));
         result.shaders=names.size();
         if (names.empty()) { result.error="no supported shader containers found"; return result; }
         // Never mark an interrupted extraction complete. Sources are revalidated on reuse.

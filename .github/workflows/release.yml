@@ -27,6 +27,9 @@ jobs:
           python -m unittest discover -s tools/tests -p test_import_game.py -v
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           python -m pip install -r tools/release/requirements.txt
+      - name: Test shader discovery and pipeline cache
+        shell: cmd
+        run: call tools\test_shader_preparation.bat
       - name: Retrieve private build input
         uses: actions/checkout@v4
         with:

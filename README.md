@@ -17,6 +17,10 @@ Windows x64 · Direct3D 12 · PowerPC static recompilation
 > [!IMPORTANT]
 > **v0.2.2 is an early testing release.** Opening areas and selected scenes have been tested; a complete playthrough has not. Rendering and stability issues remain. You must supply your own supported game files.
 
+## Preparing v0.3.0
+
+The upcoming release expands discovery into compressed shader resources and XEX sources, generates bounded vertex-shader variants, and prepares previously recorded graphics pipelines on later launches. Initial scanning and compilation may take several minutes; later launches reuse caches. Coverage remains incomplete and this does not eliminate all stutter. See [validation details](docs/notes/shader-preparation.md).
+
 ## Fixed in v0.2.2
 
 Fixes tested AMD black/dark scenes and depth-of-field output, plus Windows Unicode installation, startup-argument and save paths. NVIDIA RTX 5080 targeted regression and user visual acceptance passed; the official package also passed a Map 12 launch from a Chinese working directory. The complete save-point crash in Issue #4 remains unreproduced and is not claimed resolved. See [v0.2.2 release notes](docs/notes/release-0.2.2.md) and the [changelog](CHANGELOG.md).

@@ -11,6 +11,6 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m unittest discover -s tools/tests -p test_import_game.py -v
-      - name: Test shader index and scan fallback
+      - name: Test shader discovery and pipeline cache
         shell: cmd
-        run: call tools\test_shader_index.bat
+        run: call tools\test_shader_preparation.bat
