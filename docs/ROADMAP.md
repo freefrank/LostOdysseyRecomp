@@ -2,16 +2,16 @@
 
 [简体中文](ROADMAP.zh-CN.md) · [Current status](STATUS.md)
 
-Updated against v0.2.2 and user acceptance on **2026-09-06**. `[x]` means the stated scope has evidence, not that the entire game is complete. Dated notes retain earlier experiment states; [STATUS.md](STATUS.md) is the current release and validation ledger.
+Updated against v0.3.0 publication and recorded validation on **2026-09-07**. `[x]` means the stated scope has evidence, not that the entire game is complete. Dated notes retain earlier experiment states; [STATUS.md](STATUS.md) is the current release and validation ledger.
 
 Legend: `[ ]` planned / outstanding · `[~]` in progress · `[x]` validated within the stated scope.
 
-## Preparing v0.3.0
+## Published milestone: v0.3.0
 
 - [x] Implement and locally validate CPX/FPI discovery, verified XEX sources, bounded VS variants and previously recorded pipeline preparation; see [shader evidence](notes/shader-preparation.md).
-- [~] Prepare the user-authorized commit/push/release. CI and official-package verification are pending; no new player visual/stutter acceptance is implied.
+- [x] v0.3.0 published at 2026-09-07 06:55:19 UTC from unchanged tag `fba7ae4`; release CI 34091301175, package/installer checks and a short official first-battle smoke passed. No new player visual/stutter acceptance is implied; post-tag test tooling remains Unreleased.
 
-## Latest published milestone: v0.2.2
+## Previous milestone: v0.2.2
 
 [v0.2.2 is published](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.2.2), including the accepted AMD resolve fix and Unicode startup/save paths. CI, official-package checks, eight startup-path cases and a Chinese-working-directory Map 12 smoke run passed. The complete Issue #4 gameplay crash remains unreproduced; see [release notes](notes/release-0.2.2.md).
 
@@ -30,7 +30,7 @@ v0.1 remains the historical first Windows release with the importer, first-launc
 ## Near-term priorities
 
 1. [ ] Shadow investigation suspended after the user's ten-minute limit: the first-battle report is not locally confirmed; Map 13 evidence remains separate and unresolved.
-2. [~] Deliver expanded shader and recorded-pipeline preparation in v0.3.0, then collect player acceptance. Local tests establish source coverage and real draw reuse, not complete stutter elimination or unseen first-use PSO coverage.
+2. [~] Collect player acceptance for the expanded shader and recorded-pipeline preparation shipped in v0.3.0. Local tests establish source coverage and real draw reuse, not complete stutter elimination or unseen first-use PSO coverage.
 3. [~] Investigate blurry or garbled text against original-console and Xenia references; work in progress. This is separate from the paused text-language complement patch.
 4. [ ] Regress shadow flicker during the fire-breath phase. The same player reported that it appeared to disappear; this is one observation, not a comprehensive fix claim. Fire-hit checker effects remain a separate open issue.
 5. [ ] Assess DLC import as a later request; no delivery date is committed.

@@ -8,18 +8,18 @@ Windows x64 · Direct3D 12 · PowerPC static recompilation
 
 <img src="docs/images/title-screen.png" alt="Lost Odyssey title screen — Press START" width="960">
 
-### [Download v0.2.2](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.2.2) · [Installation guide](docs/INSTALLING.md) · [Report an issue](https://github.com/freefrank/LostOdysseyRecomp/issues)
+### [Download v0.3.0](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.3.0) · [Installation guide](docs/INSTALLING.md) · [Report an issue](https://github.com/freefrank/LostOdysseyRecomp/issues)
 
 [简体中文](README.zh-CN.md) · [Project status](docs/STATUS.md) · [Roadmap](docs/ROADMAP.md) · [Build from source](docs/BUILDING.md)
 
 </div>
 
 > [!IMPORTANT]
-> **v0.2.2 is an early testing release.** Opening areas and selected scenes have been tested; a complete playthrough has not. Rendering and stability issues remain. You must supply your own supported game files.
+> **v0.3.0 is an early testing release.** Opening areas and selected scenes have been tested; a complete playthrough has not. Rendering and stability issues remain. You must supply your own supported game files.
 
-## Preparing v0.3.0
+## New in v0.3.0
 
-The upcoming release expands discovery into compressed shader resources and XEX sources, generates bounded vertex-shader variants, and prepares previously recorded graphics pipelines on later launches. Initial scanning and compilation may take several minutes; later launches reuse caches. Coverage remains incomplete and this does not eliminate all stutter. See [validation details](docs/notes/shader-preparation.md).
+v0.3.0 is released. It expands discovery into compressed shader resources and XEX sources, generates bounded vertex-shader variants, and prepares previously recorded graphics pipelines on later launches. Initial scanning and compilation may take several minutes; later launches reuse caches. Coverage remains incomplete and this does not eliminate all stutter. See [validation details](docs/notes/shader-preparation.md).
 
 ## Fixed in v0.2.2
 

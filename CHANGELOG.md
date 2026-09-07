@@ -13,16 +13,16 @@ One record of completed changes, with unpublished work separated from verified r
 
 These workflow changes are outside the existing v0.3.0 tag. / 这些流程改动不属于现有v0.3.0标签内容。
 
-### v0.3.0 — Preparing / 待发布
+## Published / 已发布
 
-The v0.3.0 tag at `fba7ae4` is on both remotes; package build/publication remain pending. A separate release workflow will build that unchanged tag. / v0.3.0标签 `fba7ae4` 已双推，正式包构建／发布仍待完成；独立发布流程将构建该未改动标签。
+### [v0.3.0](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.3.0) — 2026-09-07
+
+Published at 06:55:19 UTC from unchanged tag `fba7ae4`; official package and short first-battle smoke checks passed. / 于UTC 06:55:19从未改动标签 `fba7ae4` 正式发布，正式包与短时首战验证通过。
 
 - Discover shaders inside CPX resources and the loaded XEX, and derive bounded vertex-fetch/output-link variants before gameplay. / 游戏开始前扫描CPX资源与已加载XEX中的shader，并推导有限顶点提取／输出链接变体。
 - Persist previously used pipeline recipes and prepare them in parallel on later launches, with validated cache files and runtime fallback. / 持久化实际使用过的管线记录，在后续启动并行预创建，校验缓存并保留运行时回退。
 
 Local build, fixtures and first-battle pipeline reuse checks passed. Two known shader failures remain; no measured FPS/stutter improvement, complete first-use PSO coverage, shadow-flicker fix or new player visual acceptance is claimed. / 本地构建、fixture和首战管线复用验证通过；两个已知shader失败仍在，不宣称测得帧率／卡顿改善、覆盖全部首用PSO、修复阴影闪烁或新增玩家视觉验收。
-
-## Published / 已发布
 
 ### [v0.2.2](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.2.2) — 2026-09-07
 

@@ -166,6 +166,10 @@ control与warm均使用最终EXE `1c8d98d93b7a10db9252829a669801c664c8236cfc4e71
 最终 `out/shader-pipeline-preview/summary.json` 对replay-seed的45,929个文件逐SHA256核对：control／warm均0 mismatch，aggregate为 `466fedfe339b4f8b0d084918bcc1048aa9e95d6dbcec0899c678ddba86603554`，两组新增source为0。`player-preview.json` 确认旧shader-integrated玩家副本的3个save、1个profile、1个settings共5文件复制后逐SHA一致；主EXE／PDB基线恢复已核对，本轮游戏进程均已退出。
 
 
-## 2026-09-07：v0.3.0 发布准备
+## 2026-09-07：v0.3.0 正式发布
 
-用户已授权commit／push／正式发布v0.3.0；当前为Preparing，尚待发布提交、CI及正式包验证。范围为CPX/FPI扫描、4个XEX静态shader、354个固定与1891个链接VS候选，以及已记录PSO的持久化／启动预创建。不包含挂起的连续shadow trace诊断或闪烁修复。发布授权不替代玩家视觉／卡顿验收；以上本地研究和预览的“未提交”保留为当时状态，最终发布状态以本节及CHANGELOG为准。
+[v0.3.0](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.3.0) 已于UTC 2026-09-07 06:55:19正式发布，draft／prerelease均false，标签 `fba7ae4` 保持不变且已双推。后继工作流 `0a79e9e` 手动checkout该标签，run34091301175成功。范围为CPX/FPI扫描、4个XEX静态shader、354个固定与1891个链接VS候选，以及已记录PSO持久化／启动预创建；不含挂起的连续shadow trace诊断或闪烁修复。上文未提交／未发布陈述保留为各次实验历史。
+
+正式ZIP为38,264,592字节，SHA256 `db11b3f275bde905ce4796cee886c6d4787e9030ab55728541c134e3e660f485`；44项manifest与CRC全通过，安装器自测exit0。正式EXE SHA256为 `9e9153e97a5caf1e107b1b9b36c9ed9c13a12d69dc6f6a6a0990f64aba201abe`。唯一隔离首战smoke到1860帧，233个recipe全部ready，0missing／0failed，4worker用21ms；f1800实际882,131次命中／171keys、0runtime creates。父代理查看截图确认凯姆首战菜单正常，无error／fatal／critical。此为短时及单帧场景验证，不代表阴影解决、FPS改善或新增玩家验收；本次没有重复启动8项／存储全套或A/B。
+
+测试组织在标签之后独立演进，不属于v0.3.0源码包；importer／shaders／pipeline的独立CI34091299239／34091299255／34091299202均成功。原22,935来源／22,933编译成功与两个旧失败、A/B覆盖边界保持。原工作区证据为 `out/release-v0.3.0/published.json`、`package-validation.json`、`smoke-result.json`（后两项同目录）。

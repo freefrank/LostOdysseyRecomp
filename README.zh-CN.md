@@ -8,18 +8,18 @@ Windows x64 · Direct3D 12 · PowerPC 静态重编译
 
 <img src="docs/images/title-screen.png" alt="失落的奥德赛标题画面 — Press START" width="960">
 
-### [下载 v0.2.2](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.2.2) · [安装指南](docs/INSTALLING.md) · [反馈问题](https://github.com/freefrank/LostOdysseyRecomp/issues)
+### [下载 v0.3.0](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.3.0) · [安装指南](docs/INSTALLING.md) · [反馈问题](https://github.com/freefrank/LostOdysseyRecomp/issues)
 
 [English](README.md) · [项目状态](docs/STATUS.md) · [路线图](docs/ROADMAP.zh-CN.md) · [从源码构建](docs/BUILDING.md)
 
 </div>
 
 > [!IMPORTANT]
-> **v0.2.2 是早期测试版。** 已测试开场区域和部分场景，尚未通关。渲染和稳定性仍有问题。请自行提供受支持版本的游戏文件。
+> **v0.3.0 是早期测试版。** 已测试开场区域和部分场景，尚未通关。渲染和稳定性仍有问题。请自行提供受支持版本的游戏文件。
 
-## v0.3.0 发布准备
+## v0.3.0 新增功能
 
-待发布版本扩大到压缩资源与XEX中的shader发现，生成有限顶点shader变体，并在后续启动预创建以前记录过的图形管线。首次扫描和编译可能需要数分钟，后续启动复用缓存。覆盖仍不完整，不代表消除所有卡顿。见[验证详情](docs/notes/shader-preparation.md)。
+v0.3.0已正式发布，扩大到压缩资源与XEX中的shader发现，生成有限顶点shader变体，并在后续启动预创建以前记录过的图形管线。首次扫描和编译可能需要数分钟，后续启动复用缓存。覆盖仍不完整，不代表消除所有卡顿。见[验证详情](docs/notes/shader-preparation.md)。
 
 ## v0.2.2 修复
 
