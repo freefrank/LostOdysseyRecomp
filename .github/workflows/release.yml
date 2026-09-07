@@ -62,6 +62,18 @@ jobs:
           call tools\setup_windows.bat || exit /b 1
           cmake --build out/build/release --target LoHidTest --parallel 2 || exit /b 1
           out\build\release\LostOdysseyRecomp\LoHidTest.exe || exit /b 1
+      - name: Test Unicode startup and save paths
+        run: |
+          python tools/tests/startup_path_test.py out/build/release/LostOdysseyRecomp/LostOdysseyRecomp.exe
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          foreach ($variant in @('ascii', 'unicode')) {
+            foreach ($mode in @('write', 'read', 'overwrite', 'read-overwritten')) {
+              $testArgs = @($mode, "out/path-regression/$variant")
+              if ($variant -eq 'unicode') { $testArgs += 'unicode' }
+              & out/build/release/LostOdysseyRecomp/LoStorageTest.exe @testArgs
+              if ($LASTEXITCODE) { exit $LASTEXITCODE }
+            }
+          }
       - name: Package runtime and importer
         run: |
           if ($env:GITHUB_REF -like 'refs/tags/v*') {
