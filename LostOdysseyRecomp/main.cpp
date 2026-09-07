@@ -12,6 +12,7 @@
 #include <apu/xma.h>
 #include <hid/hid.h>
 #include <os/logger.h>
+#include <os/log_file.h>
 #include <cstring>
 #include <ctime>
 #include <chrono>
@@ -98,17 +99,13 @@ int main(int argc, char* argv[])
     {
         const auto ticks = std::chrono::duration_cast<std::chrono::microseconds>(
             std::chrono::system_clock::now().time_since_epoch()).count();
-        const std::filesystem::path logPath = logOverride ? logOverride
-            : fmt::format("logs/runtime-{}.log", ticks);
+        const std::filesystem::path logPath = logOverride
+            ? std::filesystem::u8path(logOverride)
+            : std::filesystem::path(fmt::format("logs/runtime-{}.log", ticks));
         std::error_code ec;
         if (logPath.has_parent_path())
             std::filesystem::create_directories(logPath.parent_path(), ec);
-#ifdef _WIN32
-        os::logger::g_file = _wfopen(logPath.c_str(), L"ab");
-#else
-        os::logger::g_file = fopen(logPath.c_str(), "ab");
-#endif
-        if (os::logger::g_file) LOG_INFO("log file: {}", FileSystem::PathUtf8(logPath));
+        if (os::logger::OpenFile(logPath)) LOG_INFO("log file: {}", FileSystem::PathUtf8(logPath));
         else LOG_WARNING("could not open log file: {}", FileSystem::PathUtf8(logPath));
     }
     InstallCrashHandler();

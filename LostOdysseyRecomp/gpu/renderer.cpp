@@ -10,6 +10,7 @@
 #include "pipeline_cache.h"
 #include "texture_layout.h"
 #include "temporal_scene.h"
+#include "temporal_jitter.h"
 #include "temporal_history.h"
 #include "presentation.h"
 #include <settings/config.h>
@@ -22,6 +23,8 @@
 #include <kernel/io/file_system.h>
 #include <kernel/memory.h>
 #include <os/logger.h>
+#include <os/log_file.h>
+#include <version.h>
 
 #ifdef LO_GPU_PLUME
 #include <plume_render_interface.h>
@@ -449,6 +452,9 @@ namespace gpu::renderer
             uint32_t captureFrame = 0;
             uint64_t captureRequest = 0;
             std::string debugCaptureDir;
+            std::filesystem::path debugCaptureRoot;
+            static constexpr uint32_t debugCaptureFrameCount = 3;
+            uint32_t debugCaptureFirstFrame = 0, debugCaptureCompleted = 0;
             std::ofstream debugTrace;
             uint32_t debugDraw = 0;
             std::vector<uint32_t> debugRegisters;
@@ -461,8 +467,18 @@ namespace gpu::renderer
                 capturePending = false;
                 try
                 {
-                    const auto stamp = std::chrono::system_clock::now().time_since_epoch().count();
-                    const auto path = std::filesystem::absolute(std::filesystem::path("captures") / fmt::format("render-{}-f{}", stamp, frame));
+                    if (debugCaptureRoot.empty())
+                    {
+                        const auto stamp = std::chrono::system_clock::now().time_since_epoch().count();
+                        debugCaptureRoot = std::filesystem::absolute(std::filesystem::path("captures") / fmt::format("render-{}-f{}", stamp, frame));
+                        debugCaptureFirstFrame = frame;
+                        debugCaptureCompleted = 0;
+                        debugShaders.clear();
+                        std::filesystem::create_directories(debugCaptureRoot / "shaders");
+                    }
+                    if (frame != debugCaptureFirstFrame + debugCaptureCompleted)
+                        throw std::runtime_error("Capture frame sequence is not consecutive");
+                    const auto path = debugCaptureRoot / fmt::format("frame-{:02}-f{}", debugCaptureCompleted + 1, frame);
                     std::filesystem::create_directories(path);
                     debugCaptureDir = path.string();
                     debugTrace.open(path / "render-state.txt", std::ios::trunc);
@@ -470,12 +486,17 @@ namespace gpu::renderer
                     debugTrace << "Frame " << frame << "\nRegister index/value pairs are hex. First draw is a full register snapshot; later draws contain changes.\n";
                     const auto& description = device->getDescription();
                     debugTrace << fmt::format("GPU: {} driver_raw={}\n", description.name, description.driverVersion);
+                    const auto config = settings::GetConfig();
+                    debugTrace << fmt::format("Source version: {}\nConfigured graphics: output={}x{} internal_resolution={} window_mode={} AA={} scaling_quality={} frame_rate={}\n",
+                        lo_version::Source, config.width, config.height, config.internalResolution,
+                        uint32_t(config.windowMode), config.antialiasing, config.scalingQuality, config.frameRate);
+                    debugTrace << "AA IDs: 0 Off, 1 FXAA, 2 SMAA, 3 experimental TAA. Configured mode does not prove per-draw application; inspect surfaces and draw state.\n";
+                    debugTrace << "Shared translated shaders: ../shaders/<hash>.hlsl. Exact R32 depth is in .bin; no duplicate .f32 file.\n";
                     debugDraw = 0;
                     debugRegisters.clear();
-                    debugShaders.clear();
                     resolveSeq = 0;
                     captureFrame = frame;
-                    captureStatus = L"正在截取 / Capturing: " + path.wstring();
+                    captureStatus = L"正在截取 / Capturing " + std::to_wstring(debugCaptureCompleted + 1) + L"/3: " + path.wstring();
                     LOG_INFO("render capture started: {}", debugCaptureDir);
                 }
                 catch (const std::exception& e)
@@ -483,8 +504,26 @@ namespace gpu::renderer
                     LOG_ERROR("render capture: {}", e.what());
                     debugCaptureDir.clear();
                     debugTrace.close();
+                    debugTrace.clear();
+                    captureFrame = 0;
                     captureBusy = false;
-                    captureStatus = L"捕获失败：无法创建输出 / Cannot create capture output";
+                    captureStatus = L"捕获失败，已有文件保留 / Capture failed, files retained: " + debugCaptureRoot.wstring();
+                    // A failure opening frame 2/3 must not leave the retained
+                    // sequence looking permanently in progress.
+                    try
+                    {
+                        if (!debugCaptureRoot.empty())
+                        {
+                            std::ofstream manifest(debugCaptureRoot / "capture-info.txt");
+                            manifest << "requested_frames=" << debugCaptureFrameCount
+                                << "\ncompleted_frames=" << debugCaptureCompleted
+                                << "\nfirst_frame=" << debugCaptureFirstFrame
+                                << "\nlast_attempted_frame=" << frame << "\nstatus=incomplete\n";
+                        }
+                    }
+                    catch (...) {} // The output directory itself may be unwritable.
+                    debugCaptureRoot.clear();
+                    debugCaptureCompleted = 0;
                 }
             }
             uint64_t psTraceRequest = 0, psTraceHash = 0;
@@ -2501,6 +2540,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 // so a reversed range (scale -1, offset 1) needs no reversed host viewport.
                 shared.ndcScale[2] = (vte & 0x10) ? zs : 1.0f;
                 shared.ndcOffset[2] = (vte & 0x20) ? zo : 0.0f;
+                const bool temporalViewport = temporal::IsJitterViewport(
+                    {viewport.x, viewport.y, viewport.width, viewport.height}, vte, shared.ndcScale, shared.ndcOffset);
+                // The absolute lighting bias changes Z only. Classify the guest
+                // camera first so those lighting layers retain the base pass's XY jitter.
                 shared.ndcOffset[2] += layerDepthOffset;
                 viewport.minDepth = 0.0f;
                 viewport.maxDepth = 1.0f;
@@ -2517,9 +2560,6 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 rasterViewport.x *= rasterScale; rasterViewport.y *= rasterScale;
                 rasterViewport.width *= rasterScale; rasterViewport.height *= rasterScale;
                 const int temporalSlot=temporal::PositionVPSlot(key.vs);
-                const bool temporalViewport=viewport.x==0&&viewport.y==0&&viewport.width==1280&&viewport.height==720&&
-                    vte==0x43f&&shared.ndcScale[0]==1&&shared.ndcScale[1]==1&&shared.ndcScale[2]==-1&&
-                    shared.ndcOffset[0]==0&&shared.ndcOffset[1]==0&&shared.ndcOffset[2]==1;
                 if((temporalExperiment||sceneAAEnabled)&&temporalSlot>=0&&temporalViewport&&depth&&(depthControl&4)) {
                     temporal::SceneAnchor anchor;
                     std::copy_n(vsConstants+temporalSlot*4,16,anchor.vpBits.begin());
@@ -2527,22 +2567,30 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     anchor.viewport={rasterViewport.x,rasterViewport.y,rasterViewport.width,rasterViewport.height,shared.ndcScale[1],shared.halfPixel[0],shared.halfPixel[1]};
                     temporalDrawAnchor=anchor;
                 }
-                if(temporalExperiment&&temporalJitter&&temporalSlot>=0&&temporalViewport) {
-                    const auto* anchor=temporalDrawAnchor?&*temporalDrawAnchor:(temporalScene.Draws()?&temporalScene.Anchor():nullptr);
-                    const bool match=anchor&&std::equal(anchor->vpBits.begin(),anchor->vpBits.end(),vsConstants+temporalSlot*4)&&
-                        (!depth||anchor->depthAllocation==depth->allocationSerial);
-                    if(match) {
-                        auto halton=[](uint32_t n,uint32_t base){double value=0,f=1;while(n){f/=base;value+=f*(n%base);n/=base;}return value-.5;};
-                        const auto phase=frame%32+1;const float jx=float(halton(phase,2)),jy=float(halton(phase,3));
-                        for(unsigned row=0;row<4;++row) {
-                            auto* values=vsConstants+(temporalSlot+row)*4;
-                            const float w=std::bit_cast<float>(values[3]);
-                            values[0]=std::bit_cast<uint32_t>(std::bit_cast<float>(values[0])+2*jx/rasterViewport.width*w);
-                            values[1]=std::bit_cast<uint32_t>(std::bit_cast<float>(values[1])-2*jy/rasterViewport.height*w);
-                        }
-                        ++temporalJitterDraws;
-                    } else ++temporalJitterMisses;
+                const auto* jitterAnchor = temporalDrawAnchor ? &*temporalDrawAnchor :
+                    (temporalScene.Draws() ? &temporalScene.Anchor() : nullptr);
+                std::optional<temporal::SceneResolve> jitterSampledDepth;
+                const bool jitterShadowPair = key.vs == 0x99c2b4b0960a9ccdull && key.ps == 0xd55a20d004031279ull;
+                if (temporalExperiment && temporalJitter && jitterShadowPair)
+                {
+                    const uint32_t fetch0 = Reg(REG_FETCH_CONSTANTS), fetch1 = Reg(REG_FETCH_CONSTANTS + 1);
+                    const uint32_t address = (fetch1 >> 12) << 12;
+                    auto* source = (fetch0 & 3) == 2 ? FindResolved(address, fetch1 & 0x3f) : nullptr;
+                    if (source && source->tex && source->tex->texture && source->tex->format == RenderFormat::R32_FLOAT &&
+                        temporal::IsFullSceneDepthFetch(Reg(REG_FETCH_CONSTANTS + 2), Reg(REG_FETCH_CONSTANTS + 5),
+                            source->tex->guestWidth, source->tex->guestHeight))
+                        jitterSampledDepth = temporal::SceneResolve{source->frame, source->writeOrdinal,
+                            address, source->destFormat, source->tex->width, source->tex->height,
+                            source->writeX == 0 && source->writeY == 0 &&
+                            source->writeWidth == source->tex->width && source->writeHeight == source->tex->height};
                 }
+                const auto drawJitter = temporal::ApplyDrawJitter(key.vs, key.ps, frame,
+                    temporalExperiment && temporalJitter, temporalViewport, jitterAnchor,
+                    depth ? depth->allocationSerial : 0,
+                    {rasterViewport.x, rasterViewport.y, rasterViewport.width, rasterViewport.height},
+                    vsConstants, psConstants, &temporalScene.Depth(), jitterSampledDepth ? &*jitterSampledDepth : nullptr);
+                if (drawJitter.applied) ++temporalJitterDraws;
+                else if (temporalExperiment && temporalJitter && temporalSlot >= 0 && temporalViewport) ++temporalJitterMisses;
                 // Range of the bound colour format, clamped in the shader epilogue.
                 {
                     const uint32_t cfmt = (colorInfo >> 16) & 0xF;
@@ -2739,8 +2787,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             temporalScene.ObserveColor(*temporalSceneCopy);
                             if(temporalExperiment && temporalHistory && temporalScene.Ready() && tex->format==RenderFormat::R8G8B8A8_UNORM) {
                                 Transition(*tex,RenderTextureLayout::COPY_SOURCE,RenderBarrierStage::COPY);
-                                auto halton=[](uint32_t n,uint32_t base){double value=0,f=1;while(n){f/=base;value+=f*(n%base);n/=base;}return value-.5;};
-                                const double jx=temporalJitter?halton(frame%32+1,2):0,jy=temporalJitter?halton(frame%32+1,3):0;
+                                const auto sample = temporal::FrameJitter(frame, rasterViewport.width, rasterViewport.height);
+                                const double jx = temporalJitter ? sample.pixelX : 0, jy = temporalJitter ? sample.pixelY : 0;
                                 temporalDisplay=temporalHistory->ResolveColor(commandList.get(),tex->texture.get(),temporalScene,jx,jy,temporalAllowHistory,temporalStableGrid,sceneAAMode==3);
                                 Transition(*tex,RenderTextureLayout::SHADER_READ,RenderBarrierStage::GRAPHICS);
                                 if(temporalDisplay) {
@@ -2958,7 +3006,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     for (const auto& entry : {std::make_pair(key.vs, vs), std::make_pair(key.ps, ps)})
                     {
                         if (!entry.second) continue;
-                        const auto path = std::filesystem::path(debugCaptureDir) / fmt::format("{:016x}.hlsl", entry.first);
+                        const auto path = debugCaptureRoot / "shaders" / fmt::format("{:016x}.hlsl", entry.first);
                         if (debugShaders.insert(entry.first).second)
                         {
                             std::ofstream out(path); out << entry.second->info.hlsl; out.close();
@@ -3072,6 +3120,55 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     commandList->drawInstanced(indexCount, 1, uint32_t(baseVertex), 0);
                 }
                 drawsThisFrame++;
+                // Opt-in, bounded diagnostics of constants actually uploaded for
+                // a submitted draw. F1's guest register trace precedes these edits.
+                static const uint64_t jitterLogStart = getenv("LO_TEMPORAL_DRAW_LOG_START_FRAME") ?
+                    strtoull(getenv("LO_TEMPORAL_DRAW_LOG_START_FRAME"), nullptr, 10) : ~0ull;
+                static const uint64_t jitterLogVs = getenv("LO_TEMPORAL_DRAW_LOG_VS") ?
+                    strtoull(getenv("LO_TEMPORAL_DRAW_LOG_VS"), nullptr, 16) : 0;
+                // Optional geometry-focused logging keeps same-mesh base/light
+                // pairs and one shadow/character sample per frame, reducing IO.
+                static const uint32_t jitterLogIndexCount = getenv("LO_TEMPORAL_DRAW_LOG_INDEX_COUNT") ?
+                    strtoul(getenv("LO_TEMPORAL_DRAW_LOG_INDEX_COUNT"), nullptr, 10) : 0;
+                static uint64_t jitterLoggedShadowFrame = ~0ull, jitterLoggedCharacterFrame = ~0ull;
+                const bool jitterLogStaticMesh = key.vs == 0xb030ab4e17a20783ull || key.vs == 0xa27a7234977e0d4aull ||
+                    key.vs == 0xff9da3984ce8d094ull;
+                const bool jitterLogGeometry = !jitterLogIndexCount ||
+                    (jitterLogStaticMesh ? info.indexCount == jitterLogIndexCount :
+                        key.vs == 0x99c2b4b0960a9ccdull ? jitterShadowPair && jitterLoggedShadowFrame != frame :
+                        key.vs == 0x3148f81d65d3b5f4ull ? jitterLoggedCharacterFrame != frame : true);
+                if (frame >= jitterLogStart && frame - jitterLogStart < 32 &&
+                    jitterLogGeometry &&
+                    (jitterLogVs ? key.vs == jitterLogVs :
+                        jitterLogStaticMesh ||
+                        key.vs == 0x3148f81d65d3b5f4ull || key.vs == 0x99c2b4b0960a9ccdull))
+                {
+                    if (key.vs == 0x99c2b4b0960a9ccdull) jitterLoggedShadowFrame = frame;
+                    if (key.vs == 0x3148f81d65d3b5f4ull) jitterLoggedCharacterFrame = frame;
+                    const auto bits = [](const uint32_t* values, unsigned count) {
+                        std::string text;
+                        for (unsigned i = 0; i < count; ++i) text += fmt::format("{}{:08x}", i ? "," : "", values[i]);
+                        return text;
+                    };
+                    std::array<uint32_t, 16> guestVp{}, guestShadow{};
+                    if (temporalSlot >= 0)
+                        for (unsigned i = 0; i < 16; ++i) guestVp[i] = Reg(REG_ALU_CONSTANTS + temporalSlot * 4 + i);
+                    const bool shadowPair = jitterShadowPair;
+                    if (shadowPair)
+                        for (unsigned i = 0; i < 16; ++i) guestShadow[i] = Reg(REG_ALU_CONSTANTS + 256 * 4 + 2 * 4 + i);
+                    const bool staticMesh = jitterLogStaticMesh;
+                    LOG_INFO("renderer temporal draw f{} submitted={} vs={:016x} ps={:016x} slot={} indices={} index_base={:x} base_vertex={} fetch95={:08x},{:08x} world_c0_c3={:016x} enabled={} viewport={} applied={} shadow={} rejection={} phase={} ndc=({:.9g},{:.9g}) extent={}x{} depth={} layer_bias={:.9g} sampled_depth={:x}/{} scene_depth={:x}/{} vp_guest=[{}] vp_upload=[{}] ps_c2_c5_guest=[{}] ps_c2_c5_upload=[{}]",
+                        frame, drawsThisFrame, key.vs, key.ps, temporalSlot, info.indexCount, info.indexBase, baseVertex,
+                        Reg(REG_FETCH_CONSTANTS + 190), Reg(REG_FETCH_CONSTANTS + 191), staticMesh ? Fnv1a(vsConstants, 16 * sizeof(uint32_t)) : 0,
+                        temporalExperiment && temporalJitter, temporalViewport,
+                        drawJitter.applied, drawJitter.shadowCompensated, uint32_t(drawJitter.rejection), uint32_t(frame % 32 + 1),
+                        drawJitter.sample.ndcX, drawJitter.sample.ndcY, rasterViewport.width, rasterViewport.height,
+                        depth ? depth->allocationSerial : 0, layerDepthOffset,
+                        jitterSampledDepth ? jitterSampledDepth->address : 0, jitterSampledDepth ? jitterSampledDepth->ordinal : 0,
+                        temporalScene.Depth().address, temporalScene.Depth().ordinal, bits(guestVp.data(), temporalSlot >= 0 ? 16 : 0),
+                        temporalSlot >= 0 ? bits(vsConstants + temporalSlot * 4, 16) : "",
+                        bits(guestShadow.data(), shadowPair ? 16 : 0), shadowPair ? bits(psConstants + 2 * 4, 16) : "");
+                }
                 if(temporalSceneCopy)temporalSubmittedFrame=frame;
                 if(fullSceneCopy)color->aaProvenance.Invalidate(frame,color->allocationSerial,
                     rasterViewport.width>=color->aaValidWidth && rasterViewport.height>=color->aaValidHeight);
@@ -3323,6 +3420,11 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             // runs (the dumps themselves slow the game), shader hashes do not.
             void DumpDrawStep(HostTexture& color, uint64_t vsHash)
             {
+                // Per-draw previews are bulky and require extra GPU waits. Keep
+                // them opt-in; the normal export retains every resolve and trace.
+                static const bool captureDrawSteps = getenv("LO_DEBUG_CAPTURE_DRAW_STEPS") &&
+                    strcmp(getenv("LO_DEBUG_CAPTURE_DRAW_STEPS"), "1") == 0;
+                if (!debugCaptureDir.empty() && !captureDrawSteps) return;
                 const uint32_t dumpFrame = captureFrame ? captureFrame : (getenv("LO_DUMP_DRAW_SEQ") ? strtoul(getenv("LO_DUMP_DRAW_SEQ"), nullptr, 10) : 0);
                 static const uint32_t every = getenv("LO_DUMP_DRAW_EVERY") ? std::max(1ul, strtoul(getenv("LO_DUMP_DRAW_EVERY"), nullptr, 10)) : 25;
                 static const uint64_t dumpVs = getenv("LO_DUMP_DRAW_VS") ? strtoull(getenv("LO_DUMP_DRAW_VS"), nullptr, 16) : 0;
@@ -3380,7 +3482,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 // The preview quantizes depth to eight bits, hiding the small
                 // differences involved in shadow comparisons. Keep exact R32
                 // values beside explicitly requested resolve captures.
-                if (tex.format == RenderFormat::R32_FLOAT)
+                if (tex.format == RenderFormat::R32_FLOAT && debugCaptureDir.empty())
                 {
                     const auto rawPath = std::filesystem::path(path).replace_extension(".f32");
                     if (FILE* raw = fopen(rawPath.string().c_str(), "wb"))
@@ -3905,15 +4007,6 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             uint32_t width = 0, height = 0;
             if (ReadbackResolvedSurface(frontbuffer, pixels, width, height))
             {
-                std::ofstream out(std::filesystem::path(r.debugCaptureDir) / "screenshot.ppm", std::ios::binary);
-                out << "P6\n" << width << ' ' << height << "\n255\n";
-                for (auto pixel : pixels)
-                {
-                    const char rgb[] = {char(pixel), char(pixel >> 8), char(pixel >> 16)};
-                    out.write(rgb, 3);
-                }
-                out.close();
-                ok = !out.fail();
                 // A standard top-down 32-bit BMP can be opened directly on Windows.
                 std::ofstream bmp(std::filesystem::path(r.debugCaptureDir) / "screenshot.bmp", std::ios::binary);
                 auto put = [&](uint32_t value, int bytes) { for (int i = 0; i < bytes; ++i) bmp.put(char(value >> (8 * i))); };
@@ -3922,7 +4015,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 put(0, 4); put(width * height * 4, 4); put(0, 4); put(0, 4); put(0, 4); put(0, 4);
                 for (auto pixel : pixels) { bmp.put(char(pixel >> 16)); bmp.put(char(pixel >> 8)); bmp.put(char(pixel)); bmp.put(0); }
                 bmp.close();
-                ok = ok && !bmp.fail();
+                ok = !bmp.fail();
             }
             r.debugTrace << fmt::format("end frame={} frontbuffer={:#x} size={}x{} submitted_draws={} screenshot={}\n",
                 r.frame, frontbuffer, width, height, r.drawsThisFrame, ok);
@@ -3931,26 +4024,82 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             r.debugTrace.close();
             ok = ok && !r.debugTrace.fail();
         }
-        catch (const std::exception& e) { LOG_ERROR("render capture finish: {}", e.what()); }
+        catch (const std::exception& e) { ok = false; LOG_ERROR("render capture finish: {}", e.what()); }
         LOG_INFO("render capture {}: {}", ok ? "saved" : "incomplete", r.debugCaptureDir);
+        if (ok) ++r.debugCaptureCompleted;
+        try
+        {
+            std::ofstream manifest(r.debugCaptureRoot / "capture-info.txt");
+            manifest << "requested_frames=" << r.debugCaptureFrameCount
+                << "\ncompleted_frames=" << r.debugCaptureCompleted
+                << "\nfirst_frame=" << r.debugCaptureFirstFrame
+                << "\nlast_attempted_frame=" << r.frame
+                << "\nstatus=" << (!ok ? "incomplete" : r.debugCaptureCompleted == r.debugCaptureFrameCount ? "complete" : "capturing")
+                << "\nFrames are consecutive rendered frames. Capture readbacks may stall execution.\n"
+                << "Each frame directory contains its own screenshot, register trace, resolves and metadata.\n"
+                << "Shaders are deduplicated in shaders/. runtime.log is flushed after the last captured frame.\n"
+                << "Default omissions: draw-step previews, duplicate screenshot.ppm and duplicate depth .f32.\n"
+                << "Use LO_DEBUG_CAPTURE_DRAW_STEPS=1 to include draw-step previews.\n";
+            manifest.close();
+            if (manifest.fail()) throw std::runtime_error("Cannot write capture-info.txt");
+        }
+        catch (const std::exception& e) { ok = false; LOG_ERROR("render capture manifest: {}", e.what()); }
+        if (ok && r.debugCaptureCompleted < r.debugCaptureFrameCount)
+        {
+            r.debugTrace.clear();
+            r.debugCaptureDir.clear();
+            r.captureFrame = 0;
+            std::lock_guard lock(captureMutex);
+            capturePending = true;
+            captureStatus = L"等待下一帧 / Waiting for frame " + std::to_wstring(r.debugCaptureCompleted + 1) + L"/3";
+            return;
+        }
+        // Snapshot the log owned by this process after frame export, before ZIP
+        // creation. A disabled or unavailable log must not discard the capture.
+        try
+        {
+            const auto directory = r.debugCaptureRoot;
+            const auto error = os::logger::SnapshotFile(directory / "runtime.log");
+            std::ofstream status(directory / "runtime-log-status.txt");
+            status << "frame=" << r.frame << '\n';
+            if (error)
+            {
+                // This directory was created for this request; discard only a
+                // possible partial snapshot from the failed copy.
+                std::error_code cleanupError;
+                std::filesystem::remove(directory / "runtime.log", cleanupError);
+                status << "status=unavailable\nreason=" << error.message() << '\n';
+                LOG_WARNING("render capture runtime log unavailable: {}", error.message());
+            }
+            else
+            {
+                status << "status=included\nfile=runtime.log\n"
+                    "scope=Current process log file, flushed after frame export and before ZIP creation.\n";
+            }
+            status.close();
+            if (status.fail()) LOG_WARNING("render capture: could not write runtime log status");
+        }
+        catch (const std::exception& e) { LOG_WARNING("render capture runtime log: {}", e.what()); }
         std::filesystem::path archive;
         bool compressed = false;
         if (ok)
         {
             { std::lock_guard lock(captureMutex); captureStatus = L"正在压缩 ZIP / Compressing ZIP"; }
-            try { compressed = CompressCapture(std::filesystem::path(r.debugCaptureDir), archive); }
+            try { compressed = CompressCapture(r.debugCaptureRoot, archive); }
             catch (const std::exception& e) { LOG_ERROR("render capture ZIP: {}", e.what()); }
             LOG_INFO("render capture ZIP {}: {}", compressed ? "saved" : "failed", compressed ? archive.string() : r.debugCaptureDir);
         }
         {
             std::lock_guard lock(captureMutex);
             captureStatus = compressed ? L"ZIP 已保存 / ZIP saved: " + archive.wstring() :
-                (ok ? L"ZIP 失败，原始文件保留 / ZIP failed: " : L"导出不完整 / Incomplete: ") + std::filesystem::path(r.debugCaptureDir).wstring();
+                (ok ? L"ZIP 失败，原始文件保留 / ZIP failed: " : L"导出不完整 / Incomplete: ") + r.debugCaptureRoot.wstring();
             captureBusy = false;
         }
         r.debugTrace.close();
         r.debugTrace.clear();
         r.debugCaptureDir.clear();
+        r.debugCaptureRoot.clear();
+        r.debugCaptureCompleted = 0;
         r.captureFrame = 0;
     }
 

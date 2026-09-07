@@ -31,7 +31,7 @@ namespace gpu::renderer
     // Convert the guest frontbuffer content extent to this surface's physical
     // pixels (storage padding remains excluded).
     void ScaleResolvedSize(uint32_t physicalAddress, uint32_t& width, uint32_t& height);
-    // UI thread requests; render thread captures the next complete frame.
+    // UI thread requests; render thread captures the next three complete frames.
     void RequestDebugCapture();
     std::wstring DebugCaptureStatus();
     bool DebugCaptureBusy();

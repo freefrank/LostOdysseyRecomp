@@ -17,6 +17,10 @@ Windows x64 · Direct3D 12 · PowerPC static recompilation
 > [!IMPORTANT]
 > **v0.4.0 is an early testing release.** Opening areas and selected scenes have been tested; a complete playthrough has not. Rendering and stability issues remain. You must supply your own supported game files.
 
+## Prepared for v0.4.1
+
+The local release candidate fixes the reported Map3 tire-shadow flicker with TAA enabled; the user has confirmed the fix at the original position. F1 render exports now capture three consecutive frames in one ZIP with the current process log and less duplicate data. Release preparation is in progress; the published download remains v0.4.0. See the [changelog](CHANGELOG.md) and [validation scope](docs/STATUS.md).
+
 ## New in v0.4.0
 
 Real internal resolution up to 4K, SMAA and experimental camera-based TAA, Standard/High filtering, saved frame-rate controls and automatic Asian/USA-Europe CPX indexing are included. Settings text renders at output resolution and Debug labels switch independently between English and Simplified Chinese. See the [changelog](CHANGELOG.md). Existing translated-shader caches rebuild after updating.
@@ -80,7 +84,7 @@ The v0.4.0 Windows package passed release CI, all 45 manifest entries and the in
 
 TAA remains experimental, lacks native object-motion vectors and falls back to SMAA on unsupported paths. Selected movement, dialogue and Ring core-timing checks passed for 60 FPS, but whole-game locked 60 and precise Ring release/Perfect are unverified. The unvalidated 120 FPS option requires `LO_EXPERIMENTAL_120=1`; otherwise it runs at an effective 60 FPS.
 
-The two missing dispatch entries investigated for Issue #5 are repaired, but the original battle still needs retesting. Issue #6 has added startup-memory diagnostics; its original-machine cause and recovery remain unknown. New-build visual acceptance and broader gameplay coverage remain pending. See [release validation](docs/STATUS.md), [development evidence](docs/notes/v0.4.0-development.md) and the [follow-up record](docs/notes/handoff-v0.4.0-followup.md).
+The two missing dispatch entries investigated for Issue #5 are repaired, but the original battle still needs retesting. Issue #6 has added startup-memory diagnostics; its original-machine cause and recovery remain unknown. The local v0.4.1 Map3 tire fix has user visual acceptance; broader gameplay and hardware remain regression coverage. See [release validation](docs/STATUS.md), [development evidence](docs/notes/v0.4.0-development.md) and the [follow-up record](docs/notes/handoff-v0.4.0-followup.md).
 
 Reliable gameplay and faithful rendering come first. The project translates PowerPC code into C++ with **XenonRecomp**, implements Xbox 360 services on the host, and renders translated Xenos shaders through **plume**.
 

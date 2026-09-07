@@ -60,6 +60,14 @@ if(WIN32)
     target_link_libraries(LostOdysseyRecomp PRIVATE winmm onecore)
 endif()
 
+# Current-process log snapshots without guest generation or GPU access.
+add_executable(LoLogCaptureTest EXCLUDE_FROM_ALL
+    ${CMAKE_SOURCE_DIR}/tools/tests/log_capture_test.cpp
+    ${LO_RUNTIME_ROOT}/os/log_file.cpp)
+target_include_directories(LoLogCaptureTest PRIVATE ${LO_RUNTIME_ROOT})
+target_compile_features(LoLogCaptureTest PRIVATE cxx_std_20)
+target_link_libraries(LoLogCaptureTest PRIVATE fmt::fmt)
+
 # Integration test uses the actual guest import bridge and storage implementation.
 set(LO_STORAGE_TEST_SOURCES ${LO_RUNTIME_SOURCES})
 list(FILTER LO_STORAGE_TEST_SOURCES EXCLUDE REGEX "/main\\.cpp$")
@@ -246,6 +254,10 @@ target_compile_features(LoRenderResolutionTest PRIVATE cxx_std_20)
 add_executable(LoTemporalSceneTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/temporal_scene_test.cpp)
 target_include_directories(LoTemporalSceneTest PRIVATE ${LO_RUNTIME_ROOT})
 target_compile_features(LoTemporalSceneTest PRIVATE cxx_std_20)
+
+add_executable(LoTemporalJitterTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/temporal_jitter_test.cpp)
+target_include_directories(LoTemporalJitterTest PRIVATE ${LO_RUNTIME_ROOT})
+target_compile_features(LoTemporalJitterTest PRIVATE cxx_std_20)
 
 add_executable(LoTemporalMathTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/temporal_math_test.cpp)
 target_include_directories(LoTemporalMathTest PRIVATE ${LO_RUNTIME_ROOT})

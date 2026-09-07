@@ -2,9 +2,17 @@
 
 [简体中文](ROADMAP.zh-CN.md) · [Current status](STATUS.md)
 
-Updated against v0.4.0 publication on **2026-09-07**. `[x]` means the stated scope has evidence, not that the entire game is complete. Dated notes retain earlier experiment states; [STATUS.md](STATUS.md) is the current release and validation ledger.
+Updated for local v0.4.1 development and v0.4.0 publication on **2026-09-07**. `[x]` means the stated scope has evidence, not that the entire game is complete. Dated notes retain earlier experiment states; [STATUS.md](STATUS.md) is the current release and validation ledger.
 
 Legend: `[ ]` planned / outstanding · `[~]` in progress · `[x]` validated within the stated scope.
+
+## Release preparation: v0.4.1
+
+1. [x] Correct verified TAA lighting/depth jitter and shadow-reconstruction coordinate mismatches. Local implementation, integrated build and selected CPU/GPU checks passed; see [validation scope](notes/shadow-texture-lod.md).
+2. [x] Add the two omitted scene-depth material passes after candidate `6d3bc037…` failed original-scene acceptance. r2 passes its integrated build, 8,192 CPU jitter checks and the same-position Map3 TAA/60 FPS/Auto 1440p draw checks. Near-tire ROI mean-brightness variation is lower; individual pixels still vary. See [comparison and limits](notes/shadow-texture-lod.md).
+3. [x] Complete r2's original-Map3 TAA/AA Off comparison and player visual acceptance. The user confirms no tire flicker with TAA enabled, and the running EXE matches r2. The reported Map3 defect is resolved; other maps, motion and hardware remain regression coverage. The first candidate's failure is retained as history.
+
+The user has authorized integration into `main` and v0.4.1 publication. Release notes are prepared; release CI and official-package verification remain pending, with v0.4.0 still the verified published version. The independent AMD first-battle and separate RX 9060 XT reports remain individually suspended.
 
 ## Published milestone and remaining coverage: v0.4.0
 
@@ -56,7 +64,7 @@ v0.1 remains the historical first Windows release with the importer, first-launc
 
 ## Near-term priorities
 
-The following is the retained compatibility and regression backlog. The v0.4.0 section above defines the new development scope.
+The following is the retained compatibility and regression backlog. The v0.4.1 section above defines the current development scope.
 
 1. [ ] Shadow investigation suspended after the user's ten-minute limit: the first-battle report is not locally confirmed; Map 13 evidence remains separate and unresolved.
 2. [~] Collect player acceptance for the expanded shader and recorded-pipeline preparation shipped in v0.3.0. Local tests establish source coverage and real draw reuse, not complete stutter elimination or unseen first-use PSO coverage.

@@ -5,7 +5,8 @@
 
 namespace gpu::temporal
 {
-// Verified position-transform slots from both Map2 captures. A slot alone never
+// Verified position-transform slots from scene captures, including all three
+// tire layers (depth, opaque material, lighting) in Map3 frame 24389. A slot alone never
 // authorizes jitter: renderer also checks viewport/VTE, ordered scene allocation,
 // and exact unmodified camera bits. Fullscreen/postprocess/UI shaders are absent.
 inline int PositionVPSlot(uint64_t shader) {
@@ -13,10 +14,11 @@ inline int PositionVPSlot(uint64_t shader) {
     case 0x702c643defe73320ull:case 0x97f07e5d73418e64ull:case 0x99c2b4b0960a9ccdull:return 0;
     case 0xb030ab4e17a20783ull:case 0xf7fd88506d704a3dull:return 4;
     case 0x03184cec350bc14eull:case 0x3621e6e696f914c5ull:case 0x4053f2a21dbb92ddull:
-    case 0xbfe5f796efa9ae95ull:case 0xc13cdd857c57fed9ull:case 0xf4577672c6ee5dd9ull:return 7;
+    case 0xa27a7234977e0d4aull:case 0xbfe5f796efa9ae95ull:case 0xc13cdd857c57fed9ull:case 0xf4577672c6ee5dd9ull:
+    case 0xff9da3984ce8d094ull:return 7;
     case 0x1da1ddc75da8e994ull:case 0x22557143e0f243ddull:case 0x4c87bb5b986defc8ull:case 0xa6c8c11c6dd07144ull:return 8;
     case 0x31bde3e2770db187ull:case 0x7e8492365edcf556ull:return 230;
-    case 0xb7557072899a63a1ull:case 0xc84ca5209e98e743ull:return 233;
+    case 0x118a37c0d32c0477ull:case 0x3148f81d65d3b5f4ull:case 0xb7557072899a63a1ull:case 0xc84ca5209e98e743ull:return 233;
     default:return -1;
     }
 }

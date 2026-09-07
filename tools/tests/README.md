@@ -61,10 +61,11 @@ The bare-FPD generator requires Python; the CPX wrapper also builds its CPU deco
 
 ## Manual presentation and timing checks
 
-The v0.4.0 development targets below are excluded from default builds and are not suite names accepted by `tools/test.bat`. Select the target relevant to the change and run its built executable explicitly; the examples are alternatives, not a required full sequence.
+The development targets below are excluded from default builds and are not suite names accepted by `tools/test.bat`. Select the target relevant to the change and run its built executable explicitly; the examples are alternatives, not a required full sequence.
 
 | Target | Scope and prerequisites |
 |---|---|
+| `LoLogCaptureTest` | CPU current-process logger snapshots: flush/copy while open, missing logging, destination failure and source preservation, repeated snapshots and concurrent whole-record ordering. Requires the configured native compiler and fmt dependency; no GPU, guest generation or runtime PCH. Capture ZIP contents and post-export rendering require a separate runtime check. |
 | `LoMenuRenderTest` | Windows GDI host-menu rasterization at 720p, 1080p, 4K, 1920×1200 and portrait sizes; dimensions, opacity, text pixels, aspect fit and invalid-size rejection. No guest generation or runtime PCH required. |
 | `LoRenderResolutionTest` | CPU Auto/manual internal-size selection, 4K cap, aspect fit, scaled dimensions, target limits and logical texel-coordinate rules. No GPU or game assets; does not establish physical scene rendering. |
 | `LoRenderResolutionShaderTest` | Windows production translator/DXC checks for VS/PS normalized and denormalized fetches, signed texel offsets, texture weights and implicit LOD. Requires DXC DLLs discoverable by the built executable; no GPU or game assets. Shader compilation does not establish sampled pixels. |
@@ -72,9 +73,16 @@ The v0.4.0 development targets below are excluded from default builds and are no
 | `LoFramePacerTest` | Pure host deadline calculations, FPS changes, long-stall recovery and scoped guest interval/flag mapping, including the experimental 120 gate. No GPU, guest generation or runtime PCH required; this does not test gameplay speed. |
 | `LoTemporalMathTest` | CPU camera-reference math with independent analytic point, translation/yaw, viewport/Y-sign/half-pixel and invalid-input checks. No GPU, guest generation or runtime PCH required. Static round trips and these fixtures do not establish runtime frame association, motion vectors or TAA. |
 | `LoTemporalSceneTest` | CPU scene-observation ordering, frame reset, depth-allocation identity, full extents and ambiguity rejection. No GPU, guest generation or runtime PCH required. It does not validate the renderer's actual scene/UI selection. |
+| `LoTemporalJitterTest` | CPU production jitter and shadow-reconstruction checks across all 32 phases at 720p/1080p/1440p/4K. Retained constant fixtures independently emulate depth/material/lighting position paths and shadow reconstruction, including both captured tire world transforms, character material/lighting endpoints, preserved Z/W and depth UV, and atlas/identity rejection guards. No GPU, game assets, guest generation or runtime PCH required; this does not establish actual draw coverage or player-visible stability. |
 | `LoTemporalHistoryDiagnosticTest` | CPU history-rejection reasons/masks, raster/half-pixel changes and retained projection coordinates/depth on rejection. Checks the production positive-W reference-depth selection with analytic finite/infinite/orthographic cameras and actual float32 VP pairs at 720p/1080p/4K; camera-cut, invalid endpoint and previous-W negative controls remain active. An optional retained camera-pair manifest exercises production continuity and diagnostics together. No GPU, game assets, guest generation or runtime PCH required; this does not establish game output or broad TAA quality. |
 | `LoTemporalAATest` | Standalone D3D12 resolve/display and copied-history checks: identity, depth/reactive rejection, neighborhood clamp, alpha, invalid-call output preservation, resource lifetime, external source overwrites and frame/epoch/reset handling. Stable-grid cases separate color/depth jitter coordinates and test camera motion, material edges and static silhouettes. Moving silhouettes use the segment analysis below; optional `--replay` compares independent baseline/candidate histories on captured traces. Requires configured D3D12/Plume dependencies; no guest generation or runtime PCH. It does not enable or accept game TAA. |
 | `LoPresentationTest` | D3D12 GPU readback for native identity, letterboxing, FXAA/SMAA edges, flat regions, padding, resize, scaling and checkerboard reductions. Pre-UI scene-AA/UI-composition cases include a repeated-AA negative control. Optional `--capture` mode replays one raw frame through six AA/quality combinations. Requires configured D3D12/Plume dependencies; the target builds independently without reusing the main executable's PCH. No game-scene acceptance is implied. |
+
+```powershell
+# Current-process logger snapshot contract; no game launch
+cmake --build out/build/release --target LoLogCaptureTest
+.\out\build\release\LostOdysseyRecomp\LoLogCaptureTest.exe
+```
 
 ```powershell
 # Internal-resolution dimensions and sampling contract; select either target as needed
@@ -112,6 +120,24 @@ cmake --build out/build/release --target LoTemporalMathTest
 cmake --build out/build/release --target LoTemporalSceneTest
 .\out\build\release\LostOdysseyRecomp\LoTemporalSceneTest.exe
 ```
+
+```powershell
+# CPU per-draw jitter and shadow-reconstruction contract
+cmake --build out/build/release --target LoTemporalJitterTest
+.\out\build\release\LostOdysseyRecomp\LoTemporalJitterTest.exe
+```
+
+The r2 fixture passes 8,192 checks (`out/v0.4.1-tire-v2/LoTemporalJitterTest.log`). Its added three-layer tire cases cover 32 phases, two captured world transforms and three physical sizes, reproducing up to 0.487799 pixels of separation when the material pass remains unjittered. This is arithmetic/guard coverage; runtime draw and visual results are recorded separately in the [shadow investigation](../../docs/notes/shadow-texture-lod.md).
+
+For an isolated actual-game run, set `LO_TEMPORAL_DRAW_LOG_START_FRAME` to a decimal renderer frame before launching the process. It logs selected submitted depth, opaque-material, lighting and shadow draws for at most 32 renderer frames, including original/uploaded VP and shadow constants, phase, extent, sampled-depth identity and application/rejection results. `LO_TEMPORAL_DRAW_LOG_INDEX_COUNT` optionally limits the selected static-mesh passes by index count, retaining at most one shadow and one selected character sample per frame to reduce logging. `LO_TEMPORAL_DRAW_LOG_VS` optionally replaces the default shader selection with one hexadecimal VS hash; combining it with the index-count filter further narrows the output. Normal TAA settings still control jitter; these diagnostics do not enable it.
+
+```powershell
+# Example environment for the next isolated test process
+$env:LO_TEMPORAL_DRAW_LOG_START_FRAME = "2000"
+$env:LO_TEMPORAL_DRAW_LOG_INDEX_COUNT = "336" # Optional tire-mesh filter
+```
+
+Remove these environment variables after launching the intended test process. F1 register capture precedes the upload adjustments, so guest constants alone do not prove jitter was applied. Draw logs establish submitted constants, not the absence of visible flicker; inspect continuous output separately and exclude diagnostic logging from performance comparisons. See [current shadow investigation](../../docs/notes/shadow-texture-lod.md).
 
 ```powershell
 # CPU history-rejection diagnostics; no GPU or game launch

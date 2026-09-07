@@ -661,7 +661,7 @@ namespace gpu
                     swaps, fps, g_frame.draws, frontbuffer, width, height, FileSystem::LastOpenedFile());
             }
             g_workerStage = "renderer flush";
-            // Optional deterministic trigger for isolated capture validation.
+            // Optional deterministic trigger for a three-frame capture validation.
             static const uint32_t captureSwap = getenv("LO_DEBUG_CAPTURE_SWAP") ? strtoul(getenv("LO_DEBUG_CAPTURE_SWAP"), nullptr, 10) : 0;
             if (captureSwap && swaps == captureSwap) renderer::RequestDebugCapture();
             renderer::FinishDebugCapture(frontbuffer);
