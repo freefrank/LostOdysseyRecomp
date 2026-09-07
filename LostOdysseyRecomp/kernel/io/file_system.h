@@ -12,6 +12,13 @@
 // save/cache directory.
 struct FileSystem
 {
+    // Root registry and log strings use UTF-8, never the Windows ANSI code page.
+    static std::string PathUtf8(const std::filesystem::path& path)
+    {
+        const auto utf8 = path.u8string();
+        return std::string(reinterpret_cast<const char*>(utf8.data()), utf8.size());
+    }
+
     // Name of the most recently opened game file, for the GPU heartbeat log.
     static std::string LastOpenedFile();
 

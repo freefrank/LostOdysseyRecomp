@@ -195,6 +195,12 @@ int main(int argc, char** argv)
         Check(argc == 3 || argc == 4, "usage: LoStorageTest <mode> <isolated directory> [disc-set directory]");
         std::filesystem::create_directories(argv[2]);
         std::filesystem::current_path(argv[2]);
+        if (argc == 4 && std::string_view(argv[3]) == "unicode")
+        {
+            const std::filesystem::path directory = u8"Steamn\u00b4t games \u5b58\u6863";
+            std::filesystem::create_directories(directory);
+            std::filesystem::current_path(directory);
+        }
         g_userHeap.Init();
         g_pageAllocator.Init();
         if (std::string_view(argv[1]) == "discs" || std::string_view(argv[1]) == "disc-rejected")
@@ -268,6 +274,18 @@ int main(int argc, char** argv)
         Check(Call(__imp__XamContentFlush,{Addr(root),Addr(ov)}) == ERROR_IO_PENDING && ov->Error == 0, "content flush completion");
         Check(Call(__imp__XamContentClose,{Addr(root),Addr(ov)}) == ERROR_IO_PENDING && ov->Error == 0, "close completion");
         Check(FileSystem::ResolvePath("savetest:\\payload.bin").empty(), "close unmounts root");
+        Check(Call(__imp__XamContentCreateEx,{0,Addr(root),Addr(content),3,Addr(disposition),0,0,0,Addr(ov)}) == ERROR_IO_PENDING && ov->Error == 0,
+            "reopen saved content in same process");
+        Check(FileSystem::ResolvePath("savetest:\\payload.bin") == FileSystem::GetSaveRoot()/content->szFileName/"payload.bin",
+            "rediscovered content preserves Unicode host path");
+        Check(Call(__imp__NtCreateFile,{Addr(file),0x80000000u,Addr(attrs),Addr(iosb),0,0,0,1,0}) == 0,
+            "reopen payload after content rediscovery");
+        memset(bytes, 0, 4096);
+        Check(Call(__imp__NtReadFile,{*file,0,0,0,Addr(iosb),Addr(bytes),4096,Addr(offset)}) == 0 && iosb->Information == 4096,
+            "read reopened payload");
+        for (unsigned i=0;i<4096;i++) Check(bytes[i] == uint8_t(i*37+11), "reopened payload bytes");
+        DestroyKernelObject(*file);
+        Check(Call(__imp__XamContentClose,{Addr(root),Addr(ov)}) == ERROR_IO_PENDING && ov->Error == 0, "close reopened content");
         Check(Call(__imp__XamContentCreateEx,{0,Addr(root),Addr(content),1,Addr(disposition),0,0,0,Addr(ov)}) == ERROR_IO_PENDING && ov->Error == ERROR_FUNCTION_FAILED && ov->dwExtendedError == (0x80070000u|ERROR_ALREADY_EXISTS), "create-new collision reports async HRESULT");
         std::puts(writing ? "PASS: guest save imports, completion event, thumbnail, collision" : "PASS: fresh-process enumeration and exact payload readback");
         return 0;

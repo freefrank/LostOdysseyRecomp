@@ -2,6 +2,7 @@
 #include "xam.h"
 #include "xdm.h"
 #include "function.h"
+#include <kernel/io/file_system.h>
 #include <cpu/guest_thread.h>
 #include <hid/hid.h>
 #include <os/logger.h>
@@ -90,8 +91,8 @@ static void DiscoverSavedContent()
         std::ifstream in(entry.path() / ".lo-content", std::ios::binary);
         if (!in.read(reinterpret_cast<char*>(&data), sizeof(data)) ||
             data.dwContentType != XCONTENTTYPE_SAVEDATA || !ValidContentName(data) ||
-            entry.path().filename().string() != data.szFileName) continue;
-        XamRegisterContent(data, entry.path().string());
+            FileSystem::PathUtf8(entry.path().filename()) != data.szFileName) continue;
+        XamRegisterContent(data, FileSystem::PathUtf8(entry.path()));
     }
 }
 
@@ -312,7 +313,7 @@ static uint32_t ContentCreate(uint32_t dwUserIndex, const char* szRootName, cons
             else
                 rootPath = GetGamePath();
 
-            const std::string root = (const char*)rootPath.u8string().c_str();
+            const std::string root = FileSystem::PathUtf8(rootPath);
             std::error_code ec;
             if (exists && mode == 2)
             {
