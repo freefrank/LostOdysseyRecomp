@@ -1,3 +1,4 @@
+#include "scene_aa_provenance.h"
 #include <stdafx.h>
 #include "renderer.h"
 #include "video.h"
@@ -7,6 +8,10 @@
 #include "polygon_offset.h"
 #include "pipeline_cache.h"
 #include "texture_layout.h"
+#include "temporal_scene.h"
+#include "temporal_history.h"
+#include "presentation.h"
+#include <settings/config.h>
 #include "shader/xenos_translator.h"
 #include "shader/dxc_compiler.h"
 #include "shader/cache.h"
@@ -27,6 +32,7 @@
 #include <thread>
 #include <cmath>
 #include <fstream>
+#include <iomanip>
 #include <future>
 #include <set>
 #include <tuple>
@@ -212,6 +218,9 @@ namespace gpu::renderer
         // ---- host resources -------------------------------------------------
         struct HostTexture
         {
+            uint64_t allocationSerial = 0; // Render-target identity, never a recycled host pointer.
+            scene_aa::Provenance aaProvenance;
+            uint32_t aaValidWidth=0,aaValidHeight=0; // Proven scene domain; allocation may contain padding.
             std::unique_ptr<RenderTexture> texture;
             RenderTextureLayout layout = RenderTextureLayout::UNKNOWN;
             RenderFormat format = RenderFormat::UNKNOWN;
@@ -312,6 +321,9 @@ namespace gpu::renderer
                 uint32_t destFormat = 0, destPitch = 0;
                 bool swapRedBlue = false;
                 uint64_t frame = 0;
+                uint64_t writeOrdinal = 0;
+                uint32_t writeX = 0, writeY = 0, writeWidth = 0, writeHeight = 0;
+
             };
             // Keyed by destination address, one entry per destination format: the
             // title resolves the HDR scene to a scratch buffer as FP16 and then the
@@ -320,6 +332,22 @@ namespace gpu::renderer
             // first, so the composite's fetch of the FP16 surface missed and fell
             // back to guest memory.
             std::unordered_map<uint32_t, std::vector<ResolvedSurface>> resolved;
+            uint64_t resolveWriteOrdinal = 0;
+            uint64_t nextTargetAllocation = 0;
+            temporal::SceneObservation temporalScene;
+            std::unique_ptr<temporal::HistoryOwner> temporalHistory;
+            bool temporalExperiment=false,temporalAllowHistory=false,temporalJitter=false,temporalStableGrid=false;
+            bool temporalForced=false,temporalForcedHistory=false,temporalForcedJitter=false,temporalForcedStable=false;
+            bool temporalInitFailed=false;
+            uint64_t temporalSupportedFrame=~0ull;
+            uint32_t temporalJitterDraws=0,temporalJitterMisses=0;
+            uint64_t temporalEpoch=1,temporalFramesLogged=0,temporalSubmittedFrame=~0ull;
+            std::chrono::steady_clock::time_point temporalFrameTime=std::chrono::steady_clock::now();
+            std::unique_ptr<gpu::Presentation> sceneProcessor;
+            std::unique_ptr<RenderTexture> sceneAAOutput;
+            uint32_t sceneAAWidth=0,sceneAAHeight=0,sceneAAMode=0;
+            bool sceneAAEnabled=false,sceneAABusy=false;
+            uint64_t sceneAAConfigFrame=~0ull,sceneAAAppliedFrame=~0ull,sceneAAAllocation=0;
 
             // The entry at `base` whose destination format the fetch can read.
             ResolvedSurface* FindResolved(uint32_t base, uint32_t fetchFormat)
@@ -454,6 +482,98 @@ namespace gpu::renderer
             uint64_t psTraceRequest = 0, psTraceHash = 0;
             uint32_t psTraceRemaining = 0, psTraceFirst = 0, psTraceCount = 0, psTraceDraws = 0;
 
+            // Opt-in temporal readback. Copies are queued at the selected resolve,
+            // then mapped only after the normal end-of-frame fence. Unlike full
+            // capture, this does not insert a wait between shadow production and use.
+            struct ResolveTraceTarget { uint32_t address, occurrence, seen = 0; };
+            struct ResolveTraceCopy
+            {
+                uint32_t address, occurrence, width, height, bpp, pitch, offset;
+                RenderFormat format;
+            };
+            uint64_t resolveTraceSerial = 0;
+            uint32_t resolveTraceRemaining = 0, resolveTraceBytes = 0;
+            std::vector<ResolveTraceTarget> resolveTraceTargets;
+            std::vector<ResolveTraceCopy> resolveTraceCopies;
+            std::unique_ptr<RenderBuffer> resolveTraceBuffer;
+
+            void FinishResolveTraceFrame()
+            {
+                static const char* requestPath = getenv("LO_RESOLVE_TRACE_REQUEST");
+                if (!requestPath) return;
+                if (!resolveTraceCopies.empty())
+                {
+                    const auto directory = std::filesystem::path(requestPath).parent_path();
+                    const auto* data = static_cast<const char*>(resolveTraceBuffer->map());
+                    for (const auto& copy : resolveTraceCopies)
+                    {
+                        const auto path = directory / fmt::format("trace_f{}_a{:x}_n{}_{}x{}_fmt{}.bin",
+                            frame, copy.address, copy.occurrence, copy.width, copy.height, uint32_t(copy.format));
+                        std::ofstream out(path, std::ios::binary);
+                        for (uint32_t y = 0; y < copy.height; ++y)
+                            out.write(data + copy.offset + size_t(y) * copy.pitch, size_t(copy.width) * copy.bpp);
+                        out.close();
+                        if (out.fail()) LOG_ERROR("renderer: resolve trace write failed: {}", path.string());
+                    }
+                    resolveTraceBuffer->unmap();
+                }
+                if (resolveTraceRemaining)
+                {
+                    LOG_INFO("renderer: resolve trace f{} copies={}", frame, resolveTraceCopies.size());
+                    --resolveTraceRemaining;
+                }
+                resolveTraceCopies.clear();
+                resolveTraceBytes = 0;
+                for (auto& target : resolveTraceTargets) target.seen = 0;
+                // serial frames [address_hex occurrence_decimal] (one to four pairs).
+                uint64_t serial = 0;
+                uint32_t frames = 0, address = 0, occurrence = 0;
+                std::ifstream in(requestPath);
+                if (!(in >> serial >> frames) || !serial || serial == resolveTraceSerial || frames > 600) return;
+                std::vector<ResolveTraceTarget> targets;
+                while (in >> std::hex >> address >> std::dec >> occurrence)
+                {
+                    if (!occurrence || occurrence > 32 || targets.size() == 4) return;
+                    targets.push_back({address, occurrence});
+                }
+                if (targets.empty()) return;
+                resolveTraceSerial = serial;
+                resolveTraceRemaining = frames;
+                resolveTraceTargets = std::move(targets);
+                LOG_INFO("renderer: resolve trace request {} next-frame={} frames={} targets={}",
+                    serial, frame + 1, frames, resolveTraceTargets.size());
+            }
+
+            void QueueResolveTrace(RenderTexture* texture, RenderFormat format, uint32_t width, uint32_t height, RenderTextureLayout previousLayout, uint32_t address)
+            {
+                if (!resolveTraceRemaining) return;
+                for (auto& target : resolveTraceTargets)
+                {
+                    if (target.address != address || ++target.seen != target.occurrence) continue;
+                    const uint32_t bpp = format == RenderFormat::R8G8B8A8_UNORM ? 4 :
+                        format == RenderFormat::R16G16B16A16_FLOAT ? 8 : format == RenderFormat::R32_FLOAT ? 4 : 0;
+                    if (!bpp) continue;
+                    const uint32_t pitch = (width * bpp + 255) & ~255u;
+                    const uint32_t offset = (resolveTraceBytes + 511) & ~511u;
+                    constexpr uint32_t capacity = 64u << 20;
+                    if (uint64_t(offset) + uint64_t(pitch) * height > capacity) continue;
+                    if (!resolveTraceBuffer) resolveTraceBuffer = device->createBuffer(RenderBufferDesc::ReadbackBuffer(capacity));
+                    if (!resolveTraceBuffer) continue;
+                    commandList->barriers(RenderBarrierStage::COPY,RenderTextureBarrier(texture,RenderTextureLayout::COPY_SOURCE));
+                    commandList->copyTextureRegion(
+                        RenderTextureCopyLocation::PlacedFootprint(resolveTraceBuffer.get(), format,
+                            width, height, 1, pitch / bpp, offset),
+                        RenderTextureCopyLocation::Subresource(texture, 0));
+                    commandList->barriers(RenderBarrierStage::ALL,RenderTextureBarrier(texture,previousLayout));
+                    resolveTraceCopies.push_back({address, target.occurrence, width, height, bpp, pitch, offset, format});
+                    resolveTraceBytes = offset + pitch * height;
+                }
+            }
+
+            void QueueResolveTrace(HostTexture& tex,uint32_t address) {
+                QueueResolveTrace(tex.texture.get(),tex.format,tex.width,tex.height,tex.layout,address);
+            }
+
             // Separate from full capture: no resource readbacks or GPU waits.
             // File: serial frames shader_hex first_constant constant_count.
             void PollPsTraceRequest()
@@ -542,6 +662,26 @@ namespace gpu::renderer
                 readback = device->createBuffer(RenderBufferDesc::ReadbackBuffer(kReadbackSize));
                 resolveReadback = getenv("LO_RESOLVE_READBACK") != nullptr;
                 textureRevalidate = getenv("LO_TEXTURE_STATIC") == nullptr;
+                auto enabled=[](const char* key){const char* value=getenv(key);return value&&strcmp(value,"1")==0;};
+                temporalExperiment = enabled("LO_TEMPORAL_EXPERIMENT");
+                temporalAllowHistory = enabled("LO_TEMPORAL_CAMERA_HISTORY");
+                temporalJitter = enabled("LO_TEMPORAL_JITTER_EXPERIMENT");
+                temporalStableGrid = enabled("LO_TEMPORAL_STABLE_GRID");
+                temporalForced=temporalExperiment;temporalForcedHistory=temporalAllowHistory;
+                temporalForcedJitter=temporalJitter;temporalForcedStable=temporalStableGrid;
+                // The legacy CPU resolve path writes guest tiled memory and has
+                // no GPU scene-depth/resolve provenance; keep its existing AA path.
+                const char* sceneOverride=getenv("LO_SCENE_AA_EXPERIMENT");
+                sceneAAEnabled = (!sceneOverride||strcmp(sceneOverride,"0")!=0)&&!resolveReadback;
+                if(sceneAAEnabled) {
+                    sceneProcessor=std::make_unique<gpu::Presentation>();
+                    if(!sceneProcessor->Init(device)) {sceneProcessor.reset();sceneAAEnabled=false;}
+                }
+                if(temporalExperiment) {
+                    temporalHistory=std::make_unique<temporal::HistoryOwner>();
+                    if(!temporalHistory->Init(device)) {temporalHistory.reset();temporalExperiment=false;LOG_ERROR("renderer: temporal experiment pipeline initialization failed");}
+                    else LOG_INFO("renderer: temporal pre-UI experiment enabled, camera_history={} jitter={} stable_grid={} (known scene VS only; no object motion vectors)",temporalAllowHistory,temporalJitter,temporalStableGrid);
+                }
                 dummyBuffer = device->createBuffer(RenderBufferDesc::DefaultBuffer(256));
 
                 // Layout: root CBVs b0 (VS constants) b1 (shared) b2 (PS constants) in space0;
@@ -900,6 +1040,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         else
                             ++fb;
                 retiredTextures.clear();
+                if(temporalHistory)temporalHistory->ReleaseCompleted();
+                sceneAABusy=false; // Existing queue fence completed; processor descriptors may be reused.
                 uploadOffset = 0;
                 for (auto& used : setPoolUsed)
                     used = 0;
@@ -1470,6 +1612,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
 
                 auto tex = std::make_unique<HostTexture>();
+                tex->allocationSerial = ++nextTargetAllocation;
                 tex->format = depth ? RenderFormat::D32_FLOAT_S8_UINT : ClassHostFormat(colorClass);
                 tex->width = pitch;
                 tex->height = height;
@@ -2136,6 +2279,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     color->clearedFrame = frame;
                     commandList->setFramebuffer(GetFramebuffer(color, nullptr));
                     commandList->clearColor(0, loud ? RenderColor(1.0f, 0.0f, 1.0f, 1.0f) : RenderColor(0.0f, 0.0f, 0.0f, 0.0f));
+                    color->aaProvenance.Invalidate(frame,color->allocationSerial,true);
                     if (loud)
                         LOG_INFO("renderer: frame {} wiped target base={:#x} fmt={} pitch={} {}x{}", frame, colorInfo & 0xFFF, (colorInfo >> 16) & 0xF, pitch, color->width, color->height);
                 }
@@ -2210,6 +2354,35 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 uint32_t vsConstants[256 * 4], psConstants[256 * 4];
                 for (uint32_t i = 0; i < 256 * 4; i++) vsConstants[i] = Reg(REG_ALU_CONSTANTS + i);
                 for (uint32_t i = 0; i < 256 * 4; i++) psConstants[i] = Reg(REG_ALU_CONSTANTS + 256 * 4 + i);
+                // Diagnostic selection uses only GPU draw constants, not the CPU
+                // presented-swap counter. Shader/layout recognition is deliberately
+                // limited to the path verified in the captured Map2 scene.
+                if(sceneAAConfigFrame!=frame) {
+                    sceneAAConfigFrame=frame;const auto mode=settings::GetConfig().antialiasing;
+                    if(sceneAAMode!=mode) {if(temporalHistory)temporalHistory->Reset();temporalSupportedFrame=~0ull;++temporalEpoch;}
+                    sceneAAMode=mode;
+                    const bool selected=mode==3&&!resolveReadback;
+                    temporalExperiment=temporalForced||selected;
+                    temporalAllowHistory=temporalForcedHistory||selected;
+                    temporalJitter=temporalForcedJitter||(selected&&temporalSupportedFrame!=~0ull&&temporalSupportedFrame+1==frame);
+                    temporalStableGrid=temporalForcedStable||selected;
+                    if(temporalExperiment&&!temporalHistory&&!temporalInitFailed) {
+                        temporalHistory=std::make_unique<temporal::HistoryOwner>();
+                        if(!temporalHistory->Init(device)) {temporalHistory.reset();temporalInitFailed=true;LOG_ERROR("renderer: TAA initialization failed; SMAA fallback");}
+                    }
+                    if(!temporalHistory)temporalExperiment=false;
+                }
+                const bool trackTemporalScene = !debugCaptureDir.empty() || temporalExperiment || sceneAAEnabled;
+                if (trackTemporalScene && temporalScene.Frame() != frame) {
+                    temporalScene.Reset(frame);
+                    if(temporalHistory&&std::chrono::steady_clock::now()-temporalFrameTime>std::chrono::milliseconds(250)) {
+                        temporalHistory->Reset();temporalSupportedFrame=~0ull;temporalJitter=temporalForcedJitter;++temporalEpoch;
+                    }
+                }
+                if(temporalExperiment&&temporalHistory)temporalHistory->BeginFrame(frame,temporalEpoch);
+                std::optional<temporal::SceneResolve> temporalSceneCopy;
+                bool sceneAARecorded=false,temporalAARecorded=false;
+                std::optional<temporal::SceneAnchor> temporalDrawAnchor;
 
                 SharedConstants shared{};
                 for (uint32_t i = 0; i < 8; i++) shared.bools[i] = Reg(REG_BOOL_CONSTANTS + i);
@@ -2249,6 +2422,33 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 {
                     shared.halfPixel[0] = 1.0f / viewport.width;
                     shared.halfPixel[1] = -1.0f / viewport.height;
+                }
+                const int temporalSlot=temporal::PositionVPSlot(key.vs);
+                const bool temporalViewport=viewport.x==0&&viewport.y==0&&viewport.width==1280&&viewport.height==720&&
+                    vte==0x43f&&shared.ndcScale[0]==1&&shared.ndcScale[1]==1&&shared.ndcScale[2]==-1&&
+                    shared.ndcOffset[0]==0&&shared.ndcOffset[1]==0&&shared.ndcOffset[2]==1;
+                if((temporalExperiment||sceneAAEnabled)&&temporalSlot>=0&&temporalViewport&&depth&&(depthControl&4)) {
+                    temporal::SceneAnchor anchor;
+                    std::copy_n(vsConstants+temporalSlot*4,16,anchor.vpBits.begin());
+                    anchor.depthAllocation=depth->allocationSerial;
+                    anchor.viewport={viewport.x,viewport.y,viewport.width,viewport.height,shared.ndcScale[1],shared.halfPixel[0],shared.halfPixel[1]};
+                    temporalDrawAnchor=anchor;
+                }
+                if(temporalExperiment&&temporalJitter&&temporalSlot>=0&&temporalViewport) {
+                    const auto* anchor=temporalDrawAnchor?&*temporalDrawAnchor:(temporalScene.Draws()?&temporalScene.Anchor():nullptr);
+                    const bool match=anchor&&std::equal(anchor->vpBits.begin(),anchor->vpBits.end(),vsConstants+temporalSlot*4)&&
+                        (!depth||anchor->depthAllocation==depth->allocationSerial);
+                    if(match) {
+                        auto halton=[](uint32_t n,uint32_t base){double value=0,f=1;while(n){f/=base;value+=f*(n%base);n/=base;}return value-.5;};
+                        const auto phase=frame%32+1;const float jx=float(halton(phase,2)),jy=float(halton(phase,3));
+                        for(unsigned row=0;row<4;++row) {
+                            auto* values=vsConstants+(temporalSlot+row)*4;
+                            const float w=std::bit_cast<float>(values[3]);
+                            values[0]=std::bit_cast<uint32_t>(std::bit_cast<float>(values[0])+2*jx/1280*w);
+                            values[1]=std::bit_cast<uint32_t>(std::bit_cast<float>(values[1])-2*jy/720*w);
+                        }
+                        ++temporalJitterDraws;
+                    } else ++temporalJitterMisses;
                 }
                 // Range of the bound colour format, clamped in the shader epilogue.
                 {
@@ -2350,6 +2550,56 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 
                 tVertex += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - tVertex0).count();
 
+                // Prove the actual destination coverage before replacing its source.
+                // This shader fetches float4 positions from slot 95 with 32-byte stride.
+                // Restrict to two triangles forming a rectangle; viewport size alone
+                // cannot justify treating an arbitrary fullscreen-looking draw as a copy.
+                uint32_t fullCopyReason=0;std::string fullCopyVertices;
+                const bool fullSceneCopy = [&]() {
+                    auto reject=[&](uint32_t why){fullCopyReason=why;return false;};
+                    if(key.vs!=0x8bbd4da701845d16ull||key.ps!=0xcda578aef1724fdcull||
+                       info.primitiveType!=4||!info.indexed||info.indexCount!=6||info.indexBufferWords<6||
+                       viewport.x!=0||viewport.y!=0||viewport.width<=0||viewport.height<=0||viewport.width>pitch||viewport.height>rtHeight||
+                       key.colorMask!=15||(depthControl&3)||shared.vtxFmt!=4||
+                       (key.modeCull&3)|| (Reg(REG_RB_COLORCONTROL)&8))return reject(1);
+                    const uint32_t blend=key.blend;
+                    if(BlendFactor(blend&31)!=RenderBlend::ONE||BlendFactor((blend>>8)&31)!=RenderBlend::ZERO||
+                       BlendOp((blend>>5)&7)!=RenderBlendOperation::ADD)return reject(2);
+                    int l=scissorTl&0x3fff,t=(scissorTl>>16)&0x3fff,r=scissorBr&0x3fff,b=(scissorBr>>16)&0x3fff;
+                    const uint32_t window=Reg(REG_PA_SC_WINDOW_OFFSET);
+                    if(!(scissorTl&0x80000000u)&&window){int ox=int32_t(window<<17)>>17,oy=int32_t(window<<1)>>17;l+=ox;r+=ox;t+=oy;b+=oy;}
+                    if(l>0||t>0||r<viewport.width||b<viewport.height)return reject(3);
+                    uint32_t d0=Reg(REG_FETCH_CONSTANTS+95*2),d1=Reg(REG_FETCH_CONSTANTS+95*2+1),words=(d1>>2)&0xffffff;
+                    if((d0&3)!=3||!words||uint64_t(d0&0x1ffffffcu)+uint64_t(words)*4>0x20000000ull||
+                       uint64_t(info.indexBase&0x1fffffffu)+(info.index32?24:12)>0x20000000ull)return reject(4);
+                    float xy[6][2];float xmin=INFINITY,ymin=INFINITY,xmax=-INFINITY,ymax=-INFINITY;
+                    for(unsigned i=0;i<6;++i){
+                        uint32_t v=0;if(info.index32)memcpy(&v,Phys(info.indexBase)+i*4,4);else memcpy(&v,Phys(info.indexBase)+i*2,2);
+                        v=GpuSwap(v,info.indexEndian);if(!info.index32)v&=0xffff;
+                        int64_t index=int64_t(v)+int32_t(Reg(REG_VGT_INDX_OFFSET));if(index<0||uint64_t(index)*8+4>words)return reject(5);
+                        float pos[4];for(unsigned k=0;k<4;++k){uint32_t raw;memcpy(&raw,Phys(d0&~3u)+index*32+k*4,4);raw=GpuSwap(raw,d1&3);memcpy(pos+k,&raw,4);}
+                        fullCopyVertices+=fmt::format(" i{}={} pos=({:g},{:g},{:g},{:g})",i,index,pos[0],pos[1],pos[2],pos[3]);
+                        if(!std::isfinite(pos[0])||!std::isfinite(pos[1])||pos[3]!=1)return reject(6);
+                        xy[i][0]=(pos[0]*shared.ndcScale[0]+shared.ndcOffset[0]+shared.halfPixel[0]+1)*viewport.width*.5f;
+                        xy[i][1]=(1-pos[1]*shared.ndcScale[1]-shared.ndcOffset[1]-shared.halfPixel[1])*viewport.height*.5f;
+                        xmin=std::min(xmin,xy[i][0]);xmax=std::max(xmax,xy[i][0]);ymin=std::min(ymin,xy[i][1]);ymax=std::max(ymax,xy[i][1]);
+                    }
+                    fullCopyVertices+=fmt::format(" bounds=({:.9g},{:.9g},{:.9g},{:.9g})",xmin,ymin,xmax,ymax);
+                    if(xmin>.5f||ymin>.5f||xmax<viewport.width-.5f||ymax<viewport.height-.5f)return reject(7);
+                    unsigned masks[2]={};for(unsigned i=0;i<6;++i){
+                        bool right=std::abs(xy[i][0]-xmax)<.001f,bottom=std::abs(xy[i][1]-ymax)<.001f;
+                        if(!right&&std::abs(xy[i][0]-xmin)>=.001f)return reject(8);
+                        if(!bottom&&std::abs(xy[i][1]-ymin)>=.001f)return reject(9);
+                        masks[i/3]|=1u<<((right?1:0)+(bottom?2:0));
+                    }
+                    fullCopyVertices+=fmt::format(" bounds=({:g},{:g},{:g},{:g}) masks={}/{}",xmin,ymin,xmax,ymax,masks[0],masks[1]);
+                    unsigned common=masks[0]&masks[1];fullCopyReason=10;return std::popcount(masks[0])==3&&std::popcount(masks[1])==3&&
+                        (masks[0]|masks[1])==15&&(common==9||common==6);
+                }();
+                if(key.vs==0x8bbd4da701845d16ull&&key.ps==0xcda578aef1724fdcull) {
+                    static const uint64_t start=getenv("LO_SCENE_AA_LOG_START_FRAME")?strtoull(getenv("LO_SCENE_AA_LOG_START_FRAME"),nullptr,10):~0ull;
+                    if(frame>=start&&frame-start<128)LOG_INFO("renderer scene AA guard f{} full={} reason={} mode={} jitter={} blend={:#x} mask={} vtx={} prim={} n={} cull={:#x} ctl={:#x} vp=({},{},{},{}) extent={}x{} fetch95={:08x},{:08x} quad={} ",frame,fullSceneCopy,fullCopyReason,sceneAAMode,temporalJitter,key.blend,key.colorMask,shared.vtxFmt,info.primitiveType,info.indexCount,key.modeCull,Reg(REG_RB_COLORCONTROL),viewport.x,viewport.y,viewport.width,viewport.height,pitch,rtHeight,Reg(REG_FETCH_CONSTANTS+190),Reg(REG_FETCH_CONSTANTS+191),fullCopyVertices);
+                }
                 // Textures used by the pixel and vertex shaders.
                 auto tBind0 = std::chrono::steady_clock::now();
                 auto bindTextures = [&](Shader* s)
@@ -2377,6 +2627,55 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             dummyBindings++;
                             continue;
                         }
+                        if (trackTemporalScene && s == ps && slot == 0 &&
+                            key.vs == 0x8bbd4da701845d16ull && key.ps == 0xcda578aef1724fdcull)
+                        {
+                            const uint32_t address = (fetch[1] >> 12) << 12;
+                            const uint32_t format = fetch[1] & 0x3F;
+                            if (auto* source = FindResolved(address, format); format == 6 && source && source->tex)
+                                temporalSceneCopy = temporal::SceneResolve{source->frame, source->writeOrdinal,
+                                    address, format, tex->width, tex->height,
+                                    source->writeX == 0 && source->writeY == 0 &&
+                                    source->writeWidth == tex->width && source->writeHeight == tex->height &&
+                                    source->tex->width == tex->width && source->tex->height == tex->height};
+                        }
+                        RenderTexture* temporalDisplay=nullptr;
+                        if(temporalSceneCopy && fullSceneCopy && s==ps && slot==0 &&
+                           viewport.width==tex->width && viewport.height==tex->height &&
+                           viewport.width==temporalScene.Anchor().viewport.width && viewport.height==temporalScene.Anchor().viewport.height) {
+                            temporalScene.ObserveColor(*temporalSceneCopy);
+                            if(temporalExperiment && temporalHistory && temporalScene.Ready() && tex->format==RenderFormat::R8G8B8A8_UNORM) {
+                                Transition(*tex,RenderTextureLayout::COPY_SOURCE,RenderBarrierStage::COPY);
+                                auto halton=[](uint32_t n,uint32_t base){double value=0,f=1;while(n){f/=base;value+=f*(n%base);n/=base;}return value-.5;};
+                                const double jx=temporalJitter?halton(frame%32+1,2):0,jy=temporalJitter?halton(frame%32+1,3):0;
+                                temporalDisplay=temporalHistory->ResolveColor(commandList.get(),tex->texture.get(),temporalScene,jx,jy,temporalAllowHistory,temporalStableGrid,sceneAAMode==3);
+                                Transition(*tex,RenderTextureLayout::SHADER_READ,RenderBarrierStage::GRAPHICS);
+                                if(temporalDisplay) {
+                                    temporalAARecorded=true;
+                                    // Reserved diagnostic IDs (not guest addresses): same draw source,
+                                    // reconstructed display, and owned current depth, copied before reuse.
+                                    QueueResolveTrace(*tex,0xffff0001u);
+                                    QueueResolveTrace(temporalDisplay,RenderFormat::R8G8B8A8_UNORM,tex->width,tex->height,RenderTextureLayout::SHADER_READ,0xffff0002u);
+                                    QueueResolveTrace(temporalHistory->CurrentDepth(),RenderFormat::R32_FLOAT,tex->width,tex->height,RenderTextureLayout::SHADER_READ,0xffff0003u);
+                                }
+                            }
+                            if(!temporalDisplay && sceneAAEnabled && sceneProcessor && !sceneAABusy &&
+                               sceneAAAppliedFrame!=frame && temporalScene.Ready() &&
+                               (sceneAAMode==1||sceneAAMode==2||sceneAAMode==3) && tex->format==RenderFormat::R8G8B8A8_UNORM) {
+                                if(!sceneAAOutput||sceneAAWidth!=tex->width||sceneAAHeight!=tex->height) {
+                                    sceneAAOutput=device->createTexture(RenderTextureDesc::Texture2D(tex->width,tex->height,1,
+                                        RenderFormat::R8G8B8A8_UNORM,RenderTextureFlag::RENDER_TARGET));
+                                    sceneAAWidth=tex->width;sceneAAHeight=tex->height;
+                                }
+                                if(sceneAAOutput && sceneProcessor->ProcessSceneColor(commandList.get(),tex->texture.get(),sceneAAOutput.get(),
+                                    tex->width,tex->height,static_cast<gpu::Antialiasing>(sceneAAMode==3?2:sceneAAMode))) {
+                                    tex->layout=RenderTextureLayout::SHADER_READ;
+                                    temporalDisplay=sceneAAOutput.get();sceneAABusy=true;sceneAARecorded=true;
+                                    QueueResolveTrace(*tex,0xffff0011u);
+                                    QueueResolveTrace(temporalDisplay,RenderFormat::R8G8B8A8_UNORM,tex->width,tex->height,RenderTextureLayout::SHADER_READ,0xffff0012u);
+                                }
+                            }
+                        }
                         uint32_t d3 = fetch[3];
                         shared.textureInfo[slot] = ((fetch[0] >> 2) & 0xFF) | (((d3 >> 1) & 0xFFF) << 8);
                         // GPU resolves retain canonical RGBA for presentation.
@@ -2387,7 +2686,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         uint64_t samplerKey = ((d3 >> 19) & 3) | (((d3 >> 21) & 3) << 2) | (((d3 >> 23) & 3) << 4)
                             | (((fetch[0] >> 10) & 7) << 6) | (((fetch[0] >> 13) & 7) << 9) | (((fetch[0] >> 16) & 7) << 12);
                         shared.samplerIndex[slot] = GetSamplerIndex(samplerKey);
-                        set->setTexture(slot, tex->texture.get(), RenderTextureLayout::SHADER_READ);
+                        set->setTexture(slot, temporalDisplay?temporalDisplay:tex->texture.get(), RenderTextureLayout::SHADER_READ);
                     }
                 };
                 bindTextures(ps);
@@ -2670,6 +2969,33 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     commandList->drawInstanced(indexCount, 1, uint32_t(baseVertex), 0);
                 }
                 drawsThisFrame++;
+                if(temporalSceneCopy)temporalSubmittedFrame=frame;
+                if(fullSceneCopy)color->aaProvenance.Invalidate(frame,color->allocationSerial,
+                    viewport.width>=color->aaValidWidth && viewport.height>=color->aaValidHeight);
+                if(sceneAARecorded||temporalAARecorded) {
+                    color->aaProvenance.MarkFull(frame,color->allocationSerial);
+                    color->aaValidWidth=uint32_t(viewport.width);color->aaValidHeight=uint32_t(viewport.height);
+                    if(temporalAARecorded)temporalSupportedFrame=frame;
+                    sceneAAAppliedFrame=frame;sceneAAAllocation=color->allocationSerial;
+                    static const uint64_t logStart=getenv("LO_SCENE_AA_LOG_START_FRAME")?strtoull(getenv("LO_SCENE_AA_LOG_START_FRAME"),nullptr,10):~0ull;
+                    if(frame>=logStart&&frame-logStart<128)LOG_INFO("renderer scene AA f{} mode={} temporal={} allocation={} full_copy=1 recorded=1",frame,sceneAAMode,temporalAARecorded,color->allocationSerial);
+                }
+                if (trackTemporalScene)
+                {
+                    if(temporalDrawAnchor)temporalScene.ObserveCamera(*temporalDrawAnchor);
+                    else if (!temporalExperiment && key.vs == 0xb7557072899a63a1ull && key.ps == 0x9f4dfdd86211a018ull &&
+                        depth && (depthControl & 4) && shared.vtxFmt == 4 &&
+                        shared.ndcScale[2] == -1.0f && shared.ndcOffset[2] == 1.0f &&
+                        shared.ndcScale[0] == 1.0f && shared.ndcOffset[0] == 0.0f && shared.ndcOffset[1] == 0.0f)
+                    {
+                        temporal::SceneAnchor anchor;
+                        std::copy_n(vsConstants + 233 * 4, 16, anchor.vpBits.begin());
+                        anchor.depthAllocation = depth->allocationSerial;
+                        anchor.viewport = {viewport.x, viewport.y, viewport.width, viewport.height,
+                            shared.ndcScale[1], shared.halfPixel[0], shared.halfPixel[1]};
+                        temporalScene.ObserveCamera(anchor);
+                    }
+                }
                 if (preparedPipelineKeys.contains(key)) {
                     ++preparedPipelineHits;
                     usedPreparedPipelineKeys.insert(key);
@@ -2761,6 +3087,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             Transition(*tex, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
                             commandList->setFramebuffer(GetFramebuffer(tex.get(), nullptr));
                             commandList->clearColor(0, value);
+                            tex->aaProvenance.Invalidate(frame,tex->allocationSerial,true);
                             if (loggedFills++ < 12)
                                 LOG_INFO("renderer: depth fill (base={:#x} pitch={} msaa={} rect {}x{} z={} word={:#x}) wiped colour view class {} pitch {} to ({:g},{:g},{:g},{:g})",
                                     depthInfo & 0xFFF, pitch, (surfaceInfo >> 16) & 3, maxX, maxY, rectZ, word, k.format, k.pitch, value.r, value.g, value.b, value.a);
@@ -2912,8 +3239,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 
             // LO_DUMP_RESOLVE_SEQ=<frame>: dump every resolve of that frame in order.
             uint32_t resolveSeq = 0;
-            void DumpResolveStep(HostTexture& tex, uint32_t destBase)
+            void DumpResolveStep(HostTexture& tex, uint32_t destBase, uint64_t writeOrdinal, uint32_t guestFormat)
             {
+                QueueResolveTrace(tex, destBase);
                 const uint32_t dumpFrame = captureFrame ? captureFrame : (getenv("LO_DUMP_RESOLVE_SEQ") ? strtoul(getenv("LO_DUMP_RESOLVE_SEQ"), nullptr, 10) : 0);
                 if (!dumpFrame || frame != dumpFrame)
                     return;
@@ -2941,6 +3269,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     raw.close();
                     debugTrace << fmt::format("resolve {} draw={} address={:#x} width={} height={} plume_format={} bpp={} raw_ok={} (packed rows, little endian)\n",
                         rawPath.filename().string(), debugDraw, destBase, tex.width, tex.height, uint32_t(tex.format), bpp, !raw.fail());
+                    debugTrace << fmt::format("resolve_provenance {} frame={} write_ordinal={} guest_format={}\n",
+                        rawPath.filename().string(), frame, writeOrdinal, guestFormat);
                     if (raw.fail()) debugTrace.setstate(std::ios::failbit);
                 }
                 // The preview quantizes depth to eight bits, hiding the small
@@ -3013,6 +3343,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (!rs.tex || rs.tex->format != RenderFormat::R32_FLOAT || rs.tex->width != texW || rs.tex->height != texH)
                 {
                     if (rs.tex) retiredTextures.push_back(std::move(rs.tex));
+                    rs.writeOrdinal = 0; // The replacement allocation contains no previous resolve.
+                    rs.writeWidth = rs.writeHeight = 0;
                     rs.tex = std::make_unique<HostTexture>();
                     rs.tex->format = RenderFormat::R32_FLOAT;
                     rs.tex->width = texW;
@@ -3031,7 +3363,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 rs.destFormat = destFormat;
                 rs.destPitch = destPitch;
                 rs.swapRedBlue = false;
-                rs.frame = frame;
+                if (x0 >= texW || y0 >= texH) return;
                 w = std::min(w, texW - x0);
                 h = std::min(h, texH - y0);
                 if (w == 0 || h == 0)
@@ -3042,7 +3374,19 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 commandList->copyTextureRegion(RenderTextureCopyLocation::Subresource(rs.tex->texture.get()),
                     RenderTextureCopyLocation::Subresource(depth.texture.get(), 0), x0, y0, 0, &box);
                 Transition(*rs.tex, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
-                DumpResolveStep(*rs.tex, destBase);
+                rs.frame = frame;
+                rs.writeOrdinal = ++resolveWriteOrdinal;
+                rs.writeX = x0; rs.writeY = y0; rs.writeWidth = w; rs.writeHeight = h;
+                if (!debugCaptureDir.empty() || temporalExperiment || sceneAAEnabled) {
+                    temporalScene.ObserveDepth(depth.allocationSerial, {frame, rs.writeOrdinal, destBase, destFormat,
+                        texW, texH, x0 == 0 && y0 == 0 && w == texW && h == texH});
+                    if(temporalExperiment && temporalHistory && temporalScene.Depth().ordinal==rs.writeOrdinal) {
+                        Transition(*rs.tex,RenderTextureLayout::COPY_SOURCE,RenderBarrierStage::COPY);
+                        temporalHistory->CaptureDepth(commandList.get(),rs.tex->texture.get(),temporalScene);
+                        Transition(*rs.tex,RenderTextureLayout::SHADER_READ,RenderBarrierStage::GRAPHICS);
+                    }
+                }
+                DumpResolveStep(*rs.tex, destBase, rs.writeOrdinal, rs.destFormat);
             }
 
             // Copies the resolve rectangle into the host texture standing in for the
@@ -3061,6 +3405,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (!rs.tex || rs.tex->format != destHost || rs.tex->width != texW || rs.tex->height != texH)
                 {
                     if (rs.tex) retiredTextures.push_back(std::move(rs.tex));
+                    rs.writeOrdinal = 0; // The replacement allocation contains no previous resolve.
+                    rs.writeWidth = rs.writeHeight = 0;
                     rs.tex = std::make_unique<HostTexture>();
                     rs.tex->format = destHost;
                     rs.tex->width = texW;
@@ -3088,8 +3434,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
                 rs.destFormat = destFormat;
                 rs.destPitch = destPitch;
-                rs.frame = frame;
                 rs.swapRedBlue = ((Reg(REG_RB_COPY_DEST_INFO) >> 24) & 1) != 0;
+                if (x0 >= texW || y0 >= texH) return;
                 w = std::min(w, texW - x0);
                 h = std::min(h, texH - y0);
                 if (w == 0 || h == 0)
@@ -3105,7 +3451,15 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 else if (!BlitRegion(color, *rs.tex, x0, y0, w, h))
                     return;
                 Transition(*rs.tex, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
-                DumpResolveStep(*rs.tex, destBase);
+                rs.frame = frame;
+                rs.writeOrdinal = ++resolveWriteOrdinal;
+                rs.writeX = x0; rs.writeY = y0; rs.writeWidth = w; rs.writeHeight = h;
+                auto sourceCoverage=color.aaProvenance.Get(frame,color.allocationSerial);
+                if(sourceCoverage==scene_aa::Coverage::Full && (uint64_t(x0)+w>color.aaValidWidth || uint64_t(y0)+h>color.aaValidHeight))
+                    sourceCoverage=scene_aa::Coverage::Mixed;
+                rs.tex->aaProvenance.Resolve(frame,rs.tex->allocationSerial,sourceCoverage,
+                    x0==0&&y0==0&&w==texW&&h==texH);
+                DumpResolveStep(*rs.tex, destBase, rs.writeOrdinal, rs.destFormat);
             }
 
             void Resolve()
@@ -3299,6 +3653,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     commandList->setFramebuffer(GetFramebuffer(color, nullptr));
                     RenderRect rect{ int32_t(x0), int32_t(y0), int32_t(x1), int32_t(y1) };
                     commandList->clearColor(0, c, &rect, 1);
+                    color->aaProvenance.Invalidate(frame,color->allocationSerial,x0==0&&y0==0&&x1==color->width&&y1==color->height);
                 }
                 if (copyControl & 0x200)
                     ClearDepthTarget(pitch, rtHeight);
@@ -3358,6 +3713,63 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
         bool ok = false;
         try
         {
+            std::ofstream surfaces(std::filesystem::path(r.debugCaptureDir) / "temporal-surfaces.json");
+            surfaces << "{\n  \"schema\": 1,\n  \"frame\": " << r.frame
+                     << ",\n  \"frontbuffer_address\": " << (frontbuffer & 0x1FFFFFFF)
+                     << ",\n  \"selection_verified\": false,\n  \"surfaces\": [";
+            std::vector<std::pair<uint32_t, const Renderer::ResolvedSurface*>> ordered;
+            for (const auto& [address, variants] : r.resolved)
+                for (const auto& surface : variants)
+                    if (surface.tex && surface.writeOrdinal) ordered.emplace_back(address, &surface);
+            std::sort(ordered.begin(), ordered.end(), [](const auto& a, const auto& b) {
+                return std::pair{a.first, a.second->destFormat} < std::pair{b.first, b.second->destFormat};
+            });
+            bool first = true;
+            for (const auto& [address, surface] : ordered)
+            {
+                if (!first) surfaces << ',';
+                first = false;
+                const auto& rs = *surface;
+                surfaces << "\n    {\"address\":" << address << ",\"guest_format\":" << rs.destFormat
+                         << ",\"host_format\":" << uint32_t(rs.tex->format)
+                         << ",\"depth\":" << ((rs.destFormat & Renderer::kDepthResolveTag) ? "true" : "false")
+                         << ",\"storage\":[" << rs.tex->width << ',' << rs.tex->height << ']'
+                         << ",\"pitch\":" << rs.destPitch << ",\"last_write_frame\":" << rs.frame
+                         << ",\"last_write_ordinal\":" << rs.writeOrdinal
+                         << ",\"last_write_rect\":[" << rs.writeX << ',' << rs.writeY << ',' << rs.writeWidth << ',' << rs.writeHeight << ']'
+                         << ",\"written_this_frame\":" << (rs.frame == r.frame ? "true" : "false") << '}';
+            }
+            surfaces << "\n  ]\n}\n";
+            surfaces.close();
+            if (surfaces.fail()) throw std::runtime_error("temporal surface metadata write failed");
+            // Separate from raw resource provenance: this is the narrow selected
+            // scene path, not a declaration that motion/history inputs are ready.
+            const auto& scene = r.temporalScene;
+            std::ofstream sceneFile(std::filesystem::path(r.debugCaptureDir) / "temporal-scene.json");
+            sceneFile << "{\n  \"schema\":1,\n  \"renderer_frame\":" << r.frame
+                      << ",\n  \"observation_frame\":" << scene.Frame()
+                      << ",\n  \"candidate_ready\":" << (scene.Frame() == r.frame && scene.Ready() ? "true" : "false")
+                      << ",\n  \"temporal_history_verified\":false,\n  \"camera_draws\":" << scene.Draws()
+                      << ",\n  \"scene_copies\":" << scene.Copies()
+                      << ",\n  \"rejection_code\":" << unsigned(scene.Reason())
+                      << ",\n  \"depth_allocation\":" << scene.Anchor().depthAllocation
+                      << ",\n  \"vp_u32\":[";
+            for (size_t i = 0; i < 16; ++i) sceneFile << (i ? "," : "") << scene.Anchor().vpBits[i];
+            const auto& viewport = scene.Anchor().viewport;
+            sceneFile << "],\n  \"viewport\":[" << viewport.x << ',' << viewport.y << ',' << viewport.width << ',' << viewport.height
+                      << "],\n  \"ndc_y_sign\":" << viewport.ndcYSign
+                      << ",\n  \"half_pixel_ndc\":[" << std::setprecision(17) << viewport.halfPixelNdcX << ',' << viewport.halfPixelNdcY << ']';
+            auto writeSceneResolve = [&](const char* name, const temporal::SceneResolve& value) {
+                sceneFile << ",\n  \"" << name << "\":{\"frame\":" << value.frame << ",\"ordinal\":" << value.ordinal
+                          << ",\"address\":" << value.address << ",\"format\":" << value.format
+                          << ",\"width\":" << value.width << ",\"height\":" << value.height
+                          << ",\"full_extent\":" << (value.fullExtent ? "true" : "false") << '}';
+            };
+            writeSceneResolve("depth", scene.Depth());
+            writeSceneResolve("pre_ui_color", scene.Color());
+            sceneFile << "\n}\n";
+            sceneFile.close();
+            if (sceneFile.fail()) throw std::runtime_error("temporal scene metadata write failed");
             std::vector<uint32_t> pixels;
             uint32_t width = 0, height = 0;
             if (ReadbackResolvedSurface(frontbuffer, pixels, width, height))
@@ -3459,6 +3871,21 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 r.vertexUploads = r.vertexRevalidations = 0;
                 r.vertexBytesUploaded = 0;
             }
+            g_renderer->FinishResolveTraceFrame();
+            if(auto& owner=g_renderer->temporalHistory;owner&&g_renderer->temporalExperiment) {
+                auto& r=*g_renderer;
+                const auto now=std::chrono::steady_clock::now();
+                const bool gap=now-r.temporalFrameTime>std::chrono::milliseconds(250);
+                const bool complete=r.temporalScene.Frame()==r.frame&&r.temporalScene.Ready()&&owner->Completed()&&r.temporalSubmittedFrame==r.frame;
+                static const uint32_t temporalLogStart=getenv("LO_TEMPORAL_LOG_START_FRAME")?strtoul(getenv("LO_TEMPORAL_LOG_START_FRAME"),nullptr,10):0;
+                if(r.frame>=temporalLogStart&&r.temporalFramesLogged<256) {
+                    LOG_INFO("renderer temporal f{} epoch={} ready={} completed={} reused={} reason={} depth={} color={} gap={} jitter_draws={} jitter_misses={}",r.frame,r.temporalEpoch,r.temporalScene.Ready(),complete,owner->Reused(),uint32_t(r.temporalScene.Reason()),r.temporalScene.Depth().ordinal,r.temporalScene.Color().ordinal,gap,r.temporalJitterDraws,r.temporalJitterMisses);
+                    ++r.temporalFramesLogged;
+                }
+                if(!complete||gap) {owner->Reset();r.temporalSupportedFrame=~0ull;++r.temporalEpoch;}
+                r.temporalFrameTime=now;
+                r.temporalJitterDraws=r.temporalJitterMisses=0;
+            }
             g_renderer->SavePipelineRecipes();
             if (stats && g_renderer->frame % 600 == 0)
                 LOG_INFO("renderer: pipeline reuse frame {}: {} prepared hits, {}/{} prepared keys used, {} runtime creates, {} recipes",
@@ -3493,6 +3920,17 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
         height = tex.height;
         format = uint32_t(tex.format);
         return tex.texture.get();
+    }
+
+    bool SceneAAApplied(uint32_t physicalAddress)
+    {
+        if(!g_renderer)return false;
+        const auto* surface=g_renderer->NewestResolved(physicalAddress);
+        if(!surface||!surface->tex||surface->frame+1!=g_renderer->frame)return false;
+        auto coverage=surface->tex->aaProvenance.Get(surface->frame,surface->tex->allocationSerial);
+        static const uint64_t start=getenv("LO_SCENE_AA_LOG_START_FRAME")?strtoull(getenv("LO_SCENE_AA_LOG_START_FRAME"),nullptr,10):~0ull;
+        if(surface->frame>=start&&surface->frame-start<128)LOG_INFO("renderer scene AA present f{} address={:#x} coverage={} skip_final={}",surface->frame,physicalAddress,uint32_t(coverage),scene_aa::SkipFinalAA(coverage));
+        return scene_aa::SkipFinalAA(coverage);
     }
 
     std::vector<uint32_t> GetResolvedAddresses()
@@ -3606,6 +4044,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
     void Draw(const DrawInfo&) {}
     void Flush() {}
     void InvalidateGuestRange(uint32_t, uint32_t) {}
+    bool SceneAAApplied(uint32_t) { return false; }
     plume::RenderTexture* AcquireResolvedSurface(uint32_t, uint32_t&, uint32_t&, uint32_t&) { return nullptr; }
     bool ReadbackResolvedSurface(uint32_t, std::vector<uint32_t>&, uint32_t&, uint32_t&) { return false; }
     std::vector<uint32_t> GetResolvedAddresses() { return {}; }

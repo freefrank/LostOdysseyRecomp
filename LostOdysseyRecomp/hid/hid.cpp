@@ -7,6 +7,8 @@ extern std::atomic<uint32_t> g_presentedSwaps;
 #include <vector>
 #include <SDL.h>
 #include <settings/menu.h>
+#include <debug/frame_timing.h>
+#include "test_input_pulse.h"
 
 // SDL game controller -> XInput state. Player 1 only for now; the keyboard
 // mirrors the pad so the game can be driven without a controller.
@@ -298,9 +300,15 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
     // Background integration input, opt-in per test process. A new serial starts
     // One bounded pulse: "serial hexButtonMask leftX leftY polls [LT RT]".
     // Optional analog triggers are 0..255; the legacy five fields imply zero. No OS input.
+    static const bool inputTicks = [] { const char* value = getenv("LO_TEST_INPUT_TICKS"); return value && strcmp(value, "1") == 0; }();
+    uint32_t traceInputSerial = 0;
+    uint64_t traceInputTick = 0;
+    bool traceInputPending = false, traceInputActive = false;
     if (const char* path = getenv("LO_TEST_INPUT_FILE"))
     {
         static unsigned lastSerial = 0, pollsLeft = 0, buttons = 0, pollCount = 0;
+        static TestInputPulse tickPulse;
+        const uint64_t tick = inputTicks ? frame_timing::InputTick() : 0;
         static int leftX = 0, leftY = 0, leftTrigger = 0, rightTrigger = 0;
         if (++pollCount % 12 == 0)
         {
@@ -321,8 +329,12 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
                     leftTrigger = std::clamp(lt, 0, 255);
                     rightTrigger = std::clamp(rt, 0, 255);
                     pollsLeft = std::min(duration, 6000u);
+                    if (inputTicks) tickPulse.Set(tick, pollsLeft);
                     LOG_INFO("background test input: serial={} buttons={:#x} stick={},{} polls={} triggers={},{}",
                         serial, buttons, leftX, leftY, pollsLeft, leftTrigger, rightTrigger);
+                    if (inputTicks)
+                        LOG_INFO("test input accepted: serial={} controller=0 tick={} start={} ticks={} mode=engine_tick",
+                            serial, tick, tickPulse.start, tickPulse.duration);
                 }
             }
         }
@@ -330,20 +342,42 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
         // zero-duration command; never leave the prior RT value latched.
         gp.bLeftTrigger = 0;
         gp.bRightTrigger = 0;
-        if (pollsLeft)
+        const bool active = inputTicks ? tickPulse.Active(tick) : pollsLeft != 0;
+        if (active)
         {
-            --pollsLeft;
+            if (!inputTicks) --pollsLeft;
             gp.bLeftTrigger = uint8_t(leftTrigger);
             gp.bRightTrigger = uint8_t(rightTrigger);
             gp.wButtons |= uint16_t(buttons);
             gp.sThumbLX = int16_t(leftX);
             gp.sThumbLY = int16_t(leftY);
         }
+        traceInputSerial = lastSerial;
+        traceInputTick = tick;
+        traceInputPending = inputTicks && tickPulse.Pending(tick);
+        traceInputActive = active;
     }
 
-    if (settings::FilterInput(gp.wButtons, gp.sThumbLX, gp.sThumbLY)) {
+    const uint16_t beforeMenuButtons = gp.wButtons;
+    const bool menuFiltered = settings::FilterInput(gp.wButtons, gp.sThumbLX, gp.sThumbLY);
+    if (menuFiltered) {
         gp.sThumbLX=gp.sThumbLY=gp.sThumbRX=gp.sThumbRY=0;
         gp.bLeftTrigger=gp.bRightTrigger=0;
+    }
+    if (inputTicks && traceInputSerial)
+    {
+        static uint64_t lastTick = ~uint64_t(0);
+        static uint32_t lastSerial = 0, calls = 0;
+        static bool wasActive = false, wasPending = false;
+        if (traceInputTick != lastTick || traceInputSerial != lastSerial)
+        {
+            if (traceInputSerial != lastSerial || traceInputActive || traceInputPending || wasActive || wasPending)
+                LOG_INFO("test input returned: serial={} controller=0 tick={} pending={} active={} buttons={:#x} before_menu={:#x} menu_filtered={} previous_tick_reads={}",
+                    traceInputSerial, traceInputTick, traceInputPending, traceInputActive, gp.wButtons, beforeMenuButtons, menuFiltered, calls);
+            lastTick = traceInputTick; lastSerial = traceInputSerial; calls = 0;
+            wasActive = traceInputActive; wasPending = traceInputPending;
+        }
+        ++calls;
     }
     // Trace the final guest-facing value, including any opt-in test override.
     static const bool ringTrace = getenv("LO_RING_TRACE") != nullptr;

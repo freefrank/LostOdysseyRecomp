@@ -10,6 +10,11 @@ namespace
 std::mutex mutex;
 Config Validate(Config value)
 {
+    if (value.scalingQuality > 1) value.scalingQuality = 1;
+    if (value.antialiasing > 3) value.antialiasing = 0;
+    value.fxaa = value.antialiasing == 1;
+    if (value.frameRate != 30 && value.frameRate != 60 && value.frameRate != 120) value.frameRate = 30;
+    if (value.debugLanguage > 1) value.debugLanguage = 0;
     if (value.uiLanguage > 4)
         value.uiLanguage = 0;
     if (GameLanguageIds[GameLanguageIndex(value.gameLanguage)] != value.gameLanguage)
@@ -26,6 +31,7 @@ Config Validate(Config value)
 Config Read()
 {
     Config value;
+    bool hasAntialiasing = false;
     std::ifstream input("settings.ini");
     std::string key;
     while (std::getline(input, key))
@@ -33,6 +39,9 @@ Config Read()
         auto equal = key.find('=');
         if (equal == std::string::npos)
             continue;
+        const auto name = key.substr(0, equal);
+        // Presence wins over the legacy key even if the new value is malformed.
+        if (name == "antialiasing") { hasAntialiasing = true; value.antialiasing = 0; }
         uint32_t number = 0;
         const auto digits = key.substr(equal + 1);
         auto parsed = std::from_chars(digits.data(), digits.data() + digits.size(), number);
@@ -41,6 +50,8 @@ Config Read()
         key.resize(equal);
         if (key == "ui_language")
             value.uiLanguage = number;
+        else if (key == "debug_language")
+            value.debugLanguage = number;
         else if (key == "game_language")
             value.gameLanguage = number;
         else if (key == "width")
@@ -49,9 +60,16 @@ Config Read()
             value.height = number;
         else if (key == "window_mode")
             value.windowMode = WindowMode(number);
+        else if (key == "antialiasing")
+            value.antialiasing = number;
+        else if (key == "scaling_quality")
+            value.scalingQuality = number;
+        else if (key == "frame_rate")
+            value.frameRate = number;
         else if (key == "fxaa")
             value.fxaa = number == 1;
     }
+    if (!hasAntialiasing) value.antialiasing = value.fxaa ? 1u : 0u;
     return Validate(value);
 }
 Config &Current()
@@ -101,20 +119,23 @@ Config GetConfig()
 void PreviewConfig(const Config &value)
 {
     std::lock_guard lock(mutex);
-    Current() = Validate(value);
+    auto merged = Validate(value);
+    merged.debugLanguage = Current().debugLanguage;
+    Current() = merged;
 }
 uint32_t GameLanguage()
 {
     static const uint32_t language = GetConfig().gameLanguage;
     return language;
 }
-bool SaveConfig(const Config &requested)
+static bool WriteConfig(const Config &value)
 {
-    std::lock_guard lock(mutex);
-    const Config value = Validate(requested);
     std::ofstream output("settings.ini.tmp", std::ios::trunc);
     output << "ui_language=" << value.uiLanguage << "\ngame_language=" << value.gameLanguage
            << "\nwidth=" << value.width << "\nheight=" << value.height << "\nwindow_mode=" << uint32_t(value.windowMode)
+           << "\ndebug_language=" << value.debugLanguage
+           << "\nantialiasing=" << value.antialiasing << "\nframe_rate=" << value.frameRate
+           << "\nscaling_quality=" << value.scalingQuality
            << "\nfxaa=" << value.fxaa << '\n';
     output.flush();
     if (!output)
@@ -131,9 +152,27 @@ bool SaveConfig(const Config &requested)
     if (error)
         return false;
 #endif
-    Current() = value;
     LOG_INFO("settings saved: {}x{} mode={} FXAA={} language={} (game language applies at restart)", value.width,
              value.height, uint32_t(value.windowMode), value.fxaa, value.gameLanguage);
+    return true;
+}
+bool SaveConfig(const Config &requested)
+{
+    std::lock_guard lock(mutex);
+    auto value = Validate(requested);
+    value.debugLanguage = Current().debugLanguage;
+    if (!WriteConfig(value)) return false;
+    Current() = value;
+    return true;
+}
+bool SaveDebugLanguage(uint32_t language)
+{
+    std::lock_guard lock(mutex);
+    // Merge with disk, not an unrelated unconfirmed graphics preview.
+    auto persisted = Read();
+    persisted.debugLanguage = language <= 1 ? language : 0;
+    if (!WriteConfig(persisted)) return false;
+    Current().debugLanguage = persisted.debugLanguage;
     return true;
 }
 } // namespace settings

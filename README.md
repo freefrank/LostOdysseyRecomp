@@ -68,9 +68,11 @@ See the [installation guide](docs/INSTALLING.md) for accepted disc versions, fil
 | Shader preparation | Built-in resource index, parallel compilation and cache reuse |
 | Input and debug | Controller and keyboard input; F1 menu with map information and same-map POI teleport |
 
-DLSS and frame generation are **disabled placeholders**. Higher internal rendering resolutions, unlocked frame rates, HDR, Linux and Vulkan gameplay remain development targets.
+Published v0.3.0 has **disabled DLSS/frame-generation placeholders**; local v0.4.0 development removes those controls. Higher internal rendering resolutions, unlocked frame rates, HDR, Linux and Vulkan gameplay remain development targets.
 
 ## Development status
+
+**v0.4.0 is in local development.** It adds output-resolution Settings text, bilingual Debug controls, SMAA 1x, selectable experimental camera-based TAA, automatic Standard/High spatial scaling and 30/60/120 FPS controls. Selected tests and actual Map2 movement verify the TAA path and removal of repeated AA from later UI; guest UI still renders at 720p. Unsupported TAA paths fall back to SMAA. Debug switching passed in a live Map2 tutorial state. Graphics preview, timeout rollback, Keep and same-process reopening passed, including TAA and 60-FPS selection. The 60-FPS implementation passed bounded movement, dialogue, menu and Ring core-timing checks; the static camp averaged 59.80 FPS. Precise Ring release/Perfect and wider gameplay remain regression coverage, without a whole-game locked-60 claim. The optional 120 FPS target may be deferred. DLSS/FSR feasibility research is complete; vendor backends and missing native motion/color-space inputs remain future work. See the [development evidence and limits](docs/notes/v0.4.0-development.md); this work remains local, unpushed and unpublished, has no new user acceptance, and the published download remains v0.3.0.
 
 Reliable gameplay and faithful rendering come first. The project translates PowerPC code into C++ with **XenonRecomp**, implements Xbox 360 services on the host, and renders translated Xenos shaders through **plume**.
 

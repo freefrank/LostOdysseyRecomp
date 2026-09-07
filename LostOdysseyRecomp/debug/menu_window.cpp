@@ -3,6 +3,8 @@
 #include "teleport.h"
 #include "map_info.h"
 #include "save_anywhere.h"
+#include "translations.h"
+#include <settings/config.h>
 #include <os/logger.h>
 #include <gpu/renderer.h>
 #include <cmath>
@@ -14,6 +16,12 @@
 namespace
 {
     HWND menu = nullptr;
+    HWND languageList = nullptr, languageStatus = nullptr;
+    bool chinese = false;
+    struct LocalizedControl { HWND window; std::wstring key; };
+    std::vector<LocalizedControl> localizedControls;
+    const wchar_t* Tr(const wchar_t* key) { return debug_menu::translations::Text(key, chinese); }
+
     HWND statusLabel = nullptr;
     HWND mapLabel = nullptr;
     HWND positionLabel = nullptr;
@@ -28,7 +36,7 @@ namespace
     HWND captureButton = nullptr, captureStatus = nullptr;
     struct LayoutControl { HWND window; int x, y, width, height; };
     std::vector<LayoutControl> layoutControls;
-    constexpr int contentWidth = 540, contentHeight = 850;
+    constexpr int contentWidth = 540, contentHeight = 900;
     int scrollX = 0, scrollY = 0, wheelRemainder = 0;
 
     void Layout(HWND window)
@@ -78,10 +86,21 @@ namespace
         // Repeated WM_SETTEXT invalidates static controls even when unchanged.
         // Keep editable coordinate fields outside this display-only cache.
         static std::unordered_map<HWND, std::wstring> displayed;
+        text = Tr(text);
         auto& previous = displayed[label];
         if (previous == text) return;
         previous = text;
         SetWindowTextW(label, text);
+    }
+
+    void RefreshLanguage()
+    {
+        chinese = settings::GetConfig().debugLanguage == 1;
+        SetWindowTextW(menu, Tr(L"Lost Odyssey — Debug Menu (F1)"));
+        for (const auto& control : localizedControls)
+            SetLabel(control.window, control.key.c_str());
+        SendMessageW(languageList, CB_SETCURSEL, chinese ? 1 : 0, 0);
+        poiRevision = ~uint64_t(0); // Rebuild display names while preserving POI identity.
     }
 
     bool ReadPosition(debug_menu::Position& position)
@@ -134,6 +153,17 @@ namespace
         }
         if (message == WM_COMMAND)
         {
+            if (LOWORD(wparam) == 104 && HIWORD(wparam) == CBN_SELCHANGE)
+            {
+                const auto selected = SendMessageW(languageList, CB_GETCURSEL, 0, 0);
+                if (selected == 0 || selected == 1)
+                {
+                    const bool saved = settings::SaveDebugLanguage(uint32_t(selected));
+                    RefreshLanguage();
+                    SetLabel(languageStatus, saved ? L"" : L"Could not save language. Check settings.ini permissions.");
+                }
+                return 0;
+            }
             if (LOWORD(wparam) == 103) gpu::renderer::RequestDebugCapture();
             if (LOWORD(wparam) == 100) debug_menu::RequestVictory();
             if (LOWORD(wparam) == 101) debug_menu::CancelVictory();
@@ -193,10 +223,13 @@ namespace
         int x, int y, int width, int height, int id = 0)
     {
         const DWORD tabStop = (std::wcscmp(type, L"STATIC") == 0 || (style & 0xf) == BS_GROUPBOX) ? 0 : WS_TABSTOP;
-        HWND control = CreateWindowW(type, text, WS_CHILD | WS_VISIBLE | tabStop | style,
+        y += 190; // Capture action/status and language selector precede the original layout.
+        HWND control = CreateWindowW(type, Tr(text), WS_CHILD | WS_VISIBLE | tabStop | style,
             x, y, width, height, menu, reinterpret_cast<HMENU>(intptr_t(id)), GetModuleHandleW(nullptr), nullptr);
         SendMessageW(control, WM_SETFONT, reinterpret_cast<WPARAM>(GetStockObject(DEFAULT_GUI_FONT)), TRUE);
         layoutControls.push_back({control, x, y, width, height});
+        if (*text && std::wcscmp(type, L"EDIT") != 0 && std::wcscmp(type, L"COMBOBOX") != 0)
+            localizedControls.push_back({control, text});
         return control;
     }
 }
@@ -207,6 +240,7 @@ void debug_menu::Toggle()
 #ifdef _WIN32
     if (!menu)
     {
+        chinese = settings::GetConfig().debugLanguage == 1;
         WNDCLASSW wc{};
         wc.lpfnWndProc = MenuProc;
         wc.hInstance = GetModuleHandleW(nullptr);
@@ -214,10 +248,18 @@ void debug_menu::Toggle()
         wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_BTNFACE + 1);
         wc.lpszClassName = L"LostOdysseyDebugMenu";
         RegisterClassW(&wc);
-        menu = CreateWindowExW(WS_EX_APPWINDOW, wc.lpszClassName, L"Lost Odyssey — Debug Menu (F1)",
+        menu = CreateWindowExW(WS_EX_APPWINDOW, wc.lpszClassName, Tr(L"Lost Odyssey — Debug Menu (F1)"),
             WS_OVERLAPPEDWINDOW | WS_VSCROLL | WS_HSCROLL | WS_CLIPCHILDREN, CW_USEDEFAULT, CW_USEDEFAULT,
             580, 760, nullptr, nullptr, wc.hInstance, nullptr);
         if (!menu) { LOG_ERROR("debug menu: CreateWindow failed {}", GetLastError()); return; }
+        captureButton = Control(L"BUTTON", L"截取渲染状态 / Capture render state", BS_PUSHBUTTON, 24, -176, 490, 30, 103);
+        captureStatus = Control(L"STATIC", L"截取下一完整帧；导出期间可能短暂停顿。", 0, 24, -140, 490, 80);
+        Control(L"STATIC", L"Language", 0, 20, -36, 110, 24);
+        languageList = Control(L"COMBOBOX", L"", CBS_DROPDOWNLIST, 140, -40, 180, 100, 104);
+        SendMessageW(languageList, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"English"));
+        SendMessageW(languageList, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"简体中文"));
+        SendMessageW(languageList, CB_SETCURSEL, chinese ? 1 : 0, 0);
+        languageStatus = Control(L"STATIC", L"", 0, 20, -12, 500, 24);
         Control(L"STATIC", L"F1 打开/关闭 · 本窗口不会暂停游戏", 0, 20, 14, 500, 24);
         Control(L"STATIC", L"常用 / Quick settings", 0, 20, 42, 500, 20);
         saveToggle = Control(L"BUTTON", L"随时存档 / Save anywhere", BS_AUTOCHECKBOX,
@@ -250,8 +292,6 @@ void debug_menu::Toggle()
         poiButton = Control(L"BUTTON", L"传送到此 POI", BS_PUSHBUTTON, 379, 592, 135, 30, 31);
         poiDetails = Control(L"STATIC", L"", 0, 24, 628, 490, 36);
         Control(L"STATIC", L"POI 仅含已加载区域；传送到达后仍会触发游戏事件。", 0, 24, 672, 490, 24);
-        captureButton = Control(L"BUTTON", L"截取渲染状态 / Capture render state", BS_PUSHBUTTON, 24, 714, 490, 30, 103);
-        captureStatus = Control(L"STATIC", L"截取下一完整帧；导出期间可能短暂停顿。", 0, 24, 750, 490, 80);
         // Fit the initial window to the current monitor; scrolling keeps every control reachable.
         MONITORINFO monitor{sizeof(MONITORINFO)};
         if (GetMonitorInfoW(MonitorFromWindow(menu, MONITOR_DEFAULTTONEAREST), &monitor))
@@ -276,7 +316,7 @@ void debug_menu::Update()
     if (captureStatus && IsWindowVisible(menu))
     {
         const auto status = gpu::renderer::DebugCaptureStatus();
-        if (!status.empty()) SetLabel(captureStatus, status.c_str());
+        if (!status.empty()) SetLabel(captureStatus, translations::Capture(status, chinese).c_str());
         EnableWindow(captureButton, !gpu::renderer::DebugCaptureBusy());
     }
     // Optional startup visibility for repeatable UI validation without injected keys.
@@ -306,9 +346,9 @@ void debug_menu::Update()
         SendMessageW(saveToggle, BM_SETCHECK, SaveAnywhereEnabled() ? BST_CHECKED : BST_UNCHECKED, 0);
     if (mapLabel && IsWindowVisible(menu)) {
         const auto map = GetMapInfo();
-        std::wstring text = L"当前地图 / Map: 加载中或尚未识别";
-        if (map.available) text = L"地图 ID / Map ID: " + std::to_wstring(map.id) + L"  [" + map.package + L"]\n" +
-            (map.name.empty() ? L"地图名称尚未加载 / Name unavailable" : map.name);
+        std::wstring text = Tr(L"当前地图 / Map: 加载中或尚未识别");
+        if (map.available) text = std::wstring(Tr(L"地图 ID / Map ID: ")) + std::to_wstring(map.id) + L"  [" + map.package + L"]\n" +
+            (map.name.empty() ? Tr(L"地图名称尚未加载 / Name unavailable") : map.name);
         SetLabel(mapLabel, text.c_str());
     }
     if (statusLabel && IsWindowVisible(menu)) SetLabel(statusLabel, Status());
@@ -318,7 +358,7 @@ void debug_menu::Update()
         wchar_t text[160]{};
         if (snapshot.available)
             std::swprintf(text, 160, L"X %.2f    Y %.2f    Z %.2f", snapshot.current.x, snapshot.current.y, snapshot.current.z);
-        else std::swprintf(text, 160, L"等待可控制的地图角色 / No controllable map character");
+        else std::swprintf(text, 160, L"%ls", Tr(L"等待可控制的地图角色 / No controllable map character"));
         SetLabel(positionLabel, text);
         SetLabel(teleportStatus, invalidCoordinates ? L"坐标须为 −1000000 到 1000000 范围内的数值。" : snapshot.status.c_str());
         for (int i = 0; i < 10; ++i)
@@ -332,7 +372,7 @@ void debug_menu::Update()
             size_t selected = 0;
             for (size_t i = 0; i < snapshot.pois.size(); ++i)
             {
-                SendMessageW(poiList, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(snapshot.pois[i].label.c_str()));
+                SendMessageW(poiList, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(translations::Poi(snapshot.pois[i].label, chinese).c_str()));
                 if (snapshot.pois[i].id == selectedId) selected = i;
             }
             if (!snapshot.pois.empty()) SendMessageW(poiList, CB_SETCURSEL, selected, 0);
@@ -349,7 +389,7 @@ void debug_menu::Update()
             const auto c = snapshot.current;
             const float distance = std::sqrt((p.x-c.x)*(p.x-c.x)+(p.y-c.y)*(p.y-c.y)+(p.z-c.z)*(p.z-c.z));
             wchar_t details[180]{};
-            std::swprintf(details, 180, L"落点 X %.1f  Y %.1f  Z %.1f\n距离 %.0f（游戏单位）", p.x,p.y,p.z,distance);
+            std::swprintf(details, 180, Tr(L"落点 X %.1f  Y %.1f  Z %.1f\n距离 %.0f（游戏单位）"), p.x,p.y,p.z,distance);
             SetLabel(poiDetails, details);
         }
         else SetLabel(poiDetails, snapshot.available ? L"当前地图没有识别到 POI" : L"地图控制恢复后自动更新 POI");

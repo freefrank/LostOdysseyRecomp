@@ -1,4 +1,5 @@
 #include "menu.h"
+#include "menu_render.h"
 #include "config.h"
 #include "translations.h"
 #include <gpu/video.h>
@@ -21,19 +22,9 @@ std::atomic<bool> waitForRelease{true};
 std::atomic<int> mouseTab{-1}, mouseRow{-1};
 std::atomic<uint16_t> mouseAction{0};
 std::mutex snapshotMutex;
-struct Row
-{
-    std::wstring name, value;
-    bool enabled = true;
-};
-struct Snapshot
-{
-    int tab = 0, row = 0;
-    uint32_t language = 0;
-    std::vector<Row> rows;
-    std::wstring help;
-    uint64_t revision = 0;
-} snapshot;
+using Row = MenuRow;
+using Snapshot = MenuSnapshot;
+Snapshot snapshot;
 Config edit;
 Config previousDisplay;
 bool displayPreview = false;
@@ -106,9 +97,11 @@ void Publish(uint8_t *base, uint32_t config)
                                   Tr(L"Exclusive fullscreen", L"獨占全螢幕")};
         add(L"Display mode", L"顯示模式", modes[uint32_t(edit.windowMode)]);
         add(L"Output resolution", L"輸出解析度", std::to_wstring(edit.width) + L" × " + std::to_wstring(edit.height));
-        add(L"Anti-aliasing", L"抗鋸齒", edit.fxaa ? L"FXAA" : Tr(L"Off", L"關"));
-        add(L"DLSS", L"DLSS", Tr(L"Not implemented", L"尚未實現"), false);
-        add(L"Frame generation", L"影格生成", Tr(L"Not implemented", L"尚未實現"), false);
+        add(L"Anti-aliasing", L"抗鋸齒", edit.antialiasing == 3 ? Tr(L"TAA (Experimental)", L"TAA（實驗性）") : edit.antialiasing == 2 ? L"SMAA" : edit.antialiasing == 1 ? L"FXAA" : Tr(L"Off", L"關"));
+        add(L"Upscaling quality", L"縮放品質", edit.scalingQuality == 0
+            ? Tr(L"Standard", L"標準") : Tr(L"High", L"高"));
+        add(L"Frame rate", L"影格率", std::to_wstring(edit.frameRate) + L" FPS" +
+            (edit.frameRate == 30 ? L"" : Tr(L" (experimental)", L"（實驗性）")));
         add(L"Brightness calibration", L"亮度校準", Tr(L"Open", L"開啟"));
         add(L"Apply display settings", L"套用顯示設定",
             displayPreview ? Tr(L"Keep changes", L"保留更改") : Tr(L"Apply", L"套用"));
@@ -131,6 +124,18 @@ void Publish(uint8_t *base, uint32_t config)
     if (tab == 2 && row == 1)
         next.help = Tr(L"Scales the original game image to the output resolution. Borderless uses the desktop size.",
                        L"將原始遊戲畫面縮放至輸出解析度；無邊框模式使用桌面尺寸。");
+    if (tab == 2 && row == 2 && edit.antialiasing == 3)
+        next.help = Tr(L"Camera-based TAA; moving effects may trail. Unsupported scenes use SMAA.",
+                       L"以相機重投影的 TAA；動態特效可能拖影。不支援的場景使用 SMAA。");
+    if (tab == 2 && row == 3)
+        next.help = Tr(L"Matches window output automatically. Internal size is fixed; quality changes only spatial filtering.",
+                       L"自動匹配視窗輸出。內部解析度固定，品質僅改變空間取樣濾鏡。");
+    if (tab == 2 && row == 4)
+        next.help = edit.frameRate == 120
+            ? Tr(L"120 FPS is experimental and requires LO_EXPERIMENTAL_120; otherwise runs at 60 FPS.",
+                 L"120 FPS 為實驗性功能，需啟用 LO_EXPERIMENTAL_120，否則以 60 FPS 執行。")
+            : Tr(L"60/120 FPS are experimental. Verify game speed, audio and battle timing.",
+                 L"60/120 FPS 為實驗性功能，請確認遊戲速度、音訊與戰鬥時序。");
     if (displayPreview)
         next.help = Tr(L"Keep changes? A: keep, B: revert. Reverting automatically in 15 seconds.",
                        L"保留顯示更改？A：保留，B：還原。15 秒後自動還原。");
@@ -138,6 +143,9 @@ void Publish(uint8_t *base, uint32_t config)
         next.help = Tr(L"Keep changes? B: keep, A: revert. Reverting automatically in 15 seconds.",
                        L"保留顯示更改？B：保留，A：還原。15 秒後自動還原。");
     std::lock_guard lock(snapshotMutex);
+    if (next.tab == snapshot.tab && next.row == snapshot.row && next.language == snapshot.language &&
+        next.rows == snapshot.rows && next.help == snapshot.help)
+        return;
     next.revision = snapshot.revision + 1;
     snapshot = std::move(next);
 }
@@ -338,7 +346,7 @@ PPC_FUNC(sub_822F19B0)
         row = (row + count - 1) % count;
     if (input & 2)
         row = (row + 1) % count;
-    const bool action = (tab == 0 && row == 7) || (tab == 2 && row >= 3) || (tab == 3 && row == 2);
+    const bool action = (tab == 0 && row == 7) || (tab == 2 && row >= 5) || (tab == 3 && row == 2);
     const int delta = (input & 4) ? -1 : ((input & 8) || ((input & 0x1000) && !action)) ? 1 : 0;
     auto cycle = [&](uint32_t value, uint32_t count) {
         return uint32_t((int(value) + int(count) + delta) % int(count));
@@ -383,7 +391,18 @@ PPC_FUNC(sub_822F19B0)
                 edit.height = resolutions[index][1];
             }
             if (row == 2)
-                edit.fxaa = !edit.fxaa;
+            {
+                edit.antialiasing = cycle(edit.antialiasing, 4);
+                edit.fxaa = edit.antialiasing == 1;
+            }
+            if (row == 3)
+                edit.scalingQuality = cycle(edit.scalingQuality, 2);
+            if (row == 4)
+            {
+                constexpr uint32_t rates[] = {30, 60, 120};
+                const uint32_t index = edit.frameRate == 120 ? 2u : edit.frameRate == 60 ? 1u : 0u;
+                edit.frameRate = rates[cycle(index, 3)];
+            }
         }
         else
         {
@@ -457,100 +476,24 @@ PPC_FUNC(sub_822F19B0)
 #endif
 }
 
-bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision)
+bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint32_t width, uint32_t height)
 {
     if (!active.load())
         return false;
-#ifdef _WIN32
-    Snapshot current;
+    MenuSnapshot current;
     {
         std::lock_guard lock(snapshotMutex);
         current = snapshot;
     }
-    if (revision == current.revision && !pixels.empty())
+    // This cache belongs to the sole presentation thread. Dimensions must be
+    // checked independently: portrait and landscape buffers can have equal area.
+    static uint32_t cachedWidth = 0, cachedHeight = 0;
+    if (revision == current.revision && cachedWidth == width && cachedHeight == height && !pixels.empty())
         return true;
-    HDC dc = CreateCompatibleDC(nullptr);
-    BITMAPINFO info{};
-    info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    info.bmiHeader.biWidth = 1280;
-    info.bmiHeader.biHeight = -720;
-    info.bmiHeader.biPlanes = 1;
-    info.bmiHeader.biBitCount = 32;
-    info.bmiHeader.biCompression = BI_RGB;
-    void *bits = nullptr;
-    HBITMAP bitmap = CreateDIBSection(dc, &info, DIB_RGB_COLORS, &bits, nullptr, 0);
-    if (!dc || !bitmap)
-    {
-        if (bitmap)
-            DeleteObject(bitmap);
-        if (dc)
-            DeleteDC(dc);
+    if (!RasterizeMenu(current, width, height, pixels))
         return false;
-    }
-    auto oldBitmap = SelectObject(dc, bitmap);
-    SetBkMode(dc, TRANSPARENT);
-    auto fill = [&](int x, int y, int w, int h, COLORREF color) {
-        RECT r{x, y, x + w, y + h};
-        HBRUSH brush = CreateSolidBrush(color);
-        FillRect(dc, &r, brush);
-        DeleteObject(brush);
-    };
-    auto text = [&](int x, int y, int w, int h, const std::wstring &value, int size, COLORREF color,
-                    bool bold = false) {
-        HFONT font =
-            CreateFontW(-size, 0, 0, 0, bold ? FW_SEMIBOLD : FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-                        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY, DEFAULT_PITCH, L"Segoe UI");
-        auto old = SelectObject(dc, font);
-        SetTextColor(dc, color);
-        RECT r{x, y, x + w, y + h};
-        DrawTextW(dc, value.c_str(), -1, &r, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-        SelectObject(dc, old);
-        DeleteObject(font);
-    };
-    const COLORREF ink = RGB(229, 224, 213), muted = RGB(153, 153, 147), gold = RGB(207, 172, 108);
-    fill(0, 0, 1280, 720, RGB(22, 26, 29));
-    text(64, 26, 300, 24, L"LOST ODYSSEY", 17, gold, true);
-    text(64, 57, 900, 60, Translate(current.language, L"Settings", L"設定"), 38, ink, true);
-    text(1080, 66, 136, 42, L"LB / RB", 20, gold);
-    const wchar_t *en[] = {L"Gameplay", L"Audio", L"Graphics", L"Language"};
-    const wchar_t *zh[] = {L"遊戲", L"聲音", L"圖像", L"語言"};
-    for (int i = 0; i < 4; i++)
-    {
-        int x = 64 + i * 288;
-        if (i == current.tab)
-        {
-            fill(x, 128, 288, 56, RGB(49, 52, 51));
-            fill(x, 180, 288, 4, gold);
-        }
-        text(x + 20, 128, 248, 52, Translate(current.language, en[i], zh[i]), 23, i == current.tab ? ink : muted,
-             i == current.tab);
-    }
-    const int rowHeight = current.rows.size() > 7 ? 49 : 56;
-    for (size_t i = 0; i < current.rows.size(); i++)
-    {
-        int y = 208 + int(i) * rowHeight;
-        const auto &r = current.rows[i];
-        if (int(i) == current.row)
-            fill(64, y, 1152, rowHeight - 4, RGB(49, 52, 51));
-        text(84, y, 696, rowHeight - 4, r.name, 22, r.enabled ? ink : muted);
-        text(820, y, 376, rowHeight - 4, r.value, 21, r.enabled ? gold : muted);
-    }
-    fill(64, 626, 1152, 1, RGB(65, 66, 62));
-    text(64, 644, 1152, 48, current.help, 16, muted);
-    GdiFlush();
-    pixels.resize(1280 * 720);
-    const auto *source = static_cast<uint32_t *>(bits);
-    for (size_t i = 0; i < pixels.size(); i++)
-    {
-        uint32_t p = source[i];
-        pixels[i] = 0xff000000u | ((p & 255) << 16) | (p & 0xff00) | ((p >> 16) & 255);
-    }
-    SelectObject(dc, oldBitmap);
-    DeleteObject(bitmap);
-    DeleteDC(dc);
+    cachedWidth = width;
+    cachedHeight = height;
     revision = current.revision;
     return true;
-#else
-    return false;
-#endif
 }

@@ -2,12 +2,14 @@
 
 先读[当前状态](../STATUS.md)和[接手入口](handoff.md)。日期化实验保留证据，不自动代表当前功能支持。过期GPU、内核和旧交接已移到[归档](../archive/README.md)。
 
-当前进度：[v0.2 状态与待办](../STATUS.md) · [路线图](../ROADMAP.zh-CN.md)。历史汇总：[2026-09-05成果与交接](../WORK_REPORT_2026-09-05.md)。
+当前进度：[v0.3.0 发布状态](../STATUS.md) · [v0.4.0 本地开发与限定验证](v0.4.0-development.md) · [路线图](../ROADMAP.zh-CN.md)。历史汇总：[2026-09-05成果与交接](../WORK_REPORT_2026-09-05.md)。
 
 ## 现有文档
 
 | 专项笔记 |
 |---|
+| [v0.4.0 本地开发与验证边界](v0.4.0-development.md) |
+| [DLSS/FSR 时域超分研究：官方契约、当前证据与后续接入](temporal-upscaling-feasibility.md) |
 | [多手柄与键盘输入（本地未发布）](controller-input.md) |
 | [Debug Menu 渲染状态捕获（本地未发布）](render-state-capture.md) |
 | [两套零售版本兼容、语言与发布验证](europe-support.md) |

@@ -16,6 +16,7 @@
 #include <chrono>
 #include "settings/first_run.h"
 #include "settings/config.h"
+#include "version.h"
 
 #ifdef _WIN32
 #include <timeapi.h>
@@ -134,6 +135,7 @@ int main(int argc, char* argv[])
         for (int i = 0; i < argc; i++)
             cmdline += fmt::format("{}{}", i ? " " : "", argv[i]);
         LOG_INFO("LostOdysseyRecomp starting at {} : {}", stamp, cmdline);
+        LOG_INFO("source version: {}", lo_version::Source);
         std::string switches;
         for (char** e = environ; e && *e; e++)
             if (strncmp(*e, "LO_", 3) == 0)

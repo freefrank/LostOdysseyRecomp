@@ -41,7 +41,7 @@ struct Setup {
         for(int i=0;i<6;++i) SetWindowTextW(labels[i],tr(en[i],tw[i]));
         const int mode=std::max(selection(3),0), aa=std::max(selection(4),0);
         items(3,{tr(L"Windowed",L"視窗"),tr(L"Borderless fullscreen",L"無邊框全螢幕"),tr(L"Exclusive fullscreen",L"獨佔全螢幕")},mode);
-        items(4,{tr(L"Off",L"關"),L"FXAA"},aa);
+        items(4,{tr(L"Off",L"關"),L"FXAA",L"SMAA"},aa);
         const wchar_t* unavailable[]={L"Not available",L"尚未提供",L"未対応",L"사용 불가",L"暂不可用"};
         items(5,{unavailable[language]},0);
     }
@@ -65,7 +65,7 @@ struct Setup {
             SendMessageW(boxes[2],CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));
         }
         SendMessageW(boxes[2],CB_SETCURSEL,std::find(resolutions.begin(),resolutions.end(),resolution)-resolutions.begin(),0);
-        items(3,{L"",L"",L""},int(config.windowMode)); items(4,{L"",L""},config.fxaa?1:0);
+        items(3,{L"",L"",L""},int(config.windowMode)); items(4,{L"",L"",L""},int(config.antialiasing));
         EnableWindow(boxes[5],FALSE);
         start=control(L"BUTTON",L"",WS_TABSTOP|BS_DEFPUSHBUTTON,330,355,220,36,IDOK);
         translate(); SetFocus(boxes[0]);
@@ -76,7 +76,7 @@ struct Setup {
     void save() {
         config.uiLanguage=selection(0); config.gameLanguage=GameLanguageIds[selection(1)];
         const auto [w,h]=resolutions.at(selection(2)); config.width=w; config.height=h;
-        config.windowMode=WindowMode(selection(3)); config.fxaa=selection(4)==1;
+        config.windowMode=WindowMode(selection(3)); config.antialiasing=uint32_t(selection(4)); config.fxaa=config.antialiasing==1;
         if(!SaveConfig(config)) {
             MessageBoxW(window,L"Could not save settings.ini. Choose a writable game folder.",L"Lost Odyssey",MB_OK|MB_ICONERROR);
             return;

@@ -31,15 +31,20 @@ inline uint32_t GameLanguageIndex(uint32_t id)
 struct Config
 {
     uint32_t uiLanguage = 0;
+    uint32_t debugLanguage = 0; // Independent tool UI: 0 English, 1 Simplified Chinese.
     uint32_t gameLanguage = 1;
     uint32_t width = 1280, height = 720;
     WindowMode windowMode = WindowMode::Windowed;
-    bool fxaa = false;
+    uint32_t antialiasing = 0; // 0 Off, 1 FXAA, 2 SMAA, 3 experimental camera-based TAA.
+    uint32_t frameRate = 30;
+    uint32_t scalingQuality = 1; // 0 bilinear, 1 bicubic spatial resampling.
+    bool fxaa = false; // Legacy serialized mirror; antialiasing is authoritative.
     bool operator==(const Config &) const = default;
 };
 Config GetConfig();
 void PreviewConfig(const Config &config);
 // Atomic replacement, preserving the previous file if writing fails.
 bool SaveConfig(const Config &config);
+bool SaveDebugLanguage(uint32_t language);
 uint32_t GameLanguage();
 } // namespace settings

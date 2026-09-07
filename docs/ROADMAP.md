@@ -2,9 +2,23 @@
 
 [简体中文](ROADMAP.zh-CN.md) · [Current status](STATUS.md)
 
-Updated against v0.3.0 publication and recorded validation on **2026-09-07**. `[x]` means the stated scope has evidence, not that the entire game is complete. Dated notes retain earlier experiment states; [STATUS.md](STATUS.md) is the current release and validation ledger.
+Updated against v0.3.0 publication and the new v0.4.0 development scope on **2026-09-07**. `[x]` means the stated scope has evidence, not that the entire game is complete. Dated notes retain earlier experiment states; [STATUS.md](STATUS.md) is the current release and validation ledger.
 
 Legend: `[ ]` planned / outstanding · `[~]` in progress · `[x]` validated within the stated scope.
+
+## Current development target: v0.4.0
+
+The requested v0.4.0 implementation and bounded validation are complete: text/UI, Debug, spatial AA/scaling, experimental TAA, sampled 60-FPS behavior and DLSS/FSR feasibility research. Wider gameplay remains regression coverage; no new user acceptance is recorded. See the [implementation checkpoint and acceptance criteria](notes/v0.4.0-development.md). v0.4.0 remains local, unpushed and unpublished, with no committed release date.
+
+1. [x] Improve text clarity through output-resolution host Settings and supported pre-UI scene AA. Same-real-frame Navigation replays, production GPU controls and v7 actual final-AA skips verify removal of repeated AA from later UI; actual seven-row Graphics layout also passed. Guest UI remains 720p; unsupported/CPU fallback and broader glyph/language quality are separate regression coverage.
+2. [x] Add an independent English / Simplified Chinese Debug menu: fixtures, startup and actual Map2 tutorial-state EN → SC → EN checks passed, including dynamic map/no-battle/waiting-for-control text and restored language. Capture render state remains first. Other battle/status/layout variants are regression coverage; no new user acceptance is claimed.
+3. [x] Add SMAA 1x: the upstream HIGH three-pass/LUT path passes selected GPU and actual pre-UI processing checks. Actual Graphics selection, Keep and same-process reopening passed, including switching SMAA to TAA. Further reference/scene comparisons are regression work.
+4. [x] Add experimental camera-based TAA: normal AA3 settings, scene depth, jitter, stable-grid history/reset and final-AA bypass passed bounded v7 static/moving validation. Actual menu selection/Keep/reopening also passed. Unsupported paths use SMAA; native object motion is future work and broader scene quality remains regression coverage.
+5. [x] Match actual output automatically with Standard/bilinear and High/bicubic quality: selected GPU/configuration and real-frame replay checks passed. Actual seven-row Graphics verified preview without disk changes, 15-second High rollback, Standard Keep and same-process close/reopen. Guest size stays fixed; adjustable ratios are separate research and process-restart/display coverage is regression work.
+6. [x] Implement 60 FPS with bounded correct-speed validation: sampled movement/dialogue, normal Apply/Keep/reopening and the 59.79827-FPS static camp passed. Natural 30/60 battle samples also show matching Ring timer/progress and long-hold timeout sequences; the observed 1.399/1.415-second phase boundary difference is within sampling granularity. Precise release/Perfect, damage and broader gameplay remain regression coverage; this is not whole-game locked 60. The optional unvalidated 120 candidate may be deferred.
+7. [x] Complete DLSS/FSR feasibility research: official contracts, actual scene/depth/camera/jitter evidence, API/hardware/distribution risks and the staged implementation route are documented. Native object/skeletal motion, measured exposure/color-space semantics, broader scene coverage and vendor backends remain future engineering.
+
+The user reports a closed-source implementation with correct speed at higher frame rates; its name and exact frame-rate coverage are unknown. It is a feasibility lead. Another implementation's limitation above 60 FPS does not rule out 120 FPS, but the latest user feedback permits a 60-FPS-only delivery if 120 FPS is difficult. Existing shadow investigations and unrelated backlog retain their prior status outside this new scope.
 
 ## Published milestone: v0.3.0
 
@@ -29,6 +43,8 @@ v0.1 remains the historical first Windows release with the importer, first-launc
 
 ## Near-term priorities
 
+The following is the retained compatibility and regression backlog. The v0.4.0 section above defines the new development scope.
+
 1. [ ] Shadow investigation suspended after the user's ten-minute limit: the first-battle report is not locally confirmed; Map 13 evidence remains separate and unresolved.
 2. [~] Collect player acceptance for the expanded shader and recorded-pipeline preparation shipped in v0.3.0. Local tests establish source coverage and real draw reuse, not complete stutter elimination or unseen first-use PSO coverage.
 3. [~] Investigate blurry or garbled text against original-console and Xenia references; work in progress. This is separate from the paused text-language complement patch.
@@ -43,7 +59,7 @@ Existing work remains queued: intermittent GPU query/wait failures and long-sess
 - [x] Unicode startup/save-path fix `7dbb668` merged as `04dd7d0`; eight startup-path cases and eight storage runs passed. The complete Issue #4 gameplay crash remains unreproduced; path tests do not establish in-game acceptance.
 - [x] `v0.2.2` was published on 2026-09-07 at 03:11:10 UTC; tag `f03efe370d444db1a8a9c1213c240da697f58504` is on both remotes and CI `34077788392` passed. Official-package CRC/44 manifest hashes, installer self-test, eight startup-path cases and a Chinese-working-directory Map 12 smoke run passed.
 
-Modern graphics remain later work. **Text-language complement patch research was paused by the user on 2026-09-06**: no finished patch, no runtime code change and no inclusion in v0.2. Voice changes are outside that research scope. See [paused research](notes/text-language-patch.md).
+The requested AA, scaling and frame-rate work now belongs to v0.4.0. **Text-language complement patch research was paused by the user on 2026-09-06**: no finished patch, no runtime code change and no inclusion in v0.2. Voice changes are outside that research scope. See [paused research](notes/text-language-patch.md).
 
 ## Phase 0: Preparation
 
@@ -104,7 +120,7 @@ Modern graphics remain later work. **Text-language complement patch research was
 
 ## Phase 4: Modernization
 
-Compatibility and stability come first. Future graphics features below have no committed release date.
+Compatibility and stability remain validation requirements. SMAA/TAA, resolution-aware scaling and stable, correct-speed 60 FPS are v0.4.0 targets; 120 FPS is optional and may be deferred. DLSS/FSR input feasibility remains research. Other features below remain later work; no release date is committed.
 
 - [x] Parallel preparation with logical CPU threads minus one, minimum one: 15 workers on the test PC reduced 2,000-shader preparation from 53.4 to 6.7 seconds; successful outputs are byte-identical.
 - [x] Startup preparation for known shaders, persistent cache and progress UI. Warm-cache reuse and damaged-DXIL recovery passed for the earlier 184-microcode set. [Preparation](notes/shader-preparation.md).
@@ -113,11 +129,12 @@ Compatibility and stability come first. Future graphics features below have no c
 - [ ] Resolve two microcode compilation failures, uncovered containers/runtime variants and actual graphics-pipeline (PSO) precreation. First-use stalls in unseen scenes remain possible.
 - [x] Replace settings while retaining original game options; add five-language UI, language choice, FXAA and aspect-preserving output scaling. [Settings](notes/settings-menu.md).
 - [ ] Complete desktop acceptance for fullscreen/exclusive modes, mouse and mixed DPI.
-- [ ] Add more anti-aliasing options beyond FXAA, including investigation of temporal AA.
-- [ ] Support higher internal rendering resolutions, render scaling and widescreen with correct UI layout.
-- [ ] Investigate modern upscaling, including DLSS/FSR. Existing output scaling is not temporal upscaling; DLSS is a disabled placeholder in v0.2.
-- [ ] Investigate frame generation (FG); the v0.2 option is a disabled placeholder.
-- [ ] Unlock frame rates and identify logic fixed at 30 fps.
+- [x] SMAA 1x and experimental camera-based TAA are implemented and verified at the bounded actual-game and menu selection/Keep/reopen scope above. Broader TAA quality remains regression coverage.
+- [x] Add automatic output-resolution matching and Standard/High quality for v0.4.0: selected checks and actual seven-row Graphics preview/rollback/Keep/same-process reopening passed. Adjustable guest render ratios remain separate research.
+- [ ] Support widescreen/FOV changes with correct UI layout as later work.
+- [x] Complete DLSS/FSR temporal-input feasibility research for v0.4.0, including actual evidence, missing inputs and future integration gates. No vendor backend is implemented; the published v0.3.0 DLSS placeholder is removed from local Settings.
+- [ ] Investigate frame generation (FG) as later work; its disabled published control is removed from the local Settings page.
+- [x] Implement 60 FPS and complete the bounded movement/dialogue, UI/camp and Ring core-timing/timeout checks for v0.4.0. Precise Ring release and broader gameplay remain regression coverage; whole-game locked 60 and the optional 120 candidate are not claimed.
 - [ ] Add HDR output and tone mapping.
 - [ ] Add higher-resolution shadows.
 - [ ] Investigate SSAO and expose a clean depth buffer for ReShade.

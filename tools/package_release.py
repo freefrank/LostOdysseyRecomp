@@ -74,7 +74,7 @@ def main():
                 if Path(file).name.lower().startswith(('license', 'notice')) and not file.endswith('/'):
                     (licenses / ('DXC-' + Path(file).name)).write_bytes(archive.read(file))
         dependencies = [ROOT / 'thirdparty/SDL', ROOT / 'thirdparty/plume', ROOT / 'thirdparty/o1heap',
-                        ROOT / 'thirdparty/unordered_dense', ROOT / 'tools/XenonRecomp',
+                        ROOT / 'thirdparty/unordered_dense', ROOT / 'thirdparty/smaa', ROOT / 'tools/XenonRecomp',
                         build / '_deps/lo_ffmpeg-src']
         for directory in dependencies:
             found = []

@@ -12,6 +12,9 @@
 
 namespace gpu
 {
+    // Thread-safe target snapshot; false rejects unsupported settings values.
+    bool SetFrameRateTarget(uint32_t fps);
+    uint32_t GetFrameRateTarget();
     constexpr uint32_t MMIO_BASE = 0x7FC80000;
     constexpr uint32_t REGISTER_COUNT = 0x5003;
 

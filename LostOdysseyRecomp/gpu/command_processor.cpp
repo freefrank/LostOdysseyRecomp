@@ -2,6 +2,8 @@
 #include "command_processor.h"
 #include "video.h"
 #include "renderer.h"
+#include "frame_pacer.h"
+#include <debug/frame_timing.h>
 #include <cpu/guest_thread.h>
 #include <kernel/memory.h>
 #include <kernel/function.h>
@@ -16,6 +18,26 @@ void DumpGuestThreadStates();
 
 namespace gpu
 {
+    static std::atomic<uint32_t> g_frameRateTarget{30};
+    bool SetFrameRateTarget(uint32_t fps)
+    {
+        if (fps != 30 && fps != 60 && fps != 120) return false;
+        g_frameRateTarget.store(fps, std::memory_order_relaxed);
+        return true;
+    }
+    uint32_t GetFrameRateTarget()
+    {
+        // LO_FPS remains a diagnostic override (0 = uncapped). Never alter
+        // PPC timebase, kernel time or audio clocks when changing this cap.
+        static const int overrideFps = [] {
+            const char* value = getenv("LO_FPS");
+            if (!value || !*value) return -1;
+            char* end = nullptr;
+            const auto n = strtoul(value, &end, 10);
+            return end && !*end && n <= 1000 ? int(n) : -1;
+        }();
+        return overrideFps >= 0 ? uint32_t(overrideFps) : g_frameRateTarget.load(std::memory_order_relaxed);
+    }
     CommandProcessor g_commandProcessor;
     static std::atomic<uint32_t> g_swapCount{ 0 };
     static std::atomic<uint32_t> g_completedSwaps{ 0 };
@@ -340,6 +362,9 @@ namespace gpu
         if (video::Init())
             renderer::Init();
         uint32_t idle = 0;
+        const bool timingEnabled = frame_timing::Enabled();
+        auto idleStart = std::chrono::steady_clock::time_point{};
+        bool timingIdle = false;
         while (m_running)
         {
             uint32_t writePtr = m_writePtrIndex.load();
@@ -362,6 +387,11 @@ namespace gpu
             if (writePtr == 0xBAADF00D || m_readPtrIndex == writePtr || m_primaryBufferSize == 0)
             {
                 g_workerStage = "idle/event pump";
+                if (timingEnabled && !timingIdle)
+                {
+                    idleStart = std::chrono::steady_clock::now();
+                    timingIdle = true;
+                }
                 if (++idle > 200)
                 {
                     video::PumpEvents();
@@ -372,6 +402,12 @@ namespace gpu
                 continue;
             }
             idle = 0;
+            if (timingIdle)
+            {
+                frame_timing::CpIdle(std::chrono::duration<double, std::milli>(
+                    std::chrono::steady_clock::now() - idleStart).count());
+                timingIdle = false;
+            }
 
             g_workerStage = "PM4 execution";
             m_readPtrIndex = ExecutePrimaryBuffer(m_readPtrIndex, writePtr);
@@ -387,11 +423,12 @@ namespace gpu
     void CommandProcessor::VsyncMain()
     {
         GuestThreadContext ctx(2); // Xenia dispatches vblanks on CPU 2
-        auto next = std::chrono::steady_clock::now();
+        FramePacer pacer;
         while (m_running)
         {
-            next += std::chrono::microseconds(16667);
-            std::this_thread::sleep_until(next);
+            // Drop overdue wall-clock deadlines rather than deliver a burst
+            // of synthetic catch-up interrupts after a host scheduling stall.
+            std::this_thread::sleep_until(pacer.Schedule(std::chrono::steady_clock::now(), 60));
             ++m_counter;
 
             // Watchdog: no swap for 5 seconds -> dump what every guest thread waits on.
@@ -628,23 +665,30 @@ namespace gpu
             static const uint32_t captureSwap = getenv("LO_DEBUG_CAPTURE_SWAP") ? strtoul(getenv("LO_DEBUG_CAPTURE_SWAP"), nullptr, 10) : 0;
             if (captureSwap && swaps == captureSwap) renderer::RequestDebugCapture();
             renderer::FinishDebugCapture(frontbuffer);
+            const auto timingFlush = std::chrono::steady_clock::now();
             renderer::Flush();
+            const auto timingPace = std::chrono::steady_clock::now();
+            const auto fpsCap = GetFrameRateTarget();
+            const bool timingEnabled = frame_timing::Enabled();
+            frame_timing::PacingSample pacing;
             {
-                // Frame pacing: the game advances its simulation per presented frame
-                // and ran at 30 fps on the console, so cap presentation at LO_FPS
-                // (default 30, 0 = uncapped) instead of letting it run several times
-                // too fast on a modern GPU.
-                static const uint32_t fpsCap = getenv("LO_FPS") ? strtoul(getenv("LO_FPS"), nullptr, 10) : 30;
-                if (fpsCap)
+                static FramePacer pacer;
+                // Preserve the original schedule anchor and exactly one sleep.
+                const auto deadline = pacer.Schedule(timingPace, fpsCap);
+                const auto sleepStart = timingEnabled ? std::chrono::steady_clock::now() : timingPace;
+                std::this_thread::sleep_until(deadline);
+                if (timingEnabled)
                 {
-                    static auto next = std::chrono::steady_clock::now();
-                    const auto period = std::chrono::nanoseconds(1000000000ull / fpsCap);
-                    const auto now = std::chrono::steady_clock::now();
-                    next += period;
-                    if (next > now + period) next = now + period; // fell far behind: resync
-                    if (next > now) std::this_thread::sleep_until(next);
+                    const auto wake = std::chrono::steady_clock::now();
+                    pacing.requestedMs = std::max(0.0, std::chrono::duration<double, std::milli>(deadline - sleepStart).count());
+                    pacing.actualMs = std::chrono::duration<double, std::milli>(wake - sleepStart).count();
+                    // A past deadline requests no sleep; its call overhead must
+                    // not be reported as an OS timer wakeup overshoot.
+                    if (pacing.requestedMs > 0)
+                        pacing.overshootMs = std::max(0.0, std::chrono::duration<double, std::milli>(wake - deadline).count());
                 }
             }
+            const auto timingPresent = std::chrono::steady_clock::now();
             {
                 // LO_DUMP_THREADS_AT=<swap>: print every guest thread's wait state once.
                 static const uint32_t dumpAt = getenv("LO_DUMP_THREADS_AT") ? strtoul(getenv("LO_DUMP_THREADS_AT"), nullptr, 10) : 0;
@@ -656,6 +700,19 @@ namespace gpu
             g_workerStage = "window event pump";
             video::PumpEvents();
             g_completedSwaps = swaps;
+            if (timingEnabled)
+            {
+                const auto timingEnd = std::chrono::steady_clock::now();
+                static auto previousEnd = std::chrono::steady_clock::time_point{};
+                pacing.hasPrevious = previousEnd != std::chrono::steady_clock::time_point{};
+                if (pacing.hasPrevious)
+                    pacing.betweenMs = std::chrono::duration<double, std::milli>(timingFlush - previousEnd).count();
+                previousEnd = timingEnd;
+                frame_timing::Present(swaps, fpsCap,
+                    std::chrono::duration<double, std::milli>(timingPace - timingFlush).count(),
+                    std::chrono::duration<double, std::milli>(timingPresent - timingPace).count(),
+                    std::chrono::duration<double, std::milli>(timingEnd - timingPresent).count(), pacing);
+            }
             g_workerStage = "post-present capture/statistics";
             {
                 static const uint32_t shotSwap = getenv("LO_SCREENSHOT_SWAP") ? strtoul(getenv("LO_SCREENSHOT_SWAP"), nullptr, 10) : 0;

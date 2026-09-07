@@ -1,7 +1,9 @@
+#include <version.h>
 #include <stdafx.h>
 #include "video.h"
 #include "renderer.h"
 #include "presentation.h"
+#include "command_processor.h"
 #include <settings/config.h>
 #include <settings/menu.h>
 #include <kernel/memory.h>
@@ -121,6 +123,7 @@ namespace gpu::video
         std::unique_ptr<plume::RenderCommandSemaphore> g_releaseSemaphore;
         std::unique_ptr<plume::RenderSwapChain> g_swapChain;
         std::unique_ptr<plume::RenderBuffer> g_uploadBuffer;
+        uint64_t g_uploadCapacity = uint64_t(kMaxWidth) * kMaxHeight * 4;
         std::unique_ptr<Presentation> g_presentation;
         std::unique_ptr<plume::RenderTexture> g_cpuFrame;
         uint32_t g_cpuWidth=0,g_cpuHeight=0;
@@ -200,7 +203,7 @@ namespace gpu::video
             // but must never show a window or take focus from the desktop user.
             const bool background = getenv("LO_BACKGROUND") != nullptr;
             const auto config=settings::GetConfig();
-            g_window = SDL_CreateWindow("Lost Odyssey Recompiled", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+            g_window = SDL_CreateWindow(lo_version::WindowTitle, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                 config.width, config.height, SDL_WINDOW_RESIZABLE | (background ? SDL_WINDOW_HIDDEN : SDL_WINDOW_SHOWN));
             if (!g_window)
             {
@@ -281,7 +284,8 @@ namespace gpu::video
         g_acquireSemaphore = g_device->createCommandSemaphore();
         g_releaseSemaphore = g_device->createCommandSemaphore();
         g_swapChain = g_queue->createSwapChain(plume::RenderSwapChainDesc(renderWindow, kSwapChainFormat, kSwapChainBuffers));
-        g_uploadBuffer = g_device->createBuffer(plume::RenderBufferDesc::UploadBuffer(kMaxWidth * kMaxHeight * 4));
+        g_uploadCapacity = uint64_t(kMaxWidth) * kMaxHeight * 4;
+        g_uploadBuffer = g_device->createBuffer(plume::RenderBufferDesc::UploadBuffer(g_uploadCapacity));
         g_presentation=std::make_unique<Presentation>();
         if(!g_presentation->Init(g_device.get())) g_presentation.reset();
 
@@ -459,7 +463,20 @@ namespace gpu::video
             }
 #endif
         }
-        const bool menu=settings::DrawMenu(g_menuPixels,g_menuRevision);
+        // Resize before rasterizing host text so its glyphs match the actual output.
+        if (g_available && (g_forceSwapResize || g_swapChain->needsResize())) {
+            if(!g_swapChain->resize()) { if(g_forceSwapResize) g_displayFailed=true; return; }
+            g_forceSwapResize=false; g_hasPresentedImage=false;
+        }
+        if (g_available && g_swapChain->isEmpty()) return;
+        const uint32_t menuWidth = g_available ? g_swapChain->getWidth() : 1280;
+        const uint32_t menuHeight = g_available ? g_swapChain->getHeight() : 720;
+        const auto presentationConfig = settings::GetConfig();
+        gpu::SetFrameRateTarget(presentationConfig.frameRate);
+        const PresentationOptions presentationOptions{
+            presentationConfig.antialiasing == 3 ? Antialiasing::SMAA : static_cast<Antialiasing>(presentationConfig.antialiasing),
+            presentationConfig.scalingQuality ? ScalingFilter::Bicubic : ScalingFilter::Bilinear};
+        const bool menu=settings::DrawMenu(g_menuPixels,g_menuRevision,menuWidth,menuHeight);
         // Fast path: the frontbuffer was resolved on the GPU, copy it straight
         // into the swap chain. LO_PRESENT_CPU=1 forces the untiling path below.
         static const bool cpuPresent = getenv("LO_PRESENT_CPU") != nullptr;
@@ -487,8 +504,13 @@ namespace gpu::video
                 const uint32_t copyHeight = std::min({ height, rh, g_swapChain->getHeight() });
 
                 g_commandList->begin();
-                if(g_presentation) g_presentation->Draw(g_commandList.get(),source,backBuffer,std::min(width,rw),std::min(height,rh),
-                    g_swapChain->getWidth(),g_swapChain->getHeight(),settings::GetConfig().fxaa);
+                if(g_presentation) {
+                    if(renderer::SceneAAApplied(physicalAddress & 0x1FFFFFFF))
+                        g_presentation->DrawComposited(g_commandList.get(),source,backBuffer,std::min(width,rw),std::min(height,rh),
+                            g_swapChain->getWidth(),g_swapChain->getHeight(),presentationOptions.scalingFilter);
+                    else g_presentation->Draw(g_commandList.get(),source,backBuffer,std::min(width,rw),std::min(height,rh),
+                        g_swapChain->getWidth(),g_swapChain->getHeight(),presentationOptions);
+                }
                 else {
                     g_commandList->barriers(plume::RenderBarrierStage::COPY, plume::RenderTextureBarrier(backBuffer, plume::RenderTextureLayout::COPY_DEST));
                     plume::RenderBox box(0, 0, int32_t(copyWidth), int32_t(copyHeight), 0, 1);
@@ -513,7 +535,7 @@ namespace gpu::video
 
         // Untile: 32bpp blocks, pitch rounded up to a 32-block macro tile.
 #ifdef LO_GPU_PLUME
-        if(menu) { width=1280; height=720; g_pixels=g_menuPixels; g_frameWidth=width; g_frameHeight=height; }
+        if(menu) { width=menuWidth; height=menuHeight; g_pixels=g_menuPixels; g_frameWidth=width; g_frameHeight=height; }
         else
 #endif
         {
@@ -549,7 +571,16 @@ namespace gpu::video
 
         // Upload the untiled pixels; rows must be 256-byte aligned for D3D12.
         const uint32_t rowPitch = (width * 4 + 255) & ~255u;
+        const uint64_t requiredBytes = uint64_t(rowPitch) * height;
+        if (requiredBytes > g_uploadCapacity) {
+            // The previous presentation submission was fenced before returning.
+            auto upload = g_device->createBuffer(plume::RenderBufferDesc::UploadBuffer(requiredBytes));
+            if (!upload) return;
+            g_uploadBuffer = std::move(upload);
+            g_uploadCapacity = requiredBytes;
+        }
         auto* mapped = static_cast<uint8_t*>(g_uploadBuffer->map());
+        if (!mapped) return;
         for (uint32_t y = 0; y < height; y++)
             memcpy(mapped + size_t(y) * rowPitch, &g_pixels[size_t(y) * width], size_t(width) * 4);
         g_uploadBuffer->unmap();
@@ -573,8 +604,10 @@ namespace gpu::video
             plume::RenderTextureCopyLocation::Subresource(uploadTarget),
             plume::RenderTextureCopyLocation::PlacedFootprint(g_uploadBuffer.get(), kSwapChainFormat, width, height, 1, rowPitch / 4),
             0, 0, 0, g_presentation?nullptr:&box);
+        // This upload came from guest tiled memory, not the processed GPU resolve.
+        // GPU-only scene-AA provenance cannot authorize skipping its legacy AA.
         if(g_presentation) g_presentation->Draw(g_commandList.get(),g_cpuFrame.get(),backBuffer,width,height,
-            g_swapChain->getWidth(),g_swapChain->getHeight(),!menu && settings::GetConfig().fxaa);
+            g_swapChain->getWidth(),g_swapChain->getHeight(),menu ? PresentationOptions{} : presentationOptions);
         g_commandList->barriers(plume::RenderBarrierStage::NONE, plume::RenderTextureBarrier(backBuffer, plume::RenderTextureLayout::PRESENT));
         g_commandList->end();
 

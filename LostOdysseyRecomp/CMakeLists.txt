@@ -36,7 +36,7 @@ target_include_directories(LostOdysseyRecomp PRIVATE
 target_precompile_headers(LostOdysseyRecomp PRIVATE stdafx.h)
 target_compile_features(LostOdysseyRecomp PRIVATE cxx_std_20)
 target_compile_options(LostOdysseyRecomp PRIVATE -fno-strict-aliasing -Wno-switch -Wno-unused-function)
-target_compile_definitions(LostOdysseyRecomp PRIVATE NOMINMAX)
+target_compile_definitions(LostOdysseyRecomp PRIVATE NOMINMAX LO_SOURCE_VERSION="${LO_SOURCE_VERSION}")
 
 target_link_libraries(LostOdysseyRecomp PRIVATE
     LostOdysseyRecompLib
@@ -177,7 +177,8 @@ if(WIN32)
         target_include_directories(LoPresentationTest PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,INCLUDE_DIRECTORIES>)
         target_compile_definitions(LoPresentationTest PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,COMPILE_DEFINITIONS>)
         target_compile_features(LoPresentationTest PRIVATE cxx_std_20)
-        target_precompile_headers(LoPresentationTest REUSE_FROM LostOdysseyRecomp)
+        # Keep this focused GPU fixture independent of rebuilding the game.
+        set_target_properties(LoPresentationTest PROPERTIES DISABLE_PRECOMPILE_HEADERS ON)
         target_link_libraries(LoPresentationTest PRIVATE plume d3d12 dxgi fmt::fmt)
         add_executable(LoPolygonOffsetTest EXCLUDE_FROM_ALL
             ${CMAKE_SOURCE_DIR}/tools/tests/polygon_offset_test.cpp
@@ -186,9 +187,40 @@ if(WIN32)
         target_compile_features(LoPolygonOffsetTest PRIVATE cxx_std_20)
         target_compile_definitions(LoPolygonOffsetTest PRIVATE NOMINMAX)
         target_link_libraries(LoPolygonOffsetTest PRIVATE plume d3d12 dxgi)
+        add_executable(LoTemporalAATest EXCLUDE_FROM_ALL
+            ${CMAKE_SOURCE_DIR}/tools/tests/temporal_aa_test.cpp
+            ${LO_RUNTIME_ROOT}/gpu/temporal_aa.cpp
+            ${LO_RUNTIME_ROOT}/gpu/shader/dxc_compiler.cpp)
+        target_include_directories(LoTemporalAATest PRIVATE ${LO_RUNTIME_ROOT} ${CMAKE_SOURCE_DIR}/thirdparty/plume)
+        target_compile_features(LoTemporalAATest PRIVATE cxx_std_20)
+        target_compile_definitions(LoTemporalAATest PRIVATE LO_GPU_PLUME NOMINMAX)
+        target_link_libraries(LoTemporalAATest PRIVATE plume d3d12 dxgi)
     endif()
 endif()
 
 add_executable(LoDepthClearLayoutTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/depth_clear_layout_test.cpp)
 target_include_directories(LoDepthClearLayoutTest PRIVATE ${LO_RUNTIME_ROOT})
 target_compile_features(LoDepthClearLayoutTest PRIVATE cxx_std_20)
+
+# Host-only fixtures do not require guest generation or the runtime PCH.
+add_executable(LoTemporalSceneTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/temporal_scene_test.cpp)
+target_include_directories(LoTemporalSceneTest PRIVATE ${LO_RUNTIME_ROOT})
+target_compile_features(LoTemporalSceneTest PRIVATE cxx_std_20)
+
+add_executable(LoTemporalMathTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/temporal_math_test.cpp)
+target_include_directories(LoTemporalMathTest PRIVATE ${LO_RUNTIME_ROOT})
+target_compile_features(LoTemporalMathTest PRIVATE cxx_std_20)
+
+add_executable(LoFramePacerTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/frame_pacer_test.cpp)
+target_include_directories(LoFramePacerTest PRIVATE ${LO_RUNTIME_ROOT})
+target_compile_features(LoFramePacerTest PRIVATE cxx_std_20)
+if(WIN32)
+    add_executable(LoMenuRenderTest EXCLUDE_FROM_ALL
+        ${CMAKE_SOURCE_DIR}/tools/tests/menu_render_test.cpp
+        ${LO_RUNTIME_ROOT}/settings/menu_render.cpp)
+    target_include_directories(LoMenuRenderTest PRIVATE ${LO_RUNTIME_ROOT})
+    target_compile_features(LoMenuRenderTest PRIVATE cxx_std_20)
+    target_compile_options(LoMenuRenderTest PRIVATE /utf-8)
+    target_compile_definitions(LoMenuRenderTest PRIVATE NOMINMAX)
+    target_link_libraries(LoMenuRenderTest PRIVATE user32 gdi32)
+endif()

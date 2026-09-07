@@ -5,6 +5,8 @@
 | Start here | Purpose |
 |---|---|
 | [Changelog / 更新日志](../CHANGELOG.md) | Single history of completed changes, separating unpublished work from verified releases |
+| [v0.4.0 local development](notes/v0.4.0-development.md) | Implemented text, bilingual Debug UI, SMAA/experimental TAA, spatial scaling and 60 FPS; bounded validation and remaining coverage |
+| [DLSS/FSR temporal-upscaling feasibility](notes/temporal-upscaling-feasibility.md) | Official input contracts, current depth/camera/jitter evidence, missing native motion/color inputs and future SDK integration |
 | [v0.2.2 release notes](notes/release-0.2.2.md) | Published AMD rendering and Unicode startup/save-path fixes |
 | [Unicode paths](notes/save-path-unicode.md) | Startup/storage validation and Issue #4 limits |
 | [v0.2 release notes](RELEASE-v0.2.md) | Published edition support, languages and automatic disc selection |
