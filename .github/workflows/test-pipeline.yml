@@ -1,25 +1,27 @@
-name: Importer tests
+name: Pipeline tests
 on:
   workflow_dispatch:
   push:
     branches: [main]
     paths:
-      - 'tools/installer/**'
-      - 'tools/tests/test_import_game.py'
+      - 'LostOdysseyRecomp/gpu/pipeline_cache.h'
+      - 'tools/tests/pipeline_cache_test.cpp'
       - 'tools/test.bat'
       - 'tools/tests/run.py'
-      - '.github/workflows/test-importer.yml'
+      - '.github/workflows/test-pipeline.yml'
+      - 'tools/setup_windows.bat'
   pull_request:
     paths:
-      - 'tools/installer/**'
-      - 'tools/tests/test_import_game.py'
+      - 'LostOdysseyRecomp/gpu/pipeline_cache.h'
+      - 'tools/tests/pipeline_cache_test.cpp'
       - 'tools/test.bat'
       - 'tools/tests/run.py'
-      - '.github/workflows/test-importer.yml'
+      - '.github/workflows/test-pipeline.yml'
+      - 'tools/setup_windows.bat'
 permissions:
   contents: read
 concurrency:
-  group: tests-importer-${{ github.event.pull_request.number || github.ref }}
+  group: tests-pipeline-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
   test:
@@ -32,6 +34,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Run importer fixtures
+      - name: Run pipeline fixtures
         shell: cmd
-        run: call tools\test.bat importer
+        run: call tools\test.bat pipeline

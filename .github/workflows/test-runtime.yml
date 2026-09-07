@@ -1,0 +1,55 @@
+name: Runtime tests
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: 'Run the regression group relevant to the change'
+        type: choice
+        required: true
+        default: storage
+        options: [storage, hid, startup]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: windows-2022
+    timeout-minutes: 180
+    env:
+      TEST_SUITE: ${{ inputs.suite }}
+      LO_BUILD_JOBS: '2'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Retrieve private build input
+        uses: actions/checkout@v4
+        with:
+          repository: freefrank/LostOdysseyRecomp-build-inputs
+          ref: 0f119ca8d91c94cf09fd2ecd8268229d8b1eeb97
+          path: out/build-input
+          ssh-key: ${{ secrets.LO_BUILD_INPUT_KEY }}
+          persist-credentials: false
+      - name: Verify private build input
+        env:
+          LO_BUILD_XEX_PATH: out/build-input/default.xex
+        run: python tools/release/fetch_build_input.py
+      - name: Generate game code
+        shell: cmd
+        run: |
+          call tools\build_tools.bat || exit /b 1
+          out\build\tools\xexdump.exe LostOdysseyRecompLib\private\disc1\default.xex LostOdysseyRecompLib\private\image_disc1.bin || exit /b 1
+          out\build\tools\XenonRecomp\XenonRecomp\XenonRecomp.exe LostOdysseyRecompLib\config\LostOdysseyRecomp.toml tools\XenonRecomp\XenonUtils\ppc_context.h || exit /b 1
+      - name: Build runtime and selected test
+        shell: cmd
+        run: |
+          call tools\build_release.bat || exit /b 1
+          call tools\setup_windows.bat || exit /b 1
+          if "%TEST_SUITE%"=="storage" cmake --build out/build/release --target LoStorageTest --parallel 2 || exit /b 1
+          if "%TEST_SUITE%"=="hid" cmake --build out/build/release --target LoHidTest --parallel 2 || exit /b 1
+      - name: Run selected runtime suite
+        shell: cmd
+        run: call tools\test.bat %TEST_SUITE% --build-dir out/build/release

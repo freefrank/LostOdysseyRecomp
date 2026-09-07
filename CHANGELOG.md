@@ -6,9 +6,16 @@ One record of completed changes, with unpublished work separated from verified r
 
 ## Unreleased / 未发布
 
+### Development workflow after the v0.3.0 tag / v0.3.0 标签之后的开发流程
+
+- Separate selected test suites and path-filtered CI from release packaging; provide one local test entry point without implicit full builds. / 将按需测试套件与按路径触发的CI从发布打包拆出，统一本地测试入口，不隐式全量构建。
+- Keep checks proportionate and clean synthetic temporary inputs; default builds omit test targets. / 按改动选择相称检查并清理合成临时输入，默认构建不包含测试目标。
+
+These workflow changes are outside the existing v0.3.0 tag. / 这些流程改动不属于现有v0.3.0标签内容。
+
 ### v0.3.0 — Preparing / 待发布
 
-Release authorized; commit, CI and package publication are pending. / 已获发布授权，发布提交、CI和正式包发布待完成。
+The v0.3.0 tag at `fba7ae4` is on both remotes; package build/publication remain pending. A separate release workflow will build that unchanged tag. / v0.3.0标签 `fba7ae4` 已双推，正式包构建／发布仍待完成；独立发布流程将构建该未改动标签。
 
 - Discover shaders inside CPX resources and the loaded XEX, and derive bounded vertex-fetch/output-link variants before gameplay. / 游戏开始前扫描CPX资源与已加载XEX中的shader，并推导有限顶点提取／输出链接变体。
 - Persist previously used pipeline recipes and prepare them in parallel on later launches, with validated cache files and runtime fallback. / 持久化实际使用过的管线记录，在后续启动并行预创建，校验缓存并保留运行时回退。

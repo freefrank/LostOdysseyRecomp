@@ -200,7 +200,7 @@ int main(int argc, char** argv)
         Check(!cache::Write(path / "child.bin", keys, shaderVersion, recipeVersion).ok && Read(path) == original,
             "invalid parent preserves destination");
         for (const auto& entry : fs::directory_iterator(root))
-            Check(entry.path().filename().string().find(".tmp-") == std::string::npos, "temporary files cleaned");
+            Check(entry.path().filename().u8string().find(u8".tmp-") == std::u8string::npos, "temporary files cleaned");
 
         const fs::path maxPath = root / "bounded.bin";
         std::vector<cache::Key> maxKeys(cache::kMaxRecords, key);

@@ -1,0 +1,45 @@
+name: Shaders tests
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'LostOdysseyRecomp/gpu/shader/cpx_decode.h'
+      - 'LostOdysseyRecomp/gpu/shader/resource*.h'
+      - 'tools/tests/shader_resource*_test.cpp'
+      - 'tools/tests/cpx_decode_test.cpp'
+      - 'tools/test_shader*.bat'
+      - 'tools/test.bat'
+      - 'tools/tests/run.py'
+      - '.github/workflows/test-shaders.yml'
+      - 'tools/setup_windows.bat'
+  pull_request:
+    paths:
+      - 'LostOdysseyRecomp/gpu/shader/cpx_decode.h'
+      - 'LostOdysseyRecomp/gpu/shader/resource*.h'
+      - 'tools/tests/shader_resource*_test.cpp'
+      - 'tools/tests/cpx_decode_test.cpp'
+      - 'tools/test_shader*.bat'
+      - 'tools/test.bat'
+      - 'tools/tests/run.py'
+      - '.github/workflows/test-shaders.yml'
+      - 'tools/setup_windows.bat'
+permissions:
+  contents: read
+concurrency:
+  group: tests-shaders-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run shaders fixtures
+        shell: cmd
+        run: call tools\test.bat shaders

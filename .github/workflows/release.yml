@@ -2,8 +2,17 @@ name: Windows Release
 
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Existing version tag to package; empty builds the selected ref'
+        type: string
+        required: false
+
   push:
     tags: ['v*']
+
+env:
+  RELEASE_TAG: ${{ inputs.release_tag || (startsWith(github.ref, 'refs/tags/v') && github.ref_name) || '' }}
 
 permissions:
   contents: read
@@ -15,21 +24,20 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Validate requested tag
+        if: env.RELEASE_TAG != ''
+        run: |
+          if ($env:RELEASE_TAG -notmatch '^v[0-9][0-9A-Za-z.+-]*$') { throw 'Expected a version tag starting with v.' }
       - uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
           submodules: recursive
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Test importer and install packaging tools
-        run: |
-          python -m unittest discover -s tools/tests -p test_import_game.py -v
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          python -m pip install -r tools/release/requirements.txt
-      - name: Test shader discovery and pipeline cache
-        shell: cmd
-        run: call tools\test_shader_preparation.bat
+      - name: Install packaging tools
+        run: python -m pip install -r tools/release/requirements.txt
       - name: Retrieve private build input
         uses: actions/checkout@v4
         with:
@@ -53,34 +61,10 @@ jobs:
         env:
           LO_BUILD_JOBS: '2'
         run: call tools\build_release.bat
-      - name: Test installed disc selection
-        shell: cmd
-        run: |
-          call tools\setup_windows.bat || exit /b 1
-          cmake --build out/build/release --target LoStorageTest --parallel 2 || exit /b 1
-          python tools/tests/disc_set_test.py out/build/release/LostOdysseyRecomp/LoStorageTest.exe || exit /b 1
-      - name: Test controller and keyboard input
-        shell: cmd
-        run: |
-          call tools\setup_windows.bat || exit /b 1
-          cmake --build out/build/release --target LoHidTest --parallel 2 || exit /b 1
-          out\build\release\LostOdysseyRecomp\LoHidTest.exe || exit /b 1
-      - name: Test Unicode startup and save paths
-        run: |
-          python tools/tests/startup_path_test.py out/build/release/LostOdysseyRecomp/LostOdysseyRecomp.exe
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          foreach ($variant in @('ascii', 'unicode')) {
-            foreach ($mode in @('write', 'read', 'overwrite', 'read-overwritten')) {
-              $testArgs = @($mode, "out/path-regression/$variant")
-              if ($variant -eq 'unicode') { $testArgs += 'unicode' }
-              & out/build/release/LostOdysseyRecomp/LoStorageTest.exe @testArgs
-              if ($LASTEXITCODE) { exit $LASTEXITCODE }
-            }
-          }
       - name: Package runtime and importer
         run: |
-          if ($env:GITHUB_REF -like 'refs/tags/v*') {
-            python tools/package_release.py --version $env:GITHUB_REF_NAME
+          if ($env:RELEASE_TAG) {
+            python tools/package_release.py --version $env:RELEASE_TAG
           } else {
             python tools/package_release.py
           }
@@ -92,14 +76,14 @@ jobs:
             out/releases/LostOdysseyRecomp-*.sha256
           if-no-files-found: error
       - name: Create draft release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: env.RELEASE_TAG != ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $assets = Get-ChildItem out/releases/LostOdysseyRecomp-*.zip,out/releases/LostOdysseyRecomp-*.sha256 | ForEach-Object FullName
-          $existing = gh release view $env:GITHUB_REF_NAME --json isDraft 2>$null
+          $existing = gh release view $env:RELEASE_TAG --json isDraft 2>$null
           if ($LASTEXITCODE -eq 0) {
             Write-Host 'Release already exists; preserving its reviewed assets.'
             exit 0
           }
-          gh release create $env:GITHUB_REF_NAME --verify-tag --draft --generate-notes @assets
+          gh release create $env:RELEASE_TAG --verify-tag --draft --generate-notes @assets
