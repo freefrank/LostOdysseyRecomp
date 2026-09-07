@@ -1,10 +1,18 @@
 # Project status
 
-Reviewed **2026-09-06** against the v0.2.1 release, recorded tests and subsequent user feedback. This page describes current results; dated investigation notes retain the history of individual experiments.
+Reviewed **2026-09-06** against the v0.2.2 release, recorded tests and subsequent user feedback. This page describes current results; dated investigation notes retain the history of individual experiments.
 
 ## Published release
 
-[v0.2.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.2.1) is the latest full release (`draft=false`, `prerelease=false`), built from `906d7c039f7e709c57af2c5278a43e259bfba8e5`; both remotes have the tag. [Hosted CI 34053765472](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34053765472) passed every step, including `LoHidTest`.
+[v0.2.2](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.2.2) is the latest full release (`draft=false`, `prerelease=false`), published on **2026-09-07 at 03:11:10 UTC** (2026-09-06 local), from `f03efe370d444db1a8a9c1213c240da697f58504`. The tag is on both remotes. [Hosted CI 34077788392](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34077788392) passed every step.
+
+The official ZIP is 38,205,388 bytes, SHA256 `e91af2f49c03da48714731b07912767614d676be9d8887192647b217f2d29789`. CRC and all 44 manifest hashes passed; no private game data was present. The packaged installer self-test exited 0, and all eight startup-path cases passed against the official EXE. A Chinese-working-directory isolated RTX 5080 run remained alive for 49.54 seconds; swap 1200 visually showed Map 12. Two known shader-preparation failures remained with no new error/fatal records. The harness cleaned up its own process afterward; all 13 original save/profile hashes remained unchanged. Local evidence: `out/release-v0.2.2/{published.json,package-validation.json,smoke-result.json,ci.log,smoke-存档/scene.png}` in the original workspace. See [v0.2.2 notes](notes/release-0.2.2.md).
+
+This release includes the accepted AMD resolve-initialization repair and Unicode Windows startup/save paths. The complete Issue #4 gameplay crash remains unreproduced; path/storage and smoke checks do not establish that crash is resolved.
+
+## Previous release: v0.2.1
+
+[v0.2.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.2.1) was the preceding full release (`draft=false`, `prerelease=false`), built from `906d7c039f7e709c57af2c5278a43e259bfba8e5`; both remotes have the tag. [Hosted CI 34053765472](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34053765472) passed every step, including `LoHidTest`.
 
 The official ZIP is 38,203,314 bytes, SHA256 `cd583a6a28b47a1b2e7e31984052cd4eb6c953f5df333198f41540114eb4afb3`, matching the public API digest. All 44 manifest hashes passed and the packaged installer self-test exited 0 (`out/release-v0.2.1/package-validation.json`). An isolated cold-cache launch ran for 54 seconds with a visually confirmed German main menu. Its frame-400 capture ZIP contained 60 entries in 12,307,207 bytes; CRC and each entry SHA256 matched the raw files. ZIP completion at 43.798 seconds was followed by about 30 fps at 48.758–54.757 seconds. Evidence: `out/release-v0.2.1/smoke/runtime.log` and its captures. The test process exited, the main executable remained at `135DCA79`, and user saves were preserved.
 
@@ -18,7 +26,7 @@ The preceding [v0.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag
 
 **Validation remains limited to opening areas, selected scenes and controlled disc-manager requests. Chapter-boundary story transitions and a complete playthrough remain unverified.**
 
-[Release notes](RELEASE-v0.2.md) · [Installation](INSTALLING.md) · [Build and packaging evidence](notes/release-packaging.md)
+[Release notes](notes/release-0.2.2.md) · [Installation](INSTALLING.md) · [Build and packaging evidence](notes/release-packaging.md)
 
 ## v0.2 implementation and validation
 
@@ -54,14 +62,14 @@ See [settings](notes/settings-menu.md), [shader preparation](notes/shader-prepar
 
 ## Repairs and user feedback
 
-**Fix verified and user accepted — 2026-09-06:** Full initialization of newly allocated placed resolve render targets fixes the tested AMD black title/background and depth-of-field path; framebuffer retirement now removes cached views safely. Technical review, AMD GPU regression/negative control, layout tests, title/opening-battle checks, and final-build copied-save/random-battle regression passed. NVIDIA RTX 5080 follow-up passed GPU/layout tests and title/settings/Map 12 comparisons without new darkening. The user then reported no glitches in the manual NVIDIA run; log review found no error/fatal or device-removed records and no new merge blocker, while retaining the documented shader warnings. Commit **`43ce0e53`** is merged into local `main` without conflicts. It remains **unpublished**, is not included in v0.2.1, and has not been pushed or released. NVIDIA battle and complete-playthrough regression remain additional coverage. See [resolve initialization evidence](notes/amd-resolve-initialization.md).
+**Fix verified and user accepted — 2026-09-06:** Full initialization of newly allocated placed resolve render targets fixes the tested AMD black title/background and depth-of-field path; framebuffer retirement now removes cached views safely. Technical review, AMD GPU regression/negative control, layout tests, title/opening-battle checks, and final-build copied-save/random-battle regression passed. NVIDIA RTX 5080 follow-up passed GPU/layout tests and title/settings/Map 12 comparisons without new darkening. The user then reported no glitches in the manual NVIDIA run; log review found no error/fatal or device-removed records and no new merge blocker, while retaining the documented shader warnings. Commit **`43ce0e53`** was merged and is included in published v0.2.2; it was not included in v0.2.1. NVIDIA battle and complete-playthrough regression remain additional coverage. See [resolve initialization evidence](notes/amd-resolve-initialization.md).
 
 | Report | Current result | Remaining verification |
 |---|---|---|
 | Startup driver crash during depth clear | Batched rectangle clearing replaced the failing full clear path; targeted tests and startup runs passed. | Broader driver/hardware coverage. [Evidence](notes/startup-depth-clear-crash.md). |
 | Ground character shadows disappearing after movement | Stale guest pixel shaders are no longer bound for mode-5 stencil-volume draws. Camp movement and GPU stencil tests passed; the user confirms ground projections are basically fixed. | Cross-map and encounter regression; not a claim about all character-surface shadows. [Evidence](notes/shadow-texture-lod.md). |
 | Map 12 poster black patches | Polygon-offset conversion corrected. Same-binary 300-frame A/B: legacy path had patches in 169 frames; corrected path had none. Shallow-depth occlusion test passed. | Broader maps and near-plane behavior. This approximates float24 behavior rather than fully emulating it. [Evidence](notes/map12-poster-depth.md). |
-| Map 13 shadows flickering on characters | Latest user feedback reports that the flicker appeared to disappear and the result was satisfactory; further investigation was deferred in favor of the poster issue. | Treat as improved / awaiting controlled regression, not as an actively confirmed failure or a proven universal fix. A shared cause with the poster issue is unproven. |
+| Map 13 body/environment-shadow flicker | Later user feedback still reports alternating light/dark shadows; this remains open. | Find a controlled bright/dark pair and the responsible draw/state. The accepted ground-projection repair is separate; a shared cause with the poster issue is unproven. |
 | Ring outer ring missing | User confirmed normal behavior with a physical controller. Hold RT after confirming an attack, then release when the rings overlap. No additional rendering fix was required for the final report. | Other battle scenarios are not exhaustively tested. [Evidence](notes/battle-ring-resource.md). |
 | Accelerated / unintelligible dialogue | **Resolved and user-confirmed.** XMA packet handling preserves new frames in continuation packets without changing sample rate or volume. The tested vehicle dialogue recovered from 2,129 to 4,062 frames; timing slope against the original changed from 0.547 to 1.000. User confirmed normal playback. | The reported voice defect is closed. Other scenes and loop subframe boundaries are routine regression coverage. 34 multichannel buffers / 4,264 frames also decoded without errors. [Evidence](notes/audio-output.md). |
 | Camp deadlock and window unresponsiveness | Big-endian critical-section deadlock repair and window-message-pump changes are included. Selected routes and focused tests passed. | Separate intermittent GPU query/wait pointer corruption remains unresolved; successful routes do not establish complete stability. [Critical sections](notes/critical-section-endian.md) · [GPU waits](notes/third-map-hang.md). |
@@ -78,7 +86,7 @@ Older executable hashes in investigation notes identify test artifacts, not the 
 
 The reported voice problem is resolved, as reconfirmed by the user on 2026-09-06. The following are coverage tasks, not evidence that the voice defect remains open.
 
-- Map 13 character-surface shadows need controlled regression after positive user feedback; this is not a reopened defect.
+- Map 13 body/environment-shadow flicker remains open after later user feedback; accepted ground projections remain routine regression coverage.
 - Additional audio scenes, encounters, cutscenes, A Thousand Years of Dreams and world-map progression require regression testing.
 - Chapter-boundary saves/reloads and multilingual text/voice playback across both editions need coverage beyond the menu tests.
 - WMV playback, chapter-boundary progression and a complete playthrough are not validated; controlled installed-disc selection is recorded separately above.

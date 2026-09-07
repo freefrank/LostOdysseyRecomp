@@ -2,11 +2,15 @@
 
 [简体中文](ROADMAP.zh-CN.md) · [Current status](STATUS.md)
 
-Updated against v0.2.1 and user acceptance on **2026-09-06**. `[x]` means the stated scope has evidence, not that the entire game is complete. Dated notes retain earlier experiment states; [STATUS.md](STATUS.md) is the current release and validation ledger.
+Updated against v0.2.2 and user acceptance on **2026-09-06**. `[x]` means the stated scope has evidence, not that the entire game is complete. Dated notes retain earlier experiment states; [STATUS.md](STATUS.md) is the current release and validation ledger.
 
 Legend: `[ ]` planned / outstanding · `[~]` in progress · `[x]` validated within the stated scope.
 
-## Latest milestone: v0.2.1
+## Latest milestone: v0.2.2
+
+[v0.2.2 is published](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.2.2), including the accepted AMD resolve fix and Unicode startup/save paths. CI, official-package checks, eight startup-path cases and a Chinese-working-directory Map 12 smoke run passed. The complete Issue #4 gameplay crash remains unreproduced; see [release notes](notes/release-0.2.2.md).
+
+## Previous milestone: v0.2.1
 
 [v0.2.1 is published](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.2.1), adding next-frame F1 render capture with automatic ZIP and combined SDL controller/keyboard input with E/R triggers. Hosted CI, including LoHidTest, and official-package hash, installer and isolated rendering/capture checks passed. Physical controller and gameplay switching coverage remains outstanding. This is not an AMD rendering fix. See [capture](notes/render-state-capture.md) and [input](notes/controller-input.md).
 
@@ -20,10 +24,19 @@ v0.1 remains the historical first Windows release with the importer, first-launc
 
 ## Near-term priorities
 
-1. Diagnose intermittent GPU query/wait failures and long-session stability.
-2. Fix fire-hit checker effects and black crate-destruction effects; resolve the two failing resource shaders.
-3. Expand chapter-boundary, save/reload, encounter and multilingual regression, including both editions. Automatic path selection is implemented; actual story transitions still need coverage.
-4. Complete fullscreen/exclusive, mouse and mixed-DPI acceptance. Map 13 shadow improvement needs controlled regression, not a reopened defect report.
+1. [~] Investigate Kaim's body lighting alternating between light and dark in the first battle. A USA-edition player independently reported it; the first local capture session is complete, without a confirmed new flicker cause or fix.
+2. [ ] Diagnose attack-animation stutter using frame timings, shader-compilation logs and cold/warm-cache comparisons. The user's reply attributed it to shader compilation, but sampled evidence has not established that cause.
+3. [~] Investigate blurry or garbled text against original-console and Xenia references; work in progress. This is separate from the paused text-language complement patch.
+4. [ ] Regress shadow flicker during the fire-breath phase. The same player reported that it appeared to disappear; this is one observation, not a comprehensive fix claim. Fire-hit checker effects remain a separate open issue.
+5. [ ] Assess DLC import as a later request; no delivery date is committed.
+
+Existing work remains queued: intermittent GPU query/wait failures and long-session stability; fire-hit checker/crate effects and the two failing resource shaders; chapter-boundary, save/reload, encounter and multilingual regression for both editions; fullscreen/exclusive, mouse and mixed-DPI acceptance. Map 13 body/environment-shadow flicker remains open; the accepted ground-shadow fix remains regression coverage.
+
+## v0.2.2 delivery — 2026-09-06 local
+
+- [x] AMD resolve fix `43ce0e53` accepted by the user and merged as `ab0d038`; NVIDIA RTX 5080 targeted checks and manual acceptance passed.
+- [x] Unicode startup/save-path fix `7dbb668` merged as `04dd7d0`; eight startup-path cases and eight storage runs passed. The complete Issue #4 gameplay crash remains unreproduced; path tests do not establish in-game acceptance.
+- [x] `v0.2.2` was published on 2026-09-07 at 03:11:10 UTC; tag `f03efe370d444db1a8a9c1213c240da697f58504` is on both remotes and CI `34077788392` passed. Official-package CRC/44 manifest hashes, installer self-test, eight startup-path cases and a Chinese-working-directory Map 12 smoke run passed.
 
 Modern graphics remain later work. **Text-language complement patch research was paused by the user on 2026-09-06**: no finished patch, no runtime code change and no inclusion in v0.2. Voice changes are outside that research scope. See [paused research](notes/text-language-patch.md).
 
@@ -75,7 +88,7 @@ Modern graphics remain later work. **Text-language complement patch research was
 
 - [x] Ground projections: corrected stale guest pixel-shader use in mode-5 stencil draws; camp movement and targeted GPU tests passed, and the user reports projections are basically fixed. More maps/encounters remain regression targets. [Shadows](notes/shadow-texture-lod.md).
 - [x] Map 12 poster black patches: polygon-offset repair passed a 300-frame A/B and shallow-depth occlusion regression. Broader near-plane/map coverage remains. [Poster evidence](notes/map12-poster-depth.md).
-- [ ] Map 13 character-surface shadow regression: the user reported improvement and was satisfied with the result. Controlled regression remains outstanding; a shared cause with the poster defect is not proven.
+- [ ] Map 13 body/environment-shadow flicker remains open after the later user report; accepted ground projections are a separate repair. A shared cause with the poster defect is not proven.
 - [ ] Fire-hit black/red checker effects; use original-console references because Xenia also glitches.
 - [x] Ring outer ring: visible and changing in tested encounters; releasing RT produced Good and 101 damage in a recorded test. The user confirmed normal controller behavior. This closes the reported path, not every battle scenario. [Ring evidence](notes/battle-ring-resource.md).
 - [ ] Black crate-destruction effects in the second map.

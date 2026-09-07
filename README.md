@@ -8,14 +8,18 @@ Windows x64 · Direct3D 12 · PowerPC static recompilation
 
 <img src="docs/images/title-screen.png" alt="Lost Odyssey title screen — Press START" width="960">
 
-### [Download v0.2.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.2.1) · [Installation guide](docs/INSTALLING.md) · [Report an issue](https://github.com/freefrank/LostOdysseyRecomp/issues)
+### [Download v0.2.2](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.2.2) · [Installation guide](docs/INSTALLING.md) · [Report an issue](https://github.com/freefrank/LostOdysseyRecomp/issues)
 
 [简体中文](README.zh-CN.md) · [Project status](docs/STATUS.md) · [Roadmap](docs/ROADMAP.md) · [Build from source](docs/BUILDING.md)
 
 </div>
 
 > [!IMPORTANT]
-> **v0.2.1 is an early testing release.** Opening areas and selected scenes have been tested; a complete playthrough has not. Rendering and stability issues remain. You must supply your own supported game files.
+> **v0.2.2 is an early testing release.** Opening areas and selected scenes have been tested; a complete playthrough has not. Rendering and stability issues remain. You must supply your own supported game files.
+
+## Fixed in v0.2.2
+
+Fixes tested AMD black/dark scenes and depth-of-field output, plus Windows Unicode installation, startup-argument and save paths. NVIDIA RTX 5080 targeted regression and user visual acceptance passed; the official package also passed a Map 12 launch from a Chinese working directory. The complete save-point crash in Issue #4 remains unreproduced and is not claimed resolved. See [v0.2.2 release notes](docs/notes/release-0.2.2.md) and the [changelog](CHANGELOG.md).
 
 ## New in v0.2.1
 

@@ -4,6 +4,9 @@
 
 | Start here | Purpose |
 |---|---|
+| [Changelog / 更新日志](../CHANGELOG.md) | Single history of completed changes, separating unpublished work from verified releases |
+| [v0.2.2 release notes](notes/release-0.2.2.md) | Published AMD rendering and Unicode startup/save-path fixes |
+| [Unicode paths](notes/save-path-unicode.md) | Startup/storage validation and Issue #4 limits |
 | [v0.2 release notes](RELEASE-v0.2.md) | Published edition support, languages and automatic disc selection |
 | [Supported editions](notes/europe-support.md) | USA, Europe and Europe, Asia evidence; exact XEX validation |
 | [Automatic disc selection](notes/disc-selection.md) | Implemented manager flow and remaining story-transition coverage |

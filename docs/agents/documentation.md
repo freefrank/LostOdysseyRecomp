@@ -16,6 +16,7 @@ When evidence is missing, report the precise gap to the parent. Do not invent te
 
 ## Document ownership
 
+- Root `CHANGELOG.md`: maintain the single bilingual change history. Synchronize it after accepted changes and before/after requested releases, separating completed Unreleased changes from verified published versions. Verify actual release records before recording a version as published; do not turn roadmap items, experiments or pending CI into release contents. Preserve historical scope and known limitations. This is part of the on-demand documentation workflow, not a scheduled service.
 - `docs/STATUS.md`: current implementation, fixes, open defects, regression coverage and release inclusion. Use English throughout.
 - `docs/ROADMAP.md`: English priorities and completion status.
 - `docs/ROADMAP.zh-CN.md`: matching Chinese roadmap with the same item order and status markers.

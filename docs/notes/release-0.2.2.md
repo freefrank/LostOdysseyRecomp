@@ -1,6 +1,8 @@
 # v0.2.2 release notes / 发布说明
 
-Status: release preparation; not yet published. / 状态：发布准备中，尚未发布。
+Published as the latest full release on **2026-09-07 at 03:11:10 UTC** (2026-09-06 local), not a draft or prerelease. / 已于 **UTC 2026-09-07 03:11:10**（本地 2026-09-06）正式发布，为最新版本，非草稿／预发布。
+
+[Download / 下载](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.2.2) · [Hosted CI / 托管 CI](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34077788392)
 
 ## English
 
@@ -25,3 +27,15 @@ See [rendering implementation and validation](amd-resolve-initialization.md) and
 两个已知着色器预编译失败不在本次修复范围内。Issue #4 报告的首次存档后完整游戏崩溃尚未复现，路径／存储测试不代表该崩溃已经解决，也不能替代游戏内验收。此次发布不代表完整通关兼容性，也不覆盖所有场景和驱动。
 
 详见[渲染实现与验证记录](amd-resolve-initialization.md)及[Unicode 路径验证](save-path-unicode.md)。
+
+## Package verification / 正式包验证
+
+Tag commit: `f03efe370d444db1a8a9c1213c240da697f58504`. ZIP: **38,205,388 bytes**, SHA256 `e91af2f49c03da48714731b07912767614d676be9d8887192647b217f2d29789`.
+
+Hosted CI passed every step, including Unicode startup and storage regression. The downloaded package passed CRC and all 44 manifest hashes, contained no private game data, and its `InstallGame --self-test` exited 0. All eight startup-path cases also passed against the official EXE. An isolated RTX 5080 run from a Chinese working directory stayed alive for 49.54 seconds; the swap-1200 screenshot was visually confirmed as Map 12. The two existing shader-preparation failures remained, without new error/fatal records. The test cleaned up its own process afterward; cleanup exit code 1 was not a crash.
+
+托管 CI 全步骤通过，包含 Unicode 启动与存储回归。下载包通过 CRC 及全部 44 项 manifest 哈希检查，不含私有游戏数据；包内安装器自测返回 0，正式 EXE 的 8 项启动路径用例全通过。中文工作目录下 RTX 5080 隔离运行 49.54 秒，swap 1200 截图目视确认为 Map 12。两个既有着色器预编译失败仍保留，未见新增 error／fatal；随后测试清理自身进程，清理退出码 1 不代表崩溃。
+
+Local evidence in the original workspace / 原工作区本地证据：`out/release-v0.2.2/{published.json,package-validation.json,smoke-result.json,ci.log,smoke-存档/scene.png}`.
+
+The first CI attempt (`34076841551`) built successfully but its startup test could not print U+2032 through CP1252. The test-only UTF-8 stdout correction passed eight locally forced-CP1252 cases before the successful rerun; it did not change runtime behavior. / 首轮 CI 构建成功，但启动测试无法通过 CP1252 输出 U+2032；仅修测试 stdout 为 UTF-8，强制 CP1252 本地 8 项通过后重跑成功，未改变运行时行为。

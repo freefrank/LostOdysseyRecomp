@@ -2,11 +2,15 @@
 
 ## 2026-09-06 当前交接
 
-[v0.2.1 已正式发布](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.2.1)，包含 F1 渲染捕获自动 ZIP 与多手柄／键盘 E/R 输入；托管 CI、正式包验证及隔离启动／捕获均通过。参见[捕获](render-state-capture.md)与[输入](controller-input.md)。AMD resolve 初始化修复 `43ce0e53` 已通过 AMD 与 NVIDIA 定向验证，用户确认未发现 glitch；日志未见新增合并阻塞，已授权本地合入 `main`，当前合并无冲突、待完成合并提交，尚未推送或发布，也不在 v0.2.1 中。参见[专项证据](amd-resolve-initialization.md)；文本补丁仍暂停。
+[v0.2.2 已正式发布](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.2.2)，为最新正式版，包含 AMD resolve 初始化和 Unicode 启动／存档路径修复。AMD 与 NVIDIA 定向验证、NVIDIA 用户视觉验收通过；Issue #4 完整游戏崩溃尚未复现，不宣称已解决。见[发布说明](release-0.2.2.md)、[AMD 证据](amd-resolve-initialization.md)与[路径验证](save-path-unicode.md)。文本语言补丁仍暂停。
 
-用户先选择关闭本仓库 Gitea Actions，API PATCH `has_actions=false` 后 GET 已确认；随后用户启动 Windows runner 并要求重开，现已 PATCH `has_actions=true` 并 GET 确认开启。`win-t640` 心跳为 `2026-09-06T19:24:52Z`，已在线，但标签仍只有 `windows-latest`／`windows`，无法匹配 7 个旧任务要求的 `windows-2022`；标签匹配待处理，历史队列记录保留。`git ls-remote` 已确认 Gitea 的 `main` 与 `v0.2.1` 完好，代码镜像继续双推。GitHub [正式 CI 34053765472](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34053765472) 全部步骤成功，包括 LoHidTest。
+本次 v0.2.2 发布于 UTC 2026-09-07 03:11:10（本地 09-06），标签 `f03efe370d444db1a8a9c1213c240da697f58504` 已双推；[CI 34077788392](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34077788392) 全通过。正式 ZIP 38,205,388 字节，SHA256 `e91af2f49c03da48714731b07912767614d676be9d8887192647b217f2d29789`；CRC／44 项 manifest、安装器自测及正式 EXE 8 项启动路径检查通过。中文工作目录 RTX 5080 隔离运行 49.54 秒，swap 1200 目视确认为 Map 12；原有两项 shader 失败保留，无新增 error/fatal。测试已清理自身进程。原工作区证据：`out/release-v0.2.2/{published.json,package-validation.json,smoke-result.json,ci.log,smoke-存档/scene.png}`。
 
-最新公开版本为 v0.2.1，标签指向 `906d7c039f7e709c57af2c5278a43e259bfba8e5`，两远端标签均已确认。正式 ZIP 为 38,203,314 字节，SHA256 为 `cd583a6a28b47a1b2e7e31984052cd4eb6c953f5df333198f41540114eb4afb3`；44 项 manifest 哈希、安装器自测通过。冷缓存隔离运行 54 秒，德文标题菜单目视正常；frame 400 的 ZIP 共 60 项，每项 CRC／SHA256 校验通过，压缩后恢复约 30 fps。证据见 `out/release-v0.2.1/package-validation.json` 和 `out/release-v0.2.1/smoke/runtime.log`。此前 v0.2 的代码标签 `dcc9462`、发布记录提交 `b572d0a` 保留为历史。当前进度与近期 TODO 以 [STATUS](../STATUS.md) 和[中文路线图](../ROADMAP.zh-CN.md)为准；以下 2026-09-05 的构建名、PID、授权与实验安排保留作历史记录，不是新的执行指令。
+首战研究现场已结束：原工作区 `out/firstbattle-flicker-01/report.md` 记录 USA/Europe 实际首战 120 帧待机、600 帧攻击及 600 帧含 Magma Blast 的序列，另有 7 份完整 capture。未锁定新闪烁根因、未修改 runtime；捕获会扰动时序，不能归因攻击卡顿。自有进程 51728 已核对路径后停止释放 GPU，用户 review 优先级仍保留。
+
+以下为 2026-09-06 较早的 Gitea/runner 观察，非本次服务复查：用户先选择关闭本仓库 Gitea Actions，API PATCH `has_actions=false` 后 GET 已确认；随后用户启动 Windows runner 并要求重开，现已 PATCH `has_actions=true` 并 GET 确认开启。`win-t640` 心跳为 `2026-09-06T19:24:52Z`，已在线，但标签仍只有 `windows-latest`／`windows`，无法匹配 7 个旧任务要求的 `windows-2022`；标签匹配待处理，历史队列记录保留。`git ls-remote` 已确认 Gitea 的 `main` 与 `v0.2.1` 完好，代码镜像继续双推。GitHub [正式 CI 34053765472](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34053765472) 全部步骤成功，包括 LoHidTest。
+
+历史 v0.2.1 发布记录，标签指向 `906d7c039f7e709c57af2c5278a43e259bfba8e5`，两远端标签均已确认。正式 ZIP 为 38,203,314 字节，SHA256 为 `cd583a6a28b47a1b2e7e31984052cd4eb6c953f5df333198f41540114eb4afb3`；44 项 manifest 哈希、安装器自测通过。冷缓存隔离运行 54 秒，德文标题菜单目视正常；frame 400 的 ZIP 共 60 项，每项 CRC／SHA256 校验通过，压缩后恢复约 30 fps。证据见 `out/release-v0.2.1/package-validation.json` 和 `out/release-v0.2.1/smoke/runtime.log`。此前 v0.2 的代码标签 `dcc9462`、发布记录提交 `b572d0a` 保留为历史。当前进度与近期 TODO 以 [STATUS](../STATUS.md) 和[中文路线图](../ROADMAP.zh-CN.md)为准；以下 2026-09-05 的构建名、PID、授权与实验安排保留作历史记录，不是新的执行指令。
 
 v0.2 新增 USA/Europe `0.0.0.3` 兼容，保留 Europe/Asia `0.0.0.4`，对应用户确认的 [Redump #11817](https://redump.info/disc/11817) 与 [#39111](https://redump.info/disc/39111)。两版已通过自动选盘受控流程，章节交界剧情和完整通关仍待验证。
 

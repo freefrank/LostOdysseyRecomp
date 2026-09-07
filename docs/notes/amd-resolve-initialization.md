@@ -4,7 +4,7 @@ Date: **2026-09-06**
 
 ## Delivery status
 
-**User accepted on 2026-09-06; merged into local `main`; v0.2.2 release preparation.** The fix was committed as `43ce0e53` on `amd-fix`. After the NVIDIA manual check, the user reported no glitches and authorized merging if the logs showed no blocker. The log review below found none. The fix is merged into local `main` without conflicts in an independent worktree. The user has authorized the v0.2.2 commit/push/tag/publication workflow; the release is not yet published. This fix is **not included in v0.2.1**. See the [v0.2.2 release notes](release-0.2.2.md). This note updates the [historical investigation](amd-8060s-dark-render-handoff.md), without rewriting its earlier conclusions.
+**User accepted on 2026-09-06; included in published v0.2.2.** The fix was committed as `43ce0e53` on `amd-fix`. After the NVIDIA manual check, the user reported no glitches and authorized merging if the logs showed no blocker. The log review below found none. The fix is merged into local `main` without conflicts in an independent worktree. The full release was published on 2026-09-07 at 03:11:10 UTC from `f03efe370d444db1a8a9c1213c240da697f58504`; hosted CI and official-package validation passed. This fix is **not included in v0.2.1**. See the [v0.2.2 release notes](release-0.2.2.md). This note updates the [historical investigation](amd-8060s-dark-render-handoff.md), without rewriting its earlier conclusions.
 
 ## Cause and implementation
 

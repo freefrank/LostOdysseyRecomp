@@ -8,14 +8,18 @@ Windows x64 · Direct3D 12 · PowerPC 静态重编译
 
 <img src="docs/images/title-screen.png" alt="失落的奥德赛标题画面 — Press START" width="960">
 
-### [下载 v0.2.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.2.1) · [安装指南](docs/INSTALLING.md) · [反馈问题](https://github.com/freefrank/LostOdysseyRecomp/issues)
+### [下载 v0.2.2](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.2.2) · [安装指南](docs/INSTALLING.md) · [反馈问题](https://github.com/freefrank/LostOdysseyRecomp/issues)
 
 [English](README.md) · [项目状态](docs/STATUS.md) · [路线图](docs/ROADMAP.zh-CN.md) · [从源码构建](docs/BUILDING.md)
 
 </div>
 
 > [!IMPORTANT]
-> **v0.2.1 是早期测试版。** 已测试开场区域和部分场景，尚未通关。渲染和稳定性仍有问题。请自行提供受支持版本的游戏文件。
+> **v0.2.2 是早期测试版。** 已测试开场区域和部分场景，尚未通关。渲染和稳定性仍有问题。请自行提供受支持版本的游戏文件。
+
+## v0.2.2 修复
+
+修复已验证 AMD 场景中的全黑／偏黑与景深异常，以及 Windows Unicode 安装目录、启动参数和存档路径问题。NVIDIA RTX 5080 定向回归与用户视觉验收通过，正式包也已完成中文工作目录下的 Map 12 启动验证。Issue #4 的完整存档后崩溃仍未复现，不据此宣称已解决。见 [v0.2.2 发布说明](docs/notes/release-0.2.2.md)与[更新日志](CHANGELOG.md)。
 
 ## v0.2.1 新增功能
 
