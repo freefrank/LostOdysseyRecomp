@@ -54,6 +54,8 @@ See [settings](notes/settings-menu.md), [shader preparation](notes/shader-prepar
 
 ## Repairs and user feedback
 
+**Local fix verified — 2026-09-06:** Full initialization of newly allocated placed resolve render targets fixes the tested AMD black title/background and depth-of-field path; framebuffer retirement now removes cached views safely. Technical review, GPU regression/negative control, layout tests, title/opening-battle checks, and final-build copied-save/random-battle regression passed; runtime code is unchanged from that validation. The fix is on the **`amd-fix` development branch; the user requested commit on 2026-09-06**. It remains **unpublished and awaiting visual user acceptance**; no push or release is authorized, and it is not included in v0.2.1. NVIDIA and complete-playthrough coverage remain unverified. See [resolve initialization evidence](notes/amd-resolve-initialization.md).
+
 | Report | Current result | Remaining verification |
 |---|---|---|
 | Startup driver crash during depth clear | Batched rectangle clearing replaced the failing full clear path; targeted tests and startup runs passed. | Broader driver/hardware coverage. [Evidence](notes/startup-depth-clear-crash.md). |

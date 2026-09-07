@@ -885,6 +885,15 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     ScopedTimer timer{ tFlush };
                     queue->waitForCommandFence(fence.get());
                 }
+                // Initialization creates framebuffer views for resolve textures
+                // too. Release those cached views after their last GPU use and
+                // before a retired texture's pointer can be reused.
+                for (const auto& texture : retiredTextures)
+                    for (auto fb = framebuffers.begin(); fb != framebuffers.end();)
+                        if (fb->first.first == texture->texture.get() || fb->first.second == texture->texture.get())
+                            fb = framebuffers.erase(fb);
+                        else
+                            ++fb;
                 retiredTextures.clear();
                 uploadOffset = 0;
                 for (auto& used : setPoolUsed)
@@ -2925,6 +2934,15 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         DropResolved(destBase, destFormat);
                         return;
                     }
+                    // Placed render-target textures require full-subresource
+                    // initialization before a partial copy. The blur resolve
+                    // writes 432 pixels of a 448-pixel allocation; without this
+                    // clear its data can read back as zero on AMD hardware.
+                    // Initialize only on allocation, preserving later partial
+                    // resolves and their untouched destination pixels.
+                    Transition(*rs.tex, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
+                    commandList->setFramebuffer(GetFramebuffer(rs.tex.get(), nullptr));
+                    commandList->clearColor(0, RenderColor(0, 0, 0, 0));
                     static uint32_t created = 0;
                     if (created++ < 16)
                         LOG_INFO("renderer: resolved surface {:#x} {}x{} host fmt={} dest fmt={}", destBase, texW, texH, uint32_t(color.format), destFormat);
@@ -3016,7 +3034,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     static const uint32_t traceCount = getenv("LO_DRAW_TRACE_COUNT") ? strtoul(getenv("LO_DRAW_TRACE_COUNT"), nullptr, 10) : 1;
                     if (traceFrame && frame >= traceFrame && frame < traceFrame + traceCount)
                     {
-                        const bool existed = renderTargets.count(RenderTargetKey{ colorInfo & 0xFFF, (colorInfo >> 16) & 0xF, pitch, 0, false }) != 0;
+                        const bool existed = renderTargets.count(RenderTargetKey{ colorInfo & 0xFFF, ColorClassOf((colorInfo >> 16) & 0xF), pitch, 0, false }) != 0;
                         LOG_INFO("renderer: resolve f{} src sel={} base={:#x} fmt={} pitch={} h={} existed={} -> {:#x} destfmt={} rect ({},{}) {}x{} destPitch={} destHeight={} clear={:#x}",
                             frame, srcSelect, colorInfo & 0xFFF, (colorInfo >> 16) & 0xF, pitch, rtHeight, existed, destBase, destFormat, x0, y0, copyWidth, copyHeight, destPitch, destHeight, copyControl & 0x300);
                     }
