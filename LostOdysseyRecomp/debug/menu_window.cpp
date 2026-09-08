@@ -5,6 +5,7 @@
 #include "save_anywhere.h"
 #include "translations.h"
 #include <settings/config.h>
+#include <settings/desktop_ui.h>
 #include <os/logger.h>
 #include <gpu/renderer.h>
 #include <cmath>
@@ -16,6 +17,7 @@
 namespace
 {
     HWND menu = nullptr;
+    HFONT uiFont = nullptr, sectionFont = nullptr;
     HWND languageList = nullptr, languageStatus = nullptr;
     bool chinese = false;
     struct LocalizedControl { HWND window; std::wstring key; };
@@ -43,6 +45,10 @@ namespace
     {
         RECT client{};
         GetClientRect(window, &client);
+        // SetScrollInfo does not consistently reset a retained position when
+        // the resized client becomes larger than the virtual surface.
+        scrollX = std::clamp(scrollX, 0, std::max(0, contentWidth - int(client.right)));
+        scrollY = std::clamp(scrollY, 0, std::max(0, contentHeight - int(client.bottom)));
         // Keep both bars present so adding one cannot change the other axis's range.
         SCROLLINFO horizontal{sizeof(SCROLLINFO), SIF_RANGE | SIF_PAGE | SIF_POS | SIF_DISABLENOSCROLL,
             0, contentWidth - 1, UINT(client.right), scrollX};
@@ -122,7 +128,17 @@ namespace
 
     LRESULT CALLBACK MenuProc(HWND window, UINT message, WPARAM wparam, LPARAM lparam)
     {
+        constexpr WPARAM GamepadA = 0xC3, GamepadB = 0xC4, GamepadUp = 0xCB, GamepadDown = 0xCC;
         if (message == WM_SIZE) { Layout(window); return 0; }
+        if (message == WM_DPICHANGED)
+        {
+            const auto *suggested = reinterpret_cast<RECT *>(lparam);
+            SetWindowPos(window, nullptr, suggested->left, suggested->top,
+                         suggested->right - suggested->left, suggested->bottom - suggested->top,
+                         SWP_NOZORDER | SWP_NOACTIVATE);
+            Layout(window);
+            return 0;
+        }
         if (message == WM_VSCROLL || message == WM_HSCROLL)
         {
             const int bar = message == WM_VSCROLL ? SB_VERT : SB_HORZ;
@@ -211,7 +227,38 @@ namespace
             }
             return 0;
         }
-        if (message == WM_CLOSE || (message == WM_KEYDOWN && wparam == VK_F1))
+        if (message == WM_DRAWITEM)
+        {
+            settings::desktop_ui::DrawButton(*reinterpret_cast<DRAWITEMSTRUCT *>(lparam),
+                                             reinterpret_cast<DRAWITEMSTRUCT *>(lparam)->CtlID == 103);
+            return TRUE;
+        }
+        if (message == WM_CTLCOLORSTATIC || message == WM_CTLCOLORBTN)
+            return reinterpret_cast<LRESULT>(settings::desktop_ui::ColorControl(reinterpret_cast<HDC>(wparam)));
+        if (message == WM_CTLCOLOREDIT || message == WM_CTLCOLORLISTBOX)
+            return reinterpret_cast<LRESULT>(settings::desktop_ui::ColorControl(reinterpret_cast<HDC>(wparam), true));
+        if (message == WM_ERASEBKGND)
+        {
+            RECT client{};
+            GetClientRect(window, &client);
+            settings::desktop_ui::Fill(reinterpret_cast<HDC>(wparam), client, settings::desktop_ui::Surface);
+            RECT accent{0, 0, 4, client.bottom};
+            settings::desktop_ui::Fill(reinterpret_cast<HDC>(wparam), accent, settings::desktop_ui::Accent);
+            return TRUE;
+        }
+        if (message == WM_KEYDOWN && (wparam == GamepadUp || wparam == GamepadDown))
+        {
+            SendMessageW(window, WM_NEXTDLGCTL, wparam == GamepadUp, FALSE);
+            RevealFocus();
+            return 0;
+        }
+        if (message == WM_KEYDOWN && wparam == GamepadA)
+        {
+            if (HWND focus = GetFocus()) SendMessageW(focus, BM_CLICK, 0, 0);
+            return 0;
+        }
+        if (message == WM_CLOSE || (message == WM_KEYDOWN &&
+            (wparam == VK_F1 || wparam == VK_ESCAPE || wparam == GamepadB)))
         {
             ShowWindow(window, SW_HIDE);
             return 0;
@@ -224,9 +271,12 @@ namespace
     {
         const DWORD tabStop = (std::wcscmp(type, L"STATIC") == 0 || (style & 0xf) == BS_GROUPBOX) ? 0 : WS_TABSTOP;
         y += 190; // Capture action/status and language selector precede the original layout.
+        const bool pushButton = std::wcscmp(type, L"BUTTON") == 0 && (style & 0xf) == BS_PUSHBUTTON;
+        if (pushButton) style |= BS_OWNERDRAW;
         HWND control = CreateWindowW(type, Tr(text), WS_CHILD | WS_VISIBLE | tabStop | style,
             x, y, width, height, menu, reinterpret_cast<HMENU>(intptr_t(id)), GetModuleHandleW(nullptr), nullptr);
-        SendMessageW(control, WM_SETFONT, reinterpret_cast<WPARAM>(GetStockObject(DEFAULT_GUI_FONT)), TRUE);
+        const bool section = std::wcscmp(type, L"STATIC") == 0 && (y == 232 || y == 326 || y == 426 || y == 568);
+        settings::desktop_ui::StyleControl(control, section ? sectionFont : uiFont);
         layoutControls.push_back({control, x, y, width, height});
         if (*text && std::wcscmp(type, L"EDIT") != 0 && std::wcscmp(type, L"COMBOBOX") != 0)
             localizedControls.push_back({control, text});
@@ -240,18 +290,23 @@ void debug_menu::Toggle()
 #ifdef _WIN32
     if (!menu)
     {
+        SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         chinese = settings::GetConfig().debugLanguage == 1;
         WNDCLASSW wc{};
+        wc.hIcon = LoadIconW(GetModuleHandleW(nullptr), L"IDI_LOST_ODYSSEY_RECOMP");
         wc.lpfnWndProc = MenuProc;
         wc.hInstance = GetModuleHandleW(nullptr);
         wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
-        wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_BTNFACE + 1);
+        wc.hbrBackground = settings::desktop_ui::SurfaceBrush();
         wc.lpszClassName = L"LostOdysseyDebugMenu";
         RegisterClassW(&wc);
         menu = CreateWindowExW(WS_EX_APPWINDOW, wc.lpszClassName, Tr(L"Lost Odyssey — Debug Menu (F1)"),
             WS_OVERLAPPEDWINDOW | WS_VSCROLL | WS_HSCROLL | WS_CLIPCHILDREN, CW_USEDEFAULT, CW_USEDEFAULT,
-            580, 760, nullptr, nullptr, wc.hInstance, nullptr);
+            660, 780, nullptr, nullptr, wc.hInstance, nullptr);
         if (!menu) { LOG_ERROR("debug menu: CreateWindow failed {}", GetLastError()); return; }
+        settings::desktop_ui::EnableDarkFrame(menu);
+        uiFont = settings::desktop_ui::Font(menu, 15);
+        sectionFont = settings::desktop_ui::Font(menu, 17, FW_SEMIBOLD);
         captureButton = Control(L"BUTTON", L"截取渲染状态 / Capture render state", BS_PUSHBUTTON, 24, -176, 490, 30, 103);
         captureStatus = Control(L"STATIC", L"截取下一完整帧；导出期间可能短暂停顿。", 0, 24, -140, 490, 80);
         Control(L"STATIC", L"Language", 0, 20, -36, 110, 24);
@@ -329,7 +384,9 @@ void debug_menu::Update()
         MSG message{};
         while (PeekMessageW(&message, menu, 0, 0, PM_REMOVE))
         {
-            if (message.message == WM_KEYDOWN && message.wParam == VK_F1)
+            // Close shortcuts also apply while a child edit/button owns focus.
+            if (message.message == WM_KEYDOWN && (message.wParam == VK_F1 ||
+                message.wParam == VK_ESCAPE || message.wParam == 0xC4 /* Gamepad B */))
             {
                 ShowWindow(menu, SW_HIDE);
                 continue;
