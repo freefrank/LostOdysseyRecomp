@@ -6,6 +6,19 @@ Updated for v0.4.1 publication on **2026-09-08**. `[x]` means the stated scope h
 
 Legend: `[ ]` planned / outstanding · `[~]` in progress · `[x]` validated within the stated scope.
 
+## v0.4.2: repairs and validation
+
+The following fixes and bounded validation are complete. Original-reporter confirmation and broader progression remain separate work.
+
+- [x] Repair the reproduced Council crash by using the guest's low 32 bits for word-switch dispatch. All 843 table contracts, 109 generated-code checks and the old-selector negative control pass. See the [Council root cause](notes/issue7-cutscene-crash.md).
+- [x] Correct nine further PPC scalar, address and branch translation defects and synchronize the tracked dependency patch. Fresh generated code passes 3,258 native checks; the frozen old generator fails 1,533 matching cases. See the [implementation and excluded scope](notes/recompiler-width-audit.md).
+- [x] Validate the exact `v0.4.1-issue7-semantics-r2` candidate through the full Council scene, restored Main Street movement, native save and independent restart/reload. The tested path uses Asia Disc 1, English, FXAA, 1280x720 and 30 FPS. Build/source audits and all 47 development-ZIP member hashes and CRCs pass; this does not establish a complete playthrough. See the [runtime and package evidence](notes/issue7-cutscene-crash.md#2026-09-07-follow-up-semantics-implementation).
+- [ ] Obtain confirmation from the original Issue #7 reporters using their saves and hardware; the local reproduction does not establish equivalence to their unrecorded exception.
+- [ ] Continue later-chapter, other-edition and hardware regression with native saves. Track naturally reached paths for the additional semantics fixes, including BLRL, without reopening the locally verified Council repair unless it recurs.
+- [x] Six battle TAA paths pass 17,287 CPU checks and bounded Map3 32-phase scene/tire regressions; background ZIP and three-log retention pass independent fixtures and an actual export run. These results belong to their respective candidates; see [validation limits](STATUS.md).
+- [ ] Complete final v0.4.2 CI build, package-identity and startup-path verification, recording the actual release artifact separately.
+- [ ] Continue the enemy-disappearance flicker investigation; the six-path repair does not resolve that report.
+
 ## Published milestone: v0.4.1
 
 1. [x] Correct verified TAA lighting/depth jitter and shadow-reconstruction coordinate mismatches. Local implementation, integrated build and selected CPU/GPU checks passed; see [validation scope](notes/shadow-texture-lod.md).

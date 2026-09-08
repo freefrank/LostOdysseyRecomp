@@ -2,6 +2,7 @@
 #include <os/logger.h>
 
 #include <cerrno>
+#include <atomic>
 #include <algorithm>
 #include <optional>
 #include <string>
@@ -11,6 +12,8 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#include <fcntl.h>
+#include <io.h>
 #else
 #include <fcntl.h>
 #include <sys/file.h>
@@ -73,6 +76,12 @@ namespace os::logger
             close(file);
 #endif
         }
+#ifdef _WIN32
+        std::atomic<HANDLE> g_emergencyFile{INVALID_HANDLE_VALUE};
+#else
+        std::atomic<int> g_emergencyFile{-1};
+#endif
+        static_assert(decltype(g_emergencyFile)::is_always_lock_free);
     }
 
     bool OpenFile(const std::filesystem::path& path)
@@ -88,15 +97,43 @@ namespace os::logger
         absolutePath = absolutePath.lexically_normal();
 
 #ifdef _WIN32
-        FILE* file = _wfopen(absolutePath.c_str(), L"ab");
+        // Both handles have append-only access: a concurrent normal log write
+        // must not overwrite a crash record via a stale seek-to-end position.
+        constexpr DWORD sharing = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
+        HANDLE normal = CreateFileW(absolutePath.c_str(), FILE_APPEND_DATA,
+            sharing, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (normal == INVALID_HANDLE_VALUE)
+            return false;
+        const int fd = _open_osfhandle(reinterpret_cast<intptr_t>(normal), _O_WRONLY | _O_APPEND | _O_BINARY);
+        if (fd == -1)
+        {
+            CloseHandle(normal);
+            return false;
+        }
+        FILE* file = _fdopen(fd, "ab");
+        if (!file)
+        {
+            _close(fd);
+            return false;
+        }
+        HANDLE emergency = CreateFileW(absolutePath.c_str(), FILE_APPEND_DATA,
+            sharing, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (emergency == INVALID_HANDLE_VALUE)
+        {
+            fclose(file);
+            return false;
+        }
 #else
         FILE* file = fopen(absolutePath.c_str(), "ab");
-#endif
         if (!file)
             return false;
-
-#ifndef _WIN32
         if (flock(fileno(file), LOCK_SH | LOCK_NB) != 0)
+        {
+            fclose(file);
+            return false;
+        }
+        const int emergency = open(absolutePath.c_str(), O_WRONLY | O_APPEND | O_CLOEXEC);
+        if (emergency == -1)
         {
             fclose(file);
             return false;
@@ -104,6 +141,7 @@ namespace os::logger
 #endif
 
         g_filePath = std::move(absolutePath);
+        g_emergencyFile.store(emergency, std::memory_order_release);
         g_file = file;
         return true;
     }
@@ -155,6 +193,53 @@ namespace os::logger
         {
             // Retention is optional; a cleanup failure must not disable logging.
         }
+    }
+
+    void EmergencyWrite(const char* data, size_t size) noexcept
+    {
+        if (!data || !size)
+            return;
+#ifdef _WIN32
+        const HANDLE outputs[] = {g_emergencyFile.load(std::memory_order_acquire), GetStdHandle(STD_ERROR_HANDLE)};
+        for (unsigned index = 0; index < 2; ++index)
+        {
+            const HANDLE output = outputs[index];
+            if (!output || output == INVALID_HANDLE_VALUE)
+                continue;
+            // A synchronous write to a full redirected pipe can hang forever.
+            // Once a runtime sink exists, never let secondary pipe mirroring
+            // prevent subsequent essential records from reaching that file.
+            // Without a runtime sink, stderr remains a best-effort fallback.
+            if (index == 1 && outputs[0] != INVALID_HANDLE_VALUE && GetFileType(output) == FILE_TYPE_PIPE)
+                continue;
+            size_t offset = 0;
+            while (offset < size)
+            {
+                const DWORD count = static_cast<DWORD>((std::min)(size - offset, size_t(MAXDWORD)));
+                DWORD written = 0;
+                if (!WriteFile(output, data + offset, count, &written, nullptr) || !written)
+                    break;
+                offset += written;
+            }
+        }
+#else
+        const int outputs[] = {g_emergencyFile.load(std::memory_order_acquire), STDERR_FILENO};
+        for (int output : outputs)
+        {
+            if (output < 0)
+                continue;
+            size_t offset = 0;
+            while (offset < size)
+            {
+                const auto written = write(output, data + offset, size - offset);
+                if (written < 0 && errno == EINTR)
+                    continue;
+                if (written <= 0)
+                    break;
+                offset += static_cast<size_t>(written);
+            }
+        }
+#endif
     }
 
     std::error_code SnapshotFile(const std::filesystem::path& destination)

@@ -1,10 +1,10 @@
 # Debug Menu render-state capture
 
-Reviewed **2026-09-08**. Local background compression and log retention are recorded separately from published [v0.4.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.4.1), which captures three consecutive rendered frames in one ZIP with a shared runtime log and smaller default contents. The original single-frame capture shipped in v0.2.1. Capture is a diagnostic feature, not an AMD or TAA rendering fix or a compatibility claim.
+Reviewed **2026-09-08**. v0.4.2 includes background ZIP compression, cleanup after success and default three-log retention. The actual export and retention results below belong to the identified capture candidate; final v0.4.2 package checks are tracked in [STATUS.md](../STATUS.md). Published v0.4.1 introduced three-frame captures with a shared runtime log and smaller contents; the original single-frame capture shipped in v0.2.1. Capture remains diagnostic and does not repair rendering or establish compatibility.
 
 <a id="background-archive-dev"></a>
 
-## 2026-09-07 local development: background ZIP and three-log retention
+## 2026-09-07 candidate evidence: background ZIP and three-log retention
 
 After all three requested frames and the runtime-log snapshot are written and closed, compression now runs in a background worker. The F1 status reports **后台压缩 ZIP，可继续游戏 / Compressing ZIP in background**. Ordinary frame processing only polls for completion, so it no longer waits for ZIP compression; the capture button remains busy until archiving and cleanup finish. GPU readbacks and capture file writes still pause rendering. This change does not turn F1 into an uninterrupted performance or temporal-stability recording.
 

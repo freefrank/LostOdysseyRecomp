@@ -1,156 +1,373 @@
 #include <stdafx.h>
-#include <os/logger.h>
+#include <os/crash_handler.h>
+#include <os/log_file.h>
 #include <cpu/ppc_context.h>
 #include <kernel/memory.h>
+#include <version.h>
 
 #ifdef _WIN32
+#include <csignal>
+#include <exception>
 #include <dbghelp.h>
+#include <psapi.h>
 #pragma comment(lib, "dbghelp.lib")
 
-// Unhandled exception filter: prints the faulting address, the guest register
-// file and a symbolised host stack so crashes in recompiled code are readable
-// without a debugger attached.
-
-static const char* ExceptionName(DWORD code)
+namespace
 {
-    switch (code)
+    // Cached before game threads start. No CRT environment access during a crash.
+    char g_dumpList[1024]{};
+    volatile LONG g_crashActive = 0;
+
+    struct CrashText
     {
-    case EXCEPTION_ACCESS_VIOLATION: return "ACCESS_VIOLATION";
-    case EXCEPTION_ILLEGAL_INSTRUCTION: return "ILLEGAL_INSTRUCTION";
-    case EXCEPTION_INT_DIVIDE_BY_ZERO: return "INT_DIVIDE_BY_ZERO";
-    case EXCEPTION_STACK_OVERFLOW: return "STACK_OVERFLOW";
-    case EXCEPTION_BREAKPOINT: return "BREAKPOINT";
-    case EXCEPTION_PRIV_INSTRUCTION: return "PRIV_INSTRUCTION";
-    default: return "EXCEPTION";
+        char data[2048];
+        size_t size = 0;
+        CrashText& Text(const char* text) noexcept
+        {
+            if (text)
+                while (*text && size < sizeof(data)) data[size++] = *text++;
+            return *this;
+        }
+        CrashText& Hex(uint64_t value, unsigned width = 8) noexcept
+        {
+            const char digits[] = "0123456789ABCDEF";
+            for (unsigned i = width; i > 0; --i)
+                if (size < sizeof(data)) data[size++] = digits[(value >> ((i - 1) * 4)) & 15];
+            return *this;
+        }
+        CrashText& Decimal(unsigned value) noexcept
+        {
+            char digits[10];
+            unsigned count = 0;
+            do { digits[count++] = char('0' + value % 10); value /= 10; } while (value);
+            while (count && size < sizeof(data)) data[size++] = digits[--count];
+            return *this;
+        }
+        void Write() noexcept
+        {
+            os::logger::EmergencyWrite(data, size);
+            size = 0;
+        }
+    };
+
+    const char* ExceptionName(DWORD code) noexcept
+    {
+        switch (code)
+        {
+        case EXCEPTION_ACCESS_VIOLATION: return "ACCESS_VIOLATION";
+        case EXCEPTION_IN_PAGE_ERROR: return "IN_PAGE_ERROR";
+        case EXCEPTION_ILLEGAL_INSTRUCTION: return "ILLEGAL_INSTRUCTION";
+        case EXCEPTION_INT_DIVIDE_BY_ZERO: return "INT_DIVIDE_BY_ZERO";
+        case EXCEPTION_STACK_OVERFLOW: return "STACK_OVERFLOW";
+        case EXCEPTION_BREAKPOINT: return "BREAKPOINT";
+        case EXCEPTION_PRIV_INSTRUCTION: return "PRIV_INSTRUCTION";
+        case 0xE06D7363u: return "CPP_EXCEPTION";
+        default: return "EXCEPTION";
+        }
     }
-}
 
-static LONG WINAPI CrashFilter(EXCEPTION_POINTERS* info)
-{
-    auto* rec = info->ExceptionRecord;
-    auto* ctx = info->ContextRecord;
-
-    fprintf(stderr, "\n[crash] %s (0x%08lX) at host %p\n", ExceptionName(rec->ExceptionCode), rec->ExceptionCode, rec->ExceptionAddress);
-    if (rec->ExceptionCode == EXCEPTION_ACCESS_VIOLATION && rec->NumberParameters >= 2)
+    void EnterCrash() noexcept
     {
-        uint64_t addr = rec->ExceptionInformation[1];
-        const char* kind = rec->ExceptionInformation[0] == 0 ? "read" : rec->ExceptionInformation[0] == 1 ? "write" : "execute";
-        if (g_memory.base && addr >= (uint64_t)g_memory.base && addr < (uint64_t)g_memory.base + PPC_MEMORY_SIZE)
-            fprintf(stderr, "[crash] %s of guest address 0x%08llX\n", kind, (unsigned long long)(addr - (uint64_t)g_memory.base));
-        else
-            fprintf(stderr, "[crash] %s of host address 0x%016llX\n", kind, (unsigned long long)addr);
+        if (InterlockedCompareExchange(&g_crashActive, 1, 0) != 0)
+        {
+            constexpr char message[] = "\n[crash] secondary failure while reporting; terminating\n";
+            os::logger::EmergencyWrite(message, sizeof(message) - 1);
+            TerminateProcess(GetCurrentProcess(), EXCEPTION_NONCONTINUABLE_EXCEPTION);
+        }
     }
 
-    if (auto* ppc = GetPPCContext())
+    bool ReadLocal(const void* address, void* result, size_t size) noexcept
     {
+        SIZE_T read = 0;
+        return address && ReadProcessMemory(GetCurrentProcess(), address, result, size, &read) && read == size;
+    }
+
+    struct GuestRegisters
+    {
+        uint32_t r[32]{};
+        uint64_t lr = 0, ctr = 0;
+        bool valid = false;
+    };
+
+    GuestRegisters ReadGuestRegisters() noexcept
+    {
+        GuestRegisters result;
+        PPCContext copy;
+        if (!ReadLocal(GetPPCContext(), &copy, sizeof(copy))) return result;
         const uint32_t regs[32] = {
-            ppc->r0.u32, ppc->r1.u32, ppc->r2.u32, ppc->r3.u32, ppc->r4.u32, ppc->r5.u32, ppc->r6.u32, ppc->r7.u32,
-            ppc->r8.u32, ppc->r9.u32, ppc->r10.u32, ppc->r11.u32, ppc->r12.u32, ppc->r13.u32, ppc->r14.u32, ppc->r15.u32,
-            ppc->r16.u32, ppc->r17.u32, ppc->r18.u32, ppc->r19.u32, ppc->r20.u32, ppc->r21.u32, ppc->r22.u32, ppc->r23.u32,
-            ppc->r24.u32, ppc->r25.u32, ppc->r26.u32, ppc->r27.u32, ppc->r28.u32, ppc->r29.u32, ppc->r30.u32, ppc->r31.u32 };
-        for (int i = 0; i < 32; i += 8)
-            fprintf(stderr, "[crash] r%02d-%02d: %08X %08X %08X %08X %08X %08X %08X %08X%c", i, i + 7,
-                regs[i], regs[i + 1], regs[i + 2], regs[i + 3], regs[i + 4], regs[i + 5], regs[i + 6], regs[i + 7], 10);
-        fprintf(stderr, "[crash] guest r1=%08X r3=%08X r4=%08X r5=%08X r13=%08X lr=%08llX ctr=%08llX\n",
-            ppc->r1.u32, ppc->r3.u32, ppc->r4.u32, ppc->r5.u32, ppc->r13.u32, (unsigned long long)ppc->lr, (unsigned long long)ppc->ctr.u64);
+            copy.r0.u32, copy.r1.u32, copy.r2.u32, copy.r3.u32, copy.r4.u32, copy.r5.u32, copy.r6.u32, copy.r7.u32,
+            copy.r8.u32, copy.r9.u32, copy.r10.u32, copy.r11.u32, copy.r12.u32, copy.r13.u32, copy.r14.u32, copy.r15.u32,
+            copy.r16.u32, copy.r17.u32, copy.r18.u32, copy.r19.u32, copy.r20.u32, copy.r21.u32, copy.r22.u32, copy.r23.u32,
+            copy.r24.u32, copy.r25.u32, copy.r26.u32, copy.r27.u32, copy.r28.u32, copy.r29.u32, copy.r30.u32, copy.r31.u32};
+        for (unsigned i = 0; i < 32; ++i) result.r[i] = regs[i];
+        result.lr = copy.lr;
+        result.ctr = copy.ctr.u64;
+        result.valid = true;
+        return result;
     }
 
-    // LO_CRASH_DUMP=<guest address>: print 256 bytes of guest memory (as
-    // ASCII and UTF-16) - handy for reading the game's own fatal-error text.
-    // LO_CRASH_DUMP accepts a list: "8336D9B0,r27+0x300,r19+0xd0" (hex address
-    // or register-relative), 256 bytes each as hex words + ASCII/UTF-16.
-    std::string dumpList = getenv("LO_CRASH_DUMP") ? getenv("LO_CRASH_DUMP") : "";
-    size_t dumpPos = 0;
-    while (dumpPos < dumpList.size())
+    // Write the fault identity before guest reads, module-loader or symbol work.
+    // VirtualQuery supplies an image RVA without symbols or the loader lock.
+    void WriteEssential(const char* reason, DWORD code, const void* address,
+        const CONTEXT& host, const EXCEPTION_RECORD* rec = nullptr) noexcept
     {
-        size_t comma = dumpList.find(',', dumpPos);
-        std::string item = dumpList.substr(dumpPos, comma == std::string::npos ? std::string::npos : comma - dumpPos);
-        dumpPos = comma == std::string::npos ? dumpList.size() : comma + 1;
-        uint32_t addr = 0;
-        if (item.size() > 1 && item[0] == 'r' && GetPPCContext())
+        CrashText text;
+        text.Text("\n[crash] ").Text(reason).Text(" code=0x").Hex(code)
+            .Text(" host=0x").Hex(reinterpret_cast<uintptr_t>(address), 16)
+            .Text(" thread=").Decimal(GetCurrentThreadId()).Text(" version=").Text(lo_version::Source).Text("\n");
+        text.Text("[crash] host RIP=0x").Hex(host.Rip, 16).Text(" RSP=0x").Hex(host.Rsp, 16)
+            .Text(" RBP=0x").Hex(host.Rbp, 16).Text("\n");
+        if (rec && (code == EXCEPTION_ACCESS_VIOLATION || code == EXCEPTION_IN_PAGE_ERROR) && rec->NumberParameters >= 2)
         {
-            auto* ppc = GetPPCContext();
-            const PPCRegister* regs[32] = { &ppc->r0, &ppc->r1, &ppc->r2, &ppc->r3, &ppc->r4, &ppc->r5, &ppc->r6, &ppc->r7, &ppc->r8, &ppc->r9, &ppc->r10, &ppc->r11,
-                &ppc->r12, &ppc->r13, &ppc->r14, &ppc->r15, &ppc->r16, &ppc->r17, &ppc->r18, &ppc->r19, &ppc->r20, &ppc->r21, &ppc->r22, &ppc->r23,
-                &ppc->r24, &ppc->r25, &ppc->r26, &ppc->r27, &ppc->r28, &ppc->r29, &ppc->r30, &ppc->r31 };
-            char* end = nullptr;
-            int reg = int(strtol(item.c_str() + 1, &end, 10)) & 31;
-            addr = regs[reg]->u32 + uint32_t(end && *end ? strtol(end, nullptr, 0) : 0);
+            const auto accessed = rec->ExceptionInformation[1];
+            const auto base = reinterpret_cast<uintptr_t>(g_memory.base);
+            text.Text("[crash] access=").Text(rec->ExceptionInformation[0] == 0 ? "read" : rec->ExceptionInformation[0] == 1 ? "write" : "execute")
+                .Text(" address=0x").Hex(accessed, 16);
+            if (base && accessed >= base && accessed - base < PPC_MEMORY_SIZE)
+                text.Text(" guest=0x").Hex(accessed - base);
+            if (code == EXCEPTION_IN_PAGE_ERROR && rec->NumberParameters >= 3)
+                text.Text(" io_status=0x").Hex(rec->ExceptionInformation[2]);
+            text.Text("\n");
+        }
+        text.Write();
+        MEMORY_BASIC_INFORMATION memory{};
+        if (VirtualQuery(address, &memory, sizeof(memory)) && memory.Type == MEM_IMAGE)
+        {
+            text.Text("[crash] module_base=0x").Hex(reinterpret_cast<uintptr_t>(memory.AllocationBase), 16)
+                .Text(" module_rva=0x").Hex(reinterpret_cast<uintptr_t>(address) - reinterpret_cast<uintptr_t>(memory.AllocationBase), 16).Text("\n");
+            text.Write();
+            wchar_t path[512]{};
+            const DWORD count = K32GetMappedFileNameW(GetCurrentProcess(), memory.AllocationBase, path, DWORD(std::size(path)));
+            if (count && count < std::size(path))
+            {
+                const wchar_t* name = path;
+                for (const wchar_t* p = path; *p; ++p)
+                    if (*p == '\\' || *p == '/') name = p + 1;
+                char utf8[1536]{};
+                if (WideCharToMultiByte(CP_UTF8, 0, name, -1, utf8, int(sizeof(utf8)), nullptr, nullptr))
+                    text.Text("[crash] module_name=").Text(utf8).Text("\n");
+            }
         }
         else
-            addr = strtoul(item.c_str(), nullptr, 16);
-        // Trailing '*': follow the big-endian pointer stored at the address.
-        if (!item.empty() && item.back() == '*' && addr >= 0x1000 && addr < 0xFFFFF000u)
-        {
-            auto* pp = static_cast<const uint8_t*>(g_memory.Translate(addr));
-            uint32_t target = (uint32_t(pp[0]) << 24) | (uint32_t(pp[1]) << 16) | (uint32_t(pp[2]) << 8) | pp[3];
-            fprintf(stderr, "[crash] [%08X] -> %08X%c", addr, target, 10);
-            addr = target;
-        }
-        if (addr < 0x1000 || addr >= 0xFFFFF000u)
-            continue;
-        auto* p = static_cast<const uint8_t*>(g_memory.Translate(addr));
-        for (int row = 0; row < 256; row += 32)
-        {
-            fprintf(stderr, "[crash] %08X:", addr + row);
-            for (int i = 0; i < 32; i += 4)
-                fprintf(stderr, " %02X%02X%02X%02X", p[row + i], p[row + i + 1], p[row + i + 2], p[row + i + 3]);
-            fprintf(stderr, "%c", 10);
-        }
-        std::string ascii, wide;
-        for (int i = 0; i < 256; i++)
-            ascii += (p[i] >= 0x20 && p[i] < 0x7F) ? char(p[i]) : '.';
-        for (int i = 0; i < 256; i += 2)
-        {
-            uint16_t c = (uint16_t(p[i]) << 8) | p[i + 1];
-            wide += (c >= 0x20 && c < 0x7F) ? char(c) : '.';
-        }
-        fprintf(stderr, "[crash] guest %08X ascii: %s\n", addr, ascii.c_str());
-        fprintf(stderr, "[crash] guest %08X utf16: %s\n", addr, wide.c_str());
+            text.Text("[crash] module=unavailable\n");
+        text.Write();
     }
 
-    HANDLE process = GetCurrentProcess();
-    SymSetOptions(SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS | SYMOPT_LOAD_LINES);
-    SymInitialize(process, nullptr, TRUE);
-
-    CONTEXT c = *ctx;
-    STACKFRAME64 frame{};
-    frame.AddrPC.Offset = c.Rip; frame.AddrPC.Mode = AddrModeFlat;
-    frame.AddrFrame.Offset = c.Rbp; frame.AddrFrame.Mode = AddrModeFlat;
-    frame.AddrStack.Offset = c.Rsp; frame.AddrStack.Mode = AddrModeFlat;
-
-    char symbolBuffer[sizeof(SYMBOL_INFO) + 512]{};
-    auto* symbol = reinterpret_cast<SYMBOL_INFO*>(symbolBuffer);
-    symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
-    symbol->MaxNameLen = 511;
-
-    for (int i = 0; i < 48; i++)
+    void WriteGuestRegisters(const GuestRegisters& guest) noexcept
     {
-        if (!StackWalk64(IMAGE_FILE_MACHINE_AMD64, process, GetCurrentThread(), &frame, &c, nullptr, SymFunctionTableAccess64, SymGetModuleBase64, nullptr))
-            break;
-        if (frame.AddrPC.Offset == 0)
-            break;
-
-        DWORD64 displacement = 0;
-        const char* name = "?";
-        if (SymFromAddr(process, frame.AddrPC.Offset, &displacement, symbol))
-            name = symbol->Name;
-
-        IMAGEHLP_LINE64 line{};
-        line.SizeOfStruct = sizeof(line);
-        DWORD lineDisp = 0;
-        if (SymGetLineFromAddr64(process, frame.AddrPC.Offset, &lineDisp, &line))
-            fprintf(stderr, "[crash]   #%02d %s+0x%llx  (%s:%lu)\n", i, name, (unsigned long long)displacement, line.FileName, line.LineNumber);
+        CrashText text;
+        if (!guest.valid)
+            text.Text("[crash] guest context unavailable on this thread\n");
         else
-            fprintf(stderr, "[crash]   #%02d %s+0x%llx\n", i, name, (unsigned long long)displacement);
+        {
+            for (unsigned i = 0; i < 32; i += 8)
+            {
+                text.Text("[crash] r").Decimal(i).Text("-").Decimal(i + 7).Text(":");
+                for (unsigned j = 0; j < 8; ++j) text.Text(" ").Hex(guest.r[i + j]);
+                text.Text("\n");
+            }
+            text.Text("[crash] guest r1=").Hex(guest.r[1]).Text(" r3=").Hex(guest.r[3])
+                .Text(" r4=").Hex(guest.r[4]).Text(" r5=").Hex(guest.r[5]).Text(" r13=").Hex(guest.r[13])
+                .Text(" lr=").Hex(guest.lr, 16).Text(" ctr=").Hex(guest.ctr, 16).Text("\n");
+        }
+        text.Text("[crash] essential report complete\n").Write();
     }
-    fflush(stderr);
-    return EXCEPTION_EXECUTE_HANDLER;
+
+    bool ParseNumber(const char*& p, const char* end, unsigned base, uint32_t& value) noexcept
+    {
+        if (end - p >= 2 && p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) { base = 16; p += 2; }
+        const char* begin = p;
+        value = 0;
+        while (p != end)
+        {
+            const unsigned digit = *p >= '0' && *p <= '9' ? *p - '0' :
+                *p >= 'a' && *p <= 'f' ? *p - 'a' + 10 : *p >= 'A' && *p <= 'F' ? *p - 'A' + 10 : 99;
+            if (digit >= base) break;
+            if (value > (UINT32_MAX - digit) / base) return false;
+            value = value * base + digit;
+            ++p;
+        }
+        return p != begin;
+    }
+
+    bool ParseDump(const char* begin, const char* end, const GuestRegisters& guest,
+        uint32_t& address, bool& indirect) noexcept
+    {
+        while (begin != end && (*begin == ' ' || *begin == '\t')) ++begin;
+        while (begin != end && (end[-1] == ' ' || end[-1] == '\t')) --end;
+        indirect = begin != end && end[-1] == '*';
+        if (indirect) --end;
+        if (begin == end) return false;
+        if (*begin == 'r')
+        {
+            ++begin;
+            uint32_t reg = 0;
+            if (!guest.valid || !ParseNumber(begin, end, 10, reg) || reg > 31) return false;
+            address = guest.r[reg];
+            if (begin != end && (*begin == '+' || *begin == '-'))
+            {
+                const bool negative = *begin++ == '-';
+                uint32_t offset = 0;
+                if (!ParseNumber(begin, end, 10, offset)) return false;
+                if (negative ? offset > address : offset > UINT32_MAX - address) return false;
+                address = negative ? address - offset : address + offset;
+            }
+        }
+        else if (!ParseNumber(begin, end, 16, address)) return false;
+        return begin == end;
+    }
+
+    bool ReadGuest(uint32_t address, void* data, size_t size) noexcept
+    {
+        return g_memory.base && address >= 0x1000 && uint64_t(address) + size <= PPC_MEMORY_SIZE &&
+            ReadLocal(reinterpret_cast<const void*>(reinterpret_cast<uintptr_t>(g_memory.base) + address), data, size);
+    }
+
+    void WriteGuestDumps(const GuestRegisters& guest) noexcept
+    {
+        const char* item = g_dumpList;
+        // Bounded cached list and reads. Invalid guest pages cannot recursively
+        // fault this filter, including pointer indirection and partial reads.
+        while (*item)
+        {
+            const char* end = item;
+            while (*end && *end != ',') ++end;
+            uint32_t address = 0;
+            bool indirect = false;
+            CrashText text;
+            const bool valid = ParseDump(item, end, guest, address, indirect);
+            item = *end ? end + 1 : end;
+            if (!valid)
+            {
+                text.Text("[crash] guest dump skipped: malformed address or unavailable register\n").Write();
+                continue;
+            }
+            uint8_t bytes[256];
+            if (indirect)
+            {
+                if (!ReadGuest(address, bytes, 4))
+                {
+                    text.Text("[crash] guest pointer unreadable: ").Hex(address).Text("\n").Write();
+                    continue;
+                }
+                const uint32_t target = (uint32_t(bytes[0]) << 24) | (uint32_t(bytes[1]) << 16) | (uint32_t(bytes[2]) << 8) | bytes[3];
+                text.Text("[crash] [").Hex(address).Text("] -> ").Hex(target).Text("\n").Write();
+                address = target;
+            }
+            if (!ReadGuest(address, bytes, sizeof(bytes)))
+            {
+                text.Text("[crash] guest dump unreadable: ").Hex(address).Text("\n").Write();
+                continue;
+            }
+            for (unsigned row = 0; row < sizeof(bytes); row += 32)
+            {
+                text.Text("[crash] ").Hex(address + row).Text(":");
+                for (unsigned i = 0; i < 32; ++i)
+                {
+                    if (i % 4 == 0) text.Text(" ");
+                    text.Hex(bytes[row + i], 2);
+                }
+                text.Text("\n").Write();
+            }
+            char ascii[257], wide[129];
+            for (unsigned i = 0; i < 256; ++i) ascii[i] = bytes[i] >= 0x20 && bytes[i] < 0x7F ? char(bytes[i]) : '.';
+            for (unsigned i = 0; i < 128; ++i)
+            {
+                const uint16_t c = (uint16_t(bytes[2 * i]) << 8) | bytes[2 * i + 1];
+                wide[i] = c >= 0x20 && c < 0x7F ? char(c) : '.';
+            }
+            ascii[256] = wide[128] = 0;
+            text.Text("[crash] guest ").Hex(address).Text(" ascii: ").Text(ascii).Text("\n").Write();
+            text.Text("[crash] guest ").Hex(address).Text(" utf16: ").Text(wide).Text("\n").Write();
+        }
+    }
+
+    void WriteHostStack(const CONTEXT& context) noexcept
+    {
+        CrashText text;
+        text.Text("[crash] optional host symbols begin\n").Write();
+        HANDLE process = GetCurrentProcess();
+        SymSetOptions(SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS | SYMOPT_LOAD_LINES | SYMOPT_FAIL_CRITICAL_ERRORS | SYMOPT_NO_PROMPTS);
+        // Do not inherit symbol-server environment paths during a fatal error.
+        if (!SymInitialize(process, "", TRUE))
+        {
+            text.Text("[crash] host symbols unavailable\n").Write();
+            return;
+        }
+        CONTEXT c = context;
+        STACKFRAME64 frame{};
+        frame.AddrPC.Offset = c.Rip; frame.AddrPC.Mode = AddrModeFlat;
+        frame.AddrFrame.Offset = c.Rbp; frame.AddrFrame.Mode = AddrModeFlat;
+        frame.AddrStack.Offset = c.Rsp; frame.AddrStack.Mode = AddrModeFlat;
+        alignas(SYMBOL_INFO) char symbolBuffer[sizeof(SYMBOL_INFO) + 512]{};
+        auto* symbol = reinterpret_cast<SYMBOL_INFO*>(symbolBuffer);
+        symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+        symbol->MaxNameLen = 511;
+        for (unsigned i = 0; i < 48; ++i)
+        {
+            if (!StackWalk64(IMAGE_FILE_MACHINE_AMD64, process, GetCurrentThread(), &frame, &c,
+                nullptr, SymFunctionTableAccess64, SymGetModuleBase64, nullptr) || !frame.AddrPC.Offset) break;
+            DWORD64 displacement = 0;
+            text.Text("[crash]   #").Decimal(i).Text(" host=0x").Hex(frame.AddrPC.Offset, 16).Text(" ");
+            if (SymFromAddr(process, frame.AddrPC.Offset, &displacement, symbol))
+                text.Text(symbol->Name).Text("+0x").Hex(displacement, 16);
+            else text.Text("?");
+            IMAGEHLP_LINE64 line{};
+            line.SizeOfStruct = sizeof(line);
+            DWORD lineDisp = 0;
+            if (SymGetLineFromAddr64(process, frame.AddrPC.Offset, &lineDisp, &line))
+                text.Text(" (").Text(line.FileName).Text(":").Decimal(line.LineNumber).Text(")");
+            text.Text("\n").Write();
+        }
+        text.Text("[crash] optional host symbols complete\n").Write();
+    }
+
+    LONG WINAPI CrashFilter(EXCEPTION_POINTERS* info)
+    {
+        EnterCrash();
+        const auto& rec = *info->ExceptionRecord;
+        WriteEssential(ExceptionName(rec.ExceptionCode), rec.ExceptionCode, rec.ExceptionAddress, *info->ContextRecord, &rec);
+        const auto guest = ReadGuestRegisters();
+        WriteGuestRegisters(guest);
+        if (rec.ExceptionCode != EXCEPTION_STACK_OVERFLOW)
+        {
+            __try
+            {
+                WriteGuestDumps(guest);
+                WriteHostStack(*info->ContextRecord);
+            }
+            __except (EXCEPTION_EXECUTE_HANDLER)
+            {
+                CrashText text;
+                text.Text("[crash] optional diagnostics failed code=0x").Hex(GetExceptionCode()).Text("; essential report retained\n").Write();
+            }
+        }
+        return EXCEPTION_EXECUTE_HANDLER;
+    }
+
+    [[noreturn]] void ReportRuntimeFailure(const char* reason, DWORD code) noexcept
+    {
+        EnterCrash();
+        CONTEXT context{};
+        RtlCaptureContext(&context);
+        WriteEssential(reason, code, reinterpret_cast<const void*>(context.Rip), context);
+        WriteGuestRegisters(ReadGuestRegisters());
+        // Avoid re-entering the CRT through abort/exit/previous handlers or
+        // attempting optional allocation/symbol work in a terminate/signal path.
+        TerminateProcess(GetCurrentProcess(), code);
+        for (;;) {} // Self-termination does not return on success.
+    }
+    void TerminateHandler() noexcept { ReportRuntimeFailure("std::terminate", 0xE0000001u); }
+    void AbortHandler(int) { ReportRuntimeFailure("SIGABRT", 0xE0000002u); }
 }
 
 void InstallCrashHandler()
 {
+    if (GetEnvironmentVariableA("LO_CRASH_DUMP", g_dumpList, DWORD(sizeof(g_dumpList))) >= sizeof(g_dumpList))
+        g_dumpList[0] = 0; // Do not truncate an oversized optional list into another address.
     SetUnhandledExceptionFilter(CrashFilter);
+    std::set_terminate(TerminateHandler);
+    std::signal(SIGABRT, AbortHandler);
 }
 #else
 void InstallCrashHandler() {}

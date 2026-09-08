@@ -8,20 +8,24 @@ Windows x64 · Direct3D 12 · PowerPC 静态重编译
 
 <img src="docs/images/title-screen.png" alt="失落的奥德赛标题画面 — Press START" width="960">
 
-### [下载 v0.4.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.4.1) · [安装指南](docs/INSTALLING.md) · [反馈问题](https://github.com/freefrank/LostOdysseyRecomp/issues)
+### [下载 v0.4.2](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.4.2) · [安装指南](docs/INSTALLING.md) · [反馈问题](https://github.com/freefrank/LostOdysseyRecomp/issues)
 
 [English](README.md) · [项目状态](docs/STATUS.md) · [路线图](docs/ROADMAP.zh-CN.md) · [从源码构建](docs/BUILDING.md)
 
 </div>
 
 > [!IMPORTANT]
-> **v0.4.1 是早期测试版。** 已测试开场区域和部分场景，尚未通关。渲染和稳定性仍有问题。请自行提供受支持版本的游戏文件。
+> **本项目仍处于早期测试阶段。** 已测试开场区域和部分场景，尚未通关。渲染和稳定性仍有问题。请自行提供受支持版本的游戏文件。
 
-## v0.4.1 新增功能
+## v0.4.2 更新
 
-v0.4.1 修复启用 TAA 时的 Map3 轮胎阴影闪烁；发布前，用户已在原位置确认 r2 修复。F1 渲染导出连续捕获三帧，合并为一个 ZIP，附带当前进程日志并减少重复数据。详见[更新日志](CHANGELOG.md)和[验证范围](docs/STATUS.md)。
+修复已复现的乌拉议会过场崩溃及另外九类 PowerPC 翻译错误，原生崩溃信息写入自动运行日志。补齐六条战斗 TAA 路径；敌人消散闪烁仍待修复。F1 捕获后在后台压缩 ZIP，成功保存后才清理对应原始目录；默认保留当前日志及最新两份旧日志，活动文件和自定义路径受保护。帧捕获本身仍可能暂停渲染。
 
-**本地开发，尚未发布：** 捕获完成后在后台压缩 ZIP，成功保存后才删除对应原始目录。默认日志保留当前文件及最新两份旧日志；仍在使用或无法删除的文件可能暂留，自定义日志路径不参与轮转。帧捕获本身仍可能暂停渲染。详见[诊断行为与验证](docs/notes/render-state-capture.md#background-archive-dev)。
+已完成检查与剩余覆盖详见[更新日志](CHANGELOG.md)、[验证范围](docs/STATUS.md)和[议会调查](docs/notes/issue7-cutscene-crash.md)。
+
+## v0.4.1 历史修复
+
+v0.4.1 修复启用 TAA 时的 Map3 轮胎阴影闪烁，已获得原位置用户确认，并加入附带运行日志的三帧 F1 导出。
 
 ## v0.4.0 历史功能
 

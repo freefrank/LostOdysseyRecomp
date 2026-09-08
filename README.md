@@ -8,20 +8,24 @@ Windows x64 · Direct3D 12 · PowerPC static recompilation
 
 <img src="docs/images/title-screen.png" alt="Lost Odyssey title screen — Press START" width="960">
 
-### [Download v0.4.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.4.1) · [Installation guide](docs/INSTALLING.md) · [Report an issue](https://github.com/freefrank/LostOdysseyRecomp/issues)
+### [Download v0.4.2](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.4.2) · [Installation guide](docs/INSTALLING.md) · [Report an issue](https://github.com/freefrank/LostOdysseyRecomp/issues)
 
 [简体中文](README.zh-CN.md) · [Project status](docs/STATUS.md) · [Roadmap](docs/ROADMAP.md) · [Build from source](docs/BUILDING.md)
 
 </div>
 
 > [!IMPORTANT]
-> **v0.4.1 is an early testing release.** Opening areas and selected scenes have been tested; a complete playthrough has not. Rendering and stability issues remain. You must supply your own supported game files.
+> **This project is still in early testing.** Opening areas and selected scenes have been tested; a complete playthrough has not. Rendering and stability issues remain. You must supply your own supported game files.
 
-## New in v0.4.1
+## New in v0.4.2
 
-v0.4.1 fixes the reported Map3 tire-shadow flicker with TAA enabled; the user confirmed the r2 repair at the original position before release. F1 render exports capture three consecutive frames in one ZIP with the current process log and less duplicate data. See the [changelog](CHANGELOG.md) and [validation scope](docs/STATUS.md).
+Fixes the reproduced Uhra Council cutscene crash and nine further PowerPC translation defects, and writes native crash details to automatic runtime logs. Extends TAA to six verified battle paths; enemy-disappearance flicker remains unresolved. F1 compresses completed captures in the background and removes their raw folder only after success. Default logging retains the current file plus the two newest earlier logs, protecting active files and custom paths. Frame capture itself can still pause rendering.
 
-**Local development, unreleased:** ZIP compression runs in the background after capture, removing its raw folder only after a successful save. Default logs retain the current file plus the two newest earlier logs; active/undeletable files may remain, and custom log paths are excluded. Frame capture itself can still pause rendering. See [diagnostic behavior and validation](docs/notes/render-state-capture.md#background-archive-dev).
+See the [changelog](CHANGELOG.md), [validation scope](docs/STATUS.md) and [Council investigation](docs/notes/issue7-cutscene-crash.md) for the completed checks and remaining coverage.
+
+## Previously in v0.4.1
+
+v0.4.1 fixes the reported Map3 tire-shadow flicker with TAA enabled, confirmed by the user at the original position, and adds three-frame F1 exports with the runtime log.
 
 ## Previously in v0.4.0
 

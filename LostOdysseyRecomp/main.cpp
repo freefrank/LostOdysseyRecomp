@@ -13,6 +13,7 @@
 #include <hid/hid.h>
 #include <os/logger.h>
 #include <os/log_file.h>
+#include <os/crash_handler.h>
 #include <cstring>
 #include <ctime>
 #include <chrono>
@@ -55,7 +56,6 @@ static std::filesystem::path FindGameRoot(int argc, char* argv[])
     return "game";
 }
 
-void InstallCrashHandler();
 void InstallPhysicalWatchpoint();
 
 int main(int argc, char* argv[])

@@ -4,27 +4,37 @@ One record of completed changes, with unpublished work separated from verified r
 
 本文统一记录已完成改动，并区分未发布内容与已确认发布版本；日期采用 UTC 发布日期。后续计划见[路线图](docs/ROADMAP.zh-CN.md)，不作为已发布功能记录。
 
-## Unreleased / 未发布
+## [v0.4.2](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.4.2) — 2026-09-08
 
 ### English
 
-Move completed F1 render-export ZIP compression to a background worker so rendering can continue during compression. Delete the matching raw capture directory only after the ZIP is successfully saved; archive failure preserves the source, and cleanup failure reports a saved ZIP with retained files. Normal window close waits for an already-started archive. Three-frame readbacks and file writes can still pause the game.
+Repairs the reproduced Uhra Council cutscene crash, expands PowerPC correctness and battle TAA coverage, and improves crash reports and F1 exports.
 
-Default logging now keeps the current log plus the two newest numeric `runtime-<timestamp>.log` files after a successful log open. Active or undeletable older logs remain for a later launch; custom `LO_LOG_FILE` paths are not rotated. Capture path messages preserve UTF-8 in Unicode directories. The isolated build and archive/log fixtures pass; a 720p title/menu run continued rendering during compression, verified the three-frame ZIP and removed its source directory. Default/custom startup retention also passed. These changes are on the `taa-fix` development branch and are not included in a published release; player acceptance remains pending. See [capture behavior and validation](docs/notes/render-state-capture.md#background-archive-dev).
+- Use the guest's low 32 bits for word-switch dispatch, preventing a high-word carry from indexing beyond the host table.
+- Correct nine further PPC translation defects in scalar results/flags, update and atomic/absolute addresses, and indirect/conditional branches. Keep the tracked dependency patch synchronized.
+- Write essential native crash details to automatic runtime logs through an independent append sink, including faults while normal logging locks are held.
+- Add six verified battle terrain/object/skinned TAA paths while retaining the existing guards. Enemy-disappearance flicker remains unresolved.
+- Compress completed F1 captures in the background; remove only the matching raw folder after success and preserve it on archive failure. Readbacks/file writes can still pause rendering.
+- Retain the current default runtime log plus the two newest earlier logs. Active/undeletable files may remain; custom log paths are excluded.
 
-Extend guarded TAA jitter coverage to six verified battle terrain, object and skinned shader paths, aligning their depth, material and lighting transforms without changing the jitter algorithm or viewport/depth/camera guards. Optional submitted-draw diagnostics can follow a resolve-trace window and retain the inspected constant slot even for a baseline that rejects the shader; logging does not enable jitter.
+Fix validation covers 3,258 passing instruction regressions (the old generator fails 1,533 matching cases), 109 switch checks, 14 isolated crash cases and the full Council scene, restored movement, native save and independent restart/reload. TAA validation covers 17,287 CPU checks and bounded 32-phase Map3 battle/tire comparisons; capture/log fixtures and an actual background-export run also pass. Original-reporter acceptance, later chapters and whole-game compatibility remain unverified.
 
-The local `taa-fix` / `0.4.2-dev` repair passed its isolated build, 17,287 CPU jitter checks and selected CPU/GPU fixtures. In the reproduced Map3 battle scene, each comparison covers 32 phases: the instrumented v0.4.1 rendering baseline had 16 frames with at least half the sampled mountain region black; the exact candidate package and its AA Off control had none. Corrected depth/material/lighting uploads matched in all 32 frames. Camera animation differs between processes, so this is not a frame-identical pixel comparison. A separate Map3 tire regression matched the accepted r2 near/far mask and depth regions byte for byte in all 32 phases. Player acceptance of the new battle repair remains pending, and it is not included in `v0.4.1`; see the [battle investigation](docs/notes/shadow-texture-lod.md#battle-taa-runtime-dev). Enemy-disappearance flicker was subsequently reported on this package and remains a separate, unrepaired coverage investigation. The [static audit and runtime-linking limits](docs/notes/taa-coverage-audit.md) do not establish whole-game coverage.
+See [Council and semantics evidence](https://github.com/freefrank/LostOdysseyRecomp/blob/v0.4.2/docs/notes/issue7-cutscene-crash.md), [TAA scope](https://github.com/freefrank/LostOdysseyRecomp/blob/v0.4.2/docs/notes/shadow-texture-lod.md#battle-taa-runtime-dev) and [capture behavior](https://github.com/freefrank/LostOdysseyRecomp/blob/v0.4.2/docs/notes/render-state-capture.md).
 
 ### 简体中文
 
-F1 渲染导出完成后改为后台压缩 ZIP，压缩期间渲染可以继续。仅在 ZIP 成功保存后删除对应原始目录；归档失败保留源文件，清理失败则单独提示 ZIP 已保存且仍有源文件。正常关闭窗口会等待已开始的归档完成。三帧读回与文件写入仍可能暂停游戏。
+修复已复现的乌拉议会过场崩溃，完善 PowerPC 指令语义与战斗 TAA 覆盖，并改进崩溃记录和 F1 导出。
 
-默认日志在成功打开后，保留当前日志及文件名数字时间戳最新的两份 `runtime-<timestamp>.log`。仍在使用或无法删除的旧日志留待后续启动处理，自定义 `LO_LOG_FILE` 不轮转；Unicode 目录中的捕获路径日志保持 UTF-8。隔离构建及归档／日志用例通过，720p 标题菜单实跑在压缩期间继续渲染，三帧 ZIP 校验和源目录清理通过，默认／自定义启动日志保留验证也通过。本次改动位于 `taa-fix` 开发分支，尚未正式发布，玩家验收待完成；详见[导出行为与验证](docs/notes/render-state-capture.md#background-archive-dev)。
+- 字宽 switch 分派使用客体低 32 位，避免高位进位导致宿主跳转表越界。
+- 修正另外九类 PPC 翻译错误，覆盖标量结果／标志、更新式与原子／绝对寻址、间接／条件分支，并同步受跟踪的依赖补丁。
+- 通过独立追加通道将必要的原生崩溃信息写入自动运行日志，常规日志锁被持有时仍可记录。
+- 补齐六条已核对的战斗地形／物件／蒙皮 TAA 路径，保留现有限制；敌人消散闪烁仍未修复。
+- F1 捕获完成后在后台压缩，仅成功后清理对应原始目录，归档失败保留源文件；读回和文件写入仍可能暂停渲染。
+- 默认保留当前运行日志及最新两份旧日志；活动或无法删除的文件可能暂留，自定义日志路径不参与轮转。
 
-补齐六条已核对的战斗地形、物件及蒙皮 shader 路径的 TAA jitter 覆盖，对齐其深度、材质与补光位置变换，保留原有 jitter 算法及 viewport／深度／相机限制。可选的已提交绘制诊断可跟随 resolve trace 窗口，并在基线拒绝 shader 时保留所检查的常量槽位；日志不启用 jitter。
+修复验证覆盖 3,258 项指令回归全部通过（旧生成器在相同输入中有 1,533 项失败）、109 项 switch 检查、14 项独立崩溃用例，以及完整议会剧情、恢复移动、原生保存和独立重启读档。TAA 验证覆盖 17,287 项 CPU 检查和限定的 Map3 战斗／轮胎 32 相位对照；导出／日志用例及实际后台导出也通过。原报告者验收、后续章节及全游戏兼容性仍待确认。
 
-本地 `taa-fix`／`0.4.2-dev` 修复通过隔离构建、17,287 项 CPU jitter 检查及选定 CPU／GPU 用例。复现的 Map3 战斗场景每组覆盖 32 相位：保留 v0.4.1 渲染行为的诊断基线有 16 帧山体采样区至少一半变黑，实际候选包与其 AA Off 对照均为零；修正版全部 32 帧的深度／材质／补光上传一致。跨进程相机动画不同，因此不是逐帧像素同一对照。另行完成的 Map3 轮胎回归中，近远轮胎遮罩与深度区域在全部 32 相位均与已验收 r2 逐字节一致。新战斗修复的玩家验收仍待完成，本修复未包含在 `v0.4.1` 中，详见[战斗调查](docs/notes/shadow-texture-lod.md#battle-taa-runtime-dev)。用户随后在本包报告敌人消散闪烁，该覆盖问题仍独立调查、尚未修复。[静态审查与运行链接边界](docs/notes/taa-coverage-audit.md)不代表全游戏覆盖。
+详见[议会与语义证据](https://github.com/freefrank/LostOdysseyRecomp/blob/v0.4.2/docs/notes/issue7-cutscene-crash.md)、[TAA 范围](https://github.com/freefrank/LostOdysseyRecomp/blob/v0.4.2/docs/notes/shadow-texture-lod.md#battle-taa-runtime-dev)和[捕获行为](https://github.com/freefrank/LostOdysseyRecomp/blob/v0.4.2/docs/notes/render-state-capture.md)。
 
 ## Published / 已发布
 

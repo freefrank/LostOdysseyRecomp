@@ -2,18 +2,20 @@
 
 先读[当前状态](../STATUS.md)和[接手入口](handoff.md)。日期化实验保留证据，不自动代表当前功能支持。过期GPU、内核和旧交接已移到[归档](../archive/README.md)。
 
-当前进度：[v0.4.0 发布状态](../STATUS.md) · [v0.4.0 开发历史与限定验证](v0.4.0-development.md) · [路线图](../ROADMAP.zh-CN.md)。历史汇总：[2026-09-05成果与交接](../WORK_REPORT_2026-09-05.md)。
+当前进度：[v0.4.2 修复与验证](../STATUS.md) · [v0.4.0 开发历史与限定验证](v0.4.0-development.md) · [路线图](../ROADMAP.zh-CN.md)。历史汇总：[2026-09-05成果与交接](../WORK_REPORT_2026-09-05.md)。
 
 ## 现有文档
 
 | 专项笔记 |
 |---|
+| [Issue #7：议会崩溃、原生保存／读档与日志诊断](issue7-cutscene-crash.md) |
+| [PowerPC 位宽／控制流审查与九类语义修复](recompiler-width-audit.md) |
 | [v0.4.0 开发历史与验证边界](v0.4.0-development.md) |
 | [v0.4.0 后续实现、正式包与验收范围](handoff-v0.4.0-followup.md) |
 | [凯姆首战身体阴影 v0.4.0 复查（2026-09-07 用户挂起，未确认复现）](kaim-body-shadow-v040.md) |
 | [DLSS/FSR 时域超分研究：官方契约、当前证据与后续接入](temporal-upscaling-feasibility.md) |
 | [多手柄与键盘输入（本地未发布）](controller-input.md) |
-| [Debug Menu 渲染状态捕获（本地未发布）](render-state-capture.md) |
+| [Debug Menu 渲染状态捕获、后台 ZIP 与日志保留](render-state-capture.md) |
 | [两套零售版本兼容、语言与发布验证](europe-support.md) |
 | [自动读取已导入盘与原版管理器验证](disc-selection.md) |
 | [Windows 发布打包与 CI](release-packaging.md) |

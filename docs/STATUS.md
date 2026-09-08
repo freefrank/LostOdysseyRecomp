@@ -1,6 +1,22 @@
 # Project status
 
-Reviewed **2026-09-08** against the verified v0.4.1 release, local `taa-fix` / 0.4.2-dev battle validation, four-disc static TAA audit, enemy-disappearance report and background-export development. This page distinguishes published results, development validation and user acceptance; dated investigation notes retain the history of individual experiments.
+Reviewed **2026-09-08** for v0.4.2 integration, the verified v0.4.1 release and the candidate evidence below. This page separates final-package checks, scenario validation and user acceptance; dated investigations preserve their original checkpoints.
+
+## v0.4.2 integration and verification
+
+v0.4.2 combines the Issue #7 word-switch repair, nine further PPC semantics corrections, automatic native crash logging, six battle TAA paths, background F1 ZIP compression and default three-log retention. The implementation and candidate checks below are complete; final v0.4.2 CI/package verification is recorded separately when available. No final-package game run is established by these earlier candidates.
+
+Fresh integrated Windows fixtures pass all 14 crash cases, logger/snapshot/retention checks and archive checks, including three ZIP CRCs and an 8 MiB payload comparison. All 18 inspected inputs match the release sources after Git line-ending normalization. These are CPU/native fixture results with no game or GPU run; evidence is `out/release-v0.4.2/integration-tests/summary.json` in the original workspace.
+
+### Issue #7 Council crash and PPC semantics
+
+The automatic runtime log receives essential native crash context through an independent append sink, including faults while logger/CRT locks are held. Fourteen isolated crash-capture cases pass, and an induced fault in diagnostic-r2 preserves its original `0xC0000005` exit. A native pre-Council save then reproduces the actual Map 22 crash twice, at host RVA `0x2139A9A`. The generated switch used a full-width index after a high-word carry; using the guest low 32 bits matches all 843 table contracts. The 109 generated-code checks and old-selector negative control pass.
+
+The nine additional scalar/address/branch corrections pass all 3,258 fresh production-generated native checks; the frozen old generator fails 1,533 matching cases, while 48 existing Rc controls pass both. The tracked XenonRecomp patch reconstructs the tested Git-normalized source. All 247 generated C++ units were rebuilt for `v0.4.1-issue7-semantics-r2` (EXE prefix `87e6eb6a3ea0`), retaining frozen v0.4.1 diagnostic runtime/GPU objects. That candidate completes Map 15 → 16 → 22 → 16 without skipping the Council scene, restores movement, saves native slot 07 and independently restarts/reloads with movement. It uses Asia Disc 1, English, FXAA, 1280x720, 30 FPS and copied caches; both processes are stopped by the harness. Its 47 ZIP members pass hashes and CRCs.
+
+This candidate excluded the TAA and background-capture work combined in v0.4.2. Its verified Council path does not establish original-reporter acceptance, later chapters, natural BLRL reachability or whole-game compatibility. General LR tracking, unconfirmed signed-overflow concerns, switch-default contracts and vector/trap behavior remain outside the repair. See the [Council investigation](notes/issue7-cutscene-crash.md), [semantics audit](notes/recompiler-width-audit.md) and [test entry points](../tools/tests/README.md). Evidence: `out/issue7-semantics-fix/{REPORT.md,runtime-validation.json,handoff-verification.json}` in the original workspace.
+
+The following TAA/capture sections retain their respective candidate identities. Enemy-disappearance flicker remains an open, separate report; the six-path terrain repair does not resolve it.
 
 ## Published release: v0.4.1
 

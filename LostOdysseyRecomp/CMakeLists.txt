@@ -23,6 +23,9 @@ add_executable(LostOdysseyRecomp ${LO_RUNTIME_SOURCES} ${LO_IMPORT_STUBS})
 if(WIN32)
     # Keep the existing main/CRT initialization while avoiding a console on double-click.
     target_link_options(LostOdysseyRecomp PRIVATE /SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup)
+    # Retain a build-local address map for module/RVA crash reports from
+    # optimized packages without PDBs. The release payload excludes this file.
+    target_link_options(LostOdysseyRecomp PRIVATE "/MAP:${CMAKE_CURRENT_BINARY_DIR}/LostOdysseyRecomp.map")
 endif()
 
 target_include_directories(LostOdysseyRecomp PRIVATE
@@ -75,6 +78,20 @@ if(WIN32)
         ${LO_RUNTIME_ROOT}/os/capture_archive.cpp)
     target_include_directories(LoCaptureArchiveTest PRIVATE ${LO_RUNTIME_ROOT})
     target_compile_features(LoCaptureArchiveTest PRIVATE cxx_std_20)
+endif()
+
+# Crash reporting is exercised in sacrificial child processes, without the
+# guest library or a GPU. The fixture supplies inert guest-memory state.
+if(WIN32)
+    add_executable(LoCrashCaptureTest EXCLUDE_FROM_ALL
+        ${CMAKE_SOURCE_DIR}/tools/tests/crash_capture_test.cpp
+        ${LO_RUNTIME_ROOT}/os/crash_handler.cpp
+        ${LO_RUNTIME_ROOT}/os/log_file.cpp)
+    target_include_directories(LoCrashCaptureTest PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,INCLUDE_DIRECTORIES>)
+    target_compile_definitions(LoCrashCaptureTest PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,COMPILE_DEFINITIONS>)
+    target_compile_options(LoCrashCaptureTest PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,COMPILE_OPTIONS>)
+    target_compile_features(LoCrashCaptureTest PRIVATE cxx_std_20)
+    target_link_libraries(LoCrashCaptureTest PRIVATE fmt::fmt xxHash::xxhash dbghelp)
 endif()
 
 # Integration test uses the actual guest import bridge and storage implementation.

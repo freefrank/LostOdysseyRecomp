@@ -48,6 +48,28 @@ CPX fast discovery binds the small FPI digest, FPD name/size and exact extent lo
 
 At the renderer entry point, `LO_SHADER_FULL_SCAN=1` disables all three indexes and enables strict scanning on every run. Direct and strict v5 manifests are distinct; strict does not reuse even an earlier strict manifest. Preserve this distinction when invoking `Scan` directly: the renderer passes empty index spans as well as `strict=true`. See the [current discovery contract and measurements](../../docs/notes/shader-preparation.md).
 
+## Recompiler word-switch regression
+
+```powershell
+python -B tools/tests/recompiler_switch_test.py --output out/tests/recompiler-switch/run-01
+```
+
+Use a new output directory. This independent fixture builds the production instruction decoder and recompiler, emits native functions from synthetic PPC words, then compiles and executes them with Clang `/O2`. It requires no game assets and does not build or launch the game. It is an explicit entry point, not a `tools/test.bat` suite.
+
+The 109 checks cover word-sized bounds, ordinary cases, guest default branches, nonzero register high words, `0xFFFFFFFF + 1`, full-width `-1 + 1`, return values and guest CTR. A mutation control restores the old `.u64` selector: 20 ordinary cases pass, then the carry input must reach a Clang unreachable-sanitizer trap (`0xC000001D`). The trap makes selector undefined behavior observable; it does not claim to reproduce the original game's exact host access violation. Results, generated sources and input hashes remain in the selected output directory. See the [Council investigation](../../docs/notes/issue7-cutscene-crash.md).
+
+## Recompiler semantics regression
+
+```powershell
+python -B tools/tests/recompiler_semantics_test.py --output out/tests/recompiler-semantics/run-01
+```
+
+Use a new output directory. This explicit entry point needs Python, CMake, Ninja, `clang-cl`, the Windows SDK and the checked-out recompiler dependencies. It builds a fresh production decoder/generator, emits bounded synthetic PPC functions, compiles their actual C++ output with Clang `/O2`, then executes 3,258 native checks. It requires no ROM, GPU, game build or game process and is not a `tools/test.bat` suite.
+
+Checks cover update-address carry and aliases, all `RLWIMI` mask pairs, `SRAW`/`SRAD` results and CA, missing and existing Rc forms, atomic/absolute memory addressing, all `BDNZF` BI positions, BLRL linkage and CTR target alignment. Independent Python expectations exclude undefined division inputs and mask undefined result bits. Memory checks use sparse guest mappings with distinct decoy pages; indirect lookup uses a safe observer. The `skip_lr=true` cases preseed LR and do not establish general LR tracking or game-path reachability. The separately recorded [Council and save/reload regression](../../docs/notes/issue7-cutscene-crash.md#2026-09-07-follow-up-semantics-implementation) is not part of this fixture command.
+
+For development negative controls, append `--baseline-dir <snapshot-directory>` containing the historical `recompiler.cpp` and `ppc_context.h`. That optional run builds and checks both source snapshots. The frozen pre-fix source used for this repair fails 1,533 matching cases while 48 existing Rc controls pass; expected old failures do not count as current success unless the current comparisons all pass. Ordinary use needs no historical snapshot. The output directory retains inputs, generated code, source hashes, observations, summaries and command logs and is never silently overwritten. See the [repair and validation boundaries](../../docs/notes/recompiler-width-audit.md#2026-09-07-implementation-and-regression).
+
 ## Regenerating resource metadata
 
 The optional generators accept a repeatable `--additional-root` to merge another edition into one metadata output. Use separate edition roots containing `disc1` through `disc4`; this does not permit mixing editions inside an imported installation. Choose new output filenames and review the generated metadata before replacing built-in headers. Normal builds use the checked-in headers and do not run these commands.
@@ -216,6 +238,22 @@ For a controlled comparison of a captured frame, run the already-built presentat
 ```
 
 Supply the input's actual width and height. The file must contain exactly `width × height × 4` bytes of packed RGBA8 pixels, with no header or row padding. The output directory must not already exist; the tool preserves earlier evidence by rejecting an existing directory. It writes six 1920×1080 PPM files, from `aa0-quality0.ppm` through `aa2-quality1.ppm`: AA values 0/1/2 mean Off/FXAA/SMAA, and quality values 0/1 mean Standard/bilinear and High/bicubic. Replay mode uses the production presentation path and skips the synthetic suite; it does not launch the game. Inspect the outputs against the same source frame. Success establishes file generation and GPU execution, while visual findings remain specific to the sampled content and do not prove temporal stability, all-language text quality or performance.
+
+## Crash capture diagnostics
+
+`LoCrashCaptureTest` is a Windows target excluded from default builds and is not a suite name accepted by `tools/test.bat`. It compiles the production crash handler and log sink with synthetic guest state; it needs the configured native compiler, fmt, xxHash and DbgHelp, but no GPU, game assets, generated guest library or runtime PCH.
+
+```powershell
+# Actual faults in isolated fixture children; no game launch
+cmake --build out/build/release --target LoCrashCaptureTest
+python tools/tests/crash_capture_test.py --exe out/build/release/LostOdysseyRecomp/LoCrashCaptureTest.exe --output out/tests/crash-capture/run-01
+```
+
+Choose a new `--output` directory to retain per-case logs and `results.json`; an existing directory is rejected. Omitting `--output` uses a temporary directory that is removed after the run. The Python runner checks expected fatal exit codes, so a child crash is the intended stimulus rather than a test failure.
+
+Coverage includes main/worker access violations while logger and CRT stream locks are held, absent sinks, a full redirected `stderr` pipe, Unicode log paths, preservation of existing log contents, invalid PPC context, malformed/unreadable guest dump operands, and explicit terminate, uncaught C++ exception and abort routes. It checks that fault identity and readable guest context precede optional symbol work. MSVC routes an uncaught main-thread C++ exception through native `0xE06D7363`; a new worker's default terminate reaches the `SIGABRT` diagnostic path because the terminate handler is per-thread.
+
+These synthetic crashes validate reporting and termination behavior. They do not reproduce a game cutscene, validate external-kill/fail-fast or stack-exhaustion handling, or establish a gameplay fix. See the [Issue #7 investigation](../../docs/notes/issue7-cutscene-crash.md) for evidence and unresolved scene coverage.
 
 ## Guest dispatch and startup memory diagnostics
 
