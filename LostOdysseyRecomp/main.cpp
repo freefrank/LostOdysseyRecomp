@@ -161,7 +161,7 @@ int main(int argc, char* argv[])
 #endif
     settings::ConfigureGameLanguages(gameRoot / "default.xex");
     if(requestedSetup || (!getenv("LO_BACKGROUND") && !getenv("LO_HEADLESS") && !std::filesystem::exists("settings.ini"))) {
-        if(!settings::FirstRunSetup()) return 0;
+        if(!settings::FirstRunSetup(&gameRoot)) return 0;
         if(setupOnly) return 0;
     }
     if (g_memory.base == nullptr)

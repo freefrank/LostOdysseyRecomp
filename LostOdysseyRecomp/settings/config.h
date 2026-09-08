@@ -10,6 +10,11 @@ enum class WindowMode : uint32_t
     Borderless,
     Exclusive
 };
+enum class GraphicsBackend : uint32_t
+{
+    D3D12,
+    Vulkan
+};
 // Stable persisted IDs: retain the original EN/TW UI values.
 inline constexpr const wchar_t *UiLanguageNames[] = {L"English", L"繁體中文", L"日本語", L"한국어", L"简体中文"};
 // Guest table at 832455F0 maps these IDs to INT/JPN/KOR/CHI/SCH.
@@ -36,6 +41,7 @@ struct Config
     uint32_t width = 1280, height = 720;
     int internalResolution = 0; // 0 follows output (up to 4K); 720/1080/1440/2160 select scene height.
     WindowMode windowMode = WindowMode::Windowed;
+    GraphicsBackend graphicsBackend = GraphicsBackend::D3D12; // Applied on the next process start.
     uint32_t antialiasing = 0; // 0 Off, 1 FXAA, 2 SMAA, 3 experimental camera-based TAA.
     uint32_t frameRate = 30;
     uint32_t scalingQuality = 1; // 0 bilinear, 1 bicubic spatial resampling.

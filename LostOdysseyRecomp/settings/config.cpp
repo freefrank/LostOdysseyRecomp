@@ -24,6 +24,8 @@ Config Validate(Config value)
         value.gameLanguage = 1;
     if (uint32_t(value.windowMode) > 2)
         value.windowMode = WindowMode::Windowed;
+    if (uint32_t(value.graphicsBackend) > uint32_t(GraphicsBackend::Vulkan))
+        value.graphicsBackend = GraphicsBackend::D3D12;
     if (value.width < 640 || value.width > 7680 || value.height < 480 || value.height > 4320)
     {
         value.width = 1280;
@@ -66,6 +68,8 @@ Config Read()
             value.internalResolution = number <= 2160 ? int(number) : 0;
         else if (key == "window_mode")
             value.windowMode = WindowMode(number);
+        else if (key == "graphics_backend")
+            value.graphicsBackend = GraphicsBackend(number);
         else if (key == "antialiasing")
             value.antialiasing = number;
         else if (key == "scaling_quality")
@@ -139,6 +143,7 @@ static bool WriteConfig(const Config &value)
     std::ofstream output("settings.ini.tmp", std::ios::trunc);
     output << "ui_language=" << value.uiLanguage << "\ngame_language=" << value.gameLanguage
            << "\nwidth=" << value.width << "\nheight=" << value.height << "\nwindow_mode=" << uint32_t(value.windowMode)
+           << "\ngraphics_backend=" << uint32_t(value.graphicsBackend)
            << "\ndebug_language=" << value.debugLanguage
            << "\nantialiasing=" << value.antialiasing << "\nframe_rate=" << value.frameRate
            << "\nscaling_quality=" << value.scalingQuality
@@ -159,9 +164,9 @@ static bool WriteConfig(const Config &value)
     if (error)
         return false;
 #endif
-    LOG_INFO("settings saved: {}x{} internal_resolution={} mode={} AA={} language={} (game language applies at restart)",
-             value.width, value.height, value.internalResolution, uint32_t(value.windowMode), value.antialiasing,
-             value.gameLanguage);
+    LOG_INFO("settings saved: {}x{} internal_resolution={} mode={} backend={} AA={} language={} (backend/game language apply at restart)",
+             value.width, value.height, value.internalResolution, uint32_t(value.windowMode),
+             uint32_t(value.graphicsBackend), value.antialiasing, value.gameLanguage);
     return true;
 }
 bool SaveConfig(const Config &requested)

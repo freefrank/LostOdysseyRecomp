@@ -63,7 +63,7 @@ if(LO_BUILD_GPU)
 endif()
 
 if(WIN32)
-    target_link_libraries(LostOdysseyRecomp PRIVATE winmm onecore)
+    target_link_libraries(LostOdysseyRecomp PRIVATE winmm onecore ole32 shell32)
 endif()
 
 # Current-process log snapshots without guest generation or GPU access.
@@ -313,3 +313,12 @@ endif()
 add_executable(LoGamePathTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/game_path_test.cpp)
 target_include_directories(LoGamePathTest PRIVATE ${LO_RUNTIME_ROOT})
 target_compile_features(LoGamePathTest PRIVATE cxx_std_20)
+
+if(WIN32)
+add_executable(LoFolderPickerTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/folder_picker_test.cpp)
+target_include_directories(LoFolderPickerTest PRIVATE ${LO_RUNTIME_ROOT})
+target_compile_features(LoFolderPickerTest PRIVATE cxx_std_20)
+target_compile_definitions(LoFolderPickerTest PRIVATE NOMINMAX)
+target_compile_options(LoFolderPickerTest PRIVATE /UNDEBUG /utf-8)
+target_link_libraries(LoFolderPickerTest PRIVATE user32 ole32 shell32)
+endif()
