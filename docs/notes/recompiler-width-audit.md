@@ -6,6 +6,8 @@ Published v0.4.2 includes the nine corrections and the tracked dependency patch 
 
 The dated entries below preserve each candidate checkpoint and its validation and publication state.
 
+Current Issue state checked on 2026-09-08: [Issue #7](https://github.com/freefrank/LostOdysseyRecomp/issues/7) is closed after the repair/release follow-up, with original-reporter retesting still unconfirmed. The generated-code and Council/save-reload results above retain their exact candidate scope; closure is not additional gameplay validation. See the [current Council record](issue7-cutscene-crash.md).
+
 ## 2026-09-07 implementation and regression
 
 Nine confirmed translation defects from the scan below are now corrected in the production [recompiler and context template](../../tools/patches/XenonRecomp-lostodyssey.patch), at `tools/XenonRecomp/XenonRecomp/recompiler.cpp` and `tools/XenonRecomp/XenonUtils/ppc_context.h`. Their instruction-level regression and the semantics-r2 Council/save-reload regression pass. These local changes are uncommitted and unpublished; original-reporter acceptance and broader gameplay coverage remain unverified.

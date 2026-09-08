@@ -24,17 +24,21 @@
 
 接续重点是同场景实际上传和颜色输出对照，保留现有深度／viewport 限制。捕获停顿超过 250 ms 会影响后续 jitter 条件，首帧坏、后两帧好不能作为无扰动时序对照。本轮只诊断和捕获，未改运行时代码、构建、更改 AA、替换 EXE 或提交发布；用户游戏保持运行。新 RTX 战斗缺陷待修复，原 Map3 轮胎验收保持已解决，两个旧 AMD 报告继续分别挂起，未证明同因。
 
+## 2026-09-07 v0.5.0 Vulkan 与 DX11 TODO
+
+用户确定下一主版本 v0.5.0 开发 Windows PC Vulkan 与 Direct3D 11 支持，已写入[中文路线图](../ROADMAP.zh-CN.md#v050-pc-graphics)／[English roadmap](../ROADMAP.md#v050-pc-graphics)，并补充[后端交接与 DX11 独立拆分](switch-vulkan-handoff.md)。本次仅记录待办，后端实现、实际包验证和玩家验收均未完成。先择取 PC Vulkan 可复用改动、保留 D3D12 基线，再独立推进 DX11；Switch rebase 及 Linux／Steam Deck 仍需各自的平台验收。下方合并数字和旧版本状态保留为历史记录，开发时重查；当前发布状态以 [STATUS](../STATUS.md) 为准。
+
+## 2026-09-07 Switch 移植与 PC Vulkan 交接
+
+朋友基于 v0.1（`2d9ce9f`）的 Switch 移植快照位于 `../LostOdysseyRecomp-main`，已评估：可编译 NRO 但默认为探针模式，不可玩；与当前 main 合并干跑有 9 个文件冲突。决定 Switch 代码暂不入主库，先在主库实现 PC Vulkan 后端，再让 Switch 分支 rebase。分叉证据、冲突清单、可复用部分和 Vulkan 工作拆分见[Switch 移植评估与 PC Vulkan 后端交接](switch-vulkan-handoff.md)。本条不改变下方既有交接的其他结论。
+
 ## 2026-09-06 当前交接
 
-[v0.2.2 已正式发布](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.2.2)，为最新正式版，包含 AMD resolve 初始化和 Unicode 启动／存档路径修复。AMD 与 NVIDIA 定向验证、NVIDIA 用户视觉验收通过；Issue #4 完整游戏崩溃尚未复现，不宣称已解决。见[发布说明](release-0.2.2.md)、[AMD 证据](amd-resolve-initialization.md)与[路径验证](save-path-unicode.md)。文本语言补丁仍暂停。
+[v0.2.1 已正式发布](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.2.1)，包含 F1 渲染捕获自动 ZIP 与多手柄／键盘 E/R 输入；托管 CI、正式包验证及隔离启动／捕获均通过。参见[捕获](render-state-capture.md)与[输入](controller-input.md)，不代表 AMD 缺陷已修复；文本补丁仍暂停。
 
-本次 v0.2.2 发布于 UTC 2026-09-07 03:11:10（本地 09-06），标签 `f03efe370d444db1a8a9c1213c240da697f58504` 已双推；[CI 34077788392](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34077788392) 全通过。正式 ZIP 38,205,388 字节，SHA256 `e91af2f49c03da48714731b07912767614d676be9d8887192647b217f2d29789`；CRC／44 项 manifest、安装器自测及正式 EXE 8 项启动路径检查通过。中文工作目录 RTX 5080 隔离运行 49.54 秒，swap 1200 目视确认为 Map 12；原有两项 shader 失败保留，无新增 error/fatal。测试已清理自身进程。原工作区证据：`out/release-v0.2.2/{published.json,package-validation.json,smoke-result.json,ci.log,smoke-存档/scene.png}`。
+用户最终决定再次关闭本仓库 Gitea Actions；API PATCH `has_actions=false` 后 GET 已验证为 false。`git ls-remote origin main` 返回 `98b8fcc`，代码镜像继续保留，CI 与正式发布使用 GitHub。此前 `win-t640` 的 `windows-2022:host` 标签已修复并恢复接单，但 Release 16 与 test 17／18 均在 `setup-python@v5` 安装 Python 3.12.10 时失败，尚未进入 C++ 编译。T640 的 `Setup_20260906134712_Failed.txt` 记录 `0x80004005`，提示无法打开 engine process path 的句柄及初始化 engine section/state。本轮不再修复 Python 环境，不改变全局 runner 或其他仓库。GitHub [正式 CI 34053765472](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34053765472) 已全部成功，包括 LoHidTest；v0.2.1 正式发布不受影响。
 
-首战研究现场已结束：原工作区 `out/firstbattle-flicker-01/report.md` 记录 USA/Europe 实际首战 120 帧待机、600 帧攻击及 600 帧含 Magma Blast 的序列，另有 7 份完整 capture。未锁定新闪烁根因、未修改 runtime；捕获会扰动时序，不能归因攻击卡顿。自有进程 51728 已核对路径后停止释放 GPU，用户 review 优先级仍保留。
-
-以下为 2026-09-06 较早的 Gitea/runner 观察，非本次服务复查：用户先选择关闭本仓库 Gitea Actions，API PATCH `has_actions=false` 后 GET 已确认；随后用户启动 Windows runner 并要求重开，现已 PATCH `has_actions=true` 并 GET 确认开启。`win-t640` 心跳为 `2026-09-06T19:24:52Z`，已在线，但标签仍只有 `windows-latest`／`windows`，无法匹配 7 个旧任务要求的 `windows-2022`；标签匹配待处理，历史队列记录保留。`git ls-remote` 已确认 Gitea 的 `main` 与 `v0.2.1` 完好，代码镜像继续双推。GitHub [正式 CI 34053765472](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34053765472) 全部步骤成功，包括 LoHidTest。
-
-历史 v0.2.1 发布记录，标签指向 `906d7c039f7e709c57af2c5278a43e259bfba8e5`，两远端标签均已确认。正式 ZIP 为 38,203,314 字节，SHA256 为 `cd583a6a28b47a1b2e7e31984052cd4eb6c953f5df333198f41540114eb4afb3`；44 项 manifest 哈希、安装器自测通过。冷缓存隔离运行 54 秒，德文标题菜单目视正常；frame 400 的 ZIP 共 60 项，每项 CRC／SHA256 校验通过，压缩后恢复约 30 fps。证据见 `out/release-v0.2.1/package-validation.json` 和 `out/release-v0.2.1/smoke/runtime.log`。此前 v0.2 的代码标签 `dcc9462`、发布记录提交 `b572d0a` 保留为历史。当前进度与近期 TODO 以 [STATUS](../STATUS.md) 和[中文路线图](../ROADMAP.zh-CN.md)为准；以下 2026-09-05 的构建名、PID、授权与实验安排保留作历史记录，不是新的执行指令。
+最新公开版本为 v0.2.1，标签指向 `906d7c039f7e709c57af2c5278a43e259bfba8e5`，两远端标签均已确认。正式 ZIP 为 38,203,314 字节，SHA256 为 `cd583a6a28b47a1b2e7e31984052cd4eb6c953f5df333198f41540114eb4afb3`；44 项 manifest 哈希、安装器自测通过。冷缓存隔离运行 54 秒，德文标题菜单目视正常；frame 400 的 ZIP 共 60 项，每项 CRC／SHA256 校验通过，压缩后恢复约 30 fps。证据见 `out/release-v0.2.1/package-validation.json` 和 `out/release-v0.2.1/smoke/runtime.log`。此前 v0.2 的代码标签 `dcc9462`、发布记录提交 `b572d0a` 保留为历史。当前进度与近期 TODO 以 [STATUS](../STATUS.md) 和[中文路线图](../ROADMAP.zh-CN.md)为准；以下 2026-09-05 的构建名、PID、授权与实验安排保留作历史记录，不是新的执行指令。
 
 v0.2 新增 USA/Europe `0.0.0.3` 兼容，保留 Europe/Asia `0.0.0.4`，对应用户确认的 [Redump #11817](https://redump.info/disc/11817) 与 [#39111](https://redump.info/disc/39111)。两版已通过自动选盘受控流程，章节交界剧情和完整通关仍待验证。
 

@@ -10,7 +10,7 @@ Windows x64 · Direct3D 12 · PowerPC 静态重编译
 
 ### [下载 v0.4.2](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.4.2) · [安装指南](docs/INSTALLING.md) · [反馈问题](https://github.com/freefrank/LostOdysseyRecomp/issues)
 
-[English](README.md) · [项目状态](docs/STATUS.md) · [路线图](docs/ROADMAP.zh-CN.md) · [从源码构建](docs/BUILDING.md)
+[English](README.md) · [项目状态](docs/STATUS.md) · [路线图](docs/ROADMAP.zh-CN.md) · [维护者 Project（公开）](https://github.com/users/freefrank/projects/3) · [从源码构建](docs/BUILDING.md)
 
 </div>
 
@@ -37,7 +37,7 @@ v0.3.0已正式发布，扩大到压缩资源与XEX中的shader发现，生成�
 
 ## v0.2.2 修复
 
-修复已验证 AMD 场景中的全黑／偏黑与景深异常，以及 Windows Unicode 安装目录、启动参数和存档路径问题。NVIDIA RTX 5080 定向回归与用户视觉验收通过，正式包也已完成中文工作目录下的 Map 12 启动验证。Issue #4 的完整存档后崩溃仍未复现，不据此宣称已解决。见 [v0.2.2 发布说明](docs/notes/release-0.2.2.md)与[更新日志](CHANGELOG.md)。
+修复已验证 AMD 场景中的全黑／偏黑与景深异常，以及 Windows Unicode 安装目录、启动参数和存档路径问题。NVIDIA RTX 5080 定向回归与用户视觉验收通过，正式包也已完成中文工作目录下的 Map 12 启动验证。Issue #4 在路径修复说明后关闭，但本机检查未复现其完整游戏崩溃，也没有后续报告者验收记录。见[当前 Issue 证据](docs/STATUS.md#live-issue-reconciliation)、[v0.2.2 发布说明](docs/notes/release-0.2.2.md)与[更新日志](CHANGELOG.md)。
 
 ## v0.2.1 新增功能
 
@@ -82,7 +82,11 @@ v0.3.0已正式发布，扩大到压缩资源与XEX中的shader发现，生成�
 | 着色器预编译 | 内置资源索引、多线程编译、缓存复用 |
 | 输入与调试 | 手柄和键盘输入；英文／简体中文 F1 菜单提供捕获、地图信息与同地图 POI 传送 |
 
-DLSS、FSR 和帧生成尚未实现；v0.4.0 已移除此前的禁用控件。HDR 及 Linux / Vulkan 游戏运行仍为后续目标。
+DLSS、FSR 和帧生成尚未实现；v0.4.0 已移除此前的禁用控件。HDR 仍为后续工作。
+
+**当前 v0.5.0 开发版 DLC：**打开 `InstallGame.exe`，选择 **Files** 或 **Folder**，导入器会自动识别游戏光盘和失落的奥德赛 STFS DLC。确认识别结果后即可统一导入。所有光盘共用导入内容。导入与运行时文件读取链路已通过合成测试，真实 DLC 奖励和区域仍待验证。见[安装说明](docs/INSTALLING.md#automatic-content-import)。
+
+**当前开发：**v0.5.0 里程碑当前包含 DLC 导入及统一自动识别流程。13 个功能批次已使用 0.4.xx 开发序列提交完成，当前源码为 v0.4.15，提交为 `f77d943261e14105d17c880ffa40c171b4191dcc`；完整批次记录见[版本表](CHANGELOG.md)。历史包文件名和证据目录可以保留较早的内部版本标识。保留的 v0.5.0 候选用于记录已接受的限定 D3D12/Vulkan 生命周期工作及启动 shader 缓存处理，并已完成分发包检查；它不是另一个里程碑目标。这些本地候选均未发布，发布基线仍为 v0.4.2。DX11 尚不支持，两项已知 shader failure 仍存在；其他 GPU、全游戏兼容性与真实 DLC 内容验收仍待完成。详见[项目状态](docs/STATUS.md)、[v0.5.0 发布准备矩阵](docs/RELEASE-v0.5.0.md)与[路线图](docs/ROADMAP.zh-CN.md#v050-pc-graphics)。
 
 ## 验证与剩余工作
 
@@ -92,7 +96,7 @@ v0.4.1 Windows 正式包通过发布 CI、全部 45 项 manifest、安装器自�
 
 TAA 仍为实验功能，缺少原生对象运动矢量，不支持的路径回退至 SMAA。60 FPS 已通过选定移动、对白和 Ring 核心计时检查，但未验证全游戏锁定 60 或精准 Ring 释放／Perfect。未验证的 120 FPS 选项需要 `LO_EXPERIMENTAL_120=1`，否则实际按 60 FPS 运行。
 
-Issue #5 调查中的两个缺失调用入口已修复，原报告战斗仍待复测。Issue #6 已补充启动内存诊断，原机器根因和恢复仍未知。已验收的 Map3 轮胎修复包含在 v0.4.1 中，更广游戏流程和硬件列为回归。见[正式发布验证](docs/STATUS.md)、[开发证据](docs/notes/v0.4.0-development.md)和[后续记录](docs/notes/handoff-v0.4.0-followup.md)。
+Issue #5 报告者提供了 USA/Europe 存档，并确认调用边界修复后同一遇敌已通过，Issue 已关闭。Issue #6 由维护者以 v0.4.2 修复说明关闭，原机器恢复仍待确认。已验收的 Map3 轮胎修复包含在 v0.4.1 中，更广游戏流程和硬件列为回归。见[当前 Issue 证据](docs/STATUS.md#live-issue-reconciliation)、[正式发布验证](docs/STATUS.md)和[后续记录](docs/notes/handoff-v0.4.0-followup.md)。
 
 当前优先保证游戏流程和原版渲染行为。项目使用 **XenonRecomp** 将 PowerPC 代码翻译为 C++，在宿主侧实现 Xbox 360 服务，并通过 **plume** 渲染翻译后的 Xenos 着色器。
 

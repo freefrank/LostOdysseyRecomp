@@ -10,7 +10,7 @@ Windows x64 · Direct3D 12 · PowerPC static recompilation
 
 ### [Download v0.4.2](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.4.2) · [Installation guide](docs/INSTALLING.md) · [Report an issue](https://github.com/freefrank/LostOdysseyRecomp/issues)
 
-[简体中文](README.zh-CN.md) · [Project status](docs/STATUS.md) · [Roadmap](docs/ROADMAP.md) · [Build from source](docs/BUILDING.md)
+[简体中文](README.zh-CN.md) · [Project status](docs/STATUS.md) · [Roadmap](docs/ROADMAP.md) · [Maintainer Project (public)](https://github.com/users/freefrank/projects/3) · [Build from source](docs/BUILDING.md)
 
 </div>
 
@@ -37,7 +37,7 @@ v0.3.0 is released. It expands discovery into compressed shader resources and XE
 
 ## Fixed in v0.2.2
 
-Fixes tested AMD black/dark scenes and depth-of-field output, plus Windows Unicode installation, startup-argument and save paths. NVIDIA RTX 5080 targeted regression and user visual acceptance passed; the official package also passed a Map 12 launch from a Chinese working directory. The complete save-point crash in Issue #4 remains unreproduced and is not claimed resolved. See [v0.2.2 release notes](docs/notes/release-0.2.2.md) and the [changelog](CHANGELOG.md).
+Fixes tested AMD black/dark scenes and depth-of-field output, plus Windows Unicode installation, startup-argument and save paths. NVIDIA RTX 5080 targeted regression and user visual acceptance passed; the official package also passed a Map 12 launch from a Chinese working directory. Issue #4 was closed after the path-repair explanation, but the local checks did not reproduce the complete reported gameplay crash and no later reporter acceptance is recorded. See [current Issue evidence](docs/STATUS.md#live-issue-reconciliation), [v0.2.2 release notes](docs/notes/release-0.2.2.md) and the [changelog](CHANGELOG.md).
 
 ## New in v0.2.1
 
@@ -71,6 +71,8 @@ See the [installation guide](docs/INSTALLING.md) for accepted disc versions, fil
 
 *Unmodified screenshots from development builds leading up to v0.1.*
 
+**DLC in current v0.5.0 development builds:** Open `InstallGame.exe`, choose **Files** or **Folder**, and let the importer recognize game discs and Lost Odyssey STFS DLC automatically. Review the detected content once, then import it together. Imported DLC is shared by all discs. The import and runtime file-reading chain has synthetic coverage; actual DLC rewards and areas remain unverified. See [installation instructions](docs/INSTALLING.md#automatic-content-import).
+
 ## Current features
 
 | Feature | What to expect |
@@ -82,7 +84,9 @@ See the [installation guide](docs/INSTALLING.md) for accepted disc versions, fil
 | Shader preparation | Built-in resource index, parallel compilation and cache reuse |
 | Input and debug | Controller and keyboard input; English/Simplified Chinese F1 menu with capture, map information and same-map POI teleport |
 
-DLSS, FSR and frame generation are not implemented; v0.4.0 removes the former disabled controls. HDR, Linux and Vulkan gameplay remain future targets.
+DLSS, FSR and frame generation are not implemented; v0.4.0 removes the former disabled controls. HDR remains future work.
+
+**Current development:** The v0.5.0 milestone currently includes the DLC-import work and its unified automatic recognition flow. Thirteen feature batches are committed in the 0.4.xx development sequence through source v0.4.15 at commit `f77d943261e14105d17c880ffa40c171b4191dcc`; the complete batch record is [the version table](CHANGELOG.md). Historical package filenames and evidence directories may retain older internal version identifiers. The retained v0.5.0 candidate remains package-checked evidence for the accepted bounded D3D12/Vulkan lifecycle work and startup shader-cache handling; it is not a separate milestone target. These local candidates remain unpublished; the published baseline is v0.4.2. DX11 remains unsupported, and two known shader failures remain. Other GPUs, full-game compatibility and actual DLC content acceptance remain open. See [status](docs/STATUS.md), the [v0.5.0 release preparation matrix](docs/RELEASE-v0.5.0.md) and the [roadmap](docs/ROADMAP.md#v050-pc-graphics).
 
 ## Validation and remaining work
 
@@ -92,7 +96,7 @@ Both audited editions previously passed isolated v0.4.0 official-package Map2 st
 
 TAA remains experimental, lacks native object-motion vectors and falls back to SMAA on unsupported paths. Selected movement, dialogue and Ring core-timing checks passed for 60 FPS, but whole-game locked 60 and precise Ring release/Perfect are unverified. The unvalidated 120 FPS option requires `LO_EXPERIMENTAL_120=1`; otherwise it runs at an effective 60 FPS.
 
-The two missing dispatch entries investigated for Issue #5 are repaired, but the original battle still needs retesting. Issue #6 has added startup-memory diagnostics; its original-machine cause and recovery remain unknown. The accepted Map3 tire fix is included in v0.4.1; broader gameplay and hardware remain regression coverage. See [release validation](docs/STATUS.md), [development evidence](docs/notes/v0.4.0-development.md) and the [follow-up record](docs/notes/handoff-v0.4.0-followup.md).
+The Issue #5 reporter supplied a USA/Europe save and confirmed the same encounter passed after the dispatch-boundary repair; that Issue is closed. Issue #6 was closed by the maintainer with a v0.4.2 repair statement, but original-machine recovery remains unconfirmed. The accepted Map3 tire fix is included in v0.4.1; broader gameplay and hardware remain regression coverage. See [current Issue evidence](docs/STATUS.md#live-issue-reconciliation), [release validation](docs/STATUS.md) and the [follow-up record](docs/notes/handoff-v0.4.0-followup.md).
 
 Reliable gameplay and faithful rendering come first. The project translates PowerPC code into C++ with **XenonRecomp**, implements Xbox 360 services on the host, and renders translated Xenos shaders through **plume**.
 

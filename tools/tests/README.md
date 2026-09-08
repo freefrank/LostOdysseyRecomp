@@ -10,6 +10,45 @@ tools\test.bat shaders pipeline
 
 `tools/test.bat` forwards to `tools/tests/run.py`. Python is required; native fixture compilation also needs `clang-cl` and the Windows SDK discovered by `tools/setup_windows.bat`. Runtime suites use existing build outputs and never trigger an implicit full build. `--build-dir` defaults to `out/build/release`; it takes the CMake build root, not the directory containing the executable. The runner appends `LostOdysseyRecomp/<target>.exe`. A configured `out/build/windows-clang` can be supplied instead.
 
+## DLC import and content reading
+
+The installer’s automatic content-import UX uses one Files/Folder selection flow. It recognizes game discs, STFS DLC and mixed sources from content, presents one review, and commits discs before the shared-path save and DLC transaction. The focused result recorded 13 new cases plus 2 directly affected GUI cases, all passing on the first run in 0.934 seconds. It reused 20 unchanged DLC cases, two native modes and the independent STFS review. Evidence: `out/v0.5.2/auto-import/installer/REPORT.md`, `result.json` and `tests-initial.log`. This check did not start Tk, the game, audio, a build or packaging.
+
+`python -B tools/tests/test_dlc_import.py` selects the DLC parser/importer checks without the old disc suites. The historical v0.5.1 result has 22 passing focused cases, including independent STFS block-address vectors and windowless installer controller checks. `--runtime-fixture <new-directory>` creates a synthetic STFS package and imports it through the production Python reader for the native handoff.
+
+Build `LoStorageTest` only when the affected native inputs change. Its `dlc <new-isolation-directory> <imported-game-root>` and `dlc-restart <new-isolation-directory> <imported-game-root>` modes call the actual guest content and file imports, without a game window, renderer or audio. Both recorded modes passed, reading all 5,940 payload bytes in each process. Reproduction commands and retained results are in `out/v0.5.1/dlc-import/runtime/REPORT.md`; Python evidence is in the adjacent `importer/REPORT.md`. Synthetic tests do not establish real DLC rewards, areas or edition compatibility. Reuse these results for packaging and version changes.
+
+## Selected native targets
+
+The following CMake targets are `EXCLUDE_FROM_ALL`; they are not `tools/test.bat` suite names and are never run implicitly. Select only the target relevant to the change, build it explicitly, and run the resulting executable from an isolated working directory when it writes captures or caches:
+
+`LoFolderPickerTest`, `LoDebugMenuInteractionTest`, `LoShaderPreparationQueueTest`, `LoShaderStartupCacheTest`, `LoBackendCacheTest`, `LoBackendSelectionTest`, `LoBackendDeviceTest`, `LoRestartTest`, `LoGamePathTest`, `LoUpdaterTest`, `LoUpdaterProgressTest`, `LoUpdaterHelperContextTest`, `LoUpdaterProbe`, `LoVulkanBackendTest`, and `LoPollWaitTest`.
+
+The v0.5.0 release candidate retained the recorded backend lifecycle evidence in
+`out/v0.5.0/backend-lifecycle/REPORT.md`; it is a hidden-window video/presentation/Plume
+contract check and does not establish guest, renderer, audio, draw, present, capture, full-game
+or cross-GPU coverage. The release guard added 25 focused cases covering dirty-state, submodule,
+version/tag/build provenance and binary/hash consistency; packaging checks are documented in the
+[release preparation matrix](../../docs/RELEASE-v0.5.0.md). The candidate was packaged without
+rerunning the game, installer or feature suites.
+
+`LoPollWaitTest` is a CPU-only contract fixture for the scoped query/shared-value polling paths: it does not launch the game, require guest sources, execute generated guest/APC code, or establish runtime performance. Build it explicitly with `cmake --build out/build/release --target LoPollWaitTest` and run the resulting executable from the build output directory. The fixture verifies the helper contract; source review separately confirms preservation of the generated loop/return/APC checks and the renderer diagnostic snapshot/precedence.
+
+`LoShaderStartupCacheTest` is the narrow CPU/native fixture for v0.4.17 startup-cache contracts. Build it explicitly with `cmake --build out/build/release --target LoShaderStartupCacheTest` and run the resulting executable from the build output directory. It covers ordered bundle metadata and HLSL VS/PS, DXIL, SPIR-V, common/header/record/footer corruption and truncation, length checks, consumer/post-identity failure rollback, preservation of the original complete file, snapshot changes, and rejection of negative-cache reuse after real DXC or source identity changes. It does not launch the game; the separate original-directory prepare-only pair passed with no guest startup. Evidence: `out/v0.5.0/shader-startup-recurrence/fixture-run.log` and `startup-1/startup-2/result.json`.
+
+`LoBackendCacheTest` is the focused native fixture for backend cache identity and isolation. Its recorded run passed 91 contract checks, 14 isolated builtin checks, 10 independent restart checks and 5 framing checks; it made two actual DXC calls for the cold builtin paths and zero warm/restart calls. The fixture covers typed backend/compiler/validator/translator/options/variant/format identity, envelope length/SHA validation, legacy-success rejection, negative-cache isolation and reserved DXBC recognition. It does not launch the game or establish DX11 runtime support. Evidence: `out/v0.5.0/backend-completion/cache/REPORT.md` and `result.json`.
+
+`LoBackendSelectionTest` and `LoBackendDeviceTest` are focused selection and native-device checks. The selection fixture passed requested/actual parsing and precedence, minimum-capability checks, 21 layered failure/exception rollback cases, explicit unsupported-DX11 fallback and bounded dual-failure diagnostics. The RTX 5080 device probe passed the required D3D12/Vulkan capabilities and native resource lifecycles without a window or draw submission. These checks do not replace the accepted scene evidence or establish full-game and cross-GPU compatibility. Evidence: `out/v0.5.0/backend-completion/selection/checks.json` and its adjacent logs.
+
+The v0.4.16 candidate's unified Release build exited 0, and the only new runtime fixture run passed the exception/nesting, guest-longjmp TLS reset, four-thread ready/stop and timer-failure cases. This remains helper-contract evidence, not a scheduler-latency or CPU-performance measurement. The separate bounded D3D12 A/B sample is documented in `out/v0.5.0/cpu-optimization/REPORT.md`; the new Vulkan run lacks a paired ETW/CPU sample. Fixture evidence: `out/v0.5.0/cpu-optimization/poll-test-result.txt`.
+
+```powershell
+cmake --build out/build/release --target LoVulkanBackendTest
+.\out\build\release\LostOdysseyRecomp\LoVulkanBackendTest.exe
+```
+
+`LoVulkanBackendTest` supports `--front-face-only` and `--depth-resolve-only`. `LoPresentationTest`, `LoTemporalAATest` and `LoResolveCopyGpuTest` accept `--vulkan`; `LoShaderTool` accepts `--vulkan` and `--jobs N` with `N` from 1 through 64. These are selected synthetic or host checks. Do not schedule the full shader corpus or launch the game merely because a target exists. The Vulkan targets require a Windows driver with the requested Vulkan 1.2/Win32 WSI capabilities; no separate Vulkan SDK is required for the Release dependency path.
+
 For runtime checks, choose the relevant pair below after configuring the build and generating its required game sources; these are alternatives, not a required full sequence:
 
 ```powershell

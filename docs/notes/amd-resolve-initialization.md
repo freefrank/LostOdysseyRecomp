@@ -4,7 +4,7 @@ Date: **2026-09-06**
 
 ## Delivery status
 
-**User accepted on 2026-09-06; included in published v0.2.2.** The fix was committed as `43ce0e53` on `amd-fix`. After the NVIDIA manual check, the user reported no glitches and authorized merging if the logs showed no blocker. The log review below found none. The fix is merged into local `main` without conflicts in an independent worktree. The full release was published on 2026-09-07 at 03:11:10 UTC from `f03efe370d444db1a8a9c1213c240da697f58504`; hosted CI and official-package validation passed. This fix is **not included in v0.2.1**. See the [v0.2.2 release notes](release-0.2.2.md). This note updates the [historical investigation](amd-8060s-dark-render-handoff.md), without rewriting its earlier conclusions.
+**Committed locally as `43ce0e53` on the `amd-fix` development branch; unpublished; visual user acceptance pending.** The user requested the commit on 2026-09-06. Technical review passed; implementation and recorded validation are complete, and the tested renderer implementation is unchanged from that validation. No push or release is authorized; this fix is **not included in v0.2.1**. This note updates the [historical investigation](amd-8060s-dark-render-handoff.md), without rewriting its earlier conclusions.
 
 ## Cause and implementation
 
@@ -72,18 +72,10 @@ Both `baseline-map12` and `fixed-map12` reached 2400 swaps, remaining alive for 
 
 At fixed Map 12 swap 1800, the five 448×242 blur resolves contained 102133, 102223, 102228, 102240 and 102240 nonzero RGB pixels respectively. The blur chain was therefore not empty in the tested NVIDIA scene. The per-scene comparisons, texture counts and preservation results are recorded in `out/nvidia-amd-fix-regression/visual-results.json`; run duration and termination details are in each Map 12 directory's `result.json` and `runtime.log`.
 
-The automated follow-up tested the existing fix without publishing a build; visual user acceptance was recorded subsequently below. All 15 original files in the preservation manifest, including the main EXE/PDB and save/profile files, retained their hashes. Private captures and test artifacts remain local.
+This follow-up tests the existing fix; it does not publish a build or establish visual user acceptance. All 15 original files in the preservation manifest, including the main EXE/PDB and save/profile files, retained their hashes. Private captures and test artifacts remain local.
 
 No NVIDIA battle regression or performance benchmark was completed in this follow-up. Its positive result is limited to the GPU/layout tests and sampled title/settings/Map 12 behavior; it is not a full-playthrough compatibility result.
 
-## Manual NVIDIA acceptance and merge review — 2026-09-06
-
-The user tested the fixed EXE with SHA256 `e9ab2eda9301aed2877888ad285c357a92d265faceecb6a4da6f2529c6b74857` and reported “没发现有glitch” (no glitches observed). This accepts the tested visual behavior; broader scene coverage remains regression work rather than a pending acceptance blocker.
-
-The original workspace's local evidence directory is `out/nvidia-amd-fix-regression/manual-20260906-202710`. Its runtime log identifies the NVIDIA RTX 5080, records the last heartbeat at swap 1681 near 30 fps, and ends with the window closing and normal exit at 61.283 seconds. Audio queue drops/errors remained zero. There were no error/fatal-level records or device-removed reports.
-
-The log was not warning-free: 241 warnings comprised 238 vertex-format-0 notes, two known shader-preparation failures (`ps78af7d75d932c582` and `vs291187f5ef8ba74a`), and one unknown `ShaderDumpxe` root entry also present in the parent baseline. The shader-preparation failures were already documented in `docs/notes/shader-preparation.md`; this run does not establish that every shader compiled successfully. These records supplied no new blocker for the authorized local merge.
-
 ## Limits
 
-The original left/right images were **scene seq10 versus composite seq16 from one AMD capture**, not NVIDIA/AMD machines. NVIDIA was not retested during the initial AMD validation; the later NVIDIA follow-up and user acceptance are scoped above. The user's earlier NVIDIA title failure remains compatible with an application-side, cross-vendor API violation. Gameplay comparisons are not same-frame pixel-alignment tests. User acceptance does not establish complete-playthrough compatibility or coverage of every shader and scene. Private captures remain local; mutable `latest.png` is not an evidence reference.
+The original left/right images were **scene seq10 versus composite seq16 from one AMD capture**, not NVIDIA/AMD machines. NVIDIA was not retested during the initial AMD validation; the later NVIDIA follow-up is scoped above. The user's earlier NVIDIA title failure remains compatible with an application-side, cross-vendor API violation. Gameplay comparisons are not same-frame pixel-alignment tests. These results establish neither complete playthrough compatibility nor final user acceptance. Private captures remain local; mutable `latest.png` is not an evidence reference.

@@ -6,59 +6,40 @@ One record of completed changes, with unpublished work separated from verified r
 
 ## v0.5.0 — Unreleased / 未发布
 
-Development commits below organize validated work for the v0.5.0 milestone. Each feature batch increments the source patch version; this is not a release record or a claim that each intermediate commit was run.
+Current source is **0.4.15**, organized into 13 feature commits below. The delivery target remains **v0.5.0** and the published baseline remains **v0.4.2**. These commit numbers identify the new source history; earlier test binaries with matching version strings are separate artifacts and must be identified by their hashes.
 
-### Development commit 0.4.15
+当前源码为 **0.4.15**，已按下表拆成 13 个功能提交；交付目标仍是 **v0.5.0**，已发布基线仍为 **v0.4.2**。这些编号标识本次整理后的源码历史；此前可能同名的测试程序属于其他产物，须以哈希区分。
 
-- Automatically recognize game discs and STFS DLC, support mixed imports with partial retry, and expose complete DLC installations through guest content APIs.
+| Source / 源码 | Commit / 提交 | Change / 改动 |
+| --- | --- | --- |
+| `0.4.3` | `03c8385` | resolve portable game paths / 便携游戏路径解析 |
+| `0.4.4` | `a79588d` | add recomp executable identity / Recomp 程序图标 |
+| `0.4.5` | `cc4a97c` | discover and import disc layouts / 光盘结构识别与安全导入 |
+| `0.4.6` | `3f858f8` | modernize first-run setup / 独立首次启动设置 |
+| `0.4.7` | `2c81dc1` | streamline the debug menu / 轻量 Debug Menu |
+| `0.4.8` | `7569f9d` | restyle settings and offer safe restart / 设置菜单风格与安全重启 |
+| `0.4.9` | `fc075dd` | add transactional updates and package provenance / 自动更新与分发包来源 |
+| `0.4.10` | `3eb220d` | support Windows Vulkan and parallel shader preparation / Windows Vulkan 与并行 shader 准备 |
+| `0.4.11` | `2dc7f57` | reduce guest polling and capture overhead / 降低 CPU polling 与调试开销 |
+| `0.4.12` | `e2c8a48` | reuse startup shader bundles and known failures / 复用启动 bundle 与已知编译失败 |
+| `0.4.13` | `84929bc` | validate backend capabilities and isolate caches / 后端能力检查、回退与缓存隔离 |
+| `0.4.14` | `f513ec4` | balance backend window lifecycle resources / 后端窗口生命周期清理 |
+| `0.4.15` | `f77d943` | import DLC and automatically recognize content / DLC 导入与自动内容识别 |
 
-### Development commit 0.4.14
+Completed behavior includes portable game discovery, the installer and desktop menus, Windows updater support, Vulkan rendering and shader preparation, measured CPU reductions, typed backend caches and failure fallback. The user accepted the bounded D3D12/Vulkan scenes and one-way Xenia-to-Recomp save compatibility. Existing proportionate checks and final source equivalence were reused for this commit organization; intermediate commits were not separately built or run. No tag, push, public release or new package was created. See [development status](docs/STATUS.md) and the [release preparation matrix](docs/RELEASE-v0.5.0.md) for evidence and remaining publication gates.
 
-- Pair SDL video initialization and shutdown on the window owner thread and retain backend lifecycle cleanup.
+已完成便携游戏路径识别、导入器与桌面菜单、Windows updater、Vulkan 渲染和 shader 准备、实测 CPU 开销降低、后端缓存隔离及失败回退。用户已验收限定范围内的 D3D12/Vulkan 场景，并确认 Xenia 存档可单向复制到 Recomp 使用。本次提交整理复用已有适度验证并核对最终源码一致性，未逐提交构建或运行，也未打 tag、推送、发布或新建分发包。验证依据与剩余发布事项见[开发状态](docs/STATUS.md)及[发布准备矩阵](docs/RELEASE-v0.5.0.md)。
 
-### Development commit 0.4.13
+### DLC import and automatic content recognition
 
-- Make backend startup a finite capability-checked transaction with safe fallback and typed, identity-separated binary caches including future DX11/DXBC boundaries.
+- Add Lost Odyssey STFS DLC import to the v0.5.0 milestone. InstallGame now uses one **Files** or **Folder** flow to recognize game discs, DLC, and mixed selections from content headers and structure, presents one review, and imports discs before saving the shared path and importing DLC. A failed or cancelled DLC stage preserves completed discs and offers only remaining DLC on retry; a path-save failure warns without rolling back completed imports, and DLC-only imports leave `game-path.txt` unchanged. Nested unknown extensions receive a bounded ISO descriptor probe, while manually selected files and `.iso` inputs retain the bounded padded-image search. / 在 v0.5.0 里程碑中加入失落的奥德赛 STFS DLC 导入。InstallGame 现在通过统一的 **Files** 或 **Folder** 流程，根据内容 header 和结构自动识别游戏光盘、DLC 及混合输入，统一显示审查结果，并按光盘、共享路径保存、DLC 的顺序导入。DLC 阶段失败或取消时保留已完成光盘，只提供剩余 DLC 重试；路径保存失败只警告、不回滚已完成导入；纯 DLC 导入不修改 `game-path.txt`。嵌套未知扩展名执行有界 ISO descriptor 探测，手选文件和 `.iso` 输入保留有界填充镜像搜索。
+- Validation: 13 new automatic-import cases and 2 directly affected GUI cases passed on the first run in 0.934 seconds. Twenty unchanged DLC importer cases, two native modes and the independent STFS review were reused. No Tk, game, audio, build or package run was needed for this UX change. Real DLC rewards, areas and edition compatibility remain unverified. / 验证：13 项自动导入新增检查及 2 项直接受影响的 GUI 检查首次运行均通过，用时 0.934 秒；复用 20 项未变的 DLC 导入器检查、2 个原生模式和独立 STFS 审查。本次 UX 改动未启动 Tk、游戏、音频、构建或打包。真实 DLC 奖励、区域及版本兼容性仍待验证。
 
-### Development commit 0.4.12
+### Validation boundaries / 验证边界
 
-- Reuse identity-certified sequential startup bundles and deterministic compiler failures instead of repeated source scans and DXC work.
+Vulkan coverage remains Windows/RTX 5080 Maps 2, 3 and 12; other GPUs, full-game compatibility and future macOS/Linux work remain open. Settings retain system Trebuchet/CJK fonts and procedural textures, without a pixel-identical art claim. DX11 is unsupported at runtime. The preserved candidates stamped v0.5.0 and v0.5.1 remain historical package evidence; their filenames and hashes do not change the v0.5.0 milestone or identify this newly committed source. Hosted CI, public download and release gates remain pending.
 
-### Development commit 0.4.11
-
-- Reduce measured CPU hotspots in guest polling, launch diagnostics and debug trace paths.
-
-### Development commit 0.4.10
-
-- Implement Windows Vulkan presentation, translation and rendering with backend binary caches and a bounded logical-CPU-minus-one shader preparation queue.
-
-### Development commit 0.4.9
-
-- Check Windows updates at startup, preserve opt-out and safe helper handoff, and bind packages to linked source/dependency identities.
-
-### Development commit 0.4.8
-
-- Use the original menu layout and styled controls; prompt for Restart now, Later or Cancel when persisted settings need restart.
-
-### Development commit 0.4.7
-
-- Modernize the lightweight Debug Menu and restore focused-child dismiss behavior.
-
-### Development commit 0.4.6
-
-- Provide an independent modern setup dialog with Unicode folder selection and transactional save/cancel behavior.
-
-### Development commit 0.4.5
-
-- Validate and import nested ISO, GOD, extracted folders and XEX sources with disc identity and transaction safeguards.
-
-### Development commit 0.4.4
-
-- Add the Recomp icon and Windows resource identity.
-
-### Development commit 0.4.3
-
-- Resolve configured and empty game-path.txt relative to the executable; preserve explicit --game isolation.
+Vulkan 证据仍限定为 Windows/RTX 5080 的 Maps 2、3、12；其他 GPU、全游戏兼容性和未来 macOS/Linux 工作仍待完成。设置菜单使用系统 Trebuchet/CJK 字体及程序纹理，未宣称像素级原版美术一致。DX11 运行时尚不支持。保留的 v0.5.0、v0.5.1 候选包属于历史分发证据，其文件名和哈希不改变 v0.5.0 里程碑归属，也不代表本次新提交源码。Hosted CI、公开下载与发布检查仍待完成。
 
 ## [v0.4.2](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.4.2) — 2026-09-08
 

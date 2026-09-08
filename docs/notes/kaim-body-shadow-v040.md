@@ -1,5 +1,9 @@
 # Kaim body-shadow flicker: v0.4.0 investigation
 
+## Current clarification — 2026-09-08
+
+This independent RX 9060 XT capture investigation remains suspended, with no reproduced local root cause or reporter acceptance. The [current closures of Issues #3–#7](../STATUS.md#live-issue-reconciliation) concern separate save, battle-freeze, startup and Council reports; they do not establish a fix for this body-shadow capture or the separate Map 13 report. The dated investigation below retains its original evidence and limits.
+
 ## Status — 2026-09-07
 
 Suspended at the user's request after the final one-minute check produced no new root-cause lead. The reported flicker was not confirmed in the bounded local tests below. No production rendering change or verified fix was produced, and no reporter acceptance is recorded. This does not close the report or establish that v0.4.0 fixed it. The existing Map 13 body/environment-shadow report remains open; a relationship between the reports is unknown.

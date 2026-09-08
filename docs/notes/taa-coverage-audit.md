@@ -62,12 +62,19 @@ PS `8ead384aedf2bb23` 的消散 clip 使用对象 UV 的三纹理采样，没有
 
 现有 `jitter_misses` 只统计 `temporalSlot >= 0` 的已知路径，未知 VS 被排除；因此旧日志中的零 misses 不证明所有 VS 已覆盖。当前 draw 日志的默认 hash 过滤同样不是全体发现机制。
 
-后续覆盖方案仅为设计，尚未实现：
+<a id="shader-log-coverage-todo"></a>
 
-1. 在链接时记录 `runtime hash → 原始 VS / vertex-fetch 指纹 → 已审查位置族及最终槽位`，保留未知或歧义结果；408 个归一化组只用于缩小审查范围。`command_processor::HashWords` 按 uint32 计算 FNV，`renderer::GetShader` 按字节计算 Fnv1a，必须标注 hash namespace；`LO_SHADER_DUMP_DIR` 中命令处理器生成的 `.bin` 文件名不能直接与 renderer 的字节 hash 比较。
-2. 在实际 draw 审计相机／viewport／depth 身份、jitter 拒绝原因和上传，保留阶段与状态维度后按首次命中去重并累计次数，避免只按 shader hash 合并掉不同 pass。分别报告资源、运行 linked 与实际场景 draw 的覆盖分母。
-3. 优先审查同网格 depth／material／light 的覆盖不一致，检查 world 与骨骼配对，避免把残留 VP 或复用网格地址当成主相机／同一对象。
-4. 未知路径只记录，不自动启用 jitter。候选经真实位置合约、实际上传、正常时序 32 相位和 Off 对照后再决定是否加入映射；未触发组合继续保留未验证状态。
+### 2026-09-08：独立 shader 日志与覆盖审计 TODO（未实现）
+
+按用户要求，将已有覆盖设计与独立日志方案合并为以下待办。全部尚未实现，未进行本方案的构建或运行验证；现有 runtime 日志轮转和 F1 的 runtime 日志快照不代表已经具备独立 shader 日志、成组保留或累计覆盖清单。路线图保留[英文](../ROADMAP.md)／[中文](../ROADMAP.zh-CN.md)各一个入口。
+
+1. **分离日志与来源。** runtime 保留启动、崩溃、运行状态和严重 shader 问题摘要；独立 `shader-*.jsonl` 记录资源来源、动态链接来源、翻译／编译失败和 TAA 覆盖事件。在链接时记录 `runtime hash → 原始 VS / vertex-fetch 指纹 → 已审查位置族及最终槽位`，保留未知或歧义结果；408 个归一化组只用于缩小审查范围。`command_processor::HashWords` 按 uint32 计算 FNV，`renderer::GetShader` 按字节计算 Fnv1a，必须标注 hash namespace；`LO_SHADER_DUMP_DIR` 中命令处理器生成的 `.bin` 文件名不能直接与 renderer 的字节 hash 比较。
+2. **分别记录诊断类别。** 区分“缓存未命中”“来源未知”“翻译／编译失败”“TAA 未覆盖”和“预期拒绝”。缓存未命中不等于编译失败，来源未知不等于 TAA 未覆盖，符合现有 guard 的拒绝也不自动归为缺陷；一个事件可保留多个独立分类及原因，不将它们合并成一个失败计数。
+3. **审计实际 draw，包括未知 shader。** 记录 VS／PS、pass、frame，以及 map 值和是否可用；无法取得的上下文显式标为 unknown。保留实际相机、viewport／depth 身份、jitter 是否实际应用、拒绝理由及上传证据。未知 VS 不能被现有 `temporalSlot >= 0` 条件或默认 hash 过滤漏掉。优先审查同网格 depth／material／light 的覆盖不一致，并核对 world 与骨骼配对，避免把残留 VP 或复用网格地址当成主相机／同一对象。
+4. **去重并限制写入开销。** 以 shader＋pass＋reason 为基础保留阶段／状态差异，记录首次、最后命中及次数，避免只按 shader hash 抹掉不同 pass。采用后台批量、限量写入，避免每帧同步刷盘；日志开销和遗漏边界留待实现时验证。
+5. **按会话保留，按版本累计。** runtime 与 shader 日志使用同一会话身份，默认保留当前及最新两组旧会话；保护活动文件和自定义路径，无法删除的组留待后续启动处理。另存按源码、翻译器及 TAA 规则版本分组的累计覆盖清单，避免三组会话轮转丢失历史。分别报告盘内资源、有限派生、运行 linked shader 和实际场景 draw 的分母，未触发的链接组合及未访问场景不作穷尽承诺。
+6. **扩展 F1 日志快照。** 在现有 runtime 快照之外包含对应会话的独立 shader 日志快照，并记录其可用性；缺失日志不应丢弃渲染捕获。此项也是待实现行为。
+7. **整理缺口与确认修复分开。** 后续可从独立日志和累计清单发现、整理未覆盖项，无需每次 F1 导出。确认闪烁因果和修复仍需同场景验证，必要时导出；未知路径只记录，不自动启用 jitter。候选经真实位置合约、实际上传、正常时序 32 相位和 Off 对照后再决定是否加入映射，未验证项继续保持待办。
 
 ## 本地证据索引
 

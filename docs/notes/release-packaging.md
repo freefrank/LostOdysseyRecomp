@@ -19,10 +19,13 @@ The dedicated `out/build/release` directory uses clang-cl, Release and static CR
 `LO_BUILD_JOBS` defaults to 4; the hosted workflow uses 2 to limit memory pressure from the
 generated C++ files. Existing development builds are not overwritten.
 
-Packaging downloads the fixed Microsoft DXC v1.8.2505.1 archive and verifies its pinned SHA256.
-Both x64 dxcompiler.dll and dxil.dll come from that same archive. No Windows system DLLs are
-copied from the developer's machine. A PE import audit rejects missing non-system dependencies,
-including an accidental dependency on an unbundled Visual C++ runtime.
+Packaging uses the pinned Microsoft DXC v1.8.2407 x64 `dxcompiler.dll` and `dxil.dll` pair
+already staged beside the tested build. The pair is byte-checked against the official archive
+and recorded in `thirdparty/dxc-licenses/PROVENANCE.json`; its matching license files are
+included in the package. No Windows system DLLs are copied from the developer's machine. A PE
+import audit rejects missing non-system dependencies, including an accidental dependency on an
+unbundled Visual C++ runtime. The Vulkan loader is supplied by the graphics driver, not bundled
+as a Vulkan SDK component.
 
 Only explicitly selected payload files enter the ZIP. Game data, saves, settings, shader caches,
 private build inputs, generated source, logs and PDBs are not packaged. The manifest records the
@@ -93,6 +96,12 @@ Loaded-module paths confirmed both DXC DLLs came from the package. The existing 
 preparation failures remained (2 of 2,000), not a new packaging failure. Runtime smoke evidence
 is under `out/package-smoke`, import hashes under `out/installer-validation/verification.json`.
 The two Actions workflows passed actionlint locally; no hosted CI run has been performed yet.
+The v0.5.0 development candidate was built and package-checked locally. Its ZIP is
+`LostOdysseyRecomp-windows-x64-v0.5.0-147bffb2-dev.zip` (43,862,583 bytes, SHA256
+`1afcc6b56550bfb9d41e4799b0f747beda8002f0739ddead9a4c81959eaffcbb`). The main build used
+Release clang-cl/Ninja (session 4497); packaging exited 0 (session 47942). The candidate has not
+been committed, pushed, tagged, deployed or published, and hosted CI/anonymous download remain
+future publication checks.
 
 The current package starts through LostOdysseyRecomp.exe directly (Windows GUI subsystem).
 Without explicit `--game`, it anchors portable settings/logs/cache to the executable directory,
@@ -113,4 +122,5 @@ unrelated working directory and clean cancellation were also tested. The built-i
 completed in 989 ms during that cold start; see [index evidence](shader-resource-index.md).
 
 References: [GitHub workflow syntax](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax),
-[Microsoft DXC release](https://github.com/microsoft/DirectXShaderCompiler/releases/tag/v1.8.2505.1).
+[Microsoft DXC release](https://github.com/microsoft/DirectXShaderCompiler/releases/tag/v1.8.2407),
+and the [v0.5.0 release preparation matrix](../RELEASE-v0.5.0.md).

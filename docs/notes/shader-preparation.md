@@ -238,6 +238,15 @@ control与warm均使用最终EXE `1c8d98d93b7a10db9252829a669801c664c8236cfc4e71
 
 最终 `out/shader-pipeline-preview/summary.json` 对replay-seed的45,929个文件逐SHA256核对：control／warm均0 mismatch，aggregate为 `466fedfe339b4f8b0d084918bcc1048aa9e95d6dbcec0899c678ddba86603554`，两组新增source为0。`player-preview.json` 确认旧shader-integrated玩家副本的3个save、1个profile、1个settings共5文件复制后逐SHA一致；主EXE／PDB基线恢复已核对，本轮游戏进程均已退出。
 
+## 2026-09-08 UTC：当前启动反馈重新打开 QOL6（历史起点）
+
+用户最初反馈当前安装目录启动时仍出现 shader 检测／重复编译；当时具体运行的 EXE 与路径待核对。该段保留为调查起点；后续审计确认路径和 v0.4.16 身份，随后 v0.4.17 实现与两次 prepare-only 验证见下文。上述历史 control/warm 与 Map12 数据继续保留为限定证据，不代表当前安装的连续暖启动结果。
+
+## 2026-09-08 UTC：v0.4.17 startup bundle implementation
+
+启动审计确认原安装目录运行的是 v0.4.16 `a1ec7c9`，未设置 `LO_*`。该路径记录 source validation 20,686 files/4,322 ms、expansion 538 ms、22,972 valid、2 missing、0 invalid、2 DXC attempts、0 compiled，以及 preparation 3,873 ms；这些是根因定位数据，不是新收益或验收结论。
+
+v0.4.17 已实现可校验的顺序 startup bundle：按 game/source/compiled size+mtime、translator/backends、实际 DXC 与 validator 身份失效；不检测人为保留 size+mtime 的编辑。确定性失败缓存保持可见并可复用，I/O、OOM 和 module failure 不进入失败缓存；warm UI 区分 load 与 compile。`--prepare-shaders-only` 经过正常 video/renderer 初始化后在 guest thread 前退出。窄 Vulkan module-create factory failure 返回空以支持 fallback，不构成新的 Vulkan 游戏验证。`LoShaderStartupCacheTest` 已通过上述 metadata、HLSL VS/PS、DXIL/SPIR-V、损坏／截断、rollback、保留原文件、snapshot 与身份变化场景。随后原安装目录的两次 prepare-only 均 exit 0 且未启动 guest：首次迁移 22,972 valid、2 actual DXC rejection/0 success，生成 22,974 条 bundle；第二次 metadata 77 ms、bundle 2,397 ms（含 module 54 ms），22,972 ready/2 cached failures、0 source read/0 translation/0 actual DXC，PSO 288 ready/18 ms。五个用户 settings/save/profile SHA 未变，既有 cache entry 的 size/mtime 未变，只有首次新增 bundle 与两个 failed 记录。证据：`out/v0.5.0/shader-startup-recurrence/{startup-1/result.json,startup-2/result.json,deployment.json,launch-audit.md,fixture-run.log}`。两项既有 shader failure 仍可见，用户亲自启动验收、全游戏与其他平台仍未确认。
 
 ## 2026-09-07：v0.3.0 正式发布
 

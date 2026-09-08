@@ -1,0 +1,238 @@
+{
+  "schema_version": 1,
+  "owner": "freefrank",
+  "repository": "freefrank/LostOdysseyRecomp",
+  "number": 3,
+  "id": "PVT_kwHOAAsUY84Biy1a",
+  "url": "https://github.com/users/freefrank/projects/3",
+  "title": "Lost Odyssey Recomp Roadmap",
+  "visibility": "public",
+  "primary_view": "Roadmap",
+  "views": [
+    {
+      "id": "PVTV_lAHOAAsUY84Biy1azgLlIBU",
+      "name": "Roadmap",
+      "number": 1,
+      "layout": "ROADMAP_LAYOUT",
+      "filter": null
+    },
+    {
+      "id": "PVTV_lAHOAAsUY84Biy1azgLlIr8",
+      "name": "Backlog",
+      "number": 2,
+      "layout": "TABLE_LAYOUT",
+      "filter": "-status:Done -status:Cancelled"
+    },
+    {
+      "id": "PVTV_lAHOAAsUY84Biy1azgLlIsA",
+      "name": "History",
+      "number": 3,
+      "layout": "TABLE_LAYOUT",
+      "filter": "status:Done"
+    }
+  ],
+  "fields": [
+    {
+      "id": "PVTF_lAHOAAsUY84Biy1azhhphSA",
+      "name": "Title",
+      "dataType": "TITLE"
+    },
+    {
+      "id": "PVTF_lAHOAAsUY84Biy1azhhphSE",
+      "name": "Assignees",
+      "dataType": "ASSIGNEES"
+    },
+    {
+      "id": "PVTSSF_lAHOAAsUY84Biy1azhhphSI",
+      "name": "Status",
+      "dataType": "SINGLE_SELECT",
+      "options": [
+        {
+          "id": "f75ad846",
+          "name": "Todo"
+        },
+        {
+          "id": "47fc9ee4",
+          "name": "In Progress"
+        },
+        {
+          "id": "98236657",
+          "name": "Done"
+        },
+        {
+          "id": "defad975",
+          "name": "Awaiting validation"
+        },
+        {
+          "id": "f682650f",
+          "name": "Paused"
+        },
+        {
+          "id": "27201280",
+          "name": "Blocked"
+        },
+        {
+          "id": "7da3657c",
+          "name": "Cancelled"
+        }
+      ]
+    },
+    {
+      "id": "PVTF_lAHOAAsUY84Biy1azhhphSM",
+      "name": "Labels",
+      "dataType": "LABELS"
+    },
+    {
+      "id": "PVTF_lAHOAAsUY84Biy1azhhphSQ",
+      "name": "Linked pull requests",
+      "dataType": "LINKED_PULL_REQUESTS"
+    },
+    {
+      "id": "PVTF_lAHOAAsUY84Biy1azhhphSU",
+      "name": "Milestone",
+      "dataType": "MILESTONE"
+    },
+    {
+      "id": "PVTF_lAHOAAsUY84Biy1azhhphSY",
+      "name": "Repository",
+      "dataType": "REPOSITORY"
+    },
+    {
+      "id": "PVTF_lAHOAAsUY84Biy1azhhphSg",
+      "name": "Reviewers",
+      "dataType": "REVIEWERS"
+    },
+    {
+      "id": "PVTF_lAHOAAsUY84Biy1azhhphSk",
+      "name": "Parent issue",
+      "dataType": "PARENT_ISSUE"
+    },
+    {
+      "id": "PVTF_lAHOAAsUY84Biy1azhhphSo",
+      "name": "Sub-issues progress",
+      "dataType": "SUB_ISSUES_PROGRESS"
+    },
+    {
+      "id": "PVTF_lAHOAAsUY84Biy1azhhphSs",
+      "name": "Created",
+      "dataType": "CREATED"
+    },
+    {
+      "id": "PVTF_lAHOAAsUY84Biy1azhhphSw",
+      "name": "Updated",
+      "dataType": "UPDATED"
+    },
+    {
+      "id": "PVTF_lAHOAAsUY84Biy1azhhphS0",
+      "name": "Closed",
+      "dataType": "CLOSED"
+    },
+    {
+      "id": "PVTSSF_lAHOAAsUY84Biy1azhhpmBI",
+      "name": "Kind",
+      "dataType": "SINGLE_SELECT",
+      "options": [
+        {
+          "id": "3a168657",
+          "name": "Feature"
+        },
+        {
+          "id": "41f6c9da",
+          "name": "Bug"
+        },
+        {
+          "id": "c42730cd",
+          "name": "Infrastructure"
+        },
+        {
+          "id": "2d9225bc",
+          "name": "Release"
+        },
+        {
+          "id": "671502d4",
+          "name": "Research"
+        }
+      ]
+    },
+    {
+      "id": "PVTF_lAHOAAsUY84Biy1azhhpmBM",
+      "name": "Area",
+      "dataType": "TEXT"
+    },
+    {
+      "id": "PVTSSF_lAHOAAsUY84Biy1azhhpmCI",
+      "name": "Delivery",
+      "dataType": "SINGLE_SELECT",
+      "options": [
+        {
+          "id": "09c57c8d",
+          "name": "Not started"
+        },
+        {
+          "id": "e6c8e3bb",
+          "name": "In progress"
+        },
+        {
+          "id": "4b9c2eb6",
+          "name": "Implemented"
+        },
+        {
+          "id": "ff81b80a",
+          "name": "Validated"
+        },
+        {
+          "id": "05f2cb36",
+          "name": "Released"
+        },
+        {
+          "id": "264c3228",
+          "name": "Research complete"
+        },
+        {
+          "id": "eddb84bb",
+          "name": "Awaiting validation"
+        },
+        {
+          "id": "23633135",
+          "name": "Deferred"
+        },
+        {
+          "id": "e1e0b3e9",
+          "name": "Superseded"
+        }
+      ]
+    },
+    {
+      "id": "PVTF_lAHOAAsUY84Biy1azhhpmDE",
+      "name": "Release",
+      "dataType": "TEXT"
+    },
+    {
+      "id": "PVTF_lAHOAAsUY84Biy1azhhpmGo",
+      "name": "Start date",
+      "dataType": "DATE"
+    },
+    {
+      "id": "PVTF_lAHOAAsUY84Biy1azhhpmJU",
+      "name": "Target date",
+      "dataType": "DATE"
+    },
+    {
+      "id": "PVTF_lAHOAAsUY84Biy1azhhpmKQ",
+      "name": "Source key",
+      "dataType": "TEXT"
+    },
+    {
+      "id": "PVTF_lAHOAAsUY84Biy1azhhpspI",
+      "name": "Evidence",
+      "dataType": "TEXT"
+    }
+  ],
+  "roadmap_configuration": {
+    "group_by": "Release",
+    "start_date_field": "Start date",
+    "target_date_field": "Target date",
+    "zoom": "Month",
+    "verified": "Saved view reloaded and read from the GitHub UI on 2026-09-08"
+  }
+}
