@@ -92,10 +92,26 @@ if(WIN32)
     target_include_directories(LostOdysseyUpdater PRIVATE ${LO_RUNTIME_ROOT} ${CMAKE_SOURCE_DIR}/assets)
     target_compile_features(LostOdysseyUpdater PRIVATE cxx_std_20)
     target_compile_definitions(LostOdysseyUpdater PRIVATE NOMINMAX)
+    target_compile_definitions(LostOdysseyUpdater PRIVATE LO_SOURCE_VERSION="${LO_SOURCE_VERSION}")
     target_link_libraries(LostOdysseyUpdater PRIVATE bcrypt user32 shell32)
     # Both targets use this directory's runtime output path. Packaging takes
     # the helper beside the game, and a runtime build must produce both.
     add_dependencies(LostOdysseyRecomp LostOdysseyUpdater)
+    # Capture once before either target compiles; publish per-binary stamps only
+    # after successful links. An old EXE cannot inherit packaging-time HEAD.
+    set(LO_BUILD_SOURCE_STAMP "${CMAKE_CURRENT_BINARY_DIR}/build-source-current.json")
+    add_custom_target(LoBuildSourceStamp
+        COMMAND python "${CMAKE_SOURCE_DIR}/tools/build_provenance.py" capture
+            --root "${CMAKE_SOURCE_DIR}" --source "${LO_BUILD_SOURCE_STAMP}" --version "${LO_SOURCE_VERSION}"
+        VERBATIM)
+    foreach(target LostOdysseyRecomp LostOdysseyUpdater)
+        add_dependencies(${target} LoBuildSourceStamp)
+        set_property(TARGET ${target} APPEND PROPERTY LINK_DEPENDS "${CMAKE_SOURCE_DIR}/tools/build_provenance.py")
+        add_custom_command(TARGET ${target} POST_BUILD
+            COMMAND python "${CMAKE_SOURCE_DIR}/tools/build_provenance.py" linked
+                --root "${CMAKE_SOURCE_DIR}" --source "${LO_BUILD_SOURCE_STAMP}" --version "${LO_SOURCE_VERSION}"
+                --binary "$<TARGET_FILE:${target}>" VERBATIM)
+    endforeach()
 
     add_executable(LoUpdaterProbe WIN32 EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/updater_probe.cpp)
     target_compile_features(LoUpdaterProbe PRIVATE cxx_std_20)
@@ -414,7 +430,13 @@ if(WIN32 AND LO_BUILD_GPU)
     add_executable(LoBackendDeviceTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/backend_device_test.cpp)
     add_executable(LoBackendCacheTest EXCLUDE_FROM_ALL
         ${CMAKE_SOURCE_DIR}/tools/tests/backend_cache_test.cpp ${LO_RUNTIME_ROOT}/gpu/shader/dxc_compiler.cpp)
-    foreach(target LoBackendSelectionTest LoBackendDeviceTest LoBackendCacheTest)
+    add_executable(LoBackendLifecycleTest EXCLUDE_FROM_ALL
+        ${CMAKE_SOURCE_DIR}/tools/tests/backend_lifecycle_test.cpp
+        ${LO_RUNTIME_ROOT}/gpu/presentation.cpp ${LO_RUNTIME_ROOT}/gpu/shader/dxc_compiler.cpp)
+    target_compile_definitions(LoBackendLifecycleTest PRIVATE LO_GPU_PLUME SDL_MAIN_HANDLED)
+    target_link_options(LoBackendLifecycleTest PRIVATE /SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup)
+    target_link_libraries(LoBackendLifecycleTest PRIVATE plume d3d12 dxgi fmt::fmt SDL2::SDL2-static xxHash::xxhash)
+    foreach(target LoBackendSelectionTest LoBackendDeviceTest LoBackendCacheTest LoBackendLifecycleTest)
         target_include_directories(${target} PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,INCLUDE_DIRECTORIES>)
         target_compile_definitions(${target} PRIVATE NOMINMAX)
         target_compile_options(${target} PRIVATE /UNDEBUG /utf-8)
@@ -445,7 +467,7 @@ endif()
 # The Windows SDK compiler is allowed as an explicit fallback, but is not the release contract.
 if(WIN32 AND LO_BUILD_GPU)
     set(LO_DXC_BINARY_DIR "${CMAKE_SOURCE_DIR}/tools/XenosRecomp/thirdparty/dxc-bin/bin/x64")
-    foreach(target LostOdysseyRecomp LoShaderTool LoPresentationTest LoTemporalAATest LoRenderResolutionShaderTest LoVulkanBackendTest LoShaderStartupCacheTest LoBackendCacheTest)
+    foreach(target LostOdysseyRecomp LoShaderTool LoPresentationTest LoTemporalAATest LoRenderResolutionShaderTest LoVulkanBackendTest LoShaderStartupCacheTest LoBackendCacheTest LoBackendLifecycleTest)
         if(TARGET ${target})
             foreach(binary dxcompiler.dll dxil.dll)
                 add_custom_command(TARGET ${target} POST_BUILD

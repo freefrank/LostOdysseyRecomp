@@ -47,6 +47,17 @@ namespace gpu::video
         constexpr uint32_t kMaxHeight = 1080;
 
         SDL_Window* g_window = nullptr;
+        bool g_videoSubsystemOwned = false;
+        // Pair only this lifecycle's reference, on its window-owning thread.
+        // HID or other SDL clients retain their independent subsystem references.
+        void DestroyWindowResources()
+        {
+            if (g_window) { SDL_DestroyWindow(g_window); g_window = nullptr; }
+            if (g_videoSubsystemOwned) {
+                SDL_QuitSubSystem(SDL_INIT_VIDEO);
+                g_videoSubsystemOwned = false;
+            }
+        }
         std::atomic<uint64_t> g_shaderProgress{0};
         bool g_vulkan = false;
         constexpr uint64_t kProgressMask = (1ull << 28) - 1;
@@ -315,6 +326,7 @@ namespace gpu::video
                 LOG_WARNING("video: SDL video init failed: {}", SDL_GetError());
                 return false;
             }
+            g_videoSubsystemOwned = true;
 
             // Background regression runs still render and capture the swap chain,
             // but must never show a window or take focus from the desktop user.
@@ -357,24 +369,20 @@ namespace gpu::video
         std::promise<bool> ready;
         auto initialized = ready.get_future();
         g_windowThread = std::jthread([createWindow, ready = std::move(ready)](std::stop_token stop) mutable {
+            struct Cleanup { ~Cleanup() { DestroyWindowResources(); } } cleanup;
             bool success = false;
             try { success = createWindow(); }
             catch (const std::exception& e) { LOG_ERROR("video: window initialization exception: {}", e.what()); }
             catch (...) { LOG_ERROR("video: window initialization exception"); }
             LOG_INFO("video: window thread {} (independent event pump)", GetCurrentThreadId());
             ready.set_value(success);
-            if (!success) {
-                if (g_window) { SDL_DestroyWindow(g_window); g_window = nullptr; }
-                return;
-            }
+            if (!success) return;
             while (!stop.stop_requested())
             {
                 PumpWindowEvents();
                 // Bound latency even with no SDL events (native Debug Menu).
                 MsgWaitForMultipleObjectsEx(0, nullptr, 8, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
             }
-            SDL_DestroyWindow(g_window);
-            g_window = nullptr;
         });
         if (!initialized.get())
         {
@@ -384,7 +392,7 @@ namespace gpu::video
         }
         LOG_INFO("video: render thread {}", GetCurrentThreadId());
 #else
-        if (!createWindow()) return false;
+        if (!createWindow()) { Shutdown(); g_initAttempted = true; return false; }
 #endif
 
 #if defined(LO_GPU_PLUME) && defined(_WIN32)
@@ -437,11 +445,7 @@ namespace gpu::video
         g_preparationWindow = nullptr;
         g_shaderProgress = 0;
 #else
-        if (g_window)
-        {
-            SDL_DestroyWindow(g_window);
-            g_window = nullptr;
-        }
+        DestroyWindowResources();
 #endif
         g_available = false;
         g_initAttempted = false;
