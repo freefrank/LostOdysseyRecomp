@@ -151,6 +151,42 @@ namespace gpu::renderer
         float RegF(uint32_t index) { uint32_t v = Reg(index); float f; memcpy(&f, &v, 4); return f; }
         uint8_t* Phys(uint32_t physicalAddress) { return static_cast<uint8_t*>(g_memory.Translate(0xA0000000u + (physicalAddress & 0x1FFFFFFF))); }
 
+        struct HotCaptureEnvironment
+        {
+            bool geometryCaptureEnabled = false;
+            bool dumpResolveDirConfigured = false;
+            std::string geometryCaptureDir;
+            std::string dumpResolveDir;
+            uint32_t dumpDrawFrame = 0;
+            uint32_t dumpResolveFrame = 0;
+        };
+
+        const HotCaptureEnvironment& GetHotCaptureEnvironment()
+        {
+            // These are launch-time diagnostics. Runtime capture requests keep
+            // using captureFrame/debugCaptureDir and take precedence below.
+            static const HotCaptureEnvironment environment = []
+            {
+                HotCaptureEnvironment result;
+                if (const char* value = getenv("LO_GEOMETRY_CAPTURE_DIR"))
+                {
+                    result.geometryCaptureEnabled = true;
+                    result.geometryCaptureDir = value;
+                }
+                if (const char* value = getenv("LO_DUMP_RESOLVE_DIR"))
+                {
+                    result.dumpResolveDirConfigured = true;
+                    result.dumpResolveDir = value;
+                }
+                if (const char* value = getenv("LO_DUMP_DRAW_SEQ"))
+                    result.dumpDrawFrame = strtoul(value, nullptr, 10);
+                if (const char* value = getenv("LO_DUMP_RESOLVE_SEQ"))
+                    result.dumpResolveFrame = strtoul(value, nullptr, 10);
+                return result;
+            }();
+            return environment;
+        }
+
         uint32_t GpuSwap(uint32_t value, uint32_t endian)
         {
             switch (endian & 3)
@@ -3033,8 +3069,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 // Offline vertex replay: capture one frame of relative-addressed
                 // draws with their constants, indices and current guest streams.
                 // Stream files are swapped CPU snapshots, not upload-heap reads.
-                if (const char* captureDir = getenv("LO_GEOMETRY_CAPTURE_DIR"))
+                const auto& captureEnvironment = GetHotCaptureEnvironment();
+                if (captureEnvironment.geometryCaptureEnabled)
                 {
+                    const char* captureDir = captureEnvironment.geometryCaptureDir.c_str();
                     static const uint32_t captureFrame = getenv("LO_GEOMETRY_CAPTURE_FRAME")
                         ? strtoul(getenv("LO_GEOMETRY_CAPTURE_FRAME"), nullptr, 10) : 2400;
                     static uint32_t captureDraw = 0;
@@ -3564,7 +3602,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 static const bool captureDrawSteps = getenv("LO_DEBUG_CAPTURE_DRAW_STEPS") &&
                     strcmp(getenv("LO_DEBUG_CAPTURE_DRAW_STEPS"), "1") == 0;
                 if (!debugCaptureDir.empty() && !captureDrawSteps) return;
-                const uint32_t dumpFrame = captureFrame ? captureFrame : (getenv("LO_DUMP_DRAW_SEQ") ? strtoul(getenv("LO_DUMP_DRAW_SEQ"), nullptr, 10) : 0);
+                const auto& captureEnvironment = GetHotCaptureEnvironment();
+                const uint32_t dumpFrame = captureFrame ? captureFrame : captureEnvironment.dumpDrawFrame;
                 static const uint32_t every = getenv("LO_DUMP_DRAW_EVERY") ? std::max(1ul, strtoul(getenv("LO_DUMP_DRAW_EVERY"), nullptr, 10)) : 25;
                 static const uint64_t dumpVs = getenv("LO_DUMP_DRAW_VS") ? strtoull(getenv("LO_DUMP_DRAW_VS"), nullptr, 16) : 0;
                 static uint64_t lockedFrame = 0;
@@ -3578,7 +3617,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
                 else if (frame != dumpFrame || (drawsThisFrame % every) != 0)
                     return;
-                const char* dir = debugCaptureDir.empty() ? getenv("LO_DUMP_RESOLVE_DIR") : debugCaptureDir.c_str();
+                const char* dir = debugCaptureDir.empty()
+                    ? (captureEnvironment.dumpResolveDirConfigured ? captureEnvironment.dumpResolveDir.c_str() : nullptr)
+                    : debugCaptureDir.c_str();
                 DumpTexture(color, fmt::format("{}/f{}_draw{:04}_{}x{}.ppm", dir ? dir : ".", frame, drawsThisFrame, color.width, color.height), "draw step");
             }
 
@@ -3587,7 +3628,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             void DumpResolveStep(HostTexture& tex, uint32_t destBase, uint64_t writeOrdinal, uint32_t guestFormat)
             {
                 QueueResolveTrace(tex, destBase);
-                const uint32_t dumpFrame = captureFrame ? captureFrame : (getenv("LO_DUMP_RESOLVE_SEQ") ? strtoul(getenv("LO_DUMP_RESOLVE_SEQ"), nullptr, 10) : 0);
+                const auto& captureEnvironment = GetHotCaptureEnvironment();
+                const uint32_t dumpFrame = captureFrame ? captureFrame : captureEnvironment.dumpResolveFrame;
                 if (!dumpFrame || frame != dumpFrame)
                     return;
                 uint32_t bpp = tex.format == RenderFormat::R8G8B8A8_UNORM ? 4 : tex.format == RenderFormat::R16G16B16A16_FLOAT ? 8 : tex.format == RenderFormat::R32_FLOAT ? 4 : 0;
@@ -3603,7 +3645,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 Flush();
                 Begin();
                 const uint8_t* src = static_cast<const uint8_t*>(readback->map());
-                const char* dir = debugCaptureDir.empty() ? getenv("LO_DUMP_RESOLVE_DIR") : debugCaptureDir.c_str();
+                const char* dir = debugCaptureDir.empty()
+                    ? (captureEnvironment.dumpResolveDirConfigured ? captureEnvironment.dumpResolveDir.c_str() : nullptr)
+                    : debugCaptureDir.c_str();
                 std::string path = fmt::format("{}/f{}_seq{:02}_{:x}.ppm", dir ? dir : ".", frame, resolveSeq++, destBase);
                 if (!debugCaptureDir.empty())
                 {

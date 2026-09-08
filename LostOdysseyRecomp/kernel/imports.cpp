@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <cpu/ppc_context.h>
 #include <cpu/guest_thread.h>
+#include <cpu/poll_wait.h>
 #include "function.h"
 #include "xbox.h"
 #include "heap.h"
@@ -734,11 +735,13 @@ static void ExTerminateThread(uint32_t exitCode)
 
 void GuestThreadRunWithTerminateHook(void (*run)(void*), void* arg)
 {
+    poll_wait::ResetThread();
     jmp_buf jb;
     t_terminateJump = &jb;
     if (setjmp(jb) == 0)
         run(arg);
     t_terminateJump = nullptr;
+    poll_wait::ResetThread();
 }
 
 static GuestThreadHandle* ThreadFromHandle(uint32_t handle)
@@ -815,7 +818,10 @@ static uint32_t KeDelayExecutionThread(uint32_t WaitMode, bool Alertable, be<int
     if (timeout >= 10 && timeout != INFINITE)
         LOG_KERNEL("sleep {} ms", timeout);
     if (timeout == 0)
-        std::this_thread::yield();
+    {
+        if (!poll_wait::ZeroDelay())
+            std::this_thread::yield();
+    }
     else if (timeout != INFINITE)
         std::this_thread::sleep_for(std::chrono::milliseconds(timeout));
     else

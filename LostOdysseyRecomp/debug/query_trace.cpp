@@ -1,5 +1,6 @@
 #include <stdafx.h>
 #include <os/logger.h>
+#include <cpu/poll_wait.h>
 
 extern "C" PPC_FUNC(__imp__sub_827B7408);
 extern "C" PPC_FUNC(__imp__sub_823CDCA8);
@@ -12,6 +13,7 @@ PPC_FUNC(sub_823CF3F0)
     if (!enabled)
     {
         __imp__sub_823CF3F0(ctx, base);
+        poll_wait::QueryResult(ctx.r3.s32);
         return;
     }
     const uint32_t query = ctx.r3.u32, output = ctx.r4.u32, sp = ctx.r1.u32;
@@ -31,6 +33,7 @@ PPC_FUNC(sub_823CF3F0)
         LOG_ERROR("query callee changed saved registers: query={:#x} output={:#x} sp={:#x}->{:#x} r27={:#x}->{:#x} r28={:#x}->{:#x} r29={:#x}->{:#x} r30={:#x}->{:#x} r31={:#x}->{:#x}",
             query, output, sp, afterSp, r27, after[0], r28, after[1],
             r29, after[2], r30, after[3], r31, after[4]);
+    poll_wait::QueryResult(ctx.r3.s32);
 }
 
 // Opt-in lifetime evidence for D3D type-9 queries. Never change query results.

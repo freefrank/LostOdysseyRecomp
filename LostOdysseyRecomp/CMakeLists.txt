@@ -1,6 +1,15 @@
 project(LostOdysseyRecomp LANGUAGES CXX)
 
 set(LO_RUNTIME_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
+add_executable(LoPollWaitTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/poll_wait_test.cpp)
+target_include_directories(LoPollWaitTest PRIVATE ${LO_RUNTIME_ROOT})
+target_compile_features(LoPollWaitTest PRIVATE cxx_std_20)
+target_compile_definitions(LoPollWaitTest PRIVATE NOMINMAX)
+if(MSVC)
+    target_compile_options(LoPollWaitTest PRIVATE /UNDEBUG)
+else()
+    target_compile_options(LoPollWaitTest PRIVATE -UNDEBUG)
+endif()
 set(LO_PRIVATE_DIR ${CMAKE_SOURCE_DIR}/LostOdysseyRecompLib/private)
 
 # Logging stubs for every kernel import without an implementation. Regenerated
