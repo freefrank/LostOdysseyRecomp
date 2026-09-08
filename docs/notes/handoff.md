@@ -1,5 +1,29 @@
 # 接手入口
 
+## 2026-09-07（本地）taa-fix 开发分支接续：敌人消散仍待修复
+
+用户要求将本次 TAA 改动提交到 `taa-fix` 分支；当前仍为本地 `0.4.2-dev`，未发布，玩家验收待完成。生产范围保持六条位置路径、draw 诊断及 17,287 项检查，没有新增敌人消散修复。四盘扫描的可跟踪摘要与后续覆盖方案见 [TAA 覆盖审查](taa-coverage-audit.md)；运行链接来源与 draw 覆盖统计仅为未实现设计，408 个归一化组不能直接当语义白名单。
+
+用户已自行安装 `fe39a9c9…`；f5446–5448 新导出完整，54 份 raw resolve 检查通过，审查时无游戏进程。固定曝光下敌人胸甲、肩甲／武器黑面在最早颜色 resolve 已出现。新增 `4bd8985d84983b83` 以 c230 输出位置，在每帧 draw10–13／30–33 深度预处理漏覆盖，并与已支持本体层配对；它属于盘内 `adc97a079302f52e` 的新运行链接结果。消散 clip 阈值与本体同步，深度／材质投影不一致为优先候选。F1 每帧停顿 0.706–0.900 秒，尚无实际上传、正常时序 32 相位或 Off 证据，不能当成已证明的视觉根因。见[新诊断](shadow-texture-lod.md#enemy-death-f5446)与本地 `out/enemy-death-f5446/`。
+
+下节“原安装七文件未变”只描述此前交付时的保护检查；当前 EXE 已由用户替换。山体有限实跑通过、原轮胎已验收及两个 AMD 报告分别挂起的状态不变。
+
+## 2026-09-07（本地）战斗 TAA 实跑通过，玩家验收待完成
+
+用户已授权修复。本地 `0.4.2-dev` 补齐六条已核对的战斗位置路径，保留全部相机／viewport／深度限制及 jitter 算法。17,287 项 CPU 检查通过，覆盖 32 相位、四种分辨率、三层位置负对照、蒙皮和原轮胎／d55 用例。新增 draw log 可跟随 resolve trace，`log_slot` 不授权 jitter。见[实现与边界](shadow-texture-lod.md#battle-taa-fix-dev)和 `out/battle-taa-fix/LoTemporalJitterTest.log`。
+
+隔离 v0.4.1 源码候选排除 Issue #7 改动，构建及六项 CPU／GPU 用例通过；开发 ZIP `0bb58914…`／EXE `fe39a9c9…` 的 45 项哈希、归档和 importer 检查通过。已在 Map3 随机遇敌复现原山体，基线／修正版／Off 各覆盖 32 相位：基线 16 帧至少半区变黑，修正版和 Off 均为零；修正版三层 VP 32/32 一致，Off 224 条常量不变。三组观测时间戳均小于 250 ms，但 temporal summary 未覆盖采样帧，history reuse／gap 标志未知；跨进程相机动画不同。详见[实跑证据](shadow-texture-lod.md#battle-taa-runtime-dev)与 `out/battle-taa-fix/runtime-comparison.md`。
+
+实际包 Map3 轮胎回归也已通过：352 条上传、64 组三层 VP 和 32 条 temporal summary 均通过；近远轮胎的 mask／depth 四组 ROI 与已验收 r2 按 32 相位逐字节一致，粒子影响的 source／TAA 颜色不作字节等同。当时七个原安装文件哈希未变，全部自有游戏进程已结束；该交付检查点尚无玩家验收、提交、推送或发布。本地入口与完整证据见 `out/battle-taa-fix/REPORT.md`。下节保留先前只诊断时的状态；原轮胎已验收和两个旧 AMD 报告分别挂起的结论保持。
+
+四盘静态审查另已完成：22,935 份 HLSL（2,859 VS／20,076 PS）、408 个位置程序组；七个 observed VS、19 个阴影 PS 及平面投影／blur／fog 路径仍为候选。它们未加入本包修复，也不是已确认可见缺陷或全游戏验收。详见[扫描范围与边界](shadow-texture-lod.md#taa-four-disc-audit-20260907)及 `out/taa-whole-game-scan/REPORT.md`。
+
+## 2026-09-07（本地）v0.4.1 新战斗地形闪烁
+
+正式 v0.4.1 EXE `9e0e13d9…`、RTX 5080／2560×1440／AA3 的战斗地形出现大片黑亮切换。原 2871–2873 和现场补充 26786–26788 两组三帧导出完整；异常已存在于最早颜色 resolve，早于阴影遮罩与最终 TAA。已确认同几何深度层支持 jitter、材质／补光层漏覆盖，这是强候选，尚无实际上传常量、修正版 A/B 或 Off 对照。详见[战斗诊断](shadow-texture-lod.md#battle-terrain-flicker-v041)，本地证据为 `out/battle-flicker-20260907-f2871/`。
+
+接续重点是同场景实际上传和颜色输出对照，保留现有深度／viewport 限制。捕获停顿超过 250 ms 会影响后续 jitter 条件，首帧坏、后两帧好不能作为无扰动时序对照。本轮只诊断和捕获，未改运行时代码、构建、更改 AA、替换 EXE 或提交发布；用户游戏保持运行。新 RTX 战斗缺陷待修复，原 Map3 轮胎验收保持已解决，两个旧 AMD 报告继续分别挂起，未证明同因。
+
 ## 2026-09-06 当前交接
 
 [v0.2.2 已正式发布](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.2.2)，为最新正式版，包含 AMD resolve 初始化和 Unicode 启动／存档路径修复。AMD 与 NVIDIA 定向验证、NVIDIA 用户视觉验收通过；Issue #4 完整游戏崩溃尚未复现，不宣称已解决。见[发布说明](release-0.2.2.md)、[AMD 证据](amd-resolve-initialization.md)与[路径验证](save-path-unicode.md)。文本语言补丁仍暂停。

@@ -152,3 +152,77 @@ r2 实际解压包的同位置 AA Off 检查也已完成：352 条绘制上传�
 ## 2026-09-08：v0.4.1 正式发布
 
 [v0.4.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.4.1) 于 00:03:50 UTC 从 `eb43f108d2cdd3aef682a32b202425c28d168472` 发布，包含 r2 已验收修复及三帧日志导出。正式 EXE 为 `9e0e13d991830de84d7fb85ac7a2543f779dbf7936ee5acd4cabe7cce5b2c57f`；与 r2 相比，渲染和捕获源码未变，源码版本改为 `0.4.1`。CI、45 项包文件、安装器及 8 项无图形启动路径检查、匿名下载核验通过。本轮正式包没有加载游戏或重做 GPU／玩家验收，画面依据仍为上方 r2 的同 Map3 对照与用户确认。独立 AMD 报告继续挂起；包哈希及证据见[状态总表](../STATUS.md)。
+
+<a id="battle-terrain-flicker-v041"></a>
+
+## 2026-09-07（本地）：v0.4.1 战斗地形闪烁诊断
+
+发布后用户报告新的战斗闪烁。现场 PID 17424 的 EXE SHA256 为 `9e0e13d991830de84d7fb85ac7a2543f779dbf7936ee5acd4cabe7cce5b2c57f`，与正式 v0.4.1 一致；目录名称中的旧开发版本不能代表实际程序版本。设备为 RTX 5080，输出 2560×1440，AA3。原导出 `render-17888272305412556-f2871.zip` 的 223 个归档条目通过 CRC 检查，2871–2873 连续三帧的 57 份 raw resolve 尺寸正确，深度全部有限，未见 dropped draws。
+
+原导出的最早颜色 resolve（seq00）已经出现地面／山体大片明暗变化，早于阴影遮罩生成、guest 后处理和最终 TAA。用户随后授权读取当前画面，现场截图显示战斗指令菜单和大片地形黑块；通过 F1 补充的 26786–26788 三帧导出通过 193 个条目的 CRC 检查，51 份 raw resolve 尺寸正确。26786 的山体区域纯黑，26787／26788 恢复，角色与 UI 相对稳定。这确认了新的可见战斗地形缺陷，但尚未确定全部异常像素的绘制归属。
+
+独立 shader 审查确认同一组 18,678-index 几何的深度、材质和补光具有相同 index／vertex fetch、world 与 VP。深度 VS `f7fd88506d704a3d` 的 c4 已支持 jitter；材质 VS `400df7c5a60819f5` 与补光 VS `08dcef32bd434f8c` 的实际位置变换均使用 c7，却未纳入支持名单。深度与材质均使用 `GREATER_EQUAL` 并写入深度，补光使用同一比较但不写入深度。仅深度层偏移可使同坡度表面成片无法通过后续深度比较，与早期颜色输出的异常相符；这是已确认的覆盖漏项和强候选机制，尚非捕获 GPU 深度测试的最终根因证明。
+
+F1 记录的是临时上传修改前的 guest 常量；AA3、scene-ready 或 TAA 输出存在都不能代替实际上传证据。三帧导出的 readback／写盘停顿超过 250 ms 时会影响后续帧 TAA／jitter 条件，因而首帧严重、后两帧恢复不能当作正常运行的无扰动时序对照。后续需核对同场景深度／材质／补光的实际上传常量，完成保留现有 viewport／深度身份限制的修正版 A/B 及 AA Off 对照，再关联最早颜色输出与用户可见变化。本次未改运行时代码、构建、更改 AA、替换 EXE 或提交发布，游戏保持运行；没有修复或新的玩家验收结论。
+
+**本项作为新的 RTX 战斗缺陷待修复。** 原 Map3 轮胎缺陷的用户验收继续有效；两个旧 AMD 报告仍分别挂起，未证明与本项同因。诊断材料保留在本地 `out/battle-flicker-20260907-f2871/`，包括 `REPORT.md`、`shader-review/REPORT.md`、两份 `inventory.json` 和 `live-f26786/full-comparison.png`；私人原始捕获不纳入公开文档。
+
+<a id="battle-taa-fix-dev"></a>
+
+## 2026-09-07（本地）：战斗 TAA 六条路径修复，CPU 检查通过
+
+用户随后授权“修”。本地 `0.4.2-dev` 在 `temporal_scene.h` 补齐六条已按 HLSL 核对的位置路径：`f1b330b3ceea9a3b` 使用 c4；`8b5577db3ced3327`、`400df7c5a60819f5`、`08dcef32bd434f8c` 使用 c7；`0eb223d33f8e8e0c`、`1e9017d2b296f480` 使用 c233。现有 jitter 算法、viewport／VTE、相机位元、场景深度身份和精确遮罩 shader 对限制均保留；不会因为常量中残留 VP 就放行屏幕空间 shader。
+
+`LoTemporalJitterTest` 通过 17,287 项 CPU 检查，覆盖 32 相位和 720p／1080p／1440p／4K。使用捕获常量独立计算三层位置后，修正的深度／材质／补光结果完全一致，Z/W、材质补光的 clip-derived 采样坐标、蒙皮路径与 Off／拒绝条件均受检查。旧材质不偏移的负对照产生最高 0.487771 像素层间分离；修正后的实际 raster offset 相对目标 jitter 最大误差为 0.000426 像素。这是两个不同指标，均非游戏画面改善幅度。原轮胎与 d55 阴影重建 CPU 用例继续通过。日志：`out/battle-taa-fix/LoTemporalJitterTest.log`。
+
+`renderer.cpp` 增加 `LO_TEMPORAL_DRAW_LOG_WITH_RESOLVE_TRACE=1`，可在定向 resolve trace 活跃时记录已提交绘制的实际常量。`slot` 保留生产映射结果，`log_slot` 仅指明诊断读取槽位，使拒绝新增 shader 的旧基线也能记录原始／上传 VP；诊断不会强制 jitter 或绕过保护条件。用法见[测试说明](../../tools/tests/README.md)。
+
+候选使用独立 v0.4.1 源码快照，排除并行的 Issue #7 崩溃诊断改动，版本为 `0.4.2-dev`。本检查点仅确认实现与 CPU 验证；实际上传、修正版／Off 连续画面对照、Map3 轮胎回归和实际开发包验证仍在进行，尚无玩家验收、提交、推送或发布。上节诊断保持其原日期边界；本战斗缺陷暂不关闭，已验收轮胎与两个分别挂起的 AMD 报告不合并。
+
+<a id="battle-taa-runtime-dev"></a>
+
+## 2026-09-07（本地）：原战斗场景 32 相位对照与开发包验证
+
+隔离源码构建通过，六项选定用例 `LoTemporalJitterTest`、`LoTemporalSceneTest`、`LoTemporalMathTest`、`LoTemporalHistoryDiagnosticTest`、`LoPolygonOffsetTest` 和 `LoTemporalAATest` 均 exit 0。开发包为 `out/battle-taa-fix/delivery/LostOdysseyRecomp-windows-x64-v0.4.2-dev-battle.zip`，42,581,592 字节，SHA256 `0bb589145af79de9badd637fca02cd6043740a47700cb1e76bb3d887ed435969`；45 项 payload 哈希、归档检查和 importer self-test 通过，不含游戏或用户数据。修正版和 Off 均运行包内实际 EXE `fe39a9c90a04c6f27b3d370b41014ab0fa8ddee1aa3f903daa78ee7532d4bb74`。保留 v0.4.1 渲染行为并加入同类诊断的基线 EXE 为 `23f34ff7adef300775c9a4241a206caeb93a482a22f7cacceaa0519904534339`，不是正式发布 EXE。
+
+使用当前存档副本在 Map3 随机遇敌，复现原报告的山体。三个独立进程均为实际 2560×1440，每组覆盖连续 32 帧及全部 jitter 相位。山体 ROI 为 `(200,300)-(900,650)`，近黑定义为原始线性 RGB 最大分量小于 `0.0001`。
+
+| 组别 | 帧区间 | 每帧山体近黑比例范围 | 至少半区变黑的帧数 | 三层上传 VP 一致 |
+| --- | --- | --- | --- | --- |
+| v0.4.1 渲染基线／TAA | 4945–4976 | 0.056327%–100% | 16/32 | 0/32 |
+| 修正版／TAA | 4933–4964 | 0.049388%–0.097959% | 0/32 | 32/32 |
+| 修正版／Off | 4930–4961 | 0.055102%–0.091837% | 0/32 | 32/32 |
+
+三层按同一 18,678-index 几何核对。基线 224 条选定 draw 中仅 96 条应用 jitter；修正版 224/224 应用，深度／材质／补光 VP 上传全部符合独立 float32 计算并逐 bit 匹配；Off 的 224 条 VP／PS bank 均保持原字节。相关 Z/W 和阴影重建补偿检查通过。此证据支持该覆盖修复消除本次取样到的成片山体黑块；不等于整场战斗或全部 shader 验收。
+
+三组日志观测到的相邻 upload／resolve 时间戳最大间隔分别为 97／121／84 ms，没有观测区间超过 250 ms。这些是精度为 1 ms 的 CPU 日志节点，不能代替 GPU 帧时，也未覆盖首条上传前的间隔。实际 TAA 输出已被捕获，但这些帧没有 temporal summary 日志，history reuse 与 summary gap 标志保持未知，不能从缺少记录推断为成功或未重置。跨进程相机／动画时间不同，同相位不代表同一相机，不能宣称逐帧像素相同。
+
+实际开发包另行通过同 Map3 原轮胎位置回归：f2519–2550 覆盖完整 32 相位，352/352 条日志上传应用 jitter，64 组三层轮胎 VP 全部一致。该轮胎运行的 32 条 temporal summary 均 ready／completed／reused=true、gap=false、jitter_misses=0；这不能补足前述战斗窗口缺少的 summary。按相位与已验收 r2 比较，近／远轮胎 mask 和 depth 四组 ROI 均 32/32 逐字节相同，轮胎逐相位对照图经目视检查稳定。火粒子时间不同，source／TAA 颜色不宣称逐字节一致。证据：`out/battle-taa-fix/map3-regression.json`。
+
+该交付检查点的七个受保护原安装文件哈希未变，全部自有游戏进程已结束。当时本轮玩家验收未完成，开发包未提交、推送或发布。此前轮胎已验收结论继续有效，两个旧 AMD 报告仍分别挂起。入口与保留检查见本地 `out/battle-taa-fix/REPORT.md` 和 `handoff-verification.json`；运行与构建证据为 `runtime-comparison.md`／`.json`、`build-fixed.json`、`test-results.json` 与 `delivery-audit.json`。初期无效路线不纳入上述通过结果；后续安装版本与新反馈见[消散诊断](#enemy-death-f5446)。
+
+<a id="taa-four-disc-audit-20260907"></a>
+
+## 2026-09-07（本地）：四盘 TAA 静态覆盖审查
+
+按用户新增要求，独立扫描实际安装的 disc1–disc4：全读 52 个 FPD、核对四个 FPI 和 30,399 个 CPX 区段，完整解码按编码内容去重的 10,060 个 CPX。识别到 20,686 个原始资源 shader，加上四个静态 XEX shader 与现有规则可枚举的 2,245 个 VS 派生，共生成 22,935 份 HLSL（2,859 VS／20,076 PS）。原始资源 hash 集合与独立运行提取一致，对应 shader 源字节逐字节一致；额外 observed／cache-only 变体另保留来源。覆盖边界是现有容器格式与 microcode 校验器识别到的四盘资源，未知格式及所有动态链接组合不作完备性保证。
+
+全部 VS 位置组件依赖被审查并归为 408 个位置程序组，另审阅全部 20,076 个 PS 和一份单独的 cache-only PS。候选仍包括七个 observed VS 位置路径、19 个额外阴影重建 PS、三个平面深度投影 PS、一个 motion／depth blur PS，以及独立 fullscreen 雾 ray 合约。阴影变体有不同常量布局，不能统一照搬 d55 的 c4 修正；不同相机／viewport 和残留 VP 的负例已排除。雾合约在六帧捕获常量、32 相位、四分辨率的 CPU 对照中 RGBA 最大差为零，不支持它是本次战斗黑块的原因。
+
+这些是待取得实际配对、相机／深度／viewport 和上传证据的候选，未因此扩展生产名单，也不是额外已确认视觉故障。612 份 HLSL 带 translator notes，其中 611 份为原始 VS 尚未运行链接的 fetch/link 信息，另一份 PS 含未知指令／export；不能把这些提示一律计作编译失败。控制流和动态常量分析仍有边界，本次没有对全部 HLSL 执行 DXC 或 GPU draw，也未进行全游戏视觉验收。可跟踪的[覆盖审查](taa-coverage-audit.md)保留来源、候选及后续运行链接实例；完整本地报告与逐 shader 来源保留在 `out/taa-whole-game-scan/REPORT.md`、`vs-families.md`、`pixel-contract-review.md` 和相应清单。
+
+<a id="enemy-death-f5446"></a>
+
+## 2026-09-07（本地）：0.4.2-dev 敌人消散仍闪烁，开发分支状态
+
+用户新增要求将本次改动提交到 `taa-fix`，当前为本地开发分支、未发布，玩家验收待完成。生产实现仍只有上文六条位置路径和诊断日志，17,287 项检查结果保持原覆盖范围；没有新增敌人消散修复。用户已自行用候选 EXE `fe39a9c90a04c6f27b3d370b41014ab0fa8ddee1aa3f903daa78ee7532d4bb74` 替换安装版本，审查时无游戏进程；前述“原七文件哈希未变”仅属于此前交付检查点。
+
+新 ZIP `render-17888399554225865-f5446.zip` 的 SHA256 为 `f5a2149426d13b4e4c48262f894cacc42a5117c4ccc346a1f4c5f4fdf26b5ee1`，224 项归档 CRC 通过；f5446–5448 连续，54 份 raw resolve 尺寸正确、深度有限，来源为 `0.4.2-dev`／AA3／2560×1440。固定 x16 曝光与 gamma 2.2 检查原始 float16 HDR，f5446 敌人的胸甲、肩甲／武器已有整片黑多边形，后两帧恢复纹理。最早颜色 resolve（draw93）已见异常，早于 shadow mask、seq08 蓝紫粒子及最终 TAA；不把后期阶段当作首发位置。
+
+三帧各 310 draw／34 VS 的完整位置审查只新增一个运行 hash：`4bd8985d84983b83`。它最终使用 c230–c233 输出主相机位置，每帧 draw10–13、30–33 关闭颜色写入并执行 GREATER_EQUAL 深度写入；实际位置槽、viewport／VTE 和 guest depth 条件匹配，但当前 `PositionVPSlot` 未覆盖。与后续已支持 c233 的基础／补光层，已按索引、fetch 描述、world 及骨骼前缀配对；F1 缺少 vertex/index 内容，不把前缀相同扩展为所有顶点访问或整个 bone bank 一致。
+
+PS `8ead384aedf2bb23` 使用对象 UV 的三纹理 clip，没有场景深度／屏幕坐标重建。draw10–13 的 c3.x 约为 `0.04801565 → 0.05117329 → 0.05707855`，与对应本体层同步；draw30–33 保持阈值 1，属于另一个稳定阈值实例。67 个捕获 PS 的 HLSL 均与全盘对应文件逐字节一致；72 组配对的 UV 源、纹理完整描述及 clip 参数匹配，10,080 个 float32 边界算术样本无决策分歧。这是参数与算术核对，不是实际纹理采样或 GPU replay。此证据优先支持深度与材质投影覆盖不一致的候选；还没有这些帧的 actual upload，不能直接断言每帧哪些层已经 jitter 或哪个像素被 depth test 拒绝。
+
+运行 hash `4bd8985d84983b83` 在 fetch 入口之后的完整 guest ALU、控制流与导出文本，与盘内已枚举原始 VS `adc97a079302f52e` 一致。它是原始 c230 族产生的新链接结果，说明有限派生枚举不包含所有运行组合，不能据此说四盘资源漏扫。持久来源和未实现的链接来源／draw 覆盖方案见 [TAA 覆盖审查](taa-coverage-audit.md)；408 个归一化位置组不能直接用作语义白名单。
+
+三帧 F1 各停顿约 0.706–0.900 秒，会改变 250 ms gap 条件；相机、姿态和消散阈值也在推进。新缺口已确认，黑面首发阶段已定位，但根因仍需正常时序实际上传、32 相位与同场景原版／候选／Off 对照，尚未视觉证明或修复。已验证山体结果与原轮胎用户验收保留，两个旧 AMD 报告继续分别挂起。本地证据：`out/enemy-death-f5446/inventory.json`、`shader-review/REPORT.md`、`pixel-review/`、`enemy-localization.png`。

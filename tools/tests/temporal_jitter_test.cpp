@@ -162,9 +162,206 @@ static void TireMaterialCoverage()
     std::printf("Tire material coverage: 32 phases, two captured world transforms, three sizes; legacy separation %.6f pixels\n",legacySeparation);
 }
 
+// Battle f2871 position arithmetic, independently transcribed from HLSL.
+// f1b3 (draw1) and f7fd (draw12) have the same position instructions; likewise
+// 8b55 (draw79) and 400d (draw96), after renaming their temporary registers.
+// Keep the lighting and skinned permutations explicit instead of using Transform.
+static Float4 BattleDepth(const Constants& c, Float4 r2)
+{
+    r2[3]=1;
+    auto r1=Mul(r2[3],S(C(c,3),"xywz"));
+    r1=Mad(r2[2],S(C(c,2),"wxzy"),S(r1,"zxwy"));
+    r1=Mad(r2[1],S(C(c,1),"zwyx"),S(r1,"zxwy"));
+    r2=Mad(r2[0],S(C(c,0),"yzxw"),S(r1,"zxwy"));
+    r1=Mul(r2[3],C(c,7));
+    r1=Mad(r2[1],C(c,6),r1);
+    r1=Mad(r2[0],C(c,5),r1);
+    return Mad(r2[2],C(c,4),r1);
+}
+static Float4 BattleMaterial(const Constants& c, Float4 r8)
+{
+    r8[3]=1;
+    auto r3=Mul(r8[3],S(C(c,3),"xywz"));
+    r3=Mad(r8[2],S(C(c,2),"wxzy"),S(r3,"zxwy"));
+    r3=Mad(r8[1],S(C(c,1),"zwyx"),S(r3,"zxwy"));
+    const auto r9=Mad(r8[0],S(C(c,0),"yzxw"),S(r3,"zxwy"));
+    r3=Mul(r9[3],C(c,10));
+    r3=Mad(r9[1],C(c,9),r3);
+    r3=Mad(r9[0],C(c,8),r3);
+    return Mad(r9[2],C(c,7),r3); // oPos and o4 in 400d, o1 in 8b55
+}
+static Float4 BattleLight08dc(const Constants& c, Float4 r4)
+{
+    r4[3]=1;
+    auto r0=Mul(r4[3],S(C(c,3),"xywz"));
+    r0=Mad(r4[2],S(C(c,2),"wxzy"),S(r0,"zxwy"));
+    r0=Mad(r4[1],S(C(c,1),"zwyx"),S(r0,"zxwy"));
+    r4=Mad(r4[0],S(C(c,0),"yzxw"),S(r0,"zxwy"));
+    r0=Mul(r4[3],C(c,10));
+    r0=Mad(r4[1],C(c,9),r0);
+    r0=Mad(r4[0],C(c,8),r0);
+    return Mad(r4[2],C(c,7),r0); // retained through oPos/o4; PS667 divides o4.xy/w
+}
+// Input is the palette-skinned point. These retain the distinct world-transform
+// and VP swizzles of draw202 (0eb2) and draw249 (1e90), not just c233 endpoints.
+static Float4 BattleSkinned0eb(const Constants& c, Float4 point)
+{
+    auto r0=Mad(point[2],S(C(c,3),"wzyx"),S(C(c,4),"wzyx"));
+    r0=Mad(point[1],S(C(c,2),"yxzw"),S(r0,"zwyx"));
+    const auto r6=Mad(point[0],S(C(c,1),"zywx"),S(r0,"zxwy"));
+    auto r2=Mul(r6[2],C(c,236));
+    r2=Mad(r6[0],C(c,235),r2);
+    r2=Mad(r6[1],C(c,234),r2);
+    return Mad(r6[3],C(c,233),r2); // r2 -> oPos/o1
+}
+static Float4 BattleSkinned1e90(const Constants& c, Float4 point)
+{
+    auto r0=Mad(point[2],S(C(c,3),"wxyz"),S(C(c,4),"wxyz"));
+    r0=Mad(point[1],S(C(c,2),"wxyz"),r0);
+    const auto r7=Mad(point[0],S(C(c,1),"wxyz"),r0);
+    auto r5=Mul(r7[0],C(c,236));
+    r5=Mad(r7[3],C(c,235),r5);
+    r5=Mad(r7[2],C(c,234),r5);
+    return Mad(r7[1],C(c,233),r5); // r7 -> oPos/o1
+}
+static void BattleCoverage()
+{
+    const std::array<uint32_t,16> vp{
+        1065421082u,1036507293u,1061409510u,1061422356u,1067057496u,3181867434u,3206812392u,3206823155u,
+        0u,1077045441u,3174739206u,3174751452u,1127137590u,3281230865u,1146691008u,1146869091u};
+    // Actual object draw1 and terrain draw12 c0-c3; skin draw202/249 c1-c4.
+    const std::array<std::array<uint32_t,16>,2> worlds{{
+        {0x3f800000,0,0,0,0,0x3f800000,0,0,0,0,0x3f800000,0,0,0,0,0x3f800000},
+        {0x3f800000,0,0,0,0,0x3f800000,0,0,0,0,0x3f800000,0,0xc4c22ac6,0x44761a64,0x443aa280,0x3f800000}}};
+    const std::array<uint32_t,16> skinWorld{
+        0x3f800000,0,0,0,0,0x3f800000,0,0,0,0,0x3f800000,0,0xc3a28000,0,0,0x3f800000};
+    // Retained first two bone matrices c8-c13, shared by those two draws.
+    const std::array<uint32_t,24> bones{
+        0x3f7c4405,0xbe05dccc,0x3ddf267b,0xc1a3d828,0x3e03c439,0x3f7dc96e,0x3cd20b20,0xc0e34ce5,
+        0xbde415eb,0xbc383e27,0x3f7e6424,0xbf4b42ce,0x3f7c4405,0xbe05dccc,0x3ddf267b,0xc1a3d827,
+        0x3e03c439,0x3f7dc96e,0x3cd20b20,0xc0e34ce4,0xbde415eb,0xbc383e27,0x3f7e6424,0xbf4b429e};
+    const auto skinnedPoint=[&](Float4 local,float weight) {
+        Float4 point{0,0,0,1};
+        for (unsigned row=0;row<3;++row)
+        {
+            Float4 blended{};
+            for (unsigned column=0;column<4;++column)
+                blended[column]=weight*float(F(bones[row*4+column]))+(1-weight)*float(F(bones[12+row*4+column]));
+            // HLSL dot(row.zxyw, local.zxy1); no host Transform/jitter reference.
+            point[row]=((blended[2]*local[2]+blended[0]*local[0])+blended[1]*local[1])+blended[3];
+        }
+        return point;
+    };
+    double legacySeparation=0,offsetError=0;
+    for (const auto extent : {Viewport{0,0,1280,720},Viewport{0,0,1920,1080},
+        Viewport{0,0,2560,1440},Viewport{0,0,3840,2160}})
+        for (uint64_t frame=0;frame<32;++frame)
+        {
+            const SceneAnchor anchor{vp,extent,19};
+            const auto bank=[&](unsigned slot,unsigned world) {
+                Constants c{};
+                std::copy(worlds[world].begin(),worlds[world].end(),c.begin());
+                std::copy(vp.begin(),vp.end(),c.begin()+slot*4);return c;
+            };
+            const auto jitter=FrameJitter(frame,extent.width,extent.height);
+            for (unsigned world=0;world<2;++world)
+            {
+                const uint64_t depthVs=world?0xf7fd88506d704a3dull:0xf1b330b3ceea9a3bull;
+                const uint64_t materialVs=world?0x400df7c5a60819f5ull:0x8b5577db3ced3327ull;
+                auto depth=bank(4,world),material=bank(7,world),light=bank(7,world);
+                const auto original=material;
+                Constants ps{};
+                const auto a=ApplyDrawJitter(depthVs,0,frame,true,true,&anchor,19,extent,depth.data(),ps.data());
+                const auto b=ApplyDrawJitter(materialVs,0,frame,true,true,&anchor,19,extent,material.data(),ps.data());
+                const auto c=ApplyDrawJitter(0x08dcef32bd434f8cull,0x667ca7db02d6d0a5ull,
+                    frame,true,true,&anchor,19,extent,light.data(),ps.data());
+                Check(a.applied && b.applied && c.applied,"battle depth/material/lighting accept the captured camera");
+                Check(ps==Constants{} && !c.shadowCompensated,"mask-sampling lighting never acquires d55 reconstruction compensation");
+                for (const auto local : {Float4{-250,-100,20,1},Float4{120,90,80,1},Float4{10,250,160,1}})
+                {
+                    const auto d=BattleDepth(depth,local),m=BattleMaterial(material,local),l=BattleLight08dc(light,local);
+                    const auto old=BattleMaterial(original,local);
+                    Check(d==m && m==l,"independent battle position paths agree exactly");
+                    Check(m[2]==old[2] && m[3]==old[3],"battle jitter preserves Z and W");
+                    // Both clip-derived varyings must move with the raster position.
+                    Check(l[0]/l[3]==d[0]/d[3] && l[1]/l[3]==d[1]/d[3],"terrain mask lookup follows jittered depth coordinates");
+                    const double dx=(double(m[0])/m[3]-double(old[0])/old[3])*extent.width*.5;
+                    const double dy=(double(old[1])/old[3]-double(m[1])/m[3])*extent.height*.5;
+                    offsetError=std::max({offsetError,std::abs(dx-jitter.pixelX),std::abs(dy-jitter.pixelY)});
+                    Check(std::abs(dx-jitter.pixelX)<.02 && std::abs(dy-jitter.pixelY)<.02,"battle shader upload produces intended physical jitter");
+                    // Negative control: depth corrected while material stays at original VP.
+                    legacySeparation=std::max({legacySeparation,std::abs(dx),std::abs(dy)});
+                }
+            }
+            auto skin=bank(233,0),otherSkin=skin;
+            std::copy(skinWorld.begin(),skinWorld.end(),skin.begin()+4);
+            otherSkin=skin;
+            const auto oldSkin=skin;
+            Constants ps{};
+            const auto a=ApplyDrawJitter(0x0eb223d33f8e8e0cull,0x463f83252b104180ull,frame,true,true,&anchor,19,extent,skin.data(),ps.data());
+            const auto b=ApplyDrawJitter(0x1e9017d2b296f480ull,0xbb31c704c2ef724bull,frame,true,true,&anchor,19,extent,otherSkin.data(),ps.data());
+            Check(a.applied && b.applied,"both battle skinned position paths receive jitter");
+            for (float weight : {0.f,.35f,1.f})
+                for (const auto local : {Float4{-20,30,50,1},Float4{10,-40,90,1}})
+                {
+                    const auto point=skinnedPoint(local,weight);
+                    const auto first=BattleSkinned0eb(skin,point),second=BattleSkinned1e90(otherSkin,point);
+                    const auto old=BattleSkinned0eb(oldSkin,point);
+                    Check(first==second,"distinct skinned world/projection swizzles retain matching clip positions");
+                    Check(first[2]==old[2] && first[3]==old[3],"skinned position jitter preserves Z/W");
+                    Check(std::abs((double(first[0])/first[3]-double(old[0])/old[3])*extent.width*.5-jitter.pixelX)<.02 &&
+                        std::abs((double(old[1])/old[3]-double(first[1])/first[3])*extent.height*.5-jitter.pixelY)<.02,
+                        "skinned inputs keep the same intended raster jitter");
+                }
+            // Recognition must still leave Off and mismatched upload banks untouched.
+            for (const auto [vs,slot] : {std::pair{0xf1b330b3ceea9a3bull,4},
+                std::pair{0x8b5577db3ced3327ull,7},std::pair{0x400df7c5a60819f5ull,7},
+                std::pair{0x08dcef32bd434f8cull,7},std::pair{0x0eb223d33f8e8e0cull,233},std::pair{0x1e9017d2b296f480ull,233}})
+                for (unsigned mode=0;mode<4;++mode)
+                {
+                    auto values=bank(slot,0),originalPs=ps;
+                    if (mode==3) values[slot*4]^=1;
+                    const auto before=values;
+                    const auto result=ApplyDrawJitter(vs,0,frame,mode!=0,mode!=1,&anchor,mode==2?20:19,
+                        extent,values.data(),ps.data());
+                    Check(!result.applied && values==before && ps==originalPs,"new battle paths preserve Off/viewport/depth/camera rejection bytes");
+                }
+        }
+    Check(legacySeparation>.4,"battle negative control exposes depth versus unjittered material separation");
+
+    // The 13 newly recognized depth writers in f2871 share the original camera.
+    // Replay that observation set alongside an existing anchor; a changed camera
+    // on a newly recognized material must still reject the entire association.
+    const SceneAnchor anchor{vp,{0,0,2560,1440},19};
+    for (bool conflicting : {false,true})
+    {
+        SceneObservation observation;observation.Reset(2871);observation.ObserveCamera(anchor);
+        for (unsigned draw=0;draw<13;++draw)
+        {
+            auto added=anchor;
+            if (conflicting && draw==12) added.vpBits[12]^=1;
+            observation.ObserveCamera(added);
+        }
+        observation.ObserveDepth(19,{2871,1,0x9c00000,4102,2560,1440,true});
+        observation.ObserveColor({2871,2,0xb0d9000,6,2560,1440,true});
+        Check(observation.Draws()==14 && observation.Ready()!=conflicting,"added battle depth writers preserve camera consistency and ambiguity rejection");
+        Check(observation.Anchor().vpBits==vp,"observer retains unmodified guest camera bits");
+    }
+    for (uint64_t screenVs : {0x6318b7b358aa8b45ull,0x73a203360434358cull})
+    {
+        Constants values{},ps{};std::copy(vp.begin(),vp.end(),values.begin()+233*4);
+        const auto before=values;
+        const auto result=ApplyDrawJitter(screenVs,0,2871,true,true,&anchor,19,anchor.viewport,values.data(),ps.data());
+        Check(!result.applied && result.rejection==JitterRejection::UnknownShader && values==before,
+            "residual c233 VP cannot authorize a screen-space shader");
+    }
+    std::printf("Battle coverage: 32 phases, four sizes; legacy separation %.6f pixels, raster-offset error %.6f pixels\n",legacySeparation,offsetError);
+}
+
 int main()
 {
     TireMaterialCoverage();
+    BattleCoverage();
     // Unmodified camera and shadow PS c0..c5 from render f14774, shadow draw154.
     const std::array<uint32_t, 16> capturedVp{
         0xbe9e047a,0xbeb76758,0xbf79e276,0xbf7a227f,0xbfda2754,0x3d84d8c1,0x3e350064,0x3e352ec6,

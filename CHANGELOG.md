@@ -4,6 +4,20 @@ One record of completed changes, with unpublished work separated from verified r
 
 本文统一记录已完成改动，并区分未发布内容与已确认发布版本；日期采用 UTC 发布日期。后续计划见[路线图](docs/ROADMAP.zh-CN.md)，不作为已发布功能记录。
 
+## Unreleased / 未发布
+
+### English
+
+Extend guarded TAA jitter coverage to six verified battle terrain, object and skinned shader paths, aligning their depth, material and lighting transforms without changing the jitter algorithm or viewport/depth/camera guards. Optional submitted-draw diagnostics can follow a resolve-trace window and retain the inspected constant slot even for a baseline that rejects the shader; logging does not enable jitter.
+
+The local `taa-fix` / `0.4.2-dev` repair passed its isolated build, 17,287 CPU jitter checks and selected CPU/GPU fixtures. In the reproduced Map3 battle scene, each comparison covers 32 phases: the instrumented v0.4.1 rendering baseline had 16 frames with at least half the sampled mountain region black; the exact candidate package and its AA Off control had none. Corrected depth/material/lighting uploads matched in all 32 frames. Camera animation differs between processes, so this is not a frame-identical pixel comparison. A separate Map3 tire regression matched the accepted r2 near/far mask and depth regions byte for byte in all 32 phases. Player acceptance of the new battle repair remains pending, and it is not included in `v0.4.1`; see the [battle investigation](docs/notes/shadow-texture-lod.md#battle-taa-runtime-dev). Enemy-disappearance flicker was subsequently reported on this package and remains a separate, unrepaired coverage investigation. The [static audit and runtime-linking limits](docs/notes/taa-coverage-audit.md) do not establish whole-game coverage.
+
+### 简体中文
+
+补齐六条已核对的战斗地形、物件及蒙皮 shader 路径的 TAA jitter 覆盖，对齐其深度、材质与补光位置变换，保留原有 jitter 算法及 viewport／深度／相机限制。可选的已提交绘制诊断可跟随 resolve trace 窗口，并在基线拒绝 shader 时保留所检查的常量槽位；日志不启用 jitter。
+
+本地 `taa-fix`／`0.4.2-dev` 修复通过隔离构建、17,287 项 CPU jitter 检查及选定 CPU／GPU 用例。复现的 Map3 战斗场景每组覆盖 32 相位：保留 v0.4.1 渲染行为的诊断基线有 16 帧山体采样区至少一半变黑，实际候选包与其 AA Off 对照均为零；修正版全部 32 帧的深度／材质／补光上传一致。跨进程相机动画不同，因此不是逐帧像素同一对照。另行完成的 Map3 轮胎回归中，近远轮胎遮罩与深度区域在全部 32 相位均与已验收 r2 逐字节一致。新战斗修复的玩家验收仍待完成，本修复未包含在 `v0.4.1` 中，详见[战斗调查](docs/notes/shadow-texture-lod.md#battle-taa-runtime-dev)。用户随后在本包报告敌人消散闪烁，该覆盖问题仍独立调查、尚未修复。[静态审查与运行链接边界](docs/notes/taa-coverage-audit.md)不代表全游戏覆盖。
+
 ## Published / 已发布
 
 ### [v0.4.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.4.1) — 2026-09-08

@@ -3130,17 +3130,23 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 // pairs and one shadow/character sample per frame, reducing IO.
                 static const uint32_t jitterLogIndexCount = getenv("LO_TEMPORAL_DRAW_LOG_INDEX_COUNT") ?
                     strtoul(getenv("LO_TEMPORAL_DRAW_LOG_INDEX_COUNT"), nullptr, 10) : 0;
+                static const bool jitterLogWithResolveTrace = getenv("LO_TEMPORAL_DRAW_LOG_WITH_RESOLVE_TRACE") &&
+                    strcmp(getenv("LO_TEMPORAL_DRAW_LOG_WITH_RESOLVE_TRACE"), "1") == 0;
                 static uint64_t jitterLoggedShadowFrame = ~0ull, jitterLoggedCharacterFrame = ~0ull;
                 const bool jitterLogStaticMesh = key.vs == 0xb030ab4e17a20783ull || key.vs == 0xa27a7234977e0d4aull ||
-                    key.vs == 0xff9da3984ce8d094ull;
+                    key.vs == 0xff9da3984ce8d094ull || key.vs == 0xf7fd88506d704a3dull ||
+                    key.vs == 0xf1b330b3ceea9a3bull || key.vs == 0x8b5577db3ced3327ull ||
+                    key.vs == 0x400df7c5a60819f5ull || key.vs == 0x08dcef32bd434f8cull;
+                const bool jitterLogSkinned = key.vs == 0x0eb223d33f8e8e0cull || key.vs == 0x1e9017d2b296f480ull;
                 const bool jitterLogGeometry = !jitterLogIndexCount ||
                     (jitterLogStaticMesh ? info.indexCount == jitterLogIndexCount :
                         key.vs == 0x99c2b4b0960a9ccdull ? jitterShadowPair && jitterLoggedShadowFrame != frame :
                         key.vs == 0x3148f81d65d3b5f4ull ? jitterLoggedCharacterFrame != frame : true);
-                if (frame >= jitterLogStart && frame - jitterLogStart < 32 &&
+                if (((frame >= jitterLogStart && frame - jitterLogStart < 32) ||
+                    (jitterLogWithResolveTrace && resolveTraceRemaining)) &&
                     jitterLogGeometry &&
                     (jitterLogVs ? key.vs == jitterLogVs :
-                        jitterLogStaticMesh ||
+                        jitterLogStaticMesh || jitterLogSkinned ||
                         key.vs == 0x3148f81d65d3b5f4ull || key.vs == 0x99c2b4b0960a9ccdull))
                 {
                     if (key.vs == 0x99c2b4b0960a9ccdull) jitterLoggedShadowFrame = frame;
@@ -3151,22 +3157,32 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         return text;
                     };
                     std::array<uint32_t, 16> guestVp{}, guestShadow{};
-                    if (temporalSlot >= 0)
-                        for (unsigned i = 0; i < 16; ++i) guestVp[i] = Reg(REG_ALU_CONSTANTS + temporalSlot * 4 + i);
+                    // Retain raw bank evidence for a baseline which rejects a
+                    // reviewed shader. This diagnostic slot never authorizes jitter.
+                    int jitterLogSlot = temporalSlot;
+                    if (jitterLogSlot < 0)
+                    {
+                        if (key.vs == 0xf1b330b3ceea9a3bull) jitterLogSlot = 4;
+                        else if (key.vs == 0x8b5577db3ced3327ull || key.vs == 0x400df7c5a60819f5ull ||
+                            key.vs == 0x08dcef32bd434f8cull) jitterLogSlot = 7;
+                        else if (jitterLogSkinned) jitterLogSlot = 233;
+                    }
+                    if (jitterLogSlot >= 0)
+                        for (unsigned i = 0; i < 16; ++i) guestVp[i] = Reg(REG_ALU_CONSTANTS + jitterLogSlot * 4 + i);
                     const bool shadowPair = jitterShadowPair;
                     if (shadowPair)
                         for (unsigned i = 0; i < 16; ++i) guestShadow[i] = Reg(REG_ALU_CONSTANTS + 256 * 4 + 2 * 4 + i);
                     const bool staticMesh = jitterLogStaticMesh;
-                    LOG_INFO("renderer temporal draw f{} submitted={} vs={:016x} ps={:016x} slot={} indices={} index_base={:x} base_vertex={} fetch95={:08x},{:08x} world_c0_c3={:016x} enabled={} viewport={} applied={} shadow={} rejection={} phase={} ndc=({:.9g},{:.9g}) extent={}x{} depth={} layer_bias={:.9g} sampled_depth={:x}/{} scene_depth={:x}/{} vp_guest=[{}] vp_upload=[{}] ps_c2_c5_guest=[{}] ps_c2_c5_upload=[{}]",
-                        frame, drawsThisFrame, key.vs, key.ps, temporalSlot, info.indexCount, info.indexBase, baseVertex,
+                    LOG_INFO("renderer temporal draw f{} submitted={} vs={:016x} ps={:016x} slot={} log_slot={} indices={} index_base={:x} base_vertex={} fetch95={:08x},{:08x} world_c0_c3={:016x} enabled={} viewport={} applied={} shadow={} rejection={} phase={} ndc=({:.9g},{:.9g}) extent={}x{} depth={} layer_bias={:.9g} sampled_depth={:x}/{} scene_depth={:x}/{} vp_guest=[{}] vp_upload=[{}] ps_c2_c5_guest=[{}] ps_c2_c5_upload=[{}]",
+                        frame, drawsThisFrame, key.vs, key.ps, temporalSlot, jitterLogSlot, info.indexCount, info.indexBase, baseVertex,
                         Reg(REG_FETCH_CONSTANTS + 190), Reg(REG_FETCH_CONSTANTS + 191), staticMesh ? Fnv1a(vsConstants, 16 * sizeof(uint32_t)) : 0,
                         temporalExperiment && temporalJitter, temporalViewport,
                         drawJitter.applied, drawJitter.shadowCompensated, uint32_t(drawJitter.rejection), uint32_t(frame % 32 + 1),
                         drawJitter.sample.ndcX, drawJitter.sample.ndcY, rasterViewport.width, rasterViewport.height,
                         depth ? depth->allocationSerial : 0, layerDepthOffset,
                         jitterSampledDepth ? jitterSampledDepth->address : 0, jitterSampledDepth ? jitterSampledDepth->ordinal : 0,
-                        temporalScene.Depth().address, temporalScene.Depth().ordinal, bits(guestVp.data(), temporalSlot >= 0 ? 16 : 0),
-                        temporalSlot >= 0 ? bits(vsConstants + temporalSlot * 4, 16) : "",
+                        temporalScene.Depth().address, temporalScene.Depth().ordinal, bits(guestVp.data(), jitterLogSlot >= 0 ? 16 : 0),
+                        jitterLogSlot >= 0 ? bits(vsConstants + jitterLogSlot * 4, 16) : "",
                         bits(guestShadow.data(), shadowPair ? 16 : 0), shadowPair ? bits(psConstants + 2 * 4, 16) : "");
                 }
                 if(temporalSceneCopy)temporalSubmittedFrame=frame;
