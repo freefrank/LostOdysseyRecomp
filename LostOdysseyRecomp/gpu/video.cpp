@@ -50,6 +50,7 @@ namespace gpu::video
         const wchar_t* PreparationTitle(PreparationStage stage) {
             switch (stage) {
             case PreparationStage::CacheValidation: return L"Validating shader cache";
+            case PreparationStage::CachedShaders: return L"Loading cached shaders";
             case PreparationStage::IndexedExtraction: return L"Extracting indexed shaders";
             case PreparationStage::FallbackScan: return L"Scanning game resources";
             case PreparationStage::Pipelines: return L"Preparing pipelines";
@@ -59,6 +60,7 @@ namespace gpu::video
         const char* PreparationTitleNarrow(PreparationStage stage) {
             switch (stage) {
             case PreparationStage::CacheValidation: return "Validating shader cache";
+            case PreparationStage::CachedShaders: return "Loading cached shaders";
             case PreparationStage::IndexedExtraction: return "Extracting indexed shaders";
             case PreparationStage::FallbackScan: return "Scanning game resources";
             case PreparationStage::Pipelines: return "Preparing pipelines";

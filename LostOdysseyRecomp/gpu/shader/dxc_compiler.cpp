@@ -1,5 +1,7 @@
 #include "dxc_compiler.h"
 #include "cache.h"
+#include "resource_cpx_index_sha256.h"
+#include <atomic>
 #include <filesystem>
 #include <fstream>
 
@@ -22,6 +24,8 @@ namespace xenos
         const CLSID kClsidDxcUtils = { 0x6245d6af, 0x66e0, 0x48fd, { 0x80, 0xb4, 0x4d, 0x27, 0x17, 0x96, 0x74, 0x8c } };
 
         DxcCreateInstanceProc g_createInstance = nullptr;
+        HMODULE g_module = nullptr;
+        std::atomic<uint64_t> g_calls{0}, g_succeeded{0}, g_rejected{0}, g_infrastructureFailed{0};
         std::once_flag g_loadOnce;
 
         void LoadDxc()
@@ -60,6 +64,8 @@ namespace xenos
                 }
             }
             if (module)
+                g_module = module;
+            if (module)
                 g_createInstance = reinterpret_cast<DxcCreateInstanceProc>(GetProcAddress(module, "DxcCreateInstance"));
         }
 
@@ -80,11 +86,49 @@ namespace xenos
         return g_createInstance != nullptr;
     }
 
+    const std::string& DxcIdentity()
+    {
+        static const std::string identity = []() -> std::string {
+            if (!DxcAvailable()) return {};
+            try {
+                auto pathOf = [](HMODULE module) {
+                    wchar_t path[32768];
+                    const DWORD size = GetModuleFileNameW(module, path, 32768);
+                    if (!size || size == 32768) throw std::runtime_error("DXC module path unavailable");
+                    return std::filesystem::path(path);
+                };
+                auto hash = [](const std::filesystem::path& path) {
+                    std::ifstream in(path, std::ios::binary | std::ios::ate);
+                    const auto size = in.tellg();
+                    if (size <= 0 || size > 128 * 1024 * 1024) throw std::runtime_error("DXC module read unavailable");
+                    std::vector<uint8_t> bytes(static_cast<size_t>(size)); in.seekg(0);
+                    if (!in.read(reinterpret_cast<char*>(bytes.data()), size)) throw std::runtime_error("DXC module read incomplete");
+                    return resources::Sha256Hex(resources::Sha256(bytes));
+                };
+                const auto compiler = pathOf(g_module);
+                // Retain the actual validator module, including an already
+                // loaded one, so its identity cannot drift after certification.
+                const auto loadedValidator = GetModuleHandleW(L"dxil.dll");
+                const auto validatorPath = loadedValidator ? pathOf(loadedValidator) : compiler.parent_path() / "dxil.dll";
+                static HMODULE retainedValidator = LoadLibraryW(validatorPath.c_str());
+                if (!retainedValidator) return {};
+                return hash(compiler) + ":" + hash(pathOf(retainedValidator));
+            } catch (...) { return {}; }
+        }();
+        return identity;
+    }
+
+    DxcStatistics GetDxcStatistics()
+    {
+        return {g_calls.load(), g_succeeded.load(), g_rejected.load(), g_infrastructureFailed.load()};
+    }
+
     CompiledShader CompileHlsl(const std::string& source, const char* entryPoint, const char* profile, ShaderBinaryFormat format, bool debugInfo)
     {
         CompiledShader result;
         if (!DxcAvailable())
         {
+            ++g_infrastructureFailed;
             result.errors = "dxcompiler.dll not available";
             return result;
         }
@@ -95,6 +139,7 @@ namespace xenos
             FAILED(g_createInstance(kClsidDxcCompiler, __uuidof(IDxcCompiler3), reinterpret_cast<void**>(&compiler))))
         {
             result.errors = "DxcCreateInstance failed";
+            ++g_infrastructureFailed;
             return result;
         }
 
@@ -131,10 +176,12 @@ namespace xenos
         buffer.Encoding = DXC_CP_UTF8;
 
         ComPtr<IDxcResult> compileResult;
+        ++g_calls;
         HRESULT hr = compiler->Compile(&buffer, args.data(), uint32_t(args.size()), nullptr, __uuidof(IDxcResult), reinterpret_cast<void**>(&compileResult));
         if (FAILED(hr) || !compileResult)
         {
             result.errors = "IDxcCompiler3::Compile failed";
+            ++g_infrastructureFailed;
             return result;
         }
 
@@ -145,19 +192,30 @@ namespace xenos
 
         HRESULT status = E_FAIL;
         compileResult->GetStatus(&status);
-        if (FAILED(status))
+        if (FAILED(status)) {
+            // Only ordinary source diagnostics are reusable. Internal compiler
+            // and allocation failures are transient and must be retried.
+            result.deterministicFailure = status != E_OUTOFMEMORY &&
+                result.errors.find("error:") != std::string::npos &&
+                result.errors.find("out of memory") == std::string::npos &&
+                result.errors.find("internal compiler error") == std::string::npos;
+            if (result.deterministicFailure) ++g_rejected;
+            else ++g_infrastructureFailed;
             return result;
+        }
 
         ComPtr<IDxcBlob> object;
         compileResult->GetOutput(DXC_OUT_OBJECT, __uuidof(IDxcBlob), reinterpret_cast<void**>(&object), nullptr);
         if (!object)
         {
             result.errors += "\nno object output";
+            ++g_infrastructureFailed;
             return result;
         }
         auto* data = static_cast<const uint8_t*>(object->GetBufferPointer());
         result.bytecode.assign(data, data + object->GetBufferSize());
         result.ok = true;
+        ++g_succeeded;
         return result;
     }
 }
@@ -165,6 +223,8 @@ namespace xenos
 namespace xenos
 {
     bool DxcAvailable() { return false; }
+    const std::string& DxcIdentity() { static const std::string empty; return empty; }
+    DxcStatistics GetDxcStatistics() { return {}; }
     CompiledShader CompileHlsl(const std::string&, const char*, const char*, ShaderBinaryFormat, bool) { return {}; }
 }
 #endif

@@ -8,6 +8,8 @@
 #include <kernel/xam.h>
 #include <kernel/io/file_system.h>
 #include <gpu/command_processor.h>
+#include <gpu/renderer.h>
+#include <gpu/video.h>
 #include <apu/audio.h>
 #include <apu/xma.h>
 #include <hid/hid.h>
@@ -77,7 +79,7 @@ int main(int argc, char* argv[])
     argc = wideArgc;
     argv = argumentPointers.data();
 #endif
-    bool explicitGame=false, requestedSetup=false, setupOnly=false;
+    bool explicitGame=false, requestedSetup=false, setupOnly=false, prepareShadersOnly=false;
     std::optional<std::filesystem::path> explicitGamePath;
     for(int i=1;i<argc;++i) {
         if (strcmp(argv[i], "--game") == 0)
@@ -88,6 +90,7 @@ int main(int argc, char* argv[])
         }
         requestedSetup |= strcmp(argv[i],"--setup")==0 || strcmp(argv[i],"--setup-only")==0;
         setupOnly |= strcmp(argv[i],"--setup-only")==0;
+        prepareShadersOnly |= strcmp(argv[i],"--prepare-shaders-only")==0;
     }
     const auto executableDirectory = ExecutableDirectory();
 #ifdef _WIN32
@@ -238,6 +241,16 @@ int main(int argc, char* argv[])
     uint32_t entry = XexLoader::Load(gameRoot / "default.xex");
     if (entry == 0)
         return 1;
+
+    // Exercise the same renderer preparation as ordinary startup, without
+    // starting guest threads or opening game saves/profiles. This also provides
+    // a bounded cache warmup command for portable installations.
+    if (prepareShadersOnly) {
+        const bool prepared = gpu::video::Init() && gpu::renderer::Init();
+        LOG_INFO("shader preparation only: {}, guest not started", prepared ? "complete" : "failed");
+        fflush(stdout);
+        std::_Exit(prepared ? 0 : 1);
+    }
 
     XexLoader::StartTimeStampThread();
     gpu::g_commandProcessor.Init();

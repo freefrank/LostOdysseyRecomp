@@ -28,7 +28,7 @@ namespace gpu::video
     void PumpEvents();
     bool DisplayModeFailed();
     // Updates the title on the window owner thread. total=0 restores the title.
-    enum class PreparationStage : uint32_t { Shaders, Pipelines, CacheValidation, IndexedExtraction, FallbackScan };
+    enum class PreparationStage : uint32_t { Shaders, Pipelines, CacheValidation, IndexedExtraction, FallbackScan, CachedShaders };
     enum class PreparationUnit : uint32_t { Shaders, Pipelines, Files, MiB, Entries };
     void SetShaderPreparationProgress(uint32_t completed, uint32_t total,
         PreparationStage stage = PreparationStage::Shaders, PreparationUnit unit = PreparationUnit::Shaders);

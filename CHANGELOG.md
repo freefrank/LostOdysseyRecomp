@@ -8,6 +8,10 @@ One record of completed changes, with unpublished work separated from verified r
 
 Development commits below organize validated work for the v0.5.0 milestone. Each feature batch increments the source patch version; this is not a release record or a claim that each intermediate commit was run.
 
+### Development commit 0.4.12
+
+- Reuse identity-certified sequential startup bundles and deterministic compiler failures instead of repeated source scans and DXC work.
+
 ### Development commit 0.4.11
 
 - Reduce measured CPU hotspots in guest polling, launch diagnostics and debug trace paths.

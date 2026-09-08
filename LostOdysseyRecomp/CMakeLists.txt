@@ -410,6 +410,14 @@ if(WIN32)
 endif()
 
 if(WIN32 AND LO_BUILD_GPU)
+    add_executable(LoShaderStartupCacheTest EXCLUDE_FROM_ALL
+        ${CMAKE_SOURCE_DIR}/tools/tests/shader_startup_cache_test.cpp
+        ${LO_RUNTIME_ROOT}/gpu/shader/dxc_compiler.cpp)
+    target_include_directories(LoShaderStartupCacheTest PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,INCLUDE_DIRECTORIES>)
+    target_compile_definitions(LoShaderStartupCacheTest PRIVATE NOMINMAX)
+    target_compile_options(LoShaderStartupCacheTest PRIVATE /UNDEBUG /utf-8)
+    target_compile_features(LoShaderStartupCacheTest PRIVATE cxx_std_20)
+    set_target_properties(LoShaderStartupCacheTest PROPERTIES DISABLE_PRECOMPILE_HEADERS ON)
     add_executable(LoVulkanBackendTest EXCLUDE_FROM_ALL
         ${CMAKE_SOURCE_DIR}/tools/tests/vulkan_backend_test.cpp
         ${LO_RUNTIME_ROOT}/gpu/shader/dxc_compiler.cpp
@@ -425,7 +433,7 @@ endif()
 # The Windows SDK compiler is allowed as an explicit fallback, but is not the release contract.
 if(WIN32 AND LO_BUILD_GPU)
     set(LO_DXC_BINARY_DIR "${CMAKE_SOURCE_DIR}/tools/XenosRecomp/thirdparty/dxc-bin/bin/x64")
-    foreach(target LostOdysseyRecomp LoShaderTool LoPresentationTest LoTemporalAATest LoRenderResolutionShaderTest LoVulkanBackendTest)
+    foreach(target LostOdysseyRecomp LoShaderTool LoPresentationTest LoTemporalAATest LoRenderResolutionShaderTest LoVulkanBackendTest LoShaderStartupCacheTest)
         if(TARGET ${target})
             foreach(binary dxcompiler.dll dxil.dll)
                 add_custom_command(TARGET ${target} POST_BUILD
