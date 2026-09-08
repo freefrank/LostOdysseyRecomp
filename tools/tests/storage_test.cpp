@@ -6,6 +6,9 @@
 #include <stdexcept>
 #include <apu/xma.h>
 #include <gpu/ppc_mmio.h>
+#include <kernel/dlc_content.h>
+#include <cpu/guest_thread.h>
+#include "../XenonRecomp/thirdparty/tomlplusplus/vendor/json.hpp"
 
 PPC_FUNC(__imp__XamContentCreateEx);
 PPC_FUNC(__imp__XamContentClose);
@@ -188,6 +191,160 @@ static void CheckXmaCommands()
     std::puts("PASS: 32 synchronous XMA clears and 32 consecutive MMIO kicks");
 }
 
+static void CheckDlc(const std::filesystem::path& imported, bool restart)
+{
+    using json = nlohmann::json;
+    auto read = [](const std::filesystem::path& path) {
+        std::ifstream file(path, std::ios::binary);
+        return std::string(std::istreambuf_iterator<char>(file), {});
+    };
+    auto write = [](const std::filesystem::path& path, const std::string& bytes) {
+        std::ofstream file(path, std::ios::binary | std::ios::trunc);
+        file.write(bytes.data(), bytes.size());
+        Check(bool(file), "fixture writes only its isolated copy");
+    };
+    const auto game = restart ? imported : std::filesystem::absolute("dlc-fixture-game");
+    if (!restart)
+    {
+        Check(!std::filesystem::exists(game), "DLC fixture destination must be new");
+        std::filesystem::create_directories(game / "disc1");
+        std::filesystem::create_directories(game / "disc2");
+        write(game / "disc1/default.xex", "synthetic disc marker");
+        write(game / "disc2/default.xex", "synthetic disc marker");
+        std::filesystem::copy(imported / "dlc", game / "dlc", std::filesystem::copy_options::recursive);
+    }
+    FileSystem::Init(game / "disc2");
+    XamInit();
+    const auto packages = DlcContent::Discover(game / "disc2");
+    Check(!packages.empty(), "parser-imported DLC is discoverable from disc2 shared root");
+    auto enumerate = [](uint32_t user, uint32_t device) {
+        std::vector<XCONTENT_DATA> found;
+        be<uint32_t> bytes{}, handle{}, count{};
+        Check(XamContentCreateEnumerator(user, device, 2, 0, 30, &bytes, &handle) == 0,
+            "DLC enumerator matches guest type2/device0/fetch30 ABI");
+        XCONTENT_DATA items[30]{};
+        while (true)
+        {
+            const auto status = XamEnumerate(handle, 0, items, sizeof(items), &count, nullptr);
+            if (status == ERROR_NO_MORE_FILES) break;
+            Check(status == 0 && count > 0 && count <= 30, "DLC enumerate count");
+            found.insert(found.end(), items, items + count);
+        }
+        DestroyKernelObject(handle);
+        return found;
+    };
+    const auto listed = enumerate(0, 0);
+    Check(listed.size() == packages.size(), "XAM enumerates every validated DLC");
+    Check(enumerate(0xFFFFFFFF, 1).size() == listed.size(), "all-users DLC enumeration");
+    Check(enumerate(0, 99).empty(), "DLC device filter excludes disconnected device");
+    be<uint32_t> enumBytes{}, enumHandle{};
+    {
+        GuestThreadContext thread(0);
+        Check(XamContentCreateEnumerator(7, 0, 2, 0, 1, &enumBytes, &enumHandle) == 0xFFFFFFFF &&
+            GuestThread::GetLastError() == ERROR_NO_SUCH_USER, "invalid DLC user rejected");
+        g_ppcContext = nullptr;
+    }
+    auto* content = g_userHeap.Alloc<XCONTENT_DATA>();
+    auto* root = static_cast<char*>(g_userHeap.Alloc(32));
+    strcpy(root, "DlcTeSt");
+    auto* disposition = g_userHeap.Alloc<be<uint32_t>>();
+    auto* license = g_userHeap.Alloc<be<uint32_t>>();
+    auto* event = g_userHeap.Alloc<be<uint32_t>>();
+    Check(Call(__imp__NtCreateEvent, {Addr(event),0,0,0,0}) == 0, "DLC completion event");
+    auto* ov = static_cast<XXOVERLAPPED*>(g_userHeap.Alloc(sizeof(XXOVERLAPPED)));
+    auto openContent = [&](uint32_t mode) {
+        *ov = {}; ov->hEvent = *event; ov->Error = ERROR_IO_PENDING;
+        return Call(__imp__XamContentCreateEx, {0,Addr(root),Addr(content),mode,Addr(disposition),Addr(license),0,0,Addr(ov)});
+    };
+    size_t payloadFiles = 0, payloadBytes = 0;
+    for (const auto& package : packages)
+    {
+        *content = package.data;
+        Check(openContent(3) == ERROR_IO_PENDING && ov->Error == 0 && ov->dwExtendedError == 0 &&
+            ov->Length == XCONTENT_EXISTING && *disposition == XCONTENT_EXISTING && *license == package.licenseMask,
+            "DLC async open, disposition and license metadata");
+        Check(GetKernelObject(*event)->Wait(0) == STATUS_SUCCESS, "DLC async completion signals event");
+        const auto metadata = json::parse(read(package.root / ".lo-dlc.json"));
+        for (const auto& entry : metadata.at("files"))
+        {
+            const auto relative = entry.at("path").get<std::string>();
+            const auto source = package.root / std::filesystem::u8path(relative);
+            const auto expected = read(source);
+            const std::string guest = "DLCTEST:\\" + relative;
+            Check(FileSystem::ResolvePath(guest) == source, "DLC guest root resolves exact shared payload");
+            auto* name = static_cast<char*>(g_userHeap.Alloc(guest.size() + 1));
+            memcpy(name, guest.c_str(), guest.size() + 1);
+            auto* ansi = g_userHeap.Alloc<XANSI_STRING>();
+            ansi->Length = uint16_t(guest.size()); ansi->MaximumLength = uint16_t(guest.size() + 1); ansi->Buffer = name;
+            auto* attributes = g_userHeap.Alloc<XOBJECT_ATTRIBUTES>();
+            *attributes = {}; attributes->Name = ansi;
+            auto* file = g_userHeap.Alloc<be<uint32_t>>();
+            auto* iosb = static_cast<XIO_STATUS_BLOCK*>(g_userHeap.Alloc(sizeof(XIO_STATUS_BLOCK)));
+            Check(Call(__imp__NtCreateFile,{Addr(file),0x80000000u,Addr(attributes),Addr(iosb),0,0,0,1,0}) == 0,
+                "open imported DLC payload through actual guest import");
+            auto* bytes = static_cast<char*>(g_userHeap.Alloc(4096));
+            auto* offset = g_userHeap.Alloc<be<uint64_t>>();
+            for (size_t position = 0; position < expected.size(); position += 4096)
+            {
+                const auto count = uint32_t(std::min<size_t>(4096, expected.size() - position));
+                *offset = position;
+                Check(Call(__imp__NtReadFile,{*file,0,0,0,Addr(iosb),Addr(bytes),count,Addr(offset)}) == 0 &&
+                    iosb->Information == count && memcmp(bytes, expected.data() + position, count) == 0,
+                    "guest DLC bytes equal actual importer output");
+            }
+            DestroyKernelObject(*file);
+            ++payloadFiles; payloadBytes += expected.size();
+        }
+        Check(Call(__imp__XamContentClose,{Addr(root),Addr(ov)}) == ERROR_IO_PENDING && ov->Error == 0,
+            "DLC async close");
+        Check(FileSystem::ResolvePath("dlctest:/payload").empty(), "DLC close unmounts root");
+        Check(openContent(3) == ERROR_IO_PENDING && ov->Error == 0, "DLC same-process reopen");
+        Check(Call(__imp__XamContentClose,{Addr(root),Addr(ov)}) == ERROR_IO_PENDING && ov->Error == 0, "DLC close reopened root");
+        Check(openContent(2) == ERROR_IO_PENDING && ov->Error == ERROR_FUNCTION_FAILED &&
+            ov->dwExtendedError == (0x80070000u | ERROR_ACCESS_DENIED), "DLC replacement is refused");
+    }
+    if (!restart)
+    {
+        const auto package = packages.front().root;
+        const auto metadataPath = package / ".lo-dlc.json";
+        const auto original = read(metadataPath);
+        auto invalid = [&](const json& data, const char* message) {
+            write(metadataPath, data.dump());
+            Check(enumerate(0,0).size() == listed.size() - 1, message);
+            write(metadataPath, original);
+        };
+        auto data = json::parse(original);
+        data["title_id"] = "00000000"; invalid(data, "wrong-title DLC hidden");
+        data = json::parse(original); data["files"][0]["path"] = "../outside.bin"; invalid(data, "unsafe DLC path hidden");
+        data = json::parse(original); data["files"][0]["size"] = data["files"][0]["size"].get<uint64_t>() + 1;
+        invalid(data, "wrong payload length hidden");
+        data = json::parse(original); data["files"][0]["path"] = "missing.bin"; invalid(data, "missing payload hidden");
+        const auto contentPath = package / ".lo-content";
+        const auto originalContent = read(contentPath);
+        auto damaged = originalContent; damaged[7] = 1; write(contentPath, damaged);
+        Check(enumerate(0,0).size() == listed.size() - 1, "wrong binary content type hidden");
+        write(contentPath, originalContent);
+        const auto withheld = game / "withheld-package";
+        std::filesystem::rename(package, withheld);
+        Check(enumerate(0,0).size() == listed.size() - 1, "removed DLC purged from registry");
+        std::filesystem::rename(withheld, package);
+        Check(enumerate(0,0).size() == listed.size(), "restored DLC rediscovered");
+        std::filesystem::rename(package, withheld);
+        std::error_code ec;
+        std::filesystem::create_directory_symlink(withheld, package, ec);
+        if (!ec)
+        {
+            Check(enumerate(0,0).size() == listed.size() - 1, "DLC directory symlink ignored even with matching ID");
+            std::filesystem::remove(package);
+        }
+        else std::printf("BOUNDARY: symlink creation unavailable: %s\n", ec.message().c_str());
+        std::filesystem::rename(withheld, package);
+    }
+    DestroyKernelObject(*event);
+    std::printf("PASS: DLC %s, %zu packages, %zu payload files, %zu bytes through guest imports\n",
+        restart ? "fresh-process restart" : "shared-root/async/open/read/reopen/negative cases", packages.size(), payloadFiles, payloadBytes);
+}
+
 int main(int argc, char** argv)
 {
     try
@@ -206,6 +363,8 @@ int main(int argc, char** argv)
         if (std::string_view(argv[1]) == "discs" || std::string_view(argv[1]) == "disc-rejected")
         { Check(argc == 4,"discs requires absolute disc-set directory"); CheckDiscs(argv[3], std::string_view(argv[1]) == "disc-rejected"); return 0; }
         if (std::string_view(argv[1]) == "xma-commands") { CheckXmaCommands(); return 0; }
+        if (std::string_view(argv[1]) == "dlc" || std::string_view(argv[1]) == "dlc-restart")
+        { Check(argc == 4, "dlc requires parser-imported game root"); CheckDlc(argv[3], std::string_view(argv[1]) == "dlc-restart"); return 0; }
         FileSystem::Init(std::filesystem::absolute("game"));
         XamInit();
         const std::string_view mode(argv[1]);

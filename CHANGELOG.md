@@ -8,6 +8,10 @@ One record of completed changes, with unpublished work separated from verified r
 
 Development commits below organize validated work for the v0.5.0 milestone. Each feature batch increments the source patch version; this is not a release record or a claim that each intermediate commit was run.
 
+### Development commit 0.4.15
+
+- Automatically recognize game discs and STFS DLC, support mixed imports with partial retry, and expose complete DLC installations through guest content APIs.
+
 ### Development commit 0.4.14
 
 - Pair SDL video initialization and shutdown on the window owner thread and retain backend lifecycle cleanup.

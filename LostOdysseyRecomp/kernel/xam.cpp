@@ -2,6 +2,7 @@
 #include "xam.h"
 #include "xdm.h"
 #include "function.h"
+#include "dlc_content.h"
 #include <kernel/io/file_system.h>
 #include <cpu/guest_thread.h>
 #include <hid/hid.h>
@@ -63,6 +64,7 @@ static std::unordered_set<XamListener*> g_listeners{};
 static ankerl::unordered_dense::map<uint64_t, std::string> g_rootMap;
 static Mutex g_xamMutex;
 static std::recursive_mutex g_contentMutex;
+static std::unordered_map<uint64_t, uint32_t> g_dlcLicenseMasks;
 
 static std::string NormalizeRoot(std::string_view root)
 {
@@ -93,6 +95,20 @@ static void DiscoverSavedContent()
             data.dwContentType != XCONTENTTYPE_SAVEDATA || !ValidContentName(data) ||
             FileSystem::PathUtf8(entry.path().filename()) != data.szFileName) continue;
         XamRegisterContent(data, FileSystem::PathUtf8(entry.path()));
+    }
+}
+
+static void DiscoverDlcContent()
+{
+    // Rebuild only the DLC registry: deleted or incomplete installations cannot
+    // remain visible through a stale registration. Enumerators own snapshots.
+    auto& registry = g_contentRegistry[XCONTENTTYPE_DLC - 1];
+    registry.clear();
+    g_dlcLicenseMasks.clear();
+    for (const auto& item : DlcContent::Discover(GetGamePath()))
+    {
+        XamRegisterContent(item.data, FileSystem::PathUtf8(item.root));
+        g_dlcLicenseMasks.emplace(StringHash(item.data.szFileName), item.licenseMask);
     }
 }
 
@@ -223,7 +239,7 @@ uint32_t XamContentCreateEnumerator(uint32_t dwUserIndex, uint32_t DeviceID, uin
     uint32_t dwContentFlags, uint32_t cItem, be<uint32_t>* pcbBuffer, be<uint32_t>* phEnum)
 {
     std::lock_guard lock(g_contentMutex);
-    if (dwUserIndex != 0)
+    if (dwUserIndex != 0 && !(dwContentType == XCONTENTTYPE_DLC && dwUserIndex == 0xFFFFFFFF))
     {
         GuestThread::SetLastError(ERROR_NO_SUCH_USER);
         return 0xFFFFFFFF;
@@ -231,11 +247,14 @@ uint32_t XamContentCreateEnumerator(uint32_t dwUserIndex, uint32_t DeviceID, uin
 
     if (dwContentType < 1 || dwContentType > 3 || !phEnum || !cItem || cItem > 4096)
         return ERROR_INVALID_PARAMETER;
-    DiscoverSavedContent();
+    if (dwContentType == XCONTENTTYPE_DLC) DiscoverDlcContent();
+    else DiscoverSavedContent();
     const auto& registry = g_contentRegistry[dwContentType - 1];
     auto* enumerator = CreateKernelObject<ContentEnumerator>();
     enumerator->fetch = cItem;
-    for (const auto& [key, value] : registry) enumerator->items.push_back(value);
+    for (const auto& [key, value] : registry)
+        if (dwContentType != XCONTENTTYPE_DLC || DeviceID == 0 || DeviceID == value.DeviceID)
+            enumerator->items.push_back(value);
 
     if (pcbBuffer)
         *pcbBuffer = sizeof(_XCONTENT_DATA) * cItem;
@@ -287,12 +306,27 @@ static uint32_t ContentCreate(uint32_t dwUserIndex, const char* szRootName, cons
     if (!szRootName || !*szRootName || !pContentData || !ValidContentName(*pContentData) ||
         pContentData->dwContentType < 1 || pContentData->dwContentType > 3)
         return ERROR_INVALID_PARAMETER;
-    DiscoverSavedContent();
+    if (pContentData->dwContentType == XCONTENTTYPE_DLC) DiscoverDlcContent();
+    else DiscoverSavedContent();
     const auto& registry = g_contentRegistry[pContentData->dwContentType - 1];
     const auto exists = registry.contains(StringHash(pContentData->szFileName));
     const auto mode = dwContentFlags & 0xF;
     if (mode == 1 && exists) return ERROR_ALREADY_EXISTS;
     if (pdwLicenseMask) *pdwLicenseMask = 0;
+
+    if (pContentData->dwContentType == XCONTENTTYPE_DLC)
+    {
+        if (dwUserIndex != 0 && dwUserIndex != 0xFFFFFFFF) return ERROR_NO_SUCH_USER;
+        if (pContentData->DeviceID != 0 && pContentData->DeviceID != 1) return ERROR_DEVICE_NOT_CONNECTED;
+        // DLC publication belongs to the transactional importer. The game can
+        // only open a complete installed package, never create an empty one.
+        if (mode != 3) return ERROR_ACCESS_DENIED;
+        if (!exists) return ERROR_PATH_NOT_FOUND;
+        if (pdwDisposition) *pdwDisposition = XCONTENT_EXISTING;
+        if (pdwLicenseMask) *pdwLicenseMask = g_dlcLicenseMasks.at(StringHash(pContentData->szFileName));
+        XamRootCreate(szRootName, registry.find(StringHash(pContentData->szFileName))->second.szRoot);
+        return ERROR_SUCCESS;
+    }
 
     LOG_KERNEL("root='{}' file='{}' type={} mode={} exists={}", szRootName, pContentData->szFileName, (uint32_t)pContentData->dwContentType, mode, exists);
 
