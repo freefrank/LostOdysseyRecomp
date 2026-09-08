@@ -6,6 +6,7 @@
 #include "command_processor.h"
 #include <settings/config.h>
 #include <settings/menu.h>
+#include <settings/restart.h>
 #include <kernel/memory.h>
 #include <os/logger.h>
 #include <hid/hid.h>
@@ -426,6 +427,13 @@ namespace gpu::video
         }
         if (!g_window)
             return;
+        if (settings::restart::Requested()) {
+            renderer::WaitDebugCaptureArchive();
+            if (settings::restart::LaunchWaitingChild()) {
+                fflush(nullptr);
+                std::_Exit(0);
+            }
+        }
         static settings::Config applied;
         static bool displayInitialized=false;
         const auto config=settings::GetConfig();

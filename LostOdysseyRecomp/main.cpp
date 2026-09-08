@@ -20,6 +20,7 @@
 #include "settings/first_run.h"
 #include "settings/config.h"
 #include "settings/game_path.h"
+#include "settings/restart.h"
 #include "version.h"
 
 #ifdef _WIN32
@@ -52,6 +53,12 @@ void InstallPhysicalWatchpoint();
 
 int main(int argc, char* argv[])
 {
+#ifdef _WIN32
+    // A restart child must park before touching logs, settings, profiles,
+    // saves, caches, or guest state. Invalid handshake arguments fail closed.
+    if (settings::restart::WaitForParentIfRestartChild() == settings::restart::ChildHandshake::Invalid)
+        return 1;
+#endif
 #ifdef _WIN32
     // The CRT's narrow argv can best-fit Unicode (for example acute -> prime)
     // before we see it. Decode the original Windows command line instead.

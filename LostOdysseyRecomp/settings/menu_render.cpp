@@ -1,6 +1,7 @@
 #include "menu_render.h"
 #include "translations.h"
 #include <algorithm>
+#include <array>
 #include <cmath>
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -16,6 +17,8 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
         return false;
 #ifdef _WIN32
     HDC dc = CreateCompatibleDC(nullptr);
+    if (!dc)
+        return false;
     BITMAPINFO info{};
     info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
     info.bmiHeader.biWidth = int(width);
@@ -25,16 +28,14 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
     info.bmiHeader.biCompression = BI_RGB;
     void *bits = nullptr;
     HBITMAP bitmap = CreateDIBSection(dc, &info, DIB_RGB_COLORS, &bits, nullptr, 0);
-    if (!dc || !bitmap)
+    if (!bitmap)
     {
-        if (bitmap)
-            DeleteObject(bitmap);
-        if (dc)
-            DeleteDC(dc);
+        DeleteDC(dc);
         return false;
     }
     auto oldBitmap = SelectObject(dc, bitmap);
     SetBkMode(dc, TRANSPARENT);
+
     const double scale = std::min(width / 1280.0, height / 720.0);
     const double offsetX = (width - 1280 * scale) * 0.5;
     const double offsetY = (height - 720 * scale) * 0.5;
@@ -42,63 +43,375 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
         return {LONG(std::lround(offsetX + x * scale)), LONG(std::lround(offsetY + y * scale)),
                 LONG(std::lround(offsetX + (x + w) * scale)), LONG(std::lround(offsetY + (y + h) * scale))};
     };
-    RECT canvas{0, 0, LONG(width), LONG(height)};
-    FillRect(dc, &canvas, static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
+    auto shade = [](COLORREF color, int amount) {
+        const int red = std::clamp(int(GetRValue(color)) + amount, 0, 255);
+        const int green = std::clamp(int(GetGValue(color)) + amount, 0, 255);
+        const int blue = std::clamp(int(GetBValue(color)) + amount, 0, 255);
+        return RGB(red, green, blue);
+    };
     auto fill = [&](int x, int y, int w, int h, COLORREF color) {
-        RECT r = rect(x, y, w, h);
+        RECT area = rect(x, y, w, h);
         HBRUSH brush = CreateSolidBrush(color);
-        FillRect(dc, &r, brush);
+        FillRect(dc, &area, brush);
         DeleteObject(brush);
     };
+    auto line = [&](int x1, int y1, int x2, int y2, COLORREF color, int thickness = 1) {
+        HPEN pen = CreatePen(PS_SOLID, std::max(1, int(std::lround(thickness * scale))), color);
+        auto old = SelectObject(dc, pen);
+        MoveToEx(dc, int(std::lround(offsetX + x1 * scale)), int(std::lround(offsetY + y1 * scale)), nullptr);
+        LineTo(dc, int(std::lround(offsetX + x2 * scale)), int(std::lround(offsetY + y2 * scale)));
+        SelectObject(dc, old);
+        DeleteObject(pen);
+    };
+
+    // Deterministic, irregular horizontal grain recreates the shared metal
+    // surface without shipping a capture or private game texture.
+    auto *dib = static_cast<uint32_t *>(bits);
+    std::fill_n(dib, size_t(width) * height, 0u);
+    auto metal = [&](int x, int y, int w, int h, COLORREF base, int grain) {
+        RECT area = rect(x, y, w, h);
+        area.left = std::clamp<LONG>(area.left, 0, LONG(width));
+        area.right = std::clamp<LONG>(area.right, 0, LONG(width));
+        area.top = std::clamp<LONG>(area.top, 0, LONG(height));
+        area.bottom = std::clamp<LONG>(area.bottom, 0, LONG(height));
+        const int streakWidth = std::max(12, int(std::lround(53 * scale)));
+        for (LONG py = area.top; py < area.bottom; ++py)
+        {
+            uint32_t rowNoise = uint32_t(py) + 0x9e3779b9u;
+            rowNoise ^= rowNoise >> 16;
+            rowNoise *= 0x7feb352du;
+            rowNoise ^= rowNoise >> 15;
+            rowNoise *= 0x846ca68bu;
+            rowNoise ^= rowNoise >> 16;
+            const int band = int(rowNoise % 7) - 3;
+            for (LONG px = area.left; px < area.right; ++px)
+            {
+                uint32_t noise = uint32_t(px / streakWidth) * 0x27d4eb2du ^ rowNoise;
+                noise ^= noise >> 15;
+                const int streak = int((noise >> 29) & 3) - 1;
+                const int delta = std::clamp(band + streak, -grain, grain);
+                const int red = std::clamp(int(GetRValue(base)) + delta, 0, 255);
+                const int green = std::clamp(int(GetGValue(base)) + delta, 0, 255);
+                const int blue = std::clamp(int(GetBValue(base)) + delta, 0, 255);
+                dib[size_t(py) * width + px] = uint32_t(blue) | (uint32_t(green) << 8) | (uint32_t(red) << 16);
+            }
+        }
+    };
+
+    const COLORREF steel = RGB(100, 103, 103);
+    const COLORREF steelDark = RGB(68, 71, 71);
+    const COLORREF rail = RGB(94, 97, 97);
+    const COLORREF ink = RGB(242, 242, 237);
+    const COLORREF muted = RGB(165, 166, 163);
+    const COLORREF disabled = RGB(126, 128, 126);
+    const COLORREF selectedSurface = RGB(194, 196, 194);
+    const COLORREF selectedInk = RGB(35, 36, 36);
+    const COLORREF outline = RGB(39, 40, 40);
+
+    metal(0, 0, 1280, 720, steel, 7);
+    metal(0, 0, 1280, 100, RGB(107, 110, 110), 6);
+    metal(0, 104, 366, 536, rail, 7);
+    metal(366, 104, 727, 536, RGB(99, 102, 102), 7);
+    metal(1094, 104, 186, 536, RGB(96, 99, 99), 6);
+    metal(0, 643, 1280, 77, RGB(105, 108, 108), 6);
+
+    auto faceFor = [&](const std::wstring &value) {
+        if (std::none_of(value.begin(), value.end(), [](wchar_t c) { return c > 0x7f; }))
+            return L"Trebuchet MS";
+        if (current.language == 2) return L"Yu Gothic UI";
+        if (current.language == 3) return L"Malgun Gothic";
+        return current.language == 4 ? L"Microsoft YaHei UI" : L"Microsoft JhengHei UI";
+    };
+    auto makeFont = [&](const std::wstring &value, int size, bool bold) {
+        return CreateFontW(-std::max(1, int(std::lround(size * scale))), 0, 0, 0,
+                           bold ? FW_SEMIBOLD : FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+                           OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY,
+                           VARIABLE_PITCH | FF_SWISS, faceFor(value));
+    };
     auto text = [&](int x, int y, int w, int h, const std::wstring &value, int size, COLORREF color,
-                    bool bold = false) {
-        HFONT font =
-            CreateFontW(-std::max(1, int(std::lround(size * scale))), 0, 0, 0, bold ? FW_SEMIBOLD : FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-                        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY, DEFAULT_PITCH, L"Segoe UI");
+                    bool bold = false, UINT alignment = DT_LEFT, COLORREF edge = RGB(39, 40, 40), int minimum = 13) {
+        RECT area = rect(x, y, w, h);
+        HFONT font = nullptr;
+        for (int candidate = size; candidate >= minimum; --candidate)
+        {
+            font = makeFont(value, candidate, bold);
+            auto old = SelectObject(dc, font);
+            SIZE measured{};
+            GetTextExtentPoint32W(dc, value.c_str(), int(value.size()), &measured);
+            SelectObject(dc, old);
+            if (measured.cx <= area.right - area.left - std::max(2, int(std::lround(8 * scale))) ||
+                candidate == minimum)
+                break;
+            DeleteObject(font);
+            font = nullptr;
+        }
         auto old = SelectObject(dc, font);
+        const UINT flags = alignment | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX;
+        if (edge != CLR_INVALID)
+        {
+            const int stroke = std::max(1, int(std::lround(scale)));
+            SetTextColor(dc, edge);
+            for (const auto [dx, dy] : std::array<std::pair<int, int>, 8>{
+                     std::pair{-1, -1}, {0, -1}, {1, -1}, {-1, 0}, {1, 0}, {-1, 1}, {0, 1}, {1, 1}})
+            {
+                RECT edged = area;
+                OffsetRect(&edged, dx * stroke, dy * stroke);
+                DrawTextW(dc, value.c_str(), -1, &edged, flags);
+            }
+        }
         SetTextColor(dc, color);
-        RECT r = rect(x, y, w, h);
-        DrawTextW(dc, value.c_str(), -1, &r, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+        DrawTextW(dc, value.c_str(), -1, &area, flags);
         SelectObject(dc, old);
         DeleteObject(font);
     };
-    const COLORREF ink = RGB(229, 224, 213), muted = RGB(153, 153, 147), gold = RGB(207, 172, 108);
-    fill(0, 0, 1280, 720, RGB(22, 26, 29));
-    text(64, 26, 300, 24, L"LOST ODYSSEY", 17, gold, true);
-    text(64, 57, 900, 60, Translate(current.language, L"Settings", L"設定"), 38, ink, true);
-    text(1080, 66, 136, 42, L"LB / RB", 20, gold);
-    const wchar_t *en[] = {L"Gameplay", L"Audio", L"Graphics", L"Language"};
-    const wchar_t *zh[] = {L"遊戲", L"聲音", L"圖像", L"語言"};
-    for (int i = 0; i < 4; i++)
-    {
-        int x = 64 + i * 288;
-        if (i == current.tab)
+    auto brushedCell = [&](int x, int y, int w, int h, COLORREF base) {
+        fill(x, y, w, h, base);
+        for (int yy = 2; yy < h; yy += 4)
+            line(x + 1, y + yy, x + w - 1, y + yy, shade(base, (yy % 8) ? -3 : 3));
+    };
+    auto cell = [&](int x, int y, int w, int h, bool selected) {
+        if (selected) brushedCell(x, y, w, h, selectedSurface);
+        line(x, y, x + w, y, selected ? RGB(229, 230, 226) : RGB(137, 139, 138));
+        line(x, y, x, y + h, selected ? RGB(218, 219, 216) : RGB(113, 115, 114));
+        line(x, y + h - 1, x + w, y + h - 1, selected ? RGB(55, 56, 56) : RGB(68, 70, 70));
+        line(x + w - 1, y, x + w - 1, y + h, selected ? RGB(70, 71, 71) : RGB(76, 78, 78));
+    };
+    auto arrow = [&](int x, int y) {
+        auto draw = [&](int dx, int dy, COLORREF fillColor, COLORREF edgeColor) {
+            POINT points[] = {{int(std::lround(offsetX + (x + dx) * scale)), int(std::lround(offsetY + (y + dy) * scale))},
+                              {int(std::lround(offsetX + (x + 22 + dx) * scale)), int(std::lround(offsetY + (y + dy) * scale))},
+                              {int(std::lround(offsetX + (x + 34 + dx) * scale)), int(std::lround(offsetY + (y + 10 + dy) * scale))},
+                              {int(std::lround(offsetX + (x + 22 + dx) * scale)), int(std::lround(offsetY + (y + 20 + dy) * scale))},
+                              {int(std::lround(offsetX + (x + dx) * scale)), int(std::lround(offsetY + (y + 20 + dy) * scale))}};
+            HBRUSH brush = CreateSolidBrush(fillColor);
+            HPEN pen = CreatePen(PS_SOLID, std::max(1, int(std::lround(scale))), edgeColor);
+            auto oldBrush = SelectObject(dc, brush);
+            auto oldPen = SelectObject(dc, pen);
+            Polygon(dc, points, int(std::size(points)));
+            SelectObject(dc, oldBrush);
+            SelectObject(dc, oldPen);
+            DeleteObject(brush);
+            DeleteObject(pen);
+        };
+        draw(2, 2, RGB(46, 47, 47), RGB(46, 47, 47));
+        draw(0, 0, RGB(239, 240, 236), RGB(49, 50, 50));
+        line(x + 2, y + 2, x + 21, y + 2, RGB(255, 255, 251));
+    };
+    auto controllerButton = [&](int x, int y, wchar_t letter, bool green, bool bright) {
+        const COLORREF base = green ? (bright ? RGB(116, 177, 43) : RGB(91, 116, 72))
+                                    : (bright ? RGB(190, 62, 49) : RGB(124, 79, 74));
+        HBRUSH shadowBrush = CreateSolidBrush(RGB(45, 46, 46));
+        auto previousBrush = SelectObject(dc, shadowBrush);
+        RECT shadow = rect(x + 2, y + 2, 24, 24);
+        Ellipse(dc, shadow.left, shadow.top, shadow.right, shadow.bottom);
+        SelectObject(dc, previousBrush);
+        DeleteObject(shadowBrush);
+        HBRUSH brush = CreateSolidBrush(base);
+        HPEN pen = CreatePen(PS_SOLID, std::max(1, int(std::lround(scale))), RGB(42, 43, 43));
+        previousBrush = SelectObject(dc, brush);
+        auto previousPen = SelectObject(dc, pen);
+        RECT button = rect(x, y, 24, 24);
+        Ellipse(dc, button.left, button.top, button.right, button.bottom);
+        SelectObject(dc, previousBrush);
+        SelectObject(dc, previousPen);
+        DeleteObject(brush);
+        DeleteObject(pen);
+        line(x + 6, y + 4, x + 17, y + 4, shade(base, 58));
+        text(x, y, 24, 24, std::wstring(1, letter), 15, ink, true, DT_CENTER, outline, 12);
+    };
+
+    line(0, 97, 1280, 97, RGB(228, 229, 225), 2);
+    line(0, 101, 1280, 101, RGB(30, 31, 31), 4);
+    line(0, 105, 1280, 105, RGB(151, 153, 152));
+    line(365, 104, 365, 640, RGB(38, 39, 39), 2);
+    line(368, 104, 368, 640, RGB(151, 153, 152));
+    line(1093, 104, 1093, 640, RGB(42, 43, 43), 2);
+    line(1096, 104, 1096, 640, RGB(144, 146, 145));
+    line(0, 639, 1280, 639, RGB(34, 35, 35), 4);
+    line(0, 644, 1280, 644, RGB(153, 155, 154));
+
+    const int gearX = 104, gearY = 65;
+    auto drawGear = [&](int offset, COLORREF fillColor, COLORREF edgeColor) {
+        std::array<POINT, 48> points{};
+        for (int i = 0; i < int(points.size()); ++i)
         {
-            fill(x, 128, 288, 56, RGB(49, 52, 51));
-            fill(x, 180, 288, 4, gold);
+            const double angle = i * 2.0 * 3.141592653589793 / points.size();
+            const int radius = (i % 4 == 1 || i % 4 == 2) ? 23 : 18;
+            points[i] = {int(std::lround(offsetX + (gearX + offset + std::cos(angle) * radius) * scale)),
+                         int(std::lround(offsetY + (gearY + offset + std::sin(angle) * radius) * scale))};
         }
-        text(x + 20, 128, 248, 52, Translate(current.language, en[i], zh[i]), 23, i == current.tab ? ink : muted,
-             i == current.tab);
-    }
-    const int rowHeight = current.rows.size() > 7 ? 49 : 56;
-    for (size_t i = 0; i < current.rows.size(); i++)
+        HBRUSH brush = CreateSolidBrush(fillColor);
+        HPEN pen = CreatePen(PS_SOLID, std::max(1, int(std::lround(scale))), edgeColor);
+        auto previousBrush = SelectObject(dc, brush);
+        auto previousPen = SelectObject(dc, pen);
+        Polygon(dc, points.data(), int(points.size()));
+        SelectObject(dc, previousBrush);
+        SelectObject(dc, previousPen);
+        DeleteObject(brush);
+        DeleteObject(pen);
+    };
+    drawGear(2, RGB(43, 44, 44), RGB(43, 44, 44));
+    drawGear(0, RGB(218, 219, 215), RGB(43, 44, 44));
+    HBRUSH gearBrush = CreateSolidBrush(steelDark);
+    HPEN gearPen = CreatePen(PS_SOLID, std::max(1, int(std::lround(2 * scale))), ink);
+    auto oldBrush = SelectObject(dc, gearBrush);
+    auto oldPen = SelectObject(dc, gearPen);
+    RECT gear = rect(gearX - 13, gearY - 13, 26, 26);
+    Ellipse(dc, gear.left, gear.top, gear.right, gear.bottom);
+    HBRUSH holeBrush = CreateSolidBrush(RGB(127, 130, 130));
+    SelectObject(dc, holeBrush);
+    RECT hole = rect(gearX - 5, gearY - 5, 10, 10);
+    Ellipse(dc, hole.left, hole.top, hole.right, hole.bottom);
+    SelectObject(dc, oldBrush);
+    SelectObject(dc, oldPen);
+    DeleteObject(holeBrush);
+    DeleteObject(gearBrush);
+    DeleteObject(gearPen);
+    text(130, 27, 440, 68, Translate(current.language, L"Settings", L"設定"), 38, ink, false);
+
+    text(70, 111, 260, 35, L"Menu", 20, ink, false);
+    const wchar_t *enTabs[] = {L"Gameplay", L"Audio", L"Graphics", L"Language"};
+    const wchar_t *zhTabs[] = {L"遊戲", L"聲音", L"圖像", L"語言"};
+    for (int i = 0; i < 4; ++i)
     {
-        int y = 208 + int(i) * rowHeight;
-        const auto &r = current.rows[i];
-        if (int(i) == current.row)
-            fill(64, y, 1152, rowHeight - 4, RGB(49, 52, 51));
-        text(84, y, 696, rowHeight - 4, r.name, 22, r.enabled ? ink : muted);
-        text(820, y, 376, rowHeight - 4, r.value, 21, r.enabled ? gold : muted);
+        constexpr int tabWidth = 160;
+        const int x = 386 + i * tabWidth;
+        const bool selected = i == current.tab;
+        cell(x, 110, tabWidth, 32, selected);
+        text(x + 8, 110, tabWidth - 16, 32, Translate(current.language, enTabs[i], zhTabs[i]), 17,
+             selected ? selectedInk : ink, selected, DT_CENTER,
+             selected ? RGB(222, 223, 219) : outline, 12);
     }
-    fill(64, 626, 1152, 1, RGB(65, 66, 62));
-    text(64, 644, 1152, 48, current.help, 16, muted);
+
+    constexpr int rowTop = 150;
+    constexpr int rowHeight = 43;
+    constexpr int labelLeft = 65;
+    constexpr int labelWidth = 299;
+    constexpr int choiceLeft = 386;
+    constexpr int choiceWidth = 640;
+    for (size_t index = 0; index < current.rows.size(); ++index)
+    {
+        const int y = rowTop + int(index) * rowHeight;
+        if (y + rowHeight > 580) break;
+        const auto &row = current.rows[index];
+        const bool focused = int(index) == current.row;
+
+        if (focused)
+        {
+            brushedCell(labelLeft, y, labelWidth, rowHeight - 2, selectedSurface);
+            arrow(38, y + 10);
+        }
+        line(labelLeft, y, labelLeft + labelWidth, y, focused ? RGB(244, 244, 239) : RGB(145, 147, 146));
+        line(labelLeft, y + rowHeight - 2, labelLeft + labelWidth, y + rowHeight - 2,
+             focused ? RGB(56, 57, 57) : RGB(69, 71, 71));
+        text(82, y, 274, rowHeight - 2, row.name, 24,
+             row.enabled ? ink : disabled, false, DT_LEFT, outline, 16);
+
+        if (row.sliderPercent >= 0)
+        {
+            text(425, y, 62, rowHeight - 2, L"Min", 20, row.enabled ? ink : disabled, false, DT_CENTER);
+            text(930, y, 74, rowHeight - 2, L"Max", 20, row.enabled ? ink : disabled, false, DT_CENTER);
+            cell(495, y + 15, 420, 13, false);
+            fill(499, y + 18, 412, 7, RGB(53, 57, 58));
+            const int extent = int(std::lround(412 * std::clamp(row.sliderPercent, 0, 100) / 100.0));
+            if (extent > 0)
+            {
+                fill(499, y + 18, extent, 7, row.enabled ? RGB(178, 203, 209) : RGB(115, 124, 125));
+                line(499, y + 18, 499 + extent, y + 18, RGB(222, 234, 235));
+            }
+            continue;
+        }
+
+        std::vector<std::wstring> fallback;
+        const std::vector<std::wstring> *choices = &row.choices;
+        if (choices->empty())
+        {
+            fallback.push_back(row.value);
+            choices = &fallback;
+        }
+        const int selected = std::clamp(row.selectedChoice, 0, int(choices->size()) - 1);
+        if (row.controllerButtons && choices->size() >= 2)
+        {
+            for (int option = 0; option < 2; ++option)
+            {
+                const int left = choiceLeft + option * choiceWidth / 2;
+                const bool currentChoice = option == selected;
+                cell(left, y, choiceWidth / 2, rowHeight - 2, focused && currentChoice);
+                const bool swap = option == 1;
+                controllerButton(left + 34, y + 8, swap ? L'B' : L'A', !swap, currentChoice);
+                controllerButton(left + 154, y + 8, swap ? L'A' : L'B', swap, currentChoice);
+                const COLORREF legendColor = !row.enabled ? disabled : currentChoice ? ink : muted;
+                text(left + 62, y, 60, rowHeight - 2, L"OK", 18, legendColor, false, DT_LEFT, outline, 14);
+                text(left + 182, y, 125, rowHeight - 2,
+                     Translate(current.language, L"Cancel", L"取消"), 18, legendColor,
+                     false, DT_LEFT, outline, 13);
+            }
+            continue;
+        }
+        if (choices->size() > 5)
+        {
+            constexpr int arrowWidth = 72;
+            cell(choiceLeft, y, arrowWidth, rowHeight - 2, false);
+            cell(choiceLeft + arrowWidth, y, choiceWidth - arrowWidth * 2, rowHeight - 2, focused);
+            cell(choiceLeft + choiceWidth - arrowWidth, y, arrowWidth, rowHeight - 2, false);
+            text(choiceLeft, y, arrowWidth, rowHeight - 2, L"◀", 16,
+                 row.enabled ? muted : disabled, false, DT_CENTER);
+            text(choiceLeft + arrowWidth + 8, y, choiceWidth - arrowWidth * 2 - 16, rowHeight - 2,
+                 (*choices)[selected], 22, row.enabled ? ink : disabled,
+                 false, DT_CENTER, outline, 14);
+            text(choiceLeft + choiceWidth - arrowWidth, y, arrowWidth, rowHeight - 2, L"▶", 16,
+                 row.enabled ? muted : disabled, false, DT_CENTER);
+            continue;
+        }
+
+        const int count = int(choices->size());
+        const int usedWidth = count == 1 ? choiceWidth / 2 : choiceWidth;
+        const int startX = choiceLeft + (choiceWidth - usedWidth) / 2;
+        for (int option = 0; option < count; ++option)
+        {
+            const int left = startX + usedWidth * option / count;
+            const int right = startX + usedWidth * (option + 1) / count;
+            const bool currentChoice = option == selected;
+            cell(left, y, right - left, rowHeight - 2, focused && currentChoice);
+            text(left + 7, y, right - left - 14, rowHeight - 2, (*choices)[option], 22,
+                 !row.enabled ? disabled : currentChoice ? ink : muted,
+                 false, DT_CENTER, outline, 13);
+        }
+    }
+
+    text(65, 652, 52, 43, L"Help", 20, ink, false);
+    fill(116, 650, 1094, 45, RGB(70, 73, 73));
+    line(116, 650, 1210, 650, RGB(154, 156, 155));
+    line(116, 694, 1210, 694, RGB(55, 56, 56));
+    text(131, 650, 1063, 45, current.help, 20, ink, false, DT_LEFT, outline, 14);
+
+    if (!current.dialogChoices.empty())
+    {
+        brushedCell(280, 208, 720, 306, RGB(73, 76, 76));
+        line(280, 208, 1000, 208, RGB(231, 232, 228), 2);
+        line(280, 208, 280, 514, RGB(194, 196, 193), 2);
+        line(280, 513, 1000, 513, RGB(35, 36, 36), 3);
+        line(999, 208, 999, 514, RGB(39, 40, 40), 3);
+        text(325, 226, 630, 48, current.dialogTitle, 27, ink, false, DT_CENTER);
+        text(330, 278, 620, 62, current.dialogMessage, 18, ink, false, DT_CENTER, outline, 13);
+        for (size_t i = 0; i < current.dialogChoices.size(); ++i)
+        {
+            const int y = 360 + int(i) * 43;
+            const bool focused = int(i) == current.dialogSelection;
+            cell(390, y, 500, 37, focused);
+            if (focused) arrow(354, y + 8);
+            text(405, y, 470, 37, current.dialogChoices[i], 20,
+                 ink, false, DT_CENTER, outline, 13);
+        }
+    }
+
     GdiFlush();
     pixels.resize(size_t(width) * height);
     const auto *source = static_cast<uint32_t *>(bits);
-    for (size_t i = 0; i < pixels.size(); i++)
+    for (size_t i = 0; i < pixels.size(); ++i)
     {
-        uint32_t p = source[i];
-        pixels[i] = 0xff000000u | ((p & 255) << 16) | (p & 0xff00) | ((p >> 16) & 255);
+        const uint32_t pixel = source[i];
+        pixels[i] = 0xff000000u | ((pixel & 255) << 16) | (pixel & 0xff00) | ((pixel >> 16) & 255);
     }
     SelectObject(dc, oldBitmap);
     DeleteObject(bitmap);
