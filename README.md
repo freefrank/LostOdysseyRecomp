@@ -8,20 +8,20 @@ Windows x64 · Direct3D 12 · PowerPC static recompilation
 
 <img src="docs/images/title-screen.png" alt="Lost Odyssey title screen — Press START" width="960">
 
-### [Download v0.4.0](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.4.0) · [Installation guide](docs/INSTALLING.md) · [Report an issue](https://github.com/freefrank/LostOdysseyRecomp/issues)
+### [Download v0.4.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.4.1) · [Installation guide](docs/INSTALLING.md) · [Report an issue](https://github.com/freefrank/LostOdysseyRecomp/issues)
 
 [简体中文](README.zh-CN.md) · [Project status](docs/STATUS.md) · [Roadmap](docs/ROADMAP.md) · [Build from source](docs/BUILDING.md)
 
 </div>
 
 > [!IMPORTANT]
-> **v0.4.0 is an early testing release.** Opening areas and selected scenes have been tested; a complete playthrough has not. Rendering and stability issues remain. You must supply your own supported game files.
+> **v0.4.1 is an early testing release.** Opening areas and selected scenes have been tested; a complete playthrough has not. Rendering and stability issues remain. You must supply your own supported game files.
 
-## Prepared for v0.4.1
+## New in v0.4.1
 
-The local release candidate fixes the reported Map3 tire-shadow flicker with TAA enabled; the user has confirmed the fix at the original position. F1 render exports now capture three consecutive frames in one ZIP with the current process log and less duplicate data. Release preparation is in progress; the published download remains v0.4.0. See the [changelog](CHANGELOG.md) and [validation scope](docs/STATUS.md).
+v0.4.1 fixes the reported Map3 tire-shadow flicker with TAA enabled; the user confirmed the r2 repair at the original position before release. F1 render exports capture three consecutive frames in one ZIP with the current process log and less duplicate data. See the [changelog](CHANGELOG.md) and [validation scope](docs/STATUS.md).
 
-## New in v0.4.0
+## Previously in v0.4.0
 
 Real internal resolution up to 4K, SMAA and experimental camera-based TAA, Standard/High filtering, saved frame-rate controls and automatic Asian/USA-Europe CPX indexing are included. Settings text renders at output resolution and Debug labels switch independently between English and Simplified Chinese. See the [changelog](CHANGELOG.md). Existing translated-shader caches rebuild after updating.
 
@@ -80,11 +80,13 @@ DLSS, FSR and frame generation are not implemented; v0.4.0 removes the former di
 
 ## Validation and remaining work
 
-The v0.4.0 Windows package passed release CI, all 45 manifest entries and the installer self-test. Both audited editions passed isolated official-package Map2 startup at Auto 1080p/TAA with verified bundled compiler libraries. This is a bounded static scene check, not full-game or new player visual acceptance.
+The v0.4.1 Windows package passed release CI, all 45 manifest entries, the installer self-test and eight startup-path checks. Its public download and checksum match the validated package. These official-package checks did not load a game or repeat GPU validation; the Map3 TAA/Off comparison and player acceptance belong to the preceding r2 candidate, whose rendering code is unchanged in the release.
+
+Both audited editions previously passed isolated v0.4.0 official-package Map2 startup at Auto 1080p/TAA with verified bundled compiler libraries. That bounded static scene check does not establish full-game compatibility.
 
 TAA remains experimental, lacks native object-motion vectors and falls back to SMAA on unsupported paths. Selected movement, dialogue and Ring core-timing checks passed for 60 FPS, but whole-game locked 60 and precise Ring release/Perfect are unverified. The unvalidated 120 FPS option requires `LO_EXPERIMENTAL_120=1`; otherwise it runs at an effective 60 FPS.
 
-The two missing dispatch entries investigated for Issue #5 are repaired, but the original battle still needs retesting. Issue #6 has added startup-memory diagnostics; its original-machine cause and recovery remain unknown. The local v0.4.1 Map3 tire fix has user visual acceptance; broader gameplay and hardware remain regression coverage. See [release validation](docs/STATUS.md), [development evidence](docs/notes/v0.4.0-development.md) and the [follow-up record](docs/notes/handoff-v0.4.0-followup.md).
+The two missing dispatch entries investigated for Issue #5 are repaired, but the original battle still needs retesting. Issue #6 has added startup-memory diagnostics; its original-machine cause and recovery remain unknown. The accepted Map3 tire fix is included in v0.4.1; broader gameplay and hardware remain regression coverage. See [release validation](docs/STATUS.md), [development evidence](docs/notes/v0.4.0-development.md) and the [follow-up record](docs/notes/handoff-v0.4.0-followup.md).
 
 Reliable gameplay and faithful rendering come first. The project translates PowerPC code into C++ with **XenonRecomp**, implements Xbox 360 services on the host, and renders translated Xenos shaders through **plume**.
 

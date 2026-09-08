@@ -2,6 +2,8 @@
 
 当前汇总见[成果报告](../WORK_REPORT_2026-09-05.md)和[状态总表](../STATUS.md)。下文按实验时间保留证据，早期未完成状态不代表最新结果。
 
+2026-09-08 更新：已验收的 Map3 TAA 轮胎修复现已包含在正式发布的 [v0.4.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.4.1) 中；详见文末发布记录。其余独立阴影报告保持原状态。
+
 状态：已修正一项指令翻译缺口，162 个现有着色器离线编译通过。画面与闪烁回归仍在进行，未关闭阴影问题。
 
 ## 实际路径
@@ -146,3 +148,7 @@ r2 的整合构建、8,192 项 `LoTemporalJitterTest` 和 Scene fixture 通过�
 r2 实际解压包的同位置 AA Off 检查也已完成：352 条绘制上传（含 64 条 `ff9da` 材质）均为 Disabled，VS／PS 常量字节不变；近、远轮胎遮罩在 32 帧中逐像素一致，并与第一候选 Off 对照逐像素相同。Off 实跑的 EXE／DXC／DXIL 真实模块与哈希已核对，TAA 和 Off 两组场景截图均经目视检查。四个本轮独立测试进程已主动结束，用户正在运行的验收进程未触碰。证据：`out/v0.4.1-tire-v2/r2-off-map3-60/audit.json`、`off-comparison.json`、`r2-modules.json` 和 `user-preserved.json`。
 
 其他地图、动态画面和硬件列为后续回归，不作为继续挂起本缺陷的理由。原 AMD 首战及另一 RX 9060 XT 报告仍分别挂起；当前 r2 为未发布的 `0.4.1-dev` 开发包，没有提交或发布状态变化。
+
+## 2026-09-08：v0.4.1 正式发布
+
+[v0.4.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.4.1) 于 00:03:50 UTC 从 `eb43f108d2cdd3aef682a32b202425c28d168472` 发布，包含 r2 已验收修复及三帧日志导出。正式 EXE 为 `9e0e13d991830de84d7fb85ac7a2543f779dbf7936ee5acd4cabe7cce5b2c57f`；与 r2 相比，渲染和捕获源码未变，源码版本改为 `0.4.1`。CI、45 项包文件、安装器及 8 项无图形启动路径检查、匿名下载核验通过。本轮正式包没有加载游戏或重做 GPU／玩家验收，画面依据仍为上方 r2 的同 Map3 对照与用户确认。独立 AMD 报告继续挂起；包哈希及证据见[状态总表](../STATUS.md)。

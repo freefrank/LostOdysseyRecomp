@@ -2,17 +2,17 @@
 
 [简体中文](ROADMAP.zh-CN.md) · [Current status](STATUS.md)
 
-Updated for local v0.4.1 development and v0.4.0 publication on **2026-09-07**. `[x]` means the stated scope has evidence, not that the entire game is complete. Dated notes retain earlier experiment states; [STATUS.md](STATUS.md) is the current release and validation ledger.
+Updated for v0.4.1 publication on **2026-09-08**. `[x]` means the stated scope has evidence, not that the entire game is complete. Dated notes retain earlier experiment states; [STATUS.md](STATUS.md) is the current release and validation ledger.
 
 Legend: `[ ]` planned / outstanding · `[~]` in progress · `[x]` validated within the stated scope.
 
-## Release preparation: v0.4.1
+## Published milestone: v0.4.1
 
 1. [x] Correct verified TAA lighting/depth jitter and shadow-reconstruction coordinate mismatches. Local implementation, integrated build and selected CPU/GPU checks passed; see [validation scope](notes/shadow-texture-lod.md).
 2. [x] Add the two omitted scene-depth material passes after candidate `6d3bc037…` failed original-scene acceptance. r2 passes its integrated build, 8,192 CPU jitter checks and the same-position Map3 TAA/60 FPS/Auto 1440p draw checks. Near-tire ROI mean-brightness variation is lower; individual pixels still vary. See [comparison and limits](notes/shadow-texture-lod.md).
 3. [x] Complete r2's original-Map3 TAA/AA Off comparison and player visual acceptance. The user confirms no tire flicker with TAA enabled, and the running EXE matches r2. The reported Map3 defect is resolved; other maps, motion and hardware remain regression coverage. The first candidate's failure is retained as history.
 
-The user has authorized integration into `main` and v0.4.1 publication. Release notes are prepared; release CI and official-package verification remain pending, with v0.4.0 still the verified published version. The independent AMD first-battle and separate RX 9060 XT reports remain individually suspended.
+[v0.4.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.4.1) was published at 2026-09-08 00:03:50 UTC from `eb43f10`, including the accepted TAA repair and three-frame log-inclusive exports. Release CI 34171122945, all 45 manifest entries, installer self-test, eight headless startup-path checks and anonymous download verification passed. Official-package checks did not repeat GPU or player visual acceptance; the r2 evidence above retains that scope. The independent AMD first-battle and separate RX 9060 XT reports remain individually suspended. See [release evidence](STATUS.md).
 
 ## Published milestone and remaining coverage: v0.4.0
 
@@ -64,7 +64,7 @@ v0.1 remains the historical first Windows release with the importer, first-launc
 
 ## Near-term priorities
 
-The following is the retained compatibility and regression backlog. The v0.4.1 section above defines the current development scope.
+The following is the retained compatibility and regression backlog. The milestones above distinguish published work from future development.
 
 1. [ ] Kaim's opening-battle body-shadow investigation remains suspended after the requested v0.4.0 recheck and final one-minute limit on 2026-09-07. Official-package tests on Radeon 8060S did not confirm the RX 9060 XT report; no root cause or fix is established. Resume with reporter video/log/settings and normal/abnormal captures. Map 13 remains unresolved, and a relationship is unknown. [Evidence and limits](notes/kaim-body-shadow-v040.md).
 2. [~] Collect player acceptance for the expanded shader and recorded-pipeline preparation shipped in v0.3.0. Local tests establish source coverage and real draw reuse, not complete stutter elimination or unseen first-use PSO coverage.

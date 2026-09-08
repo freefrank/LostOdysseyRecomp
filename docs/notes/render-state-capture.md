@@ -1,8 +1,8 @@
 # Debug Menu render-state capture
 
-Reviewed **2026-09-07**. The original single-frame capture shipped in v0.2.1. Current local `0.4.1-dev` source implements three consecutive rendered frames in one ZIP, with a shared runtime log and smaller default contents. These later changes are unpublished; the previously frozen single-frame development package is identified separately below. Capture is a diagnostic feature, not an AMD rendering fix or a compatibility claim.
+Reviewed **2026-09-08**. The original single-frame capture shipped in v0.2.1. Published [v0.4.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.4.1) captures three consecutive rendered frames in one ZIP, with a shared runtime log and smaller default contents. Earlier development packages are identified separately below. Capture is a diagnostic feature, not an AMD rendering fix or a compatibility claim.
 
-## Current development: three-frame capture
+## Current release: three-frame capture
 
 Open the Windows **F1 Debug Menu** and select **截取渲染状态 / Capture render state**, the first button. One request captures the next three consecutive rendered frames and produces one ZIP. Progress identifies each frame before compression, then displays the absolute saved ZIP path. The button stays disabled while capture is busy. A paused or stalled renderer must produce new frames to complete the request.
 
@@ -32,7 +32,9 @@ GPU readbacks, file writes and compression can stall execution. Three consecutiv
 
 ### Development validation and package boundary
 
-The integrated three-frame build and isolated 720p title/menu export passed (EXE SHA256 `246585e67d854d43c49c1b050b5610f1b1f9b799946adb185b5c3b038aebe229`). This implementation remains local and uncommitted, without a new development package or publication. The earlier frozen `0.4.1-dev` package (ZIP SHA256 prefix `98993a88`, EXE `6d3bc037`) contains the single-frame log addition and source/configuration metadata, but not the three-frame layout or default size reductions.
+The integrated three-frame build and isolated 720p title/menu export passed (EXE SHA256 `246585e67d854d43c49c1b050b5610f1b1f9b799946adb185b5c3b038aebe229`). The implementation was subsequently included in the r2 development package and v0.4.1. The earlier frozen `0.4.1-dev` package (ZIP SHA256 prefix `98993a88`, EXE `6d3bc037`) contains the single-frame log addition and source/configuration metadata, but not the three-frame layout or default size reductions.
+
+v0.4.1 was published at **2026-09-08 00:03:50 UTC** from `eb43f108d2cdd3aef682a32b202425c28d168472`. Release CI, all 45 manifest entries, installer self-test, eight headless startup-path checks and anonymous download verification passed. Official EXE SHA256 is `9e0e13d991830de84d7fb85ac7a2543f779dbf7936ee5acd4cabe7cce5b2c57f`, with source version `0.4.1`; capture code is unchanged from r2. These official-package checks did not load a game or repeat capture/GPU validation. The actual three-frame export evidence remains the development run below; see [release evidence](../STATUS.md) for package hashes and verification records.
 
 The three-frame ZIP contains separate directories for frames 400/401/402, 132 entries, 48 raw resolves with verified lengths and 21 shared HLSL files. CRC checks and every archived file's bytes match the retained raw output. Its 706,805-byte `runtime.log` is an exact prefix of the current process log, includes completion of all three frames and excludes a newer unrelated log. Rendering continued beyond frame 420 after compression; the owned process was ended and the seed/executable hashes stayed unchanged. Evidence: `out/render-log-20260907/three-frame-validation.json`. The initial offline validator incorrectly required a shader file for an unbound zero hash; correcting that assertion allowed the same retained ZIP and subsequent runtime log to pass without a source change or another game run. Sequence-failure and opt-in draw-preview runtime paths remain untested by this run.
 
