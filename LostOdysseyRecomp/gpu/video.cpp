@@ -45,6 +45,7 @@ namespace gpu::video
 
         SDL_Window* g_window = nullptr;
         std::atomic<uint64_t> g_shaderProgress{0};
+        bool g_vulkan = false;
         constexpr uint64_t kProgressMask = (1ull << 28) - 1;
         const wchar_t* PreparationTitle(PreparationStage stage) {
             switch (stage) {
@@ -52,7 +53,7 @@ namespace gpu::video
             case PreparationStage::IndexedExtraction: return L"Extracting indexed shaders";
             case PreparationStage::FallbackScan: return L"Scanning game resources";
             case PreparationStage::Pipelines: return L"Preparing pipelines";
-            default: return L"Compiling shaders";
+            default: return L"Preparing shaders";
             }
         }
         const char* PreparationTitleNarrow(PreparationStage stage) {
@@ -61,7 +62,7 @@ namespace gpu::video
             case PreparationStage::IndexedExtraction: return "Extracting indexed shaders";
             case PreparationStage::FallbackScan: return "Scanning game resources";
             case PreparationStage::Pipelines: return "Preparing pipelines";
-            default: return "Compiling shaders";
+            default: return "Preparing shaders";
             }
         }
         const wchar_t* PreparationSuffix(PreparationUnit unit) {
@@ -159,17 +160,47 @@ namespace gpu::video
         std::unique_ptr<plume::RenderCommandFence> g_fence;
         std::unique_ptr<plume::RenderCommandSemaphore> g_acquireSemaphore;
         std::unique_ptr<plume::RenderCommandSemaphore> g_releaseSemaphore;
+        std::vector<std::unique_ptr<plume::RenderCommandSemaphore>> g_presentSemaphores;
         std::unique_ptr<plume::RenderSwapChain> g_swapChain;
         std::unique_ptr<plume::RenderBuffer> g_uploadBuffer;
         uint64_t g_uploadCapacity = uint64_t(kMaxWidth) * kMaxHeight * 4;
         std::unique_ptr<Presentation> g_presentation;
         std::unique_ptr<plume::RenderTexture> g_cpuFrame;
+        std::unique_ptr<plume::RenderTexture> g_presentedSnapshot;
+        uint32_t g_snapshotWidth=0,g_snapshotHeight=0;
         uint32_t g_cpuWidth=0,g_cpuHeight=0;
         uint32_t g_lastPresentedImage=0;
         bool g_hasPresentedImage=false;
         bool g_forceSwapResize=false;
         constexpr plume::RenderFormat kSwapChainFormat = plume::RenderFormat::R8G8B8A8_UNORM;
         constexpr uint32_t kSwapChainBuffers = 3;
+
+        plume::RenderCommandSemaphore* PresentSemaphore(uint32_t imageIndex)
+        {
+            if(!g_vulkan) return g_releaseSemaphore.get();
+            // A submit fence does not prove vkQueuePresent consumed its wait.
+            // Reacquiring this image does; index present semaphores by image.
+            while(g_presentSemaphores.size()<=imageIndex)
+                g_presentSemaphores.push_back(g_device->createCommandSemaphore());
+            return g_presentSemaphores[imageIndex].get();
+        }
+
+        void RecordPresentedSnapshot(plume::RenderTexture* frame)
+        {
+            // Vulkan gives the presentation engine ownership after vkQueuePresent.
+            // The explicit presented-screenshot diagnostic retains an owned image
+            // before that handoff; no extra copy is made during normal gameplay.
+            if(!g_vulkan || !getenv("LO_SCREENSHOT_PRESENTED")) return;
+            const auto w=g_swapChain->getWidth(),h=g_swapChain->getHeight();
+            if(!g_presentedSnapshot || w!=g_snapshotWidth || h!=g_snapshotHeight) {
+                g_presentedSnapshot=g_device->createTexture(plume::RenderTextureDesc::Texture2D(w,h,1,kSwapChainFormat));
+                g_snapshotWidth=w;g_snapshotHeight=h;
+            }
+            if(!g_presentedSnapshot) return;
+            g_commandList->barriers(plume::RenderBarrierStage::COPY,plume::RenderTextureBarrier(frame,plume::RenderTextureLayout::COPY_SOURCE));
+            g_commandList->barriers(plume::RenderBarrierStage::COPY,plume::RenderTextureBarrier(g_presentedSnapshot.get(),plume::RenderTextureLayout::COPY_DEST));
+            g_commandList->copyTexture(g_presentedSnapshot.get(),frame);
+        }
 #endif
 
         uint32_t GpuSwap(uint32_t value, uint32_t endian)
@@ -218,6 +249,8 @@ namespace gpu::video
                ((outerInnerBytes >> 8) << 12);
     }
 
+    bool IsVulkan() { return g_vulkan; }
+
     bool Init()
     {
         if (g_initAttempted)
@@ -228,6 +261,16 @@ namespace gpu::video
         {
             LOG_INFO("video: LO_HEADLESS set, no window");
             return false;
+        }
+
+        g_vulkan=settings::GetConfig().graphicsBackend==settings::GraphicsBackend::Vulkan;
+        if(const char* requested=getenv("LO_GRAPHICS_API")) {
+            if(SDL_strcasecmp(requested,"vulkan")==0) g_vulkan=true;
+            else if(SDL_strcasecmp(requested,"d3d12")==0) g_vulkan=false;
+            else if(SDL_strcasecmp(requested,"auto")) {
+                LOG_ERROR("video: unsupported LO_GRAPHICS_API '{}' (use d3d12 or vulkan)",requested);
+                return false;
+            }
         }
 
         auto createWindow = [] {
@@ -264,6 +307,11 @@ namespace gpu::video
                 return false;
             }
             g_nativeWindow = info.info.win.window;
+            // SDL's Windows class loads the first RT_GROUP_ICON from this EXE.
+            // Keep Explorer and the game window on the same shared resource.
+            const auto resourceIcon = LoadIconW(GetModuleHandleW(nullptr), L"IDI_LOST_ODYSSEY_RECOMP");
+            const auto windowIcon = reinterpret_cast<HICON>(GetClassLongPtrW(g_nativeWindow, GCLP_HICON));
+            LOG_INFO("video: window icon resource match={}", resourceIcon && windowIcon == resourceIcon);
 #endif
             return true;
         };
@@ -298,7 +346,7 @@ namespace gpu::video
 
 #ifdef LO_GPU_PLUME
 #ifdef _WIN32
-        g_interface = plume::CreateD3D12Interface();
+        g_interface = g_vulkan ? plume::CreateVulkanInterface() : plume::CreateD3D12Interface();
         plume::RenderWindow renderWindow = g_nativeWindow;
 #else
         plume::RenderWindow renderWindow{};
@@ -316,6 +364,10 @@ namespace gpu::video
             return false;
         }
 
+        if (g_vulkan && (!g_device->getCapabilities().bufferDeviceAddress || !g_device->getCapabilities().geometryShader)) {
+            LOG_ERROR("video: Vulkan requires buffer device address and geometry shader support");
+            g_device.reset(); return false;
+        }
         g_queue = g_device->createCommandQueue(plume::RenderCommandListType::DIRECT);
         g_commandList = g_queue->createCommandList();
         g_fence = g_device->createCommandFence();
@@ -327,7 +379,7 @@ namespace gpu::video
         g_presentation=std::make_unique<Presentation>();
         if(!g_presentation->Init(g_device.get())) g_presentation.reset();
 
-        LOG_INFO("video: {} on {}", "D3D12", g_device->getDescription().name);
+        LOG_INFO("video: {} on {}", g_vulkan ? "Vulkan" : "D3D12", g_device->getDescription().name);
         g_available = true;
 #endif
         return g_available;
@@ -341,12 +393,14 @@ namespace gpu::video
             // Nothing in flight after the last present's fence wait.
         }
         g_cpuFrame.reset();
+        g_presentedSnapshot.reset();g_snapshotWidth=g_snapshotHeight=0;
         g_presentation.reset();
         g_uploadBuffer.reset();
 #ifdef _WIN32
-        if(g_swapChain) static_cast<plume::D3D12SwapChain*>(g_swapChain.get())->d3d->SetFullscreenState(FALSE,nullptr);
+        if(g_swapChain && !g_vulkan) static_cast<plume::D3D12SwapChain*>(g_swapChain.get())->d3d->SetFullscreenState(FALSE,nullptr);
 #endif
         g_swapChain.reset();
+        g_presentSemaphores.clear();
         g_releaseSemaphore.reset();
         g_acquireSemaphore.reset();
         g_fence.reset();
@@ -441,7 +495,7 @@ namespace gpu::video
             // SDL operations remain on the message-owning thread. Hidden tests
             // must never change the user's desktop display mode.
             const auto mode=getenv("LO_BACKGROUND")?settings::WindowMode::Windowed:config.windowMode;
-            const int result=SDL_SetWindowFullscreen(g_window,mode==settings::WindowMode::Borderless?SDL_WINDOW_FULLSCREEN_DESKTOP:0);
+            const int result=SDL_SetWindowFullscreen(g_window,mode==settings::WindowMode::Borderless?SDL_WINDOW_FULLSCREEN_DESKTOP:(g_vulkan && mode==settings::WindowMode::Exclusive?SDL_WINDOW_FULLSCREEN:0));
             g_displayFailed=result!=0;
             if(mode!=settings::WindowMode::Borderless) SDL_SetWindowSize(g_window,config.width,config.height);
             g_displaySize.store(uint64_t(config.width)<<32|config.height);
@@ -491,7 +545,7 @@ namespace gpu::video
             static int appliedMode=-1;
             static uint64_t appliedSize=0;
             const int mode=g_displayMode.load(); const uint64_t size=g_displaySize.load();
-            if(mode>=0 && (mode!=appliedMode || size!=appliedSize)) {
+            if(!g_vulkan && mode>=0 && (mode!=appliedMode || size!=appliedSize)) {
                 auto* swap=static_cast<plume::D3D12SwapChain*>(g_swapChain.get());
                 HRESULT result=swap->d3d->SetFullscreenState(FALSE,nullptr);
                 if(mode==int(settings::WindowMode::Exclusive)) {
@@ -569,12 +623,13 @@ namespace gpu::video
                     g_commandList->copyTextureRegion(plume::RenderTextureCopyLocation::Subresource(backBuffer),
                         plume::RenderTextureCopyLocation::Subresource(source), 0, 0, 0, &box);
                 }
+                RecordPresentedSnapshot(backBuffer);
                 g_commandList->barriers(plume::RenderBarrierStage::NONE, plume::RenderTextureBarrier(backBuffer, plume::RenderTextureLayout::PRESENT));
                 g_commandList->end();
 
                 const plume::RenderCommandList* lists[] = { g_commandList.get() };
                 plume::RenderCommandSemaphore* waitSemaphore = g_acquireSemaphore.get();
-                plume::RenderCommandSemaphore* signalSemaphore = g_releaseSemaphore.get();
+                plume::RenderCommandSemaphore* signalSemaphore = PresentSemaphore(imageIndex);
                 g_queue->executeCommandLists(lists, 1, &waitSemaphore, 1, &signalSemaphore, 1, g_fence.get());
                 g_swapChain->present(imageIndex, &signalSemaphore, 1);
                 g_queue->waitForCommandFence(g_fence.get());
@@ -660,12 +715,13 @@ namespace gpu::video
         // GPU-only scene-AA provenance cannot authorize skipping its legacy AA.
         if(g_presentation) g_presentation->Draw(g_commandList.get(),g_cpuFrame.get(),backBuffer,width,height,
             g_swapChain->getWidth(),g_swapChain->getHeight(),menu ? PresentationOptions{} : presentationOptions);
+        RecordPresentedSnapshot(backBuffer);
         g_commandList->barriers(plume::RenderBarrierStage::NONE, plume::RenderTextureBarrier(backBuffer, plume::RenderTextureLayout::PRESENT));
         g_commandList->end();
 
         const plume::RenderCommandList* lists[] = { g_commandList.get() };
         plume::RenderCommandSemaphore* waitSemaphore = g_acquireSemaphore.get();
-        plume::RenderCommandSemaphore* signalSemaphore = g_releaseSemaphore.get();
+        plume::RenderCommandSemaphore* signalSemaphore = PresentSemaphore(imageIndex);
         g_queue->executeCommandLists(lists, 1, &waitSemaphore, 1, &signalSemaphore, 1, g_fence.get());
         g_swapChain->present(imageIndex, &signalSemaphore, 1);
         g_queue->waitForCommandFence(g_fence.get());
@@ -702,11 +758,12 @@ namespace gpu::video
             const uint32_t w=g_swapChain->getWidth(),h=g_swapChain->getHeight(),pitch=(w*4+255)&~255u;
             if(!w || !h) return false;
             auto readback=g_device->createBuffer(plume::RenderBufferDesc::ReadbackBuffer(uint64_t(pitch)*h));
-            auto* frame=g_swapChain->getTexture(g_lastPresentedImage);
+            auto* frame=g_vulkan ? g_presentedSnapshot.get() : g_swapChain->getTexture(g_lastPresentedImage);
+            if(!frame)return false;
             g_commandList->begin();
             g_commandList->barriers(plume::RenderBarrierStage::COPY,plume::RenderTextureBarrier(frame,plume::RenderTextureLayout::COPY_SOURCE));
             g_commandList->copyTextureRegion(plume::RenderTextureCopyLocation::PlacedFootprint(readback.get(),kSwapChainFormat,w,h,1,pitch/4),plume::RenderTextureCopyLocation::Subresource(frame));
-            g_commandList->barriers(plume::RenderBarrierStage::NONE,plume::RenderTextureBarrier(frame,plume::RenderTextureLayout::PRESENT));
+            if(!g_vulkan) g_commandList->barriers(plume::RenderBarrierStage::NONE,plume::RenderTextureBarrier(frame,plume::RenderTextureLayout::PRESENT));
             g_commandList->end(); const plume::RenderCommandList* lists[]={g_commandList.get()};
             g_queue->executeCommandLists(lists,1,nullptr,0,nullptr,0,g_fence.get()); g_queue->waitForCommandFence(g_fence.get());
             std::vector<uint32_t> pixels(size_t(w)*h); const auto* data=static_cast<const uint8_t*>(readback->map());

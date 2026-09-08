@@ -18,15 +18,15 @@ struct SmaaPipeline
     std::unique_ptr<plume::RenderFramebuffer> fb[4];
     std::unique_ptr<plume::RenderBuffer> areaUpload, searchUpload;
     uint32_t width=0, height=0;
-    bool uploaded=false;
+    bool uploaded=false, vulkan=false;
 
-    bool Init(Device *d, plume::RenderShader *vs, plume::RenderSampler *linear)
+    bool Init(Device *d, plume::RenderShader *vs, plume::RenderSampler *linear, bool useVulkan=false)
     {
         using namespace plume;
-        device=d;
+        device=d;vulkan=useVulkan;
         RenderDescriptorSetBuilder set;
         set.begin(); for(int i=0;i<3;++i) set.addTexture(i);
-        set.addSampler(0);set.addSampler(1);set.end();
+        set.addSampler(vulkan?3:0);set.addSampler(vulkan?4:1);set.end();
         RenderPipelineLayoutBuilder lb;
         lb.begin(false,false);lb.addPushConstant(0,0,16,RenderShaderStageFlag::PIXEL);
         lb.addDescriptorSet(set);lb.end();layout=lb.create(d);
@@ -36,10 +36,23 @@ struct SmaaPipeline
         std::string hlsl=R"(
 #define SMAA_HLSL_4 1
 #define SMAA_PRESET_HIGH 1
+#ifdef __spirv__
+struct SmaaParameters { float4 metrics; };
+[[vk::push_constant]] ConstantBuffer<SmaaParameters> parameters;
+#define metrics parameters.metrics
+#else
 cbuffer Metrics : register(b0) { float4 metrics; };
+#endif
 #define SMAA_RT_METRICS metrics
 )";
-        hlsl+=smaaSource;
+        std::string smaa=smaaSource;
+        if(vulkan) {
+            const auto linearPos=smaa.find("SamplerState LinearSampler");
+            smaa.insert(linearPos,"[[vk::binding(3,0)]] ");
+            const auto pointPos=smaa.find("SamplerState PointSampler");
+            smaa.insert(pointPos,"[[vk::binding(4,0)]] ");
+        }
+        hlsl+=smaa;
         hlsl+=R"(
 Texture2D input0 : register(t0);
 Texture2D input1 : register(t1);
@@ -59,9 +72,9 @@ float4 neighborhood(float4 pos : SV_Position) : SV_Target {
 )";
         const char *entry[]={"edge","weight","neighborhood"};
         for(int i=0;i<3;++i) {
-            auto c=xenos::CompileHlsl(hlsl,entry[i],"ps_6_0");
+            auto c=xenos::CompileCachedHlsl(hlsl,entry[i],"ps_6_0",vulkan?xenos::ShaderBinaryFormat::Spirv:xenos::ShaderBinaryFormat::Dxil);
             if(!c.ok) { LOG_WARNING("SMAA {}: {}",entry[i],c.errors);return false; }
-            shaders[i]=d->createShader(c.dxil.data(),c.dxil.size(),entry[i],RenderShaderFormat::DXIL);
+            shaders[i]=d->createShader(c.bytecode.data(),c.bytecode.size(),entry[i],vulkan?RenderShaderFormat::SPIRV:RenderShaderFormat::DXIL);
             RenderGraphicsPipelineDesc pd;
             pd.pipelineLayout=layout.get();pd.vertexShader=vs;pd.pixelShader=shaders[i].get();
             pd.renderTargetCount=1;pd.renderTargetFormat[0]=RenderFormat::R8G8B8A8_UNORM;
@@ -70,7 +83,7 @@ float4 neighborhood(float4 pos : SV_Position) : SV_Target {
             sets[i]=set.create(d);sets[i]->setSampler(3,linear);sets[i]->setSampler(4,point.get());
         }
         RenderDescriptorSetBuilder crop;
-        crop.begin();crop.addTexture(0);crop.addSampler(0);crop.end();
+        crop.begin();crop.addTexture(0);crop.addSampler(vulkan?1:0);crop.end();
         cropSet=crop.create(d);cropSet->setSampler(1,linear);
         auto lookup=[&](uint32_t w,uint32_t h,uint32_t bpp,RenderFormat format,const unsigned char *data,
             std::unique_ptr<RenderTexture> &tex,std::unique_ptr<RenderBuffer> &upload) {

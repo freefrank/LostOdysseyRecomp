@@ -1,4 +1,7 @@
 #include "dxc_compiler.h"
+#include "cache.h"
+#include <filesystem>
+#include <fstream>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -77,7 +80,7 @@ namespace xenos
         return g_createInstance != nullptr;
     }
 
-    CompiledShader CompileHlsl(const std::string& source, const char* entryPoint, const char* profile, bool debugInfo)
+    CompiledShader CompileHlsl(const std::string& source, const char* entryPoint, const char* profile, ShaderBinaryFormat format, bool debugInfo)
     {
         CompiledShader result;
         if (!DxcAvailable())
@@ -105,7 +108,12 @@ namespace xenos
             L"-Wno-unused-value",
             L"-all-resources-bound",
         };
-        if (debugInfo)
+        if (format == ShaderBinaryFormat::Spirv)
+        {
+            args.insert(args.end(), {L"-spirv", L"-fspv-target-env=vulkan1.2", L"-fvk-use-dx-layout"});
+            if (target.starts_with(L"vs_")) args.push_back(L"-fvk-invert-y");
+        }
+        if (debugInfo && format == ShaderBinaryFormat::Dxil)
         {
             args.push_back(L"-Zi");
             args.push_back(L"-Qembed_debug");
@@ -114,7 +122,7 @@ namespace xenos
         {
             args.push_back(L"-O3");
             args.push_back(L"-Qstrip_debug");
-            args.push_back(L"-Qstrip_reflect");
+            if (format == ShaderBinaryFormat::Dxil) args.push_back(L"-Qstrip_reflect");
         }
 
         DxcBuffer buffer{};
@@ -148,7 +156,7 @@ namespace xenos
             return result;
         }
         auto* data = static_cast<const uint8_t*>(object->GetBufferPointer());
-        result.dxil.assign(data, data + object->GetBufferSize());
+        result.bytecode.assign(data, data + object->GetBufferSize());
         result.ok = true;
         return result;
     }
@@ -157,6 +165,39 @@ namespace xenos
 namespace xenos
 {
     bool DxcAvailable() { return false; }
-    CompiledShader CompileHlsl(const std::string&, const char*, const char*, bool) { return {}; }
+    CompiledShader CompileHlsl(const std::string&, const char*, const char*, ShaderBinaryFormat, bool) { return {}; }
 }
 #endif
+
+namespace xenos
+{
+    CompiledShader CompileHlsl(const std::string& source, const char* entry, const char* profile, bool debugInfo)
+    {
+        return CompileHlsl(source, entry, profile, ShaderBinaryFormat::Dxil, debugInfo);
+    }
+
+    CompiledShader CompileCachedHlsl(const std::string& source, const char* entry, const char* profile, ShaderBinaryFormat format)
+    {
+        const std::string key = source + '\0' + entry + '\0' + profile + "lo-dxc-vulkan12-dx-layout-v1";
+        uint64_t hash = 0xcbf29ce484222325ull;
+        for (uint8_t byte : key) { hash ^= byte; hash *= 0x100000001b3ull; }
+        const bool spirv = format == ShaderBinaryFormat::Spirv;
+        const char* configured = std::getenv("LO_SHADER_CACHE_DIR");
+        const auto directory = std::filesystem::path(configured ? configured : "cache/shaders") / "builtin";
+        const auto path = directory / cache::FileName(false, hash, spirv);
+        CompiledShader result;
+        std::ifstream input(path, std::ios::binary);
+        result.bytecode.assign(std::istreambuf_iterator<char>(input), {});
+        if (cache::CompleteBinary(result.bytecode, spirv)) { result.ok = true; return result; }
+        result = CompileHlsl(source, entry, profile, format);
+        if (result.ok && (!configured || *configured)) {
+            std::error_code error;
+            std::filesystem::create_directories(directory, error);
+            if (!error) {
+                std::ofstream output(path, std::ios::binary | std::ios::trunc);
+                output.write(reinterpret_cast<const char*>(result.bytecode.data()), result.bytecode.size());
+            }
+        }
+        return result;
+    }
+}

@@ -14,6 +14,7 @@ struct Presentation::Impl
 {
     RenderDevice *device = nullptr;
     bool initialized = false;
+    bool vulkan = false;
     SmaaPipeline smaa;
     std::unique_ptr<RenderPipelineLayout> layout;
     std::unique_ptr<RenderShader> vs, ps;
@@ -37,10 +38,26 @@ bool Presentation::Init(RenderDevice *device)
     auto &p = *impl;
     p.initialized = false;
     p.device = device;
+    p.vulkan = device->getCapabilities().shaderFormat == RenderShaderFormat::SPIRV;
+    const auto binaryFormat = p.vulkan ? xenos::ShaderBinaryFormat::Spirv : xenos::ShaderBinaryFormat::Dxil;
+    const auto renderFormat = p.vulkan ? RenderShaderFormat::SPIRV : RenderShaderFormat::DXIL;
     const char *source = R"(
 Texture2D<float4> frame : register(t0);
+#ifdef __spirv__
+[[vk::binding(1,0)]]
+#endif
 SamplerState linearClamp : register(s0);
+#ifdef __spirv__
+struct PresentationParameters { float2 origin; float2 extent; float2 imageSize; uint aa; uint filter; };
+[[vk::push_constant]] ConstantBuffer<PresentationParameters> parameters;
+#define origin parameters.origin
+#define extent parameters.extent
+#define imageSize parameters.imageSize
+#define aa parameters.aa
+#define filter parameters.filter
+#else
 cbuffer Parameters : register(b0) { float2 origin; float2 extent; float2 imageSize; uint aa; uint filter; };
+#endif
 float4 vertex(uint id : SV_VertexID) : SV_Position {
     float2 uv = float2((id << 1) & 2, id & 2);
     return float4(uv * float2(2,-2) + float2(-1,1),0,1);
@@ -103,19 +120,19 @@ float4 pixel(float4 position : SV_Position) : SV_Target {
     float lb=luma(b);
     return float4((lb<lo || lb>hi)?a:b,1);
 })";
-    auto vs = xenos::CompileHlsl(source, "vertex", "vs_6_0");
-    auto ps = xenos::CompileHlsl(source, "pixel", "ps_6_0");
+    auto vs = xenos::CompileCachedHlsl(source, "vertex", "vs_6_0", binaryFormat);
+    auto ps = xenos::CompileCachedHlsl(source, "pixel", "ps_6_0", binaryFormat);
     if (!vs.ok || !ps.ok)
     {
         LOG_WARNING("presentation shaders: {} {}", vs.errors, ps.errors);
         return false;
     }
-    p.vs = device->createShader(vs.dxil.data(), vs.dxil.size(), "vertex", RenderShaderFormat::DXIL);
-    p.ps = device->createShader(ps.dxil.data(), ps.dxil.size(), "pixel", RenderShaderFormat::DXIL);
+    p.vs = device->createShader(vs.bytecode.data(), vs.bytecode.size(), "vertex", renderFormat);
+    p.ps = device->createShader(ps.bytecode.data(), ps.bytecode.size(), "pixel", renderFormat);
     RenderDescriptorSetBuilder set;
     set.begin();
     set.addTexture(0);
-    set.addSampler(0);
+    set.addSampler(p.vulkan ? 1 : 0);
     set.end();
     RenderPipelineLayoutBuilder layout;
     layout.begin(false, false);
@@ -135,7 +152,7 @@ float4 pixel(float4 position : SV_Position) : SV_Target {
     desc.renderTargetBlend[0] = RenderBlendDesc::Copy();
     desc.cullMode = RenderCullMode::NONE;
     p.pipeline = device->createGraphicsPipeline(desc);
-    p.initialized = bool(p.pipeline) && p.smaa.Init(device, p.vs.get(), p.sampler.get());
+    p.initialized = bool(p.pipeline) && p.smaa.Init(device, p.vs.get(), p.sampler.get(), p.vulkan);
     return p.initialized;
 }
 bool Presentation::ProcessSceneColor(RenderCommandList *commands, RenderTexture *source, RenderTexture *target,
@@ -187,7 +204,7 @@ void Presentation::Draw(RenderCommandList *commands, RenderTexture *source, Rend
         auto &pass=p.passes[passIndex++];
         if(!pass.descriptors) {
             RenderDescriptorSetBuilder set;
-            set.begin();set.addTexture(0);set.addSampler(0);set.end();
+            set.begin();set.addTexture(0);set.addSampler(p.vulkan ? 1 : 0);set.end();
             pass.descriptors=set.create(p.device);pass.descriptors->setSampler(1,p.sampler.get());
         }
         // Each recorded pass has distinct descriptors/framebuffers. They and the

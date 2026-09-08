@@ -15,6 +15,7 @@ namespace gpu::video
 {
     // Shared with the draw backend (nullptr when no device is available).
     plume::RenderDevice* GetDevice();
+    bool IsVulkan();
     plume::RenderCommandQueue* GetQueue();
 
     // Creates the window and the render device. Safe to call repeatedly;

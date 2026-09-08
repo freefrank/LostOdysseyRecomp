@@ -6,12 +6,18 @@
 namespace plume
 {
 std::unique_ptr<RenderInterface> CreateD3D12Interface();
+std::unique_ptr<RenderInterface> CreateVulkanInterface();
 }
 int main(int argc, char** argv)
 {
     using namespace plume;
-    auto api = CreateD3D12Interface();
+    const bool vulkan=argc>1 && std::string(argv[1])=="--vulkan";
+    if(vulkan){--argc;++argv;}
+    auto api = vulkan ? CreateVulkanInterface() : CreateD3D12Interface();
+    if(!api)return 2;
     auto device = api->createDevice();
+    if(!device)return 2;
+    printf("Backend: %s on %s\n",vulkan?"Vulkan":"D3D12",device->getDescription().name.c_str());
     if (argc == 6 && std::string(argv[1]) == "--capture")
         return ReplayPresentationCapture(device.get(), argv[2], std::stoul(argv[3]), std::stoul(argv[4]), argv[5]);
     if (argc != 1) return 2;

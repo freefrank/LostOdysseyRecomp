@@ -8,6 +8,10 @@ One record of completed changes, with unpublished work separated from verified r
 
 Development commits below organize validated work for the v0.5.0 milestone. Each feature batch increments the source patch version; this is not a release record or a claim that each intermediate commit was run.
 
+### Development commit 0.4.10
+
+- Implement Windows Vulkan presentation, translation and rendering with backend binary caches and a bounded logical-CPU-minus-one shader preparation queue.
+
 ### Development commit 0.4.9
 
 - Check Windows updates at startup, preserve opt-out and safe helper handoff, and bind packages to linked source/dependency identities.

@@ -20,7 +20,17 @@ inline void RunTemporalGeometryFixture(plume::RenderDevice* device,const std::fi
     TemporalAA temporal;check(temporal.Init(device),"geometry temporal init");
     auto submit=[&]{commands->end();const RenderCommandList* lists[]={commands.get()};queue->executeCommandLists(lists,1,nullptr,0,nullptr,0,fence.get());queue->waitForCommandFence(fence.get());temporal.ReleaseCompleted();};
     const char* geometry=R"(
+
+#ifdef __spirv__
+struct SceneParameters{float2 extent;float2 jitter;uint foreground;float backgroundDepth;float2 padding;};
+[[vk::push_constant]] ConstantBuffer<SceneParameters> scene;
+#define extent scene.extent
+#define jitter scene.jitter
+#define foreground scene.foreground
+#define backgroundDepth scene.backgroundDepth
+#else
 cbuffer Scene:register(b0){float2 extent;float2 jitter;uint foreground;float backgroundDepth;float2 padding;};
+#endif
 float4 vertex(uint id:SV_VertexID):SV_Position {
  float2 p;
  if(!foreground){float2 uv=float2((id<<1)&2,id&2);p=uv*extent;}
@@ -33,10 +43,12 @@ float4 vertex(uint id:SV_VertexID):SV_Position {
 struct Outputs {float4 color:SV_Target0;float depth:SV_Target1;};
 Outputs pixel(){Outputs o;o.color=float4(foreground.xxx,.4);o.depth=foreground?.5:backgroundDepth;return o;}
 )";
-    auto vb=xenos::CompileHlsl(geometry,"vertex","vs_6_0"),pb=xenos::CompileHlsl(geometry,"pixel","ps_6_0");
+    const auto format=device->getCapabilities().shaderFormat;
+    const auto binary=format==RenderShaderFormat::SPIRV?xenos::ShaderBinaryFormat::Spirv:xenos::ShaderBinaryFormat::Dxil;
+    auto vb=xenos::CompileHlsl(geometry,"vertex","vs_6_0",binary),pb=xenos::CompileHlsl(geometry,"pixel","ps_6_0",binary);
     check(vb.ok&&pb.ok,"actual geometry shaders compile");
-    auto vs=device->createShader(vb.dxil.data(),vb.dxil.size(),"vertex",RenderShaderFormat::DXIL);
-    auto ps=device->createShader(pb.dxil.data(),pb.dxil.size(),"pixel",RenderShaderFormat::DXIL);
+    auto vs=device->createShader(vb.bytecode.data(),vb.bytecode.size(),"vertex",format);
+    auto ps=device->createShader(pb.bytecode.data(),pb.bytecode.size(),"pixel",format);
     RenderPipelineLayoutBuilder lb;lb.begin(false,false);lb.addPushConstant(0,0,32,RenderShaderStageFlag::VERTEX|RenderShaderStageFlag::PIXEL);lb.end();auto layout=lb.create(device);
     RenderGraphicsPipelineDesc pipelineDesc;pipelineDesc.pipelineLayout=layout.get();pipelineDesc.vertexShader=vs.get();pipelineDesc.pixelShader=ps.get();pipelineDesc.renderTargetCount=2;
     pipelineDesc.renderTargetFormat[0]=RenderFormat::R8G8B8A8_UNORM;pipelineDesc.renderTargetFormat[1]=RenderFormat::R32_FLOAT;

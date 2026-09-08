@@ -1,5 +1,5 @@
 diff --git a/plume_d3d12.cpp b/plume_d3d12.cpp
-index 2cdcf18f3b2e1729c2ff63684329c9c26770748c..e261120b85e22bf6cb30f5f52a5ea8fa1ac0b7fc 100644
+index 2cdcf18..9e75ecf 100644
 --- a/plume_d3d12.cpp
 +++ b/plume_d3d12.cpp
 @@ -2287,7 +2287,19 @@ namespace plume {
@@ -21,10 +21,10 @@ index 2cdcf18f3b2e1729c2ff63684329c9c26770748c..e261120b85e22bf6cb30f5f52a5ea8fa
 +            }
 +        }
      }
-
+ 
      void D3D12CommandList::copyBufferRegion(RenderBufferReference dstBuffer, RenderBufferReference srcBuffer, uint64_t size) {
 @@ -2312,9 +2324,14 @@ namespace plume {
-
+ 
          const D3D12_TEXTURE_COPY_LOCATION copyDstLocation = toD3D12(dstLocation);
          const D3D12_TEXTURE_COPY_LOCATION copySrcLocation = toD3D12(srcLocation);
 -        setSamplePositions(dstLocation.texture);
@@ -38,46 +38,193 @@ index 2cdcf18f3b2e1729c2ff63684329c9c26770748c..e261120b85e22bf6cb30f5f52a5ea8fa
 +            resetSamplePositions();
 +        }
      }
-
+ 
      void D3D12CommandList::copyBuffer(const RenderBuffer *dstBuffer, const RenderBuffer *srcBuffer) {
 @@ -2957,7 +2974,9 @@ namespace plume {
      }
-
+ 
      std::unique_ptr<RenderTexture> D3D12Pool::createTexture(const RenderTextureDesc &desc) {
 -        return std::make_unique<D3D12Texture>(device, this, desc);
 +        auto texture = std::make_unique<D3D12Texture>(device, this, desc);
 +        if (texture->d3d == nullptr) return nullptr;
 +        return texture;
      }
-
+ 
      // D3D12Shader
 @@ -3075,6 +3094,7 @@ namespace plume {
      // D3D12GraphicsPipeline
-
+ 
      D3D12GraphicsPipeline::D3D12GraphicsPipeline(D3D12Device *device, const RenderGraphicsPipelineDesc &desc) : D3D12Pipeline(device, Type::Graphics) {
 +        stencilRef = desc.stencilReference;
          assert(desc.pipelineLayout != nullptr);
-
+ 
          topology = toD3D12(desc.primitiveTopology);
-@@ -3910,7 +3930,9 @@ namespace plume {
+@@ -3754,6 +3774,7 @@ namespace plume {
+                 adapter = adapterOption;
+                 d3d = deviceOption;
+                 shaderModel = dataShaderModel.HighestShaderModel;
++                capabilities.shaderFormat = RenderShaderFormat::DXIL;
+                 capabilities.geometryShader = true;
+                 capabilities.raytracing = rtSupportOption;
+                 capabilities.raytracingStateUpdate = rtStateUpdateSupportOption;
+@@ -3910,7 +3931,9 @@ namespace plume {
      }
-
+ 
      std::unique_ptr<RenderPipeline> D3D12Device::createGraphicsPipeline(const RenderGraphicsPipelineDesc &desc) {
 -        return std::make_unique<D3D12GraphicsPipeline>(this, desc);
 +        auto pipeline = std::make_unique<D3D12GraphicsPipeline>(this, desc);
 +        if (pipeline->d3d == nullptr) return nullptr;
 +        return pipeline;
      }
-
+ 
      std::unique_ptr<RenderPipeline> D3D12Device::createRaytracingPipeline(const RenderRaytracingPipelineDesc &desc, const RenderPipeline *previousPipeline) {
-@@ -3931,7 +3953,9 @@ namespace plume {
+@@ -3931,7 +3954,9 @@ namespace plume {
      }
-
+ 
      std::unique_ptr<RenderTexture> D3D12Device::createTexture(const RenderTextureDesc &desc) {
 -        return std::make_unique<D3D12Texture>(this, nullptr, desc);
 +        auto texture = std::make_unique<D3D12Texture>(this, nullptr, desc);
 +        if (texture->d3d == nullptr) return nullptr;
 +        return texture;
      }
-
+ 
      std::unique_ptr<RenderAccelerationStructure> D3D12Device::createAccelerationStructure(const RenderAccelerationStructureDesc &desc) {
+diff --git a/plume_render_interface_types.h b/plume_render_interface_types.h
+index 9dcfedf..f14e707 100644
+--- a/plume_render_interface_types.h
++++ b/plume_render_interface_types.h
+@@ -1762,6 +1762,7 @@ namespace plume {
+     };
+ 
+     struct RenderDeviceCapabilities {
++        RenderShaderFormat shaderFormat = RenderShaderFormat::UNKNOWN;
+         // Geometry shaders.
+         bool geometryShader = false;
+ 
+diff --git a/plume_vulkan.cpp b/plume_vulkan.cpp
+index f1dd503..9193350 100644
+--- a/plume_vulkan.cpp
++++ b/plume_vulkan.cpp
+@@ -835,7 +835,7 @@ namespace plume {
+         bufferInfo.usage |= (desc.flags & RenderBufferFlag::ACCELERATION_STRUCTURE_INPUT) ? VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR : 0;
+         bufferInfo.usage |= (desc.flags & RenderBufferFlag::SHADER_BINDING_TABLE) ? VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR : 0;
+         
+-        const uint32_t deviceAddressMask = RenderBufferFlag::CONSTANT | RenderBufferFlag::ACCELERATION_STRUCTURE | RenderBufferFlag::ACCELERATION_STRUCTURE_SCRATCH | RenderBufferFlag::ACCELERATION_STRUCTURE_INPUT | RenderBufferFlag::SHADER_BINDING_TABLE;
++        const uint32_t deviceAddressMask = RenderBufferFlag::DEVICE_ADDRESSABLE | RenderBufferFlag::CONSTANT | RenderBufferFlag::ACCELERATION_STRUCTURE | RenderBufferFlag::ACCELERATION_STRUCTURE_SCRATCH | RenderBufferFlag::ACCELERATION_STRUCTURE_INPUT | RenderBufferFlag::SHADER_BINDING_TABLE;
+         const bool useDeviceAddress = device->capabilities.bufferDeviceAddress && (desc.flags & deviceAddressMask);
+         bufferInfo.usage |= useDeviceAddress ? VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT : 0;
+         
+@@ -854,6 +854,8 @@ namespace plume {
+         case RenderHeapType::UPLOAD:
+             bufferInfo.usage |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+             createInfo.flags |= VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
++            // Upload arenas are persistently mapped and written between submits.
++            createInfo.requiredFlags |= VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+             break;
+         case RenderHeapType::READBACK:
+             bufferInfo.usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+@@ -909,6 +911,8 @@ namespace plume {
+             return nullptr;
+         }
+ 
++        if (desc.heapType == RenderHeapType::READBACK)
++            vmaInvalidateAllocation(device->allocator, allocation, 0, VK_WHOLE_SIZE);
+         return data;
+     }
+ 
+@@ -1040,7 +1044,9 @@ namespace plume {
+         VkImageViewCreateInfo viewInfo = {};
+         viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+         viewInfo.image = vk;
+-        viewInfo.viewType = toImageViewType(RenderTextureDimensionToView(desc.dimension), desc.arraySize);
++        viewInfo.viewType = (desc.flags & RenderTextureFlag::CUBE)
++            ? (desc.arraySize > 6 ? VK_IMAGE_VIEW_TYPE_CUBE_ARRAY : VK_IMAGE_VIEW_TYPE_CUBE)
++            : toImageViewType(RenderTextureDimensionToView(desc.dimension), desc.arraySize);
+         viewInfo.format = format;
+         viewInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+         viewInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+@@ -1504,8 +1510,9 @@ namespace plume {
+ 
+         VkPipelineViewportStateCreateInfo viewportState = {};
+         viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+-        viewportState.viewportCount = renderTargetCount;
+-        viewportState.scissorCount = renderTargetCount;
++        // MRT count does not control viewport count. Guest passes set one viewport.
++        viewportState.viewportCount = 1;
++        viewportState.scissorCount = 1;
+ 
+         VkPipelineRasterizationStateCreateInfo rasterization = {};
+         rasterization.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+@@ -2175,7 +2182,7 @@ namespace plume {
+         }
+ 
+         // Make sure maxImageCount is never below minImageCount, as it's allowed to be zero.
+-        surfaceCapabilities.maxImageCount = std::max(surfaceCapabilities.minImageCount, surfaceCapabilities.maxImageCount);
++        if (surfaceCapabilities.maxImageCount == 0) surfaceCapabilities.maxImageCount = UINT32_MAX;
+ 
+         // Clamp the requested buffer count between the bounds of the surface capabilities.
+         this->desc.textureCount = std::clamp(desc.textureCount, surfaceCapabilities.minImageCount, surfaceCapabilities.maxImageCount);
+@@ -2310,6 +2317,7 @@ namespace plume {
+     }
+ 
+     bool VulkanSwapChain::resize() {
++        if (vk != VK_NULL_HANDLE) vkDeviceWaitIdle(commandQueue->device->vk);
+         getWindowSize(width, height);
+ 
+         // Don't recreate the swap chain at all if the window doesn't have a valid size.
+@@ -2338,7 +2346,8 @@ namespace plume {
+         createInfo.imageExtent.width = width;
+         createInfo.imageExtent.height = height;
+         createInfo.imageArrayLayers = 1;
+-        createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
++        // F1/screenshot export reads the last presented swapchain image.
++        createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+         createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+         createInfo.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+         createInfo.compositeAlpha = pickedAlphaFlag;
+@@ -2496,6 +2505,7 @@ namespace plume {
+ 
+     void VulkanSwapChain::releaseSwapChain() {
+         if (vk != VK_NULL_HANDLE) {
++            vkDeviceWaitIdle(commandQueue->device->vk);
+             vkDestroySwapchainKHR(commandQueue->device->vk, vk, nullptr);
+             vk = VK_NULL_HANDLE;
+         }
+@@ -3229,7 +3239,29 @@ namespace plume {
+             imageCopy.imageExtent.depth = srcLocation.placedFootprint.depth;
+             vkCmdCopyBufferToImage(vk, srcBuffer->vk, dstTexture->vk, toImageLayout(dstTexture->textureLayout), 1, &imageCopy);
+         }
++        else if ((dstLocation.type == RenderTextureCopyType::PLACED_FOOTPRINT) && (srcLocation.type == RenderTextureCopyType::SUBRESOURCE)) {
++            assert(srcTexture != nullptr && dstBuffer != nullptr);
++            const auto &footprint = dstLocation.placedFootprint;
++            const uint32_t block = RenderFormatBlockWidth(footprint.format);
++            const uint32_t bytes = RenderFormatSize(footprint.format);
++            VkBufferImageCopy copy = {};
++            copy.bufferOffset = footprint.offset + ((uint64_t(dstZ) * footprint.height + dstY) * footprint.rowWidth + dstX) * bytes;
++            copy.bufferRowLength = ((footprint.rowWidth + block - 1) / block) * block;
++            copy.bufferImageHeight = ((footprint.height + block - 1) / block) * block;
++            copy.imageSubresource.aspectMask = toAspectFlags(srcTexture->desc.format, srcTexture->desc.flags);
++            // Host capture exports the depth plane of a depth/stencil target.
++            if (copy.imageSubresource.aspectMask & VK_IMAGE_ASPECT_DEPTH_BIT) copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
++            copy.imageSubresource.mipLevel = srcLocation.subresource.mipLevel;
++            copy.imageSubresource.baseArrayLayer = srcLocation.subresource.arrayIndex;
++            copy.imageSubresource.layerCount = 1;
++            if (srcBox) {
++                copy.imageOffset = {int32_t(srcBox->left), int32_t(srcBox->top), int32_t(srcBox->front)};
++                copy.imageExtent = {uint32_t(srcBox->right-srcBox->left), uint32_t(srcBox->bottom-srcBox->top), uint32_t(srcBox->back-srcBox->front)};
++            } else copy.imageExtent = {footprint.width, footprint.height, footprint.depth};
++            vkCmdCopyImageToBuffer(vk, srcTexture->vk, toImageLayout(srcTexture->textureLayout), dstBuffer->vk, 1, &copy);
++        }
+         else {
++            assert(dstTexture != nullptr && srcTexture != nullptr);
+             VkImageCopy imageCopy = {};
+             imageCopy.srcSubresource.aspectMask = toAspectFlags(srcTexture->desc.format, srcTexture->desc.flags);
+             imageCopy.srcSubresource.baseArrayLayer = srcLocation.subresource.arrayIndex;
+@@ -4120,6 +4152,7 @@ namespace plume {
+         description.dedicatedVideoMemory = memoryHeapSize;
+ 
+         // Fill capabilities.
++        capabilities.shaderFormat = RenderShaderFormat::SPIRV;
+         capabilities.geometryShader = deviceFeatures.features.geometryShader;
+         capabilities.raytracing = rayTracingSupported;
+         capabilities.raytracingStateUpdate = false;

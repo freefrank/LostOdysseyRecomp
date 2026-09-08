@@ -80,8 +80,8 @@ int main() {
         std::puts("PASS: invalid-width allocation returns null; normal allocation still succeeds (expected CreateResource error above)");
         auto queue = device->createCommandQueue(RenderCommandListType::DIRECT);
         auto commands = queue->createCommandList(); auto fence = device->createCommandFence();
-        auto vs = device->createShader(vertex.dxil.data(), vertex.dxil.size(), "vertex", RenderShaderFormat::DXIL);
-        auto ps = device->createShader(pixel.dxil.data(), pixel.dxil.size(), "pixel", RenderShaderFormat::DXIL);
+        auto vs = device->createShader(vertex.bytecode.data(), vertex.bytecode.size(), "vertex", RenderShaderFormat::DXIL);
+        auto ps = device->createShader(pixel.bytecode.data(), pixel.bytecode.size(), "pixel", RenderShaderFormat::DXIL);
         RenderDescriptorSetBuilder set; set.begin(); set.addTexture(0); set.addSampler(0); set.end();
         RenderPipelineLayoutBuilder layoutBuilder; layoutBuilder.begin(false, false);
         layoutBuilder.addPushConstant(0, 0, 128, RenderShaderStageFlag::PIXEL);

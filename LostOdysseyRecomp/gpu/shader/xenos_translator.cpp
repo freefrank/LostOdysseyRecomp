@@ -35,6 +35,29 @@ namespace xenos
 #define FLT_MIN asfloat(0xff7fffff)
 #define FLT_MAX asfloat(0x7f7fffff)
 
+#ifdef __spirv__
+ByteAddressBuffer xeVertexArena : register(t0, space0);
+struct XePushConstants
+{
+    uint64_t VertexShaderConstants;
+    uint64_t SharedConstants;
+    uint64_t PixelShaderConstants;
+};
+[[vk::push_constant]] ConstantBuffer<XePushConstants> xePush;
+#ifdef XE_PIXEL_SHADER
+#define XE_CONSTANTS_ADDRESS xePush.PixelShaderConstants
+#else
+#define XE_CONSTANTS_ADDRESS xePush.VertexShaderConstants
+#endif
+#define xeNdcScale       vk::RawBufferLoad<float4>(xePush.SharedConstants + 160)
+#define xeNdcOffset      vk::RawBufferLoad<float4>(xePush.SharedConstants + 176)
+#define xeHalfPixelOffset vk::RawBufferLoad<float2>(xePush.SharedConstants + 192)
+#define xeVtxFmt         vk::RawBufferLoad<uint>(xePush.SharedConstants + 200)
+#define xeFlags          vk::RawBufferLoad<uint>(xePush.SharedConstants + 204)
+#define xeAlphaTest      vk::RawBufferLoad<float4>(xePush.SharedConstants + 208)
+#define xeColorMax       vk::RawBufferLoad<float4>(xePush.SharedConstants + 224)
+#define xeTransfer       vk::RawBufferLoad<uint4>(xePush.SharedConstants + 240)
+#else
 cbuffer XeConstants : register(b0, space0)
 {
     float4 c[256];
@@ -55,24 +78,46 @@ cbuffer XeShared : register(b1, space0)
     uint4 xeVfetchOffset[24]; // byte offset of each vertex fetch slot inside its buffer
     uint4 xeSamplerIndex[8];  // sampler palette index per texture fetch slot
     uint4 xeTextureInfo[8];   // source signs (8 bits), then fetch swizzle (12 bits)
-    uint4 xeTextureSize[8];   // packed logical guest width/height, independent of render scaling
+    uint4 xeTextureSize[8];
 };
+#endif
 
 uint XeVfetchOffset(uint slot)
 {
+#ifdef __spirv__
+    return vk::RawBufferLoad<uint>(xePush.SharedConstants + 256 + slot * 4);
+#else
     return xeVfetchOffset[slot >> 2][slot & 3];
+#endif
 }
 
+#ifdef __spirv__
+SamplerState xeSamplers[64] : register(s0, space4);
+#else
 SamplerState xeSamplers[64] : register(s0, space0);
+#endif
+
+uint XeSamplerIndex(uint slot)
+{
+#ifdef __spirv__
+    return vk::RawBufferLoad<uint>(xePush.SharedConstants + 640 + slot * 4);
+#else
+    return xeSamplerIndex[slot >> 2][slot & 3];
+#endif
+}
 
 SamplerState XeSampler(uint slot)
 {
-    return xeSamplers[xeSamplerIndex[slot >> 2][slot & 3]];
+    return xeSamplers[XeSamplerIndex(slot)];
 }
 
 float4 XeConst(int index)
 {
+#ifdef __spirv__
+    return vk::RawBufferLoad<float4>(XE_CONSTANTS_ADDRESS + uint64_t(clamp(index, 0, 255)) * 16);
+#else
     return c[clamp(index, 0, 255)];
+#endif
 }
 
 // Xbox 360 piecewise gamma decode, as used by Xenia's PWLGammaToLinear.
@@ -108,17 +153,29 @@ float4 XeDecodeTexture(float4 value, uint info)
 
 float4 XeTextureResult(float4 value, uint slot)
 {
+    #ifdef __spirv__
+    return XeDecodeTexture(value, vk::RawBufferLoad<uint>(xePush.SharedConstants + 768 + slot * 4));
+#else
     return XeDecodeTexture(value, xeTextureInfo[slot >> 2][slot & 3]);
+#endif
 }
 
 bool XeBool(uint index)
 {
+    #ifdef __spirv__
+    return ((vk::RawBufferLoad<uint>(xePush.SharedConstants + ((index >> 5) & 7) * 4) >> (index & 31)) & 1u) != 0u;
+#else
     return ((xeBools[(index >> 7) & 1][(index >> 5) & 3] >> (index & 31)) & 1u) != 0u;
+#endif
 }
 
 uint XeLoopConst(uint id)
 {
+    #ifdef __spirv__
+    return vk::RawBufferLoad<uint>(xePush.SharedConstants + 32 + (id & 31) * 4);
+#else
     return xeLoops[(id >> 2) & 7][id & 3];
+#endif
 }
 
 // ---- vertex fetch ----
@@ -227,7 +284,11 @@ float4 XeVF_32_32_32_32_FLOAT(ByteAddressBuffer b, uint a, bool sgn, bool nrm)
 // ---- texture fetch ----
 float2 XeTextureDimensions(Texture2D<float4> t, uint slot)
 {
+    #ifdef __spirv__
+    uint packed = vk::RawBufferLoad<uint>(xePush.SharedConstants + 896 + slot * 4);
+#else
     uint packed = xeTextureSize[slot >> 2][slot & 3];
+#endif
     if (packed != 0) return float2(packed & 65535u, packed >> 16);
     uint2 dims;
     t.GetDimensions(dims.x, dims.y);
@@ -781,7 +842,7 @@ float4 max4(float4 src0)
                         if (relative)
                             regFormatted = fmt::format("XeConst({} + {})", reg, instr.constAddressRegisterRelative ? "a0" : "aL");
                         else
-                            regFormatted = fmt::format("c[{}]", reg);
+                            regFormatted = fmt::format("XeConst({})", reg);
                     }
 
                     std::string result;
@@ -1062,10 +1123,11 @@ float4 max4(float4 src0)
             void EmitDeclarations()
             {
                 out += isPixelShader ? kPixelSampleMacro : kVertexSampleMacro;
+                if (isPixelShader) out += "#define XE_PIXEL_SHADER 1\n";
                 out += kCommonHlsl;
                 out += '\n';
                 for (uint32_t slot : vfetchSlots)
-                    println("ByteAddressBuffer vfetch{0} : register(t{0}, space0);", slot);
+                    println("#ifdef __spirv__\n#define vfetch{0} xeVertexArena\n#else\nByteAddressBuffer vfetch{0} : register(t{0}, space0);\n#endif", slot);
                 for (auto& [slot, dim] : texSlots)
                 {
                     switch (TextureDimension(dim))

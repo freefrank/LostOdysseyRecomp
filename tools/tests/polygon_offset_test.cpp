@@ -25,7 +25,7 @@ int main() {
       auto c = xenos::CompileHlsl(source, "main", profile);
       if (!c.ok)
         throw std::runtime_error(c.errors);
-      return device->createShader(c.dxil.data(), c.dxil.size(), "main",
+      return device->createShader(c.bytecode.data(), c.bytecode.size(), "main",
                                   RenderShaderFormat::DXIL);
     };
     auto vs = shader("float4 main(uint id:SV_VertexID):SV_Position { float2 "

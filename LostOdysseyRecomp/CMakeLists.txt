@@ -385,6 +385,10 @@ add_executable(LoFramePacerTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests
 target_include_directories(LoFramePacerTest PRIVATE ${LO_RUNTIME_ROOT})
 target_compile_features(LoFramePacerTest PRIVATE cxx_std_20)
 
+add_executable(LoShaderPreparationQueueTest EXCLUDE_FROM_ALL
+    ${CMAKE_SOURCE_DIR}/tools/tests/shader_preparation_queue_test.cpp)
+target_include_directories(LoShaderPreparationQueueTest PRIVATE ${LO_RUNTIME_ROOT})
+target_compile_features(LoShaderPreparationQueueTest PRIVATE cxx_std_20)
 if(WIN32)
     add_executable(LoMenuRenderTest EXCLUDE_FROM_ALL
         ${CMAKE_SOURCE_DIR}/tools/tests/menu_render_test.cpp
@@ -394,4 +398,31 @@ if(WIN32)
     target_compile_options(LoMenuRenderTest PRIVATE /utf-8)
     target_compile_definitions(LoMenuRenderTest PRIVATE NOMINMAX)
     target_link_libraries(LoMenuRenderTest PRIVATE user32 gdi32)
+endif()
+
+if(WIN32 AND LO_BUILD_GPU)
+    add_executable(LoVulkanBackendTest EXCLUDE_FROM_ALL
+        ${CMAKE_SOURCE_DIR}/tools/tests/vulkan_backend_test.cpp
+        ${LO_RUNTIME_ROOT}/gpu/shader/dxc_compiler.cpp
+        ${LO_RUNTIME_ROOT}/gpu/shader/xenos_translator.cpp
+        ${LO_RUNTIME_ROOT}/gpu/presentation.cpp)
+    target_include_directories(LoVulkanBackendTest PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,INCLUDE_DIRECTORIES>)
+    target_compile_definitions(LoVulkanBackendTest PRIVATE LO_GPU_PLUME NOMINMAX)
+    target_compile_features(LoVulkanBackendTest PRIVATE cxx_std_20)
+    target_link_libraries(LoVulkanBackendTest PRIVATE plume d3d12 dxgi fmt::fmt)
+endif()
+
+# Package the same SPIR-V-capable DXC beside runtime and compiler/GPU fixtures.
+# The Windows SDK compiler is allowed as an explicit fallback, but is not the release contract.
+if(WIN32 AND LO_BUILD_GPU)
+    set(LO_DXC_BINARY_DIR "${CMAKE_SOURCE_DIR}/tools/XenosRecomp/thirdparty/dxc-bin/bin/x64")
+    foreach(target LostOdysseyRecomp LoShaderTool LoPresentationTest LoTemporalAATest LoRenderResolutionShaderTest LoVulkanBackendTest)
+        if(TARGET ${target})
+            foreach(binary dxcompiler.dll dxil.dll)
+                add_custom_command(TARGET ${target} POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        "${LO_DXC_BINARY_DIR}/${binary}" "$<TARGET_FILE_DIR:${target}>/${binary}" VERBATIM)
+            endforeach()
+        endif()
+    endforeach()
 endif()

@@ -17,6 +17,7 @@
 #include "shader/xenos_translator.h"
 #include "shader/dxc_compiler.h"
 #include "shader/cache.h"
+#include "shader/preparation_queue.h"
 #include "shader/resource_scan.h"
 #include "shader/resource_xex.h"
 #include "shader/resource_variants.h"
@@ -267,6 +268,11 @@ namespace gpu::renderer
         struct Renderer
         {
             RenderDevice* device = nullptr;
+            bool vulkan = false;
+            xenos::ShaderBinaryFormat binaryFormat = xenos::ShaderBinaryFormat::Dxil;
+            RenderShaderFormat renderFormat = RenderShaderFormat::DXIL;
+            uint64_t constantAddresses[3]{};
+            std::unique_ptr<RenderDescriptorSet> staticSamplerSet;
             RenderCommandQueue* queue = nullptr;
             std::unique_ptr<RenderCommandList> commandList;
             std::unique_ptr<RenderCommandFence> fence;
@@ -291,7 +297,7 @@ namespace gpu::renderer
             std::unique_ptr<RenderBuffer> readback;
 
             std::unique_ptr<RenderPipelineLayout> pipelineLayout;
-            RenderDescriptorSetBuilder setBuilders[4];
+            RenderDescriptorSetBuilder setBuilders[5];
             std::vector<std::unique_ptr<RenderDescriptorSet>> setPools[4];
             uint32_t setPoolUsed[4] = {};
             uint32_t vfetchDescriptorBase = 0, samplerDescriptorBase = 0;
@@ -690,19 +696,29 @@ namespace gpu::renderer
                 uint32_t textureSize[32]; // packed guest width/height; physical resolves may be larger.
             };
 
+            static_assert(offsetof(SharedConstants,ndcScale)==160);
+            static_assert(offsetof(SharedConstants,transfer)==240);
+            static_assert(offsetof(SharedConstants,vfetchOffset)==256);
+            static_assert(offsetof(SharedConstants,samplerIndex)==640);
+            static_assert(offsetof(SharedConstants,textureInfo)==768);
+            static_assert(offsetof(SharedConstants,textureSize)==896);
+
             // ---- lifecycle -----------------------------------------------------
             bool Init()
             {
                 device = video::GetDevice();
                 queue = video::GetQueue();
+                vulkan = video::IsVulkan();
+                binaryFormat = vulkan ? xenos::ShaderBinaryFormat::Spirv : xenos::ShaderBinaryFormat::Dxil;
+                renderFormat = vulkan ? RenderShaderFormat::SPIRV : RenderShaderFormat::DXIL;
                 if (!device || !queue)
                     return false;
 
                 commandList = queue->createCommandList();
                 fence = device->createCommandFence();
-                uploadRing = device->createBuffer(RenderBufferDesc::UploadBuffer(kUploadRingSize));
+                uploadRing = device->createBuffer(RenderBufferDesc::UploadBuffer(kUploadRingSize, vulkan ? RenderBufferFlag::DEVICE_ADDRESSABLE | RenderBufferFlag::INDEX | RenderBufferFlag::STORAGE : RenderBufferFlag::NONE));
                 uploadMapped = static_cast<uint8_t*>(uploadRing->map());
-                vertexArena = device->createBuffer(RenderBufferDesc::UploadBuffer(kVertexArenaSize));
+                vertexArena = device->createBuffer(RenderBufferDesc::UploadBuffer(kVertexArenaSize, RenderBufferFlag::STORAGE));
                 arenaMapped = static_cast<uint8_t*>(vertexArena->map());
                 readback = device->createBuffer(RenderBufferDesc::ReadbackBuffer(kReadbackSize));
                 resolveReadback = getenv("LO_RESOLVE_READBACK") != nullptr;
@@ -734,30 +750,38 @@ namespace gpu::renderer
                 // set1..3 = 2D / 3D / cube textures t0-31 (space1..3).
                 RenderPipelineLayoutBuilder layout;
                 layout.begin(false, false);
-                layout.addRootDescriptor(0, 0, RenderRootDescriptorType::CONSTANT_BUFFER);
-                layout.addRootDescriptor(1, 0, RenderRootDescriptorType::CONSTANT_BUFFER);
-                layout.addRootDescriptor(2, 0, RenderRootDescriptorType::CONSTANT_BUFFER);
+                if (vulkan) layout.addPushConstant(0, 0, sizeof(constantAddresses), RenderShaderStageFlag::VERTEX | RenderShaderStageFlag::PIXEL);
+                else {
+                    layout.addRootDescriptor(0, 0, RenderRootDescriptorType::CONSTANT_BUFFER);
+                    layout.addRootDescriptor(1, 0, RenderRootDescriptorType::CONSTANT_BUFFER);
+                    layout.addRootDescriptor(2, 0, RenderRootDescriptorType::CONSTANT_BUFFER);
+                }
                 setBuilders[0].begin();
-                vfetchDescriptorBase = setBuilders[0].addByteAddressBuffer(0, kVertexFetchSlots);
-                samplerDescriptorBase = setBuilders[0].addSampler(0, kSamplerPalette);
+                vfetchDescriptorBase = setBuilders[0].addByteAddressBuffer(0, vulkan ? 1 : kVertexFetchSlots);
+                if (!vulkan) samplerDescriptorBase = setBuilders[0].addSampler(0, kSamplerPalette);
                 setBuilders[0].end();
                 for (int i = 1; i < 4; i++)
                 {
                     setBuilders[i].begin();
-                    setBuilders[i].addTexture(0, kTextureSlots);
+                    if(vulkan) for(uint32_t slot=0;slot<kTextureSlots;++slot) setBuilders[i].addTexture(slot);
+                    else setBuilders[i].addTexture(0, kTextureSlots);
                     setBuilders[i].end();
                 }
-                for (int i = 0; i < 4; i++)
+                if(vulkan) {
+                    setBuilders[4].begin();samplerDescriptorBase=setBuilders[4].addSampler(0,kSamplerPalette);setBuilders[4].end();
+                    staticSamplerSet=setBuilders[4].create(device);
+                }
+                for (int i = 0; i < (vulkan?5:4); i++)
                     layout.addDescriptorSet(setBuilders[i]);
                 layout.end();
                 pipelineLayout = layout.create(device);
 
                 staticSet0 = setBuilders[0].create(device);
-                for (uint32_t i = 0; i < kVertexFetchSlots; i++)
+                for (uint32_t i = 0; i < (vulkan?1:kVertexFetchSlots); i++)
                     staticSet0->setBuffer(vfetchDescriptorBase + i, vertexArena.get(), kVertexArenaSize);
                 RenderSampler* defaultSampler = GetSampler(0x2 | (0x2 << 2) | (0x1 << 4)); // linear, wrap
                 for (uint32_t i = 0; i < kSamplerPalette; i++)
-                    staticSet0->setSampler(samplerDescriptorBase + i, defaultSampler);
+                    (vulkan?staticSamplerSet.get():staticSet0.get())->setSampler(samplerDescriptorBase + i, defaultSampler);
 
                 CreateDummyTexture(dummyTexture2D, RenderTextureDimension::TEXTURE_2D, 0);
                 CreateDummyTexture(dummyTexture3D, RenderTextureDimension::TEXTURE_3D, 0);
@@ -825,10 +849,16 @@ namespace gpu::renderer
             {
                 const char* psSrc =
                     "Texture2D<float4> src : register(t0, space1);\n"
+                    "#ifdef __spirv__\n"
+                    "struct XePushConstants { uint64_t vs; uint64_t sharedAddress; uint64_t ps; };\n"
+                    "[[vk::push_constant]] ConstantBuffer<XePushConstants> xePush;\n"
+                    "#define xeTransfer vk::RawBufferLoad<uint4>(xePush.sharedAddress + 240)\n"
+                    "#else\n"
                     "cbuffer XeShared : register(b1, space0) {\n"
                     "  uint4 pad0[2]; uint4 pad1[8]; float4 pad2; float4 pad3; float4 pad4;\n"
                     "  float4 pad5; float4 xeColorMax; uint4 xeTransfer;\n"
                     "};\n"
+                    "#endif\n"
                     "float Float7e3To32(uint f10) {\n"
                     "  f10 &= 0x3FFu; if (f10 == 0u) return 0.0;\n"
                     "  uint mantissa = f10 & 0x7Fu, exponent = f10 >> 7;\n"
@@ -865,13 +895,13 @@ namespace gpu::renderer
                     "  float4 v = src.Load(int3(int2(pos.xy * asfloat(xeTransfer.z)), 0));\n"
                     "  return UnpackGuest(PackGuest(v, xeTransfer.x), xeTransfer.y);\n"
                     "}\n";
-                xenos::CompiledShader f = xenos::CompileHlsl(psSrc, "main", "ps_6_0");
+                xenos::CompiledShader f = xenos::CompileCachedHlsl(psSrc, "main", "ps_6_0", binaryFormat);
                 if (!f.ok)
                 {
                     LOG_WARNING("renderer: transfer shader compilation failed: {}", f.errors);
                     return;
                 }
-                transferPs = device->createShader(f.dxil.data(), f.dxil.size(), "main", RenderShaderFormat::DXIL);
+                transferPs = device->createShader(f.bytecode.data(), f.bytecode.size(), "main", renderFormat);
             }
 
             RenderPipeline* GetTransferPipeline(RenderFormat targetFormat)
@@ -890,6 +920,7 @@ namespace gpu::renderer
                 desc.depthFunction = RenderComparisonFunction::ALWAYS;
                 desc.depthTargetFormat = RenderFormat::UNKNOWN;
                 desc.renderTargetFormat[0] = targetFormat;
+                desc.renderTargetBlend[0] = RenderBlendDesc::Copy();
                 desc.renderTargetCount = 1;
                 desc.renderTargetBlend[0].renderTargetWriteMask = 0xF;
                 desc.cullMode = RenderCullMode::NONE;
@@ -929,13 +960,14 @@ namespace gpu::renderer
                 commandList->setScissors(&scissor, 1);
                 commandList->setPipeline(pipeline);
                 commandList->setGraphicsPipelineLayout(pipelineLayout.get());
-                commandList->setGraphicsRootDescriptor(RenderBufferReference(uploadRing.get(), offset), 0);
-                commandList->setGraphicsRootDescriptor(RenderBufferReference(uploadRing.get(), offset), 1);
-                commandList->setGraphicsRootDescriptor(RenderBufferReference(uploadRing.get(), offset), 2);
+                SetConstantBuffer(offset, 0);
+                SetConstantBuffer(offset, 1);
+                SetConstantBuffer(offset, 2);
                 commandList->setGraphicsDescriptorSet(staticSet0.get(), 0);
                 commandList->setGraphicsDescriptorSet(set1, 1);
                 commandList->setGraphicsDescriptorSet(AcquireSet(2), 2);
                 commandList->setGraphicsDescriptorSet(AcquireSet(3), 3);
+                if(vulkan) commandList->setGraphicsDescriptorSet(staticSamplerSet.get(),4);
                 commandList->drawInstanced(3, 1, 0, 0);
                 transfers++;
             }
@@ -955,15 +987,15 @@ namespace gpu::renderer
                     "{\n"
                     "    return src.Load(int3(int2(pos.xy), 0));\n"
                     "}\n";
-                xenos::CompiledShader v = xenos::CompileHlsl(vsSrc, "main", "vs_6_0");
-                xenos::CompiledShader f = xenos::CompileHlsl(psSrc, "main", "ps_6_0");
+                xenos::CompiledShader v = xenos::CompileCachedHlsl(vsSrc, "main", "vs_6_0", binaryFormat);
+                xenos::CompiledShader f = xenos::CompileCachedHlsl(psSrc, "main", "ps_6_0", binaryFormat);
                 if (!v.ok || !f.ok)
                 {
                     LOG_WARNING("renderer: blit shader compilation failed: {}{}", v.errors, f.errors);
                     return;
                 }
-                blitVs = device->createShader(v.dxil.data(), v.dxil.size(), "main", RenderShaderFormat::DXIL);
-                blitPs = device->createShader(f.dxil.data(), f.dxil.size(), "main", RenderShaderFormat::DXIL);
+                blitVs = device->createShader(v.bytecode.data(), v.bytecode.size(), "main", renderFormat);
+                blitPs = device->createShader(f.bytecode.data(), f.bytecode.size(), "main", renderFormat);
             }
 
             RenderPipeline* GetBlitPipeline(RenderFormat targetFormat)
@@ -982,6 +1014,7 @@ namespace gpu::renderer
                 desc.depthFunction = RenderComparisonFunction::ALWAYS;
                 desc.depthTargetFormat = RenderFormat::UNKNOWN;
                 desc.renderTargetFormat[0] = targetFormat;
+                desc.renderTargetBlend[0] = RenderBlendDesc::Copy();
                 desc.renderTargetCount = 1;
                 desc.renderTargetBlend[0].renderTargetWriteMask = 0xF;
                 desc.cullMode = RenderCullMode::NONE;
@@ -1011,13 +1044,14 @@ namespace gpu::renderer
                 commandList->setScissors(&scissor, 1);
                 commandList->setPipeline(pipeline);
                 commandList->setGraphicsPipelineLayout(pipelineLayout.get());
-                commandList->setGraphicsRootDescriptor(RenderBufferReference(uploadRing.get(), 0), 0);
-                commandList->setGraphicsRootDescriptor(RenderBufferReference(uploadRing.get(), 0), 1);
-                commandList->setGraphicsRootDescriptor(RenderBufferReference(uploadRing.get(), 0), 2);
+                SetConstantBuffer(0, 0);
+                SetConstantBuffer(0, 1);
+                SetConstantBuffer(0, 2);
                 commandList->setGraphicsDescriptorSet(staticSet0.get(), 0);
                 commandList->setGraphicsDescriptorSet(set1, 1);
                 commandList->setGraphicsDescriptorSet(AcquireSet(2), 2);
                 commandList->setGraphicsDescriptorSet(AcquireSet(3), 3);
+                if(vulkan) commandList->setGraphicsDescriptorSet(staticSamplerSet.get(),4);
                 commandList->drawInstanced(3, 1, 0, 0);
                 return true;
             }
@@ -1045,13 +1079,13 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
     stream.RestartStrip();
 }
 )HLSL";
-                xenos::CompiledShader gs = xenos::CompileHlsl(src, "main", "gs_6_0");
+                xenos::CompiledShader gs = xenos::CompileCachedHlsl(src, "main", "gs_6_0", binaryFormat);
                 if (!gs.ok)
                 {
                     LOG_WARNING("renderer: rect list GS failed: {}", gs.errors);
                     return;
                 }
-                rectListGs = device->createShader(gs.dxil.data(), gs.dxil.size(), "main", RenderShaderFormat::DXIL);
+                rectListGs = device->createShader(gs.bytecode.data(), gs.bytecode.size(), "main", renderFormat);
             }
 
             // ---- command list / upload ring ------------------------------------
@@ -1116,6 +1150,14 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             // 32-slot sets, so the pools are capped and the frame is split when full.
             static constexpr uint32_t kMaxSetsPerKind = 500;
 
+            void SetConstantBuffer(uint64_t offset, uint32_t index)
+            {
+                if(vulkan) {
+                    constantAddresses[index]=uploadRing->getDeviceAddress()+offset;
+                    commandList->setGraphicsPushConstants(0,constantAddresses);
+                } else commandList->setGraphicsRootDescriptor(RenderBufferReference(uploadRing.get(),offset),index);
+            }
+
             RenderDescriptorSet* AcquireSet(int which)
             {
                 auto& pool = setPools[which];
@@ -1159,7 +1201,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
                 uint32_t index = uint32_t(samplerPalette.size());
                 samplerPalette.emplace(key, index);
-                staticSet0->setSampler(samplerDescriptorBase + index, GetSampler(key));
+                (vulkan?staticSamplerSet.get():staticSet0.get())->setSampler(samplerDescriptorBase + index, GetSampler(key));
                 if (getenv("LO_TRACE_SAMPLERS"))
                     LOG_INFO("renderer: sampler palette slot={} key={:#x}", index, key);
                 return index;
@@ -1216,7 +1258,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             {
                 pipelineCacheEnabled = !shaderCacheDir.empty() && !getenv("LO_NO_PIPELINE_CACHE");
                 if (!pipelineCacheEnabled) return;
-                const auto path = std::filesystem::path(shaderCacheDir) / "pipelines.bin";
+                const auto path = std::filesystem::path(shaderCacheDir) / (vulkan ? "pipelines_vk12_1.bin" : "pipelines.bin");
                 const auto loaded = gpu::pipeline_cache::Load(path, xenos::cache::Version, kPipelineRecipeVersion, ValidPipelineRecipe);
                 if (!loaded.error.empty()) LOG_WARNING("renderer: ignoring pipeline recipes: {}", loaded.error);
                 for (const auto& key : loaded.keys) pipelineRecipes.insert(key);
@@ -1291,7 +1333,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (!pipelineRecipesDirty) return;
                 try {
                     std::vector<PipelineKey> snapshot(pipelineRecipes.begin(), pipelineRecipes.end());
-                    const auto path = std::filesystem::path(shaderCacheDir) / "pipelines.bin";
+                    const auto path = std::filesystem::path(shaderCacheDir) / (vulkan ? "pipelines_vk12_1.bin" : "pipelines.bin");
                     pipelineWrite = std::async(std::launch::async, [path, snapshot = std::move(snapshot)] {
                         return gpu::pipeline_cache::Write(path, snapshot, xenos::cache::Version, kPipelineRecipeVersion, ValidPipelineRecipe);
                     });
@@ -1326,11 +1368,14 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (!extracted.error.empty()) LOG_WARNING("renderer: resource shader preparation: {}", extracted.error);
                 LOG_INFO("renderer: resource shader inventory: {} shaders ({})", extracted.shaders,
                     extracted.reused ? "reused" : "extracted");
-                LOG_INFO("renderer: shader inventory {} indexed files, {} scanned files, {} bytes read, {} ms",
-                    extracted.indexedFiles, extracted.scannedFiles, extracted.bytesRead,
-                    std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-inventoryStarted).count());
-                if (extracted.cacheBytesRead)
-                    LOG_INFO("renderer: resource cache validation: {} source bytes read", extracted.cacheBytesRead);
+                const auto inventoryMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - inventoryStarted).count();
+                if (extracted.reused)
+                    LOG_INFO("renderer: resource source-cache validation: {} shaders, {} source bytes read, {} ms",
+                        extracted.shaders, extracted.cacheBytesRead, inventoryMs);
+                else
+                    LOG_INFO("renderer: resource discovery/extraction: {} indexed files, {} fallback-scanned files, {} resource bytes read, {} ms",
+                        extracted.indexedFiles, extracted.scannedFiles, extracted.bytesRead, inventoryMs);
                 if (!extracted.reused)
                     LOG_INFO("renderer: CPX shader discovery: {} packages, {} indexed, {} fallback, {} duplicate, {} decoded (full/partial), {} decoded bytes",
                         extracted.cpxPackages, extracted.indexedPackages, extracted.fallbackPackages, extracted.duplicatePackages,
@@ -1339,6 +1384,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 std::error_code ec;
                 std::filesystem::create_directories(source, ec);
                 if (ec) return;
+                const auto expansionStarted = std::chrono::steady_clock::now();
                 try {
                     const auto staticCount = xenos::resources::ExtractXexShaders(
                         {static_cast<const uint8_t*>(g_memory.Translate(0x82000000)), 0x185C60}, source);
@@ -1353,6 +1399,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 } catch (const std::exception& e) {
                     LOG_WARNING("renderer: shader source expansion: {}", e.what());
                 }
+                LOG_INFO("renderer: shader source expansion elapsed: {:.0f} ms",
+                    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - expansionStarted).count());
+                const auto enumerationStarted = std::chrono::steady_clock::now();
                 std::vector<std::filesystem::path> paths;
                 for (std::filesystem::directory_iterator it(source, ec), end; !ec && it != end; it.increment(ec)) {
                     const auto name = it->path().filename().string();
@@ -1360,97 +1409,173 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         paths.push_back(it->path());
                 }
                 std::sort(paths.begin(), paths.end());
+                LOG_INFO("renderer: shader source enumeration: {} files, {:.0f} ms", paths.size(),
+                    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - enumerationStarted).count());
                 const auto started = std::chrono::steady_clock::now();
-                // Only CPU translation, DXC and independent cache files run in
-                // parallel. The renderer's maps, counters and device stay on
-                // the command processor thread.
+                // CPU translation, DXC and independent cache files run in
+                // parallel. A bounded queue avoids retaining every shader's
+                // HLSL and binary at once. Renderer maps and the device remain
+                // on the command processor thread.
                 struct PreparedSource {
-                    std::vector<uint32_t> words;
-                    bool pixel = false;
+                    xenos::TranslatedShader info;
+                    std::vector<uint8_t> bytecode;
+                    std::string name;
+                    std::string cachePath;
                     std::string error;
+                    std::string cacheWriteError;
+                    uint64_t hash = 0;
+                    uint64_t sourceUs = 0;
+                    uint64_t cacheUs = 0;
+                    uint64_t translateUs = 0;
+                    uint64_t compileUs = 0;
+                    bool pixel = false;
+                    bool cacheChecked = false;
+                    bool cachePresent = false;
+                    bool cacheValid = false;
+                    bool compileAttempted = false;
+                    bool compiled = false;
                 };
-                std::vector<PreparedSource> prepared(paths.size());
                 const unsigned logicalThreads = std::thread::hardware_concurrency();
-                const unsigned requestedWorkers = getenv("LO_SHADER_PREPARE_SERIAL") ? 1u :
-                    (logicalThreads > 1 ? logicalThreads - 1 : 1u);
-                const auto workerCount = std::min<size_t>(requestedWorkers, paths.size());
-                std::atomic<size_t> next{0}, completed{0}, compiledCount{0}, cachedCount{0};
-                auto worker = [&] {
-                    for (;;) {
-                        const size_t index = next.fetch_add(1);
-                        if (index >= paths.size()) return;
-                        auto& item = prepared[index];
-                        try {
-                            const auto& path = paths[index];
-                            std::ifstream in(path, std::ios::binary | std::ios::ate);
-                            const auto size = in.tellg();
-                            if (size < 12 || size > 0x40000 || size % 4 != 0)
-                                throw std::runtime_error("invalid microcode size");
-                            item.words.resize(size_t(size)/4); in.seekg(0);
-                            if (!in.read(reinterpret_cast<char*>(item.words.data()), size))
-                                throw std::runtime_error("cannot read microcode");
-                            item.pixel = path.filename().string().starts_with("ps_");
-                            const auto bytes = std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(item.words.data()),size_t(size));
-                            // Canonical names guarantee that two workers cannot
-                            // write the same shader via different source aliases.
-                            if (path.filename().string() != xenos::resources::SourceName(item.pixel,bytes))
-                                throw std::runtime_error("microcode hash does not match its filename");
-                            const auto cachePath = std::filesystem::path(shaderCacheDir) /
-                                xenos::cache::FileName(item.pixel, Fnv1a(item.words.data(),size_t(size)));
-                            std::ifstream cached(cachePath,std::ios::binary);
-                            std::vector<uint8_t> dxil((std::istreambuf_iterator<char>(cached)),{});
-                            cached.close();
-                            if (xenos::cache::CompleteContainer(dxil)) { ++cachedCount; }
-                            else {
-                                std::vector<uint32_t> swapped(item.words.size());
-                                std::transform(item.words.begin(),item.words.end(),swapped.begin(),[](uint32_t word) { return ByteSwap(word); });
-                                const auto translated = xenos::TranslateShader(swapped.data(),uint32_t(swapped.size()),item.pixel);
-                                // CompileHlsl creates separate DXC COM instances
-                                // per call; DLL loading is protected by call_once.
-                                auto compiled = xenos::CompileHlsl(translated.hlsl,"main",item.pixel ? "ps_6_0" : "vs_6_0");
-                                if (!compiled.ok) item.error = std::move(compiled.errors);
-                                else {
-                                    std::ofstream out(cachePath,std::ios::binary | std::ios::trunc);
-                                    out.write(reinterpret_cast<const char*>(compiled.dxil.data()),compiled.dxil.size()); out.close();
-                                    if (!out) throw std::runtime_error("cannot write compiled shader cache");
-                                    ++compiledCount;
-                                }
-                                if (!compiled.ok && item.error.empty()) item.error="DXC compilation failed";
+                const auto workerCount = xenos::preparation::WorkerCount(logicalThreads, paths.size(),
+                    getenv("LO_SHADER_PREPARE_SERIAL") != nullptr);
+                const size_t readyCapacity = std::max<size_t>(8, workerCount * 2);
+
+                auto prepare = [&](size_t index) {
+                    PreparedSource item;
+                    try {
+                        const auto sourceStarted = std::chrono::steady_clock::now();
+                        const auto& path = paths[index];
+                        item.name = path.filename().string();
+                        std::ifstream in(path, std::ios::binary | std::ios::ate);
+                        const auto size = in.tellg();
+                        if (size < 12 || size > 0x40000 || size % 4 != 0)
+                            throw std::runtime_error("invalid microcode size");
+                        std::vector<uint32_t> words(size_t(size) / 4);
+                        in.seekg(0);
+                        if (!in.read(reinterpret_cast<char*>(words.data()), size))
+                            throw std::runtime_error("cannot read microcode");
+                        item.pixel = item.name.starts_with("ps_");
+                        const auto bytes = std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(words.data()), size_t(size));
+                        if (item.name != xenos::resources::SourceName(item.pixel, bytes))
+                            throw std::runtime_error("microcode hash does not match its filename");
+                        item.hash = Fnv1a(words.data(), size_t(size));
+                        item.sourceUs = std::chrono::duration_cast<std::chrono::microseconds>(
+                            std::chrono::steady_clock::now() - sourceStarted).count();
+
+                        const auto cacheStarted = std::chrono::steady_clock::now();
+                        item.cachePath = (std::filesystem::path(shaderCacheDir) /
+                            xenos::cache::FileName(item.pixel, item.hash, vulkan)).string();
+                        item.cacheChecked = true;
+                        std::ifstream cached(item.cachePath, std::ios::binary);
+                        item.cachePresent = cached.is_open();
+                        item.bytecode.assign(std::istreambuf_iterator<char>(cached), {});
+                        item.cacheValid = xenos::cache::CompleteBinary(item.bytecode, vulkan);
+                        if (!item.cacheValid) item.bytecode.clear();
+                        item.cacheUs = std::chrono::duration_cast<std::chrono::microseconds>(
+                            std::chrono::steady_clock::now() - cacheStarted).count();
+
+                        std::vector<uint32_t> swapped(words.size());
+                        std::transform(words.begin(), words.end(), swapped.begin(), [](uint32_t word) { return ByteSwap(word); });
+                        const auto translateStarted = std::chrono::steady_clock::now();
+                        item.info = xenos::TranslateShader(swapped.data(), uint32_t(swapped.size()), item.pixel);
+                        item.translateUs = std::chrono::duration_cast<std::chrono::microseconds>(
+                            std::chrono::steady_clock::now() - translateStarted).count();
+                        if (const char* hlslDir = getenv("LO_SHADER_HLSL_DIR"))
+                            std::ofstream(fmt::format("{}/{}_{:016x}.hlsl", hlslDir,
+                                item.pixel ? "ps" : "vs", item.hash)) << item.info.hlsl;
+
+                        if (!item.cacheValid) {
+                            item.compileAttempted = true;
+                            const auto compileStarted = std::chrono::steady_clock::now();
+                            auto compiled = xenos::CompileHlsl(item.info.hlsl, "main",
+                                item.pixel ? "ps_6_0" : "vs_6_0", binaryFormat);
+                            item.compileUs = std::chrono::duration_cast<std::chrono::microseconds>(
+                                std::chrono::steady_clock::now() - compileStarted).count();
+                            if (!compiled.ok) {
+                                item.error = std::move(compiled.errors);
+                                if (item.error.empty()) item.error = "DXC compilation failed";
+                                if (const char* dumpDir = getenv("LO_SHADER_DUMP_DIR"))
+                                    std::ofstream(fmt::format("{}/{}_{:016x}.hlsl", dumpDir,
+                                        item.pixel ? "ps" : "vs", item.hash)) << item.info.hlsl;
+                            } else {
+                                item.bytecode = std::move(compiled.bytecode);
+                                item.compiled = true;
+                                const auto write = xenos::preparation::WriteCompiledCache(
+                                    item.cachePath, item.bytecode, compiled.ok);
+                                if (write.status == xenos::preparation::CacheWriteStatus::Failed)
+                                    item.cacheWriteError = write.error;
                             }
-                        } catch (const std::exception& e) { item.error=e.what(); }
-                        ++completed;
-                    }
+                        }
+                    } catch (const std::exception& e) { item.error = e.what(); }
+                    return item;
                 };
-                LOG_INFO("renderer: shader precompile: {} logical threads, {} workers, {} shaders",
-                    logicalThreads,workerCount,paths.size());
-                std::vector<std::jthread> workers;
-                try {
-                    for (size_t i=0; i<workerCount; ++i) workers.emplace_back(worker);
-                } catch (const std::system_error& e) {
-                    LOG_WARNING("renderer: started only {} shader workers: {}",workers.size(),e.what());
-                    if (workers.empty()) worker();
-                }
-                while (completed.load() < paths.size()) {
-                    video::SetShaderPreparationProgress(uint32_t(completed.load()),uint32_t(paths.size()));
-                    video::PumpEvents();
-                    std::this_thread::sleep_for(std::chrono::milliseconds(10));
-                }
-                for (auto& thread : workers) thread.join();
-                LOG_INFO("renderer: parallel shader phase: {} compiled, {} cached, {:.0f} ms", compiledCount.load(),cachedCount.load(),
-                    std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-started).count());
-                uint32_t done = 0, failed = 0;
-                for (const auto& item : prepared) {
-                    video::SetShaderPreparationProgress(uint32_t(paths.size()), uint32_t(paths.size()));
-                    video::PumpEvents();
+
+                LOG_INFO("renderer: shader preparation: {} logical threads, {} requested workers, {} shaders, {} queued results max",
+                    logicalThreads, workerCount, paths.size(), readyCapacity);
+
+                uint32_t done = 0, failed = 0, modulesReady = 0, modulesFailed = 0;
+                size_t cacheHits = 0, cacheMissing = 0, cacheInvalid = 0, compileAttempts = 0, compiledCount = 0;
+                uint64_t sourceUs = 0, cacheUs = 0, translateUs = 0, compileUs = 0, moduleUs = 0;
+                auto install = [&](PreparedSource item) {
+                    sourceUs += item.sourceUs;
+                    cacheUs += item.cacheUs;
+                    translateUs += item.translateUs;
+                    compileUs += item.compileUs;
+                    cacheHits += item.cacheValid;
+                    cacheMissing += item.cacheChecked && !item.cachePresent;
+                    cacheInvalid += item.cacheChecked && item.cachePresent && !item.cacheValid;
+                    compileAttempts += item.compileAttempted;
+                    compiledCount += item.compiled;
+                    if (item.cachePresent && !item.cacheValid)
+                        LOG_WARNING("renderer: ignoring incomplete shader cache {}", item.cachePath);
+                    if (!item.cacheWriteError.empty())
+                        LOG_WARNING("renderer: precompile {} cache write failed: {}", item.name, item.cacheWriteError);
                     if (!item.error.empty()) {
-                        LOG_WARNING("renderer: precompile {} failed: {}",paths[done].filename().string(),item.error);
+                        LOG_WARNING("renderer: precompile {} failed: {}", item.name, item.error);
                         ++failed;
-                    } else if (!GetShader(item.pixel,item.words.data(),uint32_t(item.words.size()))) ++failed;
+                    } else {
+                        auto& cache = shaders[item.pixel ? 1 : 0];
+                        Shader& entry = cache[item.hash];
+                        entry.info = std::move(item.info);
+                        const auto moduleStarted = std::chrono::steady_clock::now();
+                        entry.shader = device->createShader(item.bytecode.data(), item.bytecode.size(), "main", renderFormat);
+                        moduleUs += std::chrono::duration_cast<std::chrono::microseconds>(
+                            std::chrono::steady_clock::now() - moduleStarted).count();
+                        entry.valid = entry.shader != nullptr;
+                        if (!entry.info.errors.empty())
+                            LOG_WARNING("renderer: {} shader {:016x} notes: {}",
+                                item.pixel ? "pixel" : "vertex", item.hash, entry.info.errors);
+                        if (entry.valid) ++modulesReady;
+                        else { ++modulesFailed; ++failed; }
+                    }
                     ++done;
+                    video::SetShaderPreparationProgress(done, uint32_t(paths.size()));
+                    video::PumpEvents();
+                    return true;
+                };
+
+                xenos::preparation::QueueStats queueStats;
+                try {
+                    queueStats = xenos::preparation::RunBounded<PreparedSource>(paths.size(), workerCount,
+                        readyCapacity, prepare, install, [] { video::PumpEvents(); });
+                } catch (const std::exception& e) {
+                    LOG_WARNING("renderer: shader preparation queue stopped after {} shaders: {}", done, e.what());
                 }
+                if (queueStats.startFailures)
+                    LOG_WARNING("renderer: started only {} shader workers: {}",
+                        queueStats.startedWorkers, queueStats.startError);
                 video::SetShaderPreparationProgress(0, 0);
-                if (done) LOG_INFO("renderer: prepared {} known shaders, {} failed, {:.0f} ms", done, failed,
-                    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now()-started).count());
+                if (done) {
+                    LOG_INFO("renderer: shader cache: {} valid, {} missing, {} invalid; {} DXC attempts, {} compiled",
+                        cacheHits, cacheMissing, cacheInvalid, compileAttempts, compiledCount);
+                    LOG_INFO("renderer: shader preparation CPU: source read/validation {:.0f} ms, cache read/validation {:.0f} ms, translation {:.0f} ms, DXC {:.0f} ms (worker times summed)",
+                        sourceUs / 1000.0, cacheUs / 1000.0, translateUs / 1000.0, compileUs / 1000.0);
+                    LOG_INFO("renderer: shader modules: {} ready, {} failed, {:.0f} ms command-thread time",
+                        modulesReady, modulesFailed, moduleUs / 1000.0);
+                    LOG_INFO("renderer: prepared {} known shaders, {} failed, {} workers, {:.0f} ms elapsed",
+                        done, failed, queueStats.startedWorkers,
+                        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now()-started).count());
+                }
                 ResetTimers();
             }
 
@@ -1488,18 +1613,18 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 {
                     // The cache name carries a translator version so changes to the
                     // generated HLSL don't resurrect stale DXIL.
-                    cachePath = (std::filesystem::path(shaderCacheDir) / xenos::cache::FileName(pixel, hash)).string();
+                    cachePath = (std::filesystem::path(shaderCacheDir) / xenos::cache::FileName(pixel, hash, vulkan)).string();
                     std::ifstream in(cachePath, std::ios::binary);
                     if (in)
                         dxil.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
-                    if (!dxil.empty() && !xenos::cache::CompleteContainer(dxil)) {
+                    if (!dxil.empty() && !xenos::cache::CompleteBinary(dxil, vulkan)) {
                         LOG_WARNING("renderer: ignoring incomplete shader cache {}", cachePath);
                         dxil.clear();
                     }
                 }
                 if (dxil.empty())
                 {
-                    xenos::CompiledShader compiled = xenos::CompileHlsl(entry.info.hlsl, "main", pixel ? "ps_6_0" : "vs_6_0");
+                    xenos::CompiledShader compiled = xenos::CompileHlsl(entry.info.hlsl, "main", pixel ? "ps_6_0" : "vs_6_0", binaryFormat);
                     if (!compiled.ok)
                     {
                         LOG_WARNING("renderer: {} shader {:016x} failed to compile:\n{}", pixel ? "pixel" : "vertex", hash, compiled.errors);
@@ -1507,11 +1632,11 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             std::ofstream(fmt::format("{}/{}_{:016x}.hlsl", getenv("LO_SHADER_DUMP_DIR"), pixel ? "ps" : "vs", hash)) << entry.info.hlsl;
                         return nullptr;
                     }
-                    dxil = std::move(compiled.dxil);
+                    dxil = std::move(compiled.bytecode);
                     if (!cachePath.empty())
                         std::ofstream(cachePath, std::ios::binary).write(reinterpret_cast<const char*>(dxil.data()), dxil.size());
                 }
-                entry.shader = device->createShader(dxil.data(), dxil.size(), "main", RenderShaderFormat::DXIL);
+                entry.shader = device->createShader(dxil.data(), dxil.size(), "main", renderFormat);
                 entry.valid = entry.shader != nullptr;
                 if (!entry.info.errors.empty())
                     LOG_WARNING("renderer: {} shader {:016x} notes: {}", pixel ? "pixel" : "vertex", hash, entry.info.errors);
@@ -2974,13 +3099,14 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 commandList->setScissors(&scissor, 1);
                 commandList->setPipeline(pipeline);
                 commandList->setGraphicsPipelineLayout(pipelineLayout.get());
-                commandList->setGraphicsRootDescriptor(RenderBufferReference(uploadRing.get(), vsOffset), 0);
-                commandList->setGraphicsRootDescriptor(RenderBufferReference(uploadRing.get(), sharedOffset), 1);
-                commandList->setGraphicsRootDescriptor(RenderBufferReference(uploadRing.get(), psOffset), 2);
+                SetConstantBuffer(vsOffset, 0);
+                SetConstantBuffer(sharedOffset, 1);
+                SetConstantBuffer(psOffset, 2);
                 commandList->setGraphicsDescriptorSet(set0, 0);
                 commandList->setGraphicsDescriptorSet(set1, 1);
                 commandList->setGraphicsDescriptorSet(set2, 2);
                 commandList->setGraphicsDescriptorSet(set3, 3);
+                if(vulkan) commandList->setGraphicsDescriptorSet(staticSamplerSet.get(),4);
 
                 int32_t baseVertex = int32_t(Reg(REG_VGT_INDX_OFFSET));
                 static uint32_t drawLogs = 0;
@@ -3578,7 +3704,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     rs.tex->height = texH;
                     rs.tex->guestWidth = guestW; rs.tex->guestHeight = guestH;
                     rs.tex->resolutionHeight = depth.resolutionHeight;
-                    rs.tex->texture = device->createTexture(RenderTextureDesc::Texture2D(texW, texH, 1, RenderFormat::R32_FLOAT));
+                    rs.tex->texture = device->createTexture(RenderTextureDesc::Texture2D(texW, texH, 1, RenderFormat::R32_FLOAT,
+                        vulkan ? RenderTextureFlag::RENDER_TARGET : RenderTextureFlag::NONE));
                     rs.tex->layout = RenderTextureLayout::UNKNOWN;
                     if (!rs.tex->texture)
                     {
@@ -3599,11 +3726,21 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 h = std::min(h, texH - y0);
                 if (w == 0 || h == 0)
                     return;
-                Transition(depth, RenderTextureLayout::COPY_SOURCE, RenderBarrierStage::COPY);
-                Transition(*rs.tex, RenderTextureLayout::COPY_DEST, RenderBarrierStage::COPY);
-                RenderBox box{ int32_t(x0), int32_t(y0), int32_t(x0 + w), int32_t(y0 + h), 0, 1 };
-                commandList->copyTextureRegion(RenderTextureCopyLocation::Subresource(rs.tex->texture.get()),
-                    RenderTextureCopyLocation::Subresource(depth.texture.get(), 0), x0, y0, 0, &box);
+                if (vulkan) {
+                    // Vulkan 1.2 image copies cannot reinterpret D32/S8 storage
+                    // as an R32 color plane. Load the depth aspect and write the
+                    // exact float value, retaining the destination rectangle.
+                    if (!BlitRegion(depth, *rs.tex, x0, y0, w, h)) {
+                        LOG_ERROR("renderer: Vulkan depth resolve blit failed");
+                        return;
+                    }
+                } else {
+                    Transition(depth, RenderTextureLayout::COPY_SOURCE, RenderBarrierStage::COPY);
+                    Transition(*rs.tex, RenderTextureLayout::COPY_DEST, RenderBarrierStage::COPY);
+                    RenderBox box{ int32_t(x0), int32_t(y0), int32_t(x0 + w), int32_t(y0 + h), 0, 1 };
+                    commandList->copyTextureRegion(RenderTextureCopyLocation::Subresource(rs.tex->texture.get()),
+                        RenderTextureCopyLocation::Subresource(depth.texture.get(), 0), x0, y0, 0, &box);
+                }
                 Transition(*rs.tex, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
                 rs.frame = frame;
                 rs.writeOrdinal = ++resolveWriteOrdinal;

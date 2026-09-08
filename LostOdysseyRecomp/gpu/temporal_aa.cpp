@@ -12,12 +12,13 @@ using namespace plume;
 struct TemporalAA::Impl
 {
     RenderDevice* device=nullptr;
+    bool vulkan=false;
     std::string error;
     std::unique_ptr<RenderPipelineLayout> layout;
     std::unique_ptr<RenderShader> vs, ps, displayPs;
     std::unique_ptr<RenderPipeline> pipeline, displayPipeline;
     std::unique_ptr<RenderSampler> sampler;
-    struct Pending { std::unique_ptr<RenderDescriptorSet> set; std::unique_ptr<RenderFramebuffer> framebuffer; };
+    struct Pending { std::unique_ptr<RenderBuffer> constants; std::unique_ptr<RenderDescriptorSet> set; std::unique_ptr<RenderFramebuffer> framebuffer; };
     std::vector<Pending> pending;
 };
 namespace
@@ -32,9 +33,9 @@ struct Constants
     float jitter[4]{}; // current xy, previous xy; raster pixel displacement.
 };
 static_assert(sizeof(Constants)==144);
-void DefineSet(RenderDescriptorSetBuilder& set)
+void DefineSet(RenderDescriptorSetBuilder& set, bool vulkan)
 {
-    set.begin(); for(uint32_t i=0;i<5;++i) set.addTexture(i); set.addSampler(0); set.end();
+    set.begin(); for(uint32_t i=0;i<5;++i) set.addTexture(i); set.addSampler(vulkan?5:0); if(vulkan) set.addConstantBuffer(6); set.end();
 }
 temporal::Matrix Multiply(const temporal::Matrix& a,const temporal::Matrix& b)
 {
@@ -52,7 +53,13 @@ Texture2D<float> currentDepth:register(t1);
 Texture2D<float4> historyColor:register(t2);
 Texture2D<float> historyDepth:register(t3);
 Texture2D<float> reactiveMask:register(t4);
+#ifdef __spirv__
+[[vk::binding(5,0)]]
+#endif
 SamplerState linearClamp:register(s0);
+#ifdef __spirv__
+[[vk::binding(6,0)]]
+#endif
 cbuffer Parameters:register(b0) {
  row_major float4x4 transform;
  float4 previousScaleBias;
@@ -190,14 +197,17 @@ bool TemporalAA::Init(RenderDevice* device)
 {
     if(!device || impl->device) { impl->error="Init requires a non-null device and a fresh component";return false; }
     auto& p=*impl;p.device=device;
-    auto vs=xenos::CompileHlsl(source,"vertex","vs_6_0"),ps=xenos::CompileHlsl(source,"pixel","ps_6_0"),displayPs=xenos::CompileHlsl(source,"displayPixel","ps_6_0");
+    p.vulkan=device->getCapabilities().shaderFormat==RenderShaderFormat::SPIRV;
+    const auto binaryFormat=p.vulkan?xenos::ShaderBinaryFormat::Spirv:xenos::ShaderBinaryFormat::Dxil;
+    const auto renderFormat=p.vulkan?RenderShaderFormat::SPIRV:RenderShaderFormat::DXIL;
+    auto vs=xenos::CompileCachedHlsl(source,"vertex","vs_6_0",binaryFormat),ps=xenos::CompileCachedHlsl(source,"pixel","ps_6_0",binaryFormat),displayPs=xenos::CompileCachedHlsl(source,"displayPixel","ps_6_0",binaryFormat);
     if(!vs.ok||!ps.ok||!displayPs.ok) { p.error=vs.errors+ps.errors+displayPs.errors;return false; }
-    p.vs=device->createShader(vs.dxil.data(),vs.dxil.size(),"vertex",RenderShaderFormat::DXIL);
-    p.ps=device->createShader(ps.dxil.data(),ps.dxil.size(),"pixel",RenderShaderFormat::DXIL);
-    p.displayPs=device->createShader(displayPs.dxil.data(),displayPs.dxil.size(),"displayPixel",RenderShaderFormat::DXIL);
-    RenderDescriptorSetBuilder set;DefineSet(set);
+    p.vs=device->createShader(vs.bytecode.data(),vs.bytecode.size(),"vertex",renderFormat);
+    p.ps=device->createShader(ps.bytecode.data(),ps.bytecode.size(),"pixel",renderFormat);
+    p.displayPs=device->createShader(displayPs.bytecode.data(),displayPs.bytecode.size(),"displayPixel",renderFormat);
+    RenderDescriptorSetBuilder set;DefineSet(set,p.vulkan);
     RenderPipelineLayoutBuilder layout;layout.begin(false,false);
-    layout.addPushConstant(0,0,sizeof(Constants),RenderShaderStageFlag::PIXEL);layout.addDescriptorSet(set);layout.end();
+    if(!p.vulkan) layout.addPushConstant(0,0,sizeof(Constants),RenderShaderStageFlag::PIXEL);layout.addDescriptorSet(set);layout.end();
     p.layout=layout.create(device);
     RenderSamplerDesc sampler;sampler.addressU=sampler.addressV=sampler.addressW=RenderTextureAddressMode::CLAMP;
     p.sampler=device->createSampler(sampler);
@@ -248,18 +258,25 @@ bool TemporalAA::Resolve(RenderCommandList* commands,const TemporalAAInputs& in)
         c.previousScaleBias[3]=float(previous.height*.5*(1-previous.halfPixelNdcY)+in.previousJitterY);
         c.size[2]=float(in.historyWidth);c.size[3]=float(in.historyHeight);c.active=1;c.reactive=in.reactiveMask?1u:0u;
     }
-    Impl::Pending pending;RenderDescriptorSetBuilder set;DefineSet(set);pending.set=set.create(p.device);
+    Impl::Pending pending;RenderDescriptorSetBuilder set;DefineSet(set,p.vulkan);pending.set=set.create(p.device);
     const RenderTexture* attachments[]={in.output};pending.framebuffer=p.device->createFramebuffer(RenderFramebufferDesc(attachments,1));
     if(!pending.set||!pending.framebuffer)return fail("Temporal descriptor/framebuffer allocation failed");
     // Inactive shader returns before accessing fallback descriptors.
     std::array<RenderTexture*,5> inputs={in.currentColor,active?in.currentDepth:in.currentColor,active?in.historyColor:in.currentColor,active?in.historyDepth:in.currentColor,active&&in.reactiveMask?in.reactiveMask:in.currentColor};
     for(uint32_t i=0;i<5;++i)pending.set->setTexture(i,inputs[i],RenderTextureLayout::SHADER_READ);
     pending.set->setSampler(5,p.sampler.get());
+    if(p.vulkan) {
+        pending.constants=p.device->createBuffer(RenderBufferDesc::UploadBuffer(sizeof(Constants),RenderBufferFlag::CONSTANT));
+        if(!pending.constants){p.error="Temporal constants allocation failed";return false;}
+        auto* mapped=pending.constants->map();memcpy(mapped,&c,sizeof(c));pending.constants->unmap();
+        pending.set->setBuffer(6,pending.constants.get(),sizeof(c));
+    }
+
     p.pending.push_back(std::move(pending));auto& resources=p.pending.back();
     commands->setFramebuffer(resources.framebuffer.get());RenderViewport viewport(0,0,float(in.width),float(in.height));RenderRect scissor(0,0,in.width,in.height);
     commands->setViewports(&viewport,1);commands->setScissors(&scissor,1);
     commands->setGraphicsPipelineLayout(p.layout.get());commands->setPipeline(p.pipeline.get());
-    commands->setGraphicsPushConstants(0,&c);commands->setGraphicsDescriptorSet(resources.set.get(),0);commands->drawInstanced(3,1,0,0);
+    if(!p.vulkan) commands->setGraphicsPushConstants(0,&c);commands->setGraphicsDescriptorSet(resources.set.get(),0);commands->drawInstanced(3,1,0,0);
     return true;
 }
 }
@@ -274,15 +291,22 @@ bool TemporalAA::ReconstructDisplay(RenderCommandList* commands,const TemporalDi
        ||!std::isfinite(in.jitterX)||!std::isfinite(in.jitterY)||std::abs(in.jitterX)>16||std::abs(in.jitterY)>16)
     {p.error="Invalid display reconstruction inputs, extent, alias, or jitter";return false;}
     Constants c;c.size[0]=float(in.width);c.size[1]=float(in.height);c.policy[0]=float(in.jitterX);c.policy[1]=float(in.jitterY);
-    Impl::Pending pending;RenderDescriptorSetBuilder set;DefineSet(set);pending.set=set.create(p.device);
+    Impl::Pending pending;RenderDescriptorSetBuilder set;DefineSet(set,p.vulkan);pending.set=set.create(p.device);
     const RenderTexture* attachments[]={in.output};pending.framebuffer=p.device->createFramebuffer(RenderFramebufferDesc(attachments,1));
     if(!pending.set||!pending.framebuffer){p.error="Display descriptor/framebuffer allocation failed";return false;}
     for(uint32_t i=0;i<5;++i)pending.set->setTexture(i,in.jitteredColor,RenderTextureLayout::SHADER_READ);
-    pending.set->setSampler(5,p.sampler.get());p.pending.push_back(std::move(pending));auto& resources=p.pending.back();
+    pending.set->setSampler(5,p.sampler.get());
+    if(p.vulkan) {
+        pending.constants=p.device->createBuffer(RenderBufferDesc::UploadBuffer(sizeof(Constants),RenderBufferFlag::CONSTANT));
+        if(!pending.constants){p.error="Temporal constants allocation failed";return false;}
+        auto* mapped=pending.constants->map();memcpy(mapped,&c,sizeof(c));pending.constants->unmap();
+        pending.set->setBuffer(6,pending.constants.get(),sizeof(c));
+    }
+    p.pending.push_back(std::move(pending));auto& resources=p.pending.back();
     commands->setFramebuffer(resources.framebuffer.get());RenderViewport viewport(0,0,float(in.width),float(in.height));RenderRect scissor(0,0,in.width,in.height);
     commands->setViewports(&viewport,1);commands->setScissors(&scissor,1);
     commands->setGraphicsPipelineLayout(p.layout.get());commands->setPipeline(p.displayPipeline.get());
-    commands->setGraphicsPushConstants(0,&c);commands->setGraphicsDescriptorSet(resources.set.get(),0);commands->drawInstanced(3,1,0,0);
+    if(!p.vulkan) commands->setGraphicsPushConstants(0,&c);commands->setGraphicsDescriptorSet(resources.set.get(),0);commands->drawInstanced(3,1,0,0);
     return true;
 }
 }

@@ -9,7 +9,7 @@
 #include <vector>
 #include "temporal_aa_geometry_fixture.h"
 #include "temporal_aa_trace_fixture.h"
-namespace plume { std::unique_ptr<RenderInterface> CreateD3D12Interface(); }
+namespace plume { std::unique_ptr<RenderInterface> CreateD3D12Interface(); std::unique_ptr<RenderInterface> CreateVulkanInterface(); }
 namespace {
 void Require(bool ok,const char* message) {if(!ok)throw std::runtime_error(message);std::printf("PASS: %s\n",message);}
 uint32_t Pixel(unsigned gray,unsigned alpha=117) {return gray|(gray<<8)|(gray<<16)|(alpha<<24);}
@@ -19,7 +19,11 @@ int main(int argc,char** argv)
     try
     {
         using namespace plume;using namespace gpu;
-        auto api=CreateD3D12Interface();auto device=api->createDevice();
+        const bool vulkan=argc>1 && std::string(argv[1])=="--vulkan";
+        if(vulkan){--argc;++argv;}
+        auto api=vulkan?CreateVulkanInterface():CreateD3D12Interface();Require(bool(api),"render interface");
+        auto device=api->createDevice();Require(bool(device),"render device");
+        printf("Backend: %s on %s\n",vulkan?"Vulkan":"D3D12",device->getDescription().name.c_str());
         if(argc==5 && std::string(argv[1])=="--replay") {RunTemporalTraceReplay(device.get(),argv[2],argv[3],argv[4]);return 0;}
         auto queue=device->createCommandQueue(RenderCommandListType::DIRECT);
         auto commands=queue->createCommandList();auto fence=device->createCommandFence();

@@ -95,7 +95,7 @@ int main()
         Check(device->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&root)));
         D3D12_COMPUTE_PIPELINE_STATE_DESC pd{};
         pd.pRootSignature = root.Get();
-        pd.CS = {shader.dxil.data(), shader.dxil.size()};
+        pd.CS = {shader.bytecode.data(), shader.bytecode.size()};
         ComPtr<ID3D12PipelineState> pipeline;
         Check(device->CreateComputePipelineState(&pd, IID_PPV_ARGS(&pipeline)));
         D3D12_RESOURCE_DESC buffer{};
