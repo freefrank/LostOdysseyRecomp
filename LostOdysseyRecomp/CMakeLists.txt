@@ -21,6 +21,9 @@ add_custom_command(
 
 add_executable(LostOdysseyRecomp ${LO_RUNTIME_SOURCES} ${LO_IMPORT_STUBS})
 if(WIN32)
+    enable_language(RC)
+    target_sources(LostOdysseyRecomp PRIVATE ${CMAKE_SOURCE_DIR}/assets/lost-odyssey-recomp.rc)
+    target_include_directories(LostOdysseyRecomp PRIVATE ${CMAKE_SOURCE_DIR}/assets)
     # Keep the existing main/CRT initialization while avoiding a console on double-click.
     target_link_options(LostOdysseyRecomp PRIVATE /SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup)
     # Retain a build-local address map for module/RVA crash reports from

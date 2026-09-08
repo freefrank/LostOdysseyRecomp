@@ -1,0 +1,6 @@
+// Shared Windows icon resource for the game executable and release helper.
+// The icon file is kept beside this resource so both MSVC and MinGW resource
+// compilers resolve the relative path consistently.
+#include "winres.h"
+
+IDI_LOST_ODYSSEY_RECOMP ICON "lost-odyssey-recomp.ico"
