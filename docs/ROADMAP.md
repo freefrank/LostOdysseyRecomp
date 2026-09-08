@@ -2,11 +2,11 @@
 
 [简体中文](ROADMAP.zh-CN.md) · [Current status](STATUS.md)
 
-Updated for v0.4.1 publication on **2026-09-08**. `[x]` means the stated scope has evidence, not that the entire game is complete. Dated notes retain earlier experiment states; [STATUS.md](STATUS.md) is the current release and validation ledger.
+Updated for v0.4.2 publication on **2026-09-08**. `[x]` means the stated scope has evidence, not that the entire game is complete. Dated notes retain earlier experiment states; [STATUS.md](STATUS.md) is the current release and validation ledger.
 
 Legend: `[ ]` planned / outstanding · `[~]` in progress · `[x]` validated within the stated scope.
 
-## v0.4.2: repairs and validation
+## Published milestone: v0.4.2 — repairs and validation
 
 The following fixes and bounded validation are complete. Original-reporter confirmation and broader progression remain separate work.
 
@@ -16,7 +16,7 @@ The following fixes and bounded validation are complete. Original-reporter confi
 - [ ] Obtain confirmation from the original Issue #7 reporters using their saves and hardware; the local reproduction does not establish equivalence to their unrecorded exception.
 - [ ] Continue later-chapter, other-edition and hardware regression with native saves. Track naturally reached paths for the additional semantics fixes, including BLRL, without reopening the locally verified Council repair unless it recurs.
 - [x] Six battle TAA paths pass 17,287 CPU checks and bounded Map3 32-phase scene/tire regressions; background ZIP and three-log retention pass independent fixtures and an actual export run. These results belong to their respective candidates; see [validation limits](STATUS.md).
-- [ ] Complete final v0.4.2 CI build, package-identity and startup-path verification, recording the actual release artifact separately.
+- [x] Publish v0.4.2 from `2ed7a2d`: CI 34192600181, manifest/CRC, embedded version, hashes and anonymous download verification pass. Official-package checks cover build and artifacts; existing functional evidence is reused without repeated startup or game tests. See [release verification](STATUS.md).
 - [ ] Continue the enemy-disappearance flicker investigation; the six-path repair does not resolve that report.
 
 ## Published milestone: v0.4.1

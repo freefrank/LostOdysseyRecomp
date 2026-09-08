@@ -1,6 +1,6 @@
 # Debug Menu render-state capture
 
-Reviewed **2026-09-08**. v0.4.2 includes background ZIP compression, cleanup after success and default three-log retention. The actual export and retention results below belong to the identified capture candidate; final v0.4.2 package checks are tracked in [STATUS.md](../STATUS.md). Published v0.4.1 introduced three-frame captures with a shared runtime log and smaller contents; the original single-frame capture shipped in v0.2.1. Capture remains diagnostic and does not repair rendering or establish compatibility.
+Reviewed **2026-09-08**. Published v0.4.2 includes background ZIP compression, cleanup after success and default three-log retention. The actual export and retention results below belong to the identified capture candidate; v0.4.2 CI, package and anonymous-download checks pass as recorded in [STATUS.md](../STATUS.md), reusing the existing functional evidence. Published v0.4.1 introduced three-frame captures with a shared runtime log and smaller contents; the original single-frame capture shipped in v0.2.1. Capture remains diagnostic and does not repair rendering or establish compatibility.
 
 <a id="background-archive-dev"></a>
 

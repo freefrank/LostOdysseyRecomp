@@ -1,8 +1,8 @@
 # Recompiler width and control-flow audit
 
-## v0.4.2 integration — 2026-09-08
+## v0.4.2 published — 2026-09-08
 
-v0.4.2 includes the nine corrections and the tracked dependency patch described here, with 3,258 passing generated-code checks and the original 109 word-switch checks. The full Council/save-reload result belongs to semantics-r2, built with frozen v0.4.1 runtime objects; it does not establish final v0.4.2 package behavior. See [STATUS.md](../STATUS.md) for package verification and the [Council record](issue7-cutscene-crash.md) for the scenario limits.
+Published v0.4.2 includes the nine corrections and the tracked dependency patch described here, with 3,258 passing generated-code checks and the original 109 word-switch checks. The full Council/save-reload result belongs to semantics-r2, built with frozen v0.4.1 runtime objects; it does not establish final v0.4.2 package behavior. CI, package identity/integrity and anonymous download verification pass; no application tests were repeated. See [STATUS.md](../STATUS.md) for that release evidence and the [Council record](issue7-cutscene-crash.md) for scenario limits.
 
 The dated entries below preserve each candidate checkpoint and its validation and publication state.
 

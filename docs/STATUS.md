@@ -1,10 +1,12 @@
 # Project status
 
-Reviewed **2026-09-08** for v0.4.2 integration, the verified v0.4.1 release and the candidate evidence below. This page separates final-package checks, scenario validation and user acceptance; dated investigations preserve their original checkpoints.
+Reviewed **2026-09-08** against the published v0.4.2 package and the candidate evidence below. This page separates final-package checks, scenario validation and user acceptance; dated investigations preserve their original checkpoints.
 
-## v0.4.2 integration and verification
+## Published release: v0.4.2
 
-v0.4.2 combines the Issue #7 word-switch repair, nine further PPC semantics corrections, automatic native crash logging, six battle TAA paths, background F1 ZIP compression and default three-log retention. The implementation and candidate checks below are complete; final v0.4.2 CI/package verification is recorded separately when available. No final-package game run is established by these earlier candidates.
+[v0.4.2](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.4.2) was published at **2026-09-08 06:15:12 UTC**, with draft/prerelease false and latest true at verification. Commit/tag `2ed7a2d658bc9a76189a34dfa242fa72c8e241e1` matches successful [CI 34192600181](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34192600181). It combines the Council/PPC repairs, crash logging, six battle TAA paths, background ZIP compression and three-log retention.
+
+The official ZIP is 42,639,779 bytes, SHA256 `03387dcd79e8e200a7db5e6e1e1f36308e659f486cd54cb67be4d0a461cf9824`. CRC and all 45 manifest entries pass; the manifest commit and embedded source version `0.4.2` match, with `development_build=false` and no user data. EXE SHA256 is `13f1294bbb54efbf9a712a066441cb019ba5497cf1242bde6905e6c8bc1757b6`. Anonymous download and extracted release notes match the verified artifacts. Official-package validation covers CI/build and artifact identity/integrity only; the established candidate functional results below are reused without repeating application, importer, startup or game tests. Evidence: `out/release-v0.4.2/{ci-result.json,package-validation.json,public-verification.json}`.
 
 Fresh integrated Windows fixtures pass all 14 crash cases, logger/snapshot/retention checks and archive checks, including three ZIP CRCs and an 8 MiB payload comparison. All 18 inspected inputs match the release sources after Git line-ending normalization. These are CPU/native fixture results with no game or GPU run; evidence is `out/release-v0.4.2/integration-tests/summary.json` in the original workspace.
 

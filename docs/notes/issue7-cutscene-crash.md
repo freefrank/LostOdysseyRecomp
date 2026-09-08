@@ -1,8 +1,8 @@
 # Issue #7: cutscene closure and missing crash diagnostics
 
-## v0.4.2 integration — 2026-09-08
+## v0.4.2 published — 2026-09-08
 
-v0.4.2 includes the Council word-switch repair, nine further PPC semantics corrections and automatic crash-log capture. The exact semantics-r2 candidate completed the full Council scene, restored control, saved and independently reloaded; its frozen v0.4.1 runtime excluded the TAA and background-export changes now combined in v0.4.2. These candidate results are not an official v0.4.2 executable run. Final package verification is recorded in [STATUS.md](../STATUS.md); original-reporter confirmation and whole-game coverage remain outstanding.
+Published v0.4.2 includes the Council word-switch repair, nine further PPC semantics corrections and automatic crash-log capture. The exact semantics-r2 candidate completed the full Council scene, restored control, saved and independently reloaded; its frozen v0.4.1 runtime excluded the TAA and background-export changes now combined in v0.4.2. These candidate results are not an official v0.4.2 executable run. CI, package identity/integrity and anonymous download verification pass, as recorded in [STATUS.md](../STATUS.md); functional evidence is reused without repeated application tests. The [Issue #7 reply](https://github.com/freefrank/LostOdysseyRecomp/issues/7#issuecomment-5580160254) links the fix and release; the issue remains open for original-reporter confirmation, and whole-game coverage remains outstanding.
 
 The dated entries below preserve each candidate checkpoint and its validation and publication state.
 
