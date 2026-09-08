@@ -36,6 +36,8 @@ namespace gpu::renderer
     std::wstring DebugCaptureStatus();
     bool DebugCaptureBusy();
     void FinishDebugCapture(uint32_t frontbuffer);
+    // Normal window close waits for the in-flight archive before process exit.
+    void WaitDebugCaptureArchive();
 
     // Called for every DRAW_INDX / DRAW_INDX_2 after the registers were updated.
     void Draw(const DrawInfo& info);

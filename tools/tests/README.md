@@ -65,7 +65,8 @@ The development targets below are excluded from default builds and are not suite
 
 | Target | Scope and prerequisites |
 |---|---|
-| `LoLogCaptureTest` | CPU current-process logger snapshots: flush/copy while open, missing logging, destination failure and source preservation, repeated snapshots and concurrent whole-record ordering. Requires the configured native compiler and fmt dependency; no GPU, guest generation or runtime PCH. Capture ZIP contents and post-export rendering require a separate runtime check. |
+| `LoLogCaptureTest` | CPU current-process logger snapshots and default-log retention: flush/copy while open, error/alias preservation, concurrent whole records, current-plus-two numeric timestamp selection, active/undeletable files and later retry. Requires the configured native compiler and fmt dependency; no GPU, guest generation or runtime PCH. Actual startup routing, ZIP contents and rendering require separate runtime checks. |
+| `LoCaptureArchiveTest` | Windows real-file background ZIP publication, source cleanup after success, path quoting, existing ZIP/partial conflicts, read/cleanup failures, caller progress and future shutdown waiting. Requires the configured native compiler and system Windows PowerShell/.NET; no GPU, game assets, guest generation or runtime PCH. It does not run F1 or verify game-frame progress. |
 | `LoMenuRenderTest` | Windows GDI host-menu rasterization at 720p, 1080p, 4K, 1920×1200 and portrait sizes; dimensions, opacity, text pixels, aspect fit and invalid-size rejection. No guest generation or runtime PCH required. |
 | `LoRenderResolutionTest` | CPU Auto/manual internal-size selection, 4K cap, aspect fit, scaled dimensions, target limits and logical texel-coordinate rules. No GPU or game assets; does not establish physical scene rendering. |
 | `LoRenderResolutionShaderTest` | Windows production translator/DXC checks for VS/PS normalized and denormalized fetches, signed texel offsets, texture weights and implicit LOD. Requires DXC DLLs discoverable by the built executable; no GPU or game assets. Shader compilation does not establish sampled pixels. |
@@ -79,10 +80,22 @@ The development targets below are excluded from default builds and are not suite
 | `LoPresentationTest` | D3D12 GPU readback for native identity, letterboxing, FXAA/SMAA edges, flat regions, padding, resize, scaling and checkerboard reductions. Pre-UI scene-AA/UI-composition cases include a repeated-AA negative control. Optional `--capture` mode replays one raw frame through six AA/quality combinations. Requires configured D3D12/Plume dependencies; the target builds independently without reusing the main executable's PCH. No game-scene acceptance is implied. |
 
 ```powershell
-# Current-process logger snapshot contract; no game launch
+# Current-process logger snapshot and default retention contracts; no game launch
 cmake --build out/build/release --target LoLogCaptureTest
 .\out\build\release\LostOdysseyRecomp\LoLogCaptureTest.exe
 ```
+
+Default retention is called only after a successful default log open: retain the current file plus the two greatest numeric `runtime-<digits>.log` timestamps, regardless of modification time or clock rollback. Busy, read-only or otherwise undeletable older logs can remain until a later launch; cleanup failure must not evict a newer retained file or disable logging. Custom `LO_LOG_FILE` sinks do not trigger rotation, and nonmatching names, directories and capture contents are excluded. The extended Windows fixture passes with both the separate working-tree crash diagnostics and clean-HEAD retention sources; POSIX locking was not executed on this host. Existing snapshot/alias/error and concurrent-line cases remain passing.
+
+```powershell
+# Real ZIP files and failure recovery; no game launch
+cmake --build out/build/release --target LoCaptureArchiveTest
+.\out\build\release\LostOdysseyRecomp\LoCaptureArchiveTest.exe out/tests/capture-archive/run-01
+```
+
+The archive fixture requires a new output directory and rejects an existing one. It retains synthetic ZIPs and failure cases for independent inspection. It checks Unicode and shell-special path characters, nonblocking caller progress, publish-before-cleanup, existing ZIP/partial preservation, unreadable sources, a saved ZIP whose source cannot be fully removed, future destruction waiting, and rejection outside a `captures/render-*` child. Independent Python validation of the retained three ZIPs passes CRC checks and confirms the 8 MiB payload byte for byte (`out/capture-background/archive-fixture-validation.json`). This fixture does not validate game rendering during compression, the actual SDL close route, or every timeout/forced-exit case. See [development behavior and runtime scope](../../docs/notes/render-state-capture.md#background-archive-dev).
+
+Separate runtime evidence in `out/capture-background/runtime-validation.json` verifies a 720p title/menu three-frame ZIP, UTF-8 current-log prefix, source removal and rendering progress throughout compression on EXE `5fc9190c…`. The first timing window includes capture stalls; later complete windows establish bounded progress, not zero overhead. Actual SDL-close and timeout trials remain untested. Startup retention is independently checked by five default and one custom-log missing-game launches (expected exit 1), not by treating a fixture pass as proof of startup integration.
 
 ```powershell
 # Internal-resolution dimensions and sampling contract; select either target as needed

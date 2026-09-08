@@ -105,7 +105,12 @@ int main(int argc, char* argv[])
         std::error_code ec;
         if (logPath.has_parent_path())
             std::filesystem::create_directories(logPath.parent_path(), ec);
-        if (os::logger::OpenFile(logPath)) LOG_INFO("log file: {}", FileSystem::PathUtf8(logPath));
+        if (os::logger::OpenFile(logPath))
+        {
+            if (!logOverride)
+                os::logger::PruneDefaultLogs(logPath);
+            LOG_INFO("log file: {}", FileSystem::PathUtf8(logPath));
+        }
         else LOG_WARNING("could not open log file: {}", FileSystem::PathUtf8(logPath));
     }
     InstallCrashHandler();

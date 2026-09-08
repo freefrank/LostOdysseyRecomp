@@ -68,6 +68,15 @@ target_include_directories(LoLogCaptureTest PRIVATE ${LO_RUNTIME_ROOT})
 target_compile_features(LoLogCaptureTest PRIVATE cxx_std_20)
 target_link_libraries(LoLogCaptureTest PRIVATE fmt::fmt)
 
+# Background archive publication and failure recovery, without guest/GPU work.
+if(WIN32)
+    add_executable(LoCaptureArchiveTest EXCLUDE_FROM_ALL
+        ${CMAKE_SOURCE_DIR}/tools/tests/capture_archive_test.cpp
+        ${LO_RUNTIME_ROOT}/os/capture_archive.cpp)
+    target_include_directories(LoCaptureArchiveTest PRIVATE ${LO_RUNTIME_ROOT})
+    target_compile_features(LoCaptureArchiveTest PRIVATE cxx_std_20)
+endif()
+
 # Integration test uses the actual guest import bridge and storage implementation.
 set(LO_STORAGE_TEST_SOURCES ${LO_RUNTIME_SOURCES})
 list(FILTER LO_STORAGE_TEST_SOURCES EXCLUDE REGEX "/main\\.cpp$")

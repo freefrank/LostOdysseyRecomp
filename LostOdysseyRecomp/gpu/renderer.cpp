@@ -24,6 +24,7 @@
 #include <kernel/memory.h>
 #include <os/logger.h>
 #include <os/log_file.h>
+#include <os/capture_archive.h>
 #include <version.h>
 
 #ifdef LO_GPU_PLUME
@@ -54,47 +55,38 @@ namespace gpu::renderer
         std::mutex captureMutex;
         bool captureBusy = false, capturePending = false;
         std::wstring captureStatus;
-        bool CompressCapture(const std::filesystem::path& directory, std::filesystem::path& archive)
+        std::future<os::CaptureArchiveResult> captureArchive;
+
+        // Called under captureMutex. Polling never waits on compression.
+        void UpdateCaptureArchive(bool wait = false)
         {
-#ifdef _WIN32
-            archive = directory;
-            archive += L".zip";
-            auto temporary = archive;
-            temporary += L".partial";
-            // PowerShell single-quoted literals escape only apostrophes. No shell
-            // interpolation of capture paths; use the system executable directly.
-            auto literal = [](const std::wstring& value) {
-                std::wstring result = L"'";
-                for (auto c : value) { result += c; if (c == L'\'') result += c; }
-                return result + L"'";
-            };
-            wchar_t systemDirectory[MAX_PATH]{};
-            if (!GetSystemDirectoryW(systemDirectory, MAX_PATH)) return false;
-            const auto executable = std::filesystem::path(systemDirectory) / L"WindowsPowerShell/v1.0/powershell.exe";
-            std::wstring command = L"\"" + executable.wstring() + L"\" -NoLogo -NoProfile -NonInteractive -Command \"$ErrorActionPreference='Stop'; Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::CreateFromDirectory(" +
-                literal(directory.wstring()) + L"," + literal(temporary.wstring()) + L",[System.IO.Compression.CompressionLevel]::Optimal,$false)\"";
-            STARTUPINFOW startup{}; startup.cb = sizeof(startup);
-            PROCESS_INFORMATION process{};
-            if (!CreateProcessW(executable.c_str(), command.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &startup, &process)) return false;
-            const auto wait = WaitForSingleObject(process.hProcess, 60000);
-            if (wait != WAIT_OBJECT_0) { TerminateProcess(process.hProcess, 1); WaitForSingleObject(process.hProcess, INFINITE); }
-            DWORD code = 1;
-            GetExitCodeProcess(process.hProcess, &code);
-            CloseHandle(process.hThread); CloseHandle(process.hProcess);
-            std::error_code error;
-            if (wait == WAIT_OBJECT_0 && code == 0)
+            if (!captureArchive.valid() || (!wait &&
+                captureArchive.wait_for(std::chrono::seconds(0)) != std::future_status::ready)) return;
+            const auto result = captureArchive.get();
+            if (result.saved)
             {
-                std::filesystem::rename(temporary, archive, error);
-                if (!error) return true;
+                LOG_INFO("render capture ZIP saved: {}", FileSystem::PathUtf8(result.archive));
+                captureStatus = L"ZIP 已保存 / ZIP saved: " + result.archive.wstring();
+                if (result.cleanupError)
+                {
+                    LOG_WARNING("render capture source cleanup failed: {}: {}",
+                        FileSystem::PathUtf8(result.directory), result.cleanupError.message());
+                    captureStatus += L" (原始目录清理失败 / Source cleanup failed)";
+                }
             }
-            std::filesystem::remove(temporary, error);
-#endif
-            return false;
+            else
+            {
+                LOG_WARNING("render capture ZIP failed: {}: {}",
+                    FileSystem::PathUtf8(result.directory), result.error.message());
+                captureStatus = L"ZIP 失败，原始文件保留 / ZIP failed: " + result.directory.wstring();
+            }
+            captureBusy = false;
         }
     }
     void RequestDebugCapture()
     {
         std::lock_guard lock(captureMutex);
+        UpdateCaptureArchive();
         if (captureBusy) return;
 #ifdef LO_GPU_PLUME
         captureBusy = capturePending = true;
@@ -103,8 +95,13 @@ namespace gpu::renderer
         captureStatus = L"当前构建不支持渲染捕获 / Renderer unavailable";
 #endif
     }
-    std::wstring DebugCaptureStatus() { std::lock_guard lock(captureMutex); return captureStatus; }
-    bool DebugCaptureBusy() { std::lock_guard lock(captureMutex); return captureBusy; }
+    std::wstring DebugCaptureStatus() { std::lock_guard lock(captureMutex); UpdateCaptureArchive(); return captureStatus; }
+    void WaitDebugCaptureArchive()
+    {
+        std::lock_guard lock(captureMutex);
+        UpdateCaptureArchive(true);
+    }
+    bool DebugCaptureBusy() { std::lock_guard lock(captureMutex); UpdateCaptureArchive(); return captureBusy; }
 #ifdef LO_GPU_PLUME
     using namespace plume;
 
@@ -497,7 +494,7 @@ namespace gpu::renderer
                     resolveSeq = 0;
                     captureFrame = frame;
                     captureStatus = L"正在截取 / Capturing " + std::to_wstring(debugCaptureCompleted + 1) + L"/3: " + path.wstring();
-                    LOG_INFO("render capture started: {}", debugCaptureDir);
+                    LOG_INFO("render capture started: {}", FileSystem::PathUtf8(std::filesystem::path(debugCaptureDir)));
                 }
                 catch (const std::exception& e)
                 {
@@ -3938,6 +3935,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 
     void Shutdown()
     {
+        WaitDebugCaptureArchive();
         if (g_renderer)
         {
             g_renderer->Flush();
@@ -3955,6 +3953,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 
     void FinishDebugCapture(uint32_t frontbuffer)
     {
+        { std::lock_guard lock(captureMutex); UpdateCaptureArchive(); }
         if (!g_renderer || g_renderer->debugCaptureDir.empty()) return;
         auto& r = *g_renderer;
         bool ok = false;
@@ -4041,7 +4040,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             ok = ok && !r.debugTrace.fail();
         }
         catch (const std::exception& e) { ok = false; LOG_ERROR("render capture finish: {}", e.what()); }
-        LOG_INFO("render capture {}: {}", ok ? "saved" : "incomplete", r.debugCaptureDir);
+        LOG_INFO("render capture {}: {}", ok ? "saved" : "incomplete", FileSystem::PathUtf8(std::filesystem::path(r.debugCaptureDir)));
         if (ok) ++r.debugCaptureCompleted;
         try
         {
@@ -4096,27 +4095,30 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             if (status.fail()) LOG_WARNING("render capture: could not write runtime log status");
         }
         catch (const std::exception& e) { LOG_WARNING("render capture runtime log: {}", e.what()); }
-        std::filesystem::path archive;
-        bool compressed = false;
-        if (ok)
-        {
-            { std::lock_guard lock(captureMutex); captureStatus = L"正在压缩 ZIP / Compressing ZIP"; }
-            try { compressed = CompressCapture(r.debugCaptureRoot, archive); }
-            catch (const std::exception& e) { LOG_ERROR("render capture ZIP: {}", e.what()); }
-            LOG_INFO("render capture ZIP {}: {}", compressed ? "saved" : "failed", compressed ? archive.string() : r.debugCaptureDir);
-        }
-        {
-            std::lock_guard lock(captureMutex);
-            captureStatus = compressed ? L"ZIP 已保存 / ZIP saved: " + archive.wstring() :
-                (ok ? L"ZIP 失败，原始文件保留 / ZIP failed: " : L"导出不完整 / Incomplete: ") + r.debugCaptureRoot.wstring();
-            captureBusy = false;
-        }
+        // Detach the completed capture from the renderer before starting the
+        // worker. Subsequent frames cannot append to or use its source files.
+        const auto directory = std::move(r.debugCaptureRoot);
         r.debugTrace.close();
         r.debugTrace.clear();
         r.debugCaptureDir.clear();
         r.debugCaptureRoot.clear();
         r.debugCaptureCompleted = 0;
         r.captureFrame = 0;
+        std::lock_guard lock(captureMutex);
+        if (ok)
+        {
+            try
+            {
+                captureArchive = os::StartCaptureArchive(directory);
+                captureStatus = L"后台压缩 ZIP，可继续游戏 / Compressing ZIP in background";
+                LOG_INFO("render capture ZIP started in background: {}", FileSystem::PathUtf8(directory));
+                return;
+            }
+            catch (const std::exception& e) { LOG_ERROR("render capture ZIP start: {}", e.what()); }
+        }
+        captureStatus = (ok ? L"ZIP 失败，原始文件保留 / ZIP failed: " :
+            L"导出不完整 / Incomplete: ") + directory.wstring();
+        captureBusy = false;
     }
 
     void Flush()

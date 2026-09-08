@@ -463,6 +463,7 @@ namespace gpu::video
             if (event.type == SDL_QUIT)
             {
                 LOG_INFO("video: window closed, exiting");
+                renderer::WaitDebugCaptureArchive();
                 fflush(stdout);
                 std::_Exit(0);
             }

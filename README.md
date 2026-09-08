@@ -21,6 +21,8 @@ Windows x64 · Direct3D 12 · PowerPC static recompilation
 
 v0.4.1 fixes the reported Map3 tire-shadow flicker with TAA enabled; the user confirmed the r2 repair at the original position before release. F1 render exports capture three consecutive frames in one ZIP with the current process log and less duplicate data. See the [changelog](CHANGELOG.md) and [validation scope](docs/STATUS.md).
 
+**Local development, unreleased:** ZIP compression runs in the background after capture, removing its raw folder only after a successful save. Default logs retain the current file plus the two newest earlier logs; active/undeletable files may remain, and custom log paths are excluded. Frame capture itself can still pause rendering. See [diagnostic behavior and validation](docs/notes/render-state-capture.md#background-archive-dev).
+
 ## Previously in v0.4.0
 
 Real internal resolution up to 4K, SMAA and experimental camera-based TAA, Standard/High filtering, saved frame-rate controls and automatic Asian/USA-Europe CPX indexing are included. Settings text renders at output resolution and Debug labels switch independently between English and Simplified Chinese. See the [changelog](CHANGELOG.md). Existing translated-shader caches rebuild after updating.

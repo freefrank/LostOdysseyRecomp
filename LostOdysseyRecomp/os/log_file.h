@@ -9,6 +9,13 @@ namespace os::logger
     // The caller creates any parent directory. An existing sink is not replaced.
     bool OpenFile(const std::filesystem::path& path);
 
+    // Call only after opening a default logs/runtime-<digits>.log sink.
+    // Keep that file and the two greatest other numeric filename timestamps.
+    // Never recurse or remove non-regular files. Busy/inaccessible old logs are
+    // left for a later launch, so the directory may temporarily contain more.
+    // Custom LO_LOG_FILE sinks must not opt in to this best-effort cleanup.
+    void PruneDefaultLogs(const std::filesystem::path& currentLog) noexcept;
+
     // Flush and copy the complete active log while holding the logger mutex.
     // Returns an error if the sink is absent, flushing fails or copying fails.
     // Logging stays open after the snapshot, including on failure.

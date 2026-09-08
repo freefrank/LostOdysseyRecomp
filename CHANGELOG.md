@@ -8,11 +8,19 @@ One record of completed changes, with unpublished work separated from verified r
 
 ### English
 
+Move completed F1 render-export ZIP compression to a background worker so rendering can continue during compression. Delete the matching raw capture directory only after the ZIP is successfully saved; archive failure preserves the source, and cleanup failure reports a saved ZIP with retained files. Normal window close waits for an already-started archive. Three-frame readbacks and file writes can still pause the game.
+
+Default logging now keeps the current log plus the two newest numeric `runtime-<timestamp>.log` files after a successful log open. Active or undeletable older logs remain for a later launch; custom `LO_LOG_FILE` paths are not rotated. Capture path messages preserve UTF-8 in Unicode directories. The isolated build and archive/log fixtures pass; a 720p title/menu run continued rendering during compression, verified the three-frame ZIP and removed its source directory. Default/custom startup retention also passed. These changes are on the `taa-fix` development branch and are not included in a published release; player acceptance remains pending. See [capture behavior and validation](docs/notes/render-state-capture.md#background-archive-dev).
+
 Extend guarded TAA jitter coverage to six verified battle terrain, object and skinned shader paths, aligning their depth, material and lighting transforms without changing the jitter algorithm or viewport/depth/camera guards. Optional submitted-draw diagnostics can follow a resolve-trace window and retain the inspected constant slot even for a baseline that rejects the shader; logging does not enable jitter.
 
 The local `taa-fix` / `0.4.2-dev` repair passed its isolated build, 17,287 CPU jitter checks and selected CPU/GPU fixtures. In the reproduced Map3 battle scene, each comparison covers 32 phases: the instrumented v0.4.1 rendering baseline had 16 frames with at least half the sampled mountain region black; the exact candidate package and its AA Off control had none. Corrected depth/material/lighting uploads matched in all 32 frames. Camera animation differs between processes, so this is not a frame-identical pixel comparison. A separate Map3 tire regression matched the accepted r2 near/far mask and depth regions byte for byte in all 32 phases. Player acceptance of the new battle repair remains pending, and it is not included in `v0.4.1`; see the [battle investigation](docs/notes/shadow-texture-lod.md#battle-taa-runtime-dev). Enemy-disappearance flicker was subsequently reported on this package and remains a separate, unrepaired coverage investigation. The [static audit and runtime-linking limits](docs/notes/taa-coverage-audit.md) do not establish whole-game coverage.
 
 ### 简体中文
+
+F1 渲染导出完成后改为后台压缩 ZIP，压缩期间渲染可以继续。仅在 ZIP 成功保存后删除对应原始目录；归档失败保留源文件，清理失败则单独提示 ZIP 已保存且仍有源文件。正常关闭窗口会等待已开始的归档完成。三帧读回与文件写入仍可能暂停游戏。
+
+默认日志在成功打开后，保留当前日志及文件名数字时间戳最新的两份 `runtime-<timestamp>.log`。仍在使用或无法删除的旧日志留待后续启动处理，自定义 `LO_LOG_FILE` 不轮转；Unicode 目录中的捕获路径日志保持 UTF-8。隔离构建及归档／日志用例通过，720p 标题菜单实跑在压缩期间继续渲染，三帧 ZIP 校验和源目录清理通过，默认／自定义启动日志保留验证也通过。本次改动位于 `taa-fix` 开发分支，尚未正式发布，玩家验收待完成；详见[导出行为与验证](docs/notes/render-state-capture.md#background-archive-dev)。
 
 补齐六条已核对的战斗地形、物件及蒙皮 shader 路径的 TAA jitter 覆盖，对齐其深度、材质与补光位置变换，保留原有 jitter 算法及 viewport／深度／相机限制。可选的已提交绘制诊断可跟随 resolve trace 窗口，并在基线拒绝 shader 时保留所检查的常量槽位；日志不启用 jitter。
 

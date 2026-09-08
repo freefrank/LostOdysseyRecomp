@@ -1,8 +1,42 @@
 # Debug Menu render-state capture
 
-Reviewed **2026-09-08**. The original single-frame capture shipped in v0.2.1. Published [v0.4.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.4.1) captures three consecutive rendered frames in one ZIP, with a shared runtime log and smaller default contents. Earlier development packages are identified separately below. Capture is a diagnostic feature, not an AMD rendering fix or a compatibility claim.
+Reviewed **2026-09-08**. Local background compression and log retention are recorded separately from published [v0.4.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.4.1), which captures three consecutive rendered frames in one ZIP with a shared runtime log and smaller default contents. The original single-frame capture shipped in v0.2.1. Capture is a diagnostic feature, not an AMD or TAA rendering fix or a compatibility claim.
 
-## Current release: three-frame capture
+<a id="background-archive-dev"></a>
+
+## 2026-09-07 local development: background ZIP and three-log retention
+
+After all three requested frames and the runtime-log snapshot are written and closed, compression now runs in a background worker. The F1 status reports **后台压缩 ZIP，可继续游戏 / Compressing ZIP in background**. Ordinary frame processing only polls for completion, so it no longer waits for ZIP compression; the capture button remains busy until archiving and cleanup finish. GPU readbacks and capture file writes still pause rendering. This change does not turn F1 into an uninterrupted performance or temporal-stability recording.
+
+The worker receives only the completed directory path, not renderer resources. On Windows it uses the system PowerShell executable and .NET `Optimal` compression, without a visible console, at below-normal priority. It retains the 60-second timeout and writes a sibling `.zip.partial`, then renames that file to `.zip` after the compressor succeeds. Only then is the matching plain `captures/render-*` directory removed; unrelated captures are not swept. Existing ZIP or partial paths cause failure instead of replacement.
+
+Compression failure preserves the raw directory and removes this attempt's partial file where possible. ZIP success followed by source-cleanup failure reports both outcomes separately: the ZIP remains valid and some source files may remain. A normal SDL window close waits for a started archive before exiting; closing before all three frames have been captured does not create a complete archive. The Windows job object limits an abrupt process exit from leaving an orphan compressor, but forced termination is not a successful-export guarantee.
+
+Default startup logging now keeps the successfully opened current log plus the two newest other `runtime-<digits>.log` files by numeric filename timestamp. The current file is protected even if the clock moves backward. Cleanup does not recurse, follow non-regular entries, or use modification time to decide which log is newest. Active or undeletable older files remain for a later launch, so the folder can temporarily contain more than three. A failed default log open does not trigger pruning; custom `LO_LOG_FILE` paths, including disabled logging, do not opt into retention. The existing current-process snapshot contract remains unchanged.
+
+Implementation: [archive worker](../../LostOdysseyRecomp/os/capture_archive.cpp), [renderer lifecycle](../../LostOdysseyRecomp/gpu/renderer.cpp), [window-close wait](../../LostOdysseyRecomp/gpu/video.cpp) and [log retention](../../LostOdysseyRecomp/os/log_file.cpp). The isolated source uses `taa-fix` commit `5d4f5c9` plus only this capture/retention change, excluding unrelated Issue #7 and recompiler edits. The main executable and both CMake fixtures build successfully. Final EXE SHA256 is `5fc9190cc7eb97eb1eae567dadaad310837b368631b988c08d23306b2faafa39`.
+
+Real-file `LoCaptureArchiveTest` checks pass for caller progress during compression, Unicode/apostrophe/backtick/dollar-sign paths, successful source removal, ZIP/partial collisions, unreadable-source preservation, saved-ZIP cleanup failure, future destruction waiting and rejection outside a capture child directory. Independent Python checks validate CRCs for three fixture ZIPs and all bytes of the 8 MiB synthetic payload. `LoLogCaptureTest` passes against both the working tree with the separate crash diagnostics and clean-HEAD retention sources: numeric/mtime ordering conflicts, clock rollback, active and read-only files, retry, unrelated entries, continued logging and existing snapshot/alias/concurrency cases are covered. These Windows results do not exercise POSIX file locking or all timeout/forced-exit paths.
+
+Five actual-executable initialization runs produce retained default-log counts of 1/2/3/3/3; a sixth run using custom `LO_LOG_FILE` leaves neighboring logs unchanged. These deliberately missing-game runs exit 1 before game loading. Evidence: `out/capture-background/startup-retention-validation.json`.
+
+The first capture run reached frame 400 but was stopped by the validator when strict UTF-8 decoding found local-code-page bytes in two existing capture path messages. It is not a successful runtime ZIP result. Both messages now convert the path explicitly to UTF-8; the rebuilt executable passed the separate runtime check below. Build/fixture evidence: `out/capture-background/{build.json,archive-fixture-validation.json,retention-test/validation.txt,cmake-archive-test.log,cmake-log-test.log}`; invocation is in [test instructions](../../tools/tests/README.md).
+
+### Actual-game validation
+
+An isolated 720p title/menu run in a Chinese/backtick working directory captured frames 400/401/402. Its ZIP is 35,587,653 bytes, SHA256 `d3ea6cbe4fbf5d6782972426b1d45c1f958cf3e729878fd35e479f5bdeb10705`, with 132 entries, 48 correctly sized raw resolves and 21 shared shaders. CRC checks pass; the archived 754,943-byte log is valid UTF-8 and an exact current-process prefix. Only the ZIP remains for this capture, with no raw source directory or partial archive.
+
+Compression started at log time 41.461 seconds and completed at 45.398 seconds, a 3.937-second window. Per-frame renderer records advance from 403 through 520 during that interval, with completed-present samples at 406/437/467/497. Complete one-second windows after capture readback are about 30 FPS. The first sampled window includes readback stalls and cannot be used as normal-speed evidence. These records establish rendering progress during this archive; they do not establish zero compression overhead or uninterrupted capture frames.
+
+This run retained the current default log plus `runtime-5.log` and `runtime-6.log`, and preserved `notes.log`. It reused the same task's isolated shader cache prepared during the first run, so no cold-cache conclusion is drawn. The owned process was ended and its seed/executable hashes were unchanged. Evidence: `out/capture-background/runtime-validation.json`.
+
+The tested executable and manifest were subsequently deployed to the existing installation. The previous `fe39a9c9…` executable and manifest are retained under local `out/capture-background/user-backup/`. All 45 installed manifest hashes match; six protected save/profile/settings/game-path files retain their hashes. Only the executable and manifest were updated, and the original installation was not launched during deployment verification. Evidence: `out/capture-background/deployment.json`.
+
+Normal-close waiting has source review and the future-destruction fixture; the actual SDL close route, timeout and forced termination were not separately exercised. These changes are on the `taa-fix` development branch and are not included in a published release, with no new player acceptance or enemy-disappearance/TAA repair. The published v0.4.1 and v0.2.1 records below retain their original synchronous-compression and raw-file-retention behavior.
+
+## Published v0.4.1: three-frame capture
+
+This section records the published release behavior. The local background worker and successful-export source cleanup above are not included in v0.4.1.
 
 Open the Windows **F1 Debug Menu** and select **截取渲染状态 / Capture render state**, the first button. One request captures the next three consecutive rendered frames and produces one ZIP. Progress identifies each frame before compression, then displays the absolute saved ZIP path. The button stays disabled while capture is busy. A paused or stalled renderer must produce new frames to complete the request.
 

@@ -1,6 +1,6 @@
 # Project status
 
-Reviewed **2026-09-08** against the verified v0.4.1 release, local `taa-fix` / 0.4.2-dev battle validation, four-disc static TAA audit and new enemy-disappearance report. This page distinguishes published results, development validation and user acceptance; dated investigation notes retain the history of individual experiments.
+Reviewed **2026-09-08** against the verified v0.4.1 release, local `taa-fix` / 0.4.2-dev battle validation, four-disc static TAA audit, enemy-disappearance report and background-export development. This page distinguishes published results, development validation and user acceptance; dated investigation notes retain the history of individual experiments.
 
 ## Published release: v0.4.1
 
@@ -9,6 +9,22 @@ Reviewed **2026-09-08** against the verified v0.4.1 release, local `taa-fix` / 0
 The official ZIP is 42,560,290 bytes with SHA256 `d74a0a213ad08f9a03bbcd67ccce4939ac47ebd67d852803ce57554f40e4bf6f`; CRCs, all 45 manifest entries and system-dependency checks passed, with no game or user data packaged. Official EXE SHA256 is `9e0e13d991830de84d7fb85ac7a2543f779dbf7936ee5acd4cabe7cce5b2c57f`, with embedded version `0.4.1`. Installer self-test exited 0 and all eight startup-path checks passed with a System32-only PATH. These were headless bootstrap checks: no game was loaded and no GPU or new player visual acceptance was performed for this official executable. The r2 runtime comparison and user acceptance remain separate evidence below.
 
 An anonymous public download matched the verified ZIP's size/hash and published checksum file. Public release notes match the v0.4.1 body extracted from the tagged changelog. Evidence: `out/release-v0.4.1/{release-source.json,ci-result.json,package-validation.json,runtime-validation.json,public-verification.json,release-published.json}`. The two independent AMD reports remain suspended; broader maps, motion and hardware remain regression coverage.
+
+## Local development: background capture archives and log retention
+
+Completed F1 three-frame exports now hand their closed source directory to a background archive worker. Ordinary frames poll without waiting for compression; the busy flag still prevents overlapping requests. A successful temporary ZIP is renamed before the matching raw directory is removed. Archive failure retains the source; a later cleanup failure keeps the saved ZIP and reports the retained files separately. Normal window close waits for an already-started archive, but does not complete a sequence that has not captured all three frames. Readbacks and capture file writes still run synchronously and can pause rendering.
+
+After a default log is successfully opened, startup retains that current file plus the two greatest numeric `runtime-<timestamp>.log` names. Modification time does not control ordering, and clock rollback cannot evict the current file. Active or undeletable older logs may temporarily exceed three and are retried on later launches. Custom `LO_LOG_FILE` paths and nonmatching files are excluded.
+
+The isolated build is based on `taa-fix` commit `5d4f5c9` with only this capture/retention change, excluding unrelated Issue #7 and recompiler work. `LoCaptureArchiveTest` and `LoLogCaptureTest` build and pass; real-file archive fixtures cover concurrent caller progress, path quoting, collision/failure preservation, cleanup failure and future shutdown waiting. Three fixture ZIP CRC checks and the 8 MiB payload byte comparison pass. Log checks pass both with the working-tree crash-diagnostic changes and against clean HEAD, including numeric ordering, active/read-only files, retry and existing snapshot regression. The POSIX retention branch was not executed on this Windows host.
+
+Five actual-executable initialization runs retain 1/2/3/3/3 default logs; a sixth custom-`LO_LOG_FILE` run leaves neighboring logs unchanged. These deliberately missing-game runs exit 1 and do not load the game. Evidence: `out/capture-background/startup-retention-validation.json`.
+
+After fixing two existing capture messages to use UTF-8 paths, the final EXE `5fc9190cc7eb97eb1eae567dadaad310837b368631b988c08d23306b2faafa39` passed an isolated 720p title/menu export from a Chinese/backtick working directory. Frames 400–402 produced a 132-entry ZIP with 48 correctly sized raw resolves, 21 shared shaders and a valid 754,943-byte UTF-8 current-log prefix. CRC and source/partial cleanup checks pass. During the 3.937-second archive window, renderer frames 403–520 and completed-present samples continue; complete post-readback timing windows are about 30 FPS. The first timing window includes capture stalls and is not normal-frame performance evidence. Only the current default log and `runtime-5.log`/`runtime-6.log` remain, with `notes.log` untouched. The run reused this task's isolated prepared shader cache, so it is not cold-cache validation. The owned process ended; its seed and executable hashes were unchanged. Evidence: `out/capture-background/runtime-validation.json`.
+
+The tested `5fc9190c…` executable and its manifest were then installed, with the previous `fe39a9c9…` executable/manifest backed up in this task's evidence directory. All 45 installed manifest hashes match and six protected save/profile/settings/game-path files are unchanged. The original installation was not launched for this deployment check. Evidence: `out/capture-background/deployment.json`.
+
+These changes are on the `taa-fix` development branch and are not included in a published release, with no new player acceptance. Actual SDL-close/timeout trials and wider gameplay coverage were not performed; this is not a new TAA or enemy-disappearance repair. See [capture behavior and validation](notes/render-state-capture.md#background-archive-dev). Build/fixture evidence: `out/capture-background/{build.json,archive-fixture-validation.json,retention-test/validation.txt,cmake-archive-test.log,cmake-log-test.log}`.
 
 ## Local development: 0.4.2-dev battle TAA coverage
 
