@@ -306,3 +306,7 @@ if(WIN32)
     target_compile_definitions(LoMenuRenderTest PRIVATE NOMINMAX)
     target_link_libraries(LoMenuRenderTest PRIVATE user32 gdi32)
 endif()
+
+add_executable(LoGamePathTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/game_path_test.cpp)
+target_include_directories(LoGamePathTest PRIVATE ${LO_RUNTIME_ROOT})
+target_compile_features(LoGamePathTest PRIVATE cxx_std_20)

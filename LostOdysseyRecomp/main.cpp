@@ -19,6 +19,7 @@
 #include <chrono>
 #include "settings/first_run.h"
 #include "settings/config.h"
+#include "settings/game_path.h"
 #include "version.h"
 
 #ifdef _WIN32
@@ -30,30 +31,21 @@
 // on the first guest thread. Everything else is driven by the game through the
 // kernel imports (see kernel/imports.cpp).
 
-static std::filesystem::path FindGameRoot(int argc, char* argv[])
+static std::filesystem::path ExecutableDirectory()
 {
-    for (int i = 1; i + 1 < argc; i++)
-    {
-        if (strcmp(argv[i], "--game") == 0)
-            return std::filesystem::u8path(argv[i + 1]);
-    }
+#ifdef _WIN32
+    wchar_t executable[32768]{};
+    if (GetModuleFileNameW(nullptr, executable, 32768))
+        return std::filesystem::path(executable).parent_path();
+#endif
+    return std::filesystem::current_path();
+}
 
-    // Default: the extracted disc 1 next to the executable, or the dev tree.
-    std::ifstream location("game-path.txt");
-    std::string selected;
-    if (std::getline(location,selected) && !selected.empty()) {
-        if (selected.back()=='\r') selected.pop_back();
-        const auto disc=std::filesystem::u8path(selected)/"disc1";
-        if (std::filesystem::exists(disc/"default.xex")) return disc;
-    }
-    const char* candidates[] = { "game/disc1", "game", "../../../LostOdysseyRecompLib/private/disc1", "LostOdysseyRecompLib/private/disc1" };
-    for (auto c : candidates)
-    {
-        std::error_code ec;
-        if (std::filesystem::exists(std::filesystem::path(c) / "default.xex", ec))
-            return std::filesystem::absolute(c);
-    }
-    return "game";
+static settings::game_path::Resolution FindGameRoot(
+    const std::filesystem::path& executableDirectory,
+    const std::optional<std::filesystem::path>& explicitGame)
+{
+    return settings::game_path::Resolve(executableDirectory, explicitGame);
 }
 
 void InstallPhysicalWatchpoint();
@@ -78,18 +70,23 @@ int main(int argc, char* argv[])
     argv = argumentPointers.data();
 #endif
     bool explicitGame=false, requestedSetup=false, setupOnly=false;
+    std::optional<std::filesystem::path> explicitGamePath;
     for(int i=1;i<argc;++i) {
-        explicitGame |= strcmp(argv[i],"--game")==0;
+        if (strcmp(argv[i], "--game") == 0)
+        {
+            explicitGame = true;
+            explicitGamePath = i + 1 < argc ? std::filesystem::u8path(argv[i + 1])
+                                            : std::filesystem::path{};
+        }
         requestedSetup |= strcmp(argv[i],"--setup")==0 || strcmp(argv[i],"--setup-only")==0;
         setupOnly |= strcmp(argv[i],"--setup-only")==0;
     }
+    const auto executableDirectory = ExecutableDirectory();
 #ifdef _WIN32
     // Direct launches keep all portable data beside the executable. Explicit
     // --game launches retain their caller's working directory for isolated tests.
     if(!explicitGame) {
-        wchar_t executable[32768]{};
-        if(GetModuleFileNameW(nullptr,executable,32768))
-            std::filesystem::current_path(std::filesystem::path(executable).parent_path());
+        std::filesystem::current_path(executableDirectory);
     }
 #endif
     // Keep each run separately, including launches without a terminal. Tests
@@ -146,7 +143,10 @@ int main(int argc, char* argv[])
         LOG_INFO("LO_* switches:{}", switches.empty() ? " (none)" : switches.c_str());
     }
 
-    auto gameRoot=FindGameRoot(argc,argv);
+    const auto gameResolution = FindGameRoot(executableDirectory, explicitGamePath);
+    auto gameRoot = gameResolution.root;
+    if (gameResolution.configuredPathRejected)
+        LOG_WARNING("game-path.txt did not identify a default.xex; retaining the configured path for installer/error handling");
 #ifdef _WIN32
     if(!explicitGame && !std::filesystem::exists(gameRoot/"default.xex") && std::filesystem::exists("InstallGame.exe")) {
         const auto installer=std::filesystem::absolute("InstallGame.exe").wstring();
@@ -155,7 +155,7 @@ int main(int argc, char* argv[])
         launch.lpParameters=L"--return-to-game";
         if(!ShellExecuteExW(&launch)) return 1;
         if(launch.hProcess) { WaitForSingleObject(launch.hProcess,INFINITE); CloseHandle(launch.hProcess); }
-        gameRoot=FindGameRoot(argc,argv);
+        gameRoot=FindGameRoot(executableDirectory, explicitGamePath).root;
         if(!std::filesystem::exists(gameRoot/"default.xex")) return 0;
     }
 #endif

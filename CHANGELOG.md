@@ -4,6 +4,14 @@ One record of completed changes, with unpublished work separated from verified r
 
 本文统一记录已完成改动，并区分未发布内容与已确认发布版本；日期采用 UTC 发布日期。后续计划见[路线图](docs/ROADMAP.zh-CN.md)，不作为已发布功能记录。
 
+## v0.5.0 — Unreleased / 未发布
+
+Development commits below organize validated work for the v0.5.0 milestone. Each feature batch increments the source patch version; this is not a release record or a claim that each intermediate commit was run.
+
+### Development commit 0.4.3
+
+- Resolve configured and empty game-path.txt relative to the executable; preserve explicit --game isolation.
+
 ## [v0.4.2](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.4.2) — 2026-09-08
 
 ### English
