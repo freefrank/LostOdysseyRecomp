@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <span>
+#include "gpu/backend_selection.h"
 namespace settings
 {
 enum class WindowMode : uint32_t
@@ -10,11 +11,7 @@ enum class WindowMode : uint32_t
     Borderless,
     Exclusive
 };
-enum class GraphicsBackend : uint32_t
-{
-    D3D12,
-    Vulkan
-};
+using GraphicsBackend = gpu::backend::Backend;
 // Stable persisted IDs: retain the original EN/TW UI values.
 inline constexpr const wchar_t *UiLanguageNames[] = {L"English", L"繁體中文", L"日本語", L"한국어", L"简体中文"};
 // Guest table at 832455F0 maps these IDs to INT/JPN/KOR/CHI/SCH.

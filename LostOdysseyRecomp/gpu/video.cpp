@@ -1,6 +1,9 @@
 #include <version.h>
 #include <stdafx.h>
 #include "video.h"
+#if defined(LO_GPU_PLUME) && defined(_WIN32)
+#include "backend_device.h"
+#endif
 #include "renderer.h"
 #include "presentation.h"
 #include "command_processor.h"
@@ -148,6 +151,8 @@ namespace gpu::video
         void PumpWindowEvents();
         bool g_initAttempted = false;
         bool g_available = false;
+        bool g_initializing = false;
+        std::atomic<int> g_selectedBackend{-1};
 
         std::vector<uint32_t> g_pixels;   // last untiled frame, R8G8B8A8
         uint32_t g_frameWidth = 0, g_frameHeight = 0;
@@ -220,7 +225,7 @@ namespace gpu::video
     plume::RenderDevice* GetDevice()
     {
 #ifdef LO_GPU_PLUME
-        return g_available ? g_device.get() : nullptr;
+        return (g_available || g_initializing) ? g_device.get() : nullptr;
 #else
         return nullptr;
 #endif
@@ -229,7 +234,7 @@ namespace gpu::video
     plume::RenderCommandQueue* GetQueue()
     {
 #ifdef LO_GPU_PLUME
-        return g_available ? g_queue.get() : nullptr;
+        return (g_available || g_initializing) ? g_queue.get() : nullptr;
 #else
         return nullptr;
 #endif
@@ -252,6 +257,37 @@ namespace gpu::video
     }
 
     bool IsVulkan() { return g_vulkan; }
+    std::optional<backend::Backend> SelectedBackend() {
+        const auto selected = g_selectedBackend.load();
+        return selected < 0 ? std::nullopt : std::optional(static_cast<backend::Backend>(selected));
+    }
+
+    // The command thread calls this only before guest startup, or after all
+    // rendering has stopped. The window/event thread is deliberately retained
+    // between candidates; device children are destroyed before their parents.
+    static void ResetGpu() {
+        g_available = false;
+        g_initializing = false;
+        g_selectedBackend = -1;
+        renderer::Shutdown();
+#ifdef LO_GPU_PLUME
+        g_cpuFrame.reset(); g_cpuWidth = g_cpuHeight = 0;
+        g_presentedSnapshot.reset(); g_snapshotWidth = g_snapshotHeight = 0;
+        g_presentation.reset();
+        g_uploadBuffer.reset();
+#ifdef _WIN32
+        if (g_swapChain && !g_vulkan) {
+            auto* swap = static_cast<plume::D3D12SwapChain*>(g_swapChain.get());
+            if (swap->d3d) swap->d3d->SetFullscreenState(FALSE, nullptr);
+        }
+#endif
+        g_swapChain.reset(); g_presentSemaphores.clear();
+        g_releaseSemaphore.reset(); g_acquireSemaphore.reset();
+        g_fence.reset(); g_commandList.reset(); g_queue.reset();
+        g_device.reset(); g_interface.reset();
+        g_hasPresentedImage = false; g_lastPresentedImage = 0; g_forceSwapResize = false;
+#endif
+    }
 
     bool Init()
     {
@@ -265,14 +301,12 @@ namespace gpu::video
             return false;
         }
 
-        g_vulkan=settings::GetConfig().graphicsBackend==settings::GraphicsBackend::Vulkan;
-        if(const char* requested=getenv("LO_GRAPHICS_API")) {
-            if(SDL_strcasecmp(requested,"vulkan")==0) g_vulkan=true;
-            else if(SDL_strcasecmp(requested,"d3d12")==0) g_vulkan=false;
-            else if(SDL_strcasecmp(requested,"auto")) {
-                LOG_ERROR("video: unsupported LO_GRAPHICS_API '{}' (use d3d12 or vulkan)",requested);
-                return false;
-            }
+        const auto configured = settings::GetConfig().graphicsBackend;
+        const auto requested = backend::Requested(configured, getenv("LO_GRAPHICS_API"));
+        if (!requested) {
+            LOG_ERROR("video: invalid backend request '{}' (use auto, d3d12, vulkan, or dx11; DX11 is unsupported)",
+                getenv("LO_GRAPHICS_API") ? getenv("LO_GRAPHICS_API") : "settings");
+            return false;
         }
 
         auto createWindow = [] {
@@ -323,10 +357,16 @@ namespace gpu::video
         std::promise<bool> ready;
         auto initialized = ready.get_future();
         g_windowThread = std::jthread([createWindow, ready = std::move(ready)](std::stop_token stop) mutable {
-            const bool success = createWindow();
+            bool success = false;
+            try { success = createWindow(); }
+            catch (const std::exception& e) { LOG_ERROR("video: window initialization exception: {}", e.what()); }
+            catch (...) { LOG_ERROR("video: window initialization exception"); }
             LOG_INFO("video: window thread {} (independent event pump)", GetCurrentThreadId());
             ready.set_value(success);
-            if (!success) return;
+            if (!success) {
+                if (g_window) { SDL_DestroyWindow(g_window); g_window = nullptr; }
+                return;
+            }
             while (!stop.stop_requested())
             {
                 PumpWindowEvents();
@@ -339,6 +379,7 @@ namespace gpu::video
         if (!initialized.get())
         {
             g_windowThread.join();
+            Shutdown(); g_initAttempted = true;
             return false;
         }
         LOG_INFO("video: render thread {}", GetCurrentThreadId());
@@ -346,74 +387,55 @@ namespace gpu::video
         if (!createWindow()) return false;
 #endif
 
-#ifdef LO_GPU_PLUME
-#ifdef _WIN32
-        g_interface = g_vulkan ? plume::CreateVulkanInterface() : plume::CreateD3D12Interface();
-        plume::RenderWindow renderWindow = g_nativeWindow;
-#else
-        plume::RenderWindow renderWindow{};
-#endif
-        if (!g_interface)
-        {
-            LOG_WARNING("video: no render interface available");
-            return false;
+#if defined(LO_GPU_PLUME) && defined(_WIN32)
+        const auto selection = backend::Select(*requested, [](backend::Backend candidate) -> std::string {
+            g_vulkan = candidate == backend::Backend::Vulkan;
+            g_initializing = true;
+            LOG_INFO("video: trying {}", backend::Name(candidate));
+            g_interface = g_vulkan ? plume::CreateVulkanInterface() : plume::CreateD3D12Interface();
+            if (!g_interface) return "API/loader initialization failed";
+            g_device = g_interface->createDevice();
+            if (const auto missing = backend::Missing(candidate, backend::Inspect(candidate, g_device.get())); !missing.empty()) return missing;
+            g_queue = g_device->createCommandQueue(plume::RenderCommandListType::DIRECT);
+            if (!g_queue) return "graphics queue creation failed";
+            g_commandList = g_queue->createCommandList();
+            g_fence = g_device->createCommandFence();
+            g_acquireSemaphore = g_device->createCommandSemaphore();
+            g_releaseSemaphore = g_device->createCommandSemaphore();
+            if (!g_commandList || !g_fence || !g_acquireSemaphore || !g_releaseSemaphore) return "command/synchronization initialization failed";
+            g_swapChain = g_queue->createSwapChain(plume::RenderSwapChainDesc(g_nativeWindow, kSwapChainFormat, kSwapChainBuffers));
+            if (!g_swapChain || g_swapChain->isEmpty()) return "window surface/swapchain initialization failed";
+            g_uploadCapacity = uint64_t(kMaxWidth) * kMaxHeight * 4;
+            g_uploadBuffer = g_device->createBuffer(plume::RenderBufferDesc::UploadBuffer(g_uploadCapacity));
+            if (!g_uploadBuffer) return "presentation upload allocation failed";
+            g_presentation = std::make_unique<Presentation>();
+            if (!g_presentation->Init(g_device.get())) return "presentation shader/pipeline initialization failed";
+            if (!getenv("LO_NO_RENDERER") && !renderer::Init()) return "renderer initialization failed";
+            return {};
+        }, ResetGpu);
+        LOG_INFO("video: backend selection {}; configured={} (unchanged)", selection.Describe(), backend::Name(configured));
+        if (selection.selected) {
+            g_selectedBackend = static_cast<int>(*selection.selected);
+            g_available = true; g_initializing = false;
+            LOG_INFO("video: {} on {}", backend::Name(*selection.selected), g_device->getDescription().name);
+        } else {
+            LOG_ERROR("video: no usable backend; guest startup aborted: {}", selection.Describe());
+            Shutdown();
+            g_initAttempted = true; // A repeated call cannot silently start another retry cycle.
         }
-
-        g_device = g_interface->createDevice();
-        if (!g_device)
-        {
-            LOG_WARNING("video: device creation failed");
-            return false;
-        }
-
-        if (g_vulkan && (!g_device->getCapabilities().bufferDeviceAddress || !g_device->getCapabilities().geometryShader)) {
-            LOG_ERROR("video: Vulkan requires buffer device address and geometry shader support");
-            g_device.reset(); return false;
-        }
-        g_queue = g_device->createCommandQueue(plume::RenderCommandListType::DIRECT);
-        g_commandList = g_queue->createCommandList();
-        g_fence = g_device->createCommandFence();
-        g_acquireSemaphore = g_device->createCommandSemaphore();
-        g_releaseSemaphore = g_device->createCommandSemaphore();
-        g_swapChain = g_queue->createSwapChain(plume::RenderSwapChainDesc(renderWindow, kSwapChainFormat, kSwapChainBuffers));
-        g_uploadCapacity = uint64_t(kMaxWidth) * kMaxHeight * 4;
-        g_uploadBuffer = g_device->createBuffer(plume::RenderBufferDesc::UploadBuffer(g_uploadCapacity));
-        g_presentation=std::make_unique<Presentation>();
-        if(!g_presentation->Init(g_device.get())) g_presentation.reset();
-
-        LOG_INFO("video: {} on {}", g_vulkan ? "Vulkan" : "D3D12", g_device->getDescription().name);
-        g_available = true;
 #endif
         return g_available;
     }
 
     void Shutdown()
     {
-#ifdef LO_GPU_PLUME
-        if (g_queue && g_fence)
-        {
-            // Nothing in flight after the last present's fence wait.
-        }
-        g_cpuFrame.reset();
-        g_presentedSnapshot.reset();g_snapshotWidth=g_snapshotHeight=0;
-        g_presentation.reset();
-        g_uploadBuffer.reset();
-#ifdef _WIN32
-        if(g_swapChain && !g_vulkan) static_cast<plume::D3D12SwapChain*>(g_swapChain.get())->d3d->SetFullscreenState(FALSE,nullptr);
-#endif
-        g_swapChain.reset();
-        g_presentSemaphores.clear();
-        g_releaseSemaphore.reset();
-        g_acquireSemaphore.reset();
-        g_fence.reset();
-        g_commandList.reset();
-        g_queue.reset();
-        g_device.reset();
-        g_interface.reset();
-#endif
+        ResetGpu();
 #ifdef _WIN32
         g_windowThread.request_stop();
         if (g_windowThread.joinable()) g_windowThread.join();
+        g_nativeWindow = nullptr;
+        g_preparationWindow = nullptr;
+        g_shaderProgress = 0;
 #else
         if (g_window)
         {
@@ -422,6 +444,8 @@ namespace gpu::video
         }
 #endif
         g_available = false;
+        g_initAttempted = false;
+        hid::SetExternalEventPump(false);
     }
 
     void PumpEvents()

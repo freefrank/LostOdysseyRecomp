@@ -15,6 +15,8 @@ inline const wchar_t *Translate(uint32_t language, const wchar_t *en, const wcha
         const wchar_t *key, *japanese, *korean, *simplified;
     };
     static constexpr Entry entries[] = {
+        {L"Direct3D 11 (unsupported)", L"Direct3D 11（未対応）", L"Direct3D 11 (미지원)", L"Direct3D 11（尚未支持）"},
+        {L" Running: ", L" 使用中：", L" 현재 사용: ", L" 当前使用："},
         {L"TAA (Experimental)", L"TAA（実験的）", L"TAA (실험적)", L"TAA（实验性）"},
         {L"Camera-based TAA; moving effects may trail. Unsupported scenes use SMAA.",
          L"カメラ再投影の TAA。動くエフェクトに残像が出る場合があります。未対応の場面は SMAA。",

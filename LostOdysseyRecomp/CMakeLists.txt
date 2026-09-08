@@ -410,6 +410,18 @@ if(WIN32)
 endif()
 
 if(WIN32 AND LO_BUILD_GPU)
+    add_executable(LoBackendSelectionTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/backend_selection_test.cpp)
+    add_executable(LoBackendDeviceTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/backend_device_test.cpp)
+    add_executable(LoBackendCacheTest EXCLUDE_FROM_ALL
+        ${CMAKE_SOURCE_DIR}/tools/tests/backend_cache_test.cpp ${LO_RUNTIME_ROOT}/gpu/shader/dxc_compiler.cpp)
+    foreach(target LoBackendSelectionTest LoBackendDeviceTest LoBackendCacheTest)
+        target_include_directories(${target} PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,INCLUDE_DIRECTORIES>)
+        target_compile_definitions(${target} PRIVATE NOMINMAX)
+        target_compile_options(${target} PRIVATE /UNDEBUG /utf-8)
+        target_compile_features(${target} PRIVATE cxx_std_20)
+        set_target_properties(${target} PROPERTIES DISABLE_PRECOMPILE_HEADERS ON)
+    endforeach()
+    target_link_libraries(LoBackendDeviceTest PRIVATE plume d3d12 dxgi)
     add_executable(LoShaderStartupCacheTest EXCLUDE_FROM_ALL
         ${CMAKE_SOURCE_DIR}/tools/tests/shader_startup_cache_test.cpp
         ${LO_RUNTIME_ROOT}/gpu/shader/dxc_compiler.cpp)
@@ -433,7 +445,7 @@ endif()
 # The Windows SDK compiler is allowed as an explicit fallback, but is not the release contract.
 if(WIN32 AND LO_BUILD_GPU)
     set(LO_DXC_BINARY_DIR "${CMAKE_SOURCE_DIR}/tools/XenosRecomp/thirdparty/dxc-bin/bin/x64")
-    foreach(target LostOdysseyRecomp LoShaderTool LoPresentationTest LoTemporalAATest LoRenderResolutionShaderTest LoVulkanBackendTest LoShaderStartupCacheTest)
+    foreach(target LostOdysseyRecomp LoShaderTool LoPresentationTest LoTemporalAATest LoRenderResolutionShaderTest LoVulkanBackendTest LoShaderStartupCacheTest LoBackendCacheTest)
         if(TARGET ${target})
             foreach(binary dxcompiler.dll dxil.dll)
                 add_custom_command(TARGET ${target} POST_BUILD

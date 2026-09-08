@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include "backend_selection.h"
 
 namespace plume
 {
@@ -16,11 +17,13 @@ namespace gpu::video
     // Shared with the draw backend (nullptr when no device is available).
     plume::RenderDevice* GetDevice();
     bool IsVulkan();
+    // Actual committed backend; absent before readiness or after shutdown.
+    std::optional<backend::Backend> SelectedBackend();
     plume::RenderCommandQueue* GetQueue();
 
-    // Creates the window and the render device. Safe to call repeatedly;
-    // returns false when no device is available (the game keeps running
-    // headless in that case).
+    // Finite startup transaction: window -> device/caps -> presentation -> renderer.
+    // Failure cleans resources before fallback. False aborts ordinary guest startup;
+    // explicit LO_HEADLESS / LO_NO_RENDERER remain diagnostic opt-outs.
     bool Init();
     void Shutdown();
 

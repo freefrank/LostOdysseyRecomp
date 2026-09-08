@@ -24,7 +24,7 @@ Config Validate(Config value)
         value.gameLanguage = 1;
     if (uint32_t(value.windowMode) > 2)
         value.windowMode = WindowMode::Windowed;
-    if (uint32_t(value.graphicsBackend) > uint32_t(GraphicsBackend::Vulkan))
+    if (!gpu::backend::Known(value.graphicsBackend))
         value.graphicsBackend = GraphicsBackend::D3D12;
     if (value.width < 640 || value.width > 7680 || value.height < 480 || value.height > 4320)
     {

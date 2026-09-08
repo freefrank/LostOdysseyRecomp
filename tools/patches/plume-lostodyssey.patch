@@ -1,5 +1,5 @@
 diff --git a/plume_d3d12.cpp b/plume_d3d12.cpp
-index 2cdcf18..9e75ecf 100644
+index 2cdcf18..19b4b72 100644
 --- a/plume_d3d12.cpp
 +++ b/plume_d3d12.cpp
 @@ -2287,7 +2287,19 @@ namespace plume {
@@ -40,7 +40,25 @@ index 2cdcf18..9e75ecf 100644
      }
  
      void D3D12CommandList::copyBuffer(const RenderBuffer *dstBuffer, const RenderBuffer *srcBuffer) {
-@@ -2957,7 +2974,9 @@ namespace plume {
+@@ -2669,11 +2686,15 @@ namespace plume {
+     }
+ 
+     std::unique_ptr<RenderCommandList> D3D12CommandQueue::createCommandList() {
+-        return std::make_unique<D3D12CommandList>(this);
++        auto object = std::make_unique<D3D12CommandList>(this);
++        if (object->d3d == nullptr) return nullptr;
++        return object;
+     }
+ 
+     std::unique_ptr<RenderSwapChain> D3D12CommandQueue::createSwapChain(const RenderSwapChainDesc &desc) {
+-        return std::make_unique<D3D12SwapChain>(this, desc);
++        auto object = std::make_unique<D3D12SwapChain>(this, desc);
++        if (object->d3d == nullptr) return nullptr;
++        return object;
+     }
+ 
+     void D3D12CommandQueue::executeCommandLists(const RenderCommandList **commandLists, uint32_t commandListCount, RenderCommandSemaphore **waitSemaphores, uint32_t waitSemaphoreCount, RenderCommandSemaphore **signalSemaphores, uint32_t signalSemaphoreCount, RenderCommandFence *signalFence) {
+@@ -2957,7 +2978,9 @@ namespace plume {
      }
  
      std::unique_ptr<RenderTexture> D3D12Pool::createTexture(const RenderTextureDesc &desc) {
@@ -51,7 +69,7 @@ index 2cdcf18..9e75ecf 100644
      }
  
      // D3D12Shader
-@@ -3075,6 +3094,7 @@ namespace plume {
+@@ -3075,6 +3098,7 @@ namespace plume {
      // D3D12GraphicsPipeline
  
      D3D12GraphicsPipeline::D3D12GraphicsPipeline(D3D12Device *device, const RenderGraphicsPipelineDesc &desc) : D3D12Pipeline(device, Type::Graphics) {
@@ -59,7 +77,33 @@ index 2cdcf18..9e75ecf 100644
          assert(desc.pipelineLayout != nullptr);
  
          topology = toD3D12(desc.primitiveTopology);
-@@ -3754,6 +3774,7 @@ namespace plume {
+@@ -3673,18 +3697,16 @@ namespace plume {
+             const D3D_SHADER_MODEL supportedShaderModels[] = { D3D_SHADER_MODEL_6_0 };
+ #       endif
+             D3D12_FEATURE_DATA_SHADER_MODEL dataShaderModel = {};
++            bool shaderModelFound = false;
+             for (uint32_t i = 0; i < _countof(supportedShaderModels); i++) {
+                 dataShaderModel.HighestShaderModel = supportedShaderModels[i];
+                 res = deviceOption->CheckFeatureSupport(D3D12_FEATURE_SHADER_MODEL, &dataShaderModel, sizeof(dataShaderModel));
+-                if (res != E_INVALIDARG) {
+-                    if (FAILED(res)) {
+-                        deviceOption->Release();
+-                        adapterOption->Release();
+-                        continue;
+-                    }
+-
+-                    break;
+-                }
++                if (SUCCEEDED(res)) { shaderModelFound = true; break; }
++                if (res != E_INVALIDARG) break;
++            }
++            if (!shaderModelFound) {
++                deviceOption->Release(); adapterOption->Release();
++                continue;
+             }
+ 
+             // Determine if the device supports sample locations.
+@@ -3754,6 +3776,7 @@ namespace plume {
                  adapter = adapterOption;
                  d3d = deviceOption;
                  shaderModel = dataShaderModel.HighestShaderModel;
@@ -67,7 +111,26 @@ index 2cdcf18..9e75ecf 100644
                  capabilities.geometryShader = true;
                  capabilities.raytracing = rtSupportOption;
                  capabilities.raytracingStateUpdate = rtStateUpdateSupportOption;
-@@ -3910,7 +3931,9 @@ namespace plume {
+@@ -3894,7 +3917,10 @@ namespace plume {
+     }
+ 
+     std::unique_ptr<RenderDescriptorSet> D3D12Device::createDescriptorSet(const RenderDescriptorSetDesc &desc) {
+-        return std::make_unique<D3D12DescriptorSet>(this, desc);
++        auto set = std::make_unique<D3D12DescriptorSet>(this, desc);
++        if (set->viewAllocation.offset == D3D12DescriptorHeapAllocator::INVALID_OFFSET ||
++            set->samplerAllocation.offset == D3D12DescriptorHeapAllocator::INVALID_OFFSET) return nullptr;
++        return set;
+     }
+ 
+     std::unique_ptr<RenderShader> D3D12Device::createShader(const void *data, uint64_t size, const char *entryPointName, RenderShaderFormat format) {
+@@ -3906,11 +3932,15 @@ namespace plume {
+     }
+ 
+     std::unique_ptr<RenderPipeline> D3D12Device::createComputePipeline(const RenderComputePipelineDesc &desc) {
+-        return std::make_unique<D3D12ComputePipeline>(this, desc);
++        auto object = std::make_unique<D3D12ComputePipeline>(this, desc);
++        if (object->d3d == nullptr) return nullptr;
++        return object;
      }
  
      std::unique_ptr<RenderPipeline> D3D12Device::createGraphicsPipeline(const RenderGraphicsPipelineDesc &desc) {
@@ -78,7 +141,29 @@ index 2cdcf18..9e75ecf 100644
      }
  
      std::unique_ptr<RenderPipeline> D3D12Device::createRaytracingPipeline(const RenderRaytracingPipelineDesc &desc, const RenderPipeline *previousPipeline) {
-@@ -3931,7 +3954,9 @@ namespace plume {
+@@ -3918,20 +3948,28 @@ namespace plume {
+     }
+ 
+     std::unique_ptr<RenderCommandQueue> D3D12Device::createCommandQueue(RenderCommandListType type) {
+-        return std::make_unique<D3D12CommandQueue>(this, type);
++        auto object = std::make_unique<D3D12CommandQueue>(this, type);
++        if (object->d3d == nullptr) return nullptr;
++        return object;
+     }
+     
+     std::unique_ptr<RenderBuffer> D3D12Device::createBuffer(const RenderBufferDesc &desc) {
+         if ((desc.heapType == RenderHeapType::GPU_UPLOAD) && gpuUploadHeapFallback) {
+-            return std::make_unique<D3D12Buffer>(this, customUploadPool.get(), desc);
++            auto buffer = std::make_unique<D3D12Buffer>(this, customUploadPool.get(), desc);
++            if (buffer->d3d == nullptr) return nullptr;
++            return buffer;
+         }
+         else {
+-            return std::make_unique<D3D12Buffer>(this, nullptr, desc);
++            auto buffer = std::make_unique<D3D12Buffer>(this, nullptr, desc);
++            if (buffer->d3d == nullptr) return nullptr;
++            return buffer;
+         }
      }
  
      std::unique_ptr<RenderTexture> D3D12Device::createTexture(const RenderTextureDesc &desc) {
@@ -89,6 +174,42 @@ index 2cdcf18..9e75ecf 100644
      }
  
      std::unique_ptr<RenderAccelerationStructure> D3D12Device::createAccelerationStructure(const RenderAccelerationStructureDesc &desc) {
+@@ -3943,15 +3981,21 @@ namespace plume {
+     }
+ 
+     std::unique_ptr<RenderPipelineLayout> D3D12Device::createPipelineLayout(const RenderPipelineLayoutDesc &desc) {
+-        return std::make_unique<D3D12PipelineLayout>(this, desc);
++        auto object = std::make_unique<D3D12PipelineLayout>(this, desc);
++        if (object->rootSignature == nullptr) return nullptr;
++        return object;
+     }
+ 
+     std::unique_ptr<RenderCommandFence> D3D12Device::createCommandFence() {
+-        return std::make_unique<D3D12CommandFence>(this);
++        auto object = std::make_unique<D3D12CommandFence>(this);
++        if (object->d3d == nullptr || !object->fenceEvent) return nullptr;
++        return object;
+     }
+ 
+     std::unique_ptr<RenderCommandSemaphore> D3D12Device::createCommandSemaphore() {
+-        return std::make_unique<D3D12CommandSemaphore>(this);
++        auto object = std::make_unique<D3D12CommandSemaphore>(this);
++        if (object->d3d == nullptr) return nullptr;
++        return object;
+     }
+ 
+     std::unique_ptr<RenderFramebuffer> D3D12Device::createFramebuffer(const RenderFramebufferDesc &desc) {
+@@ -4161,7 +4205,9 @@ namespace plume {
+     }
+ 
+     bool D3D12Device::isValid() const {
+-        return d3d != nullptr;
++        return d3d && allocator && viewHeapAllocator && viewHeapAllocator->heap &&
++            samplerHeapAllocator && samplerHeapAllocator->heap && colorTargetHeapAllocator &&
++            colorTargetHeapAllocator->heap && depthTargetHeapAllocator && depthTargetHeapAllocator->heap;
+     }
+ 
+     bool D3D12Device::beginCapture() {
 diff --git a/plume_render_interface_types.h b/plume_render_interface_types.h
 index 9dcfedf..f14e707 100644
 --- a/plume_render_interface_types.h
@@ -102,7 +223,7 @@ index 9dcfedf..f14e707 100644
          bool geometryShader = false;
  
 diff --git a/plume_vulkan.cpp b/plume_vulkan.cpp
-index f1dd503..9193350 100644
+index f1dd503..d48e263 100644
 --- a/plume_vulkan.cpp
 +++ b/plume_vulkan.cpp
 @@ -835,7 +835,7 @@ namespace plume {
@@ -143,7 +264,15 @@ index f1dd503..9193350 100644
          viewInfo.format = format;
          viewInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
          viewInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-@@ -1504,8 +1510,9 @@ namespace plume {
+@@ -1257,6 +1263,7 @@ namespace plume {
+         for (uint32_t i = 0; i < desc.descriptorSetDescsCount; i++) {
+             VulkanDescriptorSetLayout *setLayout = new VulkanDescriptorSetLayout(device, desc.descriptorSetDescs[i]);
+             descriptorSetLayouts.emplace_back(setLayout);
++            if (setLayout->vk == VK_NULL_HANDLE) return;
+             setLayoutHandles.emplace_back(setLayout->vk);
+         }
+ 
+@@ -1504,8 +1511,9 @@ namespace plume {
  
          VkPipelineViewportStateCreateInfo viewportState = {};
          viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -155,7 +284,15 @@ index f1dd503..9193350 100644
  
          VkPipelineRasterizationStateCreateInfo rasterization = {};
          rasterization.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-@@ -2175,7 +2182,7 @@ namespace plume {
+@@ -1909,6 +1917,7 @@ namespace plume {
+         }
+ 
+         setLayout = new VulkanDescriptorSetLayout(device, desc);
++        if (setLayout->vk == VK_NULL_HANDLE) return;
+ 
+         descriptorPool = createDescriptorPool(device, typeCounts, desc.lastRangeIsBoundless);
+         if (descriptorPool == VK_NULL_HANDLE) {
+@@ -2175,7 +2184,7 @@ namespace plume {
          }
  
          // Make sure maxImageCount is never below minImageCount, as it's allowed to be zero.
@@ -164,7 +301,7 @@ index f1dd503..9193350 100644
  
          // Clamp the requested buffer count between the bounds of the surface capabilities.
          this->desc.textureCount = std::clamp(desc.textureCount, surfaceCapabilities.minImageCount, surfaceCapabilities.maxImageCount);
-@@ -2310,6 +2317,7 @@ namespace plume {
+@@ -2310,6 +2319,7 @@ namespace plume {
      }
  
      bool VulkanSwapChain::resize() {
@@ -172,7 +309,7 @@ index f1dd503..9193350 100644
          getWindowSize(width, height);
  
          // Don't recreate the swap chain at all if the window doesn't have a valid size.
-@@ -2338,7 +2346,8 @@ namespace plume {
+@@ -2338,7 +2348,8 @@ namespace plume {
          createInfo.imageExtent.width = width;
          createInfo.imageExtent.height = height;
          createInfo.imageArrayLayers = 1;
@@ -182,7 +319,7 @@ index f1dd503..9193350 100644
          createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
          createInfo.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
          createInfo.compositeAlpha = pickedAlphaFlag;
-@@ -2496,6 +2505,7 @@ namespace plume {
+@@ -2496,6 +2507,7 @@ namespace plume {
  
      void VulkanSwapChain::releaseSwapChain() {
          if (vk != VK_NULL_HANDLE) {
@@ -190,7 +327,7 @@ index f1dd503..9193350 100644
              vkDestroySwapchainKHR(commandQueue->device->vk, vk, nullptr);
              vk = VK_NULL_HANDLE;
          }
-@@ -3229,7 +3239,29 @@ namespace plume {
+@@ -3229,7 +3241,29 @@ namespace plume {
              imageCopy.imageExtent.depth = srcLocation.placedFootprint.depth;
              vkCmdCopyBufferToImage(vk, srcBuffer->vk, dstTexture->vk, toImageLayout(dstTexture->textureLayout), 1, &imageCopy);
          }
@@ -220,7 +357,84 @@ index f1dd503..9193350 100644
              VkImageCopy imageCopy = {};
              imageCopy.srcSubresource.aspectMask = toAspectFlags(srcTexture->desc.format, srcTexture->desc.flags);
              imageCopy.srcSubresource.baseArrayLayer = srcLocation.subresource.arrayIndex;
-@@ -4120,6 +4152,7 @@ namespace plume {
+@@ -3561,11 +3595,15 @@ namespace plume {
+     }
+ 
+     std::unique_ptr<RenderCommandList> VulkanCommandQueue::createCommandList() {
+-        return std::make_unique<VulkanCommandList>(this);
++        auto object = std::make_unique<VulkanCommandList>(this);
++        if (object->vk == VK_NULL_HANDLE) return nullptr;
++        return object;
+     }
+ 
+     std::unique_ptr<RenderSwapChain> VulkanCommandQueue::createSwapChain(const RenderSwapChainDesc &desc) {
+-        return std::make_unique<VulkanSwapChain>(this, desc);
++        auto object = std::make_unique<VulkanSwapChain>(this, desc);
++        if (object->vk == VK_NULL_HANDLE) return nullptr;
++        return object;
+     }
+ 
+     void VulkanCommandQueue::executeCommandLists(const RenderCommandList **commandLists, uint32_t commandListCount, RenderCommandSemaphore **waitSemaphores, uint32_t waitSemaphoreCount, RenderCommandSemaphore **signalSemaphores, uint32_t signalSemaphoreCount, RenderCommandFence *signalFence) {
+@@ -3839,7 +3877,7 @@ namespace plume {
+         }
+ 
+         VkPhysicalDeviceScalarBlockLayoutFeatures layoutFeatures = {};
+-        const bool scalarBlockLayoutFound = supportedOptionalExtensions.find(VK_EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME) != supportedOptionalExtensions.end();
++        const bool scalarBlockLayoutFound = physicalDeviceProperties.apiVersion >= VK_API_VERSION_1_2 || supportedOptionalExtensions.find(VK_EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME) != supportedOptionalExtensions.end();
+         if (scalarBlockLayoutFound) {
+             layoutFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES;
+             layoutFeatures.pNext = featuresChain;
+@@ -3868,7 +3906,7 @@ namespace plume {
+         }
+ 
+         VkPhysicalDeviceBufferDeviceAddressFeatures bufferDeviceAddressFeatures = {};
+-        const bool bufferDeviceAddressFound = supportedOptionalExtensions.find(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME) != supportedOptionalExtensions.end();
++        const bool bufferDeviceAddressFound = physicalDeviceProperties.apiVersion >= VK_API_VERSION_1_2 || supportedOptionalExtensions.find(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME) != supportedOptionalExtensions.end();
+         if (bufferDeviceAddressFound) {
+             bufferDeviceAddressFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
+             bufferDeviceAddressFeatures.pNext = featuresChain;
+@@ -3979,7 +4017,7 @@ namespace plume {
+         vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, queueFamilyProperties.data());
+ 
+         auto pickFamilyQueue = [&](RenderCommandListType type, VkQueueFlags flags) {
+-            uint32_t familyIndex = 0;
++            uint32_t familyIndex = UINT32_MAX;
+             uint32_t familySetBits = sizeof(uint32_t) * 8;
+             uint32_t familyQueueCount = 0;
+             bool familyUsed = false;
+@@ -3987,7 +4025,7 @@ namespace plume {
+                 const VkQueueFamilyProperties &props = queueFamilyProperties[i];
+ 
+                 // The family queue flags must contain all the flags required by the command list type.
+-                if ((props.queueFlags & flags) != flags) {
++                if (!props.queueCount || (props.queueFlags & flags) != flags) {
+                     continue;
+                 }
+ 
+@@ -4003,14 +4041,19 @@ namespace plume {
+                 }
+             }
+ 
++            if (familyIndex == UINT32_MAX) return false;
+             queueFamilyIndices[toFamilyIndex(type)] = familyIndex;
+             queueFamilyUsed[familyIndex] = true;
++            return true;
+         };
+ 
+         // Pick the family queues for each type of command list.
+-        pickFamilyQueue(RenderCommandListType::DIRECT, VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT);
+-        pickFamilyQueue(RenderCommandListType::COMPUTE, VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT);
+-        pickFamilyQueue(RenderCommandListType::COPY, VK_QUEUE_TRANSFER_BIT);
++        if (!pickFamilyQueue(RenderCommandListType::DIRECT, VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT) ||
++            !pickFamilyQueue(RenderCommandListType::COMPUTE, VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT) ||
++            !pickFamilyQueue(RenderCommandListType::COPY, VK_QUEUE_TRANSFER_BIT)) {
++            fprintf(stderr, "Required Vulkan queue family unavailable.\n");
++            return;
++        }
+ 
+         // Create the struct to store the virtual queues.
+         queueFamilies.resize(queueFamilyCount);
+@@ -4120,6 +4163,7 @@ namespace plume {
          description.dedicatedVideoMemory = memoryHeapSize;
  
          // Fill capabilities.
@@ -228,3 +442,94 @@ index f1dd503..9193350 100644
          capabilities.geometryShader = deviceFeatures.features.geometryShader;
          capabilities.raytracing = rayTracingSupported;
          capabilities.raytracingStateUpdate = false;
+@@ -4161,23 +4205,33 @@ namespace plume {
+     }
+ 
+     std::unique_ptr<RenderDescriptorSet> VulkanDevice::createDescriptorSet(const RenderDescriptorSetDesc &desc) {
+-        return std::make_unique<VulkanDescriptorSet>(this, desc);
++        auto object = std::make_unique<VulkanDescriptorSet>(this, desc);
++        if (object->vk == VK_NULL_HANDLE) return nullptr;
++        return object;
+     }
+ 
+     std::unique_ptr<RenderShader> VulkanDevice::createShader(const void *data, uint64_t size, const char *entryPointName, RenderShaderFormat format) {
+-        return std::make_unique<VulkanShader>(this, data, size, entryPointName, format);
++        auto shader = std::make_unique<VulkanShader>(this, data, size, entryPointName, format);
++        if (shader->vk == VK_NULL_HANDLE) return nullptr;
++        return shader;
+     }
+ 
+     std::unique_ptr<RenderSampler> VulkanDevice::createSampler(const RenderSamplerDesc &desc) {
+-        return std::make_unique<VulkanSampler>(this, desc);
++        auto object = std::make_unique<VulkanSampler>(this, desc);
++        if (object->vk == VK_NULL_HANDLE) return nullptr;
++        return object;
+     }
+ 
+     std::unique_ptr<RenderPipeline> VulkanDevice::createComputePipeline(const RenderComputePipelineDesc &desc) {
+-        return std::make_unique<VulkanComputePipeline>(this, desc);
++        auto object = std::make_unique<VulkanComputePipeline>(this, desc);
++        if (object->vk == VK_NULL_HANDLE) return nullptr;
++        return object;
+     }
+ 
+     std::unique_ptr<RenderPipeline> VulkanDevice::createGraphicsPipeline(const RenderGraphicsPipelineDesc &desc) {
+-        return std::make_unique<VulkanGraphicsPipeline>(this, desc);
++        auto object = std::make_unique<VulkanGraphicsPipeline>(this, desc);
++        if (object->vk == VK_NULL_HANDLE) return nullptr;
++        return object;
+     }
+ 
+     std::unique_ptr<RenderPipeline> VulkanDevice::createRaytracingPipeline(const RenderRaytracingPipelineDesc &desc, const RenderPipeline *previousPipeline) {
+@@ -4189,11 +4243,15 @@ namespace plume {
+     }
+ 
+     std::unique_ptr<RenderBuffer> VulkanDevice::createBuffer(const RenderBufferDesc &desc) {
+-        return std::make_unique<VulkanBuffer>(this, nullptr, desc);
++        auto object = std::make_unique<VulkanBuffer>(this, nullptr, desc);
++        if (object->vk == VK_NULL_HANDLE) return nullptr;
++        return object;
+     }
+ 
+     std::unique_ptr<RenderTexture> VulkanDevice::createTexture(const RenderTextureDesc &desc) {
+-        return std::make_unique<VulkanTexture>(this, nullptr, desc);
++        auto object = std::make_unique<VulkanTexture>(this, nullptr, desc);
++        if (object->vk == VK_NULL_HANDLE) return nullptr;
++        return object;
+     }
+ 
+     std::unique_ptr<RenderAccelerationStructure> VulkanDevice::createAccelerationStructure(const RenderAccelerationStructureDesc &desc) {
+@@ -4205,15 +4263,21 @@ namespace plume {
+     }
+ 
+     std::unique_ptr<RenderPipelineLayout> VulkanDevice::createPipelineLayout(const RenderPipelineLayoutDesc &desc) {
+-        return std::make_unique<VulkanPipelineLayout>(this, desc);
++        auto object = std::make_unique<VulkanPipelineLayout>(this, desc);
++        if (object->vk == VK_NULL_HANDLE) return nullptr;
++        return object;
+     }
+ 
+     std::unique_ptr<RenderCommandFence> VulkanDevice::createCommandFence() {
+-        return std::make_unique<VulkanCommandFence>(this);
++        auto object = std::make_unique<VulkanCommandFence>(this);
++        if (object->vk == VK_NULL_HANDLE) return nullptr;
++        return object;
+     }
+ 
+     std::unique_ptr<RenderCommandSemaphore> VulkanDevice::createCommandSemaphore() {
+-        return std::make_unique<VulkanCommandSemaphore>(this);
++        auto object = std::make_unique<VulkanCommandSemaphore>(this);
++        if (object->vk == VK_NULL_HANDLE) return nullptr;
++        return object;
+     }
+ 
+     std::unique_ptr<RenderFramebuffer> VulkanDevice::createFramebuffer(const RenderFramebufferDesc &desc) {
+@@ -4444,7 +4508,7 @@ namespace plume {
+     }
+ 
+     bool VulkanDevice::isValid() const {
+-        return vk != nullptr;
++        return vk != nullptr && allocator != VK_NULL_HANDLE && (nullDescriptorSupported || nullBuffer != nullptr);
+     }
+ 
+     bool VulkanDevice::beginCapture() {

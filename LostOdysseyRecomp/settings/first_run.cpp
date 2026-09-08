@@ -147,7 +147,7 @@ struct Setup
             L"저장 후 시작", L"保存并启动"));
         SetWindowTextW(cancel, pick(L"Cancel", L"取消", L"キャンセル", L"취소", L"取消"));
         const int backend = selection(2), mode = selection(4), aa = selection(5);
-        items(2, {L"Direct3D 12", L"Vulkan"}, backend);
+        items(2, {L"Direct3D 12", L"Vulkan", Translate(config.uiLanguage, L"Direct3D 11 (unsupported)", L"Direct3D 11（尚未支援）")}, backend);
         items(4, {tr(L"Windowed", L"視窗"), tr(L"Borderless fullscreen", L"無邊框全螢幕"),
                   tr(L"Exclusive fullscreen", L"獨佔全螢幕")}, mode);
         items(5, {tr(L"Off", L"關"), L"FXAA", L"SMAA", tr(L"TAA (Experimental)", L"TAA（實驗性）")}, aa);
@@ -180,7 +180,7 @@ struct Setup
             SendMessageW(boxes[0], CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(name));
         SendMessageW(boxes[0], CB_SETCURSEL, config.uiLanguage, 0);
         rebuildGameLanguages();
-        items(2, {L"Direct3D 12", L"Vulkan"}, int(config.graphicsBackend));
+        items(2, {L"Direct3D 12", L"Vulkan", Translate(config.uiLanguage, L"Direct3D 11 (unsupported)", L"Direct3D 11（尚未支援）")}, int(config.graphicsBackend));
         const auto resolution = std::pair{config.width, config.height};
         if (std::find(resolutions.begin(), resolutions.end(), resolution) == resolutions.end())
             resolutions.push_back(resolution);

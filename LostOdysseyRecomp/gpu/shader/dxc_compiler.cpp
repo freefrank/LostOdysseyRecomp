@@ -1,5 +1,6 @@
 #include "dxc_compiler.h"
 #include "cache.h"
+#include "binary_cache.h"
 #include "resource_cpx_index_sha256.h"
 #include <atomic>
 #include <filesystem>
@@ -242,21 +243,21 @@ namespace xenos
         uint64_t hash = 0xcbf29ce484222325ull;
         for (uint8_t byte : key) { hash ^= byte; hash *= 0x100000001b3ull; }
         const bool spirv = format == ShaderBinaryFormat::Spirv;
+        auto identity = cache::MakeIdentity(spirv ? cache::Backend::Vulkan : cache::Backend::D3D12, DxcIdentity());
+        identity.variant = "builtin:" + std::to_string(std::strlen(entry)) + ":" + entry +
+            ":" + std::to_string(std::strlen(profile)) + ":" + profile;
+        const bool pixel = std::string_view(profile).starts_with("ps_");
         const char* configured = std::getenv("LO_SHADER_CACHE_DIR");
         const auto directory = std::filesystem::path(configured ? configured : "cache/shaders") / "builtin";
-        const auto path = directory / cache::FileName(false, hash, spirv);
+        const auto path = directory / cache::FileName(pixel, hash, identity);
         CompiledShader result;
-        std::ifstream input(path, std::ios::binary);
-        result.bytecode.assign(std::istreambuf_iterator<char>(input), {});
-        if (cache::CompleteBinary(result.bytecode, spirv)) { result.ok = true; return result; }
+        if (!configured || *configured) result.bytecode = cache::ReadBinary(path, pixel, hash, identity);
+        if (!result.bytecode.empty()) { result.ok = true; return result; }
         result = CompileHlsl(source, entry, profile, format);
         if (result.ok && (!configured || *configured)) {
             std::error_code error;
             std::filesystem::create_directories(directory, error);
-            if (!error) {
-                std::ofstream output(path, std::ios::binary | std::ios::trunc);
-                output.write(reinterpret_cast<const char*>(result.bytecode.data()), result.bytecode.size());
-            }
+            if (!error) cache::WriteBinary(path, pixel, hash, identity, result.bytecode);
         }
         return result;
     }

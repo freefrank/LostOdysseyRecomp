@@ -13,6 +13,7 @@
 #include <set>
 #include <mutex>
 #include <fstream>
+#include <future>
 
 void DumpGuestThreadStates();
 
@@ -210,7 +211,7 @@ namespace gpu
         return static_cast<uint8_t*>(g_memory.Translate(0xA0000000u + (physicalAddress & 0x1FFFFFFF)));
     }
 
-    void CommandProcessor::Init()
+    bool CommandProcessor::Init()
     {
         m_registers.assign(REGISTER_COUNT, 0);
 
@@ -228,9 +229,33 @@ namespace gpu
         seed(REG_D1MODE_VIEWPORT_SIZE, 0x050002D0);
 
         m_running = true;
-        m_worker = std::thread([this] { WorkerMain(); });
-        m_vsync = std::thread([this] { VsyncMain(); });
-        m_interruptThread = std::thread([this] { InterruptMain(); });
+        // Guest threads cannot submit commands until the finite backend startup
+        // transaction has either committed, or explicitly entered headless mode.
+        std::promise<bool> ready;
+        auto initialized = ready.get_future();
+        m_worker = std::thread([this, ready = std::move(ready)]() mutable {
+            bool success = false;
+            try { success = video::Init() || getenv("LO_HEADLESS") != nullptr; }
+            catch (const std::exception& e) { LOG_ERROR("graphics startup failed: {}", e.what()); video::Shutdown(); }
+            catch (...) { LOG_ERROR("graphics startup failed: unknown exception"); video::Shutdown(); }
+            ready.set_value(success);
+            if (success) WorkerMain();
+        });
+        if (!initialized.get()) {
+            m_running = false;
+            m_worker.join();
+            return false;
+        }
+        try {
+            m_vsync = std::thread([this] { VsyncMain(); });
+            m_interruptThread = std::thread([this] { InterruptMain(); });
+        } catch (const std::exception& e) {
+            LOG_ERROR("graphics worker creation failed: {}", e.what());
+            Shutdown();
+            video::Shutdown();
+            return false;
+        }
+        return true;
     }
 
     void CommandProcessor::Shutdown()
@@ -359,8 +384,6 @@ namespace gpu
 
     void CommandProcessor::WorkerMain()
     {
-        if (video::Init())
-            renderer::Init();
         uint32_t idle = 0;
         const bool timingEnabled = frame_timing::Enabled();
         auto idleStart = std::chrono::steady_clock::time_point{};

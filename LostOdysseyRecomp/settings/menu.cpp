@@ -121,7 +121,7 @@ void Publish(uint8_t *base, uint32_t config)
     }
     else if (tab == 2)
     {
-        addChoices(L"Graphics backend", L"圖形後端", {L"Direct3D 12", L"Vulkan"},
+        addChoices(L"Graphics backend", L"圖形後端", {L"Direct3D 12", L"Vulkan", Tr(L"Direct3D 11 (unsupported)", L"Direct3D 11（尚未支援）")},
                    uint32_t(edit.graphicsBackend));
         addChoices(L"Display mode", L"顯示模式",
                    {Tr(L"Windowed", L"視窗"), Tr(L"Borderless fullscreen", L"無邊框全螢幕"),
@@ -178,9 +178,14 @@ void Publish(uint8_t *base, uint32_t config)
     if (tab == 3 && row == 1)
         next.help = Tr(L"Game language takes effect after restarting. Requires matching language assets.",
                        L"遊戲語言重新啟動後生效，需要對應語言資源。中文遊戲文本需要亞洲版資源。");
-    if (tab == 2 && row == 0)
+    if (tab == 2 && row == 0) {
         next.help = Tr(L"The graphics backend is changed after restarting. LO_GRAPHICS_API remains a diagnostic override.",
                        L"圖形後端重新啟動後變更；LO_GRAPHICS_API 仍可作為診斷覆寫。 ");
+        const auto selected = gpu::video::SelectedBackend();
+        next.help += Tr(L" Running: ", L" 目前使用：");
+        next.help += selected == gpu::backend::Backend::Vulkan ? L"Vulkan" :
+            selected == gpu::backend::Backend::D3D12 ? L"Direct3D 12" : L"-";
+    }
     if (tab == 2 && row == 2)
         next.help = Tr(L"Sets the output size. Borderless fullscreen uses the desktop size.",
                        L"設定輸出尺寸；無邊框全螢幕使用桌面尺寸。");
@@ -518,7 +523,7 @@ PPC_FUNC(sub_822F19B0)
         else if (tab == 2)
         {
             if (row == 0)
-                edit.graphicsBackend = GraphicsBackend(cycle(uint32_t(edit.graphicsBackend), 2));
+                edit.graphicsBackend = GraphicsBackend(cycle(uint32_t(edit.graphicsBackend), 3));
             if (row == 1)
                 edit.windowMode = WindowMode(cycle(uint32_t(edit.windowMode), 3));
             if (row == 2)

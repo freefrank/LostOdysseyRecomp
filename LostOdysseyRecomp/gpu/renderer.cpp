@@ -17,6 +17,7 @@
 #include "shader/xenos_translator.h"
 #include "shader/dxc_compiler.h"
 #include "shader/cache.h"
+#include "shader/binary_cache.h"
 #include "shader/preparation_queue.h"
 #include "shader/startup_cache.h"
 #include "shader/resource_scan.h"
@@ -741,6 +742,8 @@ namespace gpu::renderer
             static_assert(offsetof(SharedConstants,textureSize)==896);
 
             // ---- lifecycle -----------------------------------------------------
+            xenos::cache::Identity cacheIdentity;
+            bool initializationModuleFailure = false;
             bool Init()
             {
                 device = video::GetDevice();
@@ -750,14 +753,18 @@ namespace gpu::renderer
                 renderFormat = vulkan ? RenderShaderFormat::SPIRV : RenderShaderFormat::DXIL;
                 if (!device || !queue)
                     return false;
+                cacheIdentity = xenos::cache::MakeIdentity(vulkan ? backend::Backend::Vulkan : backend::Backend::D3D12, xenos::DxcIdentity());
 
                 commandList = queue->createCommandList();
                 fence = device->createCommandFence();
                 uploadRing = device->createBuffer(RenderBufferDesc::UploadBuffer(kUploadRingSize, vulkan ? RenderBufferFlag::DEVICE_ADDRESSABLE | RenderBufferFlag::INDEX | RenderBufferFlag::STORAGE : RenderBufferFlag::NONE));
+                if (!commandList || !fence || !uploadRing) return false;
                 uploadMapped = static_cast<uint8_t*>(uploadRing->map());
                 vertexArena = device->createBuffer(RenderBufferDesc::UploadBuffer(kVertexArenaSize, RenderBufferFlag::STORAGE));
+                if (!vertexArena || !uploadMapped) return false;
                 arenaMapped = static_cast<uint8_t*>(vertexArena->map());
                 readback = device->createBuffer(RenderBufferDesc::ReadbackBuffer(kReadbackSize));
+                if (!readback || !arenaMapped) return false;
                 resolveReadback = getenv("LO_RESOLVE_READBACK") != nullptr;
                 textureRevalidate = getenv("LO_TEXTURE_STATIC") == nullptr;
                 auto enabled=[](const char* key){const char* value=getenv(key);return value&&strcmp(value,"1")==0;};
@@ -773,11 +780,11 @@ namespace gpu::renderer
                 sceneAAEnabled = (!sceneOverride||strcmp(sceneOverride,"0")!=0)&&!resolveReadback;
                 if(sceneAAEnabled) {
                     sceneProcessor=std::make_unique<gpu::Presentation>();
-                    if(!sceneProcessor->Init(device)) {sceneProcessor.reset();sceneAAEnabled=false;}
+                    if(!sceneProcessor->Init(device)) return false;
                 }
                 if(temporalExperiment) {
                     temporalHistory=std::make_unique<temporal::HistoryOwner>();
-                    if(!temporalHistory->Init(device)) {temporalHistory.reset();temporalExperiment=false;LOG_ERROR("renderer: temporal experiment pipeline initialization failed");}
+                    if(!temporalHistory->Init(device)) {temporalHistory.reset();temporalExperiment=false;LOG_ERROR("renderer: temporal experiment pipeline initialization failed");return false;}
                     else LOG_INFO("renderer: temporal pre-UI experiment enabled, camera_history={} jitter={} stable_grid={} (known scene VS only; no object motion vectors)",temporalAllowHistory,temporalJitter,temporalStableGrid);
                 }
                 dummyBuffer = device->createBuffer(RenderBufferDesc::DefaultBuffer(256));
@@ -814,9 +821,11 @@ namespace gpu::renderer
                 pipelineLayout = layout.create(device);
 
                 staticSet0 = setBuilders[0].create(device);
+                if (!dummyBuffer || !pipelineLayout || !staticSet0 || (vulkan && !staticSamplerSet)) return false;
                 for (uint32_t i = 0; i < (vulkan?1:kVertexFetchSlots); i++)
                     staticSet0->setBuffer(vfetchDescriptorBase + i, vertexArena.get(), kVertexArenaSize);
                 RenderSampler* defaultSampler = GetSampler(0x2 | (0x2 << 2) | (0x1 << 4)); // linear, wrap
+                if (!defaultSampler) return false;
                 for (uint32_t i = 0; i < kSamplerPalette; i++)
                     (vulkan?staticSamplerSet.get():staticSet0.get())->setSampler(samplerDescriptorBase + i, defaultSampler);
 
@@ -840,7 +849,10 @@ namespace gpu::renderer
                 CompileRectListGs();
                 CompileBlitShaders();
                 CompileTransferShader();
+                if (!dummyTexture2D.texture || !dummyTexture3D.texture || !dummyTextureCube.texture ||
+                    !rectListGs || !blitVs || !blitPs || !transferPs) return false;
                 PrepareKnownShaders();
+                if (initializationModuleFailure) return false;
                 PrepareKnownPipelines();
                 const auto dxcStats = xenos::GetDxcStatistics();
                 LOG_INFO("renderer: startup DXC actual calls {}, succeeded {}, deterministic rejections {}, infrastructure failures {}",
@@ -1392,7 +1404,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     (vulkan ? "startup_vk12_v1.bundle" : "startup_dxil_v1.bundle");
                 const auto xex = std::span<const uint8_t>(static_cast<const uint8_t*>(g_memory.Translate(0x82000000)), 0x185C60);
                 auto snapshot = [&](bool compiled = true, bool sources = true) {
-                    return startup::Snapshot(FileSystem::GetGameRoot(), shaderCacheDir, vulkan, compilerIdentity, xex, compiled, sources);
+                    return startup::Snapshot(FileSystem::GetGameRoot(), shaderCacheDir, cacheIdentity, xex, compiled, sources);
                 };
                 const bool bundleEnabled = !compilerIdentity.empty() && !getenv("LO_SHADER_FULL_SCAN") &&
                     !getenv("LO_SHADER_HLSL_DIR") && !retryFailures;
@@ -1407,7 +1419,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         LOG_INFO("renderer: shader startup metadata snapshot: {:.0f} ms",
                             std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now()-probeStarted).count());
                         video::SetShaderPreparationProgress(0, 1, video::PreparationStage::CachedShaders);
-                        auto loaded = startup::LoadTransactional(bundlePath, identity, vulkan, [&](startup::Record&& record) {
+                        auto loaded = startup::LoadTransactional(bundlePath, identity, cacheIdentity, [&](startup::Record&& record) {
                             auto& entry = shaders[record.info.isPixelShader ? 1 : 0][record.hash];
                             entry.info = std::move(record.info);
                             if (!record.failure.empty()) {
@@ -1577,13 +1589,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 
                         const auto cacheStarted = std::chrono::steady_clock::now();
                         item.cachePath = (std::filesystem::path(shaderCacheDir) /
-                            xenos::cache::FileName(item.pixel, item.hash, vulkan)).string();
+                            xenos::cache::FileName(item.pixel, item.hash, cacheIdentity)).string();
                         item.cacheChecked = true;
-                        std::ifstream cached(item.cachePath, std::ios::binary);
-                        item.cachePresent = cached.is_open();
-                        item.bytecode.assign(std::istreambuf_iterator<char>(cached), {});
-                        item.cacheValid = xenos::cache::CompleteBinary(item.bytecode, vulkan);
-                        if (!item.cacheValid) item.bytecode.clear();
+                        item.bytecode = xenos::cache::ReadBinary(item.cachePath, item.pixel, item.hash, cacheIdentity, &item.cachePresent);
+                        item.cacheValid = !item.bytecode.empty();
                         item.cacheUs = std::chrono::duration_cast<std::chrono::microseconds>(
                             std::chrono::steady_clock::now() - cacheStarted).count();
 
@@ -1599,7 +1608,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 
                         if (!item.cacheValid) {
                             const auto failurePath = item.cachePath + ".failed";
-                            const auto failureKey = startup::FailureKey(item.info.hlsl, compilerIdentity, item.pixel, vulkan);
+                            const auto failureKey = startup::FailureKey(item.info.hlsl, cacheIdentity, item.pixel);
                             if (!compilerIdentity.empty() && !retryFailures) {
                                 item.error = startup::ReadFailure(failurePath, failureKey);
                                 if (!item.error.empty()) {
@@ -1625,10 +1634,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             } else {
                                 item.bytecode = std::move(compiled.bytecode);
                                 item.compiled = true;
-                                const auto write = xenos::preparation::WriteCompiledCache(
-                                    item.cachePath, item.bytecode, compiled.ok);
-                                if (write.status == xenos::preparation::CacheWriteStatus::Failed)
-                                    item.cacheWriteError = write.error;
+                                xenos::cache::WriteBinary(item.cachePath, item.pixel, item.hash, cacheIdentity,
+                                    item.bytecode, &item.cacheWriteError);
                             }
                         }
                     } catch (const std::exception& e) { item.error = e.what(); }
@@ -1682,7 +1689,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             LOG_WARNING("renderer: {} shader {:016x} notes: {}",
                                 item.pixel ? "pixel" : "vertex", item.hash, entry.info.errors);
                         if (entry.valid) ++modulesReady;
-                        else { ++modulesFailed; ++failed; bundleWriter.reset(); }
+                        else { ++modulesFailed; ++failed; initializationModuleFailure = true; bundleWriter.reset(); }
                     }
                     ++done;
                     video::SetShaderPreparationProgress(done, uint32_t(paths.size()));
@@ -1760,19 +1767,15 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 {
                     // The cache name carries a translator version so changes to the
                     // generated HLSL don't resurrect stale DXIL.
-                    cachePath = (std::filesystem::path(shaderCacheDir) / xenos::cache::FileName(pixel, hash, vulkan)).string();
-                    std::ifstream in(cachePath, std::ios::binary);
-                    if (in)
-                        dxil.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
-                    if (!dxil.empty() && !xenos::cache::CompleteBinary(dxil, vulkan)) {
-                        LOG_WARNING("renderer: ignoring incomplete shader cache {}", cachePath);
-                        dxil.clear();
-                    }
+                    cachePath = (std::filesystem::path(shaderCacheDir) / xenos::cache::FileName(pixel, hash, cacheIdentity)).string();
+                    bool present = false;
+                    dxil = xenos::cache::ReadBinary(cachePath, pixel, hash, cacheIdentity, &present);
+                    if (present && dxil.empty()) LOG_WARNING("renderer: ignoring invalid/foreign shader cache {}", cachePath);
                 }
                 if (dxil.empty())
                 {
                     const auto& compilerIdentity = xenos::DxcIdentity();
-                    const auto failureKey = xenos::startup_cache::FailureKey(entry.info.hlsl, compilerIdentity, pixel, vulkan);
+                    const auto failureKey = xenos::startup_cache::FailureKey(entry.info.hlsl, cacheIdentity, pixel);
                     const auto failurePath = cachePath + ".failed";
                     if (!cachePath.empty() && !compilerIdentity.empty() && !getenv("LO_SHADER_RETRY_FAILURES")) {
                         const auto failure = xenos::startup_cache::ReadFailure(failurePath, failureKey);
@@ -1793,8 +1796,11 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         return nullptr;
                     }
                     dxil = std::move(compiled.bytecode);
-                    if (!cachePath.empty())
-                        std::ofstream(cachePath, std::ios::binary).write(reinterpret_cast<const char*>(dxil.data()), dxil.size());
+                    if (!cachePath.empty()) {
+                        std::string error;
+                        if (!xenos::cache::WriteBinary(cachePath, pixel, hash, cacheIdentity, dxil, &error))
+                            LOG_WARNING("renderer: shader cache write failed: {}", error);
+                    }
                 }
                 entry.shader = device->createShader(dxil.data(), dxil.size(), "main", renderFormat);
                 entry.valid = entry.shader != nullptr;
@@ -4228,13 +4234,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             return true;
         if (getenv("LO_NO_RENDERER"))
             return false;
-        auto* r = new Renderer();
-        if (!r->Init())
-        {
-            delete r;
-            return false;
-        }
-        g_renderer = r;
+        auto r = std::make_unique<Renderer>();
+        if (!r->Init()) return false;
+        g_renderer = r.release();
         return true;
     }
 

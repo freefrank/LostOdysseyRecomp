@@ -34,7 +34,7 @@ namespace gpu
 
     struct CommandProcessor
     {
-        void Init();
+        bool Init();
         void Shutdown();
 
         // Kernel entry points

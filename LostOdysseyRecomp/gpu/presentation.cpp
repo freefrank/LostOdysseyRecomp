@@ -129,6 +129,7 @@ float4 pixel(float4 position : SV_Position) : SV_Target {
     }
     p.vs = device->createShader(vs.bytecode.data(), vs.bytecode.size(), "vertex", renderFormat);
     p.ps = device->createShader(ps.bytecode.data(), ps.bytecode.size(), "pixel", renderFormat);
+    if (!p.vs || !p.ps) return false;
     RenderDescriptorSetBuilder set;
     set.begin();
     set.addTexture(0);
@@ -143,6 +144,7 @@ float4 pixel(float4 position : SV_Position) : SV_Target {
     RenderSamplerDesc sampler;
     sampler.addressU = sampler.addressV = sampler.addressW = RenderTextureAddressMode::CLAMP;
     p.sampler = device->createSampler(sampler);
+    if (!p.layout || !p.sampler) return false;
     RenderGraphicsPipelineDesc desc;
     desc.pipelineLayout = p.layout.get();
     desc.vertexShader = p.vs.get();

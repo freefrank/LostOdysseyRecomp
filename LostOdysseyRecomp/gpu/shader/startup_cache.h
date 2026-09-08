@@ -73,11 +73,22 @@ inline std::vector<FileStamp> List(const fs::path& directory,
 // edits that deliberately preserve both values. Bundle contents are hashed below.
 inline std::string Snapshot(const fs::path& game, const fs::path& cacheDir,
     bool spirv, std::string_view compiler, std::span<const uint8_t> xex,
-    bool includeCompiled = true, bool includeSources = true) {
+    bool includeCompiled = true, bool includeSources = true, const cache::Identity* typed = nullptr) {
     std::ostringstream out;
-    out << "startup-bundle=" << Schema << ";translator=" << cache::Version
+    out << "startup-bundle=" << Schema << ";translator=" << (typed ? typed->translatorVersion : cache::Version)
         << ";backend=" << spirv << ";flags=lo-dxc-vulkan12-dx-layout-v1\n"
         << "compiler=" << compiler << "\nxex=" << Hex(xex) << '\n';
+    if (typed) {
+        if (!cache::ValidIdentity(*typed)) throw std::runtime_error("unsupported shader cache identity");
+        // Frozen v0.4.17 contracts. Do not replace these with DefaultOptions:
+        // a future compiler-argument change must invalidate existing bundles.
+        constexpr std::string_view dxil = "main;vs/ps_6_0;HV2021;no-parentheses-equality;no-unused-value;all-resources-bound;O3;strip-debug;strip-reflect";
+        constexpr std::string_view spv = "main;vs/ps_6_0;HV2021;no-parentheses-equality;no-unused-value;all-resources-bound;O3;strip-debug;spirv;vulkan1.2;dx-layout;vs-invert-y";
+        const bool legacy = typed->translatorVersion == 21 && typed->variant == "guest-microcode" &&
+            ((typed->backend == cache::Backend::D3D12 && typed->format == cache::Format::Dxil && typed->options == dxil) ||
+             (typed->backend == cache::Backend::Vulkan && typed->format == cache::Format::Spirv && typed->options == spv));
+        if (!legacy) out << "typed-identity=" << cache::IdentityKey(*typed) << '\n';
+    }
     auto add = [&](const fs::path& directory, const auto& include) {
         out << fs::absolute(directory).lexically_normal().generic_string() << '\n';
         for (const auto& file : List(directory, include))
@@ -99,10 +110,16 @@ inline std::string Snapshot(const fs::path& game, const fs::path& cacheDir,
     });
     if(includeSources) add(cacheDir / "source", [](const fs::path& p) { return p.extension() == ".bin"; });
     if(includeSources) add(cacheDir, [&](const fs::path& p) {
-        return (includeCompiled && (p.extension() == (spirv ? ".spv" : ".dxil") ||
+        return (includeCompiled && (p.extension() == (typed ? cache::Extension(typed->format) : spirv ? ".spv" : ".dxil") ||
             p.extension() == ".failed")) || p.filename() == "resources.manifest";
     });
     return Hex(Bytes(out.str()));
+}
+inline std::string Snapshot(const fs::path& game, const fs::path& cacheDir,
+    const cache::Identity& identity, std::span<const uint8_t> xex,
+    bool includeCompiled = true, bool includeSources = true) {
+    return Snapshot(game, cacheDir, identity.format == cache::Format::Spirv,
+        identity.compiler, xex, includeCompiled, includeSources, &identity);
 }
 
 struct Record {
@@ -158,7 +175,7 @@ inline std::vector<uint8_t> Encode(const Record& r, std::string_view common) {
     e.Text(i.errors); e.Text(r.failure); e.Blob(r.binary);
     return std::move(e.bytes);
 }
-inline Record Decode(std::span<const uint8_t> bytes, std::string_view common, bool spirv) {
+inline Record Decode(std::span<const uint8_t> bytes, std::string_view common, cache::Format format) {
     Decoder d{bytes}; Record r; auto& i=r.info;
     auto boolean=[&] { const auto n=d.U32(); if(n>1) throw std::runtime_error("invalid startup cache flag"); return n!=0; };
     r.hash=d.U64(); i.isPixelShader=boolean(); i.vertexFetchSlotsUsed=d.U32();
@@ -169,9 +186,12 @@ inline Record Decode(std::span<const uint8_t> bytes, std::string_view common, bo
     const bool sharedPrelude=boolean(); i.hlsl=d.Text();
     if(sharedPrelude) { i.hlsl+=Prelude(common,i.isPixelShader);i.hlsl+=d.Text(); }
     i.errors=d.Text(); r.failure=d.Text(); const auto binary=d.Blob();
-    if(!d.bytes.empty() || !r.hash || i.colorTargetsWritten>15 || (r.failure.empty() && !cache::CompleteBinary(binary,spirv)) ||
+    if(!d.bytes.empty() || !r.hash || i.colorTargetsWritten>15 || (r.failure.empty() && !cache::CompleteBinary(binary,format)) ||
         (!r.failure.empty() && !binary.empty())) throw std::runtime_error("invalid startup cache payload");
     r.binary.assign(binary.begin(),binary.end()); return r;
+}
+inline Record Decode(std::span<const uint8_t> bytes, std::string_view common, bool spirv) {
+    return Decode(bytes, common, spirv ? cache::Format::Spirv : cache::Format::Dxil);
 }
 inline void WriteRaw(std::ostream& out, std::span<const uint8_t> b) {
     out.write(reinterpret_cast<const char*>(b.data()),b.size());
@@ -226,7 +246,7 @@ public:
     }
 };
 struct LoadResult { bool ok=false;uint32_t records=0;uint64_t bytesRead=0;std::string reason; };
-inline LoadResult Load(const fs::path& path,std::string_view snapshot,bool spirv,
+inline LoadResult Load(const fs::path& path,std::string_view snapshot,cache::Format format,
     const std::function<void(Record&&)>& consume,const std::function<void()>& pump={}) {
     LoadResult result;
     try {
@@ -251,7 +271,7 @@ inline LoadResult Load(const fs::path& path,std::string_view snapshot,bool spirv
                 if(!in.read(reinterpret_cast<char*>(bytes.data()),bytes.size())) throw std::runtime_error("truncated bundle record");
                 result.bytesRead+=bytes.size();
                 if(resources::Sha256(bytes)!=expected) throw std::runtime_error("bundle record digest mismatch");
-                auto record=Decode(bytes,common,spirv);
+                auto record=Decode(bytes,common,format);
                 if(!keys.emplace(record.info.isPixelShader,record.hash).second) throw std::runtime_error("duplicate bundle record");
                 digests.bytes.insert(digests.bytes.end(),expected.begin(),expected.end());
                 if(pass) consume(std::move(record));
@@ -267,10 +287,24 @@ inline LoadResult Load(const fs::path& path,std::string_view snapshot,bool spirv
     } catch(const std::exception& e) {result.reason=e.what();}
     return result;
 }
+inline LoadResult Load(const fs::path& path,std::string_view snapshot,bool spirv,
+    const std::function<void(Record&&)>& consume,const std::function<void()>& pump={}) {
+    return Load(path,snapshot,spirv ? cache::Format::Spirv : cache::Format::Dxil,consume,pump);
+}
 inline LoadResult LoadTransactional(const fs::path& path,std::string_view snapshot,bool spirv,
     const std::function<void(Record&&)>& consume,const std::function<void()>& rollback,
     const std::function<void()>& validateInputs,const std::function<void()>& pump={}) {
     auto result=Load(path,snapshot,spirv,consume,pump);
+    if(result.ok) try {validateInputs();}
+        catch(const std::exception& e) {result.ok=false;result.reason=e.what();}
+    if(!result.ok) rollback();
+    return result;
+}
+inline LoadResult LoadTransactional(const fs::path& path,std::string_view snapshot,const cache::Identity& identity,
+    const std::function<void(Record&&)>& consume,const std::function<void()>& rollback,
+    const std::function<void()>& validateInputs,const std::function<void()>& pump={}) {
+    if (!cache::ValidIdentity(identity)) { rollback(); return {false,0,0,"unsupported shader cache identity"}; }
+    auto result=Load(path,snapshot,identity.format,consume,pump);
     if(result.ok) try {validateInputs();}
         catch(const std::exception& e) {result.ok=false;result.reason=e.what();}
     if(!result.ok) rollback();
@@ -283,6 +317,10 @@ inline std::string FailureKey(std::string_view hlsl,std::string_view compiler,bo
     const auto key=std::to_string(cache::Version)+":"+std::to_string(pixel)+":"+std::to_string(spirv)+
         ":lo-dxc-vulkan12-dx-layout-v1:"+std::string(compiler)+":"+Hex(Bytes(hlsl));
     return Hex(Bytes(key));
+}
+inline std::string FailureKey(std::string_view hlsl,const cache::Identity& identity,bool pixel) {
+    if (!cache::ValidIdentity(identity)) return {};
+    return Hex(Bytes(cache::IdentityKey(identity)+":"+std::to_string(pixel)+":"+Hex(Bytes(hlsl))));
 }
 inline std::string ReadFailure(const fs::path& path,std::string_view key) {
     try {

@@ -246,14 +246,17 @@ int main(int argc, char* argv[])
     // starting guest threads or opening game saves/profiles. This also provides
     // a bounded cache warmup command for portable installations.
     if (prepareShadersOnly) {
-        const bool prepared = gpu::video::Init() && gpu::renderer::Init();
+        const bool prepared = gpu::video::Init() && !getenv("LO_NO_RENDERER");
         LOG_INFO("shader preparation only: {}, guest not started", prepared ? "complete" : "failed");
         fflush(stdout);
         std::_Exit(prepared ? 0 : 1);
     }
 
+    if (!gpu::g_commandProcessor.Init()) {
+        LOG_ERROR("graphics initialization failed; guest not started (see backend selection errors above)");
+        return 1;
+    }
     XexLoader::StartTimeStampThread();
-    gpu::g_commandProcessor.Init();
     apu::Init();
     apu::xma::Init();
     if (getenv("LO_HEADLESS"))
