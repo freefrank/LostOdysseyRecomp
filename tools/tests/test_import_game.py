@@ -10,12 +10,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'installer'))
 import import_game as imp
 
 
-def xex(disc=1, title=0x4d5307fa):
+ASIA_MEDIA = {1: 0x39F7D748, 2: 0x0EF8CEA8, 3: 0x309E3386, 4: 0x7B21A91D}
+EU_MEDIA = {1: 0x368DE6DD, 2: 0x1888BE4E, 3: 0x6DD59D08, 4: 0x0C0E80B5}
+
+
+def xex(disc=1, title=0x4d5307fa, media=None, version=4, base=None, discs=4):
     data = bytearray(128)
     data[:4] = b'XEX2'
     struct.pack_into('>I', data, 20, 1)
     struct.pack_into('>II', data, 24, 0x40006, 32)
-    struct.pack_into('>IIII4B', data, 32, 1234, 4, 4, title, 2, 0, disc, 4)
+    struct.pack_into('>IIII4B', data, 32, media if media is not None else ASIA_MEDIA[disc],
+                     version, version if base is None else base, title, 2, 0, disc, discs)
     return bytes(data)
 
 
@@ -64,8 +69,7 @@ class ImportTests(unittest.TestCase):
 
     def eu_folder(self, disc=1):
         source = self.folder(disc)
-        data = bytearray(xex(disc))
-        struct.pack_into('>II', data, 36, 3, 3)
+        data = xex(disc, media=EU_MEDIA[disc], version=3)
         (source / 'default.xex').write_bytes(data)
         hashes = patch.dict(imp.EU_SUPPORTED, {disc: hashlib.sha256(data).hexdigest()})
         hashes.start()
@@ -96,13 +100,27 @@ class ImportTests(unittest.TestCase):
         self.assertEqual(imp.install(self.eu_folder(1), self.dest), [1])
         self.assertEqual(imp.install(self.eu_folder(2), self.dest), [2])
 
-    def test_unknown_xex_rejected(self):
+    def test_byte_different_xex_metadata_is_diagnostic_only(self):
         source = self.folder()
         with (source / 'default.xex').open('ab') as f:
             f.write(b'modified')
-        with self.assertRaisesRegex(imp.ImportError, 'not supported'):
+        with self.assertRaisesRegex(imp.ImportError, 'Metadata resembles Europe / Asia.*metadata alone'):
             imp.install(source, self.dest)
         self.assertFalse(self.dest.exists())
+
+    def test_unknown_xex_reports_identity(self):
+        source = self.folder()
+        (source / 'default.xex').write_bytes(xex(media=0x11112222))
+        with self.assertRaisesRegex(imp.ImportError, 'Media ID 11112222.*MD5.*SHA256'):
+            imp.install(source, self.dest)
+        self.assertFalse(self.dest.exists())
+
+    def test_optional_md5_identity(self):
+        source = self.folder()
+        digest = hashlib.md5(xex()).hexdigest()
+        with patch.dict(imp.SUPPORTED, {1: 'not-this-file'}), patch.dict(imp.SUPPORTED_MD5, {1: digest}):
+            inspected = imp.scan(source)
+        self.assertEqual(inspected.discs[0].info['identity'], 'md5')
 
     def test_folder_and_xex_then_add_disc(self):
         self.assertEqual(imp.install(self.folder() / 'default.xex', self.dest), [1])
@@ -136,6 +154,40 @@ class ImportTests(unittest.TestCase):
             image = imp.Image(source, stack)
             self.assertEqual(image.read(len(a) - 16, 32), b'A' * 16 + b'B' * 16)
 
+    def test_deep_nested_layout_and_bad_sibling(self):
+        source = self.root / 'library' / 'vendor' / 'collection' / 'lost-odyssey' / 'set' / 'disc-one'
+        source.mkdir(parents=True)
+        for name, data in files().items():
+            (source / name).write_bytes(data)
+        bad = self.root / 'library' / 'unrelated.iso'
+        bad.write_bytes(b'not an xbox image')
+        inspected = imp.scan(self.root / 'library')
+        self.assertEqual([disc.info['disc'] for disc in inspected.discs], [1])
+        self.assertEqual(len(inspected.rejected), 1)
+        imp.install(self.root / 'library', self.dest)
+        self.check_output()
+
+    def test_unreadable_sibling_does_not_hide_valid_disc(self):
+        valid = self.folder()
+        sibling = self.root / 'unreadable'
+        sibling.mkdir()
+        original = imp.linked
+        def unreadable(path):
+            if path == sibling:
+                raise PermissionError('synthetic access failure')
+            return original(path)
+        with patch.object(imp, 'linked', side_effect=unreadable):
+            self.assertEqual(imp.discover(self.root), [valid])
+
+    def test_duplicate_disc_sources_are_ambiguous(self):
+        self.folder(1)
+        duplicate = self.root / 'backup' / 'disc1'
+        duplicate.mkdir(parents=True)
+        for name, data in files().items():
+            (duplicate / name).write_bytes(data)
+        with self.assertRaisesRegex(imp.ImportError, 'multiple sources for Disc 1.*closer folder'):
+            imp.scan(self.root)
+
     def test_cancel_rolls_back(self):
         source = self.folder()
         written = False
@@ -146,6 +198,11 @@ class ImportTests(unittest.TestCase):
             imp.install(source, self.dest, update, lambda: written)
         self.assertEqual(list(self.dest.iterdir()), [])
         self.assertTrue((source / 'default.xex').exists())
+
+    def test_source_check_can_be_cancelled(self):
+        source = self.folder()
+        with self.assertRaisesRegex(imp.Cancelled, 'check cancelled'):
+            imp.scan(source, cancelled=lambda: True)
 
     def test_existing_disc_preserved(self):
         source = self.folder()
@@ -210,6 +267,18 @@ class ImportTests(unittest.TestCase):
             return result
         with patch.object(imp, 'prepare', side_effect=changed), self.assertRaisesRegex(imp.ImportError, 'changed'):
             imp.install(source, self.dest)
+        self.assertEqual(list(self.dest.iterdir()), [])
+
+    def test_publish_failure_rolls_back_all_discs(self):
+        self.folder(1)
+        self.folder(2)
+        original = Path.rename
+        def fail_second(path, target):
+            if path.name == 'disc2' and path.parent.name.startswith('.import-'):
+                raise OSError('synthetic publish failure')
+            return original(path, target)
+        with patch.object(Path, 'rename', fail_second), self.assertRaisesRegex(OSError, 'synthetic publish'):
+            imp.install(self.root, self.dest)
         self.assertEqual(list(self.dest.iterdir()), [])
 
 

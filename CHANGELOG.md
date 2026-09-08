@@ -8,6 +8,10 @@ One record of completed changes, with unpublished work separated from verified r
 
 Development commits below organize validated work for the v0.5.0 milestone. Each feature batch increments the source patch version; this is not a release record or a claim that each intermediate commit was run.
 
+### Development commit 0.4.5
+
+- Validate and import nested ISO, GOD, extracted folders and XEX sources with disc identity and transaction safeguards.
+
 ### Development commit 0.4.4
 
 - Add the Recomp icon and Windows resource identity.

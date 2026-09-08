@@ -25,6 +25,28 @@ EU_SUPPORTED = {
     4: '9204ba8b91836853ae1e9f0dc49090abd5e63709935599c5551c23b28ecf48d4',
 }
 
+# Hashes authenticate audited encrypted XEX files. Execution metadata explains
+# a near match, but cannot establish compatible guest code by itself. MD5
+# tables are intentionally optional so another independently audited identity
+# can be added without weakening the preferred SHA256 match.
+SUPPORTED_MD5 = {}
+EU_SUPPORTED_MD5 = {}
+EDITIONS = {
+    'asia': {
+        'label': 'Europe / Asia', 'version': 4, 'base': 4,
+        'media': {1: '39F7D748', 2: '0EF8CEA8', 3: '309E3386', 4: '7B21A91D'},
+        'sha256': SUPPORTED, 'md5': SUPPORTED_MD5,
+    },
+    'usa-europe': {
+        'label': 'USA / Europe', 'version': 3, 'base': 3,
+        'media': {1: '368DE6DD', 2: '1888BE4E', 3: '6DD59D08', 4: '0C0E80B5'},
+        'sha256': EU_SUPPORTED, 'md5': EU_SUPPORTED_MD5,
+    },
+}
+MAX_DISCOVERY_DEPTH = 8
+MAX_DISCOVERY_ENTRIES = 10000
+MAX_CANDIDATES = 256
+
 
 class ImportError(ValueError):
     pass
@@ -32,6 +54,28 @@ class ImportError(ValueError):
 
 class Cancelled(ImportError):
     pass
+
+
+@dataclass(frozen=True)
+class Disc:
+    path: Path
+    format: str
+    files: int
+    bytes: int
+    info: dict
+
+
+@dataclass(frozen=True)
+class Scan:
+    discs: tuple
+    rejected: tuple
+
+
+@dataclass(frozen=True)
+class Sources:
+    """Explicit (path, format) candidates from the automatic content picker."""
+    candidates: tuple
+    reviewed: tuple = ()
 
 
 def component(name):
@@ -54,7 +98,7 @@ class Entry:
 
 
 class Image:
-    def __init__(self, path, stack):
+    def __init__(self, path, stack, cancelled=lambda: False):
         self.path = path
         self.files = []
         self.base = 0
@@ -75,6 +119,8 @@ class Image:
             # Only the prefix can contain the game partition descriptor.
             found = False
             for offset in range(0, min(self.limit, 512 * 1024**2), 1024**2):
+                if cancelled():
+                    raise Cancelled('Source check cancelled')
                 self.files[0].seek(offset)
                 chunk = self.files[0].read(1024**2 + SECTOR)
                 pos = chunk.find(MAGIC)
@@ -182,30 +228,60 @@ class Folder:
         return entries
 
 
-def discover(path, depth=0):
-    path = Path(path).absolute()
-    if linked(path):
+def discover(path, depth=MAX_DISCOVERY_DEPTH):
+    """Find plausible disc roots without opening or trusting their contents."""
+    selected = Path(path).absolute()
+    if not selected.exists():
+        raise ImportError(f'Source does not exist: {selected}')
+    if linked(selected):
         raise ImportError('Select a source without symbolic links or junctions')
-    if path.is_file():
-        if path.suffix.lower() == '.xex':
-            return [path.parent]
-        if path.suffix.lower() == '.iso':
-            return [path]
-        if Path(str(path) + '.data').is_dir():
-            return [Path(str(path) + '.data')]
+    if selected.is_file():
+        if selected.suffix.lower() == '.xex':
+            return [selected.parent]
+        if selected.suffix.lower() == '.iso':
+            return [selected]
+        god = Path(str(selected) + '.data')
+        if god.is_dir() and not linked(god):
+            return [god]
         raise ImportError('Select an ISO, default.xex, GOD header, or game folder')
-    children = list(path.iterdir())
-    if any(p.name.lower() == 'default.xex' for p in children):
-        return [path]
-    if path.suffix.lower() == '.data' and any(p.name == 'Data0000' for p in children):
-        return [path]
-    if depth >= 5:
-        return []
-    sources = []
-    for p in children:
-        if p.is_dir() or p.suffix.lower() == '.iso':
-            sources.extend(discover(p, depth + 1))
-    return sources
+    if not selected.is_dir():
+        raise ImportError('The selected source is not a file or folder')
+
+    sources, pending, visited = [], [(selected, 0)], 0
+    while pending:
+        current, level = pending.pop()
+        try:
+            if linked(current):
+                continue
+            children = sorted(current.iterdir(), key=lambda p: p.name.casefold())
+        except (OSError, PermissionError):
+            continue
+        visited += len(children)
+        if visited > MAX_DISCOVERY_ENTRIES:
+            raise ImportError(f'Source contains too many entries to search safely ({MAX_DISCOVERY_ENTRIES} limit)')
+        names = {child.name.casefold() for child in children}
+        if 'default.xex' in names:
+            sources.append(current)
+            continue
+        if current.suffix.lower() == '.data' and 'data0000' in names:
+            sources.append(current)
+            continue
+        if level >= depth:
+            continue
+        for child in reversed(children):
+            try:
+                if linked(child):
+                    continue
+                is_dir = child.is_dir()
+            except OSError:
+                continue
+            if is_dir:
+                pending.append((child, level + 1))
+            elif child.suffix.lower() == '.iso':
+                sources.append(child)
+        if len(sources) > MAX_CANDIDATES:
+            raise ImportError(f'Too many possible game sources ({MAX_CANDIDATES} limit); select a closer folder')
+    return sorted(set(sources), key=lambda p: str(p).casefold())
 
 
 def execution(data):
@@ -220,13 +296,41 @@ def execution(data):
         raise ImportError('Missing XEX execution information')
     media, version, base, title = struct.unpack_from('>IIII', data, offset)
     return dict(title=f'{title:08X}', media=f'{media:08X}', version=version,
-                disc=data[offset + 18], discs=data[offset + 19])
+                base=base, disc=data[offset + 18], discs=data[offset + 19])
 
 
-def prepare(path, stack, validate=True):
+def identify(info, sha256, md5):
+    """Return (edition, evidence) only for an audited executable identity."""
+    def metadata_matches(identity, disc):
+        return (identity['media'].get(disc) == info['media']
+                and info['version'] == identity['version'] and info['base'] == identity['base'])
+
+    for edition, identity in EDITIONS.items():
+        disc = info['disc']
+        if identity['sha256'].get(disc) == sha256:
+            if not metadata_matches(identity, disc):
+                raise ImportError('XEX hash and execution metadata identify different disc builds')
+            return edition, 'sha256'
+        if identity['md5'].get(disc) == md5:
+            if not metadata_matches(identity, disc):
+                raise ImportError('XEX hash and execution metadata identify different disc builds')
+            return edition, 'md5'
+    return 'unknown', 'none'
+
+
+def metadata_edition(info):
+    for edition, identity in EDITIONS.items():
+        if (identity['media'].get(info['disc']) == info['media']
+                and info['version'] == identity['version'] and info['base'] == identity['base']):
+            return edition
+    return None
+
+
+def prepare(path, stack, validate=True, kind=None, cancelled=lambda: False):
     if linked(path):
         raise ImportError('Links are not supported as game sources')
-    source = (Image(path, stack) if path.suffix.lower() in ('.iso', '.data') else Folder(path))
+    image = kind in ('ISO', 'GOD') if kind else path.suffix.lower() in ('.iso', '.data')
+    source = Image(path, stack, cancelled) if image else Folder(path)
     entries = source.entries()
     xex = next((e for e in entries if e.name.casefold() == 'default.xex'), None)
     if xex is None or not 24 <= xex.size <= 32 * 1024**2:
@@ -235,13 +339,21 @@ def prepare(path, stack, validate=True):
             else source.read(xex.offset, xex.size))
     info = execution(data)
     info['sha256'] = hashlib.sha256(data).hexdigest()
-    info['edition'] = ('asia' if SUPPORTED.get(info['disc']) == info['sha256'] else
-                       'usa-europe' if EU_SUPPORTED.get(info['disc']) == info['sha256'] else 'unknown')
+    info['md5'] = hashlib.md5(data).hexdigest()
+    info['edition'], info['identity'] = identify(info, info['sha256'], info['md5'])
+    info['metadata_edition'] = metadata_edition(info)
     if validate:
         if info['title'] != '4D5307FA':
             raise ImportError(f"Wrong game: Title ID {info['title']} (expected 4D5307FA)")
-        if info['edition'] == 'unknown' or info['discs'] != 4:
-            raise ImportError('This XEX version is not supported by this build')
+        if info['disc'] not in range(1, 5) or info['discs'] != 4:
+            raise ImportError(f"Unsupported disc set: disc {info['disc']} of {info['discs']} (expected 1-4 of 4)")
+        if info['edition'] == 'unknown':
+            resembles = (f" Metadata resembles {EDITIONS[info['metadata_edition']]['label']}, "
+                         'but metadata alone cannot prove compatible guest code.'
+                         if info['metadata_edition'] else '')
+            raise ImportError('Unrecognized Lost Odyssey XEX: '
+                              f"Media ID {info['media']}, version {info['version']}, base {info['base']}; "
+                              f"MD5 {info['md5']}; SHA256 {info['sha256']}.{resembles}")
         root_files = {e.name.casefold() for e in entries}
         required = {'lo.fpd', 'lo.fpi'} | {f'xenon_{name}.fpd' for name in
                     ('battle', 'chr', 'event', 'field', 'loc', 'mov', 'obj', 'scr', 'snd', 'sys', 'vfx', 'world')}
@@ -250,28 +362,77 @@ def prepare(path, stack, validate=True):
     return source, entries, info
 
 
+def _load(path, stack, validate=True, cancelled=lambda: False, allow_empty=False):
+    explicit = isinstance(path, Sources)
+    candidates = list(path.candidates) if explicit else [(p, None) for p in discover(path)]
+    if not candidates:
+        raise ImportError(f'No game discs found (searched up to {MAX_DISCOVERY_DEPTH} directory levels)')
+    selected = None if explicit else Path(path).absolute()
+    direct = not explicit and (selected.is_file() or any(selected == p for p, _ in candidates))
+    reviewed = {disc.path: disc.info for disc in path.reviewed} if explicit else {}
+    discs, rejected = [], []
+    for candidate, kind in candidates:
+        if cancelled():
+            raise Cancelled('Source check cancelled')
+        try:
+            source, entries, info = prepare(candidate, stack, validate, kind, cancelled)
+            if reviewed and reviewed.get(candidate) != info:
+                raise ImportError('The selected disc identity changed after review; check the source again')
+            discs.append((source, entries, info))
+        except Cancelled:
+            raise
+        except (ImportError, OSError, UnicodeError) as error:
+            rejected.append((candidate, str(error)))
+    if not discs:
+        if allow_empty:
+            return discs, rejected
+        details = '; '.join(f'{candidate}: {error}' for candidate, error in rejected[:3])
+        suffix = f' Details: {details}' if details else ''
+        raise ImportError('No supported, complete Lost Odyssey discs were found.' + suffix)
+    if (direct or reviewed) and rejected:
+        candidate, error = rejected[0]
+        raise ImportError(f'Cannot use selected source {candidate}: {error}')
+    numbers = {}
+    for source, _, info in discs:
+        numbers.setdefault(info['disc'], []).append(source.path)
+    duplicates = {number: paths for number, paths in numbers.items() if len(paths) > 1}
+    if duplicates:
+        number, paths = sorted(duplicates.items())[0]
+        joined = ', '.join(str(path) for path in paths[:3])
+        raise ImportError(f'Found multiple sources for Disc {number}: {joined}. Select a closer folder.')
+    editions = {info['edition'] for _, _, info in discs}
+    if len(editions) != 1:
+        raise ImportError('Cannot mix Europe/Asia and USA/Europe discs in one installation')
+    return discs, rejected
+
+
+def scan(source_path, validate=True, cancelled=lambda: False):
+    """Inspect a selection without copying and return UI-friendly disc details."""
+    with ExitStack() as stack:
+        discs, rejected = _load(source_path, stack, validate, cancelled,
+                                allow_empty=isinstance(source_path, Sources))
+        summaries = []
+        for source, entries, info in sorted(discs, key=lambda item: item[2]['disc']):
+            kind = 'GOD' if isinstance(source, Image) and source.god else ('ISO' if isinstance(source, Image) else 'Folder')
+            summaries.append(Disc(source.path, kind, len(entries), sum(entry.size for entry in entries), dict(info)))
+        return Scan(tuple(summaries), tuple((Path(path), error) for path, error in rejected))
+
+
 def install(source_path, game_dir, progress=lambda done, total, label: None, cancelled=lambda: False):
     """Add discs without overwriting any existing disc; roll back this operation on error."""
     game_dir = Path(game_dir).resolve()
-    sources = discover(source_path)
-    if not sources:
-        raise ImportError('No game discs found (searched up to five directory levels)')
     with ExitStack() as stack:
-        discs = []
-        for path in sources:
-            if cancelled():
-                raise Cancelled('Import cancelled')
+        if cancelled():
+            raise Cancelled('Import cancelled')
+        progress(0, 0, 'Checking selected source')
+        discs, _ = _load(source_path, stack, cancelled=cancelled)
+        for source, _, _ in discs:
+            path = source.path
             resolved = path.resolve()
             if game_dir == resolved or game_dir.is_relative_to(resolved) or resolved.is_relative_to(game_dir):
                 raise ImportError('Source and destination must be separate folders')
-            progress(0, 0, f'Checking {path.name}')
-            discs.append(prepare(path, stack))
         numbers = [info['disc'] for _, _, info in discs]
-        if len(numbers) != len(set(numbers)):
-            raise ImportError('Multiple copies of the same disc selected')
         editions = {info['edition'] for _, _, info in discs}
-        if len(editions) != 1:
-            raise ImportError('Cannot mix Asia and USA/Europe discs in one installation')
         game_dir.mkdir(parents=True, exist_ok=True)
         lock_path = game_dir / '.import.lock'
         try:
@@ -293,7 +454,7 @@ def install(source_path, game_dir, progress=lambda done, total, label: None, can
             if existing.exists():
                 _, _, installed = prepare(existing, stack)
                 if installed['disc'] != n or installed['edition'] not in editions:
-                    raise ImportError('Cannot mix Asia and USA/Europe discs in one installation')
+                    raise ImportError('Cannot mix Europe/Asia and USA/Europe discs in one installation')
         total = sum(e.size for _, entries, _ in discs for e in entries)
         if shutil.disk_usage(game_dir).free < total + 64 * 1024**2:
             raise ImportError('Not enough free space for the selected discs')
