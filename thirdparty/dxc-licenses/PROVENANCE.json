@@ -1,0 +1,22 @@
+{
+  "release": "v1.8.2407",
+  "source_url": "https://github.com/microsoft/DirectXShaderCompiler/releases/download/v1.8.2407/dxc_2024_07_31.zip",
+  "archive_sha256": "e2627f004f0f9424d8c71ea1314d04f38c5a5096884ae9217f1f18bd320267b5",
+  "binary_repository": "https://github.com/renderbag/dxc-bin",
+  "binary_repository_commit": "737ac9f51c3d06f0cd1ee7e14dc065bafd52310d",
+  "compiler_source_commit": "416fab6b5c4ba956a320d9131102304da995edfc",
+  "versions": {
+    "dxcompiler.dll": "1.8.2407.7 (416fab6b5)",
+    "dxil.dll": "101.8.2407.12 (57a0a4370)"
+  },
+  "files": {
+    "dxcompiler.dll": "1220478c87af97551d2342906c5a08d888ee9fa26f6f99b6072d674801f492d1",
+    "dxil.dll": "e038a9755387fc396a9a5f393d292b9318cf6ac7e520e9283bbc3088c5f8ac93"
+  },
+  "licenses": {
+    "LICENSE-LLVM.txt": "729615317e28dd03907e46f0fc3b5e88f7853cee61d1a1471d2749335516b46f",
+    "LICENSE-MIT.txt": "903df5512f7d02609fed0c780a9b704f5a3eeb6e4d84ebe42a29845c81899a3c",
+    "LICENSE-MS.txt": "734f72f239fe7b07b4c7203f294c1a7ce27095687278bab7e56d630d7c672963"
+  },
+  "scope": "The bundled x64 DLL pair is byte-identical to this official archive and to the tool submodule used by CMake. Package both from the built runtime directory; never substitute one DLL independently."
+}

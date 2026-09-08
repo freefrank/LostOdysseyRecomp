@@ -166,6 +166,7 @@ void Publish(uint8_t *base, uint32_t config)
         std::vector<std::wstring> gameLanguages;
         for (const auto name : GameLanguageNames) gameLanguages.emplace_back(name);
         addChoices(L"Game language", L"遊戲語言", std::move(gameLanguages), GameLanguageIndex(edit.gameLanguage));
+        addChoices(L"Automatic updates", L"自動更新", onOff(), edit.automaticUpdates ? 0 : 1);
         addAction(L"Save settings", L"儲存設定", Tr(L"Save", L"儲存"));
     }
     next.help = status.empty() ? Tr(L"LB / RB: category     D-pad: select / change     A: select     B: back",
@@ -479,12 +480,12 @@ PPC_FUNC(sub_822F19B0)
         row = 0;
         status.clear();
     }
-    const int count = tab == 0 ? 8 : tab == 1 ? 3 : tab == 2 ? 9 : 3;
+    const int count = tab == 0 ? 8 : tab == 1 ? 3 : tab == 2 ? 9 : 4;
     if (input & 1)
         row = (row + count - 1) % count;
     if (input & 2)
         row = (row + 1) % count;
-    const bool action = (tab == 0 && row == 7) || (tab == 2 && row >= 7) || (tab == 3 && row == 2);
+    const bool action = (tab == 0 && row == 7) || (tab == 2 && row >= 7) || (tab == 3 && row == 3);
     const int delta = (input & 4) ? -1 : ((input & 8) || ((input & 0x1000) && !action)) ? 1 : 0;
     auto cycle = [&](uint32_t value, uint32_t count) {
         return uint32_t((int(value) + int(count) + delta) % int(count));
@@ -558,6 +559,8 @@ PPC_FUNC(sub_822F19B0)
                 edit.uiLanguage = cycle(edit.uiLanguage, 5);
             if (row == 1)
                 edit.gameLanguage = GameLanguageIds[cycle(GameLanguageIndex(edit.gameLanguage), uint32_t(GameLanguageIds.size()))];
+            if (row == 2)
+                edit.automaticUpdates = !edit.automaticUpdates;
         }
     }
     if (changed)
@@ -583,11 +586,12 @@ PPC_FUNC(sub_822F19B0)
         displayPreview = true;
         previewDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
     }
-    if ((input & 0x1000) && tab == 3 && row == 2)
+    if ((input & 0x1000) && tab == 3 && row == 3)
     {
         Config languages = GetConfig();
         languages.uiLanguage = edit.uiLanguage;
         languages.gameLanguage = edit.gameLanguage;
+        languages.automaticUpdates = edit.automaticUpdates;
         const Config before = GetConfig();
         if (restart::Required(before, languages))
         {

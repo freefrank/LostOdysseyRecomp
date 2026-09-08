@@ -78,6 +78,11 @@ Config Read()
             value.frameRate = number;
         else if (key == "fxaa")
             value.fxaa = number == 1;
+        else if (key == "automatic_updates")
+        {
+            // Unknown values keep the safe package default (enabled).
+            if (number <= 1) value.automaticUpdates = number == 1;
+        }
     }
     if (!hasAntialiasing) value.antialiasing = value.fxaa ? 1u : 0u;
     return Validate(value);
@@ -148,7 +153,7 @@ static bool WriteConfig(const Config &value)
            << "\nantialiasing=" << value.antialiasing << "\nframe_rate=" << value.frameRate
            << "\nscaling_quality=" << value.scalingQuality
            << "\ninternal_resolution=" << value.internalResolution
-           << "\nfxaa=" << value.fxaa << '\n';
+           << "\nfxaa=" << value.fxaa << "\nautomatic_updates=" << value.automaticUpdates << '\n';
     output.flush();
     if (!output)
         return false;

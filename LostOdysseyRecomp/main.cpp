@@ -21,6 +21,7 @@
 #include "settings/config.h"
 #include "settings/game_path.h"
 #include "settings/restart.h"
+#include "updater/update.h"
 #include "version.h"
 
 #ifdef _WIN32
@@ -167,6 +168,29 @@ int main(int argc, char* argv[])
     }
 #endif
     settings::ConfigureGameLanguages(gameRoot / "default.xex");
+#ifdef _WIN32
+    // Preserve edition-aware lazy settings validation before consulting the
+    // persisted updater opt-out. A ready helper takes over before first-run,
+    // profile, cache, or guest initialization; every other result fails open.
+    const auto startupConfig = settings::GetConfig();
+    updater::StartupOptions updateOptions;
+    updateOptions.currentVersion = lo_version::Source;
+    updateOptions.installRoot = executableDirectory;
+    updateOptions.executable = updater::CurrentExecutablePath();
+    updateOptions.launchArguments = updater::CurrentLaunchArguments();
+    updateOptions.automaticUpdates = startupConfig.automaticUpdates;
+    updateOptions.uiLanguage = startupConfig.uiLanguage;
+    const auto updateResult = updater::PrepareAtStartup(updateOptions);
+    LOG_INFO("update check: {} ({})", updater::StatusName(updateResult.status), updateResult.detail);
+    if (updateResult.status == updater::StartupStatus::Ready && updateResult.update)
+    {
+        const auto &prepared = *updateResult.update;
+        if (settings::restart::LaunchWaitingProcess(prepared.runnerPath.wstring(),
+                                                    updater::ApplyHelperArguments(prepared.planPath)))
+            return 0;
+        LOG_WARNING("update helper did not complete its readiness handshake; continuing current version");
+    }
+#endif
     if(requestedSetup || (!getenv("LO_BACKGROUND") && !getenv("LO_HEADLESS") && !std::filesystem::exists("settings.ini"))) {
         if(!settings::FirstRunSetup(&gameRoot)) return 0;
         if(setupOnly) return 0;

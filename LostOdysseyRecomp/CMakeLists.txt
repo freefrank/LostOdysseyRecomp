@@ -20,6 +20,12 @@ add_custom_command(
     VERBATIM)
 
 add_executable(LostOdysseyRecomp ${LO_RUNTIME_SOURCES} ${LO_IMPORT_STUBS})
+# Publish source identity only after the corresponding runtime links successfully.
+file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/source-version.build.txt" CONTENT "${LO_SOURCE_VERSION}\n")
+add_custom_command(TARGET LostOdysseyRecomp POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_BINARY_DIR}/source-version.build.txt"
+        "$<TARGET_FILE_DIR:LostOdysseyRecomp>/source-version.txt" VERBATIM)
 if(WIN32)
     enable_language(RC)
     target_sources(LostOdysseyRecomp PRIVATE ${CMAKE_SOURCE_DIR}/assets/lost-odyssey-recomp.rc)
@@ -63,7 +69,82 @@ if(LO_BUILD_GPU)
 endif()
 
 if(WIN32)
-    target_link_libraries(LostOdysseyRecomp PRIVATE winmm onecore ole32 shell32)
+    target_link_libraries(LostOdysseyRecomp PRIVATE winmm onecore bcrypt winhttp ole32 shell32)
+
+    set(LO_UPDATER_TRANSACTION_SOURCES
+        ${LO_RUNTIME_ROOT}/updater/update.cpp
+        ${LO_RUNTIME_ROOT}/updater/sha256.cpp
+        ${LO_RUNTIME_ROOT}/updater/stage.cpp
+        ${LO_RUNTIME_ROOT}/updater/apply.cpp)
+    add_executable(LostOdysseyUpdater WIN32
+        ${CMAKE_SOURCE_DIR}/tools/updater/helper_main.cpp
+        ${CMAKE_SOURCE_DIR}/assets/lost-odyssey-recomp.rc
+        ${LO_UPDATER_TRANSACTION_SOURCES})
+    target_include_directories(LostOdysseyUpdater PRIVATE ${LO_RUNTIME_ROOT} ${CMAKE_SOURCE_DIR}/assets)
+    target_compile_features(LostOdysseyUpdater PRIVATE cxx_std_20)
+    target_compile_definitions(LostOdysseyUpdater PRIVATE NOMINMAX)
+    target_link_libraries(LostOdysseyUpdater PRIVATE bcrypt user32 shell32)
+    # Both targets use this directory's runtime output path. Packaging takes
+    # the helper beside the game, and a runtime build must produce both.
+    add_dependencies(LostOdysseyRecomp LostOdysseyUpdater)
+
+    add_executable(LoUpdaterProbe WIN32 EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/updater_probe.cpp)
+    target_compile_features(LoUpdaterProbe PRIVATE cxx_std_20)
+    target_link_libraries(LoUpdaterProbe PRIVATE shell32)
+
+    add_executable(LoUpdaterTest EXCLUDE_FROM_ALL
+        ${CMAKE_SOURCE_DIR}/tools/tests/updater_test.cpp
+        ${LO_UPDATER_TRANSACTION_SOURCES}
+        ${LO_RUNTIME_ROOT}/updater/windows_http.cpp
+        ${LO_RUNTIME_ROOT}/updater/progress.cpp)
+    target_include_directories(LoUpdaterTest PRIVATE ${LO_RUNTIME_ROOT})
+    target_compile_features(LoUpdaterTest PRIVATE cxx_std_20)
+    target_compile_definitions(LoUpdaterTest PRIVATE NOMINMAX)
+    target_link_libraries(LoUpdaterTest PRIVATE bcrypt winhttp user32 gdi32 shell32)
+    add_dependencies(LoUpdaterTest LostOdysseyUpdater LoUpdaterProbe)
+
+    add_executable(LoUpdaterProgressTest EXCLUDE_FROM_ALL
+        ${CMAKE_SOURCE_DIR}/tools/tests/updater_progress_test.cpp
+        ${LO_RUNTIME_ROOT}/updater/progress.cpp)
+    target_include_directories(LoUpdaterProgressTest PRIVATE ${LO_RUNTIME_ROOT})
+    target_compile_features(LoUpdaterProgressTest PRIVATE cxx_std_20)
+    target_compile_definitions(LoUpdaterProgressTest PRIVATE NOMINMAX)
+    target_link_libraries(LoUpdaterProgressTest PRIVATE user32 gdi32)
+
+    add_executable(LoUpdaterHelperContextTest EXCLUDE_FROM_ALL
+        ${CMAKE_SOURCE_DIR}/tools/tests/updater_helper_context_test.cpp
+        ${LO_RUNTIME_ROOT}/updater/update.cpp
+        ${LO_RUNTIME_ROOT}/updater/sha256.cpp)
+    target_include_directories(LoUpdaterHelperContextTest PRIVATE ${LO_RUNTIME_ROOT})
+    target_compile_features(LoUpdaterHelperContextTest PRIVATE cxx_std_20)
+    target_compile_definitions(LoUpdaterHelperContextTest PRIVATE NOMINMAX)
+    target_link_libraries(LoUpdaterHelperContextTest PRIVATE bcrypt user32 shell32)
+    add_dependencies(LoUpdaterHelperContextTest LostOdysseyUpdater LoUpdaterProbe)
+endif()
+
+# Host-only restart argument and parent/child lifetime checks.
+if(WIN32)
+    add_executable(LoFolderPickerTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/folder_picker_test.cpp)
+    target_include_directories(LoFolderPickerTest PRIVATE ${LO_RUNTIME_ROOT})
+    target_compile_features(LoFolderPickerTest PRIVATE cxx_std_20)
+    target_compile_definitions(LoFolderPickerTest PRIVATE NOMINMAX)
+    target_compile_options(LoFolderPickerTest PRIVATE /utf-8 /UNDEBUG)
+    target_link_libraries(LoFolderPickerTest PRIVATE user32 ole32 shell32)
+
+    add_executable(LoDebugMenuInteractionTest EXCLUDE_FROM_ALL
+        ${CMAKE_SOURCE_DIR}/tools/tests/debug_menu_interaction_test.cpp)
+    target_include_directories(LoDebugMenuInteractionTest PRIVATE
+        ${CMAKE_SOURCE_DIR}/tools/tests/debug_menu_fixture ${LO_RUNTIME_ROOT})
+    target_compile_features(LoDebugMenuInteractionTest PRIVATE cxx_std_20)
+    target_compile_options(LoDebugMenuInteractionTest PRIVATE /utf-8 /UNDEBUG)
+    target_link_libraries(LoDebugMenuInteractionTest PRIVATE user32 gdi32 dwmapi)
+
+    add_executable(LoRestartTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/restart_test.cpp)
+    target_include_directories(LoRestartTest PRIVATE ${LO_RUNTIME_ROOT})
+    target_compile_features(LoRestartTest PRIVATE cxx_std_20)
+    target_compile_definitions(LoRestartTest PRIVATE NOMINMAX)
+    target_link_libraries(LoRestartTest PRIVATE user32 shell32)
+    set_target_properties(LoRestartTest PROPERTIES DISABLE_PRECOMPILE_HEADERS ON)
 endif()
 
 # Current-process log snapshots without guest generation or GPU access.
@@ -178,6 +259,10 @@ target_compile_features(LoShaderResourceVariantsTest PRIVATE cxx_std_20)
 add_executable(LoTextureLayoutTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/texture_layout_test.cpp)
 target_include_directories(LoTextureLayoutTest PRIVATE ${LO_RUNTIME_ROOT})
 target_compile_features(LoTextureLayoutTest PRIVATE cxx_std_20)
+
+add_executable(LoGamePathTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/game_path_test.cpp)
+target_include_directories(LoGamePathTest PRIVATE ${LO_RUNTIME_ROOT})
+target_compile_features(LoGamePathTest PRIVATE cxx_std_20)
 
 # Tests the exact address mappings used by the runtime, without game assets.
 add_executable(LoCriticalSectionTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/critical_section_test.cpp)
@@ -299,6 +384,7 @@ target_compile_features(LoTemporalHistoryDiagnosticTest PRIVATE cxx_std_20)
 add_executable(LoFramePacerTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/frame_pacer_test.cpp)
 target_include_directories(LoFramePacerTest PRIVATE ${LO_RUNTIME_ROOT})
 target_compile_features(LoFramePacerTest PRIVATE cxx_std_20)
+
 if(WIN32)
     add_executable(LoMenuRenderTest EXCLUDE_FROM_ALL
         ${CMAKE_SOURCE_DIR}/tools/tests/menu_render_test.cpp
@@ -308,38 +394,4 @@ if(WIN32)
     target_compile_options(LoMenuRenderTest PRIVATE /utf-8)
     target_compile_definitions(LoMenuRenderTest PRIVATE NOMINMAX)
     target_link_libraries(LoMenuRenderTest PRIVATE user32 gdi32)
-endif()
-
-add_executable(LoGamePathTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/game_path_test.cpp)
-target_include_directories(LoGamePathTest PRIVATE ${LO_RUNTIME_ROOT})
-target_compile_features(LoGamePathTest PRIVATE cxx_std_20)
-
-if(WIN32)
-add_executable(LoFolderPickerTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/folder_picker_test.cpp)
-target_include_directories(LoFolderPickerTest PRIVATE ${LO_RUNTIME_ROOT})
-target_compile_features(LoFolderPickerTest PRIVATE cxx_std_20)
-target_compile_definitions(LoFolderPickerTest PRIVATE NOMINMAX)
-target_compile_options(LoFolderPickerTest PRIVATE /UNDEBUG /utf-8)
-target_link_libraries(LoFolderPickerTest PRIVATE user32 ole32 shell32)
-endif()
-
-if(WIN32)
-add_executable(LoDebugMenuInteractionTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/debug_menu_interaction_test.cpp)
-target_include_directories(LoDebugMenuInteractionTest PRIVATE ${LO_RUNTIME_ROOT})
-target_compile_features(LoDebugMenuInteractionTest PRIVATE cxx_std_20)
-target_compile_definitions(LoDebugMenuInteractionTest PRIVATE NOMINMAX)
-target_compile_options(LoDebugMenuInteractionTest PRIVATE /UNDEBUG /utf-8)
-target_link_libraries(LoDebugMenuInteractionTest PRIVATE user32 gdi32 dwmapi)
-endif()
-if(WIN32)
-target_include_directories(LoDebugMenuInteractionTest BEFORE PRIVATE ${CMAKE_SOURCE_DIR}/tools/tests/debug_menu_fixture)
-endif()
-
-if(WIN32)
-add_executable(LoRestartTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/restart_test.cpp)
-target_include_directories(LoRestartTest PRIVATE ${LO_RUNTIME_ROOT})
-target_compile_features(LoRestartTest PRIVATE cxx_std_20)
-target_compile_definitions(LoRestartTest PRIVATE NOMINMAX)
-target_compile_options(LoRestartTest PRIVATE /UNDEBUG /utf-8)
-target_link_libraries(LoRestartTest PRIVATE user32 shell32)
 endif()
