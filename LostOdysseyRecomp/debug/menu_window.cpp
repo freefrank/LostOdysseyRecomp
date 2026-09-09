@@ -6,6 +6,7 @@
 #include "translations.h"
 #include <settings/config.h>
 #include <settings/desktop_ui.h>
+#include <settings/window_chrome.h>
 #include <os/logger.h>
 #include <gpu/renderer.h>
 #include <cmath>
@@ -17,11 +18,20 @@
 namespace
 {
     HWND menu = nullptr;
+    HWND viewport = nullptr;
+    settings::window_chrome::State chrome;
+    namespace ui = settings::window_chrome;
+    struct ScopedDpi
+    {
+        DPI_AWARENESS_CONTEXT previous = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+        ~ScopedDpi() { SetThreadDpiAwarenessContext(previous); }
+    };
     HFONT uiFont = nullptr, sectionFont = nullptr;
     HWND languageList = nullptr, languageStatus = nullptr;
     bool chinese = false;
     struct LocalizedControl { HWND window; std::wstring key; };
     std::vector<LocalizedControl> localizedControls;
+    std::unordered_map<HWND, std::wstring> displayedLabels;
     const wchar_t* Tr(const wchar_t* key) { return debug_menu::translations::Text(key, chinese); }
 
     HWND statusLabel = nullptr;
@@ -36,64 +46,105 @@ namespace
     std::vector<debug_menu::MapPoi> displayedPois;
     HWND saveToggle = nullptr;
     HWND captureButton = nullptr, captureStatus = nullptr;
-    struct LayoutControl { HWND window; int x, y, width, height; };
+    HWND pages[2]{};
+    int activePage = 0;
+    struct LayoutControl { HWND window; int x, y, width, height, page; bool section; };
     std::vector<LayoutControl> layoutControls;
-    constexpr int contentWidth = 540, contentHeight = 900;
+    constexpr int contentWidth = 552;
+    constexpr int pageHeights[] = {492, 486};
     int scrollX = 0, scrollY = 0, wheelRemainder = 0;
+    LONG layoutWidth = -1, layoutHeight = -1;
+    UINT layoutDpi = 0;
 
     void Layout(HWND window)
     {
+        if (!viewport) return;
         RECT client{};
-        GetClientRect(window, &client);
+        GetClientRect(menu, &client);
+        const int edge = ui::Px(menu, 20), top = ui::Px(menu, 144);
+        if (layoutWidth != client.right || layoutHeight != client.bottom || layoutDpi != GetDpiForWindow(menu))
+        {
+            layoutWidth = client.right; layoutHeight = client.bottom; layoutDpi = GetDpiForWindow(menu);
+            ui::Layout(menu, chrome);
+            MoveWindow(languageList, client.right - ui::Px(menu, 180), ui::Px(menu, 68), ui::Px(menu, 160), ui::Px(menu, 150), TRUE);
+            MoveWindow(languageStatus, edge, ui::Px(menu, 110), client.right - 2*edge, ui::Px(menu, 24), TRUE);
+            for (int i = 0; i < 2; ++i)
+                MoveWindow(pages[i], edge + ui::Px(menu, i*140), ui::Px(menu, 68), ui::Px(menu, 132), ui::Px(menu, 34), TRUE);
+            MoveWindow(viewport, edge, top, std::max(1L, client.right-2*edge), std::max(1L, client.bottom-top-edge), TRUE);
+        }
+        GetClientRect(viewport, &client);
+        const int width = ui::Px(menu, contentWidth), height = ui::Px(menu, pageHeights[activePage]);
         // SetScrollInfo does not consistently reset a retained position when
         // the resized client becomes larger than the virtual surface.
-        scrollX = std::clamp(scrollX, 0, std::max(0, contentWidth - int(client.right)));
-        scrollY = std::clamp(scrollY, 0, std::max(0, contentHeight - int(client.bottom)));
+        scrollX = std::clamp(scrollX, 0, std::max(0, width - int(client.right)));
+        scrollY = std::clamp(scrollY, 0, std::max(0, height - int(client.bottom)));
         // Keep both bars present so adding one cannot change the other axis's range.
         SCROLLINFO horizontal{sizeof(SCROLLINFO), SIF_RANGE | SIF_PAGE | SIF_POS | SIF_DISABLENOSCROLL,
-            0, contentWidth - 1, UINT(client.right), scrollX};
+            0, width - 1, UINT(client.right), scrollX};
         SCROLLINFO vertical{sizeof(SCROLLINFO), SIF_RANGE | SIF_PAGE | SIF_POS | SIF_DISABLENOSCROLL,
-            0, contentHeight - 1, UINT(client.bottom), scrollY};
-        SetScrollInfo(window, SB_HORZ, &horizontal, TRUE);
-        SetScrollInfo(window, SB_VERT, &vertical, TRUE);
-        scrollX = GetScrollPos(window, SB_HORZ);
-        scrollY = GetScrollPos(window, SB_VERT);
+            0, height - 1, UINT(client.bottom), scrollY};
+        SetScrollInfo(viewport, SB_HORZ, &horizontal, TRUE);
+        SetScrollInfo(viewport, SB_VERT, &vertical, TRUE);
+        scrollX = GetScrollPos(viewport, SB_HORZ);
+        scrollY = GetScrollPos(viewport, SB_VERT);
         for (const auto& control : layoutControls)
-            MoveWindow(control.window, control.x - scrollX, control.y - scrollY,
-                control.width, control.height, FALSE);
-        RedrawWindow(window, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
+        {
+            ShowWindow(control.window, control.page == activePage ? SW_SHOWNOACTIVATE : SW_HIDE);
+            MoveWindow(control.window, ui::Px(menu, control.x) - scrollX, ui::Px(menu, control.y) - scrollY,
+                ui::Px(menu, control.width), ui::Px(menu, control.height), FALSE);
+        }
+        RedrawWindow(viewport, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
     }
 
     void RevealFocus()
     {
         const HWND focus = GetFocus();
         RECT client{};
-        GetClientRect(menu, &client);
+        GetClientRect(viewport, &client);
         for (const auto& control : layoutControls)
         {
-            if (control.window != focus) continue;
+            if (control.window != focus || control.page != activePage) continue;
             // A combo's creation height includes its popup, not its closed field.
             RECT visible{};
             GetWindowRect(focus, &visible);
             const int height = visible.bottom - visible.top;
-            if (control.x < scrollX) scrollX = control.x;
-            else if (control.x + control.width > scrollX + client.right)
-                scrollX = control.x + control.width - client.right;
-            if (control.y < scrollY) scrollY = control.y;
-            else if (control.y + height > scrollY + client.bottom)
-                scrollY = control.y + height - client.bottom;
+            const int x = ui::Px(menu, control.x), y = ui::Px(menu, control.y), width = ui::Px(menu, control.width);
+            if (x < scrollX) scrollX = x;
+            else if (x + width > scrollX + client.right) scrollX = x + width - client.right;
+            if (y < scrollY) scrollY = y;
+            else if (y + height > scrollY + client.bottom) scrollY = y + height - client.bottom;
             Layout(menu);
             break;
         }
+    }
+
+    void SelectPage(int page)
+    {
+        activePage = std::clamp(page, 0, 1);
+        scrollX = scrollY = wheelRemainder = 0;
+        Layout(menu);
+        for (HWND button : pages) InvalidateRect(button, nullptr, FALSE);
+    }
+
+    void RefreshFonts()
+    {
+        HFONT previousUi = uiFont, previousSection = sectionFont;
+        uiFont = ui::Font(menu, 15);
+        sectionFont = ui::Font(menu, 18, FW_SEMIBOLD);
+        for (const auto& control : layoutControls)
+            SendMessageW(control.window, WM_SETFONT, reinterpret_cast<WPARAM>(control.section ? sectionFont : uiFont), TRUE);
+        for (HWND control : {languageList, languageStatus, pages[0], pages[1]})
+            if (control) SendMessageW(control, WM_SETFONT, reinterpret_cast<WPARAM>(uiFont), TRUE);
+        if (previousUi) DeleteObject(previousUi);
+        if (previousSection) DeleteObject(previousSection);
     }
 
     void SetLabel(HWND label, const wchar_t* text)
     {
         // Repeated WM_SETTEXT invalidates static controls even when unchanged.
         // Keep editable coordinate fields outside this display-only cache.
-        static std::unordered_map<HWND, std::wstring> displayed;
         text = Tr(text);
-        auto& previous = displayed[label];
+        auto& previous = displayedLabels[label];
         if (previous == text) return;
         previous = text;
         SetWindowTextW(label, text);
@@ -106,6 +157,11 @@ namespace
         for (const auto& control : localizedControls)
             SetLabel(control.window, control.key.c_str());
         SendMessageW(languageList, CB_SETCURSEL, chinese ? 1 : 0, 0);
+        SetWindowTextW(pages[0], chinese ? L"常用" : L"Overview");
+        SetWindowTextW(pages[1], chinese ? L"传送" : L"Teleport");
+        SetWindowTextW(chrome.minimize, chinese ? L"最小化" : L"Minimize");
+        SetWindowTextW(chrome.maximize, chinese ? L"最大化 / 还原" : L"Maximize / Restore");
+        SetWindowTextW(chrome.close, chinese ? L"关闭" : L"Close");
         poiRevision = ~uint64_t(0); // Rebuild display names while preserving POI identity.
     }
 
@@ -129,6 +185,8 @@ namespace
     LRESULT CALLBACK MenuProc(HWND window, UINT message, WPARAM wparam, LPARAM lparam)
     {
         constexpr WPARAM GamepadA = 0xC3, GamepadB = 0xC4, GamepadUp = 0xCB, GamepadDown = 0xCC;
+        LRESULT chromeResult{};
+        if (ui::HandleMessage(window, message, wparam, lparam, chrome, chromeResult, 560, 380)) return chromeResult;
         if (message == WM_SIZE) { Layout(window); return 0; }
         if (message == WM_DPICHANGED)
         {
@@ -136,6 +194,7 @@ namespace
             SetWindowPos(window, nullptr, suggested->left, suggested->top,
                          suggested->right - suggested->left, suggested->bottom - suggested->top,
                          SWP_NOZORDER | SWP_NOACTIVATE);
+            RefreshFonts();
             Layout(window);
             return 0;
         }
@@ -143,12 +202,12 @@ namespace
         {
             const int bar = message == WM_VSCROLL ? SB_VERT : SB_HORZ;
             SCROLLINFO info{sizeof(SCROLLINFO), SIF_ALL};
-            GetScrollInfo(window, bar, &info);
+            GetScrollInfo(viewport, bar, &info);
             int position = info.nPos;
             switch (LOWORD(wparam))
             {
-            case SB_LINEUP: position -= 28; break;
-            case SB_LINEDOWN: position += 28; break;
+            case SB_LINEUP: position -= ui::Px(menu, 28); break;
+            case SB_LINEDOWN: position += ui::Px(menu, 28); break;
             case SB_PAGEUP: position -= int(info.nPage); break;
             case SB_PAGEDOWN: position += int(info.nPage); break;
             case SB_THUMBTRACK: case SB_THUMBPOSITION: position = info.nTrackPos; break;
@@ -162,13 +221,18 @@ namespace
         if (message == WM_MOUSEWHEEL)
         {
             wheelRemainder += GET_WHEEL_DELTA_WPARAM(wparam);
-            scrollY -= (wheelRemainder / WHEEL_DELTA) * 84;
+            scrollY -= (wheelRemainder / WHEEL_DELTA) * ui::Px(menu, 84);
             wheelRemainder %= WHEEL_DELTA;
             Layout(window);
             return 0;
         }
         if (message == WM_COMMAND)
         {
+            if (LOWORD(wparam) == 200 || LOWORD(wparam) == 201)
+            {
+                SelectPage(LOWORD(wparam) - 200);
+                return 0;
+            }
             if (LOWORD(wparam) == 104 && HIWORD(wparam) == CBN_SELCHANGE)
             {
                 const auto selected = SendMessageW(languageList, CB_GETCURSEL, 0, 0);
@@ -229,26 +293,50 @@ namespace
         }
         if (message == WM_DRAWITEM)
         {
-            settings::desktop_ui::DrawButton(*reinterpret_cast<DRAWITEMSTRUCT *>(lparam),
-                                             reinterpret_cast<DRAWITEMSTRUCT *>(lparam)->CtlID == 103);
+            const auto& item = *reinterpret_cast<DRAWITEMSTRUCT *>(lparam);
+            ui::DrawButton(item, item.CtlID == 103 || item.CtlID == UINT(200 + activePage));
             return TRUE;
         }
         if (message == WM_CTLCOLORSTATIC || message == WM_CTLCOLORBTN)
-            return reinterpret_cast<LRESULT>(settings::desktop_ui::ColorControl(reinterpret_cast<HDC>(wparam)));
+            return reinterpret_cast<LRESULT>(ui::ColorControl(reinterpret_cast<HDC>(wparam)));
         if (message == WM_CTLCOLOREDIT || message == WM_CTLCOLORLISTBOX)
-            return reinterpret_cast<LRESULT>(settings::desktop_ui::ColorControl(reinterpret_cast<HDC>(wparam), true));
+            return reinterpret_cast<LRESULT>(ui::ColorControl(reinterpret_cast<HDC>(wparam), true));
         if (message == WM_ERASEBKGND)
         {
             RECT client{};
             GetClientRect(window, &client);
-            settings::desktop_ui::Fill(reinterpret_cast<HDC>(wparam), client, settings::desktop_ui::Surface);
-            RECT accent{0, 0, 4, client.bottom};
-            settings::desktop_ui::Fill(reinterpret_cast<HDC>(wparam), accent, settings::desktop_ui::Accent);
+            ui::Fill(reinterpret_cast<HDC>(wparam), client, ui::Surface);
             return TRUE;
+        }
+        if (message == WM_PAINT)
+        {
+            PAINTSTRUCT paint{};
+            HDC dc = BeginPaint(window, &paint);
+            ui::Paint(window, dc, chrome);
+            EndPaint(window, &paint);
+            return 0;
+        }
+        if (message == WM_PRINTCLIENT)
+        {
+            ui::Paint(window, reinterpret_cast<HDC>(wparam), chrome);
+            return 0;
+        }
+        if (message == WM_DESTROY)
+        {
+            ui::Destroy(chrome);
+            if (uiFont) DeleteObject(uiFont);
+            if (sectionFont) DeleteObject(sectionFont);
+            uiFont = sectionFont = nullptr;
+            menu = viewport = nullptr;
+            localizedControls.clear(); layoutControls.clear(); displayedLabels.clear();
+            displayedPois.clear(); poiRevision = ~uint64_t(0);
+            scrollX = scrollY = activePage = wheelRemainder = 0;
+            layoutWidth = layoutHeight = -1; layoutDpi = 0;
+            return 0;
         }
         if (message == WM_KEYDOWN && (wparam == GamepadUp || wparam == GamepadDown))
         {
-            SendMessageW(window, WM_NEXTDLGCTL, wparam == GamepadUp, FALSE);
+            if (HWND next = GetNextDlgTabItem(menu, GetFocus(), wparam == GamepadUp)) SetFocus(next);
             RevealFocus();
             return 0;
         }
@@ -266,18 +354,33 @@ namespace
         return DefWindowProcW(window, message, wparam, lparam);
     }
 
+    LRESULT CALLBACK ViewportProc(HWND window, UINT message, WPARAM wparam, LPARAM lparam)
+    {
+        // Keep native scrollbars on this child while the root owns custom chrome.
+        if (message == WM_COMMAND || message == WM_DRAWITEM || message == WM_CTLCOLORSTATIC ||
+            message == WM_CTLCOLORBTN || message == WM_CTLCOLOREDIT || message == WM_CTLCOLORLISTBOX ||
+            message == WM_VSCROLL || message == WM_HSCROLL || message == WM_MOUSEWHEEL || message == WM_KEYDOWN)
+            return SendMessageW(menu, message, wparam, lparam);
+        if (message == WM_ERASEBKGND)
+        {
+            RECT rect{}; GetClientRect(window, &rect);
+            ui::Fill(reinterpret_cast<HDC>(wparam), rect, ui::Surface);
+            return TRUE;
+        }
+        return DefWindowProcW(window, message, wparam, lparam);
+    }
+
     HWND Control(const wchar_t* type, const wchar_t* text, DWORD style,
-        int x, int y, int width, int height, int id = 0)
+        int x, int y, int width, int height, int id = 0, int page = 0, bool section = false)
     {
         const DWORD tabStop = (std::wcscmp(type, L"STATIC") == 0 || (style & 0xf) == BS_GROUPBOX) ? 0 : WS_TABSTOP;
-        y += 190; // Capture action/status and language selector precede the original layout.
         const bool pushButton = std::wcscmp(type, L"BUTTON") == 0 && (style & 0xf) == BS_PUSHBUTTON;
         if (pushButton) style |= BS_OWNERDRAW;
+        if (std::wcscmp(type, L"STATIC") == 0) style |= SS_NOPREFIX;
         HWND control = CreateWindowW(type, Tr(text), WS_CHILD | WS_VISIBLE | tabStop | style,
-            x, y, width, height, menu, reinterpret_cast<HMENU>(intptr_t(id)), GetModuleHandleW(nullptr), nullptr);
-        const bool section = std::wcscmp(type, L"STATIC") == 0 && (y == 232 || y == 326 || y == 426 || y == 568);
+            0, 0, 0, 0, viewport, reinterpret_cast<HMENU>(intptr_t(id)), GetModuleHandleW(nullptr), nullptr);
         settings::desktop_ui::StyleControl(control, section ? sectionFont : uiFont);
-        layoutControls.push_back({control, x, y, width, height});
+        layoutControls.push_back({control, x, y, width, height, page, section});
         if (*text && std::wcscmp(type, L"EDIT") != 0 && std::wcscmp(type, L"COMBOBOX") != 0)
             localizedControls.push_back({control, text});
         return control;
@@ -288,78 +391,93 @@ namespace
 void debug_menu::Toggle()
 {
 #ifdef _WIN32
+    const ScopedDpi dpi;
     if (!menu)
     {
-        SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         chinese = settings::GetConfig().debugLanguage == 1;
         WNDCLASSW wc{};
         wc.hIcon = LoadIconW(GetModuleHandleW(nullptr), L"IDI_LOST_ODYSSEY_RECOMP");
         wc.lpfnWndProc = MenuProc;
         wc.hInstance = GetModuleHandleW(nullptr);
         wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
-        wc.hbrBackground = settings::desktop_ui::SurfaceBrush();
+        wc.hbrBackground = ui::Brush();
         wc.lpszClassName = L"LostOdysseyDebugMenu";
         RegisterClassW(&wc);
         menu = CreateWindowExW(WS_EX_APPWINDOW, wc.lpszClassName, Tr(L"Lost Odyssey — Debug Menu (F1)"),
-            WS_OVERLAPPEDWINDOW | WS_VSCROLL | WS_HSCROLL | WS_CLIPCHILDREN, CW_USEDEFAULT, CW_USEDEFAULT,
-            660, 780, nullptr, nullptr, wc.hInstance, nullptr);
+            WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN, CW_USEDEFAULT, CW_USEDEFAULT,
+            660, 720, nullptr, nullptr, wc.hInstance, nullptr);
         if (!menu) { LOG_ERROR("debug menu: CreateWindow failed {}", GetLastError()); return; }
-        settings::desktop_ui::EnableDarkFrame(menu);
+        ui::Create(menu, chrome);
+        wc.lpfnWndProc = ViewportProc;
+        wc.lpszClassName = L"LostOdysseyDebugViewport";
+        RegisterClassW(&wc);
+        viewport = CreateWindowExW(WS_EX_CONTROLPARENT, wc.lpszClassName, L"", WS_CHILD | WS_VISIBLE | WS_VSCROLL | WS_HSCROLL | WS_CLIPCHILDREN,
+            0, 0, 1, 1, menu, nullptr, wc.hInstance, nullptr);
+        ui::StyleControl(viewport, nullptr);
         uiFont = settings::desktop_ui::Font(menu, 15);
-        sectionFont = settings::desktop_ui::Font(menu, 17, FW_SEMIBOLD);
-        captureButton = Control(L"BUTTON", L"截取渲染状态 / Capture render state", BS_PUSHBUTTON, 24, -176, 490, 30, 103);
-        captureStatus = Control(L"STATIC", L"截取下一完整帧；导出期间可能短暂停顿。", 0, 24, -140, 490, 80);
-        Control(L"STATIC", L"Language", 0, 20, -36, 110, 24);
-        languageList = Control(L"COMBOBOX", L"", CBS_DROPDOWNLIST, 140, -40, 180, 100, 104);
+        sectionFont = settings::desktop_ui::Font(menu, 18, FW_SEMIBOLD);
+        auto fixed = [&](const wchar_t* kind, const wchar_t* text, DWORD style, int id) {
+            HWND child = CreateWindowExW(0, kind, text, WS_CHILD | WS_VISIBLE | style, 0, 0, 1, 1,
+                menu, reinterpret_cast<HMENU>(intptr_t(id)), wc.hInstance, nullptr);
+            ui::StyleControl(child, uiFont);
+            return child;
+        };
+        pages[0] = fixed(L"BUTTON", chinese ? L"常用" : L"Overview", BS_OWNERDRAW | WS_TABSTOP, 200);
+        pages[1] = fixed(L"BUTTON", chinese ? L"传送" : L"Teleport", BS_OWNERDRAW | WS_TABSTOP, 201);
+        languageList = fixed(L"COMBOBOX", L"Language", CBS_DROPDOWNLIST | WS_TABSTOP, 104);
         SendMessageW(languageList, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"English"));
         SendMessageW(languageList, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"简体中文"));
         SendMessageW(languageList, CB_SETCURSEL, chinese ? 1 : 0, 0);
-        languageStatus = Control(L"STATIC", L"", 0, 20, -12, 500, 24);
-        Control(L"STATIC", L"F1 打开/关闭 · 本窗口不会暂停游戏", 0, 20, 14, 500, 24);
-        Control(L"STATIC", L"常用 / Quick settings", 0, 20, 42, 500, 20);
+        languageStatus = fixed(L"STATIC", L"", SS_NOPREFIX, 0);
+        Control(L"STATIC", L"Diagnostics", 0, 8, 8, 520, 28, 0, 0, true);
+        captureButton = Control(L"BUTTON", L"截取渲染状态 / Capture render state", BS_PUSHBUTTON, 8, 48, 520, 38, 103);
+        captureStatus = Control(L"EDIT", L"", ES_READONLY | ES_MULTILINE | ES_AUTOVSCROLL | WS_VSCROLL,
+            8, 98, 520, 74);
+        Control(L"STATIC", L"常用 / Quick settings", 0, 8, 188, 520, 28, 0, 0, true);
         saveToggle = Control(L"BUTTON", L"随时存档 / Save anywhere", BS_AUTOCHECKBOX,
-            24, 66, 490, 25, 102);
-        Control(L"STATIC", L"开启后重新进入 System 菜单，再选择 Save。", 0, 24, 97, 490, 24);
-        Control(L"STATIC", L"当前地图 / Map", 0, 20, 136, 500, 20);
-        mapLabel = Control(L"STATIC", L"", 0, 24, 160, 490, 60);
-        Control(L"STATIC", L"战斗 / Battle", 0, 20, 236, 500, 20);
-        statusLabel = Control(L"STATIC", L"", 0, 24, 258, 490, 40);
-        Control(L"BUTTON", L"当前战斗判胜 / Win battle", BS_PUSHBUTTON, 24, 300, 300, 30, 100);
-        Control(L"BUTTON", L"取消请求", BS_PUSHBUTTON, 334, 300, 180, 30, 101);
-        Control(L"STATIC", L"一次性请求；在战斗判定点执行。", 0, 24, 339, 490, 24);
-        Control(L"STATIC", L"人物传送 / Teleport（仅当前地图）", 0, 20, 378, 500, 20);
-        positionLabel = Control(L"STATIC", L"", 0, 24, 402, 490, 24);
-        teleportButtons[0] = Control(L"BUTTON", L"记住当前位置", BS_PUSHBUTTON, 24, 432, 150, 30, 10);
-        teleportButtons[1] = Control(L"BUTTON", L"返回记录位置", BS_PUSHBUTTON, 184, 432, 150, 30, 11);
-        teleportButtons[2] = Control(L"BUTTON", L"填入当前坐标", BS_PUSHBUTTON, 344, 432, 170, 30, 12);
+            8, 226, 320, 28, 102);
+        Control(L"STATIC", L"System → Save", 0, 346, 230, 190, 24);
+        mapLabel = Control(L"STATIC", L"", 0, 8, 278, 520, 58);
+        Control(L"STATIC", L"战斗 / Battle", 0, 8, 354, 520, 28, 0, 0, true);
+        statusLabel = Control(L"STATIC", L"", 0, 8, 392, 520, 36);
+        Control(L"BUTTON", L"当前战斗判胜 / Win battle", BS_PUSHBUTTON, 8, 440, 328, 36, 100);
+        Control(L"BUTTON", L"取消请求", BS_PUSHBUTTON, 348, 440, 188, 36, 101);
+        Control(L"STATIC", L"Position", 0, 8, 8, 520, 28, 0, 1, true);
+        positionLabel = Control(L"STATIC", L"", 0, 8, 46, 520, 26, 0, 1);
+        teleportButtons[0] = Control(L"BUTTON", L"记住当前位置", BS_PUSHBUTTON, 8, 86, 168, 36, 10, 1);
+        teleportButtons[1] = Control(L"BUTTON", L"返回记录位置", BS_PUSHBUTTON, 188, 86, 168, 36, 11, 1);
+        teleportButtons[2] = Control(L"BUTTON", L"填入当前坐标", BS_PUSHBUTTON, 368, 86, 168, 36, 12, 1);
         const wchar_t* axes[] = {L"X", L"Y", L"Z"};
         for (int i = 0; i < 3; ++i)
         {
-            Control(L"STATIC", axes[i], 0, 24 + i * 124, 478, 18, 24);
-            coordinates[i] = Control(L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL, 42 + i * 124, 474, 98, 28);
+            Control(L"STATIC", axes[i], 0, 8 + i * 138, 144, 18, 26, 0, 1);
+            coordinates[i] = Control(L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL, 28 + i * 138, 140, 106, 30, 0, 1);
         }
-        teleportButtons[3] = Control(L"BUTTON", L"传送到坐标", BS_PUSHBUTTON, 402, 474, 112, 30, 13);
+        teleportButtons[3] = Control(L"BUTTON", L"传送到坐标", BS_PUSHBUTTON, 422, 140, 114, 32, 13, 1);
         const wchar_t* offsets[] = {L"X −100", L"X +100", L"Y −100", L"Y +100", L"Z −100", L"Z +100"};
         for (int i = 0; i < 6; ++i)
-            teleportButtons[4+i] = Control(L"BUTTON", offsets[i], BS_PUSHBUTTON, 24+i*83, 514, 75, 30, 20+i);
-        teleportStatus = Control(L"STATIC", L"", 0, 24, 550, 490, 36);
-        poiList = Control(L"COMBOBOX", L"", CBS_DROPDOWNLIST | WS_VSCROLL, 24, 592, 345, 220, 30);
-        poiButton = Control(L"BUTTON", L"传送到此 POI", BS_PUSHBUTTON, 379, 592, 135, 30, 31);
-        poiDetails = Control(L"STATIC", L"", 0, 24, 628, 490, 36);
-        Control(L"STATIC", L"POI 仅含已加载区域；传送到达后仍会触发游戏事件。", 0, 24, 672, 490, 24);
+            teleportButtons[4+i] = Control(L"BUTTON", offsets[i], BS_PUSHBUTTON, 8+i*90, 188, 78, 32, 20+i, 1);
+        teleportStatus = Control(L"STATIC", L"", 0, 8, 236, 520, 56, 0, 1);
+        Control(L"STATIC", L"Points of interest", 0, 8, 316, 520, 28, 0, 1, true);
+        poiList = Control(L"COMBOBOX", L"", CBS_DROPDOWNLIST | WS_VSCROLL, 8, 360, 370, 220, 30, 1);
+        poiButton = Control(L"BUTTON", L"传送到此 POI", BS_PUSHBUTTON, 390, 360, 146, 32, 31, 1);
+        poiDetails = Control(L"STATIC", L"", 0, 8, 410, 520, 58, 0, 1);
         // Fit the initial window to the current monitor; scrolling keeps every control reachable.
         MONITORINFO monitor{sizeof(MONITORINFO)};
         if (GetMonitorInfoW(MonitorFromWindow(menu, MONITOR_DEFAULTTONEAREST), &monitor))
         {
             const auto& area = monitor.rcWork;
-            const int width = std::min(580L, area.right - area.left);
-            const int height = std::min(760L, area.bottom - area.top);
+            const int width = std::min(LONG(ui::Px(menu, 624)), area.right - area.left);
+            const int height = std::min(LONG(ui::Px(menu, 700)), area.bottom - area.top);
             SetWindowPos(menu, nullptr, area.left + (area.right - area.left - width) / 2,
                 area.top + (area.bottom - area.top - height) / 2, width, height, SWP_NOZORDER | SWP_NOACTIVATE);
         }
+        RefreshLanguage();
         Layout(menu);
     }
-    ShowWindow(menu, IsWindowVisible(menu) ? SW_HIDE : SW_SHOW);
+    const bool opening = !IsWindowVisible(menu);
+    ShowWindow(menu, opening ? (getenv("LO_BACKGROUND") ? SW_SHOWNOACTIVATE : SW_SHOW) : SW_HIDE);
+    if (opening && !getenv("LO_BACKGROUND")) SetFocus(pages[activePage]);
     LOG_INFO("debug menu: window visible {}", IsWindowVisible(menu) != FALSE);
     Update();
 #endif
@@ -368,6 +486,7 @@ void debug_menu::Toggle()
 void debug_menu::Update()
 {
 #ifdef _WIN32
+    const ScopedDpi dpi;
     if (captureStatus && IsWindowVisible(menu))
     {
         const auto status = gpu::renderer::DebugCaptureStatus();
@@ -389,6 +508,11 @@ void debug_menu::Update()
                 message.wParam == VK_ESCAPE || message.wParam == 0xC4 /* Gamepad B */))
             {
                 ShowWindow(menu, SW_HIDE);
+                continue;
+            }
+            if (message.message == WM_KEYDOWN && (message.wParam == 0xCB || message.wParam == 0xCC || message.wParam == 0xC3))
+            {
+                SendMessageW(menu, message.message, message.wParam, message.lParam);
                 continue;
             }
             if (!IsDialogMessageW(menu, &message))

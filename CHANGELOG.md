@@ -6,9 +6,9 @@ One record of completed changes, with unpublished work separated from verified r
 
 ## v0.5.0 — Unreleased / 未发布
 
-Current source is **0.4.17**. Earlier feature commits through 0.4.15 are listed below; subsequent UI changes are recorded in the entries that follow. The delivery target remains **v0.5.0**, with no release of these internal versions.
+Current source is **0.4.18**. Earlier feature commits through 0.4.15 are listed below; subsequent UI changes are recorded in the entries that follow. The delivery target remains **v0.5.0**, with no release of these internal versions.
 
-当前源码为 **0.4.17**；下表保留截至 0.4.15 的功能提交，后续 UI 改动见下方条目。交付目标仍为 **v0.5.0**，内部版本不单独发布。
+当前源码为 **0.4.18**；下表保留截至 0.4.15 的功能提交，后续 UI 改动见下方条目。交付目标仍为 **v0.5.0**，内部版本不单独发布。
 
 | Source / 源码 | Commit / 提交 | Change / 改动 |
 | --- | --- | --- |
@@ -41,6 +41,12 @@ Use a restrained navy/silver interface with a native borderless Windows frame, s
 The updater now uses a native lightweight borderless frame with short localized phase labels, byte and percentage reporting, indeterminate unknown totals and safe cancellation boundaries. Verification, package checking and ready states disable cancellation; unchanged values do not invalidate controls, and late progress cannot replace `Cancelling…`. The public progress API and transaction/network behavior are unchanged. Focused fixture checks passed, and normal, unknown-total and narrow Chinese renders were reviewed on an inactive desktop. Physical monitor moves and live user-desktop gestures were not tested. This is a local source change, not a published package.
 
 更新器采用原生轻量无边框窗口、精简本地化阶段文案、字节与百分比显示；未知总量使用不定进度，并在下载阶段保留安全取消边界。校验、检查和就绪状态禁用取消；未变化的数值不触发控件重绘，迟到的进度不会覆盖“正在取消…”。公开 progress API 及事务／网络行为保持不变。专项 fixture 检查通过，并已审阅未激活桌面中的正常、未知总量和窄中文实绘。未测试物理跨显示器移动和用户桌面实时手势；本项为本地源码改动，尚未发布。
+
+### 0.4.18 — Debug Menu window and diagnostics / Debug Menu 窗口与诊断
+
+The Debug Menu now uses a lightweight native borderless window with shorter status copy, paged Overview and Teleport content, a fixed title area, independent scrolling, and DPI-correct Toggle/Update layout. Long paths and result states remain readable, while F1/Escape/Gamepad-B and caption close behavior remain available. The focused fixture passed pagination, focus/close, bilingual busy/error, current-DPI metrics and cleanup checks; evidence is `out/v0.5.0/ui-modernization/native/debug-run.log`. The fixture remains source-local evidence; the separate 0.4.18 combined development build/package is recorded in `out/v0.5.0/ui-modernization/build/REPORT.md`, without establishing manual user acceptance or a public release.
+
+Debug Menu 现在使用轻量原生无边框窗口，采用更短的状态文案，Overview 与 Teleport 支持分页，标题区域固定、内容独立滚动，Toggle／Update 在当前 DPI 下正确布局。长路径和结果状态保持可读，F1／Escape／手柄 B 及标题栏关闭行为仍可用。专项 fixture 已通过分页、焦点／关闭、双语忙碌／错误、当前 DPI 指标和清理检查；证据见 `out/v0.5.0/ui-modernization/native/debug-run.log`。该 fixture 仍是源码级证据；独立的 0.4.18 合并开发构建与打包已记录在 `out/v0.5.0/ui-modernization/build/REPORT.md`，不代表人工用户验收或公开发布。
 
 ### DLC import and automatic content recognition
 

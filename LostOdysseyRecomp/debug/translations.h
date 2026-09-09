@@ -8,6 +8,10 @@ namespace debug_menu::translations
 // Only known tool strings are translated; game names and filesystem paths are data.
 struct Entry { std::wstring_view key; const wchar_t* en; const wchar_t* zh; };
 inline constexpr Entry Entries[] = {
+    {L"Diagnostics", L"Diagnostics", L"诊断"},
+    {L"Position", L"Position", L"坐标"},
+    {L"Points of interest", L"Points of interest", L"地图 POI"},
+    {L"System → Save", L"System → Save", L"系统 → 存档"},
     {L"F1 打开/关闭 · 本窗口不会暂停游戏", L"F1: show/hide. This window does not pause the game.", L"F1 打开/关闭 · 本窗口不会暂停游戏"},
     {L"常用 / Quick settings", L"Quick settings", L"常用设置"},
     {L"随时存档 / Save anywhere", L"Save anywhere", L"随时存档"},
