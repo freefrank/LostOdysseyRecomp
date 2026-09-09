@@ -1,6 +1,6 @@
 <div align="center">
 
-# Lost Odyssey Recompiled
+# Lost Odyssey Recomp
 
 **An experimental native PC port of Lost Odyssey for Xbox 360.**
 

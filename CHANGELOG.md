@@ -4,7 +4,7 @@ One record of completed changes, with unpublished work separated from verified r
 
 本文统一记录已完成改动，并区分未发布内容与已确认发布版本；日期采用 UTC 发布日期。后续计划见[路线图](docs/ROADMAP.zh-CN.md)，不作为已发布功能记录。
 
-## v0.5.0 — Unreleased / 未发布
+## v0.5.0 — 2026-09-09
 
 ### English
 
@@ -61,7 +61,7 @@ Windows D3D12/Vulkan is the delivery scope. DX11 is future work; broader GPU cov
 
 本次面向 Windows D3D12／Vulkan；DX11 属于后续工作，其他 GPU 覆盖等待反馈。三个已导入 DLC 包均已成功读取，奖励领取及地下城游玩仍未验证。Issue #12 报告者确认和全游戏覆盖仍待完成。
 
-Development evidence / 开发证据：[v0.5.0 history](https://github.com/freefrank/LostOdysseyRecomp/blob/v0.5.0/docs/notes/v0.5.0-development.md).
+Development evidence / 开发证据：[v0.5.0 release preparation](https://github.com/freefrank/LostOdysseyRecomp/blob/v0.5.0/docs/RELEASE-v0.5.0.md).
 
 ## [v0.4.2](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.4.2) — 2026-09-08
 

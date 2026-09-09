@@ -1,6 +1,6 @@
 <div align="center">
 
-# Lost Odyssey Recompiled
+# Lost Odyssey Recomp
 
 **《失落的奥德赛》Xbox 360 版的实验性原生 PC 移植。**
 

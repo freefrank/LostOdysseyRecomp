@@ -1,4 +1,4 @@
-# Installing Lost Odyssey Recompiled
+# Installing Lost Odyssey Recomp
 
 This guide covers current Windows builds in the v0.5.0 line. The published v0.4.2 package remains the historical D3D12 baseline; current Windows builds add the Vulkan path, updater flow, automatic game/DLC recognition and the Settings UX described below.
 
