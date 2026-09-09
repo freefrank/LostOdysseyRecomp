@@ -8,10 +8,10 @@
 
 工作项状态和优先级由[维护者公开 Project](https://github.com/users/freefrank/projects/3) 管理。本路线图是仓库内的公开中文镜像，由 [project_manager](agents/project-management.md) 按需同步；实现、验证、玩家验收与发布证据分别保留。
 
-## 当前进度与下一步 — 2026-09-08
+## 当前进度与下一步 — 2026-09-09
 
-- **版本与交付：**`0.4.2` 后先前的 16 个功能提交包括原有源码 `0.4.3` 至 `0.4.15` 的 13 个批次，以及 0.4.16 安装器（`b094a1a`）、0.4.17 更新器（`9c2dc76`）和 0.4.18 Debug UI（`294df07`）。此后至 source 0.4.23 的五个功能提交已完成：DPI（`7a17c84`）、GC 记录（`51b0cf0`）、DLC filter（`4f40014`）、菜单资产（`c6af5aa`）和设置流程（`78730ff`），随后为交付文档（`62dc291`）。正式 source `0.5.0`、本地 annotated tag `v0.5.0` 与 clean ZIP 已在 `86ba2c1641bb9a8324e0b1710783bead0c39bf23` 完成；发布进行中，尚未 remote push 或公开发布。发布基线仍为 [v0.4.2](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.4.2)。
-- **v0.5.0 工作：**共跟踪 27 项：25 项 Done、1 项 In Progress、1 项 Todo、0 项 Awaiting validation。安装器、更新器、Debug Menu、游戏主窗口像素尺寸、Issue #12 的 GC／渲染修复、DLC 导入／运行时枚举及原版风格设置均已完成相称的实现验证。三个真实 DLC 包通过已修复的目录 filter 完成读取；奖励领取、地下城游玩、用户验收和发布状态另行保留。
+- **版本与交付：**源码和发布目标保持 `0.5.0`。最新位置证据候选及 EXE SHA256 前缀 `6feb2092` 见[发布准备](RELEASE-v0.5.0.md)；此处不宣称已经公开发布。现有 GitHub draft 和旧 ZIP 在最终资产、tag 及匿名下载核验前仅作为历史记录。
+- **v0.5.0 工作：**Map16 性能、DPI 呈现、独立 shader 日志、可选 shader 收集和稀疏相机时序收集已有界定验证。`0.5.0-position-evidence-1` 在每个 VS 仅运行一次保守 HLSL 位置数据流分析，并在 `UnknownShader` 返回前独立记录相机、视口、深度和矩阵有限值检查的结果；它不自动授权 jitter。Worker 同时接受 schema 1 和 schema 2，但尚无新二进制游戏运行或玩家 schema 2 数据。四条 c7 路径已在同一 D 盘 slot 02 Ghost Town — City of Ruins 场景获用户认可为修复成功：六张间隔 presented 帧覆盖约 11.37 秒，未见闪烁。这不是连续视频或更广场景覆盖；shader 家族回归、全屏、Alt+Enter、物体／骨骼 MV 和全游戏性能仍待完成。
 - **P1——已实现；等待报告者反馈：**[Issue #12](https://github.com/freefrank/LostOdysseyRecomp/issues/12) 已确定为 GC 与渲染对象生命周期竞争；源码修复已从 `claude-issue12` 本地合并到 `0.5.0`，提交 `9cefb0d`。生产验证使用冻结的 source-0.4.18 EXE，无 probe、overlay、人工延迟或 skip-stale，保留 `poll_wait` 与 `17e3ab7` GC 修复。原生 10 花存档独立载入；普通 A 在 serial 16 后从确认推进到树枝后续剧情及 Kaim 自由移动，均发生在持续 148 秒无崩溃、无长卡的观察窗内。seed 与 EXE 未变。本验证不测精确 GC 耗时，也不覆盖全游戏。GC 代码 `17e3ab7` 已在此前提交并备份；source 0.4.20 版本递增及验证记录已在 `51b0cf0` 提交。目标仍为 v0.5.0。Issue 保持 open，因为报告者尚未收到修复 binary 或确认。见[根因报告](notes/issue12-root-cause.md)和[交接文档](notes/issue12-handoff-2026-09-09.md)。
 - **下一步——开发：**Direct3D 11 可行性和后端保留为 v0.5.0 之外的未来工作，未指定下个版本或日期。用户已确认 CPU Vulkan 对照通过；此前停止的采集未保留配对指标，不补写新的 benchmark 数字。
 - **下一步——证据或验收：**原版风格设置及字体／返回／保存修正已完成有界验证，新用户反馈另行记录；冻结安装器与 DPI 覆盖仍开放；两项保留的 shader compiler error 已被缓存，并未修复。玩家验收单独保留。
@@ -134,12 +134,14 @@ v0.1 保留为首个 Windows 发布里程碑，包含导入器、首次设置、
 3. [~] 研究文字模糊或乱码，与原机和 Xenia 对照，进行中；这与已暂停的文本语言互补补丁是不同任务。
 4. [ ] 回归喷火阶段阴影闪烁。同一玩家反馈该现象似乎消失，仅算单次观察，不宣称全面修复；火焰受击格子仍是单独开放的问题。
 5. [x] **v0.5.0 — 游戏／DLC 自动导入已实现：**已本地提交的 source [`0.4.15`](https://github.com/freefrank/LostOdysseyRecomp/commit/f77d943261e14105d17c880ffa40c171b4191dcc) 批次可将失落的奥德赛 CON/LIVE/PIRS STFS 包导入共享 DLC 目录，支持事务解包、重复／冲突保护及运行时枚举／打开／读取；它移除了手动 DLC／Game Discs 模式选择，对选取的文件、目录和混合来源自动分类、统一复核并导入。既有三包导入及重复保留证据继续复用。目录 filter 修复使 `spa.bin` 不再混入 `*.fpi`；原生 fixed 30-call 证据及冻结 source-0.4.18 runtime session 已完整读取 `LODLC002`、`LODLC001`、`LODLC003` 的 header/index/payload，`spa.bin` 零匹配、crash 为零且正常显示主菜单。13 个导入文件和隔离 save/config 未改变，两游戏均已退出。奖励领取、地下城游玩、用户验收和发布仍未测试。此验证完成时源码为 0.4.21，当前本地源码为 0.4.22、尚未提交；目标仍为 v0.5.0。
-6. [ ] 增加独立 shader 日志与 TAA 覆盖审计：分离 shader 诊断和 runtime 摘要，保留最近三组会话日志及按版本累计的覆盖清单，并让 F1 导出包含 shader 日志快照。发现、整理未覆盖路径无需每次导出；未知路径只记录，闪烁修复仍需同场景验证。此方案尚未实现，见[日志与覆盖 TODO](notes/taa-coverage-audit.md#shader-log-coverage-todo)。
+6. [ ] **P0 v0.5.0 发布前：**为阴影／TAA 诊断将 shader 日志从 runtime 摘要分流。既有覆盖审计设计（最近三组会话、累计清单、F1 快照及全 draw 记录）保留为可复用参考，不会因本轮优先级自动成为同批必须实现的范围。日志分流已排入下一 session，尚未开始，见[日志与覆盖 TODO](notes/taa-coverage-audit.md#shader-log-coverage-todo)。
 7. [ ] 分析 [Issue #9](https://github.com/freefrank/LostOdysseyRecomp/issues/9)：v0.4.2、Ryzen 9950X3D / RTX 5090 上报告 CPU 温度高和 TAA 纹理闪烁。两个症状均未验证，不假定同一根因，也不直接合并到此前的敌人消失报告。
 8. [x] 在固定的 v0.4.15 D3D12 Map2 配置中定位 Windows 稳态 CPU 热点（Ryzen 7 9800X3D／RTX 5080、60 FPS、SMAA、720p internal、配置 1080p output）。45.0001416 秒内进程使用 110.875 CPU 秒（整机 CPU 15.3993%；2.46388 个逻辑核当量）；112,344 个 on-CPU 样本无丢失事件、20 个缺栈。承载 GPU query 轮询和 guest 共享值零超时轮询的线程分别占进程 CPU 计时的 40.389% 与 39.994%（合计 80.3833%）；两条实际路径分别占进程 on-CPU 样本 36.5618% 与 33.0948%（合计 69.6566%），路径份额是样本分布而非 CPU 计时归因。GPU WorkerMain 占进程 CPU 计时 16.164%，其中 `getenv_nolock` 为该线程 exclusive 样本的 24.6787%。该结果只隔离单场景 D3D12 路径，不诊断温度、不证明后端回归或全游戏行为。GPU query 等待策略、零超时轮询及每 draw 环境变量查询是在 profiling 阶段提出的候选；后续实现见下一条。见[热点报告](../out/v0.5.0/cpu-hotspots/report/HOTSPOTS.html)和[CPU 对比](../out/v0.5.0/cpu-comparison/report/REPORT.html)。
 9. [~] 由该 profile 实施一批 CPU 效率修复：仅在已测 GPU query 和共享值轮询路径使用有界等待，并将四个禁用 capture 的环境值移出每 draw 热路径缓存。源码 `0.4.16` 构建成功，新的 `LoPollWaitTest` 通过。有效的新 D3D12 Map2 对比未重跑 v0.4.15：60.0003575 秒内均值为 4.3033598%／0.6885376 个逻辑核当量，保留的 v0.4.15 为 15.6200169%／2.4992027；3,599 个 PresentMon 事件在单 swapchain 上完整覆盖 CPU 窗口，采样后受控输入仍留在 Map2。该结果是整个批次的单次结果，不归因于单项改动，也不代表全游戏。首次 Vulkan CPU 窗口与 PresentMon 零重叠而排除；替代采集在开始前被用户物理 Escape 停止。Vulkan 对比、玩家验收及发布仍待完成。见[优化报告](../out/v0.5.0/cpu-optimization/REPORT.md)。
+10. [~] **P0 v0.5.0 发布前：**源码和发布目标固定为 0.5.0。shader 标识、顶点／索引准备及精确限帧修复通过定向检查；固定 Map16 D3D12 4K/TAA3 RTSS 48.01→54.05→59.76 FPS，最终内部均值/p95 为 16.72/17.16 ms。限定场景已接近 60 FPS，系统条件限制已记录；其他场景和用户验收仍开放。见[诊断与修复](notes/v0.5.0-performance-diagnosis-2026-09-09.md)。
+11. [ ] **P0 v0.5.0 发布前：**用独立 shader 日志诊断并修复报告的 4K TAA 地面／阴影变黑。已有同一 local 86ba v0.5.0 EXE、同进程静止 Map16 的有限 TAA／Off 对照：TAA 编码帧 ground ROI 180 帧中近黑 100 帧，Off 为 0/180；两片各 167 次 WGC callback。尚未定位实际失败 shader 或根因；类似错误仅能由匹配 log/state 推断并分别验证。
 
-原有事项继续排队：偶发 GPU query/wait 故障及长时间稳定性；火焰受击格子／箱子特效和两个资源着色器失败；两版章节交界、存档读回、遇敌和多语言回归；全屏／独占、鼠标及跨 DPI 验收。Map 13 身体／环境阴影明暗闪烁仍开放；已验收的脚下投影修复继续常规回归。
+原有事项继续排队：偶发 GPU query/wait 故障及长时间稳定性；火焰受击格子／箱子特效和两个资源着色器失败；两版章节交界、存档读回、遇敌和多语言回归；全屏／独占、鼠标及跨 DPI 验收。Map 13 身体／环境阴影明暗闪烁仍开放；已验收的脚下投影修复继续常规回归。用户要求在处理新增性能、TAA 地面／阴影及 shader 日志任务前暂停 Reddit 帖子；v0.5.0 GitHub Release 仍为 draft。
 
 ## v0.2.2 交付状态 — 本地 2026-09-06
 
@@ -211,6 +213,8 @@ v0.1 保留为首个 Windows 发布里程碑，包含导入器、首次设置、
 
 兼容性和稳定性仍是验收要求。SMAA/TAA、按分辨率缩放与速度正确、稳定的 60 FPS 已列入 v0.4.0 目标；120 FPS 为可延期的可选目标。DLSS/FSR 输入可行性列为研究；下方其他功能继续后续评估，均无承诺发布日期。
 
+后续还包括独立 bugfix 与 shader 优化；在既有时域输入前提后接入 DLSS、FSR 和 XeSS 超分；FG 研究；既有 DX11、Linux/Steam Deck 与新增原生 macOS 平台工作；以及暂停的与 u/Adoky 实验性 Switch 合作。上述均未实现，也不属于 v0.5.0。
+
 - [x] 按逻辑线程数减一、最少一线程并行预编译；测试机 15 worker 将 2,000 个着色器准备时间从 53.4 秒降至 6.7 秒，成功产物逐字节一致。
 - [x] 已知着色器启动准备、持久缓存和进度界面；早期 184 微码集合的热缓存复用和损坏 DXIL 恢复通过。见[着色器准备](notes/shader-preparation.md)。
 - [x] 四盘发现 2,000 个微码，1,998 个编译成功；进度、缓存复用和独立 Map 12 实跑通过。
@@ -219,6 +223,9 @@ v0.1 保留为首个 Windows 发布里程碑，包含导入器、首次设置、
 - [ ] 修复两个微码编译失败，补充其余来源／变体覆盖；尚未实现仅凭资源准备全部首用 PSO，新场景仍可能首次卡顿。
 - [x] 保留原选项并替换设置，增加五语言界面、语言选择、FXAA 和等比例输出缩放。见[设置](notes/settings-menu.md)。
 - [ ] 完成全屏／独占、鼠标和混合 DPI 桌面验收。
+- [ ] **P0 v0.5.0 发布前：**排查桌面 DPI 切换时可能遗漏的渲染输出尺寸：两块实体 4K 屏在 150% DPI 下观察到内部／窗口 4K 而 presented screenshot 为 2560x1440。100% 的比较对象是 Parsec 虚拟 1024x768 DISPLAY2，其中大部分 4K 窗口在屏外，同进程 presented 为 4K；WGC 仅裁边。这是未证实线索，并非两块实体 4K 屏之间的比较，与已完成的窗口像素尺寸范围及另一项 TAA 闪烁分开。
+- [ ] **P0 v0.5.0 发布前：**排查用户观察到的间歇性全屏画面未填满屏幕；后续验收须区分异常 underscan 与正常宽高比黑边，其与 DPI 或呈现尺寸的关系尚未证实。
+- [ ] **P0 v0.5.0 发布前：**增加 Alt+Enter 窗口／全屏切换，回到窗口模式时恢复此前窗口大小和位置，并防抖按键 repeat，避免一次长按反复切换。
 - [x] SMAA 1x 和实验性相机重投影 TAA 已实现，并在上方所述有界实机及菜单选择／Keep／重开范围通过验证；更广 TAA 画质列为回归覆盖。
 - [x] 为 v0.4.0 增加自动输出分辨率匹配和标准／高质量：选定检查及实际七行图形页预览／回退／Keep／同进程重开通过；后续已实现最高 4K 的真实 Auto／手动内部分辨率，并完成上方记录的限定验证。
 - [ ] 宽屏／FOV 变化及正确 UI 布局作为后续工作。
@@ -229,6 +236,7 @@ v0.1 保留为首个 Windows 发布里程碑，包含导入器、首次设置、
 - [ ] 更高分辨率阴影。
 - [ ] 研究 SSAO，为 ReShade 提供干净深度缓冲。
 - [ ] 完成 [v0.5.0 PC Vulkan 里程碑](#v050-pc-graphics)；DX11、Linux／Steam Deck 及其验收均为未来工作。
+- [ ] 建立原生 macOS port，作为独立未来平台工作，不承诺版本或日期。
 - [x] 托管 Windows CI 发布 v0.1，包含导入器和首次运行设置。见[安装](INSTALLING.md)与[打包](notes/release-packaging.md)。
 
 ## 阶段 5：可选探索
@@ -236,3 +244,5 @@ v0.1 保留为首个 Windows 发布里程碑，包含导入器、首次设置、
 - [ ] 屏幕空间 GI / SSR。
 - [ ] 硬件光追阴影和反射。
 - [ ] 高清贴图替换与 mod 加载器。
+
+- [~] 可选 TAA 着色器收集：客户端同意提示/上传已实现；lo.dotslash.pro Worker/D1 同时接受 schema 1 和 schema 2 telemetry。保守 schema 2 位置证据已用留存输入和 Worker 检查验证，并覆盖重传去重；尚无新二进制游戏运行或真实玩家 telemetry。十条已捕获顶点路径遗漏已修复，玩家 UI/画面验收待完成。

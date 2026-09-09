@@ -4,9 +4,11 @@
 
 **An experimental native PC port of Lost Odyssey for Xbox 360.**
 
-Windows x64 · Direct3D 12 · PowerPC static recompilation
+Windows x64 · Direct3D 12 · Vulkan · PowerPC static recompilation
 
 <img src="docs/images/title-screen.png" alt="Lost Odyssey title screen — Press START" width="960">
+
+Optional TAA shader collection asks for consent during first-time setup, or when an existing player next opens Settings. It sends bounded shader summaries and compressed 32-frame sparse camera-motion/depth sequences (including jitter and camera matrices) to `lo.dotslash.pro`; schema 2 summaries may also include conservative position evidence for unknown vertex shaders, while schema 1 remains supported. Disable it in Settings → Language. No raw logs, local paths, saves, color images or shader source are uploaded. Shader anomaly summaries take priority over the lower-priority temporal archive. See [collection details](tools/taa-collector/README.md).
 
 ### [Download v0.4.2](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.4.2) · [Installation guide](docs/INSTALLING.md) · [Report an issue](https://github.com/freefrank/LostOdysseyRecomp/issues)
 
@@ -57,7 +59,7 @@ No Python or Visual Studio installation is needed for the release package. Later
 
 | Requirement | Supported configuration |
 | :--- | :--- |
-| System | Windows x64, AVX-capable CPU, Direct3D 12 graphics driver |
+| System | Windows x64, AVX-capable CPU, Direct3D 12 or Vulkan graphics driver |
 | Game data | Audited Europe, Asia or USA, Europe edition; Disc 1 is required to start |
 | Additional discs | Import with `InstallGame.exe`; later-disc progression is not fully verified |
 
@@ -71,7 +73,7 @@ See the [installation guide](docs/INSTALLING.md) for accepted disc versions, fil
 
 *Unmodified screenshots from development builds leading up to v0.1.*
 
-**DLC in current v0.5.0 development builds:** Open `InstallGame.exe`, choose **Files** or **Folder**, and let the importer recognize game discs and Lost Odyssey STFS DLC automatically. Review the detected content once, then import it together. Imported DLC is shared by all discs. The import and runtime file-reading chain has synthetic coverage; actual DLC rewards and areas remain unverified. See [installation instructions](docs/INSTALLING.md#automatic-content-import).
+**DLC in current v0.5.0 Windows builds:** Open `InstallGame.exe`, choose **Files** or **Folder**, and let the importer recognize game discs and Lost Odyssey STFS DLC automatically. Three real DLC packages were imported and the runtime read their headers, indexes and payloads in 24 reads total without a crash; imported files and user data remained unchanged. Rewards and dungeon gameplay remain unverified. See [installation instructions](docs/INSTALLING.md#automatic-content-import).
 
 ## Current features
 
@@ -81,15 +83,16 @@ See the [installation guide](docs/INSTALLING.md) for accepted disc versions, fil
 | First-launch setup | Language and graphics settings before game initialization |
 | Language settings | English, Japanese, Korean, Traditional and Simplified Chinese interface options; game language selection |
 | Graphics settings | Auto/manual internal resolution up to 4K, Off/FXAA/SMAA/experimental TAA, Standard/High filtering, 30/60 FPS and output/display controls; fullscreen and mixed DPI need more testing |
-| Settings menu assets | Selected installed language assets provide the native Maru23/Abc font path and original grey panel/gear treatment; 0.4.23 applies the unified SCH labels and Graphics save UX, with bounded fixture and Windowed D3D12 runtime evidence recorded |
+| Settings menu assets | Selected installed language assets provide the native Maru23/Abc font path and original grey panel/gear treatment; Graphics settings save/apply on one click, restart-required changes offer Now/Later, and Back returns directly to the previous menu without the original confirmation dialog |
 | Shader preparation | Built-in resource index, parallel compilation and cache reuse |
+| CPU use | Reduced unnecessary CPU polling; one matched D3D12 scene measured 15.6% → 4.3% process CPU with both captures near 60 presents/s |
 | Input and debug | Controller and keyboard input; English/Simplified Chinese F1 menu with capture, map information and same-map POI teleport |
 
 DLSS, FSR and frame generation are not implemented; v0.4.0 removes the former disabled controls. HDR remains future work.
 
-**Current development:** Local source is 0.5.0, preparing the unpublished v0.5.0 Windows delivery. The 0.4.19–0.4.23 feature history is locally committed; the existing 0.4.23 development ZIP remains a historical artifact. Settings uses selected menu assets with unified Simplified Chinese labels, one-click Graphics save/apply, the Now/Later restart choice after a successful save, and direct return to the previous menu without the original confirmation dialog. The bounded fixture and one hidden Windowed D3D12 runtime path passed; publication and the formal v0.5.0 package remain separate.
+**Current development:** The current source and release target are both 0.5.0; the 0.4.19–0.4.23 feature history is retained as internal development history rather than separate releases. Current Windows builds provide D3D12 and Vulkan, automatic game/DLC recognition, original-style Settings with one-click Graphics save/apply, Now/Later restart handling, direct return to the previous menu without the original confirmation dialog, shader-cache reuse and reduced unnecessary CPU polling. Shader identity reuse, geometry preparation and precise pacing brought the fixed Map16 4K measurement from 48.01 to 59.76 RTSS FPS; other scenes and sustained whole-game performance remain unverified. The current release candidate also prioritizes capture-confirmed shader anomalies and retains optional sparse camera data for future temporal research. The candidate executable is recorded in [release preparation](docs/RELEASE-v0.5.0.md); publication state is tracked separately. The recorded Windows scope remains bounded: other GPUs need feedback, DX11/Linux/macOS/Switch are future work, DLC rewards/dungeons and full-game coverage remain unverified.
 
-The v0.5.0 delivery scope is Windows D3D12/Vulkan; DX11 is future work and other GPU coverage awaits user feedback. Intermediate 0.4.xx versions remain internal. The user accepted the CPU Vulkan comparison and Issue #9; this adds no new benchmark data or original-reporter confirmation. Whole-game compatibility and two known shader failures remain open.
+The v0.5.0 delivery scope is Windows D3D12/Vulkan; DX11, Linux, macOS and the experimental Switch port with u/Adoky are future work, and other GPU coverage awaits user feedback. Intermediate 0.4.xx versions remain internal. The matched D3D12 CPU comparison is bounded to its recorded scene and hardware; it is not a whole-game or Vulkan benchmark. Whole-game compatibility and two known shader failures remain open.
 
 ## Validation and remaining work
 
@@ -99,7 +102,7 @@ Both audited editions previously passed isolated v0.4.0 official-package Map2 st
 
 TAA remains experimental, lacks native object-motion vectors and falls back to SMAA on unsupported paths. Selected movement, dialogue and Ring core-timing checks passed for 60 FPS, but whole-game locked 60 and precise Ring release/Perfect are unverified. The unvalidated 120 FPS option requires `LO_EXPERIMENTAL_120=1`; otherwise it runs at an effective 60 FPS.
 
-The Issue #5 reporter supplied a USA/Europe save and confirmed the same encounter passed after the dispatch-boundary repair; that Issue is closed. Issue #6 was closed by the maintainer with a v0.4.2 repair statement, but original-machine recovery remains unconfirmed. The accepted Map3 tire fix is included in v0.4.1; broader gameplay and hardware remain regression coverage. See [current Issue evidence](docs/STATUS.md#live-issue-reconciliation), [release validation](docs/STATUS.md) and the [follow-up record](docs/notes/handoff-v0.4.0-followup.md).
+For a TAA flicker, ghosting or missing-object report, attach the complete log from `logs/runtime-<timestamp>.log`; while the problem is visible, use **F1 → Capture render state** and upload the resulting ZIP when possible. Screenshots or video are welcome, and if capture fails, send the complete log and explain what happened. Report through [GitHub Issues](https://github.com/freefrank/LostOdysseyRecomp/issues), including a concise description, reproduction steps and expected/actual behavior. See the [bug report template](.github/ISSUE_TEMPLATE/bug_report.md).
 
 Reliable gameplay and faithful rendering come first. The project translates PowerPC code into C++ with **XenonRecomp**, implements Xbox 360 services on the host, and renders translated Xenos shaders through **plume**.
 

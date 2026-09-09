@@ -10,6 +10,8 @@ struct PacingSample
     // diagnostics, PM4 production/execution and waits; this is NOT CPU time.
     double betweenMs = 0;
     bool hasPrevious = false;
+    // The swapchain accepted this present API call; this does not imply scanout.
+    bool presentAccepted = false;
 };
 void Present(uint32_t swap, uint32_t fps, double flushMs, double waitMs, double presentMs,
     const PacingSample& pacing);

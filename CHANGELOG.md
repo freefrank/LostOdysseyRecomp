@@ -8,16 +8,45 @@ One record of completed changes, with unpublished work separated from verified r
 
 ### English
 
+- Add conservative position evidence for unknown vertex shaders, serialized in client schema 2 with independent temporal guards; the Worker accepts schema 1 and schema 2 without migration, and jitter classification is unchanged. Focused native, corpus, protocol and source-0.5.0 build checks passed; current game visual validation remains pending.
+- Add four capture-confirmed c7 vertex paths (48 draws per captured frame); prioritize shader anomaly uploads every 10 seconds, cap routine resolution variants, reserve queue capacity, and defer MV archival uploads behind shader diagnostics. The user accepted the Ghost Town slot-02 same-scene fix after six spaced screenshots over approximately 11.37 seconds.
+- Cover telemetry-confirmed vertex shader `0b786a899598ce18` with c7 TAA jitter while retaining camera/viewport/depth guards; the patch is included, while broader paths remain regression coverage. The Ghost Town slot-02 acceptance does not independently verify this shader.
+- Extend optional TAA collection with compressed 32-frame, 32×18 sparse depth and camera-only motion samples, jitter and camera matrices. Reuse the existing renderer fence for GPU readback; bound collection to one pending sequence and at least five minutes between sequences. This does not supply object/skinned motion vectors or implement DLSS frame generation.
+- Fix a settings-entry crash caused by mixed old/new translation-table definitions in an incremental build; rebuild all translation consumers together.
+- Add opt-in TAA shader diagnostics with first-setup/existing-settings consent, a persistent off switch and background upload to lo.dotslash.pro. Worker/D1 deduplicates across clients; no raw logs or game assets are uploaded. Add ten capture-confirmed vertex projection paths. Windows build and service checks passed; game acceptance pending.
+
+- Fix Vulkan presentation DPI context and request swap-chain recreation after an out-of-date surface, including unchanged window sizes. Build passed; runtime confirmation is pending user testing.
+
+- Keep source and release target at 0.5.0. Reuse index/primitive scratch, specialize endian conversion, compare vertex sample bytes directly and use precise Windows pacing waits. The final fixed Map16 4K comparison reached 59.76 RTSS FPS (16.72 ms internal mean); broader performance and player acceptance remain pending.
+
+- Reuse content-checked shader identities across shader and pipeline lookup. The shader identity change passed 74 focused checks.
+
 - Add Windows Vulkan alongside D3D12, with backend capability checks, failure fallback and separate caches.
 - Automatically recognize game discs and DLC from files, folders or mixed selections. Start directly from the executable, with portable game-path discovery.
 - Modernize the installer, updater, first-run setup and Debug Menu. Add a recomp icon and lighter window interactions.
 - Use original game menu assets where available and consistent Simplified Chinese labels. Save graphics settings with one click; offer Now/Later for changes that need a restart. Closing Settings returns directly to the previous menu without the original confirmation dialog.
 - Reuse valid startup shader caches, prepare shaders in parallel and reduce unnecessary CPU polling.
 - Fix the reproduced Issue #12 GC/render-thread race and DLC directory filtering. Keep the game window sized in physical pixels and support direct Xenia-to-Recomp save copying.
+- Add the v0.5.0 rendering diagnostics and focused repairs: Map16 TAA constant-path coverage, independent shader JSONL logs that follow runtime logging by default (with `LO_SHADER_LOG_FILE` customization or disable support), accepted-present/frame timing, GPU batch timestamps and bulk register snapshots.
+- Correct Windows physical-pixel sizing across DPI-aware Plume/D3D12/Vulkan paths, preserve window placement through display changes, and add session-only Alt+Enter/fullscreen transitions.
 
-Windows D3D12/Vulkan is the delivery scope. DX11 is future work; broader GPU coverage awaits feedback. Three imported DLC packages were read successfully, but reward collection and dungeon gameplay remain unverified. Issue #12 reporter confirmation and whole-game coverage remain pending.
+These changes have passed their focused native and CPU checks. A fixed Map16 4K performance comparison reached **59.76 RTSS FPS** (16.72 ms internal mean) after the retained 48.01 FPS baseline; this is a bounded observation, not a whole-game benchmark. A separately retained Map16 temporal observation passed 32 consecutive 3840×2160 phases with normal ground output and matching paired material/depth uploads. The four capture-confirmed c7 paths were accepted by the user after the Sol scene check; broader scenes, whole-game coverage and fullscreen/Alt+Enter acceptance remain regression work. The enemy-death `c230` path and broader shader-family coverage remain follow-up work. Historical intermediate source identities are retained in the [release preparation record](docs/RELEASE-v0.5.0.md).
+
+Windows D3D12/Vulkan is the delivery scope. DX11 is future work; broader GPU coverage awaits feedback. Three imported DLC packages were read successfully, but reward collection and dungeon gameplay remain unverified. The four c7 paths are accepted for the Ghost Town slot-02 scene; broader scene and whole-game coverage remain regression work.
 
 ### 简体中文
+
+- 为未知顶点 shader 增加保守的位置证据，并以客户端 schema 2 搭配独立时序 guards 序列化；Worker 同时接受 schema 1 和 schema 2，无需迁移，且不改变 jitter 分类。定向 native、语料库、协议及 source-0.5.0 编译检查通过；当前候选仍未完成游戏画面验收。
+- 补齐 capture 确认的四条 c7 顶点路径（每帧 48 次绘制）；异常 shader 每 10 秒优先上传，限制普通尺寸变体并预留队列空间，MV 资料上传让位于 shader 诊断。Sol 场景画面检查已由用户确认通过。
+- 为真实采集确认的顶点着色器 `0b786a899598ce18` 补齐 c7 TAA 抖动覆盖；保留相机、视口和深度检查。该补丁已包含在候选中，但 Ghost Town slot-02 的验收不单独证明此 shader。
+- 修复设置翻译表在增量构建中混用导致的闪退；扩展可选 TAA 收集，上传压缩的 32 帧稀疏深度、相机运动、抖动及相机矩阵。最多保留一组待上传序列，采集间隔至少五分钟；尚不包含物体／骨骼运动或 DLSS 帧生成。
+- 新增可选 TAA 着色器诊断：首次设置或已有玩家打开设置时征求同意，可随时关闭；后台向 lo.dotslash.pro 上传摘要，Worker/D1 跨用户去重，不上传原始日志或游戏资源。补齐十条 capture 已确认的顶点投影路径。Windows 编译及服务检查通过，游戏验收待用户完成。
+
+- 补齐 Vulkan 画面获取和提交的 DPI 上下文；交换链失效时，即使窗口尺寸未变也请求重建。编译通过，实机效果等待用户测试。
+
+- 源码和发布目标固定为 0.5.0。复用索引／图元临时数组，将字节序判断移至循环外，直接比较顶点采样字节，并使用 Windows 精确限帧等待。固定 Map16 4K 对比从保留基线 48.01 FPS 改善至 59.76 RTSS FPS（内部均值 16.72 ms）；这是限定场景观察，不是全游戏 benchmark。
+
+- shader 与 pipeline 查询共用经过内容校验的 shader 标识；shader 标识改动通过 74 项定向检查。
 
 - 新增 Windows Vulkan，与 D3D12 并存，支持后端能力检查、失败回退和独立缓存。
 - 从文件、文件夹或混合选择中自动识别游戏光盘与 DLC。可直接运行游戏程序，并自动查找便携目录中的游戏资源。
@@ -25,6 +54,10 @@ Windows D3D12/Vulkan is the delivery scope. DX11 is future work; broader GPU cov
 - 在可用时采用原版游戏菜单素材，统一简体中文标签。图形设置单击即可保存；需要重启时可选“现在”或“稍后”。关闭设置直接返回上一级菜单，不再显示原版确认框。
 - 复用有效启动 shader cache，并行准备着色器，减少不必要的 CPU 轮询。
 - 修复已复现的 Issue #12 GC／渲染线程竞争及 DLC 目录过滤问题。游戏窗口按物理像素确定大小，支持直接复制 Xenia 存档到 Recomp。
+- 增加 v0.5.0 渲染诊断与限定修复：Map16 TAA 常量路径覆盖、默认随 runtime 日志启用的独立 shader JSONL 日志（支持通过 `LO_SHADER_LOG_FILE` 自定义或禁用）、成功 Present 帧时序、GPU batch 时间戳及批量寄存器快照。
+- 修正 DPI 感知的 Plume／D3D12／Vulkan 路径中的 Windows 物理像素尺寸，保留显示器切换时的窗口位置，并加入仅会话生效的 Alt+Enter／全屏切换。
+
+上述改动已通过对应的原生和 CPU 定向检查。固定 Map16 性能对比从保留基线 48.01 提升至 59.76 RTSS FPS，内部均值为 16.72 ms；这是限定场景观察，不是全游戏 benchmark。另有独立保留的 Map16 时序实跑连续通过 32 个 3840×2160 phase，地面输出正常，材质与深度的配对上传逐位一致。四条 capture 确认的 c7 路径已通过 Ghost Town slot-02 场景六张间隔截图的用户画面验收；该证据边界之外的场景和全游戏覆盖仍属回归工作。历史中间源码身份见[发布准备记录](docs/RELEASE-v0.5.0.md)。
 
 本次面向 Windows D3D12／Vulkan；DX11 属于后续工作，其他 GPU 覆盖等待反馈。三个已导入 DLC 包均已成功读取，奖励领取及地下城游玩仍未验证。Issue #12 报告者确认和全游戏覆盖仍待完成。
 

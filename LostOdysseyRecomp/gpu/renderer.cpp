@@ -1,9 +1,13 @@
+#include "taa_collection.h"
+#include "temporal_evidence.h"
 #include "scene_aa_provenance.h"
 #include <stdafx.h>
 #include "renderer.h"
 #include "render_resolution.h"
 #include "video.h"
 #include "command_processor.h"
+#include "shader_identity.h"
+#include "geometry_prepare.h"
 #include "depth_format.h"
 #include "depth_clear_layout.h"
 #include "polygon_offset.h"
@@ -26,6 +30,8 @@
 #include <kernel/io/file_system.h>
 #include <kernel/memory.h>
 #include <os/logger.h>
+#include <os/shader_log.h>
+#include "render_timing.h"
 #include <os/log_file.h>
 #include <os/capture_archive.h>
 #include <version.h>
@@ -298,6 +304,10 @@ namespace gpu::renderer
             std::unique_ptr<RenderShader> shader;
             xenos::TranslatedShader info;
             bool valid = false;
+            position_evidence::Summary position;
+            bool positionReady = false;
+            std::bitset<1024> evidenceStates;
+            uint8_t evidenceEvents = 0;
         };
 
         using PipelineKey = gpu::pipeline_cache::Key;
@@ -314,6 +324,9 @@ namespace gpu::renderer
             RenderCommandQueue* queue = nullptr;
             std::unique_ptr<RenderCommandList> commandList;
             std::unique_ptr<RenderCommandFence> fence;
+            std::unique_ptr<RenderQueryPool> timingQueries;
+            render_timing::GpuBatches gpuTiming;
+            bool timingInitialized = false;
             bool listOpen = false;
 
             std::unique_ptr<RenderBuffer> uploadRing;
@@ -323,11 +336,12 @@ namespace gpu::renderer
             // endian). A fetch constant may describe a multi-megabyte buffer for a
             // draw that touches a few hundred vertices, so copying per draw is
             // hopeless; instead each buffer is uploaded once and re-validated with
-            // a sampled hash of the guest memory when it is referenced again.
+            // exact sampled guest bytes when it is referenced again.
             std::unique_ptr<RenderBuffer> vertexArena;
             uint8_t* arenaMapped = nullptr;
             uint64_t arenaOffset = 0;
-            struct VertexEntry { uint64_t offset; uint64_t hash; uint64_t lastFrame; };
+            struct VertexEntry { uint64_t offset; geometry_prepare::SampledContent content; uint64_t lastFrame; };
+            std::vector<uint32_t> indexScratch, primitiveScratch;
             std::unordered_map<uint64_t, VertexEntry> vertexCache;
             uint32_t vertexUploads = 0, vertexRevalidations = 0;
             size_t vertexBytesUploaded = 0;
@@ -389,7 +403,7 @@ namespace gpu::renderer
             bool temporalForced=false,temporalForcedHistory=false,temporalForcedJitter=false,temporalForcedStable=false;
             bool temporalInitFailed=false;
             uint64_t temporalSupportedFrame=~0ull;
-            uint32_t temporalJitterDraws=0,temporalJitterMisses=0;
+            uint32_t temporalJitterDraws=0,temporalJitterMisses=0,temporalJitterUnknowns=0;
             uint64_t temporalEpoch=1,temporalFramesLogged=0,temporalSubmittedFrame=~0ull;
             uint64_t resolutionConfigFrame=~0ull;
             resolution::Size internalSize{}, requestedInternalSize{};
@@ -668,7 +682,7 @@ namespace gpu::renderer
             {
                 if (psTraceRemaining)
                 {
-                    LOG_INFO("renderer: ps trace end f{} ps={:016x} draws={} truncated={}",
+                    SHADER_LOG_INFO("pixel-constants", RendererByteFnv, "renderer: ps trace end f{} ps={:016x} draws={} truncated={}",
                         frame, psTraceHash, psTraceDraws, psTraceDraws > 64);
                     --psTraceRemaining;
                 }
@@ -687,7 +701,7 @@ namespace gpu::renderer
                 psTraceRemaining = frames;
                 psTraceFirst = first;
                 psTraceCount = count;
-                LOG_INFO("renderer: ps trace request {} next-frame={} frames={} ps={:016x} constants={}+{}",
+                SHADER_LOG_INFO("pixel-constants", RendererByteFnv, "renderer: ps trace request {} next-frame={} frames={} ps={:016x} constants={}+{}",
                     serial, frame + 1, frames, hash, first, count);
             }
 
@@ -854,6 +868,7 @@ namespace gpu::renderer
                 PrepareKnownShaders();
                 if (initializationModuleFailure) return false;
                 PrepareKnownPipelines();
+                taa_collection::SetDevice(vulkan, device->getDescription().name, device->getDescription().driverVersion);
                 const auto dxcStats = xenos::GetDxcStatistics();
                 LOG_INFO("renderer: startup DXC actual calls {}, succeeded {}, deterministic rejections {}, infrastructure failures {}",
                     dxcStats.calls, dxcStats.succeeded, dxcStats.rejected, dxcStats.infrastructureFailed);
@@ -950,7 +965,7 @@ namespace gpu::renderer
                 xenos::CompiledShader f = xenos::CompileCachedHlsl(psSrc, "main", "ps_6_0", binaryFormat);
                 if (!f.ok)
                 {
-                    LOG_WARNING("renderer: transfer shader compilation failed: {}", f.errors);
+                    SHADER_LOG_WARNING("compile-failed", None, "renderer: transfer shader compilation failed: {}", f.errors);
                     return;
                 }
                 transferPs = device->createShader(f.bytecode.data(), f.bytecode.size(), "main", renderFormat);
@@ -1043,7 +1058,7 @@ namespace gpu::renderer
                 xenos::CompiledShader f = xenos::CompileCachedHlsl(psSrc, "main", "ps_6_0", binaryFormat);
                 if (!v.ok || !f.ok)
                 {
-                    LOG_WARNING("renderer: blit shader compilation failed: {}{}", v.errors, f.errors);
+                    SHADER_LOG_WARNING("compile-failed", None, "renderer: blit shader compilation failed: {}{}", v.errors, f.errors);
                     return;
                 }
                 blitVs = device->createShader(v.bytecode.data(), v.bytecode.size(), "main", renderFormat);
@@ -1145,7 +1160,17 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             {
                 if (!listOpen)
                 {
+                    if (render_timing::Enabled() && !timingInitialized) {
+                        timingInitialized = true;
+                        timingQueries = device->createQueryPool(2);
+                        if (timingQueries && timingQueries->getCount() != 2) timingQueries.reset();
+                        if (!timingQueries) LOG_WARNING("render timing: GPU timestamp queries unavailable");
+                    }
                     commandList->begin();
+                    if (timingQueries) {
+                        commandList->resetQueryPool(timingQueries.get(), 0, 2);
+                        commandList->writeTimestamp(timingQueries.get(), 0);
+                    }
                     listOpen = true;
                 }
             }
@@ -1154,6 +1179,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             {
                 if (!listOpen)
                     return;
+                if (timingQueries) commandList->writeTimestamp(timingQueries.get(), 1);
                 commandList->end();
                 listOpen = false;
                 const RenderCommandList* lists[] = { commandList.get() };
@@ -1162,6 +1188,14 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     ScopedTimer timer{ tFlush };
                     queue->waitForCommandFence(fence.get());
                 }
+                // The existing fence already completed this batch. Timestamp
+                // diagnostics add no synchronization or extra command submit.
+                if (timingQueries) {
+                    timingQueries->queryResults();
+                    const auto* results = timingQueries->getResults();
+                    if (results) gpuTiming.AddBatch(results[0], results[1]);
+                    else gpuTiming.AddUnavailableBatch();
+                } else if (render_timing::Enabled()) gpuTiming.AddUnavailableBatch();
                 // Initialization creates framebuffer views for resolve textures
                 // too. Release those cached views after their last GPU use and
                 // before a retired texture's pointer can be reused.
@@ -1668,12 +1702,12 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         }
                     }
                     if (item.cachePresent && !item.cacheValid)
-                        LOG_WARNING("renderer: ignoring incomplete shader cache {}", item.cachePath);
+                        SHADER_LOG_WARNING("cache-invalid", RendererByteFnv, "renderer: ignoring incomplete shader cache {}", item.cachePath);
                     if (!item.cacheWriteError.empty())
-                        LOG_WARNING("renderer: precompile {} cache write failed: {}", item.name, item.cacheWriteError);
+                        SHADER_LOG_WARNING("cache-write-failed", RendererByteFnv, "renderer: precompile {} cache write failed: {}", item.name, item.cacheWriteError);
                     if (!item.error.empty()) {
-                        LOG_WARNING("renderer: precompile {} {}: {} (diagnostic: {}.failed)", item.name,
-                            item.cachedFailure ? "cached failure" : "failed", item.error.substr(0, item.error.find('\n')), item.cachePath);
+                        SHADER_LOG_WARNING("prepare-failed", RendererByteFnv, "renderer: precompile {} {}: {} (diagnostic: {}.failed)", item.name,
+                            item.cachedFailure ? "cached failure" : "failed", item.error, item.cachePath);
                         if (item.deterministicFailure) shaders[item.pixel ? 1 : 0][item.hash].info = std::move(item.info);
                         ++failed;
                     } else {
@@ -1686,10 +1720,14 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             std::chrono::steady_clock::now() - moduleStarted).count();
                         entry.valid = entry.shader != nullptr;
                         if (!entry.info.errors.empty())
-                            LOG_WARNING("renderer: {} shader {:016x} notes: {}",
+                            SHADER_LOG_WARNING("translation-notes", RendererByteFnv, "renderer: {} shader {:016x} notes: {}",
                                 item.pixel ? "pixel" : "vertex", item.hash, entry.info.errors);
                         if (entry.valid) ++modulesReady;
-                        else { ++modulesFailed; ++failed; initializationModuleFailure = true; bundleWriter.reset(); }
+                        else {
+                            SHADER_LOG_ERROR("shader-module-failed", RendererByteFnv, "preparation {} shader={:016x} bytes={} format={}",
+                                item.pixel ? "pixel" : "vertex", item.hash, item.bytecode.size(), vulkan ? "spirv" : "dxil");
+                            ++modulesFailed; ++failed; initializationModuleFailure = true; bundleWriter.reset();
+                        }
                     }
                     ++done;
                     video::SetShaderPreparationProgress(done, uint32_t(paths.size()));
@@ -1733,13 +1771,38 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 ResetTimers();
             }
 
-            Shader* GetShader(bool pixel, const uint32_t* words, uint32_t count)
+            shader_identity::Cache shaderIdentities;
+
+            void PreparePositionEvidence(Shader& entry, const uint32_t* words, uint32_t count, uint64_t hash)
             {
-                uint64_t hash = Fnv1a(words, count * 4);
+                if(entry.positionReady || !entry.valid)return;
+                entry.positionReady=true;
+                try {
+                    if(!entry.info.hlsl.empty())entry.position=position_evidence::Analyze(entry.info.hlsl);
+                    else if(count<=16384) {
+                        // Warm startup bundles retain module metadata, not HLSL.
+                        // Reconstruct diagnostic text once at first binding; keep
+                        // the existing GPU binary/cache and translated ABI intact.
+                        std::vector<uint32_t> swapped(count);
+                        for(uint32_t i=0;i<count;++i)swapped[i]=ByteSwap(words[i]);
+                        const auto diagnostic=xenos::TranslateShader(swapped.data(),count,false);
+                        entry.position=position_evidence::Analyze(diagnostic.hlsl);
+                    } else entry.position.issues=32;
+                } catch(...) {entry.position={};entry.position.issues=4;}
+                const auto& p=entry.position;
+                SHADER_LOG_INFO("position-evidence", RendererByteFnv,
+                    "vertex shader={:016x} analyzer={} kind={} position_slot={} issues={} outputs={} frame={}",
+                    hash,p.version,p.kind,p.slot,p.issues,p.outputs,frame);
+            }
+
+            Shader* GetShader(bool pixel, const uint32_t* words, uint32_t count, uint64_t hash)
+            {
                 auto& cache = shaders[pixel ? 1 : 0];
                 auto it = cache.find(hash);
-                if (it != cache.end())
+                if (it != cache.end()) {
+                    if(!pixel)PreparePositionEvidence(it->second,words,count,hash);
                     return it->second.valid ? &it->second : nullptr;
+                }
 
                 Shader& entry = cache[hash];
                 if (!shaderCacheDir.empty()) {
@@ -1770,7 +1833,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     cachePath = (std::filesystem::path(shaderCacheDir) / xenos::cache::FileName(pixel, hash, cacheIdentity)).string();
                     bool present = false;
                     dxil = xenos::cache::ReadBinary(cachePath, pixel, hash, cacheIdentity, &present);
-                    if (present && dxil.empty()) LOG_WARNING("renderer: ignoring invalid/foreign shader cache {}", cachePath);
+                    if (present && dxil.empty()) SHADER_LOG_WARNING("cache-invalid", RendererByteFnv, "renderer: ignoring invalid/foreign shader cache {}", cachePath);
                 }
                 if (dxil.empty())
                 {
@@ -1780,8 +1843,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     if (!cachePath.empty() && !compilerIdentity.empty() && !getenv("LO_SHADER_RETRY_FAILURES")) {
                         const auto failure = xenos::startup_cache::ReadFailure(failurePath, failureKey);
                         if (!failure.empty()) {
-                            LOG_WARNING("renderer: {} shader {:016x} cached compiler failure: {} (diagnostic: {})",
-                                pixel ? "pixel" : "vertex", hash, failure.substr(0, failure.find('\n')), failurePath);
+                            SHADER_LOG_WARNING("compile-cached-failure", RendererByteFnv, "renderer: {} shader {:016x} cached compiler failure: {} (diagnostic: {})",
+                                pixel ? "pixel" : "vertex", hash, failure, failurePath);
                             return nullptr;
                         }
                     }
@@ -1790,7 +1853,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     {
                         if (!cachePath.empty() && !compilerIdentity.empty())
                             xenos::startup_cache::WriteFailure(failurePath, failureKey, compiled.errors, compiled.deterministicFailure);
-                        LOG_WARNING("renderer: {} shader {:016x} failed to compile:\n{}", pixel ? "pixel" : "vertex", hash, compiled.errors);
+                        SHADER_LOG_WARNING("compile-failed", RendererByteFnv, "renderer: {} shader {:016x} failed to compile:\n{}", pixel ? "pixel" : "vertex", hash, compiled.errors);
                         if (getenv("LO_SHADER_DUMP_DIR"))
                             std::ofstream(fmt::format("{}/{}_{:016x}.hlsl", getenv("LO_SHADER_DUMP_DIR"), pixel ? "ps" : "vs", hash)) << entry.info.hlsl;
                         return nullptr;
@@ -1799,13 +1862,18 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     if (!cachePath.empty()) {
                         std::string error;
                         if (!xenos::cache::WriteBinary(cachePath, pixel, hash, cacheIdentity, dxil, &error))
-                            LOG_WARNING("renderer: shader cache write failed: {}", error);
+                            SHADER_LOG_WARNING("cache-write-failed", None, "renderer: shader cache write failed: {}", error);
                     }
                 }
                 entry.shader = device->createShader(dxil.data(), dxil.size(), "main", renderFormat);
                 entry.valid = entry.shader != nullptr;
+                os::shaderlog::Log(entry.valid ? LogType::Info : LogType::Error,
+                    entry.valid ? "shader-module-ready" : "shader-module-failed", os::shaderlog::HashNamespace::RendererByteFnv,
+                    "{} shader={:016x} format={} words={} bytes={} frame={}", pixel ? "pixel" : "vertex", hash,
+                    vulkan ? "spirv" : "dxil", count, dxil.size(), frame);
                 if (!entry.info.errors.empty())
-                    LOG_WARNING("renderer: {} shader {:016x} notes: {}", pixel ? "pixel" : "vertex", hash, entry.info.errors);
+                    SHADER_LOG_WARNING("translation-notes", RendererByteFnv, "renderer: {} shader {:016x} notes: {}", pixel ? "pixel" : "vertex", hash, entry.info.errors);
+                if(!pixel)PreparePositionEvidence(entry,words,count,hash);
                 return entry.valid ? &entry : nullptr;
             }
 
@@ -2440,7 +2508,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (desc.stencilEnabled)
                 {
                     if (trace && getenv("LO_STENCIL_TRACE"))
-                        LOG_INFO("renderer: stencil pipeline vs={:016x} ps={:016x} ctl={:#x} refs={:#x}/{:#x} mask={:#x}", key.vs, key.ps, depthControl, key.stencilRefMask, key.stencilRefMaskBack, key.colorMask);
+                        SHADER_LOG_INFO("pipeline-state", RendererByteFnv, "renderer: stencil pipeline vs={:016x} ps={:016x} ctl={:#x} refs={:#x}/{:#x} mask={:#x}", key.vs, key.ps, depthControl, key.stencilRefMask, key.stencilRefMaskBack, key.colorMask);
                     static constexpr RenderStencilOp ops[] = {
                         RenderStencilOp::KEEP, RenderStencilOp::ZERO, RenderStencilOp::REPLACE,
                         RenderStencilOp::INCREMENT_AND_CLAMP, RenderStencilOp::DECREMENT_AND_CLAMP,
@@ -2533,11 +2601,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 const size_t bytes = size_t(sizeDwords) * 4;
                 const uint64_t key = (uint64_t(address) << 32) | (uint64_t(sizeDwords) << 2) | endian;
                 const uint8_t* guest = Phys(address);
-                const uint64_t hash = SampleHash(guest, bytes);
                 auto it = vertexCache.find(key);
                 if (it != vertexCache.end())
                 {
-                    if (it->second.hash == hash)
+                    if (it->second.content.Matches(guest, bytes))
                     {
                         it->second.lastFrame = frame;
                         return it->second.offset;
@@ -2556,9 +2623,11 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     return UINT64_MAX; // DrawImpl resets the arena between draws
                 const uint64_t offset = arenaOffset;
                 arenaOffset += needed;
+                VertexEntry entry{ offset, {}, frame };
+                entry.content.Capture(guest, bytes);
                 CopySwapped(arenaMapped + offset, guest, sizeDwords, endian);
                 memset(arenaMapped + offset + bytes, 0, 16);
-                vertexCache.emplace(key, VertexEntry{ offset, hash, frame });
+                vertexCache.emplace(key, std::move(entry));
                 vertexUploads++;
                 vertexBytesUploaded += bytes;
                 return offset;
@@ -2629,18 +2698,22 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 
                 // Shaders come from the command processor's last IM_LOAD.
                 uint32_t vsCount = 0, psCount = 0;
-                const uint32_t* vsWords = g_commandProcessor.GetActiveShader(false, vsCount);
-                const uint32_t* psWords = g_commandProcessor.GetActiveShader(true, psCount);
+                uint64_t vsCommandHash = 0, psCommandHash = 0;
+                const uint32_t* vsWords = g_commandProcessor.GetActiveShader(false, vsCount, vsCommandHash);
+                const uint32_t* psWords = g_commandProcessor.GetActiveShader(true, psCount, psCommandHash);
                 if (!vsWords || vsCount == 0)
                 {
                     drops.shader++;
                     return;
                 }
-                Shader* vs = GetShader(false, vsWords, vsCount);
+                const uint64_t vsHash = shaderIdentities.Get(vsCommandHash, vsWords, vsCount);
+                const uint64_t psHash = modeControl == 4 && psWords && psCount
+                    ? shaderIdentities.Get(psCommandHash, psWords, psCount) : 0;
+                Shader* vs = GetShader(false, vsWords, vsCount, vsHash);
                 // RB_MODECONTROL=5 is depth-only: the last loaded pixel shader
                 // is inactive, including its discard and depth exports. Running
                 // a stale shadow-depth PS here corrupts stencil volume tests.
-                Shader* ps = modeControl == 4 && psWords && psCount ? GetShader(true, psWords, psCount) : nullptr;
+                Shader* ps = modeControl == 4 && psWords && psCount ? GetShader(true, psWords, psCount, psHash) : nullptr;
                 if (!vs)
                 {
                     drops.shader++;
@@ -2696,8 +2769,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 
                 // Pipeline.
                 PipelineKey key{};
-                key.vs = Fnv1a(vsWords, vsCount * 4);
-                key.ps = ps ? Fnv1a(psWords, psCount * 4) : 0;
+                key.vs = vsHash;
+                key.ps = ps ? psHash : 0;
                 key.blend = Reg(REG_RB_BLENDCONTROL0);
                 key.depthControl = depthControl;
                 key.stencilRefMask = Reg(REG_RB_STENCILREFMASK) & 0xFFFFFF;
@@ -2762,8 +2835,16 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 // as zero, which zeroed the light terms of every character
                 // material - they index c[253..255].
                 uint32_t vsConstants[256 * 4], psConstants[256 * 4];
-                for (uint32_t i = 0; i < 256 * 4; i++) vsConstants[i] = Reg(REG_ALU_CONSTANTS + i);
-                for (uint32_t i = 0; i < 256 * 4; i++) psConstants[i] = Reg(REG_ALU_CONSTANTS + 256 * 4 + i);
+                // Preserve the full banks and zero-register MMIO fallback. The
+                // diagnostic switch provides a same-binary performance control.
+                static const bool legacyConstants = getenv("LO_LEGACY_CONSTANT_READS") != nullptr;
+                if (legacyConstants) {
+                    for (uint32_t i = 0; i < 256 * 4; i++) vsConstants[i] = Reg(REG_ALU_CONSTANTS + i);
+                    for (uint32_t i = 0; i < 256 * 4; i++) psConstants[i] = Reg(REG_ALU_CONSTANTS + 256 * 4 + i);
+                } else {
+                    g_commandProcessor.ReadRegisters(REG_ALU_CONSTANTS, 256 * 4, vsConstants);
+                    g_commandProcessor.ReadRegisters(REG_ALU_CONSTANTS + 256 * 4, 256 * 4, psConstants);
+                }
                 // Diagnostic selection uses only GPU draw constants, not the CPU
                 // presented-swap counter. Shader/layout recognition is deliberately
                 // limited to the path verified in the captured Map2 scene.
@@ -2792,7 +2873,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if(temporalExperiment&&temporalHistory) {
                     static const char* diagnosticStart=getenv("LO_TEMPORAL_LOG_START_FRAME");
                     static const uint64_t diagnosticFrame=diagnosticStart?strtoull(diagnosticStart,nullptr,10):0;
-                    temporalHistory->BeginFrame(frame,temporalEpoch,diagnosticStart&&frame>=diagnosticFrame&&temporalFramesLogged<256);
+                    static const bool withTrace = getenv("LO_TEMPORAL_DRAW_LOG_WITH_RESOLVE_TRACE") &&
+                        strcmp(getenv("LO_TEMPORAL_DRAW_LOG_WITH_RESOLVE_TRACE"), "1") == 0;
+                    temporalHistory->BeginFrame(frame,temporalEpoch,
+                        (diagnosticStart&&frame>=diagnosticFrame&&temporalFramesLogged<256) || (withTrace&&resolveTraceRemaining));
                 }
                 std::optional<temporal::SceneResolve> temporalSceneCopy;
                 bool sceneAARecorded=false,temporalAARecorded=false;
@@ -2872,11 +2956,38 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             source->writeX == 0 && source->writeY == 0 &&
                             source->writeWidth == source->tex->width && source->writeHeight == source->tex->height};
                 }
+                uint32_t collectionCandidates = 0;
+                if (taa_collection::Enabled() && temporalExperiment && jitterAnchor && temporalViewport) {
+                    constexpr int slots[] = {0,4,7,8,230,233};
+                    for (unsigned i=0; i<6; ++i)
+                        if (memcmp(vsConstants+slots[i]*4,jitterAnchor->vpBits.data(),16*sizeof(uint32_t))==0) collectionCandidates |= 1u<<i;
+                }
+                const uint32_t positionGuards=temporalExperiment && (taa_collection::Enabled() || temporalSlot<0) ?
+                    temporal::PositionGuards(vs->position,temporalViewport,jitterAnchor,depth?depth->allocationSerial:0,
+                        {rasterViewport.x,rasterViewport.y,rasterViewport.width,rasterViewport.height},vsConstants):0;
                 const auto drawJitter = temporal::ApplyDrawJitter(key.vs, key.ps, frame,
                     temporalExperiment && temporalJitter, temporalViewport, jitterAnchor,
                     depth ? depth->allocationSerial : 0,
                     {rasterViewport.x, rasterViewport.y, rasterViewport.width, rasterViewport.height},
                     vsConstants, psConstants, &temporalScene.Depth(), jitterSampledDepth ? &*jitterSampledDepth : nullptr);
+                const uint32_t collectionFlags=(temporalViewport?1u:0u)|(temporalJitter?2u:0u)|
+                    (drawJitter.applied?4u:0u)|((depthControl&4)?8u:0u)|
+                    (jitterAnchor&&depth&&depth->allocationSerial==jitterAnchor->depthAllocation?16u:0u);
+                if (taa_collection::Enabled() && temporalExperiment)
+                    taa_collection::Observe(key.vs,key.ps,uint32_t(rasterViewport.width),uint32_t(rasterViewport.height),
+                        temporalSlot,collectionCandidates,collectionFlags,uint32_t(drawJitter.rejection),vs->position,positionGuards);
+                if(temporalExperiment && temporalJitter && temporalSlot<0 && temporalViewport) {
+                    ++temporalJitterUnknowns;
+                    const auto state=positionGuards*32+collectionFlags;
+                    if(vs->evidenceEvents<8 && !vs->evidenceStates.test(state)) {
+                        vs->evidenceStates.set(state);++vs->evidenceEvents;
+                        const auto& p=vs->position;
+                        SHADER_LOG_INFO("coverage-candidate", RendererByteFnv,
+                            "observed f{} vs={:016x} ps={:016x} slot={} candidates={} flags={} rejection={} analyzer={} kind={} position_slot={} issues={} outputs={} guards={} extent={}x{} sample={}/8",
+                            frame,key.vs,key.ps,temporalSlot,collectionCandidates,collectionFlags,uint32_t(drawJitter.rejection),
+                            p.version,p.kind,p.slot,p.issues,p.outputs,positionGuards,uint32_t(rasterViewport.width),uint32_t(rasterViewport.height),vs->evidenceEvents);
+                    }
+                }
                 if (drawJitter.applied) ++temporalJitterDraws;
                 else if (temporalExperiment && temporalJitter && temporalSlot >= 0 && temporalViewport) ++temporalJitterMisses;
                 // Range of the bound colour format, clamped in the shader epilogue.
@@ -2974,7 +3085,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     std::string raw;
                     for (uint32_t ci = 0; ci <= 10; ci++)
                         raw += fmt::format(" c{}={:08x},{:08x},{:08x},{:08x}", ci, Reg(REG_ALU_CONSTANTS + ci * 4), Reg(REG_ALU_CONSTANTS + ci * 4 + 1), Reg(REG_ALU_CONSTANTS + ci * 4 + 2), Reg(REG_ALU_CONSTANTS + ci * 4 + 3));
-                    LOG_INFO("renderer: draw vfetch{} | indxOffset={} raw{}", vfTraceLine, int32_t(Reg(REG_VGT_INDX_OFFSET)), raw);
+                    SHADER_LOG_INFO("vertex-fetch", None, "renderer: draw vfetch{} | indxOffset={} raw{}", vfTraceLine, int32_t(Reg(REG_VGT_INDX_OFFSET)), raw);
                 }
 
                 tVertex += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - tVertex0).count();
@@ -3027,7 +3138,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }();
                 if(key.vs==0x8bbd4da701845d16ull&&key.ps==0xcda578aef1724fdcull) {
                     static const uint64_t start=getenv("LO_SCENE_AA_LOG_START_FRAME")?strtoull(getenv("LO_SCENE_AA_LOG_START_FRAME"),nullptr,10):~0ull;
-                    if(frame>=start&&frame-start<128)LOG_INFO("renderer scene AA guard f{} full={} reason={} mode={} jitter={} blend={:#x} mask={} vtx={} prim={} n={} cull={:#x} ctl={:#x} vp=({},{},{},{}) extent={}x{} fetch95={:08x},{:08x} quad={} ",frame,fullSceneCopy,fullCopyReason,sceneAAMode,temporalJitter,key.blend,key.colorMask,shared.vtxFmt,info.primitiveType,info.indexCount,key.modeCull,Reg(REG_RB_COLORCONTROL),viewport.x,viewport.y,viewport.width,viewport.height,pitch,rtHeight,Reg(REG_FETCH_CONSTANTS+190),Reg(REG_FETCH_CONSTANTS+191),fullCopyVertices);
+                    if(frame>=start&&frame-start<128)SHADER_LOG_INFO("scene-aa", None, "renderer scene AA guard f{} full={} reason={} mode={} jitter={} blend={:#x} mask={} vtx={} prim={} n={} cull={:#x} ctl={:#x} vp=({},{},{},{}) extent={}x{} fetch95={:08x},{:08x} quad={} ",frame,fullSceneCopy,fullCopyReason,sceneAAMode,temporalJitter,key.blend,key.colorMask,shared.vtxFmt,info.primitiveType,info.indexCount,key.modeCull,Reg(REG_RB_COLORCONTROL),viewport.x,viewport.y,viewport.width,viewport.height,pitch,rtHeight,Reg(REG_FETCH_CONSTANTS+190),Reg(REG_FETCH_CONSTANTS+191),fullCopyVertices);
                 }
                 // Textures used by the pixel and vertex shaders.
                 auto tBind0 = std::chrono::steady_clock::now();
@@ -3134,7 +3245,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
 
                 // Index buffer / primitive conversion.
-                std::vector<uint32_t> indices;
+                auto& indices = indexScratch;
+                if (!info.indexed) indices.clear();
                 bool useIndices = false;
                 RenderFormat indexFormat = RenderFormat::R32_UINT;
                 uint32_t indexCount = info.indexCount;
@@ -3143,20 +3255,15 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     uint32_t count = std::min<uint32_t>(info.indexCount, info.indexBufferWords);
                     indices.resize(count);
                     const uint8_t* src = Phys(info.indexBase);
-                    for (uint32_t i = 0; i < count; i++)
-                    {
-                        uint32_t v;
-                        if (info.index32) { memcpy(&v, src + i * 4, 4); v = GpuSwap(v, info.indexEndian); }
-                        else { uint16_t s16; memcpy(&s16, src + i * 2, 2); v = GpuSwap(s16, info.indexEndian) & 0xFFFF; }
-                        indices[i] = v;
-                    }
+                    geometry_prepare::ConvertIndices(src, indices.data(), count, info.index32, info.indexEndian);
                     useIndices = true;
                 }
                 switch (info.primitiveType)
                 {
                 case 13: // quad list -> triangle list
                 {
-                    std::vector<uint32_t> out;
+                    auto& out = primitiveScratch;
+                    out.clear();
                     uint32_t quads = (useIndices ? uint32_t(indices.size()) : info.indexCount) / 4;
                     out.reserve(quads * 6);
                     for (uint32_t q = 0; q < quads; q++)
@@ -3165,20 +3272,22 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         for (int k = 0; k < 4; k++) v[k] = useIndices ? indices[q * 4 + k] : q * 4 + k;
                         out.insert(out.end(), { v[0], v[1], v[2], v[0], v[2], v[3] });
                     }
-                    indices = std::move(out);
+                    indices.swap(out);
                     useIndices = true;
                     break;
                 }
                 case 5: // triangle fan -> list
                 {
-                    std::vector<uint32_t> out;
+                    auto& out = primitiveScratch;
+                    out.clear();
                     uint32_t n = useIndices ? uint32_t(indices.size()) : info.indexCount;
+                    out.reserve(n > 2 ? size_t(n - 2) * 3 : 0);
                     for (uint32_t i = 2; i < n; i++)
                     {
                         uint32_t a = useIndices ? indices[0] : 0, b = useIndices ? indices[i - 1] : i - 1, c = useIndices ? indices[i] : i;
                         out.insert(out.end(), { a, b, c });
                     }
-                    indices = std::move(out);
+                    indices.swap(out);
                     useIndices = true;
                     break;
                 }
@@ -3288,7 +3397,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             const uint32_t* v = psConstants + ci * 4;
                             values += fmt::format(" c{}={:08x},{:08x},{:08x},{:08x}", ci, v[0], v[1], v[2], v[3]);
                         }
-                        LOG_INFO("renderer: ps trace f{} ps={:016x} indices={}{}", frame, key.ps, info.indexCount, values);
+                        SHADER_LOG_INFO("pixel-constants", RendererByteFnv, "renderer: ps trace f{} ps={:016x} indices={}{}", frame, key.ps, info.indexCount, values);
                     }
                 }
                 if (!debugCaptureDir.empty())
@@ -3336,7 +3445,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             for (int k = 0; k < 4; k++) { v[k] = RegF(REG_ALU_CONSTANTS + ci * 4 + k); any |= v[k] != 0.0f; }
                             if (any) consts += fmt::format(" c{}=({:g},{:g},{:g},{:g})", ci, v[0], v[1], v[2], v[3]);
                         }
-                        LOG_INFO("renderer: draw consts{}", consts);
+                        SHADER_LOG_INFO("draw-constants", RendererByteFnv, "renderer: draw consts{}", consts);
                     }
                     if (info.indexed)
                     {
@@ -3351,7 +3460,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         }
                         detail += "]";
                     }
-                    LOG_INFO("renderer: draw detail{}", detail);
+                    SHADER_LOG_INFO("draw-state", RendererByteFnv, "renderer: draw detail{}", detail);
                 }
                 if (traceFrame && frame >= traceFrame && frame < traceFrame + traceCount)
                 {
@@ -3366,7 +3475,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             if (!(v[0] | v[1] | v[2] | v[3])) continue;
                             values += fmt::format(" c{}={:08x},{:08x},{:08x},{:08x}", ci, v[0], v[1], v[2], v[3]);
                         }
-                        LOG_INFO("renderer: draw psconsts f{} ps={:016x} upload={:#x}{}", frame, key.ps, psOffset, values);
+                        SHADER_LOG_INFO("pixel-constants", RendererByteFnv, "renderer: draw psconsts f{} ps={:016x} upload={:#x}{}", frame, key.ps, psOffset, values);
                     }
                     std::string texs;
                     for (Shader* sh : { ps, vs })
@@ -3384,13 +3493,13 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                 Reg(REG_FETCH_CONSTANTS + slot * 6 + 3), Reg(REG_FETCH_CONSTANTS + slot * 6 + 4), Reg(REG_FETCH_CONSTANTS + slot * 6 + 5));
                         }
                     }
-                    LOG_INFO("renderer: draw textures{}", texs);
+                    SHADER_LOG_INFO("draw-textures", RendererByteFnv, "renderer: draw textures{}", texs);
                 }
                 if (drawLogs < 24 || (traceFrame && frame >= traceFrame && frame < traceFrame + traceCount))
                 {
                     drawLogs++;
-                    LOG_INFO("renderer: clip f{} vs={:016x} ps={:016x} control={:#x}", frame, key.vs, key.ps, Reg(0x2204));
-                    LOG_INFO("renderer: draw f{} prim={} n={} idx={} vs={:016x} ps={:016x} rt={:#x}/{} {}x{} depth={:#x} dinfo={:#x} blend={:#x} mask={:#x} cull={:#x} colorctl={:#x} aref={:g} ring(vs={:#x} ps={:#x} sh={:#x}) vp=({},{} {}x{} z {}..{}) vte={:#x} scissor=({},{})-({},{}) ndc=({},{}) off=({},{}) mode={} c255=({:g},{:g},{:g},{:g})",
+                    SHADER_LOG_INFO("draw-state", RendererByteFnv, "renderer: clip f{} vs={:016x} ps={:016x} control={:#x}", frame, key.vs, key.ps, Reg(0x2204));
+                    SHADER_LOG_INFO("draw-state", RendererByteFnv, "renderer: draw f{} prim={} n={} idx={} vs={:016x} ps={:016x} rt={:#x}/{} {}x{} depth={:#x} dinfo={:#x} blend={:#x} mask={:#x} cull={:#x} colorctl={:#x} aref={:g} ring(vs={:#x} ps={:#x} sh={:#x}) vp=({},{} {}x{} z {}..{}) vte={:#x} scissor=({},{})-({},{}) ndc=({},{}) off=({},{}) mode={} c255=({:g},{:g},{:g},{:g})",
                         frame, info.primitiveType, indexCount, useIndices, key.vs, key.ps, colorInfo & 0xFFF, (colorInfo >> 16) & 0xF, pitch, rtHeight, depthControl, depthInfo,
                         key.blend, key.colorMask, key.modeCull, Reg(REG_RB_COLORCONTROL), RegF(REG_RB_ALPHA_REF), vsOffset, psOffset, sharedOffset,
                         viewport.x, viewport.y, viewport.width, viewport.height, viewport.minDepth, viewport.maxDepth, vte,
@@ -3427,7 +3536,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 const bool jitterLogStaticMesh = key.vs == 0xb030ab4e17a20783ull || key.vs == 0xa27a7234977e0d4aull ||
                     key.vs == 0xff9da3984ce8d094ull || key.vs == 0xf7fd88506d704a3dull ||
                     key.vs == 0xf1b330b3ceea9a3bull || key.vs == 0x8b5577db3ced3327ull ||
-                    key.vs == 0x400df7c5a60819f5ull || key.vs == 0x08dcef32bd434f8cull;
+                    key.vs == 0x400df7c5a60819f5ull || key.vs == 0x08dcef32bd434f8cull ||
+                    key.vs == 0xfcbb75d0feb3fcb9ull || key.vs == 0xe8c0d438c690c784ull || key.vs == 0x576d669b2ad3c898ull;
                 const bool jitterLogSkinned = key.vs == 0x0eb223d33f8e8e0cull || key.vs == 0x1e9017d2b296f480ull;
                 const bool jitterLogGeometry = !jitterLogIndexCount ||
                     (jitterLogStaticMesh ? info.indexCount == jitterLogIndexCount :
@@ -3464,7 +3574,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     if (shadowPair)
                         for (unsigned i = 0; i < 16; ++i) guestShadow[i] = Reg(REG_ALU_CONSTANTS + 256 * 4 + 2 * 4 + i);
                     const bool staticMesh = jitterLogStaticMesh;
-                    LOG_INFO("renderer temporal draw f{} submitted={} vs={:016x} ps={:016x} slot={} log_slot={} indices={} index_base={:x} base_vertex={} fetch95={:08x},{:08x} world_c0_c3={:016x} enabled={} viewport={} applied={} shadow={} rejection={} phase={} ndc=({:.9g},{:.9g}) extent={}x{} depth={} layer_bias={:.9g} sampled_depth={:x}/{} scene_depth={:x}/{} vp_guest=[{}] vp_upload=[{}] ps_c2_c5_guest=[{}] ps_c2_c5_upload=[{}]",
+                    SHADER_LOG_INFO("temporal", RendererByteFnv, "renderer temporal draw f{} submitted={} vs={:016x} ps={:016x} slot={} log_slot={} indices={} index_base={:x} base_vertex={} fetch95={:08x},{:08x} world_c0_c3={:016x} enabled={} viewport={} applied={} shadow={} rejection={} phase={} ndc=({:.9g},{:.9g}) extent={}x{} depth={} layer_bias={:.9g} sampled_depth={:x}/{} scene_depth={:x}/{} vp_guest=[{}] vp_upload=[{}] ps_c2_c5_guest=[{}] ps_c2_c5_upload=[{}]",
                         frame, drawsThisFrame, key.vs, key.ps, temporalSlot, jitterLogSlot, info.indexCount, info.indexBase, baseVertex,
                         Reg(REG_FETCH_CONSTANTS + 190), Reg(REG_FETCH_CONSTANTS + 191), staticMesh ? Fnv1a(vsConstants, 16 * sizeof(uint32_t)) : 0,
                         temporalExperiment && temporalJitter, temporalViewport,
@@ -3485,7 +3595,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     if(temporalAARecorded)temporalSupportedFrame=frame;
                     sceneAAAppliedFrame=frame;sceneAAAllocation=color->allocationSerial;
                     static const uint64_t logStart=getenv("LO_SCENE_AA_LOG_START_FRAME")?strtoull(getenv("LO_SCENE_AA_LOG_START_FRAME"),nullptr,10):~0ull;
-                    if(frame>=logStart&&frame-logStart<128)LOG_INFO("renderer scene AA f{} mode={} temporal={} allocation={} full_copy=1 recorded=1",frame,sceneAAMode,temporalAARecorded,color->allocationSerial);
+                    if(frame>=logStart&&frame-logStart<128)SHADER_LOG_INFO("scene-aa", None, "renderer scene AA f{} mode={} temporal={} allocation={} full_copy=1 recorded=1",frame,sceneAAMode,temporalAARecorded,color->allocationSerial);
                 }
                 if (trackTemporalScene)
                 {
@@ -4402,6 +4512,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             if (status.fail()) LOG_WARNING("render capture: could not write runtime log status");
         }
         catch (const std::exception& e) { LOG_WARNING("render capture runtime log: {}", e.what()); }
+        os::shaderlog::CaptureSnapshot(r.debugCaptureRoot, r.frame);
         // Detach the completed capture from the renderer before starting the
         // worker. Subsequent frames cannot append to or use its source files.
         const auto directory = std::move(r.debugCaptureRoot);
@@ -4435,6 +4546,16 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             static const bool stats = getenv("LO_GPU_STATS") != nullptr;
             static auto lastFrame = std::chrono::steady_clock::now();
             g_renderer->Flush();
+            if (render_timing::Enabled()) {
+                Renderer& r = *g_renderer;
+                const render_timing::CpuSegments cpu{r.drawsThisFrame, r.nShader, r.nPipeline, r.nTexture, r.nResolve,
+                    r.tDraw, r.tConst, r.tSets, r.tVertex, r.tBind, r.tIndex, r.tRecord,
+                    r.tShader, r.tPipeline, r.tTexture, r.tResolve, r.tFlush};
+                render_timing::LogFrame(r.frame, cpu, r.gpuTiming, !r.debugCaptureDir.empty(),
+                    r.resolveTraceRemaining || r.psTraceRemaining || GetHotCaptureEnvironment().geometryCaptureEnabled);
+                r.gpuTiming.Reset();
+                if (!stats) r.ResetTimers();
+            }
             if (stats)
             {
                 auto now = std::chrono::steady_clock::now();
@@ -4476,6 +4597,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 r.vertexUploads = r.vertexRevalidations = 0;
                 r.vertexBytesUploaded = 0;
             }
+            const bool temporalTraceActive = g_renderer->resolveTraceRemaining != 0;
             g_renderer->FinishResolveTraceFrame();
             if(auto& owner=g_renderer->temporalHistory;owner&&g_renderer->temporalExperiment) {
                 auto& r=*g_renderer;
@@ -4483,8 +4605,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 const bool gap=now-r.temporalFrameTime>std::chrono::milliseconds(250);
                 const bool complete=r.temporalScene.Frame()==r.frame&&r.temporalScene.Ready()&&owner->Completed()&&r.temporalSubmittedFrame==r.frame;
                 static const uint32_t temporalLogStart=getenv("LO_TEMPORAL_LOG_START_FRAME")?strtoul(getenv("LO_TEMPORAL_LOG_START_FRAME"),nullptr,10):0;
-                if(r.frame>=temporalLogStart&&r.temporalFramesLogged<256) {
-                    LOG_INFO("renderer temporal f{} epoch={} ready={} completed={} reused={} reason={} depth={} color={} gap={} jitter_draws={} jitter_misses={}",r.frame,r.temporalEpoch,r.temporalScene.Ready(),complete,owner->Reused(),uint32_t(r.temporalScene.Reason()),r.temporalScene.Depth().ordinal,r.temporalScene.Color().ordinal,gap,r.temporalJitterDraws,r.temporalJitterMisses);
+                static const bool withTrace = getenv("LO_TEMPORAL_DRAW_LOG_WITH_RESOLVE_TRACE") &&
+                    strcmp(getenv("LO_TEMPORAL_DRAW_LOG_WITH_RESOLVE_TRACE"), "1") == 0;
+                if((r.frame>=temporalLogStart&&r.temporalFramesLogged<256) || (withTrace&&temporalTraceActive)) {
+                    SHADER_LOG_INFO("temporal", RendererByteFnv, "renderer temporal f{} epoch={} ready={} completed={} reused={} reason={} depth={} color={} gap={} jitter_draws={} jitter_misses={} jitter_unknowns={}",r.frame,r.temporalEpoch,r.temporalScene.Ready(),complete,owner->Reused(),uint32_t(r.temporalScene.Reason()),r.temporalScene.Depth().ordinal,r.temporalScene.Color().ordinal,gap,r.temporalJitterDraws,r.temporalJitterMisses,r.temporalJitterUnknowns);
                     const auto& diagnostic=owner->Diagnostics();
                     if(diagnostic.captured) {
                         std::string reasons;
@@ -4493,29 +4617,29 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             reasons+=temporal::HistoryReuseRejectionName(temporal::HistoryReuseRejection(bit));
                         }
                         const auto& state=diagnostic.state;
-                        LOG_INFO("renderer temporal gates f{} mask={:#x} reasons={} valid={} previous_completed={} stable={}/{} allow_history={} frames={}/{} epochs={}/{} allocations={}/{} camera_checks={}",
+                        SHADER_LOG_INFO("temporal", RendererByteFnv, "renderer temporal gates f{} mask={:#x} reasons={} valid={} previous_completed={} stable={}/{} allow_history={} frames={}/{} epochs={}/{} allocations={}/{} camera_checks={}",
                             r.frame,diagnostic.rejected,reasons.empty()?"none":reasons,state.valid,state.previousCompleted,state.currentStable,state.previousStable,state.allowHistory,
                             state.currentFrame,state.previousFrame,state.currentEpoch,state.previousEpoch,state.currentAllocation,state.previousAllocation,diagnostic.cameraChecksAvailable);
                         auto logCamera=[&](const char* which,const std::optional<temporal::Camera>& camera) {
-                            if(!camera) {LOG_INFO("renderer temporal camera f{} {} missing",r.frame,which);return;}
+                            if(!camera) {SHADER_LOG_INFO("temporal", RendererByteFnv, "renderer temporal camera f{} {} missing",r.frame,which);return;}
                             std::string vp;for(double value:camera->VP())vp+=fmt::format("{:.9g},",value);
                             const auto& v=camera->Raster();
-                            LOG_INFO("renderer temporal camera f{} {} raster=({:.17g},{:.17g},{:.17g},{:.17g}) ndc_y={:.17g} half_pixel=({:.17g},{:.17g}) vp=[{}]",
+                            SHADER_LOG_INFO("temporal", RendererByteFnv, "renderer temporal camera f{} {} raster=({:.17g},{:.17g},{:.17g},{:.17g}) ndc_y={:.17g} half_pixel=({:.17g},{:.17g}) vp=[{}]",
                                 r.frame,which,v.x,v.y,v.width,v.height,v.ndcYSign,v.halfPixelNdcX,v.halfPixelNdcY,vp);
                         };
                         logCamera("current",diagnostic.currentCamera);logCamera("previous",diagnostic.previousCamera);
                         if(diagnostic.cameraChecksAvailable)
-                            LOG_INFO("renderer temporal depth_range f{} valid={} lower_bound={:.17g} far_world_w={:.17g} near_world_w={:.17g}",
+                            SHADER_LOG_INFO("temporal", RendererByteFnv, "renderer temporal depth_range f{} valid={} lower_bound={:.17g} far_world_w={:.17g} near_world_w={:.17g}",
                                 r.frame,diagnostic.depthRange.valid,diagnostic.depthRange.lowerBound,diagnostic.depthRange.farWorldW,diagnostic.depthRange.nearWorldW);
                         if(diagnostic.cameraChecksAvailable&&diagnostic.depthRange.valid)for(const auto& probe:diagnostic.probes)
-                            LOG_INFO("renderer temporal probe f{} depth={:.9g} rejection={} projected_valid={} projected=({:.17g},{:.17g},{:.17g}) delta_fraction=({:.17g},{:.17g}) quarter_screen_rejected={}",
+                            SHADER_LOG_INFO("temporal", RendererByteFnv, "renderer temporal probe f{} depth={:.9g} rejection={} projected_valid={} projected=({:.17g},{:.17g},{:.17g}) delta_fraction=({:.17g},{:.17g}) quarter_screen_rejected={}",
                                 r.frame,probe.depth,uint32_t(probe.rejection),probe.projectedValid,probe.projected.x,probe.projected.y,probe.projected.depth,probe.deltaXFraction,probe.deltaYFraction,probe.quarterScreenRejected);
                     }
                     ++r.temporalFramesLogged;
                 }
                 if(!complete||gap) {owner->Reset();r.temporalSupportedFrame=~0ull;++r.temporalEpoch;}
                 r.temporalFrameTime=now;
-                r.temporalJitterDraws=r.temporalJitterMisses=0;
+                r.temporalJitterDraws=r.temporalJitterMisses=r.temporalJitterUnknowns=0;
             }
             g_renderer->SavePipelineRecipes();
             if (stats && g_renderer->frame % 600 == 0)
@@ -4560,7 +4684,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
         if(!surface||!surface->tex||surface->frame+1!=g_renderer->frame)return false;
         auto coverage=surface->tex->aaProvenance.Get(surface->frame,surface->tex->allocationSerial);
         static const uint64_t start=getenv("LO_SCENE_AA_LOG_START_FRAME")?strtoull(getenv("LO_SCENE_AA_LOG_START_FRAME"),nullptr,10):~0ull;
-        if(surface->frame>=start&&surface->frame-start<128)LOG_INFO("renderer scene AA present f{} address={:#x} coverage={} skip_final={}",surface->frame,physicalAddress,uint32_t(coverage),scene_aa::SkipFinalAA(coverage));
+        if(surface->frame>=start&&surface->frame-start<128)SHADER_LOG_INFO("scene-aa", None, "renderer scene AA present f{} address={:#x} coverage={} skip_final={}",surface->frame,physicalAddress,uint32_t(coverage),scene_aa::SkipFinalAA(coverage));
         return scene_aa::SkipFinalAA(coverage);
     }
 

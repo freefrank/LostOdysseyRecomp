@@ -1348,7 +1348,8 @@
         "Area": "TAA",
         "Status": "In Progress",
         "Delivery": "In progress",
-        "Source key": "enemy-disappearance-flicker"
+        "Source key": "enemy-disappearance-flicker",
+        "Evidence": "Accepted bounded c7 repair: candidate SHA256 1c9911a3ad6dc91acc5ac1a2cffd7503031b12a81b82b19dd526ce28345ca87a classifies four capture 2813–2815 VS paths (48 draws/frame) while retaining exact matrix, viewport and depth guards. In the same D-drive slot 02 Ghost Town — City of Ruins scene, six presented frames spanning about 11.37 seconds showed no flicker; the user accepts this scoped repair as successful. The sample is not continuous video; broader scene regression remains pending. Release evidence is unchanged."
       },
       "title": "Diagnose and repair enemy disappearance flicker",
       "body_sha256": "16ab50a837c113119a80f56ee8fca4865f64dd3128810391a270454cfadf27fc"
@@ -1358,12 +1359,14 @@
       "fields": {
         "Kind": "Infrastructure",
         "Area": "Shader diagnostics",
-        "Status": "Todo",
-        "Delivery": "Not started",
-        "Source key": "shader-log-coverage-audit"
+        "Status": "In Progress",
+        "Delivery": "Validated",
+        "Source key": "shader-log-coverage-audit",
+        "Release": "v0.5.0",
+        "Evidence": "Source 0.5.0 position-evidence-1 client: conservative HLSL position-dataflow analysis runs once per VS, and finite camera/viewport/depth evidence records before UnknownShader returns in schema 2 without authorizing jitter. Candidate SHA256 6feb20923e3632ac00b718950927ee245fb6929c7c3bc95e87e9d13f5cd23937 passed 27 C++ rule checks, a retained corpus with four c7 detections and five non-c7 non-matches, plus seven Worker checks. Deployed Worker accepts schema 1 and 2 requests (HTTP 200); D1 schema-2 retransmit dedup raised max_draws 44 to 54, then exact test rows were deleted and read back empty. No game run or real player schema-2 telemetry exists. Cumulative coverage and all-draw audit remain In Progress; 4bd/c230 remains unvalidated."
       },
       "title": "Add independent shader logs and cumulative coverage auditing",
-      "body_sha256": "052fc580aa0ef71b007c3b8ee9700b51bce331a16dd2d9f0eedb07043434b3d9"
+      "body_sha256": "89008022b5a9f165b6ea52e2623375373b198bf462edad04afc914b4af835871"
     },
     "amd-opening-shadow-report": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56ekQ",
@@ -1720,7 +1723,8 @@
         "Area": "Platforms",
         "Status": "Paused",
         "Delivery": "Deferred",
-        "Source key": "switch-platform-alignment"
+        "Source key": "switch-platform-alignment",
+        "Evidence": "Future experimental Switch collaboration with u/Adoky is recorded. It remains paused pending an explicit resume and retains the PC-alignment prerequisite; it does not imply main-repository merge or platform support."
       },
       "title": "Resume the Switch platform branch after PC Vulkan",
       "body_sha256": "431a995e860df135012eb4e5a3fdec0cd114b94985c2d6e2b8f8b6ddbfa298c2"
@@ -2232,6 +2236,88 @@
       },
       "title": "Size the game window in actual pixels independently of desktop DPI",
       "body_sha256": "aa46751e6445b819fcccbd08e72800dce117b1a12b96d53a91aea90b1c001049"
+    },
+    "render-output-dpi-presentation-diagnosis": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg6Knuo",
+      "fields": {
+        "Kind": "Bug",
+        "Area": "Desktop windowing",
+        "Status": "Awaiting validation",
+        "Delivery": "Validated",
+        "Evidence": "Source 0.5.6 corrected the failing legacy DPI144 fixture. Final actual D3D12 DPI144 evidence reports an SDL client of 3840x2160, raw output 2560x1440, physical output and swapchain 3840x2160 at 363.065s, and a 3840x2160 normal-ground screenshot. The intermediate 3846x2177 observation is retained as non-final. Vulkan and player acceptance remain pending; release remains pending.",
+        "Source key": "render-output-dpi-presentation-diagnosis",
+        "Release": "v0.5.0"
+      },
+      "title": "Diagnose render output size across desktop DPI transitions",
+      "body_sha256": "719d8e62d2c94884d084c300b3c915269e546724f381361b5106efbb1bb58550"
+    },
+    "native-macos-platform": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg6Knwg",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Platforms",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Source key": "native-macos-platform"
+      },
+      "title": "Establish a native macOS port",
+      "body_sha256": "8b7624814fb79b9cc1b56b27b5ea56e99226759165aaa090cc99e9730b7eca49"
+    },
+    "intermittent-fullscreen-underscan": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg6Ku0U",
+      "fields": {
+        "Kind": "Bug",
+        "Area": "Desktop windowing",
+        "Status": "Awaiting validation",
+        "Delivery": "Validated",
+        "Evidence": "Source 0.5.6 corrected native desktop-window sizing, placement, shortcut and pending-transition cases. The actual D3D12 DPI144 window path produced a 3840x2160 client and swapchain, but background execution forces Windowed mode. Actual fullscreen behavior, intentional aspect-ratio bars versus underscan, Vulkan coverage, player acceptance and release remain pending.",
+        "Source key": "intermittent-fullscreen-underscan",
+        "Release": "v0.5.0"
+      },
+      "title": "Diagnose intermittent fullscreen underscan",
+      "body_sha256": "9c7247e5449d1d41c24f043ef3454e1d7640fea8a759fd0b5735289bc10af095"
+    },
+    "alt-enter-window-fullscreen-toggle": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg6Ku2E",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Desktop windowing",
+        "Status": "Awaiting validation",
+        "Delivery": "Validated",
+        "Source key": "alt-enter-window-fullscreen-toggle",
+        "Release": "v0.5.0",
+        "Evidence": "Source 0.5.6 Alt+Enter, saved placement and pending-transition handling passed the corrected native window fixture at physical 3840x2160. Background execution forces Windowed mode, so the actual game fullscreen/windowed lifecycle, Vulkan coverage, player acceptance and release remain pending."
+      },
+      "title": "Add Alt+Enter window/fullscreen toggle",
+      "body_sha256": "6d5ce8bef1e7d9f0ad767aa589c409d005bb0bc4b70752706902dfaeb04f9160"
+    },
+    "4k-runtime-performance-diagnosis": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg6K5JU",
+      "fields": {
+        "Kind": "Research",
+        "Area": "Runtime performance",
+        "Status": "In Progress",
+        "Delivery": "Validated",
+        "Release": "v0.5.0",
+        "Evidence": "Source/release fixed at 0.5.0 by user correction. Content-checked shader reuse, exact vertex sample comparison, reused index/primitive scratch, endian loop specialization and precise Windows deadline waits implemented. Focused geometry/timer checks passed. Fixed Map16 D3D12 4K/TAA3/cap60: RTSS 54.05 to 58.33 to 59.76 FPS; final mean 16.7238 ms/p95 17.1576 ms/1196 consecutive valid frames. Vertex/index 1.5741/1.9266 to 0.6519/0.2914 ms. Output normal, no new shader/pipeline/texture or in-window captures. External load and collector cost differ; bounded near-60 result, not whole-game acceptance. Saves/settings unchanged, all games closed. No commit/push/release.",
+        "Source key": "4k-runtime-performance-diagnosis"
+      },
+      "title": "Diagnose observed 4K runtime performance",
+      "body_sha256": "d99cf368fac9071d92e215567eab8ab3d9fcf7393024af2a250d397ac8c2b1b6"
+    },
+    "4k-taa-ground-shadow-diagnosis": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg6K5Kg",
+      "fields": {
+        "Kind": "Bug",
+        "Area": "TAA and shadows",
+        "Status": "Awaiting validation",
+        "Delivery": "Validated",
+        "Release": "v0.5.0",
+        "Evidence": "The Map16 three-slot fcbb/c7/e8c0+576d/c8 repair passed 20,635 CPU checks and a 3840x2160 continuous 32-phase run: all summaries ready/completed/reused, no gap or jitter miss, with 160 material/depth VP uploads bit-identical. Accepted bounded follow-up: candidate SHA256 1c9911a3ad6dc91acc5ac1a2cffd7503031b12a81b82b19dd526ce28345ca87a classifies four c7 VS paths from captures 2813–2815 (48 draws/frame) with exact matrix, viewport and depth guards retained. In the same D-drive slot 02 Ghost Town — City of Ruins scene, six intermittent presented frames spanning about 11.37 seconds showed no flicker; the user accepted this scope. This does not validate broader shader families or release.",
+        "Source key": "4k-taa-ground-shadow-diagnosis"
+      },
+      "title": "Diagnose reported 4K TAA ground and shadow blacking",
+      "body_sha256": "8cf69c098fcb77953d34ad9e4dbd4b2abeb833accd45020b0e055c8a0cda46e4"
     }
   }
 }

@@ -4,9 +4,11 @@
 
 **《失落的奥德赛》Xbox 360 版的实验性原生 PC 移植。**
 
-Windows x64 · Direct3D 12 · PowerPC 静态重编译
+Windows x64 · Direct3D 12 · Vulkan · PowerPC 静态重编译
 
 <img src="docs/images/title-screen.png" alt="失落的奥德赛标题画面 — Press START" width="960">
+
+可选 TAA 着色器收集会在首次设置，或已有玩家下次打开设置时询问同意。开启后向 `lo.dotslash.pro` 上传有限的着色器摘要，以及压缩的 32 帧稀疏相机运动／深度序列（含抖动与相机矩阵）；schema 2 摘要还可为未知顶点 shader 携带保守的位置证据，同时继续支持 schema 1 格式。可在设置 → 语言中关闭；不上传原始日志、本地路径、存档、彩色画面或着色器源码。异常 shader 摘要优先于低优先级的时序资料归档。参见[采集说明](tools/taa-collector/README.md)。
 
 ### [下载 v0.4.2](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.4.2) · [安装指南](docs/INSTALLING.md) · [反馈问题](https://github.com/freefrank/LostOdysseyRecomp/issues)
 
@@ -57,7 +59,7 @@ v0.3.0已正式发布，扩大到压缩资源与XEX中的shader发现，生成�
 
 | 要求 | 支持范围 |
 | :--- | :--- |
-| 系统 | Windows x64、支持 AVX 的 CPU、Direct3D 12 图形驱动 |
+| 系统 | Windows x64、支持 AVX 的 CPU、Direct3D 12 或 Vulkan 图形驱动 |
 | 游戏数据 | 已核对的 Europe, Asia 或 USA, Europe 版；启动需要 Disc 1 |
 | 其他光盘 | 通过 `InstallGame.exe` 追加导入；后续光盘流程尚未完整验证 |
 
@@ -79,17 +81,18 @@ v0.3.0已正式发布，扩大到压缩资源与XEX中的shader发现，生成�
 | 首次启动设置 | 游戏初始化前选择语言和图形选项 |
 | 语言设置 | 英语、日语、韩语、繁体中文、简体中文界面，以及游戏语言选择 |
 | 图形设置 | 最高 4K 的 Auto／手动内部分辨率、Off／FXAA／SMAA／实验性 TAA、标准／高质量滤波、30／60 FPS 及输出／显示控制；全屏和跨 DPI 仍需更多测试 |
-| 设置菜单素材 | 从已安装语言资源读取 Maru23／Abc 字体路径及原版灰色面板／齿轮素材；0.4.23 已统一简体中文标签并加入图形设置保存 UX，窄 fixture 与一次 Windowed D3D12 实际流程已通过 |
+| 设置菜单素材 | 从已安装语言资源读取 Maru23／Abc 字体路径及原版灰色面板／齿轮素材；图形设置单击保存并应用，需要重启时选择 Now/Later，Back 直接返回上一级且不显示原版确认框 |
 | 着色器预编译 | 内置资源索引、多线程编译、缓存复用 |
+| CPU 使用率 | 减少不必要的 CPU 轮询；一个匹配的 D3D12 场景记录为 15.6% → 4.3%，两次采集均约 60 presents/s |
 | 输入与调试 | 手柄和键盘输入；英文／简体中文 F1 菜单提供捕获、地图信息与同地图 POI 传送 |
 
 DLSS、FSR 和帧生成尚未实现；v0.4.0 已移除此前的禁用控件。HDR 仍为后续工作。
 
-**当前 v0.5.0 开发版 DLC：**打开 `InstallGame.exe`，选择 **Files** 或 **Folder**，导入器会自动识别游戏光盘和失落的奥德赛 STFS DLC。确认识别结果后即可统一导入。所有光盘共用导入内容。导入与运行时文件读取链路已通过合成测试，真实 DLC 奖励和区域仍待验证。见[安装说明](docs/INSTALLING.md#automatic-content-import)。
+**当前 v0.5.0 Windows 版 DLC：**打开 `InstallGame.exe`，选择 **Files** 或 **Folder**，导入器会自动识别游戏光盘和失落的奥德赛 STFS DLC。三份真实 DLC 包已完成导入，运行时共读取 header、完整索引和 payload 24 次且无崩溃；导入文件和用户数据保持不变。奖励和地下城玩法仍待验证。见[安装说明](docs/INSTALLING.md#automatic-content-import)。
 
-**当前开发：** 本地源码准备为 0.5.0，正在准备未发布的 v0.5.0 Windows 交付。0.4.19–0.4.23 功能历史已在本地提交，现有 0.4.23 开发 ZIP 保持历史产物身份。Settings 使用所选菜单素材、统一简体中文标签、图形设置单击保存并应用、保存后的 Now/Later 重启选择，并可直接返回上一级菜单且不显示原版确认框。窄 fixture 与一次隐藏 Windowed D3D12 实际流程已通过；公开发布和正式 v0.5.0 包另行处理。
+**当前开发：** 当前源码和发布目标统一为 0.5.0；0.4.19–0.4.23 作为内部开发历史保留，不单独对应发布版本。当前 Windows 版提供 D3D12 与 Vulkan、游戏/DLC 自动识别、原版风格 Settings、图形设置单击保存并应用、Now/Later 重启选择、直接返回上一级且不显示原版确认框、shader cache 复用、减少不必要的 CPU 轮询。复用 shader 标识、优化几何准备和精确限帧后，固定 Map16 4K 的 RTSS 从 48.01 升至 59.76 FPS；其他场景及全游戏持续性能仍待验证。当前候选优先处理 capture 确认的异常 shader，并保留可选稀疏相机资料供后续时序研究；候选程序见[0.5.0 发布准备](docs/RELEASE-v0.5.0.md)，发布状态另行记录。当前 Windows 范围仍有界：其他 GPU 需要反馈，DX11/Linux/macOS/实验性 Switch（与 u/Adoky 合作）属于未来工作，DLC 奖励／地下城和完整游戏覆盖仍未验证。
 
-v0.5.0 的交付范围为 Windows D3D12／Vulkan；DX11 属于未来工作，其他 GPU 覆盖等待用户反馈。0.4.xx 保持内部开发版本。用户已验收 CPU Vulkan 对照和 Issue #9；这不新增 benchmark 数据，也不代表原报告者确认。全游戏兼容性及两项已知 shader failure 仍待完成。
+v0.5.0 的交付范围为 Windows D3D12／Vulkan；DX11、Linux、macOS 及与 u/Adoky 合作的实验性 Switch 移植属于未来工作，其他 GPU 覆盖等待用户反馈。0.4.xx 保持内部开发版本。D3D12 CPU 对照仅适用于记录中的场景和硬件，不是全游戏或 Vulkan benchmark。全游戏兼容性及两项已知 shader failure 仍待完成。
 
 ## 验证与剩余工作
 
@@ -99,7 +102,7 @@ v0.4.1 Windows 正式包通过发布 CI、全部 45 项 manifest、安装器自�
 
 TAA 仍为实验功能，缺少原生对象运动矢量，不支持的路径回退至 SMAA。60 FPS 已通过选定移动、对白和 Ring 核心计时检查，但未验证全游戏锁定 60 或精准 Ring 释放／Perfect。未验证的 120 FPS 选项需要 `LO_EXPERIMENTAL_120=1`，否则实际按 60 FPS 运行。
 
-Issue #5 报告者提供了 USA/Europe 存档，并确认调用边界修复后同一遇敌已通过，Issue 已关闭。Issue #6 由维护者以 v0.4.2 修复说明关闭，原机器恢复仍待确认。已验收的 Map3 轮胎修复包含在 v0.4.1 中，更广游戏流程和硬件列为回归。见[当前 Issue 证据](docs/STATUS.md#live-issue-reconciliation)、[正式发布验证](docs/STATUS.md)和[后续记录](docs/notes/handoff-v0.4.0-followup.md)。
+如果遇到 TAA 闪烁、拖影或缺少物体，请附上 `logs/runtime-<timestamp>.log` 的完整日志；问题出现时尽量使用 **F1 → Capture render state** 并上传生成的 ZIP。截图或视频可作为补充；如果捕获失败，请提交完整日志并说明情况。请通过 [GitHub Issues](https://github.com/freefrank/LostOdysseyRecomp/issues) 反馈，简述问题、复现步骤以及预期／实际行为。见 [bug report template](.github/ISSUE_TEMPLATE/bug_report.md)。
 
 当前优先保证游戏流程和原版渲染行为。项目使用 **XenonRecomp** 将 PowerPC 代码翻译为 C++，在宿主侧实现 Xbox 360 服务，并通过 **plume** 渲染翻译后的 Xenos 着色器。
 

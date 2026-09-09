@@ -4,6 +4,10 @@ The portable importer lives in `tools/installer`. Its backend uses only the Pyth
 library. The graphical frontend uses Tk and is frozen into a single InstallGame.exe using
 PyInstaller. No interpreter installation is needed on the destination machine.
 
+## Current v0.5.0 CI delivery — 2026-09-09
+
+Release CI `34362242667` succeeded for tag/main `28be72f02649cf87126dd9f1a604ada6cdd380c5`. The Windows ZIP is 44,020,136 bytes with SHA256 `e8391a2353a7206398b2dca24a2d73bccdea7b946d55cbfca4e7573648e95312`; source identity is `5038af3b3561ffce579a78158fb088c8d5f27df7705ba140e0e56bd11624e9cc`. See `out/v0.5.0/release-finalization/ci-34362242667/CI-DELIVERY.json` and `REPORT.md`. That CI artifact predates the current shader-priority candidate and remains historical until the parent replaces it. Draft release `385591785` is not public and has no publication timestamp or verified anonymous public download. The current candidate's four capture-confirmed c7 paths and shader-anomaly priority are documented in `out/v0.5.0/performance-fix/shader-priority-0.5.0/REPORT.md`; no game run was performed for it. Publication must wait for final asset/tag/download verification.
+
 ## Local build
 
 Prepare submodules and generate PPC sources as described in BUILDING.md. Then:

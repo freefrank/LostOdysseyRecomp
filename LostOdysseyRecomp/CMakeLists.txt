@@ -198,6 +198,19 @@ if(WIN32)
         ${LO_RUNTIME_ROOT}/os/capture_archive.cpp)
     target_include_directories(LoCaptureArchiveTest PRIVATE ${LO_RUNTIME_ROOT})
     target_compile_features(LoCaptureArchiveTest PRIVATE cxx_std_20)
+
+    # Shader-log routing, concurrent snapshots, real compiler diagnostics and ZIP
+    # inclusion; no GPU, game assets or generated guest library.
+    add_executable(LoShaderLogTest EXCLUDE_FROM_ALL
+        ${CMAKE_SOURCE_DIR}/tools/tests/shader_log_test.cpp
+        ${LO_RUNTIME_ROOT}/os/log_file.cpp
+        ${LO_RUNTIME_ROOT}/os/capture_archive.cpp
+        ${LO_RUNTIME_ROOT}/gpu/shader/dxc_compiler.cpp)
+    target_include_directories(LoShaderLogTest PRIVATE ${LO_RUNTIME_ROOT}
+        ${CMAKE_SOURCE_DIR}/tools/XenosRecomp/thirdparty/dxc-bin/inc)
+    target_compile_features(LoShaderLogTest PRIVATE cxx_std_20)
+    target_compile_definitions(LoShaderLogTest PRIVATE NOMINMAX)
+    target_link_libraries(LoShaderLogTest PRIVATE fmt::fmt)
 endif()
 
 # Crash reporting is exercised in sacrificial child processes, without the
@@ -397,6 +410,13 @@ target_include_directories(LoDepthClearLayoutTest PRIVATE ${LO_RUNTIME_ROOT})
 target_compile_features(LoDepthClearLayoutTest PRIVATE cxx_std_20)
 
 # Host-only fixtures do not require guest generation or the runtime PCH.
+add_executable(LoRegisterSnapshotTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/register_snapshot_test.cpp)
+target_include_directories(LoRegisterSnapshotTest PRIVATE ${LO_RUNTIME_ROOT})
+target_compile_features(LoRegisterSnapshotTest PRIVATE cxx_std_20)
+
+add_executable(LoPositionEvidenceTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/position_evidence_test.cpp)
+target_compile_features(LoPositionEvidenceTest PRIVATE cxx_std_20)
+
 add_executable(LoRenderResolutionTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/render_resolution_test.cpp)
 target_include_directories(LoRenderResolutionTest PRIVATE ${LO_RUNTIME_ROOT})
 target_compile_features(LoRenderResolutionTest PRIVATE cxx_std_20)

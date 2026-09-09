@@ -11,7 +11,9 @@ namespace os::logger
     bool OpenFile(const std::filesystem::path& path);
 
     // Call only after opening a default logs/runtime-<digits>.log sink.
-    // Keep that file and the two greatest other numeric filename timestamps.
+    // Keep that runtime/shader session and the two greatest other numeric
+    // filename timestamps (shader-only remnants also count as session groups).
+    // If either group member is active, retain both for a later launch.
     // Never recurse or remove non-regular files. Busy/inaccessible old logs are
     // left for a later launch, so the directory may temporarily contain more.
     // Custom LO_LOG_FILE sinks must not opt in to this best-effort cleanup.

@@ -1,9 +1,11 @@
 #include <os/log_file.h>
 #include <os/logger.h>
+#include <os/shader_log.h>
 
 #include <cerrno>
 #include <atomic>
 #include <algorithm>
+#include <map>
 #include <optional>
 #include <string>
 #include <vector>
@@ -28,13 +30,14 @@ namespace os::logger
         // Accessed only under g_mutex, together with the corresponding FILE*.
         std::filesystem::path g_filePath;
 
-        std::optional<std::string> LogTimestamp(const std::filesystem::path& path)
+        std::optional<std::string> LogTimestamp(const std::filesystem::path& path, bool allowShader = false)
         {
             const auto name = path.filename().u8string();
-            if (!name.starts_with(u8"runtime-") || !name.ends_with(u8".log") || name.size() <= 12)
+            const bool shader = allowShader && name.starts_with(u8"shader-") && name.ends_with(u8".jsonl");
+            if ((!shader && (!name.starts_with(u8"runtime-") || !name.ends_with(u8".log"))) || name.size() <= (shader ? 13u : 12u))
                 return std::nullopt;
             std::string digits;
-            for (const auto digit : name.substr(8, name.size() - 12))
+            for (const auto digit : name.substr(shader ? 7 : 8, name.size() - (shader ? 13 : 12)))
             {
                 if (digit < u8'0' || digit > u8'9')
                     return std::nullopt;
@@ -45,35 +48,51 @@ namespace os::logger
             return first == std::string::npos ? "0" : digits.substr(first);
         }
 
-        void RemoveInactiveLog(const std::filesystem::path& path)
+        void RemoveInactiveLogGroup(const std::vector<std::filesystem::path>& paths)
         {
 #ifdef _WIN32
             // No sharing: even older loggers that allow FILE_SHARE_DELETE
             // block this open while either their CRT or emergency sink lives.
             // Mark deletion on this handle, avoiding a close/remove race.
-            const HANDLE file = CreateFileW(path.c_str(), DELETE | FILE_READ_ATTRIBUTES,
-                0, nullptr, OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
-            if (file == INVALID_HANDLE_VALUE)
-                return;
-            BY_HANDLE_FILE_INFORMATION info{};
-            if (GetFileInformationByHandle(file, &info) &&
-                !(info.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)))
+            struct Handles {
+                std::vector<HANDLE> files;
+                ~Handles() { for (auto file : files) CloseHandle(file); }
+            } handles;
+            for (const auto& path : paths)
+            {
+                const HANDLE file = CreateFileW(path.c_str(), DELETE | FILE_READ_ATTRIBUTES,
+                    0, nullptr, OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+                if (file == INVALID_HANDLE_VALUE) return;
+                handles.files.push_back(file);
+                BY_HANDLE_FILE_INFORMATION info{};
+                if (!GetFileInformationByHandle(file, &info) ||
+                    (info.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_READONLY))) return;
+            }
+            // Acquire every member first: an active shader log protects its
+            // runtime companion and vice versa. Incomplete deletion is retried
+            // as an orphan group on a later launch.
+            for (const auto file : handles.files)
             {
                 FILE_DISPOSITION_INFO disposition{TRUE};
                 SetFileInformationByHandle(file, FileDispositionInfo, &disposition, sizeof(disposition));
             }
-            CloseHandle(file);
 #else
             // Cooperating logger processes hold a shared lock for their life.
-            const int file = open(path.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
-            if (file < 0)
-                return;
-            struct stat opened{}, named{};
-            if (flock(file, LOCK_EX | LOCK_NB) == 0 && fstat(file, &opened) == 0 &&
-                S_ISREG(opened.st_mode) && lstat(path.c_str(), &named) == 0 &&
-                opened.st_dev == named.st_dev && opened.st_ino == named.st_ino)
-                unlink(path.c_str());
-            close(file);
+            struct Handles {
+                std::vector<int> files;
+                ~Handles() { for (auto file : files) close(file); }
+            } handles;
+            for (const auto& path : paths)
+            {
+                const int file = open(path.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+                if (file < 0) return;
+                handles.files.push_back(file);
+                struct stat opened{}, named{};
+                if (flock(file, LOCK_EX | LOCK_NB) != 0 || fstat(file, &opened) != 0 ||
+                    !S_ISREG(opened.st_mode) || lstat(path.c_str(), &named) != 0 ||
+                    opened.st_dev != named.st_dev || opened.st_ino != named.st_ino) return;
+            }
+            for (const auto& path : paths) unlink(path.c_str());
 #endif
         }
 #ifdef _WIN32
@@ -86,7 +105,7 @@ namespace os::logger
 
     bool OpenFile(const std::filesystem::path& path)
     {
-        std::lock_guard lock(g_mutex);
+        std::unique_lock lock(g_mutex);
         if (g_file)
             return false;
 
@@ -143,6 +162,10 @@ namespace os::logger
         g_filePath = std::move(absolutePath);
         g_emergencyFile.store(emergency, std::memory_order_release);
         g_file = file;
+        const auto runtimePath = g_filePath;
+        lock.unlock();
+        try { shaderlog::OpenForRuntime(runtimePath); }
+        catch (const std::exception& e) { LOG_WARNING("could not initialize shader log: {}", e.what()); }
         return true;
     }
 
@@ -158,36 +181,39 @@ namespace os::logger
 
             struct Candidate
             {
-                std::filesystem::path path;
                 std::string timestamp;
+                std::vector<std::filesystem::path> paths;
             };
-            std::vector<Candidate> candidates;
+            std::map<std::string, Candidate> groups;
+            const auto currentTimestamp = LogTimestamp(current);
             std::filesystem::directory_iterator it(current.parent_path(), ec), end;
             for (; !ec && it != end; it.increment(ec))
             {
-                if (it->path() == current)
-                    continue;
-                const auto timestamp = LogTimestamp(it->path());
-                if (!timestamp)
+                const auto timestamp = LogTimestamp(it->path(), true);
+                if (!timestamp || timestamp == currentTimestamp)
                     continue;
                 std::error_code statusError;
                 if (std::filesystem::is_regular_file(it->symlink_status(statusError)) && !statusError)
-                    candidates.push_back({it->path(), *timestamp});
+                {
+                    auto& group = groups[*timestamp];
+                    group.timestamp = *timestamp;
+                    group.paths.push_back(it->path());
+                }
             }
             // An incomplete inventory must not make a newer file look oldest.
             if (ec)
                 return;
+            std::vector<Candidate> candidates;
+            for (auto& [timestamp, group] : groups) candidates.push_back(std::move(group));
             std::sort(candidates.begin(), candidates.end(), [](const Candidate& a, const Candidate& b)
             {
                 if (a.timestamp.size() != b.timestamp.size())
                     return a.timestamp.size() > b.timestamp.size();
-                if (a.timestamp != b.timestamp)
-                    return a.timestamp > b.timestamp;
-                return a.path.native() > b.path.native();
+                return a.timestamp > b.timestamp;
             });
             // Current always consumes one slot, even after a wall-clock reset.
             for (size_t i = 2; i < candidates.size(); ++i)
-                RemoveInactiveLog(candidates[i].path);
+                RemoveInactiveLogGroup(candidates[i].paths);
         }
         catch (...)
         {

@@ -522,7 +522,23 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
         line(280, 513, 1000, 513, RGB(35, 36, 36), 3);
         line(999, 208, 999, 514, RGB(39, 40, 40), 3);
         text(325, 226, 630, 48, current.dialogTitle, 27, ink, false, DT_CENTER);
-        text(330, 278, 620, 62, current.dialogMessage, 18, ink, false, DT_CENTER, outline, 13);
+        // Consent text must remain readable with both bitmap and system fonts.
+        // The normal text helper fits one line; wrap before passing it paragraphs.
+        std::vector<std::wstring> messageLines;
+        std::wstring remaining = current.dialogMessage;
+        while (!remaining.empty()) {
+            size_t cut=0, space=std::wstring::npos; unsigned units=0;
+            while (cut<remaining.size() && units+(remaining[cut]>=0x2e80?2:1)<=70) {
+                if (remaining[cut]==L' ') space=cut;
+                units+=remaining[cut]>=0x2e80?2:1; ++cut;
+            }
+            if (cut<remaining.size() && space!=std::wstring::npos && space>cut/2) cut=space;
+            messageLines.push_back(remaining.substr(0,cut)); remaining.erase(0,cut);
+            while (!remaining.empty() && remaining.front()==L' ') remaining.erase(0,1);
+        }
+        const int lineHeight=std::min(22,85/int(std::max<size_t>(1,messageLines.size())));
+        for(size_t i=0;i<messageLines.size();++i)
+            text(330,267+int(i)*lineHeight,620,lineHeight,messageLines[i],16,ink,false,DT_CENTER,outline,13);
         for (size_t i = 0; i < current.dialogChoices.size(); ++i)
         {
             const int y = 360 + int(i) * 43;

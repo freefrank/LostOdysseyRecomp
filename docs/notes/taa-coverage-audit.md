@@ -83,3 +83,15 @@ PS `8ead384aedf2bb23` 的消散 clip 使用对象 UV 的三纹理采样，没有
 - `out/taa-whole-game-scan/REPORT.md`、`shader-inventory.json`、`vs-families.md`、`pixel-contract-review.md`：扫描来源、逐 shader 候选及边界。
 - `out/battle-taa-fix/REPORT.md`、`test-results.json`、`runtime-comparison.md`、`map3-regression.json`：现有六路径实现及有限运行验证。
 - `out/enemy-death-f5446/REPORT.md`、`inventory.json`、`shader-review/REPORT.md`、`pixel-review/REPORT.md`、`enemy-localization.png`：新消散捕获与配对检查。输入 ZIP SHA256 为 `f5a2149426d13b4e4c48262f894cacc42a5117c4ccc346a1f4c5f4fdf26b5ee1`。
+
+## 2026-09-09 当前状态澄清
+
+当前本地 source batch 为 0.5.6，仍属于 v0.5.0 milestone；版本消费者重编没有追加功能验证，以下功能证据继续绑定 earlier candidate EXE `9a7b626320ede0bd82bcbf93cde08aaeefc2c631aa29ebacba4fc31a5d321288`。
+
+本轮已实现独立 shader JSONL 日志及 F1 日志快照接口，并通过并发写入、真实 DXC 成败、路径、保留、退出 flush 和生产归档定向检查；因此上面的独立日志条目保留为历史 TODO，不能再描述为当前实现缺失。累计覆盖清单、未知实际 draw 的完整审计和 provenance-family reconciliation 仍未实现。
+
+Map16 的 `fcbb75d0feb3fcb9`（c7）、`e8c0d438c690c784` 与 `576d669b2ad3c898`（c8）已加入 temporal constant 映射，并通过 20,635 项 CPU 检查，其中新增 Map16 3,348 项、32 个 phase、最大 clip 偏移误差 0.002845 像素。随后固定场景实跑覆盖 32 个连续 3840×2160 phase，所有 summary 均 ready/completed/history-reused，`gap=false`、`jitter_miss=0`，地面 ROI 未出现黑帧，160 个材质上传与对应深度上传逐位一致。该证据确认这三个路径在固定场景的修复；它不代表全游戏、全部阴影 PS 或用户验收。576d 的运行 PS payload 未记录，不能夸称 PS 逐位验证。
+
+离线 family audit 将 `4bd8985d84983b83`（c230）敌人深度路径列为最高优先级，因为已有 f5446–5448 实际 draw 证据；它仍未实现。`22225401fc8ea621`、`3eb16ad927f44289` 和 `52e4405f97159d2f` 只有同源 cache／ALU 推断，当前帧没有实际 draw，不能加入生产映射或称为新故障。完整排序见 `out/v0.5.0/rendering-fixes/analysis/prioritized-missing-paths.md`。
+
+当前 0.5.0 候选又加入四条 capture 确认的 c7 路径（`e8ec18f1d3eac4df`、`1ea46291cb1c7298`、`7d403bdef896a97f`、`45ed0948b6b701a7`），并优先上传异常 shader 摘要。用户依据 `out/v0.5.0/slot2-sol-check/REPORT.md` 对 Ghost Town slot-02 场景的六张间隔截图（约 11.37 秒）确认本次缺口修复；该结论标记为已验收，其他场景仍属回归覆盖，不延伸为全游戏修复或连续录像结论。更完整的 log-only 定位经验见[时序日志排查总结](taa-log-only-triage-2026-09-09.md)。稀疏相机 MV／jitter 收集服务于后续研究，不构成物体／骨骼 MV 或 DLSS 帧生成实现。

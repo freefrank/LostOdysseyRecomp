@@ -32,6 +32,8 @@ namespace gpu::video
     // Drains messages on non-Windows hosts; Windows pumps on its window thread.
     void PumpEvents();
     bool DisplayModeFailed();
+    // Alt+Enter is session-only; saving Display settings takes precedence.
+    bool WindowModeOverridden();
     // Called after saving Current(). Forces an actual retry even for the same
     // mode. Completion includes the window operation and one presented frame.
     uint64_t BeginDisplayChange(const settings::Config& config);
@@ -45,6 +47,9 @@ namespace gpu::video
     // Untiles the guest frontbuffer (a tiled 32bpp texture written by the
     // GPU resolve) into an upload buffer and presents it.
     void PresentFrontbuffer(uint32_t physicalAddress, uint32_t width, uint32_t height, uint32_t copyDestInfo);
+    // Monotonic successful swap-chain present calls; read on the command thread.
+    // Early returns and failed presents do not advance this counter.
+    uint64_t CompletedPresentCount();
 
     // Writes the last untiled frontbuffer as a binary PPM (for offline inspection).
     bool SaveScreenshot(const char* path);

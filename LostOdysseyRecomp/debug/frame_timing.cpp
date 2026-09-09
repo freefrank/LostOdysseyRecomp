@@ -2,6 +2,7 @@
 #include "frame_timing.h"
 #include <gpu/command_processor.h>
 #include <gpu/frame_pacer.h>
+#include <gpu/render_timing.h>
 #include <os/logger.h>
 #include <chrono>
 #include <algorithm>
@@ -11,7 +12,7 @@
 
 namespace frame_timing
 {
-bool Enabled() { static const bool enabled = getenv("LO_FRAME_TIMING") != nullptr; return enabled; }
+bool Enabled() { static const bool enabled = getenv("LO_FRAME_TIMING") != nullptr; return enabled || gpu::render_timing::Enabled(); }
 namespace
 {
 std::mutex mutex;
@@ -42,6 +43,28 @@ void Present(uint32_t swap, uint32_t fps, double flushMs, double waitMs, double 
     const PacingSample& pacing)
 {
     if (!Enabled()) return;
+    if (gpu::render_timing::Enabled())
+    {
+        // These adjacent intervals cover previous completed-present end through
+        // this completed-present end. The first call has no preceding boundary.
+        // PresentFrontbuffer plus the event pump comprise presentMs; betweenMs
+        // includes command processing, intermediate flushes, waits and previous
+        // post-present diagnostics. These are wall intervals, not CPU usage.
+        const bool valid = pacing.presentAccepted && pacing.hasPrevious && std::isfinite(pacing.betweenMs) && pacing.betweenMs >= 0 &&
+            std::isfinite(flushMs) && flushMs >= 0 && std::isfinite(waitMs) && waitMs >= 0 &&
+            std::isfinite(presentMs) && presentMs >= 0;
+        LOG_INFO("present timing completed={} target={} present_accepted={} has_previous={} sample_valid={} frame_ms={} "
+            "between_ms={} flush_ms={:.6f} pace_ms={:.6f} present_and_events_ms={:.6f} "
+            "sleep_requested_ms={:.6f} sleep_actual_ms={:.6f} wake_overshoot_ms={:.6f} scope=accepted_present_api_wall_intervals_not_display_latency",
+            swap, fps, pacing.presentAccepted, pacing.hasPrevious, valid,
+            valid ? fmt::format("{:.6f}", pacing.betweenMs + flushMs + waitMs + presentMs) : std::string("unknown"),
+            pacing.hasPrevious ? fmt::format("{:.6f}", pacing.betweenMs) : std::string("unknown"),
+            flushMs, waitMs, presentMs, pacing.requestedMs, pacing.actualMs, pacing.overshootMs);
+    }
+    // Keep the existing one-second report opt-in separately. LO_RENDER_TIMING
+    // records every completed sample instead of estimating FPS from heartbeats.
+    static const bool aggregate = getenv("LO_FRAME_TIMING") != nullptr;
+    if (!aggregate) return;
     using Clock = std::chrono::steady_clock;
     static auto start = Clock::now();
     static uint32_t count = 0;

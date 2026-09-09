@@ -12,12 +12,14 @@
 #include <settings/restart.h>
 #include <kernel/memory.h>
 #include <os/logger.h>
+#include <os/shader_log.h>
 #include <hid/hid.h>
 #include <debug/battle_menu.h>
 
 #include <SDL.h>
 #include <SDL_syswm.h>
 #include "window_pixels.h"
+#include "window_mode.h"
 
 #ifdef LO_GPU_PLUME
 #include <plume_render_interface.h>
@@ -103,7 +105,19 @@ namespace gpu::video
         std::atomic<int> g_displayMode{-1};
         std::atomic<uint64_t> g_displaySize{0};
         std::atomic<bool> g_displayFailed{false},g_reapplyWindow{false};
+        std::atomic<bool> g_windowResizeRequested{false};
+        std::atomic<uint64_t> g_settingsDisplayEpoch{0};
+        std::atomic<bool> g_windowModeOverridden{false};
+        uint64_t g_completedPresentCount = 0;
         DisplayChangeTracker g_displayChanges;
+        struct WindowDisplayState {
+            settings::Config applied;
+            bool initialized = false;
+            uint64_t settingsEpoch = 0, shortcutTicket = 0;
+            std::optional<settings::WindowMode> shortcutMode, shortcutPrevious;
+            window_mode::Placement placement;
+            SDL_Scancode consumedKey = SDL_SCANCODE_UNKNOWN;
+        } g_windowDisplay;
         std::vector<uint32_t> g_menuPixels;
         uint64_t g_menuRevision=0;
 #ifdef _WIN32
@@ -194,6 +208,22 @@ namespace gpu::video
         bool g_forceSwapResize=false;
         constexpr plume::RenderFormat kSwapChainFormat = plume::RenderFormat::R8G8B8A8_UNORM;
         constexpr uint32_t kSwapChainBuffers = 3;
+
+        void LogOutputPixels(const char* reason)
+        {
+#ifdef _WIN32
+            RECT raw{};
+            GetClientRect(g_nativeWindow, &raw);
+            uint32_t physicalWidth = 0, physicalHeight = 0;
+            plume::GetWindowClientPixels(g_nativeWindow, physicalWidth, physicalHeight);
+            LOG_INFO("video output: {} thread={} awareness={} dpi={} raw={}x{} physical={}x{} swapchain={}x{} mode={}",
+                reason, GetCurrentThreadId(), int(GetAwarenessFromDpiAwarenessContext(GetThreadDpiAwarenessContext())),
+                GetDpiForWindow(g_nativeWindow), raw.right - raw.left, raw.bottom - raw.top,
+                physicalWidth, physicalHeight, g_swapChain->getWidth(), g_swapChain->getHeight(), g_displayMode.load());
+#else
+            LOG_INFO("video output: {} swapchain={}x{} mode={}", reason, g_swapChain->getWidth(), g_swapChain->getHeight(), g_displayMode.load());
+#endif
+        }
 
         plume::RenderCommandSemaphore* PresentSemaphore(uint32_t imageIndex)
         {
@@ -324,6 +354,8 @@ namespace gpu::video
         }
 
         auto createWindow = [] {
+            g_windowDisplay = {};
+            g_windowModeOverridden = false;
             if (SDL_InitSubSystem(SDL_INIT_VIDEO) != 0)
             {
                 LOG_WARNING("video: SDL video init failed: {}", SDL_GetError());
@@ -423,6 +455,7 @@ namespace gpu::video
             if (!g_commandList || !g_fence || !g_acquireSemaphore || !g_releaseSemaphore) return "command/synchronization initialization failed";
             g_swapChain = g_queue->createSwapChain(plume::RenderSwapChainDesc(g_nativeWindow, kSwapChainFormat, kSwapChainBuffers));
             if (!g_swapChain || g_swapChain->isEmpty()) return "window surface/swapchain initialization failed";
+            LogOutputPixels("created");
             g_uploadCapacity = uint64_t(kMaxWidth) * kMaxHeight * 4;
             g_uploadBuffer = g_device->createBuffer(plume::RenderBufferDesc::UploadBuffer(g_uploadCapacity));
             if (!g_uploadBuffer) return "presentation upload allocation failed";
@@ -475,8 +508,10 @@ namespace gpu::video
             std::min<uint64_t>(completed,kProgressMask) | (uint64_t(stage) << 56) | (uint64_t(unit) << 60));
     }
     bool DisplayModeFailed() { return g_displayFailed.load(); }
+    bool WindowModeOverridden() { return g_windowModeOverridden.load(); }
     uint64_t BeginDisplayChange(const settings::Config& config) {
         const auto ticket = g_displayChanges.Begin(config.width, config.height, uint32_t(config.windowMode));
+        ++g_settingsDisplayEpoch;
         g_reapplyWindow = true;
         return ticket;
     }
@@ -530,34 +565,101 @@ namespace gpu::video
         if (settings::restart::Requested()) {
             renderer::WaitDebugCaptureArchive();
             if (settings::restart::LaunchWaitingChild()) {
+                os::shaderlog::CloseForExit();
                 fflush(nullptr);
                 std::_Exit(0);
             }
         }
-        static settings::Config applied;
-        static bool displayInitialized=false;
-        const auto config=settings::GetConfig();
-        if(g_reapplyWindow.exchange(false) || !displayInitialized || config.width!=applied.width || config.height!=applied.height || config.windowMode!=applied.windowMode) {
+        auto config=settings::GetConfig();
+        auto& state = g_windowDisplay;
+        const auto settingsEpoch = g_settingsDisplayEpoch.load();
+        if (settingsEpoch != state.settingsEpoch) {
+            state.settingsEpoch = settingsEpoch;
+            state.shortcutMode.reset();
+            g_windowModeOverridden = false;
+            state.shortcutTicket = 0;
+        }
+        if (state.shortcutTicket) {
+            const auto result = g_displayChanges.Query(state.shortcutTicket);
+            if (result != DisplayChangeResult::Pending) {
+                state.shortcutTicket = 0;
+                if (result == DisplayChangeResult::Failed) {
+                    state.shortcutMode = state.shortcutPrevious;
+                    g_windowModeOverridden = state.shortcutMode.has_value();
+                    const auto restored = state.shortcutMode.value_or(config.windowMode);
+                    g_displayChanges.Begin(config.width, config.height, uint32_t(restored));
+                    g_reapplyWindow = true;
+                    LOG_WARNING("video: fullscreen shortcut failed; restoring previous window mode");
+                }
+            }
+        }
+        if (state.shortcutMode) config.windowMode = *state.shortcutMode;
+        const bool reapply = g_reapplyWindow.exchange(false);
+        if(reapply || !state.initialized || config.width!=state.applied.width || config.height!=state.applied.height || config.windowMode!=state.applied.windowMode) {
             const auto ticket = g_displayChanges.WindowTicket(config.width, config.height, uint32_t(config.windowMode));
             // SDL operations remain on the message-owning thread. Hidden tests
             // must never change the user's desktop display mode.
             const auto mode=getenv("LO_BACKGROUND")?settings::WindowMode::Windowed:config.windowMode;
-            const int result=SDL_SetWindowFullscreen(g_window,mode==settings::WindowMode::Borderless?SDL_WINDOW_FULLSCREEN_DESKTOP:(g_vulkan && mode==settings::WindowMode::Exclusive?SDL_WINDOW_FULLSCREEN:0));
+            const bool wasWindowed = !state.initialized || state.applied.windowMode == settings::WindowMode::Windowed;
+            const bool sizeChanged = !state.initialized || config.width != state.applied.width || config.height != state.applied.height;
+            if (wasWindowed && mode != settings::WindowMode::Windowed) state.placement.Capture(g_window);
+            int result=SDL_SetWindowFullscreen(g_window,mode==settings::WindowMode::Borderless?SDL_WINDOW_FULLSCREEN_DESKTOP:(g_vulkan && mode==settings::WindowMode::Exclusive?SDL_WINDOW_FULLSCREEN:0));
+            if (result == 0 && mode == settings::WindowMode::Windowed) {
+                if ((!wasWindowed || reapply) && !sizeChanged && state.placement.valid) state.placement.Restore(g_window);
+                else if (sizeChanged) SDL_SetWindowSize(g_window,config.width,config.height);
+            }
+            else if (result == 0 && mode == settings::WindowMode::Exclusive)
+                SDL_SetWindowSize(g_window,config.width,config.height);
+#ifdef _WIN32
+            if (result == 0 && mode == settings::WindowMode::Borderless && !window_mode::FitBorderless(g_nativeWindow)) result = -1;
+#endif
             g_displayFailed=result!=0;
-            if(mode!=settings::WindowMode::Borderless) SDL_SetWindowSize(g_window,config.width,config.height);
             g_displaySize.store(uint64_t(config.width)<<32|config.height);
             g_displayMode.store(int(mode));
-            applied=config; displayInitialized=true;
+            state.applied=config; state.initialized=true;
+            g_windowResizeRequested = true;
             g_displayChanges.WindowComplete(ticket, result == 0);
         }
         debug_menu::Update();
         SDL_Event event;
         while (SDL_PollEvent(&event))
         {
+            if (event.type == SDL_KEYUP && event.key.keysym.scancode == state.consumedKey) {
+                state.consumedKey = SDL_SCANCODE_UNKNOWN;
+                continue;
+            }
+            if (event.type == SDL_KEYDOWN && event.key.keysym.scancode == state.consumedKey) continue;
+            if (event.type == SDL_KEYDOWN && window_mode::IsToggleChord(event.key) &&
+                event.key.windowID == SDL_GetWindowID(g_window)) {
+                state.consumedKey = event.key.keysym.scancode;
+                const auto next = config.windowMode == settings::WindowMode::Windowed
+                    ? settings::WindowMode::Borderless : settings::WindowMode::Windowed;
+                const auto ticket = g_displayChanges.TryBegin(config.width, config.height, uint32_t(next));
+                if (ticket) {
+                    state.shortcutPrevious = state.shortcutMode;
+                    state.shortcutMode = next;
+                    g_windowModeOverridden = true;
+                    state.shortcutTicket = ticket;
+                    g_reapplyWindow = true;
+                    LOG_INFO("video: Alt+Enter requested window mode {}", uint32_t(next));
+                }
+                continue;
+            }
             if (event.type == SDL_KEYDOWN || event.type == SDL_KEYUP)
                 hid::HandleKeyboardEvent(event.key.keysym.scancode, event.type == SDL_KEYDOWN);
-            if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_FOCUS_LOST)
+            if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_FOCUS_LOST) {
+                state.consumedKey = SDL_SCANCODE_UNKNOWN;
                 hid::ClearKeyboardState();
+            }
+            if (event.type == SDL_WINDOWEVENT && event.window.windowID == SDL_GetWindowID(g_window) &&
+                (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED || event.window.event == SDL_WINDOWEVENT_DISPLAY_CHANGED ||
+                 event.window.event == SDL_WINDOWEVENT_RESTORED)) {
+#ifdef _WIN32
+                if (!getenv("LO_BACKGROUND") && state.applied.windowMode == settings::WindowMode::Borderless)
+                    window_mode::FitBorderless(g_nativeWindow);
+#endif
+                g_windowResizeRequested = true;
+            }
             if(event.type==SDL_MOUSEBUTTONDOWN) {
                 int w=0,h=0; SDL_GetWindowSize(g_window,&w,&h);
                 const float scale=std::min(w/1280.0f,h/720.0f);
@@ -574,6 +676,7 @@ namespace gpu::video
             {
                 LOG_INFO("video: window closed, exiting");
                 renderer::WaitDebugCaptureArchive();
+                os::shaderlog::CloseForExit();
                 fflush(stdout);
                 std::_Exit(0);
             }
@@ -582,12 +685,15 @@ namespace gpu::video
 
     } // namespace
 
+    uint64_t CompletedPresentCount() { return g_completedPresentCount; }
+
     void PresentFrontbuffer(uint32_t physicalAddress, uint32_t width, uint32_t height, uint32_t copyDestInfo)
     {
         if (width == 0 || height == 0 || width > kMaxWidth || height > kMaxHeight)
             return;
 
 #ifdef LO_GPU_PLUME
+        if (g_windowResizeRequested.exchange(false)) g_forceSwapResize = true;
         const auto displayTicket = g_displayChanges.PresentationTicket();
         static uint64_t resizedDisplayTicket = 0;
         if (displayTicket && displayTicket != resizedDisplayTicket) {
@@ -602,6 +708,7 @@ namespace gpu::video
             const int mode=g_displayMode.load(); const uint64_t size=g_displaySize.load();
             if(!g_vulkan && mode>=0 && (mode!=appliedMode || size!=appliedSize || (displayTicket && displayTicket!=appliedDisplayTicket))) {
                 auto* swap=static_cast<plume::D3D12SwapChain*>(g_swapChain.get());
+                const plume::WindowPixelContext pixels;
                 HRESULT result=swap->d3d->SetFullscreenState(FALSE,nullptr);
                 if(mode==int(settings::WindowMode::Exclusive)) {
                     DXGI_MODE_DESC target{}; target.Width=uint32_t(size>>32); target.Height=uint32_t(size);
@@ -628,6 +735,7 @@ namespace gpu::video
         if (g_available && (g_forceSwapResize || g_swapChain->needsResize())) {
             if(!g_swapChain->resize()) { if(g_forceSwapResize) g_displayFailed=true; g_displayChanges.Complete(displayTicket,false); return; }
             g_forceSwapResize=false; g_hasPresentedImage=false;
+            LogOutputPixels("resized");
         }
         if (g_available && g_swapChain->isEmpty()) return;
         const uint32_t menuWidth = g_available ? g_swapChain->getWidth() : 1280;
@@ -694,6 +802,7 @@ namespace gpu::video
                 plume::RenderCommandSemaphore* signalSemaphore = PresentSemaphore(imageIndex);
                 g_queue->executeCommandLists(lists, 1, &waitSemaphore, 1, &signalSemaphore, 1, g_fence.get());
                 const bool presented = g_swapChain->present(imageIndex, &signalSemaphore, 1);
+                if (presented) ++g_completedPresentCount;
                 g_queue->waitForCommandFence(g_fence.get());
                 g_lastPresentedImage=imageIndex; g_hasPresentedImage=true;
                 g_displayChanges.Complete(displayTicket, presented && !g_displayFailed.load());
@@ -790,6 +899,7 @@ namespace gpu::video
         plume::RenderCommandSemaphore* signalSemaphore = PresentSemaphore(imageIndex);
         g_queue->executeCommandLists(lists, 1, &waitSemaphore, 1, &signalSemaphore, 1, g_fence.get());
         const bool presented = g_swapChain->present(imageIndex, &signalSemaphore, 1);
+        if (presented) ++g_completedPresentCount;
         g_queue->waitForCommandFence(g_fence.get());
         g_lastPresentedImage=imageIndex; g_hasPresentedImage=true;
         g_displayChanges.Complete(displayTicket, presented && !g_displayFailed.load());

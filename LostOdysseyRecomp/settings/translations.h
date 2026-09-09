@@ -4,7 +4,8 @@
 namespace settings
 {
 // English and Traditional Chinese are provided at the call site.
-inline const wchar_t *Translate(uint32_t language, const wchar_t *en, const wchar_t *traditional)
+// Keep the lookup and its table in the same translation unit, including incremental builds.
+static inline const wchar_t *Translate(uint32_t language, const wchar_t *en, const wchar_t *traditional)
 {
     if (language == 0)
         return en;
@@ -154,6 +155,8 @@ inline const wchar_t *Translate(uint32_t language, const wchar_t *en, const wcha
          L"游戏默认设置已恢复。"},
         {L"Saved. Restart the game to apply text language.", L"保存しました。テキスト言語の変更には再起動が必要です。",
          L"저장했습니다. 텍스트 언어를 적용하려면 게임을 재시작하세요.", L"已保存。重启游戏后应用文本语言。"},
+        {L"Yes", L"はい", L"예", L"是"},
+        {L"No", L"いいえ", L"아니요", L"否"},
         {L"Settings", L"設定", L"설정", L"设置"},
         {L"Gameplay", L"ゲーム", L"게임", L"游戏"},
         {L"Audio", L"サウンド", L"오디오", L"声音"},

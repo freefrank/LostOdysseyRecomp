@@ -1,0 +1,13 @@
+{
+  "name": "lost-odyssey-taa-collector",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test worker.test.js",
+    "deploy": "wrangler deploy",
+    "test:temporal": "node --test temporal.test.js"
+  },
+  "devDependencies": {
+    "wrangler": "4.130.0"
+  }
+}

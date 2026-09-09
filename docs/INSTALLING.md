@@ -1,6 +1,6 @@
 # Installing Lost Odyssey Recompiled
 
-This guide covers Windows packages built from the current development branch. The latest published v0.4.2 package is the historical D3D12 baseline and does not include all of the development features described here, including the updater and optional Vulkan path.
+This guide covers current Windows builds in the v0.5.0 line. The published v0.4.2 package remains the historical D3D12 baseline; current Windows builds add the Vulkan path, updater flow, automatic game/DLC recognition and the Settings UX described below.
 
 1. Extract the entire package to a writable folder, outside Program Files. Keep the executable, importer, updater helper, validated DXC v1.8.2407 DLL pair and license files together.
 2. Run **LostOdysseyRecomp.exe** directly. If game files are missing, the importer opens; select your source and review its recognition result before importing.
@@ -70,7 +70,7 @@ All discs share `game/dlc/<content-id>/`. Selecting an existing `game/disc1` thr
 
 An identical, intact installation is recognized without copying it again. A conflicting or damaged package with the same ID is reported and left unchanged. Importing stages the selected packages before publication; cancellation removes this operation's temporary data. The importer checks structure and file integrity, without verifying Microsoft signatures. Other games, title updates, SVOD DLC and arbitrary loose DLC folders are unsupported.
 
-The import-to-runtime file-reading path has synthetic fixture coverage. Real DLC rewards, areas and edition compatibility still need verification with actual content; DLC files are not included in the program download.
+Three real DLC packages have been imported and read at runtime through their headers, complete indexes and payloads in 24 total reads without a crash; imported files and isolated user data remained unchanged. Rewards, dungeon gameplay and broader edition compatibility still need verification. DLC files are not included in the program download.
 
 ## Existing data and cancellation
 

@@ -6,7 +6,7 @@
 namespace gpu::video {
 enum class DisplayChangeResult { Pending, Applied, Failed };
 
-// One menu-owned display transaction. A repeated mode still gets a new ticket;
+// One display transaction. A repeated mode still gets a new ticket;
 // a late window/presentation completion cannot complete a newer request.
 class DisplayChangeTracker {
     std::mutex mutex;
@@ -15,6 +15,14 @@ class DisplayChangeTracker {
     DisplayChangeResult result = DisplayChangeResult::Failed;
     std::atomic<uint64_t> presentation{0};
 public:
+    uint64_t TryBegin(uint32_t w, uint32_t h, uint32_t m) {
+        std::lock_guard lock(mutex);
+        if (result == DisplayChangeResult::Pending) return 0;
+        ++serial; width = w; height = h; mode = m;
+        result = DisplayChangeResult::Pending;
+        presentation = 0;
+        return serial;
+    }
     uint64_t Begin(uint32_t w, uint32_t h, uint32_t m) {
         std::lock_guard lock(mutex);
         ++serial; width = w; height = h; mode = m;

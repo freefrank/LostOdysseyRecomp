@@ -1,3 +1,4 @@
+#include <gpu/taa_collection.h>
 #include <stdafx.h>
 #include <cpu/guest_thread.h>
 #include <kernel/function.h>
@@ -14,6 +15,7 @@
 #include <apu/xma.h>
 #include <hid/hid.h>
 #include <os/logger.h>
+#include <os/shader_log.h>
 #include <os/log_file.h>
 #include <os/crash_handler.h>
 #include <cstring>
@@ -194,8 +196,10 @@ int main(int argc, char* argv[])
         LOG_WARNING("update helper did not complete its readiness handshake; continuing current version");
     }
 #endif
+    gpu::taa_collection::Initialize();
     if(requestedSetup || (!getenv("LO_BACKGROUND") && !getenv("LO_HEADLESS") && !std::filesystem::exists("settings.ini"))) {
         if(!settings::FirstRunSetup(&gameRoot)) return 0;
+        gpu::taa_collection::PromptFirstRun(settings::GetConfig().uiLanguage);
         if(setupOnly) return 0;
     }
     if (g_memory.base == nullptr)
@@ -249,7 +253,7 @@ int main(int argc, char* argv[])
         const bool prepared = gpu::video::Init() && !getenv("LO_NO_RENDERER");
         LOG_INFO("shader preparation only: {}, guest not started", prepared ? "complete" : "failed");
         fflush(stdout);
-        std::_Exit(prepared ? 0 : 1);
+        (os::shaderlog::CloseForExit(), std::_Exit(prepared ? 0 : 1));
     }
 
     if (!gpu::g_commandProcessor.Init()) {

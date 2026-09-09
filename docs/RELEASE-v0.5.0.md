@@ -1,8 +1,22 @@
 # v0.5.0 release preparation
 
-## Current local package — 2026-09-09
+## Current candidate — 2026-09-09
 
-Source 0.5.0 has a reviewed local v0.5.0 Windows package: `LostOdysseyRecomp-windows-x64-v0.5.0.zip`, 44,080,866 bytes, SHA256 `100e6491548579e3a13aa60564bc760bca121113915842f73817d1b943482ce4`. The package/link commit is `86ba2c1641bb9a8324e0b1710783bead0c39bf23`; source identity is `896317f1a0ed86cea58fe353a2cb2104b4aa757efff4b72147e4da8ba2b82f7c`. Packaging completed 1 PCH, 4 version translation units, 2 links and 1 normal package, with 0 guest compiles, tests, game runs or CI. Manifest, payload and license checks are recorded in [DELIVERY.json](../out/v0.5.0/release-finalization/DELIVERY.json) and [REPORT.md](../out/v0.5.0/release-finalization/REPORT.md). The package is local and unpublished; the public baseline remains v0.4.2, with no remote tag or push.
+The current source and release target remain **0.5.0**. The earlier visually sampled Windows executable is [shader-priority candidate](../out/v0.5.0/performance-fix/shader-priority-0.5.0/LostOdysseyRecomp/LostOdysseyRecomp.exe), SHA256 prefix `1c9911a3`. It includes the settings-entry crash correction, Vulkan startup/presentation repair, optional TAA shader collection, sparse camera temporal collection and shader-anomaly priority scheduling, plus four capture-confirmed c7 paths. Build/link evidence is in [its report](../out/v0.5.0/performance-fix/shader-priority-0.5.0/REPORT.md). The four c7 paths are accepted for the Ghost Town slot-02 scene after six spaced screenshots over approximately 11.37 seconds; this does not establish whole-game repair or a continuous recording.
+
+The latest local source-0.5.0 position-evidence candidate is diagnostic infrastructure, with conservative schema 2 client data and Worker support for schemas 1 and 2. Its incremental executable SHA256 is `6feb20923e3632ac00b718950927ee245fb6929c7c3bc95e87e9d13f5cd23937`; native, corpus, protocol and build evidence passed in the [focused report](../out/v0.5.0/performance-fix/position-evidence-0.5.0/REPORT.md). It was not run in-game, so the earlier Ghost Town visual acceptance does not apply to this binary.
+
+The release is authorized for preparation but is not yet published. The earlier GitHub draft and ZIP are historical delivery evidence and must not be described as the final public artifact until the parent release workflow verifies the replacement asset, tag, publication response and anonymous download.
+
+## Current CI delivery — 2026-09-09
+
+Release CI `34362242667` succeeded for tag/main `28be72f02649cf87126dd9f1a604ada6cdd380c5`. The verified Windows ZIP is 44,020,136 bytes with SHA256 `e8391a2353a7206398b2dca24a2d73bccdea7b946d55cbfca4e7573648e95312`; source identity is `5038af3b3561ffce579a78158fb088c8d5f27df7705ba140e0e56bd11624e9cc`. Evidence is in [CI-DELIVERY.json](../out/v0.5.0/release-finalization/ci-34362242667/CI-DELIVERY.json) and [REPORT.md](../out/v0.5.0/release-finalization/ci-34362242667/REPORT.md). Draft release `385591785` is not public, with no publication timestamp or verified anonymous public download; v0.4.2 remains the public baseline. The earlier local package below remains historical and is not the CI artifact.
+
+The agent-captured paired 4K Map16 TAA/AA-Off observation and follow-up shader captures are recorded in the [rendering handoff](notes/v0.5.0-rendering-handoff-2026-09-09.md). The latest candidate prioritizes four capture-confirmed c7 shader paths; the Ghost Town slot-02 scene was accepted by the user, while broader scenes remain regression coverage. The sparse camera-only MV/jitter collection is for future temporal research and does not implement DLSS frame generation or provide object/skinned motion vectors. The observed 25–30 FPS is not a benchmark, and the bounded Map16 performance result does not represent whole-game performance.
+
+## Historical local package — 2026-09-09
+
+Source 0.5.0 has a reviewed local v0.5.0 Windows package: `LostOdysseyRecomp-windows-x64-v0.5.0.zip`, 44,080,866 bytes, SHA256 `100e6491548579e3a13aa60564bc760bca121113915842f73817d1b943482ce4`. The package/link commit is `86ba2c1641bb9a8324e0b1710783bead0c39bf23`; source identity is `896317f1a0ed86cea58fe353a2cb2104b4aa757efff4b72147e4da8ba2b82f7c`. Packaging completed 1 PCH, 4 version translation units, 2 links and 1 normal package, with 0 guest compiles, tests, game runs or CI. Manifest, payload and license checks are recorded in [DELIVERY.json](../out/v0.5.0/release-finalization/DELIVERY.json) and [REPORT.md](../out/v0.5.0/release-finalization/REPORT.md). The package is local and unpublished; at this historical checkpoint there was no remote tag or push, and the public baseline remained v0.4.2.
 
 
 This is a historical preparation record for the Windows x64 v0.5.0 development candidate. It is

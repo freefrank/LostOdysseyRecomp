@@ -2,6 +2,7 @@
 #include "cache.h"
 #include "binary_cache.h"
 #include "resource_cpx_index_sha256.h"
+#include <os/shader_log.h>
 #include <atomic>
 #include <filesystem>
 #include <fstream>
@@ -124,7 +125,7 @@ namespace xenos
         return {g_calls.load(), g_succeeded.load(), g_rejected.load(), g_infrastructureFailed.load()};
     }
 
-    CompiledShader CompileHlsl(const std::string& source, const char* entryPoint, const char* profile, ShaderBinaryFormat format, bool debugInfo)
+    static CompiledShader CompileHlslImpl(const std::string& source, const char* entryPoint, const char* profile, ShaderBinaryFormat format, bool debugInfo)
     {
         CompiledShader result;
         if (!DxcAvailable())
@@ -226,12 +227,32 @@ namespace xenos
     bool DxcAvailable() { return false; }
     const std::string& DxcIdentity() { static const std::string empty; return empty; }
     DxcStatistics GetDxcStatistics() { return {}; }
-    CompiledShader CompileHlsl(const std::string&, const char*, const char*, ShaderBinaryFormat, bool) { return {}; }
+    static CompiledShader CompileHlslImpl(const std::string&, const char*, const char*, ShaderBinaryFormat, bool) { return {}; }
 }
 #endif
 
 namespace xenos
 {
+    CompiledShader CompileHlsl(const std::string& source, const char* entry, const char* profile, ShaderBinaryFormat format, bool debugInfo)
+    {
+        const auto start = std::chrono::steady_clock::now();
+        auto result = CompileHlslImpl(source, entry, profile, format, debugInfo);
+        // This is compilation-time provenance, not a guest shader or cache key.
+        // Do not add content hashing to the cache-hit/per-draw path.
+        if (os::shaderlog::Current().IsOpen())
+        {
+            const auto hash = resources::Sha256Hex(resources::Sha256(
+                std::span(reinterpret_cast<const uint8_t*>(source.data()), source.size())));
+            os::shaderlog::Log(result.ok ? LogType::Info : LogType::Error,
+                result.ok ? "compile-success" : result.deterministicFailure ? "compile-rejected" : "compile-failed",
+                os::shaderlog::HashNamespace::HlslSourceSha256,
+                "source={} profile={} entry={} format={} debug={} bytes={} elapsed_ms={:.3f}\n{}", hash, profile, entry,
+                format == ShaderBinaryFormat::Spirv ? "spirv" : "dxil", debugInfo, result.bytecode.size(),
+                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count(), result.errors);
+        }
+        return result;
+    }
+
     CompiledShader CompileHlsl(const std::string& source, const char* entry, const char* profile, bool debugInfo)
     {
         return CompileHlsl(source, entry, profile, ShaderBinaryFormat::Dxil, debugInfo);
@@ -252,7 +273,16 @@ namespace xenos
         const auto path = directory / cache::FileName(pixel, hash, identity);
         CompiledShader result;
         if (!configured || *configured) result.bytecode = cache::ReadBinary(path, pixel, hash, identity);
-        if (!result.bytecode.empty()) { result.ok = true; return result; }
+        if (!result.bytecode.empty()) {
+            result.ok = true;
+            if (os::shaderlog::Current().IsOpen())
+                SHADER_LOG_INFO("cache-hit", BuiltinKeyFnv, "builtin key={:016x} profile={} entry={} format={} bytes={}",
+                    hash, profile, entry, spirv ? "spirv" : "dxil", result.bytecode.size());
+            return result;
+        }
+        if (os::shaderlog::Current().IsOpen())
+            SHADER_LOG_INFO("cache-miss", BuiltinKeyFnv, "builtin key={:016x} profile={} entry={} format={}",
+                hash, profile, entry, spirv ? "spirv" : "dxil");
         result = CompileHlsl(source, entry, profile, format);
         if (result.ok && (!configured || *configured)) {
             std::error_code error;

@@ -7,7 +7,9 @@ namespace gpu::temporal
 {
 // Verified position-transform slots from scene captures, including all three
 // tire layers in Map3 frame 24389 and battle terrain/objects/skinned layers in
-// frames 2871 and 26786. A slot alone never
+// frames 2871 and 26786, Map16 ground/material passes in frame 18420, and
+// static/skinned scene paths in captures 17624-17626 and 21480-21482.
+// A slot alone never
 // authorizes jitter: renderer also checks viewport/VTE, ordered scene allocation,
 // and exact unmodified camera bits. Fullscreen/postprocess/UI shaders are absent.
 inline int PositionVPSlot(uint64_t shader) {
@@ -16,11 +18,22 @@ inline int PositionVPSlot(uint64_t shader) {
     case 0xb030ab4e17a20783ull:case 0xf1b330b3ceea9a3bull:case 0xf7fd88506d704a3dull:return 4;
     case 0x03184cec350bc14eull:case 0x3621e6e696f914c5ull:case 0x4053f2a21dbb92ddull:
     case 0xa27a7234977e0d4aull:case 0xbfe5f796efa9ae95ull:case 0xc13cdd857c57fed9ull:case 0xf4577672c6ee5dd9ull:
-    case 0xff9da3984ce8d094ull:case 0x8b5577db3ced3327ull:case 0x400df7c5a60819f5ull:case 0x08dcef32bd434f8cull:return 7;
-    case 0x1da1ddc75da8e994ull:case 0x22557143e0f243ddull:case 0x4c87bb5b986defc8ull:case 0xa6c8c11c6dd07144ull:return 8;
+    case 0xff9da3984ce8d094ull:case 0x8b5577db3ced3327ull:case 0x400df7c5a60819f5ull:case 0x08dcef32bd434f8cull:
+    case 0xfcbb75d0feb3fcb9ull:
+    case 0xf63bf6e0d52519a8ull:case 0xc1e8406a5c2ab764ull:case 0x8fe60c14bb586399ull:
+    case 0x9f2ddb46a977510bull:case 0x6cbe49f383e54f69ull:
+    // Live 4K telemetry + microcode: c7-c10 feed oPos; same camera/depth allocation.
+    case 0x0b786a899598ce18ull:
+    // Capture 2813-2815: exact c7 camera and position output, 48 draws/frame.
+    case 0xe8ec18f1d3eac4dfull:case 0x1ea46291cb1c7298ull:
+    case 0x7d403bdef896a97full:case 0x45ed0948b6b701a7ull:return 7;
+    case 0x1da1ddc75da8e994ull:case 0x22557143e0f243ddull:case 0x4c87bb5b986defc8ull:case 0xa6c8c11c6dd07144ull:
+    case 0xe8c0d438c690c784ull:case 0x576d669b2ad3c898ull:
+    case 0x188061ace0615678ull:case 0xdc7f83af67c53ba1ull:case 0x68014a17a2a9a4bdull:return 8;
     case 0x31bde3e2770db187ull:case 0x7e8492365edcf556ull:return 230;
     case 0x118a37c0d32c0477ull:case 0x3148f81d65d3b5f4ull:case 0xb7557072899a63a1ull:case 0xc84ca5209e98e743ull:
-    case 0x0eb223d33f8e8e0cull:case 0x1e9017d2b296f480ull:return 233;
+    case 0x0eb223d33f8e8e0cull:case 0x1e9017d2b296f480ull:
+    case 0x87a76ceaf1eaec11ull:case 0x81bc335604d04e8bull:return 233;
     default:return -1;
     }
 }

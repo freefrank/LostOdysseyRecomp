@@ -3,11 +3,14 @@
 #include "video.h"
 #include "renderer.h"
 #include "frame_pacer.h"
+#include "deadline_wait.h"
+#include "register_snapshot.h"
 #include <debug/frame_timing.h>
 #include <cpu/guest_thread.h>
 #include <kernel/memory.h>
 #include <kernel/function.h>
 #include <os/logger.h>
+#include <os/shader_log.h>
 #include <chrono>
 #include <kernel/io/file_system.h>
 #include <set>
@@ -122,7 +125,7 @@ namespace gpu
         if (!g_seenShaders.insert(hash).second)
             return;
         if (g_gpuStats)
-            LOG_INFO("new {} shader {:016x} ({} dwords), {} distinct so far", type ? "pixel" : "vertex", hash, count, g_seenShaders.size());
+            SHADER_LOG_INFO("shader-observed", CommandWordFnv, "new {} shader {:016x} ({} dwords), {} distinct so far", type ? "pixel" : "vertex", hash, count, g_seenShaders.size());
         if (const char* dir = getenv("LO_SHADER_DUMP_DIR"))
         {
             std::string path = fmt::format("{}/{}_{:016x}.bin", dir, type ? "ps" : "vs", hash);
@@ -358,6 +361,14 @@ namespace gpu
         return m_registers[index];
     }
 
+    void CommandProcessor::ReadRegisters(uint32_t first, uint32_t count, uint32_t* destination)
+    {
+        const auto* mmio = first < REGISTER_COUNT
+            ? reinterpret_cast<const be<uint32_t>*>(g_memory.Translate(MMIO_BASE + first * 4)) : nullptr;
+        CopyRegisterSnapshot(std::span<const uint32_t>(m_registers), first,
+            std::span<uint32_t>(destination, count), mmio);
+    }
+
     void CommandProcessor::MmioWrite32(uint32_t address, uint32_t value)
     {
         uint32_t index = (address & 0xFFFF) / 4;
@@ -375,10 +386,11 @@ namespace gpu
 
     // -----------------------------------------------------------------------
 
-    const uint32_t* CommandProcessor::GetActiveShader(bool pixel, uint32_t& dwordCount) const
+    const uint32_t* CommandProcessor::GetActiveShader(bool pixel, uint32_t& dwordCount, uint64_t& commandHash) const
     {
         auto& words = g_activeShaderWords[pixel ? 1 : 0];
         dwordCount = uint32_t(words.size());
+        commandHash = g_activeShader[pixel ? 1 : 0];
         return words.empty() ? nullptr : words.data();
     }
 
@@ -696,10 +708,11 @@ namespace gpu
             frame_timing::PacingSample pacing;
             {
                 static FramePacer pacer;
-                // Preserve the original schedule anchor and exactly one sleep.
+                static DeadlineWait pacingWait;
+                // Preserve the original schedule anchor; sleep without millisecond rounding.
                 const auto deadline = pacer.Schedule(timingPace, fpsCap);
                 const auto sleepStart = timingEnabled ? std::chrono::steady_clock::now() : timingPace;
-                std::this_thread::sleep_until(deadline);
+                pacingWait.Until(deadline);
                 if (timingEnabled)
                 {
                     const auto wake = std::chrono::steady_clock::now();
@@ -719,7 +732,9 @@ namespace gpu
                     ::DumpGuestThreadStates();
             }
             g_workerStage = "frontbuffer present";
+            const auto presentsBefore = video::CompletedPresentCount();
             video::PresentFrontbuffer(frontbuffer, width, height, ReadRegister(0x231B));
+            pacing.presentAccepted = video::CompletedPresentCount() > presentsBefore;
             g_workerStage = "window event pump";
             video::PumpEvents();
             g_completedSwaps = swaps;
@@ -730,7 +745,7 @@ namespace gpu
                 pacing.hasPrevious = previousEnd != std::chrono::steady_clock::time_point{};
                 if (pacing.hasPrevious)
                     pacing.betweenMs = std::chrono::duration<double, std::milli>(timingFlush - previousEnd).count();
-                previousEnd = timingEnd;
+                if (pacing.presentAccepted) previousEnd = timingEnd;
                 frame_timing::Present(swaps, fpsCap,
                     std::chrono::duration<double, std::milli>(timingPace - timingFlush).count(),
                     std::chrono::duration<double, std::milli>(timingPresent - timingPace).count(),

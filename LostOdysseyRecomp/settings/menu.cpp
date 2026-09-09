@@ -1,3 +1,4 @@
+#include <gpu/taa_collection.h>
 #include "menu.h"
 #include "menu_render.h"
 #include "menu_assets.h"
@@ -35,6 +36,8 @@ Config edit;
 Config previousDisplay;
 uint64_t displayTicket = 0;
 bool displayRollback = false, rollbackSaveFailed = false;
+bool collectionPrompt = false;
+int collectionChoice = 1;
 bool restartPrompt = false, savedRestartPrompt = false, restartSaveFailed = false;
 int restartChoice = 0;
 Config restartAfter;
@@ -172,6 +175,7 @@ void Publish(uint8_t *base, uint32_t config)
         addChoices(L"Game language", L"遊戲語言", std::move(gameLanguages), GameLanguageIndex(edit.gameLanguage));
         addChoices(L"Automatic updates", L"自動更新", onOff(), edit.automaticUpdates ? 0 : 1);
         addAction(L"Save settings", L"儲存設定", Tr(L"Save", L"儲存"));
+        next.rows.push_back({gpu::taa_collection::Label(edit.uiLanguage), gpu::taa_collection::Enabled() ? Tr(L"On", L"開") : Tr(L"Off", L"關"), true, {}, 0});
     }
     next.help = status.empty() ? Tr(L"LB / RB: category     D-pad: select / change     A: select     B: back",
                                     L"LB / RB：分類     方向鍵：選擇 / 調整     A：確認     B：返回")
@@ -220,6 +224,12 @@ void Publish(uint8_t *base, uint32_t config)
         next.dialogChoices = {Tr(L"Restart now", L"立即重新啟動"), Tr(L"Later", L"稍後"), Tr(L"Cancel", L"取消")};
         if (savedRestartPrompt) next.dialogChoices.resize(2);
         next.dialogSelection = restartChoice;
+    }
+    if (collectionPrompt) {
+        next.dialogTitle = gpu::taa_collection::Label(edit.uiLanguage);
+        next.dialogMessage = gpu::taa_collection::Message(edit.uiLanguage);
+        next.dialogChoices = {Tr(L"Yes", L"是"), Tr(L"No", L"否")};
+        next.dialogSelection = collectionChoice;
     }
     std::lock_guard lock(snapshotMutex);
     if (next.tab == snapshot.tab && next.row == snapshot.row && next.language == snapshot.language &&
@@ -398,6 +408,8 @@ PPC_FUNC(sub_822F19B0)
     if (!active.exchange(true))
     {
         edit = GetConfig();
+        collectionPrompt = gpu::taa_collection::Consent() < 0;
+        collectionChoice = 1;
         pending = 0;
         waitForRelease = true;
         restartPrompt = false;
@@ -428,6 +440,17 @@ PPC_FUNC(sub_822F19B0)
         status = Tr(L"Restart could not be started. This game is still running; your saved settings are safe.",
                     L"無法啟動重新啟動程序。本遊戲仍在執行，已儲存的設定安全保留。");
         Publish(base, config);
+    }
+    if (collectionPrompt) {
+        if (int selected = mouseDialog.exchange(-1); selected >= 0) collectionChoice = std::min(selected, 1);
+        if (input & 3) collectionChoice = 1 - collectionChoice;
+        if (input & 0x2000) collectionChoice = 1;
+        if (input & 0x3000) {
+            if (gpu::taa_collection::SetConsent(collectionChoice == 0)) { collectionPrompt = false; status.clear(); }
+            else status = Tr(L"Settings could not be saved.", L"無法儲存設定。");
+        }
+        if (input) Publish(base, config);
+        return;
     }
     if (restartPrompt)
     {
@@ -516,11 +539,17 @@ PPC_FUNC(sub_822F19B0)
         row = 0;
         status.clear();
     }
-    const int count = tab == 0 ? 8 : tab == 1 ? 3 : tab == 2 ? 9 : 4;
+    const int count = tab == 0 ? 8 : tab == 1 ? 3 : tab == 2 ? 9 : 5;
     if (input & 1)
         row = (row + count - 1) % count;
     if (input & 2)
         row = (row + 1) % count;
+    if (tab == 3 && row == 4 && (input & 0x100c)) {
+        if (gpu::taa_collection::Enabled()) {
+            if (!gpu::taa_collection::SetConsent(false)) status = Tr(L"Settings could not be saved.", L"無法儲存設定。");
+        } else { collectionPrompt = true; collectionChoice = 1; }
+        Publish(base, config); return;
+    }
     const bool action = (tab == 0 && row == 7) || (tab == 2 && row >= 7) || (tab == 3 && row == 3);
     const int delta = (input & 4) ? -1 : ((input & 8) || ((input & 0x1000) && !action)) ? 1 : 0;
     auto cycle = [&](uint32_t value, uint32_t count) {
@@ -624,7 +653,7 @@ PPC_FUNC(sub_822F19B0)
         {
             edit = GetConfig();
             if (edit.width != previousDisplay.width || edit.height != previousDisplay.height ||
-                edit.windowMode != previousDisplay.windowMode || gpu::video::DisplayModeFailed())
+                edit.windowMode != previousDisplay.windowMode || gpu::video::DisplayModeFailed() || gpu::video::WindowModeOverridden())
             {
                 displayRollback = false;
                 displayTicket = gpu::video::BeginDisplayChange(edit);

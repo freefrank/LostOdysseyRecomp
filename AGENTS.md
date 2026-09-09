@@ -4,7 +4,7 @@
 
 Track the v0.5.0 backend and QOL requirements in the bilingual roadmaps and [QOL requirements](docs/notes/v0.5.0-qol-requirements.md). Recording a requirement does not authorize its implementation.
 
-For this milestone, increment the current source patch version by one (`+0.0.1`) after each feature is implemented and its proportionate required validation is complete. Do not increment for planning, documentation-only synchronization, individual subtasks or repeat validation of the same feature. Keep the source and affected version documentation consistent. The v0.5.0 milestone is a planning target; do not invent per-feature versions or roll the minor version forward merely because the patch number grows. A feature version increment does not require or authorize a GitHub Release, tag, commit or push; handle publication only when separately requested.
+For this milestone, keep both the source version and release target at `0.5.0`. The user's 2026-09-09 correction supersedes the earlier per-feature patch-increment rule: do not add a version number for each implementation, subtask or validation. Preserve earlier artifact versions only as historical provenance. Change the version only when the user explicitly requests it. A feature implementation does not authorize a GitHub Release, tag, commit or push; handle publication only when separately requested.
 
 ## Project management agent
 

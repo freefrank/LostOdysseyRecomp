@@ -28,8 +28,8 @@
 | [Build guide](BUILDING.md) | Prerequisites, generation, running and storage |
 | [Maintainer Project (public)](https://github.com/users/freefrank/projects/3) | Work-item status, priorities and sources |
 | [Roadmap mirror](ROADMAP.md) / [简体中文](ROADMAP.zh-CN.md) | Synchronized repository TODO and bounded completion criteria |
-| [v0.5.0 PC graphics plan](ROADMAP.md#v050-pc-graphics) / [简体中文](ROADMAP.zh-CN.md#v050-pc-graphics) | Planned Windows PC Vulkan and DX11; implementation and acceptance pending. [Backend handoff](notes/switch-vulkan-handoff.md) includes later Switch alignment |
-| [v0.5.0 QOL requirements](notes/v0.5.0-qol-requirements.md) | Twelve planned Windows QOL items awaiting completion and validation; no implementation or version change in this record |
+| [v0.5.0 PC graphics plan](ROADMAP.md#v050-pc-graphics) / [简体中文](ROADMAP.zh-CN.md#v050-pc-graphics) | Windows PC D3D12/Vulkan candidate scope, bounded validation and remaining acceptance limits; DX11 remains future work |
+| [v0.5.0 QOL requirements](notes/v0.5.0-qol-requirements.md) | Thirteen Windows QOL requirements and their implementation, validation and release boundaries |
 | [Handoff](notes/handoff.md) | Continuation context and source map |
 | [Debug requirements](debug-menu-requirements.md) | Available and requested controls |
 | [Settings menu](notes/settings-menu.md) | Options, language, presentation and validation boundaries |

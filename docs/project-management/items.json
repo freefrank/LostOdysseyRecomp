@@ -2814,19 +2814,22 @@
     {
       "key": "shader-log-coverage-audit",
       "title": "Add independent shader logs and cumulative coverage auditing",
-      "body": "<!-- lo-project:shader-log-coverage-audit -->\n\n来源/link/已提交draw覆盖接成持续诊断闭环。\n\n## Scope and completion criteria\n\n- [ ] runtime保留运行/崩溃/严重shader摘要，shader-*.jsonl独立记录来源/link/编译/TAA\n- [ ] 记录runtime hash→base VS→fetch/layout指纹→位置族/槽位，标注word-FNV与byte-FNV namespace，保留未知/歧义\n- [ ] cache miss、来源unknown、翻译失败、TAA未覆盖、预期拒绝独立分类\n- [ ] 所有submitted draw含unknown：VS/PS/pass/frame/map及可用性、camera/viewport/depth/jitter/rejection/upload\n- [ ] shader+pass+reason首次/末次/次数，保留world/骨骼/对象差异，不只按hash去重\n- [ ] 后台批量限量写入，统计遗漏与开销，不做持续F1/readback\n- [ ] runtime/shader同session，保留当前+最新两组旧会话，保护活动/自定义路径，删失败下次处理\n- [ ] 按source/translator/TAA规则版本累计coverage，分盘资源/有限派生/runtime linked/实际draw分母\n- [ ] F1加入shader快照和可用性，缺失不丢capture\n- [ ] 未知仅观察，不自动扩jitter名单；真实position/upload/正常32相位/Off后再修\n\n## Validation and acceptance\n\n验unknown4bd、同hash不同pass/对象、Off/gap、warmcache、多来源、overflow、session轮转与快照；开销需实际测。\n\n用户明确记录后续TODO；独立shader日志/三组会话/累计清单均未实现。\n\nstage_detail: Not started\n\n## Sources\n\n- [docs/notes/taa-coverage-audit.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/notes/taa-coverage-audit.md) (repository reference; working-tree requirements may be newer)\n- `out/enemy-death-f5446/shader-review/coverage-design.md` (working-tree document, not yet committed)\n- [docs/ROADMAP.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/ROADMAP.md) (repository reference; working-tree requirements may be newer)\n- [docs/ROADMAP.zh-CN.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/ROADMAP.zh-CN.md) (repository reference; working-tree requirements may be newer)\n- [docs/ROADMAP.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/ROADMAP.md) (repository reference; working-tree requirements may be newer)\n- [docs/ROADMAP.zh-CN.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/ROADMAP.zh-CN.md) (repository reference; working-tree requirements may be newer)\n",
+      "body": "<!-- lo-project:shader-log-coverage-audit -->\n\n## Historical handoff checkpoint\n\nThe retained design joins source/link/submitted-draw coverage into a continuing diagnostic loop. The urgent scope was the split of shader events from runtime summaries; cumulative coverage and all-draw audit remain separate design work.\n\n## Scope and completion criteria\n\n- [x] runtime keeps run/crash/severe-shader summaries while shader-*.jsonl records source/link/compile/TAA events\n- [x] Record a conservative per-VS HLSL position-dataflow summary and, before `UnknownShader` returns, independently record guarded camera/viewport/depth evidence in compact schema 2 telemetry\n- [ ] Record runtime hash→base VS→fetch/layout fingerprint→family/slot with word-FNV and byte-FNV namespaces\n- [ ] Classify cache miss, unknown source, translation failure, missing TAA coverage and expected rejection independently\n- [ ] Audit every submitted draw, including unknown VS/PS/pass/frame/map and camera/viewport/depth/jitter/upload state\n- [ ] Track first/last/count by shader, pass and reason without collapsing world/skeletal/object differences\n- [ ] Quantify bounded background logging loss and overhead\n- [x] Retain the current and two newest prior runtime/shader session groups while protecting active/custom paths\n- [ ] Accumulate coverage by source/translator/TAA-rule version and explicit denominators\n- [x] Include shader snapshot availability with F1 without losing the capture when absent\n- [x] Keep the new position evidence observational: schema 2 does not automatically authorize jitter\n\n## Current — 2026-09-09, source 0.5.0\n\nIndependent shader JSONL, F1 inclusion, exit flush, custom Unicode paths and session retention passed focused fixtures. A normal earlier candidate exit wrote 15,693 contiguous JSONL records ending with a summary. The new `0.5.0-position-evidence-1` client adds one conservative HLSL position-dataflow analysis per VS and records finite guarded camera/viewport/depth evidence before `UnknownShader` returns. Candidate SHA256 `6feb20923e3632ac00b718950927ee245fb6929c7c3bc95e87e9d13f5cd23937` passed 27 C++ rule checks, a retained corpus that detected four c7 paths without falsely matching five non-c7 paths, and seven Worker checks. The deployed Worker accepts schema 1 and schema 2 requests (both HTTP 200); D1 schema-2 retransmit dedup raised `max_draws` from 44 to 54, and the precise test rows were deleted and read back empty. No new executable game run or real-player schema-2 telemetry is recorded. Cumulative coverage and all-submitted-draw auditing remain In Progress; the unknown 4bd/c230 actual-draw gap remains unvalidated and no jitter authorization was added. Player acceptance and Release remain pending.\n\n## Sources\n\n- `out/v0.5.0/performance-fix/position-evidence-0.5.0/REPORT.md`\n- [docs/notes/taa-coverage-audit.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/notes/taa-coverage-audit.md) (repository reference; working-tree requirements may be newer)\n- `out/enemy-death-f5446/shader-review/coverage-design.md` (working-tree document, not yet committed)\n- [docs/ROADMAP.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/ROADMAP.md) (repository reference; working-tree requirements may be newer)\n- [docs/ROADMAP.zh-CN.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/ROADMAP.zh-CN.md) (repository reference; working-tree requirements may be newer)\n",
       "issue_url": null,
       "fields": {
         "Kind": "Infrastructure",
         "Area": "Shader diagnostics",
-        "Status": "Todo",
-        "Delivery": "Not started",
-        "Release": null,
+        "Status": "In Progress",
+        "Delivery": "Validated",
+        "Release": "v0.5.0",
         "Start date": null,
-        "Target date": null
+        "Target date": null,
+        "Evidence": "Source 0.5.0 position-evidence-1 client: conservative HLSL position-dataflow analysis runs once per VS, and finite camera/viewport/depth evidence records before UnknownShader returns in schema 2 without authorizing jitter. Candidate SHA256 6feb20923e3632ac00b718950927ee245fb6929c7c3bc95e87e9d13f5cd23937 passed 27 C++ rule checks, a retained corpus with four c7 detections and five non-c7 non-matches, plus seven Worker checks. Deployed Worker accepts schema 1 and 2 requests (HTTP 200); D1 schema-2 retransmit dedup raised max_draws 44 to 54, then exact test rows were deleted and read back empty. No game run or real player schema-2 telemetry exists. Cumulative coverage and all-draw audit remain In Progress; 4bd/c230 remains unvalidated."
       },
       "source_refs": [
         "docs/notes/taa-coverage-audit.md#shader-log-coverage-todo",
+        "out/v0.5.0/performance-fix/shader-priority-0.5.0/REPORT.md",
+        "out/v0.5.0/slot2-sol-check/REPORT.md",
         "out/enemy-death-f5446/shader-review/coverage-design.md",
         "docs/ROADMAP.md",
         "docs/ROADMAP.zh-CN.md",
@@ -3843,6 +3846,7 @@
         "Area": "Platforms",
         "Status": "Paused",
         "Delivery": "Deferred",
+        "Evidence": "Future experimental Switch collaboration with u/Adoky is recorded. It remains paused pending an explicit resume and retains the PC-alignment prerequisite; it does not imply main-repository merge or platform support.",
         "Release": null,
         "Start date": null,
         "Target date": null
@@ -4688,6 +4692,135 @@
         "docs/ROADMAP.md#v050-pc-graphics",
         "docs/ROADMAP.zh-CN.md#v050-pc-graphics"
       ],
+      "record_type": "backlog"
+    },
+    {
+      "key": "render-output-dpi-presentation-diagnosis",
+      "title": "Diagnose render output size across desktop DPI transitions",
+      "body": "<!-- lo-project:render-output-dpi-presentation-diagnosis -->\n\n## Historical handoff checkpoint\n\nThe original 150% DPI observation compared a 3840x2160 internal/window size with a 2560x1440 presented screenshot. The 100% comparison was a Parsec virtual display with most of its 4K window off-screen; it is retained as a lead, not a second physical-4K comparison.\n\n## Scope and completion criteria\n\n- [x] Trace the affected D3D12 DPI/presentation path.\n- [x] Distinguish client/window, raw output, physical output and swapchain size in the final DPI144 run.\n- [x] Apply and validate the targeted native/D3D12 DPI144 repair.\n\n## Current — 2026-09-09, source 0.5.6\n\nThe corrected D3D12 DPI144 run reported an SDL client of 3840x2160; at 363.065 seconds raw output was 2560x1440 while physical output and swapchain were 3840x2160. Its final 3840x2160 screenshot has normal ground. The intermediate 3846x2177 observation is non-final. Vulkan and player acceptance remain pending.\n\n## Sources\n\n- out/v0.5.0/reddit-launch/capture\n- qol-game-window-pixel-size\n",
+      "issue_url": null,
+      "fields": {
+        "Kind": "Bug",
+        "Area": "Desktop windowing",
+        "Status": "Awaiting validation",
+        "Delivery": "Validated",
+        "Release": "v0.5.0",
+        "Start date": null,
+        "Target date": null,
+        "Evidence": "Source 0.5.6 corrected the failing legacy DPI144 fixture. Final actual D3D12 DPI144 evidence reports an SDL client of 3840x2160, raw output 2560x1440, physical output and swapchain 3840x2160 at 363.065s, and a 3840x2160 normal-ground screenshot. The intermediate 3846x2177 observation is retained as non-final. Vulkan and player acceptance remain pending; release remains pending."
+      },
+      "source_refs": [
+        "out/v0.5.0/reddit-launch/capture",
+        "qol-game-window-pixel-size"
+      ],
+      "source_lines": [],
+      "record_type": "backlog"
+    },
+    {
+      "key": "intermittent-fullscreen-underscan",
+      "title": "Diagnose intermittent fullscreen underscan",
+      "body": "<!-- lo-project:intermittent-fullscreen-underscan -->\n\n## Historical handoff checkpoint\n\nThe user observed that fullscreen sometimes did not fill the screen. The original cause was unproven.\n\n## Scope and completion criteria\n\n- [ ] Reproduce and distinguish abnormal underscan from intentional aspect-ratio black bars.\n- [ ] Identify the responsible fullscreen, display-mode, swapchain or window-sizing path.\n- [ ] Validate the repair across the affected fullscreen path.\n\n## Current — 2026-09-09, source 0.5.6\n\nThe corrected native fixture and the actual D3D12 DPI144 window path validated a 3840x2160 client and swapchain. Background execution forces Windowed mode, so actual fullscreen behavior and the underscan distinction remain unvalidated. Vulkan and player acceptance remain pending.\n\n## Sources\n\n- desktop-display-acceptance\n",
+      "issue_url": null,
+      "fields": {
+        "Kind": "Bug",
+        "Area": "Desktop windowing",
+        "Status": "Awaiting validation",
+        "Delivery": "Validated",
+        "Release": "v0.5.0",
+        "Start date": null,
+        "Target date": null,
+        "Evidence": "Source 0.5.6 corrected native desktop-window sizing, placement, shortcut and pending-transition cases. The actual D3D12 DPI144 window path produced a 3840x2160 client and swapchain, but background execution forces Windowed mode. Actual fullscreen behavior, intentional aspect-ratio bars versus underscan, Vulkan coverage, player acceptance and release remain pending."
+      },
+      "source_refs": [
+        "desktop-display-acceptance"
+      ],
+      "source_lines": [],
+      "record_type": "backlog"
+    },
+    {
+      "key": "alt-enter-window-fullscreen-toggle",
+      "title": "Add Alt+Enter window/fullscreen toggle",
+      "body": "<!-- lo-project:alt-enter-window-fullscreen-toggle -->\n\n## Historical handoff checkpoint\n\nThe original requirement was to support Alt+Enter switching between windowed and fullscreen presentation.\n\n## Scope and completion criteria\n\n- [ ] Toggle through Alt+Enter in the actual game path.\n- [ ] Restore the prior window size and position in the actual game path.\n- [ ] Confirm held-key debounce in the actual game path.\n\n## Current — 2026-09-09, source 0.5.6\n\nAlt+Enter, saved placement and pending-transition handling passed the corrected native 3840x2160 fixture. Background execution forces Windowed mode, so actual game fullscreen/windowed lifecycle and player acceptance remain pending.\n\n## Sources\n\n- desktop-display-acceptance\n",
+      "issue_url": null,
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Desktop windowing",
+        "Status": "Awaiting validation",
+        "Delivery": "Validated",
+        "Release": "v0.5.0",
+        "Start date": null,
+        "Target date": null,
+        "Evidence": "Source 0.5.6 Alt+Enter, saved placement and pending-transition handling passed the corrected native window fixture at physical 3840x2160. Background execution forces Windowed mode, so the actual game fullscreen/windowed lifecycle, Vulkan coverage, player acceptance and release remain pending."
+      },
+      "source_refs": [
+        "desktop-display-acceptance"
+      ],
+      "source_lines": [],
+      "record_type": "backlog"
+    },
+    {
+      "key": "4k-runtime-performance-diagnosis",
+      "title": "Diagnose observed 4K runtime performance",
+      "body": "<!-- lo-project:4k-runtime-performance-diagnosis -->\n\n## Historical handoff checkpoint\n\nThe user observed about 25–30 FPS at 4K. That original session was not a formal benchmark or a root-cause determination.\n\n## Scope and completion criteria\n\n- [x] Establish controlled 30-second 4K legacy and bulk captures.\n- [x] Record accepted-present, draw, constants and GPU-batch timing with external-condition limits.\n- [x] Avoid attributing the observed rate to TAA, recording, RTSS, CPU/NVML or constants without evidence.\n\n## Current — 2026-09-09, source 0.5.6\n\nThe bulk run recorded 1,419 frames in 30 seconds at 21.143 ms and 47.297 accepted presents/s, versus legacy 1,255 frames, 23.914 ms and 41.816 accepted presents/s. Constants fell 4.147 to 0.576 ms and draw 16.592 to 13.341 ms; GPU batches were 4.633 versus 4.785 ms. RTSS had no valid FPS and boost conditions differed, so the full 13.1% difference is not attributed to constants. The user still reports poor performance on a Ryzen 7 9800X3D with RTX 5080 and has not accepted the result. Deep localization has restarted: next checks cover thread hotspots, CPU–GPU serialization or synchronization, frame-rate limiting, and system conditions. No new diagnosis or optimization conclusion is recorded.\n\n\n## Direct repair and comparison — source 0.5.7\n\nSource 0.5.7: repeated shader FNV removed through content-checked identity reuse; 74 focused checks passed. Fixed Map16 D3D12 3840x2160/TAA3/cap60 comparison: RTSS 48.0126 to 54.0511 FPS, internal mean 20.8071 to 18.5178 ms, draw 13.0326 to 10.7875 ms; 1080 consecutive new frames and no new shader/pipeline/texture. RTSS hidden-window filter diagnosed and data connected without profile changes. CPU sampling also identified geometry preparation and serial batch fence waits. System load/boost differ slightly; this is bounded observed improvement, not stable 4K60 or player acceptance. Normal game exit; data unchanged. Local uncommitted source; no release.\n\nEvidence: docs/notes/v0.5.0-performance-diagnosis-2026-09-09.md; out/v0.5.0/performance-fix/REPORT.md.\n\n\n## Current 0.5.0 geometry and pacing result\n\nSource/release fixed at 0.5.0 by user correction. Content-checked shader reuse, exact vertex sample comparison, reused index/primitive scratch, endian loop specialization and precise Windows deadline waits implemented. Focused geometry/timer checks passed. Fixed Map16 D3D12 4K/TAA3/cap60: RTSS 54.05 to 58.33 to 59.76 FPS; final mean 16.7238 ms/p95 17.1576 ms/1196 consecutive valid frames. Vertex/index 1.5741/1.9266 to 0.6519/0.2914 ms. Output normal, no new shader/pipeline/texture or in-window captures. External load and collector cost differ; bounded near-60 result, not whole-game acceptance. Saves/settings unchanged, all games closed. No commit/push/release.\n\nEvidence: out/v0.5.0/performance-fix/FINAL-REPORT.md.\n",
+      "issue_url": null,
+      "fields": {
+        "Kind": "Research",
+        "Area": "Runtime performance",
+        "Status": "In Progress",
+        "Delivery": "Validated",
+        "Release": "v0.5.0",
+        "Start date": null,
+        "Target date": null,
+        "Evidence": "Source/release fixed at 0.5.0 by user correction. Content-checked shader reuse, exact vertex sample comparison, reused index/primitive scratch, endian loop specialization and precise Windows deadline waits implemented. Focused geometry/timer checks passed. Fixed Map16 D3D12 4K/TAA3/cap60: RTSS 54.05 to 58.33 to 59.76 FPS; final mean 16.7238 ms/p95 17.1576 ms/1196 consecutive valid frames. Vertex/index 1.5741/1.9266 to 0.6519/0.2914 ms. Output normal, no new shader/pipeline/texture or in-window captures. External load and collector cost differ; bounded near-60 result, not whole-game acceptance. Saves/settings unchanged, all games closed. No commit/push/release."
+      },
+      "source_refs": [
+        "out/v0.5.0/reddit-launch/run-user-observe-01/runtime.log",
+        "docs/notes/v0.5.0-performance-diagnosis-2026-09-09.md",
+        "out/v0.5.0/performance-fix/REPORT.md",
+        "out/v0.5.0/performance-fix/FINAL-REPORT.md"
+      ],
+      "source_lines": [],
+      "record_type": "backlog"
+    },
+    {
+      "key": "4k-taa-ground-shadow-diagnosis",
+      "title": "Diagnose reported 4K TAA ground and shadow blacking",
+      "body": "<!-- lo-project:4k-taa-ground-shadow-diagnosis -->\n\n## Historical handoff checkpoint\n\nThe original stationary Map16 TAA/Off reproduction was a limited pre-fix checkpoint; it did not then identify the failing shader or a repair.\n\n## Scope and completion criteria\n\n- [x] Inspect runtime and independent shader logs to identify the affected draw, shader, pass and state.\n- [x] Compare the fixed scene through a continuous 32-phase 3840x2160 run.\n- [x] Apply and accept the bounded four-c7 follow-up in the same D-drive slot 02 Ghost Town — City of Ruins scene.\n- [ ] Infer and separately validate matching candidates in broader shader families.\n\n## Current — 2026-09-09, source 0.5.0 candidate\n\nThe three-slot fcbb/c7/e8c0+576d/c8 repair passed 20,635 CPU checks and a continuous 32-phase 3840x2160 D3D12 run. All summaries were ready/completed/reused with no gap or jitter miss; 160 material/depth VP uploads matched bit for bit and the contact sheet shows normal ground. The follow-up candidate SHA256 `1c9911a3ad6dc91acc5ac1a2cffd7503031b12a81b82b19dd526ce28345ca87a` classifies four c7 VS paths from captures 2813–2815 (48 draws/frame) while retaining exact matrix, viewport and depth guards. In the same slot 02 Ghost Town — City of Ruins scene, six intermittent presented frames spanning about 11.37 seconds showed no flicker, and the user accepted this bounded repair. This is not continuous-video or broader-shader-family coverage; those regressions and release remain pending.\n\n## Sources\n\n- `out/v0.5.0/performance-fix/shader-priority-0.5.0/REPORT.md`\n- `out/v0.5.0/slot2-sol-check/REPORT.md`\n- shader-log-coverage-audit\n- enemy-disappearance-flicker\n- map13-shadow-regression\n",
+      "issue_url": null,
+      "fields": {
+        "Kind": "Bug",
+        "Area": "TAA and shadows",
+        "Status": "Awaiting validation",
+        "Delivery": "Validated",
+        "Release": "v0.5.0",
+        "Start date": null,
+        "Target date": null,
+        "Evidence": "The Map16 three-slot fcbb/c7/e8c0+576d/c8 repair passed 20,635 CPU checks and a 3840x2160 continuous 32-phase run: all summaries ready/completed/reused, no gap or jitter miss, with 160 material/depth VP uploads bit-identical. Accepted bounded follow-up: candidate SHA256 1c9911a3ad6dc91acc5ac1a2cffd7503031b12a81b82b19dd526ce28345ca87a classifies four c7 VS paths from captures 2813–2815 (48 draws/frame) with exact matrix, viewport and depth guards retained. In the same D-drive slot 02 Ghost Town — City of Ruins scene, six intermittent presented frames spanning about 11.37 seconds showed no flicker; the user accepted this scope. This does not validate broader shader families or release."
+      },
+      "source_refs": [
+        "shader-log-coverage-audit",
+        "enemy-disappearance-flicker",
+        "map13-shadow-regression"
+      ],
+      "source_lines": [],
+      "record_type": "backlog"
+    },
+    {
+      "key": "native-macos-platform",
+      "title": "Establish a native macOS port",
+      "body": "<!-- lo-project:native-macos-platform -->\n\nNative macOS port is future platform work with no release or date assigned.\n\n## Scope and completion criteria\n\n- [ ] Establish toolchain, dependencies, distribution and platform integration feasibility.\n- [ ] Define rendering/window/input/audio/filesystem requirements for native macOS.\n- [ ] Validate a proportionate native macOS path only after implementation is authorized.\n\n## Boundaries\n\nThis does not imply support, implementation, package availability, or inclusion in v0.5.0.\n",
+      "issue_url": null,
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Platforms",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Release": null,
+        "Start date": null,
+        "Target date": null
+      },
+      "source_refs": [],
+      "source_lines": [],
       "record_type": "backlog"
     }
   ]

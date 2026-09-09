@@ -1,0 +1,43 @@
+{
+  "name": "lost-odyssey-taa-collector",
+  "main": "worker.js",
+  "compatibility_date": "2026-09-09",
+  "account_id": "a6f98d533d0a0c22b3fdaded5cd8b8b2",
+  "workers_dev": false,
+  "routes": [
+    {
+      "pattern": "lo.dotslash.pro",
+      "custom_domain": true
+    }
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "lost-odyssey-taa-collection",
+      "database_id": "3e2c6a72-9567-4c3e-be28-6c433f294ca9"
+    }
+  ],
+  "ratelimits": [
+    {
+      "name": "UPLOAD_LIMIT",
+      "namespace_id": "100501",
+      "simple": {
+        "limit": 10,
+        "period": 60
+      }
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 0.1,
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.01
+    }
+  },
+  "triggers": {
+    "crons": [
+      "0 4 * * *"
+    ]
+  }
+}

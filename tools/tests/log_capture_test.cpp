@@ -1,5 +1,6 @@
 #include <os/log_file.h>
 #include <os/logger.h>
+#include <os/shader_log.h>
 
 #include <fstream>
 #include <iterator>
@@ -151,6 +152,7 @@ struct Fixture
 
     ~Fixture()
     {
+        os::shaderlog::CloseForExit();
         {
             std::lock_guard lock(os::logger::g_mutex);
             if (os::logger::g_file)

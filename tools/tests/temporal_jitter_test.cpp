@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <limits>
+#include "map16_jitter_capture.h"
 
 using namespace gpu::temporal;
 using Constants = std::array<uint32_t, 256 * 4>;
@@ -358,10 +359,162 @@ static void BattleCoverage()
     std::printf("Battle coverage: 32 phases, four sizes; legacy separation %.6f pixels, raster-offset error %.6f pixels\n",legacySeparation,offsetError);
 }
 
+struct Map16Output
+{
+    Float4 position, projected;
+    std::array<float,2> materialUv{};
+};
+
+// Independent f18420 HLSL transcriptions, including swizzled world transforms.
+// Do not use PositionVPSlot or the production Transform for these references.
+static Map16Output Map16GroundFcbb(const Constants& c, Float4 r4)
+{
+    r4[3]=1;
+    auto r2=Mul(r4[3],S(C(c,3),"xywz"));
+    r2=Mad(r4[2],S(C(c,2),"wxzy"),S(r2,"zxwy"));
+    r2=Mad(r4[1],S(C(c,1),"zwyx"),S(r2,"zxwy"));
+    const auto r11=Mad(r4[0],S(C(c,0),"yzxw"),S(r2,"zxwy"));
+    r2=Mul(r11[3],C(c,10));
+    r2=Mad(r11[1],C(c,9),r2);
+    r2=Mad(r11[0],C(c,8),r2);
+    r4=Mad(r11[2],C(c,7),r2);
+    return {r4,r4}; // r4 -> oPos and, without intervening mutation, o4.
+}
+
+static Map16Output Map16MaterialE8c0(const Constants& c, Float4 r7)
+{
+    r7[3]=1;
+    auto r4=Mul(r7[3],S(C(c,3),"xywz"));
+    r4=Mad(r7[2],S(C(c,2),"wxzy"),S(r4,"zxwy"));
+    r4=Mad(r7[1],S(C(c,1),"zwyx"),S(r4,"zxwy"));
+    r7=Mad(r7[0],S(C(c,0),"yzxw"),S(r4,"zxwy"));
+    r4=Mul(r7[3],C(c,11));
+    r4=Mad(r7[1],C(c,10),r4);
+    r4=Mad(r7[0],C(c,9),r4);
+    r4=Mad(r7[2],C(c,8),r4);
+    const auto uv=C(c,7);
+    return {r4,r4,{.125f*uv[0]+uv[3],.875f*uv[1]+uv[2]}}; // oPos/o2; o0.xy.
+}
+
+static Map16Output Map16Layer576d(const Constants& c, Float4 r4)
+{
+    r4[3]=1;
+    auto r1=Mul(r4[3],S(C(c,3),"xywz"));
+    r1=Mad(r4[2],S(C(c,2),"wxzy"),S(r1,"zxwy"));
+    r1=Mad(r4[1],S(C(c,1),"zwyx"),S(r1,"zxwy"));
+    r4=Mad(r4[0],S(C(c,0),"yzxw"),S(r1,"zxwy"));
+    r1=Mul(r4[3],C(c,11));
+    r1=Mad(r4[1],C(c,10),r1);
+    r1=Mad(r4[0],C(c,9),r1);
+    r1=Mad(r4[2],C(c,8),r1);
+    const auto uv=C(c,7);
+    return {r1,r1,{.125f*uv[0]+uv[3],.875f*uv[1]+uv[2]}}; // oPos/o5; o0.xy.
+}
+
+// Both observed 576d PS variants (2ca5/9510) retain this operation order:
+// rcp(i5.w), r0.zz*i5.xy -> r0.zw, r0.wz*c0.yx+c0.zw, sample at r0.wz.
+static std::array<float,2> Map16SceneUv(const Constants& c, const Float4& i5)
+{
+    const float reciprocal=1.f/i5[3];
+    const float z=reciprocal*i5[0], w=reciprocal*i5[1];
+    const auto scaleBias=C(c,0);
+    const float outZ=w*scaleBias[1]+scaleBias[2];
+    const float outW=z*scaleBias[0]+scaleBias[3];
+    return {outW,outZ};
+}
+
+static void Map16Coverage()
+{
+    using namespace map16_capture;
+    const auto bank=[](const auto& captured) {
+        Constants c{};std::copy(captured.begin(),captured.end(),c.begin());return c;
+    };
+    std::array<uint32_t,16> vp{};
+    std::copy_n(groundVs.begin()+7*4,16,vp.begin());
+    const Viewport extent{0,0,3840,2160};
+    const SceneAnchor anchor{vp,extent,8};
+    const std::array<uint64_t,4> vsHashes{
+        0xfcbb75d0feb3fcb9ull,0xe8c0d438c690c784ull,0x576d669b2ad3c898ull,0x576d669b2ad3c898ull};
+    const std::array<uint64_t,4> psHashes{
+        0x6373dc6f789b2bf1ull,0x5fbcd2ea7c8c6c8eull,0x2ca5e48054767199ull,0x9510a3faf0d67e3full};
+    const std::array<Map16Output(*)(const Constants&,Float4),4> evaluate{
+        Map16GroundFcbb,Map16MaterialE8c0,Map16Layer576d,Map16Layer576d};
+    const std::array<Constants,4> banks{bank(groundVs),bank(materialVs),bank(layerVs),bank(layerVs)};
+    const std::array<Constants,4> psBanks{bank(groundPs),bank(materialPs),bank(layerPs1593),bank(layerPs1594)};
+    std::array<double,4> legacySeparation{};
+    double offsetError=0,uvError=0;
+    const unsigned firstCheck=checks;
+    for (unsigned path=0;path<banks.size();++path)
+    {
+        auto original=banks[path];
+        // Captured c230 also contains this camera. Patching that unused copy
+        // must fail the independent oPos check even if camera matching succeeds.
+        std::copy(vp.begin(),vp.end(),original.begin()+230*4);
+        const unsigned slot=path==0?7:8;
+        Constants originalDepth{};
+        std::copy_n(original.begin(),16,originalDepth.begin());
+        std::copy(vp.begin(),vp.end(),originalDepth.begin()+4*4);
+        for (uint64_t frame=0;frame<32;++frame)
+        {
+            auto depth=originalDepth,material=original,ps=psBanks[path],depthPs=psBanks[path];
+            const auto depthHash=path==0?0xb030ab4e17a20783ull:0xf7fd88506d704a3dull;
+            ApplyDrawJitter(depthHash,0,frame,true,true,&anchor,8,extent,depth.data(),depthPs.data());
+            ApplyDrawJitter(vsHashes[path],psHashes[path],frame,true,true,&anchor,8,extent,material.data(),ps.data());
+            const auto jitter=FrameJitter(frame,extent.width,extent.height);
+            for (const auto vertex : {Float4{-60,-30,5,1},Float4{80,-20,10,1},Float4{0,90,12,1}})
+            {
+                const auto reference=path==0?TireDepthB030(depth,vertex):BattleDepth(depth,vertex);
+                const auto current=evaluate[path](material,vertex),legacy=evaluate[path](original,vertex);
+                Check(current.position==reference,"Map16 independent material position agrees with its depth pass");
+                Check(current.projected==reference,"Map16 clip-derived interpolant follows its raster position");
+                Check(current.position[2]==legacy.position[2] && current.position[3]==legacy.position[3],"Map16 material preserves clip Z/W");
+                Check(current.materialUv==legacy.materialUv,"Map16 jitter preserves material texture UV transform");
+                Check(std::isfinite(reference[3]) && std::abs(reference[3])>1,"Map16 reference point has nondegenerate clip W");
+                for (unsigned axis=0;axis<2;++axis)
+                {
+                    const double dimension=axis==0?extent.width:extent.height;
+                    const double expected=axis==0?jitter.pixelX:jitter.pixelY;
+                    const double sign=axis==0?1:-1;
+                    const double displacement=(double(current.position[axis])/current.position[3]-double(legacy.position[axis])/legacy.position[3])*dimension*.5*sign;
+                    legacySeparation[path]=std::max(legacySeparation[path],std::abs(displacement));
+                    offsetError=std::max(offsetError,std::abs(displacement-expected));
+                    Check(std::abs(displacement-expected)<.01,"Map16 independent clip offset matches requested physical jitter");
+                    if (path>=2)
+                    {
+                        const auto currentUv=Map16SceneUv(ps,current.projected),legacyUv=Map16SceneUv(psBanks[path],legacy.projected);
+                        const double sampleDisplacement=(double(currentUv[axis])-legacyUv[axis])*dimension;
+                        uvError=std::max(uvError,std::abs(sampleDisplacement-displacement));
+                        Check(std::abs(sampleDisplacement-displacement)<.002,"576d screen-color sampling tracks physical raster jitter without inverse compensation");
+                    }
+                }
+            }
+            Check(ps==psBanks[path],"Map16 material and scene-color PS constants remain unchanged");
+            // Restore only the independently identified VP range: all remaining
+            // captured world/normal/UV/light/camera constants must be untouched.
+            std::copy_n(original.begin()+slot*4,16,material.begin()+slot*4);
+            Check(material==original,"Map16 jitter leaves non-position constants and residual camera banks unchanged");
+        }
+        Check(legacySeparation[path]>.3,"Map16 unjittered-material negative control exposes the original layer separation");
+        for (unsigned reject=0;reject<4;++reject)
+        {
+            auto material=original,ps=psBanks[path];
+            auto viewport=extent;
+            if (reject==1) material[slot*4]^=1; // A different camera at the used slot.
+            if (reject==2) viewport.width-=1;
+            const auto before=material;
+            const auto result=ApplyDrawJitter(vsHashes[path],psHashes[path],0,reject!=0,true,&anchor,reject==3?9:8,viewport,material.data(),ps.data());
+            Check(!result.applied && material==before && ps==psBanks[path],"Map16 Off/camera/viewport/allocation rejection preserves the upload");
+        }
+    }
+    std::printf("Map16 coverage: %u checks, 32 phases at 3840x2160, ground and two material layers; legacy separation %.6f/%.6f/%.6f/%.6f pixels, clip offset error %.6f, scene-UV error %.6f pixels\n",
+        checks-firstCheck,legacySeparation[0],legacySeparation[1],legacySeparation[2],legacySeparation[3],offsetError,uvError);
+}
+
 int main()
 {
     TireMaterialCoverage();
     BattleCoverage();
+    Map16Coverage();
     // Unmodified camera and shadow PS c0..c5 from render f14774, shadow draw154.
     const std::array<uint32_t, 16> capturedVp{
         0xbe9e047a,0xbeb76758,0xbf79e276,0xbf7a227f,0xbfda2754,0x3d84d8c1,0x3e350064,0x3e352ec6,

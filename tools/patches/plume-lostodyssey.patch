@@ -1,8 +1,66 @@
 diff --git a/plume_d3d12.cpp b/plume_d3d12.cpp
-index 2cdcf18..19b4b72 100644
+index 2cdcf18..ca67db3 100644
 --- a/plume_d3d12.cpp
 +++ b/plume_d3d12.cpp
-@@ -2287,7 +2287,19 @@ namespace plume {
+@@ -1406,21 +1406,27 @@ namespace plume {
+     }
+ 
+     bool D3D12SwapChain::resize() {
+-        getWindowSize(width, height);
++        uint32_t requestedWidth = 0, requestedHeight = 0;
++        getWindowSize(requestedWidth, requestedHeight);
+ 
+         // Don't resize the swap chain at all if the window doesn't have a valid size.
+-        if ((width == 0) || (height == 0)) {
++        if ((requestedWidth == 0) || (requestedHeight == 0)) {
+             return false;
+         }
+ 
+         for (uint32_t i = 0; i < desc.textureCount; i++) {
+-            textures[i].d3d->Release();
++            if (textures[i].d3d != nullptr) textures[i].d3d->Release();
+             textures[i].d3d = nullptr;
+         }
+ 
+-        HRESULT res = d3d->ResizeBuffers(0, 0, 0, DXGI_FORMAT_UNKNOWN, swapChainFlags);
++        // Explicit physical pixels avoid DXGI inferring virtualized dimensions
++        // from a command thread with a different DPI context.
++        HRESULT res = d3d->ResizeBuffers(0, requestedWidth, requestedHeight, DXGI_FORMAT_UNKNOWN, swapChainFlags);
+         if (FAILED(res)) {
+             fprintf(stderr, "ResizeBuffers failed with error code 0x%lX.\n", res);
++            // The old swap chain remains valid after a failed resize. Retain
++            // its allocation size so a later frame can retry the new size.
++            setTextures();
+             return false;
+         }
+ 
+@@ -1451,10 +1457,7 @@ namespace plume {
+     }
+ 
+     void D3D12SwapChain::getWindowSize(uint32_t &dstWidth, uint32_t &dstHeight) const {
+-        RECT rect;
+-        GetClientRect(desc.renderWindow, &rect);
+-        dstWidth = rect.right - rect.left;
+-        dstHeight = rect.bottom - rect.top;
++        GetWindowClientPixels(desc.renderWindow, dstWidth, dstHeight);
+     }
+ 
+     void D3D12SwapChain::setTextures() {
+@@ -1463,6 +1466,13 @@ namespace plume {
+         for (uint32_t i = 0; i < desc.textureCount; i++) {
+             d3d->GetBuffer(i, IID_PPV_ARGS(&textures[i].d3d));
+ 
++            // Report the allocation we actually present and capture.
++            if (textures[i].d3d != nullptr) {
++                const auto bufferDesc = textures[i].d3d->GetDesc();
++                width = uint32_t(bufferDesc.Width);
++                height = bufferDesc.Height;
++            }
++
+             textures[i].desc.width = width;
+             textures[i].desc.height = height;
+             textures[i].resourceStates = D3D12_RESOURCE_STATE_PRESENT;
+@@ -2287,7 +2297,19 @@ namespace plume {
          if (clearStencil) {
              clearFlags |= D3D12_CLEAR_FLAG_STENCIL;
          }
@@ -23,7 +81,7 @@ index 2cdcf18..19b4b72 100644
      }
  
      void D3D12CommandList::copyBufferRegion(RenderBufferReference dstBuffer, RenderBufferReference srcBuffer, uint64_t size) {
-@@ -2312,9 +2324,14 @@ namespace plume {
+@@ -2312,9 +2334,14 @@ namespace plume {
  
          const D3D12_TEXTURE_COPY_LOCATION copyDstLocation = toD3D12(dstLocation);
          const D3D12_TEXTURE_COPY_LOCATION copySrcLocation = toD3D12(srcLocation);
@@ -40,7 +98,7 @@ index 2cdcf18..19b4b72 100644
      }
  
      void D3D12CommandList::copyBuffer(const RenderBuffer *dstBuffer, const RenderBuffer *srcBuffer) {
-@@ -2669,11 +2686,15 @@ namespace plume {
+@@ -2669,11 +2696,15 @@ namespace plume {
      }
  
      std::unique_ptr<RenderCommandList> D3D12CommandQueue::createCommandList() {
@@ -58,7 +116,7 @@ index 2cdcf18..19b4b72 100644
      }
  
      void D3D12CommandQueue::executeCommandLists(const RenderCommandList **commandLists, uint32_t commandListCount, RenderCommandSemaphore **waitSemaphores, uint32_t waitSemaphoreCount, RenderCommandSemaphore **signalSemaphores, uint32_t signalSemaphoreCount, RenderCommandFence *signalFence) {
-@@ -2957,7 +2978,9 @@ namespace plume {
+@@ -2957,7 +2988,9 @@ namespace plume {
      }
  
      std::unique_ptr<RenderTexture> D3D12Pool::createTexture(const RenderTextureDesc &desc) {
@@ -69,7 +127,7 @@ index 2cdcf18..19b4b72 100644
      }
  
      // D3D12Shader
-@@ -3075,6 +3098,7 @@ namespace plume {
+@@ -3075,6 +3108,7 @@ namespace plume {
      // D3D12GraphicsPipeline
  
      D3D12GraphicsPipeline::D3D12GraphicsPipeline(D3D12Device *device, const RenderGraphicsPipelineDesc &desc) : D3D12Pipeline(device, Type::Graphics) {
@@ -77,7 +135,7 @@ index 2cdcf18..19b4b72 100644
          assert(desc.pipelineLayout != nullptr);
  
          topology = toD3D12(desc.primitiveTopology);
-@@ -3673,18 +3697,16 @@ namespace plume {
+@@ -3673,18 +3707,16 @@ namespace plume {
              const D3D_SHADER_MODEL supportedShaderModels[] = { D3D_SHADER_MODEL_6_0 };
  #       endif
              D3D12_FEATURE_DATA_SHADER_MODEL dataShaderModel = {};
@@ -103,7 +161,7 @@ index 2cdcf18..19b4b72 100644
              }
  
              // Determine if the device supports sample locations.
-@@ -3754,6 +3776,7 @@ namespace plume {
+@@ -3754,6 +3786,7 @@ namespace plume {
                  adapter = adapterOption;
                  d3d = deviceOption;
                  shaderModel = dataShaderModel.HighestShaderModel;
@@ -111,7 +169,7 @@ index 2cdcf18..19b4b72 100644
                  capabilities.geometryShader = true;
                  capabilities.raytracing = rtSupportOption;
                  capabilities.raytracingStateUpdate = rtStateUpdateSupportOption;
-@@ -3894,7 +3917,10 @@ namespace plume {
+@@ -3894,7 +3927,10 @@ namespace plume {
      }
  
      std::unique_ptr<RenderDescriptorSet> D3D12Device::createDescriptorSet(const RenderDescriptorSetDesc &desc) {
@@ -123,7 +181,7 @@ index 2cdcf18..19b4b72 100644
      }
  
      std::unique_ptr<RenderShader> D3D12Device::createShader(const void *data, uint64_t size, const char *entryPointName, RenderShaderFormat format) {
-@@ -3906,11 +3932,15 @@ namespace plume {
+@@ -3906,11 +3942,15 @@ namespace plume {
      }
  
      std::unique_ptr<RenderPipeline> D3D12Device::createComputePipeline(const RenderComputePipelineDesc &desc) {
@@ -141,7 +199,7 @@ index 2cdcf18..19b4b72 100644
      }
  
      std::unique_ptr<RenderPipeline> D3D12Device::createRaytracingPipeline(const RenderRaytracingPipelineDesc &desc, const RenderPipeline *previousPipeline) {
-@@ -3918,20 +3948,28 @@ namespace plume {
+@@ -3918,20 +3958,28 @@ namespace plume {
      }
  
      std::unique_ptr<RenderCommandQueue> D3D12Device::createCommandQueue(RenderCommandListType type) {
@@ -174,7 +232,7 @@ index 2cdcf18..19b4b72 100644
      }
  
      std::unique_ptr<RenderAccelerationStructure> D3D12Device::createAccelerationStructure(const RenderAccelerationStructureDesc &desc) {
-@@ -3943,15 +3981,21 @@ namespace plume {
+@@ -3943,15 +3991,21 @@ namespace plume {
      }
  
      std::unique_ptr<RenderPipelineLayout> D3D12Device::createPipelineLayout(const RenderPipelineLayoutDesc &desc) {
@@ -199,7 +257,7 @@ index 2cdcf18..19b4b72 100644
      }
  
      std::unique_ptr<RenderFramebuffer> D3D12Device::createFramebuffer(const RenderFramebufferDesc &desc) {
-@@ -4161,7 +4205,9 @@ namespace plume {
+@@ -4161,7 +4215,9 @@ namespace plume {
      }
  
      bool D3D12Device::isValid() const {
@@ -211,10 +269,40 @@ index 2cdcf18..19b4b72 100644
  
      bool D3D12Device::beginCapture() {
 diff --git a/plume_render_interface_types.h b/plume_render_interface_types.h
-index 9dcfedf..f14e707 100644
+index 9dcfedf..e35a468 100644
 --- a/plume_render_interface_types.h
 +++ b/plume_render_interface_types.h
-@@ -1762,6 +1762,7 @@ namespace plume {
+@@ -37,6 +37,29 @@ namespace plume {
+ #if defined(_WIN64)
+     // Native HWND handle to the target window.
+     typedef HWND RenderWindow;
++
++    // HWND ownership does not make a caller on another thread DPI-aware.
++    // Scope every native size query, including swap-chain construction and resize.
++    class WindowPixelContext final {
++        DPI_AWARENESS_CONTEXT previous;
++    public:
++        WindowPixelContext() : previous(SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)) {}
++        ~WindowPixelContext() { if (previous) SetThreadDpiAwarenessContext(previous); }
++        WindowPixelContext(const WindowPixelContext &) = delete;
++        WindowPixelContext &operator=(const WindowPixelContext &) = delete;
++        bool ready() const { return previous != nullptr; }
++    };
++
++    inline bool GetWindowClientPixels(HWND window, uint32_t &width, uint32_t &height) {
++        const WindowPixelContext pixels;
++        RECT rect = {};
++        width = height = 0;
++        if (!pixels.ready() || !GetClientRect(window, &rect)) return false;
++        width = uint32_t(rect.right - rect.left);
++        height = uint32_t(rect.bottom - rect.top);
++        return true;
++    }
++
+ #elif defined(__ANDROID__)
+     typedef ANativeWindow* RenderWindow;
+ #elif defined(PLUME_SDL_VULKAN_ENABLED)
+@@ -1762,6 +1785,7 @@ namespace plume {
      };
  
      struct RenderDeviceCapabilities {
@@ -223,7 +311,7 @@ index 9dcfedf..f14e707 100644
          bool geometryShader = false;
  
 diff --git a/plume_vulkan.cpp b/plume_vulkan.cpp
-index f1dd503..78b9f9c 100644
+index f1dd503..b9fc17e 100644
 --- a/plume_vulkan.cpp
 +++ b/plume_vulkan.cpp
 @@ -835,7 +835,7 @@ namespace plume {
@@ -292,7 +380,26 @@ index f1dd503..78b9f9c 100644
  
          descriptorPool = createDescriptorPool(device, typeCounts, desc.lastRangeIsBoundless);
          if (descriptorPool == VK_NULL_HANDLE) {
-@@ -2175,7 +2184,7 @@ namespace plume {
+@@ -2083,6 +2092,8 @@ namespace plume {
+         VkResult res;
+ 
+ #   ifdef _WIN64
++        const WindowPixelContext pixels;
++        if (!pixels.ready()) return;
+         assert(desc.renderWindow != 0);
+         VkWin32SurfaceCreateInfoKHR surfaceCreateInfo = {};
+         surfaceCreateInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
+@@ -2160,7 +2171,8 @@ namespace plume {
+         }
+ 
+         VkSurfaceCapabilitiesKHR surfaceCapabilities = {};
+-        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, &surfaceCapabilities);
++        res = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, &surfaceCapabilities);
++        if (res != VK_SUCCESS) return;
+ 
+         // Pick an alpha compositing mode
+         if (surfaceCapabilities.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR) {
+@@ -2175,7 +2187,7 @@ namespace plume {
          }
  
          // Make sure maxImageCount is never below minImageCount, as it's allowed to be zero.
@@ -301,15 +408,78 @@ index f1dd503..78b9f9c 100644
  
          // Clamp the requested buffer count between the bounds of the surface capabilities.
          this->desc.textureCount = std::clamp(desc.textureCount, surfaceCapabilities.minImageCount, surfaceCapabilities.maxImageCount);
-@@ -2310,6 +2319,7 @@ namespace plume {
+@@ -2254,6 +2266,9 @@ namespace plume {
+     }
+ 
+     bool VulkanSwapChain::present(uint32_t textureIndex, RenderCommandSemaphore **waitSemaphores, uint32_t waitSemaphoreCount) {
++#   if defined(_WIN64)
++        const WindowPixelContext pixels;
++#   endif
+         thread_local std::vector<VkSemaphore> waitSemaphoresVector;
+         waitSemaphoresVector.clear();
+         for (uint32_t i = 0; i < waitSemaphoreCount; i++) {
+@@ -2286,6 +2301,7 @@ namespace plume {
+             res = vkQueuePresentKHR(commandQueue->queue->vk, &presentInfo);
+         }
+ 
++        if (res == VK_ERROR_OUT_OF_DATE_KHR) surfaceOutOfDate = true;
+ #if defined(__APPLE__)
+         // Under MoltenVK, VK_SUBOPTIMAL_KHR does not result in a valid state for rendering. We intentionally
+         // only check for this error during present to avoid having to synchronize manually against the semaphore
+@@ -2310,25 +2326,44 @@ namespace plume {
      }
  
      bool VulkanSwapChain::resize() {
+-        getWindowSize(width, height);
++#   if defined(_WIN64)
++        // WSI may query the HWND internally while reporting currentExtent.
++        // Keep its capability query and creation in the same physical context.
++        const WindowPixelContext pixels;
++        if (!pixels.ready()) return false;
++#   endif
 +        if (vk != VK_NULL_HANDLE) vkDeviceWaitIdle(commandQueue->device->vk);
-         getWindowSize(width, height);
++        uint32_t requestedWidth = 0, requestedHeight = 0;
++        getWindowSize(requestedWidth, requestedHeight);
  
          // Don't recreate the swap chain at all if the window doesn't have a valid size.
-@@ -2338,7 +2348,8 @@ namespace plume {
+-        if ((width == 0) || (height == 0)) {
++        if ((requestedWidth == 0) || (requestedHeight == 0)) {
+             return false;
+         }
+ 
+-        // Destroy any image view references to the current swap chain.
+-        releaseImageViews();
+-
+         // Query surface capabilities to get the valid extent bounds.
+         VkSurfaceCapabilitiesKHR surfaceCapabilities = {};
+-        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(commandQueue->device->physicalDevice, surface, &surfaceCapabilities);
++        const VkResult capabilitiesResult = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(commandQueue->device->physicalDevice, surface, &surfaceCapabilities);
++        if (capabilitiesResult != VK_SUCCESS) return false;
+ 
+         // Clamp the extent to the surface capabilities' min/max bounds.
+         // This is required because the window size may differ from the valid surface extent
+         // (e.g., due to window decorations, compositor behavior, or timing issues).
+-        width = std::clamp(width, surfaceCapabilities.minImageExtent.width, surfaceCapabilities.maxImageExtent.width);
+-        height = std::clamp(height, surfaceCapabilities.minImageExtent.height, surfaceCapabilities.maxImageExtent.height);
++        if (surfaceCapabilities.currentExtent.width != UINT32_MAX) {
++            requestedWidth = surfaceCapabilities.currentExtent.width;
++            requestedHeight = surfaceCapabilities.currentExtent.height;
++        }
++        else {
++            requestedWidth = std::clamp(requestedWidth, surfaceCapabilities.minImageExtent.width, surfaceCapabilities.maxImageExtent.width);
++            requestedHeight = std::clamp(requestedHeight, surfaceCapabilities.minImageExtent.height, surfaceCapabilities.maxImageExtent.height);
++        }
++
++        // A minimized/racing surface may have a zero fixed extent even when
++        // the preceding HWND query was nonzero. Keep its old views for retry.
++        if ((requestedWidth == 0) || (requestedHeight == 0)) return false;
++        width = requestedWidth;
++        height = requestedHeight;
++        releaseImageViews();
+ 
+         createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+         createInfo.surface = surface;
+@@ -2338,7 +2373,8 @@ namespace plume {
          createInfo.imageExtent.width = width;
          createInfo.imageExtent.height = height;
          createInfo.imageArrayLayers = 1;
@@ -319,7 +489,52 @@ index f1dd503..78b9f9c 100644
          createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
          createInfo.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
          createInfo.compositeAlpha = pickedAlphaFlag;
-@@ -2496,6 +2507,7 @@ namespace plume {
+@@ -2354,6 +2390,7 @@ namespace plume {
+ 
+         // Store the chosen present mode to identify later whether the swapchain needs to be recreated.
+         createdPresentMode = requiredPresentMode;
++        surfaceOutOfDate = false;
+ 
+         // Reset present counter.
+         presentCount = 1;
+@@ -2403,7 +2440,7 @@ namespace plume {
+     bool VulkanSwapChain::needsResize() const {
+         uint32_t windowWidth, windowHeight;
+         getWindowSize(windowWidth, windowHeight);
+-        return (vk == VK_NULL_HANDLE) || (windowWidth != width) || (windowHeight != height) || (requiredPresentMode != createdPresentMode);
++        return surfaceOutOfDate || (vk == VK_NULL_HANDLE) || (windowWidth != width) || (windowHeight != height) || (requiredPresentMode != createdPresentMode);
+     }
+ 
+     void VulkanSwapChain::setVsyncEnabled(bool vsyncEnabled) {
+@@ -2459,10 +2496,7 @@ namespace plume {
+ 
+     void VulkanSwapChain::getWindowSize(uint32_t &dstWidth, uint32_t &dstHeight) const {
+ #   if defined(_WIN64)
+-        RECT rect;
+-        GetClientRect(desc.renderWindow, &rect);
+-        dstWidth = rect.right - rect.left;
+-        dstHeight = rect.bottom - rect.top;
++        GetWindowClientPixels(desc.renderWindow, dstWidth, dstHeight);
+ #   elif defined(PLUME_SDL_VULKAN_ENABLED)
+         SDL_GetWindowSizeInPixels(desc.renderWindow, (int *)(&dstWidth), (int *)(&dstHeight));
+ #   elif defined(__ANDROID__)
+@@ -2483,10 +2517,15 @@ namespace plume {
+     }
+ 
+     bool VulkanSwapChain::acquireTexture(RenderCommandSemaphore *signalSemaphore, uint32_t *textureIndex) {
++#   if defined(_WIN64)
++        // Win32 WSI can query the HWND here too, not only during creation.
++        const WindowPixelContext pixels;
++#   endif
+         assert(signalSemaphore != nullptr);
+ 
+         VulkanCommandSemaphore *interfaceSemaphore = static_cast<VulkanCommandSemaphore *>(signalSemaphore);
+         VkResult res = vkAcquireNextImageKHR(commandQueue->device->vk, vk, UINT64_MAX, interfaceSemaphore->vk, VK_NULL_HANDLE, textureIndex);
++        if (res == VK_ERROR_OUT_OF_DATE_KHR) surfaceOutOfDate = true;
+         if ((res != VK_SUCCESS) && (res != VK_SUBOPTIMAL_KHR)) {
+             return false;
+         }
+@@ -2496,6 +2535,7 @@ namespace plume {
  
      void VulkanSwapChain::releaseSwapChain() {
          if (vk != VK_NULL_HANDLE) {
@@ -327,7 +542,7 @@ index f1dd503..78b9f9c 100644
              vkDestroySwapchainKHR(commandQueue->device->vk, vk, nullptr);
              vk = VK_NULL_HANDLE;
          }
-@@ -3229,7 +3241,29 @@ namespace plume {
+@@ -3229,7 +3269,29 @@ namespace plume {
              imageCopy.imageExtent.depth = srcLocation.placedFootprint.depth;
              vkCmdCopyBufferToImage(vk, srcBuffer->vk, dstTexture->vk, toImageLayout(dstTexture->textureLayout), 1, &imageCopy);
          }
@@ -357,7 +572,7 @@ index f1dd503..78b9f9c 100644
              VkImageCopy imageCopy = {};
              imageCopy.srcSubresource.aspectMask = toAspectFlags(srcTexture->desc.format, srcTexture->desc.flags);
              imageCopy.srcSubresource.baseArrayLayer = srcLocation.subresource.arrayIndex;
-@@ -3561,11 +3595,17 @@ namespace plume {
+@@ -3561,11 +3623,17 @@ namespace plume {
      }
  
      std::unique_ptr<RenderCommandList> VulkanCommandQueue::createCommandList() {
@@ -377,7 +592,7 @@ index f1dd503..78b9f9c 100644
      }
  
      void VulkanCommandQueue::executeCommandLists(const RenderCommandList **commandLists, uint32_t commandListCount, RenderCommandSemaphore **waitSemaphores, uint32_t waitSemaphoreCount, RenderCommandSemaphore **signalSemaphores, uint32_t signalSemaphoreCount, RenderCommandFence *signalFence) {
-@@ -3839,7 +3879,7 @@ namespace plume {
+@@ -3839,7 +3907,7 @@ namespace plume {
          }
  
          VkPhysicalDeviceScalarBlockLayoutFeatures layoutFeatures = {};
@@ -386,7 +601,7 @@ index f1dd503..78b9f9c 100644
          if (scalarBlockLayoutFound) {
              layoutFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES;
              layoutFeatures.pNext = featuresChain;
-@@ -3868,7 +3908,7 @@ namespace plume {
+@@ -3868,7 +3936,7 @@ namespace plume {
          }
  
          VkPhysicalDeviceBufferDeviceAddressFeatures bufferDeviceAddressFeatures = {};
@@ -395,7 +610,7 @@ index f1dd503..78b9f9c 100644
          if (bufferDeviceAddressFound) {
              bufferDeviceAddressFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
              bufferDeviceAddressFeatures.pNext = featuresChain;
-@@ -3979,7 +4019,7 @@ namespace plume {
+@@ -3979,7 +4047,7 @@ namespace plume {
          vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, queueFamilyProperties.data());
  
          auto pickFamilyQueue = [&](RenderCommandListType type, VkQueueFlags flags) {
@@ -404,7 +619,7 @@ index f1dd503..78b9f9c 100644
              uint32_t familySetBits = sizeof(uint32_t) * 8;
              uint32_t familyQueueCount = 0;
              bool familyUsed = false;
-@@ -3987,7 +4027,7 @@ namespace plume {
+@@ -3987,7 +4055,7 @@ namespace plume {
                  const VkQueueFamilyProperties &props = queueFamilyProperties[i];
  
                  // The family queue flags must contain all the flags required by the command list type.
@@ -413,7 +628,7 @@ index f1dd503..78b9f9c 100644
                      continue;
                  }
  
-@@ -4003,14 +4043,19 @@ namespace plume {
+@@ -4003,14 +4071,19 @@ namespace plume {
                  }
              }
  
@@ -436,7 +651,7 @@ index f1dd503..78b9f9c 100644
  
          // Create the struct to store the virtual queues.
          queueFamilies.resize(queueFamilyCount);
-@@ -4120,6 +4165,7 @@ namespace plume {
+@@ -4120,6 +4193,7 @@ namespace plume {
          description.dedicatedVideoMemory = memoryHeapSize;
  
          // Fill capabilities.
@@ -444,7 +659,7 @@ index f1dd503..78b9f9c 100644
          capabilities.geometryShader = deviceFeatures.features.geometryShader;
          capabilities.raytracing = rayTracingSupported;
          capabilities.raytracingStateUpdate = false;
-@@ -4161,23 +4207,33 @@ namespace plume {
+@@ -4161,23 +4235,33 @@ namespace plume {
      }
  
      std::unique_ptr<RenderDescriptorSet> VulkanDevice::createDescriptorSet(const RenderDescriptorSetDesc &desc) {
@@ -483,7 +698,7 @@ index f1dd503..78b9f9c 100644
      }
  
      std::unique_ptr<RenderPipeline> VulkanDevice::createRaytracingPipeline(const RenderRaytracingPipelineDesc &desc, const RenderPipeline *previousPipeline) {
-@@ -4189,11 +4245,15 @@ namespace plume {
+@@ -4189,11 +4273,15 @@ namespace plume {
      }
  
      std::unique_ptr<RenderBuffer> VulkanDevice::createBuffer(const RenderBufferDesc &desc) {
@@ -501,7 +716,7 @@ index f1dd503..78b9f9c 100644
      }
  
      std::unique_ptr<RenderAccelerationStructure> VulkanDevice::createAccelerationStructure(const RenderAccelerationStructureDesc &desc) {
-@@ -4205,15 +4265,21 @@ namespace plume {
+@@ -4205,15 +4293,21 @@ namespace plume {
      }
  
      std::unique_ptr<RenderPipelineLayout> VulkanDevice::createPipelineLayout(const RenderPipelineLayoutDesc &desc) {
@@ -526,7 +741,7 @@ index f1dd503..78b9f9c 100644
      }
  
      std::unique_ptr<RenderFramebuffer> VulkanDevice::createFramebuffer(const RenderFramebufferDesc &desc) {
-@@ -4444,7 +4510,7 @@ namespace plume {
+@@ -4444,7 +4538,7 @@ namespace plume {
      }
  
      bool VulkanDevice::isValid() const {
@@ -535,3 +750,15 @@ index f1dd503..78b9f9c 100644
      }
  
      bool VulkanDevice::beginCapture() {
+diff --git a/plume_vulkan.h b/plume_vulkan.h
+index 0a1edbe..99e4048 100644
+--- a/plume_vulkan.h
++++ b/plume_vulkan.h
+@@ -235,6 +235,7 @@ namespace plume {
+         VkSwapchainCreateInfoKHR createInfo = {};
+         VkSurfaceFormatKHR pickedSurfaceFormat = {};
+         VkPresentModeKHR createdPresentMode = VK_PRESENT_MODE_FIFO_KHR;
++        bool surfaceOutOfDate = false;
+         VkPresentModeKHR requiredPresentMode = VK_PRESENT_MODE_FIFO_KHR;
+         VkCompositeAlphaFlagBitsKHR pickedAlphaFlag = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+         std::vector<VulkanTexture> textures;

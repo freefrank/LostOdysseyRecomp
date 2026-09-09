@@ -2,6 +2,7 @@
 #include "hid.h"
 #include <kernel/xdm.h>
 #include <os/logger.h>
+#include <os/shader_log.h>
 #include <atomic>
 extern std::atomic<uint32_t> g_presentedSwaps;
 #include <vector>
@@ -118,7 +119,7 @@ void hid::Poll()
         else if (e.type == SDL_WINDOWEVENT && e.window.event == SDL_WINDOWEVENT_FOCUS_LOST)
             ClearKeyboardState();
         else if (e.type == SDL_QUIT)
-            std::_Exit(0);
+            (os::shaderlog::CloseForExit(), std::_Exit(0));
     }
 }
 
