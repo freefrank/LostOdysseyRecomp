@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.28)
-project(LostOdysseyRecomp VERSION 0.4.15 LANGUAGES C CXX)
+project(LostOdysseyRecomp VERSION 0.4.16 LANGUAGES C CXX)
 # Source version, not a release/commit or clean-checkout assertion.
 # Capture before nested projects can replace PROJECT_VERSION in their scope.
 set(LO_SOURCE_VERSION "${PROJECT_VERSION}")

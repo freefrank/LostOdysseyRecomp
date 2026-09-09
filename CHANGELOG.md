@@ -6,9 +6,9 @@ One record of completed changes, with unpublished work separated from verified r
 
 ## v0.5.0 — Unreleased / 未发布
 
-Current source is **0.4.15**, organized into 13 feature commits below. The delivery target remains **v0.5.0** and the published baseline remains **v0.4.2**. These commit numbers identify the new source history; earlier test binaries with matching version strings are separate artifacts and must be identified by their hashes.
+Current source is **0.4.16**. Earlier feature commits through 0.4.15 are listed below; subsequent UI changes are recorded in the entries that follow. The delivery target remains **v0.5.0**, with no release of these internal versions.
 
-当前源码为 **0.4.15**，已按下表拆成 13 个功能提交；交付目标仍是 **v0.5.0**，已发布基线仍为 **v0.4.2**。这些编号标识本次整理后的源码历史；此前可能同名的测试程序属于其他产物，须以哈希区分。
+当前源码为 **0.4.16**；下表保留截至 0.4.15 的功能提交，后续 UI 改动见下方条目。交付目标仍为 **v0.5.0**，内部版本不单独发布。
 
 | Source / 源码 | Commit / 提交 | Change / 改动 |
 | --- | --- | --- |
@@ -29,6 +29,12 @@ Current source is **0.4.15**, organized into 13 feature commits below. The deliv
 Completed behavior includes portable game discovery, the installer and desktop menus, Windows updater support, Vulkan rendering and shader preparation, measured CPU reductions, typed backend caches and failure fallback. The user accepted the bounded D3D12/Vulkan scenes and one-way Xenia-to-Recomp save compatibility. Existing proportionate checks and final source equivalence were reused for this commit organization; intermediate commits were not separately built or run. No tag, push, public release or new package was created. See [development status](docs/STATUS.md) and the [release preparation matrix](docs/RELEASE-v0.5.0.md) for evidence and remaining publication gates.
 
 已完成便携游戏路径识别、导入器与桌面菜单、Windows updater、Vulkan 渲染和 shader 准备、实测 CPU 开销降低、后端缓存隔离及失败回退。用户已验收限定范围内的 D3D12/Vulkan 场景，并确认 Xenia 存档可单向复制到 Recomp 使用。本次提交整理复用已有适度验证并核对最终源码一致性，未逐提交构建或运行，也未打 tag、推送、发布或新建分发包。验证依据与剩余发布事项见[开发状态](docs/STATUS.md)及[发布准备矩阵](docs/RELEASE-v0.5.0.md)。
+
+### 0.4.16 — Installer window and interaction / 安装器窗口与交互
+
+Use a restrained navy/silver interface with a native borderless Windows frame, short action labels, a scrollable content review and full path details. Unknown totals show indeterminate progress; cancellation, retry and closing wait for the worker's safe completion. Unchanged polling values do not redraw the interface. Nine direct UI checks and two affected controller checks passed, with normal/minimum-size real renders reviewed on an inactive desktop. Import backends are unchanged. This is a local source change, not a published package.
+
+安装器采用克制的深蓝／银色界面与原生无边框窗口，精简操作文案，支持内容表格滚动和完整路径查看。未知总量显示不定进度；取消、重试与关闭等待后台操作安全完成，未变化的轮询数值不触发重绘。9 项直接 UI 检查及 2 项受影响的控制器检查通过，已审阅未激活桌面中实绘的正常／最小尺寸界面。导入后端保持不变；本项为本地源码改动，尚未发布。
 
 ### DLC import and automatic content recognition
 
