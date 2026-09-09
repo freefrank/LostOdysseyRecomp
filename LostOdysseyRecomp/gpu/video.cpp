@@ -17,6 +17,7 @@
 
 #include <SDL.h>
 #include <SDL_syswm.h>
+#include "window_pixels.h"
 
 #ifdef LO_GPU_PLUME
 #include <plume_render_interface.h>
@@ -369,9 +370,16 @@ namespace gpu::video
         std::promise<bool> ready;
         auto initialized = ready.get_future();
         g_windowThread = std::jthread([createWindow, ready = std::move(ready)](std::stop_token stop) mutable {
+            // The game resolution is a client-area pixel size. PMv2 prevents
+            // Windows bitmap scaling; SDL's pixel policy keeps that size when
+            // the window moves to a display with a different DPI.
+            const window_pixels::Context pixels;
             struct Cleanup { ~Cleanup() { DestroyWindowResources(); } } cleanup;
             bool success = false;
-            try { success = createWindow(); }
+            try {
+                if (pixels.Ready()) success = createWindow();
+                else LOG_ERROR("video: could not establish physical-pixel window coordinates");
+            }
             catch (const std::exception& e) { LOG_ERROR("video: window initialization exception: {}", e.what()); }
             catch (...) { LOG_ERROR("video: window initialization exception"); }
             LOG_INFO("video: window thread {} (independent event pump)", GetCurrentThreadId());

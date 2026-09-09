@@ -164,6 +164,13 @@ if(WIN32)
     target_compile_options(LoDebugMenuInteractionTest PRIVATE /utf-8 /UNDEBUG)
     target_link_libraries(LoDebugMenuInteractionTest PRIVATE user32 gdi32 dwmapi)
 
+    add_executable(LoGameWindowPixelsTest EXCLUDE_FROM_ALL
+        ${CMAKE_SOURCE_DIR}/tools/tests/game_window_pixels_test.cpp)
+    target_compile_features(LoGameWindowPixelsTest PRIVATE cxx_std_20)
+    target_compile_options(LoGameWindowPixelsTest PRIVATE /utf-8 /W4 /WX)
+    target_link_libraries(LoGameWindowPixelsTest PRIVATE SDL2::SDL2-static user32)
+    set_target_properties(LoGameWindowPixelsTest PROPERTIES DISABLE_PRECOMPILE_HEADERS ON)
+
     add_executable(LoRestartTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/restart_test.cpp)
     target_include_directories(LoRestartTest PRIVATE ${LO_RUNTIME_ROOT})
     target_compile_features(LoRestartTest PRIVATE cxx_std_20)
