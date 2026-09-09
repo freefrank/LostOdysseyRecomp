@@ -1231,7 +1231,7 @@
         "Status": "Todo",
         "Delivery": "Not started",
         "Release": "v0.5.0",
-        "Evidence": "Open DX11 request. Feasibility and implementation remain unstarted; v0.5.0 is the planned milestone, with no committed delivery date.",
+        "Evidence": "Future DX11 work outside the current v0.5.0 release target. Feasibility/runtime remains unstarted; no next-release version or date is assigned.",
         "Source key": "dx11-feasibility"
       }
     },
@@ -1243,10 +1243,11 @@
         "Status": "Todo",
         "Delivery": "Not started",
         "Release": "v0.5.0",
-        "Source key": "dx11-runtime-integration"
+        "Source key": "dx11-runtime-integration",
+        "Evidence": "Future DX11 work outside the current v0.5.0 release target. Feasibility/runtime remains unstarted; no next-release version or date is assigned."
       },
       "title": "Implement the Direct3D 11 backend",
-      "body_sha256": "34892671de490a04a7be24039bcfe846f18f64d3e5d58d3653d86f07736a61ac"
+      "body_sha256": "2dad6c6eee08e50cf8230248faea023a93e3487dbb73fe064f9ffaab744fd20e"
     },
     "pc-backend-scene-validation": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56eWY",
@@ -1284,10 +1285,11 @@
         "Status": "Todo",
         "Delivery": "Not started",
         "Release": "v0.5.0",
-        "Source key": "pc-backend-hardware-validation"
+        "Source key": "pc-backend-hardware-validation",
+        "Evidence": "Broad cross-GPU coverage awaits user feedback. It is not a pre-release requirement for v0.5.0; do not claim unverified AMD/Intel support."
       },
       "title": "Validate PC backends across GPU vendors",
-      "body_sha256": "8e6cf3300353a49406a767e2c1e40f7adf0af4c3766827f1c330c3714a805d8c"
+      "body_sha256": "20986e38d396d92d68161d331bdbce78e59cf916dff4ab3a66b310b555600a20"
     },
     "pc-backend-release-readiness": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56eaU",
@@ -1428,9 +1430,9 @@
       "fields": {
         "Kind": "Feature",
         "Area": "Content import",
-        "Status": "Awaiting validation",
+        "Status": "In Progress",
         "Delivery": "Implemented",
-        "Evidence": "v0.5.0 target. Source 0.4.15 unified automatic disc/DLC import is locally committed as f77d943261e14105d17c880ffa40c171b4191dcc. 15/15 directly affected checks passed (13 new recognition/scan/review/dispatch and two reused GUI checks); unchanged parser/transaction/runtime evidence is reused. Historical source 0.5.1 and 0.5.0 ZIP identities remain unchanged. Real DLC rewards/areas/edition compatibility and player acceptance remain unverified. Unpushed and unpublished.",
+        "Evidence": "v0.5.0 target. Real three-package folder import succeeded; a duplicate files import reported 3 unchanged/0 imported while 13 payload/metadata file bytes, hashes and mtimes, source packages, and test game-path remained unchanged. Historical source 0.5.1 runtime bound three roots and read LODLC002.fpi (4096), LODLC001.fpi (2048), and spa.bin (64), then read-access violated at guest 0x1A; LODLC003.fpi was not opened. No save/reward/dungeon test or diagnosis/retry followed. Real validation remains In Progress; no reward/area/edition/player-acceptance claim.",
         "Source key": "dlc-import-support",
         "Release": "v0.5.0"
       }
@@ -1932,9 +1934,9 @@
       "fields": {
         "Kind": "Bug",
         "Area": "Runtime and graphics",
-        "Status": "Todo",
-        "Delivery": "Not started",
-        "Evidence": "New unverified v0.4.2 report: high CPU temperatures and TAA texture flicker on Ryzen 9950X3D/RTX 5090. Two symptoms, no established shared cause; distinct from the earlier enemy-disappearance report.",
+        "Status": "Done",
+        "Delivery": "Validated",
+        "Evidence": "The project user accepted Issue #9 as complete; the GitHub Issue was closed without a new comment. This does not establish an original-reporter confirmation or a shared root cause for the originally reported CPU-temperature and TAA symptoms.",
         "Source key": "issue9-cpu-temperatures-taa-flicker"
       }
     },
@@ -1989,10 +1991,11 @@
         "Release": "v0.5.0",
         "Source key": "qol-installer-input-layout",
         "Start date": "2026-09-08",
-        "Target date": "2026-09-08"
+        "Target date": "2026-09-08",
+        "Evidence": "Installer modernization refinement implemented and validated in bounded offscreen UI scope: nine direct UI checks and two affected controller checks passed. The final reduced-copy normal/narrow renders were inspected. No manual foreground GUI acceptance, installer EXE build, package, commit, or release is claimed."
       },
       "title": "Expand installer recognition for supported game inputs",
-      "body_sha256": "316d5a3b774fa61d0766850cbc5db71506ec97b3910e03fb2f7b4b3db03c85f0"
+      "body_sha256": "d4a94b25547fca47b7fad343475484952b0748533df0218a244ad1e6954234e0"
     },
     "qol-empty-game-path-default": {
       "id": "PVTI_lAHOAAsUY84Biy1azg5630U",
@@ -2088,10 +2091,11 @@
         "Release": "v0.5.0",
         "Source key": "qol-debug-menu-modernization",
         "Start date": "2026-09-08",
-        "Target date": "2026-09-08"
+        "Target date": "2026-09-08",
+        "Evidence": "Debug Menu refinement is implemented and validated in local source 0.4.18. The focused native fixture passed paged callbacks, child F1/Esc/Gamepad B dismissal, caption controls, viewport focus and reclamping, stable fonts, current-DPI layout, bilingual status and cleanup. Root reviewed actual Overview, Teleport, narrow focused and error windows on an inactive desktop. A 150% DPI layout defect was corrected by keeping the thread DPI context across window creation and updates. This does not implement the newly requested game-window pixel sizing. No game run, physical monitor transition or player acceptance is claimed. Evidence: out/v0.5.0/ui-modernization/native/DEBUG-STATUS.md."
       },
       "title": "Modernize and simplify the Debug Menu",
-      "body_sha256": "357d54f0a2fdd02b99fdb0429d767b334a3820f963bf2225e20d9327b28a785d"
+      "body_sha256": "1afd60e7f6109040e8677656ae5cd1e830ce83c024f6fdd0a3390bf85824495f"
     },
     "qol-host-settings-feasibility": {
       "id": "PVTI_lAHOAAsUY84Biy1azg5638c",
@@ -2145,10 +2149,11 @@
         "Delivery": "Validated",
         "Release": "v0.5.0",
         "Source key": "qol-github-binary-updater",
-        "Target date": "2026-09-08"
+        "Target date": "2026-09-08",
+        "Evidence": "Updater UI refinement is implemented and validated in local source 0.4.17. The dedicated native fixture passed progress, cancellation boundaries, idle redraw caching, window controls and cleanup. Actual normal, unknown-total and narrow Chinese windows were reviewed on an inactive desktop without changing foreground focus. Public API and update transactions are unchanged; no live download, transaction, physical monitor or player acceptance is claimed. Evidence: out/v0.5.0/ui-modernization/updater/REPORT.md."
       },
       "title": "Add safe GitHub binary update checks",
-      "body_sha256": "d954375f1243122cd402dade84fdb6ca82df0f179bafc989c1bfcae4f0fb7cbf"
+      "body_sha256": "197e0c71f28d8c8c027d192e471e966232f2f58318c8eaff16b9196448a60ad8"
     },
     "steady-state-cpu-hotspot-profile": {
       "id": "PVTI_lAHOAAsUY84Biy1azg5_iS4",
@@ -2170,14 +2175,15 @@
       "fields": {
         "Kind": "Feature",
         "Area": "Runtime performance",
-        "Status": "In Progress",
+        "Status": "Done",
         "Delivery": "Validated",
         "Start date": "2026-09-08",
         "Source key": "steady-state-cpu-polling-optimization",
-        "Release": "v0.5.0"
+        "Release": "v0.5.0",
+        "Evidence": "User accepted the CPU Vulkan comparison outcome. The earlier stopped acquisition has no retained paired metric; no new benchmark figure is claimed. D3D12 optimization evidence remains bounded to its recorded scene."
       },
       "title": "Reduce measured steady-state CPU polling overhead",
-      "body_sha256": "6978cefbfe809a7cec258fb3ea48a309e07659c13ffdce891445b14630e55252"
+      "body_sha256": "ce5dd157552be833c1d228fef129516f35a9dc17165c0f447902305e533568a5"
     },
     "issue10-fsr-upscaling-frame-generation": {
       "id": "PVTI_lAHOAAsUY84Biy1azg6ArNI",
@@ -2206,12 +2212,26 @@
       "fields": {
         "Kind": "Bug",
         "Area": "Gameplay progression",
-        "Status": "In Progress",
-        "Delivery": "In progress",
+        "Status": "Awaiting validation",
+        "Delivery": "Implemented",
         "Release": "v0.5.0",
-        "Evidence": "P1 locally reproduced on official v0.4.2 EXE SHA256 13f1294bbb54efbf9a712a066441cb019ba5497cf1242bde6905e6c8bc1757b6: native 0/10 save -> normal ten flowers -> 109→108→109 -> Melvi dialogue -> normal A triggers execute ACCESS_VIOLATION (guestCTR 0, LR 823CB53C). Native 10/10 save completed; no Cheat Engine 2x. Root cause, including PPC translation or GPU attribution, remains unproven; no repair/validation/release.",
+        "Evidence": "Issue #12 GC/render lifetime race established by official v0.4.2 run09/10 and delayed run13. Source repair 17e3ab7 drains rendering before collection/pending purge; claude-issue12 merged locally into 0.5.0 at 9cefb0d. Read-only ABI, dispatch and source/artifact review passed. Run13: 5 stale draws; run14: 0 stale / no crash with the same fix source, diagnostic hook chain, 20 ms delay, SKIP_STALE=1 and poll_wait excluded. Current production build, no-delay hand-in and direct performance coverage remain pending; source stays 0.4.18 until proportionate validation completes. Target v0.5.0, unreleased and not pushed. Reporter torch workaround is not GC-fix acceptance. Evidence: docs/notes/issue12-root-cause.md; docs/notes/issue12-handoff-2026-09-09.md.",
         "Source key": "issue12-kalm-daughter-funeral-flower-crash"
       }
+    },
+    "qol-game-window-pixel-size": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg6EfTs",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Desktop windowing",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Release": "v0.5.0",
+        "Evidence": "New user requirement recorded only. No implementation, test, acceptance or version increment. Auxiliary-window DPI fixes do not satisfy this requirement.",
+        "Source key": "qol-game-window-pixel-size"
+      },
+      "title": "Size the game window in actual pixels independently of desktop DPI",
+      "body_sha256": "d07db23c4dddbfaa91d31cb32dd54e5724a5fe8e6aa44068a24587b65720b0e3"
     }
   }
 }

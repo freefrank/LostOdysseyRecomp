@@ -86,7 +86,9 @@ DLSS、FSR 和帧生成尚未实现；v0.4.0 已移除此前的禁用控件。HD
 
 **当前 v0.5.0 开发版 DLC：**打开 `InstallGame.exe`，选择 **Files** 或 **Folder**，导入器会自动识别游戏光盘和失落的奥德赛 STFS DLC。确认识别结果后即可统一导入。所有光盘共用导入内容。导入与运行时文件读取链路已通过合成测试，真实 DLC 奖励和区域仍待验证。见[安装说明](docs/INSTALLING.md#automatic-content-import)。
 
-**当前开发：**v0.5.0 里程碑当前包含 DLC 导入及统一自动识别流程。13 个功能批次已使用 0.4.xx 开发序列提交完成，当前源码为 v0.4.15，提交为 `f77d943261e14105d17c880ffa40c171b4191dcc`；完整批次记录见[版本表](CHANGELOG.md)。历史包文件名和证据目录可以保留较早的内部版本标识。保留的 v0.5.0 候选用于记录已接受的限定 D3D12/Vulkan 生命周期工作及启动 shader 缓存处理，并已完成分发包检查；它不是另一个里程碑目标。这些本地候选均未发布，发布基线仍为 v0.4.2。DX11 尚不支持，两项已知 shader failure 仍存在；其他 GPU、全游戏兼容性与真实 DLC 内容验收仍待完成。详见[项目状态](docs/STATUS.md)、[v0.5.0 发布准备矩阵](docs/RELEASE-v0.5.0.md)与[路线图](docs/ROADMAP.zh-CN.md#v050-pc-graphics)。
+**当前开发：**本地源码为 0.4.18，交付目标为 v0.5.0。安装器、更新器与 Debug Menu 已加入原生轻量界面改进，并通过专项本地验证。三包真实 DLC 导入通过，但历史程序在部分读取后崩溃，DLC 玩法仍待验证。版本历史、精确产物及验证边界见[更新日志](CHANGELOG.md)、[项目状态](docs/STATUS.md)和[发布准备矩阵](docs/RELEASE-v0.5.0.md)。已发布基线仍为 v0.4.2。
+
+v0.5.0 的交付范围为 Windows D3D12／Vulkan；DX11 属于未来工作，其他 GPU 覆盖等待用户反馈。0.4.xx 保持内部开发版本。用户已验收 CPU Vulkan 对照和 Issue #9；这不新增 benchmark 数据，也不代表原报告者确认。全游戏兼容性及两项已知 shader failure 仍待完成。
 
 ## 验证与剩余工作
 

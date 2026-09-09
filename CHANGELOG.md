@@ -6,9 +6,13 @@ One record of completed changes, with unpublished work separated from verified r
 
 ## v0.5.0 — Unreleased / 未发布
 
-Current source is **0.4.18**. Earlier feature commits through 0.4.15 are listed below; subsequent UI changes are recorded in the entries that follow. The delivery target remains **v0.5.0**, with no release of these internal versions.
+Release scope is Windows D3D12 and Vulkan; DX11 is future work. Intermediate 0.4.xx versions remain internal and will be delivered together as v0.5.0. Installer, updater and Debug Menu UI passes are locally validated, and the 0.4.18 development build/package is recorded in the build report; publication remains pending.
 
-当前源码为 **0.4.18**；下表保留截至 0.4.15 的功能提交，后续 UI 改动见下方条目。交付目标仍为 **v0.5.0**，内部版本不单独发布。
+发布范围为 Windows D3D12 与 Vulkan，DX11 属于未来工作。0.4.xx 保持内部开发编号，积累至 v0.5.0 一起发布。安装器、更新器与 Debug Menu UI 改进已在本地完成相称验证，0.4.18 开发构建与打包证据已记录在构建报告中；发布仍待进行。
+
+Current source is **0.4.18**. The 13 historical feature batches through 0.4.15 and the three committed UI batches through 0.4.18 are listed below. The delivery target remains **v0.5.0** and the published baseline remains **v0.4.2**. Earlier test binaries with matching version strings are separate artifacts and must be identified by their hashes.
+
+当前源码为 **0.4.18**；下表保留截至 0.4.15 的 13 个历史功能提交，以及截至 0.4.18 的 3 个已提交 UI 批次。交付目标仍是 **v0.5.0**，已发布基线仍为 **v0.4.2**。此前可能同名的测试程序属于其他产物，须以哈希区分。
 
 | Source / 源码 | Commit / 提交 | Change / 改动 |
 | --- | --- | --- |
@@ -25,10 +29,13 @@ Current source is **0.4.18**. Earlier feature commits through 0.4.15 are listed 
 | `0.4.13` | `84929bc` | validate backend capabilities and isolate caches / 后端能力检查、回退与缓存隔离 |
 | `0.4.14` | `f513ec4` | balance backend window lifecycle resources / 后端窗口生命周期清理 |
 | `0.4.15` | `f77d943` | import DLC and automatically recognize content / DLC 导入与自动内容识别 |
+| `0.4.16` | `b094a1a` | installer window and interaction modernization / 安装器窗口与交互现代化 |
+| `0.4.17` | `9c2dc76` | updater window and progress modernization / 更新器窗口与进度现代化 |
+| `0.4.18` | `294df07` | Debug Menu window and diagnostics modernization / Debug Menu 窗口与诊断现代化 |
 
-Completed behavior includes portable game discovery, the installer and desktop menus, Windows updater support, Vulkan rendering and shader preparation, measured CPU reductions, typed backend caches and failure fallback. The user accepted the bounded D3D12/Vulkan scenes and one-way Xenia-to-Recomp save compatibility. Existing proportionate checks and final source equivalence were reused for this commit organization; intermediate commits were not separately built or run. No tag, push, public release or new package was created. See [development status](docs/STATUS.md) and the [release preparation matrix](docs/RELEASE-v0.5.0.md) for evidence and remaining publication gates.
+Completed behavior includes portable game discovery, the installer and desktop menus, Windows updater support, Vulkan rendering and shader preparation, measured CPU reductions, typed backend caches and failure fallback. The user accepted the bounded D3D12/Vulkan scenes and one-way Xenia-to-Recomp save compatibility. Existing proportionate checks and source equivalence were reused for the commit organization; intermediate commits were not separately built or run. This source-backup checkpoint adds no build, tests, package, tag or public release. See [development status](docs/STATUS.md) and the [release preparation matrix](docs/RELEASE-v0.5.0.md) for evidence and remaining publication gates.
 
-已完成便携游戏路径识别、导入器与桌面菜单、Windows updater、Vulkan 渲染和 shader 准备、实测 CPU 开销降低、后端缓存隔离及失败回退。用户已验收限定范围内的 D3D12/Vulkan 场景，并确认 Xenia 存档可单向复制到 Recomp 使用。本次提交整理复用已有适度验证并核对最终源码一致性，未逐提交构建或运行，也未打 tag、推送、发布或新建分发包。验证依据与剩余发布事项见[开发状态](docs/STATUS.md)及[发布准备矩阵](docs/RELEASE-v0.5.0.md)。
+已完成便携游戏路径识别、导入器与桌面菜单、Windows updater、Vulkan 渲染和 shader 准备、实测 CPU 开销降低、后端缓存隔离及失败回退。用户已验收限定范围内的 D3D12/Vulkan 场景，并确认 Xenia 存档可单向复制到 Recomp 使用。提交整理复用已有适度验证并核对源码一致性，未逐提交构建或运行。本次源码备份不新增构建、测试、分发包、tag 或公开 Release。验证依据与剩余发布事项见[开发状态](docs/STATUS.md)及[发布准备矩阵](docs/RELEASE-v0.5.0.md)。
 
 ### 0.4.16 — Installer window and interaction / 安装器窗口与交互
 
@@ -47,6 +54,12 @@ The updater now uses a native lightweight borderless frame with short localized 
 The Debug Menu now uses a lightweight native borderless window with shorter status copy, paged Overview and Teleport content, a fixed title area, independent scrolling, and DPI-correct Toggle/Update layout. Long paths and result states remain readable, while F1/Escape/Gamepad-B and caption close behavior remain available. The focused fixture passed pagination, focus/close, bilingual busy/error, current-DPI metrics and cleanup checks; evidence is `out/v0.5.0/ui-modernization/native/debug-run.log`. The fixture remains source-local evidence; the separate 0.4.18 combined development build/package is recorded in `out/v0.5.0/ui-modernization/build/REPORT.md`, without establishing manual user acceptance or a public release.
 
 Debug Menu 现在使用轻量原生无边框窗口，采用更短的状态文案，Overview 与 Teleport 支持分页，标题区域固定、内容独立滚动，Toggle／Update 在当前 DPI 下正确布局。长路径和结果状态保持可读，F1／Escape／手柄 B 及标题栏关闭行为仍可用。专项 fixture 已通过分页、焦点／关闭、双语忙碌／错误、当前 DPI 指标和清理检查；证据见 `out/v0.5.0/ui-modernization/native/debug-run.log`。该 fixture 仍是源码级证据；独立的 0.4.18 合并开发构建与打包已记录在 `out/v0.5.0/ui-modernization/build/REPORT.md`，不代表人工用户验收或公开发布。
+
+### Issue #12 diagnostic repair / Issue #12 诊断修复
+
+The merged source repair drains the rendering thread before the relevant garbage-collection purge path, preventing the stale scene proxy from drawing freed material instances in the reproduced race. Run-13 reproduced five stale-material draws with an artificial 20 ms render delay; run-14 used the same diagnostic setup and observed zero stale draws and zero crashes after the flush. Production validation with the current source, no probe hooks, normal timing and the hand-in path remains pending; this is an unpublished v0.5.0 change.
+
+合并源码修复在相关垃圾回收 purge 路径前排空渲染线程，避免已复现竞争中的旧场景 proxy 绘制已释放的材质实例。run-13 使用人工 20 ms 渲染延迟复现 5 次悬空材质绘制；run-14 在相同诊断条件下加入 flush 后观察到 0 次悬空绘制、0 次崩溃。当前源码、无探针、正常时序和交花路径的生产验证仍待完成；本项属于未发布的 v0.5.0 改动。
 
 ### DLC import and automatic content recognition
 

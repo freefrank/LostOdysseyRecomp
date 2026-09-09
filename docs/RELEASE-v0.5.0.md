@@ -6,6 +6,10 @@ built and verified locally, but had not been committed, pushed, tagged, deployed
 the time of this record. Current feature batches use the 0.4.xx development sequence while the
 target milestone remains v0.5.0; see [current status](STATUS.md) for the active mapping.
 
+## Current release scope — 2026-09-08
+
+The user confirmed Windows D3D12/Vulkan as the release scope; DX11 is future work outside the v0.5.0 commitment. Other GPU coverage awaits user feedback. The user accepted the CPU Vulkan comparison and Issue #9; this acceptance adds no new measurements or original-reporter confirmation. Installer, updater and Debug Menu UI passes are complete in later local source; real DLC content validation remains active. Issue #12's root cause is established and the merged source mitigation is validated in a diagnostic build, while current-source production validation, normal-timing hand-in, performance coverage, player acceptance and release remain pending. Intermediate 0.4.xx builds remain internal and will be delivered together in v0.5.0. The historical candidate below does not contain or validate these later changes.
+
 ## Dependency and package checks
 
 | Area | Current preparation result | Boundary |

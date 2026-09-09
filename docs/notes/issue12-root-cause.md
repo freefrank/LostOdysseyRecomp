@@ -1,9 +1,9 @@
 # Issue #12 root cause: garbage-collected materials drawn by a stale scene proxy
 
 **Status (2026-09-09):** root cause established from two exception-time captures on the unmodified
-official v0.4.2 executable plus an instrumented diagnostic build; a host-side mitigation is
-proposed and validated below (run-13 reproduces the race in an instrumented build, run-14 shows the mitigation closes it). This note supersedes the open questions in the
-[investigation log](issue12-funeral-crash.md) and the [Claude handoff](issue12-claude-handoff.md).
+official v0.4.2 executable plus an instrumented diagnostic build; the merged host-side mitigation is
+validated below only in that diagnostic build (run-13 reproduces the race in an instrumented build, run-14 shows the mitigation closes it). Current-source production validation remains pending. This note supersedes the open questions in the
+[investigation log](issue12-funeral-crash.md) and the [earlier Claude handoff](issue12-claude-handoff.md).
 All guest addresses refer to the original XEX image (base `0x82000000`); host tooling lives in
 `tools/diagnostics/issue12/` (see [README](../../tools/diagnostics/issue12/README.md)).
 
@@ -75,9 +75,9 @@ thread may still be drawing the previous frame. It does not change what the game
 the proxy is rebuilt; it only orders the purge after the in-flight frame. Opt out with
 `LO_GC_RENDER_FLUSH=0`.
 
-Cost: one extra rendering-thread drain per garbage collection (the engine already does one
-right after the purge), i.e. a few milliseconds at level loads and on the 60-second periodic GC,
-plus the same per tick only while an incremental purge is in progress.
+Cost: the hook can add a rendering-thread drain at full-GC entry and another at the internal purge
+entry; incremental purge may drain on each pending tick. Run-14 measured a 0.77 s wait under the
+artificial delay. Normal current-source production cost remains unmeasured.
 
 ## Validation
 

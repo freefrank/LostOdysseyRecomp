@@ -10,12 +10,12 @@
 
 ## 当前进度与下一步 — 2026-09-08
 
-- **版本与交付：**13 个功能批次已本地提交：从 `0.4.2` 依次为源码 `0.4.3` 至 `0.4.15`；这些不是构建或公开 Release。本地 `LostOdysseyRecomp-windows-x64-v0.5.1-147bffb2-dev.zip` 与已冻结 v0.5.0 候选保留精确的历史产物身份，见[产物身份与验证](STATUS.md#current-milestone-development)。发布基线仍为 [v0.4.2](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.4.2)。
-- **v0.5.0 工作：**共跟踪 28 项：21 项 Done、2 项 In Progress、3 项 Todo、2 项 Awaiting validation。这是 Project 中完整的 `Release = v0.5.0` 视图，包含 DLC 自动识别工作及两项 CPU 工作项。12 项 QOL 均已有实现和限定验证，但仍分别保留所述验收或覆盖边界。
-- **P1——调查：**[Issue #12](https://github.com/freefrank/LostOdysseyRecomp/issues/12) 已在官方 v0.4.2 程序复现：从原生 0/10 存档以正常 A 收集十朵花、走原出口 109→108→109，再在梅鲁比 “Ah, you've gathered the flowers...” 对话后正常按一次 A，即触发 execute access violation（`guestCTR=0`、`LR=823CB53C`）。完成的 10/10 存档写入成功；本次未使用 Cheat Engine 2×。PPC 转译、GPU 或任何其他根因均未证实。离线文本已定位 `nbr_1`／`nbv_1` 的梅鲁比交付，`RT_072C`／`RT_073C` 仍只是未证实候选。尚无修复或验收；后续已写入 [Issue #12 Claude handoff](notes/issue12-claude-handoff.md)，但未向外部调度。
-- **下一步——开发：**Direct3D 11 可行性和后端尚未开始。CPU polling 批次已有经验证的 D3D12 结果；配对 Vulkan 对比因用户停止采集而待完成，不需要重跑其他工作。
+- **版本与交付：**`0.4.2` 后共有 16 个功能批次已本地提交：原有 13 个为源码 `0.4.3` 至 `0.4.15`，另有 0.4.16 安装器（`b094a1a`）、0.4.17 更新器（`9c2dc76`）和 0.4.18 Debug UI（`294df07`）。这些不是构建或公开 Release；此前合并报告记录 61 次编译、2 次链接和 1 个包。见[产物身份与验证](STATUS.md#current-milestone-development)。发布基线仍为 [v0.4.2](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.4.2)。
+- **v0.5.0 工作：**共跟踪 27 项：22 项 Done、1 项 In Progress、2 项 Todo、2 项 Awaiting validation。安装器、更新器与 Debug Menu 本轮 UI 改进均已完成限定验证，分别记为本地源码 0.4.16、0.4.17、0.4.18。新增游戏主窗口按实际像素尺寸、不随桌面 DPI 缩放的需求仅记录为待办。玩家验收与发布状态另行保留。
+- **P1——等待验证：**[Issue #12](https://github.com/freefrank/LostOdysseyRecomp/issues/12) 已确定为 GC 与渲染对象生命周期竞争；源码修复已从 `claude-issue12` 本地合并到 `0.5.0`，提交 `9cefb0d`。官方 v0.4.2 的 run09/10 捕获旧材质归属；加延迟的 run13 记录 5 次悬空绘制，run14 在 GC 前排空并移除旧 proxy 后为 0 次、无崩溃。run14 使用链式探针、人工延迟并排除 `poll_wait`，当前正式构建、正常时序交花和直接相关性能覆盖仍待完成；源码暂留 `0.4.18`，目标仍为 v0.5.0，尚未发布或取得本修复的玩家验收。报告者的独立火把 workaround 已记录，不算本补丁验收。见[根因报告](notes/issue12-root-cause.md)和[交接文档](notes/issue12-handoff-2026-09-09.md)。
+- **下一步——开发：**Direct3D 11 可行性和后端保留为 v0.5.0 之外的未来工作，未指定下个版本或日期。用户已确认 CPU Vulkan 对照通过；此前停止的采集未保留配对指标，不补写新的 benchmark 数字。
 - **下一步——证据或验收：**原版风格设置仍使用近似的系统字体／程序纹理；冻结安装器与 DPI 覆盖仍开放；两项保留的 shader compiler error 已被缓存，并未修复。玩家验收单独保留。
-- **保持挂起或等待证据：**Issue #9 的温度／TAA 症状、AMD 阴影调查和敌人消散闪烁保留原有待办或暂停状态，本次整理不自动恢复。Issue #10 记录 v0.5.0 之外未来的 FSR 工作；Issue #11 已完成用户确认的 Xenia → recomp 直接复制读取；反向兼容与转换不在此边界内。
+- **保持挂起或等待证据：**Issue #9 已按项目用户验收关闭，不声称原报告者确认或两个症状存在共同根因。AMD 阴影调查和敌人消散闪烁保留原有待办或暂停状态，本次整理不自动恢复。Issue #10 记录 v0.5.0 之外未来的 FSR 工作；Issue #11 已完成用户确认的 Xenia → recomp 直接复制读取；反向兼容与转换不在此边界内。
 
 ## 已发布里程碑：v0.4.2 — 修复与验证
 
@@ -40,11 +40,11 @@
 
 <a id="v050-pc-graphics"></a>
 
-## 下一主版本：v0.5.0 — PC Vulkan 与 Direct3D 11
+## 下一主版本：v0.5.0 — PC Vulkan
 
-按用户要求于 **2026-09-07** 记录，Windows Vulkan 功能已在受限的本机 RTX 5080 范围完成：`0.4.15` 源码树是历史 Vulkan／package 验证检查点（未发布开发构建；公开基线仍为 v0.4.2），当前源码为 `0.5.0`；22,933 个 shader corpus 成功，另有两个保留的 DXIL 同样失败项；Map3 Off、Map2 SMAA/TAA 与 D3D12 对照、调整大小／重启、Map12 TAA／历史和缓存恢复均通过。Map12 的 256 帧中有 253 帧 ready/completed/reused；三次 capture stall reset 后恢复，jitter misses 为零。三帧 raw 已保存，生产 host archive 核验 273 个条目；该 host 完成不代表原 game worker 自然退出。DX11 保持独立待办，并保留可用的 D3D12 基线。跨 GPU 与全游戏回归另行保留。Linux／Steam Deck 和 Switch 需要独立的平台工作与验收。见 [Vulkan 报告](../out/v0.5.0/vulkan/REPORT.md)。
+按用户要求于 **2026-09-07** 记录，Windows Vulkan 功能已在受限的本机 RTX 5080 范围完成：`0.4.15` 源码树是历史 Vulkan／package 验证检查点（未发布开发构建；公开基线仍为 v0.4.2），当前源码为 `0.5.0`；22,933 个 shader corpus 成功，另有两个保留的 DXIL 同样失败项；Map3 Off、Map2 SMAA/TAA 与 D3D12 对照、调整大小／重启、Map12 TAA／历史和缓存恢复均通过。Map12 的 256 帧中有 253 帧 ready/completed/reused；三次 capture stall reset 后恢复，jitter misses 为零。三帧 raw 已保存，生产 host archive 核验 273 个条目；该 host 完成不代表原 game worker 自然退出。DX11 保留为 v0.5.0 之外的未来工作，并保留可用的 D3D12 基线。跨 GPU 与全游戏回归另行保留。Linux／Steam Deck 和 Switch 需要独立的平台工作与验收。见 [Vulkan 报告](../out/v0.5.0/vulkan/REPORT.md)。
 
-源码 `0.4.19` 已完成 D3D12／Vulkan 的后端选择和类型化缓存隔离。选择策略定义能力下限、有界回退、清理及明确的 DX11 Unsupported 行为；缓存 envelope 绑定 backend、format、compiler、translator、options、variant，并拒绝过期或损坏的 success 文件。焦点化 policy、lifecycle、cold/warm/restart 与 framing 检查通过，唯一 runtime build exit 0。保留的 DXBC 识别及 DX11 失败行为不表示实现或验证 DX11 runtime。D3D12／Vulkan 场景验证范围继续保留 2026-09-08 的用户肉眼 Done／Validated；DX11 runtime、fixture、场景对照、F1 capture 及更广硬件／lifecycle／release 工作仍是独立 Todo。
+源码 `0.4.19` 已完成 D3D12／Vulkan 的后端选择和类型化缓存隔离。选择策略定义能力下限、有界回退、清理及明确的 DX11 Unsupported 行为；缓存 envelope 绑定 backend、format、compiler、translator、options、variant，并拒绝过期或损坏的 success 文件。焦点化 policy、lifecycle、cold/warm/restart 与 framing 检查通过，唯一 runtime build exit 0。保留的 DXBC 识别及 DX11 失败行为不表示实现或验证 DX11 runtime。D3D12／Vulkan 场景验证范围继续保留 2026-09-08 的用户肉眼 Done／Validated；DX11 runtime、fixture、场景对照和 F1 capture 是 v0.5.0 之外的未来工作。更广跨 GPU 覆盖等待用户反馈，不是 v0.5.0 发布前要求。
 
 1. [x] 实现类型化的 D3D12／Vulkan 选择与能力策略，提供明确的 DX11 Unsupported、有限回退和部分启动状态清理。焦点化 policy 检查覆盖 21 个 staged failure／exception case；RTX 5080 native-device lifecycle probe 创建／释放所需 D3D12／Vulkan 对象，不创建窗口、不启动 guest、不提交、不绘制或呈现。DX11 runtime 支持仍独立。
 2. [x] Vulkan 第一批：平台无关的着色器、线程生命周期、内存接口及拷贝／交换链修正已在所述 Windows Vulkan 范围完成。当前 guest 时基、D3D12 深度清除修复及子模块加补丁流程保持；Switch 专属改动留在其分支。
@@ -52,29 +52,30 @@
 4. [x] 将 D3D12／Vulkan success cache 绑定到类型化的 backend／format／compiler／translator／options／variant 身份及 digest-checked envelope。焦点化检查覆盖身份、损坏、legacy 拒绝、cold/warm/restart 复用及 framing；隔离 cold 编译有 2 次实际 DXC 调用，warm/restart 为 0。保留的 DXBC framing 识别不表示 DX11 编译或 runtime 支持。
 5. [x] Vulkan 第三批：Windows SDL／WSI、运行时选择、DXC 和 loader／volk 依赖、descriptor／constant 布局、资源屏障、同步、resolve、回读与捕获已在所述 Windows Vulkan 范围完成。
 6. [x] Vulkan 的 presentation、SMAA、TAA／历史缓冲、内部分辨率及独立 UI 路径已在所述范围完成，包含窗口大小调整和重置。Map12 有受限的历史／capture-stall 恢复证据；更广场景与硬件回归另行保留。
-7. [ ] 按现有渲染抽象验证 DX11 可行性及最低能力：评估 DXBC／Shader Model 5 编译、逐 draw 资源／采样器重映射、slot／UAV 限制、几何着色器与同步回读。选定设计前记录不支持项和回退方案；当前后端与着色器格式接口没有 DX11／DXBC 实现。
-8. [ ] 实现并接通 DX11 后端的编译、缓存、资源绑定、渲染、呈现、SMAA／TAA、缩放／UI 及捕获全路径，完成状态与 Vulkan 独立跟踪。
+7. [ ] **未来工作，v0.5.0 之外：**按现有渲染抽象验证 DX11 可行性及最低能力：评估 DXBC／Shader Model 5 编译、逐 draw 资源／采样器重映射、slot／UAV 限制、几何着色器与同步回读。选定设计前记录不支持项和回退方案；当前后端与着色器格式接口没有 DX11／DXBC 实现。
+8. [ ] **未来工作，v0.5.0 之外：**实现并接通 DX11 后端的编译、缓存、资源绑定、渲染、呈现、SMAA／TAA、缩放／UI 及捕获全路径，完成状态与 Vulkan 独立跟踪。
 9. [x] 用户已于 2026-09-08 肉眼验收受限的原生存档 D3D12／Vulkan Map2／Map3／Map12 实景与对照边界。DX11 验证、跨 GPU 回归和全游戏覆盖仍开放；不表示支持 DX11。
 10. [x] 完成受限的 native D3D12／Vulkan lifecycle 验证：source `0.4.20` lifecycle 修复后，隐藏 640×360→800×450 window/swapchain cycle、同进程 re-init、failure cleanup、外部 SDL reference 保留、受控 restart 及 SDL_QUIT close 均通过。fixture 不运行 guest、draw、present、capture、save/profile/settings-file 或音频路径；此前用户场景验收只复用为未改渲染行为证据。DX11 runtime 及更广硬件／lifecycle 验证仍是独立 Todo。
 11. [ ] 在能获得的 AMD、NVIDIA 和 Intel 硬件上采集实际包的画面与稳定性证据，记录驱动、版本、场景和设置。未获得的硬件或场景标记待验，玩家验收与自动检查分开记录。
-12. [ ] **等待验证：**历史 source `0.5.0` 的本地开发候选 build/package 检查已完成：build 4497 和 package 47942 均 exit 0；49 files／42 notices 的 ZIP 通过 CRC、manifest hashes、无重复名、DXC 2407、source provenance 和顶层 PE import 检查。hosted CI、匿名下载、公开 Release、DX11 runtime 及 AMD／Intel 硬件证据仍待完成；仅在后续证据支持时发布兼容范围。
+12. [ ] **等待验证：**历史 source `0.5.0` 的本地开发候选 build/package 检查已完成：build 4497 和 package 47942 均 exit 0；49 files／42 notices 的 ZIP 通过 CRC、manifest hashes、无重复名、DXC 2407、source provenance 和顶层 PE import 检查。hosted CI、匿名下载和公开 Release 仍待完成；DX11 及广泛 AMD／Intel 覆盖是未来／用户反馈工作，发布兼容范围只以已建立证据为准。
 
 ### v0.5.0 体验优化待办
 
 用户于 2026-09-08 提出。以下是与上方 PC 后端规划并列、优先 Windows 的独立需求；12 项均已完成本轮实现及必要的限定验证，玩家验收和发布证据仍按各项所述范围分别保留。详见[体验优化需求](notes/v0.5.0-qol-requirements.md)。每实现一个功能并完成必要验证，版本增加 `0.0.1`，不要求创建 Release 或强制玩家验收；v0.5.0 仍是目标里程碑，累计超过该版本不人为进位 minor。历史 source `0.5.0` 的本地开发候选及其 ZIP 身份如上记录，v0.4.15 ZIP 保留为历史证据；已本地提交的 source 0.4.3–0.4.15 序列不改写这些产物。
 
-1. [x] 现代化安装器以识别支持的多种目录结构、ISO、已解压目录和 XEX 输入；可选 MD5／SHA-256 身份识别，并美化界面但不削弱兼容性核对。源码与合成桌面流程已验证；冻结安装器／DPI 包覆盖仍待完成。
+1. [x] 现代化安装器以识别支持的多种目录结构、ISO、已解压目录和 XEX 输入；可选 MD5／SHA-256 身份识别，并美化界面但不削弱兼容性核对。源码与合成桌面流程已验证；冻结安装器／DPI 包覆盖仍待完成。已本地提交为 `b094a1a98be441e24b8a14f2c02a2fd60020629a`（source 0.4.16）。
 2. [x] `game-path.txt` 为空时，在配置／根目录解析 `default.xex`，或在导入根目录下解析 `disc1`；并回退相邻的 `game/disc1`、`game`、EXE 和 EXE 父目录下的 `game`。实际 main 启动路径已到达 parser 并按预期提前退出。
 3. [x] 基于原游戏图标改造 EXE 图标，并突出 recomp 身份。ICO 资源、resource 与安装器接线、PE 编译及实际 SDL 图标资源匹配已通过。
 4. [x] EXE 无需 BAT／CMD 即可直接启动：以自身目录为稳定资源基准并保留显式路径优先。支持的真实路径形式为 `default.xex`、`disc1`、相邻 `game/disc1`、`game`、EXE 和 EXE 父目录下的 `game`；实际 main 启动路径检查已在 guest／GPU 执行前通过。
 5. [x] 将首启配置独立为界面／模块并现代化美化，不需要额外 EXE。实际 `IFileOpenDialog` picker 覆盖超长路径和 Unicode 选择、取消、调用方 COM 状态保留及不兼容 apartment 错误。冻结安装器／DPI 覆盖、真实零售输入、玩家验收和发布另行保留。
 6. [x] 通过顺序启动 bundle 和按身份键控的确定性失败缓存，修复启动时重复 shader 检测与编译。原安装目录的 v0.4.16 有 22,972 个有效已编译 binary 和两个反复被拒绝的 source，并非大规模重复编译。本地 source `0.4.17` runtime update 后，对同一原缓存进行了两次 D3D12 prepare-only 启动，均在 guest 启动前退出：迁移首轮 10.781 s 初始化并有 2 次实际 DXC 拒绝；后续 warm 启动 3.634 s 初始化，metadata snapshot 77 ms、bundle load 2,397 ms、22,972 个 ready module、2 个 cached failure、source 内容读取／translation／进程范围实际 DXC 均为 0，288 个 PSO 在 18 ms 内 ready。首轮仅新增 bundle 和两个 failure record；第二轮未改 cache entry，5 个受保护用户文件与既有 cache metadata 不变。build 与 `LoShaderStartupCacheTest` 通过。这是受限的 D3D12 preparation-only 证据：不表示修复两项 compiler error，也不证明 Vulkan、gameplay、其他平台、玩家验收或 Release。见[启动复发报告](../out/v0.5.0/shader-startup-recurrence/REPORT.md)。
 7. [x] 核实启动 shader 准备在实际启动路径中使用逻辑线程数减一、最少一线程，并覆盖恢复行为。生产队列 fixture 及实际 Map12 的 16 logical／15 worker 启动采样已通过；更广场景验收另行保留。
-8. [x] 现代化、轻量化 Debug Menu，同时保留诊断作用。窄 fixture 覆盖 child-focus 下 F1／Esc／Gamepad B 隐藏及 busy／failure 恢复；r5 Map2 实跑显示正确地图和坐标的真实 Debug 窗口，guest 菜单继续运行。更广诊断流程、玩家验收和发布另行保留。
+8. [x] 现代化、轻量化 Debug Menu，同时保留诊断作用。窄 fixture 覆盖 child-focus 下 F1／Esc／Gamepad B 隐藏及 busy／failure 恢复；r5 Map2 实跑显示正确地图和坐标的真实 Debug 窗口，guest 菜单继续运行。更广诊断流程、玩家验收和发布另行保留。已本地提交为 `294df076e09c7a8b41c6b530a58ed59404ae24e0`（source 0.4.18）。
 9. [x] 先评估以宿主设置菜单替换游戏内置设置的可行性，再选择实现方案。受限的宿主设置路径已实现并验证：重开后原亮度返回值不变。
 10. [x] 设置菜单复刻原游戏风格，同时兼容首启所需的现代交互。Root 审阅实际 r5 Map2 替换 overlay：System → Settings、RB 两次至 Graphics 及 Display Mode 选择均通过；1280×720 和 1920×1200 fixture 通过。系统字体和程序纹理均为近似，玩家美术验收、更广交互覆盖和发布另行保留。
 11. [x] 保存后需要重启的设置应提示立即／稍后重启，绝不强制立即重启。取消保持设置哈希不变；受限的“立即重启”交接已使父进程退出并让子进程回到 Map2。玩家视觉验收及正常子进程退出证据另行保留。
-12. [x] 检查 GitHub 是否有较新的匹配 binary；存在时自动下载并更新：先支持 Windows，保留存档／设置／游戏数据，校验包，在进程退出后替换、失败回滚，离线不阻挡启动，并为未来 macOS／Linux AppImage 选包预留架构。core/helper/progress/main-entry 检查及 v0.4.15 开发 ZIP identity gate 已通过：47 个 manifest 文件、runtime/helper、三个 EXE 图标 payload、DXC 2407 pair、license、provenance、README 及不含游戏／源码／PDB／用户数据的 allowlist 均匹配。不声称公开 Release 或玩家验收；包检查未启动 payload，也未重做 transaction／GPU 验证。
+12. [x] 检查 GitHub 是否有较新的匹配 binary；存在时自动下载并更新：先支持 Windows，保留存档／设置／游戏数据，校验包，在进程退出后替换、失败回滚，离线不阻挡启动，并为未来 macOS／Linux AppImage 选包预留架构。core/helper/progress/main-entry 检查及 v0.4.15 开发 ZIP identity gate 已通过：47 个 manifest 文件、runtime/helper、三个 EXE 图标 payload、DXC 2407 pair、license、provenance、README 及不含游戏／源码／PDB／用户数据的 allowlist 均匹配。不声称公开 Release 或玩家验收；包检查未启动 payload，也未重做 transaction／GPU 验证。已本地提交为 `9c2dc761a4c775b3ffc8b01429f11bd42f0c4f94`（source 0.4.17）。
+13. [ ] 游戏主窗口与呈现区域按所选实际像素分辨率确定尺寸，不随 Windows DPI 比例再次缩放。相同分辨率在 100%／125%／150%／200% 缩放下应保持相同像素尺寸；辅助设置、安装器、更新器及 Debug 窗口继续适配 DPI。本项仅记录需求，尚未实现或验证，不增加版本号。
 
 ## 已发布里程碑与剩余覆盖：v0.4.0
 
@@ -227,7 +228,7 @@ v0.1 保留为首个 Windows 发布里程碑，包含导入器、首次设置、
 - [ ] HDR 输出和色调映射。
 - [ ] 更高分辨率阴影。
 - [ ] 研究 SSAO，为 ReShade 提供干净深度缓冲。
-- [ ] 完成 [v0.5.0 PC Vulkan 与 DX11 里程碑](#v050-pc-graphics)；Linux／Steam Deck 支持仍需独立的平台工作与验收。
+- [ ] 完成 [v0.5.0 PC Vulkan 里程碑](#v050-pc-graphics)；DX11、Linux／Steam Deck 及其验收均为未来工作。
 - [x] 托管 Windows CI 发布 v0.1，包含导入器和首次运行设置。见[安装](INSTALLING.md)与[打包](notes/release-packaging.md)。
 
 ## 阶段 5：可选探索

@@ -2479,17 +2479,17 @@
     {
       "key": "dx11-feasibility",
       "title": "Establish Direct3D 11 feasibility",
-      "body": "<!-- lo-project:dx11-feasibility -->\n\n先验证DXBC/SM5、binding和最低能力再定设计。\n\n## Scope and completion criteria\n\n- [ ] 评估DXBC/SM5编译\n- [ ] 核对当前SM6/64sampler与逐draw资源/sampler remap\n- [ ] 检查slot/UAV/geometry shader/sync/readback限制\n- [ ] 明确最低硬件、不支持项及回退\n\n## Validation and acceptance\n\n目标旧硬件独立fixture；不能仅加API开关宣称支持。\n\n尚未完成所列场景验收；实现/发布/测试与用户验收独立。\n\nstage_detail: Not started\n\n## Sources\n\n- `docs/notes/switch-vulkan-handoff.md` (working-tree document, not yet committed)\n- [docs/ROADMAP.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/ROADMAP.md) (repository reference; working-tree requirements may be newer)\n- [docs/ROADMAP.zh-CN.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/ROADMAP.zh-CN.md) (repository reference; working-tree requirements may be newer)\n- https://github.com/freefrank/LostOdysseyRecomp/issues/1\n- [docs/ROADMAP.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/ROADMAP.md) (repository reference; working-tree requirements may be newer)\n- [docs/ROADMAP.zh-CN.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/ROADMAP.zh-CN.md) (repository reference; working-tree requirements may be newer)\n",
+      "body": "<!-- lo-project:dx11-feasibility -->\n\n先验证DXBC/SM5、binding和最低能力再定设计。\n\n## Scope and completion criteria\n\n- [ ] 评估DXBC/SM5编译\n- [ ] 核对当前SM6/64sampler与逐draw资源/sampler remap\n- [ ] 检查slot/UAV/geometry shader/sync/readback限制\n- [ ] 明确最低硬件、不支持项及回退\n\nDX11 is retained as future work outside the current v0.5.0 release target. No next-release version or date is assigned.\n\n## Validation and acceptance\n\n目标旧硬件独立fixture；不能仅加API开关宣称支持。\n\n尚未完成所列场景验收；实现/发布/测试与用户验收独立。\n\nstage_detail: Not started\n\n## Sources\n\n- `docs/notes/switch-vulkan-handoff.md` (working-tree document, not yet committed)\n- [docs/ROADMAP.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/ROADMAP.md) (repository reference; working-tree requirements may be newer)\n- [docs/ROADMAP.zh-CN.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/ROADMAP.zh-CN.md) (repository reference; working-tree requirements may be newer)\n- https://github.com/freefrank/LostOdysseyRecomp/issues/1\n- [docs/ROADMAP.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/ROADMAP.md) (repository reference; working-tree requirements may be newer)\n- [docs/ROADMAP.zh-CN.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/ROADMAP.zh-CN.md) (repository reference; working-tree requirements may be newer)\n",
       "issue_url": "https://github.com/freefrank/LostOdysseyRecomp/issues/1",
       "fields": {
         "Kind": "Research",
         "Area": "Graphics backends",
         "Status": "Todo",
         "Delivery": "Not started",
-        "Release": "v0.5.0",
+        "Release": null,
         "Start date": null,
         "Target date": null,
-        "Evidence": "Open DX11 request. Feasibility and implementation remain unstarted; v0.5.0 is the planned milestone, with no committed delivery date."
+        "Evidence": "Future DX11 work outside the current v0.5.0 release target. Feasibility/runtime remains unstarted; no next-release version or date is assigned."
       },
       "source_refs": [
         "docs/notes/switch-vulkan-handoff.md",
@@ -2514,16 +2514,17 @@
     {
       "key": "dx11-runtime-integration",
       "title": "Implement the Direct3D 11 backend",
-      "body": "<!-- lo-project:dx11-runtime-integration -->\n\nDX11全路径独立实施验收。\n\n## Scope and completion criteria\n\n- [ ] 实现device/swapchain/资源/管线/binding\n- [ ] 完成编译/cache/render/copy/resolve/sync/readback\n- [ ] 适配presentation/SMAA/TAA/scaling/UI/capture\n\n## Validation and acceptance\n\n逐层fixture、原生存档与D3D12同场景验证，不以Vulkan通过替代。\n\n尚未完成所列场景验收；实现/发布/测试与用户验收独立。\n\nDependencies (source keys): `dx11-feasibility`, `backend-cache-isolation`.\n\nstage_detail: Not started\n\n## Sources\n\n- [docs/ROADMAP.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/ROADMAP.md) (repository reference; working-tree requirements may be newer)\n- [docs/ROADMAP.zh-CN.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/ROADMAP.zh-CN.md) (repository reference; working-tree requirements may be newer)\n- [docs/ROADMAP.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/ROADMAP.md) (repository reference; working-tree requirements may be newer)\n- [docs/ROADMAP.zh-CN.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/ROADMAP.zh-CN.md) (repository reference; working-tree requirements may be newer)\n",
+      "body": "<!-- lo-project:dx11-runtime-integration -->\n\nDX11全路径独立实施验收。\n\n## Scope and completion criteria\n\n- [ ] 实现device/swapchain/资源/管线/binding\n- [ ] 完成编译/cache/render/copy/resolve/sync/readback\n- [ ] 适配presentation/SMAA/TAA/scaling/UI/capture\n\nDX11 is retained as future work outside the current v0.5.0 release target. No next-release version or date is assigned.\n\n## Validation and acceptance\n\n逐层fixture、原生存档与D3D12同场景验证，不以Vulkan通过替代。\n\n尚未完成所列场景验收；实现/发布/测试与用户验收独立。\n\nDependencies (source keys): `dx11-feasibility`, `backend-cache-isolation`.\n\nstage_detail: Not started\n\n## Sources\n\n- [docs/ROADMAP.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/ROADMAP.md) (repository reference; working-tree requirements may be newer)\n- [docs/ROADMAP.zh-CN.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/ROADMAP.zh-CN.md) (repository reference; working-tree requirements may be newer)\n- [docs/ROADMAP.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/ROADMAP.md) (repository reference; working-tree requirements may be newer)\n- [docs/ROADMAP.zh-CN.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/ROADMAP.zh-CN.md) (repository reference; working-tree requirements may be newer)\n",
       "issue_url": null,
       "fields": {
         "Kind": "Feature",
         "Area": "Graphics backends",
         "Status": "Todo",
         "Delivery": "Not started",
-        "Release": "v0.5.0",
+        "Release": null,
         "Start date": null,
-        "Target date": null
+        "Target date": null,
+        "Evidence": "Future DX11 work outside the current v0.5.0 release target. Feasibility/runtime remains unstarted; no next-release version or date is assigned."
       },
       "source_refs": [
         "docs/ROADMAP.md",
@@ -2560,7 +2561,8 @@
       },
       "source_refs": [
         "docs/ROADMAP.md#v050-pc-graphics",
-        "docs/ROADMAP.zh-CN.md#v050-pc-graphics"
+        "docs/ROADMAP.zh-CN.md#v050-pc-graphics",
+        "b094a1a98be441e24b8a14f2c02a2fd60020629a"
       ],
       "source_lines": [
         {
@@ -2610,7 +2612,7 @@
     {
       "key": "pc-backend-hardware-validation",
       "title": "Validate PC backends across GPU vendors",
-      "body": "<!-- lo-project:pc-backend-hardware-validation -->\n\n收集AMD/NVIDIA/Intel实际分发包证据。\n\n## Scope and completion criteria\n\n- [ ] 记录GPU/driver/edition/scene/settings/EXE\n- [ ] 未获得硬件和场景留pending\n- [ ] 玩家验收独立自动检查\n\n## Validation and acceptance\n\n实际包画面和稳定性证据，不把单GPU推广全部硬件。\n\n尚未完成所列场景验收；实现/发布/测试与用户验收独立。\n\nDependencies (source keys): `pc-backend-scene-validation`.\n\nstage_detail: Not started\n\n## Sources\n\n- [docs/ROADMAP.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/ROADMAP.md) (repository reference; working-tree requirements may be newer)\n- [docs/ROADMAP.zh-CN.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/ROADMAP.zh-CN.md) (repository reference; working-tree requirements may be newer)\n- [docs/ROADMAP.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/ROADMAP.md) (repository reference; working-tree requirements may be newer)\n- [docs/ROADMAP.zh-CN.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/ROADMAP.zh-CN.md) (repository reference; working-tree requirements may be newer)\n",
+      "body": "<!-- lo-project:pc-backend-hardware-validation -->\n\n收集AMD/NVIDIA/Intel实际分发包证据。\n\nBroad cross-GPU validation remains available for user feedback; it is not a pre-release requirement for v0.5.0 and does not establish AMD/Intel support.\n\n## Scope and completion criteria\n\n- [ ] 记录GPU/driver/edition/scene/settings/EXE\n- [ ] 未获得硬件和场景留pending\n- [ ] 玩家验收独立自动检查\n\n## Validation and acceptance\n\n实际包画面和稳定性证据，不把单GPU推广全部硬件。\n\n尚未完成所列场景验收；实现/发布/测试与用户验收独立。\n\nDependencies (source keys): `pc-backend-scene-validation`.\n\nstage_detail: Not started\n\n## Sources\n\n- [docs/ROADMAP.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/ROADMAP.md) (repository reference; working-tree requirements may be newer)\n- [docs/ROADMAP.zh-CN.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/ROADMAP.zh-CN.md) (repository reference; working-tree requirements may be newer)\n- [docs/ROADMAP.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/ROADMAP.md) (repository reference; working-tree requirements may be newer)\n- [docs/ROADMAP.zh-CN.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/ROADMAP.zh-CN.md) (repository reference; working-tree requirements may be newer)\n",
       "issue_url": null,
       "fields": {
         "Kind": "Infrastructure",
@@ -2619,7 +2621,8 @@
         "Delivery": "Not started",
         "Release": "v0.5.0",
         "Start date": null,
-        "Target date": null
+        "Target date": null,
+        "Evidence": "Broad cross-GPU coverage awaits user feedback. It is not a pre-release requirement for v0.5.0; do not claim unverified AMD/Intel support."
       },
       "source_refs": [
         "docs/ROADMAP.md",
@@ -2995,17 +2998,17 @@
     {
       "key": "dlc-import-support",
       "title": "Assess and implement DLC import support",
-      "body": "<!-- lo-project:dlc-import-support -->\n\n支持 Lost Odyssey DLC 与游戏光盘的统一自动识别导入；DLC 格式参考 re:Blue 的 STFS 容器契约。该工作属于 v0.5.0 目标。用户已授权把当前工作树从最后已提交的 source 0.4.2 按功能分批归档；本工作已归入 source 0.4.15 批次并本地提交为 [`f77d943261e14105d17c880ffa40c171b4191dcc`](https://github.com/freefrank/LostOdysseyRecomp/commit/f77d943261e14105d17c880ffa40c171b4191dcc)。该提交尚未推送或发布。\n\n## Scope and completion criteria\n\n- [x] 识别 CON/LIVE/PIRS STFS Marketplace 包，Title ID 4D5307FA、原 header 内容标识与来源 SHA256\n- [x] DLC 事务导入、取消回滚、重复内容校验与冲突保护；保留原包、存档、profile、配置和缓存\n- [x] 共用 game/dlc 内容目录，运行时枚举、异步打开／挂载、读取和关闭\n- [x] 移除手动 DLC／Game Discs 模式选择：对多选文件、目录和混合来源按内容自动分类、统一复核并分派导入\n\n## Validation and acceptance\n\nsource 0.4.15 统一导入批次已经实现并通过 15/15 项直接受影响检查（13 项新增识别／扫描／复核／分派检查，2 项既有 GUI 检查复用）。未改动的 STFS parser、DLC 交易和运行时读取继续复用先前 22 项 Python 专项检查与两个无窗口／无渲染／无音频的原生模式证据；它们不重复执行。自动导入报告：`out/v0.5.2/auto-import/installer/REPORT.md` 与 `result.json`。\n\n历史 source 0.5.1 本地 DLC ZIP 及 source 0.5.0 候选的名称、SHA256 和保留路径仍是历史产物证据，不代表当前源码编号或公开 Release。真实 DLC 包、奖励、区域与版本兼容性尚未验证，用户验收待补。保持 Awaiting validation / Implemented；本地提交已完成，尚未推送或发布。\n\n## Sources\n\n- [docs/notes/xex.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/notes/xex.md) (repository reference; working-tree requirements may be newer)\n- [docs/ROADMAP.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/ROADMAP.md) (repository reference; working-tree requirements may be newer)\n- [docs/ROADMAP.zh-CN.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/ROADMAP.zh-CN.md) (repository reference; working-tree requirements may be newer)\n- https://github.com/freefrank/LostOdysseyRecomp/issues/8\n",
+      "body": "<!-- lo-project:dlc-import-support -->\n\n支持 Lost Odyssey DLC 与游戏光盘的统一自动识别导入；DLC 格式参考 re:Blue 的 STFS 容器契约。该工作属于 v0.5.0 目标。用户已授权把当前工作树从最后已提交的 source 0.4.2 按功能分批归档；本工作已归入 source 0.4.15 批次并本地提交为 [`f77d943261e14105d17c880ffa40c171b4191dcc`](https://github.com/freefrank/LostOdysseyRecomp/commit/f77d943261e14105d17c880ffa40c171b4191dcc)。该提交尚未推送或发布。\n\n## Scope and completion criteria\n\n- [x] 识别 CON/LIVE/PIRS STFS Marketplace 包，Title ID 4D5307FA、原 header 内容标识与来源 SHA256\n- [x] DLC 事务导入、取消回滚、重复内容校验与冲突保护；保留原包、存档、profile、配置和缓存\n- [x] 共用 game/dlc 内容目录，运行时枚举、异步打开／挂载、读取和关闭\n- [x] 移除手动 DLC／Game Discs 模式选择：对多选文件、目录和混合来源按内容自动分类、统一复核并分派导入\n\n## Validation and acceptance\n\nsource 0.4.15 统一导入批次已经实现并通过 15/15 项直接受影响检查（13 项新增识别／扫描／复核／分派检查，2 项既有 GUI 检查复用）。未改动的 STFS parser、DLC 交易和运行时读取继续复用先前 22 项 Python 专项检查与两个无窗口／无渲染／无音频的原生模式证据；它们不重复执行。自动导入报告：`out/v0.5.2/auto-import/installer/REPORT.md` 与 `result.json`。\n\n历史 source 0.5.1 本地 DLC ZIP 及 source 0.5.0 候选的名称、SHA256 和保留路径仍是历史产物证据，不代表当前源码编号或公开 Release。用户已提供《失落的奥德赛》实际 DLC 样本，真实验证恢复进行。三包 Folder 首次导入成功；Files 重复导入报告 3 unchanged／0 imported，13 个导出 payload/metadata 文件的 bytes/hash/mtime、原包和测试 game-path 均保持。历史 source 0.5.1 运行时已绑定三内容根，读取 `LODLC002.fpi` 4096 bytes、`LODLC001.fpi` 2048 bytes 与 `spa.bin` 64 bytes，随后在 guest `0x1A` 发生 read access violation；`LODLC003.fpi` 未打开。未读存档、未验证奖励或迷宫，且未进行重试或根因诊断。真实奖励、区域与版本兼容性和用户验收仍待补。保持 In Progress / Implemented；本地提交已完成，尚未推送或发布。\n\n## Sources\n\n- [docs/notes/xex.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/notes/xex.md) (repository reference; working-tree requirements may be newer)\n- [docs/ROADMAP.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/ROADMAP.md) (repository reference; working-tree requirements may be newer)\n- [docs/ROADMAP.zh-CN.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/ROADMAP.zh-CN.md) (repository reference; working-tree requirements may be newer)\n- https://github.com/freefrank/LostOdysseyRecomp/issues/8\n",
       "issue_url": "https://github.com/freefrank/LostOdysseyRecomp/issues/8",
       "fields": {
         "Kind": "Feature",
         "Area": "Content import",
-        "Status": "Awaiting validation",
+        "Status": "In Progress",
         "Delivery": "Implemented",
         "Release": "v0.5.0",
         "Start date": null,
         "Target date": null,
-        "Evidence": "v0.5.0 target. Source 0.4.15 unified automatic disc/DLC import is locally committed as f77d943261e14105d17c880ffa40c171b4191dcc. 15/15 directly affected checks passed (13 new recognition/scan/review/dispatch and two reused GUI checks); unchanged parser/transaction/runtime evidence is reused. Historical source 0.5.1 and 0.5.0 ZIP identities remain unchanged. Real DLC rewards/areas/edition compatibility and player acceptance remain unverified. Unpushed and unpublished."
+        "Evidence": "v0.5.0 target. Real three-package folder import succeeded; a duplicate files import reported 3 unchanged/0 imported while 13 payload/metadata file bytes, hashes and mtimes, source packages, and test game-path remained unchanged. Historical source 0.5.1 runtime bound three roots and read LODLC002.fpi (4096), LODLC001.fpi (2048), and spa.bin (64), then read-access violated at guest 0x1A; LODLC003.fpi was not opened. No save/reward/dungeon test or diagnosis/retry followed. Real validation remains In Progress; no reward/area/edition/player-acceptance claim."
       },
       "source_refs": [
         "docs/notes/xex.md",
@@ -4204,17 +4207,17 @@
     {
       "key": "issue9-cpu-temperatures-taa-flicker",
       "title": "Investigate high CPU temperatures and TAA texture flicker",
-      "body": "<!-- lo-project:issue9-cpu-temperatures-taa-flicker -->\n\n新报告 #9：v0.4.2、Ryzen 9950X3D/RTX 5090，报告高 CPU 温度与启用 TAA 后纹理闪烁；尚未验证。\n\n## Scope and completion criteria\n\n- [ ] 分别核对高CPU温度与TAA纹理闪烁两个症状，不认定共同根因\n- [ ] 保留报告的视频、日志、实际版本/设置及可重复位置\n- [ ] 不能合并到已验收轮胎、原敌人消散或AMD报告\n- [ ] 先复核证据与可重复条件，再决定是否拆分修复任务\n\n## Validation and acceptance\n\n新报告未完成复现、诊断、修复或玩家验收；本次仅纳入项目清单，不执行额外分析。\n\n尚未完成所列场景验收；实现/发布/测试与用户验收独立。\n\nstage_detail: Not started\n\n## Sources\n\n- https://github.com/freefrank/LostOdysseyRecomp/issues/9\n",
+      "body": "<!-- lo-project:issue9-cpu-temperatures-taa-flicker -->\n\n新报告 #9：v0.4.2、Ryzen 9950X3D/RTX 5090，报告高 CPU 温度与启用 TAA 后纹理闪烁；尚未验证。\n\n## Scope and completion criteria\n\n- [ ] 分别核对高CPU温度与TAA纹理闪烁两个症状，不认定共同根因\n- [ ] 保留报告的视频、日志、实际版本/设置及可重复位置\n- [ ] 不能合并到已验收轮胎、原敌人消散或AMD报告\n- [ ] 先复核证据与可重复条件，再决定是否拆分修复任务\n\n## Validation and acceptance\n\n项目用户已确认 Issue #9 通过并关闭该 GitHub Issue；未新增评论。该验收不等同于原报告者确认，也不建立 CPU 温度与 TAA 症状的共同根因。\n\n实现/发布/测试与该用户验收仍独立保留。\n\nstage_detail: User accepted; Issue closed\n\n## Sources\n\n- https://github.com/freefrank/LostOdysseyRecomp/issues/9\n",
       "issue_url": "https://github.com/freefrank/LostOdysseyRecomp/issues/9",
       "fields": {
         "Kind": "Bug",
         "Area": "Runtime and graphics",
-        "Status": "Todo",
-        "Delivery": "Not started",
+        "Status": "Done",
+        "Delivery": "Validated",
         "Release": null,
         "Start date": null,
         "Target date": null,
-        "Evidence": "New unverified v0.4.2 report: high CPU temperatures and TAA texture flicker on Ryzen 9950X3D/RTX 5090. Two symptoms, no established shared cause; distinct from the earlier enemy-disappearance report."
+        "Evidence": "The project user accepted Issue #9 as complete; the GitHub Issue was closed without a new comment. This does not establish an original-reporter confirmation or a shared root cause for the originally reported CPU-temperature and TAA symptoms."
       },
       "source_refs": [
         "https://github.com/freefrank/LostOdysseyRecomp/issues/9"
@@ -4286,7 +4289,7 @@
     {
       "key": "qol-installer-input-layout",
       "title": "Expand installer recognition for supported game inputs",
-      "body": "<!-- lo-project:qol-installer-input-layout -->\n\nRecognize supported directory layouts, ISO images, extracted directories and XEX inputs; assess optional MD5/SHA-256 identification and improve the installer UI without weakening compatibility checks.\n\n## Validation and limits\n\nImplementation and proportionate source/synthetic desktop validation are complete. The existing 24-test importer suite passed, followed by 2 targeted cancellation/access tests and 3 strict XEX-identity tests. The actual Tk flow copied 15 synthetic source files with matching hashes, preserved source hashes, wrote the task-local game path and reached 100% with the completion dialog. Strict audited XEX identity remains required. Frozen-installer and DPI/package coverage, real retail input, player acceptance and release are pending.\n\nEvidence: `out/v0.5.0/installer/REPORT.md`, `out/v0.5.0/installer/ui-gate-result.json`.\n\n## Sources\n\n- docs/notes/v0.5.0-qol-requirements.md\n",
+      "body": "<!-- lo-project:qol-installer-input-layout -->\n\nRecognize supported directory layouts, ISO images, extracted directories and XEX inputs; assess optional MD5/SHA-256 identification and improve the installer UI without weakening compatibility checks.\n\n\nThe user-authorized installer refinement is implemented and validated in a bounded offscreen UI scope: original-game-inspired styling, native custom window chrome, streamlined instructional copy, and UX improvements preserve strict input validation and transactions. Nine direct UI checks and two affected controller checks passed; final normal/narrow renders were inspected. This is not manual foreground GUI acceptance, an installer EXE build, package, commit, or release.\n\n## Validation and limits\n\nImplementation and proportionate source/synthetic desktop validation are complete. The existing 24-test importer suite passed, followed by 2 targeted cancellation/access tests and 3 strict XEX-identity tests. The actual Tk flow copied 15 synthetic source files with matching hashes, preserved source hashes, wrote the task-local game path and reached 100% with the completion dialog. Strict audited XEX identity remains required. Frozen-installer and DPI/package coverage, real retail input, player acceptance and release are pending.\n\nEvidence: `out/v0.5.0/installer/REPORT.md`, `out/v0.5.0/installer/ui-gate-result.json`.\n\n## Sources\n\n- docs/notes/v0.5.0-qol-requirements.md\n",
       "issue_url": null,
       "fields": {
         "Kind": "Feature",
@@ -4295,7 +4298,8 @@
         "Delivery": "Validated",
         "Release": "v0.5.0",
         "Start date": "2026-09-08",
-        "Target date": "2026-09-08"
+        "Target date": "2026-09-08",
+        "Evidence": "Installer modernization refinement implemented and validated in bounded offscreen UI scope: nine direct UI checks and two affected controller checks passed. The final reduced-copy normal/narrow renders were inspected. No manual foreground GUI acceptance, installer EXE build, package, commit, or release is claimed."
       },
       "source_refs": [
         "docs/notes/v0.5.0-qol-requirements.md",
@@ -4436,7 +4440,7 @@
     {
       "key": "qol-debug-menu-modernization",
       "title": "Modernize and simplify the Debug Menu",
-      "body": "<!-- lo-project:qol-debug-menu-modernization -->\n\nModernize and lighten the Debug Menu while retaining its diagnostic role.\n\n## Validation and limits\n\nThe narrow interaction fixture passed startup open, child-focused F1/Esc/Gamepad B hide, busy disable/status, and failure status with re-enable. The r5 Map2 run also displayed the real Debug window with the correct map name and coordinates while guest menus continued. This is bounded UI/runtime evidence; broader diagnostic flows, player acceptance, and release remain separate.\n\nEvidence: `out/v0.5.0/menus/debug-interaction.log`, `out/v0.5.0/vulkan/map2-ui-r5/integrated-summary.json`.\n\n## Sources\n\n- docs/notes/v0.5.0-qol-requirements.md\n",
+      "body": "<!-- lo-project:qol-debug-menu-modernization -->\n\nModernize and lighten the Debug Menu while retaining its diagnostic role.\n\nDebug Menu refinement is implemented and validated in local source 0.4.18. The focused native fixture passed paged callbacks, child F1/Esc/Gamepad B dismissal, caption controls, viewport focus and reclamping, stable fonts, current-DPI layout, bilingual status and cleanup. Root reviewed actual Overview, Teleport, narrow focused and error windows on an inactive desktop. A 150% DPI layout defect was corrected by keeping the thread DPI context across window creation and updates. This does not implement the newly requested game-window pixel sizing. No game run, physical monitor transition or player acceptance is claimed. Evidence: out/v0.5.0/ui-modernization/native/DEBUG-STATUS.md.\n\n## Validation and limits\n\nThe narrow interaction fixture passed startup open, child-focused F1/Esc/Gamepad B hide, busy disable/status, and failure status with re-enable. The r5 Map2 run also displayed the real Debug window with the correct map name and coordinates while guest menus continued. This is bounded UI/runtime evidence; broader diagnostic flows, player acceptance, and release remain separate.\n\nEvidence: `out/v0.5.0/menus/debug-interaction.log`, `out/v0.5.0/vulkan/map2-ui-r5/integrated-summary.json`.\n\n## Sources\n\n- docs/notes/v0.5.0-qol-requirements.md\n",
       "issue_url": null,
       "fields": {
         "Kind": "Feature",
@@ -4445,12 +4449,15 @@
         "Delivery": "Validated",
         "Release": "v0.5.0",
         "Start date": "2026-09-08",
-        "Target date": "2026-09-08"
+        "Target date": "2026-09-08",
+        "Evidence": "Debug Menu refinement is implemented and validated in local source 0.4.18. The focused native fixture passed paged callbacks, child F1/Esc/Gamepad B dismissal, caption controls, viewport focus and reclamping, stable fonts, current-DPI layout, bilingual status and cleanup. Root reviewed actual Overview, Teleport, narrow focused and error windows on an inactive desktop. A 150% DPI layout defect was corrected by keeping the thread DPI context across window creation and updates. This does not implement the newly requested game-window pixel sizing. No game run, physical monitor transition or player acceptance is claimed. Evidence: out/v0.5.0/ui-modernization/native/DEBUG-STATUS.md."
       },
       "source_refs": [
         "docs/notes/v0.5.0-qol-requirements.md",
         "docs/ROADMAP.md#v050-pc-graphics",
-        "docs/ROADMAP.zh-CN.md#v050-pc-graphics"
+        "docs/ROADMAP.zh-CN.md#v050-pc-graphics",
+        "docs/notes/desktop-ui-modernization.md",
+        "294df076e09c7a8b41c6b530a58ed59404ae24e0"
       ],
       "record_type": "backlog"
     },
@@ -4520,7 +4527,7 @@
     {
       "key": "qol-github-binary-updater",
       "title": "Add safe GitHub binary update checks",
-      "body": "<!-- lo-project:qol-github-binary-updater -->\n\nWhen a newer matching GitHub binary is available, automatically download and update it with package verification, exit-before-replace, rollback, offline startup, preserved user data, and future macOS/Linux AppImage package selection. Begin with Windows.\n\n## Validation and limits\n\nCore, helper, progress UI, main-entry metadata, and package dependency integration are complete. The v0.4.15 development ZIP has 47 manifest files with matching SHA256 values; runtime/helper match the build, all three EXEs carry the seven icon payloads, and the DXC 2407 pair, licenses, provenance, README, and allowlist passed. The package contains no game files, source, PDB, or user data. The package identity check did not launch a payload or repeat installer, updater transaction, or GPU validation. No public Release was created, and player acceptance remains separate.\n\nEvidence: `out/v0.5.0/updater/main-entry/formal/result.json`, `out/v0.5.0/package/package-validation.json`, `out/v0.5.0/package/manifest.json`.\n\n## Sources\n\n- docs/notes/v0.5.0-qol-requirements.md\n",
+      "body": "<!-- lo-project:qol-github-binary-updater -->\n\nWhen a newer matching GitHub binary is available, automatically download and update it with package verification, exit-before-replace, rollback, offline startup, preserved user data, and future macOS/Linux AppImage package selection. Begin with Windows.\n\nUpdater UI refinement is implemented and validated in local source 0.4.17. The dedicated native fixture passed progress, cancellation boundaries, idle redraw caching, window controls and cleanup. Actual normal, unknown-total and narrow Chinese windows were reviewed on an inactive desktop without changing foreground focus. Public API and update transactions are unchanged; no live download, transaction, physical monitor or player acceptance is claimed. Evidence: out/v0.5.0/ui-modernization/updater/REPORT.md.\n\n## Validation and limits\n\nCore, helper, progress UI, main-entry metadata, and package dependency integration are complete. The v0.4.15 development ZIP has 47 manifest files with matching SHA256 values; runtime/helper match the build, all three EXEs carry the seven icon payloads, and the DXC 2407 pair, licenses, provenance, README, and allowlist passed. The package contains no game files, source, PDB, or user data. The package identity check did not launch a payload or repeat installer, updater transaction, or GPU validation. No public Release was created, and player acceptance remains separate.\n\nEvidence: `out/v0.5.0/updater/main-entry/formal/result.json`, `out/v0.5.0/package/package-validation.json`, `out/v0.5.0/package/manifest.json`.\n\n## Sources\n\n- docs/notes/v0.5.0-qol-requirements.md\n",
       "issue_url": null,
       "fields": {
         "Kind": "Feature",
@@ -4529,12 +4536,15 @@
         "Delivery": "Validated",
         "Release": "v0.5.0",
         "Start date": null,
-        "Target date": "2026-09-08"
+        "Target date": "2026-09-08",
+        "Evidence": "Updater UI refinement is implemented and validated in local source 0.4.17. The dedicated native fixture passed progress, cancellation boundaries, idle redraw caching, window controls and cleanup. Actual normal, unknown-total and narrow Chinese windows were reviewed on an inactive desktop without changing foreground focus. Public API and update transactions are unchanged; no live download, transaction, physical monitor or player acceptance is claimed. Evidence: out/v0.5.0/ui-modernization/updater/REPORT.md."
       },
       "source_refs": [
         "docs/notes/v0.5.0-qol-requirements.md",
         "docs/ROADMAP.md#v050-pc-graphics",
-        "docs/ROADMAP.zh-CN.md#v050-pc-graphics"
+        "docs/ROADMAP.zh-CN.md#v050-pc-graphics",
+        "docs/notes/desktop-ui-modernization.md",
+        "9c2dc761a4c775b3ffc8b01429f11bd42f0c4f94"
       ],
       "record_type": "backlog"
     },
@@ -4563,16 +4573,17 @@
     {
       "key": "steady-state-cpu-polling-optimization",
       "title": "Reduce measured steady-state CPU polling overhead",
-      "body": "<!-- lo-project:steady-state-cpu-polling-optimization -->\n\nImplement one bounded Windows CPU-efficiency batch from the completed Map2 hotspot profile.\n\n## Validation and limits\n\nImplementation is complete in source 0.4.16: bounded waiting now applies only to the measured GPU-query and shared-value polling paths, and the four disabled-capture diagnostic environment values are cached outside the per-draw hot path. The unified Release build exited 0, and the one new `LoPollWaitTest` passed.\n\nOne valid new D3D12 Map2 comparison reuses the retained v0.4.15 baseline without launching it again. In the fixed 60 FPS/SMAA/720p-internal/configured-1080p window, 0.4.16 used 41.3125 CPU seconds in 60.0003575 seconds: 4.3033598% mean / 0.6885376 logical-core equivalents, compared with the retained v0.4.15 D3D12 15.6200169% / 2.4992027 cores. All 3,599 target PresentMon events cover the CPU window on one swapchain; after sampling, controlled input moved 79.2098 guest units while remaining on Map2. The seed, executable, and settings were unchanged. This single whole-batch result does not attribute savings to individual changes or establish full-game coverage.\n\nThe first new Vulkan CPU window has zero overlapping PresentMon events and is excluded. The replacement Vulkan acquisition was stopped by the user's physical Escape before collector/window acquisition; no valid Vulkan pairing, user acceptance, commit, push, or release is recorded. Status remains in progress solely for that pending comparison.\n\n## Sources\n\n- out/v0.5.0/cpu-optimization/REPORT.md\n- out/v0.5.0/cpu-optimization/report/REPORT.html\n- out/v0.5.0/cpu-optimization/v0416-d3d12/result.json\n- out/v0.5.0/cpu-optimization/v0416-vulkan-r2/interrupted.json\n",
+      "body": "<!-- lo-project:steady-state-cpu-polling-optimization -->\n\nImplement one bounded Windows CPU-efficiency batch from the completed Map2 hotspot profile.\n\nUser accepted the CPU Vulkan comparison outcome. The prior stopped acquisition retains no paired metric, so this record does not add a benchmark figure.\n\n## Validation and limits\n\nImplementation is complete in source 0.4.16: bounded waiting now applies only to the measured GPU-query and shared-value polling paths, and the four disabled-capture diagnostic environment values are cached outside the per-draw hot path. The unified Release build exited 0, and the one new `LoPollWaitTest` passed.\n\nOne valid new D3D12 Map2 comparison reuses the retained v0.4.15 baseline without launching it again. In the fixed 60 FPS/SMAA/720p-internal/configured-1080p window, 0.4.16 used 41.3125 CPU seconds in 60.0003575 seconds: 4.3033598% mean / 0.6885376 logical-core equivalents, compared with the retained v0.4.15 D3D12 15.6200169% / 2.4992027 cores. All 3,599 target PresentMon events cover the CPU window on one swapchain; after sampling, controlled input moved 79.2098 guest units while remaining on Map2. The seed, executable, and settings were unchanged. This single whole-batch result does not attribute savings to individual changes or establish full-game coverage.\n\nThe first new Vulkan CPU window has zero overlapping PresentMon events and is excluded. The replacement Vulkan acquisition was stopped by the user's physical Escape before collector/window acquisition; no valid Vulkan pairing, user acceptance, commit, push, or release is recorded. Status remains in progress solely for that pending comparison.\n\n## Sources\n\n- out/v0.5.0/cpu-optimization/REPORT.md\n- out/v0.5.0/cpu-optimization/report/REPORT.html\n- out/v0.5.0/cpu-optimization/v0416-d3d12/result.json\n- out/v0.5.0/cpu-optimization/v0416-vulkan-r2/interrupted.json\n",
       "issue_url": null,
       "fields": {
         "Kind": "Feature",
         "Area": "Runtime performance",
-        "Status": "In Progress",
+        "Status": "Done",
         "Delivery": "Validated",
         "Release": "v0.5.0",
         "Start date": "2026-09-08",
-        "Target date": null
+        "Target date": null,
+        "Evidence": "User accepted the CPU Vulkan comparison outcome. The earlier stopped acquisition has no retained paired metric; no new benchmark figure is claimed. D3D12 optimization evidence remains bounded to its recorded scene."
       },
       "source_refs": [
         "out/v0.5.0/cpu-optimization/REPORT.md",
@@ -4628,17 +4639,17 @@
     {
       "key": "issue12-kalm-daughter-funeral-flower-crash",
       "title": "[Bug] kalm daughter funreal pick up flower",
-      "body": "<!-- lo-project:issue12-kalm-daughter-funeral-flower-crash -->\n\nOpen Issue #12 is a **P1 narrative-progression blocker under investigation**. The reporter says the game crashes on an MSI Claw A1M after collecting all ten flowers at Kaim's daughter funeral and talking to a character. They identify their build only as “latest recomp”; the report initially lacked an exact version, backend, logs, save, stack trace, and attachment. The reporter has since supplied a save attachment, and the local reproduction captured a runtime crash log; neither supplies a resolved host stack or identifies the reported executable/backend. The report also says Disc 2's final boss was playable, which is context only and does not establish a cause or coverage boundary.\n\n## Triage scope and completion criteria\n\n- [x] Locate the reported story context in offline game text: `nbr_1`/`nbv_1` share the ten-white-flower hand-in to Melvi; `nbv_1` row 13 is the flower-completion line; current `name_data.xml` identifies Map108 as Ghost Town — City of Ruins and Map109 as Ghost Town — Funeral Beach\n- [ ] Establish whether candidate events `RT_072C`/`RT_073C` execute from that hand-in; their link is not yet proven\n- [x] Review the selected PPC-to-generated-C++ dispatch slice: seven functions / 422 instructions reviewed, with no root cause found; this is not a complete root-cause audit\n- [x] Create isolated native pre-hand-in and 10/10 saves, then trigger the story on the exact official executable in a background, muted run; original data preserved\n- [x] Capture the crash contract: runtime log, native save provenance, guest `CTR=0` and `LR=823CB53C`; no host-resolved stack is available\n- [ ] Determine whether this is a guest/runtime, content/disc, save-state, backend, or environment-specific failure; do not merge it with unrelated crash reports without evidence\n- [ ] Implement and validate a bounded repair only after the failure path is established\n\n## Current evidence and acceptance\n\nOffline text extraction narrows the story context but does not establish an executed event link or root cause: `nbr_1`/`nbv_1` share the ten-white-flower delivery to Melvi, `nbv_1` row 13 records completion, while later rows 66–67 concern torch/branch preparation. Current `name_data.xml` directly identifies Map108/109 as the City of Ruins and Funeral Beach maps, not an established font/display-index defect; `RT_072C`/`RT_073C` remain candidate events only.\n\nThe crash is now locally reproduced on the official v0.4.2 executable (SHA256 `13f1294bbb54efbf9a712a066441cb019ba5497cf1242bde6905e6c8bc1757b6`). From a native generated 0/10 save that independently loaded, the controlled path collected all ten flowers through normal A input, used the original 109→108→109 exit route, and used same-map coordinate assistance only for location (no counter or completion-flag writes). The native 10/10 save completed successfully; after Melvi's “Ah, you've gathered the flowers...” dialogue, one normal A input reproduced an execute access violation (`guestCTR=0`, `LR=823CB53C`). The run did not use Cheat Engine 2× speed.\n\nRun04 independently loaded the native 10/10 save and captured the first invalid-object state after the Melvi hand-in. Nine read-only debugger context/base/LR/CTR checks passed. `r3` began at `03B6A480` with first word `03B6A560`, then advanced to `03B6A640` in `0xE0` steps; word 2 is `1` and `+0x124` is `0`. The original allocator free branch at `0x82298A1C` writes `[block+4]=1`, links `[block]=[pool+16]`, then stores the block at `[pool+16]`, matching the observed free-list format. This points the execute-null path at an invalid/freed-object representation rather than proving a static vtable-method omission. The actual free/write moment was not captured, so no specific UAF owner, PPC translation defect, GPU attribution, or repair is established. Runtime evidence: `out/issue12-triage/runtime/run-03/runtime.log`; targeted analysis: `out/issue12-triage/translation/crash-analysis/REPORT.md`.\n\nThe reporter later supplied a save attachment; read-only inspection does not determine its story stage. The reporter's “latest recomp” still does not identify a version or backend. Follow-up is prepared for Claude in [the Issue #12 handoff](docs/notes/issue12-claude-handoff.md); this is a local handoff record only and does not mean Claude has been scheduled or sent a message. It must begin from the retained run04 invalid/free-list-object evidence and its stated limits, without re-running the completed runtime capture or checks. No repair validation, player acceptance, or release is established. This Project item remains P1 investigation only. The GitHub Issue remains open and unchanged.\n\n## Sources\n\n- https://github.com/freefrank/LostOdysseyRecomp/issues/12\n- https://github.com/freefrank/LostOdysseyRecomp/issues/12#issuecomment-5592448054\n- https://github.com/freefrank/LostOdysseyRecomp/issues/12#issuecomment-5592895147\n- https://github.com/freefrank/LostOdysseyRecomp/issues/12#issuecomment-5592842816\n- https://github.com/freefrank/LostOdysseyRecomp/issues/12#issuecomment-5592845182\n",
+      "body": "<!-- lo-project:issue12-kalm-daughter-funeral-flower-crash -->\n\nOpen Issue #12 is a **P1 narrative-progression repair awaiting current production validation**. The reporter says the game crashes on an MSI Claw A1M after collecting all ten flowers at Kaim's daughter funeral and talking to a character. They identify their build only as “latest recomp”; the report initially lacked an exact version, backend, logs, save, stack trace, and attachment. The reporter has since supplied a save attachment, and the local reproduction captured a runtime crash log; neither supplies a resolved host stack or identifies the reported executable/backend. The report also says Disc 2's final boss was playable, which is context only and does not establish a cause or coverage boundary.\n\n## Triage scope and completion criteria\n\n- [x] Locate the reported story context in offline game text: `nbr_1`/`nbv_1` share the ten-white-flower hand-in to Melvi; `nbv_1` row 13 is the flower-completion line; current `name_data.xml` identifies Map108 as Ghost Town — City of Ruins and Map109 as Ghost Town — Funeral Beach\n- [ ] Establish whether candidate events `RT_072C`/`RT_073C` execute from that hand-in; their link is not yet proven\n- [x] Review the selected PPC-to-generated-C++ dispatch slice: seven functions / 422 instructions reviewed, with no root cause found; this is not a complete root-cause audit\n- [x] Create isolated native pre-hand-in and 10/10 saves, then trigger the story on the exact official executable in a background, muted run; original data preserved\n- [x] Capture the crash contract: runtime log, native save provenance, guest `CTR=0` and `LR=823CB53C`; no host-resolved stack is available\n- [x] Establish the captured failure path: GC frees old MaterialInstanceConstant objects while the previous frame still draws an old skeletal-mesh proxy (run09/10 and run13)\n- [x] Implement and locally merge pre-GC / pending-purge rendering drains; reuse same-source diagnostic run14 and bounded code review\n- [ ] Complete current production-build validation, natural-timing hand-in and directly affected performance coverage; then apply one development patch increment\n\n## Current evidence and acceptance\n\nOffline text extraction narrows the story context but does not establish an executed event link or root cause: `nbr_1`/`nbv_1` share the ten-white-flower delivery to Melvi, `nbv_1` row 13 records completion, while later rows 66–67 concern torch/branch preparation. Current `name_data.xml` directly identifies Map108/109 as the City of Ruins and Funeral Beach maps, not an established font/display-index defect; `RT_072C`/`RT_073C` remain candidate events only.\n\nThe crash is now locally reproduced on the official v0.4.2 executable (SHA256 `13f1294bbb54efbf9a712a066441cb019ba5497cf1242bde6905e6c8bc1757b6`). From a native generated 0/10 save that independently loaded, the controlled path collected all ten flowers through normal A input, used the original 109→108→109 exit route, and used same-map coordinate assistance only for location (no counter or completion-flag writes). The native 10/10 save completed successfully; after Melvi's “Ah, you've gathered the flowers...” dialogue, one normal A input reproduced an execute access violation (`guestCTR=0`, `LR=823CB53C`). The run did not use Cheat Engine 2× speed.\n\nRun04 independently loaded the native 10/10 save and captured the first invalid-object state after the Melvi hand-in. Nine read-only debugger context/base/LR/CTR checks passed. `r3` began at `03B6A480` with first word `03B6A560`, then advanced to `03B6A640` in `0xE0` steps; word 2 is `1` and `+0x124` is `0`. The original allocator free branch at `0x82298A1C` writes `[block+4]=1`, links `[block]=[pool+16]`, then stores the block at `[pool+16]`, matching the observed free-list format. This points the execute-null path at an invalid/freed-object representation rather than proving a static vtable-method omission. At the run04 checkpoint, the actual free/write moment had not yet been captured; that historical evidence alone did not establish a specific UAF owner or repair. The later run09-14 evidence below supersedes that diagnostic limit. Runtime evidence: `out/issue12-triage/runtime/run-03/runtime.log`; targeted analysis: `out/issue12-triage/translation/crash-analysis/REPORT.md`.\n\nOn 2026-09-09, Claude's later run09/10 official v0.4.2 captures identified old MIC ownership and free flags; run13 observed GC reclaiming the old materials before a delayed render proxy used them (five stale-draw hits). Run14 used the same fix source and forced delay: preflush removed the old proxy before collection, with zero stale draws and no crash. This diagnostic build used an external hook chain, excluded poll_wait and enabled SKIP_STALE; zero stale hits means the skip guard did not fire. It does not establish current uninstrumented production behavior or broad gameplay/performance acceptance.\n\nThe source repair from `17e3ab7` is now locally merged from `claude-issue12` into `0.5.0` at `9cefb0d`. ABI, strong-symbol dispatch registration, CMake inclusion and same-source artifact evidence passed read-only review; no merge-only build or test was repeated. Current production build, natural-timing hand-in and directly affected performance validation remain pending. Source stays `0.4.18` until proportionate validation is complete; target remains **v0.5.0**. No push, tag, release or GC-patch player acceptance is claimed. The current [root-cause report](docs/notes/issue12-root-cause.md) and [Claude handoff](docs/notes/issue12-handoff-2026-09-09.md) supersede the earlier run08 recovery checkpoint.\n\nThe Issue remains open. In the 2026-09-09T04:25:46Z comment, the reporter says turning off speedhack and possibly avoiding cutscene skipping resolved the separate torch-flame symptom and they reached Disc 1's final dungeon. This workaround has not been independently validated and is not acceptance of this GC repair.\n\n## Sources\n\n- https://github.com/freefrank/LostOdysseyRecomp/issues/12\n- https://github.com/freefrank/LostOdysseyRecomp/issues/12#issuecomment-5592448054\n- https://github.com/freefrank/LostOdysseyRecomp/issues/12#issuecomment-5592895147\n- https://github.com/freefrank/LostOdysseyRecomp/issues/12#issuecomment-5592842816\n- https://github.com/freefrank/LostOdysseyRecomp/issues/12#issuecomment-5592845182\n- https://github.com/freefrank/LostOdysseyRecomp/issues/12#issuecomment-5595769370\n",
       "issue_url": "https://github.com/freefrank/LostOdysseyRecomp/issues/12",
       "fields": {
         "Kind": "Bug",
         "Area": "Gameplay progression",
-        "Status": "In Progress",
-        "Delivery": "In progress",
+        "Status": "Awaiting validation",
+        "Delivery": "Implemented",
         "Release": "v0.5.0",
         "Start date": null,
         "Target date": null,
-        "Evidence": "P1 locally reproduced on official v0.4.2 EXE SHA256 13f1294bbb54efbf9a712a066441cb019ba5497cf1242bde6905e6c8bc1757b6: native 0/10 save -> normal ten flowers -> 109→108→109 -> Melvi dialogue -> normal A triggers execute ACCESS_VIOLATION (guestCTR 0, LR 823CB53C). Native 10/10 save completed; no Cheat Engine 2x. Root cause, including PPC translation or GPU attribution, remains unproven; no repair/validation/release."
+        "Evidence": "Issue #12 GC/render lifetime race established by official v0.4.2 run09/10 and delayed run13. Source repair 17e3ab7 drains rendering before collection/pending purge; claude-issue12 merged locally into 0.5.0 at 9cefb0d. Read-only ABI, dispatch and source/artifact review passed. Run13: 5 stale draws; run14: 0 stale / no crash with the same fix source, diagnostic hook chain, 20 ms delay, SKIP_STALE=1 and poll_wait excluded. Current production build, no-delay hand-in and direct performance coverage remain pending; source stays 0.4.18 until proportionate validation completes. Target v0.5.0, unreleased and not pushed. Reporter torch workaround is not GC-fix acceptance. Evidence: docs/notes/issue12-root-cause.md; docs/notes/issue12-handoff-2026-09-09.md."
       },
       "source_refs": [
         "https://github.com/freefrank/LostOdysseyRecomp/issues/12",
@@ -4650,6 +4661,28 @@
         "docs/notes/issue12-claude-handoff.md"
       ],
       "source_lines": [],
+      "record_type": "backlog"
+    },
+    {
+      "key": "qol-game-window-pixel-size",
+      "title": "Size the game window in actual pixels independently of desktop DPI",
+      "body": "<!-- lo-project:qol-game-window-pixel-size -->\n\nSize the game main window and presentation client area from the selected actual pixel resolution, without an additional Windows DPI scale multiplier. At the same selected resolution, 100%, 125%, 150% and 200% desktop scaling must not enlarge or shrink that pixel area. Installer, updater, configuration and Debug utility windows keep their normal DPI adaptation. Record this as a v0.5.0 requirement only; implementation, validation and player acceptance have not started, and recording it does not increment the source version.\n\n## Scope and completion criteria\n\n- Preserve the selected client pixel dimensions across Windows DPI settings.\n- Check window creation, resolution changes and DPI transitions when this work is implemented.\n- Keep this behavior separate from auxiliary-window DPI layout and internal render scaling.\n\n## Sources\n\n- docs/notes/v0.5.0-qol-requirements.md\n",
+      "issue_url": null,
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Desktop windowing",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Release": "v0.5.0",
+        "Start date": null,
+        "Target date": null,
+        "Evidence": "New user requirement recorded only. No implementation, test, acceptance or version increment. Auxiliary-window DPI fixes do not satisfy this requirement."
+      },
+      "source_refs": [
+        "docs/notes/v0.5.0-qol-requirements.md",
+        "docs/ROADMAP.md#v050-pc-graphics",
+        "docs/ROADMAP.zh-CN.md#v050-pc-graphics"
+      ],
       "record_type": "backlog"
     }
   ]

@@ -86,7 +86,9 @@ See the [installation guide](docs/INSTALLING.md) for accepted disc versions, fil
 
 DLSS, FSR and frame generation are not implemented; v0.4.0 removes the former disabled controls. HDR remains future work.
 
-**Current development:** The v0.5.0 milestone currently includes the DLC-import work and its unified automatic recognition flow. Thirteen feature batches are committed in the 0.4.xx development sequence through source v0.4.15 at commit `f77d943261e14105d17c880ffa40c171b4191dcc`; the complete batch record is [the version table](CHANGELOG.md). Historical package filenames and evidence directories may retain older internal version identifiers. The retained v0.5.0 candidate remains package-checked evidence for the accepted bounded D3D12/Vulkan lifecycle work and startup shader-cache handling; it is not a separate milestone target. These local candidates remain unpublished; the published baseline is v0.4.2. DX11 remains unsupported, and two known shader failures remain. Other GPUs, full-game compatibility and actual DLC content acceptance remain open. See [status](docs/STATUS.md), the [v0.5.0 release preparation matrix](docs/RELEASE-v0.5.0.md) and the [roadmap](docs/ROADMAP.md#v050-pc-graphics).
+**Current development:** Local source is 0.4.18, targeting v0.5.0. The installer, updater and Debug Menu have native lightweight UI improvements with focused local validation. Three real DLC imports passed, but the historical runtime faulted after partial content reads, so DLC gameplay remains unresolved. Version history, exact artifacts and validation boundaries are recorded in the [changelog](CHANGELOG.md), [status](docs/STATUS.md) and [release preparation matrix](docs/RELEASE-v0.5.0.md). The published baseline remains v0.4.2.
+
+The v0.5.0 delivery scope is Windows D3D12/Vulkan; DX11 is future work and other GPU coverage awaits user feedback. Intermediate 0.4.xx versions remain internal. The user accepted the CPU Vulkan comparison and Issue #9; this adds no new benchmark data or original-reporter confirmation. Whole-game compatibility and two known shader failures remain open.
 
 ## Validation and remaining work
 
