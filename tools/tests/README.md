@@ -18,6 +18,14 @@ tools\test.bat shaders pipeline
 
 The focused updater fixture is recorded in `out/v0.5.0/ui-modernization/updater/fixture.log` and `manifest.json`. It passed native window/control creation, native styles, known and unknown progress, unchanged-value redraw caching, verification cancellation boundaries, ready-state controls, minimize, teardown, Chinese narrow layout, download close cancellation and late-progress handling. Final normal, unknown-total and narrow Chinese renders were refreshed separately and reviewed; those captures do not repeat the functional fixture. No game, network download, package transaction or updater helper was run, and physical monitor moves and live user-desktop gestures remain untested.
 
+## Original menu asset checks
+
+The selected native menu-asset implementation is documented in `out/v0.5.0/final-preparation/menu-assets/INTEGRATION-REPORT.md`. Its bounded run-05/run-06 evidence covers the selected English/Simplified Chinese asset paths, three decoded-output byte comparisons, cache/malformed/LZO negative cases and the final whole-string coverage result: 41 original-font whole-string draw calls and 2 GDI whole-string fallback draws. The older source-0.4.22 run had two Simplified Chinese strings containing `锯` and `帧` on GDI fallback; source 0.4.23 changes those labels to `反走样` and `画面速率`. No game, CI, production package or user visual acceptance is established by these checks.
+
+The 0.4.23 Settings replacement-flow fixture is recorded in `out/v0.5.0/settings-replacement-flow/{fixture-result.json,fixture.log}`. It includes the actual `menu.cpp` with only external boundaries replaced and passed save/apply, failure recovery, Now/Later restart and Back-path checks; it does not prove actual guest runtime. The reviewed `graphics-aa.png` and `graphics-rate.png` previews show the corrected Simplified Chinese labels `反走样` and `画面速率`.
+
+Use the existing `LoMenuRenderTest` target for host raster checks; menu-asset decoding is part of the affected native fixture and is not an implicit default suite. Reuse the frozen report for documentation and packaging preparation rather than repeating passed checks without a new failure or source/input change.
+
 ## DLC import and content reading
 
 The later real-package observation is recorded in `out/v0.5.0/dlc-validation/REPORT.md`: three imports and intact duplicate recognition passed, while one historical game run faulted after partial content reads. Preserve that failure and the earlier synthetic results separately; no reward or dungeon acceptance is implied.
@@ -32,7 +40,16 @@ Build `LoStorageTest` only when the affected native inputs change. Its `dlc <new
 
 The following CMake targets are `EXCLUDE_FROM_ALL`; they are not `tools/test.bat` suite names and are never run implicitly. Select only the target relevant to the change, build it explicitly, and run the resulting executable from an isolated working directory when it writes captures or caches:
 
-`LoFolderPickerTest`, `LoDebugMenuInteractionTest`, `LoShaderPreparationQueueTest`, `LoShaderStartupCacheTest`, `LoBackendCacheTest`, `LoBackendSelectionTest`, `LoBackendDeviceTest`, `LoRestartTest`, `LoGamePathTest`, `LoUpdaterTest`, `LoUpdaterProgressTest`, `LoUpdaterHelperContextTest`, `LoUpdaterProbe`, `LoVulkanBackendTest`, and `LoPollWaitTest`.
+`LoFolderPickerTest`, `LoDebugMenuInteractionTest`, `LoGameWindowPixelsTest`, `LoShaderPreparationQueueTest`, `LoShaderStartupCacheTest`, `LoBackendCacheTest`, `LoBackendSelectionTest`, `LoBackendDeviceTest`, `LoRestartTest`, `LoGamePathTest`, `LoUpdaterTest`, `LoUpdaterProgressTest`, `LoUpdaterHelperContextTest`, `LoUpdaterProbe`, `LoVulkanBackendTest`, and `LoPollWaitTest`.
+
+`LoGameWindowPixelsTest` checks hidden Windows/SDL client and drawable pixel sizes, cross-thread presentation dimensions, DPI messages and thread-context restoration. Build this optional target only when its window policy or inputs change:
+
+```powershell
+cmake --build out/build/release --target LoGameWindowPixelsTest
+Start-Process .\out\build\release\LostOdysseyRecomp\LoGameWindowPixelsTest.exe -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput .\out\build\release\LostOdysseyRecomp\LoGameWindowPixelsTest.log
+```
+
+The recorded local run passed physical 640×360 and 1280×720 clients on one 96-DPI (100%) display. The 120/144/192-DPI (125%/150%/200%) checks exercised SDL's native message contract; they do not establish physical-monitor coverage at those scales or a real mixed-DPI monitor move. It does not change desktop DPI, show windows, initialize audio/GPU, or launch the game. Evidence: `out/v0.5.0/window-pixels/run-01/REPORT.md` and `manifest.json`. This target is outside default builds and CI; registering it does not require repeating the passed fixture.
 
 The v0.5.0 release candidate retained the recorded backend lifecycle evidence in
 `out/v0.5.0/backend-lifecycle/REPORT.md`; it is a hidden-window video/presentation/Plume
@@ -65,7 +82,11 @@ For runtime checks, choose the relevant pair below after configuring the build a
 # Storage changes
 cmake --build out/build/release --target LoStorageTest
 tools\test.bat storage --build-dir out/build/release
+# Directory-filter regression; use a fresh isolated output directory.
+LoStorageTest directory-filter <new-isolation-directory>
 ```
+
+The `directory-filter` mode is a focused native regression: the old object fails and the corrected object passes 30 actual `NtQueryDirectoryFile` calls, including first/continuation/null/empty patterns, `RestartScan`, independent handles, replacement filters, fresh null scans, no-match and buffer/IOSB boundaries. It does not start the game or establish DLC rewards, dungeon areas or complete DLC gameplay acceptance. Evidence: `out/v0.5.0/dlc-validation/directory-filter/REPORT.md`.
 
 ```powershell
 # Input changes

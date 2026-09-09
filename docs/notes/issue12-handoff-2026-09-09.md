@@ -1,11 +1,11 @@
-# Issue #12 交接（2026-09-09）：根因已定位，修复已合并并在诊断构建中验证
+# Issue #12 交接（2026-09-09）：根因已定位，生产交花路径已通过
 
 接手人请先读本文，再按需读 [根因报告](issue12-root-cause.md)（英文，含完整证据链）。
 本分支 `claude-issue12` 基于 `0.5.0` 的 `7919a9b`，只新增文件，不改动任何已有源码。
 
 **版本口径：** Issue #12 修复的交付目标仍为 **v0.5.0**；`0.4.xx` 是开发编号，每项 feature 实现完成并通过必要验证后，按集成时的当前 source 版本递增 `+0.0.1`。本文出现的 `0.5.1` 仅指历史冻结 host／诊断 artifact 编号，不是新的里程碑；本轮文档不要求 Release、tag、commit 或 push。
 
-修复已从 `claude-issue12` 本地快进合并到 `0.5.0`，合并节点 `9cefb0d`（当时工作树 source 为 0.4.18）；当前 production build、无探针正常时序 hand-in 和直接相关性能验证仍待完成。该次合并未 push、打 tag 或发布；后续源码备份的 push 状态由交付记录说明。
+修复已从 `claude-issue12` 本地快进合并到 `0.5.0`，合并节点 `9cefb0d`（当时工作树 source 为 0.4.18）；先以 source 0.4.18 标记的当前实现完成最小编译和运行验证，随后按规则进入 0.4.19、0.4.20；当前 0.4.20 的无探针正常时序 hand-in 已完成有界生产验证；直接性能基准、报告者验收和全游戏覆盖仍待完成。冻结验证 EXE 保留 source 0.4.18 身份（SHA 前缀 `7ccfdea7…`），不改称 0.4.20。该次合并未 push、打 tag 或发布；后续源码备份的 push 状态由交付记录说明。
 
 ## 一句话现状
 
@@ -15,7 +15,7 @@
 `DrawDynamicElements` 通过已回收的池块读 vtable，跳到 0。官方 v0.4.2 的这次交花路径已复现这次线程
 竞争（崩溃时 ring 里积压 64 KB 命令）；历史 `0.5.1` 宿主诊断构建在部分未加延迟的运行中只是该次
 样本碰巧错开时序，不能据此认为竞争已消除。宿主侧修复（GC 前先
-flush 渲染线程）已在人为放大时序的诊断构建里验证有效。
+flush 渲染线程）已在人为放大时序的诊断构建及 run-15 有界生产交花路径中验证有效。
 
 ## 已确认的事实（均有捕获或反汇编证据）
 
@@ -49,9 +49,9 @@ flush 渲染线程）已在人为放大时序的诊断构建里验证有效。
 
 ## 未完成事项（按优先级）
 
-1. **正式构建验证**：修复目前只和冻结的 0.5.1 宿主对象一起链接过（`bin-gcflush`，SHA `6d0b33d1…`）。需要用当前工作树正式构建（`tools/build_runtime.bat` 或现有 release 流程），再用官方时序（不加延迟）跑一次交花：`drive_probe_run.py --run run-NN --exe <正式 EXE> --sha <sha>`，`--step final-a` 后确认无 `[crash]`，并抽查运行日志里的 flush 只在相应真实 GC／增量 purge 条件下出现。run-14 仍是人工放大时序的诊断验证，不是最终用户验收。
-2. **性能与回归**：当前 production build、正常时序 hand-in 和性能覆盖仍待完成；额外渲染线程排空涉及关卡加载、60 s 周期清理和场景切换。复用既有验证，只有出现具体行为、编译选项／依赖变化或新的失败证据时，才补直接相关的最小检查。
-3. **版本与文档同步**：合并后已同步 `CHANGELOG.md`、`docs/STATUS.md`、`docs/ROADMAP*.md` 和 Project；UI 三个批次随后已分别提交为 0.4.16/0.4.17/0.4.18，Issue12 相关文档在本次 backup checkpoint 保留并继续标明生产验证待完成。Project 记录为已实现、等待验证，目标 v0.5.0。相称验证完成后，开发版本按届时的当前 `0.4.xx` 递增 `+0.0.1`；此次合并不单独递增，push 状态由交付记录说明。
+1. **正式构建验证**：先以 source 0.4.18 标记的当前实现完成最小 video/filesystem/GC translation unit 编译及一次实际 runtime link，再按已验证 feature 进入 0.4.19/0.4.20/0.4.21；冻结 source 0.4.18 身份的 EXE 完成了 run-15 无探针正常时序交花路径，不把该 EXE 改称 0.4.20。run-14 仍是人工放大时序的诊断验证；run-15 也不是最终用户验收。
+2. **性能与回归**：直接 GC 耗时基准和更广泛性能／回归覆盖仍待完成；额外渲染线程排空涉及关卡加载、60 s 周期清理和场景切换。复用既有验证，只有出现具体行为、编译选项／依赖变化或新的失败证据时，才补直接相关的最小检查。
+3. **版本与文档同步**：合并后已同步 `CHANGELOG.md`、`docs/STATUS.md`、`docs/ROADMAP*.md` 和 Project；UI 三个批次随后已分别提交为 0.4.16/0.4.17/0.4.18，Issue12 相关文档现记录 0.4.20 的有界生产验证已完成，当前 DLC 运行验证进入 0.4.21。Issue #12 的实现与验证状态为 Done/Implemented，Issue 本身仍 OPEN；源码和文档记录仍为本地未发布状态。相称验证完成后，开发版本按届时的当前 `0.4.xx` 递增 `+0.0.1`，本次 0.4.20 增量已完成；push 状态由交付记录说明。
 4. **Issue 回复**：GitHub Issue #12 仍 OPEN，尚未向报告者交付本修复。报告者最新评论（2026-09-09T04:25:46Z，[Issue comment](https://github.com/freefrank/LostOdysseyRecomp/issues/12#issuecomment-5595769370)）称关闭 speedhack、可能不跳过 cutscene 可解决火把火焰现象，并已推进到 Disc 1 final dungeon；该 workaround 未独立验证，也不构成本 GC 修复的验收确认。
 5. **同类隐患排查**（可选）：探针的材质校验 + 事件日志可复用到其他场景切换点（换装、战斗、地图切换）；打开 `LO_ISSUE12_RT_DELAY_ARMED_US` 放大时序有助于调查同类竞争。另一个没深究的问题：官方 v0.4.2 渲染线程在交花瞬间为何滞后 ≥100 ms（怀疑是新角色材质的 pipeline 首次创建）；run-14 仅证明在该诊断条件下未再观察到旧 proxy 绘制悬空材质。
 6. `out/issue12-triage/` 里 run-05…14、`probe-build/`、`branch-delivery/`、`capture-run09/10` 都是本次证据，被 git 忽略；调查未结束前请保留。合并前的未跟踪根因副本已保存在 `out/issue12-merge/root-cause-untracked.md`；合并时 Git blob 相同，仅 checkout 换行转换不同。其余既有未提交文件的原始 SHA 均保持一致，记录见 `out/issue12-merge/merge-result.json`。

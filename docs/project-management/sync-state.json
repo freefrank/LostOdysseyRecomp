@@ -1300,10 +1300,10 @@
         "Delivery": "Awaiting validation",
         "Release": "v0.5.0",
         "Source key": "pc-backend-release-readiness",
-        "Evidence": "Source 0.5.0 local dev ZIP validated: 43,862,583 bytes, SHA256 1afcc6b56550bfb9d41e4799b0f747beda8002f0739ddead9a4c81959eaffcbb; build 4497 and package 47942 exit 0; 49 files/42 notices, CRC/manifest/DXC 2407/provenance/PE checks pass. Hosted/public download and hardware gates pending."
+        "Evidence": "Source 0.4.23 local normal package complete: 1 PCH + 7 TUs, 2 actual links and 1 package; no payload/test/CI. LostOdysseyRecomp-windows-x64-v0.4.23-df59dcab-dev.zip: 44,085,093 bytes, SHA256 3fb2420de40380b4c1ece778a0cc3f06e2b5155f8f64593f2f7dca1b6f241ae8; runtime SHA256 489649ceafd8005ef1e130633e0cfeef716d9581ba425cc342ad8b6b3a99667d; linked/packaging identity a30b49a836f1ae3d2b5d49d04461572e3f6023a0b11fbdb98b63b26b9c7154ef. The package build did not run payload/tests/CI; separately, one isolated actual 0.4.23 menu runtime passed. Original-font labels are implemented and validated; the user previously accepted the overall style, and no new feedback is a release gate. The dirty df59-based development package is not a clean release. Separately authorized v0.5.0 versioning, commit/tag, formal package, public download verification and publication remain pending; cross-GPU feedback is not a v0.5.0 pre-release gate."
       },
       "title": "Prepare v0.5.0 backend packages and documentation",
-      "body_sha256": "03bdbd8d9b654433b4081d6a72ade9f72cceffbb14abc64b1ae2f13af0b1e7cf"
+      "body_sha256": "0eb9fa0973ba2eeb55b81210a5aaac0a69c56f80eb8be04ddfb8f3d41b11b088"
     },
     "council-reporter-validation": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56ecA",
@@ -1430,9 +1430,9 @@
       "fields": {
         "Kind": "Feature",
         "Area": "Content import",
-        "Status": "In Progress",
+        "Status": "Done",
         "Delivery": "Implemented",
-        "Evidence": "v0.5.0 target. Real three-package folder import succeeded; a duplicate files import reported 3 unchanged/0 imported while 13 payload/metadata file bytes, hashes and mtimes, source packages, and test game-path remained unchanged. Historical source 0.5.1 runtime bound three roots and read LODLC002.fpi (4096), LODLC001.fpi (2048), and spa.bin (64), then read-access violated at guest 0x1A; LODLC003.fpi was not opened. No save/reward/dungeon test or diagnosis/retry followed. Real validation remains In Progress; no reward/area/edition/player-acceptance claim.",
+        "Evidence": "v0.5.0 target. Existing real three-package import and duplicate preservation are reused. The directory-filter repair prevents spa.bin entering *.fpi; fixed native 30-call evidence and frozen source-0.4.18 runtime02 read complete header/index/payload data for LODLC002/001/003, with zero spa.bin matches or crashes and a normal main menu. Thirteen imported files and isolated save/config remained unchanged; both games exited. Reward collection, dungeon play, user acceptance and publication remain untested. Current local source 0.4.21 is uncommitted.",
         "Source key": "dlc-import-support",
         "Release": "v0.5.0"
       }
@@ -2109,7 +2109,7 @@
         "Start date": "2026-09-08"
       },
       "title": "Assess host settings as a replacement for game settings",
-      "body_sha256": "7a87bb448d52079080eaf2313194900339b0aa47fb05f14b66e768a765748839"
+      "body_sha256": "d247130ce3e4dee7922039f67cbfd12043fd771e888a82460a3500d82eb7a027"
     },
     "qol-original-style-settings": {
       "id": "PVTI_lAHOAAsUY84Biy1azg5639Y",
@@ -2124,7 +2124,7 @@
         "Target date": "2026-09-08"
       },
       "title": "Recreate original game style in modern settings",
-      "body_sha256": "216f010a498daab18afc3ebf18670b6b77bb31048749681a8b579b9c33cf4150"
+      "body_sha256": "113333e65643d9fe5d9bf2598baff01c8c04f52e40a1c754670abb747929c65e"
     },
     "qol-restart-now-or-later": {
       "id": "PVTI_lAHOAAsUY84Biy1azg563-M",
@@ -2138,7 +2138,7 @@
         "Start date": "2026-09-08"
       },
       "title": "Offer restart now or later for saved settings",
-      "body_sha256": "3b8a8387ad0107a04244816af1040e16a56af6c6dbeae4ec02a08c5a05c0f9e3"
+      "body_sha256": "32ca3aa87fee91becd9cc415077989ac1df2bd7a8f24f1c01a551e2356423e7a"
     },
     "qol-github-binary-updater": {
       "id": "PVTI_lAHOAAsUY84Biy1azg564AU",
@@ -2212,10 +2212,10 @@
       "fields": {
         "Kind": "Bug",
         "Area": "Gameplay progression",
-        "Status": "Awaiting validation",
+        "Status": "Done",
         "Delivery": "Implemented",
         "Release": "v0.5.0",
-        "Evidence": "Issue #12 GC/render lifetime race established by official v0.4.2 run09/10 and delayed run13. Source repair 17e3ab7 drains rendering before collection/pending purge; claude-issue12 merged locally into 0.5.0 at 9cefb0d. Read-only ABI, dispatch and source/artifact review passed. Run13: 5 stale draws; run14: 0 stale / no crash with the same fix source, diagnostic hook chain, 20 ms delay, SKIP_STALE=1 and poll_wait excluded. Current production build, no-delay hand-in and direct performance coverage remain pending; source stays 0.4.18 until proportionate validation completes. Target v0.5.0, unreleased and not pushed. Reporter torch workaround is not GC-fix acceptance. Evidence: docs/notes/issue12-root-cause.md; docs/notes/issue12-handoff-2026-09-09.md.",
+        "Evidence": "Issue #12 GC/render lifetime race established by official v0.4.2 run09/10 and delayed run13. Source repair 17e3ab7 drains rendering before collection/pending purge; claude-issue12 merged locally into 0.5.0 at 9cefb0d. Production validation used the frozen source-0.4.18 EXE without probe, overlay, artificial delay or skip-stale, retaining poll_wait and the repair: an independently loaded native 10-flower save advanced by ordinary A from serial 16 confirmation to branch follow-up and free Kaim movement within a 148-second crash-free, responsive observation window with seed/EXE unchanged. Precise GC duration and whole-game coverage remain unmeasured. GC code 17e3ab7 was previously committed and backed up; the 0.4.20 version increment and validation records remain uncommitted. Target v0.5.0. Issue remains open because the reporter has not received a repair binary or confirmed it.",
         "Source key": "issue12-kalm-daughter-funeral-flower-crash"
       }
     },
@@ -2224,14 +2224,14 @@
       "fields": {
         "Kind": "Feature",
         "Area": "Desktop windowing",
-        "Status": "Todo",
-        "Delivery": "Not started",
+        "Status": "Done",
+        "Delivery": "Implemented",
         "Release": "v0.5.0",
-        "Evidence": "New user requirement recorded only. No implementation, test, acceptance or version increment. Auxiliary-window DPI fixes do not satisfy this requirement.",
+        "Evidence": "PMv2 video/window implementation completed. Direct hidden fixture passed two lifecycles at 96 DPI / 100% for 640x360 and 1280x720; production validation compiled video/filesystem/GC (three translation units), linked once, and a real Map109 hidden-window check reported PMv2=true, 96 DPI and a 1280x720 configured client with foreground unchanged. 120/144/192 DPI cases cover only the message contract; user visual acceptance and physical 125%/150%/200% or cross-monitor coverage remain untested. Feature version 0.4.19; current local source 0.4.21 is uncommitted; target v0.5.0.",
         "Source key": "qol-game-window-pixel-size"
       },
       "title": "Size the game window in actual pixels independently of desktop DPI",
-      "body_sha256": "d07db23c4dddbfaa91d31cb32dd54e5724a5fe8e6aa44068a24587b65720b0e3"
+      "body_sha256": "aa46751e6445b819fcccbd08e72800dce117b1a12b96d53a91aea90b1c001049"
     }
   }
 }

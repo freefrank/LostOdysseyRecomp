@@ -10,9 +10,9 @@ Release scope is Windows D3D12 and Vulkan; DX11 is future work. Intermediate 0.4
 
 发布范围为 Windows D3D12 与 Vulkan，DX11 属于未来工作。0.4.xx 保持内部开发编号，积累至 v0.5.0 一起发布。安装器、更新器与 Debug Menu UI 改进已在本地完成相称验证，0.4.18 开发构建与打包证据已记录在构建报告中；发布仍待进行。
 
-Current source is **0.4.18**. The 13 historical feature batches through 0.4.15 and the three committed UI batches through 0.4.18 are listed below. The delivery target remains **v0.5.0** and the published baseline remains **v0.4.2**. Earlier test binaries with matching version strings are separate artifacts and must be identified by their hashes.
+Current source is **0.4.23**. The 13 historical feature batches through 0.4.15 and the three committed UI batches through 0.4.18 are listed below; local 0.4.19 DPI, 0.4.20 GC-validation, 0.4.21 DLC-filter, 0.4.22 menu-asset and 0.4.23 menu-UX source changes remain local and unpublished. The GC implementation itself was merged as `17e3ab7` and included in the GitHub backup. The delivery target remains **v0.5.0** and the published baseline remains **v0.4.2**. Earlier test binaries with matching version strings are separate artifacts and must be identified by their hashes.
 
-当前源码为 **0.4.18**；下表保留截至 0.4.15 的 13 个历史功能提交，以及截至 0.4.18 的 3 个已提交 UI 批次。交付目标仍是 **v0.5.0**，已发布基线仍为 **v0.4.2**。此前可能同名的测试程序属于其他产物，须以哈希区分。
+当前源码为 **0.4.23**；下表保留截至 0.4.15 的 13 个历史功能提交，以及截至 0.4.18 的 3 个已提交 UI 批次；0.4.19 DPI、0.4.20 GC 验证记录、0.4.21 DLC 过滤、0.4.22 菜单素材和 0.4.23 菜单 UX 源码均为本地未发布内容。GC 实现已以 `17e3ab7` 合并并包含在 GitHub 备份中。交付目标仍是 **v0.5.0**，已发布基线仍为 **v0.4.2**。此前可能同名的测试程序属于其他产物，须以哈希区分。
 
 | Source / 源码 | Commit / 提交 | Change / 改动 |
 | --- | --- | --- |
@@ -32,10 +32,21 @@ Current source is **0.4.18**. The 13 historical feature batches through 0.4.15 a
 | `0.4.16` | `b094a1a` | installer window and interaction modernization / 安装器窗口与交互现代化 |
 | `0.4.17` | `9c2dc76` | updater window and progress modernization / 更新器窗口与进度现代化 |
 | `0.4.18` | `294df07` | Debug Menu window and diagnostics modernization / Debug Menu 窗口与诊断现代化 |
+| `0.4.19` | local, uncommitted | physical-pixel game-window DPI lifecycle / 游戏主窗口物理像素 DPI 生命周期 |
+| `0.4.20` | local record, unpublished | Issue #12 GC/render-thread flush production validation / Issue #12 GC/渲染线程排空生产验证 |
+| `0.4.21` | local, uncommitted | real DLC directory-filter runtime validation / 真实 DLC 目录过滤运行验证 |
+| `0.4.22` | local, uncommitted | native original menu asset loading and bounded fallback validation / 原版菜单素材读取与限定回退验证 |
+| `0.4.23` | local, uncommitted | single-click graphics save, direct guest menu return and consistent original-font labels / 图形设置单击保存、直接返回与原版字体标签统一 |
 
-Completed behavior includes portable game discovery, the installer and desktop menus, Windows updater support, Vulkan rendering and shader preparation, measured CPU reductions, typed backend caches and failure fallback. The user accepted the bounded D3D12/Vulkan scenes and one-way Xenia-to-Recomp save compatibility. Existing proportionate checks and source equivalence were reused for the commit organization; intermediate commits were not separately built or run. This source-backup checkpoint adds no build, tests, package, tag or public release. See [development status](docs/STATUS.md) and the [release preparation matrix](docs/RELEASE-v0.5.0.md) for evidence and remaining publication gates.
+### 0.4.22 — Original menu assets / 原版菜单素材
 
-已完成便携游戏路径识别、导入器与桌面菜单、Windows updater、Vulkan 渲染和 shader 准备、实测 CPU 开销降低、后端缓存隔离及失败回退。用户已验收限定范围内的 D3D12/Vulkan 场景，并确认 Xenia 存档可单向复制到 Recomp 使用。提交整理复用已有适度验证并核对源码一致性，未逐提交构建或运行。本次源码备份不新增构建、测试、分发包、tag 或公开 Release。验证依据与剩余发布事项见[开发状态](docs/STATUS.md)及[发布准备矩阵](docs/RELEASE-v0.5.0.md)。
+The Settings renderer reads the selected installed `LO.fpi` language package and uses its native `Maru23` font data and `UI_MAIN_00` grey panel/gear assets. An optional same-package `Abc` whole-string fallback supplies the multiplication sign in resolution labels; missing packages, unsupported formats and uncovered glyphs retain GDI fallback. Direct run-05/run-06 checks passed the selected English/Simplified Chinese paths, three decoded-output byte comparisons, malformed/cache/LZO negative cases and the final 41-original-font/2-GDI coverage result. Menu geometry, input, save/restart transactions and presentation behavior were unchanged. The local 0.4.22 link/package completed successfully: `LostOdysseyRecomp-windows-x64-v0.4.22-df59dcab-dev.zip`, 44,082,161 bytes, SHA256 `cc21dc626862f829831e9568e0547899b8b5b293522580407ddc65ef67cd88f2`; runtime/helper/source identities and the build record are in `out/v0.5.0/final-preparation/build-0.4.22/execution-result.json`. User visual acceptance and publication remain separate; other editions and full language coverage are unverified. Evidence: `out/v0.5.0/final-preparation/menu-assets/INTEGRATION-REPORT.md`, `ABC-CHECKPOINT-MANIFEST.json` and [the public asset note](docs/notes/menu-original-assets.md).
+
+设置渲染器读取用户所选已安装 `LO.fpi` 语言包，使用其中的原生 `Maru23` 字体数据及 `UI_MAIN_00` 灰色面板／齿轮素材。同包可选 `Abc` 整句回退为分辨率标签提供乘号；缺包、不支持的格式和未覆盖字形仍回退 GDI。run-05/run-06 的直接检查通过限定英文／简体中文路径、3 项解码输出字节对照、malformed/cache/LZO 负例，以及最终 41 次原字体／2 次 GDI 覆盖结果。菜单几何、输入、存档／重启事务和 presenter 行为未改变。本地 0.4.22 链接／打包已成功完成：`LostOdysseyRecomp-windows-x64-v0.4.22-df59dcab-dev.zip`，44,082,161 字节，SHA256 为 `cc21dc626862f829831e9568e0547899b8b5b293522580407ddc65ef67cd88f2`；runtime/helper/source 身份及构建记录见 `out/v0.5.0/final-preparation/build-0.4.22/execution-result.json`。用户视觉验收和公开发布仍分开；其他版本和完整语言覆盖尚未验证。证据见 `out/v0.5.0/final-preparation/menu-assets/INTEGRATION-REPORT.md`、`ABC-CHECKPOINT-MANIFEST.json` 和[公开素材说明](docs/notes/menu-original-assets.md)。
+
+Completed behavior includes portable game discovery, the installer and desktop menus, Windows updater support, Vulkan rendering and shader preparation, measured CPU reductions, typed backend caches and failure fallback. The user accepted the bounded D3D12/Vulkan scenes and one-way Xenia-to-Recomp save compatibility. Existing proportionate checks and source equivalence were reused for the commit organization; intermediate commits were not separately built or run. The earlier source-backup checkpoint itself added no build, tests, package, tag or public release; the later 0.4.20 GC validation is recorded separately below. See [development status](docs/STATUS.md) and the [release preparation matrix](docs/RELEASE-v0.5.0.md) for evidence and remaining publication gates.
+
+已完成便携游戏路径识别、导入器与桌面菜单、Windows updater、Vulkan 渲染和 shader 准备、实测 CPU 开销降低、后端缓存隔离及失败回退。用户已验收限定范围内的 D3D12/Vulkan 场景，并确认 Xenia 存档可单向复制到 Recomp 使用。提交整理复用已有适度验证并核对源码一致性，未逐提交构建或运行。此前源码备份步骤本身不新增构建、测试、分发包、tag 或公开 Release；后续 0.4.20 GC 验证另见下文。验证依据与剩余发布事项见[开发状态](docs/STATUS.md)及[发布准备矩阵](docs/RELEASE-v0.5.0.md)。
 
 ### 0.4.16 — Installer window and interaction / 安装器窗口与交互
 
@@ -55,11 +66,29 @@ The Debug Menu now uses a lightweight native borderless window with shorter stat
 
 Debug Menu 现在使用轻量原生无边框窗口，采用更短的状态文案，Overview 与 Teleport 支持分页，标题区域固定、内容独立滚动，Toggle／Update 在当前 DPI 下正确布局。长路径和结果状态保持可读，F1／Escape／手柄 B 及标题栏关闭行为仍可用。专项 fixture 已通过分页、焦点／关闭、双语忙碌／错误、当前 DPI 指标和清理检查；证据见 `out/v0.5.0/ui-modernization/native/debug-run.log`。该 fixture 仍是源码级证据；独立的 0.4.18 合并开发构建与打包已记录在 `out/v0.5.0/ui-modernization/build/REPORT.md`，不代表人工用户验收或公开发布。
 
+### 0.4.19 — Physical-pixel game-window DPI lifecycle / 游戏主窗口物理像素 DPI 生命周期
+
+The local 0.4.19 source change keeps the game window's client/presentation size in physical pixels across the video thread's full init, event and destruction lifecycle. `SDL_WINDOWS_DPI_SCALING=0` is fixed before window initialization and the thread awareness is restored at scope end; auxiliary UI behavior is unchanged. The production-validation build compiled the video, filesystem and GC translation units, reused the fixed guest object (`d553…`) and completed one real runtime link; it did not rebuild the guest library, PCH or helper. Window integration then ran Map 109 at 96 DPI with `SDL_app` PMv2, confirmed a 1280×720 physical client against configuration, remained hidden and non-foreground, and left the foreground window unchanged. The earlier hidden fixture also passed. 125/150/200 percent desktop and real cross-monitor coverage remain untested. This is local, uncommitted source evidence and is not published in v0.4.2.
+
+本地 0.4.19 源码改动使游戏窗口在 video 线程完整 init、event 与 destruction 生命周期内保持物理像素 client/presentation 尺寸。窗口初始化前固定 `SDL_WINDOWS_DPI_SCALING=0`，scope 结束时恢复线程 awareness；辅助 UI 行为不变。生产验证构建成功编译 video、filesystem 与 GC 三个 translation unit，复用固定 guest object（`d553…`）并完成一次实际 runtime link；未重编 guest library、PCH 或 helper。窗口集成随后在 96 DPI、`SDL_app` PMv2 的 Map 109 运行中通过，1280×720 物理 client 与配置一致，窗口保持 hidden/non-foreground，前台窗口未改变；此前 hidden fixture 也通过。125/150/200% 桌面及真实跨屏覆盖仍未测试。本项是本地未提交源码证据，未发布到 v0.4.2。
+
 ### Issue #12 diagnostic repair / Issue #12 诊断修复
 
-The merged source repair drains the rendering thread before the relevant garbage-collection purge path, preventing the stale scene proxy from drawing freed material instances in the reproduced race. Run-13 reproduced five stale-material draws with an artificial 20 ms render delay; run-14 used the same diagnostic setup and observed zero stale draws and zero crashes after the flush. Production validation with the current source, no probe hooks, normal timing and the hand-in path remains pending; this is an unpublished v0.5.0 change.
+The merged source repair drains the rendering thread before the relevant garbage-collection purge path, preventing the stale scene proxy from drawing freed material instances in the reproduced race. Run-13 reproduced five stale-material draws with an artificial 20 ms render delay; run-14 used the same diagnostic setup and observed zero stale draws and zero crashes after the flush. The GC repair, recorded at source 0.4.20 after validation, passed the bounded production hand-in path with `17e3ab7` and current `poll_wait`, without probe, overlay, delay or stale-skip controls. The frozen validation EXE retains source 0.4.18 identity (SHA prefix `7ccfdea7…`) and must not be relabeled 0.4.20. Native user08 independently reached Map 109, crossed the former crash point, completed the Kaim branch dialogue and regained movement during the approximately 148-second crash-free observation window after the critical A press; the owner then ended the process. This is not natural-shutdown coverage or an exact GC timing benchmark. Reporter acceptance, full-game coverage, additional candidate regression and release remain pending; Issue #12 remains OPEN. The 0.4.20 version record is local and unpublished; the merged GC implementation is included in the GitHub backup.
 
-合并源码修复在相关垃圾回收 purge 路径前排空渲染线程，避免已复现竞争中的旧场景 proxy 绘制已释放的材质实例。run-13 使用人工 20 ms 渲染延迟复现 5 次悬空材质绘制；run-14 在相同诊断条件下加入 flush 后观察到 0 次悬空绘制、0 次崩溃。当前源码、无探针、正常时序和交花路径的生产验证仍待完成；本项属于未发布的 v0.5.0 改动。
+合并源码修复在相关垃圾回收 purge 路径前排空渲染线程，避免已复现竞争中的旧场景 proxy 绘制已释放的材质实例。run-13 使用人工 20 ms 渲染延迟复现 5 次悬空材质绘制；run-14 在相同诊断条件下加入 flush 后观察到 0 次悬空绘制、0 次崩溃。记为 0.4.20 功能增量的 GC 修复已用 `17e3ab7` 和现行 `poll_wait` 完成有界生产交花路径，未使用 probe、overlay、delay 或 stale-skip 控制。冻结验证 EXE 保留 0.4.18 源码身份（SHA 前缀 `7ccfdea7…`），不得改称 0.4.20。原生 user08 独立进入 Map 109，越过旧崩溃点，在关键 A 后约 148 秒的无崩溃观察窗口内完成 Kaim 分支对白并恢复移动；随后由 owner 结束进程。本次不覆盖自然退出，也不是精确 GC 耗时基准。报告者验收、全游戏覆盖、额外候选回归和发布仍待完成；Issue #12 仍为 OPEN。0.4.20 版本记录为本地未发布内容；GC 实现已合并并包含在 GitHub 备份中。
+
+### 0.4.21 — DLC directory filtering / DLC 目录过滤
+
+Retain each directory handle's search pattern when `FindNext` continues with a null or empty pattern, preventing `spa.bin` from being selected as `*.fpi`. The old-object control fails and the corrected native fixture passes 30 calls. The production runtime then reads all three real DLC packages successfully and reaches the main menu; rewards and dungeon gameplay remain untested.
+
+`FindNext` 传入 null 或空 pattern 续查时保留该目录句柄的过滤条件，避免将 `spa.bin` 误选为 `*.fpi`。旧对象对照失败，修复后的原生 fixture 通过 30 次调用；随后生产程序成功读取三份真实 DLC 并进入主菜单。奖励领取及地下城游玩仍未测试。
+
+### 0.4.23 — Menu UX correction / 菜单 UX 修正
+
+Source 0.4.23 maps the Simplified Chinese labels to `反走样` and `画面速率` using existing original glyphs. Graphics settings save/apply on one click; restart-required changes ask only Now/Later after a successful save. The bounded replacement-flow fixture passed, and one hidden Windowed D3D12 runtime path saved 1600×900 at 144 DPI, returned directly to System Settings after Back and preserved settings bytes. The development package is local and unpublished; no new user visual acceptance or public release is claimed. Evidence: `out/v0.5.0/settings-replacement-flow/{fixture-result.json,runtime-01/result.json}` and the package under `out/v0.5.0/settings-replacement-flow/packages/`.
+
+简体中文标签改为使用原版字形的“反走样”和“画面速率”。图形设置单击直接保存并应用；需要重启的修改在保存成功后仅询问 Now/Later。窄 replacement-flow fixture 通过；一次隐藏 Windowed D3D12 流程在 144 DPI 保存 1600×900，Back 后直接回到 System Settings 且设置字节保持一致。开发包为本地未发布产物；不宣称新一轮用户视觉验收或公开发布。
 
 ### DLC import and automatic content recognition
 
@@ -68,9 +97,9 @@ The merged source repair drains the rendering thread before the relevant garbage
 
 ### Validation boundaries / 验证边界
 
-Vulkan coverage remains Windows/RTX 5080 Maps 2, 3 and 12; other GPUs, full-game compatibility and future macOS/Linux work remain open. Settings retain system Trebuchet/CJK fonts and procedural textures, without a pixel-identical art claim. DX11 is unsupported at runtime. The preserved candidates stamped v0.5.0 and v0.5.1 remain historical package evidence; their filenames and hashes do not change the v0.5.0 milestone or identify this newly committed source. Hosted CI, public download and release gates remain pending.
+Vulkan coverage remains Windows/RTX 5080 Maps 2, 3 and 12; other GPUs, full-game compatibility and future macOS/Linux work remain open. Earlier candidate Settings validation used system Trebuchet/CJK fonts and procedural textures, without a pixel-identical art claim; the current 0.4.23 menu-UX implementation is documented above; the 0.4.22 menu-asset package remains historical. DX11 is unsupported at runtime. The preserved candidates stamped v0.5.0 and v0.5.1 remain historical package evidence; their filenames and hashes do not change the v0.5.0 milestone or identify this newly committed source. Hosted CI, public download and release gates remain pending.
 
-Vulkan 证据仍限定为 Windows/RTX 5080 的 Maps 2、3、12；其他 GPU、全游戏兼容性和未来 macOS/Linux 工作仍待完成。设置菜单使用系统 Trebuchet/CJK 字体及程序纹理，未宣称像素级原版美术一致。DX11 运行时尚不支持。保留的 v0.5.0、v0.5.1 候选包属于历史分发证据，其文件名和哈希不改变 v0.5.0 里程碑归属，也不代表本次新提交源码。Hosted CI、公开下载与发布检查仍待完成。
+Vulkan 证据仍限定为 Windows/RTX 5080 的 Maps 2、3、12；其他 GPU、全游戏兼容性和未来 macOS/Linux 工作仍待完成。此前候选设置验证使用系统 Trebuchet/CJK 字体及程序纹理，未宣称像素级原版美术一致；当前 0.4.23 菜单 UX 实现见上文；0.4.22 菜单素材包保持历史身份。DX11 运行时尚不支持。保留的 v0.5.0、v0.5.1 候选包属于历史分发证据，其文件名和哈希不改变 v0.5.0 里程碑归属，也不代表本次新提交源码。Hosted CI、公开下载与发布检查仍待完成。
 
 ## [v0.4.2](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.4.2) — 2026-09-08
 

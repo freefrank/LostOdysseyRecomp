@@ -8,7 +8,9 @@ target milestone remains v0.5.0; see [current status](STATUS.md) for the active 
 
 ## Current release scope — 2026-09-08
 
-The user confirmed Windows D3D12/Vulkan as the release scope; DX11 is future work outside the v0.5.0 commitment. Other GPU coverage awaits user feedback. The user accepted the CPU Vulkan comparison and Issue #9; this acceptance adds no new measurements or original-reporter confirmation. Installer, updater and Debug Menu UI passes are complete in later local source; real DLC content validation remains active. Issue #12's root cause is established and the merged source mitigation is validated in a diagnostic build, while current-source production validation, normal-timing hand-in, performance coverage, player acceptance and release remain pending. Intermediate 0.4.xx builds remain internal and will be delivered together in v0.5.0. The historical candidate below does not contain or validate these later changes.
+The user confirmed Windows D3D12/Vulkan as the release scope; DX11 is future work outside the v0.5.0 commitment. Other GPU coverage awaits user feedback. Installer, updater and Debug Menu UI passes are complete in later local source; directory-filter repair and runtime02 validation read all three real DLC packages without crashes, while rewards and dungeon gameplay remain unverified. Issue #12 production validation remains bounded and reporter acceptance, full-game coverage and release remain pending. Source 0.4.23 includes the unified Simplified Chinese labels, one-click Graphics save/apply and the original guest return path. Its fixture and one hidden Windowed D3D12 runtime path passed at 144 DPI; broader GPU/DPI coverage and new user visual acceptance remain separate. The 0.4.23 development package is recorded at `out/v0.5.0/settings-replacement-flow/packages/LostOdysseyRecomp-windows-x64-v0.4.23-df59dcab-dev.zip`; publication remains pending. The 0.4.22 asset package and hash remain historical. Intermediate 0.4.xx builds remain internal and will be delivered together in v0.5.0.
+
+The menu-asset implementation uses the selected installed `LO.fpi` package's native `Maru23`, optional same-package `Abc` fallback and `UI_MAIN_00` assets. It adds no bundled game assets, Python runtime or extra runtime DLL; the static MIT `lzokay` dependency is licensed separately. See [menu asset evidence](notes/menu-original-assets.md).
 
 ## Dependency and package checks
 
@@ -53,6 +55,7 @@ DX11 support, other GPUs and complete playthrough coverage remain open.
 ## Publication gate
 
 Before any future publication, verify the final source/version/stamp/tag agreement, the clean-checkout
-guard, hosted CI and publication state. The local candidate's source/build provenance, DXC provenance,
-PE imports, ZIP contents, manifest hashes and CRCs have already passed. This record does not claim a
-0.5.0 tag, hosted CI run, anonymous download or public release.
+guard, final local acceptance evidence and publication state. Hosted CI is not required by the current
+user instruction; no new CI run is claimed. The local candidate's source/build provenance, DXC
+provenance, PE imports, ZIP contents, manifest hashes and CRCs have already passed. This record does
+not claim a 0.5.0 tag, anonymous download or public release.

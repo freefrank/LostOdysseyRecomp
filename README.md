@@ -81,12 +81,13 @@ See the [installation guide](docs/INSTALLING.md) for accepted disc versions, fil
 | First-launch setup | Language and graphics settings before game initialization |
 | Language settings | English, Japanese, Korean, Traditional and Simplified Chinese interface options; game language selection |
 | Graphics settings | Auto/manual internal resolution up to 4K, Off/FXAA/SMAA/experimental TAA, Standard/High filtering, 30/60 FPS and output/display controls; fullscreen and mixed DPI need more testing |
+| Settings menu assets | Selected installed language assets provide the native Maru23/Abc font path and original grey panel/gear treatment; 0.4.23 applies the unified SCH labels and Graphics save UX, with bounded fixture and Windowed D3D12 runtime evidence recorded |
 | Shader preparation | Built-in resource index, parallel compilation and cache reuse |
 | Input and debug | Controller and keyboard input; English/Simplified Chinese F1 menu with capture, map information and same-map POI teleport |
 
 DLSS, FSR and frame generation are not implemented; v0.4.0 removes the former disabled controls. HDR remains future work.
 
-**Current development:** Local source is 0.4.18, targeting v0.5.0. The installer, updater and Debug Menu have native lightweight UI improvements with focused local validation. Three real DLC imports passed, but the historical runtime faulted after partial content reads, so DLC gameplay remains unresolved. Version history, exact artifacts and validation boundaries are recorded in the [changelog](CHANGELOG.md), [status](docs/STATUS.md) and [release preparation matrix](docs/RELEASE-v0.5.0.md). The published baseline remains v0.4.2.
+**Current development:** Local source is 0.4.23, targeting v0.5.0. Settings now uses selected menu assets with the unified Simplified Chinese labels `反走样`/`画面速率`, one-click Graphics save/apply, the Now/Later restart choice after a successful save, and the original guest apply/close return path. The bounded fixture and one hidden Windowed D3D12 runtime path passed: 1600×900 was saved at 144 DPI and Back returned directly to System Settings with settings bytes preserved. Broader GPU/DPI coverage, actual guest failure/restart branches and new user visual acceptance remain separate. The 0.4.23 package identity is in [delivery manifest](out/v0.5.0/settings-replacement-flow/DELIVERY.json); publication remains separate. The published baseline remains v0.4.2.
 
 The v0.5.0 delivery scope is Windows D3D12/Vulkan; DX11 is future work and other GPU coverage awaits user feedback. Intermediate 0.4.xx versions remain internal. The user accepted the CPU Vulkan comparison and Issue #9; this adds no new benchmark data or original-reporter confirmation. Whole-game compatibility and two known shader failures remain open.
 
