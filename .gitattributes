@@ -1,3 +1,5 @@
 * text=auto eol=lf
 *.toml text eol=lf
 *.bat text eol=crlf
+# Preserve upstream bytes used by the pinned DXC license checksums.
+thirdparty/dxc-licenses/LICENSE-*.txt text eol=crlf
