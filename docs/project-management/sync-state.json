@@ -1303,7 +1303,7 @@
         "Evidence": "Local formal v0.5.0 ZIP completed from clean source/tag/package commit 86ba2c1641bb9a8324e0b1710783bead0c39bf23: 44,080,866 bytes, SHA256 100e6491548579e3a13aa60564bc760bca121113915842f73817d1b943482ce4, source identity 896317f1a0ed86cea58fe353a2cb2104b4aa757efff4b72147e4da8ba2b82f7c. It used 1 PCH, 4 TUs, 2 links and 1 package; manifest/payload/hash/license checks passed; no functional tests, game runs or CI. Local tag v0.5.0 exists, but no remote push, public Release or anonymous download verification has occurred; public latest remains v0.4.2. Source 0.4.22/0.4.23 packages remain historical. Cross-GPU feedback is not a v0.5.0 pre-release gate."
       },
       "title": "Prepare v0.5.0 backend packages and documentation",
-      "body_sha256": "0eb9fa0973ba2eeb55b81210a5aaac0a69c56f80eb8be04ddfb8f3d41b11b088"
+      "body_sha256": "fa280da894321f4db778bb3059c1bef149f5db1d2285df5db5e78a2d1904dde2"
     },
     "council-reporter-validation": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56ecA",
