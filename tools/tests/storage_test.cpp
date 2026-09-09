@@ -18,6 +18,7 @@ PPC_FUNC(__imp__NtCreateEvent);
 PPC_FUNC(__imp__NtCreateFile);
 PPC_FUNC(__imp__NtWriteFile);
 PPC_FUNC(__imp__NtReadFile);
+PPC_FUNC(__imp__NtQueryDirectoryFile);
 PPC_FUNC(__imp__NtFlushBuffersFile);
 PPC_FUNC(__imp__XamSwapDisc);
 
@@ -189,6 +190,115 @@ static void CheckXmaCommands()
     apu::xma::Shutdown();
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
     std::puts("PASS: 32 synchronous XMA clears and 32 consecutive MMIO kicks");
+}
+
+static void CheckDirectoryFilter()
+{
+    const auto game = std::filesystem::absolute("directory-fixture-game");
+    Check(!std::filesystem::exists(game), "directory fixture destination must be new");
+    std::filesystem::create_directories(game);
+    for (const char* name : {"00.FPI", "10.fpi", "spa.bin", "zz.bin"})
+    {
+        std::ofstream file(game / name, std::ios::binary);
+        file << name;
+        Check(bool(file), "write isolated directory fixture");
+    }
+    FileSystem::Init(game);
+    XamInit();
+    // Match the game's XDCn root path without importing a content package again.
+    const auto gameUtf8 = FileSystem::PathUtf8(game);
+    XamRootCreate("XDC0", gameUtf8.c_str());
+    auto* name = static_cast<char*>(g_userHeap.Alloc(256));
+    auto* ansi = g_userHeap.Alloc<XANSI_STRING>();
+    auto* attributes = g_userHeap.Alloc<XOBJECT_ATTRIBUTES>();
+    auto* handleOut = g_userHeap.Alloc<be<uint32_t>>();
+    auto* iosb = static_cast<XIO_STATUS_BLOCK*>(g_userHeap.Alloc(sizeof(XIO_STATUS_BLOCK)));
+    auto* output = static_cast<uint8_t*>(g_userHeap.Alloc(512));
+    auto setName = [&](const char* value) {
+        strcpy(name, value);
+        ansi->Buffer = name;
+        ansi->Length = uint16_t(strlen(name));
+        ansi->MaximumLength = uint16_t(strlen(name) + 1);
+    };
+    auto open = [&] {
+        setName("XDC0:\\");
+        *attributes = {};
+        attributes->Name = ansi;
+        Check(Call(__imp__NtCreateFile, {Addr(handleOut), 0x80000000, Addr(attributes),
+            Addr(iosb), 0, 0, 1, 1, 1}) == STATUS_SUCCESS, "open directory through guest import");
+        return uint32_t(*handleOut);
+    };
+    unsigned queries = 0;
+    auto query = [&](uint32_t handle, const char* pattern, bool restart = false) {
+        if (pattern) setName(pattern);
+        memset(output, 0xA5, 512);
+        iosb->Status = 0xDEADBEEF;
+        iosb->Information = 0xDEADBEEF;
+        const auto status = Call(__imp__NtQueryDirectoryFile, {handle, 0, 0, 0,
+            Addr(iosb), Addr(output), 512, pattern ? Addr(ansi) : 0, uint32_t(restart)});
+        ++queries;
+        Check(iosb->Status == status, "directory IO status matches return value");
+        if (status == STATUS_NO_MORE_FILES)
+        {
+            Check(iosb->Information == 0, "exhausted enumeration reports no output bytes");
+            Check(std::all_of(output, output + 512, [](uint8_t byte) { return byte == 0xA5; }),
+                "exhausted enumeration leaves caller output untouched");
+            std::printf("query %u: NO_MORE_FILES\n", queries);
+            return std::string{};
+        }
+        Check(status == STATUS_SUCCESS, "directory query succeeds or reaches clean end");
+        // Xbox FILE_DIRECTORY_INFORMATION uses a 64-byte header and ANSI names.
+        const uint32_t length = *reinterpret_cast<be<uint32_t>*>(output + 60);
+        Check(length && length <= 512 - 64 && iosb->Information == 64 + length,
+            "directory filename length stays within returned bytes");
+        Check(*reinterpret_cast<be<uint32_t>*>(output) == 0, "one directory record per query");
+        Check(std::all_of(output + 64 + length, output + 512,
+            [](uint8_t byte) { return byte == 0xA5; }), "directory query preserves output tail");
+        std::string result(reinterpret_cast<char*>(output + 64), length);
+        std::printf("query %u: %s\n", queries, result.c_str());
+        return result;
+    };
+    auto collect = [&](uint32_t handle, const char* pattern, bool restart = false) {
+        std::vector<std::string> found;
+        for (unsigned i = 0; i < 8; ++i)
+        {
+            auto item = query(handle, i ? nullptr : pattern, !i && restart);
+            if (item.empty()) { std::sort(found.begin(), found.end()); return found; }
+            found.push_back(std::move(item));
+        }
+        throw std::runtime_error("directory enumeration must terminate");
+    };
+    const std::vector<std::string> fpiNames{"00.FPI", "10.fpi"};
+    const std::vector<std::string> binNames{"spa.bin", "zz.bin"};
+    const uint32_t fpi = open(), bin = open();
+    Check(collect(fpi, "*.fpi") == fpiNames,
+        "null FindNext must retain *.fpi and exclude spa.bin");
+    Check(query(fpi, nullptr).empty(), "repeated exhausted query stays exhausted");
+    Check(collect(fpi, nullptr, true) == fpiNames, "null RestartScan retains filter");
+    const auto first = query(fpi, "*.FpI");
+    Check(std::find(fpiNames.begin(), fpiNames.end(), first) != fpiNames.end(),
+        "nonempty mixed-case filter starts a new search");
+    // Reusing guest string storage must not change a different handle's rule.
+    Check(collect(bin, "*.BIN") == binNames, "different handle selects only binary files");
+    const auto second = query(fpi, "");
+    Check(second != first && std::find(fpiNames.begin(), fpiNames.end(), second) != fpiNames.end(),
+        "empty descriptor preserves owned filter and cursor after another handle queries");
+    Check(query(fpi, nullptr).empty(), "filtered continuation stops after both matching files");
+    Check(collect(fpi, "SPA.BIN") == std::vector<std::string>{"spa.bin"},
+        "replacement exact filter resets cursor and matches case-insensitively");
+    Check(collect(bin, nullptr, true) == binNames, "other handle restart retains its filter");
+    const uint32_t all = open();
+    const std::vector<std::string> allNames{"00.FPI", "10.fpi", "spa.bin", "zz.bin"};
+    Check(collect(all, nullptr) == allNames, "fresh null filter includes all files");
+    Check(collect(fpi, "*") == allNames, "explicit wildcard can replace a previous filter");
+    Check(collect(fpi, "absent.fpi").empty(), "no-match filter terminates without output");
+    Check(query(fpi, nullptr).empty(), "no-match null continuation preserves filter");
+    DestroyKernelObject(fpi);
+    DestroyKernelObject(bin);
+    DestroyKernelObject(all);
+    g_userHeap.Free(name); g_userHeap.Free(ansi); g_userHeap.Free(attributes);
+    g_userHeap.Free(handleOut); g_userHeap.Free(iosb); g_userHeap.Free(output);
+    std::printf("PASS directory-filter: %u actual NtQueryDirectoryFile calls\n", queries);
 }
 
 static void CheckDlc(const std::filesystem::path& imported, bool restart)
@@ -363,6 +473,7 @@ int main(int argc, char** argv)
         if (std::string_view(argv[1]) == "discs" || std::string_view(argv[1]) == "disc-rejected")
         { Check(argc == 4,"discs requires absolute disc-set directory"); CheckDiscs(argv[3], std::string_view(argv[1]) == "disc-rejected"); return 0; }
         if (std::string_view(argv[1]) == "xma-commands") { CheckXmaCommands(); return 0; }
+        if (std::string_view(argv[1]) == "directory-filter") { CheckDirectoryFilter(); return 0; }
         if (std::string_view(argv[1]) == "dlc" || std::string_view(argv[1]) == "dlc-restart")
         { Check(argc == 4, "dlc requires parser-imported game root"); CheckDlc(argv[3], std::string_view(argv[1]) == "dlc-restart"); return 0; }
         FileSystem::Init(std::filesystem::absolute("game"));

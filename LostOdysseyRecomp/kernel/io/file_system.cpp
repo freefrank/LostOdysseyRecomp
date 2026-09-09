@@ -148,6 +148,7 @@ struct FileHandle : KernelObject
 
     // Directory enumeration state
     std::vector<std::filesystem::directory_entry> entries;
+    std::string searchPattern;
     size_t nextEntry = 0;
     bool enumerated = false;
 
@@ -698,7 +699,14 @@ uint32_t NtQueryDirectoryFile(FileHandle* handle, uint32_t Event, uint32_t ApcRo
     if (!handle || IsInvalidKernelObject(handle) || !handle->isDirectory)
         return STATUS_INVALID_HANDLE;
 
-    std::string pattern = GuestAnsiString(FileName);
+    // Xbox FindNext passes no FileName: retain this handle's search expression.
+    // A nonempty expression starts a new search, as in Xenia's XFile::QueryDirectory.
+    if (std::string pattern = GuestAnsiString(FileName); !pattern.empty())
+    {
+        handle->searchPattern = std::move(pattern);
+        handle->nextEntry = 0;
+    }
+    const std::string& pattern = handle->searchPattern;
     std::error_code ec;
 
     if (!handle->enumerated || RestartScan)
