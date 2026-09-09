@@ -2200,6 +2200,18 @@
         "Evidence": "User confirmed on 2026-09-08 that Xenia saves copied directly to recomp read successfully. This is a one-way Xenia-to-recomp compatibility acceptance; no reverse-direction, converter, or broad compatibility claim.",
         "Source key": "issue11-xenia-save-compatibility-report"
       }
+    },
+    "issue12-kalm-daughter-funeral-flower-crash": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg6C3iQ",
+      "fields": {
+        "Kind": "Bug",
+        "Area": "Gameplay progression",
+        "Status": "In Progress",
+        "Delivery": "In progress",
+        "Release": "v0.5.0",
+        "Evidence": "P1 locally reproduced on official v0.4.2 EXE SHA256 13f1294bbb54efbf9a712a066441cb019ba5497cf1242bde6905e6c8bc1757b6: native 0/10 save -> normal ten flowers -> 109→108→109 -> Melvi dialogue -> normal A triggers execute ACCESS_VIOLATION (guestCTR 0, LR 823CB53C). Native 10/10 save completed; no Cheat Engine 2x. Root cause, including PPC translation or GPU attribution, remains unproven; no repair/validation/release.",
+        "Source key": "issue12-kalm-daughter-funeral-flower-crash"
+      }
     }
   }
 }

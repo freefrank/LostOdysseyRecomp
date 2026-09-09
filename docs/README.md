@@ -7,6 +7,7 @@
 | [Changelog / 更新日志](../CHANGELOG.md) | Single history of completed changes, separating unpublished work from verified releases |
 | [v0.4.2 changes](../CHANGELOG.md#v042--2026-09-08) | Council/PPC repairs, crash logs, battle TAA coverage and background exports; [validation scope](STATUS.md) |
 | [Issue #7 Council investigation](notes/issue7-cutscene-crash.md) / [PPC semantics audit](notes/recompiler-width-audit.md) | Root cause, generated-code regressions, native save/reload and remaining coverage |
+| [Issue #12 funeral crash investigation](notes/issue12-funeral-crash.md) / [Claude handoff](notes/issue12-claude-handoff.md) | Official v0.4.2 reproduction, execute-null object evidence and bounded writer/lifetime follow-up |
 | [v0.4.1 release](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.4.1) | Previous published release: accepted Map3 TAA repair and three-frame captures with logs; [validation scope](STATUS.md) |
 | [v0.4.0 release](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.4.0) | Internal resolution up to 4K, AA/text, frame-rate controls and both-edition indexed discovery; [official validation](STATUS.md) |
 | [v0.4.0 development evidence](notes/v0.4.0-development.md) | Recorded implementation and validation; [follow-up evidence](notes/handoff-v0.4.0-followup.md) and remaining acceptance limits |

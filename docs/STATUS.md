@@ -6,6 +6,8 @@ Reviewed **2026-09-08** against the published v0.4.2 package, candidate evidence
 
 ## Current Issue state — 2026-09-08
 
+**Issue #12 — P1, v0.5.0, locally reproduced:** the unmodified official v0.4.2 program crashed after Cooke collected ten flowers and advanced Melvi's hand-in acknowledgement. The original `RT_071_2C` scenario supplied a native task-start save; the official program independently loaded it, performed ten normal pickups across locations 109/108, returned to 109 and wrote a native pre-hand-in checkpoint. A targeted second run independently loaded that 10/10 checkpoint and captured the exception. Guest `0x823CB538` tries to call a zero function address; the supposed object's header matches the game's allocator free-list node format. The actual release/write and upstream cause remain unobserved. Both runs used normal speed without Cheat Engine; the reporter's additional torch symptom remains separate evidence. There is no confirmed PPC translation cause, repair, player acceptance or new release. See the [funeral investigation](notes/issue12-funeral-crash.md).
+
 Issues #3–#7 are closed on GitHub. The reasons and acceptance limits differ; older statements that an Issue is open or still lacks the reporter's save must be read against this update. Times below are UTC.
 
 | Issue | Latest closure evidence | Validation and remaining scope |

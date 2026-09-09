@@ -11,7 +11,8 @@
 ## 当前进度与下一步 — 2026-09-08
 
 - **版本与交付：**13 个功能批次已本地提交：从 `0.4.2` 依次为源码 `0.4.3` 至 `0.4.15`；这些不是构建或公开 Release。本地 `LostOdysseyRecomp-windows-x64-v0.5.1-147bffb2-dev.zip` 与已冻结 v0.5.0 候选保留精确的历史产物身份，见[产物身份与验证](STATUS.md#current-milestone-development)。发布基线仍为 [v0.4.2](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.4.2)。
-- **v0.5.0 工作：**共跟踪 27 项：21 项 Done、1 项 In Progress、3 项 Todo、2 项 Awaiting validation。这是 Project 中完整的 `Release = v0.5.0` 视图，包含 DLC 自动识别工作及两项 CPU 工作项。12 项 QOL 均已有实现和限定验证，但仍分别保留所述验收或覆盖边界。
+- **v0.5.0 工作：**共跟踪 28 项：21 项 Done、2 项 In Progress、3 项 Todo、2 项 Awaiting validation。这是 Project 中完整的 `Release = v0.5.0` 视图，包含 DLC 自动识别工作及两项 CPU 工作项。12 项 QOL 均已有实现和限定验证，但仍分别保留所述验收或覆盖边界。
+- **P1——调查：**[Issue #12](https://github.com/freefrank/LostOdysseyRecomp/issues/12) 已在官方 v0.4.2 程序复现：从原生 0/10 存档以正常 A 收集十朵花、走原出口 109→108→109，再在梅鲁比 “Ah, you've gathered the flowers...” 对话后正常按一次 A，即触发 execute access violation（`guestCTR=0`、`LR=823CB53C`）。完成的 10/10 存档写入成功；本次未使用 Cheat Engine 2×。PPC 转译、GPU 或任何其他根因均未证实。离线文本已定位 `nbr_1`／`nbv_1` 的梅鲁比交付，`RT_072C`／`RT_073C` 仍只是未证实候选。尚无修复或验收；后续已写入 [Issue #12 Claude handoff](notes/issue12-claude-handoff.md)，但未向外部调度。
 - **下一步——开发：**Direct3D 11 可行性和后端尚未开始。CPU polling 批次已有经验证的 D3D12 结果；配对 Vulkan 对比因用户停止采集而待完成，不需要重跑其他工作。
 - **下一步——证据或验收：**原版风格设置仍使用近似的系统字体／程序纹理；冻结安装器与 DPI 覆盖仍开放；两项保留的 shader compiler error 已被缓存，并未修复。玩家验收单独保留。
 - **保持挂起或等待证据：**Issue #9 的温度／TAA 症状、AMD 阴影调查和敌人消散闪烁保留原有待办或暂停状态，本次整理不自动恢复。Issue #10 记录 v0.5.0 之外未来的 FSR 工作；Issue #11 已完成用户确认的 Xenia → recomp 直接复制读取；反向兼容与转换不在此边界内。
