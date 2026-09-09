@@ -1,5 +1,10 @@
 # v0.5.0 release preparation
 
+## Current local package — 2026-09-09
+
+Source 0.5.0 has a reviewed local v0.5.0 Windows package: `LostOdysseyRecomp-windows-x64-v0.5.0.zip`, 44,080,866 bytes, SHA256 `100e6491548579e3a13aa60564bc760bca121113915842f73817d1b943482ce4`. The package/link commit is `86ba2c1641bb9a8324e0b1710783bead0c39bf23`; source identity is `896317f1a0ed86cea58fe353a2cb2104b4aa757efff4b72147e4da8ba2b82f7c`. Packaging completed 1 PCH, 4 version translation units, 2 links and 1 normal package, with 0 guest compiles, tests, game runs or CI. Manifest, payload and license checks are recorded in [DELIVERY.json](../out/v0.5.0/release-finalization/DELIVERY.json) and [REPORT.md](../out/v0.5.0/release-finalization/REPORT.md). The package is local and unpublished; the public baseline remains v0.4.2, with no remote tag or push.
+
+
 This is a historical preparation record for the Windows x64 v0.5.0 development candidate. It is
 not a published release note and does not define the current source version. The candidate was
 built and verified locally, but had not been committed, pushed, tagged, deployed or published at
@@ -58,4 +63,3 @@ Before any future publication, verify the final source/version/stamp/tag agreeme
 guard, final local acceptance evidence and publication state. Hosted CI is not required by the current
 user instruction; no new CI run is claimed. The local candidate's source/build provenance, DXC
 provenance, PE imports, ZIP contents, manifest hashes and CRCs have already passed. This record does
-not claim a 0.5.0 tag, anonymous download or public release.

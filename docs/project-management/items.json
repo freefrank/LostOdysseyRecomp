@@ -2655,7 +2655,7 @@
         "Release": "v0.5.0",
         "Start date": null,
         "Target date": null,
-        "Evidence": "Source 0.4.23 local normal package complete: 1 PCH + 7 TUs, 2 actual links and 1 package; no payload/test/CI. LostOdysseyRecomp-windows-x64-v0.4.23-df59dcab-dev.zip: 44,085,093 bytes, SHA256 3fb2420de40380b4c1ece778a0cc3f06e2b5155f8f64593f2f7dca1b6f241ae8; runtime SHA256 489649ceafd8005ef1e130633e0cfeef716d9581ba425cc342ad8b6b3a99667d; linked/packaging identity a30b49a836f1ae3d2b5d49d04461572e3f6023a0b11fbdb98b63b26b9c7154ef. The package build did not run payload/tests/CI; separately, one isolated actual 0.4.23 menu runtime passed. Original-font labels are implemented and validated; the user previously accepted the overall style, and no new feedback is a release gate. The dirty df59-based development package is not a clean release. Separately authorized v0.5.0 versioning, commit/tag, formal package, public download verification and publication remain pending; cross-GPU feedback is not a v0.5.0 pre-release gate."
+        "Evidence": "Local formal v0.5.0 ZIP completed from clean source/tag/package commit 86ba2c1641bb9a8324e0b1710783bead0c39bf23: 44,080,866 bytes, SHA256 100e6491548579e3a13aa60564bc760bca121113915842f73817d1b943482ce4, source identity 896317f1a0ed86cea58fe353a2cb2104b4aa757efff4b72147e4da8ba2b82f7c. It used 1 PCH, 4 TUs, 2 links and 1 package; manifest/payload/hash/license checks passed; no functional tests, game runs or CI. Local tag v0.5.0 exists, but no remote push, public Release or anonymous download verification has occurred; public latest remains v0.4.2. Source 0.4.22/0.4.23 packages remain historical. Cross-GPU feedback is not a v0.5.0 pre-release gate."
       },
       "source_refs": [
         "docs/ROADMAP.md",
@@ -2664,7 +2664,9 @@
         "docs/ROADMAP.zh-CN.md#下一主版本v050--pc-vulkan-与-direct3d-11",
         "docs/ROADMAP.md#phase-4-modernization",
         "docs/ROADMAP.zh-CN.md#阶段-4现代化",
-        "out/v0.5.0/release-finalization/commit-series/executed-commits.json"
+        "out/v0.5.0/release-finalization/commit-series/executed-commits.json",
+        "out/v0.5.0/release-finalization/DELIVERY.json",
+        "out/v0.5.0/release-finalization/REPORT.md"
       ],
       "source_lines": [
         {

@@ -10,7 +10,7 @@
 
 ## 当前进度与下一步 — 2026-09-08
 
-- **版本与交付：**`0.4.2` 后先前的 16 个功能提交包括原有源码 `0.4.3` 至 `0.4.15` 的 13 个批次，以及 0.4.16 安装器（`b094a1a`）、0.4.17 更新器（`9c2dc76`）和 0.4.18 Debug UI（`294df07`）。此后至 source 0.4.23 的五个功能提交已完成：DPI（`7a17c84`）、GC 记录（`51b0cf0`）、DLC filter（`4f40014`）、菜单资产（`c6af5aa`）和设置流程（`78730ff`），随后为交付文档（`62dc291`）。正式 v0.5.0 版本／tag／包正在准备，尚未 push、tag 或公开发布。发布基线仍为 [v0.4.2](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.4.2)。
+- **版本与交付：**`0.4.2` 后先前的 16 个功能提交包括原有源码 `0.4.3` 至 `0.4.15` 的 13 个批次，以及 0.4.16 安装器（`b094a1a`）、0.4.17 更新器（`9c2dc76`）和 0.4.18 Debug UI（`294df07`）。此后至 source 0.4.23 的五个功能提交已完成：DPI（`7a17c84`）、GC 记录（`51b0cf0`）、DLC filter（`4f40014`）、菜单资产（`c6af5aa`）和设置流程（`78730ff`），随后为交付文档（`62dc291`）。正式 source `0.5.0`、本地 annotated tag `v0.5.0` 与 clean ZIP 已在 `86ba2c1641bb9a8324e0b1710783bead0c39bf23` 完成；发布进行中，尚未 remote push 或公开发布。发布基线仍为 [v0.4.2](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.4.2)。
 - **v0.5.0 工作：**共跟踪 27 项：25 项 Done、1 项 In Progress、1 项 Todo、0 项 Awaiting validation。安装器、更新器、Debug Menu、游戏主窗口像素尺寸、Issue #12 的 GC／渲染修复、DLC 导入／运行时枚举及原版风格设置均已完成相称的实现验证。三个真实 DLC 包通过已修复的目录 filter 完成读取；奖励领取、地下城游玩、用户验收和发布状态另行保留。
 - **P1——已实现；等待报告者反馈：**[Issue #12](https://github.com/freefrank/LostOdysseyRecomp/issues/12) 已确定为 GC 与渲染对象生命周期竞争；源码修复已从 `claude-issue12` 本地合并到 `0.5.0`，提交 `9cefb0d`。生产验证使用冻结的 source-0.4.18 EXE，无 probe、overlay、人工延迟或 skip-stale，保留 `poll_wait` 与 `17e3ab7` GC 修复。原生 10 花存档独立载入；普通 A 在 serial 16 后从确认推进到树枝后续剧情及 Kaim 自由移动，均发生在持续 148 秒无崩溃、无长卡的观察窗内。seed 与 EXE 未变。本验证不测精确 GC 耗时，也不覆盖全游戏。GC 代码 `17e3ab7` 已在此前提交并备份；source 0.4.20 版本递增及验证记录已在 `51b0cf0` 提交。目标仍为 v0.5.0。Issue 保持 open，因为报告者尚未收到修复 binary 或确认。见[根因报告](notes/issue12-root-cause.md)和[交接文档](notes/issue12-handoff-2026-09-09.md)。
 - **下一步——开发：**Direct3D 11 可行性和后端保留为 v0.5.0 之外的未来工作，未指定下个版本或日期。用户已确认 CPU Vulkan 对照通过；此前停止的采集未保留配对指标，不补写新的 benchmark 数字。
@@ -57,7 +57,7 @@
 9. [x] 用户已于 2026-09-08 肉眼验收受限的原生存档 D3D12／Vulkan Map2／Map3／Map12 实景与对照边界。DX11 验证、跨 GPU 回归和全游戏覆盖仍开放；不表示支持 DX11。
 10. [x] 完成受限的 native D3D12／Vulkan lifecycle 验证：source `0.4.20` lifecycle 修复后，隐藏 640×360→800×450 window/swapchain cycle、同进程 re-init、failure cleanup、外部 SDL reference 保留、受控 restart 及 SDL_QUIT close 均通过。fixture 不运行 guest、draw、present、capture、save/profile/settings-file 或音频路径；此前用户场景验收只复用为未改渲染行为证据。DX11 runtime 及更广硬件／lifecycle 验证仍是独立 Todo。
 11. [ ] 在能获得的 AMD、NVIDIA 和 Intel 硬件上采集实际包的画面与稳定性证据，记录驱动、版本、场景和设置。未获得的硬件或场景标记待验，玩家验收与自动检查分开记录。
-12. [ ] **进行中：**至 source 0.4.23 的六个提交记录于 `out/v0.5.0/release-finalization/commit-series/executed-commits.json`；此前 0.4.22 包仍为历史证据。正式 v0.5.0 版本／tag／包正在准备，但尚未 push、tag 或公开 Release。source 0.4.23 development package 及其受限 runtime 证据仍是开发期历史证据，并非正式发布包。DX11 及广泛 AMD／Intel 覆盖是未来／用户反馈工作，发布兼容范围只以已建立证据为准。
+12. [ ] **进行中：**clean 本地 source `0.5.0`、annotated tag `v0.5.0` 与正式 ZIP 已在 `86ba2c1641bb9a8324e0b1710783bead0c39bf23` 完成。`LostOdysseyRecomp-windows-x64-v0.5.0.zip` 为 44,080,866 bytes，SHA256 为 `100e6491548579e3a13aa60564bc760bca121113915842f73817d1b943482ce4`，source identity 为 `896317f1a0ed86cea58fe353a2cb2104b4aa757efff4b72147e4da8ba2b82f7c`；完成 1 个 PCH、4 个 TU、2 次 link 和 1 个 package。manifest/payload/hash/license 检查通过；未运行功能测试、游戏或 CI。`DELIVERY.json` 与 `REPORT.md` 保留完整本地证据。尚无 remote push、公开 Release 或匿名下载核验；public latest 仍为 v0.4.2。source 0.4.22／0.4.23 包保留为历史证据。DX11 及广泛 AMD／Intel 覆盖是未来／用户反馈工作。
 
 ### v0.5.0 体验优化待办
 
