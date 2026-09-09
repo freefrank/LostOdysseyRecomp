@@ -1296,8 +1296,8 @@
       "fields": {
         "Kind": "Infrastructure",
         "Area": "Release engineering",
-        "Status": "Awaiting validation",
-        "Delivery": "Awaiting validation",
+        "Status": "In Progress",
+        "Delivery": "In progress",
         "Release": "v0.5.0",
         "Source key": "pc-backend-release-readiness",
         "Evidence": "Source 0.4.23 local normal package complete: 1 PCH + 7 TUs, 2 actual links and 1 package; no payload/test/CI. LostOdysseyRecomp-windows-x64-v0.4.23-df59dcab-dev.zip: 44,085,093 bytes, SHA256 3fb2420de40380b4c1ece778a0cc3f06e2b5155f8f64593f2f7dca1b6f241ae8; runtime SHA256 489649ceafd8005ef1e130633e0cfeef716d9581ba425cc342ad8b6b3a99667d; linked/packaging identity a30b49a836f1ae3d2b5d49d04461572e3f6023a0b11fbdb98b63b26b9c7154ef. The package build did not run payload/tests/CI; separately, one isolated actual 0.4.23 menu runtime passed. Original-font labels are implemented and validated; the user previously accepted the overall style, and no new feedback is a release gate. The dirty df59-based development package is not a clean release. Separately authorized v0.5.0 versioning, commit/tag, formal package, public download verification and publication remain pending; cross-GPU feedback is not a v0.5.0 pre-release gate."
@@ -2124,7 +2124,7 @@
         "Target date": "2026-09-08"
       },
       "title": "Recreate original game style in modern settings",
-      "body_sha256": "113333e65643d9fe5d9bf2598baff01c8c04f52e40a1c754670abb747929c65e"
+      "body_sha256": "7ef7327c36db4bbd8ec8ec8acccaf658ce1e3d7d97c34ffbfbd03837e3e1bc21"
     },
     "qol-restart-now-or-later": {
       "id": "PVTI_lAHOAAsUY84Biy1azg563-M",

@@ -2650,8 +2650,8 @@
       "fields": {
         "Kind": "Infrastructure",
         "Area": "Release engineering",
-        "Status": "Awaiting validation",
-        "Delivery": "Awaiting validation",
+        "Status": "In Progress",
+        "Delivery": "In progress",
         "Release": "v0.5.0",
         "Start date": null,
         "Target date": null,
@@ -2663,7 +2663,8 @@
         "docs/ROADMAP.md#next-major-milestone-v050--pc-vulkan-and-direct3d-11",
         "docs/ROADMAP.zh-CN.md#下一主版本v050--pc-vulkan-与-direct3d-11",
         "docs/ROADMAP.md#phase-4-modernization",
-        "docs/ROADMAP.zh-CN.md#阶段-4现代化"
+        "docs/ROADMAP.zh-CN.md#阶段-4现代化",
+        "out/v0.5.0/release-finalization/commit-series/executed-commits.json"
       ],
       "source_lines": [
         {

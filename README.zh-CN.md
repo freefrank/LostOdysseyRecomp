@@ -87,7 +87,7 @@ DLSS、FSR 和帧生成尚未实现；v0.4.0 已移除此前的禁用控件。HD
 
 **当前 v0.5.0 开发版 DLC：**打开 `InstallGame.exe`，选择 **Files** 或 **Folder**，导入器会自动识别游戏光盘和失落的奥德赛 STFS DLC。确认识别结果后即可统一导入。所有光盘共用导入内容。导入与运行时文件读取链路已通过合成测试，真实 DLC 奖励和区域仍待验证。见[安装说明](docs/INSTALLING.md#automatic-content-import)。
 
-**当前开发：** 本地源码为 0.4.23，交付目标为 v0.5.0。Settings 使用所选菜单素材，并采用“反走样”／“画面速率”简体中文标签、图形设置单击保存并应用、保存成功后的 Now/Later 重启选择，以及原 guest apply/close 返回路径。窄 fixture 与一次隐藏 Windowed D3D12 实际流程已通过：144 DPI 下保存 1600×900，Back 直接回到 System Settings 且设置字节保持一致。更广 GPU／DPI 覆盖、实际 guest 失败/重启分支和新一轮用户视觉验收另行记录。0.4.23 运行与包身份见 out/v0.5.0/settings-replacement-flow；公开发布仍待完成。已发布基线仍为 v0.4.2。
+**当前开发：** 本地源码准备为 0.5.0，正在准备未发布的 v0.5.0 Windows 交付。0.4.19–0.4.23 功能历史已在本地提交，现有 0.4.23 开发 ZIP 保持历史产物身份。Settings 使用所选菜单素材、统一简体中文标签、图形设置单击保存并应用、保存后的 Now/Later 重启选择，并可直接返回上一级菜单且不显示原版确认框。窄 fixture 与一次隐藏 Windowed D3D12 实际流程已通过；公开发布和正式 v0.5.0 包另行处理。
 
 v0.5.0 的交付范围为 Windows D3D12／Vulkan；DX11 属于未来工作，其他 GPU 覆盖等待用户反馈。0.4.xx 保持内部开发版本。用户已验收 CPU Vulkan 对照和 Issue #9；这不新增 benchmark 数据，也不代表原报告者确认。全游戏兼容性及两项已知 shader failure 仍待完成。
 
