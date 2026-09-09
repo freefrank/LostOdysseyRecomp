@@ -1,9 +1,11 @@
 #include "menu.h"
 #include "menu_render.h"
+#include "menu_assets.h"
 #include "config.h"
 #include "restart.h"
 #include "translations.h"
 #include <gpu/video.h>
+#include <kernel/io/file_system.h>
 #include <os/logger.h>
 #include <stdafx.h>
 extern "C" PPC_FUNC(__imp__sub_822F19B0);
@@ -657,6 +659,7 @@ bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint3
     static uint32_t cachedWidth = 0, cachedHeight = 0;
     if (revision == current.revision && cachedWidth == width && cachedHeight == height && !pixels.empty())
         return true;
+    current.assets = menu_assets::Cached(FileSystem::GetGameRoot(), current.language);
     if (!RasterizeMenu(current, width, height, pixels))
         return false;
     cachedWidth = width;

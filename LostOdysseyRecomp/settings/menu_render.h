@@ -1,9 +1,11 @@
 #pragma once
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 namespace settings
 {
+namespace menu_assets { struct Assets; }
 struct MenuRow
 {
     std::wstring name, value;
@@ -29,6 +31,7 @@ struct MenuSnapshot
     std::vector<std::wstring> dialogChoices;
     int dialogSelection = 0;
     uint64_t revision = 0;
+    std::shared_ptr<const menu_assets::Assets> assets;
 };
 // Render glyphs at output resolution, fitting the existing 1280x720 logical layout.
 bool RasterizeMenu(const MenuSnapshot &snapshot, uint32_t width, uint32_t height,

@@ -1,6 +1,9 @@
 project(LostOdysseyRecomp LANGUAGES CXX)
 
 set(LO_RUNTIME_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
+add_library(lo_menu_lzo STATIC EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/thirdparty/lzokay/lzokay.cpp)
+target_include_directories(lo_menu_lzo PUBLIC ${CMAKE_SOURCE_DIR}/thirdparty/lzokay)
+target_compile_features(lo_menu_lzo PRIVATE cxx_std_17)
 add_executable(LoPollWaitTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/poll_wait_test.cpp)
 target_include_directories(LoPollWaitTest PRIVATE ${LO_RUNTIME_ROOT})
 target_compile_features(LoPollWaitTest PRIVATE cxx_std_20)
@@ -60,6 +63,7 @@ target_compile_options(LostOdysseyRecomp PRIVATE -fno-strict-aliasing -Wno-switc
 target_compile_definitions(LostOdysseyRecomp PRIVATE NOMINMAX LO_SOURCE_VERSION="${LO_SOURCE_VERSION}")
 
 target_link_libraries(LostOdysseyRecomp PRIVATE
+    lo_menu_lzo
     LostOdysseyRecompLib
     XenonUtils
     fmt::fmt
@@ -424,12 +428,13 @@ target_compile_features(LoShaderPreparationQueueTest PRIVATE cxx_std_20)
 if(WIN32)
     add_executable(LoMenuRenderTest EXCLUDE_FROM_ALL
         ${CMAKE_SOURCE_DIR}/tools/tests/menu_render_test.cpp
+        ${LO_RUNTIME_ROOT}/settings/menu_assets.cpp
         ${LO_RUNTIME_ROOT}/settings/menu_render.cpp)
     target_include_directories(LoMenuRenderTest PRIVATE ${LO_RUNTIME_ROOT})
     target_compile_features(LoMenuRenderTest PRIVATE cxx_std_20)
     target_compile_options(LoMenuRenderTest PRIVATE /utf-8)
-    target_compile_definitions(LoMenuRenderTest PRIVATE NOMINMAX)
-    target_link_libraries(LoMenuRenderTest PRIVATE user32 gdi32)
+    target_compile_definitions(LoMenuRenderTest PRIVATE NOMINMAX LO_MENU_RENDER_TRACE)
+    target_link_libraries(LoMenuRenderTest PRIVATE user32 gdi32 lo_menu_lzo)
 endif()
 
 if(WIN32 AND LO_BUILD_GPU)

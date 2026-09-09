@@ -106,6 +106,7 @@ def main():
         shutil.copy2(ROOT / 'LICENSE', licenses / 'LostOdysseyRecomp.txt')
         shutil.copy2(ROOT / 'thirdparty/miniz-UNLICENSE.txt', licenses / 'miniz-UNLICENSE.txt')
         shutil.copy2(ROOT / 'thirdparty/nlohmann-json-LICENSE.txt', licenses / 'nlohmann-json-LICENSE.txt')
+        shutil.copy2(ROOT / 'thirdparty/lzokay/LICENSE', licenses / 'lzokay-LICENSE.txt')
         for dll in ('dxcompiler.dll', 'dxil.dll'):
             shutil.copy2(runtime.parent / dll, package / dll)
         shutil.copytree(DXC_LICENSES, licenses / 'DXC')

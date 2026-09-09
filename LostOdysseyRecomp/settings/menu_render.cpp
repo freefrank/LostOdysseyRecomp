@@ -1,8 +1,13 @@
 #include "menu_render.h"
+#include "menu_assets.h"
 #include "translations.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
+#ifdef LO_MENU_RENDER_TRACE
+// Only the direct raster fixture enables this observer; no runtime tracing.
+extern void LoMenuRenderTrace(const std::wstring &value, bool original);
+#endif
 #ifdef _WIN32
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -64,11 +69,77 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
         DeleteObject(pen);
     };
 
-    // Deterministic, irregular horizontal grain recreates the shared metal
-    // surface without shipping a capture or private game texture.
     auto *dib = static_cast<uint32_t *>(bits);
     std::fill_n(dib, size_t(width) * height, 0u);
+    auto sprite = [&](const menu_assets::Image &image, int sx, int sy, int sw, int sh,
+                      double x, double y, double w, double h, int brightness = 255,
+                      bool opaque = false, COLORREF face = CLR_INVALID, COLORREF edge = CLR_INVALID) {
+        if (sx < 0 || sy < 0 || sw <= 0 || sh <= 0 || sx + sw > int(image.width) || sy + sh > int(image.height) || w <= 0 || h <= 0)
+            return;
+        const double left = offsetX + x * scale, top = offsetY + y * scale;
+        const double dw = w * scale, dh = h * scale;
+        const int x0 = std::max(0, int(std::floor(left))), y0 = std::max(0, int(std::floor(top)));
+        const int x1 = std::min(int(width), int(std::ceil(left + dw))), y1 = std::min(int(height), int(std::ceil(top + dh)));
+        // Flush queued GDI operations before touching the shared DIB pixels.
+        GdiFlush();
+        for (int py = y0; py < y1; ++py)
+            for (int px = x0; px < x1; ++px)
+            {
+                const double u = std::clamp((px + .5 - left) * sw / dw - .5, 0.0, double(sw - 1));
+                const double v = std::clamp((py + .5 - top) * sh / dh - .5, 0.0, double(sh - 1));
+                const int ux = int(u), vy = int(v), ux1 = std::min(ux + 1, sw - 1), vy1 = std::min(vy + 1, sh - 1);
+                const double fx = u - ux, fy = v - vy;
+                const uint32_t samples[] = {image.pixels[size_t(sy + vy) * image.width + sx + ux],
+                    image.pixels[size_t(sy + vy) * image.width + sx + ux1],
+                    image.pixels[size_t(sy + vy1) * image.width + sx + ux],
+                    image.pixels[size_t(sy + vy1) * image.width + sx + ux1]};
+                const double weights[] = {(1-fx)*(1-fy), fx*(1-fy), (1-fx)*fy, fx*fy};
+                double alpha = 0, color[3]{};
+                for (int i = 0; i < 4; ++i)
+                {
+                    const double a = (opaque ? 255 : samples[i] >> 24) * weights[i]; alpha += a;
+                    for (int c = 0; c < 3; ++c)
+                    {
+                        double channel = (samples[i] >> (8*c)) & 255;
+                        if (face != CLR_INVALID && edge != CLR_INVALID)
+                        {
+                            // Font pages contain white faces and black outlines. Preserve
+                            // coverage while recoloring both for a light selected cell.
+                            const int shift = (2-c)*8;
+                            const double outlineChannel = (edge >> shift) & 255;
+                            channel = outlineChannel + (((face >> shift) & 255) - outlineChannel) * channel / 255;
+                        }
+                        color[c] += channel * a;
+                    }
+                }
+                auto &destination = dib[size_t(py) * width + px]; uint32_t result = 0;
+                for (int c = 0; c < 3; ++c)
+                {
+                    const auto previous = (destination >> (8*c)) & 255;
+                    const auto channel = uint32_t(std::clamp(std::lround(color[c] * brightness / (255.0*255.0) + previous * (1-alpha/255)), 0l, 255l));
+                    result |= channel << (8*c);
+                }
+                destination = result;
+            }
+    };
     auto metal = [&](int x, int y, int w, int h, COLORREF base, int grain) {
+        if (current.assets && !current.assets->menu.pixels.empty())
+        {
+            // Tile the interior at native 720p density; stretch only independent
+            // borders/corners, never the fine horizontal grain of the full panel.
+            for (int yy = 0; yy < h; )
+            {
+                const int v = (y + yy) % 135, th = std::min(h - yy, 135 - v);
+                for (int xx = 0; xx < w; )
+                {
+                    const int u = (x + xx) % 402, tw = std::min(w - xx, 402 - u);
+                    sprite(current.assets->menu, 3 + u, 62 + v, tw, th, x + xx, y + yy, tw, th);
+                    xx += tw;
+                }
+                yy += th;
+            }
+            return;
+        }
         RECT area = rect(x, y, w, h);
         area.left = std::clamp<LONG>(area.left, 0, LONG(width));
         area.right = std::clamp<LONG>(area.right, 0, LONG(width));
@@ -130,6 +201,42 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
     };
     auto text = [&](int x, int y, int w, int h, const std::wstring &value, int size, COLORREF color,
                     bool bold = false, UINT alignment = DT_LEFT, COLORREF edge = RGB(39, 40, 40), int minimum = 13) {
+        if (current.assets && !value.empty())
+        {
+            const auto covers = [&](const menu_assets::Font &font) {
+                return font.height && std::all_of(value.begin(), value.end(), [&](wchar_t c) { return font.glyphs.contains(uint32_t(c)); });
+            };
+            const auto *selectedFont = size >= 32 && !current.assets->title.glyphs.empty() ? &current.assets->title : &current.assets->body;
+            // Switch the whole string, retaining each original face's metrics.
+            // Never combine unrelated glyph baselines inside a resolution label.
+            if (!covers(*selectedFont) && covers(current.assets->fallback)) selectedFont = &current.assets->fallback;
+            if (covers(*selectedFont))
+            {
+                const auto &font = *selectedFont;
+#ifdef LO_MENU_RENDER_TRACE
+                LoMenuRenderTrace(value, true);
+#endif
+                double advance = 0;
+                for (const auto c : value) advance += int(font.glyphs.at(uint32_t(c)).width) + font.kerning;
+                const double desired = size >= 32 ? size * 1.25 : size * 1.30;
+                const double ratio = std::min({desired / font.height, double(h) / font.height, std::max(1.0, double(w - 8)) / std::max(1.0, advance)});
+                double left = x;
+                if (alignment & DT_CENTER) left += (w - advance * ratio) * .5;
+                else if (alignment & DT_RIGHT) left += w - advance * ratio;
+                const double top = y + (h - font.height * ratio) * .5;
+                for (const auto c : value)
+                {
+                    const auto &g = font.glyphs.at(uint32_t(c));
+                    sprite(font.pages[g.page], int(g.x), int(g.y), int(g.width), int(g.height),
+                           left, top, g.width * ratio, g.height * ratio, 255, false, color, edge);
+                    left += (int(g.width) + font.kerning) * ratio;
+                }
+                return;
+            }
+        }
+#ifdef LO_MENU_RENDER_TRACE
+        LoMenuRenderTrace(value, false);
+#endif
         RECT area = rect(x, y, w, h);
         HFONT font = nullptr;
         for (int candidate = size; candidate >= minimum; --candidate)
@@ -165,6 +272,16 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
         DeleteObject(font);
     };
     auto brushedCell = [&](int x, int y, int w, int h, COLORREF base) {
+        if (current.assets && !current.assets->menu.pixels.empty())
+        {
+            // This RGB panel is used by the original opaque material although
+            // its atlas alpha is zero. Other sprites retain their alpha coverage.
+            if (base == selectedSurface)
+                sprite(current.assets->menu, 98, 259, 96, 36, x, y, w, h, 255, true);
+            else
+                metal(x, y, w, h, base, 5);
+            return;
+        }
         fill(x, y, w, h, base);
         for (int yy = 2; yy < h; yy += 4)
             line(x + 1, y + yy, x + w - 1, y + yy, shade(base, (yy % 8) ? -3 : 3));
@@ -223,8 +340,14 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
     line(0, 97, 1280, 97, RGB(228, 229, 225), 2);
     line(0, 101, 1280, 101, RGB(30, 31, 31), 4);
     line(0, 105, 1280, 105, RGB(151, 153, 152));
-    line(365, 104, 365, 640, RGB(38, 39, 39), 2);
-    line(368, 104, 368, 640, RGB(151, 153, 152));
+    if (current.assets && !current.assets->menu.pixels.empty())
+    {
+        metal(0, 96, 365, 34, rail, 7);
+        line(0, 120, 280, 120, RGB(42, 43, 43), 2);
+        sprite(current.assets->menu, 410, 4, 89, 32, 277, 98, 89, 32);
+    }
+    line(365, 0, 365, 640, RGB(38, 39, 39), 2);
+    line(368, 0, 368, 640, RGB(151, 153, 152));
     line(1093, 104, 1093, 640, RGB(42, 43, 43), 2);
     line(1096, 104, 1096, 640, RGB(144, 146, 145));
     line(0, 639, 1280, 639, RGB(34, 35, 35), 4);
@@ -250,6 +373,10 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
         DeleteObject(brush);
         DeleteObject(pen);
     };
+    if (current.assets && !current.assets->menu.pixels.empty())
+        sprite(current.assets->menu, 373, 777, 41, 41, 82, 43, 42, 42);
+    else
+    {
     drawGear(2, RGB(43, 44, 44), RGB(43, 44, 44));
     drawGear(0, RGB(218, 219, 215), RGB(43, 44, 44));
     HBRUSH gearBrush = CreateSolidBrush(steelDark);
@@ -267,9 +394,10 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
     DeleteObject(holeBrush);
     DeleteObject(gearBrush);
     DeleteObject(gearPen);
-    text(130, 27, 440, 68, Translate(current.language, L"Settings", L"設定"), 38, ink, false);
+    }
+    text(130, 42, 234, 43, Translate(current.language, L"Settings", L"設定"), 31, ink, false);
 
-    text(70, 111, 260, 35, L"Menu", 20, ink, false);
+    text(70, 122, 260, 28, L"Menu", 18, ink, false);
     const wchar_t *enTabs[] = {L"Gameplay", L"Audio", L"Graphics", L"Language"};
     const wchar_t *zhTabs[] = {L"遊戲", L"聲音", L"圖像", L"語言"};
     for (int i = 0; i < 4; ++i)
@@ -305,7 +433,8 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
         line(labelLeft, y + rowHeight - 2, labelLeft + labelWidth, y + rowHeight - 2,
              focused ? RGB(56, 57, 57) : RGB(69, 71, 71));
         text(82, y, 274, rowHeight - 2, row.name, 24,
-             row.enabled ? ink : disabled, false, DT_LEFT, outline, 16);
+             !row.enabled ? disabled : focused ? selectedInk : ink, false, DT_LEFT,
+             focused ? RGB(222, 223, 219) : outline, 16);
 
         if (row.sliderPercent >= 0)
         {
@@ -357,8 +486,8 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
             text(choiceLeft, y, arrowWidth, rowHeight - 2, L"◀", 16,
                  row.enabled ? muted : disabled, false, DT_CENTER);
             text(choiceLeft + arrowWidth + 8, y, choiceWidth - arrowWidth * 2 - 16, rowHeight - 2,
-                 (*choices)[selected], 22, row.enabled ? ink : disabled,
-                 false, DT_CENTER, outline, 14);
+                 (*choices)[selected], 22, !row.enabled ? disabled : focused ? selectedInk : ink,
+                 false, DT_CENTER, focused ? RGB(222, 223, 219) : outline, 14);
             text(choiceLeft + choiceWidth - arrowWidth, y, arrowWidth, rowHeight - 2, L"▶", 16,
                  row.enabled ? muted : disabled, false, DT_CENTER);
             continue;
@@ -374,8 +503,8 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
             const bool currentChoice = option == selected;
             cell(left, y, right - left, rowHeight - 2, focused && currentChoice);
             text(left + 7, y, right - left - 14, rowHeight - 2, (*choices)[option], 22,
-                 !row.enabled ? disabled : currentChoice ? ink : muted,
-                 false, DT_CENTER, outline, 13);
+                 !row.enabled ? disabled : currentChoice ? (focused ? selectedInk : ink) : muted,
+                 false, DT_CENTER, focused && currentChoice ? RGB(222, 223, 219) : outline, 13);
         }
     }
 
@@ -401,7 +530,8 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
             cell(390, y, 500, 37, focused);
             if (focused) arrow(354, y + 8);
             text(405, y, 470, 37, current.dialogChoices[i], 20,
-                 ink, false, DT_CENTER, outline, 13);
+                 focused ? selectedInk : ink, false, DT_CENTER,
+                 focused ? RGB(222, 223, 219) : outline, 13);
         }
     }
 
