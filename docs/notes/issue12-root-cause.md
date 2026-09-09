@@ -2,7 +2,7 @@
 
 **Status (2026-09-09):** root cause established from two exception-time captures on the unmodified
 official v0.4.2 executable plus an instrumented diagnostic build; the merged host-side mitigation is
-validated below only in that diagnostic build (run-13 reproduces the race in an instrumented build, run-14 shows the mitigation closes it). Current-source production validation remains pending. This note supersedes the open questions in the
+validated below in the diagnostic build (run-13 reproduces the race in an instrumented build, run-14 shows the mitigation closes it) and in the bounded production hand-in path (run-15). Source 0.4.20 records this validation/version milestone; the GC implementation was already merged and backed up, while the version and validation records remain uncommitted; the frozen validation EXE retains source 0.4.18 identity (SHA prefix `7ccfdea7…`). This note supersedes the open questions in the
 [investigation log](issue12-funeral-crash.md) and the [earlier Claude handoff](issue12-claude-handoff.md).
 All guest addresses refer to the original XEX image (base `0x82000000`); host tooling lives in
 `tools/diagnostics/issue12/` (see [README](../../tools/diagnostics/issue12/README.md)).
@@ -77,7 +77,11 @@ the proxy is rebuilt; it only orders the purge after the in-flight frame. Opt ou
 
 Cost: the hook can add a rendering-thread drain at full-GC entry and another at the internal purge
 entry; incremental purge may drain on each pending tick. Run-14 measured a 0.77 s wait under the
-artificial delay. Normal current-source production cost remains unmeasured.
+artificial delay. Normal current-source production cost remains unmeasured; run-15 heartbeat spacing is not a frame-time or flush-duration benchmark.
+
+## Current production validation (run-15)
+
+The source repair was exercised with `17e3ab7` and current `poll_wait`, without probe, overlay, artificial delay or stale-skip controls. The frozen EXE retains source 0.4.18 identity (SHA prefix `7ccfdea7…`); it is evidence for the 0.4.20 source change, not a 0.4.20-labeled artifact. Native user08 independently read ten flowers into Map 109; ordinary A at 265.562 seconds / tick 7363 crossed the former crash point, then the Kaim branch dialogue completed and Kaim remained movable. The process stayed normal for about 148 seconds before the owner stopped it; seed and EXE were unchanged. The structured result records no crashes and the 75 later 2-second heartbeats are log spacing only, not frame-time percentiles or flush-duration measurements: `out/issue12-triage/production-validation/run15-result.json`. This is bounded production-path evidence, not natural-shutdown coverage or reporter/full-game acceptance.
 
 ## Validation
 
