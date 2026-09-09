@@ -3,14 +3,17 @@
 接手人请先读本文，再按需读 [根因报告](issue12-root-cause.md)（英文，含完整证据链）。
 本分支 `claude-issue12` 基于 `0.5.0` 的 `7919a9b`，只新增文件，不改动任何已有源码。
 
+**版本口径：** Issue #12 修复的交付目标仍为 **v0.5.0**；`0.4.xx` 是开发编号，每项 feature 实现完成并通过必要验证后，按集成时的当前 source 版本递增 `+0.0.1`。本文出现的 `0.5.1` 仅指历史冻结 host／诊断 artifact 编号，不是新的里程碑；本轮文档不要求 Release、tag、commit 或 push。
+
 ## 一句话现状
 
 交花后"跳 0"的原因是**原版引擎的线程竞争**：剧情 VM 换主角网格后，同一 tick 里请求了完整 GC；
 `UObject::CollectGarbage` 在 purge 之前不 flush 渲染线程，就把旧网格的 11 个
 `MaterialInstanceConstant` 同步释放；渲染线程此时还在画上一帧，旧 proxy 仍引用这些对象，
-`DrawDynamicElements` 通过已回收的池块读 vtable，跳到 0。主机上渲染线程够快所以不出事，
-重编译里渲染线程滞后（崩溃时 ring 里积压 64 KB 命令）所以 v0.4.2 必崩；0.5.x 只是时序碰巧
-错开，竞争仍在。宿主侧修复（GC 前先 flush 渲染线程）已在人为放大时序的诊断构建里验证有效。
+`DrawDynamicElements` 通过已回收的池块读 vtable，跳到 0。官方 v0.4.2 的这次交花路径已复现这次线程
+竞争（崩溃时 ring 里积压 64 KB 命令）；历史 `0.5.1` 宿主诊断构建在部分未加延迟的运行中只是该次
+样本碰巧错开时序，不能据此认为竞争已消除。宿主侧修复（GC 前先
+flush 渲染线程）已在人为放大时序的诊断构建里验证有效。
 
 ## 已确认的事实（均有捕获或反汇编证据）
 
@@ -21,7 +24,8 @@
 | 组件状态 | 崩溃时组件已 attached、无待处理重挂，网格已是 `pc_000a0_m`，Materials 是 22 个新 MIC；被画的 proxy 仍是旧网格 `pc_050a0_m` | run-10 `v4` |
 | 线程角色 | 崩溃线程 = UE3 渲染线程（`RenderingThreadMain 0x824856A0` → `FDrawSceneCommand::Execute`）；游戏线程停在 `CollectGarbage` purge 之后的 `FlushRenderingCommands` fence 等待 | run-09/10 全线程 guest 栈 |
 | GC 触发 | `UWorld::Tick`（`sub_82299818`）末尾的"延迟完整 GC 请求"：`sub_825B32E8(delay)` 置位 `0x83318748`，场景切换 `sub_8231EE68` 传 delay 0 → `CollectGarbage(RF_Native, TRUE)`；11 个调用点仅 60 s 周期清理传 FALSE | 静态分析（opus lens） |
-| 为何无保护 | `CollectGarbage`：前置回调→标记→逐对象 `BeginDestroy`→`IncrementalPurgeGarbage(FALSE)`→**之后**才 `sub_82485AF8` flush；MIC 的 `BeginDestroy` 只对非 NULL `Resources` 挂 fence | `sub_8249A568`、`sub_822FD0A8`、`sub_82702098`、`sub_827020F8` 反汇编 |
+| 为何无保护 | 原始 `CollectGarbage`：前置回调→标记→逐对象 `BeginDestroy`→`IncrementalPurgeGarbage(FALSE)`→**之后**才 `sub_82485AF8` flush；MIC 的 `BeginDestroy` 只对非 NULL `Resources` 挂 fence | `sub_8249A568`、`sub_822FD0A8`、`sub_82702098`、`sub_827020F8` 反汇编 |
+| 修复的同步成本 | 新 hook 在 full GC 入口 preflush，内部 purge 入口还可再次 preflush；增量 purge 在每个仍有 pending 的 tick 都可能 flush，不能简化为“每次 GC 严格一次” | `gc_render_flush.cpp` 及 code review |
 | 动态复现 | run-13：换网格后 79 ms GC，purge 释放后 **19.5 ms** 渲染线程绘制旧 proxy，13 条记录全部悬空 | `out/issue12-triage/runtime/run-13/probe.log` |
 | 修复验证 | run-14：同样延迟下，GC 前 flush 等待 0.77 s，旧 proxy 先被移除，0 悬空 0 崩溃 | `run-14/probe.log`、`run-14/runtime.log`（`gc render flush` 行） |
 
@@ -43,11 +47,11 @@
 
 ## 未完成事项（按优先级）
 
-1. **正式构建验证**：修复目前只和冻结的 0.5.1 宿主对象一起链接过（`bin-gcflush`，SHA `6d0b33d1…`）。需要用当前工作树正式构建（`tools/build_runtime.bat` 或现有 release 流程），再用官方时序（不加延迟）跑一次交花：`drive_probe_run.py --run run-NN --exe <正式 EXE> --sha <sha>`，`--step final-a` 后确认无 `[crash]`，并抽查运行日志里 `gc render flush` 只在真实 GC 时出现。
-2. **性能与回归**：每次 GC 多一次渲染线程排空（关卡加载、60 s 周期清理、场景切换）。建议在几个场景切换点（含战斗进出）观察帧时间与 `gc render flush` 频率；不需要额外测试的话至少跑一遍 `tools/tests` 现有套件。
-3. **版本与文档同步**：本分支未改 `CHANGELOG.md`、版本号、`docs/STATUS.md`、`docs/ROADMAP*.md`、`docs/project-management/`；主工作树上这些文件正有未提交改动，合并时按项目流程补齐（建议作为 v0.4.16 或 v0.5.0 的 fix 条目）。
-4. **Issue 回复**：GitHub Issue #12 仍 OPEN，尚未回复报告者；报告者提到的"火把位置错误"是另一现象，未调查。
-5. **同类隐患排查**（可选）：探针的材质校验 + 事件日志可复用到其他场景切换点（换装、战斗、地图切换）；打开 `LO_ISSUE12_RT_DELAY_ARMED_US` 放大时序即可暴露同类竞争。另一个没深究的问题：官方 v0.4.2 渲染线程在交花瞬间为何滞后 ≥100 ms（怀疑是新角色材质的 pipeline 首次创建），修复后已不影响正确性。
+1. **正式构建验证**：修复目前只和冻结的 0.5.1 宿主对象一起链接过（`bin-gcflush`，SHA `6d0b33d1…`）。需要用当前工作树正式构建（`tools/build_runtime.bat` 或现有 release 流程），再用官方时序（不加延迟）跑一次交花：`drive_probe_run.py --run run-NN --exe <正式 EXE> --sha <sha>`，`--step final-a` 后确认无 `[crash]`，并抽查运行日志里的 flush 只在相应真实 GC／增量 purge 条件下出现。run-14 仍是人工放大时序的诊断验证，不是最终用户验收。
+2. **性能与回归**：当前 production build、正常时序 hand-in 和性能覆盖仍待完成；额外渲染线程排空涉及关卡加载、60 s 周期清理和场景切换。复用既有验证，只有出现具体行为、编译选项／依赖变化或新的失败证据时，才补直接相关的最小检查。
+3. **版本与文档同步**：本分支未改 `CHANGELOG.md`、版本号、`docs/STATUS.md`、`docs/ROADMAP*.md`、`docs/project-management/`；主工作树上这些文件正有未提交改动，合并时按项目流程补齐。修复应纳入 v0.5.0 的未发布变更；集成完成且相称验证通过后，开发版本按届时的当前 `0.4.xx` 递增 `+0.0.1`，不预设或回用旧的开发版本号。
+4. **Issue 回复**：GitHub Issue #12 仍 OPEN，尚未向报告者交付本修复。报告者最新评论（2026-09-09T04:25:46Z，[Issue comment](https://github.com/freefrank/LostOdysseyRecomp/issues/12#issuecomment-5595769370)）称关闭 speedhack、可能不跳过 cutscene 可解决火把火焰现象，并已推进到 Disc 1 final dungeon；该 workaround 未独立验证，也不构成本 GC 修复的验收确认。
+5. **同类隐患排查**（可选）：探针的材质校验 + 事件日志可复用到其他场景切换点（换装、战斗、地图切换）；打开 `LO_ISSUE12_RT_DELAY_ARMED_US` 放大时序有助于调查同类竞争。另一个没深究的问题：官方 v0.4.2 渲染线程在交花瞬间为何滞后 ≥100 ms（怀疑是新角色材质的 pipeline 首次创建）；run-14 仅证明在该诊断条件下未再观察到旧 proxy 绘制悬空材质。
 6. `out/issue12-triage/` 里 run-05…14、`probe-build/`、`branch-delivery/`、`capture-run09/10` 都是本次证据，被 git 忽略；调查未结束前请保留。主工作树里有一份未跟踪的 `docs/notes/issue12-root-cause.md` 副本（与分支内容相同），可删。
 
 ## 复现 / 验证步骤
