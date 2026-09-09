@@ -6,9 +6,9 @@ One record of completed changes, with unpublished work separated from verified r
 
 ## v0.5.0 — Unreleased / 未发布
 
-Current source is **0.4.16**. Earlier feature commits through 0.4.15 are listed below; subsequent UI changes are recorded in the entries that follow. The delivery target remains **v0.5.0**, with no release of these internal versions.
+Current source is **0.4.17**. Earlier feature commits through 0.4.15 are listed below; subsequent UI changes are recorded in the entries that follow. The delivery target remains **v0.5.0**, with no release of these internal versions.
 
-当前源码为 **0.4.16**；下表保留截至 0.4.15 的功能提交，后续 UI 改动见下方条目。交付目标仍为 **v0.5.0**，内部版本不单独发布。
+当前源码为 **0.4.17**；下表保留截至 0.4.15 的功能提交，后续 UI 改动见下方条目。交付目标仍为 **v0.5.0**，内部版本不单独发布。
 
 | Source / 源码 | Commit / 提交 | Change / 改动 |
 | --- | --- | --- |
@@ -35,6 +35,12 @@ Completed behavior includes portable game discovery, the installer and desktop m
 Use a restrained navy/silver interface with a native borderless Windows frame, short action labels, a scrollable content review and full path details. Unknown totals show indeterminate progress; cancellation, retry and closing wait for the worker's safe completion. Unchanged polling values do not redraw the interface. Nine direct UI checks and two affected controller checks passed, with normal/minimum-size real renders reviewed on an inactive desktop. Import backends are unchanged. This is a local source change, not a published package.
 
 安装器采用克制的深蓝／银色界面与原生无边框窗口，精简操作文案，支持内容表格滚动和完整路径查看。未知总量显示不定进度；取消、重试与关闭等待后台操作安全完成，未变化的轮询数值不触发重绘。9 项直接 UI 检查及 2 项受影响的控制器检查通过，已审阅未激活桌面中实绘的正常／最小尺寸界面。导入后端保持不变；本项为本地源码改动，尚未发布。
+
+### 0.4.17 — Updater window and progress / 更新器窗口与进度
+
+The updater now uses a native lightweight borderless frame with short localized phase labels, byte and percentage reporting, indeterminate unknown totals and safe cancellation boundaries. Verification, package checking and ready states disable cancellation; unchanged values do not invalidate controls, and late progress cannot replace `Cancelling…`. The public progress API and transaction/network behavior are unchanged. Focused fixture checks passed, and normal, unknown-total and narrow Chinese renders were reviewed on an inactive desktop. Physical monitor moves and live user-desktop gestures were not tested. This is a local source change, not a published package.
+
+更新器采用原生轻量无边框窗口、精简本地化阶段文案、字节与百分比显示；未知总量使用不定进度，并在下载阶段保留安全取消边界。校验、检查和就绪状态禁用取消；未变化的数值不触发控件重绘，迟到的进度不会覆盖“正在取消…”。公开 progress API 及事务／网络行为保持不变。专项 fixture 检查通过，并已审阅未激活桌面中的正常、未知总量和窄中文实绘。未测试物理跨显示器移动和用户桌面实时手势；本项为本地源码改动，尚未发布。
 
 ### DLC import and automatic content recognition
 
