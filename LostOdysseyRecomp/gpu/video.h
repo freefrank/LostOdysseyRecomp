@@ -2,6 +2,8 @@
 
 #include <cstdint>
 #include "backend_selection.h"
+#include "display_change.h"
+namespace settings { struct Config; }
 
 namespace plume
 {
@@ -30,6 +32,10 @@ namespace gpu::video
     // Drains messages on non-Windows hosts; Windows pumps on its window thread.
     void PumpEvents();
     bool DisplayModeFailed();
+    // Called after saving Current(). Forces an actual retry even for the same
+    // mode. Completion includes the window operation and one presented frame.
+    uint64_t BeginDisplayChange(const settings::Config& config);
+    DisplayChangeResult QueryDisplayChange(uint64_t ticket);
     // Updates the title on the window owner thread. total=0 restores the title.
     enum class PreparationStage : uint32_t { Shaders, Pipelines, CacheValidation, IndexedExtraction, FallbackScan, CachedShaders };
     enum class PreparationUnit : uint32_t { Shaders, Pipelines, Files, MiB, Entries };

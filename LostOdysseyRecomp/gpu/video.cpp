@@ -103,6 +103,7 @@ namespace gpu::video
         std::atomic<int> g_displayMode{-1};
         std::atomic<uint64_t> g_displaySize{0};
         std::atomic<bool> g_displayFailed{false},g_reapplyWindow{false};
+        DisplayChangeTracker g_displayChanges;
         std::vector<uint32_t> g_menuPixels;
         uint64_t g_menuRevision=0;
 #ifdef _WIN32
@@ -278,6 +279,7 @@ namespace gpu::video
     // rendering has stopped. The window/event thread is deliberately retained
     // between candidates; device children are destroyed before their parents.
     static void ResetGpu() {
+        g_displayChanges.Reset();
         g_available = false;
         g_initializing = false;
         g_selectedBackend = -1;
@@ -473,6 +475,12 @@ namespace gpu::video
             std::min<uint64_t>(completed,kProgressMask) | (uint64_t(stage) << 56) | (uint64_t(unit) << 60));
     }
     bool DisplayModeFailed() { return g_displayFailed.load(); }
+    uint64_t BeginDisplayChange(const settings::Config& config) {
+        const auto ticket = g_displayChanges.Begin(config.width, config.height, uint32_t(config.windowMode));
+        g_reapplyWindow = true;
+        return ticket;
+    }
+    DisplayChangeResult QueryDisplayChange(uint64_t ticket) { return g_displayChanges.Query(ticket); }
 
     namespace {
     void PumpWindowEvents()
@@ -530,6 +538,7 @@ namespace gpu::video
         static bool displayInitialized=false;
         const auto config=settings::GetConfig();
         if(g_reapplyWindow.exchange(false) || !displayInitialized || config.width!=applied.width || config.height!=applied.height || config.windowMode!=applied.windowMode) {
+            const auto ticket = g_displayChanges.WindowTicket(config.width, config.height, uint32_t(config.windowMode));
             // SDL operations remain on the message-owning thread. Hidden tests
             // must never change the user's desktop display mode.
             const auto mode=getenv("LO_BACKGROUND")?settings::WindowMode::Windowed:config.windowMode;
@@ -539,6 +548,7 @@ namespace gpu::video
             g_displaySize.store(uint64_t(config.width)<<32|config.height);
             g_displayMode.store(int(mode));
             applied=config; displayInitialized=true;
+            g_displayChanges.WindowComplete(ticket, result == 0);
         }
         debug_menu::Update();
         SDL_Event event;
@@ -578,12 +588,19 @@ namespace gpu::video
             return;
 
 #ifdef LO_GPU_PLUME
+        const auto displayTicket = g_displayChanges.PresentationTicket();
+        static uint64_t resizedDisplayTicket = 0;
+        if (displayTicket && displayTicket != resizedDisplayTicket) {
+            g_forceSwapResize = true;
+            resizedDisplayTicket = displayTicket;
+        }
         if(g_swapChain) {
 #ifdef _WIN32
             static int appliedMode=-1;
             static uint64_t appliedSize=0;
+            static uint64_t appliedDisplayTicket=0;
             const int mode=g_displayMode.load(); const uint64_t size=g_displaySize.load();
-            if(!g_vulkan && mode>=0 && (mode!=appliedMode || size!=appliedSize)) {
+            if(!g_vulkan && mode>=0 && (mode!=appliedMode || size!=appliedSize || (displayTicket && displayTicket!=appliedDisplayTicket))) {
                 auto* swap=static_cast<plume::D3D12SwapChain*>(g_swapChain.get());
                 HRESULT result=swap->d3d->SetFullscreenState(FALSE,nullptr);
                 if(mode==int(settings::WindowMode::Exclusive)) {
@@ -593,19 +610,23 @@ namespace gpu::video
                     if(SUCCEEDED(result)) result=swap->d3d->SetFullscreenState(TRUE,nullptr);
                 }
                 BOOL exclusive=FALSE; swap->d3d->GetFullscreenState(&exclusive,nullptr);
-                if(FAILED(result) || (mode==int(settings::WindowMode::Exclusive) && !exclusive)) g_displayFailed=true;
+                if(FAILED(result) || (mode==int(settings::WindowMode::Exclusive) && !exclusive)) {
+                    g_displayFailed=true;
+                    g_displayChanges.Complete(displayTicket, false);
+                }
                 if(appliedMode==int(settings::WindowMode::Exclusive) && mode!=appliedMode) g_reapplyWindow=true;
                 LOG_INFO("display mode: requested={} exclusive={} result={:#x}",mode,bool(exclusive),uint32_t(result));
                 // Flip-model swap chains require ResizeBuffers after a
                 // fullscreen transition even when the dimensions are unchanged.
                 g_forceSwapResize=true;
                 appliedMode=mode; appliedSize=size;
+                appliedDisplayTicket=displayTicket;
             }
 #endif
         }
         // Resize before rasterizing host text so its glyphs match the actual output.
         if (g_available && (g_forceSwapResize || g_swapChain->needsResize())) {
-            if(!g_swapChain->resize()) { if(g_forceSwapResize) g_displayFailed=true; return; }
+            if(!g_swapChain->resize()) { if(g_forceSwapResize) g_displayFailed=true; g_displayChanges.Complete(displayTicket,false); return; }
             g_forceSwapResize=false; g_hasPresentedImage=false;
         }
         if (g_available && g_swapChain->isEmpty()) return;
@@ -635,14 +656,17 @@ namespace gpu::video
                 g_frontbufferPhysical = physicalAddress & 0x1FFFFFFF;
                 g_frameOnGpu = true;
                 if (g_forceSwapResize || g_swapChain->needsResize()) {
-                    if(!g_swapChain->resize()) { if(g_forceSwapResize) g_displayFailed=true; return; }
+                    if(!g_swapChain->resize()) { if(g_forceSwapResize) g_displayFailed=true; g_displayChanges.Complete(displayTicket,false); return; }
                     g_forceSwapResize=false; g_hasPresentedImage=false;
                 }
                 if (g_swapChain->isEmpty())
                     return;
                 uint32_t imageIndex = 0;
                 if (!g_swapChain->acquireTexture(g_acquireSemaphore.get(), &imageIndex))
+                {
+                    g_displayChanges.Complete(displayTicket, false);
                     return;
+                }
                 plume::RenderTexture* backBuffer = g_swapChain->getTexture(imageIndex);
                 const uint32_t copyWidth = std::min(sourceWidth, g_swapChain->getWidth());
                 const uint32_t copyHeight = std::min(sourceHeight, g_swapChain->getHeight());
@@ -669,9 +693,10 @@ namespace gpu::video
                 plume::RenderCommandSemaphore* waitSemaphore = g_acquireSemaphore.get();
                 plume::RenderCommandSemaphore* signalSemaphore = PresentSemaphore(imageIndex);
                 g_queue->executeCommandLists(lists, 1, &waitSemaphore, 1, &signalSemaphore, 1, g_fence.get());
-                g_swapChain->present(imageIndex, &signalSemaphore, 1);
+                const bool presented = g_swapChain->present(imageIndex, &signalSemaphore, 1);
                 g_queue->waitForCommandFence(g_fence.get());
                 g_lastPresentedImage=imageIndex; g_hasPresentedImage=true;
+                g_displayChanges.Complete(displayTicket, presented && !g_displayFailed.load());
                 return;
             }
         }
@@ -708,7 +733,7 @@ namespace gpu::video
             return;
 
         if (g_forceSwapResize || g_swapChain->needsResize()) {
-            if(!g_swapChain->resize()) { if(g_forceSwapResize) g_displayFailed=true; return; }
+            if(!g_swapChain->resize()) { if(g_forceSwapResize) g_displayFailed=true; g_displayChanges.Complete(displayTicket,false); return; }
             g_forceSwapResize=false; g_hasPresentedImage=false;
         }
         if (g_swapChain->isEmpty())
@@ -732,7 +757,10 @@ namespace gpu::video
 
         uint32_t imageIndex = 0;
         if (!g_swapChain->acquireTexture(g_acquireSemaphore.get(), &imageIndex))
+        {
+            g_displayChanges.Complete(displayTicket, false);
             return;
+        }
         plume::RenderTexture* backBuffer = g_swapChain->getTexture(imageIndex);
         const uint32_t copyWidth = std::min(width, g_swapChain->getWidth());
         const uint32_t copyHeight = std::min(height, g_swapChain->getHeight());
@@ -761,9 +789,10 @@ namespace gpu::video
         plume::RenderCommandSemaphore* waitSemaphore = g_acquireSemaphore.get();
         plume::RenderCommandSemaphore* signalSemaphore = PresentSemaphore(imageIndex);
         g_queue->executeCommandLists(lists, 1, &waitSemaphore, 1, &signalSemaphore, 1, g_fence.get());
-        g_swapChain->present(imageIndex, &signalSemaphore, 1);
+        const bool presented = g_swapChain->present(imageIndex, &signalSemaphore, 1);
         g_queue->waitForCommandFence(g_fence.get());
         g_lastPresentedImage=imageIndex; g_hasPresentedImage=true;
+        g_displayChanges.Complete(displayTicket, presented && !g_displayFailed.load());
 #endif
     }
 

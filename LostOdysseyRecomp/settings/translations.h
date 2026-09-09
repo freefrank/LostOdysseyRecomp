@@ -15,6 +15,12 @@ inline const wchar_t *Translate(uint32_t language, const wchar_t *en, const wcha
         const wchar_t *key, *japanese, *korean, *simplified;
     };
     static constexpr Entry entries[] = {
+        {L"Save graphics settings", L"画面設定を保存", L"그래픽 설정 저장", L"保存图形设置"},
+        {L"Settings saved. Restart now?", L"設定を保存しました。今すぐ再起動しますか？", L"설정이 저장되었습니다. 지금 다시 시작할까요?", L"设置已保存。现在重启？"},
+        {L"Applying display settings…", L"表示設定を適用中…", L"디스플레이 설정 적용 중…", L"正在应用显示设置……"},
+        {L"Restoring display settings…", L"表示設定を復元中…", L"디스플레이 설정 복원 중…", L"正在恢复显示设置……"},
+        {L"Could not restore the display mode.", L"表示モードを復元できませんでした。", L"디스플레이 모드를 복원하지 못했습니다.", L"无法恢复显示模式。"},
+        {L"Display restored; settings file could not be restored.", L"表示を復元しましたが、設定ファイルを復元できませんでした。", L"디스플레이는 복원했지만 설정 파일은 복원하지 못했습니다.", L"显示已恢复，但无法恢复设置文件。"},
         {L"Direct3D 11 (unsupported)", L"Direct3D 11（未対応）", L"Direct3D 11 (미지원)", L"Direct3D 11（尚未支持）"},
         {L" Running: ", L" 使用中：", L" 현재 사용: ", L" 当前使用："},
         {L"TAA (Experimental)", L"TAA（実験的）", L"TAA (실험적)", L"TAA（实验性）"},
@@ -65,7 +71,7 @@ inline const wchar_t *Translate(uint32_t language, const wchar_t *en, const wcha
          L"内部と出力の解像度が異なる場合のフィルターです。シーンの精細さは内部解像度で設定します。",
          L"내부 및 출력 크기가 다를 때 필터를 조정합니다. 장면 세부 묘사는 내부 해상도로 설정합니다.",
          L"控制内部与输出尺寸不同时的采样滤镜。场景细节由内部分辨率决定。"},
-        {L"Frame rate", L"フレームレート", L"프레임 속도", L"帧率"},
+        {L"Frame rate", L"フレームレート", L"프레임 속도", L"画面速率"},
         {L" (experimental)", L"（実験的）", L" (실험적)", L"（实验性）"},
         {L"60/120 FPS are experimental. Verify game speed, audio and battle timing.",
          L"60/120 FPS は実験的機能です。ゲーム速度・音声・戦闘のタイミングを確認してください。",
@@ -75,7 +81,7 @@ inline const wchar_t *Translate(uint32_t language, const wchar_t *en, const wcha
          L"120 FPS は実験的機能です。LO_EXPERIMENTAL_120 が必要です。未設定では 60 FPS になります。",
          L"120 FPS는 실험적이며 LO_EXPERIMENTAL_120이 필요합니다. 미설정 시 60 FPS로 실행됩니다.",
          L"120 FPS 为实验性功能，需启用 LO_EXPERIMENTAL_120，否则以 60 FPS 运行。"},
-        {L"Anti-aliasing", L"アンチエイリアス", L"안티앨리어싱", L"抗锯齿"},
+        {L"Anti-aliasing", L"アンチエイリアス", L"안티앨리어싱", L"反走样"},
         {L"DLSS", L"DLSS", L"DLSS", L"DLSS"},
         {L"Not implemented", L"未実装", L"미구현", L"尚未实现"},
         {L"Frame generation", L"フレーム生成", L"프레임 생성", L"帧生成"},

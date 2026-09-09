@@ -12,6 +12,7 @@ extern "C" PPC_FUNC(__imp__sub_822F19B0);
 extern "C" PPC_FUNC(__imp__sub_82481BE8);
 extern "C" PPC_FUNC(__imp__sub_82870E38);
 extern "C" PPC_FUNC(__imp__sub_828710A0);
+extern "C" PPC_FUNC(__imp__sub_82889E50);
 namespace settings
 {
 namespace
@@ -22,6 +23,7 @@ std::atomic<unsigned> cancelPolls{0};
 std::atomic<uint16_t> cancelButton{0x2000};
 std::atomic<bool> swapConfirm{false};
 std::atomic<bool> waitForRelease{true};
+std::atomic<bool> releaseToParent{false};
 std::atomic<int> mouseTab{-1}, mouseRow{-1};
 std::atomic<int> mouseDialog{-1};
 std::atomic<uint16_t> mouseAction{0};
@@ -31,13 +33,14 @@ using Snapshot = MenuSnapshot;
 Snapshot snapshot;
 Config edit;
 Config previousDisplay;
-bool displayPreview = false;
-bool restartPrompt = false, restartRollbackPreview = false, restartSaveFailed = false;
+uint64_t displayTicket = 0;
+bool displayRollback = false, rollbackSaveFailed = false;
+bool restartPrompt = false, savedRestartPrompt = false, restartSaveFailed = false;
 int restartChoice = 0;
-Config restartBefore, restartAfter;
-std::chrono::steady_clock::time_point previewDeadline{};
+Config restartAfter;
 int tab = 0, row = 0;
 bool bypass = false, sawModal = false;
+bool closing = false;
 uint32_t lastMenu = 0;
 std::wstring status;
 constexpr uint32_t resolutions[][2] = {{1280, 720}, {1600, 900}, {1920, 1080}, {2560, 1440}, {3840, 2160}};
@@ -158,8 +161,7 @@ void Publish(uint8_t *base, uint32_t config)
                     std::wstring(L"120 FPS") + Tr(L" (experimental)", L"（實驗性）")},
                    edit.frameRate == 120 ? 2 : edit.frameRate == 60 ? 1 : 0);
         addAction(L"Brightness calibration", L"亮度校準", Tr(L"Open", L"開啟"));
-        addAction(L"Apply display settings", L"套用顯示設定",
-                  displayPreview ? Tr(L"Keep changes", L"保留更改") : Tr(L"Apply", L"套用"));
+        addAction(L"Save graphics settings", L"儲存圖形設定", Tr(L"Save", L"儲存"));
     }
     else
     {
@@ -206,20 +208,17 @@ void Publish(uint8_t *base, uint32_t config)
                  L"120 FPS 為實驗性功能，需啟用 LO_EXPERIMENTAL_120，否則以 60 FPS 執行。")
             : Tr(L"60/120 FPS are experimental. Verify game speed, audio and battle timing.",
                  L"60/120 FPS 為實驗性功能，請確認遊戲速度、音訊與戰鬥時序。");
-    if (displayPreview)
-        next.help = Tr(L"Keep changes? A: keep, B: revert. Reverting automatically in 15 seconds.",
-                       L"保留顯示更改？A：保留，B：還原。15 秒後自動還原。");
-    if (displayPreview && (flags & 0x02000000))
-        next.help = Tr(L"Keep changes? B: keep, A: revert. Reverting automatically in 15 seconds.",
-                       L"保留顯示更改？B：保留，A：還原。15 秒後自動還原。");
+    if (!status.empty()) next.help = status;
     if (restartPrompt)
     {
         next.dialogTitle = Tr(L"Restart required", L"需要重新啟動");
         next.dialogMessage = restartSaveFailed
             ? Tr(L"Settings could not be saved. Check settings.ini permissions, then retry or cancel.",
                  L"無法儲存設定。請檢查 settings.ini 權限後重試或取消。")
+            : savedRestartPrompt ? Tr(L"Settings saved. Restart now?", L"設定已儲存。立即重新啟動嗎？")
             : Tr(L"Save these settings and restart now?", L"儲存這些設定並立即重新啟動嗎？");
         next.dialogChoices = {Tr(L"Restart now", L"立即重新啟動"), Tr(L"Later", L"稍後"), Tr(L"Cancel", L"取消")};
+        if (savedRestartPrompt) next.dialogChoices.resize(2);
         next.dialogSelection = restartChoice;
     }
     std::lock_guard lock(snapshotMutex);
@@ -234,6 +233,15 @@ void Publish(uint8_t *base, uint32_t config)
 } // namespace
 bool FilterInput(uint16_t &buttons, int16_t x, int16_t y)
 {
+    // A held Back must not become a fresh press in the parent menu. Consume
+    // the neutral poll as well so its edge detector sees the release first.
+    if (releaseToParent.load())
+    {
+        if (!buttons && std::abs(int(x)) <= 16000 && std::abs(int(y)) <= 16000)
+            releaseToParent = false;
+        buttons = 0;
+        return true;
+    }
     if (unsigned polls = cancelPolls.load(); polls && cancelPolls.compare_exchange_strong(polls, polls - 1))
     {
         buttons = cancelButton.load();
@@ -343,11 +351,23 @@ PPC_FUNC(sub_822F19B0)
         lastMenu = menu;
         bypass = false;
         sawModal = false;
+        closing = false;
         active = false;
+    }
+    if (closing)
+    {
+        // Keep the retail task alive through its own exit animation and
+        // completion notification. Never replace these with a state write.
+        __imp__sub_822F19B0(ctx, base);
+        if (PPC_LOAD_U32(menu + 4) <= 2)
+            closing = false;
+        return;
     }
     if (state != 4)
     {
-        if (bypass)
+        if (state <= 2)
+            bypass = sawModal = false;
+        else if (bypass)
             sawModal = true;
         active = false;
         __imp__sub_822F19B0(ctx, base);
@@ -381,6 +401,7 @@ PPC_FUNC(sub_822F19B0)
         pending = 0;
         waitForRelease = true;
         restartPrompt = false;
+        savedRestartPrompt = false;
         restartSaveFailed = false;
         status.clear();
         Publish(base, config);
@@ -410,20 +431,28 @@ PPC_FUNC(sub_822F19B0)
     }
     if (restartPrompt)
     {
+        const int choices = savedRestartPrompt ? 2 : 3;
         if (int selected = mouseDialog.exchange(-1); selected >= 0)
-            restartChoice = selected;
-        if (input & 1) restartChoice = (restartChoice + 2) % 3;
-        if (input & 2) restartChoice = (restartChoice + 1) % 3;
-        if (input & 0x2000) restartChoice = 2;
+            restartChoice = std::min(selected, choices - 1);
+        if (input & 1) restartChoice = (restartChoice + choices - 1) % choices;
+        if (input & 2) restartChoice = (restartChoice + 1) % choices;
+        if (input & 0x2000) restartChoice = choices - 1;
         if (input & 0x3000)
         {
-            if (restartChoice == 2)
+            if (savedRestartPrompt)
             {
-                if (restartRollbackPreview)
-                {
-                    PreviewConfig(restartBefore);
-                    edit = restartBefore;
-                }
+                // Graphics were already saved and applied. Back means Later;
+                // neither choice writes or reverts that completed transaction.
+                restartPrompt = false;
+                savedRestartPrompt = false;
+                restartSaveFailed = false;
+                status = restartChoice == 0
+                    ? Tr(L"Saved. Preparing a safe restart…", L"已儲存，正在準備安全重新啟動……")
+                    : Tr(L"Saved. Changes take effect after restarting.", L"已儲存，重新啟動後套用變更。");
+                if (restartChoice == 0) restart::Request();
+            }
+            else if (restartChoice == 2)
+            {
                 restartPrompt = false;
                 restartSaveFailed = false;
                 status = Tr(L"Changes requiring restart were cancelled.", L"已取消需要重新啟動的變更。");
@@ -444,40 +473,40 @@ PPC_FUNC(sub_822F19B0)
         if (input) Publish(base, config);
         return;
     }
-    if (displayPreview)
+    auto graphicsSaved = [&] {
+        status = Tr(L"Display settings saved.", L"顯示設定已儲存。");
+        if (restart::Required(previousDisplay, edit))
+        {
+            restartPrompt = savedRestartPrompt = true;
+            restartSaveFailed = false;
+            restartChoice = 0;
+        }
+    };
+    if (displayTicket)
     {
-        if (gpu::video::DisplayModeFailed() || (input & 0x2000) || std::chrono::steady_clock::now() >= previewDeadline)
+        const auto result = gpu::video::QueryDisplayChange(displayTicket);
+        if (result == gpu::video::DisplayChangeResult::Pending) return;
+        displayTicket = 0;
+        if (displayRollback)
         {
-            PreviewConfig(previousDisplay);
+            displayRollback = false;
+            status = result == gpu::video::DisplayChangeResult::Applied
+                ? rollbackSaveFailed
+                    ? Tr(L"Display restored; settings file could not be restored.", L"顯示已還原，但無法還原設定檔。")
+                    : Tr(L"Display mode unavailable; previous settings restored.", L"此顯示模式不可用，已還原之前的設定。")
+                : Tr(L"Could not restore the display mode.", L"無法還原顯示模式。");
+        }
+        else if (result == gpu::video::DisplayChangeResult::Failed)
+        {
+            rollbackSaveFailed = !SaveConfig(previousDisplay);
+            if (rollbackSaveFailed) PreviewConfig(previousDisplay);
             edit = previousDisplay;
-            displayPreview = false;
-            status = Tr(L"Display settings reverted.", L"顯示設定已還原。");
-            if (gpu::video::DisplayModeFailed())
-                status = Tr(L"Display mode unavailable; previous settings restored.",
-                            L"此顯示模式不可用，已還原之前的設定。");
+            displayRollback = true;
+            displayTicket = gpu::video::BeginDisplayChange(previousDisplay);
+            status = Tr(L"Restoring display settings…", L"正在還原顯示設定……");
         }
-        else if (input & 0x1000)
-        {
-            if (restart::Required(previousDisplay, edit))
-            {
-                displayPreview = false;
-                restartPrompt = true;
-                restartRollbackPreview = true;
-                restartSaveFailed = false;
-                restartChoice = 0;
-                restartBefore = previousDisplay;
-                restartAfter = edit;
-            }
-            else if (SaveConfig(edit))
-            {
-                displayPreview = false;
-                status = Tr(L"Display settings saved.", L"顯示設定已儲存。");
-            }
-            else
-                status = Tr(L"Could not save settings.", L"無法儲存設定。");
-        }
-        if (input || !displayPreview)
-            Publish(base, config);
+        else graphicsSaved();
+        Publish(base, config);
         return;
     }
     bool changed = false;
@@ -589,9 +618,22 @@ PPC_FUNC(sub_822F19B0)
     if ((input & 0x1000) && tab == 2 && row == 8)
     {
         previousDisplay = GetConfig();
-        PreviewConfig(edit);
-        displayPreview = true;
-        previewDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
+        if (!SaveConfig(edit))
+            status = Tr(L"Could not save settings.", L"無法儲存設定。");
+        else
+        {
+            edit = GetConfig();
+            if (edit.width != previousDisplay.width || edit.height != previousDisplay.height ||
+                edit.windowMode != previousDisplay.windowMode || gpu::video::DisplayModeFailed())
+            {
+                displayRollback = false;
+                displayTicket = gpu::video::BeginDisplayChange(edit);
+                status = Tr(L"Applying display settings…", L"正在套用顯示設定……");
+            }
+            else graphicsSaved();
+        }
+        Publish(base, config);
+        return;
     }
     if ((input & 0x1000) && tab == 3 && row == 3)
     {
@@ -603,10 +645,9 @@ PPC_FUNC(sub_822F19B0)
         if (restart::Required(before, languages))
         {
             restartPrompt = true;
-            restartRollbackPreview = false;
+            savedRestartPrompt = false;
             restartSaveFailed = false;
             restartChoice = 0;
-            restartBefore = before;
             restartAfter = languages;
         }
         else
@@ -632,16 +673,31 @@ PPC_FUNC(sub_822F19B0)
     }
     if (input & 0x2000)
     {
-        bypass = true;
+        // Retail 822F2904 applies the guest configuration before asking again.
+        // Its accepted confirmation at 822F2098 calls 82889E50, which refreshes
+        // language resources and starts state 3. Preserve those real operations
+        // and the parent's persistence/completion path without a second dialog.
+        closing = true;
+        bypass = false;
         sawModal = false;
+        releaseToParent = true;
         active = false;
-        cancelButton = swapConfirm.load() ? 0x1000 : 0x2000;
-        cancelPolls = 6;
+        cancelPolls = 0;
+        pending = 0;
+        PPCContext apply = ctx;
+        apply.r3.u64 = config;
+        __imp__sub_82870E38(apply, base);
+        PPCContext close = ctx;
+        close.r3.u64 = menu;
+        __imp__sub_82889E50(close, base);
+        LOG_INFO("settings: replacement closing menu={:08X} state={} (native completion)",
+                 menu, PPC_LOAD_U32(menu + 4));
+        return;
     }
     if (input)
         Publish(base, config);
-    // The host UI owns input while open; the original task resumes for save
-    // confirmation and calibration. Its parent continues ticking throughout.
+    // Only explicit brightness calibration delegates input to the retail UI.
+    // The parent task continues ticking throughout.
 #endif
 }
 
