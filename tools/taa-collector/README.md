@@ -1,6 +1,6 @@
 # Optional TAA collection
 
-Production endpoint: `https://lo.dotslash.pro/v1/taa`. Worker `lost-odyssey-taa-collector`; D1 `lost-odyssey-taa-collection`. No public database access or embedded client credential. See the bilingual [privacy statement](../../PRIVACY.md) · [隐私说明](../../PRIVACY.zh-CN.md).
+Production endpoint: `https://lo.dotslash.pro/v1/taa`. Worker `lost-odyssey-taa-collector`; D1 `lost-odyssey-taa-collection`. No public database access or embedded client credential. Runtime source and deployment checks found no committed or client-embedded credentials; server bindings remain platform-managed. See the bilingual [privacy statement](../../PRIVACY.md) · [隐私说明](../../PRIVACY.zh-CN.md).
 
 The historical position-evidence client build is `0.5.0-position-evidence-1`. It sends schema 2 on the same endpoint; schema 1 canonicalization and hashes remain unchanged, and the Worker accepts both formats without a D1 migration. Its earlier verified deployment was `b2c7cd15-dd98-4520-abc8-fa3e9e8b8ab0`; the current development Worker deployment is `58d3c837-6617-440e-ac80-e14467a92810`. Schema 2 adds nested conservative `position` evidence and independent temporal guards; it does not relax jitter classification or enable a mapping automatically.
 

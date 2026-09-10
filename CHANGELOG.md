@@ -4,17 +4,25 @@ One record of completed changes, with unpublished work separated from verified r
 
 本文统一记录已完成改动，并区分未发布内容与已确认发布版本；日期采用 UTC 发布日期。后续计划见[路线图](docs/ROADMAP.zh-CN.md)，不作为已发布功能记录。
 
-## v0.5.2 — Unreleased
+## v0.5.2 — Release preparation
 
 ### English
 
-- Extend the existing manually triggered F1 local package with program-produced original VS/PS microcode. With the existing automatic collection opt-in, upload pending programs every three minutes and trigger a background attempt for pending VS/PS and structured D1 data after capture. Store one record per content stage and SHA-256 identity, associate the GPU model, and retain records for 30 days after their last update. Automatic collection uses bounded preallocated state and skips busy/full samples without I/O or waits on the render path. Focused checks and background acceptance passed on the retained source-0.5.0 development binary; the 0.5.2 version-only update reuses that evidence. Product F1 export, Vulkan/AMD coverage and publication remain pending.
-- Add the bilingual [privacy statement](PRIVACY.md) and [Chinese privacy mirror](PRIVACY.zh-CN.md). This v0.5.2 development work remains unpublished.
+- Include original VS/PS microcode in manual F1 render captures to support shader diagnosis.
+- With the existing collection opt-in enabled, upload pending shader programs every three minutes and trigger an additional background attempt after F1 capture. Deduplicate content in D1 and associate GPU metadata; delete inactive records after 30 days.
+- Keep automatic collection and upload work bounded, with no file/network I/O or waiting on the game thread.
+- Add bilingual privacy documentation and simplify the README; move older release descriptions into the changelog and archive.
+
+Focused checks and background D3D12 collection validation are retained in [current status](docs/STATUS.md). Manual F1 end-to-end validation and Vulkan/AMD collection coverage remain pending.
 
 ### 简体中文
 
-- 在已有用户手动触发的 F1 本地包中附带程序产生的 VS/PS 原始微码。沿用现有自动收集同意开关，每三分钟增量上传待处理程序，并在捕获完成后触发一次后台 VS/PS 和结构化 D1 数据上传尝试。按内容阶段和 SHA-256 内容身份保存一份，关联 GPU 型号，记录在最后更新后保留 30 天。自动收集使用有界预分配状态，在渲染路径忙或满时跳过样本，不执行 I/O 或等待。保留的 source-0.5.0 开发二进制已通过定向检查和后台验收；0.5.2 仅更新版本号并复用该证据。产品 F1 导出、Vulkan/AMD 覆盖和发布仍待完成。
-- 增加[隐私说明](PRIVACY.zh-CN.md)及[英文主文档](PRIVACY.md)。本轮 v0.5.2 开发内容尚未发布。
+- 在手动 F1 渲染捕获中附带 VS/PS 原始微码，补充着色器诊断依据。
+- 沿用现有收集同意开关，每三分钟增量上传待处理着色器程序，并在 F1 捕获后额外触发一次后台上传尝试。D1 按内容去重并关联 GPU 元数据，30 天未更新后删除。
+- 限制自动采集和上传的工作量，游戏线程不执行文件或网络 I/O，也不等待上传。
+- 新增双语隐私说明并精简 README，将旧版描述移至 CHANGELOG 和归档。
+
+已有定向检查及 D3D12 后台采集验证见[当前状态](docs/STATUS.md)。F1 菜单完整流程、Vulkan/AMD 采集仍待实机验收。
 
 ## v0.5.1 — 2026-09-10
 

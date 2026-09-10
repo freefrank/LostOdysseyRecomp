@@ -1,16 +1,14 @@
 # Installing Lost Odyssey Recomp
 
-This guide covers Windows builds through v0.5.1. The published v0.4.2 package remains the historical D3D12 baseline; current Windows builds add the Vulkan path, updater flow, automatic game/DLC recognition and the Settings UX described below.
+This guide describes the Windows v0.5.2 package, with Direct3D 12 and Vulkan graphics backends.
 
 1. Extract the entire package to a writable folder, outside Program Files. Keep the executable, importer, updater helper, validated DXC v1.8.2407 DLL pair and license files together.
 2. Run **LostOdysseyRecomp.exe** directly. If game files are missing, the importer opens; select your source and review its recognition result before importing.
 3. On first launch, choose interface/game language and graphics settings. The game continues after setup and the separate shader preparation stages.
 
-Historical **v0.1** packages open setup before import and accept only the Asian set; USA/Europe support below is not included in v0.1.
-
 You can also run **InstallGame.exe** separately to import additional discs or DLC. Disc 1 is required to start.
 
-The current branch package includes the game executable, importer, updater helper, validated DXC v1.8.2407 DLL pair, dependency licenses and a SHA256 manifest. Python and Visual Studio are not required. Windows x64 and an AVX-capable CPU are required. D3D12 is the default graphics path; the development Vulkan path requires a compatible Windows driver and uses the driver-provided Vulkan loader rather than a bundled SDK.
+The package includes the game executable, importer, updater helper, validated DXC v1.8.2407 DLL pair, dependency licenses and a SHA256 manifest. Python and Visual Studio are not required. Windows x64 and an AVX-capable CPU are required. D3D12 is the default graphics path; the development Vulkan path requires a compatible Windows driver and uses the driver-provided Vulkan loader rather than a bundled SDK.
 Game files are supplied by the user and are not included in the download.
 
 <a id="automatic-content-import"></a>
@@ -35,7 +33,7 @@ The importer accepts these audited sets, both with Title ID `4D5307FA`:
 | Edition | Version | Media IDs, discs 1–4 |
 |---|---|---|
 | Asian multilingual | 4 | `39F7D748`, `0EF8CEA8`, `309E3386`, `7B21A91D` |
-| USA/Europe (not in v0.1) | 3 | `368DE6DD`, `1888BE4E`, `6DD59D08`, `0C0E80B5` |
+| USA/Europe | 3 | `368DE6DD`, `1888BE4E`, `6DD59D08`, `0C0E80B5` |
 
 Each XEX SHA256 must match one of the audited supported builds. Discs from different editions cannot be mixed,
 either in a single import or when adding to an existing installation. Other builds, title updates
@@ -102,7 +100,3 @@ published installation without retaining those folders.
 
 See [BUILDING.md](https://github.com/freefrank/LostOdysseyRecomp/blob/main/docs/BUILDING.md)
 and [release packaging](https://github.com/freefrank/LostOdysseyRecomp/blob/main/docs/notes/release-packaging.md).
-
-## Standalone update checks
-
-Close the game, then double-click `LostOdysseyUpdater.exe` beside `LostOdysseyRecomp.exe` and `manifest.json`. The updater identifies the installed release and checks GitHub Latest without starting the game first. Manual checks work when automatic checks are disabled in Settings; the `LO_NO_UPDATE` environment switch still disables them. A successful update starts the game. Keep your save, profile and settings files when replacing the program.

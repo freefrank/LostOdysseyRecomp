@@ -1,6 +1,6 @@
 # Debug menu 需求
 
-> 2026-09-05同步：基础判胜及传送/POI扩展已推送；遇敌恢复仍在本地工作区。完整状态见[总表](STATUS.md)。下面的“已实现”不自动意味着已进入远端版本。
+> 历史需求与实现边界记录。当前工作项与验收进展见 [Maintainer Project](https://github.com/users/freefrank/projects/3)，专项证据见下方 notes 链接；旧状态账本已归档至 [STATUS 快照](archive/STATUS-2026-09-10.md)。
 
 ## 地图信息与待实现需求
 
