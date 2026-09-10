@@ -1992,14 +1992,14 @@
         "Area": "Installation",
         "Status": "Done",
         "Delivery": "Validated",
-        "Release": "v0.5.0",
+        "Release": "v0.5.3",
         "Source key": "qol-installer-input-layout",
         "Start date": "2026-09-08",
         "Target date": "2026-09-08",
-        "Evidence": "Installer modernization refinement implemented and validated in bounded offscreen UI scope: nine direct UI checks and two affected controller checks passed. The final reduced-copy normal/narrow renders were inspected. No manual foreground GUI acceptance, installer EXE build, package, commit, or release is claimed."
+        "Evidence": "User reported v0.5.3 installer drag stutter/exit on 2026-09-10. Four ucrtbase 0xc0000409 events and dump 41648 trace synchronous SendMessageW from Tk binding into Python WNDPROC/Tk re-entry and PyEval_RestoreThread fatal GIL state. Local unpublished PostMessageW screen-coordinate repair passed the new message-only HWND DragDispatch case (1/1). The same legacy UI fixture failed twice in setup on an unchanged foreground assertion before changed behavior. Installer-only EXE built locally: 11,888,743 bytes, SHA-256 707CD7D2E9F4AB3BF33363E172FAAD5CFCFA6B1A53161FEE0E7F53735B7C7FA7; read-only PYZ inspection confirms PostMessageW and required modules. User accepted the repair as resolved on 2026-09-10, covering the reported drag path. The repair remains unpublished."
       },
       "title": "Expand installer recognition for supported game inputs",
-      "body_sha256": "d4a94b25547fca47b7fad343475484952b0748533df0218a244ad1e6954234e0"
+      "body_sha256": "42dd11e1a69aea54e92b70663b7cda94a884434c554ec7f09a9d0256733393f0"
     },
     "qol-empty-game-path-default": {
       "id": "PVTI_lAHOAAsUY84Biy1azg5630U",

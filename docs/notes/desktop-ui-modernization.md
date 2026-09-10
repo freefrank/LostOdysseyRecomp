@@ -22,6 +22,14 @@ The native Debug Menu fixture passed pagination callbacks, child-focus F1/Escape
 
 The game main window sizing request is tracked separately as QOL13: its client/presentation size should follow the selected physical pixel resolution without extra 100/125/150/200% desktop-DPI enlargement. Config, Installer, Updater and Debug Menu remain DPI-adaptive; this requirement does not alter the completed Debug Menu fix.
 
+## Installer drag-dispatch re-entrancy checkpoint — 2026-09-10
+
+The v0.5.3 release installer was reported to stall and crash during dragging; four local ucrtbase `0xc0000409` reports were consistent with the captured nested Tk/Win32 path. LLVM lldb analysis of dump 41648 ended at `PyEval_RestoreThread` with the GIL released and the current Python thread state `NULL`: a Tk binding synchronously entered `ctypes` `SendMessageW`, the Python window procedure called `CallWindowProcW`, and nested Tk processing reached the abort path.
+
+The local fix in `tools/installer/window_chrome.py` posts `WM_NCLBUTTONDOWN` with the real signed screen coordinates, allowing the Tk binding to return before native message handling continues. `python -B tools/tests/test_installer_ui.py DragDispatch` passed 1/1 using a message-only HWND, without showing a window; it verifies native queue dispatch and negative coordinates. The earlier InstallerUI fixture setup failed its foreground-HWND assertion twice before drag behavior ran and is no longer used for this checkpoint.
+
+The reporter confirmed the real installer drag fix. An installer-only local package is available at `out/installer-drag-fix/dist/InstallGame.exe` (11,888,743 bytes; SHA256 `707CD7D2E9F4AB3BF33363E172FAAD5CFCFA6B1A53161FEE0E7F53735B7C7FA7`), built with Python 3.12.10 and PyInstaller 6.22.2. Read-only inspection confirmed the embedded `WindowChrome.drag` uses `PostMessageW`, not `SendMessageW`, and the PYZ includes all four required modules. The agent did not launch the packaged executable; runtime acceptance comes from the reporter. This remains a local unpublished installer fix; no installer import regression, game test or publication is established.
+
 ## Real DLC validation checkpoint
 
 Three original Lost Odyssey LIVE/STFS packages passed unified Folder import and explicit Files duplicate import. The second pass imported zero packages and recognized three unchanged packages; exported bytes/hashes/modification times, source packages and the isolated game-path marker stayed unchanged. The result covers the Dungeon Pack, Double Bonus Pack and Triple Bonus Pack. Evidence: `out/v0.5.0/dlc-validation/real-import.json`.

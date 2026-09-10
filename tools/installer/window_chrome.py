@@ -94,10 +94,15 @@ class WindowChrome:
         except tk.TclError:
             pass
 
-    def drag(self, _event):
+    def drag(self, event):
         if self.native:
             self.user32.ReleaseCapture()
-            self.user32.SendMessageW(self.hwnd, 0xA1, 2, 0)  # HTCAPTION
+            # Let the Tk binding finish before Windows enters its modal move
+            # loop. Synchronous dispatch re-enters Tcl while this binding is
+            # still active. WM_NCLBUTTONDOWN also requires screen coordinates.
+            position = ((event.x_root & 0xFFFF) |
+                        ((event.y_root & 0xFFFF) << 16))
+            self.user32.PostMessageW(self.hwnd, 0xA1, 2, position)  # HTCAPTION
         return 'break'
 
     def system_menu(self, event=None):

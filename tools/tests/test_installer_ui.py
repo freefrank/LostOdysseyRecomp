@@ -4,12 +4,13 @@ from ctypes import wintypes
 from pathlib import Path
 import sys
 import tkinter as tk
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'installer'))
 import installer
-from window_chrome import resize_hit
+from window_chrome import WindowChrome, resize_hit
 
 
 class ResizeTargets(unittest.TestCase):
@@ -148,6 +149,36 @@ class InstallerUI(unittest.TestCase):
         self.app.chrome.minimize()
         self.root.update()
         self.assertTrue(self.user32.IsIconic(self.app.chrome.hwnd))
+
+
+@unittest.skipUnless(sys.platform == 'win32', 'Windows message queue')
+class DragDispatch(unittest.TestCase):
+    def test_drag_is_queued_with_signed_screen_position(self):
+        # A message-only HWND cannot activate or display a desktop window.
+        u = ctypes.WinDLL('user32', use_last_error=True)
+        u.CreateWindowExW.argtypes = [wintypes.DWORD, wintypes.LPCWSTR, wintypes.LPCWSTR,
+                                     wintypes.DWORD, ctypes.c_int, ctypes.c_int,
+                                     ctypes.c_int, ctypes.c_int, wintypes.HWND,
+                                     wintypes.HMENU, wintypes.HINSTANCE, ctypes.c_void_p]
+        u.CreateWindowExW.restype = wintypes.HWND
+        u.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+        u.PeekMessageW.argtypes = [ctypes.POINTER(wintypes.MSG), wintypes.HWND,
+                                  wintypes.UINT, wintypes.UINT, wintypes.UINT]
+        u.DestroyWindow.argtypes = [wintypes.HWND]
+        hwnd = u.CreateWindowExW(0, 'STATIC', '', 0, 0, 0, 0, 0, -3, None, None, None)
+        self.assertTrue(hwnd)
+        chrome = WindowChrome.__new__(WindowChrome)
+        chrome.native, chrome.hwnd, chrome.user32 = True, hwnd, u
+        try:
+            self.assertEqual(chrome.drag(SimpleNamespace(x_root=-1234, y_root=456)), 'break')
+            message = wintypes.MSG()
+            self.assertTrue(u.PeekMessageW(ctypes.byref(message), hwnd, 0xA1, 0xA1, 1),
+                            'Move must remain queued until the Tk binding returns')
+            self.assertEqual(message.wParam, 2)
+            self.assertEqual(ctypes.c_short(message.lParam & 0xFFFF).value, -1234)
+            self.assertEqual(ctypes.c_short((message.lParam >> 16) & 0xFFFF).value, 456)
+        finally:
+            u.DestroyWindow(hwnd)
 
 
 if __name__ == '__main__':

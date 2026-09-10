@@ -14,6 +14,16 @@ tools\test.bat shaders pipeline
 
 `python -B tools/tests/test_installer_ui.py` selects the new Windows/Tk window checks only. The recorded nine passing cases cover resize hit targets, narrow layout/scrolling, long paths, cancel/retry/close, native frame styles, unchanged polling, DPI metrics and non-activating minimize. Two affected existing controller checks also passed; no importer backend suite was repeated. Subsequent copy reduction used real normal/minimum-size renders, without repeating these checks. Evidence and limitations: [desktop UI validation](../../docs/notes/desktop-ui-modernization.md), with the local report in `out/v0.5.0/ui-modernization/installer/REPORT.md`. These checks do not launch the game or establish physical multi-monitor interaction.
 
+For the installer drag-dispatch re-entrancy regression, run the focused case directly:
+
+```powershell
+python -B tools/tests/test_installer_ui.py DragDispatch
+```
+
+The recorded result is 1/1. It uses a message-only HWND and no displayed window, and checks queued `WM_NCLBUTTONDOWN` dispatch with signed negative screen coordinates. The reporter separately confirmed the real installer drag fix. This check does not measure stall or performance behavior, launch the installer import flow, or launch the game. The broader `InstallerUI` fixture setup previously failed its foreground-HWND assertion before reaching drag behavior and is not evidence for this regression.
+
+The installer-only local package is `out/installer-drag-fix/dist/InstallGame.exe` (11,888,743 bytes; SHA256 `707CD7D2E9F4AB3BF33363E172FAAD5CFCFA6B1A53161FEE0E7F53735B7C7FA7`). It was built with Python 3.12.10 and PyInstaller 6.22.2. Read-only embedded-PYZ inspection of `WindowChrome.drag` found `PostMessageW`, no `SendMessageW`, and the four required modules; do not infer installer import-flow or game validation from that inspection.
+
 ## Updater window checks
 
 The focused updater fixture is recorded in `out/v0.5.0/ui-modernization/updater/fixture.log` and `manifest.json`. It passed native window/control creation, native styles, known and unknown progress, unchanged-value redraw caching, verification cancellation boundaries, ready-state controls, minimize, teardown, Chinese narrow layout, download close cancellation and late-progress handling. Final normal, unknown-total and narrow Chinese renders were refreshed separately and reviewed; those captures do not repeat the functional fixture. No game, network download, package transaction or updater helper was run, and physical monitor moves and live user-desktop gestures remain untested.
