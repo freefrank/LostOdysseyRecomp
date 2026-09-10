@@ -20,6 +20,14 @@ The focused updater fixture is recorded in `out/v0.5.0/ui-modernization/updater/
 
 The separate `LoUpdaterTest --version-policy` run from `out/build/windows-clang/LostOdysseyRecomp/LoUpdaterTest.exe` passed 14/14 cases. It covers numeric ordering, differing or identical suffixes, `v` prefixes and ignored build metadata. It is a focused policy check only; no network request, download, package transaction, helper, game launch or publication check was performed. Existing clients require a build containing the updated updater code.
 
+The archive staging check uses the same `shutil.make_archive` ZIP writer as the release packager. After building `LoUpdaterTest`, run:
+
+```powershell
+python -B tools/tests/updater_archive_test.py out/build/windows-clang/LostOdysseyRecomp/LoUpdaterTest.exe
+```
+
+The recorded run passed 12/12 cases in `out/updater-fix/archive-test.log`. It verifies release-style staging with an explicit root directory entry, implicit-root and root-last ordering, and rejection of multiple roots, top-level files, absolute or parent roots, traversal, duplicate and unlisted payloads, SHA256 mismatch and a missing root manifest. This is archive staging coverage; it does not establish a network update, package transaction or live native dialog.
+
 `LoUpdaterStandaloneTest` passed 43 checks in the local Release /MT host build. It covers installed-manifest/EXE validation, no-argument and malformed-argument routing, injected check results, Unicode/unrelated cwd, exact-path fake game processes, and the real helper replacing synthetic files and launching a WIN32 probe after the standalone parent exits. No real game or public download is involved. Evidence: `out/standalone-host/REPORT.md` and `fixture.log`.
 
 `python -B tools/tests/package_suffix_version_test.py` passed 7 focused cases covering full suffix identity, invalid suffixes, exact tag/source/commit matching and retained clean-checkout/build guards. Earlier updater fixtures were reused.

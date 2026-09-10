@@ -23,18 +23,10 @@ struct ProgressWindow::Impl
     HWND window{}, title{}, status{}, amount{}, percentage{}, cancel{};
     HFONT font{}, titleFont{};
     ui::State chrome;
-    uint32_t language = 0;
     double fraction = 0.0;
     bool cancelled = false, cancellable = true, indeterminate = true;
     bool animating = false, animationsEnabled = true;
     std::wstring statusText, amountText, percentText;
-
-    const wchar_t *Pick(const wchar_t *en, const wchar_t *tw, const wchar_t *jp,
-                        const wchar_t *kr, const wchar_t *sc) const
-    {
-        const wchar_t *values[] = {en, tw, jp, kr, sc};
-        return values[std::min(language, 4u)];
-    }
 
     void Pump()
     {
@@ -95,8 +87,7 @@ struct ProgressWindow::Impl
         if (!cancellable || cancelled) return;
         cancelled = true;
         SetCancellable(false);
-        Text(status, statusText, Pick(L"Cancelling…", L"正在取消…", L"キャンセル中…",
-                                     L"취소 중…", L"正在取消…"));
+        Text(status, statusText, L"Cancelling…");
         Text(amount, amountText, L"");
         Text(percentage, percentText, L"");
         UpdateAnimation();
@@ -265,14 +256,14 @@ struct ProgressWindow::Impl
                                    0, 0, 0, 0, window, reinterpret_cast<HMENU>(intptr_t(id)),
                                    GetModuleHandleW(nullptr), nullptr);
         };
-        title = control(L"STATIC", Pick(L"Update", L"更新", L"アップデート", L"업데이트", L"更新"),
+        title = control(L"STATIC", L"Update",
                         SS_LEFT | SS_NOPREFIX, 101);
         status = control(L"STATIC", L"", SS_LEFT | SS_NOPREFIX | SS_ENDELLIPSIS, 102);
         amount = control(L"STATIC", L"", SS_LEFT | SS_NOPREFIX, 103);
         percentage = control(L"STATIC", L"", SS_RIGHT | SS_NOPREFIX, 104);
-        cancel = control(L"BUTTON", Pick(L"Cancel", L"取消", L"キャンセル", L"취소", L"取消"),
+        cancel = control(L"BUTTON", L"Cancel",
                          WS_TABSTOP | BS_OWNERDRAW, IDCANCEL);
-        Text(status, statusText, Pick(L"Preparing…", L"準備中…", L"準備中…", L"준비 중…", L"准备中…"));
+        Text(status, statusText, L"Preparing…");
         SetWindowPos(window, nullptr, 0, 0, ui::Px(window, 560), ui::Px(window, 310),
                      SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
         Layout(true);
@@ -283,9 +274,9 @@ struct ProgressWindow::Impl
     }
 };
 
-ProgressWindow::ProgressWindow(uint32_t language) : impl_(std::make_unique<Impl>())
+ProgressWindow::ProgressWindow(uint32_t) : impl_(std::make_unique<Impl>())
 {
-    impl_->language = language;
+    // Updater text stays English regardless of the game's selected language.
     impl_->Create();
 }
 
@@ -330,8 +321,7 @@ void ProgressWindow::SetDownloadProgress(uint64_t completed, uint64_t total)
         Impl::Text(impl_->amount, impl_->amountText, amount);
         impl_->SetCancellable(true);
     }
-    SetProgress(completed, total, impl_->Pick(L"Downloading…", L"下載中…", L"ダウンロード中…",
-                                            L"다운로드 중…", L"下载中…"));
+    SetProgress(completed, total, L"Downloading…");
 }
 
 void ProgressWindow::SetPhase(ProgressPhase phase)
@@ -340,13 +330,12 @@ void ProgressWindow::SetPhase(ProgressPhase phase)
     {
         impl_->SetCancellable(false);
         Impl::Text(impl_->amount, impl_->amountText, L"");
-        SetProgress(1, 1, impl_->Pick(L"Ready to restart", L"可以重新啟動", L"再起動の準備完了",
-                                     L"다시 시작할 준비 완료", L"可以重启"));
+        SetProgress(1, 1, L"Ready to restart");
     }
     else if (phase == ProgressPhase::Verifying)
-        SetPhase(impl_->Pick(L"Verifying…", L"驗證中…", L"検証中…", L"확인 중…", L"验证中…"));
+        SetPhase(L"Verifying…");
     else
-        SetPhase(impl_->Pick(L"Checking package…", L"檢查套件中…", L"パッケージ確認中…", L"패키지 확인 중…", L"检查程序包…"));
+        SetPhase(L"Checking package…");
 }
 
 void ProgressWindow::SetPhase(std::wstring_view detail)

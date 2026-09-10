@@ -91,13 +91,17 @@ bool StageArchive(const std::filesystem::path &archivePath, const std::filesyste
         while (name.ends_with('/')) name.pop_back();
         if (name.empty()) continue;
         const auto slash = name.find('/');
-        if (slash == std::string::npos || name.starts_with('/') || name.find(':') != std::string::npos)
+        const bool directory = mz_zip_reader_is_file_a_directory(&archive, index);
+        if ((!directory && slash == std::string::npos) || name.starts_with('/') || name.find(':') != std::string::npos)
         {
             error = "ZIP must contain one package root directory";
             return false;
         }
         if (root.empty()) root = name.substr(0, slash);
+        if (root == "." || root == "..") { error = "ZIP contains an unsafe package root"; return false; }
         if (name.substr(0, slash) != root) { error = "ZIP contains multiple package roots"; return false; }
+        // shutil.make_archive (used by release packaging) emits the root itself.
+        if (directory && slash == std::string::npos) continue;
         const auto relative = name.substr(slash + 1);
         if (relative.empty() || mz_zip_reader_is_file_a_directory(&archive, index)) continue;
         const auto relativePath = PathFromUtf8(relative);

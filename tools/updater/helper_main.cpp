@@ -57,7 +57,8 @@ int Fail(const std::wstring &message)
 {
     wchar_t silent[2]{};
     if (!GetEnvironmentVariableW(L"LO_UPDATER_SILENT", silent, DWORD(std::size(silent))))
-        MessageBoxW(nullptr, message.c_str(), L"Lost Odyssey update", MB_OK | MB_ICONERROR);
+        MessageBoxExW(nullptr, message.c_str(), L"Lost Odyssey update", MB_OK | MB_ICONERROR,
+                      MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US));
     return 1;
 }
 } // namespace

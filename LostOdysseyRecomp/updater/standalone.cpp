@@ -10,17 +10,12 @@ namespace updater
 {
 namespace
 {
-bool Chinese()
-{
-    return PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_CHINESE;
-}
-
-int Notify(const wchar_t *english, const wchar_t *chinese, bool failed, std::string_view detail = {})
+int Notify(const wchar_t *english, bool failed, std::string_view detail = {})
 {
     wchar_t silent[2]{};
     if (!GetEnvironmentVariableW(L"LO_UPDATER_SILENT", silent, DWORD(std::size(silent))))
     {
-        std::wstring message = Chinese() ? chinese : english;
+        std::wstring message = english;
         if (!detail.empty())
         {
             const int size = MultiByteToWideChar(CP_UTF8, 0, detail.data(), int(detail.size()), nullptr, 0);
@@ -28,8 +23,9 @@ int Notify(const wchar_t *english, const wchar_t *chinese, bool failed, std::str
             MultiByteToWideChar(CP_UTF8, 0, detail.data(), int(detail.size()), wide.data(), size);
             message += L"\n\n" + wide;
         }
-        MessageBoxW(nullptr, message.c_str(), L"Lost Odyssey Updater",
-                    MB_OK | (failed ? MB_ICONERROR : MB_ICONINFORMATION));
+        MessageBoxExW(nullptr, message.c_str(), L"Lost Odyssey Updater",
+                      MB_OK | (failed ? MB_ICONERROR : MB_ICONINFORMATION),
+                      MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US));
     }
     return failed ? 1 : 0;
 }
@@ -84,7 +80,7 @@ bool ConfigureStandalone(const std::filesystem::path &helper, StartupOptions &op
     // A direct user request is independent of the saved automatic-check opt-out.
     // PrepareAtStartup still respects the explicit LO_NO_UPDATE environment switch.
     options.automaticUpdates = true;
-    options.uiLanguage = Chinese() ? 4 : 0;
+    options.uiLanguage = 0;
     return true;
 }
 
@@ -132,34 +128,33 @@ int RunStandalone(const std::filesystem::path &helper, PrepareUpdate prepare)
     StartupOptions options;
     std::string error;
     if (!ConfigureStandalone(helper, options, error))
-        return Notify(L"The installed release could not be identified.", L"无法识别已安装的发布版本。", true, error);
+        return Notify(L"The installed release could not be identified.", true, error);
     if (!StandaloneGameClosed(options.executable, error))
-        return Notify(L"Close the game and try again.", L"请先关闭游戏，再运行更新器。", true, error);
+        return Notify(L"Close the game and try again.", true, error);
     const auto result = prepare(options);
     if (result.status == StartupStatus::Ready && result.update)
     {
         if (!StandaloneGameClosed(options.executable, error))
-            return Notify(L"Close the game and try again.", L"请先关闭游戏，再运行更新器。", true, error);
+            return Notify(L"Close the game and try again.", true, error);
         // The helper preserves its caller's cwd. Standalone launches must use the
         // installation directory even when Explorer/a shortcut supplied another cwd.
         std::error_code ec;
         std::filesystem::current_path(options.installRoot, ec);
         if (ec || !settings::restart::LaunchWaitingProcess(result.update->runnerPath.wstring(),
                                                           ApplyHelperArguments(result.update->planPath)))
-            return Notify(L"Could not start the update installer.", L"无法启动更新安装程序。", true);
+            return Notify(L"Could not start the update installer.", true);
         return 0; // Release this EXE before the existing helper replaces it.
     }
     switch (result.status)
     {
     case StartupStatus::UpToDate:
-        return Notify(L"This installation is already up to date.", L"当前安装已是最新版本。", false, result.detail);
+        return Notify(L"This installation is already up to date.", false, result.detail);
     case StartupStatus::Cancelled:
         return 0;
     case StartupStatus::Disabled:
-        return Notify(L"Update checks are disabled by LO_NO_UPDATE.", L"LO_NO_UPDATE 已禁用更新检查。", false);
+        return Notify(L"Update checks are disabled by LO_NO_UPDATE.", false);
     default:
-        return Notify(L"The update check could not complete. Please try again later.",
-                      L"更新检查未能完成，请稍后重试。", true, result.detail);
+        return Notify(L"The update check could not complete. Please try again later.", true, result.detail);
     }
 }
 } // namespace updater

@@ -159,7 +159,7 @@ void Exercise(const std::filesystem::path &output)
         HWND window = FindWindowW(L"LostOdysseyUpdateProgress", nullptr);
         SetWindowPos(window, nullptr, 100, 100, Px(window, 440), Px(window, 280), SWP_NOZORDER | SWP_NOACTIVATE);
         progress.SetPhase(updater::ProgressPhase::CheckingPackage);
-        Check(Text(GetDlgItem(window, 102)) == L"检查程序包…", "localized package phase");
+        Check(Text(GetDlgItem(window, 102)) == L"Checking package…", "English package phase regardless of game language");
         Bounds(window);
         Capture(window, output / "updater-narrow-zh.bmp");
     }
@@ -180,19 +180,26 @@ void Render(const std::filesystem::path &output, bool narrowOnly)
     constexpr uint64_t MiB = 1024 * 1024;
     if (!narrowOnly)
     {
-        updater::ProgressWindow progress(0);
+        updater::ProgressWindow progress(7);
         HWND window = FindWindowW(L"LostOdysseyUpdateProgress", nullptr);
+        Check(Text(GetDlgItem(window, 101)) == L"Update", "English title with non-English language value");
+        Check(Text(GetDlgItem(window, IDCANCEL)) == L"Cancel", "English Cancel button");
+        Check(Text(GetDlgItem(window, 102)) == L"Preparing…", "English preparation text");
+        Check(SendMessageW(GetDlgItem(window, 101), WM_GETFONT, 0, 0) != 0, "title font assigned");
+        Check(SendMessageW(GetDlgItem(window, IDCANCEL), WM_GETFONT, 0, 0) != 0, "button font assigned");
         progress.SetDownloadProgress(8 * MiB, 0);
+        Check(Text(GetDlgItem(window, 102)) == L"Downloading…", "English download text");
         Capture(window, output / "updater-unknown.bmp");
         progress.SetDownloadProgress(8 * MiB, 32 * MiB);
         Capture(window, output / "updater-download.bmp");
     }
     {
-        updater::ProgressWindow progress(4);
+        updater::ProgressWindow progress(7);
         HWND window = FindWindowW(L"LostOdysseyUpdateProgress", nullptr);
         SetWindowPos(window, nullptr, 100, 100, settings::window_chrome::Px(window, 440),
                      settings::window_chrome::Px(window, 280), SWP_NOZORDER | SWP_NOACTIVATE);
         progress.SetPhase(updater::ProgressPhase::CheckingPackage);
+        Check(Text(GetDlgItem(window, 102)) == L"Checking package…", "English narrow package text");
         Capture(window, output / "updater-narrow-zh.bmp");
     }
 }

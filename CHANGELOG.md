@@ -4,6 +4,16 @@ One record of completed changes, with unpublished work separated from verified r
 
 本文统一记录已完成改动，并区分未发布内容与已确认发布版本；日期采用 UTC 发布日期。后续计划见[路线图](docs/ROADMAP.zh-CN.md)，不作为已发布功能记录。
 
+## Unreleased updater fix / 未发布的更新器修复
+
+### English
+
+- Fix staging of ZIP archives created by Python `shutil.make_archive` when the explicit package-root directory entry has a trailing slash, while retaining the one-root safety checks. Keep the standalone updater UI and error dialogs in English, with native buttons requested through the `en-US` locale. This is local and unpublished; the 12 focused archive cases and render-only English UI checks passed.
+
+### 简体中文
+
+- 修复 Python `shutil.make_archive` 生成的 ZIP 在显式包根目录条目带末尾斜杠时无法暂存的问题，同时保留单根目录安全检查。独立更新器界面和错误对话框统一使用英文，并通过 `en-US` locale 请求原生按钮。本修复仅在本地完成且尚未发布；12 项 archive 定向检查及仅渲染英文 UI 检查通过。
+
 ## v0.5.2 — 2026-09-10
 
 ### English

@@ -153,6 +153,19 @@ int ParentMode(const fs::path &helper, const fs::path &plan)
 
 int wmain(int argc, wchar_t **argv)
 {
+    if (argc == 5 && std::wstring_view(argv[1]) == L"--stage-archive")
+    {
+        updater::StagedUpdate staged;
+        std::string error;
+        const auto version = fs::path(argv[4]).string();
+        if (!updater::StageArchive(argv[2], argv[3], version, staged, error))
+        {
+            std::cerr << error << '\n';
+            return 1;
+        }
+        std::cout << "Staged " << staged.files.size() << " verified payload files\n";
+        return 0;
+    }
     if (argc == 2 && std::wstring_view(argv[1]) == L"--version-policy")
     {
         struct Case { const char *current; const char *latest; bool update; };

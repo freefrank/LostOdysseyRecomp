@@ -4558,12 +4558,12 @@
       "fields": {
         "Kind": "Feature",
         "Area": "Updates and packaging",
-        "Status": "Done",
-        "Delivery": "Released",
-        "Release": "v0.5.1",
+        "Status": "Awaiting validation",
+        "Delivery": "Validated",
+        "Release": "v0.5.2",
         "Start date": null,
         "Target date": "2026-09-08",
-        "Evidence": "Published Latest v0.5.1 at 2026-09-10T05:31:57Z from tag 7ec5c7b6dec5c1f6ba29f7652e812bca93e72652; CI 34440279121 passed. ZIP SHA256 eb78828c00a9ae1329195f619c0a400721bc8b635e80c4a57b3a15912af359c5; standalone updater SHA256 19d2cd64d78545f5687139c87eff314f8ff0e9f20be8d5911baf9644ae261e11. 50 payload hashes, source/version and anonymous ZIP/updater downloads verified. Reused standalone 43/0, policy 14/0 and packaging 7/0 checks; no new game/runtime tests or player acceptance. v0.5.1-updaterfix Release was deleted; its tag remains history."
+        "Evidence": "v0.5.2 local repair complete; user acceptance pending. stage.cpp accepts package_release.py's explicit root entry while retaining single-root checks. build_target.bat LoUpdaterTest succeeded and updater_archive_test.py passed 12/12, covering real archive layouts, byte-checked extraction and malformed/safety rejection. Render-only inactive-desktop UI checks confirm English-only language=7 strings, fitting controls and unchanged foreground; no functional checks. MessageBoxExW selects en-US, but no dialog was opened. No game, network update, full transaction, user acceptance or publication. Evidence: out/updater-fix/REPORT.md; out/updater-fix/ui/render-manifest.json; exe SHA256 eb445972f42e9374383f3eca6579462bbf363ce24cc20da067cb6987dbeb5cd7."
       },
       "source_refs": [
         "docs/notes/v0.5.0-qol-requirements.md",
