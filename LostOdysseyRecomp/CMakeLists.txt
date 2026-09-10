@@ -91,13 +91,16 @@ if(WIN32)
         ${LO_RUNTIME_ROOT}/updater/apply.cpp)
     add_executable(LostOdysseyUpdater WIN32
         ${CMAKE_SOURCE_DIR}/tools/updater/helper_main.cpp
+        ${LO_RUNTIME_ROOT}/updater/standalone.cpp
+        ${LO_RUNTIME_ROOT}/updater/windows_http.cpp
+        ${LO_RUNTIME_ROOT}/updater/progress.cpp
         ${CMAKE_SOURCE_DIR}/assets/lost-odyssey-recomp.rc
         ${LO_UPDATER_TRANSACTION_SOURCES})
     target_include_directories(LostOdysseyUpdater PRIVATE ${LO_RUNTIME_ROOT} ${CMAKE_SOURCE_DIR}/assets)
     target_compile_features(LostOdysseyUpdater PRIVATE cxx_std_20)
     target_compile_definitions(LostOdysseyUpdater PRIVATE NOMINMAX)
     target_compile_definitions(LostOdysseyUpdater PRIVATE LO_SOURCE_VERSION="${LO_SOURCE_VERSION}")
-    target_link_libraries(LostOdysseyUpdater PRIVATE bcrypt user32 shell32)
+    target_link_libraries(LostOdysseyUpdater PRIVATE bcrypt winhttp user32 gdi32 shell32)
     # Both targets use this directory's runtime output path. Packaging takes
     # the helper beside the game, and a runtime build must produce both.
     add_dependencies(LostOdysseyRecomp LostOdysseyUpdater)
@@ -139,6 +142,18 @@ if(WIN32)
     target_compile_features(LoUpdaterProgressTest PRIVATE cxx_std_20)
     target_compile_definitions(LoUpdaterProgressTest PRIVATE NOMINMAX)
     target_link_libraries(LoUpdaterProgressTest PRIVATE user32 gdi32)
+
+    add_executable(LoUpdaterStandaloneTest EXCLUDE_FROM_ALL
+        ${CMAKE_SOURCE_DIR}/tools/tests/updater_standalone_test.cpp
+        ${LO_UPDATER_TRANSACTION_SOURCES}
+        ${LO_RUNTIME_ROOT}/updater/standalone.cpp
+        ${LO_RUNTIME_ROOT}/updater/windows_http.cpp
+        ${LO_RUNTIME_ROOT}/updater/progress.cpp)
+    target_include_directories(LoUpdaterStandaloneTest PRIVATE ${LO_RUNTIME_ROOT})
+    target_compile_features(LoUpdaterStandaloneTest PRIVATE cxx_std_20)
+    target_compile_definitions(LoUpdaterStandaloneTest PRIVATE NOMINMAX)
+    target_link_libraries(LoUpdaterStandaloneTest PRIVATE bcrypt winhttp user32 gdi32 shell32)
+    add_dependencies(LoUpdaterStandaloneTest LostOdysseyUpdater LoUpdaterProbe)
 
     add_executable(LoUpdaterHelperContextTest EXCLUDE_FROM_ALL
         ${CMAKE_SOURCE_DIR}/tools/tests/updater_helper_context_test.cpp

@@ -2151,13 +2151,14 @@
         "Area": "Updates and packaging",
         "Status": "Done",
         "Delivery": "Validated",
-        "Release": "v0.5.0",
+        "Release": "v0.5.1",
         "Source key": "qol-github-binary-updater",
         "Target date": "2026-09-08",
-        "Evidence": "Updater UI refinement is implemented and validated in local source 0.4.17. The dedicated native fixture passed progress, cancellation boundaries, idle redraw caching, window controls and cleanup. Actual normal, unknown-total and narrow Chinese windows were reviewed on an inactive desktop without changing foreground focus. Public API and update transactions are unchanged; no live download, transaction, physical monitor or player acceptance is claimed. Evidence: out/v0.5.0/ui-modernization/updater/REPORT.md."
+        "Evidence": "Standalone source 0.5.1 implemented locally; Release /MT host fixture 43 checks/0 failures, including synthetic real-helper replacement/probe launch. No real game/public download. Standalone change uncommitted/unpushed/unreleased; suffix policy remains on main bf549d3. Evidence: out/standalone-host/REPORT.md.",
+        "Start date": null
       },
       "title": "Add safe GitHub binary update checks",
-      "body_sha256": "197e0c71f28d8c8c027d192e471e966232f2f58318c8eaff16b9196448a60ad8"
+      "body_sha256": "e1a8c27701c5c592800b0c8966fb2d49b3263f8e5b1c78d2b56eb569caa36814"
     },
     "steady-state-cpu-hotspot-profile": {
       "id": "PVTI_lAHOAAsUY84Biy1azg5_iS4",

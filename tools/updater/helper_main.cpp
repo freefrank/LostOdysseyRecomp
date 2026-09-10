@@ -1,4 +1,5 @@
 #include "updater/update.h"
+#include "updater/standalone.h"
 
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -65,6 +66,11 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 {
     int count = 0;
     auto arguments = CommandLineToArgvW(GetCommandLineW(), &count);
+    if (arguments && count == 1)
+    {
+        LocalFree(arguments);
+        return updater::RunStandalone(updater::CurrentExecutablePath());
+    }
     std::filesystem::path planPath;
     DWORD parentId = 0;
     std::wstring readyEvent;

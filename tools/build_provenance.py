@@ -114,14 +114,23 @@ def validate_staged_binaries(binaries, stamps):
         if sha(binary) != stamp['binary_sha256']:
             raise ValueError(f'Binary changed during packaging: {Path(binary).name}')
 
+VERSION_SUFFIX = r'(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?'
+
+def normalize_release_version(version):
+    match = re.fullmatch(r'v([0-9]+\.[0-9]+(?:\.[0-9]+)?)(' + VERSION_SUFFIX + r')', version)
+    if not match:
+        raise ValueError('Version must have the form v0.1 or v0.1.0, optionally with a suffix such as -updaterfix.')
+    components = [int(x) for x in match[1].split('.')]
+    components += [0] * (3 - len(components))
+    return '.'.join(map(str, components)) + match[2]
+
+def valid_source_version(version):
+    return re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+' + VERSION_SUFFIX, version) is not None
+
 def validate_formal(root, version, linked_version, state, stamps):
     if not version:
         return ''
-    if not re.fullmatch(r'v[0-9]+\.[0-9]+(?:\.[0-9]+)?', version):
-        raise ValueError('Version must have the form v0.1 or v0.1.0.')
-    components = [int(x) for x in version[1:].split('.')]
-    components += [0] * (3 - len(components))
-    normalized = '.'.join(map(str, components))
+    normalized = normalize_release_version(version)
     if normalized != linked_version:
         raise ValueError('Requested release version differs from linked source version.')
     if state['dirty'] or any(s['source']['dirty'] for s in stamps):

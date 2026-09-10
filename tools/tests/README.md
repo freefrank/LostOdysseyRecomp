@@ -20,6 +20,10 @@ The focused updater fixture is recorded in `out/v0.5.0/ui-modernization/updater/
 
 The separate `LoUpdaterTest --version-policy` run from `out/build/windows-clang/LostOdysseyRecomp/LoUpdaterTest.exe` passed 14/14 cases. It covers numeric ordering, differing or identical suffixes, `v` prefixes and ignored build metadata. It is a focused policy check only; no network request, download, package transaction, helper, game launch or publication check was performed. Existing clients require a build containing the updated updater code.
 
+`LoUpdaterStandaloneTest` passed 43 checks in the local Release /MT host build. It covers installed-manifest/EXE validation, no-argument and malformed-argument routing, injected check results, Unicode/unrelated cwd, exact-path fake game processes, and the real helper replacing synthetic files and launching a WIN32 probe after the standalone parent exits. No real game or public download is involved. Evidence: `out/standalone-host/REPORT.md` and `fixture.log`.
+
+`python -B tools/tests/package_suffix_version_test.py` passed 7 focused cases covering full suffix identity, invalid suffixes, exact tag/source/commit matching and retained clean-checkout/build guards. Earlier updater fixtures were reused.
+
 ## Original menu asset checks
 
 The selected native menu-asset implementation is documented in `out/v0.5.0/final-preparation/menu-assets/INTEGRATION-REPORT.md`. Its bounded run-05/run-06 evidence covers the selected English/Simplified Chinese asset paths, three decoded-output byte comparisons, cache/malformed/LZO negative cases and the final whole-string coverage result: 41 original-font whole-string draw calls and 2 GDI whole-string fallback draws. The older source-0.4.22 run had two Simplified Chinese strings containing `锯` and `帧` on GDI fallback; source 0.4.23 changes those labels to `反走样` and `画面速率`. No game, CI, production package or user visual acceptance is established by these checks.
@@ -42,7 +46,7 @@ Build `LoStorageTest` only when the affected native inputs change. Its `dlc <new
 
 The following CMake targets are `EXCLUDE_FROM_ALL`; they are not `tools/test.bat` suite names and are never run implicitly. Select only the target relevant to the change, build it explicitly, and run the resulting executable from an isolated working directory when it writes captures or caches:
 
-`LoFolderPickerTest`, `LoDebugMenuInteractionTest`, `LoGameWindowPixelsTest`, `LoShaderPreparationQueueTest`, `LoShaderStartupCacheTest`, `LoBackendCacheTest`, `LoBackendSelectionTest`, `LoBackendDeviceTest`, `LoRestartTest`, `LoGamePathTest`, `LoUpdaterTest`, `LoUpdaterProgressTest`, `LoUpdaterHelperContextTest`, `LoUpdaterProbe`, `LoVulkanBackendTest`, and `LoPollWaitTest`.
+`LoFolderPickerTest`, `LoDebugMenuInteractionTest`, `LoGameWindowPixelsTest`, `LoShaderPreparationQueueTest`, `LoShaderStartupCacheTest`, `LoBackendCacheTest`, `LoBackendSelectionTest`, `LoBackendDeviceTest`, `LoRestartTest`, `LoGamePathTest`, `LoUpdaterTest`, `LoUpdaterStandaloneTest`, `LoUpdaterProgressTest`, `LoUpdaterHelperContextTest`, `LoUpdaterProbe`, `LoVulkanBackendTest`, and `LoPollWaitTest`.
 
 `LoGameWindowPixelsTest` checks hidden Windows/SDL client and drawable pixel sizes, cross-thread presentation dimensions, DPI messages and thread-context restoration. Build this optional target only when its window policy or inputs change:
 

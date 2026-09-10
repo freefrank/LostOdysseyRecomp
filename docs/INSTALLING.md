@@ -1,6 +1,6 @@
 # Installing Lost Odyssey Recomp
 
-This guide covers current Windows builds in the v0.5.0 line. The published v0.4.2 package remains the historical D3D12 baseline; current Windows builds add the Vulkan path, updater flow, automatic game/DLC recognition and the Settings UX described below.
+This guide covers Windows builds through v0.5.1-updaterfix. The published v0.4.2 package remains the historical D3D12 baseline; current Windows builds add the Vulkan path, updater flow, automatic game/DLC recognition and the Settings UX described below.
 
 1. Extract the entire package to a writable folder, outside Program Files. Keep the executable, importer, updater helper, validated DXC v1.8.2407 DLL pair and license files together.
 2. Run **LostOdysseyRecomp.exe** directly. If game files are missing, the importer opens; select your source and review its recognition result before importing.
@@ -102,3 +102,7 @@ published installation without retaining those folders.
 
 See [BUILDING.md](https://github.com/freefrank/LostOdysseyRecomp/blob/main/docs/BUILDING.md)
 and [release packaging](https://github.com/freefrank/LostOdysseyRecomp/blob/main/docs/notes/release-packaging.md).
+
+## Standalone update checks
+
+Close the game, then double-click `LostOdysseyUpdater.exe` beside `LostOdysseyRecomp.exe` and `manifest.json`. The updater identifies the installed release and checks GitHub Latest without starting the game first. Manual checks work when automatic checks are disabled in Settings; the `LO_NO_UPDATE` environment switch still disables them. A successful update starts the game. Keep your save, profile and settings files when replacing the program.

@@ -3,13 +3,13 @@ import argparse
 import hashlib
 import importlib.metadata
 import json
-import re
 from pathlib import Path
 import shutil
 import subprocess
 import sys
 import tempfile
-from build_provenance import source_state, read_stamp, validate_formal, validate_staged_binaries
+from build_provenance import (source_state, read_stamp, validate_formal, validate_staged_binaries,
+                              normalize_release_version, valid_source_version)
 
 ROOT = Path(__file__).resolve().parents[1]
 INSTALLER_ICON = ROOT / 'assets/lost-odyssey-recomp.ico'
@@ -55,8 +55,11 @@ def main():
     parser.add_argument('--output', type=Path, default=ROOT / 'out/releases')
     parser.add_argument('--version', default='')
     args = parser.parse_args()
-    if args.version and not re.fullmatch(r'v[0-9]+\.[0-9]+(?:\.[0-9]+)?', args.version):
-        raise SystemExit('Version must have the form v0.1 or v0.1.0.')
+    if args.version:
+        try:
+            normalize_release_version(args.version)
+        except ValueError as error:
+            raise SystemExit(str(error))
     build, output = args.build.resolve(), args.output.resolve()
     runtime = build / 'LostOdysseyRecomp/LostOdysseyRecomp.exe'
     updater = build / 'LostOdysseyRecomp/LostOdysseyUpdater.exe'
@@ -68,7 +71,7 @@ def main():
     if not version_stamp.is_file():
         raise SystemExit('Build the runtime to produce its linked source-version.txt before packaging.')
     source_version = version_stamp.read_text(encoding='utf-8').strip()
-    if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', source_version):
+    if not valid_source_version(source_version):
         raise SystemExit('The linked runtime source version is invalid.')
     output.mkdir(parents=True, exist_ok=True)
     dxc = validated_dxc_payload(runtime.parent)

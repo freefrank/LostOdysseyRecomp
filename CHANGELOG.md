@@ -4,15 +4,19 @@ One record of completed changes, with unpublished work separated from verified r
 
 本文统一记录已完成改动，并区分未发布内容与已确认发布版本；日期采用 UTC 发布日期。后续计划见[路线图](docs/ROADMAP.zh-CN.md)，不作为已发布功能记录。
 
-## Unreleased — 0.5.1 target
+## v0.5.1-updaterfix
 
 ### English
 
-- Update checks now trigger for any differing prerelease suffix at an equal numeric version, while identical suffixes remain current. The updater source target is 0.5.1; no 0.5.1 release is published. Existing 0.5.0 clients can upgrade to a published 0.5.1 by numeric version, after which the suffix policy applies. `LoUpdaterTest --version-policy` passed 14/14 cases.
+- Double-click `LostOdysseyUpdater.exe` beside the installed game and `manifest.json` to check for updates without launching the game first. Close the game before updating; the updater starts it after a successful installation.
+- Follow GitHub Latest when the numeric version is higher, or when the numeric version is equal but the suffix differs. Keep the full release suffix in the program and package manifest. Existing v0.5.0 clients can upgrade to this version through their numeric-version check.
+- Validation: 43 standalone checks, 14 version-policy checks and 7 suffix-packaging checks passed.
 
 ### 简体中文
 
-- 更新检查在数字版本相同时，只要预发布后缀不同就会触发更新，相同后缀则保持当前版本。更新器源码目标为 0.5.1，尚未发布 0.5.1 Release。现有 0.5.0 程序可在 0.5.1 Release 发布后按数字版本升级，之后后缀策略才会生效。`LoUpdaterTest --version-policy` 通过 14/14 项检查。
+- 在游戏程序和 `manifest.json` 同目录双击 `LostOdysseyUpdater.exe`，无需先启动游戏即可检查更新。请先关闭游戏；更新成功后会自动启动游戏。
+- GitHub Latest 数字版本更高，或数字版本相同但后缀不同时触发更新；程序与包清单保留完整发布后缀。现有 v0.5.0 客户端可通过数字版本检查升级到此版本。
+- 验证：43 项独立启动检查、14 项版本规则检查和 7 项后缀打包检查通过。
 
 ## v0.5.0 — 2026-09-09
 
