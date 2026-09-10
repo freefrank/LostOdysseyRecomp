@@ -6,7 +6,7 @@
 
 ## Delivery
 
-[v0.5.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.1) is the public latest release, published 2026-09-10T05:31:57Z. Current source changes target `v0.5.2` and are in release preparation; they are not published. Source-0.5.0 candidate evidence does not establish a v0.5.2 game run.
+[v0.5.2](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.2) is the latest release, published on 2026-09-10. Build, package and public-download verification passed. See [STATUS](STATUS.md) for the release evidence and validation limits.
 
 <a id="v050-pc-graphics"></a>
 <a id="next-major-milestone-v050--pc-vulkan-and-direct3d-11"></a>
@@ -17,7 +17,7 @@ D3D12 remains the working baseline. Windows Vulkan has bounded RTX 5080 scene va
 <a id="near-term-priorities"></a>
 ## Active work and acceptance boundaries
 
-- [~] **Optional shader collection:** collection development and the controlled D3D12 Map16 upload path are validated. The source-0.5.0 executable produced 55 cache sources and matching D1 records while rendering continued. Product F1 capture, a new ZIP manifest and immediate upload have not been verified. Vulkan, AMD, reported visual defects, player acceptance and release remain open. Cumulative coverage and all-submitted-draw audit remain in progress.
+- [~] **Optional shader collection:** collection development and the controlled D3D12 Map16 upload path are validated. The source-0.5.0 executable produced 55 cache sources and matching D1 records while rendering continued. v0.5.2 is published; product F1 capture, a new ZIP manifest and immediate upload have not been verified. Vulkan, AMD, reported visual defects and player acceptance remain open. Cumulative coverage and all-submitted-draw audit remain in progress.
 - [ ] **Capture export size:** a new F1 ZIP capture timed out after 60.049 seconds. This records a failure; compact export and exporter repair are still unimplemented.
 - [~] **4K TAA and ground/shadow feedback:** captures 17468–17470 came from an older executable that predates the four-path c7 repair. They do not reopen the later accepted four-path Sol repair, diagnose a new cause or establish broad visual coverage. Continue scene, hardware and reporter-specific validation through the Project.
 - [ ] **Presentation and input:** fullscreen, Alt+Enter, mixed-DPI and mouse acceptance remain open. Preserve normal aspect-ratio black bars when assessing reported underscan.

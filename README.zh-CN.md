@@ -10,7 +10,7 @@ Windows x64 · Direct3D 12 · Vulkan · PowerPC 静态重编译
 
 可选诊断默认关闭，也可在设置中关闭。详见[隐私说明](PRIVACY.zh-CN.md)。
 
-### [下载 v0.5.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.1) · [安装指南](docs/INSTALLING.md) · [反馈问题](https://github.com/freefrank/LostOdysseyRecomp/issues)
+### [下载 v0.5.2](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.2) · [安装指南](docs/INSTALLING.md) · [反馈问题](https://github.com/freefrank/LostOdysseyRecomp/issues)
 
 [English](README.md) · [更新日志](CHANGELOG.md) · [Projects](https://github.com/users/freefrank/projects/3) · [从源码构建](docs/BUILDING.md)
 
@@ -19,7 +19,7 @@ Windows x64 · Direct3D 12 · Vulkan · PowerPC 静态重编译
 > [!IMPORTANT]
 > **本项目仍处于早期测试阶段。** 已测试开场区域和部分场景，尚未通关。渲染和稳定性仍有问题。请自行提供受支持版本的游戏文件。
 
-## v0.5.2 新增（尚未发布）
+## v0.5.2 新增
 
 - F1 渲染捕获附带 VS/PS 原始着色器程序。
 - 增加可选的后台增量诊断上传，F1 捕获后也会触发，游戏线程无需等待上传。

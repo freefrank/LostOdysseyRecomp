@@ -6,7 +6,7 @@
 
 ## 交付
 
-[v0.5.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.1) 是当前公开 latest，于 2026-09-10T05:31:57Z 发布。当前源码改动目标为 `v0.5.2`，正在发布准备中；尚未发布。source-0.5.0 候选证据不建立 v0.5.2 游戏运行结论。
+[v0.5.2](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.2) 已于 2026-09-10 发布，为当前最新版本。构建、安装包和公开下载核验均通过；发布依据及验收范围见 [STATUS](STATUS.md)。
 
 <a id="v050-pc-graphics"></a>
 <a id="下一主版本v050--pc-vulkan-与-direct3d-11"></a>
@@ -17,7 +17,7 @@ D3D12 仍是可用基线。Windows Vulkan 已有 RTX 5080 实机场景的界定�
 <a id="近期优先事项"></a>
 ## 当前事项与验收边界
 
-- [~] **可选 shader 收集：**收集开发及受控 D3D12 Map16 上传路径已验证。source-0.5.0 EXE 在继续渲染时产生 55 个 cache source 和匹配的 D1 记录。产品 F1 capture、新 ZIP manifest 和即时上传尚未验证。Vulkan、AMD、已报告画面问题、玩家验收和发布仍开放；累计覆盖和全 submitted draw 审计仍进行中。
+- [~] **可选 shader 收集：**收集开发及受控 D3D12 Map16 上传路径已验证。source-0.5.0 EXE 在继续渲染时产生 55 个 cache source 和匹配的 D1 记录。v0.5.2 已发布；产品 F1 capture、新 ZIP manifest 和即时上传尚未验证。Vulkan、AMD、已报告画面问题和玩家验收仍开放；累计覆盖和全 submitted draw 审计仍进行中。
 - [ ] **Capture 导出大小：**一次新的 F1 ZIP capture 在 60.049 秒后超时。这是失败记录；紧凑格式和 exporter 修复尚未实现。
 - [~] **4K TAA 与地面／阴影反馈：**17468–17470 capture 来自早于四路径 c7 修复的较早 EXE。它不重开后续已验收的四路径 Sol 修复，不定位新根因，也不建立更广画面覆盖。继续通过 Project 记录场景、硬件和报告者针对性的验证。
 - [ ] **呈现与输入：**全屏、Alt+Enter、混合 DPI 和鼠标验收仍开放。判断用户报告的 underscan 时应保留正常宽高比黑边。

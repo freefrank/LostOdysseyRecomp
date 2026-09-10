@@ -1360,10 +1360,10 @@
         "Kind": "Infrastructure",
         "Area": "Shader diagnostics",
         "Status": "In Progress",
-        "Delivery": "Validated",
+        "Delivery": "Released",
         "Source key": "shader-log-coverage-audit",
         "Release": "v0.5.2",
-        "Evidence": "v0.5.2 release preparation. Collection development is complete and background D3D12 RTX 5080 1280x720 experimental-TAA Map16 validation passed on source-0.5.0 EXE SHA256 1beb8a50c5bef1ebf0fb147338b33d558a2193e87f82b0b8c579ecbcb856959d: periodic 23+32 receipts yielded 55 cache sources (15 VS/40 PS, 19,188 bytes), all byte/SHA256/byte-FNV/length matched; final D1 snapshot 55 sources/55 associations/no duplicate stage-hash keys and 28 matching structured records. Map16 upload window 59.84 FPS/18.067 ms P95 versus 59.67/18.036 before; each had one >50 ms, none >100 ms and no missing frame. Continued-rendering evidence only, not opt-out A/B or zero-overhead proof. Product F1 menu capture, new ZIP manifest and immediate upload remain unverified. Vulkan, AMD, player acceptance and Release remain pending; cumulative coverage/all-draw audit remains In Progress."
+        "Evidence": "Released v0.5.2 at 2026-09-10T07:00:56Z (latest, non-draft, non-prerelease) from 08a0192713435892f3c1b772abc9ab31bca36359; CI 34446196620 succeeded. ZIP 44,209,471 B SHA256 5d20e569b74c75418cefc9fdd5537477ce4b0a9ca976ed9d64ec77771f78ce7c; standalone updater SHA256 4aa5e491a2bff885c668cdc4473488fd05acf44e56eba2aa9d4c242a76a4db6b. All 50 payload manifest/CRC/hash/provenance checks passed. The 1,327-entry package and two local deployment credential comparisons, plus the 566-blob source audit, had zero matches. Unauthenticated Latest returned v0.5.2; all four public assets were HTTP 200 with streamed SHA256 matching local audit outputs (2026-09-10T07:01:59Z; release 386061887). Bounded source-0.5.0 D3D12 Map16 evidence: 55 cache sources (15 VS/40 PS, 19,188 B), all byte/SHA256/byte-FNV/length matched; 55 associations/no duplicates and 28 structured records. F1 menu capture/new ZIP manifest/immediate upload, Vulkan, AMD and player acceptance remain pending; cumulative coverage/all-draw audit remains In Progress."
       },
       "title": "Add independent shader logs and cumulative coverage auditing",
       "body_sha256": "397360ede9dedb66d1f2d51b18e57794835bef25bcced0eaf4ec663e43beffef"
