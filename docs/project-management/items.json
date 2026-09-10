@@ -4536,17 +4536,17 @@
     {
       "key": "qol-github-binary-updater",
       "title": "Add safe GitHub binary update checks",
-      "body": "<!-- lo-project:qol-github-binary-updater -->\n\nWhen a newer matching GitHub binary is available, automatically download and update it with package verification, exit-before-replace, rollback, offline startup, preserved user data, and future macOS/Linux AppImage package selection. Begin with Windows.\n\n## Implemented and host-validated — source 0.5.0\n\nGitHub Latest now updates when the remote numeric version core is higher than the installed core, or when numeric cores are equal and their dash suffixes differ. A lower remote numeric core remains ineligible; build metadata is ignored. `update.h`, `update.cpp`, and the Windows HTTP call site were updated without changing the source or delivery target from `0.5.0`.\n\n`LoUpdaterTest --version-policy` passed 14 checks with 0 failures after compiling the target including `windows_http.cpp`. This is a focused host-side policy result. No game EXE rebuild, game run, network request, download, update transaction, helper execution, player acceptance, push, package, or Release is recorded for this change.\n\n## Previous validation and limits\n\nUpdater UI refinement was validated in local source 0.4.17. The dedicated native fixture passed progress, cancellation boundaries, idle redraw caching, window controls and cleanup. Actual normal, unknown-total and narrow Chinese windows were reviewed on an inactive desktop without changing foreground focus. Core, helper, progress UI, main-entry metadata, and package dependency integration also passed the recorded package identity checks.\n\n## Sources\n\n- docs/notes/v0.5.0-qol-requirements.md\n- LostOdysseyRecomp/updater/update.h\n- LostOdysseyRecomp/updater/update.cpp\n- LostOdysseyRecomp/updater/windows_http.cpp\n",
+      "body": "<!-- lo-project:qol-github-binary-updater -->\n\nWhen a newer matching GitHub binary is available, automatically download and update it with package verification, exit-before-replace, rollback, offline startup, preserved user data, and future macOS/Linux AppImage package selection. Begin with Windows.\n\n## Implemented and host-validated — source and delivery target v0.5.1\n\nThe user superseded the earlier fixed-v0.5.0 target for this updater patch. GitHub Latest now updates when the remote numeric version core is higher than the installed core, or when numeric cores are equal and their dash suffixes differ. A lower remote numeric core remains ineligible; build metadata is ignored. `update.h`, `update.cpp`, and the Windows HTTP call site are in local commit `e17570cb67ef85596514a03ee0e5c7ac311b5727`, cherry-picked onto `github/main` at `f78f64f`.\n\n`LoUpdaterTest --version-policy` passed 14 checks with 0 failures after compiling the target including `windows_http.cpp`. This retained focused host-side policy result was not rerun for the target-only change. No game EXE rebuild, game run, network request, download, update transaction, helper execution, player acceptance, package, or Release is recorded.\n\n## Previous validation and limits\n\nUpdater UI refinement was validated in local source 0.4.17. The dedicated native fixture passed progress, cancellation boundaries, idle redraw caching, window controls and cleanup. Actual normal, unknown-total and narrow Chinese windows were reviewed on an inactive desktop without changing foreground focus. Core, helper, progress UI, main-entry metadata, and package dependency integration also passed the recorded package identity checks.\n\n## Sources\n\n- docs/notes/v0.5.0-qol-requirements.md\n- e17570cb67ef85596514a03ee0e5c7ac311b5727\n- LostOdysseyRecomp/updater/update.h\n- LostOdysseyRecomp/updater/update.cpp\n- LostOdysseyRecomp/updater/windows_http.cpp\n",
       "issue_url": null,
       "fields": {
         "Kind": "Feature",
         "Area": "Updates and packaging",
         "Status": "Done",
         "Delivery": "Validated",
-        "Release": "v0.5.0",
+        "Release": "v0.5.1",
         "Start date": null,
         "Target date": "2026-09-08",
-        "Evidence": "Implemented in source 0.5.0: GitHub Latest updates for a higher remote numeric core, or equal numeric cores with different dash suffixes; lower remote cores skip and build metadata is ignored. LoUpdaterTest --version-policy passed 14 checks/0 failures after compiling windows_http.cpp. Host-side policy validation only: no game EXE rebuild/run, network/download/transaction/helper execution, player acceptance, push, package, or Release."
+        "Evidence": "User-set source/delivery target v0.5.1. Local commit e17570cb67ef85596514a03ee0e5c7ac311b5727 atop github/main f78f64f implements GitHub Latest comparison: higher remote numeric core, or equal cores with different dash suffixes, updates; lower remote cores skip and build metadata is ignored. Retained LoUpdaterTest --version-policy result: 14 checks/0 failures after compiling windows_http.cpp; it was not rerun for this target-only change. No game EXE rebuild/run, network/download/transaction/helper execution, player acceptance, package, or Release."
       },
       "source_refs": [
         "docs/notes/v0.5.0-qol-requirements.md",
@@ -4554,6 +4554,7 @@
         "docs/ROADMAP.zh-CN.md#v050-pc-graphics",
         "docs/notes/desktop-ui-modernization.md",
         "9c2dc761a4c775b3ffc8b01429f11bd42f0c4f94",
+        "e17570cb67ef85596514a03ee0e5c7ac311b5727",
         "LostOdysseyRecomp/updater/update.h",
         "LostOdysseyRecomp/updater/update.cpp",
         "LostOdysseyRecomp/updater/windows_http.cpp"

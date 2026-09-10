@@ -4,15 +4,15 @@ One record of completed changes, with unpublished work separated from verified r
 
 本文统一记录已完成改动，并区分未发布内容与已确认发布版本；日期采用 UTC 发布日期。后续计划见[路线图](docs/ROADMAP.zh-CN.md)，不作为已发布功能记录。
 
-## Unreleased — 0.5.0 target
+## Unreleased — 0.5.1 target
 
 ### English
 
-- Update checks now trigger for any differing prerelease suffix at an equal numeric version, while identical suffixes remain current. This local policy is not in a published binary; `LoUpdaterTest --version-policy` passed 14/14 cases.
+- Update checks now trigger for any differing prerelease suffix at an equal numeric version, while identical suffixes remain current. The updater source target is 0.5.1; no 0.5.1 release is published. Existing 0.5.0 clients can upgrade to a published 0.5.1 by numeric version, after which the suffix policy applies. `LoUpdaterTest --version-policy` passed 14/14 cases.
 
 ### 简体中文
 
-- 更新检查在数字版本相同时，只要预发布后缀不同就会触发更新，相同后缀则保持当前版本。本地策略尚未包含在已发布程序中；`LoUpdaterTest --version-policy` 通过 14/14 项检查。
+- 更新检查在数字版本相同时，只要预发布后缀不同就会触发更新，相同后缀则保持当前版本。更新器源码目标为 0.5.1，尚未发布 0.5.1 Release。现有 0.5.0 程序可在 0.5.1 Release 发布后按数字版本升级，之后后缀策略才会生效。`LoUpdaterTest --version-policy` 通过 14/14 项检查。
 
 ## v0.5.0 — 2026-09-09
 

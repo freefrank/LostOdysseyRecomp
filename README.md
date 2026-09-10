@@ -57,7 +57,7 @@ Fixes tested AMD black/dark scenes and depth-of-field output, plus Windows Unico
 
 No Python or Visual Studio installation is needed for the release package. Later launches reuse the shader cache. Keep your save and profile folders when updating.
 
-The updater checks GitHub's latest Release. A higher numeric version updates normally; an equal numeric version with a different `-suffix`, such as `0.5.0-hotfix1`, also triggers an update. The installed build must contain this updater policy before it can take effect.
+The updater checks GitHub's latest Release. A higher numeric version updates normally; an equal numeric version with a different `-suffix`, such as `0.5.0-hotfix1`, also triggers an update. The updater policy is targeted for source version 0.5.1 and is not in the published v0.5.0 binary. Once a v0.5.1 Release is published, existing v0.5.0 clients can upgrade to it by numeric version; later suffix changes are handled by the new policy.
 
 | Requirement | Supported configuration |
 | :--- | :--- |
