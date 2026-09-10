@@ -19,7 +19,7 @@ Windows x64 · Direct3D 12 · Vulkan · PowerPC 静态重编译
 > [!IMPORTANT]
 > **本项目仍处于早期测试阶段。** 已测试开场区域和部分场景，尚未通关。渲染和稳定性仍有问题。请自行提供受支持版本的游戏文件。
 
-## v0.5.1-updaterfix 更新
+## v0.5.1 更新
 
 更新器支持独立双击启动，以及同数字版本的后缀更新判断。完整 Windows ZIP 和独立 updater EXE 均已发布；独立 EXE 需放在游戏程序和 `manifest.json` 同目录。
 
@@ -61,9 +61,9 @@ v0.3.0已正式发布，扩大到压缩资源与XEX中的shader发现，生成�
 
 发布包不需要安装 Python 或 Visual Studio。后续启动会复用着色器缓存；更新程序时请保留存档和档案文件夹。
 
-v0.5.1-updaterfix 更新器会检查 GitHub 最新 Release。数字版本更高，或数字版本相同但后缀不同时触发更新。现有 v0.5.0 客户端可通过数字版本检查升级到此 Release。
+v0.5.1 更新器会检查 GitHub 最新 Release。数字版本更高，或数字版本相同但后缀不同时触发更新。现有 v0.5.0 客户端可通过数字版本检查升级到此 Release。
 
-将 `LostOdysseyUpdater.exe` 放在游戏程序和 `manifest.json` 同一目录，先关闭游戏再双击，即可手动检查更新。即使设置中关闭了自动检查，手动检查仍可使用；更新成功后会启动游戏。
+将 `LostOdysseyUpdater.exe` 放在游戏程序和 `manifest.json` 同一目录，先关闭游戏再双击，即可手动检查更新。即使设置中关闭了自动检查，手动检查仍可使用；更新成功后会启动游戏。详见[独立更新器说明](docs/INSTALLING.md#standalone-updater)。
 
 | 要求 | 支持范围 |
 | :--- | :--- |

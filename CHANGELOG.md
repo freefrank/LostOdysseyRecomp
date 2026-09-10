@@ -4,16 +4,18 @@ One record of completed changes, with unpublished work separated from verified r
 
 本文统一记录已完成改动，并区分未发布内容与已确认发布版本；日期采用 UTC 发布日期。后续计划见[路线图](docs/ROADMAP.zh-CN.md)，不作为已发布功能记录。
 
-## v0.5.1-updaterfix — 2026-09-10
+## v0.5.1
 
 ### English
 
+- Rename the updater release from `v0.5.1-updaterfix` to `v0.5.1`, with matching executable and package versions. Behavior and retained validation are unchanged.
 - Double-click `LostOdysseyUpdater.exe` beside the installed game and `manifest.json` to check for updates without launching the game first. Close the game before updating; the updater starts it after a successful installation.
 - Follow GitHub Latest when the numeric version is higher, or when the numeric version is equal but the suffix differs. Keep the full release suffix in the program and package manifest. Existing v0.5.0 clients can upgrade to this version through their numeric-version check.
 - Validation: 43 standalone checks, 14 version-policy checks and 7 suffix-packaging checks passed.
 
 ### 简体中文
 
+- 将更新器版本从 `v0.5.1-updaterfix` 统一为 `v0.5.1`，同步程序和安装包版本；功能与已有验证结果不变。
 - 在游戏程序和 `manifest.json` 同目录双击 `LostOdysseyUpdater.exe`，无需先启动游戏即可检查更新。请先关闭游戏；更新成功后会自动启动游戏。
 - GitHub Latest 数字版本更高，或数字版本相同但后缀不同时触发更新；程序与包清单保留完整发布后缀。现有 v0.5.0 客户端可通过数字版本检查升级到此版本。
 - 验证：43 项独立启动检查、14 项版本规则检查和 7 项后缀打包检查通过。

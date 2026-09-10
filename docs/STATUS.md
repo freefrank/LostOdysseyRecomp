@@ -1,5 +1,9 @@
 # Project status
 
+## v0.5.1 naming adjustment — preparing release
+
+The user requested the updater release name `v0.5.1` in place of `v0.5.1-updaterfix`. Source version is now `0.5.1`; the release package will be rebuilt to keep the executable, manifest, tag and asset name consistent. Updater behavior is unchanged. The existing 43 standalone, 14 version-policy and 7 packaging checks remain valid and are not repeated. Publication is pending the new CI package. The preceding published artifact is recorded below as historical provenance.
+
 ## Published v0.5.1-updaterfix — 2026-09-10
 
 [v0.5.1-updaterfix](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.1-updaterfix) is published as the latest Windows release from commit `396e7809e074c6cf6aa4740c1789516f2a4824c4`. [Release CI](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34437883096) passed. The program and package manifest both use `0.5.1-updaterfix`. ZIP SHA256: `d8b58c991eeaff0f6edfbfa371c673fa781ecc9963123dba320cc97131ba9f7f`; the separately downloadable updater matches the same CI package, SHA256 `d0b68e81744d1ac63e0ef86664c2ccdf385d6b0c7a5ab146dcc37c479dbc3457`.

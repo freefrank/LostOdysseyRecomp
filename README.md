@@ -19,7 +19,7 @@ Optional TAA shader collection asks for consent during first-time setup, or when
 > [!IMPORTANT]
 > **This project is still in early testing.** Opening areas and selected scenes have been tested; a complete playthrough has not. Rendering and stability issues remain. You must supply your own supported game files.
 
-## New in v0.5.1-updaterfix
+## New in v0.5.1
 
 The updater supports standalone double-click startup and suffix changes at an equal numeric version. The full Windows ZIP and a separate updater EXE are published; place the separate EXE beside the installed game and `manifest.json`.
 
@@ -61,9 +61,9 @@ Fixes tested AMD black/dark scenes and depth-of-field output, plus Windows Unico
 
 No Python or Visual Studio installation is needed for the release package. Later launches reuse the shader cache. Keep your save and profile folders when updating.
 
-The v0.5.1-updaterfix updater checks GitHub's latest Release. A higher numeric version updates normally; equal numeric versions with different suffixes also trigger an update. Existing v0.5.0 clients can upgrade to this patch through their numeric-version check.
+The v0.5.1 updater checks GitHub's latest Release. A higher numeric version updates normally; equal numeric versions with different suffixes also trigger an update. Existing v0.5.0 clients can upgrade to this patch through their numeric-version check.
 
-Double-click `LostOdysseyUpdater.exe` beside the installed game and `manifest.json` to check manually. Close the game first. Manual checks work even when automatic checks are disabled in Settings; a successful update starts the game.
+Double-click `LostOdysseyUpdater.exe` beside the installed game and `manifest.json` to check manually. Close the game first. Manual checks work even when automatic checks are disabled in Settings; a successful update starts the game. See the [standalone updater instructions](docs/INSTALLING.md#standalone-updater).
 
 | Requirement | Supported configuration |
 | :--- | :--- |
