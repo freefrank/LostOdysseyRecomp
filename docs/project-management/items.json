@@ -4536,7 +4536,7 @@
     {
       "key": "qol-github-binary-updater",
       "title": "Add safe GitHub binary update checks",
-      "body": "<!-- lo-project:qol-github-binary-updater -->\n\nWhen a newer matching GitHub binary is available, automatically download and update it with package verification, exit-before-replace, rollback, offline startup, preserved user data, and future macOS/Linux AppImage package selection. Begin with Windows.\n\nUpdater UI refinement is implemented and validated in local source 0.4.17. The dedicated native fixture passed progress, cancellation boundaries, idle redraw caching, window controls and cleanup. Actual normal, unknown-total and narrow Chinese windows were reviewed on an inactive desktop without changing foreground focus. Public API and update transactions are unchanged; no live download, transaction, physical monitor or player acceptance is claimed. Evidence: out/v0.5.0/ui-modernization/updater/REPORT.md.\n\n## Validation and limits\n\nCore, helper, progress UI, main-entry metadata, and package dependency integration are complete. The v0.4.15 development ZIP has 47 manifest files with matching SHA256 values; runtime/helper match the build, all three EXEs carry the seven icon payloads, and the DXC 2407 pair, licenses, provenance, README, and allowlist passed. The package contains no game files, source, PDB, or user data. The package identity check did not launch a payload or repeat installer, updater transaction, or GPU validation. No public Release was created, and player acceptance remains separate.\n\nEvidence: `out/v0.5.0/updater/main-entry/formal/result.json`, `out/v0.5.0/package/package-validation.json`, `out/v0.5.0/package/manifest.json`.\n\n## Sources\n\n- docs/notes/v0.5.0-qol-requirements.md\n",
+      "body": "<!-- lo-project:qol-github-binary-updater -->\n\nWhen a newer matching GitHub binary is available, automatically download and update it with package verification, exit-before-replace, rollback, offline startup, preserved user data, and future macOS/Linux AppImage package selection. Begin with Windows.\n\n## Implemented and host-validated — source 0.5.0\n\nGitHub Latest now updates when the remote numeric version core is higher than the installed core, or when numeric cores are equal and their dash suffixes differ. A lower remote numeric core remains ineligible; build metadata is ignored. `update.h`, `update.cpp`, and the Windows HTTP call site were updated without changing the source or delivery target from `0.5.0`.\n\n`LoUpdaterTest --version-policy` passed 14 checks with 0 failures after compiling the target including `windows_http.cpp`. This is a focused host-side policy result. No game EXE rebuild, game run, network request, download, update transaction, helper execution, player acceptance, push, package, or Release is recorded for this change.\n\n## Previous validation and limits\n\nUpdater UI refinement was validated in local source 0.4.17. The dedicated native fixture passed progress, cancellation boundaries, idle redraw caching, window controls and cleanup. Actual normal, unknown-total and narrow Chinese windows were reviewed on an inactive desktop without changing foreground focus. Core, helper, progress UI, main-entry metadata, and package dependency integration also passed the recorded package identity checks.\n\n## Sources\n\n- docs/notes/v0.5.0-qol-requirements.md\n- LostOdysseyRecomp/updater/update.h\n- LostOdysseyRecomp/updater/update.cpp\n- LostOdysseyRecomp/updater/windows_http.cpp\n",
       "issue_url": null,
       "fields": {
         "Kind": "Feature",
@@ -4546,14 +4546,17 @@
         "Release": "v0.5.0",
         "Start date": null,
         "Target date": "2026-09-08",
-        "Evidence": "Updater UI refinement is implemented and validated in local source 0.4.17. The dedicated native fixture passed progress, cancellation boundaries, idle redraw caching, window controls and cleanup. Actual normal, unknown-total and narrow Chinese windows were reviewed on an inactive desktop without changing foreground focus. Public API and update transactions are unchanged; no live download, transaction, physical monitor or player acceptance is claimed. Evidence: out/v0.5.0/ui-modernization/updater/REPORT.md."
+        "Evidence": "Implemented in source 0.5.0: GitHub Latest updates for a higher remote numeric core, or equal numeric cores with different dash suffixes; lower remote cores skip and build metadata is ignored. LoUpdaterTest --version-policy passed 14 checks/0 failures after compiling windows_http.cpp. Host-side policy validation only: no game EXE rebuild/run, network/download/transaction/helper execution, player acceptance, push, package, or Release."
       },
       "source_refs": [
         "docs/notes/v0.5.0-qol-requirements.md",
         "docs/ROADMAP.md#v050-pc-graphics",
         "docs/ROADMAP.zh-CN.md#v050-pc-graphics",
         "docs/notes/desktop-ui-modernization.md",
-        "9c2dc761a4c775b3ffc8b01429f11bd42f0c4f94"
+        "9c2dc761a4c775b3ffc8b01429f11bd42f0c4f94",
+        "LostOdysseyRecomp/updater/update.h",
+        "LostOdysseyRecomp/updater/update.cpp",
+        "LostOdysseyRecomp/updater/windows_http.cpp"
       ],
       "record_type": "backlog"
     },

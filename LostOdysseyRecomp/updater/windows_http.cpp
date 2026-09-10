@@ -211,7 +211,7 @@ StartupResult PrepareAtStartup(const StartupOptions &options)
         return result;
     }
     auto remote = ParseVersion(release->tag);
-    if (!remote || CompareVersions(*remote, *current) <= 0)
+    if (!remote || !ShouldUpdateToLatest(*current, *remote))
     {
         result.status = StartupStatus::UpToDate;
         result.detail = release->tag;

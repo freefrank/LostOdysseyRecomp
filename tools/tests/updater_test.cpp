@@ -153,6 +153,38 @@ int ParentMode(const fs::path &helper, const fs::path &plan)
 
 int wmain(int argc, wchar_t **argv)
 {
+    if (argc == 2 && std::wstring_view(argv[1]) == L"--version-policy")
+    {
+        struct Case { const char *current; const char *latest; bool update; };
+        const Case cases[] = {
+            {"0.5.0", "0.5.0-hotfix1", true},
+            {"0.5.0-hotfix1", "0.5.0-hotfix2", true},
+            {"0.5.0-hotfix2", "0.5.0-hotfix1", true},
+            {"0.5.0-hotfix1", "0.5.0", true},
+            {"0.5.0-hotfix1", "v0.5.0-hotfix1", false},
+            {"0.5.0", "v0.5.0", false},
+            {"0.5.0", "0.4.9-hotfix9", false},
+            {"0.5.0-hotfix1", "0.4.9", false},
+            {"0.5.0", "0.5.1-rc.1", true},
+            {"0.5.0-hotfix1", "0.6.0", true},
+            {"0.5.0", "0.5.0.0", false},
+            {"0.5.0", "0.5.0.0-hotfix1", true},
+            {"0.5.0+build1", "0.5.0+build2", false},
+        };
+        for (const auto &test : cases)
+        {
+            const auto current = updater::ParseVersion(test.current);
+            const auto latest = updater::ParseVersion(test.latest);
+            Expect(current && latest && updater::ShouldUpdateToLatest(*current, *latest) == test.update,
+                   test.latest);
+        }
+        const auto stable = updater::ParseVersion("0.5.0");
+        const auto hotfix = updater::ParseVersion("0.5.0-hotfix1");
+        Expect(updater::CompareVersions(*stable, *hotfix) > 0,
+               "package identity comparison retains suffix distinction");
+        std::cout << "Version policy: 14 checks, " << failures << " failures\n";
+        return failures ? 1 : 0;
+    }
     if (argc == 4 && std::wstring_view(argv[1]) == L"--parent") return ParentMode(argv[2], argv[3]);
     const fs::path root = fs::absolute("out/v0.5.0/updater/fixture-work");
     std::error_code filesystemError;

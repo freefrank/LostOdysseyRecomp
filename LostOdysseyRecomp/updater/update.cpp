@@ -129,6 +129,16 @@ int CompareVersions(const Version &left, const Version &right)
     return left.prerelease.size() < right.prerelease.size() ? -1 : 1;
 }
 
+bool ShouldUpdateToLatest(const Version &current, const Version &latest)
+{
+    // Latest is authoritative for suffix changes within the same numeric version.
+    // Keep ordinary version ordering for package identity and validation.
+    const Version currentCore{current.numbers, {}};
+    const Version latestCore{latest.numbers, {}};
+    const int coreOrder = CompareVersions(latestCore, currentCore);
+    return coreOrder > 0 || (coreOrder == 0 && latest.prerelease != current.prerelease);
+}
+
 bool IsSafePayloadPath(const std::filesystem::path &path, std::string &error)
 {
     if (path.empty() || path.is_absolute() || path.has_root_name() || path.has_root_directory())

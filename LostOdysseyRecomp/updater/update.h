@@ -18,6 +18,7 @@ struct Version
 
 std::optional<Version> ParseVersion(std::string_view text);
 int CompareVersions(const Version &left, const Version &right);
+bool ShouldUpdateToLatest(const Version &current, const Version &latest);
 
 struct FileEntry
 {

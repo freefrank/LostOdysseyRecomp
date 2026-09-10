@@ -4,6 +4,16 @@ One record of completed changes, with unpublished work separated from verified r
 
 本文统一记录已完成改动，并区分未发布内容与已确认发布版本；日期采用 UTC 发布日期。后续计划见[路线图](docs/ROADMAP.zh-CN.md)，不作为已发布功能记录。
 
+## Unreleased — 0.5.0 target
+
+### English
+
+- Update checks now trigger for any differing prerelease suffix at an equal numeric version, while identical suffixes remain current. This local policy is not in a published binary; `LoUpdaterTest --version-policy` passed 14/14 cases.
+
+### 简体中文
+
+- 更新检查在数字版本相同时，只要预发布后缀不同就会触发更新，相同后缀则保持当前版本。本地策略尚未包含在已发布程序中；`LoUpdaterTest --version-policy` 通过 14/14 项检查。
+
 ## v0.5.0 — 2026-09-09
 
 ### English

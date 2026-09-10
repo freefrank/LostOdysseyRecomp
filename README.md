@@ -57,6 +57,8 @@ Fixes tested AMD black/dark scenes and depth-of-field output, plus Windows Unico
 
 No Python or Visual Studio installation is needed for the release package. Later launches reuse the shader cache. Keep your save and profile folders when updating.
 
+The updater checks GitHub's latest Release. A higher numeric version updates normally; an equal numeric version with a different `-suffix`, such as `0.5.0-hotfix1`, also triggers an update. The installed build must contain this updater policy before it can take effect.
+
 | Requirement | Supported configuration |
 | :--- | :--- |
 | System | Windows x64, AVX-capable CPU, Direct3D 12 or Vulkan graphics driver |
