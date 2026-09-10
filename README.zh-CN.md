@@ -10,7 +10,7 @@ Windows x64 · Direct3D 12 · Vulkan · PowerPC 静态重编译
 
 可选 TAA 着色器收集会在首次设置，或已有玩家下次打开设置时询问同意。开启后向 `lo.dotslash.pro` 上传有限的着色器摘要，以及压缩的 32 帧稀疏相机运动／深度序列（含抖动与相机矩阵）；schema 2 摘要还可为未知顶点 shader 携带保守的位置证据，同时继续支持 schema 1 格式。可在设置 → 语言中关闭；不上传原始日志、本地路径、存档、彩色画面或着色器源码。异常 shader 摘要优先于低优先级的时序资料归档。参见[采集说明](tools/taa-collector/README.md)。
 
-### [下载 v0.5.1-updaterfix](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.1-updaterfix) · [安装指南](docs/INSTALLING.md) · [反馈问题](https://github.com/freefrank/LostOdysseyRecomp/issues)
+### [下载 v0.5.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.1) · [安装指南](docs/INSTALLING.md) · [反馈问题](https://github.com/freefrank/LostOdysseyRecomp/issues)
 
 [English](README.md) · [项目状态](docs/STATUS.md) · [路线图](docs/ROADMAP.zh-CN.md) · [维护者 Project（公开）](https://github.com/users/freefrank/projects/3) · [从源码构建](docs/BUILDING.md)
 

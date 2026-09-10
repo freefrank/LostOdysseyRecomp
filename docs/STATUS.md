@@ -1,12 +1,14 @@
 # Project status
 
-## v0.5.1 naming adjustment — preparing release
+## Published v0.5.1 — 2026-09-10
 
-The user requested the updater release name `v0.5.1` in place of `v0.5.1-updaterfix`. Source version is now `0.5.1`; the release package will be rebuilt to keep the executable, manifest, tag and asset name consistent. Updater behavior is unchanged. The existing 43 standalone, 14 version-policy and 7 packaging checks remain valid and are not repeated. Publication is pending the new CI package. The preceding published artifact is recorded below as historical provenance.
+The updater release is now named [v0.5.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.1) and is GitHub Latest. Source, linked executable, manifest and package filename use `0.5.1`. It was built from `7ec5c7b6dec5c1f6ba29f7652e812bca93e72652` by [Release CI](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34440279121). The prior `v0.5.1-updaterfix` release page was withdrawn after the replacement passed anonymous download verification; its tag and the following artifact record remain historical provenance.
 
-## Published v0.5.1-updaterfix — 2026-09-10
+ZIP SHA256: `eb78828c00a9ae1329195f619c0a400721bc8b635e80c4a57b3a15912af359c5`. Standalone updater SHA256: `19d2cd64d78545f5687139c87eff314f8ff0e9f20be8d5911baf9644ae261e11`. All 50 manifest payload hashes, build/source identity, version and anonymous ZIP/updater downloads passed verification. The 43 standalone, 14 version-policy and 7 packaging checks are reused; this naming adjustment adds no functional change or gameplay test. Receipts: `out/releases/v0.5.1-delivery/VERIFIED.json` and `public-release.json`.
 
-[v0.5.1-updaterfix](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.1-updaterfix) is published as the latest Windows release from commit `396e7809e074c6cf6aa4740c1789516f2a4824c4`. [Release CI](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34437883096) passed. The program and package manifest both use `0.5.1-updaterfix`. ZIP SHA256: `d8b58c991eeaff0f6edfbfa371c673fa781ecc9963123dba320cc97131ba9f7f`; the separately downloadable updater matches the same CI package, SHA256 `d0b68e81744d1ac63e0ef86664c2ccdf385d6b0c7a5ab146dcc37c479dbc3457`.
+## Historical v0.5.1-updaterfix — 2026-09-10
+
+`v0.5.1-updaterfix` was initially published as the latest Windows release from commit `396e7809e074c6cf6aa4740c1789516f2a4824c4`. [Release CI](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34437883096) passed. The program and package manifest both use `0.5.1-updaterfix`. ZIP SHA256: `d8b58c991eeaff0f6edfbfa371c673fa781ecc9963123dba320cc97131ba9f7f`; the separately downloadable updater matches the same CI package, SHA256 `d0b68e81744d1ac63e0ef86664c2ccdf385d6b0c7a5ab146dcc37c479dbc3457`.
 
 Release checks verified the ZIP checksum, all 50 manifest payload hashes, exact tag/source/build identity, and anonymous download access. The 43 standalone, 14 version-policy and 7 suffix-packaging checks are retained evidence; publication did not repeat game or runtime tests. Details are retained in `out/releases/updaterfix-delivery/VERIFIED.json` and `public-release.json`.
 

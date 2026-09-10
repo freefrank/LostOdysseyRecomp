@@ -10,7 +10,7 @@ Windows x64 · Direct3D 12 · Vulkan · PowerPC static recompilation
 
 Optional TAA shader collection asks for consent during first-time setup, or when an existing player next opens Settings. It sends bounded shader summaries and compressed 32-frame sparse camera-motion/depth sequences (including jitter and camera matrices) to `lo.dotslash.pro`; schema 2 summaries may also include conservative position evidence for unknown vertex shaders, while schema 1 remains supported. Disable it in Settings → Language. No raw logs, local paths, saves, color images or shader source are uploaded. Shader anomaly summaries take priority over the lower-priority temporal archive. See [collection details](tools/taa-collector/README.md).
 
-### [Download v0.5.1-updaterfix](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.1-updaterfix) · [Installation guide](docs/INSTALLING.md) · [Report an issue](https://github.com/freefrank/LostOdysseyRecomp/issues)
+### [Download v0.5.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.1) · [Installation guide](docs/INSTALLING.md) · [Report an issue](https://github.com/freefrank/LostOdysseyRecomp/issues)
 
 [简体中文](README.zh-CN.md) · [Project status](docs/STATUS.md) · [Roadmap](docs/ROADMAP.md) · [Maintainer Project (public)](https://github.com/users/freefrank/projects/3) · [Build from source](docs/BUILDING.md)
 

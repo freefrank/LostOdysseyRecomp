@@ -4543,10 +4543,10 @@
         "Area": "Updates and packaging",
         "Status": "Done",
         "Delivery": "Released",
-        "Release": "v0.5.1-updaterfix",
+        "Release": "v0.5.1",
         "Start date": null,
         "Target date": "2026-09-08",
-        "Evidence": "Published v0.5.1-updaterfix from 396e7809e074c6cf6aa4740c1789516f2a4824c4; CI 34437883096 passed. ZIP SHA256 d8b58c991eeaff0f6edfbfa371c673fa781ecc9963123dba320cc97131ba9f7f. All 50 payload hashes and anonymous downloads verified. Retained standalone 43/0, policy 14/0, packaging 7/0; no additional game/runtime tests. https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.1-updaterfix"
+        "Evidence": "Published Latest v0.5.1 at 2026-09-10T05:31:57Z from tag 7ec5c7b6dec5c1f6ba29f7652e812bca93e72652; CI 34440279121 passed. ZIP SHA256 eb78828c00a9ae1329195f619c0a400721bc8b635e80c4a57b3a15912af359c5; standalone updater SHA256 19d2cd64d78545f5687139c87eff314f8ff0e9f20be8d5911baf9644ae261e11. 50 payload hashes, source/version and anonymous ZIP/updater downloads verified. Reused standalone 43/0, policy 14/0 and packaging 7/0 checks; no new game/runtime tests or player acceptance. v0.5.1-updaterfix Release was deleted; its tag remains history."
       },
       "source_refs": [
         "docs/notes/v0.5.0-qol-requirements.md",
