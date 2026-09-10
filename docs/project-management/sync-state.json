@@ -1363,10 +1363,10 @@
         "Delivery": "In progress",
         "Source key": "shader-log-coverage-audit",
         "Release": "v0.5.3",
-        "Evidence": "v0.5.2 remains the historical released baseline. Compact diagnostics passed local focused checks and target v0.5.3. Private archive schema-4 compatibility is pushed at 728d6030980a7be39feca493319f54bfb1a62e74; Worker 14e74c54-1213-4240-9877-047f35cdda75 is live with schema 1–4 health checks. Client commit, tag, release-workflow build and GitHub Release remain pending. No client package, visual repair or player acceptance."
+        "Evidence": "v0.5.3 is published Latest from 6fa9adc281c5693ac0af8a47fec815b20c29ff50; CI 34505504344, package verification and four anonymous public-asset checks passed. Compact diagnostics are included in the published client. Private archive schema-4 and Worker schema 1–4 deployment remain recorded. Publication does not establish a visual repair, player acceptance or full updater transaction."
       },
       "title": "Add independent shader logs and cumulative coverage auditing",
-      "body_sha256": "566e2114e4cfebac1d058e86f8f2d41dd6399702812f8c0764e71dc190ee53fe"
+      "body_sha256": "5aa79cb39c19b1de48399d8f4e36a041c4b6bc47779761d148dbacff711465ff"
     },
     "amd-opening-shadow-report": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56ekQ",
@@ -2154,11 +2154,11 @@
         "Release": "v0.5.3",
         "Source key": "qol-github-binary-updater",
         "Target date": "2026-09-08",
-        "Evidence": "v0.5.2 local repair complete; user acceptance pending. stage.cpp accepts package_release.py's explicit root entry while retaining single-root checks. build_target.bat LoUpdaterTest succeeded and updater_archive_test.py passed 12/12, covering real archive layouts, byte-checked extraction and malformed/safety rejection. Render-only inactive-desktop UI checks confirm English-only language=7 strings, fitting controls and unchanged foreground; no functional checks. MessageBoxExW selects en-US, but no dialog was opened. No game, network update, full transaction, user acceptance or publication. Evidence: out/updater-fix/REPORT.md; out/updater-fix/ui/render-manifest.json; exe SHA256 eb445972f42e9374383f3eca6579462bbf363ce24cc20da067cb6987dbeb5cd7. Committed on trail/updater: 8ab983cc38c9e1356be2705ca4189b5fdc60372f; integrated into local main: d1bb801d8ec3027b4fe508f80292c10e031a5693. Not pushed or released.",
+        "Evidence": "v0.5.3 is published Latest from 6fa9adc281c5693ac0af8a47fec815b20c29ff50; CI 34505504344, package verification and four anonymous public-asset checks passed. The updater repair remains host-validated; no full update transaction, game run or player acceptance is recorded. The 848,896 B standalone updater SHA256 is 1ad8a0b6e605f050376d59050bf94d598bbd9ec2965610df30cd5e6083fcc5a2.",
         "Start date": null
       },
       "title": "Add safe GitHub binary update checks",
-      "body_sha256": "6340d5b86475f0f6218c626be6fa80c30946fc9a4ceddef8f2dcc1f034c33d64"
+      "body_sha256": "c53485514ed0a84941edfcc8d725c9fc5665efc77e052c9886ef341f9232bbe9"
     },
     "steady-state-cpu-hotspot-profile": {
       "id": "PVTI_lAHOAAsUY84Biy1azg5_iS4",
