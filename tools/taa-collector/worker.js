@@ -1,5 +1,7 @@
 import {temporalRequest} from './temporal.js';
 import {shaderSourceRequest,expireShaderSources} from './shader-source.js';
+import {normalizeBinding} from './taa-binding.js';
+import {normalizeCompact} from './collection-diagnostics.js';
 const MAX_BYTES = 65536;
 const reply = (body, status = 200) => Response.json(body, {status, headers: {'Cache-Control': 'no-store'}});
 const integer = (v, lo, hi) => Number.isInteger(v) && v >= lo && v <= hi;
@@ -8,6 +10,8 @@ function exact(obj, fields) {
     Object.keys(obj).length === fields.length && fields.every(k => Object.hasOwn(obj, k));
 }
 export function normalize(body) {
+  if (body?.schema === 4) return normalizeCompact(body, normalize);
+  if (body?.schema === 3) return normalizeBinding(body);
   if (!exact(body, ['schema','build','backend','gpu','driver','records']) || ![1,2].includes(body.schema) ||
       typeof body.build !== 'string' || !/^[a-zA-Z0-9._-]{1,80}$/.test(body.build) || !['vulkan','d3d12'].includes(body.backend) ||
       typeof body.gpu !== 'string' || !/^[a-zA-Z0-9 ()_.+-]{1,100}$/.test(body.gpu) ||
@@ -41,8 +45,8 @@ export async function digest(text) {
 export default {
   async fetch(request, env) {
     const path = new URL(request.url).pathname;
-    if (path === '/health' && request.method === 'GET') return reply({service:'lost-odyssey-taa-collector',schema:1,schemas:[1,2],temporal:1,shaderSources:1});
-    if (path === '/' && request.method === 'GET') return new Response('Lost Odyssey optional TAA diagnostics. Opt-in only. Structured shader hashes, original VS/PS microcode, GPU/driver, dimensions, compact position-use evidence, jitter/camera matrices, sparse depth and camera-only motion sequences; no raw logs, paths or saves. Shader programs are deduplicated by content and associated with GPU model, backend, driver and build. Records expire after 30 days without an observation; unreferenced shader programs are removed. Disable collection in game Settings. No public diagnostic download. Cloudflare processes connection metadata for delivery and abuse prevention.');
+    if (path === '/health' && request.method === 'GET') return reply({service:'lost-odyssey-taa-collector',schema:1,schemas:[1,2,3,4],temporal:1,shaderSources:1});
+    if (path === '/' && request.method === 'GET') return new Response('Lost Odyssey optional TAA diagnostics. Opt-in only. Structured shader hashes, original VS/PS microcode, GPU/driver, dimensions, compact position-use evidence, jitter/camera matrices, bounded texture binding, sampler and resolve provenance, sparse depth and camera-only motion sequences; no raw logs, paths or saves. Shader programs are deduplicated by content and associated with GPU model, backend, driver and build. D1 records expire after 30 days without an observation; unreferenced shader programs are removed. Private research archives can retain copies without automatic expiry. Disable collection in game Settings. No public diagnostic download. Cloudflare processes connection metadata for delivery and abuse prevention.');
     if (path === '/v1/temporal') return temporalRequest(request,env);
     if (path === '/v1/shader-sources') return shaderSourceRequest(request,env);
     if (path !== '/v1/taa') return reply({error:'not_found'},404);
@@ -51,14 +55,17 @@ export default {
     const {success} = await env.UPLOAD_LIMIT.limit({key:request.headers.get('CF-Connecting-IP') || 'unknown'});
     if (!success) return reply({error:'rate_limit'},429);
     if (Number(request.headers.get('Content-Length')) > MAX_BYTES) return reply({error:'too_large'},413);
-    let records;
+    let records, compact = false;
     try {
       const reader = request.body?.getReader(); if (!reader) throw Error('body');
       let size=0; const chunks=[];
       for (;;) {const {done,value}=await reader.read();if(done)break;size+=value.length;
         if(size>MAX_BYTES){await reader.cancel();return reply({error:'too_large'},413);}chunks.push(value);}
       const bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length;}
-      records=normalize(JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes)));
+      const body=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes));
+      compact=body?.schema===4;
+      if(compact && size>32768)return reply({error:'too_large'},413);
+      records=normalize(body);
     } catch {return reply({error:'invalid_payload'},400);}
     try {
       const now=Math.floor(Date.now()/1000);
@@ -66,7 +73,7 @@ export default {
         'INSERT INTO observations(id,diagnostic,max_draws,first_seen,last_seen) VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET max_draws=MAX(observations.max_draws,excluded.max_draws),last_seen=excluded.last_seen'
       ).bind(await digest(r.diagnostic),r.diagnostic,r.draws,now,now)));
       await env.DB.batch(statements);
-      return reply({accepted:records.length});
+      return reply(compact ? {accepted:1,id:await digest(records[0].diagnostic)} : {accepted:records.length});
     } catch {console.error(JSON.stringify({event:'storage_failure'}));return reply({error:'unavailable'},503);}
   },
   async scheduled(_event,env) {

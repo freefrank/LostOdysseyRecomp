@@ -56,6 +56,14 @@ Build `LoStorageTest` only when the affected native inputs change. Its `dlc <new
 
 The focused `collection_upload_request_test.cpp` fixture covers the nonblocking F1 upload request contract: bounded ownership, busy/full skip behavior, zero hot-path allocation, stalled HTTP completion, stop/destruction and retry-state boundaries. The current recorded run passed 124 checks; its retained output is [the F1 upload fixture log](../../out/tests/shader-source-collection/f1-upload-request/test.log). It reuses the existing 168 source-collection and 3,104 summary-collection checks rather than repeating them. This is client/helper contract evidence and does not establish a production client build, game runtime or player acceptance. The live service roundtrip is recorded separately in `out/v0.5.0/shader-source-collection/live-roundtrip.json`.
 
+### TAA binding evidence fixtures
+
+The standalone CPU fixtures `taa_binding_collection_test.cpp` and `taa_binding_producer_test.cpp` cover the bounded schema 3 queue, producer snapshots, revocation and zero-allocation producer paths. Compile and run them from isolated output directories when the binding contract changes. The Worker protocol fixture is run with `npm run test:taa-bindings` from `tools/taa-collector`; it covers schema 3 serialization, validation, canonicalization and deduplication. These checks do not launch the game or establish visual acceptance.
+
+### Compact diagnostic receiver fixture
+
+The compact receiver checks are run from `tools/taa-collector` with `node --test collection-diagnostics.test.js`. The recorded 9/9 run covers schema 4 bounds, canonicalization, privacy allowlists, backend capabilities, references, receipt handling, deduplication, HTTP failures and compatibility with older receipts. The C++ fixture passed 68 checks with zero allocations, and the ledger/archive checks passed separately. These checks do not launch the game or establish visual acceptance.
+
 The following CMake targets are `EXCLUDE_FROM_ALL`; they are not `tools/test.bat` suite names and are never run implicitly. Select only the target relevant to the change, build it explicitly, and run the resulting executable from an isolated working directory when it writes captures or caches:
 
 `LoFolderPickerTest`, `LoDebugMenuInteractionTest`, `LoGameWindowPixelsTest`, `LoShaderPreparationQueueTest`, `LoShaderStartupCacheTest`, `LoBackendCacheTest`, `LoBackendSelectionTest`, `LoBackendDeviceTest`, `LoRestartTest`, `LoGamePathTest`, `LoUpdaterTest`, `LoUpdaterStandaloneTest`, `LoUpdaterProgressTest`, `LoUpdaterHelperContextTest`, `LoUpdaterProbe`, `LoVulkanBackendTest`, and `LoPollWaitTest`.

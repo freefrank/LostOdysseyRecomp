@@ -4,15 +4,25 @@ One record of completed changes, with unpublished work separated from verified r
 
 本文统一记录已完成改动，并区分未发布内容与已确认发布版本；日期采用 UTC 发布日期。后续计划见[路线图](docs/ROADMAP.zh-CN.md)，不作为已发布功能记录。
 
-## Unreleased updater fix / 未发布的更新器修复
+## v0.5.3 — 2026-09-10
 
 ### English
 
-- Fix staging of ZIP archives created by Python `shutil.make_archive` when the explicit package-root directory entry has a trailing slash, while retaining the one-root safety checks. Keep the standalone updater UI and error dialogs in English, with native buttons requested through the `en-US` locale. This is local and unpublished; the 12 focused archive cases and render-only English UI checks passed.
+- Add compact opt-in TAA diagnostics using bounded 32-frame CPU windows, requests capped at 32 KiB and a 180-second cadence, with delivery receipts and no upload wait on the game thread.
+- Add bounded TAA consumer and texture-producer binding evidence for shader review, while keeping jitter mapping and visual acceptance separate.
+- Archive opted-in feedback daily with content deduplication and maintain a research analysis ledger; D1's 30-day inactive-record expiry remains separate from the long-term Git archive.
+- Fix updater staging for ZIP packages with an explicit root-directory entry.
+
+TAA remains experimental; this release does not claim a new player visual acceptance or a flicker fix.
 
 ### 简体中文
 
-- 修复 Python `shutil.make_archive` 生成的 ZIP 在显式包根目录条目带末尾斜杠时无法暂存的问题，同时保留单根目录安全检查。独立更新器界面和错误对话框统一使用英文，并通过 `en-US` locale 请求原生按钮。本修复仅在本地完成且尚未发布；12 项 archive 定向检查及仅渲染英文 UI 检查通过。
+- 增加有界 32 帧 CPU 窗口的 opt-in TAA compact 诊断，载荷上限 32 KiB、采集间隔 180 秒，提供投递回执且上传无需等待游戏线程。
+- 增加供 shader 审阅使用的 TAA 消费者与纹理生产者绑定证据；jitter 映射和画面验收仍单独判断。
+- 每日归档已同意的反馈并按内容去重，同时维护研发分析账本；D1 的 30 天未活跃记录过期规则与长期 Git 归档分开执行。
+- 修复带显式根目录条目的 ZIP 包暂存处理。
+
+TAA 仍处于实验阶段；本版本不宣称新的玩家画面验收结果，也不宣称修复闪烁问题。
 
 ## v0.5.2 — 2026-09-10
 

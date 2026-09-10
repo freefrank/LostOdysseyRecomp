@@ -10,7 +10,7 @@ Windows x64 · Direct3D 12 · Vulkan · PowerPC static recompilation
 
 Optional diagnostics are off by default and can be disabled in Settings. See [Privacy](PRIVACY.md).
 
-### [Download v0.5.2](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.2) · [Installation guide](docs/INSTALLING.md) · [Report an issue](https://github.com/freefrank/LostOdysseyRecomp/issues)
+### [Latest download](https://github.com/freefrank/LostOdysseyRecomp/releases/latest) · [Installation guide](docs/INSTALLING.md) · [Report an issue](https://github.com/freefrank/LostOdysseyRecomp/issues)
 
 [简体中文](README.zh-CN.md) · [Changelog](CHANGELOG.md) · [Projects](https://github.com/users/freefrank/projects/3) · [Build from source](docs/BUILDING.md)
 
@@ -19,10 +19,11 @@ Optional diagnostics are off by default and can be disabled in Settings. See [Pr
 > [!IMPORTANT]
 > **This project is still in early testing.** Opening areas and selected scenes have been tested; a complete playthrough has not. Rendering and stability issues remain. You must supply your own supported game files.
 
-## New in v0.5.2
+## New in v0.5.3
 
-- Include original VS/PS shader programs in F1 render captures.
-- Add optional incremental diagnostic uploads in the background, also triggered after F1 capture, without waiting on the game thread.
+- Add compact opt-in TAA diagnostics collected in bounded CPU windows, with delivery receipts and no game-thread upload wait.
+- Record bounded TAA consumer and texture-producer binding evidence for shader review.
+- Improve updater ZIP staging for packages with an explicit root-directory entry.
 
 Earlier release details are maintained in the [changelog](CHANGELOG.md).
 

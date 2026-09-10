@@ -1,6 +1,6 @@
 # Installing Lost Odyssey Recomp
 
-This guide describes the Windows v0.5.2 package, with Direct3D 12 and Vulkan graphics backends.
+This guide describes the Windows v0.5.3 package, with Direct3D 12 and Vulkan graphics backends.
 
 1. Extract the entire package to a writable folder, outside Program Files. Keep the executable, importer, updater helper, validated DXC v1.8.2407 DLL pair and license files together.
 2. Run **LostOdysseyRecomp.exe** directly. If game files are missing, the importer opens; select your source and review its recognition result before importing.

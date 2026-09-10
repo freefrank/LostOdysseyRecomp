@@ -170,6 +170,9 @@ public:
     }
     size_t PendingBytes() const { return pendingBytes_; }
     size_t Tracked() const { return tracked_; }
+    size_t PendingCount() const noexcept {
+        size_t count=0;for(const auto& program:programs_)if(program.size)++count;return count;
+    }
     uint64_t Epoch() const { return epoch_; }
 
 private:

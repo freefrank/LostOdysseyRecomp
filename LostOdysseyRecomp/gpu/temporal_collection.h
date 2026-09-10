@@ -15,7 +15,7 @@ struct SparseFrame {
     std::array<float,576> depth{};
 };
 bool WantSparse();
-uint64_t ConsentEpoch();
+uint64_t ConsentEpoch() noexcept;
 void SubmitSparse(SparseFrame frame);
 
 // Packet v1: 16-byte header, then 32 fixed 4824-byte frames. All little endian.
