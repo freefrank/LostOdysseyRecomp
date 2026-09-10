@@ -10,7 +10,7 @@ Windows x64 · Direct3D 12 · Vulkan · PowerPC static recompilation
 
 Optional TAA shader collection asks for consent during first-time setup, or when an existing player next opens Settings. It sends bounded shader summaries and compressed 32-frame sparse camera-motion/depth sequences (including jitter and camera matrices) to `lo.dotslash.pro`; schema 2 summaries may also include conservative position evidence for unknown vertex shaders, while schema 1 remains supported. Disable it in Settings → Language. No raw logs, local paths, saves, color images or shader source are uploaded. Shader anomaly summaries take priority over the lower-priority temporal archive. See [collection details](tools/taa-collector/README.md).
 
-### [Download v0.4.2](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.4.2) · [Installation guide](docs/INSTALLING.md) · [Report an issue](https://github.com/freefrank/LostOdysseyRecomp/issues)
+### [Download v0.5.1-updaterfix](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.1-updaterfix) · [Installation guide](docs/INSTALLING.md) · [Report an issue](https://github.com/freefrank/LostOdysseyRecomp/issues)
 
 [简体中文](README.zh-CN.md) · [Project status](docs/STATUS.md) · [Roadmap](docs/ROADMAP.md) · [Maintainer Project (public)](https://github.com/users/freefrank/projects/3) · [Build from source](docs/BUILDING.md)
 
@@ -19,7 +19,11 @@ Optional TAA shader collection asks for consent during first-time setup, or when
 > [!IMPORTANT]
 > **This project is still in early testing.** Opening areas and selected scenes have been tested; a complete playthrough has not. Rendering and stability issues remain. You must supply your own supported game files.
 
-## New in v0.4.2
+## New in v0.5.1-updaterfix
+
+The updater supports standalone double-click startup and suffix changes at an equal numeric version. The full Windows ZIP and a separate updater EXE are published; place the separate EXE beside the installed game and `manifest.json`.
+
+## Previously in v0.4.2
 
 Fixes the reproduced Uhra Council cutscene crash and nine further PowerPC translation defects, and writes native crash details to automatic runtime logs. Extends TAA to six verified battle paths; enemy-disappearance flicker remains unresolved. F1 compresses completed captures in the background and removes their raw folder only after success. Default logging retains the current file plus the two newest earlier logs, protecting active files and custom paths. Frame capture itself can still pause rendering.
 
@@ -57,7 +61,7 @@ Fixes tested AMD black/dark scenes and depth-of-field output, plus Windows Unico
 
 No Python or Visual Studio installation is needed for the release package. Later launches reuse the shader cache. Keep your save and profile folders when updating.
 
-The v0.5.1-updaterfix updater checks GitHub's latest Release. A higher numeric version updates normally; equal numeric versions with different suffixes also trigger an update. Existing v0.5.0 clients can upgrade to this patch through their numeric-version check once the Release is available.
+The v0.5.1-updaterfix updater checks GitHub's latest Release. A higher numeric version updates normally; equal numeric versions with different suffixes also trigger an update. Existing v0.5.0 clients can upgrade to this patch through their numeric-version check.
 
 Double-click `LostOdysseyUpdater.exe` beside the installed game and `manifest.json` to check manually. Close the game first. Manual checks work even when automatic checks are disabled in Settings; a successful update starts the game.
 
@@ -94,7 +98,7 @@ See the [installation guide](docs/INSTALLING.md) for accepted disc versions, fil
 
 DLSS, FSR and frame generation are not implemented; v0.4.0 removes the former disabled controls. HDR remains future work.
 
-**Current development:** The current source and release target are both 0.5.0; the 0.4.19–0.4.23 feature history is retained as internal development history rather than separate releases. Current Windows builds provide D3D12 and Vulkan, automatic game/DLC recognition, original-style Settings with one-click Graphics save/apply, Now/Later restart handling, direct return to the previous menu without the original confirmation dialog, shader-cache reuse and reduced unnecessary CPU polling. Shader identity reuse, geometry preparation and precise pacing brought the fixed Map16 4K measurement from 48.01 to 59.76 RTSS FPS; other scenes and sustained whole-game performance remain unverified. The current release candidate also prioritizes capture-confirmed shader anomalies and retains optional sparse camera data for future temporal research. The candidate executable is recorded in [release preparation](docs/RELEASE-v0.5.0.md); publication state is tracked separately. The recorded Windows scope remains bounded: other GPUs need feedback, DX11/Linux/macOS/Switch are future work, DLC rewards/dungeons and full-game coverage remain unverified.
+**v0.5.0 development record:** The source and release target at that milestone were both 0.5.0; the 0.4.19–0.4.23 feature history is retained as internal development history rather than separate releases. Current Windows builds provide D3D12 and Vulkan, automatic game/DLC recognition, original-style Settings with one-click Graphics save/apply, Now/Later restart handling, direct return to the previous menu without the original confirmation dialog, shader-cache reuse and reduced unnecessary CPU polling. Shader identity reuse, geometry preparation and precise pacing brought the fixed Map16 4K measurement from 48.01 to 59.76 RTSS FPS; other scenes and sustained whole-game performance remain unverified. The current release candidate also prioritizes capture-confirmed shader anomalies and retains optional sparse camera data for future temporal research. The candidate executable is recorded in [release preparation](docs/RELEASE-v0.5.0.md); publication state is tracked separately. The recorded Windows scope remains bounded: other GPUs need feedback, DX11/Linux/macOS/Switch are future work, DLC rewards/dungeons and full-game coverage remain unverified.
 
 The v0.5.0 delivery scope is Windows D3D12/Vulkan; DX11, Linux, macOS and the experimental Switch port with u/Adoky are future work, and other GPU coverage awaits user feedback. Intermediate 0.4.xx versions remain internal. The matched D3D12 CPU comparison is bounded to its recorded scene and hardware; it is not a whole-game or Vulkan benchmark. Whole-game compatibility and two known shader failures remain open.
 

@@ -2150,15 +2150,15 @@
         "Kind": "Feature",
         "Area": "Updates and packaging",
         "Status": "Done",
-        "Delivery": "Validated",
-        "Release": "v0.5.1",
+        "Delivery": "Released",
+        "Release": "v0.5.1-updaterfix",
         "Source key": "qol-github-binary-updater",
         "Target date": "2026-09-08",
-        "Evidence": "Standalone source 0.5.1 implemented locally; Release /MT host fixture 43 checks/0 failures, including synthetic real-helper replacement/probe launch. No real game/public download. Standalone change uncommitted/unpushed/unreleased; suffix policy remains on main bf549d3. Evidence: out/standalone-host/REPORT.md.",
+        "Evidence": "Published v0.5.1-updaterfix from 396e7809e074c6cf6aa4740c1789516f2a4824c4; CI 34437883096 passed. ZIP SHA256 d8b58c991eeaff0f6edfbfa371c673fa781ecc9963123dba320cc97131ba9f7f. All 50 payload hashes and anonymous downloads verified. Retained standalone 43/0, policy 14/0, packaging 7/0; no additional game/runtime tests. https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.1-updaterfix",
         "Start date": null
       },
       "title": "Add safe GitHub binary update checks",
-      "body_sha256": "e1a8c27701c5c592800b0c8966fb2d49b3263f8e5b1c78d2b56eb569caa36814"
+      "body_sha256": "6f79b694678d5600d62c05d0ac0e94dcf259846c77f689301b3aff737b90c49d"
     },
     "steady-state-cpu-hotspot-profile": {
       "id": "PVTI_lAHOAAsUY84Biy1azg5_iS4",

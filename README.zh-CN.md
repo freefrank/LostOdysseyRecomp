@@ -10,7 +10,7 @@ Windows x64 · Direct3D 12 · Vulkan · PowerPC 静态重编译
 
 可选 TAA 着色器收集会在首次设置，或已有玩家下次打开设置时询问同意。开启后向 `lo.dotslash.pro` 上传有限的着色器摘要，以及压缩的 32 帧稀疏相机运动／深度序列（含抖动与相机矩阵）；schema 2 摘要还可为未知顶点 shader 携带保守的位置证据，同时继续支持 schema 1 格式。可在设置 → 语言中关闭；不上传原始日志、本地路径、存档、彩色画面或着色器源码。异常 shader 摘要优先于低优先级的时序资料归档。参见[采集说明](tools/taa-collector/README.md)。
 
-### [下载 v0.4.2](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.4.2) · [安装指南](docs/INSTALLING.md) · [反馈问题](https://github.com/freefrank/LostOdysseyRecomp/issues)
+### [下载 v0.5.1-updaterfix](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.1-updaterfix) · [安装指南](docs/INSTALLING.md) · [反馈问题](https://github.com/freefrank/LostOdysseyRecomp/issues)
 
 [English](README.md) · [项目状态](docs/STATUS.md) · [路线图](docs/ROADMAP.zh-CN.md) · [维护者 Project（公开）](https://github.com/users/freefrank/projects/3) · [从源码构建](docs/BUILDING.md)
 
@@ -19,7 +19,11 @@ Windows x64 · Direct3D 12 · Vulkan · PowerPC 静态重编译
 > [!IMPORTANT]
 > **本项目仍处于早期测试阶段。** 已测试开场区域和部分场景，尚未通关。渲染和稳定性仍有问题。请自行提供受支持版本的游戏文件。
 
-## v0.4.2 更新
+## v0.5.1-updaterfix 更新
+
+更新器支持独立双击启动，以及同数字版本的后缀更新判断。完整 Windows ZIP 和独立 updater EXE 均已发布；独立 EXE 需放在游戏程序和 `manifest.json` 同目录。
+
+## 之前的 v0.4.2 更新
 
 修复已复现的乌拉议会过场崩溃及另外九类 PowerPC 翻译错误，原生崩溃信息写入自动运行日志。补齐六条战斗 TAA 路径；敌人消散闪烁仍待修复。F1 捕获后在后台压缩 ZIP，成功保存后才清理对应原始目录；默认保留当前日志及最新两份旧日志，活动文件和自定义路径受保护。帧捕获本身仍可能暂停渲染。
 
@@ -57,7 +61,7 @@ v0.3.0已正式发布，扩大到压缩资源与XEX中的shader发现，生成�
 
 发布包不需要安装 Python 或 Visual Studio。后续启动会复用着色器缓存；更新程序时请保留存档和档案文件夹。
 
-v0.5.1-updaterfix 更新器会检查 GitHub 最新 Release。数字版本更高，或数字版本相同但后缀不同时触发更新。此 Release 发布后，现有 v0.5.0 客户端可通过数字版本检查升级。
+v0.5.1-updaterfix 更新器会检查 GitHub 最新 Release。数字版本更高，或数字版本相同但后缀不同时触发更新。现有 v0.5.0 客户端可通过数字版本检查升级到此 Release。
 
 将 `LostOdysseyUpdater.exe` 放在游戏程序和 `manifest.json` 同一目录，先关闭游戏再双击，即可手动检查更新。即使设置中关闭了自动检查，手动检查仍可使用；更新成功后会启动游戏。
 
@@ -94,7 +98,7 @@ DLSS、FSR 和帧生成尚未实现；v0.4.0 已移除此前的禁用控件。HD
 
 **当前 v0.5.0 Windows 版 DLC：**打开 `InstallGame.exe`，选择 **Files** 或 **Folder**，导入器会自动识别游戏光盘和失落的奥德赛 STFS DLC。三份真实 DLC 包已完成导入，运行时共读取 header、完整索引和 payload 24 次且无崩溃；导入文件和用户数据保持不变。奖励和地下城玩法仍待验证。见[安装说明](docs/INSTALLING.md#automatic-content-import)。
 
-**当前开发：** 当前源码和发布目标统一为 0.5.0；0.4.19–0.4.23 作为内部开发历史保留，不单独对应发布版本。当前 Windows 版提供 D3D12 与 Vulkan、游戏/DLC 自动识别、原版风格 Settings、图形设置单击保存并应用、Now/Later 重启选择、直接返回上一级且不显示原版确认框、shader cache 复用、减少不必要的 CPU 轮询。复用 shader 标识、优化几何准备和精确限帧后，固定 Map16 4K 的 RTSS 从 48.01 升至 59.76 FPS；其他场景及全游戏持续性能仍待验证。当前候选优先处理 capture 确认的异常 shader，并保留可选稀疏相机资料供后续时序研究；候选程序见[0.5.0 发布准备](docs/RELEASE-v0.5.0.md)，发布状态另行记录。当前 Windows 范围仍有界：其他 GPU 需要反馈，DX11/Linux/macOS/实验性 Switch（与 u/Adoky 合作）属于未来工作，DLC 奖励／地下城和完整游戏覆盖仍未验证。
+**v0.5.0 开发记录：** 当时的源码和发布目标统一为 0.5.0；0.4.19–0.4.23 作为内部开发历史保留，不单独对应发布版本。当前 Windows 版提供 D3D12 与 Vulkan、游戏/DLC 自动识别、原版风格 Settings、图形设置单击保存并应用、Now/Later 重启选择、直接返回上一级且不显示原版确认框、shader cache 复用、减少不必要的 CPU 轮询。复用 shader 标识、优化几何准备和精确限帧后，固定 Map16 4K 的 RTSS 从 48.01 升至 59.76 FPS；其他场景及全游戏持续性能仍待验证。当前候选优先处理 capture 确认的异常 shader，并保留可选稀疏相机资料供后续时序研究；候选程序见[0.5.0 发布准备](docs/RELEASE-v0.5.0.md)，发布状态另行记录。当前 Windows 范围仍有界：其他 GPU 需要反馈，DX11/Linux/macOS/实验性 Switch（与 u/Adoky 合作）属于未来工作，DLC 奖励／地下城和完整游戏覆盖仍未验证。
 
 v0.5.0 的交付范围为 Windows D3D12／Vulkan；DX11、Linux、macOS 及与 u/Adoky 合作的实验性 Switch 移植属于未来工作，其他 GPU 覆盖等待用户反馈。0.4.xx 保持内部开发版本。D3D12 CPU 对照仅适用于记录中的场景和硬件，不是全游戏或 Vulkan benchmark。全游戏兼容性及两项已知 shader failure 仍待完成。
 
