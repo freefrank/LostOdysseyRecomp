@@ -1,0 +1,17 @@
+# Privacy and diagnostic collection
+
+Lost Odyssey Recomp's automatic diagnostic collection is optional. Consent is off by default, is requested through the existing five-language consent setting, and can be withdrawn in the existing Settings control. When automatic collection is disabled, queued automatic-upload samples are discarded; a request already in progress may finish. The application does not create a cross-session player or device identity.
+
+The v0.5.2 source scope is prepared locally but not published in a client package. Existing manual F1 capture already writes a local diagnostic package; this version adds the program-produced original VS/PS microcode to that package and adds a separate automatic incremental upload path. F1 capture is manually initiated and independent of automatic collection consent. The automatic payload may contain GPU model, driver and backend labels, build and resolution metadata, renderer-derived VS/PS shader hashes, original microcode, shader-state flags, and sparse camera/depth/motion samples with jitter and matrices where the supported path produces them.
+
+The application upload payload and the structured diagnostic records persisted in D1 do not include account usernames, email addresses, machine hostnames, local file paths, serial numbers, disk serial numbers, MAC addresses, device UUIDs, installation IDs, cookies or tracking IDs. They do not include saves, personal files or shader source written by the user. The original microcode in the 0.5.2 source extension is program-produced capture data, not project source code or a user's personal file. Upload records are stored once per content stage and SHA-256 identity, with GPU model associated as diagnostic metadata; they are not partitioned by user or physical device. Inactive records are deleted after 30 days.
+
+The Worker reads `CF-Connecting-IP` only to pass it to the platform's temporary rate limiter; it does not store that value in D1 or use it to track users. Persistent Workers Logs, invocation logs and traces are disabled for this collection Worker. Cloudflare still processes source IP and normal HTTPS request metadata for transport and security; this document does not promise that all Cloudflare or other infrastructure logs are disabled.
+
+Manual F1 capture is a user-triggered local package written for the user to inspect and share. It may include `runtime.log` and therefore local paths or other diagnostic text; inspect the package before sharing it. Automatic collection is a separate opt-in upload path with bounded records, content deduplication and the retention limit above. Automatic collection is designed to avoid blocking the game: it uses preallocated bounded memory, skips recording when a try-lock is busy or storage is full, performs no I/O, allocation or wait on the render hot path, and uses independent upload state. Stopping or exiting does not join a network request. These bounds do not promise zero CPU cost.
+
+F1 local capture is a separate user action and does not enable automatic uploads. After a manual capture, any automatic D1 attempt for its pending VS/PS and structured batch is made only when automatic collection is already enabled; the capture never changes the consent setting.
+
+See the [Chinese privacy mirror](PRIVACY.zh-CN.md).
+
+See the [TAA collector description](tools/taa-collector/README.md) for the current fields and validation boundaries. The collection is diagnostic research and does not establish a rendering fix or gameplay acceptance.

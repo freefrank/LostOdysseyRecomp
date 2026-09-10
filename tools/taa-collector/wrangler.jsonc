@@ -28,11 +28,13 @@
     }
   ],
   "observability": {
-    "enabled": true,
-    "head_sampling_rate": 0.1,
+    "enabled": false,
+    "logs": {
+      "enabled": false,
+      "invocation_logs": false
+    },
     "traces": {
-      "enabled": true,
-      "head_sampling_rate": 0.01
+      "enabled": false
     }
   },
   "triggers": {

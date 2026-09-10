@@ -7,6 +7,8 @@
 #include "video.h"
 #include "command_processor.h"
 #include "shader_identity.h"
+#include "shader_source_capture.h"
+#include "position_evidence_collection.h"
 #include "geometry_prepare.h"
 #include "depth_format.h"
 #include "depth_clear_layout.h"
@@ -306,8 +308,6 @@ namespace gpu::renderer
             bool valid = false;
             position_evidence::Summary position;
             bool positionReady = false;
-            std::bitset<1024> evidenceStates;
-            uint8_t evidenceEvents = 0;
         };
 
         using PipelineKey = gpu::pipeline_cache::Key;
@@ -398,6 +398,7 @@ namespace gpu::renderer
             uint64_t resolveWriteOrdinal = 0;
             uint64_t nextTargetAllocation = 0;
             temporal::SceneObservation temporalScene;
+            std::shared_ptr<taa_collection::SparseDepthGPU> sparseCollector;
             std::unique_ptr<temporal::HistoryOwner> temporalHistory;
             bool temporalExperiment=false,temporalAllowHistory=false,temporalJitter=false,temporalStableGrid=false;
             bool temporalForced=false,temporalForcedHistory=false,temporalForcedJitter=false,temporalForcedStable=false;
@@ -514,6 +515,7 @@ namespace gpu::renderer
             uint32_t debugDraw = 0;
             std::vector<uint32_t> debugRegisters;
             std::set<uint64_t> debugShaders;
+            std::shared_ptr<shader_source_capture::Capture> debugShaderSources;
 
             void BeginDebugCapture()
             {
@@ -529,6 +531,7 @@ namespace gpu::renderer
                         debugCaptureFirstFrame = frame;
                         debugCaptureCompleted = 0;
                         debugShaders.clear();
+                        debugShaderSources = std::make_shared<shader_source_capture::Capture>();
                         std::filesystem::create_directories(debugCaptureRoot / "shaders");
                     }
                     if (frame != debugCaptureFirstFrame + debugCaptureCompleted)
@@ -547,6 +550,7 @@ namespace gpu::renderer
                         uint32_t(config.windowMode), config.antialiasing, config.scalingQuality, config.frameRate);
                     debugTrace << "AA IDs: 0 Off, 1 FXAA, 2 SMAA, 3 experimental TAA. Configured mode does not prove per-draw application; inspect surfaces and draw state.\n";
                     debugTrace << "Shared translated shaders: ../shaders/<hash>.hlsl. Exact R32 depth is in .bin; no duplicate .f32 file.\n";
+                    debugTrace << "Original VS/PS microcode: ../shaders/source/{vs,ps}_<hash>.bin; source manifest reports missing programs, limits and unavailable HLSL. Written by the background archive worker.\n";
                     debugDraw = 0;
                     debugRegisters.clear();
                     resolveSeq = 0;
@@ -573,10 +577,26 @@ namespace gpu::renderer
                             manifest << "requested_frames=" << debugCaptureFrameCount
                                 << "\ncompleted_frames=" << debugCaptureCompleted
                                 << "\nfirst_frame=" << debugCaptureFirstFrame
-                                << "\nlast_attempted_frame=" << frame << "\nstatus=incomplete\n";
+                                << "\nlast_attempted_frame=" << frame << "\nstatus=incomplete\n"
+                                << "shader_sources_status=check_shaders/source/manifest.json_if_background_save_succeeded\n";
                         }
                     }
                     catch (...) {} // The output directory itself may be unwritable.
+                    if (debugShaderSources && !debugCaptureRoot.empty())
+                    {
+                        try
+                        {
+                            auto sources = std::move(debugShaderSources);
+                            captureArchive = os::StartCaptureArchive(debugCaptureRoot, [sources](const std::filesystem::path& directory) {
+                                sources->Write(directory);
+                                // Preserve partial capture data without publishing a complete ZIP.
+                                throw std::system_error(std::make_error_code(std::errc::io_error));
+                            });
+                            captureBusy = true;
+                            captureStatus = L"后台保存不完整捕获 / Saving incomplete capture in background";
+                        }
+                        catch (const std::exception& error) { LOG_ERROR("render capture shader source save could not start: {}", error.what()); }
+                    }
                     debugCaptureRoot.clear();
                     debugCaptureCompleted = 0;
                 }
@@ -769,6 +789,34 @@ namespace gpu::renderer
                     return false;
                 cacheIdentity = xenos::cache::MakeIdentity(vulkan ? backend::Backend::Vulkan : backend::Backend::D3D12, xenos::DxcIdentity());
 
+                // Optional collection resources are prepared before the game loop.
+                // Enabling collection later never compiles or maps on a draw; an
+                // unprepared collector waits for the next renderer startup.
+                try {
+                    if(taa_collection::Enabled()&&!vulkan) {
+                        auto collector=std::make_shared<taa_collection::SparseDepthGPU>();
+                        if(collector->Prepare(device))sparseCollector=std::move(collector);
+                        else LOG_WARNING("renderer: sparse GPU collection unavailable; VS/PS and summary collection remain available");
+                    } else if(taa_collection::Enabled()&&vulkan) {
+                        LOG_INFO("renderer: Vulkan sparse GPU collection skipped: coherent nonblocking readback unavailable; VS/PS and summary collection remain available");
+                    }
+                } catch(const std::exception& error) {
+                    sparseCollector.reset();
+                    LOG_WARNING("renderer: optional sparse GPU collection preparation failed: {}",error.what());
+                }
+                try {
+                    positionEvidence=std::make_unique<position_evidence::Collection>([](std::span<const uint8_t> raw) {
+                        std::vector<uint32_t> swapped(raw.size()/sizeof(uint32_t));
+                        std::memcpy(swapped.data(),raw.data(),raw.size());
+                        for(auto& word:swapped)word=ByteSwap(word);
+                        const auto diagnostic=xenos::TranslateShader(swapped.data(),uint32_t(swapped.size()),false);
+                        return position_evidence::Analyze(diagnostic.hlsl);
+                    });
+                } catch(const std::exception& error) {
+                    positionEvidence.reset();
+                    LOG_WARNING("renderer: optional position evidence collection unavailable: {}",error.what());
+                }
+
                 commandList = queue->createCommandList();
                 fence = device->createCommandFence();
                 uploadRing = device->createBuffer(RenderBufferDesc::UploadBuffer(kUploadRingSize, vulkan ? RenderBufferFlag::DEVICE_ADDRESSABLE | RenderBufferFlag::INDEX | RenderBufferFlag::STORAGE : RenderBufferFlag::NONE));
@@ -798,7 +846,7 @@ namespace gpu::renderer
                 }
                 if(temporalExperiment) {
                     temporalHistory=std::make_unique<temporal::HistoryOwner>();
-                    if(!temporalHistory->Init(device)) {temporalHistory.reset();temporalExperiment=false;LOG_ERROR("renderer: temporal experiment pipeline initialization failed");return false;}
+                    if(!temporalHistory->Init(device,sparseCollector)) {temporalHistory.reset();temporalExperiment=false;LOG_ERROR("renderer: temporal experiment pipeline initialization failed");return false;}
                     else LOG_INFO("renderer: temporal pre-UI experiment enabled, camera_history={} jitter={} stable_grid={} (known scene VS only; no object motion vectors)",temporalAllowHistory,temporalJitter,temporalStableGrid);
                 }
                 dummyBuffer = device->createBuffer(RenderBufferDesc::DefaultBuffer(256));
@@ -1207,6 +1255,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             ++fb;
                 retiredTextures.clear();
                 if(temporalHistory)temporalHistory->ReleaseCompleted();
+                else if(sparseCollector)sparseCollector->ReleaseCompleted();
                 sceneAABusy=false; // Existing queue fence completed; processor descriptors may be reused.
                 uploadOffset = 0;
                 for (auto& used : setPoolUsed)
@@ -1772,31 +1821,22 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             }
 
             shader_identity::Cache shaderIdentities;
+            std::unique_ptr<position_evidence::Collection> positionEvidence;
 
             void PreparePositionEvidence(Shader& entry, const uint32_t* words, uint32_t count, uint64_t hash)
             {
-                if(entry.positionReady || !entry.valid)return;
-                entry.positionReady=true;
-                try {
-                    if(!entry.info.hlsl.empty())entry.position=position_evidence::Analyze(entry.info.hlsl);
-                    else if(count<=16384) {
-                        // Warm startup bundles retain module metadata, not HLSL.
-                        // Reconstruct diagnostic text once at first binding; keep
-                        // the existing GPU binary/cache and translated ABI intact.
-                        std::vector<uint32_t> swapped(count);
-                        for(uint32_t i=0;i<count;++i)swapped[i]=ByteSwap(words[i]);
-                        const auto diagnostic=xenos::TranslateShader(swapped.data(),count,false);
-                        entry.position=position_evidence::Analyze(diagnostic.hlsl);
-                    } else entry.position.issues=32;
-                } catch(...) {entry.position={};entry.position.issues=4;}
-                const auto& p=entry.position;
-                SHADER_LOG_INFO("position-evidence", RendererByteFnv,
-                    "vertex shader={:016x} analyzer={} kind={} position_slot={} issues={} outputs={} frame={}",
-                    hash,p.version,p.kind,p.slot,p.issues,p.outputs,frame);
+                if(entry.positionReady || !entry.valid || !positionEvidence)return;
+                if(!taa_collection::Enabled()&&debugCaptureDir.empty())return;
+                // Busy, full, or pending diagnostics remain unproven. A later draw
+                // can consume the finished CPU result without changing GPU shaders.
+                entry.positionReady=positionEvidence->TryGet(hash,words,count,entry.position);
             }
 
             Shader* GetShader(bool pixel, const uint32_t* words, uint32_t count, uint64_t hash)
             {
+                taa_collection::ObserveProgram(!pixel, hash, words, count);
+                if (debugShaderSources && !debugCaptureDir.empty())
+                    debugShaderSources->Observe(!pixel, hash, words, count, frame);
                 auto& cache = shaders[pixel ? 1 : 0];
                 auto it = cache.find(hash);
                 if (it != cache.end()) {
@@ -2703,6 +2743,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 const uint32_t* psWords = g_commandProcessor.GetActiveShader(true, psCount, psCommandHash);
                 if (!vsWords || vsCount == 0)
                 {
+                    if (debugShaderSources && !debugCaptureDir.empty())
+                        debugShaderSources->Observe(true, 0, vsWords, vsCount, frame);
                     drops.shader++;
                     return;
                 }
@@ -2714,6 +2756,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 // is inactive, including its discard and depth exports. Running
                 // a stale shadow-depth PS here corrupts stencil volume tests.
                 Shader* ps = modeControl == 4 && psWords && psCount ? GetShader(true, psWords, psCount, psHash) : nullptr;
+                if (debugShaderSources && !debugCaptureDir.empty() && !(modeControl == 4 && psWords && psCount))
+                    debugShaderSources->NotePixelNotBound();
                 if (!vs)
                 {
                     drops.shader++;
@@ -2859,7 +2903,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     temporalStableGrid=temporalForcedStable||selected;
                     if(temporalExperiment&&!temporalHistory&&!temporalInitFailed) {
                         temporalHistory=std::make_unique<temporal::HistoryOwner>();
-                        if(!temporalHistory->Init(device)) {temporalHistory.reset();temporalInitFailed=true;LOG_ERROR("renderer: TAA initialization failed; SMAA fallback");}
+                        if(!temporalHistory->Init(device,sparseCollector)) {temporalHistory.reset();temporalInitFailed=true;LOG_ERROR("renderer: TAA initialization failed; SMAA fallback");}
                     }
                     if(!temporalHistory)temporalExperiment=false;
                 }
@@ -2978,15 +3022,6 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         temporalSlot,collectionCandidates,collectionFlags,uint32_t(drawJitter.rejection),vs->position,positionGuards);
                 if(temporalExperiment && temporalJitter && temporalSlot<0 && temporalViewport) {
                     ++temporalJitterUnknowns;
-                    const auto state=positionGuards*32+collectionFlags;
-                    if(vs->evidenceEvents<8 && !vs->evidenceStates.test(state)) {
-                        vs->evidenceStates.set(state);++vs->evidenceEvents;
-                        const auto& p=vs->position;
-                        SHADER_LOG_INFO("coverage-candidate", RendererByteFnv,
-                            "observed f{} vs={:016x} ps={:016x} slot={} candidates={} flags={} rejection={} analyzer={} kind={} position_slot={} issues={} outputs={} guards={} extent={}x{} sample={}/8",
-                            frame,key.vs,key.ps,temporalSlot,collectionCandidates,collectionFlags,uint32_t(drawJitter.rejection),
-                            p.version,p.kind,p.slot,p.issues,p.outputs,positionGuards,uint32_t(rasterViewport.width),uint32_t(rasterViewport.height),vs->evidenceEvents);
-                    }
                 }
                 if (drawJitter.applied) ++temporalJitterDraws;
                 else if (temporalExperiment && temporalJitter && temporalSlot >= 0 && temporalViewport) ++temporalJitterMisses;
@@ -3402,7 +3437,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
                 if (!debugCaptureDir.empty())
                 {
-                    debugTrace << fmt::format("shaders vs={:016x} ps={:016x}\n", key.vs, key.ps);
+                    debugTrace << fmt::format("shaders vs={:016x} ps={:016x} ps_status={}\n", key.vs, key.ps,
+                        ps ? "bound" : (psHash ? "shader_unavailable" : "not_bound"));
                     for (const auto& entry : {std::make_pair(key.vs, vs), std::make_pair(key.ps, ps)})
                     {
                         if (!entry.second) continue;
@@ -3411,6 +3447,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         {
                             std::ofstream out(path); out << entry.second->info.hlsl; out.close();
                             if (out.fail()) debugTrace.setstate(std::ios::failbit);
+                            if (debugShaderSources)
+                                debugShaderSources->MarkHlsl(entry.second == vs, entry.first,
+                                    !out.fail() && !entry.second->info.hlsl.empty());
                         }
                     }
                 }
@@ -4516,19 +4555,27 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
         // Detach the completed capture from the renderer before starting the
         // worker. Subsequent frames cannot append to or use its source files.
         const auto directory = std::move(r.debugCaptureRoot);
+        auto shaderSources = std::move(r.debugShaderSources);
         r.debugTrace.close();
         r.debugTrace.clear();
         r.debugCaptureDir.clear();
         r.debugCaptureRoot.clear();
         r.debugCaptureCompleted = 0;
         r.captureFrame = 0;
+        // Optional diagnostics use the existing consent and background uploader.
+        // This signal never uploads the local ZIP, logs or paths.
+        taa_collection::RequestUpload();
         std::lock_guard lock(captureMutex);
-        if (ok)
+        if (ok || shaderSources)
         {
             try
             {
-                captureArchive = os::StartCaptureArchive(directory);
-                captureStatus = L"后台压缩 ZIP，可继续游戏 / Compressing ZIP in background";
+                captureArchive = os::StartCaptureArchive(directory, [shaderSources, ok](const std::filesystem::path& captureDirectory) {
+                    if (shaderSources) shaderSources->Write(captureDirectory);
+                    if (!ok) throw std::system_error(std::make_error_code(std::errc::io_error));
+                });
+                captureStatus = ok ? L"后台压缩 ZIP，可继续游戏 / Compressing ZIP in background" :
+                    L"后台保存不完整捕获 / Saving incomplete capture in background";
                 LOG_INFO("render capture ZIP started in background: {}", FileSystem::PathUtf8(directory));
                 return;
             }

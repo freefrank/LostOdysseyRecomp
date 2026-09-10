@@ -5,7 +5,8 @@
   "scripts": {
     "test": "node --test worker.test.js",
     "deploy": "wrangler deploy",
-    "test:temporal": "node --test temporal.test.js"
+    "test:temporal": "node --test temporal.test.js",
+    "test:shader-sources": "node --test shader-source.test.js"
   },
   "devDependencies": {
     "wrangler": "4.130.0"

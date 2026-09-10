@@ -29,7 +29,7 @@ namespace os
         }
 #endif
 
-        CaptureArchiveResult Archive(std::filesystem::path directory)
+        CaptureArchiveResult Archive(std::filesystem::path directory, std::function<void(const std::filesystem::path&)> prepare)
         {
             CaptureArchiveResult result;
             result.directory = std::move(directory);
@@ -50,6 +50,8 @@ namespace os
                     throw std::system_error(std::make_error_code(std::errc::invalid_argument));
                 if (std::filesystem::exists(result.archive) || std::filesystem::exists(temporary))
                     throw std::system_error(std::make_error_code(std::errc::file_exists));
+
+                if (prepare) prepare(result.directory);
 
                 // PowerShell single-quoted literals escape only apostrophes.
                 // Use the system executable directly, with no shell expansion.
@@ -125,8 +127,9 @@ namespace os
         }
     }
 
-    std::future<CaptureArchiveResult> StartCaptureArchive(std::filesystem::path directory)
+    std::future<CaptureArchiveResult> StartCaptureArchive(std::filesystem::path directory,
+        std::function<void(const std::filesystem::path&)> prepare)
     {
-        return std::async(std::launch::async, Archive, std::filesystem::absolute(directory).lexically_normal());
+        return std::async(std::launch::async, Archive, std::filesystem::absolute(directory).lexically_normal(), std::move(prepare));
     }
 }

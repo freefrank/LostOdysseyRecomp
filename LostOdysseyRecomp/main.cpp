@@ -197,6 +197,10 @@ int main(int argc, char* argv[])
     }
 #endif
     gpu::taa_collection::Initialize();
+    struct CollectionShutdown
+    {
+        ~CollectionShutdown() { gpu::taa_collection::Shutdown(); }
+    } collectionShutdown;
     if(requestedSetup || (!getenv("LO_BACKGROUND") && !getenv("LO_HEADLESS") && !std::filesystem::exists("settings.ini"))) {
         if(!settings::FirstRunSetup(&gameRoot)) return 0;
         gpu::taa_collection::PromptFirstRun(settings::GetConfig().uiLanguage);

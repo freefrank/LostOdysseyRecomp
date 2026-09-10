@@ -161,7 +161,7 @@ class HistoryOwner {
     };
     plume::RenderDevice* device_=nullptr;
     TemporalAA aa_;
-    taa_collection::SparseDepthGPU sparse_;
+    std::shared_ptr<taa_collection::SparseDepthGPU> sparse_;
     std::array<Image,2> depth_,history_;
     Image source_,display_;
     std::vector<std::unique_ptr<plume::RenderTexture>> retired_;
@@ -185,7 +185,9 @@ class HistoryOwner {
         return x.x==y.x&&x.y==y.y&&x.width==y.width&&x.height==y.height&&x.ndcYSign==y.ndcYSign&&x.halfPixelNdcX==y.halfPixelNdcX&&x.halfPixelNdcY==y.halfPixelNdcY;
     }
 public:
-    bool Init(plume::RenderDevice* device) {device_=device;return aa_.Init(device);}
+    bool Init(plume::RenderDevice* device,std::shared_ptr<taa_collection::SparseDepthGPU> sparse={}) {
+        device_=device;sparse_=std::move(sparse);return aa_.Init(device);
+    }
     void Reset() {valid_=false;for(auto& frame:frames_)frame.completed=false;}
     // Frame identity is supplied by renderer, never CPU presented-swap count.
     void BeginFrame(uint64_t frame,uint64_t epoch,bool diagnostics=false) {
@@ -234,12 +236,12 @@ public:
         TemporalAAInputs in;in.rejectOutOfNeighborhoodHistory=colorReactive;in.stableGrid=stableGrid;in.currentColor=source_.texture.get();in.currentDepth=depth_[frame_%2].texture.get();in.historyColor=history_[(frame_+1)%2].texture.get();in.historyDepth=depth_[(frame_+1)%2].texture.get();in.output=history_[frame_%2].texture.get();
         in.width=in.historyWidth=width_;in.height=in.historyHeight=height_;in.currentCamera=&*current.camera;in.previousCamera=previous.camera?&*previous.camera:nullptr;
         in.currentJitterX=jx;in.currentJitterY=jy;in.previousJitterX=previous.jx;in.previousJitterY=previous.jy;in.historyValid=reuse;in.rejectAllHistory=!allowHistory;
-        if(taa_collection::WantSparse()) {
+        if(sparse_&&sparse_->Ready()&&taa_collection::WantSparse()) {
             taa_collection::SparseFrame f;f.frame=frame_;f.epoch=epoch_;f.width=width_;f.height=height_;
             f.current=current.camera;f.previous=previous.camera;
             f.flags=(previous.completed&&previous.number+1==frame_&&previous.epoch==epoch_&&previous.camera&&SameRaster(*current.camera,*previous.camera)?1u:0u)|(reuse?2u:0u)|(allowHistory?4u:0u)|(stableGrid?8u:0u);
             f.jitter[0]=float(jx);f.jitter[1]=float(jy);f.jitter[2]=float(previous.jx);f.jitter[3]=float(previous.jy);
-            sparse_.Record(device_,commands,in.currentDepth,std::move(f));
+            sparse_->Record(commands,in.currentDepth,std::move(f));
         }
         if(!aa_.Resolve(commands,in)){Reset();return nullptr;}
         Transition(commands,history_[frame_%2],plume::RenderTextureLayout::SHADER_READ);
@@ -254,7 +256,7 @@ public:
     const HistoryReuseDiagnostic& Diagnostics() const {return diagnostics_;}
     // Borrowed diagnostic view, SHADER_READ; restore that layout after a readback.
     plume::RenderTexture* CurrentDepth() const {return depth_[frame_%2].texture.get();}
-    void ReleaseCompleted() {sparse_.ReleaseCompleted();aa_.ReleaseCompleted();retired_.clear();}
+    void ReleaseCompleted() {if(sparse_)sparse_->ReleaseCompleted();aa_.ReleaseCompleted();retired_.clear();}
 };
 }
 #endif

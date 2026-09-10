@@ -80,5 +80,5 @@ test('handler stores schema 1 and 2 through the same D1 batch and rejects invali
  }
  assert.equal(batches.length,2);
  const health=await worker.fetch(new Request('https://lo.dotslash.pro/health'),env);
- assert.deepEqual(await health.json(),{service:'lost-odyssey-taa-collector',schema:1,schemas:[1,2],temporal:1});
+ assert.deepEqual(await health.json(),{service:'lost-odyssey-taa-collector',schema:1,schemas:[1,2],temporal:1,shaderSources:1});
 });

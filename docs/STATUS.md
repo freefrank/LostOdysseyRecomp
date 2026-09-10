@@ -1,5 +1,9 @@
 # Project status
 
+## Current v0.5.2 development
+
+The user requested the current work be committed as **0.5.2**. This source target adds F1 microcode, optional incremental D1 uploads and bounded nonblocking collection. The retained build and background runtime evidence belong to source 0.5.0; the version-only update reuses them. No 0.5.2 client package is published.
+
 ## Published v0.5.1 — 2026-09-10
 
 The updater release is now named [v0.5.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.1) and is GitHub Latest. Source, linked executable, manifest and package filename use `0.5.1`. It was built from `7ec5c7b6dec5c1f6ba29f7652e812bca93e72652` by [Release CI](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34440279121). The prior `v0.5.1-updaterfix` release page was withdrawn after the replacement passed anonymous download verification; its tag and the following artifact record remain historical provenance.

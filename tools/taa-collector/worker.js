@@ -1,4 +1,5 @@
 import {temporalRequest} from './temporal.js';
+import {shaderSourceRequest,expireShaderSources} from './shader-source.js';
 const MAX_BYTES = 65536;
 const reply = (body, status = 200) => Response.json(body, {status, headers: {'Cache-Control': 'no-store'}});
 const integer = (v, lo, hi) => Number.isInteger(v) && v >= lo && v <= hi;
@@ -40,9 +41,10 @@ export async function digest(text) {
 export default {
   async fetch(request, env) {
     const path = new URL(request.url).pathname;
-    if (path === '/health' && request.method === 'GET') return reply({service:'lost-odyssey-taa-collector',schema:1,schemas:[1,2],temporal:1});
-    if (path === '/' && request.method === 'GET') return new Response('Lost Odyssey optional TAA diagnostics. Opt-in only. Structured shader hashes, GPU/driver, dimensions, compact position-use evidence, jitter/camera matrices, sparse depth and camera-only motion sequences; no raw logs, paths, saves or shader source. Deduplicated records expire after 30 days without an observation. Disable collection in game Settings. No public diagnostic download. Cloudflare processes connection metadata for delivery and abuse prevention.');
+    if (path === '/health' && request.method === 'GET') return reply({service:'lost-odyssey-taa-collector',schema:1,schemas:[1,2],temporal:1,shaderSources:1});
+    if (path === '/' && request.method === 'GET') return new Response('Lost Odyssey optional TAA diagnostics. Opt-in only. Structured shader hashes, original VS/PS microcode, GPU/driver, dimensions, compact position-use evidence, jitter/camera matrices, sparse depth and camera-only motion sequences; no raw logs, paths or saves. Shader programs are deduplicated by content and associated with GPU model, backend, driver and build. Records expire after 30 days without an observation; unreferenced shader programs are removed. Disable collection in game Settings. No public diagnostic download. Cloudflare processes connection metadata for delivery and abuse prevention.');
     if (path === '/v1/temporal') return temporalRequest(request,env);
+    if (path === '/v1/shader-sources') return shaderSourceRequest(request,env);
     if (path !== '/v1/taa') return reply({error:'not_found'},404);
     if (request.method !== 'POST') return reply({error:'method'},405);
     if (!request.headers.get('Content-Type')?.toLowerCase().startsWith('application/json') || request.headers.has('Content-Encoding')) return reply({error:'content_type'},415);
@@ -67,5 +69,10 @@ export default {
       return reply({accepted:records.length});
     } catch {console.error(JSON.stringify({event:'storage_failure'}));return reply({error:'unavailable'},503);}
   },
-  async scheduled(_event,env) {await env.DB.prepare('DELETE FROM temporal_sequences WHERE last_seen < ?').bind(Math.floor(Date.now()/1000)-30*86400).run();await env.DB.prepare('DELETE FROM observations WHERE last_seen < ?').bind(Math.floor(Date.now()/1000)-30*86400).run();}
+  async scheduled(_event,env) {
+    const cutoff=Math.floor(Date.now()/1000)-30*86400;
+    await env.DB.prepare('DELETE FROM temporal_sequences WHERE last_seen < ?').bind(cutoff).run();
+    await env.DB.prepare('DELETE FROM observations WHERE last_seen < ?').bind(cutoff).run();
+    await expireShaderSources(env.DB,cutoff);
+  }
 };

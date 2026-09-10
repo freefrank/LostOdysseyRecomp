@@ -19,6 +19,13 @@ Optional TAA shader collection asks for consent during first-time setup, or when
 > [!IMPORTANT]
 > **This project is still in early testing.** Opening areas and selected scenes have been tested; a complete playthrough has not. Rendering and stability issues remain. You must supply your own supported game files.
 
+## New in v0.5.2 (unreleased)
+
+- F1 render captures include original VS/PS shader programs.
+- Optional background diagnostic uploads use bounded nonblocking collection and also trigger after F1 capture.
+
+See the [changelog](CHANGELOG.md) for the v0.5.2 scope and limitations.
+
 ## New in v0.5.1
 
 The updater supports standalone double-click startup and suffix changes at an equal numeric version. The full Windows ZIP and a separate updater EXE are published; place the separate EXE beside the installed game and `manifest.json`.

@@ -4,6 +4,18 @@ One record of completed changes, with unpublished work separated from verified r
 
 本文统一记录已完成改动，并区分未发布内容与已确认发布版本；日期采用 UTC 发布日期。后续计划见[路线图](docs/ROADMAP.zh-CN.md)，不作为已发布功能记录。
 
+## v0.5.2 — Unreleased
+
+### English
+
+- Extend the existing manually triggered F1 local package with program-produced original VS/PS microcode. With the existing automatic collection opt-in, upload pending programs every three minutes and trigger a background attempt for pending VS/PS and structured D1 data after capture. Store one record per content stage and SHA-256 identity, associate the GPU model, and retain records for 30 days after their last update. Automatic collection uses bounded preallocated state and skips busy/full samples without I/O or waits on the render path. Focused checks and background acceptance passed on the retained source-0.5.0 development binary; the 0.5.2 version-only update reuses that evidence. Product F1 export, Vulkan/AMD coverage and publication remain pending.
+- Add the bilingual [privacy statement](PRIVACY.md) and [Chinese privacy mirror](PRIVACY.zh-CN.md). This v0.5.2 development work remains unpublished.
+
+### 简体中文
+
+- 在已有用户手动触发的 F1 本地包中附带程序产生的 VS/PS 原始微码。沿用现有自动收集同意开关，每三分钟增量上传待处理程序，并在捕获完成后触发一次后台 VS/PS 和结构化 D1 数据上传尝试。按内容阶段和 SHA-256 内容身份保存一份，关联 GPU 型号，记录在最后更新后保留 30 天。自动收集使用有界预分配状态，在渲染路径忙或满时跳过样本，不执行 I/O 或等待。保留的 source-0.5.0 开发二进制已通过定向检查和后台验收；0.5.2 仅更新版本号并复用该证据。产品 F1 导出、Vulkan/AMD 覆盖和发布仍待完成。
+- 增加[隐私说明](PRIVACY.zh-CN.md)及[英文主文档](PRIVACY.md)。本轮 v0.5.2 开发内容尚未发布。
+
 ## v0.5.1 — 2026-09-10
 
 ### English

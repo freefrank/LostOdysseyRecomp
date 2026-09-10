@@ -1362,11 +1362,11 @@
         "Status": "In Progress",
         "Delivery": "Validated",
         "Source key": "shader-log-coverage-audit",
-        "Release": "v0.5.0",
-        "Evidence": "Source 0.5.0 position-evidence-1 client: conservative HLSL position-dataflow analysis runs once per VS, and finite camera/viewport/depth evidence records before UnknownShader returns in schema 2 without authorizing jitter. Candidate SHA256 6feb20923e3632ac00b718950927ee245fb6929c7c3bc95e87e9d13f5cd23937 passed 27 C++ rule checks, a retained corpus with four c7 detections and five non-c7 non-matches, plus seven Worker checks. Deployed Worker accepts schema 1 and 2 requests (HTTP 200); D1 schema-2 retransmit dedup raised max_draws 44 to 54, then exact test rows were deleted and read back empty. No game run or real player schema-2 telemetry exists. Cumulative coverage and all-draw audit remain In Progress; 4bd/c230 remains unvalidated."
+        "Release": "v0.5.2",
+        "Evidence": "v0.5.2 release preparation. Collection development is complete and background D3D12 RTX 5080 1280x720 experimental-TAA Map16 validation passed on source-0.5.0 EXE SHA256 1beb8a50c5bef1ebf0fb147338b33d558a2193e87f82b0b8c579ecbcb856959d: periodic 23+32 receipts yielded 55 cache sources (15 VS/40 PS, 19,188 bytes), all byte/SHA256/byte-FNV/length matched; final D1 snapshot 55 sources/55 associations/no duplicate stage-hash keys and 28 matching structured records. Map16 upload window 59.84 FPS/18.067 ms P95 versus 59.67/18.036 before; each had one >50 ms, none >100 ms and no missing frame. Continued-rendering evidence only, not opt-out A/B or zero-overhead proof. Product F1 menu capture, new ZIP manifest and immediate upload remain unverified. Vulkan, AMD, player acceptance and Release remain pending; cumulative coverage/all-draw audit remains In Progress."
       },
       "title": "Add independent shader logs and cumulative coverage auditing",
-      "body_sha256": "89008022b5a9f165b6ea52e2623375373b198bf462edad04afc914b4af835871"
+      "body_sha256": "397360ede9dedb66d1f2d51b18e57794835bef25bcced0eaf4ec663e43beffef"
     },
     "amd-opening-shadow-report": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56ekQ",

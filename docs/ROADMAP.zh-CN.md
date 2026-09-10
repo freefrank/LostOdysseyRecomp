@@ -10,8 +10,8 @@
 
 ## 当前进度与下一步 — 2026-09-09
 
-- **版本与交付：**源码和发布目标保持 `0.5.0`。最新位置证据候选及 EXE SHA256 前缀 `6feb2092` 见[发布准备](RELEASE-v0.5.0.md)；此处不宣称已经公开发布。现有 GitHub draft 和旧 ZIP 在最终资产、tag 及匿名下载核验前仅作为历史记录。
-- **v0.5.0 工作：**Map16 性能、DPI 呈现、独立 shader 日志、可选 shader 收集和稀疏相机时序收集已有界定验证。`0.5.0-position-evidence-1` 在每个 VS 仅运行一次保守 HLSL 位置数据流分析，并在 `UnknownShader` 返回前独立记录相机、视口、深度和矩阵有限值检查的结果；它不自动授权 jitter。Worker 同时接受 schema 1 和 schema 2，但尚无新二进制游戏运行或玩家 schema 2 数据。四条 c7 路径已在同一 D 盘 slot 02 Ghost Town — City of Ruins 场景获用户认可为修复成功：六张间隔 presented 帧覆盖约 11.37 秒，未见闪烁。这不是连续视频或更广场景覆盖；shader 家族回归、全屏、Alt+Enter、物体／骨骼 MV 和全游戏性能仍待完成。
+- **版本与交付：**[v0.5.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.1) 已正式公开，为 latest、非 draft、非 prerelease，于 2026-09-10T05:31:57Z 发布。此前 v0.5.0 发布保留为历史检查点。当前源码改动目标为 `v0.5.2`，仍在本地且未发布；source-0.5.0 候选证据不建立 v0.5.2 游戏运行结论。
+- **v0.5.0 工作：**Map16 性能、DPI 呈现、独立 shader 日志、可选 shader 收集和稀疏相机时序收集已有界定验证。`0.5.0-position-evidence-1` 在每个 VS 仅运行一次保守 HLSL 位置数据流分析，并在 `UnknownShader` 返回前独立记录相机、视口、深度和矩阵有限值检查的结果；它不自动授权 jitter。Worker 同时接受 schema 1 和 schema 2；2026-09-10 只读快照包含 768 条 schema 2 观察，但不扩展画面验收。四条 c7 路径已在同一 D 盘 slot 02 Ghost Town — City of Ruins 场景获用户认可为修复成功：六张间隔 presented 帧覆盖约 11.37 秒，未见闪烁。这不是连续视频或更广场景覆盖；shader 家族回归、全屏、Alt+Enter、物体／骨骼 MV 和全游戏性能仍待完成。
 - **P1——已实现；等待报告者反馈：**[Issue #12](https://github.com/freefrank/LostOdysseyRecomp/issues/12) 已确定为 GC 与渲染对象生命周期竞争；源码修复已从 `claude-issue12` 本地合并到 `0.5.0`，提交 `9cefb0d`。生产验证使用冻结的 source-0.4.18 EXE，无 probe、overlay、人工延迟或 skip-stale，保留 `poll_wait` 与 `17e3ab7` GC 修复。原生 10 花存档独立载入；普通 A 在 serial 16 后从确认推进到树枝后续剧情及 Kaim 自由移动，均发生在持续 148 秒无崩溃、无长卡的观察窗内。seed 与 EXE 未变。本验证不测精确 GC 耗时，也不覆盖全游戏。GC 代码 `17e3ab7` 已在此前提交并备份；source 0.4.20 版本递增及验证记录已在 `51b0cf0` 提交。目标仍为 v0.5.0。Issue 保持 open，因为报告者尚未收到修复 binary 或确认。见[根因报告](notes/issue12-root-cause.md)和[交接文档](notes/issue12-handoff-2026-09-09.md)。
 - **下一步——开发：**Direct3D 11 可行性和后端保留为 v0.5.0 之外的未来工作，未指定下个版本或日期。用户已确认 CPU Vulkan 对照通过；此前停止的采集未保留配对指标，不补写新的 benchmark 数字。
 - **下一步——证据或验收：**原版风格设置及字体／返回／保存修正已完成有界验证，新用户反馈另行记录；冻结安装器与 DPI 覆盖仍开放；两项保留的 shader compiler error 已被缓存，并未修复。玩家验收单独保留。
@@ -130,6 +130,8 @@ v0.1 保留为首个 Windows 发布里程碑，包含导入器、首次设置、
 以下保留既有兼容性和回归待办；上方里程碑区分已发布工作与后续开发。
 
 1. [ ] 凯姆首战身体阴影调查在按要求复查 v0.4.0 并完成最后一分钟核对后，于 2026-09-07 继续挂起。Radeon 8060S 上的正式包测试未确认复现 RX 9060 XT 报告，尚无根因或修复；恢复调查需要报告者的视频、日志、设置及正常／异常捕获。Map 13 仍未解决，两项报告的关联未知。见[证据与边界](notes/kaim-body-shadow-v040.md)。
+   新的匿名 RX 9060 XT D3D12/FXAA、3840×2160、source-0.5.0 capture 覆盖开场战斗 6105–6107 帧。包内没有 Vulkan runtime log，也没有士兵从可见到消失的对照，因此既未复现报告，也不关联 TAA 覆盖；调查继续挂起。
+- [ ] 缩小 F1 render capture export 体积，同时保留明确的完整诊断模式。用户要求本场景的反馈包不大于 200,000,000 bytes。完整保留实验达到 168,528,727 bytes，较原 ZIP 小 76.4130%：它存储 39 个 stride-shuffled 无损 raw 文件和 42 个可直接查看的 WebP85 preview，不存可重建的 PPM/BMP。195 个 stored 文件和独立恢复的 201 个文件均与来源 size/SHA256 匹配。压缩为 57.001 秒、peak working set 为 3.10 GB；2.734 秒预处理和 11.927 秒 preview 处理另计。一次新的真实 F1 ZIP capture 从 325.117 到 385.166 秒，共 60.049 秒后超时；原目录仍保留，早先 4450–4452 capture 已由用户删除。这是失败证据，不是端到端结果或 exporter 修复。完整原布局恢复需要 Python 和 NumPy，preview 可直接查看。7z 的速度、内存、lifecycle 和 dependency 取舍仍属实现工作。尚未实现 compact export format 或修复。
 2. [ ] 排查攻击动画卡顿，采集帧耗时、着色器编译日志并做冷／暖缓存对照。用户回复将其归因于着色器编译，但尚无采样证据确认原因。
 3. [~] 研究文字模糊或乱码，与原机和 Xenia 对照，进行中；这与已暂停的文本语言互补补丁是不同任务。
 4. [ ] 回归喷火阶段阴影闪烁。同一玩家反馈该现象似乎消失，仅算单次观察，不宣称全面修复；火焰受击格子仍是单独开放的问题。
@@ -139,7 +141,7 @@ v0.1 保留为首个 Windows 发布里程碑，包含导入器、首次设置、
 8. [x] 在固定的 v0.4.15 D3D12 Map2 配置中定位 Windows 稳态 CPU 热点（Ryzen 7 9800X3D／RTX 5080、60 FPS、SMAA、720p internal、配置 1080p output）。45.0001416 秒内进程使用 110.875 CPU 秒（整机 CPU 15.3993%；2.46388 个逻辑核当量）；112,344 个 on-CPU 样本无丢失事件、20 个缺栈。承载 GPU query 轮询和 guest 共享值零超时轮询的线程分别占进程 CPU 计时的 40.389% 与 39.994%（合计 80.3833%）；两条实际路径分别占进程 on-CPU 样本 36.5618% 与 33.0948%（合计 69.6566%），路径份额是样本分布而非 CPU 计时归因。GPU WorkerMain 占进程 CPU 计时 16.164%，其中 `getenv_nolock` 为该线程 exclusive 样本的 24.6787%。该结果只隔离单场景 D3D12 路径，不诊断温度、不证明后端回归或全游戏行为。GPU query 等待策略、零超时轮询及每 draw 环境变量查询是在 profiling 阶段提出的候选；后续实现见下一条。见[热点报告](../out/v0.5.0/cpu-hotspots/report/HOTSPOTS.html)和[CPU 对比](../out/v0.5.0/cpu-comparison/report/REPORT.html)。
 9. [~] 由该 profile 实施一批 CPU 效率修复：仅在已测 GPU query 和共享值轮询路径使用有界等待，并将四个禁用 capture 的环境值移出每 draw 热路径缓存。源码 `0.4.16` 构建成功，新的 `LoPollWaitTest` 通过。有效的新 D3D12 Map2 对比未重跑 v0.4.15：60.0003575 秒内均值为 4.3033598%／0.6885376 个逻辑核当量，保留的 v0.4.15 为 15.6200169%／2.4992027；3,599 个 PresentMon 事件在单 swapchain 上完整覆盖 CPU 窗口，采样后受控输入仍留在 Map2。该结果是整个批次的单次结果，不归因于单项改动，也不代表全游戏。首次 Vulkan CPU 窗口与 PresentMon 零重叠而排除；替代采集在开始前被用户物理 Escape 停止。Vulkan 对比、玩家验收及发布仍待完成。见[优化报告](../out/v0.5.0/cpu-optimization/REPORT.md)。
 10. [~] **P0 v0.5.0 发布前：**源码和发布目标固定为 0.5.0。shader 标识、顶点／索引准备及精确限帧修复通过定向检查；固定 Map16 D3D12 4K/TAA3 RTSS 48.01→54.05→59.76 FPS，最终内部均值/p95 为 16.72/17.16 ms。限定场景已接近 60 FPS，系统条件限制已记录；其他场景和用户验收仍开放。见[诊断与修复](notes/v0.5.0-performance-diagnosis-2026-09-09.md)。
-11. [ ] **P0 v0.5.0 发布前：**用独立 shader 日志诊断并修复报告的 4K TAA 地面／阴影变黑。已有同一 local 86ba v0.5.0 EXE、同进程静止 Map16 的有限 TAA／Off 对照：TAA 编码帧 ground ROI 180 帧中近黑 100 帧，Off 为 0/180；两片各 167 次 WGC callback。尚未定位实际失败 shader 或根因；类似错误仅能由匹配 log/state 推断并分别验证。
+11. [~] 诊断剩余 4K TAA 地面／阴影及闪烁覆盖。已验收的四条 c7 Sol 修复仍限定于候选 `1c9911a3` 和约 11.37 秒的六张静止样本。新的用户 Vulkan、仅 TAA capture 17468–17470 使用较早的 `ececed95`，它只加入 `0b786` c7，早于后续四路径修复；每张 capture 有 1,495 个 draw，缺少后续四条 c7 路径的 145 draw/frame（140/1/3/1；141 次 depth write）。1.690／3.156／1.561 秒是 F1 capture 导出间隔，不是普通 60 FPS history。本证据不重开已验收的 Sol 范围，不定位新根因，也不建立更广／发布覆盖。
 
 原有事项继续排队：偶发 GPU query/wait 故障及长时间稳定性；火焰受击格子／箱子特效和两个资源着色器失败；两版章节交界、存档读回、遇敌和多语言回归；全屏／独占、鼠标及跨 DPI 验收。Map 13 身体／环境阴影明暗闪烁仍开放；已验收的脚下投影修复继续常规回归。用户要求在处理新增性能、TAA 地面／阴影及 shader 日志任务前暂停 Reddit 帖子；v0.5.0 GitHub Release 仍为 draft。
 
@@ -245,4 +247,4 @@ v0.1 保留为首个 Windows 发布里程碑，包含导入器、首次设置、
 - [ ] 硬件光追阴影和反射。
 - [ ] 高清贴图替换与 mod 加载器。
 
-- [~] 可选 TAA 着色器收集：客户端同意提示/上传已实现；lo.dotslash.pro Worker/D1 同时接受 schema 1 和 schema 2 telemetry。保守 schema 2 位置证据已用留存输入和 Worker 检查验证，并覆盖重传去重；尚无新二进制游戏运行或真实玩家 telemetry。十条已捕获顶点路径遗漏已修复，玩家 UI/画面验收待完成。
+- [~] **v0.5.2 目标：**可选 TAA 着色器收集开发已完成，后台 D3D12 验收通过。lo.dotslash.pro Worker/D1 同时接受 schema 1 和 schema 2 telemetry。一次隐藏、静音的 RTX 5080、1280×720 experimental-TAA、Map16 Main Street 运行使用未改动的 source-0.5.0 EXE，SHA256 为 `1beb8a50c5bef1ebf0fb147338b33d558a2193e87f82b0b8c579ecbcb856959d`。周期上传先收到 23 个、后收到 32 个 source，共 55 个 program（15 VS、40 PS）和 19,188 bytes；每个 source 都与真实 cache 的原始 bytes、SHA256、renderer byte-FNV 及长度匹配。最终只读 D1 快照有 55 个 source、55 个 association、零重复 stage/hash key 和 28 条匹配的结构化记录。Map16 上传窗口为 59.84 FPS / 18.067 ms P95，上传前为 59.67 FPS / 18.036 ms P95；两个窗口各有 1 帧超过 50 ms、无帧超过 100 ms、无缺失 completed index。这只证明该上传路径继续渲染，不是 opt-out A/B，也不证明普遍零开销。产品 F1 菜单 capture、新 ZIP manifest 及即时上传仍未实机验证。Vulkan、AMD、已报告画面问题及玩家 UI/画面验收仍待完成；尚未发布。

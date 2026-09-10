@@ -1,10 +1,10 @@
 # Repository agent workflow
 
-## v0.5.0 feature versioning
+## Feature versioning
 
 Track the v0.5.0 backend and QOL requirements in the bilingual roadmaps and [QOL requirements](docs/notes/v0.5.0-qol-requirements.md). Recording a requirement does not authorize its implementation.
 
-For this milestone, keep both the source version and release target at `0.5.0`. The user's 2026-09-09 correction supersedes the earlier per-feature patch-increment rule: do not add a version number for each implementation, subtask or validation. Preserve earlier artifact versions only as historical provenance. Change the version only when the user explicitly requests it. A feature implementation does not authorize a GitHub Release, tag, commit or push; handle publication only when separately requested.
+The user explicitly requested committing the current work as `0.5.2`, superseding the earlier source/release target of `0.5.0`. Keep the current source and release target at `0.5.2`; do not add a version number for each implementation, subtask or validation. Preserve earlier artifact versions as historical provenance. Change the version only when the user explicitly requests it. The current request authorizes a local commit, not a GitHub Release, tag or push; handle publication only when separately requested.
 
 ## Project management agent
 
