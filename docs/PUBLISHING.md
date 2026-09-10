@@ -11,7 +11,8 @@ After reviewing, testing and committing a change:
 .\tools\push_all.ps1
 ```
 
-The script checks the public baseline, commit attribution and tracked artifact
+The script checks the public baseline, new commit attribution after the reviewed
+v0.5.0 public baseline, and tracked artifact
 paths, pushes the exact same commit to both remotes, then verifies both remote
 heads. It publishes committed changes only. It does not commit local edits or
 replace code review and secret scanning. If the second push fails, fix the

@@ -14,7 +14,11 @@ try {
     $revision = Invoke-Git rev-parse refs/heads/main
     # Require the reviewed public baseline and reject reintroduced private ancestry.
     Invoke-Git merge-base --is-ancestor 6bd28e98fac10f7014f0769fcc88c993887edd6c $revision
-    $messages = (Invoke-Git log $revision --format=%B) -join "`n"
+    # v0.5.0 already published reviewed Issue #12 contributor attribution.
+    # Check additions without rewriting that public release history.
+    $reviewedPublicBaseline = 'f78f64f'
+    Invoke-Git merge-base --is-ancestor $reviewedPublicBaseline $revision
+    $messages = (Invoke-Git log "${reviewedPublicBaseline}..${revision}" --format=%B) -join "`n"
     if ($messages -match '(?im)^Co-authored-by:.*(Claude|Anthropic)') {
         throw 'Unreviewed assistant attribution found in published history.'
     }
