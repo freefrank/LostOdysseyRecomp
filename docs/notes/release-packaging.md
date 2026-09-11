@@ -127,15 +127,18 @@ The standalone synthetic PPC workflow completed successfully in
 The hosted release end-to-end run has not yet been performed.
 
 Current status, 2026-09-10: resolving the library by `ppc/<key>` instead of a
-pinned private SHA is part of the local source commit of auto-sync (not
-pushed). Hosted CI and a new Release remain pending.
+pinned private SHA is pushed to github/main as
+[`2c0456c`](https://github.com/freefrank/LostOdysseyRecomp/commit/2c0456c).
+Hosted CI and a new Release remain pending. This work is Unreleased and is
+not in published v0.5.4.
 
 ## Local PPC auto-sync — unreleased
 
-Current status, 2026-09-10: the local source commit of auto-sync is included
-(not pushed). Hosted CI for the auto-sync tests and a new Release remain
-pending. This work is Unreleased and is not in published v0.5.4. There is no
-user gameplay acceptance and no hosted release end-to-end run.
+Current status, 2026-09-10: the auto-sync source is pushed to github/main as
+[`2c0456c`](https://github.com/freefrank/LostOdysseyRecomp/commit/2c0456c).
+Hosted CI for the auto-sync tests and a new Release remain pending. This
+work is Unreleased and is not in published v0.5.4. There is no user
+gameplay acceptance and no hosted release end-to-end run.
 
 The local post-build hook requires `git config --local lo.ppcAutoSync true`.
 The CMake option reads that setting; if an existing cache is `OFF`, reconfigure
@@ -162,9 +165,9 @@ at commit `5e80263491b39dc0012146dd3a31cf5eea533225`; the subsequent same-key
 sync reported unchanged. Sparse-clone restore and `check` passed against the
 isolated Release contract, whose key matched. Evidence is retained in
 `out/ppc-auto-sync-evidence/build-sync.log`, `github-output.txt`,
-`github-output-second.txt` and `out/ppc-sync/receipt.json`. The local source
-commit of auto-sync is included (not pushed); hosted CI and a new Release
-remain pending.
+`github-output-second.txt` and `out/ppc-sync/receipt.json`. The auto-sync source is pushed to github/main as
+[`2c0456c`](https://github.com/freefrank/LostOdysseyRecomp/commit/2c0456c);
+hosted CI and a new Release remain pending.
 
 `export` requires a new empty output directory; `restore` may use an existing
 output directory according to its normal merge/replace behavior. The PPC flow,

@@ -24,13 +24,13 @@ The standalone updater retains the behavior validated for [v0.5.1](https://githu
 
 ## Current validation and limits
 
-### PPC auto-sync and key-resolved prebuilt — local, unpublished
+### PPC auto-sync and key-resolved prebuilt — pushed, unpublished
 
-Opt-in local PPC auto-sync is in the local source commit of auto-sync (not pushed). Enable it with `git config --local lo.ppcAutoSync true`; CMake `LO_PPC_AUTO_SYNC` reads that setting. After a successful PPC library build, the post-build hook runs `ppc_sync.py sync --already-built`. It is not a file watcher. A matching input/compiler key reuses the immutable private `ppc/<key>` branch; a changed key publishes a new branch with shards of at most 40 MiB. CI, imported libraries and `LO_PPC_SYNC_ACTIVE` never upload. The release workflow resolves the library by key from `ppc/<key>` instead of a pinned private SHA; `rebuild_ppc: true` still compiles from source.
+Opt-in local PPC auto-sync is pushed to github/main as [`2c0456c`](https://github.com/freefrank/LostOdysseyRecomp/commit/2c0456c). Enable it with `git config --local lo.ppcAutoSync true`; CMake `LO_PPC_AUTO_SYNC` reads that setting. After a successful PPC library build, the post-build hook runs `ppc_sync.py sync --already-built`. It is not a file watcher. A matching input/compiler key reuses the immutable private `ppc/<key>` branch; a changed key publishes a new branch with shards of at most 40 MiB. CI, imported libraries and `LO_PPC_SYNC_ACTIVE` never upload. The release workflow resolves the library by key from `ppc/<key>` instead of a pinned private SHA; `rebuild_ppc: true` still compiles from source.
 
 Nineteen synthetic sync cases in `tools/tests/test_ppc_sync.py` pass. Built-library roundtrip and change-during-build checks passed. The real `LoPpcAutoSync` hook uploaded an existing library only to private commit `5e80263491b39dc0012146dd3a31cf5eea533225` on branch `ppc/4d21302a4eef224c82691878fbcb6cd2f427b60d676b3e692e78598257b5d1b4`; a subsequent same-key sync was unchanged and produced no PPC C++ compile or game run. Sparse-clone restore/check and a simulated-CI Release contract key match passed. Evidence: `out/ppc-auto-sync-evidence/build-sync.log`, `github-output.txt`, `github-output-second.txt` and `out/ppc-sync/receipt.json`. The earlier manual prebuilt path remains historical at commit [`2b5b1d1`](https://github.com/freefrank/LostOdysseyRecomp/commit/2b5b1d1) and CI [34553414428](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34553414428). See [release packaging](notes/release-packaging.md).
 
-This work is Unreleased and is not in published v0.5.4. Hosted CI for the local auto-sync workflow file, a new Release, hosted release end-to-end validation and user gameplay acceptance remain pending.
+This work is Unreleased and is not in published v0.5.4. Hosted [PPC prebuilt tests](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34565564964) passed for `2c0456c`. A new Release, hosted release end-to-end validation and user gameplay acceptance remain pending.
 
 ### PPC generation guard — v0.5.4
 

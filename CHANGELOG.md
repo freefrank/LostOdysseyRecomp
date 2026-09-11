@@ -31,8 +31,10 @@ One record of completed changes, with unpublished work separated from verified r
   post-build hook invokes `ppc_sync.py sync --already-built`; ordinary contributors remain off by default. Matching input/compiler
   hashes reuse an existing immutable private branch, while changes publish a
   new `ppc/<key>` branch with dynamically sized shards of at most 40 MiB. CI, imported libraries and
-  `LO_PPC_SYNC_ACTIVE` never upload. The local source commit of auto-sync is
-  included (not pushed); hosted CI and a new Release remain pending. Nineteen
+  `LO_PPC_SYNC_ACTIVE` never upload. The auto-sync source is pushed to
+  github/main as [`2c0456c`](https://github.com/freefrank/LostOdysseyRecomp/commit/2c0456c).
+  Hosted [PPC prebuilt tests](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34565564964)
+  passed; hosted release end-to-end validation and a new Release remain pending. Nineteen
   synthetic sync cases pass. Separately, the built-library roundtrip and
   change-during-build checks pass, and the real local auto-sync branch/upload
   plus same-key unchanged check pass. This work stays Unreleased and is not in
@@ -58,8 +60,10 @@ One record of completed changes, with unpublished work separated from verified r
   hook 调用 `ppc_sync.py sync --already-built`；普通贡献者默认关闭。输入与编译参数
   hash 相同则复用已有不可变私有 branch，变化时创建新的 `ppc/<key>` branch 并上传每片
   不超过 40 MiB 的动态分片。CI、导入库和
-  `LO_PPC_SYNC_ACTIVE` 不会上传。已纳入 auto-sync 的本地源码提交（未推送）；托管 CI
-  与新的 Release 仍待完成。19 项合成同步用例通过；另外，built-library
+  `LO_PPC_SYNC_ACTIVE` 不会上传。auto-sync 源码已推送到 github/main，提交为
+  [`2c0456c`](https://github.com/freefrank/LostOdysseyRecomp/commit/2c0456c)。托管
+  [PPC prebuilt tests](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34565564964)
+  已通过；托管 release 端到端验证与新的 Release 仍待完成。19 项合成同步用例通过；另外，built-library
   roundtrip、change-during-build、真实本地自动同步 branch／上传及同 key unchanged
   检查均已通过。该改动属于未发布内容，不包含在已发布的 v0.5.4 中。
 

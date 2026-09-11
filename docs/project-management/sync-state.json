@@ -2365,11 +2365,11 @@
         "Delivery": "Validated",
         "Release": "v0.5.4",
         "Start date": "2026-09-10",
-        "Evidence": "Automatic sync enabled (lo.ppcAutoSync=true): changed input publishes immutable ppc/<key> branch; matching remote key reused; CI resolves by key, no workflow SHA pin update. 19 sync tests, 2 extraction cases, actionlint, real hook upload of existing lib to private 5e802634, same-key unchanged, sparse restore/hash, CI-contract checks passed. No PPC C++ compile/game run. Locally committed, not pushed; no new hosted CI; not in published v0.5.4; no player acceptance. Prior 2b5b1d1/CI34553414428 is historical.",
+        "Evidence": "Automatic sync enabled (lo.ppcAutoSync=true): changed input publishes immutable ppc/<key> branch; matching remote key reused; CI resolves by key, no workflow SHA pin update. 19 sync tests, 2 extraction cases, actionlint, real hook upload of existing lib to private 5e802634, same-key unchanged, sparse restore/hash, CI-contract checks passed. No PPC C++ compile/game run. Pushed 2c0456c to github/main; hosted CI for auto-sync tests not yet confirmed; not in published v0.5.4 package; no player acceptance. Prior 2b5b1d1/CI34553414428 is historical.",
         "Source key": "release-reuse-local-ppc-static-library"
       },
       "title": "Reuse a locally built PPC static library in release workflows",
-      "body_sha256": "67e3600e75c926e585d9a0ba92fd969ff7f7ed3936dffd92c41b7861b9fa3223"
+      "body_sha256": "065ef4da44558a36989d7bf71907938794bd31346d8dadea61ae3990237703be"
     }
   }
 }
