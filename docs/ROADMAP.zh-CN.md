@@ -28,7 +28,7 @@ D3D12 仍是可用基线。Windows Vulkan 已有 RTX 5080 实机场景的界定�
 - [ ] **呈现与输入：**全屏、Alt+Enter、混合 DPI 和鼠标验收仍开放。判断用户报告的 underscan 时应保留正常宽高比黑边。
 - [ ] **游戏流程与稳定性：**后续推进、存档读回、遇敌、长时间稳定性、其余渲染反馈和跨 GPU／正式包证据仍为待办。既有界定修复不代表可完整通关。
 - [~] **汇编级性能分析：**外部 Win64 工具现已记录 wall-clock RIP 快照，解析 DbgHelp PDB 符号／源码位置，并生成 Capstone x64 HTML/JSON 热点、线程 CPU 时间／筛选和函数 self 样本排名。7 个定向报告用例、MSVC Release 构建和一次合成端到端采集均通过。2026-09-11 两次隔离实机采集使用已发布 v0.5.4 EXE `3c3b4073…`：user00 走图 5,092 样本／0 失败／最忙线程 8.11 s CPU，user01 城市走图 10,736 样本／0 失败／最忙线程 7.27 s CPU；均为 `xenon_scr.fpd`，约 36–44 fps、1,900–2,300 draws/frame、frontbuffer 1280×720。最忙线程为无符号 EXE 样本、`NtWaitForSingleObject` 与 AMD/D3D12 的混合。无匹配游戏 PDB、无 GPU 指令分析、无调用栈、无玩家验收。见[实机采集](notes/asm-profiler-gameplay.md)。其 PPC 注释是生成源码上下文，不是精确 guest PC；请求的采样间隔也不代表实际频率。
-- [ ] **性能与 shader 启动：**继续排查实际剩余卡顿和两个保留 compiler failure；固定场景数据不代表全游戏。
+- [~] **性能与 shader 启动：**本地未推送的 `perf-gpu-ring` 实现 2 槽 GPU 命令环、D3D12 描述符上限 1800 和纹理集复用（`b91d279`），随后为未用 bank 绑定静态 dummy、last-hit 缓存并跳过未变常量上传（`ed90fe9`）。隔离 user01 城市走图 1280×720 D3D12，相对已发布 v0.5.4：环缓冲 EXE `5917F389…` 约 57.7 fps（原 31–44），batches 5.2→2.0，`fence_wait` 15.40→1.67，splits 0；dummy EXE `02E303F1…` 的 `bind_ms` 1.99→1.58、hits 5289→837，帧率未再提升。Header fixture 22/22 与 12/12。剩余卡顿、两个保留 compiler failure 和 60 fps 验收仍开放；未包含在已发布 v0.5.4，也不是玩家验收。固定场景数据不代表全游戏。见[GPU 环缓冲对比](notes/perf-gpu-ring-compare.md)。
 
 <a id="当前反馈与回归"></a>
 ## 保留的有效验证范围

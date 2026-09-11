@@ -40,6 +40,23 @@ One record of completed changes, with unpublished work separated from verified r
   plus same-key unchanged check pass. This work stays Unreleased and is not in
   published v0.5.4.
 
+- Add a 2-slot D3D12 command-list ring, raise the D3D12 descriptor-set
+  limit to 1800, reuse 2D texture descriptor sets, bind unused 2D/3D/cube
+  banks to static dummy sets, use BatchCache last-hit for texture sets,
+  and skip unchanged constant uploads. Header fixtures pass: LoRenderBatchPolicyTest
+  22/22 and LoTextureDescriptorCacheTest 12/12 (including a 2000 last-hit
+  loop). Isolated user01 Uhra city walks on two local RelWithDebInfo
+  EXEs are diagnostic only (ring SHA-256
+  `5917F389F9FD9E88FDEC6DBD3437ADE76D415F1653FB6924575ACCF478C1B9AD`
+  stable city about 57.7 fps, 49.1–60; dummy SHA-256
+  `02E303F1462546FB98236446E24B2397DF762179923DE1D7C02852317ED37BC4`
+  about 56.0 fps, 28–60, bind-path only with no fps win versus the ring
+  run). Published v0.5.4 city diagnostic was 31–44 fps with about 5.2
+  batches. The two EXEs are not a laboratory A/B. This work is on local
+  branch `perf-gpu-ring` (`b91d279`, `ed90fe9`), is not pushed, is not in
+  published v0.5.4, and is not player acceptance or a 60 fps claim. See
+  [GPU ring compare](docs/notes/perf-gpu-ring-compare.md).
+
 ### 简体中文
 
 - 发布流程默认使用 PPC 预编译库。`release.yml` 根据输入／编译参数 key 从私有
@@ -66,6 +83,21 @@ One record of completed changes, with unpublished work separated from verified r
   已通过；托管 release 端到端验证与新的 Release 仍待完成。19 项合成同步用例通过；另外，built-library
   roundtrip、change-during-build、真实本地自动同步 branch／上传及同 key unchanged
   检查均已通过。该改动属于未发布内容，不包含在已发布的 v0.5.4 中。
+
+- 增加 D3D12 双槽 command-list 环缓冲，将 D3D12 描述符集上限提到 1800，
+  复用 2D 纹理描述符集，未使用的 2D／3D／cube bank 绑定静态 dummy 集，
+  纹理集使用 BatchCache last-hit，并跳过未变化的常量上传。头文件夹具通过：
+  LoRenderBatchPolicyTest 22/22、LoTextureDescriptorCacheTest 12/12
+  （含 2000 次 last-hit 循环）。两份本地 RelWithDebInfo EXE 的隔离
+  user01 乌拉城市走图仅为诊断（环缓冲 SHA-256
+  `5917F389F9FD9E88FDEC6DBD3437ADE76D415F1653FB6924575ACCF478C1B9AD`
+  稳定段约 57.7 fps，49.1–60；dummy SHA-256
+  `02E303F1462546FB98236446E24B2397DF762179923DE1D7C02852317ED37BC4`
+  约 56.0 fps，28–60，仅 bind 路径，相对环缓冲一轮没有帧率收益）。
+  已发布 v0.5.4 城市诊断为 31–44 fps、约 5.2 个 batch。两份 EXE 不是
+  实验室 A/B。该改动在本地分支 `perf-gpu-ring`（`b91d279`、`ed90fe9`），
+  尚未推送，不包含在已发布的 v0.5.4 中，不是玩家验收，也不宣称 60 fps。
+  见[GPU 环缓冲实测对比](docs/notes/perf-gpu-ring-compare.md)。
 
 ## v0.5.4 — 2026-09-11
 

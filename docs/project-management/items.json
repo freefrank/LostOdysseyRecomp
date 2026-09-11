@@ -4942,6 +4942,40 @@
       ],
       "source_lines": [],
       "record_type": "backlog"
+    },
+    {
+      "key": "performance-and-shader-startup",
+      "title": "Investigate remaining stalls and shader-startup compiler failures",
+      "body": "<!-- lo-project:performance-and-shader-startup -->\n\nInvestigate remaining runtime stalls and the two retained shader-startup compiler failures. Do not generalize a fixed-scene measurement to the full game.\n\n## GPU submit overlap — 2026-09-11, local `perf-gpu-ring`\n\nLocal unpushed commits implement a 2-slot GPU command ring, D3D12 descriptor limit 1800 and texture-set reuse (`b91d279fe6a4b02ee05eb72e48b5952e142decdb`), then bind unused texture banks to static dummy sets, a last-hit cache and skipped unchanged constant uploads (`ed90fe95149a25c7ae594e53606b13be07062aec`). Neither commit is in published v0.5.4.\n\nHeader fixtures `LoRenderBatchPolicyTest` 22/22 and `LoTextureDescriptorCacheTest` 12/12 passed; they do not launch the game or open a GPU device.\n\nIsolated diagnostic user01 city walking (`xenon_scr.fpd`, 1280×720 D3D12 TAA=3 cap 60) versus published v0.5.4 EXE `3c3b4073…` (31–44 fps, ~5.2 batches, fence_wait 15.40, ~3.7 splits):\n\n- Ring EXE SHA-256 `5917F389F9FD9E88FDEC6DBD3437ADE76D415F1653FB6924575ACCF478C1B9AD`: mean 57.7 fps (heartbeat 49.1–60.0), batches 2.00, fence_wait 1.67, splits 0, draw_ms 9.82 (spike 78.89).\n- Dummy EXE SHA-256 `02E303F1462546FB98236446E24B2397DF762179923DE1D7C02852317ED37BC4`: bind_ms 1.99→1.58, descriptor hits 5289→837; mean 56.0 fps (28.0–60.0). No fps gain versus the ring EXE.\n\nBaseline numbers were copied from a prior v0.5.4 analysis, not the same process. Draw count stayed the same order, so the gain is the submit model. `draw_ms` and `fence_wait_ms` are not additive.\n\n## Remaining work\n\n- Remaining stalls: draw_ms spikes, heartbeat lows below 60, dummy/constant reuse did not raise fps.\n- Two retained shader compiler failures remain unfinished.\n- No 60 fps acceptance, player acceptance, Vulkan coverage, package or published release.\n- Assembly-level profiler captures remain diagnostic tooling, not this GPU-ring result.\n\n## Sources\n\n- `docs/notes/perf-gpu-ring-compare.md`\n- `docs/notes/perf-complete-analysis.md`\n- `docs/notes/reblue-gpu-comparison.md`\n- `b91d279fe6a4b02ee05eb72e48b5952e142decdb`\n- `ed90fe95149a25c7ae594e53606b13be07062aec`\n",
+      "issue_url": null,
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Runtime performance",
+        "Status": "In Progress",
+        "Delivery": "Implemented",
+        "Release": null,
+        "Start date": "2026-09-11",
+        "Target date": null,
+        "Evidence": "Local unpushed perf-gpu-ring: 2-slot GPU ring, D3D12 descriptor limit 1800, texture-set reuse (b91d279); static dummy unused banks, last-hit cache, skip unchanged constant uploads (ed90fe9). Isolated user01 city walk 1280x720 D3D12 vs published v0.5.4: ring EXE 5917F389 mean 57.7 fps (was 31-44), batches 5.2->2.0, fence_wait 15.40->1.67, splits 0. Dummy EXE 02E303F1 bind_ms 1.99->1.58, hits 5289->837; fps did not improve vs ring. Header fixtures 22/22 and 12/12. Not in published v0.5.4. Remaining stalls, two retained compiler failures, draw_ms spikes to 79 ms, heartbeat lows 49/28, no 60 fps acceptance, no player acceptance. Not lab A/B; not Vulkan."
+      },
+      "source_refs": [
+        "docs/notes/perf-gpu-ring-compare.md",
+        "docs/notes/perf-complete-analysis.md",
+        "docs/notes/reblue-gpu-comparison.md",
+        "b91d279fe6a4b02ee05eb72e48b5952e142decdb",
+        "ed90fe95149a25c7ae594e53606b13be07062aec"
+      ],
+      "source_lines": [
+        {
+          "path": "docs/ROADMAP.md",
+          "line": 31
+        },
+        {
+          "path": "docs/ROADMAP.zh-CN.md",
+          "line": 31
+        }
+      ],
+      "record_type": "backlog"
     }
   ]
 }
