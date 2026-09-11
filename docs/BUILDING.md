@@ -26,8 +26,9 @@ python -B tools/ppc_codegen.py generate
 
 ### Optional PPC prebuilt library
 
-Release packaging uses a PPC static library restored from the private
-`build-inputs` repository by default. Local builds can opt into the same path by
+Release packaging uses a PPC static library restored from the private immutable
+`ppc/<key>` branch selected by the input/compiler key. The XEX input remains
+from its pinned private commit and is checked against its pinned SHA256. Local builds can opt into the same path by
 restoring the bundle into an ignored output directory and setting
 `LO_PREBUILT_PPC_DIR`; CMake checks the existing generated tree, then consumes
 `LostOdysseyRecompLib.lib` and skips compiling generated PPC C++ sources. The
@@ -42,9 +43,9 @@ call tools\setup_windows.bat
 python tools\release\ppc_prebuilt.py export --build-dir out\build\fps-0.5.4 --output out\ppc-export
 ```
 
-Here `out/ppc-upload-inputs` is the local clone of the private input repository;
-after export, replace its `ppc/` directory with the contents of `out/ppc-export`
-before committing and pushing the private update.
+The export/restore commands above are retained for offline bundle diagnostics.
+The current upload path is the post-build auto-sync hook or
+`ppc_sync.py sync`, which selects an immutable `ppc/<key>` branch.
 
 Then restore and check the fresh export from PowerShell:
 
@@ -68,6 +69,41 @@ the local Release/x64 clang-cl export, restore and isolated prebuilt CMake check
 also pass. The complete runtime was inspected through its Ninja dependency/link
 graph and has zero PPC compile commands while referencing the imported library;
 the runtime was not relinked or launched. See the [release packaging evidence](notes/release-packaging.md).
+
+### Local PPC auto-sync
+
+Local builds may opt into post-build PPC synchronization only after enabling the
+local Git setting with `git config --local lo.ppcAutoSync true`. The CMake option
+reads that setting; if an existing cache is `OFF`, reconfigure with
+`-DLO_PPC_AUTO_SYNC=ON` as needed, while `OFF` disables the hook. CMake alone does
+not grant the script's upload authorization. The hook runs only after a
+successful PPC library build and invokes `ppc_sync.py sync --already-built`. It
+is not a file watcher, and editing files does not trigger it.
+
+The sync key covers PPC inputs and compiler arguments. If the same key already
+exists remotely, no compilation or upload occurs. A changed key uses a new
+immutable private `ppc/<key>` branch with dynamically sized shards of at most
+40 MiB; old branches are
+retained. Imported libraries, CI and `LO_PPC_SYNC_ACTIVE` are excluded from
+uploads. Sync failures report a build or retry failure and do not silently fall
+back. For a manual run, prepare the Windows environment in one `cmd` session:
+
+```cmd
+call tools\setup_windows.bat
+python tools\release\ppc_sync.py sync --build-dir out\build\fps-0.5.4
+```
+
+Non-Release builds may create the independent `out/build/ppc-sync-Release`
+configuration and build only its Release PPC library; that configuration keeps
+the hook off to prevent recursion. The read-only key command accepts
+`--build-dir DIR [--github-output PATH]`; `--force` enables one manual sync and
+`--already-built` is reserved for the internal hook.
+
+Nineteen synthetic sync cases pass. Separately, the built-library roundtrip and
+change-during-build cases pass. The real `LoPpcAutoSync` target, same-key unchanged
+check and sparse restore/check also pass; the target produced no PPC C++ compile
+commands and did not build or launch the runtime. See the [release packaging
+evidence](notes/release-packaging.md) for the branch, commit and retained logs.
 
 Audio configuration fetches the pinned Xenia FFmpeg source via CMake FetchContent, so first configuration needs network access. See [ffmpeg.cmake](../thirdparty/ffmpeg.cmake) and its [license](../thirdparty/ffmpeg-LICENSE.txt). This is a frame-level XMAFRAMES decoder, not a system FFmpeg executable requirement.
 

@@ -61,3 +61,5 @@ endif()
 target_compile_options(${LO_PPC_COMPILE_TARGET} PRIVATE /w /EHs-c- /GR- -fno-strict-aliasing
     # MMIO stores (eieio-prefixed) are routed to the runtime's command processor.
     "/FI${CMAKE_SOURCE_DIR}/LostOdysseyRecomp/gpu/ppc_mmio.h")
+
+include("${CMAKE_SOURCE_DIR}/tools/release/ppc_sync.cmake")

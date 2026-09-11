@@ -6,13 +6,19 @@ on:
     branches: [main]
     paths:
       - 'tools/release/ppc_prebuilt.py'
+      - 'tools/release/ppc_sync.py'
+      - 'tools/release/ppc_sync.cmake'
       - 'tools/tests/test_ppc_prebuilt.py'
+      - 'tools/tests/test_ppc_sync.py'
       - 'tools/ppc_codegen.py'
       - '.github/workflows/test-ppc-prebuilt.yml'
   pull_request:
     paths:
       - 'tools/release/ppc_prebuilt.py'
+      - 'tools/release/ppc_sync.py'
+      - 'tools/release/ppc_sync.cmake'
       - 'tools/tests/test_ppc_prebuilt.py'
+      - 'tools/tests/test_ppc_sync.py'
       - 'tools/ppc_codegen.py'
       - '.github/workflows/test-ppc-prebuilt.yml'
 
@@ -32,3 +38,5 @@ jobs:
           python-version: '3.12'
       - name: Check synthetic prebuilt bundles
         run: python -B tools/tests/test_ppc_prebuilt.py
+      - name: Check automatic synchronization
+        run: python -B tools/tests/test_ppc_sync.py

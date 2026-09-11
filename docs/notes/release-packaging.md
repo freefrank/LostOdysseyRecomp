@@ -69,8 +69,10 @@ that the hosted workflow has run; check the actual Actions result before publish
 ## Local prebuilt PPC library — unreleased
 
 The release workflow adds a `rebuild_ppc` boolean input, defaulting to `false`.
-The default path restores the PPC static library and receipts from a fixed commit
-of the private `freefrank/LostOdysseyRecomp-build-inputs` repository. Both paths
+The default path restores the PPC static library and receipts from the immutable
+private `ppc/<key>` branch selected by the input/compiler key. The XEX input still
+comes from the separately pinned private input commit and is checked against its
+pinned SHA256. Both paths
 run the existing checkout and `Generate game code` step with its validation; the
 prebuilt path skips only generated PPC C++ compilation. Setting `rebuild_ppc: true`
 selects the retained source compilation path, which is needed when an old version
@@ -83,9 +85,8 @@ clang-cl, Release, `/MT` static CRT and non-LTO. Retain codegen input/output
 receipts, simde/mmio and CMake hashes, compile flags/includes, shard metadata and
 SHA256 for shards and the restored library.
 
-Keep the private repository clone at `out/ppc-upload-inputs`. From `cmd` or an
-x64 Developer Command Prompt, initialize the compiler environment and export to
-the new empty directory:
+For offline bundle diagnostics, from `cmd` or an x64 Developer Command Prompt,
+initialize the compiler environment and export to the new empty directory:
 
 ```cmd
 call tools\setup_windows.bat
@@ -99,11 +100,11 @@ python tools/release/ppc_prebuilt.py restore --bundle out/ppc-export --output ou
 python tools/release/ppc_prebuilt.py check --bundle out/ppc-prebuilt --build-dir out/build/fps-0.5.4
 ```
 
-`export` only incrementally builds the PPC library. Store the bundle as 40 MiB Git
-shards in the existing private input repository by replacing the clone's `ppc/`
-directory with the contents of the new `out/ppc-export` directory, then update the
-workflow to the new fixed input commit. Do not restore into the upload directory or
-place the bundle in the public checkout or release assets.
+`export` only incrementally builds the PPC library and is retained for offline
+diagnostics. The current upload path is the post-build hook or
+`ppc_sync.py sync`; it resolves PPC by immutable `ppc/<key>` branch and does not
+require a PPC workflow SHA update. Do not place bundles in the public checkout or
+release assets.
 
 The standalone `test-ppc-prebuilt.yml` workflow runs the 13 synthetic bundle
 checks separately from release packaging; those checks pass, and actionlint
@@ -124,6 +125,46 @@ The implementation was pushed to `main` at commit
 The standalone synthetic PPC workflow completed successfully in
 [run 34553414428](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34553414428).
 The hosted release end-to-end run has not yet been performed.
+
+Current status, 2026-09-10: resolving the library by `ppc/<key>` instead of a
+pinned private SHA is part of the local source commit of auto-sync (not
+pushed). Hosted CI and a new Release remain pending.
+
+## Local PPC auto-sync — unreleased
+
+Current status, 2026-09-10: the local source commit of auto-sync is included
+(not pushed). Hosted CI for the auto-sync tests and a new Release remain
+pending. This work is Unreleased and is not in published v0.5.4. There is no
+user gameplay acceptance and no hosted release end-to-end run.
+
+The local post-build hook requires `git config --local lo.ppcAutoSync true`.
+The CMake option reads that setting; if an existing cache is `OFF`, reconfigure
+with `-DLO_PPC_AUTO_SYNC=ON` as needed, while `OFF` disables the hook. CMake alone
+does not grant the script's upload authorization. After a successful source PPC library build, it invokes
+`ppc_sync.py sync --already-built`. A matching input and compiler-argument SHA256
+key reuses the existing immutable private branch without compilation or upload;
+a changed key creates `ppc/<key>` with dynamically sized shards of at most 40 MiB
+and retains older branches.
+
+The hook is excluded for CI, imported libraries and `LO_PPC_SYNC_ACTIVE`. Release
+callers reuse the already-built library. Other configurations may create the
+independent `out/build/ppc-sync-Release` configuration for a one-time Release PPC
+build with the hook disabled, preventing recursion. Sync failures surface as a
+build or retry failure and do not silently fall back. The `key` command is
+read-only and does not use the network; `--force` is a one-run manual override,
+while `--already-built` is for the internal hook.
+
+Nineteen synthetic sync cases pass. Separately, the built-library roundtrip and
+change-during-build cases pass. The real CMake `LoPpcAutoSync` target passed after
+re-archiving the library, with zero PPC C++ compilation and no runtime build or
+launch. It created private branch `ppc/4d21302a4eef224c82691878fbcb6cd2f427b60d676b3e692e78598257b5d1b4`
+at commit `5e80263491b39dc0012146dd3a31cf5eea533225`; the subsequent same-key
+sync reported unchanged. Sparse-clone restore and `check` passed against the
+isolated Release contract, whose key matched. Evidence is retained in
+`out/ppc-auto-sync-evidence/build-sync.log`, `github-output.txt`,
+`github-output-second.txt` and `out/ppc-sync/receipt.json`. The local source
+commit of auto-sync is included (not pushed); hosted CI and a new Release
+remain pending.
 
 `export` requires a new empty output directory; `restore` may use an existing
 output directory according to its normal merge/replace behavior. The PPC flow,

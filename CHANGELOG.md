@@ -9,7 +9,8 @@ One record of completed changes, with unpublished work separated from verified r
 ### English
 
 - Use a PPC prebuilt library by default in the release workflow. `release.yml` restores a
-  sharded library bundle from the pinned private `build-inputs` commit, while
+  sharded library bundle from the immutable private `ppc/<key>` branch selected by
+  the computed inputs/compiler key, while
   manual `rebuild_ppc: true` retains the source-compilation path. Local builds can
   set `LO_PREBUILT_PPC_DIR` to import `LostOdysseyRecompLib.lib` and skip PPC C++
   compilation; clearing it restores the normal source build. The bundle is kept
@@ -23,10 +24,24 @@ One record of completed changes, with unpublished work separated from verified r
   Hosted release end-to-end validation, a new release and user acceptance remain
   pending.
 
+- Add opt-in local PPC auto-sync. Enable it with local Git config
+  `git config --local lo.ppcAutoSync true`; the CMake option reads that setting,
+  and an existing cached `OFF` value may be reconfigured with
+  `-DLO_PPC_AUTO_SYNC=ON`. This does not bypass the script's local opt-in. The
+  post-build hook invokes `ppc_sync.py sync --already-built`; ordinary contributors remain off by default. Matching input/compiler
+  hashes reuse an existing immutable private branch, while changes publish a
+  new `ppc/<key>` branch with dynamically sized shards of at most 40 MiB. CI, imported libraries and
+  `LO_PPC_SYNC_ACTIVE` never upload. The local source commit of auto-sync is
+  included (not pushed); hosted CI and a new Release remain pending. Nineteen
+  synthetic sync cases pass. Separately, the built-library roundtrip and
+  change-during-build checks pass, and the real local auto-sync branch/upload
+  plus same-key unchanged check pass. This work stays Unreleased and is not in
+  published v0.5.4.
+
 ### 简体中文
 
-- 发布流程默认使用 PPC 预编译库。`release.yml` 从固定的私有
-  `build-inputs` commit 恢复分片库；手动设置 `rebuild_ppc: true` 仍使用源码编译
+- 发布流程默认使用 PPC 预编译库。`release.yml` 根据输入／编译参数 key 从私有
+  不可变的 `ppc/<key>` branch 恢复分片库；手动设置 `rebuild_ppc: true` 仍使用源码编译
   路径。本地构建可设置 `LO_PREBUILT_PPC_DIR` 导入 `LostOdysseyRecompLib.lib`
   并跳过 PPC C++ 编译；清除该变量即可恢复普通源码构建。分片库保存在私有输入
   仓库中，不作为公共发布产物。
@@ -36,6 +51,17 @@ One record of completed changes, with unpublished work separated from verified r
   为 `ba3e4c4dff009d6d8e844c007186a6e5040266875bca6423f8fe26f8d27fb21b`；私有
   commit `77f076e0e03966736cbf8919ce793bafadce82d9` 远端读回并匹配。托管 release
   端到端验证、新版本发布和用户验收仍待完成。
+
+- 增加可选的本地 PPC 自动同步。必须先用 Git 本地配置
+  `git config --local lo.ppcAutoSync true` 启用；CMake 选项读取该设置，已有缓存
+  为 OFF 时需重新配置并传入 `-DLO_PPC_AUTO_SYNC=ON`，不能绕过脚本授权。post-build
+  hook 调用 `ppc_sync.py sync --already-built`；普通贡献者默认关闭。输入与编译参数
+  hash 相同则复用已有不可变私有 branch，变化时创建新的 `ppc/<key>` branch 并上传每片
+  不超过 40 MiB 的动态分片。CI、导入库和
+  `LO_PPC_SYNC_ACTIVE` 不会上传。已纳入 auto-sync 的本地源码提交（未推送）；托管 CI
+  与新的 Release 仍待完成。19 项合成同步用例通过；另外，built-library
+  roundtrip、change-during-build、真实本地自动同步 branch／上传及同 key unchanged
+  检查均已通过。该改动属于未发布内容，不包含在已发布的 v0.5.4 中。
 
 ## v0.5.4 — 2026-09-11
 

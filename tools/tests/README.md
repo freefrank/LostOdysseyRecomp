@@ -43,6 +43,24 @@ x64 `/MT` non-LTO build, runtime relink, gameplay launch or user acceptance. The
 real local export, restore and isolated CMake check are recorded in the [release
 packaging evidence](../../docs/notes/release-packaging.md).
 
+## PPC auto-sync boundary
+
+The local auto-sync hook is a post-build action authorized by Git config
+`git config --local lo.ppcAutoSync true`; CMake `LO_PPC_AUTO_SYNC` reads that
+setting and may need reconfiguration when a cache is `OFF`. It is not a file watcher. The
+read-only `ppc_sync.py key` command can inspect the deterministic key, while
+`sync` may reuse an existing private branch or upload a changed bundle in shards
+of at most 40 MiB. CI, imported libraries and `LO_PPC_SYNC_ACTIVE` are excluded.
+Nineteen synthetic sync cases pass; the built-library roundtrip and
+change-during-build cases were also verified separately. The real target, same-key unchanged check and sparse
+restore/check are recorded in the [release packaging evidence](../../docs/notes/release-packaging.md).
+The earlier 13-case prebuilt fixture and workflow run remain historical evidence
+for the bundle format only. Run the synthetic sync suite with:
+
+```powershell
+python -B tools/tests/test_ppc_sync.py
+```
+
 ```powershell
 tools\test.bat --list
 tools\test.bat importer

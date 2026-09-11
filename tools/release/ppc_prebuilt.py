@@ -100,7 +100,15 @@ def export(root, build_dir, output):
     subprocess.run(["cmake", "--build", str(build_dir), "--target", "LostOdysseyRecompLib", "--parallel", "4"], check=True)
     if before != fingerprint(root) or contract != compile_contract(root, build_dir)[0]:
         raise ValueError("PPC inputs changed during build")
+    write_bundle_from_built(root, build_dir, output)
+
+
+def write_bundle_from_built(root, build_dir, output):
+    """Freeze an already-built library without invoking the native build again."""
+    before = fingerprint(root)
+    contract, version = compile_contract(root, build_dir)
     library = build_dir / "LostOdysseyRecompLib" / LIBRARY
+    original_stat = library.stat()
     output.mkdir(parents=True, exist_ok=True)
     if any(output.iterdir()):
         raise ValueError("Export output must be empty")
@@ -114,6 +122,12 @@ def export(root, build_dir, output):
             chunks.append({"name": name, "size": len(data), "sha256": digest(data)})
             total.update(data)
             size += len(data)
+    final_stat = library.stat()
+    if ((original_stat.st_size, original_stat.st_mtime_ns, original_stat.st_ino)
+            != (final_stat.st_size, final_stat.st_mtime_ns, final_stat.st_ino)
+            or ppc_codegen.digest(library) != total.hexdigest()
+            or before != fingerprint(root) or contract != compile_contract(root, build_dir)[0]):
+        raise ValueError("PPC inputs or library changed while exporting")
     manifest = {"schema": 1, "library": {"name": LIBRARY, "size": size, "sha256": total.hexdigest()},
                 "chunks": chunks, "fingerprint": before, "contract": contract,
                 "provenance": {"compiler_version": version}}
