@@ -4897,6 +4897,29 @@
       "record_type": "backlog"
     },
     {
+      "key": "release-reuse-local-ppc-static-library",
+      "title": "Reuse a locally built PPC static library in release workflows",
+      "body": "<!-- lo-project:release-reuse-local-ppc-static-library -->\n\nReduce GitHub release-build time by reusing the locally compiled PPC static library when its documented provenance and compatibility checks pass.\n\n## Scope and completion criteria\n\n- [x] Identify and retrieve the intended local PPC static-library artifact in the release workflow.\n- [x] Verify its provenance and compatibility before it replaces the GitHub PPC compilation step.\n- [x] Preserve a clear failure path when the artifact is absent or incompatible.\n- [ ] Record a hosted release-workflow build/package result after implementation.\n\n## Current status\n\nThe release default now restores a precompiled PPC static library. `rebuild_ppc=true` retains the source-build fallback; export, restore and verification CLI commands and CMake import support are implemented.\n\nThirteen synthetic fixtures and actionlint for both workflows passed. A real PPC Release library exported at 138,454,798 bytes with SHA-256 `ba3e4c4dff009d6d8e844c007186a6e5040266875bca6423f8fe26f8d27fb21b`; restore and the CMake verification target passed. The runtime Ninja graph contains zero PPC compile commands, links the imported library, and retains the verification dependency.\n\nPrivate build-inputs commit `77f076e0e03966736cbf8919ce793bafadce82d9` is pushed; GitHub API readback matched five blobs and the workflow pins that SHA. This transfers a private build artifact and is not a public release. Hosted CI, a new main-repository commit/push, release publication and player acceptance remain pending.\n\n## Sources\n\n- `out/ppc-evidence/upload-verification.json`\n- `out/ppc-evidence/runtime-graph.json`\n- User requirement and implementation evidence recorded on 2026-09-10\n",
+      "issue_url": null,
+      "fields": {
+        "Kind": "Infrastructure",
+        "Area": "Release Engineering",
+        "Status": "Awaiting validation",
+        "Delivery": "Validated",
+        "Release": "v0.5.4",
+        "Start date": "2026-09-10",
+        "Target date": null,
+        "Evidence": "Default release flow restores a precompiled PPC static library; rebuild_ppc=true retains source fallback. Export/restore/verify CLI and CMake import support implemented. 13 synthetic fixtures and actionlint for both workflows passed. Real Release library export: 138454798 bytes, SHA-256 ba3e4c4dff009d6d8e844c007186a6e5040266875bca6423f8fe26f8d27fb21b; restore/CMake target passed. Runtime Ninja graph has zero PPC compile commands, links the imported lib with verification dependency. Private build-inputs commit 77f076e0e03966736cbf8919ce793bafadce82d9 pushed and five GitHub API blob readbacks match; this is private artifact transport, not public release. Hosted CI, main-repository commit/push, Release, runtime and player acceptance pending."
+      },
+      "source_refs": [
+        "out/ppc-evidence/upload-verification.json",
+        "out/ppc-evidence/runtime-graph.json",
+        "User requirement and implementation evidence recorded on 2026-09-10"
+      ],
+      "source_lines": [],
+      "record_type": "backlog"
+    },
+    {
       "key": "assembly-level-performance-analysis-tool",
       "title": "Build an assembly-level performance analysis tool",
       "body": "<!-- lo-project:assembly-level-performance-analysis-tool -->\n\nBuild an external Win64 assembly-level performance analysis tool for the game. It captures wall-clock RIP snapshots, resolves DbgHelp PDB symbols and source locations, and produces Capstone-based x64 instruction hotspots in HTML and JSON. The report includes thread CPU-time tables and filtering, function self-sample ranking, and optional PPC generated-source context annotations.\n\n## Validation and limits\n\nSeven focused Python report cases passed. MSVC 19.44 built the Release executable. A background synthetic 2-second collection requested 10 ms samples and completed with 187 hits, zero failures, 31 busy-symbol/PDB/source-resolved hits, and exit code 0 for both fixture and collector. `out/asm-profiler/capture.json` produced `report.html` and `report.json` successfully. The Release executable SHA-256 is `D6326A19C51E97EE1338364A98F36A7F2CB29AEB537C82F6B100BC3104B9D0F1`.\n\nThis is wall-clock sampling, not CPU-cycle accounting; Toolhelp overhead yielded about 31 request rounds in two seconds, so requested interval is not actual frequency. PPC annotations provide generated-source context only, not an exact guest PC. GPU instruction profiling is not supported. v0.5.4 is published; actual-game sampling and player acceptance remain pending.\n\n## Sources\n\n- `tools/asm-profiler/collector.cpp`\n- `tools/asm-profiler/CMakeLists.txt`\n- `tools/asm-profiler/fixture.cpp`\n- `tools/asm-profiler/report.py`\n- `tools/asm-profiler/requirements.txt`\n- `tools/asm-profiler/test_report.py`\n- `out/asm-profiler/capture.json`\n- User requirement and implementation evidence recorded on 2026-09-10\n",

@@ -66,6 +66,65 @@ applies the checked-in dependency patches, builds Release, then packages the run
 It requires no ISO or archive assets on the runner. A successful local build is not evidence
 that the hosted workflow has run; check the actual Actions result before publishing.
 
+## Local prebuilt PPC library — unreleased
+
+The release workflow adds a `rebuild_ppc` boolean input, defaulting to `false`.
+The default path restores the PPC static library and receipts from a fixed commit
+of the private `freefrank/LostOdysseyRecomp-build-inputs` repository. Both paths
+run the existing checkout and `Generate game code` step with its validation; the
+prebuilt path skips only generated PPC C++ compilation. Setting `rebuild_ppc: true`
+selects the retained source compilation path, which is needed when an old version
+tag does not contain `ppc_prebuilt.py`.
+
+Locally, `LO_PREBUILT_PPC_DIR` is optional and points CMake at the restored bundle.
+CMake imports `LostOdysseyRecompLib.lib` and omits generated PPC C++ compilation;
+clearing the variable selects the normal source build. The contract is x64
+clang-cl, Release, `/MT` static CRT and non-LTO. Retain codegen input/output
+receipts, simde/mmio and CMake hashes, compile flags/includes, shard metadata and
+SHA256 for shards and the restored library.
+
+Keep the private repository clone at `out/ppc-upload-inputs`. From `cmd` or an
+x64 Developer Command Prompt, initialize the compiler environment and export to
+the new empty directory:
+
+```cmd
+call tools\setup_windows.bat
+python tools\release\ppc_prebuilt.py export --build-dir out\build\fps-0.5.4 --output out\ppc-export
+```
+
+Then restore and check the fresh export from PowerShell:
+
+```powershell
+python tools/release/ppc_prebuilt.py restore --bundle out/ppc-export --output out/ppc-prebuilt
+python tools/release/ppc_prebuilt.py check --bundle out/ppc-prebuilt --build-dir out/build/fps-0.5.4
+```
+
+`export` only incrementally builds the PPC library. Store the bundle as 40 MiB Git
+shards in the existing private input repository by replacing the clone's `ppc/`
+directory with the contents of the new `out/ppc-export` directory, then update the
+workflow to the new fixed input commit. Do not restore into the upload directory or
+place the bundle in the public checkout or release assets.
+
+The standalone `test-ppc-prebuilt.yml` workflow runs the 13 synthetic bundle
+checks separately from release packaging; those checks pass, and actionlint
+1.7.12 passes for both workflows. The real Release/x64 clang-cl PPC-only export
+also succeeded: four shards, 138,454,798 bytes, SHA256
+`ba3e4c4dff009d6d8e844c007186a6e5040266875bca6423f8fe26f8d27fb21b`. Restore and
+the isolated CMake `LoPpcPrebuiltCheck` passed with the `/MT` non-LTO contract.
+The runtime Ninja dependency/link graph has zero PPC compile commands and
+references the imported library; the runtime was not relinked or launched.
+
+The four shards were uploaded to the existing private repository at commit
+`77f076e0e03966736cbf8919ce793bafadce82d9`, and API readback matched the local
+manifest and all four blob IDs. Evidence is retained in
+`out/ppc-evidence/upload-verification.json` and `runtime-graph.json`.
+
+`export` requires a new empty output directory; `restore` may use an existing
+output directory according to its normal merge/replace behavior. The PPC flow,
+local validation and private upload are complete. Hosted release end-to-end
+validation, a new release, and user acceptance remain pending.
+
+
 ## Verification
 
 Hosted build 34010819664 completed successfully for commit `2a3ffcc` and supplied v0.1.

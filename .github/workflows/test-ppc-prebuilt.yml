@@ -1,0 +1,34 @@
+name: PPC prebuilt tests
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/release/ppc_prebuilt.py'
+      - 'tools/tests/test_ppc_prebuilt.py'
+      - 'tools/ppc_codegen.py'
+      - '.github/workflows/test-ppc-prebuilt.yml'
+  pull_request:
+    paths:
+      - 'tools/release/ppc_prebuilt.py'
+      - 'tools/tests/test_ppc_prebuilt.py'
+      - 'tools/ppc_codegen.py'
+      - '.github/workflows/test-ppc-prebuilt.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: windows-2022
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check synthetic prebuilt bundles
+        run: python -B tools/tests/test_ppc_prebuilt.py

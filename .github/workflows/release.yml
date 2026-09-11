@@ -7,6 +7,10 @@ on:
         description: 'Existing version tag to package; empty builds the selected ref'
         type: string
         required: false
+      rebuild_ppc:
+        description: 'Compile PPC from source instead of using the pinned local prebuilt library'
+        type: boolean
+        default: false
 
   push:
     tags: ['v*']
@@ -42,8 +46,12 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: freefrank/LostOdysseyRecomp-build-inputs
-          ref: 0f119ca8d91c94cf09fd2ecd8268229d8b1eeb97
+          ref: 77f076e0e03966736cbf8919ce793bafadce82d9
           path: out/build-input
+          sparse-checkout: |
+            /default.xex
+            /ppc/
+          sparse-checkout-cone-mode: false
           ssh-key: ${{ secrets.LO_BUILD_INPUT_KEY }}
           persist-credentials: false
       - name: Verify private build input
@@ -56,6 +64,12 @@ jobs:
           call tools\build_tools.bat || exit /b 1
           out\build\tools\xexdump.exe LostOdysseyRecompLib\private\disc1\default.xex LostOdysseyRecompLib\private\image_disc1.bin || exit /b 1
           python tools\ppc_codegen.py generate || exit /b 1
+      - name: Restore local prebuilt PPC
+        if: ${{ !inputs.rebuild_ppc }}
+        run: |
+          python tools/release/ppc_prebuilt.py restore --bundle out/build-input/ppc --output out/ppc-prebuilt
+          if ($LASTEXITCODE -ne 0) { throw 'Prebuilt PPC is missing or damaged. Upload a fresh bundle or dispatch with rebuild_ppc enabled.' }
+          "LO_PREBUILT_PPC_DIR=$((Resolve-Path out/ppc-prebuilt).Path)" >> $env:GITHUB_ENV
       - name: Build Release
         shell: cmd
         env:

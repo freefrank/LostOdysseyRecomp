@@ -8,11 +8,34 @@ One record of completed changes, with unpublished work separated from verified r
 
 ### English
 
-- No unreleased entries.
+- Use a PPC prebuilt library by default in the release workflow. `release.yml` restores a
+  sharded library bundle from the pinned private `build-inputs` commit, while
+  manual `rebuild_ppc: true` retains the source-compilation path. Local builds can
+  set `LO_PREBUILT_PPC_DIR` to import `LostOdysseyRecompLib.lib` and skip PPC C++
+  compilation; clearing it restores the normal source build. The bundle is kept
+  in the private input repository and is not a public release artifact.
+- Add `tools/release/ppc_prebuilt.py` for incremental PPC export, bundle restore
+  and receipt/hash checks. The 13 synthetic bundle checks, local Release/x64
+  clang-cl PPC export and isolated prebuilt CMake checks pass. The four-shard
+  library is 138,454,798 bytes with SHA256
+  `ba3e4c4dff009d6d8e844c007186a6e5040266875bca6423f8fe26f8d27fb21b`; private
+  commit `77f076e0e03966736cbf8919ce793bafadce82d9` was read back and matched.
+  Hosted release end-to-end validation, a new release and user acceptance remain
+  pending.
 
 ### 简体中文
 
-- 没有未发布条目。
+- 发布流程默认使用 PPC 预编译库。`release.yml` 从固定的私有
+  `build-inputs` commit 恢复分片库；手动设置 `rebuild_ppc: true` 仍使用源码编译
+  路径。本地构建可设置 `LO_PREBUILT_PPC_DIR` 导入 `LostOdysseyRecompLib.lib`
+  并跳过 PPC C++ 编译；清除该变量即可恢复普通源码构建。分片库保存在私有输入
+  仓库中，不作为公共发布产物。
+- 增加 `tools/release/ppc_prebuilt.py`，支持增量导出 PPC 库、恢复 bundle 以及
+  receipt／hash 校验。13 项合成 bundle 检查、本地 Release／x64 clang-cl PPC
+  导出和隔离 prebuilt CMake 检查均已通过。四片库大小为 138,454,798 字节，SHA256
+  为 `ba3e4c4dff009d6d8e844c007186a6e5040266875bca6423f8fe26f8d27fb21b`；私有
+  commit `77f076e0e03966736cbf8919ce793bafadce82d9` 远端读回并匹配。托管 CI、新
+  托管 release 端到端验证、新版本发布和用户验收仍待完成。
 
 ## v0.5.4 — 2026-09-11
 

@@ -24,6 +24,51 @@ python -B tools/ppc_codegen.py generate
 
 `build_tools.bat` builds the generator and records a receipt containing the generator binary and source hashes. `ppc_codegen.py generate` verifies that receipt, hashes the TOML and generator inputs before and after execution, writes an output manifest for the generated C++/header files and rejects obsolete 64-bit jump-table switches. Use `python -B tools/ppc_codegen.py check` to verify an existing generated tree without regenerating it; if the inputs or outputs changed, regenerate from the repository root. Configured runtime builds also run `LoPpcCodegenCheck` as an order dependency before compiling guest objects. See [recompilation notes](notes/recomp.md) for function boundaries and switch-table maintenance. These commands describe the checked-in scripts; a new-machine end-to-end bootstrap has not been retested as part of this documentation update.
 
+### Optional PPC prebuilt library
+
+Release packaging uses a PPC static library restored from the private
+`build-inputs` repository by default. Local builds can opt into the same path by
+restoring the bundle into an ignored output directory and setting
+`LO_PREBUILT_PPC_DIR`; CMake checks the existing generated tree, then consumes
+`LostOdysseyRecompLib.lib` and skips compiling generated PPC C++ sources. The
+release workflow runs its separate `Generate game code` step before this CMake
+configuration. Clear the variable to return to the ordinary generated-source build.
+
+From `cmd` or an x64 Developer Command Prompt, keep the compiler environment in
+the same shell before running the exporter:
+
+```cmd
+call tools\setup_windows.bat
+python tools\release\ppc_prebuilt.py export --build-dir out\build\fps-0.5.4 --output out\ppc-export
+```
+
+Here `out/ppc-upload-inputs` is the local clone of the private input repository;
+after export, replace its `ppc/` directory with the contents of `out/ppc-export`
+before committing and pushing the private update.
+
+Then restore and check the fresh export from PowerShell:
+
+```powershell
+python tools/release/ppc_prebuilt.py restore --bundle out/ppc-export --output out/ppc-prebuilt
+python tools/release/ppc_prebuilt.py check --bundle out/ppc-prebuilt --build-dir out/build/fps-0.5.4
+```
+
+For a local prebuilt runtime build in PowerShell:
+
+```powershell
+$env:LO_PREBUILT_PPC_DIR = (Resolve-Path out/ppc-prebuilt).Path
+.\tools\build_release.bat
+Remove-Item Env:LO_PREBUILT_PPC_DIR
+```
+
+The release contract is x64 clang-cl, Release, static CRT (`/MT`) and non-LTO.
+Preserve codegen receipts, input/output and CMake hashes, compile flags/includes,
+shard hashes and library SHA256 as evidence. The 13 synthetic bundle checks pass;
+the local Release/x64 clang-cl export, restore and isolated prebuilt CMake check
+also pass. The complete runtime was inspected through its Ninja dependency/link
+graph and has zero PPC compile commands while referencing the imported library;
+the runtime was not relinked or launched. See the [release packaging evidence](notes/release-packaging.md).
+
 Audio configuration fetches the pinned Xenia FFmpeg source via CMake FetchContent, so first configuration needs network access. See [ffmpeg.cmake](../thirdparty/ffmpeg.cmake) and its [license](../thirdparty/ffmpeg-LICENSE.txt). This is a frame-level XMAFRAMES decoder, not a system FFmpeg executable requirement.
 
 Release builds do not require a separately installed Vulkan SDK. Windows Vulkan headers, volk and VMA come from the patched plume submodule; the GPU driver supplies `vulkan-1.dll` and its ICD. The runtime requests Vulkan 1.2, buffer-device-address, geometry shaders and Win32 WSI. Use the exact paired DXC v1.8.2407 DLLs copied by CMake and tracked in [DXC provenance](../thirdparty/dxc-licenses/PROVENANCE.json); do not substitute one DLL independently. Building the runtime also builds `LostOdysseyUpdater` in the same output directory, which the package step expects.

@@ -24,6 +24,25 @@ The seven `unittest` cases cover a matching manifest, input/output/context drift
 
 Run commands from the repository root. Select checks appropriate to the changed behavior; this entry point does not imply that every suite is required for every change.
 
+## PPC prebuilt bundle checks
+
+`test_ppc_prebuilt.py` exercises the synthetic export, restore and check contract
+for the PPC static-library bundle, including incremental output handling,
+receipt/input/output validation, shard boundaries and SHA256 checks. It uses a
+temporary fixture and does not require game input, a generated guest tree, a
+native build or a game process:
+
+```powershell
+python -B tools/tests/test_ppc_prebuilt.py
+```
+
+The 13 synthetic bundle checks pass. The separate `.github/workflows/test-ppc-prebuilt.yml`
+workflow runs this fixture independently of release packaging; actionlint 1.7.12
+also passes for both workflows. The fixture does not prove the hosted Release
+x64 `/MT` non-LTO build, runtime relink, gameplay launch or user acceptance. The
+real local export, restore and isolated CMake check are recorded in the [release
+packaging evidence](../../docs/notes/release-packaging.md).
+
 ```powershell
 tools\test.bat --list
 tools\test.bat importer

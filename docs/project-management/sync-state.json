@@ -2355,6 +2355,21 @@
       },
       "title": "Extend the F1 capture archive timeout",
       "body_sha256": "a5e3ec8239de4cab8074f0f62859a8fa6078d06f08df6a73d4100721277b529a"
+    },
+    "release-reuse-local-ppc-static-library": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg6bw2g",
+      "fields": {
+        "Kind": "Infrastructure",
+        "Area": "Release Engineering",
+        "Status": "Awaiting validation",
+        "Delivery": "Validated",
+        "Release": "v0.5.4",
+        "Start date": "2026-09-10",
+        "Evidence": "Default release flow restores a precompiled PPC static library; rebuild_ppc=true retains source fallback. Export/restore/verify CLI and CMake import support implemented. 13 synthetic fixtures and actionlint for both workflows passed. Real Release library export: 138454798 bytes, SHA-256 ba3e4c4dff009d6d8e844c007186a6e5040266875bca6423f8fe26f8d27fb21b; restore/CMake target passed. Runtime Ninja graph has zero PPC compile commands, links the imported lib with verification dependency. Private build-inputs commit 77f076e0e03966736cbf8919ce793bafadce82d9 pushed and five GitHub API blob readbacks match; this is private artifact transport, not public release. Hosted CI, main-repository commit/push, Release, runtime and player acceptance pending.",
+        "Source key": "release-reuse-local-ppc-static-library"
+      },
+      "title": "Reuse a locally built PPC static library in release workflows",
+      "body_sha256": "18f0282813f9ce0e45be8afa38108a2798dac74d93740b6afa05add5a21c5de4"
     }
   }
 }
