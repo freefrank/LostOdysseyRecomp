@@ -34,8 +34,8 @@ One record of completed changes, with unpublished work separated from verified r
   receipt／hash 校验。13 项合成 bundle 检查、本地 Release／x64 clang-cl PPC
   导出和隔离 prebuilt CMake 检查均已通过。四片库大小为 138,454,798 字节，SHA256
   为 `ba3e4c4dff009d6d8e844c007186a6e5040266875bca6423f8fe26f8d27fb21b`；私有
-  commit `77f076e0e03966736cbf8919ce793bafadce82d9` 远端读回并匹配。托管 CI、新
-  托管 release 端到端验证、新版本发布和用户验收仍待完成。
+  commit `77f076e0e03966736cbf8919ce793bafadce82d9` 远端读回并匹配。托管 release
+  端到端验证、新版本发布和用户验收仍待完成。
 
 ## v0.5.4 — 2026-09-11
 

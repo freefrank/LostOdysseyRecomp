@@ -119,6 +119,12 @@ The four shards were uploaded to the existing private repository at commit
 manifest and all four blob IDs. Evidence is retained in
 `out/ppc-evidence/upload-verification.json` and `runtime-graph.json`.
 
+The implementation was pushed to `main` at commit
+[`2b5b1d1d0d3c0a1a2d5404cdc29bbf9f3aa75e4e`](https://github.com/freefrank/LostOdysseyRecomp/commit/2b5b1d1d0d3c0a1a2d5404cdc29bbf9f3aa75e4e).
+The standalone synthetic PPC workflow completed successfully in
+[run 34553414428](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34553414428).
+The hosted release end-to-end run has not yet been performed.
+
 `export` requires a new empty output directory; `restore` may use an existing
 output directory according to its normal merge/replace behavior. The PPC flow,
 local validation and private upload are complete. Hosted release end-to-end
