@@ -29,6 +29,9 @@ int main() {
     auto permuted = key;
     permuted[0] = &textures[1];
     Check(cache.Acquire(permuted, create, reused) != second && !reused);
+    // Adjacent identical keys skip the map (last-hit). A different key in
+    // between still finds the earlier entry.
+    Check(cache.Acquire(key, create, reused) == first && reused && allocations == 3);
     Check(otherBank.Acquire(key, create, reused) != first && !reused);
     // Guest content changes do not change descriptor identity; texture barriers
     // and uploads remain the caller's responsibility, not cache side effects.

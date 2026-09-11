@@ -390,6 +390,7 @@ namespace gpu::renderer
             uint32_t descriptorHits = 0, descriptorMisses = 0;
             uint32_t vfetchDescriptorBase = 0, samplerDescriptorBase = 0;
             std::unique_ptr<RenderDescriptorSet> staticSet0;     // ring buffers + sampler palette
+            std::unique_ptr<RenderDescriptorSet> staticDummySets[3]; // unused 2D / 3D / cube banks
             std::map<uint64_t, uint32_t> samplerPalette;         // sampler key -> palette index
             static constexpr uint32_t kSamplerPalette = 64;
 
@@ -816,6 +817,36 @@ namespace gpu::renderer
             static_assert(offsetof(SharedConstants,textureInfo)==768);
             static_assert(offsetof(SharedConstants,textureSize)==896);
 
+            struct UploadedConstants
+            {
+                uint32_t vs[256 * 4]{};
+                uint32_t ps[256 * 4]{};
+                SharedConstants shared{};
+                uint64_t vsOffset = UINT64_MAX;
+                uint64_t psOffset = UINT64_MAX;
+                uint64_t sharedOffset = UINT64_MAX;
+            };
+            UploadedConstants uploadedConstants[kGpuSlots];
+
+            uint64_t UploadUnchanged(int bank, const void* data, size_t size)
+            {
+                auto& before = uploadedConstants[gpuSlot];
+                uint64_t lastOffset = bank == 0 ? before.vsOffset : bank == 1 ? before.psOffset : before.sharedOffset;
+                const void* last = bank == 0 ? static_cast<const void*>(before.vs) :
+                    bank == 1 ? static_cast<const void*>(before.ps) : static_cast<const void*>(&before.shared);
+                if (lastOffset != UINT64_MAX && std::memcmp(last, data, size) == 0)
+                    return lastOffset;
+                const uint64_t offset = Upload(data, size);
+                auto& after = uploadedConstants[gpuSlot];
+                if (offset != UINT64_MAX)
+                {
+                    if (bank == 0) { std::memcpy(after.vs, data, size); after.vsOffset = offset; }
+                    else if (bank == 1) { std::memcpy(after.ps, data, size); after.psOffset = offset; }
+                    else { std::memcpy(&after.shared, data, size); after.sharedOffset = offset; }
+                }
+                return offset;
+            }
+
             // ---- lifecycle -----------------------------------------------------
             xenos::cache::Identity cacheIdentity;
             bool initializationModuleFailure = false;
@@ -944,6 +975,14 @@ namespace gpu::renderer
                 CreateDummyTexture(dummyTexture2D, RenderTextureDimension::TEXTURE_2D, 0);
                 CreateDummyTexture(dummyTexture3D, RenderTextureDimension::TEXTURE_3D, 0);
                 CreateDummyTexture(dummyTextureCube, RenderTextureDimension::TEXTURE_2D, RenderTextureFlag::CUBE);
+                HostTexture* dummyBanks[] = { &dummyTexture2D, &dummyTexture3D, &dummyTextureCube };
+                for (int bank = 0; bank < 3; ++bank)
+                {
+                    staticDummySets[bank] = setBuilders[bank + 1].create(device);
+                    if (!staticDummySets[bank] || !dummyBanks[bank]->texture) return false;
+                    for (uint32_t slot = 0; slot < kTextureSlots; ++slot)
+                        staticDummySets[bank]->setTexture(slot, dummyBanks[bank]->texture.get(), RenderTextureLayout::SHADER_READ);
+                }
 
                 if (const char* dir = getenv("LO_SHADER_CACHE_DIR"))
                     shaderCacheDir = dir;
@@ -1289,6 +1328,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 s.uploadOffset = 0;
                 for (auto& used : s.setPoolUsed)
                     used = 0;
+                uploadedConstants[i] = {};
             }
 
             void WaitForGpu()
@@ -1384,6 +1424,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 
             RenderDescriptorSet* AcquireTextureSet(int which, const TextureSetCache::Key& textures, uint32_t activeSlots)
             {
+                if (activeSlots == 0)
+                    return staticDummySets[which - 1].get();
                 const bool reuse = !vulkan && descriptorReuse;
                 auto create = [&]() {
                     auto* set = AcquireSet(which);
@@ -3501,9 +3543,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 tBind0.AddTo(tBind);
                 render_batch::CpuTimer<> tIndex0(cpuTimingEnabled);
 
-                uint64_t vsOffset = Upload(vsConstants, sizeof(vsConstants));
-                uint64_t psOffset = Upload(psConstants, sizeof(psConstants));
-                uint64_t sharedOffset = Upload(&shared, sizeof(shared));
+                uint64_t vsOffset = UploadUnchanged(0, vsConstants, sizeof(vsConstants));
+                uint64_t psOffset = UploadUnchanged(1, psConstants, sizeof(psConstants));
+                uint64_t sharedOffset = UploadUnchanged(2, &shared, sizeof(shared));
                 if (vsOffset == UINT64_MAX || psOffset == UINT64_MAX || sharedOffset == UINT64_MAX)
                 {
                     drops.upload++;
