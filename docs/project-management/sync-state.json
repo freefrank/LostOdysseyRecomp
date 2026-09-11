@@ -1893,11 +1893,13 @@
         "Status": "In Progress",
         "Delivery": "In progress",
         "Source key": "recompiler-remaining-contracts",
-        "Evidence": "Completed sub-scope: ppc_codegen generate exited 0; out/issue14-width-audit/scan-result.json records 247 C++ units, 843 .u32 selectors, zero .u64 selectors, and unchanged instruction-stream hashes for 246 units. Seven provenance-guard fixtures passed, covering stale output, input/tool/context drift and return-0-without-output recovery. Generator/context source prefixes 2a12d39169b0/08d47f20df8d match the historical 3,258/109/843-table-44,523 evidence, which was reused without rerun. CMake integration checking and the remaining PPC-contract audit are still in progress. No game run, Issue #14 root cause, player acceptance or release is recorded.",
-        "Start date": "2026-09-10"
+        "Evidence": "Generated-source guard sub-scope: ppc_codegen generate produced 247 C++ units with 843 .u32/zero .u64 selectors and unchanged instruction-stream hashes for 246 units; seven guard fixtures and CMake/LoPpcCodegenCheck dependency checks passed. Historical 3,258/109/843-table-44,523 evidence was reused without rerun. v0.5.4 was publicly released 2026-09-11T01:36:30Z from 2ad94d418bb0478417ab9589109f1f685ed92eb3; CI 34550200618 passed. Its 44,237,061-byte ZIP SHA-256 is 104ced8b60c16cd1b9013543a3940c9ed8d7cf904c3d05a6a8ef8d591f51d218; 50 file hash/CRC/version/clean-provenance and four anonymous 200-download asset checks passed. Remaining PPC contracts, game run, Issue #14 root cause and player acceptance remain open.",
+        "Start date": "2026-09-10",
+        "Release": "v0.5.4",
+        "Target date": null
       },
-      "title": "Audit remaining PPC translation contracts",
-      "body_sha256": "13bef09169dd96965e3c85da9ccecba60e62cc424265a2e6ff6173a551b671b3"
+      "title": "Maintain PPC generated-source provenance guard and remaining contracts",
+      "body_sha256": "2577fdb1ded0bcf386a72617fed62f59815d21aa49fa2a5c7fa0b77c42efc522"
     },
     "embsec-segment-research": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56fPQ",
@@ -1993,12 +1995,12 @@
         "Kind": "Feature",
         "Area": "Installation",
         "Status": "Done",
-        "Delivery": "Validated",
-        "Release": "v0.5.3",
+        "Delivery": "Released",
+        "Release": "v0.5.4",
         "Source key": "qol-installer-input-layout",
         "Start date": "2026-09-08",
         "Target date": "2026-09-08",
-        "Evidence": "User reported v0.5.3 installer drag stutter/exit on 2026-09-10. Four ucrtbase 0xc0000409 events and dump 41648 trace synchronous SendMessageW from Tk binding into Python WNDPROC/Tk re-entry and PyEval_RestoreThread fatal GIL state. Local unpublished PostMessageW screen-coordinate repair passed the new message-only HWND DragDispatch case (1/1). The same legacy UI fixture failed twice in setup on an unchanged foreground assertion before changed behavior. Installer-only EXE built locally: 11,888,743 bytes, SHA-256 707CD7D2E9F4AB3BF33363E172FAAD5CFCFA6B1A53161FEE0E7F53735B7C7FA7; read-only PYZ inspection confirms PostMessageW and required modules. User accepted the repair as resolved on 2026-09-10, covering the reported drag path. The repair remains unpublished."
+        "Evidence": "The locally accepted PostMessageW installer drag repair is released in v0.5.4. Its message-only HWND DragDispatch case passed 1/1; the legacy UI fixture remains limited by an unchanged foreground setup assertion. v0.5.4 was publicly released 2026-09-11T01:36:30Z from 2ad94d418bb0478417ab9589109f1f685ed92eb3; CI 34550200618 passed. ZIP SHA-256 104ced8b60c16cd1b9013543a3940c9ed8d7cf904c3d05a6a8ef8d591f51d218, package provenance/50 file hash+CRC checks and four anonymous 200-download asset checks passed. User acceptance remains limited to the reported drag path."
       },
       "title": "Expand installer recognition for supported game inputs",
       "body_sha256": "42dd11e1a69aea54e92b70663b7cda94a884434c554ec7f09a9d0256733393f0"
@@ -2328,30 +2330,31 @@
         "Kind": "Infrastructure",
         "Area": "Performance tooling",
         "Status": "Awaiting validation",
-        "Delivery": "Validated",
-        "Release": "v0.5.3",
+        "Delivery": "Released",
+        "Release": "v0.5.4",
         "Start date": "2026-09-10",
-        "Evidence": "Seven focused Python report cases and an MSVC 19.44 Release build passed. A background synthetic 2-second/10 ms-request collection completed with 187 hits, zero failures and 31 busy-symbol/PDB/source-resolved hits; fixture and collector exited 0, and capture.json rendered HTML/JSON successfully. This is wall-clock RIP sampling, not cycles; Toolhelp overhead yielded about 31 request rounds. PPC annotations are source context, not exact guest PC; GPU instruction profiling is not supported. Actual-game sampling, player acceptance, commit, push and release remain pending.",
+        "Evidence": "Seven focused report cases, MSVC Release build and a synthetic 2-second collection passed; the tool is wall-clock RIP sampling, not cycles, and does not support GPU instruction profiling. v0.5.4 was publicly released 2026-09-11T01:36:30Z from 2ad94d418bb0478417ab9589109f1f685ed92eb3; CI 34550200618 passed. ZIP SHA-256 104ced8b60c16cd1b9013543a3940c9ed8d7cf904c3d05a6a8ef8d591f51d218, package provenance/50 file hash+CRC checks and four anonymous 200-download asset checks passed. Actual-game sampling and player acceptance remain pending.",
         "Source key": "assembly-level-performance-analysis-tool",
         "Target date": "2026-09-10"
       },
       "title": "Build an assembly-level performance analysis tool",
-      "body_sha256": "22a6bac0a27b5d4467a170630225a70862e8ddbcb74bc6fb543b6e2b52a99040"
+      "body_sha256": "f1331bf308c8b20faac0f59028eb2b4baade896668af26744770c3331e826bb7"
     },
     "f1-capture-archive-timeout": {
       "id": "PVTI_lAHOAAsUY84Biy1azg6bP_I",
       "fields": {
         "Kind": "Bug",
         "Area": "Diagnostics",
-        "Status": "In Progress",
-        "Delivery": "In progress",
-        "Release": "v0.5.3",
+        "Status": "Awaiting validation",
+        "Delivery": "Released",
+        "Release": "v0.5.4",
         "Start date": "2026-09-10",
-        "Evidence": "runtime-1789085721772554.log records two F1 ZIP archive failures after about 60 seconds. Source changes the archive worker wait from 60000 to 180000 ms, retaining existing process/job-object cleanup and Optimal compression. The v0.5.3 EXE linked, build.json source identity was checked, and the installed replacement SHA-256 is CF70EA663ED230334145E1135CA97A58DFE3A34C65ED7D43E9E428C41B53270B; backup and install evidence are under out/f1-zip-180s. The overall build ended with a missing-source-DLL DXC-copy failure; the installation DLL was copied into build output without recompiling. No timeout recovery test, game run, player acceptance, commit, push or release is recorded.",
-        "Source key": "f1-capture-archive-timeout"
+        "Evidence": "The archive wait is 60000 to 180000 ms with existing cleanup and Optimal compression retained. v0.5.4 was publicly released 2026-09-11T01:36:30Z from 2ad94d418bb0478417ab9589109f1f685ed92eb3; CI 34550200618 passed. ZIP SHA-256 104ced8b60c16cd1b9013543a3940c9ed8d7cf904c3d05a6a8ef8d591f51d218, package provenance/50 file hash+CRC checks and four anonymous 200-download asset checks passed. No timeout recovery test, game run or player acceptance is recorded.",
+        "Source key": "f1-capture-archive-timeout",
+        "Target date": null
       },
       "title": "Extend the F1 capture archive timeout",
-      "body_sha256": "32c653b3f57450a2be0586b2a848351cc9abf1bf4f2281cf843b142d9fc6b954"
+      "body_sha256": "a5e3ec8239de4cab8074f0f62859a8fa6078d06f08df6a73d4100721277b529a"
     }
   }
 }

@@ -1,8 +1,10 @@
 # Project status
 
-## v0.5.4 release candidate — prepared, not published — 2026-09-11
+## Published v0.5.4 — 2026-09-11
 
-The release notes are prepared for v0.5.4 and contain the PPC generation guard, optional external assembly profiler, extended F1 archive wait and confirmed installer drag-dispatch fix. The release is not published; CI, package identity and release assets remain pending. Detailed local evidence and its limits are recorded below. The existing v0.5.3 release remains the latest published version.
+Source version **0.5.4** is published at [GitHub](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.4), with Release CI [34550200618](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34550200618) succeeding for commit `2ad94d418bb0478417ab9589109f1f685ed92eb3`. The ZIP is 44,237,061 bytes with SHA-256 `104ced8b60c16cd1b9013543a3940c9ed8d7cf904c3d05a6a8ef8d591f51d218`; the standalone updater is 848,896 bytes with SHA-256 `7285d0f24331387973a44e4240353d7857f1967163440fb49ba0546c7b9dd844` and is byte-identical to the copy extracted from the ZIP. All 50 manifest files passed hash, CRC, version 0.5.4 and clean-build provenance checks. The runtime executable hash is `3c3b4073f1b7abbcce38747dc08763335ac019edf560df849177176d0399f949`.
+
+All four public assets matched the local verification artifacts and returned anonymous HTTP 200 responses; the GitHub latest-release API reports v0.5.4. Evidence: `out/v0.5.4/release/{delivery-verification.json,public-download-check.json,published-release.json}`. The release includes the PPC generation guard, optional external assembly profiler, extended F1 archive wait and confirmed installer drag-dispatch fix. Focused validation and package integrity passed; no whole-game, visual or complete F1 acceptance is claimed.
 
 ## Published v0.5.3 — 2026-09-10
 
@@ -10,7 +12,7 @@ Source version **0.5.3** is published at [GitHub](https://github.com/freefrank/L
 
 The release adds compact opt-in TAA diagnostics, schema 3 binding evidence, the updater ZIP-root staging fix and private feedback archiving. TAA remains diagnostic research: no new player visual acceptance, complete update transaction or flicker fix is claimed. Evidence is retained under `out/v0.5.3/release/`.
 
-The repository marks v0.5.3 as the latest release. All four public asset digests and sizes match the local verification artifacts and returned anonymous HTTP 200 responses; the standalone updater is byte-identical to the copy inside the same ZIP.
+The v0.5.3 entry is retained as historical release provenance. Its asset digests and validation boundaries remain unchanged.
 
 ## Published v0.5.2 — 2026-09-10
 
@@ -22,9 +24,9 @@ The standalone updater retains the behavior validated for [v0.5.1](https://githu
 
 ## Current validation and limits
 
-### PPC generation guard — local, unpublished
+### PPC generation guard — v0.5.4
 
-PPC source generation now runs through `python -B tools/ppc_codegen.py generate`. `tools/build_tools.bat` records the generator binary and source receipt; generation and `check` validate the TOML/recompiler inputs, generated output hashes and the absence of obsolete 64-bit jump-table switches. The wrapper preserves the prior output tree if generation fails. The configured runtime build exposes `LoPpcCodegenCheck` as an order dependency before guest objects. The seven-case synthetic guard passed, and a fresh generation followed by `python -B tools/ppc_codegen.py check` completed successfully, producing 247 C++ files with 843 low-word (`u32`) and zero `u64` switch sites; 246 `ppc_recomp` instruction-comment stream hashes are unchanged. Existing 3,258 instruction checks, 109 word-switch checks, 843 recognized tables and 44,523 selector evaluations are reused from the earlier semantic evidence; this change has no new gameplay or package acceptance. The local change is unpublished and does not change the 0.5.3 release.
+PPC source generation now runs through `python -B tools/ppc_codegen.py generate`. `tools/build_tools.bat` records the generator binary and source receipt; generation and `check` validate the TOML/recompiler inputs, generated output hashes and the absence of obsolete 64-bit jump-table switches. The wrapper preserves the prior output tree if generation fails. The configured runtime build exposes `LoPpcCodegenCheck` as an order dependency before guest objects. The seven-case synthetic guard passed, and a fresh generation followed by `python -B tools/ppc_codegen.py check` completed successfully, producing 247 C++ files with 843 low-word (`u32`) and zero `u64` switch sites; 246 `ppc_recomp` instruction-comment stream hashes are unchanged. Existing 3,258 instruction checks, 109 word-switch checks, 843 recognized tables and 44,523 selector evaluations are reused from the earlier semantic evidence; no new gameplay acceptance is claimed. Package integrity and release provenance are recorded in the published v0.5.4 section above.
 
 ### TAA crowd coverage follow-up — local, unpublished
 
@@ -35,11 +37,13 @@ The audit baseline contains 63 observations: 20 cross-pass groups and 43 PS reco
 
 ### F1 capture archive timeout adjustment
 
-The local F1 menu ZIP archive wait was increased from 60 seconds to 180 seconds for large captures. Optimal compression and background behavior are unchanged. Runtime logs in the installation directory recorded two separate approximately 2.5 GB captures, each timing out at 60 seconds. The executable linked successfully, `build.json` verified version 0.5.3 and its hash, and the local install at `D:/Games/LostOdysseyRecomp-windows-x64-v0.5.3` matched SHA-256 `CF70EA663ED230334145E1135CA97A58DFE3A34C65ED7D43E9E428C41B53270B` (evidence: `out/f1-zip-180s/install.json`; prior EXE/metadata: `out/f1-zip-180s/backup`). The build ended with a source-directory DXC DLL copy failure; installation-directory DLLs were used to complete the output. No game run or F1 acceptance is recorded; this remains local evidence for the unpublished v0.5.4 candidate.
+The v0.5.4 source change increases the local F1 menu ZIP archive wait from 60 seconds to 180 seconds for large captures. Optimal compression and background behavior are unchanged. The retained local evidence records two separate approximately 2.5 GB captures timing out at 60 seconds; it does not record a game run or F1 acceptance. The published package identity and clean-build evidence are recorded above.
 
-### Installer drag dispatch — v0.5.4 candidate
+The earlier local source-0.5.3 executable and installation matched SHA-256 `CF70EA663ED230334145E1135CA97A58DFE3A34C65ED7D43E9E428C41B53270B` (`out/f1-zip-180s/install.json`; previous EXE/metadata in `out/f1-zip-180s/backup`). That build linked successfully but required copying the existing installation's DXC DLLs after the source-directory DLL copy failed. This remains historical local-build provenance, separate from the v0.5.4 CI package above.
 
-The installer drag-dispatch re-entrancy path now posts `WM_NCLBUTTONDOWN` with signed screen coordinates instead of synchronously calling the window procedure. `DragDispatch` passed 1/1, and the reporter confirmed the real installer drag fix. The installer-only local package is retained at `out/installer-drag-fix/dist/InstallGame.exe` (11,888,743 bytes; SHA-256 `707CD7D2E9F4AB3BF33363E172FAAD5CFCFA6B1A53161FEE0E7F53735B7C7FA7`). No game or importer regression validation is included; the v0.5.4 candidate remains unpublished.
+### Installer drag dispatch — v0.5.4
+
+The installer drag-dispatch re-entrancy path now posts `WM_NCLBUTTONDOWN` with signed screen coordinates instead of synchronously calling the window procedure. `DragDispatch` passed 1/1, and the reporter confirmed the real installer drag fix. The installer-only local package is retained at `out/installer-drag-fix/dist/InstallGame.exe` (11,888,743 bytes; SHA-256 `707CD7D2E9F4AB3BF33363E172FAAD5CFCFA6B1A53161FEE0E7F53735B7C7FA7`). No game or importer regression validation is included; the fix is included in published v0.5.4.
 
 ### Optional assembly profiler
 
