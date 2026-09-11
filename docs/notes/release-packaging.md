@@ -129,16 +129,18 @@ The hosted release end-to-end run has not yet been performed.
 Current status, 2026-09-10: resolving the library by `ppc/<key>` instead of a
 pinned private SHA is pushed to github/main as
 [`2c0456c`](https://github.com/freefrank/LostOdysseyRecomp/commit/2c0456c).
-Hosted CI and a new Release remain pending. This work is Unreleased and is
-not in published v0.5.4.
+Hosted [PPC prebuilt tests](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34565564964)
+passed; hosted release end-to-end validation and a new Release remain pending.
+This work is Unreleased and is not in published v0.5.4.
 
 ## Local PPC auto-sync — unreleased
 
 Current status, 2026-09-10: the auto-sync source is pushed to github/main as
 [`2c0456c`](https://github.com/freefrank/LostOdysseyRecomp/commit/2c0456c).
-Hosted CI for the auto-sync tests and a new Release remain pending. This
-work is Unreleased and is not in published v0.5.4. There is no user
-gameplay acceptance and no hosted release end-to-end run.
+Hosted [PPC prebuilt tests](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34565564964)
+passed; a new Release remains pending. This work is Unreleased and is not
+in published v0.5.4. There is no user gameplay acceptance and no hosted
+release end-to-end run.
 
 The local post-build hook requires `git config --local lo.ppcAutoSync true`.
 The CMake option reads that setting; if an existing cache is `OFF`, reconfigure
@@ -167,7 +169,8 @@ isolated Release contract, whose key matched. Evidence is retained in
 `out/ppc-auto-sync-evidence/build-sync.log`, `github-output.txt`,
 `github-output-second.txt` and `out/ppc-sync/receipt.json`. The auto-sync source is pushed to github/main as
 [`2c0456c`](https://github.com/freefrank/LostOdysseyRecomp/commit/2c0456c);
-hosted CI and a new Release remain pending.
+hosted [PPC prebuilt tests](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34565564964)
+passed, and a new Release remains pending.
 
 `export` requires a new empty output directory; `restore` may use an existing
 output directory according to its normal merge/replace behavior. The PPC flow,

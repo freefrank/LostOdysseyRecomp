@@ -11,6 +11,7 @@
 #include "shader_source_capture.h"
 #include "position_evidence_collection.h"
 #include "geometry_prepare.h"
+#include "texture_descriptor_cache.h"
 #include "depth_format.h"
 #include "depth_clear_layout.h"
 #include "polygon_offset.h"
@@ -35,6 +36,7 @@
 #include <os/logger.h>
 #include <os/shader_log.h>
 #include "render_timing.h"
+#include "render_batch_policy.h"
 #include <os/log_file.h>
 #include <os/capture_archive.h>
 #include <version.h>
@@ -59,6 +61,7 @@
 #include <unordered_set>
 #include <vector>
 #include <mutex>
+#include <string_view>
 
 namespace gpu::renderer
 {
@@ -326,15 +329,42 @@ namespace gpu::renderer
             uint64_t constantAddresses[3]{};
             std::unique_ptr<RenderDescriptorSet> staticSamplerSet;
             RenderCommandQueue* queue = nullptr;
-            std::unique_ptr<RenderCommandList> commandList;
-            std::unique_ptr<RenderCommandFence> fence;
-            std::unique_ptr<RenderQueryPool> timingQueries;
+            static constexpr uint32_t kGpuSlots = 2;
+            using TextureSetCache = texture_descriptors::BatchCache<RenderTexture, RenderDescriptorSet, kTextureSlots>;
+            struct GpuSlot {
+                std::unique_ptr<RenderCommandList> list;
+                std::unique_ptr<RenderCommandFence> fence;
+                std::unique_ptr<RenderQueryPool> timingQueries;
+                std::unique_ptr<RenderBuffer> uploadRing;
+                uint8_t* uploadMapped = nullptr;
+                uint64_t uploadOffset = 0;
+                std::vector<std::unique_ptr<RenderDescriptorSet>> setPools[4];
+                uint32_t setPoolUsed[4] = {};
+                TextureSetCache textureSetCache[3];
+                std::vector<std::unique_ptr<HostTexture>> retiredTextures;
+                bool submitted = false;
+            };
+            GpuSlot gpuSlots[kGpuSlots];
+            uint32_t gpuSlot = 0;
+            GpuSlot& Gpu() { return gpuSlots[gpuSlot]; }
+            void BindGpuSlot()
+            {
+                auto& g = Gpu();
+                commandList = g.list.get();
+                fence = g.fence.get();
+                timingQueries = g.timingQueries.get();
+                uploadRing = g.uploadRing.get();
+                uploadMapped = g.uploadMapped;
+            }
+            // Non-owning aliases to gpuSlots[gpuSlot], rebound in BindGpuSlot.
+            RenderCommandList* commandList = nullptr;
+            RenderCommandFence* fence = nullptr;
+            RenderQueryPool* timingQueries = nullptr;
+            RenderBuffer* uploadRing = nullptr;
+            uint8_t* uploadMapped = nullptr;
             render_timing::GpuBatches gpuTiming;
             bool timingInitialized = false;
             bool listOpen = false;
-
-            std::unique_ptr<RenderBuffer> uploadRing;
-            uint8_t* uploadMapped = nullptr;
 
             // Vertex buffers live in a persistent arena keyed by (address, size,
             // endian). A fetch constant may describe a multi-megabyte buffer for a
@@ -349,13 +379,15 @@ namespace gpu::renderer
             std::unordered_map<uint64_t, VertexEntry> vertexCache;
             uint32_t vertexUploads = 0, vertexRevalidations = 0;
             size_t vertexBytesUploaded = 0;
-            uint64_t uploadOffset = 0;
             std::unique_ptr<RenderBuffer> readback;
 
             std::unique_ptr<RenderPipelineLayout> pipelineLayout;
             RenderDescriptorSetBuilder setBuilders[5];
-            std::vector<std::unique_ptr<RenderDescriptorSet>> setPools[4];
-            uint32_t setPoolUsed[4] = {};
+            const bool descriptorReuse = [] {
+                const char* value = getenv("LO_DESCRIPTOR_REUSE");
+                return !value || std::string_view(value) != "0";
+            }();
+            uint32_t descriptorHits = 0, descriptorMisses = 0;
             uint32_t vfetchDescriptorBase = 0, samplerDescriptorBase = 0;
             std::unique_ptr<RenderDescriptorSet> staticSet0;     // ring buffers + sampler palette
             std::map<uint64_t, uint32_t> samplerPalette;         // sampler key -> palette index
@@ -375,7 +407,6 @@ namespace gpu::renderer
             bool pipelineCacheEnabled = false, pipelineRecipesDirty = false;
             uint64_t preparedPipelineHits = 0, runtimePipelineCreates = 0;
             std::unordered_map<RenderTargetKey, std::unique_ptr<HostTexture>, RenderTargetKeyHash> renderTargets;
-            std::vector<std::unique_ptr<HostTexture>> retiredTextures; // replaced targets, freed after the next Flush
             std::unordered_map<TextureKey, std::unique_ptr<HostTexture>, TextureKeyHash> textures;
 
             // Resolve results kept on the GPU, keyed by guest physical address.
@@ -473,12 +504,16 @@ namespace gpu::renderer
             uint32_t textureReuploads = 0;
             uint32_t dummyBindings = 0;
 
-            // Per-frame timing of the expensive paths (LO_GPU_STATS).
+            // Both diagnostic consumers need CPU segments; ordinary play does not.
+            const bool cpuTimingEnabled = getenv("LO_GPU_STATS") != nullptr || render_timing::Enabled();
+            uint32_t descriptorBatchLimit = 500;
+            uint32_t descriptorSplits = 0, uploadSplits = 0, arenaSplits = 0;
             struct ScopedTimer
             {
                 double& acc;
-                std::chrono::steady_clock::time_point t0 = std::chrono::steady_clock::now();
-                ~ScopedTimer() { acc += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count(); }
+                render_batch::CpuTimer<> timer;
+                ScopedTimer(double& value, bool enabled) : acc(value), timer(enabled) {}
+                ~ScopedTimer() { timer.AddTo(acc); }
             };
             double tDraw = 0, tShader = 0, tPipeline = 0, tTexture = 0, tResolve = 0, tFlush = 0;
             double tConst = 0, tSets = 0, tVertex = 0, tBind = 0, tIndex = 0, tRecord = 0;
@@ -789,6 +824,10 @@ namespace gpu::renderer
                 device = video::GetDevice();
                 queue = video::GetQueue();
                 vulkan = video::IsVulkan();
+                const char* batchOverride = getenv("LO_VK_DESCRIPTOR_BATCH_LIMIT");
+                descriptorBatchLimit = render_batch::DescriptorLimit(vulkan, batchOverride ? batchOverride : "");
+                LOG_INFO("renderer: descriptor reuse={} backend={} limit={} gpu_slots={} (LO_DESCRIPTOR_REUSE=0 disables D3D12 reuse)",
+                    !vulkan && descriptorReuse, vulkan ? "Vulkan" : "D3D12", descriptorBatchLimit, kGpuSlots);
                 binaryFormat = vulkan ? xenos::ShaderBinaryFormat::Spirv : xenos::ShaderBinaryFormat::Dxil;
                 renderFormat = vulkan ? RenderShaderFormat::SPIRV : RenderShaderFormat::DXIL;
                 if (!device || !queue)
@@ -823,13 +862,18 @@ namespace gpu::renderer
                     LOG_WARNING("renderer: optional position evidence collection unavailable: {}",error.what());
                 }
 
-                commandList = queue->createCommandList();
-                fence = device->createCommandFence();
-                uploadRing = device->createBuffer(RenderBufferDesc::UploadBuffer(kUploadRingSize, vulkan ? RenderBufferFlag::DEVICE_ADDRESSABLE | RenderBufferFlag::INDEX | RenderBufferFlag::STORAGE : RenderBufferFlag::NONE));
-                if (!commandList || !fence || !uploadRing) return false;
-                uploadMapped = static_cast<uint8_t*>(uploadRing->map());
+                for (uint32_t i = 0; i < kGpuSlots; ++i) {
+                    auto& g = gpuSlots[i];
+                    g.list = queue->createCommandList();
+                    g.fence = device->createCommandFence();
+                    g.uploadRing = device->createBuffer(RenderBufferDesc::UploadBuffer(kUploadRingSize, vulkan ? RenderBufferFlag::DEVICE_ADDRESSABLE | RenderBufferFlag::INDEX | RenderBufferFlag::STORAGE : RenderBufferFlag::NONE));
+                    if (!g.list || !g.fence || !g.uploadRing) return false;
+                    g.uploadMapped = static_cast<uint8_t*>(g.uploadRing->map());
+                    if (!g.uploadMapped) return false;
+                }
+                BindGpuSlot();
                 vertexArena = device->createBuffer(RenderBufferDesc::UploadBuffer(kVertexArenaSize, RenderBufferFlag::STORAGE));
-                if (!vertexArena || !uploadMapped) return false;
+                if (!vertexArena) return false;
                 arenaMapped = static_cast<uint8_t*>(vertexArena->map());
                 readback = device->createBuffer(RenderBufferDesc::ReadbackBuffer(kReadbackSize));
                 if (!readback || !arenaMapped) return false;
@@ -951,7 +995,7 @@ namespace gpu::renderer
                 for (uint32_t slice = 0; slice < slices; slice++)
                     commandList->copyTextureRegion(
                         RenderTextureCopyLocation::Subresource(tex.texture.get(), 0, slice),
-                        RenderTextureCopyLocation::PlacedFootprint(uploadRing.get(), RenderFormat::R8G8B8A8_UNORM, 1, 1, 1, 64, offset));
+                        RenderTextureCopyLocation::PlacedFootprint(uploadRing, RenderFormat::R8G8B8A8_UNORM, 1, 1, 1, 64, offset));
                 Transition(tex, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
             }
 
@@ -1213,20 +1257,65 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             }
 
             // ---- command list / upload ring ------------------------------------
+            // ReBlue-style two-slot ring: submit without waiting, then wait only
+            // the slot about to be recorded into (one generation old).
+            void RecycleSlot(uint32_t i)
+            {
+                auto& s = gpuSlots[i];
+                if (!s.submitted)
+                    return;
+                {
+                    ScopedTimer timer{ tFlush, cpuTimingEnabled };
+                    queue->waitForCommandFence(s.fence.get());
+                }
+                s.submitted = false;
+                if (s.timingQueries) {
+                    s.timingQueries->queryResults();
+                    const auto* results = s.timingQueries->getResults();
+                    if (results) gpuTiming.AddBatch(results[0], results[1]);
+                    else gpuTiming.AddUnavailableBatch();
+                } else if (render_timing::Enabled()) gpuTiming.AddUnavailableBatch();
+                for (const auto& texture : s.retiredTextures)
+                    for (auto fb = framebuffers.begin(); fb != framebuffers.end();)
+                        if (fb->first.first == texture->texture.get() || fb->first.second == texture->texture.get())
+                            fb = framebuffers.erase(fb);
+                        else
+                            ++fb;
+                for (auto& cache : s.textureSetCache) cache.Clear();
+                s.retiredTextures.clear();
+                if(temporalHistory)temporalHistory->ReleaseCompleted();
+                else if(sparseCollector)sparseCollector->ReleaseCompleted();
+                sceneAABusy=false;
+                s.uploadOffset = 0;
+                for (auto& used : s.setPoolUsed)
+                    used = 0;
+            }
+
+            void WaitForGpu()
+            {
+                for (uint32_t i = 0; i < kGpuSlots; ++i)
+                    RecycleSlot(i);
+            }
+
             void Begin()
             {
+                RecycleSlot(gpuSlot);
+                BindGpuSlot();
                 if (!listOpen)
                 {
                     if (render_timing::Enabled() && !timingInitialized) {
                         timingInitialized = true;
-                        timingQueries = device->createQueryPool(2);
-                        if (timingQueries && timingQueries->getCount() != 2) timingQueries.reset();
-                        if (!timingQueries) LOG_WARNING("render timing: GPU timestamp queries unavailable");
+                    }
+                    if (render_timing::Enabled() && !Gpu().timingQueries) {
+                        Gpu().timingQueries = device->createQueryPool(2);
+                        if (Gpu().timingQueries && Gpu().timingQueries->getCount() != 2) Gpu().timingQueries.reset();
+                        if (!Gpu().timingQueries) LOG_WARNING("render timing: GPU timestamp queries unavailable");
+                        timingQueries = Gpu().timingQueries.get();
                     }
                     commandList->begin();
                     if (timingQueries) {
-                        commandList->resetQueryPool(timingQueries.get(), 0, 2);
-                        commandList->writeTimestamp(timingQueries.get(), 0);
+                        commandList->resetQueryPool(timingQueries, 0, 2);
+                        commandList->writeTimestamp(timingQueries, 0);
                     }
                     listOpen = true;
                 }
@@ -1236,45 +1325,20 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             {
                 if (!listOpen)
                     return;
-                if (timingQueries) commandList->writeTimestamp(timingQueries.get(), 1);
+                if (timingQueries) commandList->writeTimestamp(timingQueries, 1);
                 commandList->end();
                 listOpen = false;
-                const RenderCommandList* lists[] = { commandList.get() };
-                queue->executeCommandLists(lists, 1, nullptr, 0, nullptr, 0, fence.get());
-                {
-                    ScopedTimer timer{ tFlush };
-                    queue->waitForCommandFence(fence.get());
-                }
-                // The existing fence already completed this batch. Timestamp
-                // diagnostics add no synchronization or extra command submit.
-                if (timingQueries) {
-                    timingQueries->queryResults();
-                    const auto* results = timingQueries->getResults();
-                    if (results) gpuTiming.AddBatch(results[0], results[1]);
-                    else gpuTiming.AddUnavailableBatch();
-                } else if (render_timing::Enabled()) gpuTiming.AddUnavailableBatch();
-                // Initialization creates framebuffer views for resolve textures
-                // too. Release those cached views after their last GPU use and
-                // before a retired texture's pointer can be reused.
-                for (const auto& texture : retiredTextures)
-                    for (auto fb = framebuffers.begin(); fb != framebuffers.end();)
-                        if (fb->first.first == texture->texture.get() || fb->first.second == texture->texture.get())
-                            fb = framebuffers.erase(fb);
-                        else
-                            ++fb;
-                retiredTextures.clear();
-                if(temporalHistory)temporalHistory->ReleaseCompleted();
-                else if(sparseCollector)sparseCollector->ReleaseCompleted();
-                sceneAABusy=false; // Existing queue fence completed; processor descriptors may be reused.
-                uploadOffset = 0;
-                for (auto& used : setPoolUsed)
-                    used = 0;
+                const RenderCommandList* lists[] = { commandList };
+                queue->executeCommandLists(lists, 1, nullptr, 0, nullptr, 0, fence);
+                Gpu().submitted = true;
+                gpuSlot = (gpuSlot + 1) % kGpuSlots;
+                BindGpuSlot();
             }
 
             // Returns an offset into the upload ring or UINT64_MAX when full.
             uint64_t Upload(const void* data, size_t size, uint32_t alignment = 256)
             {
-                uint64_t offset = (uploadOffset + alignment - 1) & ~uint64_t(alignment - 1);
+                uint64_t offset = (Gpu().uploadOffset + alignment - 1) & ~uint64_t(alignment - 1);
                 if (offset + size > kUploadRingSize)
                 {
                     // Out of space mid-frame: finish what we have and start over.
@@ -1286,26 +1350,25 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
                 if (data)
                     memcpy(uploadMapped + offset, data, size);
-                uploadOffset = offset + size;
+                Gpu().uploadOffset = offset + size;
                 return offset;
             }
 
-            // plume's shader-visible heap holds 65536 views; every draw takes three
-            // 32-slot sets, so the pools are capped and the frame is split when full.
-            static constexpr uint32_t kMaxSetsPerKind = 500;
+            // Three 32-slot texture banks per draw. Unused banks reuse one dummy
+            // set; unique 2D combinations consume descriptorBatchLimit.
 
             void SetConstantBuffer(uint64_t offset, uint32_t index)
             {
                 if(vulkan) {
                     constantAddresses[index]=uploadRing->getDeviceAddress()+offset;
                     commandList->setGraphicsPushConstants(0,constantAddresses);
-                } else commandList->setGraphicsRootDescriptor(RenderBufferReference(uploadRing.get(),offset),index);
+                } else commandList->setGraphicsRootDescriptor(RenderBufferReference(uploadRing,offset),index);
             }
 
             RenderDescriptorSet* AcquireSet(int which)
             {
-                auto& pool = setPools[which];
-                uint32_t& used = setPoolUsed[which];
+                auto& pool = Gpu().setPools[which];
+                uint32_t& used = Gpu().setPoolUsed[which];
                 if (used >= pool.size())
                 {
                     pool.push_back(setBuilders[which].create(device));
@@ -1317,6 +1380,26 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     }
                 }
                 return pool[used++].get();
+            }
+
+            RenderDescriptorSet* AcquireTextureSet(int which, const TextureSetCache::Key& textures, uint32_t activeSlots)
+            {
+                const bool reuse = !vulkan && descriptorReuse;
+                auto create = [&]() {
+                    auto* set = AcquireSet(which);
+                    for (uint32_t slot = 0; slot < kTextureSlots; ++slot)
+                        if (reuse || ((activeSlots >> slot) & 1))
+                            set->setTexture(slot, textures[slot], RenderTextureLayout::SHADER_READ);
+                    return set;
+                };
+                if (!reuse) return create();
+                bool reused = false;
+                auto* set = Gpu().textureSetCache[which - 1].Acquire(textures, create, reused);
+                if (cpuTimingEnabled) {
+                    descriptorHits += reused;
+                    descriptorMisses += !reused;
+                }
+                return set;
             }
 
             void Transition(HostTexture& tex, RenderTextureLayout layout, RenderBarrierStages stages)
@@ -1862,7 +1945,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     if (!ec && !std::filesystem::exists(path, ec))
                         std::ofstream(path, std::ios::binary).write(reinterpret_cast<const char*>(words), size_t(count)*4);
                 }
-                ScopedTimer timer{ tShader };
+                ScopedTimer timer{ tShader, cpuTimingEnabled };
                 nShader++;
                 std::vector<uint32_t> swapped(count);
                 for (uint32_t i = 0; i < count; i++)
@@ -2073,6 +2156,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 // before destroying framebuffer views and the resources they use.
                 if (effective != internalSize) {
                     Flush();
+                    WaitForGpu();
                     framebuffers.clear();
                     renderTargets.clear();
                     resolved.clear();
@@ -2114,7 +2198,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         if (fb->first.first == old || fb->first.second == old) fb = framebuffers.erase(fb);
                         else ++fb;
                     }
-                    retiredTextures.push_back(std::move(it->second));
+                    Gpu().retiredTextures.push_back(std::move(it->second));
                     renderTargets.erase(it);
                 }
 
@@ -2300,7 +2384,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         auto& view = rs->fetchViews[viewKey];
                         if (!view || view->format != rs->tex->format || view->width != physicalWidth || view->height != physicalHeight)
                         {
-                            if (view) retiredTextures.push_back(std::move(view));
+                            if (view) Gpu().retiredTextures.push_back(std::move(view));
                             view = std::make_unique<HostTexture>();
                             view->format = rs->tex->format;
                             view->guestWidth = width;
@@ -2350,11 +2434,11 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         return cached;
                     }
                     textureReuploads++;
-                    retiredTextures.push_back(std::move(it->second));
+                    Gpu().retiredTextures.push_back(std::move(it->second));
                     textures.erase(it);
                 }
 
-                ScopedTimer timer{ tTexture };
+                ScopedTimer timer{ tTexture, cpuTimingEnabled };
                 nTexture++;
                 TextureFormatInfo fi;
                 if (!GetTextureFormat(format, fi))
@@ -2471,7 +2555,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 for (uint32_t f = 0; f < faces; f++)
                     commandList->copyTextureRegion(
                         RenderTextureCopyLocation::Subresource(tex->texture.get(), 0, f),
-                        RenderTextureCopyLocation::PlacedFootprint(uploadRing.get(), fi.host, texWidth, texHeight, 1, (rowPitch / hostBpp) * fi.blockWidth,
+                        RenderTextureCopyLocation::PlacedFootprint(uploadRing, fi.host, texWidth, texHeight, 1, (rowPitch / hostBpp) * fi.blockWidth,
                             offset + uint64_t(f) * rowPitch * blocksY));
                 Transition(*tex, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
 
@@ -2491,7 +2575,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     {
                         // The command list being recorded may still reference it, so
                         // hand it to the retired list (freed after the next fence wait).
-                        retiredTextures.push_back(std::move(it->second));
+                        Gpu().retiredTextures.push_back(std::move(it->second));
                         it = textures.erase(it);
                     }
                     else ++it;
@@ -2548,7 +2632,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (it != pipelines.end()) {
                     return it->second.get();
                 }
-                ScopedTimer timer{ tPipeline };
+                ScopedTimer timer{ tPipeline, cpuTimingEnabled };
                 nPipeline++;
                 ++runtimePipelineCreates;
                 auto pipeline = CreatePipeline(key, vs, ps, true);
@@ -2725,7 +2809,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             // ---- draw -------------------------------------------------------------------
             void Draw(const DrawInfo& info)
             {
-                ScopedTimer timer{ tDraw };
+                ScopedTimer timer{ tDraw, cpuTimingEnabled };
                 if(collectionFrame!=frame){collectionFrame=frame;taa_collection::BeginDiagnosticsFrame(frame);}
                 if (!debugCaptureDir.empty())
                 {
@@ -2757,19 +2841,26 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 // All resource recycling happens BETWEEN draws: a Flush inside one
                 // would rewind the descriptor pools and upload ring that this draw's
                 // already-recorded state points at.
-                const bool poolsFull = setPoolUsed[1] >= kMaxSetsPerKind;
-                const bool ringLow = uploadOffset + kUploadHeadroom > kUploadRingSize;
+                const bool poolsFull = Gpu().setPoolUsed[1] >= descriptorBatchLimit ||
+                    Gpu().setPoolUsed[2] >= descriptorBatchLimit || Gpu().setPoolUsed[3] >= descriptorBatchLimit;
+                const bool ringLow = Gpu().uploadOffset + kUploadHeadroom > kUploadRingSize;
                 const bool arenaLow = arenaOffset + kArenaHeadroom > kVertexArenaSize;
                 if (poolsFull || ringLow || arenaLow)
                 {
+                    if (cpuTimingEnabled) {
+                        descriptorSplits += poolsFull;
+                        uploadSplits += ringLow;
+                        arenaSplits += arenaLow;
+                    }
                     Flush();
-                    Begin();
                     if (arenaLow)
                     {
+                        WaitForGpu();
                         arenaOffset = 0;
                         vertexCache.clear();
                         LOG_INFO("renderer: vertex arena reset");
                     }
+                    Begin();
                 }
                 Begin();
 
@@ -2924,7 +3015,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
 
                 // Constants.
-                auto tConst0 = std::chrono::steady_clock::now();
+                render_batch::CpuTimer<> tConst0(cpuTimingEnabled);
                 // Both halves of the ALU constant file are 256 vec4 wide
                 // (0x4000-0x43FF for the vertex shader, 0x4400-0x47FF for the
                 // pixel shader) and the translated HLSL declares float4 c[256]
@@ -3157,20 +3248,16 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     shared.alphaTest[1] = float(colorControl & 7);
                 }
 
-                tConst += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - tConst0).count();
+                tConst0.AddTo(tConst);
 
                 // Descriptor sets: vertex fetch buffers + samplers, textures.
                 RenderDescriptorSet* set0 = staticSet0.get();
-                RenderDescriptorSet* set1;
-                RenderDescriptorSet* set2;
-                RenderDescriptorSet* set3;
-                {
-                    ScopedTimer timer{ tSets };
-                    set1 = AcquireSet(1);
-                    set2 = AcquireSet(2);
-                    set3 = AcquireSet(3);
-                }
-                auto tVertex0 = std::chrono::steady_clock::now();
+                TextureSetCache::Key textureBindings[3];
+                uint32_t activeTextureSlots[3] = {};
+                textureBindings[0].fill(dummyTexture2D.texture.get());
+                textureBindings[1].fill(dummyTexture3D.texture.get());
+                textureBindings[2].fill(dummyTextureCube.texture.get());
+                render_batch::CpuTimer<> tVertex0(cpuTimingEnabled);
                 const uint32_t vfTraceFrame = TraceFrame();
                 static const uint32_t vfTraceCount = getenv("LO_DRAW_TRACE_COUNT") ? strtoul(getenv("LO_DRAW_TRACE_COUNT"), nullptr, 10) : 1;
                 const bool vfTrace = vfTraceFrame && frame >= vfTraceFrame && frame < vfTraceFrame + vfTraceCount;
@@ -3211,7 +3298,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     SHADER_LOG_INFO("vertex-fetch", None, "renderer: draw vfetch{} | indxOffset={} raw{}", vfTraceLine, int32_t(Reg(REG_VGT_INDX_OFFSET)), raw);
                 }
 
-                tVertex += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - tVertex0).count();
+                tVertex0.AddTo(tVertex);
 
                 // Prove the actual destination coverage before replacing its source.
                 // This shader fetches float4 positions from slot 95 with 32-byte stride.
@@ -3264,7 +3351,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     if(frame>=start&&frame-start<128)SHADER_LOG_INFO("scene-aa", None, "renderer scene AA guard f{} full={} reason={} mode={} jitter={} blend={:#x} mask={} vtx={} prim={} n={} cull={:#x} ctl={:#x} vp=({},{},{},{}) extent={}x{} fetch95={:08x},{:08x} quad={} ",frame,fullSceneCopy,fullCopyReason,sceneAAMode,temporalJitter,key.blend,key.colorMask,shared.vtxFmt,info.primitiveType,info.indexCount,key.modeCull,Reg(REG_RB_COLORCONTROL),viewport.x,viewport.y,viewport.width,viewport.height,pitch,rtHeight,Reg(REG_FETCH_CONSTANTS+190),Reg(REG_FETCH_CONSTANTS+191),fullCopyVertices);
                 }
                 // Textures used by the pixel and vertex shaders.
-                auto tBind0 = std::chrono::steady_clock::now();
+                render_batch::CpuTimer<> tBind0(cpuTimingEnabled);
                 const uint32_t bindingBank = bindingRecord ? bindingRecord->texture.bank : 0;
                 const uint32_t sceneCopyBank = ps && ps->info.textureDimension[0] == 2 ? 1 :
                     ps && ps->info.textureDimension[0] == 3 ? 2 : 0;
@@ -3280,7 +3367,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         for (int i = 0; i < 6; i++) fetch[i] = Reg(REG_FETCH_CONSTANTS + slot * 6 + i);
                         const uint32_t declared = s->info.textureDimension[slot];
                         const uint32_t bank = declared == 2 ? 1 : declared == 3 ? 2 : 0;
-                        RenderDescriptorSet* set = declared == 2 ? set2 : declared == 3 ? set3 : set1;
+                        activeTextureSlots[bank] |= uint32_t(1) << slot;
                         HostTexture* dummy = declared == 2 ? &dummyTexture3D : declared == 3 ? &dummyTextureCube : &dummyTexture2D;
                         uint32_t dimension = (fetch[5] >> 9) & 3; // 0 1D, 1 2D, 2 3D, 3 cube
                         std::optional<binding::Texture> selectedBinding;
@@ -3292,7 +3379,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             // Descriptor sets are pooled and reused, so a slot the
                             // shader reads must always be written: otherwise it keeps
                             // the texture some earlier draw left there.
-                            set->setTexture(slot, dummy->texture.get(), RenderTextureLayout::SHADER_READ);
+                            textureBindings[bank][slot] = dummy->texture.get();
                             shared.samplerIndex[slot] = 0;
                             shared.textureInfo[slot] = 0x68800u;
                             if (selectedBinding) {
@@ -3330,7 +3417,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                 Transition(*tex,RenderTextureLayout::COPY_SOURCE,RenderBarrierStage::COPY);
                                 const auto sample = temporal::FrameJitter(frame, rasterViewport.width, rasterViewport.height);
                                 const double jx = temporalJitter ? sample.pixelX : 0, jy = temporalJitter ? sample.pixelY : 0;
-                                temporalDisplay=temporalHistory->ResolveColor(commandList.get(),tex->texture.get(),temporalScene,jx,jy,temporalAllowHistory,temporalStableGrid,sceneAAMode==3);
+                                temporalDisplay=temporalHistory->ResolveColor(commandList,tex->texture.get(),temporalScene,jx,jy,temporalAllowHistory,temporalStableGrid,sceneAAMode==3);
                                 Transition(*tex,RenderTextureLayout::SHADER_READ,RenderBarrierStage::GRAPHICS);
                                 if(temporalDisplay) {
                                     temporalDisplayFromHistory = true;
@@ -3350,7 +3437,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                         RenderFormat::R8G8B8A8_UNORM,RenderTextureFlag::RENDER_TARGET));
                                     sceneAAWidth=tex->width;sceneAAHeight=tex->height;
                                 }
-                                if(sceneAAOutput && sceneProcessor->ProcessSceneColor(commandList.get(),tex->texture.get(),sceneAAOutput.get(),
+                                if(sceneAAOutput && sceneProcessor->ProcessSceneColor(commandList,tex->texture.get(),sceneAAOutput.get(),
                                     tex->width,tex->height,static_cast<gpu::Antialiasing>(sceneAAMode==3?2:sceneAAMode))) {
                                     tex->layout=RenderTextureLayout::SHADER_READ;
                                     temporalDisplay=sceneAAOutput.get();sceneAABusy=true;sceneAARecorded=true;
@@ -3370,7 +3457,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         uint64_t samplerKey = ((d3 >> 19) & 3) | (((d3 >> 21) & 3) << 2) | (((d3 >> 23) & 3) << 4)
                             | (((fetch[0] >> 10) & 7) << 6) | (((fetch[0] >> 13) & 7) << 9) | (((fetch[0] >> 16) & 7) << 12);
                         shared.samplerIndex[slot] = GetSamplerIndex(samplerKey);
-                        set->setTexture(slot, temporalDisplay?temporalDisplay:tex->texture.get(), RenderTextureLayout::SHADER_READ);
+                        textureBindings[bank][slot] = temporalDisplay ? temporalDisplay : tex->texture.get();
                         if (selectedBinding) {
                             selectedBinding->bank = bank;
                             if (temporalDisplay) {
@@ -3391,6 +3478,13 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 };
                 bindTextures(ps);
                 bindTextures(vs);
+                RenderDescriptorSet *set1, *set2, *set3;
+                {
+                    ScopedTimer timer{ tSets, cpuTimingEnabled };
+                    set1 = AcquireTextureSet(1, textureBindings[0], activeTextureSlots[0]);
+                    set2 = AcquireTextureSet(2, textureBindings[1], activeTextureSlots[1]);
+                    set3 = AcquireTextureSet(3, textureBindings[2], activeTextureSlots[2]);
+                }
                 if (bindingRecord) {
                     // Shared sign/swizzle/sampler constants may also have been written by VS texture0.
                     auto& texture = bindingRecord->texture;
@@ -3404,8 +3498,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         uint32_t((actualSampler >> 12) & 7), uint32_t((actualSampler >> 2) & 3),
                         uint32_t(actualSampler & 3), uint32_t((actualSampler >> 4) & 3)};
                 }
-                tBind += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - tBind0).count();
-                auto tIndex0 = std::chrono::steady_clock::now();
+                tBind0.AddTo(tBind);
+                render_batch::CpuTimer<> tIndex0(cpuTimingEnabled);
 
                 uint64_t vsOffset = Upload(vsConstants, sizeof(vsConstants));
                 uint64_t psOffset = Upload(psConstants, sizeof(psConstants));
@@ -3475,7 +3569,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     return;
                 }
 
-                tIndex += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - tIndex0).count();
+                tIndex0.AddTo(tIndex);
 
                 // Offline vertex replay: capture one frame of relative-addressed
                 // draws with their constants, indices and current guest streams.
@@ -3518,7 +3612,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
 
                 // Record.
-                ScopedTimer recordTimer{ tRecord };
+                ScopedTimer recordTimer{ tRecord, cpuTimingEnabled };
                 RenderFramebuffer* framebuffer = GetFramebuffer(color, depth);
                 commandList->setFramebuffer(framebuffer);
                 commandList->setViewports(&rasterViewport, 1);
@@ -3687,7 +3781,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     uint64_t offset = Upload(indices.data(), indices.size() * 4, 16);
                     if (offset == UINT64_MAX)
                         return;
-                    RenderIndexBufferView view(RenderBufferReference(uploadRing.get(), offset), uint32_t(indices.size() * 4), RenderFormat::R32_UINT);
+                    RenderIndexBufferView view(RenderBufferReference(uploadRing, offset), uint32_t(indices.size() * 4), RenderFormat::R32_UINT);
                     commandList->setIndexBuffer(&view);
                     commandList->drawIndexedInstanced(indexCount, 1, 0, baseVertex, 0);
                 }
@@ -4180,7 +4274,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 ResolvedSurface& rs = ResolvedSlot(destBase, destFormat);
                 if (!rs.tex || rs.tex->format != RenderFormat::R32_FLOAT || rs.tex->width != texW || rs.tex->height != texH)
                 {
-                    if (rs.tex) retiredTextures.push_back(std::move(rs.tex));
+                    if (rs.tex) Gpu().retiredTextures.push_back(std::move(rs.tex));
                     rs.writeOrdinal = 0; // The replacement allocation contains no previous resolve.
                     rs.writeWidth = rs.writeHeight = 0;
                     rs.tex = std::make_unique<HostTexture>();
@@ -4238,7 +4332,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         texW, texH, x0 == 0 && y0 == 0 && w == texW && h == texH});
                     if(temporalExperiment && temporalHistory && temporalScene.Depth().ordinal==rs.writeOrdinal) {
                         Transition(*rs.tex,RenderTextureLayout::COPY_SOURCE,RenderBarrierStage::COPY);
-                        temporalHistory->CaptureDepth(commandList.get(),rs.tex->texture.get(),temporalScene);
+                        temporalHistory->CaptureDepth(commandList,rs.tex->texture.get(),temporalScene);
                         Transition(*rs.tex,RenderTextureLayout::SHADER_READ,RenderBarrierStage::GRAPHICS);
                     }
                 }
@@ -4268,7 +4362,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 ResolvedSurface& rs = ResolvedSlot(destBase, destFormat);
                 if (!rs.tex || rs.tex->format != destHost || rs.tex->width != texW || rs.tex->height != texH)
                 {
-                    if (rs.tex) retiredTextures.push_back(std::move(rs.tex));
+                    if (rs.tex) Gpu().retiredTextures.push_back(std::move(rs.tex));
                     rs.writeOrdinal = 0; // The replacement allocation contains no previous resolve.
                     rs.writeWidth = rs.writeHeight = 0;
                     rs.tex = std::make_unique<HostTexture>();
@@ -4336,7 +4430,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 
             void Resolve()
             {
-                ScopedTimer timer{ tResolve };
+                ScopedTimer timer{ tResolve, cpuTimingEnabled };
                 nResolve++;
                 ResolveImpl();
             }
@@ -4437,6 +4531,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     RenderTextureCopyLocation::PlacedFootprint(readback.get(), color->format, copyWidth, copyHeight, 1, rowPitch / hostBpp, 0),
                     RenderTextureCopyLocation::Subresource(color->texture.get()), 0, 0, 0, &box);
                 Flush();
+                WaitForGpu();
 
                 // Convert each pixel to four floats, then to the destination format, tiled.
                 const uint8_t* src = static_cast<const uint8_t*>(readback->map());
@@ -4569,6 +4664,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
         if (g_renderer)
         {
             g_renderer->Flush();
+            g_renderer->WaitForGpu();
             g_renderer->SavePipelineRecipes(true);
             delete g_renderer;
             g_renderer = nullptr;
@@ -4767,6 +4863,14 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             static const bool stats = getenv("LO_GPU_STATS") != nullptr;
             static auto lastFrame = std::chrono::steady_clock::now();
             g_renderer->Flush();
+            if (g_renderer->cpuTimingEnabled) {
+                auto& r = *g_renderer;
+                if (render_timing::Enabled() || r.frame % 60 == 0)
+                    LOG_INFO("render batch capacity frame={} limit={} descriptor_splits={} upload_splits={} arena_splits={} descriptor_hits={} descriptor_misses={} scope=current_frame_capacity_checks reasons_may_overlap=true",
+                        r.frame, r.descriptorBatchLimit, r.descriptorSplits, r.uploadSplits, r.arenaSplits, r.descriptorHits, r.descriptorMisses);
+                r.descriptorSplits = r.uploadSplits = r.arenaSplits = 0;
+                r.descriptorHits = r.descriptorMisses = 0;
+            }
             if (render_timing::Enabled()) {
                 Renderer& r = *g_renderer;
                 const render_timing::CpuSegments cpu{r.drawsThisFrame, r.nShader, r.nPipeline, r.nTexture, r.nResolve,
@@ -4974,6 +5078,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             RenderTextureCopyLocation::PlacedFootprint(g_renderer->readback.get(), copyFormat, tex.width, tex.height, 1, rowPitch / bpp, 0),
             RenderTextureCopyLocation::Subresource(tex.texture.get(), 0));
         g_renderer->Flush();
+        g_renderer->WaitForGpu();
         const uint8_t* src = static_cast<const uint8_t*>(g_renderer->readback->map());
         width = tex.width;
         height = tex.height;

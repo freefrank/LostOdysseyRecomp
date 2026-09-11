@@ -1,5 +1,16 @@
 # Test suites
 
+## Render batch policy and descriptor cache
+
+Header fixtures for the D3D12/Vulkan descriptor batch limit and per-batch texture-set reuse. They do not launch the game or open a GPU device:
+
+```powershell
+clang-cl /std:c++20 /EHsc /I LostOdysseyRecomp tools/tests/render_batch_policy_test.cpp
+clang-cl /std:c++20 /EHsc /I LostOdysseyRecomp tools/tests/texture_descriptor_cache_test.cpp
+```
+
+CMake targets `LoRenderBatchPolicyTest` and `LoTextureDescriptorCacheTest` match `LoPollWaitTest`. The recorded local run passed 22 batch-policy checks and 11 descriptor-cache checks (including 2000 repeated hits). They do not prove a game frame, GPU heap layout or 60 fps.
+
 ## Assembly profiler report
 
 The offline report fixture is a focused check for `tools/asm-profiler/report.py`; it does not launch the game or collect a native process sample. Install the pinned Capstone dependency, then run:

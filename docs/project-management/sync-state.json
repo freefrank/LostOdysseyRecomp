@@ -2333,7 +2333,7 @@
         "Delivery": "Released",
         "Release": "v0.5.4",
         "Start date": "2026-09-10",
-        "Evidence": "Seven focused report cases, MSVC Release build and a synthetic 2-second collection passed; the tool is wall-clock RIP sampling, not cycles, and does not support GPU instruction profiling. v0.5.4 was publicly released 2026-09-11T01:36:30Z from 2ad94d418bb0478417ab9589109f1f685ed92eb3; CI 34550200618 passed. ZIP SHA-256 104ced8b60c16cd1b9013543a3940c9ed8d7cf904c3d05a6a8ef8d591f51d218, package provenance/50 file hash+CRC checks and four anonymous 200-download asset checks passed. Actual-game sampling and player acceptance remain pending.",
+        "Evidence": "Seven focused report cases, MSVC Release build and a synthetic 2-second collection passed; the tool is wall-clock RIP sampling, not cycles, and does not support GPU instruction profiling. v0.5.4 was publicly released 2026-09-11T01:36:30Z from 2ad94d418bb0478417ab9589109f1f685ed92eb3; CI 34550200618 passed. ZIP SHA-256 104ced8b60c16cd1b9013543a3940c9ed8d7cf904c3d05a6a8ef8d591f51d218, package provenance/50 file hash+CRC checks and four anonymous 200-download asset checks passed. Two 2026-09-11 gameplay captures on published EXE 3c3b4073: user00 walk 5092/0 fail hottest 8.11s; user01 city 10736/0 fail hottest 7.27s. Both xenon_scr.fpd ~36-44 fps ~1900-2300 draws 1280x720. Hottest thread unresolved EXE + NtWaitForSingleObject + AMD/D3D12. No PDB. Wall-clock waits included. No GPU/stacks/player acceptance.",
         "Source key": "assembly-level-performance-analysis-tool",
         "Target date": "2026-09-10"
       },
@@ -2365,7 +2365,7 @@
         "Delivery": "Validated",
         "Release": "v0.5.4",
         "Start date": "2026-09-10",
-        "Evidence": "Automatic sync enabled (lo.ppcAutoSync=true): changed input publishes immutable ppc/<key> branch; matching remote key reused; CI resolves by key, no workflow SHA pin update. 19 sync tests, 2 extraction cases, actionlint, real hook upload of existing lib to private 5e802634, same-key unchanged, sparse restore/hash, CI-contract checks passed. No PPC C++ compile/game run. Pushed 2c0456c to github/main; hosted CI for auto-sync tests not yet confirmed; not in published v0.5.4 package; no player acceptance. Prior 2b5b1d1/CI34553414428 is historical.",
+        "Evidence": "Automatic sync enabled (lo.ppcAutoSync=true): changed input publishes immutable ppc/<key> branch; matching remote key reused; CI resolves by key, no workflow SHA pin update. 19 sync tests, 2 extraction cases, actionlint, real hook upload of existing lib to private 5e802634, same-key unchanged, sparse restore/hash, CI-contract checks passed. No PPC C++ compile/game run. Pushed 2c0456c to github/main. Hosted PPC prebuilt tests 34565564964 passed (not release E2E). Not in published v0.5.4 package; no player acceptance. Prior 2b5b1d1/CI34553414428 is historical.",
         "Source key": "release-reuse-local-ppc-static-library"
       },
       "title": "Reuse a locally built PPC static library in release workflows",

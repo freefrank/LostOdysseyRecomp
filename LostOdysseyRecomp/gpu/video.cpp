@@ -205,9 +205,17 @@ namespace gpu::video
         uint32_t g_cpuWidth=0,g_cpuHeight=0;
         uint32_t g_lastPresentedImage=0;
         bool g_hasPresentedImage=false;
+        bool g_presentPending=false;
         bool g_forceSwapResize=false;
         constexpr plume::RenderFormat kSwapChainFormat = plume::RenderFormat::R8G8B8A8_UNORM;
         constexpr uint32_t kSwapChainBuffers = 3;
+
+        void WaitForPresentGpu()
+        {
+            if (!g_presentPending || !g_queue || !g_fence) return;
+            g_queue->waitForCommandFence(g_fence.get());
+            g_presentPending = false;
+        }
 
         void LogOutputPixels(const char* reason)
         {
@@ -315,6 +323,7 @@ namespace gpu::video
         g_selectedBackend = -1;
         renderer::Shutdown();
 #ifdef LO_GPU_PLUME
+        WaitForPresentGpu();
         g_cpuFrame.reset(); g_cpuWidth = g_cpuHeight = 0;
         g_presentedSnapshot.reset(); g_snapshotWidth = g_snapshotHeight = 0;
         g_presentation.reset();
@@ -769,6 +778,7 @@ namespace gpu::video
                 }
                 if (g_swapChain->isEmpty())
                     return;
+                WaitForPresentGpu();
                 uint32_t imageIndex = 0;
                 if (!g_swapChain->acquireTexture(g_acquireSemaphore.get(), &imageIndex))
                 {
@@ -803,7 +813,7 @@ namespace gpu::video
                 g_queue->executeCommandLists(lists, 1, &waitSemaphore, 1, &signalSemaphore, 1, g_fence.get());
                 const bool presented = g_swapChain->present(imageIndex, &signalSemaphore, 1);
                 if (presented) ++g_completedPresentCount;
-                g_queue->waitForCommandFence(g_fence.get());
+                g_presentPending = true;
                 g_lastPresentedImage=imageIndex; g_hasPresentedImage=true;
                 g_displayChanges.Complete(displayTicket, presented && !g_displayFailed.load());
                 return;
@@ -851,8 +861,8 @@ namespace gpu::video
         // Upload the untiled pixels; rows must be 256-byte aligned for D3D12.
         const uint32_t rowPitch = (width * 4 + 255) & ~255u;
         const uint64_t requiredBytes = uint64_t(rowPitch) * height;
+        WaitForPresentGpu();
         if (requiredBytes > g_uploadCapacity) {
-            // The previous presentation submission was fenced before returning.
             auto upload = g_device->createBuffer(plume::RenderBufferDesc::UploadBuffer(requiredBytes));
             if (!upload) return;
             g_uploadBuffer = std::move(upload);
@@ -864,6 +874,7 @@ namespace gpu::video
             memcpy(mapped + size_t(y) * rowPitch, &g_pixels[size_t(y) * width], size_t(width) * 4);
         g_uploadBuffer->unmap();
 
+        WaitForPresentGpu();
         uint32_t imageIndex = 0;
         if (!g_swapChain->acquireTexture(g_acquireSemaphore.get(), &imageIndex))
         {
@@ -900,7 +911,7 @@ namespace gpu::video
         g_queue->executeCommandLists(lists, 1, &waitSemaphore, 1, &signalSemaphore, 1, g_fence.get());
         const bool presented = g_swapChain->present(imageIndex, &signalSemaphore, 1);
         if (presented) ++g_completedPresentCount;
-        g_queue->waitForCommandFence(g_fence.get());
+        g_presentPending = true;
         g_lastPresentedImage=imageIndex; g_hasPresentedImage=true;
         g_displayChanges.Complete(displayTicket, presented && !g_displayFailed.load());
 #endif
@@ -937,6 +948,7 @@ namespace gpu::video
             auto readback=g_device->createBuffer(plume::RenderBufferDesc::ReadbackBuffer(uint64_t(pitch)*h));
             auto* frame=g_vulkan ? g_presentedSnapshot.get() : g_swapChain->getTexture(g_lastPresentedImage);
             if(!frame)return false;
+            WaitForPresentGpu();
             g_commandList->begin();
             g_commandList->barriers(plume::RenderBarrierStage::COPY,plume::RenderTextureBarrier(frame,plume::RenderTextureLayout::COPY_SOURCE));
             g_commandList->copyTextureRegion(plume::RenderTextureCopyLocation::PlacedFootprint(readback.get(),kSwapChainFormat,w,h,1,pitch/4),plume::RenderTextureCopyLocation::Subresource(frame));

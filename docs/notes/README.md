@@ -51,6 +51,9 @@
 | [标题动态背景恢复（2026-09-04）](title-packed-mips.md) |
 | [攻略路线与后台推进测试（2026-09-04）](walkthrough-testing.md) |
 | [Xenia 实机画面对照（2026-09-04）](xenia-render-comparison.md) |
+| [性能分析完整报告（2026-09-11；诊断，未改运行时）](perf-complete-analysis.md) |
+| [GPU 环缓冲实测对比（2026-09-11；user01 城市，非验收）](perf-gpu-ring-compare.md) |
+| [ReBlue vs Lost Odyssey GPU 对照（2026-09-11）](reblue-gpu-comparison.md) |
 | [游戏数据来源与 XEX](xex.md) |
 
 记录地址范围、还原结构、可重复验证和未决问题；不要创建只有规划名称、没有实际内容的索引项。

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Lost Odyssey Profiling"
+  short_description: "性能采样、汇编热点与受控对比，区分 CPU 执行和线程等待"
+  default_prompt: "使用 $lo-profiling 分析 LostOdysseyRecomp 的性能热点，复用已有采集并交付证据和验证边界。"
