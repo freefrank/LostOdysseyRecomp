@@ -17,13 +17,15 @@ D3D12 仍是可用基线。Windows Vulkan 已有 RTX 5080 实机场景的界定�
 <a id="近期优先事项"></a>
 ## 当前事项与验收边界
 
-- [x] **安装器拖动闪退：**用户报告已发布的 v0.5.3 安装器在拖动时卡顿并退出。本机四次 `ucrtbase` 0xc0000409 事件及 41648 dump 指向 Tk binding 经同步 `SendMessageW` 进入 Python WNDPROC/Tk 重入，最终触发致命 GIL 状态错误。本地未发布修复把拖动分发改为带屏幕坐标的 `PostMessageW`；新的 message-only HWND DragDispatch case 通过 1/1。同一旧 fixture 两次都在 setup 阶段因未变的前台断言失败，尚未到达拖动行为。installer-only 修正版 EXE 已本地打包（11,888,743 bytes；SHA-256 `707CD7D2E9F4AB3BF33363E172FAAD5CFCFA6B1A53161FEE0E7F53735B7C7FA7`），只读 embedded-PYZ 检查确认目标分发／模块。用户于 2026-09-10 确认报告的拖动路径已解决；本修复仍未发布。
+- [x] **安装器拖动闪退：**v0.5.4 发布目标包含本地已验收的 `PostMessageW` 修复，针对 v0.5.3 安装器拖动卡顿／退出。本机四次 `ucrtbase` 0xc0000409 事件及 41648 dump 指向 Tk binding 经同步 `SendMessageW` 进入 Python WNDPROC/Tk 重入，最终触发致命 GIL 状态错误。message-only HWND DragDispatch case 通过 1/1；旧 fixture 两次均在未变的前台 setup 断言失败，尚未到达修改后的行为。installer-only 修正版 EXE 为 11,888,743 bytes（SHA-256 `707CD7D2E9F4AB3BF33363E172FAAD5CFCFA6B1A53161FEE0E7F53735B7C7FA7`），只读 PYZ 检查确认目标分发／模块。用户于 2026-09-10 验收报告路径；发布仍待完成。
 - [~] **更新器修复：**v0.5.3 包含 ZIP 根目录条目修复、单根目录校验和仅英文的更新器界面。保留的 updater target 和 12 个 archive case 已通过，v0.5.3 的安装包和公开下载核验也已通过。完整更新事务、游戏运行和用户验收仍待完成。
 - [~] **可选 shader 收集：**v0.5.3 已发布紧凑的 opt-in 诊断和 schema 3 绑定证据；Worker schema 1–4 与私有归档、账本已集成。紧凑收集使用 32 帧／180 秒 CPU 窗口、最多 24 个配对和 8 个绑定，限制在 32 KiB 内。18 个账本案例仍待复核。schema 3 只覆盖 e810 的两对绑定；新候选仍需程序复核及足够的最终绑定、生产者时序和 jitter 证据。画面修复、玩家验收、更广 GPU 覆盖和全部提交绘制的覆盖审计仍待完成。
-- [ ] **Capture 导出大小：**一次新的 F1 ZIP capture 在 60.049 秒后超时。这是失败记录；紧凑格式和 exporter 修复尚未实现。
+- [~] **Capture 导出超时：**两次 F1 ZIP 归档均在约 60 秒后超时。archive worker 现改为在把子进程视为超时前最多等待 180 秒（`60000` → `180000` ms）；既有进程、job object 和 `Optimal` 压缩行为保持不变。v0.5.3 EXE 已成功链接并核对 `build.json` 来源，安装替换后的 SHA256 为 `CF70EA663ED230334145E1135CA97A58DFE3A34C65ED7D43E9E428C41B53270B`；旧 EXE／metadata 已备份至 `out/f1-zip-180s/backup`。整体构建最终因源码依赖 DLL 缺失而在复制 DXC 时失败；未重编译，仅从安装目录复用 DLL 补齐 build 输出。尚无超时恢复测试、游戏运行、玩家验收、提交或发布记录。
 - [~] **4K TAA 与地面／阴影反馈：**17468–17470 capture 来自早于四路径 c7 修复的较早 EXE。它不重开后续已验收的四路径 Sol 修复，不定位新根因，也不建立更广画面覆盖。继续通过 Project 记录场景、硬件和报告者针对性的验证。
+- [~] **PPC 生成源码一致性检查：**生成树 provenance 子范围已完成：`ppc_codegen generate` 产出 247 个 C++ 单元，含 843 个 `.u32`、零个 `.u64` selector，246 个指令流哈希保持不变。7 个 guard fixture 通过，覆盖旧输出、input/tool/context drift 和 return-0-without-output recovery；历史 3,258／109／843 表-44,523 证据已复用而未重跑。CMake 配置及编译前检查依赖已核验；更广 PPC 契约审计仍开放。Issue #14 的旧 v0.5.0 日志依旧不定位根因、已发布构建条件或牢笼场景修复；尚无游戏运行或玩家验收记录。
 - [ ] **呈现与输入：**全屏、Alt+Enter、混合 DPI 和鼠标验收仍开放。判断用户报告的 underscan 时应保留正常宽高比黑边。
 - [ ] **游戏流程与稳定性：**后续推进、存档读回、遇敌、长时间稳定性、其余渲染反馈和跨 GPU／正式包证据仍为待办。既有界定修复不代表可完整通关。
+- [~] **汇编级性能分析：**外部 Win64 工具现已记录 wall-clock RIP 快照，解析 DbgHelp PDB 符号／源码位置，并生成 Capstone x64 HTML/JSON 热点、线程 CPU 时间／筛选和函数 self 样本排名。7 个定向报告用例、MSVC Release 构建和一次合成端到端采集均通过；实际游戏采样和玩家验收仍待完成。不支持 GPU 指令分析。其 PPC 注释是生成源码上下文，不是精确 guest PC；请求的采样间隔也不代表实际频率。
 - [ ] **性能与 shader 启动：**继续排查实际剩余卡顿和两个保留 compiler failure；固定场景数据不代表全游戏。
 
 <a id="当前反馈与回归"></a>

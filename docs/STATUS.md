@@ -1,5 +1,9 @@
 # Project status
 
+## v0.5.4 release candidate — prepared, not published — 2026-09-11
+
+The release notes are prepared for v0.5.4 and contain the PPC generation guard, optional external assembly profiler, extended F1 archive wait and confirmed installer drag-dispatch fix. The release is not published; CI, package identity and release assets remain pending. Detailed local evidence and its limits are recorded below. The existing v0.5.3 release remains the latest published version.
+
 ## Published v0.5.3 — 2026-09-10
 
 Source version **0.5.3** is published at [GitHub](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.3), with Release CI [34505504344](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34505504344) succeeding for commit `6fa9adc281c5693ac0af8a47fec815b20c29ff50`. The ZIP is 44,237,807 bytes with SHA-256 `53beb197b753fa26c5c436f37c4b03bb636857c7390171d3ce6353940a9d81d0`; the standalone updater is 848,896 bytes with SHA-256 `1ad8a0b6e605f050376d59050bf94d598bbd9ec2965610df30cd5e6083fcc5a2`. The 50-file manifest, hashes, CRCs, clean-build provenance and version checks passed; the runtime executable hash is `9dbcef81412c683d4fd76d5a13c16663c3893b4e0944804f8aaf6e1b7fd1f2c0`.
@@ -17,6 +21,31 @@ The recorded runtime evidence remains tied to the retained source-0.5.0 developm
 The standalone updater retains the behavior validated for [v0.5.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.1). The separate updater download is byte-identical to the helper inside the 0.5.2 ZIP.
 
 ## Current validation and limits
+
+### PPC generation guard — local, unpublished
+
+PPC source generation now runs through `python -B tools/ppc_codegen.py generate`. `tools/build_tools.bat` records the generator binary and source receipt; generation and `check` validate the TOML/recompiler inputs, generated output hashes and the absence of obsolete 64-bit jump-table switches. The wrapper preserves the prior output tree if generation fails. The configured runtime build exposes `LoPpcCodegenCheck` as an order dependency before guest objects. The seven-case synthetic guard passed, and a fresh generation followed by `python -B tools/ppc_codegen.py check` completed successfully, producing 247 C++ files with 843 low-word (`u32`) and zero `u64` switch sites; 246 `ppc_recomp` instruction-comment stream hashes are unchanged. Existing 3,258 instruction checks, 109 word-switch checks, 843 recognized tables and 44,523 selector evaluations are reused from the earlier semantic evidence; this change has no new gameplay or package acceptance. The local change is unpublished and does not change the 0.5.3 release.
+
+### TAA crowd coverage follow-up — local, unpublished
+
+The current local executable hash `56e9e8d53f798a9ada10726c0141b0746b4dc3d0fbd763ae159eb8ee153b5d2d` matches the retained source-0.5.4 crowd candidate. The implementation adds seven local VS coverage paths: `fe3efe042c311110` to c4, and `1474db97dfc0afad`, `97b5d441419b5533`, `6742ec1abe49589e`, `3eb16ad927f44289`, `0f2b89c7eb1c409e` and `fecf2f9d9bef2702` to c7. VS `99c2` and PS `67b10` now share `IsSceneDepthReconstructionPair` in `temporal_jitter.h` and `renderer.cpp`, so resolve, compensation and diagnostic parsing use the same pair classification. Existing guards and the c4 algorithm are retained.
+
+The audit baseline contains 63 observations: 20 cross-pass groups and 43 PS reconstruction observations. The postfix policy covers the first four VS paths; the 43 strategy candidates disappear from that policy output, while 20 older upload differences remain diagnostic evidence rather than visual acceptance. The audit is retained under `out/tools/taa-audit-latest/AUDIT.md`.
+
+
+### F1 capture archive timeout adjustment
+
+The local F1 menu ZIP archive wait was increased from 60 seconds to 180 seconds for large captures. Optimal compression and background behavior are unchanged. Runtime logs in the installation directory recorded two separate approximately 2.5 GB captures, each timing out at 60 seconds. The executable linked successfully, `build.json` verified version 0.5.3 and its hash, and the local install at `D:/Games/LostOdysseyRecomp-windows-x64-v0.5.3` matched SHA-256 `CF70EA663ED230334145E1135CA97A58DFE3A34C65ED7D43E9E428C41B53270B` (evidence: `out/f1-zip-180s/install.json`; prior EXE/metadata: `out/f1-zip-180s/backup`). The build ended with a source-directory DXC DLL copy failure; installation-directory DLLs were used to complete the output. No game run or F1 acceptance is recorded; this remains local evidence for the unpublished v0.5.4 candidate.
+
+### Installer drag dispatch — v0.5.4 candidate
+
+The installer drag-dispatch re-entrancy path now posts `WM_NCLBUTTONDOWN` with signed screen coordinates instead of synchronously calling the window procedure. `DragDispatch` passed 1/1, and the reporter confirmed the real installer drag fix. The installer-only local package is retained at `out/installer-drag-fix/dist/InstallGame.exe` (11,888,743 bytes; SHA-256 `707CD7D2E9F4AB3BF33363E172FAAD5CFCFA6B1A53161FEE0E7F53735B7C7FA7`). No game or importer regression validation is included; the v0.5.4 candidate remains unpublished.
+
+### Optional assembly profiler
+
+The standalone `tools/asm-profiler` utility is implemented for Win64 external attachment. It samples live thread RIPs by briefly suspending each target thread, reading its context, and resuming it before allocation or I/O; after collection it uses DbgHelp for a post-capture module, symbol, source-line and 32-byte code snapshot. `report.py` uses Capstone 5.0.6 to produce offline HTML and JSON with instruction hotspots, function self-sample rankings, a per-thread OS CPU-time table (not allocated to RIP), `--tid` filtering, HTML filtering and optional matching generated PPC comment context via `--source-root`. The HTML has no external resources. Existing output is rejected unless `--overwrite` is supplied, and the target executable is protected from replacement.
+
+The Python reporting fixture passed 6 tests (`tools/asm-profiler/test_report.py`), followed by the independent thread CPU-time table check (1/1), for 7 covered checks. Coverage includes disassembly, aggregation, thread filtering, unknown/empty samples, changed code snapshots, HTML escaping, guest-comment boundaries and the thread table. MSVC 19.44 Release native build completed without warnings; a synthetic 2-second/10-ms background run collected 187 samples with zero failures, all code bytes, successful PDB/source resolution and a 1.84375-second busy-thread CPU delta. No gameplay run, CPU utilization/cycle/instruction-latency/cache/branch/GPU profiling or user acceptance is recorded. Samples include sleeping/waiting threads and are wall-clock shares; there is no call stack. Matching PDBs and generated sources are required, and PPC comments are source-line context rather than verified guest PCs. Native evidence is retained under `out/asm-profiler/`.
 
 ### TAA binding evidence — 0.5.2 historical build
 

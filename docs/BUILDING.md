@@ -4,7 +4,7 @@
 
 ## Prerequisites
 
-The tested environment is Windows x64 with Direct3D 12 or the optional Vulkan backend, Visual Studio 2022 Build Tools and Windows SDK, LLVM clang-cl, CMake 3.28+ and Ninja. The runtime requires Clang; the `windows-msvc` preset is not a supported runtime alternative. Generated code uses AVX instructions. Windows 10 1803+ is required by the current memory-mapping path; this is not a guarantee for every GPU/driver combination.
+The tested environment is Windows x64 with Direct3D 12 or the optional Vulkan backend, Visual Studio 2022 Build Tools and Windows SDK, LLVM clang-cl, CMake 3.28+, Ninja and Python 3.11+ (the code-generation guard uses the standard-library `tomllib` module). The runtime requires Clang; the `windows-msvc` preset is not a supported runtime alternative. Generated code uses AVX instructions. Windows 10 1803+ is required by the current memory-mapping path; this is not a guarantee for every GPU/driver combination.
 
 The scripts [build_runtime.bat](../tools/build_runtime.bat), [build_tools.bat](../tools/build_tools.bat) and [CMakePresets.json](../CMakePresets.json) discover Visual Studio with `vswhere` and resolve tools from `PATH`. Use `LO_VCVARS64` or `LLVM_ROOT` for custom installations. Keep personal overrides in the ignored `CMakeUserPresets.json`.
 
@@ -18,11 +18,11 @@ From the repository root, after preparing dependencies and data:
 
 ```powershell
 .\tools\build_tools.bat
-.\out\build\tools\XenonRecomp\XenonRecomp\XenonRecomp.exe .\LostOdysseyRecompLib\config\LostOdysseyRecomp.toml .\tools\XenonRecomp\XenonUtils\ppc_context.h
+python -B tools/ppc_codegen.py generate
 .\tools\build_runtime.bat
 ```
 
-The generator takes the configuration and context header as arguments. See [recompilation notes](notes/recomp.md) for function boundaries and switch-table maintenance. These commands describe the checked-in scripts; a new-machine end-to-end bootstrap has not been retested as part of this documentation update.
+`build_tools.bat` builds the generator and records a receipt containing the generator binary and source hashes. `ppc_codegen.py generate` verifies that receipt, hashes the TOML and generator inputs before and after execution, writes an output manifest for the generated C++/header files and rejects obsolete 64-bit jump-table switches. Use `python -B tools/ppc_codegen.py check` to verify an existing generated tree without regenerating it; if the inputs or outputs changed, regenerate from the repository root. Configured runtime builds also run `LoPpcCodegenCheck` as an order dependency before compiling guest objects. See [recompilation notes](notes/recomp.md) for function boundaries and switch-table maintenance. These commands describe the checked-in scripts; a new-machine end-to-end bootstrap has not been retested as part of this documentation update.
 
 Audio configuration fetches the pinned Xenia FFmpeg source via CMake FetchContent, so first configuration needs network access. See [ffmpeg.cmake](../thirdparty/ffmpeg.cmake) and its [license](../thirdparty/ffmpeg-LICENSE.txt). This is a frame-level XMAFRAMES decoder, not a system FFmpeg executable requirement.
 

@@ -1296,8 +1296,8 @@
       "fields": {
         "Kind": "Infrastructure",
         "Area": "Release engineering",
-        "Status": "In Progress",
-        "Delivery": "In progress",
+        "Status": "Awaiting validation",
+        "Delivery": "Implemented",
         "Release": "v0.5.0",
         "Source key": "pc-backend-release-readiness",
         "Evidence": "Local formal v0.5.0 ZIP completed from clean source/tag/package commit 86ba2c1641bb9a8324e0b1710783bead0c39bf23: 44,080,866 bytes, SHA256 100e6491548579e3a13aa60564bc760bca121113915842f73817d1b943482ce4, source identity 896317f1a0ed86cea58fe353a2cb2104b4aa757efff4b72147e4da8ba2b82f7c. It used 1 PCH, 4 TUs, 2 links and 1 package; manifest/payload/hash/license checks passed; no functional tests, game runs or CI. Local tag v0.5.0 exists, but no remote push, public Release or anonymous download verification has occurred; public latest remains v0.4.2. Source 0.4.22/0.4.23 packages remain historical. Cross-GPU feedback is not a v0.5.0 pre-release gate."
@@ -1890,12 +1890,14 @@
       "fields": {
         "Kind": "Research",
         "Area": "Recompiler",
-        "Status": "Todo",
-        "Delivery": "Not started",
-        "Source key": "recompiler-remaining-contracts"
+        "Status": "In Progress",
+        "Delivery": "In progress",
+        "Source key": "recompiler-remaining-contracts",
+        "Evidence": "Completed sub-scope: ppc_codegen generate exited 0; out/issue14-width-audit/scan-result.json records 247 C++ units, 843 .u32 selectors, zero .u64 selectors, and unchanged instruction-stream hashes for 246 units. Seven provenance-guard fixtures passed, covering stale output, input/tool/context drift and return-0-without-output recovery. Generator/context source prefixes 2a12d39169b0/08d47f20df8d match the historical 3,258/109/843-table-44,523 evidence, which was reused without rerun. CMake integration checking and the remaining PPC-contract audit are still in progress. No game run, Issue #14 root cause, player acceptance or release is recorded.",
+        "Start date": "2026-09-10"
       },
       "title": "Audit remaining PPC translation contracts",
-      "body_sha256": "07cf309a3e521f4f16f8e1edd0d1475f6a728d1e9801f44ac3a4369a118c58be"
+      "body_sha256": "13bef09169dd96965e3c85da9ccecba60e62cc424265a2e6ff6173a551b671b3"
     },
     "embsec-segment-research": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56fPQ",
@@ -2319,6 +2321,37 @@
       },
       "title": "Diagnose reported 4K TAA ground and shadow blacking",
       "body_sha256": "8cf69c098fcb77953d34ad9e4dbd4b2abeb833accd45020b0e055c8a0cda46e4"
+    },
+    "assembly-level-performance-analysis-tool": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg6bCMw",
+      "fields": {
+        "Kind": "Infrastructure",
+        "Area": "Performance tooling",
+        "Status": "Awaiting validation",
+        "Delivery": "Validated",
+        "Release": "v0.5.3",
+        "Start date": "2026-09-10",
+        "Evidence": "Seven focused Python report cases and an MSVC 19.44 Release build passed. A background synthetic 2-second/10 ms-request collection completed with 187 hits, zero failures and 31 busy-symbol/PDB/source-resolved hits; fixture and collector exited 0, and capture.json rendered HTML/JSON successfully. This is wall-clock RIP sampling, not cycles; Toolhelp overhead yielded about 31 request rounds. PPC annotations are source context, not exact guest PC; GPU instruction profiling is not supported. Actual-game sampling, player acceptance, commit, push and release remain pending.",
+        "Source key": "assembly-level-performance-analysis-tool",
+        "Target date": "2026-09-10"
+      },
+      "title": "Build an assembly-level performance analysis tool",
+      "body_sha256": "22a6bac0a27b5d4467a170630225a70862e8ddbcb74bc6fb543b6e2b52a99040"
+    },
+    "f1-capture-archive-timeout": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg6bP_I",
+      "fields": {
+        "Kind": "Bug",
+        "Area": "Diagnostics",
+        "Status": "In Progress",
+        "Delivery": "In progress",
+        "Release": "v0.5.3",
+        "Start date": "2026-09-10",
+        "Evidence": "runtime-1789085721772554.log records two F1 ZIP archive failures after about 60 seconds. Source changes the archive worker wait from 60000 to 180000 ms, retaining existing process/job-object cleanup and Optimal compression. The v0.5.3 EXE linked, build.json source identity was checked, and the installed replacement SHA-256 is CF70EA663ED230334145E1135CA97A58DFE3A34C65ED7D43E9E428C41B53270B; backup and install evidence are under out/f1-zip-180s. The overall build ended with a missing-source-DLL DXC-copy failure; the installation DLL was copied into build output without recompiling. No timeout recovery test, game run, player acceptance, commit, push or release is recorded.",
+        "Source key": "f1-capture-archive-timeout"
+      },
+      "title": "Extend the F1 capture archive timeout",
+      "body_sha256": "32c653b3f57450a2be0586b2a848351cc9abf1bf4f2281cf843b142d9fc6b954"
     }
   }
 }

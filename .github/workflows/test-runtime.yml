@@ -42,7 +42,7 @@ jobs:
         run: |
           call tools\build_tools.bat || exit /b 1
           out\build\tools\xexdump.exe LostOdysseyRecompLib\private\disc1\default.xex LostOdysseyRecompLib\private\image_disc1.bin || exit /b 1
-          out\build\tools\XenonRecomp\XenonRecomp\XenonRecomp.exe LostOdysseyRecompLib\config\LostOdysseyRecomp.toml tools\XenonRecomp\XenonUtils\ppc_context.h || exit /b 1
+          python tools\ppc_codegen.py generate || exit /b 1
       - name: Build runtime and selected test
         shell: cmd
         run: |

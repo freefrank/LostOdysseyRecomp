@@ -4,7 +4,7 @@
 
 Track the v0.5.0 backend and QOL requirements in the bilingual roadmaps and [QOL requirements](docs/notes/v0.5.0-qol-requirements.md). Recording a requirement does not authorize its implementation.
 
-The user explicitly requested committing and publishing the current work as `0.5.3`, superseding the earlier source/release target of `0.5.2`. Keep the current source and release target at `0.5.3`; do not add a version number for each implementation, subtask or validation. Preserve earlier artifact versions as historical provenance. Change the version only when the user explicitly requests it. The `0.5.3` request authorizes its commit, push, tag and GitHub Release; future publication still requires an explicit request.
+The user explicitly requested committing and publishing the current work as `0.5.4`, superseding the earlier source/release target of `0.5.3`. Keep the current source and release target at `0.5.4`; do not add a version number for each implementation, subtask or validation. Preserve earlier artifact versions as historical provenance. Change the version only when the user explicitly requests it. The `0.5.4` request authorizes its commit, push, tag and GitHub Release; future publication still requires an explicit request.
 
 ## Project management agent
 

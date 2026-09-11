@@ -4167,19 +4167,23 @@
     },
     {
       "key": "recompiler-remaining-contracts",
-      "title": "Audit remaining PPC translation contracts",
-      "body": "<!-- lo-project:recompiler-remaining-contracts -->\n\n已修复的九项语义与议会 word-switch 不覆盖全部 PPC 翻译契约。\n\n## Scope and completion criteria\n\n- [ ] 核验 LR/skip_lr 前提、switch默认/运行时变化与宿主整数溢出候选\n- [ ] 检查 vpkd3d128 type3、未解码或空实现 SIMD/FP/trap 的可达路径\n- [ ] 先建立反例和生成代码测试，不凭语法模式宣称新bug\n- [ ] 区分静态已修复与真实剧情自然到达\n\n## Validation and acceptance\n\n独立参考模型/负对照验证候选，再以对应实际可达路径确定游戏影响。\n\n尚未完成所列场景验收；实现/发布/测试与用户验收独立。\n\nstage_detail: Not started\n\n## Sources\n\n- [docs/notes/recompiler-width-audit.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/notes/recompiler-width-audit.md) (repository reference; working-tree requirements may be newer)\n- [docs/notes/recomp.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/notes/recomp.md) (repository reference; working-tree requirements may be newer)\n",
+      "title": "Maintain PPC generated-source provenance guard and remaining contracts",
+      "body": "<!-- lo-project:recompiler-remaining-contracts -->\n\nIssue #14 reports a cage-interaction crash. The stale ignored generated C++ tree has now been refreshed from the generator/context sources whose SHA-256 prefixes (`2a12d39169b0`, `08d47f20df8d`) match the historical Council low-32-bit word-switch repair.\n\n## Completed sub-scope — generated-tree provenance\n\n- [x] `ppc_codegen generate` exited 0 and produced 247 C++ units with 843 `.u32` selectors and zero `.u64` selectors\n- [x] The 246 instruction-stream hashes are unchanged before/after regeneration, so this did not change generator semantics\n- [x] Seven guard fixtures passed: stale output, input/tool/context drift and return-0-without-output recovery cases\n- [x] Reused, without rerunning, Issue #7's historical 3,258 semantics, 109 word-switch and 843-table/44,523-comparison evidence\n\n## Remaining scope\n\n- [x] CMake configuration passed and every guest object depends on LoPpcCodegenCheck\n- [ ] Audit and validate remaining PPC contracts separately: signed-overflow candidates, LR/skip_lr, switch default/runtime mutation, vpkd3d128 and undecoded/empty SIMD/FP/trap paths\n- [ ] Establish a runtime reproduction before associating any contract with Issue #14; its old v0.5.0 log is not a root cause or released-build condition\n\n## Validation and acceptance\n\nThis records generated output and guard-fixture evidence only. It neither builds/runs the game nor provides cage-scene validation, player acceptance, publication or a change to generator semantics.\n\nstage_detail: In progress — remaining PPC contracts; generated-source guard complete\n\nrelated_issue_url: https://github.com/freefrank/LostOdysseyRecomp/issues/14\n\n## Sources\n\n- `out/issue14-width-audit/scan-result.json`\n- https://github.com/freefrank/LostOdysseyRecomp/issues/14\n- https://github.com/freefrank/LostOdysseyRecomp/issues/7\n- [docs/notes/issue7-cutscene-crash.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/notes/issue7-cutscene-crash.md) (historical repair evidence)\n- [docs/notes/recompiler-width-audit.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/notes/recompiler-width-audit.md) (repository reference; working-tree requirements may be newer)\n- [docs/notes/recomp.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/notes/recomp.md) (repository reference; working-tree requirements may be newer)\n",
       "issue_url": null,
       "fields": {
         "Kind": "Research",
         "Area": "Recompiler",
-        "Status": "Todo",
-        "Delivery": "Not started",
-        "Release": null,
-        "Start date": null,
+        "Status": "In Progress",
+        "Delivery": "In progress",
+        "Evidence": "Completed sub-scope: ppc_codegen generate exited 0; out/issue14-width-audit/scan-result.json records 247 C++ units, 843 .u32 selectors, zero .u64 selectors, and unchanged instruction-stream hashes for 246 units. Seven provenance-guard fixtures passed, covering stale output, input/tool/context drift and return-0-without-output recovery. Generator/context source prefixes 2a12d39169b0/08d47f20df8d match the historical 3,258/109/843-table-44,523 evidence, which was reused without rerun. CMake configuration passed and guest objects depend on LoPpcCodegenCheck; the remaining PPC-contract audit is still in progress. No game run, Issue #14 root cause, player acceptance or release is recorded.",
+        "Release": "v0.5.4",
+        "Start date": "2026-09-10",
         "Target date": null
       },
       "source_refs": [
+        "https://github.com/freefrank/LostOdysseyRecomp/issues/14",
+        "https://github.com/freefrank/LostOdysseyRecomp/issues/7",
+        "docs/notes/issue7-cutscene-crash.md",
         "docs/notes/recompiler-width-audit.md",
         "docs/notes/recomp.md"
       ],
@@ -4340,7 +4344,7 @@
         "Area": "Installation",
         "Status": "Done",
         "Delivery": "Validated",
-        "Release": "v0.5.3",
+        "Release": "v0.5.4",
         "Start date": "2026-09-08",
         "Target date": "2026-09-08",
         "Evidence": "User reported v0.5.3 installer drag stutter/exit on 2026-09-10. Four ucrtbase 0xc0000409 events and dump 41648 trace synchronous SendMessageW from Tk binding into Python WNDPROC/Tk re-entry and PyEval_RestoreThread fatal GIL state. Local unpublished PostMessageW screen-coordinate repair passed the new message-only HWND DragDispatch case (1/1). The same legacy UI fixture failed twice in setup on an unchanged foreground assertion before changed behavior. Installer-only EXE built locally: 11,888,743 bytes, SHA-256 707CD7D2E9F4AB3BF33363E172FAAD5CFCFA6B1A53161FEE0E7F53735B7C7FA7; read-only PYZ inspection confirms PostMessageW and required modules. User accepted the repair as resolved on 2026-09-10, covering the reported drag path. The repair remains unpublished."
@@ -4864,6 +4868,52 @@
         "Target date": null
       },
       "source_refs": [],
+      "source_lines": [],
+      "record_type": "backlog"
+    },
+    {
+      "key": "f1-capture-archive-timeout",
+      "title": "Extend the F1 capture archive timeout",
+      "body": "<!-- lo-project:f1-capture-archive-timeout -->\n\nTwo F1 render-capture ZIP archives in the v0.5.3 installation timed out at about 60 seconds. The archive child-process wait is extended from 60,000 to 180,000 ms in `LostOdysseyRecomp/os/capture_archive.cpp`. Existing process/job-object cleanup and `Optimal` compression behavior are retained.\n\n## Current status\n\nThe v0.5.3 EXE linked successfully; its `build.json` source identity was checked, then the replacement was installed at `D:/Games/LostOdysseyRecomp-windows-x64-v0.5.3/LostOdysseyRecomp.exe`. Its SHA-256 is `CF70EA663ED230334145E1135CA97A58DFE3A34C65ED7D43E9E428C41B53270B`. The prior EXE and metadata are retained in `out/f1-zip-180s/backup`.\n\n## Evidence and limits\n\nThe overall build ended with a DXC-copy failure because a source dependency DLL was missing. The EXE and stamp succeeded; a DLL from the installation directory was copied into the build output without recompilation. `runtime-1789085721772554.log` establishes the earlier timeout failure only. No timeout recovery test, game run, player acceptance, commit, push or release is recorded. The 180-second value is a requested wait-limit change, not proof that an archive will complete.\n\n## Sources\n\n- `D:/Games/LostOdysseyRecomp-windows-x64-v0.5.3/logs/runtime-1789085721772554.log`\n- `LostOdysseyRecomp/os/capture_archive.cpp`\n- `out/f1-zip-180s/install.json`\n- `out/f1-zip-180s/backup`\n- Build/install evidence recorded on 2026-09-10\n",
+      "issue_url": null,
+      "fields": {
+        "Kind": "Bug",
+        "Area": "Diagnostics",
+        "Status": "Awaiting validation",
+        "Delivery": "Implemented",
+        "Release": "v0.5.4",
+        "Start date": "2026-09-10",
+        "Target date": null,
+        "Evidence": "runtime-1789085721772554.log records two F1 ZIP archive failures after about 60 seconds. Source changes the archive worker wait from 60000 to 180000 ms, retaining existing process/job-object cleanup and Optimal compression. The v0.5.3 EXE linked, build.json source identity was checked, and the installed replacement SHA-256 is CF70EA663ED230334145E1135CA97A58DFE3A34C65ED7D43E9E428C41B53270B; backup and install evidence are under out/f1-zip-180s. The overall build ended with a missing-source-DLL DXC-copy failure; the installation DLL was copied into build output without recompiling. No timeout recovery test, game run, player acceptance, commit, push or release is recorded."
+      },
+      "source_refs": [
+        "D:/Games/LostOdysseyRecomp-windows-x64-v0.5.3/logs/runtime-1789085721772554.log",
+        "LostOdysseyRecomp/os/capture_archive.cpp",
+        "out/f1-zip-180s/install.json",
+        "out/f1-zip-180s/backup",
+        "Build/install evidence recorded on 2026-09-10"
+      ],
+      "source_lines": [],
+      "record_type": "backlog"
+    },
+    {
+      "key": "assembly-level-performance-analysis-tool",
+      "title": "Build an assembly-level performance analysis tool",
+      "body": "<!-- lo-project:assembly-level-performance-analysis-tool -->\n\nBuild an external Win64 assembly-level performance analysis tool for the game. It captures wall-clock RIP snapshots, resolves DbgHelp PDB symbols and source locations, and produces Capstone-based x64 instruction hotspots in HTML and JSON. The report includes thread CPU-time tables and filtering, function self-sample ranking, and optional PPC generated-source context annotations.\n\n## Validation and limits\n\nSeven focused Python report cases passed. MSVC 19.44 built the Release executable. A background synthetic 2-second collection requested 10 ms samples and completed with 187 hits, zero failures, 31 busy-symbol/PDB/source-resolved hits, and exit code 0 for both fixture and collector. `out/asm-profiler/capture.json` produced `report.html` and `report.json` successfully. The Release executable SHA-256 is `D6326A19C51E97EE1338364A98F36A7F2CB29AEB537C82F6B100BC3104B9D0F1`.\n\nThis is wall-clock sampling, not CPU-cycle accounting; Toolhelp overhead yielded about 31 request rounds in two seconds, so requested interval is not actual frequency. PPC annotations provide generated-source context only, not an exact guest PC. GPU instruction profiling is not supported. Actual-game sampling, player acceptance, commit, push, and release remain unrecorded.\n\n## Sources\n\n- `tools/asm-profiler/collector.cpp`\n- `tools/asm-profiler/CMakeLists.txt`\n- `tools/asm-profiler/fixture.cpp`\n- `tools/asm-profiler/report.py`\n- `tools/asm-profiler/requirements.txt`\n- `tools/asm-profiler/test_report.py`\n- `out/asm-profiler/capture.json`\n- User requirement and implementation evidence recorded on 2026-09-10\n",
+      "issue_url": null,
+      "fields": {
+        "Kind": "Infrastructure",
+        "Area": "Performance tooling",
+        "Status": "Awaiting validation",
+        "Delivery": "Validated",
+        "Release": "v0.5.4",
+        "Start date": "2026-09-10",
+        "Target date": "2026-09-10",
+        "Evidence": "Seven focused Python report cases and an MSVC 19.44 Release build passed. A background synthetic 2-second/10 ms-request collection completed with 187 hits, zero failures and 31 busy-symbol/PDB/source-resolved hits; fixture and collector exited 0, and capture.json rendered HTML/JSON successfully. This is wall-clock RIP sampling, not cycles; Toolhelp overhead yielded about 31 request rounds. PPC annotations are source context, not exact guest PC; GPU instruction profiling is not supported. Actual-game sampling, player acceptance, commit, push and release remain pending."
+      },
+      "source_refs": [
+        "User requirement and implementation evidence recorded on 2026-09-10"
+      ],
       "source_lines": [],
       "record_type": "backlog"
     }

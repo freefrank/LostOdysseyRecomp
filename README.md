@@ -19,11 +19,11 @@ Optional diagnostics are off by default and can be disabled in Settings. See [Pr
 > [!IMPORTANT]
 > **This project is still in early testing.** Opening areas and selected scenes have been tested; a complete playthrough has not. Rendering and stability issues remain. You must supply your own supported game files.
 
-## New in v0.5.3
+## New in v0.5.4
 
-- Add compact opt-in TAA diagnostics collected in bounded CPU windows, with delivery receipts and no game-thread upload wait.
-- Record bounded TAA consumer and texture-producer binding evidence for shader review.
-- Improve updater ZIP staging for packages with an explicit root-directory entry.
+- Guard PPC source generation against stale inputs, incomplete output and obsolete 64-bit jump-table switches.
+- Add an optional Win64 external assembly profiler with offline reports.
+- Extend the F1 menu ZIP archive wait for large captures and fix installer drag dispatch.
 
 Earlier release details are maintained in the [changelog](CHANGELOG.md).
 
@@ -119,7 +119,7 @@ Rumble is disabled by default; `LO_CONTROLLER_RUMBLE=1` enables it. For Ring act
 | :--- | :--- |
 | `LostOdysseyRecomp/` | Host kernel, graphics, audio, input and debugging |
 | `LostOdysseyRecompLib/` | Configuration; ignored `private/` game data and generated `ppc/` code |
-| `tools/` | Recompilers, dependency patches and Ghidra scripts |
+| `tools/` | Recompilers, dependency patches, Ghidra scripts and the optional [assembly profiler](tools/asm-profiler/README.md) |
 | `thirdparty/` | Rendering, audio and other dependencies |
 | `docs/` | Current status, guides, research and historical archives |
 

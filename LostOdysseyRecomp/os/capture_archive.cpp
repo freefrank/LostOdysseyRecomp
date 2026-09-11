@@ -89,7 +89,7 @@ namespace os
                 }
                 ownsTemporary = true;
                 if (ResumeThread(process.hThread) == DWORD(-1)) throw std::system_error(WindowsError());
-                const auto wait = WaitForSingleObject(process.hProcess, 60000);
+                const auto wait = WaitForSingleObject(process.hProcess, 180000);
                 if (wait != WAIT_OBJECT_0)
                 {
                     TerminateJobObject(job.value, 1);

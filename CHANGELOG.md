@@ -8,11 +8,31 @@ One record of completed changes, with unpublished work separated from verified r
 
 ### English
 
-- Fix the installer drag-dispatch re-entrancy path locally by posting `WM_NCLBUTTONDOWN` with signed screen coordinates instead of synchronously calling the window procedure. `DragDispatch` passed 1/1, and the reporter confirmed the real installer drag fix. An installer-only local package is available at `out/installer-drag-fix/dist/InstallGame.exe` (11,888,743 bytes; SHA256 `707CD7D2E9F4AB3BF33363E172FAAD5CFCFA6B1A53161FEE0E7F53735B7C7FA7`); this remains a local unpublished fix. No game or importer regression validation is included.
+- No unreleased entries.
 
 ### 简体中文
 
-- 在本地修复安装器拖动分发的重入路径：改用携带有符号屏幕坐标的异步 `WM_NCLBUTTONDOWN`，避免同步调用窗口过程。`DragDispatch` 通过 1/1，报告者确认实际安装器拖动修复有效。现已生成仅安装器的本地包 `out/installer-drag-fix/dist/InstallGame.exe`（11,888,743 字节；SHA256 `707CD7D2E9F4AB3BF33363E172FAAD5CFCFA6B1A53161FEE0E7F53735B7C7FA7`）；这是本地未发布修复，不包含游戏或导入回归验证。
+- 没有未发布条目。
+
+## v0.5.4 — 2026-09-11
+
+### English
+
+- Guard PPC source generation with binary/source receipts and generated-output manifests; preserve prior output on failure and reject stale inputs or 64-bit jump-table switches.
+- Add an optional Win64 external assembly profiler with bounded sampling and offline Capstone HTML/JSON reports.
+- Increase the F1 menu ZIP archive wait from 60 to 180 seconds for large captures.
+- Fix installer drag dispatch by posting signed-coordinate `WM_NCLBUTTONDOWN`; the reporter confirmed the fix.
+
+The release retains the documented validation boundaries in [current status](docs/STATUS.md); no whole-game, visual or complete F1 acceptance is implied.
+
+### 简体中文
+
+- 为 PPC 源码生成增加二进制／源码 receipt 和生成输出 manifest；失败时保留旧输出，并拒绝过期输入或 64 位跳转表 switch。
+- 增加可选的 Win64 外部汇编分析器，支持有界采样和离线 Capstone HTML／JSON 报告。
+- 将大体积 F1 菜单 ZIP 归档等待时间从 60 秒延长至 180 秒。
+- 通过发送带符号坐标的 `WM_NCLBUTTONDOWN` 修复安装器拖动分发；报告者已确认修复。
+
+本版本保留[当前状态](docs/STATUS.md)中的验证边界；不代表全游戏、画面或完整 F1 流程验收完成。
 
 ## v0.5.3 — 2026-09-10
 

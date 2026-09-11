@@ -1,5 +1,27 @@
 # Test suites
 
+## Assembly profiler report
+
+The offline report fixture is a focused check for `tools/asm-profiler/report.py`; it does not launch the game or collect a native process sample. Install the pinned Capstone dependency, then run:
+
+```powershell
+python -m venv out\asm-profiler\venv
+out\asm-profiler\venv\Scripts\python.exe -m pip install -r tools\asm-profiler\requirements.txt
+out\asm-profiler\venv\Scripts\python.exe tools\asm-profiler\test_report.py
+```
+
+The seven checks cover x64 disassembly, hotspot/function aggregation, `--tid` selection, unknown and empty samples, distinct code snapshots, HTML escaping, PPC comment boundaries and the thread CPU-time table. See the [assembly profiler guide](../asm-profiler/README.md).
+
+## PPC code-generation guard
+
+Run the synthetic guard tests from the repository root with:
+
+```powershell
+python -B tools/tests/ppc_codegen_test.py
+```
+
+The seven `unittest` cases cover a matching manifest, input/output/context drift, obsolete 64-bit jump-table switches, a stale generator receipt and invalidation after a failed generation. They use a temporary tree with synthetic files; they do not require game input, generated game sources, a native tool build or a game/runtime process. For a real generated tree, `python -B tools/ppc_codegen.py check` verifies the recorded input/output manifest, while `python -B tools/ppc_codegen.py generate` requires the receipt written by `tools/build_tools.bat` and regenerates the sources.
+
 Run commands from the repository root. Select checks appropriate to the changed behavior; this entry point does not imply that every suite is required for every change.
 
 ```powershell
@@ -69,6 +91,9 @@ The focused `collection_upload_request_test.cpp` fixture covers the nonblocking 
 ### TAA binding evidence fixtures
 
 The standalone CPU fixtures `taa_binding_collection_test.cpp` and `taa_binding_producer_test.cpp` cover the bounded schema 3 queue, producer snapshots, revocation and zero-allocation producer paths. Compile and run them from isolated output directories when the binding contract changes. The Worker protocol fixture is run with `npm run test:taa-bindings` from `tools/taa-collector`; it covers schema 3 serialization, validation, canonicalization and deduplication. These checks do not launch the game or establish visual acceptance.
+
+### TAA crowd coverage follow-up
+
 
 ### Compact diagnostic receiver fixture
 

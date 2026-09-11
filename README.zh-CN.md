@@ -19,11 +19,11 @@ Windows x64 · Direct3D 12 · Vulkan · PowerPC 静态重编译
 > [!IMPORTANT]
 > **本项目仍处于早期测试阶段。** 已测试开场区域和部分场景，尚未通关。渲染和稳定性仍有问题。请自行提供受支持版本的游戏文件。
 
-## v0.5.3 新增
+## v0.5.4 新增
 
-- 增加有界 CPU 窗口的 opt-in TAA compact 诊断，提供投递回执且上传不等待游戏线程。
-- 记录有界的 TAA 消费者与纹理生产者绑定证据，供 shader 审阅使用。
-- 改进带显式根目录条目的 ZIP 包暂存处理。
+- 防止 PPC 源码生成使用过期输入、残缺输出或旧式 64 位跳转表 switch。
+- 增加可选的 Win64 外部汇编分析器，支持离线报告。
+- 延长大体积捕获的 F1 菜单 ZIP 归档等待时间，并修复安装器拖动分发。
 
 更早版本的改动见[更新日志](CHANGELOG.md)。
 
@@ -119,7 +119,7 @@ SDL 已映射手柄与键盘可同时用于玩家 1。未映射摇杆需要 SDL 
 | :--- | :--- |
 | `LostOdysseyRecomp/` | 宿主内核、图形、音频、输入与调试 |
 | `LostOdysseyRecompLib/` | 配置；Git 忽略的 `private/` 游戏数据和 `ppc/` 生成代码 |
-| `tools/` | 重编译工具、依赖补丁、Ghidra 脚本 |
+| `tools/` | 重编译工具、依赖补丁、Ghidra 脚本，以及可选的[汇编采样分析器](tools/asm-profiler/README.zh-CN.md) |
 | `thirdparty/` | 渲染、音频及其他依赖 |
 | `docs/` | 当前状态、指南、逆向记录与历史归档 |
 
