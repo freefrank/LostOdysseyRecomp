@@ -518,9 +518,10 @@ namespace gpu::renderer
             };
             double tDraw = 0, tShader = 0, tPipeline = 0, tTexture = 0, tResolve = 0, tFlush = 0;
             double tConst = 0, tSets = 0, tVertex = 0, tBind = 0, tIndex = 0, tRecord = 0;
+            double tRt = 0, tTaa = 0, tNestedFlush = 0;
             uint32_t nShader = 0, nPipeline = 0, nTexture = 0, nResolve = 0;
             size_t texBytes = 0;
-            void ResetTimers() { tDraw = tShader = tPipeline = tTexture = tResolve = tFlush = 0; tConst = tSets = tVertex = tBind = tIndex = tRecord = 0; nShader = nPipeline = nTexture = nResolve = 0; texBytes = 0; }
+            void ResetTimers() { tDraw = tShader = tPipeline = tTexture = tResolve = tFlush = 0; tConst = tSets = tVertex = tBind = tIndex = tRecord = 0; tRt = tTaa = tNestedFlush = 0; nShader = nPipeline = nTexture = nResolve = 0; texBytes = 0; }
             std::map<uint64_t, std::unique_ptr<RenderSampler>> samplers;
             std::map<std::pair<const RenderTexture*, const RenderTexture*>, std::unique_ptr<RenderFramebuffer>> framebuffers;
 
@@ -2889,6 +2890,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 const bool arenaLow = arenaOffset + kArenaHeadroom > kVertexArenaSize;
                 if (poolsFull || ringLow || arenaLow)
                 {
+                    render_batch::CpuTimer<> nestedFlushTimer(cpuTimingEnabled);
                     if (cpuTimingEnabled) {
                         descriptorSplits += poolsFull;
                         uploadSplits += ringLow;
@@ -2903,6 +2905,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         LOG_INFO("renderer: vertex arena reset");
                     }
                     Begin();
+                    nestedFlushTimer.AddTo(tNestedFlush);
                 }
                 Begin();
 
@@ -2965,36 +2968,41 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 uint32_t depthInfo = Reg(REG_RB_DEPTH_INFO);
                 uint32_t depthControl = Reg(REG_RB_DEPTHCONTROL);
                 bool colorWrites = modeControl == 4;
-                HostTexture* color = AcquireColorTarget(colorInfo & 0xFFF, (colorInfo >> 16) & 0xF, pitch, rtHeight);
-                HostTexture* depth = (depthControl & 3) ? GetRenderTarget(depthInfo & 0xFFF, (depthInfo >> 16) & 1, pitch, rtHeight, true) : nullptr;
-                if (!color || !color->texture || ((depthControl & 3) && (!depth || !depth->texture))) {
-                    ++drops.pitch;
-                    return;
-                }
-                if (depth) depth->depthMsaa = (surfaceInfo >> 16) & 3;
-
-                Transition(*color, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
-                if (depth)
-                    Transition(*depth, RenderTextureLayout::DEPTH_WRITE, RenderBarrierStage::GRAPHICS);
-
-                // LO_CLEAR_RT=1: wipe every colour target the first time a frame
-                // touches it. Targets normally survive across frames, so a
-                // per-draw dump shows last frame's image until something covers
-                // it - which makes it impossible to tell which draw of THIS
-                // frame painted a given pixel.
-                // LO_CLEAR_RT=magenta paints the wipe bright instead of black, so
-                // anything the frame leaves untouched stands out in the final image.
-                static const char* clearTargets = getenv("LO_CLEAR_RT");
-                if (clearTargets && color->clearedFrame != frame)
+                HostTexture* color = nullptr;
+                HostTexture* depth = nullptr;
                 {
-                    static const bool loud = strcmp(clearTargets, "magenta") == 0;
-                    color->clearedFrame = frame;
-                    commandList->setFramebuffer(GetFramebuffer(color, nullptr));
-                    commandList->clearColor(0, loud ? RenderColor(1.0f, 0.0f, 1.0f, 1.0f) : RenderColor(0.0f, 0.0f, 0.0f, 0.0f));
-                    if (trackBinding) color->bindingProducer.Clear(bindingEpoch, frame, true);
-                    color->aaProvenance.Invalidate(frame,color->allocationSerial,true);
-                    if (loud)
-                        LOG_INFO("renderer: frame {} wiped target base={:#x} fmt={} pitch={} {}x{}", frame, colorInfo & 0xFFF, (colorInfo >> 16) & 0xF, pitch, color->width, color->height);
+                    ScopedTimer rtTimer{ tRt, cpuTimingEnabled };
+                    color = AcquireColorTarget(colorInfo & 0xFFF, (colorInfo >> 16) & 0xF, pitch, rtHeight);
+                    depth = (depthControl & 3) ? GetRenderTarget(depthInfo & 0xFFF, (depthInfo >> 16) & 1, pitch, rtHeight, true) : nullptr;
+                    if (!color || !color->texture || ((depthControl & 3) && (!depth || !depth->texture))) {
+                        ++drops.pitch;
+                        return;
+                    }
+                    if (depth) depth->depthMsaa = (surfaceInfo >> 16) & 3;
+
+                    Transition(*color, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
+                    if (depth)
+                        Transition(*depth, RenderTextureLayout::DEPTH_WRITE, RenderBarrierStage::GRAPHICS);
+
+                    // LO_CLEAR_RT=1: wipe every colour target the first time a frame
+                    // touches it. Targets normally survive across frames, so a
+                    // per-draw dump shows last frame's image until something covers
+                    // it - which makes it impossible to tell which draw of THIS
+                    // frame painted a given pixel.
+                    // LO_CLEAR_RT=magenta paints the wipe bright instead of black, so
+                    // anything the frame leaves untouched stands out in the final image.
+                    static const char* clearTargets = getenv("LO_CLEAR_RT");
+                    if (clearTargets && color->clearedFrame != frame)
+                    {
+                        static const bool loud = strcmp(clearTargets, "magenta") == 0;
+                        color->clearedFrame = frame;
+                        commandList->setFramebuffer(GetFramebuffer(color, nullptr));
+                        commandList->clearColor(0, loud ? RenderColor(1.0f, 0.0f, 1.0f, 1.0f) : RenderColor(0.0f, 0.0f, 0.0f, 0.0f));
+                        if (trackBinding) color->bindingProducer.Clear(bindingEpoch, frame, true);
+                        color->aaProvenance.Invalidate(frame,color->allocationSerial,true);
+                        if (loud)
+                            LOG_INFO("renderer: frame {} wiped target base={:#x} fmt={} pitch={} {}x{}", frame, colorInfo & 0xFFF, (colorInfo >> 16) & 0xF, pitch, color->width, color->height);
+                    }
                 }
 
                 // Pipeline.
@@ -3078,6 +3086,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 // Diagnostic selection uses only GPU draw constants, not the CPU
                 // presented-swap counter. Shader/layout recognition is deliberately
                 // limited to the path verified in the captured Map2 scene.
+                render_batch::CpuTimer<> taaInit(cpuTimingEnabled);
                 if(sceneAAConfigFrame!=frame) {
                     sceneAAConfigFrame=frame;const auto mode=settings::GetConfig().antialiasing;
                     if(sceneAAMode!=mode) {if(temporalHistory)temporalHistory->Reset();temporalSupportedFrame=~0ull;++temporalEpoch;}
@@ -3108,6 +3117,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     temporalHistory->BeginFrame(frame,temporalEpoch,
                         taa_collection::DiagnosticsActive() || (diagnosticStart&&frame>=diagnosticFrame&&temporalFramesLogged<256) || (withTrace&&resolveTraceRemaining));
                 }
+                taaInit.AddTo(tTaa);
                 std::optional<temporal::SceneResolve> temporalSceneCopy;
                 bool sceneAARecorded=false,temporalAARecorded=false;
                 std::optional<temporal::SceneAnchor> temporalDrawAnchor;
@@ -3161,6 +3171,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 RenderViewport rasterViewport = viewport;
                 rasterViewport.x *= rasterScale; rasterViewport.y *= rasterScale;
                 rasterViewport.width *= rasterScale; rasterViewport.height *= rasterScale;
+                render_batch::CpuTimer<> taaJitter(cpuTimingEnabled);
                 const int temporalSlot=temporal::PositionVPSlot(key.vs);
                 if((temporalExperiment||sceneAAEnabled)&&temporalSlot>=0&&temporalViewport&&depth&&(depthControl&4)) {
                     temporal::SceneAnchor anchor;
@@ -3246,6 +3257,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
                 if (drawJitter.applied) ++temporalJitterDraws;
                 else if (temporalExperiment && temporalJitter && temporalSlot >= 0 && temporalViewport) ++temporalJitterMisses;
+                taaJitter.AddTo(tTaa);
                 // Range of the bound colour format, clamped in the shader epilogue.
                 {
                     const uint32_t cfmt = (colorInfo >> 16) & 0xF;
@@ -3454,6 +3466,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         if(temporalSceneCopy && fullSceneCopy && s==ps && slot==0 &&
                            rasterViewport.width==tex->width && rasterViewport.height==tex->height &&
                            rasterViewport.width==temporalScene.Anchor().viewport.width && rasterViewport.height==temporalScene.Anchor().viewport.height) {
+                            render_batch::CpuTimer<> taaResolve(cpuTimingEnabled);
                             temporalScene.ObserveColor(*temporalSceneCopy);
                             if(temporalExperiment && temporalHistory && temporalScene.Ready() && tex->format==RenderFormat::R8G8B8A8_UNORM) {
                                 Transition(*tex,RenderTextureLayout::COPY_SOURCE,RenderBarrierStage::COPY);
@@ -3487,6 +3500,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                     QueueResolveTrace(temporalDisplay,RenderFormat::R8G8B8A8_UNORM,tex->width,tex->height,RenderTextureLayout::SHADER_READ,0xffff0012u);
                                 }
                             }
+                            taaResolve.AddTo(tTaa);
                         }
                         uint32_t d3 = fetch[3];
                         shared.textureInfo[slot] = ((fetch[0] >> 2) & 0xFF) | (((d3 >> 1) & 0xFFF) << 8);
@@ -4917,7 +4931,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 Renderer& r = *g_renderer;
                 const render_timing::CpuSegments cpu{r.drawsThisFrame, r.nShader, r.nPipeline, r.nTexture, r.nResolve,
                     r.tDraw, r.tConst, r.tSets, r.tVertex, r.tBind, r.tIndex, r.tRecord,
-                    r.tShader, r.tPipeline, r.tTexture, r.tResolve, r.tFlush};
+                    r.tShader, r.tPipeline, r.tTexture, r.tResolve, r.tFlush,
+                    r.tRt, r.tTaa, r.tNestedFlush};
                 render_timing::LogFrame(r.frame, cpu, r.gpuTiming, !r.debugCaptureDir.empty(),
                     r.resolveTraceRemaining || r.psTraceRemaining || GetHotCaptureEnvironment().geometryCaptureEnabled);
                 r.gpuTiming.Reset();
@@ -4930,8 +4945,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 lastFrame = now;
                 Renderer& r = *g_renderer;
                 if (frameMs > 150.0 || (r.frame % 60) == 0)
-                    LOG_INFO("renderer frame {}: {:.0f} ms, draws {} ({:.0f} ms: const {:.0f} sets {:.0f} vertex {:.0f} bind {:.0f} index {:.0f} record {:.0f}), shaders {} ({:.0f} ms), pipelines {} ({:.0f} ms), textures {} ({:.0f} ms, {} KB), vertex uploads {}+{} ({} KB, arena {} MB), resolves {} ({:.0f} ms), gpu wait {:.0f} ms",
-                        r.frame, frameMs, r.drawsThisFrame, r.tDraw, r.tConst, r.tSets, r.tVertex, r.tBind, r.tIndex, r.tRecord, r.nShader, r.tShader, r.nPipeline, r.tPipeline, r.nTexture, r.tTexture, r.texBytes / 1024,
+                    LOG_INFO("renderer frame {}: {:.0f} ms, draws {} ({:.0f} ms: const {:.0f} sets {:.0f} vertex {:.0f} bind {:.0f} index {:.0f} record {:.0f} rt {:.0f} taa {:.0f} nested_flush {:.0f}), shaders {} ({:.0f} ms), pipelines {} ({:.0f} ms), textures {} ({:.0f} ms, {} KB), vertex uploads {}+{} ({} KB, arena {} MB), resolves {} ({:.0f} ms), gpu wait {:.0f} ms",
+                        r.frame, frameMs, r.drawsThisFrame, r.tDraw, r.tConst, r.tSets, r.tVertex, r.tBind, r.tIndex, r.tRecord, r.tRt, r.tTaa, r.tNestedFlush, r.nShader, r.tShader, r.nPipeline, r.tPipeline, r.nTexture, r.tTexture, r.texBytes / 1024,
                         r.vertexUploads, r.vertexRevalidations, r.vertexBytesUploaded / 1024, r.arenaOffset >> 20, r.nResolve, r.tResolve, r.tFlush);
                 if (stats && r.transfers)
                     LOG_INFO("renderer frame {}: {} EDRAM ownership transfers", r.frame, r.transfers);
