@@ -8,11 +8,18 @@
 #include <Windows.h>
 #endif
 
-// Only the two known guest polling loops opt in. No guest result, timeout or
-// memory access is replaced: every pause returns to the original guest code.
+// Only the known guest polling loops opt in (query, shared-value Sleep(0),
+// GPU timestamp poll). No guest result, timeout or memory access is replaced:
+// every pause returns to the original guest code.
 namespace poll_wait
 {
-    enum class Kind { Query, SharedValue };
+    enum class Kind { Query, SharedValue, GpuPoll };
+
+    // Query / SharedValue may sit on a not-ready result. GpuPoll is a GPU
+    // timestamp wait used in both the title menu and the city; the 200µs tail
+    // added milliseconds of fence latency there. Cap it so the menu still
+    // yields after the warmup, without parking city completion checks.
+    inline constexpr uint32_t kGpuPollDelayCapUs = 50;
 
     struct State
     {
@@ -31,8 +38,16 @@ namespace poll_wait
 
     inline thread_local State query;
     inline thread_local State sharedValue;
+    inline thread_local State gpuPoll;
 
-    inline void ResetThread() { query = {}; sharedValue = {}; }
+    inline State& StateFor(Kind kind)
+    {
+        if (kind == Kind::Query) return query;
+        if (kind == Kind::GpuPoll) return gpuPoll;
+        return sharedValue;
+    }
+
+    inline void ResetThread() { query = {}; sharedValue = {}; gpuPoll = {}; }
 
     // Guest ExTerminateThread uses longjmp. Keep the production wrapper free of
     // automatic objects requiring destruction; the guest thread boundary resets
@@ -40,7 +55,7 @@ namespace poll_wait
     template<class Run>
     void RunScoped(Kind kind, Run&& run)
     {
-        State& state = kind == Kind::Query ? query : sharedValue;
+        State& state = StateFor(kind);
         const State previous = state;
         state = {true, 0};
         try { run(); }
@@ -53,7 +68,7 @@ namespace poll_wait
         State& state;
         State previous;
     public:
-        explicit Scope(Kind kind) : state(kind == Kind::Query ? query : sharedValue), previous(state)
+        explicit Scope(Kind kind) : state(StateFor(kind)), previous(state)
         { state = {true, 0}; }
         ~Scope() { state = previous; }
         Scope(const Scope&) = delete;
@@ -112,5 +127,19 @@ namespace poll_wait
         if (!sharedValue.active) return false;
         if (const auto us = sharedValue.NextDelayUs()) wait(us);
         return true;
+    }
+
+    template<class Wait = decltype(&Pause)>
+    void GpuPollResult(int32_t result, Wait wait = &Pause)
+    {
+        if (!gpuPoll.active) return;
+        // Guest sub_827B6278: 1 = GPU timestamp still pending, 0 = done or timeout.
+        if (result == 1)
+        {
+            uint32_t us = gpuPoll.NextDelayUs();
+            if (us > kGpuPollDelayCapUs) us = kGpuPollDelayCapUs;
+            if (us) wait(us);
+        }
+        else gpuPoll.polls = 0;
     }
 }

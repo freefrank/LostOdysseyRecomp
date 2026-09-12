@@ -17,3 +17,6 @@ PPC_FUNC(sub_82322478)
 {
     poll_wait::RunScoped(poll_wait::Kind::SharedValue, [&] { __imp__sub_82322478(ctx, base); });
 }
+
+// GpuPoll for the title GPU timestamp wait lives in debug/gpu_wait_trace.cpp.
+// That file already owns PPC_FUNC(sub_823B62A0) and PPC_FUNC(sub_827B6278).

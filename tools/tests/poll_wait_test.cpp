@@ -35,10 +35,35 @@ int main()
         assert(!ZeroDelay(fake));
     }
     assert(!query.active && query.polls==0);
+    GpuPollResult(1, fake);
+    assert(delays.back()==200);
+    {
+        Scope outer(Kind::GpuPoll);
+        const auto beforeWarmup = delays.size();
+        for (int i=0;i<32;++i) GpuPollResult(1,fake);
+        assert(delays.size()==beforeWarmup);
+        GpuPollResult(1,fake);
+        assert(delays.back()==50);
+        QueryResult(1,fake);
+        assert(!ZeroDelay(fake));
+        for (int i=0;i<32;++i) GpuPollResult(1,fake);
+        assert(delays.back()==kGpuPollDelayCapUs);
+        for (int i=0;i<10000;++i) GpuPollResult(1,fake);
+        assert(gpuPoll.polls==65 && delays.back()==kGpuPollDelayCapUs);
+        GpuPollResult(0,fake);
+        assert(gpuPoll.polls==0);
+        GpuPollResult(2,fake);
+        assert(gpuPoll.polls==0);
+        auto saved=gpuPoll.polls;
+        try { Scope inner(Kind::GpuPoll); GpuPollResult(1,fake); assert(gpuPoll.polls==1); throw 7; }
+        catch(int) {}
+        assert(gpuPoll.polls==saved && gpuPoll.active);
+    }
+    assert(!gpuPoll.active && gpuPoll.polls==0);
     {
         Scope scope(Kind::SharedValue);
         assert(ZeroDelay(fake));
-        assert(sharedValue.polls==1 && !query.active);
+        assert(sharedValue.polls==1 && !query.active && !gpuPoll.active);
     }
     assert(!sharedValue.active);
     RunScoped(Kind::Query, [&] {
@@ -51,7 +76,7 @@ int main()
     if (setjmp(target)==0)
         RunScoped(Kind::SharedValue, [&]{ std::longjmp(target,1); });
     ResetThread();
-    assert(!query.active && !sharedValue.active);
+    assert(!query.active && !sharedValue.active && !gpuPoll.active);
 
     int armed=0,waited=0,cancelled=0,yielded=0;
     auto arm=[&](uint32_t us){++armed;assert(us==200);return true;};
