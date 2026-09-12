@@ -18,6 +18,7 @@ endfunction()
 lo_add_header_test(LoPollWaitTest ${CMAKE_SOURCE_DIR}/tools/tests/poll_wait_test.cpp)
 lo_add_header_test(LoRenderBatchPolicyTest ${CMAKE_SOURCE_DIR}/tools/tests/render_batch_policy_test.cpp)
 lo_add_header_test(LoTextureDescriptorCacheTest ${CMAKE_SOURCE_DIR}/tools/tests/texture_descriptor_cache_test.cpp)
+lo_add_header_test(LoRenderTimingTest ${CMAKE_SOURCE_DIR}/tools/tests/render_timing_test.cpp)
 set(LO_PRIVATE_DIR ${CMAKE_SOURCE_DIR}/LostOdysseyRecompLib/private)
 
 # Logging stubs for every kernel import without an implementation. Regenerated
