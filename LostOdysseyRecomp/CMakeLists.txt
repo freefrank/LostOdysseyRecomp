@@ -99,7 +99,7 @@ if(LO_BUILD_GPU)
     target_include_directories(LostOdysseyRecomp PRIVATE ${CMAKE_SOURCE_DIR}/thirdparty/plume)
     target_compile_definitions(LostOdysseyRecomp PRIVATE LO_GPU_PLUME=1)
     if(WIN32)
-        target_link_libraries(LostOdysseyRecomp PRIVATE d3d12 dxgi)
+        target_link_libraries(LostOdysseyRecomp PRIVATE d3d12 d3d11 dxgi)
     endif()
 endif()
 
@@ -374,6 +374,13 @@ if(WIN32)
     target_include_directories(LoMemoryFailureTest PRIVATE ${LO_RUNTIME_ROOT})
     target_compile_features(LoMemoryFailureTest PRIVATE cxx_std_20)
     target_compile_definitions(LoMemoryFailureTest PRIVATE NOMINMAX)
+
+    add_executable(LoD3D11DeviceTest EXCLUDE_FROM_ALL
+        ${CMAKE_SOURCE_DIR}/tools/tests/d3d11_device_test.cpp)
+    target_include_directories(LoD3D11DeviceTest PRIVATE ${LO_RUNTIME_ROOT})
+    target_compile_features(LoD3D11DeviceTest PRIVATE cxx_std_20)
+    target_compile_definitions(LoD3D11DeviceTest PRIVATE NOMINMAX)
+    target_link_libraries(LoD3D11DeviceTest PRIVATE d3d11 dxgi)
 
     # Translates and compiles HLSL with DXC, without a GPU or game assets.
     add_executable(LoRenderResolutionShaderTest EXCLUDE_FROM_ALL

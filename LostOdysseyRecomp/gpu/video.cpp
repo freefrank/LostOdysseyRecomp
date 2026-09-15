@@ -3,6 +3,7 @@
 #include "video.h"
 #if defined(LO_GPU_PLUME) && defined(_WIN32)
 #include "backend_device.h"
+#include "d3d11_probe.h"
 #endif
 #include "renderer.h"
 #include "presentation.h"
@@ -358,7 +359,7 @@ namespace gpu::video
         const auto configured = settings::GetConfig().graphicsBackend;
         const auto requested = backend::Requested(configured, getenv("LO_GRAPHICS_API"));
         if (!requested) {
-            LOG_ERROR("video: invalid backend request '{}' (use auto, d3d12, vulkan, or dx11; DX11 is unsupported)",
+            LOG_ERROR("video: invalid backend request '{}' (use auto, d3d12, vulkan, or d3d11)",
                 getenv("LO_GRAPHICS_API") ? getenv("LO_GRAPHICS_API") : "settings");
             return false;
         }
@@ -449,6 +450,16 @@ namespace gpu::video
 
 #if defined(LO_GPU_PLUME) && defined(_WIN32)
         diagnostics::InstallPlumeLog();
+        if (*requested == backend::Backend::D3D11) {
+            const auto probe = d3d11::ProbeHardware();
+            char text[192]{};
+            d3d11::Format(text, sizeof(text), probe);
+            if (SUCCEEDED(probe.hr))
+                LOG_INFO("video: D3D11 probe {}", text);
+            else
+                LOG_WARNING("video: D3D11 probe {}", text);
+            LOG_WARNING("video: D3D11 renderer is not implemented; falling back to D3D12/Vulkan");
+        }
         const auto selection = backend::Select(*requested, [](backend::Backend candidate) -> std::string {
             g_vulkan = candidate == backend::Backend::Vulkan;
             g_initializing = true;
