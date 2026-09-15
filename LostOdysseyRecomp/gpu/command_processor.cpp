@@ -292,6 +292,11 @@ namespace gpu
             LOG_INFO("swap#{} WPTR <- {:#x} (rd {:#x})", g_swapCount.load(), dwordIndex, m_readPtrIndex);
         m_writePtrIndex = dwordIndex;
         m_writePtrIndex.notify_all();
+        if (m_workerSleeping.load(std::memory_order_relaxed))
+        {
+            std::lock_guard lock(m_workerWakeMutex);
+            m_workerWake.notify_one();
+        }
     }
 
     void CommandProcessor::WriteRegister(uint32_t index, uint32_t value)
@@ -427,7 +432,14 @@ namespace gpu
                 if (++idle > 200)
                 {
                     video::PumpEvents();
-                    std::this_thread::sleep_for(std::chrono::microseconds(500));
+                    // UpdateWritePointer wakes this wait immediately; the timeout keeps the
+                    // previous latency bound for write pointers mirrored through guest memory.
+                    std::unique_lock lock(m_workerWakeMutex);
+                    m_workerSleeping.store(true, std::memory_order_relaxed);
+                    m_workerWake.wait_for(lock, std::chrono::microseconds(500), [&] {
+                        return !m_running || m_writePtrIndex.load() != writePtr;
+                    });
+                    m_workerSleeping.store(false, std::memory_order_relaxed);
                 }
                 else
                     std::this_thread::yield();
@@ -878,7 +890,15 @@ namespace gpu
                 LOG_INFO("WAIT_REG_MEM {} {:#x} op={} ref={:#x} mask={:#x} value now {:#x} swap #{}", isMemory ? "mem" : "reg", pollRegAddr, waitInfo & 7, ref, mask,
                     isMemory ? GpuSwap(*reinterpret_cast<uint32_t*>(TranslatePhysical(pollRegAddr & ~3u)), pollRegAddr & 3) : 0, g_swapCount.load());
             g_workerStage = "WAIT_REG_MEM";
-            auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+            const auto waitStart = std::chrono::steady_clock::now();
+            auto deadline = waitStart + std::chrono::seconds(5);
+            // Xenia sleeps wait/256 ms between polls. That is an emulator heuristic, not packet
+            // semantics: on the host the value (query results, CPU-side flags) usually changes
+            // within microseconds, and whole-millisecond sleeps parked this thread for 13% of a
+            // battle frame while the guest render thread waited on it in turn. Poll with a short
+            // backoff instead. LO_WAIT_REG_MEM_LEGACY=1 restores the millisecond sleeps.
+            static const bool legacyWait = getenv("LO_WAIT_REG_MEM_LEGACY") != nullptr;
+            uint32_t polls = 0;
             while (m_running)
             {
                 uint32_t value;
@@ -909,10 +929,47 @@ namespace gpu
                     LOG_WARNING("WAIT_REG_MEM stalled 5s ({} {:#x} ref {:#x} mask {:#x} value {:#x}), still waiting", isMemory ? "mem" : "reg", pollRegAddr, ref, mask, value);
                     deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
                 }
-                if (wait >= 0x100)
-                    std::this_thread::sleep_for(std::chrono::milliseconds(wait / 0x100));
-                else
+                if (legacyWait)
+                {
+                    if (wait >= 0x100)
+                        std::this_thread::sleep_for(std::chrono::milliseconds(wait / 0x100));
+                    else
+                        std::this_thread::yield();
+                }
+                else if (++polls <= 64)
                     std::this_thread::yield();
+                else
+                    std::this_thread::sleep_for(std::chrono::microseconds(polls <= 256 ? 50 : 200));
+            }
+            {
+                // Aggregated per target so a soak shows what the guest waits on and for how long.
+                struct WaitStat { uint32_t key = 0, count = 0; double ms = 0; };
+                static WaitStat stats[8];
+                static auto lastLog = std::chrono::steady_clock::now();
+                const auto now = std::chrono::steady_clock::now();
+                const uint32_t key = (isMemory ? 0x80000000u : 0u) | (pollRegAddr & 0x7FFFFFFFu);
+                WaitStat* slot = nullptr;
+                for (auto& s : stats)
+                    if (s.count && s.key == key) { slot = &s; break; }
+                if (!slot)
+                    for (auto& s : stats)
+                        if (!s.count) { slot = &s; slot->key = key; break; }
+                if (slot)
+                {
+                    slot->count++;
+                    slot->ms += std::chrono::duration<double, std::milli>(now - waitStart).count();
+                }
+                if (now - lastLog >= std::chrono::seconds(30))
+                {
+                    lastLog = now;
+                    std::string text;
+                    for (auto& s : stats)
+                        if (s.count)
+                            text += fmt::format(" {}{:#x}:{}x/{:.1f}ms", (s.key & 0x80000000u) ? "mem" : "reg", s.key & 0x7FFFFFFFu, s.count, s.ms);
+                    LOG_INFO("WAIT_REG_MEM last 30 s ({}):{}", legacyWait ? "legacy millisecond sleeps" : "backoff", text);
+                    for (auto& s : stats)
+                        s = {};
+                }
             }
             return true;
         }

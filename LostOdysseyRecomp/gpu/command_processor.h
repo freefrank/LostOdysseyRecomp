@@ -1,6 +1,8 @@
 #pragma once
 
 #include <atomic>
+#include <condition_variable>
+#include <mutex>
 #include <thread>
 #include <vector>
 
@@ -96,6 +98,11 @@ namespace gpu
         uint32_t m_readPtrIndex = 0;
         uint32_t m_readPtrWritebackPhysical = 0;
         std::atomic<uint32_t> m_writePtrIndex{ 0xBAADF00D };
+        // Wakes the idle worker as soon as the guest publishes more ring data instead of
+        // letting it finish a fixed sleep; the timed wait still catches mirrored updates.
+        std::mutex m_workerWakeMutex;
+        std::condition_variable m_workerWake;
+        std::atomic<bool> m_workerSleeping{ false };
         std::atomic<uint32_t> m_counter{ 0 };
         std::atomic<bool> m_running{ false };
 
