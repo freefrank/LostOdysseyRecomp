@@ -129,7 +129,7 @@ void Publish(uint8_t *base, uint32_t config)
     }
     else if (tab == 2)
     {
-        addChoices(L"Graphics backend", L"圖形後端", {L"Direct3D 12", L"Vulkan", Tr(L"Direct3D 11 (unsupported)", L"Direct3D 11（尚未支援）")},
+        addChoices(L"Graphics backend", L"圖形後端", {L"Direct3D 12", L"Vulkan", Tr(L"Direct3D 11 (probe)", L"Direct3D 11（探測）")},
                    uint32_t(edit.graphicsBackend));
         addChoices(L"Display mode", L"顯示模式",
                    {Tr(L"Windowed", L"視窗"), Tr(L"Borderless fullscreen", L"無邊框全螢幕"),
@@ -189,10 +189,14 @@ void Publish(uint8_t *base, uint32_t config)
     if (tab == 2 && row == 0) {
         next.help = Tr(L"The graphics backend is changed after restarting. LO_GRAPHICS_API remains a diagnostic override.",
                        L"圖形後端重新啟動後變更；LO_GRAPHICS_API 仍可作為診斷覆寫。 ");
+        if (edit.graphicsBackend == GraphicsBackend::D3D11)
+            next.help = Tr(L"Direct3D 11 currently probes the adapter then falls back to Direct3D 12 or Vulkan. A renderer is not implemented.",
+                           L"Direct3D 11 目前只探測適配器，然後回退到 Direct3D 12 或 Vulkan。渲染器尚未實現。");
         const auto selected = gpu::video::SelectedBackend();
         next.help += Tr(L" Running: ", L" 目前使用：");
         next.help += selected == gpu::backend::Backend::Vulkan ? L"Vulkan" :
-            selected == gpu::backend::Backend::D3D12 ? L"Direct3D 12" : L"-";
+            selected == gpu::backend::Backend::D3D12 ? L"Direct3D 12" :
+            selected == gpu::backend::Backend::D3D11 ? L"Direct3D 11" : L"-";
     }
     if (tab == 2 && row == 2)
         next.help = Tr(L"Sets the output size. Borderless fullscreen uses the desktop size.",
