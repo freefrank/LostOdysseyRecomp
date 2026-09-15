@@ -247,6 +247,9 @@ int main(int argc, char* argv[])
 #endif
         return 1;
     }
+    LOG_INFO("guest address space: mapping={} e_window_page_offset={}",
+             GuestAddressSpace::MappingMethodName(),
+             unsigned(GuestAddressSpace::EWindowHasPageOffset()));
     InstallPhysicalWatchpoint();
 
     g_userHeap.Init();

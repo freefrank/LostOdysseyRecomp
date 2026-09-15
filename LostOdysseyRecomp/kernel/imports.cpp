@@ -11,6 +11,7 @@
 #include "xbox.h"
 #include "heap.h"
 #include "memory.h"
+#include "guest_address_space.h"
 #include "xam.h"
 #include "xdm.h"
 #include "xex_loader.h"
@@ -990,7 +991,7 @@ static void MmFreePhysicalMemory(uint32_t type, uint32_t guestAddress)
 static uint32_t MmGetPhysicalAddress(uint32_t address)
 {
     uint32_t physical = address & 0x1FFFFFFF;
-    if (address >= 0xE0000000)
+    if (address >= 0xE0000000 && GuestAddressSpace::EWindowHasPageOffset())
         physical += 0x1000;
     return physical;
 }
