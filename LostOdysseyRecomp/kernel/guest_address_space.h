@@ -45,8 +45,14 @@ struct FailureInfo
 FailureInfo GetFailureInfo();
 const char* FailureOperationName(FailureOperation operation);
 const char* FailureApiName(FailureOperation operation);
-// A and C alias the same 512 MiB; E starts one physical page later.
-// Keep these OS mappings coherent even for direct recompiled base+address loads.
+// "placeholder", "legacy", or "none". Valid after Allocate returns.
+const char* MappingMethodName();
+// Placeholder maps E at file offset +4 KiB. Win7 MapViewOfFileEx cannot, so
+// legacy maps E onto the same pages as A/C and this returns false.
+bool EWindowHasPageOffset();
+// A and C alias the same 512 MiB; E starts one physical page later when the
+// host supports page-granular section offsets. Keep OS mappings coherent even
+// for direct recompiled base+address loads.
 uint8_t* Allocate();
 void Release(uint8_t* base);
 }

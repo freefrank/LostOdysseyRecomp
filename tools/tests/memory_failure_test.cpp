@@ -135,6 +135,7 @@ BOOL TestVirtualProtect(void* address, SIZE_T size, DWORD protection, DWORD*)
     return TRUE;
 }
 }
+#define LO_GUEST_MEMORY_API_OVERRIDE 1
 #define VirtualAlloc2 TestVirtualAlloc2
 #define VirtualFree TestVirtualFree
 #define CreateFileMappingW TestCreateFileMappingW
@@ -245,6 +246,8 @@ int main()
     Check(base && reserveCalls == 2, "preferred-reservation failure must still fall back");
     Check(GetFailureInfo().operation == FailureOperation::None && GetFailureInfo().error == 0,
           "successful fallback left stale failure info");
+    Check(MappingMethodName()[0] == 'p' && EWindowHasPageOffset(),
+          "injected placeholder success must keep the 4 KiB E window");
     Check(GetFailureInfo().utcFileTime == 0 && GetFailureInfo().memory.valid == 0 && memoryQueryCalls == 0,
           "successful allocation left a stale failure scene or queried memory");
     Release(base);

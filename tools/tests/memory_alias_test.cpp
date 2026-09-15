@@ -27,9 +27,18 @@ int main()
             ok &= word(0xC0000000u + offset) == 0x12345678;
             word(0xC0000000u + offset) = 0;
             ok &= word(0xA0000000u + offset) == 0;
-            if (offset >= 0x1000)
+            if (GuestAddressSpace::EWindowHasPageOffset())
             {
-                word(0xE0000000u + offset - 0x1000) = 0xABCDEF01;
+                if (offset >= 0x1000)
+                {
+                    word(0xE0000000u + offset - 0x1000) = 0xABCDEF01;
+                    ok &= word(0xA0000000u + offset) == 0xABCDEF01;
+                    ok &= word(0xC0000000u + offset) == 0xABCDEF01;
+                }
+            }
+            else
+            {
+                word(0xE0000000u + offset) = 0xABCDEF01;
                 ok &= word(0xA0000000u + offset) == 0xABCDEF01;
                 ok &= word(0xC0000000u + offset) == 0xABCDEF01;
             }
@@ -54,6 +63,8 @@ int main()
             return 1;
         }
     }
-    std::puts("PASS: A/C coherence, E offset, virtual isolation, query round trip, release/reallocate");
+    std::printf("PASS: A/C coherence, E %s, virtual isolation, query round trip, release/reallocate, mapping=%s\n",
+                GuestAddressSpace::EWindowHasPageOffset() ? "offset" : "aligned-alias",
+                GuestAddressSpace::MappingMethodName());
     return 0;
 }
