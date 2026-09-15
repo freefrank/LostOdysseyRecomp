@@ -9,10 +9,12 @@ One record of completed changes, with unpublished work separated from verified r
 ### English
 
 - Deploy the GitHub Issue triage workflow update at `600b08e` with authorized human `@codex` comment requests, per-comment deduplication, recent human discussion and bounded first-party code retrieval. Nineteen triage/mention checks and seven retrieval checks pass; a real public `@codex` reply remains to be observed.
+- On the `legacy` branch, fall back to `MapViewOfFileEx` when `VirtualAlloc2` placeholder reservation fails (Win7/VxKex). A/C aliases remain coherent; the E window is 64 KiB-aligned on that path. Direct3D 11 currently probes the adapter then falls back to D3D12/Vulkan.
 
 ### 简体中文
 
 - 已在 `600b08e` 部署 GitHub Issue triage workflow 更新，支持授权协作者的 `@codex` 评论请求、按评论去重、最近人类讨论和有界的 first-party 代码检索。19 项 triage/mention 检查及 7 项 retrieval 检查已通过；首次公开 `@codex` 回复仍待观察。
+- `legacy` 分支在 `VirtualAlloc2` placeholder 预留失败时回退到 `MapViewOfFileEx`（Win7/VxKex）。A/C 别名仍保持一致；该路径上 E 窗口按 64 KiB 对齐。Direct3D 11 目前只探测适配器，然后回退到 D3D12/Vulkan。
 
 ## v0.5.13 — 2026-09-14 / Published / 已发布
 
