@@ -215,6 +215,11 @@ namespace gpu::video
         bool g_hasPresentedImage=false;
         bool g_presentPending=false;
         bool g_forceSwapResize=false;
+        struct PresentationDisplayState {
+            uint64_t resizedTicket = 0;
+            int appliedMode = -1;
+            uint64_t appliedSize = 0, appliedTicket = 0;
+        } g_presentationDisplay;
         constexpr plume::RenderFormat kSwapChainFormat = plume::RenderFormat::R8G8B8A8_UNORM;
         constexpr uint32_t kSwapChainBuffers = 3;
 
@@ -347,6 +352,7 @@ namespace gpu::video
         g_fence.reset(); g_commandList.reset(); g_queue.reset();
         g_device.reset(); g_interface.reset();
         g_hasPresentedImage = false; g_lastPresentedImage = 0; g_forceSwapResize = false;
+        g_presentationDisplay = {};
 #endif
     }
 
@@ -752,18 +758,96 @@ namespace gpu::video
     }
 
 #ifdef LO_GPU_PLUME
+    // Shared by guest frames and overlay-only frames. Only the presentation
+    // thread calls this; SDL window operations stay on their existing owner.
+    // The returned ticket describes the operations prepared for THIS frame.
+    static bool PreparePresentation(uint64_t& displayTicket)
+    {
+        displayTicket = 0;
+        if (!g_available || !g_swapChain) return false;
+        if (g_windowResizeRequested.exchange(false)) g_forceSwapResize = true;
+        displayTicket = g_displayChanges.PresentationTicket();
+        auto& state = g_presentationDisplay;
+        if (displayTicket && displayTicket != state.resizedTicket) {
+            g_forceSwapResize = true;
+            state.resizedTicket = displayTicket;
+        }
+#ifdef _WIN32
+        const int mode = g_displayMode.load();
+        const uint64_t size = g_displaySize.load();
+        if (!g_vulkan && mode >= 0 && (mode != state.appliedMode || size != state.appliedSize ||
+            (displayTicket && displayTicket != state.appliedTicket))) {
+            WaitForPresentGpu();
+            auto* swap = static_cast<plume::D3D12SwapChain*>(g_swapChain.get());
+            const plume::WindowPixelContext pixels;
+            HRESULT result = swap->d3d->SetFullscreenState(FALSE, nullptr);
+            if (SUCCEEDED(result) && mode == int(settings::WindowMode::Exclusive)) {
+                DXGI_MODE_DESC target{};
+                target.Width = uint32_t(size >> 32); target.Height = uint32_t(size);
+                target.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+                result = swap->d3d->ResizeTarget(&target);
+                if (SUCCEEDED(result)) result = swap->d3d->SetFullscreenState(TRUE, nullptr);
+            }
+            BOOL exclusive = FALSE;
+            const HRESULT queried = swap->d3d->GetFullscreenState(&exclusive, nullptr);
+            const bool failed = FAILED(result) || FAILED(queried) ||
+                (bool(exclusive) != (mode == int(settings::WindowMode::Exclusive)));
+            if (failed) {
+                g_displayFailed = true;
+                g_displayChanges.Complete(displayTicket, false);
+            }
+            if (state.appliedMode == int(settings::WindowMode::Exclusive) && mode != state.appliedMode)
+                g_reapplyWindow = true;
+            LOG_INFO("display mode: requested={} exclusive={} result={:#x}", mode, bool(exclusive), uint32_t(result));
+            // Flip-model chains need ResizeBuffers after fullscreen transitions,
+            // including transitions which keep the same dimensions.
+            g_forceSwapResize = true;
+            state.appliedMode = mode; state.appliedSize = size; state.appliedTicket = displayTicket;
+            if (failed) return false;
+        }
+#endif
+        // An empty chain must get a chance to recover after a zero-size window.
+        // Never test isEmpty() and return before attempting this resize.
+        if (g_forceSwapResize || g_swapChain->isEmpty() || g_swapChain->needsResize()) {
+            WaitForPresentGpu();
+            g_hasPresentedImage = false;
+            if (!g_swapChain->resize()) {
+                g_forceSwapResize = true;
+                // Zero drawable size is temporary (e.g. minimized); keep the
+                // ticket pending until a restored window can actually present.
+                if (g_swapChain->getWidth() && g_swapChain->getHeight()) {
+                    g_displayFailed = true;
+                    g_displayChanges.Complete(displayTicket, false);
+                }
+                return false;
+            }
+            g_forceSwapResize = false;
+            LogOutputPixels("resized");
+        }
+        return !g_swapChain->isEmpty();
+    }
+
+    // Keep the screenshot's storage, dimensions, and source provenance together.
+    static bool StoreCpuFrame(const std::vector<uint32_t>& pixels, uint32_t width, uint32_t height)
+    {
+        if (!width || !height || size_t(width) > std::numeric_limits<size_t>::max() / size_t(height) ||
+            pixels.size() != size_t(width) * height) return false;
+        g_pixels = pixels;
+        g_frameWidth = width; g_frameHeight = height;
+        g_frameOnGpu = false;
+        g_frontbufferPhysical = 0;
+        return true;
+    }
+
     static bool UploadAndPresentPixels(const std::vector<uint32_t>& pixels, uint32_t width, uint32_t height,
                                        bool isMenu, uint64_t displayTicket, const PresentationOptions& presentationOptions)
     {
-        if (!g_available)
-            return false;
-
-        if (g_forceSwapResize || g_swapChain->needsResize()) {
-            if(!g_swapChain->resize()) { if(g_forceSwapResize) g_displayFailed=true; g_displayChanges.Complete(displayTicket,false); return false; }
-            g_forceSwapResize=false; g_hasPresentedImage=false;
-        }
-        if (g_swapChain->isEmpty())
-            return false;
+        // PreparePresentation ran before rasterization. Defer any newer resize
+        // to the next frame rather than changing the output under this buffer.
+        if (!g_available || !g_swapChain || g_swapChain->isEmpty() || !width || !height ||
+            width > (std::numeric_limits<uint32_t>::max() - 255u) / 4u ||
+            size_t(width) > std::numeric_limits<size_t>::max() / size_t(height) ||
+            pixels.size() != size_t(width) * height) return false;
 
         // Upload the untiled pixels; rows must be 256-byte aligned for D3D12.
         const uint32_t rowPitch = (width * 4 + 255) & ~255u;
@@ -835,51 +919,8 @@ namespace gpu::video
             return;
 
 #ifdef LO_GPU_PLUME
-        if (g_windowResizeRequested.exchange(false)) g_forceSwapResize = true;
-        const auto displayTicket = g_displayChanges.PresentationTicket();
-        static uint64_t resizedDisplayTicket = 0;
-        if (displayTicket && displayTicket != resizedDisplayTicket) {
-            g_forceSwapResize = true;
-            resizedDisplayTicket = displayTicket;
-        }
-        if(g_swapChain) {
-#ifdef _WIN32
-            static int appliedMode=-1;
-            static uint64_t appliedSize=0;
-            static uint64_t appliedDisplayTicket=0;
-            const int mode=g_displayMode.load(); const uint64_t size=g_displaySize.load();
-            if(!g_vulkan && mode>=0 && (mode!=appliedMode || size!=appliedSize || (displayTicket && displayTicket!=appliedDisplayTicket))) {
-                auto* swap=static_cast<plume::D3D12SwapChain*>(g_swapChain.get());
-                const plume::WindowPixelContext pixels;
-                HRESULT result=swap->d3d->SetFullscreenState(FALSE,nullptr);
-                if(mode==int(settings::WindowMode::Exclusive)) {
-                    DXGI_MODE_DESC target{}; target.Width=uint32_t(size>>32); target.Height=uint32_t(size);
-                    target.Format=DXGI_FORMAT_R8G8B8A8_UNORM;
-                    result=swap->d3d->ResizeTarget(&target);
-                    if(SUCCEEDED(result)) result=swap->d3d->SetFullscreenState(TRUE,nullptr);
-                }
-                BOOL exclusive=FALSE; swap->d3d->GetFullscreenState(&exclusive,nullptr);
-                if(FAILED(result) || (mode==int(settings::WindowMode::Exclusive) && !exclusive)) {
-                    g_displayFailed=true;
-                    g_displayChanges.Complete(displayTicket, false);
-                }
-                if(appliedMode==int(settings::WindowMode::Exclusive) && mode!=appliedMode) g_reapplyWindow=true;
-                LOG_INFO("display mode: requested={} exclusive={} result={:#x}",mode,bool(exclusive),uint32_t(result));
-                // Flip-model swap chains require ResizeBuffers after a
-                // fullscreen transition even when the dimensions are unchanged.
-                g_forceSwapResize=true;
-                appliedMode=mode; appliedSize=size;
-                appliedDisplayTicket=displayTicket;
-            }
-#endif
-        }
-        // Resize before rasterizing host text so its glyphs match the actual output.
-        if (g_available && (g_forceSwapResize || g_swapChain->needsResize())) {
-            if(!g_swapChain->resize()) { if(g_forceSwapResize) g_displayFailed=true; g_displayChanges.Complete(displayTicket,false); return; }
-            g_forceSwapResize=false; g_hasPresentedImage=false;
-            LogOutputPixels("resized");
-        }
-        if (g_available && g_swapChain->isEmpty()) return;
+        uint64_t displayTicket = 0;
+        if (g_available && !PreparePresentation(displayTicket)) return;
         const uint32_t menuWidth = g_available ? g_swapChain->getWidth() : 1280;
         const uint32_t menuHeight = g_available ? g_swapChain->getHeight() : 720;
         renderer::SetOutputSize(menuWidth, menuHeight);
@@ -947,10 +988,6 @@ namespace gpu::video
                 g_frameHeight = sourceHeight;
                 g_frontbufferPhysical = physicalAddress & 0x1FFFFFFF;
                 g_frameOnGpu = true;
-                if (g_forceSwapResize || g_swapChain->needsResize()) {
-                    if(!g_swapChain->resize()) { if(g_forceSwapResize) g_displayFailed=true; g_displayChanges.Complete(displayTicket,false); return; }
-                    g_forceSwapResize=false; g_hasPresentedImage=false;
-                }
                 if (g_swapChain->isEmpty())
                     return;
                 WaitForPresentGpu();
@@ -1000,9 +1037,7 @@ namespace gpu::video
 #ifdef LO_GPU_PLUME
         if (menu)
         {
-            g_pixels = menuPresentBuffer;
-            g_frameWidth = menuWidth;
-            g_frameHeight = menuHeight;
+            if (!StoreCpuFrame(menuPresentBuffer, menuWidth, menuHeight)) return;
             UploadAndPresentPixels(menuPresentBuffer, menuWidth, menuHeight, true, displayTicket, presentationOptions);
             return;
         }
@@ -1040,8 +1075,8 @@ namespace gpu::video
     void PresentHostOverlay()
     {
 #ifdef LO_GPU_PLUME
-        if (!g_available || !g_swapChain || g_swapChain->isEmpty())
-            return;
+        uint64_t displayTicket = 0;
+        if (!PreparePresentation(displayTicket)) return;
         const uint32_t menuWidth = g_swapChain->getWidth();
         const uint32_t menuHeight = g_swapChain->getHeight();
         if (!menuWidth || !menuHeight)
@@ -1077,10 +1112,8 @@ namespace gpu::video
         if (menuPresentBuffer.empty())
             return;
 
-        g_pixels = menuPresentBuffer;
-        g_frameWidth = menuWidth;
-        g_frameHeight = menuHeight;
-        UploadAndPresentPixels(menuPresentBuffer, menuWidth, menuHeight, true, g_displayChanges.PresentationTicket(), PresentationOptions{});
+        if (!StoreCpuFrame(menuPresentBuffer, menuWidth, menuHeight)) return;
+        UploadAndPresentPixels(menuPresentBuffer, menuWidth, menuHeight, true, displayTicket, PresentationOptions{});
 #endif
     }
 

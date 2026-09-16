@@ -258,6 +258,7 @@ namespace debug_menu
                         stateLock.lock();
                         g_overlayState.editCoordinates[0] = s.current.x;
                         g_overlayState.editCoordinates[1] = s.current.y;
+                        g_overlayState.editCoordinates[2] = s.current.z;
                         g_overlayState.statusMessage = g_overlayState.chinese ? L"已填入当前角色坐标" : L"Position filled";
                         g_overlayState.statusExpiry = std::chrono::steady_clock::now() + std::chrono::seconds(2);
                     }

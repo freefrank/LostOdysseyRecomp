@@ -11,6 +11,7 @@ extern std::atomic<uint32_t> g_presentedSwaps;
 #include <debug/menu_overlay.h>
 #include <debug/frame_timing.h>
 #include "test_input_pulse.h"
+#include "button_quarantine.h"
 
 // SDL game controller -> XInput state. Player 1 only for now; the keyboard
 // mirrors the pad so the game can be driven without a controller.
@@ -132,10 +133,11 @@ static uint16_t ReadRawButtonsLocked()
     return buttons;
 }
 
-static std::atomic<uint16_t> s_quarantinedButtons{0};
+static hid::ButtonQuarantine s_buttonQuarantine;
 
 static void ProcessHostInput(uint16_t buttons)
 {
+    s_buttonQuarantine.ObserveRelease(buttons);
     static uint16_t s_prevGamepadButtons = 0;
     const uint16_t chordMask = XAMINPUT_GAMEPAD_LEFT_SHOULDER | XAMINPUT_GAMEPAD_RIGHT_SHOULDER;
     const bool prevChord = (s_prevGamepadButtons & chordMask) == chordMask;
@@ -143,11 +145,8 @@ static void ProcessHostInput(uint16_t buttons)
     if (curChord && !prevChord)
     {
         const bool wasVisible = debug_menu::IsOverlayVisible();
+        if (wasVisible) s_buttonQuarantine.Consume(chordMask);
         debug_menu::ToggleOverlay();
-        if (wasVisible)
-        {
-            s_quarantinedButtons.fetch_or(chordMask, std::memory_order_relaxed);
-        }
     }
     else if (debug_menu::IsOverlayVisible())
     {
@@ -159,8 +158,8 @@ static void ProcessHostInput(uint16_t buttons)
         else if (pressed & XAMINPUT_GAMEPAD_A) debug_menu::HandleInput(debug_menu::InputAction::Confirm);
         else if (pressed & XAMINPUT_GAMEPAD_B)
         {
+            s_buttonQuarantine.Consume(XAMINPUT_GAMEPAD_B);
             debug_menu::HandleInput(debug_menu::InputAction::Cancel);
-            s_quarantinedButtons.fetch_or(XAMINPUT_GAMEPAD_B, std::memory_order_relaxed);
         }
         else if ((pressed & XAMINPUT_GAMEPAD_LEFT_SHOULDER) && !curChord) debug_menu::HandleInput(debug_menu::InputAction::PrevTab);
         else if ((pressed & XAMINPUT_GAMEPAD_RIGHT_SHOULDER) && !curChord) debug_menu::HandleInput(debug_menu::InputAction::NextTab);
@@ -203,6 +202,7 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
         return ERROR_DEVICE_NOT_CONNECTED;
 
     std::lock_guard stateLock(g_getStateMutex);
+    const auto quarantineBeforeSample = s_buttonQuarantine.Capture();
     Poll();
 
     *pState = {};
@@ -452,14 +452,9 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
         ProcessHostInput(gp.wButtons);
     }
 
-    // Release quarantine: if a button (such as B or LB+RB chord) was consumed to close
-    // the overlay, keep filtering that button from the guest/settings until physically released.
-    const uint16_t quarantine = s_quarantinedButtons.load(std::memory_order_relaxed);
-    if (quarantine)
-    {
-        s_quarantinedButtons.store(gp.wButtons & quarantine, std::memory_order_relaxed);
-        gp.wButtons &= ~quarantine;
-    }
+    // Read-only filtering: only the host dispatcher observes physical releases.
+    // Also discard stale samples which straddled a close/resume transition.
+    gp.wButtons = s_buttonQuarantine.Filter(gp.wButtons, quarantineBeforeSample);
 
     bool overlayOwnsInput = overlayVisibleBefore || debug_menu::IsOverlayVisible();
     const uint16_t beforeMenuButtons = gp.wButtons;
