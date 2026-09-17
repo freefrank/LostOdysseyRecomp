@@ -1,0 +1,32 @@
+name: PR 42 integration
+on:
+  push:
+    branches: [fix/menu-audit-input-display]
+    paths: ['.github/workflows/pr42-integration.yml']
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Capture pinned merge inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out/pr42
+          for rev in 6e48a9c956205f5550259bf59fa3285b54755dd0 65b75ceb463301bb9e50b1a0bf1a191e37e3c1f3 8a8f3db35cff702464f599a9064a35123806bd03; do
+            git fetch --depth=1 origin "$rev"
+            git archive --format=tar "$rev" > "out/pr42/$rev.tar"
+          done
+          git diff 6e48a9c956205f5550259bf59fa3285b54755dd0 65b75ceb463301bb9e50b1a0bf1a191e37e3c1f3 > out/pr42/pr.patch
+          git diff 6e48a9c956205f5550259bf59fa3285b54755dd0 8a8f3db35cff702464f599a9064a35123806bd03 -- LostOdysseyRecomp/debug/menu_overlay.cpp LostOdysseyRecomp/gpu/video.cpp LostOdysseyRecomp/hid/hid.cpp > out/pr42/later.patch
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pr42-merge-inputs
+          path: out/pr42/
+          retention-days: 1
