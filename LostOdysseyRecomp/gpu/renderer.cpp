@@ -2680,8 +2680,12 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 // One host texture per (base, pitch, storage class).
                 const uint32_t colorClass = depth ? 0u : ColorClassOf(format);
                 RenderTargetKey key{ base, colorClass, pitch, 0, depth };
-                const resolution::Size desiredSize = resolution::TargetSizeForRole(ResolveCatalogRole(base, pitch), pitch, height, internalSize);
                 auto it = renderTargets.find(key);
+                uint32_t effectiveHeight = height;
+                if (it != renderTargets.end())
+                    effectiveHeight = std::max(effectiveHeight, it->second->guestHeight);
+                const auto role = ResolveCatalogRole(base, pitch);
+                const resolution::Size desiredSize = resolution::TargetSizeForRole(role, pitch, effectiveHeight, internalSize);
                 if (it != renderTargets.end())
                 {
                     // A catalog publication can arrive after a target's first
@@ -2689,7 +2693,6 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     // hit so the old native/square allocation is never reused.
                     if (it->second->guestHeight >= height && it->second->resolutionSize == desiredSize)
                         return it->second.get();
-                    height = std::max(height, it->second->guestHeight);
                     Gpu().retiredTextures.push_back(std::move(it->second));
                     renderTargets.erase(it);
                 }
@@ -2699,19 +2702,19 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 tex->allocationSerial = ++nextTargetAllocation;
                 tex->format = depth ? RenderFormat::D32_FLOAT_S8_UINT : ClassHostFormat(colorClass);
                 tex->guestWidth = pitch;
-                tex->guestHeight = height;
-                tex->resolutionSize = resolution::TargetSizeForRole(ResolveCatalogRole(base, pitch), pitch, height, internalSize);
+                tex->guestHeight = effectiveHeight;
+                tex->resolutionSize = desiredSize;
                 tex->width = std::max(1u, tex->ScaleX(pitch));
-                tex->height = std::max(1u, tex->ScaleY(height));
+                tex->height = std::max(1u, tex->ScaleY(effectiveHeight));
                 RenderTextureDesc desc = RenderTextureDesc::Texture2D(tex->width, tex->height, 1, tex->format, depth ? RenderTextureFlag::DEPTH_TARGET : RenderTextureFlag::RENDER_TARGET);
                 tex->texture = device->createTexture(desc);
                 tex->layout = RenderTextureLayout::UNKNOWN;
                 if (!tex->texture) {
                     FailCurrentPlan();
-                    LOG_ERROR("renderer: render target allocation failed guest={}x{} physical={}x{}; native resolution fallback next frame", pitch, height, tex->width, tex->height);
+                    LOG_ERROR("renderer: render target allocation failed guest={}x{} physical={}x{}; native resolution fallback next frame", pitch, effectiveHeight, tex->width, tex->height);
                     return nullptr;
                 }
-                LOG_INFO("renderer: new {} target base={:#x} fmt={} guest={}x{} physical={}x{} scale={}x{}", depth ? "depth" : "color", base, format, pitch, height, tex->width, tex->height, tex->resolutionSize.width, tex->resolutionSize.height);
+                LOG_INFO("renderer: new {} target base={:#x} fmt={} guest={}x{} physical={}x{} scale={}x{}", depth ? "depth" : "color", base, format, pitch, effectiveHeight, tex->width, tex->height, tex->resolutionSize.width, tex->resolutionSize.height);
                 HostTexture* result = tex.get();
                 renderTargets.emplace(key, std::move(tex));
                 return result;
@@ -3576,6 +3579,11 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     drops.primMask |= 1u << (info.primitiveType & 31);
                     return;
                 }
+                // A draw with no color write mask rasterizes to its depth target.
+                // Its bound color attachment can legitimately use a different
+                // catalog mapping while the pixel shader still writes depth.
+                const bool depthOnlyRaster = key.colorMask == 0 && depth != nullptr;
+                HostTexture* rasterTarget = depthOnlyRaster ? depth : color;
 
                 // Constants.
                 render_batch::CpuTimer<> tConst0(cpuTimingEnabled);
@@ -3675,18 +3683,18 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 float xs = RegF(REG_PA_CL_VPORT_XSCALE), xo = RegF(REG_PA_CL_VPORT_XSCALE + 1);
                 float ys = RegF(REG_PA_CL_VPORT_XSCALE + 2), yo = RegF(REG_PA_CL_VPORT_XSCALE + 3);
                 float zs = RegF(REG_PA_CL_VPORT_XSCALE + 4), zo = RegF(REG_PA_CL_VPORT_XSCALE + 5);
-                RenderViewport viewport(0.0f, 0.0f, float(pitch), float(rtHeight));
+                RenderViewport viewport(0.0f, 0.0f, float(rasterTarget->guestWidth), float(rasterTarget->guestHeight));
                 shared.ndcScale[0] = shared.ndcScale[1] = shared.ndcScale[2] = 1.0f;
                 if (vte & 1) // viewport scale enabled: vertices are in NDC, use a real viewport
                 {
                     float w = 2.0f * std::fabs(xs), h = 2.0f * std::fabs(ys);
-                    viewport = RenderViewport(xo - std::fabs(xs), yo - std::fabs(ys), w > 0 ? w : float(pitch), h > 0 ? h : float(rtHeight));
+                    viewport = RenderViewport(xo - std::fabs(xs), yo - std::fabs(ys), w > 0 ? w : float(rasterTarget->guestWidth), h > 0 ? h : float(rasterTarget->guestHeight));
                     if (ys > 0) shared.ndcScale[1] = -1.0f; // flipped viewport
                 }
                 else // screen-space vertices: map pixels to NDC ourselves
                 {
-                    shared.ndcScale[0] = 2.0f / float(pitch);
-                    shared.ndcScale[1] = -2.0f / float(rtHeight);
+                    shared.ndcScale[0] = 2.0f / float(rasterTarget->guestWidth);
+                    shared.ndcScale[1] = -2.0f / float(rasterTarget->guestHeight);
                     shared.ndcOffset[0] = -1.0f;
                     shared.ndcOffset[1] = 1.0f;
                 }
@@ -3712,8 +3720,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
                 // Shader constants stay in guest coordinates; only rasterization
                 // and API pixel rectangles move to the physical target grid.
-                const double rasterScaleX = double(color->resolutionSize.width) / 1280.0;
-                const double rasterScaleY = double(color->resolutionSize.height) / 720.0;
+                const double rasterScaleX = double(rasterTarget->resolutionSize.width) / 1280.0;
+                const double rasterScaleY = double(rasterTarget->resolutionSize.height) / 720.0;
                 RenderViewport rasterViewport = viewport;
                 rasterViewport.x *= rasterScaleX; rasterViewport.y *= rasterScaleY;
                 rasterViewport.width *= rasterScaleX; rasterViewport.height *= rasterScaleY;
@@ -4417,15 +4425,15 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     int32_t ox = int32_t(windowOffset << 17) >> 17, oy = int32_t(windowOffset << 1) >> 17;
                     scissor.left += ox; scissor.right += ox; scissor.top += oy; scissor.bottom += oy;
                 }
-                scissor.left = std::clamp(scissor.left, 0, int32_t(pitch)); scissor.right = std::clamp(scissor.right, 0, int32_t(pitch));
-                scissor.top = std::clamp(scissor.top, 0, int32_t(rtHeight)); scissor.bottom = std::clamp(scissor.bottom, 0, int32_t(rtHeight));
-                scissor.left = int32_t(color->ScaleX(uint32_t(scissor.left))); scissor.right = int32_t(color->ScaleX(uint32_t(scissor.right)));
-                scissor.top = int32_t(color->ScaleY(uint32_t(scissor.top))); scissor.bottom = int32_t(color->ScaleY(uint32_t(scissor.bottom)));
+                scissor.left = std::clamp(scissor.left, 0, int32_t(rasterTarget->guestWidth)); scissor.right = std::clamp(scissor.right, 0, int32_t(rasterTarget->guestWidth));
+                scissor.top = std::clamp(scissor.top, 0, int32_t(rasterTarget->guestHeight)); scissor.bottom = std::clamp(scissor.bottom, 0, int32_t(rasterTarget->guestHeight));
+                scissor.left = int32_t(rasterTarget->ScaleX(uint32_t(scissor.left))); scissor.right = int32_t(rasterTarget->ScaleX(uint32_t(scissor.right)));
+                scissor.top = int32_t(rasterTarget->ScaleY(uint32_t(scissor.top))); scissor.bottom = int32_t(rasterTarget->ScaleY(uint32_t(scissor.bottom)));
                 // Height is a historical EDRAM allocation estimate. Attachments
                 // may have different padding while covering the same draw; keep
                 // that draw and constrain it to their common physical extent.
-                const int32_t attachmentWidth = int32_t(depth ? std::min(color->width, depth->width) : color->width);
-                const int32_t attachmentHeight = int32_t(depth ? std::min(color->height, depth->height) : color->height);
+                const int32_t attachmentWidth = int32_t(depthOnlyRaster ? depth->width : depth ? std::min(color->width, depth->width) : color->width);
+                const int32_t attachmentHeight = int32_t(depthOnlyRaster ? depth->height : depth ? std::min(color->height, depth->height) : color->height);
                 scissor.left = std::min(scissor.left, attachmentWidth); scissor.right = std::min(scissor.right, attachmentWidth);
                 scissor.top = std::min(scissor.top, attachmentHeight); scissor.bottom = std::min(scissor.bottom, attachmentHeight);
                 if (scissor.right <= scissor.left || scissor.bottom <= scissor.top)

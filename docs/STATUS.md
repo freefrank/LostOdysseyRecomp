@@ -1,11 +1,13 @@
 # Project status
 
-## v0.6.6 published / v0.6.6 已发布
+## v0.6.6 published & reissue preparing / v0.6.6 已发布与重新发布准备中
 
-v0.6.6 was published on 2026-09-20T08:10:24Z from tag/source commit
-`c953bb56857330a2238869b306ffda98fe41bcdd`. It introduces initial native ultrawide
-(21:9) support (Issue #17) and the Linux AppImage updater rollback-preserving
-cleanup.
+v0.6.6 was initially published on 2026-09-20T08:10:24Z from tag/source commit
+`c953bb56857330a2238869b306ffda98fe41bcdd`. A same-version reissue is currently
+preparing to package a shadow-map rendering repair across all aspect ratios and
+high internal resolutions. Corrected release assets are pending CI completion;
+the initial download artifacts remain accessible on GitHub Releases but are being
+superseded and do not include this repair.
 
 The native ultrawide implementation allows internal render targets to follow aspect
 ratios beyond 16:9 using Hor+ projection adjustments applied before derived matrices
@@ -14,46 +16,58 @@ of view. HUD elements are constrained to a 16:9 safe region, and video playback 
 ordered left/right pillarbox bars. FramePlan manages queue epoch tracking and
 render-target catalog roles.
 
-User note and limitations: Ultrawide support is EXPERIMENTAL. There are known
-user-reported shadow mapping issues, and currently ONLY 3440×1440 is supported
-(2560×1080 is not currently advertised or supported despite appearing as an unverified
-UI option). Publication does not establish complete player visual acceptance.
+Shadow fix & user testing: The shadow fix corrects effective-height render target
+caching to avoid unnecessary 640×640 recreation and updates depth rasterization
+without color writes to cover modes 4 and 5 while preserving `SV_Depth` and alpha.
+In the tested scene, the user confirmed shadows are fixed. A temporary user report
+of elevated CPU usage was traced to background system activity (`bun`) rather than
+a game engine regression. Acceptance of the shadow fix remains limited to the tested
+scene.
 
-Release and validation verification: Release CI [35497779401](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35497779401)
-succeeded for Windows and Linux packaging. Both public package URLs returned HTTP 200.
-The downloaded package hashes match their sidecars and GitHub digests: Windows ZIP is
-211,105,665 bytes with SHA-256 `c1bcae49bac6fbb445babbebc9f48ce21e2f438283d0bec771d8ebf123cce8d7`;
-Linux AppImage is 220,842,488 bytes with SHA-256 `19ff373ac5b9de960a71577009710f64269973477a86d6ba1d2bc07b0659c5c4`.
-The Windows manifest reports version `0.6.6`, commit `c953bb5` and `dirty=false` with
-the bundled shader pack confirmed. The Linux release asset matches its Linux CI artifact. Earlier focused
-fixtures passed for `windows-clang` runtime build, `LoFramePlanTest` (18 checks),
-`LoTargetMappingTest` (5 checks), resolution calculation (40 checks), and temporal math.
-In Vulkan testing with bundled shaders, a native save loaded at 13.93s and captured two
-frames during scene transition at swaps 382–383, verifying 3440×1472 padded color/depth
-allocations and 3440×1440 resolve content. Full visual verification across scenes,
-dynamic window resizing, shadow mapping repairs, failure injection paths, and other
-backends (Direct3D 12) remain pending.
+User note and limitations: Ultrawide support remains EXPERIMENTAL and currently ONLY
+3440×1440 is supported (2560×1080 is not currently advertised or supported despite
+appearing as an unverified UI option).
 
-v0.6.6 已于 2026-09-20T08:10:24Z 从 tag/source commit
-`c953bb56857330a2238869b306ffda98fe41bcdd` 正式发布。版本包含原生超宽屏 (21:9)
-初始支持（Issue #17）以及 Linux AppImage 更新器保留回滚的清理逻辑。
+Release and validation verification:
+- Initial v0.6.6 release: Release CI [35497779401](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35497779401)
+  passed Windows and Linux packaging. Both public package URLs returned HTTP 200.
+  Downloaded package hashes matched sidecars and GitHub digests: Windows ZIP was
+  211,105,665 bytes with SHA-256 `c1bcae49bac6fbb445babbebc9f48ce21e2f438283d0bec771d8ebf123cce8d7`;
+  Linux AppImage was 220,842,488 bytes with SHA-256 `19ff373ac5b9de960a71577009710f64269973477a86d6ba1d2bc07b0659c5c4`.
+  The Windows manifest reported version `0.6.6`, commit `c953bb5` and `dirty=false` with
+  the bundled shader pack confirmed.
+- Shadow fix validation: `windows-clang` runtime build passed (runtime SHA
+  `1d7b75c98856a4da922de98088a5c066b95cf318636a1bf59bd1a15c7537d195`), and
+  `LoTargetMappingTest` passed 7 checks. Existing unit fixtures passed for
+  `LoFramePlanTest` (18 checks), resolution calculation (40 checks), and temporal
+  math. In Vulkan live testing with bundled shaders, a native save loaded at 13.93s
+  and captured two frames during scene transition at swaps 382–383, verifying
+  3440×1472 padded color/depth allocations and 3440×1440 resolve content.
+- Remaining limits: Comprehensive visual Hor+, HUD positioning, dynamic window
+  resizing, broader scene shadow validation, failure injection paths, other backends
+  (Direct3D 12), and full player acceptance remain pending.
+
+v0.6.6 初版已于 2026-09-20T08:10:24Z 从 tag/source commit
+`c953bb56857330a2238869b306ffda98fe41bcdd` 发布。目前正在准备同版本重新发布，以打包针对所有比例及高内部分辨率下的阴影贴图渲染修复。修正后的资产仍在等待 CI 完成；初版发布的下载资产目前仍可在 GitHub Releases 获取，但将被替代且不含该项修复。
 
 原生超宽屏实现允许内部渲染目标跟随 16:9 以外的显示比例，并在派生矩阵计算与视锥裁剪前应用
 Hor+ 投影调整，在拓展视野中保持正确的透视几何结构。HUD 界面元素被限制在 16:9 安全区内，
 视频播放期间添加有序左右立柱黑边。FramePlan 负责队列周期跟踪与渲染目标分类角色管理。
 
-用户提示与限制：超宽屏支持为实验性（EXPERIMENTAL）。存在已知且用户反馈的阴影贴图（shadow mapping）问题，
-目前仅支持 3440×1440（界面虽有 2560×1080 选项但尚未验证支持，请勿作为受支持分辨率使用）。本次发布不代表完整玩家视觉验收通过。
+阴影修复与用户测试：修正 effective-height 渲染目标缓存以避免不必要的 640×640 重建，并在无颜色写入的深度光栅化中覆盖模式 4 与 5，同时保留 `SV_Depth` 与 alpha。在受影响测试场景中，用户确认阴影已恢复正常。此前反馈的 CPU 占用上升经查为后台系统进程（`bun`）导致，非游戏回归。阴影修复的验收仅限于当前测试场景。
 
-发布与验证核验：Release CI [35497779401](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35497779401)
-成功完成 Windows 与 Linux 打包。两个公开资产下载 URL 均返回 HTTP 200，下载包 hash 与 sidecar 和 GitHub digest 一致：
-Windows ZIP 大小为 211,105,665 字节，SHA-256 为 `c1bcae49bac6fbb445babbebc9f48ce21e2f438283d0bec771d8ebf123cce8d7`；
-Linux AppImage 大小为 220,842,488 字节，SHA-256 为 `19ff373ac5b9de960a71577009710f64269973477a86d6ba1d2bc07b0659c5c4`。
-Windows manifest 报告版本为 `0.6.6`、commit `c953bb5`、`dirty=false`，确认内置 shader pack。Linux 发布资产与对应 Linux CI 产物一致。
-此前已通过 `windows-clang` 运行时构建、`LoFramePlanTest`（18 项检查）、`LoTargetMappingTest`（5 项检查）、
-分辨率计算（40 项）与时序数学检查。在 Vulkan 搭配内置着色器包测试中，原生存档于 13.93 秒成功载入，并在场景过渡期间捕获
-swap 382–383 的两帧，确认主颜色／深度缓冲分配为 3440×1472（对齐），resolve 内容为 3440×1440。跨场景的完整实机视觉验证、
-动态窗口大小调整、阴影贴图修复、故障注入路径以及 Direct3D 12 等其他图形后端仍待完成。
+用户提示与限制：超宽屏支持仍为实验性（EXPERIMENTAL），目前仅支持 3440×1440（界面虽有 2560×1080 选项但尚未验证支持，请勿作为受支持分辨率使用）。
+
+发布与验证核验：
+- 初版发布资产：Release CI [35497779401](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35497779401)
+  完成 Windows 与 Linux 打包。两个公开资产下载 URL 均返回 HTTP 200，下载包 hash 与 sidecar 和 GitHub digest 一致：
+  Windows ZIP 为 211,105,665 字节，SHA-256 为 `c1bcae49bac6fbb445babbebc9f48ce21e2f438283d0bec771d8ebf123cce8d7`；
+  Linux AppImage 为 220,842,488 字节，SHA-256 为 `19ff373ac5b9de960a71577009710f64269973477a86d6ba1d2bc07b0659c5c4`。
+  Windows manifest 报告版本 `0.6.6`、commit `c953bb5`、`dirty=false` 并确认内置着色器包。
+- 阴影修复验证：`windows-clang` 运行时构建通过（运行时 SHA `1d7b75c98856a4da922de98088a5c066b95cf318636a1bf59bd1a15c7537d195`），
+  `LoTargetMappingTest` 通过 7 项检查。既有 `LoFramePlanTest`（18 项）、分辨率计算（40 项）与时序数学测试均通过。在 Vulkan
+  搭配内置着色器包测试中，原生存档于 13.93 秒成功载入，并在场景过渡期间捕获 swap 382–383 的两帧，确认 3440×1472（对齐）分配及 3440×1440 resolve 画面。
+- 剩余限制：跨场景完整实机 Hor+ 视觉呈现、HUD 排布、动态窗口大小调整、更广场景阴影验证、故障注入路径、Direct3D 12 等其他图形后端及完整玩家验收仍待完成。
 
 ## v0.6.3 published / v0.6.3 已发布
 

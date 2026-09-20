@@ -21,10 +21,12 @@ Optional diagnostics are off by default and can be disabled in Settings. See [Pr
 
 ## v0.6.6 release
 
-Published at [GitHub Release v0.6.6](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.6) on 2026-09-20T08:10:24Z from commit `c953bb5`. It introduces initial native ultrawide (21:9) support (Issue #17) and Linux AppImage updater rollback-preserving cleanup. Release CI [35497779401](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35497779401) passed Windows and Linux packaging, and public package URLs returned HTTP 200 with verified SHA-256 sidecars.
+Published release [v0.6.6](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.6) (initially published 2026-09-20T08:10:24Z, with a same-version reissue currently preparing for a shadow-mapping repair). It introduces initial native ultrawide (21:9) support (Issue #17) and Linux AppImage updater rollback-preserving cleanup.
+
+The shadow fix repairs effective-height render-target caching and depth-only rasterization modes 4 and 5; shadows were confirmed fixed in user testing of the affected scene. Refreshed release assets are pending CI completion; initial published downloads do not yet include this repair.
 
 > [!WARNING]
-> **Ultrawide support is EXPERIMENTAL, has known shadow mapping problems, and currently ONLY 3440×1440 is supported.** 2560×1080 is not currently advertised or supported despite appearing as an unverified UI option.
+> **Ultrawide support remains EXPERIMENTAL, and currently ONLY 3440×1440 is supported.** 2560×1080 is not currently advertised or supported despite appearing as an unverified UI option.
 
 See the [changelog](CHANGELOG.md#v066--2026-09-20) and [development status](docs/STATUS.md) for validation limits.
 
