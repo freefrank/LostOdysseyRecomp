@@ -1,8 +1,12 @@
 # Project status
 
-## v0.6.7 release candidate preparation (awaiting Release CI) / v0.6.7 发布准备（等待 Release CI）
+## v0.6.7 published / v0.6.7 已发布
 
-Target version v0.6.7 packages the in-game Graphics menu Widescreen switch and expanded 21:9 resolution presets (resolving Issue #17).
+v0.6.7 was published on 2026-09-20T20:09:28Z from tag/source commit
+`f92c24da03816b4c0c7664fbc8589169a205b555` via Release CI
+[35533399325](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35533399325) as the
+latest public release (non-draft, non-prerelease). It packages the in-game Graphics menu
+Widescreen switch and expanded 21:9 resolution presets, resolving and closing Issue #17.
 
 A Widescreen toggle switch is added to the Graphics settings menu (`tab == 2`, row 2), directly above Output resolution (`row 3`). The switch categorizes Output resolution presets into two aspect-ratio groups:
 - **Widescreen Off (16:9)**: 1280×720, 1600×900, 1920×1080, 2560×1440, and 3840×2160.
@@ -10,35 +14,49 @@ A Widescreen toggle switch is added to the Graphics settings menu (`tab == 2`, r
 
 The toggle state is inferred directly from the current configured width and height (`width * 9 > height * 16`), requiring no new INI keys. Existing configurations at 3440×1440 automatically show Widescreen On and index into the 21:9 list. When toggling the switch between 16:9 and 21:9, `FindNearestResolutionIndex` selects the closest preset by vertical height; for equidistant heights (such as 900p between 720p and 1080p), the higher tier is chosen. Selecting Save graphics settings persists the choice and transitions through the display-change state machine; cancelling or navigating back without saving discards changes and keeps the existing configuration. The first-run setup resolution list in `first_run.cpp` is synchronized to include matching presets, and strings and help text have been added for 5 languages (English, Japanese, Korean, Traditional Chinese, Simplified Chinese).
 
-Validation & acceptance status:
-- Unit test `menu_flow_test` verifies initial 3440×1440 auto-derivation, all 5 ultrawide resolution steps cycling in sequence, height preservation when returning to 16:9 (e.g. 2160p maintained), cancel discard, menu reopen state restoration, and Save display change completion.
-- Render test `menu_render_test` verified 10-row layout rendering and output snapshot `out/snapshots/menu_1280x720_21_9.png`.
-- Incremental runtime compilation passes.
-- In manual runtime testing with the latest build, the user explicitly verified the menu and display change behavior, confirmed functionality is working as expected, and authorized closing Issue #17.
+Release and delivery verification:
+- Release CI [35533399325](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35533399325)
+  succeeded from source commit `f92c24da03816b4c0c7664fbc8589169a205b555`. Public release packages
+  are available at [GitHub Release v0.6.7](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.7).
+- Windows ZIP `LostOdysseyRecomp-windows-x64-v0.6.7.zip` is 211,105,409 bytes with SHA-256
+  `372324811075bc89ac30b3f9786fa7a5a93f02d8ee22b854980fa5acf7a9e279`.
+- Linux AppImage `LostOdysseyRecomp-linux-x64-v0.6.7.AppImage` is 220,846,584 bytes with SHA-256
+  `de99f9eeea3a83984faa09b098fc8469b8a9adc64974e63a710e9311a05f8bc4`.
+- Both package files and their `.sha256` sidecars returned HTTP 200; downloaded hashes match
+  sidecars and GitHub release digests. The Windows manifest confirms version `v0.6.7`, commit / build /
+  packaging SHA `f92c24da03816b4c0c7664fbc8589169a205b555`, and `dirty=false`. Published release
+  notes match the extracted CHANGELOG section.
+- Implementation & user acceptance: Focused checks passed for `menu_flow_test` (auto-derivation,
+  five ultrawide tiers cycling, height preservation when returning to 16:9, cancel discard, and Save
+  state machine) and `menu_render_test` layout snapshot `out/snapshots/menu_1280x720_21_9.png`. In local
+  runtime testing on the latest build, the user confirmed the menu and display change functionality
+  works as expected, and authorized closing Issue #17 (now closed).
+- Remaining limits: Ultrawide support remains experimental across diverse hardware and aspect ratio
+  combinations; testing does not claim exhaustive verification across all GPUs and resolutions.
 
-Validation boundary & limits:
-- Packages are prepared for release; publication on GitHub Releases is pending completion of Release CI.
-- Ultrawide support remains experimental across diverse hardware and aspect ratio combinations, without claiming exhaustive testing across all possible GPUs and resolutions.
+v0.6.7 已发布：
 
-v0.6.7 发布准备（等待 Release CI）：
+v0.6.7 已于 2026-09-20T20:09:28Z 从 tag/source commit
+`f92c24da03816b4c0c7664fbc8589169a205b555` 通过 Release CI
+[35533399325](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35533399325) 正式发布为
+latest 公开版本（非 draft、非 prerelease）。版本包含游戏内图形设置“宽屏”开关及扩充的 21:9 分辨率预设，解决并关闭 Issue #17。
 
-目标版本 v0.6.7 包含游戏内图形设置“宽屏”开关及扩充的 21:9 分辨率预设（解决 Issue #17）。
-
-在“设置” -> “图形”中，“输出分辨率”上方新增宽屏切换开关。
+在“设置” -> “图形”中，“输出分辨率”上方新增宽屏切换开关：
 - **宽屏关（16:9）**：1280×720、1600×900、1920×1080、2560×1440 与 3840×2160。
 - **宽屏开（21:9）**：1720×720、2560×1080、3440×1440、3840×1600 与 5120×2160。
 
-开关状态直接由当前配置的宽高推导，不增加额外 INI 字段；原有 3440×1440 配置自动识别为宽屏开。切换比例时按高度差最近匹配目标档位（等距选较高档位，如 900p 转 1080p）。保存应用新分辨率并写入磁盘，取消不改动配置。首次启动列表同步包含对应预设，已适配英、日、韩、繁中、简中五语言。
+开关状态由当前配置宽高动态推导，不增加额外 INI 字段；原有 3440×1440 配置自动识别为宽屏开。切换比例时按高度差最近匹配目标档位（等距选较高档位，如 900p 转 1080p）。保存应用新分辨率并写入磁盘，取消不改动配置。首次启动列表同步包含对应预设，已适配英、日、韩、繁中、简中五语言。
 
-验证与验收状态：
-- `menu_flow_test` 验证了 3440×1440 自动推导、五档循环、返回 16:9 保留 2160 高度、取消不保存及 Save 状态机。
-- `menu_render_test` 离线渲染快照 `out/snapshots/menu_1280x720_21_9.png` 验证 10 行菜单布局。
-- 主程序增量构建通过。
-- 用户在最新构建上实机测试，明确确认功能正常并授权关闭 Issue #17。
-
-边界与说明：
-- 当前处于待 CI 构建与发布的准备状态，尚未在 GitHub Releases 发布完成。
-- 超宽屏在多样化硬件与多分辨率组合下仍保持实验性，不虚构所有 GPU 与分辨率的全流程穷尽验证。
+发布与资产核验：
+- Release CI [35533399325](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35533399325)
+  从源码 `f92c24da03816b4c0c7664fbc8589169a205b555` 构建成功，公开资产见 [GitHub Release v0.6.7](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.7)。
+- Windows ZIP `LostOdysseyRecomp-windows-x64-v0.6.7.zip` 大小为 211,105,409 字节，SHA-256 为
+  `372324811075bc89ac30b3f9786fa7a5a93f02d8ee22b854980fa5acf7a9e279`。
+- Linux AppImage `LostOdysseyRecomp-linux-x64-v0.6.7.AppImage` 大小为 220,846,584 字节，SHA-256 为
+  `de99f9eeea3a83984faa09b098fc8469b8a9adc64974e63a710e9311a05f8bc4`。
+- 两平台包及各自 `.sha256` sidecar 均返回 HTTP 200；下载包 hash 与 sidecar 和 GitHub digests 一致。Windows manifest 报告版本 `v0.6.7`、commit/build/packaging SHA 均为上述 commit 且 `dirty=false`。公开 Release 说明与 CHANGELOG 提取一致。
+- 实现与用户验收：`menu_flow_test`（3440×1440 自动推导、五档循环、返回 16:9 保留 2160 高度、取消不保存及 Save 状态机）与 `menu_render_test` 渲染快照（`out/snapshots/menu_1280x720_21_9.png`）均通过。用户在最新构建实机测试中明确确认功能正常，并授权关闭 Issue #17（已关闭）。
+- 剩余限制：超宽屏在多样化硬件与多分辨率组合下仍保持实验性，不虚构所有 GPU 与分辨率的全游戏穷尽验证。
 
 ## v0.6.6 published & reissued / v0.6.6 已发布与同版本重新发布
 

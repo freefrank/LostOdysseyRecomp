@@ -19,14 +19,20 @@ Optional diagnostics are off by default and can be disabled in Settings. See [Pr
 > [!IMPORTANT]
 > **This project is still in early testing.** Opening areas and selected scenes have been tested; a complete playthrough has not. Rendering and stability issues remain. You must supply your own supported game files.
 
+## v0.6.7 release
+
+Published release [v0.6.7](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.7) on 2026-09-20T20:09:28Z from source `f92c24d` via Release CI [35533399325](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35533399325) as the latest public release. It adds an in-game Graphics menu Widescreen switch and expanded 21:9 resolution presets (1720×720, 2560×1080, 3440×1440, 3840×1600, 5120×2160), with closest vertical height matching when toggling aspect ratio, automatic detection for existing configurations, and synchronization with first-launch setup across 5 languages. Issue #17 is resolved and closed.
+
+> [!WARNING]
+> **Ultrawide support remains EXPERIMENTAL across diverse hardware and aspect ratio combinations.**
+
+See the [changelog](CHANGELOG.md#v067--2026-09-20) and [development status](docs/STATUS.md) for validation limits.
+
 ## v0.6.6 release
 
 Published release [v0.6.6](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.6) (reissued 2026-09-20 from source `c6cbd1f` via Release CI [35527543573](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35527543573)). It introduces initial native ultrawide (21:9) support (Issue #17), a shadow-map rendering repair across all aspect ratios and high internal resolutions, and Linux AppImage updater rollback-preserving cleanup.
 
 The shadow fix repairs effective-height render-target caching and depth-only rasterization modes 4 and 5; shadows were confirmed fixed in user testing of the affected scene. Reissue packages have been verified and uploaded; the initial `c953bb5` packages are superseded, and players who downloaded the earlier build should redownload to get the fix.
-
-> [!WARNING]
-> **Ultrawide support remains EXPERIMENTAL, and currently ONLY 3440×1440 is supported.** 2560×1080 is not currently advertised or supported despite appearing as an unverified UI option.
 
 See the [changelog](CHANGELOG.md#v066--2026-09-20) and [development status](docs/STATUS.md) for validation limits.
 

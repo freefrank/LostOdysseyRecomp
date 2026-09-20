@@ -1621,13 +1621,13 @@
         "Kind": "Feature",
         "Area": "Graphics presentation",
         "Status": "Done",
-        "Delivery": "Validated",
+        "Delivery": "Released",
         "Source key": "ultrawide-fov-layout",
-        "Evidence": "v0.6.6 reissued native Hor+ 3440x1440 (source c6cbd1f, CI 35527543573, Win ZIP bed792e5, Linux 4c5ac5e5); shadow repair accepted. In-game Graphics Widescreen toggle added above Output resolution (1720x720, 2560x1080, 3440x1440, 3840x1600, 5120x2160; Off reverts to 16:9) with nearest-height mapping (equidistant upper-tier tie), 5 languages, first-run sync, passing menu flow/render tests and 10/10 target build. User tested and accepted latest build, confirmed no issues, and authorized Issue #17 closure for target release v0.6.7 (packaging/CI pending). Exhaustive multi-GPU/scene coverage is not claimed; future regressions track separately.",
+        "Evidence": "v0.6.7 published 2026-09-20T20:09:28Z (source f92c24d, CI 35533399325; Win ZIP 211105409 SHA-256 37232481…, Linux AppImage 220846584 SHA-256 de99f9ee…, sidecars/API digests match, 4 assets HTTP 200, manifest v0.6.7 clean). Adds in-game Graphics Widescreen toggle above Output resolution (1720x720, 2560x1080, 3440x1440, 3840x1600, 5120x2160; Off reverts 16:9) with nearest-height mapping (equidistant upper-tier tie), 5 languages, first-run sync, passing menu tests and 10/10 build. User verified and accepted delivery; Issue #17 closed. Exhaustive multi-GPU/scene coverage not claimed; future regressions track separately.",
         "Release": "v0.6.7"
       },
       "title": "Support ultrawide output and FOV changes",
-      "body_sha256": "211bf571081c0f60b20da977124b48f85883dc9d12be45d808f190277ebf4efc"
+      "body_sha256": "ea4ddfbb717b88a45f625694c9a414228b6ed88babad2138b590859a5eddbd3e"
     },
     "frame-generation-research": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56e6A",
