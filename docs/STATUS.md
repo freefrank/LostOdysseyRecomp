@@ -1,5 +1,21 @@
 # Project status
 
+## Development branch: Native DLSS integration (P0 foundation passed)
+
+Development work on native NVIDIA DLSS Super Resolution is underway on the `dlss` feature branch:
+- **P0 Scope & Status**: P0 foundation established on local branch. P0 covers the optional SDK dependency, Plume Vulkan bridge hooks (`VulkanExtensionHooks` and `VulkanExtensionStatus`), pre-device extension negotiation, external command demarcations (`beginExternalCommands`, `endExternalCommands`), NGX feature discovery, and optimal input resolution queries. Frame Generation (FG) remains deferred.
+- **Verification Evidence**:
+  - Reused Plume Vulkan bridge command recording fixture (`LoPlumeBridgeTest`) passed (CPU command recording only; no GPU submit, no synthetic device-lost injection).
+  - SDK-off runtime build (`LostOdysseyRecomp`) and standalone tests passed. Probe returns exit 77 (`ProbeState::SdkDisabled`, mapped to CTest skip).
+  - SDK-on runtime build (`LostOdysseyRecomp`) passed with pinned NVIDIA DLSS SDK `310.9.1` (`374959484e79a640feaba44c93ac8cfb0a03f5b5`) using static CRT bootstrap libraries (`nvsdk_ngx_s.lib` / `nvsdk_ngx_s_dbg.lib`).
+  - NVIDIA hardware execution on an RTX 5080 (driver 616.56) verified successful NGX initialization, capability query, and optimal settings calculation for 1920×1080 output: Quality 1280×720, Balanced 1114×626, Performance 960×540.
+  - Missing staged runtime injection confirmed controlled negative exit: standalone probe exited with code 1, recording raw NGX error `-1160773614` (`0xBAD00012`, `NVSDK_NGX_Result_FAIL_NotImplemented`), and the staged runtime was restored.
+  - Decision helper logic in `LoNativeDlssReportTest` passed all exit code, capability parsing, and optimal settings validation tests.
+  - Native Linux testing was skipped in P0 due to the absence of a native Linux GPU environment.
+- **Scope Limits**: No Super Resolution evaluation (`NGX_VULKAN_EVALUATE_DLSS_EXT`), temporal motion vector feeding, HUD separation, or game launch has taken place. No visual quality or framerate improvements are claimed.
+- **Redistribution & Licensing**: SDK-on builds link proprietary NVIDIA components. Binary redistribution licensing remains unresolved, and no binary packages are released.
+- See detailed evidence and reproduction steps in [Native DLSS Validation](notes/native-dlss-validation.md).
+
 ## v0.6.7 published / v0.6.7 已发布
 
 v0.6.7 was published on 2026-09-20T20:09:28Z from tag/source commit

@@ -1783,12 +1783,13 @@
       "fields": {
         "Kind": "Feature",
         "Area": "Temporal rendering",
-        "Status": "Todo",
-        "Delivery": "Not started",
-        "Source key": "vendor-temporal-upscaling"
+        "Status": "In Progress",
+        "Delivery": "In progress",
+        "Source key": "vendor-temporal-upscaling",
+        "Start date": "2026-09-20"
       },
       "title": "Integrate vendor temporal upscaling after input validation",
-      "body_sha256": "7a64f5f794964f512051252e07c38e98fb89834a2cf2f6a51f7648c3aefd0854"
+      "body_sha256": "5433fb0897d3da13f124a5574281d21cc3b2f95147aeab3c8cd7f42d95ab03b4"
     },
     "taa-motion-quality": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56fGM",

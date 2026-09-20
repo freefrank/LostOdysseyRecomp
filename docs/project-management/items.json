@@ -3964,15 +3964,15 @@
     {
       "key": "vendor-temporal-upscaling",
       "title": "Integrate vendor temporal upscaling after input validation",
-      "body": "<!-- lo-project:vendor-temporal-upscaling -->\n\nDLSS/FSR/XeSS 等时间超分需先满足真实渲染输入与质量门槛。\n\n## Scope and completion criteria\n\n- [ ] 核实 SDK 版本、硬件、平台与分发条件\n- [ ] 共享正确 scene color、depth、motion、jitter、exposure、尺寸、fence 和 reset 合约\n- [ ] 与现有 TAA 作为替代选项，避免重复时间重建\n- [ ] 提供明确质量档、回退和失败诊断\n\n## Validation and acceptance\n\n先通过真实运动/遮挡/切场景输入验证，再运行固定场景画质与性能 A/B。\n\n尚未完成所列场景验收；实现/发布/测试与用户验收独立。\n\nDependencies (source keys): `native-object-motion`, `temporal-color-exposure`, `taa-motion-quality`.\n\nstage_detail: Not started\n\n## Sources\n\n- [docs/STATUS.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/STATUS.md) (repository reference; working-tree requirements may be newer)\n- [docs/notes/temporal-upscaling-feasibility.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/notes/temporal-upscaling-feasibility.md) (repository reference; working-tree requirements may be newer)\n",
+      "body": "<!-- lo-project:vendor-temporal-upscaling -->\n\nDLSS/FSR/XeSS 等时间超分需先满足真实渲染输入与质量门槛。\n\n## Scope and completion criteria\n\n- [ ] 核实 SDK 版本、硬件、平台与分发条件\n- [ ] 共享正确 scene color、depth、motion、jitter、exposure、尺寸、fence 和 reset 合约\n- [ ] 与现有 TAA 作为替代选项，避免重复时间重建\n- [ ] 提供明确质量档、回退和失败诊断\n\n## Current — 2026-09-20\n\nUser requested `dlss` branch implementing native Vulkan NGX DLSS Super Resolution (P0–P3 of handoff, P4 FG deferred). P0 native Vulkan bridge and official NGX capability probe locally implemented on Windows (RTX 5080, driver 616.56, pinned SDK 310.9.1); probe and SDK-off/on builds passed. Gate 1 review PASSED at attempt 3. P1 temporal input contract and resolution decoupling next. No SR actual Create/Evaluate, game acceptance, or Linux verification.\n\n## Validation and acceptance\n\n先通过真实运动/遮挡/切场景输入验证，再运行固定场景画质与性能 A/B。\n\n尚未完成所列场景验收；实现/发布/测试与用户验收独立。\n\nDependencies (source keys): `native-object-motion`, `temporal-color-exposure`, `taa-motion-quality`.\n\nstage_detail: In progress; P0 gate passed, P1 next\n\n## Sources\n\n- [docs/STATUS.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/STATUS.md) (repository reference; working-tree requirements may be newer)\n- [docs/notes/temporal-upscaling-feasibility.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/notes/temporal-upscaling-feasibility.md) (repository reference; working-tree requirements may be newer)\n- `docs/notes/native-dlss-validation.md` (forthcoming validation record)\n",
       "issue_url": null,
       "fields": {
         "Kind": "Feature",
         "Area": "Temporal rendering",
-        "Status": "Todo",
-        "Delivery": "Not started",
+        "Status": "In Progress",
+        "Delivery": "In progress",
         "Release": null,
-        "Start date": null,
+        "Start date": "2026-09-20",
         "Target date": null
       },
       "source_refs": [

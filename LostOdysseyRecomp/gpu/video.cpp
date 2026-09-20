@@ -3,6 +3,7 @@
 #include "video.h"
 #if defined(LO_GPU_PLUME)
 #include "backend_device.h"
+#include "dlss_ngx.h"
 #endif
 #include "renderer.h"
 #include "presentation.h"
@@ -13,6 +14,7 @@
 #include <kernel/memory.h>
 #include <os/logger.h>
 #include <os/shader_log.h>
+#include <os/user_paths.h>
 #include <hid/hid.h>
 #include <debug/battle_menu.h>
 #include <debug/menu_overlay.h>
@@ -201,6 +203,9 @@ namespace gpu::video
         uint32_t g_frontbufferPhysical = 0;
 
 #ifdef LO_GPU_PLUME
+        // This outlives g_interface because Plume retains the copied hook
+        // userdata until VulkanInterface destruction.
+        std::unique_ptr<dlss::Controller> g_dlssController;
         std::unique_ptr<plume::RenderInterface> g_interface;
         std::unique_ptr<plume::RenderDevice> g_device;
         std::unique_ptr<plume::RenderCommandQueue> g_queue;
@@ -230,6 +235,32 @@ namespace gpu::video
         } g_presentationDisplay;
         constexpr plume::RenderFormat kSwapChainFormat = plume::RenderFormat::R8G8B8A8_UNORM;
         constexpr uint32_t kSwapChainBuffers = 3;
+
+        std::filesystem::path DlssApplicationDataPath()
+        {
+            return os::user_paths::UsePortableLayout() ? std::filesystem::path("cache") / "ngx"
+                : os::user_paths::DataDir() / "cache" / "ngx";
+        }
+
+        std::filesystem::path DlssRuntimePath()
+        {
+            const char* override = std::getenv("LO_DLSS_RUNTIME_PATH");
+            return override && *override ? std::filesystem::path(override) : std::filesystem::current_path();
+        }
+
+        void LogDlssProbe(const dlss::ProbeReport& report)
+        {
+            LOG_INFO("DLSS P0: state={} reason='{}' sdk={} runtime='{}' device='{}' vendor={:#x} device_id={:#x} driver={} driver_raw={:#x} sr_flags={} sr_implemented={} sr_evaluated={} fg=not_probed/not_implemented",
+                dlss::ProbeStateName(report.state), report.reason, report.sdkVersion, report.runtimePath,
+                report.deviceName, report.vendorId, report.deviceId, report.driverVersionText, report.driverVersion,
+                report.featureSupport.value_or(UINT32_MAX), report.srImplemented, report.srEvaluated);
+            for (const auto& call : report.calls)
+                LOG_INFO("DLSS P0: {} raw={}", call.name, call.result);
+            for (const auto& optimal : report.optimalSettings)
+                LOG_INFO("DLSS P0: {} optimal={}x{} min={}x{} max={}x{} sharpness={} raw={}", optimal.quality,
+                    optimal.optimalWidth, optimal.optimalHeight, optimal.minWidth, optimal.minHeight,
+                    optimal.maxWidth, optimal.maxHeight, optimal.sharpness, optimal.result.value_or(0));
+        }
 
         void WaitForPresentGpuImpl()
         {
@@ -365,6 +396,7 @@ namespace gpu::video
         g_releaseSemaphore.reset(); g_acquireSemaphore.reset();
         g_fence.reset(); g_commandList.reset(); g_queue.reset();
         g_device.reset(); g_interface.reset();
+        g_dlssController.reset();
         g_hasPresentedImage = false; g_lastPresentedImage = 0; g_forceSwapResize = false;
         g_presentationDisplay = {};
 #endif
@@ -487,9 +519,16 @@ namespace gpu::video
             g_initializing = true;
             LOG_INFO("video: trying {}", backend::Name(candidate));
 #ifdef _WIN32
-            g_interface = g_vulkan ? plume::CreateVulkanInterface() : plume::CreateD3D12Interface();
+            if (g_vulkan) {
+                g_dlssController = std::make_unique<dlss::Controller>(DlssApplicationDataPath(), DlssRuntimePath());
+                g_interface = plume::CreateVulkanInterface(g_dlssController->ExtensionHooks());
+            } else {
+                g_dlssController.reset();
+                g_interface = plume::CreateD3D12Interface();
+            }
 #else
-            g_interface = plume::CreateVulkanInterface(g_window);
+            g_dlssController = std::make_unique<dlss::Controller>(DlssApplicationDataPath(), DlssRuntimePath());
+            g_interface = plume::CreateVulkanInterface(g_window, g_dlssController->ExtensionHooks());
 #endif
             if (!g_interface) return "API/loader initialization failed";
             g_device = g_interface->createDevice();
@@ -500,6 +539,11 @@ namespace gpu::video
                     uint32_t(description.vendor), uint32_t(description.type), description.dedicatedVideoMemory);
             }
             if (const auto missing = backend::Missing(candidate, backend::Inspect(candidate, g_device.get())); !missing.empty()) return missing;
+            if (g_vulkan && g_dlssController) {
+                g_dlssController->ProbeOnce(*static_cast<plume::VulkanInterface*>(g_interface.get()),
+                    *static_cast<plume::VulkanDevice*>(g_device.get()));
+                LogDlssProbe(g_dlssController->Report());
+            }
             g_queue = g_device->createCommandQueue(plume::RenderCommandListType::DIRECT);
             if (!g_queue) return "graphics queue creation failed";
             g_commandList = g_queue->createCommandList();

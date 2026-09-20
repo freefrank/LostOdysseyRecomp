@@ -163,6 +163,7 @@ if(LO_BUILD_GPU)
     if(WIN32)
         target_link_libraries(LostOdysseyRecomp PRIVATE d3d12 dxgi)
     endif()
+    lo_enable_dlss(LostOdysseyRecomp)
 endif()
 
 if(WIN32)

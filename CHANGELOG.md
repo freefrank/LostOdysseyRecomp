@@ -8,7 +8,21 @@ One record of completed changes, with unpublished work separated from verified r
 
 ### English
 
+- Implemented P0 foundation for native NVIDIA DLSS Super Resolution (SR) on the development branch:
+  - Added optional build support for pinned official NVIDIA DLSS SDK `310.9.1` (`374959484e79a640feaba44c93ac8cfb0a03f5b5`) using static CRT bootstrap libraries on Windows and static library on Linux.
+  - Implemented Plume Vulkan bridge extension hooks and external command boundaries (`VulkanExtensionHooks`, `VulkanExtensionStatus`, `beginExternalCommands`, and `endExternalCommands`).
+  - Added standalone and integrated capability probes (`LoNativeDlssProbe`, `LoNativeDlssReportTest`) verifying NGX feature discovery, Vulkan instance/device extension negotiation, capability parameters, and optimal input resolution queries.
+  - P0 validation gate passed on local hardware (NVIDIA RTX 5080, driver 616.56, reporting optimal inputs for 1080p: Quality 1280×720, Balanced 1114×626, Performance 960×540). Controlled injection of missing runtime DLL verified expected standalone negative probe exit (exit 1).
+  - Frame Generation (FG) remains deferred, and Super Resolution evaluation (`NGX_VULKAN_EVALUATE_DLSS_EXT`) and game output integration are not yet implemented (P1/P2). Proprietary licensing for SDK-on binary distribution remains unresolved, and no binary packages are released.
+
 ### 简体中文
+
+- 在开发分支实现原生 NVIDIA DLSS 超分辨率（SR）P0 基础设施：
+  - 增加对固定版本 NVIDIA 官方 DLSS SDK `310.9.1`（commit `374959484e79a640feaba44c93ac8cfb0a03f5b5`）的可选构建支持，Windows 采用静态 CRT 引导库，Linux 采用静态库。
+  - 实现 Plume Vulkan 桥接扩展钩子与外部命令流边界（`VulkanExtensionHooks`、`VulkanExtensionStatus`、`beginExternalCommands` 与 `endExternalCommands`）。
+  - 新增独立与集成能力探测程序（`LoNativeDlssProbe`、`LoNativeDlssReportTest`），验证 NGX 特征发现、Vulkan 实例与设备扩展协商、能力参数读取及推荐输入分辨率查询。
+  - P0 验证门禁在本地设备通过（RTX 5080，驱动 616.56，1080p 目标下查询到 Quality 1280×720、Balanced 1114×626、Performance 960×540）。受控注入缺失运行库测试确认了独立探测程序的预期负向退出（exit 1）。
+  - 帧生成（FG）保持暂缓，SR 执行求值（`NGX_VULKAN_EVALUATE_DLSS_EXT`）与游戏渲染链输出接回尚未实现（属于 P1/P2 阶段）。包含 SDK 的二进制分发许可尚待确定，不发布二进制包。
 
 ## v0.6.7 — 2026-09-20
 

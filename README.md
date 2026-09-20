@@ -167,7 +167,7 @@ Rumble is disabled by default; `LO_CONTROLLER_RUMBLE=1` enables it. For Ring act
 | `thirdparty/` | Rendering, audio and other dependencies |
 | `docs/` | Current status, guides, research and historical archives |
 
-[Roadmap](docs/ROADMAP.md) · [Handoff](docs/notes/handoff.md) · [Rendering tests](docs/notes/rendering-validation.md) · [TAA live debug](docs/TAA_LIVE_DEBUG.md) · [Audio](docs/notes/audio-output.md) · [Archive](docs/archive/README.md)
+[Roadmap](docs/ROADMAP.md) · [Handoff](docs/notes/handoff.md) · [Native DLSS validation](docs/notes/native-dlss-validation.md) · [Rendering tests](docs/notes/rendering-validation.md) · [TAA live debug](docs/TAA_LIVE_DEBUG.md) · [Audio](docs/notes/audio-output.md) · [Archive](docs/archive/README.md)
 
 </details>
 

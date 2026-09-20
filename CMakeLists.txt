@@ -22,6 +22,7 @@ endif()
 # architecture repeats the sandybridge baseline above (benign duplicate flag);
 # an explicit LO_TARGET_ARCH comes later on the command line and wins.
 include(cmake/LoOptimization.cmake)
+include(cmake/LoDlss.cmake)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 # 阶段 1 之前这里只是占位。生成 ppc/ 之后再按 UnleashedRecomp 的
@@ -56,6 +57,9 @@ if(LO_BUILD_RUNTIME)
     endif()
     add_subdirectory(thirdparty)
     add_subdirectory(LostOdysseyRecomp)
+    if(LO_BUILD_GPU)
+        add_subdirectory(tools/tests/native_dlss)
+    endif()
     if(TARGET LoPpcAutoSync)
         add_dependencies(LostOdysseyRecomp LoPpcAutoSync)
     endif()
