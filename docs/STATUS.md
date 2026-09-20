@@ -1,5 +1,45 @@
 # Project status
 
+## v0.6.7 release candidate preparation (awaiting Release CI) / v0.6.7 发布准备（等待 Release CI）
+
+Target version v0.6.7 packages the in-game Graphics menu Widescreen switch and expanded 21:9 resolution presets (resolving Issue #17).
+
+A Widescreen toggle switch is added to the Graphics settings menu (`tab == 2`, row 2), directly above Output resolution (`row 3`). The switch categorizes Output resolution presets into two aspect-ratio groups:
+- **Widescreen Off (16:9)**: 1280×720, 1600×900, 1920×1080, 2560×1440, and 3840×2160.
+- **Widescreen On (21:9)**: 1720×720, 2560×1080, 3440×1440, 3840×1600, and 5120×2160.
+
+The toggle state is inferred directly from the current configured width and height (`width * 9 > height * 16`), requiring no new INI keys. Existing configurations at 3440×1440 automatically show Widescreen On and index into the 21:9 list. When toggling the switch between 16:9 and 21:9, `FindNearestResolutionIndex` selects the closest preset by vertical height; for equidistant heights (such as 900p between 720p and 1080p), the higher tier is chosen. Selecting Save graphics settings persists the choice and transitions through the display-change state machine; cancelling or navigating back without saving discards changes and keeps the existing configuration. The first-run setup resolution list in `first_run.cpp` is synchronized to include matching presets, and strings and help text have been added for 5 languages (English, Japanese, Korean, Traditional Chinese, Simplified Chinese).
+
+Validation & acceptance status:
+- Unit test `menu_flow_test` verifies initial 3440×1440 auto-derivation, all 5 ultrawide resolution steps cycling in sequence, height preservation when returning to 16:9 (e.g. 2160p maintained), cancel discard, menu reopen state restoration, and Save display change completion.
+- Render test `menu_render_test` verified 10-row layout rendering and output snapshot `out/snapshots/menu_1280x720_21_9.png`.
+- Incremental runtime compilation passes.
+- In manual runtime testing with the latest build, the user explicitly verified the menu and display change behavior, confirmed functionality is working as expected, and authorized closing Issue #17.
+
+Validation boundary & limits:
+- Packages are prepared for release; publication on GitHub Releases is pending completion of Release CI.
+- Ultrawide support remains experimental across diverse hardware and aspect ratio combinations, without claiming exhaustive testing across all possible GPUs and resolutions.
+
+v0.6.7 发布准备（等待 Release CI）：
+
+目标版本 v0.6.7 包含游戏内图形设置“宽屏”开关及扩充的 21:9 分辨率预设（解决 Issue #17）。
+
+在“设置” -> “图形”中，“输出分辨率”上方新增宽屏切换开关。
+- **宽屏关（16:9）**：1280×720、1600×900、1920×1080、2560×1440 与 3840×2160。
+- **宽屏开（21:9）**：1720×720、2560×1080、3440×1440、3840×1600 与 5120×2160。
+
+开关状态直接由当前配置的宽高推导，不增加额外 INI 字段；原有 3440×1440 配置自动识别为宽屏开。切换比例时按高度差最近匹配目标档位（等距选较高档位，如 900p 转 1080p）。保存应用新分辨率并写入磁盘，取消不改动配置。首次启动列表同步包含对应预设，已适配英、日、韩、繁中、简中五语言。
+
+验证与验收状态：
+- `menu_flow_test` 验证了 3440×1440 自动推导、五档循环、返回 16:9 保留 2160 高度、取消不保存及 Save 状态机。
+- `menu_render_test` 离线渲染快照 `out/snapshots/menu_1280x720_21_9.png` 验证 10 行菜单布局。
+- 主程序增量构建通过。
+- 用户在最新构建上实机测试，明确确认功能正常并授权关闭 Issue #17。
+
+边界与说明：
+- 当前处于待 CI 构建与发布的准备状态，尚未在 GitHub Releases 发布完成。
+- 超宽屏在多样化硬件与多分辨率组合下仍保持实验性，不虚构所有 GPU 与分辨率的全流程穷尽验证。
+
 ## v0.6.6 published & reissued / v0.6.6 已发布与同版本重新发布
 
 v0.6.6 was initially published on 2026-09-20T08:10:24Z from tag/source commit

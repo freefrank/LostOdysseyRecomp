@@ -94,7 +94,7 @@ See the [installation guide](docs/INSTALLING.md) for accepted disc versions, fil
 | Game importer | Folder, XEX, ISO and GOD input; originals stay untouched, and staged copies check final writes before publication |
 | First-launch setup | Language and graphics settings before game initialization |
 | Language settings | English, Japanese, Korean, Traditional and Simplified Chinese interface options; game language selection |
-| Graphics settings | Auto/manual internal resolution up to 4K, Off/FXAA/SMAA/experimental TAA, Standard/High filtering, 30/60 FPS and output/display controls; fullscreen and mixed DPI need more testing |
+| Graphics settings | Auto/manual internal resolution up to 4K, 16:9 / 21:9 resolution presets with Widescreen toggle, Off/FXAA/SMAA/experimental TAA, Standard/High filtering, 30/60 FPS and output/display controls; fullscreen and mixed DPI need more testing |
 | Settings menu | Original game fonts and menu styling; one-click Graphics save/apply and Now/Later restart choices |
 | Shader preparation | Bundled portable Vulkan shader pack (.lospv), memory-adaptive parallel compilation, interactive skip, and cache reuse |
 | CPU use | Reduced unnecessary polling and reuse of rendering work |

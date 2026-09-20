@@ -5,11 +5,25 @@
 #include <settings/config.h>
 #include <fstream>
 #include <stdexcept>
-namespace gpu::video { plume::RenderDevice* MenuFlowTestDevice(); }
+namespace gpu::video {
+plume::RenderDevice* MenuFlowTestDevice();
+inline bool WindowModeOverridden() { return false; }
+inline std::optional<gpu::backend::Backend> SelectedBackend() { return gpu::backend::Backend::D3D12; }
+}
+#include <kernel/io/file_system.h>
+inline std::filesystem::path FileSystem::GetGameRoot() { return {}; }
+namespace gpu::taa_collection {
+inline const wchar_t* Label(uint32_t) { return L"Collection"; }
+inline const wchar_t* Message(uint32_t) { return L"Message"; }
+inline bool Enabled() { return false; }
+inline int Consent() { return 0; }
+inline bool SetConsent(bool) { return true; }
+}
 namespace settings {
 Config MenuFlowGetConfig();
 bool MenuFlowSaveConfig(const Config&);
 void MenuFlowPreviewConfig(const Config&);
+inline uint32_t GameLanguage() { return 1; }
 }
 namespace gpu::video {
 uint64_t MenuFlowBeginDisplayChange(const settings::Config&);
@@ -184,7 +198,7 @@ int main(int argc, char** argv)
             Require(settings::active && closes == oldCloses + 1, "same address reopens without duplicate close");
         }
         // Existing brightness handoff must return to this same replacement.
-        settings::tab = 2; settings::row = 7;
+        settings::tab = 2; settings::row = 8;
         PPC_STORE_U32(Menu + 0x558 + 0x84, 0x22000);
         PPC_STORE_U32(0x22000 + 4, 12);
         settings::pending = 0x3000; Tick(base);
@@ -206,7 +220,7 @@ int main(int argc, char** argv)
         Require(ticks == oldTicks + 1, "no-device retail fallback retained");
         std::puts("PASS actual menu hook: edit/apply, close order/context, native completion, held-key gate, swapped buttons, reopen, calibration return, no-device fallback");
         deviceReady = true;
-        settings::tab = 2; settings::row = 8;
+        settings::tab = 2; settings::row = 9;
         settings::edit = currentConfig;
         const auto original = currentConfig;
         settings::edit.width = original.width + 160;
@@ -283,6 +297,120 @@ int main(int argc, char** argv)
         Require(displayChanges.Query(invalidated) == gpu::video::DisplayChangeResult::Failed && !displayChanges.PresentationTicket(),
                 "reset invalidates pending and late presentation results");
         std::puts("PASS actual Graphics Save: write failure, one click/apply acknowledgment, rollback and disk error, same-mode retry, stale completion, Now/Later, reset invalidation");
+
+        // Widescreen workflow verification:
+        // 1. Initial 3440x1440 configuration: widescreen switch derives ON, selects 3440x1440 in 21:9 list
+        {
+            currentConfig.width = 3440;
+            currentConfig.height = 1440;
+            diskConfig = currentConfig;
+            settings::edit = currentConfig;
+            settings::tab = 2;
+            settings::row = 2;
+            settings::Publish(base, ConfigData);
+            Require(settings::snapshot.rows.size() == 10, "graphics tab has 10 rows");
+            const auto& wsRow = settings::snapshot.rows[2];
+            Require(wsRow.name == L"Widescreen" && wsRow.value == L"On" && wsRow.selectedChoice == 0,
+                    "initial 3440x1440 automatically enables Widescreen switch");
+            const auto& resRow = settings::snapshot.rows[3];
+            Require(resRow.name == L"Output resolution", "row 3 is Output resolution");
+            Require(resRow.choices.size() == 5, "21:9 resolution choices count is 5");
+            Require(resRow.choices[0] == L"1720 × 720" && resRow.choices[1] == L"2560 × 1080" &&
+                    resRow.choices[2] == L"3440 × 1440" && resRow.choices[3] == L"3840 × 1600" &&
+                    resRow.choices[4] == L"5120 × 2160", "21:9 resolution choices match specification");
+            Require(resRow.selectedChoice == 2 && resRow.value == L"3440 × 1440",
+                    "3440x1440 selected in 21:9 output choices");
+        }
+
+        // 2. Start from 16:9 1280x720, toggle switch ON -> 1720x720, cycle all 5 ultrawide tiers including 5120x2160
+        {
+            currentConfig.width = 1280;
+            currentConfig.height = 720;
+            diskConfig = currentConfig;
+            settings::edit = currentConfig;
+            settings::tab = 2;
+            settings::row = 2;
+            settings::Publish(base, ConfigData);
+            Require(settings::snapshot.rows[2].value == L"Off", "1280x720 starts with Widescreen Off");
+            Require(settings::snapshot.rows[3].choices.size() == 5 &&
+                    settings::snapshot.rows[3].choices[0] == L"1280 × 720" &&
+                    settings::snapshot.rows[3].choices[4] == L"3840 × 2160",
+                    "16:9 resolution choices present");
+
+            // Toggle switch ON (delta +1)
+            settings::pending = 0x1008; Tick(base);
+            Require(settings::edit.width == 1720 && settings::edit.height == 720,
+                    "toggle ON from 1280x720 maps to 1720x720");
+            Require(settings::snapshot.rows[2].value == L"On", "Widescreen switch is now On");
+            Require(settings::snapshot.rows[3].selectedChoice == 0 &&
+                    settings::snapshot.rows[3].value == L"1720 × 720", "1720x720 selected");
+
+            // Move to row 3 (resolution) and cycle forward through all 5 ultrawide tiers
+            settings::row = 3;
+            constexpr uint32_t expected21_9[][2] = {
+                {2560, 1080}, {3440, 1440}, {3840, 1600}, {5120, 2160}, {1720, 720}};
+            for (size_t i = 0; i < 5; ++i)
+            {
+                settings::pending = 0x1008; Tick(base); // Right arrow / Confirm
+                Require(settings::edit.width == expected21_9[i][0] && settings::edit.height == expected21_9[i][1],
+                        "cycle 21:9 resolution matches expected tier");
+            }
+            Require(settings::edit.width == 1720 && settings::edit.height == 720, "cycled back to 1720x720");
+
+            // Direct step to 5120x2160
+            settings::edit.width = 5120;
+            settings::edit.height = 2160;
+            settings::Publish(base, ConfigData);
+            Require(settings::snapshot.rows[3].selectedChoice == 4 &&
+                    settings::snapshot.rows[3].value == L"5120 × 2160", "5120x2160 tier verified");
+
+            // Switch back to 16:9 on row 2: height 2160 preserves height and maps to 3840x2160
+            settings::row = 2;
+            settings::pending = 0x1008; Tick(base);
+            Require(settings::edit.width == 3840 && settings::edit.height == 2160,
+                    "switch to 16:9 preserves 2160 height mapping to 3840x2160");
+            Require(settings::snapshot.rows[2].value == L"Off", "switch is now Off");
+            Require(settings::snapshot.rows[3].choices[4] == L"3840 × 2160", "16:9 4K selected");
+
+            // Cancel / exit without saving: disk remains untouched at initial 1280x720
+            const auto oldSaves = saves;
+            const unsigned oldCloses = closes;
+            settings::pending = 0x2000; Tick(base); // Back button to close menu
+            Require(closes == oldCloses + 1, "close called on Back");
+            Require(saves == oldSaves, "cancel does not write to disk");
+            Require(diskConfig.width == 1280 && diskConfig.height == 720, "disk config unchanged on cancel");
+
+            // Native tick completes the close
+            Tick(base);
+            Require(!settings::closing && PPC_LOAD_U32(Menu + 4) == 1, "native tick completes close");
+            settings::releaseToParent = false;
+            settings::waitForRelease = false;
+
+            // Reopen menu: edit restores cleanly from GetConfig()
+            PPC_STORE_U32(Menu + 4, 4); Tick(base); Poll(0, true);
+            Require(settings::edit.width == 1280 && settings::edit.height == 720,
+                    "reopening restores saved config without unapplied preview changes");
+
+            // Switch to 3440x1440 and Save on row 9: goes through display change state machine
+            settings::tab = 2;
+            settings::row = 2;
+            settings::pending = 0x1008; Tick(base); // Switch ON -> 1720x720
+            settings::row = 3;
+            settings::pending = 0x1008; Tick(base); // 2560x1080
+            settings::pending = 0x1008; Tick(base); // 3440x1440
+            Require(settings::edit.width == 3440 && settings::edit.height == 1440, "selected 3440x1440");
+            settings::row = 9; // Save graphics settings
+            settings::pending = 0x1000; Tick(base);
+            Require(saves == oldSaves + 1 && diskConfig.width == 3440 && diskConfig.height == 1440,
+                    "Save persists 3440x1440 to disk config");
+            auto saveTicket = settings::displayTicket;
+            Require(saveTicket != 0, "Save triggers BeginDisplayChange ticket");
+            displayChanges.WindowComplete(saveTicket, true);
+            displayChanges.Complete(saveTicket, true); Tick(base);
+            Require(!settings::displayTicket, "display state machine completed successfully for 3440x1440");
+            Require(settings::status == L"Display settings saved.", "status shows display saved");
+        }
+        std::puts("PASS Widescreen workflow: 3440x1440 auto-derive, 5 ultrawide tiers cycle incl 5120x2160, height-preserved 16:9 switch, cancel discard, Save state machine");
         if (argc == 3)
         {
             settings::status.clear();
@@ -290,15 +418,15 @@ int main(int argc, char** argv)
             auto assets = settings::menu_assets::Cached(argv[1], 4);
             Require(bool(assets), "installed SCH assets");
             std::filesystem::create_directories(argv[2]);
-            for (int selected : {4, 6})
+            for (int selected : {5, 7})
             {
                 settings::row = selected; settings::Publish(base, ConfigData);
                 auto preview = settings::snapshot; preview.assets = assets;
-                for (int label : {4, 6, 8})
+                for (int label : {5, 7, 9})
                     Require(covers(assets->body, preview.rows[label].name), "changed label must use original body face");
                 std::vector<uint32_t> pixels;
                 Require(settings::RasterizeMenu(preview, 1280, 720, pixels), "translated Graphics preview");
-                WriteBmp(std::filesystem::path(argv[2]) / (selected == 4 ? "graphics-aa.bmp" : "graphics-rate.bmp"), pixels);
+                WriteBmp(std::filesystem::path(argv[2]) / (selected == 5 ? "graphics-aa.bmp" : "graphics-rate.bmp"), pixels);
             }
             std::puts("PASS two Graphics previews from actual Publish/Translate, normal and selected changed labels");
         }

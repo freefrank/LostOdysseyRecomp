@@ -71,7 +71,8 @@ struct Setup
     std::filesystem::path selectedRoot;
     std::filesystem::path *outputRoot = nullptr;
     std::vector<std::pair<uint32_t, uint32_t>> resolutions{
-        {1280, 720}, {1600, 900}, {1920, 1080}, {2560, 1080}, {2560, 1440}, {3440, 1440}, {3840, 2160}};
+        {1280, 720}, {1600, 900}, {1920, 1080}, {2560, 1440}, {3840, 2160},
+        {1720, 720}, {2560, 1080}, {3440, 1440}, {3840, 1600}, {5120, 2160}};
 
     int px(int value) const { return desktop_ui::Px(window, value); }
 

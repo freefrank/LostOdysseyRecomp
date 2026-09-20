@@ -628,6 +628,16 @@ if(WIN32)
     target_compile_options(LoMenuRenderTest PRIVATE /utf-8)
     target_compile_definitions(LoMenuRenderTest PRIVATE NOMINMAX LO_MENU_RENDER_TRACE)
     target_link_libraries(LoMenuRenderTest PRIVATE user32 gdi32 lo_menu_lzo)
+
+    add_executable(LoMenuFlowTest EXCLUDE_FROM_ALL
+        ${CMAKE_SOURCE_DIR}/tools/tests/menu_flow_test.cpp
+        ${LO_RUNTIME_ROOT}/settings/menu_assets.cpp
+        ${LO_RUNTIME_ROOT}/settings/menu_render.cpp)
+    target_include_directories(LoMenuFlowTest PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,INCLUDE_DIRECTORIES>)
+    target_compile_features(LoMenuFlowTest PRIVATE cxx_std_20)
+    target_compile_options(LoMenuFlowTest PRIVATE /utf-8)
+    target_compile_definitions(LoMenuFlowTest PRIVATE NOMINMAX LO_GPU_PLUME)
+    target_link_libraries(LoMenuFlowTest PRIVATE user32 gdi32 lo_menu_lzo fmt::fmt)
 endif()
 
 if(LO_BUILD_GPU)

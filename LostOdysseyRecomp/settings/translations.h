@@ -17,6 +17,11 @@ static inline const wchar_t *Translate(uint32_t language, const wchar_t *en, con
     };
     static constexpr Entry entries[] = {
         {L"Save graphics settings", L"画面設定を保存", L"그래픽 설정 저장", L"保存图形设置"},
+        {L"Widescreen", L"ワイドスクリーン", L"와이드스크린", L"宽屏"},
+        {L"Switches resolution choices between 16:9 and 21:9 ultrawide.",
+         L"解像度の選択肢を 16:9 と 21:9 ウルトラワイドで切り替えます。",
+         L"해상도 선택 항목을 16:9와 21:9 울트라와이드 간에 전환합니다.",
+         L"在 16:9 与 21:9 宽屏规格之间切换分辨率选项。"},
         {L"Settings saved. Restart now?", L"設定を保存しました。今すぐ再起動しますか？", L"설정이 저장되었습니다. 지금 다시 시작할까요?", L"设置已保存。现在重启？"},
         {L"Applying display settings…", L"表示設定を適用中…", L"디스플레이 설정 적용 중…", L"正在应用显示设置……"},
         {L"Restoring display settings…", L"表示設定を復元中…", L"디스플레이 설정 복원 중…", L"正在恢复显示设置……"},

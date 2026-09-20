@@ -18,20 +18,21 @@ int main(int argc, char **argv)
     settings::MenuSnapshot snapshot;
     snapshot.tab = 2;
     snapshot.language = 4;
-    snapshot.row = 4;
+    snapshot.row = 3;
     snapshot.rows = {
         {L"图形后端", L"Vulkan", true, {L"Direct3D 12", L"Vulkan"}, 1},
         {L"显示模式", L"无边框全屏", true, {L"窗口", L"无边框全屏", L"独占全屏"}, 1},
-        {L"输出分辨率", L"3840 × 2160", true,
-         {L"1280 × 720", L"1600 × 900", L"1920 × 1080", L"2560 × 1440", L"3840 × 2160"}, 4},
+        {L"宽屏", L"开", true, {L"开", L"关"}, 0},
+        {L"输出分辨率", L"3440 × 1440", true,
+         {L"1720 × 720", L"2560 × 1080", L"3440 × 1440", L"3840 × 1600", L"5120 × 2160"}, 2},
         {L"内部分辨率", L"自动（跟随输出）", true,
-         {L"自动（跟随输出）", L"1280 × 720", L"1920 × 1080", L"2560 × 1440", L"3840 × 2160"}, 0},
-        {L"抗锯齿", L"SMAA", true, {L"关", L"FXAA", L"SMAA", L"TAA（实验性）"}, 2},
+         {L"自动（跟随输出）", L"720p", L"1080p", L"1440p", L"2160p"}, 0},
+        {L"抗锯齿", L"TAA（实验性）", true, {L"关", L"FXAA", L"SMAA", L"TAA（实验性）"}, 3},
         {L"缩放质量", L"高", true, {L"标准", L"高"}, 1},
         {L"帧率", L"60 FPS（实验性）", true,
          {L"30 FPS", L"60 FPS（实验性）", L"120 FPS（实验性）"}, 1},
         {L"亮度校准", L"打开", true, {L"打开"}, 0},
-        {L"应用显示设置", L"应用", true, {L"应用"}, 0}};
+        {L"保存图形设置", L"保存", true, {L"保存"}, 0}};
     snapshot.help = L"LB / RB：分类    方向键：选择 / 调整    A：确认    B：返回";
     if (argc > 2)
     {
@@ -102,26 +103,21 @@ int main(int argc, char **argv)
             return (p&255)>210 && ((p>>8)&255)>210 && ((p>>16)&255)>210;
         });
         Require(brightPixels > 100, "missing outlined light glyphs");
-        if (argc > 1 && w == 1280 && h == 720)
+        if (argc > 1)
         {
             std::filesystem::create_directories(argv[1]);
-            std::ofstream f(std::filesystem::path(argv[1]) / "first-frame.ppm", std::ios::binary);
+            std::ofstream f(std::filesystem::path(argv[1]) / (std::to_string(w) + "x" + std::to_string(h) + ".ppm"), std::ios::binary);
             f << "P6\n" << w << " " << h << "\n255\n";
             for (auto p : pixels) { const char rgb[] = {char(p), char(p >> 8), char(p >> 16)}; f.write(rgb, 3); }
         }
         if (w == 1280 && h == 720)
         {
             const auto luminance=[](uint32_t p){ return int(p&255)+int((p>>8)&255)+int((p>>16)&255); };
-            Require(luminance(pixels[340*1280+250]) > 500, "selected label bevel missing");
-            Require(luminance(pixels[340*1280+730]) > 500, "selected option bevel missing");
-            Require(luminance(pixels[340*1280+575]) < 500, "unselected option was highlighted");
+            const int selectedY = 150 + snapshot.row * 43;
+            Require(luminance(pixels[(selectedY + 18) * 1280 + 250]) > 500, "selected label bevel missing");
+            Require(luminance(pixels[(selectedY + 18) * 1280 + 700]) > 500, "selected option bevel missing");
+            Require(luminance(pixels[(selectedY + 18) * 1280 + 440]) < 500, "unselected option was highlighted");
             Require(pixels[640*1280+10] != 0xff000000u, "brushed-metal footer missing");
-        }
-        if (argc>1) {
-            std::filesystem::create_directories(argv[1]);
-            std::ofstream f(std::filesystem::path(argv[1])/(std::to_string(w)+"x"+std::to_string(h)+".ppm"),std::ios::binary);
-            f<<"P6\n"<<w<<" "<<h<<"\n255\n";
-            for(auto p:pixels) { const char rgb[]={char(p),char(p>>8),char(p>>16)};f.write(rgb,3); }
         }
         std::printf("original-style menu %ux%u: opaque, choice mapping, aspect fit passed\n",w,h);
     }

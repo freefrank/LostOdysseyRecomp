@@ -425,7 +425,7 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
     for (size_t index = 0; index < current.rows.size(); ++index)
     {
         const int y = rowTop + int(index) * rowHeight;
-        if (y + rowHeight > 580) break;
+        if (y + rowHeight > 640) break;
         const auto &row = current.rows[index];
         const bool focused = int(index) == current.row;
 

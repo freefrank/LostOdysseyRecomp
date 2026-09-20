@@ -1620,14 +1620,14 @@
       "fields": {
         "Kind": "Feature",
         "Area": "Graphics presentation",
-        "Status": "In Progress",
-        "Delivery": "Implemented",
+        "Status": "Done",
+        "Delivery": "Validated",
         "Source key": "ultrawide-fov-layout",
-        "Evidence": "Initial experimental native Hor+ ultrawide rendering published in v0.6.6 reissued from source c6cbd1f62414a46c00c6312559edcd8d217bc9ee (Release CI 35527543573; 4 assets clobbered and verified HTTP 200, Windows 211105610 hash bed792e5…, Linux 220846584 hash 4c5ac5e5…). Experimental scope currently supports 3440x1440 only. Windows Clang build passed; FramePlan (18 checks), TargetMapping (7 checks), resolution sizing (40 checks) and temporal tests passed. Vulkan startup with 28,482 bundled shaders loaded save in 13.93s; scene-transition screenshots 382/383; actual primary color/depth 3440x1472 padding resolve 3440x1440 verified. Known shadow mapping bug repaired via no-color-write mode 4+5 depth rasterization and cached height correction, verified in runtime builds and accepted by user in tested scenes; unrelated CPU report withdrawn. Full stable gameplay, visual Hor+, HUD, dynamic resize, failure injection and player visual acceptance remain pending; Issue #17 kept open and in progress.",
-        "Release": "v0.6.6"
+        "Evidence": "v0.6.6 reissued native Hor+ 3440x1440 (source c6cbd1f, CI 35527543573, Win ZIP bed792e5, Linux 4c5ac5e5); shadow repair accepted. In-game Graphics Widescreen toggle added above Output resolution (1720x720, 2560x1080, 3440x1440, 3840x1600, 5120x2160; Off reverts to 16:9) with nearest-height mapping (equidistant upper-tier tie), 5 languages, first-run sync, passing menu flow/render tests and 10/10 target build. User tested and accepted latest build, confirmed no issues, and authorized Issue #17 closure for target release v0.6.7 (packaging/CI pending). Exhaustive multi-GPU/scene coverage is not claimed; future regressions track separately.",
+        "Release": "v0.6.7"
       },
       "title": "Support ultrawide output and FOV changes",
-      "body_sha256": "b7de1b27cfbd7e0d5080892fbe47986264be9293d3afff63feecb11401b81cc7"
+      "body_sha256": "211bf571081c0f60b20da977124b48f85883dc9d12be45d808f190277ebf4efc"
     },
     "frame-generation-research": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56e6A",

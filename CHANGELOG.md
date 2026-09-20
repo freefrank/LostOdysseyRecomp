@@ -10,6 +10,32 @@ One record of completed changes, with unpublished work separated from verified r
 
 ### 简体中文
 
+## v0.6.7 — 2026-09-20
+
+### English
+
+- Add in-game Graphics menu Widescreen switch and expanded 21:9 resolution presets (Issue #17):
+  - In Settings -> Graphics, a new **Widescreen** toggle appears immediately above **Output resolution**.
+  - When Widescreen is **Off**, Output resolution offers five standard 16:9 tiers: 1280×720, 1600×900, 1920×1080, 2560×1440, and 3840×2160.
+  - When Widescreen is **On**, Output resolution offers five common 21:9 ultrawide tiers: 1720×720, 2560×1080, 3440×1440, 3840×1600, and 5120×2160.
+  - Toggling aspect ratio maps to the nearest preset by vertical height, choosing the higher tier in equidistant ties (e.g. 900p maps to 1080p).
+  - The switch state is derived dynamically from configured width and height without adding new INI keys; existing 3440×1440 configurations automatically open with Widescreen enabled.
+  - Saving settings applies the chosen resolution and commits it to disk; exiting without saving preserves existing configuration. First-launch setup resolution choices are also updated to include matching presets. Localized terms and help descriptions are provided in English, Japanese, Korean, Traditional Chinese, and Simplified Chinese.
+  - Validation includes `menu_flow_test` covering initial 3440×1440 auto-derivation, 5 ultrawide tiers cycling, height-preserving 2160p toggle back to 16:9, cancel discard, and Save display change state machine; `menu_render_test` layout verification (`out/snapshots/menu_1280x720_21_9.png`); and incremental runtime build verification.
+  - In local runtime testing, the user confirmed functionality is working as expected and authorized closing Issue #17. Ultrawide support remains experimental across diverse hardware and aspect ratio combinations.
+
+### 简体中文
+
+- 游戏内图形设置增加“宽屏”开关并扩充 21:9 分辨率预设（Issue #17）：
+  - 在“设置” -> “图形”中，“输出分辨率”上方新增**宽屏**切换开关。
+  - 宽屏为**关**时，输出分辨率提供 5 档标准 16:9 选项：1280×720、1600×900、1920×1080、2560×1440 与 3840×2160。
+  - 宽屏为**开**时，输出分辨率提供 5 档常见 21:9 超宽屏选项：1720×720、2560×1080、3440×1440、3840×1600 与 5120×2160。
+  - 切换比例时按高度差最近匹配目标档位，等距时选取较高档位（例如 900p 切换至 1080p）。
+  - 开关状态直接由当前配置的宽度与高度推导，不增加额外 INI 字段；原有 3440×1440 配置会自动识别并打开宽屏。
+  - 保存图形设置将应用新分辨率并写入磁盘；取消或返回则不改动配置。首次启动设置向导的分辨率列表中也同步补齐对应预设。已适配英语、日语、韩语、繁体中文与简体中文 5 种语言的词条与提示文案。
+  - 验证覆盖：`menu_flow_test` 验证了初始 3440×1440 自动推导、五档循环、关闭时保留 2160 高度、取消／重开恢复及 Save 显示状态机；`menu_render_test` 离线渲染（`out/snapshots/menu_1280x720_21_9.png`）验证了 10 行菜单布局；主程序增量构建通过。
+  - 在本地构建实机测试中，用户已明确确认功能正常并授权关闭 Issue #17。超宽屏支持在多样化硬件与多分辨率组合下仍保持实验性。
+
 ## v0.6.6 — 2026-09-20
 
 ### English

@@ -47,8 +47,33 @@ bool bypass = false, sawModal = false;
 bool closing = false;
 uint32_t lastMenu = 0;
 std::wstring status;
-constexpr uint32_t resolutions[][2] = {
-    {1280, 720}, {1600, 900}, {1920, 1080}, {2560, 1080}, {2560, 1440}, {3440, 1440}, {3840, 2160}};
+constexpr uint32_t resolutions16_9[][2] = {
+    {1280, 720}, {1600, 900}, {1920, 1080}, {2560, 1440}, {3840, 2160}};
+constexpr uint32_t resolutions21_9[][2] = {
+    {1720, 720}, {2560, 1080}, {3440, 1440}, {3840, 1600}, {5120, 2160}};
+inline bool IsUltrawideAspect(uint32_t width, uint32_t height)
+{
+    return width && height && (uint64_t(width) * 9 > uint64_t(height) * 16);
+}
+inline uint32_t FindNearestResolutionIndex(const uint32_t list[][2], size_t count, uint32_t currentWidth, uint32_t currentHeight)
+{
+    for (size_t i = 0; i < count; ++i)
+        if (list[i][0] == currentWidth && list[i][1] == currentHeight)
+            return uint32_t(i);
+    // Closest match by height; for equidistant heights (such as 900 vs 720/1080), <= chooses the higher option
+    uint32_t bestIndex = 0;
+    uint32_t bestDiff = UINT32_MAX;
+    for (size_t i = 0; i < count; ++i)
+    {
+        uint32_t diff = list[i][1] >= currentHeight ? (list[i][1] - currentHeight) : (currentHeight - list[i][1]);
+        if (diff <= bestDiff)
+        {
+            bestDiff = diff;
+            bestIndex = uint32_t(i);
+        }
+    }
+    return bestIndex;
+}
 constexpr int internalResolutions[] = {0, 720, 1080, 1440, 2160};
 const wchar_t *Tr(const wchar_t *en, const wchar_t *zh)
 {
@@ -149,13 +174,27 @@ void Publish(uint8_t *base, uint32_t config)
                    {Tr(L"Windowed", L"視窗"), Tr(L"Borderless fullscreen", L"無邊框全螢幕"),
                     Tr(L"Exclusive fullscreen", L"獨占全螢幕")},
                    uint32_t(edit.windowMode));
+        const bool ultrawide = IsUltrawideAspect(edit.width, edit.height);
+        addChoices(L"Widescreen", L"寬螢幕", onOff(), ultrawide ? 0 : 1);
         std::vector<std::wstring> outputChoices;
         uint32_t outputChoice = 0;
-        for (uint32_t i = 0; i < std::size(resolutions); ++i)
+        if (ultrawide)
         {
-            outputChoices.push_back(std::to_wstring(resolutions[i][0]) + L" × " +
-                                    std::to_wstring(resolutions[i][1]));
-            if (edit.width == resolutions[i][0] && edit.height == resolutions[i][1]) outputChoice = i;
+            for (uint32_t i = 0; i < std::size(resolutions21_9); ++i)
+            {
+                outputChoices.push_back(std::to_wstring(resolutions21_9[i][0]) + L" × " +
+                                        std::to_wstring(resolutions21_9[i][1]));
+                if (edit.width == resolutions21_9[i][0] && edit.height == resolutions21_9[i][1]) outputChoice = i;
+            }
+        }
+        else
+        {
+            for (uint32_t i = 0; i < std::size(resolutions16_9); ++i)
+            {
+                outputChoices.push_back(std::to_wstring(resolutions16_9[i][0]) + L" × " +
+                                        std::to_wstring(resolutions16_9[i][1]));
+                if (edit.width == resolutions16_9[i][0] && edit.height == resolutions16_9[i][1]) outputChoice = i;
+            }
         }
         addChoices(L"Output resolution", L"輸出解析度", std::move(outputChoices), outputChoice);
         std::vector<std::wstring> internalChoices{Tr(L"Auto (match output)", L"自動（跟隨輸出）")};
@@ -208,18 +247,21 @@ void Publish(uint8_t *base, uint32_t config)
             selected == gpu::backend::Backend::D3D12 ? L"Direct3D 12" : L"-";
     }
     if (tab == 2 && row == 2)
+        next.help = Tr(L"Switches resolution choices between 16:9 and 21:9 ultrawide.",
+                       L"在 16:9 與 21:9 寬螢幕規格之間切換解析度選項。");
+    if (tab == 2 && row == 3)
         next.help = Tr(L"Sets the output size. Borderless fullscreen uses the desktop size.",
                        L"設定輸出尺寸；無邊框全螢幕使用桌面尺寸。");
-    if (tab == 2 && row == 3)
+    if (tab == 2 && row == 4)
         next.help = Tr(L"Scene detail up to 4K. Auto follows output; higher values use more GPU power.",
                        L"場景細節最高 4K。自動跟隨輸出；較高解析度需要更多 GPU 效能。");
-    if (tab == 2 && row == 4 && edit.antialiasing == 3)
+    if (tab == 2 && row == 5 && edit.antialiasing == 3)
         next.help = Tr(L"Camera-based TAA; moving effects may trail. Unsupported scenes use SMAA.",
                        L"以相機重投影的 TAA；動態特效可能拖影。不支援的場景使用 SMAA。");
-    if (tab == 2 && row == 5)
+    if (tab == 2 && row == 6)
         next.help = Tr(L"Controls filtering when internal and output sizes differ. Scene detail uses Internal resolution.",
                        L"控制內部與輸出尺寸不同時的取樣濾鏡。場景細節由內部解析度決定。");
-    if (tab == 2 && row == 6)
+    if (tab == 2 && row == 7)
         next.help = edit.frameRate == 120
             ? Tr(L"120 FPS is experimental and requires LO_EXPERIMENTAL_120; otherwise runs at 60 FPS.",
                  L"120 FPS 為實驗性功能，需啟用 LO_EXPERIMENTAL_120，否則以 60 FPS 執行。")
@@ -338,8 +380,9 @@ void PointerClick(float x, float y, bool reverse)
         return;
     }
     constexpr int height = 43;
-    const int selected = int(y - 150) / height;
-    if (x < 38 || x >= 1026 || y < 150 || selected < 0 || selected >= int(snapshot.rows.size()))
+    constexpr int top = 150;
+    const int selected = int(y - top) / height;
+    if (x < 38 || x >= 1026 || y < top || selected < 0 || selected >= int(snapshot.rows.size()))
         return;
     mouseRow = selected;
     if (x >= 386)
@@ -582,7 +625,7 @@ PPC_FUNC(sub_822F19B0)
         row = 0;
         status.clear();
     }
-    const int count = tab == 0 ? 8 : tab == 1 ? 3 : tab == 2 ? 9 : 5;
+    const int count = tab == 0 ? 8 : tab == 1 ? 3 : tab == 2 ? 10 : 5;
     if (input & 1)
         row = (row + count - 1) % count;
     if (input & 2)
@@ -593,7 +636,7 @@ PPC_FUNC(sub_822F19B0)
         } else { collectionPrompt = true; collectionChoice = 1; }
         Publish(base, config); return;
     }
-    const bool action = (tab == 0 && row == 7) || (tab == 2 && row >= 7) || (tab == 3 && row == 3);
+    const bool action = (tab == 0 && row == 7) || (tab == 2 && row >= 8) || (tab == 3 && row == 3);
     const int delta = (input & 4) ? -1 : ((input & 8) || ((input & 0x1000) && !action)) ? 1 : 0;
     auto cycle = [&](uint32_t value, uint32_t count) {
         return uint32_t((int(value) + int(count) + delta) % int(count));
@@ -642,15 +685,28 @@ PPC_FUNC(sub_822F19B0)
                 edit.windowMode = WindowMode(cycle(uint32_t(edit.windowMode), 3));
             if (row == 2)
             {
-                uint32_t index = 0;
-                for (uint32_t i = 0; i < std::size(resolutions); i++)
-                    if (edit.width == resolutions[i][0] && edit.height == resolutions[i][1])
-                        index = i;
-                index = cycle(index, uint32_t(std::size(resolutions)));
-                edit.width = resolutions[index][0];
-                edit.height = resolutions[index][1];
+                const bool currentUltrawide = IsUltrawideAspect(edit.width, edit.height);
+                const bool newUltrawide = !currentUltrawide;
+                const auto &targetList = newUltrawide ? resolutions21_9 : resolutions16_9;
+                const size_t targetCount = newUltrawide ? std::size(resolutions21_9) : std::size(resolutions16_9);
+                uint32_t targetIndex = FindNearestResolutionIndex(targetList, targetCount, edit.width, edit.height);
+                edit.width = targetList[targetIndex][0];
+                edit.height = targetList[targetIndex][1];
             }
             if (row == 3)
+            {
+                const bool ultrawide = IsUltrawideAspect(edit.width, edit.height);
+                const auto &list = ultrawide ? resolutions21_9 : resolutions16_9;
+                const size_t count = ultrawide ? std::size(resolutions21_9) : std::size(resolutions16_9);
+                uint32_t index = 0;
+                for (size_t i = 0; i < count; ++i)
+                    if (edit.width == list[i][0] && edit.height == list[i][1])
+                        index = uint32_t(i);
+                index = cycle(index, uint32_t(count));
+                edit.width = list[index][0];
+                edit.height = list[index][1];
+            }
+            if (row == 4)
             {
                 uint32_t index = 0;
                 for (uint32_t i = 0; i < std::size(internalResolutions); ++i)
@@ -658,14 +714,14 @@ PPC_FUNC(sub_822F19B0)
                         index = i;
                 edit.internalResolution = internalResolutions[cycle(index, uint32_t(std::size(internalResolutions)))];
             }
-            if (row == 4)
+            if (row == 5)
             {
                 edit.antialiasing = cycle(edit.antialiasing, 4);
                 edit.fxaa = edit.antialiasing == 1;
             }
-            if (row == 5)
-                edit.scalingQuality = cycle(edit.scalingQuality, 2);
             if (row == 6)
+                edit.scalingQuality = cycle(edit.scalingQuality, 2);
+            if (row == 7)
             {
                 constexpr uint32_t rates[] = {30, 60, 120};
                 const uint32_t index = edit.frameRate == 120 ? 2u : edit.frameRate == 60 ? 1u : 0u;
@@ -702,7 +758,7 @@ PPC_FUNC(sub_822F19B0)
         language::TraceConfig(base, config, "menu-after-defaults");
         status = Tr(L"Game defaults restored.", L"遊戲預設設定已恢復。");
     }
-    if ((input & 0x1000) && tab == 2 && row == 8)
+    if ((input & 0x1000) && tab == 2 && row == 9)
     {
         previousDisplay = GetConfig();
         if (!SaveConfig(edit))
@@ -741,7 +797,7 @@ PPC_FUNC(sub_822F19B0)
             status = SaveConfig(languages) ? Tr(L"Language settings saved.", L"語言設定已儲存。")
                                            : Tr(L"Could not save settings.", L"無法儲存設定。");
     }
-    if ((input & 0x1000) && tab == 2 && row == 7)
+    if ((input & 0x1000) && tab == 2 && row == 8)
     {
         // Hand the original calibration screen its own brightness row.
         const uint32_t list = menu + 0x558, table = PPC_LOAD_U32(list + 0x84);
