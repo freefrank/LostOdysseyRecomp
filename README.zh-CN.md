@@ -21,9 +21,9 @@ Windows x64 · Direct3D 12 · Vulkan · PowerPC 静态重编译
 
 ## v0.6.6 发布版
 
-已发布 [v0.6.6](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.6)（初版于 2026-09-20T08:10:24Z 发布，目前正在准备同版本重新发布以包含阴影贴图修复）。包含原生超宽屏 (21:9) 初始支持（Issue #17）以及 Linux AppImage 更新器保留回滚的清理逻辑。
+已发布 [v0.6.6](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.6)（于 2026-09-20 从 source `c6cbd1f` 通过 Release CI [35527543573](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35527543573) 完成同版本重新发布）。包含原生超宽屏 (21:9) 初始支持（Issue #17）、针对所有比例与高内部分辨率的阴影贴图渲染修复，以及 Linux AppImage 更新器保留回滚的清理逻辑。
 
-阴影修复修正了 effective-height 渲染目标缓存以及模式 4 与 5 的仅深度光栅化；受影响场景经用户实机测试确认阴影已恢复正常。更新后的发布资产仍在等待 CI 完成；初版发布的下载资产尚未包含该项修复。
+阴影修复修正了 effective-height 渲染目标缓存以及模式 4 与 5 的仅深度光栅化；受影响场景经用户实机测试确认阴影已恢复正常。重新发布的资产已核验并上传；初版 `c953bb5` 资产已被替代，已下载旧版本的用户需重新下载以获取修复。
 
 > [!WARNING]
 > **超宽屏支持仍为实验性（EXPERIMENTAL），目前仅支持 3440×1440。** 界面虽有 2560×1080 选项但尚未验证支持，请勿作为受支持分辨率使用。

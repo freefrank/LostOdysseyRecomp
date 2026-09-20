@@ -1,13 +1,14 @@
 # Project status
 
-## v0.6.6 published & reissue preparing / v0.6.6 已发布与重新发布准备中
+## v0.6.6 published & reissued / v0.6.6 已发布与同版本重新发布
 
 v0.6.6 was initially published on 2026-09-20T08:10:24Z from tag/source commit
-`c953bb56857330a2238869b306ffda98fe41bcdd`. A same-version reissue is currently
-preparing to package a shadow-map rendering repair across all aspect ratios and
-high internal resolutions. Corrected release assets are pending CI completion;
-the initial download artifacts remain accessible on GitHub Releases but are being
-superseded and do not include this repair.
+`c953bb56857330a2238869b306ffda98fe41bcdd`. A same-version reissue was released on
+2026-09-20 from source commit `c6cbd1f62414a46c00c6312559edcd8d217bc9ee` via Release
+CI [35527543573](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35527543573)
+to package a shadow-map rendering repair across all aspect ratios and high internal
+resolutions. The initial `c953bb5` packages lacked this repair and are superseded;
+players must redownload the release packages to obtain the fix.
 
 The native ultrawide implementation allows internal render targets to follow aspect
 ratios beyond 16:9 using Hor+ projection adjustments applied before derived matrices
@@ -29,13 +30,16 @@ User note and limitations: Ultrawide support remains EXPERIMENTAL and currently 
 appearing as an unverified UI option).
 
 Release and validation verification:
-- Initial v0.6.6 release: Release CI [35497779401](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35497779401)
-  passed Windows and Linux packaging. Both public package URLs returned HTTP 200.
-  Downloaded package hashes matched sidecars and GitHub digests: Windows ZIP was
-  211,105,665 bytes with SHA-256 `c1bcae49bac6fbb445babbebc9f48ce21e2f438283d0bec771d8ebf123cce8d7`;
-  Linux AppImage was 220,842,488 bytes with SHA-256 `19ff373ac5b9de960a71577009710f64269973477a86d6ba1d2bc07b0659c5c4`.
-  The Windows manifest reported version `0.6.6`, commit `c953bb5` and `dirty=false` with
-  the bundled shader pack confirmed.
+- Reissued v0.6.6 release: Release CI [35527543573](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35527543573)
+  succeeded from source `c6cbd1f62414a46c00c6312559edcd8d217bc9ee`. Replacement packages
+  are verified and uploaded: Windows ZIP is 211,105,610 bytes with SHA-256
+  `bed792e563ad31f0a167621f98f92fee6d83da1540943fe85bf95e286cb90180`; Linux AppImage is
+  220,846,584 bytes with SHA-256 `4c5ac5e5ba763d108d972ca7c11d4dfafbcfb3a3efdb1325186b788e2bd0f946`.
+  Downloaded hashes match sidecars and GitHub digests, and the Windows manifest reports
+  clean version `0.6.6` with the correct source shader pack confirmed.
+- Superseded initial v0.6.6 release: Release CI [35497779401](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35497779401)
+  from commit `c953bb5` (Windows ZIP 211,105,665 bytes SHA-256 `c1bcae49...`, Linux AppImage
+  220,842,488 bytes SHA-256 `19ff373a...`).
 - Shadow fix validation: `windows-clang` runtime build passed (runtime SHA
   `1d7b75c98856a4da922de98088a5c066b95cf318636a1bf59bd1a15c7537d195`), and
   `LoTargetMappingTest` passed 7 checks. Existing unit fixtures passed for
@@ -47,8 +51,12 @@ Release and validation verification:
   resizing, broader scene shadow validation, failure injection paths, other backends
   (Direct3D 12), and full player acceptance remain pending.
 
+v0.6.6 已发布与同版本重新发布：
+
 v0.6.6 初版已于 2026-09-20T08:10:24Z 从 tag/source commit
-`c953bb56857330a2238869b306ffda98fe41bcdd` 发布。目前正在准备同版本重新发布，以打包针对所有比例及高内部分辨率下的阴影贴图渲染修复。修正后的资产仍在等待 CI 完成；初版发布的下载资产目前仍可在 GitHub Releases 获取，但将被替代且不含该项修复。
+`c953bb56857330a2238869b306ffda98fe41bcdd` 发布。随后于 2026-09-20 从 source commit
+`c6cbd1f62414a46c00c6312559edcd8d217bc9ee` 通过 Release CI [35527543573](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35527543573)
+完成同版本重新发布，以纳入针对全比例及高内部分辨率下的阴影贴图渲染修复。初版发布的 `c953bb5` 资产不含该修复并已被替代；玩家需重新下载发布包以获取修复。
 
 原生超宽屏实现允许内部渲染目标跟随 16:9 以外的显示比例，并在派生矩阵计算与视锥裁剪前应用
 Hor+ 投影调整，在拓展视野中保持正确的透视几何结构。HUD 界面元素被限制在 16:9 安全区内，
@@ -59,11 +67,13 @@ Hor+ 投影调整，在拓展视野中保持正确的透视几何结构。HUD �
 用户提示与限制：超宽屏支持仍为实验性（EXPERIMENTAL），目前仅支持 3440×1440（界面虽有 2560×1080 选项但尚未验证支持，请勿作为受支持分辨率使用）。
 
 发布与验证核验：
-- 初版发布资产：Release CI [35497779401](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35497779401)
-  完成 Windows 与 Linux 打包。两个公开资产下载 URL 均返回 HTTP 200，下载包 hash 与 sidecar 和 GitHub digest 一致：
-  Windows ZIP 为 211,105,665 字节，SHA-256 为 `c1bcae49bac6fbb445babbebc9f48ce21e2f438283d0bec771d8ebf123cce8d7`；
-  Linux AppImage 为 220,842,488 字节，SHA-256 为 `19ff373ac5b9de960a71577009710f64269973477a86d6ba1d2bc07b0659c5c4`。
-  Windows manifest 报告版本 `0.6.6`、commit `c953bb5`、`dirty=false` 并确认内置着色器包。
+- 重新发布的 v0.6.6 资产：Release CI [35527543573](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35527543573)
+  从源码 `c6cbd1f62414a46c00c6312559edcd8d217bc9ee` 构建成功。替换包均已核验并上传：Windows ZIP 为 211,105,610 字节，
+  SHA-256 为 `bed792e563ad31f0a167621f98f92fee6d83da1540943fe85bf95e286cb90180`；Linux AppImage 为 220,846,584 字节，
+  SHA-256 为 `4c5ac5e5ba763d108d972ca7c11d4dfafbcfb3a3efdb1325186b788e2bd0f946`。下载包 hash 与 sidecar 和 GitHub digests 一致，
+  Windows manifest 报告版本 `0.6.6`、clean 并确认内置着色器包。
+- 已被替代的初版 v0.6.6 资产：Release CI [35497779401](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35497779401)
+  从 commit `c953bb5` 构建（Windows ZIP 211,105,665 字节 SHA-256 `c1bcae49...`，Linux AppImage 220,842,488 字节 SHA-256 `19ff373a...`）。
 - 阴影修复验证：`windows-clang` 运行时构建通过（运行时 SHA `1d7b75c98856a4da922de98088a5c066b95cf318636a1bf59bd1a15c7537d195`），
   `LoTargetMappingTest` 通过 7 项检查。既有 `LoFramePlanTest`（18 项）、分辨率计算（40 项）与时序数学测试均通过。在 Vulkan
   搭配内置着色器包测试中，原生存档于 13.93 秒成功载入，并在场景过渡期间捕获 swap 382–383 的两帧，确认 3440×1472（对齐）分配及 3440×1440 resolve 画面。
