@@ -1,363 +1,141 @@
-diff --git a/tools/tests/native_dlss/CMakeLists.txt b/tools/tests/native_dlss/CMakeLists.txt
-index 596dfb2..2f670c2 100644
---- a/tools/tests/native_dlss/CMakeLists.txt
-+++ b/tools/tests/native_dlss/CMakeLists.txt
-@@ -68,2 +68,10 @@ if(BUILD_TESTING)
-     set_tests_properties(LoNativeDlssSubmissionFailureTest LoNativeDlssFrameInputsTest LoP1FramePlanTest LoNativeDlssP2RoutingTest LoNativeDlssPromotionPolicyTest LoNativeDlssSubmissionLifetimeTest PROPERTIES LABELS "native-dlss;cpu")
-+    # Optional developer tooling only; the game and C++ fixtures do not depend
-+    # on Python. Existing CI images provide it for recording-evidence triage.
-+    find_package(Python3 COMPONENTS Interpreter QUIET)
-+    if(Python3_Interpreter_FOUND)
-+        add_test(NAME LoNativeDlssOracleTest COMMAND ${Python3_EXECUTABLE} -m unittest discover
-+            -s ${CMAKE_CURRENT_SOURCE_DIR} -p test_p2_oracle.py -v)
-+        set_tests_properties(LoNativeDlssOracleTest PROPERTIES LABELS "native-dlss;cpu;oracle" TIMEOUT 30)
-+    endif()
- endif()
-diff --git a/tools/tests/native_dlss/check_p2_oracle.py b/tools/tests/native_dlss/check_p2_oracle.py
+diff --git a/docs/notes/native-dlss-handoff.zh-CN.md b/docs/notes/native-dlss-handoff.zh-CN.md
+index c2d6a3e..ec0a8ba 100644
+--- a/docs/notes/native-dlss-handoff.zh-CN.md
++++ b/docs/notes/native-dlss-handoff.zh-CN.md
+@@ -5,3 +5,3 @@
+ 基线提交：`main@5b765f617ec511a2f76aa9da7923a8c122679d2c`
+-已推送到远端的阶段提交：`origin/dlss` @ `91bf37ea846189f5e7b1f4c12ca631e5ed510203`（P0: `089676f`，P1 尺寸: `c6bc50b`，P1 输入: `3f40030`，文档: `91bf37e`）
++历史P0/P1阶段提交（非当前HEAD）： `91bf37ea846189f5e7b1f4c12ca631e5ed510203`（P0: `089676f`，P1 尺寸: `c6bc50b`，P1 输入: `3f40030`，文档: `91bf37e`）
+ 当前状态：2026-09-21 已恢复 P2 开发并分项推送；输入/提交生命周期、目标提升边界和合成测试已补强。P2 尚未完成，Gate 3 未通过，游戏内 SR 仍受未知颜色编码守卫保护。历史检查点与 RTX 记录保留，下方续开发结果优先于历史暂停状态。
+@@ -10,9 +10,9 @@
+ 
+-## 2026-09-21 续开发结果
++## 2026-09-21 第二轮续开发结果
+ 
+-已新增 CPU-only CMake/CTest 与 Windows/Linux CI，修复晚期目标提升中的隐式 Flush、附件借用前的恢复顺序、深度/尺寸不匹配、NGX feature 安全重配置、提交 use 的 fence 生命周期、SR 有效区域外的填充像素，以及输入区域整数溢出。
++最新实现、验证范围和本地执行步骤见[P2续开发与下一次实机验收](native-dlss-p2-next-run.zh-CN.md)。已补充真实Renderer目标提升/Flush/恢复测试，修复反向Z未传给NGX的错误，并提供跨Windows/Linux编译的真实NGX Renderer自测入口和三帧颜色链检查器。
+ 
+-详细提交、复现命令和证据范围见 [P2 续开发记录](native-dlss-p2-progress-2026-09-21.md)。新证据包括 5 组本地 CPU 测试、实际 renderer 编译单元、SDK 开/关构建与 report 测试，以及软件 Vulkan 执行生产像素 shader 的 256 个 FP16 RGBA 精确读回检查；本轮未运行 RTX NGX 或完整游戏。
++P2仍未完成游戏接入/验收。剩余主要步骤是RTX原生自测、真实游戏采集后的颜色资格判定及其运行时接入、全游戏画面/性能验收。普通提交故障的停止状态已有`59e9dce`修复，不应重复从零实现；真实驱动DeviceLost仍未验证。
+ 
+-仍需运行时颜色资格证据、完整目标映射路径验证，以及提交失败/设备丢失后的终止状态与 fence 等待处理。禁止据此删除 `Unknown` 守卫或标记 Gate 3 通过。下文暂停/取消复审文字描述的是此前检查点，不代表本次没有继续开发。
++历史RTX结果、初期暂停状态与第一轮测试范围保留在下文，不能视为本轮RTX验证。游戏输入的`Unknown`守卫保持不变。
+ 
+@@ -24,3 +24,3 @@
+ 2. **P1 时序输入与计划（已通过并推送到远端）**：CPU 帧计划器 24-word 快照、真实低内部分辨率光栅化、NGX 目标尺寸查询缓存、渲染器 pre-TAA 颜色、R32 深度与未抖动几何运动矢量采集、GPU fence 生命周期管理、`LO_DLSS_INPUT_PROBE=1` 诊断模式。
+-3. **P2 执行与目标提升（已提交未完成检查点，已暂停）**：
++3. **P2 执行与目标提升（以下为历史检查点，最新状态见上文）**：
+    - Lane A 完成了持久化 NGX 会话控制器（`gpu::dlss::Controller`），支持 `NGX_VULKAN_CREATE_DLSS_EXT1` 与 `NGX_VULKAN_EVALUATE_DLSS_EXT` 录制，并对原生 Vulkan `vkResetCommandBuffer`、`vkBeginCommandBuffer`、`vkEndCommandBuffer` 实施校验。独立求值测试 `LoNativeDlssExecutionTest` 通过。
+@@ -32,3 +32,3 @@
+    - 尚未在实际游戏过程中进行 DLSS 调度，不能向玩家宣称 DLSS 在游戏中可用。
+-   - Linux 原生运行跳过未跑；包含 SDK 的二进制分发许可尚待确定，不提供二进制安装包发布。
++   - Linux软件Vulkan测试及SDK开/关构建已补充；NVIDIA原生执行仍未跑；包含 SDK 的二进制分发许可尚待确定，不提供二进制安装包发布。
+ 
+diff --git a/docs/notes/native-dlss-p2-next-run.zh-CN.md b/docs/notes/native-dlss-p2-next-run.zh-CN.md
 new file mode 100644
-index 0000000..2e6978c
+index 0000000..ff1d4c7
 --- /dev/null
-+++ b/tools/tests/native_dlss/check_p2_oracle.py
-@@ -0,0 +1,208 @@
-+#!/usr/bin/env python3
-+"""Read-only P2 recording-evidence triage. Exit 0 is NOT DLSS acceptance.
++++ b/docs/notes/native-dlss-p2-next-run.zh-CN.md
+@@ -0,0 +1,76 @@
++# P2续开发与下一次实机验收（2026-09-21）
 +
-+Only supplied JSONL or frame-*/p2-oracle.jsonl in one capture is read. No asset scan, game execution, color profile
-+creation or renderer configuration changes occur. v1 traces do not prove GPU
-+execution or capture every intervening attachment write / texture transform.
-+"""
-+from __future__ import annotations
++## 当前结论
 +
-+import argparse
-+import json
-+import math
-+from pathlib import Path
-+import struct
-+import sys
++P2继续推进，但尚未完成游戏接入/验收，Gate 3未通过。游戏输入仍为`ColorEncoding::Unknown`，没有强制启用DLSS，也没有发布二进制或修改玩家存档。
 +
-+SCHEMA = "lostodyssey.p2-oracle-evidence.v1"
-+PRODUCER = "b4b4d54a7a2d6b96"
-+COPY = "cda578aef1724fdc"
-+MAX_LINE = 1024 * 1024
-+MAX_BYTES = 64 * 1024 * 1024
++本轮开始时远端已有`59e9dce`：提交/录制/fence失败进入停止状态、避免等待失败提交的fence、设备丢失后的资源处理，并带有112项CPU故障检查。本轮在它之后继续开发，没有把这项已有提交算作本轮新增。
 +
++## 本轮已实现
 +
-+def unique_object(pairs: list[tuple]) -> dict:
-+    result = {}
-+    for key, value in pairs:
-+        if key in result:
-+            raise ValueError(f"duplicate JSON key: {key}")
-+        result[key] = value
-+    return result
++| 提交 | 内容 |
++|---|---|
++| `19415e4` | 用真实Renderer方法驱动目标提升、提交与恢复；替换NGX/平台入口，Vulkan命令和读回真实执行 |
++| `0a2af46` | 修复反向Z接线：HistoryOwner的R32深度未经翻转，原先NGX配置却默认正向Z；新增显式DepthConvention并检查匹配 |
++| `4047d6f` | 新增`LoNativeDlssRendererTest --native`，直接使用真实Controller/NGX走Renderer链；增加异常退出时的本地图片资源排空 |
++| `9375608`、`c2f0602` | 补齐该独立测试的Windows clang-cl链接：仅在测试中排除未调用的游戏入口，链接真实zstd依赖 |
++| `a9d870c` | 三帧采集元数据检查器、13组单元测试、可选Python CTest接入；不自动认定颜色编码 |
 +
++生产链测试执行`PrepareSceneCopyDestination`、`ActivateSceneCopyDestination`、`RecordSceneCopyDlssUsing`、`Flush`、`PreparePromotionAccess`和恢复方法。默认模式仅以合成Vulkan写入替代NGX。覆盖成功/失败的3/2段提交、未知颜色拒绝、上传环不足不触发隐式Flush、跨Flush保留映射、Alpha、后续UI式RGBA写入，以及7种不兼容恢复边界。
 +
-+def reject_constant(value: str):
-+    raise ValueError(f"non-finite JSON number: {value}")
++它没有驱动完整游戏`DrawImpl`、PM4数据流、窗口交换链或真实文字/UI绘制。不要将这些测试描述为全游戏验证。
 +
++## 实际执行的验证
 +
-+def uint(value, label: str, maximum: int = (1 << 64) - 1) -> int:
-+    if type(value) is not int or not 0 <= value <= maximum:
-+        raise ValueError(f"{label}: expected unsigned integer")
-+    return value
++- 本地CPU CTest：7/7通过，包括6组C++测试和1组包含13项检查器测试的Python测试。Python只用于开发工具，不是游戏运行依赖。
++- Linux软件Vulkan：真实Renderer路径1,536项检查通过；共享生产shader的256个RGBA16F像素精确匹配。成功日志中未见VUID或验证层错误。
++- 反向Z变更已复测真实P1 GPU输入采集，并通过SDK开/关构建及report测试。
++- Windows clang-cl与Linux：新的Renderer自测在SDK开启/关闭时均编译通过。SDK关闭时`--native`明确返回77（跳过），这不是原生NGX执行通过。
++- SDK开启的Linux构建也执行了合成vendor模式。当前托管CI未执行RTX上的`--native`，未验证其画质、性能或驱动行为。
 +
++成功记录：
 +
-+def identity(record: dict, frame: int) -> tuple:
-+    return (frame, *(uint(record[k], k) for k in ("guest_base", "guest_format")))
++- [生产Renderer链首次通过](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35626007451)
++- [反向Z、P1输入与SDK构建](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35626659861)
++- [Linux原生测试入口构建与软件Vulkan](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35628539732)
++- [Windows SDK开/关构建及明确跳过](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35628539860)
 +
++## 1. 先在RTX机器跑原生Renderer自测
 +
-+def constants(draw: dict) -> dict:
-+    bank = draw["ps_constants"]
-+    if bank["bank_base"] != "0x4400":
-+        raise ValueError("PS constant bank is not 0x4400")
-+    result = {}
-+    for entry in bank["values"]:
-+        index = uint(entry["constant"], "constant", 255)
-+        words = entry["u32"]
-+        if index in result or entry["register"].lower() != f"0x{0x4400 + 4 * index:04x}":
-+            raise ValueError("duplicate constant or incorrect register address")
-+        if not isinstance(words, list) or len(words) != 4:
-+            raise ValueError("constant must contain four raw u32 words")
-+        result[index] = [uint(word, "constant word", 0xffffffff) for word in words]
-+    missing = set(range(11)) | {255}
-+    missing -= result.keys()
-+    if missing:
-+        raise ValueError(f"missing PS constants: {sorted(missing)}")
-+    return result
++无需游戏资源，不触碰游戏存档。在与现有clang-cl构建相同的、已初始化Visual Studio环境的开发终端中执行。使用独立构建目录，替换SDK路径；依赖沿用固定版本SDK`374959484e79a640feaba44c93ac8cfb0a03f5b5`、既有Plume补丁及已初始化的公开子模块。
 +
++```powershell
++cmake -S tools/tests/motion_replay -B out/p2-native -G Ninja -DCMAKE_CXX_COMPILER=clang-cl -DCMAKE_C_COMPILER=clang-cl -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_SCAN_FOR_MODULES=OFF -DLO_ENABLE_DLSS=ON -DLO_DLSS_SDK_ROOT="<本机固定版本SDK目录>" -DLO_DLSS_STAGE_RUNTIME=ON
++cmake --build out/p2-native --target LoNativeDlssRendererTest --parallel 2
++ctest --test-dir out/p2-native -R '^LoNativeDlssRendererNativeTest$' -V --output-on-failure --output-log native-renderer.log
++```
 +
-+def extent(value, label: str, count: int = 2) -> tuple:
-+    if not isinstance(value, list) or len(value) != count:
-+        raise ValueError(f"{label}: incorrect component count")
-+    return tuple(uint(v, label, 0xffffffff) for v in value)
++每一步失败即停止，不要继续使用旧exe。需要可用的DXC；自动加载失败时将`LO_DXC_PATH`设为本机`dxcompiler.dll`的完整路径。Linux使用`clang++`/`clang`和对应`libdxcompiler.so`，同样需要实际NVIDIA驱动和SR运行库；不要选择lavapipe来冒充NVIDIA结果。
 +
++原生测试覆盖Quality连续两帧（feature复用）、切换Balanced、切换1920×1080 Performance（重建feature）、注入Evaluate失败（排除隔离命令缓冲、保留回退），并检查读回RGB有限/非零、Alpha和恢复后的后续RGBA写入。
 +
-+def input_lines(path: Path):
-+    # The renderer writes a separate JSONL in each of three frame directories.
-+    # Enumerate only this fixed metadata pattern, never textures/shaders/assets.
-+    files = sorted(path.glob("frame-*/p2-oracle.jsonl")) if path.is_dir() else [path]
-+    if not files:
-+        raise ValueError("no frame-*/p2-oracle.jsonl in the supplied capture directory")
-+    total = 0
-+    for file in files:
-+        with file.open("rb") as stream:
-+            line = 0
-+            while raw := stream.readline(MAX_LINE + 1):
-+                line += 1
-+                total += len(raw)
-+                if len(raw) > MAX_LINE or total > MAX_BYTES:
-+                    raise ValueError("trace exceeds bounded input size")
-+                if raw.strip():
-+                    yield f"{file.parent.name}/{file.name}:{line}", raw
++退出0表示这个合成输入下的NGX+Renderer测试通过；77表示SDK/能力不可用；其他非零表示失败。它依然不证明真实游戏运动响应、颜色准确度或性能。保留日志中的设备名称、MODE和各条`NATIVE_CASE`。
 +
++## 2. 采集真实游戏颜色链
 +
-+def analyze(path: Path) -> dict:
-+    producers, resolves, chains, issues = {}, {}, [], []
-+    previous_frame = -1
-+    for line_number, (location, raw) in enumerate(input_lines(path), 1):
-+        try:
-+            event = json.loads(raw, object_pairs_hook=unique_object, parse_constant=reject_constant)
-+        except (UnicodeError, ValueError) as error:
-+            raise ValueError(f"{location}: {error}") from error
-+        try:
-+            if not isinstance(event, dict) or event.get("schema") != SCHEMA:
-+                raise ValueError("unsupported event schema")
-+            frame = uint(event["renderer_frame"], "renderer_frame")
-+            if frame < previous_frame:
-+                raise ValueError("renderer frames moved backwards; do not combine capture sessions")
-+            previous_frame = frame
-+            event["_location"] = location
-+            if event["event"] == "capture":
-+                if event.get("encoding_claim") != "unknown":
-+                    raise ValueError("capture metadata unexpectedly claims a color encoding")
-+                continue
-+            if event["event"] == "resolve":
-+                if event["kind"] == "color":
-+                    destination = event["destination"]
-+                    resolves[identity(destination, frame)] = (line_number, event)
-+                continue
-+            if event["event"] != "draw":
-+                raise ValueError("unrecognized event type")
-+            shader = event["shader"]["ps"].lower()
-+            if shader not in (PRODUCER, COPY):
-+                continue
-+            allocation = uint(event["destination"]["allocation"], "draw allocation")
-+            # Invalidate an earlier producer before validating a later write.
-+            if shader == PRODUCER:
-+                producers.pop((frame, allocation), None)
-+            words = constants(event)
-+            if shader == PRODUCER:
-+                producers[frame, allocation] = (line_number, event, words)
-+                continue
-+            sampled = event["sampled_slot0_resolved"]
-+            if not isinstance(sampled, dict):
-+                raise ValueError("scene copy has no recorded resolved slot0 source")
-+            if uint(sampled["write_frame"], "write_frame") != frame:
-+                raise ValueError("scene copy samples a stale frame")
-+            pair = resolves.get(identity(sampled, frame))
-+            if pair is None:
-+                raise ValueError("missing prior color resolve")
-+            resolve_line, resolve = pair
-+            target, source = resolve["destination"], resolve["source"]
-+            for field in ("allocation", "write_version", "write_ordinal", "host_format"):
-+                if uint(sampled[field], field) != uint(target[field], field):
-+                    raise ValueError(f"resolve-to-copy {field} mismatch")
-+            if extent(sampled["rect"], "sampled rect", 4) != extent(target["rect"], "resolve rect", 4):
-+                raise ValueError("resolve-to-copy rectangle mismatch")
-+            producer = producers.get((frame, uint(source["allocation"], "source allocation")))
-+            if producer is None or producer[0] >= resolve_line:
-+                raise ValueError("missing prior tone-map producer for resolve allocation")
-+            producer_line, draw, producer_words = producer
-+            if uint(draw["destination"]["host_format"], "producer format") != uint(source["host_format"], "resolve source format"):
-+                raise ValueError("producer-to-resolve format mismatch")
-+            if extent(draw["destination"]["extent"], "producer extent") != extent(source["extent"], "source extent"):
-+                raise ValueError("producer-to-resolve extent mismatch")
-+            for field in ("cpu_serial", "geometry_epoch", "consumer", "input", "output", "output_rect"):
-+                if draw["plan"][field] != event["plan"][field]:
-+                    raise ValueError(f"producer-to-copy plan {field} mismatch")
-+            exponent_bits = producer_words[10][0]
-+            exponent = struct.unpack("<f", struct.pack("<I", exponent_bits))[0]
-+            if not math.isfinite(exponent) or exponent <= 0:
-+                raise ValueError("producer c10.x is not finite and positive")
-+            chains.append({"renderer_frame": frame, "producer_line": producer_line,
-+                           "resolve_line": resolve_line, "copy_line": line_number,
-+                           "producer_source": draw["_location"], "resolve_source": resolve["_location"],
-+                           "copy_source": location,
-+                           "producer_c10_x_bits": f"0x{exponent_bits:08x}", "producer_c10_x": exponent,
-+                           "producer_constants_u32": producer_words, "copy_constants_u32": words,
-+                           "source_allocation": source["allocation"], "resolved_allocation": target["allocation"],
-+                           "copy_destination_allocation": allocation, "plan": event["plan"]})
-+        except (KeyError, TypeError, AttributeError, ValueError) as error:
-+            issues.append({"line": line_number, "source": location, "reason": str(error)})
-+    frames = sorted({chain["renderer_frame"] for chain in chains})
-+    longest = current = 0
-+    previous = None
-+    for frame in frames:
-+        current = current + 1 if previous is not None and frame == previous + 1 else 1
-+        longest = max(longest, current)
-+        previous = frame
-+    if longest < 3:
-+        issues.append({"line": None, "reason": "need at least three consecutive frames with complete recorded chains"})
-+    return {"schema": "lostodyssey.p2-oracle-review.v1",
-+            "status": "incomplete" if issues else "ready_for_manual_color_review",
-+            "color_encoding": "unknown", "p2_accepted": False,
-+            "scope": "recorded metadata only; not GPU execution, full binding provenance or color-transfer qualification",
-+            "frames": frames, "longest_consecutive_run": longest, "chains": chains, "issues": issues}
++沿用原交接的隔离要求：独立CWD、明确`--game`、`LO_GRAPHICS_API=vulkan`、`LO_NO_UPDATE=1`，不在玩家原安装/存档目录启动。`LO_PROFILE_DIR`并不能重定向全部宿主配置和存档。
 +
++在实际3D场景通过现有F1菜单触发连续三帧渲染捕获。需要低内部分辨率输入时沿用`LO_DLSS_INPUT_PROBE=1`。不要为了捕获而移除`Unknown`守卫。采集可能引起停顿，不能拿采集时的帧率评估性能。
 +
-+def main(argv: list[str] | None = None) -> int:
-+    parser = argparse.ArgumentParser(description=__doc__)
-+    parser.add_argument("trace", type=Path, help="one three-frame capture directory, or a combined p2-oracle.jsonl")
-+    parser.add_argument("--output", type=Path, help="optional review JSON; never replaces the input trace")
-+    args = parser.parse_args(argv)
-+    try:
-+        if args.output and (args.output.resolve() == args.trace.resolve() or
-+                            (args.trace.is_dir() and args.output.name == "p2-oracle.jsonl")):
-+            raise ValueError("output must differ from input")
-+        report = analyze(args.trace)
-+        text = json.dumps(report, indent=2, allow_nan=False) + "\n"
-+        if args.output:
-+            args.output.write_text(text, encoding="utf-8")
-+        else:
-+            print(text, end="")
-+        return 0 if report["status"] == "ready_for_manual_color_review" else 2
-+    except (OSError, ValueError, RecursionError) as error:
-+        print(f"ERROR: {error}", file=sys.stderr)
-+        return 1
++真实目录结构为一个`captures/render-.../`下的三个`frame-01-f...`、`frame-02-f...`、`frame-03-f...`目录，每个都有自己的`p2-oracle.jsonl`。解压捕获后，将整个该次捕获目录交给检查器：
 +
++```powershell
++python tools/tests/native_dlss/check_p2_oracle.py "<该次render-...目录>" --output p2-color-review.json
++```
 +
-+if __name__ == "__main__":
-+    sys.exit(main())
-diff --git a/tools/tests/native_dlss/test_p2_oracle.py b/tools/tests/native_dlss/test_p2_oracle.py
-new file mode 100644
-index 0000000..e5b1e2e
---- /dev/null
-+++ b/tools/tests/native_dlss/test_p2_oracle.py
-@@ -0,0 +1,128 @@
-+import copy
-+import json
-+from pathlib import Path
-+import tempfile
-+import unittest
++检查器只读取固定的`frame-*/p2-oracle.jsonl`模式，不扫描游戏、纹理或shader资源。输出包含c10.x的原始位和浮点值、c0–c10/c255、生产→resolve→copy链的文件/行号，以及缺失、版本不匹配、旧帧或帧不连续的原因。
 +
-+import check_p2_oracle as checker
++退出0只表示记录结构可供人工颜色审查，2表示证据不完整，1表示输入/解析错误。输出始终保持`color_encoding=unknown`、`p2_accepted=false`。现有v1记录没有覆盖所有中间写入、实际GPU执行和全部采样/格式变换，因此检查器不能自动证明SDR或HDR。
 +
++## 3. 仍需完成的游戏接入
 +
-+def records():
-+    result = []
-+    for frame in (10, 11, 12):
-+        plan = dict(cpu_serial=frame, geometry_epoch=1, consumer=3, input=[640, 360],
-+                    output=[1280, 720], output_rect=[0, 0, 1280, 720])
-+        constants = {"bank_base": "0x4400", "values": [
-+            dict(constant=i, register=f"0x{0x4400 + i * 4:04x}", u32=[0x3f800000, 0, 0, 0])
-+            for i in [*range(11), 255]]}
-+        producer = dict(schema=checker.SCHEMA, event="draw", renderer_frame=frame, draw_id=0,
-+                        shader={"ps": checker.PRODUCER}, plan=plan, ps_constants=constants,
-+                        destination=dict(allocation=1, host_format=10, extent=[640, 368]))
-+        target = dict(guest_base=4096, guest_format=6, allocation=2, host_format=10,
-+                      write_version=frame, write_ordinal=frame, rect=[0, 0, 640, 360])
-+        resolve = dict(schema=checker.SCHEMA, event="resolve", kind="color", renderer_frame=frame,
-+                       source=dict(allocation=1, host_format=10, extent=[640, 368]), destination=target)
-+        draw = copy.deepcopy(producer)
-+        draw.update(draw_id=1, sampled_slot0_resolved=dict(**target, write_frame=frame))
-+        draw["shader"]["ps"] = checker.COPY
-+        draw["destination"]["allocation"] = 3
-+        result += [producer, resolve, draw]
-+    return result
++确认实际producer的c10.x、shader最终RGB运算、取样/格式变换与目标链后，才能添加窄范围的运行时颜色资格判定，将已证明的输入传给NGX；任何不匹配继续走Unknown回退。不能依据UNORM存储格式、非零输出或检查器退出0直接赋值Sdr。
 +
++随后在RTX上执行真实游戏：移动镜头/角色、遮挡变化、透明特效与UI、普通中途Flush、resize/品质切换、错误回退、退出与重进，并检查画面和性能。驱动真实DeviceLost和整条视频呈现链的故障行为仍不能用CPU注入结果替代。
 +
-+class OracleTest(unittest.TestCase):
-+    def run_records(self, rows):
-+        with tempfile.TemporaryDirectory() as directory:
-+            path = Path(directory) / "p2-oracle.jsonl"
-+            path.write_text("\n".join(json.dumps(row) for row in rows), encoding="utf-8")
-+            return checker.analyze(path)
++在完成上述证据与实现前，不能向玩家宣称游戏内DLSS已经可用。FG、D3D12移除和SDK二进制分发均不在本次改动范围。
+diff --git a/docs/notes/native-dlss-p2-progress-2026-09-21.md b/docs/notes/native-dlss-p2-progress-2026-09-21.md
+index 0d386de..12cc81d 100644
+--- a/docs/notes/native-dlss-p2-progress-2026-09-21.md
++++ b/docs/notes/native-dlss-p2-progress-2026-09-21.md
+@@ -2,2 +2,6 @@
+ 
++## Superseded checkpoint
 +
-+    def test_complete_never_approves_color(self):
-+        report = self.run_records(records())
-+        self.assertEqual(report["status"], "ready_for_manual_color_review")
-+        self.assertEqual(report["longest_consecutive_run"], 3)
-+        self.assertEqual(report["chains"][0]["producer_c10_x"], 1.0)
-+        self.assertEqual(report["color_encoding"], "unknown")
-+        self.assertFalse(report["p2_accepted"])
++This page preserves the first follow-up. See [the second follow-up](native-dlss-p2-next-run.zh-CN.md) for fixes and new execution evidence after this checkpoint. Its remaining-blocker list is historical: `59e9dce` added failure-stop handling and the later renderer fixture executes actual mapping methods with a synthetic vendor. Real game color qualification and NVIDIA/gameplay acceptance remain outstanding.
 +
-+    def test_actual_three_frame_directory_layout(self):
-+        with tempfile.TemporaryDirectory() as directory:
-+            root = Path(directory)
-+            rows = records()
-+            for i in range(3):
-+                folder = root / f"frame-{i+1:02}-f{10+i}"
-+                folder.mkdir()
-+                header = dict(schema=checker.SCHEMA, event="capture", renderer_frame=10+i, encoding_claim="unknown")
-+                (folder / "p2-oracle.jsonl").write_text("\n".join(json.dumps(row) for row in [header, *rows[i*3:i*3+3]]))
-+                (folder / "unrelated.bin").write_bytes(b"not scanned")
-+            report = checker.analyze(root)
-+            self.assertEqual(report["status"], "ready_for_manual_color_review")
-+            self.assertEqual(report["chains"][0]["producer_source"], "frame-01-f10/p2-oracle.jsonl:2")
-+            self.assertEqual(checker.main([str(root), "--output", str(root / "review.json")]), 0)
-+
-+    def test_empty(self):
-+        self.assertEqual(self.run_records([])["status"], "incomplete")
-+
-+    def test_missing_constants(self):
-+        for index in (0, 10, 255):
-+            with self.subTest(index=index):
-+                rows = records()
-+                rows[0]["ps_constants"]["values"] = [e for e in rows[0]["ps_constants"]["values"] if e["constant"] != index]
-+                self.assertEqual(self.run_records(rows)["status"], "incomplete")
-+
-+    def test_stale_or_wrong_resolve(self):
-+        for field in ("allocation", "write_version", "write_ordinal", "host_format", "write_frame", "guest_base"):
-+            with self.subTest(field=field):
-+                rows = records(); rows[2]["sampled_slot0_resolved"][field] += 1
-+                self.assertEqual(self.run_records(rows)["status"], "incomplete")
-+
-+    def test_missing_or_late_producer(self):
-+        for rows in (records()[1:], [records()[1], records()[0], *records()[2:]]):
-+            self.assertEqual(self.run_records(rows)["status"], "incomplete")
-+
-+    def test_frame_gap(self):
-+        self.assertEqual(self.run_records(records()[:3] + records()[6:])["status"], "incomplete")
-+
-+    def test_backwards_frame(self):
-+        self.assertEqual(self.run_records(records()[3:] + records()[:3])["status"], "incomplete")
-+
-+    def test_nonfinite_or_invalid_exponent(self):
-+        for bits in (0x7f800000, 0xff800000, 0x7fc00000, 0, 0xbf800000):
-+            rows = records(); rows[0]["ps_constants"]["values"][10]["u32"][0] = bits
-+            self.assertEqual(self.run_records(rows)["status"], "incomplete")
-+
-+    def test_bad_words_and_register(self):
-+        for value in (-1, True, 0x100000000, 1.5):
-+            rows = records(); rows[0]["ps_constants"]["values"][0]["u32"][0] = value
-+            self.assertEqual(self.run_records(rows)["status"], "incomplete")
-+        rows = records(); rows[0]["ps_constants"]["values"][0]["register"] = "0x4000"
-+        self.assertEqual(self.run_records(rows)["status"], "incomplete")
-+
-+    def test_rectangle_and_plan(self):
-+        rows = records(); rows[2]["sampled_slot0_resolved"]["rect"] = [0, 0, 320, 360]
-+        self.assertEqual(self.run_records(rows)["status"], "incomplete")
-+        rows = records(); rows[2]["plan"]["geometry_epoch"] = 7
-+        self.assertEqual(self.run_records(rows)["status"], "incomplete")
-+
-+    def test_malformed_json_and_duplicate_keys(self):
-+        with tempfile.TemporaryDirectory() as directory:
-+            path = Path(directory) / "trace.jsonl"
-+            for text in ('{"schema":1,"schema":2}', '{"x":NaN}', '{', 'x' * (checker.MAX_LINE + 1)):
-+                path.write_text(text)
-+                with self.assertRaises(ValueError):
-+                    checker.analyze(path)
-+
-+    def test_cli_read_only_and_exit_status(self):
-+        with tempfile.TemporaryDirectory() as directory:
-+            path = Path(directory) / "trace.jsonl"; output = Path(directory) / "review.json"
-+            path.write_text("\n".join(json.dumps(row) for row in records()))
-+            before = path.read_bytes()
-+            self.assertEqual(checker.main([str(path), "--output", str(output)]), 0)
-+            self.assertEqual(path.read_bytes(), before)
-+            self.assertEqual(checker.main([str(path), "--output", str(path)]), 1)
-+            path.write_text("")
-+            self.assertEqual(checker.main([str(path), "--output", str(output)]), 2)
-+
-+
-+if __name__ == "__main__":
-+    unittest.main()
+ ## Status
+diff --git a/docs/notes/native-dlss-validation.md b/docs/notes/native-dlss-validation.md
+index 5cd06b9..9a27fd6 100644
+--- a/docs/notes/native-dlss-validation.md
++++ b/docs/notes/native-dlss-validation.md
+@@ -8,7 +8,7 @@ Status: **P0 gate 1 passed**; **P1 gate 2 passed** (historical evidence retained
+ 
+-## 2026-09-21 Development Follow-up
++## 2026-09-21 Second Development Follow-up
+ 
+-The earlier paused checkpoint has received five focused implementation/test changes on `dlss`; see [P2 follow-up evidence and remaining blockers](native-dlss-p2-progress-2026-09-21.md) for commits, reproducible commands and exact scope. Historical RTX results below were not rerun and must not be attributed to the new revisions.
++See [latest implementation, evidence and next RTX run](native-dlss-p2-next-run.zh-CN.md). Actual Renderer target-map/Flush/restore methods now execute in software Vulkan tests (1,536 checks), in addition to the 256 FP16 shared-shader comparisons. The reversed-Z producer convention is explicitly carried into NGX feature flags. Windows/Linux SDK ON/OFF builds of a new `--native` Renderer fixture pass; NVIDIA execution of that mode is still unverified. SDK-disabled skip=77 is not a GPU pass.
+ 
+-New evidence covers CPU contracts, actual renderer translation-unit compilation, pinned SDK ON/OFF adapter compilation and report tests, and software Vulkan execution of production FP16 composite shaders. It does not qualify runtime game color, full target-map transitions, fatal submission/device-loss recovery, or NVIDIA in-game SR. Gate 3 remains unapproved.
++CPU failure-stop handling was already implemented in `59e9dce`. A read-only checker now triages the three per-frame oracle JSONL files (13 Python tests, optional CTest). It never qualifies color or approves P2. Runtime game-color qualification and dispatch, complete guest DrawImpl/UI/presentation behavior, real driver DeviceLost, gameplay and performance remain unaccepted. Historical RTX results below were not rerun for these revisions. Gate 3 remains unapproved.
+ 
