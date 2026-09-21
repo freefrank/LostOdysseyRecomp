@@ -18,8 +18,13 @@ One record of completed changes, with unpublished work separated from verified r
   - Sizing cache queries NGX recommended dimensions on demand; added native 1280×720 verification on local hardware (Quality 853×480, Balanced 742×418, Performance 640×360, exit 0).
   - Renderer captures pre-TAA color, single-channel R32 current depth, and unjittered geometric motion vectors in input pixel units (`previousPixel - currentPixel`), with explicit history reset triggers (camera cut, extent, epoch, format) and GPU fence-qualified resource retirement.
   - Added local `LO_DLSS_INPUT_PROBE=1` diagnostic mode to drive true low-resolution rendering and spatial presentation without executing legacy TAA. Ordinary DLSS configuration requests continue to fall back to legacy rendering paths until P2.
-  - Verified by 62 production CPU planner checks, 112 Vulkan GPU input checks on an NVIDIA RTX 5080, and compilation of all affected translation units. No NGX Super Resolution evaluation (`NGX_VULKAN_EVALUATE_DLSS_EXT`) or game-level execution has taken place.
-  - Frame Generation (FG) remains deferred. Proprietary licensing for SDK-on binary distribution remains unresolved; no binary packages are released.
+    - Verified by 62 production CPU planner checks, 112 Vulkan GPU input checks on an NVIDIA RTX 5080, and compilation of all affected translation units. At P1 completion, no NGX Super Resolution evaluation (`NGX_VULKAN_EVALUATE_DLSS_EXT`) or game-level execution had taken place.
+    - Frame Generation (FG) remains deferred. Proprietary licensing for SDK-on binary distribution remains unresolved; no binary packages are released.
+- Advanced experimental P2 Super Resolution execution and destination promotion (paused work in progress):
+  - Added persistent NGX session controller supporting native `NGX_VULKAN_CREATE_DLSS_EXT1` and `NGX_VULKAN_EVALUATE_DLSS_EXT` recording with checked native Vulkan command buffer reset, begin, and end operations. Standalone evaluation passed on RTX 5080 via first-pixel finite/sentinel-change check; validation layers were unavailable at runtime.
+  - Implemented renderer-side SR dispatch routing, monotonic submission-serial tracking, unknown color encoding bypass, and destination target promotion architecture with parked low-resolution fallback mappings and diagnostic capture hooks (`p2-oracle.jsonl`).
+  - Validated production destination resample (`DrawPromotionResample`) on local hardware via entry-point self-test (`--self-test-scene-copy-promotion`, 4×4 to 8×8 readback pass across 64 RGBA pixels with 0 mismatches and 1-byte alpha tolerance). Completed four initial review action items (routing guard, validation flags, JSON formatting, GPU drain before cleanup).
+  - Formal re-review was cancelled at user request and work is paused with Gate 3 unapproved; no actual in-game Super Resolution dispatch has occurred, and full end-to-end promotion mapping, alpha preservation, mid-frame flush safety, and Linux execution remain unvalidated. Handoff details are recorded in `docs/notes/native-dlss-handoff.zh-CN.md`.
 
 ### 简体中文
 
@@ -33,8 +38,13 @@ One record of completed changes, with unpublished work separated from verified r
   - 分辨率缓存按需查询 NGX 推荐输入尺寸；在实机上补充了 1280×720 输出验证（Quality 853×480、Balanced 742×418、Performance 640×360，退出码 0）。
   - 渲染器独立采集 TAA 前颜色、单通道 R32 当前深度以及未抖动的像素单位几何运动矢量（`previousPixel - currentPixel`），具备显式历史重置策略（切镜、尺寸、周期与格式变更）及基于 GPU fence 序列的生命周期管理。
   - 新增本地 `LO_DLSS_INPUT_PROBE=1` 诊断模式，以驱动真实低分辨率与空间呈现，不执行旧版 TAA。在 P2 实现前，普通 DLSS 配置请求仍继续回退至原版渲染路径。
-  - 通过 62 项 CPU 生产计划器检查、RTX 5080 上的 112 项 Vulkan GPU 输入检查，以及所有受影响编译单元构建。尚未调用 NGX SR 求值（`NGX_VULKAN_EVALUATE_DLSS_EXT`），未进行全游戏运行验收。
+  - 通过 62 项 CPU 生产计划器检查、RTX 5080 上的 112 项 Vulkan GPU 输入检查，以及所有受影响编译单元构建。在 P1 验收时，尚未调用 NGX SR 求值（`NGX_VULKAN_EVALUATE_DLSS_EXT`），未进行全游戏运行验收。
   - 帧生成（FG）保持暂缓。包含 SDK 的二进制分发许可尚待确定，不发布二进制包。
+- 推进实验性 P2 超分辨率执行与目标提升（按用户要求暂停的在制源码）：
+  - 完善持久化 NGX 会话控制器，支持原生 `NGX_VULKAN_CREATE_DLSS_EXT1` 与 `NGX_VULKAN_EVALUATE_DLSS_EXT` 录制，并对原生 Vulkan 命令缓冲 reset/begin/end 实施结果校验。RTX 5080 上的独立求值测试通过（经首像素有限值／哨兵变化检查）；运行时 Vulkan 验证层不可用。
+  - 实现渲染器侧 SR 路由调度、单调提交序号管理、未知色彩编码旁路保护，以及基于停放低分辨率目标的目标提升架构与诊断捕获钩子（`p2-oracle.jsonl`）。
+  - 通过启动入口自检（`--self-test-scene-copy-promotion`）在实机上验证了生产端提升重采样（`DrawPromotionResample`，4×4 升至 8×8 回读测试 64 个 RGBA 像素 0 差异且 alpha 容差 1 字节），并完成初审 4 项修复（路由守卫、验证层选项、JSON 格式与析构前 GPU 排空）。
+  - 依用户指示取消形式化复审，源码目前暂停交接，Gate 3 未批准；尚未在实际游戏中触发 SR 调度，端到端提升映射、alpha 保护、帧中 Flush 安全与 Linux 原生验证均尚未完成。交接指南见 `docs/notes/native-dlss-handoff.zh-CN.md`。
 
 ## v0.6.7 — 2026-09-20
 

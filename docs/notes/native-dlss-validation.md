@@ -1,14 +1,14 @@
-# Native DLSS Validation (P0 Foundation & P1 Temporal Inputs)
+# Native DLSS Validation (P0 Foundation, P1 Temporal Inputs & P2 Checkpoint)
 
-Date: 2026-09-20
+Date: 2026-09-21
 Baseline: `main@5b765f617ec511a2f76aa9da7923a8c122679d2c`
-Feature branch: `dlss` (P0 commit `089676f`, P1 commits `c6bc50b` and `3f40030`)
+Feature branch: `dlss` (prior pushed baseline: `91bf37e`; P2 checkpoint commits: `d018be7` adapter, `744ab91` scene-copy path)
 SDK Reference: NVIDIA DLSS **310.9.1** (`374959484e79a640feaba44c93ac8cfb0a03f5b5`)
-Status: **P0 gate 1 passed**; **P1 gate 2 passed**. Local foundation and temporal input contracts established. Frame Generation (FG) deferred.
+Status: **P0 gate 1 passed**; **P1 gate 2 passed**. P2 Super Resolution execution is in checkpoint commits `d018be7` and `744ab91`, paused at user request. Formal Gate 3 re-review was cancelled at user direction; Gate 3 is not approved. Frame Generation (FG) deferred.
 
 ## 1. Overview and Scope
 
-This document records the verification evidence for the P0 and P1 phases of native Vulkan NVIDIA DLSS integration on the `dlss` development branch.
+This document records verification evidence for native Vulkan NVIDIA DLSS integration on the `dlss` development branch across P0, P1, and current experimental P2 work.
 
 ### P0 Scope
 - Pinned official NGX SDK bootstrap dependency and Vulkan extension negotiation.
@@ -24,7 +24,15 @@ This document records the verification evidence for the P0 and P1 phases of nati
 - Local diagnostic mode `LO_DLSS_INPUT_PROBE=1` driving true lower-resolution rendering and spatial presentation without executing legacy TAA.
 - Ordinary DLSS configuration requests continue to fall back to legacy rendering paths until P2.
 
-P0 and P1 do **not** implement Super Resolution evaluation (`NGX_VULKAN_CREATE_DLSS_EXT1` / `NGX_VULKAN_EVALUATE_DLSS_EXT`) or Frame Generation. No game launch or visual/framerate acceptance is claimed.
+### P2 Scope (Experimental Work in Progress, Paused)
+- Persistent per-device NGX feature session managed by `gpu::dlss::Controller`.
+- Feature creation (`NGX_VULKAN_CREATE_DLSS_EXT1`) and evaluation recording (`NGX_VULKAN_EVALUATE_DLSS_EXT`) with checked Vulkan command buffer reset, begin, and end operations.
+- Renderer-side SR dispatch routing, monotonic submission-serial tracking for renderer and presentation queue batches, and request-level failure latches.
+- Unknown color space bypass to protect unverified game tonemapping pipelines from improper upscaling.
+- Destination target promotion architecture with parked low-resolution fallback mappings and diagnostic capture hooks (`p2-oracle.jsonl`).
+- Production destination resample (`DrawPromotionResample`) validated via build entry-point self-test (`--self-test-scene-copy-promotion`).
+
+P0 and P1 results remain closed and reused. P2 is recorded in checkpoint commits `d018be7` and `744ab91`, paused for handoff; no actual in-game Super Resolution dispatch has occurred, and formal Gate 3 re-review was cancelled at user direction and is not approved. Frame Generation remains deferred.
 
 ## 2. Pinned SDK Provenance and Cryptographic Hashes
 
@@ -159,6 +167,32 @@ All changed translation units compiled without errors:
 - Lane A: `gpu/frame_plan.cpp`, `gpu/upscaling_plan.cpp`, `gpu/video.cpp`, `gpu/dlss_ngx.cpp`, `settings/config.cpp`, `gpu/command_processor.cpp`.
 - Lane B: `gpu/renderer.cpp`.
 
+### 4.10 P2 Native NGX Execution and Destination Promotion Evidence
+
+Evidence is preserved in `.cache/evidence/native-dlss-p2-a.json`, `.cache/evidence/native-dlss-p2-b.json`, and `out/build/windows-clang/p2-bootstrap-cwd/evidence/native-dlss-p2-resample.json`.
+
+#### Lane A: Persistent NGX Session and Command Recording Fixture
+The standalone execution test (`LoNativeDlssExecutionTest`) was compiled with MSVC against pinned SDK `310.9.1` and executed on an NVIDIA GeForce RTX 5080 (driver 616.56):
+- Managed persistent feature lifetime across frames via `gpu::dlss::Controller`, verifying feature creation and evaluation recording.
+- Raw NGX calls returned success: `Sizing_DLSS_GetOptimalSettings` returned `1`, `CREATE_DLSS_EXT1` returned `1`, and `EVALUATE_DLSS_EXT` returned `1`.
+- Raw native Vulkan command buffer calls (`vkResetCommandBuffer`, `vkBeginCommandBuffer`, `vkEndCommandBuffer`) returned `0` (`VK_SUCCESS`).
+- Three primary command buffers were submitted with a GPU fence. The output buffer started with a zero sentinel; post-execution readback confirmed only that the first RGBA16F pixel was finite and nonzero. This sentinel-change check does not prove motion-vector responsiveness, color fidelity, or alpha preservation.
+- Host-injected evaluation failure confirmed exclusion of the isolated command buffer while preserving prefix spatial fallback readability.
+- Runtime validation layer check printed `VALIDATION_LAYER_KHRONOS=unavailable`; no Khronos validation messages were captured.
+- Result: **PASS** (exit 0). Prior P0/P1 results (62 CPU checks, 112 GPU checks) were reused and not rerun.
+
+#### Lane B: Production Destination Resample and Renderer Routing
+- Implemented SR dispatch routing, monotonic submission-serial tracking for Vulkan renderer and presentation queues, and diagnostic capture hooks (`p2-oracle.jsonl`).
+- Implemented unknown color space bypass: static code review confirms that while runtime tonemapping encoding remains unqualified, SR evaluation is bypassed in-game. This is static review confirmation of the guard, not runtime game validation, and tonemapped inputs are unqualified rather than invalid.
+- Entry-point self-test (`--self-test-scene-copy-promotion` guarded by `LO_RENDERER_P2_SELFTEST`) executed on the real RTX 5080 hardware using production `DrawPromotionResample`. Readback confirmed 4×4 to 8×8 RGBA upscaling (64 destination pixels) with 0 mismatches and 1-byte alpha tolerance (`out/build/windows-clang/p2-bootstrap-cwd/evidence/native-dlss-p2-resample.json`, exit 0).
+- Scope limits: The resample test validates isolated image upscaling only. It does not validate active target promotion mapping, guest alpha preservation, mid-frame Flush survival, UI/draw ordering, texture aliasing, fence synchronization, dynamic window resizing, or full-game behavior. These missing areas are acceptable for an in-progress work checkpoint and do not require completion before pausing.
+
+#### Review Checkpoint Status
+Gate 3 initial review attempt 1 identified 4 action items (addressing readback SR guard, validation define leakage, JSON bracket formatting, and self-test failure resource cleanup). All four items were implemented and verified locally (including clean self-test queue draining and resample verification in `out/build/windows-clang/p2-bootstrap-cwd/evidence-cleanup/native-dlss-p2-resample.json` with 0 mismatches). Formal re-review was cancelled at user direction; Gate 3 is not approved, and P2 implementation is paused as an incomplete working-tree checkpoint. Detailed implementation handoff and developer guidelines are provided in [docs/notes/native-dlss-handoff.zh-CN.md](native-dlss-handoff.zh-CN.md).
+
+#### Color Qualification Status
+Offline analysis of game post-processing pixel shader `b4b4d54a7a2d6b96` confirmed that the final pass computes `exp2(c10.x * clamped log2(v))`. The exponent `c10.x` is a runtime pixel shader constant. Known UNORM storage format does not establish whether the underlying game color encoding is linear or gamma-curve. Because runtime constants and producer-chain textures are not yet qualified, the color encoding remains unknown, and unknown color space remains a bypass condition. Remaining capture requirements to qualify this pipeline are runtime PS constants `c0`–`c10`, `c255`, and the producer-resolve-copy allocation chain via `p2-oracle.jsonl`.
+
 ## 5. Architectural and Licensing Boundaries
 
 ### Search Path vs. Loaded Runtime Version
@@ -171,14 +205,18 @@ The probe and runtime pass the directory containing the staged `nvngx_dlss.dll` 
 - Binary redistribution remains unresolved, and no binary packages are released.
 
 ### Known Limits and Boundary Conditions
-- **No Game or Linux Validation**: Tests were run using focused synthetic and hardware probes; no full game launch or Linux GPU runs have been performed.
-- **P2 Prerequisite**: True NGX Super Resolution evaluation (`NGX_VULKAN_CREATE_DLSS_EXT1` and `NGX_VULKAN_EVALUATE_DLSS_EXT`) is not yet implemented. Ordinary DLSS configuration requests remain mapped to legacy rendering paths until P2.
+- **No In-Game DLSS Dispatch**: Actual in-game Super Resolution evaluation is bypassed due to unqualified runtime color encoding. DLSS cannot be claimed as usable in gameplay.
+- **P2 Work In Progress**: P2 implementation is paused in uncommitted working-tree source; Gate 3 review is currently running and is not yet approved.
+- **No Linux Validation**: Native Linux execution remains skipped and untested.
+- **Self-Test Scope**: The promotion resample test covers isolated resample math; it does not prove end-to-end target promotion, guest alpha preservation, UI ordering, or mid-frame flush safety.
 - **Renderer Recognition Scope**: The focused GPU fixture verifies single motion finalization before consumers, but does not exercise separate HDR and SDR scene-recognition branches.
 - **Allocation Geometry**: The input-region fixture exercises a 64×64 valid allocation, but does not test padded texture allocations with smaller subrectangles.
-- **Temporal & Config Discontinuities**: The test suite does not simulate temporal frame-time discontinuities (such as 250 ms stalls). Persisted configuration handling (legacy migration, missing keys, invalid enums, PreviewConfig, and SaveConfig write failure) remains unexecuted in focused fixtures.
+- **Temporal & Config Discontinuities**: The test suite does not simulate temporal frame-time discontinuities (such as 250 ms stalls). Persisted configuration handling remains unexecuted in focused fixtures.
 - **Jitter Proof**: The GPU fixture verifies unjittered motion vector inputs with a synchronized raster jitter sample, but does not provide end-to-end full renderer jitter coverage.
 
 ## 6. Next Steps
 
-- **P2**: Actual NGX Super Resolution execution (`NGX_VULKAN_CREATE_DLSS_EXT1` / `NGX_VULKAN_EVALUATE_DLSS_EXT`), SDR pre-UI initial integration path, persistent NGX session management, and renderer and presentation submission-serial retirement.
-- **P4**: Frame Generation remains deferred until Super Resolution (P1–P3) is completed and verified.
+- Complete Gate 3 code review and address review findings.
+- Qualify runtime tonemapping color encoding and capture producer-chain constants via `p2-oracle.jsonl`.
+- Validate guest alpha preservation, mid-frame flush handling, and UI pass ordering.
+- P4 Frame Generation remains deferred until Super Resolution (P1–P3) is completed and verified.
