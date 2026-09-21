@@ -1,0 +1,16 @@
+diff --git a/tools/tests/motion_replay/CMakeLists.txt b/tools/tests/motion_replay/CMakeLists.txt
+--- a/tools/tests/motion_replay/CMakeLists.txt
++++ b/tools/tests/motion_replay/CMakeLists.txt
+@@ -65 +65,2 @@
+- target_compile_definitions(p2_video_compile PRIVATE LO_SOURCE_VERSION="p2-fixture")
++ target_compile_definitions(p2_video_compile PRIVATE LO_SOURCE_VERSION="p2-fixture"
++  $<$<PLATFORM_ID:Linux>:PLUME_SDL_VULKAN_ENABLED=1>)
+diff --git a/tools/tests/motion_replay/compile_boundary/stdafx.h b/tools/tests/motion_replay/compile_boundary/stdafx.h
+--- a/tools/tests/motion_replay/compile_boundary/stdafx.h
++++ b/tools/tests/motion_replay/compile_boundary/stdafx.h
+@@ -66,0 +67,5 @@
++
++// Pointer-only HID declarations used by video.cpp; no guest layout is modeled.
++struct XAMINPUT_STATE;
++struct XAMINPUT_VIBRATION;
++struct XAMINPUT_CAPABILITIES;
