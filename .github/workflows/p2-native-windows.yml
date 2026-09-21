@@ -1,0 +1,65 @@
+name: P2 native renderer Windows build
+on:
+  push:
+    branches: [dlss-p2-workbench]
+    paths: [.github/workflows/p2-native-windows.yml]
+permissions:
+  contents: read
+jobs:
+  compile:
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: control
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 0a2af46e37df6c90240774c75cb8092ddde70dcc
+          path: source
+          persist-credentials: false
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Apply identical native fixture patch
+        shell: bash
+        run: |
+          cd source
+          git apply --unidiff-zero --check ../control/tools/ci/native-dlss-p2-workbench/feature.patch
+          git apply --unidiff-zero ../control/tools/ci/native-dlss-p2-workbench/feature.patch
+          git submodule update --init --recursive thirdparty/plume thirdparty/unordered_dense tools/XenosRecomp
+          git -C thirdparty/plume apply ../../tools/patches/plume-lostodyssey.patch
+      - uses: actions/checkout@v4
+        with:
+          repository: NVIDIA/DLSS
+          ref: 374959484e79a640feaba44c93ac8cfb0a03f5b5
+          path: sdk
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /include/
+            /lib/Windows_x86_64/x64/nvsdk_ngx_s.lib
+            /lib/Windows_x86_64/x64/nvsdk_ngx_s_dbg.lib
+            /LICENSE.txt
+      - name: Compile SDK disabled and check explicit skip
+        shell: pwsh
+        run: |
+          cmake -S source/tools/tests/motion_replay -B source/out/win-off -G Ninja -DCMAKE_CXX_COMPILER=clang-cl -DCMAKE_C_COMPILER=clang-cl -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_SCAN_FOR_MODULES=OFF -DLO_ENABLE_DLSS=OFF
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          cmake --build source/out/win-off --target LoNativeDlssRendererTest --parallel 2 2>&1 | Tee-Object source/out/win-off-build.log
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          ctest --test-dir source/out/win-off -R '^LoNativeDlssRendererNativeTest$' -V --output-on-failure 2>&1 | Tee-Object source/out/win-skip.log
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Compile SDK enabled without staging binaries
+        shell: pwsh
+        run: |
+          cmake -S source/tools/tests/motion_replay -B source/out/win-on -G Ninja -DCMAKE_CXX_COMPILER=clang-cl -DCMAKE_C_COMPILER=clang-cl -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_SCAN_FOR_MODULES=OFF -DLO_ENABLE_DLSS=ON "-DLO_DLSS_SDK_ROOT=$env:GITHUB_WORKSPACE/sdk" -DLO_DLSS_STAGE_RUNTIME=OFF
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          if (-not (Select-String -Path source/out/win-on/build.ninja -SimpleMatch 'LO_DLSS_SDK=1' -Quiet)) { throw 'SDK unexpectedly disabled' }
+          cmake --build source/out/win-on --target LoNativeDlssRendererTest --parallel 2 2>&1 | Tee-Object source/out/win-on-build.log
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: p2-windows-build-evidence
+          path: source/out/*.log
+          retention-days: 5
