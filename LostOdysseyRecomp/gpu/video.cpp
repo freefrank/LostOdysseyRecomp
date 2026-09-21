@@ -29,6 +29,7 @@
 
 #ifdef LO_GPU_PLUME
 #include <plume_render_interface.h>
+#include <plume_vulkan.h>
 #include "diagnostic_log.h"
 #ifdef _WIN32
 #include <plume_d3d12.h>
@@ -228,6 +229,7 @@ namespace gpu::video
         bool g_hasPresentedImage=false;
         bool g_presentPending=false;
         bool g_forceSwapResize=false;
+        uint64_t g_vulkanSubmissionSerial = 0;
         struct PresentationDisplayState {
             uint64_t resizedTicket = 0;
 #ifdef _WIN32
@@ -237,6 +239,45 @@ namespace gpu::video
         } g_presentationDisplay;
         constexpr plume::RenderFormat kSwapChainFormat = plume::RenderFormat::R8G8B8A8_UNORM;
         constexpr uint32_t kSwapChainBuffers = 3;
+
+        bool SubmitVulkan(const plume::RenderCommandList* const* lists, uint32_t count,
+            plume::RenderCommandSemaphore* const* waits, uint32_t waitCount,
+            plume::RenderCommandSemaphore* const* signals, uint32_t signalCount,
+            plume::RenderCommandFence* fence, uint64_t* serial, int32_t* rawResult)
+        {
+            if (!g_vulkan || !g_queue || !lists || !count || !fence) return false;
+            auto* queue = static_cast<plume::VulkanCommandQueue*>(g_queue.get());
+            auto* nativeFence = static_cast<plume::VulkanCommandFence*>(fence);
+            std::vector<VkCommandBuffer> commandBuffers;
+            std::vector<VkSemaphore> waitSemaphores, signalSemaphores;
+            commandBuffers.reserve(count); waitSemaphores.reserve(waitCount); signalSemaphores.reserve(signalCount);
+            for (uint32_t i = 0; i < count; ++i) {
+                if (!lists[i]) return false;
+                commandBuffers.push_back(static_cast<const plume::VulkanCommandList*>(lists[i])->vk);
+            }
+            for (uint32_t i = 0; i < waitCount; ++i)
+                waitSemaphores.push_back(static_cast<plume::VulkanCommandSemaphore*>(waits[i])->vk);
+            for (uint32_t i = 0; i < signalCount; ++i)
+                signalSemaphores.push_back(static_cast<plume::VulkanCommandSemaphore*>(signals[i])->vk);
+            const VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+            VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
+            submit.commandBufferCount = uint32_t(commandBuffers.size()); submit.pCommandBuffers = commandBuffers.data();
+            submit.waitSemaphoreCount = uint32_t(waitSemaphores.size()); submit.pWaitSemaphores = waitSemaphores.data();
+            submit.pWaitDstStageMask = waitSemaphores.empty() ? nullptr : &waitStage;
+            submit.signalSemaphoreCount = uint32_t(signalSemaphores.size()); submit.pSignalSemaphores = signalSemaphores.data();
+            VkResult result;
+            {
+                const std::scoped_lock lock(*queue->queue->mutex);
+                result = vkResetFences(queue->device->vk, 1, &nativeFence->vk);
+                if (result == VK_SUCCESS)
+                    result = vkQueueSubmit(queue->queue->vk, 1, &submit, nativeFence->vk);
+                if (result == VK_SUCCESS && serial)
+                    *serial = ++g_vulkanSubmissionSerial;
+            }
+            if (rawResult) *rawResult = int32_t(result);
+            if (result != VK_SUCCESS) return false;
+            return true;
+        }
 
         std::filesystem::path DlssApplicationDataPath()
         {
@@ -344,6 +385,14 @@ namespace gpu::video
         return nullptr;
 #endif
     }
+#if defined(LO_GPU_PLUME)
+    dlss::Controller* GetDlssController() { return g_vulkan ? g_dlssController.get() : nullptr; }
+    bool SubmitRendererBatch(const plume::RenderCommandList* const* lists, uint32_t count,
+        plume::RenderCommandFence* fence, uint64_t& submissionSerial, int32_t& rawVkResult)
+    {
+        return SubmitVulkan(lists, count, nullptr, 0, nullptr, 0, fence, &submissionSerial, &rawVkResult);
+    }
+#endif
 
     uint32_t TiledOffset2D(uint32_t x, uint32_t y, uint32_t pitchBlocks, uint32_t bytesPerBlockLog2)
     {
@@ -409,6 +458,8 @@ namespace gpu::video
         renderer::Shutdown();
 #ifdef LO_GPU_PLUME
         WaitForPresentGpu();
+        if (g_dlssController && g_vulkan)
+            g_dlssController->ShutdownAfterGpuDrain();
         g_cpuFrame.reset(); g_cpuWidth = g_cpuHeight = 0;
         g_presentedSnapshot.reset(); g_snapshotWidth = g_snapshotHeight = 0;
         g_presentation.reset();
@@ -423,6 +474,7 @@ namespace gpu::video
         g_releaseSemaphore.reset(); g_acquireSemaphore.reset();
         g_fence.reset(); g_commandList.reset(); g_queue.reset();
         g_device.reset(); g_interface.reset();
+        g_vulkanSubmissionSerial = 0;
         g_dlssController.reset();
         g_hasPresentedImage = false; g_lastPresentedImage = 0; g_forceSwapResize = false;
         g_presentationDisplay = {};
@@ -1095,7 +1147,11 @@ namespace gpu::video
         const plume::RenderCommandList* lists[] = { g_commandList.get() };
         plume::RenderCommandSemaphore* waitSemaphore = g_acquireSemaphore.get();
         plume::RenderCommandSemaphore* signalSemaphore = PresentSemaphore(imageIndex);
-        g_queue->executeCommandLists(lists, 1, &waitSemaphore, 1, &signalSemaphore, 1, g_fence.get());
+        uint64_t submissionSerial = 0; int32_t submitResult = 0;
+        const bool submitted = g_vulkan ? SubmitVulkan(lists, 1, &waitSemaphore, 1, &signalSemaphore, 1,
+            g_fence.get(), &submissionSerial, &submitResult)
+            : (g_queue->executeCommandLists(lists, 1, &waitSemaphore, 1, &signalSemaphore, 1, g_fence.get()), true);
+        if (!submitted) { LOG_ERROR("video: present submit failed raw_vk={}", submitResult); return false; }
         const bool presented = g_swapChain->present(imageIndex, &signalSemaphore, 1);
         if (presented) ++g_completedPresentCount;
         g_presentPending = true;
@@ -1229,7 +1285,11 @@ namespace gpu::video
                 const plume::RenderCommandList* lists[] = { g_commandList.get() };
                 plume::RenderCommandSemaphore* waitSemaphore = g_acquireSemaphore.get();
                 plume::RenderCommandSemaphore* signalSemaphore = PresentSemaphore(imageIndex);
-                g_queue->executeCommandLists(lists, 1, &waitSemaphore, 1, &signalSemaphore, 1, g_fence.get());
+                uint64_t submissionSerial = 0; int32_t submitResult = 0;
+                const bool submitted = g_vulkan ? SubmitVulkan(lists, 1, &waitSemaphore, 1, &signalSemaphore, 1,
+                    g_fence.get(), &submissionSerial, &submitResult)
+                    : (g_queue->executeCommandLists(lists, 1, &waitSemaphore, 1, &signalSemaphore, 1, g_fence.get()), true);
+                if (!submitted) { LOG_ERROR("video: GPU presentation submit failed raw_vk={}", submitResult); return; }
                 const bool presented = g_swapChain->present(imageIndex, &signalSemaphore, 1);
                 if (presented) ++g_completedPresentCount;
                 g_presentPending = true;
@@ -1362,7 +1422,12 @@ namespace gpu::video
             g_commandList->copyTextureRegion(plume::RenderTextureCopyLocation::PlacedFootprint(readback.get(),kSwapChainFormat,w,h,1,pitch/4),plume::RenderTextureCopyLocation::Subresource(frame));
             if(!g_vulkan) g_commandList->barriers(plume::RenderBarrierStage::NONE,plume::RenderTextureBarrier(frame,plume::RenderTextureLayout::PRESENT));
             g_commandList->end(); const plume::RenderCommandList* lists[]={g_commandList.get()};
-            g_queue->executeCommandLists(lists,1,nullptr,0,nullptr,0,g_fence.get()); g_queue->waitForCommandFence(g_fence.get());
+            uint64_t submissionSerial = 0; int32_t submitResult = 0;
+            const bool submitted = g_vulkan ? SubmitVulkan(lists, 1, nullptr, 0, nullptr, 0,
+                g_fence.get(), &submissionSerial, &submitResult)
+                : (g_queue->executeCommandLists(lists,1,nullptr,0,nullptr,0,g_fence.get()), true);
+            if (!submitted) { LOG_ERROR("video: screenshot submit failed raw_vk={}", submitResult); return false; }
+            g_queue->waitForCommandFence(g_fence.get());
             std::vector<uint32_t> pixels(size_t(w)*h); const auto* data=static_cast<const uint8_t*>(readback->map());
             for(uint32_t y=0;y<h;y++) memcpy(pixels.data()+size_t(y)*w,data+size_t(y)*pitch,w*4);
             readback->unmap(); return WritePpm(path,pixels,w,h);

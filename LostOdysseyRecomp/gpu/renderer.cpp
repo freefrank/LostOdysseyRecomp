@@ -57,6 +57,7 @@
 #ifdef LO_GPU_PLUME
 #include <plume_render_interface.h>
 #include <plume_render_interface_builders.h>
+#include "dlss_ngx.h"
 #include "draw_timing.h"
 #endif
 
@@ -347,6 +348,10 @@ namespace gpu::renderer
             using TextureSetCache = texture_descriptors::BatchCache<RenderTexture, RenderDescriptorSet, kTextureSlots>;
             struct GpuSlot {
                 std::unique_ptr<RenderCommandList> list;
+                // The prefix is list. An NGX recording error must never place
+                // vendor commands in the guest continuation batch.
+                std::unique_ptr<RenderCommandList> srIsolated;
+                std::unique_ptr<RenderCommandList> srContinuation;
                 std::unique_ptr<RenderCommandFence> fence;
                 std::unique_ptr<RenderQueryPool> timingQueries;
                 draw_timing::Probe drawProbe;
@@ -363,6 +368,8 @@ namespace gpu::renderer
                 std::vector<std::unique_ptr<HostTexture>> bloomPrefilterTextures;
                 size_t bloomPrefilterUsed = 0;
                 uint64_t temporalSerial = 0, hdrTemporalSerial = 0, motionSerial = 0;
+                uint64_t srUseId = 0, srSubmissionSerial = 0;
+                bool srPrefixClosed = false, srIsolatedAccepted = false, srContinuationOpen = false;
                 bool submitted = false;
             };
             GpuSlot gpuSlots[kGpuSlots];
@@ -371,7 +378,11 @@ namespace gpu::renderer
             void BindGpuSlot()
             {
                 auto& g = Gpu();
-                commandList = g.list.get();
+                // A successful isolated SR list leaves the ordinary renderer in
+                // the continuation.  Rebinding after an upload-ring Flush must
+                // therefore resume that open list instead of recording into the
+                // already-ended prefix.
+                commandList = g.srContinuationOpen ? g.srContinuation.get() : g.list.get();
                 fence = g.fence.get();
                 timingQueries = g.timingQueries.get();
                 uploadRing = g.uploadRing.get();
@@ -488,6 +499,8 @@ namespace gpu::renderer
             temporal::MotionFrameView motionView;
             uint64_t motionFinalizedFrame = ~0ull;
             bool temporalInputProbe = false;
+            bool dlssSrRequested = false;
+            uint64_t dlssDisableReportedEpoch = ~0ull;
             void FinishMotion(temporal::HistoryOwner* history) {
                 if (!motionOptions.enabled || !history || motionFinalizedFrame == frame) return;
                 motionFinalizedFrame = frame;
@@ -508,6 +521,9 @@ namespace gpu::renderer
                 }
             }
             std::unique_ptr<temporal::HistoryOwner> temporalHistory;
+#if defined(LO_GPU_PLUME)
+            dlss::Controller* dlssController = nullptr;
+#endif
             // Opt-in candidate, controlled through the local diagnostic file.
             // Separate owner: HDR is accumulated before bloom and tone mapping.
             std::unique_ptr<temporal::HistoryOwner> hdrTemporalHistory;
@@ -531,6 +547,26 @@ namespace gpu::renderer
             std::unordered_set<uint64_t> failedPlanEpochs;
             std::chrono::steady_clock::time_point temporalFrameTime=std::chrono::steady_clock::now();
             std::unique_ptr<gpu::Presentation> sceneProcessor;
+            // A single scene-copy promotion is deliberately renderer-owned. The
+            // render-target map keeps the active allocation; parkedLow keeps the
+            // alternate grid alive across ordinary mid-frame Flush calls.
+            struct SceneCopyPromotion {
+                RenderTargetKey key{};
+                uint64_t frame = ~0ull, epoch = 0;
+                uint64_t sourceAllocation = 0;
+                HostTexture* active = nullptr;
+                std::unique_ptr<HostTexture> parkedLow;
+                std::unique_ptr<HostTexture> preparedPromoted;
+                std::unique_ptr<HostTexture> scratch;
+                std::unique_ptr<HostTexture> composite;
+                temporal::TemporalFrameInputs inputs{};
+                RenderDescriptorSet* fallbackSet = nullptr;
+                RenderDescriptorSet* rgbSet = nullptr;
+                uint64_t fallbackConstants = UINT64_MAX, rgbConstants = UINT64_MAX;
+                bool prepared = false, activeMapping = false, srApplied = false;
+            } sceneCopyPromotion;
+            std::unique_ptr<RenderShader> sceneCopyPromotionPs, sceneCopyPromotionRgbPs;
+            std::map<uint32_t, std::unique_ptr<RenderPipeline>> sceneCopyPromotionPipelines, sceneCopyPromotionRgbPipelines;
             std::unique_ptr<RenderTexture> sceneAAOutput;
             uint32_t sceneAAWidth=0,sceneAAHeight=0,sceneAAMode=0;
             bool sceneAAEnabled=false,sceneAABusy=false,activeSpatialAA=false;
@@ -689,6 +725,9 @@ namespace gpu::renderer
             std::vector<uint32_t> debugRegisters;
             std::set<uint64_t> debugShaders;
             std::shared_ptr<shader_source_capture::Capture> debugShaderSources;
+            // Narrow P2 provenance evidence. This is created only with the existing
+            // three-frame capture and is not a general frame logging facility.
+            std::ofstream p2Evidence;
 
             void BeginDebugCapture()
             {
@@ -714,7 +753,13 @@ namespace gpu::renderer
                     debugCaptureDir = path.string();
                     debugTrace.open(path / "render-state.txt", std::ios::trunc);
                     if (!debugTrace) throw std::runtime_error("Cannot write render-state.txt");
+                    p2Evidence.open(path / "p2-oracle.jsonl", std::ios::trunc);
+                    if (!p2Evidence) throw std::runtime_error("Cannot write p2-oracle.jsonl");
                     debugTrace << "Frame " << frame << "\nRegister index/value pairs are hex. First draw is a full register snapshot; later draws contain changes.\n";
+                    // Newline-delimited JSON. Each subsequent line is either a resolve
+                    // event or one of the two PS draw records requested by the oracle.
+                    p2Evidence << "{\"schema\":\"lostodyssey.p2-oracle-evidence.v1\",\"event\":\"capture\",\"renderer_frame\":" << frame
+                               << ",\"trigger\":\"LO_CAPTURE_REQUEST changing_nonzero_uint64_or_existing_F1_menu\",\"encoding_claim\":\"unknown\"}\n";
                     const auto& description = device->getDescription();
                     debugTrace << fmt::format("GPU: {} driver_raw={}\n", description.name, description.driverVersion);
                     const auto config = settings::GetConfig();
@@ -737,6 +782,8 @@ namespace gpu::renderer
                     debugCaptureDir.clear();
                     debugTrace.close();
                     debugTrace.clear();
+                    p2Evidence.close();
+                    p2Evidence.clear();
                     captureFrame = 0;
                     captureBusy = false;
                     captureStatus = L"捕获失败，已有文件保留 / Capture failed, files retained: " + debugCaptureRoot.wstring();
@@ -1055,6 +1102,31 @@ namespace gpu::renderer
             static_assert(offsetof(SharedConstants,ndcScale)==160);
             static_assert(offsetof(SharedConstants,transfer)==240);
             static_assert(offsetof(SharedConstants,vfetchOffset)==256);
+
+            void WriteP2ResolveEvent(const char* kind, const HostTexture& source, uint32_t destBase,
+                const ResolvedSurface& destination, const char* operation)
+            {
+                if (!p2Evidence.is_open() || !destination.tex) return;
+                const auto& dest = *destination.tex;
+                // Both renderer copy paths name subresource zero explicitly. Do not
+                // infer image layout or a color transform from this bookkeeping.
+                p2Evidence << "{\"schema\":\"lostodyssey.p2-oracle-evidence.v1\",\"event\":\"resolve\",\"kind\":\"" << kind
+                    << "\",\"renderer_frame\":" << frame << ",\"operation\":\"" << operation
+                    << "\",\"source\":{\"allocation\":" << source.allocationSerial
+                    << ",\"host_format\":" << uint32_t(source.format)
+                    << ",\"extent\":[" << source.width << ',' << source.height << "]"
+                    << ",\"subresource\":0}"
+                    << ",\"destination\":{\"guest_base\":" << destBase
+                    << ",\"guest_format\":" << destination.destFormat
+                    << ",\"guest_pitch\":" << destination.destPitch
+                    << ",\"allocation\":" << dest.allocationSerial
+                    << ",\"host_format\":" << uint32_t(dest.format)
+                    << ",\"extent\":[" << dest.width << ',' << dest.height << "]"
+                    << ",\"subresource\":0,\"write_version\":" << destination.writeOrdinal
+                    << ",\"write_ordinal\":" << destination.writeOrdinal
+                    << ",\"rect\":[" << destination.writeX << ',' << destination.writeY << ','
+                    << destination.writeWidth << ',' << destination.writeHeight << "]}}\n";
+            }
             static_assert(offsetof(SharedConstants,samplerIndex)==640);
             static_assert(offsetof(SharedConstants,textureInfo)==768);
             static_assert(offsetof(SharedConstants,textureSize)==896);
@@ -1112,6 +1184,9 @@ namespace gpu::renderer
                 device = video::GetDevice();
                 queue = video::GetQueue();
                 vulkan = video::IsVulkan();
+#if defined(LO_GPU_PLUME)
+                dlssController = vulkan ? video::GetDlssController() : nullptr;
+#endif
                 const char* batchOverride = getenv("LO_VK_DESCRIPTOR_BATCH_LIMIT");
                 descriptorBatchLimit = render_batch::DescriptorLimit(vulkan, batchOverride ? batchOverride : "");
                 LOG_INFO("renderer: descriptor reuse={} backend={} limit={} gpu_slots={} (LO_DESCRIPTOR_REUSE=0 disables reuse)",
@@ -1154,6 +1229,12 @@ namespace gpu::renderer
                     auto& g = gpuSlots[i];
                     g.list = queue->createCommandList();
                     if (!g.list) return InitFailure("command_list.create", 0, i);
+                    if (vulkan && dlssController) {
+                        g.srIsolated = queue->createCommandList();
+                        g.srContinuation = queue->createCommandList();
+                        if (!g.srIsolated || !g.srContinuation)
+                            return InitFailure("dlss.command_list.create", 0, i);
+                    }
                     g.fence = device->createCommandFence();
                     if (!g.fence) return InitFailure("command_fence.create", 0, i);
                     g.uploadRing = device->createBuffer(RenderBufferDesc::UploadBuffer(kUploadRingSize, vulkan ? RenderBufferFlag::DEVICE_ADDRESSABLE | RenderBufferFlag::INDEX | RenderBufferFlag::STORAGE : RenderBufferFlag::NONE));
@@ -1264,6 +1345,7 @@ namespace gpu::renderer
 
                 CompileRectListGs();
                 CompileBlitShaders();
+                CompileSceneCopyPromotionShaders();
                 CompileTransferShader();
                 if (!rectListGs) return InitFailure("rect_list_shader.create");
                 if (!blitVs || !blitPs) return InitFailure("blit_shader.create");
@@ -1483,6 +1565,295 @@ namespace gpu::renderer
                 }
             }
 
+            void CompileSceneCopyPromotionShaders()
+            {
+                // Reuse the renderer's shared-constant binding: transfer[0..1]
+                // are source-to-destination scale. The RGB pass samples a distinct
+                // SR scratch image and deliberately retains base alpha.
+                const char* common =
+                    "Texture2D<float4> base : register(t0, space1);\n"
+                    "#ifdef __spirv__\n"
+                    "struct XePushConstants { uint64_t vs; uint64_t sharedAddress; uint64_t ps; };\n"
+                    "[[vk::push_constant]] ConstantBuffer<XePushConstants> xePush;\n"
+                    "#define xePromotion vk::RawBufferLoad<uint4>(xePush.sharedAddress + 240)\n"
+                    "#else\n"
+                    "cbuffer XeShared : register(b1, space0) { uint4 pad0[2]; uint4 pad1[8]; float4 pad2; float4 pad3; float4 pad4; float4 pad5; float4 xeColorMax; uint4 xePromotion; };\n"
+                    "#endif\n";
+                const std::string rgba = std::string(common) +
+                    "float4 main(float4 pos : SV_Position) : SV_Target { uint4 p=xePromotion; return base.Load(int3(int2(pos.xy*float2(asfloat(p.x),asfloat(p.y))),0)); }\n";
+                const std::string rgb = std::string(common) +
+                    "Texture2D<float4> sr : register(t1, space1);\n"
+                    "float4 main(float4 pos : SV_Position) : SV_Target { uint4 p=xePromotion; float4 b=base.Load(int3(int2(pos.xy*float2(asfloat(p.x),asfloat(p.y))),0)); return float4(sr.Load(int3(int2(pos.xy),0)).rgb,b.a); }\n";
+                auto rgbaCompiled = xenos::CompileCachedHlsl(rgba, "main", "ps_6_0", binaryFormat);
+                auto rgbCompiled = xenos::CompileCachedHlsl(rgb, "main", "ps_6_0", binaryFormat);
+                if (!rgbaCompiled.ok || !rgbCompiled.ok) {
+                    SHADER_LOG_WARNING("compile-failed", None, "renderer: scene-copy promotion shader compilation failed: {}{}", rgbaCompiled.errors, rgbCompiled.errors);
+                    return;
+                }
+                sceneCopyPromotionPs = device->createShader(rgbaCompiled.bytecode.data(), rgbaCompiled.bytecode.size(), "main", renderFormat);
+                sceneCopyPromotionRgbPs = device->createShader(rgbCompiled.bytecode.data(), rgbCompiled.bytecode.size(), "main", renderFormat);
+            }
+
+            RenderPipeline* GetSceneCopyPromotionPipeline(RenderFormat format, bool rgb)
+            {
+                auto& cache = rgb ? sceneCopyPromotionRgbPipelines : sceneCopyPromotionPipelines;
+                auto found = cache.find(uint32_t(format));
+                if (found != cache.end()) return found->second.get();
+                auto* ps = rgb ? sceneCopyPromotionRgbPs.get() : sceneCopyPromotionPs.get();
+                if (!blitVs || !ps) return nullptr;
+                RenderGraphicsPipelineDesc desc;
+                desc.pipelineLayout = pipelineLayout.get(); desc.vertexShader = blitVs.get(); desc.pixelShader = ps;
+                desc.depthEnabled = false; desc.depthWriteEnabled = false; desc.depthFunction = RenderComparisonFunction::ALWAYS;
+                desc.depthTargetFormat = RenderFormat::UNKNOWN; desc.renderTargetFormat[0] = format;
+                desc.renderTargetBlend[0] = RenderBlendDesc::Copy(); desc.renderTargetBlend[0].renderTargetWriteMask = 0xF;
+                desc.renderTargetCount = 1; desc.cullMode = RenderCullMode::NONE; desc.primitiveTopology = RenderPrimitiveTopology::TRIANGLE_LIST;
+                auto pipeline = device->createGraphicsPipeline(desc);
+                if (!pipeline) return nullptr;
+                auto* result = pipeline.get(); cache.emplace(uint32_t(format), std::move(pipeline)); return result;
+            }
+
+            std::unique_ptr<HostTexture> CreatePromotedTarget(const HostTexture& source, resolution::Size output)
+            {
+                auto target = std::make_unique<HostTexture>();
+                target->allocationSerial = ++nextTargetAllocation; target->format = source.format;
+                target->guestWidth = source.guestWidth; target->guestHeight = source.guestHeight;
+                target->resolutionSize = output;
+                target->width = std::max(1u, target->ScaleX(target->guestWidth));
+                target->height = std::max(1u, target->ScaleY(target->guestHeight));
+                target->texture = device->createTexture(RenderTextureDesc::Texture2D(target->width, target->height, 1,
+                    target->format, RenderTextureFlag::RENDER_TARGET));
+                target->layout = RenderTextureLayout::UNKNOWN;
+                if (!target->texture) return nullptr;
+                return target;
+            }
+
+            std::unique_ptr<HostTexture> CreateSceneCopyScratch(const HostTexture& source, resolution::Size output)
+            {
+                // NGX writes content pixels.  This image deliberately has no
+                // guest pitch padding: its extent is exactly the requested SR
+                // output and it is only ever addressed as storage/sample data.
+                auto scratch = std::make_unique<HostTexture>();
+                scratch->allocationSerial = ++nextTargetAllocation;
+                scratch->format = source.format;
+                scratch->guestWidth = scratch->width = std::max(1u, output.width);
+                scratch->guestHeight = scratch->height = std::max(1u, output.height);
+                scratch->resolutionSize = output;
+                scratch->texture = device->createTexture(RenderTextureDesc::Texture2D(scratch->width, scratch->height, 1,
+                    scratch->format, RenderTextureFlag::STORAGE));
+                scratch->layout = RenderTextureLayout::UNKNOWN;
+                if (!scratch->texture) return nullptr;
+                return scratch;
+            }
+
+            bool PrepareSceneCopyDestination(const RenderTargetKey& key, HostTexture& color,
+                const temporal::TemporalFrameInputs& inputs)
+            {
+                if (sceneCopyPromotion.activeMapping || !sceneCopyPromotionPs || !sceneCopyPromotionRgbPs ||
+                    inputs.colorEncoding == temporal::ColorEncoding::Unknown || !inputs.CompleteForConsumer()) return false;
+                const resolution::Size output{activePlan.output.width, activePlan.output.height};
+                if (!output.width || !output.height) return false;
+                auto promoted = CreatePromotedTarget(color, output);
+                auto scratch = CreateSceneCopyScratch(color, output);
+                auto composite = CreatePromotedTarget(color, output);
+                if (!promoted || !scratch || !composite) return false;
+                const auto scale = [&](const HostTexture& src) {
+                    SharedConstants constants{};
+                    constants.transfer[0] = std::bit_cast<uint32_t>(float(src.width) / float(promoted->width));
+                    constants.transfer[1] = std::bit_cast<uint32_t>(float(src.height) / float(promoted->height));
+                    return Upload(&constants, sizeof(constants));
+                };
+                // Both constant allocations must belong to the final active
+                // slot. Upload may Flush when the ring wraps, so reserve their
+                // combined aligned footprint before allocating descriptors.
+                const auto promotionUploadEnd = [](uint64_t offset, size_t size) {
+                    return ((offset + 255) & ~uint64_t(255)) + size;
+                };
+                const size_t promotionConstantBytes = sizeof(SharedConstants);
+                const uint64_t firstEnd = promotionUploadEnd(Gpu().uploadOffset, promotionConstantBytes);
+                const uint64_t bothEnd = promotionUploadEnd(firstEnd, promotionConstantBytes);
+                if (bothEnd > kUploadRingSize) {
+                    Flush();
+                    Begin();
+                }
+                const uint64_t fallbackConstants = scale(color);
+                const uint64_t rgbConstants = scale(*promoted);
+                if (fallbackConstants == UINT64_MAX || rgbConstants == UINT64_MAX) return false;
+                auto* fallbackSet = AcquireSet(1);
+                auto* rgbSet = AcquireSet(1);
+                if (!fallbackSet || !rgbSet) return false;
+                fallbackSet->setTexture(0, color.texture.get(), RenderTextureLayout::SHADER_READ);
+                fallbackSet->setTexture(1, dummyTexture2D.texture.get(), RenderTextureLayout::SHADER_READ);
+                rgbSet->setTexture(0, promoted->texture.get(), RenderTextureLayout::SHADER_READ);
+                rgbSet->setTexture(1, scratch->texture.get(), RenderTextureLayout::SHADER_READ);
+                sceneCopyPromotion = {};
+                sceneCopyPromotion.key = key; sceneCopyPromotion.frame = frame; sceneCopyPromotion.epoch = activePlan.geometryEpoch;
+                sceneCopyPromotion.sourceAllocation = color.allocationSerial;
+                sceneCopyPromotion.inputs = inputs; sceneCopyPromotion.scratch = std::move(scratch); sceneCopyPromotion.composite = std::move(composite);
+                sceneCopyPromotion.fallbackSet = fallbackSet; sceneCopyPromotion.rgbSet = rgbSet;
+                sceneCopyPromotion.fallbackConstants = fallbackConstants; sceneCopyPromotion.rgbConstants = rgbConstants;
+                // parkedLow is installed by Activate after the map identity check.
+                sceneCopyPromotion.preparedPromoted = std::move(promoted);
+                sceneCopyPromotion.prepared = true;
+                return true;
+            }
+
+            void SetPromotionConstants(uint64_t offset)
+            {
+                if (vulkan) {
+                    const uint64_t base = uploadRing->getDeviceAddress();
+                    constantAddresses[0] = base + offset; constantAddresses[1] = base + offset; constantAddresses[2] = base + offset;
+                    commandList->setGraphicsPushConstants(0, constantAddresses);
+                } else {
+                    SetConstantBuffer(offset, 0); SetConstantBuffer(offset, 1); SetConstantBuffer(offset, 2);
+                }
+            }
+
+            bool DrawPromotionResample(HostTexture& destination, RenderDescriptorSet* set, uint64_t constants, bool rgb)
+            {
+                auto* pipeline = GetSceneCopyPromotionPipeline(destination.format, rgb);
+                if (!pipeline || !set) return false;
+                Transition(destination, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
+                commandList->setFramebuffer(GetFramebuffer(&destination, nullptr));
+                RenderViewport viewport(0.0f, 0.0f, float(destination.width), float(destination.height));
+                RenderRect scissor{0, 0, int32_t(destination.width), int32_t(destination.height)};
+                commandList->setViewports(viewport); commandList->setScissors(scissor);
+                commandList->setPipeline(pipeline); commandList->setGraphicsPipelineLayout(pipelineLayout.get());
+                SetPromotionConstants(constants); commandList->setGraphicsDescriptorSet(staticSet0.get(), 0);
+                commandList->setGraphicsDescriptorSet(set, 1); commandList->setGraphicsDescriptorSet(AcquireSet(2), 2);
+                commandList->setGraphicsDescriptorSet(AcquireSet(3), 3); if (vulkan) commandList->setGraphicsDescriptorSet(staticSamplerSet.get(), 4);
+                commandList->drawInstanced(3, 1, 0, 0);
+                return true;
+            }
+
+            bool ActivateSceneCopyDestination(HostTexture*& color, HostTexture*& rasterTarget,
+                RenderViewport& rasterViewport, RenderRect& physicalScissor,
+                const RenderViewport& guestViewport, const RenderRect& guestScissor)
+            {
+                auto& promotion = sceneCopyPromotion;
+                if (!promotion.prepared || promotion.activeMapping || !promotion.preparedPromoted) return false;
+                auto it = renderTargets.find(promotion.key);
+                if (it == renderTargets.end() || it->second.get() != color ||
+                    color->allocationSerial != promotion.sourceAllocation) return false;
+                promotion.parkedLow = std::move(it->second);
+                it->second = std::move(promotion.preparedPromoted);
+                promotion.active = it->second.get(); promotion.activeMapping = true;
+                Transition(*promotion.parkedLow, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
+                if (!DrawPromotionResample(*promotion.active, promotion.fallbackSet, promotion.fallbackConstants, false)) {
+                    it->second = std::move(promotion.parkedLow); promotion.active = nullptr; promotion.activeMapping = false;
+                    return false;
+                }
+                const bool rasterWasColor = rasterTarget == color;
+                color = promotion.active;
+                if (rasterWasColor) rasterTarget = color;
+                rasterViewport = guestViewport;
+                rasterViewport.x *= double(rasterTarget->resolutionSize.width) / 1280.0;
+                rasterViewport.y *= double(rasterTarget->resolutionSize.height) / 720.0;
+                rasterViewport.width *= double(rasterTarget->resolutionSize.width) / 1280.0;
+                rasterViewport.height *= double(rasterTarget->resolutionSize.height) / 720.0;
+                physicalScissor.left = int32_t(color->ScaleX(uint32_t(guestScissor.left)));
+                physicalScissor.right = int32_t(color->ScaleX(uint32_t(guestScissor.right)));
+                physicalScissor.top = int32_t(color->ScaleY(uint32_t(guestScissor.top)));
+                physicalScissor.bottom = int32_t(color->ScaleY(uint32_t(guestScissor.bottom)));
+                return true;
+            }
+
+            void RestoreSceneCopyDestination(const char* reason)
+            {
+                auto& promotion = sceneCopyPromotion;
+                if (!promotion.activeMapping || !promotion.active || !promotion.parkedLow) return;
+                auto it = renderTargets.find(promotion.key);
+                if (it == renderTargets.end() || it->second.get() != promotion.active) return;
+                Begin();
+                Transition(*promotion.active, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
+                auto* restoreSet = AcquireSet(1);
+                restoreSet->setTexture(0, promotion.active->texture.get(), RenderTextureLayout::SHADER_READ);
+                restoreSet->setTexture(1, dummyTexture2D.texture.get(), RenderTextureLayout::SHADER_READ);
+                SharedConstants constants{};
+                constants.transfer[0] = std::bit_cast<uint32_t>(float(promotion.active->width) / float(promotion.parkedLow->width));
+                constants.transfer[1] = std::bit_cast<uint32_t>(float(promotion.active->height) / float(promotion.parkedLow->height));
+                const uint64_t offset = Upload(&constants, sizeof(constants));
+                if (offset == UINT64_MAX || !DrawPromotionResample(*promotion.parkedLow, restoreSet, offset, false)) {
+                    DisableDlssRequest(frame_plan::FailureReason::InvalidInput);
+                    return;
+                }
+                auto retired = std::move(it->second);
+                it->second = std::move(promotion.parkedLow);
+                if (retired) Gpu().retiredTextures.push_back(std::move(retired));
+                if (promotion.composite) Gpu().retiredTextures.push_back(std::move(promotion.composite));
+                if (promotion.scratch) Gpu().retiredTextures.push_back(std::move(promotion.scratch));
+                LOG_INFO("renderer: restored scene-copy destination frame={} reason={}", frame, reason);
+                promotion = {};
+            }
+
+#if defined(LO_GPU_PLUME)
+            bool RecordSceneCopyDlss(HostTexture*& color, HostTexture*& rasterTarget)
+            {
+                auto& promotion = sceneCopyPromotion;
+                if (!promotion.activeMapping || !dlssController || !vulkan || !Gpu().srIsolated || !Gpu().srContinuation) return false;
+                dlss::SrConfig config{};
+                config.renderExtent = {promotion.inputs.color.width, promotion.inputs.color.height};
+                config.outputExtent = {activePlan.output.width, activePlan.output.height};
+                config.quality = activePlan.dlssQuality; config.deviceEpoch = activePlan.deviceEpoch;
+                config.colorSpace = promotion.inputs.colorEncoding == temporal::ColorEncoding::Sdr ?
+                    dlss::SrColorSpace::DisplayEncoded : dlss::SrColorSpace::Linear;
+                // A fresh controller has no feature to recreate. EnsureSession
+                // establishes that cold state; RecordIsolated reports a genuine
+                // configuration change as NeedsReconfigure after it exists.
+                if (dlssController->EnsureSession(*static_cast<plume::VulkanDevice*>(device)) != dlss::SrStatus::Executable) {
+                    DisableDlssRequest(frame_plan::FailureReason::DlssUnavailable);
+                    return false;
+                }
+                // The promoted destination first received the old RGBA contents,
+                // then the original guest copy (including its destination-dependent
+                // alpha blend). The composite below preserves that post-copy alpha;
+                // it never reads SR scratch alpha. A's
+                // fixture contract requires every NGX image to enter GENERAL with
+                // an ALL-stage barrier, regardless of its preceding renderer use.
+                std::vector<RenderTextureBarrier> barriers;
+                for (auto* image : {promotion.inputs.color.texture, promotion.inputs.depth.texture,
+                                    promotion.inputs.motion.texture, promotion.inputs.motionInvalidity.texture,
+                                    promotion.scratch->texture.get()})
+                    if (image) barriers.emplace_back(image, RenderTextureLayout::GENERAL);
+                commandList->barriers(RenderBarrierStage::ALL, barriers);
+                Gpu().drawProbe.End(commandList); commandList->end(); listOpen = false;
+                Gpu().srPrefixClosed = true;
+                auto attempt = dlssController->RecordIsolated(*static_cast<plume::VulkanCommandList*>(Gpu().srIsolated.get()), config,
+                    promotion.inputs, *static_cast<plume::VulkanTexture*>(promotion.scratch->texture.get()));
+                Gpu().srUseId = attempt.useId;
+                if (attempt.status == dlss::SrStatus::DeviceLost) {
+                    if (attempt.useId) dlssController->OnBatchDiscarded(attempt.useId);
+                    return false;
+                }
+                Gpu().srIsolatedAccepted = attempt.status == dlss::SrStatus::Executable;
+                commandList = Gpu().srContinuation.get(); commandList->begin(); listOpen = true; Gpu().srContinuationOpen = true;
+                // Continuation owns the normal post-NGX layouts. It may record the
+                // RGB-only combine only after a successfully closed isolated list.
+                std::vector<RenderTextureBarrier> continuationBarriers;
+                for (auto* image : {promotion.inputs.color.texture, promotion.inputs.depth.texture,
+                                    promotion.inputs.motion.texture, promotion.inputs.motionInvalidity.texture,
+                                    promotion.scratch->texture.get()})
+                    if (image) continuationBarriers.emplace_back(image, RenderTextureLayout::SHADER_READ);
+                commandList->barriers(RenderBarrierStage::GRAPHICS, continuationBarriers);
+                if (attempt.status != dlss::SrStatus::Executable) {
+                    DisableDlssRequest(frame_plan::FailureReason::DlssUnavailable);
+                    return false;
+                }
+                commandList->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(promotion.active->texture.get(), RenderTextureLayout::SHADER_READ));
+                if (!DrawPromotionResample(*promotion.composite, promotion.rgbSet, promotion.rgbConstants, true)) {
+                    DisableDlssRequest(frame_plan::FailureReason::InvalidInput);
+                    return false;
+                }
+                auto it = renderTargets.find(promotion.key);
+                if (it == renderTargets.end() || it->second.get() != promotion.active) return false;
+                auto fallback = std::move(it->second); it->second = std::move(promotion.composite);
+                promotion.active = it->second.get(); color = promotion.active;
+                if (rasterTarget == fallback.get()) rasterTarget = color;
+                Gpu().retiredTextures.push_back(std::move(fallback));
+                promotion.srApplied = true;
+                return true;
+            }
+#endif
+
             HostTexture* PrefilterBloom(HostTexture& src, RenderTexture* hdrSource = nullptr)
             {
                 if (!bloomPrefilterPs || !blitVs) return nullptr;
@@ -1668,6 +2039,12 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if(temporalHistory)temporalHistory->ReleaseCompletedThrough(s.temporalSerial);
                 else if(sparseCollector)sparseCollector->ReleaseCompleted();
                 if(hdrTemporalHistory)hdrTemporalHistory->ReleaseCompletedThrough(s.hdrTemporalSerial);
+#if defined(LO_GPU_PLUME)
+                if (dlssController && s.srSubmissionSerial)
+                    dlssController->ReleaseCompletedThrough(s.srSubmissionSerial);
+#endif
+                s.srUseId = s.srSubmissionSerial = 0;
+                s.srPrefixClosed = s.srIsolatedAccepted = s.srContinuationOpen = false;
                 sceneAABusy=false;
                 s.uploadOffset = 0;
                 for (auto& used : s.setPoolUsed)
@@ -1722,15 +2099,41 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (!listOpen)
                     return;
                 if (motionReplay) motionReplay->SealTimings(commandList);
-                Gpu().drawProbe.End(commandList);
+                if (!Gpu().srPrefixClosed) Gpu().drawProbe.End(commandList);
                 if (timingQueries) commandList->writeTimestamp(timingQueries, 1);
                 commandList->end();
                 listOpen = false;
-                const RenderCommandList* lists[] = { commandList };
+                const RenderCommandList* lists[3] = { Gpu().list.get(), nullptr, nullptr };
+                uint32_t listCount = 1;
+                if (Gpu().srPrefixClosed) {
+                    if (Gpu().srIsolatedAccepted) lists[listCount++] = Gpu().srIsolated.get();
+                    if (Gpu().srContinuationOpen) lists[listCount++] = Gpu().srContinuation.get();
+                }
                 Gpu().temporalSerial = temporalHistory ? temporalHistory->RecordedSerial() : 0;
                 Gpu().hdrTemporalSerial = hdrTemporalHistory ? hdrTemporalHistory->RecordedSerial() : 0;
                 Gpu().motionSerial = motionReplay ? motionReplay->RecordedSerial() : 0;
-                queue->executeCommandLists(lists, 1, nullptr, 0, nullptr, 0, fence);
+                bool submitted = true;
+#if defined(LO_GPU_PLUME)
+                int32_t rawVkResult = 0;
+                uint64_t submissionSerial = 0;
+                if (vulkan)
+                    submitted = video::SubmitRendererBatch(lists, listCount, fence, submissionSerial, rawVkResult);
+                else
+#endif
+                    queue->executeCommandLists(lists, listCount, nullptr, 0, nullptr, 0, fence);
+                if (!submitted) {
+#if defined(LO_GPU_PLUME)
+                    if (dlssController && Gpu().srUseId) dlssController->OnBatchDiscarded(Gpu().srUseId);
+                    LOG_ERROR("renderer: Vulkan batch submit failed raw_vk={}; no fallback submission issued", rawVkResult);
+#endif
+                    return;
+                }
+#if defined(LO_GPU_PLUME)
+                if (dlssController && Gpu().srUseId) {
+                    Gpu().srSubmissionSerial = submissionSerial;
+                    dlssController->OnBatchSubmitted(Gpu().srUseId, submissionSerial);
+                }
+#endif
                 Gpu().submitted = true;
                 gpuSlot = (gpuSlot + 1) % kGpuSlots;
                 BindGpuSlot();
@@ -2664,11 +3067,23 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
                 const uint32_t fallback = activePlan.height > 720 ? std::max(720u, activePlan.height * 3 / 4) : 720u;
                 if (reason == frame_plan::FailureReason::Unknown)
-                    reason = activePlan.consumer == upscaling::TemporalConsumer::DlssInputs
+                    reason = upscaling::IsDlssConsumer(activePlan.consumer)
                         ? frame_plan::FailureReason::DlssOutOfMemory : frame_plan::FailureReason::InvalidInput;
                 frame_plan::ReportPlanFailure({activePlan.geometryEpoch,activePlan.requestSignature,fallback,reason});
                 LOG_ERROR("renderer: plan failure epoch={} signature={:#x} reason={} fallback={}",
                     activePlan.geometryEpoch,activePlan.requestSignature,uint32_t(reason),fallback);
+            }
+
+            // SR execution errors retain this frame's spatial/legacy result and
+            // disable only the matching DLSS request on the next CPU plan. They
+            // are not allocation failures and must never enter failedPlanEpochs.
+            void DisableDlssRequest(frame_plan::FailureReason reason)
+            {
+                if (!upscaling::IsDlssConsumer(activePlan.consumer) || !activePlan.cpuSerial ||
+                    dlssDisableReportedEpoch == activePlan.geometryEpoch) return;
+                dlssDisableReportedEpoch = activePlan.geometryEpoch;
+                frame_plan::ReportPlanFailure({activePlan.geometryEpoch, activePlan.requestSignature,
+                    activePlan.legacyHeight, reason});
             }
 
             bool PlanSuppressed()
@@ -2689,13 +3104,23 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 // One host texture per (base, pitch, storage class).
                 const uint32_t colorClass = depth ? 0u : ColorClassOf(format);
                 RenderTargetKey key{ base, colorClass, pitch, 0, depth };
+                if (sceneCopyPromotion.activeMapping) {
+                    const bool exact = key == sceneCopyPromotion.key && sceneCopyPromotion.frame == frame &&
+                        sceneCopyPromotion.epoch == activePlan.geometryEpoch && !depth;
+                    const bool incompatible = base == sceneCopyPromotion.key.base && (!exact || height > sceneCopyPromotion.active->guestHeight);
+                    if (incompatible || sceneCopyPromotion.frame != frame || sceneCopyPromotion.epoch != activePlan.geometryEpoch)
+                        RestoreSceneCopyDestination(incompatible ? "alias_or_extent" : "frame_or_epoch");
+                }
                 auto it = renderTargets.find(key);
                 uint32_t effectiveHeight = height;
                 if (it != renderTargets.end())
                     effectiveHeight = std::max(effectiveHeight, it->second->guestHeight);
                 const auto role = ResolveCatalogRole(base, pitch);
                 const resolution::Size legacySize{activePlan.legacyWidth,activePlan.legacyHeight};
-                const resolution::Size desiredSize = resolution::TargetSizeForPlan(role, pitch, effectiveHeight, internalSize, legacySize);
+                resolution::Size desiredSize = resolution::TargetSizeForPlan(role, pitch, effectiveHeight, internalSize, legacySize);
+                if (sceneCopyPromotion.activeMapping && key == sceneCopyPromotion.key && sceneCopyPromotion.frame == frame &&
+                    sceneCopyPromotion.epoch == activePlan.geometryEpoch)
+                    desiredSize = {activePlan.output.width, activePlan.output.height};
                 if (it != renderTargets.end())
                 {
                     // A catalog publication can arrive after a target's first
@@ -3637,22 +4062,25 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     if (taaDiagnosticJitter >= 0) temporalJitter = taaDiagnosticJitter == 1;
                     if (taaDiagnosticHistory >= 0) temporalAllowHistory = taaDiagnosticHistory == 1;
                     temporalInputProbe = route.inputProbe;
-                    if (temporalInputProbe && !motionOptions.Supports(activePlan.consumer)) {
-                        FailCurrentPlan(frame_plan::FailureReason::InvalidInput);
+                    dlssSrRequested = route.dlssSr;
+                    if ((temporalInputProbe || dlssSrRequested) &&
+                        !motionOptions.Supports(upscaling::TemporalConsumer::DlssInputs)) {
+                        DisableDlssRequest(frame_plan::FailureReason::InvalidInput);
                         temporalInputProbe = false;
+                        dlssSrRequested = false;
                     }
-                    if (temporalInputProbe) {
+                    if (temporalInputProbe || dlssSrRequested) {
                         temporalJitter = true;
                         temporalAllowHistory = false;
                         temporalStableGrid = false;
                     }
                     activeSpatialAA = route.spatialAA&&!resolveReadback;
-                    const bool temporalActive = temporalExperiment || temporalInputProbe;
+                    const bool temporalActive = temporalExperiment || temporalInputProbe || dlssSrRequested;
                     if(temporalActive&&!temporalHistory&&!temporalInitFailed) {
                         temporalHistory=std::make_unique<temporal::HistoryOwner>();
                         if(!temporalHistory->Init(device,sparseCollector)) {temporalHistory.reset();temporalInitFailed=true;LOG_ERROR("renderer: TAA initialization failed; SMAA fallback");}
                     }
-                    if(!temporalHistory) { temporalExperiment=false; temporalInputProbe=false; }
+                    if(!temporalHistory) { temporalExperiment=false; temporalInputProbe=false; dlssSrRequested=false; }
                     if (temporalExperiment && taaDiagnosticHDR == 1 && !hdrTemporalHistory && !hdrTemporalInitFailed) {
                         hdrTemporalHistory = std::make_unique<temporal::HistoryOwner>();
                         if (!hdrTemporalHistory->Init(device, {}, true)) {
@@ -3661,7 +4089,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         }
                     }
                 }
-                const bool temporalActive = temporalExperiment || temporalInputProbe;
+                const bool temporalActive = temporalExperiment || temporalInputProbe || dlssSrRequested;
                 const bool trackTemporalScene = !debugCaptureDir.empty() || temporalActive || activeSpatialAA;
                 if (trackTemporalScene && temporalScene.Frame() != frame) {
                     temporalScene.Reset(frame);
@@ -3700,6 +4128,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
                 taaInit.AddTo(tTaa);
                 std::optional<temporal::SceneResolve> temporalSceneCopy;
+                std::optional<temporal::TemporalFrameInputs> dlssSceneCopyInputs;
                 bool sceneAARecorded=false,temporalAARecorded=false,hdrTonemapRecorded=false;
                 std::optional<temporal::SceneAnchor> temporalDrawAnchor;
 
@@ -4204,19 +4633,32 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                            rasterViewport.width==temporalScene.Anchor().viewport.width && rasterViewport.height==temporalScene.Anchor().viewport.height) {
                             render_batch::CpuTimer<> taaResolve(cpuTimingEnabled);
                             temporalScene.ObserveColor(*temporalSceneCopy);
-                            if (temporalInputProbe && temporalHistory && temporalScene.Ready() && tex->format==RenderFormat::R8G8B8A8_UNORM) {
-                                // P1 diagnostic only: retain the real low-resolution,
-                                // pre-TAA scene inputs. Do not create/evaluate an SR feature.
+                            if ((temporalInputProbe || dlssSrRequested) && temporalHistory && temporalScene.Ready() &&
+                                tex->format==RenderFormat::R8G8B8A8_UNORM) {
+                                // Storage format is not a transfer-function proof. Preserve
+                                // the real pre-UI inputs for P1/P2, but retain Unknown until
+                                // capture evidence qualifies this exact producer chain.
                                 Transition(*tex,RenderTextureLayout::COPY_SOURCE,RenderBarrierStage::COPY);
                                 FinishMotion(temporalHistory.get());
                                 const auto sample = actualRasterJitterCaptured ? actualRasterJitter : temporal::JitterSample{};
                                 if (!temporalHistory->CaptureColorInputs(commandList, tex->texture.get(), temporalScene, activePlan, sample,
-                                        temporal::ColorEncoding::Sdr, &motionView)) {
-                                    FailCurrentPlan(frame_plan::FailureReason::InvalidInput);
+                                        temporal::ColorEncoding::Unknown, &motionView)) {
+                                    DisableDlssRequest(frame_plan::FailureReason::InvalidInput);
                                 } else {
                                     const auto inputs = temporalHistory->CurrentInputs();
                                     if (!inputs.CompleteForConsumer())
-                                        FailCurrentPlan(frame_plan::FailureReason::InvalidInput);
+                                        DisableDlssRequest(frame_plan::FailureReason::InvalidInput);
+                                    // Oracle color review remains Unknown. In particular, the
+                                    // b4b4 tone-map consumer and an UNORM allocation do not
+                                    // establish the source copy's encoding, so no NGX command
+                                    // buffer is opened and the current low-res result remains.
+                                    else if (dlssSrRequested && inputs.colorEncoding == temporal::ColorEncoding::Unknown) {
+                                        DisableDlssRequest(frame_plan::FailureReason::InvalidInput);
+                                        LOG_INFO("renderer: DLSS SR bypass frame={} reason=unknown_color_encoding", frame);
+                                    }
+                                    else if (dlssSrRequested) {
+                                        dlssSceneCopyInputs = inputs;
+                                    }
                                 }
                                 if (motionView.ready && motionReplay) motionReplay->RecordConsumerUse();
                                 Transition(*tex,RenderTextureLayout::SHADER_READ,RenderBarrierStage::GRAPHICS);
@@ -4469,11 +4911,17 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 
                 tIndex0.AddTo(tIndex);
 
+                // Activation may split this batch into prefix/isolated/continuation.
+                // Upload indices first so no allocator pressure can Flush between the
+                // promoted fallback and the original guarded draw.
+                uint64_t preparedIndexOffset = UINT64_MAX;
+                if (useIndices) {
+                    preparedIndexOffset = Upload(indices.data(), indices.size() * 4, 16);
+                    if (preparedIndexOffset == UINT64_MAX) return;
+                }
+
                 // Record.
                 ScopedTimer recordTimer{ tRecord, cpuTimingEnabled };
-                RenderFramebuffer* framebuffer = GetFramebuffer(color, depth);
-                commandList->setFramebuffer(framebuffer);
-                commandList->setViewports(&rasterViewport, 1);
                 RenderRect scissor(int32_t(scissorTl & 0x3FFF), int32_t((scissorTl >> 16) & 0x3FFF), int32_t(scissorBr & 0x3FFF), int32_t((scissorBr >> 16) & 0x3FFF));
                 uint32_t windowOffset = Reg(REG_PA_SC_WINDOW_OFFSET);
                 if (!(scissorTl & 0x80000000u) && windowOffset)
@@ -4483,8 +4931,43 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
                 scissor.left = std::clamp(scissor.left, 0, int32_t(rasterTarget->guestWidth)); scissor.right = std::clamp(scissor.right, 0, int32_t(rasterTarget->guestWidth));
                 scissor.top = std::clamp(scissor.top, 0, int32_t(rasterTarget->guestHeight)); scissor.bottom = std::clamp(scissor.bottom, 0, int32_t(rasterTarget->guestHeight));
-                scissor.left = int32_t(rasterTarget->ScaleX(uint32_t(scissor.left))); scissor.right = int32_t(rasterTarget->ScaleX(uint32_t(scissor.right)));
-                scissor.top = int32_t(rasterTarget->ScaleY(uint32_t(scissor.top))); scissor.bottom = int32_t(rasterTarget->ScaleY(uint32_t(scissor.bottom)));
+                const RenderRect guestScissor = scissor;
+                bool scenePromotionActivated = false;
+                if (dlssSrRequested && dlssSceneCopyInputs && fullSceneCopy && !depth
+#if defined(LO_GPU_PLUME)
+                    && vulkan && dlssController
+#else
+                    && false
+#endif
+                    ) {
+                    const RenderTargetKey promotionKey{colorInfo & 0xFFF, ColorClassOf((colorInfo >> 16) & 0xF), pitch, 0, false};
+                    if (PrepareSceneCopyDestination(promotionKey, *color, *dlssSceneCopyInputs))
+                        scenePromotionActivated = ActivateSceneCopyDestination(color, rasterTarget, rasterViewport, scissor,
+                            viewport, guestScissor);
+                }
+                if (!scenePromotionActivated) {
+                    scissor.left = int32_t(rasterTarget->ScaleX(uint32_t(scissor.left))); scissor.right = int32_t(rasterTarget->ScaleX(uint32_t(scissor.right)));
+                    scissor.top = int32_t(rasterTarget->ScaleY(uint32_t(scissor.top))); scissor.bottom = int32_t(rasterTarget->ScaleY(uint32_t(scissor.bottom)));
+                } else {
+                    // Activation can replace the map entry after the original
+                    // render-target acquisition. Re-read the final attachments
+                    // before framebuffer, viewport, and pipeline binding so a
+                    // restored/retargeted mapping never produces a mixed grid.
+                    auto finalColor = renderTargets.find(sceneCopyPromotion.key);
+                    if (finalColor == renderTargets.end() || finalColor->second.get() != color)
+                        return;
+                    color = finalColor->second.get();
+                    if (!depthOnlyRaster)
+                        rasterTarget = color;
+                    key.rtFormat = uint32_t(color->format);
+                    key.depthFormat = depth ? uint32_t(depth->format) : 0;
+                    pipeline = GetPipeline(key, vs, ps, color->format, depth ? depth->format : RenderFormat::UNKNOWN);
+                    if (!pipeline) {
+                        ++drops.pipeline;
+                        drops.primMask |= 1u << (info.primitiveType & 31);
+                        return;
+                    }
+                }
                 // Height is a historical EDRAM allocation estimate. Attachments
                 // may have different padding while covering the same draw; keep
                 // that draw and constrain it to their common physical extent.
@@ -4497,7 +4980,97 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     drops.scissor++;
                     return;
                 }
+                RenderFramebuffer* framebuffer = GetFramebuffer(color, depth);
+                commandList->setFramebuffer(framebuffer);
+                commandList->setViewports(&rasterViewport, 1);
                 commandList->setScissors(&scissor, 1);
+                if (p2Evidence.is_open() && ps &&
+                    (key.ps == 0xb4b4d54a7a2d6b96ull || key.ps == 0xcda578aef1724fdcull))
+                {
+                    // This is intentionally the local color attachment for the draw,
+                    // rather than a sampled pre-UI texture. It is the only target
+                    // identity that can later support an oracle mapping decision.
+                    const uint32_t targetFormat = (colorInfo >> 16) & 0xF;
+                    const uint32_t targetBase = colorInfo & 0xFFF;
+                    const uint32_t f0 = Reg(REG_FETCH_CONSTANTS);
+                    const uint32_t f1 = Reg(REG_FETCH_CONSTANTS + 1);
+                    const uint32_t sampledAddress = (f1 >> 12) << 12;
+                    const uint32_t sampledFormat = f1 & 0x3F;
+                    const ResolvedSurface* sampled = (f0 & 3) == 2 ? FindResolved(sampledAddress, sampledFormat) : nullptr;
+                    const uint32_t captureDraw = debugDraw ? debugDraw - 1 : 0;
+                    p2Evidence << "{\"schema\":\"lostodyssey.p2-oracle-evidence.v1\",\"event\":\"draw\",\"renderer_frame\":" << frame
+                        << ",\"draw_id\":" << captureDraw
+                        << ",\"shader\":{\"vs\":\"" << fmt::format("{:016x}", key.vs)
+                        << "\",\"ps\":\"" << fmt::format("{:016x}", key.ps) << "\"}"
+                        << ",\"plan\":{\"cpu_serial\":" << activePlan.cpuSerial
+                        << ",\"geometry_epoch\":" << activePlan.geometryEpoch
+                        << ",\"consumer\":" << uint32_t(activePlan.consumer)
+                        << ",\"input\":[" << activePlan.width << ',' << activePlan.height << "]"
+                        << ",\"output\":[" << activePlan.output.width << ',' << activePlan.output.height << "]"
+                        << ",\"output_rect\":[" << activePlan.output.x << ',' << activePlan.output.y << ','
+                        << activePlan.output.width << ',' << activePlan.output.height << "]"
+                        << ",\"output_xy_scope\":\"presentation_only_not_destination_mapping\"}"
+                        << ",\"ps_constants\":{\"bank_base\":\"0x4400\",\"values\":[";
+                    bool firstConstant = true;
+                    for (uint32_t constant = 0; constant <= 10; ++constant) {
+                        const uint32_t* words = psConstants + constant * 4;
+                        p2Evidence << (firstConstant ? "" : ",") << "{\"constant\":" << constant
+                            << ",\"register\":\"" << fmt::format("0x{:04x}", 0x4400 + constant * 4)
+                            << "\",\"u32\":[" << words[0] << ',' << words[1] << ',' << words[2] << ',' << words[3] << "]}";
+                        firstConstant = false;
+                    }
+                    const uint32_t* c255 = psConstants + 255 * 4;
+                    p2Evidence << ",{\"constant\":255,\"register\":\"0x47fc\",\"u32\":[" << c255[0] << ',' << c255[1] << ',' << c255[2] << ',' << c255[3] << "]}]}";
+                    p2Evidence << ",\"fetch_slots\":[";
+                    for (uint32_t slot = 0; slot < 4; ++slot) {
+                        uint32_t fetch[6];
+                        for (uint32_t word = 0; word < 6; ++word) fetch[word] = Reg(REG_FETCH_CONSTANTS + slot * 6 + word);
+                        std::optional<uint64_t> samplerKey;
+                        for (const auto& [candidate, index] : samplerPalette)
+                            if (index == shared.samplerIndex[slot]) { samplerKey = candidate; break; }
+                        p2Evidence << (slot ? "," : "") << "{\"slot\":" << slot << ",\"words\":["
+                            << fetch[0] << ',' << fetch[1] << ',' << fetch[2] << ',' << fetch[3] << ',' << fetch[4] << ',' << fetch[5]
+                            << "],\"shared_texture_info\":" << shared.textureInfo[slot]
+                            << ",\"shared_sampler_index\":" << shared.samplerIndex[slot]
+                            << ",\"actual_sampler_key\":";
+                        if (samplerKey) p2Evidence << '"' << fmt::format("0x{:x}", *samplerKey) << '"'; else p2Evidence << "null";
+                        p2Evidence << ",\"actual_sampler_fields\":";
+                        if (samplerKey) p2Evidence << '[' << ((*samplerKey >> 6) & 7) << ',' << ((*samplerKey >> 9) & 7)
+                            << ',' << ((*samplerKey >> 12) & 7) << ',' << ((*samplerKey >> 2) & 3)
+                            << ',' << (*samplerKey & 3) << ',' << ((*samplerKey >> 4) & 3) << ']';
+                        else p2Evidence << "null";
+                        p2Evidence << ",\"srv_guest_format\":" << (fetch[1] & 0x3F) << '}';
+                    }
+                    p2Evidence << ']'
+                        << ",\"sampled_slot0_resolved\":";
+                    if (sampled && sampled->tex) {
+                        const auto& source = *sampled->tex;
+                        p2Evidence << "{\"guest_base\":" << sampledAddress << ",\"guest_format\":" << sampledFormat
+                            << ",\"allocation\":" << source.allocationSerial << ",\"host_format\":" << uint32_t(source.format)
+                            << ",\"write_frame\":" << sampled->frame << ",\"write_version\":" << sampled->writeOrdinal
+                            << ",\"write_ordinal\":" << sampled->writeOrdinal
+                            << ",\"rect\":[" << sampled->writeX << ',' << sampled->writeY << ',' << sampled->writeWidth << ',' << sampled->writeHeight << "]}";
+                    } else p2Evidence << "null";
+                    p2Evidence << ",\"destination\":{\"render_target_key\":{\"base\":" << targetBase
+                        << ",\"color_storage_class\":" << ColorClassOf(targetFormat) << ",\"pitch\":" << pitch
+                        << ",\"height\":0,\"depth\":false}"
+                        << ",\"guest_base\":" << targetBase << ",\"guest_pitch\":" << pitch
+                        << ",\"guest_storage_format\":" << targetFormat << ",\"color_storage_class\":" << ColorClassOf(targetFormat)
+                        << ",\"allocation\":" << color->allocationSerial << ",\"host_format\":" << uint32_t(color->format)
+                        << ",\"extent\":[" << color->width << ',' << color->height << "]"
+                        << ",\"guest_extent\":[" << color->guestWidth << ',' << color->guestHeight << "]"
+                        << ",\"resolution_size\":[" << color->resolutionSize.width << ',' << color->resolutionSize.height << "]"
+                        << ",\"guest_viewport\":[" << viewport.x << ',' << viewport.y << ',' << viewport.width << ',' << viewport.height << "]"
+                        << ",\"guest_scissor\":[" << guestScissor.left << ',' << guestScissor.top << ',' << guestScissor.right << ',' << guestScissor.bottom << "]"
+                        << ",\"physical_scissor\":[" << scissor.left << ',' << scissor.top << ',' << scissor.right << ',' << scissor.bottom << "]}"
+                        << ",\"framebuffer_attachments\":{\"color_allocation\":" << color->allocationSerial << ",\"depth_allocation\":";
+                    if (depth) p2Evidence << depth->allocationSerial; else p2Evidence << "null";
+                    p2Evidence << ",\"depth_extent\":";
+                    if (depth) p2Evidence << '[' << depth->width << ',' << depth->height << ']'; else p2Evidence << "null";
+                    p2Evidence << "},\"render_state\":{\"color_control\":" << Reg(REG_RB_COLORCONTROL)
+                        << ",\"blend_control\":" << key.blend << ",\"color_mask\":" << key.colorMask
+                        << ",\"exp_bias\":\"unknown\"}}\n";
+                }
                 commandList->setPipeline(pipeline);
                 commandList->setGraphicsPipelineLayout(pipelineLayout.get());
                 if (vulkan) {
@@ -4644,10 +5217,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
                 if (useIndices)
                 {
-                    uint64_t offset = Upload(indices.data(), indices.size() * 4, 16);
-                    if (offset == UINT64_MAX)
-                        return;
-                    RenderIndexBufferView view(RenderBufferReference(uploadRing, offset), uint32_t(indices.size() * 4), RenderFormat::R32_UINT);
+                    RenderIndexBufferView view(RenderBufferReference(uploadRing, preparedIndexOffset), uint32_t(indices.size() * 4), RenderFormat::R32_UINT);
                     commandList->setIndexBuffer(&view);
                     commandList->drawIndexedInstanced(indexCount, 1, 0, baseVertex, 0);
                 }
@@ -4655,6 +5225,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 {
                     commandList->drawInstanced(indexCount, 1, uint32_t(baseVertex), 0);
                 }
+ #if defined(LO_GPU_PLUME)
+                if (scenePromotionActivated)
+                    RecordSceneCopyDlss(color, rasterTarget);
+ #endif
                 drawsThisFrame++;
 
                 if (motionDepthWrite) {
@@ -5369,13 +5943,14 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 rs.frame = frame;
                 rs.writeOrdinal = ++resolveWriteOrdinal;
                 rs.writeX = x0; rs.writeY = y0; rs.writeWidth = w; rs.writeHeight = h;
+                WriteP2ResolveEvent("depth", depth, destBase, rs, vulkan ? "blit" : "copy");
                 if (taa_collection::Enabled())
                     rs.tex->bindingProducer.Copy(depth.bindingProducer, taa_collection::ConsentEpoch(), frame,
                         x0 == 0 && y0 == 0 && w == texW && h == texH);
-                if (!debugCaptureDir.empty() || temporalExperiment || temporalInputProbe || activeSpatialAA) {
+                if (!debugCaptureDir.empty() || temporalExperiment || temporalInputProbe || dlssSrRequested || activeSpatialAA) {
                     temporalScene.ObserveDepth(depth.allocationSerial, {frame, rs.writeOrdinal, destBase, destFormat,
                         texW, texH, x0 == 0 && y0 == 0 && w == texW && h == texH});
-                    if((temporalExperiment || temporalInputProbe) && temporalHistory && temporalScene.Depth().ordinal==rs.writeOrdinal) {
+                    if((temporalExperiment || temporalInputProbe || dlssSrRequested) && temporalHistory && temporalScene.Depth().ordinal==rs.writeOrdinal) {
                         Transition(*rs.tex,RenderTextureLayout::COPY_SOURCE,RenderBarrierStage::COPY);
                         temporalHistory->CaptureDepth(commandList,rs.tex->texture.get(),temporalScene);
                         if (taaDiagnosticHDR == 1 && hdrTemporalHistory)
@@ -5453,14 +6028,17 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 h = std::min(h, texH - y0);
                 if (w == 0 || h == 0)
                     return true;
+                const char* resolveOperation = rs.tex->format == color.format ? "copy" : "blit";
                 if (rs.tex->format == color.format)
                 {
                     Transition(color, RenderTextureLayout::COPY_SOURCE, RenderBarrierStage::COPY);
                     Transition(*rs.tex, RenderTextureLayout::COPY_DEST, RenderBarrierStage::COPY);
                     const resolve_copy::Copy copy{color.allocationSerial, rs.tex->allocationSerial,
                         color.width, color.height, texW, texH, uint32_t(color.format), x0, y0, w, h};
-                    if (resolveCopyReuse && consecutiveResolveCopies.CanReuse(copy))
+                    if (resolveCopyReuse && consecutiveResolveCopies.CanReuse(copy)) {
                         ++resolveCopiesSkipped;
+                        resolveOperation = "copy_reused";
+                    }
                     else
                     {
                         RenderBox box{ int32_t(x0), int32_t(y0), int32_t(x0 + w), int32_t(y0 + h), 0, 1 };
@@ -5476,6 +6054,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 rs.frame = frame;
                 rs.writeOrdinal = ++resolveWriteOrdinal;
                 rs.writeX = x0; rs.writeY = y0; rs.writeWidth = w; rs.writeHeight = h;
+                WriteP2ResolveEvent("color", color, destBase, rs, resolveOperation);
                 const bool fullResolved = x0==0&&y0==0&&w==texW&&h==texH;
                 // A partial write can retain pixels from another plan/allocation.
                 // It must not hand presentation a fabricated whole-surface plan.
@@ -5885,6 +6464,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 r.frame, frontbuffer, width, height, r.drawsThisFrame, ok);
             r.debugTrace << fmt::format("drops mode={} shader={} pitch={} pipeline={} upload={} index={} scissor={} dummy_bindings={}\n",
                 r.drops.mode, r.drops.shader, r.drops.pitch, r.drops.pipeline, r.drops.upload, r.drops.index, r.drops.scissor, r.dummyBindings);
+            r.p2Evidence.close();
+            ok = ok && !r.p2Evidence.fail();
             r.debugTrace.close();
             ok = ok && !r.debugTrace.fail();
         }
@@ -5901,6 +6482,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 << "\nstatus=" << (!ok ? "incomplete" : r.debugCaptureCompleted == r.debugCaptureFrameCount ? "complete" : "capturing")
                 << "\nFrames are consecutive rendered frames. Capture readbacks may stall execution.\n"
                 << "Each frame directory contains its own screenshot, register trace, resolves and metadata.\n"
+                << "p2-oracle.jsonl is newline-delimited JSON for b4b4d54a7a2d6b96/cda578aef1724fdc draw and resolve provenance; it records no color-space conclusion.\n"
+                << "Trigger this three-frame capture through the existing F1 menu or LO_CAPTURE_REQUEST pointing to a file containing a new nonzero uint64.\n"
                 << "Shaders are deduplicated in shaders/. runtime.log is flushed after the last captured frame.\n"
                 << "Default omissions: draw-step previews, duplicate screenshot.ppm and duplicate depth .f32.\n"
                 << "Use LO_DEBUG_CAPTURE_DRAW_STEPS=1 to include draw-step previews.\n";
@@ -5951,6 +6534,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
         auto shaderSources = std::move(r.debugShaderSources);
         r.debugTrace.close();
         r.debugTrace.clear();
+        r.p2Evidence.close();
+        r.p2Evidence.clear();
         r.debugCaptureDir.clear();
         r.debugCaptureRoot.clear();
         r.debugCaptureCompleted = 0;
@@ -6349,6 +6934,135 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             fclose(f);
         }
     }
+#if defined(LO_RENDERER_P2_SELFTEST)
+    int RunSceneCopyPromotionSelfTest(const std::filesystem::path& evidenceDirectory)
+    {
+        const auto cacheDirectory = evidenceDirectory / "renderer-p2-cache";
+        std::error_code error;
+        std::filesystem::create_directories(cacheDirectory, error);
+        if (error)
+            return 1;
+#ifdef _WIN32
+        _putenv_s("LO_BACKGROUND", "1");
+        _putenv_s("LO_GRAPHICS_API", "vulkan");
+        _putenv_s("LO_NO_SHADER_PREPARE", "1");
+        _putenv_s("LO_NO_PORTABLE_SHADER_PACK", "1");
+        _putenv_s("LO_NO_PIPELINE_CACHE", "1");
+        _putenv_s("LO_SHADER_CACHE_DIR", FileSystem::PathUtf8(cacheDirectory).c_str());
+        _putenv_s("LO_HEADLESS", "");
+        _putenv_s("LO_NO_RENDERER", "");
+#else
+        setenv("LO_BACKGROUND", "1", 1); setenv("LO_GRAPHICS_API", "vulkan", 1);
+        setenv("LO_NO_SHADER_PREPARE", "1", 1); setenv("LO_NO_PORTABLE_SHADER_PACK", "1", 1);
+        setenv("LO_NO_PIPELINE_CACHE", "1", 1); setenv("LO_SHADER_CACHE_DIR", cacheDirectory.c_str(), 1);
+        unsetenv("LO_HEADLESS"); unsetenv("LO_NO_RENDERER");
+#endif
+        auto preview = settings::GetConfig();
+        preview.graphicsBackend = backend::Backend::Vulkan;
+        preview.skipShaderPrebuild = true;
+        settings::PreviewConfig(preview);
+        const bool initialized = video::Init();
+        const bool ready = initialized && video::IsVulkan() && video::GetDevice() && g_renderer &&
+            g_renderer->device && g_renderer->queue && g_renderer->commandList;
+        bool resamplePassed = false;
+        uint32_t readbackWidth = 0, readbackHeight = 0, mismatches = 0;
+        if (ready)
+        {
+            // This is deliberately limited to the production resample draw. It
+            // neither installs a render-target mapping nor calls NGX.
+            constexpr uint32_t sourceWidth = 4, sourceHeight = 4;
+            constexpr uint32_t destinationWidth = 8, destinationHeight = 8;
+            const std::array<std::array<uint8_t, 4>, 4> quadrants = {{
+                {{255, 0, 0, 64}}, {{0, 255, 0, 128}},
+                {{0, 0, 255, 192}}, {{255, 255, 0, 255}},
+            }};
+            std::array<uint8_t, sourceWidth * sourceHeight * 4> sourcePixels{};
+            for (uint32_t y = 0; y < sourceHeight; ++y)
+                for (uint32_t x = 0; x < sourceWidth; ++x)
+                {
+                    const auto& color = quadrants[(y >= sourceHeight / 2 ? 2 : 0) + (x >= sourceWidth / 2 ? 1 : 0)];
+                    std::memcpy(sourcePixels.data() + (size_t(y) * sourceWidth + x) * 4, color.data(), color.size());
+                }
+
+            HostTexture source{}, destination{};
+            // A failed upload, descriptor allocation, or pipeline creation can
+            // leave this list referencing the local textures. Drain it before
+            // their destructors run and before video tears down the device.
+            struct FixtureGpuDrain {
+                Renderer& renderer;
+                ~FixtureGpuDrain() { renderer.Flush(); renderer.WaitForGpu(); }
+            } drain{*g_renderer};
+            source.allocationSerial = 1;
+            source.format = RenderFormat::R8G8B8A8_UNORM;
+            source.width = source.guestWidth = sourceWidth;
+            source.height = source.guestHeight = sourceHeight;
+            source.resolutionSize = {sourceWidth, sourceHeight};
+            source.texture = g_renderer->device->createTexture(RenderTextureDesc::Texture2D(sourceWidth, sourceHeight, 1,
+                source.format));
+            destination.allocationSerial = 2;
+            destination.format = RenderFormat::R8G8B8A8_UNORM;
+            destination.width = destination.guestWidth = destinationWidth;
+            destination.height = destination.guestHeight = destinationHeight;
+            destination.resolutionSize = {destinationWidth, destinationHeight};
+            destination.texture = g_renderer->device->createTexture(RenderTextureDesc::Texture2D(destinationWidth, destinationHeight, 1,
+                destination.format, RenderTextureFlag::RENDER_TARGET));
+
+            if (source.texture && destination.texture)
+            {
+                auto& r = *g_renderer;
+                r.Begin();
+                const uint64_t sourceOffset = r.Upload(sourcePixels.data(), sourcePixels.size(), 512);
+                if (sourceOffset != UINT64_MAX)
+                {
+                    r.Transition(source, RenderTextureLayout::COPY_DEST, RenderBarrierStage::COPY);
+                    r.commandList->copyTextureRegion(RenderTextureCopyLocation::Subresource(source.texture.get()),
+                        RenderTextureCopyLocation::PlacedFootprint(r.uploadRing, source.format, sourceWidth, sourceHeight, 1, sourceWidth, sourceOffset));
+                    r.Transition(source, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
+                    Renderer::SharedConstants constants{};
+                    constants.transfer[0] = std::bit_cast<uint32_t>(float(sourceWidth) / destinationWidth);
+                    constants.transfer[1] = std::bit_cast<uint32_t>(float(sourceHeight) / destinationHeight);
+                    const uint64_t constantsOffset = r.Upload(&constants, sizeof(constants));
+                    if (constantsOffset != UINT64_MAX)
+                    {
+                        auto* set = r.AcquireSet(1);
+                        set->setTexture(0, source.texture.get(), RenderTextureLayout::SHADER_READ);
+                        set->setTexture(1, r.dummyTexture2D.texture.get(), RenderTextureLayout::SHADER_READ);
+                        if (r.DrawPromotionResample(destination, set, constantsOffset, false))
+                        {
+                            r.Flush();
+                            r.WaitForGpu();
+                            std::vector<uint32_t> pixels;
+                            if (ReadbackTexture(destination, pixels, readbackWidth, readbackHeight) &&
+                                readbackWidth == destinationWidth && readbackHeight == destinationHeight &&
+                                pixels.size() == size_t(destinationWidth) * destinationHeight)
+                            {
+                                for (uint32_t y = 0; y < destinationHeight; ++y)
+                                    for (uint32_t x = 0; x < destinationWidth; ++x)
+                                    {
+                                        const auto& expected = quadrants[(y >= destinationHeight / 2 ? 2 : 0) + (x >= destinationWidth / 2 ? 1 : 0)];
+                                        const uint32_t pixel = pixels[size_t(y) * destinationWidth + x];
+                                        if (uint8_t(pixel) != expected[0] || uint8_t(pixel >> 8) != expected[1] ||
+                                            uint8_t(pixel >> 16) != expected[2] || std::abs(int(uint8_t(pixel >> 24)) - int(expected[3])) > 1)
+                                            ++mismatches;
+                                    }
+                                resamplePassed = mismatches == 0;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        video::Shutdown();
+        std::ofstream evidence(evidenceDirectory / "native-dlss-p2-resample.json", std::ios::app);
+        evidence << "{\"schema\":\"lostodyssey.p2-promotion-resample.v1\",\"bootstrap\":" << (ready ? "true" : "false")
+            << ",\"resample_tested\":" << (ready ? "true" : "false")
+            << ",\"promotion_mapping_tested\":false,\"source_extent\":[4,4],\"destination_extent\":["
+            << readbackWidth << ',' << readbackHeight << "],\"mismatches\":" << mismatches
+            << ",\"result\":\"" << (!ready ? "unsupported_or_init_failed" : resamplePassed ? "pass" : "fail") << "\"}\n";
+        std::fprintf(stdout, "scene-copy promotion resample %s; mapping untested\n", resamplePassed ? "PASS" : "FAIL");
+        return !ready ? 77 : resamplePassed ? 0 : 1;
+    }
+#endif
 #else
     void FinishDebugCapture(uint32_t) {}
     bool Init() { return false; }

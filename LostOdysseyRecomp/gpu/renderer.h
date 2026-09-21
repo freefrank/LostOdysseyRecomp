@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <filesystem>
 #include <vector>
 #include <string>
 
@@ -83,4 +84,8 @@ namespace gpu::renderer
     std::vector<uint32_t> GetResolvedAddresses();
     // Writes every colour render target as <prefix>_rt_<base>_<fmt>_<w>x<h>.ppm (debugging).
     void DumpRenderTargets(const char* prefix);
+#if defined(LO_RENDERER_P2_SELFTEST)
+    // Guarded runtime bootstrap for the scene-copy promotion GPU fixture.
+    int RunSceneCopyPromotionSelfTest(const std::filesystem::path& evidenceDirectory);
+#endif
 }

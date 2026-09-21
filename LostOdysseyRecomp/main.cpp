@@ -103,6 +103,16 @@ int main(int argc, char* argv[])
     argc = wideArgc;
     argv = argumentPointers.data();
 #endif
+#if defined(LO_RENDERER_P2_SELFTEST)
+    for (int i = 1; i < argc; ++i)
+    {
+        if (strcmp(argv[i], "--self-test-scene-copy-promotion") != 0)
+            continue;
+        if (i + 1 >= argc)
+            return 1;
+        return gpu::renderer::RunSceneCopyPromotionSelfTest(std::filesystem::u8path(argv[i + 1]));
+    }
+#endif
     bool explicitGame=false, requestedSetup=false, setupOnly=false, prepareShadersOnly=false, requestedInstall=false;
     std::optional<std::filesystem::path> explicitGamePath;
     for(int i=1;i<argc;++i) {

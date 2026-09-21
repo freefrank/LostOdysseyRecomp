@@ -1,5 +1,10 @@
 project(LostOdysseyRecomp LANGUAGES CXX)
 
+option(LO_RENDERER_P2_SELFTEST "Build the guarded scene-copy promotion bootstrap entry" OFF)
+if(LO_RENDERER_P2_SELFTEST AND NOT LO_BUILD_GPU)
+    message(FATAL_ERROR "LO_RENDERER_P2_SELFTEST requires LO_BUILD_GPU")
+endif()
+
 set(LO_RUNTIME_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
 include("${CMAKE_SOURCE_DIR}/cmake/portable_shader_pack.cmake")
 add_library(lo_menu_lzo STATIC EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/thirdparty/lzokay/lzokay.cpp)
@@ -164,6 +169,10 @@ if(LO_BUILD_GPU)
         target_link_libraries(LostOdysseyRecomp PRIVATE d3d12 dxgi)
     endif()
     lo_enable_dlss(LostOdysseyRecomp)
+endif()
+
+if(LO_RENDERER_P2_SELFTEST)
+    target_compile_definitions(LostOdysseyRecomp PRIVATE LO_RENDERER_P2_SELFTEST=1)
 endif()
 
 if(WIN32)

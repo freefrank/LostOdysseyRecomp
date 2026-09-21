@@ -10,7 +10,10 @@ namespace plume
 {
     struct RenderDevice;
     struct RenderCommandQueue;
+    struct RenderCommandList;
+    struct RenderCommandFence;
 }
+namespace gpu::dlss { class Controller; }
 
 // Host presentation layer: SDL window + plume render device. Owned by the
 // command processor thread; on Windows the SDL/Debug Menu windows have a
@@ -26,6 +29,15 @@ namespace gpu::video
     // device lifecycle in lane A; callers do not access Plume objects directly.
     upscaling::BackendDeviceSnapshot BackendDeviceState();
     plume::RenderCommandQueue* GetQueue();
+#if defined(LO_GPU_PLUME)
+    // The renderer borrows the persistent controller. Video remains responsible
+    // for its device lifetime and final drained shutdown.
+    dlss::Controller* GetDlssController();
+    // Uses the backend's native Vulkan queue path so the result is observable.
+    // submissionSerial advances only after vkQueueSubmit returns VK_SUCCESS.
+    bool SubmitRendererBatch(const plume::RenderCommandList* const* lists, uint32_t count,
+        plume::RenderCommandFence* fence, uint64_t& submissionSerial, int32_t& rawVkResult);
+#endif
 
     // Finite startup transaction: window -> device/caps -> presentation -> renderer.
     // Failure cleans resources before fallback. False aborts ordinary guest startup;

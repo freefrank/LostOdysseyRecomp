@@ -150,7 +150,7 @@ namespace gpu::frame_plan
             const bool matchesLatchedAttempt = latched_ && lastFinal_ &&
                 MatchesPlanFailure(*lastFinal_, *latched_) && latched_->requestSignature == incomingSignature;
             const bool legacyRetry = matchesLatchedAttempt &&
-                lastFinal_->consumer != upscaling::TemporalConsumer::DlssInputs;
+                !upscaling::IsDlssConsumer(lastFinal_->consumer);
 
             FramePlan p = AdvanceCpuPlan(legacy_, ++serial_, epoch_,
                 legacyRetry ? latched_->geometryEpoch : ~0ull,
@@ -181,6 +181,13 @@ namespace gpu::frame_plan
                     p.height = mode.optimal.height;
                     p.effectiveAA = 0;
                     p.consumer = upscaling::TemporalConsumer::DlssInputs;
+                } else if (input.upscaler == upscaling::Upscaler::Dlss && !input.readback && !p.inputProbe &&
+                    input.device.dlssAvailable && mode.state == upscaling::SizingState::Ready &&
+                    mode.optimal.width && mode.optimal.height) {
+                    p.width = mode.optimal.width;
+                    p.height = mode.optimal.height;
+                    p.effectiveAA = 0;
+                    p.consumer = upscaling::TemporalConsumer::DlssSr;
                 }
             }
             p.requestSignature = FullRequestSignature(p, input.internalResolution, recommended);
@@ -203,7 +210,7 @@ namespace gpu::frame_plan
                 lastFinal_->consumer != p.consumer || lastFinal_->dlssQuality != p.dlssQuality ||
                 lastFinal_->output != p.output || lastFinal_->deviceEpoch != p.deviceEpoch;
             if (lastFinal_) p.geometryEpoch = changed ? ++epoch_ : lastFinal_->geometryEpoch;
-            if (p.consumer != upscaling::TemporalConsumer::DlssInputs) legacy_.plan = p;
+            if (!upscaling::IsDlssConsumer(p.consumer)) legacy_.plan = p;
             lastFinal_ = p;
 
             bool known = false;
@@ -222,7 +229,7 @@ namespace gpu::frame_plan
             for (size_t i = 0; i < attemptCount_; ++i) {
                 if (MatchesPlanFailure(attempts_[i], failure)) {
                     latched_ = failure;
-                    if (attempts_[i].consumer == upscaling::TemporalConsumer::DlssInputs)
+                    if (upscaling::IsDlssConsumer(attempts_[i].consumer))
                         dlssDisabledSignature_ = failure.requestSignature;
                     return true;
                 }
