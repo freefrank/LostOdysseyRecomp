@@ -49,3 +49,9 @@ target_link_libraries(motion_renderer_compile PRIVATE mv_runtime)
 if(NOT MSVC)
  target_compile_options(motion_renderer_compile PRIVATE -O0 -g0)
 endif()
+
+# Shared production promotion shaders, executed without guest code or NGX.
+add_executable(LoSceneCopyCompositeTest "${ROOT}/tools/tests/native_dlss_composite_gpu_test.cpp" platform_stub.cpp)
+target_link_libraries(LoSceneCopyCompositeTest PRIVATE mv_runtime)
+add_test(NAME LoSceneCopyCompositeTest COMMAND LoSceneCopyCompositeTest)
+set_tests_properties(LoSceneCopyCompositeTest PROPERTIES LABELS "native-dlss;gpu-composite" TIMEOUT 120)

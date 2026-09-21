@@ -3,6 +3,7 @@
 #include "temporal_evidence.h"
 #include "scene_aa_provenance.h"
 #include "scene_copy_promotion_policy.h"
+#include "scene_copy_promotion_shaders.h"
 #include "bloom_prefilter.h"
 #include <stdafx.h>
 #include "renderer.h"
@@ -1570,25 +1571,8 @@ namespace gpu::renderer
 
             void CompileSceneCopyPromotionShaders()
             {
-                // Reuse the renderer's shared-constant binding: transfer[0..1]
-                // are source-to-destination scale. The RGB pass samples a distinct
-                // SR scratch image and deliberately retains base alpha.
-                const char* common =
-                    "Texture2D<float4> base : register(t0, space1);\n"
-                    "#ifdef __spirv__\n"
-                    "struct XePushConstants { uint64_t vs; uint64_t sharedAddress; uint64_t ps; };\n"
-                    "[[vk::push_constant]] ConstantBuffer<XePushConstants> xePush;\n"
-                    "#define xePromotion vk::RawBufferLoad<uint4>(xePush.sharedAddress + 240)\n"
-                    "#else\n"
-                    "cbuffer XeShared : register(b1, space0) { uint4 pad0[2]; uint4 pad1[8]; float4 pad2; float4 pad3; float4 pad4; float4 pad5; float4 xeColorMax; uint4 xePromotion; };\n"
-                    "#endif\n";
-                const std::string rgba = std::string(common) +
-                    "float4 main(float4 pos : SV_Position) : SV_Target { uint4 p=xePromotion; return base.Load(int3(int2(pos.xy*float2(asfloat(p.x),asfloat(p.y))),0)); }\n";
-                const std::string rgb = std::string(common) +
-                    "Texture2D<float4> sr : register(t1, space1);\n"
-                    "float4 main(float4 pos : SV_Position) : SV_Target { uint4 p=xePromotion; float4 b=base.Load(int3(int2(pos.xy*float2(asfloat(p.x),asfloat(p.y))),0)); return float4(sr.Load(int3(int2(pos.xy),0)).rgb,b.a); }\n";
-                auto rgbaCompiled = xenos::CompileCachedHlsl(rgba, "main", "ps_6_0", binaryFormat);
-                auto rgbCompiled = xenos::CompileCachedHlsl(rgb, "main", "ps_6_0", binaryFormat);
+                auto rgbaCompiled = xenos::CompileCachedHlsl(scene_copy_promotion::RgbaShader, "main", "ps_6_0", binaryFormat);
+                auto rgbCompiled = xenos::CompileCachedHlsl(scene_copy_promotion::RgbShader, "main", "ps_6_0", binaryFormat);
                 if (!rgbaCompiled.ok || !rgbCompiled.ok) {
                     SHADER_LOG_WARNING("compile-failed", None, "renderer: scene-copy promotion shader compilation failed: {}{}", rgbaCompiled.errors, rgbCompiled.errors);
                     return;
