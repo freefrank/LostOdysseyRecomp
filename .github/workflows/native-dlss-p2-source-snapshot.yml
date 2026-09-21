@@ -1,0 +1,29 @@
+name: Native DLSS P2 source snapshot
+on:
+  push:
+    branches: [dlss-p2-workbench]
+    paths: [.github/workflows/native-dlss-p2-source-snapshot.yml]
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 59e9dce080e3f623dbfe9ef95c71150d3ee5d6f5
+          persist-credentials: false
+      - name: Public source and graphics headers only
+        run: |
+          git submodule update --init --recursive thirdparty/plume thirdparty/unordered_dense tools/XenosRecomp
+          git -C thirdparty/plume apply ../../tools/patches/plume-lostodyssey.patch
+          git rev-parse HEAD > /tmp/source-sha.txt
+          tar --exclude='.git' --exclude='thirdparty/dxc-bin' -czf /tmp/p2-source-snapshot.tar.gz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: p2-source-snapshot
+          path: |
+            /tmp/source-sha.txt
+            /tmp/p2-source-snapshot.tar.gz
+          retention-days: 1
