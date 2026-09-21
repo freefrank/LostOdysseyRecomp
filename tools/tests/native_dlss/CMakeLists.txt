@@ -66,6 +66,14 @@ if(BUILD_TESTING)
     add_test(NAME LoNativeDlssFrameInputsTest COMMAND LoNativeDlssFrameInputsTest)
     add_test(NAME LoNativeDlssSubmissionFailureTest COMMAND LoNativeDlssSubmissionFailureTest)
     set_tests_properties(LoNativeDlssSubmissionFailureTest LoNativeDlssFrameInputsTest LoP1FramePlanTest LoNativeDlssP2RoutingTest LoNativeDlssPromotionPolicyTest LoNativeDlssSubmissionLifetimeTest PROPERTIES LABELS "native-dlss;cpu")
+    # Optional developer tooling only; the game and C++ fixtures do not depend
+    # on Python. Existing CI images provide it for recording-evidence triage.
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME LoNativeDlssOracleTest COMMAND ${Python3_EXECUTABLE} -m unittest discover
+            -s ${CMAKE_CURRENT_SOURCE_DIR} -p test_p2_oracle.py -v)
+        set_tests_properties(LoNativeDlssOracleTest PROPERTIES LABELS "native-dlss;cpu;oracle" TIMEOUT 30)
+    endif()
 endif()
 if(LO_NATIVE_DLSS_CPU_ONLY)
     return()

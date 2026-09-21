@@ -1,5 +1,9 @@
 # Native DLSS P2 follow-up — 2026-09-21
 
+## Earlier follow-up and evidence checker
+
+The [earlier next-run handoff](native-dlss-p2-next-run.zh-CN.md) preserves the software-Vulkan and SDK-build checkpoint and instructions for the read-only three-frame evidence checker. The current status below includes the later qualified SDR implementation and live-game NGX execution. Visual acceptance remains outstanding.
+
 ## Status
 
 P2 development has advanced on `dlss` through commit `c2f0602`, and a bounded live-game production run now confirms NGX SR on an RTX 5080: Quality `1707x960 -> 2560x1440`, `DisplayEncoded`, reversed-Z. The run retained one successful Create and 24 successful Evaluate records under a 128-record cap; isolated use `10684` at serial `23614` was accepted/submitted and remained in flight in the snapshot, while `completed through 23612` is the earlier SR completion watermark. No failure was recorded. P2 is **not complete, accepted, or Gate 3 approved**. Visual quality and player acceptance are not claimed. Historical P0/P1, native5, composite, f11889 and f2347 evidence retains its original limits; no release was published and no SDK/runtime binaries were committed.

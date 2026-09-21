@@ -88,6 +88,12 @@ Gate 3 remains unapproved. Targeted visual, motion, occlusion, UI and reset
 acceptance remains to be performed. The `LO_NO_RENDERER` shutdown boundary and
 legacy execution fixture's unchecked `void` fence-wait gap remain open.
 
+## 2026-09-21 Second Development Follow-up
+
+See [latest implementation, evidence and next RTX run](native-dlss-p2-next-run.zh-CN.md). Actual Renderer target-map/Flush/restore methods execute in software Vulkan tests (1,536 checks), in addition to the 256 FP16 shared-shader comparisons. The reversed-Z producer convention is explicitly carried into NGX feature flags. Windows/Linux SDK ON/OFF builds of the new `--native` Renderer fixture pass; NVIDIA execution of that mode is represented by the later bounded live-game record above, not by this software/SDK lane. SDK-disabled skip=77 is not a GPU pass.
+
+CPU failure-stop handling was already implemented in `59e9dce`. The read-only checker triages the three per-frame oracle JSONL files with 13 Python tests and optional CTest. It never qualifies color or approves P2: manual CLI triage always reports `color_encoding=unknown` and `p2_accepted=false`. Python is an optional development tool and has no runtime dependency. Runtime game-color qualification beyond the documented narrowed proof, complete guest DrawImpl/UI/presentation behavior, real driver DeviceLost, gameplay and performance remain unaccepted. Historical RTX results below retain their original boundaries.
+
 ## 1. Overview and Scope
 
 This document records verification evidence for native Vulkan NVIDIA DLSS integration on the `dlss` development branch across P0, P1, and current experimental P2 work.

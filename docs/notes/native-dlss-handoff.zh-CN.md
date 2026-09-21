@@ -69,6 +69,8 @@
 
 ---
 
+远端新增的只读颜色链检查器见 [P2 下一次实机验收](native-dlss-p2-next-run.zh-CN.md)。它只做人工审查前的结构整理：命令行手动 triage 始终输出 `color_encoding=unknown`、`p2_accepted=false`，不会自动完成颜色资格判定；Python 测试为可选开发工具，不是运行时依赖。
+
 ## 1. 阶段状态总览与总体边界
 
 原生 NVIDIA DLSS 超分辨率（Super Resolution, SR）工作流划分为四个阶段（P0–P3，P4 插帧 Frame Generation 暂缓）：
@@ -77,14 +79,15 @@
 2. **P1 时序输入与计划（已通过并推送到远端）**：CPU 帧计划器 24-word 快照、真实低内部分辨率光栅化、NGX 目标尺寸查询缓存、渲染器 pre-TAA 颜色、R32 深度与未抖动几何运动矢量采集、GPU fence 生命周期管理、`LO_DLSS_INPUT_PROBE=1` 诊断模式。
 3. **P2 执行与目标提升（开发持续进行中，已确认有界生产执行）**：
    - Lane A 完成了持久化 NGX 会话控制器（`gpu::dlss::Controller`），支持 `NGX_VULKAN_CREATE_DLSS_EXT1` 与 `NGX_VULKAN_EVALUATE_DLSS_EXT` 录制，并对原生 Vulkan `vkResetCommandBuffer`、`vkBeginCommandBuffer`、`vkEndCommandBuffer` 实施校验。
+   - 独立求值测试 `LoNativeDlssExecutionTest` 通过；其首像素与验证层限制保留在验证记录中。
    - Lane B 完成了渲染器侧 SR 路由调度、单调提交序号追踪、未知色彩编码旁路保护、基于停放低分辨率目标的目标提升架构以及诊断捕获钩子（`p2-oracle.jsonl`）。
    - 生产端重采样函数（`DrawPromotionResample`）在历史测试中完成了本地 RTX 5080 验证。
    - 历史暂停记录属于此前的检查点状态；当前 P2 已恢复持续开发与推进，但未达完成与验收标准。
 4. **P3 与后续边界**：
    - 当前状态修正：`.cache/evidence/game-sr-runtime.json` 已确认有界的真实游戏 SR 调度；实际物理上传 quad、精确 resolve ordinal 与 net RGB view 的 SDR 路径已通过资格边界，其他候选路径仍为 `Unknown`。画质、运动响应、遮挡、UI、重置行为和玩家验收仍未确认。
-   - 游戏默认色彩编码保持为未知状态（`ColorEncoding::Unknown`），受静态审查守卫保护，在游戏运行时完全绕过 SR 评估调用。
+   - 默认颜色编码仍为 `ColorEncoding::Unknown`；只有满足已审阅生产链资格的输入才赋予 SDR，其余输入继续绕过 SR 求值。
    - 已在真实游戏过程中确认有界的 DLSS SR 调度，但不能据此向玩家宣称画质、运动响应、遮挡、UI、重置行为或整体可用性已经验收。
-   - Linux 原生运行跳过未跑；包含 SDK 的二进制分发许可尚待确定，不提供二进制安装包发布。
+   - Linux 软件 Vulkan 测试及 SDK 开关构建已有证据；Linux NVIDIA 原生执行仍未验证。SDK 二进制分发许可尚待确定，不提供安装包发布。
 
 ---
 
