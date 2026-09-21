@@ -1,112 +1,216 @@
-diff --git a/LostOdysseyRecomp/gpu/dlss_ngx.cpp b/LostOdysseyRecomp/gpu/dlss_ngx.cpp
-index f90e1ee..5926dd8 100644
---- a/LostOdysseyRecomp/gpu/dlss_ngx.cpp
-+++ b/LostOdysseyRecomp/gpu/dlss_ngx.cpp
-@@ -667,3 +667,4 @@ SrAttempt Controller::RecordIsolated(plume::VulkanCommandList& isolatedCommandLi
-         config.deviceEpoch != inputs.plan.deviceEpoch || inputs.plan.consumer != upscaling::TemporalConsumer::DlssSr ||
--        !inputs.CompleteForConsumer() || !validRegion(inputs.color) || !validRegion(inputs.depth) || !validRegion(inputs.motion) ||
-+        !inputs.CompleteForConsumer() || !temporal::MatchesDepthConvention(inputs.depthConvention, config.depthInverted) ||
-+        !validRegion(inputs.color) || !validRegion(inputs.depth) || !validRegion(inputs.motion) ||
-         !ValidImage(output, sessionDevice_) || output.desc.width != config.outputExtent.width || output.desc.height != config.outputExtent.height ||
-diff --git a/LostOdysseyRecomp/gpu/renderer.cpp b/LostOdysseyRecomp/gpu/renderer.cpp
-index 3888ade..f924405 100644
---- a/LostOdysseyRecomp/gpu/renderer.cpp
-+++ b/LostOdysseyRecomp/gpu/renderer.cpp
-@@ -1800,2 +1800,3 @@ namespace gpu::renderer
-                 config.quality = activePlan.dlssQuality; config.deviceEpoch = activePlan.deviceEpoch;
-+                config.depthInverted = promotion.inputs.depthConvention == temporal::DepthConvention::Reversed;
-                 config.colorSpace = promotion.inputs.colorEncoding == temporal::ColorEncoding::Sdr ?
-diff --git a/LostOdysseyRecomp/gpu/temporal_frame_inputs.h b/LostOdysseyRecomp/gpu/temporal_frame_inputs.h
-index 615a6f0..0a7f9e5 100644
---- a/LostOdysseyRecomp/gpu/temporal_frame_inputs.h
-+++ b/LostOdysseyRecomp/gpu/temporal_frame_inputs.h
-@@ -27,2 +27,12 @@ struct TextureRegion {
- enum class ColorEncoding : uint32_t { Unknown = 0, Sdr = 1, HdrLinear = 2 };
-+// Storage format does not identify near/far ordering. HistoryOwner's reviewed
-+// scene anchor uses reversed Z; independent synthetic producers must declare
-+// their own convention rather than inheriting a renderer default.
-+enum class DepthConvention : uint32_t { Unknown = 0, Forward = 1, Reversed = 2 };
-+inline constexpr bool KnownDepthConvention(DepthConvention value) {
-+    return value == DepthConvention::Forward || value == DepthConvention::Reversed;
-+}
-+inline constexpr bool MatchesDepthConvention(DepthConvention value, bool inverted) {
-+    return KnownDepthConvention(value) && (inverted == (value == DepthConvention::Reversed));
-+}
- enum class MotionState : uint32_t { Unavailable = 0, ResetInitialization = 1, Tracked = 2 };
-@@ -68,2 +78,3 @@ struct TemporalFrameInputs {
-     ColorEncoding colorEncoding = ColorEncoding::Unknown;
-+    DepthConvention depthConvention = DepthConvention::Unknown;
-     float preExposure = 1.0f, exposureScale = 1.0f;
-@@ -76,3 +87,4 @@ struct TemporalFrameInputs {
-         return !upscaling::IsDlssConsumer(plan.consumer) ||
--            (motionState != MotionState::Unavailable && motion.Complete() && motionInvalidity.Complete());
-+            (KnownDepthConvention(depthConvention) && motionState != MotionState::Unavailable &&
-+             motion.Complete() && motionInvalidity.Complete());
-     }
-diff --git a/LostOdysseyRecomp/gpu/temporal_history.h b/LostOdysseyRecomp/gpu/temporal_history.h
-index 52ae4ab..a69953b 100644
---- a/LostOdysseyRecomp/gpu/temporal_history.h
-+++ b/LostOdysseyRecomp/gpu/temporal_history.h
-@@ -329,2 +329,5 @@ public:
-         result.depth={depth_[frame_%2].texture.get(),{width_,height_},0,0,width_,height_};
-+        // CaptureDepth copies the R32 resolve unchanged. SceneObservation's
-+        // reviewed camera/depth contract is d=1 near, d=0 far (reversed Z).
-+        result.depthConvention=DepthConvention::Reversed;
-         result.motion={motionView_.velocity,{width_,height_},0,0,width_,height_};
-diff --git a/tools/tests/motion_replay_gpu_test.cpp b/tools/tests/motion_replay_gpu_test.cpp
-index f1b1499..9da6692 100644
---- a/tools/tests/motion_replay_gpu_test.cpp
-+++ b/tools/tests/motion_replay_gpu_test.cpp
-@@ -626,2 +626,3 @@ public:
-             Require(inputs.CompleteForConsumer(),"P1 complete frame carries color/depth/geometry MV inputs");
-+            Require(inputs.depthConvention==DepthConvention::Reversed,"P1 R32 capture keeps reversed-Z convention");
-             Require(inputs.color.allocation==gpu::resolution::Size{W,H}&&inputs.color.x==0&&inputs.color.y==0&&inputs.color.width==W&&inputs.color.height==H,
-diff --git a/tools/tests/native_dlss/native_dlss_execution_test.cpp b/tools/tests/native_dlss/native_dlss_execution_test.cpp
-index ada4764..cfc9885 100644
---- a/tools/tests/native_dlss/native_dlss_execution_test.cpp
-+++ b/tools/tests/native_dlss/native_dlss_execution_test.cpp
-@@ -126,2 +126,3 @@ int main() {
-         inputs.colorEncoding = gpu::temporal::ColorEncoding::Sdr;
-+        inputs.depthConvention = gpu::temporal::DepthConvention::Forward; // Synthetic conventional R32 fixture.
- 
+diff --git a/tools/tests/motion_replay/CMakeLists.txt b/tools/tests/motion_replay/CMakeLists.txt
+index 91d2ff7..79e3b93 100644
+--- a/tools/tests/motion_replay/CMakeLists.txt
++++ b/tools/tests/motion_replay/CMakeLists.txt
+@@ -3,0 +4,3 @@ set(CMAKE_CXX_STANDARD 20)
++if(MSVC)
++ set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
++endif()
+@@ -72 +75,2 @@ endif()
+-if(UNIX AND NOT APPLE)
++if((UNIX AND NOT APPLE) OR WIN32)
++ include("${ROOT}/cmake/LoDlss.cmake")
+@@ -81,2 +85,9 @@ if(UNIX AND NOT APPLE)
+- target_compile_options(LoNativeDlssRendererTest PRIVATE -O0 -g0 -ffunction-sections -fdata-sections)
+- target_link_options(LoNativeDlssRendererTest PRIVATE -Wl,--gc-sections)
++ if(MSVC)
++  target_compile_options(LoNativeDlssRendererTest PRIVATE /Od /Gy /Gw)
++  target_link_options(LoNativeDlssRendererTest PRIVATE /OPT:REF /INCREMENTAL:NO)
++ else()
++  target_compile_options(LoNativeDlssRendererTest PRIVATE -O0 -g0 -ffunction-sections -fdata-sections)
++  target_link_options(LoNativeDlssRendererTest PRIVATE -Wl,--gc-sections)
++ endif()
++ target_compile_definitions(LoNativeDlssRendererTest PRIVATE LO_NATIVE_DLSS_TEST_INJECT_EVALUATE_FAILURE=1)
++ lo_enable_dlss(LoNativeDlssRendererTest)
+@@ -84,0 +96,2 @@ if(UNIX AND NOT APPLE)
++ add_test(NAME LoNativeDlssRendererNativeTest COMMAND LoNativeDlssRendererTest --native)
++ set_tests_properties(LoNativeDlssRendererNativeTest PROPERTIES LABELS "native-dlss;ngx-renderer" TIMEOUT 180 SKIP_RETURN_CODE 77)
 diff --git a/tools/tests/native_dlss_renderer_gpu_test.cpp b/tools/tests/native_dlss_renderer_gpu_test.cpp
-index 6db9632..8bb3ac5 100644
+index 8bb3ac5..1e26801 100644
 --- a/tools/tests/native_dlss_renderer_gpu_test.cpp
 +++ b/tools/tests/native_dlss_renderer_gpu_test.cpp
-@@ -68,5 +68,7 @@ struct VendorFixture {
-     gpu::dlss::SrStatus EnsureSession(const plume::VulkanDevice&) { return gpu::dlss::SrStatus::Executable; }
--    gpu::dlss::SrAttempt RecordIsolated(plume::VulkanCommandList& list, const gpu::dlss::SrConfig&,
--        const gpu::temporal::TemporalFrameInputs&, plume::VulkanTexture& output) {
-+    gpu::dlss::SrAttempt RecordIsolated(plume::VulkanCommandList& list, const gpu::dlss::SrConfig& config,
-+        const gpu::temporal::TemporalFrameInputs& inputs, plume::VulkanTexture& output) {
-         ++calls;
-+        Require(gpu::temporal::MatchesDepthConvention(inputs.depthConvention, config.depthInverted),
-+            "renderer must pass the producer depth ordering to NGX");
-         Require(gpu::submission::BeginCommands(list) == VK_SUCCESS, "isolated begin");
-@@ -182,2 +184,3 @@ public:
-         inputs.plan = r.activePlan; inputs.currentInputsComplete = true;
-+        inputs.depthConvention = (restoreReason & 1) ? gpu::temporal::DepthConvention::Reversed : gpu::temporal::DepthConvention::Forward;
-         inputs.motionState = gpu::temporal::MotionState::Tracked;
-diff --git a/tools/tests/temporal_frame_inputs_test.cpp b/tools/tests/temporal_frame_inputs_test.cpp
-index e331bcd..7641eda 100644
---- a/tools/tests/temporal_frame_inputs_test.cpp
-+++ b/tools/tests/temporal_frame_inputs_test.cpp
-@@ -22,2 +22,4 @@ int main() {
-         inputs.depthAllocation = 9;
-+        Require(inputs.depthConvention == DepthConvention::Unknown, "new producer has no assumed depth convention");
-+        inputs.depthConvention = DepthConvention::Forward;
-         inputs.jitter = FrameJitter(inputs.renderFrameId, 64, 32);
-@@ -38,2 +40,13 @@ int main() {
-         Require(motionPixelsX == -2.0f, "motion contract is known previousPixel-currentPixel (-2,0) at scale 1");
-+        inputs.depthConvention = DepthConvention::Unknown;
-+        Require(!inputs.CompleteForConsumer(), "unknown depth cannot enter DLSS");
-+        inputs.depthConvention = static_cast<DepthConvention>(3);
-+        Require(!inputs.CompleteForConsumer(), "invalid depth enum cannot enter DLSS");
-+        inputs.depthConvention = DepthConvention::Reversed;
-+        Require(inputs.CompleteForConsumer(), "explicit reversed depth is complete");
-+        Require(MatchesDepthConvention(DepthConvention::Reversed, true), "reversed depth selects NGX inverted flag");
-+        Require(!MatchesDepthConvention(DepthConvention::Reversed, false), "reversed depth rejects forward NGX flag");
-+        Require(MatchesDepthConvention(DepthConvention::Forward, false), "forward fixture selects conventional NGX flag");
-+        Require(!MatchesDepthConvention(DepthConvention::Forward, true), "forward depth rejects inverted NGX flag");
-+        Require(!MatchesDepthConvention(DepthConvention::Unknown, false), "unknown is not forward");
-         inputs.motionState = MotionState::Unavailable;
+@@ -82,0 +83,13 @@ struct VendorFixture {
++struct SkipNative : std::runtime_error { using std::runtime_error::runtime_error; };
++// On an assertion exception, never submit a partly recorded list during stack
++// unwinding. Drain previously submitted work before local image owners die.
++struct LocalImageDrain {
++    plume::RenderDevice* device;
++    int exceptions = std::uncaught_exceptions();
++    ~LocalImageDrain() {
++        if (std::uncaught_exceptions() > exceptions)
++            gpu::video::StopGpuWork(gpu::submission::VulkanState::InvalidState);
++        const auto result = vkDeviceWaitIdle(static_cast<plume::VulkanDevice*>(device)->vk);
++        if (result != VK_SUCCESS && result != VK_ERROR_DEVICE_LOST) std::_Exit(1);
++    }
++};
+@@ -83,0 +97 @@ class Harness {
++    std::unique_ptr<gpu::dlss::Controller> nativeController;
+@@ -90 +104 @@ class Harness {
+-    static constexpr uint32_t Pitch = 32;
++    uint32_t readbackPitch = 32;
+@@ -110 +124 @@ class Harness {
+-            t.width, t.height, 1, Pitch), plume::RenderTextureCopyLocation::Subresource(t.texture.get()));
++            t.width, t.height, 1, readbackPitch), plume::RenderTextureCopyLocation::Subresource(t.texture.get()));
+@@ -115 +129 @@ class Harness {
+-            result.insert(result.end(), p + y * Pitch, p + y * Pitch + t.width);
++            result.insert(result.end(), p + y * readbackPitch, p + y * readbackPitch + t.width);
+@@ -122,2 +136,9 @@ public:
+-    Harness() {
+-        api = plume::CreateVulkanInterface(); Require(bool(api), "interface");
++    void Init(bool native = false, const std::filesystem::path& runtime = {}) {
++        if (native) {
++            nativeController = std::make_unique<gpu::dlss::Controller>(
++                std::filesystem::current_path() / "native-dlss-renderer-data", runtime);
++            if (nativeController->Report().state == gpu::dlss::ProbeState::SdkDisabled)
++                throw SkipNative("built without NGX SDK");
++        }
++        api = plume::CreateVulkanInterface(nativeController ? nativeController->ExtensionHooks() : plume::VulkanExtensionHooks{});
++        Require(bool(api), "interface");
+@@ -126,0 +148,9 @@ public:
++        std::printf("DEVICE=%s MODE=%s\n", device->getDescription().name.c_str(), native ? "native_ngx" : "synthetic_vendor");
++        if (nativeController) {
++            nativeController->ProbeOnce(*static_cast<plume::VulkanInterface*>(api.get()), *static_cast<plume::VulkanDevice*>(device.get()));
++            const auto& report = nativeController->Report();
++            if (report.state == gpu::dlss::ProbeState::Unavailable) throw SkipNative(report.reason);
++            Require(report.state == gpu::dlss::ProbeState::Available, report.reason.c_str());
++            Require(nativeController->EnsureSession(*static_cast<plume::VulkanDevice*>(device.get())) == gpu::dlss::SrStatus::Executable,
++                "native persistent session initialization failed");
++        }
+@@ -128,0 +159 @@ public:
++        r.dlssController = nativeController.get();
+@@ -161 +192 @@ public:
+-        readback = device->createBuffer(plume::RenderBufferDesc::ReadbackBuffer(Pitch * 32 * 8));
++        readback = device->createBuffer(plume::RenderBufferDesc::ReadbackBuffer(readbackPitch * 32 * 8));
+@@ -168,0 +200,8 @@ public:
++            if (nativeController) {
++                if (result == VK_ERROR_DEVICE_LOST) nativeController->AbandonUsesAfterDeviceLoss();
++                else {
++                    for (auto& slot : R().gpuSlots)
++                        if (slot.srUseId && !slot.submitted) nativeController->OnBatchDiscarded(slot.srUseId);
++                    nativeController->ReleaseCompletedThrough(fixture::state.LastSubmission());
++                }
++            }
+@@ -170,0 +210,100 @@ public:
++        if (nativeController) nativeController->ShutdownAfterGpuDrain();
++    }
++    void NativeRun(gpu::upscaling::DlssQuality quality, uint32_t outputWidth, uint32_t outputHeight,
++        bool reset, bool injectedFailure = false) {
++        Require(bool(nativeController), "native mode required");
++        auto& r = R(); ++r.frame;
++        const auto sizing = nativeController->QueryOutputSizing(*static_cast<plume::VulkanInterface*>(api.get()),
++            *static_cast<plume::VulkanDevice*>(device.get()), {1, outputWidth, outputHeight});
++        const auto& mode = sizing.modes[static_cast<unsigned>(quality)];
++        Require(mode.state == gpu::upscaling::SizingState::Ready && mode.optimal.width && mode.optimal.height,
++            "native sizing failed");
++        auto plan = r.activePlan;
++        if (plan.width != mode.optimal.width || plan.height != mode.optimal.height || plan.dlssQuality != quality ||
++            plan.output.width != outputWidth || plan.output.height != outputHeight) ++plan.geometryEpoch;
++        ++plan.cpuSerial;
++        plan.width = mode.optimal.width; plan.height = mode.optimal.height; plan.dlssQuality = quality;
++        plan.output = {{outputWidth, outputHeight}, 0, 0, outputWidth, outputHeight};
++        { std::lock_guard lock(gpu::renderer::framePlanMutex); gpu::renderer::committedPlan = plan; }
++        Require(r.ApplyInternalResolution(), "native plan reconfiguration did not drain old feature");
++        readbackPitch = (outputWidth + 31) & ~31u;
++        readback = device->createBuffer(plume::RenderBufferDesc::ReadbackBuffer(uint64_t(readbackPitch) * outputHeight * 8));
++        Require(bool(readback), "native readback allocation");
++        const RenderTargetKey key{0, 3, 1280, 0, false};
++        auto base = Texture(plan.width, plan.height, plume::RenderFormat::R16G16B16A16_FLOAT);
++        HostTexture* original = base.get(); r.renderTargets[key] = std::move(base);
++        Clear(*original, plume::RenderColor(.25f, .5f, .75f, .5f));
++        auto depth = Texture(plan.width, plan.height, plume::RenderFormat::R32_FLOAT);
++        auto motion = Texture(plan.width, plan.height, plume::RenderFormat::R16G16_FLOAT);
++        auto invalid = Texture(plan.width, plan.height, plume::RenderFormat::R8_UNORM);
++        LocalImageDrain imageDrain{device.get()};
++        Clear(*depth, plume::RenderColor(.5f, 0, 0, 0));
++        Clear(*motion, plume::RenderColor(0, 0, 0, 0)); Clear(*invalid, plume::RenderColor(0, 0, 0, 0));
++        gpu::temporal::TemporalFrameInputs inputs{};
++        inputs.plan = plan; inputs.renderFrameId = r.frame; inputs.currentInputsComplete = true;
++        inputs.resetHistory = reset;
++        inputs.motionState = reset ? gpu::temporal::MotionState::ResetInitialization : gpu::temporal::MotionState::Tracked;
++        inputs.depthConvention = gpu::temporal::DepthConvention::Reversed;
++        inputs.colorEncoding = gpu::temporal::ColorEncoding::Sdr; // Known synthetic signal, NOT a game qualification.
++        const auto region = [&](HostTexture& t) { return gpu::temporal::TextureRegion{t.texture.get(),
++            {plan.width, plan.height}, 0, 0, plan.width, plan.height}; };
++        inputs.color = region(*original); inputs.depth = region(*depth);
++        inputs.motion = region(*motion); inputs.motionInvalidity = region(*invalid);
++        Require(r.PrepareSceneCopyDestination(key, *original, inputs), "native mapping prepare");
++        HostTexture* color = original; HostTexture* raster = color;
++        plume::RenderViewport guest(0,0,1280,720), viewport;
++        plume::RenderRect guestScissor(0,0,1280,720), scissor;
++        Require(r.ActivateSceneCopyDestination(color, raster, viewport, scissor, guest, guestScissor), "native mapping activation");
++        Clear(*color, plume::RenderColor(.25f, .5f, .75f, .5f));
++        // NGX scratch begins as an explicit zero sentinel, without adding a
++        // framebuffer or different format to the production storage allocation.
++        auto& scratch = *static_cast<plume::VulkanTexture*>(r.sceneCopyPromotion.scratch->texture.get());
++        r.commandList->barriers(plume::RenderBarrierStage::COPY, plume::RenderTextureBarrier(&scratch, plume::RenderTextureLayout::COPY_DEST));
++        const VkClearColorValue zero{};
++        vkCmdClearColorImage(static_cast<plume::VulkanCommandList*>(r.commandList)->vk, scratch.vk,
++            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &zero, 1, &scratch.imageSubresourceRange);
++        struct InjectScope {
++            InjectScope(bool enable) {
++#ifdef _WIN32
++                _putenv_s("LO_DLSS_TEST_INJECT_EVALUATE_FAILURE", enable ? "1" : "");
++#else
++                if (enable) setenv("LO_DLSS_TEST_INJECT_EVALUATE_FAILURE", "1", 1);
++                else unsetenv("LO_DLSS_TEST_INJECT_EVALUATE_FAILURE");
++#endif
++            }
++            ~InjectScope() {
++#ifdef _WIN32
++                _putenv_s("LO_DLSS_TEST_INJECT_EVALUATE_FAILURE", "");
++#else
++                unsetenv("LO_DLSS_TEST_INJECT_EVALUATE_FAILURE");
++#endif
++            }
++        } inject(injectedFailure);
++        const auto creates = [&] {
++            return std::count_if(nativeController->Report().calls.begin(), nativeController->Report().calls.end(),
++                [](const gpu::dlss::ApiCall& call) { return call.name == "CREATE_DLSS_EXT1"; });
++        };
++        const auto createsBefore = creates();
++        Require(r.RecordSceneCopyDlss(color, raster) == !injectedFailure, "native renderer dispatch/fallback result");
++        Require(creates() == createsBefore + (reset ? 1 : 0), "native feature reuse/recreation call count");
++        Require(r.Flush(), "native renderer batch submit");
++        Require(fixture::lastListCount == (injectedFailure ? 2u : 3u), "native batch inclusion");
++        const auto pixels = Pixels(*color);
++        Require(pixels.size() == size_t(outputWidth) * outputHeight, "native output extent");
++        bool anyRgb = false;
++        for (const uint64_t pixel : pixels) {
++            Require(uint16_t(pixel >> 48) == 0x3800, "native composite lost post-copy guest alpha");
++            for (unsigned channel = 0; channel < 3; ++channel)
++                Require((uint16_t(pixel >> (channel * 16)) & 0x7c00) != 0x7c00, "native RGB contains NaN/Inf");
++            anyRgb |= (pixel & 0x0000ffffffffffffull) != 0;
++            if (injectedFailure) Require(pixel == 0x38003a0038003400ull, "excluded NGX list corrupted fallback pixels");
++        }
++        Require(anyRgb, "NGX did not replace zero RGB sentinel");
++        Clear(*color, plume::RenderColor(.5f, .25f, .125f, .75f));
++        Require(r.PreparePromotionAccess(key, 720, true), "native incompatible-depth restoration");
++        Require(r.renderTargets.at(key).get() == original && !r.sceneCopyPromotion.activeMapping, "native parked target restoration");
++        All(*original, 0x3a00300034003800ull, "native restore lost later UI-like RGBA write");
++        Require(r.Flush() && r.WaitForGpu(), "native inputs fence retirement");
++        r.framebuffers.clear(); r.renderTargets.clear();
++        std::printf("NATIVE_CASE quality=%u input=%ux%u output=%ux%u failure=%u pixels=%zu alpha_mismatches=0\n",
++            unsigned(quality), plan.width, plan.height, outputWidth, outputHeight, injectedFailure, pixels.size());
+@@ -182,0 +322 @@ public:
++        LocalImageDrain imageDrain{device.get()};
+@@ -233 +373 @@ public:
+-int main() {
++int main(int argc, char** argv) {
+@@ -234,0 +375,3 @@ int main() {
++        const bool native = argc == 2 && std::string_view(argv[1]) == "--native";
++        if (argc > 1 && !native) { std::fprintf(stderr, "usage: %s [--native]\n", argv[0]); return 2; }
++        std::setvbuf(stdout, nullptr, _IONBF, 0);
+@@ -235,0 +379,11 @@ int main() {
++        harness.Init(native, std::filesystem::absolute(argv[0]).parent_path());
++        if (native) {
++            using Q = gpu::upscaling::DlssQuality;
++            harness.NativeRun(Q::Quality, 1280, 720, true);
++            harness.NativeRun(Q::Quality, 1280, 720, false);
++            harness.NativeRun(Q::Balanced, 1280, 720, true);
++            harness.NativeRun(Q::Performance, 1920, 1080, true);
++            harness.NativeRun(Q::Performance, 1920, 1080, false, true);
++            std::puts("PASS: actual NGX + Renderer mapping/submit/alpha/restore; no gameplay or motion-response quality claim");
++            return 0;
++        }
+@@ -240,0 +395 @@ int main() {
++    } catch (const SkipNative& e) { std::printf("SKIP: %s\n", e.what()); return 77;

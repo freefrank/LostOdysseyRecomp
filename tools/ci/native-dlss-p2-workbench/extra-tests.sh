@@ -10,7 +10,11 @@ export LD_LIBRARY_PATH="$GITHUB_WORKSPACE/dxc/lib:${LD_LIBRARY_PATH:-}"
 export VK_ICD_FILENAMES
 VK_ICD_FILENAMES=$(find /usr/share/vulkan/icd.d -name '*lvp*.json' -print -quit)
 test -n "$VK_ICD_FILENAMES"
-cmake --build source/out/renderer-check --target LoNativeDlssRendererTest LoSceneCopyCompositeTest motion_replay_gpu_test --parallel 2
-ctest --test-dir source/out/renderer-check -R '^(LoNativeDlssRendererTest|LoSceneCopyCompositeTest)$' --output-on-failure -V | tee source/out/composite-console.log
-(cd source/out/renderer-check && ./motion_replay_gpu_test --p1-inputs-only) 2>&1 | tee source/out/p1-input-console.log
-! grep -E 'Validation Error|VUID-' source/out/composite-console.log source/out/p1-input-console.log
+cmake --build source/out/renderer-check --target LoNativeDlssRendererTest LoSceneCopyCompositeTest --parallel 2
+ctest --test-dir source/out/renderer-check -R '^(LoNativeDlssRendererTest|LoNativeDlssRendererNativeTest|LoSceneCopyCompositeTest)$' --output-on-failure -V | tee source/out/composite-console.log
+! grep -E 'Validation Error|VUID-' source/out/composite-console.log
+cmake -S source/tools/tests/motion_replay -B source/out/renderer-ngx -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_CXX_SCAN_FOR_MODULES=OFF -DLO_ENABLE_DLSS=ON -DLO_DLSS_SDK_ROOT="$GITHUB_WORKSPACE/sdk" -DLO_DLSS_STAGE_RUNTIME=OFF
+grep -q 'LO_DLSS_SDK=1' source/out/renderer-ngx/build.ninja
+cmake --build source/out/renderer-ngx --target LoNativeDlssRendererTest --parallel 2
+ctest --test-dir source/out/renderer-ngx -R '^LoNativeDlssRendererTest$' -V --output-on-failure | tee source/out/native-renderer-build-check.log
+! grep -E 'Validation Error|VUID-' source/out/native-renderer-build-check.log
