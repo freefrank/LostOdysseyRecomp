@@ -1,233 +1,278 @@
-diff --git a/LostOdysseyRecomp/gpu/dlss_ngx.cpp b/LostOdysseyRecomp/gpu/dlss_ngx.cpp
-index 6266efe..3faf51f 100644
---- a/LostOdysseyRecomp/gpu/dlss_ngx.cpp
-+++ b/LostOdysseyRecomp/gpu/dlss_ngx.cpp
-@@ -679,2 +679,2 @@ SrAttempt Controller::RecordIsolated(plume::VulkanCommandList& isolatedCommandLi
--    attempt.useId = nextSrUseId_++;
--    srUses_.push_back({attempt.useId});
-+    attempt.useId = srUses_.Record();
-+    if (!attempt.useId) { attempt.status = SrStatus::Failed; return attempt; }
-@@ -793,3 +793 @@ void Controller::OnBatchSubmitted(uint64_t useId, uint64_t submissionSerial) {
--    if (!useId || !submissionSerial) return;
--    const auto it = std::find_if(srUses_.begin(), srUses_.end(), [useId](const SrUse& use) { return use.useId == useId; });
--    if (it != srUses_.end()) { it->submitted = true; it->submissionSerial = submissionSerial; }
-+    srUses_.Submit(useId, submissionSerial);
-@@ -799,2 +797 @@ void Controller::OnBatchDiscarded(uint64_t useId) {
--    if (!useId) return;
--    std::erase_if(srUses_, [useId](const SrUse& use) { return use.useId == useId; });
-+    srUses_.Discard(useId);
-@@ -804,3 +801 @@ void Controller::ReleaseCompletedThrough(uint64_t submissionSerial) {
--    std::erase_if(srUses_, [submissionSerial](const SrUse& use) {
--        return use.submitted && use.submissionSerial <= submissionSerial;
--    });
-+    srUses_.CompleteThrough(submissionSerial);
-@@ -810 +805 @@ void Controller::ReleaseFeatureAfterGpuDrain() {
--    if (!srUses_.empty()) return;
-+    if (!srUses_.Empty()) return;
-@@ -824 +819 @@ void Controller::ShutdownAfterGpuDrain() {
--    if (!srUses_.empty()) return;
-+    if (!srUses_.Empty()) return;
-diff --git a/LostOdysseyRecomp/gpu/dlss_ngx.h b/LostOdysseyRecomp/gpu/dlss_ngx.h
-index 3e4f9b3..daed1a1 100644
---- a/LostOdysseyRecomp/gpu/dlss_ngx.h
-+++ b/LostOdysseyRecomp/gpu/dlss_ngx.h
-@@ -5,0 +6 @@
-+#include "dlss_submission_lifetime.h"
-@@ -113,0 +115,2 @@ public:
-+    // Persistent capability/parameter blocks alone do not require a drain.
-+    bool HasFeatureState() const { return feature_ || featureConfigValid_ || featureFailed_ || !srUses_.Empty(); }
-@@ -147,6 +149,0 @@ private:
--    struct SrUse {
--        uint64_t useId = 0;
--        uint64_t submissionSerial = 0;
--        bool submitted = false;
--    };
--
-@@ -164,2 +161 @@ private:
--    std::vector<SrUse> srUses_;
--    uint64_t nextSrUseId_ = 1;
-+    SubmissionLifetime srUses_;
-diff --git a/LostOdysseyRecomp/gpu/dlss_submission_lifetime.h b/LostOdysseyRecomp/gpu/dlss_submission_lifetime.h
-new file mode 100644
-index 0000000..f0dbe3d
---- /dev/null
-+++ b/LostOdysseyRecomp/gpu/dlss_submission_lifetime.h
-@@ -0,0 +1,54 @@
-+#pragma once
-+
-+#include <algorithm>
-+#include <cstdint>
-+#include <vector>
-+
-+namespace gpu::dlss {
-+
-+// One ledger per device session, serialized on the command worker. Recording
-+// retains a feature even if NGX failed and its isolated list will be excluded.
-+// Only a successful prefix-batch submit can assign that use a completion fence.
-+class SubmissionLifetime {
-+public:
-+    uint64_t Record() {
-+        if (!nextId_) return 0; // Never wrap and alias an earlier use ID.
-+        const uint64_t id = nextId_++;
-+        uses_.push_back({id, 0});
-+        return id;
-+    }
-+
-+    bool Submit(uint64_t id, uint64_t serial) {
-+        if (!id || !serial) return false;
-+        const auto it = std::find_if(uses_.begin(), uses_.end(),
-+            [id](const Use& use) { return use.id == id; });
-+        if (it == uses_.end()) return false;
-+        // Duplicate notifications cannot move a live resource to an earlier
-+        // fence. Nor can a recorded use claim an already completed submission.
-+        if (it->serial) return it->serial == serial;
-+        if (serial <= completed_) return false;
-+        it->serial = serial;
-+        return true;
-+    }
-+
-+    void Discard(uint64_t id) {
-+        // A discard belongs to a batch that was never submitted. Once assigned
-+        // a fence, only GPU completion can release the use.
-+        std::erase_if(uses_, [id](const Use& use) { return use.id == id && !use.serial; });
-+    }
-+
-+    void CompleteThrough(uint64_t serial) {
-+        completed_ = std::max(completed_, serial);
-+        std::erase_if(uses_, [this](const Use& use) { return use.serial && use.serial <= completed_; });
-+    }
-+
-+    bool Empty() const { return uses_.empty(); }
-+
-+private:
-+    struct Use { uint64_t id, serial; };
-+    std::vector<Use> uses_;
-+    uint64_t nextId_ = 1;
-+    uint64_t completed_ = 0;
-+};
-+
-+} // namespace gpu::dlss
 diff --git a/LostOdysseyRecomp/gpu/renderer.cpp b/LostOdysseyRecomp/gpu/renderer.cpp
-index 4e3fd58..caf88c2 100644
+index caf88c2..f431163 100644
 --- a/LostOdysseyRecomp/gpu/renderer.cpp
 +++ b/LostOdysseyRecomp/gpu/renderer.cpp
-@@ -569,0 +570 @@ namespace gpu::renderer
-+            uint64_t srReconfigureFrame = ~0ull;
-@@ -1854 +1855,4 @@ namespace gpu::renderer
--                    DisableDlssRequest(frame_plan::FailureReason::DlssUnavailable);
-+                    if (attempt.status == dlss::SrStatus::NeedsReconfigure)
-+                        srReconfigureFrame = frame; // Retry only after a drained next-frame boundary.
-+                    else
-+                        DisableDlssRequest(frame_plan::FailureReason::DlssUnavailable);
-@@ -3048 +3052,5 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
--                if (selected.geometryEpoch == appliedPlanEpoch && !requestChanged && !first) return true;
-+                const bool epochChanged = selected.geometryEpoch != appliedPlanEpoch;
-+                const bool recreateFeature = dlssController &&
-+                    ((srReconfigureFrame != ~0ull && srReconfigureFrame != frame) ||
-+                     (epochChanged && dlssController->HasFeatureState()));
-+                if (!epochChanged && !requestChanged && !first && !recreateFeature) return true;
-@@ -3051,3 +3059,4 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
--                // Resize only between renderer frames. Complete all references
--                // before destroying framebuffer views and the resources they use.
--                if (effective != internalSize) {
-+                // No guest draw attachments, upload offsets or descriptors have
-+                // been borrowed yet. Reconfigure here, never in a scene-copy draw.
-+                // Keep the NGX session/parameters, releasing only the old feature.
-+                if (effective != internalSize || recreateFeature) {
-@@ -3056,0 +3066,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
-+                    if (recreateFeature) {
-+                        dlssController->ReleaseFeatureAfterGpuDrain();
-+                        if (dlssController->HasFeatureState()) {
-+                            FailCurrentPlan(frame_plan::FailureReason::InvalidInput);
-+                            return false;
-+                        }
-+                        srReconfigureFrame = ~0ull;
-+                    }
-+                }
-+                if (effective != internalSize) {
-diff --git a/tools/tests/native_dlss/CMakeLists.txt b/tools/tests/native_dlss/CMakeLists.txt
-index 4f6b28f..de032ec 100644
---- a/tools/tests/native_dlss/CMakeLists.txt
-+++ b/tools/tests/native_dlss/CMakeLists.txt
-@@ -37,0 +38,5 @@ target_compile_features(LoNativeDlssPromotionPolicyTest PRIVATE cxx_std_20)
-+add_executable(LoNativeDlssSubmissionLifetimeTest EXCLUDE_FROM_ALL
-+    ${LO_NATIVE_DLSS_ROOT}/tools/tests/native_dlss_submission_lifetime_test.cpp)
-+target_include_directories(LoNativeDlssSubmissionLifetimeTest PRIVATE ${LO_NATIVE_DLSS_ROOT}/LostOdysseyRecomp)
-+target_compile_features(LoNativeDlssSubmissionLifetimeTest PRIVATE cxx_std_20)
-+
-@@ -40 +45 @@ target_compile_features(LoNativeDlssPromotionPolicyTest PRIVATE cxx_std_20)
--set_target_properties(LoP1FramePlanTest LoNativeDlssP2RoutingTest LoNativeDlssPromotionPolicyTest
-+set_target_properties(LoP1FramePlanTest LoNativeDlssP2RoutingTest LoNativeDlssPromotionPolicyTest LoNativeDlssSubmissionLifetimeTest
-@@ -44 +49 @@ add_custom_target(LoNativeDlssCpuTests
--    DEPENDS LoP1FramePlanTest LoNativeDlssP2RoutingTest LoNativeDlssPromotionPolicyTest)
-+    DEPENDS LoP1FramePlanTest LoNativeDlssP2RoutingTest LoNativeDlssPromotionPolicyTest LoNativeDlssSubmissionLifetimeTest)
-@@ -50 +55,2 @@ if(BUILD_TESTING)
--    set_tests_properties(LoP1FramePlanTest LoNativeDlssP2RoutingTest LoNativeDlssPromotionPolicyTest PROPERTIES LABELS "native-dlss;cpu")
-+    add_test(NAME LoNativeDlssSubmissionLifetimeTest COMMAND LoNativeDlssSubmissionLifetimeTest)
-+    set_tests_properties(LoP1FramePlanTest LoNativeDlssP2RoutingTest LoNativeDlssPromotionPolicyTest LoNativeDlssSubmissionLifetimeTest PROPERTIES LABELS "native-dlss;cpu")
-diff --git a/tools/tests/native_dlss_submission_lifetime_test.cpp b/tools/tests/native_dlss_submission_lifetime_test.cpp
+@@ -5,0 +6 @@
++#include "scene_copy_promotion_shaders.h"
+@@ -1573,19 +1574,2 @@ namespace gpu::renderer
+-                // Reuse the renderer's shared-constant binding: transfer[0..1]
+-                // are source-to-destination scale. The RGB pass samples a distinct
+-                // SR scratch image and deliberately retains base alpha.
+-                const char* common =
+-                    "Texture2D<float4> base : register(t0, space1);\n"
+-                    "#ifdef __spirv__\n"
+-                    "struct XePushConstants { uint64_t vs; uint64_t sharedAddress; uint64_t ps; };\n"
+-                    "[[vk::push_constant]] ConstantBuffer<XePushConstants> xePush;\n"
+-                    "#define xePromotion vk::RawBufferLoad<uint4>(xePush.sharedAddress + 240)\n"
+-                    "#else\n"
+-                    "cbuffer XeShared : register(b1, space0) { uint4 pad0[2]; uint4 pad1[8]; float4 pad2; float4 pad3; float4 pad4; float4 pad5; float4 xeColorMax; uint4 xePromotion; };\n"
+-                    "#endif\n";
+-                const std::string rgba = std::string(common) +
+-                    "float4 main(float4 pos : SV_Position) : SV_Target { uint4 p=xePromotion; return base.Load(int3(int2(pos.xy*float2(asfloat(p.x),asfloat(p.y))),0)); }\n";
+-                const std::string rgb = std::string(common) +
+-                    "Texture2D<float4> sr : register(t1, space1);\n"
+-                    "float4 main(float4 pos : SV_Position) : SV_Target { uint4 p=xePromotion; float4 b=base.Load(int3(int2(pos.xy*float2(asfloat(p.x),asfloat(p.y))),0)); return float4(sr.Load(int3(int2(pos.xy),0)).rgb,b.a); }\n";
+-                auto rgbaCompiled = xenos::CompileCachedHlsl(rgba, "main", "ps_6_0", binaryFormat);
+-                auto rgbCompiled = xenos::CompileCachedHlsl(rgb, "main", "ps_6_0", binaryFormat);
++                auto rgbaCompiled = xenos::CompileCachedHlsl(scene_copy_promotion::RgbaShader, "main", "ps_6_0", binaryFormat);
++                auto rgbCompiled = xenos::CompileCachedHlsl(scene_copy_promotion::RgbShader, "main", "ps_6_0", binaryFormat);
+diff --git a/LostOdysseyRecomp/gpu/scene_copy_promotion_shaders.h b/LostOdysseyRecomp/gpu/scene_copy_promotion_shaders.h
 new file mode 100644
-index 0000000..86fe425
+index 0000000..6436670
 --- /dev/null
-+++ b/tools/tests/native_dlss_submission_lifetime_test.cpp
-@@ -0,0 +1,60 @@
-+#include "gpu/dlss_submission_lifetime.h"
++++ b/LostOdysseyRecomp/gpu/scene_copy_promotion_shaders.h
+@@ -0,0 +1,47 @@
++#pragma once
 +
-+#include <cstdlib>
-+#include <iostream>
++#include <string>
 +
-+namespace {
-+unsigned checks = 0;
-+void Require(bool value, const char* message) {
-+    ++checks;
-+    if (!value) { std::cerr << message << '\n'; std::exit(1); }
++namespace gpu::scene_copy_promotion {
++// Shared with the standalone GPU fixture: do not validate a copied substitute
++// for the production shader. The constants match SharedConstants::transfer.
++inline constexpr const char* VertexShader = R"HLSL(
++void main(uint id : SV_VertexID, out float4 pos : SV_Position) {
++    float2 uv = float2((id << 1) & 2, id & 2);
++    pos = float4(uv * float2(2.0, -2.0) + float2(-1.0, 1.0), 0.0, 1.0);
 +}
++)HLSL";
++inline constexpr const char* Common = R"HLSL(
++Texture2D<float4> base : register(t0, space1);
++#ifdef __spirv__
++struct XePushConstants { uint64_t vs; uint64_t sharedAddress; uint64_t ps; };
++[[vk::push_constant]] ConstantBuffer<XePushConstants> xePush;
++#define xePromotion vk::RawBufferLoad<uint4>(xePush.sharedAddress + 240)
++#else
++cbuffer XeShared : register(b1, space0) {
++    uint4 pad0[2]; uint4 pad1[8]; float4 pad2; float4 pad3;
++    float4 pad4; float4 pad5; float4 xeColorMax; uint4 xePromotion;
++};
++#endif
++)HLSL";
++inline const std::string RgbaShader = std::string(Common) + R"HLSL(
++float4 main(float4 pos : SV_Position) : SV_Target {
++    uint4 p = xePromotion;
++    return base.Load(int3(int2(pos.xy * float2(asfloat(p.x), asfloat(p.y))), 0));
++}
++)HLSL";
++inline const std::string RgbShader = std::string(Common) + R"HLSL(
++Texture2D<float4> sr : register(t1, space1);
++float4 main(float4 pos : SV_Position) : SV_Target {
++    uint4 p = xePromotion;
++    float4 b = base.Load(int3(int2(pos.xy * float2(asfloat(p.x), asfloat(p.y))), 0));
++    uint width, height;
++    sr.GetDimensions(width, height);
++    uint2 pixel = uint2(pos.xy);
++    // The promoted allocation includes guest tile padding; NGX scratch covers
++    // only the output content. Never overwrite padding with out-of-range loads.
++    if (any(pixel >= uint2(width, height))) return b;
++    return float4(sr.Load(int3(pixel, 0)).rgb, b.a);
++}
++)HLSL";
++} // namespace gpu::scene_copy_promotion
+diff --git a/tools/tests/motion_replay/CMakeLists.txt b/tools/tests/motion_replay/CMakeLists.txt
+index a287485..d5e6a6b 100644
+--- a/tools/tests/motion_replay/CMakeLists.txt
++++ b/tools/tests/motion_replay/CMakeLists.txt
+@@ -51,0 +52,6 @@ endif()
++
++# Shared production promotion shaders, executed without guest code or NGX.
++add_executable(LoSceneCopyCompositeTest "${ROOT}/tools/tests/native_dlss_composite_gpu_test.cpp" platform_stub.cpp)
++target_link_libraries(LoSceneCopyCompositeTest PRIVATE mv_runtime)
++add_test(NAME LoSceneCopyCompositeTest COMMAND LoSceneCopyCompositeTest)
++set_tests_properties(LoSceneCopyCompositeTest PROPERTIES LABELS "native-dlss;gpu-composite" TIMEOUT 120)
+diff --git a/tools/tests/native_dlss_composite_gpu_test.cpp b/tools/tests/native_dlss_composite_gpu_test.cpp
+new file mode 100644
+index 0000000..69eb345
+--- /dev/null
++++ b/tools/tests/native_dlss_composite_gpu_test.cpp
+@@ -0,0 +1,180 @@
++#include <gpu/scene_copy_promotion_shaders.h>
++#include <gpu/shader/dxc_compiler.h>
++#include <plume_vulkan.h>
++#include <plume_render_interface_builders.h>
++
++#include <array>
++#include <bit>
++#include <cstdio>
++#include <cstring>
++#include <memory>
++#include <stdexcept>
++#include <string>
++#include <vector>
++
++using namespace plume;
++namespace {
++void Require(bool ok, const std::string& message) {
++    if (!ok) throw std::runtime_error(message);
++}
++void Checked(VkResult result, const char* operation) {
++    Require(result == VK_SUCCESS, std::string(operation) + " raw_vk=" + std::to_string(result));
++}
++void Write(RenderBuffer* buffer, const void* bytes, size_t size) {
++    void* mapped = buffer->map(); Require(mapped != nullptr, "upload map failed");
++    std::memcpy(mapped, bytes, size); buffer->unmap();
++}
++// Vulkan raster/descriptor/readback test. Deliberately no NGX, game assets,
++// renderer target-map model, or implied Gate 3 / image-quality acceptance.
++class Fixture {
++    std::unique_ptr<RenderInterface> api_;
++    std::unique_ptr<RenderDevice> device_;
++    std::unique_ptr<RenderCommandQueue> queue_;
++    std::unique_ptr<RenderCommandList> cmd_;
++    std::unique_ptr<RenderCommandFence> fence_;
++    std::unique_ptr<RenderBuffer> constants_, upload_, readback_;
++    RenderDescriptorSetBuilder builders_[2];
++    std::unique_ptr<RenderDescriptorSet> sets_[2];
++    std::unique_ptr<RenderPipelineLayout> layout_;
++    std::unique_ptr<RenderShader> vertex_, rgba_, rgb_;
++    std::unique_ptr<RenderPipeline> rgbaPipeline_, rgbPipeline_;
++    static constexpr uint32_t Width = 8, Height = 8, RowPixels = 64;
++    std::unique_ptr<RenderShader> Compile(const std::string& source, const char* profile) {
++        auto compiled = xenos::CompileHlsl(source, "main", profile, xenos::ShaderBinaryFormat::Spirv);
++        Require(compiled.ok, compiled.errors);
++        auto shader = device_->createShader(compiled.bytecode.data(), compiled.bytecode.size(), "main", RenderShaderFormat::SPIRV);
++        Require(bool(shader), "create shader failed"); return shader;
++    }
++    void Submit() {
++        cmd_->end();
++        const auto* device = static_cast<VulkanDevice*>(device_.get());
++        const auto* queue = static_cast<VulkanCommandQueue*>(queue_.get());
++        const auto* list = static_cast<VulkanCommandList*>(cmd_.get());
++        const auto* fence = static_cast<VulkanCommandFence*>(fence_.get());
++        VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
++        submit.commandBufferCount = 1; submit.pCommandBuffers = &list->vk;
++        Checked(vkResetFences(device->vk, 1, &fence->vk), "vkResetFences");
++        Checked(vkQueueSubmit(queue->queue->vk, 1, &submit, fence->vk), "vkQueueSubmit");
++        Checked(vkWaitForFences(device->vk, 1, &fence->vk, VK_TRUE, UINT64_MAX), "vkWaitForFences");
++    }
++    void Fill(RenderTexture* texture, const std::vector<uint64_t>& pixels, uint32_t width, uint32_t height) {
++        std::array<uint64_t, RowPixels * Height> padded{};
++        for (uint32_t y = 0; y < height; ++y)
++            std::memcpy(padded.data() + y * RowPixels, pixels.data() + y * width, width * 8);
++        Write(upload_.get(), padded.data(), sizeof(padded));
++        cmd_->begin();
++        cmd_->barriers(RenderBarrierStage::COPY, RenderTextureBarrier(texture, RenderTextureLayout::COPY_DEST));
++        cmd_->copyTextureRegion(RenderTextureCopyLocation::Subresource(texture),
++            RenderTextureCopyLocation::PlacedFootprint(upload_.get(), RenderFormat::R16G16B16A16_FLOAT, width, height, 1, RowPixels));
++        cmd_->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(texture, RenderTextureLayout::SHADER_READ));
++        Submit();
++    }
++public:
++    Fixture() {
++        api_ = CreateVulkanInterface(); Require(bool(api_), "Vulkan interface unavailable");
++        device_ = api_->createDevice(); Require(bool(device_), "Vulkan device unavailable");
++        std::printf("DEVICE=%s\n", device_->getDescription().name.c_str());
++        queue_ = device_->createCommandQueue(RenderCommandListType::DIRECT);
++        Require(bool(queue_), "queue unavailable");
++        cmd_ = queue_->createCommandList(); fence_ = device_->createCommandFence();
++        constants_ = device_->createBuffer(RenderBufferDesc::UploadBuffer(256,
++            RenderBufferFlag::CONSTANT | RenderBufferFlag::DEVICE_ADDRESSABLE));
++        upload_ = device_->createBuffer(RenderBufferDesc::UploadBuffer(RowPixels * Height * 8));
++        readback_ = device_->createBuffer(RenderBufferDesc::ReadbackBuffer(RowPixels * Height * 8));
++        Require(cmd_ && fence_ && constants_ && upload_ && readback_, "fixture allocation failed");
++        // Keep space1, t0/t1 and the actual shared-address push-constant ABI.
++        builders_[0].begin(); builders_[0].addByteAddressBuffer(0); builders_[0].end();
++        builders_[1].begin(); builders_[1].addTexture(0, 2); builders_[1].end();
++        for (unsigned i = 0; i < 2; ++i) {
++            sets_[i] = builders_[i].create(device_.get()); Require(bool(sets_[i]), "descriptor allocation failed");
++        }
++        // The unused space0 binding does not participate in either shader.
++        RenderPipelineLayoutBuilder builder;
++        builder.begin(false, false);
++        builder.addPushConstant(0, 0, 24, RenderShaderStageFlag::VERTEX | RenderShaderStageFlag::PIXEL);
++        for (auto& set : builders_) builder.addDescriptorSet(set);
++        builder.end(); layout_ = builder.create(device_.get()); Require(bool(layout_), "pipeline layout failed");
++        vertex_ = Compile(gpu::scene_copy_promotion::VertexShader, "vs_6_0");
++        rgba_ = Compile(gpu::scene_copy_promotion::RgbaShader, "ps_6_0");
++        rgb_ = Compile(gpu::scene_copy_promotion::RgbShader, "ps_6_0");
++        const auto pipeline = [&](RenderShader* ps) {
++            RenderGraphicsPipelineDesc desc;
++            desc.pipelineLayout = layout_.get(); desc.vertexShader = vertex_.get(); desc.pixelShader = ps;
++            desc.renderTargetCount = 1; desc.renderTargetFormat[0] = RenderFormat::R16G16B16A16_FLOAT;
++            desc.renderTargetBlend[0] = RenderBlendDesc::Copy(); desc.renderTargetBlend[0].renderTargetWriteMask = 0xF;
++            desc.depthEnabled = desc.depthWriteEnabled = false; desc.cullMode = RenderCullMode::NONE;
++            desc.primitiveTopology = RenderPrimitiveTopology::TRIANGLE_LIST;
++            return device_->createGraphicsPipeline(desc);
++        };
++        rgbaPipeline_ = pipeline(rgba_.get()); rgbPipeline_ = pipeline(rgb_.get());
++        Require(rgbaPipeline_ && rgbPipeline_, "graphics pipeline creation failed");
++    }
++    void Run(bool composite, uint32_t baseWidth, uint32_t baseHeight, uint32_t srWidth, uint32_t srHeight) {
++        const auto texture = [&](uint32_t w, uint32_t h, bool rt) {
++            return device_->createTexture(RenderTextureDesc::Texture2D(w, h, 1, RenderFormat::R16G16B16A16_FLOAT,
++                rt ? RenderTextureFlag::RENDER_TARGET : RenderTextureFlag::NONE));
++        };
++        auto base = texture(baseWidth, baseHeight, false), scratch = texture(srWidth, srHeight, false);
++        auto output = texture(Width, Height, true);
++        Require(base && scratch && output, "texture allocation failed");
++        const RenderTexture* attachment[] = {output.get()};
++        auto framebuffer = device_->createFramebuffer(RenderFramebufferDesc(attachment, 1));
++        Require(bool(framebuffer), "framebuffer failed");
++        std::vector<uint64_t> basePixels(baseWidth * baseHeight), srPixels(srWidth * srHeight);
++        const auto pack = [](uint64_t r, uint64_t g, uint64_t b, uint64_t a) {
++            return r | (g << 16) | (b << 32) | (a << 48);
++        };
++        constexpr uint16_t alpha[] = {0, 0x3000, 0x3400, 0x3600, 0x3800, 0x3900, 0x3a00, 0x3c00};
++        for (unsigned i = 0; i < basePixels.size(); ++i)
++            basePixels[i] = pack(0x3400 + i * 4, 0x3000 + i * 4, 0x3a00 - i * 4, alpha[i % 8]);
++        for (unsigned i = 0; i < srPixels.size(); ++i)
++            srPixels[i] = pack(0x4000 + i * 4, 0x2800 + i * 4, 0x3800 + i * 4, 0x3c00);
++        Fill(base.get(), basePixels, baseWidth, baseHeight); Fill(scratch.get(), srPixels, srWidth, srHeight);
++        std::array<uint32_t, 64> constants{};
++        constants[60] = std::bit_cast<uint32_t>(float(baseWidth) / Width);
++        constants[61] = std::bit_cast<uint32_t>(float(baseHeight) / Height);
++        Write(constants_.get(), constants.data(), sizeof(constants));
++        sets_[1]->setTexture(0, base.get(), RenderTextureLayout::SHADER_READ);
++        sets_[1]->setTexture(1, scratch.get(), RenderTextureLayout::SHADER_READ);
++        cmd_->begin();
++        cmd_->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(output.get(), RenderTextureLayout::COLOR_WRITE));
++        cmd_->setFramebuffer(framebuffer.get()); cmd_->clearColor(0, RenderColor(1, 0, 1, 1));
++        RenderViewport viewport(0, 0, Width, Height); RenderRect scissor(0, 0, Width, Height);
++        cmd_->setViewports(&viewport, 1); cmd_->setScissors(&scissor, 1);
++        cmd_->setGraphicsPipelineLayout(layout_.get()); cmd_->setPipeline(composite ? rgbPipeline_.get() : rgbaPipeline_.get());
++        const uint64_t addresses[] = {constants_->getDeviceAddress(), constants_->getDeviceAddress(), constants_->getDeviceAddress()};
++        cmd_->setGraphicsPushConstants(0, addresses); cmd_->setGraphicsDescriptorSet(sets_[1].get(), 1);
++        cmd_->drawInstanced(3, 1, 0, 0);
++        cmd_->barriers(RenderBarrierStage::COPY, RenderTextureBarrier(output.get(), RenderTextureLayout::COPY_SOURCE));
++        cmd_->copyTextureRegion(RenderTextureCopyLocation::PlacedFootprint(readback_.get(), RenderFormat::R16G16B16A16_FLOAT,
++            Width, Height, 1, RowPixels), RenderTextureCopyLocation::Subresource(output.get()));
++        Submit();
++        const auto* pixels = static_cast<const uint64_t*>(readback_->map()); Require(pixels != nullptr, "readback map failed");
++        unsigned mismatches = 0;
++        for (unsigned y = 0; y < Height; ++y) for (unsigned x = 0; x < Width; ++x) {
++            const unsigned bx = unsigned((x + .5f) * baseWidth / Width), by = unsigned((y + .5f) * baseHeight / Height);
++            const uint64_t b = basePixels[by * baseWidth + bx];
++            const uint64_t expected = composite && x < srWidth && y < srHeight ?
++                (srPixels[y * srWidth + x] & 0x0000ffffffffffffull) | (b & 0xffff000000000000ull) : b;
++            mismatches += pixels[y * RowPixels + x] != expected;
++        }
++        readback_->unmap();
++        std::printf("%s base=%ux%u scratch=%ux%u output=8x8 fp16 checked=64 mismatches=%u\n",
++            composite ? "RGB_ALPHA_PADDING" : "RGBA_RESAMPLE", baseWidth, baseHeight, srWidth, srHeight, mismatches);
++        Require(!mismatches, "production shader pixel mismatch");
++    }
++};
 +}
 +int main() {
-+    gpu::dlss::SubmissionLifetime lifetime;
-+    Require(lifetime.Empty(), "cold session has no feature users");
-+    const auto first = lifetime.Record();
-+    const auto second = lifetime.Record();
-+    Require(first && second > first, "nonzero unique recording IDs");
-+    lifetime.CompleteThrough(0);
-+    Require(!lifetime.Empty(), "completion never releases unsubmitted recordings");
-+    Require(!lifetime.Submit(0, 1), "zero ID rejected");
-+    Require(!lifetime.Submit(first, 0), "zero serial rejected");
-+    Require(!lifetime.Submit(second + 1, 1), "unknown ID rejected");
-+    Require(lifetime.Submit(first, 10), "successful batch attaches fence");
-+    Require(lifetime.Submit(first, 10), "duplicate submit is idempotent");
-+    Require(!lifetime.Submit(first, 2), "duplicate cannot move to earlier fence");
-+    Require(!lifetime.Submit(first, 20), "duplicate cannot move to later fence");
-+    lifetime.Discard(first);
-+    Require(!lifetime.Empty(), "discard cannot release a submitted feature user");
-+    lifetime.Discard(second);
-+    lifetime.CompleteThrough(9);
-+    Require(!lifetime.Empty(), "feature retained before actual submission completion");
-+    lifetime.CompleteThrough(10);
-+    Require(lifetime.Empty(), "feature released at completion");
-+    Require(!lifetime.Submit(first, 11), "completed use cannot be revived");
-+    lifetime.Discard(first);
-+    Require(lifetime.Empty(), "late discard is harmless");
-+    const auto third = lifetime.Record();
-+    Require(third > second, "feature reconfiguration never reuses use IDs");
-+    lifetime.CompleteThrough(5);
-+    Require(!lifetime.Submit(third, 10), "out-of-order completion cannot rewind watermark");
-+    Require(!lifetime.Empty(), "invalid submission leaves recording retained");
-+    Require(lifetime.Submit(third, 11), "next successful queue submission");
-+    const auto fourth = lifetime.Record();
-+    Require(lifetime.Submit(fourth, 12), "two independent in-flight slots");
-+    lifetime.CompleteThrough(12);
-+    Require(lifetime.Empty(), "newest same-queue fence covers earlier submissions");
-+    const auto excluded = lifetime.Record();
-+    Require(lifetime.Submit(excluded, 13), "excluded NGX list still retains prefix fallback use");
-+    lifetime.Discard(excluded);
-+    Require(!lifetime.Empty(), "failed NGX recording waits for prefix fence");
-+    lifetime.CompleteThrough(13);
-+    Require(lifetime.Empty(), "fallback prefix completion permits feature retirement");
-+    const auto abandoned = lifetime.Record();
-+    lifetime.CompleteThrough(20);
-+    Require(!lifetime.Empty(), "unrelated completion never retires abandoned recording");
-+    lifetime.Discard(abandoned);
-+    Require(lifetime.Empty(), "discard of never-submitted batch permits retirement");
-+    std::cout << checks << " submission lifetime checks passed\n";
++    try {
++        Fixture fixture;
++        fixture.Run(false, 4, 4, 8, 8);
++        fixture.Run(true, 8, 8, 8, 8);
++        fixture.Run(true, 8, 8, 6, 5);
++        fixture.Run(true, 4, 4, 5, 7);
++        std::puts("PASS: 256 exact RGBA pixel checks; no NGX or renderer mapping execution claimed");
++        return 0;
++    } catch (const std::exception& error) {
++        std::fprintf(stderr, "FAIL: %s\n", error.what()); return 1;
++    }
 +}
