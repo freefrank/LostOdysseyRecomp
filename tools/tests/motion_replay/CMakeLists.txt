@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.24)
 project(lo_motion_replay_tests LANGUAGES CXX C)
 set(CMAKE_CXX_STANDARD 20)
+if(MSVC)
+ set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
 get_filename_component(ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../.." ABSOLUTE)
 set(PLUME_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(PLUME_SDL_VULKAN_ENABLED OFF CACHE BOOL "" FORCE)
@@ -69,7 +72,8 @@ endif()
 
 # Full production target-map/command route with only NGX and the platform
 # boundary substituted. No guest executable or private assets are linked.
-if(UNIX AND NOT APPLE)
+if((UNIX AND NOT APPLE) OR WIN32)
+ include("${ROOT}/cmake/LoDlss.cmake")
  add_executable(LoNativeDlssRendererTest "${ROOT}/tools/tests/native_dlss_renderer_gpu_test.cpp"
   "${ROOT}/LostOdysseyRecomp/gpu/dlss_ngx.cpp"
   "${ROOT}/LostOdysseyRecomp/gpu/presentation.cpp"
@@ -78,9 +82,18 @@ if(UNIX AND NOT APPLE)
  target_include_directories(LoNativeDlssRendererTest PRIVATE "${ROOT}/thirdparty/unordered_dense/include"
   "${ROOT}/tools/XenosRecomp/thirdparty/zstd/lib")
  target_compile_definitions(LoNativeDlssRendererTest PRIVATE LO_SOURCE_VERSION="p2-renderer-fixture")
- target_compile_options(LoNativeDlssRendererTest PRIVATE -O0 -g0 -ffunction-sections -fdata-sections)
- target_link_options(LoNativeDlssRendererTest PRIVATE -Wl,--gc-sections)
+ if(MSVC)
+  target_compile_options(LoNativeDlssRendererTest PRIVATE /Od /Gy /Gw)
+  target_link_options(LoNativeDlssRendererTest PRIVATE /OPT:REF /INCREMENTAL:NO)
+ else()
+  target_compile_options(LoNativeDlssRendererTest PRIVATE -O0 -g0 -ffunction-sections -fdata-sections)
+  target_link_options(LoNativeDlssRendererTest PRIVATE -Wl,--gc-sections)
+ endif()
+ target_compile_definitions(LoNativeDlssRendererTest PRIVATE LO_NATIVE_DLSS_TEST_INJECT_EVALUATE_FAILURE=1)
+ lo_enable_dlss(LoNativeDlssRendererTest)
  target_link_libraries(LoNativeDlssRendererTest PRIVATE mv_runtime)
  add_test(NAME LoNativeDlssRendererTest COMMAND LoNativeDlssRendererTest)
+ add_test(NAME LoNativeDlssRendererNativeTest COMMAND LoNativeDlssRendererTest --native)
+ set_tests_properties(LoNativeDlssRendererNativeTest PROPERTIES LABELS "native-dlss;ngx-renderer" TIMEOUT 180 SKIP_RETURN_CODE 77)
  set_tests_properties(LoNativeDlssRendererTest PROPERTIES LABELS "native-dlss;gpu-renderer" TIMEOUT 180)
 endif()
