@@ -1787,10 +1787,13 @@ namespace gpu::renderer
             }
 
 #if defined(LO_GPU_PLUME)
-            bool RecordSceneCopyDlss(HostTexture*& color, HostTexture*& rasterTarget)
+            // Keep the renderer route identical in the asset-free Vulkan fixture;
+            // only the vendor's session and isolated command recording are substituted.
+            template<class SrController>
+            bool RecordSceneCopyDlssUsing(SrController& controller, HostTexture*& color, HostTexture*& rasterTarget)
             {
                 auto& promotion = sceneCopyPromotion;
-                if (!promotion.activeMapping || !dlssController || !vulkan || !Gpu().srIsolated || !Gpu().srContinuation) return false;
+                if (!promotion.activeMapping || !vulkan || !Gpu().srIsolated || !Gpu().srContinuation) return false;
                 dlss::SrConfig config{};
                 config.renderExtent = {promotion.inputs.color.width, promotion.inputs.color.height};
                 config.outputExtent = {activePlan.output.width, activePlan.output.height};
@@ -1800,7 +1803,7 @@ namespace gpu::renderer
                 // A fresh controller has no feature to recreate. EnsureSession
                 // establishes that cold state; RecordIsolated reports a genuine
                 // configuration change as NeedsReconfigure after it exists.
-                if (dlssController->EnsureSession(*static_cast<plume::VulkanDevice*>(device)) != dlss::SrStatus::Executable) {
+                if (controller.EnsureSession(*static_cast<plume::VulkanDevice*>(device)) != dlss::SrStatus::Executable) {
                     DisableDlssRequest(frame_plan::FailureReason::DlssUnavailable);
                     return false;
                 }
@@ -1820,11 +1823,11 @@ namespace gpu::renderer
                 if (!video::EndGpuCommands(commandList)) { listOpen = false; return false; }
                 listOpen = false;
                 Gpu().srPrefixClosed = true;
-                auto attempt = dlssController->RecordIsolated(*static_cast<plume::VulkanCommandList*>(Gpu().srIsolated.get()), config,
+                auto attempt = controller.RecordIsolated(*static_cast<plume::VulkanCommandList*>(Gpu().srIsolated.get()), config,
                     promotion.inputs, *static_cast<plume::VulkanTexture*>(promotion.scratch->texture.get()));
                 Gpu().srUseId = attempt.useId;
                 if (attempt.status == dlss::SrStatus::DeviceLost) {
-                    if (attempt.useId) dlssController->OnBatchDiscarded(attempt.useId);
+                    if (attempt.useId) controller.OnBatchDiscarded(attempt.useId);
                     Gpu().srUseId = 0;
                     video::StopGpuWork(attempt.rawVkResult.value_or(VK_ERROR_DEVICE_LOST));
                     return false;
@@ -1860,6 +1863,11 @@ namespace gpu::renderer
                 promotion.srApplied = true;
                 return true;
             }
+            bool RecordSceneCopyDlss(HostTexture*& color, HostTexture*& rasterTarget)
+            {
+                return dlssController && RecordSceneCopyDlssUsing(*dlssController, color, rasterTarget);
+            }
+
 #endif
 
             HostTexture* PrefilterBloom(HostTexture& src, RenderTexture* hdrSource = nullptr)

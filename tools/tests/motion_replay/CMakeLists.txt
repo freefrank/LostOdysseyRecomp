@@ -66,3 +66,21 @@ if(LO_P2_VIDEO_COMPILE_CHECK)
   $<$<PLATFORM_ID:Linux>:PLUME_SDL_VULKAN_ENABLED=1>)
  target_link_libraries(p2_video_compile PRIVATE mv_runtime SDL2::SDL2)
 endif()
+
+# Full production target-map/command route with only NGX and the platform
+# boundary substituted. No guest executable or private assets are linked.
+if(UNIX AND NOT APPLE)
+ add_executable(LoNativeDlssRendererTest "${ROOT}/tools/tests/native_dlss_renderer_gpu_test.cpp"
+  "${ROOT}/LostOdysseyRecomp/gpu/dlss_ngx.cpp"
+  "${ROOT}/LostOdysseyRecomp/gpu/presentation.cpp"
+  "${ROOT}/LostOdysseyRecomp/gpu/shader/portable_shader_pack.cpp" platform_stub.cpp)
+ target_include_directories(LoNativeDlssRendererTest BEFORE PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/compile_boundary")
+ target_include_directories(LoNativeDlssRendererTest PRIVATE "${ROOT}/thirdparty/unordered_dense/include"
+  "${ROOT}/tools/XenosRecomp/thirdparty/zstd/lib")
+ target_compile_definitions(LoNativeDlssRendererTest PRIVATE LO_SOURCE_VERSION="p2-renderer-fixture")
+ target_compile_options(LoNativeDlssRendererTest PRIVATE -O0 -g0 -ffunction-sections -fdata-sections)
+ target_link_options(LoNativeDlssRendererTest PRIVATE -Wl,--gc-sections)
+ target_link_libraries(LoNativeDlssRendererTest PRIVATE mv_runtime)
+ add_test(NAME LoNativeDlssRendererTest COMMAND LoNativeDlssRendererTest)
+ set_tests_properties(LoNativeDlssRendererTest PROPERTIES LABELS "native-dlss;gpu-renderer" TIMEOUT 180)
+endif()
