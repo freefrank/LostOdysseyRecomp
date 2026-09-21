@@ -1,278 +1,233 @@
-diff --git a/LostOdysseyRecomp/gpu/renderer.cpp b/LostOdysseyRecomp/gpu/renderer.cpp
-index caf88c2..f431163 100644
---- a/LostOdysseyRecomp/gpu/renderer.cpp
-+++ b/LostOdysseyRecomp/gpu/renderer.cpp
-@@ -5,0 +6 @@
-+#include "scene_copy_promotion_shaders.h"
-@@ -1573,19 +1574,2 @@ namespace gpu::renderer
--                // Reuse the renderer's shared-constant binding: transfer[0..1]
--                // are source-to-destination scale. The RGB pass samples a distinct
--                // SR scratch image and deliberately retains base alpha.
--                const char* common =
--                    "Texture2D<float4> base : register(t0, space1);\n"
--                    "#ifdef __spirv__\n"
--                    "struct XePushConstants { uint64_t vs; uint64_t sharedAddress; uint64_t ps; };\n"
--                    "[[vk::push_constant]] ConstantBuffer<XePushConstants> xePush;\n"
--                    "#define xePromotion vk::RawBufferLoad<uint4>(xePush.sharedAddress + 240)\n"
--                    "#else\n"
--                    "cbuffer XeShared : register(b1, space0) { uint4 pad0[2]; uint4 pad1[8]; float4 pad2; float4 pad3; float4 pad4; float4 pad5; float4 xeColorMax; uint4 xePromotion; };\n"
--                    "#endif\n";
--                const std::string rgba = std::string(common) +
--                    "float4 main(float4 pos : SV_Position) : SV_Target { uint4 p=xePromotion; return base.Load(int3(int2(pos.xy*float2(asfloat(p.x),asfloat(p.y))),0)); }\n";
--                const std::string rgb = std::string(common) +
--                    "Texture2D<float4> sr : register(t1, space1);\n"
--                    "float4 main(float4 pos : SV_Position) : SV_Target { uint4 p=xePromotion; float4 b=base.Load(int3(int2(pos.xy*float2(asfloat(p.x),asfloat(p.y))),0)); return float4(sr.Load(int3(int2(pos.xy),0)).rgb,b.a); }\n";
--                auto rgbaCompiled = xenos::CompileCachedHlsl(rgba, "main", "ps_6_0", binaryFormat);
--                auto rgbCompiled = xenos::CompileCachedHlsl(rgb, "main", "ps_6_0", binaryFormat);
-+                auto rgbaCompiled = xenos::CompileCachedHlsl(scene_copy_promotion::RgbaShader, "main", "ps_6_0", binaryFormat);
-+                auto rgbCompiled = xenos::CompileCachedHlsl(scene_copy_promotion::RgbShader, "main", "ps_6_0", binaryFormat);
-diff --git a/LostOdysseyRecomp/gpu/scene_copy_promotion_shaders.h b/LostOdysseyRecomp/gpu/scene_copy_promotion_shaders.h
+diff --git a/LostOdysseyRecomp/gpu/temporal_frame_inputs.h b/LostOdysseyRecomp/gpu/temporal_frame_inputs.h
+index 855ab1c..615a6f0 100644
+--- a/LostOdysseyRecomp/gpu/temporal_frame_inputs.h
++++ b/LostOdysseyRecomp/gpu/temporal_frame_inputs.h
+@@ -18 +18,5 @@ struct TextureRegion {
+-    bool Complete() const { return texture && width && height && x + width <= allocation.width && y + height <= allocation.height; }
++    bool Complete() const {
++        // Reject overflowing offsets/extents before any native image access.
++        return texture && width && height && x <= allocation.width && y <= allocation.height &&
++            width <= allocation.width - x && height <= allocation.height - y;
++    }
+diff --git a/docs/notes/native-dlss-handoff.zh-CN.md b/docs/notes/native-dlss-handoff.zh-CN.md
+index 137ebe9..c2d6a3e 100644
+--- a/docs/notes/native-dlss-handoff.zh-CN.md
++++ b/docs/notes/native-dlss-handoff.zh-CN.md
+@@ -7 +7 @@
+-当前状态：P2 处于检查点提交阶段（已本地提交 `d018be7` 与 `744ab91`，尚未完成全量阶段）；按用户明确指示取消形式化复审，工作暂停交接（未标 Gate 3 通过，无全量游戏验收）
++当前状态：2026-09-21 已恢复 P2 开发并分项推送；输入/提交生命周期、目标提升边界和合成测试已补强。P2 尚未完成，Gate 3 未通过，游戏内 SR 仍受未知颜色编码守卫保护。历史检查点与 RTX 记录保留，下方续开发结果优先于历史暂停状态。
+@@ -10,0 +11,8 @@
++## 2026-09-21 续开发结果
++
++已新增 CPU-only CMake/CTest 与 Windows/Linux CI，修复晚期目标提升中的隐式 Flush、附件借用前的恢复顺序、深度/尺寸不匹配、NGX feature 安全重配置、提交 use 的 fence 生命周期、SR 有效区域外的填充像素，以及输入区域整数溢出。
++
++详细提交、复现命令和证据范围见 [P2 续开发记录](native-dlss-p2-progress-2026-09-21.md)。新证据包括 5 组本地 CPU 测试、实际 renderer 编译单元、SDK 开/关构建与 report 测试，以及软件 Vulkan 执行生产像素 shader 的 256 个 FP16 RGBA 精确读回检查；本轮未运行 RTX NGX 或完整游戏。
++
++仍需运行时颜色资格证据、完整目标映射路径验证，以及提交失败/设备丢失后的终止状态与 fence 等待处理。禁止据此删除 `Unknown` 守卫或标记 Gate 3 通过。下文暂停/取消复审文字描述的是此前检查点，不代表本次没有继续开发。
++
+diff --git a/docs/notes/native-dlss-p2-progress-2026-09-21.md b/docs/notes/native-dlss-p2-progress-2026-09-21.md
 new file mode 100644
-index 0000000..6436670
+index 0000000..0d386de
 --- /dev/null
-+++ b/LostOdysseyRecomp/gpu/scene_copy_promotion_shaders.h
-@@ -0,0 +1,47 @@
-+#pragma once
++++ b/docs/notes/native-dlss-p2-progress-2026-09-21.md
+@@ -0,0 +1,131 @@
++# Native DLSS P2 follow-up — 2026-09-21
 +
-+#include <string>
++## Status
 +
-+namespace gpu::scene_copy_promotion {
-+// Shared with the standalone GPU fixture: do not validate a copied substitute
-+// for the production shader. The constants match SharedConstants::transfer.
-+inline constexpr const char* VertexShader = R"HLSL(
-+void main(uint id : SV_VertexID, out float4 pos : SV_Position) {
-+    float2 uv = float2((id << 1) & 2, id & 2);
-+    pos = float4(uv * float2(2.0, -2.0) + float2(-1.0, 1.0), 0.0, 1.0);
-+}
-+)HLSL";
-+inline constexpr const char* Common = R"HLSL(
-+Texture2D<float4> base : register(t0, space1);
-+#ifdef __spirv__
-+struct XePushConstants { uint64_t vs; uint64_t sharedAddress; uint64_t ps; };
-+[[vk::push_constant]] ConstantBuffer<XePushConstants> xePush;
-+#define xePromotion vk::RawBufferLoad<uint4>(xePush.sharedAddress + 240)
-+#else
-+cbuffer XeShared : register(b1, space0) {
-+    uint4 pad0[2]; uint4 pad1[8]; float4 pad2; float4 pad3;
-+    float4 pad4; float4 pad5; float4 xeColorMax; uint4 xePromotion;
-+};
-+#endif
-+)HLSL";
-+inline const std::string RgbaShader = std::string(Common) + R"HLSL(
-+float4 main(float4 pos : SV_Position) : SV_Target {
-+    uint4 p = xePromotion;
-+    return base.Load(int3(int2(pos.xy * float2(asfloat(p.x), asfloat(p.y))), 0));
-+}
-+)HLSL";
-+inline const std::string RgbShader = std::string(Common) + R"HLSL(
-+Texture2D<float4> sr : register(t1, space1);
-+float4 main(float4 pos : SV_Position) : SV_Target {
-+    uint4 p = xePromotion;
-+    float4 b = base.Load(int3(int2(pos.xy * float2(asfloat(p.x), asfloat(p.y))), 0));
-+    uint width, height;
-+    sr.GetDimensions(width, height);
-+    uint2 pixel = uint2(pos.xy);
-+    // The promoted allocation includes guest tile padding; NGX scratch covers
-+    // only the output content. Never overwrite padding with out-of-range loads.
-+    if (any(pixel >= uint2(width, height))) return b;
-+    return float4(sr.Load(int3(pixel, 0)).rgb, b.a);
-+}
-+)HLSL";
-+} // namespace gpu::scene_copy_promotion
-diff --git a/tools/tests/motion_replay/CMakeLists.txt b/tools/tests/motion_replay/CMakeLists.txt
-index a287485..d5e6a6b 100644
---- a/tools/tests/motion_replay/CMakeLists.txt
-+++ b/tools/tests/motion_replay/CMakeLists.txt
-@@ -51,0 +52,6 @@ endif()
++P2 has advanced, but is **not complete or accepted**. The game still rejects
++unqualified `ColorEncoding::Unknown` inputs. No game assets, player settings or
++saves were used, no release was published, and no SDK/runtime binaries were
++committed. P0/P1 evidence is retained; historical RTX results are not new results.
 +
-+# Shared production promotion shaders, executed without guest code or NGX.
-+add_executable(LoSceneCopyCompositeTest "${ROOT}/tools/tests/native_dlss_composite_gpu_test.cpp" platform_stub.cpp)
-+target_link_libraries(LoSceneCopyCompositeTest PRIVATE mv_runtime)
-+add_test(NAME LoSceneCopyCompositeTest COMMAND LoSceneCopyCompositeTest)
-+set_tests_properties(LoSceneCopyCompositeTest PROPERTIES LABELS "native-dlss;gpu-composite" TIMEOUT 120)
-diff --git a/tools/tests/native_dlss_composite_gpu_test.cpp b/tools/tests/native_dlss_composite_gpu_test.cpp
-new file mode 100644
-index 0000000..69eb345
---- /dev/null
-+++ b/tools/tests/native_dlss_composite_gpu_test.cpp
-@@ -0,0 +1,180 @@
-+#include <gpu/scene_copy_promotion_shaders.h>
-+#include <gpu/shader/dxc_compiler.h>
-+#include <plume_vulkan.h>
-+#include <plume_render_interface_builders.h>
++## Implemented and pushed changes
 +
-+#include <array>
-+#include <bit>
-+#include <cstdio>
-+#include <cstring>
-+#include <memory>
-+#include <stdexcept>
-+#include <string>
-+#include <vector>
++| Commit | Change | Evidence boundary |
++|---|---|---|
++| `acaf83a` | Register the orphaned P2 routing fixture, add CPU-only CMake/CTest and Windows/Linux CPU CI | CPU contracts, not GPU execution |
++| `a2cc639` | Reserve promotion uploads without rotating slots; restore before borrowing attachments; restore on depth/storage/extent/frame/epoch changes; keep mappings across normal Flush; clear them only after resize drains | 29 policy checks plus actual renderer translation-unit compilation; full renderer mapping remains unexecuted |
++| `7c32c69` | Fence-qualified submission-use ledger; idempotent submit; discard only unsubmitted uses; release/recreate features at safe frame boundaries while retaining the device session | 26 lifetime checks; SDK-enabled and disabled builds; no new RTX execution |
++| `ee464e8` | Shared production FP16 shaders; retain fallback RGBA outside SR scratch content instead of out-of-range sampling | Actual Vulkan raster/readback: 256 exact RGBA pixel comparisons |
++| This follow-up | Reject overflowing input-region origins/extents and wire its fixture into CPU CI | 17 frame-input checks, including 10 new bounds/overflow checks |
 +
-+using namespace plume;
-+namespace {
-+void Require(bool ok, const std::string& message) {
-+    if (!ok) throw std::runtime_error(message);
-+}
-+void Checked(VkResult result, const char* operation) {
-+    Require(result == VK_SUCCESS, std::string(operation) + " raw_vk=" + std::to_string(result));
-+}
-+void Write(RenderBuffer* buffer, const void* bytes, size_t size) {
-+    void* mapped = buffer->map(); Require(mapped != nullptr, "upload map failed");
-+    std::memcpy(mapped, bytes, size); buffer->unmap();
-+}
-+// Vulkan raster/descriptor/readback test. Deliberately no NGX, game assets,
-+// renderer target-map model, or implied Gate 3 / image-quality acceptance.
-+class Fixture {
-+    std::unique_ptr<RenderInterface> api_;
-+    std::unique_ptr<RenderDevice> device_;
-+    std::unique_ptr<RenderCommandQueue> queue_;
-+    std::unique_ptr<RenderCommandList> cmd_;
-+    std::unique_ptr<RenderCommandFence> fence_;
-+    std::unique_ptr<RenderBuffer> constants_, upload_, readback_;
-+    RenderDescriptorSetBuilder builders_[2];
-+    std::unique_ptr<RenderDescriptorSet> sets_[2];
-+    std::unique_ptr<RenderPipelineLayout> layout_;
-+    std::unique_ptr<RenderShader> vertex_, rgba_, rgb_;
-+    std::unique_ptr<RenderPipeline> rgbaPipeline_, rgbPipeline_;
-+    static constexpr uint32_t Width = 8, Height = 8, RowPixels = 64;
-+    std::unique_ptr<RenderShader> Compile(const std::string& source, const char* profile) {
-+        auto compiled = xenos::CompileHlsl(source, "main", profile, xenos::ShaderBinaryFormat::Spirv);
-+        Require(compiled.ok, compiled.errors);
-+        auto shader = device_->createShader(compiled.bytecode.data(), compiled.bytecode.size(), "main", RenderShaderFormat::SPIRV);
-+        Require(bool(shader), "create shader failed"); return shader;
-+    }
-+    void Submit() {
-+        cmd_->end();
-+        const auto* device = static_cast<VulkanDevice*>(device_.get());
-+        const auto* queue = static_cast<VulkanCommandQueue*>(queue_.get());
-+        const auto* list = static_cast<VulkanCommandList*>(cmd_.get());
-+        const auto* fence = static_cast<VulkanCommandFence*>(fence_.get());
-+        VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
-+        submit.commandBufferCount = 1; submit.pCommandBuffers = &list->vk;
-+        Checked(vkResetFences(device->vk, 1, &fence->vk), "vkResetFences");
-+        Checked(vkQueueSubmit(queue->queue->vk, 1, &submit, fence->vk), "vkQueueSubmit");
-+        Checked(vkWaitForFences(device->vk, 1, &fence->vk, VK_TRUE, UINT64_MAX), "vkWaitForFences");
-+    }
-+    void Fill(RenderTexture* texture, const std::vector<uint64_t>& pixels, uint32_t width, uint32_t height) {
-+        std::array<uint64_t, RowPixels * Height> padded{};
-+        for (uint32_t y = 0; y < height; ++y)
-+            std::memcpy(padded.data() + y * RowPixels, pixels.data() + y * width, width * 8);
-+        Write(upload_.get(), padded.data(), sizeof(padded));
-+        cmd_->begin();
-+        cmd_->barriers(RenderBarrierStage::COPY, RenderTextureBarrier(texture, RenderTextureLayout::COPY_DEST));
-+        cmd_->copyTextureRegion(RenderTextureCopyLocation::Subresource(texture),
-+            RenderTextureCopyLocation::PlacedFootprint(upload_.get(), RenderFormat::R16G16B16A16_FLOAT, width, height, 1, RowPixels));
-+        cmd_->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(texture, RenderTextureLayout::SHADER_READ));
-+        Submit();
-+    }
-+public:
-+    Fixture() {
-+        api_ = CreateVulkanInterface(); Require(bool(api_), "Vulkan interface unavailable");
-+        device_ = api_->createDevice(); Require(bool(device_), "Vulkan device unavailable");
-+        std::printf("DEVICE=%s\n", device_->getDescription().name.c_str());
-+        queue_ = device_->createCommandQueue(RenderCommandListType::DIRECT);
-+        Require(bool(queue_), "queue unavailable");
-+        cmd_ = queue_->createCommandList(); fence_ = device_->createCommandFence();
-+        constants_ = device_->createBuffer(RenderBufferDesc::UploadBuffer(256,
-+            RenderBufferFlag::CONSTANT | RenderBufferFlag::DEVICE_ADDRESSABLE));
-+        upload_ = device_->createBuffer(RenderBufferDesc::UploadBuffer(RowPixels * Height * 8));
-+        readback_ = device_->createBuffer(RenderBufferDesc::ReadbackBuffer(RowPixels * Height * 8));
-+        Require(cmd_ && fence_ && constants_ && upload_ && readback_, "fixture allocation failed");
-+        // Keep space1, t0/t1 and the actual shared-address push-constant ABI.
-+        builders_[0].begin(); builders_[0].addByteAddressBuffer(0); builders_[0].end();
-+        builders_[1].begin(); builders_[1].addTexture(0, 2); builders_[1].end();
-+        for (unsigned i = 0; i < 2; ++i) {
-+            sets_[i] = builders_[i].create(device_.get()); Require(bool(sets_[i]), "descriptor allocation failed");
-+        }
-+        // The unused space0 binding does not participate in either shader.
-+        RenderPipelineLayoutBuilder builder;
-+        builder.begin(false, false);
-+        builder.addPushConstant(0, 0, 24, RenderShaderStageFlag::VERTEX | RenderShaderStageFlag::PIXEL);
-+        for (auto& set : builders_) builder.addDescriptorSet(set);
-+        builder.end(); layout_ = builder.create(device_.get()); Require(bool(layout_), "pipeline layout failed");
-+        vertex_ = Compile(gpu::scene_copy_promotion::VertexShader, "vs_6_0");
-+        rgba_ = Compile(gpu::scene_copy_promotion::RgbaShader, "ps_6_0");
-+        rgb_ = Compile(gpu::scene_copy_promotion::RgbShader, "ps_6_0");
-+        const auto pipeline = [&](RenderShader* ps) {
-+            RenderGraphicsPipelineDesc desc;
-+            desc.pipelineLayout = layout_.get(); desc.vertexShader = vertex_.get(); desc.pixelShader = ps;
-+            desc.renderTargetCount = 1; desc.renderTargetFormat[0] = RenderFormat::R16G16B16A16_FLOAT;
-+            desc.renderTargetBlend[0] = RenderBlendDesc::Copy(); desc.renderTargetBlend[0].renderTargetWriteMask = 0xF;
-+            desc.depthEnabled = desc.depthWriteEnabled = false; desc.cullMode = RenderCullMode::NONE;
-+            desc.primitiveTopology = RenderPrimitiveTopology::TRIANGLE_LIST;
-+            return device_->createGraphicsPipeline(desc);
-+        };
-+        rgbaPipeline_ = pipeline(rgba_.get()); rgbPipeline_ = pipeline(rgb_.get());
-+        Require(rgbaPipeline_ && rgbPipeline_, "graphics pipeline creation failed");
-+    }
-+    void Run(bool composite, uint32_t baseWidth, uint32_t baseHeight, uint32_t srWidth, uint32_t srHeight) {
-+        const auto texture = [&](uint32_t w, uint32_t h, bool rt) {
-+            return device_->createTexture(RenderTextureDesc::Texture2D(w, h, 1, RenderFormat::R16G16B16A16_FLOAT,
-+                rt ? RenderTextureFlag::RENDER_TARGET : RenderTextureFlag::NONE));
-+        };
-+        auto base = texture(baseWidth, baseHeight, false), scratch = texture(srWidth, srHeight, false);
-+        auto output = texture(Width, Height, true);
-+        Require(base && scratch && output, "texture allocation failed");
-+        const RenderTexture* attachment[] = {output.get()};
-+        auto framebuffer = device_->createFramebuffer(RenderFramebufferDesc(attachment, 1));
-+        Require(bool(framebuffer), "framebuffer failed");
-+        std::vector<uint64_t> basePixels(baseWidth * baseHeight), srPixels(srWidth * srHeight);
-+        const auto pack = [](uint64_t r, uint64_t g, uint64_t b, uint64_t a) {
-+            return r | (g << 16) | (b << 32) | (a << 48);
-+        };
-+        constexpr uint16_t alpha[] = {0, 0x3000, 0x3400, 0x3600, 0x3800, 0x3900, 0x3a00, 0x3c00};
-+        for (unsigned i = 0; i < basePixels.size(); ++i)
-+            basePixels[i] = pack(0x3400 + i * 4, 0x3000 + i * 4, 0x3a00 - i * 4, alpha[i % 8]);
-+        for (unsigned i = 0; i < srPixels.size(); ++i)
-+            srPixels[i] = pack(0x4000 + i * 4, 0x2800 + i * 4, 0x3800 + i * 4, 0x3c00);
-+        Fill(base.get(), basePixels, baseWidth, baseHeight); Fill(scratch.get(), srPixels, srWidth, srHeight);
-+        std::array<uint32_t, 64> constants{};
-+        constants[60] = std::bit_cast<uint32_t>(float(baseWidth) / Width);
-+        constants[61] = std::bit_cast<uint32_t>(float(baseHeight) / Height);
-+        Write(constants_.get(), constants.data(), sizeof(constants));
-+        sets_[1]->setTexture(0, base.get(), RenderTextureLayout::SHADER_READ);
-+        sets_[1]->setTexture(1, scratch.get(), RenderTextureLayout::SHADER_READ);
-+        cmd_->begin();
-+        cmd_->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(output.get(), RenderTextureLayout::COLOR_WRITE));
-+        cmd_->setFramebuffer(framebuffer.get()); cmd_->clearColor(0, RenderColor(1, 0, 1, 1));
-+        RenderViewport viewport(0, 0, Width, Height); RenderRect scissor(0, 0, Width, Height);
-+        cmd_->setViewports(&viewport, 1); cmd_->setScissors(&scissor, 1);
-+        cmd_->setGraphicsPipelineLayout(layout_.get()); cmd_->setPipeline(composite ? rgbPipeline_.get() : rgbaPipeline_.get());
-+        const uint64_t addresses[] = {constants_->getDeviceAddress(), constants_->getDeviceAddress(), constants_->getDeviceAddress()};
-+        cmd_->setGraphicsPushConstants(0, addresses); cmd_->setGraphicsDescriptorSet(sets_[1].get(), 1);
-+        cmd_->drawInstanced(3, 1, 0, 0);
-+        cmd_->barriers(RenderBarrierStage::COPY, RenderTextureBarrier(output.get(), RenderTextureLayout::COPY_SOURCE));
-+        cmd_->copyTextureRegion(RenderTextureCopyLocation::PlacedFootprint(readback_.get(), RenderFormat::R16G16B16A16_FLOAT,
-+            Width, Height, 1, RowPixels), RenderTextureCopyLocation::Subresource(output.get()));
-+        Submit();
-+        const auto* pixels = static_cast<const uint64_t*>(readback_->map()); Require(pixels != nullptr, "readback map failed");
-+        unsigned mismatches = 0;
-+        for (unsigned y = 0; y < Height; ++y) for (unsigned x = 0; x < Width; ++x) {
-+            const unsigned bx = unsigned((x + .5f) * baseWidth / Width), by = unsigned((y + .5f) * baseHeight / Height);
-+            const uint64_t b = basePixels[by * baseWidth + bx];
-+            const uint64_t expected = composite && x < srWidth && y < srHeight ?
-+                (srPixels[y * srWidth + x] & 0x0000ffffffffffffull) | (b & 0xffff000000000000ull) : b;
-+            mismatches += pixels[y * RowPixels + x] != expected;
-+        }
-+        readback_->unmap();
-+        std::printf("%s base=%ux%u scratch=%ux%u output=8x8 fp16 checked=64 mismatches=%u\n",
-+            composite ? "RGB_ALPHA_PADDING" : "RGBA_RESAMPLE", baseWidth, baseHeight, srWidth, srHeight, mismatches);
-+        Require(!mismatches, "production shader pixel mismatch");
-+    }
-+};
-+}
-+int main() {
-+    try {
-+        Fixture fixture;
-+        fixture.Run(false, 4, 4, 8, 8);
-+        fixture.Run(true, 8, 8, 8, 8);
-+        fixture.Run(true, 8, 8, 6, 5);
-+        fixture.Run(true, 4, 4, 5, 7);
-+        std::puts("PASS: 256 exact RGBA pixel checks; no NGX or renderer mapping execution claimed");
-+        return 0;
-+    } catch (const std::exception& error) {
-+        std::fprintf(stderr, "FAIL: %s\n", error.what()); return 1;
-+    }
-+}
++Normal configuration changes and deferred `NeedsReconfigure` responses now
++retire old feature state at `ApplyInternalResolution`, before guest draw uploads
++or attachments are borrowed. This removes the previous permanent-stall path for
++reconfiguration; it is not proof of live window-resize or quality-switch visuals.
++
++The promotion policy preserves one promotion per renderer frame and refuses to
++Flush from its late draw-preparation stage. Restore uploads occur before any
++new descriptors are acquired. Restoration failure suppresses the affected plan
++rather than letting the caller continue with incompatible attachments.
++
++## Checks actually executed
++
++- Local GCC 14.2 Debug and Clang 17 Release: all **5 CPU fixtures passed**.
++  They exercise production planner/routing, promotion reservation/boundaries,
++  submission retirement, and temporal input-region validation. They do not
++  execute renderer target-map ownership, Vulkan submission failure, or NGX.
++- GitHub Actions Ubuntu: **actual `renderer.cpp` translation unit compiled**
++  using the existing `motion_renderer_compile` boundary. Its guest-ABI shim is
++  already part of that fixture. This is not a complete game link.
++- Pinned NVIDIA SDK `374959484e79a640feaba44c93ac8cfb0a03f5b5`:
++  `LoNativeDlssReportTest` and `LoNativeDlssExecutionTest` compiled with SDK OFF
++  and ON; report tests executed successfully. The execution executable was
++  **compiled, not run on NVIDIA hardware**. Runtime staging was OFF.
++- `LoSceneCopyCompositeTest` executed on **llvmpipe (LLVM 20.1.2, 256 bits)**,
++  through Vulkan, using the same production pixel-shader source as the renderer.
++  Four cases passed: RGBA 4×4→8×8; full 8×8 RGB/alpha composite; 6×5 SR scratch
++  into an 8×8 target; and a scaled 4×4 base with 5×7 scratch into 8×8.
++  All **256 RGBA16F pixels matched exactly**. Test data includes varying alpha
++  and RGB above 1.0. The runner installed Khronos validation layers; the successful
++  test log contained no validation errors/VUID messages. This is software Vulkan,
++  not NVIDIA DLSS, and does not invoke production target-map transitions.
++
++Successful validation runs (public source only):
++
++- [CPU CI for the first change](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35579359865)
++- [Promotion policy and renderer boundary](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35580071328)
++- [Lifetime and SDK ON/OFF](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35581228426)
++- [FP16 Vulkan composite](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35582125864)
++
++The last two runs retain `native-dlss-p2-validation` artifacts with the candidate
++SHA, SDK byte-verification JSON and CTest logs, subject to Actions retention.
++The first composite attempt failed due to a **new test-fixture** descriptor
++layout error (an array at t0 instead of separate t0/t1). That fixture was fixed
++before the successful run and before the feature was pushed to `dlss`.
++
++### SDK header line endings
++
++The pinned Linux checkout's `include/nvsdk_ngx_vk.h` SHA-256 is
++`2d364ce7132881eb669e9498fd570d74cba563b1fbebc82c235f8e1ad2dd8b6d`.
++The earlier Windows-recorded value
++`3be54d0103cce02174fd34912c60c9f40c73b5eec919e42613a2268c589c53ad`
++is reproduced by changing LF to CRLF. Only text line endings were normalized
++for this comparison; the exact immutable upstream commit was also checked.
++The Linux bootstrap archive matched the previously recorded SHA-256 exactly:
++`3321c4ca9adf71f345550d10bf2148ed38003151b03ec5f81c99d00949ab8202`.
++No binary hash mismatch was ignored.
++
++## Reproduce without game assets
++
++CPU-only, no submodules, Vulkan loader or SDK required:
++
++```sh
++cmake -S tools/tests/native_dlss -B out/native-dlss-cpu -DLO_NATIVE_DLSS_CPU_ONLY=ON -DCMAKE_BUILD_TYPE=Release
++cmake --build out/native-dlss-cpu --config Release --target LoNativeDlssCpuTests --parallel 2
++ctest --test-dir out/native-dlss-cpu -C Release -L cpu --output-on-failure
++```
++
++For the Vulkan fixture, first initialize the existing public Plume/XenosRecomp
++submodules and apply `tools/patches/plume-lostodyssey.patch` as documented in the
++main handoff. Supply a working DXC library; `LO_DXC_PATH` accepts its full path.
++The successful Linux run used Microsoft's `v1.8.2505.1` Linux archive
++`linux_dxc_2025_07_14.x86_64.tar.gz`, SHA-256
++`f2213da1fc99dc8778c8823078e16ba97c7f80f86a1d4520ab1adf4b462bc48c`.
++
++```sh
++cmake -S tools/tests/motion_replay -B out/p2-composite -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_SCAN_FOR_MODULES=OFF
++cmake --build out/p2-composite --target motion_renderer_compile LoSceneCopyCompositeTest --parallel 2
++ctest --test-dir out/p2-composite -R '^LoSceneCopyCompositeTest$' --output-on-failure -V
++```
++
++The Vulkan fixture fails rather than reporting success when the device, shader
++compiler, pipeline, submission, fence or pixel comparison fails. To reproduce
++software Vulkan on Linux, select the installed lavapipe ICD explicitly through
++`VK_ICD_FILENAMES`; do not infer an NVIDIA result from this lane.
++
++## Remaining blockers before P2 can be enabled/accepted
++
++1. **Runtime color qualification is missing.** Capture at least three consecutive
++   frames with runtime PS constants c0–c10/c255 and producer→resolve→scene-copy
++   allocation lineage. Confirm actual c10.x for `b4b4d54a7a2d6b96` and classify the
++   color transfer before selecting NGX color flags. Keep `Unknown` guarded off.
++2. **Execute the complete mapping/lifetime path.** The new CPU policy tests and
++   shader GPU test do not drive `PrepareSceneCopyDestination` → guest copy →
++   `RecordSceneCopyDlss` → restore in a running renderer. Test incompatible
++   depth/stencil, storage aliases, extent growth, next-frame access, ordinary
++   mid-frame Flush, dynamic resize/quality changes and transparent UI ordering.
++3. **Submission-failure/device-loss handling still needs work and injection.**
++   Static inspection found that `Flush` returns after a failed
++   `SubmitRendererBatch` without a terminal recording-state latch; the
++   `RecordSceneCopyDlss` DeviceLost branch also leaves a closed prefix. Do not
++   claim those batches can safely resume. Audit the next `Begin`/slot reuse and
++   checked fence waits, prevent reuse after fatal errors, then test those paths.
++   The new use ledger protects ordinary ownership transitions, not this gap.
++4. **RTX Windows/Linux validation remains outstanding for these revisions.**
++   Run the NGX execution fixture, then isolated-CWD gameplay. Confirm movement
++   response, color/alpha/UI, reset transitions, failure fallback and performance;
++   compile/report success is insufficient. Preserve the original runtime-isolation
++   requirements (`LO_GRAPHICS_API=vulkan`, `LO_NO_UPDATE=1`, separate CWD).
++
++Do not remove the color guard or mark Gate 3 passed just to make the DLSS menu
++selection appear effective. No automatic shader-wide MV replacement, FG,
++OptiScaler integration or D3D12 removal was introduced.
+diff --git a/docs/notes/native-dlss-validation.md b/docs/notes/native-dlss-validation.md
+index 98a5148..5cd06b9 100644
+--- a/docs/notes/native-dlss-validation.md
++++ b/docs/notes/native-dlss-validation.md
+@@ -7 +7,7 @@ SDK Reference: NVIDIA DLSS **310.9.1** (`374959484e79a640feaba44c93ac8cfb0a03f5b
+-Status: **P0 gate 1 passed**; **P1 gate 2 passed**. P2 Super Resolution execution is in checkpoint commits `d018be7` and `744ab91`, paused at user request. Formal Gate 3 re-review was cancelled at user direction; Gate 3 is not approved. Frame Generation (FG) deferred.
++Status: **P0 gate 1 passed**; **P1 gate 2 passed** (historical evidence retained). P2 development resumed on 2026-09-21 with focused fixes and additional tests; it is **not complete or Gate 3 approved**. The earlier formal re-review was cancelled. In-game SR remains blocked by unqualified color encoding. Frame Generation (FG) deferred.
++
++## 2026-09-21 Development Follow-up
++
++The earlier paused checkpoint has received five focused implementation/test changes on `dlss`; see [P2 follow-up evidence and remaining blockers](native-dlss-p2-progress-2026-09-21.md) for commits, reproducible commands and exact scope. Historical RTX results below were not rerun and must not be attributed to the new revisions.
++
++New evidence covers CPU contracts, actual renderer translation-unit compilation, pinned SDK ON/OFF adapter compilation and report tests, and software Vulkan execution of production FP16 composite shaders. It does not qualify runtime game color, full target-map transitions, fatal submission/device-loss recovery, or NVIDIA in-game SR. Gate 3 remains unapproved.
+@@ -209,2 +215,2 @@ The probe and runtime pass the directory containing the staged `nvngx_dlss.dll`
+-- **P2 Work In Progress**: P2 implementation is paused in uncommitted working-tree source; Gate 3 review is currently running and is not yet approved.
+-- **No Linux Validation**: Native Linux execution remains skipped and untested.
++- **P2 Work In Progress**: Development resumed with committed changes on 2026-09-21. Gate 3 is not approved; no completed formal re-review is claimed.
++- **Linux Evidence Scope**: CPU tests, renderer translation-unit compilation, SDK ON/OFF builds/report tests and software Vulkan composites ran on Linux. NVIDIA NGX execution and Linux gameplay remain untested for these revisions.
+@@ -213 +219 @@ The probe and runtime pass the directory containing the staged `nvngx_dlss.dll`
+-- **Allocation Geometry**: The input-region fixture exercises a 64×64 valid allocation, but does not test padded texture allocations with smaller subrectangles.
++- **Allocation Geometry**: The follow-up adds nonzero subregion origins and integer-overflow CPU cases, plus FP16 composites with an 8×8 target and smaller SR scratch. These do not establish padded NGX/game allocations or the complete renderer mapping path.
+diff --git a/tools/tests/native_dlss/CMakeLists.txt b/tools/tests/native_dlss/CMakeLists.txt
+index de032ec..1314d6b 100644
+--- a/tools/tests/native_dlss/CMakeLists.txt
++++ b/tools/tests/native_dlss/CMakeLists.txt
+@@ -42,0 +43,5 @@ target_compile_features(LoNativeDlssSubmissionLifetimeTest PRIVATE cxx_std_20)
++add_executable(LoNativeDlssFrameInputsTest EXCLUDE_FROM_ALL
++    ${LO_NATIVE_DLSS_ROOT}/tools/tests/temporal_frame_inputs_test.cpp)
++target_include_directories(LoNativeDlssFrameInputsTest PRIVATE ${LO_NATIVE_DLSS_ROOT}/LostOdysseyRecomp)
++target_compile_features(LoNativeDlssFrameInputsTest PRIVATE cxx_std_20)
++
+@@ -45 +50 @@ target_compile_features(LoNativeDlssSubmissionLifetimeTest PRIVATE cxx_std_20)
+-set_target_properties(LoP1FramePlanTest LoNativeDlssP2RoutingTest LoNativeDlssPromotionPolicyTest LoNativeDlssSubmissionLifetimeTest
++set_target_properties(LoNativeDlssFrameInputsTest LoP1FramePlanTest LoNativeDlssP2RoutingTest LoNativeDlssPromotionPolicyTest LoNativeDlssSubmissionLifetimeTest
+@@ -49 +54 @@ add_custom_target(LoNativeDlssCpuTests
+-    DEPENDS LoP1FramePlanTest LoNativeDlssP2RoutingTest LoNativeDlssPromotionPolicyTest LoNativeDlssSubmissionLifetimeTest)
++    DEPENDS LoNativeDlssFrameInputsTest LoP1FramePlanTest LoNativeDlssP2RoutingTest LoNativeDlssPromotionPolicyTest LoNativeDlssSubmissionLifetimeTest)
+@@ -56 +61,2 @@ if(BUILD_TESTING)
+-    set_tests_properties(LoP1FramePlanTest LoNativeDlssP2RoutingTest LoNativeDlssPromotionPolicyTest LoNativeDlssSubmissionLifetimeTest PROPERTIES LABELS "native-dlss;cpu")
++    add_test(NAME LoNativeDlssFrameInputsTest COMMAND LoNativeDlssFrameInputsTest)
++    set_tests_properties(LoNativeDlssFrameInputsTest LoP1FramePlanTest LoNativeDlssP2RoutingTest LoNativeDlssPromotionPolicyTest LoNativeDlssSubmissionLifetimeTest PROPERTIES LABELS "native-dlss;cpu")
+diff --git a/tools/tests/temporal_frame_inputs_test.cpp b/tools/tests/temporal_frame_inputs_test.cpp
+index ec16c2f..e331bcd 100644
+--- a/tools/tests/temporal_frame_inputs_test.cpp
++++ b/tools/tests/temporal_frame_inputs_test.cpp
+@@ -2,0 +3 @@
++#include <limits>
+@@ -42,0 +44,21 @@ int main() {
++        TextureRegion region{token, {64, 32}, 0, 0, 64, 32};
++        Require(region.Complete(), "exact allocation bounds accepted");
++        region.x = 1;
++        Require(!region.Complete(), "right edge beyond allocation rejected");
++        region = {token, {64, 32}, 32, 16, 32, 16};
++        Require(region.Complete(), "valid nonzero origin accepted");
++        region.width = 0;
++        Require(!region.Complete(), "zero-sized region rejected");
++        constexpr auto max = std::numeric_limits<uint32_t>::max();
++        region = {token, {64, 32}, max, 0, 2, 1};
++        Require(!region.Complete(), "wrapped x plus width rejected");
++        region = {token, {64, 32}, 0, max, 1, 2};
++        Require(!region.Complete(), "wrapped y plus height rejected");
++        region = {token, {64, 32}, 1, 0, max, 1};
++        Require(!region.Complete(), "wrapped oversized width rejected");
++        region = {token, {64, 32}, 0, 1, 1, max};
++        Require(!region.Complete(), "wrapped oversized height rejected");
++        region = {token, {max, max}, max - 1, max - 1, 1, 1};
++        Require(region.Complete(), "maximum representable exact bounds accepted");
++        region.texture = nullptr;
++        Require(!region.Complete(), "null texture rejected");
