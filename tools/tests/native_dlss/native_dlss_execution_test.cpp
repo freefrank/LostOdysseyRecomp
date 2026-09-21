@@ -124,6 +124,7 @@ int main() {
         inputs.resetHistory = true;
         inputs.motionState = gpu::temporal::MotionState::ResetInitialization;
         inputs.colorEncoding = gpu::temporal::ColorEncoding::Sdr;
+        inputs.depthConvention = gpu::temporal::DepthConvention::Forward; // Synthetic conventional R32 fixture.
 
         prefix->begin();
         prefix->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(color.get(), RenderTextureLayout::COLOR_WRITE));

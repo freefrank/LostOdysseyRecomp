@@ -25,6 +25,16 @@ struct TextureRegion {
 // Unknown is the only safe default. An R8_UNORM allocation is storage metadata,
 // not proof of an SDR transfer function or of a pre-UI tone-map boundary.
 enum class ColorEncoding : uint32_t { Unknown = 0, Sdr = 1, HdrLinear = 2 };
+// Storage format does not identify near/far ordering. HistoryOwner's reviewed
+// scene anchor uses reversed Z; independent synthetic producers must declare
+// their own convention rather than inheriting a renderer default.
+enum class DepthConvention : uint32_t { Unknown = 0, Forward = 1, Reversed = 2 };
+inline constexpr bool KnownDepthConvention(DepthConvention value) {
+    return value == DepthConvention::Forward || value == DepthConvention::Reversed;
+}
+inline constexpr bool MatchesDepthConvention(DepthConvention value, bool inverted) {
+    return KnownDepthConvention(value) && (inverted == (value == DepthConvention::Reversed));
+}
 enum class MotionState : uint32_t { Unavailable = 0, ResetInitialization = 1, Tracked = 2 };
 struct ConsumerRoute {
     bool legacyTaa = false, dlssInputs = false, dlssSr = false, inputProbe = false, spatialAA = false;
@@ -66,6 +76,7 @@ struct TemporalFrameInputs {
     TextureRegion motionInvalidity{}, materialInstability{};
     JitterSample jitter{};
     ColorEncoding colorEncoding = ColorEncoding::Unknown;
+    DepthConvention depthConvention = DepthConvention::Unknown;
     float preExposure = 1.0f, exposureScale = 1.0f;
     MotionState motionState = MotionState::Unavailable;
     bool currentInputsComplete = false, resetHistory = true;
@@ -74,7 +85,8 @@ struct TemporalFrameInputs {
     bool CompleteForConsumer() const {
         if (!currentInputsComplete || !color.Complete() || !depth.Complete()) return false;
         return !upscaling::IsDlssConsumer(plan.consumer) ||
-            (motionState != MotionState::Unavailable && motion.Complete() && motionInvalidity.Complete());
+            (KnownDepthConvention(depthConvention) && motionState != MotionState::Unavailable &&
+             motion.Complete() && motionInvalidity.Complete());
     }
 };
 } // namespace gpu::temporal

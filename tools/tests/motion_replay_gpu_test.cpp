@@ -624,6 +624,7 @@ public:
             Require(owner.CaptureColorInputs(cmd.get(),color.get(),scene,plan,jitter,ColorEncoding::Sdr,&motion,reset),"P1 captures pre-TAA color without resolving TAA");
             const auto inputs=owner.CurrentInputs();
             Require(inputs.CompleteForConsumer(),"P1 complete frame carries color/depth/geometry MV inputs");
+            Require(inputs.depthConvention==DepthConvention::Reversed,"P1 R32 capture keeps reversed-Z convention");
             Require(inputs.color.allocation==gpu::resolution::Size{W,H}&&inputs.color.x==0&&inputs.color.y==0&&inputs.color.width==W&&inputs.color.height==H,
                 "P1 input region uses the exact valid allocation rectangle without padding");
             Require(inputs.jitter.phase==jitter.phase&&inputs.jitter.pixelX==jitter.pixelX&&inputs.jitter.pixelY==jitter.pixelY,

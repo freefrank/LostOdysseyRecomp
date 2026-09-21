@@ -665,7 +665,8 @@ SrAttempt Controller::RecordIsolated(plume::VulkanCommandList& isolatedCommandLi
     };
     if (!config.renderExtent.width || !config.renderExtent.height || !config.outputExtent.width || !config.outputExtent.height ||
         config.deviceEpoch != inputs.plan.deviceEpoch || inputs.plan.consumer != upscaling::TemporalConsumer::DlssSr ||
-        !inputs.CompleteForConsumer() || !validRegion(inputs.color) || !validRegion(inputs.depth) || !validRegion(inputs.motion) ||
+        !inputs.CompleteForConsumer() || !temporal::MatchesDepthConvention(inputs.depthConvention, config.depthInverted) ||
+        !validRegion(inputs.color) || !validRegion(inputs.depth) || !validRegion(inputs.motion) ||
         !ValidImage(output, sessionDevice_) || output.desc.width != config.outputExtent.width || output.desc.height != config.outputExtent.height ||
         static_cast<const plume::VulkanTexture*>(inputs.depth.texture)->imageFormat != VK_FORMAT_R32_SFLOAT ||
         !std::isfinite(inputs.jitter.pixelX) || !std::isfinite(inputs.jitter.pixelY) ||

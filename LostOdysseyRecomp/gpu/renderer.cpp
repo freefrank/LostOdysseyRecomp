@@ -1798,6 +1798,7 @@ namespace gpu::renderer
                 config.renderExtent = {promotion.inputs.color.width, promotion.inputs.color.height};
                 config.outputExtent = {activePlan.output.width, activePlan.output.height};
                 config.quality = activePlan.dlssQuality; config.deviceEpoch = activePlan.deviceEpoch;
+                config.depthInverted = promotion.inputs.depthConvention == temporal::DepthConvention::Reversed;
                 config.colorSpace = promotion.inputs.colorEncoding == temporal::ColorEncoding::Sdr ?
                     dlss::SrColorSpace::DisplayEncoded : dlss::SrColorSpace::Linear;
                 // A fresh controller has no feature to recreate. EnsureSession

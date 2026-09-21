@@ -20,6 +20,8 @@ int main() {
         inputs.renderFrameId = 17;
         inputs.temporalEpoch = 3;
         inputs.depthAllocation = 9;
+        Require(inputs.depthConvention == DepthConvention::Unknown, "new producer has no assumed depth convention");
+        inputs.depthConvention = DepthConvention::Forward;
         inputs.jitter = FrameJitter(inputs.renderFrameId, 64, 32);
         plume::RenderTexture* token = reinterpret_cast<plume::RenderTexture*>(uintptr_t(1));
         inputs.color = {token, {64, 32}, 0, 0, 64, 32};
@@ -36,6 +38,17 @@ int main() {
         const float previousPixelX = 10.0f, currentPixelX = 12.0f;
         const float motionPixelsX = previousPixelX - currentPixelX;
         Require(motionPixelsX == -2.0f, "motion contract is known previousPixel-currentPixel (-2,0) at scale 1");
+        inputs.depthConvention = DepthConvention::Unknown;
+        Require(!inputs.CompleteForConsumer(), "unknown depth cannot enter DLSS");
+        inputs.depthConvention = static_cast<DepthConvention>(3);
+        Require(!inputs.CompleteForConsumer(), "invalid depth enum cannot enter DLSS");
+        inputs.depthConvention = DepthConvention::Reversed;
+        Require(inputs.CompleteForConsumer(), "explicit reversed depth is complete");
+        Require(MatchesDepthConvention(DepthConvention::Reversed, true), "reversed depth selects NGX inverted flag");
+        Require(!MatchesDepthConvention(DepthConvention::Reversed, false), "reversed depth rejects forward NGX flag");
+        Require(MatchesDepthConvention(DepthConvention::Forward, false), "forward fixture selects conventional NGX flag");
+        Require(!MatchesDepthConvention(DepthConvention::Forward, true), "forward depth rejects inverted NGX flag");
+        Require(!MatchesDepthConvention(DepthConvention::Unknown, false), "unknown is not forward");
         inputs.motionState = MotionState::Unavailable;
         Require(!inputs.CompleteForConsumer(), "DLSS input rejects missing geometry motion instead of treating it as static");
         inputs.plan.consumer = upscaling::TemporalConsumer::None;

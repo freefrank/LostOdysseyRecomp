@@ -66,9 +66,11 @@ struct VendorFixture {
     gpu::dlss::SrStatus outcome = gpu::dlss::SrStatus::Executable;
     uint32_t calls = 0;
     gpu::dlss::SrStatus EnsureSession(const plume::VulkanDevice&) { return gpu::dlss::SrStatus::Executable; }
-    gpu::dlss::SrAttempt RecordIsolated(plume::VulkanCommandList& list, const gpu::dlss::SrConfig&,
-        const gpu::temporal::TemporalFrameInputs&, plume::VulkanTexture& output) {
+    gpu::dlss::SrAttempt RecordIsolated(plume::VulkanCommandList& list, const gpu::dlss::SrConfig& config,
+        const gpu::temporal::TemporalFrameInputs& inputs, plume::VulkanTexture& output) {
         ++calls;
+        Require(gpu::temporal::MatchesDepthConvention(inputs.depthConvention, config.depthInverted),
+            "renderer must pass the producer depth ordering to NGX");
         Require(gpu::submission::BeginCommands(list) == VK_SUCCESS, "isolated begin");
         // Exact FP16 values; alpha is deliberately different from the guest.
         const VkClearColorValue value{{2.0f, .5f, .25f, 0.0f}};
@@ -180,6 +182,7 @@ public:
         auto invalid = Texture(4, 4, plume::RenderFormat::R8_UNORM);
         gpu::temporal::TemporalFrameInputs inputs{};
         inputs.plan = r.activePlan; inputs.currentInputsComplete = true;
+        inputs.depthConvention = (restoreReason & 1) ? gpu::temporal::DepthConvention::Reversed : gpu::temporal::DepthConvention::Forward;
         inputs.motionState = gpu::temporal::MotionState::Tracked;
         inputs.color = {original->texture.get(), {4,4}, 0,0,4,4};
         inputs.depth = {depth->texture.get(), {4,4}, 0,0,4,4};

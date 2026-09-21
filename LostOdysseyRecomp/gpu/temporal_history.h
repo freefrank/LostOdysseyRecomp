@@ -327,6 +327,9 @@ public:
         result.plan=current.plan; result.renderFrameId=frame_; result.temporalEpoch=epoch_; result.depthAllocation=current.allocation;
         result.color={source_.texture.get(),{width_,height_},0,0,width_,height_};
         result.depth={depth_[frame_%2].texture.get(),{width_,height_},0,0,width_,height_};
+        // CaptureDepth copies the R32 resolve unchanged. SceneObservation's
+        // reviewed camera/depth contract is d=1 near, d=0 far (reversed Z).
+        result.depthConvention=DepthConvention::Reversed;
         result.motion={motionView_.velocity,{width_,height_},0,0,width_,height_};
         result.motionInvalidity={motionView_.reactive,{width_,height_},0,0,width_,height_};
         result.jitter=current.jitter; result.colorEncoding=current.colorEncoding; result.currentInputsComplete=current.inputsComplete;
