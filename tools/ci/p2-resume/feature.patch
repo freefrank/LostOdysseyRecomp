@@ -1,0 +1,338 @@
+diff --git a/LostOdysseyRecomp/gpu/renderer.cpp b/LostOdysseyRecomp/gpu/renderer.cpp
+index 407df92..63c1575 100644
+--- a/LostOdysseyRecomp/gpu/renderer.cpp
++++ b/LostOdysseyRecomp/gpu/renderer.cpp
+@@ -571,0 +572,7 @@ namespace gpu::renderer
++#if defined(LO_DLSS_RENDERER_FIXTURE)
++            // Replaces only the vendor recording call in offline fixtures. Target
++            // mapping, prefix/continuation, composition and native submission stay real.
++            dlss::SrAttempt (*fixtureSrRecorder)(plume::VulkanCommandList&,
++                const dlss::SrConfig&, const temporal::TemporalFrameInputs&, plume::VulkanTexture&) = nullptr;
++#endif
++
+@@ -1793,0 +1801,2 @@ namespace gpu::renderer
++                if (video::GpuWorkStopped() || promotion.inputs.colorEncoding == temporal::ColorEncoding::Unknown)
++                    return false;
+@@ -1803 +1812,6 @@ namespace gpu::renderer
+-                if (dlssController->EnsureSession(*static_cast<plume::VulkanDevice*>(device)) != dlss::SrStatus::Executable) {
++                const bool sessionReady =
++#if defined(LO_DLSS_RENDERER_FIXTURE)
++                    fixtureSrRecorder != nullptr ||
++#endif
++                    dlssController->EnsureSession(*static_cast<plume::VulkanDevice*>(device)) == dlss::SrStatus::Executable;
++                if (!sessionReady) {
+@@ -1823,2 +1837,8 @@ namespace gpu::renderer
+-                auto attempt = dlssController->RecordIsolated(*static_cast<plume::VulkanCommandList*>(Gpu().srIsolated.get()), config,
+-                    promotion.inputs, *static_cast<plume::VulkanTexture*>(promotion.scratch->texture.get()));
++                const auto record = [&](plume::VulkanCommandList& list, plume::VulkanTexture& output) {
++#if defined(LO_DLSS_RENDERER_FIXTURE)
++                    if (fixtureSrRecorder) return fixtureSrRecorder(list, config, promotion.inputs, output);
++#endif
++                    return dlssController->RecordIsolated(list, config, promotion.inputs, output);
++                };
++                auto attempt = record(*static_cast<plume::VulkanCommandList*>(Gpu().srIsolated.get()),
++                    *static_cast<plume::VulkanTexture*>(promotion.scratch->texture.get()));
+diff --git a/LostOdysseyRecomp/gpu/video.cpp b/LostOdysseyRecomp/gpu/video.cpp
+index 21f05a5..9d7d70e 100644
+--- a/LostOdysseyRecomp/gpu/video.cpp
++++ b/LostOdysseyRecomp/gpu/video.cpp
+@@ -456,0 +457,15 @@ namespace gpu::video
++#if defined(LO_DLSS_RENDERER_FIXTURE)
++    // Test-only device attachment: no SDL window, guest process, profile or saves.
++    // The tests still execute this translation unit's real native submit/wait code.
++    void InstallFixtureGpu(std::unique_ptr<plume::RenderInterface> api,
++        std::unique_ptr<plume::RenderDevice> device, std::unique_ptr<plume::RenderCommandQueue> queue) {
++        assert(!g_device && !g_queue && !g_interface);
++        g_interface = std::move(api); g_device = std::move(device); g_queue = std::move(queue);
++        g_submissionState = {}; g_vulkan = true; g_available = true;
++    }
++    void RemoveFixtureGpu() {
++        DrainGpuForShutdown(); g_available = false;
++        g_queue.reset(); g_device.reset(); g_interface.reset(); g_vulkan = false;
++    }
++#endif
++
+diff --git a/tools/tests/motion_replay/CMakeLists.txt b/tools/tests/motion_replay/CMakeLists.txt
+index b89d459..ba1bc10 100644
+--- a/tools/tests/motion_replay/CMakeLists.txt
++++ b/tools/tests/motion_replay/CMakeLists.txt
+@@ -68,0 +69,23 @@ endif()
++
++# ELF dead-section linking retains the actual renderer methods used by this
++# fixture, without linking guest code, the SDL event loop or unused menu code.
++option(LO_P2_RENDERER_MAPPING_TEST "Execute actual renderer promotion on a headless Vulkan device" OFF)
++if(LO_P2_RENDERER_MAPPING_TEST)
++ if(NOT UNIX OR APPLE OR NOT TARGET p2_video_compile)
++  message(FATAL_ERROR "Mapping fixture requires Linux and LO_P2_VIDEO_COMPILE_CHECK=ON")
++ endif()
++ target_compile_definitions(p2_video_compile PRIVATE LO_DLSS_RENDERER_FIXTURE=1)
++ target_compile_options(p2_video_compile PRIVATE -ffunction-sections -fdata-sections)
++ add_executable(LoDlssRendererMappingTest
++  "${ROOT}/tools/tests/native_dlss_renderer_mapping_test.cpp"
++  "${ROOT}/LostOdysseyRecomp/gpu/dlss_ngx.cpp"
++  $<TARGET_OBJECTS:p2_video_compile> platform_stub.cpp)
++ target_include_directories(LoDlssRendererMappingTest BEFORE PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/compile_boundary")
++ target_include_directories(LoDlssRendererMappingTest PRIVATE "${ROOT}/thirdparty/unordered_dense/include")
++ target_compile_definitions(LoDlssRendererMappingTest PRIVATE LO_DLSS_RENDERER_FIXTURE=1 LO_SOURCE_VERSION="p2-mapping-fixture")
++ target_compile_options(LoDlssRendererMappingTest PRIVATE -ffunction-sections -fdata-sections -O0 -g0)
++ target_link_options(LoDlssRendererMappingTest PRIVATE -Wl,--gc-sections)
++ target_link_libraries(LoDlssRendererMappingTest PRIVATE mv_runtime SDL2::SDL2)
++ add_test(NAME LoDlssRendererMappingTest COMMAND LoDlssRendererMappingTest)
++ set_tests_properties(LoDlssRendererMappingTest PROPERTIES LABELS "native-dlss;renderer-mapping" TIMEOUT 120)
++endif()
+diff --git a/tools/tests/native_dlss_renderer_mapping_test.cpp b/tools/tests/native_dlss_renderer_mapping_test.cpp
+new file mode 100644
+index 0000000..1e15fcc
+--- /dev/null
++++ b/tools/tests/native_dlss_renderer_mapping_test.cpp
+@@ -0,0 +1,250 @@
++// Include the actual implementation, not a replica of its target-map model.
++// Only the vendor NGX call is replaced, through a build-only recorder hook.
++#include <gpu/renderer.cpp>
++#include <gpu/vulkan_command_recording.h>
++#include <stdexcept>
++
++namespace gpu::video {
++void InstallFixtureGpu(std::unique_ptr<plume::RenderInterface>, std::unique_ptr<plume::RenderDevice>,
++    std::unique_ptr<plume::RenderCommandQueue>);
++void RemoveFixtureGpu();
++}
++namespace gpu::frame_plan {
++// The guest CPU mailbox is not linked. Keep failure reporting visible to the
++// test without pretending that a CPU recompile/game loop executed.
++unsigned fixtureFailures = 0;
++void ReportPlanFailure(const PlanFailure&) { ++fixtureFailures; }
++}
++namespace {
++using namespace plume;
++using namespace gpu::renderer;
++unsigned checks = 0, pixelsChecked = 0, recordings = 0;
++bool failRecording = false;
++void Require(bool value, const char* message) {
++    ++checks;
++    if (!value) throw std::runtime_error(message);
++}
++void Checked(VkResult result, const char* operation) {
++    if (result != VK_SUCCESS) throw std::runtime_error(std::string(operation) + " raw_vk=" + std::to_string(result));
++}
++gpu::dlss::SrAttempt SyntheticNgx(VulkanCommandList& list, const gpu::dlss::SrConfig& config,
++    const gpu::temporal::TemporalFrameInputs&, VulkanTexture& output) {
++    ++recordings;
++    Require(config.colorSpace == gpu::dlss::SrColorSpace::DisplayEncoded, "synthetic SDR tag propagated");
++    Checked(gpu::submission::BeginCommands(list), "begin isolated fixture");
++    VkClearColorValue clear{};
++    clear.float32[0] = failRecording ? 1.f : .25f;
++    clear.float32[1] = failRecording ? 0.f : .5f;
++    clear.float32[2] = failRecording ? 1.f : .75f;
++    clear.float32[3] = 1.f; // Caller must ignore this alpha.
++    vkCmdClearColorImage(list.vk, output.vk, VK_IMAGE_LAYOUT_GENERAL, &clear, 1, &output.imageSubresourceRange);
++    Checked(gpu::submission::EndCommands(list), "end isolated fixture");
++    gpu::dlss::SrAttempt attempt;
++    attempt.status = failRecording ? gpu::dlss::SrStatus::Failed : gpu::dlss::SrStatus::Executable;
++    return attempt; // No NGX feature or feature-use ledger is simulated.
++}
++struct DeviceScope {
++    DeviceScope() {
++        auto api = CreateVulkanInterface(); Require(bool(api), "Vulkan interface");
++        auto device = api->createDevice(); Require(bool(device), "Vulkan device");
++        std::printf("MAPPING_DEVICE=%s\n", device->getDescription().name.c_str());
++        auto queue = device->createCommandQueue(RenderCommandListType::DIRECT);
++        Require(bool(queue), "Vulkan queue");
++        gpu::video::InstallFixtureGpu(std::move(api), std::move(device), std::move(queue));
++    }
++    ~DeviceScope() { gpu::video::RemoveFixtureGpu(); }
++};
++struct Fixture {
++    gpu::dlss::Controller controller{"unused-fixture-data", "unused-fixture-runtime"};
++    Renderer r;
++    std::unique_ptr<RenderBuffer> readback;
++    std::vector<std::unique_ptr<HostTexture>> auxiliaryInputs;
++    Fixture() {
++        r.device = gpu::video::GetDevice(); r.queue = gpu::video::GetQueue(); r.vulkan = true;
++        r.binaryFormat = xenos::ShaderBinaryFormat::Spirv; r.renderFormat = RenderShaderFormat::SPIRV;
++        r.dlssController = &controller; r.fixtureSrRecorder = SyntheticNgx;
++        for (auto& slot : r.gpuSlots) {
++            slot.list = r.queue->createCommandList(); slot.srIsolated = r.queue->createCommandList();
++            slot.srContinuation = r.queue->createCommandList(); slot.fence = r.device->createCommandFence();
++            slot.uploadRing = r.device->createBuffer(RenderBufferDesc::UploadBuffer(kUploadRingSize,
++                RenderBufferFlag::DEVICE_ADDRESSABLE | RenderBufferFlag::INDEX | RenderBufferFlag::STORAGE));
++            Require(slot.list && slot.srIsolated && slot.srContinuation && slot.fence && slot.uploadRing, "slot allocations");
++            slot.uploadMapped = static_cast<uint8_t*>(slot.uploadRing->map()); Require(slot.uploadMapped, "slot map");
++        }
++        r.BindGpuSlot();
++        r.vertexArena = r.device->createBuffer(RenderBufferDesc::UploadBuffer(256, RenderBufferFlag::STORAGE));
++        Require(bool(r.vertexArena), "unused vertex descriptor buffer");
++        readback = r.device->createBuffer(RenderBufferDesc::ReadbackBuffer(64 * 16 * 8));
++        Require(bool(readback), "readback allocation");
++        RenderPipelineLayoutBuilder layout;
++        layout.begin(false, false);
++        layout.addPushConstant(0, 0, 24, RenderShaderStageFlag::VERTEX | RenderShaderStageFlag::PIXEL);
++        r.setBuilders[0].begin(); r.setBuilders[0].addByteAddressBuffer(0); r.setBuilders[0].end();
++        for (int i = 1; i < 4; ++i) {
++            r.setBuilders[i].begin();
++            for (uint32_t slot = 0; slot < kTextureSlots; ++slot) r.setBuilders[i].addTexture(slot);
++            r.setBuilders[i].end();
++        }
++        r.setBuilders[4].begin(); r.setBuilders[4].addSampler(0, 64); r.setBuilders[4].end();
++        for (auto& builder : r.setBuilders) layout.addDescriptorSet(builder);
++        layout.end(); r.pipelineLayout = layout.create(r.device);
++        r.staticSet0 = r.setBuilders[0].create(r.device);
++        r.staticSamplerSet = r.setBuilders[4].create(r.device);
++        Require(r.pipelineLayout && r.staticSet0 && r.staticSamplerSet, "descriptor ABI");
++        r.staticSet0->setBuffer(0, r.vertexArena.get(), 256);
++        auto* sampler = r.GetSampler(0x2 | (0x2 << 2) | (0x1 << 4)); Require(sampler, "sampler");
++        for (unsigned i = 0; i < 64; ++i) r.staticSamplerSet->setSampler(i, sampler);
++        r.CreateDummyTexture(r.dummyTexture2D, RenderTextureDimension::TEXTURE_2D, 0);
++        r.CreateDummyTexture(r.dummyTexture3D, RenderTextureDimension::TEXTURE_3D, 0);
++        r.CreateDummyTexture(r.dummyTextureCube, RenderTextureDimension::TEXTURE_2D, RenderTextureFlag::CUBE);
++        Require(r.dummyTexture2D.texture && r.dummyTexture3D.texture && r.dummyTextureCube.texture, "dummy banks");
++        r.CompileBlitShaders(); r.CompileSceneCopyPromotionShaders();
++        Require(r.blitVs && r.sceneCopyPromotionPs && r.sceneCopyPromotionRgbPs, "production shaders");
++    }
++    ~Fixture() {
++        r.Flush(); r.WaitForGpu(); gpu::video::DrainGpuForShutdown();
++        // Renderer runtime shutdown also unmaps its persistent rings after drain.
++        for (auto& slot : r.gpuSlots) if (slot.uploadMapped) { slot.uploadRing->unmap(); slot.uploadMapped = nullptr; }
++    }
++    void Clear(HostTexture& texture, RenderColor color, const RenderRect* rect = nullptr) {
++        Require(r.Begin(), "begin clear");
++        r.Transition(texture, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
++        auto* fb = r.GetFramebuffer(&texture, nullptr); Require(fb, "clear framebuffer");
++        r.commandList->setFramebuffer(fb);
++        r.commandList->clearColor(0, color, rect, rect ? 1 : 0);
++    }
++    std::vector<uint64_t> Read(HostTexture& texture) {
++        Require(r.Begin(), "begin readback");
++        r.Transition(texture, RenderTextureLayout::COPY_SOURCE, RenderBarrierStage::COPY);
++        r.commandList->copyTextureRegion(RenderTextureCopyLocation::PlacedFootprint(readback.get(),
++            texture.format, texture.width, texture.height, 1, 64), RenderTextureCopyLocation::Subresource(texture.texture.get()));
++        const unsigned w = texture.width, h = texture.height;
++        Require(r.Flush() && r.WaitForReadback(), "readback fence");
++        const auto* data = static_cast<const uint64_t*>(readback->map()); Require(data, "readback map");
++        std::vector<uint64_t> result;
++        for (unsigned y = 0; y < h; ++y) for (unsigned x = 0; x < w; ++x) result.push_back(data[y * 64 + x]);
++        readback->unmap(); return result;
++    }
++    void CheckPixels(HostTexture& texture, uint64_t background, bool ui, const char* reason) {
++        auto pixels = Read(texture);
++        for (unsigned y = 0; y < texture.height; ++y) for (unsigned x = 0; x < texture.width; ++x) {
++            const bool marked = ui && (texture.width == 8 ? x == 3 && y == 3 : x == 1 && y == 1);
++            const uint64_t expected = marked ? 0x3a003c0000003c00ull : background;
++            ++pixelsChecked;
++            if (pixels[y * texture.width + x] != expected) {
++                std::fprintf(stderr, "%s %ux%u pixel %u,%u got=%016llx expected=%016llx\n", reason,
++                    texture.width, texture.height, x, y, (unsigned long long)pixels[y*texture.width+x], (unsigned long long)expected);
++                Require(false, reason);
++            }
++        }
++    }
++    void Run(unsigned restoreCase, bool fail) {
++        failRecording = fail; ++r.frame; r.activePlan = {};
++        r.activePlan.geometryEpoch = r.frame; r.activePlan.deviceEpoch = 1;
++        r.activePlan.cpuSerial = r.frame;
++        r.activePlan.width = r.activePlan.height = 4;
++        r.activePlan.output.width = r.activePlan.output.height = 8;
++        r.activePlan.output.x = 17; r.activePlan.output.y = 23; // Presentation-only offsets.
++        r.activePlan.consumer = gpu::upscaling::TemporalConsumer::DlssSr;
++        const RenderTargetKey key{7, 0, 1280, 0, false};
++        Require(r.Begin(), "begin frame");
++        auto low = std::make_unique<HostTexture>(); low->allocationSerial = ++r.nextTargetAllocation;
++        low->width = low->height = 4; low->guestWidth = 1280; low->guestHeight = 736;
++        low->resolutionSize = {4, 4}; low->format = RenderFormat::R16G16B16A16_FLOAT;
++        low->texture = r.device->createTexture(RenderTextureDesc::Texture2D(4, 4, 1, low->format, RenderTextureFlag::RENDER_TARGET));
++        Require(bool(low->texture), "low target");
++        HostTexture* color = low.get(); HostTexture* raster = color;
++        r.renderTargets[key] = std::move(low);
++        Clear(*color, RenderColor(.125f, .25f, .5f, .75f));
++        gpu::temporal::TemporalFrameInputs inputs;
++        inputs.plan = r.activePlan; inputs.renderFrameId = r.frame;
++        inputs.color = {color->texture.get(), {4,4}, 0,0,4,4};
++        const auto input = [&](RenderFormat format) {
++            auto image = std::make_unique<HostTexture>();
++            image->width = image->height = image->guestWidth = image->guestHeight = 4;
++            image->format = format;
++            image->texture = r.device->createTexture(RenderTextureDesc::Texture2D(4,4,1,format,RenderTextureFlag::RENDER_TARGET));
++            Require(bool(image->texture), "distinct typed temporal input");
++            auto* retained = image.get(); auxiliaryInputs.push_back(std::move(image));
++            Clear(*retained, RenderColor(0,0,0,0));
++            return gpu::temporal::TextureRegion{retained->texture.get(), {4,4}, 0,0,4,4};
++        };
++        inputs.depth = input(RenderFormat::R32_FLOAT);
++        inputs.motion = input(RenderFormat::R16G16_FLOAT);
++        inputs.motionInvalidity = input(RenderFormat::R8_UNORM);
++        inputs.currentInputsComplete = true; inputs.motionState = gpu::temporal::MotionState::ResetInitialization;
++        Require(!r.PrepareSceneCopyDestination(key, *color, inputs), "unknown color cannot promote");
++        inputs.colorEncoding = gpu::temporal::ColorEncoding::Sdr; // Only synthetic input is qualified.
++        auto& slot = r.Gpu(); const auto oldOffset = slot.uploadOffset;
++        slot.uploadOffset = kUploadRingSize - 1;
++        const auto oldSlot = r.gpuSlot;
++        Require(!r.PrepareSceneCopyDestination(key, *color, inputs), "late upload shortage bypasses");
++        Require(r.gpuSlot == oldSlot && r.listOpen, "late promotion never rotates slot");
++        slot.uploadOffset = oldOffset;
++        Require(r.PrepareSceneCopyDestination(key, *color, inputs), "prepare actual target");
++        auto& scratch = *r.sceneCopyPromotion.scratch;
++        r.Transition(scratch, RenderTextureLayout::COPY_DEST, RenderBarrierStage::COPY);
++        auto* nativeScratch = static_cast<VulkanTexture*>(scratch.texture.get());
++        VkClearColorValue sentinel{};
++        vkCmdClearColorImage(static_cast<VulkanCommandList*>(r.commandList)->vk, nativeScratch->vk,
++            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &sentinel, 1, &nativeScratch->imageSubresourceRange);
++        RenderViewport viewport(0, 0, 4, 4), guest(0, 0, 1280, 720);
++        RenderRect scissor{0,0,4,4}, guestScissor{0,0,1280,720};
++        Require(r.ActivateSceneCopyDestination(color, raster, viewport, scissor, guest, guestScissor), "activate actual mapping");
++        Require(color == raster && color == r.renderTargets[key].get() && color->width == 8 && color->height == 8, "map and raster agree");
++        Require(viewport.x == 0 && viewport.y == 0 && viewport.width == 8 && viewport.height == 8 && scissor.right == 8,
++            "presentation offsets never leak into raster coordinates");
++        // Stand-in for the guest scene-copy draw changes both RGB and alpha;
++        // all subsequent production composition/ordering uses its actual result.
++        Clear(*color, RenderColor(.5f, .25f, .125f, .25f));
++        const auto before = recordings;
++        r.sceneCopyPromotion.inputs.colorEncoding = gpu::temporal::ColorEncoding::Unknown;
++        Require(!r.RecordSceneCopyDlss(color, raster) && recordings == before && r.listOpen && !r.Gpu().srPrefixClosed,
++            "unknown color is rejected again at the vendor boundary");
++        r.sceneCopyPromotion.inputs.colorEncoding = gpu::temporal::ColorEncoding::Sdr;
++        const auto failures = gpu::frame_plan::fixtureFailures;
++        const bool applied = r.RecordSceneCopyDlss(color, raster);
++        Require(applied == !fail && recordings == before + 1, "vendor result routes actual continuation");
++        Require(r.Gpu().srPrefixClosed && r.Gpu().srContinuationOpen && r.listOpen, "three-list boundary recorded");
++        Require(r.Gpu().srIsolatedAccepted == !fail, "failed isolated list excluded");
++        Require(gpu::frame_plan::fixtureFailures == failures + (fail ? 1 : 0), "failure reports exactly once to CPU boundary");
++        const uint64_t expected = fail ? 0x3400300034003800ull : 0x34003a0038003400ull;
++        RenderRect ui{3,3,4,4}; Clear(*color, RenderColor(1,0,1,.75f), &ui);
++        Require(r.Flush() && r.Begin(), "ordinary mid-frame flush");
++        Require(r.sceneCopyPromotion.activeMapping && r.renderTargets[key].get() == color, "mapping survives slot rotation");
++        CheckPixels(*color, expected, true, "SR/guest-alpha/native-size UI");
++        CheckPixels(scratch, fail ? 0ull : 0x3c003a0038003400ull, false,
++            "failed isolated writes never reach queue; successful output is ordered");
++        // Force a ring rollover *inside restore*, after descriptors from the old
++        // slot were used. This was a real lifetime bug, not just a policy case.
++        if (restoreCase == 6) { Require(r.Begin(), "begin restore overflow"); r.Gpu().uploadOffset = kUploadRingSize - 1; }
++        auto nextKey = key; unsigned height = 736; bool depth = false;
++        switch (restoreCase) {
++        case 0: depth = true; break;
++        case 1: ++nextKey.pitch; break;
++        case 2: ++nextKey.format; break;
++        case 3: height = 768; break;
++        case 4: ++r.frame; break;
++        case 5: ++r.activePlan.geometryEpoch; break;
++        case 6: ++nextKey.base; break;
++        }
++        Require(r.PreparePromotionAccess(nextKey, height, depth), "actual restore boundary");
++        Require(!r.sceneCopyPromotion.activeMapping && r.renderTargets[key]->width == 4, "low mapping restored");
++        CheckPixels(*r.renderTargets[key], expected, true, "restored RGBA including UI");
++        Require(r.Flush() && r.WaitForGpu(), "completed frame");
++        r.framebuffers.clear(); r.renderTargets.clear(); auxiliaryInputs.clear();
++    }
++};
++}
++int main() {
++    try {
++        DeviceScope device;
++        Fixture fixture;
++        for (unsigned boundary = 0; boundary < 7; ++boundary) { fixture.Run(boundary, false); fixture.Run(boundary, true); }
++        std::printf("PASS: %u renderer mapping checks, %u RGBA16F pixels, %u synthetic vendor recordings; no NGX or game execution\n",
++            checks, pixelsChecked, recordings);
++        return 0;
++    } catch (const std::exception& error) {
++        std::fprintf(stderr, "FAIL: %s\n", error.what()); return 1;
++    }
++}
