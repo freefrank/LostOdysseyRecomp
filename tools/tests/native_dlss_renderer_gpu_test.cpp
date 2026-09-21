@@ -118,6 +118,19 @@ class Harness {
         R().commandList->setFramebuffer(R().GetFramebuffer(&t, nullptr));
         R().commandList->clearColor(0, color);
     }
+    void UploadPattern(HostTexture& t, const std::vector<uint64_t>& pixels) {
+        auto& r = R();
+        Require(r.Begin(), "upload pattern begin");
+        const uint32_t pitch = t.width;
+        const uint64_t bytes = uint64_t(pitch) * t.height * sizeof(uint64_t);
+        const uint64_t offset = r.Upload(pixels.data(), bytes, 512);
+        Require(offset != UINT64_MAX, "upload pattern buffer space");
+        r.Transition(t, plume::RenderTextureLayout::COPY_DEST, plume::RenderBarrierStage::COPY);
+        r.commandList->copyTextureRegion(
+            plume::RenderTextureCopyLocation::Subresource(t.texture.get()),
+            plume::RenderTextureCopyLocation::PlacedFootprint(r.uploadRing, t.format, t.width, t.height, 1, pitch, offset));
+        r.Transition(t, plume::RenderTextureLayout::COLOR_WRITE, plume::RenderBarrierStage::GRAPHICS);
+    }
     std::vector<uint64_t> Pixels(HostTexture& t) {
         auto& r = R(); Require(r.Begin(), "readback begin");
         r.Transition(t, plume::RenderTextureLayout::COPY_SOURCE, plume::RenderBarrierStage::COPY);
@@ -190,6 +203,7 @@ public:
         r.CreateDummyTexture(r.dummyTextureCube, plume::RenderTextureDimension::TEXTURE_2D, plume::RenderTextureFlag::CUBE);
         r.CompileBlitShaders(); r.CompileSceneCopyPromotionShaders();
         Require(r.blitVs && r.sceneCopyPromotionPs && r.sceneCopyPromotionRgbPs, "production shaders");
+        readbackPitch = 32;
         readback = device->createBuffer(plume::RenderBufferDesc::ReadbackBuffer(readbackPitch * 32 * 8));
         Require(bool(readback), "readback allocation");
     }
@@ -369,12 +383,161 @@ public:
         Require(r.Flush() && r.WaitForGpu(), "end case drain");
         r.framebuffers.clear(); r.renderTargets.clear();
     }
+    void RunExtentGrowth() {
+        auto& r = R(); ++r.frame;
+        const uint32_t base = 0;
+        const uint32_t pitch = 1280;
+        const uint32_t oldHeight = 736;
+        const uint32_t newHeight = 768;
+        const RenderTargetKey key{base, Renderer::ColorClassOf(0), pitch, 0, false};
+
+        // 1. Configure frame plan and internal resolution for scene target
+        // plan: input 160x90, output 320x180 (2x scaling).
+        r.internalSize = {160, 90};
+        r.activePlan.width = 160;
+        r.activePlan.height = 90;
+        r.activePlan.legacyWidth = 160;
+        r.activePlan.legacyHeight = 90;
+        r.activePlan.cpuSerial = r.activePlan.geometryEpoch = r.activePlan.deviceEpoch = r.frame;
+        r.activePlan.consumer = gpu::upscaling::TemporalConsumer::DlssSr;
+        r.activePlan.output = {{320, 180}, 0, 0, 320, 180};
+
+        // Mark surface role as Scene in catalog
+        {
+            std::lock_guard lock(gpu::renderer::catalogMutex);
+            gpu::renderer::catalogRoles[(uint64_t(base) << 32) | pitch] = gpu::frame_plan::SurfaceRole::Scene;
+        }
+
+        // 2. Allocate initial target via production GetRenderTarget
+        // Scale: 160/1280 = 1/8. Physical dims: guestWidth*1/8 = 160, guestHeight*1/8: 736/8 = 92.
+        HostTexture* initial = r.GetRenderTarget(base, 0, pitch, oldHeight, false);
+        Require(initial != nullptr, "initial GetRenderTarget failed");
+        Require(initial->width == 160 && initial->height == 92, "initial physical dimensions 160x92");
+        Require(initial->guestWidth == 1280 && initial->guestHeight == 736, "initial guest dimensions 1280x736");
+        const uint64_t initialAllocId = initial->allocationSerial;
+        const uint32_t initialWidth = initial->width;
+        const uint32_t initialHeight = initial->height;
+
+        // 3. Upload non-uniform RGBA16F pattern into initial target
+        std::vector<uint64_t> pattern(size_t(initialWidth) * initialHeight);
+        for (uint32_t y = 0; y < initialHeight; ++y) {
+            for (uint32_t x = 0; x < initialWidth; ++x) {
+                const uint16_t rCh = uint16_t(0x3000 + ((x * 17) & 0x3ff));
+                const uint16_t gCh = uint16_t(0x3400 + ((y * 23) & 0x3ff));
+                const uint16_t bCh = uint16_t(0x3800 + (((x * 7) + (y * 11)) & 0x3ff));
+                const uint16_t aCh = uint16_t(0x3c00 + ((x ^ y) & 0x3ff));
+                pattern[y * initialWidth + x] =
+                    (uint64_t(aCh) << 48) | (uint64_t(bCh) << 32) |
+                    (uint64_t(gCh) << 16) | uint64_t(rCh);
+            }
+        }
+        UploadPattern(*initial, pattern);
+
+        // 4. Synthetic temporal inputs and promote scene copy destination
+        auto depth = Texture(160, 92, plume::RenderFormat::R32_FLOAT);
+        auto motion = Texture(160, 92, plume::RenderFormat::R16G16_FLOAT);
+        auto invalid = Texture(160, 92, plume::RenderFormat::R8_UNORM);
+        LocalImageDrain imageDrain{device.get()};
+
+        gpu::temporal::TemporalFrameInputs inputs{};
+        inputs.plan = r.activePlan; inputs.currentInputsComplete = true;
+        inputs.depthConvention = gpu::temporal::DepthConvention::Forward;
+        inputs.motionState = gpu::temporal::MotionState::Tracked;
+        inputs.colorEncoding = gpu::temporal::ColorEncoding::HdrLinear;
+        inputs.color = {initial->texture.get(), {160, 90}, 0, 0, 160, 90};
+        inputs.depth = {depth->texture.get(), {160, 90}, 0, 0, 160, 90};
+        inputs.motion = {motion->texture.get(), {160, 90}, 0, 0, 160, 90};
+        inputs.motionInvalidity = {invalid->texture.get(), {160, 90}, 0, 0, 160, 90};
+
+        Require(r.PrepareSceneCopyDestination(key, *initial, inputs), "prepare scene copy promotion");
+        HostTexture* color = initial;
+        HostTexture* raster = color;
+        plume::RenderViewport guestVp(0, 0, 1280, 720), rasterVp;
+        plume::RenderRect guestScissor{0, 0, 1280, 720}, physScissor;
+        Require(r.ActivateSceneCopyDestination(color, raster, rasterVp, physScissor, guestVp, guestScissor), "activate promotion");
+        Require(r.sceneCopyPromotion.activeMapping && color != initial, "promotion mapping active");
+        Require(color->width == 320 && color->height == 184, "promoted target extent 320x184");
+
+        // 5. Clear a sub-rectangle in the promoted target: [32..64) x [24..48)
+        // With 2x scale (nearest/Load integer resample with p.x=2, p.y=2 during restore),
+        // each destination pixel at (pos.x, pos.y) samples base at (pos.x * 2, pos.y * 2).
+        // During restore: destination is parkedLow (160x92), source is promoted active (320x184).
+        // restore constants: transfer[0]=320/160=2.0, transfer[1]=184/92=2.0.
+        // pos in parkedLow in [16..32) x [12..24) will sample active in [32..64) x [24..48)!
+        constexpr uint64_t promotedClearPixel = 0x3c00000000000000ull; // black RGB, alpha 1.0 (0x3c00)
+        {
+            r.commandList->setFramebuffer(r.GetFramebuffer(color, nullptr));
+            plume::RenderRect promClearRect{32, 24, 64, 48};
+            r.commandList->clearColor(0, plume::RenderColor(0.0f, 0.0f, 0.0f, 1.0f), &promClearRect, 1);
+        }
+        Require(r.Flush(), "flush promoted clear");
+
+        // 6. Call GetRenderTarget with larger guest height 768 on the same base/pitch/format
+        // This triggers PreparePromotionAccess -> restores RGBA to parkedLow -> detects height 768 > 736
+        // -> allocates new target (160x96) -> copies overlapping 160x92 from old parkedLow into new target!
+        HostTexture* grown = r.GetRenderTarget(base, 0, pitch, newHeight, false);
+        Require(grown != nullptr, "grown target allocated");
+        Require(grown->allocationSerial != initialAllocId, "reallocated for growth");
+        Require(grown->width == 160 && grown->height == 96, "grown physical extent 160x96");
+        Require(grown->guestWidth == 1280 && grown->guestHeight == 768, "grown guest extent 1280x768");
+        Require(!r.sceneCopyPromotion.activeMapping, "promotion mapping closed by restore");
+
+        // 7. Perform a partial clear on the grown target at [4..12) x [5..9)
+        constexpr uint64_t grownClearPixel = 0x380000003c000000ull; // green 1.0, alpha 0.5 (0x3800)
+        Require(r.Begin(), "begin for grown clear");
+        r.Transition(*grown, plume::RenderTextureLayout::COLOR_WRITE, plume::RenderBarrierStage::GRAPHICS);
+        r.commandList->setFramebuffer(r.GetFramebuffer(grown, nullptr));
+        plume::RenderRect grownClearRect{4, 5, 12, 9};
+        r.commandList->clearColor(0, plume::RenderColor(0.0f, 1.0f, 0.0f, 0.5f), &grownClearRect, 1);
+
+        // 8. Read back 160x96 texels and verify
+        readbackPitch = 160;
+        readback = device->createBuffer(plume::RenderBufferDesc::ReadbackBuffer(uint64_t(readbackPitch) * grown->height * 8));
+        Require(bool(readback), "readback buffer allocation");
+
+        const auto grownPixels = Pixels(*grown);
+        Require(grownPixels.size() == size_t(grown->width) * grown->height, "grown readback size");
+
+        uint32_t checksCount = 0;
+        for (uint32_t y = 0; y < initialHeight; ++y) {
+            for (uint32_t x = 0; x < initialWidth; ++x) {
+                const uint64_t actual = grownPixels[y * grown->width + x];
+                uint64_t expected = pattern[y * initialWidth + x];
+
+                if (x >= 4 && x < 12 && y >= 5 && y < 9) {
+                    expected = grownClearPixel;
+                } else if (x >= 16 && x < 32 && y >= 12 && y < 24) {
+                    expected = promotedClearPixel;
+                }
+
+                if (actual != expected) {
+                    std::fprintf(stderr, "EXTENT_FAIL at (%u, %u): actual=0x%016llx expected=0x%016llx (alloc=%llu initial=%ux%u grown=%ux%u)\n",
+                        x, y, (unsigned long long)actual, (unsigned long long)expected,
+                        (unsigned long long)grown->allocationSerial, initialWidth, initialHeight, grown->width, grown->height);
+                    Require(false, "pixel mismatch in grown overlap region");
+                }
+                ++checksCount;
+            }
+        }
+
+        Require(r.Flush() && r.WaitForGpu(), "drain extent test");
+        r.framebuffers.clear(); r.renderTargets.clear();
+        {
+            std::lock_guard lock(gpu::renderer::catalogMutex);
+            gpu::renderer::catalogRoles.erase((uint64_t(base) << 32) | pitch);
+        }
+        std::printf("PASS_EXTENT: verified %u overlapping pixels (pattern, promoted-restore clear, and grown clear) across 160x92 -> 160x96 growth\n", checksCount);
+    }
 };
 }
 int main(int argc, char** argv) {
     try {
         const bool native = argc == 2 && std::string_view(argv[1]) == "--native";
-        if (argc > 1 && !native) { std::fprintf(stderr, "usage: %s [--native]\n", argv[0]); return 2; }
+        const bool extentOnly = argc == 2 && std::string_view(argv[1]) == "--extent-only";
+        if (argc > 1 && !native && !extentOnly) {
+            std::fprintf(stderr, "usage: %s [--native|--extent-only]\n", argv[0]);
+            return 2;
+        }
         std::setvbuf(stdout, nullptr, _IONBF, 0);
         Harness harness;
         harness.Init(native, std::filesystem::absolute(argv[0]).parent_path());
@@ -386,6 +549,10 @@ int main(int argc, char** argv) {
             harness.NativeRun(Q::Performance, 1920, 1080, true);
             harness.NativeRun(Q::Performance, 1920, 1080, false, true);
             std::puts("PASS: actual NGX + Renderer mapping/submit/alpha/restore; no gameplay or motion-response quality claim");
+            return 0;
+        }
+        if (extentOnly) {
+            harness.RunExtentGrowth();
             return 0;
         }
         for (unsigned reason = 0; reason < 7; ++reason) {

@@ -1,3 +1,7 @@
+#if defined(_WIN32) && !defined(NOMINMAX)
+#define NOMINMAX
+#endif
+
 #include <gpu/dlss_ngx.h>
 
 #include <cstdio>
@@ -88,6 +92,43 @@ int main(int argc, char** argv) {
     if (!device) {
         std::fputs("{\"state\":\"api_error\",\"reason\":\"Vulkan device creation failed\",\"stage\":\"base_vulkan_device\"}\n", stdout);
         return gpu::dlss::ProbeExitCode(gpu::dlss::ProbeState::ApiError);
+    }
+    struct ScopeDrain {
+        gpu::dlss::Controller& c;
+        ~ScopeDrain() { c.ShutdownAfterGpuDrain(); }
+    } drainGuard{controller};
+    if (argc >= 2 && std::string_view(argv[1]) == "--production-sizing") {
+        auto* vkInterface = static_cast<plume::VulkanInterface*>(renderInterface.get());
+        auto* vkDevice = static_cast<plume::VulkanDevice*>(device.get());
+        controller.ProbeOnce(*vkInterface, *vkDevice);
+        if (controller.Report().state != gpu::dlss::ProbeState::Available) {
+            std::printf("{\"status\":\"probe_unavailable\",\"state\":\"%s\",\"reason\":\"%s\"}\n",
+                gpu::dlss::ProbeStateName(controller.Report().state),
+                Escape(controller.Report().reason).c_str());
+            return gpu::dlss::ProbeExitCode(controller.Report());
+        }
+        const auto sizing720 = controller.QueryOutputSizing(*vkInterface, *vkDevice, {1, 1280, 720});
+        const auto sizing1440 = controller.QueryOutputSizing(*vkInterface, *vkDevice, {1, 2560, 1440});
+
+        const auto& q720 = sizing720.modes[0];
+        const auto& q1440 = sizing1440.modes[0];
+        const bool ok720 = q720.state == gpu::upscaling::SizingState::Ready &&
+            q720.optimal.width > 0 && q720.optimal.height > 0 &&
+            q720.optimal.width < 1280 && q720.optimal.height < 720;
+        const bool ok1440 = q1440.state == gpu::upscaling::SizingState::Ready &&
+            q1440.optimal.width > 0 && q1440.optimal.height > 0 &&
+            q1440.optimal.width < 2560 && q1440.optimal.height < 1440;
+
+        std::printf("{\"status\":\"%s\",\"calls\":[", (ok720 && ok1440) ? "ok" : "failed");
+        for (size_t i = 0; i < controller.Report().calls.size(); ++i) {
+            std::printf("%s{\"name\":\"%s\",\"raw\":%d}", i ? "," : "",
+                Escape(controller.Report().calls[i].name).c_str(), controller.Report().calls[i].result);
+        }
+        std::printf("],\"sizing720\":{\"state\":%u,\"optimal\":[%u,%u],\"min\":[%u,%u],\"max\":[%u,%u]},"
+                    "\"sizing1440\":{\"state\":%u,\"optimal\":[%u,%u],\"min\":[%u,%u],\"max\":[%u,%u]}}\n",
+            uint32_t(q720.state), q720.optimal.width, q720.optimal.height, q720.minimum.width, q720.minimum.height, q720.maximum.width, q720.maximum.height,
+            uint32_t(q1440.state), q1440.optimal.width, q1440.optimal.height, q1440.minimum.width, q1440.minimum.height, q1440.maximum.width, q1440.maximum.height);
+        return (ok720 && ok1440) ? 0 : 1;
     }
     if (argc == 4 && std::string_view(argv[1]) == "--sizing") {
         const uint32_t width = uint32_t(std::strtoul(argv[2], nullptr, 10));

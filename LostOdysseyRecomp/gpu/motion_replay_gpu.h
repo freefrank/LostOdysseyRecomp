@@ -6,6 +6,7 @@
 #include "shader/motion_replay_hlsl.h"
 #include "shader/dxc_compiler.h"
 #include <bit>
+#include <cstdint>
 #include <chrono>
 #include <future>
 #include <memory>
@@ -60,6 +61,7 @@ class MotionReplayGPU {
     std::unordered_map<Key, std::unique_ptr<plume::RenderPipeline>, KeyHash> pipelines_;
     plume::RenderDevice* device_ = nullptr;
     bool vulkan_ = false, initialized_ = false, cleared_ = false, finalized_ = false, aborted_ = false;
+    bool pendingThisFrame_ = false, injectPreparePending_ = false;
     uint64_t frame_ = ~0ull, epoch_ = 0, allocation_ = 0, serial_ = 0, targetGeneration_ = 0;
     uint32_t width_ = 0, height_ = 0;
     const plume::RenderTexture* boundDepth_ = nullptr;
@@ -211,15 +213,30 @@ public:
     uint64_t MaskBatchAllocations() const {return maskBatchAllocations_;}
     bool Ready() const { return initialized_; }
     bool UsableThisFrame() const { return initialized_ && !aborted_ && !finalized_; }
+    bool PipelinePendingThisFrame() const { return pendingThisFrame_; }
+    bool SceneReadyThisFrame() const { return cleared_ && !aborted_; }
+    bool AbortedThisFrame() const { return aborted_; }
     const std::string& LastError() const { return error_; }
+    enum class PipelinePrepareStatus : uint8_t { Ready, Pending, Failed };
+    struct SceneDrawPrepare {
+        PipelinePrepareStatus status = PipelinePrepareStatus::Failed;
+        plume::RenderPipeline* pipeline = nullptr;
+        bool sceneReady = false;
+    };
+    // Deterministic test inject: next wait=false prepare reports Pending without racing compiles.
+    void InjectNextPreparePending() { injectPreparePending_ = true; }
     void BeginFrame(uint64_t frame, uint64_t epoch) {
         if (frame_ == frame && epoch_ == epoch) return;
-        frame_ = frame; epoch_ = epoch; cleared_ = finalized_ = aborted_ = false;
+        frame_ = frame; epoch_ = epoch; cleared_ = finalized_ = aborted_ = pendingThisFrame_ = false;
+        injectPreparePending_ = false;
         drawCount_ = failedDraws_ = 0;
+    }
+    void AbortFrame(std::string_view reason = {}) {
+        aborted_ = true;
+        if (!reason.empty()) error_ = std::string(reason);
     }
     // Whole-frame fallback is used for unsupported visibility writes (stencil,
     // PS depth, unknown scene view), never fabricated stationary vectors.
-    void AbortFrame() { aborted_ = true; }
     bool BeginScene(plume::RenderCommandList* commands, uint64_t allocation, plume::RenderTexture* depth,
         uint32_t width, uint32_t height) {
         if (!initialized_ || aborted_ || finalized_ || !commands || !depth || !width || !height || width > 7680 || height > 4320) return false;
@@ -254,15 +271,37 @@ public:
         ++serial_; cleared_ = true; return true;
     }
     plume::RenderPipeline* PreparePipeline(const Key& key, plume::RenderGraphicsPipelineDesc desc,
-        const uint32_t* vsWords, uint32_t vsCount, const uint32_t* psWords, uint32_t psCount, bool wait = false) {
-        auto found = pipelines_.find(key); if (found != pipelines_.end()) return found->second.get();
-        if (desc.geometryShader || desc.stencilEnabled || !desc.depthEnabled) { ++failedDraws_; return nullptr; }
+        const uint32_t* vsWords, uint32_t vsCount, const uint32_t* psWords, uint32_t psCount, bool wait = false,
+        PipelinePrepareStatus* status = nullptr) {
+        const auto setStatus = [&](PipelinePrepareStatus value) { if (status) *status = value; };
+        // One-shot fixture inject: wait=false reports Pending even for a warm cache.
+        // pendingThisFrame_ stays set for the rest of the frame; Ready must not clear it.
+        if (injectPreparePending_ && !wait) {
+            injectPreparePending_ = false;
+            pendingThisFrame_ = true;
+            setStatus(PipelinePrepareStatus::Pending);
+            return nullptr;
+        }
+        auto found = pipelines_.find(key);
+        if (found != pipelines_.end()) {
+            if (!found->second) { setStatus(PipelinePrepareStatus::Failed); return nullptr; }
+            setStatus(PipelinePrepareStatus::Ready);
+            return found->second.get();
+        }
+        if (desc.geometryShader || desc.stencilEnabled || !desc.depthEnabled) {
+            ++failedDraws_; setStatus(PipelinePrepareStatus::Failed); return nullptr;
+        }
         auto& vs = GetModule(false, key.vs, vsWords, vsCount, wait);
         auto& ps = GetModule(true, key.ps, psWords, psCount, wait);
         if (!vs.shader || !ps.shader) {
+            if (vs.error.empty() && ps.error.empty()) {
+                pendingThisFrame_ = true;
+                setStatus(PipelinePrepareStatus::Pending);
+                return nullptr;
+            }
             ++failedDraws_;
             error_ = vs.error + ps.error;
-            if (error_.empty()) error_ = "Replay shader compilation pending";
+            setStatus(PipelinePrepareStatus::Failed);
             return nullptr;
         }
         desc.pipelineLayout = layout_.get(); desc.vertexShader = vs.shader.get(); desc.pixelShader = ps.shader.get();
@@ -274,9 +313,20 @@ public:
         desc.renderTargetFormat[2] = plume::RenderFormat::R32_UINT;
         for (unsigned i = 0; i < 3; ++i) desc.renderTargetBlend[i] = plume::RenderBlendDesc::Copy();
         auto pipeline = device_->createGraphicsPipeline(desc);
-        auto* result = pipeline.get(); pipelines_.emplace(key, std::move(pipeline));
-        if (!result) { ++failedDraws_; error_ = "MV pipeline allocation failed"; }
+        auto* result = pipeline.get();
+        if (!result) { ++failedDraws_; error_ = "MV pipeline allocation failed"; setStatus(PipelinePrepareStatus::Failed); return nullptr; }
+        pipelines_.emplace(key, std::move(pipeline));
+        setStatus(PipelinePrepareStatus::Ready);
         return result;
+    }
+    SceneDrawPrepare PrepareSceneDraw(plume::RenderCommandList* commands, uint64_t allocation, plume::RenderTexture* depth,
+        uint32_t width, uint32_t height, const Key& key, plume::RenderGraphicsPipelineDesc desc,
+        const uint32_t* vsWords, uint32_t vsCount, const uint32_t* psWords, uint32_t psCount, bool wait = false) {
+        SceneDrawPrepare prepared;
+        prepared.sceneReady = BeginScene(commands, allocation, depth, width, height);
+        if (!prepared.sceneReady) return prepared;
+        prepared.pipeline = PreparePipeline(key, desc, vsWords, vsCount, psWords, psCount, wait, &prepared.status);
+        return prepared;
     }
     bool Draw(plume::RenderCommandList* commands, plume::RenderPipeline* pipeline,
         const plume::RenderBufferReference (&constants)[4], plume::RenderDescriptorSet* const* sets, uint32_t setCount,
@@ -300,6 +350,7 @@ public:
         const std::vector<uint32_t>& validity, bool resetInitialization = false) {
         MotionFrameView result;
         if (!cleared_ || aborted_ || finalized_ || !currentDepth || !commands || validity.empty() || validity.size() > DrawTemporalTracker::kMaxDraws + 1) return result;
+        if (pendingThisFrame_) { finalized_ = true; return result; }
         finalized_ = true;
         if (pending_.size() >= kMaxBatches) { error_ = "MV in-flight batch bound exceeded"; aborted_ = true; return result; }
         std::unique_ptr<MaskBatch> batch;

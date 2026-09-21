@@ -19,6 +19,15 @@ Optional diagnostics are off by default and can be disabled in Settings. See [Pr
 > [!IMPORTANT]
 > **This project is still in early testing.** Opening areas and selected scenes have been tested; a complete playthrough has not. Rendering and stability issues remain. You must supply your own supported game files.
 
+### Experimental native DLSS SR
+
+Native NVIDIA DLSS Super Resolution is experimental development work, not a
+general released or player-ready feature. A local Windows SDK-on build has
+demonstrated live-game NGX SR on an RTX 5080 in one tested scene at Quality
+(1707x960 to 2560x1440, DisplayEncoded color and reversed-Z depth). Visual
+quality, motion response, occlusion, UI, reset behavior and player acceptance
+remain unclaimed. See the [native DLSS validation record](docs/notes/native-dlss-validation.md).
+
 ## v0.6.7 release
 
 Published release [v0.6.7](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.7) on 2026-09-20T20:09:28Z from source `f92c24d` via Release CI [35533399325](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35533399325) as the latest public release. It adds an in-game Graphics menu Widescreen switch and expanded 21:9 resolution presets (1720×720, 2560×1080, 3440×1440, 3840×1600, 5120×2160), with closest vertical height matching when toggling aspect ratio, automatic detection for existing configurations, and synchronization with first-launch setup across 5 languages. Issue #17 is resolved and closed.

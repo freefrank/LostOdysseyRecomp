@@ -713,8 +713,17 @@ namespace gpu::video
             if (g_vulkan && g_dlssController && settings::GetConfig().upscaler == upscaling::Upscaler::Dlss) {
                 const auto output = upscaling::ResolveOutputRegion({g_swapChain->getWidth(), g_swapChain->getHeight()});
                 const upscaling::SizingKey key{g_deviceEpoch.load(std::memory_order_acquire), output.width, output.height};
-                frame_plan::PublishSizing(upscaling::SizingService::QueryOutputSizing(*g_dlssController,
-                    *static_cast<plume::VulkanInterface*>(g_interface.get()), *static_cast<plume::VulkanDevice*>(g_device.get()), key));
+                const auto sizing = upscaling::SizingService::QueryOutputSizing(*g_dlssController,
+                    *static_cast<plume::VulkanInterface*>(g_interface.get()), *static_cast<plume::VulkanDevice*>(g_device.get()), key);
+                const auto qualityIndex = static_cast<size_t>(settings::GetConfig().dlssQuality);
+                const auto& activeMode = sizing.modes[qualityIndex < sizing.modes.size() ? qualityIndex : 0];
+                if (activeMode.state != upscaling::SizingState::Ready) {
+                    LOG_ERROR("video: DLSS initial sizing failed stage=QueryOutputSizing quality={} state={} native_result={} output={}x{} device_epoch={}",
+                        qualityIndex, uint32_t(activeMode.state),
+                        activeMode.ngxResult ? std::to_string(*activeMode.ngxResult) : "unavailable",
+                        output.width, output.height, key.deviceEpoch);
+                }
+                frame_plan::PublishSizing(sizing);
             }
             LogOutputPixels("created");
             g_uploadCapacity = uint64_t(kMaxWidth) * kMaxHeight * 4;

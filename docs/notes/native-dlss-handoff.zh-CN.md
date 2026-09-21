@@ -3,18 +3,71 @@
 日期：2026-09-21
 特性分支：`dlss`
 基线提交：`main@5b765f617ec511a2f76aa9da7923a8c122679d2c`
-已推送到远端的阶段提交：`origin/dlss` @ `91bf37ea846189f5e7b1f4c12ca631e5ed510203`（P0: `089676f`，P1 尺寸: `c6bc50b`，P1 输入: `3f40030`，文档: `91bf37e`）
-当前状态：2026-09-21 已恢复 P2 开发并分项推送；输入/提交生命周期、目标提升边界和合成测试已补强。P2 尚未完成，Gate 3 未通过，游戏内 SR 仍受未知颜色编码守卫保护。历史检查点与 RTX 记录保留，下方续开发结果优先于历史暂停状态。
+当前最新代码提交：`origin/dlss` @ `c2f0602`
+当前状态：2026-09-21 持续推进 P2 阶段开发与审阅。最新有界运行记录已在 RTX 5080 上确认真实游戏生产 NGX SR：Quality `1707x960 -> 2560x1440`、DisplayEncoded、reversed-Z；记录为 1 次成功 Create、24 条保留的成功 Evaluate（受 128 条上限限制，不代表总调用数），隔离 use `10684` 的提交序号 `23614` 已接受并提交，快照中仍在处理中；`completed through 23612` 是更早的 SR 完成水位。未记录失败。Gate 3 未通过，未进行视觉或玩家验收。历史 P0/P1、native5、composite、f11889 与 f2347 证据继续保留原有边界。
 
 ---
 
-## 2026-09-21 续开发结果
+## 2026-09-21 续开发与只读审阅结果
 
-已新增 CPU-only CMake/CTest 与 Windows/Linux CI，修复晚期目标提升中的隐式 Flush、附件借用前的恢复顺序、深度/尺寸不匹配、NGX feature 安全重配置、提交 use 的 fence 生命周期、SR 有效区域外的填充像素，以及输入区域整数溢出。
+### 最新代码演进与边界校正
 
-详细提交、复现命令和证据范围见 [P2 续开发记录](native-dlss-p2-progress-2026-09-21.md)。新证据包括 5 组本地 CPU 测试、实际 renderer 编译单元、SDK 开/关构建与 report 测试，以及软件 Vulkan 执行生产像素 shader 的 256 个 FP16 RGBA 精确读回检查；本轮未运行 RTX NGX 或完整游戏。
+在 `dlss` 分支上，代码已推进至 `c2f0602`：
+- `59e9dce`：修复生产渲染器主路径，在 recording、submit 或 fence wait 失败时设置 fatal 闭锁、排空队列并阻止后续 GPU 任务提交。
+- `19415e4`：测试 fixture 在 Vulkan 上真实执行生产 Prepare/Activate/Record/Flush/Restore 与 mock NGX 分发。
+- `0a2af46`：将 reversed-Z 输入约定贯穿到 NGX feature 创建 flags。
+- `4047d6f`：新增 `LoNativeDlssRendererTest`，在真实 `gpu::dlss::Controller` 与生产 `Renderer` 之间执行原生编排。
+- `9375608`：在嵌入式渲染器测试 fixture 中隔离未使用的游戏入口符号依赖。
+- `c2f0602`：在 Windows 构建中链接真实的 portable-pack zstd 解压缩依赖。
 
-仍需运行时颜色资格证据、完整目标映射路径验证，以及提交失败/设备丢失后的终止状态与 fence 等待处理。禁止据此删除 `Unknown` 守卫或标记 Gate 3 通过。下文暂停/取消复审文字描述的是此前检查点，不代表本次没有继续开发。
+此前文档将“完整目标映射与致命错误处理”笼统称为“未实现”，该表述已过时。当前准确边界为：生产渲染器已实现了核心映射、槽位安全的晋升/恢复以及失败时的 fatal 闭锁与队列排空机制；仍有 `LO_NO_RENDERER` 关闭排空边界和旧执行 fixture 未检查 `void` fence wait 两个缺口。
+
+### 已有 CI 验证结果
+
+1. **主仓库 `dlss` CI (`c2f0602`)**：[Run 35629006599](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35629006599) 6 项 CPU 测试全部通过。
+2. **Workbench Linux CI (检出候选 `c2f06023b7dfddc92d4413eae2ac7541492c1354`)**：[Run 35629333836](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35629333836) 7 项 CPU 测试通过；CTest 注册的两项测试分别执行：`LoNativeDlssRendererTest`（mock 路径）在 llvmpipe 下通过；`LoNativeDlssRendererNativeTest`（`--native`）在缺少 NVIDIA 硬件时返回跳过码 77。
+3. **Workbench Windows CI (检出 `9375608` + workbench 链接修正)**：[Run 35628539860](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35628539860) 成功编译未执行。目前尚无针对 `c2f0602` exact HEAD 的 Windows 编译验证运行。
+
+### Oracle 只读审阅发现的 3 个具体缺口与收口修复
+
+1. **目标尺寸增长晋升丢失重叠区数据 (`renderer.cpp:1753–1773, 3158–3199`)**：
+   在渲染目标晋升过程中，若发生尺寸增长（extent-growth），原实现恢复至 `parkedLow`，随后 `GetRenderTarget` 重新分配并退休旧目标导致重叠区像素数据未被保留。
+   - *最终修复收口*：已限制在严格同 scale、同 width 的颜色高度扩容（`tex->guestHeight > oldTarget->guestHeight` 且 `tex->height >= oldTarget->height`），执行 1:1 的 `copyTextureRegion`。若 `Begin()` 失败则记录错误并返回 `nullptr`，安全退休资源。废弃的生产自检测试接口已被移除。
+   - *独立硬件测试验证*：在独立测试工程中使用 `--extent-only`（`RunExtentGrowth`），针对真实 key 驱动客户机尺寸 1280×736 至 1280×768（内部分辨率 160×90 至输出 320×180，2× scale），对应物理尺寸从 160×92 扩容至 160×96（提升尺寸 320×184）。测试覆盖非均匀图案上传、提升目标局部清空、`GetRenderTarget` 自动恢复扩容、以及扩容后局部清空，验证了全部 14,720 个重叠区像素完全精确匹配（日志 `.cache/evidence/p2-native-run/extent_growth_regression_rev3.log`）。首版 142 checks 与 rev2 崩溃（根因为测试 fixture 解引用已退休的 `HostTexture` 野指针 `0xDDDDDDDD`）已不再作为证据。
+2. **`LO_NO_RENDERER` 无渲染器路径缺失最终排空 (`video.cpp:522–545`)**：
+   在无 `g_renderer` 的环境或工具路径中，若 `WaitForPresentGpu` 失败，代码仍直接销毁 presentation 资源。当前渲染器的 `Shutdown` 排空仅在 `g_renderer` 存在时调用；`video.cpp` 自身必须提供独立的最终安全排空边界。
+3. **旧测试 fixture 未检查 Plume 提交/等待结果 (`native_dlss_execution_test.cpp:156–159, 180–183, 199–202, 231–234`)**：
+   旧的独立执行测试使用的是 Plume 的 `executeCommandLists()` 与 `waitForCommandFence()`，两者均返回 `void`，测试在调用后未检查底层原生 submit/wait 状态即无条件发布 serial 并调用 `ReleaseCompletedThrough`，因而无法覆盖和证明失败时的 fatal 闭锁与排空路径。该缺口依然保留在旧测试中。本轮优先采用新研发的 `LoNativeDlssRendererTest` 生产编排，以避免重复修补旧哨兵机制，但旧测试缺陷本身尚未消除。
+
+### Sizing 会话持久化修复与 RTX 验证 (`dlss_ngx.cpp`, `video.cpp`, `native_dlss_probe.cpp`)
+
+针对 `QueryOutputSizing` 因 `ProbeOnce` 退出调用 `Shutdown(true)` 导致后续查询缺少会话返回 `0xBAD00012` 的问题：
+1. **Controller 会话持久化**：`gpu::dlss::Controller::QueryOutputSizing` 在当前接口/设备匹配时，若会话未初始化则显式调用 `EnsureSession(device)` 后再查询参数。错误分支使用 `std::nullopt` 代替猜测 raw 结果。
+2. **Video 诊断日志**：`video.cpp` 在当前模式未处于 `Ready` 时输出阶段 `QueryOutputSizing` 详细日志（包含质量等级、状态、原生返回码、目标尺寸与设备周期）。
+3. **Probe 安全清理**：`native_dlss_probe.cpp` 增加 `ScopeDrain` 确保在设备销毁前执行 `ShutdownAfterGpuDrain`，并返回真实 `ProbeExitCode`。
+4. **RTX 硬件验证**：在本地 RTX 5080 上执行 `LoNativeDlssProbe --production-sizing`（`.cache/evidence/native-dlss-p2-sizing-fix.json`），验证生产调用顺序（`ProbeOnce` -> `Query 1280x720` -> `Query 2560x1440`）全部返回 `status: ok`，推荐 Quality 输入分别为 853×480 与 1707×960。上述微调只需编译确认，不重跑尺寸查询。
+
+上述问题均不构成阻碍下一轮原生 RTX 测试或离线 `Unknown` 色彩捕获的 P0/P1 问题，但阻止授予 Gate 3 验收。
+
+### 2026-09-21 前台实机帧捕获与色彩链路分析
+
+`LostOdysseyRecomp` 在隔离工作目录 `out/p2-game-cwd-c2f0602`（游戏资产位于 `LostOdysseyRecompLib/private/disc1`）以前台可见窗口（PID 42720）启动运行。用户进入 3D 场景并按下 `F1` 触发渲染状态捕获：
+- **捕获触发机制修正**：文档之前所述 `LO_CAPTURE_REQUEST` 仅设置 `captureFrame` 触发传统的单帧 root dump（如 frame 2909），不会调用 `RequestDebugCapture`。本轮完整的连续 3 帧捕获是由游戏内 `F1` 键触发生成，产物为 `out/p2-game-cwd-c2f0602/captures/render-17900119851502951-f11889.zip`，`capture-info.txt` 确认包含完整的 11889–11891 三帧数据。后续无需用户针对相同色彩链路重复抓帧。
+- **色彩链路确证**：通过只读审阅 `p2-oracle.jsonl`、render-state 与着色器，确证完整链路：
+  1. HDR 场景缓冲：Allocation 9，地址 `0x09fa0000`，guest format 32。
+  2. 后处理 Tonemap Draw 632：VS `9b81c55ca39bb529`，PS `b4b4d54a7a2d6b96`，目标为 EDRAM Allocation 3（guest base 十进制 720，即 `0x2d0`，format 0，FP16 host 10，1280×736，有效区域 1280×720），`colorMask = 7`（保留 alpha）。
+   3. 常量确证：PS 常量 `c10.x = 0x3ee8ba2e` (`0.4545454383` ≈ `1.0 / 2.2`) 三帧严格一致，数学表达式为 `pow(saturate(M + 0.1725 * bloom), 1.0 / 2.2)`，输出确认为针对该捕获链路的**显示编码 SDR**（gamma 2.2 曲线），并非精确的标准 sRGB transfer、非已解码、亦非线性 HDR。该结论严格限定于本次分析链路，不向全游戏泛化。
+  4. Resolve 与采样：Resolve 至 Allocation 20（`R8G8B8A8_UNORM`），带 RB 交换；Draw 659（VS `8bbd4da701845d16`，PS `cda578aef1724fdc`，`colorMask = 15`，copy blend `ONE / ZERO / ADD`）采样 `shared_texture_info = 0x00160a00`，`sign = 0`（fetch BGR）。RB 交换与 fetch BGR 净效果为恒等映射，无额外 gamma。Draw 632 与 659 之间的 24 次 Draw 均为 `(colorMask & 7) == 0`（深度/模板或仅 alpha 写）。Draw 660 开始绘制 UI，最终输出到前缓冲 Allocation 4（`0x00714000`）。写版本号逐帧递增：Alloc 9 为 207457/207475/207493，Alloc 20 为 207464/207482/207500，Frontbuffer 为 207465/207483/207501。
+   5. 关键历史捕获观察：`candidate_ready = true`，但 `temporal_history_verified = false`；该旧三帧计划均为 `consumer = 0 (None)`，`input = 1280x720`，`output = 1280x720`，`epoch = 1`。这是启动阶段 sizing 会话尚未持久化时的捕获结果，不是当前实现状态；Sizing Session Persistence 修复已由 `.cache/evidence/native-dlss-p2-sizing-fix.json` 验证，后续 live-game 记录已确认 `1707x960 -> 2560x1440` 的 qualified SR 生产执行。该历史捕获不应被解读为当前低分辨率仍未验证。
+- 完整的轻量化 SDR 色彩资格追踪与几何判定规范已记录在 [docs/notes/native-dlss-color-qualification-plan.md](native-dlss-color-qualification-plan.md)。
+
+### 新原生测试 `LoNativeDlssRendererTest` 的能力与边界
+
+- **可验证范围（执行后）**：Quality 模式复用、Balanced 模式切换、Performance 模式 1080p 重配置、非零有限浮点 RGB 与 Alpha 读回、不兼容目标恢复，以及 Evaluate 失败后的降级回退。
+- **不可验证范围**：不能证明运动矢量响应、抖动消除、reversed-Z 深度视觉正确性（测试采用恒定 0.5 深度、零运动矢量与均匀纯色）、真实呈现队列同步、`video.cpp` 呈现边界、客户机 `DrawImpl` 真实绘制管线及性能开销。
+- 软件 mock fixture 替代的是平台抽象边界，不能替代真实硬件执行。
+
+---
 
 ## 1. 阶段状态总览与总体边界
 
@@ -22,14 +75,15 @@
 
 1. **P0 基础与桥接（已通过并推送到远端）**：Vulkan 扩展协商、Plume 外部命令流桥接、NGX 官方能力探测（`LoNativeDlssProbe`）、缺失运行库受控退出（exit 1）。
 2. **P1 时序输入与计划（已通过并推送到远端）**：CPU 帧计划器 24-word 快照、真实低内部分辨率光栅化、NGX 目标尺寸查询缓存、渲染器 pre-TAA 颜色、R32 深度与未抖动几何运动矢量采集、GPU fence 生命周期管理、`LO_DLSS_INPUT_PROBE=1` 诊断模式。
-3. **P2 执行与目标提升（已提交未完成检查点，已暂停）**：
-   - Lane A 完成了持久化 NGX 会话控制器（`gpu::dlss::Controller`），支持 `NGX_VULKAN_CREATE_DLSS_EXT1` 与 `NGX_VULKAN_EVALUATE_DLSS_EXT` 录制，并对原生 Vulkan `vkResetCommandBuffer`、`vkBeginCommandBuffer`、`vkEndCommandBuffer` 实施校验。独立求值测试 `LoNativeDlssExecutionTest` 通过。
+3. **P2 执行与目标提升（开发持续进行中，已确认有界生产执行）**：
+   - Lane A 完成了持久化 NGX 会话控制器（`gpu::dlss::Controller`），支持 `NGX_VULKAN_CREATE_DLSS_EXT1` 与 `NGX_VULKAN_EVALUATE_DLSS_EXT` 录制，并对原生 Vulkan `vkResetCommandBuffer`、`vkBeginCommandBuffer`、`vkEndCommandBuffer` 实施校验。
    - Lane B 完成了渲染器侧 SR 路由调度、单调提交序号追踪、未知色彩编码旁路保护、基于停放低分辨率目标的目标提升架构以及诊断捕获钩子（`p2-oracle.jsonl`）。
-   - 生产端重采样函数（`DrawPromotionResample`）通过入口自检参数 `--self-test-scene-copy-promotion`（源码门禁宏 `LO_RENDERER_P2_SELFTEST` 默认 `OFF`）在本地 RTX 5080 上完成验证（4×4 升至 8×8，64 个 RGBA 像素 0 不匹配，1 字节 alpha 容差）。
-   - 初审提出的 4 项修复（SR 读回守卫、验证层宏显式开关、JSON 括号闭合、自检析构前等待 GPU 队列完成）已全部修改并通过针对性验证（包含自检资源清理与重采样验证 `evidence-cleanup/native-dlss-p2-resample.json`，mismatch 0）。依用户明确指示，取消形式化复审，不宣称 Gate 3 通过，工作暂停交接。
+   - 生产端重采样函数（`DrawPromotionResample`）在历史测试中完成了本地 RTX 5080 验证。
+   - 历史暂停记录属于此前的检查点状态；当前 P2 已恢复持续开发与推进，但未达完成与验收标准。
 4. **P3 与后续边界**：
+   - 当前状态修正：`.cache/evidence/game-sr-runtime.json` 已确认有界的真实游戏 SR 调度；实际物理上传 quad、精确 resolve ordinal 与 net RGB view 的 SDR 路径已通过资格边界，其他候选路径仍为 `Unknown`。画质、运动响应、遮挡、UI、重置行为和玩家验收仍未确认。
    - 游戏默认色彩编码保持为未知状态（`ColorEncoding::Unknown`），受静态审查守卫保护，在游戏运行时完全绕过 SR 评估调用。
-   - 尚未在实际游戏过程中进行 DLSS 调度，不能向玩家宣称 DLSS 在游戏中可用。
+   - 已在真实游戏过程中确认有界的 DLSS SR 调度，但不能据此向玩家宣称画质、运动响应、遮挡、UI、重置行为或整体可用性已经验收。
    - Linux 原生运行跳过未跑；包含 SDK 的二进制分发许可尚待确定，不提供二进制安装包发布。
 
 ---
@@ -141,26 +195,30 @@ Set-Location out/build/windows-clang/p2-bootstrap-cwd
 
 ## 6. 接手代理的首要行动项 (Next Agent Action Items)
 
-后续接手代理开展工作时，原则上复用已通过的 P0/P1 测试（62 项 CPU、112 项 GPU 检查）与 P2 独立测试结论；仅当直接影响对应结论的行为或编译配置发生变更、或出现新的失败证据时，才重跑直接受影响的最小项目。首要行动如下：
+后续接手代理开展工作时，原则上复用已通过的 P0/P1 测试（62 项 CPU、112 项 GPU 检查）与 P2 独立测试结论；仅当直接影响对应结论的行为或编译配置发生变更、或出现新的失败证据时，才重跑直接受影响的最小项目。执行顺序如下：
 
-### 第一步：获取真实像素着色器常量与生产管线资格
-- 离线分析已知后处理像素着色器 `b4b4d54a7a2d6b96` 最终 RGB 计算为 `exp2(c10.x * clamped log2(v))`，指数依赖运行时常量 `c10.x`。已知 UNORM 存储格式不代表确定为 gamma 还是线性。
-- 启动三帧诊断捕获，从 `p2-oracle.jsonl` 中采集实际运行时的像素着色器常量（`c0`–`c10`、`c255`）以及完整的 `producer -> resolve -> copy` 资源分配与版本链条。
-- 在未完成上述捕获资格认定前，保持 `ColorEncoding::Unknown` 旁路保护不变，严禁盲目向实际游戏开启 SR 调度。
+### 第一步：本机原生 RTX 5080 执行验证证据（已完成实测）
 
-### 第二步：核验与修复生产端目标晋升映射 (Destination Promotion Mapping)
-当前代码库中已包含目标晋升基础实现，接手代理不应从零重复实现，而应重点核验、修复并在生产测试中验证：
-1. **核验已冻结的目标上下文**：确认 `DrawImpl` 中在 `fullSceneCopy`、`ObserveColor` 及输入尺寸校验后冻结的上下文正确性：
-   - 存储键：`key = {colorInfo & 0xFFF, ColorClassOf((colorInfo >> 16) & 0xF), pitch, 0, false}`。
-   - 原始颜色分配序号、客户机格式/尺寸（`guestWidth`/`guestHeight`）、物理分辨率及宿主格式。
-   - 几何周期 `activePlan.geometryEpoch` 及输入/输出尺寸（`input.width/height`，`output.width/height`）。
-   - 未缩放的客户机视口与窗口偏移剪裁区（注意 `output.x/y` 属于呈现阶段，不可在此叠加）。
-   - 晋升目标分辨率与通过 `ScaleX/ScaleY` 推导对齐后的物理缓冲分配。
-2. **核验激活与停放管理**：
-   - 确认在最终帧缓冲区绑定前激活晋升目标：旧目标 RGBA 重采样至晋升目标，置换 `renderTargets[key]` 映射，原低分辨率目标保留在 `parked` 字段中供后续操作复用。
-   - 保证在激活与后续绘制之间不发生因 Upload 引起的隐式 Flush。
-3. **核验恢复与降级边界**：
-   - 确认遇到不兼容操作（深度/模板网格不匹配、基址相同但 pitch/class 变化、尺寸增长、下一帧首次访问或目标转移）时，正确调用恢复流程：将当前晋升目标 RGBA 内容重采样回低分辨率停放目标，恢复原始映射并清除覆盖。
-   - 确认中途 Flush 操作时保持现有的目标映射有效。
-4. **验证 Alpha 保护与 UI 渲染顺序**：
-   - 确认在合成 Pass 中使用独立的合成着色器将客户机 Alpha 正确回写，后续 UI/文本绘制直接绘制在高分辨率目标上，避免 UI 混入超分辨率。
+针对 commit `c2f0602`，独立测试工程 `tools/tests/motion_replay` 已在现有 `out/build/motion-replay-p1`（Ninja, clang-cl, Debug 缓存，`LO_ENABLE_DLSS=ON`, `LO_DLSS_STAGE_RUNTIME=ON`）下成功完成构建。依赖的 DXC 工具位于 `tools/XenosRecomp/thirdparty/dxc-bin/bin/x64/dxcompiler.dll` 且已确认可用，未修改任何受版本追踪的源码。
+- 目标程序：`out/build/motion-replay-p1/LoNativeDlssRendererTest.exe`（SHA-256 `7a00626f12a2215f24943d6fceaf91c07e8022e609267f2b3f7a8f847bba58fd`）。
+- 运行时库：`nvngx_dlss.dll`（SHA-256 `3975567b8943c53acce397f2b72380092f84f162d00b0d2c7d08a1025c563983`）。
+- 运行环境与结果：在隔离工作目录 `out/tmp/isolated-native-p2` 中执行 `./LoNativeDlssRendererTest.exe --native`，退出码为 0，日志记录在 `.cache/evidence/p2-native-run/test_run.log`（共 15 行，硬件为 NVIDIA GeForce RTX 5080，驱动 616.56，`MODE=native_ngx`，无验证层）。
+- 实测通过的 5 项用例（全部 `alpha_mismatches=0`）：Quality 模式（853×480->1280×720）、Quality 模式复用、Balanced 模式切换（742×418->1280×720）、Performance 模式 1080p 重配置（960×540->1920×1080）以及 Performance 模式注入 evaluation 失败（`failure=1`）后的安全降级回退。基于未变行为复用，不重复测试。
+- 扩容修复通过验证：在 `LoNativeDlssRendererTest --extent-only` 中真实驱动 1280×736 至 1280×768（物理 160×92 扩容至 160×96），全部 14,720 个重叠区像素通过匹配验证（`.cache/evidence/p2-native-run/extent_growth_regression_rev3.log`）。
+- Sizing 持久化通过验证：在 `LoNativeDlssProbe --production-sizing` 中验证 `ProbeOnce` -> `Query 1280x720` -> `Query 2560x1440` 序列全部通过（`.cache/evidence/native-dlss-p2-sizing-fix.json`）。
+
+### 第二步：定向视觉与行为验收（进行中）
+
+SDR 色彩资格跟踪及几何判定代码已实现，并通过 CPU qualification boundary；当前前台旧程序（PID 42720）不包含这些新修改。最新 live-game 记录使用更新后的生产路径。
+
+后续计划流程：
+1. 针对视觉、motion、遮挡、UI 与 reset 进行前台验收，复用已确认的 live-game 生产执行基线。
+2. 继续记录实际下发尺寸与 runtime qualification 结果，不重跑已完成的 sizing、color-qualification、extent-growth 或 cold-start evidence。
+
+### 第三步：补充无渲染器路径的呈现排空边界
+
+在 `LO_NO_RENDERER` 条件下，当 `WaitForPresentGpu` 失败时，在销毁 presentation 资源前增加 `video.cpp` 自身的排空保护。
+
+### 第四步：色彩资格认定与缺陷收口后的真实 SR 验证
+
+真实 SR 调度已经确认；下一步安排运动响应、抖动、遮挡、UI 叠加、重置处理、窗口缩放及性能的定向视觉验收。当前 Gate 3 未通过，未进行用户验收。

@@ -475,7 +475,20 @@ upscaling::OutputSizing Controller::QueryOutputSizing(const plume::VulkanInterfa
     if (!CreateApplicationDataPath(pathReason)) { setAll(upscaling::SizingState::Error); return sizing; }
     NVSDK_NGX_Parameter* parameters = nullptr;
     bool temporarySession = false;
-    if (sessionInitialized_) {
+    if (sessionInterface_ == &vulkanInterface && sessionDevice_ == &device) {
+        if (!sessionInitialized_) {
+            const auto status = EnsureSession(device);
+            if (status != SrStatus::Executable) {
+                setAll(status == SrStatus::Bypass ? upscaling::SizingState::Unavailable : upscaling::SizingState::Error);
+                return sizing;
+            }
+        }
+        if (!capabilityParameters_ || sessionInstance_ != vulkanInterface.instance) {
+            setAll(upscaling::SizingState::Error);
+            return sizing;
+        }
+        parameters = static_cast<NVSDK_NGX_Parameter*>(capabilityParameters_);
+    } else if (sessionInitialized_) {
         if (sessionInstance_ != vulkanInterface.instance || sessionDevice_ != &device || !capabilityParameters_) {
             setAll(upscaling::SizingState::Error);
             return sizing;

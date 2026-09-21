@@ -737,10 +737,184 @@ public:
         auto resized=replay.Finish(cmd.get(),sceneDepth.get(),{0,1});Require(resized.ready&&resized.width==W/2,"resized motion contract");Submit();
         Require(replay.PendingCount()==0,"resize releases old descriptor/framebuffer generations safely");
     }
+
+    void ColdStartRecovery() {
+        const auto vp=motion_fixture::Vertex(false),pp=motion_fixture::Pixel();
+        auto vh=vp.Host(),ph=pp.Host(); auto vg=vp.Guest(),pg=pp.Guest();
+        auto tv=xenos::TranslateShader(vh.data(),uint32_t(vh.size()),false);
+        auto tp=xenos::TranslateShader(ph.data(),uint32_t(ph.size()),true);
+        if(!tv.errors.empty()||!tp.errors.empty())throw std::runtime_error(tv.errors+tp.errors);
+        auto v=Compile(tv.hlsl,false),p=Compile(tp.hlsl,true);
+        RenderGraphicsPipelineDesc d;d.pipelineLayout=layout.get();d.vertexShader=v.get();d.pixelShader=p.get();d.renderTargetCount=1;
+        d.renderTargetFormat[0]=RenderFormat::R8G8B8A8_UNORM;d.renderTargetBlend[0]=RenderBlendDesc::Copy();
+        d.depthEnabled=d.depthWriteEnabled=true;d.depthFunction=RenderComparisonFunction::GREATER_EQUAL;
+        d.depthTargetFormat=RenderFormat::D32_FLOAT;d.cullMode=RenderCullMode::NONE;
+        gpu::pipeline_cache::Key k{};k.vs=21;k.ps=22;k.depthControl=6;k.prim=4;
+        k.rtFormat=uint32_t(RenderFormat::R8G8B8A8_UNORM);k.depthFormat=uint32_t(RenderFormat::D32_FLOAT);
+        DrawHistoryKey key{};key.vsHash=k.vs;key.psHash=k.ps;key.sceneAllocation=1;key.geometrySignature=1;key.indexCount=3;key.primitiveType=4;
+        const MotionRasterContract raster{W,H,{0,0,float(W),float(H),0,1},true};
+        HistoryOwner owner; Require(owner.Init(device.get()),"cold-start history owner");
+        gpu::frame_plan::FramePlan plan{}; plan.width=W; plan.height=H; plan.consumer=gpu::upscaling::TemporalConsumer::DlssSr;
+        const Matrix identity{1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1};
+        auto fill=[&](){
+            std::vector<uint32_t> pixels(W*H,0x7b808080u), depths(W*H,std::bit_cast<uint32_t>(.5f));
+            Fill(color.get(),pixels,RenderFormat::R8G8B8A8_UNORM); Fill(sceneDepth.get(),depths,RenderFormat::R32_FLOAT);
+        };
+        auto sceneFor=[&](uint64_t number){
+            SceneObservation scene; scene.Reset(number); SceneAnchor anchor; anchor.depthAllocation=1; anchor.viewport={0,0,W,H};
+            for(unsigned i=0;i<16;++i)anchor.vpBits[i]=std::bit_cast<uint32_t>(float(identity[i]));
+            scene.ObserveCamera(anchor); scene.ObserveDepth(1,{number,number*2+1,0x1000,24,W,H,true});
+            scene.ObserveColor({number,number*2+2,0x2000,6,W,H,true}); return scene;
+        };
+        auto bindGuest=[&](){
+            cmd->barriers(RenderBarrierStage::GRAPHICS,RenderTextureBarrier(color.get(),RenderTextureLayout::COLOR_WRITE));
+            cmd->barriers(RenderBarrierStage::GRAPHICS,RenderTextureBarrier(depth.get(),RenderTextureLayout::DEPTH_WRITE));
+            cmd->setFramebuffer(framebuffer.get());
+            cmd->clearDepth(true,.5f);
+            RenderViewport viewport(0,0,W,H); RenderRect scissor(0,0,W,H);
+            cmd->setViewports(&viewport,1); cmd->setScissors(&scissor,1);
+        };
+        auto restoreGuest=[&](){
+            cmd->setFramebuffer(framebuffer.get());
+            RenderViewport viewport(0,0,W,H); RenderRect scissor(0,0,W,H);
+            cmd->setViewports(&viewport,1); cmd->setScissors(&scissor,1);
+        };
+        auto prepareScene=[&](bool wait){
+            return replay.PrepareSceneDraw(cmd.get(),1,depth.get(),W,H,k,d,
+                vg.data(),uint32_t(vg.size()),pg.data(),uint32_t(pg.size()),wait);
+        };
+
+        current.fill(0); previous.fill(0);
+        MotionReplayGPU::PipelinePrepareStatus st{};
+        auto* warm=replay.PreparePipeline(k,d,vg.data(),uint32_t(vg.size()),pg.data(),uint32_t(pg.size()),true,&st);
+        Require(st==MotionReplayGPU::PipelinePrepareStatus::Ready&&warm,"warmup precompile ready before first frame");
+        Require(!replay.SceneReadyThisFrame(),"warmup does not initialize motion scene");
+
+        fill();
+        tracker.BeginFrame(1,7);
+        const auto match1=tracker.Collect(key,current.data(),&shared,false,-1,nullptr,&raster);
+        Require(!match1.previous,"cold start has no previous snapshot");
+        replay.BeginFrame(1,7);
+        cmd->begin(); bindGuest();
+        auto p1=prepareScene(false);
+        Require(p1.sceneReady&&p1.status==MotionReplayGPU::PipelinePrepareStatus::Ready&&p1.pipeline,
+            "cold frame initializes scene without previous");
+        Require(!replay.PipelinePendingThisFrame(),"warmed cold frame is not pending");
+        restoreGuest();
+        auto view1=replay.Finish(cmd.get(),sceneDepth.get(),tracker.FinalizeFrame(),true);
+        Require(view1.ready&&view1.state==MotionState::ResetInitialization&&view1.velocity&&view1.reactive&&view1.width==W&&view1.height==H,
+            "first frame returns texture-backed ResetInitialization");
+        Submit();
+        auto mask1=Read(view1.reactive,RenderFormat::R8_UNORM,1);
+        bool allInvalid=true; for(unsigned i=0;i<W*H;++i) allInvalid&=mask1[i]==255;
+        Require(allInvalid,"first frame all-invalid reactive mask");
+
+        owner.BeginFrame(1,7);
+        Require(owner.ResetInitializationRequired(),"first history frame requires reset");
+        auto scene1=sceneFor(1);
+        cmd->begin();
+        cmd->barriers(RenderBarrierStage::COPY,RenderTextureBarrier(sceneDepth.get(),RenderTextureLayout::COPY_SOURCE));
+        Require(owner.CaptureDepth(cmd.get(),sceneDepth.get(),scene1),"cold-start captures depth");
+        cmd->barriers(RenderBarrierStage::COPY,RenderTextureBarrier(color.get(),RenderTextureLayout::COPY_SOURCE));
+        Require(owner.CaptureColorInputs(cmd.get(),color.get(),scene1,plan,JitterSample{},ColorEncoding::Sdr,&view1),"cold-start captures complete inputs");
+        const auto in1=owner.CurrentInputs();
+        Require(in1.CompleteForConsumer()&&in1.motionState==MotionState::ResetInitialization&&in1.resetHistory,
+            "first frame inputs are complete ResetInitialization");
+        const auto serial1=owner.RecordedSerial(); Submit(); owner.ReleaseCompletedThrough(serial1);
+
+        fill();
+        tracker.BeginFrame(2,7);
+        const auto match2=tracker.Collect(key,current.data(),&shared,false,-1,nullptr,&raster);
+        Require(match2.previous,"second frame matches previous");
+        replay.BeginFrame(2,7);
+        cmd->begin(); bindGuest();
+        auto p2=prepareScene(false);
+        Require(p2.sceneReady&&p2.status==MotionReplayGPU::PipelinePrepareStatus::Ready&&p2.pipeline,"second frame pipeline ready");
+        const auto mc=MakeMotionReplayConstants(match2,W,H,0,0);
+        Write(vsCB.get(),current.data(),4096); Write(psCB.get(),pixel.data(),4096); Write(sharedCB.get(),&shared,sizeof(shared)); Write(mvCB.get(),&mc,sizeof(mc));
+        RenderBufferReference cb[]={vsCB.get(),sharedCB.get(),psCB.get(),mvCB.get()};
+        RenderDescriptorSet* bindings[5]; for(unsigned i=0;i<5;++i)bindings[i]=sets[i].get();
+        RenderViewport viewport(0,0,W,H); RenderRect scissor(0,0,W,H);
+        Require(replay.Draw(cmd.get(),p2.pipeline,cb,bindings,5,viewport,scissor,false,3,0),"second frame draws matched previous");
+        restoreGuest();
+        auto view2=replay.Finish(cmd.get(),sceneDepth.get(),tracker.FinalizeFrame(),false);
+        Require(view2.ready&&view2.state==MotionState::Tracked,"second frame is tracked replay");
+        Submit();
+        auto mask2=Read(view2.reactive,RenderFormat::R8_UNORM,1);
+        bool anyValid=false; for(unsigned i=0;i<W*H;++i) anyValid|=mask2[i]==0;
+        Require(anyValid,"second frame has matched valid motion coverage");
+        Require(mask2[0]==255,"outside triangle stays invalid");
+        Require(mask2[32*W+32]==0,"inside triangle is valid");
+
+        owner.BeginFrame(2,7);
+        Require(!owner.ResetInitializationRequired(),"complete first frame does not reset epoch/history");
+        auto scene2=sceneFor(2);
+        cmd->begin();
+        cmd->barriers(RenderBarrierStage::COPY,RenderTextureBarrier(sceneDepth.get(),RenderTextureLayout::COPY_SOURCE));
+        Require(owner.CaptureDepth(cmd.get(),sceneDepth.get(),scene2),"second frame captures depth");
+        cmd->barriers(RenderBarrierStage::COPY,RenderTextureBarrier(color.get(),RenderTextureLayout::COPY_SOURCE));
+        Require(owner.CaptureColorInputs(cmd.get(),color.get(),scene2,plan,JitterSample{},ColorEncoding::Sdr,&view2),"second frame captures tracked inputs");
+        const auto in2=owner.CurrentInputs();
+        Require(in2.CompleteForConsumer()&&in2.motionState==MotionState::Tracked&&!in2.resetHistory,"second frame stays tracked");
+        const auto serial2=owner.RecordedSerial(); Submit(); owner.ReleaseCompletedThrough(serial2);
+
+        fill();
+        tracker.BeginFrame(3,7); tracker.Collect(key,current.data(),&shared,false,-1,nullptr,&raster);
+        replay.BeginFrame(3,7);
+        cmd->begin(); bindGuest();
+        replay.InjectNextPreparePending();
+        auto p3=prepareScene(false);
+        Require(p3.sceneReady&&p3.status==MotionReplayGPU::PipelinePrepareStatus::Pending&&!p3.pipeline&&replay.PipelinePendingThisFrame(),
+            "explicit pending is not a failed LastError scan");
+        Require(replay.LastError().find("pending")==std::string::npos,"pending does not write a pending LastError");
+        restoreGuest();
+        auto viewPending=replay.Finish(cmd.get(),sceneDepth.get(),tracker.FinalizeFrame(),true);
+        Require(!viewPending.ready&&viewPending.state==MotionState::Unavailable,
+            "pending is incomplete Unavailable even with resetInitialization");
+        Submit();
+
+        owner.BeginFrame(3,7);
+        auto scene3=sceneFor(3);
+        cmd->begin();
+        cmd->barriers(RenderBarrierStage::COPY,RenderTextureBarrier(sceneDepth.get(),RenderTextureLayout::COPY_SOURCE));
+        Require(owner.CaptureDepth(cmd.get(),sceneDepth.get(),scene3),"pending frame still captures depth");
+        cmd->barriers(RenderBarrierStage::COPY,RenderTextureBarrier(color.get(),RenderTextureLayout::COPY_SOURCE));
+        Require(owner.CaptureColorInputs(cmd.get(),color.get(),scene3,plan,JitterSample{},ColorEncoding::Sdr,&viewPending),
+            "pending capture does not permanently disable");
+        const auto in3=owner.CurrentInputs();
+        Require(!in3.CompleteForConsumer()&&in3.motionState==MotionState::Unavailable,
+            "pending refuses NGX-complete inputs");
+        const auto serial3=owner.RecordedSerial(); Submit(); owner.ReleaseCompletedThrough(serial3);
+
+        fill();
+        tracker.BeginFrame(4,7); tracker.Collect(key,current.data(),&shared,false,-1,nullptr,&raster);
+        replay.BeginFrame(4,7);
+        cmd->begin(); bindGuest();
+        auto p4=prepareScene(false);
+        Require(p4.sceneReady&&p4.status==MotionReplayGPU::PipelinePrepareStatus::Ready&&p4.pipeline&&!replay.PipelinePendingThisFrame(),
+            "next frame Ready recovers after pending");
+        restoreGuest();
+        auto view4=replay.Finish(cmd.get(),sceneDepth.get(),tracker.FinalizeFrame(),true);
+        Require(view4.ready&&view4.state==MotionState::ResetInitialization,"recovered frame can complete reset after pending");
+        Submit();
+        owner.BeginFrame(4,7);
+        Require(owner.ResetInitializationRequired(),"incomplete history requires reset recovery");
+
+        replay.BeginFrame(5,7);
+        cmd->begin();
+        auto failedPrep=replay.PrepareSceneDraw(cmd.get(),1,nullptr,W,H,k,d,
+            vg.data(),uint32_t(vg.size()),pg.data(),uint32_t(pg.size()),false);
+        Require(!failedPrep.sceneReady&&failedPrep.status==MotionReplayGPU::PipelinePrepareStatus::Failed,
+            "null depth cannot initialize scene");
+        auto failed=replay.Finish(cmd.get(),sceneDepth.get(),std::vector<uint32_t>{0,1},true);
+        Require(!failed.ready&&failed.state==MotionState::Unavailable,"resource failure is not reset success");
+        Submit();
+    }
 };
 int main(int argc, char** argv) {
  try {
     Require(xenos::DxcAvailable(),"pinned DXC available");
+    if(argc>1&&std::string(argv[1])=="--cold-start-only"){Fixture f;f.ColdStartRecovery();printf("PASS: %u cold-start motion GPU checks\n",checks);return 0;}
     if(argc>1&&std::string(argv[1])=="--p1-inputs-only"){Fixture f;f.P1InputsOnly();printf("PASS: %u P1 input/MV GPU checks\n",checks);return 0;}
     if(argc>1&&std::string(argv[1])=="--history-precision-only"){Fixture f;f.HistoryPrecision();printf("PASS: %u history precision GPU checks\n",checks);return 0;}
     if(argc>1&&std::string(argv[1])=="--stationary-multi-only"){Fixture f;f.StationarySilhouette();printf("PASS: %u stationary coverage GPU checks\n",checks);return 0;}

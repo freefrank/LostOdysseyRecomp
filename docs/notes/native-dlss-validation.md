@@ -2,15 +2,91 @@
 
 Date: 2026-09-21
 Baseline: `main@5b765f617ec511a2f76aa9da7923a8c122679d2c`
-Feature branch: `dlss` (prior pushed baseline: `91bf37e`; P2 checkpoint commits: `d018be7` adapter, `744ab91` scene-copy path)
+Feature branch: `dlss` (prior pushed baseline: `91bf37e`; current HEAD: `c2f0602`)
 SDK Reference: NVIDIA DLSS **310.9.1** (`374959484e79a640feaba44c93ac8cfb0a03f5b5`)
-Status: **P0 gate 1 passed**; **P1 gate 2 passed** (historical evidence retained). P2 development resumed on 2026-09-21 with focused fixes and additional tests; it is **not complete or Gate 3 approved**. The earlier formal re-review was cancelled. In-game SR remains blocked by unqualified color encoding. Frame Generation (FG) deferred.
+Status: **P0 gate 1 passed**; **P1 gate 2 passed** (historical evidence retained). P2 development has advanced on `dlss` through commit `c2f0602`; a bounded live-game production run now confirms NGX SR on RTX 5080 at Quality `1707x960 -> 2560x1440`, `DisplayEncoded`, reversed-Z. The runtime record contains one successful Create and 24 retained successful Evaluate records under a 128-entry cap. Accepted/submitted use `10684` at serial `23614` remained in flight in the snapshot; `completed through 23612` is the earlier SR completion watermark, and no failure was recorded. P2 is **not complete, accepted, or Gate 3 approved**. Visual quality and player acceptance are not claimed. Historical RTX and P0/P1 results remain preserved with their original limits. Frame Generation (FG) remains deferred.
 
-## 2026-09-21 Development Follow-up
+## 2026-09-21 Development Follow-up and Current Evidence Boundary
 
-The earlier paused checkpoint has received five focused implementation/test changes on `dlss`; see [P2 follow-up evidence and remaining blockers](native-dlss-p2-progress-2026-09-21.md) for commits, reproducible commands and exact scope. Historical RTX results below were not rerun and must not be attributed to the new revisions.
+Development continued on `dlss` across commits `59e9dce`, `19415e4`, `0a2af46`, `4047d6f`, `9375608`, and `c2f0602`. See [P2 follow-up evidence and remaining blockers](native-dlss-p2-progress-2026-09-21.md) for detailed commit listings, reproducible commands, and exact boundary definitions.
 
-New evidence covers CPU contracts, actual renderer translation-unit compilation, pinned SDK ON/OFF adapter compilation and report tests, and software Vulkan execution of production FP16 composite shaders. It does not qualify runtime game color, full target-map transitions, fatal submission/device-loss recovery, or NVIDIA in-game SR. Gate 3 remains unapproved.
+Earlier claims that destination mapping and fatal error handling are entirely unimplemented are now obsolete. The core mapping, slot-safe promotion and restoration, and recording/submit/fence wait fatal latches with queue draining are implemented in the production renderer. Two concrete edge cases remain open for broader acceptance: the `LO_NO_RENDERER` shutdown boundary and the legacy execution fixture's unchecked `void` fence wait.
+
+### Active CI Evidence
+
+1. **`dlss` commit `c2f0602` CPU CI**: [Run 35629006599](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35629006599) passed all 6 CPU tests.
+2. **Workbench Linux CI (checkout candidate `c2f06023b7dfddc92d4413eae2ac7541492c1354`)**: [Run 35629333836](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35629333836) passed 7 CPU tests; `LoNativeDlssRendererTest` passed under llvmpipe in software mode and returned skip code 77 when native NGX hardware was not present.
+3. **Workbench Windows CI (checkout `9375608` + workbench link fix)**: [Run 35628539860](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35628539860) compiled successfully without execution. There is currently no verified compilation run for exact HEAD `c2f0602` on Windows; do not claim unproven exact-HEAD Windows build evidence.
+
+### Read-Only Oracle Review Technical Gaps and Resolved Fixes
+
+1. **Target extent-growth promotion drops overlap data (`renderer.cpp:1753–1773, 3158–3199`)**:
+   During destination promotion, when target extents grow, the implementation restores to `parkedLow`. A subsequent `GetRenderTarget` call then reallocates and retires the old target without preserving overlapping pixel data.
+   - *Final fix status*: The extent-growth repair was completed and accepted in review. It strictly constrains preservation to matching scale, matching guest width, and color height growth (`oldTarget->format == tex->format`, `oldTarget->resolutionSize == tex->resolutionSize`, `oldTarget->guestWidth == tex->guestWidth`, `oldTarget->width == tex->width`, `tex->guestHeight > oldTarget->guestHeight`, `tex->height >= oldTarget->height`), executing a 1:1 `copyTextureRegion`. If `Begin()` fails during reallocation, it logs an error, safely retires resources, and returns `nullptr`. Obsolete production test APIs were removed.
+   - *Hardware test verification*: Validated via `LoNativeDlssRendererTest --extent-only` (`RunExtentGrowth`). The test exercises a promotion transition from guest 1280×736 to 1280×768 (internal 160×90 to output 320×180, 2× scale) with physical allocation going from 160×92 to 160×96 (promoted 320×184). It validates non-uniform uploaded patterns, partial clear on promoted active target, automatic restore-growth on `GetRenderTarget`, and partial clear on the grown target. All 14,720 overlapping pixels matched exactly on local RTX hardware (`.cache/evidence/p2-native-run/extent_growth_regression_rev3.log`). Initial 142-check uniform checks and rev2 failure (fixture accessing retired `HostTexture` `0xDDDDDDDD`) are superseded and not used as passing evidence.
+2. **Missing presentation drain in `LO_NO_RENDERER` fallback (`video.cpp:522–545`)**: In paths running without `g_renderer`, a failure in `WaitForPresentGpu` still proceeds to destroy presentation resources. The renderer `Shutdown` drain only executes when `g_renderer` is non-null; `video.cpp` requires its own terminal drain boundary.
+3. **Legacy execution fixture unchecked Plume fence wait (`native_dlss_execution_test.cpp:156–159, 180–183, 199–202, 231–234`)**: Older execution tests use Plume `executeCommandLists()` and `waitForCommandFence()`, both of which return `void`. They publish serials and call `ReleaseCompletedThrough` unconditionally without checking underlying native submit or fence-wait return values, leaving fatal error latches unproven in that fixture. This gap remains in `native_dlss_execution_test.cpp`. In this round, priority is placed on the new `LoNativeDlssRendererTest` production orchestration to avoid duplicating legacy sentinels, but the legacy test gap itself remains tracked.
+
+### Sizing Session Persistence Fix and RTX Verification (`dlss_ngx.cpp`, `video.cpp`, `native_dlss_probe.cpp`)
+
+1. **Persistent Session in Controller**: `gpu::dlss::Controller::QueryOutputSizing` now verifies if `vulkanInterface` and `device` match the current session. If the session was not initialized, it explicitly invokes `EnsureSession(device)` before querying capabilities. Error branches return `std::nullopt` for `ngxResult`.
+2. **Video Logging & Diagnostics**: `video.cpp` now logs stage `QueryOutputSizing` with selected quality, state, optional raw result, output extents, and device epoch whenever the active sizing mode is not `Ready`.
+3. **Probe Cleanliness**: `native_dlss_probe.cpp` adds `ScopeDrain` to guarantee `ShutdownAfterGpuDrain` before device teardown and returns genuine `ProbeExitCode`.
+4. **RTX Hardware Verification**: The production sequence (`ProbeOnce` -> `Query 1280x720` -> `Query 2560x1440`) was executed on local RTX 5080 hardware via `LoNativeDlssProbe --production-sizing` (`.cache/evidence/native-dlss-p2-sizing-fix.json`). Both output resolutions succeeded (`status: ok`, sizing state `Ready`), reporting optimal Quality inputs of 853×480 (for 720p) and 1707×960 (for 1440p). These adjustments are compiled and confirmed; sizing queries need not be rerun.
+
+### Local Native RTX 5080 Execution Evidence (`LoNativeDlssRendererTest --native`)
+
+The standalone test fixture `LoNativeDlssRendererTest` was built from commit `c2f0602` in `out/build/motion-replay-p1` using the existing Ninja clang-cl Debug cache with `LO_ENABLE_DLSS=ON` and `LO_DLSS_STAGE_RUNTIME=ON`. DXC dependency at `tools/XenosRecomp/thirdparty/dxc-bin/bin/x64/dxcompiler.dll` was verified operational. No tracked sources were modified.
+
+- Executable: `out/build/motion-replay-p1/LoNativeDlssRendererTest.exe` (SHA-256 `7a00626f12a2215f24943d6fceaf91c07e8022e609267f2b3f7a8f847bba58fd`).
+- Staged DLL: `nvngx_dlss.dll` (SHA-256 `3975567b8943c53acce397f2b72380092f84f162d00b0d2c7d08a1025c563983`).
+- Execution: isolated CWD `out/tmp/isolated-native-p2`, exit code 0 (`PASS: actual NGX + production Renderer mapping, submit, alpha and restore verified on hardware; no gameplay or motion-response quality claim`).
+- 15-line log preserved in `.cache/evidence/p2-native-run/test_run.log` (`DEVICE=NVIDIA GeForce RTX 5080`, driver 616.56, `MODE=native_ngx`). Running `vulkaninfo` enumerates 8 layers and does not include `VK_LAYER_KHRONOS_validation`; no validation layer coverage is claimed.
+  - All 5 native test cases completed with 0 alpha mismatches (`alpha_mismatches=0`): Quality (853×480->1280×720), Quality reuse, Balanced dynamic switch (742×418->1280×720), Performance 1080p reconfiguration (960×540->1920×1080), and Performance injected evaluation failure (`failure=1`) fallback. These results may be reused while behavior and configuration remain unchanged; rerun only for a relevant change or new failure evidence.
+
+### Capabilities and Limits of `LoNativeDlssRendererTest`
+
+- **Verified by fixture**: Quality mode reuse, Balanced mode switching, Performance mode 1080p reconfiguration, non-zero finite RGB/alpha readback, incompatible target restoration, and evaluation failure fallback on hardware.
+- **Unverified by fixture**: Motion vectors, jitter response, reversed-Z depth correctness (it uses constant 0.5 depth, zero motion vectors, and uniform color), real swapchain presentation, `video.cpp` queue synchronization, guest `DrawImpl` pipeline integration, or live performance metrics. Software mock fixtures test platform routing boundaries rather than NVIDIA driver execution.
+
+### 2026-09-21 Foreground Game Capture & Color Pipeline Verification
+
+`LostOdysseyRecomp` was executed in a visible foreground window (`PID 42720`, isolated CWD `out/p2-game-cwd-c2f0602`, assets from `LostOdysseyRecompLib/private/disc1`). The user triggered render state capture via `F1`.
+
+- **Capture trigger**: Capture bundle `out/p2-game-cwd-c2f0602/captures/render-17900119851502951-f11889.zip` contains 3 complete frames (11889, 11890, 11891). Note that `LO_CAPTURE_REQUEST` only triggers legacy single-frame dumps, whereas `F1` captures the full multi-frame state. Users do not need to recapture this pipeline.
+- **Tonemap & Color Lineage**:
+  - HDR buffer: Allocation 9, address `0x09fa0000`, guest format 32.
+  - Draw 632: VS `9b81c55ca39bb529`, PS `b4b4d54a7a2d6b96`, output EDRAM Allocation 3 (guest base 720 decimal / `0x2d0`, guest format 0 mapping to host FP16 / format 10, 1280×736, 1280×720 active rect), `colorMask = 7` (predicate requires `(colorMask & 7) == 7`).
+  - Constant `c10.x = 0x3ee8ba2e` (`0.4545454383` ≈ `1.0 / 2.2`) across all 3 frames. Math is `pow(saturate(M + 0.1725 * bloom), 1.0 / 2.2)`, outputting **display-encoded SDR** (gamma 2.2 curve) for this specific analyzed capture pipeline. It is not an exact standard sRGB transfer, not sRGB-decoded, and not linear HDR.
+  - Resolve to Allocation 20 (`R8G8B8A8_UNORM`) with RB swap. Sampled in Draw 659 (VS `8bbd4da701845d16`, PS `cda578aef1724fdc`) with `shared_texture_info = 0x00160a00`, `sign = 0` (fetch BGR), copy blend `ONE / ZERO / ADD`, `colorMask = 15`. Net transfer is identity.
+  - 24 intermediate draws have `(colorMask & 7) == 0` (depth/stencil or alpha-only passes). UI draws start at Draw 660 onto frontbuffer Allocation 4 (`0x00714000`).
+  - Write ordinals across frames 11889/11890/11891: Alloc 9 (207457/207475/207493), Alloc 20 (207464/207482/207500), Alloc 4 (207465/207483/207501).
+  - Planning state: `candidate_ready = true`, `temporal_history_verified = false`. `activePlan.consumer = 0 (None)`, `input = 1280x720`, `output = 1280x720`, `epoch = 1`.
+  - *Historical sizing capture observation*: The running executable (`PID 42720`) recorded the pre-fix sizing failure caused by `ProbeOnce` calling `Shutdown(true)` before later `QueryOutputSizing` calls. The Sizing Session Persistence fix is now verified on RTX hardware via `LoNativeDlssProbe --production-sizing`, and the later live-game record proves qualified `1707x960 -> 2560x1440` production SR. The old process and its `1280x720 -> 1280x720` capture remain historical observations, not current implementation limits.
+- SDR qualification tracking and the runtime geometric quad predicate are implemented and covered by the CPU boundary evidence; live qualification accepts the actual physical uploaded quad, exact resolve ordinal and net RGB view, while other candidate paths remain `Unknown`. The detailed design is recorded in [docs/notes/native-dlss-color-qualification-plan.md](native-dlss-color-qualification-plan.md).
+
+### Current live-game production SR record
+
+The final bounded runtime record is `.cache/evidence/game-sr-runtime.json`.
+On an RTX 5080, Quality SR ran at `1707x960` and output at `2560x1440`, with
+`DisplayEncoded` color and inverted depth (`reversed-Z`). It records one
+successful Create and 24 retained successful Evaluate records under a 128-entry
+cap, not a total-call count. Isolated use `10684` at serial `23614` was
+accepted and submitted and remained in flight in the snapshot. `completed
+through 23612` is the earlier SR completion watermark. No failure was recorded.
+
+This confirms live production execution only. Visual quality, motion response,
+occlusion, UI, reset behavior, performance and player acceptance remain
+unclaimed. The next work is targeted acceptance of those areas; completed
+sizing, color-qualification, extent-growth and cold-start evidence is reused
+while behavior and configuration remain unchanged; rerun only for a relevant
+change or new failure evidence.
+
+### Next Steps before Broad Game-Level Acceptance
+
+Gate 3 remains unapproved. Targeted visual, motion, occlusion, UI and reset
+acceptance remains to be performed. The `LO_NO_RENDERER` shutdown boundary and
+legacy execution fixture's unchecked `void` fence-wait gap remain open.
 
 ## 1. Overview and Scope
 
@@ -30,7 +106,7 @@ This document records verification evidence for native Vulkan NVIDIA DLSS integr
 - Local diagnostic mode `LO_DLSS_INPUT_PROBE=1` driving true lower-resolution rendering and spatial presentation without executing legacy TAA.
 - Ordinary DLSS configuration requests continue to fall back to legacy rendering paths until P2.
 
-### P2 Scope (Experimental Work in Progress, Paused)
+### P2 Scope (Active Work in Progress, Historical Checkpoint Retained)
 - Persistent per-device NGX feature session managed by `gpu::dlss::Controller`.
 - Feature creation (`NGX_VULKAN_CREATE_DLSS_EXT1`) and evaluation recording (`NGX_VULKAN_EVALUATE_DLSS_EXT`) with checked Vulkan command buffer reset, begin, and end operations.
 - Renderer-side SR dispatch routing, monotonic submission-serial tracking for renderer and presentation queue batches, and request-level failure latches.
@@ -38,7 +114,7 @@ This document records verification evidence for native Vulkan NVIDIA DLSS integr
 - Destination target promotion architecture with parked low-resolution fallback mappings and diagnostic capture hooks (`p2-oracle.jsonl`).
 - Production destination resample (`DrawPromotionResample`) validated via build entry-point self-test (`--self-test-scene-copy-promotion`).
 
-P0 and P1 results remain closed and reused. P2 is recorded in checkpoint commits `d018be7` and `744ab91`, paused for handoff; no actual in-game Super Resolution dispatch has occurred, and formal Gate 3 re-review was cancelled at user direction and is not approved. Frame Generation remains deferred.
+P0 and P1 results remain closed and reused. P2 is an active work-in-progress on the `dlss` development branch (progressed through commit `c2f0602`); bounded live-game production SR execution is confirmed in `.cache/evidence/game-sr-runtime.json`, the earlier formal Gate 3 re-review was cancelled at user direction, and Gate 3 is not approved. Frame Generation remains deferred.
 
 ## 2. Pinned SDK Provenance and Cryptographic Hashes
 
@@ -185,19 +261,19 @@ The standalone execution test (`LoNativeDlssExecutionTest`) was compiled with MS
 - Three primary command buffers were submitted with a GPU fence. The output buffer started with a zero sentinel; post-execution readback confirmed only that the first RGBA16F pixel was finite and nonzero. This sentinel-change check does not prove motion-vector responsiveness, color fidelity, or alpha preservation.
 - Host-injected evaluation failure confirmed exclusion of the isolated command buffer while preserving prefix spatial fallback readability.
 - Runtime validation layer check printed `VALIDATION_LAYER_KHRONOS=unavailable`; no Khronos validation messages were captured.
-- Result: **PASS** (exit 0). Prior P0/P1 results (62 CPU checks, 112 GPU checks) were reused and not rerun.
+- Result: **PASS** (exit 0). Prior P0/P1 results (62 CPU checks, 112 GPU checks) were reused; they remain reusable while behavior and configuration remain unchanged.
 
 #### Lane B: Production Destination Resample and Renderer Routing
 - Implemented SR dispatch routing, monotonic submission-serial tracking for Vulkan renderer and presentation queues, and diagnostic capture hooks (`p2-oracle.jsonl`).
-- Implemented unknown color space bypass: static code review confirms that while runtime tonemapping encoding remains unqualified, SR evaluation is bypassed in-game. This is static review confirmation of the guard, not runtime game validation, and tonemapped inputs are unqualified rather than invalid.
+- **Historical unknown-color checkpoint**: static code review confirmed that unqualified tonemapping inputs were bypassed in the earlier checkpoint. The current live-game record and narrowed qualification proof supersede the old blanket no-dispatch wording; other candidate paths still remain `Unknown`.
 - Entry-point self-test (`--self-test-scene-copy-promotion` guarded by `LO_RENDERER_P2_SELFTEST`) executed on the real RTX 5080 hardware using production `DrawPromotionResample`. Readback confirmed 4×4 to 8×8 RGBA upscaling (64 destination pixels) with 0 mismatches and 1-byte alpha tolerance (`out/build/windows-clang/p2-bootstrap-cwd/evidence/native-dlss-p2-resample.json`, exit 0).
 - Scope limits: The resample test validates isolated image upscaling only. It does not validate active target promotion mapping, guest alpha preservation, mid-frame Flush survival, UI/draw ordering, texture aliasing, fence synchronization, dynamic window resizing, or full-game behavior. These missing areas are acceptable for an in-progress work checkpoint and do not require completion before pausing.
 
-#### Review Checkpoint Status
-Gate 3 initial review attempt 1 identified 4 action items (addressing readback SR guard, validation define leakage, JSON bracket formatting, and self-test failure resource cleanup). All four items were implemented and verified locally (including clean self-test queue draining and resample verification in `out/build/windows-clang/p2-bootstrap-cwd/evidence-cleanup/native-dlss-p2-resample.json` with 0 mismatches). Formal re-review was cancelled at user direction; Gate 3 is not approved, and P2 implementation is paused as an incomplete working-tree checkpoint. Detailed implementation handoff and developer guidelines are provided in [docs/notes/native-dlss-handoff.zh-CN.md](native-dlss-handoff.zh-CN.md).
+#### Review Checkpoint Status (Historical Checkpoint)
+Gate 3 initial review attempt 1 identified 4 action items (addressing readback SR guard, validation define leakage, JSON bracket formatting, and self-test failure resource cleanup). All four items were implemented and verified locally (including clean self-test queue draining and resample verification in `out/build/windows-clang/p2-bootstrap-cwd/evidence-cleanup/native-dlss-p2-resample.json` with 0 mismatches). Formal re-review was cancelled at user direction; Gate 3 was not approved, and the implementation was historically paused at that checkpoint. P2 development has since resumed on `dlss` through commit `c2f0602`, but remains incomplete and unaccepted. Detailed implementation handoff and developer guidelines are provided in [docs/notes/native-dlss-handoff.zh-CN.md](native-dlss-handoff.zh-CN.md).
 
-#### Color Qualification Status
-Offline analysis of game post-processing pixel shader `b4b4d54a7a2d6b96` confirmed that the final pass computes `exp2(c10.x * clamped log2(v))`. The exponent `c10.x` is a runtime pixel shader constant. Known UNORM storage format does not establish whether the underlying game color encoding is linear or gamma-curve. Because runtime constants and producer-chain textures are not yet qualified, the color encoding remains unknown, and unknown color space remains a bypass condition. Remaining capture requirements to qualify this pipeline are runtime PS constants `c0`–`c10`, `c255`, and the producer-resolve-copy allocation chain via `p2-oracle.jsonl`.
+#### Historical Color Qualification Checkpoint
+Offline analysis of the historical f11889 capture's pixel shader `b4b4d54a7a2d6b96` confirmed that its final pass computes `exp2(c10.x * clamped log2(v))`. That checkpoint's `c10.x` evidence describes a gamma-2.2 display-encoding curve; it is not an exact standard sRGB transfer. The current narrowed qualification proof covers the actual physical uploaded quad, exact resolve ordinal and net RGB view; other candidate paths remain `Unknown`.
 
 ## 5. Architectural and Licensing Boundaries
 
@@ -211,7 +287,7 @@ The probe and runtime pass the directory containing the staged `nvngx_dlss.dll` 
 - Binary redistribution remains unresolved, and no binary packages are released.
 
 ### Known Limits and Boundary Conditions
-- **No In-Game DLSS Dispatch**: Actual in-game Super Resolution evaluation is bypassed due to unqualified runtime color encoding. DLSS cannot be claimed as usable in gameplay.
+- **Bounded In-Game DLSS Dispatch**: The live-game record confirms one bounded production SR run. It does not establish broad gameplay usability, visual quality or player acceptance.
 - **P2 Work In Progress**: Development resumed with committed changes on 2026-09-21. Gate 3 is not approved; no completed formal re-review is claimed.
 - **Linux Evidence Scope**: CPU tests, renderer translation-unit compilation, SDK ON/OFF builds/report tests and software Vulkan composites ran on Linux. NVIDIA NGX execution and Linux gameplay remain untested for these revisions.
 - **Self-Test Scope**: The promotion resample test covers isolated resample math; it does not prove end-to-end target promotion, guest alpha preservation, UI ordering, or mid-frame flush safety.
@@ -223,6 +299,6 @@ The probe and runtime pass the directory containing the staged `nvngx_dlss.dll` 
 ## 6. Next Steps
 
 - Complete Gate 3 code review and address review findings.
-- Qualify runtime tonemapping color encoding and capture producer-chain constants via `p2-oracle.jsonl`.
+- Perform targeted visual, motion, occlusion, UI and reset acceptance using the documented qualified SR path; retain the historical f11889/f2347 capture limits and reuse completed evidence while behavior remains unchanged.
 - Validate guest alpha preservation, mid-frame flush handling, and UI pass ordering.
 - P4 Frame Generation remains deferred until Super Resolution (P1–P3) is completed and verified.

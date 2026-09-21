@@ -19,6 +19,14 @@ Windows x64 · Direct3D 12 · Vulkan · PowerPC 静态重编译
 > [!IMPORTANT]
 > **本项目仍处于早期测试阶段。** 已测试开场区域和部分场景，尚未通关。渲染和稳定性仍有问题。请自行提供受支持版本的游戏文件。
 
+### 实验性原生 DLSS SR
+
+原生 NVIDIA DLSS 超分辨率仍属于实验性开发功能，不是面向普通玩家发布或
+可直接使用的功能。本地 Windows SDK-on 构建已在 RTX 5080 的一个测试场景中
+确认游戏内 NGX SR 执行，Quality 模式为 `1707x960 -> 2560x1440`，色彩为
+DisplayEncoded、深度为 reversed-Z。画质、运动响应、遮挡、UI、重置行为和
+玩家验收均未宣称完成。详见[原生 DLSS 验证记录](docs/notes/native-dlss-validation.md)。
+
 ## v0.6.7 发布版
 
 已发布 [v0.6.7](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.7)（于 2026-09-20T20:09:28Z 从 source `f92c24d` 通过 Release CI [35533399325](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35533399325) 发布为最新公开版本）。在游戏内图形设置中增加“宽屏”开关并扩充 21:9 分辨率预设（1720×720、2560×1080、3440×1440、3840×1600、5120×2160），比例切换时按垂直高度最近匹配，自动推导识别旧配置，并在 5 种语言中同步更新首次启动设置向导。Issue #17 已解决并关闭。

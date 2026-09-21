@@ -158,9 +158,9 @@ FPD/FPI 格式解析旧 checkbox 在已发布发现/解析范围内已过时；�
 | texture-replacement-mod-loader | Support texture replacement and a mod loader | Todo | Not started |
 | switch-platform-alignment | Resume the Switch platform branch after PC Vulkan | Paused | Deferred |
 | cross-edition-text-patch | Resume cross-edition text and font patch research | Paused | Deferred |
-| native-object-motion | Develop native object and skeletal motion vectors | Todo | Not started |
-| temporal-color-exposure | Define the temporal color and exposure contract | Todo | Not started |
-| vendor-temporal-upscaling | Integrate vendor temporal upscaling after input validation | Todo | Not started |
+| native-object-motion | Develop native object and skeletal motion vectors | In Progress | In progress |
+| temporal-color-exposure | Define the temporal color and exposure contract | In Progress | In progress |
+| vendor-temporal-upscaling | Integrate vendor temporal upscaling after input validation | In Progress | In progress |
 | taa-motion-quality | Validate TAA motion and history quality across scenes | Todo | Awaiting validation |
 | internal-resolution-acceptance | Complete internal-resolution visual acceptance | Todo | Awaiting validation |
 | 60fps-gameplay-regression | Extend correct-speed 60 FPS gameplay validation | Todo | Awaiting validation |

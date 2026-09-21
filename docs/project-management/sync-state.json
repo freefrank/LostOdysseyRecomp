@@ -1761,7 +1761,7 @@
         "Status": "In Progress",
         "Delivery": "In progress",
         "Source key": "native-object-motion",
-        "Evidence": "Four-save survey complete: 288 renderer frames/864 stage traces, all 32 jitter phases. 24 unregistered scene/viewport VS candidates include at least 3 pass-through paths, so no 24-target TAA claim. Offline camera-only MV works; native object/skinned MV, palette producer/history and object generation remain open. Four product F1 ZIPs each contain 3 consecutive frames, screenshot, temporal JSON, logs and manifest; CRC/source hashes match. Static anchors: skeletal 823CB350→823C87D8; material 8258A958/823CB538; atoms 822B5938; camera current/previous/velocity. No repair, FG, build, release or acceptance. Evidence: out/save-temporal-survey-20260910/REPORT.md, analysis-summary.json, submission-research.md, F1-REPORT.md, f1-zip-audit.json."
+        "Evidence": "Four-save survey and F1 archives remain retained. Motion cold-start shared helper with explicit Pending fallback recovery passed 38 GPU checks; native object/skinned motion vectors remain unproven. SDR/motion replay input probing completed before actual production SR confirmation. No native object/skinned repair, full P3 input coverage, player visual acceptance or release is claimed. Evidence: out/tmp/isolated-motion-cold-start/cold_start_rev2.log; .cache/evidence/game-sr-runtime.json; historical out/save-temporal-survey-20260910/REPORT.md, analysis-summary.json, submission-research.md, F1-REPORT.md, f1-zip-audit.json."
       },
       "title": "Develop native object and skeletal motion vectors",
       "body_sha256": "8d1455d9f1eac1b553a4c033fb945b6a2b4ae02e277b54c7fd35a970c76e917e"
@@ -1771,9 +1771,10 @@
       "fields": {
         "Kind": "Research",
         "Area": "Temporal rendering",
-        "Status": "Todo",
-        "Delivery": "Not started",
-        "Source key": "temporal-color-exposure"
+        "Status": "In Progress",
+        "Delivery": "In progress",
+        "Source key": "temporal-color-exposure",
+        "Evidence": "Narrow SDR producer-resolve qualification is implemented and proven in the actual Windows RTX 5080 game run: Quality 1707x960 to 2560x1440, DisplayEncoded color and reversed-Z depth. Persistent session sizing passed at 720p and 1440p; same-scale color-height growth passed 14,720 pixels. HDR, exposure and the full color contract remain incomplete; visual/player acceptance is not claimed."
       },
       "title": "Define the temporal color and exposure contract",
       "body_sha256": "ea11c472bef6182aa16508da1e19a1947dd04f6ad5eb2ee10f0e3bbe6d2fd7cc"
@@ -1786,7 +1787,8 @@
         "Status": "In Progress",
         "Delivery": "In progress",
         "Source key": "vendor-temporal-upscaling",
-        "Start date": "2026-09-20"
+        "Start date": "2026-09-20",
+        "Evidence": "Development and targeted execution are verified. Narrow SDR producer-resolve qualification and CPU-bound tests passed; persistent session sizing passed at 720p and 1440p; same-scale color-height growth passed 14,720 pixels; motion cold-start shared helper and explicit Pending fallback recovery passed 38 GPU checks. Windows RTX 5080 production SR confirmed Quality 1707x960 to 2560x1440, DisplayEncoded, reversed-Z; Create=1 and Evaluate=24 are retained records under a 128-call cap, not a total. Isolated use 10684 was submitted at serial 23614 and remains in flight at the snapshot; 23612 is the earlier completed watermark. No failure, device loss or request disable was recorded. Visual acceptance is not claimed because the run only entered a scene. P3/Gate 3 are not fully accepted, publication has not occurred, and native Linux execution plus SDK distribution remain unresolved. Outstanding: LO_NO_RENDERER shutdown drain and the older unchecked void-submit-wait execution fixture."
       },
       "title": "Integrate vendor temporal upscaling after input validation",
       "body_sha256": "c6d130b2ef790cf62e433ac7b024e82716cd49789eb996dc04d1e58a8c6a6dc3"
@@ -2650,6 +2652,17 @@
       },
       "title": "Add WSL and Linux build scripts for on-demand ELF compilation",
       "body_sha256": "5a3f931391ed989bdccf4827ae9a333863ee181f678de871f60eb9ffd04aa78a"
+    },
+    "d3d12-motion-replay-pso-invalidarg": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg7x6qk",
+      "fields": {
+        "Kind": "Bug",
+        "Area": "Graphics backends",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Evidence": "Observed in automated validation log runtime-639254046562050769.log: DXIL replay shaders compile successfully, but D3D12 CreateGraphicsPipelineState fails with E_INVALIDARG 0x80070057 ('MV pipeline allocation failed'), yielding replay=0 ready=false consume=false. Vulkan path passes (replay>0 ready=true consume=true). Scoped to D3D12 backend repair.",
+        "Source key": "d3d12-motion-replay-pso-invalidarg"
+      }
     }
   }
 }
