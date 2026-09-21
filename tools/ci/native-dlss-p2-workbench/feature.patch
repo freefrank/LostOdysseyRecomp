@@ -1,31 +1,19 @@
-diff --git a/LostOdysseyRecomp/gpu/renderer.cpp b/LostOdysseyRecomp/gpu/renderer.cpp
-index f924405..95a5283 100644
---- a/LostOdysseyRecomp/gpu/renderer.cpp
-+++ b/LostOdysseyRecomp/gpu/renderer.cpp
-@@ -6395,2 +6395,6 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
- 
-+#if !defined(LO_RENDERER_P2_EMBEDDED_TEST)
-+    // The asset-free fixture instantiates Renderer directly. Exclude only game
-+    // entrypoints from that TU, not the production methods under test. COFF
-+    // exception funclets may otherwise retain unused game startup call graphs.
-     bool Init()
-@@ -7113,2 +7117,3 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
- #endif
-+#endif // !LO_RENDERER_P2_EMBEDDED_TEST
- #else
-@@ -7129,2 +7134,3 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
- #endif
-+#if !defined(LO_RENDERER_P2_EMBEDDED_TEST)
-     void SetOutputSize(uint32_t width, uint32_t height)
-@@ -7178,2 +7184,3 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
-     }
-+#endif // !LO_RENDERER_P2_EMBEDDED_TEST
- }
-diff --git a/tools/tests/native_dlss_renderer_gpu_test.cpp b/tools/tests/native_dlss_renderer_gpu_test.cpp
-index 1e26801..e1f4ac8 100644
---- a/tools/tests/native_dlss_renderer_gpu_test.cpp
-+++ b/tools/tests/native_dlss_renderer_gpu_test.cpp
-@@ -2,2 +2,3 @@
- // are linked. The only substituted GPU operation is the proprietary NGX call.
-+#define LO_RENDERER_P2_EMBEDDED_TEST 1
- #include <gpu/renderer.cpp>
+diff --git a/tools/tests/motion_replay/CMakeLists.txt b/tools/tests/motion_replay/CMakeLists.txt
+index 79e3b93..6778ad9 100644
+--- a/tools/tests/motion_replay/CMakeLists.txt
++++ b/tools/tests/motion_replay/CMakeLists.txt
+@@ -93,2 +93,14 @@ if((UNIX AND NOT APPLE) OR WIN32)
+  lo_enable_dlss(LoNativeDlssRendererTest)
++ if(WIN32)
++  # COFF retains the portable-pack implementation with its out-of-line
++  # destructor. Link its real public dependency, not fake codec functions.
++  if(NOT TARGET libzstd_static)
++   set(ZSTD_BUILD_SHARED OFF CACHE BOOL "" FORCE)
++   set(ZSTD_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
++   set(ZSTD_BUILD_TESTS OFF CACHE BOOL "" FORCE)
++   set(ZSTD_USE_STATIC_RUNTIME ON CACHE BOOL "" FORCE)
++   add_subdirectory("${ROOT}/tools/XenosRecomp/thirdparty/zstd/build/cmake" zstd EXCLUDE_FROM_ALL)
++  endif()
++  target_link_libraries(LoNativeDlssRendererTest PRIVATE libzstd_static)
++ endif()
+  target_link_libraries(LoNativeDlssRendererTest PRIVATE mv_runtime)

@@ -16,7 +16,7 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@v4
         with:
-          ref: 4047d6fadbe5189241a3b51d16b4828b6ad62d79
+          ref: 93756081893abf8a472b8afdbb40bccc3eb862e3
           path: source
           persist-credentials: false
       - uses: ilammy/msvc-dev-cmd@v1
