@@ -18,10 +18,12 @@ struct TextureRegion {
     bool Complete() const { return texture && width && height && x + width <= allocation.width && y + height <= allocation.height; }
 };
 
-enum class ColorEncoding : uint32_t { Sdr = 0, HdrLinear = 1 };
+// Unknown is the only safe default. An R8_UNORM allocation is storage metadata,
+// not proof of an SDR transfer function or of a pre-UI tone-map boundary.
+enum class ColorEncoding : uint32_t { Unknown = 0, Sdr = 1, HdrLinear = 2 };
 enum class MotionState : uint32_t { Unavailable = 0, ResetInitialization = 1, Tracked = 2 };
 struct ConsumerRoute {
-    bool legacyTaa = false, dlssInputs = false, inputProbe = false, spatialAA = false;
+    bool legacyTaa = false, dlssInputs = false, dlssSr = false, inputProbe = false, spatialAA = false;
     uint32_t effectiveAA = 0;
 };
 inline constexpr ConsumerRoute RouteConsumer(const frame_plan::FramePlan& plan, bool localInputProbe) {
@@ -30,6 +32,8 @@ inline constexpr ConsumerRoute RouteConsumer(const frame_plan::FramePlan& plan, 
     case upscaling::TemporalConsumer::LegacyTaa: route.legacyTaa=true;break;
     case upscaling::TemporalConsumer::DlssInputs:
         route.dlssInputs=true;route.inputProbe=localInputProbe&&plan.inputProbe;route.effectiveAA=0;break;
+    case upscaling::TemporalConsumer::DlssSr:
+        route.dlssInputs=true;route.dlssSr=true;route.effectiveAA=0;break;
     case upscaling::TemporalConsumer::None:
         route.spatialAA=plan.effectiveAA==1||plan.effectiveAA==2;break;
     }
@@ -57,7 +61,7 @@ struct TemporalFrameInputs {
     TextureRegion color{}, depth{}, motion{};
     TextureRegion motionInvalidity{}, materialInstability{};
     JitterSample jitter{};
-    ColorEncoding colorEncoding = ColorEncoding::Sdr;
+    ColorEncoding colorEncoding = ColorEncoding::Unknown;
     float preExposure = 1.0f, exposureScale = 1.0f;
     MotionState motionState = MotionState::Unavailable;
     bool currentInputsComplete = false, resetHistory = true;
@@ -65,7 +69,7 @@ struct TemporalFrameInputs {
 
     bool CompleteForConsumer() const {
         if (!currentInputsComplete || !color.Complete() || !depth.Complete()) return false;
-        return plan.consumer != upscaling::TemporalConsumer::DlssInputs ||
+        return !upscaling::IsDlssConsumer(plan.consumer) ||
             (motionState != MotionState::Unavailable && motion.Complete() && motionInvalidity.Complete());
     }
 };

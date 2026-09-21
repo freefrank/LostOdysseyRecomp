@@ -2,6 +2,7 @@
 
 #if defined(LO_GPU_PLUME)
 #include <plume_vulkan.h>
+#include "dlss_sr.h"
 #include "upscaling_plan.h"
 
 #include <cstdint>
@@ -103,6 +104,33 @@ public:
     void ProbeOnce(const plume::VulkanInterface& vulkanInterface, const plume::VulkanDevice& device);
     upscaling::OutputSizing QueryOutputSizing(const plume::VulkanInterface& vulkanInterface,
         const plume::VulkanDevice& device, const upscaling::SizingKey& key);
+
+    // Starts one persistent device session using the initialized interface
+    // retained by ProbeOnce. Executable here means the session and capability
+    // map are ready; it does not mean a frame was recorded. QueryOutputSizing
+    // uses that capability map and must not shut down an active session.
+    SrStatus EnsureSession(const plume::VulkanDevice& device);
+    bool NeedsFeatureRecreate(const SrConfig& config) const;
+
+    // Lane B owns one prefix, isolated NGX, and continuation primary list per
+    // GPU slot. This method exclusively begins, records, and ends the isolated
+    // list; it neither submits nor waits, and it never records on the prefix
+    // or continuation list. output remains renderer-owned.
+    SrAttempt RecordIsolated(plume::VulkanCommandList& isolatedCommandList, const SrConfig& config,
+        const temporal::TemporalFrameInputs& inputs, plume::VulkanTexture& output);
+
+    // Lane B reports the prefix/fallback batch outcome. A failed isolated list
+    // is never submitted, but its nonzero useId remains live until one of
+    // these notifications. release is driven only by the shared submission
+    // serial domain after GPU completion.
+    void OnBatchSubmitted(uint64_t useId, uint64_t submissionSerial);
+    void OnBatchDiscarded(uint64_t useId);
+    void ReleaseCompletedThrough(uint64_t submissionSerial);
+
+    // Call at a controlled drained boundary. Reconfiguration releases the
+    // feature only; final shutdown also releases parameters and the session.
+    void ReleaseFeatureAfterGpuDrain();
+    void ShutdownAfterGpuDrain();
     const ProbeReport& Report() const { return report_; }
 
 private:
@@ -114,12 +142,34 @@ private:
                                std::vector<VkExtensionProperties>& required, std::string& reason);
     void RecordCall(const char* name, int32_t result, bool failed = false);
     bool CreateApplicationDataPath(std::string& reason);
+    SrStatus AllocateParameters();
+
+    struct SrUse {
+        uint64_t useId = 0;
+        uint64_t submissionSerial = 0;
+        bool submitted = false;
+    };
 
     std::filesystem::path applicationDataPath_;
     std::filesystem::path runtimePath_;
     ProbeReport report_;
+    const plume::VulkanInterface* sessionInterface_ = nullptr;
+    const plume::VulkanDevice* sessionDevice_ = nullptr;
+    VkInstance sessionInstance_ = VK_NULL_HANDLE;
+    // Opaque SDK-owned objects keep SDK declarations out of the public API.
+    void* capabilityParameters_ = nullptr;
+    void* featureParameters_ = nullptr;
+    void* feature_ = nullptr;
+    SrConfig featureConfig_{};
+    std::vector<SrUse> srUses_;
+    uint64_t nextSrUseId_ = 1;
     bool probeAttempted_ = false;
     bool apiFailure_ = false;
+    bool sessionInitialized_ = false;
+    bool featureConfigValid_ = false;
+    bool sessionFailed_ = false;
+    bool featureFailed_ = false;
+    uint64_t lastSrAttemptFrameId_ = 0;
 };
 } // namespace gpu::dlss
 #endif

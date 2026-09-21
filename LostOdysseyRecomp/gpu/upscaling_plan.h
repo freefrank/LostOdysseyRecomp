@@ -18,7 +18,13 @@ namespace gpu::dlss { class Controller; }
 namespace gpu::upscaling {
 enum class Upscaler : uint32_t { Off = 0, Dlss = 1 };
 enum class DlssQuality : uint32_t { Quality = 0, Balanced = 1, Performance = 2 };
-enum class TemporalConsumer : uint32_t { None = 0, LegacyTaa = 1, DlssInputs = 2 };
+enum class TemporalConsumer : uint32_t { None = 0, LegacyTaa = 1, DlssInputs = 2, DlssSr = 3 };
+// P1's input-only route and P2's native SR route have different output handling,
+// but both require the same complete temporal input contract and request-level
+// fallback semantics.
+inline constexpr bool IsDlssConsumer(TemporalConsumer consumer) {
+    return consumer == TemporalConsumer::DlssInputs || consumer == TemporalConsumer::DlssSr;
+}
 
 struct OutputRegion {
     resolution::Size drawable{};

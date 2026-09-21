@@ -1,11 +1,21 @@
+#if defined(_WIN32) && !defined(NOMINMAX)
+#define NOMINMAX
+#endif
+
 #include "dlss_ngx.h"
 
 #if defined(LO_GPU_PLUME)
+#include "temporal_frame_inputs.h"
+
+#include <algorithm>
+#include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <codecvt>
 #include <locale>
 #if defined(LO_DLSS_SDK)
 #include <nvsdk_ngx_helpers.h>
+#include <nvsdk_ngx_helpers_vk.h>
 #include <nvsdk_ngx_vk.h>
 #endif
 
@@ -13,6 +23,7 @@ namespace gpu::dlss {
 namespace {
 constexpr char kProjectId[] = "bb5fe48b-f929-4b9a-a72b-98a23141a7c9";
 constexpr char kSdkVersion[] = "310.9.1";
+constexpr size_t kMaxRecordedCalls = 128;
 
 #if defined(LO_DLSS_SDK)
 std::wstring ToWide(const std::filesystem::path& path) {
@@ -64,6 +75,77 @@ void CopyExtensionNames(const std::vector<VkExtensionProperties>& extensions, st
     destination.clear();
     destination.reserve(extensions.size());
     for (const auto& extension : extensions) destination.emplace_back(extension.extensionName);
+}
+
+NVSDK_NGX_PerfQuality_Value ToNgxQuality(upscaling::DlssQuality quality) {
+    switch (quality) {
+    case upscaling::DlssQuality::Quality: return NVSDK_NGX_PerfQuality_Value_MaxQuality;
+    case upscaling::DlssQuality::Balanced: return NVSDK_NGX_PerfQuality_Value_Balanced;
+    case upscaling::DlssQuality::Performance: return NVSDK_NGX_PerfQuality_Value_MaxPerf;
+    }
+    return NVSDK_NGX_PerfQuality_Value_MaxQuality;
+}
+
+bool IsFinitePositive(float value) {
+    return std::isfinite(value) && value > 0.0f;
+}
+
+bool ValidImage(const plume::VulkanTexture& texture, const plume::VulkanDevice* device) {
+    return texture.device == device && texture.vk != VK_NULL_HANDLE && texture.imageView != VK_NULL_HANDLE &&
+        texture.imageFormat != VK_FORMAT_UNDEFINED && texture.allocation != VK_NULL_HANDLE &&
+        texture.imageSubresourceRange.aspectMask == VK_IMAGE_ASPECT_COLOR_BIT &&
+        texture.imageSubresourceRange.levelCount == 1 && texture.imageSubresourceRange.layerCount == 1 &&
+        texture.desc.width && texture.desc.height;
+}
+
+NVSDK_NGX_Resource_VK ImageResource(const plume::VulkanTexture& texture, bool readWrite) {
+    return NVSDK_NGX_Create_ImageView_Resource_VK(texture.imageView, texture.vk, texture.imageSubresourceRange,
+        texture.imageFormat, texture.desc.width, texture.desc.height, readWrite);
+}
+
+int DlssFlags(const SrConfig& config) {
+    int flags = NVSDK_NGX_DLSS_Feature_Flags_MVLowRes;
+    if (config.colorSpace == SrColorSpace::Linear) flags |= NVSDK_NGX_DLSS_Feature_Flags_IsHDR;
+    if (config.depthInverted) flags |= NVSDK_NGX_DLSS_Feature_Flags_DepthInverted;
+    if (config.autoExposure) flags |= NVSDK_NGX_DLSS_Feature_Flags_AutoExposure;
+    return flags;
+}
+
+struct BeginCommandResult {
+    std::optional<VkResult> reset;
+    std::optional<VkResult> begin;
+};
+
+// This is the dedicated, renderer-owned isolated primary list only. Keep the
+// public Plume bookkeeping equivalent to VulkanCommandList::begin while using
+// native calls so callers retain the actual VkResult diagnostics.
+BeginCommandResult BeginIsolatedCommandList(plume::VulkanCommandList& list) {
+    if (list.vk == VK_NULL_HANDLE) return {};
+    const auto reset = vkResetCommandBuffer(list.vk, 0);
+    if (reset != VK_SUCCESS) return {reset, std::nullopt};
+    list.activeGraphicsDescriptorSets.clear();
+    list.recording = false;
+    list.externalCommandsOpen = false;
+    VkCommandBufferBeginInfo beginInfo = {};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    const auto begin = vkBeginCommandBuffer(list.vk, &beginInfo);
+    if (begin == VK_SUCCESS) list.recording = true;
+    return {reset, begin};
+}
+
+std::optional<VkResult> EndIsolatedCommandList(plume::VulkanCommandList& list) {
+    if (!list.recording || list.externalCommandsOpen || list.activeRenderPass != VK_NULL_HANDLE) return std::nullopt;
+    const auto end = vkEndCommandBuffer(list.vk);
+    if (end != VK_SUCCESS) return end;
+    list.targetFramebuffer = nullptr;
+    list.activeComputePipelineLayout = nullptr;
+    list.activeGraphicsPipelineLayout = nullptr;
+    list.activeRaytracingPipelineLayout = nullptr;
+    list.activeGraphicsDescriptorSets.clear();
+    list.recording = false;
+    list.externalCommandsOpen = false;
+    return end;
 }
 #endif
 }
@@ -141,7 +223,7 @@ Controller::Controller(std::filesystem::path applicationDataPath, std::filesyste
 }
 
 void Controller::RecordCall(const char* name, int32_t result, bool failed) {
-    report_.calls.push_back({name, result});
+    if (report_.calls.size() < kMaxRecordedCalls) report_.calls.push_back({name, result});
     apiFailure_ |= failed;
 }
 
@@ -193,6 +275,7 @@ bool Controller::QueryInstanceExtensions(std::vector<VkExtensionProperties>& req
 bool Controller::QueryDeviceExtensions(VkInstance instance, VkPhysicalDevice device,
                                        std::vector<VkExtensionProperties>& required, std::string& reason) {
 #if defined(LO_DLSS_SDK)
+    sessionInstance_ = instance;
     if (!CreateApplicationDataPath(reason)) return false;
     DiscoveryInfo info(applicationDataPath_, runtimePath_);
     VkPhysicalDeviceProperties properties = {};
@@ -281,6 +364,11 @@ void Controller::ProbeOnce(const plume::VulkanInterface& vulkanInterface, const 
         return;
     }
 
+    // ProbeOnce deliberately owns a standalone Init/capability/Shutdown cycle.
+    // The retained context is only used by a later persistent EnsureSession.
+    sessionInterface_ = &vulkanInterface;
+    sessionDevice_ = &device;
+    sessionInstance_ = vulkanInterface.instance;
     DiscoveryInfo info(applicationDataPath_, runtimePath_);
     auto result = NVSDK_NGX_VULKAN_Init_with_ProjectID(kProjectId, NVSDK_NGX_ENGINE_TYPE_CUSTOM, "LostOdysseyRecomp",
         info.appDataPath.c_str(), vulkanInterface.instance, device.physicalDevice, device.vk, vkGetInstanceProcAddr,
@@ -385,33 +473,44 @@ upscaling::OutputSizing Controller::QueryOutputSizing(const plume::VulkanInterfa
     }
     std::string pathReason;
     if (!CreateApplicationDataPath(pathReason)) { setAll(upscaling::SizingState::Error); return sizing; }
-    DiscoveryInfo info(applicationDataPath_, runtimePath_);
-    NVSDK_NGX_FeatureRequirement requirements = {};
-    auto result = NVSDK_NGX_VULKAN_GetFeatureRequirements(vulkanInterface.instance, device.physicalDevice,
-        &info.discovery, &requirements);
-    RecordCall("Sizing_GetFeatureRequirements", int32_t(result), NVSDK_NGX_FAILED(result));
-    if (NVSDK_NGX_FAILED(result)) { setAll(upscaling::SizingState::Error, int32_t(result)); return sizing; }
-    if (requirements.FeatureSupported != NVSDK_NGX_FeatureSupportResult_Supported) {
-        setAll(upscaling::SizingState::Unavailable, int32_t(requirements.FeatureSupported));
-        return sizing;
-    }
-    result = NVSDK_NGX_VULKAN_Init_with_ProjectID(kProjectId, NVSDK_NGX_ENGINE_TYPE_CUSTOM, "LostOdysseyRecomp",
-        info.appDataPath.c_str(), vulkanInterface.instance, device.physicalDevice, device.vk, vkGetInstanceProcAddr,
-        vkGetDeviceProcAddr, &info.featureInfo);
-    RecordCall("Sizing_Init_with_ProjectID", int32_t(result), NVSDK_NGX_FAILED(result));
-    if (NVSDK_NGX_FAILED(result)) {
-        setAll(ClassifyNgxResult(int32_t(result), int32_t(NVSDK_NGX_Result_Success),
-            int32_t(NVSDK_NGX_Result_FAIL_FeatureNotSupported)) == ProbeState::Unavailable
-            ? upscaling::SizingState::Unavailable : upscaling::SizingState::Error, int32_t(result));
-        return sizing;
-    }
     NVSDK_NGX_Parameter* parameters = nullptr;
-    result = NVSDK_NGX_VULKAN_GetCapabilityParameters(&parameters);
-    RecordCall("Sizing_GetCapabilityParameters", int32_t(result), NVSDK_NGX_FAILED(result));
-    if (NVSDK_NGX_FAILED(result) || !parameters) {
-        setAll(upscaling::SizingState::Error, int32_t(result));
-        NVSDK_NGX_VULKAN_Shutdown1(device.vk);
-        return sizing;
+    bool temporarySession = false;
+    if (sessionInitialized_) {
+        if (sessionInstance_ != vulkanInterface.instance || sessionDevice_ != &device || !capabilityParameters_) {
+            setAll(upscaling::SizingState::Error);
+            return sizing;
+        }
+        parameters = static_cast<NVSDK_NGX_Parameter*>(capabilityParameters_);
+    } else {
+        DiscoveryInfo info(applicationDataPath_, runtimePath_);
+        NVSDK_NGX_FeatureRequirement requirements = {};
+        auto result = NVSDK_NGX_VULKAN_GetFeatureRequirements(vulkanInterface.instance, device.physicalDevice,
+            &info.discovery, &requirements);
+        RecordCall("Sizing_GetFeatureRequirements", int32_t(result), NVSDK_NGX_FAILED(result));
+        if (NVSDK_NGX_FAILED(result)) { setAll(upscaling::SizingState::Error, int32_t(result)); return sizing; }
+        if (requirements.FeatureSupported != NVSDK_NGX_FeatureSupportResult_Supported) {
+            setAll(upscaling::SizingState::Unavailable, int32_t(requirements.FeatureSupported));
+            return sizing;
+        }
+        result = NVSDK_NGX_VULKAN_Init_with_ProjectID(kProjectId, NVSDK_NGX_ENGINE_TYPE_CUSTOM, "LostOdysseyRecomp",
+            info.appDataPath.c_str(), vulkanInterface.instance, device.physicalDevice, device.vk, vkGetInstanceProcAddr,
+            vkGetDeviceProcAddr, &info.featureInfo);
+        RecordCall("Sizing_Init_with_ProjectID", int32_t(result), NVSDK_NGX_FAILED(result));
+        if (NVSDK_NGX_FAILED(result)) {
+            setAll(ClassifyNgxResult(int32_t(result), int32_t(NVSDK_NGX_Result_Success),
+                int32_t(NVSDK_NGX_Result_FAIL_FeatureNotSupported)) == ProbeState::Unavailable
+                ? upscaling::SizingState::Unavailable : upscaling::SizingState::Error, int32_t(result));
+            return sizing;
+        }
+        result = NVSDK_NGX_VULKAN_GetCapabilityParameters(&parameters);
+        RecordCall("Sizing_GetCapabilityParameters", int32_t(result), NVSDK_NGX_FAILED(result));
+        if (NVSDK_NGX_FAILED(result) || !parameters) {
+            setAll(upscaling::SizingState::Error, int32_t(result));
+            const auto shutdownResult = NVSDK_NGX_VULKAN_Shutdown1(device.vk);
+            RecordCall("Sizing_Shutdown1", int32_t(shutdownResult), NVSDK_NGX_FAILED(shutdownResult));
+            return sizing;
+        }
+        temporarySession = true;
     }
     CapabilityValue available, needsDriver, minMajor, minMinor, featureInit;
     const auto read = [&](const char* keyName, const char* parameter, CapabilityValue& value) {
@@ -448,13 +547,303 @@ upscaling::OutputSizing Controller::QueryOutputSizing(const plume::VulkanInterfa
             if (valid) { mode.optimal = {optimalWidth, optimalHeight}; mode.minimum = {minWidth, minHeight}; mode.maximum = {maxWidth, maxHeight}; }
         }
     }
-    const auto destroyResult = NVSDK_NGX_VULKAN_DestroyParameters(parameters);
-    RecordCall("Sizing_DestroyParameters", int32_t(destroyResult), NVSDK_NGX_FAILED(destroyResult));
-    const auto shutdownResult = NVSDK_NGX_VULKAN_Shutdown1(device.vk);
-    RecordCall("Sizing_Shutdown1", int32_t(shutdownResult), NVSDK_NGX_FAILED(shutdownResult));
-    if (NVSDK_NGX_FAILED(destroyResult) || NVSDK_NGX_FAILED(shutdownResult)) setAll(upscaling::SizingState::Error);
+    if (temporarySession) {
+        const auto destroyResult = NVSDK_NGX_VULKAN_DestroyParameters(parameters);
+        RecordCall("Sizing_DestroyParameters", int32_t(destroyResult), NVSDK_NGX_FAILED(destroyResult));
+        const auto shutdownResult = NVSDK_NGX_VULKAN_Shutdown1(device.vk);
+        RecordCall("Sizing_Shutdown1", int32_t(shutdownResult), NVSDK_NGX_FAILED(shutdownResult));
+        if (NVSDK_NGX_FAILED(destroyResult) || NVSDK_NGX_FAILED(shutdownResult)) setAll(upscaling::SizingState::Error);
+    }
     return sizing;
 #endif
+}
+
+SrStatus Controller::EnsureSession(const plume::VulkanDevice& device) {
+#if !defined(LO_DLSS_SDK)
+    (void)device;
+    return SrStatus::Bypass;
+#else
+    if (sessionDevice_ && sessionDevice_ != &device) return SrStatus::NeedsReconfigure;
+    if (sessionInstance_ == VK_NULL_HANDLE) return SrStatus::Bypass;
+    if (sessionInitialized_) return capabilityParameters_ ? SrStatus::Executable : SrStatus::Failed;
+    if (sessionFailed_) return SrStatus::Failed;
+    const auto& deviceStatus = device.getExternalExtensionStatus();
+    if ((sessionInterface_ && sessionInterface_->getExternalExtensionStatus().state != plume::VulkanExtensionState::Enabled) ||
+        deviceStatus.state != plume::VulkanExtensionState::Enabled)
+        return SrStatus::Bypass;
+
+    std::string reason;
+    if (!CreateApplicationDataPath(reason)) { sessionFailed_ = true; return SrStatus::Failed; }
+    DiscoveryInfo info(applicationDataPath_, runtimePath_);
+    auto result = NVSDK_NGX_VULKAN_Init_with_ProjectID(kProjectId, NVSDK_NGX_ENGINE_TYPE_CUSTOM, "LostOdysseyRecomp",
+        info.appDataPath.c_str(), sessionInstance_, device.physicalDevice, device.vk, vkGetInstanceProcAddr,
+        vkGetDeviceProcAddr, &info.featureInfo);
+    RecordCall("Session_Init_with_ProjectID", int32_t(result), NVSDK_NGX_FAILED(result));
+    if (NVSDK_NGX_FAILED(result)) { sessionFailed_ = true; return SrStatus::Failed; }
+
+    NVSDK_NGX_Parameter* capabilities = nullptr;
+    result = NVSDK_NGX_VULKAN_GetCapabilityParameters(&capabilities);
+    RecordCall("Session_GetCapabilityParameters", int32_t(result), NVSDK_NGX_FAILED(result));
+    if (NVSDK_NGX_FAILED(result) || !capabilities) {
+        const auto shutdownResult = NVSDK_NGX_VULKAN_Shutdown1(device.vk);
+        RecordCall("Session_Shutdown1", int32_t(shutdownResult), NVSDK_NGX_FAILED(shutdownResult));
+        sessionFailed_ = true;
+        return SrStatus::Failed;
+    }
+    const auto read = [&](const char* name, const char* key, CapabilityValue& value) {
+        int raw = 0;
+        const auto getResult = NVSDK_NGX_Parameter_GetI(capabilities, key, &raw);
+        value.raw = int32_t(getResult);
+        if (!NVSDK_NGX_FAILED(getResult)) value.value = raw;
+        RecordCall(name, int32_t(getResult), NVSDK_NGX_FAILED(getResult));
+    };
+    read("Session_Parameter_GetI(SuperSampling_Available)", NVSDK_NGX_EParameter_SuperSampling_Available, report_.srAvailable);
+    read("Session_Parameter_GetI(SuperSampling_NeedsUpdatedDriver)", NVSDK_NGX_Parameter_SuperSampling_NeedsUpdatedDriver, report_.needsUpdatedDriver);
+    read("Session_Parameter_GetI(SuperSampling_MinDriverVersionMajor)", NVSDK_NGX_Parameter_SuperSampling_MinDriverVersionMajor, report_.minDriverVersionMajor);
+    read("Session_Parameter_GetI(SuperSampling_MinDriverVersionMinor)", NVSDK_NGX_Parameter_SuperSampling_MinDriverVersionMinor, report_.minDriverVersionMinor);
+    read("Session_Parameter_GetI(SuperSampling_FeatureInitResult)", NVSDK_NGX_Parameter_SuperSampling_FeatureInitResult, report_.featureInitResult);
+    const auto capability = ClassifySuperSamplingCapabilities(report_.srAvailable, report_.needsUpdatedDriver,
+        report_.minDriverVersionMajor, report_.minDriverVersionMinor, report_.featureInitResult,
+        int32_t(NVSDK_NGX_Result_Success), int32_t(NVSDK_NGX_Result_FAIL_FeatureNotSupported));
+    if (capability.decision != CapabilityDecision::Proceed) {
+        const auto destroyResult = NVSDK_NGX_VULKAN_DestroyParameters(capabilities);
+        RecordCall("Session_DestroyCapabilityParameters", int32_t(destroyResult), NVSDK_NGX_FAILED(destroyResult));
+        const auto shutdownResult = NVSDK_NGX_VULKAN_Shutdown1(device.vk);
+        RecordCall("Session_Shutdown1", int32_t(shutdownResult), NVSDK_NGX_FAILED(shutdownResult));
+        sessionFailed_ = capability.decision == CapabilityDecision::ApiError;
+        return capability.decision == CapabilityDecision::Unavailable ? SrStatus::Bypass : SrStatus::Failed;
+    }
+    capabilityParameters_ = capabilities;
+    sessionDevice_ = &device;
+    sessionInitialized_ = true;
+    report_.state = ProbeState::Available;
+    report_.reason = "NGX persistent Super Sampling session ready";
+    return SrStatus::Executable;
+#endif
+}
+
+bool Controller::NeedsFeatureRecreate(const SrConfig& config) const {
+    return featureFailed_ || !featureConfigValid_ || featureConfig_ != config;
+}
+
+SrStatus Controller::AllocateParameters() {
+#if !defined(LO_DLSS_SDK)
+    return SrStatus::Bypass;
+#else
+    if (!sessionInitialized_) return SrStatus::Failed;
+    if (featureParameters_) return SrStatus::Executable;
+    NVSDK_NGX_Parameter* parameters = nullptr;
+    const auto result = NVSDK_NGX_VULKAN_AllocateParameters(&parameters);
+    RecordCall("AllocateParameters", int32_t(result), NVSDK_NGX_FAILED(result));
+    if (NVSDK_NGX_FAILED(result) || !parameters) return SrStatus::Failed;
+    featureParameters_ = parameters;
+    return SrStatus::Executable;
+#endif
+}
+
+SrAttempt Controller::RecordIsolated(plume::VulkanCommandList& isolatedCommandList, const SrConfig& config,
+    const temporal::TemporalFrameInputs& inputs, plume::VulkanTexture& output) {
+    SrAttempt attempt;
+#if !defined(LO_DLSS_SDK)
+    (void)isolatedCommandList; (void)config; (void)inputs; (void)output;
+    return attempt;
+#else
+    if (config.colorSpace == SrColorSpace::Unknown) return attempt;
+    if (!sessionDevice_) return attempt;
+    const auto session = EnsureSession(*sessionDevice_);
+    if (session != SrStatus::Executable) { attempt.status = session; return attempt; }
+    if (NeedsFeatureRecreate(config) && featureConfigValid_) { attempt.status = SrStatus::NeedsReconfigure; return attempt; }
+    if (featureFailed_) { attempt.status = SrStatus::NeedsReconfigure; return attempt; }
+    if (inputs.renderFrameId && inputs.renderFrameId == lastSrAttemptFrameId_) return attempt;
+
+    const auto validRegion = [&](const temporal::TextureRegion& region) {
+        if (!region.Complete() || region.width != config.renderExtent.width || region.height != config.renderExtent.height)
+            return false;
+        const auto* texture = static_cast<const plume::VulkanTexture*>(region.texture);
+        return ValidImage(*texture, sessionDevice_) && region.allocation.width == texture->desc.width &&
+            region.allocation.height == texture->desc.height;
+    };
+    if (!config.renderExtent.width || !config.renderExtent.height || !config.outputExtent.width || !config.outputExtent.height ||
+        config.deviceEpoch != inputs.plan.deviceEpoch || inputs.plan.consumer != upscaling::TemporalConsumer::DlssSr ||
+        !inputs.CompleteForConsumer() || !validRegion(inputs.color) || !validRegion(inputs.depth) || !validRegion(inputs.motion) ||
+        !ValidImage(output, sessionDevice_) || output.desc.width != config.outputExtent.width || output.desc.height != config.outputExtent.height ||
+        static_cast<const plume::VulkanTexture*>(inputs.depth.texture)->imageFormat != VK_FORMAT_R32_SFLOAT ||
+        !std::isfinite(inputs.jitter.pixelX) || !std::isfinite(inputs.jitter.pixelY) ||
+        !IsFinitePositive(inputs.preExposure) || !IsFinitePositive(inputs.exposureScale) ||
+        (config.colorSpace == SrColorSpace::DisplayEncoded && inputs.colorEncoding != temporal::ColorEncoding::Sdr) ||
+        (config.colorSpace == SrColorSpace::Linear && inputs.colorEncoding != temporal::ColorEncoding::HdrLinear))
+        return attempt;
+
+    // Retain parameters and any feature state through the fallback prefix batch,
+    // including a failed Create/Evaluate recording whose primary is excluded.
+    attempt.useId = nextSrUseId_++;
+    srUses_.push_back({attempt.useId});
+    lastSrAttemptFrameId_ = inputs.renderFrameId;
+    const auto failed = [&](std::optional<int32_t> rawNgx = std::nullopt,
+                            std::optional<VkResult> rawVk = std::nullopt) {
+        attempt.status = rawVk && *rawVk == VK_ERROR_DEVICE_LOST ? SrStatus::DeviceLost : SrStatus::Failed;
+        attempt.rawNgxResult = rawNgx;
+        if (rawVk) attempt.rawVkResult = int32_t(*rawVk);
+        featureFailed_ = true;
+        return attempt;
+    };
+
+    const auto begin = BeginIsolatedCommandList(isolatedCommandList);
+    if (begin.reset) RecordCall("vkResetCommandBuffer", int32_t(*begin.reset), *begin.reset != VK_SUCCESS);
+    if (begin.begin) RecordCall("vkBeginCommandBuffer", int32_t(*begin.begin), *begin.begin != VK_SUCCESS);
+    if (!begin.reset || *begin.reset != VK_SUCCESS) return failed(std::nullopt, begin.reset);
+    if (!begin.begin || *begin.begin != VK_SUCCESS) return failed(std::nullopt, begin.begin);
+    const auto commandBuffer = isolatedCommandList.beginExternalCommands();
+    if (commandBuffer == VK_NULL_HANDLE) {
+        const auto end = EndIsolatedCommandList(isolatedCommandList);
+        if (end) RecordCall("vkEndCommandBuffer", int32_t(*end), *end != VK_SUCCESS);
+        return failed(std::nullopt, end);
+    }
+
+    auto* parameters = static_cast<NVSDK_NGX_Parameter*>(featureParameters_);
+    bool created = false;
+    if (!feature_) {
+        if (AllocateParameters() != SrStatus::Executable) {
+            isolatedCommandList.endExternalCommands();
+            const auto end = EndIsolatedCommandList(isolatedCommandList);
+            if (end) RecordCall("vkEndCommandBuffer", int32_t(*end), *end != VK_SUCCESS);
+            return failed(std::nullopt, end);
+        }
+        parameters = static_cast<NVSDK_NGX_Parameter*>(featureParameters_);
+        NVSDK_NGX_DLSS_Create_Params create = {};
+        create.Feature.InWidth = config.renderExtent.width;
+        create.Feature.InHeight = config.renderExtent.height;
+        create.Feature.InTargetWidth = config.outputExtent.width;
+        create.Feature.InTargetHeight = config.outputExtent.height;
+        create.Feature.InPerfQualityValue = ToNgxQuality(config.quality);
+        create.InFeatureCreateFlags = DlssFlags(config);
+        create.InEnableOutputSubrects = false;
+        NVSDK_NGX_Handle* handle = nullptr;
+        const auto createResult = NGX_VULKAN_CREATE_DLSS_EXT1(sessionDevice_->vk, commandBuffer, 1, 1,
+            &handle, parameters, &create);
+        RecordCall("CREATE_DLSS_EXT1", int32_t(createResult), NVSDK_NGX_FAILED(createResult));
+        if (NVSDK_NGX_FAILED(createResult) || !handle) {
+            isolatedCommandList.endExternalCommands();
+            const auto end = EndIsolatedCommandList(isolatedCommandList);
+            if (end) RecordCall("vkEndCommandBuffer", int32_t(*end), *end != VK_SUCCESS);
+            return failed(int32_t(createResult), end);
+        }
+        feature_ = handle;
+        featureConfig_ = config;
+        featureConfigValid_ = true;
+        created = true;
+        report_.srImplemented = true;
+    }
+
+    const auto& color = *static_cast<const plume::VulkanTexture*>(inputs.color.texture);
+    const auto& depth = *static_cast<const plume::VulkanTexture*>(inputs.depth.texture);
+    const auto& motion = *static_cast<const plume::VulkanTexture*>(inputs.motion.texture);
+    auto colorResource = ImageResource(color, false);
+    auto depthResource = ImageResource(depth, false);
+    auto motionResource = ImageResource(motion, false);
+    auto outputResource = ImageResource(output, true);
+    NVSDK_NGX_VK_DLSS_Eval_Params evaluate = {};
+    evaluate.Feature.pInColor = &colorResource;
+    evaluate.Feature.pInOutput = &outputResource;
+    evaluate.pInDepth = &depthResource;
+    evaluate.pInMotionVectors = &motionResource;
+    evaluate.InJitterOffsetX = float(inputs.jitter.pixelX);
+    evaluate.InJitterOffsetY = float(inputs.jitter.pixelY);
+    evaluate.InRenderSubrectDimensions = {config.renderExtent.width, config.renderExtent.height};
+    evaluate.InReset = created || inputs.resetHistory ? 1 : 0;
+    evaluate.InMVScaleX = 1.0f;
+    evaluate.InMVScaleY = 1.0f;
+    evaluate.InColorSubrectBase = {inputs.color.x, inputs.color.y};
+    evaluate.InDepthSubrectBase = {inputs.depth.x, inputs.depth.y};
+    evaluate.InMVSubrectBase = {inputs.motion.x, inputs.motion.y};
+    evaluate.InOutputSubrectBase = {0, 0};
+    evaluate.InPreExposure = inputs.preExposure;
+    evaluate.InExposureScale = inputs.exposureScale;
+    // Transparency and exposure resources remain null. Auto exposure is only
+    // selected by SrConfig and no guest alpha/mask is bound to NGX.
+#if defined(LO_NATIVE_DLSS_TEST_INJECT_EVALUATE_FAILURE)
+    if (const char* inject = std::getenv("LO_DLSS_TEST_INJECT_EVALUATE_FAILURE"); inject && *inject == '1') {
+        // Test-only host injection: this records a command before reporting a
+        // synthetic NGX failure. The caller must exclude this primary list and
+        // submit its already-recorded prefix fallback instead.
+        vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+            0, 0, nullptr, 0, nullptr, 0, nullptr);
+        RecordCall("TEST_INJECT_DLSS_EVALUATE_FAILURE", int32_t(NVSDK_NGX_Result_FAIL_InvalidParameter), true);
+        isolatedCommandList.endExternalCommands();
+        const auto end = EndIsolatedCommandList(isolatedCommandList);
+        if (end) RecordCall("vkEndCommandBuffer", int32_t(*end), *end != VK_SUCCESS);
+        return failed(int32_t(NVSDK_NGX_Result_FAIL_InvalidParameter), end);
+    }
+#endif
+    const auto evaluateResult = NGX_VULKAN_EVALUATE_DLSS_EXT(commandBuffer,
+        static_cast<NVSDK_NGX_Handle*>(feature_), parameters, &evaluate);
+    RecordCall("EVALUATE_DLSS_EXT", int32_t(evaluateResult), NVSDK_NGX_FAILED(evaluateResult));
+    isolatedCommandList.endExternalCommands();
+    const auto end = EndIsolatedCommandList(isolatedCommandList);
+    if (end) RecordCall("vkEndCommandBuffer", int32_t(*end), *end != VK_SUCCESS);
+    if (!end || *end != VK_SUCCESS) return failed(int32_t(evaluateResult), end);
+    if (NVSDK_NGX_FAILED(evaluateResult)) return failed(int32_t(evaluateResult), end);
+    report_.srEvaluated = true;
+    attempt.status = SrStatus::Executable;
+    return attempt;
+#endif
+}
+
+void Controller::OnBatchSubmitted(uint64_t useId, uint64_t submissionSerial) {
+    if (!useId || !submissionSerial) return;
+    const auto it = std::find_if(srUses_.begin(), srUses_.end(), [useId](const SrUse& use) { return use.useId == useId; });
+    if (it != srUses_.end()) { it->submitted = true; it->submissionSerial = submissionSerial; }
+}
+
+void Controller::OnBatchDiscarded(uint64_t useId) {
+    if (!useId) return;
+    std::erase_if(srUses_, [useId](const SrUse& use) { return use.useId == useId; });
+}
+
+void Controller::ReleaseCompletedThrough(uint64_t submissionSerial) {
+    std::erase_if(srUses_, [submissionSerial](const SrUse& use) {
+        return use.submitted && use.submissionSerial <= submissionSerial;
+    });
+}
+
+void Controller::ReleaseFeatureAfterGpuDrain() {
+    if (!srUses_.empty()) return;
+#if defined(LO_DLSS_SDK)
+    if (feature_) {
+        const auto result = NVSDK_NGX_VULKAN_ReleaseFeature(static_cast<NVSDK_NGX_Handle*>(feature_));
+        RecordCall("ReleaseFeature", int32_t(result), NVSDK_NGX_FAILED(result));
+        feature_ = nullptr;
+    }
+#endif
+    featureConfigValid_ = false;
+    featureFailed_ = false;
+    lastSrAttemptFrameId_ = 0;
+}
+
+void Controller::ShutdownAfterGpuDrain() {
+    if (!srUses_.empty()) return;
+    ReleaseFeatureAfterGpuDrain();
+#if defined(LO_DLSS_SDK)
+    if (featureParameters_) {
+        const auto result = NVSDK_NGX_VULKAN_DestroyParameters(static_cast<NVSDK_NGX_Parameter*>(featureParameters_));
+        RecordCall("DestroyFeatureParameters", int32_t(result), NVSDK_NGX_FAILED(result));
+        featureParameters_ = nullptr;
+    }
+    if (capabilityParameters_) {
+        const auto result = NVSDK_NGX_VULKAN_DestroyParameters(static_cast<NVSDK_NGX_Parameter*>(capabilityParameters_));
+        RecordCall("DestroyCapabilityParameters", int32_t(result), NVSDK_NGX_FAILED(result));
+        capabilityParameters_ = nullptr;
+    }
+    if (sessionInitialized_ && sessionDevice_) {
+        const auto result = NVSDK_NGX_VULKAN_Shutdown1(sessionDevice_->vk);
+        RecordCall("Session_Shutdown1", int32_t(result), NVSDK_NGX_FAILED(result));
+    }
+#endif
+    sessionInitialized_ = false;
+    sessionFailed_ = false;
+    sessionInterface_ = nullptr;
+    sessionDevice_ = nullptr;
+    sessionInstance_ = VK_NULL_HANDLE;
 }
 } // namespace gpu::dlss
 #endif

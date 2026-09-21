@@ -316,10 +316,10 @@ public:
             if(!ContinuousHistoryCamera(*current.camera,*previous.camera)) automatic=automatic|TemporalResetReason::CameraDiscontinuity;
             if(!SameInputConfiguration(previous.plan,plan)) automatic=automatic|TemporalResetReason::PlanConfigurationChanged;
         }
-        if(plan.consumer==upscaling::TemporalConsumer::DlssInputs&&!motionVectorValid_)
+        if(upscaling::IsDlssConsumer(plan.consumer)&&!motionVectorValid_)
             automatic=automatic|TemporalResetReason::IncompleteInputs;
         current.inputReset=reset|automatic;
-        current.inputsComplete=plan.consumer!=upscaling::TemporalConsumer::DlssInputs||motionVectorValid_;
+        current.inputsComplete=!upscaling::IsDlssConsumer(plan.consumer)||motionVectorValid_;
         aa_.RecordExternalUse(); return true;
     }
     TemporalFrameInputs CurrentInputs() const {
