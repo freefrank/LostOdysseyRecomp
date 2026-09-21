@@ -1,0 +1,36 @@
+name: Native DLSS CPU contracts
+
+on:
+  push:
+    branches: [dlss]
+    paths:
+      - LostOdysseyRecomp/gpu/**
+      - tools/tests/**
+      - .github/workflows/native-dlss-cpu.yml
+  pull_request:
+    paths:
+      - LostOdysseyRecomp/gpu/**
+      - tools/tests/**
+      - .github/workflows/native-dlss-cpu.yml
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Configure without Vulkan, NGX, submodules or game assets
+        run: cmake -S tools/tests/native_dlss -B out/native-dlss-cpu -DLO_NATIVE_DLSS_CPU_ONLY=ON -DCMAKE_BUILD_TYPE=Release
+      - name: Build CPU contract fixtures
+        run: cmake --build out/native-dlss-cpu --config Release --target LoNativeDlssCpuTests --parallel 2
+      - name: Run CPU contracts (not GPU or image-quality acceptance)
+        run: ctest --test-dir out/native-dlss-cpu -C Release -L cpu --output-on-failure
