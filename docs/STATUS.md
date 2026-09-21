@@ -1,20 +1,19 @@
 # Project status
 
-## Development branch: Native DLSS integration (P0 foundation passed)
+## Development branch: Native DLSS integration (P1 temporal inputs & resolution plan passed)
 
 Development work on native NVIDIA DLSS Super Resolution is underway on the `dlss` feature branch:
-- **P0 Scope & Status**: P0 foundation established on local branch. P0 covers the optional SDK dependency, Plume Vulkan bridge hooks (`VulkanExtensionHooks` and `VulkanExtensionStatus`), pre-device extension negotiation, external command demarcations (`beginExternalCommands`, `endExternalCommands`), NGX feature discovery, and optimal input resolution queries. Frame Generation (FG) remains deferred.
+- **P0 Foundation**: Baseline established at commit `089676f`, covering optional NGX SDK integration (v310.9.1 / `374959484e79a640feaba44c93ac8cfb0a03f5b5`), Plume Vulkan bridge hooks (`VulkanExtensionHooks` / `VulkanExtensionStatus`), external command boundaries, standalone probe (`LoNativeDlssProbe`), and exit policy tests.
+- **P1 Scope & Status**: P1 gate passed and committed locally in `c6bc50b` (output sizing support) and `3f40030` (frame planning inputs). P1 introduces true lower internal rendering resolution, CPU frame planning with versioned 24-word snapshot packets, request-level DLSS disable latches independent of legacy OOM retry state, and exact NGX output sizing. Renderer captures pre-TAA color, R32 current depth, and unjittered input-pixel motion vectors with explicit reset and GPU fence-qualified resource retirement.
 - **Verification Evidence**:
-  - Reused Plume Vulkan bridge command recording fixture (`LoPlumeBridgeTest`) passed (CPU command recording only; no GPU submit, no synthetic device-lost injection).
-  - SDK-off runtime build (`LostOdysseyRecomp`) and standalone tests passed. Probe returns exit 77 (`ProbeState::SdkDisabled`, mapped to CTest skip).
-  - SDK-on runtime build (`LostOdysseyRecomp`) passed with pinned NVIDIA DLSS SDK `310.9.1` (`374959484e79a640feaba44c93ac8cfb0a03f5b5`) using static CRT bootstrap libraries (`nvsdk_ngx_s.lib` / `nvsdk_ngx_s_dbg.lib`).
-  - NVIDIA hardware execution on an RTX 5080 (driver 616.56) verified successful NGX initialization, capability query, and optimal settings calculation for 1920×1080 output: Quality 1280×720, Balanced 1114×626, Performance 960×540.
-  - Missing staged runtime injection confirmed controlled negative exit: standalone probe exited with code 1, recording raw NGX error `-1160773614` (`0xBAD00012`, `NVSDK_NGX_Result_FAIL_NotImplemented`), and the staged runtime was restored.
-  - Decision helper logic in `LoNativeDlssReportTest` passed all exit code, capability parsing, and optimal settings validation tests.
-  - Native Linux testing was skipped in P0 due to the absence of a native Linux GPU environment.
-- **Scope Limits**: No Super Resolution evaluation (`NGX_VULKAN_EVALUATE_DLSS_EXT`), temporal motion vector feeding, HUD separation, or game launch has taken place. No visual quality or framerate improvements are claimed.
+  - 62 production CPU planner checks (`LoP1FramePlanTest`) covering request signatures, geometry epochs, low-720 fallbacks, latching, and mailbox retry behavior.
+  - Standalone NGX query verified optimal settings for 1280×720 output on local RTX 5080: Quality 853×480, Balanced 742×418, Performance 640×360 (`raw = 1`, exit 0).
+  - 112 focused Vulkan GPU input checks (`motion_replay_gpu_test --p1-inputs-only`) on an NVIDIA RTX 5080 verifying real R32 depth, pre-TAA color capture, unjittered geometric MV conventions, camera-cut resets, single motion finalization, and fence-qualified resource retirement.
+  - Compilation of all changed runtime translation units (`frame_plan.cpp`, `upscaling_plan.cpp`, `video.cpp`, `dlss_ngx.cpp`, `config.cpp`, `command_processor.cpp`, and `renderer.cpp`).
+  - Local diagnostic switch `LO_DLSS_INPUT_PROBE=1` drives true low-resolution rendering and spatial presentation without legacy TAA; ordinary DLSS configuration requests fall back to legacy rendering paths until P2.
+- **Scope Limits**: No NGX Super Resolution evaluation (`NGX_VULKAN_EVALUATE_DLSS_EXT`), Create calls, persistent NGX sessions, or game/Linux acceptance yet. GPU test fixture exercises single motion finalization but does not cover HDR/SDR branch distinctions, padded subrect allocations, or full renderer end-to-end jitter proof.
 - **Redistribution & Licensing**: SDK-on builds link proprietary NVIDIA components. Binary redistribution licensing remains unresolved, and no binary packages are released.
-- See detailed evidence and reproduction steps in [Native DLSS Validation](notes/native-dlss-validation.md).
+- Detailed P0 and P1 verification records are maintained in [Native DLSS Validation](notes/native-dlss-validation.md).
 
 ## v0.6.7 published / v0.6.7 已发布
 

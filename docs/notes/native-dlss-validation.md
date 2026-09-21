@@ -1,25 +1,30 @@
-# Native DLSS Validation (P0 Foundation)
+# Native DLSS Validation (P0 Foundation & P1 Temporal Inputs)
 
 Date: 2026-09-20
-
 Baseline: `main@5b765f617ec511a2f76aa9da7923a8c122679d2c`
-
-Feature branch: `dlss`
-
+Feature branch: `dlss` (P0 commit `089676f`, P1 commits `c6bc50b` and `3f40030`)
 SDK Reference: NVIDIA DLSS **310.9.1** (`374959484e79a640feaba44c93ac8cfb0a03f5b5`)
-Status: **P0 gate 1 passed** (Attempt 3). Local foundation only. Frame Generation (FG) deferred.
+Status: **P0 gate 1 passed**; **P1 gate 2 passed**. Local foundation and temporal input contracts established. Frame Generation (FG) deferred.
 
 ## 1. Overview and Scope
 
-This document records the verification evidence for the P0 phase of native Vulkan NVIDIA DLSS integration on the `dlss` development branch.
+This document records the verification evidence for the P0 and P1 phases of native Vulkan NVIDIA DLSS integration on the `dlss` development branch.
 
-P0 scope is strictly limited to:
+### P0 Scope
 - Pinned official NGX SDK bootstrap dependency and Vulkan extension negotiation.
 - Plume Vulkan bridge hooks (`VulkanExtensionHooks`, `VulkanExtensionStatus`, and external command boundaries).
 - Capability discovery, query parameter lifecycle, and optimal resolution settings via `LoNativeDlssProbe` and `LoNativeDlssReportTest`.
-- Fallback policies: implemented runtime fallback policies (reverting to baseline Vulkan without DLSS when the SDK is disabled at build time, when hardware is unsupported, or when the staged runtime is absent) and verified negative standalone probe behavior.
+- Fallback policies: runtime fallback policies (reverting to baseline Vulkan without DLSS when the SDK is disabled at build time, when hardware is unsupported, or when the staged runtime is absent) and verified negative standalone probe behavior.
 
-P0 does **not** implement Super Resolution evaluation (`NGX_VULKAN_CREATE_DLSS_EXT1` / `NGX_VULKAN_EVALUATE_DLSS_EXT`), temporal motion vector feeding, HUD separation, or Frame Generation. No game launch or visual/framerate acceptance is claimed.
+### P1 Scope
+- CPU frame planning with versioned 24-word snapshot packets transmitting true lower internal rendering resolution, request signatures, geometry epochs, and exact NGX output sizing.
+- Demand-driven NGX sizing cache with independent request-level DLSS disable latches (decoupled from legacy out-of-memory retry step-downs).
+- Renderer separation: captures pre-TAA color, R32 current depth, and unjittered geometric motion vectors in input pixel units (`previousPixel - currentPixel`).
+- Explicit history reset conditions (camera cuts, extent changes, geometry epochs, format changes) and GPU fence-qualified resource retirement.
+- Local diagnostic mode `LO_DLSS_INPUT_PROBE=1` driving true lower-resolution rendering and spatial presentation without executing legacy TAA.
+- Ordinary DLSS configuration requests continue to fall back to legacy rendering paths until P2.
+
+P0 and P1 do **not** implement Super Resolution evaluation (`NGX_VULKAN_CREATE_DLSS_EXT1` / `NGX_VULKAN_EVALUATE_DLSS_EXT`) or Frame Generation. No game launch or visual/framerate acceptance is claimed.
 
 ## 2. Pinned SDK Provenance and Cryptographic Hashes
 
@@ -126,6 +131,34 @@ To verify controlled error handling when the SDK bootstrap is present but the ru
 - Verifies optimal settings dimension validation and exit code policies.
 - Result: **PASS** (exit 0).
 
+### 4.6 P1 Sizing Query on NVIDIA Hardware (1280×720 Output)
+To verify resolution planning across multiple output targets, NGX optimal settings queries were executed for 1280×720 output on the local RTX 5080:
+- Command: `out/build/native-dlss-p1-sdk/Debug/LoNativeDlssProbe.exe --sizing 1280 720`
+- Exit code: **0**
+- Optimal settings returned (`raw = 1`):
+  - **Quality**: 853×480 (min 640×360, max 1280×720)
+  - **Balanced**: 742×418 (min 640×360, max 1280×720)
+  - **Performance**: 640×360 (min 640×360, max 1280×720)
+
+### 4.7 P1 CPU Frame Planner Verification
+The standalone CPU planner fixture (`LoP1FramePlanTest`) tests production planner logic in `gpu/frame_plan.h` and `gpu/upscaling_plan.cpp`:
+- 62 checks passed across mailbox error reporting, request-level DLSS disable latches (independent of legacy OOM retry state), low-720 floor terminal stability, 24-word wire packet encoding/decoding, and sizing cache synchronization.
+- Result: **PASS** (62 checks).
+
+### 4.8 P1 Vulkan GPU Temporal Input Verification
+The standalone motion replay fixture (`motion_replay_gpu_test --p1-inputs-only`) executed on local NVIDIA GeForce RTX 5080 hardware:
+- Verified single-channel R32 depth and pre-TAA color capture for first and second frames.
+- Verified absence of legacy TAA color resolve and lazy allocation of TAA history buffers.
+- Verified unjittered input-pixel motion vector convention (`previousPixel - currentPixel`) with known `(-2, 0)` vector movement from actual motion replay.
+- Verified explicit history reset triggers: camera cuts, extent changes, geometry epochs, and format changes.
+- Verified fence-qualified GPU resource retirement and single motion finalization before consumers.
+- Result: **PASS** (112 checks).
+
+### 4.9 Compilation Scope
+All changed translation units compiled without errors:
+- Lane A: `gpu/frame_plan.cpp`, `gpu/upscaling_plan.cpp`, `gpu/video.cpp`, `gpu/dlss_ngx.cpp`, `settings/config.cpp`, `gpu/command_processor.cpp`.
+- Lane B: `gpu/renderer.cpp`.
+
 ## 5. Architectural and Licensing Boundaries
 
 ### Search Path vs. Loaded Runtime Version
@@ -137,7 +170,15 @@ The probe and runtime pass the directory containing the staged `nvngx_dlss.dll` 
 - While optional static bootstrap linking permits local development, public redistribution of builds with `LO_ENABLE_DLSS=ON` bundled with or linking proprietary NGX components raises unresolved licensing questions.
 - Binary redistribution remains unresolved, and no binary packages are released.
 
+### Known Limits and Boundary Conditions
+- **No Game or Linux Validation**: Tests were run using focused synthetic and hardware probes; no full game launch or Linux GPU runs have been performed.
+- **P2 Prerequisite**: True NGX Super Resolution evaluation (`NGX_VULKAN_CREATE_DLSS_EXT1` and `NGX_VULKAN_EVALUATE_DLSS_EXT`) is not yet implemented. Ordinary DLSS configuration requests remain mapped to legacy rendering paths until P2.
+- **Renderer Recognition Scope**: The focused GPU fixture verifies single motion finalization before consumers, but does not exercise separate HDR and SDR scene-recognition branches.
+- **Allocation Geometry**: The input-region fixture exercises a 64×64 valid allocation, but does not test padded texture allocations with smaller subrectangles.
+- **Temporal & Config Discontinuities**: The test suite does not simulate temporal frame-time discontinuities (such as 250 ms stalls). Persisted configuration handling (legacy migration, missing keys, invalid enums, PreviewConfig, and SaveConfig write failure) remains unexecuted in focused fixtures.
+- **Jitter Proof**: The GPU fixture verifies unjittered motion vector inputs with a synchronized raster jitter sample, but does not provide end-to-end full renderer jitter coverage.
+
 ## 6. Next Steps
 
-- **P1**: Frame plan integration, shared temporal input contracts (`TemporalFrameInputs`), separate internal render resolution scaling below 720p, and jitter coordinate contracts.
+- **P2**: Actual NGX Super Resolution execution (`NGX_VULKAN_CREATE_DLSS_EXT1` / `NGX_VULKAN_EVALUATE_DLSS_EXT`), SDR pre-UI initial integration path, persistent NGX session management, and renderer and presentation submission-serial retirement.
 - **P4**: Frame Generation remains deferred until Super Resolution (P1–P3) is completed and verified.

@@ -13,7 +13,13 @@ One record of completed changes, with unpublished work separated from verified r
   - Implemented Plume Vulkan bridge extension hooks and external command boundaries (`VulkanExtensionHooks`, `VulkanExtensionStatus`, `beginExternalCommands`, and `endExternalCommands`).
   - Added standalone and integrated capability probes (`LoNativeDlssProbe`, `LoNativeDlssReportTest`) verifying NGX feature discovery, Vulkan instance/device extension negotiation, capability parameters, and optimal input resolution queries.
   - P0 validation gate passed on local hardware (NVIDIA RTX 5080, driver 616.56, reporting optimal inputs for 1080p: Quality 1280×720, Balanced 1114×626, Performance 960×540). Controlled injection of missing runtime DLL verified expected standalone negative probe exit (exit 1).
-  - Frame Generation (FG) remains deferred, and Super Resolution evaluation (`NGX_VULKAN_EVALUATE_DLSS_EXT`) and game output integration are not yet implemented (P1/P2). Proprietary licensing for SDK-on binary distribution remains unresolved, and no binary packages are released.
+- Implemented P1 temporal input contracts and true lower-resolution rendering plan:
+  - CPU frame planner generates versioned 24-word snapshot packets with true lower internal rendering resolution, request signatures, geometry epochs, and exact NGX output sizing.
+  - Sizing cache queries NGX recommended dimensions on demand; added native 1280×720 verification on local hardware (Quality 853×480, Balanced 742×418, Performance 640×360, exit 0).
+  - Renderer captures pre-TAA color, single-channel R32 current depth, and unjittered geometric motion vectors in input pixel units (`previousPixel - currentPixel`), with explicit history reset triggers (camera cut, extent, epoch, format) and GPU fence-qualified resource retirement.
+  - Added local `LO_DLSS_INPUT_PROBE=1` diagnostic mode to drive true low-resolution rendering and spatial presentation without executing legacy TAA. Ordinary DLSS configuration requests continue to fall back to legacy rendering paths until P2.
+  - Verified by 62 production CPU planner checks, 112 Vulkan GPU input checks on an NVIDIA RTX 5080, and compilation of all affected translation units. No NGX Super Resolution evaluation (`NGX_VULKAN_EVALUATE_DLSS_EXT`) or game-level execution has taken place.
+  - Frame Generation (FG) remains deferred. Proprietary licensing for SDK-on binary distribution remains unresolved; no binary packages are released.
 
 ### 简体中文
 
@@ -22,7 +28,13 @@ One record of completed changes, with unpublished work separated from verified r
   - 实现 Plume Vulkan 桥接扩展钩子与外部命令流边界（`VulkanExtensionHooks`、`VulkanExtensionStatus`、`beginExternalCommands` 与 `endExternalCommands`）。
   - 新增独立与集成能力探测程序（`LoNativeDlssProbe`、`LoNativeDlssReportTest`），验证 NGX 特征发现、Vulkan 实例与设备扩展协商、能力参数读取及推荐输入分辨率查询。
   - P0 验证门禁在本地设备通过（RTX 5080，驱动 616.56，1080p 目标下查询到 Quality 1280×720、Balanced 1114×626、Performance 960×540）。受控注入缺失运行库测试确认了独立探测程序的预期负向退出（exit 1）。
-  - 帧生成（FG）保持暂缓，SR 执行求值（`NGX_VULKAN_EVALUATE_DLSS_EXT`）与游戏渲染链输出接回尚未实现（属于 P1/P2 阶段）。包含 SDK 的二进制分发许可尚待确定，不发布二进制包。
+- 实现 P1 时序输入契约与真实低分辨率渲染计划：
+  - CPU 帧计划器生成包含版本信息的 24-word 快照数据包，支持真实低内部渲染分辨率、请求签名、几何周期及精确 NGX 输出区域。
+  - 分辨率缓存按需查询 NGX 推荐输入尺寸；在实机上补充了 1280×720 输出验证（Quality 853×480、Balanced 742×418、Performance 640×360，退出码 0）。
+  - 渲染器独立采集 TAA 前颜色、单通道 R32 当前深度以及未抖动的像素单位几何运动矢量（`previousPixel - currentPixel`），具备显式历史重置策略（切镜、尺寸、周期与格式变更）及基于 GPU fence 序列的生命周期管理。
+  - 新增本地 `LO_DLSS_INPUT_PROBE=1` 诊断模式，以驱动真实低分辨率与空间呈现，不执行旧版 TAA。在 P2 实现前，普通 DLSS 配置请求仍继续回退至原版渲染路径。
+  - 通过 62 项 CPU 生产计划器检查、RTX 5080 上的 112 项 Vulkan GPU 输入检查，以及所有受影响编译单元构建。尚未调用 NGX SR 求值（`NGX_VULKAN_EVALUATE_DLSS_EXT`），未进行全游戏运行验收。
+  - 帧生成（FG）保持暂缓。包含 SDK 的二进制分发许可尚待确定，不发布二进制包。
 
 ## v0.6.7 — 2026-09-20
 

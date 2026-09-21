@@ -21,7 +21,7 @@ v0.6.3 已于 2026-09-19T23:56:08Z 从 tag/source commit `93bdbc1ccae7652e38dc80
 ## v0.7.0 计划
 
 - [ ] **DLSS-G 与 FSR Frame Generation：**Windows PC 的 v0.7.0 计划要求 D3D12 与 Vulkan 均完成 2× DLSS-G 和 2× FSR Frame Generation。四个提供方／API 组合分别验收；D3D12 的输入定位不能推迟 Vulkan。P0 固定 SDK、能力、队列和呈现路线；P1 核实原生 velocity 覆盖；P2 完成相机、刚体和骨骼运动；P3 冻结颜色／UI／帧输入；P4 建立两 API；P5／P6 分别接入 FSR FG 与 DLSS-G；P7 验收四组合；P8 准备另行授权的发布。FSR Super Resolution 与锐化保留为 Issue #10 的独立范围，不算插帧完成。本次仅完成规划，尚未开始实现、SDK 验证、游戏测试、玩家验收或发布。见[完整计划](notes/v0.7.0-frame-generation-plan.md)。
-- [~] **原生 Vulkan DLSS 超分辨率（SR）：**`dlss` 分支正在按交接实施原生 Vulkan NGX DLSS SR（P0–P3，P4 插帧暂缓）。P0 原生 Vulkan bridge 与官方 NGX 能力探测已在 Windows 本地完成（RTX 5080、驱动 616.56、SDK 310.9.1 锁定）；探测与 SDK 开关构建均通过，Gate 1 门禁审查于 attempt 3 通过。下一步为 P1 时序输入契约与分辨率解耦。SR 实际 Create/Evaluate 及游戏验收尚未开展，Linux 尚未测试。Issue #10 其他目标仍保持开放。详细验证将记录于 `docs/notes/native-dlss-validation.md`。
+- [~] **原生 Vulkan DLSS 超分辨率（SR）：**`dlss` 分支正在按交接实施原生 Vulkan NGX DLSS SR（P0–P3，P4 插帧暂缓）。P0 原生 Vulkan bridge 与官方 NGX 能力探测已提交至 `089676f`。P1 时序输入契约、真实低分辨率渲染计划、按输出分辨率 NGX 尺寸查询及 input-probe 模式已实现并提交（`c6bc50b`、`3f40030`），受影响对象通过 62 项生产 planner 检查与 112 项 Vulkan GPU 输入检查；Gate 2 审查通过。P2（NGX SR 执行与渲染链接回）仍待开展，尚未实现。SR 实际 Create/Evaluate 及游戏验收尚未开展，Linux 尚未测试。Issue #10 其他目标仍保持开放。详细验证将记录于 `docs/notes/native-dlss-validation.md`。
 - [ ] **macOS 发布规划：**v0.7.0 现加入 macOS 发布目标，与持续推进的性能、QoL、DLSS／FSR 缩放和插帧工作并列。当前仅为路线图目标，尚无 macOS 构建、后端、包、兼容性验证、玩家验收或发布产物。
 
 <a id="v050-pc-graphics"></a>
