@@ -10,7 +10,7 @@ export LD_LIBRARY_PATH="$GITHUB_WORKSPACE/dxc/lib:${LD_LIBRARY_PATH:-}"
 export VK_ICD_FILENAMES
 VK_ICD_FILENAMES=$(find /usr/share/vulkan/icd.d -name '*lvp*.json' -print -quit)
 test -n "$VK_ICD_FILENAMES"
-test -f "$LO_DXC_PATH"
-cmake --build source/out/renderer-check --target LoSceneCopyCompositeTest --parallel 2
-ctest --test-dir source/out/renderer-check -R '^LoSceneCopyCompositeTest$' --output-on-failure -V | tee source/out/composite-console.log
-! grep -E 'Validation Error|VUID-' source/out/composite-console.log
+cmake --build source/out/renderer-check --target LoNativeDlssRendererTest LoSceneCopyCompositeTest motion_replay_gpu_test --parallel 2
+ctest --test-dir source/out/renderer-check -R '^(LoNativeDlssRendererTest|LoSceneCopyCompositeTest)$' --output-on-failure -V | tee source/out/composite-console.log
+(cd source/out/renderer-check && ./motion_replay_gpu_test --p1-inputs-only) 2>&1 | tee source/out/p1-input-console.log
+! grep -E 'Validation Error|VUID-' source/out/composite-console.log source/out/p1-input-console.log
