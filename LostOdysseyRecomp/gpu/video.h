@@ -3,6 +3,7 @@
 #include <cstdint>
 #include "backend_selection.h"
 #include "display_change.h"
+#include "upscaling_plan.h"
 namespace settings { struct Config; }
 
 namespace plume
@@ -21,6 +22,9 @@ namespace gpu::video
     bool IsVulkan();
     // Actual committed backend; absent before readiness or after shutdown.
     std::optional<backend::Backend> SelectedBackend();
+    // Immutable state for the CPU frame-plan producer. Implemented with video's
+    // device lifecycle in lane A; callers do not access Plume objects directly.
+    upscaling::BackendDeviceSnapshot BackendDeviceState();
     plume::RenderCommandQueue* GetQueue();
 
     // Finite startup transaction: window -> device/caps -> presentation -> renderer.

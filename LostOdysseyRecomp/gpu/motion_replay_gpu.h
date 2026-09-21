@@ -297,7 +297,7 @@ public:
         return true;
     }
     MotionFrameView Finish(plume::RenderCommandList* commands, plume::RenderTexture* currentDepth,
-        const std::vector<uint32_t>& validity) {
+        const std::vector<uint32_t>& validity, bool resetInitialization = false) {
         MotionFrameView result;
         if (!cleared_ || aborted_ || finalized_ || !currentDepth || !commands || validity.empty() || validity.size() > DrawTemporalTracker::kMaxDraws + 1) return result;
         finalized_ = true;
@@ -345,7 +345,8 @@ public:
         batch->serial = ++serial_;
         if (timed) maskTimer_.End(commands, serial_);
         pending_.push_back(std::move(batch));
-        return {velocity_.texture.get(), depths_.texture.get(), reactive_.texture.get(), frame_, epoch_, allocation_, width_, height_, true};
+        return {velocity_.texture.get(), depths_.texture.get(), reactive_.texture.get(), frame_, epoch_, allocation_, width_, height_, true,
+            resetInitialization ? MotionState::ResetInitialization : MotionState::Tracked};
     }
     void ForgetDepth(const plume::RenderTexture* depth) {
         if (boundDepth_ == depth) { Retire(drawFramebuffer_); boundDepth_ = nullptr; }

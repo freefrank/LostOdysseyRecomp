@@ -457,6 +457,8 @@ namespace gpu::renderer
                 uint64_t frame = 0;
                 uint64_t writeOrdinal = 0;
                 uint32_t writeX = 0, writeY = 0, writeWidth = 0, writeHeight = 0;
+                frame_plan::FramePlan sourcePlan{};
+                bool sourcePlanValid = false;
 
             };
             // Keyed by destination address, one entry per destination format: the
@@ -485,6 +487,7 @@ namespace gpu::renderer
             bool motionInitFailed = false;
             temporal::MotionFrameView motionView;
             uint64_t motionFinalizedFrame = ~0ull;
+            bool temporalInputProbe = false;
             void FinishMotion(temporal::HistoryOwner* history) {
                 if (!motionOptions.enabled || !history || motionFinalizedFrame == frame) return;
                 motionFinalizedFrame = frame;
@@ -492,7 +495,7 @@ namespace gpu::renderer
                 const auto& flags = drawTemporalTracker.FinalizeFrame();
                 timer.AddTo(mvTrackCpuMs);
                 if (motionReplay && !drawTemporalTracker.Failed()) {
-                    motionView = motionReplay->Finish(commandList, history->CurrentDepth(), flags);
+                    motionView = motionReplay->Finish(commandList, history->CurrentDepth(), flags, history->ResetInitializationRequired());
                     if (motionView.ready) history->RecordExternalRead();
                 }
                 if (motionOptions.log && (frame % 120 == 0)) {
@@ -518,6 +521,8 @@ namespace gpu::renderer
             uint64_t temporalSupportedFrame=~0ull;
             uint32_t temporalJitterDraws=0,temporalJitterMisses=0,temporalJitterUnknowns=0;
             uint64_t temporalEpoch=1,temporalFramesLogged=0,temporalSubmittedFrame=~0ull;
+            temporal::JitterSample actualRasterJitter{};
+            bool actualRasterJitterCaptured=false;
             uint64_t appliedPlanEpoch=~0ull;
             resolution::Size internalSize{}, requestedInternalSize{};
             frame_plan::FramePlan activePlan{};
@@ -528,7 +533,7 @@ namespace gpu::renderer
             std::unique_ptr<gpu::Presentation> sceneProcessor;
             std::unique_ptr<RenderTexture> sceneAAOutput;
             uint32_t sceneAAWidth=0,sceneAAHeight=0,sceneAAMode=0;
-            bool sceneAAEnabled=false,sceneAABusy=false;
+            bool sceneAAEnabled=false,sceneAABusy=false,activeSpatialAA=false;
             uint64_t sceneAAConfigFrame=~0ull,sceneAAAppliedFrame=~0ull,sceneAAAllocation=0;
 
             // The entry at `base` whose destination format the fetch can read.
@@ -2649,7 +2654,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 return true;
             }
 
-            void FailCurrentPlan()
+            void FailCurrentPlan(frame_plan::FailureReason reason = frame_plan::FailureReason::Unknown)
             {
                 if (!activePlan.cpuSerial || !activePlan.geometryEpoch) return;
                 {
@@ -2658,8 +2663,12 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         return;
                 }
                 const uint32_t fallback = activePlan.height > 720 ? std::max(720u, activePlan.height * 3 / 4) : 720u;
-                frame_plan::ReportFailedEpoch(activePlan.geometryEpoch, fallback);
-                LOG_ERROR("renderer: allocation failure suppresses frame-plan epoch {} and requests {}p retry", activePlan.geometryEpoch, fallback);
+                if (reason == frame_plan::FailureReason::Unknown)
+                    reason = activePlan.consumer == upscaling::TemporalConsumer::DlssInputs
+                        ? frame_plan::FailureReason::DlssOutOfMemory : frame_plan::FailureReason::InvalidInput;
+                frame_plan::ReportPlanFailure({activePlan.geometryEpoch,activePlan.requestSignature,fallback,reason});
+                LOG_ERROR("renderer: plan failure epoch={} signature={:#x} reason={} fallback={}",
+                    activePlan.geometryEpoch,activePlan.requestSignature,uint32_t(reason),fallback);
             }
 
             bool PlanSuppressed()
@@ -2685,7 +2694,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (it != renderTargets.end())
                     effectiveHeight = std::max(effectiveHeight, it->second->guestHeight);
                 const auto role = ResolveCatalogRole(base, pitch);
-                const resolution::Size desiredSize = resolution::TargetSizeForRole(role, pitch, effectiveHeight, internalSize);
+                const resolution::Size legacySize{activePlan.legacyWidth,activePlan.legacyHeight};
+                const resolution::Size desiredSize = resolution::TargetSizeForPlan(role, pitch, effectiveHeight, internalSize, legacySize);
                 if (it != renderTargets.end())
                 {
                     // A catalog publication can arrive after a target's first
@@ -3612,22 +3622,37 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     sceneAAConfigFrame=frame;
                     PollTaaDiagnostic();
                     PollTaaLive();
-                    const auto mode=taaDiagnosticAA >= 0 ? uint32_t(taaDiagnosticAA) : uint32_t(settings::GetConfig().antialiasing);
+                    const char* dlssProbeValue = std::getenv("LO_DLSS_INPUT_PROBE");
+                    const auto route=temporal::RouteConsumer(activePlan,dlssProbeValue&&std::string_view(dlssProbeValue)=="1");
+                    const auto mode=route.effectiveAA;
                     if(sceneAAMode!=mode) {if(temporalHistory)temporalHistory->Reset();temporalSupportedFrame=~0ull;++temporalEpoch;}
                     sceneAAMode=mode;
-                    const bool selected=mode==3&&!resolveReadback;
-                    temporalExperiment=temporalForced||selected;
-                    temporalAllowHistory=temporalForcedHistory||selected;
-                    temporalJitter=temporalForcedJitter||(selected&&temporalSupportedFrame!=~0ull&&temporalSupportedFrame+1==frame);
-                    temporalStableGrid=temporalForcedStable||selected;
-                    if (taaDiagnosticAA == 0) temporalExperiment = false;
+                    const bool selected=route.legacyTaa&&!resolveReadback;
+                    const bool forbidLegacyTemporal = route.dlssInputs;
+                    temporalExperiment=selected||(!forbidLegacyTemporal&&temporalForced);
+                    temporalAllowHistory=selected||(!forbidLegacyTemporal&&temporalForcedHistory);
+                    temporalJitter=(selected&&temporalSupportedFrame!=~0ull&&temporalSupportedFrame+1==frame)||
+                        (!forbidLegacyTemporal&&temporalForcedJitter);
+                    temporalStableGrid=selected||(!forbidLegacyTemporal&&temporalForcedStable);
                     if (taaDiagnosticJitter >= 0) temporalJitter = taaDiagnosticJitter == 1;
                     if (taaDiagnosticHistory >= 0) temporalAllowHistory = taaDiagnosticHistory == 1;
-                    if(temporalExperiment&&!temporalHistory&&!temporalInitFailed) {
+                    temporalInputProbe = route.inputProbe;
+                    if (temporalInputProbe && !motionOptions.Supports(activePlan.consumer)) {
+                        FailCurrentPlan(frame_plan::FailureReason::InvalidInput);
+                        temporalInputProbe = false;
+                    }
+                    if (temporalInputProbe) {
+                        temporalJitter = true;
+                        temporalAllowHistory = false;
+                        temporalStableGrid = false;
+                    }
+                    activeSpatialAA = route.spatialAA&&!resolveReadback;
+                    const bool temporalActive = temporalExperiment || temporalInputProbe;
+                    if(temporalActive&&!temporalHistory&&!temporalInitFailed) {
                         temporalHistory=std::make_unique<temporal::HistoryOwner>();
                         if(!temporalHistory->Init(device,sparseCollector)) {temporalHistory.reset();temporalInitFailed=true;LOG_ERROR("renderer: TAA initialization failed; SMAA fallback");}
                     }
-                    if(!temporalHistory)temporalExperiment=false;
+                    if(!temporalHistory) { temporalExperiment=false; temporalInputProbe=false; }
                     if (temporalExperiment && taaDiagnosticHDR == 1 && !hdrTemporalHistory && !hdrTemporalInitFailed) {
                         hdrTemporalHistory = std::make_unique<temporal::HistoryOwner>();
                         if (!hdrTemporalHistory->Init(device, {}, true)) {
@@ -3636,15 +3661,18 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         }
                     }
                 }
-                const bool trackTemporalScene = !debugCaptureDir.empty() || temporalExperiment || sceneAAEnabled;
+                const bool temporalActive = temporalExperiment || temporalInputProbe;
+                const bool trackTemporalScene = !debugCaptureDir.empty() || temporalActive || activeSpatialAA;
                 if (trackTemporalScene && temporalScene.Frame() != frame) {
                     temporalScene.Reset(frame);
                     hdrTemporalOutput = nullptr; hdrTemporalSource = {}; hdrTonemapApplied = false;
+                    actualRasterJitter = {}; actualRasterJitterCaptured = false;
                     if(temporalHistory&&std::chrono::steady_clock::now()-temporalFrameTime>std::chrono::milliseconds(250)) {
-                        temporalHistory->Reset();temporalSupportedFrame=~0ull;temporalJitter=taaDiagnosticJitter >= 0 ? taaDiagnosticJitter == 1 : temporalForcedJitter;++temporalEpoch;
+                        temporalHistory->Reset();temporalSupportedFrame=~0ull;
+                        temporalJitter=temporalInputProbe|| (taaDiagnosticJitter >= 0 ? taaDiagnosticJitter == 1 : temporalForcedJitter);++temporalEpoch;
                     }
                 }
-                if(temporalExperiment&&temporalHistory) {
+                if(temporalActive&&temporalHistory) {
                     static const char* diagnosticStart=getenv("LO_TEMPORAL_LOG_START_FRAME");
                     static const uint64_t diagnosticFrame=diagnosticStart?strtoull(diagnosticStart,nullptr,10):0;
                     static const bool withTrace = getenv("LO_TEMPORAL_DRAW_LOG_WITH_RESOLVE_TRACE") &&
@@ -3727,7 +3755,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 rasterViewport.width *= rasterScaleX; rasterViewport.height *= rasterScaleY;
                 render_batch::CpuTimer<> taaJitter(cpuTimingEnabled);
                 const int temporalSlot=temporal::PositionVPSlot(key.vs);
-                if((temporalExperiment||sceneAAEnabled)&&temporalSlot>=0&&temporalViewport&&depth&&(depthControl&4)) {
+                if((temporalActive||activeSpatialAA)&&temporalSlot>=0&&temporalViewport&&depth&&(depthControl&4)) {
                     temporal::SceneAnchor anchor;
                     std::copy_n(vsConstants+temporalSlot*4,16,anchor.vpBits.begin());
                     anchor.depthAllocation=depth->allocationSerial;
@@ -3738,7 +3766,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     (temporalScene.Draws() ? &temporalScene.Anchor() : nullptr);
                 std::optional<temporal::SceneResolve> jitterSampledDepth;
                 const bool jitterShadowPair = key.vs == 0x99c2b4b0960a9ccdull && key.ps == 0xd55a20d004031279ull;
-                if (temporalExperiment && temporalJitter && jitterShadowPair)
+                if (temporalActive && temporalJitter && jitterShadowPair)
                 {
                     const uint32_t fetch0 = Reg(REG_FETCH_CONSTANTS), fetch1 = Reg(REG_FETCH_CONSTANTS + 1);
                     const uint32_t address = (fetch1 >> 12) << 12;
@@ -3773,7 +3801,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
                 // Motion follows the proven main scene allocation. The same shader
                 // hash in a shadow/offscreen view never authorizes replay.
-                const bool motionScene = motionOptions.enabled && (!motionOptions.replay || motionReplay) && temporalExperiment && jitterAnchor && temporalViewport && depth &&
+                const bool motionScene = motionOptions.enabled && (!motionOptions.replay || motionReplay) && temporalActive && jitterAnchor && temporalViewport && depth &&
                     depth->allocationSerial == jitterAnchor->depthAllocation && rasterViewport.x == 0 && rasterViewport.y == 0 &&
                     rasterViewport.width == jitterAnchor->viewport.width && rasterViewport.height == jitterAnchor->viewport.height;
                 const bool motionDepthWrite = motionScene && (depthControl & 6) == 6;
@@ -3802,11 +3830,22 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 const bool diagnosticMaterialBypass = taaDiagnosticMaterials == 0 &&
                     (key.vs == 0x3c86f4a89d220ee8ull || key.vs == 0xf3b9f20b3d3a62d5ull || key.vs == 0xe7b38eb08c70e5e1ull);
                 const auto drawJitter = temporal::ApplyDrawJitter(key.vs, key.ps, frame,
-                    temporalExperiment && temporalJitter && !diagnosticMaterialBypass, temporalViewport, jitterAnchor,
+                    temporalActive && temporalJitter && !diagnosticMaterialBypass, temporalViewport, jitterAnchor,
                     depth ? depth->allocationSerial : 0,
                     {rasterViewport.x, rasterViewport.y, rasterViewport.width, rasterViewport.height},
                     vsConstants, psConstants, &temporalScene.Depth(), jitterSampledDepth ? &*jitterSampledDepth : nullptr,
                     ActiveTaaOptions().jitter_scale);
+                if (temporalActive && drawJitter.applied) {
+                    if (!actualRasterJitterCaptured) {
+                        actualRasterJitter = drawJitter.sample;
+                        actualRasterJitterCaptured = true;
+                    } else if (actualRasterJitter.phase != drawJitter.sample.phase ||
+                        actualRasterJitter.pixelX != drawJitter.sample.pixelX || actualRasterJitter.pixelY != drawJitter.sample.pixelY) {
+                        temporalScene.Reset(frame);
+                        actualRasterJitter = {};
+                        actualRasterJitterCaptured = false;
+                    }
+                }
                 const uint32_t collectionFlags=(temporalViewport?1u:0u)|(temporalJitter?2u:0u)|
                     (drawJitter.applied?4u:0u)|((depthControl&4)?8u:0u)|
                     (jitterAnchor&&depth&&depth->allocationSerial==jitterAnchor->depthAllocation?16u:0u);
@@ -4165,6 +4204,23 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                            rasterViewport.width==temporalScene.Anchor().viewport.width && rasterViewport.height==temporalScene.Anchor().viewport.height) {
                             render_batch::CpuTimer<> taaResolve(cpuTimingEnabled);
                             temporalScene.ObserveColor(*temporalSceneCopy);
+                            if (temporalInputProbe && temporalHistory && temporalScene.Ready() && tex->format==RenderFormat::R8G8B8A8_UNORM) {
+                                // P1 diagnostic only: retain the real low-resolution,
+                                // pre-TAA scene inputs. Do not create/evaluate an SR feature.
+                                Transition(*tex,RenderTextureLayout::COPY_SOURCE,RenderBarrierStage::COPY);
+                                FinishMotion(temporalHistory.get());
+                                const auto sample = actualRasterJitterCaptured ? actualRasterJitter : temporal::JitterSample{};
+                                if (!temporalHistory->CaptureColorInputs(commandList, tex->texture.get(), temporalScene, activePlan, sample,
+                                        temporal::ColorEncoding::Sdr, &motionView)) {
+                                    FailCurrentPlan(frame_plan::FailureReason::InvalidInput);
+                                } else {
+                                    const auto inputs = temporalHistory->CurrentInputs();
+                                    if (!inputs.CompleteForConsumer())
+                                        FailCurrentPlan(frame_plan::FailureReason::InvalidInput);
+                                }
+                                if (motionView.ready && motionReplay) motionReplay->RecordConsumerUse();
+                                Transition(*tex,RenderTextureLayout::SHADER_READ,RenderBarrierStage::GRAPHICS);
+                            }
                             if(temporalExperiment && temporalHistory && temporalScene.Ready() && tex->format==RenderFormat::R8G8B8A8_UNORM) {
                                 Transition(*tex,RenderTextureLayout::COPY_SOURCE,RenderBarrierStage::COPY);
                                 const auto sample = temporal::FrameJitter(frame, rasterViewport.width, rasterViewport.height,
@@ -4201,7 +4257,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                         QueueResolveTrace(temporalHistory->CurrentReactiveMask(),RenderFormat::R8_UNORM,tex->width,tex->height,RenderTextureLayout::SHADER_READ,0xffff0006u);
                                 }
                             }
-                            if(!temporalDisplay && sceneAAEnabled && sceneProcessor && !sceneAABusy &&
+                            if(!temporalDisplay && activeSpatialAA && sceneProcessor && !sceneAABusy &&
                                sceneAAAppliedFrame!=frame && temporalScene.Ready() &&
                                (sceneAAMode==1||sceneAAMode==2||sceneAAMode==3) && tex->format==RenderFormat::R8G8B8A8_UNORM) {
                                 if(!sceneAAOutput||sceneAAWidth!=tex->width||sceneAAHeight!=tex->height) {
@@ -5316,10 +5372,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (taa_collection::Enabled())
                     rs.tex->bindingProducer.Copy(depth.bindingProducer, taa_collection::ConsentEpoch(), frame,
                         x0 == 0 && y0 == 0 && w == texW && h == texH);
-                if (!debugCaptureDir.empty() || temporalExperiment || sceneAAEnabled) {
+                if (!debugCaptureDir.empty() || temporalExperiment || temporalInputProbe || activeSpatialAA) {
                     temporalScene.ObserveDepth(depth.allocationSerial, {frame, rs.writeOrdinal, destBase, destFormat,
                         texW, texH, x0 == 0 && y0 == 0 && w == texW && h == texH});
-                    if(temporalExperiment && temporalHistory && temporalScene.Depth().ordinal==rs.writeOrdinal) {
+                    if((temporalExperiment || temporalInputProbe) && temporalHistory && temporalScene.Depth().ordinal==rs.writeOrdinal) {
                         Transition(*rs.tex,RenderTextureLayout::COPY_SOURCE,RenderBarrierStage::COPY);
                         temporalHistory->CaptureDepth(commandList,rs.tex->texture.get(),temporalScene);
                         if (taaDiagnosticHDR == 1 && hdrTemporalHistory)
@@ -5420,6 +5476,11 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 rs.frame = frame;
                 rs.writeOrdinal = ++resolveWriteOrdinal;
                 rs.writeX = x0; rs.writeY = y0; rs.writeWidth = w; rs.writeHeight = h;
+                const bool fullResolved = x0==0&&y0==0&&w==texW&&h==texH;
+                // A partial write can retain pixels from another plan/allocation.
+                // It must not hand presentation a fabricated whole-surface plan.
+                rs.sourcePlanValid = fullResolved&&activePlan.cpuSerial!=0;
+                if (rs.sourcePlanValid) rs.sourcePlan = activePlan;
                 if (taa_collection::Enabled())
                     rs.tex->bindingProducer.Copy(color.bindingProducer, taa_collection::ConsentEpoch(), frame,
                         x0 == 0 && y0 == 0 && w == texW && h == texH);
@@ -5427,7 +5488,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if(sourceCoverage==scene_aa::Coverage::Full && (uint64_t(x0)+w>color.aaValidWidth || uint64_t(y0)+h>color.aaValidHeight))
                     sourceCoverage=scene_aa::Coverage::Mixed;
                 rs.tex->aaProvenance.Resolve(frame,rs.tex->allocationSerial,sourceCoverage,
-                    x0==0&&y0==0&&w==texW&&h==texH);
+                    fullResolved);
                 DumpResolveStep(*rs.tex, destBase, rs.writeOrdinal, rs.destFormat);
                 return true;
             }
@@ -6061,11 +6122,12 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             if(collectionRenderer.temporalScene.Frame()==collectionRenderer.frame)
                 collectionFrame.sceneRejection=uint32_t(collectionRenderer.temporalScene.Reason());
             collectionFrame.sparseReady=collectionRenderer.sparseCollector&&collectionRenderer.sparseCollector->Ready();
-            if(auto& owner=g_renderer->temporalHistory;owner&&g_renderer->temporalExperiment) {
+            if(auto& owner=g_renderer->temporalHistory;owner&&(g_renderer->temporalExperiment||g_renderer->temporalInputProbe)) {
                 auto& r=*g_renderer;
                 const auto now=std::chrono::steady_clock::now();
                 const bool gap=now-r.temporalFrameTime>std::chrono::milliseconds(250);
-                const bool complete=r.temporalScene.Frame()==r.frame&&r.temporalScene.Ready()&&owner->Completed()&&r.temporalSubmittedFrame==r.frame;
+                const bool complete=r.temporalScene.Frame()==r.frame&&r.temporalScene.Ready()&&
+                    (r.temporalExperiment?owner->Completed():owner->InputsComplete())&&r.temporalSubmittedFrame==r.frame;
                 collectionFrame.completed=complete;
                 collectionFrame.reused=complete&&owner->Reused();
                 collectionFrame.resetAfterFrame=!complete||gap;
@@ -6142,7 +6204,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
         }
     }
 
-    plume::RenderTexture* AcquireResolvedSurface(uint32_t physicalAddress, uint32_t& width, uint32_t& height, uint32_t& format)
+    plume::RenderTexture* AcquireResolvedSurface(uint32_t physicalAddress, uint32_t& width, uint32_t& height, uint32_t& format,
+        frame_plan::FramePlan* sourcePlan)
     {
         if (!g_renderer)
             return nullptr;
@@ -6156,6 +6219,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
         width = tex.width;
         height = tex.height;
         format = uint32_t(tex.format);
+        if (sourcePlan)
+            *sourcePlan = rs->sourcePlanValid ? rs->sourcePlan : frame_plan::FramePlan{};
         return tex.texture.get();
     }
 
@@ -6295,7 +6360,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
     bool SuppressPresent() { return false; }
     void InvalidateGuestRange(uint32_t, uint32_t) {}
     bool SceneAAApplied(uint32_t) { return false; }
-    plume::RenderTexture* AcquireResolvedSurface(uint32_t, uint32_t&, uint32_t&, uint32_t&) { return nullptr; }
+    plume::RenderTexture* AcquireResolvedSurface(uint32_t, uint32_t&, uint32_t&, uint32_t&, frame_plan::FramePlan*) { return nullptr; }
     bool ReadbackResolvedSurface(uint32_t, std::vector<uint32_t>&, uint32_t&, uint32_t&) { return false; }
     std::vector<uint32_t> GetResolvedAddresses() { return {}; }
     void DumpRenderTargets(const char*) {}
@@ -6308,7 +6373,11 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
     float ActiveOutputAspect()
     {
         const auto plan = frame_plan::CurrentProducerPlan();
-        return plan && plan->height ? float(plan->width) / plan->height : 16.0f / 9.0f;
+        if (!plan) return 16.0f / 9.0f;
+        const auto& output = plan->output;
+        if (output.width && output.height) return float(output.width) / output.height;
+        if (output.drawable.width && output.drawable.height) return float(output.drawable.width) / output.drawable.height;
+        return 16.0f / 9.0f;
     }
 
     void SelectFramePlan(const frame_plan::FramePlan& plan)

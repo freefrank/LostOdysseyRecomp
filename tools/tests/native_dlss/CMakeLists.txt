@@ -49,6 +49,12 @@ target_compile_definitions(LoNativeDlssReportTest PRIVATE LO_GPU_PLUME=1)
 target_link_libraries(LoNativeDlssReportTest PRIVATE plume)
 lo_enable_dlss(LoNativeDlssReportTest)
 
+add_executable(LoP1FramePlanTest EXCLUDE_FROM_ALL
+    ${LO_NATIVE_DLSS_ROOT}/tools/tests/frame_plan_test.cpp
+    ${LO_NATIVE_DLSS_ROOT}/LostOdysseyRecomp/gpu/upscaling_plan.cpp)
+target_include_directories(LoP1FramePlanTest PRIVATE ${LO_NATIVE_DLSS_ROOT}/LostOdysseyRecomp)
+target_compile_features(LoP1FramePlanTest PRIVATE cxx_std_20)
+
 if(UNIX)
     if(PLUME_SDL_VULKAN_ENABLED)
         if(TARGET SDL2::SDL2-static)

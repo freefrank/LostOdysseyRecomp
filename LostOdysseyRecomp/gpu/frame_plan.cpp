@@ -1,5 +1,7 @@
 #include <stdafx.h>
 #include "gpu/frame_plan.h"
+#include "gpu/video.h"
+#include <string_view>
 #include "settings/config.h"
 #include "kernel/memory.h"
 #include "cpu/ppc_context.h"
@@ -28,17 +30,17 @@ namespace gpu::frame_plan
     namespace
     {
         std::atomic<uint64_t> drawable{ (uint64_t(1280) << 32) | 720 };
-        std::atomic<uint64_t> serial{0}, epoch{0};
+        PlannerState planner;
         std::atomic<uint64_t> failedEpoch{~0ull};
         std::atomic<uint32_t> failedFallbackHeight{720};
+        upscaling::SizingCache sizingCache;
         thread_local FramePlan cpuPlan{};
-        thread_local FailureState failureState{};
         thread_local std::optional<FramePlan> renderPlan;
         CommandTags tags;
         std::mutex deviceMutex;
         uint32_t readyDevice = 0;
         uint64_t streamGeneration = 0;
-        uint64_t emittedSerial = 0, emittedEpoch = 0, emittedGeneration = 0;
+        uint64_t emittedSerial = 0, emittedEpoch = 0, emittedSignature = 0, emittedSizingRevision = 0, emittedGeneration = 0;
         uint32_t LoadWord(uint32_t address)
         {
             return g_memory.base && address >= 0x10000
@@ -53,13 +55,15 @@ namespace gpu::frame_plan
     void BeginCpuFrame()
     {
         const uint64_t extent = drawable.load(std::memory_order_acquire);
-        const uint32_t mode = settings::GetConfig().internalResolution;
-        const bool readback = getenv("LO_RESOLVE_READBACK") != nullptr;
-        uint64_t nextEpoch = epoch.load(std::memory_order_relaxed);
-        cpuPlan = AdvanceCpuPlan(failureState, serial.fetch_add(1, std::memory_order_relaxed) + 1,
-            nextEpoch, failedEpoch.load(std::memory_order_acquire), failedFallbackHeight.load(std::memory_order_acquire),
-            mode, uint32_t(extent >> 32), uint32_t(extent), readback);
-        epoch.store(nextEpoch, std::memory_order_relaxed);
+        const auto config = settings::GetConfig();
+        const auto output = upscaling::ResolveOutputRegion({uint32_t(extent >> 32), uint32_t(extent)});
+        const auto device = video::BackendDeviceState();
+        std::optional<upscaling::OutputSizing> sizing;
+        if (config.upscaler == upscaling::Upscaler::Dlss && device.deviceReady && device.backend == backend::Backend::Vulkan)
+            sizing = sizingCache.LookupOrRequestSizing({device.deviceEpoch, output.width, output.height});
+        cpuPlan = planner.Begin({uint32_t(config.internalResolution), config.antialiasing, config.scalingQuality,
+            config.upscaler, config.dlssQuality, output, device, sizing ? &*sizing : nullptr,
+            getenv("LO_RESOLVE_READBACK") != nullptr, getenv("LO_DLSS_INPUT_PROBE") && std::string_view(getenv("LO_DLSS_INPUT_PROBE")) == "1"});
     }
     FramePlan CpuPlan() { return cpuPlan; }
     std::optional<FramePlan> CurrentProducerPlan()
@@ -73,6 +77,13 @@ namespace gpu::frame_plan
         failedFallbackHeight.store(std::max(720u, fallbackHeight), std::memory_order_release);
         failedEpoch.store(geometryEpoch, std::memory_order_release);
     }
+    void ReportPlanFailure(const PlanFailure& failure)
+    {
+        planner.ReportFailure(failure);
+    }
+    std::optional<upscaling::SizingKey> TakeSizingRequest() { return sizingCache.TakeSizingRequest(); }
+    void PublishSizing(upscaling::OutputSizing sizing) { sizingCache.PublishSizing(std::move(sizing)); }
+    void ResetSizing(uint64_t deviceEpoch) { sizingCache.ResetSizing(deviceEpoch); }
     void TagReservedCommand(uint32_t ring, uint32_t commandAddress)
     {
         const auto plan = CurrentProducerPlan();
@@ -121,15 +132,16 @@ namespace gpu::frame_plan
     {
         { std::lock_guard lock(deviceMutex);
             if (device != readyDevice || !LoadWord(device + 0x30) || !LoadWord(device + 0x34) ||
-                (emittedGeneration == streamGeneration && emittedSerial == plan.cpuSerial && emittedEpoch == plan.geometryEpoch)) return false; }
-        const uint32_t words[] = { wire::Magic, uint32_t(plan.cpuSerial), uint32_t(plan.cpuSerial >> 32),
-            uint32_t(plan.geometryEpoch), uint32_t(plan.geometryEpoch >> 32), plan.width, plan.height, wire::Magic };
+                (emittedGeneration == streamGeneration && emittedSerial == plan.cpuSerial && emittedEpoch == plan.geometryEpoch &&
+                 emittedSignature == plan.requestSignature && emittedSizingRevision == plan.sizingRevision)) return false; }
+        const auto words = wire::EncodePlan(plan);
         if (!gpu::frame_plan::EmitPrivatePacket(device, wire::PlanBase, words)) return false;
         // The display target exists before the world target table is populated;
         // publish it alongside the plan so pre-world Canvas/movie draws cannot
         // allocate a stale native mapping.
         QueueMainDisplayCatalog(context, device);
-        { std::lock_guard lock(deviceMutex); emittedSerial = plan.cpuSerial; emittedEpoch = plan.geometryEpoch; emittedGeneration = streamGeneration; }
+        { std::lock_guard lock(deviceMutex); emittedSerial = plan.cpuSerial; emittedEpoch = plan.geometryEpoch;
+            emittedSignature = plan.requestSignature; emittedSizingRevision = plan.sizingRevision; emittedGeneration = streamGeneration; }
         return true;
     }
     bool QueueCatalogOnDevice(PPCContext& context, uint32_t device, SurfaceRole role, uint32_t surfaceInfo, uint32_t colorInfo)

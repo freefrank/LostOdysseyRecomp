@@ -318,7 +318,7 @@ namespace gpu
                 renderer::RegisterCatalogSurface(role, surfaceInfo, colorInfo);
             return;
         }
-        if (index >= frame_plan::wire::PlanBase && index <= frame_plan::wire::PlanBase + 7)
+        if (index >= frame_plan::wire::PlanBase && index < frame_plan::wire::PlanBase + frame_plan::wire::PlanWordCount)
         {
             if (const auto plan = m_framePlan.Write(index, value))
                 renderer::SelectFramePlan(*plan);

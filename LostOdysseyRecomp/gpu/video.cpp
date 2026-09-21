@@ -8,6 +8,7 @@
 #include "renderer.h"
 #include "presentation.h"
 #include "command_processor.h"
+#include "frame_plan.h"
 #include <settings/config.h>
 #include <settings/menu.h>
 #include <settings/restart.h>
@@ -73,6 +74,7 @@ namespace gpu::video
         }
         std::atomic<uint64_t> g_shaderProgress{0};
         std::atomic<bool> g_vulkan{false};
+        std::atomic<uint64_t> g_deviceEpoch{0};
         constexpr uint64_t kProgressMask = (1ull << 28) - 1;
         const wchar_t* PreparationTitle(PreparationStage stage) {
             switch (stage) {
@@ -360,6 +362,31 @@ namespace gpu::video
     }
 
     bool IsVulkan() { return g_vulkan; }
+    upscaling::BackendDeviceSnapshot BackendDeviceState()
+    {
+        upscaling::BackendDeviceSnapshot snapshot;
+        snapshot.backend = g_vulkan ? backend::Backend::Vulkan : backend::Backend::D3D12;
+        snapshot.deviceEpoch = g_deviceEpoch.load(std::memory_order_acquire);
+#if defined(LO_GPU_PLUME)
+        snapshot.deviceReady = g_available && g_device != nullptr;
+        snapshot.dlssAvailable = g_dlssController && g_dlssController->Report().state == dlss::ProbeState::Available;
+#else
+        snapshot.deviceReady = false;
+#endif
+        return snapshot;
+    }
+#if defined(LO_GPU_PLUME)
+    // Called by video's GPU-owning presentation path. TakeSizingRequest releases
+    // the CPU cache lock before NGX initialization and capability work begins.
+    static void ServicePendingDlssSizing()
+    {
+        if (!g_vulkan || !g_dlssController || !g_interface || !g_device) return;
+        const auto key = frame_plan::TakeSizingRequest();
+        if (!key || key->deviceEpoch != g_deviceEpoch.load(std::memory_order_acquire)) return;
+        frame_plan::PublishSizing(upscaling::SizingService::QueryOutputSizing(*g_dlssController,
+            *static_cast<plume::VulkanInterface*>(g_interface.get()), *static_cast<plume::VulkanDevice*>(g_device.get()), *key));
+    }
+#endif
     void WaitForPresentGpu()
     {
 #ifdef LO_GPU_PLUME
@@ -533,6 +560,10 @@ namespace gpu::video
             if (!g_interface) return "API/loader initialization failed";
             g_device = g_interface->createDevice();
             if (g_device) {
+                const uint64_t nextEpoch = g_deviceEpoch.fetch_add(1, std::memory_order_acq_rel) + 1;
+                frame_plan::ResetSizing(nextEpoch);
+            }
+            if (g_device) {
                 const auto& description = g_device->getDescription();
                 LOG_INFO("video device: backend={} name={} driver_raw={} vendor_enum={} type_enum={} reported_device_memory_bytes={}",
                     backend::Name(candidate), description.name, description.driverVersion,
@@ -557,6 +588,12 @@ namespace gpu::video
             g_swapChain = g_queue->createSwapChain(plume::RenderSwapChainDesc(g_window, kSwapChainFormat, kSwapChainBuffers));
 #endif
             if (!g_swapChain || g_swapChain->isEmpty()) return "window surface/swapchain initialization failed";
+            if (g_vulkan && g_dlssController && settings::GetConfig().upscaler == upscaling::Upscaler::Dlss) {
+                const auto output = upscaling::ResolveOutputRegion({g_swapChain->getWidth(), g_swapChain->getHeight()});
+                const upscaling::SizingKey key{g_deviceEpoch.load(std::memory_order_acquire), output.width, output.height};
+                frame_plan::PublishSizing(upscaling::SizingService::QueryOutputSizing(*g_dlssController,
+                    *static_cast<plume::VulkanInterface*>(g_interface.get()), *static_cast<plume::VulkanDevice*>(g_device.get()), key));
+            }
             LogOutputPixels("created");
             g_uploadCapacity = uint64_t(kMaxWidth) * kMaxHeight * 4;
             g_uploadBuffer = g_device->createBuffer(plume::RenderBufferDesc::UploadBuffer(g_uploadCapacity));
@@ -1084,6 +1121,7 @@ namespace gpu::video
         // preparation transaction as overlay-only presentation.
         if (g_available && !PreparePresentation(displayTicket, menuWidth, menuHeight))
             return;
+        ServicePendingDlssSizing();
         renderer::SetOutputSize(menuWidth, menuHeight);
         const auto presentationConfig = settings::GetConfig();
         gpu::SetFrameRateTarget(presentationConfig.frameRate);
@@ -1141,7 +1179,8 @@ namespace gpu::video
         if (g_available && !cpuPresent && !menu)
         {
             uint32_t rw = 0, rh = 0, rf = 0;
-            plume::RenderTexture* source = renderer::AcquireResolvedSurface(physicalAddress & 0x1FFFFFFF, rw, rh, rf);
+            frame_plan::FramePlan sourcePlan;
+            plume::RenderTexture* source = renderer::AcquireResolvedSurface(physicalAddress & 0x1FFFFFFF, rw, rh, rf, &sourcePlan);
             if (source && plume::RenderFormat(rf) == kSwapChainFormat)
             {
                 uint32_t sourceWidth=width, sourceHeight=height;
@@ -1166,11 +1205,16 @@ namespace gpu::video
 
                 g_commandList->begin();
                 if(g_presentation) {
-                    if(renderer::SceneAAApplied(physicalAddress & 0x1FFFFFFF))
+                    const auto decision = frame_plan::ResolvePresentationDecision(&sourcePlan,
+                        renderer::SceneAAApplied(physicalAddress & 0x1FFFFFFF), uint32_t(presentationOptions.antialiasing),
+                        uint32_t(presentationOptions.scalingFilter));
+                    const PresentationOptions sourceOptions{decision.requestedAA == 3 ? Antialiasing::SMAA :
+                        static_cast<Antialiasing>(decision.requestedAA), decision.scalingQuality ? ScalingFilter::Bicubic : ScalingFilter::Bilinear};
+                    if(decision.bypassAA)
                         g_presentation->DrawComposited(g_commandList.get(),source,backBuffer,sourceWidth,sourceHeight,
-                            g_swapChain->getWidth(),g_swapChain->getHeight(),presentationOptions.scalingFilter);
+                            g_swapChain->getWidth(),g_swapChain->getHeight(),sourceOptions.scalingFilter);
                     else g_presentation->Draw(g_commandList.get(),source,backBuffer,sourceWidth,sourceHeight,
-                        g_swapChain->getWidth(),g_swapChain->getHeight(),presentationOptions);
+                        g_swapChain->getWidth(),g_swapChain->getHeight(),sourceOptions);
                 }
                 else {
                     g_commandList->barriers(plume::RenderBarrierStage::COPY, plume::RenderTextureBarrier(backBuffer, plume::RenderTextureLayout::COPY_DEST));

@@ -1,4 +1,5 @@
 #pragma once
+#include "temporal_frame_inputs.h"
 #include <cstdint>
 namespace plume { struct RenderTexture; }
 namespace gpu::temporal {
@@ -11,5 +12,6 @@ struct MotionFrameView {
     uint64_t frame = ~0ull, epoch = 0, depthAllocation = 0;
     uint32_t width = 0, height = 0;
     bool ready = false;
+    MotionState state = MotionState::Unavailable;
 };
 }

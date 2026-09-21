@@ -71,7 +71,8 @@ namespace gpu::renderer
     // barrier on the swap list; AcquireResolvedSurface then hands that texture
     // over (format is a plume::RenderFormat) without a second Flush, or returns
     // nullptr when nothing was resolved there.
-    plume::RenderTexture* AcquireResolvedSurface(uint32_t physicalAddress, uint32_t& width, uint32_t& height, uint32_t& format);
+    plume::RenderTexture* AcquireResolvedSurface(uint32_t physicalAddress, uint32_t& width, uint32_t& height, uint32_t& format,
+        frame_plan::FramePlan* sourcePlan = nullptr);
     // Same renderer/presentation thread, after XE_SWAP Flush and acquisition.
     // True only for a full resolve of the actual processed scene target in the
     // just-completed frame; stale surfaces and unrecognized paths return false.

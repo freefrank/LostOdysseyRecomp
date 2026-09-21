@@ -78,7 +78,8 @@ public:
         std::vector<uint8_t> out(W*H*bytes);auto* p=static_cast<const uint8_t*>(readback->map());
         for(unsigned y=0;y<H;++y)std::memcpy(out.data()+y*W*bytes,p+y*stride,W*bytes);readback->unmap();return out;
     }
-    MotionFrameView Run(bool skin=false,bool duplicate=false,bool alphaReject=false, float jitterX=0, float jitterY=0) {
+    MotionFrameView Run(bool skin=false,bool duplicate=false,bool alphaReject=false, float jitterX=0, float jitterY=0,
+        bool resetInitialization=false,bool verifySingleFinalize=false,uint64_t outputFrame=0,uint64_t outputEpoch=0,uint64_t outputAllocation=1) {
         const auto vp=motion_fixture::Vertex(skin),pp=motion_fixture::Pixel();auto vh=vp.Host(),ph=pp.Host();auto vg=vp.Guest(),pg=pp.Guest();
         auto tv=xenos::TranslateShader(vh.data(),uint32_t(vh.size()),false),tp=xenos::TranslateShader(ph.data(),uint32_t(ph.size()),true);
         if(!tv.errors.empty()||!tp.errors.empty())throw std::runtime_error(tv.errors+tp.errors);
@@ -113,17 +114,26 @@ public:
         cmd->setGraphicsPipelineLayout(layout.get());cmd->setPipeline(base.get());
         uint64_t addresses[]={vsCB->getDeviceAddress(),sharedCB->getDeviceAddress(),psCB->getDeviceAddress()};cmd->setGraphicsPushConstants(0,addresses);
         for(unsigned i=0;i<5;++i)cmd->setGraphicsDescriptorSet(sets[i].get(),i);cmd->drawInstanced(3,1,0,0);
-        replay.BeginFrame(token,epoch);Require(replay.BeginScene(cmd.get(),1,depth.get(),W,H),"motion targets/clear");
+        const uint64_t frameIdentity=outputFrame?outputFrame:token, epochIdentity=outputEpoch?outputEpoch:epoch;
+        replay.BeginFrame(frameIdentity,epochIdentity);Require(replay.BeginScene(cmd.get(),outputAllocation,depth.get(),W,H),"motion targets/clear");
         RenderBufferReference cb[]={vsCB.get(),sharedCB.get(),psCB.get(),mvCB.get()};RenderDescriptorSet* bindings[5];for(unsigned i=0;i<5;++i)bindings[i]=sets[i].get();
         Require(replay.Draw(cmd.get(),motionPipeline,cb,bindings,5,viewport,scissor,false,3,0),"actual translated previous-position draw");
         if(duplicate)tracker.Collect(key,current.data(),&shared,skin);
-        const auto out=replay.Finish(cmd.get(),sceneDepth.get(),tracker.FinalizeFrame());Require(out.ready,"finalized GPU motion and validity");Submit();
+        const auto out=replay.Finish(cmd.get(),sceneDepth.get(),tracker.FinalizeFrame(),resetInitialization);Require(out.ready,"finalized GPU motion and validity");
+        if (verifySingleFinalize)
+            Require(!replay.Finish(cmd.get(),sceneDepth.get(),tracker.FinalizeFrame()).ready,"motion finalizes once before shared consumers");
+        Submit();
         return out;
     }
-    void Fill(RenderTexture* target, const std::vector<uint32_t>& data, RenderFormat format) {
+    MotionFrameView RunWithSample(const JitterSample& sample,bool resetInitialization=false,bool verifySingleFinalize=false,
+        uint64_t outputFrame=0,uint64_t outputEpoch=0,uint64_t outputAllocation=1) {
+        return Run(false,false,false,float(sample.pixelX),float(sample.pixelY),resetInitialization,verifySingleFinalize,
+            outputFrame,outputEpoch,outputAllocation);
+    }
+    void Fill(RenderTexture* target, const std::vector<uint32_t>& data, RenderFormat format,uint32_t width=W,uint32_t height=H) {
         Write(upload.get(),data.data(),data.size()*4);cmd->begin();
         cmd->barriers(RenderBarrierStage::COPY,RenderTextureBarrier(target,RenderTextureLayout::COPY_DEST));
-        cmd->copyTextureRegion(RenderTextureCopyLocation::Subresource(target),RenderTextureCopyLocation::PlacedFootprint(upload.get(),format,W,H,1,W));
+        cmd->copyTextureRegion(RenderTextureCopyLocation::Subresource(target),RenderTextureCopyLocation::PlacedFootprint(upload.get(),format,width,height,1,width));
         cmd->barriers(RenderBarrierStage::GRAPHICS,RenderTextureBarrier(target,RenderTextureLayout::SHADER_READ));Submit();
     }
     void TestTaa(MotionFrameView view,float currentZ=.5f) {
@@ -577,6 +587,128 @@ public:
         frame(reset,3,true,nullptr);Require(reset.Completed()&&!reset.Reused(),"unused invalid previous jitter cannot poison reset frame");
         frame(reset,4,true,nullptr);Require(reset.Reused(),"normal history resumes after reset");
     }
+    void P1InputsOnly() {
+        // This follows the production input-only branch: real GPU depth/color
+        // copies and the real replay-produced MV, with no TemporalAA resolve.
+        HistoryOwner owner; Require(owner.Init(device.get()),"P1 input owner initialization");
+        gpu::frame_plan::FramePlan plan{};plan.width=W;plan.height=H;plan.legacyWidth=W;plan.legacyHeight=H;
+        plan.consumer=gpu::upscaling::TemporalConsumer::DlssInputs;plan.inputProbe=true;plan.legacyAA=plan.effectiveAA=3;
+        const auto inputRoute=RouteConsumer(plan,true);
+        Require(inputRoute.inputProbe&&!inputRoute.legacyTaa&&!inputRoute.spatialAA&&inputRoute.effectiveAA==0,
+            "DlssInputs route suppresses legacy TAA and spatial AA even when original AA was TAA");
+        const gpu::resolution::Size lowInput{1114,626},legacySize{1280,720};
+        Require(gpu::resolution::TargetSizeForPlan(gpu::resolution::TargetRole::Scene,1280,720,lowInput,legacySize)==lowInput&&
+            gpu::resolution::TargetSizeForPlan(gpu::resolution::TargetRole::Unknown,1280,720,lowInput,legacySize)==legacySize&&
+            gpu::resolution::TargetSizeForPlan(gpu::resolution::TargetRole::Fixed,1280,720,lowInput,legacySize)==gpu::resolution::Size{},
+            "production target routing uses sub-720 Scene input and keeps Unknown and Fixed legacy mappings");
+        const Matrix identity{1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1};
+        auto sceneFor=[&](uint64_t number) {
+            SceneObservation scene; scene.Reset(number); SceneAnchor anchor; anchor.depthAllocation=7; anchor.viewport={0,0,W,H};
+            for(unsigned i=0;i<16;++i)anchor.vpBits[i]=std::bit_cast<uint32_t>(float(identity[i]));
+            scene.ObserveCamera(anchor); scene.ObserveDepth(7,{number,number*2+1,0x1000,24,W,H,true});
+            scene.ObserveColor({number,number*2+2,0x2000,6,W,H,true}); return scene;
+        };
+        auto capture=[&](uint64_t number, MotionFrameView motion, const JitterSample& jitter, TemporalResetReason reset) {
+            std::vector<uint32_t> pixels(W*H,0x7b808080u), depths(W*H,std::bit_cast<uint32_t>(.5f));
+            Fill(color.get(),pixels,RenderFormat::R8G8B8A8_UNORM); Fill(sceneDepth.get(),depths,RenderFormat::R32_FLOAT);
+            auto scene=sceneFor(number); owner.BeginFrame(number,55);
+            Require(owner.ResetInitializationRequired()==(number==101),"P1 first/second frame reset decision follows completed inputs");
+            cmd->begin();
+            cmd->barriers(RenderBarrierStage::COPY,RenderTextureBarrier(sceneDepth.get(),RenderTextureLayout::COPY_SOURCE));
+            Require(owner.CaptureDepth(cmd.get(),sceneDepth.get(),scene),"P1 captures current R32 depth before color");
+            cmd->barriers(RenderBarrierStage::COPY,RenderTextureBarrier(color.get(),RenderTextureLayout::COPY_SOURCE));
+            Require(motion.frame==number&&motion.epoch==55&&motion.depthAllocation==7&&motion.width==W&&motion.height==H,
+                "P1 consumes the replay-produced frame, epoch, allocation, and dimensions");
+            if(number==101) {auto mismatch=plan;mismatch.width=W+1;
+                Require(!owner.CaptureColorInputs(cmd.get(),color.get(),scene,mismatch,jitter,ColorEncoding::Sdr,&motion),"P1 rejects mismatched plan metadata");}
+            Require(owner.CaptureColorInputs(cmd.get(),color.get(),scene,plan,jitter,ColorEncoding::Sdr,&motion,reset),"P1 captures pre-TAA color without resolving TAA");
+            const auto inputs=owner.CurrentInputs();
+            Require(inputs.CompleteForConsumer(),"P1 complete frame carries color/depth/geometry MV inputs");
+            Require(inputs.color.allocation==gpu::resolution::Size{W,H}&&inputs.color.x==0&&inputs.color.y==0&&inputs.color.width==W&&inputs.color.height==H,
+                "P1 input region uses the exact valid allocation rectangle without padding");
+            Require(inputs.jitter.phase==jitter.phase&&inputs.jitter.pixelX==jitter.pixelX&&inputs.jitter.pixelY==jitter.pixelY,
+                "P1 input sees the same raster jitter sample");
+            Require(!owner.Completed()&&!owner.Reused(),"P1 input-only capture does not execute legacy TAA");
+            const auto serial=owner.RecordedSerial(); Submit(); owner.ReleaseCompletedThrough(serial); return inputs;
+        };
+        current.fill(0); previous.fill(0); current[16]=.0625f;
+        const auto firstSample=FrameJitter(101,W,H);
+        auto firstMotion=RunWithSample(firstSample,true,true,101,55,7);
+        Require(firstMotion.state==MotionState::ResetInitialization,"first complete motion frame is explicit reset initialization");
+        auto motionBytes=Read(firstMotion.velocity,RenderFormat::R16G16_FLOAT,4); uint16_t motionXY[2];
+        std::memcpy(motionXY,motionBytes.data()+(32*W+38)*4,sizeof(motionXY));
+        Near(Half(motionXY[0]),-2,"P1 replay exports known -2 input-pixel previous-current motion",.03f);
+        Near(Half(motionXY[1]),0,"P1 replay removes the shared raster jitter without changing Y motion",.03f);
+        const auto first=capture(101,firstMotion,firstSample,TemporalResetReason::FirstFrame);
+        Require(first.motionState==MotionState::ResetInitialization&&first.resetHistory,"first P1 input frame requests reset without waiting for prior history");
+        current.fill(0); previous.fill(0); current[16]=.0625f;
+        const auto secondSample=FrameJitter(102,W,H);
+        auto secondMotion=RunWithSample(secondSample,false,false,102,55,7);
+        Require(secondMotion.state==MotionState::Tracked,"second motion frame is tracked");
+        const auto second=capture(102,secondMotion,secondSample,TemporalResetReason::None);
+        Require(second.motionState==MotionState::Tracked&&!second.resetHistory,"second P1 input frame keeps tracked motion without a reset");
+        Require(replay.PendingCount()==0,"P1 motion resources retire only after the submitted fence completes");
+        HistoryOwner discontinuities;Require(discontinuities.Init(device.get()),"P1 discontinuity owner initialization");
+        auto captureDiscontinuity=[&](uint64_t number,uint64_t allocation,gpu::frame_plan::FramePlan currentPlan,float cameraX=0.f) {
+            std::vector<uint32_t> pixels(W*H,0x7b808080u),depths(W*H,std::bit_cast<uint32_t>(.5f));
+            Fill(color.get(),pixels,RenderFormat::R8G8B8A8_UNORM);Fill(sceneDepth.get(),depths,RenderFormat::R32_FLOAT);
+            SceneObservation scene;scene.Reset(number);SceneAnchor anchor;anchor.depthAllocation=allocation;anchor.viewport={0,0,W,H};
+            for(unsigned i=0;i<16;++i)anchor.vpBits[i]=std::bit_cast<uint32_t>(float(identity[i]));anchor.vpBits[12]=std::bit_cast<uint32_t>(cameraX);
+            scene.ObserveCamera(anchor);scene.ObserveDepth(allocation,{number,number*2+1,0x1000,24,W,H,true});scene.ObserveColor({number,number*2+2,0x2000,6,W,H,true});
+            const auto sample=FrameJitter(number,W,H);
+            const auto motion=RunWithSample(sample,false,false,number,99,allocation);
+            discontinuities.BeginFrame(number,99);cmd->begin();cmd->barriers(RenderBarrierStage::COPY,RenderTextureBarrier(sceneDepth.get(),RenderTextureLayout::COPY_SOURCE));
+            Require(discontinuities.CaptureDepth(cmd.get(),sceneDepth.get(),scene),"P1 discontinuity captures depth");
+            cmd->barriers(RenderBarrierStage::COPY,RenderTextureBarrier(color.get(),RenderTextureLayout::COPY_SOURCE));
+            Require(discontinuities.CaptureColorInputs(cmd.get(),color.get(),scene,currentPlan,sample,ColorEncoding::Sdr,&motion),"P1 discontinuity captures metadata-qualified inputs");
+            const auto inputs=discontinuities.CurrentInputs();const auto serial=discontinuities.RecordedSerial();Submit();discontinuities.ReleaseCompletedThrough(serial);return inputs;
+        };
+        const auto d1=captureDiscontinuity(301,7,plan);
+        const auto d2=captureDiscontinuity(303,7,plan);
+        Require(HasResetReason(d2.resetReasons,TemporalResetReason::FrameDiscontinuity),"P1 frame cut resets input history");
+        auto nonePlan=plan;nonePlan.consumer=gpu::upscaling::TemporalConsumer::None;
+        const auto d3=captureDiscontinuity(304,7,nonePlan);
+        Require(HasResetReason(d3.resetReasons,TemporalResetReason::ConsumerChanged),"P1 consumer transition resets input history");
+        const auto d4=captureDiscontinuity(305,8,nonePlan);
+        Require(HasResetReason(d4.resetReasons,TemporalResetReason::AllocationChanged),"P1 depth allocation transition resets input history");
+        const auto d5=captureDiscontinuity(306,8,nonePlan,10.f);
+        Require(HasResetReason(d5.resetReasons,TemporalResetReason::CameraDiscontinuity),"P1 contiguous frame camera cut resets input history");
+        auto qualityPlan=nonePlan;qualityPlan.output={{1280,720},0,0,1280,720};qualityPlan.dlssQuality=gpu::upscaling::DlssQuality::Balanced;
+        const auto d6=captureDiscontinuity(307,8,qualityPlan,10.f);
+        Require(HasResetReason(d6.resetReasons,TemporalResetReason::PlanConfigurationChanged),"P1 output and quality change resets input history");
+        HistoryOwner legacy;Require(legacy.Init(device.get()),"P1 legacy TAA owner initialization");
+        auto legacyFrame=[&](uint64_t number) {
+            std::vector<uint32_t> pixels(W*H,0x7b808080u),depths(W*H,std::bit_cast<uint32_t>(.5f));
+            Fill(color.get(),pixels,RenderFormat::R8G8B8A8_UNORM);Fill(sceneDepth.get(),depths,RenderFormat::R32_FLOAT);
+            auto scene=sceneFor(number);legacy.BeginFrame(number,77);cmd->begin();
+            cmd->barriers(RenderBarrierStage::COPY,RenderTextureBarrier(sceneDepth.get(),RenderTextureLayout::COPY_SOURCE));
+            Require(legacy.CaptureDepth(cmd.get(),sceneDepth.get(),scene),"legacy TAA captures depth");
+            cmd->barriers(RenderBarrierStage::COPY,RenderTextureBarrier(color.get(),RenderTextureLayout::COPY_SOURCE));
+            auto* result=legacy.ResolveColor(cmd.get(),color.get(),scene,0,0,true,true);
+            Require(result!=nullptr,"legacy TAA ResolveColor succeeds after input capture");
+            const auto serial=legacy.RecordedSerial();Submit();legacy.ReleaseCompletedThrough(serial);
+        };
+        legacyFrame(201);Require(!legacy.Reused(),"legacy TAA first frame initializes history");
+        legacyFrame(202);Require(legacy.Reused(),"legacy TAA second frame reuses committed history");
+        constexpr uint32_t RW=32,RH=32;
+        auto resizedColor=device->createTexture(RenderTextureDesc::Texture2D(RW,RH,1,RenderFormat::R8G8B8A8_UNORM));
+        auto resizedDepth=device->createTexture(RenderTextureDesc::Texture2D(RW,RH,1,RenderFormat::R32_FLOAT));
+        Require(bool(resizedColor)&&bool(resizedDepth),"legacy TAA resize fixture textures allocate");
+        auto legacyResize=[&](uint64_t number) {
+            Fill(resizedColor.get(),std::vector<uint32_t>(RW*RH,0x7b808080u),RenderFormat::R8G8B8A8_UNORM,RW,RH);
+            Fill(resizedDepth.get(),std::vector<uint32_t>(RW*RH,std::bit_cast<uint32_t>(.5f)),RenderFormat::R32_FLOAT,RW,RH);
+            SceneObservation scene;scene.Reset(number);SceneAnchor anchor;anchor.depthAllocation=9;anchor.viewport={0,0,RW,RH};
+            for(unsigned i=0;i<16;++i)anchor.vpBits[i]=std::bit_cast<uint32_t>(float(identity[i]));
+            scene.ObserveCamera(anchor);scene.ObserveDepth(9,{number,number*2+1,0x3000,24,RW,RH,true});scene.ObserveColor({number,number*2+2,0x4000,6,RW,RH,true});
+            legacy.BeginFrame(number,77);cmd->begin();cmd->barriers(RenderBarrierStage::COPY,RenderTextureBarrier(resizedDepth.get(),RenderTextureLayout::COPY_SOURCE));
+            Require(legacy.CaptureDepth(cmd.get(),resizedDepth.get(),scene),"legacy TAA captures resized depth");
+            cmd->barriers(RenderBarrierStage::COPY,RenderTextureBarrier(resizedColor.get(),RenderTextureLayout::COPY_SOURCE));
+            Require(legacy.ResolveColor(cmd.get(),resizedColor.get(),scene,0,0,true,true)!=nullptr,"legacy TAA resolves after same-format resize");
+            const auto serial=legacy.RecordedSerial();Submit();legacy.ReleaseCompletedThrough(serial);
+        };
+        legacyResize(203);Require(!legacy.Reused(),"legacy TAA resize resets stale history");
+        legacyResize(204);Require(legacy.Reused(),"legacy TAA reuses storage allocated at resized extent");
+    }
     void TimingLifecycle() {
         GpuPassTimer<2,2> timer;
         cmd->begin();Require(!timer.Begin(device.get(),cmd.get())&&timer.Stats().queryPoolAllocations==0,"disabled GPU timers allocate nothing");Submit();
@@ -608,6 +740,7 @@ public:
 int main(int argc, char** argv) {
  try {
     Require(xenos::DxcAvailable(),"pinned DXC available");
+    if(argc>1&&std::string(argv[1])=="--p1-inputs-only"){Fixture f;f.P1InputsOnly();printf("PASS: %u P1 input/MV GPU checks\n",checks);return 0;}
     if(argc>1&&std::string(argv[1])=="--history-precision-only"){Fixture f;f.HistoryPrecision();printf("PASS: %u history precision GPU checks\n",checks);return 0;}
     if(argc>1&&std::string(argv[1])=="--stationary-multi-only"){Fixture f;f.StationarySilhouette();printf("PASS: %u stationary coverage GPU checks\n",checks);return 0;}
     for(auto format:{xenos::ShaderBinaryFormat::Dxil,xenos::ShaderBinaryFormat::Spirv}) {

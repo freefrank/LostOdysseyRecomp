@@ -25,10 +25,10 @@ inline constexpr Size ResolveInternalSize(uint32_t mode, uint32_t outputWidth, u
     default:
         if (!outputWidth || !outputHeight) return {};
         if (wide) {
-            const uint32_t height = std::clamp(outputHeight, 1u, 2160u);
+            const uint32_t height = (std::clamp)(outputHeight, 1u, 2160u);
             return {widthForHeight(height), height};
         }
-        const uint32_t units = std::clamp(std::min(outputWidth / 16, outputHeight / 9), 1u, 240u);
+        const uint32_t units = (std::clamp)((std::min)(outputWidth / 16, outputHeight / 9), 1u, 240u);
         return {units * 16, units * 9};
     }
 }
@@ -58,6 +58,12 @@ inline constexpr Size TargetSizeForRole(TargetRole role, uint32_t pitch, uint32_
         return TargetSize(pitch, height, { uint32_t((uint64_t(plan.height) * 16) / 9), plan.height });
     }
     return {};
+}
+// A plan may carry a sub-720 official DLSS input. Only catalogued Scene targets
+// receive that size; Fixed and Unknown retain their legacy mappings and never
+// invent an aspect ratio from a rounded recommended input.
+inline constexpr Size TargetSizeForPlan(TargetRole role, uint32_t pitch, uint32_t height, Size input, Size legacy) {
+    return role == TargetRole::Scene ? input : TargetSizeForRole(role, pitch, height, legacy);
 }
 inline constexpr uint32_t TargetHeight(uint32_t pitch, uint32_t height, uint32_t internalHeight) {
     return TargetSize(pitch, height, {uint32_t((uint64_t(internalHeight) * 16) / 9), internalHeight}).height;
