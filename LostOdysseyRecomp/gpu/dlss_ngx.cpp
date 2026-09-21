@@ -363,5 +363,98 @@ void Controller::ProbeOnce(const plume::VulkanInterface& vulkanInterface, const 
     }
 #endif
 }
+
+upscaling::OutputSizing Controller::QueryOutputSizing(const plume::VulkanInterface& vulkanInterface,
+    const plume::VulkanDevice& device, const upscaling::SizingKey& key) {
+    upscaling::OutputSizing sizing;
+    sizing.key = key;
+    const auto setAll = [&](upscaling::SizingState state, std::optional<int32_t> result = std::nullopt) {
+        for (auto& mode : sizing.modes) { mode.state = state; mode.ngxResult = result; }
+    };
+    if (!key.outputWidth || !key.outputHeight) { setAll(upscaling::SizingState::Error); return sizing; }
+#if !defined(LO_DLSS_SDK)
+    setAll(upscaling::SizingState::Unavailable);
+    return sizing;
+#else
+    const auto& instanceStatus = vulkanInterface.getExternalExtensionStatus();
+    const auto& deviceStatus = device.getExternalExtensionStatus();
+    if (instanceStatus.state != plume::VulkanExtensionState::Enabled || deviceStatus.state != plume::VulkanExtensionState::Enabled) {
+        setAll((instanceStatus.createFailure == VK_SUCCESS && deviceStatus.createFailure == VK_SUCCESS)
+            ? upscaling::SizingState::Unavailable : upscaling::SizingState::Error);
+        return sizing;
+    }
+    std::string pathReason;
+    if (!CreateApplicationDataPath(pathReason)) { setAll(upscaling::SizingState::Error); return sizing; }
+    DiscoveryInfo info(applicationDataPath_, runtimePath_);
+    NVSDK_NGX_FeatureRequirement requirements = {};
+    auto result = NVSDK_NGX_VULKAN_GetFeatureRequirements(vulkanInterface.instance, device.physicalDevice,
+        &info.discovery, &requirements);
+    RecordCall("Sizing_GetFeatureRequirements", int32_t(result), NVSDK_NGX_FAILED(result));
+    if (NVSDK_NGX_FAILED(result)) { setAll(upscaling::SizingState::Error, int32_t(result)); return sizing; }
+    if (requirements.FeatureSupported != NVSDK_NGX_FeatureSupportResult_Supported) {
+        setAll(upscaling::SizingState::Unavailable, int32_t(requirements.FeatureSupported));
+        return sizing;
+    }
+    result = NVSDK_NGX_VULKAN_Init_with_ProjectID(kProjectId, NVSDK_NGX_ENGINE_TYPE_CUSTOM, "LostOdysseyRecomp",
+        info.appDataPath.c_str(), vulkanInterface.instance, device.physicalDevice, device.vk, vkGetInstanceProcAddr,
+        vkGetDeviceProcAddr, &info.featureInfo);
+    RecordCall("Sizing_Init_with_ProjectID", int32_t(result), NVSDK_NGX_FAILED(result));
+    if (NVSDK_NGX_FAILED(result)) {
+        setAll(ClassifyNgxResult(int32_t(result), int32_t(NVSDK_NGX_Result_Success),
+            int32_t(NVSDK_NGX_Result_FAIL_FeatureNotSupported)) == ProbeState::Unavailable
+            ? upscaling::SizingState::Unavailable : upscaling::SizingState::Error, int32_t(result));
+        return sizing;
+    }
+    NVSDK_NGX_Parameter* parameters = nullptr;
+    result = NVSDK_NGX_VULKAN_GetCapabilityParameters(&parameters);
+    RecordCall("Sizing_GetCapabilityParameters", int32_t(result), NVSDK_NGX_FAILED(result));
+    if (NVSDK_NGX_FAILED(result) || !parameters) {
+        setAll(upscaling::SizingState::Error, int32_t(result));
+        NVSDK_NGX_VULKAN_Shutdown1(device.vk);
+        return sizing;
+    }
+    CapabilityValue available, needsDriver, minMajor, minMinor, featureInit;
+    const auto read = [&](const char* keyName, const char* parameter, CapabilityValue& value) {
+        int raw = 0;
+        const auto getResult = NVSDK_NGX_Parameter_GetI(parameters, parameter, &raw);
+        value.raw = int32_t(getResult);
+        if (!NVSDK_NGX_FAILED(getResult)) value.value = raw;
+        RecordCall(keyName, int32_t(getResult), NVSDK_NGX_FAILED(getResult));
+    };
+    read("Sizing_Parameter_GetI(SuperSampling_Available)", NVSDK_NGX_EParameter_SuperSampling_Available, available);
+    read("Sizing_Parameter_GetI(SuperSampling_NeedsUpdatedDriver)", NVSDK_NGX_Parameter_SuperSampling_NeedsUpdatedDriver, needsDriver);
+    read("Sizing_Parameter_GetI(SuperSampling_MinDriverVersionMajor)", NVSDK_NGX_Parameter_SuperSampling_MinDriverVersionMajor, minMajor);
+    read("Sizing_Parameter_GetI(SuperSampling_MinDriverVersionMinor)", NVSDK_NGX_Parameter_SuperSampling_MinDriverVersionMinor, minMinor);
+    read("Sizing_Parameter_GetI(SuperSampling_FeatureInitResult)", NVSDK_NGX_Parameter_SuperSampling_FeatureInitResult, featureInit);
+    const auto capability = ClassifySuperSamplingCapabilities(available, needsDriver, minMajor, minMinor, featureInit,
+        int32_t(NVSDK_NGX_Result_Success), int32_t(NVSDK_NGX_Result_FAIL_FeatureNotSupported));
+    if (capability.decision != CapabilityDecision::Proceed) {
+        setAll(capability.decision == CapabilityDecision::Unavailable ? upscaling::SizingState::Unavailable : upscaling::SizingState::Error);
+    } else {
+        const NVSDK_NGX_PerfQuality_Value qualities[] = {NVSDK_NGX_PerfQuality_Value_MaxQuality,
+            NVSDK_NGX_PerfQuality_Value_Balanced, NVSDK_NGX_PerfQuality_Value_MaxPerf};
+        for (size_t index = 0; index < sizing.modes.size(); ++index) {
+            auto& mode = sizing.modes[index];
+            uint32_t optimalWidth = 0, optimalHeight = 0, maxWidth = 0, maxHeight = 0, minWidth = 0, minHeight = 0;
+            float sharpness = 0.0f;
+            const auto optimalResult = NGX_DLSS_GET_OPTIMAL_SETTINGS(parameters, key.outputWidth, key.outputHeight,
+                qualities[index], &optimalWidth, &optimalHeight, &maxWidth, &maxHeight, &minWidth, &minHeight, &sharpness);
+            mode.ngxResult = int32_t(optimalResult);
+            RecordCall("Sizing_DLSS_GetOptimalSettings", int32_t(optimalResult), NVSDK_NGX_FAILED(optimalResult));
+            const bool valid = !NVSDK_NGX_FAILED(optimalResult) && optimalWidth && optimalHeight && minWidth && minHeight &&
+                maxWidth && maxHeight && minWidth <= optimalWidth && optimalWidth <= maxWidth &&
+                minHeight <= optimalHeight && optimalHeight <= maxHeight;
+            mode.state = valid ? upscaling::SizingState::Ready : upscaling::SizingState::Error;
+            if (valid) { mode.optimal = {optimalWidth, optimalHeight}; mode.minimum = {minWidth, minHeight}; mode.maximum = {maxWidth, maxHeight}; }
+        }
+    }
+    const auto destroyResult = NVSDK_NGX_VULKAN_DestroyParameters(parameters);
+    RecordCall("Sizing_DestroyParameters", int32_t(destroyResult), NVSDK_NGX_FAILED(destroyResult));
+    const auto shutdownResult = NVSDK_NGX_VULKAN_Shutdown1(device.vk);
+    RecordCall("Sizing_Shutdown1", int32_t(shutdownResult), NVSDK_NGX_FAILED(shutdownResult));
+    if (NVSDK_NGX_FAILED(destroyResult) || NVSDK_NGX_FAILED(shutdownResult)) setAll(upscaling::SizingState::Error);
+    return sizing;
+#endif
+}
 } // namespace gpu::dlss
 #endif

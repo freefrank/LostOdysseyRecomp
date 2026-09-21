@@ -15,6 +15,8 @@ Config Validate(Config value)
         value.internalResolution != 1440 && value.internalResolution != 2160)
         value.internalResolution = 0;
     if (value.scalingQuality > 1) value.scalingQuality = 1;
+    if (uint32_t(value.upscaler) > uint32_t(gpu::upscaling::Upscaler::Dlss)) value.upscaler = gpu::upscaling::Upscaler::Off;
+    if (uint32_t(value.dlssQuality) > uint32_t(gpu::upscaling::DlssQuality::Performance)) value.dlssQuality = gpu::upscaling::DlssQuality::Quality;
     if (value.antialiasing > 3) value.antialiasing = 0;
     value.fxaa = value.antialiasing == 1;
     if (value.frameRate != 30 && value.frameRate != 60 && value.frameRate != 120) value.frameRate = 30;
@@ -84,6 +86,10 @@ Config Read()
             value.antialiasing = number;
         else if (key == "scaling_quality")
             value.scalingQuality = number;
+        else if (key == "upscaler")
+            value.upscaler = gpu::upscaling::Upscaler(number);
+        else if (key == "dlss_quality")
+            value.dlssQuality = gpu::upscaling::DlssQuality(number);
         else if (key == "frame_rate")
             value.frameRate = number;
         else if (key == "fxaa")
@@ -168,6 +174,7 @@ static bool WriteConfig(const Config &value)
            << "\ndebug_language=" << value.debugLanguage
            << "\nantialiasing=" << value.antialiasing << "\nframe_rate=" << value.frameRate
            << "\nscaling_quality=" << value.scalingQuality
+           << "\nupscaler=" << uint32_t(value.upscaler) << "\ndlss_quality=" << uint32_t(value.dlssQuality)
            << "\ninternal_resolution=" << value.internalResolution
            << "\nfxaa=" << value.fxaa << "\nautomatic_updates=" << value.automaticUpdates
            << "\nskip_shader_prebuild=" << (value.skipShaderPrebuild ? 1 : 0) << '\n';

@@ -89,6 +89,28 @@ int main(int argc, char** argv) {
         std::fputs("{\"state\":\"api_error\",\"reason\":\"Vulkan device creation failed\",\"stage\":\"base_vulkan_device\"}\n", stdout);
         return gpu::dlss::ProbeExitCode(gpu::dlss::ProbeState::ApiError);
     }
+    if (argc == 4 && std::string_view(argv[1]) == "--sizing") {
+        const uint32_t width = uint32_t(std::strtoul(argv[2], nullptr, 10));
+        const uint32_t height = uint32_t(std::strtoul(argv[3], nullptr, 10));
+        const auto sizing = controller.QueryOutputSizing(*static_cast<plume::VulkanInterface*>(renderInterface.get()),
+            *static_cast<plume::VulkanDevice*>(device.get()), {1, width, height});
+        std::printf("{\"sizing_key\":[%llu,%u,%u],\"revision\":%llu,\"modes\":[",
+            static_cast<unsigned long long>(sizing.key.deviceEpoch), sizing.key.outputWidth, sizing.key.outputHeight,
+            static_cast<unsigned long long>(sizing.revision));
+        bool ready = false, unavailable = false;
+        for (size_t index = 0; index < sizing.modes.size(); ++index) {
+            const auto& mode = sizing.modes[index];
+            ready |= mode.state == gpu::upscaling::SizingState::Ready;
+            unavailable |= mode.state == gpu::upscaling::SizingState::Unavailable;
+            std::printf("%s{\"state\":%u,\"optimal\":[%u,%u],\"min\":[%u,%u],\"max\":[%u,%u],\"raw\":",
+                index ? "," : "", uint32_t(mode.state), mode.optimal.width, mode.optimal.height,
+                mode.minimum.width, mode.minimum.height, mode.maximum.width, mode.maximum.height);
+            if (mode.ngxResult) std::printf("%d", *mode.ngxResult); else std::fputs("null", stdout);
+            std::fputc('}', stdout);
+        }
+        std::puts("]}");
+        return ready ? 0 : unavailable ? 77 : 1;
+    }
     controller.ProbeOnce(*static_cast<plume::VulkanInterface*>(renderInterface.get()), *static_cast<plume::VulkanDevice*>(device.get()));
     PrintReport(controller.Report());
     return gpu::dlss::ProbeExitCode(controller.Report());

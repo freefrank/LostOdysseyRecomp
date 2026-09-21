@@ -2,6 +2,7 @@
 
 #if defined(LO_GPU_PLUME)
 #include <plume_vulkan.h>
+#include "upscaling_plan.h"
 
 #include <cstdint>
 #include <filesystem>
@@ -100,6 +101,8 @@ public:
 
     plume::VulkanExtensionHooks ExtensionHooks();
     void ProbeOnce(const plume::VulkanInterface& vulkanInterface, const plume::VulkanDevice& device);
+    upscaling::OutputSizing QueryOutputSizing(const plume::VulkanInterface& vulkanInterface,
+        const plume::VulkanDevice& device, const upscaling::SizingKey& key);
     const ProbeReport& Report() const { return report_; }
 
 private:

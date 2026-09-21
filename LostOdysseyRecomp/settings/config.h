@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <span>
 #include "gpu/backend_selection.h"
+#include "gpu/upscaling_plan.h"
 namespace settings
 {
 enum class WindowMode : uint32_t
@@ -46,6 +47,8 @@ struct Config
     uint32_t antialiasing = 0; // 0 Off, 1 FXAA, 2 SMAA, 3 experimental camera-based TAA.
     uint32_t frameRate = 30;
     uint32_t scalingQuality = 1; // 0 bilinear, 1 bicubic spatial resampling.
+    gpu::upscaling::Upscaler upscaler = gpu::upscaling::Upscaler::Off;
+    gpu::upscaling::DlssQuality dlssQuality = gpu::upscaling::DlssQuality::Quality;
     bool fxaa = false; // Legacy serialized mirror; antialiasing is authoritative.
     bool automaticUpdates = true;
     bool skipShaderPrebuild = false;
