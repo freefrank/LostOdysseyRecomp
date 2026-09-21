@@ -38,14 +38,26 @@ jobs:
           from pathlib import Path
           r=json.loads(Path('control/tools/ci/p2-continue/request.json').read_text())
           p=Path('candidate.patch').resolve()
-          # Correct a known single-character transport typo; gzip validates CRC.
           payload=r['patch_gzip_base64'].replace('BbtG6ypW','BbtG6yoW')
           p.write_bytes(gzip.decompress(base64.b64decode(payload,validate=True)))
           def git(*a): return subprocess.check_output(['git',*a],cwd='source',text=True).strip()
           assert git('rev-parse','HEAD')==r['base']
           paths=[line.split('\t')[-1] for line in git('apply','--numstat',str(p)).splitlines()]
           assert paths and all(x.startswith(('LostOdysseyRecomp/gpu/','tools/tests/','docs/notes/')) and '..' not in Path(x).parts for x in paths)
-          git('apply','--check',str(p)); git('apply',str(p)); git('add','--',*paths); git('diff','--cached','--check')
+          git('apply','--check',str(p)); git('apply',str(p))
+          cm=Path('source/tools/tests/motion_replay/CMakeLists.txt')
+          s=cm.read_text()
+          old='"${ROOT}/LostOdysseyRecomp/gpu/dlss_ngx.cpp" platform_stub.cpp)'
+          new='"${ROOT}/LostOdysseyRecomp/gpu/dlss_ngx.cpp"\n  "${ROOT}/LostOdysseyRecomp/gpu/presentation.cpp"\n  "${ROOT}/LostOdysseyRecomp/gpu/shader/portable_shader_pack.cpp" platform_stub.cpp)'
+          assert s.count(old)==1
+          s=s.replace(old,new).replace('target_include_directories(LoNativeDlssRendererTest PRIVATE "${ROOT}/thirdparty/unordered_dense/include")','target_include_directories(LoNativeDlssRendererTest PRIVATE "${ROOT}/thirdparty/unordered_dense/include"\n  "${ROOT}/tools/XenosRecomp/thirdparty/zstd/lib")')
+          cm.write_text(s)
+          extra=Path('control/tools/ci/p2-continue/followup.patch').resolve()
+          if extra.is_file():
+              added=[line.split('\t')[-1] for line in git('apply','--numstat',str(extra)).splitlines()]
+              assert all(x.startswith(('LostOdysseyRecomp/gpu/','tools/tests/','docs/notes/')) and '..' not in Path(x).parts for x in added)
+              git('apply','--check',str(extra)); git('apply',str(extra)); paths+=added
+          git('add','--',*paths); git('diff','--cached','--check')
           PY
       - name: CPU contracts
         working-directory: source
