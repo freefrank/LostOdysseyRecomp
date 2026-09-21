@@ -1,5 +1,6 @@
 // Compile the production Renderer itself. No game code, assets, or SDL window
 // are linked. The only substituted GPU operation is the proprietary NGX call.
+#define LO_RENDERER_P2_EMBEDDED_TEST 1
 #include <gpu/renderer.cpp>
 #include <gpu/vulkan_command_recording.h>
 #include <gpu/vulkan_submission_state.h>

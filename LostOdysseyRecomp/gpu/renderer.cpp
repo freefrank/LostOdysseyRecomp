@@ -6393,6 +6393,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
         Renderer* g_renderer = nullptr;
     }
 
+#if !defined(LO_RENDERER_P2_EMBEDDED_TEST)
+    // The asset-free fixture instantiates Renderer directly. Exclude only game
+    // entrypoints from that TU, not the production methods under test. COFF
+    // exception funclets may otherwise retain unused game startup call graphs.
     bool Init()
     {
         if (g_renderer)
@@ -7111,6 +7115,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
         return !ready ? 77 : resamplePassed ? 0 : 1;
     }
 #endif
+#endif // !LO_RENDERER_P2_EMBEDDED_TEST
 #else
     void FinishDebugCapture(uint32_t) {}
     bool Init() { return false; }
@@ -7127,6 +7132,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
     std::vector<uint32_t> GetResolvedAddresses() { return {}; }
     void DumpRenderTargets(const char*) {}
 #endif
+#if !defined(LO_RENDERER_P2_EMBEDDED_TEST)
     void SetOutputSize(uint32_t width, uint32_t height)
     {
         frame_plan::PublishDrawable(width, height);
@@ -7176,4 +7182,5 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
         (void)width; (void)height; (void)safeLeft; (void)safeRight;
 #endif
     }
+#endif // !LO_RENDERER_P2_EMBEDDED_TEST
 }
