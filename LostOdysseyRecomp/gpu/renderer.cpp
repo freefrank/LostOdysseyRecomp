@@ -2,6 +2,7 @@
 #include "taa_binding_producer.h"
 #include "temporal_evidence.h"
 #include "scene_aa_provenance.h"
+#include "scene_copy_promotion_policy.h"
 #include "bloom_prefilter.h"
 #include <stdafx.h>
 #include "renderer.h"
@@ -565,6 +566,7 @@ namespace gpu::renderer
                 uint64_t fallbackConstants = UINT64_MAX, rgbConstants = UINT64_MAX;
                 bool prepared = false, activeMapping = false, srApplied = false;
             } sceneCopyPromotion;
+            uint64_t sceneCopyPromotionFrame = ~0ull;
             std::unique_ptr<RenderShader> sceneCopyPromotionPs, sceneCopyPromotionRgbPs;
             std::map<uint32_t, std::unique_ptr<RenderPipeline>> sceneCopyPromotionPipelines, sceneCopyPromotionRgbPipelines;
             std::unique_ptr<RenderTexture> sceneAAOutput;
@@ -1648,10 +1650,15 @@ namespace gpu::renderer
             bool PrepareSceneCopyDestination(const RenderTargetKey& key, HostTexture& color,
                 const temporal::TemporalFrameInputs& inputs)
             {
-                if (sceneCopyPromotion.activeMapping || !sceneCopyPromotionPs || !sceneCopyPromotionRgbPs ||
+                if (sceneCopyPromotion.activeMapping || sceneCopyPromotionFrame == frame || Gpu().srPrefixClosed ||
+                    !sceneCopyPromotionPs || !sceneCopyPromotionRgbPs ||
                     inputs.colorEncoding == temporal::ColorEncoding::Unknown || !inputs.CompleteForConsumer()) return false;
                 const resolution::Size output{activePlan.output.width, activePlan.output.height};
                 if (!output.width || !output.height) return false;
+                // VS/PS/shared constants, texture descriptors and indices for
+                // this guest draw already belong to Gpu(). Never Flush here.
+                if (!scene_copy_promotion::CanAppendConstants(Gpu().uploadOffset,
+                        kUploadRingSize, sizeof(SharedConstants))) return false;
                 auto promoted = CreatePromotedTarget(color, output);
                 auto scratch = CreateSceneCopyScratch(color, output);
                 auto composite = CreatePromotedTarget(color, output);
@@ -1662,19 +1669,6 @@ namespace gpu::renderer
                     constants.transfer[1] = std::bit_cast<uint32_t>(float(src.height) / float(promoted->height));
                     return Upload(&constants, sizeof(constants));
                 };
-                // Both constant allocations must belong to the final active
-                // slot. Upload may Flush when the ring wraps, so reserve their
-                // combined aligned footprint before allocating descriptors.
-                const auto promotionUploadEnd = [](uint64_t offset, size_t size) {
-                    return ((offset + 255) & ~uint64_t(255)) + size;
-                };
-                const size_t promotionConstantBytes = sizeof(SharedConstants);
-                const uint64_t firstEnd = promotionUploadEnd(Gpu().uploadOffset, promotionConstantBytes);
-                const uint64_t bothEnd = promotionUploadEnd(firstEnd, promotionConstantBytes);
-                if (bothEnd > kUploadRingSize) {
-                    Flush();
-                    Begin();
-                }
                 const uint64_t fallbackConstants = scale(color);
                 const uint64_t rgbConstants = scale(*promoted);
                 if (fallbackConstants == UINT64_MAX || rgbConstants == UINT64_MAX) return false;
@@ -1742,6 +1736,7 @@ namespace gpu::renderer
                     it->second = std::move(promotion.parkedLow); promotion.active = nullptr; promotion.activeMapping = false;
                     return false;
                 }
+                sceneCopyPromotionFrame = frame;
                 const bool rasterWasColor = rasterTarget == color;
                 color = promotion.active;
                 if (rasterWasColor) rasterTarget = color;
@@ -1757,25 +1752,33 @@ namespace gpu::renderer
                 return true;
             }
 
-            void RestoreSceneCopyDestination(const char* reason)
+            bool RestoreSceneCopyDestination(const char* reason)
             {
                 auto& promotion = sceneCopyPromotion;
-                if (!promotion.activeMapping || !promotion.active || !promotion.parkedLow) return;
+                if (!promotion.activeMapping) return true;
+                const auto fail = [&] {
+                    // Losing the RGBA restore makes the next incompatible draw
+                    // unsafe. Suppress this plan instead of reusing a stale map.
+                    FailCurrentPlan(frame_plan::FailureReason::InvalidInput);
+                    return false;
+                };
+                if (!promotion.active || !promotion.parkedLow) return fail();
                 auto it = renderTargets.find(promotion.key);
-                if (it == renderTargets.end() || it->second.get() != promotion.active) return;
+                if (it == renderTargets.end() || it->second.get() != promotion.active) return fail();
                 Begin();
-                Transition(*promotion.active, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
-                auto* restoreSet = AcquireSet(1);
-                restoreSet->setTexture(0, promotion.active->texture.get(), RenderTextureLayout::SHADER_READ);
-                restoreSet->setTexture(1, dummyTexture2D.texture.get(), RenderTextureLayout::SHADER_READ);
                 SharedConstants constants{};
                 constants.transfer[0] = std::bit_cast<uint32_t>(float(promotion.active->width) / float(promotion.parkedLow->width));
                 constants.transfer[1] = std::bit_cast<uint32_t>(float(promotion.active->height) / float(promotion.parkedLow->height));
+                // Upload may rotate slots. Acquire descriptors and record
+                // barriers only afterwards; callers have not borrowed targets.
                 const uint64_t offset = Upload(&constants, sizeof(constants));
-                if (offset == UINT64_MAX || !DrawPromotionResample(*promotion.parkedLow, restoreSet, offset, false)) {
-                    DisableDlssRequest(frame_plan::FailureReason::InvalidInput);
-                    return;
-                }
+                if (offset == UINT64_MAX) return fail();
+                auto* restoreSet = AcquireSet(1);
+                if (!restoreSet) return fail();
+                restoreSet->setTexture(0, promotion.active->texture.get(), RenderTextureLayout::SHADER_READ);
+                restoreSet->setTexture(1, dummyTexture2D.texture.get(), RenderTextureLayout::SHADER_READ);
+                Transition(*promotion.active, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
+                if (!DrawPromotionResample(*promotion.parkedLow, restoreSet, offset, false)) return fail();
                 auto retired = std::move(it->second);
                 it->second = std::move(promotion.parkedLow);
                 if (retired) Gpu().retiredTextures.push_back(std::move(retired));
@@ -1783,6 +1786,19 @@ namespace gpu::renderer
                 if (promotion.scratch) Gpu().retiredTextures.push_back(std::move(promotion.scratch));
                 LOG_INFO("renderer: restored scene-copy destination frame={} reason={}", frame, reason);
                 promotion = {};
+                return true;
+            }
+
+            bool PreparePromotionAccess(const RenderTargetKey& key, uint32_t height, bool needsDepthStencil)
+            {
+                const auto& promotion = sceneCopyPromotion;
+                if (!promotion.activeMapping) return true;
+                if (!promotion.active) return RestoreSceneCopyDestination("invalid_mapping");
+                height = std::clamp<uint32_t>((height + 31) & ~31u, 32, 2048);
+                if (!scene_copy_promotion::MustRestore(key == promotion.key, promotion.frame == frame,
+                        promotion.epoch == activePlan.geometryEpoch, needsDepthStencil,
+                        height, promotion.active->guestHeight)) return true;
+                return RestoreSceneCopyDestination("target_depth_extent_or_epoch");
             }
 
 #if defined(LO_GPU_PLUME)
@@ -1838,7 +1854,7 @@ namespace gpu::renderer
                     DisableDlssRequest(frame_plan::FailureReason::DlssUnavailable);
                     return false;
                 }
-                commandList->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(promotion.active->texture.get(), RenderTextureLayout::SHADER_READ));
+                Transition(*promotion.active, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
                 if (!DrawPromotionResample(*promotion.composite, promotion.rgbSet, promotion.rgbConstants, true)) {
                     DisableDlssRequest(frame_plan::FailureReason::InvalidInput);
                     return false;
@@ -3038,6 +3054,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     Flush();
                     WaitForGpu();
                     video::WaitForPresentGpu();
+                    // active points into renderTargets; parked/scratch may also
+                    // be referenced by completed NGX lists. Clear only after the
+                    // drain, before destroying the map it points into.
+                    sceneCopyPromotion = {};
                     framebuffers.clear();
                     renderTargets.clear();
                     resolved.clear();
@@ -3104,13 +3124,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 // One host texture per (base, pitch, storage class).
                 const uint32_t colorClass = depth ? 0u : ColorClassOf(format);
                 RenderTargetKey key{ base, colorClass, pitch, 0, depth };
-                if (sceneCopyPromotion.activeMapping) {
-                    const bool exact = key == sceneCopyPromotion.key && sceneCopyPromotion.frame == frame &&
-                        sceneCopyPromotion.epoch == activePlan.geometryEpoch && !depth;
-                    const bool incompatible = base == sceneCopyPromotion.key.base && (!exact || height > sceneCopyPromotion.active->guestHeight);
-                    if (incompatible || sceneCopyPromotion.frame != frame || sceneCopyPromotion.epoch != activePlan.geometryEpoch)
-                        RestoreSceneCopyDestination(incompatible ? "alias_or_extent" : "frame_or_epoch");
-                }
+                if (!PreparePromotionAccess(key, height, depth)) return nullptr;
                 auto it = renderTargets.find(key);
                 uint32_t effectiveHeight = height;
                 if (it != renderTargets.end())
@@ -3919,6 +3933,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 HostTexture* depth = nullptr;
                 {
                     ScopedTimer rtTimer{ tRt, cpuTimingEnabled };
+                    // Restore before taking color: looking up depth afterwards
+                    // must not retire the color pointer we just borrowed.
+                    const RenderTargetKey drawKey{colorInfo & 0xFFF, ColorClassOf((colorInfo >> 16) & 0xF), pitch, 0, false};
+                    if (!PreparePromotionAccess(drawKey, rtHeight, (depthControl & 3) != 0)) return;
                     color = AcquireColorTarget(colorInfo & 0xFFF, (colorInfo >> 16) & 0xF, pitch, rtHeight);
                     depth = (depthControl & 3) ? GetRenderTarget(depthInfo & 0xFFF, (depthInfo >> 16) & 1, pitch, rtHeight, true) : nullptr;
                     if (!color || !color->texture || ((depthControl & 3) && (!depth || !depth->texture))) {
