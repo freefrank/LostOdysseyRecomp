@@ -676,8 +676,8 @@ SrAttempt Controller::RecordIsolated(plume::VulkanCommandList& isolatedCommandLi
 
     // Retain parameters and any feature state through the fallback prefix batch,
     // including a failed Create/Evaluate recording whose primary is excluded.
-    attempt.useId = nextSrUseId_++;
-    srUses_.push_back({attempt.useId});
+    attempt.useId = srUses_.Record();
+    if (!attempt.useId) { attempt.status = SrStatus::Failed; return attempt; }
     lastSrAttemptFrameId_ = inputs.renderFrameId;
     const auto failed = [&](std::optional<int32_t> rawNgx = std::nullopt,
                             std::optional<VkResult> rawVk = std::nullopt) {
@@ -790,24 +790,19 @@ SrAttempt Controller::RecordIsolated(plume::VulkanCommandList& isolatedCommandLi
 }
 
 void Controller::OnBatchSubmitted(uint64_t useId, uint64_t submissionSerial) {
-    if (!useId || !submissionSerial) return;
-    const auto it = std::find_if(srUses_.begin(), srUses_.end(), [useId](const SrUse& use) { return use.useId == useId; });
-    if (it != srUses_.end()) { it->submitted = true; it->submissionSerial = submissionSerial; }
+    srUses_.Submit(useId, submissionSerial);
 }
 
 void Controller::OnBatchDiscarded(uint64_t useId) {
-    if (!useId) return;
-    std::erase_if(srUses_, [useId](const SrUse& use) { return use.useId == useId; });
+    srUses_.Discard(useId);
 }
 
 void Controller::ReleaseCompletedThrough(uint64_t submissionSerial) {
-    std::erase_if(srUses_, [submissionSerial](const SrUse& use) {
-        return use.submitted && use.submissionSerial <= submissionSerial;
-    });
+    srUses_.CompleteThrough(submissionSerial);
 }
 
 void Controller::ReleaseFeatureAfterGpuDrain() {
-    if (!srUses_.empty()) return;
+    if (!srUses_.Empty()) return;
 #if defined(LO_DLSS_SDK)
     if (feature_) {
         const auto result = NVSDK_NGX_VULKAN_ReleaseFeature(static_cast<NVSDK_NGX_Handle*>(feature_));
@@ -821,7 +816,7 @@ void Controller::ReleaseFeatureAfterGpuDrain() {
 }
 
 void Controller::ShutdownAfterGpuDrain() {
-    if (!srUses_.empty()) return;
+    if (!srUses_.Empty()) return;
     ReleaseFeatureAfterGpuDrain();
 #if defined(LO_DLSS_SDK)
     if (featureParameters_) {

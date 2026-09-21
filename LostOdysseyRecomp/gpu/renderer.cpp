@@ -567,6 +567,7 @@ namespace gpu::renderer
                 bool prepared = false, activeMapping = false, srApplied = false;
             } sceneCopyPromotion;
             uint64_t sceneCopyPromotionFrame = ~0ull;
+            uint64_t srReconfigureFrame = ~0ull;
             std::unique_ptr<RenderShader> sceneCopyPromotionPs, sceneCopyPromotionRgbPs;
             std::map<uint32_t, std::unique_ptr<RenderPipeline>> sceneCopyPromotionPipelines, sceneCopyPromotionRgbPipelines;
             std::unique_ptr<RenderTexture> sceneAAOutput;
@@ -1851,7 +1852,10 @@ namespace gpu::renderer
                     if (image) continuationBarriers.emplace_back(image, RenderTextureLayout::SHADER_READ);
                 commandList->barriers(RenderBarrierStage::GRAPHICS, continuationBarriers);
                 if (attempt.status != dlss::SrStatus::Executable) {
-                    DisableDlssRequest(frame_plan::FailureReason::DlssUnavailable);
+                    if (attempt.status == dlss::SrStatus::NeedsReconfigure)
+                        srReconfigureFrame = frame; // Retry only after a drained next-frame boundary.
+                    else
+                        DisableDlssRequest(frame_plan::FailureReason::DlssUnavailable);
                     return false;
                 }
                 Transition(*promotion.active, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
@@ -3045,15 +3049,30 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 const resolution::Size requested{selected.width, selected.height};
                 const bool first = appliedPlanEpoch == ~0ull;
                 const bool requestChanged = requested != requestedInternalSize;
-                if (selected.geometryEpoch == appliedPlanEpoch && !requestChanged && !first) return true;
+                const bool epochChanged = selected.geometryEpoch != appliedPlanEpoch;
+                const bool recreateFeature = dlssController &&
+                    ((srReconfigureFrame != ~0ull && srReconfigureFrame != frame) ||
+                     (epochChanged && dlssController->HasFeatureState()));
+                if (!epochChanged && !requestChanged && !first && !recreateFeature) return true;
                 requestedInternalSize = requested;
                 const auto effective = requested;
-                // Resize only between renderer frames. Complete all references
-                // before destroying framebuffer views and the resources they use.
-                if (effective != internalSize) {
+                // No guest draw attachments, upload offsets or descriptors have
+                // been borrowed yet. Reconfigure here, never in a scene-copy draw.
+                // Keep the NGX session/parameters, releasing only the old feature.
+                if (effective != internalSize || recreateFeature) {
                     Flush();
                     WaitForGpu();
                     video::WaitForPresentGpu();
+                    if (recreateFeature) {
+                        dlssController->ReleaseFeatureAfterGpuDrain();
+                        if (dlssController->HasFeatureState()) {
+                            FailCurrentPlan(frame_plan::FailureReason::InvalidInput);
+                            return false;
+                        }
+                        srReconfigureFrame = ~0ull;
+                    }
+                }
+                if (effective != internalSize) {
                     // active points into renderTargets; parked/scratch may also
                     // be referenced by completed NGX lists. Clear only after the
                     // drain, before destroying the map it points into.

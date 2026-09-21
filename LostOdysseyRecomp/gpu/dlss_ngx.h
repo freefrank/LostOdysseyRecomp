@@ -3,6 +3,7 @@
 #if defined(LO_GPU_PLUME)
 #include <plume_vulkan.h>
 #include "dlss_sr.h"
+#include "dlss_submission_lifetime.h"
 #include "upscaling_plan.h"
 
 #include <cstdint>
@@ -111,6 +112,8 @@ public:
     // uses that capability map and must not shut down an active session.
     SrStatus EnsureSession(const plume::VulkanDevice& device);
     bool NeedsFeatureRecreate(const SrConfig& config) const;
+    // Persistent capability/parameter blocks alone do not require a drain.
+    bool HasFeatureState() const { return feature_ || featureConfigValid_ || featureFailed_ || !srUses_.Empty(); }
 
     // Lane B owns one prefix, isolated NGX, and continuation primary list per
     // GPU slot. This method exclusively begins, records, and ends the isolated
@@ -144,12 +147,6 @@ private:
     bool CreateApplicationDataPath(std::string& reason);
     SrStatus AllocateParameters();
 
-    struct SrUse {
-        uint64_t useId = 0;
-        uint64_t submissionSerial = 0;
-        bool submitted = false;
-    };
-
     std::filesystem::path applicationDataPath_;
     std::filesystem::path runtimePath_;
     ProbeReport report_;
@@ -161,8 +158,7 @@ private:
     void* featureParameters_ = nullptr;
     void* feature_ = nullptr;
     SrConfig featureConfig_{};
-    std::vector<SrUse> srUses_;
-    uint64_t nextSrUseId_ = 1;
+    SubmissionLifetime srUses_;
     bool probeAttempted_ = false;
     bool apiFailure_ = false;
     bool sessionInitialized_ = false;
