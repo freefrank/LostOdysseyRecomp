@@ -1,0 +1,129 @@
+name: P2 focused validation
+on:
+  push:
+    branches: [dlss-p2-workbench]
+    paths: [.github/workflows/native-dlss-p2-resume.yml, 'tools/ci/p2-resume/**']
+permissions:
+  contents: write
+concurrency:
+  group: p2-resume
+  cancel-in-progress: false
+jobs:
+  candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: control
+          persist-credentials: false
+      - id: request
+        run: |
+          python3 - <<'PY'
+          import json,os,re
+          from pathlib import Path
+          r=json.loads(Path('control/tools/ci/p2-resume/request.json').read_text())
+          assert re.fullmatch('[a-f0-9]{40}',r['base'])
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f: print('base='+r['base'],file=f)
+          PY
+      - uses: actions/checkout@v4
+        with:
+          path: source
+          ref: ${{ steps.request.outputs.base }}
+          fetch-depth: 0
+      - name: Verify exact reviewed patch before applying
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64,gzip,hashlib,json,subprocess
+          c=Path('control/tools/ci/p2-resume')
+          r=json.loads((c/'request.json').read_text())
+          encoded=base64.b64encode((c/'patch.gz').read_bytes()).decode().rstrip('=')
+          for old,new in r.get('base64_replacements',[]):
+              assert encoded.count(old)==1
+              encoded=encoded.replace(old,new)
+          patch=gzip.decompress(base64.b64decode(encoded+'==='))
+          assert hashlib.sha256(patch).hexdigest()==r['patch_sha256']
+          p=Path('reviewed.patch').resolve();p.write_bytes(patch)
+          def git(*args): return subprocess.check_output(['git',*args],cwd='source',text=True).strip()
+          assert git('rev-parse','HEAD')==r['base']
+          paths=[line.split('\t')[-1] for line in git('apply','--numstat',str(p)).splitlines()]
+          assert paths and all(x.startswith(('LostOdysseyRecomp/gpu/','tools/tests/','docs/notes/')) and '..' not in Path(x).parts for x in paths)
+          git('apply','--unidiff-zero','--check',str(p));git('apply','--unidiff-zero',str(p))
+          git('add','--',*paths);git('diff','--cached','--check')
+          PY
+      - name: CPU contracts
+        working-directory: source
+        run: |
+          cmake -S tools/tests/native_dlss -B out/cpu -G Ninja -DLO_NATIVE_DLSS_CPU_ONLY=ON -DCMAKE_BUILD_TYPE=Debug
+          cmake --build out/cpu --target LoNativeDlssCpuTests --parallel 2
+          ctest --test-dir out/cpu -L cpu --output-on-failure -V
+      - name: Public graphics dependencies
+        working-directory: source
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends clang ninja-build libvulkan-dev libsdl2-dev mesa-vulkan-drivers vulkan-validationlayers
+          git submodule update --init --recursive thirdparty/plume thirdparty/unordered_dense tools/XenosRecomp
+          git -C thirdparty/plume apply --reverse --check ../../tools/patches/plume-lostodyssey.patch >/dev/null 2>&1 || git -C thirdparty/plume apply ../../tools/patches/plume-lostodyssey.patch
+      - name: Actual renderer and video translation units
+        working-directory: source
+        run: |
+          cmake -S tools/tests/motion_replay -B out/graphics -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_CXX_SCAN_FOR_MODULES=OFF -DLO_P2_VIDEO_COMPILE_CHECK=ON
+          cmake --build out/graphics --target motion_renderer_compile p2_video_compile --parallel 2
+      - uses: actions/checkout@v4
+        with:
+          repository: NVIDIA/DLSS
+          ref: 374959484e79a640feaba44c93ac8cfb0a03f5b5
+          path: sdk
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /include/
+            /lib/Linux_x86_64/libnvsdk_ngx.a
+            /LICENSE.txt
+      - name: SDK enabled and disabled builds and report tests
+        working-directory: source
+        run: |
+          for mode in OFF ON; do
+            cmake -S tools/tests/native_dlss -B "out/ngx-$mode" -G Ninja -DCMAKE_BUILD_TYPE=Debug -DLO_ENABLE_DLSS=$mode -DLO_DLSS_SDK_ROOT="$GITHUB_WORKSPACE/sdk" -DLO_DLSS_STAGE_RUNTIME=OFF -DCMAKE_CXX_SCAN_FOR_MODULES=OFF
+            cmake --build "out/ngx-$mode" --target LoNativeDlssExecutionTest LoNativeDlssReportTest --parallel 2
+            ctest --test-dir "out/ngx-$mode" -R '^LoNativeDlssReportTest$' --output-on-failure
+          done
+          grep -q 'LO_DLSS_SDK=1' out/ngx-ON/build.ninja
+      - name: Software Vulkan production composite regression
+        run: |
+          mkdir -p dxc
+          curl --fail --location --retry 3 'https://github.com/microsoft/DirectXShaderCompiler/releases/download/v1.8.2505.1/linux_dxc_2025_07_14.x86_64.tar.gz' -o dxc/archive.tar.gz
+          echo 'f2213da1fc99dc8778c8823078e16ba97c7f80f86a1d4520ab1adf4b462bc48c  dxc/archive.tar.gz' | sha256sum --check --strict
+          tar -xzf dxc/archive.tar.gz -C dxc
+          export LO_DXC_PATH="$GITHUB_WORKSPACE/dxc/lib/libdxcompiler.so"
+          export LD_LIBRARY_PATH="$GITHUB_WORKSPACE/dxc/lib:${LD_LIBRARY_PATH:-}"
+          export VK_ICD_FILENAMES=$(find /usr/share/vulkan/icd.d -name '*lvp*.json' -print -quit)
+          test -n "$VK_ICD_FILENAMES"
+          cmake --build source/out/graphics --target LoSceneCopyCompositeTest --parallel 2
+          set -o pipefail
+          ctest --test-dir source/out/graphics -R '^LoSceneCopyCompositeTest$' --output-on-failure -V | tee composite.log
+          ! grep -E 'Validation Error|VUID-' composite.log
+          if [ -f control/tools/ci/p2-resume/extra-tests.sh ]; then bash control/tools/ci/p2-resume/extra-tests.sh; fi
+      - name: Commit validated feature to candidate only
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import json,subprocess
+          r=json.loads(Path('control/tools/ci/p2-resume/request.json').read_text())
+          def git(*a):return subprocess.check_output(['git',*a],cwd='source',text=True).strip()
+          assert git('rev-parse','HEAD')==r['base']
+          git('config','user.name','github-actions[bot]');git('config','user.email','41898282+github-actions[bot]@users.noreply.github.com')
+          git('commit','-m',r['message']);git('push','origin','HEAD:refs/heads/dlss-p2-candidate')
+          Path('candidate.json').write_text(json.dumps({'commit':git('rev-parse','HEAD'),'tree':git('rev-parse','HEAD^{tree}'),'base':r['base']},indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: p2-resume-evidence
+          path: |
+            candidate.json
+            composite.log
+            source/out/**/Testing/Temporary/LastTest.log
+          retention-days: 7
+          if-no-files-found: warn
