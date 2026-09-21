@@ -3,18 +3,18 @@
 日期：2026-09-21
 特性分支：`dlss`
 基线提交：`main@5b765f617ec511a2f76aa9da7923a8c122679d2c`
-已推送到远端的阶段提交：`origin/dlss` @ `91bf37ea846189f5e7b1f4c12ca631e5ed510203`（P0: `089676f`，P1 尺寸: `c6bc50b`，P1 输入: `3f40030`，文档: `91bf37e`）
+历史P0/P1阶段提交（非当前HEAD）： `91bf37ea846189f5e7b1f4c12ca631e5ed510203`（P0: `089676f`，P1 尺寸: `c6bc50b`，P1 输入: `3f40030`，文档: `91bf37e`）
 当前状态：2026-09-21 已恢复 P2 开发并分项推送；输入/提交生命周期、目标提升边界和合成测试已补强。P2 尚未完成，Gate 3 未通过，游戏内 SR 仍受未知颜色编码守卫保护。历史检查点与 RTX 记录保留，下方续开发结果优先于历史暂停状态。
 
 ---
 
-## 2026-09-21 续开发结果
+## 2026-09-21 第二轮续开发结果
 
-已新增 CPU-only CMake/CTest 与 Windows/Linux CI，修复晚期目标提升中的隐式 Flush、附件借用前的恢复顺序、深度/尺寸不匹配、NGX feature 安全重配置、提交 use 的 fence 生命周期、SR 有效区域外的填充像素，以及输入区域整数溢出。
+最新实现、验证范围和本地执行步骤见[P2续开发与下一次实机验收](native-dlss-p2-next-run.zh-CN.md)。已补充真实Renderer目标提升/Flush/恢复测试，修复反向Z未传给NGX的错误，并提供跨Windows/Linux编译的真实NGX Renderer自测入口和三帧颜色链检查器。
 
-详细提交、复现命令和证据范围见 [P2 续开发记录](native-dlss-p2-progress-2026-09-21.md)。新证据包括 5 组本地 CPU 测试、实际 renderer 编译单元、SDK 开/关构建与 report 测试，以及软件 Vulkan 执行生产像素 shader 的 256 个 FP16 RGBA 精确读回检查；本轮未运行 RTX NGX 或完整游戏。
+P2仍未完成游戏接入/验收。剩余主要步骤是RTX原生自测、真实游戏采集后的颜色资格判定及其运行时接入、全游戏画面/性能验收。普通提交故障的停止状态已有`59e9dce`修复，不应重复从零实现；真实驱动DeviceLost仍未验证。
 
-仍需运行时颜色资格证据、完整目标映射路径验证，以及提交失败/设备丢失后的终止状态与 fence 等待处理。禁止据此删除 `Unknown` 守卫或标记 Gate 3 通过。下文暂停/取消复审文字描述的是此前检查点，不代表本次没有继续开发。
+历史RTX结果、初期暂停状态与第一轮测试范围保留在下文，不能视为本轮RTX验证。游戏输入的`Unknown`守卫保持不变。
 
 ## 1. 阶段状态总览与总体边界
 
@@ -22,7 +22,7 @@
 
 1. **P0 基础与桥接（已通过并推送到远端）**：Vulkan 扩展协商、Plume 外部命令流桥接、NGX 官方能力探测（`LoNativeDlssProbe`）、缺失运行库受控退出（exit 1）。
 2. **P1 时序输入与计划（已通过并推送到远端）**：CPU 帧计划器 24-word 快照、真实低内部分辨率光栅化、NGX 目标尺寸查询缓存、渲染器 pre-TAA 颜色、R32 深度与未抖动几何运动矢量采集、GPU fence 生命周期管理、`LO_DLSS_INPUT_PROBE=1` 诊断模式。
-3. **P2 执行与目标提升（已提交未完成检查点，已暂停）**：
+3. **P2 执行与目标提升（以下为历史检查点，最新状态见上文）**：
    - Lane A 完成了持久化 NGX 会话控制器（`gpu::dlss::Controller`），支持 `NGX_VULKAN_CREATE_DLSS_EXT1` 与 `NGX_VULKAN_EVALUATE_DLSS_EXT` 录制，并对原生 Vulkan `vkResetCommandBuffer`、`vkBeginCommandBuffer`、`vkEndCommandBuffer` 实施校验。独立求值测试 `LoNativeDlssExecutionTest` 通过。
    - Lane B 完成了渲染器侧 SR 路由调度、单调提交序号追踪、未知色彩编码旁路保护、基于停放低分辨率目标的目标提升架构以及诊断捕获钩子（`p2-oracle.jsonl`）。
    - 生产端重采样函数（`DrawPromotionResample`）通过入口自检参数 `--self-test-scene-copy-promotion`（源码门禁宏 `LO_RENDERER_P2_SELFTEST` 默认 `OFF`）在本地 RTX 5080 上完成验证（4×4 升至 8×8，64 个 RGBA 像素 0 不匹配，1 字节 alpha 容差）。
@@ -30,7 +30,7 @@
 4. **P3 与后续边界**：
    - 游戏默认色彩编码保持为未知状态（`ColorEncoding::Unknown`），受静态审查守卫保护，在游戏运行时完全绕过 SR 评估调用。
    - 尚未在实际游戏过程中进行 DLSS 调度，不能向玩家宣称 DLSS 在游戏中可用。
-   - Linux 原生运行跳过未跑；包含 SDK 的二进制分发许可尚待确定，不提供二进制安装包发布。
+   - Linux软件Vulkan测试及SDK开/关构建已补充；NVIDIA原生执行仍未跑；包含 SDK 的二进制分发许可尚待确定，不提供二进制安装包发布。
 
 ---
 

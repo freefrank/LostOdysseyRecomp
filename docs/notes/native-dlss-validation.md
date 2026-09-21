@@ -6,11 +6,11 @@ Feature branch: `dlss` (prior pushed baseline: `91bf37e`; P2 checkpoint commits:
 SDK Reference: NVIDIA DLSS **310.9.1** (`374959484e79a640feaba44c93ac8cfb0a03f5b5`)
 Status: **P0 gate 1 passed**; **P1 gate 2 passed** (historical evidence retained). P2 development resumed on 2026-09-21 with focused fixes and additional tests; it is **not complete or Gate 3 approved**. The earlier formal re-review was cancelled. In-game SR remains blocked by unqualified color encoding. Frame Generation (FG) deferred.
 
-## 2026-09-21 Development Follow-up
+## 2026-09-21 Second Development Follow-up
 
-The earlier paused checkpoint has received five focused implementation/test changes on `dlss`; see [P2 follow-up evidence and remaining blockers](native-dlss-p2-progress-2026-09-21.md) for commits, reproducible commands and exact scope. Historical RTX results below were not rerun and must not be attributed to the new revisions.
+See [latest implementation, evidence and next RTX run](native-dlss-p2-next-run.zh-CN.md). Actual Renderer target-map/Flush/restore methods now execute in software Vulkan tests (1,536 checks), in addition to the 256 FP16 shared-shader comparisons. The reversed-Z producer convention is explicitly carried into NGX feature flags. Windows/Linux SDK ON/OFF builds of a new `--native` Renderer fixture pass; NVIDIA execution of that mode is still unverified. SDK-disabled skip=77 is not a GPU pass.
 
-New evidence covers CPU contracts, actual renderer translation-unit compilation, pinned SDK ON/OFF adapter compilation and report tests, and software Vulkan execution of production FP16 composite shaders. It does not qualify runtime game color, full target-map transitions, fatal submission/device-loss recovery, or NVIDIA in-game SR. Gate 3 remains unapproved.
+CPU failure-stop handling was already implemented in `59e9dce`. A read-only checker now triages the three per-frame oracle JSONL files (13 Python tests, optional CTest). It never qualifies color or approves P2. Runtime game-color qualification and dispatch, complete guest DrawImpl/UI/presentation behavior, real driver DeviceLost, gameplay and performance remain unaccepted. Historical RTX results below were not rerun for these revisions. Gate 3 remains unapproved.
 
 ## 1. Overview and Scope
 

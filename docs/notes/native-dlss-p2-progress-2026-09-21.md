@@ -1,5 +1,9 @@
 # Native DLSS P2 follow-up — 2026-09-21
 
+## Superseded checkpoint
+
+This page preserves the first follow-up. See [the second follow-up](native-dlss-p2-next-run.zh-CN.md) for fixes and new execution evidence after this checkpoint. Its remaining-blocker list is historical: `59e9dce` added failure-stop handling and the later renderer fixture executes actual mapping methods with a synthetic vendor. Real game color qualification and NVIDIA/gameplay acceptance remain outstanding.
+
 ## Status
 
 P2 has advanced, but is **not complete or accepted**. The game still rejects
