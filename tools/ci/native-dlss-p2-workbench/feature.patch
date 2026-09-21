@@ -1,178 +1,181 @@
-diff --git a/LostOdysseyRecomp/gpu/renderer.cpp b/LostOdysseyRecomp/gpu/renderer.cpp
-index b7dea46..4e3fd58 100644
---- a/LostOdysseyRecomp/gpu/renderer.cpp
-+++ b/LostOdysseyRecomp/gpu/renderer.cpp
-@@ -4,0 +5 @@
-+#include "scene_copy_promotion_policy.h"
-@@ -567,0 +569 @@ namespace gpu::renderer
-+            uint64_t sceneCopyPromotionFrame = ~0ull;
-@@ -1651 +1653,2 @@ namespace gpu::renderer
--                if (sceneCopyPromotion.activeMapping || !sceneCopyPromotionPs || !sceneCopyPromotionRgbPs ||
-+                if (sceneCopyPromotion.activeMapping || sceneCopyPromotionFrame == frame || Gpu().srPrefixClosed ||
-+                    !sceneCopyPromotionPs || !sceneCopyPromotionRgbPs ||
-@@ -1654,0 +1658,4 @@ namespace gpu::renderer
-+                // VS/PS/shared constants, texture descriptors and indices for
-+                // this guest draw already belong to Gpu(). Never Flush here.
-+                if (!scene_copy_promotion::CanAppendConstants(Gpu().uploadOffset,
-+                        kUploadRingSize, sizeof(SharedConstants))) return false;
-@@ -1665,13 +1671,0 @@ namespace gpu::renderer
--                // Both constant allocations must belong to the final active
--                // slot. Upload may Flush when the ring wraps, so reserve their
--                // combined aligned footprint before allocating descriptors.
--                const auto promotionUploadEnd = [](uint64_t offset, size_t size) {
--                    return ((offset + 255) & ~uint64_t(255)) + size;
--                };
--                const size_t promotionConstantBytes = sizeof(SharedConstants);
--                const uint64_t firstEnd = promotionUploadEnd(Gpu().uploadOffset, promotionConstantBytes);
--                const uint64_t bothEnd = promotionUploadEnd(firstEnd, promotionConstantBytes);
--                if (bothEnd > kUploadRingSize) {
--                    Flush();
--                    Begin();
--                }
-@@ -1744,0 +1739 @@ namespace gpu::renderer
-+                sceneCopyPromotionFrame = frame;
-@@ -1760 +1755 @@ namespace gpu::renderer
--            void RestoreSceneCopyDestination(const char* reason)
-+            bool RestoreSceneCopyDestination(const char* reason)
-@@ -1763 +1758,8 @@ namespace gpu::renderer
--                if (!promotion.activeMapping || !promotion.active || !promotion.parkedLow) return;
-+                if (!promotion.activeMapping) return true;
-+                const auto fail = [&] {
-+                    // Losing the RGBA restore makes the next incompatible draw
-+                    // unsafe. Suppress this plan instead of reusing a stale map.
-+                    FailCurrentPlan(frame_plan::FailureReason::InvalidInput);
-+                    return false;
-+                };
-+                if (!promotion.active || !promotion.parkedLow) return fail();
-@@ -1765 +1767 @@ namespace gpu::renderer
--                if (it == renderTargets.end() || it->second.get() != promotion.active) return;
-+                if (it == renderTargets.end() || it->second.get() != promotion.active) return fail();
-@@ -1767,4 +1768,0 @@ namespace gpu::renderer
--                Transition(*promotion.active, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
--                auto* restoreSet = AcquireSet(1);
--                restoreSet->setTexture(0, promotion.active->texture.get(), RenderTextureLayout::SHADER_READ);
--                restoreSet->setTexture(1, dummyTexture2D.texture.get(), RenderTextureLayout::SHADER_READ);
-@@ -1773,0 +1772,2 @@ namespace gpu::renderer
-+                // Upload may rotate slots. Acquire descriptors and record
-+                // barriers only afterwards; callers have not borrowed targets.
-@@ -1775,4 +1775,7 @@ namespace gpu::renderer
--                if (offset == UINT64_MAX || !DrawPromotionResample(*promotion.parkedLow, restoreSet, offset, false)) {
--                    DisableDlssRequest(frame_plan::FailureReason::InvalidInput);
--                    return;
--                }
-+                if (offset == UINT64_MAX) return fail();
-+                auto* restoreSet = AcquireSet(1);
-+                if (!restoreSet) return fail();
-+                restoreSet->setTexture(0, promotion.active->texture.get(), RenderTextureLayout::SHADER_READ);
-+                restoreSet->setTexture(1, dummyTexture2D.texture.get(), RenderTextureLayout::SHADER_READ);
-+                Transition(*promotion.active, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
-+                if (!DrawPromotionResample(*promotion.parkedLow, restoreSet, offset, false)) return fail();
-@@ -1785,0 +1789,13 @@ namespace gpu::renderer
-+                return true;
-+            }
-+
-+            bool PreparePromotionAccess(const RenderTargetKey& key, uint32_t height, bool needsDepthStencil)
-+            {
-+                const auto& promotion = sceneCopyPromotion;
-+                if (!promotion.activeMapping) return true;
-+                if (!promotion.active) return RestoreSceneCopyDestination("invalid_mapping");
-+                height = std::clamp<uint32_t>((height + 31) & ~31u, 32, 2048);
-+                if (!scene_copy_promotion::MustRestore(key == promotion.key, promotion.frame == frame,
-+                        promotion.epoch == activePlan.geometryEpoch, needsDepthStencil,
-+                        height, promotion.active->guestHeight)) return true;
-+                return RestoreSceneCopyDestination("target_depth_extent_or_epoch");
-@@ -1841 +1857 @@ namespace gpu::renderer
--                commandList->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(promotion.active->texture.get(), RenderTextureLayout::SHADER_READ));
-+                Transition(*promotion.active, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
-@@ -3040,0 +3057,4 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
-+                    // active points into renderTargets; parked/scratch may also
-+                    // be referenced by completed NGX lists. Clear only after the
-+                    // drain, before destroying the map it points into.
-+                    sceneCopyPromotion = {};
-@@ -3107,7 +3127 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
--                if (sceneCopyPromotion.activeMapping) {
--                    const bool exact = key == sceneCopyPromotion.key && sceneCopyPromotion.frame == frame &&
--                        sceneCopyPromotion.epoch == activePlan.geometryEpoch && !depth;
--                    const bool incompatible = base == sceneCopyPromotion.key.base && (!exact || height > sceneCopyPromotion.active->guestHeight);
--                    if (incompatible || sceneCopyPromotion.frame != frame || sceneCopyPromotion.epoch != activePlan.geometryEpoch)
--                        RestoreSceneCopyDestination(incompatible ? "alias_or_extent" : "frame_or_epoch");
--                }
-+                if (!PreparePromotionAccess(key, height, depth)) return nullptr;
-@@ -3921,0 +3936,4 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
-+                    // Restore before taking color: looking up depth afterwards
-+                    // must not retire the color pointer we just borrowed.
-+                    const RenderTargetKey drawKey{colorInfo & 0xFFF, ColorClassOf((colorInfo >> 16) & 0xF), pitch, 0, false};
-+                    if (!PreparePromotionAccess(drawKey, rtHeight, (depthControl & 3) != 0)) return;
-diff --git a/LostOdysseyRecomp/gpu/scene_copy_promotion_policy.h b/LostOdysseyRecomp/gpu/scene_copy_promotion_policy.h
+diff --git a/LostOdysseyRecomp/gpu/dlss_ngx.cpp b/LostOdysseyRecomp/gpu/dlss_ngx.cpp
+index 6266efe..3faf51f 100644
+--- a/LostOdysseyRecomp/gpu/dlss_ngx.cpp
++++ b/LostOdysseyRecomp/gpu/dlss_ngx.cpp
+@@ -679,2 +679,2 @@ SrAttempt Controller::RecordIsolated(plume::VulkanCommandList& isolatedCommandLi
+-    attempt.useId = nextSrUseId_++;
+-    srUses_.push_back({attempt.useId});
++    attempt.useId = srUses_.Record();
++    if (!attempt.useId) { attempt.status = SrStatus::Failed; return attempt; }
+@@ -793,3 +793 @@ void Controller::OnBatchSubmitted(uint64_t useId, uint64_t submissionSerial) {
+-    if (!useId || !submissionSerial) return;
+-    const auto it = std::find_if(srUses_.begin(), srUses_.end(), [useId](const SrUse& use) { return use.useId == useId; });
+-    if (it != srUses_.end()) { it->submitted = true; it->submissionSerial = submissionSerial; }
++    srUses_.Submit(useId, submissionSerial);
+@@ -799,2 +797 @@ void Controller::OnBatchDiscarded(uint64_t useId) {
+-    if (!useId) return;
+-    std::erase_if(srUses_, [useId](const SrUse& use) { return use.useId == useId; });
++    srUses_.Discard(useId);
+@@ -804,3 +801 @@ void Controller::ReleaseCompletedThrough(uint64_t submissionSerial) {
+-    std::erase_if(srUses_, [submissionSerial](const SrUse& use) {
+-        return use.submitted && use.submissionSerial <= submissionSerial;
+-    });
++    srUses_.CompleteThrough(submissionSerial);
+@@ -810 +805 @@ void Controller::ReleaseFeatureAfterGpuDrain() {
+-    if (!srUses_.empty()) return;
++    if (!srUses_.Empty()) return;
+@@ -824 +819 @@ void Controller::ShutdownAfterGpuDrain() {
+-    if (!srUses_.empty()) return;
++    if (!srUses_.Empty()) return;
+diff --git a/LostOdysseyRecomp/gpu/dlss_ngx.h b/LostOdysseyRecomp/gpu/dlss_ngx.h
+index 3e4f9b3..daed1a1 100644
+--- a/LostOdysseyRecomp/gpu/dlss_ngx.h
++++ b/LostOdysseyRecomp/gpu/dlss_ngx.h
+@@ -5,0 +6 @@
++#include "dlss_submission_lifetime.h"
+@@ -113,0 +115,2 @@ public:
++    // Persistent capability/parameter blocks alone do not require a drain.
++    bool HasFeatureState() const { return feature_ || featureConfigValid_ || featureFailed_ || !srUses_.Empty(); }
+@@ -147,6 +149,0 @@ private:
+-    struct SrUse {
+-        uint64_t useId = 0;
+-        uint64_t submissionSerial = 0;
+-        bool submitted = false;
+-    };
+-
+@@ -164,2 +161 @@ private:
+-    std::vector<SrUse> srUses_;
+-    uint64_t nextSrUseId_ = 1;
++    SubmissionLifetime srUses_;
+diff --git a/LostOdysseyRecomp/gpu/dlss_submission_lifetime.h b/LostOdysseyRecomp/gpu/dlss_submission_lifetime.h
 new file mode 100644
-index 0000000..7f442a0
+index 0000000..f0dbe3d
 --- /dev/null
-+++ b/LostOdysseyRecomp/gpu/scene_copy_promotion_policy.h
-@@ -0,0 +1,30 @@
++++ b/LostOdysseyRecomp/gpu/dlss_submission_lifetime.h
+@@ -0,0 +1,54 @@
 +#pragma once
 +
++#include <algorithm>
 +#include <cstdint>
++#include <vector>
 +
-+namespace gpu::scene_copy_promotion {
++namespace gpu::dlss {
 +
-+// Called after a guest draw has already uploaded its constants and indices.
-+// A failed reservation must bypass promotion, never rotate the GPU slot.
-+inline constexpr bool CanAppendConstants(uint64_t offset, uint64_t capacity,
-+    uint64_t bytes, uint32_t count = 2, uint64_t alignment = 256) {
-+    if (!alignment || (alignment & (alignment - 1)) || !bytes || offset > capacity) return false;
-+    for (uint32_t i = 0; i < count; ++i) {
-+        const uint64_t padding = (alignment - (offset & (alignment - 1))) & (alignment - 1);
-+        if (padding > capacity - offset) return false;
-+        offset += padding;
-+        if (bytes > capacity - offset) return false;
-+        offset += bytes;
++// One ledger per device session, serialized on the command worker. Recording
++// retains a feature even if NGX failed and its isolated list will be excluded.
++// Only a successful prefix-batch submit can assign that use a completion fence.
++class SubmissionLifetime {
++public:
++    uint64_t Record() {
++        if (!nextId_) return 0; // Never wrap and alias an earlier use ID.
++        const uint64_t id = nextId_++;
++        uses_.push_back({id, 0});
++        return id;
 +    }
-+    return true;
-+}
 +
-+// Check before borrowing either framebuffer attachment. A promoted color
-+// attachment cannot be paired with the parked low-resolution depth grid.
-+inline constexpr bool MustRestore(bool sameStorage, bool sameFrame, bool sameEpoch,
-+    bool needsDepthStencil, uint32_t requestedGuestHeight, uint32_t promotedGuestHeight) {
-+    return !sameStorage || !sameFrame || !sameEpoch || needsDepthStencil ||
-+        requestedGuestHeight > promotedGuestHeight;
-+}
++    bool Submit(uint64_t id, uint64_t serial) {
++        if (!id || !serial) return false;
++        const auto it = std::find_if(uses_.begin(), uses_.end(),
++            [id](const Use& use) { return use.id == id; });
++        if (it == uses_.end()) return false;
++        // Duplicate notifications cannot move a live resource to an earlier
++        // fence. Nor can a recorded use claim an already completed submission.
++        if (it->serial) return it->serial == serial;
++        if (serial <= completed_) return false;
++        it->serial = serial;
++        return true;
++    }
 +
-+} // namespace gpu::scene_copy_promotion
++    void Discard(uint64_t id) {
++        // A discard belongs to a batch that was never submitted. Once assigned
++        // a fence, only GPU completion can release the use.
++        std::erase_if(uses_, [id](const Use& use) { return use.id == id && !use.serial; });
++    }
++
++    void CompleteThrough(uint64_t serial) {
++        completed_ = std::max(completed_, serial);
++        std::erase_if(uses_, [this](const Use& use) { return use.serial && use.serial <= completed_; });
++    }
++
++    bool Empty() const { return uses_.empty(); }
++
++private:
++    struct Use { uint64_t id, serial; };
++    std::vector<Use> uses_;
++    uint64_t nextId_ = 1;
++    uint64_t completed_ = 0;
++};
++
++} // namespace gpu::dlss
+diff --git a/LostOdysseyRecomp/gpu/renderer.cpp b/LostOdysseyRecomp/gpu/renderer.cpp
+index 4e3fd58..caf88c2 100644
+--- a/LostOdysseyRecomp/gpu/renderer.cpp
++++ b/LostOdysseyRecomp/gpu/renderer.cpp
+@@ -569,0 +570 @@ namespace gpu::renderer
++            uint64_t srReconfigureFrame = ~0ull;
+@@ -1854 +1855,4 @@ namespace gpu::renderer
+-                    DisableDlssRequest(frame_plan::FailureReason::DlssUnavailable);
++                    if (attempt.status == dlss::SrStatus::NeedsReconfigure)
++                        srReconfigureFrame = frame; // Retry only after a drained next-frame boundary.
++                    else
++                        DisableDlssRequest(frame_plan::FailureReason::DlssUnavailable);
+@@ -3048 +3052,5 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
+-                if (selected.geometryEpoch == appliedPlanEpoch && !requestChanged && !first) return true;
++                const bool epochChanged = selected.geometryEpoch != appliedPlanEpoch;
++                const bool recreateFeature = dlssController &&
++                    ((srReconfigureFrame != ~0ull && srReconfigureFrame != frame) ||
++                     (epochChanged && dlssController->HasFeatureState()));
++                if (!epochChanged && !requestChanged && !first && !recreateFeature) return true;
+@@ -3051,3 +3059,4 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
+-                // Resize only between renderer frames. Complete all references
+-                // before destroying framebuffer views and the resources they use.
+-                if (effective != internalSize) {
++                // No guest draw attachments, upload offsets or descriptors have
++                // been borrowed yet. Reconfigure here, never in a scene-copy draw.
++                // Keep the NGX session/parameters, releasing only the old feature.
++                if (effective != internalSize || recreateFeature) {
+@@ -3056,0 +3066,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
++                    if (recreateFeature) {
++                        dlssController->ReleaseFeatureAfterGpuDrain();
++                        if (dlssController->HasFeatureState()) {
++                            FailCurrentPlan(frame_plan::FailureReason::InvalidInput);
++                            return false;
++                        }
++                        srReconfigureFrame = ~0ull;
++                    }
++                }
++                if (effective != internalSize) {
 diff --git a/tools/tests/native_dlss/CMakeLists.txt b/tools/tests/native_dlss/CMakeLists.txt
-index 96f635c..4f6b28f 100644
+index 4f6b28f..de032ec 100644
 --- a/tools/tests/native_dlss/CMakeLists.txt
 +++ b/tools/tests/native_dlss/CMakeLists.txt
-@@ -32,0 +33,5 @@ target_compile_features(LoNativeDlssP2RoutingTest PRIVATE cxx_std_20)
-+add_executable(LoNativeDlssPromotionPolicyTest EXCLUDE_FROM_ALL
-+    ${LO_NATIVE_DLSS_ROOT}/tools/tests/native_dlss_promotion_policy_test.cpp)
-+target_include_directories(LoNativeDlssPromotionPolicyTest PRIVATE ${LO_NATIVE_DLSS_ROOT}/LostOdysseyRecomp)
-+target_compile_features(LoNativeDlssPromotionPolicyTest PRIVATE cxx_std_20)
+@@ -37,0 +38,5 @@ target_compile_features(LoNativeDlssPromotionPolicyTest PRIVATE cxx_std_20)
++add_executable(LoNativeDlssSubmissionLifetimeTest EXCLUDE_FROM_ALL
++    ${LO_NATIVE_DLSS_ROOT}/tools/tests/native_dlss_submission_lifetime_test.cpp)
++target_include_directories(LoNativeDlssSubmissionLifetimeTest PRIVATE ${LO_NATIVE_DLSS_ROOT}/LostOdysseyRecomp)
++target_compile_features(LoNativeDlssSubmissionLifetimeTest PRIVATE cxx_std_20)
 +
-@@ -35 +40 @@ target_compile_features(LoNativeDlssP2RoutingTest PRIVATE cxx_std_20)
--set_target_properties(LoP1FramePlanTest LoNativeDlssP2RoutingTest
-+set_target_properties(LoP1FramePlanTest LoNativeDlssP2RoutingTest LoNativeDlssPromotionPolicyTest
-@@ -39 +44 @@ add_custom_target(LoNativeDlssCpuTests
--    DEPENDS LoP1FramePlanTest LoNativeDlssP2RoutingTest)
-+    DEPENDS LoP1FramePlanTest LoNativeDlssP2RoutingTest LoNativeDlssPromotionPolicyTest)
-@@ -44 +49,2 @@ if(BUILD_TESTING)
--    set_tests_properties(LoP1FramePlanTest LoNativeDlssP2RoutingTest PROPERTIES LABELS "native-dlss;cpu")
-+    add_test(NAME LoNativeDlssPromotionPolicyTest COMMAND LoNativeDlssPromotionPolicyTest)
-+    set_tests_properties(LoP1FramePlanTest LoNativeDlssP2RoutingTest LoNativeDlssPromotionPolicyTest PROPERTIES LABELS "native-dlss;cpu")
-diff --git a/tools/tests/native_dlss_promotion_policy_test.cpp b/tools/tests/native_dlss_promotion_policy_test.cpp
+@@ -40 +45 @@ target_compile_features(LoNativeDlssPromotionPolicyTest PRIVATE cxx_std_20)
+-set_target_properties(LoP1FramePlanTest LoNativeDlssP2RoutingTest LoNativeDlssPromotionPolicyTest
++set_target_properties(LoP1FramePlanTest LoNativeDlssP2RoutingTest LoNativeDlssPromotionPolicyTest LoNativeDlssSubmissionLifetimeTest
+@@ -44 +49 @@ add_custom_target(LoNativeDlssCpuTests
+-    DEPENDS LoP1FramePlanTest LoNativeDlssP2RoutingTest LoNativeDlssPromotionPolicyTest)
++    DEPENDS LoP1FramePlanTest LoNativeDlssP2RoutingTest LoNativeDlssPromotionPolicyTest LoNativeDlssSubmissionLifetimeTest)
+@@ -50 +55,2 @@ if(BUILD_TESTING)
+-    set_tests_properties(LoP1FramePlanTest LoNativeDlssP2RoutingTest LoNativeDlssPromotionPolicyTest PROPERTIES LABELS "native-dlss;cpu")
++    add_test(NAME LoNativeDlssSubmissionLifetimeTest COMMAND LoNativeDlssSubmissionLifetimeTest)
++    set_tests_properties(LoP1FramePlanTest LoNativeDlssP2RoutingTest LoNativeDlssPromotionPolicyTest LoNativeDlssSubmissionLifetimeTest PROPERTIES LABELS "native-dlss;cpu")
+diff --git a/tools/tests/native_dlss_submission_lifetime_test.cpp b/tools/tests/native_dlss_submission_lifetime_test.cpp
 new file mode 100644
-index 0000000..0b4a716
+index 0000000..86fe425
 --- /dev/null
-+++ b/tools/tests/native_dlss_promotion_policy_test.cpp
-@@ -0,0 +1,41 @@
-+#include "gpu/scene_copy_promotion_policy.h"
++++ b/tools/tests/native_dlss_submission_lifetime_test.cpp
+@@ -0,0 +1,60 @@
++#include "gpu/dlss_submission_lifetime.h"
 +
-+#include <cstdint>
 +#include <cstdlib>
 +#include <iostream>
-+#include <limits>
 +
-+using namespace gpu::scene_copy_promotion;
 +namespace {
 +unsigned checks = 0;
 +void Require(bool value, const char* message) {
@@ -181,28 +184,50 @@ index 0000000..0b4a716
 +}
 +}
 +int main() {
-+    Require(CanAppendConstants(0, 512, 256), "two exact-fit constant blocks");
-+    Require(!CanAppendConstants(1, 512, 256), "alignment can exhaust ring");
-+    Require(CanAppendConstants(1, 768, 256), "alignment with sufficient space");
-+    Require(!CanAppendConstants(256, 511, 256, 1), "single block cannot wrap");
-+    Require(!CanAppendConstants(513, 512, 1), "invalid offset rejected");
-+    Require(!CanAppendConstants(0, 512, 0), "zero-byte reservation rejected");
-+    Require(!CanAppendConstants(0, 512, 256, 2, 0), "zero alignment rejected");
-+    Require(!CanAppendConstants(0, 512, 256, 2, 3), "non-power-of-two alignment rejected");
-+    constexpr auto max = std::numeric_limits<uint64_t>::max();
-+    Require(!CanAppendConstants(max - 4, max, 8, 1), "alignment cannot overflow");
-+    Require(!CanAppendConstants(0, max, max, 2), "combined size cannot overflow");
-+    Require(CanAppendConstants(max - 255, max, 255, 1), "large exact-fit reservation");
-+    // Exercise every frame/epoch/storage/depth combination used by the
-+    // renderer preflight. A Flush changes none of these and preserves mapping.
-+    for (unsigned flags = 0; flags < 16; ++flags) {
-+        const bool sameStorage = flags & 1, sameFrame = flags & 2;
-+        const bool sameEpoch = flags & 4, depthStencil = flags & 8;
-+        const bool keep = sameStorage && sameFrame && sameEpoch && !depthStencil;
-+        Require(MustRestore(sameStorage, sameFrame, sameEpoch, depthStencil, 736, 736) == !keep,
-+            "storage/frame/epoch/depth preflight");
-+    }
-+    Require(!MustRestore(true, true, true, false, 720, 736), "padded target retains smaller viewport");
-+    Require(MustRestore(true, true, true, false, 768, 736), "growing extent restores parked grid");
-+    std::cout << checks << " promotion policy checks passed\n";
++    gpu::dlss::SubmissionLifetime lifetime;
++    Require(lifetime.Empty(), "cold session has no feature users");
++    const auto first = lifetime.Record();
++    const auto second = lifetime.Record();
++    Require(first && second > first, "nonzero unique recording IDs");
++    lifetime.CompleteThrough(0);
++    Require(!lifetime.Empty(), "completion never releases unsubmitted recordings");
++    Require(!lifetime.Submit(0, 1), "zero ID rejected");
++    Require(!lifetime.Submit(first, 0), "zero serial rejected");
++    Require(!lifetime.Submit(second + 1, 1), "unknown ID rejected");
++    Require(lifetime.Submit(first, 10), "successful batch attaches fence");
++    Require(lifetime.Submit(first, 10), "duplicate submit is idempotent");
++    Require(!lifetime.Submit(first, 2), "duplicate cannot move to earlier fence");
++    Require(!lifetime.Submit(first, 20), "duplicate cannot move to later fence");
++    lifetime.Discard(first);
++    Require(!lifetime.Empty(), "discard cannot release a submitted feature user");
++    lifetime.Discard(second);
++    lifetime.CompleteThrough(9);
++    Require(!lifetime.Empty(), "feature retained before actual submission completion");
++    lifetime.CompleteThrough(10);
++    Require(lifetime.Empty(), "feature released at completion");
++    Require(!lifetime.Submit(first, 11), "completed use cannot be revived");
++    lifetime.Discard(first);
++    Require(lifetime.Empty(), "late discard is harmless");
++    const auto third = lifetime.Record();
++    Require(third > second, "feature reconfiguration never reuses use IDs");
++    lifetime.CompleteThrough(5);
++    Require(!lifetime.Submit(third, 10), "out-of-order completion cannot rewind watermark");
++    Require(!lifetime.Empty(), "invalid submission leaves recording retained");
++    Require(lifetime.Submit(third, 11), "next successful queue submission");
++    const auto fourth = lifetime.Record();
++    Require(lifetime.Submit(fourth, 12), "two independent in-flight slots");
++    lifetime.CompleteThrough(12);
++    Require(lifetime.Empty(), "newest same-queue fence covers earlier submissions");
++    const auto excluded = lifetime.Record();
++    Require(lifetime.Submit(excluded, 13), "excluded NGX list still retains prefix fallback use");
++    lifetime.Discard(excluded);
++    Require(!lifetime.Empty(), "failed NGX recording waits for prefix fence");
++    lifetime.CompleteThrough(13);
++    Require(lifetime.Empty(), "fallback prefix completion permits feature retirement");
++    const auto abandoned = lifetime.Record();
++    lifetime.CompleteThrough(20);
++    Require(!lifetime.Empty(), "unrelated completion never retires abandoned recording");
++    lifetime.Discard(abandoned);
++    Require(lifetime.Empty(), "discard of never-submitted batch permits retirement");
++    std::cout << checks << " submission lifetime checks passed\n";
 +}

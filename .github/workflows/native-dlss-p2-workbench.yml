@@ -60,7 +60,7 @@ jobs:
           cmake -S tools/tests/native_dlss -B out/cpu -G Ninja -DLO_NATIVE_DLSS_CPU_ONLY=ON -DCMAKE_BUILD_TYPE=Debug
           cmake --build out/cpu --target LoNativeDlssCpuTests --parallel 2
           ctest --test-dir out/cpu -L cpu --output-on-failure
-      - name: Prepare public graphics dependencies (no game or SDK assets)
+      - name: Prepare public graphics dependencies (no game assets)
         working-directory: source
         run: |
           sudo apt-get update -qq
@@ -75,6 +75,36 @@ jobs:
           cmake -S tools/tests/native_dlss -B out/native-off -G Ninja -DCMAKE_BUILD_TYPE=Debug -DLO_ENABLE_DLSS=OFF -DCMAKE_CXX_SCAN_FOR_MODULES=OFF
           cmake --build out/native-off --target LoNativeDlssReportTest LoNativeDlssExecutionTest --parallel 2
           ctest --test-dir out/native-off -R '^LoNativeDlssReportTest$' --output-on-failure
+      - uses: actions/checkout@v4
+        with:
+          repository: NVIDIA/DLSS
+          ref: 374959484e79a640feaba44c93ac8cfb0a03f5b5
+          path: sdk
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /include/
+            /lib/Linux_x86_64/libnvsdk_ngx.a
+            /LICENSE.txt
+      - name: Compile pinned SDK path without publishing proprietary binaries
+        working-directory: source
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          from pathlib import Path
+          expected = {'include/nvsdk_ngx_vk.h':'3be54d0103cce02174fd34912c60c9f40c73b5eec919e42613a2268c589c53ad','lib/Linux_x86_64/libnvsdk_ngx.a':'3321c4ca9adf71f345550d10bf2148ed38003151b03ec5f81c99d00949ab8202'}
+          for name, sha in expected.items():
+              assert hashlib.sha256((Path('../sdk') / name).read_bytes()).hexdigest() == sha, name
+          PY
+          cmake -S tools/tests/native_dlss -B out/native-on -G Ninja -DCMAKE_BUILD_TYPE=Debug -DLO_ENABLE_DLSS=ON -DLO_DLSS_SDK_ROOT="$GITHUB_WORKSPACE/sdk" -DLO_DLSS_STAGE_RUNTIME=OFF -DCMAKE_CXX_SCAN_FOR_MODULES=OFF
+          grep -q 'LO_DLSS_SDK=1' out/native-on/build.ninja
+          cmake --build out/native-on --target LoNativeDlssReportTest LoNativeDlssExecutionTest --parallel 2
+          ctest --test-dir out/native-on -R '^LoNativeDlssReportTest$' --output-on-failure
+      - name: Additional reviewed graphics fixtures when present
+        run: |
+          if [ -f control/tools/ci/native-dlss-p2-workbench/extra-tests.sh ]; then
+            bash control/tools/ci/native-dlss-p2-workbench/extra-tests.sh
+          fi
       - name: Commit tested candidate without touching dlss
         run: |
           python3 - <<'PY'
@@ -88,7 +118,7 @@ jobs:
           git('commit','-m',req['message'])
           sha = git('rev-parse','HEAD')
           git('push','origin','HEAD:refs/heads/dlss-p2-candidate')
-          Path('candidate.json').write_text(json.dumps({'commit':sha,'parent':req['base'],'tree':git('rev-parse','HEAD^{tree}'), 'checks':['CPU contracts','renderer translation-unit boundary (not full game link)','SDK-disabled adapter compilation and report test']},indent=2))
+          Path('candidate.json').write_text(json.dumps({'commit':sha,'parent':req['base'],'tree':git('rev-parse','HEAD^{tree}'), 'checks':['CPU contracts','renderer translation-unit boundary (not full game link)','SDK-disabled and pinned SDK-enabled adapter compilation and report tests']},indent=2))
           print(Path('candidate.json').read_text())
           PY
       - uses: actions/upload-artifact@v4
@@ -99,5 +129,7 @@ jobs:
             candidate.json
             source/out/cpu/Testing/Temporary/LastTest.log
             source/out/native-off/Testing/Temporary/LastTest.log
+            source/out/native-on/Testing/Temporary/LastTest.log
+            source/out/renderer-check/Testing/Temporary/LastTest.log
           retention-days: 3
           if-no-files-found: warn
