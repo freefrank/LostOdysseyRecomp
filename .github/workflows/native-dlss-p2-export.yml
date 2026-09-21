@@ -1,0 +1,25 @@
+name: P2 source snapshot
+on:
+  push:
+    branches: [dlss-p2-workbench]
+    paths: [.github/workflows/native-dlss-p2-export.yml]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 3e07a63cbe044ca9682684e382929f1457548c53
+          persist-credentials: false
+      - run: |
+          git archive --format=tar.gz -o /tmp/p2-current.tar.gz HEAD
+          git rev-parse HEAD > /tmp/p2-current.sha
+      - uses: actions/upload-artifact@v4
+        with:
+          name: p2-current-source
+          path: |
+            /tmp/p2-current.tar.gz
+            /tmp/p2-current.sha
+          retention-days: 1
