@@ -1,0 +1,32 @@
+name: Native DLSS P2 workbench
+
+on:
+  push:
+    branches: [dlss-p2-workbench]
+    paths:
+      - .github/workflows/native-dlss-p2-workbench.yml
+      - tools/ci/native-dlss-p2-workbench/**
+
+permissions:
+  contents: read
+
+jobs:
+  source:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dlss
+          persist-credentials: false
+      - name: Export public source without credentials or game assets
+        run: |
+          git rev-parse HEAD > /tmp/native-dlss-p2-source-sha.txt
+          git archive --format=tar.gz --output=/tmp/native-dlss-p2-source.tar.gz HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-dlss-p2-source
+          path: |
+            /tmp/native-dlss-p2-source.tar.gz
+            /tmp/native-dlss-p2-source-sha.txt
+          retention-days: 1
+          if-no-files-found: error
