@@ -15,7 +15,11 @@ struct TextureRegion {
     plume::RenderTexture* texture = nullptr;
     resolution::Size allocation{};
     uint32_t x = 0, y = 0, width = 0, height = 0;
-    bool Complete() const { return texture && width && height && x + width <= allocation.width && y + height <= allocation.height; }
+    bool Complete() const {
+        // Reject overflowing offsets/extents before any native image access.
+        return texture && width && height && x <= allocation.width && y <= allocation.height &&
+            width <= allocation.width - x && height <= allocation.height - y;
+    }
 };
 
 // Unknown is the only safe default. An R8_UNORM allocation is storage metadata,

@@ -1,5 +1,6 @@
 #include <gpu/temporal_frame_inputs.h>
 #include <cstdio>
+#include <limits>
 
 using namespace gpu;
 using namespace gpu::temporal;
@@ -40,6 +41,27 @@ int main() {
         inputs.plan.consumer = upscaling::TemporalConsumer::None;
         Require(inputs.CompleteForConsumer(), "spatial consumer does not require motion inputs");
         Require(inputs.preExposure == 1 && inputs.exposureScale == 1, "default exposure is explicit unity");
+        TextureRegion region{token, {64, 32}, 0, 0, 64, 32};
+        Require(region.Complete(), "exact allocation bounds accepted");
+        region.x = 1;
+        Require(!region.Complete(), "right edge beyond allocation rejected");
+        region = {token, {64, 32}, 32, 16, 32, 16};
+        Require(region.Complete(), "valid nonzero origin accepted");
+        region.width = 0;
+        Require(!region.Complete(), "zero-sized region rejected");
+        constexpr auto max = std::numeric_limits<uint32_t>::max();
+        region = {token, {64, 32}, max, 0, 2, 1};
+        Require(!region.Complete(), "wrapped x plus width rejected");
+        region = {token, {64, 32}, 0, max, 1, 2};
+        Require(!region.Complete(), "wrapped y plus height rejected");
+        region = {token, {64, 32}, 1, 0, max, 1};
+        Require(!region.Complete(), "wrapped oversized width rejected");
+        region = {token, {64, 32}, 0, 1, 1, max};
+        Require(!region.Complete(), "wrapped oversized height rejected");
+        region = {token, {max, max}, max - 1, max - 1, 1, 1};
+        Require(region.Complete(), "maximum representable exact bounds accepted");
+        region.texture = nullptr;
+        Require(!region.Complete(), "null texture rejected");
         std::printf("PASS: %u temporal frame input checks; MV convention is previousPixel-currentPixel at scale 1,1\n", checks);
         return failed ? 1 : 0;
 }

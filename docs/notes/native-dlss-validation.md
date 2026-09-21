@@ -4,7 +4,13 @@ Date: 2026-09-21
 Baseline: `main@5b765f617ec511a2f76aa9da7923a8c122679d2c`
 Feature branch: `dlss` (prior pushed baseline: `91bf37e`; P2 checkpoint commits: `d018be7` adapter, `744ab91` scene-copy path)
 SDK Reference: NVIDIA DLSS **310.9.1** (`374959484e79a640feaba44c93ac8cfb0a03f5b5`)
-Status: **P0 gate 1 passed**; **P1 gate 2 passed**. P2 Super Resolution execution is in checkpoint commits `d018be7` and `744ab91`, paused at user request. Formal Gate 3 re-review was cancelled at user direction; Gate 3 is not approved. Frame Generation (FG) deferred.
+Status: **P0 gate 1 passed**; **P1 gate 2 passed** (historical evidence retained). P2 development resumed on 2026-09-21 with focused fixes and additional tests; it is **not complete or Gate 3 approved**. The earlier formal re-review was cancelled. In-game SR remains blocked by unqualified color encoding. Frame Generation (FG) deferred.
+
+## 2026-09-21 Development Follow-up
+
+The earlier paused checkpoint has received five focused implementation/test changes on `dlss`; see [P2 follow-up evidence and remaining blockers](native-dlss-p2-progress-2026-09-21.md) for commits, reproducible commands and exact scope. Historical RTX results below were not rerun and must not be attributed to the new revisions.
+
+New evidence covers CPU contracts, actual renderer translation-unit compilation, pinned SDK ON/OFF adapter compilation and report tests, and software Vulkan execution of production FP16 composite shaders. It does not qualify runtime game color, full target-map transitions, fatal submission/device-loss recovery, or NVIDIA in-game SR. Gate 3 remains unapproved.
 
 ## 1. Overview and Scope
 
@@ -206,11 +212,11 @@ The probe and runtime pass the directory containing the staged `nvngx_dlss.dll` 
 
 ### Known Limits and Boundary Conditions
 - **No In-Game DLSS Dispatch**: Actual in-game Super Resolution evaluation is bypassed due to unqualified runtime color encoding. DLSS cannot be claimed as usable in gameplay.
-- **P2 Work In Progress**: P2 implementation is paused in uncommitted working-tree source; Gate 3 review is currently running and is not yet approved.
-- **No Linux Validation**: Native Linux execution remains skipped and untested.
+- **P2 Work In Progress**: Development resumed with committed changes on 2026-09-21. Gate 3 is not approved; no completed formal re-review is claimed.
+- **Linux Evidence Scope**: CPU tests, renderer translation-unit compilation, SDK ON/OFF builds/report tests and software Vulkan composites ran on Linux. NVIDIA NGX execution and Linux gameplay remain untested for these revisions.
 - **Self-Test Scope**: The promotion resample test covers isolated resample math; it does not prove end-to-end target promotion, guest alpha preservation, UI ordering, or mid-frame flush safety.
 - **Renderer Recognition Scope**: The focused GPU fixture verifies single motion finalization before consumers, but does not exercise separate HDR and SDR scene-recognition branches.
-- **Allocation Geometry**: The input-region fixture exercises a 64×64 valid allocation, but does not test padded texture allocations with smaller subrectangles.
+- **Allocation Geometry**: The follow-up adds nonzero subregion origins and integer-overflow CPU cases, plus FP16 composites with an 8×8 target and smaller SR scratch. These do not establish padded NGX/game allocations or the complete renderer mapping path.
 - **Temporal & Config Discontinuities**: The test suite does not simulate temporal frame-time discontinuities (such as 250 ms stalls). Persisted configuration handling remains unexecuted in focused fixtures.
 - **Jitter Proof**: The GPU fixture verifies unjittered motion vector inputs with a synchronized raster jitter sample, but does not provide end-to-end full renderer jitter coverage.
 
