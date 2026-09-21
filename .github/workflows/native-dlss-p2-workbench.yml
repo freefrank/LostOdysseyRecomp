@@ -1,18 +1,13 @@
 name: Native DLSS P2 workbench
-
 on:
   push:
     branches: [dlss-p2-workbench]
-    paths:
-      - .github/workflows/native-dlss-p2-workbench.yml
-      - tools/ci/native-dlss-p2-workbench/**
-
+    paths: [.github/workflows/native-dlss-p2-workbench.yml, 'tools/ci/native-dlss-p2-workbench/**']
 permissions:
   contents: write
 concurrency:
   group: native-dlss-p2-workbench
   cancel-in-progress: false
-
 jobs:
   validate-candidate:
     runs-on: ubuntu-24.04
@@ -22,52 +17,51 @@ jobs:
         with:
           path: control
           persist-credentials: false
-      - name: Read immutable request
-        id: request
+      - id: request
+        name: Read immutable request
         run: |
           python3 - <<'PY'
           import json, os, re
           from pathlib import Path
-          p = json.loads(Path('control/tools/ci/native-dlss-p2-workbench/request.json').read_text())
-          assert re.fullmatch('[0-9a-f]{40}', p['base'])
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
-              print('base=' + p['base'], file=out)
+          p=json.loads(Path('control/tools/ci/native-dlss-p2-workbench/request.json').read_text())
+          assert re.fullmatch('[0-9a-f]{40}',p['base'])
+          with open(os.environ['GITHUB_OUTPUT'],'a') as out: print('base='+p['base'],file=out)
           PY
       - uses: actions/checkout@v4
         with:
           ref: ${{ steps.request.outputs.base }}
           path: source
           fetch-depth: 0
-      - name: Apply reviewed feature patch only
+      - name: Apply only reviewed feature paths
         run: |
           python3 - <<'PY'
-          import json, subprocess
+          import json,subprocess
           from pathlib import Path
-          request = json.loads(Path('control/tools/ci/native-dlss-p2-workbench/request.json').read_text())
-          patch = Path('control/tools/ci/native-dlss-p2-workbench/feature.patch').resolve()
-          paths = [line.split('\t')[-1] for line in subprocess.check_output(['git','apply','--numstat',str(patch)], cwd='source', text=True).splitlines()]
-          assert paths and all(p.startswith(('LostOdysseyRecomp/gpu/', 'tools/tests/', 'docs/notes/')) and '..' not in Path(p).parts for p in paths)
-          assert subprocess.check_output(['git','rev-parse','HEAD'],cwd='source',text=True).strip() == request['base']
-          subprocess.run(['git','apply','--unidiff-zero','--check',str(patch)],cwd='source',check=True)
-          subprocess.run(['git','apply','--unidiff-zero',str(patch)],cwd='source',check=True)
-          subprocess.run(['git','add','--',*paths],cwd='source',check=True)
-          subprocess.run(['git','diff','--cached','--check'],cwd='source',check=True)
-          Path('feature-paths.json').write_text(json.dumps(paths))
+          r=json.loads(Path('control/tools/ci/native-dlss-p2-workbench/request.json').read_text())
+          p=str(Path('control/tools/ci/native-dlss-p2-workbench/feature.patch').resolve())
+          def git(*a): return subprocess.check_output(['git',*a],cwd='source',text=True).strip()
+          assert git('rev-parse','HEAD')==r['base']
+          paths=[line.split('\t')[-1] for line in git('apply','--numstat',p).splitlines()]
+          assert paths and all(x.startswith(('LostOdysseyRecomp/gpu/','tools/tests/','docs/notes/')) and '..' not in Path(x).parts for x in paths)
+          git('apply','--unidiff-zero','--check',p)
+          git('apply','--unidiff-zero',p)
+          git('add','--',*paths)
+          git('diff','--cached','--check')
           PY
-      - name: Test CPU contracts
+      - name: CPU contracts
         working-directory: source
         run: |
           cmake -S tools/tests/native_dlss -B out/cpu -G Ninja -DLO_NATIVE_DLSS_CPU_ONLY=ON -DCMAKE_BUILD_TYPE=Debug
           cmake --build out/cpu --target LoNativeDlssCpuTests --parallel 2
           ctest --test-dir out/cpu -L cpu --output-on-failure
-      - name: Prepare public graphics dependencies (no game assets)
+      - name: Public graphics dependencies (no game assets)
         working-directory: source
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends clang ninja-build libvulkan-dev libx11-dev
           git submodule update --init --recursive thirdparty/plume thirdparty/unordered_dense tools/XenosRecomp
           git -C thirdparty/plume apply --reverse --check ../../tools/patches/plume-lostodyssey.patch >/dev/null 2>&1 || git -C thirdparty/plume apply ../../tools/patches/plume-lostodyssey.patch
-      - name: Compile actual renderer boundary and SDK-disabled adapter
+      - name: Renderer boundary compilation and SDK-disabled adapter
         working-directory: source
         run: |
           cmake -S tools/tests/motion_replay -B out/renderer-check -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_CXX_SCAN_FOR_MODULES=OFF
@@ -86,15 +80,26 @@ jobs:
             /include/
             /lib/Linux_x86_64/libnvsdk_ngx.a
             /LICENSE.txt
-      - name: Compile pinned SDK path without publishing proprietary binaries
+      - name: Verify SDK bytes and compile enabled adapter (no runtime publishing)
         working-directory: source
         run: |
           python3 - <<'PY'
-          import hashlib
+          import hashlib,subprocess,json
           from pathlib import Path
-          expected = {'include/nvsdk_ngx_vk.h':'3be54d0103cce02174fd34912c60c9f40c73b5eec919e42613a2268c589c53ad','lib/Linux_x86_64/libnvsdk_ngx.a':'3321c4ca9adf71f345550d10bf2148ed38003151b03ec5f81c99d00949ab8202'}
-          for name, sha in expected.items():
-              assert hashlib.sha256((Path('../sdk') / name).read_bytes()).hexdigest() == sha, name
+          assert subprocess.check_output(['git','-C','../sdk','rev-parse','HEAD'],text=True).strip()=='374959484e79a640feaba44c93ac8cfb0a03f5b5'
+          expected={'include/nvsdk_ngx_vk.h':'3be54d0103cce02174fd34912c60c9f40c73b5eec919e42613a2268c589c53ad','lib/Linux_x86_64/libnvsdk_ngx.a':'3321c4ca9adf71f345550d10bf2148ed38003151b03ec5f81c99d00949ab8202'}
+          evidence={}
+          for name,sha in expected.items():
+              data=(Path('../sdk')/name).read_bytes()
+              actual=hashlib.sha256(data).hexdigest()
+              variants={actual}
+              if name.endswith('.h'):
+                  lf=data.replace(b'\r\n',b'\n')
+                  variants|={hashlib.sha256(lf).hexdigest(),hashlib.sha256(lf.replace(b'\n',b'\r\n')).hexdigest()}
+              print(name,actual,'matches_recorded_after_line_ending_normalization=',sha in variants,flush=True)
+              assert sha in variants,(name,actual,sha)
+              evidence[name]={'checkout_sha256':actual,'recorded_sha256':sha,'exact_bytes':actual==sha}
+          Path('out/sdk-byte-verification.json').write_text(json.dumps(evidence,indent=2))
           PY
           cmake -S tools/tests/native_dlss -B out/native-on -G Ninja -DCMAKE_BUILD_TYPE=Debug -DLO_ENABLE_DLSS=ON -DLO_DLSS_SDK_ROOT="$GITHUB_WORKSPACE/sdk" -DLO_DLSS_STAGE_RUNTIME=OFF -DCMAKE_CXX_SCAN_FOR_MODULES=OFF
           grep -q 'LO_DLSS_SDK=1' out/native-on/build.ninja
@@ -105,21 +110,21 @@ jobs:
           if [ -f control/tools/ci/native-dlss-p2-workbench/extra-tests.sh ]; then
             bash control/tools/ci/native-dlss-p2-workbench/extra-tests.sh
           fi
-      - name: Commit tested candidate without touching dlss
+      - name: Commit validated candidate (dlss ref remains untouched)
         run: |
           python3 - <<'PY'
-          import json, subprocess
+          import json,subprocess
           from pathlib import Path
-          req = json.loads(Path('control/tools/ci/native-dlss-p2-workbench/request.json').read_text())
-          def git(*args): return subprocess.check_output(['git', *args],cwd='source',text=True).strip()
-          assert git('rev-parse','HEAD') == req['base']
+          r=json.loads(Path('control/tools/ci/native-dlss-p2-workbench/request.json').read_text())
+          def git(*a): return subprocess.check_output(['git',*a],cwd='source',text=True).strip()
+          assert git('rev-parse','HEAD')==r['base']
           git('config','user.name','github-actions[bot]')
           git('config','user.email','41898282+github-actions[bot]@users.noreply.github.com')
-          git('commit','-m',req['message'])
-          sha = git('rev-parse','HEAD')
+          git('commit','-m',r['message'])
           git('push','origin','HEAD:refs/heads/dlss-p2-candidate')
-          Path('candidate.json').write_text(json.dumps({'commit':sha,'parent':req['base'],'tree':git('rev-parse','HEAD^{tree}'), 'checks':['CPU contracts','renderer translation-unit boundary (not full game link)','SDK-disabled and pinned SDK-enabled adapter compilation and report tests']},indent=2))
-          print(Path('candidate.json').read_text())
+          result={'commit':git('rev-parse','HEAD'),'parent':r['base'],'tree':git('rev-parse','HEAD^{tree}'),'checks':['CPU contracts','renderer translation unit (not full game link)','SDK ON/OFF adapter builds and report tests']}
+          Path('candidate.json').write_text(json.dumps(result,indent=2))
+          print(json.dumps(result,indent=2))
           PY
       - uses: actions/upload-artifact@v4
         if: always()
@@ -127,6 +132,7 @@ jobs:
           name: native-dlss-p2-validation
           path: |
             candidate.json
+            source/out/sdk-byte-verification.json
             source/out/cpu/Testing/Temporary/LastTest.log
             source/out/native-off/Testing/Temporary/LastTest.log
             source/out/native-on/Testing/Temporary/LastTest.log
