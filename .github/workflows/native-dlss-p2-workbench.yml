@@ -8,25 +8,96 @@ on:
       - tools/ci/native-dlss-p2-workbench/**
 
 permissions:
-  contents: read
+  contents: write
+concurrency:
+  group: native-dlss-p2-workbench
+  cancel-in-progress: false
 
 jobs:
-  source:
+  validate-candidate:
     runs-on: ubuntu-24.04
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: dlss
+          path: control
           persist-credentials: false
-      - name: Export public source without credentials or game assets
+      - name: Read immutable request
+        id: request
         run: |
-          git rev-parse HEAD > /tmp/native-dlss-p2-source-sha.txt
-          git archive --format=tar.gz --output=/tmp/native-dlss-p2-source.tar.gz HEAD
-      - uses: actions/upload-artifact@v4
+          python3 - <<'PY'
+          import json, os, re
+          from pathlib import Path
+          p = json.loads(Path('control/tools/ci/native-dlss-p2-workbench/request.json').read_text())
+          assert re.fullmatch('[0-9a-f]{40}', p['base'])
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+              print('base=' + p['base'], file=out)
+          PY
+      - uses: actions/checkout@v4
         with:
-          name: native-dlss-p2-source
+          ref: ${{ steps.request.outputs.base }}
+          path: source
+          fetch-depth: 0
+      - name: Apply reviewed feature patch only
+        run: |
+          python3 - <<'PY'
+          import json, subprocess
+          from pathlib import Path
+          request = json.loads(Path('control/tools/ci/native-dlss-p2-workbench/request.json').read_text())
+          patch = Path('control/tools/ci/native-dlss-p2-workbench/feature.patch').resolve()
+          paths = [line.split('\t')[-1] for line in subprocess.check_output(['git','apply','--numstat',str(patch)], cwd='source', text=True).splitlines()]
+          assert paths and all(p.startswith(('LostOdysseyRecomp/gpu/', 'tools/tests/', 'docs/notes/')) and '..' not in Path(p).parts for p in paths)
+          assert subprocess.check_output(['git','rev-parse','HEAD'],cwd='source',text=True).strip() == request['base']
+          subprocess.run(['git','apply','--unidiff-zero','--check',str(patch)],cwd='source',check=True)
+          subprocess.run(['git','apply','--unidiff-zero',str(patch)],cwd='source',check=True)
+          subprocess.run(['git','add','--',*paths],cwd='source',check=True)
+          subprocess.run(['git','diff','--cached','--check'],cwd='source',check=True)
+          Path('feature-paths.json').write_text(json.dumps(paths))
+          PY
+      - name: Test CPU contracts
+        working-directory: source
+        run: |
+          cmake -S tools/tests/native_dlss -B out/cpu -G Ninja -DLO_NATIVE_DLSS_CPU_ONLY=ON -DCMAKE_BUILD_TYPE=Debug
+          cmake --build out/cpu --target LoNativeDlssCpuTests --parallel 2
+          ctest --test-dir out/cpu -L cpu --output-on-failure
+      - name: Prepare public graphics dependencies (no game or SDK assets)
+        working-directory: source
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends clang ninja-build libvulkan-dev libx11-dev
+          git submodule update --init --recursive thirdparty/plume thirdparty/unordered_dense tools/XenosRecomp
+          git -C thirdparty/plume apply --reverse --check ../../tools/patches/plume-lostodyssey.patch >/dev/null 2>&1 || git -C thirdparty/plume apply ../../tools/patches/plume-lostodyssey.patch
+      - name: Compile actual renderer boundary and SDK-disabled adapter
+        working-directory: source
+        run: |
+          cmake -S tools/tests/motion_replay -B out/renderer-check -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_CXX_SCAN_FOR_MODULES=OFF
+          cmake --build out/renderer-check --target motion_renderer_compile --parallel 2
+          cmake -S tools/tests/native_dlss -B out/native-off -G Ninja -DCMAKE_BUILD_TYPE=Debug -DLO_ENABLE_DLSS=OFF -DCMAKE_CXX_SCAN_FOR_MODULES=OFF
+          cmake --build out/native-off --target LoNativeDlssReportTest LoNativeDlssExecutionTest --parallel 2
+          ctest --test-dir out/native-off -R '^LoNativeDlssReportTest$' --output-on-failure
+      - name: Commit tested candidate without touching dlss
+        run: |
+          python3 - <<'PY'
+          import json, subprocess
+          from pathlib import Path
+          req = json.loads(Path('control/tools/ci/native-dlss-p2-workbench/request.json').read_text())
+          def git(*args): return subprocess.check_output(['git', *args],cwd='source',text=True).strip()
+          assert git('rev-parse','HEAD') == req['base']
+          git('config','user.name','github-actions[bot]')
+          git('config','user.email','41898282+github-actions[bot]@users.noreply.github.com')
+          git('commit','-m',req['message'])
+          sha = git('rev-parse','HEAD')
+          git('push','origin','HEAD:refs/heads/dlss-p2-candidate')
+          Path('candidate.json').write_text(json.dumps({'commit':sha,'parent':req['base'],'tree':git('rev-parse','HEAD^{tree}'), 'checks':['CPU contracts','renderer translation-unit boundary (not full game link)','SDK-disabled adapter compilation and report test']},indent=2))
+          print(Path('candidate.json').read_text())
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-dlss-p2-validation
           path: |
-            /tmp/native-dlss-p2-source.tar.gz
-            /tmp/native-dlss-p2-source-sha.txt
-          retention-days: 1
-          if-no-files-found: error
+            candidate.json
+            source/out/cpu/Testing/Temporary/LastTest.log
+            source/out/native-off/Testing/Temporary/LastTest.log
+          retention-days: 3
+          if-no-files-found: warn
