@@ -1,0 +1,100 @@
+name: Native DLSS P2 renderer validation
+on:
+  push:
+    branches: [dlss-p2-workbench]
+    paths: [.github/workflows/native-dlss-p2-continue.yml, 'tools/ci/p2-continue/**']
+permissions:
+  contents: write
+concurrency:
+  group: native-dlss-p2-continue
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: control
+          persist-credentials: false
+      - id: request
+        run: |
+          python3 - <<'PY'
+          import json, os, re
+          from pathlib import Path
+          r=json.loads(Path('control/tools/ci/p2-continue/request.json').read_text())
+          assert re.fullmatch('[0-9a-f]{40}',r['base'])
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f: print('base='+r['base'],file=f)
+          PY
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.request.outputs.base }}
+          path: source
+          fetch-depth: 0
+      - name: Apply pinned candidate patch
+        run: |
+          python3 - <<'PY'
+          import base64,gzip,json,subprocess
+          from pathlib import Path
+          r=json.loads(Path('control/tools/ci/p2-continue/request.json').read_text())
+          p=Path('candidate.patch').resolve()
+          # Correct a known single-character transport typo; gzip validates CRC.
+          payload=r['patch_gzip_base64'].replace('BbtG6ypW','BbtG6yoW')
+          p.write_bytes(gzip.decompress(base64.b64decode(payload,validate=True)))
+          def git(*a): return subprocess.check_output(['git',*a],cwd='source',text=True).strip()
+          assert git('rev-parse','HEAD')==r['base']
+          paths=[line.split('\t')[-1] for line in git('apply','--numstat',str(p)).splitlines()]
+          assert paths and all(x.startswith(('LostOdysseyRecomp/gpu/','tools/tests/','docs/notes/')) and '..' not in Path(x).parts for x in paths)
+          git('apply','--check',str(p)); git('apply',str(p)); git('add','--',*paths); git('diff','--cached','--check')
+          PY
+      - name: CPU contracts
+        working-directory: source
+        run: |
+          cmake -S tools/tests/native_dlss -B out/cpu -G Ninja -DLO_NATIVE_DLSS_CPU_ONLY=ON -DCMAKE_BUILD_TYPE=Debug
+          cmake --build out/cpu --target LoNativeDlssCpuTests --parallel 2
+          ctest --test-dir out/cpu -L cpu --output-on-failure
+      - name: Public graphics dependencies
+        working-directory: source
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends clang ninja-build libx11-dev mesa-vulkan-drivers vulkan-validationlayers
+          git submodule update --init --recursive thirdparty/plume thirdparty/unordered_dense tools/XenosRecomp
+          git -C thirdparty/plume apply ../../tools/patches/plume-lostodyssey.patch
+          mkdir -p "$GITHUB_WORKSPACE/dxc"
+          curl -fL --retry 3 'https://github.com/microsoft/DirectXShaderCompiler/releases/download/v1.8.2505.1/linux_dxc_2025_07_14.x86_64.tar.gz' -o "$GITHUB_WORKSPACE/dxc/archive.tar.gz"
+          printf '%s  %s\n' f2213da1fc99dc8778c8823078e16ba97c7f80f86a1d4520ab1adf4b462bc48c "$GITHUB_WORKSPACE/dxc/archive.tar.gz" | sha256sum -c
+          tar -xzf "$GITHUB_WORKSPACE/dxc/archive.tar.gz" -C "$GITHUB_WORKSPACE/dxc"
+      - name: Execute production renderer and composites on Vulkan
+        working-directory: source
+        run: |
+          set -o pipefail
+          export LO_DXC_PATH="$GITHUB_WORKSPACE/dxc/lib/libdxcompiler.so"
+          export LD_LIBRARY_PATH="$GITHUB_WORKSPACE/dxc/lib:${LD_LIBRARY_PATH:-}"
+          export VK_ICD_FILENAMES=$(find /usr/share/vulkan/icd.d -name '*lvp*.json' -print -quit)
+          test -n "$VK_ICD_FILENAMES"
+          cmake -S tools/tests/motion_replay -B out/renderer -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_CXX_SCAN_FOR_MODULES=OFF
+          cmake --build out/renderer --target motion_renderer_compile LoNativeDlssRendererTest LoSceneCopyCompositeTest --parallel 2 2>&1 | tee out/build-console.log
+          ctest --test-dir out/renderer -R '^(LoNativeDlssRendererTest|LoSceneCopyCompositeTest)$' -V --output-on-failure 2>&1 | tee out/renderer-console.log
+          ! grep -E 'Validation Error|VUID-' out/renderer-console.log
+      - name: Commit validated candidate without advancing dlss
+        run: |
+          python3 - <<'PY'
+          import json,subprocess
+          from pathlib import Path
+          r=json.loads(Path('control/tools/ci/p2-continue/request.json').read_text())
+          def git(*a): return subprocess.check_output(['git',*a],cwd='source',text=True).strip()
+          assert git('rev-parse','HEAD')==r['base']
+          git('config','user.name','github-actions[bot]'); git('config','user.email','41898282+github-actions[bot]@users.noreply.github.com')
+          git('commit','-m',r['message']); git('push','origin','HEAD:refs/heads/dlss-p2-candidate')
+          Path('candidate.json').write_text(json.dumps({'commit':git('rev-parse','HEAD'),'parent':r['base'],'tree':git('rev-parse','HEAD^{tree}')},indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: p2-renderer-validation
+          path: |
+            candidate.json
+            source/out/*console.log
+            source/out/cpu/Testing/Temporary/LastTest.log
+            source/out/renderer/Testing/Temporary/LastTest.log
+          retention-days: 5
