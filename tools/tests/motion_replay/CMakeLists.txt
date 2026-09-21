@@ -55,3 +55,14 @@ add_executable(LoSceneCopyCompositeTest "${ROOT}/tools/tests/native_dlss_composi
 target_link_libraries(LoSceneCopyCompositeTest PRIVATE mv_runtime)
 add_test(NAME LoSceneCopyCompositeTest COMMAND LoSceneCopyCompositeTest)
 set_tests_properties(LoSceneCopyCompositeTest PROPERTIES LABELS "native-dlss;gpu-composite" TIMEOUT 120)
+
+option(LO_P2_VIDEO_COMPILE_CHECK "Compile actual video.cpp in the asset-free boundary" OFF)
+if(LO_P2_VIDEO_COMPILE_CHECK)
+ find_package(SDL2 REQUIRED)
+ add_library(p2_video_compile OBJECT "${ROOT}/LostOdysseyRecomp/gpu/video.cpp")
+ target_include_directories(p2_video_compile BEFORE PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/compile_boundary")
+ target_include_directories(p2_video_compile PRIVATE "${ROOT}/thirdparty/unordered_dense/include")
+ target_compile_definitions(p2_video_compile PRIVATE LO_SOURCE_VERSION="p2-fixture"
+  $<$<PLATFORM_ID:Linux>:PLUME_SDL_VULKAN_ENABLED=1>)
+ target_link_libraries(p2_video_compile PRIVATE mv_runtime SDL2::SDL2)
+endif()

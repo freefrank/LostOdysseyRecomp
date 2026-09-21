@@ -45,13 +45,18 @@ add_executable(LoNativeDlssFrameInputsTest EXCLUDE_FROM_ALL
 target_include_directories(LoNativeDlssFrameInputsTest PRIVATE ${LO_NATIVE_DLSS_ROOT}/LostOdysseyRecomp)
 target_compile_features(LoNativeDlssFrameInputsTest PRIVATE cxx_std_20)
 
+add_executable(LoNativeDlssSubmissionFailureTest EXCLUDE_FROM_ALL
+    ${LO_NATIVE_DLSS_ROOT}/tools/tests/native_dlss_submission_failure_test.cpp)
+target_include_directories(LoNativeDlssSubmissionFailureTest PRIVATE ${LO_NATIVE_DLSS_ROOT}/LostOdysseyRecomp)
+target_compile_features(LoNativeDlssSubmissionFailureTest PRIVATE cxx_std_20)
+
 # None of these translation units uses C++ modules. Do not require a separate
 # clang-scan-deps binary just to build ordinary C++20 contract fixtures.
-set_target_properties(LoNativeDlssFrameInputsTest LoP1FramePlanTest LoNativeDlssP2RoutingTest LoNativeDlssPromotionPolicyTest LoNativeDlssSubmissionLifetimeTest
+set_target_properties(LoNativeDlssSubmissionFailureTest LoNativeDlssFrameInputsTest LoP1FramePlanTest LoNativeDlssP2RoutingTest LoNativeDlssPromotionPolicyTest LoNativeDlssSubmissionLifetimeTest
     PROPERTIES CXX_SCAN_FOR_MODULES OFF)
 
 add_custom_target(LoNativeDlssCpuTests
-    DEPENDS LoNativeDlssFrameInputsTest LoP1FramePlanTest LoNativeDlssP2RoutingTest LoNativeDlssPromotionPolicyTest LoNativeDlssSubmissionLifetimeTest)
+    DEPENDS LoNativeDlssSubmissionFailureTest LoNativeDlssFrameInputsTest LoP1FramePlanTest LoNativeDlssP2RoutingTest LoNativeDlssPromotionPolicyTest LoNativeDlssSubmissionLifetimeTest)
 include(CTest)
 if(BUILD_TESTING)
     add_test(NAME LoP1FramePlanTest COMMAND LoP1FramePlanTest)
@@ -59,7 +64,8 @@ if(BUILD_TESTING)
     add_test(NAME LoNativeDlssPromotionPolicyTest COMMAND LoNativeDlssPromotionPolicyTest)
     add_test(NAME LoNativeDlssSubmissionLifetimeTest COMMAND LoNativeDlssSubmissionLifetimeTest)
     add_test(NAME LoNativeDlssFrameInputsTest COMMAND LoNativeDlssFrameInputsTest)
-    set_tests_properties(LoNativeDlssFrameInputsTest LoP1FramePlanTest LoNativeDlssP2RoutingTest LoNativeDlssPromotionPolicyTest LoNativeDlssSubmissionLifetimeTest PROPERTIES LABELS "native-dlss;cpu")
+    add_test(NAME LoNativeDlssSubmissionFailureTest COMMAND LoNativeDlssSubmissionFailureTest)
+    set_tests_properties(LoNativeDlssSubmissionFailureTest LoNativeDlssFrameInputsTest LoP1FramePlanTest LoNativeDlssP2RoutingTest LoNativeDlssPromotionPolicyTest LoNativeDlssSubmissionLifetimeTest PROPERTIES LABELS "native-dlss;cpu")
 endif()
 if(LO_NATIVE_DLSS_CPU_ONLY)
     return()

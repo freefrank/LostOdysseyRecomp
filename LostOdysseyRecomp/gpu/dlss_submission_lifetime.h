@@ -43,6 +43,9 @@ public:
     }
 
     bool Empty() const { return uses_.empty(); }
+    // Final shutdown after native device loss only. This does not advance any
+    // completion watermark and must never be used for ordinary error fallback.
+    void AbandonAfterDeviceLoss() { uses_.clear(); }
 
 private:
     struct Use { uint64_t id, serial; };

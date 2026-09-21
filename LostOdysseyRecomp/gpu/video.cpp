@@ -3,6 +3,8 @@
 #include "video.h"
 #if defined(LO_GPU_PLUME)
 #include "backend_device.h"
+#include "vulkan_submission_state.h"
+#include "vulkan_command_recording.h"
 #include "dlss_ngx.h"
 #endif
 #include "renderer.h"
@@ -229,7 +231,7 @@ namespace gpu::video
         bool g_hasPresentedImage=false;
         bool g_presentPending=false;
         bool g_forceSwapResize=false;
-        uint64_t g_vulkanSubmissionSerial = 0;
+        submission::VulkanState g_submissionState;
         struct PresentationDisplayState {
             uint64_t resizedTicket = 0;
 #ifdef _WIN32
@@ -245,38 +247,50 @@ namespace gpu::video
             plume::RenderCommandSemaphore* const* signals, uint32_t signalCount,
             plume::RenderCommandFence* fence, uint64_t* serial, int32_t* rawResult)
         {
-            if (!g_vulkan || !g_queue || !lists || !count || !fence) return false;
+            if (serial) *serial = 0;
+            if (rawResult) *rawResult = submission::VulkanState::InvalidState;
+            if (GpuWorkStopped()) {
+                if (rawResult) *rawResult = g_submissionState.Failure();
+                return false;
+            }
+            if (!g_vulkan || !g_queue || !lists || !count || !fence) {
+                StopGpuWork(submission::VulkanState::InvalidState); return false;
+            }
             auto* queue = static_cast<plume::VulkanCommandQueue*>(g_queue.get());
             auto* nativeFence = static_cast<plume::VulkanCommandFence*>(fence);
             std::vector<VkCommandBuffer> commandBuffers;
             std::vector<VkSemaphore> waitSemaphores, signalSemaphores;
             commandBuffers.reserve(count); waitSemaphores.reserve(waitCount); signalSemaphores.reserve(signalCount);
             for (uint32_t i = 0; i < count; ++i) {
-                if (!lists[i]) return false;
+                if (!lists[i]) { StopGpuWork(submission::VulkanState::InvalidState); return false; }
                 commandBuffers.push_back(static_cast<const plume::VulkanCommandList*>(lists[i])->vk);
             }
             for (uint32_t i = 0; i < waitCount; ++i)
                 waitSemaphores.push_back(static_cast<plume::VulkanCommandSemaphore*>(waits[i])->vk);
             for (uint32_t i = 0; i < signalCount; ++i)
                 signalSemaphores.push_back(static_cast<plume::VulkanCommandSemaphore*>(signals[i])->vk);
-            const VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+            // Presentation may copy to the acquired image before rendering.
+            // There must also be one stage mask for EACH waited semaphore.
+            const std::vector<VkPipelineStageFlags> waitStages(waitCount, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
             VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
             submit.commandBufferCount = uint32_t(commandBuffers.size()); submit.pCommandBuffers = commandBuffers.data();
             submit.waitSemaphoreCount = uint32_t(waitSemaphores.size()); submit.pWaitSemaphores = waitSemaphores.data();
-            submit.pWaitDstStageMask = waitSemaphores.empty() ? nullptr : &waitStage;
+            submit.pWaitDstStageMask = waitSemaphores.empty() ? nullptr : waitStages.data();
             submit.signalSemaphoreCount = uint32_t(signalSemaphores.size()); submit.pSignalSemaphores = signalSemaphores.data();
-            VkResult result;
+            uint64_t acceptedSerial = 0;
+            int32_t result = 0;
+            bool submitted;
             {
                 const std::scoped_lock lock(*queue->queue->mutex);
-                result = vkResetFences(queue->device->vk, 1, &nativeFence->vk);
-                if (result == VK_SUCCESS)
-                    result = vkQueueSubmit(queue->queue->vk, 1, &submit, nativeFence->vk);
-                if (result == VK_SUCCESS && serial)
-                    *serial = ++g_vulkanSubmissionSerial;
+                submitted = g_submissionState.SubmitBatch(
+                    [&] { return int32_t(vkResetFences(queue->device->vk, 1, &nativeFence->vk)); },
+                    [&] { return int32_t(vkQueueSubmit(queue->queue->vk, 1, &submit, nativeFence->vk)); },
+                    acceptedSerial, result);
             }
-            if (rawResult) *rawResult = int32_t(result);
-            if (result != VK_SUCCESS) return false;
-            return true;
+            if (rawResult) *rawResult = result;
+            if (serial) *serial = acceptedSerial;
+            if (!submitted) LOG_ERROR("video: Vulkan submission stopped raw_vk={}", result);
+            return submitted;
         }
 
         std::filesystem::path DlssApplicationDataPath()
@@ -305,11 +319,13 @@ namespace gpu::video
                     optimal.maxWidth, optimal.maxHeight, optimal.sharpness, optimal.result.value_or(0));
         }
 
-        void WaitForPresentGpuImpl()
+        bool WaitForPresentGpuImpl()
         {
-            if (!g_presentPending || !g_queue || !g_fence) return;
-            g_queue->waitForCommandFence(g_fence.get());
-            g_presentPending = false;
+            if (g_presentPending) {
+                if (!g_queue || !g_fence || !WaitForGpuFence(g_fence.get())) return false;
+                g_presentPending = false;
+            }
+            return !GpuWorkStopped();
         }
 
         void LogOutputPixels(const char* reason)
@@ -387,6 +403,57 @@ namespace gpu::video
     }
 #if defined(LO_GPU_PLUME)
     dlss::Controller* GetDlssController() { return g_vulkan ? g_dlssController.get() : nullptr; }
+    bool GpuWorkStopped() { return g_vulkan && g_submissionState.Stopped(); }
+    void StopGpuWork(int32_t nativeResult) {
+        if (!g_submissionState.Stopped())
+            LOG_ERROR("video: native GPU work stopped raw_vk={}; device restart required", nativeResult);
+        g_submissionState.Stop(nativeResult);
+    }
+    bool BeginGpuCommands(plume::RenderCommandList* list) {
+        if (GpuWorkStopped()) return false;
+        if (!list) { StopGpuWork(submission::VulkanState::InvalidState); return false; }
+        if (!g_vulkan) { list->begin(); return true; }
+        const auto result = submission::BeginCommands(*static_cast<plume::VulkanCommandList*>(list));
+        if (result != VK_SUCCESS) StopGpuWork(int32_t(result));
+        return result == VK_SUCCESS;
+    }
+    bool EndGpuCommands(plume::RenderCommandList* list) {
+        if (GpuWorkStopped()) return false;
+        if (!list) { StopGpuWork(submission::VulkanState::InvalidState); return false; }
+        if (!g_vulkan) { list->end(); return true; }
+        const auto result = submission::EndCommands(*static_cast<plume::VulkanCommandList*>(list));
+        if (result != VK_SUCCESS) StopGpuWork(int32_t(result));
+        return result == VK_SUCCESS;
+    }
+    bool WaitForGpuFence(plume::RenderCommandFence* fence) {
+        if (!g_queue || !fence) { StopGpuWork(submission::VulkanState::InvalidState); return false; }
+        if (!g_vulkan) { g_queue->waitForCommandFence(fence); return true; }
+        auto* queue = static_cast<plume::VulkanCommandQueue*>(g_queue.get());
+        auto* nativeFence = static_cast<plume::VulkanCommandFence*>(fence);
+        const bool complete = g_submissionState.WaitSubmitted([&] {
+            return int32_t(vkWaitForFences(queue->device->vk, 1, &nativeFence->vk, VK_TRUE, UINT64_MAX));
+        });
+        if (!complete) LOG_ERROR("video: GPU fence wait failed raw_vk={}; resources retained", g_submissionState.Failure());
+        return complete;
+    }
+    void DrainGpuForShutdown() {
+        if (!g_vulkan || !g_device) return;
+        const auto result = vkDeviceWaitIdle(static_cast<plume::VulkanDevice*>(g_device.get())->vk);
+        if (result == VK_SUCCESS) {
+            if (g_dlssController) g_dlssController->ReleaseCompletedThrough(g_submissionState.LastSubmission());
+        } else if (result == VK_ERROR_DEVICE_LOST) {
+            StopGpuWork(int32_t(result));
+            if (g_dlssController) g_dlssController->AbandonUsesAfterDeviceLoss();
+        } else {
+            // No proven completion or lost-device disposal boundary. Never free
+            // resources still referenced by native work. OS process teardown is
+            // safer than running their destructors against an undrained device.
+            LOG_ERROR("video: shutdown drain failed raw_vk={}; terminating without unsafe GPU destruction", int32_t(result));
+            std::fflush(nullptr);
+            std::_Exit(EXIT_FAILURE);
+        }
+    }
+
     bool SubmitRendererBatch(const plume::RenderCommandList* const* lists, uint32_t count,
         plume::RenderCommandFence* fence, uint64_t& submissionSerial, int32_t& rawVkResult)
     {
@@ -436,10 +503,12 @@ namespace gpu::video
             *static_cast<plume::VulkanInterface*>(g_interface.get()), *static_cast<plume::VulkanDevice*>(g_device.get()), *key));
     }
 #endif
-    void WaitForPresentGpu()
+    bool WaitForPresentGpu()
     {
 #ifdef LO_GPU_PLUME
-        WaitForPresentGpuImpl();
+        return WaitForPresentGpuImpl();
+#else
+        return true;
 #endif
     }
     std::optional<backend::Backend> SelectedBackend() {
@@ -474,7 +543,8 @@ namespace gpu::video
         g_releaseSemaphore.reset(); g_acquireSemaphore.reset();
         g_fence.reset(); g_commandList.reset(); g_queue.reset();
         g_device.reset(); g_interface.reset();
-        g_vulkanSubmissionSerial = 0;
+        g_submissionState = {};
+        g_presentPending = false;
         g_dlssController.reset();
         g_hasPresentedImage = false; g_lastPresentedImage = 0; g_forceSwapResize = false;
         g_presentationDisplay = {};
@@ -1001,7 +1071,7 @@ namespace gpu::video
     // or rasterizing UI. The returned ticket belongs to these prepared operations.
     static bool PreparePresentation(uint64_t& displayTicket, uint32_t& width, uint32_t& height)
     {
-        if (!g_available || !g_swapChain)
+        if (!g_available || !g_swapChain || GpuWorkStopped())
             return false;
         displayTicket = g_displayChanges.PresentationTicket();
         if (g_windowResizeRequested.exchange(false)) g_forceSwapResize = true;
@@ -1015,7 +1085,7 @@ namespace gpu::video
         auto& applied = g_presentationDisplay;
         if (!g_vulkan && mode >= 0 && (mode != applied.appliedMode || size != applied.appliedSize ||
             (displayTicket && displayTicket != applied.appliedTicket))) {
-            WaitForPresentGpu();
+            if (!WaitForPresentGpu()) return false;
             auto* swap = static_cast<plume::D3D12SwapChain*>(g_swapChain.get());
             const plume::WindowPixelContext pixels;
             HRESULT result = swap->d3d->SetFullscreenState(FALSE, nullptr);
@@ -1046,7 +1116,7 @@ namespace gpu::video
         // Empty is recoverable: minimized Vulkan surfaces may have zero extent.
         // Never return for isEmpty() before giving resize() a chance to recover.
         if (g_forceSwapResize || g_swapChain->isEmpty() || g_swapChain->needsResize()) {
-            WaitForPresentGpu();
+            if (!WaitForPresentGpu()) return false;
             if (!g_swapChain->resize()) {
                 // Zero extent is transient. Retain the pending transaction and
                 // resize request until the window has a drawable extent again.
@@ -1079,7 +1149,7 @@ namespace gpu::video
     static bool UploadAndPresentPixels(const std::vector<uint32_t>& pixels, uint32_t width, uint32_t height,
                                        bool isMenu, uint64_t displayTicket, const PresentationOptions& presentationOptions)
     {
-        if ((!g_available && !g_initializing) || !g_swapChain || g_swapChain->isEmpty())
+        if (GpuWorkStopped() || (!g_available && !g_initializing) || !g_swapChain || g_swapChain->isEmpty())
             return false;
         DisplayCompletion completion(g_displayChanges, displayTicket);
         if (!width || !height || size_t(width) > std::numeric_limits<size_t>::max() / height ||
@@ -1093,7 +1163,7 @@ namespace gpu::video
         const uint32_t rowPitch = (width * 4 + 255) & ~255u;
         const uint64_t requiredBytes = uint64_t(rowPitch) * height;
         try {
-            WaitForPresentGpu();
+            if (!WaitForPresentGpu()) return false;
             // Stage allocations before acquiring an image or opening a command
             // list. Failed resizing keeps the previous usable resources intact.
             std::unique_ptr<plume::RenderBuffer> upload;
@@ -1128,7 +1198,7 @@ namespace gpu::video
         const uint32_t copyWidth = std::min(width, g_swapChain->getWidth());
         const uint32_t copyHeight = std::min(height, g_swapChain->getHeight());
 
-        g_commandList->begin();
+        if (!BeginGpuCommands(g_commandList.get())) return false;
         auto* uploadTarget=g_presentation?g_cpuFrame.get():backBuffer;
         g_commandList->barriers(plume::RenderBarrierStage::COPY, plume::RenderTextureBarrier(uploadTarget, plume::RenderTextureLayout::COPY_DEST));
         plume::RenderBox box(0, 0, int32_t(copyWidth), int32_t(copyHeight), 0, 1);
@@ -1142,7 +1212,7 @@ namespace gpu::video
             g_swapChain->getWidth(),g_swapChain->getHeight(),isMenu ? PresentationOptions{} : presentationOptions);
         RecordPresentedSnapshot(backBuffer);
         g_commandList->barriers(plume::RenderBarrierStage::NONE, plume::RenderTextureBarrier(backBuffer, plume::RenderTextureLayout::PRESENT));
-        g_commandList->end();
+        if (!EndGpuCommands(g_commandList.get())) return false;
 
         const plume::RenderCommandList* lists[] = { g_commandList.get() };
         plume::RenderCommandSemaphore* waitSemaphore = g_acquireSemaphore.get();
@@ -1249,7 +1319,7 @@ namespace gpu::video
                 if (g_swapChain->isEmpty())
                     return;
                 DisplayCompletion completion(g_displayChanges, displayTicket);
-                WaitForPresentGpu();
+                if (!WaitForPresentGpu()) return;
                 uint32_t imageIndex = 0;
                 if (!g_swapChain->acquireTexture(g_acquireSemaphore.get(), &imageIndex))
                 {
@@ -1259,7 +1329,7 @@ namespace gpu::video
                 const uint32_t copyWidth = std::min(sourceWidth, g_swapChain->getWidth());
                 const uint32_t copyHeight = std::min(sourceHeight, g_swapChain->getHeight());
 
-                g_commandList->begin();
+                if (!BeginGpuCommands(g_commandList.get())) return;
                 if(g_presentation) {
                     const auto decision = frame_plan::ResolvePresentationDecision(&sourcePlan,
                         renderer::SceneAAApplied(physicalAddress & 0x1FFFFFFF), uint32_t(presentationOptions.antialiasing),
@@ -1280,7 +1350,7 @@ namespace gpu::video
                 }
                 RecordPresentedSnapshot(backBuffer);
                 g_commandList->barriers(plume::RenderBarrierStage::NONE, plume::RenderTextureBarrier(backBuffer, plume::RenderTextureLayout::PRESENT));
-                g_commandList->end();
+                if (!EndGpuCommands(g_commandList.get())) return;
 
                 const plume::RenderCommandList* lists[] = { g_commandList.get() };
                 plume::RenderCommandSemaphore* waitSemaphore = g_acquireSemaphore.get();
@@ -1410,24 +1480,27 @@ namespace gpu::video
     bool SaveScreenshot(const char* path)
     {
 #ifdef LO_GPU_PLUME
+        if (GpuWorkStopped()) return false;
         if(getenv("LO_SCREENSHOT_PRESENTED") && g_hasPresentedImage && g_swapChain) {
             const uint32_t w=g_swapChain->getWidth(),h=g_swapChain->getHeight(),pitch=(w*4+255)&~255u;
             if(!w || !h) return false;
             auto readback=g_device->createBuffer(plume::RenderBufferDesc::ReadbackBuffer(uint64_t(pitch)*h));
             auto* frame=g_vulkan ? g_presentedSnapshot.get() : g_swapChain->getTexture(g_lastPresentedImage);
             if(!frame)return false;
-            WaitForPresentGpu();
-            g_commandList->begin();
+            if (!WaitForPresentGpu()) return false;
+            if (!BeginGpuCommands(g_commandList.get())) return false;
             g_commandList->barriers(plume::RenderBarrierStage::COPY,plume::RenderTextureBarrier(frame,plume::RenderTextureLayout::COPY_SOURCE));
             g_commandList->copyTextureRegion(plume::RenderTextureCopyLocation::PlacedFootprint(readback.get(),kSwapChainFormat,w,h,1,pitch/4),plume::RenderTextureCopyLocation::Subresource(frame));
             if(!g_vulkan) g_commandList->barriers(plume::RenderBarrierStage::NONE,plume::RenderTextureBarrier(frame,plume::RenderTextureLayout::PRESENT));
-            g_commandList->end(); const plume::RenderCommandList* lists[]={g_commandList.get()};
+            if (!EndGpuCommands(g_commandList.get())) return false; const plume::RenderCommandList* lists[]={g_commandList.get()};
             uint64_t submissionSerial = 0; int32_t submitResult = 0;
             const bool submitted = g_vulkan ? SubmitVulkan(lists, 1, nullptr, 0, nullptr, 0,
                 g_fence.get(), &submissionSerial, &submitResult)
                 : (g_queue->executeCommandLists(lists,1,nullptr,0,nullptr,0,g_fence.get()), true);
             if (!submitted) { LOG_ERROR("video: screenshot submit failed raw_vk={}", submitResult); return false; }
-            g_queue->waitForCommandFence(g_fence.get());
+            g_presentPending = true;
+            if (!WaitForGpuFence(g_fence.get())) { DrainGpuForShutdown(); return false; }
+            g_presentPending = false;
             std::vector<uint32_t> pixels(size_t(w)*h); const auto* data=static_cast<const uint8_t*>(readback->map());
             for(uint32_t y=0;y<h;y++) memcpy(pixels.data()+size_t(y)*w,data+size_t(y)*pitch,w*4);
             readback->unmap(); return WritePpm(path,pixels,w,h);

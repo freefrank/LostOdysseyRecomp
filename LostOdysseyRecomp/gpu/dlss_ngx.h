@@ -134,6 +134,7 @@ public:
     // feature only; final shutdown also releases parameters and the session.
     void ReleaseFeatureAfterGpuDrain();
     void ShutdownAfterGpuDrain();
+    void AbandonUsesAfterDeviceLoss();
     const ProbeReport& Report() const { return report_; }
 
 private:

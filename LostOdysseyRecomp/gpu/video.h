@@ -33,6 +33,16 @@ namespace gpu::video
     // The renderer borrows the persistent controller. Video remains responsible
     // for its device lifetime and final drained shutdown.
     dlss::Controller* GetDlssController();
+    bool GpuWorkStopped();
+    bool BeginGpuCommands(plume::RenderCommandList* list);
+    bool EndGpuCommands(plume::RenderCommandList* list);
+    void StopGpuWork(int32_t nativeResult);
+    // Caller must own a fence attached to a successful submission. Failure
+    // never authorizes retirement, descriptor reuse or CPU readback.
+    bool WaitForGpuFence(plume::RenderCommandFence* fence);
+    // Shutdown only: device loss authorizes disposal, not successful completion.
+    // An unprovable drain terminates without running native resource destructors.
+    void DrainGpuForShutdown();
     // Uses the backend's native Vulkan queue path so the result is observable.
     // submissionSerial advances only after vkQueueSubmit returns VK_SUCCESS.
     bool SubmitRendererBatch(const plume::RenderCommandList* const* lists, uint32_t count,
@@ -68,7 +78,7 @@ namespace gpu::video
     void PresentFrontbuffer(uint32_t physicalAddress, uint32_t width, uint32_t height, uint32_t copyDestInfo);
     // Waits the independent presentation submission before renderer resources
     // referenced by it are retired. Called on the command processor thread.
-    void WaitForPresentGpu();
+    bool WaitForPresentGpu();
     // Presents the host menu overlay (settings or debug overlay) on the presentation thread.
     bool IsHostOverlayActive();
     void PresentHostOverlay();

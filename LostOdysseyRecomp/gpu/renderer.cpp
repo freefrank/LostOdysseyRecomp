@@ -956,7 +956,7 @@ namespace gpu::renderer
                     // Flush submits asynchronously. Recycle completed slots before
                     // mapping their copies; this also consumes/reset-tracks Vulkan
                     // fences so a later Begin cannot wait the same fence twice.
-                    WaitForReadback();
+                    if (!WaitForReadback()) return;
                     const auto directory = std::filesystem::path(requestPath).parent_path();
                     const auto* data = static_cast<const char*>(resolveTraceBuffer->map());
                     for (const auto& copy : resolveTraceCopies)
@@ -1378,7 +1378,7 @@ namespace gpu::renderer
                 // Texture memory starts undefined: a slot that falls back to the dummy
                 // would otherwise sample garbage. Give it opaque black.
                 const uint8_t black[4] = { 0, 0, 0, 255 };
-                Begin();
+                if (!Begin()) return;
                 uint64_t offset = Upload(black, sizeof(black), 512);
                 if (offset == UINT64_MAX)
                     return;
@@ -1510,7 +1510,7 @@ namespace gpu::renderer
                     return;
                 const uint32_t w = dst.ScaleX(std::min(src.guestWidth, dst.guestWidth));
                 const uint32_t h = dst.ScaleY(std::min(src.guestHeight, dst.guestHeight));
-                Begin();
+                if (!Begin()) return;
                 Transition(src, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
                 Transition(dst, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
                 RenderDescriptorSet* set1 = AcquireSet(1);
@@ -1750,7 +1750,7 @@ namespace gpu::renderer
                 if (!promotion.active || !promotion.parkedLow) return fail();
                 auto it = renderTargets.find(promotion.key);
                 if (it == renderTargets.end() || it->second.get() != promotion.active) return fail();
-                Begin();
+                if (!Begin()) return false;
                 SharedConstants constants{};
                 constants.transfer[0] = std::bit_cast<uint32_t>(float(promotion.active->width) / float(promotion.parkedLow->width));
                 constants.transfer[1] = std::bit_cast<uint32_t>(float(promotion.active->height) / float(promotion.parkedLow->height));
@@ -1816,17 +1816,21 @@ namespace gpu::renderer
                                     promotion.scratch->texture.get()})
                     if (image) barriers.emplace_back(image, RenderTextureLayout::GENERAL);
                 commandList->barriers(RenderBarrierStage::ALL, barriers);
-                Gpu().drawProbe.End(commandList); commandList->end(); listOpen = false;
+                Gpu().drawProbe.End(commandList);
+                if (!video::EndGpuCommands(commandList)) { listOpen = false; return false; }
+                listOpen = false;
                 Gpu().srPrefixClosed = true;
                 auto attempt = dlssController->RecordIsolated(*static_cast<plume::VulkanCommandList*>(Gpu().srIsolated.get()), config,
                     promotion.inputs, *static_cast<plume::VulkanTexture*>(promotion.scratch->texture.get()));
                 Gpu().srUseId = attempt.useId;
                 if (attempt.status == dlss::SrStatus::DeviceLost) {
                     if (attempt.useId) dlssController->OnBatchDiscarded(attempt.useId);
+                    Gpu().srUseId = 0;
+                    video::StopGpuWork(attempt.rawVkResult.value_or(VK_ERROR_DEVICE_LOST));
                     return false;
                 }
                 Gpu().srIsolatedAccepted = attempt.status == dlss::SrStatus::Executable;
-                commandList = Gpu().srContinuation.get(); commandList->begin(); listOpen = true; Gpu().srContinuationOpen = true;
+                commandList = Gpu().srContinuation.get(); if (!video::BeginGpuCommands(commandList)) return false; listOpen = true; Gpu().srContinuationOpen = true;
                 // Continuation owns the normal post-NGX layouts. It may record the
                 // RGB-only combine only after a successfully closed isolated list.
                 std::vector<RenderTextureBarrier> continuationBarriers;
@@ -1879,7 +1883,7 @@ namespace gpu::renderer
                     bloomPrefilterPipeline = device->createGraphicsPipeline(desc);
                     if (!bloomPrefilterPipeline) return nullptr;
                 }
-                Begin();
+                if (!Begin()) return nullptr;
                 auto& slot = Gpu();
                 if (slot.bloomPrefilterUsed == slot.bloomPrefilterTextures.size()) {
                     auto dst = std::make_unique<HostTexture>();
@@ -1951,7 +1955,7 @@ namespace gpu::renderer
                 RenderPipeline* pipeline = GetBlitPipeline(dst.format);
                 if (!pipeline)
                     return false;
-                Begin();
+                if (!Begin()) return false;
                 Transition(src, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
                 Transition(dst, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
                 RenderDescriptorSet* set1 = AcquireSet(1);
@@ -2010,14 +2014,14 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             // ---- command list / upload ring ------------------------------------
             // ReBlue-style two-slot ring: submit without waiting, then wait only
             // the slot about to be recorded into (one generation old).
-            void RecycleSlot(uint32_t i)
+            bool RecycleSlot(uint32_t i)
             {
                 auto& s = gpuSlots[i];
                 if (!s.submitted)
-                    return;
+                    return true;
                 {
                     ScopedTimer timer{ tFlush, cpuTimingEnabled };
-                    queue->waitForCommandFence(s.fence.get());
+                    if (!video::WaitForGpuFence(s.fence.get())) return false;
                 }
                 s.submitted = false;
                 if (s.timingQueries) {
@@ -2054,26 +2058,28 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 for (auto& used : s.setPoolUsed)
                     used = 0;
                 uploadedConstants[i] = {};
+                return true;
             }
 
-            void WaitForGpu()
+            bool WaitForGpu()
             {
                 for (uint32_t i = 0; i < kGpuSlots; ++i)
-                    RecycleSlot(i);
+                    if (!RecycleSlot(i)) return false;
+                return true;
             }
 
-            void WaitForReadback()
+            bool WaitForReadback()
             {
                 // Call only after Flush. Its outgoing slot is the newest queue
                 // submission; waiting it first covers earlier copies before any
                 // RecycleSlot releases shared temporal descriptor resources.
-                RecycleSlot((gpuSlot + kGpuSlots - 1) % kGpuSlots);
-                WaitForGpu();
+                return !video::GpuWorkStopped() &&
+                    RecycleSlot((gpuSlot + kGpuSlots - 1) % kGpuSlots) && WaitForGpu();
             }
 
-            void Begin()
+            bool Begin()
             {
-                RecycleSlot(gpuSlot);
+                if (video::GpuWorkStopped() || !RecycleSlot(gpuSlot)) return false;
                 BindGpuSlot();
                 if (!listOpen)
                 {
@@ -2087,7 +2093,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         if (!Gpu().timingQueries) LOG_WARNING("render timing: GPU timestamp queries unavailable");
                         timingQueries = Gpu().timingQueries.get();
                     }
-                    commandList->begin();
+                    if (!video::BeginGpuCommands(commandList)) return false;
                     Gpu().drawProbe.Begin(device, commandList, frame);
                     if (timingQueries) {
                         commandList->resetQueryPool(timingQueries, 0, 2);
@@ -2095,17 +2101,27 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     }
                     listOpen = true;
                 }
+                return true;
             }
 
-            void Flush()
+            bool Flush()
             {
                 consecutiveResolveCopies.Invalidate();
-                if (!listOpen)
-                    return;
+                if (video::GpuWorkStopped()) {
+                    if (dlssController && Gpu().srUseId && !Gpu().submitted)
+                        dlssController->OnBatchDiscarded(Gpu().srUseId);
+                    if (!Gpu().submitted) Gpu().srUseId = 0;
+                    listOpen = false;
+                    return false;
+                }
+                if (!listOpen) return true;
                 if (motionReplay) motionReplay->SealTimings(commandList);
                 if (!Gpu().srPrefixClosed) Gpu().drawProbe.End(commandList);
                 if (timingQueries) commandList->writeTimestamp(timingQueries, 1);
-                commandList->end();
+                if (!video::EndGpuCommands(commandList)) {
+                    if (dlssController && Gpu().srUseId) dlssController->OnBatchDiscarded(Gpu().srUseId);
+                    Gpu().srUseId = 0; listOpen = false; return false;
+                }
                 listOpen = false;
                 const RenderCommandList* lists[3] = { Gpu().list.get(), nullptr, nullptr };
                 uint32_t listCount = 1;
@@ -2128,9 +2144,11 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (!submitted) {
 #if defined(LO_GPU_PLUME)
                     if (dlssController && Gpu().srUseId) dlssController->OnBatchDiscarded(Gpu().srUseId);
+                    Gpu().srUseId = 0;
+                    video::StopGpuWork(rawVkResult);
                     LOG_ERROR("renderer: Vulkan batch submit failed raw_vk={}; no fallback submission issued", rawVkResult);
 #endif
-                    return;
+                    return false;
                 }
 #if defined(LO_GPU_PLUME)
                 if (dlssController && Gpu().srUseId) {
@@ -2141,17 +2159,18 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 Gpu().submitted = true;
                 gpuSlot = (gpuSlot + 1) % kGpuSlots;
                 BindGpuSlot();
+                return true;
             }
 
             // Returns an offset into the upload ring or UINT64_MAX when full.
             uint64_t Upload(const void* data, size_t size, uint32_t alignment = 256)
             {
+                if (video::GpuWorkStopped()) return UINT64_MAX;
                 uint64_t offset = (Gpu().uploadOffset + alignment - 1) & ~uint64_t(alignment - 1);
                 if (offset + size > kUploadRingSize)
                 {
                     // Out of space mid-frame: finish what we have and start over.
-                    Flush();
-                    Begin();
+                    if (!Flush() || !Begin()) return UINT64_MAX;
                     offset = 0;
                     if (size > kUploadRingSize)
                         return UINT64_MAX;
@@ -3020,6 +3039,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 
             bool ApplyInternalResolution()
             {
+                if (video::GpuWorkStopped()) return false;
                 frame_plan::FramePlan selected;
                 bool failed = false;
                 {
@@ -3044,9 +3064,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 // been borrowed yet. Reconfigure here, never in a scene-copy draw.
                 // Keep the NGX session/parameters, releasing only the old feature.
                 if (effective != internalSize || recreateFeature) {
-                    Flush();
-                    WaitForGpu();
-                    video::WaitForPresentGpu();
+                    if (!Flush() || !WaitForGpu() || !video::WaitForPresentGpu()) return false;
                     if (recreateFeature) {
                         dlssController->ReleaseFeatureAfterGpuDrain();
                         if (dlssController->HasFeatureState()) {
@@ -3111,6 +3129,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 
             bool PlanSuppressed()
             {
+                if (video::GpuWorkStopped()) return true;
                 std::lock_guard lock(framePlanMutex);
                 return committedPlan.geometryEpoch != 0 && failedPlanEpochs.contains(committedPlan.geometryEpoch);
             }
@@ -3846,25 +3865,23 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         uploadSplits += ringLow;
                         arenaSplits += arenaLow;
                     }
-                    Flush();
+                    if (!Flush()) return;
                     if (arenaLow)
                     {
                         const uint32_t incoming = wrap.incomingSlot;
                         const auto fences = gpu::render_arena::WrapFenceWaits(wrap);
-                        if (fences.waitIncoming)
-                            RecycleSlot(incoming);
-                        if (fences.waitSubmitted)
-                            RecycleSlot(gpu::render_arena::SubmittedSlotAfterFlush(incoming));
+                        if (fences.waitIncoming && !RecycleSlot(incoming)) return;
+                        if (fences.waitSubmitted && !RecycleSlot(gpu::render_arena::SubmittedSlotAfterFlush(incoming))) return;
                         if (wrap.resetIncoming)
                         {
                             ResetSlotArena(incoming);
                             LOG_INFO("renderer: vertex arena slot {} reset", incoming);
                         }
                     }
-                    Begin();
+                    if (!Begin()) return;
                     nestedFlushTimer.AddTo(tNestedFlush);
                 }
-                Begin();
+                if (!Begin()) return;
 
                 if (modeControl == 6)
                 {
@@ -5249,6 +5266,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
  #if defined(LO_GPU_PLUME)
                 if (scenePromotionActivated)
                     RecordSceneCopyDlss(color, rasterTarget);
+                if (video::GpuWorkStopped()) return;
  #endif
                 drawsThisFrame++;
 
@@ -5725,14 +5743,13 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 const uint32_t rowPitch = (tex.width * bpp + 255) & ~255u;
                 if (size_t(rowPitch) * tex.height > kReadbackSize)
                     return;
-                Begin();
+                if (!Begin()) return;
                 Transition(tex, RenderTextureLayout::COPY_SOURCE, RenderBarrierStage::COPY);
                 commandList->copyTextureRegion(
                     RenderTextureCopyLocation::PlacedFootprint(readback.get(), tex.format, tex.width, tex.height, 1, rowPitch / bpp, 0),
                     RenderTextureCopyLocation::Subresource(tex.texture.get(), 0));
-                Flush();
-                WaitForReadback();
-                Begin();
+                if (!Flush() || !WaitForReadback()) return;
+                if (!Begin()) return;
                 const uint8_t* src = static_cast<const uint8_t*>(readback->map());
                 if (FILE* f = fopen(path.c_str(), "wb"))
                 {
@@ -5815,9 +5832,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 commandList->copyTextureRegion(
                     RenderTextureCopyLocation::PlacedFootprint(readback.get(), tex.format == RenderFormat::R32_FLOAT ? RenderFormat::R32_FLOAT : tex.format, tex.width, tex.height, 1, rowPitch / bpp, 0),
                     RenderTextureCopyLocation::Subresource(tex.texture.get(), 0));
-                Flush();
-                WaitForReadback();
-                Begin();
+                if (!Flush() || !WaitForReadback()) return;
+                if (!Begin()) return;
                 const uint8_t* src = static_cast<const uint8_t*>(readback->map());
                 const char* dir = debugCaptureDir.empty()
                     ? (captureEnvironment.dumpResolveDirConfigured ? captureEnvironment.dumpResolveDir.c_str() : nullptr)
@@ -5900,7 +5916,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                    uint32_t x0, uint32_t y0, uint32_t w, uint32_t h)
             {
                 consecutiveResolveCopies.Invalidate();
-                Begin();
+                if (!Begin()) return false;
                 const uint32_t guestW = std::clamp<uint32_t>(std::max(destPitch, x0 + w), 1, 8192);
                 const uint32_t guestH = std::clamp<uint32_t>(std::max(destHeight, y0 + h), 1, 8192);
                 const uint32_t texW = std::max(1u, depth.ScaleX(guestW)), texH = std::max(1u, depth.ScaleY(guestH));
@@ -5989,7 +6005,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             bool ResolveOnGpu(HostTexture& color, uint32_t destBase, uint32_t destFormat, uint32_t destPitch, uint32_t destHeight,
                               uint32_t x0, uint32_t y0, uint32_t w, uint32_t h)
             {
-                Begin();
+                if (!Begin()) return false;
                 const uint32_t guestW = std::clamp<uint32_t>(std::max(destPitch, x0 + w), 1, 8192);
                 const uint32_t guestH = std::clamp<uint32_t>(std::max(destHeight, y0 + h), 1, 8192);
                 const uint32_t texW = std::max(1u, color.ScaleX(guestW)), texH = std::max(1u, color.ScaleY(guestH));
@@ -6144,7 +6160,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         static bool warned = false;
                         if (!warned) { LOG_WARNING("renderer: depth resolve readback not implemented"); warned = true; }
                     }
-                    Begin();
+                    if (!Begin()) return;
                     if (copyControl & 0x200) ClearDepthTarget(pitch, rtHeight);
                     return;
                 }
@@ -6199,8 +6215,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 commandList->copyTextureRegion(
                     RenderTextureCopyLocation::PlacedFootprint(readback.get(), color->format, copyWidth, copyHeight, 1, rowPitch / hostBpp, 0),
                     RenderTextureCopyLocation::Subresource(color->texture.get()), 0, 0, 0, &box);
-                Flush();
-                WaitForGpu();
+                if (!Flush() || !WaitForGpu()) return;
 
                 // Convert each pixel to four floats, then to the destination format, tiled.
                 const uint8_t* src = static_cast<const uint8_t*>(readback->map());
@@ -6281,7 +6296,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 InvalidateRange(destBase, pitchBlocks * copyHeight * (destFormat == 32 ? 8 : 4));
                 }
 
-                Begin();
+                if (!Begin()) return;
                 if (copyControl & 0x100)
                 {
                     consecutiveResolveCopies.Invalidate();
@@ -6325,7 +6340,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     return;
                 if (!ApplyInternalResolution())
                     return;
-                Begin();
+                if (!Begin()) return;
                 const uint32_t bottom = uint32_t(std::clamp(std::lround(y + height), 0l, 0x3FFFl));
                 const uint32_t rtHeight = GuessTargetHeight(pitch, bottom);
                 HostTexture* color = AcquireColorTarget(colorInfo & 0xFFF, (colorInfo >> 16) & 0xF, pitch, rtHeight);
@@ -6388,6 +6403,12 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
         {
             g_renderer->Flush();
             g_renderer->WaitForGpu();
+            video::WaitForPresentGpu();
+            video::DrainGpuForShutdown();
+            // Open/failed batches never acquired a queue completion serial.
+            for (auto& slot : g_renderer->gpuSlots)
+                if (g_renderer->dlssController && slot.srUseId && !slot.submitted)
+                    g_renderer->dlssController->OnBatchDiscarded(slot.srUseId);
             g_renderer->SavePipelineRecipes(true);
             delete g_renderer;
             g_renderer = nullptr;
@@ -6595,7 +6616,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
         auto* rs = g_renderer->NewestResolved(physicalAddress & 0x1FFFFFFF);
         if (!rs || !rs->tex)
             return;
-        g_renderer->Begin();
+        if (!g_renderer->Begin()) return;
         g_renderer->Transition(*rs->tex, RenderTextureLayout::COPY_SOURCE, RenderBarrierStage::COPY);
     }
 
@@ -6610,7 +6631,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
         {
             static const bool stats = getenv("LO_GPU_STATS") != nullptr;
             static auto lastFrame = std::chrono::steady_clock::now();
-            g_renderer->Flush();
+            if (!g_renderer->Flush()) return;
             {
                 auto& r = *g_renderer;
                 if (r.motionOptions.log && r.frame % 120 == 0) {
@@ -6875,13 +6896,12 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
         const uint32_t rowPitch = (tex.width * bpp + 255) & ~255u;
         if (size_t(rowPitch) * tex.height > kReadbackSize)
             return false;
-        g_renderer->Begin();
+        if (!g_renderer->Begin()) return false;
         g_renderer->Transition(tex, RenderTextureLayout::COPY_SOURCE, RenderBarrierStage::COPY);
         g_renderer->commandList->copyTextureRegion(
             RenderTextureCopyLocation::PlacedFootprint(g_renderer->readback.get(), copyFormat, tex.width, tex.height, 1, rowPitch / bpp, 0),
             RenderTextureCopyLocation::Subresource(tex.texture.get(), 0));
-        g_renderer->Flush();
-        g_renderer->WaitForGpu();
+        if (!g_renderer->Flush() || !g_renderer->WaitForGpu()) return false;
         const uint8_t* src = static_cast<const uint8_t*>(g_renderer->readback->map());
         width = tex.width;
         height = tex.height;
@@ -7011,7 +7031,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             // their destructors run and before video tears down the device.
             struct FixtureGpuDrain {
                 Renderer& renderer;
-                ~FixtureGpuDrain() { renderer.Flush(); renderer.WaitForGpu(); }
+                ~FixtureGpuDrain() { renderer.Flush(); renderer.WaitForGpu(); video::DrainGpuForShutdown(); }
             } drain{*g_renderer};
             source.allocationSerial = 1;
             source.format = RenderFormat::R8G8B8A8_UNORM;
@@ -7031,8 +7051,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             if (source.texture && destination.texture)
             {
                 auto& r = *g_renderer;
-                r.Begin();
-                const uint64_t sourceOffset = r.Upload(sourcePixels.data(), sourcePixels.size(), 512);
+                const uint64_t sourceOffset = r.Begin() ? r.Upload(sourcePixels.data(), sourcePixels.size(), 512) : UINT64_MAX;
                 if (sourceOffset != UINT64_MAX)
                 {
                     r.Transition(source, RenderTextureLayout::COPY_DEST, RenderBarrierStage::COPY);
@@ -7050,10 +7069,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         set->setTexture(1, r.dummyTexture2D.texture.get(), RenderTextureLayout::SHADER_READ);
                         if (r.DrawPromotionResample(destination, set, constantsOffset, false))
                         {
-                            r.Flush();
-                            r.WaitForGpu();
+                            const bool submitted = r.Flush() && r.WaitForGpu();
                             std::vector<uint32_t> pixels;
-                            if (ReadbackTexture(destination, pixels, readbackWidth, readbackHeight) &&
+                            if (submitted && ReadbackTexture(destination, pixels, readbackWidth, readbackHeight) &&
                                 readbackWidth == destinationWidth && readbackHeight == destinationHeight &&
                                 pixels.size() == size_t(destinationWidth) * destinationHeight)
                             {

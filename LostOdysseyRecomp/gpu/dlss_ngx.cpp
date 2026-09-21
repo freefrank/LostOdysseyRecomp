@@ -801,6 +801,11 @@ void Controller::ReleaseCompletedThrough(uint64_t submissionSerial) {
     srUses_.CompleteThrough(submissionSerial);
 }
 
+void Controller::AbandonUsesAfterDeviceLoss() {
+    srUses_.AbandonAfterDeviceLoss();
+    sessionFailed_ = true;
+}
+
 void Controller::ReleaseFeatureAfterGpuDrain() {
     if (!srUses_.Empty()) return;
 #if defined(LO_DLSS_SDK)

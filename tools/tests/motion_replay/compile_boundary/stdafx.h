@@ -64,3 +64,8 @@ using PPCFunc = void();
 #include "framework.h"
 #include "mutex.h"
 inline uint32_t ByteSwap(uint32_t x) { return (x>>24)|((x>>8)&0xff00u)|((x<<8)&0xff0000u)|(x<<24); }
+
+// Pointer-only HID declarations used by video.cpp; no guest layout is modeled.
+struct XAMINPUT_STATE;
+struct XAMINPUT_VIBRATION;
+struct XAMINPUT_CAPABILITIES;
