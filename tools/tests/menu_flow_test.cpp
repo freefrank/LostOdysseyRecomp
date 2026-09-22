@@ -198,7 +198,7 @@ int main(int argc, char** argv)
             Require(settings::active && closes == oldCloses + 1, "same address reopens without duplicate close");
         }
         // Existing brightness handoff must return to this same replacement.
-        settings::tab = 2; settings::row = 8;
+        settings::tab = 2; settings::row = 9;
         PPC_STORE_U32(Menu + 0x558 + 0x84, 0x22000);
         PPC_STORE_U32(0x22000 + 4, 12);
         settings::pending = 0x3000; Tick(base);
@@ -220,7 +220,7 @@ int main(int argc, char** argv)
         Require(ticks == oldTicks + 1, "no-device retail fallback retained");
         std::puts("PASS actual menu hook: edit/apply, close order/context, native completion, held-key gate, swapped buttons, reopen, calibration return, no-device fallback");
         deviceReady = true;
-        settings::tab = 2; settings::row = 9;
+        settings::tab = 2; settings::row = 10;
         settings::edit = currentConfig;
         const auto original = currentConfig;
         settings::edit.width = original.width + 160;
@@ -308,7 +308,7 @@ int main(int argc, char** argv)
             settings::tab = 2;
             settings::row = 2;
             settings::Publish(base, ConfigData);
-            Require(settings::snapshot.rows.size() == 10, "graphics tab has 10 rows");
+            Require(settings::snapshot.rows.size() == 11, "graphics tab has 11 rows");
             const auto& wsRow = settings::snapshot.rows[2];
             Require(wsRow.name == L"Widescreen" && wsRow.value == L"On" && wsRow.selectedChoice == 0,
                     "initial 3440x1440 automatically enables Widescreen switch");
@@ -399,7 +399,7 @@ int main(int argc, char** argv)
             settings::pending = 0x1008; Tick(base); // 2560x1080
             settings::pending = 0x1008; Tick(base); // 3440x1440
             Require(settings::edit.width == 3440 && settings::edit.height == 1440, "selected 3440x1440");
-            settings::row = 9; // Save graphics settings
+            settings::row = 10; // Save graphics settings
             settings::pending = 0x1000; Tick(base);
             Require(saves == oldSaves + 1 && diskConfig.width == 3440 && diskConfig.height == 1440,
                     "Save persists 3440x1440 to disk config");
@@ -411,6 +411,66 @@ int main(int argc, char** argv)
             Require(settings::status == L"Display settings saved.", "status shows display saved");
         }
         std::puts("PASS Widescreen workflow: 3440x1440 auto-derive, 5 ultrawide tiers cycle incl 5120x2160, height-preserved 16:9 switch, cancel discard, Save state machine");
+
+        // Start / Enter focus-jump, simultaneous confirm suppression, PointerClick viewport clipping and DLSS quality visibility:
+        {
+            const auto savesBefore = saves;
+            settings::tab = 2; // Graphics tab
+            settings::row = 0;
+            settings::edit.upscaler = gpu::upscaling::Upscaler::Off;
+            settings::Publish(base, ConfigData);
+
+            // DLSS Quality row (row 6) is hidden when upscaler is Off
+            Require(settings::snapshot.rows.size() == 11, "graphics tab has 11 rows");
+            Require(settings::snapshot.rows[6].hidden, "DLSS quality is hidden when upscaler is Off");
+
+            // Navigation skipping hidden row 6
+            settings::row = 5; // Upscaler row
+            settings::pending = 2; Tick(base); // D-pad down
+            Require(settings::row == 7, "down from Upscaler skips hidden DLSS quality to Scaling quality (row 7)");
+            settings::pending = 1; Tick(base); // D-pad up
+            Require(settings::row == 5, "up from Scaling quality skips hidden DLSS quality to Upscaler (row 5)");
+
+            // Start (0x10) jumps focus to Save graphics settings (row 10) without saving
+            settings::pending = 0x10; Tick(base);
+            Require(settings::row == 10, "Start jumps focus to Save row (row 10)");
+            Require(saves == savesBefore, "Start jump does not save immediately");
+
+            // Simultaneous Start (0x10) + Confirm (0x1000) does NOT save on the same tick
+            settings::row = 0;
+            settings::pending = 0x1010; Tick(base);
+            Require(settings::row == 10, "simultaneous Start+A still focuses Save row");
+            Require(saves == savesBefore, "simultaneous Start+A suppresses same-tick save");
+
+            // Subsequent A (0x1000) on focused Save row executes the save
+            settings::pending = 0x1000; Tick(base);
+            Require(saves == savesBefore + 1, "subsequent A on Save row triggers save");
+
+            // Language tab (tab 3): Start (0x10) jumps focus to Save settings (row 3)
+            settings::tab = 3;
+            settings::row = 0;
+            settings::pending = 0x10; Tick(base);
+            Require(settings::row == 3, "Start on Language tab jumps to Save settings (row 3)");
+
+            // PointerClick boundary tests:
+            // Valid slot 0 (y = 150) hits row 0
+            settings::PointerClick(100.0f, 150.0f, false);
+            Require(settings::mouseRow.load() == 0, "click at y=150 selects visible slot 0 (row 0)");
+
+            // Click at y < 150 (above rows) is ignored
+            settings::mouseRow = -1;
+            settings::PointerClick(100.0f, 140.0f, false);
+            Require(settings::mouseRow.load() == -1, "click above y=150 ignored");
+
+            // Click below visible viewport (y >= 640 or slot >= 11) is ignored
+            settings::mouseRow = -1;
+            settings::PointerClick(100.0f, 640.0f, false);
+            Require(settings::mouseRow.load() == -1, "click at y=640 (below viewport) ignored");
+            settings::PointerClick(100.0f, 700.0f, false);
+            Require(settings::mouseRow.load() == -1, "click at y=700 (below viewport) ignored");
+
+            std::puts("PASS Start/Enter focus jump, simultaneous confirm suppression, and PointerClick viewport clipping");
+        }
         if (argc == 3)
         {
             settings::status.clear();

@@ -27,6 +27,14 @@ One record of completed changes, with unpublished work separated from verified r
   - Added persistent sizing-session handling, SDR qualification metadata and runtime geometry checks, cold-start motion recovery, and extent-growth preservation. Focused evidence passed for startup sizing (`.cache/evidence/native-dlss-p2-sizing-fix.json`), 14,720-pixel extent growth (`.cache/evidence/p2-native-run/extent_growth_regression_rev3.log`), 38 cold-start motion GPU checks (`out/tmp/isolated-motion-cold-start/cold_start_rev2.log`), and the CPU qualification boundary (`.cache/evidence/p2-native-run/color_qualification_cpu_boundary.log`).
   - A bounded live-game production run on an RTX 5080 confirmed NGX SR at Quality, 1707x960 to 2560x1440, with DisplayEncoded color and reversed-Z depth. The run recorded one successful Create and 24 retained successful Evaluate records, limited by the 128-record cap rather than a total-call count; isolated use `10684` at submission serial `23614` was accepted and submitted and remained in flight in the snapshot, while `completed through 23612` is the earlier SR completion watermark. No failure was recorded.
   - Gate 3 remains unapproved. Visual quality, motion response, occlusion, UI, reset behavior and player acceptance are not claimed. The `LO_NO_RENDERER` shutdown boundary and legacy execution fixture's unchecked `void` fence-wait gap remain open; historical P0/P1, native5, composite, f11889 and f2347 evidence retains its original limits. Handoff details are recorded in `docs/notes/native-dlss-handoff.zh-CN.md`.
+- In-game Settings menu graphics updates and list viewport scrolling on the development branch:
+  - Exposed **Upscaler** (`Off`, `DLSS`) and **DLSS quality** (`Quality`, `Balanced`, `Performance`, `DLAA`) in the Graphics tab.
+  - DLSS quality row automatically hides when Upscaler is set to `Off`, preserving logical row indexing while navigation smoothly skips hidden entries.
+  - Removed the **Internal resolution** row from the menu while retaining its persisted value in configuration for legacy fallbacks.
+  - Added scrolling support for overflowing menu lists exceeding 11 rows: the visible list tracks focus, accounts for hidden rows in rendering and pointer hit testing, and displays subtle top and bottom scroll indicators.
+  - On Graphics and Language tabs, pressing Start (or Enter) jumps focus directly to the **Save settings** row without triggering an immediate save, suppressing same-tick confirm input to prevent accidental saves.
+  - Fixed MSVC build of the native DLSS test fixture by enforcing `/utf-8` source encoding for non-BOM CJK strings in `CMakeLists.txt`.
+  - Focused validation: 8/8 CPU tests passed earlier; synthetic overflowing list pixel tests (>11 rows with hidden row and scroll indicators) passed in `LoMenuRenderTest`; navigation, hidden-row skipping, boundary clicks, and Start/Enter focus-jump passed in `LoMenuFlowTest`; and incremental runtime build succeeded. The latest binary is not yet deployed, and UI changes are not yet user-accepted. Prior runtime logs show NGX availability on RTX 5080, sizing across 1440p and 4K switches, and transient motion pipeline pending fallbacks without constituting DLAA evaluation or visual acceptance.
 
 ### 简体中文
 
@@ -49,6 +57,14 @@ One record of completed changes, with unpublished work separated from verified r
   - 增加持久化 sizing 会话、SDR 资格元数据与运行期几何检查、冷启动 motion 恢复和 extent-growth 数据保留。启动 sizing、14,720 像素扩容、38 项冷启动 motion GPU 检查及 CPU 色彩资格边界均有对应证据。
   - RTX 5080 上一次有界的真实游戏生产运行已确认 Quality 模式 NGX SR，输入 `1707x960`、输出 `2560x1440`，色彩为 DisplayEncoded、深度为 reversed-Z。运行记录为 1 次成功 Create、24 条保留的成功 Evaluate 记录；受 128 条记录上限限制，不能据此推断总调用数。隔离 use `10684` 的提交序号 `23614` 已接受并提交，快照中仍在处理中；`completed through 23612` 是更早的 SR 完成水位。未记录失败。
   - Gate 3 仍未批准；画质、运动响应、遮挡、UI、重置行为和玩家验收均未宣称完成。`LO_NO_RENDERER` 关闭排空边界及旧执行 fixture 未检查 `void` fence wait 的缺口仍开放；历史 P0/P1、native5、composite、f11889 与 f2347 证据保留原有边界。交接指南见 `docs/notes/native-dlss-handoff.zh-CN.md`。
+- 开发分支更新游戏内设置菜单图形选项及列表视口滚动支持：
+  - 在“图形”分页中增加**缩放技术**（关、DLSS）与 **DLSS 质量**（质量、平衡、性能、DLAA）选项。
+  - 当缩放技术为“关”时自动隐藏“DLSS 质量”行，保持逻辑行号稳定并在导航中平滑跳过隐藏行。
+  - 从图形菜单中移除“内部分辨率”行，但保留已配置在文件中的原有数值以供回退使用。
+  - 增加超过 11 行的长列表滚动支持：视口自动跟随焦点行，在渲染和指针点击判定中适配隐藏行偏移，并显示顶部和底部滚动提示。
+  - 在“图形”与“语言”分页中，按 Start（或 Enter）直接将焦点移动至“保存设置”行而不会立即触发保存，同时抑制同帧确认输入以防止误触。
+  - 在 `tools/tests/native_dlss/CMakeLists.txt` 中增加 `/utf-8` 编译选项，修复 MSVC 下非 BOM CJK 字符串的解析问题。
+  - 定向验证：前期 8/8 项 CPU 测试已通过；`LoMenuRenderTest` 合成超长列表（>11 行，包含隐藏行与滚动指示器）像素对比通过；`LoMenuFlowTest` 验证了导航、隐藏行跳过、点击边界与 Start/Enter 焦点跳转；主程序增量编译通过。最新二进制尚未部署，界面改动尚未获得用户验收。前期运行日志显示 RTX 5080 上 NGX 可用、1440p/4K 切换及暂态 motion pipeline pending 回退，不足以作为 DLAA 求值或画质验收依据。
 
 ## v0.6.7 — 2026-09-20
 

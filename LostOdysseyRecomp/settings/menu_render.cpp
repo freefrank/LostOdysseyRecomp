@@ -422,11 +422,17 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
     constexpr int labelWidth = 299;
     constexpr int choiceLeft = 386;
     constexpr int choiceWidth = 640;
+    int visible = 0;
     for (size_t index = 0; index < current.rows.size(); ++index)
     {
-        const int y = rowTop + int(index) * rowHeight;
-        if (y + rowHeight > 640) break;
         const auto &row = current.rows[index];
+        if (row.hidden)
+            continue;
+        const int slot = visible++ - current.scroll;
+        if (slot < 0)
+            continue;
+        const int y = rowTop + slot * rowHeight;
+        if (y + rowHeight > 640) break;
         const bool focused = int(index) == current.row;
 
         if (focused)
@@ -512,6 +518,12 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
                  false, 1, focused && currentChoice ? MakeColor(255, 222, 223, 219) : outline, 13);
         }
     }
+
+    // Understated overflow indicators when rows exceed the visible viewport.
+    if (current.scroll > 0)
+        text( choiceLeft + choiceWidth - 40, rowTop - 24, 40, 20, L"▲", 13, muted, false, 1);
+    if (visible - current.scroll > kMenuVisibleRows)
+        text( choiceLeft + choiceWidth - 40, 622, 40, 20, L"▼", 13, muted, false, 1);
 
     text(65, 652, 52, 43, L"Help", 20, ink, false);
     fill(116, 650, 1094, 45, MakeColor(255, 70, 73, 73));

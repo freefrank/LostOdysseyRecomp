@@ -2,7 +2,7 @@
 
 日期：2026-09-21。基线：`dlss@fcda598006dd5de50ee0ac7a17f9db78c39b1d1a`。
 
-状态：实验性、配置文件入口。已实现模式/尺寸/NGX 接入和 CPU 回归，尚未完成本次改动的 SDK-enabled 编译、RTX Create/Evaluate、游戏画质或性能验收。本文不提升原生 DLSS 的 P2/Gate 3 状态。
+状态：实验性、开发分支配置与图形菜单入口。已实现模式/尺寸/NGX 接入、图形菜单选项及 CPU 回归，包含 MSVC 原生 DLSS fixture 的 `/utf-8` 源码编码支持。图形菜单改动及最新构建尚未部署，尚未获得用户界面与体验验收；运行时前期用户日志显示 NGX 可用（RTX 5080）、1440p/4K 尺寸切换及暂态 motion_pipeline_pending 回退，但不足以作为 DLAA 实际 Evaluate 与画质验收依据。本文不提升原生 DLSS 的 P2/Gate 3 状态。
 
 ## 开启
 
@@ -16,9 +16,9 @@ dlss_quality=3
 
 需要启用 `LO_ENABLE_DLSS=ON` 的构建、可用的 NVIDIA NGX runtime 和受支持的 Vulkan/RTX 环境。不要改用户存档或共享资源路径。
 
-原有 `dlss_quality` 编号保持不变：0 Quality、1 Balanced、2 Performance；新增 3 DLAA。关闭时用 `upscaler=0`；切回 Quality 用 `dlss_quality=0`。本次没有新增菜单项，现有菜单的空间缩放品质和抗锯齿列表不代表 DLAA 的实际执行状态。
+原有 `dlss_quality` 编号保持不变：0 Quality、1 Balanced、2 Performance；新增 3 DLAA。关闭时用 `upscaler=0`；切回 Quality 用 `dlss_quality=0`。图形菜单中已暴露 Upscaler（Off/DLSS）与 DLSS quality（Quality/Balanced/Performance/DLAA）选项；Upscaler 为 Off 时自动隐藏 DLSS quality 行。未部署的最新构建中，现有菜单的空间缩放品质和抗锯齿列表不代表 DLAA 的实际执行状态。
 
-DLAA 采用实际输出内容尺寸作为场景输入尺寸。2560×1440 内容对应 2560×1440 → 2560×1440；1280×800 drawable 内的现有 16:9 内容仍是 1280×720。活动 DLAA 不使用旧的 `internal_resolution` 作为输入，但保留该值和旧 `antialiasing` 用于回退，不覆盖用户设置。
+DLAA 采用实际输出内容尺寸作为场景输入尺寸。2560×1440 内容对应 2560×1440 → 2560×1440；1280×800 drawable 内的现有 16:9 内容仍是 1280×720。图形菜单已移除内部分辨率行，但保留已持久化的原有数值及旧 `antialiasing` 用于回退，不覆盖用户设置。
 
 ## 实现边界
 

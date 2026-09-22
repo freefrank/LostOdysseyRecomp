@@ -74,7 +74,6 @@ inline uint32_t FindNearestResolutionIndex(const uint32_t list[][2], size_t coun
     }
     return bestIndex;
 }
-constexpr int internalResolutions[] = {0, 720, 1080, 1440, 2160};
 const wchar_t *Tr(const wchar_t *en, const wchar_t *zh)
 {
     return Translate(edit.uiLanguage, en, zh);
@@ -197,17 +196,17 @@ void Publish(uint8_t *base, uint32_t config)
             }
         }
         addChoices(L"Output resolution", L"輸出解析度", std::move(outputChoices), outputChoice);
-        std::vector<std::wstring> internalChoices{Tr(L"Auto (match output)", L"自動（跟隨輸出）")};
-        uint32_t internalChoice = 0;
-        for (uint32_t i = 1; i < std::size(internalResolutions); ++i)
-        {
-            internalChoices.push_back(std::to_wstring(internalResolutions[i]) + L"p");
-            if (edit.internalResolution == internalResolutions[i]) internalChoice = i;
-        }
-        addChoices(L"Internal resolution", L"內部解析度", std::move(internalChoices), internalChoice);
         addChoices(L"Anti-aliasing", L"抗鋸齒",
                    {Tr(L"Off", L"關"), L"FXAA", L"SMAA", Tr(L"TAA (Experimental)", L"TAA（實驗性）")},
                    std::min(edit.antialiasing, 3u));
+        addChoices(L"Upscaler", L"縮放技術",
+                   {Tr(L"Off", L"關"), L"DLSS"},
+                   std::min(uint32_t(edit.upscaler), 1u));
+        addChoices(L"DLSS quality", L"DLSS 品質",
+                   {Tr(L"Quality", L"品質"), Tr(L"Balanced", L"平衡"), Tr(L"Performance", L"效能"), L"DLAA"},
+                   std::min(uint32_t(edit.dlssQuality), 3u));
+        // Hidden instead of removed so the logical row indices below stay stable.
+        next.rows.back().hidden = edit.upscaler != gpu::upscaling::Upscaler::Dlss;
         addChoices(L"Upscaling quality", L"縮放品質",
                    {Tr(L"Standard", L"標準"), Tr(L"High", L"高")},
                    std::min(edit.scalingQuality, 1u));
@@ -228,6 +227,24 @@ void Publish(uint8_t *base, uint32_t config)
         addChoices(L"Automatic updates", L"自動更新", onOff(), edit.automaticUpdates ? 0 : 1);
         addAction(L"Save settings", L"儲存設定", Tr(L"Save", L"儲存"));
         next.rows.push_back({gpu::taa_collection::Label(edit.uiLanguage), gpu::taa_collection::Enabled() ? Tr(L"On", L"開") : Tr(L"Off", L"關"), true, {}, 0});
+    }
+    // Keep the focused row inside the visible window. Scroll persists per tab
+    // so returning to a long list restores its position.
+    if (tab >= 0 && tab < 4)
+    {
+        static int scrollByTab[4] = {0, 0, 0, 0};
+        int visibleCount = 0, visibleFocus = 0;
+        for (size_t i = 0; i < next.rows.size(); ++i)
+        {
+            if (next.rows[i].hidden) continue;
+            if (int(i) <= row) visibleFocus = visibleCount;
+            ++visibleCount;
+        }
+        int &scroll = scrollByTab[tab];
+        scroll = std::clamp(scroll, 0, std::max(0, visibleCount - kMenuVisibleRows));
+        if (visibleFocus < scroll) scroll = visibleFocus;
+        if (visibleFocus >= scroll + kMenuVisibleRows) scroll = visibleFocus - kMenuVisibleRows + 1;
+        next.scroll = scroll;
     }
     next.help = status.empty() ? Tr(L"LB / RB: category     D-pad: select / change     A: select     B: back",
                                     L"LB / RB：分類     方向鍵：選擇 / 調整     A：確認     B：返回")
@@ -252,16 +269,19 @@ void Publish(uint8_t *base, uint32_t config)
     if (tab == 2 && row == 3)
         next.help = Tr(L"Sets the output size. Borderless fullscreen uses the desktop size.",
                        L"設定輸出尺寸；無邊框全螢幕使用桌面尺寸。");
-    if (tab == 2 && row == 4)
-        next.help = Tr(L"Scene detail up to 4K. Auto follows output; higher values use more GPU power.",
-                       L"場景細節最高 4K。自動跟隨輸出；較高解析度需要更多 GPU 效能。");
-    if (tab == 2 && row == 5 && edit.antialiasing == 3)
+    if (tab == 2 && row == 4 && edit.antialiasing == 3)
         next.help = Tr(L"Camera-based TAA; moving effects may trail. Unsupported scenes use SMAA.",
                        L"以相機重投影的 TAA；動態特效可能拖影。不支援的場景使用 SMAA。");
+    if (tab == 2 && row == 5)
+        next.help = Tr(L"Reconstructs high-resolution frames using NVIDIA DLSS.",
+                       L"使用 NVIDIA DLSS 重建高解析度畫面。");
     if (tab == 2 && row == 6)
-        next.help = Tr(L"Controls filtering when internal and output sizes differ. Scene detail uses Internal resolution.",
-                       L"控制內部與輸出尺寸不同時的取樣濾鏡。場景細節由內部解析度決定。");
+        next.help = Tr(L"Balances image quality and performance for DLSS reconstruction.",
+                       L"調整 DLSS 重建的畫質與效能平衡。");
     if (tab == 2 && row == 7)
+        next.help = Tr(L"Controls filtering when upscaling is active.",
+                       L"控制啟用縮放時的取樣濾鏡。");
+    if (tab == 2 && row == 8)
         next.help = edit.frameRate == 120
             ? Tr(L"120 FPS is experimental and requires LO_EXPERIMENTAL_120; otherwise runs at 60 FPS.",
                  L"120 FPS 為實驗性功能，需啟用 LO_EXPERIMENTAL_120，否則以 60 FPS 執行。")
@@ -298,7 +318,7 @@ void Publish(uint8_t *base, uint32_t config)
         next.dialogSelection = collectionChoice;
     }
     std::lock_guard lock(snapshotMutex);
-    if (next.tab == snapshot.tab && next.row == snapshot.row && next.language == snapshot.language &&
+    if (next.tab == snapshot.tab && next.row == snapshot.row && next.scroll == snapshot.scroll && next.language == snapshot.language &&
         next.rows == snapshot.rows && next.help == snapshot.help && next.dialogTitle == snapshot.dialogTitle &&
         next.dialogMessage == snapshot.dialogMessage && next.dialogChoices == snapshot.dialogChoices &&
         next.dialogSelection == snapshot.dialogSelection)
@@ -381,10 +401,27 @@ void PointerClick(float x, float y, bool reverse)
     }
     constexpr int height = 43;
     constexpr int top = 150;
-    const int selected = int(y - top) / height;
-    if (x < 38 || x >= 1026 || y < top || selected < 0 || selected >= int(snapshot.rows.size()))
+    const int slot = int(y - top) / height;
+    if (x < 38 || x >= 1026 || y < top || slot < 0 || slot >= kMenuVisibleRows || (top + (slot + 1) * height) > 640)
         return;
-    mouseRow = selected;
+    // Translate the clicked slot through hidden rows and the scroll window
+    // back to a logical row index.
+    const int target = snapshot.scroll + slot;
+    int visible = 0;
+    size_t hit = snapshot.rows.size();
+    for (size_t i = 0; i < snapshot.rows.size(); ++i)
+    {
+        if (snapshot.rows[i].hidden)
+            continue;
+        if (visible++ == target)
+        {
+            hit = i;
+            break;
+        }
+    }
+    if (hit >= snapshot.rows.size())
+        return;
+    mouseRow = int(hit);
     if (x >= 386)
         mouseAction = reverse ? 4 : 0x1000;
 }
@@ -625,18 +662,34 @@ PPC_FUNC(sub_822F19B0)
         row = 0;
         status.clear();
     }
-    const int count = tab == 0 ? 8 : tab == 1 ? 3 : tab == 2 ? 10 : 5;
+    const int count = tab == 0 ? 8 : tab == 1 ? 3 : tab == 2 ? 11 : 5;
+    // Row 6 (DLSS quality) hides unless the upscaler is DLSS. It keeps its
+    // logical index and navigation skips it. Keyboard Enter reaches the menu
+    // as GAMEPAD_START (hid.cpp), so one branch covers gamepad Start and Enter.
+    auto rowHidden = [&](int r) {
+        return tab == 2 && r == 6 && edit.upscaler != gpu::upscaling::Upscaler::Dlss;
+    };
     if (input & 1)
-        row = (row + count - 1) % count;
+        do { row = (row + count - 1) % count; } while (rowHidden(row));
     if (input & 2)
-        row = (row + 1) % count;
+        do { row = (row + 1) % count; } while (rowHidden(row));
+    if (input & 0x10)
+    {
+        if (tab == 2)
+            row = 10;
+        else if (tab == 3)
+            row = 3;
+        // Start / Enter only shifts focus to Save; inhibit confirm on the same tick
+        // so simultaneous input (or key bindings sending both) cannot trigger saving.
+        input &= ~0x1000;
+    }
     if (tab == 3 && row == 4 && (input & 0x100c)) {
         if (gpu::taa_collection::Enabled()) {
             if (!gpu::taa_collection::SetConsent(false)) status = Tr(L"Settings could not be saved.", L"無法儲存設定。");
         } else { collectionPrompt = true; collectionChoice = 1; }
         Publish(base, config); return;
     }
-    const bool action = (tab == 0 && row == 7) || (tab == 2 && row >= 8) || (tab == 3 && row == 3);
+    const bool action = (tab == 0 && row == 7) || (tab == 2 && row >= 9) || (tab == 3 && row == 3);
     const int delta = (input & 4) ? -1 : ((input & 8) || ((input & 0x1000) && !action)) ? 1 : 0;
     auto cycle = [&](uint32_t value, uint32_t count) {
         return uint32_t((int(value) + int(count) + delta) % int(count));
@@ -708,20 +761,16 @@ PPC_FUNC(sub_822F19B0)
             }
             if (row == 4)
             {
-                uint32_t index = 0;
-                for (uint32_t i = 0; i < std::size(internalResolutions); ++i)
-                    if (edit.internalResolution == internalResolutions[i])
-                        index = i;
-                edit.internalResolution = internalResolutions[cycle(index, uint32_t(std::size(internalResolutions)))];
-            }
-            if (row == 5)
-            {
                 edit.antialiasing = cycle(edit.antialiasing, 4);
                 edit.fxaa = edit.antialiasing == 1;
             }
+            if (row == 5)
+                edit.upscaler = gpu::upscaling::Upscaler(cycle(uint32_t(edit.upscaler), 2));
             if (row == 6)
-                edit.scalingQuality = cycle(edit.scalingQuality, 2);
+                edit.dlssQuality = gpu::upscaling::DlssQuality(cycle(uint32_t(edit.dlssQuality), 4));
             if (row == 7)
+                edit.scalingQuality = cycle(edit.scalingQuality, 2);
+            if (row == 8)
             {
                 constexpr uint32_t rates[] = {30, 60, 120};
                 const uint32_t index = edit.frameRate == 120 ? 2u : edit.frameRate == 60 ? 1u : 0u;
@@ -758,7 +807,7 @@ PPC_FUNC(sub_822F19B0)
         language::TraceConfig(base, config, "menu-after-defaults");
         status = Tr(L"Game defaults restored.", L"遊戲預設設定已恢復。");
     }
-    if ((input & 0x1000) && tab == 2 && row == 9)
+    if ((input & 0x1000) && tab == 2 && row == 10)
     {
         previousDisplay = GetConfig();
         if (!SaveConfig(edit))
@@ -797,7 +846,7 @@ PPC_FUNC(sub_822F19B0)
             status = SaveConfig(languages) ? Tr(L"Language settings saved.", L"語言設定已儲存。")
                                            : Tr(L"Could not save settings.", L"無法儲存設定。");
     }
-    if ((input & 0x1000) && tab == 2 && row == 8)
+    if ((input & 0x1000) && tab == 2 && row == 9)
     {
         // Hand the original calibration screen its own brightness row.
         const uint32_t list = menu + 0x558, table = PPC_LOAD_U32(list + 0x84);

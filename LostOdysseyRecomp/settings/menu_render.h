@@ -6,6 +6,9 @@
 namespace settings
 {
 namespace menu_assets { struct Assets; }
+// Visible list slots: rows start at y=150 with height 43 and clip at y=640,
+// so (640 - 150) / 43 == 11 rows fit without scrolling.
+inline constexpr int kMenuVisibleRows = 11;
 struct MenuRow
 {
     std::wstring name, value;
@@ -19,11 +22,17 @@ struct MenuRow
     int sliderPercent = -1;
     // Confirmation-button choices use the original colored A/B key legend.
     bool controllerButtons = false;
+    // Hidden rows keep their logical index (input dispatch stays stable) but
+    // are skipped by navigation, drawing and mouse hit-testing.
+    bool hidden = false;
     bool operator==(const MenuRow &) const = default;
 };
 struct MenuSnapshot
 {
     int tab = 0, row = 0;
+    // First visible slot when rows overflow the list area. Publish keeps the
+    // focused row inside [scroll, scroll + kMenuVisibleRows).
+    int scroll = 0;
     uint32_t language = 0;
     std::vector<MenuRow> rows;
     std::wstring help;

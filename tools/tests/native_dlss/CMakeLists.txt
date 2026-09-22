@@ -13,6 +13,12 @@ else()
     set(LO_NATIVE_DLSS_ROOT "${CMAKE_SOURCE_DIR}")
     set(LO_NATIVE_DLSS_STANDALONE OFF)
 endif()
+# config.h and other sources embed CJK UI strings as UTF-8 without BOM.
+# MSVC cl defaults to the system code page and misparses them (C4819
+# followed by cascading errors); force UTF-8 source encoding instead.
+if(MSVC)
+    add_compile_options(/utf-8)
+endif()
 # The P1/P2 planner contracts are CPU-only. Keep this lane usable on CI and
 # development machines without Plume submodules, a Vulkan loader, the SDK, or
 # game assets. The default still builds the existing native GPU fixtures.

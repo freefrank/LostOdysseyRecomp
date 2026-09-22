@@ -200,5 +200,64 @@ int main(int argc, char **argv)
         for (auto p : pixels) { const char rgb[] = {char(p), char(p >> 8), char(p >> 16)}; f.write(rgb, 3); }
     }
     std::puts("Language reference (with Korean 한국어) rendered at 1280x720");
+
+    // Synthetic overflowing menu (>11 visible rows) to verify scroll clipping, hidden rows and overflow indicators.
+    {
+        // Reference snapshot: exactly 11 rows (the visible window), representing Option 3 through Option 13.
+        settings::MenuSnapshot refSnapshot;
+        refSnapshot.tab = 2;
+        refSnapshot.language = 0;
+        for (int i = 3; i < 14; ++i)
+            refSnapshot.rows.push_back({L"Option " + std::to_wstring(i), L"Val", true, {L"Val"}, 0});
+        refSnapshot.row = 10; // Corresponds to Option 13
+        refSnapshot.scroll = 0;
+        refSnapshot.help = L"Overflow test";
+        std::vector<uint32_t> refPixels;
+        Require(settings::RasterizeMenu(refSnapshot, 1280, 720, refPixels), "ref raster failed");
+
+        // Overflow snapshot: 16 rows total, with Option 2 marked hidden.
+        // Visible sequence: Option 0, 1 (above scroll=2), Option 3..13 (visible, 11 rows), Option 14, 15 (below).
+        settings::MenuSnapshot overflowSnapshot;
+        overflowSnapshot.tab = 2;
+        overflowSnapshot.language = 0;
+        for (int i = 0; i < 16; ++i)
+        {
+            settings::MenuRow row{L"Option " + std::to_wstring(i), L"Val", true, {L"Val"}, 0};
+            if (i == 2) row.hidden = true;
+            overflowSnapshot.rows.push_back(row);
+        }
+        overflowSnapshot.row = 13; // Option 13
+        overflowSnapshot.scroll = 2; // skips visible 0, 1 (and hidden 2) -> displays Option 3..13
+        overflowSnapshot.help = L"Overflow test";
+        Require(settings::RasterizeMenu(overflowSnapshot, 1280, 720, pixels), "overflow rasterization failed");
+
+        // Verify that slot 0 (y=150..191) renders Option 3 identically between ref and scrolled overflow.
+        // Label area: x in [82, 350], y in [155, 185]
+        bool slot0Matches = true;
+        for (int y = 155; y < 185; ++y)
+            for (int x = 82; x < 350; ++x)
+                if (pixels[y * 1280 + x] != refPixels[y * 1280 + x])
+                    slot0Matches = false;
+        Require(slot0Matches, "scrolled slot 0 must render Option 3 identical to reference");
+
+        // Verify overflow indicators:
+        // Top indicator at (1026-40..1026, 150-24..150-4) has rendered glyph pixels because scroll > 0
+        int topGlyphPixels = 0;
+        for (int y = 150 - 24; y < 150 - 4; ++y)
+            for (int x = 386 + 640 - 40; x < 386 + 640; ++x)
+                if (pixels[y * 1280 + x] != refPixels[y * 1280 + x])
+                    ++topGlyphPixels;
+        Require(topGlyphPixels > 10, "top overflow indicator glyph pixels missing");
+
+        // Bottom indicator at (1026-40..1026, 622..642) has rendered glyph pixels because rows remain below viewport
+        int bottomGlyphPixels = 0;
+        for (int y = 622; y < 642; ++y)
+            for (int x = 386 + 640 - 40; x < 386 + 640; ++x)
+                if (pixels[y * 1280 + x] != refPixels[y * 1280 + x])
+                    ++bottomGlyphPixels;
+        Require(bottomGlyphPixels > 10, "bottom overflow indicator glyph pixels missing");
+
+        std::puts("Synthetic overflow (>11 rows) pixel comparison and overflow indicators passed");
+    }
     return 0;
 }
