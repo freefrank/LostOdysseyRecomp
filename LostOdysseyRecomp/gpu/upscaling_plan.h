@@ -17,7 +17,27 @@ namespace gpu::dlss { class Controller; }
 
 namespace gpu::upscaling {
 enum class Upscaler : uint32_t { Off = 0, Dlss = 1 };
-enum class DlssQuality : uint32_t { Quality = 0, Balanced = 1, Performance = 2 };
+// Persisted IDs and the two-bit frame-plan wire field. Append, never renumber.
+enum class DlssQuality : uint32_t { Quality = 0, Balanced = 1, Performance = 2, Dlaa = 3 };
+inline constexpr std::array kDlssQualityModes{
+    DlssQuality::Quality, DlssQuality::Balanced, DlssQuality::Performance, DlssQuality::Dlaa};
+static_assert(uint32_t(DlssQuality::Dlaa) + 1 == kDlssQualityModes.size());
+inline constexpr bool KnownDlssQuality(DlssQuality quality) {
+    return uint32_t(quality) < kDlssQualityModes.size();
+}
+inline constexpr DlssQuality NormalizeDlssQuality(DlssQuality quality) {
+    return KnownDlssQuality(quality) ? quality : DlssQuality::Quality;
+}
+inline constexpr uint32_t DlssQualityIndex(DlssQuality quality) {
+    return uint32_t(NormalizeDlssQuality(quality));
+}
+// DLAA consumes the output content extent, not drawable bars or guest padding.
+// A failed/mismatched vendor query must not be replaced with a guessed 1:1 size.
+inline constexpr bool ValidDlssRenderExtent(DlssQuality quality, resolution::Size render,
+    resolution::Size output) {
+    return KnownDlssQuality(quality) && render.width && render.height && output.width && output.height &&
+        (quality != DlssQuality::Dlaa || render == output);
+}
 enum class TemporalConsumer : uint32_t { None = 0, LegacyTaa = 1, DlssInputs = 2, DlssSr = 3 };
 // P1's input-only route and P2's native SR route have different output handling,
 // but both require the same complete temporal input contract and request-level
@@ -60,10 +80,14 @@ struct ModeSizing {
     bool operator==(const ModeSizing&) const = default;
 };
 
+inline bool ModeReadyForOutput(const ModeSizing& mode, DlssQuality quality, resolution::Size output) {
+    return mode.state == SizingState::Ready && ValidDlssRenderExtent(quality, mode.optimal, output);
+}
+
 struct OutputSizing {
     SizingKey key{};
     uint64_t revision = 0;
-    std::array<ModeSizing, 3> modes{};
+    std::array<ModeSizing, kDlssQualityModes.size()> modes{};
     bool operator==(const OutputSizing&) const = default;
 };
 

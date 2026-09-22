@@ -122,14 +122,15 @@ namespace gpu::frame_plan
         request.output = input.output;
         request.deviceEpoch = input.device.deviceEpoch;
         request.requestedUpscaler = input.upscaler;
-        request.dlssQuality = input.quality;
+        request.dlssQuality = upscaling::NormalizeDlssQuality(input.quality);
         request.legacyAA = input.antialiasing;
         request.scalingQuality = input.scalingQuality;
         request.requiresReadback = input.readback;
         resolution::Size recommended{request.width, request.height};
         if (input.sizing) {
-            const auto& mode = input.sizing->modes[uint32_t(input.quality)];
-            if (mode.state == upscaling::SizingState::Ready) recommended = mode.optimal;
+            const auto& mode = input.sizing->modes[upscaling::DlssQualityIndex(input.quality)];
+            if (upscaling::ModeReadyForOutput(mode, request.dlssQuality, {input.output.width, input.output.height}))
+                recommended = mode.optimal;
         }
         return FullRequestSignature(request, input.internalResolution, recommended);
     }
@@ -138,7 +139,8 @@ namespace gpu::frame_plan
         uint32_t drawableWidth, uint32_t drawableHeight, bool resolveReadback);
     class PlannerState {
     public:
-        FramePlan Begin(const PlannerInput& input) {
+        FramePlan Begin(PlannerInput input) {
+            input.quality = upscaling::NormalizeDlssQuality(input.quality);
             std::lock_guard lock(mutex_);
             const uint64_t incomingSignature = InputRequestSignature(input);
             const bool newRequest = !lastFinal_ || lastFinal_->requestSignature != incomingSignature;
@@ -172,18 +174,18 @@ namespace gpu::frame_plan
             const auto requestedBase = Choose(0, 0, input.internalResolution, input.output.width, input.output.height, input.readback);
             resolution::Size recommended{requestedBase.width, requestedBase.height};
             if (input.sizing) {
-                const auto& mode = input.sizing->modes[uint32_t(input.quality)];
+                const auto& mode = input.sizing->modes[upscaling::DlssQualityIndex(input.quality)];
                 p.sizingRevision = input.sizing->revision;
-                if (mode.state == upscaling::SizingState::Ready) recommended = mode.optimal;
-                if (p.inputProbe && input.device.dlssAvailable && mode.state == upscaling::SizingState::Ready &&
-                    mode.optimal.width && mode.optimal.height) {
+                const bool modeReady = upscaling::ModeReadyForOutput(mode, input.quality,
+                    {input.output.width, input.output.height});
+                if (modeReady) recommended = mode.optimal;
+                if (p.inputProbe && input.device.dlssAvailable && modeReady) {
                     p.width = mode.optimal.width;
                     p.height = mode.optimal.height;
                     p.effectiveAA = 0;
                     p.consumer = upscaling::TemporalConsumer::DlssInputs;
                 } else if (input.upscaler == upscaling::Upscaler::Dlss && !input.readback && !p.inputProbe &&
-                    input.device.dlssAvailable && mode.state == upscaling::SizingState::Ready &&
-                    mode.optimal.width && mode.optimal.height) {
+                    input.device.dlssAvailable && modeReady) {
                     p.width = mode.optimal.width;
                     p.height = mode.optimal.height;
                     p.effectiveAA = 0;

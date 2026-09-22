@@ -82,6 +82,7 @@ NVSDK_NGX_PerfQuality_Value ToNgxQuality(upscaling::DlssQuality quality) {
     case upscaling::DlssQuality::Quality: return NVSDK_NGX_PerfQuality_Value_MaxQuality;
     case upscaling::DlssQuality::Balanced: return NVSDK_NGX_PerfQuality_Value_Balanced;
     case upscaling::DlssQuality::Performance: return NVSDK_NGX_PerfQuality_Value_MaxPerf;
+    case upscaling::DlssQuality::Dlaa: return NVSDK_NGX_PerfQuality_Value_DLAA;
     }
     return NVSDK_NGX_PerfQuality_Value_MaxQuality;
 }
@@ -409,6 +410,8 @@ void Controller::ProbeOnce(const plume::VulkanInterface& vulkanInterface, const 
             report_.state = capabilityDecision.decision == CapabilityDecision::Unavailable ? ProbeState::Unavailable : ProbeState::ApiError;
             report_.reason = capabilityDecision.reason;
         } else {
+            // Keep baseline SR discovery independent of optional DLAA support.
+            // DLAA is queried per output by QueryOutputSizing (also --sizing).
             const struct { const char* name; NVSDK_NGX_PerfQuality_Value value; } qualities[] = {
                 {"quality", NVSDK_NGX_PerfQuality_Value_MaxQuality},
                 {"balanced", NVSDK_NGX_PerfQuality_Value_Balanced},
@@ -543,20 +546,23 @@ upscaling::OutputSizing Controller::QueryOutputSizing(const plume::VulkanInterfa
     if (capability.decision != CapabilityDecision::Proceed) {
         setAll(capability.decision == CapabilityDecision::Unavailable ? upscaling::SizingState::Unavailable : upscaling::SizingState::Error);
     } else {
-        const NVSDK_NGX_PerfQuality_Value qualities[] = {NVSDK_NGX_PerfQuality_Value_MaxQuality,
-            NVSDK_NGX_PerfQuality_Value_Balanced, NVSDK_NGX_PerfQuality_Value_MaxPerf};
-        for (size_t index = 0; index < sizing.modes.size(); ++index) {
-            auto& mode = sizing.modes[index];
+        // Share the mode inventory with OutputSizing; no parallel three-entry
+        // SDK array that can go out of bounds when DLAA is appended.
+        for (const auto quality : upscaling::kDlssQualityModes) {
+            auto& mode = sizing.modes[upscaling::DlssQualityIndex(quality)];
             uint32_t optimalWidth = 0, optimalHeight = 0, maxWidth = 0, maxHeight = 0, minWidth = 0, minHeight = 0;
             float sharpness = 0.0f;
             const auto optimalResult = NGX_DLSS_GET_OPTIMAL_SETTINGS(parameters, key.outputWidth, key.outputHeight,
-                qualities[index], &optimalWidth, &optimalHeight, &maxWidth, &maxHeight, &minWidth, &minHeight, &sharpness);
+                ToNgxQuality(quality), &optimalWidth, &optimalHeight, &maxWidth, &maxHeight, &minWidth, &minHeight, &sharpness);
             mode.ngxResult = int32_t(optimalResult);
             RecordCall("Sizing_DLSS_GetOptimalSettings", int32_t(optimalResult), NVSDK_NGX_FAILED(optimalResult));
             const bool valid = !NVSDK_NGX_FAILED(optimalResult) && optimalWidth && optimalHeight && minWidth && minHeight &&
                 maxWidth && maxHeight && minWidth <= optimalWidth && optimalWidth <= maxWidth &&
-                minHeight <= optimalHeight && optimalHeight <= maxHeight;
-            mode.state = valid ? upscaling::SizingState::Ready : upscaling::SizingState::Error;
+                minHeight <= optimalHeight && optimalHeight <= maxHeight &&
+                upscaling::ValidDlssRenderExtent(quality, {optimalWidth, optimalHeight}, {key.outputWidth, key.outputHeight});
+            // A DLAA-only failure must not disable the three existing SR modes.
+            mode.state = valid ? upscaling::SizingState::Ready :
+                optimalResult == NVSDK_NGX_Result_FAIL_FeatureNotSupported ? upscaling::SizingState::Unavailable : upscaling::SizingState::Error;
             if (valid) { mode.optimal = {optimalWidth, optimalHeight}; mode.minimum = {minWidth, minHeight}; mode.maximum = {maxWidth, maxHeight}; }
         }
     }
@@ -662,6 +668,7 @@ SrAttempt Controller::RecordIsolated(plume::VulkanCommandList& isolatedCommandLi
     return attempt;
 #else
     if (config.colorSpace == SrColorSpace::Unknown) return attempt;
+    if (!upscaling::ValidDlssRenderExtent(config.quality, config.renderExtent, config.outputExtent)) return attempt;
     if (!sessionDevice_) return attempt;
     const auto session = EnsureSession(*sessionDevice_);
     if (session != SrStatus::Executable) { attempt.status = session; return attempt; }

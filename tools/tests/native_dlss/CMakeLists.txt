@@ -50,22 +50,28 @@ add_executable(LoNativeDlssSubmissionFailureTest EXCLUDE_FROM_ALL
 target_include_directories(LoNativeDlssSubmissionFailureTest PRIVATE ${LO_NATIVE_DLSS_ROOT}/LostOdysseyRecomp)
 target_compile_features(LoNativeDlssSubmissionFailureTest PRIVATE cxx_std_20)
 
+add_executable(LoNativeDlaaTest EXCLUDE_FROM_ALL
+    ${LO_NATIVE_DLSS_ROOT}/tools/tests/native_dlaa_test.cpp)
+target_include_directories(LoNativeDlaaTest PRIVATE ${LO_NATIVE_DLSS_ROOT}/LostOdysseyRecomp)
+target_compile_features(LoNativeDlaaTest PRIVATE cxx_std_20)
+
 # None of these translation units uses C++ modules. Do not require a separate
 # clang-scan-deps binary just to build ordinary C++20 contract fixtures.
-set_target_properties(LoNativeDlssSubmissionFailureTest LoNativeDlssFrameInputsTest LoP1FramePlanTest LoNativeDlssP2RoutingTest LoNativeDlssPromotionPolicyTest LoNativeDlssSubmissionLifetimeTest
+set_target_properties(LoNativeDlaaTest LoNativeDlssSubmissionFailureTest LoNativeDlssFrameInputsTest LoP1FramePlanTest LoNativeDlssP2RoutingTest LoNativeDlssPromotionPolicyTest LoNativeDlssSubmissionLifetimeTest
     PROPERTIES CXX_SCAN_FOR_MODULES OFF)
 
 add_custom_target(LoNativeDlssCpuTests
-    DEPENDS LoNativeDlssSubmissionFailureTest LoNativeDlssFrameInputsTest LoP1FramePlanTest LoNativeDlssP2RoutingTest LoNativeDlssPromotionPolicyTest LoNativeDlssSubmissionLifetimeTest)
+    DEPENDS LoNativeDlaaTest LoNativeDlssSubmissionFailureTest LoNativeDlssFrameInputsTest LoP1FramePlanTest LoNativeDlssP2RoutingTest LoNativeDlssPromotionPolicyTest LoNativeDlssSubmissionLifetimeTest)
 include(CTest)
 if(BUILD_TESTING)
+    add_test(NAME LoNativeDlaaTest COMMAND LoNativeDlaaTest)
     add_test(NAME LoP1FramePlanTest COMMAND LoP1FramePlanTest)
     add_test(NAME LoNativeDlssP2RoutingTest COMMAND LoNativeDlssP2RoutingTest)
     add_test(NAME LoNativeDlssPromotionPolicyTest COMMAND LoNativeDlssPromotionPolicyTest)
     add_test(NAME LoNativeDlssSubmissionLifetimeTest COMMAND LoNativeDlssSubmissionLifetimeTest)
     add_test(NAME LoNativeDlssFrameInputsTest COMMAND LoNativeDlssFrameInputsTest)
     add_test(NAME LoNativeDlssSubmissionFailureTest COMMAND LoNativeDlssSubmissionFailureTest)
-    set_tests_properties(LoNativeDlssSubmissionFailureTest LoNativeDlssFrameInputsTest LoP1FramePlanTest LoNativeDlssP2RoutingTest LoNativeDlssPromotionPolicyTest LoNativeDlssSubmissionLifetimeTest PROPERTIES LABELS "native-dlss;cpu")
+    set_tests_properties(LoNativeDlaaTest LoNativeDlssSubmissionFailureTest LoNativeDlssFrameInputsTest LoP1FramePlanTest LoNativeDlssP2RoutingTest LoNativeDlssPromotionPolicyTest LoNativeDlssSubmissionLifetimeTest PROPERTIES LABELS "native-dlss;cpu")
     # Optional developer tooling only; the game and C++ fixtures do not depend
     # on Python. Existing CI images provide it for recording-evidence triage.
     find_package(Python3 COMPONENTS Interpreter QUIET)

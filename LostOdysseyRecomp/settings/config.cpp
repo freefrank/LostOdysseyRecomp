@@ -16,7 +16,7 @@ Config Validate(Config value)
         value.internalResolution = 0;
     if (value.scalingQuality > 1) value.scalingQuality = 1;
     if (uint32_t(value.upscaler) > uint32_t(gpu::upscaling::Upscaler::Dlss)) value.upscaler = gpu::upscaling::Upscaler::Off;
-    if (uint32_t(value.dlssQuality) > uint32_t(gpu::upscaling::DlssQuality::Performance)) value.dlssQuality = gpu::upscaling::DlssQuality::Quality;
+    value.dlssQuality = gpu::upscaling::NormalizeDlssQuality(value.dlssQuality);
     if (value.antialiasing > 3) value.antialiasing = 0;
     value.fxaa = value.antialiasing == 1;
     if (value.frameRate != 30 && value.frameRate != 60 && value.frameRate != 120) value.frameRate = 30;
