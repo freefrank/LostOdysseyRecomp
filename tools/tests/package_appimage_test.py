@@ -229,5 +229,42 @@ class PackageAppImageTests(unittest.TestCase):
             module.validate_apprun(appdir)
 
 
+    def test_dlss_runtime_bundled_with_license_and_symlinks(self):
+        module = load_packager()
+        with tempfile.TemporaryDirectory(prefix='lo-dlss-appimage-') as tmp:
+            base = Path(tmp)
+            binaries = base / 'build' / 'LostOdysseyRecomp'
+            binaries.mkdir(parents=True)
+            (binaries / 'LostOdysseyRecomp').write_bytes(b'mock-runtime')
+            (binaries / 'libdxcompiler.so').write_bytes(b'mock-dxc')
+            (binaries / 'libnvidia-ngx-dlss.so.310.9.1').write_bytes(b'mock-dlss-so')
+            output = base / 'output'
+
+            argv = [
+                'package_appimage.py',
+                '--build', str(base / 'build'),
+                '--output', str(output),
+                '--version', 'v0.6.11',
+                '--dry-layout',
+            ]
+
+            # 1. Missing DLSS license triggers exit when neither candidate path exists
+            with patch.object(module, 'ROOT', base / 'fake_root'):
+                with patch.object(sys, 'argv', argv):
+                    with self.assertRaisesRegex(SystemExit, 'DLSS SDK license is missing'):
+                        module.main()
+
+            # 2. Provide mock DLSS SDK license in candidate path under module.ROOT
+            fake_root = base / 'fake_root'
+            sdk_dir = fake_root / 'out/deps/nvidia-dlss'
+            sdk_dir.mkdir(parents=True, exist_ok=True)
+            (sdk_dir / 'LICENSE.txt').write_text('mock license', encoding='utf-8')
+
+            with patch.object(module, 'ROOT', fake_root):
+                with patch.object(sys, 'argv', argv):
+                    # Dry layout creates layout and prints paths without linuxdeploy
+                    module.main()
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

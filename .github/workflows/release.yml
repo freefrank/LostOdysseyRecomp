@@ -80,6 +80,8 @@ jobs:
         env:
           LO_BUILD_XEX_PATH: out/build-input/default.xex
         run: python tools/release/fetch_build_input.py
+      - name: Fetch NVIDIA DLSS SDK
+        run: python tools/release/fetch_dlss_sdk.py --dest out/deps/nvidia-dlss
       - name: Generate game code
         shell: cmd
         run: |
@@ -90,6 +92,9 @@ jobs:
         shell: cmd
         env:
           LO_BUILD_JOBS: '2'
+          LO_ENABLE_DLSS: 'ON'
+          LO_REQUIRE_DLSS: 'ON'
+          LO_DLSS_SDK_ROOT: out\deps\nvidia-dlss
         run: call tools\build_release.bat
       - name: Fetch portable shader pack
         env:
@@ -212,6 +217,8 @@ jobs:
             -DCMAKE_CXX_COMPILER=clang++
           cmake --build out/build/tools --target XenonRecomp XenonAnalyse xexdump
           python tools/ppc_codegen.py stamp-tool --executable out/build/tools/XenonRecomp/XenonRecomp/XenonRecomp
+      - name: Fetch NVIDIA DLSS SDK
+        run: python3 tools/release/fetch_dlss_sdk.py --dest out/deps/nvidia-dlss
       - name: Generate game code
         run: |
           out/build/tools/xexdump LostOdysseyRecompLib/private/disc1/default.xex LostOdysseyRecompLib/private/image_disc1.bin
@@ -221,7 +228,10 @@ jobs:
           cmake -S . -B out/build/linux -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER=clang \
-            -DCMAKE_CXX_COMPILER=clang++
+            -DCMAKE_CXX_COMPILER=clang++ \
+            -DLO_ENABLE_DLSS=ON \
+            -DLO_REQUIRE_DLSS=ON \
+            -DLO_DLSS_SDK_ROOT="$GITHUB_WORKSPACE/out/deps/nvidia-dlss"
           cmake --build out/build/linux --target LostOdysseyRecomp LoShaderPackTool --parallel 2
       - name: Install linuxdeploy
         run: |

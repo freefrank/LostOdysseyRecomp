@@ -1,8 +1,8 @@
 # 原生 DLAA 初步实现
 
-日期：2026-09-21。基线：`dlss@fcda598006dd5de50ee0ac7a17f9db78c39b1d1a`。
+日期：2026-09-21。基线：`main@943062f`（已合并 dlss 分支）。
 
-状态：实验性、开发分支配置与图形菜单入口。已实现模式/尺寸/NGX 接入、图形菜单选项及 CPU 回归，包含 MSVC 原生 DLSS fixture 的 `/utf-8` 源码编码支持。图形菜单改动及最新构建尚未部署，尚未获得用户界面与体验验收；运行时前期用户日志显示 NGX 可用（RTX 5080）、1440p/4K 尺寸切换及暂态 motion_pipeline_pending 回退，但不足以作为 DLAA 实际 Evaluate 与画质验收依据。本文不提升原生 DLSS 的 P2/Gate 3 状态。
+状态：实验性、v0.6.11 待发布版本配置与图形菜单入口。已合并至 main 分支，包含模式/尺寸/NGX 接入、图形菜单选项及 CPU 回归，以及 MSVC 原生 DLSS fixture 的 `/utf-8` 源码编码支持。发布包与 CI 产物仍处于待发布状态，界面改动尚未完成用户验收；运行时前期用户日志显示 NGX 可用（RTX 5080）、1440p/4K 尺寸切换及暂态 motion_pipeline_pending 回退，但不足以作为 DLAA 实际 Evaluate 与画质验收依据。本文不提升原生 DLSS 的 P2/Gate 3 状态。
 
 ## 开启
 

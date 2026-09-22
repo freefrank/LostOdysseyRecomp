@@ -19,13 +19,18 @@ Windows x64 · Direct3D 12 · Vulkan · PowerPC 静态重编译
 > [!IMPORTANT]
 > **本项目仍处于早期测试阶段。** 已测试开场区域和部分场景，尚未通关。渲染和稳定性仍有问题。请自行提供受支持版本的游戏文件。
 
-### 实验性原生 DLSS SR
+### 实验性原生 DLSS SR 与 DLAA
 
-原生 NVIDIA DLSS 超分辨率仍属于实验性开发功能，不是面向普通玩家发布或
-可直接使用的功能。本地 Windows SDK-on 构建已在 RTX 5080 的一个测试场景中
-确认游戏内 NGX SR 执行，Quality 模式为 `1707x960 -> 2560x1440`，色彩为
-DisplayEncoded、深度为 reversed-Z。画质、运动响应、遮挡、UI、重置行为和
-玩家验收均未宣称完成。详见[原生 DLSS 验证记录](docs/notes/native-dlss-validation.md)。
+原生 NVIDIA DLSS 超分辨率与 DLAA 仍属于具备有界验证的实验性功能，不是经过全量验证的常规
+或可直接使用功能。项目计划在 Windows 与 Linux 发布包中启用 NGX 支持，具体以
+自动化 CI 构建产物为准。本地 Windows SDK-on 构建已在 RTX 5080 上确认 Quality
+模式游戏内 NGX SR 执行（`1707x960 -> 2560x1440`、DisplayEncoded 色彩、reversed-Z 深度），
+DLAA 已具备 CPU 契约与运行时查询支撑。画质、细线、运动响应、遮挡、UI 元素、
+重置行为和完整玩家验收均未宣称完成。详见[原生 DLSS 验证记录](docs/notes/native-dlss-validation.md)。
+
+## v0.6.11 发布版（待发布）
+
+v0.6.11 版本引入实验性原生 NVIDIA DLSS 超分辨率（SR）与 DLAA 支持、游戏内图形设置缩放技术选项、长列表视口滚动以及 Start/Enter 聚焦“保存”且不立即保存的功能。Windows 与 Linux 发布包计划包含 NGX 支持，等待自动化 CI 构建验证。画质、运动响应及玩家验收均未宣称完成。详见[更新日志](CHANGELOG.md#v0611--2026-09-21)与[开发状态](docs/STATUS.md)。
 
 ## v0.6.7 发布版
 

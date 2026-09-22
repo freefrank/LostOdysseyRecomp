@@ -92,6 +92,29 @@ def main():
                      licenses / 'Unifont-OFL-1.1.txt')
         for dll in ('dxcompiler.dll', 'dxil.dll'):
             shutil.copy2(runtime.parent / dll, package / dll)
+        dlss_runtime = runtime.parent / 'nvngx_dlss.dll'
+        if dlss_runtime.is_file():
+            shutil.copy2(dlss_runtime, package / 'nvngx_dlss.dll')
+            # NVIDIA DLSS SDK License and redistribution notice per Section 2(b)
+            dlss_sdk_root = None
+            for candidate in [
+                ROOT / 'out/deps/nvidia-dlss',
+                ROOT / '.cache/deps/nvidia-dlss-37495948',
+            ]:
+                if (candidate / 'LICENSE.txt').is_file():
+                    dlss_sdk_root = candidate
+                    break
+            if dlss_sdk_root:
+                dlss_lic_dest = licenses / 'NVIDIA-DLSS'
+                dlss_lic_dest.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(dlss_sdk_root / 'LICENSE.txt', dlss_lic_dest / 'LICENSE.txt')
+                notice_text = (
+                    "This software contains source code and/or runtime components provided by NVIDIA Corporation.\n"
+                    "NVIDIA DLSS SDK Version: 310.9.1 (commit 374959484e79a640feaba44c93ac8cfb0a03f5b5)\n"
+                )
+                (dlss_lic_dest / 'NOTICE.txt').write_text(notice_text, encoding='utf-8')
+            else:
+                raise SystemExit('nvngx_dlss.dll is packaged but DLSS SDK license is missing.')
         shutil.copytree(DXC_LICENSES, licenses / 'DXC')
         dependencies = [ROOT / 'thirdparty/SDL', ROOT / 'thirdparty/plume', ROOT / 'thirdparty/o1heap',
                         ROOT / 'thirdparty/unordered_dense', ROOT / 'thirdparty/smaa', ROOT / 'tools/XenonRecomp',

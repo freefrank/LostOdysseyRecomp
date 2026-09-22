@@ -63,6 +63,50 @@ def main():
         (appdir / "usr/lib").mkdir(parents=True)
         shutil.copy2(runtime, appdir / "usr/bin/LostOdysseyRecomp")
         shutil.copy2(dxc, appdir / "usr/lib/libdxcompiler.so")
+
+        # Include DLSS Linux runtime if present
+        dlss_runtime = runtime.parent / "libnvidia-ngx-dlss.so.310.9.1"
+        if dlss_runtime.is_file():
+            # NGX loader searches next to the executable (usr/bin) and in system/app library paths (usr/lib)
+            canonical_so = appdir / "usr/bin/libnvidia-ngx-dlss.so.310.9.1"
+            shutil.copy2(dlss_runtime, canonical_so)
+
+            def make_link_or_copy(source_rel, target_path, source_abs):
+                if not target_path.exists():
+                    try:
+                        target_path.symlink_to(source_rel)
+                    except OSError:
+                        shutil.copy2(source_abs, target_path)
+
+            # In usr/bin: provide unversioned and .so.1 links to canonical
+            make_link_or_copy("libnvidia-ngx-dlss.so.310.9.1", appdir / "usr/bin/libnvidia-ngx-dlss.so", canonical_so)
+            make_link_or_copy("libnvidia-ngx-dlss.so.310.9.1", appdir / "usr/bin/libnvidia-ngx-dlss.so.1", canonical_so)
+
+            # In usr/lib: provide relative symlink to ../bin/libnvidia-ngx-dlss.so.310.9.1, with fallback to copy
+            make_link_or_copy("../bin/libnvidia-ngx-dlss.so.310.9.1", appdir / "usr/lib/libnvidia-ngx-dlss.so.310.9.1", canonical_so)
+            make_link_or_copy("libnvidia-ngx-dlss.so.310.9.1", appdir / "usr/lib/libnvidia-ngx-dlss.so", canonical_so)
+            make_link_or_copy("libnvidia-ngx-dlss.so.310.9.1", appdir / "usr/lib/libnvidia-ngx-dlss.so.1", canonical_so)
+
+            # Stage DLSS License & Notice (mandatory when bundling runtime)
+            dlss_sdk_root = None
+            for candidate in [
+                ROOT / "out/deps/nvidia-dlss",
+                ROOT / ".cache/deps/nvidia-dlss-37495948",
+            ]:
+                if (candidate / "LICENSE.txt").is_file():
+                    dlss_sdk_root = candidate
+                    break
+            if not dlss_sdk_root:
+                raise SystemExit("libnvidia-ngx-dlss.so.310.9.1 is packaged but DLSS SDK license is missing.")
+
+            dlss_lic_dest = appdir / "usr/share/licenses/lost-odyssey-recomp/NVIDIA-DLSS"
+            dlss_lic_dest.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(dlss_sdk_root / "LICENSE.txt", dlss_lic_dest / "LICENSE.txt")
+            notice_text = (
+                "This software contains source code and/or runtime components provided by NVIDIA Corporation.\n"
+                "NVIDIA DLSS SDK Version: 310.9.1 (commit 374959484e79a640feaba44c93ac8cfb0a03f5b5)\n"
+            )
+            (dlss_lic_dest / "NOTICE.txt").write_text(notice_text, encoding="utf-8")
         stage_portable_shader_pack(runtime.parent, appdir / "usr/bin",
                                    appdir / "usr/share/licenses/lost-odyssey-recomp")
         desktop = LINUX_PACKAGING / "io.github.freefrank.LostOdysseyRecomp.desktop"

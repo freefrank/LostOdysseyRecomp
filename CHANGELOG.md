@@ -6,65 +6,49 @@ One record of completed changes, with unpublished work separated from verified r
 
 ## Unreleased / 未发布
 
+## v0.6.11 — 2026-09-21
+
 ### English
 
-- Implemented P0 foundation for native NVIDIA DLSS Super Resolution (SR) on the development branch:
-  - Added optional build support for pinned official NVIDIA DLSS SDK `310.9.1` (`374959484e79a640feaba44c93ac8cfb0a03f5b5`) using static CRT bootstrap libraries on Windows and static library on Linux.
-  - Implemented Plume Vulkan bridge extension hooks and external command boundaries (`VulkanExtensionHooks`, `VulkanExtensionStatus`, `beginExternalCommands`, and `endExternalCommands`).
-  - Added standalone and integrated capability probes (`LoNativeDlssProbe`, `LoNativeDlssReportTest`) verifying NGX feature discovery, Vulkan instance/device extension negotiation, capability parameters, and optimal input resolution queries.
-  - P0 validation gate passed on local hardware (NVIDIA RTX 5080, driver 616.56, reporting optimal inputs for 1080p: Quality 1280×720, Balanced 1114×626, Performance 960×540). Controlled injection of missing runtime DLL verified expected standalone negative probe exit (exit 1).
-- Implemented P1 temporal input contracts and true lower-resolution rendering plan:
-  - CPU frame planner generates versioned 24-word snapshot packets with true lower internal rendering resolution, request signatures, geometry epochs, and exact NGX output sizing.
-  - Sizing cache queries NGX recommended dimensions on demand; added native 1280×720 verification on local hardware (Quality 853×480, Balanced 742×418, Performance 640×360, exit 0).
+- Add experimental native NVIDIA DLSS Super Resolution (SR) and Deep Learning Anti-Aliasing (DLAA) support, with planned Windows and Linux release packaging (pending CI verification):
+  - Integrates official NVIDIA DLSS SDK `310.9.1` (`374959484e79a640feaba44c93ac8cfb0a03f5b5`) with static CRT bootstrap libraries on Windows and static libraries on Linux. Intended release packages enable NGX support pending automated CI builds.
+  - Implements Plume Vulkan bridge extension hooks (`VulkanExtensionHooks`, `VulkanExtensionStatus`), external command boundaries (`beginExternalCommands`, `endExternalCommands`), and standalone/integrated capability probes (`LoNativeDlssProbe`, `LoNativeDlssReportTest`).
+  - Implements CPU frame planner contracts with versioned 24-word snapshot packets, request signatures, geometry epochs, and exact NGX output sizing queries for 16:9, 21:9, and non-standard drawables.
   - Renderer captures pre-TAA color, single-channel R32 current depth, and unjittered geometric motion vectors in input pixel units (`previousPixel - currentPixel`), with explicit history reset triggers (camera cut, extent, epoch, format) and GPU fence-qualified resource retirement.
-  - Added local `LO_DLSS_INPUT_PROBE=1` diagnostic mode to drive true low-resolution rendering and spatial presentation without executing legacy TAA. Ordinary DLSS configuration requests continue to fall back to legacy rendering paths until P2.
-    - Verified by 62 production CPU planner checks, 112 Vulkan GPU input checks on an NVIDIA RTX 5080, and compilation of all affected translation units. At P1 completion, no NGX Super Resolution evaluation (`NGX_VULKAN_EVALUATE_DLSS_EXT`) or game-level execution had taken place.
-    - Frame Generation (FG) remains deferred. Proprietary licensing for SDK-on binary distribution remains unresolved; no binary packages are released.
-- Advanced experimental P2 Super Resolution execution and destination promotion:
-  - Added persistent NGX session controller supporting native `NGX_VULKAN_CREATE_DLSS_EXT1` and `NGX_VULKAN_EVALUATE_DLSS_EXT` recording with checked native Vulkan command buffer reset, begin, and end operations. Standalone evaluation passed on RTX 5080 via first-pixel finite/sentinel-change check; validation layers were unavailable at runtime.
-  - Implemented renderer-side SR dispatch routing, monotonic submission-serial tracking, unknown color encoding bypass, and destination target promotion architecture with parked low-resolution fallback mappings and diagnostic capture hooks (`p2-oracle.jsonl`).
-  - Validated production destination resample (`DrawPromotionResample`) on local hardware via entry-point self-test (`--self-test-scene-copy-promotion`, 4×4 to 8×8 readback pass across 64 RGBA pixels with 0 mismatches and 1-byte alpha tolerance). Completed four initial review action items (routing guard, validation flags, JSON formatting, GPU drain before cleanup).
-  - Added persistent sizing-session handling, SDR qualification metadata and runtime geometry checks, cold-start motion recovery, and extent-growth preservation. Focused evidence passed for startup sizing (`.cache/evidence/native-dlss-p2-sizing-fix.json`), 14,720-pixel extent growth (`.cache/evidence/p2-native-run/extent_growth_regression_rev3.log`), 38 cold-start motion GPU checks (`out/tmp/isolated-motion-cold-start/cold_start_rev2.log`), and the CPU qualification boundary (`.cache/evidence/p2-native-run/color_qualification_cpu_boundary.log`).
-  - A bounded live-game production run on an RTX 5080 confirmed NGX SR at Quality, 1707x960 to 2560x1440, with DisplayEncoded color and reversed-Z depth. The run recorded one successful Create and 24 retained successful Evaluate records, limited by the 128-record cap rather than a total-call count; isolated use `10684` at submission serial `23614` was accepted and submitted and remained in flight in the snapshot, while `completed through 23612` is the earlier SR completion watermark. No failure was recorded.
-  - Gate 3 remains unapproved. Visual quality, motion response, occlusion, UI, reset behavior and player acceptance are not claimed. The `LO_NO_RENDERER` shutdown boundary and legacy execution fixture's unchecked `void` fence-wait gap remain open; historical P0/P1, native5, composite, f11889 and f2347 evidence retains its original limits. Handoff details are recorded in `docs/notes/native-dlss-handoff.zh-CN.md`.
-- In-game Settings menu graphics updates and list viewport scrolling on the development branch:
-  - Exposed **Upscaler** (`Off`, `DLSS`) and **DLSS quality** (`Quality`, `Balanced`, `Performance`, `DLAA`) in the Graphics tab.
+  - Introduces experimental DLAA mode (quality index 3) operating with 1:1 input-to-output resolution on supported RTX configurations, backed by 350 CPU contract checks (`LoNativeDlaaTest`) and runtime query bounds.
+  - Implements persistent NGX session controller supporting native `NGX_VULKAN_CREATE_DLSS_EXT1` and `NGX_VULKAN_EVALUATE_DLSS_EXT`, monotonic submission-serial tracking, SDR qualified color encoding bypass, and destination target promotion architecture with parked low-resolution fallback mappings.
+- In-game Settings menu graphics updates and list viewport scrolling:
+  - In Settings -> Graphics, exposed **Upscaler** (`Off`, `DLSS`) and **DLSS quality** (`Quality`, `Balanced`, `Performance`, `DLAA`).
   - DLSS quality row automatically hides when Upscaler is set to `Off`, preserving logical row indexing while navigation smoothly skips hidden entries.
   - Removed the **Internal resolution** row from the menu while retaining its persisted value in configuration for legacy fallbacks.
-  - Added scrolling support for overflowing menu lists exceeding 11 rows: the visible list tracks focus, accounts for hidden rows in rendering and pointer hit testing, and displays subtle top and bottom scroll indicators.
+  - Added scrolling support for overflowing menu lists exceeding 11 rows: visible list tracks focus, accounts for hidden rows in rendering and pointer hit testing, and displays subtle top and bottom scroll indicators.
   - On Graphics and Language tabs, pressing Start (or Enter) jumps focus directly to the **Save settings** row without triggering an immediate save, suppressing same-tick confirm input to prevent accidental saves.
   - Fixed MSVC build of the native DLSS test fixture by enforcing `/utf-8` source encoding for non-BOM CJK strings in `CMakeLists.txt`.
-  - Focused validation: 8/8 CPU tests passed earlier; synthetic overflowing list pixel tests (>11 rows with hidden row and scroll indicators) passed in `LoMenuRenderTest`; navigation, hidden-row skipping, boundary clicks, and Start/Enter focus-jump passed in `LoMenuFlowTest`; and incremental runtime build succeeded. The latest binary is not yet deployed, and UI changes are not yet user-accepted. Prior runtime logs show NGX availability on RTX 5080, sizing across 1440p and 4K switches, and transient motion pipeline pending fallbacks without constituting DLAA evaluation or visual acceptance.
+- Validation status & scope limits:
+  - CPU tests (8/8 native DLSS suites and 350 DLAA checks), synthetic overflowing menu render tests (`LoMenuRenderTest`), menu navigation/flow tests (`LoMenuFlowTest`), and incremental game compilation passed.
+  - Prior bounded live-game production runs on an RTX 5080 confirmed Quality NGX SR (`1707x960` to `2560x1440`, DisplayEncoded color, reversed-Z depth, 1 Create, 24 retained successful Evaluate records). User runtime logs confirm NGX availability, sizing across 1440p and 4K switches, and transient motion pipeline pending fallbacks.
+  - Release packages and CI artifacts are pending publication; DLSS and DLAA remain experimental development features with bounded verification. Gate 3 is not approved. Visual quality, motion response, fine lines, occlusion, UI elements, reset behavior, and player acceptance are not claimed.
 
 ### 简体中文
 
-- 在开发分支实现原生 NVIDIA DLSS 超分辨率（SR）P0 基础设施：
-  - 增加对固定版本 NVIDIA 官方 DLSS SDK `310.9.1`（commit `374959484e79a640feaba44c93ac8cfb0a03f5b5`）的可选构建支持，Windows 采用静态 CRT 引导库，Linux 采用静态库。
-  - 实现 Plume Vulkan 桥接扩展钩子与外部命令流边界（`VulkanExtensionHooks`、`VulkanExtensionStatus`、`beginExternalCommands` 与 `endExternalCommands`）。
-  - 新增独立与集成能力探测程序（`LoNativeDlssProbe`、`LoNativeDlssReportTest`），验证 NGX 特征发现、Vulkan 实例与设备扩展协商、能力参数读取及推荐输入分辨率查询。
-  - P0 验证门禁在本地设备通过（RTX 5080，驱动 616.56，1080p 目标下查询到 Quality 1280×720、Balanced 1114×626、Performance 960×540）。受控注入缺失运行库测试确认了独立探测程序的预期负向退出（exit 1）。
-- 实现 P1 时序输入契约与真实低分辨率渲染计划：
-  - CPU 帧计划器生成包含版本信息的 24-word 快照数据包，支持真实低内部渲染分辨率、请求签名、几何周期及精确 NGX 输出区域。
-  - 分辨率缓存按需查询 NGX 推荐输入尺寸；在实机上补充了 1280×720 输出验证（Quality 853×480、Balanced 742×418、Performance 640×360，退出码 0）。
+- 增加实验性原生 NVIDIA DLSS 超分辨率（SR）与深度学习抗锯齿（DLAA）支持，并计划启用 Windows 与 Linux 发布包构建（等待 CI 构建与验证）：
+  - 接入官方 NVIDIA DLSS SDK `310.9.1`（commit `374959484e79a640feaba44c93ac8cfb0a03f5b5`），Windows 采用静态 CRT 引导库，Linux 采用静态库。计划中的发布包默认启用 NGX 支持，具体交付以 CI 构建产物为准。
+  - 实现 Plume Vulkan 桥接扩展钩子（`VulkanExtensionHooks`、`VulkanExtensionStatus`）、外部命令边界（`beginExternalCommands`、`endExternalCommands`）以及独立与集成能力探测程序（`LoNativeDlssProbe`、`LoNativeDlssReportTest`）。
+  - 实现 CPU 帧计划器契约，支持版本化 24-word 快照数据包、请求签名、几何周期以及针对 16:9、21:9 和非标准尺寸的精确 NGX 输出区域查询。
   - 渲染器独立采集 TAA 前颜色、单通道 R32 当前深度以及未抖动的像素单位几何运动矢量（`previousPixel - currentPixel`），具备显式历史重置策略（切镜、尺寸、周期与格式变更）及基于 GPU fence 序列的生命周期管理。
-  - 新增本地 `LO_DLSS_INPUT_PROBE=1` 诊断模式，以驱动真实低分辨率与空间呈现，不执行旧版 TAA。在 P2 实现前，普通 DLSS 配置请求仍继续回退至原版渲染路径。
-  - 通过 62 项 CPU 生产计划器检查、RTX 5080 上的 112 项 Vulkan GPU 输入检查，以及所有受影响编译单元构建。在 P1 验收时，尚未调用 NGX SR 求值（`NGX_VULKAN_EVALUATE_DLSS_EXT`），未进行全游戏运行验收。
-  - 帧生成（FG）保持暂缓。包含 SDK 的二进制分发许可尚待确定，不发布二进制包。
-- 推进实验性 P2 超分辨率执行与目标提升：
-  - 完善持久化 NGX 会话控制器，支持原生 `NGX_VULKAN_CREATE_DLSS_EXT1` 与 `NGX_VULKAN_EVALUATE_DLSS_EXT` 录制，并对原生 Vulkan 命令缓冲 reset/begin/end 实施结果校验。RTX 5080 上的独立求值测试通过（经首像素有限值／哨兵变化检查）；运行时 Vulkan 验证层不可用。
-  - 实现渲染器侧 SR 路由调度、单调提交序号管理、未知色彩编码旁路保护，以及基于停放低分辨率目标的目标提升架构与诊断捕获钩子（`p2-oracle.jsonl`）。
-  - 通过启动入口自检（`--self-test-scene-copy-promotion`）在实机上验证了生产端提升重采样（`DrawPromotionResample`，4×4 升至 8×8 回读测试 64 个 RGBA 像素 0 差异且 alpha 容差 1 字节），并完成初审 4 项修复（路由守卫、验证层选项、JSON 格式与析构前 GPU 排空）。
-  - 增加持久化 sizing 会话、SDR 资格元数据与运行期几何检查、冷启动 motion 恢复和 extent-growth 数据保留。启动 sizing、14,720 像素扩容、38 项冷启动 motion GPU 检查及 CPU 色彩资格边界均有对应证据。
-  - RTX 5080 上一次有界的真实游戏生产运行已确认 Quality 模式 NGX SR，输入 `1707x960`、输出 `2560x1440`，色彩为 DisplayEncoded、深度为 reversed-Z。运行记录为 1 次成功 Create、24 条保留的成功 Evaluate 记录；受 128 条记录上限限制，不能据此推断总调用数。隔离 use `10684` 的提交序号 `23614` 已接受并提交，快照中仍在处理中；`completed through 23612` 是更早的 SR 完成水位。未记录失败。
-  - Gate 3 仍未批准；画质、运动响应、遮挡、UI、重置行为和玩家验收均未宣称完成。`LO_NO_RENDERER` 关闭排空边界及旧执行 fixture 未检查 `void` fence wait 的缺口仍开放；历史 P0/P1、native5、composite、f11889 与 f2347 证据保留原有边界。交接指南见 `docs/notes/native-dlss-handoff.zh-CN.md`。
-- 开发分支更新游戏内设置菜单图形选项及列表视口滚动支持：
-  - 在“图形”分页中增加**缩放技术**（关、DLSS）与 **DLSS 质量**（质量、平衡、性能、DLAA）选项。
+  - 引入实验性 DLAA 模式（质量索引 3），在受支持的 RTX 配置上以 1:1 输入输出比例运行，并通过 350 项 CPU 契约检查（`LoNativeDlaaTest`）及运行时尺寸查询约束验证。
+  - 实现持久化 NGX 会话控制器，支持原生 `NGX_VULKAN_CREATE_DLSS_EXT1` 与 `NGX_VULKAN_EVALUATE_DLSS_EXT`、单调提交序号管理、SDR 合格色彩编码旁路保护，以及基于停放低分辨率目标的目标提升架构。
+- 游戏内设置菜单图形选项及列表视口滚动更新：
+  - 在“设置” -> “图形”中，增加**缩放技术**（关、DLSS）与 **DLSS 质量**（质量、平衡、性能、DLAA）选项。
   - 当缩放技术为“关”时自动隐藏“DLSS 质量”行，保持逻辑行号稳定并在导航中平滑跳过隐藏行。
-  - 从图形菜单中移除“内部分辨率”行，但保留已配置在文件中的原有数值以供回退使用。
-  - 增加超过 11 行的长列表滚动支持：视口自动跟随焦点行，在渲染和指针点击判定中适配隐藏行偏移，并显示顶部和底部滚动提示。
+  - 从图形菜单中移除“内部分辨率”行，但保留已配置在文件中的原有数值以供兼容回退使用。
+  - 增加超过 11 行的长列表滚动支持：视口自动跟随焦点行，在渲染和指针点击判定中适配隐藏行偏移，并显示顶部和底部滚动指示器。
   - 在“图形”与“语言”分页中，按 Start（或 Enter）直接将焦点移动至“保存设置”行而不会立即触发保存，同时抑制同帧确认输入以防止误触。
   - 在 `tools/tests/native_dlss/CMakeLists.txt` 中增加 `/utf-8` 编译选项，修复 MSVC 下非 BOM CJK 字符串的解析问题。
-  - 定向验证：前期 8/8 项 CPU 测试已通过；`LoMenuRenderTest` 合成超长列表（>11 行，包含隐藏行与滚动指示器）像素对比通过；`LoMenuFlowTest` 验证了导航、隐藏行跳过、点击边界与 Start/Enter 焦点跳转；主程序增量编译通过。最新二进制尚未部署，界面改动尚未获得用户验收。前期运行日志显示 RTX 5080 上 NGX 可用、1440p/4K 切换及暂态 motion pipeline pending 回退，不足以作为 DLAA 求值或画质验收依据。
+- 验证状态与范围限制：
+  - CPU 测试（8/8 项原生 DLSS 测试套件及 350 项 DLAA 检查）、`LoMenuRenderTest` 超长列表像素级比对、`LoMenuFlowTest` 导航/流转测试以及主程序增量编译均已通过。
+  - RTX 5080 上前期的有界真实游戏运行已确认 Quality 模式 NGX SR（`1707x960 -> 2560x1440`、DisplayEncoded 色彩、reversed-Z 深度、1 次成功 Create、24 条保留的成功 Evaluate 记录）。用户实机日志确认了 RTX 5080 上的 NGX 可用性、1440p/4K 切换及暂态 motion pipeline pending 回退。
+  - 发布包与 CI 产物仍待构建与发布核验；DLSS 与 DLAA 仍属于具备有界验证的实验性功能。Gate 3 尚未批准；画质、细线、运动响应、遮挡、UI 元素、重置行为和玩家验收均未宣称完成。
 
 ## v0.6.7 — 2026-09-20
 

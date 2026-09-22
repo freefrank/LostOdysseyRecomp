@@ -35,6 +35,12 @@ class PackagePayloadTests(unittest.TestCase):
 
         self.assertNotIn('pyinstaller', requirements)
 
+    def test_release_payload_handles_dlss_runtime_and_license(self):
+        source = PACKAGE_SCRIPT.read_text(encoding='utf-8')
+        self.assertIn("dlss_runtime = runtime.parent / 'nvngx_dlss.dll'", source)
+        self.assertIn("licenses / 'NVIDIA-DLSS'", source)
+        self.assertIn("nvngx_dlss.dll is packaged but DLSS SDK license is missing.", source)
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

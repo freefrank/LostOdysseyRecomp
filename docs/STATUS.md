@@ -1,26 +1,28 @@
 # Project status
 
-## Development branch: Native DLSS integration (P1 passed; P2 experimental live execution)
+## v0.6.11 release preparation (pending publication / 待发布)
 
-Development work on native NVIDIA DLSS Super Resolution is underway on the `dlss` feature branch:
-- **P0 Foundation**: Baseline established at commit `089676f`, covering optional NGX SDK integration (v310.9.1 / `374959484e79a640feaba44c93ac8cfb0a03f5b5`), Plume Vulkan bridge hooks (`VulkanExtensionHooks` / `VulkanExtensionStatus`), external command boundaries, standalone probe (`LoNativeDlssProbe`), and exit policy tests.
-- **P1 Scope & Status**: P1 gate passed and committed in `c6bc50b` (output sizing support) and `3f40030` (frame planning inputs), with P0/P1 pushed to `origin/dlss` at commit `91bf37ea846189f5e7b1f4c12ca631e5ed510203`. P1 introduces true lower internal rendering resolution, CPU frame planning with versioned 24-word snapshot packets, request-level DLSS disable latches independent of legacy OOM retry state, and exact NGX output sizing. Renderer captures pre-TAA color, R32 current depth, and unjittered input-pixel motion vectors with explicit reset and GPU fence-qualified resource retirement.
-- **P2 Scope & Status**: P2 has advanced beyond the historical checkpoint. Persistent sizing, SDR qualification, extent-growth preservation, cold-start motion recovery and production SR routing are implemented on the source development branch, with the tested candidate based on `c2f0602` and the documented changes here. A bounded live-game run on RTX 5080 confirmed Quality NGX SR at `1707x960 -> 2560x1440`, `DisplayEncoded`, reversed-Z. The runtime record retained one successful Create and 24 successful Evaluate records under its 128-record cap; isolated use `10684` at submission serial `23614` was accepted/submitted and remained in flight in the snapshot, while `completed through 23612` is the earlier SR completion watermark. No failure was recorded. Gate 3 remains unapproved and visual/player acceptance is not claimed. The `LO_NO_RENDERER` shutdown boundary and legacy `void` fence-wait fixture gap remain open. Historical P0/P1, native5, composite, f11889 and f2347 evidence retains its original limits. Comprehensive handoff and developer guide are documented in [docs/notes/native-dlss-handoff.zh-CN.md](notes/native-dlss-handoff.zh-CN.md).
-- **Verification Evidence**:
-  - 62 production CPU planner checks (`LoP1FramePlanTest`) covering request signatures, geometry epochs, low-720 fallbacks, latching, and mailbox retry behavior (reused from P1).
-  - Standalone NGX query verified optimal settings for 1280×720 output on local RTX 5080: Quality 853×480, Balanced 742×418, Performance 640×360 (`raw = 1`, exit 0).
-  - 112 focused Vulkan GPU input checks (`motion_replay_gpu_test --p1-inputs-only`) on an NVIDIA RTX 5080 verifying real R32 depth, pre-TAA color capture, unjittered geometric MV conventions, camera-cut resets, single motion finalization, and fence-qualified resource retirement (reused from P1).
-  - Standalone P2 native execution fixture (`LoNativeDlssExecutionTest`, `.cache/evidence/native-dlss-p2-a.json`) passed native NGX create/evaluate recording, persistent session sizing, and isolated buffer exclusion. The newer live-game production record (`.cache/evidence/game-sr-runtime.json`) confirms Quality `1707x960 -> 2560x1440`, `DisplayEncoded`, reversed-Z, one successful Create, 24 retained successful Evaluate records under a 128-record cap, accepted/submitted use `10684` at serial `23614` still in flight in the snapshot, earlier completion watermark `23612`, and no failure. This proves production execution only; it does not prove visual quality or player acceptance.
-  - Production resample verification (`DrawPromotionResample`, `out/build/windows-clang/p2-bootstrap-cwd/evidence/native-dlss-p2-resample.json`) executed a 4×4 to 8×8 RGBA resample (64 destination pixels) on local RTX 5080 hardware with 0 mismatches and 1-byte alpha tolerance.
-  - Compilation of all affected runtime and test translation units reported passing.
-- **Scope Limits**:
-  - Live production SR execution is confirmed only for the bounded run recorded in `.cache/evidence/game-sr-runtime.json`. Visual quality, motion response, occlusion, UI, reset behavior, performance and player acceptance remain unclaimed.
-  - The entry-point self-test verified `DrawPromotionResample` isolated execution only. It does not validate active target promotion mapping, guest alpha preservation, mid-frame Flush survival, UI/draw ordering, texture aliasing, fence synchronization, dynamic window resizing, or full-game behavior. These gaps are expected for the current WIP checkpoint and do not require completion before pausing.
-  - Native Linux execution remains skipped and untested.
-  - The qualified SDR path requires the actual physical uploaded quad, exact resolve ordinal and net RGB view; other candidate paths remain `Unknown`. The analyzed f11889 capture remains historical evidence for its display-encoded gamma-2.2 chain and does not establish whole-game color behavior.
-  - The test suite does not simulate temporal frame-time discontinuities (such as 250 ms stalls). Persisted configuration handling (legacy migration, missing keys, invalid enums, PreviewConfig, and SaveConfig write failure) remains unexecuted in focused fixtures.
-- **Redistribution & Licensing**: SDK-on builds link proprietary NVIDIA components. Binary redistribution licensing remains unresolved, and no binary packages are released.
-- Detailed P0, P1, and P2 verification records are maintained in [Native DLSS Validation](notes/native-dlss-validation.md).
+Release v0.6.11 merges native NVIDIA DLSS Super Resolution (SR) and DLAA development into `main` (fast-forwarded through `943062f`), exposes upscaler options in the in-game Graphics menu, adds list viewport scrolling for long menus, and updates the native DLSS test fixture for MSVC `/utf-8` compatibility. Windows and Linux release packages are configured to include packaged NGX support pending automated CI builds.
+
+Status & Verification Limits:
+- **Publication Pending**: Public artifacts and Release CI verification are pending. The version is not yet delivered or available on GitHub Releases.
+- **Experimental Status**: DLSS and DLAA remain experimental features with bounded verification. Gate 3 is not approved. Visual quality, motion response, fine lines, occlusion, UI elements, reset behavior, and full player acceptance are not claimed.
+- **Implemented Scope**:
+  - Official NVIDIA DLSS SDK `310.9.1` (`374959484e79a640feaba44c93ac8cfb0a03f5b5`) integration with static CRT on Windows and static libraries on Linux.
+  - Plume Vulkan bridge hooks (`VulkanExtensionHooks` / `VulkanExtensionStatus`), external command boundaries, and standalone/integrated capability probes (`LoNativeDlssProbe`, `LoNativeDlssReportTest`).
+  - CPU frame planner supporting 24-word snapshot packets, request signatures, geometry epochs, and exact NGX output sizing queries for 16:9, 21:9, and non-standard drawables.
+  - Renderer capture of pre-TAA color, single-channel R32 depth, unjittered geometric motion vectors, and fence-qualified resource retirement.
+  - Experimental DLAA mode (quality index 3) operating 1:1 input to output on supported RTX hardware, backed by 350 CPU contract checks (`LoNativeDlaaTest`).
+  - Persistent NGX session controller (`NGX_VULKAN_CREATE_DLSS_EXT1`, `NGX_VULKAN_EVALUATE_DLSS_EXT`), monotonic submission-serial tracking, SDR color encoding bypass, and target promotion architecture with parked low-resolution fallbacks.
+  - In-game Settings menu: **Upscaler** (`Off`, `DLSS`), **DLSS quality** (`Quality`, `Balanced`, `Performance`, `DLAA`, hidden when Upscaler is Off), Internal resolution row removed from UI (persisted value retained in configuration for legacy fallbacks), list viewport scrolling (>11 rows) with hidden-row awareness and indicators, and Start/Enter focus-jump to Save without saving (same-tick confirm suppressed).
+  - MSVC compilation fix for native DLSS test fixture using `/utf-8` in `tools/tests/native_dlss/CMakeLists.txt`.
+- **Evidence Baseline**:
+  - CPU test suites passed (8/8 native DLSS suites including 62 frame-plan checks and 350 DLAA checks).
+  - Menu rendering tests (`LoMenuRenderTest`) passed synthetic overflowing list pixel checks (>11 rows with hidden row and indicators).
+  - Menu flow tests (`LoMenuFlowTest`) passed navigation, hidden-row skipping, pointer click boundaries, and Start/Enter focus jumps.
+  - Windows SDK-enabled incremental game compilation passed.
+  - Bounded live-game production run on an RTX 5080 confirmed Quality NGX SR (`1707x960 -> 2560x1440`, DisplayEncoded color, reversed-Z depth, 1 Create, 24 retained successful Evaluate records under a 128-record cap). Runtime logs show NGX availability on RTX 5080, sizing across 1440p and 4K switches, and transient motion pipeline pending fallbacks; these do not establish full DLAA image-quality or player acceptance.
+- Detailed verification records are maintained in [Native DLSS Validation](notes/native-dlss-validation.md) and [Native DLAA Initial (zh-CN)](notes/native-dlaa-initial.zh-CN.md).
 
 ## v0.6.7 published / v0.6.7 已发布
 
