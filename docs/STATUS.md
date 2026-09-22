@@ -1,15 +1,26 @@
 # Project status
 
-## v0.6.11 release preparation (pending publication / 待发布)
+## v0.6.11 published / v0.6.11 已发布
 
-Release v0.6.11 merges native NVIDIA DLSS Super Resolution (SR) and DLAA development into `main` (fast-forwarded through `943062f`), exposes upscaler options in the in-game Graphics menu, adds list viewport scrolling for long menus, and updates the native DLSS test fixture for MSVC `/utf-8` compatibility. Windows and Linux release packages are configured to include packaged NGX support pending automated CI builds.
+v0.6.11 was published on 2026-09-22T06:44:37Z from tag/source commit
+`3daba372ea34c93b65b55c25ee5daa4f4ed5573d` via Release CI
+[35687931776](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35687931776) as the
+latest public release (non-draft, non-prerelease). It packages experimental native NVIDIA DLSS Super
+Resolution (SR) and DLAA support, in-game Graphics menu upscaler options, list viewport scrolling,
+and official packaged NVIDIA NGX runtime libraries on Windows and Linux.
+
+Release and delivery verification:
+- Release CI [35687931776](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35687931776) succeeded from commit `3daba372ea34c93b65b55c25ee5daa4f4ed5573d`. Public release packages are available at [GitHub Release v0.6.11](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.11).
+- Windows ZIP `LostOdysseyRecomp-windows-x64-v0.6.11.zip` SHA-256 matches sidecar and GitHub digest: `362592d16f45bc56fd686c4f0bc4c4e23e8a82eafffdcd8f6c77971ed3c9e823`.
+- Linux AppImage `LostOdysseyRecomp-linux-x64-v0.6.11.AppImage` SHA-256 matches sidecar and GitHub digest: `2e2ada519ae7b3b63be306d7d301bf26be677c0af08f13b7653c2e54c9727bf9`.
+- Both package files and their `.sha256` sidecars returned HTTP 200. Windows manifest confirms clean non-development version `v0.6.11`, build commit `3daba37`, and bundled `nvngx_dlss.dll` matching the audited SDK 310.9.1 (`374959484e79a640feaba44c93ac8cfb0a03f5b5`) with verified LICENSE and NOTICE. Linux AppImage SquashFS inspection confirms canonical `usr/bin/libnvidia-ngx-dlss.so.310.9.1`, library symlinks, license, and notice.
+- Published release notes match the extracted CHANGELOG section.
 
 Status & Verification Limits:
-- **Publication Pending**: Public artifacts and Release CI verification are pending. The version is not yet delivered or available on GitHub Releases.
 - **Experimental Status**: DLSS and DLAA remain experimental features with bounded verification. Gate 3 is not approved. Visual quality, motion response, fine lines, occlusion, UI elements, reset behavior, and full player acceptance are not claimed.
 - **Implemented Scope**:
-  - Official NVIDIA DLSS SDK `310.9.1` (`374959484e79a640feaba44c93ac8cfb0a03f5b5`) integration with static CRT on Windows and static libraries on Linux.
-  - Plume Vulkan bridge hooks (`VulkanExtensionHooks` / `VulkanExtensionStatus`), external command boundaries, and standalone/integrated capability probes (`LoNativeDlssProbe`, `LoNativeDlssReportTest`).
+  - Official NVIDIA DLSS SDK `310.9.1` integration with static CRT on Windows and static libraries on Linux.
+  - Plume Vulkan bridge hooks (`VulkanExtensionHooks` / `VulkanExtensionStatus`), external command boundaries, and capability probes (`LoNativeDlssProbe`, `LoNativeDlssReportTest`).
   - CPU frame planner supporting 24-word snapshot packets, request signatures, geometry epochs, and exact NGX output sizing queries for 16:9, 21:9, and non-standard drawables.
   - Renderer capture of pre-TAA color, single-channel R32 depth, unjittered geometric motion vectors, and fence-qualified resource retirement.
   - Experimental DLAA mode (quality index 3) operating 1:1 input to output on supported RTX hardware, backed by 350 CPU contract checks (`LoNativeDlaaTest`).
@@ -20,9 +31,20 @@ Status & Verification Limits:
   - CPU test suites passed (8/8 native DLSS suites including 62 frame-plan checks and 350 DLAA checks).
   - Menu rendering tests (`LoMenuRenderTest`) passed synthetic overflowing list pixel checks (>11 rows with hidden row and indicators).
   - Menu flow tests (`LoMenuFlowTest`) passed navigation, hidden-row skipping, pointer click boundaries, and Start/Enter focus jumps.
-  - Windows SDK-enabled incremental game compilation passed.
+  - Windows and Linux release packaging jobs passed in Release CI.
   - Bounded live-game production run on an RTX 5080 confirmed Quality NGX SR (`1707x960 -> 2560x1440`, DisplayEncoded color, reversed-Z depth, 1 Create, 24 retained successful Evaluate records under a 128-record cap). Runtime logs show NGX availability on RTX 5080, sizing across 1440p and 4K switches, and transient motion pipeline pending fallbacks; these do not establish full DLAA image-quality or player acceptance.
 - Detailed verification records are maintained in [Native DLSS Validation](notes/native-dlss-validation.md) and [Native DLAA Initial (zh-CN)](notes/native-dlaa-initial.zh-CN.md).
+
+v0.6.11 已发布：
+
+v0.6.11 已于 2026-09-22T06:44:37Z 从 tag/source commit `3daba372ea34c93b65b55c25ee5daa4f4ed5573d` 通过 Release CI [35687931776](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35687931776) 正式发布为 latest 公开版本（非 draft、非 prerelease）。包含实验性原生 NVIDIA DLSS 超分辨率（SR）与 DLAA 支持、游戏内图形设置缩放技术选项、长列表视口滚动以及 Windows/Linux 正式发布包官方 NVIDIA NGX 运行库打包。
+
+发布与资产核验：
+- Release CI [35687931776](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35687931776) 构建成功，公开资产见 [GitHub Release v0.6.11](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.11)。
+- Windows ZIP `LostOdysseyRecomp-windows-x64-v0.6.11.zip` SHA-256 与 sidecar 和 GitHub digests 一致：`362592d16f45bc56fd686c4f0bc4c4e23e8a82eafffdcd8f6c77971ed3c9e823`。
+- Linux AppImage `LostOdysseyRecomp-linux-x64-v0.6.11.AppImage` SHA-256 与 sidecar 和 GitHub digests 一致：`2e2ada519ae7b3b63be306d7d301bf26be677c0af08f13b7653c2e54c9727bf9`。
+- 两平台包及各自 `.sha256` sidecar 均返回 HTTP 200。Windows manifest 报告版本 `v0.6.11`、commit `3daba37`，内置 `nvngx_dlss.dll` 与 SDK 310.9.1 严格吻合；Linux AppImage 经 SquashFS 解构核实包含 `usr/bin/libnvidia-ngx-dlss.so.310.9.1`、库软链及 License/Notice 文件。
+- 公开 Release 说明与 CHANGELOG 提取一致。
 
 ## v0.6.7 published / v0.6.7 已发布
 

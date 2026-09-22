@@ -6,13 +6,13 @@ One record of completed changes, with unpublished work separated from verified r
 
 ## Unreleased / 未发布
 
-## v0.6.11 — 2026-09-21
+## v0.6.11 — 2026-09-22
 
 ### English
 
-- Add experimental native NVIDIA DLSS Super Resolution (SR) and Deep Learning Anti-Aliasing (DLAA) support, with planned Windows and Linux release packaging (pending CI verification):
-  - Integrates official NVIDIA DLSS SDK `310.9.1` (`374959484e79a640feaba44c93ac8cfb0a03f5b5`) with static CRT bootstrap libraries on Windows and static libraries on Linux. Intended release packages enable NGX support pending automated CI builds.
-  - Implements Plume Vulkan bridge extension hooks (`VulkanExtensionHooks`, `VulkanExtensionStatus`), external command boundaries (`beginExternalCommands`, `endExternalCommands`), and standalone/integrated capability probes (`LoNativeDlssProbe`, `LoNativeDlssReportTest`).
+- Add experimental native NVIDIA DLSS Super Resolution (SR) and Deep Learning Anti-Aliasing (DLAA) support, with official packaged NGX libraries for Windows and Linux:
+  - Integrates official NVIDIA DLSS SDK `310.9.1` (`374959484e79a640feaba44c93ac8cfb0a03f5b5`). Windows release ZIP packages `nvngx_dlss.dll` with static CRT bootstrap libraries, verified LICENSE and NOTICE. Linux AppImage bundles canonical `usr/bin/libnvidia-ngx-dlss.so.310.9.1` with `usr/lib` symlinks, license, and notice.
+  - Implements Plume Vulkan bridge extension hooks (`VulkanExtensionHooks`, `VulkanExtensionStatus`), external command boundaries (`beginExternalCommands`, `endExternalCommands`), and capability probes (`LoNativeDlssProbe`, `LoNativeDlssReportTest`).
   - Implements CPU frame planner contracts with versioned 24-word snapshot packets, request signatures, geometry epochs, and exact NGX output sizing queries for 16:9, 21:9, and non-standard drawables.
   - Renderer captures pre-TAA color, single-channel R32 current depth, and unjittered geometric motion vectors in input pixel units (`previousPixel - currentPixel`), with explicit history reset triggers (camera cut, extent, epoch, format) and GPU fence-qualified resource retirement.
   - Introduces experimental DLAA mode (quality index 3) operating with 1:1 input-to-output resolution on supported RTX configurations, backed by 350 CPU contract checks (`LoNativeDlaaTest`) and runtime query bounds.
@@ -24,15 +24,18 @@ One record of completed changes, with unpublished work separated from verified r
   - Added scrolling support for overflowing menu lists exceeding 11 rows: visible list tracks focus, accounts for hidden rows in rendering and pointer hit testing, and displays subtle top and bottom scroll indicators.
   - On Graphics and Language tabs, pressing Start (or Enter) jumps focus directly to the **Save settings** row without triggering an immediate save, suppressing same-tick confirm input to prevent accidental saves.
   - Fixed MSVC build of the native DLSS test fixture by enforcing `/utf-8` source encoding for non-BOM CJK strings in `CMakeLists.txt`.
-- Validation status & scope limits:
-  - CPU tests (8/8 native DLSS suites and 350 DLAA checks), synthetic overflowing menu render tests (`LoMenuRenderTest`), menu navigation/flow tests (`LoMenuFlowTest`), and incremental game compilation passed.
+- Release delivery & verification status:
+  - Published release [v0.6.11](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.11) built from commit `3daba372ea34c93b65b55c25ee5daa4f4ed5573d` via Release CI [35687931776](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35687931776).
+  - Public release assets verified against SHA-256 sidecars and GitHub digests: Windows ZIP `362592d16f45bc56fd686c4f0bc4c4e23e8a82eafffdcd8f6c77971ed3c9e823`, Linux AppImage `2e2ada519ae7b3b63be306d7d301bf26be677c0af08f13b7653c2e54c9727bf9`.
+  - Windows manifest confirms non-development version `v0.6.11`, commit `3daba37`, and bundled `nvngx_dlss.dll` matching the audited SDK. Linux AppImage SquashFS inspection confirms canonical `usr/bin/libnvidia-ngx-dlss.so.310.9.1`, library symlinks, license, and notice files.
+  - CPU tests (8/8 native DLSS suites and 350 DLAA checks), synthetic overflowing menu render tests (`LoMenuRenderTest`), menu flow tests (`LoMenuFlowTest`), and Windows/Linux packaging builds passed.
   - Prior bounded live-game production runs on an RTX 5080 confirmed Quality NGX SR (`1707x960` to `2560x1440`, DisplayEncoded color, reversed-Z depth, 1 Create, 24 retained successful Evaluate records). User runtime logs confirm NGX availability, sizing across 1440p and 4K switches, and transient motion pipeline pending fallbacks.
-  - Release packages and CI artifacts are pending publication; DLSS and DLAA remain experimental development features with bounded verification. Gate 3 is not approved. Visual quality, motion response, fine lines, occlusion, UI elements, reset behavior, and player acceptance are not claimed.
+  - DLSS and DLAA remain experimental features with bounded verification. Gate 3 is not approved. Visual quality, motion response, fine lines, occlusion, UI elements, reset behavior, and player acceptance are not claimed.
 
 ### 简体中文
 
-- 增加实验性原生 NVIDIA DLSS 超分辨率（SR）与深度学习抗锯齿（DLAA）支持，并计划启用 Windows 与 Linux 发布包构建（等待 CI 构建与验证）：
-  - 接入官方 NVIDIA DLSS SDK `310.9.1`（commit `374959484e79a640feaba44c93ac8cfb0a03f5b5`），Windows 采用静态 CRT 引导库，Linux 采用静态库。计划中的发布包默认启用 NGX 支持，具体交付以 CI 构建产物为准。
+- 增加实验性原生 NVIDIA DLSS 超分辨率（SR）与深度学习抗锯齿（DLAA）支持，并在 Windows 与 Linux 正式发布包中内置官方 NGX 运行库：
+  - 接入官方 NVIDIA DLSS SDK `310.9.1`（commit `374959484e79a640feaba44c93ac8cfb0a03f5b5`）。Windows 发布包包含带静态 CRT 引导库的 `nvngx_dlss.dll` 及 LICENSE 与 NOTICE；Linux AppImage 内置规范的 `usr/bin/libnvidia-ngx-dlss.so.310.9.1`、`usr/lib` 软链接及对应授权说明文件。
   - 实现 Plume Vulkan 桥接扩展钩子（`VulkanExtensionHooks`、`VulkanExtensionStatus`）、外部命令边界（`beginExternalCommands`、`endExternalCommands`）以及独立与集成能力探测程序（`LoNativeDlssProbe`、`LoNativeDlssReportTest`）。
   - 实现 CPU 帧计划器契约，支持版本化 24-word 快照数据包、请求签名、几何周期以及针对 16:9、21:9 和非标准尺寸的精确 NGX 输出区域查询。
   - 渲染器独立采集 TAA 前颜色、单通道 R32 当前深度以及未抖动的像素单位几何运动矢量（`previousPixel - currentPixel`），具备显式历史重置策略（切镜、尺寸、周期与格式变更）及基于 GPU fence 序列的生命周期管理。
@@ -45,10 +48,13 @@ One record of completed changes, with unpublished work separated from verified r
   - 增加超过 11 行的长列表滚动支持：视口自动跟随焦点行，在渲染和指针点击判定中适配隐藏行偏移，并显示顶部和底部滚动指示器。
   - 在“图形”与“语言”分页中，按 Start（或 Enter）直接将焦点移动至“保存设置”行而不会立即触发保存，同时抑制同帧确认输入以防止误触。
   - 在 `tools/tests/native_dlss/CMakeLists.txt` 中增加 `/utf-8` 编译选项，修复 MSVC 下非 BOM CJK 字符串的解析问题。
-- 验证状态与范围限制：
-  - CPU 测试（8/8 项原生 DLSS 测试套件及 350 项 DLAA 检查）、`LoMenuRenderTest` 超长列表像素级比对、`LoMenuFlowTest` 导航/流转测试以及主程序增量编译均已通过。
+- 发布交付与验证状态：
+  - 公开版本 [v0.6.11](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.11) 已从 commit `3daba372ea34c93b65b55c25ee5daa4f4ed5573d` 通过 Release CI [35687931776](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35687931776) 完成构建发布。
+  - 公开资产经 SHA-256 sidecar 与 GitHub digests 核验无误：Windows ZIP `362592d16f45bc56fd686c4f0bc4c4e23e8a82eafffdcd8f6c77971ed3c9e823`，Linux AppImage `2e2ada519ae7b3b63be306d7d301bf26be677c0af08f13b7653c2e54c9727bf9`。
+  - Windows manifest 确认正式版本 `v0.6.11`、源码 commit `3daba37`，打包的 `nvngx_dlss.dll` 与 SDK 严格吻合；Linux AppImage 经 SquashFS 解构核实包含 `usr/bin/libnvidia-ngx-dlss.so.310.9.1`、库软链、License 及 Notice。
+  - CPU 测试（8/8 项原生 DLSS 测试套件及 350 项 DLAA 检查）、`LoMenuRenderTest` 超长列表像素级比对、`LoMenuFlowTest` 交互流转测试及 Windows/Linux 打包均已通过。
   - RTX 5080 上前期的有界真实游戏运行已确认 Quality 模式 NGX SR（`1707x960 -> 2560x1440`、DisplayEncoded 色彩、reversed-Z 深度、1 次成功 Create、24 条保留的成功 Evaluate 记录）。用户实机日志确认了 RTX 5080 上的 NGX 可用性、1440p/4K 切换及暂态 motion pipeline pending 回退。
-  - 发布包与 CI 产物仍待构建与发布核验；DLSS 与 DLAA 仍属于具备有界验证的实验性功能。Gate 3 尚未批准；画质、细线、运动响应、遮挡、UI 元素、重置行为和玩家验收均未宣称完成。
+  - DLSS 与 DLAA 仍属于具备有界验证的实验性功能。Gate 3 尚未批准；画质、细线、运动响应、遮挡、UI 元素、重置行为和玩家验收均未宣称完成。
 
 ## v0.6.7 — 2026-09-20
 

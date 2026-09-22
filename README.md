@@ -23,17 +23,17 @@ Optional diagnostics are off by default and can be disabled in Settings. See [Pr
 
 Native NVIDIA DLSS Super Resolution and DLAA are experimental features with
 bounded verification, not verified general or player-ready additions. Windows
-and Linux release packaging with NGX support is planned pending automated CI
-builds. A local Windows SDK-enabled build has demonstrated live-game NGX SR on
-an RTX 5080 at Quality (1707x960 to 2560x1440, DisplayEncoded color and
-reversed-Z depth), while DLAA is supported by CPU contracts and runtime
-queries. Visual quality, motion response, fine lines, occlusion, UI elements,
-reset behavior, and full player acceptance remain unclaimed. See the [native
-DLSS validation record](docs/notes/native-dlss-validation.md).
+and Linux release packages include official NGX runtime libraries. A local
+Windows SDK-enabled build has demonstrated live-game NGX SR on an RTX 5080 at
+Quality (1707x960 to 2560x1440, DisplayEncoded color and reversed-Z depth),
+while DLAA is supported by CPU contracts and runtime queries. Visual quality,
+motion response, fine lines, occlusion, UI elements, reset behavior, and full
+player acceptance remain unclaimed. See the [native DLSS validation
+record](docs/notes/native-dlss-validation.md).
 
-## v0.6.11 release (pending)
+## v0.6.11 release
 
-Release v0.6.11 introduces experimental native NVIDIA DLSS Super Resolution (SR) and DLAA support, in-game Graphics menu upscaler options, list viewport scrolling, and Start/Enter focus-jump to Save. Windows and Linux release packages are intended to include packaged NGX support pending verification of automated CI builds. Visual quality, motion response, and player acceptance remain unclaimed. See the [changelog](CHANGELOG.md#v0611--2026-09-21) and [development status](docs/STATUS.md) for validation limits.
+Published release [v0.6.11](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.11) on 2026-09-22T06:44:37Z from source `3daba37` via Release CI [35687931776](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35687931776) as the latest public release. It introduces experimental native NVIDIA DLSS Super Resolution (SR) and DLAA support, in-game Graphics menu upscaler options, list viewport scrolling, and Start/Enter focus-jump to Save. Windows and Linux release packages bundle verified official NVIDIA NGX libraries. Visual quality, motion response, and player acceptance remain unclaimed. See the [changelog](CHANGELOG.md#v0611--2026-09-22) and [development status](docs/STATUS.md) for validation limits.
 
 ## v0.6.7 release
 

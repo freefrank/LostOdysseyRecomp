@@ -22,15 +22,14 @@ Windows x64 · Direct3D 12 · Vulkan · PowerPC 静态重编译
 ### 实验性原生 DLSS SR 与 DLAA
 
 原生 NVIDIA DLSS 超分辨率与 DLAA 仍属于具备有界验证的实验性功能，不是经过全量验证的常规
-或可直接使用功能。项目计划在 Windows 与 Linux 发布包中启用 NGX 支持，具体以
-自动化 CI 构建产物为准。本地 Windows SDK-on 构建已在 RTX 5080 上确认 Quality
-模式游戏内 NGX SR 执行（`1707x960 -> 2560x1440`、DisplayEncoded 色彩、reversed-Z 深度），
-DLAA 已具备 CPU 契约与运行时查询支撑。画质、细线、运动响应、遮挡、UI 元素、
-重置行为和完整玩家验收均未宣称完成。详见[原生 DLSS 验证记录](docs/notes/native-dlss-validation.md)。
+或可直接使用功能。Windows 与 Linux 正式发布包中已内置经过核验的官方 NGX 运行库。
+本地 Windows SDK-on 构建已在 RTX 5080 上确认 Quality 模式游戏内 NGX SR 执行（`1707x960 -> 2560x1440`、
+DisplayEncoded 色彩、reversed-Z 深度），DLAA 已具备 CPU 契约与运行时查询支撑。画质、细线、
+运动响应、遮挡、UI 元素、重置行为和完整玩家验收均未宣称完成。详见[原生 DLSS 验证记录](docs/notes/native-dlss-validation.md)。
 
-## v0.6.11 发布版（待发布）
+## v0.6.11 发布版
 
-v0.6.11 版本引入实验性原生 NVIDIA DLSS 超分辨率（SR）与 DLAA 支持、游戏内图形设置缩放技术选项、长列表视口滚动以及 Start/Enter 聚焦“保存”且不立即保存的功能。Windows 与 Linux 发布包计划包含 NGX 支持，等待自动化 CI 构建验证。画质、运动响应及玩家验收均未宣称完成。详见[更新日志](CHANGELOG.md#v0611--2026-09-21)与[开发状态](docs/STATUS.md)。
+已发布 [v0.6.11](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.11)（于 2026-09-22T06:44:37Z 从 source `3daba37` 通过 Release CI [35687931776](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35687931776) 发布为最新公开版本）。引入实验性原生 NVIDIA DLSS 超分辨率（SR）与 DLAA 支持、游戏内图形设置缩放技术选项、长列表视口滚动以及 Start/Enter 聚焦“保存”且不立即保存的功能。Windows 与 Linux 发布包已内置官方 NVIDIA NGX 运行库。画质、运动响应及玩家验收均未宣称完成。详见[更新日志](CHANGELOG.md#v0611--2026-09-22)与[开发状态](docs/STATUS.md)。
 
 ## v0.6.7 发布版
 
