@@ -6,6 +6,22 @@ One record of completed changes, with unpublished work separated from verified r
 
 ## Unreleased / 未发布
 
+### English
+
+- Native DLSS SR/DLAA lifecycle and capability coordination updates (BR-01, BR-02, BR-03):
+  - Fixed temporal history lifecycle handling so DLSS SR and DLAA properly advance temporal frame time and preserve jitter across frame gaps without spurious resets (BR-01).
+  - Resolved capability status data race between CPU planning and GPU worker updates by publishing a mutex-protected by-value device snapshot (BR-02).
+  - Added dynamic two-line help area status feedback in Settings -> Graphics reflecting CPU-planned DLSS effect and failure-latch states (Inactive, Active with render/output extents, NeedsVulkanRestart, DeviceUnavailable, TemporaryFallback) rather than per-frame NGX runtime evaluation success, with appended notes for uncommitted menu edits (BR-03; non-latching execution-layer fallback feedback remains to be added).
+  - Focused verification passed for three new CMake targets (`LoTemporalLifecycleBr01Test`, `LoDlssCapabilitySnapshotTest`, `LoTemporalLifecycleBr01OwnerTest`), `LoMenuFlowTest` status flows, and production GPU objects, without re-running underlying GPU suites. Full game links, visual gameplay comparisons, and player acceptance remain pending. See [native DLSS validation](docs/notes/native-dlss-validation.md) for detailed boundaries.
+
+### 简体中文
+
+- 原生 DLSS SR/DLAA 生命周期与能力协调更新（BR-01、BR-02、BR-03）：
+  - 修复时序生命周期处理，使 DLSS SR 与 DLAA 在正常推进时正确更新帧时间，并在长间隔后保留抖动，避免异常重置历史（BR-01）。
+  - 通过互斥锁保护的按值设备快照，消除 CPU 规划器与 GPU 工作线程间的能力读取数据竞争（BR-02）。
+  - 在“设置” -> “图形”中增加两行帮助区状态反馈，动态反映 CPU 规划与失败闭锁决定的 DLSS 状态（未启用、生效及尺寸、需 Vulkan 并重启、设备不支持、暂态回退），而非宣称每帧 NGX 实际执行成功，并对未保存的编辑选项附加提示说明（BR-03；非闭锁执行层回退反馈待后续补充）。
+  - 定向验证通过了三个新增 CMake 目标（`LoTemporalLifecycleBr01Test`、`LoDlssCapabilitySnapshotTest`、`LoTemporalLifecycleBr01OwnerTest`）、`LoMenuFlowTest` 状态流转与生产 GPU 对象编译，无底层 GPU 重跑。完整程序链接、实机画面对照与玩家画质验收仍待完成。详见[原生 DLSS 验证记录](docs/notes/native-dlss-validation.md)。
+
 ## v0.6.11 — 2026-09-22
 
 ### English

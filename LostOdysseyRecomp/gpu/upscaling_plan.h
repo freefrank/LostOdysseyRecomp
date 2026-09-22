@@ -91,8 +91,8 @@ struct OutputSizing {
     bool operator==(const OutputSizing&) const = default;
 };
 
-// Immutable CPU-frame input. video owns publication; the plan producer takes
-// one snapshot and never rereads live backend state for that frame.
+// Immutable CPU-frame input. The device owner publishes one complete value.
+// Readers copy it and never follow a device pointer or NGX report.
 struct BackendDeviceSnapshot {
     backend::Backend backend = backend::Backend::D3D12;
     uint64_t deviceEpoch = 0;
@@ -100,6 +100,11 @@ struct BackendDeviceSnapshot {
     bool dlssAvailable = false;
     bool operator==(const BackendDeviceSnapshot&) const = default;
 };
+
+// The four fields are stored together. A reader cannot observe a new epoch
+// paired with the previous backend or DLSS flag.
+void PublishDeviceCapability(BackendDeviceSnapshot snapshot);
+BackendDeviceSnapshot PublishedDeviceCapability();
 
 // Implemented by lane A. Lookup returns an exact-key cached state or a Pending
 // state after recording the latest request; it never waits for GPU work.
@@ -109,6 +114,9 @@ public:
     std::optional<SizingKey> TakeSizingRequest();
     void PublishSizing(OutputSizing sizing);
     void ResetSizing(uint64_t deviceEpoch);
+    // Copy a cached result without recording a GPU request. Unknown and stale
+    // epochs return empty; they are not treated as a permanent device failure.
+    std::optional<OutputSizing> Peek(const SizingKey& key);
 private:
     std::mutex mutex_;
     std::array<std::optional<OutputSizing>, 8> entries_{};

@@ -527,9 +527,17 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
 
     text(65, 652, 52, 43, L"Help", 20, ink, false);
     fill(116, 650, 1094, 45, MakeColor(255, 70, 73, 73));
+    if (!current.notice.empty())
+        fill(116, 672, 1094, 22, MakeColor(255, 54, 57, 57));
     line(116, 650, 1210, 650, MakeColor(255, 154, 156, 155));
     line(116, 694, 1210, 694, MakeColor(255, 55, 56, 56));
-    text(131, 650, 1063, 45, current.help, 20, ink, false, 0, outline, 14);
+    if (current.notice.empty())
+        text(131, 650, 1063, 45, current.help, 20, ink, false, 0, outline, 14);
+    else
+    {
+        text(131, 650, 1063, 22, current.help, 16, ink, false, 0, outline, 12);
+        text(131, 672, 1063, 22, current.notice, 16, ink, false, 0, outline, 12);
+    }
 
     if (!current.dialogChoices.empty())
     {

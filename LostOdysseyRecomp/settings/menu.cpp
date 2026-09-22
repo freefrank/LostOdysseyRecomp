@@ -6,6 +6,7 @@
 #include "restart.h"
 #include "translations.h"
 #include <gpu/video.h>
+#include <gpu/frame_plan.h>
 #include <kernel/io/file_system.h>
 #include <os/logger.h>
 #include <stdafx.h>
@@ -101,6 +102,92 @@ const wchar_t *VoiceName(uint8_t *base, uint32_t index)
                                        L"Español", L"Italiano", L"한국어", L"繁體中文", L"简体中文"};
     const auto language = VoiceLanguage(base, index);
     return language >= 1 && language < std::size(names) ? names[language] : L"Unknown";
+}
+std::wstring PlanSizeSuffix(const gpu::frame_plan::DlssEffectSnapshot &running)
+{
+    if (!running.inputWidth || !running.inputHeight || !running.outputWidth || !running.outputHeight)
+        return {};
+    return L" " + std::to_wstring(running.inputWidth) + L"×" + std::to_wstring(running.inputHeight) +
+           L" - " + std::to_wstring(running.outputWidth) + L"×" + std::to_wstring(running.outputHeight);
+}
+const wchar_t *ActivePlanSentence(gpu::upscaling::DlssQuality quality)
+{
+    switch (gpu::upscaling::NormalizeDlssQuality(quality))
+    {
+    case gpu::upscaling::DlssQuality::Balanced:
+        return Tr(L"Latest frame plan uses DLSS Balanced.", L"最新畫面計畫使用 DLSS 平衡。");
+    case gpu::upscaling::DlssQuality::Performance:
+        return Tr(L"Latest frame plan uses DLSS Performance.", L"最新畫面計畫使用 DLSS 效能。");
+    case gpu::upscaling::DlssQuality::Dlaa:
+        return Tr(L"Latest frame plan uses DLAA.", L"最新畫面計畫使用 DLAA。");
+    default:
+        return Tr(L"Latest frame plan uses DLSS Quality.", L"最新畫面計畫使用 DLSS 品質。");
+    }
+}
+const wchar_t *BackendPendingSentence(gpu::backend::Backend backend)
+{
+    if (backend == gpu::backend::Backend::Vulkan)
+        return Tr(L"Still using Vulkan until restart. DLSS is checked after restart.",
+                  L"重新啟動前仍使用 Vulkan。DLSS 會在重新啟動後再確認。");
+    if (backend == gpu::backend::Backend::D3D11)
+        return Tr(L"Still using Direct3D 11 until restart. DLSS is checked after restart.",
+                  L"重新啟動前仍使用 Direct3D 11。DLSS 會在重新啟動後再確認。");
+    if (backend == gpu::backend::Backend::D3D12)
+        return Tr(L"Still using Direct3D 12 until restart. DLSS is checked after restart.",
+                  L"重新啟動前仍使用 Direct3D 12。DLSS 會在重新啟動後再確認。");
+    return Tr(L"Graphics backend change is not applied. DLSS is checked after restart.",
+              L"圖形後端變更尚未套用。DLSS 會在重新啟動後再確認。");
+}
+// The first sentence is the latest CPU plan. An unsaved menu edit is only a
+// following note. Active means that plan chose DLSS, not that NGX succeeded.
+std::wstring DlssNotice()
+{
+    const auto running = gpu::frame_plan::CurrentDlssEffect();
+    std::wstring text;
+    switch (running.phase)
+    {
+    case gpu::frame_plan::DlssEffectPhase::Active:
+        text = std::wstring(ActivePlanSentence(running.plannedQuality)) + PlanSizeSuffix(running);
+        break;
+    case gpu::frame_plan::DlssEffectPhase::NeedsVulkanRestart:
+        text = Tr(L"DLSS needs Vulkan and a restart.", L"DLSS 需要 Vulkan，並在重新啟動後才會使用。");
+        break;
+    case gpu::frame_plan::DlssEffectPhase::DeviceUnavailable:
+        text = Tr(L"DLSS is not available on this device.", L"這台裝置無法使用 DLSS。");
+        break;
+    case gpu::frame_plan::DlssEffectPhase::TemporaryFallback:
+        if (!running.device.deviceReady)
+            text = Tr(L"DLSS is waiting for the graphics device. Normal rendering is used for now.",
+                      L"DLSS 正在等待圖形裝置。目前先使用常規渲染。");
+        else if (running.device.dlssAvailable &&
+                 (!running.sizingKnown || running.sizingState == gpu::upscaling::SizingState::Pending))
+            text = Tr(L"DLSS is querying the render resolution. Normal rendering is used for now.",
+                      L"DLSS 正在查詢渲染解析度。目前先使用常規渲染。");
+        else
+            text = Tr(L"DLSS is not in the latest frame plan. Normal rendering is used for now.",
+                      L"最新的畫面計畫沒有使用 DLSS。目前先使用常規渲染。");
+        break;
+    case gpu::frame_plan::DlssEffectPhase::Inactive:
+    default:
+        text = Tr(L"DLSS is not in use.", L"DLSS 目前未啟用。");
+        break;
+    }
+    const bool backendPending = edit.graphicsBackend != running.device.backend;
+    const bool planRequestsDlss = running.phase != gpu::frame_plan::DlssEffectPhase::Inactive;
+    if (planRequestsDlss && edit.upscaler != gpu::upscaling::Upscaler::Dlss)
+        text += std::wstring(L" ") + Tr(L"The Off choice is not applied yet.", L"關閉選項尚未套用。");
+    else if (!planRequestsDlss && edit.upscaler == gpu::upscaling::Upscaler::Dlss && !backendPending &&
+             running.device.backend != gpu::backend::Backend::Vulkan)
+        text += std::wstring(L" ") + Tr(L"DLSS needs Vulkan and a restart.", L"DLSS 需要 Vulkan，並在重新啟動後才會使用。");
+    else if (!planRequestsDlss && edit.upscaler == gpu::upscaling::Upscaler::Dlss && !backendPending)
+        text += std::wstring(L" ") + Tr(L"The DLSS choice is not applied yet.", L"DLSS 選項尚未套用。");
+    else if (planRequestsDlss && edit.upscaler == gpu::upscaling::Upscaler::Dlss &&
+             gpu::upscaling::NormalizeDlssQuality(edit.dlssQuality) !=
+                 gpu::upscaling::NormalizeDlssQuality(running.plannedQuality))
+        text += std::wstring(L" ") + Tr(L"The selected DLSS quality is not applied yet.", L"選取的 DLSS 品質尚未套用。");
+    if (backendPending)
+        text += std::wstring(L" ") + BackendPendingSentence(running.device.backend);
+    return text;
 }
 void Publish(uint8_t *base, uint32_t config)
 {
@@ -273,11 +360,11 @@ void Publish(uint8_t *base, uint32_t config)
         next.help = Tr(L"Camera-based TAA; moving effects may trail. Unsupported scenes use SMAA.",
                        L"以相機重投影的 TAA；動態特效可能拖影。不支援的場景使用 SMAA。");
     if (tab == 2 && row == 5)
-        next.help = Tr(L"Reconstructs high-resolution frames using NVIDIA DLSS.",
-                       L"使用 NVIDIA DLSS 重建高解析度畫面。");
+        next.help = Tr(L"Saves the DLSS preference. The status line shows the latest frame plan.",
+                       L"儲存 DLSS 偏好。狀態列顯示最新的畫面計畫。");
     if (tab == 2 && row == 6)
-        next.help = Tr(L"Balances image quality and performance for DLSS reconstruction.",
-                       L"調整 DLSS 重建的畫質與效能平衡。");
+        next.help = Tr(L"Quality, Balanced, Performance, or DLAA. The status line shows whether it is in the latest frame plan.",
+                       L"品質、平衡、效能或 DLAA。狀態列顯示最新畫面計畫是否使用它。");
     if (tab == 2 && row == 7)
         next.help = Tr(L"Controls filtering when upscaling is active.",
                        L"控制啟用縮放時的取樣濾鏡。");
@@ -317,9 +404,10 @@ void Publish(uint8_t *base, uint32_t config)
         next.dialogChoices = {Tr(L"Yes", L"是"), Tr(L"No", L"否")};
         next.dialogSelection = collectionChoice;
     }
+    next.notice = tab == 2 ? DlssNotice() : std::wstring{};
     std::lock_guard lock(snapshotMutex);
     if (next.tab == snapshot.tab && next.row == snapshot.row && next.scroll == snapshot.scroll && next.language == snapshot.language &&
-        next.rows == snapshot.rows && next.help == snapshot.help && next.dialogTitle == snapshot.dialogTitle &&
+        next.rows == snapshot.rows && next.help == snapshot.help && next.notice == snapshot.notice && next.dialogTitle == snapshot.dialogTitle &&
         next.dialogMessage == snapshot.dialogMessage && next.dialogChoices == snapshot.dialogChoices &&
         next.dialogSelection == snapshot.dialogSelection)
         return;
@@ -560,7 +648,7 @@ PPC_FUNC(sub_822F19B0)
             if (gpu::taa_collection::SetConsent(collectionChoice == 0)) { collectionPrompt = false; status.clear(); }
             else status = Tr(L"Settings could not be saved.", L"無法儲存設定。");
         }
-        if (input) Publish(base, config);
+        Publish(base, config);
         return;
     }
     if (restartPrompt)
@@ -616,7 +704,7 @@ PPC_FUNC(sub_822F19B0)
             else
                 restartSaveFailed = true;
         }
-        if (input) Publish(base, config);
+        Publish(base, config);
         return;
     }
     auto graphicsSaved = [&] {
@@ -631,7 +719,11 @@ PPC_FUNC(sub_822F19B0)
     if (displayTicket)
     {
         const auto result = gpu::video::QueryDisplayChange(displayTicket);
-        if (result == gpu::video::DisplayChangeResult::Pending) return;
+        if (result == gpu::video::DisplayChangeResult::Pending)
+        {
+            Publish(base, config);
+            return;
+        }
         displayTicket = 0;
         if (displayRollback)
         {
@@ -888,8 +980,8 @@ PPC_FUNC(sub_822F19B0)
                  menu, PPC_LOAD_U32(menu + 4));
         return;
     }
-    if (input)
-        Publish(base, config);
+    // The status line follows the latest frame plan, including while the menu sits idle.
+    Publish(base, config);
     // Only explicit brightness calibration delegates input to the retail UI.
     // The parent task continues ticking throughout.
 #endif

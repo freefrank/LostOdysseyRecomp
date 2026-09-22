@@ -36,6 +36,8 @@ struct MenuSnapshot
     uint32_t language = 0;
     std::vector<MenuRow> rows;
     std::wstring help;
+    // Graphics-tab DLSS status. Empty on other tabs, so those pages keep one help line.
+    std::wstring notice;
     std::wstring dialogTitle, dialogMessage;
     std::vector<std::wstring> dialogChoices;
     int dialogSelection = 0;

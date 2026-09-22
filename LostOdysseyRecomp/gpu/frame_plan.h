@@ -137,6 +137,11 @@ namespace gpu::frame_plan
     inline FramePlan AdvanceCpuPlan(FailureState& state, uint64_t cpuSerial, uint64_t& geometryEpoch,
         uint64_t reportedFailedEpoch, uint32_t fallbackHeight, uint32_t mode,
         uint32_t drawableWidth, uint32_t drawableHeight, bool resolveReadback);
+    struct PlannerObservation {
+        bool hasPlan = false;
+        FramePlan plan{};
+        std::optional<PlanFailure> latched;
+    };
     class PlannerState {
     public:
         FramePlan Begin(PlannerInput input) {
@@ -225,6 +230,17 @@ namespace gpu::frame_plan
             }
             return p;
         }
+        PlannerObservation Observe()
+        {
+            std::lock_guard lock(mutex_);
+            PlannerObservation observed;
+            if (lastFinal_) {
+                observed.hasPlan = true;
+                observed.plan = *lastFinal_;
+            }
+            observed.latched = latched_;
+            return observed;
+        }
         bool ReportFailure(const PlanFailure& failure)
         {
             std::lock_guard lock(mutex_);
@@ -255,6 +271,92 @@ namespace gpu::frame_plan
         size_t nextAttempt_ = 0;
         std::optional<FramePlan> lastFinal_;
     };
+
+    // What the latest CPU plan selects. Active means the plan chose DLSS;
+    // it does not establish NGX evaluation or GPU submission success.
+    enum class DlssEffectPhase : uint8_t {
+        Inactive = 0,
+        Active,
+        NeedsVulkanRestart,
+        DeviceUnavailable,
+        TemporaryFallback,
+    };
+    // Menu classification for the values currently shown, which may not have
+    // been applied. BackendChangePending means the edited backend is not the
+    // committed device, so its DLSS capability is still unknown.
+    enum class DlssMenuStatus : uint8_t {
+        Inactive = 0,
+        Active,
+        NeedsVulkanRestart,
+        DeviceUnavailable,
+        TemporaryFallback,
+        BackendChangePending,
+    };
+    struct DlssEffectSnapshot {
+        upscaling::BackendDeviceSnapshot device{};
+        bool hasPlan = false;
+        upscaling::Upscaler plannedRequest = upscaling::Upscaler::Off;
+        upscaling::DlssQuality plannedQuality = upscaling::DlssQuality::Quality;
+        upscaling::TemporalConsumer consumer = upscaling::TemporalConsumer::None;
+        uint32_t inputWidth = 0, inputHeight = 0;
+        uint32_t outputWidth = 0, outputHeight = 0;
+        upscaling::SizingState sizingState = upscaling::SizingState::Pending;
+        bool sizingKnown = false;
+        std::optional<FailureReason> failure;
+        DlssEffectPhase phase = DlssEffectPhase::Inactive;
+    };
+    inline DlssEffectSnapshot DescribeDlssRuntime(const upscaling::BackendDeviceSnapshot& device,
+        const PlannerObservation& observed, const upscaling::OutputSizing* sizing)
+    {
+        DlssEffectSnapshot snapshot;
+        snapshot.device = device;
+        snapshot.hasPlan = observed.hasPlan;
+        if (observed.hasPlan) {
+            snapshot.plannedRequest = observed.plan.requestedUpscaler;
+            snapshot.plannedQuality = observed.plan.dlssQuality;
+            snapshot.consumer = observed.plan.consumer;
+            snapshot.inputWidth = observed.plan.width;
+            snapshot.inputHeight = observed.plan.height;
+            snapshot.outputWidth = observed.plan.output.width;
+            snapshot.outputHeight = observed.plan.output.height;
+            if (observed.latched && MatchesPlanFailure(observed.plan, *observed.latched))
+                snapshot.failure = observed.latched->reason;
+        }
+        bool sizingReady = false;
+        if (sizing && observed.hasPlan && sizing->key.deviceEpoch == device.deviceEpoch &&
+            sizing->key.deviceEpoch == observed.plan.deviceEpoch &&
+            sizing->key.outputWidth == observed.plan.output.width &&
+            sizing->key.outputHeight == observed.plan.output.height) {
+            const auto& mode = sizing->modes[upscaling::DlssQualityIndex(observed.plan.dlssQuality)];
+            snapshot.sizingState = mode.state;
+            snapshot.sizingKnown = true;
+            sizingReady = upscaling::ModeReadyForOutput(mode, observed.plan.dlssQuality,
+                {observed.plan.output.width, observed.plan.output.height});
+        }
+        const bool wantsDlss = observed.hasPlan && snapshot.plannedRequest == upscaling::Upscaler::Dlss;
+        const bool active = wantsDlss && upscaling::IsDlssConsumer(snapshot.consumer) && !snapshot.failure &&
+            device.backend == backend::Backend::Vulkan && device.deviceReady && device.dlssAvailable &&
+            device.deviceEpoch == observed.plan.deviceEpoch && sizingReady;
+        if (active) snapshot.phase = DlssEffectPhase::Active;
+        else if (!wantsDlss) snapshot.phase = DlssEffectPhase::Inactive;
+        else if (device.backend != backend::Backend::Vulkan) snapshot.phase = DlssEffectPhase::NeedsVulkanRestart;
+        else if (device.deviceReady && !device.dlssAvailable) snapshot.phase = DlssEffectPhase::DeviceUnavailable;
+        else snapshot.phase = DlssEffectPhase::TemporaryFallback;
+        return snapshot;
+    }
+    inline DlssMenuStatus ClassifyDlssMenu(const DlssEffectSnapshot& running, upscaling::Upscaler displayedUpscaler,
+        upscaling::DlssQuality displayedQuality, backend::Backend displayedBackend)
+    {
+        if (displayedBackend != running.device.backend) return DlssMenuStatus::BackendChangePending;
+        if (displayedUpscaler != upscaling::Upscaler::Dlss) return DlssMenuStatus::Inactive;
+        if (running.device.backend != backend::Backend::Vulkan) return DlssMenuStatus::NeedsVulkanRestart;
+        if (running.device.deviceReady && !running.device.dlssAvailable) return DlssMenuStatus::DeviceUnavailable;
+        if (!running.device.deviceReady) return DlssMenuStatus::TemporaryFallback;
+        if (running.phase == DlssEffectPhase::Active && running.plannedRequest == upscaling::Upscaler::Dlss &&
+            running.plannedQuality == upscaling::NormalizeDlssQuality(displayedQuality))
+            return DlssMenuStatus::Active;
+        return DlssMenuStatus::TemporaryFallback;
+    }
     // The CPU owns retry sizing. A failure only caps the matching request, so a
     // later tick cannot recreate its original oversized plan before the GPU has
     // reported a different request.
@@ -416,6 +518,14 @@ namespace gpu::frame_plan
     void PublishDrawable(uint32_t width, uint32_t height);
     void BeginCpuFrame();
     FramePlan CpuPlan();
+    // Copy of the committed device, the last CPU plan, and the cached sizing
+    // for that plan. Safe on the UI thread. Do not call it from inside
+    // PlannerState::Begin or while already holding the sizing or device lock.
+    // It does not read settings, NGX, or renderer objects. phase == Active only
+    // when the last plan's consumer is DLSS on the committed device. A renderer
+    // rejection is included only after ReportPlanFailure; a skip that does not
+    // report one leaves the planned consumer in place.
+    DlssEffectSnapshot CurrentDlssEffect();
     // A full P1 producer takes Config, drawable, and one immutable backend/device
     // snapshot. Implementation remains with lane A.
     FramePlan BeginCpuFrame(const settings::Config& config, const upscaling::OutputRegion& output,

@@ -25,8 +25,8 @@ namespace gpu::video
     bool IsVulkan();
     // Actual committed backend; absent before readiness or after shutdown.
     std::optional<backend::Backend> SelectedBackend();
-    // Immutable state for the CPU frame-plan producer. Implemented with video's
-    // device lifecycle in lane A; callers do not access Plume objects directly.
+    // Latest committed device capability. Callers receive a copy and do not
+    // read NGX reports or device pointers. The device owner publishes it.
     upscaling::BackendDeviceSnapshot BackendDeviceState();
     plume::RenderCommandQueue* GetQueue();
 #if defined(LO_GPU_PLUME)

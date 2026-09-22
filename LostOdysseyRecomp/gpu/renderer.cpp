@@ -26,6 +26,7 @@
 #include "temporal_scene.h"
 #include "temporal_jitter.h"
 #include "temporal_history.h"
+#include "temporal_lifecycle.h"
 #include "motion_options.h"
 #include "motion_replay_gpu.h"
 #include "presentation.h"
@@ -553,6 +554,7 @@ namespace gpu::renderer
             // after later plan markers have already been committed.
             std::unordered_set<uint64_t> failedPlanEpochs;
             std::chrono::steady_clock::time_point temporalFrameTime=std::chrono::steady_clock::now();
+            uint64_t temporalGapResetFrame=~0ull;
             std::unique_ptr<gpu::Presentation> sceneProcessor;
             // A single scene-copy promotion is deliberately renderer-owned. The
             // render-target map keeps the active allocation; parkedLow keeps the
@@ -4135,30 +4137,32 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     const auto mode=route.effectiveAA;
                     if(sceneAAMode!=mode) {if(temporalHistory)temporalHistory->Reset();temporalSupportedFrame=~0ull;++temporalEpoch;}
                     sceneAAMode=mode;
-                    const bool selected=route.legacyTaa&&!resolveReadback;
-                    const bool forbidLegacyTemporal = route.dlssInputs;
-                    temporalExperiment=selected||(!forbidLegacyTemporal&&temporalForced);
-                    temporalAllowHistory=selected||(!forbidLegacyTemporal&&temporalForcedHistory);
-                    temporalJitter=(selected&&temporalSupportedFrame!=~0ull&&temporalSupportedFrame+1==frame)||
-                        (!forbidLegacyTemporal&&temporalForcedJitter);
-                    temporalStableGrid=selected||(!forbidLegacyTemporal&&temporalForcedStable);
-                    if (taaDiagnosticJitter >= 0) temporalJitter = taaDiagnosticJitter == 1;
-                    if (taaDiagnosticHistory >= 0) temporalAllowHistory = taaDiagnosticHistory == 1;
-                    temporalInputProbe = route.inputProbe;
-                    dlssSrRequested = route.dlssSr;
-                    if ((temporalInputProbe || dlssSrRequested) &&
-                        !motionOptions.Supports(upscaling::TemporalConsumer::DlssInputs)) {
+                    temporal::FrameStartPolicy frameStart;
+                    frameStart.legacyTaa = route.legacyTaa;
+                    frameStart.dlssInputs = route.dlssInputs;
+                    frameStart.dlssSr = route.dlssSr;
+                    frameStart.inputProbe = route.inputProbe;
+                    frameStart.resolveReadback = resolveReadback;
+                    frameStart.forced = temporalForced;
+                    frameStart.forcedHistory = temporalForcedHistory;
+                    frameStart.forcedJitter = temporalForcedJitter;
+                    frameStart.forcedStable = temporalForcedStable;
+                    frameStart.frame = frame;
+                    frameStart.supportedFrame = temporalSupportedFrame;
+                    frameStart.diagnosticJitter = taaDiagnosticJitter;
+                    frameStart.diagnosticHistory = taaDiagnosticHistory;
+                    frameStart.motionSupportsDlss = motionOptions.Supports(upscaling::TemporalConsumer::DlssInputs);
+                    const auto started = temporal::ResolveFrameStartConsumers(frameStart);
+                    temporalExperiment = started.experiment;
+                    temporalAllowHistory = started.allowHistory;
+                    temporalJitter = started.jitter;
+                    temporalStableGrid = started.stableGrid;
+                    temporalInputProbe = started.inputProbe;
+                    dlssSrRequested = started.dlssSr;
+                    if (started.rejectDlss)
                         DisableDlssRequest(frame_plan::FailureReason::InvalidInput);
-                        temporalInputProbe = false;
-                        dlssSrRequested = false;
-                    }
-                    if (temporalInputProbe || dlssSrRequested) {
-                        temporalJitter = true;
-                        temporalAllowHistory = false;
-                        temporalStableGrid = false;
-                    }
                     activeSpatialAA = route.spatialAA&&!resolveReadback;
-                    const bool temporalActive = temporalExperiment || temporalInputProbe || dlssSrRequested;
+                    const bool temporalActive = temporal::TemporalConsumerActive(temporalExperiment, temporalInputProbe, dlssSrRequested);
                     if(temporalActive&&!temporalHistory&&!temporalInitFailed) {
                         temporalHistory=std::make_unique<temporal::HistoryOwner>();
                         if(!temporalHistory->Init(device,sparseCollector)) {temporalHistory.reset();temporalInitFailed=true;LOG_ERROR("renderer: TAA initialization failed; SMAA fallback");}
@@ -4172,16 +4176,15 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         }
                     }
                 }
-                const bool temporalActive = temporalExperiment || temporalInputProbe || dlssSrRequested;
+                const bool temporalActive = temporal::TemporalConsumerActive(temporalExperiment, temporalInputProbe, dlssSrRequested);
                 const bool trackTemporalScene = !debugCaptureDir.empty() || temporalActive || activeSpatialAA;
                 if (trackTemporalScene && temporalScene.Frame() != frame) {
                     temporalScene.Reset(frame);
                     hdrTemporalOutput = nullptr; hdrTemporalSource = {}; hdrTonemapApplied = false;
                     actualRasterJitter = {}; actualRasterJitterCaptured = false;
-                    if(temporalHistory&&std::chrono::steady_clock::now()-temporalFrameTime>std::chrono::milliseconds(250)) {
-                        temporalHistory->Reset();temporalSupportedFrame=~0ull;
-                        temporalJitter=temporalInputProbe|| (taaDiagnosticJitter >= 0 ? taaDiagnosticJitter == 1 : temporalForcedJitter);++temporalEpoch;
-                    }
+                    temporal::ApplyTemporalLongInterval(temporalHistory.get(), std::chrono::steady_clock::now(), frame,
+                        temporalInputProbe, dlssSrRequested, taaDiagnosticJitter, temporalForcedJitter,
+                        temporalFrameTime, temporalJitter, temporalSupportedFrame, temporalEpoch, temporalGapResetFrame);
                 }
                 if(temporalActive&&temporalHistory) {
                     static const char* diagnosticStart=getenv("LO_TEMPORAL_LOG_START_FRAME");
@@ -6987,15 +6990,19 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             if(collectionRenderer.temporalScene.Frame()==collectionRenderer.frame)
                 collectionFrame.sceneRejection=uint32_t(collectionRenderer.temporalScene.Reason());
             collectionFrame.sparseReady=collectionRenderer.sparseCollector&&collectionRenderer.sparseCollector->Ready();
-            if(auto& owner=g_renderer->temporalHistory;owner&&(g_renderer->temporalExperiment||g_renderer->temporalInputProbe)) {
-                auto& r=*g_renderer;
-                const auto now=std::chrono::steady_clock::now();
-                const bool gap=now-r.temporalFrameTime>std::chrono::milliseconds(250);
-                const bool complete=r.temporalScene.Frame()==r.frame&&r.temporalScene.Ready()&&
-                    (r.temporalExperiment?owner->Completed():owner->InputsComplete())&&r.temporalSubmittedFrame==r.frame;
+            if (auto& owner = g_renderer->temporalHistory; owner) {
+                auto& r = *g_renderer;
+                const auto now = std::chrono::steady_clock::now();
+                const auto temporalEnd = temporal::EvaluateTemporalFrameEnd(*owner, now, r.frame,
+                    r.temporalExperiment, r.temporalInputProbe, r.dlssSrRequested,
+                    r.temporalScene.Frame() == r.frame && r.temporalScene.Ready(),
+                    r.temporalSubmittedFrame == r.frame, r.temporalFrameTime, r.temporalGapResetFrame);
+                if (temporalEnd.engaged) {
+                const bool gap = temporalEnd.gap;
+                const bool complete = temporalEnd.complete;
                 collectionFrame.completed=complete;
                 collectionFrame.reused=complete&&owner->Reused();
-                collectionFrame.resetAfterFrame=!complete||gap;
+                collectionFrame.resetAfterFrame=temporalEnd.reset||temporalEnd.gapAlreadyReset;
                 const auto& collectionHistory=owner->Diagnostics();
                 collectionFrame.historyCaptured=collectionHistory.captured&&collectionHistory.state.currentFrame==r.frame&&collectionHistory.state.currentEpoch==r.temporalEpoch;
                 if(collectionFrame.historyCaptured) {
@@ -7010,7 +7017,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 static const bool temporalDetailsRequested=getenv("LO_TEMPORAL_LOG_START_FRAME")!=nullptr;
                 static const bool withTrace = getenv("LO_TEMPORAL_DRAW_LOG_WITH_RESOLVE_TRACE") &&
                     strcmp(getenv("LO_TEMPORAL_DRAW_LOG_WITH_RESOLVE_TRACE"), "1") == 0;
-                if((r.frame>=temporalLogStart&&r.temporalFramesLogged<256) || (withTrace&&temporalTraceActive)) {
+                const bool logTemporalConsumer = r.temporalExperiment || r.temporalInputProbe || temporalDetailsRequested;
+                if((logTemporalConsumer&&r.frame>=temporalLogStart&&r.temporalFramesLogged<256) || (withTrace&&temporalTraceActive)) {
                     SHADER_LOG_INFO("temporal", RendererByteFnv, "renderer temporal f{} epoch={} ready={} completed={} reused={} reason={} depth={} color={} gap={} jitter_draws={} jitter_misses={} jitter_unknowns={}",r.frame,r.temporalEpoch,r.temporalScene.Ready(),complete,owner->Reused(),uint32_t(r.temporalScene.Reason()),r.temporalScene.Depth().ordinal,r.temporalScene.Color().ordinal,gap,r.temporalJitterDraws,r.temporalJitterMisses,r.temporalJitterUnknowns);
                     const auto& diagnostic=owner->Diagnostics();
                     // Compact CPU inspection must not enable verbose renderer
@@ -7042,9 +7050,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     }
                     ++r.temporalFramesLogged;
                 }
-                if(!complete||gap) {owner->Reset();r.temporalSupportedFrame=~0ull;++r.temporalEpoch;}
-                r.temporalFrameTime=now;
+                temporal::CommitTemporalFrameEnd(*owner, temporalEnd, now, r.temporalSupportedFrame, r.temporalEpoch, r.temporalFrameTime);
                 r.temporalJitterDraws=r.temporalJitterMisses=r.temporalJitterUnknowns=0;
+                }
             }
             taa_collection::EndDiagnosticsFrame(collectionRenderer.frame,collectionFrame);
             g_renderer->SavePipelineRecipes();

@@ -544,6 +544,20 @@ if(WIN32)
         target_compile_features(LoTemporalAATest PRIVATE cxx_std_20)
         target_compile_definitions(LoTemporalAATest PRIVATE LO_GPU_PLUME NOMINMAX)
         target_link_libraries(LoTemporalAATest PRIVATE plume d3d12 dxgi)
+        # HistoryOwner capture uses the same TAA/DXC objects as LoTemporalAATest.
+        # platform_stub supplies the offline collection hooks. D3D12 is Windows-only;
+        # this block is already inside WIN32 and LO_BUILD_GPU.
+        add_executable(LoTemporalLifecycleBr01OwnerTest EXCLUDE_FROM_ALL
+            ${CMAKE_SOURCE_DIR}/tools/tests/temporal_lifecycle_br01_owner_test.cpp
+            ${LO_RUNTIME_ROOT}/gpu/temporal_aa.cpp
+            ${LO_RUNTIME_ROOT}/gpu/shader/dxc_compiler.cpp
+            ${CMAKE_SOURCE_DIR}/tools/tests/motion_replay/platform_stub.cpp)
+        target_include_directories(LoTemporalLifecycleBr01OwnerTest PRIVATE ${LO_RUNTIME_ROOT} ${CMAKE_SOURCE_DIR}/thirdparty/plume)
+        target_compile_features(LoTemporalLifecycleBr01OwnerTest PRIVATE cxx_std_20)
+        target_compile_definitions(LoTemporalLifecycleBr01OwnerTest PRIVATE LO_GPU_PLUME NOMINMAX)
+        # dxc_compiler.cpp includes shader_log.h, which includes fmt. user32 is
+        # already in the MSVC default libraries, as with LoTemporalAATest.
+        target_link_libraries(LoTemporalLifecycleBr01OwnerTest PRIVATE plume d3d12 dxgi fmt::fmt)
         add_executable(LoBloomPrefilterTest EXCLUDE_FROM_ALL
             ${CMAKE_SOURCE_DIR}/tools/tests/bloom_prefilter_test.cpp
             ${LO_RUNTIME_ROOT}/gpu/shader/dxc_compiler.cpp)
@@ -573,6 +587,19 @@ target_compile_features(LoRenderResolutionTest PRIVATE cxx_std_20)
 add_executable(LoFramePlanTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/frame_plan_test.cpp)
 target_include_directories(LoFramePlanTest PRIVATE ${LO_RUNTIME_ROOT})
 target_compile_features(LoFramePlanTest PRIVATE cxx_std_20)
+
+# CPU contract fixtures. They do not require Plume, D3D12, or guest code, so
+# Linux configures the same targets.
+add_executable(LoTemporalLifecycleBr01Test EXCLUDE_FROM_ALL
+    ${CMAKE_SOURCE_DIR}/tools/tests/temporal_lifecycle_br01_test.cpp)
+target_include_directories(LoTemporalLifecycleBr01Test PRIVATE ${LO_RUNTIME_ROOT})
+target_compile_features(LoTemporalLifecycleBr01Test PRIVATE cxx_std_20)
+
+add_executable(LoDlssCapabilitySnapshotTest EXCLUDE_FROM_ALL
+    ${CMAKE_SOURCE_DIR}/tools/tests/dlss_capability_snapshot_test.cpp
+    ${LO_RUNTIME_ROOT}/gpu/upscaling_plan.cpp)
+target_include_directories(LoDlssCapabilitySnapshotTest PRIVATE ${LO_RUNTIME_ROOT})
+target_compile_features(LoDlssCapabilitySnapshotTest PRIVATE cxx_std_20)
 
 add_executable(LoTargetMappingTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/target_mapping_test.cpp)
 target_include_directories(LoTargetMappingTest PRIVATE ${LO_RUNTIME_ROOT})

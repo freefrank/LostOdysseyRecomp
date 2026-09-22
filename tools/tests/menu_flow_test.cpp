@@ -58,6 +58,11 @@ bool MenuFlowDisplayModeFailed();
 #undef __imp__sub_828710A0
 #undef __imp__sub_82889E50
 
+namespace gpu::frame_plan {
+DlssEffectSnapshot menuFlowDlssEffect{};
+DlssEffectSnapshot CurrentDlssEffect() { return menuFlowDlssEffect; }
+}
+
 namespace {
 constexpr uint32_t Menu = 0x10000, ConfigData = 0x21000;
 bool deviceReady = true;
@@ -161,6 +166,328 @@ extern "C" PPC_FUNC(MenuFlowClose)
 }
 extern "C" PPC_FUNC(MenuFlowOriginalLanguage) { (void)ctx; (void)base; }
 extern "C" PPC_FUNC(MenuFlowDefaults) { (void)ctx; (void)base; }
+
+std::string Utf8(const std::wstring& text)
+{
+    if (text.empty()) return {};
+    const int size = WideCharToMultiByte(CP_UTF8, 0, text.c_str(), -1, nullptr, 0, nullptr, nullptr);
+    std::string out(size > 1 ? size - 1 : 0, '\0');
+    if (size > 1) WideCharToMultiByte(CP_UTF8, 0, text.c_str(), -1, out.data(), size, nullptr, nullptr);
+    return out;
+}
+int BrightGlyphs(const std::vector<uint32_t>& pixels, int y0, int y1)
+{
+    int count = 0;
+    for (int y = y0; y < y1; ++y)
+        for (int x = 131; x < 1190; ++x)
+        {
+            const auto p = pixels[size_t(y) * 1280 + x];
+            if (int(p & 255) + int((p >> 8) & 255) + int((p >> 16) & 255) > 500) ++count;
+        }
+    return count;
+}
+bool OptionRowsMatch(const std::vector<uint32_t>& withNotice, const std::vector<uint32_t>& without)
+{
+    for (int y = 0; y < 640; ++y)
+        for (int x = 0; x < 1280; ++x)
+            if (withNotice[size_t(y) * 1280 + x] != without[size_t(y) * 1280 + x]) return false;
+    return true;
+}
+void CheckBr03DlssMenu(uint8_t* base)
+{
+    using gpu::backend::Backend;
+    using gpu::frame_plan::DlssEffectPhase;
+    using gpu::upscaling::DlssQuality;
+    using gpu::upscaling::SizingState;
+    using gpu::upscaling::Upscaler;
+    const auto needsVulkan = std::wstring(L"DLSS needs Vulkan and a restart.");
+    const auto evidence = std::filesystem::current_path() / "out" / "br03-dlss-menu";
+    std::filesystem::create_directories(evidence);
+    std::ofstream notes(evidence / "notices.txt", std::ios::binary);
+    auto saveState = [&](const char* name) {
+        auto preview = settings::snapshot;
+        preview.assets.reset();
+        std::vector<uint32_t> pixels, plain;
+        Require(settings::RasterizeMenu(preview, 1280, 720, pixels), "BR-03 raster");
+        Require(BrightGlyphs(pixels, 672, 692) > 20, "status line is painted in the help bar");
+        auto cleared = preview;
+        cleared.notice.clear();
+        Require(settings::RasterizeMenu(cleared, 1280, 720, plain), "BR-03 raster without notice");
+        Require(OptionRowsMatch(pixels, plain), "status line does not move the option rows");
+        int differ = 0;
+        for (int y = 650; y < 694; ++y)
+            for (int x = 116; x < 1210; ++x)
+                differ += pixels[size_t(y) * 1280 + x] != plain[size_t(y) * 1280 + x];
+        Require(differ > 20, "renderer paints snapshot.notice");
+        WriteBmp(evidence / name, pixels);
+        notes << name << "\t" << Utf8(preview.notice) << "\n";
+    };
+
+    deviceReady = true;
+    settings::restartPrompt = false;
+    settings::collectionPrompt = false;
+    settings::displayTicket = 0;
+    settings::closing = false;
+    settings::bypass = false;
+    currentConfig.uiLanguage = 0;
+    currentConfig.graphicsBackend = settings::GraphicsBackend::D3D12;
+    currentConfig.upscaler = Upscaler::Dlss;
+    currentConfig.dlssQuality = DlssQuality::Quality;
+    settings::active = false;
+    PPC_STORE_U32(Menu + 4, 4);
+    gpu::frame_plan::DlssEffectSnapshot running{};
+    running.device.backend = Backend::D3D12;
+    running.device.deviceReady = true;
+    running.phase = DlssEffectPhase::NeedsVulkanRestart;
+    gpu::frame_plan::menuFlowDlssEffect = running;
+    Tick(base);
+    Require(settings::active, "BR-03 menu is open");
+    settings::tab = 2;
+    settings::row = 5;
+    settings::status.clear();
+    settings::pending = 0;
+    Tick(base);
+    Require(settings::snapshot.notice == needsVulkan, "D3D12 DLSS shows Vulkan restart");
+    Require(settings::snapshot.rows.size() == 11, "BR-03 keeps 11 graphics rows");
+    Require(settings::snapshot.rows[5].enabled && settings::snapshot.rows[5].choices.size() == 2, "DLSS choice stays enabled on D3D12");
+    Require(!settings::snapshot.rows[6].hidden && settings::snapshot.rows[6].enabled, "quality row stays available");
+    Require(settings::snapshot.rows[0].enabled && settings::snapshot.rows[0].choices.size() == 3, "backend choices stay available");
+    Require(settings::snapshot.help == L"Saves the DLSS preference. The status line shows the latest frame plan.",
+            "upscaler help points at the status line");
+    saveState("01-d3d12-needs-vulkan.bmp");
+    settings::pending = 8;
+    Tick(base);
+    Require(settings::edit.upscaler == Upscaler::Off && settings::snapshot.rows[6].hidden, "DLSS can be turned off on D3D12");
+    Require(settings::snapshot.notice == needsVulkan + L" The Off choice is not applied yet.",
+            "turning DLSS off before it is applied does not claim the plan is off");
+    settings::pending = 8;
+    Tick(base);
+    Require(settings::edit.upscaler == Upscaler::Dlss && settings::snapshot.notice == needsVulkan, "DLSS can be turned back on");
+
+    running = {};
+    running.device.backend = Backend::Vulkan;
+    running.device.deviceReady = true;
+    running.device.dlssAvailable = false;
+    running.phase = DlssEffectPhase::DeviceUnavailable;
+    gpu::frame_plan::menuFlowDlssEffect = running;
+    settings::edit.graphicsBackend = settings::GraphicsBackend::Vulkan;
+    settings::pending = 0;
+    Tick(base);
+    Require(settings::snapshot.notice == L"DLSS is not available on this device.", "Vulkan device unavailable");
+    Require(settings::snapshot.rows[5].enabled && !settings::snapshot.rows[6].hidden, "unavailable device does not lock DLSS");
+    saveState("02-vulkan-device-unavailable.bmp");
+
+    running.device.dlssAvailable = true;
+    running.phase = DlssEffectPhase::TemporaryFallback;
+    running.hasPlan = true;
+    running.plannedRequest = Upscaler::Dlss;
+    running.plannedQuality = DlssQuality::Quality;
+    running.sizingKnown = true;
+    running.sizingState = SizingState::Pending;
+    gpu::frame_plan::menuFlowDlssEffect = running;
+    settings::pending = 0;
+    Tick(base);
+    Require(settings::snapshot.notice == L"DLSS is querying the render resolution. Normal rendering is used for now.", "size pending");
+    saveState("03-size-pending.bmp");
+
+    running.device.deviceReady = false;
+    running.device.dlssAvailable = false;
+    gpu::frame_plan::menuFlowDlssEffect = running;
+    settings::pending = 0;
+    Tick(base);
+    Require(settings::snapshot.notice == L"DLSS is waiting for the graphics device. Normal rendering is used for now.",
+            "waiting for the device is not reported as unsupported");
+
+    running.device.deviceReady = true;
+    running.device.dlssAvailable = true;
+    running.phase = DlssEffectPhase::Active;
+    running.plannedQuality = DlssQuality::Quality;
+    running.sizingState = SizingState::Ready;
+    gpu::frame_plan::menuFlowDlssEffect = running;
+    settings::edit.dlssQuality = DlssQuality::Balanced;
+    settings::pending = 0;
+    Tick(base);
+    Require(settings::snapshot.notice == L"Latest frame plan uses DLSS Quality. The selected DLSS quality is not applied yet.",
+            "editing quality does not replace the running Quality plan");
+
+    const auto savesBefore = saves;
+    running.inputWidth = 1707;
+    running.inputHeight = 960;
+    running.outputWidth = 2560;
+    running.outputHeight = 1440;
+    running.consumer = gpu::upscaling::TemporalConsumer::DlssSr;
+    gpu::frame_plan::menuFlowDlssEffect = running;
+    settings::edit.dlssQuality = DlssQuality::Quality;
+    settings::pending = 0;
+    Tick(base);
+    Require(settings::snapshot.notice == L"Latest frame plan uses DLSS Quality. 1707×960 - 2560×1440",
+            "active text names the latest frame plan and its sizes");
+    Require(saves == savesBefore, "status refresh does not save");
+    saveState("04-active-frame-plan.bmp");
+
+    running.plannedQuality = DlssQuality::Dlaa;
+    running.inputWidth = 2560;
+    running.inputHeight = 1440;
+    gpu::frame_plan::menuFlowDlssEffect = running;
+    settings::edit.dlssQuality = DlssQuality::Dlaa;
+    settings::pending = 0;
+    Tick(base);
+    Require(settings::snapshot.notice == L"Latest frame plan uses DLAA. 2560×1440 - 2560×1440", "DLAA uses its own plan text");
+
+    running = {};
+    running.device.backend = Backend::D3D12;
+    running.device.deviceReady = true;
+    running.phase = DlssEffectPhase::NeedsVulkanRestart;
+    running.plannedRequest = Upscaler::Dlss;
+    running.plannedQuality = DlssQuality::Balanced;
+    gpu::frame_plan::menuFlowDlssEffect = running;
+    settings::edit.graphicsBackend = settings::GraphicsBackend::D3D12;
+    settings::edit.upscaler = Upscaler::Dlss;
+    settings::edit.dlssQuality = DlssQuality::Balanced;
+    settings::row = 0;
+    settings::pending = 0;
+    Tick(base);
+    Require(settings::snapshot.notice == needsVulkan, "matching D3D12 edit still needs Vulkan");
+    const auto savesAtCycle = saves;
+    settings::pending = 8;
+    Tick(base);
+    Require(settings::edit.graphicsBackend == settings::GraphicsBackend::Vulkan, "Vulkan can be selected while running D3D12");
+    Require(settings::edit.upscaler == Upscaler::Dlss && settings::edit.dlssQuality == DlssQuality::Balanced,
+            "backend edit keeps the DLSS preference");
+    Require(settings::snapshot.rows[0].enabled && settings::snapshot.rows[0].selectedChoice == 1, "Vulkan cell stays selectable");
+    Require(settings::snapshot.rows[5].enabled && !settings::snapshot.rows[6].hidden, "pending backend does not hide DLSS");
+    Require(settings::snapshot.notice == needsVulkan + L" Still using Direct3D 12 until restart. DLSS is checked after restart.",
+            "pending backend is added after the current plan and does not replace it");
+    Require(saves == savesAtCycle, "selecting Vulkan does not save by itself");
+    saveState("05-backend-pending.bmp");
+    settings::pending = 8;
+    Tick(base);
+    Require(settings::edit.graphicsBackend == settings::GraphicsBackend::D3D11, "Direct3D 11 remains selectable");
+    Require(settings::snapshot.notice == needsVulkan + L" Still using Direct3D 12 until restart. DLSS is checked after restart.",
+            "an unapplied backend still names the running device");
+
+    settings::edit.graphicsBackend = settings::GraphicsBackend::D3D12;
+    settings::status = L"Display settings saved.";
+    settings::row = 10;
+    settings::pending = 0;
+    Tick(base);
+    Require(settings::snapshot.help == L"Display settings saved.", "save message stays on the help line");
+    Require(settings::snapshot.notice == needsVulkan, "save message does not hide the DLSS status");
+
+    settings::status.clear();
+    settings::edit.uiLanguage = 4;
+    settings::edit.graphicsBackend = settings::GraphicsBackend::Vulkan;
+    settings::edit.upscaler = Upscaler::Dlss;
+    settings::edit.dlssQuality = DlssQuality::Quality;
+    running = {};
+    running.device.backend = Backend::Vulkan;
+    running.device.deviceReady = true;
+    running.device.dlssAvailable = true;
+    running.phase = DlssEffectPhase::Active;
+    running.hasPlan = true;
+    running.plannedRequest = Upscaler::Dlss;
+    running.plannedQuality = DlssQuality::Quality;
+    running.sizingKnown = true;
+    running.sizingState = SizingState::Ready;
+    running.inputWidth = 1280;
+    running.inputHeight = 720;
+    running.outputWidth = 1920;
+    running.outputHeight = 1080;
+    gpu::frame_plan::menuFlowDlssEffect = running;
+    settings::pending = 0;
+    Tick(base);
+    Require(settings::snapshot.notice == L"最新画面计划使用 DLSS 质量。 1280×720 - 1920×1080", "simplified status");
+    saveState("06-active-simplified.bmp");
+    settings::edit.uiLanguage = 1;
+    settings::pending = 0;
+    Tick(base);
+    Require(settings::snapshot.notice == L"最新畫面計畫使用 DLSS 品質。 1280×720 - 1920×1080", "traditional status");
+
+    settings::edit.uiLanguage = 0;
+    settings::tab = 0;
+    settings::pending = 0;
+    Tick(base);
+    Require(settings::snapshot.notice.empty(), "other tabs keep a single help line");
+    settings::tab = 2;
+    running.phase = DlssEffectPhase::TemporaryFallback;
+    running.sizingState = SizingState::Pending;
+    gpu::frame_plan::menuFlowDlssEffect = running;
+    settings::pending = 0;
+    Tick(base);
+    Require(settings::snapshot.notice == L"DLSS is querying the render resolution. Normal rendering is used for now.",
+            "an open graphics page reads a new plan without reopening");
+    settings::edit.upscaler = Upscaler::Off;
+    settings::pending = 0;
+    Tick(base);
+    Require(settings::snapshot.notice == L"DLSS is querying the render resolution. Normal rendering is used for now. The Off choice is not applied yet.",
+            "an unsaved Off choice does not replace a plan that is still querying resolution");
+    Require(settings::snapshot.rows[6].hidden && settings::snapshot.rows.size() == 11,
+            "turning DLSS off hides quality and keeps the row count");
+    const auto activePlan = std::wstring(L"Latest frame plan uses DLSS Quality. 1707×960 - 2560×1440");
+    running = {};
+    running.device.backend = Backend::Vulkan;
+    running.device.deviceReady = true;
+    running.device.dlssAvailable = true;
+    running.phase = DlssEffectPhase::Active;
+    running.hasPlan = true;
+    running.plannedRequest = Upscaler::Dlss;
+    running.plannedQuality = DlssQuality::Quality;
+    running.sizingKnown = true;
+    running.sizingState = SizingState::Ready;
+    running.inputWidth = 1707;
+    running.inputHeight = 960;
+    running.outputWidth = 2560;
+    running.outputHeight = 1440;
+    gpu::frame_plan::menuFlowDlssEffect = running;
+    settings::edit.uiLanguage = 0;
+    settings::edit.graphicsBackend = settings::GraphicsBackend::Vulkan;
+    settings::edit.upscaler = Upscaler::Off;
+    settings::edit.dlssQuality = DlssQuality::Quality;
+    settings::tab = 2;
+    settings::pending = 0;
+    Tick(base);
+    Require(settings::snapshot.notice == activePlan + L" The Off choice is not applied yet.",
+            "Active plan stays visible when Off is not saved");
+    Require(settings::snapshot.notice.find(L"DLSS is not in use") == std::wstring::npos, "unsaved Off does not claim DLSS stopped");
+    saveState("07-active-edit-off-unsaved.bmp");
+    settings::edit.upscaler = Upscaler::Dlss;
+    settings::edit.dlssQuality = DlssQuality::Balanced;
+    settings::pending = 0;
+    Tick(base);
+    Require(settings::snapshot.notice == activePlan + L" The selected DLSS quality is not applied yet.",
+            "Active Quality stays visible when Balanced is not saved");
+    Require(settings::snapshot.notice.find(L"DLSS Balanced") == std::wstring::npos, "unsaved Balanced is not described as the plan");
+    Require(settings::snapshot.notice.find(L"not in the latest frame plan") == std::wstring::npos,
+            "an unsaved quality edit is not a fallback");
+    saveState("08-active-quality-unapplied.bmp");
+    running.phase = DlssEffectPhase::Inactive;
+    running.plannedRequest = Upscaler::Off;
+    running.plannedQuality = DlssQuality::Quality;
+    running.device.backend = Backend::D3D12;
+    running.inputWidth = running.inputHeight = running.outputWidth = running.outputHeight = 0;
+    gpu::frame_plan::menuFlowDlssEffect = running;
+    settings::edit.graphicsBackend = settings::GraphicsBackend::D3D12;
+    settings::edit.upscaler = Upscaler::Dlss;
+    settings::edit.dlssQuality = DlssQuality::Quality;
+    settings::pending = 0;
+    Tick(base);
+    Require(settings::snapshot.notice == L"DLSS is not in use. DLSS needs Vulkan and a restart.",
+            "unsaved DLSS on D3D12 says it is not in use and needs Vulkan");
+    Require(settings::snapshot.notice.find(L"Latest frame plan uses") == std::wstring::npos,
+            "unsaved DLSS is not described as the running plan");
+    Require(settings::snapshot.rows[5].enabled && !settings::snapshot.rows[6].hidden, "unsaved DLSS choice stays available");
+    saveState("09-d3d12-edit-dlss-unsaved.bmp");
+    running.device.backend = Backend::Vulkan;
+    gpu::frame_plan::menuFlowDlssEffect = running;
+    settings::edit.graphicsBackend = settings::GraphicsBackend::Vulkan;
+    settings::pending = 0;
+    Tick(base);
+    Require(settings::snapshot.notice == L"DLSS is not in use. The DLSS choice is not applied yet.",
+            "unsaved DLSS on Vulkan stays not in use without a Vulkan warning");
+    notes.close();
+    Require(bool(notes), "write BR-03 notice list");
+    std::puts("PASS BR-03 DLSS menu status: D3D12, device unavailable, size pending, active plan, backend pending");
+}
 
 int main(int argc, char** argv)
 {
@@ -490,6 +817,7 @@ int main(int argc, char** argv)
             }
             std::puts("PASS two Graphics previews from actual Publish/Translate, normal and selected changed labels");
         }
+        CheckBr03DlssMenu(base);
         VirtualFree(base, 0, MEM_RELEASE);
         return 0;
     }

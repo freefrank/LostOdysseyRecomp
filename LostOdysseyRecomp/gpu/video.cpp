@@ -382,6 +382,35 @@ namespace gpu::video
             default: return value;
             }
         }
+
+        // Owner thread only. Report() is read here, after NGX has returned,
+        // and the four fields are published as one value.
+        void PublishOwnedDeviceCapability()
+        {
+            upscaling::BackendDeviceSnapshot snapshot;
+            const bool vulkan = g_vulkan.load(std::memory_order_acquire);
+            snapshot.backend = vulkan ? backend::Backend::Vulkan : backend::Backend::D3D12;
+            snapshot.deviceEpoch = g_deviceEpoch.load(std::memory_order_acquire);
+#if defined(LO_GPU_PLUME)
+            snapshot.deviceReady = g_available && g_device != nullptr;
+            snapshot.dlssAvailable = vulkan && g_dlssController &&
+                g_dlssController->Report().state == dlss::ProbeState::Available;
+#else
+            snapshot.deviceReady = false;
+            snapshot.dlssAvailable = false;
+#endif
+            upscaling::PublishDeviceCapability(snapshot);
+        }
+
+        void PublishClearedDeviceCapability()
+        {
+            upscaling::BackendDeviceSnapshot snapshot;
+            snapshot.backend = g_vulkan.load(std::memory_order_acquire) ? backend::Backend::Vulkan : backend::Backend::D3D12;
+            snapshot.deviceEpoch = g_deviceEpoch.load(std::memory_order_acquire);
+            snapshot.deviceReady = false;
+            snapshot.dlssAvailable = false;
+            upscaling::PublishDeviceCapability(snapshot);
+        }
     }
 
     plume::RenderDevice* GetDevice()
@@ -480,16 +509,7 @@ namespace gpu::video
     bool IsVulkan() { return g_vulkan; }
     upscaling::BackendDeviceSnapshot BackendDeviceState()
     {
-        upscaling::BackendDeviceSnapshot snapshot;
-        snapshot.backend = g_vulkan ? backend::Backend::Vulkan : backend::Backend::D3D12;
-        snapshot.deviceEpoch = g_deviceEpoch.load(std::memory_order_acquire);
-#if defined(LO_GPU_PLUME)
-        snapshot.deviceReady = g_available && g_device != nullptr;
-        snapshot.dlssAvailable = g_dlssController && g_dlssController->Report().state == dlss::ProbeState::Available;
-#else
-        snapshot.deviceReady = false;
-#endif
-        return snapshot;
+        return upscaling::PublishedDeviceCapability();
     }
 #if defined(LO_GPU_PLUME)
     // Called by video's GPU-owning presentation path. TakeSizingRequest releases
@@ -501,6 +521,7 @@ namespace gpu::video
         if (!key || key->deviceEpoch != g_deviceEpoch.load(std::memory_order_acquire)) return;
         frame_plan::PublishSizing(upscaling::SizingService::QueryOutputSizing(*g_dlssController,
             *static_cast<plume::VulkanInterface*>(g_interface.get()), *static_cast<plume::VulkanDevice*>(g_device.get()), *key));
+        PublishOwnedDeviceCapability();
     }
 #endif
     bool WaitForPresentGpu()
@@ -524,6 +545,7 @@ namespace gpu::video
         g_available = false;
         g_initializing = false;
         g_selectedBackend = -1;
+        PublishClearedDeviceCapability();
         renderer::Shutdown();
 #ifdef LO_GPU_PLUME
         WaitForPresentGpu();
@@ -738,6 +760,7 @@ namespace gpu::video
         if (selection.selected) {
             g_selectedBackend = static_cast<int>(*selection.selected);
             g_available = true; g_initializing = false;
+            PublishOwnedDeviceCapability();
             LOG_INFO("video: {} on {}", backend::Name(*selection.selected), g_device->getDescription().name);
         } else {
             LOG_ERROR("video: no usable backend; guest startup aborted: {}", selection.Describe());

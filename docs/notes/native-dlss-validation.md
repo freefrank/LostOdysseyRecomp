@@ -308,3 +308,36 @@ The probe and runtime pass the directory containing the staged `nvngx_dlss.dll` 
 - Perform targeted visual, motion, occlusion, UI and reset acceptance using the documented qualified SR path; retain the historical f11889/f2347 capture limits and reuse completed evidence while behavior remains unchanged.
 - Validate guest alpha preservation, mid-frame flush handling, and UI pass ordering.
 - P4 Frame Generation remains deferred until Super Resolution (P1–P3) is completed and verified.
+
+## 7. 2026-09-22 Workspace Implementation and Validation Status (BR-01, BR-02, BR-03)
+
+This section documents workspace implementation and verification progress on issues BR-01, BR-02, and BR-03 identified following the post-v0.6.7 audit. Historical baseline findings, prior gate evidence, and previously established boundaries are preserved untouched above. Diagnostic-path item K-01 remains unchanged. Implementations and targeted validations are completed in the workspace and incorporated into the pending commit scope; full-program linking, visual gameplay acceptance, and release packaging remain incomplete, with no premature claim of completed commit.
+
+### BR-01: Temporal Lifecycle Harmonization and Clock Advancement
+- **Root Cause & Fix**: Prior code omitted `dlssSrRequested` when updating `temporalFrameTime` and choosing jitter across frame gaps, causing normal DLSS SR and DLAA to continuously reset temporal history after 250 ms. Implemented `gpu::temporal::TemporalConsumerActive` in `LostOdysseyRecomp/gpu/temporal_lifecycle.h` to unify consumer checks across frame start, interval detection, and frame end.
+- **Boundary Correction**: Independent review noted that while a long frame interval may trigger a reset at frame start, a frame-end evaluation must still reset if the frame itself failed to complete or submit. The reset predicate was corrected to `!complete || (gap && !gapAlreadyReset)`.
+- **Validation**:
+  - `LoTemporalLifecycleBr01Test` (cross-platform CPU target): 154 clock advancement and state-machine checks passed originally. Following the logic correction, the 14 gap-specific checks were re-run and passed without re-running unaffected tests.
+  - `LoTemporalLifecycleBr01OwnerTest` (`WIN32 AND LO_BUILD_GPU` target): 12 hardware checks passed on an RTX 5080 (Direct3D 12 backend with motion stub textures, no NGX runtime dependency, no game launch), verifying lifecycle initialization, steady-state stepping, 300 ms gap handling (testing the >250 ms threshold), recovery, and repeated-color invalidation.
+
+### BR-02: Device Capability Snapshot
+- **Root Cause & Fix**: The CPU frame planner directly accessed the mutable `report_.state` of the NGX controller while the GPU worker thread updated it during output sizing queries. Resolved by having the device owner publish a mutex-protected by-value `BackendDeviceSnapshot` during initialization, sizing, and cleanup (`PublishDeviceCapability` / `PublishedDeviceCapability`). The CPU frame planner reads only this value.
+- **Validation**:
+  - `LoDlssCapabilitySnapshotTest` (cross-platform CPU target): 43 checks passed, verifying cold start with upscaler disabled, first enablement of DLSS, disable-and-reenable transitions, concurrent multi-threaded read/write consistency, and fallback reporting.
+
+### BR-03: Menu Runtime Status Feedback and Dynamic Refresh
+- **Implementation**: Updated the in-game Settings menu help area to support a dynamic two-line layout. While the first line displays key navigation or setting descriptions, the second line displays the live planned DLSS effect state via `gpu::frame_plan::CurrentDlssEffect()` across five distinct states: Inactive, Active (with optimal render and output extents), NeedsVulkanRestart, DeviceUnavailable, and TemporaryFallback. Idle frames continuously refresh this snapshot. Uncommitted menu edits (such as selecting Off or changing quality preset before pressing Save) do not overwrite the active runtime status sentence and are appended as qualifying notes.
+- **Scope & Remaining Execution Gap**: Only CPU frame-planning feedback and static/latched capability states are completed. Non-latching transient execution fallbacks (such as pending motion pipeline, unqualified tonemapping color encoding, or feature recreation) lack runtime execution snapshots and root-cause reporting; execution-layer status feedback remains to be implemented.
+- **Validation**:
+  - `LoMenuFlowTest` passed on the latest build, verifying the interaction flow, layout, and three specific uncommitted edit cases:
+    1. Active Quality plan with an unsaved edit to Off;
+    2. Active Quality plan with an unsaved switch to Balanced;
+    3. Direct3D 12 backend with an unsaved edit selecting DLSS.
+  - Test run generated screenshots 01 through 06, along with new captures `07-active-edit-off-unsaved.png`, `08-active-quality-unapplied.png`, and `09-d3d12-edit-dlss-unsaved.png`, plus `notices.txt` under `out/br03-dlss-menu/`. Implementation and focused test flow are complete; full player visual quality acceptance and binary releases remain pending. No underlying GPU suites were re-run.
+
+### Build and Verification Scope
+- CMake configuration was updated to register the three new test targets (`LoTemporalLifecycleBr01Test`, `LoDlssCapabilitySnapshotTest`, and `LoTemporalLifecycleBr01OwnerTest`).
+- `cmake -S . -B build` succeeded. The three test targets compiled and linked cleanly without requiring re-execution of unaffected suites.
+- Production translation units `renderer.cpp`, `video.cpp`, `frame_plan.cpp`, and `upscaling_plan.cpp` compiled cleanly with `LO_GPU_PLUME` enabled.
+- Architectural boundary note: `CurrentDlssEffect` reflects the CPU frame plan and failure latch; it does not indicate per-frame NGX evaluation success or substitute for visual gameplay verification.
+- Full executable linking, in-game visual comparisons, Linux execution, binary release packaging, and player acceptance testing remain pending. These changes are prepared for commit review without claiming that the Git commit or push has completed.

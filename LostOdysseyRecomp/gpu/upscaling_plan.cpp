@@ -3,6 +3,9 @@
 
 namespace gpu::upscaling {
 namespace {
+std::mutex g_deviceCapabilityMutex;
+BackendDeviceSnapshot g_deviceCapability{};
+
 OutputSizing PendingSizing(const SizingKey& key) {
     OutputSizing sizing;
     sizing.key = key;
@@ -62,6 +65,24 @@ void SizingCache::ResetSizing(uint64_t deviceEpoch) {
     entries_ = {};
     pending_.reset();
     inFlight_.reset();
+}
+
+std::optional<OutputSizing> SizingCache::Peek(const SizingKey& key) {
+    std::lock_guard lock(mutex_);
+    if (key.deviceEpoch != deviceEpoch_) return std::nullopt;
+    for (const auto& entry : entries_)
+        if (entry && entry->key == key) return *entry;
+    return std::nullopt;
+}
+
+void PublishDeviceCapability(BackendDeviceSnapshot snapshot) {
+    std::lock_guard lock(g_deviceCapabilityMutex);
+    g_deviceCapability = snapshot;
+}
+
+BackendDeviceSnapshot PublishedDeviceCapability() {
+    std::lock_guard lock(g_deviceCapabilityMutex);
+    return g_deviceCapability;
 }
 
 #if defined(LO_GPU_PLUME)

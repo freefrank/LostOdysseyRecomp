@@ -66,6 +66,15 @@ namespace gpu::frame_plan
             getenv("LO_RESOLVE_READBACK") != nullptr, getenv("LO_DLSS_INPUT_PROBE") && std::string_view(getenv("LO_DLSS_INPUT_PROBE")) == "1"});
     }
     FramePlan CpuPlan() { return cpuPlan; }
+    DlssEffectSnapshot CurrentDlssEffect()
+    {
+        const auto device = upscaling::PublishedDeviceCapability();
+        const auto observed = planner.Observe();
+        std::optional<upscaling::OutputSizing> sizing;
+        if (observed.hasPlan && observed.plan.output.width && observed.plan.output.height)
+            sizing = sizingCache.Peek({device.deviceEpoch, observed.plan.output.width, observed.plan.output.height});
+        return DescribeDlssRuntime(device, observed, sizing ? &*sizing : nullptr);
+    }
     std::optional<FramePlan> CurrentProducerPlan()
     {
         if (renderPlan && renderPlan->cpuSerial) return renderPlan;
