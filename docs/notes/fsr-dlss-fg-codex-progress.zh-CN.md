@@ -95,3 +95,12 @@ P1 的结案仅覆盖可运行路径及其有界输入／回退合同；P2 的�
 Windows 与原生 Linux 已完成首轮增量构建，见 [构建记录](../../out/streamline-fg-p0/fsr-p2-alpha-build-result.json)。Windows `d567693c…` 在隔离城镇实景的 frame12000 记录 14 次已审计 draw，实际分配为 `853×491`，raw mask 有 130 个非零像素。draw1979 的原 `R16G16B16A16_FLOAT` 颜色 3,350,584 字节、D32 的 R32 depth plane 1,675,292 字节在同一次 replay 前后完全一致，独立哈希与逐像素比较均吻合；读回所属 serial24006 已完成后才导出。进程 exit0，原 settings／save／profile 未变。见 [实景结果](../../out/streamline-fg-p0/fsr-alpha-windows-01/result.json)。该检查不覆盖 stencil，不表示完整透明覆盖或画质／性能收益。
 
 诊断可将 `LO_FSR_ALPHA_CAPTURE_FRAME`、`LO_FSR_ALPHA_COMPARE_FRAME` 设为同一个预定 renderer 帧，并设置绝对 `LO_FSR_ALPHA_CAPTURE_DIR`。正常未启用路径不分配这些读回。只读深度格式暂限 D32_FLOAT_S8_UINT；不支持格式明确输出状态，不能据此当作相等。首轮捕获的有效证据与后续 long-frame epoch 顺序修复分开记录，最终提交前完成该窄修与受影响构建。
+
+
+### 原生 Linux alpha 实景与首切片提交
+
+首切片已提交为 `c8975c2`。长帧 epoch 更新顺序已修正，168 项时钟检查和独立源码复核通过；随后双平台增量构建通过，见[最终构建记录](../../out/streamline-fg-p0/fsr-p2-alpha-final-build-result.json)。Windows 已取得的同 draw 证据不受无 hitch 路径未变的窄修影响，未重复运行。
+
+psvita 的原生 Linux RADV 使用该最终构建 `8e8b2bd5…` 完成相同诊断：frame12000、serial24010、14 次 audited draw，`853×491` raw R8 有 148 个非零像素；draw1994 的颜色 3,350,584 字节和 R32 depth plane 1,675,292 字节前后完全相同。两个 readback 在 fence 完成后导出，画面、HUD 与颜色正常，进程 exit0，17 个原配置／profile／存档文件哈希未变。证据见[Linux alpha 结果](../../out/streamline-fg-p0/fsr-alpha-linux-02/result.json)。首轮代理导航延迟错过固定采集帧，保留为未取得证据；同一 EXE 改用定时菜单输入后重试成功，没有把首轮记为 SDK 失败。
+
+这仍是 `PartialCoverage` 原始材质 alpha，不包含 resolve／fetch／后处理传播、SDK mask、stencil 不变、性能收益或 Steam Deck 验收。psvita 当前为 ONEXPLAYER APEX / Radeon 8060S。下一片版本桥接正在开发，未据此宣称通过。

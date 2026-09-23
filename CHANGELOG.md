@@ -11,7 +11,7 @@ One record of completed changes, with unpublished work separated from verified r
 - Experimental opt-in FSR SR development updates:
   - Added the fixed FidelityFX SDK v1.1.4 (FSR 3.1.4) source-build path for Windows and native Linux behind `LO_ENABLE_FSR=ON` and `LO_REQUIRE_FSR=ON`, with bounded Windows execution evidence for all four presets and native Linux RADV Quality, Performance and Native AA submissions. Full quality/performance, Steam Deck, player, and DLSS frame-generation acceptance remain pending.
   - Added opt-in three-frame FSR input/output capture with completed-submission metadata, camera/depth motion diagnostics, and bounded right-stick test input. Controlled Windows translation/yaw checks passed for static geometry; this is not full image-quality acceptance.
-  - Added explicitly enabled raw material-alpha replay for six audited shader pairs, with R8 MAX accumulation and same-draw color/depth readback diagnostics. A Windows town capture produced nonzero alpha while preserving original color and depth bytes. Postprocess propagation and SDK reactive/transparency inputs remain pending.
+  - Added explicitly enabled raw material-alpha replay for six audited shader pairs, with R8 MAX accumulation and same-draw color/depth readback diagnostics. Windows and native Linux RADV town captures produced nonzero alpha while preserving original color and depth bytes. Postprocess propagation and SDK reactive/transparency inputs remain pending.
   - Fixed presented screenshots interpreting BGRA swapchain pixels as RGBA; verified with a native Linux Native AA capture.
 
 - Native DLSS SR/DLAA lifecycle and capability coordination updates (BR-01, BR-02):
@@ -38,7 +38,7 @@ One record of completed changes, with unpublished work separated from verified r
 - 实验性可选 FSR 超分开发更新：
   - 增加固定 FidelityFX SDK v1.1.4（FSR 3.1.4 实现）的源码构建路径，通过 `LO_ENABLE_FSR=ON` 与 `LO_REQUIRE_FSR=ON` 在 Windows 和原生 Linux 选择性启用；Windows 四档已有有界运行证据，原生 Linux RADV 已有 Quality、Performance 和 Native AA 真实提交；完整画质／性能、Steam Deck、玩家及 DLSS 帧生成验收仍待完成。
   - 增加显式启用的 FSR 三帧输入／输出捕获、提交完成元数据、相机／深度运动诊断及有界右摇杆测试输入。Windows 受控移动／旋转的静态几何检查通过，不代表完整画质验收。
-  - 增加显式启用的原始材质 alpha replay，覆盖六组已审计着色器，使用 R8 MAX 累积并提供同一次绘制的颜色／深度读回诊断。Windows 城镇捕获获得非零 alpha，原颜色和深度字节保持不变；后处理传播与 SDK reactive／transparency 输入仍待完成。
+  - 增加显式启用的原始材质 alpha replay，覆盖六组已审计着色器，使用 R8 MAX 累积并提供同一次绘制的颜色／深度读回诊断。Windows 与原生 Linux RADV 城镇捕获均获得非零 alpha，原颜色和深度字节保持不变；后处理传播与 SDK reactive／transparency 输入仍待完成。
   - 修复最终呈现截图将 BGRA 交换链像素按 RGBA 解读的问题，已用原生 Linux Native AA 截图验证。
 
 - 原生 DLSS SR/DLAA 生命周期与能力协调更新（BR-01、BR-02）：
