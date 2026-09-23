@@ -103,26 +103,100 @@ const wchar_t *VoiceName(uint8_t *base, uint32_t index)
     const auto language = VoiceLanguage(base, index);
     return language >= 1 && language < std::size(names) ? names[language] : L"Unknown";
 }
-std::wstring PlanSizeSuffix(const gpu::frame_plan::DlssEffectSnapshot &running)
+std::wstring ExecutionSizeSuffix(const gpu::frame_plan::FramePlan &plan)
 {
-    if (!running.inputWidth || !running.inputHeight || !running.outputWidth || !running.outputHeight)
+    if (!plan.width || !plan.height || !plan.output.width || !plan.output.height)
         return {};
-    return L" " + std::to_wstring(running.inputWidth) + L"×" + std::to_wstring(running.inputHeight) +
-           L" - " + std::to_wstring(running.outputWidth) + L"×" + std::to_wstring(running.outputHeight);
+    return L" " + std::to_wstring(plan.width) + L"×" + std::to_wstring(plan.height) +
+           L" - " + std::to_wstring(plan.output.width) + L"×" + std::to_wstring(plan.output.height);
 }
-const wchar_t *ActivePlanSentence(gpu::upscaling::DlssQuality quality)
+const wchar_t *SubmittedModeSentence(gpu::upscaling::DlssQuality quality)
 {
     switch (gpu::upscaling::NormalizeDlssQuality(quality))
     {
     case gpu::upscaling::DlssQuality::Balanced:
-        return Tr(L"Latest frame plan uses DLSS Balanced.", L"最新畫面計畫使用 DLSS 平衡。");
+        return Tr(L"Submitted DLSS Balanced output.", L"已提交 DLSS 平衡輸出。");
     case gpu::upscaling::DlssQuality::Performance:
-        return Tr(L"Latest frame plan uses DLSS Performance.", L"最新畫面計畫使用 DLSS 效能。");
+        return Tr(L"Submitted DLSS Performance output.", L"已提交 DLSS 效能輸出。");
     case gpu::upscaling::DlssQuality::Dlaa:
-        return Tr(L"Latest frame plan uses DLAA.", L"最新畫面計畫使用 DLAA。");
+        return Tr(L"Submitted DLAA output.", L"已提交 DLAA 輸出。");
     default:
-        return Tr(L"Latest frame plan uses DLSS Quality.", L"最新畫面計畫使用 DLSS 品質。");
+        return Tr(L"Submitted DLSS Quality output.", L"已提交 DLSS 品質輸出。");
     }
+}
+// Classified reason from DlssEffectSnapshot. The menu does not infer GPU eligibility.
+const wchar_t *ReasonSentence(gpu::frame_plan::DlssEffectReason reason)
+{
+    using gpu::frame_plan::DlssEffectReason;
+    switch (reason)
+    {
+    case DlssEffectReason::AwaitingGpuFrame:
+        return Tr(L"Waiting for the first DLSS result.", L"正在等待第一次 DLSS 結果。");
+    case DlssEffectReason::DeviceNotReady:
+        return Tr(L"DLSS is waiting for the graphics device. Normal rendering is used for now.",
+                  L"DLSS 正在等待圖形裝置。目前先使用常規渲染。");
+    case DlssEffectReason::NeedsVulkanRestart:
+        return Tr(L"DLSS needs Vulkan and a restart.", L"DLSS 需要 Vulkan，並在重新啟動後才會使用。");
+    case DlssEffectReason::CapabilityUnavailable:
+        return Tr(L"DLSS is not available on this device.", L"這台裝置無法使用 DLSS。");
+    case DlssEffectReason::SizingPending:
+        return Tr(L"DLSS is querying the render resolution. Normal rendering is used for now.",
+                  L"DLSS 正在查詢渲染解析度。目前先使用常規渲染。");
+    case DlssEffectReason::SizingUnavailable:
+        return Tr(L"Render resolution is unavailable.", L"渲染解析度無法使用。");
+    case DlssEffectReason::SizingError:
+        return Tr(L"Render resolution query failed.", L"渲染解析度查詢失敗。");
+    case DlssEffectReason::InputProbeOnly:
+        return Tr(L"Input capture only. DLSS is not run.", L"只採集輸入，不執行 DLSS。");
+    case DlssEffectReason::NoEligibleScene:
+        return Tr(L"No eligible scene this frame.", L"這一幀沒有合格場景。");
+    case DlssEffectReason::MotionPipelinePending:
+        return Tr(L"Motion data is still being prepared.", L"正在準備運動資料。");
+    case DlssEffectReason::UnknownColorEncoding:
+        return Tr(L"Color conditions do not support DLSS.", L"色彩條件不支援 DLSS。");
+    case DlssEffectReason::FeatureReconfigurePending:
+        return Tr(L"Waiting to rebuild DLSS.", L"正在等待重建 DLSS。");
+    case DlssEffectReason::PromotionUnavailable:
+        return Tr(L"DLSS output was not adopted.", L"未能採用 DLSS 輸出。");
+    case DlssEffectReason::RequestFailure:
+        return Tr(L"DLSS request failed and fell back. No automatic retry.",
+                  L"DLSS 請求失敗並已回退，不會自動重試。");
+    case DlssEffectReason::GpuWorkStopped:
+        return Tr(L"GPU work has stopped.", L"GPU 工作已停止。");
+    case DlssEffectReason::None:
+        break;
+    }
+    return nullptr;
+}
+const wchar_t *PhaseSentence(gpu::frame_plan::DlssEffectPhase phase)
+{
+    using gpu::frame_plan::DlssEffectPhase;
+    using gpu::frame_plan::DlssEffectReason;
+    switch (phase)
+    {
+    case DlssEffectPhase::AwaitingExecution:
+        return ReasonSentence(DlssEffectReason::AwaitingGpuFrame);
+    case DlssEffectPhase::InputProbeOnly:
+        return ReasonSentence(DlssEffectReason::InputProbeOnly);
+    case DlssEffectPhase::GpuStopped:
+        return ReasonSentence(DlssEffectReason::GpuWorkStopped);
+    case DlssEffectPhase::NeedsVulkanRestart:
+        return ReasonSentence(DlssEffectReason::NeedsVulkanRestart);
+    case DlssEffectPhase::DeviceUnavailable:
+        return ReasonSentence(DlssEffectReason::CapabilityUnavailable);
+    case DlssEffectPhase::TemporaryFallback:
+        return Tr(L"DLSS is not running. Normal rendering is used for now.",
+                  L"DLSS 沒有在執行。目前先使用常規渲染。");
+    case DlssEffectPhase::Inactive:
+    case DlssEffectPhase::Active:
+        break;
+    }
+    return Tr(L"DLSS is not in use.", L"DLSS 目前未啟用。");
+}
+std::wstring SubmittedSentence(const gpu::frame_plan::DlssEffectSnapshot &running)
+{
+    return std::wstring(SubmittedModeSentence(running.execution->plan.dlssQuality)) +
+           ExecutionSizeSuffix(running.execution->plan);
 }
 const wchar_t *BackendPendingSentence(gpu::backend::Backend backend)
 {
@@ -138,57 +212,57 @@ const wchar_t *BackendPendingSentence(gpu::backend::Backend backend)
     return Tr(L"Graphics backend change is not applied. DLSS is checked after restart.",
               L"圖形後端變更尚未套用。DLSS 會在重新啟動後再確認。");
 }
-// The first sentence is the latest CPU plan. An unsaved menu edit is only a
-// following note. Active means that plan chose DLSS, not that NGX succeeded.
+// The first sentence is the classified result. Active with an execution record
+// reads quality and size from that submitted frame, not from an unsaved edit or
+// the CPU plan. Submitted means that output was accepted for submission. It does
+// not mean the GPU finished, the image was presented, or the whole frame used DLSS.
+// Active without an execution record stays on the waiting sentence.
+// An unsaved Off, quality, or backend edit is only a following note.
 std::wstring DlssNotice()
 {
     const auto running = gpu::frame_plan::CurrentDlssEffect();
     std::wstring text;
-    switch (running.phase)
-    {
-    case gpu::frame_plan::DlssEffectPhase::Active:
-        text = std::wstring(ActivePlanSentence(running.plannedQuality)) + PlanSizeSuffix(running);
-        break;
-    case gpu::frame_plan::DlssEffectPhase::NeedsVulkanRestart:
-        text = Tr(L"DLSS needs Vulkan and a restart.", L"DLSS 需要 Vulkan，並在重新啟動後才會使用。");
-        break;
-    case gpu::frame_plan::DlssEffectPhase::DeviceUnavailable:
-        text = Tr(L"DLSS is not available on this device.", L"這台裝置無法使用 DLSS。");
-        break;
-    case gpu::frame_plan::DlssEffectPhase::TemporaryFallback:
-        if (!running.device.deviceReady)
-            text = Tr(L"DLSS is waiting for the graphics device. Normal rendering is used for now.",
-                      L"DLSS 正在等待圖形裝置。目前先使用常規渲染。");
-        else if (running.device.dlssAvailable &&
-                 (!running.sizingKnown || running.sizingState == gpu::upscaling::SizingState::Pending))
-            text = Tr(L"DLSS is querying the render resolution. Normal rendering is used for now.",
-                      L"DLSS 正在查詢渲染解析度。目前先使用常規渲染。");
-        else
-            text = Tr(L"DLSS is not in the latest frame plan. Normal rendering is used for now.",
-                      L"最新的畫面計畫沒有使用 DLSS。目前先使用常規渲染。");
-        break;
-    case gpu::frame_plan::DlssEffectPhase::Inactive:
-    default:
-        text = Tr(L"DLSS is not in use.", L"DLSS 目前未啟用。");
-        break;
-    }
+    if (running.phase == gpu::frame_plan::DlssEffectPhase::Active && running.execution)
+        text = SubmittedSentence(running);
+    else if (running.phase == gpu::frame_plan::DlssEffectPhase::Active)
+        text = ReasonSentence(gpu::frame_plan::DlssEffectReason::AwaitingGpuFrame);
+    else if (const wchar_t *classified = ReasonSentence(running.reason))
+        text = classified;
+    else
+        text = PhaseSentence(running.phase);
     const bool backendPending = edit.graphicsBackend != running.device.backend;
-    const bool planRequestsDlss = running.phase != gpu::frame_plan::DlssEffectPhase::Inactive;
-    if (planRequestsDlss && edit.upscaler != gpu::upscaling::Upscaler::Dlss)
+    const bool runningDlss = running.phase != gpu::frame_plan::DlssEffectPhase::Inactive;
+    std::optional<gpu::upscaling::DlssQuality> appliedQuality;
+    if (running.phase == gpu::frame_plan::DlssEffectPhase::Active)
+    {
+        if (running.execution)
+            appliedQuality = gpu::upscaling::NormalizeDlssQuality(running.execution->plan.dlssQuality);
+    }
+    else if (runningDlss)
+        appliedQuality = gpu::upscaling::NormalizeDlssQuality(running.plannedQuality);
+    if (runningDlss && edit.upscaler != gpu::upscaling::Upscaler::Dlss)
         text += std::wstring(L" ") + Tr(L"The Off choice is not applied yet.", L"關閉選項尚未套用。");
-    else if (!planRequestsDlss && edit.upscaler == gpu::upscaling::Upscaler::Dlss && !backendPending &&
+    else if (!runningDlss && edit.upscaler == gpu::upscaling::Upscaler::Dlss && !backendPending &&
              running.device.backend != gpu::backend::Backend::Vulkan)
         text += std::wstring(L" ") + Tr(L"DLSS needs Vulkan and a restart.", L"DLSS 需要 Vulkan，並在重新啟動後才會使用。");
-    else if (!planRequestsDlss && edit.upscaler == gpu::upscaling::Upscaler::Dlss && !backendPending)
+    else if (!runningDlss && edit.upscaler == gpu::upscaling::Upscaler::Dlss && !backendPending)
         text += std::wstring(L" ") + Tr(L"The DLSS choice is not applied yet.", L"DLSS 選項尚未套用。");
-    else if (planRequestsDlss && edit.upscaler == gpu::upscaling::Upscaler::Dlss &&
-             gpu::upscaling::NormalizeDlssQuality(edit.dlssQuality) !=
-                 gpu::upscaling::NormalizeDlssQuality(running.plannedQuality))
+    else if (runningDlss && edit.upscaler == gpu::upscaling::Upscaler::Dlss && appliedQuality &&
+             gpu::upscaling::NormalizeDlssQuality(edit.dlssQuality) != *appliedQuality)
         text += std::wstring(L" ") + Tr(L"The selected DLSS quality is not applied yet.", L"選取的 DLSS 品質尚未套用。");
     if (backendPending)
         text += std::wstring(L" ") + BackendPendingSentence(running.device.backend);
     return text;
 }
+bool GraphicsRowHidden(int r)
+{
+    return r == int(GraphicsRow::DlssQuality) && edit.upscaler != gpu::upscaling::Upscaler::Dlss;
+}
+bool GraphicsRowIsAction(int r)
+{
+    return r == int(GraphicsRow::Brightness) || r == int(GraphicsRow::Save);
+}
+static_assert(int(GraphicsRow::Save) + 1 == int(GraphicsRow::Count));
 void Publish(uint8_t *base, uint32_t config)
 {
     Snapshot next;
@@ -196,11 +270,15 @@ void Publish(uint8_t *base, uint32_t config)
     next.row = row;
     next.language = edit.uiLanguage;
     const uint32_t flags = PPC_LOAD_U32(config + 4);
-    auto addChoices = [&](const wchar_t *en, const wchar_t *zh, std::vector<std::wstring> choices,
-                          uint32_t selected, bool enabled = true) {
+    auto makeChoices = [&](const wchar_t *en, const wchar_t *zh, std::vector<std::wstring> choices,
+                           uint32_t selected, bool enabled = true) {
         selected = choices.empty() ? 0 : std::min(selected, uint32_t(choices.size() - 1));
         const std::wstring value = choices.empty() ? std::wstring{} : choices[selected];
-        next.rows.push_back({Tr(en, zh), value, enabled, std::move(choices), int(selected)});
+        return Row{Tr(en, zh), value, enabled, std::move(choices), int(selected)};
+    };
+    auto addChoices = [&](const wchar_t *en, const wchar_t *zh, std::vector<std::wstring> choices,
+                          uint32_t selected, bool enabled = true) {
+        next.rows.push_back(makeChoices(en, zh, std::move(choices), selected, enabled));
     };
     auto addAction = [&](const wchar_t *en, const wchar_t *zh, const wchar_t *value) {
         addChoices(en, zh, {value}, 0);
@@ -250,18 +328,22 @@ void Publish(uint8_t *base, uint32_t config)
     }
     else if (tab == 2)
     {
+        next.rows.resize(int(GraphicsRow::Count));
+        auto placeGraphics = [&](GraphicsRow id, Row value) {
+            next.rows[int(id)] = std::move(value);
+        };
 #ifdef _WIN32
-        addChoices(L"Graphics backend", L"圖形後端", {L"Direct3D 12", L"Vulkan", Tr(L"Direct3D 11 (unsupported)", L"Direct3D 11（尚未支援）")},
-                   uint32_t(edit.graphicsBackend));
+        placeGraphics(GraphicsRow::Backend, makeChoices(L"Graphics backend", L"圖形後端", {L"Direct3D 12", L"Vulkan", Tr(L"Direct3D 11 (unsupported)", L"Direct3D 11（尚未支援）")},
+                   uint32_t(edit.graphicsBackend)));
 #else
-        addChoices(L"Graphics backend", L"圖形後端", {L"Vulkan"}, 0);
+        placeGraphics(GraphicsRow::Backend, makeChoices(L"Graphics backend", L"圖形後端", {L"Vulkan"}, 0));
 #endif
-        addChoices(L"Display mode", L"顯示模式",
+        placeGraphics(GraphicsRow::DisplayMode, makeChoices(L"Display mode", L"顯示模式",
                    {Tr(L"Windowed", L"視窗"), Tr(L"Borderless fullscreen", L"無邊框全螢幕"),
                     Tr(L"Exclusive fullscreen", L"獨占全螢幕")},
-                   uint32_t(edit.windowMode));
+                   uint32_t(edit.windowMode)));
         const bool ultrawide = IsUltrawideAspect(edit.width, edit.height);
-        addChoices(L"Widescreen", L"寬螢幕", onOff(), ultrawide ? 0 : 1);
+        placeGraphics(GraphicsRow::Widescreen, makeChoices(L"Widescreen", L"寬螢幕", onOff(), ultrawide ? 0 : 1));
         std::vector<std::wstring> outputChoices;
         uint32_t outputChoice = 0;
         if (ultrawide)
@@ -282,27 +364,28 @@ void Publish(uint8_t *base, uint32_t config)
                 if (edit.width == resolutions16_9[i][0] && edit.height == resolutions16_9[i][1]) outputChoice = i;
             }
         }
-        addChoices(L"Output resolution", L"輸出解析度", std::move(outputChoices), outputChoice);
-        addChoices(L"Anti-aliasing", L"抗鋸齒",
+        placeGraphics(GraphicsRow::OutputResolution, makeChoices(L"Output resolution", L"輸出解析度", std::move(outputChoices), outputChoice));
+        placeGraphics(GraphicsRow::AntiAliasing, makeChoices(L"Anti-aliasing", L"抗鋸齒",
                    {Tr(L"Off", L"關"), L"FXAA", L"SMAA", Tr(L"TAA (Experimental)", L"TAA（實驗性）")},
-                   std::min(edit.antialiasing, 3u));
-        addChoices(L"Upscaler", L"縮放技術",
+                   std::min(edit.antialiasing, 3u)));
+        placeGraphics(GraphicsRow::Upscaler, makeChoices(L"Upscaler", L"縮放技術",
                    {Tr(L"Off", L"關"), L"DLSS"},
-                   std::min(uint32_t(edit.upscaler), 1u));
-        addChoices(L"DLSS quality", L"DLSS 品質",
+                   std::min(uint32_t(edit.upscaler), 1u)));
+        auto dlssQuality = makeChoices(L"DLSS quality", L"DLSS 品質",
                    {Tr(L"Quality", L"品質"), Tr(L"Balanced", L"平衡"), Tr(L"Performance", L"效能"), L"DLAA"},
                    std::min(uint32_t(edit.dlssQuality), 3u));
-        // Hidden instead of removed so the logical row indices below stay stable.
-        next.rows.back().hidden = edit.upscaler != gpu::upscaling::Upscaler::Dlss;
-        addChoices(L"Upscaling quality", L"縮放品質",
+        // Hidden instead of removed so this logical id stays stable for input, drawing and hit-testing.
+        dlssQuality.hidden = GraphicsRowHidden(int(GraphicsRow::DlssQuality));
+        placeGraphics(GraphicsRow::DlssQuality, std::move(dlssQuality));
+        placeGraphics(GraphicsRow::ScalingQuality, makeChoices(L"Upscaling quality", L"縮放品質",
                    {Tr(L"Standard", L"標準"), Tr(L"High", L"高")},
-                   std::min(edit.scalingQuality, 1u));
-        addChoices(L"Frame rate", L"影格率",
+                   std::min(edit.scalingQuality, 1u)));
+        placeGraphics(GraphicsRow::FrameRate, makeChoices(L"Frame rate", L"影格率",
                    {L"30 FPS", std::wstring(L"60 FPS") + Tr(L" (experimental)", L"（實驗性）"),
                     std::wstring(L"120 FPS") + Tr(L" (experimental)", L"（實驗性）")},
-                   edit.frameRate == 120 ? 2 : edit.frameRate == 60 ? 1 : 0);
-        addAction(L"Brightness calibration", L"亮度校準", Tr(L"Open", L"開啟"));
-        addAction(L"Save graphics settings", L"儲存圖形設定", Tr(L"Save", L"儲存"));
+                   edit.frameRate == 120 ? 2 : edit.frameRate == 60 ? 1 : 0));
+        placeGraphics(GraphicsRow::Brightness, makeChoices(L"Brightness calibration", L"亮度校準", {Tr(L"Open", L"開啟")}, 0));
+        placeGraphics(GraphicsRow::Save, makeChoices(L"Save graphics settings", L"儲存圖形設定", {Tr(L"Save", L"儲存")}, 0));
     }
     else
     {
@@ -342,38 +425,58 @@ void Publish(uint8_t *base, uint32_t config)
     if (tab == 3 && row == 1)
         next.help = Tr(L"Game language takes effect after restarting. Requires matching language assets.",
                        L"遊戲語言重新啟動後生效，需要對應語言資源。中文遊戲文本需要亞洲版資源。");
-    if (tab == 2 && row == 0) {
-        next.help = Tr(L"The graphics backend is changed after restarting. LO_GRAPHICS_API remains a diagnostic override.",
-                       L"圖形後端重新啟動後變更；LO_GRAPHICS_API 仍可作為診斷覆寫。 ");
-        const auto selected = gpu::video::SelectedBackend();
-        next.help += Tr(L" Running: ", L" 目前使用：");
-        next.help += selected == gpu::backend::Backend::Vulkan ? L"Vulkan" :
-            selected == gpu::backend::Backend::D3D12 ? L"Direct3D 12" : L"-";
+    if (tab == 2)
+    {
+        switch (GraphicsRow(row))
+        {
+        case GraphicsRow::Backend: {
+            next.help = Tr(L"The graphics backend is changed after restarting. LO_GRAPHICS_API remains a diagnostic override.",
+                           L"圖形後端重新啟動後變更；LO_GRAPHICS_API 仍可作為診斷覆寫。 ");
+            const auto selected = gpu::video::SelectedBackend();
+            next.help += Tr(L" Running: ", L" 目前使用：");
+            next.help += selected == gpu::backend::Backend::Vulkan ? L"Vulkan" :
+                selected == gpu::backend::Backend::D3D12 ? L"Direct3D 12" : L"-";
+            break;
+        }
+        case GraphicsRow::Widescreen:
+            next.help = Tr(L"Switches resolution choices between 16:9 and 21:9 ultrawide.",
+                           L"在 16:9 與 21:9 寬螢幕規格之間切換解析度選項。");
+            break;
+        case GraphicsRow::OutputResolution:
+            next.help = Tr(L"Sets the output size. Borderless fullscreen uses the desktop size.",
+                           L"設定輸出尺寸；無邊框全螢幕使用桌面尺寸。");
+            break;
+        case GraphicsRow::AntiAliasing:
+            if (edit.antialiasing == 3)
+                next.help = Tr(L"Camera-based TAA; moving effects may trail. Unsupported scenes use SMAA.",
+                               L"以相機重投影的 TAA；動態特效可能拖影。不支援的場景使用 SMAA。");
+            break;
+        case GraphicsRow::Upscaler:
+            next.help = Tr(L"Saves the DLSS preference. The status line shows the latest DLSS result.",
+                           L"儲存 DLSS 偏好。狀態列顯示最新的 DLSS 結果。");
+            break;
+        case GraphicsRow::DlssQuality:
+            next.help = Tr(L"Quality, Balanced, Performance, or DLAA. The status line shows the submitted mode.",
+                           L"品質、平衡、效能或 DLAA。狀態列顯示已提交的模式。");
+            break;
+        case GraphicsRow::ScalingQuality:
+            next.help = Tr(L"Controls filtering when upscaling is active.",
+                           L"控制啟用縮放時的取樣濾鏡。");
+            break;
+        case GraphicsRow::FrameRate:
+            next.help = edit.frameRate == 120
+                ? Tr(L"120 FPS is experimental and requires LO_EXPERIMENTAL_120; otherwise runs at 60 FPS.",
+                     L"120 FPS 為實驗性功能，需啟用 LO_EXPERIMENTAL_120，否則以 60 FPS 執行。")
+                : Tr(L"60/120 FPS are experimental. Verify game speed, audio and battle timing.",
+                     L"60/120 FPS 為實驗性功能，請確認遊戲速度、音訊與戰鬥時序。");
+            break;
+        case GraphicsRow::DisplayMode:
+        case GraphicsRow::Brightness:
+        case GraphicsRow::Save:
+        case GraphicsRow::Count:
+            break;
+        }
     }
-    if (tab == 2 && row == 2)
-        next.help = Tr(L"Switches resolution choices between 16:9 and 21:9 ultrawide.",
-                       L"在 16:9 與 21:9 寬螢幕規格之間切換解析度選項。");
-    if (tab == 2 && row == 3)
-        next.help = Tr(L"Sets the output size. Borderless fullscreen uses the desktop size.",
-                       L"設定輸出尺寸；無邊框全螢幕使用桌面尺寸。");
-    if (tab == 2 && row == 4 && edit.antialiasing == 3)
-        next.help = Tr(L"Camera-based TAA; moving effects may trail. Unsupported scenes use SMAA.",
-                       L"以相機重投影的 TAA；動態特效可能拖影。不支援的場景使用 SMAA。");
-    if (tab == 2 && row == 5)
-        next.help = Tr(L"Saves the DLSS preference. The status line shows the latest frame plan.",
-                       L"儲存 DLSS 偏好。狀態列顯示最新的畫面計畫。");
-    if (tab == 2 && row == 6)
-        next.help = Tr(L"Quality, Balanced, Performance, or DLAA. The status line shows whether it is in the latest frame plan.",
-                       L"品質、平衡、效能或 DLAA。狀態列顯示最新畫面計畫是否使用它。");
-    if (tab == 2 && row == 7)
-        next.help = Tr(L"Controls filtering when upscaling is active.",
-                       L"控制啟用縮放時的取樣濾鏡。");
-    if (tab == 2 && row == 8)
-        next.help = edit.frameRate == 120
-            ? Tr(L"120 FPS is experimental and requires LO_EXPERIMENTAL_120; otherwise runs at 60 FPS.",
-                 L"120 FPS 為實驗性功能，需啟用 LO_EXPERIMENTAL_120，否則以 60 FPS 執行。")
-            : Tr(L"60/120 FPS are experimental. Verify game speed, audio and battle timing.",
-                 L"60/120 FPS 為實驗性功能，請確認遊戲速度、音訊與戰鬥時序。");
     if (!status.empty()) next.help = status;
     if (restartPrompt)
     {
@@ -754,12 +857,12 @@ PPC_FUNC(sub_822F19B0)
         row = 0;
         status.clear();
     }
-    const int count = tab == 0 ? 8 : tab == 1 ? 3 : tab == 2 ? 11 : 5;
-    // Row 6 (DLSS quality) hides unless the upscaler is DLSS. It keeps its
-    // logical index and navigation skips it. Keyboard Enter reaches the menu
-    // as GAMEPAD_START (hid.cpp), so one branch covers gamepad Start and Enter.
+    const int count = tab == 0 ? 8 : tab == 1 ? 3 : tab == 2 ? int(GraphicsRow::Count) : 5;
+    // DLSS quality keeps its logical id and navigation skips it while the
+    // upscaler is not DLSS. Keyboard Enter reaches the menu as GAMEPAD_START
+    // (hid.cpp), so one branch covers gamepad Start and Enter.
     auto rowHidden = [&](int r) {
-        return tab == 2 && r == 6 && edit.upscaler != gpu::upscaling::Upscaler::Dlss;
+        return tab == 2 && GraphicsRowHidden(r);
     };
     if (input & 1)
         do { row = (row + count - 1) % count; } while (rowHidden(row));
@@ -768,7 +871,7 @@ PPC_FUNC(sub_822F19B0)
     if (input & 0x10)
     {
         if (tab == 2)
-            row = 10;
+            row = int(GraphicsRow::Save);
         else if (tab == 3)
             row = 3;
         // Start / Enter only shifts focus to Save; inhibit confirm on the same tick
@@ -781,7 +884,7 @@ PPC_FUNC(sub_822F19B0)
         } else { collectionPrompt = true; collectionChoice = 1; }
         Publish(base, config); return;
     }
-    const bool action = (tab == 0 && row == 7) || (tab == 2 && row >= 9) || (tab == 3 && row == 3);
+    const bool action = (tab == 0 && row == 7) || (tab == 2 && GraphicsRowIsAction(row)) || (tab == 3 && row == 3);
     const int delta = (input & 4) ? -1 : ((input & 8) || ((input & 0x1000) && !action)) ? 1 : 0;
     auto cycle = [&](uint32_t value, uint32_t count) {
         return uint32_t((int(value) + int(count) + delta) % int(count));
@@ -820,15 +923,19 @@ PPC_FUNC(sub_822F19B0)
         }
         else if (tab == 2)
         {
-            if (row == 0)
+            switch (GraphicsRow(row))
+            {
+            case GraphicsRow::Backend:
 #ifdef _WIN32
                 edit.graphicsBackend = GraphicsBackend(cycle(uint32_t(edit.graphicsBackend), 3));
 #else
                 edit.graphicsBackend = GraphicsBackend::Vulkan;
 #endif
-            if (row == 1)
+                break;
+            case GraphicsRow::DisplayMode:
                 edit.windowMode = WindowMode(cycle(uint32_t(edit.windowMode), 3));
-            if (row == 2)
+                break;
+            case GraphicsRow::Widescreen:
             {
                 const bool currentUltrawide = IsUltrawideAspect(edit.width, edit.height);
                 const bool newUltrawide = !currentUltrawide;
@@ -837,36 +944,46 @@ PPC_FUNC(sub_822F19B0)
                 uint32_t targetIndex = FindNearestResolutionIndex(targetList, targetCount, edit.width, edit.height);
                 edit.width = targetList[targetIndex][0];
                 edit.height = targetList[targetIndex][1];
+                break;
             }
-            if (row == 3)
+            case GraphicsRow::OutputResolution:
             {
                 const bool ultrawide = IsUltrawideAspect(edit.width, edit.height);
                 const auto &list = ultrawide ? resolutions21_9 : resolutions16_9;
-                const size_t count = ultrawide ? std::size(resolutions21_9) : std::size(resolutions16_9);
+                const size_t listCount = ultrawide ? std::size(resolutions21_9) : std::size(resolutions16_9);
                 uint32_t index = 0;
-                for (size_t i = 0; i < count; ++i)
+                for (size_t i = 0; i < listCount; ++i)
                     if (edit.width == list[i][0] && edit.height == list[i][1])
                         index = uint32_t(i);
-                index = cycle(index, uint32_t(count));
+                index = cycle(index, uint32_t(listCount));
                 edit.width = list[index][0];
                 edit.height = list[index][1];
+                break;
             }
-            if (row == 4)
-            {
+            case GraphicsRow::AntiAliasing:
                 edit.antialiasing = cycle(edit.antialiasing, 4);
                 edit.fxaa = edit.antialiasing == 1;
-            }
-            if (row == 5)
+                break;
+            case GraphicsRow::Upscaler:
                 edit.upscaler = gpu::upscaling::Upscaler(cycle(uint32_t(edit.upscaler), 2));
-            if (row == 6)
+                break;
+            case GraphicsRow::DlssQuality:
                 edit.dlssQuality = gpu::upscaling::DlssQuality(cycle(uint32_t(edit.dlssQuality), 4));
-            if (row == 7)
+                break;
+            case GraphicsRow::ScalingQuality:
                 edit.scalingQuality = cycle(edit.scalingQuality, 2);
-            if (row == 8)
+                break;
+            case GraphicsRow::FrameRate:
             {
                 constexpr uint32_t rates[] = {30, 60, 120};
                 const uint32_t index = edit.frameRate == 120 ? 2u : edit.frameRate == 60 ? 1u : 0u;
                 edit.frameRate = rates[cycle(index, 3)];
+                break;
+            }
+            case GraphicsRow::Brightness:
+            case GraphicsRow::Save:
+            case GraphicsRow::Count:
+                break;
             }
         }
         else
@@ -899,7 +1016,7 @@ PPC_FUNC(sub_822F19B0)
         language::TraceConfig(base, config, "menu-after-defaults");
         status = Tr(L"Game defaults restored.", L"遊戲預設設定已恢復。");
     }
-    if ((input & 0x1000) && tab == 2 && row == 10)
+    if ((input & 0x1000) && tab == 2 && row == int(GraphicsRow::Save))
     {
         previousDisplay = GetConfig();
         if (!SaveConfig(edit))
@@ -938,7 +1055,7 @@ PPC_FUNC(sub_822F19B0)
             status = SaveConfig(languages) ? Tr(L"Language settings saved.", L"語言設定已儲存。")
                                            : Tr(L"Could not save settings.", L"無法儲存設定。");
     }
-    if ((input & 0x1000) && tab == 2 && row == 9)
+    if ((input & 0x1000) && tab == 2 && row == int(GraphicsRow::Brightness))
     {
         // Hand the original calibration screen its own brightness row.
         const uint32_t list = menu + 0x558, table = PPC_LOAD_U32(list + 0x84);
@@ -980,7 +1097,7 @@ PPC_FUNC(sub_822F19B0)
                  menu, PPC_LOAD_U32(menu + 4));
         return;
     }
-    // The status line follows the latest frame plan, including while the menu sits idle.
+    // The status line follows the latest DLSS result, including while the menu sits idle.
     Publish(base, config);
     // Only explicit brightness calibration delegates input to the retail UI.
     // The parent task continues ticking throughout.

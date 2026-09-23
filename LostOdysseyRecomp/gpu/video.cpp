@@ -1,12 +1,17 @@
+#if !defined(LO_VIDEO_SUBMISSION_UNIT)
 #include <version.h>
 #include <stdafx.h>
+#endif
 #include "video.h"
-#if defined(LO_GPU_PLUME)
+#if defined(LO_GPU_PLUME) || defined(LO_VIDEO_SUBMISSION_UNIT)
 #include "backend_device.h"
 #include "vulkan_submission_state.h"
 #include "vulkan_command_recording.h"
+#if !defined(LO_VIDEO_SUBMISSION_UNIT)
 #include "dlss_ngx.h"
 #endif
+#endif
+#if !defined(LO_VIDEO_SUBMISSION_UNIT)
 #include "renderer.h"
 #include "presentation.h"
 #include "command_processor.h"
@@ -15,7 +20,6 @@
 #include <settings/menu.h>
 #include <settings/restart.h>
 #include <kernel/memory.h>
-#include <os/logger.h>
 #include <os/shader_log.h>
 #include <os/user_paths.h>
 #include <hid/hid.h>
@@ -28,13 +32,17 @@
 #include <SDL_syswm.h>
 #include "window_pixels.h"
 #include "window_mode.h"
+#endif
+#include <os/logger.h>
 
-#ifdef LO_GPU_PLUME
+#if defined(LO_GPU_PLUME) || defined(LO_VIDEO_SUBMISSION_UNIT)
 #include <plume_render_interface.h>
 #include <plume_vulkan.h>
+#if !defined(LO_VIDEO_SUBMISSION_UNIT)
 #include "diagnostic_log.h"
 #ifdef _WIN32
 #include <plume_d3d12.h>
+#endif
 #endif
 #endif
 
@@ -42,6 +50,12 @@
 #include <future>
 #include <thread>
 #include <atomic>
+#if defined(LO_VIDEO_SUBMISSION_UNIT)
+#include <mutex>
+#ifdef _WIN32
+#include <windows.h>
+#endif
+#endif
 
 #ifdef LO_GPU_PLUME
 namespace plume
@@ -63,6 +77,7 @@ namespace gpu::video
         constexpr uint32_t kMaxWidth = 1920;
         constexpr uint32_t kMaxHeight = 1080;
 
+#if !defined(LO_VIDEO_SUBMISSION_UNIT)
         SDL_Window* g_window = nullptr;
         bool g_videoSubsystemOwned = false;
         // Pair only this lifecycle's reference, on its window-owning thread.
@@ -75,10 +90,12 @@ namespace gpu::video
                 g_videoSubsystemOwned = false;
             }
         }
+#endif
         std::atomic<uint64_t> g_shaderProgress{0};
         std::atomic<bool> g_vulkan{false};
         std::atomic<uint64_t> g_deviceEpoch{0};
         constexpr uint64_t kProgressMask = (1ull << 28) - 1;
+#if !defined(LO_VIDEO_SUBMISSION_UNIT)
         const wchar_t* PreparationTitle(PreparationStage stage) {
             switch (stage) {
             case PreparationStage::CacheValidation: return L"Validating shader cache";
@@ -197,20 +214,25 @@ namespace gpu::video
         }
 #endif
         void PumpWindowEvents();
+#endif
         bool g_initAttempted = false;
         bool g_available = false;
         bool g_initializing = false;
         std::atomic<int> g_selectedBackend{-1};
 
+#if !defined(LO_VIDEO_SUBMISSION_UNIT)
         std::vector<uint32_t> g_pixels;   // last untiled frame, R8G8B8A8
         uint32_t g_frameWidth = 0, g_frameHeight = 0;
         bool g_frameOnGpu = false;        // last frame came straight from a resolved surface
         uint32_t g_frontbufferPhysical = 0;
+#endif
 
 #ifdef LO_GPU_PLUME
         // This outlives g_interface because Plume retains the copied hook
         // userdata until VulkanInterface destruction.
+#if !defined(LO_VIDEO_SUBMISSION_UNIT)
         std::unique_ptr<dlss::Controller> g_dlssController;
+#endif
         std::unique_ptr<plume::RenderInterface> g_interface;
         std::unique_ptr<plume::RenderDevice> g_device;
         std::unique_ptr<plume::RenderCommandQueue> g_queue;
@@ -222,7 +244,9 @@ namespace gpu::video
         std::unique_ptr<plume::RenderSwapChain> g_swapChain;
         std::unique_ptr<plume::RenderBuffer> g_uploadBuffer;
         uint64_t g_uploadCapacity = uint64_t(kMaxWidth) * kMaxHeight * 4;
+#if !defined(LO_VIDEO_SUBMISSION_UNIT)
         std::unique_ptr<Presentation> g_presentation;
+#endif
         std::unique_ptr<plume::RenderTexture> g_cpuFrame;
         std::unique_ptr<plume::RenderTexture> g_presentedSnapshot;
         uint32_t g_snapshotWidth=0,g_snapshotHeight=0;
@@ -231,7 +255,28 @@ namespace gpu::video
         bool g_hasPresentedImage=false;
         bool g_presentPending=false;
         bool g_forceSwapResize=false;
+        struct PresentCaptureCopy {
+            bool queued = false;
+            std::string failure;
+            gpu::present_capture::Ticket ticket{};
+            std::unique_ptr<plume::RenderBuffer> buffer;
+            uint32_t width = 0, height = 0, pitch = 0;
+            uint64_t d3dFenceValue = 0;
+        };
+        PresentCaptureCopy g_captureCopy;
+        std::vector<std::unique_ptr<plume::RenderBuffer>> g_captureRetained;
+        uint64_t g_captureAllocs = 0, g_captureCopies = 0, g_captureMaps = 0;
+        bool g_captureCompletionFault = false;
         submission::VulkanState g_submissionState;
+        // Null in production. A submission test can attach a real queue and make
+        // the next reset/wait return before vkQueueSubmit or vkWaitForFences.
+        plume::RenderCommandQueue* g_probeQueue = nullptr;
+        int32_t g_probeSubmitFault = 0;
+        int32_t g_probeWaitFault = 0;
+        plume::RenderCommandQueue* ActiveSubmissionQueue()
+        {
+            return g_probeQueue ? g_probeQueue : g_queue.get();
+        }
         struct PresentationDisplayState {
             uint64_t resizedTicket = 0;
 #ifdef _WIN32
@@ -249,14 +294,15 @@ namespace gpu::video
         {
             if (serial) *serial = 0;
             if (rawResult) *rawResult = submission::VulkanState::InvalidState;
+            auto* queueHolder = ActiveSubmissionQueue();
             if (GpuWorkStopped()) {
                 if (rawResult) *rawResult = g_submissionState.Failure();
                 return false;
             }
-            if (!g_vulkan || !g_queue || !lists || !count || !fence) {
+            if (!g_vulkan || !queueHolder || !lists || !count || !fence) {
                 StopGpuWork(submission::VulkanState::InvalidState); return false;
             }
-            auto* queue = static_cast<plume::VulkanCommandQueue*>(g_queue.get());
+            auto* queue = static_cast<plume::VulkanCommandQueue*>(queueHolder);
             auto* nativeFence = static_cast<plume::VulkanCommandFence*>(fence);
             std::vector<VkCommandBuffer> commandBuffers;
             std::vector<VkSemaphore> waitSemaphores, signalSemaphores;
@@ -283,16 +329,30 @@ namespace gpu::video
             {
                 const std::scoped_lock lock(*queue->queue->mutex);
                 submitted = g_submissionState.SubmitBatch(
-                    [&] { return int32_t(vkResetFences(queue->device->vk, 1, &nativeFence->vk)); },
+                    [&] {
+                        if (g_probeSubmitFault) {
+                            const int32_t fault = g_probeSubmitFault;
+                            g_probeSubmitFault = 0;
+                            return fault;
+                        }
+                        return int32_t(vkResetFences(queue->device->vk, 1, &nativeFence->vk));
+                    },
                     [&] { return int32_t(vkQueueSubmit(queue->queue->vk, 1, &submit, nativeFence->vk)); },
                     acceptedSerial, result);
             }
             if (rawResult) *rawResult = result;
             if (serial) *serial = acceptedSerial;
-            if (!submitted) LOG_ERROR("video: Vulkan submission stopped raw_vk={}", result);
+            // SubmitBatch already latched the device. Publish only after the
+            // queue mutex is released so a present failure cannot leave the
+            // previous DLSS submission looking active.
+            if (!submitted) {
+                LOG_ERROR("video: Vulkan submission stopped raw_vk={}", result);
+                StopGpuWork(result);
+            }
             return submitted;
         }
 
+#if !defined(LO_VIDEO_SUBMISSION_UNIT)
         std::filesystem::path DlssApplicationDataPath()
         {
             return os::user_paths::UsePortableLayout() ? std::filesystem::path("cache") / "ngx"
@@ -370,8 +430,145 @@ namespace gpu::video
             g_commandList->barriers(plume::RenderBarrierStage::COPY,plume::RenderTextureBarrier(g_presentedSnapshot.get(),plume::RenderTextureLayout::COPY_DEST));
             g_commandList->copyTexture(g_presentedSnapshot.get(),frame);
         }
+
+        void RetainPresentCapture()
+        {
+            if (g_captureCopy.buffer) g_captureRetained.push_back(std::move(g_captureCopy.buffer));
+            g_captureCopy.queued = false;
+        }
+
+        void QueuePresentCapture(plume::RenderTexture *frame, const gpu::present_capture::Ticket *ticket)
+        {
+            if (g_captureCopy.buffer) RetainPresentCapture();
+            g_captureCopy = {};
+            if (!ticket || !ticket->active || !frame || !g_swapChain || !g_device || !g_commandList) return;
+            g_captureCopy.ticket = *ticket;
+            const uint32_t width = g_swapChain->getWidth(), height = g_swapChain->getHeight();
+            if (!width || !height || width > (UINT32_MAX - 255u) / 4u)
+            {
+                g_captureCopy.failure = "swapchain_extent";
+                return;
+            }
+            const uint32_t pitch = (width * 4 + 255u) & ~255u;
+            auto buffer = g_device->createBuffer(plume::RenderBufferDesc::ReadbackBuffer(uint64_t(pitch) * height));
+            ++g_captureAllocs;
+            if (!buffer)
+            {
+                g_captureCopy.failure = "allocation_failed";
+                return;
+            }
+            g_commandList->barriers(plume::RenderBarrierStage::COPY, plume::RenderTextureBarrier(frame, plume::RenderTextureLayout::COPY_SOURCE));
+            g_commandList->copyTextureRegion(
+                plume::RenderTextureCopyLocation::PlacedFootprint(buffer.get(), kSwapChainFormat, width, height, 1, pitch / 4),
+                plume::RenderTextureCopyLocation::Subresource(frame, 0));
+            ++g_captureCopies;
+            g_captureCopy.queued = true;
+            g_captureCopy.buffer = std::move(buffer);
+            g_captureCopy.width = width;
+            g_captureCopy.height = height;
+            g_captureCopy.pitch = pitch;
+        }
+
+        bool ConfirmD3D12PresentFence(uint64_t signaled)
+        {
+#ifdef _WIN32
+            if (!signaled || g_captureCompletionFault) return false;
+            auto *fence = static_cast<plume::D3D12CommandFence *>(g_fence.get());
+            auto *device = static_cast<plume::D3D12Device *>(g_device.get());
+            if (!fence || !fence->d3d || !device || !device->d3d) return false;
+            const auto completed = fence->d3d->GetCompletedValue();
+            if (completed == UINT64_MAX || completed < signaled) return false;
+            return SUCCEEDED(device->d3d->GetDeviceRemovedReason());
+#else
+            (void)signaled;
+            return false;
+#endif
+        }
+
+        void ReadPresentCapture(gpu::present_capture::Result *result, bool submitted, bool presented, uint64_t serial)
+        {
+            if (!result)
+            {
+                if (g_captureCopy.queued) RetainPresentCapture();
+                return;
+            }
+            if (!g_captureCopy.ticket.active && !g_captureCopy.queued) return;
+            result->attempted = true;
+            result->rendererFrame = g_captureCopy.ticket.rendererFrame;
+            result->swap = g_captureCopy.ticket.swap;
+            result->deviceEpoch = g_captureCopy.ticket.deviceEpoch;
+            result->presentAccepted = presented;
+            result->backend = g_vulkan ? "Vulkan" : "D3D12";
+            result->format = "R8G8B8A8_UNORM";
+            result->available = false;
+            if (!g_captureCopy.ticket.active)
+            {
+                result->reason = "no_request";
+                return;
+            }
+            if (!g_captureCopy.queued)
+            {
+                result->reason = g_captureCopy.failure.empty() ? "not_recorded" : g_captureCopy.failure;
+                return;
+            }
+            result->width = g_captureCopy.width;
+            result->height = g_captureCopy.height;
+            if (g_captureCompletionFault || !submitted)
+            {
+                result->reason = submitted ? "completion_unconfirmed" : "submit_failed";
+                RetainPresentCapture();
+                return;
+            }
+            bool complete = false;
+            if (g_vulkan)
+            {
+                complete = WaitForGpuFence(g_fence.get());
+                if (complete)
+                {
+                    result->hasSubmissionSerial = true;
+                    result->submissionSerial = serial;
+                    g_presentPending = false;
+                }
+            }
+            else
+            {
+                g_queue->waitForCommandFence(g_fence.get());
+                complete = ConfirmD3D12PresentFence(g_captureCopy.d3dFenceValue);
+                if (complete)
+                {
+                    result->hasFenceValue = true;
+                    result->fenceValue = g_captureCopy.d3dFenceValue;
+                    g_presentPending = false;
+                }
+            }
+            if (!complete)
+            {
+                result->reason = "completion_unconfirmed";
+                RetainPresentCapture();
+                return;
+            }
+            auto *mapped = static_cast<const uint8_t *>(g_captureCopy.buffer->map());
+            if (!mapped)
+            {
+                result->reason = "map_failed";
+                g_captureCopy.buffer.reset();
+                g_captureCopy.queued = false;
+                return;
+            }
+            ++g_captureMaps;
+            result->pixels.resize(size_t(result->width) * result->height);
+            for (uint32_t y = 0; y < result->height; ++y)
+                memcpy(result->pixels.data() + size_t(y) * result->width, mapped + size_t(y) * g_captureCopy.pitch, size_t(result->width) * 4);
+            g_captureCopy.buffer->unmap();
+            g_captureCopy.buffer.reset();
+            g_captureCopy.queued = false;
+            result->available = true;
+            result->reason = "swapchain_readback";
+        }
+#endif
 #endif
 
+#if !defined(LO_VIDEO_SUBMISSION_UNIT)
         uint32_t GpuSwap(uint32_t value, uint32_t endian)
         {
             switch (endian & 3)
@@ -382,24 +579,34 @@ namespace gpu::video
             default: return value;
             }
         }
+#endif
 
         // Owner thread only. Report() is read here, after NGX has returned,
-        // and the four fields are published as one value.
+        // and the capability fields are published as one value.
         void PublishOwnedDeviceCapability()
         {
             upscaling::BackendDeviceSnapshot snapshot;
             const bool vulkan = g_vulkan.load(std::memory_order_acquire);
             snapshot.backend = vulkan ? backend::Backend::Vulkan : backend::Backend::D3D12;
             snapshot.deviceEpoch = g_deviceEpoch.load(std::memory_order_acquire);
-#if defined(LO_GPU_PLUME)
+#if defined(LO_GPU_PLUME) && !defined(LO_VIDEO_SUBMISSION_UNIT)
             snapshot.deviceReady = g_available && g_device != nullptr;
             snapshot.dlssAvailable = vulkan && g_dlssController &&
                 g_dlssController->Report().state == dlss::ProbeState::Available;
+            snapshot.gpuWorkStopped = vulkan && g_submissionState.Stopped();
+#elif defined(LO_GPU_PLUME)
+            snapshot.deviceReady = false;
+            snapshot.dlssAvailable = false;
+            snapshot.gpuWorkStopped = vulkan && g_submissionState.Stopped();
 #else
             snapshot.deviceReady = false;
             snapshot.dlssAvailable = false;
+            snapshot.gpuWorkStopped = false;
 #endif
+            const auto previous = upscaling::PublishedDeviceCapability();
             upscaling::PublishDeviceCapability(snapshot);
+            if (previous != snapshot)
+                frame_plan::NoteCurrentDlssStatus();
         }
 
         void PublishClearedDeviceCapability()
@@ -409,7 +616,11 @@ namespace gpu::video
             snapshot.deviceEpoch = g_deviceEpoch.load(std::memory_order_acquire);
             snapshot.deviceReady = false;
             snapshot.dlssAvailable = false;
+            snapshot.gpuWorkStopped = false;
+            const auto previous = upscaling::PublishedDeviceCapability();
             upscaling::PublishDeviceCapability(snapshot);
+            if (previous != snapshot)
+                frame_plan::NoteCurrentDlssStatus();
         }
     }
 
@@ -430,13 +641,18 @@ namespace gpu::video
         return nullptr;
 #endif
     }
-#if defined(LO_GPU_PLUME)
+#if defined(LO_GPU_PLUME) && !defined(LO_VIDEO_SUBMISSION_UNIT)
     dlss::Controller* GetDlssController() { return g_vulkan ? g_dlssController.get() : nullptr; }
+#endif
+#if defined(LO_GPU_PLUME)
     bool GpuWorkStopped() { return g_vulkan && g_submissionState.Stopped(); }
     void StopGpuWork(int32_t nativeResult) {
         if (!g_submissionState.Stopped())
             LOG_ERROR("video: native GPU work stopped raw_vk={}; device restart required", nativeResult);
         g_submissionState.Stop(nativeResult);
+        // Publish even when the first-stop log is skipped. Resource teardown
+        // is unchanged; only the capability snapshot gains the stopped bit.
+        PublishOwnedDeviceCapability();
     }
     bool BeginGpuCommands(plume::RenderCommandList* list) {
         if (GpuWorkStopped()) return false;
@@ -455,16 +671,26 @@ namespace gpu::video
         return result == VK_SUCCESS;
     }
     bool WaitForGpuFence(plume::RenderCommandFence* fence) {
-        if (!g_queue || !fence) { StopGpuWork(submission::VulkanState::InvalidState); return false; }
-        if (!g_vulkan) { g_queue->waitForCommandFence(fence); return true; }
-        auto* queue = static_cast<plume::VulkanCommandQueue*>(g_queue.get());
+        auto* queueHolder = ActiveSubmissionQueue();
+        if (!queueHolder || !fence) { StopGpuWork(submission::VulkanState::InvalidState); return false; }
+        if (!g_vulkan) { queueHolder->waitForCommandFence(fence); return true; }
+        auto* queue = static_cast<plume::VulkanCommandQueue*>(queueHolder);
         auto* nativeFence = static_cast<plume::VulkanCommandFence*>(fence);
         const bool complete = g_submissionState.WaitSubmitted([&] {
+            if (g_probeWaitFault) {
+                const int32_t fault = g_probeWaitFault;
+                g_probeWaitFault = 0;
+                return fault;
+            }
             return int32_t(vkWaitForFences(queue->device->vk, 1, &nativeFence->vk, VK_TRUE, UINT64_MAX));
         });
-        if (!complete) LOG_ERROR("video: GPU fence wait failed raw_vk={}; resources retained", g_submissionState.Failure());
+        if (!complete) {
+            LOG_ERROR("video: GPU fence wait failed raw_vk={}; resources retained", g_submissionState.Failure());
+            StopGpuWork(g_submissionState.Failure());
+        }
         return complete;
     }
+#if !defined(LO_VIDEO_SUBMISSION_UNIT)
     void DrainGpuForShutdown() {
         if (!g_vulkan || !g_device) return;
         const auto result = vkDeviceWaitIdle(static_cast<plume::VulkanDevice*>(g_device.get())->vk);
@@ -482,14 +708,31 @@ namespace gpu::video
             std::_Exit(EXIT_FAILURE);
         }
     }
+#endif
 
     bool SubmitRendererBatch(const plume::RenderCommandList* const* lists, uint32_t count,
         plume::RenderCommandFence* fence, uint64_t& submissionSerial, int32_t& rawVkResult)
     {
         return SubmitVulkan(lists, count, nullptr, 0, nullptr, 0, fence, &submissionSerial, &rawVkResult);
     }
+    // Test seam for the production submit and fence-wait stop paths. A fault
+    // is consumed once and returns before the native queue call. resetStop
+    // clears the device latch and publishes not-stopped so the next failure
+    // is the one that becomes visible.
+    void ConfigureSubmissionProbe(plume::RenderCommandQueue* queue, int32_t submitFault, int32_t waitFault, bool resetStop)
+    {
+        if (resetStop) {
+            g_submissionState = {};
+            PublishClearedDeviceCapability();
+        }
+        g_probeSubmitFault = submitFault;
+        g_probeWaitFault = waitFault;
+        g_probeQueue = queue;
+        if (queue) g_vulkan.store(true, std::memory_order_release);
+    }
 #endif
 
+#if !defined(LO_VIDEO_SUBMISSION_UNIT)
     uint32_t TiledOffset2D(uint32_t x, uint32_t y, uint32_t pitchBlocks, uint32_t bytesPerBlockLog2)
     {
         // Macro tiles are 32x32 blocks; the pitch is given in blocks.
@@ -549,6 +792,9 @@ namespace gpu::video
         renderer::Shutdown();
 #ifdef LO_GPU_PLUME
         WaitForPresentGpu();
+        g_captureRetained.clear();
+        if (g_captureCopy.buffer) g_captureCopy.buffer.reset();
+        g_captureCopy = {};
         if (g_dlssController && g_vulkan)
             g_dlssController->ShutdownAfterGpuDrain();
         g_cpuFrame.reset(); g_cpuWidth = g_cpuHeight = 0;
@@ -820,7 +1066,8 @@ namespace gpu::video
     namespace {
 #if defined(LO_GPU_PLUME) && !defined(_WIN32)
     static bool UploadAndPresentPixels(const std::vector<uint32_t>& pixels, uint32_t width, uint32_t height,
-                                       bool isMenu, uint64_t displayTicket, const PresentationOptions& presentationOptions);
+                                       bool isMenu, uint64_t displayTicket, const PresentationOptions& presentationOptions,
+                                       const gpu::present_capture::Ticket *captureTicket, gpu::present_capture::Result *captureResult);
     static void RenderPreparationScreen(PreparationStage stage, PreparationUnit unit, uint32_t done, uint32_t total)
     {
         if (!g_swapChain || g_swapChain->isEmpty() || (!g_available && !g_initializing) || !g_presentation)
@@ -870,7 +1117,7 @@ namespace gpu::video
         r.DrawWString((int(width) - hint2W) / 2, centerY + 68, line2, hintColor, 1.0f);
         r.DrawWString((int(width) - hint3W) / 2, centerY + 91, line3, hintColor, 1.0f);
 
-        UploadAndPresentPixels(s_prepPixels, width, height, true, 0, PresentationOptions{});
+        UploadAndPresentPixels(s_prepPixels, width, height, true, 0, PresentationOptions{}, nullptr, nullptr);
     }
 #endif
 
@@ -923,7 +1170,7 @@ namespace gpu::video
                     const size_t count = size_t(width) * height;
                     if (s_clearPixels.size() != count)
                         s_clearPixels.assign(count, host_ui::MakeColor(255, 0, 0, 0));
-                    UploadAndPresentPixels(s_clearPixels, width, height, true, 0, PresentationOptions{});
+                    UploadAndPresentPixels(s_clearPixels, width, height, true, 0, PresentationOptions{}, nullptr, nullptr);
                 }
             }
 #endif
@@ -1179,7 +1426,8 @@ namespace gpu::video
     }
 
     static bool UploadAndPresentPixels(const std::vector<uint32_t>& pixels, uint32_t width, uint32_t height,
-                                       bool isMenu, uint64_t displayTicket, const PresentationOptions& presentationOptions)
+                                       bool isMenu, uint64_t displayTicket, const PresentationOptions& presentationOptions,
+                                       const gpu::present_capture::Ticket *captureTicket, gpu::present_capture::Result *captureResult)
     {
         if (GpuWorkStopped() || (!g_available && !g_initializing) || !g_swapChain || g_swapChain->isEmpty())
             return false;
@@ -1243,6 +1491,7 @@ namespace gpu::video
         if(g_presentation) g_presentation->Draw(g_commandList.get(),g_cpuFrame.get(),backBuffer,width,height,
             g_swapChain->getWidth(),g_swapChain->getHeight(),isMenu ? PresentationOptions{} : presentationOptions);
         RecordPresentedSnapshot(backBuffer);
+        QueuePresentCapture(backBuffer, captureTicket);
         g_commandList->barriers(plume::RenderBarrierStage::NONE, plume::RenderTextureBarrier(backBuffer, plume::RenderTextureLayout::PRESENT));
         if (!EndGpuCommands(g_commandList.get())) return false;
 
@@ -1250,15 +1499,22 @@ namespace gpu::video
         plume::RenderCommandSemaphore* waitSemaphore = g_acquireSemaphore.get();
         plume::RenderCommandSemaphore* signalSemaphore = PresentSemaphore(imageIndex);
         uint64_t submissionSerial = 0; int32_t submitResult = 0;
+#ifndef _WIN32
+        const uint64_t d3dSignal = 0;
+#else
+        const uint64_t d3dSignal = g_vulkan || !g_fence ? 0 : static_cast<plume::D3D12CommandFence *>(g_fence.get())->fenceValue;
+#endif
+        g_captureCopy.d3dFenceValue = d3dSignal;
         const bool submitted = g_vulkan ? SubmitVulkan(lists, 1, &waitSemaphore, 1, &signalSemaphore, 1,
             g_fence.get(), &submissionSerial, &submitResult)
             : (g_queue->executeCommandLists(lists, 1, &waitSemaphore, 1, &signalSemaphore, 1, g_fence.get()), true);
-        if (!submitted) { LOG_ERROR("video: present submit failed raw_vk={}", submitResult); return false; }
+        if (!submitted) { LOG_ERROR("video: present submit failed raw_vk={}", submitResult); ReadPresentCapture(captureResult, false, false, 0); return false; }
         const bool presented = g_swapChain->present(imageIndex, &signalSemaphore, 1);
         if (presented) ++g_completedPresentCount;
         g_presentPending = true;
         g_lastPresentedImage=imageIndex; g_hasPresentedImage=true;
         completion.Complete(presented && !g_displayFailed.load());
+        ReadPresentCapture(captureResult, true, presented, submissionSerial);
         return presented;
     }
 #endif
@@ -1266,9 +1522,33 @@ namespace gpu::video
     } // namespace
 
     uint64_t CompletedPresentCount() { return g_completedPresentCount; }
+#if defined(LO_GPU_PLUME)
+    void SetPresentCaptureCompletionFault(bool fail) { g_captureCompletionFault = fail; }
+    uint64_t PresentCaptureAllocationCount() { return g_captureAllocs; }
+    uint64_t PresentCaptureCopyCount() { return g_captureCopies; }
+    uint64_t PresentCaptureMapCount() { return g_captureMaps; }
+    size_t PresentCaptureRetainedBuffers() { return g_captureRetained.size() + (g_captureCopy.buffer ? 1 : 0); }
+#endif
 
-    void PresentFrontbuffer(uint32_t physicalAddress, uint32_t width, uint32_t height, uint32_t copyDestInfo)
+    void PresentFrontbuffer(uint32_t physicalAddress, uint32_t width, uint32_t height, uint32_t copyDestInfo,
+        const gpu::present_capture::Ticket *capture, gpu::present_capture::Result *captureResult)
     {
+        struct CaptureExit {
+            const gpu::present_capture::Ticket *ticket;
+            gpu::present_capture::Result *result;
+            ~CaptureExit() {
+#if defined(LO_GPU_PLUME)
+                const bool gpuQueued = g_captureCopy.queued;
+#else
+                const bool gpuQueued = false;
+#endif
+                gpu::present_capture::FinishPresentCaptureExit(ticket, result, gpuQueued, [&] {
+#if defined(LO_GPU_PLUME)
+                    ReadPresentCapture(result, false, false, 0);
+#endif
+                });
+            }
+        } captureExit{capture, captureResult};
         if (width == 0 || height == 0 || width > kMaxWidth || height > kMaxHeight)
             return;
 
@@ -1381,6 +1661,13 @@ namespace gpu::video
                         plume::RenderTextureCopyLocation::Subresource(source), 0, 0, 0, &box);
                 }
                 RecordPresentedSnapshot(backBuffer);
+                QueuePresentCapture(backBuffer, capture);
+#ifndef _WIN32
+                const uint64_t d3dSignal = 0;
+#else
+                const uint64_t d3dSignal = g_vulkan || !g_fence ? 0 : static_cast<plume::D3D12CommandFence *>(g_fence.get())->fenceValue;
+#endif
+                g_captureCopy.d3dFenceValue = d3dSignal;
                 g_commandList->barriers(plume::RenderBarrierStage::NONE, plume::RenderTextureBarrier(backBuffer, plume::RenderTextureLayout::PRESENT));
                 if (!EndGpuCommands(g_commandList.get())) return;
 
@@ -1391,12 +1678,13 @@ namespace gpu::video
                 const bool submitted = g_vulkan ? SubmitVulkan(lists, 1, &waitSemaphore, 1, &signalSemaphore, 1,
                     g_fence.get(), &submissionSerial, &submitResult)
                     : (g_queue->executeCommandLists(lists, 1, &waitSemaphore, 1, &signalSemaphore, 1, g_fence.get()), true);
-                if (!submitted) { LOG_ERROR("video: GPU presentation submit failed raw_vk={}", submitResult); return; }
+                if (!submitted) { LOG_ERROR("video: GPU presentation submit failed raw_vk={}", submitResult); ReadPresentCapture(captureResult, false, false, 0); return; }
                 const bool presented = g_swapChain->present(imageIndex, &signalSemaphore, 1);
                 if (presented) ++g_completedPresentCount;
                 g_presentPending = true;
                 g_lastPresentedImage=imageIndex; g_hasPresentedImage=true;
                 completion.Complete(presented && !g_displayFailed.load());
+                ReadPresentCapture(captureResult, true, presented, submissionSerial);
                 return;
             }
         }
@@ -1407,7 +1695,7 @@ namespace gpu::video
         if (menu)
         {
             CacheCpuFrame(menuPresentBuffer, menuWidth, menuHeight);
-            UploadAndPresentPixels(menuPresentBuffer, menuWidth, menuHeight, true, displayTicket, presentationOptions);
+            UploadAndPresentPixels(menuPresentBuffer, menuWidth, menuHeight, true, displayTicket, presentationOptions, capture, captureResult);
             return;
         }
 #endif
@@ -1432,7 +1720,7 @@ namespace gpu::video
         }
 
 #ifdef LO_GPU_PLUME
-        UploadAndPresentPixels(g_pixels, width, height, false, displayTicket, presentationOptions);
+        UploadAndPresentPixels(g_pixels, width, height, false, displayTicket, presentationOptions, capture, captureResult);
 #endif
     }
 
@@ -1483,7 +1771,7 @@ namespace gpu::video
             return;
 
         CacheCpuFrame(menuPresentBuffer, menuWidth, menuHeight);
-        UploadAndPresentPixels(menuPresentBuffer, menuWidth, menuHeight, true, displayTicket, PresentationOptions{});
+        UploadAndPresentPixels(menuPresentBuffer, menuWidth, menuHeight, true, displayTicket, PresentationOptions{}, nullptr, nullptr);
 #endif
     }
 
@@ -1584,4 +1872,5 @@ namespace gpu::video
         fclose(f);
         return true;
     }
+#endif
 }

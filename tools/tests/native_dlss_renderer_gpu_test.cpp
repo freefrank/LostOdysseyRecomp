@@ -5,6 +5,7 @@
 #include <gpu/vulkan_command_recording.h>
 #include <gpu/vulkan_submission_state.h>
 #include <stdexcept>
+#include <json.hpp>
 
 namespace fixture {
 using namespace plume;
@@ -20,6 +21,19 @@ void Require(bool ok, const char* message) {
 }
 // Platform boundary only: real Vulkan commands/submissions/fences, with the
 // same production checked recording helpers and submission state as video.cpp.
+namespace fixture {
+gpu::frame_plan::PlannerState* statusPlanner = nullptr;
+struct ExecutionReport {
+    gpu::frame_plan::DlssExecutionOutcome outcome{};
+    gpu::frame_plan::DlssEffectReason reason{};
+    gpu::frame_plan::FramePlan plan{};
+    uint64_t serial = 0;
+    uint64_t frame = 0;
+};
+std::vector<ExecutionReport> executions;
+bool rejectSubmit = false;
+bool rejectWaitOnce = false;
+}
 namespace gpu::video {
 bool GpuWorkStopped() { return fixture::state.Stopped(); }
 void StopGpuWork(int32_t value) { fixture::state.Stop(value); }
@@ -36,6 +50,7 @@ bool EndGpuCommands(plume::RenderCommandList* list) {
     return result == VK_SUCCESS;
 }
 bool WaitForGpuFence(plume::RenderCommandFence* fence) {
+    if (fixture::rejectWaitOnce) { fixture::rejectWaitOnce = false; return false; }
     auto* f = static_cast<plume::VulkanCommandFence*>(fence);
     auto* d = static_cast<plume::VulkanDevice*>(fixture::device);
     return fixture::state.WaitSubmitted([&] { return int32_t(vkWaitForFences(d->vk, 1, &f->vk, VK_TRUE, UINT64_MAX)); });
@@ -50,13 +65,26 @@ bool SubmitRendererBatch(const plume::RenderCommandList* const* lists, uint32_t 
     for (uint32_t i = 0; i < count; ++i) buffers.push_back(static_cast<const plume::VulkanCommandList*>(lists[i])->vk);
     VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
     submit.commandBufferCount = count; submit.pCommandBuffers = buffers.data();
+    if (fixture::rejectSubmit) {
+        fixture::rejectSubmit = false;
+        fixture::lastListCount = 0;
+        result = -3;
+        serial = 0;
+        return false;
+    }
     fixture::lastListCount = count;
     return fixture::state.SubmitBatch([&] { return int32_t(vkResetFences(d->vk, 1, &f->vk)); },
         [&] { return int32_t(vkQueueSubmit(q->queue->vk, 1, &submit, f->vk)); }, serial, result);
 }
 }
 namespace gpu::frame_plan {
-void ReportPlanFailure(const PlanFailure&) {} // No CPU guest frame producer.
+void ReportPlanFailure(const PlanFailure& failure) {
+    if (fixture::statusPlanner) fixture::statusPlanner->ReportFailure(failure);
+}
+void ReportDlssExecution(const DlssExecutionObservation& observation) {
+    fixture::executions.push_back({observation.outcome, observation.reason, observation.plan, observation.submissionSerial, observation.renderFrame});
+    if (fixture::statusPlanner) fixture::statusPlanner->ReportExecution(observation);
+}
 }
 namespace gpu::taa_collection { bool Enabled() { return false; } }
 
@@ -66,16 +94,46 @@ using fixture::Require;
 struct VendorFixture {
     gpu::dlss::SrStatus outcome = gpu::dlss::SrStatus::Executable;
     uint32_t calls = 0;
+    uint32_t vendorCalls = 0;
+    bool created = true;
+    bool failCreate = false;
     gpu::dlss::SrStatus EnsureSession(const plume::VulkanDevice&) { return gpu::dlss::SrStatus::Executable; }
     gpu::dlss::SrAttempt RecordIsolated(plume::VulkanCommandList& list, const gpu::dlss::SrConfig& config,
-        const gpu::temporal::TemporalFrameInputs& inputs, plume::VulkanTexture& output) {
+        const gpu::temporal::TemporalFrameInputs& inputs, plume::VulkanTexture& output,
+        gpu::dlss::EvaluateCapture* capture = nullptr) {
         ++calls;
+        if (capture && (outcome == gpu::dlss::SrStatus::NeedsReconfigure || failCreate)) {
+            capture->stage = failCreate ? "create" : "validation";
+            capture->reason = failCreate ? "feature_create_failed" : "needs_reconfigure";
+            if (failCreate) capture->createResult = -23;
+            return {failCreate ? gpu::dlss::SrStatus::Failed : outcome};
+        }
         Require(gpu::temporal::MatchesDepthConvention(inputs.depthConvention, config.depthInverted),
             "renderer must pass the producer depth ordering to NGX");
         Require(gpu::submission::BeginCommands(list) == VK_SUCCESS, "isolated begin");
         // Exact FP16 values; alpha is deliberately different from the guest.
         const VkClearColorValue value{{2.0f, .5f, .25f, 0.0f}};
-        vkCmdClearColorImage(list.vk, output.vk, VK_IMAGE_LAYOUT_GENERAL, &value, 1, &output.imageSubresourceRange);
+        if (capture) {
+            gpu::dlss::capture::Parameters sdk{};
+            sdk.jitterX = float(inputs.jitter.pixelX); sdk.jitterY = float(inputs.jitter.pixelY);
+            sdk.mvScaleX = sdk.mvScaleY = sdk.preExposure = sdk.exposureScale = 1;
+            sdk.renderWidth = config.renderExtent.width; sdk.renderHeight = config.renderExtent.height;
+            sdk.colorX = inputs.color.x; sdk.colorY = inputs.color.y;
+            sdk.depthX = inputs.depth.x; sdk.depthY = inputs.depth.y;
+            sdk.mvX = inputs.motion.x; sdk.mvY = inputs.motion.y;
+            sdk.featureCreated = created; sdk.inputHistoryReset = inputs.resetHistory;
+            sdk.reset = created || inputs.resetHistory;
+            const auto& color = *static_cast<plume::VulkanTexture*>(inputs.color.texture);
+            gpu::dlss::capture::InvokeEvaluate(list.vk, capture, color, output, sdk, [&] {
+                ++vendorCalls;
+                if (outcome == gpu::dlss::SrStatus::Executable)
+                    vkCmdClearColorImage(list.vk, output.vk, VK_IMAGE_LAYOUT_GENERAL, &value, 1, &output.imageSubresourceRange);
+                return outcome == gpu::dlss::SrStatus::Executable ? 0 : -17;
+            }, [](int32_t value) { return value == 0; });
+        } else {
+            ++vendorCalls;
+            vkCmdClearColorImage(list.vk, output.vk, VK_IMAGE_LAYOUT_GENERAL, &value, 1, &output.imageSubresourceRange);
+        }
         Require(gpu::submission::EndCommands(list) == VK_SUCCESS, "isolated end");
         return {outcome};
     }
@@ -383,6 +441,403 @@ public:
         Require(r.Flush() && r.WaitForGpu(), "end case drain");
         r.framebuffers.clear(); r.renderTargets.clear();
     }
+    void RunStatus() {
+        gpu::frame_plan::PlannerState planner;
+        fixture::statusPlanner = &planner;
+        fixture::executions.clear();
+        fixture::rejectSubmit = false;
+        auto& r = R();
+        r.frame = 1;
+        r.dlssSrRequested = true;
+        gpu::upscaling::BackendDeviceSnapshot capability{gpu::backend::Backend::Vulkan, 1, true, true};
+        gpu::upscaling::OutputSizing sizing;
+        sizing.key = {1, 8, 8};
+        sizing.revision = 1;
+        for (auto& mode : sizing.modes) {
+            mode.state = gpu::upscaling::SizingState::Ready;
+            mode.optimal = mode.minimum = mode.maximum = {4, 4};
+        }
+        gpu::frame_plan::PlannerInput input;
+        input.internalResolution = 0;
+        input.antialiasing = 0;
+        input.scalingQuality = 1;
+        input.upscaler = gpu::upscaling::Upscaler::Dlss;
+        input.quality = gpu::upscaling::DlssQuality::Quality;
+        input.output = {{8, 8}, 0, 0, 8, 8};
+        input.device = capability;
+        input.sizing = &sizing;
+        const auto effectOf = [&] {
+            return gpu::frame_plan::DescribeDlssRuntime(capability, planner.Observe(), &sizing);
+        };
+        const auto install = [&](gpu::upscaling::DlssQuality quality) {
+            input.quality = quality;
+            const auto plan = planner.Begin(input);
+            Require(plan.consumer == gpu::upscaling::TemporalConsumer::DlssSr && plan.cpuSerial &&
+                plan.width == 4 && plan.height == 4 && plan.output.width == 8 && plan.output.height == 8,
+                "status planner did not produce the 4x4 to 8x8 DLSS SR plan");
+            r.activePlan = plan;
+            r.internalSize = {plan.width, plan.height};
+            r.dlssDisableReportedEpoch = ~0ull;
+            return plan;
+        };
+        const auto region = [](HostTexture& texture) {
+            return gpu::temporal::TextureRegion{texture.texture.get(), {4, 4}, 0, 0, 4, 4};
+        };
+        const RenderTargetKey key{0, 3, 1280, 0, false};
+        struct Scene {
+            std::unique_ptr<HostTexture> depth, motion, invalid, held;
+            HostTexture* color = nullptr;
+        };
+        const auto openScene = [&](Scene& scene) {
+            auto base = Texture(4, 4, plume::RenderFormat::R16G16B16A16_FLOAT);
+            base->guestHeight = 736;
+            HostTexture* original = base.get();
+            r.renderTargets[key] = std::move(base);
+            scene.depth = Texture(4, 4, plume::RenderFormat::R32_FLOAT);
+            scene.motion = Texture(4, 4, plume::RenderFormat::R16G16_FLOAT);
+            scene.invalid = Texture(4, 4, plume::RenderFormat::R8_UNORM);
+            gpu::temporal::TemporalFrameInputs inputs{};
+            inputs.plan = r.activePlan;
+            inputs.currentInputsComplete = true;
+            inputs.motionState = gpu::temporal::MotionState::Tracked;
+            inputs.depthConvention = gpu::temporal::DepthConvention::Reversed;
+            inputs.colorEncoding = gpu::temporal::ColorEncoding::HdrLinear;
+            inputs.color = region(*original);
+            inputs.depth = region(*scene.depth);
+            inputs.motion = region(*scene.motion);
+            inputs.motionInvalidity = region(*scene.invalid);
+            Require(r.Begin(), "status begin");
+            Require(r.PrepareSceneCopyDestination(key, *original, inputs), "status prepare");
+            HostTexture* color = original;
+            HostTexture* raster = color;
+            plume::RenderViewport guest(0, 0, 1280, 720), viewport;
+            plume::RenderRect guestScissor(0, 0, 1280, 720), scissor;
+            Require(r.ActivateSceneCopyDestination(color, raster, viewport, scissor, guest, guestScissor), "status activate");
+            scene.color = color;
+            scene.held = nullptr;
+        };
+        const auto retire = [&] {
+            if (fixture::state.Stopped()) return;
+            if (r.listOpen) Require(r.Flush(), "status retire flush");
+            Require(r.WaitForGpu(), "status retire wait");
+            r.framebuffers.clear();
+            r.renderTargets.clear();
+            r.sceneCopyPromotion = {};
+        };
+        const auto plan = install(gpu::upscaling::DlssQuality::Quality);
+        Require(r.Flush() && fixture::executions.empty(), "closed list is not a DLSS submission");
+        Scene scene;
+        LocalImageDrain imageDrain{device.get()};
+        openScene(scene);
+        VendorFixture vendor;
+        HostTexture* color = scene.color;
+        HostTexture* raster = color;
+        Require(r.RecordSceneCopyDlssUsing(vendor, color, raster) && r.sceneCopyPromotion.srApplied, "status record");
+        r.PublishDlssFrameOutcome();
+        Require(fixture::executions.empty() && effectOf().phase == gpu::frame_plan::DlssEffectPhase::AwaitingExecution,
+            "recorded SR is not submitted until the checked flush");
+        Require(r.Flush() && fixture::lastListCount == 3, "checked flush omitted isolated or continuation");
+        r.PublishDlssFrameOutcome();
+        Require(fixture::executions.size() == 1 && fixture::executions[0].outcome == gpu::frame_plan::DlssExecutionOutcome::Submitted &&
+            fixture::executions[0].serial != 0 && fixture::executions[0].frame == r.frame, "frame-end submit");
+        auto effect = effectOf();
+        Require(effect.phase == gpu::frame_plan::DlssEffectPhase::Active && effect.execution &&
+            effect.execution->outcome == gpu::frame_plan::DlssExecutionOutcome::Submitted &&
+            effect.execution->plan.width == 4 && effect.execution->plan.output.width == 8, "submitted plan is the active effect");
+        const auto submittedReports = fixture::executions.size();
+        Require(r.Flush(), "same-frame ordinary flush");
+        r.PublishDlssFrameOutcome();
+        Require(fixture::executions.size() == submittedReports && effectOf().phase == gpu::frame_plan::DlssEffectPhase::Active,
+            "same-frame ordinary flush downgraded a submission");
+        retire();
+        ++r.frame;
+        r.PublishDlssFrameOutcome();
+        effect = effectOf();
+        Require(effect.phase != gpu::frame_plan::DlssEffectPhase::Active && effect.reason == gpu::frame_plan::DlssEffectReason::NoEligibleScene,
+            "a frame with no eligible scene must replace the previous active submission");
+
+        ++r.frame;
+        openScene(scene);
+        vendor.outcome = gpu::dlss::SrStatus::NeedsReconfigure;
+        color = scene.color;
+        raster = color;
+        const auto beforeReconfigure = fixture::executions.size();
+        Require(!r.RecordSceneCopyDlssUsing(vendor, color, raster) && !r.sceneCopyPromotion.srApplied, "reconfigure is not applied");
+        r.PublishDlssFrameOutcome();
+        Require(r.Flush() && fixture::lastListCount == 2, "reconfigure included the isolated list");
+        Require(fixture::executions.size() == beforeReconfigure + 1 &&
+            fixture::executions.back().outcome != gpu::frame_plan::DlssExecutionOutcome::Submitted &&
+            fixture::executions.back().reason == gpu::frame_plan::DlssEffectReason::FeatureReconfigurePending &&
+            !planner.Observe().persistentFailure, "reconfigure is a frame fallback, not a latched failure");
+        retire();
+
+        ++r.frame;
+        r.motionReplay = std::make_unique<gpu::temporal::MotionReplayGPU>();
+        r.motionReplay->BeginFrame(r.frame, 1);
+        r.motionReplay->InjectNextPreparePending();
+        gpu::pipeline_cache::Key pipelineKey{};
+        plume::RenderGraphicsPipelineDesc pipelineDesc{};
+        r.motionReplay->PreparePipeline(pipelineKey, pipelineDesc, nullptr, 0, nullptr, 0, false);
+        gpu::temporal::TemporalFrameInputs selectedInputs{};
+        selectedInputs.plan = r.activePlan;
+        selectedInputs.currentInputsComplete = true;
+        selectedInputs.motionState = gpu::temporal::MotionState::Tracked;
+        selectedInputs.depthConvention = gpu::temporal::DepthConvention::Reversed;
+        selectedInputs.colorEncoding = gpu::temporal::ColorEncoding::Sdr;
+        auto dummyRegion = gpu::temporal::TextureRegion{r.dummyTexture2D.texture.get(), {1, 1}, 0, 0, 1, 1};
+        selectedInputs.color = selectedInputs.depth = selectedInputs.motion = selectedInputs.motionInvalidity = dummyRegion;
+        auto choice = r.SelectDlssSceneCopyInputs(selectedInputs);
+        Require(choice.kind == Renderer::DlssSceneInputSelection::Kind::Pending, "pending motion branch");
+        r.PublishDlssFrameOutcome();
+        Require(effectOf().reason == gpu::frame_plan::DlssEffectReason::MotionPipelinePending &&
+            effectOf().phase != gpu::frame_plan::DlssEffectPhase::Active, "pending motion is not active");
+        r.motionReplay.reset();
+        ++r.frame;
+        selectedInputs.colorEncoding = gpu::temporal::ColorEncoding::Unknown;
+        choice = r.SelectDlssSceneCopyInputs(selectedInputs);
+        Require(choice.kind == Renderer::DlssSceneInputSelection::Kind::UnknownColor, "unknown color branch");
+        r.PublishDlssFrameOutcome();
+        Require(effectOf().reason == gpu::frame_plan::DlssEffectReason::UnknownColorEncoding &&
+            effectOf().phase != gpu::frame_plan::DlssEffectPhase::Active, "unknown color is not active");
+
+        ++r.frame;
+        r.Gpu().srPrefixClosed = true;
+        Require(!r.PrepareSceneCopyDestination(key, *Texture(4, 4, plume::RenderFormat::R16G16B16A16_FLOAT), selectedInputs),
+            "closed prefix must not prepare");
+        r.Gpu().srPrefixClosed = false;
+        selectedInputs.colorEncoding = gpu::temporal::ColorEncoding::HdrLinear;
+        r.PublishDlssFrameOutcome();
+        Require(effectOf().reason == gpu::frame_plan::DlssEffectReason::PromotionUnavailable, "prepare failure");
+        auto prepared = Texture(4, 4, plume::RenderFormat::R16G16B16A16_FLOAT);
+        prepared->guestHeight = 736;
+        HostTexture* preparedColor = prepared.get();
+        r.renderTargets[key] = std::move(prepared);
+        gpu::temporal::TemporalFrameInputs promoteInputs = selectedInputs;
+        promoteInputs.color = region(*preparedColor);
+        promoteInputs.depth = dummyRegion;
+        // Activate's identity check needs the prepared source to remain alive.
+        Require(r.Begin() && r.PrepareSceneCopyDestination(key, *preparedColor, promoteInputs), "activate setup");
+        scene.held = std::move(r.renderTargets[key]);
+        r.renderTargets[key] = Texture(4, 4, plume::RenderFormat::R16G16B16A16_FLOAT);
+        HostTexture* mismatched = scene.held.get();
+        HostTexture* mismatchedRaster = mismatched;
+        plume::RenderViewport guest(0, 0, 1280, 720), viewport;
+        plume::RenderRect guestScissor(0, 0, 1280, 720), scissor;
+        Require(!r.ActivateSceneCopyDestination(mismatched, mismatchedRaster, viewport, scissor, guest, guestScissor),
+            "mismatched target must not activate");
+        r.PublishDlssFrameOutcome();
+        Require(effectOf().reason == gpu::frame_plan::DlssEffectReason::PromotionUnavailable, "activate failure");
+        retire();
+
+        ++r.frame;
+        vendor.outcome = gpu::dlss::SrStatus::Failed;
+        openScene(scene);
+        color = scene.color;
+        raster = color;
+        const auto beforeVendor = fixture::executions.size();
+        Require(!r.RecordSceneCopyDlssUsing(vendor, color, raster), "vendor failure is not applied");
+        r.PublishDlssFrameOutcome();
+        Require(r.Flush(), "vendor-failure batch");
+        Require(std::none_of(fixture::executions.begin() + beforeVendor, fixture::executions.end(), [](const fixture::ExecutionReport& report) {
+            return report.outcome == gpu::frame_plan::DlssExecutionOutcome::Submitted;
+        }), "vendor failure reported a submission");
+        effect = effectOf();
+        Require(effect.failure && *effect.failure == gpu::frame_plan::FailureReason::DlssUnavailable &&
+            effect.phase != gpu::frame_plan::DlssEffectPhase::Active && effect.reason == gpu::frame_plan::DlssEffectReason::RequestFailure,
+            "vendor failure latches the request");
+        input.quality = gpu::upscaling::DlssQuality::Quality;
+        const auto fallen = planner.Begin(input);
+        Require(fallen.consumer != gpu::upscaling::TemporalConsumer::DlssSr, "latched request must leave SR");
+        gpu::frame_plan::DlssExecutionObservation late = {};
+        late.plan = plan;
+        late.renderFrame = r.frame + 1;
+        late.submissionSerial = 99;
+        late.outcome = gpu::frame_plan::DlssExecutionOutcome::Submitted;
+        Require(!planner.ReportExecution(late), "late success must not replace the latched request");
+        effect = effectOf();
+        Require(effect.failure && *effect.failure == gpu::frame_plan::FailureReason::DlssUnavailable &&
+            effect.phase != gpu::frame_plan::DlssEffectPhase::Active, "failure remains after a late success");
+        retire();
+
+        install(gpu::upscaling::DlssQuality::Balanced);
+        ++r.frame;
+        openScene(scene);
+        r.sceneCopyPromotionRgbPs.reset();
+        r.sceneCopyPromotionRgbPipelines.clear();
+        vendor.outcome = gpu::dlss::SrStatus::Executable;
+        color = scene.color;
+        raster = color;
+        const auto beforeComposite = fixture::executions.size();
+        Require(!r.RecordSceneCopyDlssUsing(vendor, color, raster) && !r.sceneCopyPromotion.srApplied, "composite failure is not applied");
+        Require(r.Flush() && fixture::lastListCount == 3, "unadopted composite still closed its lists");
+        r.PublishDlssFrameOutcome();
+        Require(std::none_of(fixture::executions.begin() + beforeComposite, fixture::executions.end(), [](const fixture::ExecutionReport& report) {
+            return report.outcome == gpu::frame_plan::DlssExecutionOutcome::Submitted;
+        }) && effectOf().phase != gpu::frame_plan::DlssEffectPhase::Active, "unadopted composite is not a submission");
+        retire();
+        r.CompileSceneCopyPromotionShaders();
+        Require(bool(r.sceneCopyPromotionRgbPs), "restore promotion shader");
+
+        install(gpu::upscaling::DlssQuality::Performance);
+        ++r.frame;
+        openScene(scene);
+        vendor.outcome = gpu::dlss::SrStatus::Executable;
+        color = scene.color;
+        raster = color;
+        Require(r.RecordSceneCopyDlssUsing(vendor, color, raster), "submit-failure record");
+        const auto beforeRejected = fixture::executions.size();
+        fixture::rejectSubmit = true;
+        Require(!r.Flush() && fixture::lastListCount == 0 && fixture::state.Stopped(), "rejected submit must not reach the queue");
+        r.PublishDlssFrameOutcome();
+        Require(fixture::executions.size() == beforeRejected, "rejected submit reported success");
+        capability.gpuWorkStopped = true;
+        effect = effectOf();
+        Require(effect.phase == gpu::frame_plan::DlssEffectPhase::GpuStopped && !effect.execution &&
+            effect.phase != gpu::frame_plan::DlssEffectPhase::Active, "stopped device hides the old submission");
+        fixture::statusPlanner = nullptr;
+    }
+    static bool SameIdentity(const gpu::frame_plan::FramePlan& a, const gpu::frame_plan::FramePlan& b)
+    {
+        return a.deviceEpoch == b.deviceEpoch && a.requestSignature == b.requestSignature &&
+            a.geometryEpoch == b.geometryEpoch;
+    }
+    void RunPlanIdentity()
+    {
+        gpu::frame_plan::PlannerState planner;
+        fixture::statusPlanner = &planner;
+        fixture::executions.clear();
+        auto& r = R();
+        r.frame = 8;
+        r.dlssSrRequested = true;
+        gpu::upscaling::BackendDeviceSnapshot capability{gpu::backend::Backend::Vulkan, 1, true, true};
+        gpu::upscaling::OutputSizing sizing;
+        sizing.key = {1, 8, 8};
+        for (auto& mode : sizing.modes) {
+            mode.state = gpu::upscaling::SizingState::Ready;
+            mode.optimal = mode.minimum = mode.maximum = {4, 4};
+        }
+        gpu::frame_plan::PlannerInput input;
+        input.upscaler = gpu::upscaling::Upscaler::Dlss;
+        input.output = {{8, 8}, 0, 0, 8, 8};
+        input.device = capability;
+        input.sizing = &sizing;
+        const auto install = [&](gpu::upscaling::DlssQuality quality) {
+            input.quality = quality;
+            const auto plan = planner.Begin(input);
+            Require(plan.consumer == gpu::upscaling::TemporalConsumer::DlssSr, "identity planner lost DLSS SR");
+            r.activePlan = plan;
+            r.internalSize = {plan.width, plan.height};
+            return plan;
+        };
+        const auto effectOf = [&] {
+            return gpu::frame_plan::DescribeDlssRuntime(capability, planner.Observe(), &sizing);
+        };
+        const auto planA = install(gpu::upscaling::DlssQuality::Quality);
+        r.NoteDlssFrameFallback(gpu::frame_plan::DlssEffectReason::MotionPipelinePending);
+        const auto planB = install(gpu::upscaling::DlssQuality::Balanced);
+        Require(!SameIdentity(planA, planB), "quality change did not create a new plan identity");
+        r.NoteDlssFrameFallback(gpu::frame_plan::DlssEffectReason::UnknownColorEncoding);
+        r.PublishDlssFrameOutcome();
+        Require(fixture::executions.size() == 1 &&
+            fixture::executions.back().reason == gpu::frame_plan::DlssEffectReason::UnknownColorEncoding &&
+            SameIdentity(fixture::executions.back().plan, planB) &&
+            effectOf().phase != gpu::frame_plan::DlssEffectPhase::Active,
+            "same-frame fallback B must replace fallback A");
+
+        ++r.frame;
+        const auto submittedA = install(gpu::upscaling::DlssQuality::Quality);
+        const RenderTargetKey key{0, 3, 1280, 0, false};
+        auto base = Texture(4, 4, plume::RenderFormat::R16G16B16A16_FLOAT);
+        base->guestHeight = 736;
+        HostTexture* original = base.get();
+        r.renderTargets[key] = std::move(base);
+        auto depth = Texture(4, 4, plume::RenderFormat::R32_FLOAT);
+        auto motion = Texture(4, 4, plume::RenderFormat::R16G16_FLOAT);
+        auto invalid = Texture(4, 4, plume::RenderFormat::R8_UNORM);
+        LocalImageDrain imageDrain{device.get()};
+        const auto region = [](HostTexture& texture) {
+            return gpu::temporal::TextureRegion{texture.texture.get(), {4, 4}, 0, 0, 4, 4};
+        };
+        gpu::temporal::TemporalFrameInputs inputs{};
+        inputs.plan = r.activePlan;
+        inputs.currentInputsComplete = true;
+        inputs.motionState = gpu::temporal::MotionState::Tracked;
+        inputs.depthConvention = gpu::temporal::DepthConvention::Reversed;
+        inputs.colorEncoding = gpu::temporal::ColorEncoding::HdrLinear;
+        inputs.color = region(*original);
+        inputs.depth = region(*depth);
+        inputs.motion = region(*motion);
+        inputs.motionInvalidity = region(*invalid);
+        Require(r.Begin(), "identity begin");
+        Require(r.PrepareSceneCopyDestination(key, *original, inputs), "identity prepare");
+        HostTexture* color = original;
+        HostTexture* raster = color;
+        plume::RenderViewport guest(0, 0, 1280, 720), viewport;
+        plume::RenderRect guestScissor(0, 0, 1280, 720), scissor;
+        Require(r.ActivateSceneCopyDestination(color, raster, viewport, scissor, guest, guestScissor), "identity activate");
+        VendorFixture vendor;
+        Require(r.RecordSceneCopyDlssUsing(vendor, color, raster) && r.Gpu().dlssSubmit.pending, "identity arm");
+        Require(r.Flush() && fixture::lastListCount == 3, "submitted plan A");
+        const auto submittedB = install(gpu::upscaling::DlssQuality::Balanced);
+        r.NoteDlssFrameFallback(gpu::frame_plan::DlssEffectReason::UnknownColorEncoding);
+        r.PublishDlssFrameOutcome();
+        Require(fixture::executions.back().outcome == gpu::frame_plan::DlssExecutionOutcome::Fallback &&
+            fixture::executions.back().reason == gpu::frame_plan::DlssEffectReason::UnknownColorEncoding &&
+            SameIdentity(fixture::executions.back().plan, submittedB) &&
+            !SameIdentity(fixture::executions.back().plan, submittedA) &&
+            effectOf().phase != gpu::frame_plan::DlssEffectPhase::Active,
+            "same-frame fallback B must replace submitted A");
+        Require(r.WaitForGpu(), "drain submitted A");
+        r.framebuffers.clear();
+        r.renderTargets.clear();
+        r.sceneCopyPromotion = {};
+
+        ++r.frame;
+        const auto armedPlan = install(gpu::upscaling::DlssQuality::Performance);
+        auto armedBase = Texture(4, 4, plume::RenderFormat::R16G16B16A16_FLOAT);
+        armedBase->guestHeight = 736;
+        HostTexture* armedOriginal = armedBase.get();
+        r.renderTargets[key] = std::move(armedBase);
+        auto armedDepth = Texture(4, 4, plume::RenderFormat::R32_FLOAT);
+        auto armedMotion = Texture(4, 4, plume::RenderFormat::R16G16_FLOAT);
+        auto armedInvalid = Texture(4, 4, plume::RenderFormat::R8_UNORM);
+        inputs.plan = r.activePlan;
+        inputs.color = region(*armedOriginal);
+        inputs.depth = region(*armedDepth);
+        inputs.motion = region(*armedMotion);
+        inputs.motionInvalidity = region(*armedInvalid);
+        Require(r.Begin() && r.PrepareSceneCopyDestination(key, *armedOriginal, inputs), "armed prepare");
+        color = armedOriginal;
+        raster = color;
+        Require(r.ActivateSceneCopyDestination(color, raster, viewport, scissor, guest, guestScissor), "armed activate");
+        Require(r.RecordSceneCopyDlssUsing(vendor, color, raster) && r.Gpu().dlssSubmit.pending &&
+            SameIdentity(r.Gpu().dlssSubmit.plan, armedPlan), "slot captured the armed plan");
+        auto switched = r.activePlan;
+        switched.geometryEpoch += 1;
+        switched.requestSignature ^= 0x5a5a5a5a5a5a5a5aull;
+        r.activePlan = switched;
+        Require(r.Flush() && fixture::lastListCount == 3, "flush after activePlan switch");
+        r.activePlan = armedPlan;
+        r.PublishDlssFrameOutcome();
+        Require(fixture::executions.back().outcome == gpu::frame_plan::DlssExecutionOutcome::Submitted &&
+            SameIdentity(fixture::executions.back().plan, armedPlan) &&
+            !SameIdentity(fixture::executions.back().plan, switched),
+            "submit must keep the armed plan rather than activePlan");
+        const auto afterArmed = fixture::executions.size();
+        Require(r.Begin(), "ordinary batch begin");
+        r.commandList->setFramebuffer(r.GetFramebuffer(color, nullptr));
+        r.commandList->clearColor(0, plume::RenderColor(.25f, .5f, .75f, .5f));
+        Require(r.Flush() && fixture::lastListCount == 1, "non-empty ordinary batch was not submitted");
+        r.PublishDlssFrameOutcome();
+        Require(fixture::executions.size() == afterArmed && effectOf().phase == gpu::frame_plan::DlssEffectPhase::Active &&
+            SameIdentity(planner.Observe().execution->plan, armedPlan),
+            "a later ordinary batch downgraded the submitted plan");
+        Require(r.WaitForGpu(), "identity drain");
+        r.framebuffers.clear();
+        r.renderTargets.clear();
+        r.sceneCopyPromotion = {};
+        fixture::statusPlanner = nullptr;
+    }
     void RunExtentGrowth() {
         auto& r = R(); ++r.frame;
         const uint32_t base = 0;
@@ -528,14 +983,182 @@ public:
         }
         std::printf("PASS_EXTENT: verified %u overlapping pixels (pattern, promoted-restore clear, and grown clear) across 160x92 -> 160x96 growth\n", checksCount);
     }
+    void RunEvaluateCapture() {
+        auto& r = R();
+        const auto dir = std::filesystem::temp_directory_path() /
+            ("lo-evaluate-gpu-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+        std::filesystem::create_directory(dir);
+        struct OwnDirectory {
+            std::filesystem::path path;
+            ~OwnDirectory() { std::error_code ec; std::filesystem::remove_all(path, ec); }
+        } owned{dir};
+        unsigned evaluatedCalls = 0;
+        auto run = [&](const char* label, gpu::dlss::SrStatus result, bool createFailure,
+                       bool compositeFailure, bool submitFailure, bool captureEnabled,
+                       bool subrect = false, bool completionUnconfirmed = false,
+                       bool featureCreated = true, bool historyReset = false) {
+            ++r.frame; ++r.activePlan.cpuSerial; ++r.activePlan.requestSignature;
+            r.activePlan.requestedUpscaler = gpu::upscaling::Upscaler::Dlss;
+            auto subdir = dir / label;
+            std::filesystem::create_directory(subdir);
+            if (captureEnabled) {
+                r.evaluatePage = std::make_shared<gpu::dlss::capture::Page>();
+                r.evaluatePage->number = r.frame - 1; r.evaluatePage->frame = r.frame;
+            } else r.evaluatePage.reset();
+            const RenderTargetKey key{0, 3, 1280, 0, false};
+            auto base = Texture(subrect ? 6 : 4, subrect ? 6 : 4, plume::RenderFormat::R16G16B16A16_FLOAT);
+            base->guestHeight = 736;
+            HostTexture* original = base.get(); r.renderTargets[key] = std::move(base);
+            auto depth = Texture(4, 4, plume::RenderFormat::R32_FLOAT);
+            auto motion = Texture(4, 4, plume::RenderFormat::R16G16_FLOAT);
+            auto invalid = Texture(4, 4, plume::RenderFormat::R8_UNORM);
+            LocalImageDrain imageDrain{device.get()};
+            Clear(*original, plume::RenderColor(.25f, .5f, .75f, .5f));
+            if (subrect) {
+                plume::RenderRect rect{1, 1, 5, 5};
+                r.commandList->setFramebuffer(r.GetFramebuffer(original, nullptr));
+                r.commandList->clearColor(0, plume::RenderColor(.125f, .25f, .5f, .75f), &rect, 1);
+            }
+            gpu::temporal::TemporalFrameInputs inputs{};
+            inputs.plan = r.activePlan; inputs.renderFrameId = r.frame;
+            inputs.currentInputsComplete = true; inputs.motionState = gpu::temporal::MotionState::Tracked;
+            inputs.colorEncoding = gpu::temporal::ColorEncoding::HdrLinear;
+            inputs.depthConvention = gpu::temporal::DepthConvention::Reversed;
+            inputs.resetHistory = historyReset;
+            inputs.resetReasons = gpu::temporal::TemporalResetReason::None;
+            inputs.temporalEpoch = r.temporalEpoch;
+            inputs.jitter.pixelX = .25; inputs.jitter.pixelY = -.375;
+            const auto region = [](HostTexture& t) { return gpu::temporal::TextureRegion{t.texture.get(), {4,4}, 0,0,4,4}; };
+            inputs.color = region(*original); inputs.depth = region(*depth);
+            if (subrect) inputs.color = {original->texture.get(), {6, 6}, 1, 1, 4, 4};
+            inputs.motion = region(*motion); inputs.motionInvalidity = region(*invalid);
+            Require(r.PrepareSceneCopyDestination(key, *original, inputs), "capture prepare");
+            HostTexture* color = original; HostTexture* raster = color;
+            plume::RenderViewport guest(0,0,1280,720), viewport;
+            plume::RenderRect guestScissor(0,0,1280,720), scissor;
+            Require(r.ActivateSceneCopyDestination(color, raster, viewport, scissor, guest, guestScissor), "capture activate");
+            Clear(*color, plume::RenderColor(.25f, .5f, .75f, .5f));
+            VendorFixture vendor; vendor.outcome = result; vendor.failCreate = createFailure;
+            vendor.created = featureCreated;
+            if (compositeFailure) { r.sceneCopyPromotionRgbPs.reset(); r.sceneCopyPromotionRgbPipelines.clear(); }
+            const auto originalSerial = inputs.plan.cpuSerial;
+            const bool applied = r.RecordSceneCopyDlssUsing(vendor, color, raster);
+            if (vendor.vendorCalls) ++evaluatedCalls;
+            Require(applied == (result == gpu::dlss::SrStatus::Executable && !createFailure && !compositeFailure),
+                "capture applied status");
+            if (captureEnabled) {
+                auto& page = *r.evaluatePage;
+                Require(page.attempts == 1 && page.evaluates == vendor.vendorCalls, "attempt/evaluate count");
+                const auto& e = *page.entries[0];
+                Require(e.inputs.plan.cpuSerial == originalSerial &&
+                    e.sdk.reset == (vendor.vendorCalls != 0 && (featureCreated || historyReset)),
+                    "frozen plan and created reset");
+                if (vendor.vendorCalls) Require(e.sdk.jitterX == .25f && e.sdk.jitterY == -.375f,
+                    "actual input pixel jitter");
+                if (vendor.vendorCalls && result == gpu::dlss::SrStatus::Executable)
+                    Require(e.input.recorded && e.output.recorded, "pre/post copies recorded");
+                if (createFailure || result == gpu::dlss::SrStatus::NeedsReconfigure)
+                    Require(!e.evaluated && !e.evaluateIndex && !e.input.buffer, "pre-evaluate failure allocated or called");
+            }
+            if (applied) Clear(*color, plume::RenderColor(.5f, .25f, .125f, .75f)); // UI-like third color.
+            if (captureEnabled && vendor.vendorCalls) {
+                auto changed = r.activePlan;
+                changed.cpuSerial += 123; changed.requestSignature ^= 1234;
+                r.activePlan = changed;
+            }
+            if (submitFailure) fixture::rejectSubmit = true;
+            const bool submitted = r.Flush();
+            Require(submitted == !submitFailure, "checked capture submission");
+            if (captureEnabled) {
+                auto& page = *r.evaluatePage;
+                auto& e = *page.entries[0];
+                Require(e.inputs.plan.cpuSerial == originalSerial, "Flush read changed CPU plan");
+                if (result == gpu::dlss::SrStatus::Executable && !createFailure && !submitFailure) {
+                    Require(e.checkedSubmit && e.submissionSerial && !e.completed,
+                        "capture completed before fence");
+                    Require(e.isolatedIncluded && e.vendorSuccess && e.adopted == applied,
+                        "vendor and adoption must be independent");
+                } else Require(!e.checkedSubmit && !e.completed, "discarded list obtained a completion");
+                if (submitFailure) {
+                    Require(!page.Export(subdir) && !std::filesystem::exists(subdir / "dlss-output-001.bin"),
+                        "failed submit published pixels");
+                    Require(!r.gpuSlots[0].evaluateCaptures.empty() || !r.gpuSlots[1].evaluateCaptures.empty(),
+                        "failed submit discarded readback owner early");
+                } else {
+                    if (completionUnconfirmed) {
+                        fixture::rejectWaitOnce = true;
+                        Require(!r.WaitForGpu() && !e.completed, "unconfirmed completion was accepted");
+                        Require(!page.Export(subdir) && !std::filesystem::exists(subdir / "dlss-output-001.bin") &&
+                            !std::filesystem::exists(subdir / "dlss-input-001.bin"), "unconfirmed completion published pixels");
+                        Require(!r.gpuSlots[0].evaluateCaptures.empty() || !r.gpuSlots[1].evaluateCaptures.empty(),
+                            "unconfirmed completion released readback buffer");
+                    }
+                    Require(r.WaitForGpu(), "capture checked fence completion");
+                    Require(page.Export(subdir), "capture export");
+                    std::ifstream jsonFile(subdir / "dlss-evaluations.json");
+                    const auto json = nlohmann::json::parse(jsonFile);
+                    const auto& row = json["evaluations"][0];
+                    Require(row["attempt_index"].get<unsigned>() == 1 &&
+                        row["plan"]["cpu_serial"].get<uint64_t>() == originalSerial, "typed export identity");
+                    Require(row["evaluate_called"].get<bool>() == bool(vendor.vendorCalls), "typed evaluate flag");
+                    if (vendor.vendorCalls) Require(row["sdk"]["reset"].get<bool>() ==
+                        (featureCreated || historyReset), "reset frozen from final SDK parameter");
+                    if (e.vendorSuccess) {
+                        Require(row["gpu_completed"].get<bool>() && row["input"]["available"].get<bool>() &&
+                            row["output"]["available"].get<bool>(), "completed readback missing");
+                        auto pixel = [&](const char* path, size_t size, uint64_t expected) {
+                            std::ifstream stream(subdir / path, std::ios::binary);
+                            std::vector<char> data((std::istreambuf_iterator<char>(stream)), {});
+                            Require(data.size() == size, "tight raw extent");
+                            uint64_t first = 0; std::memcpy(&first, data.data(), 8);
+                            Require(first == expected, "before/after/UI pixel mismatch");
+                        };
+                        pixel("dlss-input-001.bin", 4 * 4 * 8,
+                            subrect ? 0x3a00380034003000ull : 0x38003a0038003400ull);
+                        if (subrect) Require(row["input"]["content_rect"] == nlohmann::json::array({1,1,4,4}) &&
+                            row["input"]["storage"] == nlohmann::json::array({6,6}), "subrect storage metadata");
+                        pixel("dlss-output-001.bin", 8 * 8 * 8, 0x0000340038004000ull);
+                        Require(std::filesystem::exists(subdir / "dlss-input-001-preview.bmp") &&
+                            std::filesystem::exists(subdir / "dlss-output-001-preview.bmp"), "previews missing");
+                    } else {
+                        Require(!std::filesystem::exists(subdir / "dlss-input-001.bin") &&
+                            !std::filesystem::exists(subdir / "dlss-output-001.bin"), "discarded pixels published");
+                    }
+                }
+            } else Require(r.WaitForGpu(), "no-capture drain");
+            if (applied && !submitFailure) All(*color, 0x3a00300034003800ull, "UI-like final color changed by capture");
+            if (!submitFailure) {
+                r.framebuffers.clear(); r.renderTargets.clear(); r.sceneCopyPromotion = {};
+                if (compositeFailure) r.CompileSceneCopyPromotionShaders();
+            }
+            r.evaluatePage.reset();
+        };
+        run("capture-frame-a", gpu::dlss::SrStatus::Executable, false, false, false, true);
+        run("capture-frame-b", gpu::dlss::SrStatus::Executable, false, false, false, true, true,
+            false, false, false);
+        run("input-history-reset", gpu::dlss::SrStatus::Executable, false, false, false, true,
+            false, false, false, true);
+        run("no-capture", gpu::dlss::SrStatus::Executable, false, false, false, false);
+        run("reconfigure", gpu::dlss::SrStatus::NeedsReconfigure, false, false, false, true);
+        run("create-fail", gpu::dlss::SrStatus::Executable, true, false, false, true);
+        run("vendor-fail", gpu::dlss::SrStatus::Failed, false, false, false, true);
+        run("composite-fail", gpu::dlss::SrStatus::Executable, false, true, false, true);
+        run("completion-unconfirmed", gpu::dlss::SrStatus::Executable, false, false, false, true, false, true);
+        run("submit-fail", gpu::dlss::SrStatus::Executable, false, false, true, true);
+        Require(evaluatedCalls == 8, "capture changed vendor call count");
+        std::printf("PASS_EVALUATE_CAPTURE: calls=%u checked Vulkan, shared synthetic vendor boundary; no NGX quality claim\n", evaluatedCalls);
+    }
 };
 }
 int main(int argc, char** argv) {
     try {
         const bool native = argc == 2 && std::string_view(argv[1]) == "--native";
         const bool extentOnly = argc == 2 && std::string_view(argv[1]) == "--extent-only";
-        if (argc > 1 && !native && !extentOnly) {
-            std::fprintf(stderr, "usage: %s [--native|--extent-only]\n", argv[0]);
+        const bool statusOnly = argc == 2 && std::string_view(argv[1]) == "--status-only";
+        const bool planIdentity = argc == 2 && std::string_view(argv[1]) == "--plan-identity";
+        const bool evaluateCapture = argc == 2 && std::string_view(argv[1]) == "--evaluate-capture-only";
+        if (argc > 1 && !native && !extentOnly && !statusOnly && !planIdentity && !evaluateCapture) {
+            std::fprintf(stderr, "usage: %s [--native|--extent-only|--status-only|--plan-identity|--evaluate-capture-only]\n", argv[0]);
             return 2;
         }
         std::setvbuf(stdout, nullptr, _IONBF, 0);
@@ -553,6 +1176,20 @@ int main(int argc, char** argv) {
         }
         if (extentOnly) {
             harness.RunExtentGrowth();
+            return 0;
+        }
+        if (statusOnly) {
+            harness.RunStatus();
+            std::puts("PASS: DLSS execution status from the real planner and checked Vulkan submit; no NGX, present, or gameplay claim");
+            return 0;
+        }
+        if (planIdentity) {
+            harness.RunPlanIdentity();
+            std::puts("PASS: same-frame plan identity, armed-plan submit, and non-empty ordinary batch; no NGX or present claim");
+            return 0;
+        }
+        if (evaluateCapture) {
+            harness.RunEvaluateCapture();
             return 0;
         }
         for (unsigned reason = 0; reason < 7; ++reason) {

@@ -910,6 +910,73 @@ public:
         Require(!failed.ready&&failed.state==MotionState::Unavailable,"resource failure is not reset success");
         Submit();
     }
+    void WaitWithoutRelease() {
+        replay.SealTimings(cmd.get());
+        cmd->end();
+        const RenderCommandList* lists[] = {cmd.get()};
+        queue->executeCommandLists(lists, 1, nullptr, 0, nullptr, 0, fence.get());
+        queue->waitForCommandFence(fence.get());
+    }
+    std::unique_ptr<RenderTexture> StencilDepth(uint32_t width, uint32_t height) {
+        auto texture = device->createTexture(RenderTextureDesc::Texture2D(
+            width, height, 1, RenderFormat::D32_FLOAT_S8_UINT, RenderTextureFlag::DEPTH_TARGET));
+        Require(bool(texture), "D32_FLOAT_S8_UINT depth allocation");
+        return texture;
+    }
+    void DepthRetirement() {
+        const auto pipelines = replay.PipelineCount();
+        auto finished = StencilDepth(32, 32);
+        auto inflight = StencilDepth(32, 32);
+        replay.BeginFrame(1, 1);
+        cmd->begin();
+        cmd->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(finished.get(), RenderTextureLayout::DEPTH_WRITE));
+        Require(replay.BeginScene(cmd.get(), 1, finished.get(), 32, 32), "bind stencil depth");
+        const auto slotSerial = replay.RecordedSerial();
+        replay.RecordConsumerUse();
+        Require(replay.RecordedSerial() > slotSerial, "consumer use leaves the slot serial behind");
+        replay.BeginFrame(2, 1);
+        cmd->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(inflight.get(), RenderTextureLayout::DEPTH_WRITE));
+        Require(replay.BeginScene(cmd.get(), 2, inflight.get(), 48, 32), "resize retires the finished stencil framebuffer and binds another depth");
+        Require(replay.ReferencesExternalDepth(finished.get()), "retired stencil framebuffer still holds the finished depth");
+        Require(replay.ReferencesExternalDepth(inflight.get()), "current stencil framebuffer holds the in-flight depth");
+        const auto owned = replay.RetiredOwnedTextureCount();
+        Require(owned > 0, "resize keeps owned replay textures in flight");
+        WaitWithoutRelease();
+        replay.ReleaseDepthAfterGpuCompletion(finished.get());
+        Require(!replay.ReferencesExternalDepth(finished.get()), "slot completion drops that depth's stencil views immediately");
+        Require(replay.ReferencesExternalDepth(inflight.get()), "an unrelated in-flight depth binding stays");
+        Require(replay.RetiredOwnedTextureCount() == owned, "owned replay textures stay until their own serial");
+        Require(replay.PipelineCount() == pipelines, "depth completion does not rebuild pipelines");
+        finished.reset();
+        replay.ReleaseCompletedThrough(slotSerial);
+        Require(replay.ReferencesExternalDepth(inflight.get()), "the old slot serial is not what releases the newer depth");
+        replay.ReleaseCompletedThrough(replay.RecordedSerial());
+
+        auto resized = StencilDepth(48, 32);
+        replay.BeginFrame(3, 1);
+        cmd->begin();
+        cmd->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(resized.get(), RenderTextureLayout::DEPTH_WRITE));
+        Require(replay.BeginScene(cmd.get(), 1, resized.get(), 48, 32), "rebind before the resolution drain");
+        replay.BeginFrame(4, 1);
+        Require(replay.BeginScene(cmd.get(), 1, resized.get(), 64, 36), "resolution change retires and rebinds the same stencil depth");
+        Require(replay.BoundDepthIs(resized.get()) && replay.RetiredDepthFramebufferCount(resized.get()) >= 1,
+            "current and retired stencil framebuffers both hold the old depth");
+        WaitWithoutRelease();
+        replay.ReleaseDepthBindingsAfterGpuDrain();
+        Require(!replay.ReferencesExternalDepth(resized.get()), "drain drops current and retired stencil views before the texture");
+        Require(replay.PipelineCount() == pipelines, "drain does not rebuild pipelines");
+        resized.reset();
+        auto next = StencilDepth(64, 36);
+        replay.BeginFrame(5, 1);
+        cmd->begin();
+        cmd->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(next.get(), RenderTextureLayout::DEPTH_WRITE));
+        Require(replay.BeginScene(cmd.get(), 1, next.get(), 80, 40), "new size begins after the old stencil depth is gone");
+        WaitWithoutRelease();
+        replay.ReleaseDepthBindingsAfterGpuDrain();
+        Require(!replay.ReferencesExternalDepth(next.get()), "new size releases its stencil views before destruction");
+        next.reset();
+        inflight.reset();
+    }
 };
 int main(int argc, char** argv) {
  try {
@@ -918,6 +985,7 @@ int main(int argc, char** argv) {
     if(argc>1&&std::string(argv[1])=="--p1-inputs-only"){Fixture f;f.P1InputsOnly();printf("PASS: %u P1 input/MV GPU checks\n",checks);return 0;}
     if(argc>1&&std::string(argv[1])=="--history-precision-only"){Fixture f;f.HistoryPrecision();printf("PASS: %u history precision GPU checks\n",checks);return 0;}
     if(argc>1&&std::string(argv[1])=="--stationary-multi-only"){Fixture f;f.StationarySilhouette();printf("PASS: %u stationary coverage GPU checks\n",checks);return 0;}
+    if(argc>1&&std::string(argv[1])=="--depth-retirement-only"){Fixture f;f.DepthRetirement();printf("PASS: %u depth retirement checks\n",checks);return 0;}
     for(auto format:{xenos::ShaderBinaryFormat::Dxil,xenos::ShaderBinaryFormat::Spirv}) {
         const auto source=xenos::motion_replay::Pixel(nullptr);
         const auto c=xenos::CompileHlsl(source,"main","ps_6_0",format);

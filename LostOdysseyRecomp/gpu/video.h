@@ -1,8 +1,10 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include "backend_selection.h"
 #include "display_change.h"
+#include "present_capture.h"
 #include "upscaling_plan.h"
 namespace settings { struct Config; }
 
@@ -75,7 +77,17 @@ namespace gpu::video
 
     // Untiles the guest frontbuffer (a tiled 32bpp texture written by the
     // GPU resolve) into an upload buffer and presents it.
-    void PresentFrontbuffer(uint32_t physicalAddress, uint32_t width, uint32_t height, uint32_t copyDestInfo);
+    void PresentFrontbuffer(uint32_t physicalAddress, uint32_t width, uint32_t height, uint32_t copyDestInfo,
+        const present_capture::Ticket *capture = nullptr, present_capture::Result *captureResult = nullptr);
+#if defined(LO_GPU_PLUME)
+    // Observation for the capture fixture. Production frames leave these at zero
+    // unless an explicit ticket queued a readback.
+    void SetPresentCaptureCompletionFault(bool fail);
+    uint64_t PresentCaptureAllocationCount();
+    uint64_t PresentCaptureCopyCount();
+    uint64_t PresentCaptureMapCount();
+    size_t PresentCaptureRetainedBuffers();
+#endif
     // Waits the independent presentation submission before renderer resources
     // referenced by it are retired. Called on the command processor thread.
     bool WaitForPresentGpu();

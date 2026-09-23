@@ -196,10 +196,11 @@ void CheckEnableCycle()
     const auto enabled = planner.Begin(Input(Upscaler::Dlss, capable, &*cached));
     effect = ReadEffect(planner, cache);
     Require(enabled.consumer == TemporalConsumer::DlssSr && enabled.width == 1707 && enabled.height == 960 &&
-        effect.phase == DlssEffectPhase::Active && effect.inputWidth == 1707 && effect.outputWidth == 2560,
-        "ready sizing makes the DLSS consumer the actual effect");
-    Require(ClassifyDlssMenu(effect, Upscaler::Dlss, DlssQuality::Quality, Backend::Vulkan) == DlssMenuStatus::Active,
-        "matching displayed quality reports the running DLSS consumer");
+        effect.phase == DlssEffectPhase::AwaitingExecution && !effect.execution &&
+        effect.inputWidth == 1707 && effect.outputWidth == 2560,
+        "ready sizing selects the DLSS consumer and waits for a submission");
+    Require(ClassifyDlssMenu(effect, Upscaler::Dlss, DlssQuality::Quality, Backend::Vulkan) == DlssMenuStatus::TemporaryFallback,
+        "matching quality is not shown as enabled before a submission");
     Require(ClassifyDlssMenu(effect, Upscaler::Dlss, DlssQuality::Performance, Backend::Vulkan) == DlssMenuStatus::TemporaryFallback,
         "a different displayed quality is not reported as the running mode");
 
@@ -214,8 +215,8 @@ void CheckEnableCycle()
     const auto again = cache.Peek(pending.key);
     const auto reenabled = planner.Begin(Input(Upscaler::Dlss, capable, again ? &*again : nullptr));
     effect = ReadEffect(planner, cache);
-    Require(reenabled.consumer == TemporalConsumer::DlssSr && effect.phase == DlssEffectPhase::Active,
-        "turning DLSS on again uses the cached ready sizing");
+    Require(reenabled.consumer == TemporalConsumer::DlssSr && effect.phase == DlssEffectPhase::AwaitingExecution &&
+        !effect.execution, "turning DLSS on again uses the cached ready sizing and waits for a submission");
 }
 
 void CheckFallbackStates()
@@ -256,7 +257,9 @@ void CheckFallbackStates()
     Require(effect.phase == DlssEffectPhase::DeviceUnavailable, "Vulkan without DLSS capability is device unavailable");
     Require(ClassifyDlssMenu(effect, Upscaler::Dlss, DlssQuality::Quality, Backend::Vulkan) == DlssMenuStatus::DeviceUnavailable,
         "the menu can say the current Vulkan device is unavailable");
-    Require(DescribeDlssRuntime(unavailable, staleDlss, &ready).phase == DlssEffectPhase::DeviceUnavailable,
+    auto sameEpoch = staleDlss;
+    sameEpoch.plan.deviceEpoch = unavailable.deviceEpoch;
+    Require(DescribeDlssRuntime(unavailable, sameEpoch, &ready).phase == DlssEffectPhase::DeviceUnavailable,
         "a DLSS consumer bit does not override a negative capability snapshot");
 
     const auto capable = Device(Backend::Vulkan, 5, true, true);

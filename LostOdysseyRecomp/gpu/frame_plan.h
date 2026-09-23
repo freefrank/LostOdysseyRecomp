@@ -137,10 +137,38 @@ namespace gpu::frame_plan
     inline FramePlan AdvanceCpuPlan(FailureState& state, uint64_t cpuSerial, uint64_t& geometryEpoch,
         uint64_t reportedFailedEpoch, uint32_t fallbackHeight, uint32_t mode,
         uint32_t drawableWidth, uint32_t drawableHeight, bool resolveReadback);
+    enum class DlssExecutionOutcome : uint8_t { Submitted, Fallback };
+    enum class DlssEffectReason : uint8_t {
+        None = 0,
+        AwaitingGpuFrame,
+        DeviceNotReady,
+        NeedsVulkanRestart,
+        CapabilityUnavailable,
+        SizingPending,
+        SizingUnavailable,
+        SizingError,
+        InputProbeOnly,
+        NoEligibleScene,
+        MotionPipelinePending,
+        UnknownColorEncoding,
+        FeatureReconfigurePending,
+        PromotionUnavailable,
+        RequestFailure,
+        GpuWorkStopped,
+    };
+    struct DlssExecutionObservation {
+        FramePlan plan{};
+        uint64_t renderFrame = 0;
+        uint64_t submissionSerial = 0;
+        DlssExecutionOutcome outcome = DlssExecutionOutcome::Fallback;
+        DlssEffectReason reason = DlssEffectReason::NoEligibleScene;
+    };
     struct PlannerObservation {
         bool hasPlan = false;
         FramePlan plan{};
         std::optional<PlanFailure> latched;
+        std::optional<FailureReason> persistentFailure;
+        std::optional<DlssExecutionObservation> execution;
     };
     class PlannerState {
     public:
@@ -151,7 +179,7 @@ namespace gpu::frame_plan
             const bool newRequest = !lastFinal_ || lastFinal_->requestSignature != incomingSignature;
             if (newRequest) {
                 legacy_ = {};
-                dlssDisabledSignature_.reset();
+                dlssDisabled_.reset();
                 ClearAttemptMailbox();
             }
             const bool matchesLatchedAttempt = latched_ && lastFinal_ &&
@@ -206,7 +234,7 @@ namespace gpu::frame_plan
                 p.effectiveAA = p.legacyAA;
                 p.consumer = p.legacyAA == 3 ? upscaling::TemporalConsumer::LegacyTaa : upscaling::TemporalConsumer::None;
             };
-            const bool dlssDisabled = dlssDisabledSignature_ && *dlssDisabledSignature_ == p.requestSignature;
+            const bool dlssDisabled = dlssDisabled_ && dlssDisabled_->signature == p.requestSignature;
             if (legacyRetry || dlssDisabled) {
                 selectLegacy();
             }
@@ -217,6 +245,14 @@ namespace gpu::frame_plan
                 lastFinal_->consumer != p.consumer || lastFinal_->dlssQuality != p.dlssQuality ||
                 lastFinal_->output != p.output || lastFinal_->deviceEpoch != p.deviceEpoch;
             if (lastFinal_) p.geometryEpoch = changed ? ++epoch_ : lastFinal_->geometryEpoch;
+            // A changed geometry is a new attempt. Drop an execution that belongs
+            // to the previous one so quality/size A-B-A cannot revive the first A.
+            if (changed && execution_) {
+                const bool sameExecution = execution_->plan.deviceEpoch == p.deviceEpoch &&
+                    execution_->plan.requestSignature == p.requestSignature &&
+                    execution_->plan.geometryEpoch == p.geometryEpoch;
+                if (!sameExecution) execution_.reset();
+            }
             if (!upscaling::IsDlssConsumer(p.consumer)) legacy_.plan = p;
             lastFinal_ = p;
 
@@ -239,6 +275,9 @@ namespace gpu::frame_plan
                 observed.plan = *lastFinal_;
             }
             observed.latched = latched_;
+            if (dlssDisabled_ && lastFinal_ && dlssDisabled_->signature == lastFinal_->requestSignature)
+                observed.persistentFailure = dlssDisabled_->reason;
+            observed.execution = execution_;
             return observed;
         }
         bool ReportFailure(const PlanFailure& failure)
@@ -248,11 +287,28 @@ namespace gpu::frame_plan
                 if (MatchesPlanFailure(attempts_[i], failure)) {
                     latched_ = failure;
                     if (upscaling::IsDlssConsumer(attempts_[i].consumer))
-                        dlssDisabledSignature_ = failure.requestSignature;
+                        dlssDisabled_ = DisabledRequest{failure.requestSignature, failure.reason};
                     return true;
                 }
             }
             return false;
+        }
+        // GPU frames may lag the newest CPU serial. Identity is the device,
+        // request, and geometry; an older render frame never replaces a newer one.
+        bool ReportExecution(const DlssExecutionObservation& observation)
+        {
+            std::lock_guard lock(mutex_);
+            if (!lastFinal_) return false;
+            const auto& plan = observation.plan;
+            if (!plan.cpuSerial || plan.cpuSerial > lastFinal_->cpuSerial) return false;
+            if (plan.deviceEpoch != lastFinal_->deviceEpoch || plan.requestSignature != lastFinal_->requestSignature ||
+                plan.geometryEpoch != lastFinal_->geometryEpoch) return false;
+            if (observation.outcome == DlssExecutionOutcome::Submitted &&
+                (plan.consumer != upscaling::TemporalConsumer::DlssSr || !observation.submissionSerial))
+                return false;
+            if (execution_ && observation.renderFrame <= execution_->renderFrame) return false;
+            execution_ = observation;
+            return true;
         }
     private:
         void ClearAttemptMailbox()
@@ -261,25 +317,34 @@ namespace gpu::frame_plan
             attemptCount_ = 0;
             nextAttempt_ = 0;
         }
+        struct DisabledRequest {
+            uint64_t signature = 0;
+            FailureReason reason = FailureReason::Unknown;
+        };
         std::mutex mutex_;
         uint64_t serial_ = 0, epoch_ = 0;
         FailureState legacy_{};
         std::optional<PlanFailure> latched_;
-        std::optional<uint64_t> dlssDisabledSignature_;
+        // Survives ClearAttemptMailbox. newRequest clears it with the old latch.
+        std::optional<DisabledRequest> dlssDisabled_;
         std::array<FramePlan, 8> attempts_{};
         size_t attemptCount_ = 0;
         size_t nextAttempt_ = 0;
         std::optional<FramePlan> lastFinal_;
+        std::optional<DlssExecutionObservation> execution_;
     };
 
-    // What the latest CPU plan selects. Active means the plan chose DLSS;
-    // it does not establish NGX evaluation or GPU submission success.
+    // Active is only a matching submitted DLSS SR frame. The appended values
+    // name waits and stops that are not a submitted effect.
     enum class DlssEffectPhase : uint8_t {
         Inactive = 0,
         Active,
         NeedsVulkanRestart,
         DeviceUnavailable,
         TemporaryFallback,
+        AwaitingExecution,
+        InputProbeOnly,
+        GpuStopped,
     };
     // Menu classification for the values currently shown, which may not have
     // been applied. BackendChangePending means the edited backend is not the
@@ -300,9 +365,15 @@ namespace gpu::frame_plan
         upscaling::TemporalConsumer consumer = upscaling::TemporalConsumer::None;
         uint32_t inputWidth = 0, inputHeight = 0;
         uint32_t outputWidth = 0, outputHeight = 0;
+        // CPU plan identity for a status line. Not a second classification.
+        uint64_t cpuSerial = 0, geometryEpoch = 0, requestSignature = 0;
         upscaling::SizingState sizingState = upscaling::SizingState::Pending;
         bool sizingKnown = false;
         std::optional<FailureReason> failure;
+        DlssEffectReason reason = DlssEffectReason::None;
+        // Present only when this device may still show that GPU frame.
+        // plannedQuality and the sizes above stay the CPU plan.
+        std::optional<DlssExecutionObservation> execution;
         DlssEffectPhase phase = DlssEffectPhase::Inactive;
     };
     inline DlssEffectSnapshot DescribeDlssRuntime(const upscaling::BackendDeviceSnapshot& device,
@@ -319,7 +390,11 @@ namespace gpu::frame_plan
             snapshot.inputHeight = observed.plan.height;
             snapshot.outputWidth = observed.plan.output.width;
             snapshot.outputHeight = observed.plan.output.height;
-            if (observed.latched && MatchesPlanFailure(observed.plan, *observed.latched))
+            snapshot.cpuSerial = observed.plan.cpuSerial;
+            snapshot.geometryEpoch = observed.plan.geometryEpoch;
+            snapshot.requestSignature = observed.plan.requestSignature;
+            if (observed.persistentFailure) snapshot.failure = observed.persistentFailure;
+            else if (observed.latched && MatchesPlanFailure(observed.plan, *observed.latched))
                 snapshot.failure = observed.latched->reason;
         }
         bool sizingReady = false;
@@ -334,15 +409,43 @@ namespace gpu::frame_plan
                 {observed.plan.output.width, observed.plan.output.height});
         }
         const bool wantsDlss = observed.hasPlan && snapshot.plannedRequest == upscaling::Upscaler::Dlss;
-        const bool active = wantsDlss && upscaling::IsDlssConsumer(snapshot.consumer) && !snapshot.failure &&
-            device.backend == backend::Backend::Vulkan && device.deviceReady && device.dlssAvailable &&
-            device.deviceEpoch == observed.plan.deviceEpoch && sizingReady;
-        if (active) snapshot.phase = DlssEffectPhase::Active;
-        else if (!wantsDlss) snapshot.phase = DlssEffectPhase::Inactive;
-        else if (device.backend != backend::Backend::Vulkan) snapshot.phase = DlssEffectPhase::NeedsVulkanRestart;
-        else if (device.deviceReady && !device.dlssAvailable) snapshot.phase = DlssEffectPhase::DeviceUnavailable;
-        else snapshot.phase = DlssEffectPhase::TemporaryFallback;
-        return snapshot;
+        const bool epochMatches = observed.hasPlan && device.deviceEpoch == observed.plan.deviceEpoch;
+        const bool executionMatches = observed.execution && epochMatches &&
+            observed.execution->plan.deviceEpoch == observed.plan.deviceEpoch &&
+            observed.execution->plan.requestSignature == observed.plan.requestSignature &&
+            observed.execution->plan.geometryEpoch == observed.plan.geometryEpoch &&
+            observed.execution->plan.cpuSerial && observed.execution->plan.cpuSerial <= observed.plan.cpuSerial;
+        const bool exposeExecution = executionMatches && device.deviceReady && !device.gpuWorkStopped;
+        const auto finish = [&](DlssEffectPhase phase, DlssEffectReason reason, bool showExecution) {
+            snapshot.phase = phase;
+            snapshot.reason = reason;
+            if (showExecution && exposeExecution) snapshot.execution = observed.execution;
+            return snapshot;
+        };
+        if (!wantsDlss) return finish(DlssEffectPhase::Inactive, DlssEffectReason::None, false);
+        if (device.gpuWorkStopped) return finish(DlssEffectPhase::GpuStopped, DlssEffectReason::GpuWorkStopped, false);
+        if (device.backend != backend::Backend::Vulkan)
+            return finish(DlssEffectPhase::NeedsVulkanRestart, DlssEffectReason::NeedsVulkanRestart, false);
+        if (!device.deviceReady || !epochMatches)
+            return finish(DlssEffectPhase::TemporaryFallback, DlssEffectReason::DeviceNotReady, false);
+        if (!device.dlssAvailable)
+            return finish(DlssEffectPhase::DeviceUnavailable, DlssEffectReason::CapabilityUnavailable, false);
+        if (snapshot.failure) return finish(DlssEffectPhase::TemporaryFallback, DlssEffectReason::RequestFailure, false);
+        if (!snapshot.sizingKnown || snapshot.sizingState == upscaling::SizingState::Pending)
+            return finish(DlssEffectPhase::TemporaryFallback, DlssEffectReason::SizingPending, false);
+        if (snapshot.sizingState == upscaling::SizingState::Unavailable)
+            return finish(DlssEffectPhase::TemporaryFallback, DlssEffectReason::SizingUnavailable, false);
+        if (snapshot.sizingState == upscaling::SizingState::Error || !sizingReady)
+            return finish(DlssEffectPhase::TemporaryFallback, DlssEffectReason::SizingError, false);
+        if (snapshot.consumer == upscaling::TemporalConsumer::DlssInputs)
+            return finish(DlssEffectPhase::InputProbeOnly, DlssEffectReason::InputProbeOnly, false);
+        if (snapshot.consumer != upscaling::TemporalConsumer::DlssSr)
+            return finish(DlssEffectPhase::TemporaryFallback, DlssEffectReason::None, false);
+        if (!exposeExecution) return finish(DlssEffectPhase::AwaitingExecution, DlssEffectReason::AwaitingGpuFrame, false);
+        if (observed.execution->outcome != DlssExecutionOutcome::Submitted || !observed.execution->submissionSerial ||
+            observed.execution->plan.consumer != upscaling::TemporalConsumer::DlssSr)
+            return finish(DlssEffectPhase::TemporaryFallback, observed.execution->reason, true);
+        return finish(DlssEffectPhase::Active, DlssEffectReason::None, true);
     }
     inline DlssMenuStatus ClassifyDlssMenu(const DlssEffectSnapshot& running, upscaling::Upscaler displayedUpscaler,
         upscaling::DlssQuality displayedQuality, backend::Backend displayedBackend)
@@ -518,14 +621,17 @@ namespace gpu::frame_plan
     void PublishDrawable(uint32_t width, uint32_t height);
     void BeginCpuFrame();
     FramePlan CpuPlan();
-    // Copy of the committed device, the last CPU plan, and the cached sizing
-    // for that plan. Safe on the UI thread. Do not call it from inside
-    // PlannerState::Begin or while already holding the sizing or device lock.
-    // It does not read settings, NGX, or renderer objects. phase == Active only
-    // when the last plan's consumer is DLSS on the committed device. A renderer
+    // Copy of the committed device, the last CPU plan, the cached sizing, and
+    // the newest matching GPU execution. Safe on the UI thread. Do not call it
+    // from inside PlannerState::Begin or while already holding the sizing or
+    // device lock. It does not read settings, NGX, or renderer objects.
+    // phase == Active only for a matching submitted DLSS SR frame. A renderer
     // rejection is included only after ReportPlanFailure; a skip that does not
     // report one leaves the planned consumer in place.
     DlssEffectSnapshot CurrentDlssEffect();
+    void ReportDlssExecution(const DlssExecutionObservation& observation);
+    // One classified snapshot after a device publish. Not a per-frame hook.
+    void NoteCurrentDlssStatus();
     // A full P1 producer takes Config, drawable, and one immutable backend/device
     // snapshot. Implementation remains with lane A.
     FramePlan BeginCpuFrame(const settings::Config& config, const upscaling::OutputRegion& output,
@@ -552,4 +658,17 @@ namespace gpu::frame_plan
     // the helper a private guest stack/backlink and never keeps host locks
     // while the guest command writer may roll over its ring.
     bool EmitPrivatePacket(uint32_t device, uint32_t registerBase, std::span<const uint32_t> words);
+
+    // First event, then again at fixed counts. `repeats` is the number of
+    // later identical events; a reason change resets it and logs immediately.
+    inline bool EmitSparseRepeat(uint32_t& repeats, bool changed)
+    {
+        if (changed) {
+            repeats = 0;
+            return true;
+        }
+        if (repeats == ~0u) return false;
+        ++repeats;
+        return repeats == 64 || repeats == 256 || repeats == 1024 || repeats == 4096 || repeats == 16384;
+    }
 }

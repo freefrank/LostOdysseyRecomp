@@ -129,38 +129,43 @@ if (auto& owner = g_renderer->temporalHistory;
 
 建议先处理 BR-01、BR-02，并补齐 BR-03 的状态反馈，再进行针对性的真实画面验收；设置界面其余改进可按配套文档独立安排。
 
-## 2026-09-22 工作区修复与验证状态
+## 2026-09-22 修复进展与验证状态
 
-本节记录 2026-09-22 在本地工作区中对 BR-01、BR-02、BR-03 的实现与验证进展。原有审计章节保留作为原始历史基线，不修改当时发现的问题描述与边界。诊断路径项 K-01 本轮未做改动。本轮相关实现与验证已在工作区完成并纳入待提交范围；发布、全程序链接与游戏实际视觉验收仍未完成，不提前宣称提交成功。
+本节记录 2026-09-22 对 BR-01、BR-02、BR-03 及相关菜单稳定性的实现与验证进展。前面的审计章节保留作为原始历史基线，不修改当时发现的问题描述与边界。诊断路径项 K-01 本轮未做改动。本轮功能实现、定向验证与全程序可执行文件构建均已完成；真实游戏画面验证、玩家验收及版本发布仍待完成。
 
-### 1. BR-01：时序生命周期统一与帧间隔时钟推进
+### 1. BR-01：时序生命周期统一与帧间隔时钟推进（已随 commit 0625923 提交并合入 main）
 
 - **实现**：引入 `LostOdysseyRecomp/gpu/temporal_lifecycle.h`，提供统一的 `gpu::temporal::TemporalConsumerActive`（涵盖 legacy TAA、input probe 与 DLSS SR/DLAA）。在帧开始、长间隔检查（`ApplyTemporalLongInterval`）与帧尾判定（`EvaluateTemporalFrameEnd`）中统一应用此规则，确保普通 DLSS SR 与 DLAA 在正常推进时正确更新 `temporalFrameTime`，并在超过 250 ms 间隔后保留 subpixel jitter。
 - **边界修正**：在独立评审中发现，如果帧首已因长间隔执行了 reset 并记录 `gapResetFrame == frame`，原逻辑的 `gapAlreadyReset` 可能会误屏蔽帧尾因场景未就绪或未提交引起的重置需求。逻辑已修正为 `decision.reset = !decision.complete || (decision.gap && !decision.gapAlreadyReset)`，确保任何未完成帧均会执行历史清除。
 - **验证**：
-  - 新增 CPU 跨平台契约测试 `tools/tests/temporal_lifecycle_br01_test.cpp`（CMake 目标 `LoTemporalLifecycleBr01Test`）：原 154 项时钟推进与生命周期检查全部通过；在上述逻辑修正后，重跑了相关的 14 项 gap 检查并全部通过，未重跑其余已通过项目。
-  - 新增 GPU 真实所有权测试 `tools/tests/temporal_lifecycle_br01_owner_test.cpp`（CMake 目标 `LoTemporalLifecycleBr01OwnerTest`，条件为 `WIN32 AND LO_BUILD_GPU`）：在 RTX 5080 D3D12 环境下使用 motion stub 纹理执行真实 `HistoryOwner` 验证（无 NGX 依赖、不启动游戏），12 项检查全部通过，覆盖了初始化、连续推进、300 ms 长间隔（验证 >250 ms 阈值）、恢复序列及重复颜色失效判定。
+  - CPU 跨平台契约测试 `tools/tests/temporal_lifecycle_br01_test.cpp`（CMake 目标 `LoTemporalLifecycleBr01Test`）：原 154 项时钟推进与生命周期检查通过；在上述逻辑修正后，相关的 14 项 gap 检查全部通过。
+  - GPU 真实所有权测试 `tools/tests/temporal_lifecycle_br01_owner_test.cpp`（CMake 目标 `LoTemporalLifecycleBr01OwnerTest`，条件为 `WIN32 AND LO_BUILD_GPU`）：在 RTX 5080 D3D12 环境下使用 motion stub 纹理执行真实 `HistoryOwner` 验证（无 NGX 依赖、不启动游戏），12 项检查通过，覆盖了初始化、连续推进、300 ms 长间隔（验证 >250 ms 阈值）、恢复序列及重复颜色失效判定。相关测试结果直接复用，本轮未重跑。
 
-### 2. BR-02：设备能力快照与互斥保护发布
+### 2. BR-02：设备能力快照与互斥保护发布（已随 commit 0625923 提交并合入 main）
 
 - **实现**：在 `gpu::upscaling` 中定义按值传递的 `BackendDeviceSnapshot`（包含 `backend`、`deviceEpoch`、`deviceReady`、`dlssAvailable`）。设备拥有方在初始化、尺寸查询与退出清理时持有互斥锁发布完整快照（`PublishDeviceCapability`）；CPU 规划器只调用互斥锁保护的 `PublishedDeviceCapability()` 复制该快照，彻底解耦对可变 NGX 控制器 `report_` 的直接无锁读取。
 - **验证**：
-  - 新增 CPU 跨平台测试 `tools/tests/dlss_capability_snapshot_test.cpp`（CMake 目标 `LoDlssCapabilitySnapshotTest`）：43 项检查全部通过，覆盖了“关闭启动 → 首次开启 DLSS → 关闭 → 再次开启”的全过程状态迁移、并发一致性读写、设备断开及安全回退。
+  - CPU 跨平台测试 `tools/tests/dlss_capability_snapshot_test.cpp`（CMake 目标 `LoDlssCapabilitySnapshotTest`）：在 commit 0625923 中 43 项检查全部通过。在本轮 Active 状态匹配执行层观察之后，测试按新断言更新并重新运行，43 项检查再次全部通过，后续未再重跑。
 
-### 3. BR-03：菜单运行状态反馈与动态刷新
+### 3. BR-03 与设置行索引重构：执行反馈闭环与 GraphicsRow（本轮已实现，待提交）
 
-- **实现**：在设置菜单帮助区域引入两行动态状态反馈，第一行显示按键操作或选项说明，第二行由 `gpu::frame_plan::CurrentDlssEffect()` 根据当前计划与能力决定生效状态（未启用、生效及尺寸、需要 Vulkan 并重启、设备不支持、暂态回退）。菜单在后台空闲时每帧重新获取快照以保持动态刷新。未保存的编辑项（如当前生效中但选择 Off、或修改了质量档位、或在 D3D12 下选择 DLSS）不会误改实际运行状态，仅作为附加说明跟在主状态之后。
-- **范围与待补反馈**：当前仅完成基于 CPU 帧计划与静态/闭锁能力的状态反馈；对于渲染执行层中 motion pending、未确认色彩编码或 feature 重建等引起的非闭锁暂态回退，暂无底层执行快照和细分原因上报，执行层状态反馈仍待后续补齐。
+- **GraphicsRow 稳定枚举**：将图形菜单行号抽象为共享的 `GraphicsRow` 枚举（`0..10`），帮助文本、按键导航、变更响应与自动化测试统一根据行 ID 索引，消除增减选项引起的下标错位。修正了既有测试用例中关于 AA 与帧率行的截图索引断言。
+- **执行层状态闭环**：
+  - 菜单中 DLSS 的 `Active` 状态不再仅依赖 CPU 帧计划，而是要求同时匹配到来自底层渲染器的真实观察——实际采用 DLSS RGB 输出且经由 checked 检查成功提交 Vulkan 命令。
+  - 细化执行层回退与失败原因：区分持久失败闭锁（如缺少 Vulkan、设备不支持、尺寸未就绪、显式失败停止）与动态回退（如运动矢量管线就绪中 motion pending、未确认色彩编码 Unknown、feature 重建中、目标提升 promotion 失败、无合格绘制目标、等待首个结果、输入探针模式及底层停止等）。
+  - 运行时状态来自设备周期、请求签名与几何周期三元组身份过滤；同帧内若发生计划切换，保留最新失败原因；在 `SubmitVulkan` 与 `WaitForGpuFence` 出现错误时发布 stopped 状态。
+  - 菜单展示的渲染尺寸与输出尺寸直接取自实际执行计划 `execution.plan`；未保存的菜单编辑项继续作为附加说明显示在末尾。
 - **验证**：
-  - 最新 `menu_flow_test` 构建运行通过。除初始流程外，补齐了三项未保存编辑定向用例：
-    1. 当前计划 Quality 生效中，菜单编辑切换为 Off 未保存；
-    2. 当前计划 Quality 生效中，菜单编辑切换为 Balanced 尚未应用；
-    3. D3D12 后端下未启用 DLSS，菜单编辑选择 DLSS 未保存。
-  - 测试在输出目录 `out/br03-dlss-menu/` 下完整生成了 01 至 06 及新增的 `07-active-edit-off-unsaved.png`、`08-active-quality-unapplied.png`、`09-d3d12-edit-dlss-unsaved.png` 截图与 `notices.txt`。实现与定向回归已完成，未做用户画质验收，未发布。
+  - 新增 CPU 测试 `tools/tests/dlss_runtime_status_test.cpp`（CMake 目标 `LoDlssRuntimeStatusTest`）：37 项状态迁移与回退分类检查全部通过。
+  - 新增原生调用前错误注入测试 `tools/tests/video_submission_stop_test.cpp`（CMake 目标 `LoVideoSubmissionStopTest`）：14 项检查全部通过，验证底层提交与等待失败时发布 stopped 状态。
+  - 真实硬件 Vulkan 测试（`native_dlss_renderer_gpu_test.exe`）：在 RTX 5080 上使用合成 vendor 扩展运行，`--status-only` 验证通过（目标采用、checked 提交、输入选择与帧尾发布）；`--plan-identity` 验证通过（覆盖 fallback->fallback、success->fallback、activePlan 在提交前变更但已排队命令仍保留原 plan、SR 后常规非空批次不降级等边界场景）。
+  - 菜单交互测试 `tools/tests/menu_flow_test.cpp`（CMake 目标 `LoMenuFlowTest`）：结合 GraphicsRow 与最新执行状态反馈一次运行通过，在 `out/br03-dlss-menu/` 生成 18 张 BMP 截图与 `notices.txt`。经对齐检查，最短提示 18、最长提示 05、中文提示 06 及未保存质量提示 08 均完整展示且排版良好，未对底层 `menu_render` 额外做视觉侵入修改。
+  - 生产受影响对象（`frame_plan.cpp`、`renderer.cpp`、`video.cpp`、`menu.cpp`）增量编译通过。
 
-### 4. 构建与工程边界
+### 4. 边界说明
 
-- CMake 根配置完成更新，新增上述三个测试目标（两个 CPU 跨平台目标，一个 Windows GPU 真实 owner 目标）。
-- `cmake -S . -B build` 配置通过，三个测试目标编译链接通过；`renderer.cpp`、`video.cpp`、`frame_plan.cpp`、`upscaling_plan.cpp` 在定义 `LO_GPU_PLUME` 的生产对象编译通过。
-- 实际状态接口 `CurrentDlssEffect` 仅代表 CPU 帧规划决策及失败闭锁，不代表每一帧真实的 NGX 执行成功，禁止夸大为实际画质验收。
-- 未执行全程序最终可执行文件链接、游戏内实际画面对照、Linux 环境执行、发布打包或用户验收。
+- 功能实现与定向测试已完成。BR-01 CPU 与 owner 测试结论严格复用；BR-02 capability 测试因 Active 语义变化更新断言后重新运行 43 项通过并复用；其他既有 GPU 测试套件无重复运行。
+- 状态反馈仅代表渲染器采用目标与 checked 成功提交，不宣称 GPU 执行完成、最终呈现或整帧 DLSS 画面。
+- 修复 Quality->DLAA 切换时外部 depth 纹理与 motion stencil 视图解构顺序导致的崩溃，新增深度退休测试（`--depth-retirement-only`，26 项检查通过）。
+- 完整程序目标 `LostOdysseyRecomp` 成功完成最新本地增量构建与链接（产物 `build/LostOdysseyRecomp/LostOdysseyRecomp.exe`，93,599,744 字节，SHA-256 `eb37e8349775ec343032a7cdeadcfbb53e74ffe915f1b3c0890d938fb5cdbb41`，2026-09-22 19:33:37 -0600，基于 `0625923` 叠加未提交改动；崩溃基线备份于 `crash-baseline-6ab30022`）。用户实机验证成功完成 Quality->DLAA 切换并导出帧 2961–2963 无崩溃（DLAA 在 2887 帧激活）；同次 NGX 真实输入输出与 jitter 捕获需求仍待后续实施。
+- 真实游戏内画质与视觉表现、用户体验验收以及版本发布仍待后续开展。

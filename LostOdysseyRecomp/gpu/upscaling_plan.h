@@ -98,11 +98,14 @@ struct BackendDeviceSnapshot {
     uint64_t deviceEpoch = 0;
     bool deviceReady = false;
     bool dlssAvailable = false;
+    // Terminal for this device lifetime. Readers must not treat an older
+    // submitted DLSS frame as still running after the owner publishes this.
+    bool gpuWorkStopped = false;
     bool operator==(const BackendDeviceSnapshot&) const = default;
 };
 
-// The four fields are stored together. A reader cannot observe a new epoch
-// paired with the previous backend or DLSS flag.
+// The snapshot fields are stored together, including gpuWorkStopped. A reader
+// cannot observe a new epoch paired with the previous backend or DLSS flag.
 void PublishDeviceCapability(BackendDeviceSnapshot snapshot);
 BackendDeviceSnapshot PublishedDeviceCapability();
 

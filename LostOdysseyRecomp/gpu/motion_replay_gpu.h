@@ -70,7 +70,9 @@ class MotionReplayGPU {
     std::unique_ptr<plume::RenderPipeline> maskPipeline_;
     std::unique_ptr<plume::RenderFramebuffer> clearFramebuffer_, drawFramebuffer_;
     struct Retired {
-        uint64_t serial;
+        uint64_t serial = 0;
+        // Guest depth is not owned. The framebuffer's stencil view must die first.
+        const plume::RenderTexture* externalDepth = nullptr;
         std::unique_ptr<plume::RenderFramebuffer> framebuffer;
         std::unique_ptr<plume::RenderTexture> texture;
     };
@@ -120,11 +122,11 @@ float pixel(float4 p : SV_Position) : SV_Target {
             image.layout = to;
         }
     }
-    void Retire(std::unique_ptr<plume::RenderFramebuffer>& p) {
-        if (p) retired_.push_back({serial_, std::move(p), {}});
+    void Retire(std::unique_ptr<plume::RenderFramebuffer>& p, const plume::RenderTexture* externalDepth = nullptr) {
+        if (p) retired_.push_back({serial_, externalDepth, std::move(p), {}});
     }
     bool Allocate(Image& image, plume::RenderFormat format) {
-        if (image.texture) retired_.push_back({serial_, {}, std::move(image.texture)});
+        if (image.texture) retired_.push_back({serial_, nullptr, {}, std::move(image.texture)});
         image.layout = plume::RenderTextureLayout::UNKNOWN;
         image.texture = device_->createTexture(plume::RenderTextureDesc::Texture2D(width_, height_, 1, format, plume::RenderTextureFlag::RENDER_TARGET));
         return bool(image.texture);
@@ -244,7 +246,7 @@ public:
         if (width_ != width || height_ != height) {
             ++targetGeneration_;
             free_.clear(); // release cached framebuffers before retiring their attachments
-            Retire(drawFramebuffer_); Retire(clearFramebuffer_);
+            Retire(drawFramebuffer_, boundDepth_); Retire(clearFramebuffer_);
             width_ = width; height_ = height;
             if (!Allocate(velocity_, plume::RenderFormat::R16G16_FLOAT) || !Allocate(depths_, plume::RenderFormat::R32G32_FLOAT) ||
                 !Allocate(tags_, plume::RenderFormat::R32_UINT) || !Allocate(reactive_, plume::RenderFormat::R8_UNORM)) {
@@ -255,7 +257,7 @@ public:
         const plume::RenderTexture* colors[] = {velocity_.texture.get(), depths_.texture.get(), tags_.texture.get()};
         if (!clearFramebuffer_) clearFramebuffer_ = device_->createFramebuffer(plume::RenderFramebufferDesc(colors, 3));
         if (boundDepth_ != depth || allocation_ != allocation || !drawFramebuffer_) {
-            Retire(drawFramebuffer_);
+            Retire(drawFramebuffer_, boundDepth_);
             // Keep DEPTH_WRITE layout as in the guest pass, but the replay PSO
             // disables depth/stencil writes. No per-draw depth transition or wait.
             drawFramebuffer_ = device_->createFramebuffer(plume::RenderFramebufferDesc(colors, 3, depth, false));
@@ -399,8 +401,42 @@ public:
         return {velocity_.texture.get(), depths_.texture.get(), reactive_.texture.get(), frame_, epoch_, allocation_, width_, height_, true,
             resetInitialization ? MotionState::ResetInitialization : MotionState::Tracked};
     }
-    void ForgetDepth(const plume::RenderTexture* depth) {
-        if (boundDepth_ == depth) { Retire(drawFramebuffer_); boundDepth_ = nullptr; }
+    // The slot fence has already proved this depth's last use. Drop every
+    // framebuffer that still holds its stencil view before the texture dies.
+    // Other in-flight replay textures and unrelated depth bindings stay.
+    void ReleaseDepthAfterGpuCompletion(const plume::RenderTexture* depth) {
+        if (!depth) return;
+        if (boundDepth_ == depth) { drawFramebuffer_.reset(); boundDepth_ = nullptr; }
+        for (auto& entry : retired_) if (entry.externalDepth == depth) {
+            entry.framebuffer.reset();
+            entry.externalDepth = nullptr;
+        }
+    }
+    // Full renderer and presentation drain already succeeded. Retire every
+    // completed object, then drop the current draw framebuffer. Pipelines stay.
+    void ReleaseDepthBindingsAfterGpuDrain() {
+        ReleaseCompletedThrough(RecordedSerial());
+        drawFramebuffer_.reset();
+        boundDepth_ = nullptr;
+    }
+    bool ReferencesExternalDepth(const plume::RenderTexture* depth) const {
+        if (!depth) return false;
+        if (boundDepth_ == depth && drawFramebuffer_) return true;
+        for (const auto& entry : retired_) if (entry.externalDepth == depth && entry.framebuffer) return true;
+        return false;
+    }
+    bool BoundDepthIs(const plume::RenderTexture* depth) const { return depth && boundDepth_ == depth && drawFramebuffer_; }
+    uint32_t RetiredDepthFramebufferCount(const plume::RenderTexture* depth) const {
+        uint32_t count = 0;
+        if (!depth) return 0;
+        for (const auto& entry : retired_) if (entry.externalDepth == depth && entry.framebuffer) ++count;
+        return count;
+    }
+    uint32_t PipelineCount() const { return uint32_t(pipelines_.size()); }
+    uint32_t RetiredOwnedTextureCount() const {
+        uint32_t count = 0;
+        for (const auto& entry : retired_) if (entry.texture) ++count;
+        return count;
     }
     // A later TAA/diagnostic read may be in another submission than Finish().
     // Include it before that submission is stamped by the renderer.

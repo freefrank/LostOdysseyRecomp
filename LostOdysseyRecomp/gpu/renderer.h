@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <vector>
 #include <string>
+#include "present_capture.h"
 
 namespace plume { struct RenderTexture; }
 namespace gpu::frame_plan { struct FramePlan; }
@@ -49,7 +50,12 @@ namespace gpu::renderer
     void RequestDebugCapture();
     std::wstring DebugCaptureStatus();
     bool DebugCaptureBusy();
-    void FinishDebugCapture(uint32_t frontbuffer);
+    // Fixes this XE_SWAP's guest export and ticket before presentation.
+    void PrepareDebugCaptureFrame(uint32_t frontbuffer, uint32_t swap, present_capture::Ticket &ticket);
+    // Writes the final pre-present image, then advances or archives. No capture is a no-op.
+    void CompleteDebugCaptureFrame(const present_capture::Result &presented);
+    // Starts the next frame directory only after the current export has finished.
+    void PollDebugCapture();
     // Normal window close waits for the in-flight archive before process exit.
     void WaitDebugCaptureArchive();
 

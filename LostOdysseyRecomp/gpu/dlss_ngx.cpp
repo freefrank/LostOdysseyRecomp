@@ -3,6 +3,7 @@
 #endif
 
 #include "dlss_ngx.h"
+#include "dlss_evaluate_capture.h"
 
 #if defined(LO_GPU_PLUME)
 #include "temporal_frame_inputs.h"
@@ -661,20 +662,25 @@ SrStatus Controller::AllocateParameters() {
 }
 
 SrAttempt Controller::RecordIsolated(plume::VulkanCommandList& isolatedCommandList, const SrConfig& config,
-    const temporal::TemporalFrameInputs& inputs, plume::VulkanTexture& output) {
+    const temporal::TemporalFrameInputs& inputs, plume::VulkanTexture& output, EvaluateCapture* capture) {
     SrAttempt attempt;
 #if !defined(LO_DLSS_SDK)
     (void)isolatedCommandList; (void)config; (void)inputs; (void)output;
+    if (capture) { capture->stage = "sdk_disabled"; capture->reason = "sdk_disabled"; }
     return attempt;
 #else
-    if (config.colorSpace == SrColorSpace::Unknown) return attempt;
-    if (!upscaling::ValidDlssRenderExtent(config.quality, config.renderExtent, config.outputExtent)) return attempt;
-    if (!sessionDevice_) return attempt;
+    const auto early = [&](const char* reason) {
+        if (capture) { capture->stage = "validation"; capture->reason = reason; }
+        return attempt;
+    };
+    if (config.colorSpace == SrColorSpace::Unknown) return early("unknown_color_encoding");
+    if (!upscaling::ValidDlssRenderExtent(config.quality, config.renderExtent, config.outputExtent)) return early("invalid_sizing");
+    if (!sessionDevice_) return early("no_session_device");
     const auto session = EnsureSession(*sessionDevice_);
-    if (session != SrStatus::Executable) { attempt.status = session; return attempt; }
-    if (NeedsFeatureRecreate(config) && featureConfigValid_) { attempt.status = SrStatus::NeedsReconfigure; return attempt; }
-    if (featureFailed_) { attempt.status = SrStatus::NeedsReconfigure; return attempt; }
-    if (inputs.renderFrameId && inputs.renderFrameId == lastSrAttemptFrameId_) return attempt;
+    if (session != SrStatus::Executable) { attempt.status = session; return early("session_unavailable"); }
+    if (NeedsFeatureRecreate(config) && featureConfigValid_) { attempt.status = SrStatus::NeedsReconfigure; return early("needs_reconfigure"); }
+    if (featureFailed_) { attempt.status = SrStatus::NeedsReconfigure; return early("feature_failed_needs_reconfigure"); }
+    if (inputs.renderFrameId && inputs.renderFrameId == lastSrAttemptFrameId_) return early("duplicate_frame");
 
     const auto validRegion = [&](const temporal::TextureRegion& region) {
         if (!region.Complete() || region.width != config.renderExtent.width || region.height != config.renderExtent.height)
@@ -693,12 +699,12 @@ SrAttempt Controller::RecordIsolated(plume::VulkanCommandList& isolatedCommandLi
         !IsFinitePositive(inputs.preExposure) || !IsFinitePositive(inputs.exposureScale) ||
         (config.colorSpace == SrColorSpace::DisplayEncoded && inputs.colorEncoding != temporal::ColorEncoding::Sdr) ||
         (config.colorSpace == SrColorSpace::Linear && inputs.colorEncoding != temporal::ColorEncoding::HdrLinear))
-        return attempt;
+        return early("invalid_inputs");
 
     // Retain parameters and any feature state through the fallback prefix batch,
     // including a failed Create/Evaluate recording whose primary is excluded.
     attempt.useId = srUses_.Record();
-    if (!attempt.useId) { attempt.status = SrStatus::Failed; return attempt; }
+    if (!attempt.useId) { attempt.status = SrStatus::Failed; return early("use_id_unavailable"); }
     lastSrAttemptFrameId_ = inputs.renderFrameId;
     const auto failed = [&](std::optional<int32_t> rawNgx = std::nullopt,
                             std::optional<VkResult> rawVk = std::nullopt) {
@@ -706,6 +712,7 @@ SrAttempt Controller::RecordIsolated(plume::VulkanCommandList& isolatedCommandLi
         attempt.rawNgxResult = rawNgx;
         if (rawVk) attempt.rawVkResult = int32_t(*rawVk);
         featureFailed_ = true;
+        if (capture && capture->reason.empty()) capture->reason = "isolated_record_failed";
         return attempt;
     };
 
@@ -714,6 +721,7 @@ SrAttempt Controller::RecordIsolated(plume::VulkanCommandList& isolatedCommandLi
     if (begin.begin) RecordCall("vkBeginCommandBuffer", int32_t(*begin.begin), *begin.begin != VK_SUCCESS);
     if (!begin.reset || *begin.reset != VK_SUCCESS) return failed(std::nullopt, begin.reset);
     if (!begin.begin || *begin.begin != VK_SUCCESS) return failed(std::nullopt, begin.begin);
+    if (capture) capture->stage = "create";
     const auto commandBuffer = isolatedCommandList.beginExternalCommands();
     if (commandBuffer == VK_NULL_HANDLE) {
         const auto end = EndIsolatedCommandList(isolatedCommandList);
@@ -743,7 +751,9 @@ SrAttempt Controller::RecordIsolated(plume::VulkanCommandList& isolatedCommandLi
         const auto createResult = NGX_VULKAN_CREATE_DLSS_EXT1(sessionDevice_->vk, commandBuffer, 1, 1,
             &handle, parameters, &create);
         RecordCall("CREATE_DLSS_EXT1", int32_t(createResult), NVSDK_NGX_FAILED(createResult));
+        if (capture) capture->createResult = int32_t(createResult);
         if (NVSDK_NGX_FAILED(createResult) || !handle) {
+            if (capture) capture->reason = "feature_create_failed";
             isolatedCommandList.endExternalCommands();
             const auto end = EndIsolatedCommandList(isolatedCommandList);
             if (end) RecordCall("vkEndCommandBuffer", int32_t(*end), *end != VK_SUCCESS);
@@ -780,10 +790,26 @@ SrAttempt Controller::RecordIsolated(plume::VulkanCommandList& isolatedCommandLi
     evaluate.InOutputSubrectBase = {0, 0};
     evaluate.InPreExposure = inputs.preExposure;
     evaluate.InExposureScale = inputs.exposureScale;
+    capture::Parameters frozen{};
+    if (capture) {
+        frozen.jitterX = evaluate.InJitterOffsetX; frozen.jitterY = evaluate.InJitterOffsetY;
+        frozen.mvScaleX = evaluate.InMVScaleX; frozen.mvScaleY = evaluate.InMVScaleY;
+        frozen.preExposure = evaluate.InPreExposure; frozen.exposureScale = evaluate.InExposureScale;
+        frozen.colorX = evaluate.InColorSubrectBase.X; frozen.colorY = evaluate.InColorSubrectBase.Y;
+        frozen.depthX = evaluate.InDepthSubrectBase.X; frozen.depthY = evaluate.InDepthSubrectBase.Y;
+        frozen.mvX = evaluate.InMVSubrectBase.X; frozen.mvY = evaluate.InMVSubrectBase.Y;
+        frozen.outputX = evaluate.InOutputSubrectBase.X; frozen.outputY = evaluate.InOutputSubrectBase.Y;
+        frozen.renderWidth = evaluate.InRenderSubrectDimensions.Width;
+        frozen.renderHeight = evaluate.InRenderSubrectDimensions.Height;
+        frozen.reset = evaluate.InReset != 0; frozen.featureCreated = created;
+        frozen.inputHistoryReset = inputs.resetHistory;
+        capture->sdk = frozen;
+    }
     // Transparency and exposure resources remain null. Auto exposure is only
     // selected by SrConfig and no guest alpha/mask is bound to NGX.
 #if defined(LO_NATIVE_DLSS_TEST_INJECT_EVALUATE_FAILURE)
     if (const char* inject = std::getenv("LO_DLSS_TEST_INJECT_EVALUATE_FAILURE"); inject && *inject == '1') {
+        if (capture) { capture->stage = "before_evaluate"; capture->reason = "test_injection_before_vendor"; }
         // Test-only host injection: this records a command before reporting a
         // synthetic NGX failure. The caller must exclude this primary list and
         // submit its already-recorded prefix fallback instead.
@@ -796,13 +822,18 @@ SrAttempt Controller::RecordIsolated(plume::VulkanCommandList& isolatedCommandLi
         return failed(int32_t(NVSDK_NGX_Result_FAIL_InvalidParameter), end);
     }
 #endif
-    const auto evaluateResult = NGX_VULKAN_EVALUATE_DLSS_EXT(commandBuffer,
-        static_cast<NVSDK_NGX_Handle*>(feature_), parameters, &evaluate);
+    const auto evaluateResult = capture::InvokeEvaluate(commandBuffer, capture, color, output, frozen,
+        [&] { return int32_t(NGX_VULKAN_EVALUATE_DLSS_EXT(commandBuffer,
+            static_cast<NVSDK_NGX_Handle*>(feature_), parameters, &evaluate)); },
+        [](int32_t result) { return !NVSDK_NGX_FAILED(NVSDK_NGX_Result(result)); });
     RecordCall("EVALUATE_DLSS_EXT", int32_t(evaluateResult), NVSDK_NGX_FAILED(evaluateResult));
     isolatedCommandList.endExternalCommands();
     const auto end = EndIsolatedCommandList(isolatedCommandList);
     if (end) RecordCall("vkEndCommandBuffer", int32_t(*end), *end != VK_SUCCESS);
-    if (!end || *end != VK_SUCCESS) return failed(int32_t(evaluateResult), end);
+    if (!end || *end != VK_SUCCESS) {
+        if (capture) capture->reason = "isolated_end_failed";
+        return failed(int32_t(evaluateResult), end);
+    }
     if (NVSDK_NGX_FAILED(evaluateResult)) return failed(int32_t(evaluateResult), end);
     report_.srEvaluated = true;
     attempt.status = SrStatus::Executable;

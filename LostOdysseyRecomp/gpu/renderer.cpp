@@ -62,6 +62,7 @@
 #include <plume_render_interface.h>
 #include <plume_render_interface_builders.h>
 #include "dlss_ngx.h"
+#include "dlss_evaluate_capture.h"
 #include "draw_timing.h"
 #endif
 
@@ -378,6 +379,14 @@ namespace gpu::renderer
                 uint64_t srUseId = 0, srSubmissionSerial = 0;
                 bool srPrefixClosed = false, srIsolatedAccepted = false, srContinuationOpen = false;
                 bool submitted = false;
+                std::vector<std::shared_ptr<dlss::EvaluateCapture>> evaluateCaptures;
+                // Copied at srApplied. Flush must not read activePlan; resolution
+                // changes replace that plan before they submit.
+                struct DlssSubmitMark {
+                    bool pending = false;
+                    frame_plan::FramePlan plan{};
+                    uint64_t renderFrame = 0;
+                } dlssSubmit;
             };
             GpuSlot gpuSlots[kGpuSlots];
             uint32_t gpuSlot = 0;
@@ -509,6 +518,135 @@ namespace gpu::renderer
             bool temporalInputProbe = false;
             bool dlssSrRequested = false;
             uint64_t dlssDisableReportedEpoch = ~0ull;
+            struct DlssFrameFeedback {
+                bool submitted = false;
+                frame_plan::FramePlan submittedPlan{};
+                uint64_t submittedFrame = 0;
+                uint64_t submissionSerial = 0;
+                bool hasFallback = false;
+                frame_plan::DlssEffectReason fallback = frame_plan::DlssEffectReason::NoEligibleScene;
+                frame_plan::FramePlan fallbackPlan{};
+                uint64_t fallbackFrame = 0;
+                bool submitRejected = false;
+                frame_plan::FramePlan submitRejectedPlan{};
+                uint64_t submitRejectedFrame = 0;
+                uint64_t publishedFrame = ~0ull;
+                bool publishedSubmitted = false;
+                frame_plan::FramePlan publishedPlan{};
+            } dlssFrame;
+            static bool SameDlssIdentity(const frame_plan::FramePlan& a, const frame_plan::FramePlan& b)
+            {
+                return a.deviceEpoch == b.deviceEpoch && a.requestSignature == b.requestSignature &&
+                    a.geometryEpoch == b.geometryEpoch;
+            }
+            struct DlssSceneInputSelection {
+                enum class Kind : uint8_t { Ignored, Pending, Incomplete, UnknownColor, Selected };
+                Kind kind = Kind::Ignored;
+                temporal::TemporalFrameInputs inputs{};
+            };
+            void NoteDlssFrameFallback(frame_plan::DlssEffectReason reason)
+            {
+                // First note wins only for the same plan. A later identity on
+                // this frame replaces it; an earlier identity must not hide it.
+                if (dlssFrame.submitted && dlssFrame.submittedFrame == frame &&
+                    SameDlssIdentity(dlssFrame.submittedPlan, activePlan)) return;
+                if (dlssFrame.hasFallback && dlssFrame.fallbackFrame == frame &&
+                    SameDlssIdentity(dlssFrame.fallbackPlan, activePlan)) return;
+                dlssFrame.hasFallback = true;
+                dlssFrame.fallback = reason;
+                dlssFrame.fallbackPlan = activePlan;
+                dlssFrame.fallbackFrame = frame;
+                if (evaluatePage && evaluatePage->frame == frame)
+                    evaluatePage->fallbackReason = dlss::capture::FrameFallbackName(reason);
+            }
+            void NoteDlssSubmitted(const frame_plan::FramePlan& plan, uint64_t renderFrame, uint64_t serial)
+            {
+                if (!serial) return;
+                if (dlssFrame.submitted && dlssFrame.submittedFrame == renderFrame &&
+                    SameDlssIdentity(dlssFrame.submittedPlan, plan)) return;
+                dlssFrame.submitted = true;
+                dlssFrame.submittedPlan = plan;
+                dlssFrame.submittedFrame = renderFrame;
+                dlssFrame.submissionSerial = serial;
+            }
+            void ClearDlssSubmit(GpuSlot& slot, bool rejected)
+            {
+                if (rejected && slot.dlssSubmit.pending) {
+                    dlssFrame.submitRejected = true;
+                    dlssFrame.submitRejectedPlan = slot.dlssSubmit.plan;
+                    dlssFrame.submitRejectedFrame = slot.dlssSubmit.renderFrame;
+                }
+                slot.dlssSubmit = {};
+            }
+            void ArmDlssSubmit()
+            {
+                Gpu().dlssSubmit.pending = true;
+                Gpu().dlssSubmit.plan = activePlan;
+                Gpu().dlssSubmit.renderFrame = frame;
+            }
+            // Shared with the renderer fixture. DrawImpl keeps the original logs.
+            DlssSceneInputSelection SelectDlssSceneCopyInputs(const temporal::TemporalFrameInputs& inputs)
+            {
+                DlssSceneInputSelection selected;
+                const bool recoverablePending = motionReplay && motionReplay->PipelinePendingThisFrame()
+                    && !motionReplay->AbortedThisFrame() && !drawTemporalTracker.Failed();
+                if (recoverablePending) {
+                    NoteDlssFrameFallback(frame_plan::DlssEffectReason::MotionPipelinePending);
+                    selected.kind = DlssSceneInputSelection::Kind::Pending;
+                    return selected;
+                }
+                if (!inputs.CompleteForConsumer()) {
+                    selected.kind = DlssSceneInputSelection::Kind::Incomplete;
+                    return selected;
+                }
+                if (dlssSrRequested && inputs.colorEncoding == temporal::ColorEncoding::Unknown) {
+                    NoteDlssFrameFallback(frame_plan::DlssEffectReason::UnknownColorEncoding);
+                    selected.kind = DlssSceneInputSelection::Kind::UnknownColor;
+                    return selected;
+                }
+                if (dlssSrRequested) {
+                    selected.kind = DlssSceneInputSelection::Kind::Selected;
+                    selected.inputs = inputs;
+                    return selected;
+                }
+                return selected;
+            }
+            void PublishDlssFrameOutcome()
+            {
+                const bool confirmed = dlssFrame.submitted && dlssFrame.submittedFrame == frame &&
+                    dlssFrame.submissionSerial && SameDlssIdentity(dlssFrame.submittedPlan, activePlan);
+                if (dlssFrame.publishedSubmitted && dlssFrame.publishedFrame == frame &&
+                    SameDlssIdentity(dlssFrame.publishedPlan, activePlan) && confirmed) return;
+                const bool rejected = dlssFrame.submitRejected && dlssFrame.submitRejectedFrame == frame &&
+                    SameDlssIdentity(dlssFrame.submitRejectedPlan, activePlan);
+                frame_plan::DlssExecutionObservation observation;
+                observation.renderFrame = frame;
+                if (confirmed) {
+                    observation.plan = dlssFrame.submittedPlan;
+                    observation.submissionSerial = dlssFrame.submissionSerial;
+                    observation.outcome = frame_plan::DlssExecutionOutcome::Submitted;
+                    observation.reason = frame_plan::DlssEffectReason::None;
+                } else if (rejected) {
+                    return;
+                } else if (dlssFrame.hasFallback && dlssFrame.fallbackFrame == frame &&
+                    SameDlssIdentity(dlssFrame.fallbackPlan, activePlan)) {
+                    observation.plan = dlssFrame.fallbackPlan;
+                    observation.outcome = frame_plan::DlssExecutionOutcome::Fallback;
+                    observation.reason = dlssFrame.fallback;
+                } else {
+                    for (const auto& slot : gpuSlots)
+                        if (slot.dlssSubmit.pending && slot.dlssSubmit.renderFrame == frame &&
+                            SameDlssIdentity(slot.dlssSubmit.plan, activePlan)) return;
+                    if (activePlan.consumer != upscaling::TemporalConsumer::DlssSr || !activePlan.cpuSerial) return;
+                    observation.plan = activePlan;
+                    observation.outcome = frame_plan::DlssExecutionOutcome::Fallback;
+                    observation.reason = frame_plan::DlssEffectReason::NoEligibleScene;
+                }
+                frame_plan::ReportDlssExecution(observation);
+                dlssFrame.publishedFrame = frame;
+                dlssFrame.publishedPlan = observation.plan;
+                dlssFrame.publishedSubmitted = observation.outcome == frame_plan::DlssExecutionOutcome::Submitted;
+            }
             void FinishMotion(temporal::HistoryOwner* history) {
                 if (!motionOptions.enabled || !history || motionFinalizedFrame == frame) return;
                 motionFinalizedFrame = frame;
@@ -729,8 +867,17 @@ namespace gpu::renderer
             uint64_t captureRequest = 0;
             std::string debugCaptureDir;
             std::filesystem::path debugCaptureRoot;
+            present_capture::Ticket captureTicket{};
+            present_capture::GuestImage captureGuest{};
+            bool capturePrepared = false;
+            uint32_t captureAttemptFrame = 0;
+            uint32_t captureAttemptSwap = 0;
             static constexpr uint32_t debugCaptureFrameCount = 3;
             uint32_t debugCaptureFirstFrame = 0, debugCaptureCompleted = 0;
+            std::shared_ptr<dlss::capture::Page> evaluatePage;
+            bool evaluatePagePrepared = false;
+            bool evaluatePageExported = false;
+            bool evaluatePageExportOk = true;
             std::ofstream debugTrace;
             uint32_t debugDraw = 0;
             std::vector<uint32_t> debugRegisters;
@@ -784,6 +931,13 @@ namespace gpu::renderer
                     debugRegisters.clear();
                     resolveSeq = 0;
                     captureFrame = frame;
+                    evaluatePage = std::make_shared<dlss::capture::Page>();
+                    evaluatePage->number = debugCaptureCompleted + 1;
+                    evaluatePage->frame = frame;
+                    evaluatePage->gapResetBeforeInputs = temporalGapResetFrame == frame;
+                    evaluatePagePrepared = false;
+                    evaluatePageExported = false;
+                    evaluatePageExportOk = true;
                     captureStatus = L"正在截取 / Capturing " + std::to_wstring(debugCaptureCompleted + 1) + L"/3: " + path.wstring();
                     LOG_INFO("render capture started: {}", FileSystem::PathUtf8(std::filesystem::path(debugCaptureDir)));
                 }
@@ -796,6 +950,7 @@ namespace gpu::renderer
                     p2Evidence.close();
                     p2Evidence.clear();
                     captureFrame = 0;
+                    evaluatePage.reset();
                     captureBusy = false;
                     captureStatus = L"捕获失败，已有文件保留 / Capture failed, files retained: " + debugCaptureRoot.wstring();
                     // A failure opening frame 2/3 must not leave the retained
@@ -1643,19 +1798,23 @@ namespace gpu::renderer
             bool PrepareSceneCopyDestination(const RenderTargetKey& key, HostTexture& color,
                 const temporal::TemporalFrameInputs& inputs)
             {
+                const auto reject = [&] {
+                    NoteDlssFrameFallback(frame_plan::DlssEffectReason::PromotionUnavailable);
+                    return false;
+                };
                 if (sceneCopyPromotion.activeMapping || sceneCopyPromotionFrame == frame || Gpu().srPrefixClosed ||
                     !sceneCopyPromotionPs || !sceneCopyPromotionRgbPs ||
-                    inputs.colorEncoding == temporal::ColorEncoding::Unknown || !inputs.CompleteForConsumer()) return false;
+                    inputs.colorEncoding == temporal::ColorEncoding::Unknown || !inputs.CompleteForConsumer()) return reject();
                 const resolution::Size output{activePlan.output.width, activePlan.output.height};
-                if (!output.width || !output.height) return false;
+                if (!output.width || !output.height) return reject();
                 // VS/PS/shared constants, texture descriptors and indices for
                 // this guest draw already belong to Gpu(). Never Flush here.
                 if (!scene_copy_promotion::CanAppendConstants(Gpu().uploadOffset,
-                        kUploadRingSize, sizeof(SharedConstants))) return false;
+                        kUploadRingSize, sizeof(SharedConstants))) return reject();
                 auto promoted = CreatePromotedTarget(color, output);
                 auto scratch = CreateSceneCopyScratch(color, output);
                 auto composite = CreatePromotedTarget(color, output);
-                if (!promoted || !scratch || !composite) return false;
+                if (!promoted || !scratch || !composite) return reject();
                 const auto scale = [&](const HostTexture& src) {
                     SharedConstants constants{};
                     constants.transfer[0] = std::bit_cast<uint32_t>(float(src.width) / float(promoted->width));
@@ -1664,10 +1823,10 @@ namespace gpu::renderer
                 };
                 const uint64_t fallbackConstants = scale(color);
                 const uint64_t rgbConstants = scale(*promoted);
-                if (fallbackConstants == UINT64_MAX || rgbConstants == UINT64_MAX) return false;
+                if (fallbackConstants == UINT64_MAX || rgbConstants == UINT64_MAX) return reject();
                 auto* fallbackSet = AcquireSet(1);
                 auto* rgbSet = AcquireSet(1);
-                if (!fallbackSet || !rgbSet) return false;
+                if (!fallbackSet || !rgbSet) return reject();
                 fallbackSet->setTexture(0, color.texture.get(), RenderTextureLayout::SHADER_READ);
                 fallbackSet->setTexture(1, dummyTexture2D.texture.get(), RenderTextureLayout::SHADER_READ);
                 rgbSet->setTexture(0, promoted->texture.get(), RenderTextureLayout::SHADER_READ);
@@ -1718,17 +1877,21 @@ namespace gpu::renderer
                 const RenderViewport& guestViewport, const RenderRect& guestScissor)
             {
                 auto& promotion = sceneCopyPromotion;
-                if (!promotion.prepared || promotion.activeMapping || !promotion.preparedPromoted) return false;
+                const auto reject = [&] {
+                    NoteDlssFrameFallback(frame_plan::DlssEffectReason::PromotionUnavailable);
+                    return false;
+                };
+                if (!promotion.prepared || promotion.activeMapping || !promotion.preparedPromoted) return reject();
                 auto it = renderTargets.find(promotion.key);
                 if (it == renderTargets.end() || it->second.get() != color ||
-                    color->allocationSerial != promotion.sourceAllocation) return false;
+                    color->allocationSerial != promotion.sourceAllocation) return reject();
                 promotion.parkedLow = std::move(it->second);
                 it->second = std::move(promotion.preparedPromoted);
                 promotion.active = it->second.get(); promotion.activeMapping = true;
                 Transition(*promotion.parkedLow, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
                 if (!DrawPromotionResample(*promotion.active, promotion.fallbackSet, promotion.fallbackConstants, false)) {
                     it->second = std::move(promotion.parkedLow); promotion.active = nullptr; promotion.activeMapping = false;
-                    return false;
+                    return reject();
                 }
                 sceneCopyPromotionFrame = frame;
                 const bool rasterWasColor = rasterTarget == color;
@@ -1778,7 +1941,18 @@ namespace gpu::renderer
                 if (retired) Gpu().retiredTextures.push_back(std::move(retired));
                 if (promotion.composite) Gpu().retiredTextures.push_back(std::move(promotion.composite));
                 if (promotion.scratch) Gpu().retiredTextures.push_back(std::move(promotion.scratch));
-                LOG_INFO("renderer: restored scene-copy destination frame={} reason={}", frame, reason);
+                static const char* loggedReason = nullptr;
+                static uint32_t loggedRepeats = 0;
+                const bool reasonChanged = !loggedReason || std::strcmp(loggedReason, reason) != 0;
+                if (reasonChanged && loggedReason && loggedRepeats)
+                    LOG_INFO("renderer: restored scene-copy destination frame={} reason={} repeats={}", frame, loggedReason, loggedRepeats);
+                if (frame_plan::EmitSparseRepeat(loggedRepeats, reasonChanged)) {
+                    if (reasonChanged)
+                        LOG_INFO("renderer: restored scene-copy destination frame={} reason={}", frame, reason);
+                    else
+                        LOG_INFO("renderer: restored scene-copy destination frame={} reason={} repeats={}", frame, reason, loggedRepeats);
+                }
+                if (reasonChanged) loggedReason = reason;
                 promotion = {};
                 return true;
             }
@@ -1810,10 +1984,20 @@ namespace gpu::renderer
                 config.depthInverted = promotion.inputs.depthConvention == temporal::DepthConvention::Reversed;
                 config.colorSpace = promotion.inputs.colorEncoding == temporal::ColorEncoding::Sdr ?
                     dlss::SrColorSpace::DisplayEncoded : dlss::SrColorSpace::Linear;
+                std::shared_ptr<dlss::EvaluateCapture> evidence;
+                if (evaluatePage && evaluatePage->frame == frame && promotion.inputs.color.texture && promotion.scratch) {
+                    try {
+                        evidence = evaluatePage->NewAttempt(*device, promotion.inputs, config,
+                            *static_cast<plume::VulkanTexture*>(promotion.inputs.color.texture),
+                            *static_cast<plume::VulkanTexture*>(promotion.scratch->texture.get()),
+                            temporalScene.Color().ordinal, drawsThisFrame);
+                    } catch (const std::exception&) { evaluatePage->captureFailed = true; }
+                }
                 // A fresh controller has no feature to recreate. EnsureSession
                 // establishes that cold state; RecordIsolated reports a genuine
                 // configuration change as NeedsReconfigure after it exists.
                 if (controller.EnsureSession(*static_cast<plume::VulkanDevice*>(device)) != dlss::SrStatus::Executable) {
+                    if (evidence) { evidence->stage = "ensure_session"; evidence->reason = "session_unavailable"; }
                     DisableDlssRequest(frame_plan::FailureReason::DlssUnavailable);
                     return false;
                 }
@@ -1830,11 +2014,20 @@ namespace gpu::renderer
                     if (image) barriers.emplace_back(image, RenderTextureLayout::GENERAL);
                 commandList->barriers(RenderBarrierStage::ALL, barriers);
                 Gpu().drawProbe.End(commandList);
-                if (!video::EndGpuCommands(commandList)) { listOpen = false; return false; }
+                if (!video::EndGpuCommands(commandList)) {
+                    if (evidence) { evidence->stage = "prefix_end"; evidence->reason = "prefix_end_failed"; }
+                    listOpen = false; return false;
+                }
                 listOpen = false;
                 Gpu().srPrefixClosed = true;
                 auto attempt = controller.RecordIsolated(*static_cast<plume::VulkanCommandList*>(Gpu().srIsolated.get()), config,
-                    promotion.inputs, *static_cast<plume::VulkanTexture*>(promotion.scratch->texture.get()));
+                    promotion.inputs, *static_cast<plume::VulkanTexture*>(promotion.scratch->texture.get()), evidence.get());
+                if (evidence) {
+                    if (evidence->evaluated) evaluatePage->Called(evidence);
+                    else evaluatePage->CancelReservation(evidence);
+                    evidence->isolatedAccepted = attempt.status == dlss::SrStatus::Executable;
+                    Gpu().evaluateCaptures.push_back(evidence);
+                }
                 Gpu().srUseId = attempt.useId;
                 if (attempt.status == dlss::SrStatus::DeviceLost) {
                     if (attempt.useId) controller.OnBatchDiscarded(attempt.useId);
@@ -1853,24 +2046,31 @@ namespace gpu::renderer
                     if (image) continuationBarriers.emplace_back(image, RenderTextureLayout::SHADER_READ);
                 commandList->barriers(RenderBarrierStage::GRAPHICS, continuationBarriers);
                 if (attempt.status != dlss::SrStatus::Executable) {
-                    if (attempt.status == dlss::SrStatus::NeedsReconfigure)
+                    if (attempt.status == dlss::SrStatus::NeedsReconfigure) {
                         srReconfigureFrame = frame; // Retry only after a drained next-frame boundary.
-                    else
+                        NoteDlssFrameFallback(frame_plan::DlssEffectReason::FeatureReconfigurePending);
+                    } else
                         DisableDlssRequest(frame_plan::FailureReason::DlssUnavailable);
                     return false;
                 }
                 Transition(*promotion.active, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
                 if (!DrawPromotionResample(*promotion.composite, promotion.rgbSet, promotion.rgbConstants, true)) {
+                    if (evidence) evidence->reason = "composite_failed";
                     DisableDlssRequest(frame_plan::FailureReason::InvalidInput);
                     return false;
                 }
                 auto it = renderTargets.find(promotion.key);
-                if (it == renderTargets.end() || it->second.get() != promotion.active) return false;
+                if (it == renderTargets.end() || it->second.get() != promotion.active) {
+                    if (evidence) { evidence->compositeSucceeded = true; evidence->reason = "composite_target_missing"; }
+                    return false;
+                }
                 auto fallback = std::move(it->second); it->second = std::move(promotion.composite);
                 promotion.active = it->second.get(); color = promotion.active;
                 if (rasterTarget == fallback.get()) rasterTarget = color;
                 Gpu().retiredTextures.push_back(std::move(fallback));
                 promotion.srApplied = true;
+                if (evidence) { evidence->compositeSucceeded = true; evidence->adopted = true; }
+                ArmDlssSubmit();
                 return true;
             }
             bool RecordSceneCopyDlss(HostTexture*& color, HostTexture*& rasterTarget)
@@ -2043,6 +2243,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     if (!video::WaitForGpuFence(s.fence.get())) return false;
                 }
                 s.submitted = false;
+                for (const auto& e : s.evaluateCaptures) if (e->checkedSubmit) e->completed = true;
+                s.evaluateCaptures.clear();
                 if (s.timingQueries) {
                     s.timingQueries->queryResults();
                     const auto* results = s.timingQueries->getResults();
@@ -2051,7 +2253,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 } else if (render_timing::Enabled()) gpuTiming.AddUnavailableBatch();
                 s.drawProbe.ReadCompleted();
                 if (motionReplay) {
-                    for (const auto& texture : s.retiredTextures) motionReplay->ForgetDepth(texture->texture.get());
+                    for (const auto& texture : s.retiredTextures)
+                        motionReplay->ReleaseDepthAfterGpuCompletion(texture->texture.get());
                     motionReplay->ReleaseCompletedThrough(s.motionSerial);
                 }
                 for (const auto& texture : s.retiredTextures)
@@ -2072,6 +2275,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 #endif
                 s.srUseId = s.srSubmissionSerial = 0;
                 s.srPrefixClosed = s.srIsolatedAccepted = s.srContinuationOpen = false;
+                s.dlssSubmit = {};
                 sceneAABusy=false;
                 s.uploadOffset = 0;
                 for (auto& used : s.setPoolUsed)
@@ -2127,9 +2331,12 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             {
                 consecutiveResolveCopies.Invalidate();
                 if (video::GpuWorkStopped()) {
+                    if (!Gpu().submitted) for (const auto& e : Gpu().evaluateCaptures)
+                        e->reason = "gpu_stopped_before_submit";
                     if (dlssController && Gpu().srUseId && !Gpu().submitted)
                         dlssController->OnBatchDiscarded(Gpu().srUseId);
                     if (!Gpu().submitted) Gpu().srUseId = 0;
+                    ClearDlssSubmit(Gpu(), true);
                     listOpen = false;
                     return false;
                 }
@@ -2138,8 +2345,12 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (!Gpu().srPrefixClosed) Gpu().drawProbe.End(commandList);
                 if (timingQueries) commandList->writeTimestamp(timingQueries, 1);
                 if (!video::EndGpuCommands(commandList)) {
+                    for (const auto& e : Gpu().evaluateCaptures) e->reason = "continuation_end_failed";
                     if (dlssController && Gpu().srUseId) dlssController->OnBatchDiscarded(Gpu().srUseId);
-                    Gpu().srUseId = 0; listOpen = false; return false;
+                    Gpu().srUseId = 0;
+                    ClearDlssSubmit(Gpu(), true);
+                    listOpen = false;
+                    return false;
                 }
                 listOpen = false;
                 const RenderCommandList* lists[3] = { Gpu().list.get(), nullptr, nullptr };
@@ -2161,12 +2372,14 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 #endif
                     queue->executeCommandLists(lists, listCount, nullptr, 0, nullptr, 0, fence);
                 if (!submitted) {
+                    for (const auto& e : Gpu().evaluateCaptures) e->reason = "checked_submit_failed";
 #if defined(LO_GPU_PLUME)
                     if (dlssController && Gpu().srUseId) dlssController->OnBatchDiscarded(Gpu().srUseId);
                     Gpu().srUseId = 0;
                     video::StopGpuWork(rawVkResult);
                     LOG_ERROR("renderer: Vulkan batch submit failed raw_vk={}; no fallback submission issued", rawVkResult);
 #endif
+                    ClearDlssSubmit(Gpu(), true);
                     return false;
                 }
 #if defined(LO_GPU_PLUME)
@@ -2174,7 +2387,19 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     Gpu().srSubmissionSerial = submissionSerial;
                     dlssController->OnBatchSubmitted(Gpu().srUseId, submissionSerial);
                 }
+                const bool srBatch = Gpu().srPrefixClosed && Gpu().srIsolatedAccepted && Gpu().srContinuationOpen;
+                for (const auto& entry : Gpu().evaluateCaptures) {
+                    auto& e = *entry;
+                    e.isolatedIncluded = srBatch && e.isolatedAccepted;
+                    e.checkedSubmit = vulkan && e.isolatedIncluded && submissionSerial != 0;
+                    if (e.checkedSubmit) e.submissionSerial = submissionSerial;
+                    else if (e.reason.empty()) e.reason = "discarded_isolated_list";
+                }
+                if (vulkan && srBatch && Gpu().dlssSubmit.pending && submissionSerial)
+                    NoteDlssSubmitted(Gpu().dlssSubmit.plan, Gpu().dlssSubmit.renderFrame, submissionSerial);
 #endif
+                ClearDlssSubmit(Gpu(), Gpu().dlssSubmit.pending &&
+                    !(dlssFrame.submitted && dlssFrame.submittedFrame == Gpu().dlssSubmit.renderFrame));
                 Gpu().submitted = true;
                 gpuSlot = (gpuSlot + 1) % kGpuSlots;
                 BindGpuSlot();
@@ -3097,6 +3322,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     // active points into renderTargets; parked/scratch may also
                     // be referenced by completed NGX lists. Clear only after the
                     // drain, before destroying the map it points into.
+                    // Stencil views inside replay framebuffers must die first.
+                    if (motionReplay) motionReplay->ReleaseDepthBindingsAfterGpuDrain();
                     sceneCopyPromotion = {};
                     framebuffers.clear();
                     renderTargets.clear();
@@ -3142,6 +3369,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (!upscaling::IsDlssConsumer(activePlan.consumer) || !activePlan.cpuSerial ||
                     dlssDisableReportedEpoch == activePlan.geometryEpoch) return;
                 dlssDisableReportedEpoch = activePlan.geometryEpoch;
+                if (evaluatePage && evaluatePage->frame == frame)
+                    evaluatePage->fallbackReason = fmt::format("request_failure_{}", uint32_t(reason));
                 frame_plan::ReportPlanFailure({activePlan.geometryEpoch, activePlan.requestSignature,
                     activePlan.legacyHeight, reason});
             }
@@ -4810,20 +5039,19 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                     DisableDlssRequest(frame_plan::FailureReason::InvalidInput);
                                 } else {
                                     const auto inputs = temporalHistory->CurrentInputs();
-                                    const bool recoverablePending = motionReplay && motionReplay->PipelinePendingThisFrame()
-                                        && !motionReplay->AbortedThisFrame() && !drawTemporalTracker.Failed();
-                                    if (recoverablePending) {
+                                    const auto selected = SelectDlssSceneCopyInputs(inputs);
+                                    if (selected.kind == DlssSceneInputSelection::Kind::Pending) {
                                         static uint64_t loggedPendingSignature = 0;
                                         if (loggedPendingSignature != activePlan.requestSignature) {
                                             loggedPendingSignature = activePlan.requestSignature;
                                             LOG_INFO("renderer: DLSS spatial fallback frame={} reason=motion_pipeline_pending signature={:#x} reset={}",
                                                 frame, activePlan.requestSignature, inputs.resetHistory ? 1 : 0);
                                         }
-                                    } else if (!inputs.CompleteForConsumer()) {
+                                    } else if (selected.kind == DlssSceneInputSelection::Kind::Incomplete) {
                                         logDlssInputFailure("complete_for_consumer");
                                         DisableDlssRequest(frame_plan::FailureReason::InvalidInput);
                                     }
-                                    else if (dlssSrRequested && inputs.colorEncoding == temporal::ColorEncoding::Unknown) {
+                                    else if (selected.kind == DlssSceneInputSelection::Kind::UnknownColor) {
                                         // Clean bypass without permanently latching DLSS as disabled.
                                         static bool loggedUnknownEncodingBypass = false;
                                         if (!loggedUnknownEncodingBypass) {
@@ -4831,8 +5059,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                             LOG_INFO("renderer: DLSS SR bypass frame={} reason=unknown_color_encoding", frame);
                                         }
                                     }
-                                    else if (dlssSrRequested) {
-                                        dlssSceneCopyInputs = inputs;
+                                    else if (selected.kind == DlssSceneInputSelection::Kind::Selected) {
+                                        dlssSceneCopyInputs = selected.inputs;
                                     }
                                 }
                                 if (motionView.ready && motionReplay) motionReplay->RecordConsumerUse();
@@ -6662,11 +6890,19 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             g_renderer->Draw(info);
     }
 
-    void FinishDebugCapture(uint32_t frontbuffer)
+    void FinalizeDebugCapture(bool ok);
+    void PrepareDebugCaptureFrame(uint32_t frontbuffer, uint32_t swap, present_capture::Ticket &ticket)
     {
+        ticket = {};
         { std::lock_guard lock(captureMutex); UpdateCaptureArchive(); }
         if (!g_renderer || g_renderer->debugCaptureDir.empty()) return;
+        g_renderer->captureAttemptFrame = g_renderer->frame;
+        g_renderer->captureAttemptSwap = swap;
+        g_renderer->capturePrepared = false;
+        g_renderer->captureTicket = {};
+        g_renderer->captureGuest = {};
         auto& r = *g_renderer;
+        r.evaluatePagePrepared = bool(r.evaluatePage);
         bool ok = false;
         try
         {
@@ -6729,41 +6965,87 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             sceneFile << "\n}\n";
             sceneFile.close();
             if (sceneFile.fail()) throw std::runtime_error("temporal scene metadata write failed");
+            present_capture::GuestImage guest;
+            guest.address = frontbuffer & 0x1FFFFFFF;
             std::vector<uint32_t> pixels;
             uint32_t width = 0, height = 0;
-            if (ReadbackResolvedSurface(frontbuffer, pixels, width, height))
+            auto *resolved = r.NewestResolved(guest.address);
+            if (resolved)
             {
-                // A standard top-down 32-bit BMP can be opened directly on Windows.
-                std::ofstream bmp(std::filesystem::path(r.debugCaptureDir) / "screenshot.bmp", std::ios::binary);
-                auto put = [&](uint32_t value, int bytes) { for (int i = 0; i < bytes; ++i) bmp.put(char(value >> (8 * i))); };
-                bmp.write("BM", 2); put(54 + width * height * 4, 4); put(0, 4); put(54, 4);
-                put(40, 4); put(width, 4); put(uint32_t(-int32_t(height)), 4); put(1, 2); put(32, 2);
-                put(0, 4); put(width * height * 4, 4); put(0, 4); put(0, 4); put(0, 4); put(0, 4);
-                for (auto pixel : pixels) { bmp.put(char(pixel >> 16)); bmp.put(char(pixel >> 8)); bmp.put(char(pixel)); bmp.put(0); }
-                bmp.close();
-                ok = !bmp.fail();
+                guest.sourceWriteFrame = resolved->frame;
+                guest.sourceWriteOrdinal = resolved->writeOrdinal;
+                if (resolved->sourcePlanValid)
+                {
+                    r.captureTicket.hasSourcePlan = true;
+                    r.captureTicket.planWidth = resolved->sourcePlan.width;
+                    r.captureTicket.planHeight = resolved->sourcePlan.height;
+                    r.captureTicket.planOutputWidth = resolved->sourcePlan.output.width;
+                    r.captureTicket.planOutputHeight = resolved->sourcePlan.output.height;
+                    r.captureTicket.planUpscaler = uint32_t(resolved->sourcePlan.requestedUpscaler);
+                    r.captureTicket.planQuality = uint32_t(resolved->sourcePlan.dlssQuality);
+                    r.captureTicket.planCpuSerial = resolved->sourcePlan.cpuSerial;
+                }
             }
-            r.debugTrace << fmt::format("end frame={} frontbuffer={:#x} size={}x{} submitted_draws={} screenshot={}\n",
-                r.frame, frontbuffer, width, height, r.drawsThisFrame, ok);
+            if (ReadbackResolvedSurface(frontbuffer, pixels, width, height) &&
+                present_capture::WriteRgbaBmp(std::filesystem::path(r.debugCaptureDir) / "guest-frontbuffer.bmp", pixels, width, height))
+            {
+                guest.available = true;
+                guest.reason = "readback";
+                guest.width = width;
+                guest.height = height;
+            }
+            else guest.reason = "guest_readback_failed";
+            r.captureGuest = guest;
+            r.debugTrace << fmt::format("end frame={} frontbuffer={:#x} size={}x{} submitted_draws={} guest_frontbuffer={}\n",
+                r.frame, frontbuffer, width, height, r.drawsThisFrame, guest.available);
             r.debugTrace << fmt::format("drops mode={} shader={} pitch={} pipeline={} upload={} index={} scissor={} dummy_bindings={}\n",
                 r.drops.mode, r.drops.shader, r.drops.pitch, r.drops.pipeline, r.drops.upload, r.drops.index, r.drops.scissor, r.dummyBindings);
             r.p2Evidence.close();
-            ok = ok && !r.p2Evidence.fail();
-            r.debugTrace.close();
-            ok = ok && !r.debugTrace.fail();
+            if (r.p2Evidence.fail()) throw std::runtime_error("p2 evidence write failed");
+            r.captureTicket.active = true;
+            r.captureTicket.rendererFrame = r.captureAttemptFrame;
+            r.captureTicket.swap = r.captureAttemptSwap;
+            r.captureTicket.frontbuffer = guest.address;
+            r.captureTicket.deviceEpoch = video::BackendDeviceState().deviceEpoch;
+            r.capturePrepared = true;
+            ok = true;
         }
         catch (const std::exception& e) { ok = false; LOG_ERROR("render capture finish: {}", e.what()); }
-        LOG_INFO("render capture {}: {}", ok ? "saved" : "incomplete", FileSystem::PathUtf8(std::filesystem::path(r.debugCaptureDir)));
-        if (ok) ++r.debugCaptureCompleted;
+        if (r.capturePrepared)
+        {
+            ticket = r.captureTicket;
+            return;
+        }
+        FinalizeDebugCapture(ok);
+    }
+
+    void FinalizeDebugCapture(bool ok)
+    {
+        if (!g_renderer) return;
+        auto &r = *g_renderer;
+        if (r.evaluatePage && !r.evaluatePageExported && !r.debugCaptureDir.empty()) {
+            try {
+                bool pending = false;
+                for (const auto& e : r.evaluatePage->entries) pending |= e->checkedSubmit && !e->completed;
+                if (pending) r.WaitForGpu();
+                r.evaluatePageExportOk = r.evaluatePage->Export(r.debugCaptureDir);
+            } catch (const std::exception&) { r.evaluatePageExportOk = false; }
+            r.evaluatePageExported = true;
+        }
+        ok = ok && r.evaluatePageExportOk;
+        r.evaluatePage.reset();
+        r.evaluatePagePrepared = false;
+        if (r.debugTrace.is_open()) r.debugTrace.close();
+        if (r.p2Evidence.is_open()) r.p2Evidence.close();
+        const uint32_t completedBefore = r.debugCaptureCompleted;
+        bool frameOk = ok;
+        auto close = present_capture::BeginCaptureClose(completedBefore, r.debugCaptureFrameCount, r.captureAttemptFrame, r.captureAttemptSwap, frameOk);
+        LOG_INFO("render capture {}: {}", frameOk ? "saved" : "incomplete", FileSystem::PathUtf8(std::filesystem::path(r.debugCaptureDir)));
         try
         {
             std::ofstream manifest(r.debugCaptureRoot / "capture-info.txt");
-            manifest << "requested_frames=" << r.debugCaptureFrameCount
-                << "\ncompleted_frames=" << r.debugCaptureCompleted
-                << "\nfirst_frame=" << r.debugCaptureFirstFrame
-                << "\nlast_attempted_frame=" << r.frame
-                << "\nstatus=" << (!ok ? "incomplete" : r.debugCaptureCompleted == r.debugCaptureFrameCount ? "complete" : "capturing")
-                << "\nFrames are consecutive rendered frames. Capture readbacks may stall execution.\n"
+            present_capture::WriteCaptureManifest(manifest, close, r.debugCaptureFirstFrame);
+            manifest << "Frames are consecutive rendered frames. Capture readbacks may stall execution.\n"
                 << "Each frame directory contains its own screenshot, register trace, resolves and metadata.\n"
                 << "p2-oracle.jsonl is newline-delimited JSON for b4b4d54a7a2d6b96/cda578aef1724fdc draw and resolve provenance; it records no color-space conclusion.\n"
                 << "Trigger this three-frame capture through the existing F1 menu or LO_CAPTURE_REQUEST pointing to a file containing a new nonzero uint64.\n"
@@ -6773,15 +7055,21 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             manifest.close();
             if (manifest.fail()) throw std::runtime_error("Cannot write capture-info.txt");
         }
-        catch (const std::exception& e) { ok = false; LOG_ERROR("render capture manifest: {}", e.what()); }
-        if (ok && r.debugCaptureCompleted < r.debugCaptureFrameCount)
+        catch (const std::exception& e)
         {
+            frameOk = false;
+            close = present_capture::BeginCaptureClose(completedBefore, r.debugCaptureFrameCount, r.captureAttemptFrame, r.captureAttemptSwap, false);
+            LOG_ERROR("render capture manifest: {}", e.what());
+        }
+        if (close.continueNext)
+        {
+            r.debugCaptureCompleted = close.completedFrames;
             r.debugTrace.clear();
             r.debugCaptureDir.clear();
             r.captureFrame = 0;
             std::lock_guard lock(captureMutex);
             capturePending = true;
-            captureStatus = L"等待下一帧 / Waiting for frame " + std::to_wstring(r.debugCaptureCompleted + 1) + L"/3";
+            captureStatus = L"等待下一帧 / Waiting for frame " + std::to_wstring(close.completedFrames + 1) + L"/3";
             return;
         }
         // Snapshot the log owned by this process after frame export, before ZIP
@@ -6791,7 +7079,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             const auto directory = r.debugCaptureRoot;
             const auto error = os::logger::SnapshotFile(directory / "runtime.log");
             std::ofstream status(directory / "runtime-log-status.txt");
-            status << "frame=" << r.frame << '\n';
+            present_capture::WriteRuntimeFrameStatus(status, close);
             if (error)
             {
                 // This directory was created for this request; discard only a
@@ -6810,7 +7098,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             if (status.fail()) LOG_WARNING("render capture: could not write runtime log status");
         }
         catch (const std::exception& e) { LOG_WARNING("render capture runtime log: {}", e.what()); }
-        os::shaderlog::CaptureSnapshot(r.debugCaptureRoot, r.frame);
+        os::shaderlog::CaptureSnapshot(r.debugCaptureRoot, close.attemptFrame);
         // Detach the completed capture from the renderer before starting the
         // worker. Subsequent frames cannot append to or use its source files.
         const auto directory = std::move(r.debugCaptureRoot);
@@ -6821,6 +7109,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
         r.p2Evidence.clear();
         r.debugCaptureDir.clear();
         r.debugCaptureRoot.clear();
+        const bool publish = close.publish;
+        const uint32_t completedFrames = close.completedFrames;
         r.debugCaptureCompleted = 0;
         r.captureFrame = 0;
         // Optional diagnostics use the existing consent and background uploader.
@@ -6831,13 +7121,14 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
         {
             try
             {
-                captureArchive = os::StartCaptureArchive(directory, [shaderSources, ok](const std::filesystem::path& captureDirectory) {
+                captureArchive = os::StartCaptureArchive(directory, [shaderSources, publish](const std::filesystem::path& captureDirectory) {
                     if (shaderSources) shaderSources->Write(captureDirectory);
-                    if (!ok) throw std::system_error(std::make_error_code(std::errc::io_error));
+                    if (!publish) throw std::system_error(std::make_error_code(std::errc::io_error));
                 });
-                captureStatus = ok ? L"后台压缩，可继续游戏 / Compressing capture in background" :
+                captureStatus = publish ? L"后台压缩，可继续游戏 / Compressing capture in background" :
                     L"后台保存不完整捕获 / Saving incomplete capture in background";
-                LOG_INFO("render capture archive started in background: {}", FileSystem::PathUtf8(directory));
+                LOG_INFO("render capture archive started in background: {} completed={} frame={} swap={} publish={}",
+                    FileSystem::PathUtf8(directory), completedFrames, close.attemptFrame, close.attemptSwap, publish);
                 return;
             }
             catch (const std::exception& e) { LOG_ERROR("render capture archive start: {}", e.what()); }
@@ -6845,6 +7136,48 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
         captureStatus = (ok ? L"归档失败，原始文件保留 / Archive failed: " :
             L"导出不完整 / Incomplete: ") + directory.wstring();
         captureBusy = false;
+    }
+
+    void CompleteDebugCaptureFrame(const present_capture::Result &presented)
+    {
+        if (!g_renderer || !g_renderer->capturePrepared) return;
+        auto &r = *g_renderer;
+        r.capturePrepared = false;
+        present_capture::Result finalImage = presented;
+        const auto &ticket = r.captureTicket;
+        if (!finalImage.attempted || finalImage.rendererFrame != ticket.rendererFrame || finalImage.swap != ticket.swap)
+        {
+            finalImage.available = false;
+            finalImage.pixels.clear();
+            if (finalImage.reason.empty() || finalImage.reason == "swapchain_readback") finalImage.reason = "identity_mismatch";
+        }
+        const auto directory = std::filesystem::path(r.debugCaptureDir);
+        const bool finalOk = present_capture::CommitFinalImage(finalImage, directory / "screenshot.bmp");
+        if (r.evaluatePage && r.evaluatePagePrepared) {
+            try {
+                // Guest readback normally drained both slots already. Only a
+                // capture whose ordinary readback did not do so needs this wait.
+                bool pending = false;
+                for (const auto& entry : r.evaluatePage->entries)
+                    pending |= entry->checkedSubmit && !entry->completed;
+                if (pending) r.WaitForGpu();
+                r.evaluatePageExportOk = r.evaluatePage->Export(directory);
+            } catch (const std::exception&) { r.evaluatePageExportOk = false; }
+            r.evaluatePageExported = true;
+        }
+        const bool traceOpen = r.debugTrace.is_open();
+        if (traceOpen)
+        {
+            present_capture::AppendFrameMetadata(r.debugTrace, ticket, r.captureGuest, finalImage);
+            r.debugTrace.close();
+        }
+        const bool frameOk = r.captureGuest.available && finalOk && traceOpen && !r.debugTrace.fail() && r.evaluatePageExportOk;
+        FinalizeDebugCapture(frameOk);
+    }
+
+    void PollDebugCapture()
+    {
+        if (g_renderer) g_renderer->PollCaptureRequest();
     }
 
     void PreparePresent(uint32_t physicalAddress)
@@ -6873,6 +7206,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             static const bool stats = getenv("LO_GPU_STATS") != nullptr;
             static auto lastFrame = std::chrono::steady_clock::now();
             if (!g_renderer->Flush()) return;
+            g_renderer->PublishDlssFrameOutcome();
             {
                 auto& r = *g_renderer;
                 if (r.motionOptions.log && r.frame % 120 == 0) {
@@ -6998,6 +7332,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     r.temporalScene.Frame() == r.frame && r.temporalScene.Ready(),
                     r.temporalSubmittedFrame == r.frame, r.temporalFrameTime, r.temporalGapResetFrame);
                 if (temporalEnd.engaged) {
+                if (r.evaluatePage && r.evaluatePage->frame == r.frame)
+                    r.evaluatePage->resetAtFrameEnd = temporalEnd.reset;
                 const bool gap = temporalEnd.gap;
                 const bool complete = temporalEnd.complete;
                 collectionFrame.completed=complete;
@@ -7054,6 +7390,24 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 r.temporalJitterDraws=r.temporalJitterMisses=r.temporalJitterUnknowns=0;
                 }
             }
+            if (g_renderer->evaluatePage && g_renderer->evaluatePage->frame == g_renderer->frame) {
+                auto& r = *g_renderer;
+                auto& page = *r.evaluatePage;
+                page.temporalEpochEnd = r.temporalEpoch;
+                page.framePlan = r.activePlan;
+                page.gapResetBeforeInputs |= r.temporalGapResetFrame == r.frame;
+                if (!page.evaluates && page.fallbackReason == "no_eligible_scene") {
+                    if (r.dlssFrame.hasFallback && r.dlssFrame.fallbackFrame == r.frame)
+                        page.fallbackReason = dlss::capture::FrameFallbackName(r.dlssFrame.fallback);
+                    else if (r.activePlan.requestedUpscaler == upscaling::Upscaler::Off) page.fallbackReason = "upscaling_off";
+                    else if (r.activePlan.inputProbe) page.fallbackReason = "input_probe_only";
+                    else if (r.activePlan.consumer != upscaling::TemporalConsumer::DlssSr)
+                        page.fallbackReason = "dlss_sr_plan_unavailable_this_frame";
+                    else if (!page.entries.empty() && !page.entries.back()->reason.empty())
+                        page.fallbackReason = page.entries.back()->reason;
+                }
+                page.closed = true;
+            }
             taa_collection::EndDiagnosticsFrame(collectionRenderer.frame,collectionFrame);
             g_renderer->SavePipelineRecipes();
             if (stats && g_renderer->frame % 600 == 0)
@@ -7062,7 +7416,6 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     g_renderer->preparedPipelineKeys.size(), g_renderer->runtimePipelineCreates, g_renderer->pipelineRecipes.size());
             g_renderer->PollPsTraceRequest();
             g_renderer->frame++;
-            g_renderer->PollCaptureRequest();
             g_renderer->drawsThisFrame = 0;
             g_renderer->drops = {};
         }
@@ -7350,7 +7703,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 #endif
 #endif // !LO_RENDERER_P2_EMBEDDED_TEST
 #else
-    void FinishDebugCapture(uint32_t) {}
+    void PrepareDebugCaptureFrame(uint32_t, uint32_t, present_capture::Ticket &ticket) { ticket = {}; }
+    void CompleteDebugCaptureFrame(const present_capture::Result &) {}
+    void PollDebugCapture() {}
     bool Init() { return false; }
     void Shutdown() {}
     void ScaleResolvedSize(uint32_t, uint32_t&, uint32_t&) {}

@@ -601,6 +601,18 @@ add_executable(LoDlssCapabilitySnapshotTest EXCLUDE_FROM_ALL
 target_include_directories(LoDlssCapabilitySnapshotTest PRIVATE ${LO_RUNTIME_ROOT})
 target_compile_features(LoDlssCapabilitySnapshotTest PRIVATE cxx_std_20)
 
+add_executable(LoDlssRuntimeStatusTest EXCLUDE_FROM_ALL
+    ${CMAKE_SOURCE_DIR}/tools/tests/dlss_runtime_status_test.cpp)
+target_include_directories(LoDlssRuntimeStatusTest PRIVATE ${LO_RUNTIME_ROOT})
+target_compile_features(LoDlssRuntimeStatusTest PRIVATE cxx_std_20)
+
+add_executable(LoDlssStatusLogTest EXCLUDE_FROM_ALL
+    ${CMAKE_SOURCE_DIR}/tools/tests/dlss_status_log_test.cpp)
+target_include_directories(LoDlssStatusLogTest PRIVATE ${LO_RUNTIME_ROOT})
+target_compile_features(LoDlssStatusLogTest PRIVATE cxx_std_20)
+target_compile_definitions(LoDlssStatusLogTest PRIVATE NOMINMAX)
+target_link_libraries(LoDlssStatusLogTest PRIVATE fmt::fmt)
+
 add_executable(LoTargetMappingTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/target_mapping_test.cpp)
 target_include_directories(LoTargetMappingTest PRIVATE ${LO_RUNTIME_ROOT})
 target_compile_features(LoTargetMappingTest PRIVATE cxx_std_20)
@@ -736,13 +748,35 @@ if(WIN32 AND LO_BUILD_GPU)
     target_compile_features(LoVulkanTextureReuseTest PRIVATE cxx_std_20)
     set_target_properties(LoVulkanTextureReuseTest PROPERTIES DISABLE_PRECOMPILE_HEADERS ON)
     target_link_libraries(LoVulkanTextureReuseTest PRIVATE plume d3d12 dxgi fmt::fmt)
+    add_executable(LoPresentCaptureTest EXCLUDE_FROM_ALL
+        ${CMAKE_SOURCE_DIR}/tools/tests/present_capture_test.cpp
+        ${LO_RUNTIME_ROOT}/os/log_file.cpp
+        ${LO_RUNTIME_ROOT}/os/capture_archive.cpp
+        ${LO_RUNTIME_ROOT}/gpu/presentation.cpp
+        ${LO_RUNTIME_ROOT}/gpu/shader/dxc_compiler.cpp)
+    foreach(mode PLUME OFF UNIT)
+        set(preprocess LoPresentCapturePreprocess${mode})
+        add_library(${preprocess} OBJECT ${CMAKE_SOURCE_DIR}/tools/tests/present_capture_preprocess.cpp)
+        target_include_directories(${preprocess} PRIVATE ${LO_RUNTIME_ROOT})
+        target_compile_features(${preprocess} PRIVATE cxx_std_20)
+        target_compile_definitions(${preprocess} PRIVATE LO_PRESENT_CAPTURE_MODE_${mode} NOMINMAX)
+        set_target_properties(${preprocess} PROPERTIES DISABLE_PRECOMPILE_HEADERS ON)
+        target_link_libraries(LoPresentCaptureTest PRIVATE ${preprocess})
+    endforeach()
+    target_compile_definitions(LoPresentCaptureTest PRIVATE LO_GPU_PLUME SDL_MAIN_HANDLED NOMINMAX)
+    target_include_directories(LoPresentCaptureTest PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,INCLUDE_DIRECTORIES>)
+    target_compile_options(LoPresentCaptureTest PRIVATE /UNDEBUG /utf-8)
+    target_compile_features(LoPresentCaptureTest PRIVATE cxx_std_20)
+    set_target_properties(LoPresentCaptureTest PROPERTIES DISABLE_PRECOMPILE_HEADERS ON)
+    target_link_options(LoPresentCaptureTest PRIVATE /SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup)
+    target_link_libraries(LoPresentCaptureTest PRIVATE plume d3d12 dxgi fmt::fmt SDL2::SDL2-static xxHash::xxhash)
 endif()
 
 # Package the same SPIR-V-capable DXC beside runtime and compiler/GPU fixtures.
 # The Windows SDK compiler is allowed as an explicit fallback, but is not the release contract.
 if(WIN32 AND LO_BUILD_GPU)
     set(LO_DXC_BINARY_DIR "${CMAKE_SOURCE_DIR}/tools/XenosRecomp/thirdparty/dxc-bin/bin/x64")
-    foreach(target LostOdysseyRecomp LoShaderTool LoPresentationTest LoTemporalAATest LoRenderResolutionShaderTest LoVulkanBackendTest LoVulkanTextureReuseTest LoShaderStartupCacheTest LoBackendCacheTest LoBackendLifecycleTest)
+    foreach(target LostOdysseyRecomp LoShaderTool LoPresentationTest LoTemporalAATest LoRenderResolutionShaderTest LoVulkanBackendTest LoVulkanTextureReuseTest LoShaderStartupCacheTest LoBackendCacheTest LoBackendLifecycleTest LoPresentCaptureTest)
         if(TARGET ${target})
             foreach(binary dxcompiler.dll dxil.dll)
                 add_custom_command(TARGET ${target} POST_BUILD

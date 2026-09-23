@@ -79,8 +79,9 @@ if((UNIX AND NOT APPLE) OR WIN32)
   "${ROOT}/LostOdysseyRecomp/gpu/presentation.cpp"
   "${ROOT}/LostOdysseyRecomp/gpu/shader/portable_shader_pack.cpp" platform_stub.cpp)
  target_include_directories(LoNativeDlssRendererTest BEFORE PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/compile_boundary")
- target_include_directories(LoNativeDlssRendererTest PRIVATE "${ROOT}/thirdparty/unordered_dense/include"
-  "${ROOT}/tools/XenosRecomp/thirdparty/zstd/lib")
+  target_include_directories(LoNativeDlssRendererTest PRIVATE "${ROOT}/thirdparty/unordered_dense/include"
+   "${ROOT}/tools/XenosRecomp/thirdparty/zstd/lib"
+   "${ROOT}/tools/XenonRecomp/thirdparty/tomlplusplus/vendor")
  target_compile_definitions(LoNativeDlssRendererTest PRIVATE LO_SOURCE_VERSION="p2-renderer-fixture")
  if(MSVC)
   target_compile_options(LoNativeDlssRendererTest PRIVATE /Od /Gy /Gw)
@@ -103,8 +104,27 @@ if((UNIX AND NOT APPLE) OR WIN32)
   endif()
   target_link_libraries(LoNativeDlssRendererTest PRIVATE libzstd_static)
  endif()
- target_link_libraries(LoNativeDlssRendererTest PRIVATE mv_runtime)
- add_test(NAME LoNativeDlssRendererTest COMMAND LoNativeDlssRendererTest)
+  target_link_libraries(LoNativeDlssRendererTest PRIVATE mv_runtime)
+   add_executable(LoDlssEvaluateCaptureContractTest "${ROOT}/tools/tests/dlss_evaluate_capture_contract_test.cpp")
+   target_include_directories(LoDlssEvaluateCaptureContractTest PRIVATE "${ROOT}/LostOdysseyRecomp")
+   target_include_directories(LoDlssEvaluateCaptureContractTest PRIVATE "${ROOT}/tools/XenonRecomp/thirdparty/tomlplusplus/vendor")
+   target_link_libraries(LoDlssEvaluateCaptureContractTest PRIVATE mv_runtime)
+  add_executable(LoVideoSubmissionStopTest "${ROOT}/tools/tests/video_submission_stop_test.cpp"
+   "${ROOT}/LostOdysseyRecomp/gpu/video.cpp"
+   "${ROOT}/LostOdysseyRecomp/gpu/upscaling_plan.cpp"
+   "${ROOT}/LostOdysseyRecomp/gpu/dlss_ngx.cpp" platform_stub.cpp)
+  target_include_directories(LoVideoSubmissionStopTest BEFORE PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/compile_boundary")
+  target_include_directories(LoVideoSubmissionStopTest PRIVATE "${ROOT}/thirdparty/unordered_dense/include")
+  target_compile_definitions(LoVideoSubmissionStopTest PRIVATE LO_VIDEO_SUBMISSION_UNIT LO_GPU_PLUME NOMINMAX
+   LO_SOURCE_VERSION="video-submission-stop")
+  if(MSVC)
+   target_compile_options(LoVideoSubmissionStopTest PRIVATE /Od)
+  else()
+   target_compile_options(LoVideoSubmissionStopTest PRIVATE -O0 -g0)
+  endif()
+  lo_enable_dlss(LoVideoSubmissionStopTest)
+  target_link_libraries(LoVideoSubmissionStopTest PRIVATE mv_runtime)
+  add_test(NAME LoNativeDlssRendererTest COMMAND LoNativeDlssRendererTest)
  add_test(NAME LoNativeDlssRendererNativeTest COMMAND LoNativeDlssRendererTest --native)
  set_tests_properties(LoNativeDlssRendererNativeTest PROPERTIES LABELS "native-dlss;ngx-renderer" TIMEOUT 180 SKIP_RETURN_CODE 77)
  set_tests_properties(LoNativeDlssRendererTest PROPERTIES LABELS "native-dlss;gpu-renderer" TIMEOUT 180)

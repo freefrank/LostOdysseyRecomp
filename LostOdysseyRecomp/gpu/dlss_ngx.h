@@ -13,6 +13,7 @@
 #include <vector>
 
 namespace gpu::dlss {
+struct EvaluateCapture;
 enum class ProbeState : uint8_t {
     NotProbed,
     SdkDisabled,
@@ -120,7 +121,7 @@ public:
     // list; it neither submits nor waits, and it never records on the prefix
     // or continuation list. output remains renderer-owned.
     SrAttempt RecordIsolated(plume::VulkanCommandList& isolatedCommandList, const SrConfig& config,
-        const temporal::TemporalFrameInputs& inputs, plume::VulkanTexture& output);
+        const temporal::TemporalFrameInputs& inputs, plume::VulkanTexture& output, EvaluateCapture* capture = nullptr);
 
     // Lane B reports the prefix/fallback batch outcome. A failed isolated list
     // is never submitted, but its nonzero useId remains live until one of

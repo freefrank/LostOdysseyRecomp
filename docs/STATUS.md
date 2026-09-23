@@ -1,5 +1,23 @@
 # Project status
 
+## Unreleased (Post-v0.6.11 Work in Progress) / 未发布（v0.6.11 之后工作进展）
+
+Status as of 2026-09-22:
+Following the publication of v0.6.11, diagnostics and fixes were implemented on the development branch. Commit `0625923` resolved temporal history resets and jitter preservation across frame gaps (BR-01) as well as multithreaded capability snapshot races (BR-02). Subsequent work in this delivery includes:
+- **Graphics Menu Stability & Runtime Feedback (BR-03 & GraphicsRow)**: Replaced raw positional indexing with a shared `GraphicsRow` (`0..10`) enum across navigation, actions, help text, and test fixtures. Active DLSS effect reporting requires verified production renderer target adoption and checked Vulkan submission, distinguishing persistent capability/failure latches from dynamic fallbacks (motion pending, unknown color encoding, feature recreation, promotion mapping failure, no eligible drawables, waiting for initial results, input probe mode, and stopped status) using triple identity filtering (`deviceEpoch`, `requestSignature`, `geometryEpoch`).
+- **Structured DLSS Diagnostics Logging**: Logs settings save feedback (upscaler, quality, frame-rate) and structured DLSS status transitions (`Off`, `AwaitingExecution`, `Submitted`, `Fallback`, `NeedsVulkanRestart`, `DeviceUnavailable`, `TemporaryFallback`, `InputProbeOnly`, `GpuStopped`) with readable reasons, extents, and execution context. Repetitive transitions are deduplicated and recovery is logged as standard `Submitted`.
+- **Pre-Present Swapchain Screenshot Capture**: In F1 render-state capture, `screenshot.bmp` now captures the final pre-present swapchain backbuffer (reflecting DLSS, letterboxing, and post-processing when active) ahead of display presentation, while `guest-frontbuffer.bmp` preserves the resolved host texture with paired `XE_SWAP` tickets, frame IDs, and submission serials/fences. Normal frames without capture requests execute zero readback allocations, copies, or memory mappings.
+- **DLAA Depth View Lifetime UAF Fix**: Resolved an access violation in `VulkanTextureView` destructor when switching from DLSS Quality to DLAA by binding retired motion stencil views to `externalDepth` identity and releasing views upon GPU completion before texture destruction.
+- **Synchronous NGX Evaluate Capture**: Controller captures isolated pre-Evaluate input color copies and post-Evaluate scratch output copies (restoring `VK_IMAGE_LAYOUT_GENERAL` ahead of composite/UI), exporting `dlss-evaluations.json`, `dlss-input-NNN.bin` / `-preview.bmp`, and `dlss-output-NNN.bin` / `-preview.bmp` (RGBA8/RGBA16F) with sub-pixel jitter, reset flags, and execution identities. Non-evaluated frames record explicit zero-evaluate fallback reasons without mock images.
+- **Verification & Build Baseline**:
+  - CPU tests: `LoDlssRuntimeStatusTest` (37 checks), `LoDlssCapabilitySnapshotTest` (43 checks re-run with revised Active semantics), `LoVideoSubmissionStopTest` (14 checks), `LoDlssStatusLogTest` (400 logger checks), `LoPresentCaptureTest --case close`, and `LoDlssEvaluateCaptureContractTest --evaluate-capture-contract-only`.
+  - Hardware fixtures (RTX 5080): `LoPresentCaptureTest` (4 D3D12/Vulkan cases), `motion_replay_gpu_test.exe --depth-retirement-only` (26 Vulkan D32S8 checks), and `LoNativeDlssRendererTest.exe --evaluate-capture-only`.
+  - Live session: Quality -> DLAA switching and export of frames 2961–2963 ran without crash in live user session (runtime-1790127353540651.log).
+  - Executable target `LostOdysseyRecomp` completed linking successfully: `build/LostOdysseyRecomp/LostOdysseyRecomp.exe` (93,635,072 bytes, SHA-256 `08d50e3774d18a02d4f6eaf2267472e9fab75db36e3ee970980aa96faf641e9d`, UTC 2026-09-23 02:32:58 / local 2026-09-22 20:32:58 -0600, source fingerprint `bdd9539ee4f176bdda0d9660bb5621b8a90a09acf8f8faa8427c10f2075c2688`).
+- **Remaining Scope**: Visual quality, motion response, fine lines, occlusion, and player acceptance remain unverified. K-01 diagnostic cleanup, broader graphics menu proposals, and official release publication remain pending.
+
+---
+
 ## v0.6.11 published / v0.6.11 已发布
 
 v0.6.11 was published on 2026-09-22T06:44:37Z from tag/source commit
@@ -45,6 +63,14 @@ v0.6.11 已于 2026-09-22T06:44:37Z 从 tag/source commit `3daba372ea34c93b65b55
 - Linux AppImage `LostOdysseyRecomp-linux-x64-v0.6.11.AppImage` SHA-256 与 sidecar 和 GitHub digests 一致：`2e2ada519ae7b3b63be306d7d301bf26be677c0af08f13b7653c2e54c9727bf9`。
 - 两平台包及各自 `.sha256` sidecar 均返回 HTTP 200。Windows manifest 报告版本 `v0.6.11`、commit `3daba37`，内置 `nvngx_dlss.dll` 与 SDK 310.9.1 严格吻合；Linux AppImage 经 SquashFS 解构核实包含 `usr/bin/libnvidia-ngx-dlss.so.310.9.1`、库软链及 License/Notice 文件。
 - 公开 Release 说明与 CHANGELOG 提取一致。
+
+当前开发分支未发布进展（2026-09-22）：
+- 提交 `0625923` 已修复时序历史时钟推进与长间隔抖动丢失（BR-01），并通过按值快照消除了能力查询并发数据竞争（BR-02）。
+- 本轮工作区实现并验证了图形菜单稳定行索引枚举（`GraphicsRow` 0..10）与真实渲染器执行反馈闭环（BR-03），细化回退状态并在 checked Vulkan 提交成功后才报告 `Active`。
+- 增加了结构化 DLSS 运行时状态日志与保存设置参数记录；F1 渲染状态捕获的 `screenshot.bmp` 改进为提交给呈现系统的最终交换链画面，并实现了同次 NGX Evaluate 输入/输出缓冲及元数据捕获（`dlss-evaluations.json`、输入输出 raw 与 preview）。
+- 修复了从 DLSS Quality 切换至 DLAA 时外部 depth 纹理先于已退休 stencil 视图销毁引起的访问违规（UAF）问题，经实机验证会话持续运行且成功导出帧 2961–2963 无崩溃。
+- 最新完整游戏可执行文件目标本地增量构建成功（产物 `build/LostOdysseyRecomp/LostOdysseyRecomp.exe`，93,635,072 字节，SHA-256 `08d50e3774d18a02d4f6eaf2267472e9fab75db36e3ee970980aa96faf641e9d`，UTC 2026-09-23 02:32:58 / 当地 2026-09-22 20:32:58 -0600）。
+- 真实游戏画质、运动表现、边缘与遮挡效果及玩家整体验收未宣称完成；K-01 等诊断路径与公开发布仍待后续开展。
 
 ## v0.6.7 published / v0.6.7 已发布
 

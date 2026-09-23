@@ -762,7 +762,9 @@ namespace gpu
             // Optional deterministic trigger for a three-frame capture validation.
             static const uint32_t captureSwap = getenv("LO_DEBUG_CAPTURE_SWAP") ? strtoul(getenv("LO_DEBUG_CAPTURE_SWAP"), nullptr, 10) : 0;
             if (captureSwap && swaps == captureSwap) renderer::RequestDebugCapture();
-            renderer::FinishDebugCapture(frontbuffer);
+            present_capture::Ticket captureTicket;
+            present_capture::Result captureResult;
+            renderer::PrepareDebugCaptureFrame(frontbuffer, swaps, captureTicket);
             const auto timingFlush = std::chrono::steady_clock::now();
             renderer::PreparePresent(frontbuffer);
             renderer::Flush();
@@ -797,7 +799,10 @@ namespace gpu
             }
             g_workerStage = "frontbuffer present";
             const auto presentsBefore = video::CompletedPresentCount();
-            video::PresentFrontbuffer(frontbuffer, width, height, ReadRegister(0x231B));
+            video::PresentFrontbuffer(frontbuffer, width, height, ReadRegister(0x231B),
+                captureTicket.active ? &captureTicket : nullptr, captureTicket.active ? &captureResult : nullptr);
+            renderer::CompleteDebugCaptureFrame(captureResult);
+            renderer::PollDebugCapture();
             pacing.presentAccepted = video::CompletedPresentCount() > presentsBefore;
             g_workerStage = "window event pump";
             video::PumpEvents();

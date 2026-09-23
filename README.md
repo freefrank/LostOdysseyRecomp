@@ -31,6 +31,10 @@ motion response, fine lines, occlusion, UI elements, reset behavior, and full
 player acceptance remain unclaimed. See the [native DLSS validation
 record](docs/notes/native-dlss-validation.md).
 
+### Unreleased development updates
+
+Current source work following v0.6.11 includes temporal lifecycle and capability race fixes (BR-01, BR-02), in-game graphics menu stability with verified execution status feedback (BR-03, `GraphicsRow`), final pre-present swapchain screenshots and synchronous NGX Evaluate input/output capture in F1 state archives, and a depth view lifetime UAF fix for DLSS Quality to DLAA transitions. These additions are verified via focused unit and hardware fixtures but are not included in public v0.6.11 release binaries; end-to-end user capture and visual acceptance remain pending. See [Project Status](docs/STATUS.md) and the [Handoff Document](HANDOFF.md) for details.
+
 ## v0.6.11 release
 
 Published release [v0.6.11](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.11) on 2026-09-22T06:44:37Z from source `3daba37` via Release CI [35687931776](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35687931776) as the latest public release. It introduces experimental native NVIDIA DLSS Super Resolution (SR) and DLAA support, in-game Graphics menu upscaler options, list viewport scrolling, and Start/Enter focus-jump to Save. Windows and Linux release packages bundle verified official NVIDIA NGX libraries. Visual quality, motion response, and player acceptance remain unclaimed. See the [changelog](CHANGELOG.md#v0611--2026-09-22) and [development status](docs/STATUS.md) for validation limits.

@@ -629,3 +629,21 @@ Release packaging is separate from test CI. A build or fixture pass is not gamep
 `shader_resource_variants_test.cpp` supports `scratch --cpx-original decoded-file container-offset reference-vs` to extract an original SDK container into isolated input, generate first, then compare the captured reference. The 2026-09-13 fixture reproduces all 564 bytes of `1474db97dfc0afad` from original `11bc08f69da45bb3`, preserving the input and rejecting corruption. `scratch --linked-only original-source reference-fixed reference-linked` checks linked coverage without repeating already-passed fixed assertions. Historical references are subsets of the expanded coverage: 354 fixed and 2,245 combined outputs.
 
 The maintainer command `python tools/generate_shader_variants.py <decoded-xex> <raw-inventory> LostOdysseyRecomp/gpu/shader/resource_variants.h --cpx-inventory <decoded-package-inventory> --linked-header LostOdysseyRecomp/gpu/shader/resource_variant_links.h --check` verifies deterministic tables and their adjacent generated discovery identity. Remove `--check` to regenerate. Decoded inventories contain `packages` with `decoded_file`, `decoded_size`, `decoded_sha256` and shader container offsets; failed decodes and mismatched identities are rejected. Inputs must be original resources. See the [coverage record](../../docs/notes/shader-startup-coverage-2026-09-13.md) for provenance and limits.
+
+## Post-v0.6.11 DLSS & Render State Capture Fixtures
+
+Focused verification fixtures introduced for post-v0.6.11 lifecycle fixes, capability synchronization, runtime status logging, and render state capture:
+
+| Target | Binary / Selector | Scope and Coverage |
+|---|---|---|
+| `LoTemporalLifecycleBr01Test` | `LoTemporalLifecycleBr01Test.exe` | 154 CPU clock advancement and temporal lifecycle checks; 14 gap checks. |
+| `LoTemporalLifecycleBr01OwnerTest` | `LoTemporalLifecycleBr01OwnerTest.exe` | 12 Direct3D 12 hardware checks on RTX 5080 (motion stub, >250 ms gap, no game launch). |
+| `LoDlssCapabilitySnapshotTest` | `LoDlssCapabilitySnapshotTest.exe` | 43 CPU checks for mutex-protected device capability snapshot transitions. |
+| `LoDlssRuntimeStatusTest` | `LoDlssRuntimeStatusTest.exe` | 37 CPU checks for granular fallback/latched DLSS runtime status classifications. |
+| `LoVideoSubmissionStopTest` | `LoVideoSubmissionStopTest.exe` | 14 CPU checks verifying stopped status publication upon native submission failures. |
+| `LoDlssStatusLogTest` | `LoDlssStatusLogTest.exe` | 400 real logger checks verifying formatted DLSS runtime status lines and deduplication. |
+| `LoPresentCaptureTest` | `LoPresentCaptureTest.exe --backend <d3d12 or vulkan> --case <three-frame or failure>` | Four combinations of backend and case passed: 640×360 final vs 320×240 guest, no added capture GPU work without a request, and failure handling. |
+| `LoPresentCaptureTest` (Close) | `LoPresentCaptureTest.exe --case close` | Production finalize helpers and archive invocation (completion count 3, last frame 12, incomplete cleanup). |
+| `motion_replay_gpu_test` | `motion_replay_gpu_test.exe --depth-retirement-only` | 26 Vulkan hardware checks (RTX 5080 D32S8) verifying external depth unbinding before texture destruction. |
+| `LoDlssEvaluateCaptureContractTest` | `LoDlssEvaluateCaptureContractTest.exe --evaluate-capture-contract-only` | Contract checks for RGBA8/RGBA16F Evaluate capture, quotas (4 entries/128 MiB), truncation, and formatting. |
+| `LoNativeDlssRendererTest` | `LoNativeDlssRendererTest.exe --evaluate-capture-only` | Vulkan hardware execution of isolated pre-Evaluate input and post-Evaluate scratch output copies with checked submit. |

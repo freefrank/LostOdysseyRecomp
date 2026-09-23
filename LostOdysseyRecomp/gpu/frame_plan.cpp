@@ -1,5 +1,6 @@
 #include <stdafx.h>
 #include "gpu/frame_plan.h"
+#include "gpu/dlss_status_log.h"
 #include "gpu/video.h"
 #include <string_view>
 #include "settings/config.h"
@@ -31,6 +32,22 @@ namespace gpu::frame_plan
     {
         std::atomic<uint64_t> drawable{ (uint64_t(1280) << 32) | 720 };
         PlannerState planner;
+        struct StatusIdentity {
+            upscaling::Upscaler upscaler = upscaling::Upscaler::Off;
+            upscaling::DlssQuality quality = upscaling::DlssQuality::Quality;
+            upscaling::TemporalConsumer consumer = upscaling::TemporalConsumer::None;
+            uint32_t width = 0, height = 0, outputWidth = 0, outputHeight = 0;
+            uint64_t requestSignature = 0, geometryEpoch = 0, deviceEpoch = 0, sizingRevision = 0;
+            bool inputProbe = false;
+            bool operator==(const StatusIdentity&) const = default;
+        };
+        StatusIdentity loggedStatusPlan{};
+        StatusIdentity StatusIdentityOf(const FramePlan& plan)
+        {
+            return {plan.requestedUpscaler, plan.dlssQuality, plan.consumer, plan.width, plan.height,
+                plan.output.width, plan.output.height, plan.requestSignature, plan.geometryEpoch,
+                plan.deviceEpoch, plan.sizingRevision, plan.inputProbe};
+        }
         std::atomic<uint64_t> failedEpoch{~0ull};
         std::atomic<uint32_t> failedFallbackHeight{720};
         upscaling::SizingCache sizingCache;
@@ -64,6 +81,11 @@ namespace gpu::frame_plan
         cpuPlan = planner.Begin({uint32_t(config.internalResolution), config.antialiasing, config.scalingQuality,
             config.upscaler, config.dlssQuality, output, device, sizing ? &*sizing : nullptr,
             getenv("LO_RESOLVE_READBACK") != nullptr, getenv("LO_DLSS_INPUT_PROBE") && std::string_view(getenv("LO_DLSS_INPUT_PROBE")) == "1"});
+        const auto identity = StatusIdentityOf(cpuPlan);
+        const bool planChanged = identity != loggedStatusPlan;
+        loggedStatusPlan = identity;
+        if (planChanged)
+            NoteDlssRuntime(CurrentDlssEffect());
     }
     FramePlan CpuPlan() { return cpuPlan; }
     DlssEffectSnapshot CurrentDlssEffect()
@@ -89,6 +111,16 @@ namespace gpu::frame_plan
     void ReportPlanFailure(const PlanFailure& failure)
     {
         planner.ReportFailure(failure);
+    }
+    void ReportDlssExecution(const DlssExecutionObservation& observation)
+    {
+        if (!planner.ReportExecution(observation)) return;
+        if (!ExecutionLogChanged(observation)) return;
+        NoteDlssRuntime(CurrentDlssEffect());
+    }
+    void NoteCurrentDlssStatus()
+    {
+        NoteDlssRuntime(CurrentDlssEffect());
     }
     std::optional<upscaling::SizingKey> TakeSizingRequest() { return sizingCache.TakeSizingRequest(); }
     void PublishSizing(upscaling::OutputSizing sizing) { sizingCache.PublishSizing(std::move(sizing)); }

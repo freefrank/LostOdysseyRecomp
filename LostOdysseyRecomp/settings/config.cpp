@@ -3,6 +3,7 @@
 #include <fstream>
 #include <os/logger.h>
 #include <os/user_paths.h>
+#include <gpu/dlss_status_log.h>
 #include <stdafx.h>
 namespace settings
 {
@@ -193,9 +194,7 @@ static bool WriteConfig(const Config &value)
     if (error)
         return false;
 #endif
-    LOG_INFO("settings saved: {}x{} internal_resolution={} mode={} backend={} AA={} language={} (backend/game language apply at restart)",
-             value.width, value.height, value.internalResolution, uint32_t(value.windowMode),
-             uint32_t(value.graphicsBackend), value.antialiasing, value.gameLanguage);
+    LogSettingsSaved(value);
     return true;
 }
 bool SaveConfig(const Config &requested)

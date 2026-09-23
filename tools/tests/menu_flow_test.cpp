@@ -58,6 +58,8 @@ bool MenuFlowDisplayModeFailed();
 #undef __imp__sub_828710A0
 #undef __imp__sub_82889E50
 
+using settings::GraphicsRow;
+
 namespace gpu::frame_plan {
 DlssEffectSnapshot menuFlowDlssEffect{};
 DlssEffectSnapshot CurrentDlssEffect() { return menuFlowDlssEffect; }
@@ -193,10 +195,30 @@ bool OptionRowsMatch(const std::vector<uint32_t>& withNotice, const std::vector<
             if (withNotice[size_t(y) * 1280 + x] != without[size_t(y) * 1280 + x]) return false;
     return true;
 }
+// Stub observation only. This does not claim a production GPU submission.
+// The menu trusts phase and the snapshot reason; it does not read outcome or ids.
+gpu::frame_plan::DlssExecutionObservation SubmittedObservation(gpu::upscaling::DlssQuality quality,
+    uint32_t inW = 0, uint32_t inH = 0, uint32_t outW = 0, uint32_t outH = 0)
+{
+    gpu::frame_plan::DlssExecutionObservation observed;
+    observed.plan.requestedUpscaler = gpu::upscaling::Upscaler::Dlss;
+    observed.plan.dlssQuality = quality;
+    observed.plan.consumer = gpu::upscaling::TemporalConsumer::DlssSr;
+    observed.plan.width = inW;
+    observed.plan.height = inH;
+    observed.plan.output.width = outW;
+    observed.plan.output.height = outH;
+    observed.renderFrame = 8675309;
+    observed.submissionSerial = 424242;
+    observed.outcome = gpu::frame_plan::DlssExecutionOutcome::Submitted;
+    observed.reason = gpu::frame_plan::DlssEffectReason::None;
+    return observed;
+}
 void CheckBr03DlssMenu(uint8_t* base)
 {
     using gpu::backend::Backend;
     using gpu::frame_plan::DlssEffectPhase;
+    using gpu::frame_plan::DlssEffectReason;
     using gpu::upscaling::DlssQuality;
     using gpu::upscaling::SizingState;
     using gpu::upscaling::Upscaler;
@@ -243,21 +265,29 @@ void CheckBr03DlssMenu(uint8_t* base)
     Tick(base);
     Require(settings::active, "BR-03 menu is open");
     settings::tab = 2;
-    settings::row = 5;
+    settings::row = int(GraphicsRow::Upscaler);
     settings::status.clear();
     settings::pending = 0;
     Tick(base);
     Require(settings::snapshot.notice == needsVulkan, "D3D12 DLSS shows Vulkan restart");
-    Require(settings::snapshot.rows.size() == 11, "BR-03 keeps 11 graphics rows");
-    Require(settings::snapshot.rows[5].enabled && settings::snapshot.rows[5].choices.size() == 2, "DLSS choice stays enabled on D3D12");
-    Require(!settings::snapshot.rows[6].hidden && settings::snapshot.rows[6].enabled, "quality row stays available");
-    Require(settings::snapshot.rows[0].enabled && settings::snapshot.rows[0].choices.size() == 3, "backend choices stay available");
-    Require(settings::snapshot.help == L"Saves the DLSS preference. The status line shows the latest frame plan.",
+    Require(settings::snapshot.rows.size() == size_t(GraphicsRow::Count), "BR-03 keeps every graphics row");
+    Require(settings::snapshot.rows[int(GraphicsRow::Upscaler)].enabled && settings::snapshot.rows[int(GraphicsRow::Upscaler)].choices.size() == 2, "DLSS choice stays enabled on D3D12");
+    Require(!settings::snapshot.rows[int(GraphicsRow::DlssQuality)].hidden && settings::snapshot.rows[int(GraphicsRow::DlssQuality)].enabled, "quality row stays available");
+    Require(settings::snapshot.rows[int(GraphicsRow::Backend)].enabled && settings::snapshot.rows[int(GraphicsRow::Backend)].choices.size() == 3, "backend choices stay available");
+    Require(settings::snapshot.help == L"Saves the DLSS preference. The status line shows the latest DLSS result.",
             "upscaler help points at the status line");
     saveState("01-d3d12-needs-vulkan.bmp");
+    settings::row = int(GraphicsRow::DlssQuality);
+    settings::pending = 0;
+    Tick(base);
+    Require(settings::snapshot.help == L"Quality, Balanced, Performance, or DLAA. The status line shows the submitted mode.",
+            "quality help names the submitted mode");
+    settings::row = int(GraphicsRow::Upscaler);
+    settings::pending = 0;
+    Tick(base);
     settings::pending = 8;
     Tick(base);
-    Require(settings::edit.upscaler == Upscaler::Off && settings::snapshot.rows[6].hidden, "DLSS can be turned off on D3D12");
+    Require(settings::edit.upscaler == Upscaler::Off && settings::snapshot.rows[int(GraphicsRow::DlssQuality)].hidden, "DLSS can be turned off on D3D12");
     Require(settings::snapshot.notice == needsVulkan + L" The Off choice is not applied yet.",
             "turning DLSS off before it is applied does not claim the plan is off");
     settings::pending = 8;
@@ -274,65 +304,79 @@ void CheckBr03DlssMenu(uint8_t* base)
     settings::pending = 0;
     Tick(base);
     Require(settings::snapshot.notice == L"DLSS is not available on this device.", "Vulkan device unavailable");
-    Require(settings::snapshot.rows[5].enabled && !settings::snapshot.rows[6].hidden, "unavailable device does not lock DLSS");
+    Require(settings::snapshot.rows[int(GraphicsRow::Upscaler)].enabled && !settings::snapshot.rows[int(GraphicsRow::DlssQuality)].hidden, "unavailable device does not lock DLSS");
     saveState("02-vulkan-device-unavailable.bmp");
 
     running.device.dlssAvailable = true;
+    running.device.deviceReady = true;
     running.phase = DlssEffectPhase::TemporaryFallback;
+    running.reason = DlssEffectReason::SizingPending;
     running.hasPlan = true;
     running.plannedRequest = Upscaler::Dlss;
     running.plannedQuality = DlssQuality::Quality;
     running.sizingKnown = true;
-    running.sizingState = SizingState::Pending;
+    running.sizingState = SizingState::Error;
     gpu::frame_plan::menuFlowDlssEffect = running;
     settings::pending = 0;
     Tick(base);
-    Require(settings::snapshot.notice == L"DLSS is querying the render resolution. Normal rendering is used for now.", "size pending");
+    Require(settings::snapshot.notice == L"DLSS is querying the render resolution. Normal rendering is used for now.",
+            "size pending comes from the classified reason, not sizingState");
     saveState("03-size-pending.bmp");
 
-    running.device.deviceReady = false;
-    running.device.dlssAvailable = false;
+    running.device.deviceReady = true;
+    running.device.dlssAvailable = true;
+    running.reason = DlssEffectReason::DeviceNotReady;
+    running.sizingState = SizingState::Ready;
     gpu::frame_plan::menuFlowDlssEffect = running;
     settings::pending = 0;
     Tick(base);
     Require(settings::snapshot.notice == L"DLSS is waiting for the graphics device. Normal rendering is used for now.",
-            "waiting for the device is not reported as unsupported");
+            "device wait comes from the classified reason, not deviceReady");
 
     running.device.deviceReady = true;
     running.device.dlssAvailable = true;
     running.phase = DlssEffectPhase::Active;
-    running.plannedQuality = DlssQuality::Quality;
-    running.sizingState = SizingState::Ready;
+    running.reason = DlssEffectReason::None;
+    running.plannedQuality = DlssQuality::Performance;
+    running.inputWidth = 111;
+    running.inputHeight = 222;
+    running.outputWidth = 333;
+    running.outputHeight = 444;
+    running.execution = SubmittedObservation(DlssQuality::Quality);
     gpu::frame_plan::menuFlowDlssEffect = running;
     settings::edit.dlssQuality = DlssQuality::Balanced;
     settings::pending = 0;
     Tick(base);
-    Require(settings::snapshot.notice == L"Latest frame plan uses DLSS Quality. The selected DLSS quality is not applied yet.",
-            "editing quality does not replace the running Quality plan");
+    Require(settings::snapshot.notice == L"Submitted DLSS Quality output. The selected DLSS quality is not applied yet.",
+            "editing quality does not replace the submitted Quality output");
+    Require(settings::snapshot.notice.find(L"Performance") == std::wstring::npos,
+            "CPU plan quality is not described as the submitted mode");
+    Require(settings::snapshot.notice.find(L"111") == std::wstring::npos, "CPU plan size is not shown for Active");
 
     const auto savesBefore = saves;
-    running.inputWidth = 1707;
-    running.inputHeight = 960;
-    running.outputWidth = 2560;
-    running.outputHeight = 1440;
-    running.consumer = gpu::upscaling::TemporalConsumer::DlssSr;
+    running.execution = SubmittedObservation(DlssQuality::Quality, 1707, 960, 2560, 1440);
+    running.plannedQuality = DlssQuality::Balanced;
     gpu::frame_plan::menuFlowDlssEffect = running;
     settings::edit.dlssQuality = DlssQuality::Quality;
     settings::pending = 0;
     Tick(base);
-    Require(settings::snapshot.notice == L"Latest frame plan uses DLSS Quality. 1707×960 - 2560×1440",
-            "active text names the latest frame plan and its sizes");
+    Require(settings::snapshot.notice == L"Submitted DLSS Quality output. 1707×960 - 2560×1440",
+            "active text names the submitted output and its sizes");
+    Require(settings::snapshot.notice.find(L"8675309") == std::wstring::npos, "status hides the render frame id");
+    Require(settings::snapshot.notice.find(L"424242") == std::wstring::npos, "status hides the submission serial");
+    Require(settings::snapshot.notice.find(L"Balanced") == std::wstring::npos, "CPU plan quality is not the submitted mode");
     Require(saves == savesBefore, "status refresh does not save");
     saveState("04-active-frame-plan.bmp");
 
-    running.plannedQuality = DlssQuality::Dlaa;
-    running.inputWidth = 2560;
-    running.inputHeight = 1440;
+    running.execution = SubmittedObservation(DlssQuality::Dlaa, 2560, 1440, 2560, 1440);
+    running.plannedQuality = DlssQuality::Quality;
+    running.inputWidth = 11;
     gpu::frame_plan::menuFlowDlssEffect = running;
     settings::edit.dlssQuality = DlssQuality::Dlaa;
     settings::pending = 0;
     Tick(base);
-    Require(settings::snapshot.notice == L"Latest frame plan uses DLAA. 2560×1440 - 2560×1440", "DLAA uses its own plan text");
+    Require(settings::snapshot.notice == L"Submitted DLAA output. 2560×1440 - 2560×1440", "DLAA names the submitted output");
+    Require(settings::snapshot.notice.find(L"Quality") == std::wstring::npos, "DLAA does not keep the CPU plan mode");
 
     running = {};
     running.device.backend = Backend::D3D12;
@@ -344,7 +388,7 @@ void CheckBr03DlssMenu(uint8_t* base)
     settings::edit.graphicsBackend = settings::GraphicsBackend::D3D12;
     settings::edit.upscaler = Upscaler::Dlss;
     settings::edit.dlssQuality = DlssQuality::Balanced;
-    settings::row = 0;
+    settings::row = int(GraphicsRow::Backend);
     settings::pending = 0;
     Tick(base);
     Require(settings::snapshot.notice == needsVulkan, "matching D3D12 edit still needs Vulkan");
@@ -354,8 +398,8 @@ void CheckBr03DlssMenu(uint8_t* base)
     Require(settings::edit.graphicsBackend == settings::GraphicsBackend::Vulkan, "Vulkan can be selected while running D3D12");
     Require(settings::edit.upscaler == Upscaler::Dlss && settings::edit.dlssQuality == DlssQuality::Balanced,
             "backend edit keeps the DLSS preference");
-    Require(settings::snapshot.rows[0].enabled && settings::snapshot.rows[0].selectedChoice == 1, "Vulkan cell stays selectable");
-    Require(settings::snapshot.rows[5].enabled && !settings::snapshot.rows[6].hidden, "pending backend does not hide DLSS");
+    Require(settings::snapshot.rows[int(GraphicsRow::Backend)].enabled && settings::snapshot.rows[int(GraphicsRow::Backend)].selectedChoice == 1, "Vulkan cell stays selectable");
+    Require(settings::snapshot.rows[int(GraphicsRow::Upscaler)].enabled && !settings::snapshot.rows[int(GraphicsRow::DlssQuality)].hidden, "pending backend does not hide DLSS");
     Require(settings::snapshot.notice == needsVulkan + L" Still using Direct3D 12 until restart. DLSS is checked after restart.",
             "pending backend is added after the current plan and does not replace it");
     Require(saves == savesAtCycle, "selecting Vulkan does not save by itself");
@@ -368,7 +412,7 @@ void CheckBr03DlssMenu(uint8_t* base)
 
     settings::edit.graphicsBackend = settings::GraphicsBackend::D3D12;
     settings::status = L"Display settings saved.";
-    settings::row = 10;
+    settings::row = int(GraphicsRow::Save);
     settings::pending = 0;
     Tick(base);
     Require(settings::snapshot.help == L"Display settings saved.", "save message stays on the help line");
@@ -384,24 +428,34 @@ void CheckBr03DlssMenu(uint8_t* base)
     running.device.deviceReady = true;
     running.device.dlssAvailable = true;
     running.phase = DlssEffectPhase::Active;
+    running.reason = DlssEffectReason::None;
     running.hasPlan = true;
     running.plannedRequest = Upscaler::Dlss;
-    running.plannedQuality = DlssQuality::Quality;
+    running.plannedQuality = DlssQuality::Balanced;
     running.sizingKnown = true;
     running.sizingState = SizingState::Ready;
-    running.inputWidth = 1280;
-    running.inputHeight = 720;
-    running.outputWidth = 1920;
-    running.outputHeight = 1080;
+    running.inputWidth = 9;
+    running.inputHeight = 9;
+    running.outputWidth = 9;
+    running.outputHeight = 9;
+    running.execution = SubmittedObservation(DlssQuality::Quality, 1280, 720, 1920, 1080);
     gpu::frame_plan::menuFlowDlssEffect = running;
     settings::pending = 0;
     Tick(base);
-    Require(settings::snapshot.notice == L"最新画面计划使用 DLSS 质量。 1280×720 - 1920×1080", "simplified status");
+    Require(settings::snapshot.notice == L"已提交 DLSS 质量输出。 1280×720 - 1920×1080", "simplified status");
     saveState("06-active-simplified.bmp");
     settings::edit.uiLanguage = 1;
     settings::pending = 0;
     Tick(base);
-    Require(settings::snapshot.notice == L"最新畫面計畫使用 DLSS 品質。 1280×720 - 1920×1080", "traditional status");
+    Require(settings::snapshot.notice == L"已提交 DLSS 品質輸出。 1280×720 - 1920×1080", "traditional status");
+    settings::edit.uiLanguage = 2;
+    settings::pending = 0;
+    Tick(base);
+    Require(settings::snapshot.notice == L"DLSS 品質出力を提出しました。 1280×720 - 1920×1080", "japanese status");
+    settings::edit.uiLanguage = 3;
+    settings::pending = 0;
+    Tick(base);
+    Require(settings::snapshot.notice == L"DLSS 품질 출력을 제출했습니다. 1280×720 - 1920×1080", "korean status");
 
     settings::edit.uiLanguage = 0;
     settings::tab = 0;
@@ -410,34 +464,39 @@ void CheckBr03DlssMenu(uint8_t* base)
     Require(settings::snapshot.notice.empty(), "other tabs keep a single help line");
     settings::tab = 2;
     running.phase = DlssEffectPhase::TemporaryFallback;
-    running.sizingState = SizingState::Pending;
+    running.reason = DlssEffectReason::SizingPending;
+    running.plannedQuality = DlssQuality::Quality;
+    running.sizingState = SizingState::Error;
     gpu::frame_plan::menuFlowDlssEffect = running;
     settings::pending = 0;
     Tick(base);
     Require(settings::snapshot.notice == L"DLSS is querying the render resolution. Normal rendering is used for now.",
-            "an open graphics page reads a new plan without reopening");
+            "an open graphics page reads a new result without reopening");
+    Require(settings::snapshot.notice.find(L"1280") == std::wstring::npos, "a querying result does not keep the submitted size");
     settings::edit.upscaler = Upscaler::Off;
     settings::pending = 0;
     Tick(base);
     Require(settings::snapshot.notice == L"DLSS is querying the render resolution. Normal rendering is used for now. The Off choice is not applied yet.",
             "an unsaved Off choice does not replace a plan that is still querying resolution");
-    Require(settings::snapshot.rows[6].hidden && settings::snapshot.rows.size() == 11,
+    Require(settings::snapshot.rows[int(GraphicsRow::DlssQuality)].hidden && settings::snapshot.rows.size() == size_t(GraphicsRow::Count),
             "turning DLSS off hides quality and keeps the row count");
-    const auto activePlan = std::wstring(L"Latest frame plan uses DLSS Quality. 1707×960 - 2560×1440");
+    const auto activePlan = std::wstring(L"Submitted DLSS Quality output. 1707×960 - 2560×1440");
     running = {};
     running.device.backend = Backend::Vulkan;
     running.device.deviceReady = true;
     running.device.dlssAvailable = true;
     running.phase = DlssEffectPhase::Active;
+    running.reason = DlssEffectReason::None;
     running.hasPlan = true;
     running.plannedRequest = Upscaler::Dlss;
-    running.plannedQuality = DlssQuality::Quality;
+    running.plannedQuality = DlssQuality::Performance;
     running.sizingKnown = true;
     running.sizingState = SizingState::Ready;
-    running.inputWidth = 1707;
-    running.inputHeight = 960;
-    running.outputWidth = 2560;
-    running.outputHeight = 1440;
+    running.inputWidth = 111;
+    running.inputHeight = 222;
+    running.outputWidth = 333;
+    running.outputHeight = 444;
+    running.execution = SubmittedObservation(DlssQuality::Quality, 1707, 960, 2560, 1440);
     gpu::frame_plan::menuFlowDlssEffect = running;
     settings::edit.uiLanguage = 0;
     settings::edit.graphicsBackend = settings::GraphicsBackend::Vulkan;
@@ -456,8 +515,9 @@ void CheckBr03DlssMenu(uint8_t* base)
     Tick(base);
     Require(settings::snapshot.notice == activePlan + L" The selected DLSS quality is not applied yet.",
             "Active Quality stays visible when Balanced is not saved");
-    Require(settings::snapshot.notice.find(L"DLSS Balanced") == std::wstring::npos, "unsaved Balanced is not described as the plan");
-    Require(settings::snapshot.notice.find(L"not in the latest frame plan") == std::wstring::npos,
+    Require(settings::snapshot.notice.find(L"DLSS Balanced") == std::wstring::npos, "unsaved Balanced is not described as submitted");
+    Require(settings::snapshot.notice.find(L"Performance") == std::wstring::npos, "CPU plan quality is not described as submitted");
+    Require(settings::snapshot.notice.find(L"DLSS is not running") == std::wstring::npos,
             "an unsaved quality edit is not a fallback");
     saveState("08-active-quality-unapplied.bmp");
     running.phase = DlssEffectPhase::Inactive;
@@ -473,9 +533,10 @@ void CheckBr03DlssMenu(uint8_t* base)
     Tick(base);
     Require(settings::snapshot.notice == L"DLSS is not in use. DLSS needs Vulkan and a restart.",
             "unsaved DLSS on D3D12 says it is not in use and needs Vulkan");
-    Require(settings::snapshot.notice.find(L"Latest frame plan uses") == std::wstring::npos,
-            "unsaved DLSS is not described as the running plan");
-    Require(settings::snapshot.rows[5].enabled && !settings::snapshot.rows[6].hidden, "unsaved DLSS choice stays available");
+    Require(settings::snapshot.notice.find(L"Submitted") == std::wstring::npos,
+            "unsaved DLSS is not described as submitted output");
+    Require(settings::snapshot.notice.find(L"1707") == std::wstring::npos, "an inactive result does not keep a submitted size");
+    Require(settings::snapshot.rows[int(GraphicsRow::Upscaler)].enabled && !settings::snapshot.rows[int(GraphicsRow::DlssQuality)].hidden, "unsaved DLSS choice stays available");
     saveState("09-d3d12-edit-dlss-unsaved.bmp");
     running.device.backend = Backend::Vulkan;
     gpu::frame_plan::menuFlowDlssEffect = running;
@@ -484,9 +545,134 @@ void CheckBr03DlssMenu(uint8_t* base)
     Tick(base);
     Require(settings::snapshot.notice == L"DLSS is not in use. The DLSS choice is not applied yet.",
             "unsaved DLSS on Vulkan stays not in use without a Vulkan warning");
+
+    settings::edit.uiLanguage = 0;
+    settings::edit.graphicsBackend = settings::GraphicsBackend::Vulkan;
+    settings::edit.upscaler = Upscaler::Dlss;
+    settings::edit.dlssQuality = DlssQuality::Quality;
+    settings::status.clear();
+    settings::tab = 2;
+    settings::row = int(GraphicsRow::Upscaler);
+    auto show = [&](DlssEffectPhase phase, DlssEffectReason reason) {
+        running.phase = phase;
+        running.reason = reason;
+        running.device.backend = Backend::Vulkan;
+        running.device.deviceReady = true;
+        running.device.dlssAvailable = true;
+        gpu::frame_plan::menuFlowDlssEffect = running;
+        settings::pending = 0;
+        Tick(base);
+    };
+    const auto savesAtExecution = saves;
+    running = {};
+    running.execution = SubmittedObservation(DlssQuality::Quality, 1707, 960, 2560, 1440);
+    running.plannedRequest = Upscaler::Dlss;
+    running.plannedQuality = DlssQuality::Quality;
+    running.inputWidth = 1707;
+    running.inputHeight = 960;
+    running.outputWidth = 2560;
+    running.outputHeight = 1440;
+    show(DlssEffectPhase::AwaitingExecution, DlssEffectReason::AwaitingGpuFrame);
+    Require(settings::snapshot.notice == L"Waiting for the first DLSS result.",
+            "waiting for the first result is not submitted output");
+    Require(settings::snapshot.notice.find(L"Submitted") == std::wstring::npos, "waiting cannot claim a submission");
+    Require(settings::snapshot.notice.find(L"1707") == std::wstring::npos, "waiting does not show a planned size");
+    Require(settings::active && settings::tab == 2, "refresh keeps the graphics page open");
+    saveState("10-awaiting-first-result.bmp");
+    show(DlssEffectPhase::AwaitingExecution, DlssEffectReason::None);
+    Require(settings::snapshot.notice == L"Waiting for the first DLSS result.",
+            "awaiting phase without a reason still waits");
+
+    running.execution = SubmittedObservation(DlssQuality::Quality, 1280, 720, 1920, 1080);
+    show(DlssEffectPhase::InputProbeOnly, DlssEffectReason::InputProbeOnly);
+    Require(settings::snapshot.notice == L"Input capture only. DLSS is not run.",
+            "input capture does not execute DLSS");
+    Require(settings::snapshot.notice.find(L"Submitted") == std::wstring::npos, "input capture is not active");
+    saveState("11-input-probe.bmp");
+
+    running.execution->reason = DlssEffectReason::RequestFailure;
+    show(DlssEffectPhase::TemporaryFallback, DlssEffectReason::MotionPipelinePending);
+    Require(settings::snapshot.notice == L"Motion data is still being prepared.",
+            "motion preparation uses the snapshot reason, not the observation reason");
+    saveState("12-motion-preparing.bmp");
+    show(DlssEffectPhase::TemporaryFallback, DlssEffectReason::UnknownColorEncoding);
+    Require(settings::snapshot.notice == L"Color conditions do not support DLSS.", "unsupported color");
+    saveState("13-color-unsupported.bmp");
+    show(DlssEffectPhase::TemporaryFallback, DlssEffectReason::NoEligibleScene);
+    Require(settings::snapshot.notice == L"No eligible scene this frame.", "no eligible scene");
+    saveState("14-no-eligible-scene.bmp");
+    show(DlssEffectPhase::TemporaryFallback, DlssEffectReason::FeatureReconfigurePending);
+    Require(settings::snapshot.notice == L"Waiting to rebuild DLSS.", "rebuild wait");
+    saveState("15-rebuild-waiting.bmp");
+    show(DlssEffectPhase::TemporaryFallback, DlssEffectReason::PromotionUnavailable);
+    Require(settings::snapshot.notice == L"DLSS output was not adopted.", "output not adopted");
+
+    running.sizingState = SizingState::Pending;
+    running.sizingKnown = false;
+    show(DlssEffectPhase::TemporaryFallback, DlssEffectReason::SizingError);
+    Require(settings::snapshot.notice == L"Render resolution query failed.", "resolution query failed");
+    saveState("16-resolution-query-failed.bmp");
+    running.sizingState = SizingState::Error;
+    show(DlssEffectPhase::TemporaryFallback, DlssEffectReason::SizingUnavailable);
+    Require(settings::snapshot.notice == L"Render resolution is unavailable.", "resolution unavailable");
+    running.failure = gpu::frame_plan::FailureReason::InvalidInput;
+    show(DlssEffectPhase::TemporaryFallback, DlssEffectReason::RequestFailure);
+    Require(settings::snapshot.notice == L"DLSS request failed and fell back. No automatic retry.",
+            "request failure names the fallback and does not promise a retry");
+    Require(settings::snapshot.notice.find(L"InvalidInput") == std::wstring::npos, "failure enum is not shown");
+    Require(settings::snapshot.notice.find(L"will retry") == std::wstring::npos, "request failure does not promise a retry");
+    saveState("17-request-failed.bmp");
+    show(DlssEffectPhase::TemporaryFallback, DlssEffectReason::CapabilityUnavailable);
+    Require(settings::snapshot.notice == L"DLSS is not available on this device.",
+            "capability reason is shown without a device-flag decision");
+
+    running.failure = gpu::frame_plan::FailureReason::DlssOutOfMemory;
+    running.execution.reset();
+    show(DlssEffectPhase::GpuStopped, DlssEffectReason::GpuWorkStopped);
+    Require(settings::snapshot.notice == L"GPU work has stopped.", "GPU work stopped");
+    Require(settings::snapshot.notice.find(L"OutOfMemory") == std::wstring::npos, "GPU stop hides the failure code");
+    Require(settings::snapshot.notice.find(L"Submitted") == std::wstring::npos, "GPU stop is not active");
+    saveState("18-gpu-stopped.bmp");
+    running.failure.reset();
+    show(DlssEffectPhase::GpuStopped, DlssEffectReason::None);
+    Require(settings::snapshot.notice == L"GPU work has stopped.", "GPU stop phase is enough when no reason is set");
+
+    running.execution = SubmittedObservation(DlssQuality::Performance, 1280, 720, 1920, 1080);
+    running.plannedQuality = DlssQuality::Quality;
+    running.inputWidth = 111;
+    settings::edit.dlssQuality = DlssQuality::Performance;
+    show(DlssEffectPhase::Active, DlssEffectReason::RequestFailure);
+    Require(settings::snapshot.notice == L"Submitted DLSS Performance output. 1280×720 - 1920×1080",
+            "Active uses the submitted mode even if a stale reason is set");
+    Require(settings::snapshot.notice.find(L"Quality output") == std::wstring::npos, "Active does not use the CPU plan mode");
+    Require(settings::snapshot.notice.find(L"111×") == std::wstring::npos, "Active does not use the CPU plan size");
+    Require(settings::snapshot.notice.find(L"failed") == std::wstring::npos, "Active does not show a stale failure reason");
+
+    running.execution = SubmittedObservation(DlssQuality::Balanced, 1500, 844, 2560, 1440);
+    running.plannedQuality = DlssQuality::Balanced;
+    settings::edit.dlssQuality = DlssQuality::Quality;
+    show(DlssEffectPhase::Active, DlssEffectReason::None);
+    Require(settings::snapshot.notice ==
+                L"Submitted DLSS Balanced output. 1500×844 - 2560×1440 The selected DLSS quality is not applied yet.",
+            "submitted Balanced stays visible when the edit is still Quality");
+    Require(settings::snapshot.notice.find(L"Quality output") == std::wstring::npos, "the edit is not described as submitted");
+
+    running.execution.reset();
+    running.plannedQuality = DlssQuality::Quality;
+    settings::edit.dlssQuality = DlssQuality::Performance;
+    show(DlssEffectPhase::Active, DlssEffectReason::None);
+    Require(settings::snapshot.notice == L"Waiting for the first DLSS result.",
+            "Active without an execution record waits and does not claim a submission");
+    Require(settings::snapshot.notice.find(L"Submitted") == std::wstring::npos, "missing execution is not described as submitted");
+    Require(settings::snapshot.notice.find(L"Performance") == std::wstring::npos, "missing execution does not name the edit");
+    Require(settings::snapshot.notice.find(L"not applied") == std::wstring::npos,
+            "missing execution does not invent a quality comparison");
+    Require(saves == savesAtExecution, "execution status refresh does not save");
+    Require(settings::snapshot.rows.size() == size_t(GraphicsRow::Count), "execution status keeps every graphics row");
+    Require(settings::active, "execution status refresh leaves the menu open");
     notes.close();
     Require(bool(notes), "write BR-03 notice list");
-    std::puts("PASS BR-03 DLSS menu status: D3D12, device unavailable, size pending, active plan, backend pending");
+    std::puts("PASS BR-03 menu status from stubbed snapshots: submitted output, waiting, probe, fallback reasons, GPU stopped, unsaved edits");
 }
 
 int main(int argc, char** argv)
@@ -525,7 +711,7 @@ int main(int argc, char** argv)
             Require(settings::active && closes == oldCloses + 1, "same address reopens without duplicate close");
         }
         // Existing brightness handoff must return to this same replacement.
-        settings::tab = 2; settings::row = 9;
+        settings::tab = 2; settings::row = int(GraphicsRow::Brightness);
         PPC_STORE_U32(Menu + 0x558 + 0x84, 0x22000);
         PPC_STORE_U32(0x22000 + 4, 12);
         settings::pending = 0x3000; Tick(base);
@@ -547,7 +733,7 @@ int main(int argc, char** argv)
         Require(ticks == oldTicks + 1, "no-device retail fallback retained");
         std::puts("PASS actual menu hook: edit/apply, close order/context, native completion, held-key gate, swapped buttons, reopen, calibration return, no-device fallback");
         deviceReady = true;
-        settings::tab = 2; settings::row = 10;
+        settings::tab = 2; settings::row = int(GraphicsRow::Save);
         settings::edit = currentConfig;
         const auto original = currentConfig;
         settings::edit.width = original.width + 160;
@@ -633,14 +819,14 @@ int main(int argc, char** argv)
             diskConfig = currentConfig;
             settings::edit = currentConfig;
             settings::tab = 2;
-            settings::row = 2;
+            settings::row = int(GraphicsRow::Widescreen);
             settings::Publish(base, ConfigData);
-            Require(settings::snapshot.rows.size() == 11, "graphics tab has 11 rows");
-            const auto& wsRow = settings::snapshot.rows[2];
+            Require(settings::snapshot.rows.size() == size_t(GraphicsRow::Count), "graphics tab has one row per id");
+            const auto& wsRow = settings::snapshot.rows[int(GraphicsRow::Widescreen)];
             Require(wsRow.name == L"Widescreen" && wsRow.value == L"On" && wsRow.selectedChoice == 0,
                     "initial 3440x1440 automatically enables Widescreen switch");
-            const auto& resRow = settings::snapshot.rows[3];
-            Require(resRow.name == L"Output resolution", "row 3 is Output resolution");
+            const auto& resRow = settings::snapshot.rows[int(GraphicsRow::OutputResolution)];
+            Require(resRow.name == L"Output resolution", "output resolution keeps its graphics id");
             Require(resRow.choices.size() == 5, "21:9 resolution choices count is 5");
             Require(resRow.choices[0] == L"1720 × 720" && resRow.choices[1] == L"2560 × 1080" &&
                     resRow.choices[2] == L"3440 × 1440" && resRow.choices[3] == L"3840 × 1600" &&
@@ -656,24 +842,24 @@ int main(int argc, char** argv)
             diskConfig = currentConfig;
             settings::edit = currentConfig;
             settings::tab = 2;
-            settings::row = 2;
+            settings::row = int(GraphicsRow::Widescreen);
             settings::Publish(base, ConfigData);
-            Require(settings::snapshot.rows[2].value == L"Off", "1280x720 starts with Widescreen Off");
-            Require(settings::snapshot.rows[3].choices.size() == 5 &&
-                    settings::snapshot.rows[3].choices[0] == L"1280 × 720" &&
-                    settings::snapshot.rows[3].choices[4] == L"3840 × 2160",
+            Require(settings::snapshot.rows[int(GraphicsRow::Widescreen)].value == L"Off", "1280x720 starts with Widescreen Off");
+            Require(settings::snapshot.rows[int(GraphicsRow::OutputResolution)].choices.size() == 5 &&
+                    settings::snapshot.rows[int(GraphicsRow::OutputResolution)].choices[0] == L"1280 × 720" &&
+                    settings::snapshot.rows[int(GraphicsRow::OutputResolution)].choices[4] == L"3840 × 2160",
                     "16:9 resolution choices present");
 
             // Toggle switch ON (delta +1)
             settings::pending = 0x1008; Tick(base);
             Require(settings::edit.width == 1720 && settings::edit.height == 720,
                     "toggle ON from 1280x720 maps to 1720x720");
-            Require(settings::snapshot.rows[2].value == L"On", "Widescreen switch is now On");
-            Require(settings::snapshot.rows[3].selectedChoice == 0 &&
-                    settings::snapshot.rows[3].value == L"1720 × 720", "1720x720 selected");
+            Require(settings::snapshot.rows[int(GraphicsRow::Widescreen)].value == L"On", "Widescreen switch is now On");
+            Require(settings::snapshot.rows[int(GraphicsRow::OutputResolution)].selectedChoice == 0 &&
+                    settings::snapshot.rows[int(GraphicsRow::OutputResolution)].value == L"1720 × 720", "1720x720 selected");
 
-            // Move to row 3 (resolution) and cycle forward through all 5 ultrawide tiers
-            settings::row = 3;
+            // Move to output resolution and cycle forward through all 5 ultrawide tiers
+            settings::row = int(GraphicsRow::OutputResolution);
             constexpr uint32_t expected21_9[][2] = {
                 {2560, 1080}, {3440, 1440}, {3840, 1600}, {5120, 2160}, {1720, 720}};
             for (size_t i = 0; i < 5; ++i)
@@ -688,16 +874,16 @@ int main(int argc, char** argv)
             settings::edit.width = 5120;
             settings::edit.height = 2160;
             settings::Publish(base, ConfigData);
-            Require(settings::snapshot.rows[3].selectedChoice == 4 &&
-                    settings::snapshot.rows[3].value == L"5120 × 2160", "5120x2160 tier verified");
+            Require(settings::snapshot.rows[int(GraphicsRow::OutputResolution)].selectedChoice == 4 &&
+                    settings::snapshot.rows[int(GraphicsRow::OutputResolution)].value == L"5120 × 2160", "5120x2160 tier verified");
 
-            // Switch back to 16:9 on row 2: height 2160 preserves height and maps to 3840x2160
-            settings::row = 2;
+            // Switch back to 16:9: height 2160 preserves height and maps to 3840x2160
+            settings::row = int(GraphicsRow::Widescreen);
             settings::pending = 0x1008; Tick(base);
             Require(settings::edit.width == 3840 && settings::edit.height == 2160,
                     "switch to 16:9 preserves 2160 height mapping to 3840x2160");
-            Require(settings::snapshot.rows[2].value == L"Off", "switch is now Off");
-            Require(settings::snapshot.rows[3].choices[4] == L"3840 × 2160", "16:9 4K selected");
+            Require(settings::snapshot.rows[int(GraphicsRow::Widescreen)].value == L"Off", "switch is now Off");
+            Require(settings::snapshot.rows[int(GraphicsRow::OutputResolution)].choices[4] == L"3840 × 2160", "16:9 4K selected");
 
             // Cancel / exit without saving: disk remains untouched at initial 1280x720
             const auto oldSaves = saves;
@@ -718,15 +904,15 @@ int main(int argc, char** argv)
             Require(settings::edit.width == 1280 && settings::edit.height == 720,
                     "reopening restores saved config without unapplied preview changes");
 
-            // Switch to 3440x1440 and Save on row 9: goes through display change state machine
+            // Switch to 3440x1440 and Save: goes through display change state machine
             settings::tab = 2;
-            settings::row = 2;
+            settings::row = int(GraphicsRow::Widescreen);
             settings::pending = 0x1008; Tick(base); // Switch ON -> 1720x720
-            settings::row = 3;
+            settings::row = int(GraphicsRow::OutputResolution);
             settings::pending = 0x1008; Tick(base); // 2560x1080
             settings::pending = 0x1008; Tick(base); // 3440x1440
             Require(settings::edit.width == 3440 && settings::edit.height == 1440, "selected 3440x1440");
-            settings::row = 10; // Save graphics settings
+            settings::row = int(GraphicsRow::Save);
             settings::pending = 0x1000; Tick(base);
             Require(saves == oldSaves + 1 && diskConfig.width == 3440 && diskConfig.height == 1440,
                     "Save persists 3440x1440 to disk config");
@@ -743,30 +929,28 @@ int main(int argc, char** argv)
         {
             const auto savesBefore = saves;
             settings::tab = 2; // Graphics tab
-            settings::row = 0;
+            settings::row = int(GraphicsRow::Backend);
             settings::edit.upscaler = gpu::upscaling::Upscaler::Off;
             settings::Publish(base, ConfigData);
 
-            // DLSS Quality row (row 6) is hidden when upscaler is Off
-            Require(settings::snapshot.rows.size() == 11, "graphics tab has 11 rows");
-            Require(settings::snapshot.rows[6].hidden, "DLSS quality is hidden when upscaler is Off");
+            Require(settings::snapshot.rows.size() == size_t(GraphicsRow::Count), "graphics tab has one row per id");
+            Require(settings::snapshot.rows[int(GraphicsRow::DlssQuality)].hidden, "DLSS quality is hidden when upscaler is Off");
 
-            // Navigation skipping hidden row 6
-            settings::row = 5; // Upscaler row
+            settings::row = int(GraphicsRow::Upscaler);
             settings::pending = 2; Tick(base); // D-pad down
-            Require(settings::row == 7, "down from Upscaler skips hidden DLSS quality to Scaling quality (row 7)");
+            Require(settings::row == int(GraphicsRow::ScalingQuality), "down from Upscaler skips hidden DLSS quality");
             settings::pending = 1; Tick(base); // D-pad up
-            Require(settings::row == 5, "up from Scaling quality skips hidden DLSS quality to Upscaler (row 5)");
+            Require(settings::row == int(GraphicsRow::Upscaler), "up from Scaling quality skips hidden DLSS quality");
 
-            // Start (0x10) jumps focus to Save graphics settings (row 10) without saving
+            // Start (0x10) jumps focus to Save graphics settings without saving
             settings::pending = 0x10; Tick(base);
-            Require(settings::row == 10, "Start jumps focus to Save row (row 10)");
+            Require(settings::row == int(GraphicsRow::Save), "Start jumps focus to Save");
             Require(saves == savesBefore, "Start jump does not save immediately");
 
             // Simultaneous Start (0x10) + Confirm (0x1000) does NOT save on the same tick
-            settings::row = 0;
+            settings::row = int(GraphicsRow::Backend);
             settings::pending = 0x1010; Tick(base);
-            Require(settings::row == 10, "simultaneous Start+A still focuses Save row");
+            Require(settings::row == int(GraphicsRow::Save), "simultaneous Start+A still focuses Save row");
             Require(saves == savesBefore, "simultaneous Start+A suppresses same-tick save");
 
             // Subsequent A (0x1000) on focused Save row executes the save
@@ -805,15 +989,15 @@ int main(int argc, char** argv)
             auto assets = settings::menu_assets::Cached(argv[1], 4);
             Require(bool(assets), "installed SCH assets");
             std::filesystem::create_directories(argv[2]);
-            for (int selected : {5, 7})
+            for (GraphicsRow selected : {GraphicsRow::AntiAliasing, GraphicsRow::FrameRate})
             {
-                settings::row = selected; settings::Publish(base, ConfigData);
+                settings::row = int(selected); settings::Publish(base, ConfigData);
                 auto preview = settings::snapshot; preview.assets = assets;
-                for (int label : {5, 7, 9})
-                    Require(covers(assets->body, preview.rows[label].name), "changed label must use original body face");
+                for (GraphicsRow label : {GraphicsRow::AntiAliasing, GraphicsRow::FrameRate, GraphicsRow::Save})
+                    Require(covers(assets->body, preview.rows[int(label)].name), "changed label must use original body face");
                 std::vector<uint32_t> pixels;
                 Require(settings::RasterizeMenu(preview, 1280, 720, pixels), "translated Graphics preview");
-                WriteBmp(std::filesystem::path(argv[2]) / (selected == 5 ? "graphics-aa.bmp" : "graphics-rate.bmp"), pixels);
+                WriteBmp(std::filesystem::path(argv[2]) / (selected == GraphicsRow::AntiAliasing ? "graphics-aa.bmp" : "graphics-rate.bmp"), pixels);
             }
             std::puts("PASS two Graphics previews from actual Publish/Translate, normal and selected changed labels");
         }
