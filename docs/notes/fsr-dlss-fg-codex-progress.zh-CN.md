@@ -104,3 +104,14 @@ Windows 与原生 Linux 已完成首轮增量构建，见 [构建记录](../../o
 psvita 的原生 Linux RADV 使用该最终构建 `8e8b2bd5…` 完成相同诊断：frame12000、serial24010、14 次 audited draw，`853×491` raw R8 有 148 个非零像素；draw1994 的颜色 3,350,584 字节和 R32 depth plane 1,675,292 字节前后完全相同。两个 readback 在 fence 完成后导出，画面、HUD 与颜色正常，进程 exit0，17 个原配置／profile／存档文件哈希未变。证据见[Linux alpha 结果](../../out/streamline-fg-p0/fsr-alpha-linux-02/result.json)。首轮代理导航延迟错过固定采集帧，保留为未取得证据；同一 EXE 改用定时菜单输入后重试成功，没有把首轮记为 SDK 失败。
 
 这仍是 `PartialCoverage` 原始材质 alpha，不包含 resolve／fetch／后处理传播、SDK mask、stencil 不变、性能收益或 Steam Deck 验收。psvita 当前为 ONEXPLAYER APEX / Radeon 8060S。下一片版本桥接正在开发，未据此宣称通过。
+
+
+### P2 resolve／fetch 版本桥接检查点
+
+`LO_FSR_ALPHA_REPLAY=1` 与 `LO_FSR_ALPHA_BRIDGE=1` 同时启用有界桥接。R8 在实际颜色 resolve 点复制，按同帧／epoch、源与目标分配、写入序号和有效矩形关联；fetch 必须匹配最终 PS 绑定图像。未知 RGB 覆盖、clear／transfer 会使后续原始来源失效，已复制的独立快照仍可使用。已审计的局部混合只保留此前 alpha 贡献的保守上界，不增加透明覆盖声明。
+
+CPU owner／policy 检查和 Windows／Linux 增量构建通过，见 [CPU 记录](../../out/fsr-alpha-p2-cpu/result.json) 与 [构建记录](../../out/streamline-fg-p0/fsr-p2-bridge-build-result.json)。Windows 实景构建 `e4e277da…` 在 frame12000／serial24009 产生写入序号 205034 的 `853×491 → 853×480` R8 copy，独立逐字节比较 409,440 个复制像素零差异，其中 150 个非零。随后 `copy_reused` 获得新序号 205035，downsample 与 tonemap 的实际 slot0 fetch 均匹配该版本和最终绑定图像。复用关系由代码与真实 trace 联合证明，没有声称执行第二次 GPU copy。
+
+后续 draw2084 的未知 RGB 写入确实触发来源失效；先前独立复制的版本仍可供 fetch。六次后处理 fetch 的 guest 448→428 裁剪（本次实际物理尺寸 299→285）因尚未实现的后处理明确返回 `Unavailable`。见 [实景结果](../../out/streamline-fg-p0/fsr-alpha-bridge-windows-01/result.json)、[独立检查](../../out/streamline-fg-p0/fsr-alpha-bridge-windows-01/bridge-independent-check.json) 及目录内原始 JSONL／R8。GPU fence 完成后导出，进程 exit0，原配置／存档基线未变。独立复核支持本片提交，未重复既有测试。
+
+本片没有正例裁剪、实际最终图像替换或游戏内 Off／epoch 切换证据；后两者仅有对应代码／CPU 边界检查。Linux 本片仅构建，首 alpha 实景结果继续复用。后处理 mask、SDK reactive／T&C、完整透明覆盖、画质／性能及 Steam Deck 仍待完成，G003 保持执行中；未推送或发布。
