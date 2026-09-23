@@ -30,6 +30,7 @@
 #include "motion_options.h"
 #include "motion_replay_gpu.h"
 #include "fsr_alpha_replay_gpu.h"
+#include "fsr_alpha_postprocess_gpu.h"
 #include "fsr_alpha_propagation_gpu.h"
 #include "presentation.h"
 #include <settings/config.h>
@@ -379,14 +380,23 @@ namespace gpu::renderer
                 std::string reason;
             };
             struct FsrAlphaBridgeDiagnostic {
+                struct Snapshot {
+                    std::string label;
+                    std::unique_ptr<RenderBuffer> buffer;
+                    uint32_t width = 0, height = 0, rowPitch = 0, bytesPerPixel = 0;
+                    RenderFormat format = RenderFormat::UNKNOWN;
+                };
                 std::string fields;
                 uint64_t frame = 0, submissionSerial = 0, writeOrdinal = 0;
+                uint32_t eventIndex = 0;
                 fsr_alpha::FrameView raw;
                 std::shared_ptr<fsr_alpha::MaskLease> mask;
                 fsr_alpha::MaskRect rect{};
                 uint32_t rawWidth = 0, rawHeight = 0, resolvedWidth = 0, resolvedHeight = 0;
                 uint32_t rawPitch = 0, resolvedPitch = 0;
                 std::array<std::unique_ptr<RenderBuffer>, 2> buffers;
+                std::vector<Snapshot> snapshots;
+                std::vector<std::string> captureFailures;
             };
 #endif
             struct GpuSlot {
@@ -572,6 +582,7 @@ namespace gpu::renderer
                 return value && std::string_view(value) == "1";
             }();
             std::unique_ptr<fsr_alpha::PropagationGPU> fsrAlphaBridge;
+            std::unique_ptr<fsr_alpha::PostprocessGPU> fsrAlphaPostprocess;
             std::vector<fsr_alpha::FrameView> fsrAlphaRawViews;
             uint32_t fsrAlphaBridgePairCount = 0, fsrAlphaBridgeTraceCount = 0;
             bool fsrAlphaInitFailed = false;
@@ -2271,14 +2282,50 @@ namespace gpu::renderer
             void TraceFsrAlphaBridge(std::shared_ptr<FsrAlphaBridgeDiagnostic> event) {
                 if (!FsrAlphaBridgeTraceEnabled() || fsrAlphaBridgeTraceCount >= 128) return;
                 event->frame = frame;
+                event->eventIndex = fsrAlphaBridgeTraceCount;
                 Gpu().fsrAlphaBridgeDiagnostics.push_back(std::move(event));
                 ++fsrAlphaBridgeTraceCount;
+            }
+            bool QueueFsrAlphaSnapshot(const std::shared_ptr<FsrAlphaBridgeDiagnostic>& event,
+                const char* label, RenderTexture* texture, RenderFormat format,
+                uint32_t width, uint32_t height, uint32_t bytesPerPixel,
+                RenderTextureLayout originalLayout) {
+                if (!event) return false;
+                const auto fail = [&](const char* reason) {
+                    event->captureFailures.push_back(fmt::format("{}:{}", label, reason));
+                    return false;
+                };
+                if (!texture || !width || !height || !bytesPerPixel)
+                    return fail("missing_image_or_extent");
+                if (event->snapshots.size() >= 16) return fail("snapshot_limit");
+                const uint64_t rowBytes = uint64_t(width) * bytesPerPixel;
+                const uint64_t rowPitch = (rowBytes + 255u) & ~255ull;
+                if (rowPitch * height > (128u << 20)) return fail("extent_limit");
+                FsrAlphaBridgeDiagnostic::Snapshot snapshot{};
+                snapshot.label = label; snapshot.width = width; snapshot.height = height;
+                snapshot.rowPitch = uint32_t(rowPitch); snapshot.bytesPerPixel = bytesPerPixel;
+                snapshot.format = format;
+                snapshot.buffer = device->createBuffer(RenderBufferDesc::ReadbackBuffer(rowPitch * height));
+                if (!snapshot.buffer) return fail("buffer_allocation_failed");
+                // Register the readback before any GPU command can reference it.
+                auto* buffer = snapshot.buffer.get();
+                event->snapshots.push_back(std::move(snapshot));
+                commandList->barriers(RenderBarrierStage::COPY,
+                    RenderTextureBarrier(texture, RenderTextureLayout::COPY_SOURCE));
+                commandList->copyTextureRegion(
+                    RenderTextureCopyLocation::PlacedFootprint(buffer, format, width, height, 1,
+                        uint32_t(rowPitch / bytesPerPixel), 0),
+                    RenderTextureCopyLocation::Subresource(texture, 0));
+                commandList->barriers(RenderBarrierStage::GRAPHICS,
+                    RenderTextureBarrier(texture, originalLayout));
+                return true;
             }
             void HandleFsrAlphaRgbWriter(HostTexture& color, const char* writer,
                 uint64_t drawOrdinal = 0, uint64_t vsHash = 0, uint64_t psHash = 0,
                 uint64_t blend = 0, uint32_t colorMask = 7, bool retainsRaw = false) {
                 if (!fsrAlphaBridge || activePlan.requestedUpscaler != upscaling::Upscaler::Fsr) return;
-                if (retainsRaw ? !fsrAlphaBridge->HasRawSource(color.allocationSerial) :
+                const bool retained = retainsRaw && fsrAlphaBridge->HasRawSource(color.allocationSerial);
+                if (retained ? !fsrAlphaBridge->HasCurrentSource(color.allocationSerial) :
                     !fsrAlphaBridge->InvalidateRawSource(color.allocationSerial)) return;
                 if (!FsrAlphaBridgeTraceEnabled()) return;
                 auto event = std::make_shared<FsrAlphaBridgeDiagnostic>();
@@ -2287,7 +2334,7 @@ namespace gpu::renderer
                     "\"writer\":\"{}\",\"source_allocation\":{},\"draw_ordinal\":{},"
                     "\"vs_hash\":\"{:016x}\",\"ps_hash\":\"{:016x}\","
                     "\"blend\":{},\"color_mask\":{}",
-                    retainsRaw ? "retained_audited_local_blend" : "source_written_after_raw",
+                    retained ? "retained_audited_local_blend" : "source_written_after_raw",
                     writer, color.allocationSerial, drawOrdinal, vsHash, psHash, blend, colorMask);
                 TraceFsrAlphaBridge(std::move(event));
             }
@@ -2310,16 +2357,18 @@ namespace gpu::renderer
                     "\"kind\":\"resolve\",\"operation\":\"{}\",\"status\":\"{}\","
                     "\"source_allocation\":{},\"source_extent\":[{},{}],\"raw_revision\":{},"
                     "\"raw_epoch\":{},\"raw_depth_allocation\":{},"
+                    "\"source_revision\":{},\"source_stage\":{},"
                     "\"destination_address\":{},\"destination_format\":{},\"destination_allocation\":{},"
                     "\"write_ordinal\":{},\"resolve_rect\":[{},{},{},{}],\"resolved_extent\":[{},{}]",
                     operation, result.reason, source.allocationSerial, source.width, source.height,
                     result.rawAtResolve.auditedDraws,
                     result.rawAtResolve.identity.geometryEpoch, result.rawAtResolve.identity.depthAllocation,
+                    result.version.sourceRevision, uint32_t(result.version.sourceStage),
                     address, destination.destFormat,
                     destination.tex->allocationSerial, destination.writeOrdinal,
                     rect.x, rect.y, rect.width, rect.height,
                     destination.tex->width, destination.tex->height);
-                if (result.copied && fsrAlphaBridgePairCount < 8) {
+                if (result.copied && result.rawAtResolve && fsrAlphaBridgePairCount < 8) {
                     event->raw = result.rawAtResolve;
                     event->mask = result.version.mask;
                     event->rect = rect;
@@ -2829,7 +2878,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     auto* raw = static_cast<const uint8_t*>(event.buffers[0]->map());
                     auto* resolved = static_cast<const uint8_t*>(event.buffers[1]->map());
                     if (raw && resolved) {
-                        const auto stem = fmt::format("fsr-alpha-bridge-f{}-ord{}", event.frame, event.writeOrdinal);
+                        const auto stem = fmt::format("fsr-alpha-bridge-f{}-e{}-ord{}",
+                            event.frame, event.eventIndex, event.writeOrdinal);
                         std::ofstream rawFile(fsrAlphaCaptureDir / (stem + "-raw-at-resolve.r8.bin"),
                             std::ios::binary | std::ios::trunc);
                         std::ofstream resolvedFile(fsrAlphaCaptureDir / (stem + "-resolved.r8.bin"),
@@ -2858,10 +2908,50 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     if (raw) event.buffers[0]->unmap();
                     if (resolved) event.buffers[1]->unmap();
                 }
+                std::string snapshotsResult;
+                if (!event.snapshots.empty()) {
+                    snapshotsResult = ",\"snapshots\":[";
+                    bool first = true;
+                    for (const auto& snapshot : event.snapshots) {
+                        if (!first) snapshotsResult += ',';
+                        first = false;
+                        const auto filename = fmt::format("fsr-postprocess-f{}-e{}-draw{}-{}.bin",
+                            event.frame, event.eventIndex, event.writeOrdinal, snapshot.label);
+                        auto* data = static_cast<const uint8_t*>(snapshot.buffer->map());
+                        bool written = false;
+                        if (data) {
+                            std::ofstream output(fsrAlphaCaptureDir / filename,
+                                std::ios::binary | std::ios::trunc);
+                            for (uint32_t y = 0; y < snapshot.height && output; ++y)
+                                output.write(reinterpret_cast<const char*>(data + size_t(y) * snapshot.rowPitch),
+                                    size_t(snapshot.width) * snapshot.bytesPerPixel);
+                            output.close(); written = !output.fail();
+                            snapshot.buffer->unmap();
+                        }
+                        snapshotsResult += fmt::format(
+                            "{{\"label\":\"{}\",\"status\":\"{}\",\"file\":\"{}\","
+                            "\"format\":{},\"extent\":[{},{}],\"bytes_per_pixel\":{},"
+                            "\"row_pitch\":{},\"gpu_row_pitch\":{}}}",
+                            snapshot.label, written ? "complete" : data ? "write_failed" : "map_failed",
+                            filename, uint32_t(snapshot.format), snapshot.width, snapshot.height,
+                            snapshot.bytesPerPixel, snapshot.width * snapshot.bytesPerPixel,
+                            snapshot.rowPitch);
+                    }
+                    snapshotsResult += ']';
+                }
+                if (!event.captureFailures.empty()) {
+                    snapshotsResult += ",\"capture_failures\":[";
+                    for (size_t i = 0; i < event.captureFailures.size(); ++i) {
+                        if (i) snapshotsResult += ',';
+                        snapshotsResult += fmt::format("\"{}\"", event.captureFailures[i]);
+                    }
+                    snapshotsResult += ']';
+                }
                 std::ofstream trace(fsrAlphaCaptureDir /
                     fmt::format("fsr-alpha-bridge-f{}.jsonl", event.frame), std::ios::app);
-                if (trace) trace << '{' << event.fields << pairResult
+                if (trace) trace << '{' << event.fields << pairResult << snapshotsResult
                     << ",\"render_frame\":" << event.frame
+                    << ",\"event_index\":" << event.eventIndex
                     << ",\"submission_serial\":" << event.submissionSerial << "}\n";
             }
 #endif
@@ -5159,6 +5249,12 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         }
                         if (fsrAlphaBridgeEnabled && fsrAlphaReplay && !fsrAlphaBridge)
                             fsrAlphaBridge = std::make_unique<fsr_alpha::PropagationGPU>(device);
+                        if (fsrAlphaBridge && !fsrAlphaPostprocess) {
+                            auto replay = std::make_unique<fsr_alpha::PostprocessGPU>();
+                            if (replay->Init(device, pipelineLayout.get(), blitVs.get()))
+                                fsrAlphaPostprocess = std::move(replay);
+                            else LOG_WARNING("fsr alpha: postprocess initialization failed");
+                        }
                     }
 #endif
                     hdrTemporalOutput = nullptr; hdrTemporalSource = {}; hdrTonemapApplied = false;
@@ -5569,10 +5665,27 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     uint32_t cropWidth = 0, cropHeight = 0, parentWidth = 0, parentHeight = 0;
                     uint32_t guestFetchWidth = 0, guestParentWidth = 0;
                     uint64_t destinationAllocation = 0, writeOrdinal = 0;
+                    uint64_t samplerKey = 0;
                     RenderTexture* returnedColor = nullptr;
+                    RenderTexture* prefilterOutput = nullptr;
                     const char* substitution = "none";
+                    bool prefilterSourceIsReturnedColor = false;
                 };
                 std::vector<AlphaBridgeFetchRequest> alphaBridgeFetches;
+                struct AlphaPostInput {
+                    fsr_alpha::FetchCandidate fetch;
+                    uint64_t samplerKey = 0;
+                    RenderTexture* actualColor = nullptr;
+                    const char* substitution = "none";
+                };
+                std::array<std::optional<AlphaPostInput>, 4> alphaPostInputs{};
+                struct AlphaPostDepthInput {
+                    RenderTexture* texture = nullptr;
+                    RenderFormat format = RenderFormat::UNKNOWN;
+                    uint32_t width = 0, height = 0;
+                    uint64_t samplerKey = 0;
+                };
+                std::optional<AlphaPostDepthInput> alphaPostDepth;
 #endif
                 auto bindTextures = [&](Shader* s)
                 {
@@ -5666,6 +5779,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                     source->tex->width == tex->width && source->tex->height == tex->height};
                         }
                         HostTexture* bloomFiltered = nullptr;
+                        RenderTexture* bloomPrefilterInput = nullptr;
                         RenderTexture* hdrBinding = nullptr;
                         const bool useBloomPrefilter = taaDiagnosticBloom >= 0 ? taaDiagnosticBloom == 1 : bloomPrefilterEnabled && sceneAAMode == 3;
                         // Keep bloom reconstruction stable while temporal history
@@ -5718,7 +5832,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                 const bool sameHDRSource = hdrTemporalOutput && hdrTemporalSource.frame == frame &&
                                     hdrTemporalSource.address == ((fetch[1] >> 12) << 12) && hdrTemporalSource.format == (fetch[1] & 0x3F) &&
                                     hdrTemporalSource.ordinal == source->writeOrdinal && hdrTemporalSource.width == tex->width && hdrTemporalSource.height == tex->height;
-                                if (useBloomPrefilter) bloomFiltered = PrefilterBloom(*tex, sameHDRSource ? hdrTemporalOutput : nullptr);
+                                if (useBloomPrefilter) {
+                                    bloomPrefilterInput = sameHDRSource ? hdrTemporalOutput : tex->texture.get();
+                                    bloomFiltered = PrefilterBloom(*tex, sameHDRSource ? hdrTemporalOutput : nullptr);
+                                }
                                 else if (sameHDRSource) hdrBinding = hdrTemporalOutput;
                                 if (bloomFiltered) {
                                     if (bloomPrefilterLogs++ < 4)
@@ -5872,6 +5989,43 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                     }
                                     else if (selected.kind == DlssSceneInputSelection::Kind::Selected) {
                                         dlssSceneCopyInputs = selected.inputs;
+#if defined(LO_GPU_PLUME)
+                                        if (fsrAlphaBridge && activePlan.requestedUpscaler == upscaling::Upscaler::Fsr &&
+                                            qualifiedEncoding == temporal::ColorEncoding::Sdr && source &&
+                                            viewMatches && frameMatches && ordinalMatches && extentMatches) {
+                                            auto candidate = fsrAlphaBridge->RecordFetchView(commandList, frame, temporalEpoch,
+                                                address, source->destFormat, source->tex->allocationSerial,
+                                                source->writeOrdinal, tex->texture.get(), tex->width, tex->height,
+                                                Gpu().fsrAlphaBridgeUses);
+                                            const bool frozen = fsrAlphaBridge->FreezeForSceneCopy(candidate,
+                                                tex->texture.get(), selected.inputs.color.texture,
+                                                frame, temporalEpoch, temporalSceneCopy->ordinal,
+                                                selected.inputs.color.width, selected.inputs.color.height);
+                                            if (frozen) Gpu().fsrAlphaBridgeUses.push_back(candidate.mask);
+                                            if (FsrAlphaBridgeTraceEnabled() && fsrAlphaBridgeTraceCount < 128) {
+                                                auto event = std::make_shared<FsrAlphaBridgeDiagnostic>();
+                                                event->fields = fmt::format(
+                                                    "\"kind\":\"scene_copy_mask\",\"status\":\"{}\","
+                                                    "\"geometry_epoch\":{},\"color_ordinal\":{},"
+                                                    "\"source_write_ordinal\":{},"
+                                                    "\"source_allocation\":{},\"source_stage\":{},"
+                                                    "\"source_revision\":{},\"captured_color_image\":{},"
+                                                    "\"mask_image\":{},\"extent\":[{},{}]",
+                                                    frozen ? "available" : candidate.reason,
+                                                    temporalEpoch, temporalSceneCopy->ordinal, source->writeOrdinal,
+                                                    candidate.version.sourceAllocation,
+                                                    uint32_t(candidate.version.sourceStage), candidate.version.sourceRevision,
+                                                    uintptr_t(selected.inputs.color.texture),
+                                                    frozen ? uintptr_t(candidate.mask->texture.get()) : 0,
+                                                    selected.inputs.color.width, selected.inputs.color.height);
+                                                TraceFsrAlphaBridge(event);
+                                                if (frozen) QueueFsrAlphaSnapshot(event, "final-scene-mask",
+                                                    candidate.mask->texture.get(), RenderFormat::R8_UNORM,
+                                                    selected.inputs.color.width, selected.inputs.color.height, 1,
+                                                    RenderTextureLayout::SHADER_READ);
+                                            }
+                                        }
+#endif
                                     }
                                 }
                                 if (motionView.ready && motionReplay) motionReplay->RecordConsumerUse();
@@ -5952,10 +6106,21 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         textureBindings[bank][slot] = temporalDisplay ? temporalDisplay :
                             bloomFiltered ? bloomFiltered->texture.get() : hdrBinding ? hdrBinding : tex->texture.get();
 #if defined(LO_GPU_PLUME)
+                        if (s == ps && key.ps == 0xb4b4d54a7a2d6b96ull && slot == 1 && bank == 0 &&
+                            !temporalDisplay && !bloomFiltered && !hdrBinding)
+                            alphaPostDepth = AlphaPostDepthInput{tex->texture.get(), tex->format,
+                                tex->width, tex->height, samplerKey};
                         if (s == ps && !alphaBridgeFetches.empty() &&
-                            alphaBridgeFetches.back().slot == slot && alphaBridgeFetches.back().bank == bank)
+                            alphaBridgeFetches.back().slot == slot && alphaBridgeFetches.back().bank == bank) {
                             alphaBridgeFetches.back().substitution = temporalDisplay ? "temporal_display" :
                                 bloomFiltered ? "bloom_prefilter" : hdrBinding ? "hdr_temporal" : "none";
+                            alphaBridgeFetches.back().samplerKey = samplerKey;
+                            alphaBridgeFetches.back().prefilterOutput =
+                                bloomFiltered ? bloomFiltered->texture.get() : nullptr;
+                            alphaBridgeFetches.back().prefilterSourceIsReturnedColor =
+                                bloomFiltered && !temporalDisplay &&
+                                bloomPrefilterInput == alphaBridgeFetches.back().returnedColor;
+                        }
 #endif
                         if (selectedBinding) {
                             selectedBinding->bank = bank;
@@ -6001,14 +6166,64 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     fsr_alpha::FetchCandidate candidate{};
                     const char* reason = "no_resolved_parent";
                     if (!unchanged) reason = "bound_image_substituted";
-                    else if (request.destinationAllocation && request.writeOrdinal) {
+                    if (request.destinationAllocation && request.writeOrdinal &&
+                         (unchanged || (fsrAlphaPostprocess && request.slot == 0 && request.bank == 0 &&
+                             request.prefilterSourceIsReturnedColor &&
+                             bound == request.prefilterOutput &&
+                             std::strcmp(substitution, "bloom_prefilter") == 0))) {
                         candidate = fsrAlphaBridge->RecordFetchView(commandList, frame, temporalEpoch,
                             request.address,
                             request.resolveFormat, request.destinationAllocation, request.writeOrdinal,
                             request.returnedColor, request.cropWidth, request.cropHeight,
                             Gpu().fsrAlphaBridgeUses);
-                        reason = candidate.Matches(bound) ? "available" : candidate.reason;
+                        if (candidate && !unchanged && request.parentWidth == request.cropWidth &&
+                            request.parentHeight == request.cropHeight &&
+                            fsr_alpha::Contains(candidate.version.validRect,
+                                {0, 0, request.cropWidth, request.cropHeight})) {
+                            auto* areaSet = AcquireSet(1);
+                            areaSet->setTexture(0, candidate.mask->texture.get(), RenderTextureLayout::SHADER_READ);
+                            RenderDescriptorSet* areaSets[] = {staticSet0.get(), areaSet,
+                                AcquireSet(2), AcquireSet(3), staticSamplerSet.get()};
+                            auto area = fsrAlphaPostprocess->AreaMaximum(commandList, candidate.mask,
+                                areaSets, 5, Gpu().fsrAlphaBridgeUses);
+                            if (area) {
+                                if (FsrAlphaBridgeTraceEnabled() && fsrAlphaBridgeTraceCount < 128) {
+                                    auto evidence = std::make_shared<FsrAlphaBridgeDiagnostic>();
+                                    evidence->writeOrdinal = request.writeOrdinal;
+                                    evidence->fields = fmt::format(
+                                        "\"kind\":\"host_bloom_prefilter\",\"status\":\"available\","
+                                        "\"source_color_image\":{},\"source_mask_image\":{},"
+                                        "\"source_extent\":[{},{}],\"source_valid_rect\":[{},{},{},{}],"
+                                        "\"source_allocation\":{},\"source_revision\":{},"
+                                        "\"output_color_image\":{},\"output_mask_image\":{},"
+                                        "\"output_extent\":[1280,720]",
+                                        uintptr_t(request.returnedColor), uintptr_t(candidate.mask->texture.get()),
+                                        candidate.cropWidth, candidate.cropHeight,
+                                        candidate.version.validRect.x, candidate.version.validRect.y,
+                                        candidate.version.validRect.width, candidate.version.validRect.height,
+                                        candidate.version.sourceAllocation, candidate.version.sourceRevision,
+                                        uintptr_t(bound), uintptr_t(area->texture.get()));
+                                    TraceFsrAlphaBridge(evidence);
+                                    QueueFsrAlphaSnapshot(evidence, "prefilter-input-mask",
+                                        candidate.mask->texture.get(), RenderFormat::R8_UNORM,
+                                        candidate.cropWidth, candidate.cropHeight, 1,
+                                        RenderTextureLayout::SHADER_READ);
+                                    QueueFsrAlphaSnapshot(evidence, "prefilter-output-mask",
+                                        area->texture.get(), RenderFormat::R8_UNORM,
+                                        1280, 720, 1, RenderTextureLayout::SHADER_READ);
+                                }
+                                candidate.mask = std::move(area);
+                                candidate.returnedColor = bound;
+                                candidate.cropWidth = 1280; candidate.cropHeight = 720;
+                            }
+                        }
+                        reason = candidate.Matches(bound) ? "available" :
+                            unchanged ? candidate.reason : "unmatched_host_prefilter";
                     }
+                    if (request.bank == 0 && request.slot < alphaPostInputs.size() &&
+                        candidate.Matches(bound))
+                        alphaPostInputs[request.slot] = AlphaPostInput{candidate, request.samplerKey,
+                            bound, substitution};
                     if (FsrAlphaBridgeTraceEnabled() && fsrAlphaBridgeTraceCount < 128) {
                         auto event = std::make_shared<FsrAlphaBridgeDiagnostic>();
                         event->writeOrdinal = request.writeOrdinal;
@@ -6504,7 +6719,14 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     color->width == depth->width && color->height == depth->height &&
                     rasterViewport.x == 0 && rasterViewport.y == 0 &&
                     rasterViewport.width > 0 && rasterViewport.height > 0 &&
-                    rasterViewport.width <= color->width && rasterViewport.height <= color->height) {
+                    rasterViewport.x >= 0 && rasterViewport.y >= 0 &&
+                    rasterViewport.width > 0 && rasterViewport.height > 0 &&
+                    std::floor(rasterViewport.x) == rasterViewport.x &&
+                    std::floor(rasterViewport.y) == rasterViewport.y &&
+                    std::floor(rasterViewport.width) == rasterViewport.width &&
+                    std::floor(rasterViewport.height) == rasterViewport.height &&
+                    rasterViewport.x + rasterViewport.width <= color->width &&
+                    rasterViewport.y + rasterViewport.height <= color->height) {
                     const auto alphaDesc = DescribePipeline(key, vs, ps, false);
                     if (alphaDesc.depthEnabled && !alphaDesc.depthWriteEnabled &&
                         alphaDesc.depthFunction == RenderComparisonFunction::GREATER_EQUAL &&
@@ -6572,17 +6794,340 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         }
                     }
                 }
+                bool alphaPostprocessRecorded = false;
+                const char* alphaPostprocessReason = "state_guard";
+                if (fsrAlphaPostprocess && fsrAlphaBridge && dlssSrRequested &&
+                    !scenePromotionActivated && color && ps &&
+                    activePlan.requestedUpscaler == upscaling::Upscaler::Fsr &&
+                    fsr_alpha::AuditedPostprocessPair(key.vs, key.ps) &&
+                    info.primitiveType == 4 && info.indexed && indexCount == 6 && indices.size() >= 6 &&
+                    slot95Bound && slot95ArenaOffset != UINT64_MAX &&
+                    (key.colorMask & 7u) == 7u && !(shared.flags & 31u) &&
+                    !vs->info.usesPointSize && vs->info.errors.empty() &&
+                    !ps->info.writesDepth && ps->info.errors.empty() &&
+                    (ps->info.colorTargetsWritten & 1u) &&
+                    rasterViewport.width <= color->width && rasterViewport.height <= color->height) {
+                    const auto postDesc = DescribePipeline(key, vs, ps, false);
+                    float positions[24]{};
+                    bool vertexRange = true;
+                    const uint8_t* arenaBase = arenaMapped + slot95ArenaOffset;
+                    for (unsigned i = 0; i < 6; ++i) {
+                        const int64_t vertex = int64_t(indices[i]) + int64_t(baseVertex);
+                        if (vertex < 0 || uint64_t(vertex) > (UINT64_MAX - 24) / 32 ||
+                            uint64_t(vertex) * 32 + 24 > slot95StreamBytes ||
+                            slot95ArenaOffset + uint64_t(vertex) * 32 + 24 > gpu::render_arena::kVertexArenaSize) {
+                            vertexRange = false; break;
+                        }
+                        std::memcpy(&positions[i * 4], arenaBase + uint64_t(vertex) * 32, 16);
+                    }
+                    const bool fullQuad = vertexRange && color_qualification::CheckQuadCoverage(
+                        positions, rasterViewport.x, rasterViewport.y, rasterViewport.width,
+                        rasterViewport.height, scissor.left, scissor.top, scissor.right, scissor.bottom,
+                        shared.ndcScale, shared.ndcOffset, shared.halfPixel).ok;
+                    const auto psFloat = [&](unsigned constant, unsigned component) {
+                        return std::bit_cast<float>(psConstants[constant * 4 + component]);
+                    };
+                    const bool tone = key.ps == 0xb4b4d54a7a2d6b96ull;
+                    const bool needDof = tone && (psFloat(6, 0) != 0.0f ||
+                        psFloat(6, 1) != 0.0f || psFloat(6, 2) != 0.0f);
+                    const bool needBloom = tone && psFloat(7, 0) != 0.0f;
+                    const bool completeInputs = alphaPostInputs[0].has_value() &&
+                        (!needDof || alphaPostInputs[2].has_value()) &&
+                        (!needBloom || alphaPostInputs[3].has_value()) &&
+                        (!tone || (alphaPostDepth && alphaPostDepth->texture == textureBindings[0][1] &&
+                            alphaPostDepth->format == RenderFormat::R32_FLOAT));
+                    if (!completeInputs) alphaPostprocessReason = "input_unavailable";
+                    uint32_t pointSlots = 0;
+                    bool samplerSupported = completeInputs;
+                    for (unsigned slot : {0u, 2u, 3u}) {
+                        if (slot != 0 && !tone) continue;
+                        if (slot == 2 && !needDof) continue;
+                        if (slot == 3 && !needBloom) continue;
+                        if (!alphaPostInputs[slot]) continue;
+                        // GetSamplerIndex falls back to palette slot zero when
+                        // exhausted. The shader samples that actual slot, so
+                        // never infer its footprint from the requested key.
+                        const auto palette = samplerPalette.find(alphaPostInputs[slot]->samplerKey);
+                        if (palette == samplerPalette.end() ||
+                            palette->second != shared.samplerIndex[slot]) {
+                            samplerSupported = false;
+                            continue;
+                        }
+                        const auto footprint = fsr_alpha::LOD0ClampFootprint(
+                            alphaPostInputs[slot]->samplerKey, true);
+                        if (footprint == fsr_alpha::SamplerFootprint::Unsupported)
+                            samplerSupported = false;
+                        else if (footprint == fsr_alpha::SamplerFootprint::Point)
+                            pointSlots |= 1u << slot;
+                    }
+                    if (fullQuad && !postDesc.depthEnabled && !postDesc.stencilEnabled &&
+                        !postDesc.geometryShader && postDesc.cullMode == RenderCullMode::NONE &&
+                        !postDesc.renderTargetBlend[0].blendEnabled &&
+                        samplerSupported) {
+                        alphaPostprocessReason = "shader_pending";
+                        auto* maskPipeline = fsrAlphaPostprocess->Prepare(key, pointSlots, postDesc,
+                            vs->info, ps->info, vsWords, vsCount, psWords, psCount);
+                        if (!maskPipeline && !fsrAlphaPostprocess->LastError().empty())
+                            alphaPostprocessReason = "shader_or_pipeline_failed";
+                        if (maskPipeline) {
+                            TextureSetCache::Key maskBindings[3] = {
+                                textureBindings[0], textureBindings[1], textureBindings[2]};
+                            for (unsigned slot : {0u, 2u, 3u}) {
+                                if (slot != 0 && !tone) continue;
+                                if (slot == 2 && !needDof) continue;
+                                if (slot == 3 && !needBloom) continue;
+                                auto& input = *alphaPostInputs[slot];
+                                Gpu().fsrAlphaBridgeUses.push_back(input.fetch.mask);
+                                maskBindings[0][slot] = input.fetch.mask->texture.get();
+                            }
+                            auto* maskSet1 = AcquireTextureSet(1, maskBindings[0], activeTextureSlots[0]);
+                            auto* maskSet2 = AcquireTextureSet(2, maskBindings[1], activeTextureSlots[1]);
+                            auto* maskSet3 = AcquireTextureSet(3, maskBindings[2], activeTextureSlots[2]);
+                            const RenderBufferReference maskConstants[3] = {
+                                {uploadRing, vsOffset}, {uploadRing, sharedOffset}, {uploadRing, psOffset}};
+                            RenderDescriptorSet* maskSets[] = {set0, maskSet1, maskSet2,
+                                maskSet3, staticSamplerSet.get()};
+                            std::shared_ptr<FsrAlphaBridgeDiagnostic> postEvidence;
+                            if (FsrAlphaBridgeTraceEnabled() && fsrAlphaBridgeTraceCount < 128) {
+                                postEvidence = std::make_shared<FsrAlphaBridgeDiagnostic>();
+                                postEvidence->writeOrdinal = drawsThisFrame;
+                                auto& fields = postEvidence->fields;
+                                fields = fmt::format(
+                                    "\"kind\":\"postprocess_draw\",\"status\":\"recording\","
+                                    "\"vs_hash\":\"{:016x}\",\"ps_hash\":\"{:016x}\","
+                                    "\"draw_ordinal\":{},\"geometry_epoch\":{},"
+                                    "\"color_allocation\":{},"
+                                    "\"output_extent\":[{},{}],\"primitive\":{},"
+                                    "\"actual_topology\":\"TRIANGLE_LIST\",\"indexed\":true,"
+                                    "\"index_count\":{},\"base_vertex\":{},"
+                                    "\"viewport\":[{},{},{},{},{},{}],"
+                                    "\"scissor\":[{},{},{},{}],\"blend\":{},\"color_mask\":{},"
+                                    "\"shared_flags\":{},\"point_slots\":{}",
+                                    key.vs, key.ps, drawsThisFrame, temporalEpoch, color->allocationSerial,
+                                    color->width, color->height, info.primitiveType,
+                                    indexCount, baseVertex, rasterViewport.x, rasterViewport.y,
+                                    rasterViewport.width, rasterViewport.height,
+                                    rasterViewport.minDepth, rasterViewport.maxDepth,
+                                    scissor.left, scissor.top, scissor.right, scissor.bottom,
+                                    key.blend, key.colorMask, shared.flags, pointSlots);
+                                const auto appendWords = [&](const char* name, const uint32_t* words, size_t count) {
+                                    fields += fmt::format(",\"{}\":[", name);
+                                    for (size_t i = 0; i < count; ++i) {
+                                        if (i) fields += ',';
+                                        fields += std::to_string(words[i]);
+                                    }
+                                    fields += ']';
+                                };
+                                appendWords("vs_c0_c7_u32x4", vsConstants, 32);
+                                appendWords("ps_c0_c15_u32x4", psConstants, 64);
+                                appendWords("ps_c255_u32x4", psConstants + 255 * 4, 4);
+                                const uint32_t ndcScaleBits[4] = {
+                                    std::bit_cast<uint32_t>(shared.ndcScale[0]),
+                                    std::bit_cast<uint32_t>(shared.ndcScale[1]),
+                                    std::bit_cast<uint32_t>(shared.ndcScale[2]),
+                                    std::bit_cast<uint32_t>(shared.ndcScale[3])};
+                                const uint32_t ndcOffsetBits[4] = {
+                                    std::bit_cast<uint32_t>(shared.ndcOffset[0]),
+                                    std::bit_cast<uint32_t>(shared.ndcOffset[1]),
+                                    std::bit_cast<uint32_t>(shared.ndcOffset[2]),
+                                    std::bit_cast<uint32_t>(shared.ndcOffset[3])};
+                                const uint32_t halfPixelBits[2] = {
+                                    std::bit_cast<uint32_t>(shared.halfPixel[0]),
+                                    std::bit_cast<uint32_t>(shared.halfPixel[1])};
+                                appendWords("ndc_scale_u32", ndcScaleBits, 4);
+                                appendWords("ndc_offset_u32", ndcOffsetBits, 4);
+                                appendWords("half_pixel_u32", halfPixelBits, 2);
+                                fields += fmt::format(",\"vtx_fmt\":{}", shared.vtxFmt);
+                                appendWords("shared_texture_size_u32", shared.textureSize, 4);
+                                appendWords("shared_texture_info_u32", shared.textureInfo, 4);
+                                fields += ",\"vertices_in_index_order\":[";
+                                for (unsigned i = 0; i < 6; ++i) {
+                                    if (i) fields += ',';
+                                    const int64_t vertex = int64_t(indices[i]) + int64_t(baseVertex);
+                                    float attributes[6]{};
+                                    std::memcpy(attributes, arenaBase + uint64_t(vertex) * 32, sizeof(attributes));
+                                    fields += fmt::format("{{\"index\":{},\"clip_position_bits\":[{},{},{},{}],"
+                                        "\"base_uv_bits\":[{},{}]}}", vertex,
+                                        std::bit_cast<uint32_t>(attributes[0]), std::bit_cast<uint32_t>(attributes[1]),
+                                        std::bit_cast<uint32_t>(attributes[2]), std::bit_cast<uint32_t>(attributes[3]),
+                                        std::bit_cast<uint32_t>(attributes[4]), std::bit_cast<uint32_t>(attributes[5]));
+                                }
+                                fields += "],\"inputs\":[";
+                                bool firstInput = true;
+                                const auto paletteKey = [&](uint32_t index) {
+                                    for (const auto& [candidateKey, paletteIndex] : samplerPalette)
+                                        if (paletteIndex == index) return candidateKey;
+                                    return uint64_t(0);
+                                };
+                                for (unsigned slot : {0u, 2u, 3u}) {
+                                    if (!alphaPostInputs[slot] || (slot == 2 && !needDof) ||
+                                        (slot == 3 && !needBloom)) continue;
+                                    const auto& input = *alphaPostInputs[slot];
+                                    if (!firstInput) fields += ',';
+                                    firstInput = false;
+                                    fields += fmt::format(
+                                        "{{\"slot\":{},\"sampler_key\":{},\"sampler_index\":{},"
+                                        "\"effective_sampler_key\":{},\"mip_levels\":1,"
+                                        "\"texture_size\":{},"
+                                        "\"texture_info\":{},\"actual_color_image\":{},"
+                                        "\"mask_image\":{},\"source_allocation\":{},"
+                                        "\"source_revision\":{},\"source_stage\":{},"
+                                        "\"valid_rect\":[{},{},{},{}],\"crop\":[{},{}],"
+                                        "\"substitution\":\"{}\"}}",
+                                        slot, input.samplerKey, shared.samplerIndex[slot],
+                                        paletteKey(shared.samplerIndex[slot]),
+                                        shared.textureSize[slot], shared.textureInfo[slot],
+                                        uintptr_t(input.actualColor), uintptr_t(input.fetch.mask->texture.get()),
+                                        input.fetch.version.sourceAllocation,
+                                        input.fetch.version.sourceRevision,
+                                        uint32_t(input.fetch.version.sourceStage),
+                                        0, 0, input.fetch.cropWidth, input.fetch.cropHeight,
+                                        input.fetch.cropWidth, input.fetch.cropHeight, input.substitution);
+                                }
+                                if (tone && alphaPostDepth) {
+                                    if (!firstInput) fields += ',';
+                                    fields += fmt::format(
+                                        "{{\"slot\":1,\"role\":\"actual_depth\","
+                                        "\"sampler_key\":{},\"sampler_index\":{},"
+                                        "\"effective_sampler_key\":{},\"mip_levels\":1,"
+                                        "\"texture_size\":{},"
+                                        "\"texture_info\":{},\"image\":{},"
+                                        "\"format\":{},\"extent\":[{},{}]}}",
+                                        alphaPostDepth->samplerKey, shared.samplerIndex[1],
+                                        paletteKey(shared.samplerIndex[1]),
+                                        shared.textureSize[1], shared.textureInfo[1],
+                                        uintptr_t(alphaPostDepth->texture), uint32_t(alphaPostDepth->format),
+                                        alphaPostDepth->width, alphaPostDepth->height);
+                                }
+                                fields += ']';
+                                TraceFsrAlphaBridge(postEvidence);
+                                for (unsigned slot : {0u, 2u, 3u}) {
+                                    if (!alphaPostInputs[slot] || (slot == 2 && !needDof) ||
+                                        (slot == 3 && !needBloom)) continue;
+                                    const auto& input = *alphaPostInputs[slot];
+                                    const auto label = fmt::format("input-t{}-mask", slot);
+                                    QueueFsrAlphaSnapshot(postEvidence, label.c_str(),
+                                        input.fetch.mask->texture.get(), RenderFormat::R8_UNORM,
+                                        input.fetch.cropWidth, input.fetch.cropHeight, 1,
+                                        RenderTextureLayout::SHADER_READ);
+                                }
+                                if (tone && alphaPostDepth)
+                                    QueueFsrAlphaSnapshot(postEvidence, "input-t1-depth",
+                                        alphaPostDepth->texture, RenderFormat::R32_FLOAT,
+                                        alphaPostDepth->width, alphaPostDepth->height, 4,
+                                        RenderTextureLayout::SHADER_READ);
+                                const uint32_t colorBpp = color->format == RenderFormat::R8G8B8A8_UNORM ? 4u :
+                                    color->format == RenderFormat::R16G16B16A16_FLOAT ? 8u : 0u;
+                                if (colorBpp)
+                                    QueueFsrAlphaSnapshot(postEvidence, "original-color-before", color->texture.get(),
+                                        color->format, color->width, color->height, colorBpp, color->layout);
+                                if (depth && depth->format == RenderFormat::D32_FLOAT_S8_UINT)
+                                    QueueFsrAlphaSnapshot(postEvidence, "original-depth-before", depth->texture.get(),
+                                        RenderFormat::R32_FLOAT, depth->width, depth->height, 4, depth->layout);
+                            }
+                            auto mask = fsrAlphaPostprocess->Draw(commandList, maskPipeline,
+                                color->width, color->height, maskConstants, maskSets, 5,
+                                rasterViewport, scissor, useIndices, indexCount, baseVertex,
+                                 Gpu().fsrAlphaBridgeUses);
+                            if (postEvidence) {
+                                postEvidence->fields += fmt::format(",\"recorded\":{}",
+                                    mask ? "true" : "false");
+                                if (mask) QueueFsrAlphaSnapshot(postEvidence, "output-mask",
+                                    mask->texture.get(), RenderFormat::R8_UNORM,
+                                    color->width, color->height, 1, RenderTextureLayout::SHADER_READ);
+                                const uint32_t colorBpp = color->format == RenderFormat::R8G8B8A8_UNORM ? 4u :
+                                    color->format == RenderFormat::R16G16B16A16_FLOAT ? 8u : 0u;
+                                if (colorBpp)
+                                    QueueFsrAlphaSnapshot(postEvidence, "original-color-after", color->texture.get(),
+                                        color->format, color->width, color->height, colorBpp, color->layout);
+                                if (depth && depth->format == RenderFormat::D32_FLOAT_S8_UINT)
+                                    QueueFsrAlphaSnapshot(postEvidence, "original-depth-after", depth->texture.get(),
+                                        RenderFormat::R32_FLOAT, depth->width, depth->height, 4, depth->layout);
+                            }
+                            if (mask) {
+                                fsr_alpha::SourceMask source{};
+                                source.frame = frame; source.epoch = temporalEpoch;
+                                source.colorAllocation = color->allocationSerial;
+                                source.revision = drawsThisFrame;
+                                source.width = color->width; source.height = color->height;
+                                source.validRect = {uint32_t(rasterViewport.x), uint32_t(rasterViewport.y),
+                                    uint32_t(rasterViewport.width),
+                                    uint32_t(rasterViewport.height)};
+                                source.stage = key.ps == 0x7c260eacff1d681dull ?
+                                    fsr_alpha::SourceStage::Downsample :
+                                    key.ps == 0x53dd5d081c7945cfull ? fsr_alpha::SourceStage::Dof :
+                                    key.ps == 0xee90000c755c0472ull ? fsr_alpha::SourceStage::Bloom :
+                                     fsr_alpha::SourceStage::Tonemap;
+                                if (postEvidence) postEvidence->fields += fmt::format(
+                                    ",\"source_revision\":{},\"source_stage\":{},"
+                                    "\"published_valid_rect\":[{},{},{},{}],\"output_mask_image\":{}",
+                                    source.revision, uint32_t(source.stage),
+                                    source.validRect.x, source.validRect.y,
+                                    source.validRect.width, source.validRect.height,
+                                    uintptr_t(mask->texture.get()));
+                                source.mask = std::move(mask);
+                                fsrAlphaBridge->PublishPostprocess(std::move(source));
+                                alphaPostprocessRecorded = fsrAlphaBridge->CurrentSource(
+                                    color->allocationSerial, frame, temporalEpoch) != nullptr;
+                                alphaPostprocessReason = alphaPostprocessRecorded ? "available" : "publish_rejected";
+                                if (postEvidence) postEvidence->fields += fmt::format(
+                                    ",\"published\":{}", alphaPostprocessRecorded ? "true" : "false");
+                            }
+                            else alphaPostprocessReason = "mask_draw_failed";
+                            commandList->setFramebuffer(framebuffer);
+                            commandList->setViewports(&rasterViewport, 1);
+                            commandList->setScissors(&scissor, 1);
+                            commandList->setGraphicsPipelineLayout(pipelineLayout.get());
+                            commandList->setPipeline(pipeline);
+                            commandList->setGraphicsPushConstants(0, constantAddresses);
+                            commandList->setGraphicsDescriptorSet(set0, 0);
+                            commandList->setGraphicsDescriptorSet(set1, 1);
+                            commandList->setGraphicsDescriptorSet(set2, 2);
+                            commandList->setGraphicsDescriptorSet(set3, 3);
+                            commandList->setGraphicsDescriptorSet(staticSamplerSet.get(), 4);
+                        }
+                    }
+                    else if (!fullQuad) alphaPostprocessReason = "quad_unavailable";
+                    else if (!samplerSupported) alphaPostprocessReason = "sampler_unavailable";
+                    else if (postDesc.depthEnabled) alphaPostprocessReason = "depth_enabled";
+                    else if (postDesc.stencilEnabled) alphaPostprocessReason = "stencil_enabled";
+                    else if (postDesc.geometryShader) alphaPostprocessReason = "geometry_shader";
+                    else if (postDesc.cullMode != RenderCullMode::NONE)
+                        alphaPostprocessReason = "cull_enabled";
+                    else if (postDesc.renderTargetBlend[0].blendEnabled)
+                        alphaPostprocessReason = "blend_enabled";
+                    else alphaPostprocessReason = "pipeline_state_unavailable";
+                }
                 if (fsrAlphaBridge && activePlan.requestedUpscaler == upscaling::Upscaler::Fsr &&
                     color && ps && (ps->info.colorTargetsWritten & 1u) && (key.colorMask & 7)) {
-                    if (!alphaReplayRecorded)
+                    if (!alphaReplayRecorded && !alphaPostprocessRecorded)
                         HandleFsrAlphaRgbWriter(*color, "unreplayed_rgb_draw", drawsThisFrame,
                             key.vs, key.ps, key.blend, key.colorMask,
                             fsr_alpha::RetainsRawAfterAuditedLocalBlend(key.vs, key.ps,
                                 key.blend, key.colorMask, (colorInfo >> 16) & 0xF,
                                 color->format == RenderFormat::R16G16B16A16_FLOAT,
                                 shared.flags, getenv("LO_NO_BLEND") != nullptr));
-                    if (fsr_alpha::AuditedPostprocessPs(key.ps))
+                    if (fsr_alpha::AuditedPostprocessPs(key.ps) && !alphaPostprocessRecorded)
                         fsrAlphaBridge->MarkUnsupportedPostprocess(color->allocationSerial);
+                    if (fsr_alpha::AuditedPostprocessPs(key.ps) && !alphaPostprocessRecorded &&
+                        FsrAlphaBridgeTraceEnabled() && fsrAlphaBridgeTraceCount < 128) {
+                        auto event = std::make_shared<FsrAlphaBridgeDiagnostic>();
+                        event->writeOrdinal = drawsThisFrame;
+                        event->fields = fmt::format(
+                            "\"kind\":\"postprocess_draw\",\"status\":\"unavailable\","
+                            "\"reason\":\"{}\",\"vs_hash\":\"{:016x}\","
+                            "\"ps_hash\":\"{:016x}\",\"draw_ordinal\":{},"
+                            "\"geometry_epoch\":{},\"color_allocation\":{},"
+                            "\"primitive\":{},\"indexed\":{},\"index_count\":{},"
+                            "\"vfetch95_bound\":{},\"color_mask\":{},"
+                            "\"shared_flags\":{},\"ps_writes_depth\":{}",
+                            alphaPostprocessReason, key.vs, key.ps, drawsThisFrame,
+                            temporalEpoch, color->allocationSerial, info.primitiveType,
+                            info.indexed ? "true" : "false", indexCount,
+                            slot95Bound ? "true" : "false", key.colorMask, shared.flags,
+                            ps->info.writesDepth ? "true" : "false");
+                        TraceFsrAlphaBridge(std::move(event));
+                    }
                 }
                 if (scenePromotionActivated)
                     RecordSceneCopyDlss(color, rasterTarget);

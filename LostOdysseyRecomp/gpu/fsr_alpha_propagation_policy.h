@@ -7,6 +7,18 @@ struct MaskRect {
     bool operator==(const MaskRect&) const = default;
 };
 
+enum class SamplerFootprint : uint8_t { Unsupported, Point, Linear };
+inline SamplerFootprint LOD0ClampFootprint(uint64_t samplerKey, bool singleMip) {
+    const uint32_t mag = samplerKey & 3u, min = (samplerKey >> 2) & 3u;
+    const uint32_t addressU = (samplerKey >> 6) & 7u;
+    const uint32_t addressV = (samplerKey >> 9) & 7u;
+    const auto clamp = [](uint32_t mode) { return mode == 2u || mode == 4u; };
+    if (!singleMip || !clamp(addressU) || !clamp(addressV) ||
+        (samplerKey & (1ull << 15)) || (mag == 0) != (min == 0))
+        return SamplerFootprint::Unsupported;
+    return mag == 0 ? SamplerFootprint::Point : SamplerFootprint::Linear;
+}
+
 inline bool Contains(MaskRect outer, MaskRect inner) {
     return inner.width && inner.height && inner.x >= outer.x && inner.y >= outer.y &&
         uint64_t(inner.x) + inner.width <= uint64_t(outer.x) + outer.width &&

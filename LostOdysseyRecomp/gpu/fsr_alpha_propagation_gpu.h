@@ -17,6 +17,12 @@ inline bool AuditedPostprocessPs(uint64_t hash) {
     return hash == 0x7c260eacff1d681dull || hash == 0x53dd5d081c7945cfull ||
         hash == 0xee90000c755c0472ull || hash == 0xb4b4d54a7a2d6b96ull;
 }
+inline bool AuditedPostprocessPair(uint64_t vs, uint64_t ps) {
+    return (vs == 0x2f6bbed8149a7804ull &&
+            (ps == 0x7c260eacff1d681dull || ps == 0x53dd5d081c7945cfull)) ||
+        (vs == 0xd1b241c74103b6bfull && ps == 0xee90000c755c0472ull) ||
+        (vs == 0x9b81c55ca39bb529ull && ps == 0xb4b4d54a7a2d6b96ull);
+}
 
 struct MaskLease {
     std::unique_ptr<plume::RenderTexture> texture;
@@ -26,6 +32,19 @@ struct MaskLease {
     plume::RenderTextureLayout layout = plume::RenderTextureLayout::UNKNOWN;
 };
 
+enum class SourceStage : uint8_t { Raw, Downsample, Dof, Bloom, Tonemap };
+
+// A postprocess output is identified by its own color allocation and draw
+// revision. It has no raw-scene depth, viewport or jitter identity.
+struct SourceMask {
+    uint64_t frame = 0, epoch = 0, colorAllocation = 0, revision = 0;
+    uint32_t width = 0, height = 0;
+    MaskRect validRect{};
+    SourceStage stage = SourceStage::Raw;
+    std::shared_ptr<MaskLease> mask;
+    explicit operator bool() const { return frame && colorAllocation && mask && mask->texture; }
+};
+
 struct ResolveVersion {
     uint64_t frame = 0, epoch = 0, sourceAllocation = 0, destinationAllocation = 0;
     uint64_t writeOrdinal = 0;
@@ -33,6 +52,8 @@ struct ResolveVersion {
     MaskRect validRect{};
     FrameIdentity rawIdentity{};
     uint32_t rawDraws = 0;
+    uint64_t sourceRevision = 0;
+    SourceStage sourceStage = SourceStage::Raw;
     std::shared_ptr<MaskLease> mask;
     explicit operator bool() const { return mask && mask->texture && writeOrdinal; }
 };
@@ -69,6 +90,15 @@ struct FetchCandidate {
     }
 };
 
+struct SceneCopyMask {
+    uint64_t frame = 0, epoch = 0, colorOrdinal = 0, sourceWriteOrdinal = 0;
+    uint64_t sourceAllocation = 0;
+    uint32_t width = 0, height = 0;
+    plume::RenderTexture* capturedColor = nullptr;
+    std::shared_ptr<MaskLease> mask;
+    explicit operator bool() const { return frame && colorOrdinal && capturedColor && mask; }
+};
+
 // A frame-local bridge for the first proven raw-alpha color resolve. Versions
 // are keyed by the actual guest destination and color allocation, not by a
 // mutable ResolvedSurface pointer or an address alone.
@@ -76,6 +106,8 @@ class PropagationGPU {
     plume::RenderDevice* device_ = nullptr;
     uint64_t frame_ = ~0ull, epoch_ = 0;
     std::vector<FrameView> raw_;
+    std::map<uint64_t, SourceMask> sources_;
+    SceneCopyMask sceneCopy_{};
     std::map<std::pair<uint32_t, uint32_t>, ResolveVersion> resolved_;
     std::map<std::pair<uint32_t, uint32_t>, const char*> unavailable_;
     std::map<uint64_t, const char*> unavailableRawSources_;
@@ -92,29 +124,67 @@ public:
         frame_ = frame; epoch_ = epoch; Invalidate();
     }
     void Invalidate() {
-        raw_.clear(); resolved_.clear(); unavailable_.clear(); unavailableRawSources_.clear();
+        raw_.clear(); sources_.clear(); sceneCopy_ = {};
+        resolved_.clear(); unavailable_.clear(); unavailableRawSources_.clear();
     }
     void DiscardUnsubmitted() { Invalidate(); }
     void PublishRaw(FrameView view) {
         if (!view || view.identity.renderFrame != frame_ || view.identity.geometryEpoch != epoch_) return;
         if (unavailableRawSources_.contains(view.identity.colorAllocation)) return;
+        // A later audited raw write supersedes a prior full-screen stage on
+        // this same guest color allocation. Resolves must consume the newest
+        // producer, not the older stage just because it has higher priority.
+        sources_.erase(view.identity.colorAllocation);
         for (auto& old : raw_) if (old.identity == view.identity) { old = std::move(view); return; }
         raw_.push_back(std::move(view));
     }
+    void PublishPostprocess(SourceMask source) {
+        if (!source || source.frame != frame_ || source.epoch != epoch_ ||
+            !source.width || !source.height ||
+            !Contains({0, 0, source.width, source.height}, source.validRect)) return;
+        raw_.erase(std::remove_if(raw_.begin(), raw_.end(), [&](const FrameView& view) {
+            return view.identity.colorAllocation == source.colorAllocation;
+        }), raw_.end());
+        unavailableRawSources_.erase(source.colorAllocation);
+        sources_[source.colorAllocation] = std::move(source);
+    }
+    const SourceMask* CurrentSource(uint64_t colorAllocation, uint64_t frame, uint64_t epoch) const {
+        if (frame != frame_ || epoch != epoch_) return nullptr;
+        const auto found = sources_.find(colorAllocation);
+        return found != sources_.end() && found->second.frame == frame && found->second.epoch == epoch ?
+            &found->second : nullptr;
+    }
+    bool FreezeForSceneCopy(const FetchCandidate& fetched, plume::RenderTexture* actualSource,
+        plume::RenderTexture* capturedColor, uint64_t frame, uint64_t epoch,
+        uint64_t colorOrdinal, uint32_t width, uint32_t height) {
+        sceneCopy_ = {};
+        if (frame != frame_ || epoch != epoch_ || !colorOrdinal || !capturedColor ||
+            !fetched.Matches(actualSource) || fetched.cropWidth != width ||
+            fetched.cropHeight != height ||
+            !Contains(fetched.version.validRect, {0, 0, width, height})) return false;
+        sceneCopy_ = {frame, epoch, colorOrdinal, fetched.version.writeOrdinal,
+            fetched.version.sourceAllocation, width, height, capturedColor, fetched.mask};
+        return true;
+    }
+    SceneCopyMask SceneCopy() const { return sceneCopy_; }
     bool HasEvidence() const {
-        return !raw_.empty() || !resolved_.empty() || !unavailableRawSources_.empty();
+        return !raw_.empty() || !sources_.empty() || !resolved_.empty() || !unavailableRawSources_.empty();
     }
     bool HasRawSource(uint64_t colorAllocation) const {
         return std::any_of(raw_.begin(), raw_.end(), [&](const FrameView& view) {
             return view.identity.colorAllocation == colorAllocation;
         });
     }
+    bool HasCurrentSource(uint64_t colorAllocation) const {
+        return HasRawSource(colorAllocation) || sources_.contains(colorAllocation);
+    }
     // An RGB write after a raw replay makes that source snapshot stale. Keep
     // the rejection for this frame: a later replay cannot reconstruct the
     // missing contribution from the intervening draw or clear.
     bool InvalidateRawSource(uint64_t colorAllocation) {
-        if (!HasRawSource(colorAllocation)) return false;
+        if (!HasCurrentSource(colorAllocation)) return false;
         unavailableRawSources_[colorAllocation] = "source_written_after_raw";
+        sources_.erase(colorAllocation);
         raw_.erase(std::remove_if(raw_.begin(), raw_.end(), [&](const FrameView& view) {
             return view.identity.colorAllocation == colorAllocation;
         }), raw_.end());
@@ -123,6 +193,7 @@ public:
     void MarkUnsupportedPostprocess(uint64_t colorAllocation) {
         if (!colorAllocation) return;
         unavailableRawSources_[colorAllocation] = "unsupported_postprocess";
+        sources_.erase(colorAllocation);
         raw_.erase(std::remove_if(raw_.begin(), raw_.end(), [&](const FrameView& view) {
             return view.identity.colorAllocation == colorAllocation;
         }), raw_.end());
@@ -145,8 +216,16 @@ public:
             !width || !height || !Contains({0, 0, width, height}, rect)) {
             out.reason = "invalid_resolve_identity_or_rect"; return out;
         }
+        const SourceMask* stage = CurrentSource(sourceAllocation, currentFrame, currentEpoch);
+        if (stage && (stage->width != sourceWidth || stage->height != sourceHeight ||
+            !Contains(stage->validRect, rect))) {
+            out.reason = "postprocess_source_rect_unavailable";
+            unavailable_[key] = out.reason;
+            return out;
+        }
         const FrameView* raw = nullptr;
-        for (const auto& view : raw_) if (view.identity.colorAllocation == sourceAllocation &&
+        for (const auto& view : raw_) if (!stage &&
+            view.identity.colorAllocation == sourceAllocation &&
             view.identity.width == sourceWidth && view.identity.height == sourceHeight &&
             view.identity.renderFrame == currentFrame && view.identity.geometryEpoch == currentEpoch) {
             if (raw && !(raw->identity == view.identity)) {
@@ -154,14 +233,15 @@ public:
             }
             raw = &view;
         }
-        if (!raw || !*raw || !Contains({0, 0, sourceWidth, sourceHeight}, rect)) {
+        if ((!stage && (!raw || !*raw)) ||
+            !Contains({0, 0, sourceWidth, sourceHeight}, rect)) {
             const auto blocked = unavailableRawSources_.find(sourceAllocation);
             out.reason = blocked == unavailableRawSources_.end() ?
                 "no_matching_raw_source" : blocked->second;
             unavailable_[key] = out.reason;
             return out;
         }
-        out.rawAtResolve = *raw;
+        if (raw) out.rawAtResolve = *raw;
         ResolveVersion next{};
         next.frame = frame_; next.epoch = epoch_;
         next.sourceAllocation = sourceAllocation;
@@ -169,10 +249,21 @@ public:
         next.writeOrdinal = writeOrdinal;
         next.address = address; next.format = format;
         next.width = width; next.height = height; next.validRect = rect;
-        next.rawIdentity = raw->identity; next.rawDraws = raw->auditedDraws;
+        if (raw) {
+            next.rawIdentity = raw->identity; next.rawDraws = raw->auditedDraws;
+            next.sourceRevision = raw->auditedDraws;
+        } else {
+            next.sourceRevision = stage->revision;
+            next.sourceStage = stage->stage;
+        }
         if (operation && std::strcmp(operation, "copy_reused") == 0) {
-            if (!CanRelabelReusedCopy(old, *raw, frame_, epoch_, sourceAllocation,
-                destinationAllocation, width, height, rect)) {
+            const bool sameSource = raw ? CanRelabelReusedCopy(old, *raw, frame_, epoch_,
+                sourceAllocation, destinationAllocation, width, height, rect) :
+                old && old.frame == frame_ && old.epoch == epoch_ &&
+                old.sourceAllocation == sourceAllocation && old.destinationAllocation == destinationAllocation &&
+                old.sourceRevision == stage->revision && old.sourceStage == stage->stage &&
+                old.width == width && old.height == height && old.validRect == rect;
+            if (!sameSource) {
                 out.reason = "copy_reuse_revision_mismatch"; return out;
             }
             next.mask = old.mask;
@@ -180,11 +271,15 @@ public:
             resolved_[key] = next;
             return out;
         }
-        if (!operation || std::strcmp(operation, "copy") != 0) {
+        // Renderer::BlitRegion uses src.Load(pixel) and the identical source and
+        // destination pixel coordinates. Only its format conversion changes.
+        if (!operation || (std::strcmp(operation, "copy") != 0 &&
+            std::strcmp(operation, "blit") != 0)) {
             out.reason = "unsupported_color_blit"; return out;
         }
         auto lease = std::make_shared<MaskLease>();
-        lease->rawSource = raw->lease;
+        if (raw) lease->rawSource = raw->lease;
+        else lease->parent = stage->mask;
         lease->texture = device_->createTexture(plume::RenderTextureDesc::Texture2D(
             width, height, 1, plume::RenderFormat::R8_UNORM, plume::RenderTextureFlag::RENDER_TARGET));
         if (lease->texture) {
@@ -200,16 +295,20 @@ public:
         commands->setFramebuffer(lease->clearFramebuffer.get());
         commands->clearColor(0, plume::RenderColor(0, 0, 0, 0));
         Transition(commands, *lease, plume::RenderTextureLayout::COPY_DEST, plume::RenderBarrierStage::COPY);
+        auto* sourceTexture = raw ? raw->texture : stage->mask->texture.get();
         commands->barriers(plume::RenderBarrierStage::COPY,
-            plume::RenderTextureBarrier(raw->texture, plume::RenderTextureLayout::COPY_SOURCE));
-        raw->lease->layout = plume::RenderTextureLayout::COPY_SOURCE;
+            plume::RenderTextureBarrier(sourceTexture, plume::RenderTextureLayout::COPY_SOURCE));
+        if (raw) raw->lease->layout = plume::RenderTextureLayout::COPY_SOURCE;
+        else stage->mask->layout = plume::RenderTextureLayout::COPY_SOURCE;
         plume::RenderBox box{int32_t(rect.x), int32_t(rect.y), int32_t(rect.x + rect.width),
             int32_t(rect.y + rect.height), 0, 1};
         commands->copyTextureRegion(plume::RenderTextureCopyLocation::Subresource(lease->texture.get()),
-            plume::RenderTextureCopyLocation::Subresource(raw->texture), rect.x, rect.y, 0, &box);
+            plume::RenderTextureCopyLocation::Subresource(sourceTexture), rect.x, rect.y, 0, &box);
         commands->barriers(plume::RenderBarrierStage::GRAPHICS,
-            plume::RenderTextureBarrier(raw->texture, plume::RenderTextureLayout::COLOR_WRITE));
-        raw->lease->layout = plume::RenderTextureLayout::COLOR_WRITE;
+            plume::RenderTextureBarrier(sourceTexture, raw ?
+                plume::RenderTextureLayout::COLOR_WRITE : plume::RenderTextureLayout::SHADER_READ));
+        if (raw) raw->lease->layout = plume::RenderTextureLayout::COLOR_WRITE;
+        else stage->mask->layout = plume::RenderTextureLayout::SHADER_READ;
         Transition(commands, *lease, plume::RenderTextureLayout::SHADER_READ, plume::RenderBarrierStage::GRAPHICS);
         next.mask = std::move(lease);
         out.version = next; out.reason = "available"; out.copied = true;

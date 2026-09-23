@@ -4,15 +4,15 @@
 
 ## 当前状态
 
-`IMP-P0-FIX2` 的探针专用门禁修复已落盘，run03 已使用冻结 EXE（SHA256 `36665711B5258A234DC29AD7266BFD5A26243FD998B285178A516CDBF95EA9D2`）运行。G006 的完整 P0 Gate 仍不通过，Oracle 初审剩余 2 次材料复审；G002 的 FSR SDK、renderer/runtime 接线已实现并提交为 `87a1691`，Windows/Linux 基础运行已验证；P1 可运行阶段已按原始通过条件完成并 checkpoint，G003 的 P2 正在实施；P0 Gate 与 P2–P4 仍未完成，主 ultragoal 仍覆盖至 P4。
+`IMP-P0-FIX2` 的探针专用门禁修复已落盘，run03 已使用冻结 EXE（SHA256 `36665711B5258A234DC29AD7266BFD5A26243FD998B285178A516CDBF95EA9D2`）运行。G006 的完整 P0 Gate 仍不通过，Oracle 初审剩余 2 次材料复审；G002 的 FSR SDK、renderer/runtime 接线已实现并提交为 `87a1691`，Windows/Linux 基础运行已验证，P1 已按原始通过条件验收完成；G003 的 P2 曾在本轮实施，当前随用户停止开发而暂停，P0 Gate 与 P2–P4 仍未完成。
 
 几何一致性小修 EXE SHA256 为 `C13BDC5E7ED8C73612388D79871770CCD4EB1ACE8232EE050FB74DC235C98398`，已用于 foreground01 和 background04；run03 使用的旧 `366657...` EXE 与证据保持不变。
 
 P0 探针修复范围限制为 `tools/tests/streamline_fg` 与 `cmake/LoStreamline.cmake`；独立 P1 接线涉及生产渲染代码。已有 CPU 4/4 和生产回归证据继续复用，仅重测受新改动影响的项目。
 
-用户已授权持续自主执行，native 工具现已确认 active，OMX 当前为 executing。Linux 依赖安装后，使用当时工作树 25 文件及 source manifest，在 psvita 隔离目录 `p0-cpu-01` 以现有 `CPU_ONLY` CMake 运行 4 项原 CPU 测试，4/4 通过；结果见 [`test-results.log`](../../out/streamline-fg-p0/linux-p0-cpu/test-results.log)、[`test-run.json`](../../out/streamline-fg-p0/linux-p0-cpu/test-run.json) 和 [`source-manifest.json`](../../out/streamline-fg-p0/linux-p0-cpu/source-manifest.json)。这不构成全量游戏构建、GPU 或 FSR 证据。
+此前用户曾授权持续自主执行，native 工具当时确认 active、OMX 当时为 executing。Linux 依赖安装后，使用当时工作树 25 文件及 source manifest，在 psvita 隔离目录 `p0-cpu-01` 以现有 `CPU_ONLY` CMake 运行 4 项原 CPU 测试，4/4 通过；结果见 [`test-results.log`](../../out/streamline-fg-p0/linux-p0-cpu/test-results.log)、[`test-run.json`](../../out/streamline-fg-p0/linux-p0-cpu/test-run.json) 和 [`source-manifest.json`](../../out/streamline-fg-p0/linux-p0-cpu/source-manifest.json)。这不构成全量游戏构建、GPU 或 FSR 证据。
 
-用户最新明确授权自主执行必要的前台运行，不再把前台许可列为等待项。foreground01 使用 C13 EXE 完成 48 帧，观察到 33 个 interval 的 `actual_presents=2`；release/shutdown API 成功，但 validation 仍为 46 条错误、exit1。background04 使用同一 C13 EXE，仍观察到 10 条 layout VUID。apidump01 使用 F474 EXE 完成 48 帧、52 条 validation、exit1；[`p0-api-layout-trace.md`](../../out/streamline-fg-p0/p0-api-layout-trace.md) 与 [`p0-api-input-trace.md`](../../out/streamline-fg-p0/p0-api-input-trace.md) 记录了 SDK 内部 WAW 及 pacer 缺失 transition。FG Gate 仍未通过，不能称为修复。
+此前用户曾明确授权自主执行必要的前台运行。foreground01 使用 C13 EXE 完成 48 帧，观察到 33 个 interval 的 `actual_presents=2`；release/shutdown API 成功，但 validation 仍为 46 条错误、exit1。background04 使用同一 C13 EXE，仍观察到 10 条 layout VUID。apidump01 使用 F474 EXE 完成 48 帧、52 条 validation、exit1；[`p0-api-layout-trace.md`](../../out/streamline-fg-p0/p0-api-layout-trace.md) 与 [`p0-api-input-trace.md`](../../out/streamline-fg-p0/p0-api-input-trace.md) 记录了 SDK 内部 WAW 及 pacer 缺失 transition。FG Gate 仍未通过，不能称为修复；当前开发已停止，native goal 为 paused。
 
 ## 运行证据
 
@@ -41,11 +41,11 @@ Linux 已将当前源码与 PPC 隔离传输到 psvita，使用 `FSR=ON` / `REQU
 - [ ] 继续分析 foreground01、background04 与 apidump01 的 layout/API trace，解释 46 条 validation、10 条 layout VUID、SDK WAW 及 pacer transition 缺口；`actual_presents=2` 与 API cleanup 成功仍不足以关闭 P0。
 - [ ] 解释或隔离 run02 的 fake swapchain / `TRANSFER_SRC` VUID，并补足 active FG 退出证据。
 - [ ] 取得物理显示证据后再准备 Gate 1 材料复审；不因 48 frames 或旧错误消失而关闭 P0。
-- [ ] 保持 G002 的 P1 接线与运行结论受证据约束；P2–P4 仍待验收，直到各自依赖和 Gate 结论满足。
+- [x] G002 的 P1 接线与运行结论已验收完成；G003 的 P2 传播诊断仍未完成，P3/P4 仍待实施和验收。
 
 ## 调度与设计证据
 
-原始 brief 明确先做 FSR，并行推进 FG；此前“严格串行、P0 未过则不得做 FSR”的说法来自 OpenCode deepwork 旧文件，不是用户技术依赖。当前 G001 已被 superseded（不表示通过）；G006 逐字保留完整 P0 objective、attempt 1/3 NOT PASSED、剩余 2 次复审，以及 validation/display/image/performance 的完整要求。G002 的 P1 已完成，G003 正在开发，G003/G006/G004/G005 待验收；优先顺序只是排程，不新增依赖。native 工具当前状态 active，但用户已授权持续自主执行；OMX 当前为 executing。
+原始 brief 明确先做 FSR，并行推进 FG；此前“严格串行、P0 未过则不得做 FSR”的说法来自 OpenCode deepwork 旧文件，不是用户技术依赖。当前 G001 已被 superseded（不表示通过）；G006 逐字保留完整 P0 objective、attempt 1/3 NOT PASSED、剩余 2 次复审，以及 validation/display/image/performance 的完整要求。G002 的 P1 已完成 checkpoint，G003 的 P2 仍未完成，G003/G006/G004/G005 待验收；优先顺序只是排程，不新增依赖。用户已停止本轮，native goal 为 paused。
 
 设计记录：[stage-dependency-audit.md](../../out/streamline-fg-p0/stage-dependency-audit.md)、[fsr-p1-input-contract.md](../../out/streamline-fg-p0/fsr-p1-input-contract.md)、[fsr-p2-mask-design.md](../../out/streamline-fg-p0/fsr-p2-mask-design.md)。P2 新 architect 计划还包括 alpha replay 与后处理传播；这些文档记录设计和证据边界，不表示 FSR/P2 已验收。
 
@@ -114,7 +114,7 @@ CPU owner／policy 检查和 Windows／Linux 增量构建通过，见 [CPU 记�
 
 后续 draw2084 的未知 RGB 写入确实触发来源失效；先前独立复制的版本仍可供 fetch。六次后处理 fetch 的 guest 448→428 裁剪（本次实际物理尺寸 299→285）因尚未实现的后处理明确返回 `Unavailable`。见 [实景结果](../../out/streamline-fg-p0/fsr-alpha-bridge-windows-01/result.json)、[独立检查](../../out/streamline-fg-p0/fsr-alpha-bridge-windows-01/bridge-independent-check.json) 及目录内原始 JSONL／R8。GPU fence 完成后导出，进程 exit0，原配置／存档基线未变。独立复核支持本片提交，未重复既有测试。
 
-本片没有正例裁剪、实际最终图像替换或游戏内 Off／epoch 切换证据；后两者仅有对应代码／CPU 边界检查。Linux 本片仅构建，首 alpha 实景结果继续复用。后处理 mask、SDK reactive／T&C、完整透明覆盖、画质／性能及 Steam Deck 仍待完成，G003 保持执行中；未推送或发布。
+本片没有正例裁剪、实际最终图像替换或游戏内 Off／epoch 切换证据；后两者仅有对应代码／CPU 边界检查。Linux 本片仅构建，首 alpha 实景结果继续复用。后处理 mask、SDK reactive／T&C、完整透明覆盖、画质／性能及 Steam Deck 仍待完成；该历史检查点当时未推送或发布，最新交付状态以停止交接及 Git 记录为准。
 
 
 ### P2 战斗／粒子场景入口
@@ -122,3 +122,14 @@ CPU owner／policy 检查和 Windows／Linux 增量构建通过，见 [CPU 记�
 使用已保留的 bridge 构建 `e4e277da…`，从历史 Hypocenter 存档／profile 的隔离副本进入当前游戏，实际完成取得 Bruiser Ring、跳过可选教程、遇到 Insane Khent Soldier、选择 Attack／目标和 RT 输入。`shot_31698.ppm` 显示实际 Aim Ring 与 87 伤害；初始 Hypocenter 可见烟雾、火星和紫色发光。进程按请求正常退出 0，原安装状态及所选历史存档／profile 哈希均未变。见 [入口结果](../../out/streamline-fg-p0/fsr-battle-route-01/result.json) 和 [实际输入时间线](../../out/streamline-fg-p0/fsr-battle-route-01/route-replay-timeline.json)。
 
 这补充了当前构建的场景入口，不证明画质 A/B、Good／Perfect 输入时机、随机遇敌稳定性或后处理 mask。旧 poll 脚本未直接作为成功依据；本次按实际画面调整，以 tick 记录输入。后续可在此场景比较战斗 UI、细环、粒子与遮挡；完整 P2 仍未验收。
+
+
+### P2 后处理传播与可选 GPU 计时检查点
+
+在显式 alpha replay／bridge 路径中加入四组已审计后处理 VS／PS 的 R8 传播，覆盖九采样 downsample、带 c10 限制的九采样、十六采样 bloom，以及读取实际深度分支的 tonemap。传播保留每个正权重采样足迹中的最大值，是已收集贡献的保守上界；仅发布经过几何／scissor 证明且未开启 cull 的有效矩形。实际 host bloom prefilter 使用面积重叠的最大值，并核对真正的输入与最终绑定输出图像。未知写入、无法匹配的 HDR／temporal 替换或覆盖范围仍明确不可用，未绑定 SDK reactive／T&C。
+
+新增诊断按 fence 完成导出输入／输出 mask、实际常量与顶点、原颜色／深度快照；记录捕获失败并以事件序号区分文件，文件行距与 GPU readback 行距分开。独立静态审阅通过，CPU owner／shader fixture、四组原 VS wrapper 及 host area shader 的 SPIR-V 编译通过。Windows 与 psvita Distrobox 原生 Linux 生产增量构建通过，Windows SHA256 为 `eb84f8b4…`，Linux 为 `7bdf80fa…`。见 [静态审阅](../../out/streamline-fg-p0/fsr-p2-postprocess-static-review.json)、[CPU／着色器记录](../../out/fsr-postprocess-cpu/result.json) 和 [双平台构建](../../out/streamline-fg-p0/fsr-p2-postprocess-build-result.json)。已完成的 Windows 实景 `f12000` 中，三种 blur 对应五个 draw 均为 `quad_unavailable`，tone draw 2085 为 `sampler_unavailable`，没有 record/publish，final scene 为 unsupported；因此以上不构成完整 P2 验收。
+
+`LO_FSR_GPU_TIMING=1` 可记录 prepare／SDK／encode／copy／同步范围的 GPU timestamp；查询只在所属提交 fence 完成后读取，未就绪明确为 unavailable。默认关闭，不分配查询池或录制计时命令。这是隔离 SR 段诊断，不是 SDK 单独耗时或整帧性能；截图、alpha capture、重置及预热帧需由实验记录排除，不能据此直接宣称性能收益。
+
+本轮开发已按用户指令停止，native goal 为 paused；当前交接见 [Codex 停止交接](fsr-dlss-fg-codex-handoff.zh-CN.md)。

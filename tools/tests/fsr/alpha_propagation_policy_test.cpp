@@ -5,11 +5,23 @@
 
 using namespace gpu::fsr_alpha;
 
+struct DummyTexture final : plume::RenderTexture {
+    std::unique_ptr<plume::RenderTextureView> createTextureView(
+        const plume::RenderTextureViewDesc&) const override { return nullptr; }
+    void setName(const std::string&) override {}
+};
+
 static void Check(bool value, const char* description) {
     if (!value) { std::fprintf(stderr, "FAIL: %s\n", description); std::exit(1); }
 }
 
 int main() {
+    Check(AuditedPostprocessPair(0x2f6bbed8149a7804ull, 0x7c260eacff1d681dull) &&
+        AuditedPostprocessPair(0x2f6bbed8149a7804ull, 0x53dd5d081c7945cfull) &&
+        AuditedPostprocessPair(0xd1b241c74103b6bfull, 0xee90000c755c0472ull) &&
+        AuditedPostprocessPair(0x9b81c55ca39bb529ull, 0xb4b4d54a7a2d6b96ull) &&
+        !AuditedPostprocessPair(0x2f6bbed8149a7804ull, 0xb4b4d54a7a2d6b96ull),
+        "only the four captured VS/PS postprocess pairings are eligible");
     Check(Contains({0, 0, 432, 242}, {0, 0, 428, 240}), "428 crop within copied 432 region");
     Check(!Contains({0, 0, 420, 242}, {0, 0, 428, 240}), "unwritten fetch pixels unavailable");
     Check(!Contains({16, 0, 432, 242}, {0, 0, 428, 240}), "partial offset unavailable");
@@ -105,6 +117,19 @@ int main() {
     Check(!owner.InvalidateRawSource(9), "raw source remains blocked after RGB writer");
     owner.BeginFrame(12002, 7370);
     raw.identity.renderFrame = 12002;
+    auto stageLease = std::make_shared<MaskLease>();
+    stageLease->texture = std::make_unique<DummyTexture>();
+    SourceMask stage{};
+    stage.frame = 12002; stage.epoch = 7370; stage.colorAllocation = 9;
+    stage.revision = 18; stage.width = 853; stage.height = 480;
+    stage.validRect = {0, 0, 853, 480}; stage.stage = SourceStage::Dof;
+    stage.mask = stageLease;
+    owner.PublishPostprocess(stage);
+    Check(owner.CurrentSource(9, 12002, 7370) != nullptr,
+        "postprocess source becomes current for its color allocation");
+    owner.PublishRaw(raw);
+    Check(owner.CurrentSource(9, 12002, 7370) == nullptr && owner.HasRawSource(9),
+        "later audited raw producer supersedes prior postprocess stage");
     owner.PublishRaw(raw);
     Check(owner.InvalidateRawSource(9), "next frame can publish a new raw source");
     std::puts("PASS: FSR alpha resolve/fetch policy checks");
