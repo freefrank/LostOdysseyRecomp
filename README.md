@@ -12,7 +12,7 @@ Optional diagnostics are off by default and can be disabled in Settings. See [Pr
 
 ### [Latest download](https://github.com/freefrank/LostOdysseyRecomp/releases/latest) · [Installation guide](docs/INSTALLING.md) · [Report an issue](https://github.com/freefrank/LostOdysseyRecomp/issues)
 
-[简体中文](README.zh-CN.md) · [Changelog](CHANGELOG.md) · [Projects](https://github.com/users/freefrank/projects/3) · [Build from source](docs/BUILDING.md) · [Native DLSS validation](docs/notes/native-dlss-validation.md) · [DLSS handoff guide (中文)](docs/notes/native-dlss-handoff.zh-CN.md)
+[简体中文](README.zh-CN.md) · [Changelog](CHANGELOG.md) · [Projects](https://github.com/users/freefrank/projects/3) · [Build from source](docs/BUILDING.md)
 
 </div>
 
@@ -21,15 +21,9 @@ Optional diagnostics are off by default and can be disabled in Settings. See [Pr
 
 ### Experimental native DLSS SR & DLAA
 
-Native NVIDIA DLSS Super Resolution and DLAA are experimental features with
-bounded verification, not verified general or player-ready additions. Windows
-and Linux release packages include official NGX runtime libraries. A local
-Windows SDK-enabled build has demonstrated live-game NGX SR on an RTX 5080 at
-Quality (1707x960 to 2560x1440, DisplayEncoded color and reversed-Z depth),
-while DLAA is supported by CPU contracts and runtime queries. Visual quality,
-motion response, fine lines, occlusion, UI elements, reset behavior, and full
-player acceptance remain unclaimed. See the [native DLSS validation
-record](docs/notes/native-dlss-validation.md).
+Native NVIDIA DLSS Super Resolution and DLAA are experimental features.
+Windows and Linux release packages include official NGX runtime libraries;
+image quality and stability remain under validation.
 
 ### Experimental opt-in FSR SR
 
@@ -198,7 +192,7 @@ Rumble is disabled by default; `LO_CONTROLLER_RUMBLE=1` enables it. For Ring act
 | `thirdparty/` | Rendering, audio and other dependencies |
 | `docs/` | Current status, guides, research and historical archives |
 
-[Roadmap](docs/ROADMAP.md) · [Handoff](docs/notes/handoff.md) · [Native DLSS validation](docs/notes/native-dlss-validation.md) · [Rendering tests](docs/notes/rendering-validation.md) · [TAA live debug](docs/TAA_LIVE_DEBUG.md) · [Audio](docs/notes/audio-output.md) · [Archive](docs/archive/README.md)
+[Roadmap](docs/ROADMAP.md) · [Handoff](docs/notes/handoff.md) · [Rendering tests](docs/notes/rendering-validation.md) · [TAA live debug](docs/TAA_LIVE_DEBUG.md) · [Audio](docs/notes/audio-output.md) · [Archive](docs/archive/README.md)
 
 </details>
 

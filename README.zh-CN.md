@@ -12,7 +12,7 @@ Windows x64 · Direct3D 12 · Vulkan · PowerPC 静态重编译
 
 ### [下载最新版本](https://github.com/freefrank/LostOdysseyRecomp/releases/latest) · [安装指南](docs/INSTALLING.md) · [反馈问题](https://github.com/freefrank/LostOdysseyRecomp/issues)
 
-[English](README.md) · [更新日志](CHANGELOG.md) · [Projects](https://github.com/users/freefrank/projects/3) · [从源码构建](docs/BUILDING.md) · [原生 DLSS 验证](docs/notes/native-dlss-validation.md) · [原生 DLSS 开发与交接指南](docs/notes/native-dlss-handoff.zh-CN.md)
+[English](README.md) · [更新日志](CHANGELOG.md) · [Projects](https://github.com/users/freefrank/projects/3) · [从源码构建](docs/BUILDING.md)
 
 </div>
 
@@ -21,11 +21,8 @@ Windows x64 · Direct3D 12 · Vulkan · PowerPC 静态重编译
 
 ### 实验性原生 DLSS SR 与 DLAA
 
-原生 NVIDIA DLSS 超分辨率与 DLAA 仍属于具备有界验证的实验性功能，不是经过全量验证的常规
-或可直接使用功能。Windows 与 Linux 正式发布包中已内置经过核验的官方 NGX 运行库。
-本地 Windows SDK-on 构建已在 RTX 5080 上确认 Quality 模式游戏内 NGX SR 执行（`1707x960 -> 2560x1440`、
-DisplayEncoded 色彩、reversed-Z 深度），DLAA 已具备 CPU 契约与运行时查询支撑。画质、细线、
-运动响应、遮挡、UI 元素、重置行为和完整玩家验收均未宣称完成。详见[原生 DLSS 验证记录](docs/notes/native-dlss-validation.md)。
+原生 NVIDIA DLSS 超分辨率与 DLAA 属于实验性功能。
+Windows 与 Linux 正式发布包中已内置官方 NGX 运行库；画质与稳定性仍在验证中。
 
 ### 实验性可选 FSR 超分
 
@@ -191,7 +188,7 @@ SDL 已映射手柄与键盘可同时用于玩家 1。未映射摇杆需要 SDL 
 | `thirdparty/` | 渲染、音频及其他依赖 |
 | `docs/` | 当前状态、指南、逆向记录与历史归档 |
 
-[路线图](docs/ROADMAP.zh-CN.md) · [接手入口](docs/notes/handoff.md) · [原生 DLSS 验证](docs/notes/native-dlss-validation.md) · [渲染测试](docs/notes/rendering-validation.md) · [TAA 实时调试](docs/TAA_LIVE_DEBUG.md) · [音频](docs/notes/audio-output.md) · [归档](docs/archive/README.md)
+[路线图](docs/ROADMAP.zh-CN.md) · [接手入口](docs/notes/handoff.md) · [渲染测试](docs/notes/rendering-validation.md) · [TAA 实时调试](docs/TAA_LIVE_DEBUG.md) · [音频](docs/notes/audio-output.md) · [归档](docs/archive/README.md)
 
 </details>
 
