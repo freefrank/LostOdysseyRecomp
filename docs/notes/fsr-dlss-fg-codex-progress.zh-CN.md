@@ -115,3 +115,10 @@ CPU owner／policy 检查和 Windows／Linux 增量构建通过，见 [CPU 记�
 后续 draw2084 的未知 RGB 写入确实触发来源失效；先前独立复制的版本仍可供 fetch。六次后处理 fetch 的 guest 448→428 裁剪（本次实际物理尺寸 299→285）因尚未实现的后处理明确返回 `Unavailable`。见 [实景结果](../../out/streamline-fg-p0/fsr-alpha-bridge-windows-01/result.json)、[独立检查](../../out/streamline-fg-p0/fsr-alpha-bridge-windows-01/bridge-independent-check.json) 及目录内原始 JSONL／R8。GPU fence 完成后导出，进程 exit0，原配置／存档基线未变。独立复核支持本片提交，未重复既有测试。
 
 本片没有正例裁剪、实际最终图像替换或游戏内 Off／epoch 切换证据；后两者仅有对应代码／CPU 边界检查。Linux 本片仅构建，首 alpha 实景结果继续复用。后处理 mask、SDK reactive／T&C、完整透明覆盖、画质／性能及 Steam Deck 仍待完成，G003 保持执行中；未推送或发布。
+
+
+### P2 战斗／粒子场景入口
+
+使用已保留的 bridge 构建 `e4e277da…`，从历史 Hypocenter 存档／profile 的隔离副本进入当前游戏，实际完成取得 Bruiser Ring、跳过可选教程、遇到 Insane Khent Soldier、选择 Attack／目标和 RT 输入。`shot_31698.ppm` 显示实际 Aim Ring 与 87 伤害；初始 Hypocenter 可见烟雾、火星和紫色发光。进程按请求正常退出 0，原安装状态及所选历史存档／profile 哈希均未变。见 [入口结果](../../out/streamline-fg-p0/fsr-battle-route-01/result.json) 和 [实际输入时间线](../../out/streamline-fg-p0/fsr-battle-route-01/route-replay-timeline.json)。
+
+这补充了当前构建的场景入口，不证明画质 A/B、Good／Perfect 输入时机、随机遇敌稳定性或后处理 mask。旧 poll 脚本未直接作为成功依据；本次按实际画面调整，以 tick 记录输入。后续可在此场景比较战斗 UI、细环、粒子与遮挡；完整 P2 仍未验收。
