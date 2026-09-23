@@ -1793,6 +1793,21 @@
       "title": "Integrate vendor temporal upscaling after input validation",
       "body_sha256": "cd90bf9c9c4d021b4be372ec415840b8bac062b21ecb8ebdadec9a953c60507b"
     },
+    "temporal-phased-p2-fsr-quality-hardware": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg8QYqA",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Temporal rendering",
+        "Status": "In Progress",
+        "Delivery": "In progress",
+        "Release": "v0.7.0",
+        "Evidence": "Windows postprocess slice verified: run 03 (fsr-postprocess-windows-03) on RTX 5080 Vulkan (720p Quality, 853x480, f12000, exit 0, baseline unchanged) recorded/published 6 draws (5 blur draws 45440 interior + 445 border zero diff; tone 2104 409440 zero diff; single-pixel HLSL FLT_MIN=-FLT_MAX artifact resolved in postprocess-independent-check-corrected.json). Oracle chain passed: crop bytes equal, stage 4 ord 205234 sub 24009 complete, 285 valid/288 resolve/299 parent correct without padding validity. CPU 2 tests, clear checker 6 cases, regression passed; blocker closed. Exe SHA 8e513eb2... (dirty HEAD ffc5399). Clear background and inset fixes replace unverified proposals: 01 quad/sampler fail; 02 inset draw lacked clear proof (1440p, not scale-caused); 03 valid (720p restored + new impl, not single-variable). Linux unverified this slice. Depth invariance, edge rules, prefilter, SDK binding, full P2 quality/perf unverified. P2 in progress; P0 Gate 1 attempt 1/3 NOT PASSED (2 reviews held); P1 complete.",
+        "Source key": "temporal-phased-p2-fsr-quality-hardware",
+        "Start date": "2026-09-23"
+      },
+      "title": "P2: Validate FSR visual quality and multi-platform hardware",
+      "body_sha256": "08b8a3264e49b9bc41dc30d72d9bc6998e7810dd1b15adf335b610f852a99a7a"
+    },
     "taa-motion-quality": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56fGM",
       "fields": {

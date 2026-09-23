@@ -125,6 +125,83 @@ void TestColorQualificationPolicy() {
     Require(!quadPadded.ok && quadPadded.rejectReason == ProducerRejectReason::ScissorMismatch,
         "scissor mismatch on padded allocation rejects producer");
 
+    // P2 has a distinct contract: real fractional viewport, with only fully
+    // covered integer pixel centers (and no padded allocation) published.
+    const auto postQuad = [&](const float* p, float w, float h, int right, int bottom) {
+        return CheckPostprocessQuadCoverage(std::span<const float, 24>(p, 24),
+            0.0f, 0.0f, w, h, 0, 0, right, bottom,
+            ndcScale, ndcOffset, halfPixel, 320, 320);
+    };
+    const auto fractional = postQuad(posQuad, 285.221875f, 161.333333f, 285, 161);
+    Require(fractional.ok && fractional.coveredWidth == 285 && fractional.coveredHeight == 161,
+        "fractional P2 viewport proves only 285x161 pixel centers");
+    Require(!CheckQuadCoverage(posQuad, 0, 0, 285.221875f, 161.333333f,
+        0, 0, 285, 161, ndcScale, ndcOffset, halfPixel).ok,
+        "SDR integer-viewport contract remains unchanged");
+    const auto clipped = postQuad(posQuad, 285.8f, 161.8f, 285, 161);
+    Require(clipped.ok && clipped.coveredWidth == 285 && clipped.coveredHeight == 161,
+        "fractional tail outside the scissor is not published");
+    const auto smallRect = CheckPostprocessQuadCoverage(posQuad, 0, 0, 2.2f, 2.2f,
+        0, 0, 2, 2, ndcScale, ndcOffset, halfPixel, 2, 2);
+    Require(smallRect.ok && smallRect.coveredWidth == 2 && smallRect.coveredHeight == 2,
+        "P2 exact rectangular quad covers both pixel centers per axis");
+
+    // The old 1e-3f corner tolerance merges these near-corners, but the two
+    // triangle diagonal edges straddle pixel center (1.5, 0.5).
+    constexpr float delta = 0.0005f;
+    const float seamPhysical[12] = {0, 0, 2 - delta, 0, 0, 2 - delta,
+        2, delta, 2, 2, delta, 2};
+    float seamQuad[24]{};
+    for (unsigned i = 0; i < 6; ++i) {
+        seamQuad[4 * i] = seamPhysical[2 * i] / 1.1f - 1.0f;
+        seamQuad[4 * i + 1] = 1.0f - seamPhysical[2 * i + 1] / 1.1f;
+        seamQuad[4 * i + 3] = 1.0f;
+    }
+    const auto oldToleranceSeam = CheckQuadCoveragePixels(seamQuad, 0, 0, 2.2f, 2.2f,
+        0, 0, 2, 2, ndcScale, ndcOffset, halfPixel, 2, 2, false);
+    Require(oldToleranceSeam.ok, "former corner tolerance accepts adversarial shared-edge crack");
+    const auto seam = CheckPostprocessQuadCoverage(seamQuad, 0, 0, 2.2f, 2.2f,
+        0, 0, 2, 2, ndcScale, ndcOffset, halfPixel, 2, 2);
+    Require(!seam.ok && seam.rejectReason == ProducerRejectReason::TopologyInvalid,
+        "P2 exact corners reject sub-epsilon diagonal crack");
+    float nearRectangle[24];
+    std::copy_n(posQuad, 24, nearRectangle);
+    // Same two right-bottom vertices shift together: no shared-corner gap,
+    // but the bottom edge is slanted instead of an exact rectangular edge.
+    nearRectangle[5] -= delta / 1.1f;
+    nearRectangle[13] = nearRectangle[5];
+    Require(CheckQuadCoveragePixels(nearRectangle, 0, 0, 2.2f, 2.2f,
+        0, 0, 2, 2, ndcScale, ndcOffset, halfPixel, 2, 2, false).ok,
+        "former tolerance accepts almost rectangular slanted edge");
+    const auto approximate = CheckPostprocessQuadCoverage(nearRectangle, 0, 0, 2.2f, 2.2f,
+        0, 0, 2, 2, ndcScale, ndcOffset, halfPixel, 2, 2);
+    Require(!approximate.ok && approximate.rejectReason == ProducerRejectReason::TopologyInvalid,
+        "P2 rejects nearly rectangular slanted edge below old epsilon");
+    float insetQuad[24];
+    std::copy_n(posQuad, 24, insetQuad);
+    for (unsigned i = 0; i < 6; ++i) {
+        insetQuad[4 * i] = posQuad[4 * i] < 0 ? -0.6875f : 0.6875f;
+        insetQuad[4 * i + 1] = posQuad[4 * i + 1] < 0 ? -0.6875f : 0.6875f;
+    }
+    const auto insetAsFull = CheckPostprocessQuadCoverage(insetQuad, 0, 0, 8, 8,
+        0, 0, 8, 8, ndcScale, ndcOffset, halfPixel, 8, 8);
+    Require(!insetAsFull.ok && insetAsFull.rejectReason == ProducerRejectReason::CoverageNotFull,
+        "inset quad cannot claim the full area without a clear background");
+    const auto inset = CheckPostprocessQuadCoverage(insetQuad, 0, 0, 8, 8,
+        0, 0, 8, 8, ndcScale, ndcOffset, halfPixel, 8, 8, true);
+    Require(inset.ok && inset.coveredWidth == 8 && inset.coveredHeight == 8 &&
+        inset.writtenX == 1 && inset.writtenY == 1 &&
+        inset.writtenWidth == 6 && inset.writtenHeight == 6,
+        "exact inset quad proves only its internal pixel centers");
+    Require(CheckPostprocessQuadCoverage(seamQuad, 0, 0, 2.2f, 2.2f,
+        0, 0, 2, 2, ndcScale, ndcOffset, halfPixel, 2, 2, true).rejectReason ==
+        ProducerRejectReason::TopologyInvalid, "inset path also rejects shared-edge crack");
+    const auto fractionalScissor = CheckPostprocessQuadCoverage(posQuad,
+        0, 0, 285.221875f, 161.333333f, 1, 0, 285, 161,
+        ndcScale, ndcOffset, halfPixel, 320, 320);
+    Require(!fractionalScissor.ok && fractionalScissor.rejectReason == ProducerRejectReason::ScissorMismatch,
+        "scissor excluding the first pixel center rejects P2");
+
     // Partial quad
     float partialQuad[24] = {
         -0.5f, -0.5f, 0.0f, 1.0f,
@@ -138,6 +215,9 @@ void TestColorQualificationPolicy() {
         0, 0, 1707, 960, ndcScale, ndcOffset, halfPixel);
     Require(!partialRes.ok && partialRes.rejectReason == ProducerRejectReason::CoverageNotFull,
         "partial quad coverage rejected");
+    const auto postPartial = postQuad(partialQuad, 285.221875f, 161.333333f, 285, 161);
+    Require(!postPartial.ok && postPartial.rejectReason == ProducerRejectReason::CoverageNotFull,
+        "partially covering P2 quad rejected");
 
     // Non-finite coordinates
     float nanQuad[24];
@@ -152,6 +232,8 @@ void TestColorQualificationPolicy() {
     wQuad[3] = 2.0f;
     Require(!CheckQuadCoverage(wQuad, 0.0f, 0.0f, 1707.0f, 960.0f, 0, 0, 1707, 960, ndcScale, ndcOffset, halfPixel).ok,
         "W!=1 vertex rejected");
+    Require(postQuad(wQuad, 285.221875f, 161.333333f, 285, 161).rejectReason == ProducerRejectReason::WNotOne,
+        "P2 rejects W!=1");
 
     // Z out of [0, 1] range after transform
     float zQuad[24];
@@ -159,6 +241,8 @@ void TestColorQualificationPolicy() {
     for (int i = 0; i < 6; ++i) zQuad[i * 4 + 2] = 2.0f;
     Require(!CheckQuadCoverage(zQuad, 0.0f, 0.0f, 1707.0f, 960.0f, 0, 0, 1707, 960, ndcScale, ndcOffset, halfPixel).ok,
         "Z out of range rejected");
+    Require(postQuad(zQuad, 285.221875f, 161.333333f, 285, 161).rejectReason == ProducerRejectReason::ZOutOfRange,
+        "P2 rejects transformed Z outside [0, 1]");
 
     auto reject = [&](const float* pos, float vpX, float vpY, float vpW, float vpH,
         ProducerRejectReason reason, const char* message) {
@@ -226,6 +310,12 @@ void TestColorQualificationPolicy() {
         0, 0, 1707, 960, ndcScale, ndcOffset, halfPixel);
     Require(!gap.ok && gap.rejectReason == ProducerRejectReason::TopologyInvalid,
         "triangle shared-corner gap rejected");
+    float wrongTopology[24];
+    std::copy_n(posQuad, 24, wrongTopology);
+    wrongTopology[12] = wrongTopology[0];
+    wrongTopology[13] = wrongTopology[1];
+    Require(postQuad(wrongTopology, 285.221875f, 161.333333f, 285, 161).rejectReason ==
+        ProducerRejectReason::TopologyInvalid, "P2 rejects two triangles without four corners");
 
     // Net RB Swap Identity check
     uint32_t f0 = 0;

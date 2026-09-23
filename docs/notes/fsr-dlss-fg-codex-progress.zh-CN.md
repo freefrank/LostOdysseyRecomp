@@ -4,7 +4,9 @@
 
 ## 当前状态
 
-`IMP-P0-FIX2` 的探针专用门禁修复已落盘，run03 已使用冻结 EXE（SHA256 `36665711B5258A234DC29AD7266BFD5A26243FD998B285178A516CDBF95EA9D2`）运行。G006 的完整 P0 Gate 仍不通过，Oracle 初审剩余 2 次材料复审；G002 的 FSR SDK、renderer/runtime 接线已实现并提交为 `87a1691`，Windows/Linux 基础运行已验证，P1 已按原始通过条件验收完成；G003 的 P2 曾在本轮实施，当前随用户停止开发而暂停，P0 Gate 与 P2–P4 仍未完成。
+用户此前曾要求暂停开发，现已重新授权恢复执行并推进 P2 后处理保护修复。G006 的完整 P0 Gate 仍为 attempt 1/3 NOT PASSED，初审剩余 2 次材料复审；G002 的 P1 已按原始通过条件验收完成；G003 的 P2 仍处于进行中（in progress），P3/P4 尚待实施。Windows 生产构建 build03（EXE SHA256 `8e513eb254bafe27d0373d1706f6afb314d49d2864d2d8afe57e7f56ab139f5d`，源码标识 `eac07c5c3cbf9154a62b490f2e144c0cb91835ea9f55a6ec87477444686788a7`，基于 dirty HEAD `ffc5399`，不可仅用 HEAD 标识）已完成 1280x720 FSR Quality 实景运行验证（`fsr-postprocess-windows-03`），6 个已审计 draw 全部成功 record/publish 且逐像素比对通过。Linux 仅有旧版构建，本次 C++ 改动未在 Linux 验证，不宣称双平台新通过。
+
+`IMP-P0-FIX2` 的探针专用门禁修复已落盘，run03 已使用冻结 EXE（SHA256 `36665711B5258A234DC29AD7266BFD5A26243FD998B285178A516CDBF95EA9D2`）运行。G006 的完整 P0 Gate 仍不通过，Oracle 初审剩余 2 次材料复审；G002 的 FSR SDK、renderer/runtime 接线已实现并提交为 `87a1691`，Windows/Linux 基础运行已验证，P1 已按原始通过条件验收完成；G003 的 P2 历史暂停记录保留，P0 Gate 与 P2–P4 仍未完成。
 
 几何一致性小修 EXE SHA256 为 `C13BDC5E7ED8C73612388D79871770CCD4EB1ACE8232EE050FB74DC235C98398`，已用于 foreground01 和 background04；run03 使用的旧 `366657...` EXE 与证据保持不变。
 
@@ -132,4 +134,32 @@ CPU owner／policy 检查和 Windows／Linux 增量构建通过，见 [CPU 记�
 
 `LO_FSR_GPU_TIMING=1` 可记录 prepare／SDK／encode／copy／同步范围的 GPU timestamp；查询只在所属提交 fence 完成后读取，未就绪明确为 unavailable。默认关闭，不分配查询池或录制计时命令。这是隔离 SR 段诊断，不是 SDK 单独耗时或整帧性能；截图、alpha capture、重置及预热帧需由实验记录排除，不能据此直接宣称性能收益。
 
-本轮开发已按用户指令停止，native goal 为 paused；当前交接见 [Codex 停止交接](fsr-dlss-fg-codex-handoff.zh-CN.md)。
+此前开发曾按用户指令暂停，历史停止交接见 [Codex 停止交接](fsr-dlss-fg-codex-handoff.zh-CN.md)。
+
+### P2 后处理保护修复与实景验证检查点 (windows-03)
+
+用户已授权恢复开发并推进 P2 后处理保护修复。
+
+#### 修复与机制实现
+
+在 `CheckPostprocessQuadCoverage` 中引入支持小数 viewport 的像素覆盖判定与精确矩形角点检查，避免 SDR 宽松 epsilon 导致对角线像素缝隙。resolve 阶段通过 `IntersectCopyValidRect` 计算 validRect 交集，右侧和底部 padding 明确保留为无效。
+
+接入真实 `depth_color_tile_clear` 追踪全量清屏事件，当检测到合规的内缩（inset）几何时以 clear 背景补齐未覆盖边框，并在未知 RGB 写入或不支持后处理时使该 clear 失效。首次 clear 允许保留后续 raw 收集；若该 clear 替换了已有源，则保留此前写入者拒绝记录，旧 raw 禁用策略维持不变。
+
+细化区分输入纹理缺失（`input_unavailable`）与采样器不支持（`sampler_unavailable`）。在 `FsrAlphaBridgeTraceEnabled` 下输出包含 `draw_written_rect`、`inset_geometry_ok`、`clear_background_available`、`geometry_supported` 等详尽诊断字段。
+
+Python 离线参考工具修正了 Vulkan Y 轴方向，以及项目 HLSL 中 `FLT_MIN` 实际为 `-FLT_MAX` 的负极值下界逻辑（恢复 scene 采样分支激活权重）；新增 6 项 clear 背景合成独立检查用例与单像素 tonemap 回归测试。
+
+#### 定向验证结果
+
+- CPU 与 Python 测试：CPU 单元测试 `LoNativeDlssP2RoutingTest` 与 `LoFsrAlphaPropagationPolicyTest` 全部通过，独立 oracle 阻塞均已关闭。Python 脚本 `test_postprocess_clear_background.py`（6 项 clear 背景用例）与 `test_postprocess_tonemap_flt_min.py`（单像素 tonemap 回归）全部通过。
+- Windows build03 生产构建：可执行文件 SHA256 为 `8e513eb254bafe27d0373d1706f6afb314d49d2864d2d8afe57e7f56ab139f5d`，源码标识为 `eac07c5c3cbf9154a62b490f2e144c0cb91835ea9f55a6ec87477444686788a7`，基于 dirty HEAD `ffc5399`（禁止单独使用 HEAD 标识）。
+- Windows 实景运行（`out/streamline-fg-p0/fsr-postprocess-windows-03`）：在 RTX 5080 Vulkan、1280x720 FSR Quality（输入 853x480）、frame 12000 条件下运行，进程 exit 0 且配置与存档基线未变（`baseline_unchanged`）。6 个已审计 draw（2091、2094、2097、2100、2103、2104）全部成功 record 并 publish。
+- 逐像素比对结果：5 组 blur draw（2091、2094、2097、2100、2103）各包含 45,440 个 interior 像素与 445 个 clearborder 像素，比对 0 mismatch（非零像素依次为 33、124、277、385、2322）。tone draw（2104）包含 409,440 个 interior 像素，修正参考端 `FLT_MIN` 误解后比对 0 mismatch（非零像素 22,672）。原报告单像素失败记录原样保留，修正后报告见 `alpha-capture/postprocess-independent-check-corrected.json`（exit 0，`bounded_interior_checks_passed`，同目录保存 provenance）。6 个 draw 的原始颜色字节比对均为 0 差异。
+- Oracle 独立传输链：6 次 blur 传输（每次 45,885 字节）、2 次 raw 传输（每次 409,440 字节）与 tone 至 final 传输（409,440 字节）全量比对 0 差异，stage 4 rev 2104 ordinal 205234 submission 24009 完成；285 valid、288 resolve、299 parent 裁剪正确，padding 未认证为有效。
+
+#### 运行条件与保留限制
+
+- 运行条件澄清：此前 02 运行采用 1440p 设置（与 01 的 720p 不一致），但失败实际是由于 inset quad 缺少 clear 背景证明，并非 1440p 导致失败；03 运行恢复了 720p 分辨率条件，但同时修改了 C++ 传播实现，不构成单一变量对比。01、02 及旧 baseline 证据全部保留。
+- 门禁与阶段状态：P0 Gate 1 维持 attempt 1/3 NOT PASSED，初审剩余 2 次材料复审；P1 已完成，P2 仍在进行中（in progress）。
+- 未验证范围：未捕获 originaldepth 成对读回，不宣称深度不变；光栅化边缘规则未认证（`edge_check_status: not_covered`）；host prefilter 未覆盖（仅 host scene-only 检查通过）；SDK 遮罩绑定、完整 P2 画质及性能未验收；Linux 平台当前仅有旧版本构建，本次 C++ 修改未在 Linux 实机验证，不宣称双平台新通过。

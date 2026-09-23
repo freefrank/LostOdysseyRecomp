@@ -2073,7 +2073,7 @@ namespace gpu::renderer
                 commandList->setGraphicsDescriptorSet(AcquireSet(3), 3); if (vulkan) commandList->setGraphicsDescriptorSet(staticSamplerSet.get(), 4);
                 commandList->drawInstanced(3, 1, 0, 0);
 #if defined(LO_GPU_PLUME)
-                if (rgb) HandleFsrAlphaRgbWriter(destination, "promotion_resample_rgb");
+                HandleFsrAlphaRgbWriter(destination, "promotion_resample_rgb");
 #endif
                 return true;
             }
@@ -2324,6 +2324,7 @@ namespace gpu::renderer
                 uint64_t drawOrdinal = 0, uint64_t vsHash = 0, uint64_t psHash = 0,
                 uint64_t blend = 0, uint32_t colorMask = 7, bool retainsRaw = false) {
                 if (!fsrAlphaBridge || activePlan.requestedUpscaler != upscaling::Upscaler::Fsr) return;
+                fsrAlphaBridge->InvalidateClearBackground(color.allocationSerial, writer);
                 const bool retained = retainsRaw && fsrAlphaBridge->HasRawSource(color.allocationSerial);
                 if (retained ? !fsrAlphaBridge->HasCurrentSource(color.allocationSerial) :
                     !fsrAlphaBridge->InvalidateRawSource(color.allocationSerial)) return;
@@ -2359,7 +2360,8 @@ namespace gpu::renderer
                     "\"raw_epoch\":{},\"raw_depth_allocation\":{},"
                     "\"source_revision\":{},\"source_stage\":{},"
                     "\"destination_address\":{},\"destination_format\":{},\"destination_allocation\":{},"
-                    "\"write_ordinal\":{},\"resolve_rect\":[{},{},{},{}],\"resolved_extent\":[{},{}]",
+                    "\"write_ordinal\":{},\"resolve_rect\":[{},{},{},{}],\"resolved_extent\":[{},{}],"
+                    "\"mask_valid_rect\":[{},{},{},{}]",
                     operation, result.reason, source.allocationSerial, source.width, source.height,
                     result.rawAtResolve.auditedDraws,
                     result.rawAtResolve.identity.geometryEpoch, result.rawAtResolve.identity.depthAllocation,
@@ -2367,7 +2369,9 @@ namespace gpu::renderer
                     address, destination.destFormat,
                     destination.tex->allocationSerial, destination.writeOrdinal,
                     rect.x, rect.y, rect.width, rect.height,
-                    destination.tex->width, destination.tex->height);
+                    destination.tex->width, destination.tex->height,
+                    result.version.validRect.x, result.version.validRect.y,
+                    result.version.validRect.width, result.version.validRect.height);
                 if (result.copied && result.rawAtResolve && fsrAlphaBridgePairCount < 8) {
                     event->raw = result.rawAtResolve;
                     event->mask = result.version.mask;
@@ -6796,6 +6800,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
                 bool alphaPostprocessRecorded = false;
                 const char* alphaPostprocessReason = "state_guard";
+                std::string alphaPostprocessGuards;
+                std::string alphaPostprocessCoverageTrace;
                 if (fsrAlphaPostprocess && fsrAlphaBridge && dlssSrRequested &&
                     !scenePromotionActivated && color && ps &&
                     activePlan.requestedUpscaler == upscaling::Upscaler::Fsr &&
@@ -6820,10 +6826,30 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         }
                         std::memcpy(&positions[i * 4], arenaBase + uint64_t(vertex) * 32, 16);
                     }
-                    const bool fullQuad = vertexRange && color_qualification::CheckQuadCoverage(
+                    const auto quad = vertexRange ? color_qualification::CheckPostprocessQuadCoverage(
                         positions, rasterViewport.x, rasterViewport.y, rasterViewport.width,
                         rasterViewport.height, scissor.left, scissor.top, scissor.right, scissor.bottom,
-                        shared.ndcScale, shared.ndcOffset, shared.halfPixel).ok;
+                        shared.ndcScale, shared.ndcOffset, shared.halfPixel, color->width, color->height) :
+                        color_qualification::QuadGeometryCheckResult{};
+                    const bool fullQuad = vertexRange && quad.ok;
+                    const auto insetQuad = vertexRange && !fullQuad &&
+                        quad.rejectReason == color_qualification::ProducerRejectReason::CoverageNotFull ?
+                        color_qualification::CheckPostprocessQuadCoverage(
+                            positions, rasterViewport.x, rasterViewport.y, rasterViewport.width,
+                            rasterViewport.height, scissor.left, scissor.top, scissor.right, scissor.bottom,
+                            shared.ndcScale, shared.ndcOffset, shared.halfPixel,
+                            color->width, color->height, true) : color_qualification::QuadGeometryCheckResult{};
+                    const auto& provenGeometry = fullQuad ? quad : insetQuad;
+                    const fsr_alpha::MaskRect publishedRect{0, 0,
+                        provenGeometry.coveredWidth, provenGeometry.coveredHeight};
+                    const fsr_alpha::MaskRect writtenRect{provenGeometry.writtenX,
+                        provenGeometry.writtenY, provenGeometry.writtenWidth, provenGeometry.writtenHeight};
+                    const auto* recentClear = fsrAlphaBridge->RecentClear(color->allocationSerial);
+                    const bool clearBackgroundAvailable = insetQuad.ok &&
+                        fsr_alpha::QualifiesInsetReplacement(recentClear, frame, temporalEpoch,
+                            color->allocationSerial, color->width, color->height,
+                            drawsThisFrame, publishedRect, writtenRect);
+                    const bool geometrySupported = fullQuad || clearBackgroundAvailable;
                     const auto psFloat = [&](unsigned constant, unsigned component) {
                         return std::bit_cast<float>(psConstants[constant * 4 + component]);
                     };
@@ -6838,7 +6864,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             alphaPostDepth->format == RenderFormat::R32_FLOAT));
                     if (!completeInputs) alphaPostprocessReason = "input_unavailable";
                     uint32_t pointSlots = 0;
-                    bool samplerSupported = completeInputs;
+                    bool samplerSupported = true;
                     for (unsigned slot : {0u, 2u, 3u}) {
                         if (slot != 0 && !tone) continue;
                         if (slot == 2 && !needDof) continue;
@@ -6860,7 +6886,124 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         else if (footprint == fsr_alpha::SamplerFootprint::Point)
                             pointSlots |= 1u << slot;
                     }
-                    if (fullQuad && !postDesc.depthEnabled && !postDesc.stencilEnabled &&
+                    if (FsrAlphaBridgeTraceEnabled() && fsrAlphaBridgeTraceCount < 128) {
+                        alphaPostprocessCoverageTrace = fmt::format(
+                            ",\"draw_written_rect\":[{},{},{},{}],"
+                            "\"inset_geometry_ok\":{},\"clear_background_available\":{},"
+                            "\"geometry_supported\":{}",
+                            writtenRect.x, writtenRect.y, writtenRect.width, writtenRect.height,
+                            insetQuad.ok ? "true" : "false",
+                            clearBackgroundAvailable ? "true" : "false",
+                            geometrySupported ? "true" : "false");
+                        if (recentClear) {
+                            alphaPostprocessCoverageTrace += fmt::format(
+                                ",\"clear_background\":{{\"frame\":{},\"epoch\":{},"
+                                "\"allocation\":{},\"extent\":[{},{}],\"ordinal\":{},"
+                                "\"kind\":\"{}\",\"affected_rect\":[{},{},{},{}],"
+                                "\"invalidated_by\":",
+                                recentClear->frame, recentClear->epoch, recentClear->colorAllocation,
+                                recentClear->width, recentClear->height, recentClear->ordinal,
+                                recentClear->kind, recentClear->affectedRect.x, recentClear->affectedRect.y,
+                                recentClear->affectedRect.width, recentClear->affectedRect.height);
+                            if (recentClear->invalidatedBy)
+                                alphaPostprocessCoverageTrace += fmt::format("\"{}\"}}", recentClear->invalidatedBy);
+                            else alphaPostprocessCoverageTrace += "null}";
+                        } else alphaPostprocessCoverageTrace += ",\"clear_background\":null";
+                        alphaPostprocessGuards = fmt::format(
+                            ",\"viewport\":[{:.9g},{:.9g},{:.9g},{:.9g}],"
+                            "\"scissor\":[{},{},{},{}],\"attachment_extent\":[{},{}],"
+                            "\"vtx_fmt\":{},\"base_vertex\":{},\"vertex_range\":{},"
+                            "\"quad_ok\":{},\"quad_reject_reason\":{},"
+                            "\"quad_bounds\":[{:.9g},{:.9g},{:.9g},{:.9g}],"
+                            "\"proven_valid_rect\":[0,0,{},{}],"
+                            "\"need_dof\":{},\"need_bloom\":{},\"complete_inputs\":{},"
+                            "\"slot0_available\":{},\"slot2_available\":{},\"slot3_available\":{},"
+                            "\"depth_input_available\":{},\"depth_input_matches\":{},"
+                            "\"sampler_supported\":{},\"point_slots\":{},"
+                            "\"depth_enabled\":{},\"stencil_enabled\":{},"
+                            "\"geometry_shader\":{},\"cull_mode\":{},\"blend_enabled\":{},"
+                            "\"indices\":[{},{},{},{},{},{}]",
+                            rasterViewport.x, rasterViewport.y, rasterViewport.width, rasterViewport.height,
+                            scissor.left, scissor.top, scissor.right, scissor.bottom,
+                            color->width, color->height, shared.vtxFmt, baseVertex,
+                            vertexRange ? "true" : "false", fullQuad ? "true" : "false",
+                            vertexRange ? uint32_t(quad.rejectReason) : uint32_t(color_qualification::ProducerRejectReason::IndexRangeOverflow),
+                            quad.bounds[0], quad.bounds[1], quad.bounds[2], quad.bounds[3],
+                            quad.coveredWidth, quad.coveredHeight,
+                            needDof ? "true" : "false", needBloom ? "true" : "false",
+                            completeInputs ? "true" : "false",
+                            alphaPostInputs[0] ? "true" : "false",
+                            alphaPostInputs[2] ? "true" : "false",
+                            alphaPostInputs[3] ? "true" : "false",
+                            alphaPostDepth ? "true" : "false",
+                            alphaPostDepth && alphaPostDepth->texture == textureBindings[0][1] &&
+                                alphaPostDepth->format == RenderFormat::R32_FLOAT ? "true" : "false",
+                            samplerSupported ? "true" : "false", pointSlots,
+                            postDesc.depthEnabled ? "true" : "false", postDesc.stencilEnabled ? "true" : "false",
+                            postDesc.geometryShader ? "true" : "false", uint32_t(postDesc.cullMode),
+                            postDesc.renderTargetBlend[0].blendEnabled ? "true" : "false",
+                            indices[0], indices[1], indices[2], indices[3], indices[4], indices[5]);
+                        alphaPostprocessGuards += alphaPostprocessCoverageTrace;
+                        const auto appendFloatBits = [&](const char* name, const float* values, size_t count) {
+                            alphaPostprocessGuards += fmt::format(",\"{}\":[", name);
+                            for (size_t i = 0; i < count; ++i) {
+                                if (i) alphaPostprocessGuards += ',';
+                                alphaPostprocessGuards += std::to_string(std::bit_cast<uint32_t>(values[i]));
+                            }
+                            alphaPostprocessGuards += ']';
+                        };
+                        const float viewportValues[4] = {rasterViewport.x, rasterViewport.y,
+                            rasterViewport.width, rasterViewport.height};
+                        appendFloatBits("viewport_u32", viewportValues, 4);
+                        appendFloatBits("ndc_scale_u32", shared.ndcScale, 4);
+                        appendFloatBits("ndc_offset_u32", shared.ndcOffset, 4);
+                        appendFloatBits("half_pixel_u32", shared.halfPixel, 2);
+                        if (vertexRange) {
+                            appendFloatBits("clip_positions_u32", positions, 24);
+                            uint32_t baseUvBits[12]{};
+                            for (unsigned i = 0; i < 6; ++i) {
+                                const auto vertex = uint64_t(int64_t(indices[i]) + int64_t(baseVertex));
+                                std::memcpy(baseUvBits + 2 * i,
+                                    arenaBase + vertex * 32 + 16, 2 * sizeof(uint32_t));
+                            }
+                            alphaPostprocessGuards += ",\"base_uv_u32\":[";
+                            for (unsigned i = 0; i < 12; ++i) {
+                                if (i) alphaPostprocessGuards += ',';
+                                alphaPostprocessGuards += std::to_string(baseUvBits[i]);
+                            }
+                            alphaPostprocessGuards += ']';
+                        }
+                        const auto appendConstantWords = [&](const char* name, const uint32_t* words, unsigned count) {
+                            alphaPostprocessGuards += fmt::format(",\"{}\":[", name);
+                            for (unsigned i = 0; i < count; ++i) {
+                                if (i) alphaPostprocessGuards += ',';
+                                alphaPostprocessGuards += std::to_string(words[i]);
+                            }
+                            alphaPostprocessGuards += ']';
+                        };
+                        appendConstantWords("vs_c0_c7_u32x4", vsConstants, 32);
+                        appendConstantWords("ps_c0_c15_u32x4", psConstants, 64);
+                        appendConstantWords("ps_c255_u32x4", psConstants + 255 * 4, 4);
+                        alphaPostprocessGuards += ",\"samplers\":[";
+                        for (unsigned slot : {0u, 2u, 3u}) {
+                            if (slot != 0) alphaPostprocessGuards += ',';
+                            const auto& input = alphaPostInputs[slot];
+                            const auto palette = input ? samplerPalette.find(input->samplerKey) : samplerPalette.end();
+                            uint64_t effectiveKey = 0;
+                            for (const auto& [candidate, index] : samplerPalette)
+                                if (index == shared.samplerIndex[slot]) { effectiveKey = candidate; break; }
+                            alphaPostprocessGuards += fmt::format(
+                                "{{\"slot\":{},\"input\":{},\"requested_key\":{},"
+                                "\"palette_index\":{},\"actual_index\":{},"
+                                "\"effective_key\":{},\"footprint\":{}}}",
+                                slot, input ? "true" : "false", input ? input->samplerKey : 0,
+                                palette != samplerPalette.end() ? int64_t(palette->second) : -1,
+                                shared.samplerIndex[slot], effectiveKey,
+                                input ? uint32_t(fsr_alpha::LOD0ClampFootprint(input->samplerKey, true)) : 0u);
+                        }
+                        alphaPostprocessGuards += ']';
+                    }
+                    if (completeInputs && geometrySupported && !postDesc.depthEnabled && !postDesc.stencilEnabled &&
                         !postDesc.geometryShader && postDesc.cullMode == RenderCullMode::NONE &&
                         !postDesc.renderTargetBlend[0].blendEnabled &&
                         samplerSupported) {
@@ -6910,6 +7053,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                     rasterViewport.minDepth, rasterViewport.maxDepth,
                                     scissor.left, scissor.top, scissor.right, scissor.bottom,
                                     key.blend, key.colorMask, shared.flags, pointSlots);
+                                fields += alphaPostprocessCoverageTrace;
                                 const auto appendWords = [&](const char* name, const uint32_t* words, size_t count) {
                                     fields += fmt::format(",\"{}\":[", name);
                                     for (size_t i = 0; i < count; ++i) {
@@ -7050,9 +7194,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                 source.colorAllocation = color->allocationSerial;
                                 source.revision = drawsThisFrame;
                                 source.width = color->width; source.height = color->height;
-                                source.validRect = {uint32_t(rasterViewport.x), uint32_t(rasterViewport.y),
-                                    uint32_t(rasterViewport.width),
-                                    uint32_t(rasterViewport.height)};
+                                source.validRect = publishedRect;
                                 source.stage = key.ps == 0x7c260eacff1d681dull ?
                                     fsr_alpha::SourceStage::Downsample :
                                     key.ps == 0x53dd5d081c7945cfull ? fsr_alpha::SourceStage::Dof :
@@ -7087,19 +7229,19 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             commandList->setGraphicsDescriptorSet(staticSamplerSet.get(), 4);
                         }
                     }
-                    else if (!fullQuad) alphaPostprocessReason = "quad_unavailable";
-                    else if (!samplerSupported) alphaPostprocessReason = "sampler_unavailable";
-                    else if (postDesc.depthEnabled) alphaPostprocessReason = "depth_enabled";
-                    else if (postDesc.stencilEnabled) alphaPostprocessReason = "stencil_enabled";
-                    else if (postDesc.geometryShader) alphaPostprocessReason = "geometry_shader";
-                    else if (postDesc.cullMode != RenderCullMode::NONE)
-                        alphaPostprocessReason = "cull_enabled";
-                    else if (postDesc.renderTargetBlend[0].blendEnabled)
-                        alphaPostprocessReason = "blend_enabled";
-                    else alphaPostprocessReason = "pipeline_state_unavailable";
+                    else alphaPostprocessReason = fsr_alpha::PostprocessGuardReason(completeInputs, geometrySupported,
+                        samplerSupported, postDesc.depthEnabled, postDesc.stencilEnabled,
+                        postDesc.geometryShader, postDesc.cullMode != RenderCullMode::NONE,
+                        postDesc.renderTargetBlend[0].blendEnabled,
+                        insetQuad.ok, clearBackgroundAvailable);
                 }
                 if (fsrAlphaBridge && activePlan.requestedUpscaler == upscaling::Upscaler::Fsr &&
+                    color && (key.colorMask & 7u) && (!ps || !(ps->info.colorTargetsWritten & 1u)))
+                    fsrAlphaBridge->InvalidateClearBackground(color->allocationSerial, "unclassified_rgb_draw");
+                if (fsrAlphaBridge && activePlan.requestedUpscaler == upscaling::Upscaler::Fsr &&
                     color && ps && (ps->info.colorTargetsWritten & 1u) && (key.colorMask & 7)) {
+                    if (alphaReplayRecorded || alphaPostprocessRecorded)
+                        fsrAlphaBridge->InvalidateClearBackground(color->allocationSerial, "audited_rgb_draw");
                     if (!alphaReplayRecorded && !alphaPostprocessRecorded)
                         HandleFsrAlphaRgbWriter(*color, "unreplayed_rgb_draw", drawsThisFrame,
                             key.vs, key.ps, key.blend, key.colorMask,
@@ -7126,6 +7268,77 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             info.indexed ? "true" : "false", indexCount,
                             slot95Bound ? "true" : "false", key.colorMask, shared.flags,
                             ps->info.writesDepth ? "true" : "false");
+                        if (alphaPostprocessGuards.empty()) {
+                            alphaPostprocessGuards = fmt::format(
+                                ",\"viewport\":[{:.9g},{:.9g},{:.9g},{:.9g}],"
+                                "\"scissor\":[{},{},{},{}],\"vtx_fmt\":{},"
+                                "\"vfetch95_range\":{},\"slot0_available\":{},"
+                                "\"slot2_available\":{},\"slot3_available\":{},"
+                                "\"depth_input_available\":{},\"base_vertex\":{}",
+                                rasterViewport.x, rasterViewport.y, rasterViewport.width, rasterViewport.height,
+                                scissor.left, scissor.top, scissor.right, scissor.bottom,
+                                shared.vtxFmt, slot95ArenaOffset != UINT64_MAX ? "true" : "false",
+                                alphaPostInputs[0] ? "true" : "false",
+                                alphaPostInputs[2] ? "true" : "false",
+                                alphaPostInputs[3] ? "true" : "false",
+                                alphaPostDepth ? "true" : "false", baseVertex);
+                            const auto* clear = fsrAlphaBridge->RecentClear(color->allocationSerial);
+                            alphaPostprocessGuards +=
+                                ",\"draw_written_rect\":[0,0,0,0],\"inset_geometry_ok\":false,"
+                                "\"clear_background_available\":false,\"geometry_supported\":false";
+                            if (clear) {
+                                alphaPostprocessGuards += fmt::format(
+                                    ",\"clear_background\":{{\"frame\":{},\"epoch\":{},"
+                                    "\"allocation\":{},\"extent\":[{},{}],\"ordinal\":{},"
+                                    "\"kind\":\"{}\",\"affected_rect\":[{},{},{},{}],"
+                                    "\"invalidated_by\":",
+                                    clear->frame, clear->epoch, clear->colorAllocation,
+                                    clear->width, clear->height, clear->ordinal, clear->kind,
+                                    clear->affectedRect.x, clear->affectedRect.y,
+                                    clear->affectedRect.width, clear->affectedRect.height);
+                                if (clear->invalidatedBy)
+                                    alphaPostprocessGuards += fmt::format("\"{}\"}}", clear->invalidatedBy);
+                                else alphaPostprocessGuards += "null}";
+                            } else alphaPostprocessGuards += ",\"clear_background\":null";
+                            const auto appendConstants = [&](const char* name, const uint32_t* words, unsigned count) {
+                                alphaPostprocessGuards += fmt::format(",\"{}\":[", name);
+                                for (unsigned i = 0; i < count; ++i) {
+                                    if (i) alphaPostprocessGuards += ',';
+                                    alphaPostprocessGuards += std::to_string(words[i]);
+                                }
+                                alphaPostprocessGuards += ']';
+                            };
+                            appendConstants("vs_c0_c7_u32x4", vsConstants, 32);
+                            appendConstants("ps_c0_c15_u32x4", psConstants, 64);
+                            appendConstants("ps_c255_u32x4", psConstants + 255 * 4, 4);
+                            if (vs) {
+                                const auto guardDesc = DescribePipeline(key, vs, ps, false);
+                                alphaPostprocessGuards += fmt::format(
+                                    ",\"depth_enabled\":{},\"stencil_enabled\":{},"
+                                    "\"cull_mode\":{},\"blend_enabled\":{}",
+                                    guardDesc.depthEnabled ? "true" : "false",
+                                    guardDesc.stencilEnabled ? "true" : "false",
+                                    uint32_t(guardDesc.cullMode),
+                                    guardDesc.renderTargetBlend[0].blendEnabled ? "true" : "false");
+                            }
+                            alphaPostprocessGuards += ",\"samplers\":[";
+                            for (unsigned slot : {0u, 2u, 3u}) {
+                                if (slot != 0) alphaPostprocessGuards += ',';
+                                const auto& input = alphaPostInputs[slot];
+                                const auto palette = input ? samplerPalette.find(input->samplerKey) : samplerPalette.end();
+                                uint64_t effectiveKey = 0;
+                                for (const auto& [candidate, index] : samplerPalette)
+                                    if (index == shared.samplerIndex[slot]) { effectiveKey = candidate; break; }
+                                alphaPostprocessGuards += fmt::format(
+                                    "{{\"slot\":{},\"input\":{},\"requested_key\":{},"
+                                    "\"palette_index\":{},\"actual_index\":{},\"effective_key\":{}}}",
+                                    slot, input ? "true" : "false", input ? input->samplerKey : 0,
+                                    palette != samplerPalette.end() ? int64_t(palette->second) : -1,
+                                    shared.samplerIndex[slot], effectiveKey);
+                            }
+                            alphaPostprocessGuards += ']';
+                        }
+                        event->fields += alphaPostprocessGuards;
                         TraceFsrAlphaBridge(std::move(event));
                     }
                 }
@@ -7592,6 +7805,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             commandList->clearColor(0, value);
 #if defined(LO_GPU_PLUME)
                             HandleFsrAlphaRgbWriter(*tex, "depth_color_tile_clear");
+                            if (fsrAlphaBridge && activePlan.requestedUpscaler == upscaling::Upscaler::Fsr)
+                                fsrAlphaBridge->RecordFullColorClear(frame, temporalEpoch,
+                                    tex->allocationSerial, tex->width, tex->height, drawsThisFrame,
+                                    {0, 0, tex->width, tex->height}, "depth_color_tile_clear");
 #endif
                             if (trackBinding) tex->bindingProducer.Clear(bindingEpoch, frame, true);
                             tex->aaProvenance.Invalidate(frame,tex->allocationSerial,true);

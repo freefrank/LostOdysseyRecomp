@@ -1,4 +1,5 @@
 #pragma once
+#include <algorithm>
 #include <cstdint>
 
 namespace gpu::fsr_alpha {
@@ -23,6 +24,57 @@ inline bool Contains(MaskRect outer, MaskRect inner) {
     return inner.width && inner.height && inner.x >= outer.x && inner.y >= outer.y &&
         uint64_t(inner.x) + inner.width <= uint64_t(outer.x) + outer.width &&
         uint64_t(inner.y) + inner.height <= uint64_t(outer.y) + outer.height;
+}
+
+// A whole-attachment color clear is recorded only when its GPU command is
+// emitted. The ordinal is the renderer draw count at that command; the next
+// draw sees that same count before incrementing it.
+struct ClearBackground {
+    uint64_t frame = 0, epoch = 0, colorAllocation = 0, ordinal = 0;
+    uint32_t width = 0, height = 0;
+    MaskRect affectedRect{};
+    const char* kind = nullptr;
+    const char* invalidatedBy = nullptr;
+};
+
+inline bool QualifiesInsetReplacement(const ClearBackground* clear,
+    uint64_t frame, uint64_t epoch, uint64_t allocation, uint32_t width, uint32_t height,
+    uint64_t drawOrdinal, MaskRect publishedRect, MaskRect drawWrittenRect) {
+    return clear && clear->kind && !clear->invalidatedBy &&
+        clear->frame == frame && clear->epoch == epoch &&
+        clear->colorAllocation == allocation && clear->width == width && clear->height == height &&
+        clear->ordinal <= drawOrdinal &&
+        clear->affectedRect == MaskRect{0, 0, width, height} &&
+        Contains(clear->affectedRect, publishedRect) && Contains(publishedRect, drawWrittenRect);
+}
+
+// BlitRegion and the mask copy keep source/destination pixel coordinates equal.
+// Only pixels both copied and already proven by the producer are valid.
+inline MaskRect IntersectCopyValidRect(MaskRect proven, MaskRect actualCopy) {
+    const uint64_t left = std::max(proven.x, actualCopy.x);
+    const uint64_t top = std::max(proven.y, actualCopy.y);
+    const uint64_t right = std::min(uint64_t(proven.x) + proven.width,
+        uint64_t(actualCopy.x) + actualCopy.width);
+    const uint64_t bottom = std::min(uint64_t(proven.y) + proven.height,
+        uint64_t(actualCopy.y) + actualCopy.height);
+    if (right <= left || bottom <= top) return {};
+    return {uint32_t(left), uint32_t(top), uint32_t(right - left), uint32_t(bottom - top)};
+}
+
+inline const char* PostprocessGuardReason(bool completeInputs, bool provenGeometry,
+    bool samplerSupported, bool depthEnabled, bool stencilEnabled,
+    bool geometryShader, bool cullEnabled, bool blendEnabled,
+    bool insetGeometry = false, bool clearBackgroundAvailable = false) {
+    if (!completeInputs) return "input_unavailable";
+    if (!provenGeometry && insetGeometry && !clearBackgroundAvailable) return "clear_background_unavailable";
+    if (!provenGeometry) return "quad_unavailable";
+    if (!samplerSupported) return "sampler_unavailable";
+    if (depthEnabled) return "depth_enabled";
+    if (stencilEnabled) return "stencil_enabled";
+    if (geometryShader) return "geometry_shader";
+    if (cullEnabled) return "cull_enabled";
+    if (blendEnabled) return "blend_enabled";
+    return "available";
 }
 
 // In the captured cfmt12 FP16 pass, these exact blends leave destination

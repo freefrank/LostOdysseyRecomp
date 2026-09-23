@@ -95,7 +95,8 @@ def vertex_outputs(vs, position, base_uv, constants, shared):
 
 def raster_interpolants(clip, attributes, triangles, viewport, output_extent, scissor):
     """Perspective interpolation on original triangles at pixel centers.
-    Uses captured signed Vulkan viewport. Does not certify clipping or fill rules.
+    Captured viewport height is positive; Vulkan VS compilation inverts HLSL clip Y.
+    Does not certify clipping or fill rules.
     Reports overlap inconsistency and proximity to triangle edges for diagnosis.
     """
     clip=np.asarray(clip,dtype=np.float64)
@@ -103,7 +104,7 @@ def raster_interpolants(clip, attributes, triangles, viewport, output_extent, sc
     width,height=output_extent
     vx,vy,vw,vh=viewport[:4]
     screen=clip[:,:2]/clip[:,3,None]
-    screen=screen*np.array([vw,vh])/2+np.array([vx+vw/2,vy+vh/2])
+    screen=screen*np.array([vw,-vh])/2+np.array([vx+vw/2,vy+vh/2])
     yy,xx=np.mgrid[:height,:width]
     xy=np.stack([xx+.5,yy+.5],axis=-1)
     output=np.zeros((height,width)+attr.shape[1:],dtype=np.float64)
@@ -128,7 +129,9 @@ def raster_interpolants(clip, attributes, triangles, viewport, output_extent, sc
             max_overlap_error=max(max_overlap_error,float(np.max(np.abs(output[overlap]-values[overlap]))))
         output[inside]=values[inside]
         covered|=inside
-        edge|=inside&(np.min(np.abs(bary),axis=-1)<1e-7)
+        # Also mark near-edge pixels just outside the approximate triangle: fill
+        # rules cannot distinguish those from genuinely untouched background.
+        edge|=eligible&(np.min(np.abs(bary),axis=-1)<1e-7)&(bary.min(axis=-1)>=-1e-7)
     return output.astype(np.float32),covered,edge,max_overlap_error
 
 
@@ -157,7 +160,9 @@ def tonemap_weights(depth, constants):
     """Original b4 depth arithmetic through conditional DOF composition."""
     c=np.asarray(constants,dtype=np.float32)
     d=np.asarray(depth,dtype=np.float32)
-    low,high=F(np.finfo(F).tiny),F(np.finfo(F).max)
+    # This project's HLSL prelude defines FLT_MIN as -FLT_MAX, unlike C's
+    # positive minimum normal. Preserve negative log2 values for the DOF curve.
+    low,high=F(-np.finfo(F).max),F(np.finfo(F).max)
     with np.errstate(all='ignore'):
         distance=np.clip(F(1)/(d*c[0,2]-c[0,3]),low,high)
         delta=distance-c[1,0]
@@ -249,7 +254,12 @@ def self_check():
     clip=np.array([[-1,-1,0,1],[1,-1,0,1],[-1,1,0,1],[1,1,0,1]],F)
     attr=np.zeros((4,1,4),F); attr[:,0,:2]=np.array([[0,0],[1,0],[0,1],[1,1]],F)
     vals,cov,_,err=raster_interpolants(clip,attr,[[0,1,2],[2,1,3]],[0,0,2,2],[2,2],[0,0,2,2])
-    assert cov.all() and err==0 and np.allclose(vals[0,0,0,:2],[.25,.25])
+    assert cov.all() and err==0 and np.allclose(vals[0,0,0,:2],[.25,.75])
+    vals,cov,_,err=raster_interpolants(clip,attr,[[0,1,2],[2,1,3]],
+                                     [3,5,4,6],[8,12],[3,5,4,6])
+    assert cov[5:11,3:7].all() and err==0
+    assert np.allclose(vals[5,3,0,:2],[.125,11/12])
+    assert np.allclose(vals[10,3,0,:2],[.125,1/12])
     c=np.zeros((256,4),F); c[0,2]=1; c[3,:2]=1; c[4,:2]=1; c[5,:2]=.5; c[255,0]=1; c[255,1]=.5
     scene,dof,_,branch,w=tonemap_weights(np.array([1],F),c)
     assert not branch[0] and scene[0]==1 and not dof.any() and w[0]==.5
@@ -265,7 +275,7 @@ def self_check():
     assert not valid[0,0]
     perspective_clip=np.array([[-1,-1,0,1],[2,-2,0,2],[-4,4,0,4]],F)
     vals,cov,_,_=raster_interpolants(perspective_clip,attr[:3],[[0,1,2]],[0,0,2,2],[2,2],[0,0,2,2])
-    assert cov[0,0] and np.allclose(vals[0,0,0,:2],[2/11,1/11])
+    assert cov[1,0] and np.allclose(vals[1,0,0,:2],[2/11,1/11])
     clamp_taps=np.broadcast_to(np.array([-1,2,2,-1],F),(1,1,5,4)).copy()
     clamp_c=np.zeros((16,4),F); clamp_c[9,0]=1; clamp_c[10]=[.5,.2,.8,.6]
     out,valid=blur_reference('53dd5d081c7945cf',clamp_taps,clamp_c,np.arange(10,100,10,dtype=np.uint8).reshape(3,3),[0,0,3,3])

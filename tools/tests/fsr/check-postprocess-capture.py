@@ -33,6 +33,33 @@ def load_snapshot(root,snapshot):
     return data,{'file':path.name,'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest()}
 
 
+def qualify_clear_background(event):
+    """Bound a zero-mask background to the actual pre-draw full-color clear."""
+    clear=event.get('clear_background')
+    if not isinstance(clear,dict):raise ValueError('uncovered output without clear_background')
+    required=('render_frame','geometry_epoch','color_allocation','output_extent','draw_ordinal',
+              'published_valid_rect')
+    clear_required=('frame','epoch','allocation','extent','ordinal','kind','affected_rect','invalidated_by')
+    for name in required:
+        if name not in event:raise ValueError(f'missing postprocess identity field: {name}')
+    for name in clear_required:
+        if name not in clear:raise ValueError(f'missing clear identity field: {name}')
+    if clear['kind']!='depth_color_tile_clear' or clear['invalidated_by'] is not None:
+        raise ValueError('clear background kind or invalidation unsupported')
+    if (clear['frame']!=event['render_frame'] or clear['epoch']!=event['geometry_epoch'] or
+        clear['allocation']!=event['color_allocation'] or clear['extent']!=event['output_extent'] or
+        not isinstance(clear['ordinal'],int) or isinstance(clear['ordinal'],bool) or
+        not 0<=clear['ordinal']<=event['draw_ordinal']):
+        raise ValueError('clear background identity or order mismatch')
+    w,h=event['output_extent']
+    if (clear['affected_rect']!=[0,0,w,h] or not event.get('inset_geometry_ok') or
+        not event.get('clear_background_available') or not event.get('geometry_supported')):
+        raise ValueError('clear background does not support inset published rectangle')
+    x,y,rw,rh=event['published_valid_rect']
+    if min(x,y)<0 or min(rw,rh)<=0 or x+rw>w or y+rh>h:
+        raise ValueError('published rectangle outside cleared attachment')
+
+
 def compare_draw(event,root):
     if not event.get('recorded') or not event.get('published'):raise ValueError('postprocess replay not recorded and published')
     if event.get('capture_failures'):raise ValueError('capture failures: '+str(event['capture_failures']))
@@ -111,18 +138,38 @@ def compare_draw(event,root):
     compared=interior&valid
     mismatch=(actual!=reference)&compared
     edge_mismatch=(actual!=reference)&declared&covered&edge&valid
+    uncovered=declared&~covered
+    if uncovered.any():qualify_clear_background(event)
+    background=uncovered&~edge
+    background_mismatch=background&(actual!=0)
+    unchecked=uncovered&edge
     bad_coords=np.argwhere(mismatch)[:16]
+    bad_background=np.argwhere(background_mismatch)[:16]
     return {'frame':event['render_frame'],'submission_serial':event['submission_serial'],
         'draw':event['draw_ordinal'],'ps':event['ps_hash'],'output_extent':extent,
         'source_revision':event['source_revision'],'source_stage':event['source_stage'],
         'output_mask_image':event['output_mask_image'],'published_valid_rect':event['published_valid_rect'],
         'interior_compared_pixels':int(compared.sum()),'unknown_input_pixels':int(unknown.sum()),
-        'uncovered_declared_pixels':int((declared&~covered).sum()),
+        'uncovered_declared_pixels':int(uncovered.sum()),
+        'background_compared_pixels':int(background.sum()),
+        'background_mismatch_pixels':int(background_mismatch.sum()),
+        'uncovered_unchecked_pixels':int(unchecked.sum()),
         'interior_mismatch_pixels':int(mismatch.sum()),'edge_pixels':int((declared&covered&edge).sum()),
-        'edge_mismatch_pixels':int(edge_mismatch.sum()),'nonzero_output_pixels':int(np.count_nonzero(actual[compared])),
+        'edge_mismatch_pixels':int(edge_mismatch.sum()),'edge_check_status':'not_covered',
+        'nonzero_output_pixels':int(np.count_nonzero(actual[compared])),
         'sample_mismatches':[{'xy':[int(x),int(y)],'actual':int(actual[y,x]),'reference':int(reference[y,x])} for y,x in bad_coords],
+        'sample_background_mismatches':[{'xy':[int(x),int(y)],'actual':int(actual[y,x]),'reference':0} for y,x in bad_background],
         'tone_branch_pixels':branch_pixels,'preservation':preservation,'snapshots':hashes,
-        'limits':['Raster edge/top-left/cull/clip not certified by this oracle','Cross-stage source version identity audited separately']}
+        'limits':['Edge mismatch counts are diagnostic only: raster top-left/cull/clip not certified by this oracle',
+                  'Background zero is compared only outside reference geometry with qualifying clear identity; draw_written_rect is diagnostic only',
+                  'Cross-stage source version identity audited separately']}
+
+
+def draw_failed(row):
+    return (not row['interior_compared_pixels'] or row['interior_mismatch_pixels'] or
+            row['unknown_input_pixels'] or row['background_mismatch_pixels'] or
+            row['uncovered_unchecked_pixels'] or
+            any(p['mismatched_bytes'] for p in row['preservation'].values()))
 
 
 def main():
@@ -139,7 +186,7 @@ def main():
     required={'7c260eacff1d681d','53dd5d081c7945cf','ee90000c755c0472','b4b4d54a7a2d6b96'}
     seen={r['ps'] for r in rows}
     missing=sorted(required-seen)
-    bad=bool(missing) or any(not r['interior_compared_pixels'] or r['interior_mismatch_pixels'] or r['unknown_input_pixels'] or r['uncovered_declared_pixels'] or any(p['mismatched_bytes'] for p in r['preservation'].values()) for r in rows)
+    bad=bool(missing) or any(draw_failed(r) for r in rows)
     result={'status':'bounded_interior_checks_passed' if rows and not errors and not bad else 'incomplete_or_failed',
         'draws':rows,'errors':errors,'required_ps_seen':sorted(seen),'required_ps_missing':missing,
         'limits':['Host prefilter, crop/version chain, final scene-copy and raster edge adjudication remain separate checks','Only captured preservation pairs are checked; absent depth pairs do not prove depth invariance','No full P2/quality/performance acceptance']}

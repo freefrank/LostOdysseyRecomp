@@ -63,15 +63,24 @@ def main():
         except (ValueError, KeyError, OSError) as error:
             errors.append({'kind': kind, 'event_index': event.get('event_index'), 'error': str(error)})
     kinds = {row['kind'] for row in rows}
-    passed = not errors and kinds == {'host_bloom_prefilter', 'scene_copy_mask'} and not any(
+    fetches = [event for event in events if event.get('kind') == 'fetch_bound']
+    no_prefilter_substitution = (fetches and any(event.get('status') == 'available' for event in fetches)
+                                 and all(event.get('substitution') == 'none' for event in fetches))
+    valid_rows = not errors and not any(
         row.get('mismatch_pixels', 0) or row.get('unknown_pixels', 0) for row in rows)
-    result = {'status': 'bounded_host_checks_passed' if passed else 'incomplete_or_failed',
+    full = valid_rows and kinds == {'host_bloom_prefilter', 'scene_copy_mask'}
+    scene_only = valid_rows and kinds == {'scene_copy_mask'} and no_prefilter_substitution
+    status = ('bounded_host_checks_passed' if full else
+              'scene_copy_checked_prefilter_not_covered' if scene_only else 'incomplete_or_failed')
+    result = {'status': status,
+              'prefilter_status': 'checked' if full else 'not_covered_no_prefilter_substitution' if scene_only else 'unresolved',
               'rows': rows, 'errors': errors,
-              'limits': ['Final scene snapshot presence is not proof of its complete source-version chain',
+              'limits': ['No host prefilter comparison is claimed when captured fetches use substitution=none',
+                         'Final scene snapshot presence is not proof of its complete source-version chain',
                          'No SDK mask binding or full quality acceptance']}
     args.output.write_text(json.dumps(result, indent=2) + '\n')
     print(json.dumps({'status': result['status'], 'rows': len(rows), 'errors': errors}))
-    raise SystemExit(0 if passed else 1)
+    raise SystemExit(0 if full or scene_only else 1)
 
 
 if __name__ == '__main__':

@@ -36,6 +36,14 @@ add_executable(LoNativeDlssP2RoutingTest EXCLUDE_FROM_ALL
 target_include_directories(LoNativeDlssP2RoutingTest PRIVATE ${LO_NATIVE_DLSS_ROOT}/LostOdysseyRecomp)
 target_compile_features(LoNativeDlssP2RoutingTest PRIVATE cxx_std_20)
 
+add_executable(LoFsrAlphaPropagationPolicyTest EXCLUDE_FROM_ALL
+    ${LO_NATIVE_DLSS_ROOT}/tools/tests/fsr/alpha_propagation_policy_test.cpp)
+target_include_directories(LoFsrAlphaPropagationPolicyTest PRIVATE
+    ${LO_NATIVE_DLSS_ROOT}/LostOdysseyRecomp
+    ${LO_NATIVE_DLSS_ROOT}/thirdparty/plume)
+target_compile_definitions(LoFsrAlphaPropagationPolicyTest PRIVATE LO_GPU_PLUME=1)
+target_compile_features(LoFsrAlphaPropagationPolicyTest PRIVATE cxx_std_20)
+
 add_executable(LoNativeDlssPromotionPolicyTest EXCLUDE_FROM_ALL
     ${LO_NATIVE_DLSS_ROOT}/tools/tests/native_dlss_promotion_policy_test.cpp)
 target_include_directories(LoNativeDlssPromotionPolicyTest PRIVATE ${LO_NATIVE_DLSS_ROOT}/LostOdysseyRecomp)
@@ -68,22 +76,23 @@ target_compile_features(LoNativeDlaaTest PRIVATE cxx_std_20)
 
 # None of these translation units uses C++ modules. Do not require a separate
 # clang-scan-deps binary just to build ordinary C++20 contract fixtures.
-set_target_properties(LoTemporalUpscalerContractTest LoNativeDlaaTest LoNativeDlssSubmissionFailureTest LoNativeDlssFrameInputsTest LoP1FramePlanTest LoNativeDlssP2RoutingTest LoNativeDlssPromotionPolicyTest LoNativeDlssSubmissionLifetimeTest
+set_target_properties(LoTemporalUpscalerContractTest LoNativeDlaaTest LoNativeDlssSubmissionFailureTest LoNativeDlssFrameInputsTest LoP1FramePlanTest LoNativeDlssP2RoutingTest LoFsrAlphaPropagationPolicyTest LoNativeDlssPromotionPolicyTest LoNativeDlssSubmissionLifetimeTest
     PROPERTIES CXX_SCAN_FOR_MODULES OFF)
 
 add_custom_target(LoNativeDlssCpuTests
-    DEPENDS LoTemporalUpscalerContractTest LoNativeDlaaTest LoNativeDlssSubmissionFailureTest LoNativeDlssFrameInputsTest LoP1FramePlanTest LoNativeDlssP2RoutingTest LoNativeDlssPromotionPolicyTest LoNativeDlssSubmissionLifetimeTest)
+    DEPENDS LoTemporalUpscalerContractTest LoNativeDlaaTest LoNativeDlssSubmissionFailureTest LoNativeDlssFrameInputsTest LoP1FramePlanTest LoNativeDlssP2RoutingTest LoFsrAlphaPropagationPolicyTest LoNativeDlssPromotionPolicyTest LoNativeDlssSubmissionLifetimeTest)
 include(CTest)
 if(BUILD_TESTING)
     add_test(NAME LoNativeDlaaTest COMMAND LoNativeDlaaTest)
     add_test(NAME LoP1FramePlanTest COMMAND LoP1FramePlanTest)
     add_test(NAME LoNativeDlssP2RoutingTest COMMAND LoNativeDlssP2RoutingTest)
+    add_test(NAME LoFsrAlphaPropagationPolicyTest COMMAND LoFsrAlphaPropagationPolicyTest)
     add_test(NAME LoNativeDlssPromotionPolicyTest COMMAND LoNativeDlssPromotionPolicyTest)
     add_test(NAME LoNativeDlssSubmissionLifetimeTest COMMAND LoNativeDlssSubmissionLifetimeTest)
     add_test(NAME LoNativeDlssFrameInputsTest COMMAND LoNativeDlssFrameInputsTest)
     add_test(NAME LoTemporalUpscalerContractTest COMMAND LoTemporalUpscalerContractTest)
     add_test(NAME LoNativeDlssSubmissionFailureTest COMMAND LoNativeDlssSubmissionFailureTest)
-    set_tests_properties(LoTemporalUpscalerContractTest LoNativeDlaaTest LoNativeDlssSubmissionFailureTest LoNativeDlssFrameInputsTest LoP1FramePlanTest LoNativeDlssP2RoutingTest LoNativeDlssPromotionPolicyTest LoNativeDlssSubmissionLifetimeTest PROPERTIES LABELS "native-dlss;cpu")
+    set_tests_properties(LoTemporalUpscalerContractTest LoNativeDlaaTest LoNativeDlssSubmissionFailureTest LoNativeDlssFrameInputsTest LoP1FramePlanTest LoNativeDlssP2RoutingTest LoFsrAlphaPropagationPolicyTest LoNativeDlssPromotionPolicyTest LoNativeDlssSubmissionLifetimeTest PROPERTIES LABELS "native-dlss;cpu")
     # Optional developer tooling only; the game and C++ fixtures do not depend
     # on Python. Existing CI images provide it for recording-evidence triage.
     find_package(Python3 COMPONENTS Interpreter QUIET)

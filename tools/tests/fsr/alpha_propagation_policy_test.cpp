@@ -26,6 +26,28 @@ int main() {
     Check(!Contains({0, 0, 420, 242}, {0, 0, 428, 240}), "unwritten fetch pixels unavailable");
     Check(!Contains({16, 0, 432, 242}, {0, 0, 428, 240}), "partial offset unavailable");
     Check(!Contains({0, 0, 448, 242}, {0, 0, 0, 240}), "empty crop unavailable");
+    const MaskRect intersection = IntersectCopyValidRect({0, 0, 285, 161}, {0, 0, 288, 161});
+    Check(intersection == MaskRect{0, 0, 285, 161}, "resolve copies only proven portion of actual copy");
+    Check(Contains(intersection, {0, 0, 285, 161}), "consumer crop inside proven intersection valid");
+    Check(!Contains(intersection, {0, 0, 286, 161}), "padding outside intersection invalid");
+    Check(IntersectCopyValidRect({10, 20, 30, 40}, {25, 30, 20, 15}) == MaskRect{25, 30, 15, 15},
+        "offset intersection preserves source and destination coordinates");
+    Check(IntersectCopyValidRect({0, 0, 285, 161}, {286, 0, 12, 161}) == MaskRect{},
+        "disjoint source and actual copy have no valid pixels");
+    Check(std::strcmp(PostprocessGuardReason(false, false, false, false, false, false, false, false),
+        "input_unavailable") == 0, "missing input is not mislabeled sampler unavailable");
+    Check(std::strcmp(PostprocessGuardReason(true, false, false, false, false, false, false, false),
+        "quad_unavailable") == 0, "bad quad is not mislabeled sampler unavailable");
+    Check(std::strcmp(PostprocessGuardReason(true, true, false, false, false, false, false, false),
+        "sampler_unavailable") == 0, "sampler reject reports real sampler guard");
+    Check(std::strcmp(PostprocessGuardReason(true, true, true, false, false, false, false, false),
+        "available") == 0, "complete guarded postprocess inputs available");
+    Check(std::strcmp(PostprocessGuardReason(true, false, true, false, false, false, false, false,
+        true, false), "clear_background_unavailable") == 0,
+        "valid inset without a proven clear reports missing background");
+    Check(std::strcmp(PostprocessGuardReason(true, true, true, false, false, false, false, false,
+        true, true), "available") == 0,
+        "clear and inset can satisfy the geometry guard together");
     constexpr uint64_t townVs = 0x4c87bb5b986defc8ull;
     constexpr uint64_t townOverPs = 0x03b446965d7d52b3ull;
     Check(RetainsRawAfterAuditedLocalBlend(townVs, townOverPs,
@@ -132,5 +154,84 @@ int main() {
         "later audited raw producer supersedes prior postprocess stage");
     owner.PublishRaw(raw);
     Check(owner.InvalidateRawSource(9), "next frame can publish a new raw source");
+
+    owner.BeginFrame(12003, 7371);
+    const MaskRect published{0, 0, 8, 8}, written{1, 1, 6, 6};
+    Check(!QualifiesInsetReplacement(owner.RecentClear(9), 12003, 7371, 9, 8, 8,
+        20, published, written), "no clear cannot qualify an inset");
+    Check(!owner.RecordFullColorClear(12003, 7371, 9, 8, 8, 20,
+        {0, 0, 7, 8}, "depth_color_tile_clear"),
+        "partial clear is not a whole-attachment background");
+    Check(owner.RecordFullColorClear(12003, 7371, 9, 8, 8, 20,
+        {0, 0, 8, 8}, "depth_color_tile_clear"), "actual full clear recorded");
+    auto* clear = owner.RecentClear(9);
+    Check(QualifiesInsetReplacement(clear, 12003, 7371, 9, 8, 8,
+        20, published, written), "clear then inset proves full published rectangle");
+    Check(!QualifiesInsetReplacement(clear, 12002, 7371, 9, 8, 8,
+        20, published, written) &&
+        !QualifiesInsetReplacement(clear, 12003, 7372, 9, 8, 8,
+            20, published, written) &&
+        !QualifiesInsetReplacement(clear, 12003, 7371, 10, 8, 8,
+            20, published, written) &&
+        !QualifiesInsetReplacement(clear, 12003, 7371, 9, 9, 8,
+            20, published, written),
+        "clear frame, epoch, allocation and extent must all match");
+    owner.InvalidateClearBackground(9, "unknown_rgb_writer");
+    Check(clear->invalidatedBy && std::strcmp(clear->invalidatedBy, "unknown_rgb_writer") == 0 &&
+        !QualifiesInsetReplacement(clear, 12003, 7371, 9, 8, 8, 21, published, written),
+        "unknown RGB writer invalidates prior clear with reason");
+    Check(owner.RecordFullColorClear(12003, 7371, 9, 8, 8, 22,
+        {0, 0, 8, 8}, "depth_color_tile_clear"), "later real clear resets invalidation");
+    auto olderLease = std::make_shared<MaskLease>();
+    olderLease->texture = std::make_unique<DummyTexture>();
+    SourceMask older{};
+    older.frame = 12003; older.epoch = 7371; older.colorAllocation = 9;
+    older.revision = 23; older.width = 8; older.height = 8;
+    older.validRect = published; older.stage = SourceStage::Downsample;
+    older.mask = olderLease;
+    owner.PublishPostprocess(older);
+    Check(owner.CurrentSource(9, 12003, 7371) != nullptr &&
+        !QualifiesInsetReplacement(owner.RecentClear(9), 12003, 7371, 9, 8, 8,
+            24, published, written), "published postprocess write consumes the clear proof");
+    const SourceMask oldSnapshot = *owner.CurrentSource(9, 12003, 7371);
+    Check(owner.RecordFullColorClear(12003, 7371, 9, 8, 8, 24,
+        {0, 0, 8, 8}, "depth_color_tile_clear"), "later clear replaces current source");
+    Check(owner.CurrentSource(9, 12003, 7371) == nullptr &&
+        oldSnapshot.mask == olderLease && oldSnapshot.validRect == published &&
+        oldSnapshot.mask->texture.get() == olderLease->texture.get(),
+        "later clear cannot mutate an earlier snapshot lease or valid rectangle");
+    owner.BeginFrame(12004, 7371);
+    Check(owner.RecentClear(9) == nullptr, "new frame drops clear background proof");
+
+    FrameView replay = raw;
+    replay.identity.geometryEpoch = 7371;
+    replay.identity.width = replay.identity.height = 8;
+    owner.BeginFrame(12005, 7371);
+    replay.identity.renderFrame = 12005;
+    Check(owner.RecordFullColorClear(12005, 7371, 9, 8, 8, 1,
+        {0, 0, 8, 8}, "depth_color_tile_clear"), "first full clear recorded without a raw source");
+    owner.PublishRaw(replay);
+    Check(owner.HasRawSource(9) && owner.RecentClear(9)->invalidatedBy &&
+        std::strcmp(owner.RecentClear(9)->invalidatedBy, "raw_draw") == 0,
+        "first audited raw after a first clear is accepted and consumes the clear proof");
+
+    owner.BeginFrame(12006, 7371);
+    replay.identity.renderFrame = 12006;
+    owner.PublishRaw(replay);
+    Check(owner.HasRawSource(9), "previous raw replay exists before clear");
+    Check(owner.RecordFullColorClear(12006, 7371, 9, 8, 8, 2,
+        {0, 0, 8, 8}, "depth_color_tile_clear") && !owner.HasRawSource(9),
+        "full clear invalidates an existing raw source");
+    owner.PublishRaw(replay);
+    Check(!owner.HasRawSource(9), "old cumulative raw replay cannot be republished after clear");
+
+    owner.BeginFrame(12007, 7371);
+    replay.identity.renderFrame = 12007;
+    owner.PublishRaw(replay);
+    Check(owner.InvalidateRawSource(9), "unknown RGB writer blocks the old raw source");
+    Check(owner.RecordFullColorClear(12007, 7371, 9, 8, 8, 3,
+        {0, 0, 8, 8}, "depth_color_tile_clear"), "clear is still recorded after unknown writer");
+    owner.PublishRaw(replay);
+    Check(!owner.HasRawSource(9), "clear cannot lift the prior unknown-writer raw replay rejection");
     std::puts("PASS: FSR alpha resolve/fetch policy checks");
 }

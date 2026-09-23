@@ -88,13 +88,19 @@ struct QuadGeometryCheckResult {
     bool ok = false;
     float bounds[4] = {0.0f, 0.0f, 0.0f, 0.0f}; // xmin, ymin, xmax, ymax
     ProducerRejectReason rejectReason = ProducerRejectReason::None;
+    uint32_t coveredWidth = 0, coveredHeight = 0;
+    uint32_t writtenX = 0, writtenY = 0, writtenWidth = 0, writtenHeight = 0;
 };
 
-inline QuadGeometryCheckResult CheckQuadCoverage(
+// The pixel rectangle is proven separately from the floating point viewport.
+// Keep the viewport unchanged for projection: rounding it changes the quad.
+inline QuadGeometryCheckResult CheckQuadCoveragePixels(
     std::span<const float, 24> positions, // 6 vertices * float4 (x,y,z,w) from arena
     float physicalVpX, float physicalVpY, float physicalVpW, float physicalVpH,
     int32_t scissorL, int32_t scissorT, int32_t scissorR, int32_t scissorB,
-    const float ndcScale[3], const float ndcOffset[3], const float halfPixel[2]) noexcept {
+    const float ndcScale[3], const float ndcOffset[3], const float halfPixel[2],
+    uint32_t coveredWidth, uint32_t coveredHeight, bool exactCorners,
+    bool allowInset = false) noexcept {
 
     QuadGeometryCheckResult res{};
     float xy[6][2];
@@ -110,22 +116,12 @@ inline QuadGeometryCheckResult CheckQuadCoverage(
         res.rejectReason = ProducerRejectReason::CoverageNotFull;
         return res;
     }
-    // Scissor compares as int32, so extents must fit INT32_MAX exactly.
-    // float(UINT32_MAX) rounds to 2^32 and must not be accepted then cast.
-    const auto exactInt32Extent = [](float value) {
-        if (!(value >= 1.0f) || double(value) > double(INT32_MAX)) return false;
-        const auto rounded = int32_t(value);
-        return float(rounded) == value;
-    };
-    if (!exactInt32Extent(physicalVpW) || !exactInt32Extent(physicalVpH)) {
+    if (!coveredWidth || !coveredHeight || coveredWidth > INT32_MAX || coveredHeight > INT32_MAX) {
         res.rejectReason = ProducerRejectReason::CoverageNotFull;
         return res;
     }
-    const uint32_t vpW = uint32_t(physicalVpW);
-    const uint32_t vpH = uint32_t(physicalVpH);
 
-    // Scissor must cover the origin-0 physical viewport.
-    if (scissorL > 0 || scissorT > 0 || scissorR < int32_t(vpW) || scissorB < int32_t(vpH)) {
+    if (scissorL > 0 || scissorT > 0 || scissorR < int32_t(coveredWidth) || scissorB < int32_t(coveredHeight)) {
         res.rejectReason = ProducerRejectReason::ScissorMismatch;
         return res;
     }
@@ -152,6 +148,10 @@ inline QuadGeometryCheckResult CheckQuadCoverage(
         }
         xy[i][0] = physicalVpX + (px * ndcScale[0] + ndcOffset[0] + halfPixel[0] + 1.0f) * physicalVpW * 0.5f;
         xy[i][1] = physicalVpY + (1.0f - py * ndcScale[1] - ndcOffset[1] - halfPixel[1]) * physicalVpH * 0.5f;
+        if (!std::isfinite(xy[i][0]) || !std::isfinite(xy[i][1])) {
+            res.rejectReason = ProducerRejectReason::NonFiniteCoordinate;
+            return res;
+        }
         xmin = std::min(xmin, xy[i][0]);
         xmax = std::max(xmax, xy[i][0]);
         ymin = std::min(ymin, xy[i][1]);
@@ -163,23 +163,27 @@ inline QuadGeometryCheckResult CheckQuadCoverage(
     // Cover every pixel center. Equality with the last center is the exclude edge.
     const float firstCenterX = 0.5f;
     const float firstCenterY = 0.5f;
-    const float lastCenterX = physicalVpW - 0.5f;
-    const float lastCenterY = physicalVpH - 0.5f;
-    if (xmin >= firstCenterX || ymin >= firstCenterY || xmax <= lastCenterX || ymax <= lastCenterY) {
+    const float lastCenterX = float(coveredWidth) - 0.5f;
+    const float lastCenterY = float(coveredHeight) - 0.5f;
+    if ((!allowInset && (xmin >= firstCenterX || ymin >= firstCenterY ||
+                        xmax <= lastCenterX || ymax <= lastCenterY)) ||
+        (allowInset && (xmin < 0.0f || ymin < 0.0f ||
+                        xmax > float(coveredWidth) || ymax > float(coveredHeight)))) {
         res.rejectReason = ProducerRejectReason::CoverageNotFull;
         return res;
     }
 
-    // Projection epsilon only. Separated corners must not collapse into one quad vertex.
+    // SDR retains its projection epsilon. P2 must use exact rectangle corners:
+    // near-corners can leave a gap across the shared diagonal at a pixel center.
     constexpr float kCornerEps = 1e-3f;
     unsigned masks[2] = {};
     float cornerXY[4][2]{};
     bool cornerSeen[4]{};
     for (unsigned i = 0; i < 6; ++i) {
-        const bool right = std::abs(xy[i][0] - xmax) <= kCornerEps;
-        const bool left = std::abs(xy[i][0] - xmin) <= kCornerEps;
-        const bool bottom = std::abs(xy[i][1] - ymax) <= kCornerEps;
-        const bool top = std::abs(xy[i][1] - ymin) <= kCornerEps;
+        const bool right = exactCorners ? xy[i][0] == xmax : std::abs(xy[i][0] - xmax) <= kCornerEps;
+        const bool left = exactCorners ? xy[i][0] == xmin : std::abs(xy[i][0] - xmin) <= kCornerEps;
+        const bool bottom = exactCorners ? xy[i][1] == ymax : std::abs(xy[i][1] - ymax) <= kCornerEps;
+        const bool top = exactCorners ? xy[i][1] == ymin : std::abs(xy[i][1] - ymin) <= kCornerEps;
         if (right == left || bottom == top) {
             res.rejectReason = ProducerRejectReason::TopologyInvalid;
             return res;
@@ -189,8 +193,10 @@ inline QuadGeometryCheckResult CheckQuadCoverage(
             cornerXY[corner][0] = xy[i][0];
             cornerXY[corner][1] = xy[i][1];
             cornerSeen[corner] = true;
-        } else if (std::abs(xy[i][0] - cornerXY[corner][0]) > kCornerEps ||
-                   std::abs(xy[i][1] - cornerXY[corner][1]) > kCornerEps) {
+        } else if ((exactCorners && (xy[i][0] != cornerXY[corner][0] ||
+                                    xy[i][1] != cornerXY[corner][1])) ||
+                   (!exactCorners && (std::abs(xy[i][0] - cornerXY[corner][0]) > kCornerEps ||
+                                     std::abs(xy[i][1] - cornerXY[corner][1]) > kCornerEps))) {
             res.rejectReason = ProducerRejectReason::TopologyInvalid;
             return res;
         }
@@ -205,8 +211,89 @@ inline QuadGeometryCheckResult CheckQuadCoverage(
         return res;
     }
 
+    if (allowInset) {
+        // Exclude centers lying exactly on any edge: raster top-left rules do
+        // not guarantee that either triangle wrote an edge-aligned pixel.
+        const auto first = [](float lower) { return uint32_t(std::floor(double(lower) - 0.5) + 1.0); };
+        const auto end = [](float upper) { return uint32_t(std::ceil(double(upper) - 0.5)); };
+        res.writtenX = first(xmin); res.writtenY = first(ymin);
+        const uint32_t right = end(xmax), bottom = end(ymax);
+        if (right <= res.writtenX || bottom <= res.writtenY ||
+            right > coveredWidth || bottom > coveredHeight) {
+            res.rejectReason = ProducerRejectReason::CoverageNotFull;
+            return res;
+        }
+        res.writtenWidth = right - res.writtenX;
+        res.writtenHeight = bottom - res.writtenY;
+    } else {
+        res.writtenWidth = coveredWidth; res.writtenHeight = coveredHeight;
+    }
     res.ok = true;
+    res.coveredWidth = coveredWidth; res.coveredHeight = coveredHeight;
     return res;
+}
+
+// SDR producer contract: viewport extents must be exact integers. Its token
+// still describes the entire physical viewport, including its scissor.
+inline QuadGeometryCheckResult CheckQuadCoverage(
+    std::span<const float, 24> positions,
+    float physicalVpX, float physicalVpY, float physicalVpW, float physicalVpH,
+    int32_t scissorL, int32_t scissorT, int32_t scissorR, int32_t scissorB,
+    const float ndcScale[3], const float ndcOffset[3], const float halfPixel[2]) noexcept {
+    QuadGeometryCheckResult res{};
+    if (!std::isfinite(physicalVpX) || !std::isfinite(physicalVpY) ||
+        !std::isfinite(physicalVpW) || !std::isfinite(physicalVpH)) {
+        res.rejectReason = ProducerRejectReason::NonFiniteCoordinate; return res;
+    }
+    if (physicalVpX != 0.0f || physicalVpY != 0.0f) {
+        res.rejectReason = ProducerRejectReason::CoverageNotFull; return res;
+    }
+    const auto exactInt32Extent = [](float value) {
+        if (!(value >= 1.0f) || double(value) > double(INT32_MAX)) return false;
+        const auto rounded = int32_t(value);
+        return float(rounded) == value;
+    };
+    if (!exactInt32Extent(physicalVpW) || !exactInt32Extent(physicalVpH)) {
+        res.rejectReason = ProducerRejectReason::CoverageNotFull; return res;
+    }
+    return CheckQuadCoveragePixels(positions, physicalVpX, physicalVpY, physicalVpW, physicalVpH,
+        scissorL, scissorT, scissorR, scissorB, ndcScale, ndcOffset, halfPixel,
+        uint32_t(physicalVpW), uint32_t(physicalVpH), false);
+}
+
+// P2-only rectangle contract. Every integer pixel center in the returned
+// origin-zero rect lies inside the real viewport, scissor and attachment. The
+// right/bottom padding and any fractional viewport tail are not claimed valid.
+inline QuadGeometryCheckResult CheckPostprocessQuadCoverage(
+    std::span<const float, 24> positions,
+    float physicalVpX, float physicalVpY, float physicalVpW, float physicalVpH,
+    int32_t scissorL, int32_t scissorT, int32_t scissorR, int32_t scissorB,
+    const float ndcScale[3], const float ndcOffset[3], const float halfPixel[2],
+    uint32_t attachmentWidth, uint32_t attachmentHeight,
+    bool allowInset = false) noexcept {
+    QuadGeometryCheckResult res{};
+    if (!std::isfinite(physicalVpX) || !std::isfinite(physicalVpY) ||
+        !std::isfinite(physicalVpW) || !std::isfinite(physicalVpH)) {
+        res.rejectReason = ProducerRejectReason::NonFiniteCoordinate; return res;
+    }
+    if (physicalVpX != 0.0f || physicalVpY != 0.0f ||
+        physicalVpW < 1.0f || physicalVpH < 1.0f ||
+        double(physicalVpW) > double(INT32_MAX) || double(physicalVpH) > double(INT32_MAX)) {
+        res.rejectReason = ProducerRejectReason::CoverageNotFull; return res;
+    }
+    if (scissorL > 0 || scissorT > 0) {
+        res.rejectReason = ProducerRejectReason::ScissorMismatch; return res;
+    }
+    // Pixel center n + 0.5 is inside [0, viewportExtent) iff n + 0.5 < extent.
+    const auto extent = [](float viewportExtent, int32_t scissorEnd, uint32_t attachmentEnd) {
+        return uint32_t(std::min({double(std::ceil(double(viewportExtent) - 0.5)),
+            double(std::max(scissorEnd, 0)), double(attachmentEnd)}));
+    };
+    const uint32_t w = extent(physicalVpW, scissorR, attachmentWidth);
+    const uint32_t h = extent(physicalVpH, scissorB, attachmentHeight);
+    if (!w || !h) { res.rejectReason = ProducerRejectReason::ScissorMismatch; return res; }
+    return CheckQuadCoveragePixels(positions, physicalVpX, physicalVpY, physicalVpW, physicalVpH,
+        scissorL, scissorT, scissorR, scissorB, ndcScale, ndcOffset, halfPixel, w, h, true, allowInset);
 }
 
 inline bool CheckNetIdentityRBSwap(uint32_t fetchWord0, uint32_t fetchWord3, bool resolveSwapRedBlue) noexcept {

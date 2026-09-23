@@ -44,3 +44,35 @@ python tools/tests/fsr/check-fsr-isolated-timing.py out/streamline-fg-p0/fsr-pos
 ```
 
 第一条当前预期 exit1，表示实景后处理尚不可用。第二条只核对计时记录格式和完成身份；额外截图帧仍需从实验元数据排除，统计值不能作为性能结论。
+
+## 用户授权恢复开发与 P2 后处理验证更新（2026-09-23）
+
+用户已提供明确指令恢复开发；当前状态脱离 paused。历史停止 checkpoint、01/02 运行记录与既有基线证据均保留。
+
+### 当前阶段与门禁状态
+
+- 总体阶段：G002（P1 FSR）已完成验收；G003（P2）仍处于进行中（in progress）；P3/P4 尚待实施。
+- 门禁状态：P0 Gate 1 维持 attempt 1/3 NOT PASSED，剩余 2 次材料复审机会。P0 的 validation、display、image、performance 要求仍保留。
+- 跨平台覆盖：Linux 平台当前仅有旧版本构建，本次 C++ 后处理修改尚未在 Linux 上进行验证，不宣称双平台新通过。
+- 运行对比背景：此前的 02 运行分辨率为 1440p（与 01 的 720p 不一致），但其实际失败原因是 inset quad 缺少 clear 背景证明，并非 1440p 本身导致失败；03 运行恢复了 720p 分辨率条件，但因同时修改了 C++ 传播实现，不构成单一变量对比。01、02 与旧 baseline 结果全部保留。
+
+### 本次修复与验证结论摘要
+
+本次针对 P2 后处理传播补齐了保护与判定机制：
+- 支持小数 viewport 的像素覆盖判定，并采用精确矩形角点检查，避免 SDR 宽松 epsilon 导致对角线像素缝隙。
+- Resolve 阶段通过 validRect 交集裁剪，padding 保持无效。
+- 接入真实 `depth_color_tile_clear` 追踪，对合格的 inset 几何以 clear 背景补齐，且在未知 RGB 写入或不支持后处理时使 clear 失效。
+- 首次 clear 允许保留 raw 收集，并细化区分输入缺失（`input_unavailable`）与采样器不支持（`sampler_unavailable`）。
+- Python 离线参考工具修正了 Vulkan Y 轴与项目 HLSL `FLT_MIN` 实际为 `-FLT_MAX` 的负极值处理，并增加独立 clear 检查套件。
+
+相关 CPU 测试（`LoNativeDlssP2RoutingTest`、`LoFsrAlphaPropagationPolicyTest`）、Python clear 6 项测试与单像素 tonemap 回归测试全部通过。Windows build03（EXE `8e513eb2...`，源码标识 `eac07c5c...`，基于 dirty HEAD `ffc5399`，不可仅用 HEAD 标识）在 RTX 5080 Vulkan 1280x720 FSR Quality 实景（`fsr-postprocess-windows-03`，frame 12000，exit 0，配置存档基线未变）中完成验证：6 个已审计 draw 全部成功 record/publish，5 组 blur 与 1 组 tone 逐像素比对零差异（修正参考端 `FLT_MIN` 误解，原单像素失败报告原样保留），原始颜色零差异，且独立 oracle 传输链全量一致完成。
+
+完整数据、逐 draw 像素明细及 oracle 传输记录详见 [Codex 进度记录](fsr-dlss-fg-codex-progress.zh-CN.md)。
+
+### 保留缺口与未验证范围
+
+- 深度不变性尚未由 originaldepth 对证明。
+- 光栅化边缘规则未认证（`edge_check_status: not_covered`）。
+- host prefilter 替换未覆盖（仅 host scene-only 通过）。
+- SDK 遮罩绑定、完整 P2 画质及性能均未验收。
+- Linux 实机运行未完成。
