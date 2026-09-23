@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-`IMP-P0-FIX2` 的探针专用门禁修复已落盘，run03 已使用冻结 EXE（SHA256 `36665711B5258A234DC29AD7266BFD5A26243FD998B285178A516CDBF95EA9D2`）运行。G006 的完整 P0 Gate 仍不通过，Oracle 初审剩余 2 次材料复审；G002 的 FSR SDK、renderer/runtime 接线已实现并提交为 `87a1691`，Windows/Linux 基础运行已验证；P1 连续平移／旋转输入验收及 P2–P4 仍未完成，主 ultragoal 仍覆盖至 P4。
+`IMP-P0-FIX2` 的探针专用门禁修复已落盘，run03 已使用冻结 EXE（SHA256 `36665711B5258A234DC29AD7266BFD5A26243FD998B285178A516CDBF95EA9D2`）运行。G006 的完整 P0 Gate 仍不通过，Oracle 初审剩余 2 次材料复审；G002 的 FSR SDK、renderer/runtime 接线已实现并提交为 `87a1691`，Windows/Linux 基础运行已验证；P1 可运行阶段已按原始通过条件完成并 checkpoint，G003 的 P2 正在实施；P0 Gate 与 P2–P4 仍未完成，主 ultragoal 仍覆盖至 P4。
 
 几何一致性小修 EXE SHA256 为 `C13BDC5E7ED8C73612388D79871770CCD4EB1ACE8232EE050FB74DC235C98398`，已用于 foreground01 和 background04；run03 使用的旧 `366657...` EXE 与证据保持不变。
 
@@ -30,7 +30,7 @@ P0 探针修复范围限制为 `tools/tests/streamline_fg` 与 `cmake/LoStreamli
 
 早期 SDK 阶段记录（后续状态见下文）：FSR SDK 双平台 static build、backend-dispatch 符号 link 和 CPU 3.1.4 check 已 exit0，证据见 [`fsr-sdk-build-results.json`](../../out/streamline-fg-p0/fsr-sdk-build-results.json)；当时 G002 的 renderer/runtime 接线仍在进行，尚无 FSR GPU 运行验收。生产 DLAA/Quality 背景回归已完成单场景证据，详见 [`RESULTS.md`](../../out/streamline-fg-p0/production-facade-regression/RESULTS.md)；不代表全游戏画质性能或 FG 验收。
 
-P1 当前证据：Windows 最终生产构建完整哈希见 [`fsr-p1-integration-results.json`](../../out/streamline-fg-p0/fsr-p1-integration-results.json)，独立 adapter run04/run05-gap 全流程 exit0、0 warnings、0 errors，run05-gap 证明真实 `renderFrame 2→4` 会强制 SDK reset；真实 renderer failed-token-gpu-01 exit0、validation 0。两处实际缺陷已修复：SDK KHR 空 proc 使用 promoted core 等价回退；GLSL luma RGBA8 与 SDK RGBA16F 错配，生成期 overlay 仅重生 4 family，SDK cache 未改。quality02 已提交真实 FSR（`1706x960→2560x1440`），但 baseline classes/extent validation 共 144 条、exit0 且 baseline unchanged；quality03-normal 66 sampled non-reset median `16.7599 ms`，静止与短移动截图 exit0；NativeAA01 49 non-reset median `16.6743 ms`、`2560x1440→same`、截图 exit0，screenshot fix 已在 NativeAA 场景核实。fallbackgpu02 `6b00c780...` 通过实际 FSR record → 注入 post-record reject → renderer current green 4096 pixels（保留 alpha）→ 下一次 actual blue SDK reset，明确仅为 fallback/reset 范围证据，不是 SDK internal fault 或 full-facade 通过。上述结果仍不足以宣称 P1 完成；完整 P1 仍需 nonzero MV、depth translation 和 yaw 证据。
+P1 早期运行检查点（后续结案见文末）：Windows 当时生产构建完整哈希见 [`fsr-p1-integration-results.json`](../../out/streamline-fg-p0/fsr-p1-integration-results.json)，独立 adapter run04/run05-gap 全流程 exit0、0 warnings、0 errors，run05-gap 证明真实 `renderFrame 2→4` 会强制 SDK reset；真实 renderer failed-token-gpu-01 exit0、validation 0。两处实际缺陷已修复：SDK KHR 空 proc 使用 promoted core 等价回退；GLSL luma RGBA8 与 SDK RGBA16F 错配，生成期 overlay 仅重生 4 family，SDK cache 未改。quality02 已提交真实 FSR（`1706x960→2560x1440`），但 baseline classes/extent validation 共 144 条、exit0 且 baseline unchanged；quality03-normal 66 sampled non-reset median `16.7599 ms`，静止与短移动截图 exit0；NativeAA01 49 non-reset median `16.6743 ms`、`2560x1440→same`、截图 exit0，screenshot fix 已在 NativeAA 场景核实。fallbackgpu02 `6b00c780...` 通过实际 FSR record → 注入 post-record reject → renderer current green 4096 pixels（保留 alpha）→ 下一次 actual blue SDK reset，明确仅为 fallback/reset 范围证据，不是 SDK internal fault 或 full-facade 通过。上述结果仍不足以宣称 P1 完成；完整 P1 仍需 nonzero MV、depth translation 和 yaw 证据。
 
 Linux Distrobox crash core 证明 `EffectContext` `alignas(32)` 实际 `mod32=24`；生成 backend alignment 修复后的全游戏 build 为 `76513e...`，main harness run02 exit0，5 项 readback 与 reset/resize 通过，但旧 run02 的 AMD coherent-memory `VUID-02790` 已由后续 Linux adapter run03 修复并以 0 errors/0 warnings 通过。Linux run03 已 clean，但这仍不是 Steam Deck 或完整 Linux 游戏画质验收；当前 Linux game 的完整实景结果仍待补充。
 
@@ -45,7 +45,7 @@ Linux 已将当前源码与 PPC 隔离传输到 psvita，使用 `FSR=ON` / `REQU
 
 ## 调度与设计证据
 
-原始 brief 明确先做 FSR，并行推进 FG；此前“严格串行、P0 未过则不得做 FSR”的说法来自 OpenCode deepwork 旧文件，不是用户技术依赖。当前 G001 已被 superseded（不表示通过）；G006 逐字保留完整 P0 objective、attempt 1/3 NOT PASSED、剩余 2 次复审，以及 validation/display/image/performance 的完整要求。G002 正在开发独立 FSR，G003/G006/G004/G005 待验收；优先顺序只是排程，不新增依赖。native 工具当前状态 active，但用户已授权持续自主执行；OMX 当前为 executing。
+原始 brief 明确先做 FSR，并行推进 FG；此前“严格串行、P0 未过则不得做 FSR”的说法来自 OpenCode deepwork 旧文件，不是用户技术依赖。当前 G001 已被 superseded（不表示通过）；G006 逐字保留完整 P0 objective、attempt 1/3 NOT PASSED、剩余 2 次复审，以及 validation/display/image/performance 的完整要求。G002 的 P1 已完成，G003 正在开发，G003/G006/G004/G005 待验收；优先顺序只是排程，不新增依赖。native 工具当前状态 active，但用户已授权持续自主执行；OMX 当前为 executing。
 
 设计记录：[stage-dependency-audit.md](../../out/streamline-fg-p0/stage-dependency-audit.md)、[fsr-p1-input-contract.md](../../out/streamline-fg-p0/fsr-p1-input-contract.md)、[fsr-p2-mask-design.md](../../out/streamline-fg-p0/fsr-p2-mask-design.md)。P2 新 architect 计划还包括 alpha replay 与后处理传播；这些文档记录设计和证据边界，不表示 FSR/P2 已验收。
 
@@ -78,3 +78,11 @@ Windows 同一隔离进程完成左摇杆相机跟随移动和右摇杆旋转。
 该结果通过试验前固定的静态几何判据（每对深度一致样本至少 100、预期运动中位数至少 `0.5 px`、误差中位数至多 `0.05 px`、P95 至多 `0.1 px`）。见 [结果与范围](../../out/streamline-fg-p0/fsr-motion-windows-02-lite/result.json) 和 [预设判据](../../out/streamline-fg-p0/fsr-motion-acceptance-plan.json)。游戏 exit0，存档／配置基线未变。这补齐 Windows P1 的有界运动输入证据，不代表 P2 画质、性能、动态物体、Steam Deck 或 FG 验收。
 
 复现时在 FSR 启用的隔离进程设置 `LO_FSR_CAPTURE_REQUEST` 为请求文件的绝对路径，写入新的非零整数触发三帧；产物位于 `captures/fsr-motion-*/frame-*/`。运动测试文件保留原 5/7 字段，并支持 `serial hexButtonMask leftX leftY polls LT RT rightX rightY`；右轴限幅、取消和过期释放的实际 HID fixture 已通过。离线执行 `python tools/tests/fsr/compare_captured_motion.py <capture-directory> --motion translation --roi x0,y0,x1,y1 --step 4 --output result.json`，旋转则使用 `--motion yaw`。ROI 使用输入分辨率坐标，必须人工选静态几何。比较器输出诊断而不自动宣称验收，退出码 0 只表示成功生成结果；缺失方向、历史重置或覆盖不足必须单独判断。
+
+## P1 阶段结案，转入 P2
+
+独立复核完成后，G002 已通过受支持的 OMX checkpoint 标记 complete，G003 已进入执行；native aggregate goal 保持 active。验收对照见 [P1 audit](../../out/streamline-fg-p0/fsr-p1-acceptance-audit.md)。新增 Windows Balanced 为 `752×423 → 1280×720`，Performance 为 `640×360 → 1280×720`；两档均有真实 SDK 提交、连续三帧无 reset 的完整读回、正常最终场景／HUD、exit0 和未变基线，见 [Balanced](../../out/streamline-fg-p0/fsr-game-windows-balanced-01/result.json) 与 [Performance](../../out/streamline-fg-p0/fsr-game-windows-performance-01/result.json)。
+
+原生 Linux RADV Performance 也通过相同 `640×360 → 1280×720` 提交与读回检查，三个实际帧 `8345–8347` 无 reset，正常退出且隔离配置、profile、存档 17 个文件不变，见 [Linux Performance](../../out/streamline-fg-p0/linux-game-fsr-performance-02/result.json)。首次较晚发送输入未能进入存档，随后进入待机影片，未计为 FSR 失败；重试只把 START 提前到约 28.5 秒，保持 12 tick 与同一 EXE，成功读档。
+
+P1 的结案仅覆盖可运行路径及其有界输入／回退合同；P2 的透明遮罩、完整画质／性能场景和 Steam Deck，保留的 P0 Gate、P3/P4 FG 仍待完成。已有 clean adapter/fixture validation 不代表整个游戏 validation 清零。SDK 内部错误注入、动态物体画质与实际物理 FG 显示也未据此宣称通过。新 P2 alpha replay 文件是进行中草稿，尚未构建或验收。

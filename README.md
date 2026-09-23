@@ -36,10 +36,11 @@ record](docs/notes/native-dlss-validation.md).
 Source builds may opt into the experimental FSR 3.1.4 path on
 Windows and native Linux with `LO_ENABLE_FSR=ON` and `LO_REQUIRE_FSR=ON`, using
 FidelityFX SDK v1.1.4's FSR 3.1.4 implementation.
-Current bounded evidence covers selected Quality and Native AA scenarios;
-full quality coverage, Linux/Steam Deck acceptance, player acceptance, and
-DLSS frame-generation acceptance remain open. These flags and results do not
-change the public release configuration.
+Quality, Balanced, Performance and Native AA have bounded Windows runtime evidence;
+native Linux RADV also has real Quality, Performance and Native AA submissions.
+Controlled Windows static-scene motion/depth checks passed. Full image-quality and
+performance coverage, Steam Deck, player acceptance, and DLSS frame generation remain
+open. These source-build results do not change the public release configuration.
 
 ### Unreleased development updates
 

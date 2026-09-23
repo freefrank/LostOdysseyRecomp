@@ -7,11 +7,11 @@
 - 任务性质：本地文档导入与状态整理；没有重建 OpenCode 任务执行器，也没有创建新的 Codex sidebar 任务。
 - 导入时代码基线：`39bbda6ff1cb8216582798bebab21a3a5395a36e`；当时已有代码修改未提交。后续 FSR 实现已本地提交为 `87a1691`。
 - 导入时验证边界：CPU 直接受影响测试 4/4 通过，生产链接构建通过；当时没有生产路径 GPU 回归。该历史事实保留；当前生产 facade 回归已有单场景证据，但不扩展为全游戏画质、性能、每个 SDK teardown 或 FG 验收。
-- 交付状态：FSR 第一批实现已本地提交为 `87a1691`，后续捕获改动仍在工作区；未推送、未发布。
+- 交付状态：FSR 实现与运动捕获已本地提交为 `87a1691`、`c028962`；未推送、未发布。
 
 ## 2026-09-23 Codex 恢复执行
 
-本次已由新建的 ultragoal 恢复开发清单并进入执行阶段。OpenCode 与 `oh-my-opencode-slim` 的 `STOPPED` 是历史来源状态，保留用于追溯；当前 `IMP-P0-FIX2` 仍未通过 Gate，G002 的 FSR SDK 和 renderer/runtime 接线已实现，Windows/Linux 基础运行已有证据；P1 连续平移／旋转验证及 P2–P4 仍待验收，所有检查框保持未完成。
+本次已由新建的 ultragoal 恢复开发清单并进入执行阶段。OpenCode 与 `oh-my-opencode-slim` 的 `STOPPED` 是历史来源状态，保留用于追溯；当前 `IMP-P0-FIX2` 仍未通过 Gate，G002 的 FSR SDK 和 renderer/runtime 接线已实现，Windows/Linux 基础运行已有证据；P1 可运行阶段已完成受控运动及四档检查并 checkpoint；P2–P4 与保留的 P0 Gate 仍待验收，其原导入检查框保持未完成。
 
 持久计划索引：[`.omx/ultragoal/goals.json`](../../.omx/ultragoal/goals.json)、[`.omx/ultragoal/ledger.jsonl`](../../.omx/ultragoal/ledger.jsonl)。本次只同步当前清单状态，不改写上述持久计划文件。
 
@@ -52,20 +52,20 @@ OpenCode 只读核对信息：数据库为 `C:/Users/freefrank/.local/share/open
 - [ ] `IMP-P0-REVIEW-1`（依赖上述修复证据）：整理 Gate 1 材料复审包。Oracle 初审为 NOT PASSED，剩余两次材料复审机会；不重跑初审，也不把 clean exit 自动等同于 Gate 通过。
 - [ ] `IMP-P0-PM-SYNC`（依赖阶段性实质证据与复审结论）：更新 `docs/project-management/items.json`、中英文 ROADMAP 和同步状态。历史 195 项同步已完成；本次停止状态不触发新的 PM 同步。
 
-### P1：FSR 可运行版本（G002 接线进行中，尚未验收）
+### P1：FSR 可运行版本（G002 已完成有界验收）
 
-- [ ] `IMP-P1-FSR-RUNTIME`：固定 SDK 接入真实低分辨率渲染、dispatch 与输出目标，完成 Windows Vulkan 和原生 Linux 的实际构建/运行边界；先 Quality，再 Balanced、Performance 和 Native AA。
-- [ ] `IMP-P1-FSR-GATE`：提供真实帧中的 provider、输入/输出尺寸、jitter/reset、提交与失败回退证据，并证明平移/旋转下 depth/MV 契约正确。
-- 进度：SDK 双平台 static build、backend-dispatch 符号 link 和 CPU 3.1.4 check 已通过，renderer/runtime 接线进行中；尚无 FSR GPU 运行验收。
-- 当前 P1 证据：Windows 最终生产构建 hash 见 [`fsr-p1-integration-results.json`](../../out/streamline-fg-p0/fsr-p1-integration-results.json)；adapter run04/run05-gap 全流程通过，failed-token-gpu-01 exit0、validation 0。quality02 已提交真实 FSR（`1706x960→2560x1440`），但有 144 条 baseline classes/extent validation、exit0 且 baseline unchanged；quality03-normal 与 NativeAA01 均有 exit0 的非 reset median 和截图结果，NativeAA 已核实 screenshot fix。fallbackgpu02 `6b00c780...` 通过实际 FSR record、注入 post-record reject、renderer current green 4096 pixels（保留 alpha）和下一次 actual blue SDK reset，仅证明 fallback/reset 范围，不能解释为 SDK internal fault 或 full-facade 通过。Linux run03 clean；P1 仍需 nonzero MV、depth translation、yaw 和完整 Linux/Steam Deck 边界证据，不标记完成。
+- [x] `IMP-P1-FSR-RUNTIME`：固定 SDK 接入真实低分辨率渲染、dispatch 与输出目标，完成 Windows Vulkan 和原生 Linux 的实际构建/运行边界；先 Quality，再 Balanced、Performance 和 Native AA。
+- [x] `IMP-P1-FSR-GATE`：提供真实帧中的 provider、输入/输出尺寸、jitter/reset、提交与失败回退证据，并证明平移/旋转下 depth/MV 契约正确。
+- 当前进度：G002 已按原 P1 条件完成并 checkpoint；Windows 四档、Linux RADV 路径、受控运动、提交与回退证据见 [P1 audit](../../out/streamline-fg-p0/fsr-p1-acceptance-audit.md)。P2 画质／性能、Steam Deck 与 FG 不随之验收。
+- 早期 P1 运行检查点：Windows 当时生产构建 hash 见 [`fsr-p1-integration-results.json`](../../out/streamline-fg-p0/fsr-p1-integration-results.json)；adapter run04/run05-gap 全流程通过，failed-token-gpu-01 exit0、validation 0。quality02 已提交真实 FSR（`1706x960→2560x1440`），但有 144 条 baseline classes/extent validation、exit0 且 baseline unchanged；quality03-normal 与 NativeAA01 均有 exit0 的非 reset median 和截图结果，NativeAA 已核实 screenshot fix。fallbackgpu02 `6b00c780...` 通过实际 FSR record、注入 post-record reject、renderer current green 4096 pixels（保留 alpha）和下一次 actual blue SDK reset，仅证明 fallback/reset 范围，不能解释为 SDK internal fault 或 full-facade 通过。Linux run03 clean；当时尚缺的 nonzero MV、depth translation/yaw 和新增两档实景证据现已补齐。Steam Deck 仍属于 P2 待验收范围。
 
-### P2：FSR 画质与 Deck 验收（未启动）
+### P2：FSR 画质与 Deck 验收（G003 执行中）
 
 - [ ] `IMP-P2-QUALITY`：验证颜色域、透明/reactive mask、场景边界、锐化和 mip 策略；比较同输出尺寸的 Off、原 TAA、DLSS、FSR。
 - [ ] `IMP-P2-HARDWARE`：取得 AMD 与 NVIDIA 实机证据，并分别验证原生 Linux 与 Steam Deck；记录样张、连续帧和基础渲染时间/GPU 收益。未测设备不能写成已验收。
 - 依赖：P1 的真实 FSR 执行和输入契约证据。
 
-P2 当前仅有设计记录：[fsr-p2-mask-design.md](../../out/streamline-fg-p0/fsr-p2-mask-design.md)，新 architect 计划包括 alpha replay 与后处理传播。尚无完整 opaque-only/composited 对，P2 检查框保持未完成。
+P2 已据设计启动原始 alpha 收集切片，草稿尚未构建／验收。设计记录：[fsr-p2-mask-design.md](../../out/streamline-fg-p0/fsr-p2-mask-design.md)，新 architect 计划包括 alpha replay 与后处理传播。尚无完整 opaque-only/composited 对，P2 检查框保持未完成。
 
 ### P3：FG 生产输入与呈现基础设施（未启动）
 
@@ -89,7 +89,7 @@ P2 当前仅有设计记录：[fsr-p2-mask-design.md](../../out/streamline-fg-p0
 
 ## 恢复边界
 
-当前清单已由 ultragoal 恢复到 `IMP-P0-FIX2` 执行中，同时 G002 的 P1 renderer/runtime 接线进行中；G006 P0 仍完整未通过，P2–P4 仍待验收。提交、推送和远程 PM 同步遵循各自授权边界。
+当前 G002 P1 已完成，G003 P2 执行中；G006 完整保留 P0 未通过项，P2–P4 仍待验收。提交、推送和远程 PM 同步遵循各自授权边界。
 
 ## 来源
 
@@ -102,3 +102,5 @@ P2 当前仅有设计记录：[fsr-p2-mask-design.md](../../out/streamline-fg-p0
 最新运动输入诊断及其边界见[当前进度](fsr-dlss-fg-codex-progress.zh-CN.md#2026-09-23-运动输入捕获检查点)：首帧静态 ROI 的 MV 回投吻合；完整捕获触发后两帧重置，未据此关闭 P1。
 
 后续轻量捕获已取得 Windows 连续三帧移动／旋转证据，见[轻量连续帧试验](fsr-dlss-fg-codex-progress.zh-CN.md#轻量连续帧试验)。它补齐该平台的 P1 静态几何运动输入检查，不改变 P2、Steam Deck 或 FG 待验收状态。
+
+G002 P1 已完成独立证据复核并由 OMX 标记 complete；G003 P2 正在执行。完整要求及证据边界见[阶段结案](fsr-dlss-fg-codex-progress.zh-CN.md#p1-阶段结案转入-p2)，未将 P1 通过扩展到原 P0 Gate 或 FG。

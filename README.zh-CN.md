@@ -31,8 +31,9 @@ DisplayEncoded 色彩、reversed-Z 深度），DLAA 已具备 CPU 契约与运�
 
 源码构建可在 Windows 与原生 Linux 通过 `LO_ENABLE_FSR=ON` 和
 `LO_REQUIRE_FSR=ON` 选择性启用固定 FidelityFX SDK v1.1.4（FSR 3.1.4 实现）的实验性路径。
-当前只有 Quality 与 Native AA 的有界场景证据；完整质量覆盖、Linux/Steam Deck 验收、
-玩家验收和 DLSS 帧生成验收仍未完成。这些开关和结果不改变公开发布配置。
+Quality、Balanced、Performance、Native AA 均有 Windows 有界运行证据；原生 Linux RADV
+已有 Quality、Performance 和 Native AA 的真实提交。Windows 受控静态场景的运动／深度检查已通过。
+完整画质与性能覆盖、Steam Deck、玩家验收和 DLSS 帧生成仍未完成；源码构建结果不改变公开发布配置。
 
 ### 未发布开发进展
 

@@ -9,7 +9,7 @@ One record of completed changes, with unpublished work separated from verified r
 ### English
 
 - Experimental opt-in FSR SR development updates:
-  - Added the fixed FidelityFX SDK v1.1.4 (FSR 3.1.4) source-build path for Windows and native Linux behind `LO_ENABLE_FSR=ON` and `LO_REQUIRE_FSR=ON`, with bounded Quality and Native AA evidence. Full quality, Linux/Steam Deck, player, and DLSS frame-generation acceptance remain pending.
+  - Added the fixed FidelityFX SDK v1.1.4 (FSR 3.1.4) source-build path for Windows and native Linux behind `LO_ENABLE_FSR=ON` and `LO_REQUIRE_FSR=ON`, with bounded Windows execution evidence for all four presets and native Linux RADV Quality, Performance and Native AA submissions. Full quality/performance, Steam Deck, player, and DLSS frame-generation acceptance remain pending.
   - Added opt-in three-frame FSR input/output capture with completed-submission metadata, camera/depth motion diagnostics, and bounded right-stick test input. Controlled Windows translation/yaw checks passed for static geometry; this is not full image-quality acceptance.
   - Fixed presented screenshots interpreting BGRA swapchain pixels as RGBA; verified with a native Linux Native AA capture.
 
@@ -35,7 +35,7 @@ One record of completed changes, with unpublished work separated from verified r
 ### 简体中文
 
 - 实验性可选 FSR 超分开发更新：
-  - 增加固定 FidelityFX SDK v1.1.4（FSR 3.1.4 实现）的源码构建路径，通过 `LO_ENABLE_FSR=ON` 与 `LO_REQUIRE_FSR=ON` 在 Windows 和原生 Linux 选择性启用；当前仅有 Quality 与 Native AA 的有界证据，完整质量、Linux/Steam Deck、玩家及 DLSS 帧生成验收仍待完成。
+  - 增加固定 FidelityFX SDK v1.1.4（FSR 3.1.4 实现）的源码构建路径，通过 `LO_ENABLE_FSR=ON` 与 `LO_REQUIRE_FSR=ON` 在 Windows 和原生 Linux 选择性启用；Windows 四档已有有界运行证据，原生 Linux RADV 已有 Quality、Performance 和 Native AA 真实提交；完整画质／性能、Steam Deck、玩家及 DLSS 帧生成验收仍待完成。
   - 增加显式启用的 FSR 三帧输入／输出捕获、提交完成元数据、相机／深度运动诊断及有界右摇杆测试输入。Windows 受控移动／旋转的静态几何检查通过，不代表完整画质验收。
   - 修复最终呈现截图将 BGRA 交换链像素按 RGBA 解读的问题，已用原生 Linux Native AA 截图验证。
 
