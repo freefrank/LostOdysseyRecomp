@@ -85,7 +85,7 @@ P2 已据设计启动原始 alpha 收集切片，草稿尚未构建／验收。�
 
 ## 调度状态
 
-原 brief 明确先做 FSR 并行推进 FG；旧 strict serial 结论来自 OpenCode deepwork，不是用户技术依赖。G001 已 superseded（不表示通过），G006 保留完整 P0 objective 与 attempt 1/3 NOT PASSED、剩 2 次复审及 validation/display/image/performance 要求；G002 正在开发独立 FSR，G003/G006/G004/G005 待验收。native 工具当前已确认 active，但用户已授权自主持续执行；OMX 当前 executing。设计依据见 [stage-dependency-audit.md](../../out/streamline-fg-p0/stage-dependency-audit.md) 和 [fsr-p1-input-contract.md](../../out/streamline-fg-p0/fsr-p1-input-contract.md)。
+原 brief 明确先做 FSR 并行推进 FG；旧 strict serial 结论来自 OpenCode deepwork，不是用户技术依赖。G001 已 superseded（不表示通过），G006 保留完整 P0 objective 与 attempt 1/3 NOT PASSED、剩 2 次复审及 validation/display/image/performance 要求；G002 P1 已完成，G003 P2 正在开发，G003/G006/G004/G005 待验收。native 工具当前已确认 active，但用户已授权自主持续执行；OMX 当前 executing。设计依据见 [stage-dependency-audit.md](../../out/streamline-fg-p0/stage-dependency-audit.md) 和 [fsr-p1-input-contract.md](../../out/streamline-fg-p0/fsr-p1-input-contract.md)。
 
 ## 恢复边界
 
@@ -104,3 +104,5 @@ P2 已据设计启动原始 alpha 收集切片，草稿尚未构建／验收。�
 后续轻量捕获已取得 Windows 连续三帧移动／旋转证据，见[轻量连续帧试验](fsr-dlss-fg-codex-progress.zh-CN.md#轻量连续帧试验)。它补齐该平台的 P1 静态几何运动输入检查，不改变 P2、Steam Deck 或 FG 待验收状态。
 
 G002 P1 已完成独立证据复核并由 OMX 标记 complete；G003 P2 正在执行。完整要求及证据边界见[阶段结案](fsr-dlss-fg-codex-progress.zh-CN.md#p1-阶段结案转入-p2)，未将 P1 通过扩展到原 P0 Gate 或 FG。
+
+P2 原始 alpha 收集已有 Windows 同一次绘制的颜色／深度不变与非零 mask 证据，见[收集检查点](fsr-dlss-fg-codex-progress.zh-CN.md#p2-原始材质-alpha-收集检查点)。后处理传播、SDK mask 绑定与完整 P2 验收保持待办。

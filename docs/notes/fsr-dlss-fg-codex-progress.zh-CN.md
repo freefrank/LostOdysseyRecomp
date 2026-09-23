@@ -85,4 +85,13 @@ Windows 同一隔离进程完成左摇杆相机跟随移动和右摇杆旋转。
 
 原生 Linux RADV Performance 也通过相同 `640×360 → 1280×720` 提交与读回检查，三个实际帧 `8345–8347` 无 reset，正常退出且隔离配置、profile、存档 17 个文件不变，见 [Linux Performance](../../out/streamline-fg-p0/linux-game-fsr-performance-02/result.json)。首次较晚发送输入未能进入存档，随后进入待机影片，未计为 FSR 失败；重试只把 START 提前到约 28.5 秒，保持 12 tick 与同一 EXE，成功读档。
 
-P1 的结案仅覆盖可运行路径及其有界输入／回退合同；P2 的透明遮罩、完整画质／性能场景和 Steam Deck，保留的 P0 Gate、P3/P4 FG 仍待完成。已有 clean adapter/fixture validation 不代表整个游戏 validation 清零。SDK 内部错误注入、动态物体画质与实际物理 FG 显示也未据此宣称通过。新 P2 alpha replay 文件是进行中草稿，尚未构建或验收。
+P1 的结案仅覆盖可运行路径及其有界输入／回退合同；P2 的透明遮罩、完整画质／性能场景和 Steam Deck，保留的 P0 Gate、P3/P4 FG 仍待完成。已有 clean adapter/fixture validation 不代表整个游戏 validation 清零。SDK 内部错误注入、动态物体画质与实际物理 FG 显示也未据此宣称通过。P2 原始 alpha 收集的后续检查点见下节；完整 P2 仍未验收。
+
+
+## P2 原始材质 alpha 收集检查点
+
+显式 `LO_FSR_ALPHA_REPLAY=1` 启用六组已审计 VS/PS 的原 alpha replay，保留原 PS 的 discard，以独立 R8 MAX 累积并只读原深度。每个 GPU 批次持有共享 lease，首 clear 与后续 LOAD、跨 Flush 累积具有显式依赖；实际深度分配与场景 anchor 决定归属，不固定捕获时的 eDRAM 地址。此时仅为 `PartialCoverage` 原始收集，未传播到最终场景，也未绑定 SDK reactive／T&C。
+
+Windows 与原生 Linux 已完成首轮增量构建，见 [构建记录](../../out/streamline-fg-p0/fsr-p2-alpha-build-result.json)。Windows `d567693c…` 在隔离城镇实景的 frame12000 记录 14 次已审计 draw，实际分配为 `853×491`，raw mask 有 130 个非零像素。draw1979 的原 `R16G16B16A16_FLOAT` 颜色 3,350,584 字节、D32 的 R32 depth plane 1,675,292 字节在同一次 replay 前后完全一致，独立哈希与逐像素比较均吻合；读回所属 serial24006 已完成后才导出。进程 exit0，原 settings／save／profile 未变。见 [实景结果](../../out/streamline-fg-p0/fsr-alpha-windows-01/result.json)。该检查不覆盖 stencil，不表示完整透明覆盖或画质／性能收益。
+
+诊断可将 `LO_FSR_ALPHA_CAPTURE_FRAME`、`LO_FSR_ALPHA_COMPARE_FRAME` 设为同一个预定 renderer 帧，并设置绝对 `LO_FSR_ALPHA_CAPTURE_DIR`。正常未启用路径不分配这些读回。只读深度格式暂限 D32_FLOAT_S8_UINT；不支持格式明确输出状态，不能据此当作相等。首轮捕获的有效证据与后续 long-frame epoch 顺序修复分开记录，最终提交前完成该窄修与受影响构建。

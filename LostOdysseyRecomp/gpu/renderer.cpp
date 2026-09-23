@@ -29,6 +29,7 @@
 #include "temporal_lifecycle.h"
 #include "motion_options.h"
 #include "motion_replay_gpu.h"
+#include "fsr_alpha_replay_gpu.h"
 #include "presentation.h"
 #include <settings/config.h>
 #include "shader/xenos_translator.h"
@@ -72,6 +73,8 @@
 #include <atomic>
 #include <thread>
 #include <cmath>
+#include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <iomanip>
 #include <future>
@@ -356,6 +359,25 @@ namespace gpu::renderer
             static constexpr uint32_t kGpuSlots = 2;
             static_assert(kGpuSlots == gpu::render_arena::kGpuSlots, "slot count must match arena policy");
             using TextureSetCache = texture_descriptors::BatchCache<RenderTexture, RenderDescriptorSet, kTextureSlots>;
+#if defined(LO_GPU_PLUME)
+            struct FsrAlphaCapture {
+                fsr_alpha::FrameView view;
+                std::unique_ptr<RenderBuffer> buffer;
+                std::filesystem::path directory;
+                uint32_t rowPitch = 0;
+                uint64_t submissionSerial = 0;
+            };
+            struct FsrAlphaEquality {
+                std::array<std::unique_ptr<RenderBuffer>, 4> buffers;
+                std::filesystem::path directory;
+                uint32_t width = 0, height = 0, colorBpp = 0, colorPitch = 0, depthPitch = 0;
+                RenderFormat colorFormat = RenderFormat::UNKNOWN, depthFormat = RenderFormat::UNKNOWN;
+                uint64_t frame = 0, drawOrdinal = 0, colorAllocation = 0, depthAllocation = 0;
+                uint64_t submissionSerial = 0;
+                bool replayRecorded = false;
+                std::string reason;
+            };
+#endif
             struct GpuSlot {
                 std::unique_ptr<RenderCommandList> list;
                 // The prefix is list. An NGX recording error must never place
@@ -387,6 +409,13 @@ namespace gpu::renderer
                 bool srPrefixClosed = false, srIsolatedAccepted = false, srContinuationOpen = false;
                 bool submitted = false;
                 std::vector<std::shared_ptr<dlss::EvaluateCapture>> evaluateCaptures;
+#if defined(LO_GPU_PLUME)
+                // Every submitted producer batch owns its raw alpha target and
+                // read-only depth framebuffer until this slot's fence completes.
+                std::vector<std::shared_ptr<fsr_alpha::BatchUse>> fsrAlphaBatches;
+                std::vector<std::shared_ptr<FsrAlphaCapture>> fsrAlphaCaptures;
+                std::vector<std::shared_ptr<FsrAlphaEquality>> fsrAlphaEqualities;
+#endif
                 // Copied at srApplied. Flush must not read activePlan; resolution
                 // changes replace that plan before they submit.
                 struct DlssSubmitMark {
@@ -519,6 +548,35 @@ namespace gpu::renderer
             uint64_t mvScratchBytes = 0;
             const temporal::MotionOptions motionOptions = temporal::MotionOptions::Environment();
             std::unique_ptr<temporal::MotionReplayGPU> motionReplay;
+#if defined(LO_GPU_PLUME)
+            const bool fsrAlphaReplayEnabled = [] {
+                const char* value = getenv("LO_FSR_ALPHA_REPLAY");
+                return value && std::string_view(value) == "1";
+            }();
+            std::unique_ptr<fsr_alpha::ReplayGPU> fsrAlphaReplay;
+            std::vector<fsr_alpha::FrameView> fsrAlphaRawViews;
+            bool fsrAlphaInitFailed = false;
+            const uint64_t fsrAlphaCaptureFrame = [] {
+                const char* value = getenv("LO_FSR_ALPHA_CAPTURE_FRAME");
+                if (!value || !*value) return ~0ull;
+                char* end = nullptr;
+                const auto result = std::strtoull(value, &end, 10);
+                return end && *end == '\0' ? result : ~0ull;
+            }();
+            const std::filesystem::path fsrAlphaCaptureDir = [] {
+                const char* value = getenv("LO_FSR_ALPHA_CAPTURE_DIR");
+                return value && *value ? std::filesystem::path(value) : std::filesystem::path{};
+            }();
+            uint64_t fsrAlphaCaptureQueuedFrame = ~0ull;
+            const uint64_t fsrAlphaCompareFrame = [] {
+                const char* value = getenv("LO_FSR_ALPHA_COMPARE_FRAME");
+                if (!value || !*value) return ~0ull;
+                char* end = nullptr;
+                const auto result = std::strtoull(value, &end, 10);
+                return end && *end == '\0' ? result : ~0ull;
+            }();
+            uint64_t fsrAlphaCompareQueuedFrame = ~0ull;
+#endif
             bool motionInitFailed = false;
             temporal::MotionFrameView motionView;
             uint64_t motionFinalizedFrame = ~0ull;
@@ -2084,11 +2142,109 @@ namespace gpu::renderer
 #if defined(LO_GPU_PLUME)
             // Keep the renderer route identical in the asset-free Vulkan fixture;
             // only the vendor's session and isolated command recording are substituted.
+            void CaptureFsrAlphaAtSceneCopy()
+            {
+                if (!fsrAlphaReplayEnabled || fsrAlphaCaptureDir.empty() ||
+                    frame != fsrAlphaCaptureFrame || fsrAlphaCaptureQueuedFrame == frame ||
+                    fsrAlphaRawViews.empty()) return;
+                size_t recorded = 0;
+                for (const auto& view : fsrAlphaRawViews) {
+                    if (!view || view.identity.renderFrame != frame || recorded == 4) continue;
+                    const uint64_t pitch = (uint64_t(view.identity.width) + 255u) & ~255ull;
+                    const uint64_t bytes = pitch * view.identity.height;
+                    if (bytes == 0 || bytes > (128u << 20)) continue;
+                    auto capture = std::make_shared<FsrAlphaCapture>();
+                    capture->view = view;
+                    capture->directory = fsrAlphaCaptureDir;
+                    capture->rowPitch = uint32_t(pitch);
+                    capture->buffer = device->createBuffer(RenderBufferDesc::ReadbackBuffer(bytes));
+                    if (!capture->buffer) continue;
+                    commandList->barriers(RenderBarrierStage::COPY,
+                        RenderTextureBarrier(view.texture, RenderTextureLayout::COPY_SOURCE));
+                    view.lease->layout = RenderTextureLayout::COPY_SOURCE;
+                    commandList->copyTextureRegion(
+                        RenderTextureCopyLocation::PlacedFootprint(capture->buffer.get(), RenderFormat::R8_UNORM,
+                            view.identity.width, view.identity.height, 1, capture->rowPitch, 0),
+                        RenderTextureCopyLocation::Subresource(view.texture, 0));
+                    commandList->barriers(RenderBarrierStage::GRAPHICS,
+                        RenderTextureBarrier(view.texture, RenderTextureLayout::COLOR_WRITE));
+                    view.lease->layout = RenderTextureLayout::COLOR_WRITE;
+                    Gpu().fsrAlphaCaptures.push_back(std::move(capture));
+                    ++recorded;
+                }
+                if (recorded) fsrAlphaCaptureQueuedFrame = frame;
+            }
+
+            std::shared_ptr<FsrAlphaEquality> PrepareFsrAlphaEquality(
+                const HostTexture& color, const HostTexture& depth, uint64_t drawOrdinal)
+            {
+                if (frame != fsrAlphaCompareFrame || fsrAlphaCaptureDir.empty() ||
+                    fsrAlphaCompareQueuedFrame == frame) return {};
+                fsrAlphaCompareQueuedFrame = frame;
+                auto capture = std::make_shared<FsrAlphaEquality>();
+                capture->directory = fsrAlphaCaptureDir;
+                capture->frame = frame;
+                capture->drawOrdinal = drawOrdinal;
+                capture->colorAllocation = color.allocationSerial;
+                capture->depthAllocation = depth.allocationSerial;
+                capture->width = color.width;
+                capture->height = color.height;
+                capture->colorFormat = color.format;
+                capture->depthFormat = depth.format;
+                capture->colorBpp = color.format == RenderFormat::R8G8B8A8_UNORM ? 4u :
+                    color.format == RenderFormat::R16G16B16A16_FLOAT ? 8u : 0u;
+                if (!capture->colorBpp || depth.format != RenderFormat::D32_FLOAT_S8_UINT ||
+                    color.width != depth.width || color.height != depth.height)
+                    capture->reason = "unsupported_color_or_depth_format_or_extent";
+                else {
+                    const uint64_t colorPitch = (uint64_t(color.width) * capture->colorBpp + 255u) & ~255ull;
+                    const uint64_t depthPitch = (uint64_t(depth.width) * 4u + 255u) & ~255ull;
+                    if (!color.width || !color.height || colorPitch * color.height > (128u << 20) ||
+                        depthPitch * depth.height > (128u << 20))
+                        capture->reason = "readback_extent_exceeds_limit";
+                    else {
+                        capture->colorPitch = uint32_t(colorPitch);
+                        capture->depthPitch = uint32_t(depthPitch);
+                        for (size_t i = 0; i < capture->buffers.size(); ++i) {
+                            const uint64_t bytes = (i < 2 ? colorPitch : depthPitch) * color.height;
+                            capture->buffers[i] = device->createBuffer(RenderBufferDesc::ReadbackBuffer(bytes));
+                            if (!capture->buffers[i]) { capture->reason = "readback_allocation_failed"; break; }
+                        }
+                    }
+                }
+                // The slot owns every buffer before a command may reference it.
+                Gpu().fsrAlphaEqualities.push_back(capture);
+                return capture;
+            }
+
+            void RecordFsrAlphaEqualitySnapshot(const std::shared_ptr<FsrAlphaEquality>& capture,
+                HostTexture& color, HostTexture& depth, bool after)
+            {
+                if (!capture || !capture->reason.empty()) return;
+                const auto colorLayout = color.layout;
+                const auto depthLayout = depth.layout;
+                Transition(color, RenderTextureLayout::COPY_SOURCE, RenderBarrierStage::COPY);
+                Transition(depth, RenderTextureLayout::COPY_SOURCE, RenderBarrierStage::COPY);
+                const size_t index = after ? 1 : 0;
+                commandList->copyTextureRegion(
+                    RenderTextureCopyLocation::PlacedFootprint(capture->buffers[index].get(),
+                        color.format, color.width, color.height, 1,
+                        capture->colorPitch / capture->colorBpp, 0),
+                    RenderTextureCopyLocation::Subresource(color.texture.get(), 0));
+                commandList->copyTextureRegion(
+                    RenderTextureCopyLocation::PlacedFootprint(capture->buffers[index + 2].get(),
+                        RenderFormat::R32_FLOAT, depth.width, depth.height, 1,
+                        capture->depthPitch / 4, 0),
+                    RenderTextureCopyLocation::Subresource(depth.texture.get(), 0));
+                Transition(color, colorLayout, RenderBarrierStage::GRAPHICS);
+                Transition(depth, depthLayout, RenderBarrierStage::GRAPHICS);
+            }
             template<class SrController>
             bool RecordSceneCopyDlssUsing(SrController& controller, HostTexture*& color, HostTexture*& rasterTarget)
             {
                 auto& promotion = sceneCopyPromotion;
                 if (!promotion.activeMapping || !vulkan || !Gpu().srIsolated || !Gpu().srContinuation) return false;
+                CaptureFsrAlphaAtSceneCopy();
                 dlss::SrConfig config{};
                 config.renderExtent = {promotion.inputs.color.width, promotion.inputs.color.height};
                 config.outputExtent = {activePlan.output.width, activePlan.output.height};
@@ -2415,6 +2571,117 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             // ---- command list / upload ring ------------------------------------
             // ReBlue-style two-slot ring: submit without waiting, then wait only
             // the slot about to be recorded into (one generation old).
+#if defined(LO_GPU_PLUME)
+            void ExportFsrAlphaCapture(const FsrAlphaCapture& capture, size_t index)
+            {
+                if (!capture.submissionSerial || !capture.buffer || !capture.view) return;
+                std::error_code ec;
+                std::filesystem::create_directories(capture.directory, ec);
+                if (ec) { LOG_WARNING("fsr alpha: capture directory failed: {}", ec.message()); return; }
+                const auto& id = capture.view.identity;
+                const auto stem = fmt::format("fsr-alpha-f{}-c{}-d{}-{}",
+                    id.renderFrame, id.colorAllocation, id.depthAllocation, index);
+                auto* mapped = static_cast<const uint8_t*>(capture.buffer->map());
+                if (!mapped) { LOG_WARNING("fsr alpha: capture map failed frame={}", id.renderFrame); return; }
+                std::ofstream raw(capture.directory / (stem + ".r8.bin"), std::ios::binary | std::ios::trunc);
+                std::ofstream preview(capture.directory / (stem + ".pgm"), std::ios::binary | std::ios::trunc);
+                if (preview) preview << "P5\n" << id.width << ' ' << id.height << "\n255\n";
+                for (uint32_t y = 0; y < id.height; ++y) {
+                    const char* row = reinterpret_cast<const char*>(mapped + size_t(y) * capture.rowPitch);
+                    if (raw) raw.write(row, id.width);
+                    if (preview) preview.write(row, id.width);
+                }
+                capture.buffer->unmap();
+                raw.close(); preview.close();
+                std::ofstream metadata(capture.directory / (stem + ".json"), std::ios::trunc);
+                if (metadata) metadata << "{\"coverage\":\"PartialCoverage\",\"render_frame\":" << id.renderFrame
+                    << ",\"geometry_epoch\":" << id.geometryEpoch
+                    << ",\"color_allocation\":" << id.colorAllocation
+                    << ",\"depth_allocation\":" << id.depthAllocation
+                    << ",\"resolve_write_ordinal\":null,\"width\":" << id.width
+                    << ",\"height\":" << id.height
+                    << ",\"viewport_bits\":[" << id.viewportBits[0] << ',' << id.viewportBits[1]
+                    << ',' << id.viewportBits[2] << ',' << id.viewportBits[3]
+                    << "],\"jitter_bits\":[" << id.jitterBits[0] << ',' << id.jitterBits[1]
+                    << "],\"audited_draws\":" << capture.view.auditedDraws
+                    << ",\"submission_serial\":" << capture.submissionSerial << "}\n";
+                if (!raw.fail() && !preview.fail() && metadata && !metadata.fail())
+                    LOG_INFO("fsr alpha: captured PartialCoverage frame={} draws={} {}x{} path={}",
+                        id.renderFrame, capture.view.auditedDraws, id.width, id.height, stem);
+                else LOG_WARNING("fsr alpha: capture export failed frame={}", id.renderFrame);
+            }
+
+            void ExportFsrAlphaEquality(const FsrAlphaEquality& capture)
+            {
+                if (!capture.submissionSerial) return;
+                std::error_code ec;
+                std::filesystem::create_directories(capture.directory, ec);
+                if (ec) { LOG_WARNING("fsr alpha: equality directory failed: {}", ec.message()); return; }
+                const auto stem = fmt::format("fsr-alpha-equality-f{}-draw{}", capture.frame, capture.drawOrdinal);
+                std::string reason = capture.reason;
+                if (reason.empty() && !capture.replayRecorded) reason = "replay_not_recorded";
+                std::array<const uint8_t*, 4> mapped{};
+                if (reason.empty()) {
+                    for (size_t i = 0; i < mapped.size(); ++i) {
+                        mapped[i] = static_cast<const uint8_t*>(capture.buffers[i]->map());
+                        if (!mapped[i]) { reason = "readback_map_failed"; break; }
+                    }
+                }
+                uint64_t colorMismatch = 0, depthMismatch = 0;
+                if (reason.empty()) {
+                    const auto comparePlane = [&](size_t first, size_t second, uint32_t bpp, uint32_t pitch,
+                        uint64_t& mismatch, const char* firstName, const char* secondName) {
+                        std::ofstream before(capture.directory / (stem + firstName), std::ios::binary | std::ios::trunc);
+                        std::ofstream after(capture.directory / (stem + secondName), std::ios::binary | std::ios::trunc);
+                        for (uint32_t y = 0; y < capture.height; ++y) {
+                            const auto* a = mapped[first] + size_t(y) * pitch;
+                            const auto* b = mapped[second] + size_t(y) * pitch;
+                            for (uint32_t x = 0; x < capture.width; ++x)
+                                mismatch += std::memcmp(a + size_t(x) * bpp, b + size_t(x) * bpp, bpp) != 0;
+                            if (before) before.write(reinterpret_cast<const char*>(a), size_t(capture.width) * bpp);
+                            if (after) after.write(reinterpret_cast<const char*>(b), size_t(capture.width) * bpp);
+                        }
+                        before.close(); after.close();
+                        if (before.fail() || after.fail()) reason = "readback_export_failed";
+                    };
+                    comparePlane(0, 1, capture.colorBpp, capture.colorPitch, colorMismatch,
+                        "-color-before.bin", "-color-after.bin");
+                    comparePlane(2, 3, 4, capture.depthPitch, depthMismatch,
+                        "-depth-before.r32.bin", "-depth-after.r32.bin");
+                }
+                for (size_t i = 0; i < mapped.size(); ++i)
+                    if (mapped[i]) capture.buffers[i]->unmap();
+                std::ofstream metadata(capture.directory / (stem + ".json"), std::ios::trunc);
+                if (metadata) {
+                    const char* format = capture.colorFormat == RenderFormat::R8G8B8A8_UNORM ? "R8G8B8A8_UNORM" :
+                        capture.colorFormat == RenderFormat::R16G16B16A16_FLOAT ? "R16G16B16A16_FLOAT" : "unsupported";
+                    const char* depthFormat = capture.depthFormat == RenderFormat::D32_FLOAT_S8_UINT ?
+                        "D32_FLOAT_S8_UINT" : "unsupported";
+                    metadata << "{\"status\":\"" << (reason.empty() ? "complete" : reason)
+                        << "\",\"render_frame\":" << capture.frame
+                        << ",\"draw_ordinal\":" << capture.drawOrdinal
+                        << ",\"color_allocation\":" << capture.colorAllocation
+                        << ",\"depth_allocation\":" << capture.depthAllocation
+                        << ",\"color_format\":\"" << format
+                        << "\",\"color_format_value\":" << uint32_t(capture.colorFormat)
+                        << ",\"depth_format\":\"" << depthFormat
+                        << "\",\"depth_format_value\":" << uint32_t(capture.depthFormat)
+                        << ",\"depth_copy_format\":\"R32_FLOAT_plane_only\""
+                        << ",\"width\":" << capture.width << ",\"height\":" << capture.height
+                        << ",\"color_bytes_compared\":" << (reason.empty() ? uint64_t(capture.width) * capture.height * capture.colorBpp : 0)
+                        << ",\"depth_bytes_compared\":" << (reason.empty() ? uint64_t(capture.width) * capture.height * 4 : 0)
+                        << ",\"color_mismatch_pixels\":" << colorMismatch
+                        << ",\"depth_mismatch_pixels\":" << depthMismatch
+                        << ",\"color_equal\":" << (reason.empty() && !colorMismatch ? "true" : "false")
+                        << ",\"depth_equal\":" << (reason.empty() && !depthMismatch ? "true" : "false")
+                        << ",\"replay_recorded\":" << (capture.replayRecorded ? "true" : "false")
+                        << ",\"submission_serial\":" << capture.submissionSerial << "}\n";
+                }
+                LOG_INFO("fsr alpha: same-draw equality frame={} draw={} status={} color_mismatch={} depth_mismatch={}",
+                    capture.frame, capture.drawOrdinal, reason.empty() ? "complete" : reason,
+                    colorMismatch, depthMismatch);
+            }
+#endif
             bool RecycleSlot(uint32_t i)
             {
                 auto& s = gpuSlots[i];
@@ -2434,6 +2701,16 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     else gpuTiming.AddUnavailableBatch();
                 } else if (render_timing::Enabled()) gpuTiming.AddUnavailableBatch();
                 s.drawProbe.ReadCompleted();
+#if defined(LO_GPU_PLUME)
+                for (size_t captureIndex = 0; captureIndex < s.fsrAlphaCaptures.size(); ++captureIndex)
+                    ExportFsrAlphaCapture(*s.fsrAlphaCaptures[captureIndex], captureIndex);
+                s.fsrAlphaCaptures.clear();
+                for (const auto& capture : s.fsrAlphaEqualities)
+                    ExportFsrAlphaEquality(*capture);
+                s.fsrAlphaEqualities.clear();
+                // Release read-only depth framebuffers before retired guest depth.
+                s.fsrAlphaBatches.clear();
+#endif
                 if (motionReplay) {
                     for (const auto& texture : s.retiredTextures)
                         motionReplay->ReleaseDepthAfterGpuCompletion(texture->texture.get());
@@ -2519,6 +2796,13 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             {
                 consecutiveResolveCopies.Invalidate();
                 if (video::GpuWorkStopped()) {
+#if defined(LO_GPU_PLUME)
+                    if (!Gpu().submitted) {
+                        Gpu().fsrAlphaCaptures.clear();
+                        Gpu().fsrAlphaEqualities.clear();
+                        Gpu().fsrAlphaBatches.clear();
+                    }
+#endif
                     if (!Gpu().submitted) for (const auto& e : Gpu().evaluateCaptures)
                         e->reason = "gpu_stopped_before_submit";
 #if defined(LO_RENDERER_P2_EMBEDDED_TEST)
@@ -2538,6 +2822,11 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (!Gpu().srPrefixClosed) Gpu().drawProbe.End(commandList);
                 if (timingQueries) commandList->writeTimestamp(timingQueries, 1);
                 if (!video::EndGpuCommands(commandList)) {
+#if defined(LO_GPU_PLUME)
+                    Gpu().fsrAlphaCaptures.clear();
+                    Gpu().fsrAlphaEqualities.clear();
+                    Gpu().fsrAlphaBatches.clear();
+#endif
                     for (const auto& e : Gpu().evaluateCaptures) e->reason = "continuation_end_failed";
 #if defined(LO_RENDERER_P2_EMBEDDED_TEST)
                     if (dlssController && Gpu().srUseId) dlssController->OnBatchDiscarded(Gpu().srUseId);
@@ -2569,6 +2858,11 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 #endif
                     queue->executeCommandLists(lists, listCount, nullptr, 0, nullptr, 0, fence);
                 if (!submitted) {
+#if defined(LO_GPU_PLUME)
+                    Gpu().fsrAlphaCaptures.clear();
+                    Gpu().fsrAlphaEqualities.clear();
+                    Gpu().fsrAlphaBatches.clear();
+#endif
                     for (const auto& e : Gpu().evaluateCaptures) e->reason = "checked_submit_failed";
 #if defined(LO_GPU_PLUME)
 #if defined(LO_RENDERER_P2_EMBEDDED_TEST)
@@ -2584,6 +2878,12 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     return false;
                 }
 #if defined(LO_GPU_PLUME)
+                for (const auto& use : Gpu().fsrAlphaBatches)
+                    use->submissionSerial = submissionSerial;
+                for (const auto& capture : Gpu().fsrAlphaCaptures)
+                    capture->submissionSerial = submissionSerial;
+                for (const auto& capture : Gpu().fsrAlphaEqualities)
+                    capture->submissionSerial = submissionSerial;
 #if defined(LO_RENDERER_P2_EMBEDDED_TEST)
                 if (dlssController && Gpu().srUseId) {
                     Gpu().srSubmissionSerial = submissionSerial;
@@ -3545,6 +3845,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     // drain, before destroying the map it points into.
                     // Stencil views inside replay framebuffers must die first.
                     if (motionReplay) motionReplay->ReleaseDepthBindingsAfterGpuDrain();
+#if defined(LO_GPU_PLUME)
+                    if (fsrAlphaReplay) fsrAlphaReplay->ReleaseDepthBindingsAfterGpuDrain();
+                    fsrAlphaRawViews.clear();
+#endif
                     sceneCopyPromotion = {};
                     framebuffers.clear();
                     renderTargets.clear();
@@ -4636,11 +4940,27 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     srFrameTime = now; srTimedFrame = frame;
                     frameRasterJitter = temporal::FrameJitter(frame, activePlan.width, activePlan.height, ActiveTaaOptions().jitter_scale);
                     temporalScene.Reset(frame);
+#if defined(LO_GPU_PLUME)
+                    fsrAlphaRawViews.clear();
+                    if (fsrAlphaReplayEnabled && vulkan &&
+                        activePlan.requestedUpscaler == upscaling::Upscaler::Fsr && !fsrAlphaInitFailed) {
+                        if (!fsrAlphaReplay) {
+                            fsrAlphaReplay = std::make_unique<fsr_alpha::ReplayGPU>();
+                            if (!fsrAlphaReplay->Init(device, setBuilders, 5)) {
+                                LOG_WARNING("fsr alpha: replay initialization failed");
+                                fsrAlphaReplay.reset(); fsrAlphaInitFailed = true;
+                            }
+                        }
+                    }
+#endif
                     hdrTemporalOutput = nullptr; hdrTemporalSource = {}; hdrTonemapApplied = false;
                     actualRasterJitter = {}; actualRasterJitterCaptured = false;
                     temporal::ApplyTemporalLongInterval(temporalHistory.get(), std::chrono::steady_clock::now(), frame,
                         temporalInputProbe, dlssSrRequested, taaDiagnosticJitter, temporalForcedJitter,
                         temporalFrameTime, temporalJitter, temporalSupportedFrame, temporalEpoch, temporalGapResetFrame);
+#if defined(LO_GPU_PLUME)
+                    if (fsrAlphaReplay) fsrAlphaReplay->BeginFrame(frame, temporalEpoch);
+#endif
                 }
                 if(temporalActive&&temporalHistory) {
                     static const char* diagnosticStart=getenv("LO_TEMPORAL_LOG_START_FRAME");
@@ -5867,6 +6187,82 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     commandList->drawInstanced(indexCount, 1, uint32_t(baseVertex), 0);
                 }
  #if defined(LO_GPU_PLUME)
+                // Controlled P2 collection: this raw R8 mask is deliberately
+                // independent of the later scene-copy/SDK inputs. Only the six
+                // audited original PS outputs can contribute to it.
+                if (fsrAlphaReplay && dlssSrRequested && !scenePromotionActivated &&
+                    activePlan.requestedUpscaler == upscaling::Upscaler::Fsr &&
+                    fsr_alpha::AuditedPair(key.vs, key.ps) &&
+                    fsr_alpha::AuditedState(key.blend, depthControl, depthInfo, key.colorMask, info.primitiveType) &&
+                    ps && !vs->info.usesPointSize && vs->info.errors.empty() &&
+                    !ps->info.writesDepth && ps->info.errors.empty() &&
+                    (ps->info.colorTargetsWritten & 1u) && depth && jitterAnchor && drawJitter.applied &&
+                    depth->allocationSerial == jitterAnchor->depthAllocation &&
+                    color->width == depth->width && color->height == depth->height &&
+                    rasterViewport.x == 0 && rasterViewport.y == 0 &&
+                    rasterViewport.width > 0 && rasterViewport.height > 0 &&
+                    rasterViewport.width <= color->width && rasterViewport.height <= color->height) {
+                    const auto alphaDesc = DescribePipeline(key, vs, ps, false);
+                    if (alphaDesc.depthEnabled && !alphaDesc.depthWriteEnabled &&
+                        alphaDesc.depthFunction == RenderComparisonFunction::GREATER_EQUAL &&
+                        !alphaDesc.stencilEnabled && !alphaDesc.geometryShader) {
+                        auto* alphaPipeline = fsrAlphaReplay->Prepare(key, alphaDesc, vs->info, ps->info,
+                            vsWords, vsCount, psWords, psCount);
+                        if (alphaPipeline) {
+                            fsr_alpha::FrameIdentity identity{};
+                            identity.renderFrame = frame; identity.geometryEpoch = temporalEpoch;
+                            identity.colorAllocation = color->allocationSerial;
+                            identity.depthAllocation = depth->allocationSerial;
+                            identity.width = color->width; identity.height = color->height;
+                            identity.viewportBits = {
+                                std::bit_cast<uint32_t>(float(rasterViewport.x)),
+                                std::bit_cast<uint32_t>(float(rasterViewport.y)),
+                                std::bit_cast<uint32_t>(float(rasterViewport.width)),
+                                std::bit_cast<uint32_t>(float(rasterViewport.height))};
+                            identity.jitterBits = {
+                                std::bit_cast<uint32_t>(float(drawJitter.sample.pixelX)),
+                                std::bit_cast<uint32_t>(float(drawJitter.sample.pixelY))};
+                            const RenderBufferReference alphaConstants[3] = {
+                                {uploadRing, vsOffset}, {uploadRing, sharedOffset}, {uploadRing, psOffset}};
+                            RenderDescriptorSet* alphaSets[] = {set0, set1, set2, set3, staticSamplerSet.get()};
+                            auto equality = PrepareFsrAlphaEquality(*color, *depth, drawsThisFrame);
+                            RecordFsrAlphaEqualitySnapshot(equality, *color, *depth, false);
+                            Transition(*depth, RenderTextureLayout::DEPTH_READ, RenderBarrierStage::GRAPHICS);
+                            const bool recorded = fsrAlphaReplay->Draw(commandList, alphaPipeline, identity,
+                                depth->texture.get(), alphaConstants, alphaSets, 5, rasterViewport, scissor,
+                                useIndices, indexCount, baseVertex, drawsThisFrame, Gpu().fsrAlphaBatches);
+                            Transition(*depth, RenderTextureLayout::DEPTH_WRITE, RenderBarrierStage::GRAPHICS);
+                            if (equality) equality->replayRecorded = recorded;
+                            RecordFsrAlphaEqualitySnapshot(equality, *color, *depth, true);
+                            if (recorded) {
+                                auto view = fsrAlphaReplay->ViewFor(identity);
+                                auto existing = std::find_if(fsrAlphaRawViews.begin(), fsrAlphaRawViews.end(),
+                                    [&](const auto& value) { return value.identity == identity; });
+                                if (existing == fsrAlphaRawViews.end()) fsrAlphaRawViews.push_back(std::move(view));
+                                else *existing = std::move(view);
+                            }
+                            else {
+                                fsrAlphaRawViews.clear();
+                                if (frame % 120 == 0)
+                                    LOG_WARNING("fsr alpha: replay failed frame={} draw={} reason={}",
+                                        frame, drawsThisFrame, fsrAlphaReplay->LastError());
+                            }
+                            // The original guest bindings are still needed by
+                            // later draws and scene-copy promotion in this list.
+                            commandList->setFramebuffer(framebuffer);
+                            commandList->setViewports(&rasterViewport, 1);
+                            commandList->setScissors(&scissor, 1);
+                            commandList->setGraphicsPipelineLayout(pipelineLayout.get());
+                            commandList->setPipeline(pipeline);
+                            commandList->setGraphicsPushConstants(0, constantAddresses);
+                            commandList->setGraphicsDescriptorSet(set0, 0);
+                            commandList->setGraphicsDescriptorSet(set1, 1);
+                            commandList->setGraphicsDescriptorSet(set2, 2);
+                            commandList->setGraphicsDescriptorSet(set3, 3);
+                            commandList->setGraphicsDescriptorSet(staticSamplerSet.get(), 4);
+                        } else if (fsrAlphaReplay->FailedThisFrame()) fsrAlphaRawViews.clear();
+                    }
+                }
                 if (scenePromotionActivated)
                     RecordSceneCopyDlss(color, rasterTarget);
                 if (video::GpuWorkStopped()) return;
