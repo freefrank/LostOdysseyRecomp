@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cfloat>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <mutex>
 #include <unordered_map>
@@ -218,7 +219,83 @@ struct Controller::Impl {
     VkDescriptorSetLayout prepareSetLayout = VK_NULL_HANDLE, presentSetLayout = VK_NULL_HANDLE;
     VkPipelineLayout prepareLayout = VK_NULL_HANDLE, presentLayout = VK_NULL_HANDLE;
     VkPipeline preparePipeline = VK_NULL_HANDLE, presentPipeline = VK_NULL_HANDLE;
-    struct Use { uint64_t id, serial; VkDescriptorSet prepare, present; bool initializedShared, ready; };
+    struct Use {
+        uint64_t id, serial; VkDescriptorSet prepare, present; bool initializedShared, ready;
+        VkQueryPool timing = VK_NULL_HANDLE;
+        uint64_t frame = 0, request = 0, epoch = 0;
+        Config timingConfig{};
+        uint32_t timestampBits = 0;
+        float timestampPeriod = 0;
+        bool reset = false, capture = false;
+    };
+    const bool timingEnabled = [] {
+        const char* value = std::getenv("LO_FSR_GPU_TIMING");
+        return value && std::strcmp(value, "1") == 0;
+    }();
+    std::vector<VkQueryPool> timingPools, availableTimingPools;
+    std::optional<uint32_t> timingFamily;
+    uint32_t timingBits = 0;
+    float timingPeriod = 0;
+
+    void BeginTiming(Use& use, plume::VulkanCommandList& commands,
+        const temporal::TemporalFrameInputs& inputs, bool reset, bool capture) {
+        if (!timingEnabled) return;
+        use.frame = inputs.renderFrameId; use.request = inputs.plan.requestSignature;
+        use.epoch = inputs.plan.geometryEpoch; use.timingConfig = config;
+        use.reset = reset; use.capture = capture;
+        if (!commands.queue) return;
+        if (timingFamily != commands.queue->familyIndex) {
+            timingFamily = commands.queue->familyIndex;
+            uint32_t count = 0;
+            vkGetPhysicalDeviceQueueFamilyProperties(device->physicalDevice, &count, nullptr);
+            std::vector<VkQueueFamilyProperties> families(count);
+            vkGetPhysicalDeviceQueueFamilyProperties(device->physicalDevice, &count, families.data());
+            timingBits = *timingFamily < count ? families[*timingFamily].timestampValidBits : 0;
+            VkPhysicalDeviceProperties properties{};
+            vkGetPhysicalDeviceProperties(device->physicalDevice, &properties);
+            timingPeriod = properties.limits.timestampPeriod;
+        }
+        use.timestampBits = timingBits;
+        use.timestampPeriod = timingPeriod;
+        if (!use.timestampBits || use.timestampPeriod <= 0) return;
+        if (!availableTimingPools.empty()) {
+            use.timing = availableTimingPools.back(); availableTimingPools.pop_back();
+        } else {
+            VkQueryPoolCreateInfo info{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
+            info.queryType = VK_QUERY_TYPE_TIMESTAMP; info.queryCount = 2;
+            if (vkCreateQueryPool(device->vk, &info, nullptr, &use.timing) != VK_SUCCESS) {
+                use.timing = VK_NULL_HANDLE;
+                return;
+            }
+            timingPools.push_back(use.timing);
+        }
+        vkCmdResetQueryPool(commands.vk, use.timing, 0, 2);
+        vkCmdWriteTimestamp(commands.vk, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, use.timing, 0);
+    }
+
+    // Called only from the existing completed-fence path. Never wait for a query.
+    void CompleteTiming(const Use& use) {
+        if (!timingEnabled) return;
+        uint64_t data[4]{}; // value, availability for each timestamp
+        VkResult result = use.timing ? vkGetQueryPoolResults(device->vk, use.timing,
+            0, 2, sizeof(data), data, sizeof(uint64_t) * 2,
+            VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT) : VK_NOT_READY;
+        const bool valid = use.ready && result == VK_SUCCESS && data[1] && data[3];
+        const uint64_t mask = use.timestampBits == 64 ? ~uint64_t(0) :
+            use.timestampBits ? (uint64_t(1) << use.timestampBits) - 1 : 0;
+        const double elapsed = valid ? double((data[2] - data[0]) & mask) * use.timestampPeriod / 1e6 : -1;
+        std::fprintf(stderr,
+            "FSR GPU timing: provider=fsr frame=%llu use=%llu submission_serial=%llu request=0x%llx geometry_epoch=%llu device_epoch=%llu input=%ux%u output=%ux%u quality=%u sdk_reset=%u fsr_capture=%u status=%s sr_isolated_elapsed_ms=%.6f scope=prepare_sdk_encode_copy_sync\n",
+            static_cast<unsigned long long>(use.frame), static_cast<unsigned long long>(use.id),
+            static_cast<unsigned long long>(use.serial), static_cast<unsigned long long>(use.request),
+            static_cast<unsigned long long>(use.epoch), static_cast<unsigned long long>(use.timingConfig.deviceEpoch),
+            use.timingConfig.renderWidth, use.timingConfig.renderHeight,
+            use.timingConfig.outputWidth, use.timingConfig.outputHeight, unsigned(use.timingConfig.quality),
+            unsigned(use.reset), unsigned(use.capture), valid ? "complete" : "unavailable", elapsed);
+    }
+    void RecycleTiming(const Use& use) {
+        if (use.timing) availableTimingPools.push_back(use.timing);
+    }
     std::vector<Use> uses;
     uint64_t nextUse = 1, completed = 0;
     std::optional<uint64_t> lastRecordedRenderFrameId;
@@ -251,6 +328,7 @@ struct Controller::Impl {
         backendScratch.clear();
         if (device && device->vk) {
             const VkDevice vk = device->vk;
+            for (auto pool : timingPools) vkDestroyQueryPool(vk, pool, nullptr);
             if (preparePipeline) vkDestroyPipeline(vk, preparePipeline, nullptr);
             if (presentPipeline) vkDestroyPipeline(vk, presentPipeline, nullptr);
             if (prepareLayout) vkDestroyPipelineLayout(vk, prepareLayout, nullptr);
@@ -268,6 +346,8 @@ struct Controller::Impl {
         dilatedDepth.reset(); dilatedMotion.reset(); previousDepth.reset();
         linearColor.reset(); canonicalDepth.reset(); sdkOutput.reset(); encodedOutput.reset();
         uses.clear();
+        timingPools.clear(); availableTimingPools.clear();
+        timingFamily.reset(); timingBits = 0; timingPeriod = 0;
         lastRecordedRenderFrameId.reset();
         lastGuardDiagnosticConfig.reset();
         lastGuardDiagnosticRequestSignature = 0;
@@ -607,6 +687,7 @@ Attempt Controller::RecordIsolated(plume::VulkanCommandList& commands, const Con
         capture->BeforeFsr(cmd, color, depth, motion,
             *static_cast<const plume::VulkanTexture*>(inputs.motionInvalidity.texture));
     }
+    impl_->BeginTiming(impl_->uses.back(), commands, inputs, effectiveReset, capture != nullptr);
     Barrier(cmd, impl_->linearColor->vk, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
     Barrier(cmd, impl_->canonicalDepth->vk, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
     Barrier(cmd, impl_->sdkOutput->vk, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
@@ -689,6 +770,8 @@ Attempt Controller::RecordIsolated(plume::VulkanCommandList& commands, const Con
         copy.extent = {config.outputWidth, config.outputHeight, 1};
         vkCmdCopyImage(cmd, impl_->encodedOutput->vk, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
             output.vk, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+        if (impl_->uses.back().timing)
+            vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, impl_->uses.back().timing, 1);
         if (capture) capture->AfterFsr(cmd, output);
     }
     commands.endExternalCommands();
@@ -742,6 +825,7 @@ void Controller::OnBatchDiscarded(uint64_t useId) {
         // FSR advances CPU-side history when dispatch records. A successfully
         // recorded list omitted from submission invalidates that history.
         if (it->ready) impl_->poisoned = true;
+        impl_->RecycleTiming(*it);
         impl_->FreeSets(*it);
         impl_->uses.erase(it);
     }
@@ -755,6 +839,8 @@ void Controller::ReleaseCompletedThrough(uint64_t serial) {
     auto it = impl_->uses.begin();
     while (it != impl_->uses.end()) {
         if (it->serial && it->serial <= impl_->completed) {
+            impl_->CompleteTiming(*it);
+            impl_->RecycleTiming(*it);
             impl_->FreeSets(*it);
             it = impl_->uses.erase(it);
         } else ++it;
