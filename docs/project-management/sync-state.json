@@ -1788,10 +1788,10 @@
         "Delivery": "In progress",
         "Source key": "vendor-temporal-upscaling",
         "Start date": "2026-09-20",
-        "Evidence": "Targeted implementation and validation complete across BR-01 (temporal history clock & gap jitter, 154+14 CPU, 12 GPU owner checks), BR-02 (thread-safe device capability snapshot, 43 checks), BR-03 (stable GraphicsRow, adopted+checked-submit runtime status, 37 CPU, 14 video stop, native Vulkan status/identity, 18 menu BMPs), settings save logging (400 logger checks), pre-present swapchain screenshot + guest resolved dual capture at XE_SWAP, and Quality->DLAA UAF depth/stencil fix (motion_replay_gpu_test --depth-retirement-only 26 checks). Synchronous NGX Evaluate capture contract tests passed. User live session verified Quality->DLAA switch and export 2961-2963 without crash (frame 2887 DLAA Submitted). Re-export on latest executable, live visual quality, and player acceptance remain pending."
+        "Evidence": "Implementation delivery commit 871685fdd75b84c00bb9ebb685f36d90169eb82d (pushed to main) establishes targeted verification across BR-01 (154+14 CPU, 12 GPU owner checks), BR-02 (43 checks), BR-03 (stable GraphicsRow, adopted+checked-submit runtime status, 37 CPU, 14 video stop, native Vulkan status/identity, 18 menu BMPs), settings save logging (400 logger checks), pre-present swapchain screenshot + guest resolved dual capture at XE_SWAP, and Quality->DLAA UAF depth/stencil fix (motion_replay_gpu_test --depth-retirement-only 26 checks). Synchronous NGX Evaluate capture contract tests passed. User live session verified Quality->DLAA switch and export 2961-2963 without crash (frame 2887 DLAA Submitted). Re-export on latest executable, per-frame NGX execution capture, and visual quality/player acceptance remain pending."
       },
       "title": "Integrate vendor temporal upscaling after input validation",
-      "body_sha256": "5e6287152ad5a9cb8bc4a1d7f9ced673d0af129e8f5576ee49c293f19fa4b96b"
+      "body_sha256": "cd90bf9c9c4d021b4be372ec415840b8bac062b21ecb8ebdadec9a953c60507b"
     },
     "taa-motion-quality": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56fGM",
