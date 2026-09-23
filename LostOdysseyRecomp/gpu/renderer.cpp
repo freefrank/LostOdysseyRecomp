@@ -108,7 +108,7 @@ namespace gpu::renderer
                 : resolution::TargetRole::Unknown;
         }
         std::mutex captureMutex;
-        bool captureBusy = false, capturePending = false;
+        bool captureBusy = false, capturePending = false, fsrCaptureBusy = false;
         std::wstring captureStatus;
         std::future<os::CaptureArchiveResult> captureArchive;
 
@@ -142,7 +142,7 @@ namespace gpu::renderer
     {
         std::lock_guard lock(captureMutex);
         UpdateCaptureArchive();
-        if (captureBusy) return;
+        if (captureBusy || fsrCaptureBusy) return;
 #ifdef LO_GPU_PLUME
         captureBusy = capturePending = true;
         captureStatus = L"等待下一完整帧 / Waiting for next frame";
@@ -895,6 +895,12 @@ namespace gpu::renderer
             bool evaluatePagePrepared = false;
             bool evaluatePageExported = false;
             bool evaluatePageExportOk = true;
+            // A separate, bounded three-frame FSR diagnostic uses the same
+            // checked-submit/readback ownership without enabling F1 draw traces.
+            std::vector<std::shared_ptr<dlss::capture::Page>> fsrCapturePages;
+            std::filesystem::path fsrCaptureRoot;
+            uint64_t fsrCaptureRequestSeen = 0;
+            uint32_t fsrCaptureFirstFrame = 0;
             std::ofstream debugTrace;
             uint32_t debugDraw = 0;
             std::vector<uint32_t> debugRegisters;
@@ -934,7 +940,7 @@ namespace gpu::renderer
                     // Newline-delimited JSON. Each subsequent line is either a resolve
                     // event or one of the two PS draw records requested by the oracle.
                     p2Evidence << "{\"schema\":\"lostodyssey.p2-oracle-evidence.v1\",\"event\":\"capture\",\"renderer_frame\":" << frame
-                               << ",\"trigger\":\"LO_CAPTURE_REQUEST changing_nonzero_uint64_or_existing_F1_menu\",\"encoding_claim\":\"unknown\"}\n";
+                               << ",\"trigger\":\"F1_or_LO_DEBUG_CAPTURE_SWAP\",\"encoding_claim\":\"unknown\"}\n";
                     const auto& description = device->getDescription();
                     debugTrace << fmt::format("GPU: {} driver_raw={}\n", description.name, description.driverVersion);
                     const auto config = settings::GetConfig();
@@ -1247,6 +1253,10 @@ namespace gpu::renderer
                 if (!debugCaptureDir.empty()) return;
                 static const char* path = getenv("LO_CAPTURE_REQUEST");
                 if (!path) return;
+                {
+                    std::lock_guard lock(captureMutex);
+                    if (fsrCaptureBusy) return;
+                }
                 uint64_t request = 0;
                 std::ifstream in(path);
                 if (in >> request && request && request != captureRequest)
@@ -1255,6 +1265,87 @@ namespace gpu::renderer
                     captureFrame = frame;
                     LOG_INFO("renderer: capture request {} at frame {}", request, frame);
                 }
+            }
+
+            void FinishFsrCapture()
+            {
+                if (fsrCapturePages.empty()) return;
+                const bool gpuComplete = WaitForGpu();
+                bool ok = gpuComplete && fsrCapturePages.size() == 3;
+                try {
+                    std::filesystem::create_directories(fsrCaptureRoot);
+                    for (size_t i = 0; i < fsrCapturePages.size(); ++i) {
+                        auto& page = *fsrCapturePages[i];
+                        const auto dir = fsrCaptureRoot / fmt::format("frame-{:02}-f{}", i + 1, page.frame);
+                        std::filesystem::create_directories(dir);
+                        const bool exported = page.closed && page.ExportFsr(dir);
+                        ok = exported && page.saved > 0 && ok;
+                    }
+                    std::ofstream manifest(fsrCaptureRoot / "capture-info.json", std::ios::trunc);
+                    manifest << "{\"schema\":1,\"trigger\":\"LO_FSR_CAPTURE_REQUEST\",\"request\":"
+                             << fsrCaptureRequestSeen << ",\"first_renderer_frame\":" << fsrCaptureFirstFrame
+                             << ",\"frames\":[";
+                    for (size_t i = 0; i < fsrCapturePages.size(); ++i)
+                        manifest << (i ? "," : "") << fsrCapturePages[i]->frame;
+                    manifest << "],\"gpu_complete\":" << (gpuComplete ? "true" : "false")
+                             << ",\"complete\":" << (ok ? "true" : "false") << "}\n";
+                    manifest.close(); ok = !manifest.fail() && ok;
+                } catch (const std::exception& e) {
+                    ok = false;
+                    LOG_ERROR("FSR-only capture export failed: {}", e.what());
+                }
+                LOG_INFO("FSR-only capture {}: {}", ok ? "saved" : "incomplete",
+                    FileSystem::PathUtf8(fsrCaptureRoot));
+                if (evaluatePage && !fsrCapturePages.empty() && evaluatePage == fsrCapturePages.back())
+                    evaluatePage.reset();
+                fsrCapturePages.clear(); fsrCaptureRoot.clear();
+                std::lock_guard lock(captureMutex);
+                fsrCaptureBusy = false;
+            }
+
+            void PollFsrCaptureRequest()
+            {
+                if (fsrCapturePages.size() == 3 && fsrCapturePages.back()->closed)
+                    FinishFsrCapture();
+                if (fsrCapturePages.empty()) {
+                    static const char* path = getenv("LO_FSR_CAPTURE_REQUEST");
+                    if (!path || !*path || !debugCaptureDir.empty() || captureFrame == frame) return;
+                    uint64_t request = 0;
+                    std::ifstream in(path);
+                    if (!(in >> request) || !request || request == fsrCaptureRequestSeen) return;
+                    {
+                        std::lock_guard lock(captureMutex);
+                        if (captureBusy || fsrCaptureBusy) return;
+                        fsrCaptureBusy = true;
+                    }
+                    try {
+                        const auto stamp = std::chrono::system_clock::now().time_since_epoch().count();
+                        fsrCaptureRoot = std::filesystem::absolute(std::filesystem::path("captures") /
+                            fmt::format("fsr-motion-{}-f{}", stamp, frame));
+                    } catch (const std::exception& e) {
+                        std::lock_guard lock(captureMutex);
+                        fsrCaptureBusy = false;
+                        LOG_ERROR("FSR-only capture start failed: {}", e.what());
+                        return;
+                    }
+                    fsrCaptureRequestSeen = request;
+                    fsrCaptureFirstFrame = frame;
+                    LOG_INFO("FSR-only capture request {} starting frame={} root={}", request, frame,
+                        FileSystem::PathUtf8(fsrCaptureRoot));
+                }
+                if (fsrCapturePages.size() >= 3) return;
+                if (frame != fsrCaptureFirstFrame + fsrCapturePages.size()) {
+                    LOG_WARNING("FSR-only capture frame gap: expected={} actual={}",
+                        fsrCaptureFirstFrame + fsrCapturePages.size(), frame);
+                    FinishFsrCapture();
+                    return;
+                }
+                if (evaluatePage && evaluatePage->frame == frame) return;
+                evaluatePage = std::make_shared<dlss::capture::Page>();
+                evaluatePage->number = uint32_t(fsrCapturePages.size() + 1);
+                evaluatePage->frame = frame;
+                evaluatePage->gapResetBeforeInputs = temporalGapResetFrame == frame;
+                fsrCapturePages.push_back(evaluatePage);
             }
 
             uint32_t TraceFrame() const
@@ -2011,6 +2102,20 @@ namespace gpu::renderer
                         evidence = evaluatePage->NewAttempt(*device, promotion.inputs, config,
                             *static_cast<plume::VulkanTexture*>(promotion.inputs.color.texture),
                             *static_cast<plume::VulkanTexture*>(promotion.scratch->texture.get()),
+                            temporalScene.Color().ordinal, drawsThisFrame);
+                    } catch (const std::exception&) { evaluatePage->captureFailed = true; }
+                } else if (activePlan.requestedUpscaler == upscaling::Upscaler::Fsr && evaluatePage &&
+                    evaluatePage->frame == frame && temporalHistory && promotion.inputs.color.texture &&
+                    promotion.inputs.depth.texture && promotion.inputs.motion.texture &&
+                    promotion.inputs.motionInvalidity.texture && promotion.scratch) {
+                    try {
+                        evidence = evaluatePage->NewFsrAttempt(*device, promotion.inputs, config,
+                            *static_cast<plume::VulkanTexture*>(promotion.inputs.color.texture),
+                            *static_cast<plume::VulkanTexture*>(promotion.inputs.depth.texture),
+                            *static_cast<plume::VulkanTexture*>(promotion.inputs.motion.texture),
+                            *static_cast<plume::VulkanTexture*>(promotion.inputs.motionInvalidity.texture),
+                            *static_cast<plume::VulkanTexture*>(promotion.scratch->texture.get()),
+                            temporalHistory->CurrentCameraForCapture(), temporalHistory->PreviousCameraForCapture(),
                             temporalScene.Color().ordinal, drawsThisFrame);
                     } catch (const std::exception&) { evaluatePage->captureFailed = true; }
                 }
@@ -7004,6 +7109,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
         {
             g_renderer->Flush();
             g_renderer->WaitForGpu();
+            if (!g_renderer->fsrCapturePages.empty()) g_renderer->FinishFsrCapture();
             video::WaitForPresentGpu();
             video::DrainGpuForShutdown();
             // Open/failed batches never acquired a queue completion serial.
@@ -7185,7 +7291,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             manifest << "Frames are consecutive rendered frames. Capture readbacks may stall execution.\n"
                 << "Each frame directory contains its own screenshot, register trace, resolves and metadata.\n"
                 << "p2-oracle.jsonl is newline-delimited JSON for b4b4d54a7a2d6b96/cda578aef1724fdc draw and resolve provenance; it records no color-space conclusion.\n"
-                << "Trigger this three-frame capture through the existing F1 menu or LO_CAPTURE_REQUEST pointing to a file containing a new nonzero uint64.\n"
+                << "Trigger this three-frame capture with F1 or LO_DEBUG_CAPTURE_SWAP=<target swap> at process start. LO_CAPTURE_REQUEST is a separate legacy single-frame trace.\n"
                 << "Shaders are deduplicated in shaders/. runtime.log is flushed after the last captured frame.\n"
                 << "Default omissions: draw-step previews, duplicate screenshot.ppm and duplicate depth .f32.\n"
                 << "Use LO_DEBUG_CAPTURE_DRAW_STEPS=1 to include draw-step previews.\n";
@@ -7314,7 +7420,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 
     void PollDebugCapture()
     {
-        if (g_renderer) g_renderer->PollCaptureRequest();
+        if (g_renderer) {
+            g_renderer->PollCaptureRequest();
+            g_renderer->PollFsrCaptureRequest();
+        }
     }
 
     void PreparePresent(uint32_t physicalAddress)
@@ -7538,6 +7647,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         page.fallbackReason = dlss::capture::FrameFallbackName(r.dlssFrame.fallback);
                     else if (r.activePlan.requestedUpscaler == upscaling::Upscaler::Off) page.fallbackReason = "upscaling_off";
                     else if (r.activePlan.inputProbe) page.fallbackReason = "input_probe_only";
+                    else if (r.activePlan.consumer == upscaling::TemporalConsumer::FsrSr)
+                        page.fallbackReason = "fsr_sr_no_dispatch_this_frame";
                     else if (r.activePlan.consumer != upscaling::TemporalConsumer::DlssSr)
                         page.fallbackReason = "dlss_sr_plan_unavailable_this_frame";
                     else if (!page.entries.empty() && !page.entries.back()->reason.empty())

@@ -9,6 +9,7 @@
 #include <string>
 
 namespace plume { struct VulkanCommandList; struct VulkanDevice; struct VulkanTexture; }
+namespace gpu::dlss { struct EvaluateCapture; }
 
 namespace gpu::fsr {
 
@@ -64,7 +65,7 @@ public:
     Status EnsureSession(plume::VulkanDevice& device, const Config& config);
     Attempt RecordIsolated(plume::VulkanCommandList& commands, const Config& config,
         const temporal::TemporalFrameInputs& inputs, const FrameMetadata& frame,
-        plume::VulkanTexture& output);
+        plume::VulkanTexture& output, dlss::EvaluateCapture* capture = nullptr);
     void OnBatchSubmitted(uint64_t useId, uint64_t serial);
     void OnBatchDiscarded(uint64_t useId);
     void ReleaseCompletedThrough(uint64_t serial);

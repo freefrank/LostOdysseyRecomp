@@ -291,6 +291,15 @@ public:
     uint64_t CapturedDepthOrdinal() const { return frames_[frame_%2].depthOrdinal; }
     uint64_t CapturedDepthAllocation() const { return frames_[frame_%2].allocation; }
     bool HasCapturedCamera() const { return bool(frames_[frame_%2].camera); }
+    // Capture-only snapshots of the cameras that own this frame's depth input.
+    std::optional<Camera> CurrentCameraForCapture() const {
+        const auto& current = frames_[frame_%2];
+        return current.number == frame_ && current.epoch == epoch_ ? current.camera : std::nullopt;
+    }
+    std::optional<Camera> PreviousCameraForCapture() const {
+        const auto& previous = frames_[(frame_+1)%2];
+        return previous.number + 1 == frame_ && previous.epoch == epoch_ ? previous.camera : std::nullopt;
+    }
     uint64_t CapturedColorOrdinal() const { return frames_[frame_%2].colorOrdinal; }
     // External passes sampling our owned depth join THIS owner's submission serial.
     void RecordExternalRead() { aa_.RecordExternalUse(); }

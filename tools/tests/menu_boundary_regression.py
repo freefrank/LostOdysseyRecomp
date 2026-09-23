@@ -195,6 +195,47 @@ int main() {
 '''
 
 
+def test_input_file_fixture(source: str) -> str:
+    # Reuse the actual HID implementation and platform stubs, but run only the
+    # changed file-input protocol instead of repeating the menu-boundary suite.
+    original = input_fixture(source)
+    return original[:original.rindex('int main() {')] + r'''
+int main() {
+    const char* path="test-input-pulse.txt";
+#ifdef _WIN32
+    _putenv_s("LO_TEST_INPUT_FILE",path);
+#else
+    setenv("LO_TEST_INPUT_FILE",path,1);
+#endif
+    g_controllers.push_back(&pad);
+    auto command=[&](const char* value) {
+        FILE* f=fopen(path,"w");Check(f,"input file create");fputs(value,f);fclose(f);
+        XAMINPUT_STATE state{};
+        for(int i=0;i<12;++i) Check(hid::GetState(0,&state)==ERROR_SUCCESS,"sample command");
+        return state.Gamepad;
+    };
+    auto gp=command("1 1000 100 -200 30 12 34 50000 -50000");
+    Check(gp.wButtons==0x1000 && gp.sThumbLX==100 && gp.sThumbLY==-200,"9-field buttons/left stick");
+    Check(gp.bLeftTrigger==12 && gp.bRightTrigger==34 && gp.sThumbRX==32767 && gp.sThumbRY==-32768,"9-field right clamp");
+    gp=command("2 0 0 0 0 0 0 20000 30000");
+    Check(gp.sThumbRX==0 && gp.sThumbRY==0,"zero-duration right-stick cancellation");
+    gp=command("3 0 0 0 13 0 0 -12345 23456");
+    Check(gp.sThumbRX==-12345 && gp.sThumbRY==23456,"signed right stick");
+    XAMINPUT_STATE state{};
+    for(int i=0;i<14;++i) hid::GetState(0,&state);
+    Check(state.Gamepad.sThumbRX==0 && state.Gamepad.sThumbRY==0,"pulse expiry releases right stick");
+    gp=command("4 0 0 0 30 22 44");
+    Check(gp.bLeftTrigger==22 && gp.bRightTrigger==44 && gp.sThumbRX==0 && gp.sThumbRY==0,"7-field compatibility");
+    gp=command("5 0 0 0 30");
+    Check(gp.bLeftTrigger==0 && gp.bRightTrigger==0 && gp.sThumbRX==0 && gp.sThumbRY==0,"5-field clears omitted axes/triggers");
+    gp=command("6 0 0 0 30 0 0 20000");
+    Check(gp.sThumbRX==0 && gp.sThumbRY==0,"incomplete 8-field command rejected");
+    std::remove(path);
+    puts("PASS: actual HID 5/7/9-field parsing, right-axis clamp, zero cancellation, expiry and malformed command");
+}
+'''
+
+
 def overlay_fixture(source: str) -> str:
     body = between(source, 'namespace debug_menu\n{', '    // Render debug overlay') + '\n}\n'
     return COMMON + r'''
@@ -419,7 +460,7 @@ def main() -> None:
     parser.add_argument('--out',type=Path)
     parser.add_argument('--cxx',default='clang++')
     parser.add_argument('--sanitize',action='store_true')
-    parser.add_argument('--only',choices=['input','overlay','display','dxgi','headless'])
+    parser.add_argument('--only',choices=['input','test-input','overlay','display','dxgi','headless'])
     args=parser.parse_args()
     root=args.root.resolve();runtime=root/'LostOdysseyRecomp'
     out=args.out.resolve() if args.out else Path(tempfile.mkdtemp(prefix='lo-menu-boundary-'))
@@ -429,6 +470,7 @@ def main() -> None:
     fixtures={
         'headless':(lambda:headless_preparation_fixture(inputs['video']),[]),
         'input':(lambda:input_fixture(inputs['hid']),[]),
+        'test-input':(lambda:test_input_file_fixture(inputs['hid']),[]),
         'overlay':(lambda:overlay_fixture(inputs['overlay']),[]),
         'display':(lambda:display_fixture(inputs['video']),[]),
         'dxgi':(lambda:display_fixture(inputs['video']),['-DTEST_DXGI_BRANCH']),

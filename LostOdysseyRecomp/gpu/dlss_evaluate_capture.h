@@ -5,6 +5,7 @@
 #include "temporal_frame_inputs.h"
 #include <plume_vulkan.h>
 #include <algorithm>
+#include <array>
 #include <bit>
 #include <cmath>
 #include <cstring>
@@ -14,6 +15,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace gpu::dlss::capture {
@@ -36,10 +38,21 @@ struct Parameters {
     bool reset = false, featureCreated = false, inputHistoryReset = false;
 };
 
+struct FsrDispatch {
+    float jitterX = 0, jitterY = 0, mvScaleX = 0, mvScaleY = 0;
+    float frameTimeMs = 0, preExposure = 0, cameraNear = 0, cameraFar = 0;
+    float fovYRadians = 0, viewSpaceToMeters = 0, depthScale = 0, depthBias = 0;
+    uint32_t renderWidth = 0, renderHeight = 0, outputWidth = 0, outputHeight = 0;
+    bool reset = false;
+};
+
 inline uint32_t TexelBytes(VkFormat format) {
     switch (format) {
     case VK_FORMAT_R8G8B8A8_UNORM: return 4;
     case VK_FORMAT_R16G16B16A16_SFLOAT: return 8;
+    case VK_FORMAT_R32_SFLOAT: return 4;
+    case VK_FORMAT_R16G16_SFLOAT: return 4;
+    case VK_FORMAT_R8_UNORM: return 1;
     default: return 0;
     }
 }
@@ -47,6 +60,9 @@ inline const char* FormatName(VkFormat format) {
     switch (format) {
     case VK_FORMAT_R8G8B8A8_UNORM: return "RGBA8_UNORM";
     case VK_FORMAT_R16G16B16A16_SFLOAT: return "RGBA16_FLOAT";
+    case VK_FORMAT_R32_SFLOAT: return "R32_FLOAT";
+    case VK_FORMAT_R16G16_SFLOAT: return "RG16_FLOAT";
+    case VK_FORMAT_R8_UNORM: return "R8_UNORM";
     default: return "unsupported";
     }
 }
@@ -84,11 +100,12 @@ inline bool WritePreview(const std::filesystem::path& path, const uint8_t* raw, 
     }
     file.close(); return !file.fail();
 }
-inline void CopyImage(VkCommandBuffer command, const plume::VulkanTexture& texture, const Image& image) {
+inline void CopyImage(VkCommandBuffer command, const plume::VulkanTexture& texture, const Image& image,
+    VkImageLayout originalLayout = VK_IMAGE_LAYOUT_GENERAL) {
     VkImageMemoryBarrier barrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
     barrier.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
     barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-    barrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+    barrier.oldLayout = originalLayout;
     barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
     barrier.srcQueueFamilyIndex = barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrier.image = texture.vk;
@@ -107,7 +124,7 @@ inline void CopyImage(VkCommandBuffer command, const plume::VulkanTexture& textu
     barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
     barrier.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
     barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-    barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+    barrier.newLayout = originalLayout;
     vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
         0, 0, nullptr, 0, nullptr, 1, &barrier);
 }
@@ -119,7 +136,10 @@ struct Entry {
     temporal::TemporalFrameInputs inputs{};
     SrConfig config{};
     Parameters sdk{};
-    Image input, output;
+    Image input, output, depth, motion, invalidity;
+    FsrDispatch fsrDispatch{};
+    std::optional<temporal::Camera> currentCamera, previousCamera;
+    bool fsr = false;
     bool omitted = false, evaluated = false, vendorSuccess = false;
     bool isolatedAccepted = false, isolatedIncluded = false, compositeSucceeded = false, adopted = false;
     bool checkedSubmit = false, completed = false;
@@ -153,6 +173,24 @@ struct Entry {
         input.reason = output.reason = "not_submitted";
         return true;
     }
+    size_t ReservedBytes() const {
+        return input.Bytes() + output.Bytes() + depth.Bytes() + motion.Bytes() + invalidity.Bytes();
+    }
+    void BeforeFsr(VkCommandBuffer command, const plume::VulkanTexture& color,
+        const plume::VulkanTexture& rawDepth, const plume::VulkanTexture& velocity,
+        const plume::VulkanTexture& mask) {
+        if (!input.buffer || !depth.buffer || !motion.buffer || !invalidity.buffer) return;
+        constexpr auto layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        CopyImage(command, color, input, layout); input.recorded = true;
+        CopyImage(command, rawDepth, depth, layout); depth.recorded = true;
+        CopyImage(command, velocity, motion, layout); motion.recorded = true;
+        CopyImage(command, mask, invalidity, layout); invalidity.recorded = true;
+    }
+    void AfterFsr(VkCommandBuffer command, const plume::VulkanTexture& scratch) {
+        if (!output.buffer) return;
+        CopyImage(command, scratch, output, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+        output.recorded = true;
+    }
     void Before(VkCommandBuffer command, const plume::VulkanTexture& color) {
         if (!input.buffer) return;
         if (input.x != sdk.colorX || input.y != sdk.colorY || input.width != sdk.renderWidth ||
@@ -181,7 +219,9 @@ struct Entry {
         std::ofstream raw(rawPath, std::ios::binary | std::ios::trunc);
         if (raw) raw.write(reinterpret_cast<const char*>(bytes), std::streamsize(image.Bytes()));
         raw.close();
-        const bool saved = !raw.fail() && WritePreview(previewPath, bytes, image);
+        const bool colorPreview = image.format == VK_FORMAT_R8G8B8A8_UNORM ||
+            image.format == VK_FORMAT_R16G16B16A16_SFLOAT;
+        const bool saved = !raw.fail() && (!colorPreview || WritePreview(previewPath, bytes, image));
         image.buffer->unmap();
         if (!saved) {
             std::error_code ec; std::filesystem::remove(rawPath, ec); std::filesystem::remove(previewPath, ec);
@@ -241,10 +281,14 @@ inline void JsonString(std::ostream& file, const std::string& value) {
     file << '"';
 }
 inline void JsonImage(std::ostream& file, const Image& image) {
+    const char* channels = image.format == VK_FORMAT_R32_SFLOAT || image.format == VK_FORMAT_R8_UNORM ? "R" :
+        image.format == VK_FORMAT_R16G16_SFLOAT ? "RG" : "RGBA";
+    const char* component = image.format == VK_FORMAT_R32_SFLOAT ? "float32" :
+        image.format == VK_FORMAT_R16G16_SFLOAT || image.format == VK_FORMAT_R16G16B16A16_SFLOAT ? "float16" : "unorm8";
     file << "{\"available\":" << (image.available ? "true" : "false") << ",\"reason\":";
     JsonString(file, image.reason);
     file << ",\"format\":\"" << FormatName(image.format) << "\",\"vk_format\":" << int(image.format)
-         << ",\"channels\":\"RGBA\",\"component_type\":\"" << (image.texelBytes == 8 ? "float16" : "unorm8")
+         << ",\"channels\":\"" << channels << "\",\"component_type\":\"" << component
          << "\",\"endianness\":\"little\",\"content_rect\":[" << image.x << ',' << image.y << ',' << image.width << ',' << image.height
          << "],\"storage\":[" << image.storageWidth << ',' << image.storageHeight << "],\"tight_row_stride\":"
          << uint64_t(image.width) * image.texelBytes << ",\"raw_bytes\":" << image.Bytes() << '}';
@@ -283,17 +327,152 @@ struct Page {
         }
         return e;
     }
+    std::shared_ptr<EvaluateCapture> NewFsrAttempt(plume::RenderDevice& device,
+        const temporal::TemporalFrameInputs& inputs, const SrConfig& config,
+        const plume::VulkanTexture& color, const plume::VulkanTexture& rawDepth,
+        const plume::VulkanTexture& velocity, const plume::VulkanTexture& mask,
+        const plume::VulkanTexture& scratch, std::optional<temporal::Camera> currentCamera,
+        std::optional<temporal::Camera> previousCamera, uint64_t resolveOrdinal, uint64_t drawOrdinal) {
+        auto e = std::make_shared<EvaluateCapture>();
+        e->fsr = true; e->attemptIndex = ++attempts; e->page = number; e->renderFrame = frame;
+        e->resolveOrdinal = resolveOrdinal; e->drawOrdinal = drawOrdinal;
+        e->inputs = inputs; e->config = config;
+        e->currentCamera = std::move(currentCamera); e->previousCamera = std::move(previousCamera);
+        entries.push_back(e);
+        Entry::Setup(e->input, color, inputs.color.x, inputs.color.y, inputs.color.width, inputs.color.height);
+        Entry::Setup(e->depth, rawDepth, inputs.depth.x, inputs.depth.y, inputs.depth.width, inputs.depth.height);
+        Entry::Setup(e->motion, velocity, inputs.motion.x, inputs.motion.y, inputs.motion.width, inputs.motion.height);
+        Entry::Setup(e->invalidity, mask, inputs.motionInvalidity.x, inputs.motionInvalidity.y,
+            inputs.motionInvalidity.width, inputs.motionInvalidity.height);
+        Entry::Setup(e->output, scratch, 0, 0, scratch.desc.width, scratch.desc.height);
+        const std::array<Image*, 5> images = {&e->input, &e->depth, &e->motion, &e->invalidity, &e->output};
+        const std::array<VkFormat, 5> formats = {VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R32_SFLOAT,
+            VK_FORMAT_R16G16_SFLOAT, VK_FORMAT_R8_UNORM, VK_FORMAT_R8G8B8A8_UNORM};
+        for (size_t i = 0; i < images.size(); ++i) {
+            const auto& image = *images[i];
+            if (image.format != formats[i] || !image.width || !image.height ||
+                image.x > image.storageWidth || image.y > image.storageHeight ||
+                image.width > image.storageWidth - image.x || image.height > image.storageHeight - image.y) {
+                e->reason = "fsr_capture_unsupported_format_or_region"; return e;
+            }
+        }
+        const size_t bytes = e->ReservedBytes();
+        if (!CanReserve(bytes)) { e->omitted = true; e->reason = "capture_limit"; ++omitted; return e; }
+        for (auto* image : images) {
+            image->buffer = device.createBuffer(plume::RenderBufferDesc::ReadbackBuffer(image->Bytes()));
+            if (!image->buffer) {
+                for (auto* rollback : images) rollback->buffer.reset();
+                e->reason = "capture_allocation_failed"; return e;
+            }
+            image->reason = "not_submitted";
+        }
+        ++reserved; reservedBytes += bytes;
+        return e;
+    }
     void Called(const std::shared_ptr<Entry>& e) { e->evaluateIndex = ++evaluates; }
     void CancelReservation(const std::shared_ptr<Entry>& e) {
         if (e->evaluated) return;
         if (e->omitted) { --omitted; e->omitted = false; }
         if (!e->input.buffer) return;
-        reservedBytes -= e->input.Bytes() + e->output.Bytes();
+        reservedBytes -= e->ReservedBytes();
         --reserved;
-        e->input.buffer.reset(); e->output.buffer.reset();
-        e->input.reason = e->output.reason = "evaluate_not_called";
+        for (auto* image : {&e->input, &e->output, &e->depth, &e->motion, &e->invalidity}) {
+            image->buffer.reset(); image->reason = "evaluate_not_called";
+        }
+    }
+    bool ExportFsr(const std::filesystem::path& dir) {
+        bool ok = !captureFailed;
+        for (const auto& e : entries) {
+            if (!e->fsr || !e->evaluated || e->omitted) continue;
+            if (e->vendorSuccess && e->isolatedIncluded && e->checkedSubmit) {
+                const std::string index = std::to_string(*e->evaluateIndex);
+                const std::string suffix = std::string(3 - std::min<size_t>(3, index.size()), '0') + index;
+                bool savedAll = true;
+                for (auto [image, name] : {std::pair{&e->input, "input"}, {&e->depth, "depth"},
+                        {&e->motion, "motion"}, {&e->invalidity, "invalidity"}, {&e->output, "output"}})
+                    savedAll = e->ExportImage(*image, dir, (std::string("fsr-") + name + '-' + suffix).c_str()) && savedAll;
+                if (savedAll) ++saved;
+                ok = savedAll && ok;
+            } else {
+                for (auto* image : {&e->input, &e->depth, &e->motion, &e->invalidity, &e->output})
+                    image->reason = !e->vendorSuccess ? "vendor_failed" :
+                        !e->isolatedAccepted ? "discarded_isolated_list" : "submit_not_confirmed";
+                if (e->vendorSuccess) ok = false;
+            }
+        }
+        std::ofstream file(dir / "fsr-evaluations.json", std::ios::trunc);
+        if (!file) return false;
+        file << "{\"schema\":1,\"page\":" << number << ",\"render_frame\":" << frame
+             << ",\"frame_plan\":{\"cpu_serial\":" << framePlan.cpuSerial
+             << ",\"request_signature\":" << framePlan.requestSignature
+             << ",\"geometry_epoch\":" << framePlan.geometryEpoch
+             << ",\"device_epoch\":" << framePlan.deviceEpoch
+             << ",\"requested_upscaler\":" << uint32_t(framePlan.requestedUpscaler) << '}'
+             << ",\"attempt_count\":" << attempts << ",\"dispatch_count\":" << evaluates
+             << ",\"saved\":" << saved << ",\"omitted\":" << omitted
+             << ",\"capture_failed\":" << (captureFailed ? "true" : "false")
+             << ",\"max_readback_bytes\":" << kMaxBytes << ",\"zero_dispatch_reason\":";
+        JsonString(file, evaluates ? "" : fallbackReason);
+        file << ",\"dispatches\":[";
+        auto camera = [&](const std::optional<temporal::Camera>& value) {
+            if (!value) { file << "null"; return; }
+            file << "{\"vp\":[" << std::setprecision(17);
+            for (size_t i = 0; i < 16; ++i) file << (i ? "," : "") << value->VP()[i];
+            const auto& v = value->Raster();
+            file << "],\"viewport\":[" << v.x << ',' << v.y << ',' << v.width << ',' << v.height
+                 << "],\"ndc_y_sign\":" << v.ndcYSign
+                 << ",\"half_pixel_ndc\":[" << v.halfPixelNdcX << ',' << v.halfPixelNdcY << "]}";
+        };
+        bool first = true;
+        for (const auto& e : entries) {
+            if (!e->fsr) continue;
+            if (!first) file << ','; first = false;
+            const auto& p = e->fsrDispatch;
+            file << "{\"attempt_index\":" << e->attemptIndex << ",\"dispatch_index\":";
+            if (e->evaluateIndex) file << *e->evaluateIndex; else file << "null";
+            file << ",\"render_frame\":" << e->inputs.renderFrameId
+                 << ",\"temporal_epoch\":" << e->inputs.temporalEpoch
+                 << ",\"depth_allocation\":" << e->inputs.depthAllocation
+                 << ",\"scene_color_resolve_ordinal\":" << e->resolveOrdinal
+                 << ",\"scene_copy_draw_ordinal\":" << e->drawOrdinal
+                 << ",\"current_camera\":";
+            camera(e->currentCamera); file << ",\"previous_camera\":"; camera(e->previousCamera);
+            file << std::setprecision(9) << ",\"sdk\":{\"render\":[" << p.renderWidth << ',' << p.renderHeight
+                 << "],\"output\":[" << p.outputWidth << ',' << p.outputHeight
+                 << "],\"jitter_input_pixels\":[" << p.jitterX << ',' << p.jitterY
+                 << "],\"motion_vector_scale\":[" << p.mvScaleX << ',' << p.mvScaleY
+                 << "],\"frame_time_ms\":" << p.frameTimeMs
+                 << ",\"pre_exposure\":" << p.preExposure << ",\"reset\":" << (p.reset ? "true" : "false")
+                 << ",\"input_reset\":" << (e->inputs.resetHistory ? "true" : "false")
+                 << ",\"camera_near\":" << p.cameraNear << ",\"camera_far\":" << p.cameraFar
+                 << ",\"fov_y_radians\":" << p.fovYRadians
+                 << ",\"view_space_to_meters\":" << p.viewSpaceToMeters
+                 << ",\"depth_scale\":" << p.depthScale << ",\"depth_bias\":" << p.depthBias
+                 << ",\"invalidity_bound_to_sdk\":false}"
+                 << ",\"stage\":"; JsonString(file, e->stage);
+            file << ",\"reason\":"; JsonString(file, e->reason);
+            file << ",\"sdk_result\":";
+            if (e->vendorResult) file << *e->vendorResult; else file << "null";
+            file << ",\"sdk_success\":" << (e->vendorSuccess ? "true" : "false")
+                 << ",\"isolated_accepted\":" << (e->isolatedAccepted ? "true" : "false")
+                 << ",\"isolated_included\":" << (e->isolatedIncluded ? "true" : "false")
+                 << ",\"checked_submit\":" << (e->checkedSubmit ? "true" : "false")
+                 << ",\"submission_serial\":" << e->submissionSerial
+                 << ",\"gpu_completed\":" << (e->completed ? "true" : "false")
+                 << ",\"omitted\":" << (e->omitted ? "true" : "false")
+                 << ",\"input\":"; JsonImage(file, e->input);
+            file << ",\"depth\":"; JsonImage(file, e->depth);
+            file << ",\"motion\":"; JsonImage(file, e->motion);
+            file << ",\"invalidity\":"; JsonImage(file, e->invalidity);
+            file << ",\"output\":"; JsonImage(file, e->output);
+            file << '}';
+        }
+        file << "]}\n"; file.close();
+        return ok && !file.fail();
     }
     bool Export(const std::filesystem::path& dir) {
+        if (framePlan.requestedUpscaler == upscaling::Upscaler::Fsr ||
+            std::any_of(entries.begin(), entries.end(), [](const auto& e) { return e->fsr; })) return ExportFsr(dir);
         bool ok = !captureFailed;
         for (const auto& e : entries) {
             if (!e->evaluated || e->omitted) continue;

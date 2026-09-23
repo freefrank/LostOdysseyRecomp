@@ -5,13 +5,13 @@
 - 导入日期：2026-09-23
 - 导入范围：把 OpenCode 主会话及 `oh-my-opencode-slim` 中与 FSR、DLSS FG、P0 Gate 1 相关的未完成工作整理为当前 Codex 可续接的本地清单。
 - 任务性质：本地文档导入与状态整理；没有重建 OpenCode 任务执行器，也没有创建新的 Codex sidebar 任务。
-- 代码基线：`39bbda6ff1cb8216582798bebab21a3a5395a36e`（实测 HEAD）；工作区代码和交接文档与记录一致，已有代码修改未提交。
+- 导入时代码基线：`39bbda6ff1cb8216582798bebab21a3a5395a36e`；当时已有代码修改未提交。后续 FSR 实现已本地提交为 `87a1691`。
 - 导入时验证边界：CPU 直接受影响测试 4/4 通过，生产链接构建通过；当时没有生产路径 GPU 回归。该历史事实保留；当前生产 facade 回归已有单场景证据，但不扩展为全游戏画质、性能、每个 SDK teardown 或 FG 验收。
-- 发布状态：未提交、未推送、未发布。
+- 交付状态：FSR 第一批实现已本地提交为 `87a1691`，后续捕获改动仍在工作区；未推送、未发布。
 
 ## 2026-09-23 Codex 恢复执行
 
-本次已由新建的 ultragoal 恢复开发清单并进入执行阶段。OpenCode 与 `oh-my-opencode-slim` 的 `STOPPED` 是历史来源状态，保留用于追溯；当前 `IMP-P0-FIX2` 仍未通过 Gate，G002 的 P1 SDK 已构建、renderer/runtime 接线进行中；P2–P4 仍待验收，所有检查框保持未完成。
+本次已由新建的 ultragoal 恢复开发清单并进入执行阶段。OpenCode 与 `oh-my-opencode-slim` 的 `STOPPED` 是历史来源状态，保留用于追溯；当前 `IMP-P0-FIX2` 仍未通过 Gate，G002 的 FSR SDK 和 renderer/runtime 接线已实现，Windows/Linux 基础运行已有证据；P1 连续平移／旋转验证及 P2–P4 仍待验收，所有检查框保持未完成。
 
 持久计划索引：[`.omx/ultragoal/goals.json`](../../.omx/ultragoal/goals.json)、[`.omx/ultragoal/ledger.jsonl`](../../.omx/ultragoal/ledger.jsonl)。本次只同步当前清单状态，不改写上述持久计划文件。
 
@@ -98,3 +98,7 @@ P2 当前仅有设计记录：[fsr-p2-mask-design.md](../../out/streamline-fg-p0
 - Slim 状态文件：`.slim/deepwork/fsr-dlss-fg.md`
 - 原始计划：`C:/Users/freefrank/Downloads/LORecomp_FSR_DLSS_FG_implementation_plan.zh-CN.md`（P1–P4 位于第 226–248 行）
 - OpenCode 数据库：`C:/Users/freefrank/.local/share/opencode/opencode.db`（只读核对）
+
+最新运动输入诊断及其边界见[当前进度](fsr-dlss-fg-codex-progress.zh-CN.md#2026-09-23-运动输入捕获检查点)：首帧静态 ROI 的 MV 回投吻合；完整捕获触发后两帧重置，未据此关闭 P1。
+
+后续轻量捕获已取得 Windows 连续三帧移动／旋转证据，见[轻量连续帧试验](fsr-dlss-fg-codex-progress.zh-CN.md#轻量连续帧试验)。它补齐该平台的 P1 静态几何运动输入检查，不改变 P2、Steam Deck 或 FG 待验收状态。

@@ -1,4 +1,5 @@
 #include "fsr_upscaler.h"
+#include "dlss_evaluate_capture.h"
 
 #if defined(LO_GPU_PLUME)
 #include <plume_vulkan.h>
@@ -452,7 +453,7 @@ Status Controller::EnsureSession(plume::VulkanDevice& device, const Config& conf
 
 Attempt Controller::RecordIsolated(plume::VulkanCommandList& commands, const Config& config,
     const temporal::TemporalFrameInputs& inputs, const FrameMetadata& frame,
-    plume::VulkanTexture& output) {
+    plume::VulkanTexture& output, dlss::EvaluateCapture* capture) {
     Attempt attempt{};
 #if defined(LO_HAS_FSR) && LO_HAS_FSR
     const bool frameGap = impl_->lastRecordedRenderFrameId &&
@@ -601,6 +602,11 @@ Attempt Controller::RecordIsolated(plume::VulkanCommandList& commands, const Con
     commands.recording = true;
     VkCommandBuffer cmd = commands.beginExternalCommands();
     if (!cmd) { attempt.status = Status::Failed; impl_->poisoned = true; return attempt; }
+    if (capture) {
+        capture->stage = "before_dispatch";
+        capture->BeforeFsr(cmd, color, depth, motion,
+            *static_cast<const plume::VulkanTexture*>(inputs.motionInvalidity.texture));
+    }
     Barrier(cmd, impl_->linearColor->vk, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
     Barrier(cmd, impl_->canonicalDepth->vk, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
     Barrier(cmd, impl_->sdkOutput->vk, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
@@ -643,8 +649,27 @@ Attempt Controller::RecordIsolated(plume::VulkanCommandList& commands, const Con
     dispatch.cameraFar = frame.cameraFar;
     dispatch.cameraFovAngleVertical = frame.verticalFovRadians;
     dispatch.viewSpaceToMetersFactor = frame.viewSpaceToMetersFactor;
+    if (capture) {
+        auto& recorded = capture->fsrDispatch;
+        recorded.jitterX = dispatch.jitterOffset.x; recorded.jitterY = dispatch.jitterOffset.y;
+        recorded.mvScaleX = dispatch.motionVectorScale.x; recorded.mvScaleY = dispatch.motionVectorScale.y;
+        recorded.frameTimeMs = dispatch.frameTimeDelta; recorded.preExposure = dispatch.preExposure;
+        recorded.cameraNear = dispatch.cameraNear; recorded.cameraFar = dispatch.cameraFar;
+        recorded.fovYRadians = dispatch.cameraFovAngleVertical;
+        recorded.viewSpaceToMeters = dispatch.viewSpaceToMetersFactor;
+        recorded.depthScale = frame.depthScale; recorded.depthBias = frame.depthBias;
+        recorded.renderWidth = dispatch.renderSize.width; recorded.renderHeight = dispatch.renderSize.height;
+        recorded.outputWidth = dispatch.upscaleSize.width; recorded.outputHeight = dispatch.upscaleSize.height;
+        recorded.reset = dispatch.reset;
+        capture->stage = "dispatch"; capture->evaluated = true;
+    }
     const auto result = ffxFsr3UpscalerContextDispatch(impl_->context.get(), &dispatch);
     attempt.sdkResult = int32_t(result);
+    if (capture) {
+        capture->vendorResult = int32_t(result);
+        capture->vendorSuccess = result == FFX_OK;
+        if (result != FFX_OK) capture->reason = "sdk_dispatch_failed";
+    }
     if (result == FFX_OK) {
         Barrier(cmd, impl_->sdkOutput->vk, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, impl_->presentPipeline);
@@ -664,6 +689,7 @@ Attempt Controller::RecordIsolated(plume::VulkanCommandList& commands, const Con
         copy.extent = {config.outputWidth, config.outputHeight, 1};
         vkCmdCopyImage(cmd, impl_->encodedOutput->vk, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
             output.vk, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+        if (capture) capture->AfterFsr(cmd, output);
     }
     commands.endExternalCommands();
     const VkResult endResult = vkEndCommandBuffer(cmd);
@@ -691,7 +717,7 @@ Attempt Controller::RecordIsolated(plume::VulkanCommandList& commands, const Con
         impl_->diagnostics.lastResetForFrameGap = frameGap;
     } else impl_->poisoned = true;
 #else
-    (void)commands; (void)config; (void)inputs; (void)frame; (void)output;
+    (void)commands; (void)config; (void)inputs; (void)frame; (void)output; (void)capture;
 #endif
     return attempt;
 }

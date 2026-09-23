@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-`IMP-P0-FIX2` 的探针专用门禁修复已落盘，run03 已使用冻结 EXE（SHA256 `36665711B5258A234DC29AD7266BFD5A26243FD998B285178A516CDBF95EA9D2`）运行。G006 的完整 P0 Gate 仍不通过，Oracle 初审剩余 2 次材料复审；G002 的 P1 SDK 已构建，renderer/runtime 接线进行中，P2–P4 仍待验收，主 ultragoal 仍覆盖至 P4。
+`IMP-P0-FIX2` 的探针专用门禁修复已落盘，run03 已使用冻结 EXE（SHA256 `36665711B5258A234DC29AD7266BFD5A26243FD998B285178A516CDBF95EA9D2`）运行。G006 的完整 P0 Gate 仍不通过，Oracle 初审剩余 2 次材料复审；G002 的 FSR SDK、renderer/runtime 接线已实现并提交为 `87a1691`，Windows/Linux 基础运行已验证；P1 连续平移／旋转输入验收及 P2–P4 仍未完成，主 ultragoal 仍覆盖至 P4。
 
 几何一致性小修 EXE SHA256 为 `C13BDC5E7ED8C73612388D79871770CCD4EB1ACE8232EE050FB74DC235C98398`，已用于 foreground01 和 background04；run03 使用的旧 `366657...` EXE 与证据保持不变。
 
@@ -28,7 +28,7 @@ P0 探针修复范围限制为 `tools/tests/streamline_fg` 与 `cmake/LoStreamli
 
 官方 PresentMon 2.6.0 ETW 启动已通过，便携 Khronos 1.4.328 已在实际运行中启用；当前不应再写成“没有 validation layer”。仍缺少物理显示侧生成帧证据和 Steam Deck 证据。`psvita` 的 Bazzite 44 / ONEXPLAYER APEX Linux 测试属于用户授权测试，不能写成 Deck 验证。用户已授权必要前台运行；物理显示采集仍是独立缺口。
 
-FSR SDK 双平台 static build、backend-dispatch 符号 link 和 CPU 3.1.4 check 已 exit0，证据见 [`fsr-sdk-build-results.json`](../../out/streamline-fg-p0/fsr-sdk-build-results.json)；G002 的 renderer/runtime 接线仍在进行，尚无 FSR GPU 运行验收。生产 DLAA/Quality 背景回归已完成单场景证据，详见 [`RESULTS.md`](../../out/streamline-fg-p0/production-facade-regression/RESULTS.md)；不代表全游戏画质性能或 FG 验收。
+早期 SDK 阶段记录（后续状态见下文）：FSR SDK 双平台 static build、backend-dispatch 符号 link 和 CPU 3.1.4 check 已 exit0，证据见 [`fsr-sdk-build-results.json`](../../out/streamline-fg-p0/fsr-sdk-build-results.json)；当时 G002 的 renderer/runtime 接线仍在进行，尚无 FSR GPU 运行验收。生产 DLAA/Quality 背景回归已完成单场景证据，详见 [`RESULTS.md`](../../out/streamline-fg-p0/production-facade-regression/RESULTS.md)；不代表全游戏画质性能或 FG 验收。
 
 P1 当前证据：Windows 最终生产构建完整哈希见 [`fsr-p1-integration-results.json`](../../out/streamline-fg-p0/fsr-p1-integration-results.json)，独立 adapter run04/run05-gap 全流程 exit0、0 warnings、0 errors，run05-gap 证明真实 `renderFrame 2→4` 会强制 SDK reset；真实 renderer failed-token-gpu-01 exit0、validation 0。两处实际缺陷已修复：SDK KHR 空 proc 使用 promoted core 等价回退；GLSL luma RGBA8 与 SDK RGBA16F 错配，生成期 overlay 仅重生 4 family，SDK cache 未改。quality02 已提交真实 FSR（`1706x960→2560x1440`），但 baseline classes/extent validation 共 144 条、exit0 且 baseline unchanged；quality03-normal 66 sampled non-reset median `16.7599 ms`，静止与短移动截图 exit0；NativeAA01 49 non-reset median `16.6743 ms`、`2560x1440→same`、截图 exit0，screenshot fix 已在 NativeAA 场景核实。fallbackgpu02 `6b00c780...` 通过实际 FSR record → 注入 post-record reject → renderer current green 4096 pixels（保留 alpha）→ 下一次 actual blue SDK reset，明确仅为 fallback/reset 范围证据，不是 SDK internal fault 或 full-facade 通过。上述结果仍不足以宣称 P1 完成；完整 P1 仍需 nonzero MV、depth translation 和 yaw 证据。
 
@@ -60,3 +60,21 @@ P2 详细方案与新增 shader 审计已保存到 out/streamline-fg-p0/fsr-p2-m
 Linux 实景最新证据：Quality `30f3e390...` 已在 frame12356 提交 `853x480→1280x720`，41 条采样记录无 reset、exit0。旧截图红蓝交换在 Off 同场景也重现，已定位为 BGRA 交换链截图被按 RGBA 保存；修复不改变游戏呈现。新 Linux `034c22b4...` Native AA 在 frame10314 提交 `1280x720→same`，65 条无 reset 采样的中位帧间隔为 17.107218 ms，`linux-game-fsr-native-aa-01/shot_14399.png` 确认正确颜色，exit0。该帧间隔不是 GPU A/B 收益或全场景性能结论。
 
 真实 FSR renderer fixture `fsr-fallback-gpu-02` 已通过：成功红色帧之后，在真实 SDK record 后注入拒绝，4096 个最终像素保留当前绿色和 alpha，token 被丢弃，恢复蓝色帧强制 SDK history reset。该证据不覆盖 SDK 内部失败或完整生产 facade。P1 仍待受控平移／旋转的同帧非零 MV/depth/jitter 独立比较；P2、Steam Deck 和 FG gate 保持未完成。
+
+## 2026-09-23 运动输入捕获检查点
+
+FSR 接入及已验证修复已本地提交为 `87a1691`，未推送或发布。新增诊断捕获构建在 Windows（`49cfd828…`）和 Linux（`357948f6…`）通过，见 [构建记录](../../out/streamline-fg-p0/fsr-capture-production-result.json)。
+
+Windows `fsr-motion-windows-01` 在隔离状态运行并正常退出，存档／配置基线未变。真实 FSR 三帧均有 SDK 成功、checked submit 和 GPU completion 记录。首帧 12000 的人工静态地面 ROI 为 `[500,270,690,390)`，输入尺寸 `853×480`；1,440 个样本的独立深度回投 MV 误差中位数 `0.00049934 px`、P95 `0.00090686 px`，预期位移中位数 `1.28044 px`，见 [单帧结果](../../out/streamline-fg-p0/fsr-motion-windows-01/single-frame-preliminary.json)。这只证明该静态 ROI 的同帧几何合同，未捕获前一帧 raw depth，不能证明完整遮挡或连续 FSR history。
+
+完整渲染捕获使后两帧间隔达到约 `677/603 ms`，正常重置逻辑随之变更 temporal epoch、清空 MV，并将 invalidity 置为无效。这两帧不能用于相邻运动验收。轻量 FSR-only 三帧捕获和可控右摇杆输入正在补充；尚无其实际运行结果。P1、P2、Steam Deck 与 FG Gate 保持未完成。
+
+### 轻量连续帧试验
+
+`LO_FSR_CAPTURE_REQUEST` 的轻量路径已在 Windows 实景通过：三帧仅保留五种 raw 输入／输出和元数据，第三帧提交完成后统一导出；不启动完整 F1 的逐 draw/resolve 捕获。测试构建 Windows SHA256 为 `784f2f4783e2e0e5ebc97ae940ffa23eece93b241b9998b7373080e5da7f0878`，Linux 同步构建为 `000a6d4c…`，见 [构建记录](../../out/streamline-fg-p0/fsr-lite-capture-production-result.json)。Linux 该诊断路径未实景重跑，已有原生 FSR 运行结果仍复用。
+
+Windows 同一隔离进程完成左摇杆相机跟随移动和右摇杆旋转。各试验均为三个连续帧、同一 temporal epoch、无 SDK/input reset，五张 raw 均确认提交并完成。移动两对帧各有 1,440 个深度一致静态地面样本，P95 误差分别 `0.000919/0.003527 px`；旋转两对各有 900 个样本，P95 为 `0.000423/0.000494 px`。旋转时相机中心变化约 `0.00013` guest 单位，朝向变化约 `0.059/0.048°`，FOV 基本不变；控制脉冲和实际相机量共同证明旋转，未把人工标签当证据。X 方向共 4,680、Y 方向共 1,440 个显著分量样本，方向一致率均为 100%；旋转试验自身没有显著 Y 分量，该项由移动第二对覆盖。
+
+该结果通过试验前固定的静态几何判据（每对深度一致样本至少 100、预期运动中位数至少 `0.5 px`、误差中位数至多 `0.05 px`、P95 至多 `0.1 px`）。见 [结果与范围](../../out/streamline-fg-p0/fsr-motion-windows-02-lite/result.json) 和 [预设判据](../../out/streamline-fg-p0/fsr-motion-acceptance-plan.json)。游戏 exit0，存档／配置基线未变。这补齐 Windows P1 的有界运动输入证据，不代表 P2 画质、性能、动态物体、Steam Deck 或 FG 验收。
+
+复现时在 FSR 启用的隔离进程设置 `LO_FSR_CAPTURE_REQUEST` 为请求文件的绝对路径，写入新的非零整数触发三帧；产物位于 `captures/fsr-motion-*/frame-*/`。运动测试文件保留原 5/7 字段，并支持 `serial hexButtonMask leftX leftY polls LT RT rightX rightY`；右轴限幅、取消和过期释放的实际 HID fixture 已通过。离线执行 `python tools/tests/fsr/compare_captured_motion.py <capture-directory> --motion translation --roi x0,y0,x1,y1 --step 4 --output result.json`，旋转则使用 `--motion yaw`。ROI 使用输入分辨率坐标，必须人工选静态几何。比较器输出诊断而不自动宣称验收，退出码 0 只表示成功生成结果；缺失方向、历史重置或覆盖不足必须单独判断。

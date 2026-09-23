@@ -107,7 +107,7 @@ SrResult TemporalUpscaler::RecordIsolated(plume::VulkanCommandList& commands,
     if (!ValidSrRequest(request)) return result;
     if (request.plan.requestedUpscaler == upscaling::Upscaler::Fsr) {
         const auto attempt = fsr_->RecordIsolated(commands, FsrConfig(request), request.inputs,
-            FsrMetadata(request), output);
+            FsrMetadata(request), output, capture);
         result.actualProvider = upscaling::Upscaler::Fsr;
         result.status = Convert(attempt.status);
         result.rawResult = attempt.sdkResult;

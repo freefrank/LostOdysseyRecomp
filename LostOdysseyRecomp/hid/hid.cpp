@@ -385,8 +385,8 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
     }
 
     // Background integration input, opt-in per test process. A new serial starts
-    // One bounded pulse: "serial hexButtonMask leftX leftY polls [LT RT]".
-    // Optional analog triggers are 0..255; the legacy five fields imply zero. No OS input.
+    // One bounded pulse: "serial hexButtonMask leftX leftY polls [LT RT [rightX rightY]]".
+    // Triggers clamp to 0..255, sticks to int16; omitted fields imply zero. No OS input.
     static const bool inputTicks = [] { const char* value = getenv("LO_TEST_INPUT_TICKS"); return value && strcmp(value, "1") == 0; }();
     uint32_t traceInputSerial = 0;
     uint64_t traceInputTick = 0;
@@ -397,15 +397,16 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
         static TestInputPulse tickPulse;
         const uint64_t tick = inputTicks ? frame_timing::InputTick() : 0;
         static int leftX = 0, leftY = 0, leftTrigger = 0, rightTrigger = 0;
+        static int rightX = 0, rightY = 0;
         if (++pollCount % 12 == 0)
         {
             if (FILE* file = fopen(path, "r"))
             {
                 unsigned serial = 0, mask = 0, duration = 0;
-                int x = 0, y = 0, lt = 0, rt = 0;
-                const int fields = fscanf(file, "%u %x %d %d %u %d %d",
-                    &serial, &mask, &x, &y, &duration, &lt, &rt);
-                const bool valid = fields == 5 || fields == 7;
+                int x = 0, y = 0, lt = 0, rt = 0, rx = 0, ry = 0;
+                const int fields = fscanf(file, "%u %x %d %d %u %d %d %d %d",
+                    &serial, &mask, &x, &y, &duration, &lt, &rt, &rx, &ry);
+                const bool valid = fields == 5 || fields == 7 || fields == 9;
                 fclose(file);
                 if (valid && serial != lastSerial)
                 {
@@ -415,10 +416,12 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
                     leftY = std::clamp(y, -32768, 32767);
                     leftTrigger = std::clamp(lt, 0, 255);
                     rightTrigger = std::clamp(rt, 0, 255);
+                    rightX = std::clamp(rx, -32768, 32767);
+                    rightY = std::clamp(ry, -32768, 32767);
                     pollsLeft = std::min(duration, 6000u);
                     if (inputTicks) tickPulse.Set(tick, pollsLeft);
-                    LOG_INFO("background test input: serial={} buttons={:#x} stick={},{} polls={} triggers={},{}",
-                        serial, buttons, leftX, leftY, pollsLeft, leftTrigger, rightTrigger);
+                    LOG_INFO("background test input: serial={} buttons={:#x} stick={},{} polls={} triggers={},{} right_stick={},{}",
+                        serial, buttons, leftX, leftY, pollsLeft, leftTrigger, rightTrigger, rightX, rightY);
                     if (inputTicks)
                         LOG_INFO("test input accepted: serial={} controller=0 tick={} start={} ticks={} mode=engine_tick",
                             serial, tick, tickPulse.start, tickPulse.duration);
@@ -429,6 +432,8 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
         // zero-duration command; never leave the prior RT value latched.
         gp.bLeftTrigger = 0;
         gp.bRightTrigger = 0;
+        gp.sThumbRX = 0;
+        gp.sThumbRY = 0;
         const bool active = inputTicks ? tickPulse.Active(tick) : pollsLeft != 0;
         if (active)
         {
@@ -438,6 +443,8 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
             gp.wButtons |= uint16_t(buttons);
             gp.sThumbLX = int16_t(leftX);
             gp.sThumbLY = int16_t(leftY);
+            gp.sThumbRX = int16_t(rightX);
+            gp.sThumbRY = int16_t(rightY);
         }
         traceInputSerial = lastSerial;
         traceInputTick = tick;
