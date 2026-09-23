@@ -107,6 +107,11 @@ def main():
                 "NVIDIA DLSS SDK Version: 310.9.1 (commit 374959484e79a640feaba44c93ac8cfb0a03f5b5)\n"
             )
             (dlss_lic_dest / "NOTICE.txt").write_text(notice_text, encoding="utf-8")
+        fsr_license = runtime.parent / "licenses/LICENSE-FidelityFX.txt"
+        if fsr_license.is_file():
+            fsr_licenses = appdir / "usr/share/licenses/lost-odyssey-recomp"
+            fsr_licenses.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(fsr_license, fsr_licenses / fsr_license.name)
         stage_portable_shader_pack(runtime.parent, appdir / "usr/bin",
                                    appdir / "usr/share/licenses/lost-odyssey-recomp")
         desktop = LINUX_PACKAGING / "io.github.freefrank.LostOdysseyRecomp.desktop"

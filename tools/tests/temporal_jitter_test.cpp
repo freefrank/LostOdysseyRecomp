@@ -971,6 +971,14 @@ int main(int argc,char** argv)
         true,true,&anchor,37,anchor.viewport,invalidVp.data(),invalidPs.data(),&depth,&depth);
     Check(!invalidResult.applied && invalidResult.rejection == JitterRejection::InvalidConstants &&
         invalidVp == bank(0) && invalidPs == invalidBefore, "invalid PS cannot cause a half-applied correction");
+    auto cachedVp = bank(0), cachedPs = originalPs;
+    const auto cachedSample = FrameJitter(5, anchor.viewport.width, anchor.viewport.height);
+    const auto cachedResult = ApplyDrawJitter(0x99c2b4b0960a9ccdull, 0x12345678ull, 20,
+        true, true, &anchor, 37, anchor.viewport, cachedVp.data(), cachedPs.data(), nullptr, nullptr,
+        1, &cachedSample);
+    Check(cachedResult.applied && cachedResult.sample.phase == cachedSample.phase &&
+        cachedResult.sample.pixelX == cachedSample.pixelX && cachedResult.sample.ndcY == cachedSample.ndcY,
+        "draw uses the selected frame jitter instead of recomputing a different phase");
     std::printf("PASS: %u temporal jitter checks; 32 phases at 4 sizes; legacy shadow error %.9g, corrected %.9g\n",
         checks, legacyError, correctedError);
 }

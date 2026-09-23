@@ -4,6 +4,8 @@
 #include <gpu/renderer.cpp>
 #include <gpu/vulkan_command_recording.h>
 #include <gpu/vulkan_submission_state.h>
+#include <gpu/fsr_upscaler.h>
+#include <cfloat>
 #include <stdexcept>
 #include <json.hpp>
 
@@ -95,6 +97,7 @@ struct VendorFixture {
     gpu::dlss::SrStatus outcome = gpu::dlss::SrStatus::Executable;
     uint32_t calls = 0;
     uint32_t vendorCalls = 0;
+    uint64_t failedUseId = 0, discardedUseId = 0;
     bool created = true;
     bool failCreate = false;
     gpu::dlss::SrStatus EnsureSession(const plume::VulkanDevice&) { return gpu::dlss::SrStatus::Executable; }
@@ -135,9 +138,11 @@ struct VendorFixture {
             vkCmdClearColorImage(list.vk, output.vk, VK_IMAGE_LAYOUT_GENERAL, &value, 1, &output.imageSubresourceRange);
         }
         Require(gpu::submission::EndCommands(list) == VK_SUCCESS, "isolated end");
-        return {outcome};
+        gpu::dlss::SrAttempt result{outcome};
+        result.useId = outcome == gpu::dlss::SrStatus::Failed ? failedUseId : 0;
+        return result;
     }
-    void OnBatchDiscarded(uint64_t) {}
+    void OnBatchDiscarded(uint64_t id) { discardedUseId = id; }
 };
 struct SkipNative : std::runtime_error { using std::runtime_error::runtime_error; };
 // On an assertion exception, never submit a partly recorded list during stack
@@ -441,6 +446,152 @@ public:
         Require(r.Flush() && r.WaitForGpu(), "end case drain");
         r.framebuffers.clear(); r.renderTargets.clear();
     }
+    void RunFsrFallback() {
+#if !defined(LO_HAS_FSR) || !LO_HAS_FSR
+        throw SkipNative("FSR SDK is disabled for this fixture");
+#else
+        // The embedded renderer uses the legacy fixture controller signature.
+        // This bridge records with the real FSR controller and only injects a
+        // single rejection AFTER successful SDK recording. No SDK call is faked.
+        struct FsrBridge {
+            gpu::fsr::Controller actual;
+            gpu::fsr::Config config{32, 32, 64, 64, gpu::upscaling::FsrQuality::Quality, 1};
+            bool rejectOnce = false;
+            uint64_t recorded = 0, discarded = 0;
+            unsigned dispatches = 0;
+            gpu::dlss::SrStatus EnsureSession(const plume::VulkanDevice& device) {
+                Require(actual.EnsureSession(const_cast<plume::VulkanDevice&>(device), config) ==
+                    gpu::fsr::Status::Ready, "real FSR session ready");
+                return gpu::dlss::SrStatus::Executable;
+            }
+            gpu::dlss::SrAttempt RecordIsolated(plume::VulkanCommandList& commands,
+                const gpu::dlss::SrConfig&, const gpu::temporal::TemporalFrameInputs& inputs,
+                plume::VulkanTexture& output, gpu::dlss::EvaluateCapture*) {
+                gpu::fsr::FrameMetadata metadata{true, FLT_MAX, 10.0f, .7f, 1.0f,
+                    16.6f, 1.0f / .999f, -.001f / .999f};
+                const auto result = actual.RecordIsolated(commands, config, inputs, metadata, output);
+                Require(result.status == gpu::fsr::Status::Ready && result.useId,
+                    "real FSR SDK record must succeed before test rejection");
+                ++dispatches; recorded = result.useId;
+                gpu::dlss::SrAttempt translated{rejectOnce ? gpu::dlss::SrStatus::Failed : gpu::dlss::SrStatus::Executable};
+                translated.useId = result.useId;
+                rejectOnce = false;
+                return translated;
+            }
+            void OnBatchDiscarded(uint64_t use) {
+                discarded = use;
+                actual.OnBatchDiscarded(use);
+            }
+        } bridge;
+        auto& r = R();
+        r.activePlan.requestedUpscaler = gpu::upscaling::Upscaler::Fsr;
+        r.activePlan.consumer = gpu::upscaling::TemporalConsumer::FsrSr;
+        r.activePlan.width = r.activePlan.height = 32;
+        r.activePlan.output = {{64,64}, 0,0,64,64};
+        r.activePlan.fsrQuality = gpu::upscaling::FsrQuality::Quality;
+        r.internalSize = {32,32};
+        readbackPitch = 64;
+        readback = device->createBuffer(plume::RenderBufferDesc::ReadbackBuffer(64 * 64 * 8));
+        Require(bool(readback), "FSR final readback allocation");
+        const RenderTargetKey key{0, 3, 1280, 0, false};
+        for (unsigned step = 0; step < 3; ++step) {
+            ++r.frame;
+            auto base = Texture(32,32,plume::RenderFormat::R16G16B16A16_FLOAT);
+            HostTexture* original = base.get(); r.renderTargets[key] = std::move(base);
+            auto source = Texture(32,32,plume::RenderFormat::R8G8B8A8_UNORM);
+            auto depth = Texture(32,32,plume::RenderFormat::R32_FLOAT);
+            auto motion = Texture(32,32,plume::RenderFormat::R16G16_FLOAT);
+            auto invalid = Texture(32,32,plume::RenderFormat::R8_UNORM);
+            LocalImageDrain drain{device.get()};
+            // Current fallback is always green; real SDK frame 1 is red and
+            // recovery is blue. Thus success cannot be the unchanged fallback.
+            Clear(*original, plume::RenderColor(0,1,0,.5f));
+            Clear(*source, step == 0 ? plume::RenderColor(1,0,0,1) : plume::RenderColor(0,0,1,1));
+            Clear(*depth, plume::RenderColor(.5f,0,0,0));
+            Clear(*motion, plume::RenderColor(0,0,0,0));
+            Clear(*invalid, plume::RenderColor(0,0,0,0));
+            gpu::temporal::TemporalFrameInputs inputs{};
+            inputs.plan = r.activePlan; inputs.currentInputsComplete = true;
+            inputs.renderFrameId = r.frame;
+            inputs.resetHistory = step == 0;
+            inputs.colorEncoding = gpu::temporal::ColorEncoding::Sdr;
+            inputs.depthConvention = gpu::temporal::DepthConvention::Reversed;
+            inputs.motionState = gpu::temporal::MotionState::Tracked;
+            inputs.color = {source->texture.get(), {32,32},0,0,32,32};
+            inputs.depth = {depth->texture.get(), {32,32},0,0,32,32};
+            inputs.motion = {motion->texture.get(), {32,32},0,0,32,32};
+            inputs.motionInvalidity = {invalid->texture.get(), {32,32},0,0,32,32};
+            Require(inputs.CompleteForConsumer(), "fixture supplies complete FSR motion/depth inputs");
+            Require(r.PrepareSceneCopyDestination(key, *original, inputs), "real renderer FSR promotion prepare");
+            Require(r.sceneCopyPromotion.scratch->format == plume::RenderFormat::R8G8B8A8_UNORM,
+                "real FSR provider selects R8 SDK scratch");
+            HostTexture* color = original; HostTexture* raster = color;
+            plume::RenderViewport viewport, guest(0,0,1280,720);
+            plume::RenderRect scissor, guestScissor(0,0,1280,720);
+            Require(r.ActivateSceneCopyDestination(color,raster,viewport,scissor,guest,guestScissor), "FSR activate");
+            Clear(*color, plume::RenderColor(0,1,0,.5f));
+            bridge.rejectOnce = step == 1;
+            const bool accepted = r.RecordSceneCopyDlssUsing(bridge,color,raster);
+            Require(accepted == (step != 1), "single post-record rejection boundary");
+            if (step == 1) Require(bridge.discarded == bridge.recorded && !r.Gpu().srUseId,
+                "renderer itself discards and clears rejected real FSR token");
+            Require(r.Flush(), "FSR renderer flush");
+            Require(fixture::lastListCount == (step == 1 ? 2u : 3u), "rejected SDK list must not be submitted");
+            if (accepted) bridge.actual.OnBatchSubmitted(bridge.recorded,fixture::state.LastSubmission());
+            const auto pixels = Pixels(*color);
+            for (uint64_t pixel : pixels) {
+                Require((pixel >> 48) == 0x3800, "guest alpha must survive FSR and fallback");
+                if (step == 1) Require(pixel == 0x380000003c000000ull,
+                    "rejected frame must contain current green, not previous FSR red or blank");
+                else {
+                    const uint16_t red = uint16_t(pixel), green = uint16_t(pixel >> 16), blue = uint16_t(pixel >> 32);
+                    Require(step == 0 ? (red > 0x3800 && green < 0x3000 && blue < 0x3000) :
+                        (blue > 0x3800 && red < 0x3000 && green < 0x3000), "actual SDK final color red then blue");
+                }
+            }
+            bridge.actual.ReleaseCompletedThrough(fixture::state.LastSubmission());
+            if (step == 2) Require(!inputs.resetHistory && bridge.actual.LastDiagnostics().lastDispatchReset,
+                "recovery SDK resets history despite false input reset");
+            std::printf("FSR_FALLBACK frame=%llu accepted=%u discarded=%llu sdk_reset=%u pixels=%zu\n",
+                (unsigned long long)r.frame,accepted,(unsigned long long)bridge.discarded,
+                bridge.actual.LastDiagnostics().lastDispatchReset,pixels.size());
+            Require(r.WaitForGpu(), "FSR frame drain");
+            r.framebuffers.clear(); r.renderTargets.clear(); r.sceneCopyPromotion = {};
+            if (step == 1) {
+                Require(bridge.actual.EnsureSession(*static_cast<plume::VulkanDevice*>(device.get()),bridge.config) ==
+                    gpu::fsr::Status::NeedsReconfigure,"discarded SDK recording poisons history");
+                bridge.actual.ReleaseFeatureAfterGpuDrain();
+            }
+        }
+        Require(bridge.dispatches == 3 && bridge.discarded, "three actual SDK records and one renderer discard");
+        bridge.actual.ShutdownAfterGpuDrain();
+        std::puts("PASS: real FSR + renderer current-frame fallback after injected post-record rejection; recovery SDK reset; not SDK-internal-failure or production-facade coverage");
+#endif
+    }
+    void RunFsrScratchFormat() {
+        auto& r = R();
+        auto guest = Texture(4, 4, plume::RenderFormat::R16G16B16A16_FLOAT);
+        uint64_t lastAllocation = 0;
+        // Real renderer allocation path, including switching back to FSR.
+        for (const auto provider : {gpu::upscaling::Upscaler::Fsr, gpu::upscaling::Upscaler::Dlss,
+                                   gpu::upscaling::Upscaler::Fsr}) {
+            r.activePlan.requestedUpscaler = provider;
+            auto scratch = r.CreateSceneCopyScratch(*guest, {8, 8});
+            auto composite = r.CreatePromotedTarget(*guest, {8, 8});
+            Require(scratch && composite, "provider output and guest composite allocate");
+            const auto expected = provider == gpu::upscaling::Upscaler::Fsr ?
+                VK_FORMAT_R8G8B8A8_UNORM : VK_FORMAT_R16G16B16A16_SFLOAT;
+            Require(static_cast<plume::VulkanTexture*>(scratch->texture.get())->imageFormat == expected,
+                "actual scratch VkImage format follows the selected provider contract");
+            Require(scratch->width == 8 && scratch->height == 8 && scratch->allocationSerial > lastAllocation,
+                "provider switch uses a new unpadded scratch allocation");
+            Require(composite->format == plume::RenderFormat::R16G16B16A16_FLOAT &&
+                guest->format == plume::RenderFormat::R16G16B16A16_FLOAT,
+                "encoded SR scratch does not change the guest composite or destination format");
+            lastAllocation = scratch->allocationSerial;
+        }
+        std::puts("PASS: real renderer FSR/DLSS/FSR scratch Vulkan formats and preserved FP16 guest destination");
+    }
     void RunStatus() {
         gpu::frame_plan::PlannerState planner;
         fixture::statusPlanner = &planner;
@@ -631,11 +782,14 @@ public:
 
         ++r.frame;
         vendor.outcome = gpu::dlss::SrStatus::Failed;
+        vendor.failedUseId = 73;
         openScene(scene);
         color = scene.color;
         raster = color;
         const auto beforeVendor = fixture::executions.size();
         Require(!r.RecordSceneCopyDlssUsing(vendor, color, raster), "vendor failure is not applied");
+        Require(vendor.discardedUseId == 73 && !r.Gpu().srUseId && !r.Gpu().srIsolatedAccepted,
+            "failed SDK list returns its allocated use to the owner before the fallback batch can submit");
         r.PublishDlssFrameOutcome();
         Require(r.Flush(), "vendor-failure batch");
         Require(std::none_of(fixture::executions.begin() + beforeVendor, fixture::executions.end(), [](const fixture::ExecutionReport& report) {
@@ -1155,10 +1309,12 @@ int main(int argc, char** argv) {
         const bool native = argc == 2 && std::string_view(argv[1]) == "--native";
         const bool extentOnly = argc == 2 && std::string_view(argv[1]) == "--extent-only";
         const bool statusOnly = argc == 2 && std::string_view(argv[1]) == "--status-only";
+        const bool fsrScratchOnly = argc == 2 && std::string_view(argv[1]) == "--fsr-scratch-only";
+        const bool fsrFallbackOnly = argc == 2 && std::string_view(argv[1]) == "--fsr-fallback-only";
         const bool planIdentity = argc == 2 && std::string_view(argv[1]) == "--plan-identity";
         const bool evaluateCapture = argc == 2 && std::string_view(argv[1]) == "--evaluate-capture-only";
-        if (argc > 1 && !native && !extentOnly && !statusOnly && !planIdentity && !evaluateCapture) {
-            std::fprintf(stderr, "usage: %s [--native|--extent-only|--status-only|--plan-identity|--evaluate-capture-only]\n", argv[0]);
+        if (argc > 1 && !native && !extentOnly && !statusOnly && !planIdentity && !evaluateCapture && !fsrScratchOnly && !fsrFallbackOnly) {
+            std::fprintf(stderr, "usage: %s [--native|--extent-only|--status-only|--plan-identity|--evaluate-capture-only|--fsr-scratch-only]\n", argv[0]);
             return 2;
         }
         std::setvbuf(stdout, nullptr, _IONBF, 0);
@@ -1178,6 +1334,8 @@ int main(int argc, char** argv) {
             harness.RunExtentGrowth();
             return 0;
         }
+        if (fsrScratchOnly) { harness.RunFsrScratchFormat(); return 0; }
+        if (fsrFallbackOnly) { harness.RunFsrFallback(); return 0; }
         if (statusOnly) {
             harness.RunStatus();
             std::puts("PASS: DLSS execution status from the real planner and checked Vulkan submit; no NGX, present, or gameplay claim");

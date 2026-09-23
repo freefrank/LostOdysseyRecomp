@@ -169,6 +169,7 @@ if(LO_BUILD_GPU)
         target_link_libraries(LostOdysseyRecomp PRIVATE d3d12 dxgi)
     endif()
     lo_enable_dlss(LostOdysseyRecomp)
+    lo_enable_fsr(LostOdysseyRecomp)
 endif()
 
 if(LO_RENDERER_P2_SELFTEST)
@@ -584,7 +585,11 @@ add_executable(LoRenderResolutionTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools
 target_include_directories(LoRenderResolutionTest PRIVATE ${LO_RUNTIME_ROOT})
 target_compile_features(LoRenderResolutionTest PRIVATE cxx_std_20)
 
-add_executable(LoFramePlanTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/frame_plan_test.cpp)
+add_executable(LoFsrProjectionTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/fsr_projection_test.cpp)
+target_include_directories(LoFsrProjectionTest PRIVATE ${LO_RUNTIME_ROOT})
+target_compile_features(LoFsrProjectionTest PRIVATE cxx_std_20)
+
+add_executable(LoFramePlanTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/frame_plan_test.cpp ${LO_RUNTIME_ROOT}/gpu/upscaling_plan.cpp)
 target_include_directories(LoFramePlanTest PRIVATE ${LO_RUNTIME_ROOT})
 target_compile_features(LoFramePlanTest PRIVATE cxx_std_20)
 

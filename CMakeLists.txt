@@ -23,6 +23,7 @@ endif()
 # an explicit LO_TARGET_ARCH comes later on the command line and wins.
 include(cmake/LoOptimization.cmake)
 include(cmake/LoDlss.cmake)
+include(cmake/LoFsr.cmake)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 # 阶段 1 之前这里只是占位。生成 ppc/ 之后再按 UnleashedRecomp 的

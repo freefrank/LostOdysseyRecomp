@@ -36,6 +36,8 @@ namespace gpu::frame_plan
         bool requiresReadback = false;
         bool inputProbe = false;
         bool failed = false;
+        upscaling::FsrQuality fsrQuality = upscaling::FsrQuality::Quality;
+        upscaling::FrameGeneration frameGeneration = upscaling::FrameGeneration::Off;
         bool operator==(const FramePlan&) const = default;
     };
     enum class SurfaceRole : uint32_t { Unknown = 0, Scene = 1, Fixed = 2 };
@@ -93,11 +95,14 @@ namespace gpu::frame_plan
     inline uint64_t FullRequestSignature(const FramePlan& plan, uint32_t internalResolution, resolution::Size recommendedInput) {
         const auto mix = [](uint64_t value, uint64_t input) { return (value ^ input) * 0x9E3779B185EBCA87ull; };
         uint64_t value = 0x6C6F706C616E7631ull;
-        value = mix(value, uint32_t(plan.requestedUpscaler)); value = mix(value, uint32_t(plan.dlssQuality));
+        value = mix(value, uint32_t(plan.requestedUpscaler));
+        value = mix(value, plan.requestedUpscaler == upscaling::Upscaler::Dlss ? uint32_t(plan.dlssQuality) : 0);
         value = mix(value, plan.legacyAA); value = mix(value, plan.scalingQuality); value = mix(value, internalResolution);
         value = mix(value, plan.output.drawable.width); value = mix(value, plan.output.drawable.height);
         value = mix(value, plan.output.x); value = mix(value, plan.output.y); value = mix(value, plan.output.width); value = mix(value, plan.output.height);
         value = mix(value, plan.deviceEpoch); value = mix(value, plan.requiresReadback);
+        if (plan.requestedUpscaler == upscaling::Upscaler::Fsr) value = mix(value, uint32_t(plan.fsrQuality));
+        if (plan.frameGeneration != upscaling::FrameGeneration::Off) value = mix(value, uint32_t(plan.frameGeneration));
         value = mix(value, recommendedInput.width); return mix(value, recommendedInput.height);
     }
     inline uint64_t RequestSignature(uint32_t mode, uint32_t drawableWidth, uint32_t drawableHeight, bool resolveReadback)
@@ -115,6 +120,8 @@ namespace gpu::frame_plan
         upscaling::BackendDeviceSnapshot device{};
         const upscaling::OutputSizing* sizing = nullptr;
         bool readback = false, inputProbeRequested = false;
+        upscaling::FsrQuality fsrQuality = upscaling::FsrQuality::Quality;
+        upscaling::FrameGeneration frameGeneration = upscaling::FrameGeneration::Off;
     };
     inline uint64_t InputRequestSignature(const PlannerInput& input)
     {
@@ -123,13 +130,28 @@ namespace gpu::frame_plan
         request.deviceEpoch = input.device.deviceEpoch;
         request.requestedUpscaler = input.upscaler;
         request.dlssQuality = upscaling::NormalizeDlssQuality(input.quality);
+        request.fsrQuality = upscaling::NormalizeFsrQuality(input.fsrQuality);
+        request.frameGeneration = input.frameGeneration;
         request.legacyAA = input.antialiasing;
         request.scalingQuality = input.scalingQuality;
         request.requiresReadback = input.readback;
         resolution::Size recommended{request.width, request.height};
-        if (input.sizing) {
+        if (input.upscaler == upscaling::Upscaler::Dlss && input.sizing &&
+            input.sizing->key.provider == upscaling::Upscaler::Dlss &&
+            input.sizing->key.deviceEpoch == input.device.deviceEpoch &&
+            input.sizing->key.outputWidth == input.output.width && input.sizing->key.outputHeight == input.output.height &&
+            input.sizing->key.outputX == input.output.x && input.sizing->key.outputY == input.output.y) {
             const auto& mode = input.sizing->modes[upscaling::DlssQualityIndex(input.quality)];
             if (upscaling::ModeReadyForOutput(mode, request.dlssQuality, {input.output.width, input.output.height}))
+                recommended = mode.optimal;
+        }
+        if (input.upscaler == upscaling::Upscaler::Fsr && input.sizing &&
+            input.sizing->key == upscaling::SizingKey{input.device.deviceEpoch, input.output.width,
+                input.output.height, upscaling::Upscaler::Fsr, input.output.x, input.output.y}) {
+            const auto& mode = input.sizing->modes[uint32_t(request.fsrQuality)];
+            if (mode.state == upscaling::SizingState::Ready && mode.optimal.width && mode.optimal.height &&
+                mode.optimal.width <= input.output.width && mode.optimal.height <= input.output.height &&
+                (request.fsrQuality != upscaling::FsrQuality::NativeAA || mode.optimal == resolution::Size{input.output.width,input.output.height}))
                 recommended = mode.optimal;
         }
         return FullRequestSignature(request, input.internalResolution, recommended);
@@ -155,6 +177,7 @@ namespace gpu::frame_plan
         PromotionUnavailable,
         RequestFailure,
         GpuWorkStopped,
+        UnsupportedProjection,
     };
     struct DlssExecutionObservation {
         FramePlan plan{};
@@ -162,7 +185,9 @@ namespace gpu::frame_plan
         uint64_t submissionSerial = 0;
         DlssExecutionOutcome outcome = DlssExecutionOutcome::Fallback;
         DlssEffectReason reason = DlssEffectReason::NoEligibleScene;
+        upscaling::Upscaler actualProvider = upscaling::Upscaler::Dlss;
     };
+    using UpscalerExecutionObservation = DlssExecutionObservation; // Source compatibility for the existing NGX status fixtures.
     struct PlannerObservation {
         bool hasPlan = false;
         FramePlan plan{};
@@ -174,6 +199,7 @@ namespace gpu::frame_plan
     public:
         FramePlan Begin(PlannerInput input) {
             input.quality = upscaling::NormalizeDlssQuality(input.quality);
+            input.fsrQuality = upscaling::NormalizeFsrQuality(input.fsrQuality);
             std::lock_guard lock(mutex_);
             const uint64_t incomingSignature = InputRequestSignature(input);
             const bool newRequest = !lastFinal_ || lastFinal_->requestSignature != incomingSignature;
@@ -185,7 +211,7 @@ namespace gpu::frame_plan
             const bool matchesLatchedAttempt = latched_ && lastFinal_ &&
                 MatchesPlanFailure(*lastFinal_, *latched_) && latched_->requestSignature == incomingSignature;
             const bool legacyRetry = matchesLatchedAttempt &&
-                !upscaling::IsDlssConsumer(lastFinal_->consumer);
+                !upscaling::IsDlssConsumer(lastFinal_->consumer) && !upscaling::IsSrConsumer(lastFinal_->consumer);
 
             FramePlan p = AdvanceCpuPlan(legacy_, ++serial_, epoch_,
                 legacyRetry ? latched_->geometryEpoch : ~0ull,
@@ -197,6 +223,8 @@ namespace gpu::frame_plan
             p.deviceEpoch = input.device.deviceEpoch;
             p.requestedUpscaler = input.upscaler;
             p.dlssQuality = input.quality;
+            p.fsrQuality = input.fsrQuality;
+            p.frameGeneration = input.frameGeneration;
             p.legacyAA = input.antialiasing;
             p.effectiveAA = input.antialiasing;
             p.scalingQuality = input.scalingQuality;
@@ -206,23 +234,45 @@ namespace gpu::frame_plan
 
             const auto requestedBase = Choose(0, 0, input.internalResolution, input.output.width, input.output.height, input.readback);
             resolution::Size recommended{requestedBase.width, requestedBase.height};
-            if (input.sizing) {
+            if (input.upscaler == upscaling::Upscaler::Dlss && input.sizing &&
+                input.sizing->key.provider == upscaling::Upscaler::Dlss &&
+                input.sizing->key.deviceEpoch == input.device.deviceEpoch &&
+                input.sizing->key.outputWidth == input.output.width && input.sizing->key.outputHeight == input.output.height &&
+                input.sizing->key.outputX == input.output.x && input.sizing->key.outputY == input.output.y) {
                 const auto& mode = input.sizing->modes[upscaling::DlssQualityIndex(input.quality)];
                 p.sizingRevision = input.sizing->revision;
                 const bool modeReady = upscaling::ModeReadyForOutput(mode, input.quality,
                     {input.output.width, input.output.height});
                 if (modeReady) recommended = mode.optimal;
-                if (p.inputProbe && input.device.dlssAvailable && modeReady) {
+                if (p.inputProbe && input.device.Available(upscaling::Upscaler::Dlss) && modeReady) {
                     p.width = mode.optimal.width;
                     p.height = mode.optimal.height;
                     p.effectiveAA = 0;
                     p.consumer = upscaling::TemporalConsumer::DlssInputs;
-                } else if (input.upscaler == upscaling::Upscaler::Dlss && !input.readback && !p.inputProbe &&
-                    input.device.dlssAvailable && modeReady) {
+                } else if (!input.readback && !p.inputProbe &&
+                    input.device.Available(upscaling::Upscaler::Dlss) && modeReady) {
                     p.width = mode.optimal.width;
                     p.height = mode.optimal.height;
                     p.effectiveAA = 0;
                     p.consumer = upscaling::TemporalConsumer::DlssSr;
+                }
+            }
+            if (input.upscaler == upscaling::Upscaler::Fsr && input.sizing &&
+                input.sizing->key == upscaling::SizingKey{input.device.deviceEpoch, input.output.width,
+                    input.output.height, upscaling::Upscaler::Fsr, input.output.x, input.output.y}) {
+                const auto& mode = input.sizing->modes[uint32_t(input.fsrQuality)];
+                p.sizingRevision = input.sizing->revision;
+                const bool ready = mode.state == upscaling::SizingState::Ready &&
+                    mode.optimal.width && mode.optimal.height && mode.optimal.width <= input.output.width &&
+                    mode.optimal.height <= input.output.height &&
+                    (input.fsrQuality != upscaling::FsrQuality::NativeAA ||
+                        mode.optimal == resolution::Size{input.output.width, input.output.height});
+                if (ready) recommended = mode.optimal;
+                if (ready && !input.readback && input.device.Available(upscaling::Upscaler::Fsr)) {
+                    p.width = mode.optimal.width;
+                    p.height = mode.optimal.height;
+                    p.effectiveAA = 0;
+                    p.consumer = upscaling::TemporalConsumer::FsrSr;
                 }
             }
             p.requestSignature = FullRequestSignature(p, input.internalResolution, recommended);
@@ -242,7 +292,9 @@ namespace gpu::frame_plan
 
             const bool changed = !lastFinal_ || lastFinal_->requestSignature != p.requestSignature ||
                 lastFinal_->width != p.width || lastFinal_->height != p.height ||
-                lastFinal_->consumer != p.consumer || lastFinal_->dlssQuality != p.dlssQuality ||
+                lastFinal_->consumer != p.consumer ||
+                !upscaling::SameEffectiveQuality(p.requestedUpscaler, lastFinal_->dlssQuality, p.dlssQuality,
+                    lastFinal_->fsrQuality, p.fsrQuality) || lastFinal_->frameGeneration != p.frameGeneration ||
                 lastFinal_->output != p.output || lastFinal_->deviceEpoch != p.deviceEpoch;
             if (lastFinal_) p.geometryEpoch = changed ? ++epoch_ : lastFinal_->geometryEpoch;
             // A changed geometry is a new attempt. Drop an execution that belongs
@@ -250,10 +302,11 @@ namespace gpu::frame_plan
             if (changed && execution_) {
                 const bool sameExecution = execution_->plan.deviceEpoch == p.deviceEpoch &&
                     execution_->plan.requestSignature == p.requestSignature &&
-                    execution_->plan.geometryEpoch == p.geometryEpoch;
+                    execution_->plan.geometryEpoch == p.geometryEpoch &&
+                    execution_->plan.requestedUpscaler == p.requestedUpscaler;
                 if (!sameExecution) execution_.reset();
             }
-            if (!upscaling::IsDlssConsumer(p.consumer)) legacy_.plan = p;
+            if (!upscaling::IsDlssConsumer(p.consumer) && !upscaling::IsSrConsumer(p.consumer)) legacy_.plan = p;
             lastFinal_ = p;
 
             bool known = false;
@@ -286,7 +339,7 @@ namespace gpu::frame_plan
             for (size_t i = 0; i < attemptCount_; ++i) {
                 if (MatchesPlanFailure(attempts_[i], failure)) {
                     latched_ = failure;
-                    if (upscaling::IsDlssConsumer(attempts_[i].consumer))
+                    if (upscaling::IsDlssConsumer(attempts_[i].consumer) || upscaling::IsSrConsumer(attempts_[i].consumer))
                         dlssDisabled_ = DisabledRequest{failure.requestSignature, failure.reason};
                     return true;
                 }
@@ -297,15 +350,23 @@ namespace gpu::frame_plan
         // request, and geometry; an older render frame never replaces a newer one.
         bool ReportExecution(const DlssExecutionObservation& observation)
         {
+            return ReportUpscalerExecution(observation);
+        }
+        bool ReportUpscalerExecution(const UpscalerExecutionObservation& observation)
+        {
             std::lock_guard lock(mutex_);
             if (!lastFinal_) return false;
             const auto& plan = observation.plan;
             if (!plan.cpuSerial || plan.cpuSerial > lastFinal_->cpuSerial) return false;
-            if (plan.deviceEpoch != lastFinal_->deviceEpoch || plan.requestSignature != lastFinal_->requestSignature ||
+            if (plan.requestedUpscaler != lastFinal_->requestedUpscaler ||
+                plan.deviceEpoch != lastFinal_->deviceEpoch || plan.requestSignature != lastFinal_->requestSignature ||
                 plan.geometryEpoch != lastFinal_->geometryEpoch) return false;
             if (observation.outcome == DlssExecutionOutcome::Submitted &&
-                (plan.consumer != upscaling::TemporalConsumer::DlssSr || !observation.submissionSerial))
-                return false;
+                (!upscaling::MatchesSrProvider(observation.actualProvider, plan.consumer) ||
+                 plan.requestedUpscaler != observation.actualProvider || !observation.submissionSerial ||
+                 plan.consumer != lastFinal_->consumer)) return false;
+            if (observation.outcome == DlssExecutionOutcome::Fallback &&
+                observation.actualProvider != plan.requestedUpscaler) return false;
             if (execution_ && observation.renderFrame <= execution_->renderFrame) return false;
             execution_ = observation;
             return true;
@@ -398,7 +459,10 @@ namespace gpu::frame_plan
                 snapshot.failure = observed.latched->reason;
         }
         bool sizingReady = false;
-        if (sizing && observed.hasPlan && sizing->key.deviceEpoch == device.deviceEpoch &&
+        if (sizing && observed.hasPlan && sizing->key.provider == upscaling::Upscaler::Dlss &&
+            observed.plan.requestedUpscaler == upscaling::Upscaler::Dlss &&
+            sizing->key.outputX == observed.plan.output.x && sizing->key.outputY == observed.plan.output.y &&
+            sizing->key.deviceEpoch == device.deviceEpoch &&
             sizing->key.deviceEpoch == observed.plan.deviceEpoch &&
             sizing->key.outputWidth == observed.plan.output.width &&
             sizing->key.outputHeight == observed.plan.output.height) {
@@ -410,7 +474,9 @@ namespace gpu::frame_plan
         }
         const bool wantsDlss = observed.hasPlan && snapshot.plannedRequest == upscaling::Upscaler::Dlss;
         const bool epochMatches = observed.hasPlan && device.deviceEpoch == observed.plan.deviceEpoch;
-        const bool executionMatches = observed.execution && epochMatches &&
+        const bool executionMatches = wantsDlss && observed.execution && epochMatches &&
+            observed.execution->plan.requestedUpscaler == upscaling::Upscaler::Dlss &&
+            observed.execution->plan.requestedUpscaler == observed.plan.requestedUpscaler &&
             observed.execution->plan.deviceEpoch == observed.plan.deviceEpoch &&
             observed.execution->plan.requestSignature == observed.plan.requestSignature &&
             observed.execution->plan.geometryEpoch == observed.plan.geometryEpoch &&
@@ -519,11 +585,10 @@ namespace gpu::frame_plan
     {
         constexpr uint32_t PlanBase = 0x7F20;
         constexpr uint32_t CatalogBase = 0x7F40;
-        // Magic remains the legacy 8-word packet marker until lane A updates
-        // the producer. PlanMagic identifies the versioned full snapshot.
+        // Keep both older packet layouts readable at this same register base.
         constexpr uint32_t Magic = 0x4C4F4650; // "LOFP"
         constexpr uint32_t PlanMagic = 0x4C4F4632; // "LOF2"
-        constexpr uint32_t Version = 2;
+        constexpr uint32_t Version = 3;
         constexpr uint32_t PlanWordCount = 24;
         constexpr uint32_t PlanWordCapacity = CatalogBase - PlanBase;
         static_assert(PlanWordCount <= PlanWordCapacity);
@@ -532,22 +597,36 @@ namespace gpu::frame_plan
         constexpr uint32_t PackFlags(const FramePlan& plan)
         {
             return uint32_t(plan.requestedUpscaler) | (uint32_t(plan.dlssQuality) << 2) |
-                (uint32_t(plan.consumer) << 4) | ((plan.legacyAA & 0xFu) << 6) |
+                ((uint32_t(plan.consumer) & 0x3u) << 4) | ((plan.legacyAA & 0xFu) << 6) |
                 ((plan.effectiveAA & 0xFu) << 10) | ((plan.scalingQuality & 0xFu) << 14) |
                 (uint32_t(plan.requiresReadback) << 18) | (uint32_t(plan.inputProbe) << 19) |
-                (uint32_t(plan.failed) << 20);
+                (uint32_t(plan.failed) << 20) |
+                ((uint32_t(plan.consumer) & 4u) << 19) |
+                (uint32_t(plan.fsrQuality) << 22) | (uint32_t(plan.frameGeneration) << 24);
         }
-        constexpr void UnpackFlags(FramePlan& plan, uint32_t flags)
+        constexpr bool UnpackFlags(FramePlan& plan, uint32_t flags, uint32_t version)
         {
+            if (version != 2 && version != Version) return false;
+            if (flags & (version == 2 ? ~0x1FFFFFu : ~0x1FFFFFFu)) return false;
             plan.requestedUpscaler = upscaling::Upscaler(flags & 0x3u);
             plan.dlssQuality = upscaling::DlssQuality((flags >> 2) & 0x3u);
-            plan.consumer = upscaling::TemporalConsumer((flags >> 4) & 0x3u);
+            plan.consumer = upscaling::TemporalConsumer(((flags >> 4) & 0x3u) |
+                (version == Version ? ((flags >> 19) & 4u) : 0u));
             plan.legacyAA = (flags >> 6) & 0xFu;
             plan.effectiveAA = (flags >> 10) & 0xFu;
             plan.scalingQuality = (flags >> 14) & 0xFu;
             plan.requiresReadback = (flags & (1u << 18)) != 0;
             plan.inputProbe = (flags & (1u << 19)) != 0;
             plan.failed = (flags & (1u << 20)) != 0;
+            if (version == Version) {
+                plan.fsrQuality = upscaling::FsrQuality((flags >> 22) & 0x3u);
+                plan.frameGeneration = upscaling::FrameGeneration((flags >> 24) & 1u);
+            }
+            return upscaling::KnownUpscaler(plan.requestedUpscaler) &&
+                (version != 2 || plan.requestedUpscaler != upscaling::Upscaler::Fsr) &&
+                upscaling::KnownDlssQuality(plan.dlssQuality) &&
+                upscaling::KnownFsrQuality(plan.fsrQuality) &&
+                upscaling::KnownFrameGeneration(plan.frameGeneration) && upscaling::KnownTemporalConsumer(plan.consumer);
         }
         inline std::array<uint32_t, PlanWordCount> EncodePlan(const FramePlan& plan)
         {
@@ -563,12 +642,18 @@ namespace gpu::frame_plan
         {
             bool active = false;
             bool legacy = false;
+            uint32_t version = 0;
+            bool flagsValid = false;
             FramePlan plan{};
             std::optional<FramePlan> Write(uint32_t index, uint32_t value)
             {
-                if (index == PlanBase) { legacy = value == Magic; active = legacy || value == PlanMagic; plan = {}; return std::nullopt; }
+                if (index == PlanBase) { legacy = value == Magic; active = legacy || value == PlanMagic;
+                    version = 0; flagsValid = false; plan = {}; return std::nullopt; }
                 if (!active || index < PlanBase || index >= PlanBase + PlanWordCount) return std::nullopt;
-                if (!legacy && index == PlanBase + 1 && value != Version) { active = false; return std::nullopt; }
+                if (!legacy && index == PlanBase + 1) {
+                    if (value != 2 && value != Version) { active = false; return std::nullopt; }
+                    version = value;
+                }
                 if (legacy && index > PlanBase + 7) return std::nullopt;
                 if (legacy) {
                     switch (index - PlanBase) {
@@ -603,8 +688,8 @@ namespace gpu::frame_plan
                 case 19: plan.output.y = value; break;
                 case 20: plan.output.width = value; break;
                 case 21: plan.output.height = value; break;
-                case 22: UnpackFlags(plan, value); break;
-                case 23: active = false; if (value == PlanMagic && plan.width && plan.height) return plan; break;
+                case 22: flagsValid = UnpackFlags(plan, value, version); break;
+                case 23: active = false; if (value == PlanMagic && flagsValid && plan.width && plan.height) return plan; break;
                 }
                 return std::nullopt;
             }
@@ -630,6 +715,8 @@ namespace gpu::frame_plan
     // report one leaves the planned consumer in place.
     DlssEffectSnapshot CurrentDlssEffect();
     void ReportDlssExecution(const DlssExecutionObservation& observation);
+    void ReportUpscalerExecution(const UpscalerExecutionObservation& observation);
+    std::optional<UpscalerExecutionObservation> CurrentUpscalerExecution();
     // One classified snapshot after a device publish. Not a per-frame hook.
     void NoteCurrentDlssStatus();
     // A full P1 producer takes Config, drawable, and one immutable backend/device

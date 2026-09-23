@@ -13,10 +13,11 @@ struct VulkanInterface;
 struct VulkanDevice;
 }
 
-namespace gpu::dlss { class Controller; }
+namespace gpu { class TemporalUpscaler; }
 
 namespace gpu::upscaling {
-enum class Upscaler : uint32_t { Off = 0, Dlss = 1 };
+enum class Upscaler : uint32_t { Off = 0, Dlss = 1, Fsr = 2 };
+inline constexpr bool KnownUpscaler(Upscaler value) { return uint32_t(value) <= uint32_t(Upscaler::Fsr); }
 // Persisted IDs and the two-bit frame-plan wire field. Append, never renumber.
 enum class DlssQuality : uint32_t { Quality = 0, Balanced = 1, Performance = 2, Dlaa = 3 };
 inline constexpr std::array kDlssQualityModes{
@@ -31,6 +32,14 @@ inline constexpr DlssQuality NormalizeDlssQuality(DlssQuality quality) {
 inline constexpr uint32_t DlssQualityIndex(DlssQuality quality) {
     return uint32_t(NormalizeDlssQuality(quality));
 }
+// Persisted independently from DLSS quality; SDK quality IDs are not these IDs.
+enum class FsrQuality : uint32_t { Quality = 0, Balanced = 1, Performance = 2, NativeAA = 3 };
+inline constexpr bool KnownFsrQuality(FsrQuality value) { return uint32_t(value) <= uint32_t(FsrQuality::NativeAA); }
+inline constexpr FsrQuality NormalizeFsrQuality(FsrQuality value) {
+    return KnownFsrQuality(value) ? value : FsrQuality::Quality;
+}
+enum class FrameGeneration : uint32_t { Off = 0, Dlss2x = 1 };
+inline constexpr bool KnownFrameGeneration(FrameGeneration value) { return uint32_t(value) <= uint32_t(FrameGeneration::Dlss2x); }
 // DLAA consumes the output content extent, not drawable bars or guest padding.
 // A failed/mismatched vendor query must not be replaced with a guessed 1:1 size.
 inline constexpr bool ValidDlssRenderExtent(DlssQuality quality, resolution::Size render,
@@ -38,12 +47,35 @@ inline constexpr bool ValidDlssRenderExtent(DlssQuality quality, resolution::Siz
     return KnownDlssQuality(quality) && render.width && render.height && output.width && output.height &&
         (quality != DlssQuality::Dlaa || render == output);
 }
-enum class TemporalConsumer : uint32_t { None = 0, LegacyTaa = 1, DlssInputs = 2, DlssSr = 3 };
+enum class TemporalConsumer : uint32_t { None = 0, LegacyTaa = 1, DlssInputs = 2, DlssSr = 3, FsrSr = 4 };
+inline constexpr bool KnownTemporalConsumer(TemporalConsumer value) { return uint32_t(value) <= uint32_t(TemporalConsumer::FsrSr); }
+inline constexpr bool RequiresMotionDepth(TemporalConsumer consumer, FrameGeneration frameGeneration = FrameGeneration::Off) {
+    return consumer == TemporalConsumer::DlssInputs || consumer == TemporalConsumer::DlssSr ||
+        consumer == TemporalConsumer::FsrSr || frameGeneration != FrameGeneration::Off;
+}
 // P1's input-only route and P2's native SR route have different output handling,
 // but both require the same complete temporal input contract and request-level
 // fallback semantics.
 inline constexpr bool IsDlssConsumer(TemporalConsumer consumer) {
     return consumer == TemporalConsumer::DlssInputs || consumer == TemporalConsumer::DlssSr;
+}
+inline constexpr bool IsSrConsumer(TemporalConsumer consumer) {
+    return consumer == TemporalConsumer::DlssSr || consumer == TemporalConsumer::FsrSr;
+}
+inline constexpr Upscaler ProviderForConsumer(TemporalConsumer consumer) {
+    return consumer == TemporalConsumer::FsrSr ? Upscaler::Fsr : IsDlssConsumer(consumer) ? Upscaler::Dlss : Upscaler::Off;
+}
+inline constexpr bool MatchesSrProvider(Upscaler provider, TemporalConsumer consumer) {
+    return IsSrConsumer(consumer) && ProviderForConsumer(consumer) == provider;
+}
+inline constexpr bool SameEffectiveQuality(Upscaler provider, DlssQuality aDlss, DlssQuality bDlss,
+    FsrQuality aFsr, FsrQuality bFsr) {
+    switch (provider) {
+    case Upscaler::Dlss: return aDlss == bDlss;
+    case Upscaler::Fsr: return aFsr == bFsr;
+    case Upscaler::Off: return true;
+    }
+    return false;
 }
 
 struct OutputRegion {
@@ -66,6 +98,9 @@ inline constexpr OutputRegion ResolveOutputRegion(resolution::Size drawable) {
 struct SizingKey {
     uint64_t deviceEpoch = 0;
     uint32_t outputWidth = 0, outputHeight = 0;
+    // Exact provider/device/content-area key; DLSS publishes four mode slots.
+    Upscaler provider = Upscaler::Dlss;
+    uint32_t outputX = 0, outputY = 0;
     bool operator==(const SizingKey&) const = default;
 };
 
@@ -101,6 +136,11 @@ struct BackendDeviceSnapshot {
     // Terminal for this device lifetime. Readers must not treat an older
     // submitted DLSS frame as still running after the owner publishes this.
     bool gpuWorkStopped = false;
+    bool fsrAvailable = false;
+    bool Available(Upscaler provider) const {
+        return backend == backend::Backend::Vulkan && deviceReady && !gpuWorkStopped &&
+            (provider == Upscaler::Dlss ? dlssAvailable : provider == Upscaler::Fsr && fsrAvailable);
+    }
     bool operator==(const BackendDeviceSnapshot&) const = default;
 };
 
@@ -132,7 +172,7 @@ private:
 // GPU-worker-only service declaration. Its implementation delegates to the
 // controller's P1 sizing query without exposing NGX types to CPU planning.
 struct SizingService {
-    static OutputSizing QueryOutputSizing(dlss::Controller& controller,
+    static OutputSizing QueryOutputSizing(TemporalUpscaler& upscaler,
         const plume::VulkanInterface& vulkanInterface, const plume::VulkanDevice& device,
         const SizingKey& key);
 };

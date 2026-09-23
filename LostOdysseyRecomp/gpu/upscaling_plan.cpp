@@ -1,5 +1,7 @@
 #include "upscaling_plan.h"
-#include "dlss_ngx.h"
+#if defined(LO_GPU_PLUME)
+#include "temporal_upscaler.h"
+#endif
 
 namespace gpu::upscaling {
 namespace {
@@ -86,9 +88,9 @@ BackendDeviceSnapshot PublishedDeviceCapability() {
 }
 
 #if defined(LO_GPU_PLUME)
-OutputSizing SizingService::QueryOutputSizing(dlss::Controller& controller,
+OutputSizing SizingService::QueryOutputSizing(TemporalUpscaler& upscaler,
     const plume::VulkanInterface& vulkanInterface, const plume::VulkanDevice& device, const SizingKey& key) {
-    return controller.QueryOutputSizing(vulkanInterface, device, key);
+    return upscaler.QuerySizing(vulkanInterface, device, key);
 }
 #endif
 } // namespace gpu::upscaling

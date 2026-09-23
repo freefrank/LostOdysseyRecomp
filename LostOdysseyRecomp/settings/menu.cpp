@@ -221,6 +221,22 @@ const wchar_t *BackendPendingSentence(gpu::backend::Backend backend)
 std::wstring DlssNotice()
 {
     const auto running = gpu::frame_plan::CurrentDlssEffect();
+    const auto execution = gpu::frame_plan::CurrentUpscalerExecution();
+    if (GetConfig().upscaler == gpu::upscaling::Upscaler::Fsr ||
+        (execution && execution->actualProvider == gpu::upscaling::Upscaler::Fsr)) {
+        std::wstring fsrText;
+        if (execution && execution->actualProvider == gpu::upscaling::Upscaler::Fsr &&
+            execution->outcome == gpu::frame_plan::DlssExecutionOutcome::Submitted) {
+            const wchar_t* modes[] = {Tr(L"Quality", L"品質"), Tr(L"Balanced", L"平衡"), Tr(L"Performance", L"效能"), L"Native AA"};
+            fsrText = std::wstring(L"FSR ") + modes[uint32_t(gpu::upscaling::NormalizeFsrQuality(execution->plan.fsrQuality))] +
+                Tr(L" output submitted.", L" 輸出已提交。") + ExecutionSizeSuffix(execution->plan);
+            if (edit.upscaler == gpu::upscaling::Upscaler::Fsr && edit.fsrQuality != execution->plan.fsrQuality)
+                fsrText += Tr(L" The selected FSR quality is not applied yet.", L" 選取的 FSR 品質尚未套用。");
+        } else fsrText = Tr(L"FSR has no submitted output. Normal rendering is used until it is ready.", L"FSR 尚無已提交的輸出。準備完成前使用常規渲染。");
+        if (edit.upscaler != gpu::upscaling::Upscaler::Fsr)
+            fsrText += Tr(L" The selected upscaler is not applied yet.", L" 選取的縮放技術尚未套用。");
+        return fsrText;
+    }
     std::wstring text;
     if (running.phase == gpu::frame_plan::DlssEffectPhase::Active && running.execution)
         text = SubmittedSentence(running);
@@ -241,7 +257,7 @@ std::wstring DlssNotice()
     else if (runningDlss)
         appliedQuality = gpu::upscaling::NormalizeDlssQuality(running.plannedQuality);
     if (runningDlss && edit.upscaler != gpu::upscaling::Upscaler::Dlss)
-        text += std::wstring(L" ") + Tr(L"The Off choice is not applied yet.", L"關閉選項尚未套用。");
+        text += std::wstring(L" ") + (edit.upscaler == gpu::upscaling::Upscaler::Fsr ? Tr(L"The FSR choice is not applied yet.", L"FSR 選項尚未套用。") : Tr(L"The Off choice is not applied yet.", L"關閉選項尚未套用。"));
     else if (!runningDlss && edit.upscaler == gpu::upscaling::Upscaler::Dlss && !backendPending &&
              running.device.backend != gpu::backend::Backend::Vulkan)
         text += std::wstring(L" ") + Tr(L"DLSS needs Vulkan and a restart.", L"DLSS 需要 Vulkan，並在重新啟動後才會使用。");
@@ -256,7 +272,7 @@ std::wstring DlssNotice()
 }
 bool GraphicsRowHidden(int r)
 {
-    return r == int(GraphicsRow::DlssQuality) && edit.upscaler != gpu::upscaling::Upscaler::Dlss;
+    return r == int(GraphicsRow::DlssQuality) && edit.upscaler == gpu::upscaling::Upscaler::Off;
 }
 bool GraphicsRowIsAction(int r)
 {
@@ -368,12 +384,13 @@ void Publish(uint8_t *base, uint32_t config)
         placeGraphics(GraphicsRow::AntiAliasing, makeChoices(L"Anti-aliasing", L"抗鋸齒",
                    {Tr(L"Off", L"關"), L"FXAA", L"SMAA", Tr(L"TAA (Experimental)", L"TAA（實驗性）")},
                    std::min(edit.antialiasing, 3u)));
+        const bool savedFsr = edit.upscaler == gpu::upscaling::Upscaler::Fsr;
         placeGraphics(GraphicsRow::Upscaler, makeChoices(L"Upscaler", L"縮放技術",
-                   {Tr(L"Off", L"關"), L"DLSS"},
-                   std::min(uint32_t(edit.upscaler), 1u)));
-        auto dlssQuality = makeChoices(L"DLSS quality", L"DLSS 品質",
-                   {Tr(L"Quality", L"品質"), Tr(L"Balanced", L"平衡"), Tr(L"Performance", L"效能"), L"DLAA"},
-                   std::min(uint32_t(edit.dlssQuality), 3u));
+                   std::vector<std::wstring>{Tr(L"Off", L"關"), L"DLSS", L"FSR 3.1"},
+                   std::min(uint32_t(edit.upscaler), 2u)));
+        auto dlssQuality = makeChoices(savedFsr ? L"FSR quality" : L"DLSS quality", savedFsr ? L"FSR 品質" : L"DLSS 品質",
+                   {Tr(L"Quality", L"品質"), Tr(L"Balanced", L"平衡"), Tr(L"Performance", L"效能"), savedFsr ? L"Native AA" : L"DLAA"},
+                   std::min(savedFsr ? uint32_t(edit.fsrQuality) : uint32_t(edit.dlssQuality), 3u));
         // Hidden instead of removed so this logical id stays stable for input, drawing and hit-testing.
         dlssQuality.hidden = GraphicsRowHidden(int(GraphicsRow::DlssQuality));
         placeGraphics(GraphicsRow::DlssQuality, std::move(dlssQuality));
@@ -452,11 +469,15 @@ void Publish(uint8_t *base, uint32_t config)
                                L"以相機重投影的 TAA；動態特效可能拖影。不支援的場景使用 SMAA。");
             break;
         case GraphicsRow::Upscaler:
-            next.help = Tr(L"Saves the DLSS preference. The status line shows the latest DLSS result.",
-                           L"儲存 DLSS 偏好。狀態列顯示最新的 DLSS 結果。");
+            next.help = edit.upscaler == gpu::upscaling::Upscaler::Fsr
+                ? Tr(L"FSR 3.1 needs Vulkan and an FSR-enabled build. Unsupported scenes use normal rendering.",
+                     L"FSR 3.1 需要 Vulkan 與包含 FSR 的版本。不支援的場景使用常規渲染。")
+                : Tr(L"Saves the DLSS preference. The status line shows the latest DLSS result.",
+                     L"儲存 DLSS 偏好。狀態列顯示最新的 DLSS 結果。");
             break;
         case GraphicsRow::DlssQuality:
-            next.help = Tr(L"Quality, Balanced, Performance, or DLAA. The status line shows the submitted mode.",
+            next.help = edit.upscaler == gpu::upscaling::Upscaler::Fsr ?
+                Tr(L"Quality, Balanced, Performance, or Native AA. Native AA keeps the output resolution.", L"品質、平衡、效能或 Native AA。Native AA 維持輸出解析度。") : Tr(L"Quality, Balanced, Performance, or DLAA. The status line shows the submitted mode.",
                            L"品質、平衡、效能或 DLAA。狀態列顯示已提交的模式。");
             break;
         case GraphicsRow::ScalingQuality:
@@ -965,10 +986,12 @@ PPC_FUNC(sub_822F19B0)
                 edit.fxaa = edit.antialiasing == 1;
                 break;
             case GraphicsRow::Upscaler:
-                edit.upscaler = gpu::upscaling::Upscaler(cycle(uint32_t(edit.upscaler), 2));
+                edit.upscaler = gpu::upscaling::Upscaler(cycle(uint32_t(edit.upscaler), 3));
                 break;
             case GraphicsRow::DlssQuality:
-                edit.dlssQuality = gpu::upscaling::DlssQuality(cycle(uint32_t(edit.dlssQuality), 4));
+                if (edit.upscaler == gpu::upscaling::Upscaler::Fsr)
+                    edit.fsrQuality = gpu::upscaling::FsrQuality(cycle(uint32_t(edit.fsrQuality), 4));
+                else edit.dlssQuality = gpu::upscaling::DlssQuality(cycle(uint32_t(edit.dlssQuality), 4));
                 break;
             case GraphicsRow::ScalingQuality:
                 edit.scalingQuality = cycle(edit.scalingQuality, 2);

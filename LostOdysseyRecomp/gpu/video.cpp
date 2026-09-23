@@ -9,6 +9,7 @@
 #include "vulkan_command_recording.h"
 #if !defined(LO_VIDEO_SUBMISSION_UNIT)
 #include "dlss_ngx.h"
+#include "temporal_upscaler.h"
 #endif
 #endif
 #if !defined(LO_VIDEO_SUBMISSION_UNIT)
@@ -232,6 +233,7 @@ namespace gpu::video
         // userdata until VulkanInterface destruction.
 #if !defined(LO_VIDEO_SUBMISSION_UNIT)
         std::unique_ptr<dlss::Controller> g_dlssController;
+        std::unique_ptr<TemporalUpscaler> g_temporalUpscaler;
 #endif
         std::unique_ptr<plume::RenderInterface> g_interface;
         std::unique_ptr<plume::RenderDevice> g_device;
@@ -250,6 +252,7 @@ namespace gpu::video
         std::unique_ptr<plume::RenderTexture> g_cpuFrame;
         std::unique_ptr<plume::RenderTexture> g_presentedSnapshot;
         uint32_t g_snapshotWidth=0,g_snapshotHeight=0;
+        plume::RenderFormat g_snapshotFormat=plume::RenderFormat::UNKNOWN;
         uint32_t g_cpuWidth=0,g_cpuHeight=0;
         uint32_t g_lastPresentedImage=0;
         bool g_hasPresentedImage=false;
@@ -421,9 +424,10 @@ namespace gpu::video
             // before that handoff; no extra copy is made during normal gameplay.
             if(!g_vulkan || !getenv("LO_SCREENSHOT_PRESENTED")) return;
             const auto w=g_swapChain->getWidth(),h=g_swapChain->getHeight();
-            if(!g_presentedSnapshot || w!=g_snapshotWidth || h!=g_snapshotHeight) {
-                g_presentedSnapshot=g_device->createTexture(plume::RenderTextureDesc::Texture2D(w,h,1,kSwapChainFormat));
-                g_snapshotWidth=w;g_snapshotHeight=h;
+            const auto format=g_swapChain->getFormat();
+            if(!g_presentedSnapshot || w!=g_snapshotWidth || h!=g_snapshotHeight || format!=g_snapshotFormat) {
+                g_presentedSnapshot=g_device->createTexture(plume::RenderTextureDesc::Texture2D(w,h,1,format));
+                g_snapshotWidth=w;g_snapshotHeight=h;g_snapshotFormat=format;
             }
             if(!g_presentedSnapshot) return;
             g_commandList->barriers(plume::RenderBarrierStage::COPY,plume::RenderTextureBarrier(frame,plume::RenderTextureLayout::COPY_SOURCE));
@@ -593,6 +597,7 @@ namespace gpu::video
             snapshot.deviceReady = g_available && g_device != nullptr;
             snapshot.dlssAvailable = vulkan && g_dlssController &&
                 g_dlssController->Report().state == dlss::ProbeState::Available;
+            snapshot.fsrAvailable = vulkan && snapshot.deviceReady && LO_HAS_FSR;
             snapshot.gpuWorkStopped = vulkan && g_submissionState.Stopped();
 #elif defined(LO_GPU_PLUME)
             snapshot.deviceReady = false;
@@ -643,6 +648,7 @@ namespace gpu::video
     }
 #if defined(LO_GPU_PLUME) && !defined(LO_VIDEO_SUBMISSION_UNIT)
     dlss::Controller* GetDlssController() { return g_vulkan ? g_dlssController.get() : nullptr; }
+    TemporalUpscaler* GetTemporalUpscaler() { return g_vulkan ? g_temporalUpscaler.get() : nullptr; }
 #endif
 #if defined(LO_GPU_PLUME)
     bool GpuWorkStopped() { return g_vulkan && g_submissionState.Stopped(); }
@@ -695,10 +701,10 @@ namespace gpu::video
         if (!g_vulkan || !g_device) return;
         const auto result = vkDeviceWaitIdle(static_cast<plume::VulkanDevice*>(g_device.get())->vk);
         if (result == VK_SUCCESS) {
-            if (g_dlssController) g_dlssController->ReleaseCompletedThrough(g_submissionState.LastSubmission());
+            if (g_temporalUpscaler) g_temporalUpscaler->ReleaseCompleted(g_submissionState.LastSubmission());
         } else if (result == VK_ERROR_DEVICE_LOST) {
             StopGpuWork(int32_t(result));
-            if (g_dlssController) g_dlssController->AbandonUsesAfterDeviceLoss();
+            if (g_temporalUpscaler) g_temporalUpscaler->AbandonAfterDeviceLoss();
         } else {
             // No proven completion or lost-device disposal boundary. Never free
             // resources still referenced by native work. OS process teardown is
@@ -759,10 +765,10 @@ namespace gpu::video
     // the CPU cache lock before NGX initialization and capability work begins.
     static void ServicePendingDlssSizing()
     {
-        if (!g_vulkan || !g_dlssController || !g_interface || !g_device) return;
+        if (!g_vulkan || !g_temporalUpscaler || !g_interface || !g_device) return;
         const auto key = frame_plan::TakeSizingRequest();
         if (!key || key->deviceEpoch != g_deviceEpoch.load(std::memory_order_acquire)) return;
-        frame_plan::PublishSizing(upscaling::SizingService::QueryOutputSizing(*g_dlssController,
+        frame_plan::PublishSizing(upscaling::SizingService::QueryOutputSizing(*g_temporalUpscaler,
             *static_cast<plume::VulkanInterface*>(g_interface.get()), *static_cast<plume::VulkanDevice*>(g_device.get()), *key));
         PublishOwnedDeviceCapability();
     }
@@ -795,10 +801,10 @@ namespace gpu::video
         g_captureRetained.clear();
         if (g_captureCopy.buffer) g_captureCopy.buffer.reset();
         g_captureCopy = {};
-        if (g_dlssController && g_vulkan)
-            g_dlssController->ShutdownAfterGpuDrain();
+        if (g_temporalUpscaler && g_vulkan)
+            g_temporalUpscaler->ShutdownAfterGpuDrain();
         g_cpuFrame.reset(); g_cpuWidth = g_cpuHeight = 0;
-        g_presentedSnapshot.reset(); g_snapshotWidth = g_snapshotHeight = 0;
+        g_presentedSnapshot.reset(); g_snapshotWidth = g_snapshotHeight = 0; g_snapshotFormat=plume::RenderFormat::UNKNOWN;
         g_presentation.reset();
         g_uploadBuffer.reset();
 #ifdef _WIN32
@@ -813,6 +819,7 @@ namespace gpu::video
         g_device.reset(); g_interface.reset();
         g_submissionState = {};
         g_presentPending = false;
+        g_temporalUpscaler.reset();
         g_dlssController.reset();
         g_hasPresentedImage = false; g_lastPresentedImage = 0; g_forceSwapResize = false;
         g_presentationDisplay = {};
@@ -938,13 +945,16 @@ namespace gpu::video
 #ifdef _WIN32
             if (g_vulkan) {
                 g_dlssController = std::make_unique<dlss::Controller>(DlssApplicationDataPath(), DlssRuntimePath());
+                g_temporalUpscaler = std::make_unique<TemporalUpscaler>(*g_dlssController);
                 g_interface = plume::CreateVulkanInterface(g_dlssController->ExtensionHooks());
             } else {
+                g_temporalUpscaler.reset();
                 g_dlssController.reset();
                 g_interface = plume::CreateD3D12Interface();
             }
 #else
             g_dlssController = std::make_unique<dlss::Controller>(DlssApplicationDataPath(), DlssRuntimePath());
+            g_temporalUpscaler = std::make_unique<TemporalUpscaler>(*g_dlssController);
             g_interface = plume::CreateVulkanInterface(g_window, g_dlssController->ExtensionHooks());
 #endif
             if (!g_interface) return "API/loader initialization failed";
@@ -978,10 +988,11 @@ namespace gpu::video
             g_swapChain = g_queue->createSwapChain(plume::RenderSwapChainDesc(g_window, kSwapChainFormat, kSwapChainBuffers));
 #endif
             if (!g_swapChain || g_swapChain->isEmpty()) return "window surface/swapchain initialization failed";
-            if (g_vulkan && g_dlssController && settings::GetConfig().upscaler == upscaling::Upscaler::Dlss) {
+            if (g_vulkan && g_temporalUpscaler && settings::GetConfig().upscaler == upscaling::Upscaler::Dlss) {
                 const auto output = upscaling::ResolveOutputRegion({g_swapChain->getWidth(), g_swapChain->getHeight()});
-                const upscaling::SizingKey key{g_deviceEpoch.load(std::memory_order_acquire), output.width, output.height};
-                const auto sizing = upscaling::SizingService::QueryOutputSizing(*g_dlssController,
+                const upscaling::SizingKey key{g_deviceEpoch.load(std::memory_order_acquire), output.width, output.height,
+                    upscaling::Upscaler::Dlss, output.x, output.y};
+                const auto sizing = upscaling::SizingService::QueryOutputSizing(*g_temporalUpscaler,
                     *static_cast<plume::VulkanInterface*>(g_interface.get()), *static_cast<plume::VulkanDevice*>(g_device.get()), key);
                 const auto qualityIndex = static_cast<size_t>(settings::GetConfig().dlssQuality);
                 const auto& activeMode = sizing.modes[qualityIndex < sizing.modes.size() ? qualityIndex : 0];
@@ -1775,7 +1786,8 @@ namespace gpu::video
 #endif
     }
 
-    static bool WritePpm(const char* path, const std::vector<uint32_t>& pixels, uint32_t width, uint32_t height)
+    static bool WritePpm(const char* path, const std::vector<uint32_t>& pixels, uint32_t width, uint32_t height,
+        bool bgra = false)
     {
         FILE* f = fopen(path, "wb");
         if (!f)
@@ -1787,9 +1799,9 @@ namespace gpu::video
             for (uint32_t x = 0; x < width; x++)
             {
                 uint32_t p = pixels[size_t(y) * width + x];
-                row[x * 3 + 0] = uint8_t(p);
+                row[x * 3 + 0] = uint8_t(p >> (bgra ? 16 : 0));
                 row[x * 3 + 1] = uint8_t(p >> 8);
-                row[x * 3 + 2] = uint8_t(p >> 16);
+                row[x * 3 + 2] = uint8_t(p >> (bgra ? 0 : 16));
             }
             fwrite(row.data(), 1, row.size(), f);
         }
@@ -1802,7 +1814,12 @@ namespace gpu::video
 #ifdef LO_GPU_PLUME
         if (GpuWorkStopped()) return false;
         if(getenv("LO_SCREENSHOT_PRESENTED") && g_hasPresentedImage && g_swapChain) {
-            const uint32_t w=g_swapChain->getWidth(),h=g_swapChain->getHeight(),pitch=(w*4+255)&~255u;
+            const auto format=g_vulkan ? g_snapshotFormat : g_swapChain->getFormat();
+            if(format!=plume::RenderFormat::R8G8B8A8_UNORM &&
+                format!=plume::RenderFormat::B8G8R8A8_UNORM) return false;
+            const uint32_t w=g_vulkan ? g_snapshotWidth : g_swapChain->getWidth();
+            const uint32_t h=g_vulkan ? g_snapshotHeight : g_swapChain->getHeight();
+            const uint32_t pitch=(w*4+255)&~255u;
             if(!w || !h) return false;
             auto readback=g_device->createBuffer(plume::RenderBufferDesc::ReadbackBuffer(uint64_t(pitch)*h));
             auto* frame=g_vulkan ? g_presentedSnapshot.get() : g_swapChain->getTexture(g_lastPresentedImage);
@@ -1810,7 +1827,7 @@ namespace gpu::video
             if (!WaitForPresentGpu()) return false;
             if (!BeginGpuCommands(g_commandList.get())) return false;
             g_commandList->barriers(plume::RenderBarrierStage::COPY,plume::RenderTextureBarrier(frame,plume::RenderTextureLayout::COPY_SOURCE));
-            g_commandList->copyTextureRegion(plume::RenderTextureCopyLocation::PlacedFootprint(readback.get(),kSwapChainFormat,w,h,1,pitch/4),plume::RenderTextureCopyLocation::Subresource(frame));
+            g_commandList->copyTextureRegion(plume::RenderTextureCopyLocation::PlacedFootprint(readback.get(),format,w,h,1,pitch/4),plume::RenderTextureCopyLocation::Subresource(frame));
             if(!g_vulkan) g_commandList->barriers(plume::RenderBarrierStage::NONE,plume::RenderTextureBarrier(frame,plume::RenderTextureLayout::PRESENT));
             if (!EndGpuCommands(g_commandList.get())) return false; const plume::RenderCommandList* lists[]={g_commandList.get()};
             uint64_t submissionSerial = 0; int32_t submitResult = 0;
@@ -1823,7 +1840,7 @@ namespace gpu::video
             g_presentPending = false;
             std::vector<uint32_t> pixels(size_t(w)*h); const auto* data=static_cast<const uint8_t*>(readback->map());
             for(uint32_t y=0;y<h;y++) memcpy(pixels.data()+size_t(y)*w,data+size_t(y)*pitch,w*4);
-            readback->unmap(); return WritePpm(path,pixels,w,h);
+            readback->unmap(); return WritePpm(path,pixels,w,h,format==plume::RenderFormat::B8G8R8A8_UNORM);
         }
 #endif
         // LO_SCREENSHOT_RESOLVED=1: also dump every GPU-resolved surface (HDR

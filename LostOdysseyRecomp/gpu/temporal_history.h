@@ -261,7 +261,9 @@ class HistoryOwner {
         return a.geometryEpoch==b.geometryEpoch&&a.width==b.width&&a.height==b.height&&
             a.requestSignature==b.requestSignature&&a.deviceEpoch==b.deviceEpoch&&a.sizingRevision==b.sizingRevision&&
             a.output==b.output&&a.legacyWidth==b.legacyWidth&&a.legacyHeight==b.legacyHeight&&
-            a.requestedUpscaler==b.requestedUpscaler&&a.dlssQuality==b.dlssQuality&&a.legacyAA==b.legacyAA&&
+            a.requestedUpscaler==b.requestedUpscaler&&
+            upscaling::SameEffectiveQuality(a.requestedUpscaler,a.dlssQuality,b.dlssQuality,a.fsrQuality,b.fsrQuality)&&
+            a.frameGeneration==b.frameGeneration&&a.legacyAA==b.legacyAA&&
             a.effectiveAA==b.effectiveAA&&a.scalingQuality==b.scalingQuality&&a.consumer==b.consumer&&
             a.requiresReadback==b.requiresReadback&&a.inputProbe==b.inputProbe;
     }
@@ -363,10 +365,10 @@ public:
             if(!ContinuousHistoryCamera(*current.camera,*previous.camera)) automatic=automatic|TemporalResetReason::CameraDiscontinuity;
             if(!SameInputConfiguration(previous.plan,plan)) automatic=automatic|TemporalResetReason::PlanConfigurationChanged;
         }
-        if(upscaling::IsDlssConsumer(plan.consumer)&&!motionVectorValid_)
+        if(upscaling::RequiresMotionDepth(plan.consumer,plan.frameGeneration)&&!motionVectorValid_)
             automatic=automatic|TemporalResetReason::IncompleteInputs;
         current.inputReset=reset|automatic;
-        current.inputsComplete=!upscaling::IsDlssConsumer(plan.consumer)||motionVectorValid_;
+        current.inputsComplete=!upscaling::RequiresMotionDepth(plan.consumer,plan.frameGeneration)||motionVectorValid_;
         aa_.RecordExternalUse(); return true;
     }
     TemporalFrameInputs CurrentInputs() const {
@@ -377,6 +379,7 @@ public:
         // CaptureDepth copies the R32 resolve unchanged. SceneObservation's
         // reviewed camera/depth contract is d=1 near, d=0 far (reversed Z).
         result.depthConvention=DepthConvention::Reversed;
+        if (current.camera) { result.cameraViewProjection=current.camera->VP(); result.cameraValid=true; }
         result.motion={motionView_.velocity,{width_,height_},0,0,width_,height_};
         result.motionInvalidity={motionView_.reactive,{width_,height_},0,0,width_,height_};
         result.jitter=current.jitter; result.colorEncoding=current.colorEncoding; result.currentInputsComplete=current.inputsComplete;

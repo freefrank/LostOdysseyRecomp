@@ -20,7 +20,7 @@ void Check(bool condition, const char* description) {
 }
 OutputSizing Sizing(OutputRegion output) {
     OutputSizing sizing;
-    sizing.key = {7, output.width, output.height};
+    sizing.key = {7, output.width, output.height, Upscaler::Dlss, output.x, output.y};
     sizing.revision = 11;
     for (auto quality : kDlssQualityModes) {
         auto& mode = sizing.modes[DlssQualityIndex(quality)];
@@ -63,7 +63,7 @@ void RoundTrip(const FramePlan& plan) {
 int main() {
     static_assert(uint32_t(DlssQuality::Quality) == 0 && uint32_t(DlssQuality::Balanced) == 1);
     static_assert(uint32_t(DlssQuality::Performance) == 2 && uint32_t(DlssQuality::Dlaa) == 3);
-    static_assert(kDlssQualityModes.size() == 4 && wire::PlanWordCount == 24 && wire::Version == 2);
+    static_assert(kDlssQualityModes.size() == 4 && wire::PlanWordCount == 24 && wire::Version == 3);
     static_assert(uint32_t(DlssQuality::Dlaa) <= 0x3u);
     for (auto quality : kDlssQualityModes) {
         Check(KnownDlssQuality(quality), "all persisted modes are known");

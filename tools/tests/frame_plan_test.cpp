@@ -67,6 +67,48 @@ int main()
     std::optional<FramePlan> decoded;
     for (uint32_t index = 0; index < words.size(); ++index) decoded = fullStage.Write(wire::PlanBase + index, words[index]);
     Require(decoded && *decoded == full, "versioned packet commits the complete snapshot");
+    auto Decode = [](const auto& packet) {
+        wire::PlanStage reader;
+        std::optional<FramePlan> result;
+        for (uint32_t i = 0; i < packet.size(); ++i) result = reader.Write(wire::PlanBase + i, packet[i]);
+        return result;
+    };
+    auto v2 = words; v2[1] = 2;
+    Require(Decode(v2) == full, "known v2 full packet decodes with legacy flags");
+    for (auto consumer : {gpu::upscaling::TemporalConsumer::None, gpu::upscaling::TemporalConsumer::LegacyTaa,
+             gpu::upscaling::TemporalConsumer::DlssInputs, gpu::upscaling::TemporalConsumer::DlssSr,
+             gpu::upscaling::TemporalConsumer::FsrSr}) {
+        for (auto quality : {gpu::upscaling::FsrQuality::Quality, gpu::upscaling::FsrQuality::Balanced,
+                 gpu::upscaling::FsrQuality::Performance, gpu::upscaling::FsrQuality::NativeAA}) {
+            auto candidate = full;
+            candidate.requestedUpscaler = gpu::upscaling::Upscaler::Fsr;
+            candidate.consumer = consumer;
+            candidate.fsrQuality = quality;
+            candidate.frameGeneration = gpu::upscaling::FrameGeneration::Dlss2x;
+            Require(Decode(wire::EncodePlan(candidate)) == candidate, "v3 consumer/FSR quality/FG roundtrip");
+        }
+    }
+    for (auto provider : {gpu::upscaling::Upscaler::Off, gpu::upscaling::Upscaler::Dlss,
+             gpu::upscaling::Upscaler::Fsr}) {
+        auto candidate = full;
+        candidate.requestedUpscaler = provider;
+        candidate.consumer = gpu::upscaling::TemporalConsumer::FsrSr;
+        candidate.legacyAA = 0;
+        Require(Decode(wire::EncodePlan(candidate)) == candidate,
+            "v3 FSR consumer bit cannot alias legacy AA for any provider");
+    }
+    auto malformed = words; malformed[1] = 4;
+    Require(!Decode(malformed), "unknown version rejected");
+    malformed = words; malformed[22] = (malformed[22] & ~3u) | 3u;
+    Require(!Decode(malformed), "unknown provider rejected");
+    malformed = words; malformed[22] |= (3u << 4) | (1u << 21);
+    Require(!Decode(malformed), "unknown consumer rejected");
+    malformed = words; malformed[22] |= 1u << 25;
+    Require(!Decode(malformed), "unknown flag rejected");
+    malformed = v2; malformed[22] |= 1u << 21;
+    Require(!Decode(malformed), "new v3 bits cannot be interpreted as v2 legacy AA");
+    malformed = v2; malformed[22] = (malformed[22] & ~3u) | 2u;
+    Require(!Decode(malformed), "v2 cannot advertise FSR");
     Require(FullRequestSignature(full, 0, {1114, 626}) != FullRequestSignature(full, 1080, {1114, 626}) &&
         FullRequestSignature(full, 0, {1114, 626}) != FullRequestSignature(full, 0, {960, 540}),
         "production request signature includes legacy mode and recommended input");
@@ -203,5 +245,33 @@ int main()
     Require(cache.LookupOrRequestSizing(latest).modes[0].state == gpu::upscaling::SizingState::Ready &&
         cache.LookupOrRequestSizing({4, 1280, 720}).modes[0].state == gpu::upscaling::SizingState::Error,
         "published latest request completes and old epoch cannot reset the cache");
+    const gpu::upscaling::SizingKey fsrKey{5, 1920, 1080, gpu::upscaling::Upscaler::Fsr};
+    Require(cache.LookupOrRequestSizing(fsrKey).modes[0].state == gpu::upscaling::SizingState::Pending &&
+        cache.TakeSizingRequest() == fsrKey && cache.Peek(latest)->modes[0].state == gpu::upscaling::SizingState::Ready,
+        "FSR sizing request and NGX key stay separate");
+    gpu::upscaling::OutputSizing unsupported{}; unsupported.key = fsrKey;
+    for (auto& mode : unsupported.modes) mode.state = gpu::upscaling::SizingState::Unavailable;
+    cache.PublishSizing(unsupported);
+    Require(cache.LookupOrRequestSizing(fsrKey).modes[0].state == gpu::upscaling::SizingState::Unavailable &&
+        !cache.TakeSizingRequest(), "unsupported provider is cached without repeat requests");
+    auto areaKey = latest; areaKey.outputY = 40;
+    Require(cache.LookupOrRequestSizing(areaKey).modes[0].state == gpu::upscaling::SizingState::Pending &&
+        cache.TakeSizingRequest() == areaKey && cache.Peek(fsrKey).has_value(), "content origin isolates sizing cache");
+    PlannerState providerPlanner;
+    auto dlssInput = input; dlssInput.readback = false; dlssInput.inputProbeRequested = false;
+    dlssInput.quality = gpu::upscaling::DlssQuality::Quality; dlssInput.internalResolution = 0;
+    const auto submittedPlan = providerPlanner.Begin(dlssInput);
+    Require(submittedPlan.consumer == gpu::upscaling::TemporalConsumer::DlssSr &&
+        providerPlanner.ReportExecution({submittedPlan, 1, 11, DlssExecutionOutcome::Submitted}), "DLSS submission accepted");
+    auto fsrInput = dlssInput; fsrInput.upscaler = gpu::upscaling::Upscaler::Fsr;
+    fsrInput.fsrQuality = gpu::upscaling::FsrQuality::Balanced;
+    const auto fsrFallback = providerPlanner.Begin(fsrInput);
+    Require(fsrFallback.consumer != gpu::upscaling::TemporalConsumer::DlssSr &&
+        fsrFallback.requestSignature != submittedPlan.requestSignature && !providerPlanner.Observe().execution &&
+        !providerPlanner.ReportExecution({submittedPlan, 2, 12, DlssExecutionOutcome::Submitted}),
+        "old DLSS submission cannot satisfy unsupported FSR request");
+    fsrInput.fsrQuality = gpu::upscaling::FsrQuality::Performance;
+    Require(providerPlanner.Begin(fsrInput).requestSignature != fsrFallback.requestSignature,
+        "FSR quality affects request identity without NGX sizing");
     std::printf("frame plan: %d checks passed\n", checks);
 }

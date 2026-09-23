@@ -77,7 +77,7 @@ inline DrawJitter ApplyDrawJitter(uint64_t vs, uint64_t ps, uint64_t frame,
     uint64_t depthAllocation, const Viewport& rasterViewport,
     uint32_t* vsConstants, uint32_t* psConstants,
     const SceneResolve* sceneDepth = nullptr, const SceneResolve* sampledDepth = nullptr,
-    double jitterScale = 1)
+    double jitterScale = 1, const JitterSample* frameSample = nullptr)
 {
     DrawJitter result;
     result.slot = PositionVPSlot(vs);
@@ -94,7 +94,7 @@ inline DrawJitter ApplyDrawJitter(uint64_t vs, uint64_t ps, uint64_t frame,
     if (rasterViewport.x != anchor->viewport.x || rasterViewport.y != anchor->viewport.y ||
         rasterViewport.width != anchor->viewport.width || rasterViewport.height != anchor->viewport.height)
         return reject(JitterRejection::IncompatibleViewport);
-    result.sample = FrameJitter(frame, rasterViewport.width, rasterViewport.height, jitterScale);
+    result.sample = frameSample ? *frameSample : FrameJitter(frame, rasterViewport.width, rasterViewport.height, jitterScale);
     if (!result.sample.phase) return reject(JitterRejection::InvalidExtent);
     const bool shadow = vs == 0x99c2b4b0960a9ccdull && ps == 0xd55a20d004031279ull;
     if (shadow && !IsSceneDepthSample(frame, sceneDepth, sampledDepth))

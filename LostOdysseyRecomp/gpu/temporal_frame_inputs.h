@@ -38,16 +38,30 @@ inline constexpr bool MatchesDepthConvention(DepthConvention value, bool inverte
 enum class MotionState : uint32_t { Unavailable = 0, ResetInitialization = 1, Tracked = 2 };
 struct ConsumerRoute {
     bool legacyTaa = false, dlssInputs = false, dlssSr = false, inputProbe = false, spatialAA = false;
+    bool sr = false;
+    upscaling::Upscaler srProvider = upscaling::Upscaler::Off;
+    bool requiresMotionDepth = false, providerMismatch = false;
     uint32_t effectiveAA = 0;
 };
 inline constexpr ConsumerRoute RouteConsumer(const frame_plan::FramePlan& plan, bool localInputProbe) {
     ConsumerRoute route{};route.effectiveAA=plan.effectiveAA;
+    route.requiresMotionDepth=upscaling::RequiresMotionDepth(plan.consumer,plan.frameGeneration);
+    const auto expected=upscaling::ProviderForConsumer(plan.consumer);
+    route.providerMismatch=expected!=upscaling::Upscaler::Off && expected!=plan.requestedUpscaler;
+    if (route.providerMismatch) return route;
+    if (upscaling::IsSrConsumer(plan.consumer) &&
+        upscaling::MatchesSrProvider(plan.requestedUpscaler, plan.consumer)) {
+        route.sr=true;route.srProvider=plan.requestedUpscaler;
+    }
     switch(plan.consumer) {
     case upscaling::TemporalConsumer::LegacyTaa: route.legacyTaa=true;break;
     case upscaling::TemporalConsumer::DlssInputs:
         route.dlssInputs=true;route.inputProbe=localInputProbe&&plan.inputProbe;route.effectiveAA=0;break;
     case upscaling::TemporalConsumer::DlssSr:
-        route.dlssInputs=true;route.dlssSr=true;route.effectiveAA=0;break;
+        route.dlssInputs=route.sr;route.dlssSr=route.sr;
+        if (route.sr) route.effectiveAA=0;break;
+    case upscaling::TemporalConsumer::FsrSr:
+        if (route.sr) route.effectiveAA=0;break;
     case upscaling::TemporalConsumer::None:
         route.spatialAA=plan.effectiveAA==1||plan.effectiveAA==2;break;
     }
@@ -78,13 +92,16 @@ struct TemporalFrameInputs {
     ColorEncoding colorEncoding = ColorEncoding::Unknown;
     DepthConvention depthConvention = DepthConvention::Unknown;
     float preExposure = 1.0f, exposureScale = 1.0f;
+    Matrix cameraViewProjection{};
+    bool cameraValid = false;
+    float frameTimeDeltaMilliseconds = 0.0f;
     MotionState motionState = MotionState::Unavailable;
     bool currentInputsComplete = false, resetHistory = true;
     TemporalResetReason resetReasons = TemporalResetReason::FirstFrame;
 
     bool CompleteForConsumer() const {
         if (!currentInputsComplete || !color.Complete() || !depth.Complete()) return false;
-        return !upscaling::IsDlssConsumer(plan.consumer) ||
+        return !upscaling::RequiresMotionDepth(plan.consumer, plan.frameGeneration) ||
             (KnownDepthConvention(depthConvention) && motionState != MotionState::Unavailable &&
              motion.Complete() && motionInvalidity.Complete());
     }

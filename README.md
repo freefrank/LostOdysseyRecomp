@@ -31,6 +31,16 @@ motion response, fine lines, occlusion, UI elements, reset behavior, and full
 player acceptance remain unclaimed. See the [native DLSS validation
 record](docs/notes/native-dlss-validation.md).
 
+### Experimental opt-in FSR SR
+
+Source builds may opt into the experimental FSR 3.1.4 path on
+Windows and native Linux with `LO_ENABLE_FSR=ON` and `LO_REQUIRE_FSR=ON`, using
+FidelityFX SDK v1.1.4's FSR 3.1.4 implementation.
+Current bounded evidence covers selected Quality and Native AA scenarios;
+full quality coverage, Linux/Steam Deck acceptance, player acceptance, and
+DLSS frame-generation acceptance remain open. These flags and results do not
+change the public release configuration.
+
 ### Unreleased development updates
 
 Current source work following v0.6.11 includes temporal lifecycle and capability race fixes (BR-01, BR-02), in-game graphics menu stability with verified execution status feedback (BR-03, `GraphicsRow`), final pre-present swapchain screenshots and synchronous NGX Evaluate input/output capture in F1 state archives, and a depth view lifetime UAF fix for DLSS Quality to DLAA transitions. These additions are verified via focused unit and hardware fixtures but are not included in public v0.6.11 release binaries; end-to-end user capture and visual acceptance remain pending. See [Project Status](docs/STATUS.md) and the [Handoff Document](HANDOFF.md) for details.

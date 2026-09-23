@@ -15,6 +15,7 @@ void Require(bool value, const char* message) {
 
 gpu::upscaling::OutputSizing ReadySizing() {
     gpu::upscaling::OutputSizing sizing;
+    sizing.key = {7, 1920, 1080};
     for (auto& mode : sizing.modes) {
         mode.state = gpu::upscaling::SizingState::Ready;
         mode.optimal = {960, 540};

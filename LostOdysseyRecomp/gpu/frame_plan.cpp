@@ -76,11 +76,13 @@ namespace gpu::frame_plan
         const auto output = upscaling::ResolveOutputRegion({uint32_t(extent >> 32), uint32_t(extent)});
         const auto device = video::BackendDeviceState();
         std::optional<upscaling::OutputSizing> sizing;
-        if (config.upscaler == upscaling::Upscaler::Dlss && device.deviceReady && device.backend == backend::Backend::Vulkan)
-            sizing = sizingCache.LookupOrRequestSizing({device.deviceEpoch, output.width, output.height});
+        if ((config.upscaler == upscaling::Upscaler::Dlss || config.upscaler == upscaling::Upscaler::Fsr) && device.deviceReady && device.backend == backend::Backend::Vulkan)
+            sizing = sizingCache.LookupOrRequestSizing({device.deviceEpoch, output.width, output.height,
+                config.upscaler, output.x, output.y});
         cpuPlan = planner.Begin({uint32_t(config.internalResolution), config.antialiasing, config.scalingQuality,
             config.upscaler, config.dlssQuality, output, device, sizing ? &*sizing : nullptr,
-            getenv("LO_RESOLVE_READBACK") != nullptr, getenv("LO_DLSS_INPUT_PROBE") && std::string_view(getenv("LO_DLSS_INPUT_PROBE")) == "1"});
+            getenv("LO_RESOLVE_READBACK") != nullptr, getenv("LO_DLSS_INPUT_PROBE") && std::string_view(getenv("LO_DLSS_INPUT_PROBE")) == "1",
+            config.fsrQuality});
         const auto identity = StatusIdentityOf(cpuPlan);
         const bool planChanged = identity != loggedStatusPlan;
         loggedStatusPlan = identity;
@@ -93,8 +95,10 @@ namespace gpu::frame_plan
         const auto device = upscaling::PublishedDeviceCapability();
         const auto observed = planner.Observe();
         std::optional<upscaling::OutputSizing> sizing;
-        if (observed.hasPlan && observed.plan.output.width && observed.plan.output.height)
-            sizing = sizingCache.Peek({device.deviceEpoch, observed.plan.output.width, observed.plan.output.height});
+        if (observed.hasPlan && observed.plan.requestedUpscaler == upscaling::Upscaler::Dlss &&
+            observed.plan.output.width && observed.plan.output.height)
+            sizing = sizingCache.Peek({device.deviceEpoch, observed.plan.output.width, observed.plan.output.height,
+                upscaling::Upscaler::Dlss, observed.plan.output.x, observed.plan.output.y});
         return DescribeDlssRuntime(device, observed, sizing ? &*sizing : nullptr);
     }
     std::optional<FramePlan> CurrentProducerPlan()
@@ -111,6 +115,25 @@ namespace gpu::frame_plan
     void ReportPlanFailure(const PlanFailure& failure)
     {
         planner.ReportFailure(failure);
+    }
+    std::optional<UpscalerExecutionObservation> CurrentUpscalerExecution()
+    {
+        const auto device = upscaling::PublishedDeviceCapability();
+        const auto observed = planner.Observe();
+        if (!observed.hasPlan || !observed.execution || !device.Available(observed.plan.requestedUpscaler) ||
+            observed.plan.deviceEpoch != device.deviceEpoch ||
+            observed.execution->plan.requestSignature != observed.plan.requestSignature ||
+            observed.execution->plan.geometryEpoch != observed.plan.geometryEpoch) return {};
+        return observed.execution;
+    }
+    void ReportUpscalerExecution(const UpscalerExecutionObservation& observation)
+    {
+        if (observation.actualProvider == upscaling::Upscaler::Dlss) { ReportDlssExecution(observation); return; }
+        if (!planner.ReportUpscalerExecution(observation) || !ExecutionLogChanged(observation)) return;
+        LOG_INFO("FSR: frame={} outcome={} input={}x{} output={}x{} quality={} serial={} reason={}",
+            observation.renderFrame, observation.outcome == DlssExecutionOutcome::Submitted ? "submitted" : "fallback",
+            observation.plan.width, observation.plan.height, observation.plan.output.width, observation.plan.output.height,
+            uint32_t(observation.plan.fsrQuality), observation.submissionSerial, DlssEffectReasonName(observation.reason));
     }
     void ReportDlssExecution(const DlssExecutionObservation& observation)
     {

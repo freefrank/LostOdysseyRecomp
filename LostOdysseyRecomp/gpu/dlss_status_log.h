@@ -15,6 +15,7 @@ namespace gpu::frame_plan
         switch (value) {
         case upscaling::Upscaler::Off: return "Off";
         case upscaling::Upscaler::Dlss: return "Dlss";
+        case upscaling::Upscaler::Fsr: return "Fsr";
         }
         return "Unknown";
     }
@@ -35,6 +36,7 @@ namespace gpu::frame_plan
         case upscaling::TemporalConsumer::LegacyTaa: return "LegacyTaa";
         case upscaling::TemporalConsumer::DlssInputs: return "DlssInputs";
         case upscaling::TemporalConsumer::DlssSr: return "DlssSr";
+        case upscaling::TemporalConsumer::FsrSr: return "FsrSr";
         }
         return "Unknown";
     }
@@ -79,6 +81,7 @@ namespace gpu::frame_plan
         case DlssEffectReason::PromotionUnavailable: return "PromotionUnavailable";
         case DlssEffectReason::RequestFailure: return "RequestFailure";
         case DlssEffectReason::GpuWorkStopped: return "GpuWorkStopped";
+        case DlssEffectReason::UnsupportedProjection: return "UnsupportedProjection";
         }
         return "Unknown";
     }

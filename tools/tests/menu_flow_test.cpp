@@ -63,6 +63,7 @@ using settings::GraphicsRow;
 namespace gpu::frame_plan {
 DlssEffectSnapshot menuFlowDlssEffect{};
 DlssEffectSnapshot CurrentDlssEffect() { return menuFlowDlssEffect; }
+std::optional<UpscalerExecutionObservation> CurrentUpscalerExecution() { return menuFlowDlssEffect.execution; }
 }
 
 namespace {
@@ -271,7 +272,7 @@ void CheckBr03DlssMenu(uint8_t* base)
     Tick(base);
     Require(settings::snapshot.notice == needsVulkan, "D3D12 DLSS shows Vulkan restart");
     Require(settings::snapshot.rows.size() == size_t(GraphicsRow::Count), "BR-03 keeps every graphics row");
-    Require(settings::snapshot.rows[int(GraphicsRow::Upscaler)].enabled && settings::snapshot.rows[int(GraphicsRow::Upscaler)].choices.size() == 2, "DLSS choice stays enabled on D3D12");
+    Require(settings::snapshot.rows[int(GraphicsRow::Upscaler)].enabled && settings::snapshot.rows[int(GraphicsRow::Upscaler)].choices.size() == 3, "DLSS and FSR choices stay enabled on D3D12");
     Require(!settings::snapshot.rows[int(GraphicsRow::DlssQuality)].hidden && settings::snapshot.rows[int(GraphicsRow::DlssQuality)].enabled, "quality row stays available");
     Require(settings::snapshot.rows[int(GraphicsRow::Backend)].enabled && settings::snapshot.rows[int(GraphicsRow::Backend)].choices.size() == 3, "backend choices stay available");
     Require(settings::snapshot.help == L"Saves the DLSS preference. The status line shows the latest DLSS result.",
@@ -285,6 +286,11 @@ void CheckBr03DlssMenu(uint8_t* base)
     settings::row = int(GraphicsRow::Upscaler);
     settings::pending = 0;
     Tick(base);
+    settings::pending = 8;
+    Tick(base);
+    Require(settings::edit.upscaler == Upscaler::Fsr && !settings::snapshot.rows[int(GraphicsRow::DlssQuality)].hidden,
+            "FSR can be selected independently on D3D12");
+    Require(settings::snapshot.rows[int(GraphicsRow::DlssQuality)].choices.back() == L"Native AA", "FSR uses Native AA quality label");
     settings::pending = 8;
     Tick(base);
     Require(settings::edit.upscaler == Upscaler::Off && settings::snapshot.rows[int(GraphicsRow::DlssQuality)].hidden, "DLSS can be turned off on D3D12");

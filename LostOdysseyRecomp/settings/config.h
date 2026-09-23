@@ -49,6 +49,7 @@ struct Config
     uint32_t scalingQuality = 1; // 0 bilinear, 1 bicubic spatial resampling.
     gpu::upscaling::Upscaler upscaler = gpu::upscaling::Upscaler::Off;
     gpu::upscaling::DlssQuality dlssQuality = gpu::upscaling::DlssQuality::Quality;
+    gpu::upscaling::FsrQuality fsrQuality = gpu::upscaling::FsrQuality::Quality;
     bool fxaa = false; // Legacy serialized mirror; antialiasing is authoritative.
     bool automaticUpdates = true;
     bool skipShaderPrebuild = false;

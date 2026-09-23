@@ -62,6 +62,8 @@
 #include <plume_render_interface.h>
 #include <plume_render_interface_builders.h>
 #include "dlss_ngx.h"
+#include "temporal_upscaler.h"
+#include "fsr_projection.h"
 #include "dlss_evaluate_capture.h"
 #include "draw_timing.h"
 #endif
@@ -376,7 +378,12 @@ namespace gpu::renderer
                 std::vector<std::unique_ptr<HostTexture>> bloomPrefilterTextures;
                 size_t bloomPrefilterUsed = 0;
                 uint64_t temporalSerial = 0, hdrTemporalSerial = 0, motionSerial = 0;
-                uint64_t srUseId = 0, srSubmissionSerial = 0;
+#if defined(LO_RENDERER_P2_EMBEDDED_TEST)
+                uint64_t srUseId = 0;
+#else
+                SrUseToken srUseId{};
+#endif
+                uint64_t srSubmissionSerial = 0;
                 bool srPrefixClosed = false, srIsolatedAccepted = false, srContinuationOpen = false;
                 bool submitted = false;
                 std::vector<std::shared_ptr<dlss::EvaluateCapture>> evaluateCaptures;
@@ -637,12 +644,17 @@ namespace gpu::renderer
                     for (const auto& slot : gpuSlots)
                         if (slot.dlssSubmit.pending && slot.dlssSubmit.renderFrame == frame &&
                             SameDlssIdentity(slot.dlssSubmit.plan, activePlan)) return;
-                    if (activePlan.consumer != upscaling::TemporalConsumer::DlssSr || !activePlan.cpuSerial) return;
+                    if (!upscaling::IsSrConsumer(activePlan.consumer) || !activePlan.cpuSerial) return;
                     observation.plan = activePlan;
                     observation.outcome = frame_plan::DlssExecutionOutcome::Fallback;
                     observation.reason = frame_plan::DlssEffectReason::NoEligibleScene;
                 }
+                observation.actualProvider = observation.plan.requestedUpscaler;
+#if defined(LO_RENDERER_P2_EMBEDDED_TEST)
                 frame_plan::ReportDlssExecution(observation);
+#else
+                frame_plan::ReportUpscalerExecution(observation);
+#endif
                 dlssFrame.publishedFrame = frame;
                 dlssFrame.publishedPlan = observation.plan;
                 dlssFrame.publishedSubmitted = observation.outcome == frame_plan::DlssExecutionOutcome::Submitted;
@@ -669,6 +681,7 @@ namespace gpu::renderer
             std::unique_ptr<temporal::HistoryOwner> temporalHistory;
 #if defined(LO_GPU_PLUME)
             dlss::Controller* dlssController = nullptr;
+            TemporalUpscaler* temporalUpscaler = nullptr;
 #endif
             // Opt-in candidate, controlled through the local diagnostic file.
             // Separate owner: HDR is accumulated before bloom and tone mapping.
@@ -683,7 +696,11 @@ namespace gpu::renderer
             uint64_t temporalSupportedFrame=~0ull;
             uint32_t temporalJitterDraws=0,temporalJitterMisses=0,temporalJitterUnknowns=0;
             uint64_t temporalEpoch=1,temporalFramesLogged=0,temporalSubmittedFrame=~0ull;
-            temporal::JitterSample actualRasterJitter{};
+            temporal::JitterSample actualRasterJitter{}, frameRasterJitter{};
+            std::chrono::steady_clock::time_point srFrameTime{};
+            uint64_t srTimedFrame = ~0ull;
+            float srFrameDeltaMilliseconds = 0;
+            bool srTimeReset = true;
             bool actualRasterJitterCaptured=false;
             uint64_t appliedPlanEpoch=~0ull;
             resolution::Size internalSize{}, requestedInternalSize{};
@@ -1352,6 +1369,9 @@ namespace gpu::renderer
                 vulkan = video::IsVulkan();
 #if defined(LO_GPU_PLUME)
                 dlssController = vulkan ? video::GetDlssController() : nullptr;
+#if !defined(LO_RENDERER_P2_EMBEDDED_TEST)
+                temporalUpscaler = vulkan ? video::GetTemporalUpscaler() : nullptr;
+#endif
 #endif
                 const char* batchOverride = getenv("LO_VK_DESCRIPTOR_BATCH_LIMIT");
                 descriptorBatchLimit = render_batch::DescriptorLimit(vulkan, batchOverride ? batchOverride : "");
@@ -1779,12 +1799,13 @@ namespace gpu::renderer
 
             std::unique_ptr<HostTexture> CreateSceneCopyScratch(const HostTexture& source, resolution::Size output)
             {
-                // NGX writes content pixels.  This image deliberately has no
-                // guest pitch padding: its extent is exactly the requested SR
-                // output and it is only ever addressed as storage/sample data.
+                // Provider output has no guest pitch padding. FSR's encoded
+                // output is R8 even when the SDR guest destination uses FP16;
+                // the RGB-only composite samples it into that original format.
                 auto scratch = std::make_unique<HostTexture>();
                 scratch->allocationSerial = ++nextTargetAllocation;
-                scratch->format = source.format;
+                scratch->format = activePlan.requestedUpscaler == upscaling::Upscaler::Fsr ?
+                    RenderFormat::R8G8B8A8_UNORM : source.format;
                 scratch->guestWidth = scratch->width = std::max(1u, output.width);
                 scratch->guestHeight = scratch->height = std::max(1u, output.height);
                 scratch->resolutionSize = output;
@@ -1985,7 +2006,7 @@ namespace gpu::renderer
                 config.colorSpace = promotion.inputs.colorEncoding == temporal::ColorEncoding::Sdr ?
                     dlss::SrColorSpace::DisplayEncoded : dlss::SrColorSpace::Linear;
                 std::shared_ptr<dlss::EvaluateCapture> evidence;
-                if (evaluatePage && evaluatePage->frame == frame && promotion.inputs.color.texture && promotion.scratch) {
+                if (activePlan.requestedUpscaler == upscaling::Upscaler::Dlss && evaluatePage && evaluatePage->frame == frame && promotion.inputs.color.texture && promotion.scratch) {
                     try {
                         evidence = evaluatePage->NewAttempt(*device, promotion.inputs, config,
                             *static_cast<plume::VulkanTexture*>(promotion.inputs.color.texture),
@@ -1996,7 +2017,22 @@ namespace gpu::renderer
                 // A fresh controller has no feature to recreate. EnsureSession
                 // establishes that cold state; RecordIsolated reports a genuine
                 // configuration change as NeedsReconfigure after it exists.
-                if (controller.EnsureSession(*static_cast<plume::VulkanDevice*>(device)) != dlss::SrStatus::Executable) {
+#if defined(LO_RENDERER_P2_EMBEDDED_TEST)
+                const bool sessionReady = controller.EnsureSession(*static_cast<plume::VulkanDevice*>(device)) == dlss::SrStatus::Executable;
+#else
+                const auto prepared = controller.Prepare(*static_cast<plume::VulkanDevice*>(device), {activePlan, promotion.inputs});
+                const bool sessionReady = prepared.status == SrResultStatus::Ready;
+                if (prepared.status == SrResultStatus::InputUnavailable) {
+                    NoteDlssFrameFallback(frame_plan::DlssEffectReason::UnsupportedProjection);
+                    return false;
+                }
+                if (prepared.status == SrResultStatus::NeedsReconfigure) {
+                    srReconfigureFrame = frame;
+                    NoteDlssFrameFallback(frame_plan::DlssEffectReason::FeatureReconfigurePending);
+                    return false;
+                }
+#endif
+                if (!sessionReady) {
                     if (evidence) { evidence->stage = "ensure_session"; evidence->reason = "session_unavailable"; }
                     DisableDlssRequest(frame_plan::FailureReason::DlssUnavailable);
                     return false;
@@ -2009,9 +2045,11 @@ namespace gpu::renderer
                 // an ALL-stage barrier, regardless of its preceding renderer use.
                 std::vector<RenderTextureBarrier> barriers;
                 for (auto* image : {promotion.inputs.color.texture, promotion.inputs.depth.texture,
-                                    promotion.inputs.motion.texture, promotion.inputs.motionInvalidity.texture,
-                                    promotion.scratch->texture.get()})
-                    if (image) barriers.emplace_back(image, RenderTextureLayout::GENERAL);
+                                    promotion.inputs.motion.texture, promotion.inputs.motionInvalidity.texture})
+                    if (image) barriers.emplace_back(image, activePlan.requestedUpscaler == upscaling::Upscaler::Fsr ?
+                        RenderTextureLayout::SHADER_READ : RenderTextureLayout::GENERAL);
+                barriers.emplace_back(promotion.scratch->texture.get(), activePlan.requestedUpscaler == upscaling::Upscaler::Fsr ?
+                    RenderTextureLayout::COPY_DEST : RenderTextureLayout::GENERAL);
                 commandList->barriers(RenderBarrierStage::ALL, barriers);
                 Gpu().drawProbe.End(commandList);
                 if (!video::EndGpuCommands(commandList)) {
@@ -2020,22 +2058,48 @@ namespace gpu::renderer
                 }
                 listOpen = false;
                 Gpu().srPrefixClosed = true;
+#if defined(LO_RENDERER_P2_EMBEDDED_TEST)
                 auto attempt = controller.RecordIsolated(*static_cast<plume::VulkanCommandList*>(Gpu().srIsolated.get()), config,
                     promotion.inputs, *static_cast<plume::VulkanTexture*>(promotion.scratch->texture.get()), evidence.get());
+                const bool accepted = attempt.status == dlss::SrStatus::Executable;
+                const bool deviceLost = attempt.status == dlss::SrStatus::DeviceLost;
+                const bool needsReconfigure = attempt.status == dlss::SrStatus::NeedsReconfigure;
+                Gpu().srUseId = attempt.useId;
+#else
+                auto attempt = controller.RecordIsolated(*static_cast<plume::VulkanCommandList*>(Gpu().srIsolated.get()),
+                    {activePlan, promotion.inputs}, *static_cast<plume::VulkanTexture*>(promotion.scratch->texture.get()), evidence.get());
+                const bool accepted = attempt.status == SrResultStatus::Ready;
+                const bool deviceLost = attempt.status == SrResultStatus::DeviceLost;
+                const bool needsReconfigure = attempt.status == SrResultStatus::NeedsReconfigure;
+                Gpu().srUseId = attempt.token;
+#endif
                 if (evidence) {
                     if (evidence->evaluated) evaluatePage->Called(evidence);
                     else evaluatePage->CancelReservation(evidence);
-                    evidence->isolatedAccepted = attempt.status == dlss::SrStatus::Executable;
+                    evidence->isolatedAccepted = accepted;
                     Gpu().evaluateCaptures.push_back(evidence);
                 }
-                Gpu().srUseId = attempt.useId;
-                if (attempt.status == dlss::SrStatus::DeviceLost) {
-                    if (attempt.useId) controller.OnBatchDiscarded(attempt.useId);
-                    Gpu().srUseId = 0;
+                if (deviceLost) {
+                    if (Gpu().srUseId) {
+#if defined(LO_RENDERER_P2_EMBEDDED_TEST)
+                        controller.OnBatchDiscarded(Gpu().srUseId);
+#else
+                        controller.OnDiscarded(Gpu().srUseId);
+#endif
+                    }
+                    Gpu().srUseId = {};
                     video::StopGpuWork(attempt.rawVkResult.value_or(VK_ERROR_DEVICE_LOST));
                     return false;
                 }
-                Gpu().srIsolatedAccepted = attempt.status == dlss::SrStatus::Executable;
+                if (!accepted && Gpu().srUseId) {
+#if defined(LO_RENDERER_P2_EMBEDDED_TEST)
+                    controller.OnBatchDiscarded(Gpu().srUseId);
+#else
+                    controller.OnDiscarded(Gpu().srUseId);
+#endif
+                    Gpu().srUseId = {};
+                }
+                Gpu().srIsolatedAccepted = accepted;
                 commandList = Gpu().srContinuation.get(); if (!video::BeginGpuCommands(commandList)) return false; listOpen = true; Gpu().srContinuationOpen = true;
                 // Continuation owns the normal post-NGX layouts. It may record the
                 // RGB-only combine only after a successfully closed isolated list.
@@ -2045,8 +2109,8 @@ namespace gpu::renderer
                                     promotion.scratch->texture.get()})
                     if (image) continuationBarriers.emplace_back(image, RenderTextureLayout::SHADER_READ);
                 commandList->barriers(RenderBarrierStage::GRAPHICS, continuationBarriers);
-                if (attempt.status != dlss::SrStatus::Executable) {
-                    if (attempt.status == dlss::SrStatus::NeedsReconfigure) {
+                if (!accepted) {
+                    if (needsReconfigure) {
                         srReconfigureFrame = frame; // Retry only after a drained next-frame boundary.
                         NoteDlssFrameFallback(frame_plan::DlssEffectReason::FeatureReconfigurePending);
                     } else
@@ -2069,13 +2133,26 @@ namespace gpu::renderer
                 if (rasterTarget == fallback.get()) rasterTarget = color;
                 Gpu().retiredTextures.push_back(std::move(fallback));
                 promotion.srApplied = true;
+                if (activePlan.requestedUpscaler == upscaling::Upscaler::Fsr && (promotion.inputs.resetHistory || frame % 120 == 0)) {
+                    const auto projection = fsr::DeriveProjection(promotion.inputs.cameraViewProjection,
+                        double(promotion.inputs.color.width) / promotion.inputs.color.height);
+                    if (projection) LOG_INFO("renderer: FSR recorded frame={} input={}x{} output={}x{} quality={} near={} fov={} dt_ms={} jitter=({}, {}) input_reset={} unit_scale=1_uncalibrated",
+                        promotion.inputs.renderFrameId, promotion.inputs.color.width, promotion.inputs.color.height,
+                        activePlan.output.width, activePlan.output.height, uint32_t(activePlan.fsrQuality), projection->nearDistance,
+                        projection->verticalFovRadians, promotion.inputs.frameTimeDeltaMilliseconds,
+                        promotion.inputs.jitter.pixelX, promotion.inputs.jitter.pixelY, promotion.inputs.resetHistory);
+                }
                 if (evidence) { evidence->compositeSucceeded = true; evidence->adopted = true; }
                 ArmDlssSubmit();
                 return true;
             }
             bool RecordSceneCopyDlss(HostTexture*& color, HostTexture*& rasterTarget)
             {
+#if defined(LO_RENDERER_P2_EMBEDDED_TEST)
                 return dlssController && RecordSceneCopyDlssUsing(*dlssController, color, rasterTarget);
+#else
+                return temporalUpscaler && RecordSceneCopyDlssUsing(*temporalUpscaler, color, rasterTarget);
+#endif
             }
 
 #endif
@@ -2270,10 +2347,16 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 else if(sparseCollector)sparseCollector->ReleaseCompleted();
                 if(hdrTemporalHistory)hdrTemporalHistory->ReleaseCompletedThrough(s.hdrTemporalSerial);
 #if defined(LO_GPU_PLUME)
+#if defined(LO_RENDERER_P2_EMBEDDED_TEST)
                 if (dlssController && s.srSubmissionSerial)
                     dlssController->ReleaseCompletedThrough(s.srSubmissionSerial);
+#else
+                if (temporalUpscaler && s.srSubmissionSerial)
+                    temporalUpscaler->ReleaseCompleted(s.srSubmissionSerial);
 #endif
-                s.srUseId = s.srSubmissionSerial = 0;
+#endif
+                s.srUseId = {};
+                s.srSubmissionSerial = 0;
                 s.srPrefixClosed = s.srIsolatedAccepted = s.srContinuationOpen = false;
                 s.dlssSubmit = {};
                 sceneAABusy=false;
@@ -2333,9 +2416,14 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (video::GpuWorkStopped()) {
                     if (!Gpu().submitted) for (const auto& e : Gpu().evaluateCaptures)
                         e->reason = "gpu_stopped_before_submit";
+#if defined(LO_RENDERER_P2_EMBEDDED_TEST)
                     if (dlssController && Gpu().srUseId && !Gpu().submitted)
                         dlssController->OnBatchDiscarded(Gpu().srUseId);
-                    if (!Gpu().submitted) Gpu().srUseId = 0;
+#else
+                    if (temporalUpscaler && Gpu().srUseId && !Gpu().submitted)
+                        temporalUpscaler->OnDiscarded(Gpu().srUseId);
+#endif
+                    if (!Gpu().submitted) Gpu().srUseId = {};
                     ClearDlssSubmit(Gpu(), true);
                     listOpen = false;
                     return false;
@@ -2346,8 +2434,12 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (timingQueries) commandList->writeTimestamp(timingQueries, 1);
                 if (!video::EndGpuCommands(commandList)) {
                     for (const auto& e : Gpu().evaluateCaptures) e->reason = "continuation_end_failed";
+#if defined(LO_RENDERER_P2_EMBEDDED_TEST)
                     if (dlssController && Gpu().srUseId) dlssController->OnBatchDiscarded(Gpu().srUseId);
-                    Gpu().srUseId = 0;
+#else
+                    if (temporalUpscaler && Gpu().srUseId) temporalUpscaler->OnDiscarded(Gpu().srUseId);
+#endif
+                    Gpu().srUseId = {};
                     ClearDlssSubmit(Gpu(), true);
                     listOpen = false;
                     return false;
@@ -2374,8 +2466,12 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (!submitted) {
                     for (const auto& e : Gpu().evaluateCaptures) e->reason = "checked_submit_failed";
 #if defined(LO_GPU_PLUME)
+#if defined(LO_RENDERER_P2_EMBEDDED_TEST)
                     if (dlssController && Gpu().srUseId) dlssController->OnBatchDiscarded(Gpu().srUseId);
-                    Gpu().srUseId = 0;
+#else
+                    if (temporalUpscaler && Gpu().srUseId) temporalUpscaler->OnDiscarded(Gpu().srUseId);
+#endif
+                    Gpu().srUseId = {};
                     video::StopGpuWork(rawVkResult);
                     LOG_ERROR("renderer: Vulkan batch submit failed raw_vk={}; no fallback submission issued", rawVkResult);
 #endif
@@ -2383,10 +2479,17 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     return false;
                 }
 #if defined(LO_GPU_PLUME)
+#if defined(LO_RENDERER_P2_EMBEDDED_TEST)
                 if (dlssController && Gpu().srUseId) {
                     Gpu().srSubmissionSerial = submissionSerial;
                     dlssController->OnBatchSubmitted(Gpu().srUseId, submissionSerial);
                 }
+#else
+                if (temporalUpscaler && Gpu().srUseId) {
+                    Gpu().srSubmissionSerial = submissionSerial;
+                    temporalUpscaler->OnSubmitted(Gpu().srUseId, submissionSerial);
+                }
+#endif
                 const bool srBatch = Gpu().srPrefixClosed && Gpu().srIsolatedAccepted && Gpu().srContinuationOpen;
                 for (const auto& entry : Gpu().evaluateCaptures) {
                     auto& e = *entry;
@@ -3298,9 +3401,16 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 const bool first = appliedPlanEpoch == ~0ull;
                 const bool requestChanged = requested != requestedInternalSize;
                 const bool epochChanged = selected.geometryEpoch != appliedPlanEpoch;
-                const bool recreateFeature = dlssController &&
+                const bool recreateFeature =
+#if defined(LO_RENDERER_P2_EMBEDDED_TEST)
+                    dlssController &&
                     ((srReconfigureFrame != ~0ull && srReconfigureFrame != frame) ||
-                     (epochChanged && dlssController->HasFeatureState()));
+                      (epochChanged && dlssController->HasFeatureState()));
+#else
+                    temporalUpscaler &&
+                    ((srReconfigureFrame != ~0ull && srReconfigureFrame != frame) ||
+                      (epochChanged && temporalUpscaler->HasFeatureState()));
+#endif
                 if (!epochChanged && !requestChanged && !first && !recreateFeature) return true;
                 requestedInternalSize = requested;
                 const auto effective = requested;
@@ -3310,8 +3420,14 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (effective != internalSize || recreateFeature) {
                     if (!Flush() || !WaitForGpu() || !video::WaitForPresentGpu()) return false;
                     if (recreateFeature) {
+#if defined(LO_RENDERER_P2_EMBEDDED_TEST)
                         dlssController->ReleaseFeatureAfterGpuDrain();
-                        if (dlssController->HasFeatureState()) {
+                        const bool featureRetained = dlssController->HasFeatureState();
+#else
+                        temporalUpscaler->ReleaseFeatureAfterGpuDrain();
+                        const bool featureRetained = temporalUpscaler->HasFeatureState();
+#endif
+                        if (featureRetained) {
                             FailCurrentPlan(frame_plan::FailureReason::InvalidInput);
                             return false;
                         }
@@ -3366,7 +3482,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             // are not allocation failures and must never enter failedPlanEpochs.
             void DisableDlssRequest(frame_plan::FailureReason reason)
             {
-                if (!upscaling::IsDlssConsumer(activePlan.consumer) || !activePlan.cpuSerial ||
+                if ((!upscaling::IsDlssConsumer(activePlan.consumer) && !upscaling::IsSrConsumer(activePlan.consumer)) || !activePlan.cpuSerial ||
                     dlssDisableReportedEpoch == activePlan.geometryEpoch) return;
                 dlssDisableReportedEpoch = activePlan.geometryEpoch;
                 if (evaluatePage && evaluatePage->frame == frame)
@@ -4368,8 +4484,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     sceneAAMode=mode;
                     temporal::FrameStartPolicy frameStart;
                     frameStart.legacyTaa = route.legacyTaa;
-                    frameStart.dlssInputs = route.dlssInputs;
-                    frameStart.dlssSr = route.dlssSr;
+                    frameStart.dlssInputs = route.dlssInputs || route.sr;
+                    frameStart.dlssSr = route.sr;
                     frameStart.inputProbe = route.inputProbe;
                     frameStart.resolveReadback = resolveReadback;
                     frameStart.forced = temporalForced;
@@ -4408,6 +4524,12 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 const bool temporalActive = temporal::TemporalConsumerActive(temporalExperiment, temporalInputProbe, dlssSrRequested);
                 const bool trackTemporalScene = !debugCaptureDir.empty() || temporalActive || activeSpatialAA;
                 if (trackTemporalScene && temporalScene.Frame() != frame) {
+                    const auto now = std::chrono::steady_clock::now();
+                    srFrameDeltaMilliseconds = srTimedFrame == ~0ull ? 0.0f :
+                        std::chrono::duration<float, std::milli>(now - srFrameTime).count();
+                    srTimeReset = srTimedFrame == ~0ull || srTimedFrame + 1 != frame || srFrameDeltaMilliseconds > 250.0f;
+                    srFrameTime = now; srTimedFrame = frame;
+                    frameRasterJitter = temporal::FrameJitter(frame, activePlan.width, activePlan.height, ActiveTaaOptions().jitter_scale);
                     temporalScene.Reset(frame);
                     hdrTemporalOutput = nullptr; hdrTemporalSource = {}; hdrTonemapApplied = false;
                     actualRasterJitter = {}; actualRasterJitterCaptured = false;
@@ -4578,7 +4700,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     depth ? depth->allocationSerial : 0,
                     {rasterViewport.x, rasterViewport.y, rasterViewport.width, rasterViewport.height},
                     vsConstants, psConstants, &temporalScene.Depth(), jitterSampledDepth ? &*jitterSampledDepth : nullptr,
-                    ActiveTaaOptions().jitter_scale);
+                    ActiveTaaOptions().jitter_scale, dlssSrRequested ? &frameRasterJitter : nullptr);
                 if (temporalActive && drawJitter.applied) {
                     if (!actualRasterJitterCaptured) {
                         actualRasterJitter = drawJitter.sample;
@@ -5019,7 +5141,12 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                             motionView.ready ? 1 : 0, motionView.frame, motionView.epoch, motionView.depthAllocation,
                                             motionView.width, motionView.height, uint32_t(motionView.state), motionInitFailed ? 1 : 0, mvError);
                                     } else {
-                                        const auto inputs = temporalHistory->CurrentInputs();
+                                        auto inputs = temporalHistory->CurrentInputs();
+                                    inputs.frameTimeDeltaMilliseconds = srFrameDeltaMilliseconds;
+                                    if (srTimeReset) {
+                                        inputs.resetHistory = true;
+                                        inputs.resetReasons = inputs.resetReasons | temporal::TemporalResetReason::FrameDiscontinuity;
+                                    }
                                         LOG_INFO("renderer: DLSS InvalidInput stage={} frame={} cpu_serial={} epoch={} signature={:#x} consumer={} input={}x{} output={}x{} complete={} motion_state={} color_ok={} depth_ok={} motion_ok={} invalidity_ok={} encoding={} depth_conv={} depth_captured_ord={} depth_captured_alloc={} depth_captured_extent={}x{} motion_view_frame={} motion_view_epoch={} motion_view_alloc={} motion_view_extent={}x{} tracker_failed={} replay_error={} current_inputs_fresh=1 capture_succeeded=1",
                                             stage, frame, activePlan.cpuSerial, activePlan.geometryEpoch, activePlan.requestSignature,
                                             uint32_t(activePlan.consumer), activePlan.width, activePlan.height,
@@ -5038,7 +5165,12 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                     logDlssInputFailure("capture_color_inputs");
                                     DisableDlssRequest(frame_plan::FailureReason::InvalidInput);
                                 } else {
-                                    const auto inputs = temporalHistory->CurrentInputs();
+                                    auto inputs = temporalHistory->CurrentInputs();
+                                    inputs.frameTimeDeltaMilliseconds = srFrameDeltaMilliseconds;
+                                    if (srTimeReset) {
+                                        inputs.resetHistory = true;
+                                        inputs.resetReasons = inputs.resetReasons | temporal::TemporalResetReason::FrameDiscontinuity;
+                                    }
                                     const auto selected = SelectDlssSceneCopyInputs(inputs);
                                     if (selected.kind == DlssSceneInputSelection::Kind::Pending) {
                                         static uint64_t loggedPendingSignature = 0;
@@ -6876,8 +7008,13 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             video::DrainGpuForShutdown();
             // Open/failed batches never acquired a queue completion serial.
             for (auto& slot : g_renderer->gpuSlots)
+#if defined(LO_RENDERER_P2_EMBEDDED_TEST)
                 if (g_renderer->dlssController && slot.srUseId && !slot.submitted)
                     g_renderer->dlssController->OnBatchDiscarded(slot.srUseId);
+#else
+                if (g_renderer->temporalUpscaler && slot.srUseId && !slot.submitted)
+                    g_renderer->temporalUpscaler->OnDiscarded(slot.srUseId);
+#endif
             g_renderer->SavePipelineRecipes(true);
             delete g_renderer;
             g_renderer = nullptr;

@@ -16,6 +16,7 @@ namespace plume
     struct RenderCommandFence;
 }
 namespace gpu::dlss { class Controller; }
+namespace gpu { class TemporalUpscaler; }
 
 // Host presentation layer: SDL window + plume render device. Owned by the
 // command processor thread; on Windows the SDL/Debug Menu windows have a
@@ -35,6 +36,7 @@ namespace gpu::video
     // The renderer borrows the persistent controller. Video remains responsible
     // for its device lifetime and final drained shutdown.
     dlss::Controller* GetDlssController();
+    TemporalUpscaler* GetTemporalUpscaler();
     bool GpuWorkStopped();
     bool BeginGpuCommands(plume::RenderCommandList* list);
     bool EndGpuCommands(plume::RenderCommandList* list);

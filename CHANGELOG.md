@@ -8,6 +8,10 @@ One record of completed changes, with unpublished work separated from verified r
 
 ### English
 
+- Experimental opt-in FSR SR development updates:
+  - Added the fixed FidelityFX SDK v1.1.4 (FSR 3.1.4) source-build path for Windows and native Linux behind `LO_ENABLE_FSR=ON` and `LO_REQUIRE_FSR=ON`, with bounded Quality and Native AA evidence. Full quality, Linux/Steam Deck, player, and DLSS frame-generation acceptance remain pending.
+  - Fixed presented screenshots interpreting BGRA swapchain pixels as RGBA; verified with a native Linux Native AA capture.
+
 - Native DLSS SR/DLAA lifecycle and capability coordination updates (BR-01, BR-02):
   - Fixed temporal history lifecycle handling so DLSS SR and DLAA properly advance temporal frame time and preserve jitter across frame gaps without spurious resets (BR-01).
   - Resolved capability status data race between CPU planning and GPU worker updates by publishing a mutex-protected by-value device snapshot (BR-02).
@@ -28,6 +32,10 @@ One record of completed changes, with unpublished work separated from verified r
   - Focused verification passed: new CPU suite `LoDlssStatusLogTest` (400 logger checks), hardware fixture `LoPresentCaptureTest` (4 Direct3D 12 and Vulkan multi-frame/error cases), capture close helper test (`LoPresentCaptureTest --case close`), standalone depth retirement suite `motion_replay_gpu_test.exe --depth-retirement-only` (26 checks on RTX 5080 Vulkan D32S8), and evaluate capture suites `LoDlssEvaluateCaptureContractTest.exe --evaluate-capture-contract-only` and `LoNativeDlssRendererTest.exe --evaluate-capture-only` (with `motion_renderer_compile` clean compilation). The full game executable target `LostOdysseyRecomp` completed linking successfully (`build/LostOdysseyRecomp/LostOdysseyRecomp.exe`, 93,635,072 bytes, SHA-256 `08d50e3774d18a02d4f6eaf2267472e9fab75db36e3ee970980aa96faf641e9d`, UTC 2026-09-23 02:32:58 / local 2026-09-22 20:32:58 -0600, built from `0625923` plus uncommitted changes with source ID `bdd9539ee4f176bdda0d9660bb5621b8a90a09acf8f8faa8427c10f2075c2688`; earlier 16:24:35 and 19:33:37 intermediate builds preserved). In-game visual quality verification, player acceptance, and release publication remain pending.
 
 ### 简体中文
+
+- 实验性可选 FSR 超分开发更新：
+  - 增加固定 FidelityFX SDK v1.1.4（FSR 3.1.4 实现）的源码构建路径，通过 `LO_ENABLE_FSR=ON` 与 `LO_REQUIRE_FSR=ON` 在 Windows 和原生 Linux 选择性启用；当前仅有 Quality 与 Native AA 的有界证据，完整质量、Linux/Steam Deck、玩家及 DLSS 帧生成验收仍待完成。
+  - 修复最终呈现截图将 BGRA 交换链像素按 RGBA 解读的问题，已用原生 Linux Native AA 截图验证。
 
 - 原生 DLSS SR/DLAA 生命周期与能力协调更新（BR-01、BR-02）：
   - 修复时序生命周期处理，使 DLSS SR 与 DLAA 在正常推进时正确更新帧时间，并在长间隔后保留抖动，避免异常重置历史（BR-01）。

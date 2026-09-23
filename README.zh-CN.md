@@ -27,6 +27,13 @@ Windows x64 · Direct3D 12 · Vulkan · PowerPC 静态重编译
 DisplayEncoded 色彩、reversed-Z 深度），DLAA 已具备 CPU 契约与运行时查询支撑。画质、细线、
 运动响应、遮挡、UI 元素、重置行为和完整玩家验收均未宣称完成。详见[原生 DLSS 验证记录](docs/notes/native-dlss-validation.md)。
 
+### 实验性可选 FSR 超分
+
+源码构建可在 Windows 与原生 Linux 通过 `LO_ENABLE_FSR=ON` 和
+`LO_REQUIRE_FSR=ON` 选择性启用固定 FidelityFX SDK v1.1.4（FSR 3.1.4 实现）的实验性路径。
+当前只有 Quality 与 Native AA 的有界场景证据；完整质量覆盖、Linux/Steam Deck 验收、
+玩家验收和 DLSS 帧生成验收仍未完成。这些开关和结果不改变公开发布配置。
+
 ### 未发布开发进展
 
 当前开发分支（v0.6.11 之后）的工作包含时序生命周期与能力竞争修复（BR-01、BR-02）、带有经校验执行状态反馈的游戏内图形菜单稳定性重构（BR-03、`GraphicsRow`）、F1 状态捕获中的呈现前交换链最终截图与同步 NGX Evaluate 输入/输出拷贝捕获，以及 DLSS Quality 切换至 DLAA 时的深度视图生命周期 UAF 修复。上述改进已通过定向单元测试与硬件 fixture 验证，但未包含在公开的 v0.6.11 二进制发布包中；端到端用户导帧与真实画质验收仍待进行。详见[项目状态](docs/STATUS.md)与[交接文档](HANDOFF.md)。

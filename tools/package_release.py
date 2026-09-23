@@ -82,6 +82,9 @@ def main():
         shutil.copy2(ROOT / 'docs/INSTALLING.md', package / 'README.md')
         licenses = package / 'licenses'
         licenses.mkdir()
+        fsr_license = runtime.parent / "licenses/LICENSE-FidelityFX.txt"
+        if fsr_license.is_file():
+            shutil.copy2(fsr_license, licenses / fsr_license.name)
         stage_portable_shader_pack(runtime.parent, package, licenses)
         shutil.copy2(ROOT / 'LICENSE', licenses / 'LostOdysseyRecomp.txt')
         shutil.copy2(ROOT / 'thirdparty/miniz-UNLICENSE.txt', licenses / 'miniz-UNLICENSE.txt')

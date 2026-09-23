@@ -74,8 +74,10 @@ endif()
 # boundary substituted. No guest executable or private assets are linked.
 if((UNIX AND NOT APPLE) OR WIN32)
  include("${ROOT}/cmake/LoDlss.cmake")
+ include("${ROOT}/cmake/LoFsr.cmake")
  add_executable(LoNativeDlssRendererTest "${ROOT}/tools/tests/native_dlss_renderer_gpu_test.cpp"
   "${ROOT}/LostOdysseyRecomp/gpu/dlss_ngx.cpp"
+  "${ROOT}/LostOdysseyRecomp/gpu/fsr_upscaler.cpp"
   "${ROOT}/LostOdysseyRecomp/gpu/presentation.cpp"
   "${ROOT}/LostOdysseyRecomp/gpu/shader/portable_shader_pack.cpp" platform_stub.cpp)
  target_include_directories(LoNativeDlssRendererTest BEFORE PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/compile_boundary")
@@ -92,6 +94,7 @@ if((UNIX AND NOT APPLE) OR WIN32)
  endif()
  target_compile_definitions(LoNativeDlssRendererTest PRIVATE LO_NATIVE_DLSS_TEST_INJECT_EVALUATE_FAILURE=1)
  lo_enable_dlss(LoNativeDlssRendererTest)
+ lo_enable_fsr(LoNativeDlssRendererTest)
  if(WIN32)
   # COFF retains the portable-pack implementation with its out-of-line
   # destructor. Link its real public dependency, not fake codec functions.
