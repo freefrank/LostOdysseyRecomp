@@ -1,0 +1,32 @@
+name: Settings menu regression
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'LostOdysseyRecomp/settings/**'
+      - 'LostOdysseyRecomp/host_ui/**'
+      - 'tools/tests/settings_menu/**'
+      - '.github/workflows/settings-menu-tests.yml'
+  pull_request:
+    paths:
+      - 'LostOdysseyRecomp/settings/**'
+      - 'LostOdysseyRecomp/host_ui/**'
+      - 'tools/tests/settings_menu/**'
+      - '.github/workflows/settings-menu-tests.yml'
+permissions:
+  contents: read
+jobs:
+  offline:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure (synthetic services, no game)
+        run: cmake -S tools/tests/settings_menu -B out/settings-menu -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build out/settings-menu --config Release --parallel 2
+      - name: Test input, ordering, and raster cache
+        run: ctest --test-dir out/settings-menu -C Release --output-on-failure

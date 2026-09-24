@@ -229,13 +229,6 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
     const uint32_t selectedInk = MakeColor(255, 35, 36, 36);
     const uint32_t outline = MakeColor(255, 39, 40, 40);
 
-    metal(0, 0, 1280, 720, steel, 7);
-    metal(0, 0, 1280, 100, MakeColor(255, 107, 110, 110), 6);
-    metal(0, 104, 366, 536, rail, 7);
-    metal(366, 104, 727, 536, MakeColor(255, 99, 102, 102), 7);
-    metal(1094, 104, 186, 536, MakeColor(255, 96, 99, 99), 6);
-    metal(0, 643, 1280, 77, MakeColor(255, 105, 108, 108), 6);
-
     auto text = [&](int x, int y, int w, int h, const std::wstring &value, int size, uint32_t color,
                     bool bold = false, int alignment = 0 /* 0=left, 1=center, 2=right */,
                     uint32_t edge = MakeColor(255, 39, 40, 40), int minimum = 13) {
@@ -376,29 +369,55 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
         text(x, y, 24, 24, std::wstring(1, letter), 15, ink, true, 1, outline, 12);
     };
 
-    line(0, 97, 1280, 97, MakeColor(255, 228, 229, 225), 2);
-    line(0, 101, 1280, 101, MakeColor(255, 30, 31, 31), 4);
-    line(0, 105, 1280, 105, MakeColor(255, 151, 153, 152));
-    if (current.assets && !current.assets->menu.pixels.empty())
-    {
-        metal(0, 96, 365, 34, rail, 7);
-        line(0, 120, 280, 120, MakeColor(255, 42, 43, 43), 2);
-        sprite(current.assets->menu, 410, 4, 89, 32, 277, 98, 89, 32);
-    }
-    line(365, 0, 365, 640, MakeColor(255, 38, 39, 39), 2);
-    line(368, 0, 368, 640, MakeColor(255, 151, 153, 152));
-    line(1093, 104, 1093, 640, MakeColor(255, 42, 43, 43), 2);
-    line(1096, 104, 1096, 640, MakeColor(255, 144, 146, 145));
-    line(0, 639, 1280, 639, MakeColor(255, 34, 35, 35), 4);
-    line(0, 644, 1280, 644, MakeColor(255, 153, 155, 154));
+    // Repainting the textured backdrop at 4K dominated every selection change.
+    // Keep one backdrop per presentation thread, keyed by both dimensions and
+    // the owning immutable asset set. Values, focus and dialogs are never cached.
+    // Retaining the shared_ptr prevents pointer-reuse collisions after reload.
+    struct Backdrop {
+        uint32_t width = 0, height = 0;
+        std::shared_ptr<const menu_assets::Assets> assets;
+        std::vector<uint32_t> pixels;
+    };
+    static thread_local Backdrop backdrop;
+    if (backdrop.width == width && backdrop.height == height &&
+        backdrop.assets == current.assets && backdrop.pixels.size() == pixels.size()) {
+        std::copy(backdrop.pixels.begin(), backdrop.pixels.end(), pixels.begin());
+    } else {
+        metal(0, 0, 1280, 720, steel, 7);
+        metal(0, 0, 1280, 100, MakeColor(255, 107, 110, 110), 6);
+        metal(0, 104, 366, 536, rail, 7);
+        metal(366, 104, 727, 536, MakeColor(255, 99, 102, 102), 7);
+        metal(1094, 104, 186, 536, MakeColor(255, 96, 99, 99), 6);
+        metal(0, 643, 1280, 77, MakeColor(255, 105, 108, 108), 6);
 
-    if (current.assets && !current.assets->menu.pixels.empty())
-        sprite(current.assets->menu, 373, 777, 41, 41, 82, 43, 42, 42);
-    else
-    {
-        fill(91, 52, 26, 26, steelDark);
-        line(91, 52, 117, 52, ink);
-        fill(99, 60, 10, 10, MakeColor(255, 127, 130, 130));
+        line(0, 97, 1280, 97, MakeColor(255, 228, 229, 225), 2);
+        line(0, 101, 1280, 101, MakeColor(255, 30, 31, 31), 4);
+        line(0, 105, 1280, 105, MakeColor(255, 151, 153, 152));
+        if (current.assets && !current.assets->menu.pixels.empty())
+        {
+            metal(0, 96, 365, 34, rail, 7);
+            line(0, 120, 280, 120, MakeColor(255, 42, 43, 43), 2);
+            sprite(current.assets->menu, 410, 4, 89, 32, 277, 98, 89, 32);
+        }
+        line(365, 0, 365, 640, MakeColor(255, 38, 39, 39), 2);
+        line(368, 0, 368, 640, MakeColor(255, 151, 153, 152));
+        line(1093, 104, 1093, 640, MakeColor(255, 42, 43, 43), 2);
+        line(1096, 104, 1096, 640, MakeColor(255, 144, 146, 145));
+        line(0, 639, 1280, 639, MakeColor(255, 34, 35, 35), 4);
+        line(0, 644, 1280, 644, MakeColor(255, 153, 155, 154));
+
+        if (current.assets && !current.assets->menu.pixels.empty())
+            sprite(current.assets->menu, 373, 777, 41, 41, 82, 43, 42, 42);
+        else
+        {
+            fill(91, 52, 26, 26, steelDark);
+            line(91, 52, 117, 52, ink);
+            fill(99, 60, 10, 10, MakeColor(255, 127, 130, 130));
+        }
+        backdrop.width = width;
+        backdrop.height = height;
+        backdrop.assets = current.assets;
+        backdrop.pixels = pixels;
     }
     text(130, 42, 234, 43, Translate(current.language, L"Settings", L"設定"), 31, ink, false);
     text(70, 122, 260, 28, L"Menu", 18, ink, false);

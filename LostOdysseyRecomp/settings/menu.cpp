@@ -3,6 +3,7 @@
 #include "menu_render.h"
 #include "menu_assets.h"
 #include "config.h"
+#include "graphics_menu.h"
 #include "restart.h"
 #include "translations.h"
 #include <gpu/video.h>
@@ -275,11 +276,7 @@ bool GraphicsRowHidden(int r)
     return (r == int(GraphicsRow::DlssQuality) && edit.upscaler == gpu::upscaling::Upscaler::Off) ||
            (r == int(GraphicsRow::FsrSharpness) && edit.upscaler != gpu::upscaling::Upscaler::Fsr);
 }
-bool GraphicsRowIsAction(int r)
-{
-    return r == int(GraphicsRow::Brightness) || r == int(GraphicsRow::Save);
-}
-static_assert(int(GraphicsRow::Save) == 10 && int(GraphicsRow::FsrSharpness) + 1 == int(GraphicsRow::Count));
+static_assert(int(GraphicsRow::Save) + 1 == int(GraphicsRow::Count));
 void Publish(uint8_t *base, uint32_t config)
 {
     Snapshot next;
@@ -382,13 +379,10 @@ void Publish(uint8_t *base, uint32_t config)
             }
         }
         placeGraphics(GraphicsRow::OutputResolution, makeChoices(L"Output resolution", L"輸出解析度", std::move(outputChoices), outputChoice));
-        placeGraphics(GraphicsRow::AntiAliasing, makeChoices(L"Anti-aliasing", L"抗鋸齒",
-                   {Tr(L"Off", L"關"), L"FXAA", L"SMAA", Tr(L"TAA (Experimental)", L"TAA（實驗性）")},
-                   std::min(edit.antialiasing, 3u)));
+        placeGraphics(GraphicsRow::AntiAliasing, makeChoices(L"Anti-aliasing / Upscaling", L"抗鋸齒 / 超解析度",
+                   {Tr(L"Off", L"關"), L"FXAA", L"SMAA", Tr(L"TAA (Experimental)", L"TAA（實驗性）"), L"DLSS", L"FSR 3.1"},
+                   graphics_menu::AaChoice(edit)));
         const bool savedFsr = edit.upscaler == gpu::upscaling::Upscaler::Fsr;
-        placeGraphics(GraphicsRow::Upscaler, makeChoices(L"Upscaler", L"縮放技術",
-                   std::vector<std::wstring>{Tr(L"Off", L"關"), L"DLSS", L"FSR 3.1"},
-                   std::min(uint32_t(edit.upscaler), 2u)));
         auto dlssQuality = makeChoices(savedFsr ? L"FSR quality" : L"DLSS quality", savedFsr ? L"FSR 品質" : L"DLSS 品質",
                    {Tr(L"Quality", L"品質"), Tr(L"Balanced", L"平衡"), Tr(L"Performance", L"效能"), savedFsr ? L"Native AA" : L"DLAA"},
                    std::min(savedFsr ? uint32_t(edit.fsrQuality) : uint32_t(edit.dlssQuality), 3u));
@@ -406,7 +400,7 @@ void Publish(uint8_t *base, uint32_t config)
                                         std::min(edit.fsrSharpnessPercent, 100u));
         fsrSharpness.hidden = GraphicsRowHidden(int(GraphicsRow::FsrSharpness));
         placeGraphics(GraphicsRow::FsrSharpness, std::move(fsrSharpness));
-        placeGraphics(GraphicsRow::ScalingQuality, makeChoices(L"Upscaling quality", L"縮放品質",
+        placeGraphics(GraphicsRow::ScalingQuality, makeChoices(L"Scaling filter", L"縮放濾鏡",
                    {Tr(L"Standard", L"標準"), Tr(L"High", L"高")},
                    std::min(edit.scalingQuality, 1u)));
         placeGraphics(GraphicsRow::FrameRate, makeChoices(L"Frame rate", L"影格率",
@@ -445,11 +439,11 @@ void Publish(uint8_t *base, uint32_t config)
         if (visibleFocus >= scroll + kMenuVisibleRows) scroll = visibleFocus - kMenuVisibleRows + 1;
         next.scroll = scroll;
     }
-    next.help = status.empty() ? Tr(L"LB / RB: category     D-pad: select / change     A: select     B: back",
+    next.help = status.empty() ? Tr(L"LB / RB: category     D-pad: select / change     A: confirm     B: back",
                                     L"LB / RB：分類     方向鍵：選擇 / 調整     A：確認     B：返回")
                                : status;
     if (status.empty() && (flags & 0x02000000))
-        next.help = Tr(L"LB / RB: category     D-pad: select / change     B: select     A: back",
+        next.help = Tr(L"LB / RB: category     D-pad: select / change     B: confirm     A: back",
                        L"LB / RB：分類     方向鍵：選擇 / 調整     B：確認     A：返回");
     if (tab == 3 && row == 1)
         next.help = Tr(L"Game language takes effect after restarting. Requires matching language assets.",
@@ -476,16 +470,15 @@ void Publish(uint8_t *base, uint32_t config)
                            L"設定輸出尺寸；無邊框全螢幕使用桌面尺寸。");
             break;
         case GraphicsRow::AntiAliasing:
-            if (edit.antialiasing == 3)
+            if (edit.upscaler == gpu::upscaling::Upscaler::Fsr)
+                next.help = Tr(L"FSR 3.1 needs Vulkan and an FSR-enabled build. Unsupported scenes use normal rendering.",
+                              L"FSR 3.1 需要 Vulkan 與包含 FSR 的版本。不支援的場景使用常規渲染。");
+            else if (edit.upscaler == gpu::upscaling::Upscaler::Dlss)
+                next.help = Tr(L"Saves the DLSS preference. The status line shows the latest DLSS result.",
+                              L"儲存 DLSS 偏好。狀態列顯示最新的 DLSS 結果。");
+            else if (edit.antialiasing == 3)
                 next.help = Tr(L"Camera-based TAA; moving effects may trail. Unsupported scenes use SMAA.",
-                               L"以相機重投影的 TAA；動態特效可能拖影。不支援的場景使用 SMAA。");
-            break;
-        case GraphicsRow::Upscaler:
-            next.help = edit.upscaler == gpu::upscaling::Upscaler::Fsr
-                ? Tr(L"FSR 3.1 needs Vulkan and an FSR-enabled build. Unsupported scenes use normal rendering.",
-                     L"FSR 3.1 需要 Vulkan 與包含 FSR 的版本。不支援的場景使用常規渲染。")
-                : Tr(L"Saves the DLSS preference. The status line shows the latest DLSS result.",
-                     L"儲存 DLSS 偏好。狀態列顯示最新的 DLSS 結果。");
+                              L"以相機重投影的 TAA；動態特效可能拖影。不支援的場景使用 SMAA。");
             break;
         case GraphicsRow::DlssQuality:
             next.help = edit.upscaler == gpu::upscaling::Upscaler::Fsr ?
@@ -650,8 +643,12 @@ void PointerClick(float x, float y, bool reverse)
     if (hit >= snapshot.rows.size())
         return;
     mouseRow = int(hit);
-    if (x >= 386)
-        mouseAction = reverse ? 4 : 0x1000;
+    if (x >= 386 && snapshot.rows[hit].enabled) {
+        // Pointer adjustment is explicit left/right, not a synthetic A press.
+        // Keep confirmation reserved for action rows and modal dialogs.
+        mouseAction = graphics_menu::IsAction(snapshot.tab, int(hit))
+            ? (reverse ? 0 : 0x1000) : (reverse || (snapshot.rows[hit].choices.size() > 5 && x < 458) ? 4 : 8);
+    }
 }
 } // namespace settings
 
@@ -915,14 +912,14 @@ PPC_FUNC(sub_822F19B0)
         // so simultaneous input (or key bindings sending both) cannot trigger saving.
         input &= ~0x1000;
     }
-    if (tab == 3 && row == 4 && (input & 0x100c)) {
+    if (tab == 3 && row == 4 && (input & 0x000c)) {
         if (gpu::taa_collection::Enabled()) {
             if (!gpu::taa_collection::SetConsent(false)) status = Tr(L"Settings could not be saved.", L"無法儲存設定。");
         } else { collectionPrompt = true; collectionChoice = 1; }
         Publish(base, config); return;
     }
-    const bool action = (tab == 0 && row == 7) || (tab == 2 && GraphicsRowIsAction(row)) || (tab == 3 && row == 3);
-    const int delta = (input & 4) ? -1 : ((input & 8) || ((input & 0x1000) && !action)) ? 1 : 0;
+    // A confirms actions/dialogs only. Option values change with Left/Right.
+    const int delta = (input & 4) ? -1 : (input & 8) ? 1 : 0;
     auto cycle = [&](uint32_t value, uint32_t count) {
         return uint32_t((int(value) + int(count) + delta) % int(count));
     };
@@ -998,11 +995,7 @@ PPC_FUNC(sub_822F19B0)
                 break;
             }
             case GraphicsRow::AntiAliasing:
-                edit.antialiasing = cycle(edit.antialiasing, 4);
-                edit.fxaa = edit.antialiasing == 1;
-                break;
-            case GraphicsRow::Upscaler:
-                edit.upscaler = gpu::upscaling::Upscaler(cycle(uint32_t(edit.upscaler), 3));
+                graphics_menu::SelectAa(edit, cycle(graphics_menu::AaChoice(edit), graphics_menu::AaChoiceCount));
                 break;
             case GraphicsRow::DlssQuality:
                 if (edit.upscaler == gpu::upscaling::Upscaler::Fsr)

@@ -275,13 +275,13 @@ void CheckBr03DlssMenu(uint8_t* base)
     Tick(base);
     Require(settings::active, "BR-03 menu is open");
     settings::tab = 2;
-    settings::row = int(GraphicsRow::Upscaler);
+    settings::row = int(GraphicsRow::AntiAliasing);
     settings::status.clear();
     settings::pending = 0;
     Tick(base);
     Require(settings::snapshot.notice == needsVulkan, "D3D12 DLSS shows Vulkan restart");
     Require(settings::snapshot.rows.size() == size_t(GraphicsRow::Count), "BR-03 keeps every graphics row");
-    Require(settings::snapshot.rows[int(GraphicsRow::Upscaler)].enabled && settings::snapshot.rows[int(GraphicsRow::Upscaler)].choices.size() == 3, "DLSS and FSR choices stay enabled on D3D12");
+    Require(settings::snapshot.rows[int(GraphicsRow::AntiAliasing)].enabled && settings::snapshot.rows[int(GraphicsRow::AntiAliasing)].choices.size() == 6, "DLSS and FSR choices stay enabled on D3D12");
     Require(!settings::snapshot.rows[int(GraphicsRow::DlssQuality)].hidden && settings::snapshot.rows[int(GraphicsRow::DlssQuality)].enabled, "quality row stays available");
     Require(settings::snapshot.rows[int(GraphicsRow::Backend)].enabled && settings::snapshot.rows[int(GraphicsRow::Backend)].choices.size() == 3, "backend choices stay available");
     Require(settings::snapshot.help == L"Saves the DLSS preference. The status line shows the latest DLSS result.",
@@ -292,7 +292,7 @@ void CheckBr03DlssMenu(uint8_t* base)
     Tick(base);
     Require(settings::snapshot.help == L"Quality, Balanced, Performance, or DLAA. The status line shows the submitted mode.",
             "quality help names the submitted mode");
-    settings::row = int(GraphicsRow::Upscaler);
+    settings::row = int(GraphicsRow::AntiAliasing);
     settings::pending = 0;
     Tick(base);
     settings::pending = 8;
@@ -305,8 +305,7 @@ void CheckBr03DlssMenu(uint8_t* base)
     Require(settings::edit.upscaler == Upscaler::Off && settings::snapshot.rows[int(GraphicsRow::DlssQuality)].hidden, "DLSS can be turned off on D3D12");
     Require(settings::snapshot.notice == needsVulkan + L" The Off choice is not applied yet.",
             "turning DLSS off before it is applied does not claim the plan is off");
-    settings::pending = 8;
-    Tick(base);
+    for (int i = 0; i < 4; ++i) { settings::pending = 8; Tick(base); } // Off -> FXAA -> SMAA -> TAA -> DLSS
     Require(settings::edit.upscaler == Upscaler::Dlss && settings::snapshot.notice == needsVulkan, "DLSS can be turned back on");
 
     running = {};
@@ -319,7 +318,7 @@ void CheckBr03DlssMenu(uint8_t* base)
     settings::pending = 0;
     Tick(base);
     Require(settings::snapshot.notice == L"DLSS is not available on this device.", "Vulkan device unavailable");
-    Require(settings::snapshot.rows[int(GraphicsRow::Upscaler)].enabled && !settings::snapshot.rows[int(GraphicsRow::DlssQuality)].hidden, "unavailable device does not lock DLSS");
+    Require(settings::snapshot.rows[int(GraphicsRow::AntiAliasing)].enabled && !settings::snapshot.rows[int(GraphicsRow::DlssQuality)].hidden, "unavailable device does not lock DLSS");
     saveState("02-vulkan-device-unavailable.bmp");
 
     running.device.dlssAvailable = true;
@@ -414,7 +413,7 @@ void CheckBr03DlssMenu(uint8_t* base)
     Require(settings::edit.upscaler == Upscaler::Dlss && settings::edit.dlssQuality == DlssQuality::Balanced,
             "backend edit keeps the DLSS preference");
     Require(settings::snapshot.rows[int(GraphicsRow::Backend)].enabled && settings::snapshot.rows[int(GraphicsRow::Backend)].selectedChoice == 1, "Vulkan cell stays selectable");
-    Require(settings::snapshot.rows[int(GraphicsRow::Upscaler)].enabled && !settings::snapshot.rows[int(GraphicsRow::DlssQuality)].hidden, "pending backend does not hide DLSS");
+    Require(settings::snapshot.rows[int(GraphicsRow::AntiAliasing)].enabled && !settings::snapshot.rows[int(GraphicsRow::DlssQuality)].hidden, "pending backend does not hide DLSS");
     Require(settings::snapshot.notice == needsVulkan + L" Still using Direct3D 12 until restart. DLSS is checked after restart.",
             "pending backend is added after the current plan and does not replace it");
     Require(saves == savesAtCycle, "selecting Vulkan does not save by itself");
@@ -551,7 +550,7 @@ void CheckBr03DlssMenu(uint8_t* base)
     Require(settings::snapshot.notice.find(L"Submitted") == std::wstring::npos,
             "unsaved DLSS is not described as submitted output");
     Require(settings::snapshot.notice.find(L"1707") == std::wstring::npos, "an inactive result does not keep a submitted size");
-    Require(settings::snapshot.rows[int(GraphicsRow::Upscaler)].enabled && !settings::snapshot.rows[int(GraphicsRow::DlssQuality)].hidden, "unsaved DLSS choice stays available");
+    Require(settings::snapshot.rows[int(GraphicsRow::AntiAliasing)].enabled && !settings::snapshot.rows[int(GraphicsRow::DlssQuality)].hidden, "unsaved DLSS choice stays available");
     saveState("09-d3d12-edit-dlss-unsaved.bmp");
     running.device.backend = Backend::Vulkan;
     gpu::frame_plan::menuFlowDlssEffect = running;
@@ -567,7 +566,7 @@ void CheckBr03DlssMenu(uint8_t* base)
     settings::edit.dlssQuality = DlssQuality::Quality;
     settings::status.clear();
     settings::tab = 2;
-    settings::row = int(GraphicsRow::Upscaler);
+    settings::row = int(GraphicsRow::AntiAliasing);
     auto show = [&](DlssEffectPhase phase, DlssEffectReason reason) {
         running.phase = phase;
         running.reason = reason;
@@ -951,11 +950,11 @@ int main(int argc, char** argv)
             Require(settings::snapshot.rows.size() == size_t(GraphicsRow::Count), "graphics tab has one row per id");
             Require(settings::snapshot.rows[int(GraphicsRow::DlssQuality)].hidden, "DLSS quality is hidden when upscaler is Off");
 
-            settings::row = int(GraphicsRow::Upscaler);
+            settings::row = int(GraphicsRow::AntiAliasing);
             settings::pending = 2; Tick(base); // D-pad down
             Require(settings::row == int(GraphicsRow::ScalingQuality), "down from Upscaler skips hidden DLSS quality");
             settings::pending = 1; Tick(base); // D-pad up
-            Require(settings::row == int(GraphicsRow::Upscaler), "up from Scaling quality skips hidden DLSS quality");
+            Require(settings::row == int(GraphicsRow::AntiAliasing), "up from Scaling quality skips hidden DLSS quality");
 
             // Start (0x10) jumps focus to Save graphics settings without saving
             settings::pending = 0x10; Tick(base);
@@ -997,16 +996,16 @@ int main(int argc, char** argv)
 
             std::puts("PASS Start/Enter focus jump, simultaneous confirm suppression, and PointerClick viewport clipping");
         }
-        // FSR sharpness appends a logical row without changing any established
-        // graphics id. Off disables RCAS, and percent changes are bounded.
+        // FSR sharpness follows quality; Save is always last. Off disables
+        // RCAS, and percent changes are bounded.
         {
-            static_assert(int(GraphicsRow::Save) == 10 && int(GraphicsRow::FsrSharpness) == 11);
+            static_assert(int(GraphicsRow::Save) + 1 == int(GraphicsRow::Count) && int(GraphicsRow::FsrSharpness) == 6);
             settings::tab = 2;
             settings::status.clear();
             settings::edit = currentConfig;
             settings::edit.upscaler = gpu::upscaling::Upscaler::Off;
             settings::edit.fsrSharpnessPercent = 0;
-            settings::row = int(GraphicsRow::Upscaler);
+            settings::row = int(GraphicsRow::AntiAliasing);
             settings::pending = 0; Tick(base);
             Require(settings::snapshot.rows[int(GraphicsRow::FsrSharpness)].hidden, "Off hides FSR sharpness");
             settings::row = int(GraphicsRow::Save);
@@ -1024,10 +1023,10 @@ int main(int argc, char** argv)
                     "FSR displays Off and 1-100 percent options");
             Require(settings::snapshot.help.find(L"Off disables RCAS") != std::wstring::npos,
                     "FSR help describes RCAS disabled at zero");
-            settings::row = int(GraphicsRow::Save);
+            settings::row = int(GraphicsRow::DlssQuality);
             settings::pending = 2; Tick(base);
-            Require(settings::row == int(GraphicsRow::FsrSharpness) && settings::snapshot.scroll == 1,
-                    "D-pad reaches FSR sharpness beyond the visible graphics page");
+            Require(settings::row == int(GraphicsRow::FsrSharpness) && settings::snapshot.scroll == 0,
+                    "D-pad reaches FSR sharpness directly after quality without scrolling");
             settings::pending = 4; Tick(base);
             Require(settings::edit.fsrSharpnessPercent == 0, "left at zero does not wrap to 100");
             settings::pending = 8; Tick(base);
