@@ -2,6 +2,7 @@
 
 #if defined(LO_GPU_PLUME)
 #include "dlss_sr.h"
+#include "fsr_mask_policy.h"
 #include "temporal_frame_inputs.h"
 #include <plume_vulkan.h>
 #include <algorithm>
@@ -44,6 +45,11 @@ struct FsrDispatch {
     float fovYRadians = 0, viewSpaceToMeters = 0, depthScale = 0, depthBias = 0;
     uint32_t renderWidth = 0, renderHeight = 0, outputWidth = 0, outputHeight = 0;
     bool reset = false;
+    bool maskBound = false, rcasEnabled = false;
+    uint32_t maskRejection = 0, maskSemantic = 0, maskCoverage = 0;
+    uint64_t maskSourceAllocation = 0, maskSourceWriteOrdinal = 0, maskColorOrdinal = 0;
+    VkFormat reactiveFormat = VK_FORMAT_UNDEFINED;
+    float reactiveCap = 0.0f, rcasStrength = 0.0f;
 };
 
 inline uint32_t TexelBytes(VkFormat format) {
@@ -136,7 +142,7 @@ struct Entry {
     temporal::TemporalFrameInputs inputs{};
     SrConfig config{};
     Parameters sdk{};
-    Image input, output, depth, motion, invalidity;
+    Image input, output, depth, motion, invalidity, reactive;
     FsrDispatch fsrDispatch{};
     std::optional<temporal::Camera> currentCamera, previousCamera;
     bool fsr = false;
@@ -174,7 +180,7 @@ struct Entry {
         return true;
     }
     size_t ReservedBytes() const {
-        return input.Bytes() + output.Bytes() + depth.Bytes() + motion.Bytes() + invalidity.Bytes();
+        return input.Bytes() + output.Bytes() + depth.Bytes() + motion.Bytes() + invalidity.Bytes() + reactive.Bytes();
     }
     void BeforeFsr(VkCommandBuffer command, const plume::VulkanTexture& color,
         const plume::VulkanTexture& rawDepth, const plume::VulkanTexture& velocity,
@@ -345,10 +351,15 @@ struct Page {
         Entry::Setup(e->invalidity, mask, inputs.motionInvalidity.x, inputs.motionInvalidity.y,
             inputs.motionInvalidity.width, inputs.motionInvalidity.height);
         Entry::Setup(e->output, scratch, 0, 0, scratch.desc.width, scratch.desc.height);
-        const std::array<Image*, 5> images = {&e->input, &e->depth, &e->motion, &e->invalidity, &e->output};
+        if (fsr::QualifyFsrMask(inputs).useReactive) {
+            e->reactive.width = inputs.color.width; e->reactive.height = inputs.color.height;
+            e->reactive.storageWidth = e->reactive.width; e->reactive.storageHeight = e->reactive.height;
+            e->reactive.format = VK_FORMAT_R32_SFLOAT; e->reactive.texelBytes = 4;
+        }
+        const std::array<Image*, 6> images = {&e->input, &e->depth, &e->motion, &e->invalidity, &e->output, &e->reactive};
         const std::array<VkFormat, 5> formats = {VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R32_SFLOAT,
             VK_FORMAT_R16G16_SFLOAT, VK_FORMAT_R8_UNORM, VK_FORMAT_R8G8B8A8_UNORM};
-        for (size_t i = 0; i < images.size(); ++i) {
+        for (size_t i = 0; i < 5; ++i) {
             const auto& image = *images[i];
             if (image.format != formats[i] || !image.width || !image.height ||
                 image.x > image.storageWidth || image.y > image.storageHeight ||
@@ -359,6 +370,7 @@ struct Page {
         const size_t bytes = e->ReservedBytes();
         if (!CanReserve(bytes)) { e->omitted = true; e->reason = "capture_limit"; ++omitted; return e; }
         for (auto* image : images) {
+            if (!image->Bytes()) continue;
             image->buffer = device.createBuffer(plume::RenderBufferDesc::ReadbackBuffer(image->Bytes()));
             if (!image->buffer) {
                 for (auto* rollback : images) rollback->buffer.reset();
@@ -376,7 +388,7 @@ struct Page {
         if (!e->input.buffer) return;
         reservedBytes -= e->ReservedBytes();
         --reserved;
-        for (auto* image : {&e->input, &e->output, &e->depth, &e->motion, &e->invalidity}) {
+        for (auto* image : {&e->input, &e->output, &e->depth, &e->motion, &e->invalidity, &e->reactive}) {
             image->buffer.reset(); image->reason = "evaluate_not_called";
         }
     }
@@ -391,10 +403,13 @@ struct Page {
                 for (auto [image, name] : {std::pair{&e->input, "input"}, {&e->depth, "depth"},
                         {&e->motion, "motion"}, {&e->invalidity, "invalidity"}, {&e->output, "output"}})
                     savedAll = e->ExportImage(*image, dir, (std::string("fsr-") + name + '-' + suffix).c_str()) && savedAll;
+                if (e->reactive.recorded)
+                    savedAll = e->ExportImage(e->reactive, dir,
+                        (std::string("fsr-reactive-") + suffix).c_str()) && savedAll;
                 if (savedAll) ++saved;
                 ok = savedAll && ok;
             } else {
-                for (auto* image : {&e->input, &e->depth, &e->motion, &e->invalidity, &e->output})
+                for (auto* image : {&e->input, &e->depth, &e->motion, &e->invalidity, &e->output, &e->reactive})
                     image->reason = !e->vendorSuccess ? "vendor_failed" :
                         !e->isolatedAccepted ? "discarded_isolated_list" : "submit_not_confirmed";
                 if (e->vendorSuccess) ok = false;
@@ -447,8 +462,26 @@ struct Page {
                  << ",\"camera_near\":" << p.cameraNear << ",\"camera_far\":" << p.cameraFar
                  << ",\"fov_y_radians\":" << p.fovYRadians
                  << ",\"view_space_to_meters\":" << p.viewSpaceToMeters
-                 << ",\"depth_scale\":" << p.depthScale << ",\"depth_bias\":" << p.depthBias
-                 << ",\"invalidity_bound_to_sdk\":false}"
+                  << ",\"depth_scale\":" << p.depthScale << ",\"depth_bias\":" << p.depthBias
+                  << ",\"invalidity_bound_to_sdk\":false,\"reactive_bound_to_sdk\":" << (p.maskBound ? "true" : "false")
+                  << ",\"reactive_format\":" << int(p.reactiveFormat)
+                  << ",\"reactive_cap\":" << p.reactiveCap
+                  << ",\"transparency_composition_bound_to_sdk\":false"
+                  << ",\"rcas_enabled\":" << (p.rcasEnabled ? "true" : "false")
+                  << ",\"rcas_strength\":" << p.rcasStrength << '}'
+                  << ",\"fsr_mask\":{\"semantic\":" << p.maskSemantic << ",\"coverage\":" << p.maskCoverage
+                  << ",\"rejection\":" << p.maskRejection << ",\"source_allocation\":" << p.maskSourceAllocation
+                  << ",\"rejection_name\":\"" << fsr::FsrMaskRejectionName(fsr::FsrMaskRejection(p.maskRejection)) << '"'
+                  << ",\"source_write_ordinal\":" << p.maskSourceWriteOrdinal
+                  << ",\"color_ordinal\":" << p.maskColorOrdinal
+                  << ",\"selected_color_ordinal\":" << e->inputs.colorOrdinal
+                  << ",\"source_frame\":" << e->inputs.fsrMask.provenance.renderFrameId
+                  << ",\"source_temporal_epoch\":" << e->inputs.fsrMask.provenance.temporalEpoch
+                  << ",\"source_geometry_epoch\":" << e->inputs.fsrMask.provenance.geometryEpoch
+                  << ",\"source_device_epoch\":" << e->inputs.fsrMask.provenance.deviceEpoch
+                  << ",\"captured_color_matches\":" << (e->inputs.fsrMask.provenance.capturedColor == e->inputs.color.texture ? "true" : "false")
+                  << ",\"region\":[" << e->inputs.fsrMask.sceneContribution.x << ',' << e->inputs.fsrMask.sceneContribution.y
+                  << ',' << e->inputs.fsrMask.sceneContribution.width << ',' << e->inputs.fsrMask.sceneContribution.height << "]}"
                  << ",\"stage\":"; JsonString(file, e->stage);
             file << ",\"reason\":"; JsonString(file, e->reason);
             file << ",\"sdk_result\":";
@@ -464,6 +497,7 @@ struct Page {
             file << ",\"depth\":"; JsonImage(file, e->depth);
             file << ",\"motion\":"; JsonImage(file, e->motion);
             file << ",\"invalidity\":"; JsonImage(file, e->invalidity);
+            file << ",\"reactive\":"; JsonImage(file, e->reactive);
             file << ",\"output\":"; JsonImage(file, e->output);
             file << '}';
         }

@@ -3,8 +3,10 @@
 layout(local_size_x = 8, local_size_y = 8) in;
 layout(set = 0, binding = 0) uniform sampler2D sourceColor;
 layout(set = 0, binding = 1) uniform sampler2D sourceDepth;
-layout(set = 0, binding = 2, rgba16f) uniform writeonly image2D linearColor;
-layout(set = 0, binding = 3, r32f) uniform writeonly image2D canonicalDepth;
+layout(set = 0, binding = 2) uniform sampler2D sceneContribution;
+layout(set = 0, binding = 3, rgba16f) uniform writeonly image2D linearColor;
+layout(set = 0, binding = 4, r32f) uniform writeonly image2D canonicalDepth;
+layout(set = 0, binding = 5, r32f) uniform writeonly image2D reactiveMask;
 
 layout(push_constant) uniform Parameters {
     ivec2 colorOrigin;
@@ -12,6 +14,9 @@ layout(push_constant) uniform Parameters {
     ivec2 size;
     float depthScale;
     float depthBias;
+    ivec2 maskOrigin;
+    uint maskEnabled;
+    float reactiveMax;
 } params;
 
 void main() {
@@ -23,4 +28,8 @@ void main() {
     float canonical = isnan(rawDepth) || isinf(rawDepth) ? 0.0 :
         clamp(rawDepth * params.depthScale + params.depthBias, 0.0, 1.0);
     imageStore(canonicalDepth, p, vec4(canonical));
+    if (params.maskEnabled != 0) {
+        float m = texelFetch(sceneContribution, p + params.maskOrigin, 0).r;
+        imageStore(reactiveMask, p, vec4(min(params.reactiveMax, clamp(m, 0.0, 1.0))));
+    }
 }

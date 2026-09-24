@@ -40,9 +40,15 @@ struct SrResult {
     std::optional<int32_t> rawResult, rawVkResult;
 };
 
+struct SrDispatchOptions {
+    bool fsrSharpening = false;
+    float fsrSharpness = 0.0f;
+};
+
 struct SrRequest {
     const frame_plan::FramePlan& plan;
     const temporal::TemporalFrameInputs& inputs;
+    SrDispatchOptions options{};
 };
 
 inline bool ValidSrRequest(const SrRequest& request) {

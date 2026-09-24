@@ -1,5 +1,7 @@
 #include "gpu/frame_plan.h"
 #include "gpu/temporal_frame_inputs.h"
+#include "gpu/sr_scene_input_policy.h"
+#include "gpu/temporal_lifecycle.h"
 #include "gpu/color_qualification.h"
 
 #include <algorithm>
@@ -325,10 +327,92 @@ void TestColorQualificationPolicy() {
     uint32_t f3_identity = (0x88 << 1);
     Require(CheckNetIdentityRBSwap(f0, f3_identity, false), "unswizzled fetch without RB swap yields net identity");
 }
+
+void TestSceneInputRecovery() {
+    using namespace gpu;
+    const auto sizing = ReadySizing();
+    frame_plan::PlannerState planner;
+    const auto requested = planner.Begin(Input(sizing, false));
+    Require(requested.consumer == upscaling::TemporalConsumer::DlssSr, "initial SR request");
+    Require(temporal::ClassifySrCaptureFailure(temporal::InputCaptureFailure::SceneNotReady) ==
+        temporal::SrSceneInputFailure::FrameFallback, "unready scene rejects this frame only");
+    Require(temporal::ClassifySrCaptureFailure(temporal::InputCaptureFailure::DepthOrdinalMismatch) ==
+        temporal::SrSceneInputFailure::FrameFallback, "scene depth revision rejects this frame only");
+    Require(temporal::ClassifySrCaptureFailure(temporal::InputCaptureFailure::PlanExtentMismatch) ==
+        temporal::SrSceneInputFailure::RequestFailure, "incompatible requested size remains hard failure");
+    Require(temporal::ClassifySrCaptureFailure(temporal::InputCaptureFailure::MissingSource) ==
+        temporal::SrSceneInputFailure::RequestFailure, "missing source resource remains hard failure");
+
+    temporal::TemporalFrameInputs inputs;
+    inputs.plan = requested;
+    // Region::Complete checks identity and bounds, never dereferences images;
+    // this CPU-only routing test makes no claim of GPU allocation/submission.
+    auto* image = reinterpret_cast<plume::RenderTexture*>(uintptr_t(0x1000));
+    inputs.color = {image, {960, 540}, 0, 0, 960, 540};
+    inputs.depth = {image, {960, 540}, 0, 0, 960, 540};
+    inputs.depthConvention = temporal::DepthConvention::Reversed;
+    inputs.currentInputsComplete = false;
+    inputs.motionState = temporal::MotionState::Unavailable;
+    Require(!inputs.CompleteForConsumer() &&
+        temporal::ClassifySrIncomplete(inputs) == temporal::SrSceneInputFailure::FrameFallback,
+        "frame without motion/visibility cannot reach SDK but does not poison request");
+    Require(temporal::ClassifySrIncomplete(inputs, true) == temporal::SrSceneInputFailure::RequestFailure,
+        "actual motion resource failure cannot be mistaken for a transient missing view");
+    inputs.currentInputsComplete = true;
+    Require(!inputs.CompleteForConsumer() &&
+        temporal::ClassifySrIncomplete(inputs) == temporal::SrSceneInputFailure::FrameFallback,
+        "missing actual motion and invalidity allocations still reject this frame");
+    struct History {
+        bool reset = false;
+        bool InputsComplete() const { return false; }
+        bool Completed() const { return false; }
+        void Reset() { reset = true; }
+    } history;
+    const auto now = std::chrono::steady_clock::now();
+    uint64_t epoch = 3, supportedFrame = 100;
+    auto previousTime = now;
+    const auto frameEnd = temporal::EvaluateTemporalFrameEnd(history, now, 101,
+        false, false, true, true, false, previousTime, ~0ull);
+    Require(frameEnd.engaged && !frameEnd.complete && frameEnd.reset,
+        "production SR frame-end policy resets a rejected scene frame");
+    temporal::CommitTemporalFrameEnd(history, frameEnd, now, supportedFrame, epoch, previousTime);
+    Require(history.reset && epoch == 4 && supportedFrame == ~0ull,
+        "incomplete frame discards history and advances temporal epoch");
+    const auto continued = planner.Begin(Input(sizing, false));
+    Require(continued.consumer == requested.consumer &&
+        continued.requestSignature == requested.requestSignature &&
+        continued.geometryEpoch == requested.geometryEpoch &&
+        !planner.Observe().persistentFailure,
+        "same signature remains eligible on next CPU frame after frame-only failure");
+    inputs.plan = continued;
+    inputs.motion = {image, {960, 540}, 0, 0, 960, 540};
+    inputs.motionInvalidity = {image, {960, 540}, 0, 0, 960, 540};
+    inputs.motionState = temporal::MotionState::ResetInitialization;
+    inputs.temporalEpoch = epoch;
+    inputs.resetHistory = history.reset;
+    inputs.resetReasons = temporal::TemporalResetReason::EpochChanged;
+    Require(inputs.CompleteForConsumer() && inputs.resetHistory &&
+        temporal::HasResetReason(inputs.resetReasons, temporal::TemporalResetReason::EpochChanged),
+        "later complete frame can enter SDK with reset after incomplete interval");
+    inputs.color = {};
+    Require(!inputs.CompleteForConsumer() &&
+        temporal::ClassifySrIncomplete(inputs) == temporal::SrSceneInputFailure::RequestFailure,
+        "missing owned color object is not misclassified as transient motion");
+
+    frame_plan::PlannerState hardPlanner;
+    const auto hard = hardPlanner.Begin(Input(sizing, false));
+    Require(hardPlanner.ReportFailure({hard.geometryEpoch, hard.requestSignature, hard.legacyHeight,
+        frame_plan::FailureReason::InvalidInput}), "genuine request failure is reported to production planner");
+    const auto latched = hardPlanner.Begin(Input(sizing, false));
+    Require(latched.consumer == upscaling::TemporalConsumer::LegacyTaa &&
+        hardPlanner.Observe().persistentFailure == frame_plan::FailureReason::InvalidInput,
+        "hard failure remains signature-latched under identical settings");
+}
 }
 
 int main() {
     TestColorQualificationPolicy();
+    TestSceneInputRecovery();
     const auto sizing = ReadySizing();
     gpu::frame_plan::PlannerState planner;
     const auto sr = planner.Begin(Input(sizing, false));

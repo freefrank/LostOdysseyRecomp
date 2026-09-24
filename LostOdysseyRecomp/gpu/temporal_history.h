@@ -2,6 +2,7 @@
 #include "motion_vector.h"
 #include "motion_frame.h"
 #include "temporal_frame_inputs.h"
+#include "temporal_input_capture_failure.h"
 #include "temporal_aa.h"
 #include "temporal_scene.h"
 #include "taa_live_control.h"
@@ -150,35 +151,6 @@ inline HistoryReuseDiagnostic InspectHistoryReuse(const HistoryReuseState& state
 #include <vector>
 
 namespace gpu::temporal {
-enum class InputCaptureFailure : uint32_t {
-    None = 0,
-    MissingCommands = 1,
-    MissingSource = 2,
-    SceneNotReady = 3,
-    SceneFrameMismatch = 4,
-    MissingCamera = 5,
-    DepthOrdinalMismatch = 6,
-    ColorAlreadyCaptured = 7,
-    SceneColorExtentMismatch = 8,
-    PlanExtentInvalid = 9,
-    PlanExtentMismatch = 10,
-};
-inline const char* InputCaptureFailureName(InputCaptureFailure reason) {
-    switch (reason) {
-    case InputCaptureFailure::None: return "none";
-    case InputCaptureFailure::MissingCommands: return "missing_commands";
-    case InputCaptureFailure::MissingSource: return "missing_source";
-    case InputCaptureFailure::SceneNotReady: return "scene_not_ready";
-    case InputCaptureFailure::SceneFrameMismatch: return "scene_frame_mismatch";
-    case InputCaptureFailure::MissingCamera: return "missing_camera";
-    case InputCaptureFailure::DepthOrdinalMismatch: return "depth_ordinal_mismatch";
-    case InputCaptureFailure::ColorAlreadyCaptured: return "color_already_captured";
-    case InputCaptureFailure::SceneColorExtentMismatch: return "scene_color_extent_mismatch";
-    case InputCaptureFailure::PlanExtentInvalid: return "plan_extent_invalid";
-    case InputCaptureFailure::PlanExtentMismatch: return "plan_extent_mismatch";
-    }
-    return "unknown";
-}
 // One recording thread / one ordered queue. Caller retains external sources until
 // submitted GPU work completes and calls ReleaseCompleted only after that fence.
 // Copies are owned: guest resolve addresses and recycled RT pointers are not history.
@@ -214,6 +186,9 @@ class HistoryOwner {
     bool motionVectorValid_=false;
     bool aaInitialized_=false;
     InputCaptureFailure captureFailure_=InputCaptureFailure::None;
+    // Reset() may run again mid-frame; only a new BeginFrame clears this cause.
+    InputCaptureFailure frameResourceFailure_=InputCaptureFailure::None;
+    uint32_t testFailOwnedAllocationAt_=0, testOwnedAllocationAttempt_=0;
     TemporalResetReason pendingReset_=TemporalResetReason::None;
     bool diagnosticsEnabled_=false;
     plume::RenderFormat sourceFormat_=plume::RenderFormat::R8G8B8A8_UNORM;
@@ -225,6 +200,11 @@ class HistoryOwner {
     bool Allocate(Image& image,plume::RenderFormat format) {
         if(image.texture)retired_.push_back({aa_.RecordedSerial(),std::move(image.texture)});
         image.layout=plume::RenderTextureLayout::UNKNOWN;
+        // Instance-local failure seam after normal retirement, before the real
+        // device allocation. Unused in production unless a fixture arms it.
+        if(testFailOwnedAllocationAt_ && ++testOwnedAllocationAttempt_ == testFailOwnedAllocationAt_) {
+            testFailOwnedAllocationAt_=0; return false;
+        }
         image.texture=device_->createTexture(plume::RenderTextureDesc::Texture2D(width_,height_,1,format,plume::RenderTextureFlag::RENDER_TARGET));
         return bool(image.texture);
     }
@@ -283,7 +263,13 @@ public:
     const GpuPassTimingStats& DisplayTiming() const {return aa_.DisplayTiming();}
     void Reset() {valid_=false;motionVectorValid_=false;motionView_={};captureFailure_=InputCaptureFailure::None;for(auto& frame:frames_)frame.completed=frame.inputsComplete=frame.taaResolved=false;}
     bool MotionVectorValid() const { return motionVectorValid_; }
-    InputCaptureFailure LastInputCaptureFailure() const { return captureFailure_; }
+    InputCaptureFailure LastInputCaptureFailure() const {
+        return frameResourceFailure_ != InputCaptureFailure::None ? frameResourceFailure_ : captureFailure_;
+    }
+    // Test-only: 1/2 = owned depth buffers, 3 = owned scene color.
+    void InjectOwnedCaptureAllocationFailureForTest(uint32_t allocationOrdinal) {
+        testFailOwnedAllocationAt_=allocationOrdinal;testOwnedAllocationAttempt_=0;
+    }
     uint32_t InputWidth() const { return width_; }
     uint32_t InputHeight() const { return height_; }
     uint64_t InputFrame() const { return frame_; }
@@ -312,19 +298,29 @@ public:
                 (epoch_!=epoch?TemporalResetReason::EpochChanged:TemporalResetReason::None);
             Reset();
         }
+        if(frame_!=frame)frameResourceFailure_=InputCaptureFailure::None;
         frame_=frame;epoch_=epoch;frames_[frame%2]=Frame{};reused_=false;
         diagnostics_={};motionView_={};motionVectorValid_=false;captureFailure_=InputCaptureFailure::None;
     }
     bool CaptureDepth(plume::RenderCommandList* commands,plume::RenderTexture* source,const SceneObservation& scene) {
         const auto& d=scene.Depth();auto& current=frames_[frame_%2];
+        if(frameResourceFailure_!=InputCaptureFailure::None)return false;
         if(!commands||!source||!scene.Draws()||scene.Reason()!=SceneObservation::Rejection::None||d.frame!=frame_||!d.ordinal||!d.fullExtent||current.depthOrdinal)return false;
         if(width_!=d.width||height_!=d.height) {
             pendingReset_=pendingReset_|TemporalResetReason::ExtentChanged;
             Reset();width_=d.width;height_=d.height;
             bool ok=width_&&height_&&width_<=16384&&height_<=16384;
-            if(!ok)return false;
-            for(auto& image:depth_)ok=Allocate(image,plume::RenderFormat::R32_FLOAT)&&ok;
-            ok=Allocate(source_,sourceFormat_)&&ok;
+            if(!ok){frameResourceFailure_=InputCaptureFailure::OwnedExtentInvalid;return false;}
+            for(auto& image:depth_)if(!Allocate(image,plume::RenderFormat::R32_FLOAT)) {
+                ok=false;
+                if(frameResourceFailure_==InputCaptureFailure::None)
+                    frameResourceFailure_=InputCaptureFailure::OwnedDepthAllocationFailed;
+            }
+            if(!Allocate(source_,sourceFormat_)) {
+                ok=false;
+                if(frameResourceFailure_==InputCaptureFailure::None)
+                    frameResourceFailure_=InputCaptureFailure::OwnedColorAllocationFailed;
+            }
             if(!ok){width_=height_=0;return false;}
         }
         Matrix vp{};for(unsigned i=0;i<16;++i)vp[i]=std::bit_cast<float>(scene.Anchor().vpBits[i]);
@@ -343,6 +339,7 @@ public:
         const MotionFrameView* motion = nullptr, TemporalResetReason reset = TemporalResetReason::None) {
         auto& current=frames_[frame_%2];const auto& previous=frames_[(frame_+1)%2];
         captureFailure_=InputCaptureFailure::None;
+        if(frameResourceFailure_!=InputCaptureFailure::None) {captureFailure_=frameResourceFailure_;return false;}
         if(!commands) { captureFailure_=InputCaptureFailure::MissingCommands; return false; }
         if(!source) { captureFailure_=InputCaptureFailure::MissingSource; return false; }
         if(!scene.Ready()) { captureFailure_=InputCaptureFailure::SceneNotReady; return false; }

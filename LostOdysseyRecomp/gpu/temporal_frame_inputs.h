@@ -22,6 +22,23 @@ struct TextureRegion {
     }
 };
 
+enum class FsrMaskSemantic : uint8_t { Unknown, ConservativeTransparentAlpha };
+enum class FsrMaskCoverage : uint8_t { Unavailable, Partial };
+
+// Borrowed scene-contribution image; its producer retains the GPU allocation
+// until the consuming command batch completes.
+struct FsrMaskProvenance {
+    uint64_t renderFrameId = 0, temporalEpoch = 0, geometryEpoch = 0, deviceEpoch = 0;
+    uint64_t colorOrdinal = 0, sourceAllocation = 0, sourceWriteOrdinal = 0;
+    const plume::RenderTexture* capturedColor = nullptr;
+};
+struct FsrMaskInput {
+    TextureRegion sceneContribution{};
+    FsrMaskProvenance provenance{};
+    FsrMaskSemantic semantic = FsrMaskSemantic::Unknown;
+    FsrMaskCoverage coverage = FsrMaskCoverage::Unavailable;
+};
+
 // Unknown is the only safe default. An R8_UNORM allocation is storage metadata,
 // not proof of an SDR transfer function or of a pre-UI tone-map boundary.
 enum class ColorEncoding : uint32_t { Unknown = 0, Sdr = 1, HdrLinear = 2 };
@@ -86,8 +103,10 @@ inline constexpr bool HasResetReason(TemporalResetReason bits, TemporalResetReas
 struct TemporalFrameInputs {
     frame_plan::FramePlan plan{};
     uint64_t renderFrameId = 0, temporalEpoch = 0, depthAllocation = 0;
+    uint64_t colorOrdinal = 0;
     TextureRegion color{}, depth{}, motion{};
     TextureRegion motionInvalidity{}, materialInstability{};
+    FsrMaskInput fsrMask{};
     JitterSample jitter{};
     ColorEncoding colorEncoding = ColorEncoding::Unknown;
     DepthConvention depthConvention = DepthConvention::Unknown;

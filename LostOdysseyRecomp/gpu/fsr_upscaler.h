@@ -24,6 +24,8 @@ struct FrameMetadata {
     float verticalFovRadians = 0.0f, viewSpaceToMetersFactor = 0.0f;
     float frameTimeDeltaMilliseconds = 0.0f;
     float depthScale = 0.0f, depthBias = 0.0f;
+    bool enableSharpening = false;
+    float sharpness = 0.0f;
 };
 
 struct Config {

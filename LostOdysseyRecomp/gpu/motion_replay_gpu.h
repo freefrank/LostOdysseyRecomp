@@ -52,16 +52,20 @@ class MotionReplayGPU {
         plume::RenderTextureLayout layout = plume::RenderTextureLayout::UNKNOWN;
     } velocity_, depths_, tags_, reactive_;
     struct Module {
+        enum class Failure : uint8_t { None, Unsupported, Translation, GpuAllocation };
         std::unique_ptr<plume::RenderShader> shader;
         std::future<xenos::CompiledShader> compilation;
         std::string source, error;
+        Failure failure = Failure::None;
         MotionConstantUsage constantUsage;
     };
     std::unordered_map<uint64_t, Module> vertexModules_, pixelModules_;
     std::unordered_map<Key, std::unique_ptr<plume::RenderPipeline>, KeyHash> pipelines_;
     plume::RenderDevice* device_ = nullptr;
     bool vulkan_ = false, initialized_ = false, cleared_ = false, finalized_ = false, aborted_ = false;
+    bool resourceFailedThisFrame_ = false;
     bool pendingThisFrame_ = false, injectPreparePending_ = false;
+    bool testFailNextModuleAllocation_ = false;
     uint64_t frame_ = ~0ull, epoch_ = 0, allocation_ = 0, serial_ = 0, targetGeneration_ = 0;
     uint32_t width_ = 0, height_ = 0;
     const plume::RenderTexture* boundDepth_ = nullptr;
@@ -150,12 +154,21 @@ float pixel(float4 p : SV_Position) : SV_Target {
                     words[i] = (w >> 24) | ((w >> 8) & 0xff00u) | ((w << 8) & 0xff0000u) | (w << 24);
                 }
                 translated = xenos::TranslateShader(words.data(), count, pixel);
-            } else if (!pixel) { m.error = "Missing vertex microcode"; return m; }
+            } else if (!pixel) {
+                m.error = "Missing vertex microcode"; m.failure = Module::Failure::Unsupported; return m;
+            }
             if(!pixel && translated.errors.empty()) m.constantUsage = ParseMotionConstantUsage(translated.hlsl,translated.usesRelativeConstants);
             m.source = pixel ? xenos::motion_replay::Pixel(count ? &translated : nullptr) : xenos::motion_replay::Vertex(translated);
-            if (m.source.empty()) { m.error = "Unsupported replay program: " + translated.errors; return m; }
+            if (m.source.empty()) {
+                m.error = "Unsupported replay program: " + translated.errors;
+                m.failure = translated.errors.empty() ? Module::Failure::Unsupported : Module::Failure::Translation;
+                return m;
+            }
         }
-        if (m.shader || !m.error.empty()) return m;
+        if (m.shader || !m.error.empty()) {
+            if (m.failure == Module::Failure::GpuAllocation) resourceFailedThisFrame_ = true;
+            return m;
+        }
         const char* profile = pixel ? "ps_6_0" : "vs_6_0";
         const auto format = vulkan_ ? xenos::ShaderBinaryFormat::Spirv : xenos::ShaderBinaryFormat::Dxil;
         if (!m.compilation.valid() && (wait || compilingModules_ < kMaxCompilingModules)) {
@@ -170,10 +183,15 @@ float pixel(float4 p : SV_Position) : SV_Target {
         auto compiled = m.compilation.get();
         --compilingModules_;
         m.source.clear();
-        if (!compiled.ok) { m.error = compiled.errors; return m; }
-        m.shader = device_->createShader(compiled.bytecode.data(), compiled.bytecode.size(), "main",
+        if (!compiled.ok) { m.error = compiled.errors; m.failure = Module::Failure::Translation; return m; }
+        if (testFailNextModuleAllocation_) testFailNextModuleAllocation_ = false;
+        else m.shader = device_->createShader(compiled.bytecode.data(), compiled.bytecode.size(), "main",
             vulkan_ ? plume::RenderShaderFormat::SPIRV : plume::RenderShaderFormat::DXIL);
-        if (!m.shader) m.error = "Replay shader module allocation failed";
+        if (!m.shader) {
+            m.error = "Replay shader module allocation failed";
+            m.failure = Module::Failure::GpuAllocation;
+            resourceFailedThisFrame_ = true;
+        }
         return m;
     }
 public:
@@ -216,8 +234,11 @@ public:
     bool Ready() const { return initialized_; }
     bool UsableThisFrame() const { return initialized_ && !aborted_ && !finalized_; }
     bool PipelinePendingThisFrame() const { return pendingThisFrame_; }
+    bool ClearedThisFrame() const { return cleared_; }
+    bool FinalizedThisFrame() const { return finalized_; }
     bool SceneReadyThisFrame() const { return cleared_ && !aborted_; }
     bool AbortedThisFrame() const { return aborted_; }
+    bool ResourceFailedThisFrame() const { return resourceFailedThisFrame_; }
     const std::string& LastError() const { return error_; }
     enum class PipelinePrepareStatus : uint8_t { Ready, Pending, Failed };
     struct SceneDrawPrepare {
@@ -227,15 +248,19 @@ public:
     };
     // Deterministic test inject: next wait=false prepare reports Pending without racing compiles.
     void InjectNextPreparePending() { injectPreparePending_ = true; }
+    // Instance-local fixture seam: fail only the next compiled module's GPU
+    // createShader allocation; the cached failure then follows normal paths.
+    void InjectNextModuleAllocationFailureForTest() { testFailNextModuleAllocation_ = true; }
     void BeginFrame(uint64_t frame, uint64_t epoch) {
         if (frame_ == frame && epoch_ == epoch) return;
-        frame_ = frame; epoch_ = epoch; cleared_ = finalized_ = aborted_ = pendingThisFrame_ = false;
+        frame_ = frame; epoch_ = epoch; cleared_ = finalized_ = aborted_ = pendingThisFrame_ = resourceFailedThisFrame_ = false;
+        error_.clear();
         injectPreparePending_ = false;
         drawCount_ = failedDraws_ = 0;
     }
     void AbortFrame(std::string_view reason = {}) {
+        if (!aborted_ && !reason.empty()) error_ = std::string(reason);
         aborted_ = true;
-        if (!reason.empty()) error_ = std::string(reason);
     }
     // Whole-frame fallback is used for unsupported visibility writes (stencil,
     // PS depth, unknown scene view), never fabricated stationary vectors.
@@ -250,7 +275,7 @@ public:
             width_ = width; height_ = height;
             if (!Allocate(velocity_, plume::RenderFormat::R16G16_FLOAT) || !Allocate(depths_, plume::RenderFormat::R32G32_FLOAT) ||
                 !Allocate(tags_, plume::RenderFormat::R32_UINT) || !Allocate(reactive_, plume::RenderFormat::R8_UNORM)) {
-                aborted_ = true; width_ = height_ = 0; error_ = "MV target allocation failed"; return false;
+                aborted_ = resourceFailedThisFrame_ = true; width_ = height_ = 0; error_ = "MV target allocation failed"; return false;
             }
             boundDepth_ = nullptr;
         }
@@ -264,7 +289,9 @@ public:
             boundDepth_ = depth;
         }
         allocation_ = allocation;
-        if (!clearFramebuffer_ || !drawFramebuffer_) { aborted_ = true; return false; }
+        if (!clearFramebuffer_ || !drawFramebuffer_) {
+            aborted_ = resourceFailedThisFrame_ = true; error_ = "MV framebuffer allocation failed"; return false;
+        }
         Transition(commands, velocity_, plume::RenderTextureLayout::COLOR_WRITE);
         Transition(commands, depths_, plume::RenderTextureLayout::COLOR_WRITE);
         Transition(commands, tags_, plume::RenderTextureLayout::COLOR_WRITE);
@@ -316,7 +343,7 @@ public:
         for (unsigned i = 0; i < 3; ++i) desc.renderTargetBlend[i] = plume::RenderBlendDesc::Copy();
         auto pipeline = device_->createGraphicsPipeline(desc);
         auto* result = pipeline.get();
-        if (!result) { ++failedDraws_; error_ = "MV pipeline allocation failed"; setStatus(PipelinePrepareStatus::Failed); return nullptr; }
+        if (!result) { ++failedDraws_; resourceFailedThisFrame_ = true; error_ = "MV pipeline allocation failed"; setStatus(PipelinePrepareStatus::Failed); return nullptr; }
         pipelines_.emplace(key, std::move(pipeline));
         setStatus(PipelinePrepareStatus::Ready);
         return result;
@@ -354,7 +381,7 @@ public:
         if (!cleared_ || aborted_ || finalized_ || !currentDepth || !commands || validity.empty() || validity.size() > DrawTemporalTracker::kMaxDraws + 1) return result;
         if (pendingThisFrame_) { finalized_ = true; return result; }
         finalized_ = true;
-        if (pending_.size() >= kMaxBatches) { error_ = "MV in-flight batch bound exceeded"; aborted_ = true; return result; }
+        if (pending_.size() >= kMaxBatches) { error_ = "MV in-flight batch bound exceeded"; aborted_ = resourceFailedThisFrame_ = true; return result; }
         std::unique_ptr<MaskBatch> batch;
         if (!free_.empty()) { batch = std::move(free_.back()); free_.pop_back(); }
         else {
@@ -363,19 +390,27 @@ public:
             if (vulkan_) batch->constants = device_->createBuffer(plume::RenderBufferDesc::UploadBuffer(16, plume::RenderBufferFlag::CONSTANT));
             plume::RenderDescriptorSetBuilder sb; MaskSet(sb); batch->set = sb.create(device_);
         }
-        if (!batch->flags || !batch->set || (vulkan_ && !batch->constants)) { aborted_ = true; return result; }
+        if (!batch->flags || !batch->set || (vulkan_ && !batch->constants)) {
+            aborted_ = resourceFailedThisFrame_ = true; error_ = "MV validity batch allocation failed"; return result;
+        }
         if (batch->generation != targetGeneration_) batch->framebuffer.reset();
         batch->generation = targetGeneration_;
         if (!batch->framebuffer) {
             const plume::RenderTexture* attachments[] = {reactive_.texture.get()};
             batch->framebuffer = device_->createFramebuffer(plume::RenderFramebufferDesc(attachments, 1));
         }
-        if (!batch->framebuffer) { aborted_ = true; return result; }
-        void* mapped = batch->flags->map(); if (!mapped) { aborted_ = true; return result; }
+        if (!batch->framebuffer) {
+            aborted_ = resourceFailedThisFrame_ = true; error_ = "MV validity framebuffer allocation failed"; return result;
+        }
+        void* mapped = batch->flags->map(); if (!mapped) {
+            aborted_ = resourceFailedThisFrame_ = true; error_ = "MV validity flags mapping failed"; return result;
+        }
         std::memcpy(mapped, validity.data(), validity.size() * 4); batch->flags->unmap();
         uint32_t c[4] = {uint32_t(validity.size()),0,0,0};
         if (vulkan_) {
-            mapped = batch->constants->map(); if (!mapped) { aborted_ = true; return result; }
+            mapped = batch->constants->map(); if (!mapped) {
+                aborted_ = resourceFailedThisFrame_ = true; error_ = "MV validity constants mapping failed"; return result;
+            }
             std::memcpy(mapped, c, sizeof(c)); batch->constants->unmap();
             batch->set->setBuffer(4, batch->constants.get(), sizeof(c));
         }

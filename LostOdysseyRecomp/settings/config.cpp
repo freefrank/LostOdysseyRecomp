@@ -19,6 +19,7 @@ Config Validate(Config value)
     if (!gpu::upscaling::KnownUpscaler(value.upscaler)) value.upscaler = gpu::upscaling::Upscaler::Off;
     value.dlssQuality = gpu::upscaling::NormalizeDlssQuality(value.dlssQuality);
     value.fsrQuality = gpu::upscaling::NormalizeFsrQuality(value.fsrQuality);
+    value.fsrSharpnessPercent = std::min(value.fsrSharpnessPercent, 100u);
     if (value.antialiasing > 3) value.antialiasing = 0;
     value.fxaa = value.antialiasing == 1;
     if (value.frameRate != 30 && value.frameRate != 60 && value.frameRate != 120) value.frameRate = 30;
@@ -94,6 +95,8 @@ Config Read()
             value.dlssQuality = gpu::upscaling::DlssQuality(number);
         else if (key == "fsr_quality")
             value.fsrQuality = gpu::upscaling::FsrQuality(number);
+        else if (key == "fsr_sharpness")
+            value.fsrSharpnessPercent = number;
         else if (key == "frame_rate")
             value.frameRate = number;
         else if (key == "fxaa")
@@ -180,6 +183,7 @@ static bool WriteConfig(const Config &value)
            << "\nscaling_quality=" << value.scalingQuality
            << "\nupscaler=" << uint32_t(value.upscaler) << "\ndlss_quality=" << uint32_t(value.dlssQuality)
            << "\nfsr_quality=" << uint32_t(value.fsrQuality)
+           << "\nfsr_sharpness=" << value.fsrSharpnessPercent
            << "\ninternal_resolution=" << value.internalResolution
            << "\nfxaa=" << value.fxaa << "\nautomatic_updates=" << value.automaticUpdates
            << "\nskip_shader_prebuild=" << (value.skipShaderPrebuild ? 1 : 0) << '\n';

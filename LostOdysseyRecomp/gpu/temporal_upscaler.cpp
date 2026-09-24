@@ -34,6 +34,8 @@ fsr::Config FsrConfig(const SrRequest& request) {
 }
 fsr::FrameMetadata FsrMetadata(const SrRequest& request) {
     fsr::FrameMetadata frame{};
+    frame.enableSharpening = request.options.fsrSharpening;
+    frame.sharpness = request.options.fsrSharpness;
     if (!request.inputs.cameraValid || !request.inputs.color.height) return frame;
     const auto projection = fsr::DeriveProjection(request.inputs.cameraViewProjection,
         double(request.inputs.color.width) / request.inputs.color.height);

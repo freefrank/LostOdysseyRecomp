@@ -272,13 +272,14 @@ std::wstring DlssNotice()
 }
 bool GraphicsRowHidden(int r)
 {
-    return r == int(GraphicsRow::DlssQuality) && edit.upscaler == gpu::upscaling::Upscaler::Off;
+    return (r == int(GraphicsRow::DlssQuality) && edit.upscaler == gpu::upscaling::Upscaler::Off) ||
+           (r == int(GraphicsRow::FsrSharpness) && edit.upscaler != gpu::upscaling::Upscaler::Fsr);
 }
 bool GraphicsRowIsAction(int r)
 {
     return r == int(GraphicsRow::Brightness) || r == int(GraphicsRow::Save);
 }
-static_assert(int(GraphicsRow::Save) + 1 == int(GraphicsRow::Count));
+static_assert(int(GraphicsRow::Save) == 10 && int(GraphicsRow::FsrSharpness) + 1 == int(GraphicsRow::Count));
 void Publish(uint8_t *base, uint32_t config)
 {
     Snapshot next;
@@ -394,6 +395,17 @@ void Publish(uint8_t *base, uint32_t config)
         // Hidden instead of removed so this logical id stays stable for input, drawing and hit-testing.
         dlssQuality.hidden = GraphicsRowHidden(int(GraphicsRow::DlssQuality));
         placeGraphics(GraphicsRow::DlssQuality, std::move(dlssQuality));
+        // Reuse the existing many-choice control: it shows the selected percentage
+        // between arrows without adding another renderer layout or shifting row IDs.
+        std::vector<std::wstring> sharpnessChoices;
+        sharpnessChoices.reserve(101);
+        sharpnessChoices.emplace_back(Tr(L"Off", L"關"));
+        for (uint32_t percent = 1; percent <= 100; ++percent)
+            sharpnessChoices.push_back(std::to_wstring(percent) + L"%");
+        auto fsrSharpness = makeChoices(L"FSR sharpness", L"FSR 銳化", std::move(sharpnessChoices),
+                                        std::min(edit.fsrSharpnessPercent, 100u));
+        fsrSharpness.hidden = GraphicsRowHidden(int(GraphicsRow::FsrSharpness));
+        placeGraphics(GraphicsRow::FsrSharpness, std::move(fsrSharpness));
         placeGraphics(GraphicsRow::ScalingQuality, makeChoices(L"Upscaling quality", L"縮放品質",
                    {Tr(L"Standard", L"標準"), Tr(L"High", L"高")},
                    std::min(edit.scalingQuality, 1u)));
@@ -479,6 +491,10 @@ void Publish(uint8_t *base, uint32_t config)
             next.help = edit.upscaler == gpu::upscaling::Upscaler::Fsr ?
                 Tr(L"Quality, Balanced, Performance, or Native AA. Native AA keeps the output resolution.", L"品質、平衡、效能或 Native AA。Native AA 維持輸出解析度。") : Tr(L"Quality, Balanced, Performance, or DLAA. The status line shows the submitted mode.",
                            L"品質、平衡、效能或 DLAA。狀態列顯示已提交的模式。");
+            break;
+        case GraphicsRow::FsrSharpness:
+            next.help = Tr(L"FSR sharpening: Off disables RCAS; 1-100% sets sharpening strength.",
+                           L"FSR 銳化：關閉會停用 RCAS；1-100% 調整銳化強度。");
             break;
         case GraphicsRow::ScalingQuality:
             next.help = Tr(L"Controls filtering when upscaling is active.",
@@ -879,8 +895,8 @@ PPC_FUNC(sub_822F19B0)
         status.clear();
     }
     const int count = tab == 0 ? 8 : tab == 1 ? 3 : tab == 2 ? int(GraphicsRow::Count) : 5;
-    // DLSS quality keeps its logical id and navigation skips it while the
-    // upscaler is not DLSS. Keyboard Enter reaches the menu as GAMEPAD_START
+    // Provider-specific rows keep their logical ids and navigation skips them
+    // when unavailable. Keyboard Enter reaches the menu as GAMEPAD_START
     // (hid.cpp), so one branch covers gamepad Start and Enter.
     auto rowHidden = [&](int r) {
         return tab == 2 && GraphicsRowHidden(r);
@@ -992,6 +1008,9 @@ PPC_FUNC(sub_822F19B0)
                 if (edit.upscaler == gpu::upscaling::Upscaler::Fsr)
                     edit.fsrQuality = gpu::upscaling::FsrQuality(cycle(uint32_t(edit.fsrQuality), 4));
                 else edit.dlssQuality = gpu::upscaling::DlssQuality(cycle(uint32_t(edit.dlssQuality), 4));
+                break;
+            case GraphicsRow::FsrSharpness:
+                edit.fsrSharpnessPercent = uint32_t(std::clamp(int(edit.fsrSharpnessPercent) + delta, 0, 100));
                 break;
             case GraphicsRow::ScalingQuality:
                 edit.scalingQuality = cycle(edit.scalingQuality, 2);

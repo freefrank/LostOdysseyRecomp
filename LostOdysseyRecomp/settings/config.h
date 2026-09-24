@@ -50,6 +50,7 @@ struct Config
     gpu::upscaling::Upscaler upscaler = gpu::upscaling::Upscaler::Off;
     gpu::upscaling::DlssQuality dlssQuality = gpu::upscaling::DlssQuality::Quality;
     gpu::upscaling::FsrQuality fsrQuality = gpu::upscaling::FsrQuality::Quality;
+    uint32_t fsrSharpnessPercent = 0; // 0 disables FSR RCAS; 1-100 sets its strength.
     bool fxaa = false; // Legacy serialized mirror; antialiasing is authoritative.
     bool automaticUpdates = true;
     bool skipShaderPrebuild = false;

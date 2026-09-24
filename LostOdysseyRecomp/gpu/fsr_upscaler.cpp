@@ -1,5 +1,6 @@
 #include "fsr_upscaler.h"
 #include "dlss_evaluate_capture.h"
+#include "fsr_mask_policy.h"
 
 #if defined(LO_GPU_PLUME)
 #include <plume_vulkan.h>
@@ -139,12 +140,37 @@ bool ValidCamera(const FrameMetadata& m, bool resetHistory) {
         std::isfinite(m.viewSpaceToMetersFactor) && m.viewSpaceToMetersFactor > 0 &&
         std::isfinite(m.frameTimeDeltaMilliseconds) &&
         (m.frameTimeDeltaMilliseconds > 0 || (resetHistory && m.frameTimeDeltaMilliseconds == 0)) &&
-        std::isfinite(m.depthScale) && m.depthScale > 0 && std::isfinite(m.depthBias);
+        std::isfinite(m.depthScale) && m.depthScale > 0 && std::isfinite(m.depthBias) &&
+        std::isfinite(m.sharpness) && m.sharpness >= 0.0f && m.sharpness <= 1.0f;
+}
+
+FsrMaskDecision QualifyNativeMask(const temporal::TemporalFrameInputs& inputs) {
+    auto decision = QualifyFsrMask(inputs);
+    if (!decision.useReactive) return decision;
+    const auto& region = inputs.fsrMask.sceneContribution;
+    const auto& mask = *static_cast<const plume::VulkanTexture*>(region.texture);
+    using Reject = FsrMaskRejection;
+    if (!mask.vk || !mask.imageView) return {false, Reject::Image};
+    if (mask.imageFormat != VK_FORMAT_R8_UNORM || mask.desc.format != plume::RenderFormat::R8_UNORM)
+        return {false, Reject::Format};
+    if (mask.desc.dimension != plume::RenderTextureDimension::TEXTURE_2D ||
+        mask.desc.mipLevels != 1 || mask.desc.arraySize != 1 ||
+        mask.imageSubresourceRange.baseMipLevel != 0 || mask.imageSubresourceRange.levelCount != 1 ||
+        mask.imageSubresourceRange.baseArrayLayer != 0 || mask.imageSubresourceRange.layerCount != 1 ||
+        mask.imageSubresourceRange.aspectMask != VK_IMAGE_ASPECT_COLOR_BIT ||
+        mask.desc.width != region.allocation.width || mask.desc.height != region.allocation.height)
+        return {false, Reject::Allocation};
+    if (mask.textureLayout != plume::RenderTextureLayout::SHADER_READ)
+        return {false, Reject::Layout};
+    return decision;
 }
 
 struct PrepareConstants {
     int32_t colorX, colorY, depthX, depthY, width, height;
     float depthScale, depthBias;
+    int32_t maskX, maskY;
+    uint32_t maskEnabled;
+    float reactiveMax;
 };
 struct PresentConstants { int32_t width, height, renderWidth, renderHeight, colorX, colorY; };
 
@@ -213,7 +239,9 @@ struct Controller::Impl {
     bool poisoned = false;
     bool sharedInitialized = false;
     std::unique_ptr<plume::VulkanTexture> dilatedDepth, dilatedMotion, previousDepth;
-    std::unique_ptr<plume::VulkanTexture> linearColor, canonicalDepth, sdkOutput, encodedOutput;
+    std::unique_ptr<plume::VulkanTexture> linearColor, canonicalDepth, reactiveMask, sdkOutput, encodedOutput;
+    bool reactiveScratchUnavailable = false;
+    bool reactiveMaskInitialized = false;
     VkSampler sampler = VK_NULL_HANDLE;
     VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
     VkDescriptorSetLayout prepareSetLayout = VK_NULL_HANDLE, presentSetLayout = VK_NULL_HANDLE;
@@ -344,7 +372,9 @@ struct Controller::Impl {
         descriptorPool = VK_NULL_HANDLE;
         sampler = VK_NULL_HANDLE;
         dilatedDepth.reset(); dilatedMotion.reset(); previousDepth.reset();
-        linearColor.reset(); canonicalDepth.reset(); sdkOutput.reset(); encodedOutput.reset();
+        linearColor.reset(); canonicalDepth.reset(); reactiveMask.reset(); sdkOutput.reset(); encodedOutput.reset();
+        reactiveScratchUnavailable = false;
+        reactiveMaskInitialized = false;
         uses.clear();
         timingPools.clear(); availableTimingPools.clear();
         timingFamily.reset(); timingBits = 0; timingPeriod = 0;
@@ -364,7 +394,7 @@ struct Controller::Impl {
         samplerInfo.addressModeU = samplerInfo.addressModeV = samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
         result = vkCreateSampler(vk, &samplerInfo, nullptr, &sampler);
         if (result != VK_SUCCESS) { diagnostics.failedApi = "vkCreateSampler"; diagnostics.rawResult = result; return false; }
-        prepareSetLayout = MakeLayout(vk, 2, 2, result);
+        prepareSetLayout = MakeLayout(vk, 3, 3, result);
         if (!prepareSetLayout) { diagnostics.failedApi = "vkCreateDescriptorSetLayout(prepare)"; diagnostics.rawResult = result; return false; }
         presentSetLayout = MakeLayout(vk, 2, 1, result);
         if (!presentSetLayout) { diagnostics.failedApi = "vkCreateDescriptorSetLayout(present)"; diagnostics.rawResult = result; return false; }
@@ -380,8 +410,8 @@ struct Controller::Impl {
         presentPipeline = MakePipeline(vk, presentLayout, lo_fsr_present_spv, sizeof(lo_fsr_present_spv), result, shaderApi);
         if (!presentPipeline) { diagnostics.failedApi = std::string(shaderApi) + "(present)"; diagnostics.rawResult = result; return false; }
         if (!preparePipeline || !presentPipeline) return false;
-        VkDescriptorPoolSize sizes[] = {{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4 * 128},
-            {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 3 * 128}};
+        VkDescriptorPoolSize sizes[] = {{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 5 * 128},
+            {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 4 * 128}};
         VkDescriptorPoolCreateInfo pool{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
         pool.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
         pool.maxSets = 2 * 128;
@@ -629,6 +659,19 @@ Attempt Controller::RecordIsolated(plume::VulkanCommandList& commands, const Con
         return attempt;
     }
 
+    auto maskDecision = QualifyNativeMask(inputs);
+    if (maskDecision.useReactive && !impl_->reactiveMask && !impl_->reactiveScratchUnavailable) {
+        impl_->reactiveMask = CreateTexture(*impl_->device, config.renderWidth, config.renderHeight,
+            plume::RenderFormat::R32_FLOAT);
+        if (!impl_->reactiveMask) impl_->reactiveScratchUnavailable = true;
+    }
+    if (maskDecision.useReactive && !impl_->reactiveMask)
+        maskDecision = {false, FsrMaskRejection::ScratchUnavailable};
+    if (capture && capture->reactive.buffer && !maskDecision.useReactive)
+        capture->reactive.reason = FsrMaskRejectionName(maskDecision.rejection);
+    const plume::VulkanTexture* mask = maskDecision.useReactive ?
+        static_cast<const plume::VulkanTexture*>(inputs.fsrMask.sceneContribution.texture) : &color;
+
     VkDescriptorSet prepare = VK_NULL_HANDLE, present = VK_NULL_HANDLE;
     if (const VkResult allocate = impl_->AllocateSets(prepare, present); allocate != VK_SUCCESS) {
         attempt.vkResult = int32_t(allocate);
@@ -642,25 +685,28 @@ Attempt Controller::RecordIsolated(plume::VulkanCommandList& commands, const Con
     VkDescriptorImageInfo prepareImages[] = {
         {impl_->sampler, color.imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
         {impl_->sampler, depth.imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+        {impl_->sampler, mask->imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
         {VK_NULL_HANDLE, impl_->linearColor->imageView, VK_IMAGE_LAYOUT_GENERAL},
-        {VK_NULL_HANDLE, impl_->canonicalDepth->imageView, VK_IMAGE_LAYOUT_GENERAL}
+        {VK_NULL_HANDLE, impl_->canonicalDepth->imageView, VK_IMAGE_LAYOUT_GENERAL},
+        {VK_NULL_HANDLE, maskDecision.useReactive ? impl_->reactiveMask->imageView : impl_->canonicalDepth->imageView,
+            VK_IMAGE_LAYOUT_GENERAL}
     };
     VkDescriptorImageInfo presentImages[] = {
         {impl_->sampler, impl_->sdkOutput->imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
         {impl_->sampler, color.imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
         {VK_NULL_HANDLE, impl_->encodedOutput->imageView, VK_IMAGE_LAYOUT_GENERAL}
     };
-    VkWriteDescriptorSet writes[7]{};
-    for (uint32_t i = 0; i < 7; ++i) {
+    VkWriteDescriptorSet writes[9]{};
+    for (uint32_t i = 0; i < 9; ++i) {
         auto& write = writes[i];
         write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        write.dstSet = i < 4 ? prepare : present;
-        write.dstBinding = i < 4 ? i : i - 4;
-        write.descriptorType = (i < 2 || i == 4 || i == 5) ? VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER : VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        write.dstSet = i < 6 ? prepare : present;
+        write.dstBinding = i < 6 ? i : i - 6;
+        write.descriptorType = (i < 3 || i == 6 || i == 7) ? VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER : VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
         write.descriptorCount = 1;
-        write.pImageInfo = i < 4 ? &prepareImages[i] : &presentImages[i - 4];
+        write.pImageInfo = i < 6 ? &prepareImages[i] : &presentImages[i - 6];
     }
-    vkUpdateDescriptorSets(impl_->device->vk, 7, writes, 0, nullptr);
+    vkUpdateDescriptorSets(impl_->device->vk, 9, writes, 0, nullptr);
 
     const VkResult resetResult = commands.vk ? vkResetCommandBuffer(commands.vk, 0) : VK_ERROR_INITIALIZATION_FAILED;
     if (resetResult != VK_SUCCESS) {
@@ -690,6 +736,10 @@ Attempt Controller::RecordIsolated(plume::VulkanCommandList& commands, const Con
     impl_->BeginTiming(impl_->uses.back(), commands, inputs, effectiveReset, capture != nullptr);
     Barrier(cmd, impl_->linearColor->vk, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
     Barrier(cmd, impl_->canonicalDepth->vk, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+    if (maskDecision.useReactive)
+        Barrier(cmd, impl_->reactiveMask->vk,
+            impl_->reactiveMaskInitialized ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_IMAGE_LAYOUT_GENERAL);
     Barrier(cmd, impl_->sdkOutput->vk, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
     Barrier(cmd, impl_->encodedOutput->vk, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
     if (!impl_->sharedInitialized) {
@@ -702,18 +752,32 @@ Attempt Controller::RecordIsolated(plume::VulkanCommandList& commands, const Con
         0, 1, &prepare, 0, nullptr);
     const PrepareConstants prepareParams{int32_t(inputs.color.x), int32_t(inputs.color.y),
         int32_t(inputs.depth.x), int32_t(inputs.depth.y), int32_t(config.renderWidth),
-        int32_t(config.renderHeight), frame.depthScale, frame.depthBias};
+        int32_t(config.renderHeight), frame.depthScale, frame.depthBias,
+        int32_t(inputs.fsrMask.sceneContribution.x), int32_t(inputs.fsrMask.sceneContribution.y),
+        uint32_t(maskDecision.useReactive), kReactiveMax};
     vkCmdPushConstants(cmd, impl_->prepareLayout, VK_SHADER_STAGE_COMPUTE_BIT,
         0, sizeof(prepareParams), &prepareParams);
     vkCmdDispatch(cmd, (config.renderWidth + 7) / 8, (config.renderHeight + 7) / 8, 1);
     Barrier(cmd, impl_->linearColor->vk, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     Barrier(cmd, impl_->canonicalDepth->vk, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    if (maskDecision.useReactive) {
+        Barrier(cmd, impl_->reactiveMask->vk, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        impl_->reactiveMaskInitialized = true;
+        if (capture && capture->reactive.buffer) {
+            dlss::capture::CopyImage(cmd, *impl_->reactiveMask, capture->reactive,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+            capture->reactive.recorded = true;
+        }
+    }
 
     FfxFsr3UpscalerDispatchDescription dispatch{};
     dispatch.commandList = ffxGetCommandListVK(cmd);
     dispatch.color = MakeResource(*impl_->linearColor, FFX_RESOURCE_STATE_COMPUTE_READ);
     dispatch.depth = MakeResource(*impl_->canonicalDepth, FFX_RESOURCE_STATE_COMPUTE_READ);
     dispatch.motionVectors = MakeResource(motion, FFX_RESOURCE_STATE_COMPUTE_READ);
+    dispatch.reactive = maskDecision.useReactive ?
+        MakeResource(*impl_->reactiveMask, FFX_RESOURCE_STATE_COMPUTE_READ) : FfxResource{};
+    dispatch.transparencyAndComposition = {};
     dispatch.dilatedDepth = MakeResource(*impl_->dilatedDepth, FFX_RESOURCE_STATE_UNORDERED_ACCESS, FFX_RESOURCE_USAGE_UAV);
     dispatch.dilatedMotionVectors = MakeResource(*impl_->dilatedMotion, FFX_RESOURCE_STATE_UNORDERED_ACCESS, FFX_RESOURCE_USAGE_UAV);
     dispatch.reconstructedPrevNearestDepth = MakeResource(*impl_->previousDepth, FFX_RESOURCE_STATE_UNORDERED_ACCESS, FFX_RESOURCE_USAGE_UAV);
@@ -722,7 +786,8 @@ Attempt Controller::RecordIsolated(plume::VulkanCommandList& commands, const Con
     dispatch.motionVectorScale = {1.0f, 1.0f};
     dispatch.renderSize = {config.renderWidth, config.renderHeight};
     dispatch.upscaleSize = {config.outputWidth, config.outputHeight};
-    dispatch.enableSharpening = false;
+    dispatch.enableSharpening = frame.enableSharpening;
+    dispatch.sharpness = frame.sharpness;
     dispatch.frameTimeDelta = frame.frameTimeDeltaMilliseconds;
     dispatch.preExposure = 1.0f;
     dispatch.reset = effectiveReset;
@@ -732,6 +797,17 @@ Attempt Controller::RecordIsolated(plume::VulkanCommandList& commands, const Con
     dispatch.viewSpaceToMetersFactor = frame.viewSpaceToMetersFactor;
     if (capture) {
         auto& recorded = capture->fsrDispatch;
+        recorded.maskRejection = uint32_t(maskDecision.rejection);
+        recorded.maskSemantic = uint32_t(inputs.fsrMask.semantic);
+        recorded.maskCoverage = uint32_t(inputs.fsrMask.coverage);
+        recorded.maskSourceAllocation = inputs.fsrMask.provenance.sourceAllocation;
+        recorded.maskSourceWriteOrdinal = inputs.fsrMask.provenance.sourceWriteOrdinal;
+        recorded.maskColorOrdinal = inputs.fsrMask.provenance.colorOrdinal;
+        recorded.maskBound = maskDecision.useReactive;
+        recorded.reactiveFormat = maskDecision.useReactive ? VK_FORMAT_R32_SFLOAT : VK_FORMAT_UNDEFINED;
+        recorded.reactiveCap = maskDecision.useReactive ? kReactiveMax : 0.0f;
+        recorded.rcasEnabled = dispatch.enableSharpening;
+        recorded.rcasStrength = dispatch.sharpness;
         recorded.jitterX = dispatch.jitterOffset.x; recorded.jitterY = dispatch.jitterOffset.y;
         recorded.mvScaleX = dispatch.motionVectorScale.x; recorded.mvScaleY = dispatch.motionVectorScale.y;
         recorded.frameTimeMs = dispatch.frameTimeDelta; recorded.preExposure = dispatch.preExposure;

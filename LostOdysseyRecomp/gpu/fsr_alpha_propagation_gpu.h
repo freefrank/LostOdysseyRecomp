@@ -2,6 +2,7 @@
 
 #include "fsr_alpha_propagation_policy.h"
 #include "fsr_alpha_replay_gpu.h"
+#include "temporal_frame_inputs.h"
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
@@ -98,6 +99,39 @@ struct SceneCopyMask {
     std::shared_ptr<MaskLease> mask;
     explicit operator bool() const { return frame && colorOrdinal && capturedColor && mask; }
 };
+
+// Only the frozen, paired source may enter the borrowed SR handoff. The
+// renderer separately carries sceneCopy.mask's lease into the consuming slot.
+inline bool AttachSceneCopyMask(const SceneCopyMask& sceneCopy, temporal::TemporalFrameInputs& inputs) {
+    inputs.fsrMask = {};
+    if (!sceneCopy || !sceneCopy.mask->texture || !sceneCopy.sourceAllocation ||
+        !sceneCopy.sourceWriteOrdinal || sceneCopy.frame != inputs.renderFrameId ||
+        sceneCopy.epoch != inputs.temporalEpoch || sceneCopy.colorOrdinal != inputs.colorOrdinal ||
+        sceneCopy.capturedColor != inputs.color.texture ||
+        sceneCopy.width != inputs.color.width || sceneCopy.height != inputs.color.height) return false;
+    auto& mask = inputs.fsrMask;
+    mask.sceneContribution = {sceneCopy.mask->texture.get(), {sceneCopy.width, sceneCopy.height},
+        0, 0, sceneCopy.width, sceneCopy.height};
+    mask.provenance = {sceneCopy.frame, sceneCopy.epoch, inputs.plan.geometryEpoch,
+        inputs.plan.deviceEpoch, sceneCopy.colorOrdinal, sceneCopy.sourceAllocation,
+        sceneCopy.sourceWriteOrdinal, inputs.color.texture};
+    mask.semantic = temporal::FsrMaskSemantic::ConservativeTransparentAlpha;
+    mask.coverage = temporal::FsrMaskCoverage::Partial;
+    return true;
+}
+
+// The DTO remains borrowed; retain the exact producer image in the consuming
+// GPU batch before recording a barrier or descriptor that references it.
+inline bool RetainSceneCopyMaskForBatch(temporal::TemporalFrameInputs& inputs,
+    const std::shared_ptr<MaskLease>& lease, std::vector<std::shared_ptr<MaskLease>>& batchUses) {
+    if (!lease || !lease->texture ||
+        inputs.fsrMask.sceneContribution.texture != lease->texture.get()) {
+        inputs.fsrMask = {};
+        return false;
+    }
+    batchUses.push_back(lease);
+    return true;
+}
 
 // A frame-local bridge for the first proven raw-alpha color resolve. Versions
 // are keyed by the actual guest destination and color allocation, not by a

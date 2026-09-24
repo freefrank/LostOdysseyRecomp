@@ -1,5 +1,6 @@
 // Bounded native Vulkan contract probe. No WSI, guest executable, or assets.
 #include <gpu/fsr_upscaler.h>
+#include <gpu/dlss_evaluate_capture.h>
 #include <plume_vulkan.h>
 
 #include <algorithm>
@@ -42,7 +43,7 @@ struct Fixture {
     std::unique_ptr<RenderCommandList> init, prefix, isolated, readbackList;
     std::unique_ptr<RenderCommandFence> fence;
     std::unique_ptr<RenderBuffer> upload, readback;
-    std::unique_ptr<RenderTexture> color, depth, motion, invalidity, output;
+    std::unique_ptr<RenderTexture> color, depth, motion, invalidity, mask, output;
     gpu::fsr::Controller fsr;
     gpu::fsr::Config config{kRender, kRender, kRender, kRender, gpu::upscaling::FsrQuality::NativeAA, 1};
     gpu::temporal::TemporalFrameInputs inputs{};
@@ -72,14 +73,16 @@ struct Fixture {
         depth = device->createTexture(RenderTextureDesc::Texture2D(kRender, kRender, 1, RenderFormat::R32_FLOAT));
         motion = device->createTexture(RenderTextureDesc::Texture2D(kRender, kRender, 1, RenderFormat::R16G16_FLOAT));
         invalidity = device->createTexture(RenderTextureDesc::Texture2D(kRender, kRender, 1, RenderFormat::R8_UNORM));
+        mask = device->createTexture(RenderTextureDesc::Texture2D(kRender, kRender, 1, RenderFormat::R8_UNORM));
         output = NewOutput(kRender);
-        Check(color && depth && motion && invalidity && output, "input and output images");
-        upload = device->createBuffer(RenderBufferDesc::UploadBuffer(4 * kUploadImageBytes));
+        Check(color && depth && motion && invalidity && mask && output, "input and output images");
+        upload = device->createBuffer(RenderBufferDesc::UploadBuffer(5 * kUploadImageBytes));
         readback = device->createBuffer(RenderBufferDesc::ReadbackBuffer(128 * 128 * 4));
         Check(upload && readback, "staging buffers");
         UploadInputs();
         inputs.plan.consumer = gpu::upscaling::TemporalConsumer::FsrSr;
         inputs.plan.requestedUpscaler = gpu::upscaling::Upscaler::Fsr;
+        inputs.plan.deviceEpoch = inputs.plan.geometryEpoch = inputs.temporalEpoch = 1;
         inputs.color = {color.get(), {kRender, kRender}, 0, 0, kRender, kRender};
         inputs.depth = {depth.get(), {kRender, kRender}, 0, 0, kRender, kRender};
         inputs.motion = {motion.get(), {kRender, kRender}, 0, 0, kRender, kRender};
@@ -104,7 +107,7 @@ struct Fixture {
 
     void UploadInputs() {
         auto* bytes = static_cast<uint8_t*>(upload->map()); Check(bytes != nullptr, "map upload");
-        std::memset(bytes, 0, 4 * kUploadImageBytes);
+        std::memset(bytes, 0, 5 * kUploadImageBytes);
         for (uint32_t y = 0; y < kRender; ++y) for (uint32_t x = 0; x < kRender; ++x) {
             auto* rgba = bytes + y * kUploadRowBytes + x * 4;
             rgba[0] = uint8_t(32 + x * 2);
@@ -115,18 +118,20 @@ struct Fixture {
             const float rawDepth = .001f + .999f * canonical;
             std::memcpy(bytes + kUploadImageBytes + y * kUploadRowBytes + x * 4,
                 &rawDepth, sizeof(rawDepth));
+            bytes[4 * kUploadImageBytes + y * kUploadRowBytes + x] =
+                x < kRender / 4 ? 0 : x < kRender / 2 ? 128 : 255;
             // R16G16_SFLOAT zero motion and R8_UNORM zero invalidity remain zero.
         }
         upload->unmap();
         init->begin();
-        RenderTexture* images[] = {color.get(), depth.get(), motion.get(), invalidity.get()};
+        RenderTexture* images[] = {color.get(), depth.get(), motion.get(), invalidity.get(), mask.get()};
         RenderFormat formats[] = {RenderFormat::R8G8B8A8_UNORM, RenderFormat::R32_FLOAT,
-            RenderFormat::R16G16_FLOAT, RenderFormat::R8_UNORM};
-        for (uint32_t i = 0; i < 4; ++i) {
+            RenderFormat::R16G16_FLOAT, RenderFormat::R8_UNORM, RenderFormat::R8_UNORM};
+        for (uint32_t i = 0; i < 5; ++i) {
             init->barriers(RenderBarrierStage::COPY, RenderTextureBarrier(images[i], RenderTextureLayout::COPY_DEST));
             init->copyTextureRegion(RenderTextureCopyLocation::Subresource(images[i]),
                 RenderTextureCopyLocation::PlacedFootprint(upload.get(), formats[i], kRender, kRender, 1,
-                    i == 3 ? kUploadRowBytes : kRender, uint64_t(i) * kUploadImageBytes));
+                    i >= 3 ? kUploadRowBytes : kRender, uint64_t(i) * kUploadImageBytes));
             init->barriers(RenderBarrierStage::COMPUTE, RenderTextureBarrier(images[i], RenderTextureLayout::SHADER_READ));
         }
         init->end();
@@ -232,14 +237,103 @@ struct Fixture {
         output = std::move(resizedOutput);
         RecordAndSubmit(true, 16.6f, true, false);
     }
+
+    void P2MaskAndRcas() {
+        Check(fsr.EnsureSession(Device(), config) == gpu::fsr::Status::Ready, "P2 context ready");
+        gpu::dlss::EvaluateCapture capture{};
+        capture.reactive = {};
+        capture.reactive.width = capture.reactive.height = kRender;
+        capture.reactive.storageWidth = capture.reactive.storageHeight = kRender;
+        capture.reactive.format = VK_FORMAT_R32_SFLOAT;
+        capture.reactive.texelBytes = 4;
+        capture.reactive.buffer = device->createBuffer(RenderBufferDesc::ReadbackBuffer(capture.reactive.Bytes()));
+        Check(bool(capture.reactive.buffer), "reactive capture readback");
+        inputs.renderFrameId = nextRenderFrame++;
+        inputs.colorOrdinal = 10;
+        inputs.fsrMask = {{mask.get(), {kRender, kRender}, 0, 0, kRender, kRender},
+            {inputs.renderFrameId, inputs.temporalEpoch, inputs.plan.geometryEpoch, inputs.plan.deviceEpoch,
+                inputs.colorOrdinal, 11, 12, color.get()},
+            gpu::temporal::FsrMaskSemantic::ConservativeTransparentAlpha,
+            gpu::temporal::FsrMaskCoverage::Partial};
+        inputs.resetHistory = true;
+        inputs.jitter = gpu::temporal::FrameJitter(1, kRender, kRender);
+        prefix->begin();
+        prefix->barriers(RenderBarrierStage::COPY, RenderTextureBarrier(output.get(), RenderTextureLayout::COPY_DEST));
+        prefix->end();
+        auto off = Metadata(true, 0.0f);
+        auto attempt = fsr.RecordIsolated(Isolated(), config, inputs, off, Native(*output), &capture);
+        Check(attempt.status == gpu::fsr::Status::Ready && capture.fsrDispatch.maskBound &&
+            !capture.fsrDispatch.rcasEnabled && capture.fsrDispatch.rcasStrength == 0.0f &&
+            capture.fsrDispatch.reactiveFormat == VK_FORMAT_R32_SFLOAT, "reactive and RCAS off SDK inputs");
+        Submit(Device(), Queue(), *fence, {prefix.get(), isolated.get()});
+        fsr.OnBatchSubmitted(attempt.useId, ++serial); fsr.ReleaseCompletedThrough(serial);
+        const auto* pixels = static_cast<const float*>(capture.reactive.buffer->map());
+        Check(pixels && capture.reactive.recorded && pixels[0] == 0.0f &&
+            std::fabs(pixels[kRender / 4] - 128.0f / 255.0f) < 0.00001f &&
+            std::fabs(pixels[kRender / 2] - 0.9f) < 0.00001f,
+            "actual prepare output R32F min(.9, R8_UNORM)");
+        capture.reactive.buffer->unmap();
+        auto on = Metadata(false, 16.6f);
+        on.enableSharpening = true; on.sharpness = .6f;
+        ++inputs.fsrMask.provenance.renderFrameId; // Must omit reactive without rejecting FSR.
+        inputs.renderFrameId = inputs.fsrMask.provenance.renderFrameId;
+        inputs.fsrMask.provenance.colorOrdinal = 0; // invalidate only the mask
+        inputs.resetHistory = false;
+        prefix->begin(); prefix->end();
+        gpu::dlss::EvaluateCapture noMask{};
+        auto second = fsr.RecordIsolated(Isolated(), config, inputs, on, Native(*output), &noMask);
+        Check(second.status == gpu::fsr::Status::Ready && !noMask.fsrDispatch.maskBound &&
+            noMask.fsrDispatch.maskRejection == uint32_t(gpu::fsr::FsrMaskRejection::ColorOrdinal) &&
+            noMask.fsrDispatch.rcasEnabled && noMask.fsrDispatch.rcasStrength == .6f,
+            "invalid mask fallback and RCAS on SDK inputs");
+        Submit(Device(), Queue(), *fence, {prefix.get(), isolated.get()});
+        fsr.OnBatchSubmitted(second.useId, ++serial); fsr.ReleaseCompletedThrough(serial);
+        on.sharpness = NAN;
+        auto invalid = fsr.RecordIsolated(Isolated(), config, inputs, on, Native(*output));
+        Check(invalid.status != gpu::fsr::Status::Ready && !invalid.useId, "reject nonfinite RCAS");
+        on.sharpness = .6f;
+        inputs.renderFrameId = nextRenderFrame++;
+        inputs.fsrMask.provenance.renderFrameId = inputs.renderFrameId;
+        inputs.fsrMask.provenance.colorOrdinal = inputs.colorOrdinal;
+        inputs.fsrMask.sceneContribution.texture = color.get(); // RGBA8 is not an R8 source.
+        gpu::dlss::EvaluateCapture wrongFormat{};
+        auto rejected = fsr.RecordIsolated(Isolated(), config, inputs, on, Native(*output), &wrongFormat);
+        Check(rejected.status == gpu::fsr::Status::Ready && !wrongFormat.fsrDispatch.maskBound &&
+            wrongFormat.fsrDispatch.maskRejection == uint32_t(gpu::fsr::FsrMaskRejection::Format),
+            "native mask format rejected without blocking FSR");
+        prefix->begin(); prefix->end();
+        Submit(Device(), Queue(), *fence, {prefix.get(), isolated.get()});
+        fsr.OnBatchSubmitted(rejected.useId, ++serial); fsr.ReleaseCompletedThrough(serial);
+
+        inputs.renderFrameId = nextRenderFrame++;
+        inputs.fsrMask.provenance.renderFrameId = inputs.renderFrameId;
+        inputs.fsrMask.sceneContribution.texture = mask.get();
+        auto disposable = NewOutput(kRender); Check(bool(disposable), "discard destination");
+        prefix->begin();
+        prefix->barriers(RenderBarrierStage::COPY, RenderTextureBarrier(disposable.get(), RenderTextureLayout::COPY_DEST));
+        prefix->end();
+        auto discarded = fsr.RecordIsolated(Isolated(), config, inputs, on, Native(*disposable));
+        Check(discarded.status == gpu::fsr::Status::Ready && discarded.useId, "reactive descriptor record for discard");
+        Check(vkResetCommandBuffer(Isolated().vk, 0) == VK_SUCCESS, "reset discarded reactive list");
+        Check(vkResetCommandBuffer(static_cast<VulkanCommandList&>(*prefix).vk, 0) == VK_SUCCESS,
+            "reset discarded prefix list");
+        fsr.OnBatchDiscarded(discarded.useId);
+        Check(fsr.EnsureSession(Device(), config) == gpu::fsr::Status::NeedsReconfigure,
+            "discard invalidates shared scratch history");
+        fsr.ReleaseFeatureAfterGpuDrain();
+        Check(fsr.EnsureSession(Device(), config) == gpu::fsr::Status::Ready,
+            "recreate scratch after safe discard");
+    }
 };
 } // namespace
 
 int main(int argc, char** argv) {
     try {
         const bool gapOnly = argc == 2 && std::strcmp(argv[1], "--gap-only") == 0;
-        Check(argc == 1 || gapOnly, "usage: LoFsrAdapterGpuTest [--gap-only]");
+        const bool p2Only = argc == 2 && std::strcmp(argv[1], "--p2-only") == 0;
+        Check(argc == 1 || gapOnly || p2Only, "usage: LoFsrAdapterGpuTest [--gap-only|--p2-only]");
         Fixture fixture;
+        if (p2Only) { fixture.P2MaskAndRcas(); std::puts("FSR P2 mask and RCAS: PASS"); return 0; }
         fixture.RecordAndSubmit(true, 0.0f, true, false);
         fixture.RecordAndSubmit(false, 16.6f, false, false);
         ++fixture.nextRenderFrame; // A captured game frame where FSR was ineligible.

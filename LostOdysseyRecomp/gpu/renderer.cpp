@@ -26,6 +26,7 @@
 #include "temporal_scene.h"
 #include "temporal_jitter.h"
 #include "temporal_history.h"
+#include "sr_scene_input_policy.h"
 #include "temporal_lifecycle.h"
 #include "motion_options.h"
 #include "motion_replay_gpu.h"
@@ -574,12 +575,12 @@ namespace gpu::renderer
 #if defined(LO_GPU_PLUME)
             const bool fsrAlphaReplayEnabled = [] {
                 const char* value = getenv("LO_FSR_ALPHA_REPLAY");
-                return value && std::string_view(value) == "1";
+                return !value || std::string_view(value) != "0";
             }();
             std::unique_ptr<fsr_alpha::ReplayGPU> fsrAlphaReplay;
             const bool fsrAlphaBridgeEnabled = [] {
                 const char* value = getenv("LO_FSR_ALPHA_BRIDGE");
-                return value && std::string_view(value) == "1";
+                return !value || std::string_view(value) != "0";
             }();
             std::unique_ptr<fsr_alpha::PropagationGPU> fsrAlphaBridge;
             std::unique_ptr<fsr_alpha::PostprocessGPU> fsrAlphaPostprocess;
@@ -610,6 +611,13 @@ namespace gpu::renderer
             bool motionInitFailed = false;
             temporal::MotionFrameView motionView;
             uint64_t motionFinalizedFrame = ~0ull;
+            std::array<uint64_t, 8> motionFailureKeys{};
+            uint32_t motionFailureKeyCount = 0;
+            uint64_t motionFirstFailureFrame = ~0ull;
+            uint64_t motionFailureSuppressed = 0;
+            std::array<uint32_t, 8> motionFinishStates{};
+            uint32_t motionFinishDistinct = 0;
+            uint64_t motionFinishSuppressed = 0;
             bool temporalInputProbe = false;
             bool dlssSrRequested = false;
             uint64_t dlssDisableReportedEpoch = ~0ull;
@@ -757,13 +765,37 @@ namespace gpu::renderer
                     motionView = motionReplay->Finish(commandList, history->CurrentDepth(), flags, history->ResetInitializationRequired());
                     if (motionView.ready) history->RecordExternalRead();
                 }
-                if (motionOptions.log && (frame % 120 == 0)) {
+                if (motionOptions.log) {
                     const auto& st = drawTemporalTracker.Stats();
-                    LOG_INFO("mv: frame={} tracked={} matched={} ordered_duplicates={} overflow={} replay={} failed={} ready={} consume={} pending={}",
-                        frame, st.trackedCurrentDraws, st.matchedPreviousDraws, st.orderedDuplicateDraws,
-                        st.overflowDraws, motionReplay ? motionReplay->DrawCount() : 0,
-                        motionReplay ? motionReplay->FailedDraws() : 0, motionView.ready,
-                        motionOptions.consume && motionView.ready, motionReplay ? motionReplay->PendingCount() : 0);
+                    const bool trackerFailed = drawTemporalTracker.Failed();
+                    const bool aborted = motionReplay && motionReplay->AbortedThisFrame();
+                    const bool pending = motionReplay && motionReplay->PipelinePendingThisFrame();
+                    const bool cleared = motionReplay && motionReplay->ClearedThisFrame();
+                    const bool replayFinalized = motionReplay && motionReplay->FinalizedThisFrame();
+                    const char* emptyReason = trackerFailed ? "tracker_failed" : motionInitFailed ? "motion_init_failed" :
+                        !motionReplay ? "no_replay" : aborted ? "replay_aborted" : pending ? "pipeline_pending" :
+                        !cleared ? "scene_not_cleared" : !motionView.ready ? "finish_no_view" : "none";
+                    const uint32_t state = uint32_t(trackerFailed) | (uint32_t(motionInitFailed) << 1) |
+                        (uint32_t(aborted) << 2) | (uint32_t(pending) << 3) |
+                        (uint32_t(cleared) << 4) | (uint32_t(motionView.ready) << 5) |
+                        (uint32_t(motionReplay && motionReplay->ResourceFailedThisFrame()) << 6) |
+                        (uint32_t(replayFinalized) << 7);
+                    const bool seen = std::find(motionFinishStates.begin(),
+                        motionFinishStates.begin() + motionFinishDistinct, state) !=
+                        motionFinishStates.begin() + motionFinishDistinct;
+                    const bool firstState = !seen && motionFinishDistinct < motionFinishStates.size();
+                    if (firstState) motionFinishStates[motionFinishDistinct++] = state;
+                    if (firstState || frame % 120 == 0) {
+                        LOG_INFO("mv: frame={} epoch={} tracker_failed={} tracker_finalized={} tracked={} matched={} unmatched={} overflow={} late={} replay_draws={} replay_failed={} replay_cleared={} replay_finalized={} aborted={} resource_failed={} pending_pipeline={} pending_batches={} ready={} empty_reason={} replay_error={} suppressed_draw={} suppressed_finish={}",
+                            frame, temporalEpoch, trackerFailed, drawTemporalTracker.Finalized(),
+                            st.trackedCurrentDraws, st.matchedPreviousDraws, st.unmatchedDraws,
+                            st.overflowDraws, st.lateDraws, motionReplay ? motionReplay->DrawCount() : 0,
+                            motionReplay ? motionReplay->FailedDraws() : 0, cleared, replayFinalized, aborted,
+                            motionReplay && motionReplay->ResourceFailedThisFrame(), pending,
+                            motionReplay ? motionReplay->PendingCount() : 0, motionView.ready, emptyReason,
+                            motionReplay ? motionReplay->LastError() : std::string{},
+                            motionFailureSuppressed, motionFinishSuppressed);
+                    } else ++motionFinishSuppressed;
                 }
             }
             std::unique_ptr<temporal::HistoryOwner> temporalHistory;
@@ -812,11 +844,14 @@ namespace gpu::renderer
                 std::unique_ptr<HostTexture> scratch;
                 std::unique_ptr<HostTexture> composite;
                 temporal::TemporalFrameInputs inputs{};
+                SrDispatchOptions srOptions{};
+                std::shared_ptr<fsr_alpha::MaskLease> fsrMaskLease;
                 RenderDescriptorSet* fallbackSet = nullptr;
                 RenderDescriptorSet* rgbSet = nullptr;
                 uint64_t fallbackConstants = UINT64_MAX, rgbConstants = UINT64_MAX;
                 bool prepared = false, activeMapping = false, srApplied = false;
             } sceneCopyPromotion;
+            SrDispatchOptions frameSrOptions{};
             uint64_t sceneCopyPromotionFrame = ~0ull;
             uint64_t srReconfigureFrame = ~0ull;
             std::unique_ptr<RenderShader> sceneCopyPromotionPs, sceneCopyPromotionRgbPs;
@@ -2038,6 +2073,7 @@ namespace gpu::renderer
                 sceneCopyPromotion.key = key; sceneCopyPromotion.frame = frame; sceneCopyPromotion.epoch = activePlan.geometryEpoch;
                 sceneCopyPromotion.sourceAllocation = color.allocationSerial;
                 sceneCopyPromotion.inputs = inputs; sceneCopyPromotion.scratch = std::move(scratch); sceneCopyPromotion.composite = std::move(composite);
+                sceneCopyPromotion.srOptions = frameSrOptions;
                 sceneCopyPromotion.fallbackSet = fallbackSet; sceneCopyPromotion.rgbSet = rgbSet;
                 sceneCopyPromotion.fallbackConstants = fallbackConstants; sceneCopyPromotion.rgbConstants = rgbConstants;
                 // parkedLow is installed by Activate after the map identity check.
@@ -2428,7 +2464,8 @@ namespace gpu::renderer
             {
                 auto& promotion = sceneCopyPromotion;
                 if (!promotion.activeMapping || !vulkan || !Gpu().srIsolated || !Gpu().srContinuation) return false;
-                CaptureFsrAlphaAtSceneCopy();
+                if (activePlan.requestedUpscaler == upscaling::Upscaler::Fsr)
+                    CaptureFsrAlphaAtSceneCopy();
                 dlss::SrConfig config{};
                 config.renderExtent = {promotion.inputs.color.width, promotion.inputs.color.height};
                 config.outputExtent = {activePlan.output.width, activePlan.output.height};
@@ -2465,7 +2502,8 @@ namespace gpu::renderer
 #if defined(LO_RENDERER_P2_EMBEDDED_TEST)
                 const bool sessionReady = controller.EnsureSession(*static_cast<plume::VulkanDevice*>(device)) == dlss::SrStatus::Executable;
 #else
-                const auto prepared = controller.Prepare(*static_cast<plume::VulkanDevice*>(device), {activePlan, promotion.inputs});
+                const auto prepared = controller.Prepare(*static_cast<plume::VulkanDevice*>(device),
+                    {activePlan, promotion.inputs, promotion.srOptions});
                 const bool sessionReady = prepared.status == SrResultStatus::Ready;
                 if (prepared.status == SrResultStatus::InputUnavailable) {
                     NoteDlssFrameFallback(frame_plan::DlssEffectReason::UnsupportedProjection);
@@ -2495,7 +2533,28 @@ namespace gpu::renderer
                         RenderTextureLayout::SHADER_READ : RenderTextureLayout::GENERAL);
                 barriers.emplace_back(promotion.scratch->texture.get(), activePlan.requestedUpscaler == upscaling::Upscaler::Fsr ?
                     RenderTextureLayout::COPY_DEST : RenderTextureLayout::GENERAL);
+                // The scene-copy input only borrows this image. Hold the lease in
+                // the consuming slot before its first prefix command; the producer
+                // slot continues to own any earlier fetch/crop commands.
+                if (activePlan.requestedUpscaler == upscaling::Upscaler::Fsr &&
+                    fsr_alpha::RetainSceneCopyMaskForBatch(promotion.inputs, promotion.fsrMaskLease,
+                        Gpu().fsrAlphaBridgeUses)) {
+                    barriers.emplace_back(promotion.fsrMaskLease->texture.get(), RenderTextureLayout::SHADER_READ);
+                    promotion.fsrMaskLease->layout = RenderTextureLayout::SHADER_READ;
+                } else promotion.inputs.fsrMask = {};
                 commandList->barriers(RenderBarrierStage::ALL, barriers);
+                std::shared_ptr<FsrAlphaBridgeDiagnostic> handoffTrace;
+                if (activePlan.requestedUpscaler == upscaling::Upscaler::Fsr &&
+                    FsrAlphaBridgeTraceEnabled() && fsrAlphaBridgeTraceCount < 128) {
+                    handoffTrace = std::make_shared<FsrAlphaBridgeDiagnostic>();
+                    handoffTrace->fields = "\"kind\":\"sr_mask_handoff\",\"status\":\"before_record\"";
+                    TraceFsrAlphaBridge(handoffTrace); // Own readbacks before recording their copies.
+                    const auto& depth = promotion.inputs.depth;
+                    if (depth.Complete() && depth.x == 0 && depth.y == 0 &&
+                        depth.width == depth.allocation.width && depth.height == depth.allocation.height)
+                        QueueFsrAlphaSnapshot(handoffTrace, "sdk-depth-before", depth.texture,
+                            RenderFormat::R32_FLOAT, depth.width, depth.height, 4, RenderTextureLayout::SHADER_READ);
+                }
                 Gpu().drawProbe.End(commandList);
                 if (!video::EndGpuCommands(commandList)) {
                     if (evidence) { evidence->stage = "prefix_end"; evidence->reason = "prefix_end_failed"; }
@@ -2512,12 +2571,36 @@ namespace gpu::renderer
                 Gpu().srUseId = attempt.useId;
 #else
                 auto attempt = controller.RecordIsolated(*static_cast<plume::VulkanCommandList*>(Gpu().srIsolated.get()),
-                    {activePlan, promotion.inputs}, *static_cast<plume::VulkanTexture*>(promotion.scratch->texture.get()), evidence.get());
+                    {activePlan, promotion.inputs, promotion.srOptions},
+                    *static_cast<plume::VulkanTexture*>(promotion.scratch->texture.get()), evidence.get());
                 const bool accepted = attempt.status == SrResultStatus::Ready;
                 const bool deviceLost = attempt.status == SrResultStatus::DeviceLost;
                 const bool needsReconfigure = attempt.status == SrResultStatus::NeedsReconfigure;
                 Gpu().srUseId = attempt.token;
 #endif
+                if (handoffTrace) {
+                    const auto& p = promotion.inputs.fsrMask.provenance;
+                    handoffTrace->fields = fmt::format(
+                        "\"kind\":\"sr_mask_handoff\",\"status\":\"{}\","
+                        "\"temporal_epoch\":{},\"geometry_epoch\":{},\"device_epoch\":{},"
+                        "\"color_ordinal\":{},\"source_allocation\":{},\"source_write_ordinal\":{},"
+                        "\"captured_color_image\":{},\"mask_image\":{},\"consumer_lease_held\":{},"
+                        "\"requested_rcas_enabled\":{},\"requested_rcas_strength\":{},"
+                        "\"sdk_capture_present\":{}",
+                        accepted ? "accepted" : "rejected", promotion.inputs.temporalEpoch,
+                        activePlan.geometryEpoch, activePlan.deviceEpoch, promotion.inputs.colorOrdinal,
+                        p.sourceAllocation, p.sourceWriteOrdinal, uintptr_t(promotion.inputs.color.texture),
+                        uintptr_t(promotion.inputs.fsrMask.sceneContribution.texture),
+                        promotion.fsrMaskLease && promotion.inputs.fsrMask.sceneContribution.texture ? 1 : 0,
+                        promotion.srOptions.fsrSharpening ? 1 : 0, promotion.srOptions.fsrSharpness,
+                        evidence ? 1 : 0);
+                    if (evidence) handoffTrace->fields += fmt::format(
+                        ",\"sdk_mask_bound\":{},\"sdk_mask_rejection\":{},\"sdk_reactive_format\":{},"
+                        "\"sdk_reactive_cap\":{},\"sdk_rcas_enabled\":{},\"sdk_rcas_strength\":{}",
+                        evidence->fsrDispatch.maskBound ? 1 : 0, evidence->fsrDispatch.maskRejection,
+                        uint32_t(evidence->fsrDispatch.reactiveFormat), evidence->fsrDispatch.reactiveCap,
+                        evidence->fsrDispatch.rcasEnabled ? 1 : 0, evidence->fsrDispatch.rcasStrength);
+                }
                 if (evidence) {
                     if (evidence->evaluated) evaluatePage->Called(evidence);
                     else evaluatePage->CancelReservation(evidence);
@@ -2554,6 +2637,13 @@ namespace gpu::renderer
                                     promotion.scratch->texture.get()})
                     if (image) continuationBarriers.emplace_back(image, RenderTextureLayout::SHADER_READ);
                 commandList->barriers(RenderBarrierStage::GRAPHICS, continuationBarriers);
+                if (accepted && handoffTrace) {
+                    const auto& depth = promotion.inputs.depth;
+                    if (depth.Complete() && depth.x == 0 && depth.y == 0 &&
+                        depth.width == depth.allocation.width && depth.height == depth.allocation.height)
+                        QueueFsrAlphaSnapshot(handoffTrace, "sdk-depth-after", depth.texture,
+                            RenderFormat::R32_FLOAT, depth.width, depth.height, 4, RenderTextureLayout::SHADER_READ);
+                }
                 if (!accepted) {
                     if (needsReconfigure) {
                         srReconfigureFrame = frame; // Retry only after a drained next-frame boundary.
@@ -5184,6 +5274,11 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 render_batch::CpuTimer<> taaInit(cpuTimingEnabled);
                 if(sceneAAConfigFrame!=frame) {
                     sceneAAConfigFrame=frame;
+                    frameSrOptions = {};
+                    if (vulkan && activePlan.requestedUpscaler == upscaling::Upscaler::Fsr) {
+                        const uint32_t percent = std::min(settings::GetConfig().fsrSharpnessPercent, 100u);
+                        frameSrOptions = {percent != 0, float(percent) / 100.0f};
+                    }
                     PollTaaDiagnostic();
                     PollTaaLive();
                     const char* dlssProbeValue = std::getenv("LO_DLSS_INPUT_PROBE");
@@ -5242,7 +5337,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     temporalScene.Reset(frame);
 #if defined(LO_GPU_PLUME)
                     fsrAlphaRawViews.clear();
-                    if (fsrAlphaReplayEnabled && vulkan &&
+                    if (fsrAlphaReplayEnabled && fsrAlphaBridgeEnabled && vulkan &&
                         activePlan.requestedUpscaler == upscaling::Upscaler::Fsr && !fsrAlphaInitFailed) {
                         if (!fsrAlphaReplay) {
                             fsrAlphaReplay = std::make_unique<fsr_alpha::ReplayGPU>();
@@ -5251,7 +5346,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                 fsrAlphaReplay.reset(); fsrAlphaInitFailed = true;
                             }
                         }
-                        if (fsrAlphaBridgeEnabled && fsrAlphaReplay && !fsrAlphaBridge)
+                        if (fsrAlphaReplay && !fsrAlphaBridge)
                             fsrAlphaBridge = std::make_unique<fsr_alpha::PropagationGPU>(device);
                         if (fsrAlphaBridge && !fsrAlphaPostprocess) {
                             auto replay = std::make_unique<fsr_alpha::PostprocessGPU>();
@@ -5267,8 +5362,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         temporalInputProbe, dlssSrRequested, taaDiagnosticJitter, temporalForcedJitter,
                         temporalFrameTime, temporalJitter, temporalSupportedFrame, temporalEpoch, temporalGapResetFrame);
 #if defined(LO_GPU_PLUME)
-                    if (fsrAlphaReplay) fsrAlphaReplay->BeginFrame(frame, temporalEpoch);
-                    if (fsrAlphaBridge) fsrAlphaBridge->BeginFrame(frame, temporalEpoch);
+                    if (activePlan.requestedUpscaler == upscaling::Upscaler::Fsr) {
+                        if (fsrAlphaReplay) fsrAlphaReplay->BeginFrame(frame, temporalEpoch);
+                        if (fsrAlphaBridge) fsrAlphaBridge->BeginFrame(frame, temporalEpoch);
+                    }
                     fsrAlphaBridgePairCount = fsrAlphaBridgeTraceCount = 0;
 #endif
                 }
@@ -5301,6 +5398,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 taaInit.AddTo(tTaa);
                 std::optional<temporal::SceneResolve> temporalSceneCopy;
                 std::optional<temporal::TemporalFrameInputs> dlssSceneCopyInputs;
+                std::shared_ptr<fsr_alpha::MaskLease> selectedFsrMaskLease;
                 bool sceneAARecorded=false,temporalAARecorded=false,hdrTonemapRecorded=false;
                 std::optional<temporal::SceneAnchor> temporalDrawAnchor;
 
@@ -5913,12 +6011,17 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                     }
                                 }
 
-                                const auto logDlssInputFailure = [&](const char* stage) {
+                                    const auto logDlssInputFailure = [&](const char* stage, const char* disposition) {
                                     static uint64_t loggedSignature = 0;
-                                    static const char* loggedStage = nullptr;
-                                    if (loggedSignature == activePlan.requestSignature && loggedStage == stage) return;
+                                    static std::string_view loggedStage, loggedDisposition;
+                                    static temporal::InputCaptureFailure loggedCaptureReason = temporal::InputCaptureFailure::None;
+                                    const auto captureReason = temporalHistory->LastInputCaptureFailure();
+                                    if (loggedSignature == activePlan.requestSignature && loggedStage == stage &&
+                                        loggedDisposition == disposition && loggedCaptureReason == captureReason) return;
                                     loggedSignature = activePlan.requestSignature;
                                     loggedStage = stage;
+                                    loggedDisposition = disposition;
+                                    loggedCaptureReason = captureReason;
                                     const auto& depth = temporalScene.Depth();
                                     const char* mvError = "unknown";
                                     if (motionReplay) {
@@ -5928,9 +6031,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                         mvError = "init_failed";
                                     }
                                     if (strcmp(stage, "capture_color_inputs") == 0) {
-                                        const auto captureReason = temporalHistory->LastInputCaptureFailure();
-                                        LOG_INFO("renderer: DLSS InvalidInput stage={} reason={} frame={} cpu_serial={} epoch={} signature={:#x} consumer={} input={}x{} output={}x{} history_frame={} history_epoch={} history_extent={}x{} camera={} captured_depth_ord={} captured_depth_alloc={} scene_depth_ord={} scene_depth={}x{} full_extent={} scene_color={}x{} plan={}x{} color_already={} motion_ready={} motion_frame={} motion_epoch={} motion_alloc={} motion_extent={}x{} motion_state={} tracker_failed={} replay_error={} capture_inputs_fresh=1 current_inputs_used=0",
-                                            stage, temporal::InputCaptureFailureName(captureReason), frame, activePlan.cpuSerial, activePlan.geometryEpoch,
+                                        LOG_INFO("renderer: DLSS InvalidInput stage={} disposition={} reason={} frame={} cpu_serial={} epoch={} signature={:#x} consumer={} input={}x{} output={}x{} history_frame={} history_epoch={} history_extent={}x{} camera={} captured_depth_ord={} captured_depth_alloc={} scene_depth_ord={} scene_depth={}x{} full_extent={} scene_color={}x{} plan={}x{} color_already={} motion_ready={} motion_frame={} motion_epoch={} motion_alloc={} motion_extent={}x{} motion_state={} tracker_failed={} motion_init_failed={} replay_error={} capture_inputs_fresh=1 current_inputs_used=0",
+                                            stage, disposition, temporal::InputCaptureFailureName(captureReason), frame, activePlan.cpuSerial, activePlan.geometryEpoch,
                                             activePlan.requestSignature, uint32_t(activePlan.consumer), activePlan.width, activePlan.height,
                                             activePlan.output.width, activePlan.output.height, temporalHistory->InputFrame(), temporalHistory->InputEpoch(),
                                             temporalHistory->InputWidth(), temporalHistory->InputHeight(), temporalHistory->HasCapturedCamera() ? 1 : 0,
@@ -5939,7 +6041,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                             temporalScene.Color().width, temporalScene.Color().height, activePlan.width, activePlan.height,
                                             temporalHistory->CapturedColorOrdinal() ? 1 : 0,
                                             motionView.ready ? 1 : 0, motionView.frame, motionView.epoch, motionView.depthAllocation,
-                                            motionView.width, motionView.height, uint32_t(motionView.state), motionInitFailed ? 1 : 0, mvError);
+                                            motionView.width, motionView.height, uint32_t(motionView.state), drawTemporalTracker.Failed() ? 1 : 0,
+                                            motionInitFailed ? 1 : 0, mvError);
                                     } else {
                                         auto inputs = temporalHistory->CurrentInputs();
                                     inputs.frameTimeDeltaMilliseconds = srFrameDeltaMilliseconds;
@@ -5947,8 +6050,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                         inputs.resetHistory = true;
                                         inputs.resetReasons = inputs.resetReasons | temporal::TemporalResetReason::FrameDiscontinuity;
                                     }
-                                        LOG_INFO("renderer: DLSS InvalidInput stage={} frame={} cpu_serial={} epoch={} signature={:#x} consumer={} input={}x{} output={}x{} complete={} motion_state={} color_ok={} depth_ok={} motion_ok={} invalidity_ok={} encoding={} depth_conv={} depth_captured_ord={} depth_captured_alloc={} depth_captured_extent={}x{} motion_view_frame={} motion_view_epoch={} motion_view_alloc={} motion_view_extent={}x{} tracker_failed={} replay_error={} current_inputs_fresh=1 capture_succeeded=1",
-                                            stage, frame, activePlan.cpuSerial, activePlan.geometryEpoch, activePlan.requestSignature,
+                                        LOG_INFO("renderer: DLSS InvalidInput stage={} disposition={} frame={} cpu_serial={} epoch={} signature={:#x} consumer={} input={}x{} output={}x{} complete={} motion_state={} color_ok={} depth_ok={} motion_ok={} invalidity_ok={} encoding={} depth_conv={} depth_captured_ord={} depth_captured_alloc={} depth_captured_extent={}x{} motion_view_frame={} motion_view_epoch={} motion_view_alloc={} motion_view_extent={}x{} tracker_failed={} motion_init_failed={} replay_error={} current_inputs_fresh=1 capture_succeeded=1",
+                                            stage, disposition, frame, activePlan.cpuSerial, activePlan.geometryEpoch, activePlan.requestSignature,
                                             uint32_t(activePlan.consumer), activePlan.width, activePlan.height,
                                             activePlan.output.width, activePlan.output.height, inputs.currentInputsComplete ? 1 : 0,
                                             uint32_t(inputs.motionState), inputs.color.Complete() ? 1 : 0, inputs.depth.Complete() ? 1 : 0,
@@ -5957,13 +6060,17 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                             temporalHistory->CapturedDepthOrdinal(), temporalHistory->CapturedDepthAllocation(),
                                             temporalHistory->InputWidth(), temporalHistory->InputHeight(),
                                             motionView.frame, motionView.epoch, motionView.depthAllocation, motionView.width, motionView.height,
-                                            motionInitFailed ? 1 : 0, mvError);
+                                            drawTemporalTracker.Failed() ? 1 : 0, motionInitFailed ? 1 : 0, mvError);
                                     }
                                 };
                                 if (!temporalHistory->CaptureColorInputs(commandList, tex->texture.get(), temporalScene, activePlan, sample,
                                         qualifiedEncoding, &motionView)) {
-                                    logDlssInputFailure("capture_color_inputs");
-                                    DisableDlssRequest(frame_plan::FailureReason::InvalidInput);
+                                    const bool frameOnly = temporal::ClassifySrCaptureFailure(temporalHistory->LastInputCaptureFailure()) ==
+                                        temporal::SrSceneInputFailure::FrameFallback;
+                                    logDlssInputFailure("capture_color_inputs", frameOnly ? "frame_fallback" : "request_failure");
+                                    if (frameOnly)
+                                        NoteDlssFrameFallback(frame_plan::DlssEffectReason::NoEligibleScene);
+                                    else DisableDlssRequest(frame_plan::FailureReason::InvalidInput);
                                 } else {
                                     auto inputs = temporalHistory->CurrentInputs();
                                     inputs.frameTimeDeltaMilliseconds = srFrameDeltaMilliseconds;
@@ -5980,8 +6087,14 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                                 frame, activePlan.requestSignature, inputs.resetHistory ? 1 : 0);
                                         }
                                     } else if (selected.kind == DlssSceneInputSelection::Kind::Incomplete) {
-                                        logDlssInputFailure("complete_for_consumer");
-                                        DisableDlssRequest(frame_plan::FailureReason::InvalidInput);
+                                        const bool resourceFailed = motionInitFailed ||
+                                            (motionReplay && motionReplay->ResourceFailedThisFrame());
+                                        const bool frameOnly = temporal::ClassifySrIncomplete(inputs, resourceFailed) ==
+                                            temporal::SrSceneInputFailure::FrameFallback;
+                                        logDlssInputFailure("complete_for_consumer", frameOnly ? "frame_fallback" : "request_failure");
+                                        if (frameOnly)
+                                            NoteDlssFrameFallback(frame_plan::DlssEffectReason::NoEligibleScene);
+                                        else DisableDlssRequest(frame_plan::FailureReason::InvalidInput);
                                     }
                                     else if (selected.kind == DlssSceneInputSelection::Kind::UnknownColor) {
                                         // Clean bypass without permanently latching DLSS as disabled.
@@ -5993,6 +6106,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                     }
                                     else if (selected.kind == DlssSceneInputSelection::Kind::Selected) {
                                         dlssSceneCopyInputs = selected.inputs;
+                                        dlssSceneCopyInputs->colorOrdinal = temporalSceneCopy->ordinal;
+                                        selectedFsrMaskLease.reset();
 #if defined(LO_GPU_PLUME)
                                         if (fsrAlphaBridge && activePlan.requestedUpscaler == upscaling::Upscaler::Fsr &&
                                             qualifiedEncoding == temporal::ColorEncoding::Sdr && source &&
@@ -6005,18 +6120,23 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                                 tex->texture.get(), selected.inputs.color.texture,
                                                 frame, temporalEpoch, temporalSceneCopy->ordinal,
                                                 selected.inputs.color.width, selected.inputs.color.height);
-                                            if (frozen) Gpu().fsrAlphaBridgeUses.push_back(candidate.mask);
+                                            const bool attached = frozen && fsr_alpha::AttachSceneCopyMask(
+                                                fsrAlphaBridge->SceneCopy(), *dlssSceneCopyInputs);
+                                            if (attached)
+                                                selectedFsrMaskLease = candidate.mask;
                                             if (FsrAlphaBridgeTraceEnabled() && fsrAlphaBridgeTraceCount < 128) {
                                                 auto event = std::make_shared<FsrAlphaBridgeDiagnostic>();
                                                 event->fields = fmt::format(
                                                     "\"kind\":\"scene_copy_mask\",\"status\":\"{}\","
-                                                    "\"geometry_epoch\":{},\"color_ordinal\":{},"
+                                                    "\"temporal_epoch\":{},\"geometry_epoch\":{},\"device_epoch\":{},"
+                                                    "\"color_ordinal\":{},\"handoff_attached\":{},"
                                                     "\"source_write_ordinal\":{},"
                                                     "\"source_allocation\":{},\"source_stage\":{},"
                                                     "\"source_revision\":{},\"captured_color_image\":{},"
                                                     "\"mask_image\":{},\"extent\":[{},{}]",
                                                     frozen ? "available" : candidate.reason,
-                                                    temporalEpoch, temporalSceneCopy->ordinal, source->writeOrdinal,
+                                                    temporalEpoch, activePlan.geometryEpoch, activePlan.deviceEpoch,
+                                                    temporalSceneCopy->ordinal, attached ? 1 : 0, source->writeOrdinal,
                                                     candidate.version.sourceAllocation,
                                                     uint32_t(candidate.version.sourceStage), candidate.version.sourceRevision,
                                                     uintptr_t(selected.inputs.color.texture),
@@ -6422,9 +6542,11 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 #endif
                     ) {
                     const RenderTargetKey promotionKey{colorInfo & 0xFFF, ColorClassOf((colorInfo >> 16) & 0xF), pitch, 0, false};
-                    if (PrepareSceneCopyDestination(promotionKey, *color, *dlssSceneCopyInputs))
+                    if (PrepareSceneCopyDestination(promotionKey, *color, *dlssSceneCopyInputs)) {
+                        sceneCopyPromotion.fsrMaskLease = selectedFsrMaskLease;
                         scenePromotionActivated = ActivateSceneCopyDestination(color, rasterTarget, rasterViewport, scissor,
                             viewport, guestScissor);
+                    }
                 }
                 if (!scenePromotionActivated) {
                     scissor.left = int32_t(rasterTarget->ScaleX(uint32_t(scissor.left))); scissor.right = int32_t(rasterTarget->ScaleX(uint32_t(scissor.right)));
@@ -7349,30 +7471,59 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 drawsThisFrame++;
 
                 if (motionDepthWrite) {
+                    const auto logFirstMotionFailure = [&](const char* reason, uint32_t reasonCode) {
+                        if (!motionOptions.log) return;
+                        // First healthy->failed transition is the causal draw.
+                        // Later draws in this frame only increment suppression;
+                        // an exhausted distinct-state table never hides a new
+                        // frame's first writer.
+                        if (motionFirstFailureFrame == frame) { ++motionFailureSuppressed; return; }
+                        motionFirstFailureFrame = frame;
+                        uint64_t state = temporal::MotionHashWord(key.vs, key.ps);
+                        for (uint64_t part : {uint64_t(reasonCode), depth->allocationSerial,
+                            uint64_t(uint32_t(temporalSlot)), uint64_t(depthControl), uint64_t(motionStreamsValid),
+                            uint64_t(std::bit_cast<uint32_t>(rasterViewport.width)),
+                            uint64_t(std::bit_cast<uint32_t>(rasterViewport.height))})
+                            state = temporal::MotionHashWord(state, part);
+                        const bool known = std::find(motionFailureKeys.begin(), motionFailureKeys.begin() + motionFailureKeyCount,
+                            state) != motionFailureKeys.begin() + motionFailureKeyCount;
+                        if (!known && motionFailureKeyCount < motionFailureKeys.size())
+                            motionFailureKeys[motionFailureKeyCount++] = state;
+                        LOG_INFO("mv first_failure reason={} frame={} draw={} temporal_epoch={} plan_epoch={} vs={:016x} ps={:016x} depth_alloc={} viewport=({},{},{},{}) scissor=({},{},{},{}) depth_control={:#x} primitive={} depth_bias={} slope_bias={} layer_depth_offset={} temporal_slot={} streams={} supported={} tracker_failed={} motion_init_failed={} replay_cleared={} replay_aborted={} replay_pending={} replay_error={} known_state={} distinct={} suppressed={}",
+                            reason, frame, drawsThisFrame, temporalEpoch, activePlan.geometryEpoch,
+                            key.vs, key.ps, depth->allocationSerial, rasterViewport.x, rasterViewport.y,
+                            rasterViewport.width, rasterViewport.height, scissor.left, scissor.top,
+                            scissor.right, scissor.bottom, depthControl, key.prim, key.depthBias,
+                            std::bit_cast<float>(key.slopeBias), layerDepthOffset, temporalSlot, motionStreamsValid,
+                            motionSupported, drawTemporalTracker.Failed(), motionInitFailed,
+                            motionReplay && motionReplay->ClearedThisFrame(),
+                            motionReplay && motionReplay->AbortedThisFrame(),
+                            motionReplay && motionReplay->PipelinePendingThisFrame(),
+                            motionReplay ? motionReplay->LastError() : std::string{},
+                            known, motionFailureKeyCount, motionFailureSuppressed);
+                    };
                     if (motionLocallyMaskedClipWriter) {
                         // Nothing to replay: final scene depth makes these pixels
                         // reactive while preserving motion from the rest of the frame.
                     } else if (drawTemporalTracker.Finalized()) {
                         // Do not change a motion field after its pre-UI consumer.
-                        if (motionOptions.log && frame % 120 == 0)
-                            LOG_INFO("mv late depth writer frame={} draw={} vs={:016x} ps={:016x} slot={} scene={} depth={} allocation={} prim={} indices={} bias={} slope={} layer={}",
-                                frame, drawsThisFrame, key.vs, key.ps, temporalSlot, motionScene,
-                                depth->allocationSerial, jitterAnchor ? jitterAnchor->depthAllocation : 0,
-                                key.prim, indexCount, key.depthBias,
-                                std::bit_cast<float>(key.slopeBias), layerDepthOffset);
+                        logFirstMotionFailure("late_depth_writer", 1);
                         drawTemporalTracker.Invalidate();
+                        if (motionReplay && !motionReplay->AbortedThisFrame()) motionReplay->AbortFrame("late_depth_writer");
                     } else if (!motionSupported || !motionStreamsValid) {
                         // Unknown visibility writers require a conservative whole-frame
                         // fallback; camera reprojection is not valid object motion.
-                        if (motionOptions.log && !drawTemporalTracker.Failed() && frame % 120 == 0)
-                            LOG_INFO("mv reject frame={} draw={} vs={:016x} ps={:016x} supported={} streams={} slot={} scene={} depth_write={} tex_mask={} point_size={} vs_errors={} ps_depth={} ps_errors={} stencil={} prim={} depth_bias={} slope_bias={} layer_bias={}",
-                                frame, drawsThisFrame, key.vs, key.ps, motionSupported, motionStreamsValid,
-                                temporalSlot, motionScene, motionDepthWrite, vs->info.textureSlotMask,
-                                vs->info.usesPointSize, vs->info.errors.size(), ps ? ps->info.writesDepth : false,
-                                ps ? ps->info.errors.size() : 0, key.depthControl & 1, key.prim,
-                                key.depthBias, std::bit_cast<float>(key.slopeBias), layerDepthOffset);
+                        const char* reason = !motionStreamsValid ? "invalid_streams" :
+                            temporalSlot < 0 || temporalSlot > 252 ? "position_slot_unavailable" :
+                            vs->info.textureSlotMask ? "vertex_texture_fetch" :
+                            vs->info.usesPointSize ? "point_size" : !vs->info.errors.empty() ? "vertex_translation" :
+                            ps && ps->info.writesDepth ? "pixel_depth_write" :
+                            ps && !ps->info.errors.empty() ? "pixel_translation" :
+                            (depthControl & 1) ? "stencil_visibility" : "unsupported_raster_state";
+                        if (!drawTemporalTracker.Failed()) logFirstMotionFailure(reason, 2);
+                        else if (motionOptions.log) ++motionFailureSuppressed;
                         drawTemporalTracker.Invalidate();
-                        if (motionReplay) motionReplay->AbortFrame();
+                        if (motionReplay && !motionReplay->AbortedThisFrame()) motionReplay->AbortFrame(reason);
                     } else {
                         render_batch::CpuTimer<> mvTimer(motionOptions.timing);
                         temporal::DrawHistoryKey mk{};
@@ -7430,16 +7581,14 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                 key, DescribePipeline(key, vs, ps, false),
                                 vsWords, vsCount, ps ? psWords : nullptr, ps ? psCount : 0);
                             if (!prepared.sceneReady || prepared.status == temporal::MotionReplayGPU::PipelinePrepareStatus::Failed) {
-                                if (motionOptions.log && frame % 120 == 0)
-                                    LOG_INFO("mv replay {} failed frame={} draw={} vs={:016x} ps={:016x} error={}",
-                                        prepared.sceneReady ? "pipeline" : "scene",
-                                        frame, drawsThisFrame, key.vs, key.ps, motionReplay->LastError());
+                                logFirstMotionFailure(prepared.sceneReady ? "replay_pipeline_failed" : "replay_scene_failed", 3);
                                 motionReplay->AbortFrame();
                             } else if (prepared.status == temporal::MotionReplayGPU::PipelinePrepareStatus::Ready && match.previous) {
                                 const uint64_t aligned = (Gpu().uploadOffset + 255) & ~uint64_t(255);
                                 // Never trigger a mid-draw Flush: it would invalidate bound
                                 // index/texture state and the original constant references.
                                 if (aligned + sizeof(temporal::MotionReplayConstants) > kUploadRingSize) {
+                                    logFirstMotionFailure("replay_upload_ring_full", 4);
                                     motionReplay->AbortFrame("MV upload ring full");
                                 } else {
                                     const auto c = temporal::MakeMotionReplayConstants(match, w, h,
@@ -7450,7 +7599,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                         {uploadRing, psOffset}, {uploadRing, mvOffset}};
                                     RenderDescriptorSet* sets[] = {set0, set1, set2, set3, staticSamplerSet.get()};
                                     if (!motionReplay->Draw(commandList, prepared.pipeline, cb, sets, vulkan ? 5 : 4,
-                                        rasterViewport, scissor, useIndices, indexCount, baseVertex)) motionReplay->AbortFrame();
+                                        rasterViewport, scissor, useIndices, indexCount, baseVertex)) {
+                                        logFirstMotionFailure("replay_draw_failed", 5);
+                                        motionReplay->AbortFrame("MV draw record failed");
+                                    }
                                 }
                             }
                             // Restore the guest binding contract after BeginScene framebuffer/layout changes.

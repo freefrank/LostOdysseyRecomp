@@ -24,6 +24,51 @@ target_compile_definitions(LoFsrAdapterGpuTest PRIVATE LO_GPU_PLUME=1 NOMINMAX)
 target_include_directories(LoFsrAdapterGpuTest PRIVATE "${LO_REPO_ROOT}/LostOdysseyRecomp")
 target_link_libraries(LoFsrAdapterGpuTest PRIVATE plume)
 lo_enable_fsr(LoFsrAdapterGpuTest)
+add_executable(LoFsrMaskPolicyTest EXCLUDE_FROM_ALL fsr_mask_policy_test.cpp)
+target_compile_features(LoFsrMaskPolicyTest PRIVATE cxx_std_20)
+target_include_directories(LoFsrMaskPolicyTest PRIVATE "${LO_REPO_ROOT}/LostOdysseyRecomp")
+enable_testing()
+add_test(NAME LoFsrMaskPolicyTest COMMAND LoFsrMaskPolicyTest)
+add_test(NAME LoFsrAdapterP2 COMMAND LoFsrAdapterGpuTest --p2-only)
+add_executable(LoFsrCrossSubmitGpuTest EXCLUDE_FROM_ALL
+    fsr_cross_submit_gpu_test.cpp
+    "${LO_REPO_ROOT}/LostOdysseyRecomp/gpu/fsr_upscaler.cpp")
+target_compile_features(LoFsrCrossSubmitGpuTest PRIVATE cxx_std_20)
+target_compile_definitions(LoFsrCrossSubmitGpuTest PRIVATE LO_GPU_PLUME=1 NOMINMAX)
+target_include_directories(LoFsrCrossSubmitGpuTest PRIVATE "${LO_REPO_ROOT}/LostOdysseyRecomp")
+target_link_libraries(LoFsrCrossSubmitGpuTest PRIVATE plume)
+lo_enable_fsr(LoFsrCrossSubmitGpuTest)
+add_test(NAME LoFsrCrossSubmitGpuTest COMMAND LoFsrCrossSubmitGpuTest
+    "${CMAKE_CURRENT_BINARY_DIR}/cross-submit-result.json")
+add_subdirectory("${LO_REPO_ROOT}/tools/XenosRecomp/thirdparty/fmt" fmt EXCLUDE_FROM_ALL)
+add_executable(LoFsrRasterEdgeGpuTest EXCLUDE_FROM_ALL
+    fsr_raster_edge_gpu_test.cpp
+    "${LO_REPO_ROOT}/LostOdysseyRecomp/gpu/shader/xenos_translator.cpp"
+    "${LO_REPO_ROOT}/LostOdysseyRecomp/gpu/shader/dxc_compiler.cpp")
+target_compile_features(LoFsrRasterEdgeGpuTest PRIVATE cxx_std_20)
+target_compile_definitions(LoFsrRasterEdgeGpuTest PRIVATE LO_GPU_PLUME=1 NOMINMAX
+    LO_FIXTURE_ROOT="${LO_REPO_ROOT}")
+target_include_directories(LoFsrRasterEdgeGpuTest PRIVATE
+    "${LO_REPO_ROOT}/LostOdysseyRecomp"
+    "${LO_REPO_ROOT}/tools/XenosRecomp/XenosRecomp"
+    "${LO_REPO_ROOT}/tools/XenosRecomp/thirdparty/dxc-bin/inc")
+target_link_libraries(LoFsrRasterEdgeGpuTest PRIVATE plume fmt::fmt ${CMAKE_DL_LIBS})
+add_test(NAME LoFsrRasterEdgeGpuTest COMMAND LoFsrRasterEdgeGpuTest
+    "${CMAKE_CURRENT_BINARY_DIR}/raster-edge-result.json")
+add_executable(LoFsrColorRoundtripGpuTest EXCLUDE_FROM_ALL fsr_color_roundtrip_gpu_test.cpp)
+target_compile_features(LoFsrColorRoundtripGpuTest PRIVATE cxx_std_20)
+target_compile_definitions(LoFsrColorRoundtripGpuTest PRIVATE NOMINMAX)
+target_include_directories(LoFsrColorRoundtripGpuTest PRIVATE "${LO_FSR_SHADER_DIR}")
+target_link_libraries(LoFsrColorRoundtripGpuTest PRIVATE plume)
+if(WIN32)
+    target_compile_options(LoFsrCrossSubmitGpuTest PRIVATE /utf-8)
+    target_link_libraries(LoFsrCrossSubmitGpuTest PRIVATE d3d12 dxgi)
+    target_compile_options(LoFsrRasterEdgeGpuTest PRIVATE /utf-8)
+    target_link_libraries(LoFsrRasterEdgeGpuTest PRIVATE d3d12 dxgi)
+    target_link_libraries(LoFsrColorRoundtripGpuTest PRIVATE d3d12 dxgi)
+endif()
+add_test(NAME LoFsrColorRoundtripGpuTest COMMAND LoFsrColorRoundtripGpuTest
+    --output "${LO_REPO_ROOT}/out/streamline-fg-p0/fsr-p2-color-roundtrip")
 if(WIN32)
     target_compile_options(LoFsrAdapterGpuTest PRIVATE /utf-8)
     target_link_libraries(LoFsrAdapterGpuTest PRIVATE d3d12 dxgi)
@@ -38,4 +83,6 @@ else()
     find_package(X11 REQUIRED)
     target_include_directories(LoFsrAdapterGpuTest PRIVATE ${X11_INCLUDE_DIR})
     target_link_libraries(LoFsrAdapterGpuTest PRIVATE ${X11_LIBRARIES} ${CMAKE_DL_LIBS})
+    target_include_directories(LoFsrColorRoundtripGpuTest PRIVATE ${X11_INCLUDE_DIR})
+    target_link_libraries(LoFsrColorRoundtripGpuTest PRIVATE ${X11_LIBRARIES} ${CMAKE_DL_LIBS})
 endif()

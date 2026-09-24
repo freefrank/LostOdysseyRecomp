@@ -1,4 +1,5 @@
 #include "gpu/fsr_alpha_propagation_gpu.h"
+#include "gpu/fsr_mask_policy.h"
 #include <cstring>
 #include <cstdio>
 #include <cstdlib>
@@ -233,5 +234,66 @@ int main() {
         {0, 0, 8, 8}, "depth_color_tile_clear"), "clear is still recorded after unknown writer");
     owner.PublishRaw(replay);
     Check(!owner.HasRawSource(9), "clear cannot lift the prior unknown-writer raw replay rejection");
+
+    owner.BeginFrame(12008, 7371);
+    auto source = std::make_unique<DummyTexture>();
+    auto captured = std::make_unique<DummyTexture>();
+    auto maskLease = std::make_shared<MaskLease>();
+    maskLease->texture = std::make_unique<DummyTexture>();
+    FetchCandidate fetched{};
+    fetched.version.frame = 12008; fetched.version.epoch = 7371;
+    fetched.version.sourceAllocation = 9; fetched.version.destinationAllocation = 17;
+    fetched.version.writeOrdinal = 42; fetched.version.width = fetched.version.height = 8;
+    fetched.version.validRect = {0, 0, 8, 8}; fetched.version.mask = maskLease;
+    fetched.mask = maskLease; fetched.returnedColor = source.get();
+    fetched.cropWidth = fetched.cropHeight = 8;
+    Check(owner.FreezeForSceneCopy(fetched, source.get(), captured.get(), 12008, 7371, 55, 8, 8),
+        "frozen scene copy pairs fetched source and captured color");
+    gpu::temporal::TemporalFrameInputs inputs{};
+    inputs.plan.geometryEpoch = 600; inputs.plan.deviceEpoch = 700;
+    inputs.renderFrameId = 12008; inputs.temporalEpoch = 7371;
+    inputs.colorOrdinal = 55;
+    inputs.color = {captured.get(), {8, 8}, 0, 0, 8, 8};
+    inputs.depth = inputs.color; inputs.currentInputsComplete = true;
+    Check(AttachSceneCopyMask(owner.SceneCopy(), inputs) && gpu::fsr::QualifyFsrMask(inputs).useReactive &&
+        inputs.fsrMask.provenance.temporalEpoch == 7371 &&
+        inputs.fsrMask.provenance.geometryEpoch == 600 &&
+        inputs.fsrMask.provenance.deviceEpoch == 700 &&
+        inputs.fsrMask.provenance.sourceAllocation == 9 &&
+        inputs.fsrMask.provenance.sourceWriteOrdinal == 42 &&
+        inputs.fsrMask.sceneContribution.texture == maskLease->texture.get(),
+        "borrowed scene copy carries separate temporal/geometry epochs and exact source provenance");
+    auto staleInputs = inputs; ++staleInputs.colorOrdinal;
+    Check(!AttachSceneCopyMask(owner.SceneCopy(), staleInputs) &&
+        staleInputs.fsrMask.sceneContribution.texture == nullptr && staleInputs.CompleteForConsumer(),
+        "ordinal mismatch drops only mask, preserving base consumer");
+    staleInputs = inputs; ++staleInputs.temporalEpoch;
+    Check(!AttachSceneCopyMask(owner.SceneCopy(), staleInputs) && !staleInputs.fsrMask.sceneContribution.texture,
+        "temporal epoch mismatch drops borrowed mask");
+    staleInputs = inputs; staleInputs.color.texture = source.get();
+    Check(!AttachSceneCopyMask(owner.SceneCopy(), staleInputs) && !staleInputs.fsrMask.sceneContribution.texture,
+        "captured color must be the actual promoted input");
+    Check(!owner.FreezeForSceneCopy(fetched, captured.get(), captured.get(), 12008, 7371, 56, 8, 8) &&
+        !AttachSceneCopyMask(owner.SceneCopy(), inputs) && !inputs.fsrMask.sceneContribution.texture,
+        "failed source pairing invalidates prior frozen handoff");
+    std::vector<std::shared_ptr<MaskLease>> consumingSlot;
+    Check(!RetainSceneCopyMaskForBatch(inputs, maskLease, consumingSlot) && consumingSlot.empty(),
+        "discarded selection never retains or reuses a mask");
+    Check(AttachSceneCopyMask({12008, 7371, 55, 42, 9, 8, 8, captured.get(), maskLease}, inputs) &&
+        RetainSceneCopyMaskForBatch(inputs, maskLease, consumingSlot) && consumingSlot.size() == 1,
+        "consuming batch retains the paired source before borrowing the image");
+    staleInputs = inputs;
+    auto otherLease = std::make_shared<MaskLease>();
+    otherLease->texture = std::make_unique<DummyTexture>();
+    Check(!RetainSceneCopyMaskForBatch(staleInputs, otherLease, consumingSlot) &&
+        staleInputs.fsrMask.sceneContribution.texture == nullptr && consumingSlot.size() == 1,
+        "replacement selection cannot retain a different mask behind a borrowed pointer");
+    otherLease.reset();
+    std::weak_ptr<MaskLease> untilFence = maskLease;
+    fetched = {}; maskLease.reset(); owner.Invalidate();
+    Check(!untilFence.expired() && consumingSlot[0]->texture != nullptr,
+        "consuming slot retains borrowed mask after pending selection and owner invalidation");
+    consumingSlot.clear();
+    Check(untilFence.expired(), "slot fence completion releases last mask lease");
     std::puts("PASS: FSR alpha resolve/fetch policy checks");
 }

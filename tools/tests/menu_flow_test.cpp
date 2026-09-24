@@ -58,6 +58,15 @@ bool MenuFlowDisplayModeFailed();
 #undef __imp__sub_828710A0
 #undef __imp__sub_82889E50
 
+// Compile the real settings reader/writer into this menu fixture as well.
+// Its public entry points stay distinct from the menu hook's mock persistence.
+#define GameLanguage MenuFlowRealGameLanguage
+#undef LOG_INFO
+#define LOG_INFO(...) ((void)0)
+#include "../../LostOdysseyRecomp/settings/config.cpp"
+#undef LOG_INFO
+#undef GameLanguage
+
 using settings::GraphicsRow;
 
 namespace gpu::frame_plan {
@@ -988,6 +997,54 @@ int main(int argc, char** argv)
 
             std::puts("PASS Start/Enter focus jump, simultaneous confirm suppression, and PointerClick viewport clipping");
         }
+        // FSR sharpness appends a logical row without changing any established
+        // graphics id. Off disables RCAS, and percent changes are bounded.
+        {
+            static_assert(int(GraphicsRow::Save) == 10 && int(GraphicsRow::FsrSharpness) == 11);
+            settings::tab = 2;
+            settings::status.clear();
+            settings::edit = currentConfig;
+            settings::edit.upscaler = gpu::upscaling::Upscaler::Off;
+            settings::edit.fsrSharpnessPercent = 0;
+            settings::row = int(GraphicsRow::Upscaler);
+            settings::pending = 0; Tick(base);
+            Require(settings::snapshot.rows[int(GraphicsRow::FsrSharpness)].hidden, "Off hides FSR sharpness");
+            settings::row = int(GraphicsRow::Save);
+            settings::pending = 2; Tick(base);
+            Require(settings::row == int(GraphicsRow::Backend), "navigation skips hidden FSR sharpness");
+            settings::edit.upscaler = gpu::upscaling::Upscaler::Dlss;
+            settings::pending = 0; Tick(base);
+            Require(settings::snapshot.rows[int(GraphicsRow::FsrSharpness)].hidden, "DLSS hides FSR sharpness");
+            settings::edit.upscaler = gpu::upscaling::Upscaler::Fsr;
+            settings::row = int(GraphicsRow::FsrSharpness);
+            settings::pending = 0; Tick(base);
+            Require(!settings::snapshot.rows[int(GraphicsRow::FsrSharpness)].hidden &&
+                    settings::snapshot.rows[int(GraphicsRow::FsrSharpness)].value == L"Off" &&
+                    settings::snapshot.rows[int(GraphicsRow::FsrSharpness)].choices.size() == 101,
+                    "FSR displays Off and 1-100 percent options");
+            Require(settings::snapshot.help.find(L"Off disables RCAS") != std::wstring::npos,
+                    "FSR help describes RCAS disabled at zero");
+            settings::row = int(GraphicsRow::Save);
+            settings::pending = 2; Tick(base);
+            Require(settings::row == int(GraphicsRow::FsrSharpness) && settings::snapshot.scroll == 1,
+                    "D-pad reaches FSR sharpness beyond the visible graphics page");
+            settings::pending = 4; Tick(base);
+            Require(settings::edit.fsrSharpnessPercent == 0, "left at zero does not wrap to 100");
+            settings::pending = 8; Tick(base);
+            Require(settings::edit.fsrSharpnessPercent == 1 &&
+                    settings::snapshot.rows[int(GraphicsRow::FsrSharpness)].value == L"1%", "right turns on 1 percent");
+            settings::edit.fsrSharpnessPercent = 100;
+            settings::pending = 8; Tick(base);
+            Require(settings::edit.fsrSharpnessPercent == 100 &&
+                    settings::snapshot.rows[int(GraphicsRow::FsrSharpness)].value == L"100%", "right at 100 clamps");
+            settings::edit.fsrSharpnessPercent = 64;
+            const unsigned beforeSave = saves;
+            settings::row = int(GraphicsRow::Save);
+            settings::pending = 0x1000; Tick(base);
+            Require(saves == beforeSave + 1 && diskConfig.fsrSharpnessPercent == 64 &&
+                    currentConfig.fsrSharpnessPercent == 64, "existing Save action persists FSR sharpness");
+            std::puts("PASS FSR sharpness menu visibility, 0/100 bounds, description, stable ids and Save");
+        }
         if (argc == 3)
         {
             settings::status.clear();
@@ -1008,6 +1065,47 @@ int main(int argc, char** argv)
             std::puts("PASS two Graphics previews from actual Publish/Translate, normal and selected changed labels");
         }
         CheckBr03DlssMenu(base);
+        {
+            const auto originalDir = std::filesystem::current_path();
+            const auto sandbox = std::filesystem::temp_directory_path() /
+                ("lo-fsr-sharpness-settings-" + std::to_string(GetCurrentProcessId()));
+            std::filesystem::create_directories(sandbox);
+            std::filesystem::current_path(sandbox);
+            auto writeIni = [](const char* contents) {
+                std::ofstream output("settings.ini", std::ios::trunc);
+                output << contents;
+                Require(bool(output), "write isolated settings.ini");
+            };
+            writeIni("upscaler=2\nfsr_sharpness=75\n");
+            Require(settings::Read().fsrSharpnessPercent == 75, "FSR sharpness reads from INI");
+            writeIni("fsr_sharpness=101\n");
+            Require(settings::Read().fsrSharpnessPercent == 100, "out-of-range INI sharpness clamps to 100");
+            writeIni("fsr_sharpness=4294967295\n");
+            Require(settings::Read().fsrSharpnessPercent == 100, "largest uint32 clamps to 100");
+            writeIni("fsr_sharpness=-1\n");
+            Require(settings::Read().fsrSharpnessPercent == 0, "negative sharpness keeps Off default");
+            writeIni("fsr_sharpness=garbage\n");
+            Require(settings::Read().fsrSharpnessPercent == 0, "invalid sharpness keeps Off default");
+            settings::Config sharpness{};
+            sharpness.upscaler = gpu::upscaling::Upscaler::Fsr;
+            sharpness.fsrSharpnessPercent = 64;
+            Require(settings::SaveConfig(sharpness), "real config save succeeds in sandbox");
+            Require(settings::GetConfig().fsrSharpnessPercent == 64 && settings::Read().fsrSharpnessPercent == 64,
+                    "real config retains sharpness after save and disk reload");
+            std::ifstream persisted("settings.ini");
+            const std::string text((std::istreambuf_iterator<char>(persisted)), std::istreambuf_iterator<char>());
+            Require(text.find("fsr_sharpness=64\n") != std::string::npos, "INI writes fsr_sharpness key");
+            persisted.close(); // Windows cannot replace settings.ini while this reader holds it.
+            sharpness.fsrSharpnessPercent = 102;
+            Require(settings::SaveConfig(sharpness) && settings::Read().fsrSharpnessPercent == 100,
+                    "real save validates out-of-range sharpness");
+            sharpness.fsrSharpnessPercent = 0;
+            Require(settings::SaveConfig(sharpness) && settings::Read().fsrSharpnessPercent == 0,
+                    "Off roundtrips as zero");
+            std::filesystem::current_path(originalDir);
+            std::filesystem::remove_all(sandbox);
+            std::puts("PASS FSR sharpness settings.ini read, validation and save/reload roundtrip");
+        }
         VirtualFree(base, 0, MEM_RELEASE);
         return 0;
     }
