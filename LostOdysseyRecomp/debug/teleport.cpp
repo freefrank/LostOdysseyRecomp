@@ -10,6 +10,7 @@
 #include "map_poi.h"
 #include "map_info.h"
 #include <host_ui/host_ui.h>
+#include "cheats.h"
 
 extern "C" PPC_FUNC(__imp__sub_82290B60);
 extern "C" PPC_FUNC(__imp__sub_822FA548);
@@ -414,7 +415,7 @@ PPC_FUNC(sub_82290B60)
     if (getenv("LO_TELEPORT_COMMAND_FILE") && !observed.exchange(true))
         LOG_INFO("teleport scene hook this={:#x} caller={:#x}", ctx.r3.u32, uint32_t(ctx.lr));
     const bool engine = ctx.r3.u32 == PPC_LOAD_U32(0x83315FB4);
-    if (engine) { gpu::frame_plan::BeginCpuFrame(); frame_timing::EngineTick(ctx.f1.f64); }
+    if (engine) { debug_menu::cheats::Tick(ctx, base); gpu::frame_plan::BeginCpuFrame(); frame_timing::EngineTick(ctx.f1.f64); }
     __imp__sub_82290B60(ctx, base);
     if (engine) { debug_menu::UpdateMapInfo(base); Tick(ctx, base); }
 }

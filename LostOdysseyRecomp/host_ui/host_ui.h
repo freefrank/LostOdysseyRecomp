@@ -8,6 +8,7 @@
 #include <limits>
 #include <vector>
 #include <string>
+#include "../debug/fast_forward.h"
 
 namespace host_ui
 {
@@ -34,6 +35,8 @@ namespace host_ui
         {
             std::lock_guard<std::mutex> lock(g_pauseMutex);
             g_stopping.store(true, std::memory_order_release);
+            debug_menu::fast_forward::Enable(false);
+            debug_menu::fast_forward::SetPaused(false);
             if (g_gamePaused.load(std::memory_order_relaxed))
             {
                 if (g_pauseStartTime != std::chrono::steady_clock::time_point{})
@@ -56,11 +59,13 @@ namespace host_ui
                 bool wasPaused = g_gamePaused.load(std::memory_order_relaxed);
                 if (paused && !wasPaused)
                 {
+                    debug_menu::fast_forward::SetPaused(true);
                     g_pauseStartTime = std::chrono::steady_clock::now();
                     g_gamePaused.store(true, std::memory_order_release);
                 }
                 else if (!paused && wasPaused)
                 {
+                    debug_menu::fast_forward::SetPaused(false);
                     if (g_pauseStartTime != std::chrono::steady_clock::time_point{})
                     {
                         g_accumulatedPausedDuration += std::chrono::steady_clock::now() - g_pauseStartTime;
@@ -76,7 +81,14 @@ namespace host_ui
         }
     }
 
+    // mftb and KeTimeStampBundle use this same continuous, scaled guest clock.
     inline uint64_t GetActiveGameTimeNs()
+    {
+        return debug_menu::fast_forward::GameTimeNs();
+    }
+
+    // Keep host-side stale-snapshot checks and UI deadlines at wall-time speed.
+    inline uint64_t GetUnscaledActiveGameTimeNs()
     {
         std::lock_guard<std::mutex> lock(g_pauseMutex);
         const auto now = std::chrono::steady_clock::now();
@@ -91,7 +103,7 @@ namespace host_ui
 
     inline uint64_t GetActiveGameTimeMs()
     {
-        return GetActiveGameTimeNs() / 1000000ull;
+        return GetUnscaledActiveGameTimeNs() / 1000000ull;
     }
 
     // Called by guest threads or wait routines to block while paused

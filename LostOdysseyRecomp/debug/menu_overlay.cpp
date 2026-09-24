@@ -14,15 +14,17 @@
 #include "../debug/translations.h"
 #include "../gpu/renderer.h"
 #include "../settings/config.h"
+#include "cheat_overlay.h"
 
 namespace debug_menu
 {
     struct OverlayState
     {
         bool visible = false;
-        int activeTab = 0; // 0: Overview/常用, 1: Teleport/传送
+        int activeTab = 0; // 0: Overview, 1: Teleport, 2: Cheats
         int selectedRow = 0;
         bool chinese = false;
+        cheat_overlay::Model cheatsPage;
 
         // Teleport edit state
         int selectedAxis = 0; // 0: X, 1: Y, 2: Z
@@ -69,6 +71,7 @@ namespace debug_menu
             std::lock_guard lock(g_overlayStateMutex);
             g_overlayState.visible = opening;
             g_overlayState.chinese = chinese;
+            g_overlayState.cheatsPage.Dismiss();
             if (opening && snapshot.available)
             {
                 g_overlayState.editCoordinates[0] = snapshot.current.x;
@@ -125,6 +128,30 @@ namespace debug_menu
         std::unique_lock stateLock(g_overlayStateMutex);
         if (!g_overlayState.visible) return;
 
+        if (g_overlayState.activeTab == 2)
+        {
+            std::optional<cheat_overlay::Nav> nav;
+            switch (action)
+            {
+            case InputAction::Up: nav = cheat_overlay::Nav::Up; break;
+            case InputAction::Down: nav = cheat_overlay::Nav::Down; break;
+            case InputAction::Left: nav = cheat_overlay::Nav::Left; break;
+            case InputAction::Right: nav = cheat_overlay::Nav::Right; break;
+            case InputAction::Confirm: nav = cheat_overlay::Nav::Confirm; break;
+            case InputAction::Cancel: nav = cheat_overlay::Nav::Cancel; break;
+            default: break;
+            }
+            if (nav)
+            {
+                if (!g_overlayState.cheatsPage.Input(*nav, g_overlayState.chinese))
+                {
+                    stateLock.unlock();
+                    ToggleOverlayLocked();
+                }
+                return;
+            }
+        }
+
         switch (action)
         {
         case InputAction::Cancel:
@@ -132,12 +159,14 @@ namespace debug_menu
             ToggleOverlayLocked();
             return;
         case InputAction::PrevTab:
-            g_overlayState.activeTab = (g_overlayState.activeTab + 2 - 1) % 2;
+            g_overlayState.activeTab = (g_overlayState.activeTab + 3 - 1) % 3;
             g_overlayState.selectedRow = 0;
+            g_overlayState.cheatsPage.Dismiss();
             return;
         case InputAction::NextTab:
-            g_overlayState.activeTab = (g_overlayState.activeTab + 1) % 2;
+            g_overlayState.activeTab = (g_overlayState.activeTab + 1) % 3;
             g_overlayState.selectedRow = 0;
+            g_overlayState.cheatsPage.Dismiss();
             return;
         case InputAction::Up:
             if (g_overlayState.selectedRow > 0)
@@ -369,17 +398,18 @@ namespace debug_menu
         // Centered Tab buttons
         int tabW = 160;
         int tabGap = 20;
-        int totalTabsW = tabW * 2 + tabGap;
+        int totalTabsW = tabW * 3 + tabGap * 2;
         int tabStartX = panelX + (panelW - totalTabsW) / 2;
         int tabY = panelY + 44;
         host_ui::DrawButton(r, tabStartX, tabY, tabW, 30, zh ? L"常规" : L"Overview", state.activeTab == 0, state.activeTab == 0);
         host_ui::DrawButton(r, tabStartX + tabW + tabGap, tabY, tabW, 30, zh ? L"传送" : L"Teleport", state.activeTab == 1, state.activeTab == 1);
+        host_ui::DrawButton(r, tabStartX + (tabW + tabGap) * 2, tabY, tabW, 30, zh ? L"辅助 / 修改" : L"Cheats", state.activeTab == 2, state.activeTab == 2);
 
         // Footer at bottom of panel
         int footerY = panelY + panelH - 32;
         r.DrawHLine(panelX, footerY - 6, panelW, host_ui::MakeColor(255, 60, 65, 75));
-        std::wstring help = zh ? L"方向键/左摇杆: 导航   A/Enter: 确定   B/Esc: 关闭   LB/RB: 切页"
-                               : L"D-Pad/Stick: Nav   A/Enter: Confirm   B/Esc: Close   LB/RB: Tab";
+        std::wstring help = zh ? L"方向键/左摇杆: 导航   A/Enter: 确定   B/Esc: 返回   LB/RB: 切页"
+                               : L"D-Pad/Stick: Nav   A/Enter: Confirm   B/Esc: Back   LB/RB: Tab";
         int helpW = r.MeasureWString(help);
         r.DrawWString(panelX + (panelW - helpW) / 2, footerY, help, host_ui::MakeColor(255, 170, 175, 185));
 
@@ -527,9 +557,13 @@ namespace debug_menu
             host_ui::DrawButton(r, gridX, contentY + 182, editW, 30, poiName, state.selectedRow == 6);
             host_ui::DrawButton(r, gridX + editW + colGap, contentY + 182, actionW, 30, zh ? L"传送到此兴趣点" : L"Teleport to POI", state.selectedRow == 7);
         }
+        else if (state.activeTab == 2)
+        {
+            cheat_overlay::Render(r, state.cheatsPage, zh, panelX + 30, contentY, panelW - 60);
+        }
 
         // Status message at bottom of panel (Centered)
-        if (!state.statusMessage.empty())
+        if (state.activeTab != 2 && !state.statusMessage.empty())
         {
             std::wstring dispMsg = debug_menu::translations::Text(state.statusMessage.c_str(), zh);
             int msgW = r.MeasureWString(dispMsg);

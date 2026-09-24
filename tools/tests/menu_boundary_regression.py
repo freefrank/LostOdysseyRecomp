@@ -240,6 +240,7 @@ def overlay_fixture(source: str) -> str:
     body = between(source, 'namespace debug_menu\n{', '    // Render debug overlay') + '\n}\n'
     return COMMON + r'''
 #include <host_ui/host_ui.h>
+#include <debug/cheat_overlay.h>
 namespace settings { struct Config { int debugLanguage=0; };
 Config GetConfig() { return {}; } bool SaveDebugLanguage(int) { return true; } }
 namespace gpu::renderer { void RequestDebugCapture() {} }

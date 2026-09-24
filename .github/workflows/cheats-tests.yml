@@ -1,0 +1,44 @@
+name: Cheats and guest clock
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'LostOdysseyRecomp/debug/cheat*'
+      - 'LostOdysseyRecomp/debug/fast_forward.h'
+      - 'LostOdysseyRecomp/debug/menu_overlay.cpp'
+      - 'LostOdysseyRecomp/debug/menu_window.cpp'
+      - 'LostOdysseyRecomp/debug/teleport.cpp'
+      - 'LostOdysseyRecomp/host_ui/**'
+      - 'tools/tests/cheats/**'
+      - '.github/workflows/cheats-tests.yml'
+  pull_request:
+    paths:
+      - 'LostOdysseyRecomp/debug/cheat*'
+      - 'LostOdysseyRecomp/debug/fast_forward.h'
+      - 'LostOdysseyRecomp/debug/menu_overlay.cpp'
+      - 'LostOdysseyRecomp/debug/menu_window.cpp'
+      - 'LostOdysseyRecomp/debug/teleport.cpp'
+      - 'LostOdysseyRecomp/host_ui/**'
+      - 'tools/tests/cheats/**'
+      - '.github/workflows/cheats-tests.yml'
+permissions:
+  contents: read
+jobs:
+  offline:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure offline fixtures
+        run: cmake -S tools/tests/cheats -B out/cheats -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build out/cheats --config Release --parallel 2
+      - name: Test (no game or physical controllers)
+        run: ctest --test-dir out/cheats -C Release --output-on-failure
+      - name: Existing overlay controller regression
+        if: runner.os == 'Linux'
+        run: python tools/tests/menu_boundary_regression.py --only overlay --cxx clang++ --out out/cheats/legacy-overlay

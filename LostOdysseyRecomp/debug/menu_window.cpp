@@ -5,6 +5,7 @@
 #include "map_info.h"
 #include "save_anywhere.h"
 #include "translations.h"
+#include "cheats.h"
 #include <settings/config.h>
 #include <os/logger.h>
 #include <gpu/renderer.h>
@@ -19,6 +20,7 @@ namespace debug_menu
 
     void Update()
     {
+        cheats::PollHostControls();
         if (IsOverlayVisible())
         {
             UpdateOverlaySnapshot();
