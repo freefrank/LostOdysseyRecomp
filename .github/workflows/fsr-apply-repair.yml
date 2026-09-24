@@ -31,6 +31,9 @@ jobs:
           assert hashlib.sha256(data).hexdigest() == '05268b4b7897bc68f7b1eb339551289f9ebca7667bba5d5a1c320ca77b72056a'
           subprocess.run(['git', 'apply', '--index', '--whitespace=error', '-'], input=data, check=True)
           subprocess.run(['git', 'diff', '--cached', '--check'], check=True)
+      - name: Install Linux Xlib and shader development tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y libx11-dev glslang-tools spirv-tools
       - name: Prepare pinned Plume interface headers
         shell: bash
         run: |
@@ -59,8 +62,6 @@ jobs:
         run: |
           set -euo pipefail
           git -C thirdparty/plume submodule update --init --depth 1 contrib/volk contrib/Vulkan-Headers contrib/VulkanMemoryAllocator
-          sudo apt-get update -qq
-          sudo apt-get install -y glslang-tools spirv-tools
           bash tools/fsr/native_compile_check.sh out/fsr-sdk out/fsr-native-compile "$(command -v glslangValidator)" | tee out/native-results.txt
       - uses: actions/upload-artifact@v4
         if: always()
