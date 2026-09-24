@@ -524,7 +524,7 @@ uint32_t hid::SetState(uint32_t dwUserIndex, XAMINPUT_VIBRATION* pVibration)
         return ERROR_DEVICE_NOT_CONNECTED;
     if (!rumbleEnabled) return ERROR_SUCCESS;
 
-    const Uint32 duration = (pVibration->wLeftMotorSpeed || pVibration->wRightMotorSpeed)
+    const uint32_t duration = (pVibration->wLeftMotorSpeed || pVibration->wRightMotorSpeed)
         ? 0xFFFFFFFFu
         : 0u;
 

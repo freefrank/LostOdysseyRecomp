@@ -8,12 +8,22 @@ One record of completed changes, with unpublished work separated from verified r
 
 ### English
 
+- Input/window usability:
+  - Implemented Issue #50 cursor auto-hide: the mouse pointer hides after 2 seconds of inactivity while it remains over the game window, reappears on pointer activity, and is restored when focus/pointer leaves the game.
+  - Disabled SDL text input/IME composition for the gameplay window on creation and focus regain so active IMEs do not consume normal gameplay keys; installer text-entry remains explicitly scoped.
+  - Controller rumble is enabled by default with persistent XInput/Xam-style motor state; `LO_CONTROLLER_RUMBLE=0` remains the explicit opt-out.
+
 - Reusable developer tooling catalog and test harness indexing:
   - Added `tools/README.md` cataloging formal offline analysis scripts (shader, capture, performance), packaging/release helpers, profiling tools, and build drivers with explicit side-effect classifications.
   - Added structured top-level test navigation to `tools/tests/README.md` grouping targets across CPU contracts, GPU hardware fixtures, offline analyzers, and in-game drivers.
   - Clarified project tool conventions: reusable utilities live under `tools/`, while `out/` is reserved for ignored build artifacts and temporary outputs and must not be indexed.
 
 ### 简体中文
+
+- 输入与窗口体验：
+  - 实现 Issue #50 鼠标自动隐藏：鼠标停留在游戏窗口内且 2 秒无操作后自动隐藏；移动／点击后立即恢复，离开窗口或失焦时强制恢复系统鼠标。
+  - 游戏窗口创建及重新获得焦点时显式关闭 SDL 文本输入／IME 组合，避免输入法抢占普通游戏按键；安装器的文字输入仍按需单独启用。
+  - 手柄震动默认开启并保持 XInput/Xam 状态语义；仍可通过 `LO_CONTROLLER_RUMBLE=0` 显式关闭。
 
 - 可复用开发者工具全景索引与测试套件目录整理：
   - 新增 `tools/README.md` 索引正式离线分析脚本（着色器、截图、性能）、打包发布辅助工具、性能分析器及构建入口，并明确标注副作用分类。

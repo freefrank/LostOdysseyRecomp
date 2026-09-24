@@ -81,10 +81,27 @@ namespace gpu::video
 #if !defined(LO_VIDEO_SUBMISSION_UNIT)
         SDL_Window* g_window = nullptr;
         bool g_videoSubsystemOwned = false;
+        constexpr auto kCursorIdleTimeout = std::chrono::milliseconds(2000);
+        std::chrono::steady_clock::time_point g_lastPointerActivity{};
+        bool g_cursorHidden = false;
+        bool g_cursorManaged = false;
+
+        void SetGameCursorHidden(bool hidden)
+        {
+            if (!g_cursorManaged || g_cursorHidden == hidden) return;
+            SDL_ShowCursor(hidden ? SDL_DISABLE : SDL_ENABLE);
+            g_cursorHidden = hidden;
+        }
+
         // Pair only this lifecycle's reference, on its window-owning thread.
         // HID or other SDL clients retain their independent subsystem references.
         void DestroyWindowResources()
         {
+            if (g_cursorManaged) {
+                SDL_ShowCursor(SDL_ENABLE);
+                g_cursorManaged = false;
+                g_cursorHidden = false;
+            }
             if (g_window) { SDL_DestroyWindow(g_window); g_window = nullptr; }
             if (g_videoSubsystemOwned) {
                 SDL_QuitSubSystem(SDL_INIT_VIDEO);
@@ -871,6 +888,20 @@ namespace gpu::video
                 LOG_WARNING("video: window creation failed: {}", SDL_GetError());
                 return false;
             }
+
+            // The game never accepts host text entry. Keep SDL text input/IME
+            // disabled so an active IME cannot consume gameplay key presses.
+            SDL_StopTextInput();
+
+            // Keep the pointer usable for mouse-driven host UI, then hide it
+            // after brief inactivity while it remains over the game window.
+            g_cursorManaged = !background;
+            g_cursorHidden = false;
+            if (g_cursorManaged) {
+                SDL_ShowCursor(SDL_ENABLE);
+                g_lastPointerActivity = std::chrono::steady_clock::now();
+            }
+
             // This thread owns the SDL event loop from now on; the controller
             // subsystem is initialised here too so its message window (if any)
             // lives on the pumping thread.
@@ -1257,9 +1288,41 @@ namespace gpu::video
         }
         debug_menu::Update();
         hid::PumpHostInput();
+
+        if (g_cursorManaged && !g_cursorHidden &&
+            (SDL_GetWindowFlags(g_window) & SDL_WINDOW_MOUSE_FOCUS) &&
+            g_lastPointerActivity != std::chrono::steady_clock::time_point{} &&
+            now - g_lastPointerActivity >= kCursorIdleTimeout) {
+            SetGameCursorHidden(true);
+        }
+
         SDL_Event event;
         while (SDL_PollEvent(&event))
         {
+            const bool pointerActivity =
+                event.type == SDL_MOUSEMOTION ||
+                event.type == SDL_MOUSEBUTTONDOWN ||
+                event.type == SDL_MOUSEBUTTONUP ||
+                event.type == SDL_MOUSEWHEEL;
+            if (pointerActivity) {
+                g_lastPointerActivity = std::chrono::steady_clock::now();
+                SetGameCursorHidden(false);
+            }
+            if (event.type == SDL_WINDOWEVENT && event.window.windowID == SDL_GetWindowID(g_window)) {
+                if (event.window.event == SDL_WINDOWEVENT_ENTER) {
+                    g_lastPointerActivity = std::chrono::steady_clock::now();
+                    SetGameCursorHidden(false);
+                }
+                else if (event.window.event == SDL_WINDOWEVENT_LEAVE ||
+                         event.window.event == SDL_WINDOWEVENT_FOCUS_LOST) {
+                    // Never leave the OS pointer hidden when the user leaves the game.
+                    SetGameCursorHidden(false);
+                }
+                else if (event.window.event == SDL_WINDOWEVENT_FOCUS_GAINED) {
+                    // Reassert the gameplay input contract after focus changes.
+                    SDL_StopTextInput();
+                }
+            }
             if (g_shaderProgress.load() != 0) {
                 if (event.type == SDL_KEYDOWN && !event.key.repeat) {
                     if (event.key.keysym.sym == SDLK_ESCAPE || event.key.keysym.sym == SDLK_SPACE ||
