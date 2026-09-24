@@ -5,14 +5,46 @@ on:
 permissions:
   contents: read
 jobs:
-  source:
-    runs-on: ubuntu-latest
+  offline:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - name: Archive public source for offline menu regression
-        run: git archive --format=tar --output="$RUNNER_TEMP/menu-source.tar" HEAD
-      - uses: actions/upload-artifact@v4
+      - name: Apply SHA-verified menu patch
+        run: python tools/menu_workbench_apply.py
+      - name: Configure actual menu with synthetic services
+        run: cmake -S tools/tests/settings_menu -B out/settings-menu -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build out/settings-menu --config Release --parallel 2
+      - name: Test input, ordering, and native-resolution raster cache
+        run: ctest --test-dir out/settings-menu -C Release --output-on-failure -V
+      - name: Existing overlay regression
+        if: runner.os == 'Linux'
+        run: python tools/tests/menu_boundary_regression.py --only overlay --cxx clang++ --out out/overlay-regression
+  prepare-source:
+    needs: offline
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
         with:
-          name: menu-source
-          path: ${{ runner.temp }}/menu-source.tar
-          retention-days: 1
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Apply tested patch
+        run: python tools/menu_workbench_apply.py
+      - name: Push tested source to the isolated work branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The connector installs the reviewed permanent workflow in the final
+          # tree; this token only publishes source/test/document changes.
+          rm .github/workflows/settings-menu-tests.yml
+          git rm -- tools/menu-workbench.0.b64 tools/menu-workbench.1.b64 tools/menu-workbench.2.b64 tools/menu-workbench.3.b64 tools/menu_workbench_apply.py
+          git add -A -- LostOdysseyRecomp/settings CHANGELOG.md docs/notes/settings-menu-interaction.md tools/tests/menu_flow_test.cpp tools/tests/settings_menu
+          git diff --cached --check
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'fix(settings): tested controls, combined AA and cached menu backdrop'
+          git push origin HEAD:refs/heads/fix/menu-interaction
