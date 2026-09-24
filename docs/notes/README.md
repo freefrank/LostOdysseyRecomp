@@ -2,7 +2,15 @@
 
 先读[当前状态](../STATUS.md)和[路线图](../ROADMAP.zh-CN.md)。[旧交接](handoff.md)和日期化实验保留当时证据，不自动代表当前功能支持。部分过期 GPU、内核和交接记录已移到[归档](../archive/README.md)。
 
-当前进度：[v0.6.2 发布状态](../STATUS.md) · [图形后端路线图](../ROADMAP.zh-CN.md#v050-pc-graphics) · [Linux／Steam Deck 评估](linux-port-evaluation-2026-09-13.md)。历史汇总：[2026-09-05成果与交接](../WORK_REPORT_2026-09-05.md)。Issue #53 当前记录：[Disc 2 加载调查与防御性修正](ISSUE_53_DISC2_HANG_FIX_REPORT.md)。
+当前进度：[项目状态](../STATUS.md) · [图形后端路线图](../ROADMAP.zh-CN.md#v050-pc-graphics) · [Linux／Steam Deck 评估](linux-port-evaluation-2026-09-13.md)。历史汇总：[2026-09-05成果与交接](../WORK_REPORT_2026-09-05.md)。Issue #53 当前记录：[Disc 2 加载调查与防御性修正](ISSUE_53_DISC2_HANG_FIX_REPORT.md)。
+
+## FSR / DLSS FG 记录
+
+- [当前 P2 交接](fsr-dlss-fg-codex-handoff.zh-CN.md)：现行实现、验证边界、证据路径和接续步骤。
+- [Codex 进度日志](fsr-dlss-fg-codex-progress.zh-CN.md)：保留日期化历史结果；其中旧“当前状态”不代表现状。
+- [Codex 历史交接](fsr-dlss-fg-codex-history.zh-CN.md)：保留早期暂停 checkpoint 和后续历史过程。
+- [OpenCode P0 handoff](fsr-dlss-fg-handoff.zh-CN.md)：早期阶段快照。
+- [导入需求与阶段映射](fsr-dlss-fg-imported-tasks.zh-CN.md)：需求来源与历史项目映射；进度字段已过期。
 
 ## 现有文档
 

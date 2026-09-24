@@ -1,8 +1,8 @@
-# FSR / DLSS FG Codex 当前进度
+# FSR / DLSS FG Codex 历史进度日志
 
-> 当前续记（2026-09-24）：本文下方较早的状态是历史记录，不能代表最新 P2 阶段。当前 P2 战斗映射与有界实景结果见[2026-09-24 交接续记](fsr-dlss-fg-codex-handoff.zh-CN.md#2026-09-24-p2-战斗映射续记)。当前 P2 仍未完成用户画面验收；旧记录中的暂停、Gate 预算和待测范围应按该续记及 `.slim/deepwork/fsr-p2-completion.md` 顶部最新决定理解。
+> 历史进度日志。本文按日期保留当时的实验过程和结论，其中“当前状态”、Gate 预算及待办可能已被后续工作替代。请以[FSR / DLSS FG 当前交接](fsr-dlss-fg-codex-handoff.zh-CN.md)为准；该页独立列明当前状态、验证边界、证据路径及接续步骤。
 
-更新时间：2026-09-23。本文只记录当前 Codex 恢复执行的实现与验证状态；不替代历史 handoff，也不表示 Gate 1 已通过。
+更新时间：2026-09-23。本文只保留当日恢复执行后的历史记录，不表示 Gate 1 已通过。
 
 ## 当前状态
 
@@ -22,9 +22,9 @@ P0 探针修复范围限制为 `tools/tests/streamline_fg` 与 `cmake/LoStreamli
 
 | 运行 | 结果 | 当前解释 |
 | --- | --- | --- |
-| background-01 | EXE `3b639...`，exit 77，0 frames | 未启用 Vulkan `privateData` feature，触发 VUID；drawable 尺寸不足，不构成 Gate 证据。详见 [`manifest.json`](../../out/streamline-fg-p0/gate1-codex-background-01/manifest.json) 与 [`stdout`](../../out/streamline-fg-p0/gate1-codex-background-01/stdout)。 |
-| background-02 | EXE `edba349...`，exit 1，48 frames、2 次 swapchain | 旧 `FeatureNotFound` 未出现；`SLfree=0`、`nativeRelease=1`、`nativeShutdown1=1`、`SLShutdown=0`。但所有 `actual_presents=1`，没有 active FG 退出证明；10 条 `VUID-vkCmdDraw-None-09600` 触及 SL fake swapchain buffer / pacer 期待 `TRANSFER_SRC` 而实际为 PRESENT。详见 [`manifest.json`](../../out/streamline-fg-p0/gate1-codex-background-02/manifest.json) 与 [`stdout`](../../out/streamline-fg-p0/gate1-codex-background-02/stdout)。 |
-| background-03 | 同版 EXE `366657...`，exit 1，48 frames | validation 同类 10 条 VUID；swapchain epoch1 的三个输出 handles `ed00000000ed`、`f000000000f0`、`f300000000f3` 与观察到的 VUID 对应，证明为宿主代理图像而非四个输入 tag 的 image，但不证明具体 SDK 根因。每轮 SDK aggregate log 已保存；仍无 active FG 或 Gate 通过证据。详见 [`manifest.json`](../../out/streamline-fg-p0/gate1-codex-background-03/manifest.json) 与 [`stdout`](../../out/streamline-fg-p0/gate1-codex-background-03/stdout)。 |
+| background-01 | EXE `3b639...`，exit 77，0 frames | 未启用 Vulkan `privateData` feature，触发 VUID；drawable 尺寸不足，不构成 Gate 证据。详见 [`manifest.json`](../../out/streamline-fg-p0/gate1-codex-background-01/manifest.json)；配套 `stdout` 原始文件不在仓库中。 |
+| background-02 | EXE `edba349...`，exit 1，48 frames、2 次 swapchain | 旧 `FeatureNotFound` 未出现；`SLfree=0`、`nativeRelease=1`、`nativeShutdown1=1`、`SLShutdown=0`。但所有 `actual_presents=1`，没有 active FG 退出证明；10 条 `VUID-vkCmdDraw-None-09600` 触及 SL fake swapchain buffer / pacer 期待 `TRANSFER_SRC` 而实际为 PRESENT。详见 [`manifest.json`](../../out/streamline-fg-p0/gate1-codex-background-02/manifest.json)；配套 `stdout` 原始文件不在仓库中。 |
+| background-03 | 同版 EXE `366657...`，exit 1，48 frames | validation 同类 10 条 VUID；swapchain epoch1 的三个输出 handles `ed00000000ed`、`f000000000f0`、`f300000000f3` 与观察到的 VUID 对应，证明为宿主代理图像而非四个输入 tag 的 image，但不证明具体 SDK 根因。每轮 SDK aggregate log 已保存；仍无 active FG 或 Gate 通过证据。详见 [`manifest.json`](../../out/streamline-fg-p0/gate1-codex-background-03/manifest.json)；配套 `stdout` 原始文件不在仓库中。 |
 
 对应 run02 的 PresentMon 输出有 44 行，均匹配目标 application PID；聚合日志仍记录 SDK 的 “window not focused” 提示。NVIDIA issue 84 存在相似 VUID 先例，但不能据此认定本项目根因。
 
@@ -136,7 +136,7 @@ CPU owner／policy 检查和 Windows／Linux 增量构建通过，见 [CPU 记�
 
 `LO_FSR_GPU_TIMING=1` 可记录 prepare／SDK／encode／copy／同步范围的 GPU timestamp；查询只在所属提交 fence 完成后读取，未就绪明确为 unavailable。默认关闭，不分配查询池或录制计时命令。这是隔离 SR 段诊断，不是 SDK 单独耗时或整帧性能；截图、alpha capture、重置及预热帧需由实验记录排除，不能据此直接宣称性能收益。
 
-此前开发曾按用户指令暂停，历史停止交接见 [Codex 停止交接](fsr-dlss-fg-codex-handoff.zh-CN.md)。
+此前开发曾按用户指令暂停，历史停止交接见 [Codex 历史交接](fsr-dlss-fg-codex-history.zh-CN.md)。
 
 ### P2 后处理保护修复与实景验证检查点 (windows-03)
 

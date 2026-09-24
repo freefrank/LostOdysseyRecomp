@@ -32,9 +32,11 @@ Windows and native Linux with `LO_ENABLE_FSR=ON` and `LO_REQUIRE_FSR=ON`, using
 FidelityFX SDK v1.1.4's FSR 3.1.4 implementation.
 Quality, Balanced, Performance and Native AA have bounded Windows runtime evidence;
 native Linux RADV also has real Quality, Performance and Native AA submissions.
-Controlled Windows static-scene motion/depth checks passed. Full image-quality and
-performance coverage, Steam Deck, player acceptance, and DLSS frame generation remain
-open. These source-build results do not change the public release configuration.
+Controlled Windows static-scene motion/depth checks passed. Full image-quality
+coverage, player acceptance, and DLSS frame generation remain open. This round's
+low-power hardware requirement was covered on the user-approved APEX 15W proxy; it
+does not establish Steam Deck hardware behavior. These source-build results do not
+change the public release configuration.
 
 ### Unreleased development updates
 

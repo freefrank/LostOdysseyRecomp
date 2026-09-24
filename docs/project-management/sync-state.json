@@ -1801,12 +1801,12 @@
         "Status": "In Progress",
         "Delivery": "In progress",
         "Release": "v0.7.0",
-        "Evidence": "P2 remains in progress. Mapped candidate `cb41c99cdc44456864ac0d44cfcd815c2d099f89595840f4e76df2a2db12c352` (source `d78d80f3add32494c53f67702d27d52c5c5e23aa82d690339cba046768c6357e`; preceding pushed baseline `a4792244a195545847a33b7708969c108268e361`) passed the application build; CPU fixture passed 768 samples; GPU fixture passed six current DXIL/SPIR-V microcodes with Vulkan alpha/depth, palette-motion and QuadList geometry checks. Manual battle audit recorded 2,476 completed FSR records and zero `mv_first_failure` in that run. This is bounded battle-path evidence, not visual acceptance or full-game coverage. f6 has fixture coverage only; 02d8 remains excluded for unproven screen-UV binding, with no proven runtime blocker. Do not claim 98.49%. Other scenes, actual f6 battle coverage and latest Linux hot-change validation remain. APEX 15W is the user's low-power proxy, not Deck-equivalent; missing Deck is not an iteration blocker.",
+        "Evidence": "G003/P2 remains In Progress; final visual acceptance is pending. Checkpoint `ebefab459515fcd629e9758c8726d5b9b6c4b04b` delivered Windows FSR Vulkan mask/RCAS and transient-fallback work plus three battle shader mappings. Candidate `cb41c99cdc44456864ac0d44cfcd815c2d099f89595840f4e76df2a2db12c352` (source `d78d80f3add32494c53f67702d27d52c5c5e23aa82d690339cba046768c6357e`) identifies the manual run, not a release. CPU passed 768 samples; GPU fixtures covered three mappings in six DXIL/SPIR-V variants. One Windows Vulkan battle window recorded 2,476 completed FSR uses and zero `mv_first_failure`, limited to that scene. APEX 15W is the user-accepted Deck proxy, not Deck-equivalent. SDK consumption and controlled performance checks passed; latest Linux shader/hot-change coverage and final visual acceptance remain pending. f6 is fixture-only; 02d8 remains excluded for unproven screen-UV binding, with no established runtime blocker.",
         "Source key": "temporal-phased-p2-fsr-quality-hardware",
         "Start date": "2026-09-23"
       },
       "title": "P2: Validate FSR visual quality and multi-platform hardware",
-      "body_sha256": "ddb54416c960819dc95e231ba3093f8be5a228b5007452714914ed103f454f8e"
+      "body_sha256": "c908926784c6ea00212f31351c7e8220a821cad2ea9cfddbd3739cc77d7214dd"
     },
     "taa-motion-quality": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56fGM",

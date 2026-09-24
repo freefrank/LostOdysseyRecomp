@@ -30,7 +30,7 @@ Windows 与 Linux 正式发布包中已内置官方 NGX 运行库；画质与稳
 `LO_REQUIRE_FSR=ON` 选择性启用固定 FidelityFX SDK v1.1.4（FSR 3.1.4 实现）的实验性路径。
 Quality、Balanced、Performance、Native AA 均有 Windows 有界运行证据；原生 Linux RADV
 已有 Quality、Performance 和 Native AA 的真实提交。Windows 受控静态场景的运动／深度检查已通过。
-完整画质与性能覆盖、Steam Deck、玩家验收和 DLSS 帧生成仍未完成；源码构建结果不改变公开发布配置。
+完整画质、玩家验收和 DLSS 帧生成仍未完成。本轮低功耗硬件要求已按用户决定使用 APEX 15W 代理设备验证；这不代表 Steam Deck 的硬件表现。源码构建结果不改变公开发布配置。
 
 ### 未发布开发进展
 
