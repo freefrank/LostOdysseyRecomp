@@ -6,6 +6,10 @@
 
 G002/P1 FSR 已完成；G003/P2 仍在进行中，尚未完成最终用户画面验收。已推送检查点 `ebefab459515fcd629e9758c8726d5b9b6c4b04b`，其中包含本次三组战斗 shader 映射。手动战斗候选程序 SHA-256 为 `cb41c99cdc44456864ac0d44cfcd815c2d099f89595840f4e76df2a2db12c352`，源码身份为 `d78d80f3add32494c53f67702d27d52c5c5e23aa82d690339cba046768c6357e`。该候选身份只标识那次运行所用程序，不是当前发行版本。
 
+## FSR分支代码修复（2026-09-24）
+
+`FSR`分支在上述基线后修复了录制阶段暂态输入的请求闭锁、Prepare阶段设备丢失传播、反向深度准入，以及固定SDK的Vulkan内存属性匹配/统一内存回退；并修复独立CPU测试的Plume依赖和Linux类型推导问题。详见[修复范围与验证记录](fsr-repair-2026-09-24.zh-CN.md)。需要重新配置CMake并重建SDK目标。本段不宣称已有游戏候选二进制包含这些修复，也不扩大下方既有GPU和画面验收范围；P2仍未完成。
+
 ## 已实现与已验证
 
 - Windows FSR Vulkan 路径有资格检查的默认桥接：R8 alpha resolve 后转为 R32 reactive mask，使用 `min(0.9, M)`；transparency-and-composition mask 为 null。既有环境开关可关闭桥接，非 FSR 路径不执行它。RCAS 默认关闭，菜单提供设置项。

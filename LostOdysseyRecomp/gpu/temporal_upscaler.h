@@ -32,6 +32,20 @@ template<class Owner> void RouteDiscarded(SrUseToken token, Owner& owner) {
 }
 
 enum class SrResultStatus : uint8_t { Ready, Unavailable, NeedsReconfigure, Failed, DeviceLost, InputUnavailable };
+// Both preparation and recording must distinguish per-frame input loss
+// from capability/resource failure. Never latch a request off for the former.
+enum class SrFailureAction : uint8_t { None, FrameFallback, Reconfigure, DisableRequest, StopDevice };
+inline constexpr SrFailureAction FailureAction(SrResultStatus status) {
+    switch (status) {
+    case SrResultStatus::Ready: return SrFailureAction::None;
+    case SrResultStatus::InputUnavailable: return SrFailureAction::FrameFallback;
+    case SrResultStatus::NeedsReconfigure: return SrFailureAction::Reconfigure;
+    case SrResultStatus::DeviceLost: return SrFailureAction::StopDevice;
+    case SrResultStatus::Unavailable:
+    case SrResultStatus::Failed: return SrFailureAction::DisableRequest;
+    }
+    return SrFailureAction::DisableRequest;
+}
 struct SrResult {
     SrResultStatus status = SrResultStatus::Unavailable;
     upscaling::Upscaler requestedProvider = upscaling::Upscaler::Off;

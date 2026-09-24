@@ -2504,12 +2504,18 @@ namespace gpu::renderer
 #else
                 const auto prepared = controller.Prepare(*static_cast<plume::VulkanDevice*>(device),
                     {activePlan, promotion.inputs, promotion.srOptions});
-                const bool sessionReady = prepared.status == SrResultStatus::Ready;
-                if (prepared.status == SrResultStatus::InputUnavailable) {
+                const auto prepareAction = FailureAction(prepared.status);
+                const bool sessionReady = prepareAction == SrFailureAction::None;
+                if (prepareAction == SrFailureAction::StopDevice) {
+                    if (evidence) { evidence->stage = "ensure_session"; evidence->reason = "device_lost"; }
+                    video::StopGpuWork(prepared.rawVkResult.value_or(VK_ERROR_DEVICE_LOST));
+                    return false;
+                }
+                if (prepareAction == SrFailureAction::FrameFallback) {
                     NoteDlssFrameFallback(frame_plan::DlssEffectReason::UnsupportedProjection);
                     return false;
                 }
-                if (prepared.status == SrResultStatus::NeedsReconfigure) {
+                if (prepareAction == SrFailureAction::Reconfigure) {
                     srReconfigureFrame = frame;
                     NoteDlssFrameFallback(frame_plan::DlssEffectReason::FeatureReconfigurePending);
                     return false;
@@ -2568,14 +2574,17 @@ namespace gpu::renderer
                 const bool accepted = attempt.status == dlss::SrStatus::Executable;
                 const bool deviceLost = attempt.status == dlss::SrStatus::DeviceLost;
                 const bool needsReconfigure = attempt.status == dlss::SrStatus::NeedsReconfigure;
+                const bool inputUnavailable = false; // Legacy embedded NGX fixture contract.
                 Gpu().srUseId = attempt.useId;
 #else
                 auto attempt = controller.RecordIsolated(*static_cast<plume::VulkanCommandList*>(Gpu().srIsolated.get()),
                     {activePlan, promotion.inputs, promotion.srOptions},
                     *static_cast<plume::VulkanTexture*>(promotion.scratch->texture.get()), evidence.get());
-                const bool accepted = attempt.status == SrResultStatus::Ready;
-                const bool deviceLost = attempt.status == SrResultStatus::DeviceLost;
-                const bool needsReconfigure = attempt.status == SrResultStatus::NeedsReconfigure;
+                const auto recordAction = FailureAction(attempt.status);
+                const bool accepted = recordAction == SrFailureAction::None;
+                const bool deviceLost = recordAction == SrFailureAction::StopDevice;
+                const bool needsReconfigure = recordAction == SrFailureAction::Reconfigure;
+                const bool inputUnavailable = recordAction == SrFailureAction::FrameFallback;
                 Gpu().srUseId = attempt.token;
 #endif
                 if (handoffTrace) {
@@ -2648,6 +2657,11 @@ namespace gpu::renderer
                     if (needsReconfigure) {
                         srReconfigureFrame = frame; // Retry only after a drained next-frame boundary.
                         NoteDlssFrameFallback(frame_plan::DlssEffectReason::FeatureReconfigurePending);
+                    } else if (inputUnavailable) {
+                        // The unsubmitted token has already been discarded and
+                        // the normal continuation layouts restored. Keep the
+                        // request alive; the next real FSR frame resets on a gap.
+                        NoteDlssFrameFallback(frame_plan::DlssEffectReason::NoEligibleScene);
                     } else
                         DisableDlssRequest(frame_plan::FailureReason::DlssUnavailable);
                     return false;

@@ -1,4 +1,5 @@
 #include "fsr_upscaler.h"
+#include "fsr_dispatch_policy.h"
 #include "dlss_evaluate_capture.h"
 #include "fsr_mask_policy.h"
 
@@ -131,17 +132,6 @@ void Barrier(VkCommandBuffer cmd, VkImage image, VkImageLayout oldLayout, VkImag
     barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
     vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
         0, 0, nullptr, 0, nullptr, 1, &barrier);
-}
-
-bool ValidCamera(const FrameMetadata& m, bool resetHistory) {
-    return m.cameraValid && std::isfinite(m.cameraFar) && m.cameraFar > 0 &&
-        m.cameraNear == FLT_MAX && std::isfinite(m.verticalFovRadians) &&
-        m.verticalFovRadians > 0 && m.verticalFovRadians < 3.14159265f &&
-        std::isfinite(m.viewSpaceToMetersFactor) && m.viewSpaceToMetersFactor > 0 &&
-        std::isfinite(m.frameTimeDeltaMilliseconds) &&
-        (m.frameTimeDeltaMilliseconds > 0 || (resetHistory && m.frameTimeDeltaMilliseconds == 0)) &&
-        std::isfinite(m.depthScale) && m.depthScale > 0 && std::isfinite(m.depthBias) &&
-        std::isfinite(m.sharpness) && m.sharpness >= 0.0f && m.sharpness <= 1.0f;
 }
 
 FsrMaskDecision QualifyNativeMask(const temporal::TemporalFrameInputs& inputs) {
@@ -602,36 +592,12 @@ Attempt Controller::RecordIsolated(plume::VulkanCommandList& commands, const Con
             int(output.imageFormat), int(output.textureLayout), output.vk ? 1 : 0,
             output.desc.width, output.desc.height);
     };
-    if (!impl_->contextReady || impl_->poisoned || impl_->config != config ||
-        !ValidCamera(frame, effectiveReset) ||
-        !inputs.CompleteForConsumer() || inputs.colorEncoding != temporal::ColorEncoding::Sdr ||
-        inputs.motionState == temporal::MotionState::Unavailable ||
-        inputs.color.width != config.renderWidth || inputs.color.height != config.renderHeight ||
-        inputs.depth.width != config.renderWidth || inputs.depth.height != config.renderHeight ||
-        inputs.motion.width != config.renderWidth || inputs.motion.height != config.renderHeight ||
-        inputs.motion.x || inputs.motion.y ||
-        inputs.motion.allocation.width != config.renderWidth ||
-        inputs.motion.allocation.height != config.renderHeight ||
-        output.desc.width != config.outputWidth || output.desc.height != config.outputHeight ||
-        !std::isfinite(inputs.jitter.pixelX) || !std::isfinite(inputs.jitter.pixelY) ||
-        !std::isfinite(inputs.preExposure) || inputs.preExposure <= 0 ||
-        !impl_->nextUse) {
-        const char* reason = !impl_->contextReady ? "context_not_ready" :
-            impl_->poisoned ? "context_poisoned" : impl_->config != config ? "config_mismatch" :
-            !ValidCamera(frame, effectiveReset) ? "camera_invalid" :
-            !inputs.CompleteForConsumer() ? "inputs_incomplete" :
-            inputs.colorEncoding != temporal::ColorEncoding::Sdr ? "color_not_sdr" :
-            inputs.motionState == temporal::MotionState::Unavailable ? "motion_unavailable" :
-            inputs.color.width != config.renderWidth || inputs.color.height != config.renderHeight ? "color_extent" :
-            inputs.depth.width != config.renderWidth || inputs.depth.height != config.renderHeight ? "depth_extent" :
-            inputs.motion.width != config.renderWidth || inputs.motion.height != config.renderHeight ? "motion_extent" :
-            inputs.motion.x || inputs.motion.y || inputs.motion.allocation.width != config.renderWidth ||
-                inputs.motion.allocation.height != config.renderHeight ? "motion_allocation_or_origin" :
-            output.desc.width != config.outputWidth || output.desc.height != config.outputHeight ? "output_extent" :
-            !std::isfinite(inputs.jitter.pixelX) || !std::isfinite(inputs.jitter.pixelY) ? "jitter_invalid" :
-            !std::isfinite(inputs.preExposure) || inputs.preExposure <= 0 ? "pre_exposure_invalid" :
-            "use_id_exhausted";
-        logGuardRejection(reason);
+    const auto guard = CheckRecordGuard(impl_->contextReady, impl_->poisoned,
+        impl_->config == config, config, inputs, frame,
+        {output.desc.width, output.desc.height}, effectiveReset, impl_->nextUse != 0);
+    if (guard.status != Status::Ready) {
+        attempt.status = guard.status;
+        logGuardRejection(guard.reason);
         return attempt;
     }
     const auto& color = *static_cast<const plume::VulkanTexture*>(inputs.color.texture);

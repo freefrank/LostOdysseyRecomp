@@ -20,8 +20,9 @@ if(MSVC)
     add_compile_options(/utf-8)
 endif()
 # The P1/P2 planner contracts are CPU-only. Keep this lane usable on CI and
-# development machines without Plume submodules, a Vulkan loader, the SDK, or
-# game assets. The default still builds the existing native GPU fixtures.
+# development machines without a Vulkan loader, the SDK, or game assets.
+# FSR ownership fixtures need patched Plume interface headers, not its GPU
+# library. The default still builds the existing native GPU fixtures.
 option(LO_NATIVE_DLSS_CPU_ONLY "Configure only GPU-free native DLSS contract tests" OFF)
 
 add_executable(LoP1FramePlanTest EXCLUDE_FROM_ALL
@@ -35,6 +36,36 @@ add_executable(LoNativeDlssP2RoutingTest EXCLUDE_FROM_ALL
     ${LO_NATIVE_DLSS_ROOT}/LostOdysseyRecomp/gpu/upscaling_plan.cpp)
 target_include_directories(LoNativeDlssP2RoutingTest PRIVATE ${LO_NATIVE_DLSS_ROOT}/LostOdysseyRecomp)
 target_compile_features(LoNativeDlssP2RoutingTest PRIVATE cxx_std_20)
+
+# Keep the alpha/mask lifetime coverage: it executes on CPU but uses real
+# Plume resource interfaces, so a plain checkout must initialize these headers.
+if(NOT EXISTS "${LO_NATIVE_DLSS_ROOT}/thirdparty/plume/plume_render_interface.h")
+    message(FATAL_ERROR "CPU ownership fixtures need patched Plume headers; see tools/patches/README.md (initialize thirdparty/plume and apply plume-lostodyssey.patch)")
+endif()
+file(READ "${LO_NATIVE_DLSS_ROOT}/thirdparty/plume/plume_render_interface_types.h" _lo_plume_types)
+string(REGEX MATCH "struct RenderDeviceCapabilities[^}]*shaderFormat"
+    _lo_plume_shader_format "${_lo_plume_types}")
+if(NOT _lo_plume_shader_format)
+    message(FATAL_ERROR "Apply the pinned Plume patch before CPU ownership tests: git -C thirdparty/plume apply ../../tools/patches/plume-lostodyssey.patch")
+endif()
+
+add_executable(LoFsrVulkanMemoryPolicyTest EXCLUDE_FROM_ALL
+    ${LO_NATIVE_DLSS_ROOT}/tools/tests/fsr/vulkan_memory_policy_test.cpp)
+target_compile_features(LoFsrVulkanMemoryPolicyTest PRIVATE cxx_std_20)
+
+add_executable(LoFsrDispatchPolicyTest EXCLUDE_FROM_ALL
+    ${LO_NATIVE_DLSS_ROOT}/tools/tests/fsr/dispatch_policy_test.cpp)
+target_include_directories(LoFsrDispatchPolicyTest PRIVATE ${LO_NATIVE_DLSS_ROOT}/LostOdysseyRecomp)
+target_compile_definitions(LoFsrDispatchPolicyTest PRIVATE LO_GPU_PLUME=1)
+target_compile_features(LoFsrDispatchPolicyTest PRIVATE cxx_std_20)
+
+# The full runtime build already registers this target before this directory.
+if(NOT TARGET LoFsrProjectionTest)
+    add_executable(LoFsrProjectionTest EXCLUDE_FROM_ALL
+        ${LO_NATIVE_DLSS_ROOT}/tools/tests/fsr_projection_test.cpp)
+    target_include_directories(LoFsrProjectionTest PRIVATE ${LO_NATIVE_DLSS_ROOT}/LostOdysseyRecomp)
+    target_compile_features(LoFsrProjectionTest PRIVATE cxx_std_20)
+endif()
 
 add_executable(LoFsrAlphaPropagationPolicyTest EXCLUDE_FROM_ALL
     ${LO_NATIVE_DLSS_ROOT}/tools/tests/fsr/alpha_propagation_policy_test.cpp)
@@ -76,13 +107,16 @@ target_compile_features(LoNativeDlaaTest PRIVATE cxx_std_20)
 
 # None of these translation units uses C++ modules. Do not require a separate
 # clang-scan-deps binary just to build ordinary C++20 contract fixtures.
-set_target_properties(LoTemporalUpscalerContractTest LoNativeDlaaTest LoNativeDlssSubmissionFailureTest LoNativeDlssFrameInputsTest LoP1FramePlanTest LoNativeDlssP2RoutingTest LoFsrAlphaPropagationPolicyTest LoNativeDlssPromotionPolicyTest LoNativeDlssSubmissionLifetimeTest
+set_target_properties(LoFsrVulkanMemoryPolicyTest LoFsrDispatchPolicyTest LoFsrProjectionTest LoTemporalUpscalerContractTest LoNativeDlaaTest LoNativeDlssSubmissionFailureTest LoNativeDlssFrameInputsTest LoP1FramePlanTest LoNativeDlssP2RoutingTest LoFsrAlphaPropagationPolicyTest LoNativeDlssPromotionPolicyTest LoNativeDlssSubmissionLifetimeTest
     PROPERTIES CXX_SCAN_FOR_MODULES OFF)
 
 add_custom_target(LoNativeDlssCpuTests
-    DEPENDS LoTemporalUpscalerContractTest LoNativeDlaaTest LoNativeDlssSubmissionFailureTest LoNativeDlssFrameInputsTest LoP1FramePlanTest LoNativeDlssP2RoutingTest LoFsrAlphaPropagationPolicyTest LoNativeDlssPromotionPolicyTest LoNativeDlssSubmissionLifetimeTest)
+    DEPENDS LoFsrVulkanMemoryPolicyTest LoFsrDispatchPolicyTest LoFsrProjectionTest LoTemporalUpscalerContractTest LoNativeDlaaTest LoNativeDlssSubmissionFailureTest LoNativeDlssFrameInputsTest LoP1FramePlanTest LoNativeDlssP2RoutingTest LoFsrAlphaPropagationPolicyTest LoNativeDlssPromotionPolicyTest LoNativeDlssSubmissionLifetimeTest)
 include(CTest)
 if(BUILD_TESTING)
+    add_test(NAME LoFsrVulkanMemoryPolicyTest COMMAND LoFsrVulkanMemoryPolicyTest)
+    add_test(NAME LoFsrDispatchPolicyTest COMMAND LoFsrDispatchPolicyTest)
+    add_test(NAME LoFsrProjectionTest COMMAND LoFsrProjectionTest)
     add_test(NAME LoNativeDlaaTest COMMAND LoNativeDlaaTest)
     add_test(NAME LoP1FramePlanTest COMMAND LoP1FramePlanTest)
     add_test(NAME LoNativeDlssP2RoutingTest COMMAND LoNativeDlssP2RoutingTest)
@@ -92,7 +126,7 @@ if(BUILD_TESTING)
     add_test(NAME LoNativeDlssFrameInputsTest COMMAND LoNativeDlssFrameInputsTest)
     add_test(NAME LoTemporalUpscalerContractTest COMMAND LoTemporalUpscalerContractTest)
     add_test(NAME LoNativeDlssSubmissionFailureTest COMMAND LoNativeDlssSubmissionFailureTest)
-    set_tests_properties(LoTemporalUpscalerContractTest LoNativeDlaaTest LoNativeDlssSubmissionFailureTest LoNativeDlssFrameInputsTest LoP1FramePlanTest LoNativeDlssP2RoutingTest LoFsrAlphaPropagationPolicyTest LoNativeDlssPromotionPolicyTest LoNativeDlssSubmissionLifetimeTest PROPERTIES LABELS "native-dlss;cpu")
+    set_tests_properties(LoFsrVulkanMemoryPolicyTest LoFsrDispatchPolicyTest LoFsrProjectionTest LoTemporalUpscalerContractTest LoNativeDlaaTest LoNativeDlssSubmissionFailureTest LoNativeDlssFrameInputsTest LoP1FramePlanTest LoNativeDlssP2RoutingTest LoFsrAlphaPropagationPolicyTest LoNativeDlssPromotionPolicyTest LoNativeDlssSubmissionLifetimeTest PROPERTIES LABELS "native-dlss;cpu")
     # Optional developer tooling only; the game and C++ fixtures do not depend
     # on Python. Existing CI images provide it for recording-evidence triage.
     find_package(Python3 COMPONENTS Interpreter QUIET)
@@ -194,6 +228,9 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
+    add_test(NAME LoFsrVulkanMemoryPolicyTest COMMAND LoFsrVulkanMemoryPolicyTest)
+    add_test(NAME LoFsrDispatchPolicyTest COMMAND LoFsrDispatchPolicyTest)
+    add_test(NAME LoFsrProjectionTest COMMAND LoFsrProjectionTest)
     add_test(NAME LoNativeDlssProbe COMMAND LoNativeDlssProbe)
     set_tests_properties(LoNativeDlssProbe PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME LoNativeDlssReportTest COMMAND LoNativeDlssReportTest)

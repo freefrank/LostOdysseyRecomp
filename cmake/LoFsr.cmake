@@ -79,21 +79,15 @@ if(LO_ENABLE_FSR)
         string(REPLACE "${_lo_fsr_map_anchor}"
             "pMem = reinterpret_cast<uint8_t*>(FFX_ALIGN_UP(reinterpret_cast<uintptr_t>(pMem), uintptr_t(alignof(BackendContext_VK::EffectContext))));\n        ${_lo_fsr_map_anchor}"
             _lo_fsr_backend "${_lo_fsr_backend}")
-        # Plume does not enable deviceCoherentMemory on the logical device.
-        # Physical memory types remain unchanged, but these types cannot be
-        # allocated by this backend without that enabled feature.
-        set(_lo_fsr_memory_anchor "if ((memRequirements.memoryTypeBits & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & requestedProperties)) {")
-        string(FIND "${_lo_fsr_backend}" "${_lo_fsr_memory_anchor}" _lo_fsr_memory_pos)
-        if(_lo_fsr_memory_pos EQUAL -1)
-            message(FATAL_ERROR "Pinned FSR memory type compatibility anchor missing")
-        endif()
-        string(REPLACE "${_lo_fsr_memory_anchor}"
-            "if (memProperties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_COHERENT_BIT_AMD) continue;\n        ${_lo_fsr_memory_anchor}"
-            _lo_fsr_backend "${_lo_fsr_backend}")
+        # Require every requested property. Prefer invisible local memory on
+        # discrete GPUs but allow local+visible heaps on UMA. The same policy
+        # still excludes deviceCoherentMemory, which Plume does not enable.
+        include("${CMAKE_CURRENT_LIST_DIR}/LoFsrVulkanMemory.cmake")
+        lo_fsr_patch_memory_selection("${_lo_fsr_backend}" _lo_fsr_backend)
         # Plume defines Vulkan entry points as volk function-pointer variables.
         # Compile the backend against the same ABI, not loader function imports.
         set(_lo_fsr_backend_file "${CMAKE_CURRENT_BINARY_DIR}/lo-fsr-backend/ffx_vk.cpp")
-        file(CONFIGURE OUTPUT "${_lo_fsr_backend_file}" CONTENT "#include <volk.h>\n${_lo_fsr_backend}" @ONLY)
+        file(CONFIGURE OUTPUT "${_lo_fsr_backend_file}" CONTENT "#include <volk.h>\n#include \"vulkan_memory_policy.h\"\n${_lo_fsr_backend}" @ONLY)
         add_library(lo_fsr3upscaler_vk STATIC
             "${_fsr}/src/components/fsr3upscaler/ffx_fsr3upscaler.cpp"
             "${_fsr}/src/shared/ffx_assert.cpp"
@@ -108,7 +102,8 @@ if(LO_ENABLE_FSR)
         target_compile_definitions(lo_fsr3upscaler_vk PRIVATE FFX_FSR3UPSCALER NOMINMAX)
         target_include_directories(lo_fsr3upscaler_vk PUBLIC "${_fsr}/include" "${LO_FSR_SHADER_DIR}"
             PRIVATE "${_fsr}/src/shared" "${_fsr}/src/components"
-            "${_fsr}/src/backends/shared" "${LO_FSR_SHADER_DIR}" "${LO_FSR_VOLK_DIR}")
+            "${_fsr}/src/backends/shared" "${LO_FSR_SHADER_DIR}" "${LO_FSR_VOLK_DIR}"
+            "${CMAKE_CURRENT_LIST_DIR}/../tools/fsr")
         if(TARGET Vulkan::Headers)
             target_link_libraries(lo_fsr3upscaler_vk PUBLIC Vulkan::Headers)
         else()

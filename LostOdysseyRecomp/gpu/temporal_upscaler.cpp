@@ -25,6 +25,7 @@ SrResultStatus Convert(fsr::Status status) {
     case fsr::Status::NeedsReconfigure: return SrResultStatus::NeedsReconfigure;
     case fsr::Status::Failed: return SrResultStatus::Failed;
     case fsr::Status::DeviceLost: return SrResultStatus::DeviceLost;
+    case fsr::Status::InputUnavailable: return SrResultStatus::InputUnavailable;
     }
     return SrResultStatus::Failed;
 }

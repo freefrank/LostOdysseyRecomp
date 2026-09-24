@@ -13,7 +13,7 @@ namespace gpu::dlss { struct EvaluateCapture; }
 
 namespace gpu::fsr {
 
-enum class Status : uint8_t { Ready, Unavailable, NeedsReconfigure, Failed, DeviceLost };
+enum class Status : uint8_t { Ready, Unavailable, NeedsReconfigure, Failed, DeviceLost, InputUnavailable };
 
 // Camera values are derived from the current guest projection, never guessed.
 // For the canonical inverted/infinite depth input, cameraNear is FLT_MAX and

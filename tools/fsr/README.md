@@ -30,3 +30,25 @@ Linux uses 32-bit `wchar_t`, making the private FSR context 837848 bytes with th
 `LoFsrSdkLinkCheck` links actual backend and dispatch symbols and checks the effect version without creating a Vulkan instance/device. A library/link success is build evidence only; FSR rendering, GPU feature enablement, color/depth contracts and quality require separate runtime validation.
 
 Windows SDK compilation explicitly includes `<bit>` because the pinned SDK utility header uses `std::popcount` under C++20 and newer without including it. This compatibility include is scoped to the SDK target; Linux receives it through its existing target-private compatibility header.
+
+## Vulkan memory selection and source regression
+
+The generated SDK backend requires **all** requested memory-property bits,
+not any matching bit. Invisible device-local memory is preferred for ordinary
+discrete-GPU allocations; a compatible host-visible local type remains eligible
+when no invisible type exists (for example UMA). Types requiring disabled AMD
+device-coherent memory remain excluded. The original SDK and shader manifest
+are unchanged; reconfigure CMake and rebuild the SDK target to apply this fix.
+
+`tools/tests/fsr/sdk_memory_selection_regression.py` compiles the original SDK
+selector (with the prior project exclusion) and the function transformed by the
+production CMake patch. Synthetic tables reproduce two baseline failures and
+verify their repair without creating a Vulkan device. `LoFsrVulkanMemoryPolicyTest`
+adds mask, required-property, preference, disabled-feature and type-31 cases.
+
+The `FSR native compile contracts` workflow compiles both FSR-enabled and disabled
+adapter objects plus the temporal provider wrapper against pinned public headers.
+It compiles and validates the two existing conversion shaders, not SDK shader
+permutations. This is not a full SDK link, game build, GPU execution, performance,
+or image-quality test. CPU ownership tests require the project's patched Plume
+headers; use `tools/patches/README.md` for dependency preparation.

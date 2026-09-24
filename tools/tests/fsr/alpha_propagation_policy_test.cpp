@@ -1,6 +1,7 @@
 #include "gpu/fsr_alpha_propagation_gpu.h"
 #include "gpu/fsr_mask_policy.h"
 #include <cstring>
+#include <array>
 #include <cstdio>
 #include <cstdlib>
 
@@ -54,7 +55,7 @@ int main() {
     Check(RetainsRawAfterAuditedLocalBlend(townVs, townOverPs,
         0x01000106u, 0xF, 12, true, 0, false),
         "audited FP16 additive RGB preserves prior color and alpha");
-    for (const uint64_t ps : {townOverPs, 0x342877796a1673e6ull,
+    for (const uint64_t ps : std::array<uint64_t, 3>{townOverPs, 0x342877796a1673e6ull,
         0x9791230246c5bc3cull})
         Check(RetainsRawAfterAuditedLocalBlend(townVs, ps,
             0x01000706u, 0xF, 12, true, 0, false),
