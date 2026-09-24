@@ -2,6 +2,8 @@
 
 源码基线：`main`的`5f67b8c3d1f11ee7b1bea55fa3da7e4f00f943bc`。本轮只交付到`FSR`分支，不合并main、不发布版本。P2仍为In Progress；本页不取代[当前交接](fsr-dlss-fg-codex-handoff.zh-CN.md)中的既有画面证据与验收边界。
 
+核心修复提交：`fae701043861719c26920ce5bdaab9745584e5ea`。提交前验证见[Actions运行35976343011](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35976343011)：Windows/MSVC及Linux/GCC的CPU测试组均13/13通过；Linux原生FSR开启/关闭适配器对象、超分调度器、两段转换GLSL/SPIR-V及SDK内存选择前后对照均通过。验证后才将同一SHA-256补丁提交到FSR。临时源码快照、补丁传输与自动提交工作流在收尾提交中移除；仅保留只读权限的正式回归工作流。
+
 ## 代码修复
 
 1. FSR录制入口原来把无效帧间隔、相机元数据、抖动和曝光等输入拒绝与上下文失效统一返回Unavailable。渲染器会据此禁用当前请求。现在由生产路径与CPU测试共用的`CheckRecordGuard`区分InputUnavailable、NeedsReconfigure和硬性失败；原生纹理、格式、布局和资源错误仍保持严格拒绝。
@@ -12,7 +14,7 @@
 
 ## 测试与构建修复
 
-原CPU测试组新增了依赖Plume接口的遮罩所有权测试，但CI没有准备子模块及项目补丁。本轮补全这两个步骤，并在CMake配置期提供明确的缺失依赖诊断，保留全部原测试。另外修正了混合`uint64_t`与`ull`列表导致的Linux类型推导错误。
+原CPU测试组新增了依赖Plume接口的遮罩所有权测试，但CI没有准备子模块及项目补丁。本轮补全这两个步骤与Linux的Xlib开发头文件，并在CMake配置期提供明确的缺失依赖诊断，保留全部原测试。另外修正了混合`uint64_t`与`ull`列表导致的Linux类型推导错误。
 
 新增59项录制/恢复策略检查、16项内存选择策略检查，并把已有投影测试接入CPU测试组。Linux本地完整CPU测试组13/13通过。对固定SDK函数执行真实CMake转换前后的编译对照：两种合成内存布局在旧函数中均失败，修复后均通过。它们证明的是选择算法，不代表这些设备已经实测，也不是OOM注入。
 

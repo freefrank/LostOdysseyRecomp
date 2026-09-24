@@ -2,15 +2,21 @@ name: Native DLSS CPU contracts
 
 on:
   push:
-    branches: [dlss]
+    branches: [dlss, FSR]
     paths:
       - LostOdysseyRecomp/gpu/**
       - tools/tests/**
+      - tools/fsr/**
+      - cmake/LoFsr*.cmake
+      - tools/patches/plume-lostodyssey.patch
       - .github/workflows/native-dlss-cpu.yml
   pull_request:
     paths:
       - LostOdysseyRecomp/gpu/**
       - tools/tests/**
+      - tools/fsr/**
+      - cmake/LoFsr*.cmake
+      - tools/patches/plume-lostodyssey.patch
       - .github/workflows/native-dlss-cpu.yml
 
 permissions:
@@ -25,10 +31,20 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     steps:
+      - name: Preserve repository and submodule line endings
+        shell: bash
+        run: git config --global core.autocrlf false
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Configure without Vulkan, NGX, submodules or game assets
+      - name: Install Xlib development headers for the Plume CPU interfaces
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y libx11-dev
+      - name: Initialize pinned Plume interface headers (no GPU library build)
+        run: |
+          git submodule update --init --depth 1 thirdparty/plume
+          git -C thirdparty/plume apply ../../tools/patches/plume-lostodyssey.patch
+      - name: Configure without Vulkan loader, vendor SDKs or game assets
         run: cmake -S tools/tests/native_dlss -B out/native-dlss-cpu -DLO_NATIVE_DLSS_CPU_ONLY=ON -DCMAKE_BUILD_TYPE=Release
       - name: Build CPU contract fixtures
         run: cmake --build out/native-dlss-cpu --config Release --target LoNativeDlssCpuTests --parallel 2
