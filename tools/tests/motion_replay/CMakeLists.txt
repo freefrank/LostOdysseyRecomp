@@ -23,6 +23,27 @@ if(WIN32)
 endif()
 add_executable(motion_replay_gpu_test "${ROOT}/tools/tests/motion_replay_gpu_test.cpp" platform_stub.cpp)
 target_link_libraries(motion_replay_gpu_test PRIVATE mv_runtime)
+add_executable(battle_motion_replay_gpu_test "${ROOT}/tools/tests/battle_motion_replay_gpu_test.cpp" platform_stub.cpp)
+target_link_libraries(battle_motion_replay_gpu_test PRIVATE mv_runtime)
+set(LO_BATTLE_MOTION_SOURCE_ROOT "${ROOT}/out" CACHE PATH "Ignored local battle microcode evidence root")
+set(_battle_feedback "${LO_BATTLE_MOTION_SOURCE_ROOT}/streamline-fg-p0/fsr-p2-player-feedback-audit/programs")
+set(_battle_local "${LO_BATTLE_MOTION_SOURCE_ROOT}/streamline-fg-p0/fsr-p2-battle-diagnostic-01/manual-hypocenter-01/shader-cache/source")
+set(_battle_sources
+ "${_battle_feedback}/vs/a6f8edc127ae75374e1ac1fd209ef5e5827f5cfc1fe046e8293f4b5473e9208b.bin"
+ "${_battle_feedback}/vs/bf47df67bbfd857e55ea65815d2f55ef09356818ab8a52fd6d79d6de83220de0.bin"
+ "${_battle_feedback}/vs/b25fdc9a20ac636263493cdc229dc81291b8b4d2ff95dbba8d1995605d617522.bin"
+ "${_battle_feedback}/ps/e3df99cc5e52b1bec72bf1575e3d396ce0a643cba89989ce2d35b1d799c6d67d.bin"
+ "${_battle_local}/ps_8ead384aedf2bb23.bin" "${_battle_local}/ps_a3826242c3338c5f.bin")
+set(_battle_sources_ready TRUE)
+foreach(_source IN LISTS _battle_sources)
+ if(NOT EXISTS "${_source}")
+  set(_battle_sources_ready FALSE)
+ endif()
+endforeach()
+if(_battle_sources_ready)
+ add_test(NAME battle_motion_replay_gpu COMMAND battle_motion_replay_gpu_test "${LO_BATTLE_MOTION_SOURCE_ROOT}")
+ set_tests_properties(battle_motion_replay_gpu PROPERTIES LABELS "battle;gpu;local-microcode" TIMEOUT 180)
+endif()
 add_executable(motion_vector_test "${ROOT}/tools/tests/motion_vector_test.cpp")
 target_include_directories(motion_vector_test PRIVATE "${ROOT}/LostOdysseyRecomp")
 add_executable(temporal_frame_inputs_test "${ROOT}/tools/tests/temporal_frame_inputs_test.cpp")

@@ -13,6 +13,24 @@
 
 namespace gpu::geometry_prepare
 {
+    // Shared QuadList expansion used by the guest draw and its motion replay.
+    inline void ExpandQuadList(std::vector<uint32_t>& indices, std::vector<uint32_t>& primitiveScratch,
+        bool& useIndices, uint32_t indexCount)
+    {
+        auto& out = primitiveScratch;
+        out.clear();
+        uint32_t quads = (useIndices ? uint32_t(indices.size()) : indexCount) / 4;
+        out.reserve(quads * 6);
+        for (uint32_t q = 0; q < quads; q++)
+        {
+            uint32_t v[4];
+            for (int k = 0; k < 4; k++) v[k] = useIndices ? indices[q * 4 + k] : q * 4 + k;
+            out.insert(out.end(), { v[0], v[1], v[2], v[0], v[2], v[3] });
+        }
+        indices.swap(out);
+        useIndices = true;
+    }
+
     template<unsigned Endian>
     inline void CopyDwordsSwappedImpl(uint8_t* dst, const uint8_t* src, size_t dwords)
     {

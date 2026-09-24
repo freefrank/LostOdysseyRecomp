@@ -38,7 +38,9 @@ open. These source-build results do not change the public release configuration.
 
 ### Unreleased development updates
 
-Current source work following v0.6.11 includes temporal lifecycle and capability race fixes (BR-01, BR-02), in-game graphics menu stability with verified execution status feedback (BR-03, `GraphicsRow`), final pre-present swapchain screenshots and synchronous NGX Evaluate input/output capture in F1 state archives, and a depth view lifetime UAF fix for DLSS Quality to DLAA transitions. These additions are verified via focused unit and hardware fixtures but are not included in public v0.6.11 release binaries; end-to-end user capture and visual acceptance remain pending. See [Project Status](docs/STATUS.md) and the [Handoff Document](HANDOFF.md) for details.
+Current source work following v0.6.11 includes temporal lifecycle and capability race fixes (BR-01, BR-02), in-game graphics menu stability with verified execution status feedback (BR-03, `GraphicsRow`), final pre-present swapchain screenshots and synchronous NGX Evaluate input/output capture in F1 state archives, and a depth view lifetime UAF fix for DLSS Quality to DLAA transitions. Focused unit and hardware fixtures verify these changes; they are not in the public v0.6.11 binaries, and end-to-end capture and visual acceptance remain limited. See [Project Status](docs/STATUS.md) and the [Handoff Document](HANDOFF.md) for details.
+
+A separate, unreleased P2 follow-up adds three battle motion-vector shader mappings. CPU and Vulkan GPU fixtures passed, and one manual battle run recorded completed FSR uses without motion-vector first failures. This does not establish visual acceptance or full P2 completion. See the [FSR progress notes](docs/notes/fsr-dlss-fg-codex-progress.zh-CN.md) for scope and limits.
 
 ## v0.6.11 release
 

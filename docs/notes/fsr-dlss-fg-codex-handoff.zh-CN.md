@@ -1,5 +1,7 @@
 # FSR / DLSS FG Codex 停止交接
 
+> 本文前半部分是 2026-09-23 的历史 checkpoint；其旧的 paused／恢复边界不代表当前状态。最新状态见下方 2026-09-24 续记。
+
 日期：2026-09-23。用户已明确停止开发并要求形成 checkpoint；当前 native goal 为 paused。本文记录可复用证据、状态和恢复边界，不表示发布或验收完成。
 
 ## 当前状态
@@ -76,3 +78,29 @@ python tools/tests/fsr/check-fsr-isolated-timing.py out/streamline-fg-p0/fsr-pos
 - host prefilter 替换未覆盖（仅 host scene-only 通过）。
 - SDK 遮罩绑定、完整 P2 画质及性能均未验收。
 - Linux 实机运行未完成。
+
+## 2026-09-24 P2 战斗映射续记
+
+本节更新当前交接状态；不改写上方历史测试结果。本次检查点基于已推送的 P2 整合提交 `a4792244a195545847a33b7708969c108268e361`，目前未发布。候选程序 `cb41c99cdc44456864ac0d44cfcd815c2d099f89595840f4e76df2a2db12c352` 来自源码标识 `d78d80f3add32494c53f67702d27d52c5c5e23aa82d690339cba046768c6357e`。本段不推断本次检查点后续的 commit 状态。P2 尚未完成用户画面验收。
+
+### 已完成并可复用的 P2 检查点
+
+已推送的整合提交 `a479224` 包含 P2 mask 桥接与有界验证。R8 alpha 经 resolve 保留后，在 FSR prepare 中转为 `R32_FLOAT` reactive mask，值为 `min(0.9, M)`；transparency-and-composition mask 保持 null。FSR/Vulkan 默认启用经过资格检查的 raw/bridge 路径，既有环境开关显式设为 0 可关闭；非 FSR 路径不增加该执行。RCAS 默认关闭，菜单提供设置项。Windows RTX 5080 Vulkan SDK 实际消费已在 Quality 路径验证；SDK 消费、跨提交 helper 与色彩转换检查分别见 `out/streamline-fg-p0/fsr-p2-sdk-integration-01`、`fsr-p2-cross-submit-01`、`fsr-p2-color-roundtrip`。这些结果覆盖有界帧与像素链，不代表完整画质验收。
+
+暂态场景输入失败处理已修复并完成有界验证：同一请求遇到暂态失败后可恢复，history reset/epoch 更新不会永久锁住请求；owned-depth 与 replay module shader 创建的两类资源错误均沿初始及缓存路径传播。CPU 路由及失败注入证据见 `out/focused-sr-scene-recovery/`，受影响 renderer 编译见 `out/focused-sr-scene-recovery/failure-same-frame-epoch-build.log`。资源错误 fixture 模拟分配失败，不代表真实系统 OOM。
+
+Windows RTX 5080 SDK 实际消费以及 ONEXPLAYER APEX 15W 代理设备的 SDK/性能检查已有结果，分别见 `out/streamline-fg-p0/fsr-p2-sdk-integration-01`、`out/streamline-fg-p0/fsr-p2-apex15w-sdk-02` 和 `out/streamline-fg-p0/fsr-p2-apex15w-performance-01`。APEX 15W 是本轮用户接受的低功耗代理覆盖，可用于替代本轮要求的实物 Deck 测试；它不等同于 Steam Deck 硬件行为、性能或兼容性结论。另有 `fsr-p2-quality-windows-01` 的 Windows 有界画质对照与 `fsr-p2-dynamic-windows-01` 的 Windows 连续设置切换观察。Windows case10 已完成同进程 Quality→Native AA→DLSS Quality→FSR Quality 链；可复用既有验证，不因交接或提交重跑。
+
+本轮代码当前所对应的颜色 CPU/GPU、raster edge、mask 与性能检查沿用上述独立记录及本续记后文列明的范围；不得把单项或单场景结果扩写成整体 P2 通过。上方较早的“SDK 遮罩绑定、完整 P2 画质及性能未验收”“Linux 实机运行未完成”是当时状态：之后已有 Windows SDK 消费、限定性能证据与 case10；最新 Linux 改动仍未验证。旧结论中有效的限制（例如完整画质、跨场景与 Steam Deck 硬件行为）继续保留。
+
+三组精确战斗 shader-slot 映射（`8d97` slot 8、`4bd` slot 230、`f6` slot 8）及 QuadList helper 的 CPU 检查通过 768 个 clips。GPU fixture 对六段映射 microcode 的 DXIL/SPIR-V 编译及 RTX 5080 Vulkan replay 检查通过，覆盖真实像素着色器 alpha discard、调色板权重运动和非零 base vertex 的双 quad 几何。它们是 fixture 验证，不代表这些映射均在游戏中实际出现。
+
+候选版本的一次手动战斗运行（`out/streamline-fg-p0/fsr-p2-battle-mapped-01/manual-mapped-01/`）在 46.787–92.526 秒战斗窗口记录 2,476 条已完成 FSR 使用，未记录 `mv_first_failure`。日志也出现可恢复的暂态 fallback。该结果限于这次 RTX 5080 Vulkan 战斗运行；不从 module creation 推断具体 draw，也不将 `f6` fixture 映射说成游戏中已观察。用户仅反馈已进入战斗，没有明确确认画质通过，因此不构成视觉验收。
+
+`02d8` 的 screen-UV binding 仍未知，当前没有证据将其列为已确认 blocker，也不要求立即实现。Gate B 第三次审查与一次额外授权审查均已耗尽；本轮三组映射所需的条件 CPU/GPU fixture 均已通过，不存在可继续使用的额外审查额度。最终 P2 仍未验收。用户存档 `user01` 的实际 SHA-256 为 `9b5407eb599917ddff02668e08f423ca522f7d7887f8dac3d61992fded2be0ba`，已确认载入成功且原件保持未改；旧报告 hash 不同，原因未查明，不能据此称存档损坏。自动 Ram 撞击交互导航不可靠，不应重复。游戏 PID 35952 可能仍在运行；不要操作或关闭游戏，也不要改动存档。原版雾效表现已由用户确认相同，不作为本次新增缺陷。
+
+### 后续交接
+
+先等待用户对当前画面的反馈，不要启动新游戏或重复自动 Ram 撞击交互路线。保留用户当前游戏及存档状态。收到画面反馈后再按需规划剩余 Linux 与多场景覆盖；APEX 15W 按用户决定作为低功耗代理验证，不作为 Steam Deck 实机等价证据。对 `02d8` 仅在后续证据确认实际覆盖阻碍时再评估，不预先要求实现。
+
+此前已通过的 mask/color/edge/performance 等结论按原覆盖范围复用；未重复测试、构建或运行游戏。详细 artifact 位于 `out/streamline-fg-p0/fsr-p2-battle-mapped-01/`、`out/battle-motion-replay-build/` 与 `.slim/deepwork/fsr-p2-completion.md`。本续记仅更新证据与限制，不同步 roadmap 或 project-management 状态。

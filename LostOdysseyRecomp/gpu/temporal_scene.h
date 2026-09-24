@@ -65,7 +65,13 @@ inline int PositionVPSlot(uint64_t shader) {
     // f5914: stride-56 material/light pair, c7 UV and c12+ lighting untouched.
     case 0x799c02c8b6582bfeull:case 0xeeae6424413228d6ull:
     // f2358: matched static companion; c8-c11 position only.
+    // f1991/f2163 battle terrain: c8-c11 clip position and copy; c7 UV untouched.
+    case 0x8d9770d1bd8ba0faull:
+    // Battle companion: c8-c11 clip position and o2 copy; non-VP basis untouched.
+    case 0xf6f074ce5d305448ull:
     case 0x6761469677f921c6ull:return 8;
+    // f5446-f5448 enemy skinning: c230-c233 post-skin clip position only.
+    case 0x4bd8985d84983b83ull:
     case 0x31bde3e2770db187ull:case 0x7e8492365edcf556ull:return 230;
     case 0x118a37c0d32c0477ull:case 0x3148f81d65d3b5f4ull:case 0xb7557072899a63a1ull:case 0xc84ca5209e98e743ull:
     case 0x0eb223d33f8e8e0cull:case 0x1e9017d2b296f480ull:

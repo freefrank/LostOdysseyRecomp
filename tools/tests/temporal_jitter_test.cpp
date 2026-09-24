@@ -792,8 +792,228 @@ static void CapturedF16385Layers()
     std::printf("Captured f16385 layers: %u checks, 12 draws across three frames, two shaders, 32 phases, 1080p/4K; legacy separation %.6f pixels\n",checks,legacySeparation);
 }
 
+// Compact cumulative-register reconstructions (original capture files and
+// SHA-256 in out/streamline-fg-p0/fsr-p2-battle-cpu-01/source-samples.json).
+// f1991 draw699 and f2163 draw540: c0..3 world, c7 UV, c8..11 VP, c12 light.
+struct Battle8dSample {
+    const char* source;
+    std::array<uint32_t,16> vp;
+    std::array<uint32_t,24> other;
+    std::array<uint32_t,8> ps;
+};
+static constexpr std::array<Battle8dSample,2> battle8d{{
+    {"f1991/d699",
+     {0x3f636cc9,0xbeda98bb,0xbe2cdeff,0x4194f6af,0x3ed6c0e1,0x3f677eb1,0xbda33d39,0x410ca9eb,
+      0x3e3f2ba7,0,0x3f7b7fce,0xc1d802f0,0x3e3ebdea,0xbf2b593a,0xbf381fd5,0x428b3729},
+     {0x40400000,0x40400000,0x40400000,0x40400000,0,0xbf800000,0,0,
+      0x3f800000,0,0,0,0,0,0x3f800000,0,0x80000000,0x80000000,0x3f800000,0,
+      0x3ebecc0b,0x3f39b8fd,0xbf14210c,0x425a779b},
+     {0,0,0,0x3f800000,0x3f800000,0x3f000000,0,0}},
+    {"f2163/d540",
+     {0x3f7e1781,0,0xbdf996a3,0x42462fb4,0,0x3f800000,0,0,
+      0x3df996a3,0,0x3f7e1781,0xc1c48aee,0x3f800000,0,0,0},
+     {0x3f800000,0x3f800000,0x3f800000,0x3f800000,0xbf326e98,0xb382daa5,0,0,
+      0x3382daa5,0xbf326e98,0,0,0,0,0x3f326e98,0,0,0,0x3fb7a4ea,0x80000000,
+      0,0x3f800000,0,0},
+     {0,0,0,0x3f800000,0x40000000,0x3f000000,0xbf800000,0x3f800000}}
+}};
+
+// f5446..f5448 draw11: c1..4 world, c5..7 selected skin-palette
+// samples, c230..233 VP and c255 select flags. This CPU fixture starts at
+// controlled post-skin registers; full bone palette/weights are GPU-lane scope.
+struct Battle4bdSample {
+    const char* source;
+    std::array<uint32_t,16> vp;
+    std::array<uint32_t,32> other;
+    std::array<uint32_t,8> ps;
+};
+static constexpr std::array<Battle4bdSample,3> battle4bd{{
+    {"f5446/d11",
+     {0xbf07a1ae,0x3e6bea93,0x3f6fcd2e,0x3f700aa1,0x3fbd1fc5,0x3da9305b,0x3eabf9a4,0x3eac25b6,
+      0,0x4031e81c,0xbdb372bc,0xbdb3a0b8,0x431f1fa5,0xc39290f9,0x434fca00,0x4359ff3f},
+     {0xbf7fff6b,0x3b8a3b29,0,0,0xbb8a3b29,0xbf7fff6b,0,0,0,0,0x3f800000,0,
+      0x43b2be41,0x40f85762,0,0x3f800000,0x3f7f9ff0,0x3d500000,0x3c996b36,0xbfef1eb0,
+      0xbd46fc35,0x3f7e5207,0xbdd407e8,0x412f7af4,0xbcc37b29,0x3dd1db57,0x3f7e9445,0xc178dc50,
+      0,0x3f800000,0x3f000000,0xbf800000},
+     {0x40400000,0x40400000,0,0,0,0x3f000000,0x3f800000,0}},
+    {"f5447/d11",
+     {0xbf07a1ae,0x3e6bea93,0x3f6fcd2e,0x3f700aa1,0x3fbd1fc5,0x3da9305b,0x3eabf9a4,0x3eac25b6,
+      0,0x4031e81c,0xbdb372bc,0xbdb3a0b8,0x431eff6f,0xc3928a10,0x43500232,0x435a3780},
+     {0xbf7fff6b,0x3b8a3b29,0,0,0xbb8a3b29,0xbf7fff6b,0,0,0,0,0x3f800000,0,
+      0x43b21abe,0x40dee3c2,0,0x3f800000,0x3f7f9b08,0x3d5116b6,0x3cb23968,0xc00b13dc,
+      0xbd473641,0x3f7e6b00,0xbdcc594f,0x41296fb2,0xbcdad935,0x3dc9ddf4,0x3f7ea95b,0xc1817d04,
+      0,0x3f800000,0x3f000000,0xbf800000},
+     {0x40400000,0x40400000,0,0,0,0x3f000000,0x3f800000,0}},
+    {"f5448/d11",
+     {0xbf07a1ae,0x3e6bea93,0x3f6fcd2e,0x3f700aa1,0x3fbd1fc5,0x3da9305b,0x3eabf9a4,0x3eac25b6,
+      0,0x4031e81c,0xbdb372bc,0xbdb3a0b8,0x431edffe,0xc3928351,0x4350390f,0x435a6e6b},
+     {0xbf7fff6b,0x3b8a3b29,0,0,0xbb8a3b29,0xbf7fff6b,0,0,0,0,0x3f800000,0,
+      0x43b09bd1,0x40acbcb1,0,0x3f800000,0x3f7f9293,0x3d525913,0x3cd8a699,0xc02950f8,
+       0xbd479603,0x3f7e9c89,0xbdbc321e,0x411cba25,0xbcfe226b,0x3db93e0b,0x3f7ed3b1,0xc18eb5b5,
+      0,0x3f800000,0x3f000000,0xbf800000},
+     {0x40400000,0x40400000,0,0,0,0x3f000000,0x3f800000,0}}
+}};
+
+// Independent, final shader swizzles (no Transform/PositionVPSlot in oracle).
+static Float4 Battle8dClip(const Constants& c, Float4 r6)
+{
+    r6[3]=1;
+    auto r4=Mul(r6[3],S(C(c,3),"xywz"));
+    r4=Mad(r6[2],S(C(c,2),"wxzy"),S(r4,"zxwy"));
+    r4=Mad(r6[1],S(C(c,1),"zwyx"),S(r4,"zxwy"));
+    r6=Mad(r6[0],S(C(c,0),"yzxw"),S(r4,"zxwy"));
+    r4=Mul(r6[3],C(c,11));
+    r4=Mad(r6[1],C(c,10),r4);
+    r4=Mad(r6[0],C(c,9),r4);
+    return Mad(r6[2],C(c,8),r4); // oPos and o2; c7 UV is independent.
+}
+static float Dot(const Float4& a,const Float4& b)
+{
+    float result=0;
+    for (unsigned i=0;i<4;++i) result+=a[i]*b[i];
+    return result;
+}
+static Float4 Battle4bdClip(const Constants& c)
+{
+    // Controlled one-bone post-skin registers seeded with captured c5..c7.
+    // Preserve c255's observed x=0, y=1 select: xyz from r3/r6, w=1.
+    const auto r11=C(c,5),r10=C(c,6),r6=C(c,7);
+    auto r1=S(r6,"zxyy"),r3=S(r6,"zxyy");
+    r1[3]=r3[3]=float(F(c[255*4+1]));
+    const float r0w=Dot(S(r11,"zxyw"),r3);
+    const float r3x=Dot(S(r10,"zxyw"),r3);
+    const float r1x=Dot(S(r6,"zxyw"),r1);
+    r1=Mad(r1x,S(C(c,3),"wzyx"),S(C(c,4),"wzyx"));
+    r1=Mad(r3x,S(C(c,2),"yxzw"),S(r1,"zwyx"));
+    r3=Mad(r0w,S(C(c,1),"zywx"),S(r1,"zxwy"));
+    r1=Mad(r3[2],C(c,233),Mul(r3[0],C(c,232)));
+    r1=Mad(r3[1],C(c,231),r1);
+    return Mad(r3[3],C(c,230),r1);
+}
+static Float4 BattleF6Clip(const Constants& c,const Float4& r6)
+{
+    auto r3=Mul(r6[3],C(c,11));
+    r3=Mad(r6[0],C(c,10),r3);
+    r3=Mad(r6[2],C(c,9),r3);
+    return Mad(r6[1],C(c,8),r3); // oPos and o2; rest of basis outside VP.
+}
+
+static void BattleP2CpuJitter()
+{
+    constexpr uint64_t vs8=0x8d9770d1bd8ba0faull,vs4=0x4bd8985d84983b83ull,
+        vsF6=0xf6f074ce5d305448ull;
+    const float ndcScale[]{1,1,-1},ndcOffset[]{0,0,1};
+    Check(IsJitterViewport({0,0,1280,720},0x43f,ndcScale,ndcOffset),
+        "battle guest-camera gate uses verified 720p viewport");
+    Check(PositionVPSlot(0x02d8d17463de32cdull)<0,
+        "unreviewed screen-UV shader remains excluded");
+    Check(battle4bd[0].vp!=battle4bd[1].vp && battle4bd[1].vp!=battle4bd[2].vp &&
+        battle4bd[0].other!=battle4bd[1].other && battle4bd[1].other!=battle4bd[2].other,
+        "three historical skinned draws contain evolving camera and palette banks");
+    double maxError=0;
+    unsigned sampled=0;
+    const auto exercise=[&](uint64_t vs,uint64_t psHash,int slot,Constants original,
+        const Constants originalPs,const char* source,auto evaluate,const auto& points) {
+        std::array<uint32_t,16> vp{};
+        std::copy_n(original.begin()+slot*4,16,vp.begin());
+        for (const auto extent:{Viewport{0,0,853,480},Viewport{0,0,1280,720}})
+        {
+            const SceneAnchor anchor{vp,extent,0x10000};
+            for (uint64_t phase=0;phase<32;++phase)
+            {
+                auto upload=original,ps=originalPs;
+                const auto result=ApplyDrawJitter(vs,psHash,phase,true,true,&anchor,
+                    anchor.depthAllocation,extent,upload.data(),ps.data());
+                Check(result.applied && result.slot==slot && !result.shadowCompensated &&
+                    result.rejection==JitterRejection::None,"actual battle draw jitter upload accepted");
+                Check(ps==originalPs,"battle PS upload bitwise unchanged");
+                for (unsigned row=0;row<4;++row)
+                {
+                    Check(upload[slot*4+row*4+2]==original[slot*4+row*4+2] &&
+                        upload[slot*4+row*4+3]==original[slot*4+row*4+3],
+                        "battle VP depth and homogeneous coefficients preserved");
+                    upload[slot*4+row*4]=original[slot*4+row*4];
+                    upload[slot*4+row*4+1]=original[slot*4+row*4+1];
+                }
+                Check(upload==original,"all non-VP constants including UV, skin palette and guest bank unchanged");
+                upload=original;ps=originalPs;
+                const auto again=ApplyDrawJitter(vs,psHash,phase,true,true,&anchor,
+                    anchor.depthAllocation,extent,upload.data(),ps.data());
+                const auto jitter=FrameJitter(phase,extent.width,extent.height);
+                Check(again.applied && again.sample.phase==jitter.phase,"actual phase used by battle upload");
+                for (const auto& point:points)
+                {
+                    const auto old=evaluate(original,point),now=evaluate(upload,point);
+                    Check(std::isfinite(old[3]) && std::abs(old[3])>0.00001f &&
+                        now[2]==old[2] && now[3]==old[3],"independent swizzled clip Z/W unchanged");
+                    const double dx=(double(now[0])/now[3]-double(old[0])/old[3])*extent.width*.5;
+                    const double dy=(double(old[1])/old[3]-double(now[1])/now[3])*extent.height*.5;
+                    maxError=std::max({maxError,std::abs(dx-jitter.pixelX),std::abs(dy-jitter.pixelY)});
+                    Check(std::abs(dx-jitter.pixelX)<.03 && std::abs(dy-jitter.pixelY)<.03,
+                        "independent final swizzle yields requested XY pixel shift");
+                    ++sampled;
+                }
+            }
+            auto altered=anchor;altered.vpBits[0]^=1;
+            auto untouched=original,unmodifiedPs=originalPs;
+            const auto reject=ApplyDrawJitter(vs,psHash,0,true,true,&altered,
+                anchor.depthAllocation,extent,untouched.data(),unmodifiedPs.data());
+            Check(!reject.applied && reject.rejection==JitterRejection::CameraMismatch &&
+                untouched==original && unmodifiedPs==originalPs,
+                "different unmodified camera rejected without upload writes");
+            const auto rejectDepth=ApplyDrawJitter(vs,psHash,0,true,true,&anchor,
+                anchor.depthAllocation+1,extent,untouched.data(),unmodifiedPs.data());
+            Check(!rejectDepth.applied && rejectDepth.rejection==JitterRejection::DepthMismatch &&
+                untouched==original && unmodifiedPs==originalPs,
+                "different depth allocation rejected without upload writes");
+        }
+        std::printf("P2 CPU %s VS=%016llx slot=%d phase=32 extents=853x480,1280x720\n",
+            source,static_cast<unsigned long long>(vs),slot);
+    };
+    for (const auto& entry:battle8d)
+    {
+        Constants vs{},ps{};
+        std::copy_n(entry.other.begin(),16,vs.begin());
+        std::copy_n(entry.other.begin()+16,4,vs.begin()+7*4);
+        std::copy(entry.vp.begin(),entry.vp.end(),vs.begin()+8*4);
+        std::copy_n(entry.other.begin()+20,4,vs.begin()+12*4);
+        std::copy_n(entry.ps.begin(),4,ps.begin());
+        std::copy_n(entry.ps.begin()+4,4,ps.begin()+255*4);
+        exercise(vs8,0xa196904547677608ull,8,vs,ps,entry.source,Battle8dClip,
+            std::array<Float4,3>{{{-.6f,.3f,.5f,1},{1.2f,-.5f,2.f,1},{.4f,1.1f,-1.f,1}}});
+    }
+    for (const auto& entry:battle4bd)
+    {
+        Constants vs{},ps{};
+        std::copy_n(entry.other.begin(),28,vs.begin()+4);
+        std::copy(entry.vp.begin(),entry.vp.end(),vs.begin()+230*4);
+        std::copy_n(entry.other.begin()+28,4,vs.begin()+255*4);
+        std::copy_n(entry.ps.begin(),4,ps.begin());
+        std::copy_n(entry.ps.begin()+4,4,ps.begin()+255*4);
+        Check(F(vs[255*4])==0 && F(vs[255*4+1])==1,"historical skin select flags match controlled post-skin case");
+        exercise(vs4,0x8ead384aedf2bb23ull,230,vs,ps,entry.source,
+            [](const Constants& c,const Float4&){return Battle4bdClip(c);},
+            std::array<Float4,1>{{{0,0,0,1}}});
+    }
+    Constants effect{},effectPs{};
+    for (unsigned i=0;i<effect.size();++i)
+        effect[i]=std::bit_cast<uint32_t>(float(int(i%37)-18)*.125f);
+    constexpr std::array<float,16> controlledVp{
+        1,0,0,0, 0,1,0,0, 0,0,1,1, 0,0,.1f,0};
+    for (unsigned i=0;i<16;++i)effect[8*4+i]=std::bit_cast<uint32_t>(controlledVp[i]);
+    for (unsigned i=0;i<effectPs.size();++i)
+        effectPs[i]=std::bit_cast<uint32_t>(float(int(i%19)-9)*.125f);
+    exercise(vsF6,0xa3826242c3338c5full,8,effect,effectPs,"f6-controlled",
+        [](const Constants& c,const Float4& point){return BattleF6Clip(c,point);},
+        std::array<Float4,3>{{{.7f,.2f,2.f,1},{1.5f,-.5f,3.f,1},{-.4f,.6f,4.f,1}}});
+    std::printf("Battle P2 CPU jitter: %u final-clip samples, max pixel error %.6f (controlled f6; no GPU draw/alpha claim)\n",
+        sampled,maxError);
+}
+
 int main(int argc,char** argv)
 {
+    if (argc==2 && std::strcmp(argv[1],"--battle-p2-cpu")==0)
+    { BattleP2CpuJitter();return 0; }
     if (argc==2 && std::strcmp(argv[1],"--captured-f16385-layers")==0)
     { CapturedF16385Layers(); return 0; }
     if (argc==2 && std::strcmp(argv[1],"--captured-f5912-layers")==0)

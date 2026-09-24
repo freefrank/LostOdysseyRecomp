@@ -34,7 +34,9 @@ Quality、Balanced、Performance、Native AA 均有 Windows 有界运行证据�
 
 ### 未发布开发进展
 
-当前开发分支（v0.6.11 之后）的工作包含时序生命周期与能力竞争修复（BR-01、BR-02）、带有经校验执行状态反馈的游戏内图形菜单稳定性重构（BR-03、`GraphicsRow`）、F1 状态捕获中的呈现前交换链最终截图与同步 NGX Evaluate 输入/输出拷贝捕获，以及 DLSS Quality 切换至 DLAA 时的深度视图生命周期 UAF 修复。上述改进已通过定向单元测试与硬件 fixture 验证，但未包含在公开的 v0.6.11 二进制发布包中；端到端用户导帧与真实画质验收仍待进行。详见[项目状态](docs/STATUS.md)与[交接文档](HANDOFF.md)。
+当前开发分支（v0.6.11 之后）的工作包含时序生命周期与能力竞争修复（BR-01、BR-02）、带有经校验执行状态反馈的游戏内图形菜单稳定性重构（BR-03、`GraphicsRow`）、F1 状态捕获中的呈现前交换链最终截图与同步 NGX Evaluate 输入/输出拷贝捕获，以及 DLSS Quality 切换至 DLAA 时的深度视图生命周期 UAF 修复。定向单元测试与硬件 fixture 验证了这些改动；它们未包含在公开的 v0.6.11 二进制包中，端到端导帧和画面验收仍有限。详见[项目状态](docs/STATUS.md)与[交接文档](HANDOFF.md)。
+
+另有尚未发布的 P2 后续工作增加了三组战斗运动矢量 shader 映射；CPU 与 Vulkan GPU fixture 已通过，一次手动战斗运行记录到已完成的 FSR 使用且没有运动矢量首错记录。这不代表画面验收或 P2 全面完成。详见[FSR 进度记录](docs/notes/fsr-dlss-fg-codex-progress.zh-CN.md)。
 
 ## v0.6.11 发布版
 

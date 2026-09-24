@@ -6458,18 +6458,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 {
                 case 13: // quad list -> triangle list
                 {
-                    auto& out = primitiveScratch;
-                    out.clear();
-                    uint32_t quads = (useIndices ? uint32_t(indices.size()) : info.indexCount) / 4;
-                    out.reserve(quads * 6);
-                    for (uint32_t q = 0; q < quads; q++)
-                    {
-                        uint32_t v[4];
-                        for (int k = 0; k < 4; k++) v[k] = useIndices ? indices[q * 4 + k] : q * 4 + k;
-                        out.insert(out.end(), { v[0], v[1], v[2], v[0], v[2], v[3] });
-                    }
-                    indices.swap(out);
-                    useIndices = true;
+                    geometry_prepare::ExpandQuadList(indices, primitiveScratch, useIndices, info.indexCount);
                     break;
                 }
                 case 5: // triangle fan -> list
