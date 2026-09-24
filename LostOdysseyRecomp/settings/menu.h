@@ -12,14 +12,13 @@ enum class GraphicsRow : int
     Widescreen = 2,
     OutputResolution = 3,
     AntiAliasing = 4,
-    Upscaler = 5,
-    DlssQuality = 6,
+    DlssQuality = 5,
+    FsrSharpness = 6,
     ScalingQuality = 7,
     FrameRate = 8,
     Brightness = 9,
     Save = 10,
-    FsrSharpness = 11,
-    Count = 12,
+    Count = 11,
 };
 // Called by input polling before returning the guest-facing controller state.
 bool FilterInput(uint16_t &buttons, int16_t leftX, int16_t leftY);

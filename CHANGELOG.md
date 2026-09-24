@@ -8,6 +8,7 @@ One record of completed changes, with unpublished work separated from verified r
 
 ### English
 
+- Settings menu: merged AA and DLSS/FSR selection, placed FSR sharpness directly after quality, and kept Save last. A confirms actions/dialogs only; Left/Right adjusts choices, with mouse adjustment retained. Cached static menu decoration at native output resolution to remove repeated full-background software filtering on navigation. Synthetic input/raster tests cover the changes; real-device end-to-end latency is not measured. See [menu interaction notes](docs/notes/settings-menu-interaction.md).
 - Input/window usability:
   - Implemented Issue #50 cursor auto-hide: the mouse pointer hides after 2 seconds of inactivity while it remains over the game window, reappears on pointer activity, and is restored when focus/pointer leaves the game.
   - Disabled SDL text input/IME composition for the gameplay window on creation and focus regain so active IMEs do not consume normal gameplay keys; installer text-entry remains explicitly scoped.
@@ -20,6 +21,7 @@ One record of completed changes, with unpublished work separated from verified r
 
 ### 简体中文
 
+- 设置菜单：合并抗锯齿与 DLSS/FSR 入口，FSR 锐化紧跟画质选项，保存始终在最后。A 仅确认操作／对话框，方向键左右调整选项，保留鼠标调整。按输出分辨率缓存静态菜单装饰，避免每次导航重复进行整屏软件纹理过滤。已补充输入与光栅化离线测试，尚未测量实机端到端延迟。见[菜单交互记录](docs/notes/settings-menu-interaction.md)。
 - 输入与窗口体验：
   - 实现 Issue #50 鼠标自动隐藏：鼠标停留在游戏窗口内且 2 秒无操作后自动隐藏；移动／点击后立即恢复，离开窗口或失焦时强制恢复系统鼠标。
   - 游戏窗口创建及重新获得焦点时显式关闭 SDL 文本输入／IME 组合，避免输入法抢占普通游戏按键；安装器的文字输入仍按需单独启用。
