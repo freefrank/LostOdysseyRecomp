@@ -8,7 +8,7 @@ Status: **2026-09-06, released in v0.2.1; not included in v0.2**. The input upda
 - Held buttons are combined; each trigger takes the maximum value. Each stick uses the strongest whole vector above its deadzone (left 7,849, right 8,689), rather than combining axes from different controllers.
 - Keyboard events update a synchronized snapshot on the event-pump thread. Losing window focus clears it to prevent held keys remaining stuck. Keyboard remains usable with connected pads; held I/J/K/L keys override their corresponding left-stick axes.
 - E/R provide full left/right trigger input. Existing arrow, Enter/Backspace, Z/X/A/S and Q/W mappings remain unchanged.
-- Each `GetState` clears the caller state before constructing the current combined input. Rumble stays opt-in with `LO_CONTROLLER_RUMBLE=1`; when enabled, requests are sent to all opened pads.
+- Each `GetState` clears the caller state before constructing the current combined input. Rumble is enabled by default and requests are sent to all opened pads. `LO_CONTROLLER_RUMBLE=0` explicitly disables host rumble. Non-zero motor state is kept active until the guest changes or clears it, matching XInput/Xam state semantics instead of truncating every request to 100 ms.
 
 Implementation: [hid.cpp](../../LostOdysseyRecomp/hid/hid.cpp), [hid.h](../../LostOdysseyRecomp/hid/hid.h) and [video event pump](../../LostOdysseyRecomp/gpu/video.cpp).
 

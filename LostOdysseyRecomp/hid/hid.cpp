@@ -513,17 +513,31 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
 
 uint32_t hid::SetState(uint32_t dwUserIndex, XAMINPUT_VIBRATION* pVibration)
 {
-    // Keep local debugging quiet. Opt in explicitly to restore controller rumble.
+    // Match XInput/Xam semantics: rumble is enabled by default and remains at
+    // the requested motor speeds until the guest changes or clears the state.
+    // LO_CONTROLLER_RUMBLE=0 is an explicit host-side opt-out.
     static const bool rumbleEnabled = [] {
         const char* value = getenv("LO_CONTROLLER_RUMBLE");
-        return value && strcmp(value, "1") == 0;
+        return !value || strcmp(value, "0") != 0;
     }();
     if (dwUserIndex != 0)
         return ERROR_DEVICE_NOT_CONNECTED;
     if (!rumbleEnabled) return ERROR_SUCCESS;
+
+    const Uint32 duration = (pVibration->wLeftMotorSpeed || pVibration->wRightMotorSpeed)
+        ? 0xFFFFFFFFu
+        : 0u;
+
     std::lock_guard lock(g_hidMutex);
     for (auto* controller : g_controllers)
-        SDL_GameControllerRumble(controller, pVibration->wLeftMotorSpeed, pVibration->wRightMotorSpeed, 100);
+    {
+        if (!SDL_GameControllerGetAttached(controller)) continue;
+        SDL_GameControllerRumble(
+            controller,
+            pVibration->wLeftMotorSpeed,
+            pVibration->wRightMotorSpeed,
+            duration);
+    }
     return ERROR_SUCCESS;
 }
 
