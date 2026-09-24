@@ -3630,17 +3630,17 @@
     {
       "key": "frame-generation-research",
       "title": "Evaluate frame generation integration",
-      "body": "<!-- lo-project:frame-generation-research -->\n\n## v0.7.0 frame-generation plan\n\nThe planned Windows PC delivery requires 2× DLSS-G and 2× FSR Frame Generation on both D3D12 and Vulkan. Each of the four provider/API combinations has independent acceptance gates; D3D12 diagnosis does not defer Vulkan. This plan does not include FSR Super Resolution or sharpening, DLSS SR, higher multipliers, DX11, Switch, Linux/Steam Deck, or a release date.\n\nP0 fixes SDK, licensing, device, queue and presentation routes. P1 validates the retained native-velocity path and same-frame coverage before fallback work. P2 completes camera, rigid and skeletal motion vectors; P3 freezes color/UI/frame inputs and reset/lifetime rules; P4 establishes both API foundations; P5 and P6 implement FSR FG and DLSS-G on both APIs; P7 accepts the four combinations; P8 prepares a separately authorized release.\n\nThis is planning only: implementation, SDK validation, game tests, player acceptance and publication have not started.\n\nDependencies (source keys): `native-object-motion`, `temporal-color-exposure`, `issue10-fsr-upscaling-frame-generation`.\n\nstage_detail: Planning complete; implementation not started\n\n## Sources\n\n- [v0.7.0 frame-generation plan](https://github.com/freefrank/LostOdysseyRecomp/blob/main/docs/notes/v0.7.0-frame-generation-plan.md)\n- [docs/notes/temporal-upscaling-feasibility.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/notes/temporal-upscaling-feasibility.md) (repository reference; working-tree requirements may be newer)\n- https://github.com/freefrank/LostOdysseyRecomp/issues/10\n",
+      "body": "<!-- lo-project:frame-generation-research -->\n\n## v0.7.0 frame-generation plan\n\nThe planned Windows PC delivery requires 2× DLSS-G and 2× FSR Frame Generation on both D3D12 and Vulkan. Each of the four provider/API combinations has independent acceptance gates; D3D12 diagnosis does not defer Vulkan. This plan does not include FSR Super Resolution or sharpening, DLSS SR, higher multipliers, DX11, Switch, Linux/Steam Deck, or a release date.\n\nP0 fixes SDK, licensing, device, queue and presentation routes. P1 validates the retained native-velocity path and same-frame coverage before fallback work. P2 completes camera, rigid and skeletal motion vectors; P3 freezes color/UI/frame inputs and reset/lifetime rules; P4 establishes both API foundations; P5 and P6 implement FSR FG and DLSS-G on both APIs; P7 accepts the four combinations; P8 prepares a separately authorized release.\n\nThis remains planning/backlog scope: no production frame-generation implementation, FG runtime validation, player acceptance or publication is established. An experimental probe run reported generated-present intervals but exited 1 with Vulkan validation errors. This diagnostic run does not establish production FG implementation or acceptance.\n\nDependencies (source keys): `native-object-motion`, `temporal-color-exposure`, `issue10-fsr-upscaling-frame-generation`.\n\nstage_detail: Planning complete; broader backlog deferred\n\n## Sources\n\n- [v0.7.0 frame-generation plan](https://github.com/freefrank/LostOdysseyRecomp/blob/main/docs/notes/v0.7.0-frame-generation-plan.md)\n- [docs/notes/temporal-upscaling-feasibility.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/notes/temporal-upscaling-feasibility.md) (repository reference; working-tree requirements may be newer)\n- https://github.com/freefrank/LostOdysseyRecomp/issues/10\n\n## Active phased scope and deferred backlog — 2026-09-22\n\nFollowing user approval of the FSR + DLSS FG implementation plan, active scope focuses on Windows Vulkan Streamline fixed 2× DLSS FG (P0 common contracts and coexistence architecture consult, P3 presentation infrastructure, P4 fixed 2× DLSS FG). Broader historical v0.7.0 goals (D3D12 2× DLSS-G, D3D12 and Vulkan 2× FSR Frame Generation) remain active backlog requirements, and dynamic multi-frame generation (MFG) is explicitly deferred by the new plan; these are deferred for the current iteration and not cancelled or deleted.\n",
       "issue_url": null,
       "fields": {
         "Kind": "Research",
         "Area": "Temporal rendering",
         "Status": "Todo",
-        "Delivery": "Not started",
+        "Delivery": "Deferred",
         "Release": "v0.7.0",
         "Start date": null,
         "Target date": null,
-        "Evidence": "The v0.7.0 plan defines required 2× DLSS-G and FSR Frame Generation delivery on D3D12 and Vulkan, with four independent acceptance gates. It is planning only: no implementation, SDK validation, game test, player acceptance, or release has started."
+        "Evidence": "Broader historical goals (2× DLSS-G on D3D12 and 2× FSR FG on D3D12/Vulkan) remain deferred backlog; dynamic MFG is deferred by the current plan. Active FG production work is phased through P0 architecture evaluation, P3 infrastructure and P4 Windows Vulkan DLSS FG. Experimental probe run reported generated-present intervals but exited 1 with Vulkan validation errors; it is failed-run diagnostic evidence, not production FG delivery or Gate 1 acceptance."
       },
       "source_refs": [
         "docs/notes/v0.7.0-frame-generation-plan.md",
@@ -3967,7 +3967,7 @@
     {
       "key": "vendor-temporal-upscaling",
       "title": "Integrate vendor temporal upscaling after input validation",
-      "body": "<!-- lo-project:vendor-temporal-upscaling -->\n\nDLSS/FSR/XeSS 等时间超分需先满足真实渲染输入与质量门槛。\n\n## Scope and completion criteria\n\n- [ ] 核实 SDK 版本、硬件、平台与分发条件\n- [ ] 共享正确 scene color、depth、motion、jitter、exposure、尺寸、fence 和 reset 合约\n- [ ] 与现有 TAA 作为替代选项，避免重复时间重建\n- [ ] 提供明确质量档、回退和失败诊断\n\n## Current — 2026-09-22\n\nFollowing initial experimental native Vulkan DLSS/DLAA packaging in v0.6.11, baseline commit `0625923` repaired temporal history clock progression and gap jitter retention (BR-01) and resolved multithreaded capability snapshot data races (BR-02). Implementation delivery commit `871685fdd75b84c00bb9ebb685f36d90169eb82d` (`871685f`, pushed to `main`) implements BR-03 with stable `GraphicsRow` indexing, verified target adoption, checked Vulkan submission runtime status feedback, structured status logging with parameter recording on settings save, pre-present swapchain screenshots in F1 captures, and UAF fix on Quality-to-DLAA switching. Synchronous NGX Evaluate capture (raw, preview BMP, dlss-evaluations.json) has been integrated. In user live-testing, Quality->DLAA switching and frame 2961–2963 export completed without crash (frame 2887 verified DLAA Submitted). User re-export with latest binary, per-frame NGX execution capture, and visual quality/player acceptance remain pending.\n\n## Validation and acceptance\n\n先通过真实运动/遮挡/切场景输入验证，再运行固定场景画质与性能 A/B。\n\n尚未完成所列场景验收；实现/发布/测试与用户验收独立。\n\nDependencies (source keys): `native-object-motion`, `temporal-color-exposure`, `taa-motion-quality`.\n\nstage_detail: In progress; targeted implementation and contract verification complete; live visual acceptance and latest-binary NGX capture pending\n\n## Sources\n\n- https://github.com/freefrank/LostOdysseyRecomp/commit/871685fdd75b84c00bb9ebb685f36d90169eb82d\n- https://github.com/freefrank/LostOdysseyRecomp/commit/0625923ec69e1741657fa95f9013b474fe82c745\n- [docs/STATUS.md](https://github.com/freefrank/LostOdysseyRecomp/blob/main/docs/STATUS.md) (repository reference; working-tree requirements may be newer)\n- [docs/notes/temporal-upscaling-feasibility.md](https://github.com/freefrank/LostOdysseyRecomp/blob/main/docs/notes/temporal-upscaling-feasibility.md) (repository reference; working-tree requirements may be newer)\n- [docs/notes/native-dlss-validation.md](https://github.com/freefrank/LostOdysseyRecomp/blob/main/docs/notes/native-dlss-validation.md) (repository reference; working-tree requirements may be newer)\n- [docs/notes/post-v0.6.7-bug-report.zh-CN.md](https://github.com/freefrank/LostOdysseyRecomp/blob/main/docs/notes/post-v0.6.7-bug-report.zh-CN.md)\n- docs/notes/native-dlss-handoff.zh-CN.md\n",
+      "body": "<!-- lo-project:vendor-temporal-upscaling -->\n\nDLSS/FSR/XeSS 等时间超分需先满足真实渲染输入与质量门槛。\n\n## Scope and completion criteria\n\n- [ ] 核实 SDK 版本、硬件、平台与分发条件\n- [ ] 共享正确 scene color、depth、motion、jitter、exposure、尺寸、fence 和 reset 合约\n- [ ] 与现有 TAA 作为替代选项，避免重复时间重建\n- [ ] 提供明确质量档、回退和失败诊断\n\n## Historical delivery record — 2026-09-22\n\nFollowing initial experimental native Vulkan DLSS/DLAA packaging in v0.6.11, baseline commit `0625923` repaired temporal history clock progression and gap jitter retention (BR-01) and resolved multithreaded capability snapshot data races (BR-02). Implementation delivery commit `871685fdd75b84c00bb9ebb685f36d90169eb82d` (`871685f`, pushed to `main`) implements BR-03 with stable `GraphicsRow` indexing, verified target adoption, checked Vulkan submission runtime status feedback, structured status logging with parameter recording on settings save, pre-present swapchain screenshots in F1 captures, and UAF fix on Quality-to-DLAA switching. Synchronous NGX Evaluate capture (raw, preview BMP, dlss-evaluations.json) has been integrated. In user live-testing, Quality->DLAA switching and frame 2961–2963 export completed without crash (frame 2887 verified DLAA Submitted). User re-export with latest binary, per-frame NGX execution capture, and visual quality/player acceptance remain pending.\n\n## Current status — 2026-09-24\n\nThe native Vulkan DLSS/DLAA delivery and bounded results under commit `871685fdd75b84c00bb9ebb685f36d90169eb82d` remain valid. FSR 3.1.4 Vulkan SR P1/G002 is complete on Windows and native Linux (commit `87a1691`). P2/G003 remains in progress; final visual acceptance is pending. P0 common contracts have targeted checks recorded, but P0 Gate 1 remains NOT PASSED (attempt 1/3, two material reviews remain). Experimental Streamline/NGX probe has a foreground diagnostic run that reported generated-present intervals but exited 1 with Vulkan validation errors; this is not production FG delivery or Gate 1 acceptance. The P0 and P2 review gates are separate. See [current FSR handoff](../notes/fsr-dlss-fg-codex-handoff.zh-CN.md) and [historical evidence](../notes/fsr-dlss-fg-codex-history.zh-CN.md).\n\n## Validation and acceptance\n\n先通过真实运动/遮挡/切场景输入验证，再运行固定场景画质与性能 A/B。\n\n尚未完成所列场景验收；实现/发布/测试与用户验收独立。\n\nDependencies (source keys): `native-object-motion`, `temporal-color-exposure`, `taa-motion-quality`.\n\nstage_detail: In progress; targeted implementation and contract verification complete; live visual acceptance and latest-binary NGX capture pending\n\n## Sources\n\n- https://github.com/freefrank/LostOdysseyRecomp/commit/871685fdd75b84c00bb9ebb685f36d90169eb82d\n- https://github.com/freefrank/LostOdysseyRecomp/commit/0625923ec69e1741657fa95f9013b474fe82c745\n- [docs/STATUS.md](https://github.com/freefrank/LostOdysseyRecomp/blob/main/docs/STATUS.md) (repository reference; working-tree requirements may be newer)\n- [docs/notes/temporal-upscaling-feasibility.md](https://github.com/freefrank/LostOdysseyRecomp/blob/main/docs/notes/temporal-upscaling-feasibility.md) (repository reference; working-tree requirements may be newer)\n- [docs/notes/native-dlss-validation.md](https://github.com/freefrank/LostOdysseyRecomp/blob/main/docs/notes/native-dlss-validation.md) (repository reference; working-tree requirements may be newer)\n- [docs/notes/post-v0.6.7-bug-report.zh-CN.md](https://github.com/freefrank/LostOdysseyRecomp/blob/main/docs/notes/post-v0.6.7-bug-report.zh-CN.md)\n- docs/notes/native-dlss-handoff.zh-CN.md\n\n## Historical FSR integration snapshot — 2026-09-22\n\nFollowing user approval of the implementation plan, vendor temporal upscaling incorporates FSR 3.1.4 Vulkan Super Resolution across Windows and native Linux. P0 common contract refactoring (wire layout expansion, provider routing, motion/depth input qualification for DLSS/FSR/FG) had targeted CPU 8/8 and affected frame-plan 1/1 checks recorded at that historical snapshot. This paragraph is historical; it does not represent current P0 gate, probe, or P1 status.\n",
       "issue_url": null,
       "fields": {
         "Kind": "Feature",
@@ -3977,7 +3977,7 @@
         "Release": null,
         "Start date": "2026-09-20",
         "Target date": null,
-        "Evidence": "Implementation delivery commit 871685fdd75b84c00bb9ebb685f36d90169eb82d (pushed to main) establishes targeted verification across BR-01 (154+14 CPU, 12 GPU owner checks), BR-02 (43 checks), BR-03 (stable GraphicsRow, adopted+checked-submit runtime status, 37 CPU, 14 video stop, native Vulkan status/identity, 18 menu BMPs), settings save logging (400 logger checks), pre-present swapchain screenshot + guest resolved dual capture at XE_SWAP, and Quality->DLAA UAF depth/stencil fix (motion_replay_gpu_test --depth-retirement-only 26 checks). Synchronous NGX Evaluate capture contract tests passed. User live session verified Quality->DLAA switch and export 2961-2963 without crash (frame 2887 DLAA Submitted). Re-export on latest executable, per-frame NGX execution capture, and visual quality/player acceptance remain pending."
+        "Evidence": "Native Vulkan DLSS/DLAA delivery commit `871685fdd75b84c00bb9ebb685f36d90169eb82d` and its bounded verification remain valid. FSR 3.1.4 Vulkan SR P1 is complete on Windows and native Linux (commit `87a1691`); P2 remains In Progress with visual acceptance pending. P0 common contracts have recorded targeted checks, but P0 Gate 1 remains NOT PASSED (attempt 1/3, two material reviews remaining). Experimental Streamline/NGX probe foreground run reported generated-present intervals but exited 1 with Vulkan validation errors; no validation-clean generated frame or physical-display acceptance is established. See current FSR handoff for limits."
       },
       "source_refs": [
         "https://github.com/freefrank/LostOdysseyRecomp/commit/871685fdd75b84c00bb9ebb685f36d90169eb82d",
@@ -3988,6 +3988,55 @@
         "docs/notes/native-dlss-handoff.zh-CN.md",
         ".cache/evidence/game-sr-runtime.json",
         "out/tmp/isolated-motion-cold-start/cold_start_rev2.log"
+      ],
+      "source_lines": [],
+      "record_type": "backlog"
+    },
+    {
+      "key": "temporal-phased-p0-common-contracts-probe",
+      "title": "P0: Implement common upscaler/FG contracts and evaluate coexistence architecture",
+      "body": "<!-- lo-project:temporal-phased-p0-common-contracts-probe -->\n\n## Summary and objectives\n\nEstablish provider-agnostic temporal upscaling contracts and evaluate NVIDIA NGX + Streamline coexistence architecture on Vulkan before full pipeline integration.\n\n## Scope and completion criteria\n\n- [x] Add `Upscaler::Fsr=2` provider enum, sizing calculations, and cache key isolation in `gpu/upscaling_plan.h/.cpp` without modifying existing NGX sizing or using `dlssAvailable`.\n- [x] Expand wire layout in `gpu/frame_plan.h` beyond 2-bit consumer mask; update encode, decode, protocol identification, and backward-compatible default decoding.\n- [x] Expand `TemporalFrameInputs::CompleteForConsumer()` in `gpu/temporal_frame_inputs.h` to require valid motion vectors and depth contracts for DLSS, FSR, and independent FG requirements (not every legacy temporal consumer).\n- [~] Evaluate NGX + Streamline coexistence on Vulkan. Official SDK research is complete. An experimental standalone probe has a recorded foreground diagnostic run; it reported generated-present intervals but exited 1 with Vulkan validation errors. This does not prove validation-clean generated frames, physical display, production FG delivery or Gate 1 acceptance.\n- [ ] Retain all existing native Vulkan DLSS/DLAA tests and baseline functionality; preserving baseline is a requirement pending production compilation and game regression evidence.\n\n## Status — 2026-09-24\n\nP0 common temporal-upscaler contracts are implemented; recorded targeted checks passed (CPU 8/8 and affected frame-plan 1/1). P0 Gate 1 remains NOT PASSED (attempt 1/3; two material reviews remain). The experimental standalone Streamline/NGX probe has source and a recorded foreground diagnostic run: binary `f47431b7746cdf54d847d7008547c0d7af0bce8a579f7596cccd5d95334c9efa` reported generated-present intervals but exited 1 with Vulkan validation errors. This is failed-run diagnostic evidence, not a validation-clean generated frame, physical-display proof, production FG delivery or Gate 1 acceptance. Preserving the native Vulkan DLSS/DLAA baseline remains required. This P0 gate is separate from the exhausted P2 Gate B review budget.\n\n## Validation and acceptance\n\n- Provider enum round-trip encoding and backward compatibility test coverage (frame-plan test 1/1 passed).\n- Motion and depth qualification verified for DLSS/FSR/FG requirements without breaking legacy AA.\n- Production build and game regressions must pass before claiming P0 completion.\n- The probe run is bounded failed-run diagnostic evidence only; no validation-clean generated frame or physical-display acceptance is established.\n\nDependencies (source keys): `vendor-temporal-upscaling`, `temporal-color-exposure`, `native-object-motion`.\n\nstage_detail: In progress; common contracts and targeted checks recorded; P0 Gate 1 attempt 1/3 not passed with two material reviews remaining; experimental probe foreground run exited 1 with Vulkan validation errors; no Gate 1 acceptance; P0 incomplete\n\n## Sources\n\n- C:/Users/freefrank/Downloads/LORecomp_FSR_DLSS_FG_implementation_plan.zh-CN.md\n- [docs/STATUS.md](https://github.com/freefrank/LostOdysseyRecomp/blob/main/docs/STATUS.md)\n- https://github.com/freefrank/LostOdysseyRecomp/commit/39bbda6ff1cb8216582798bebab21a3a5395a36e\n- https://github.com/freefrank/LostOdysseyRecomp/commit/871685fdd75b84c00bb9ebb685f36d90169eb82d\n",
+      "issue_url": null,
+      "fields": {
+        "Kind": "Infrastructure",
+        "Area": "Temporal rendering",
+        "Status": "In Progress",
+        "Delivery": "In progress",
+        "Release": "v0.7.0",
+        "Start date": "2026-09-22",
+        "Target date": null,
+        "Evidence": "P0 common temporal-upscaler contracts are implemented; recorded targeted checks passed (CPU 8/8 and affected frame-plan 1/1). P0 Gate 1 remains NOT PASSED (attempt 1/3; two material reviews remain). The experimental standalone Streamline/NGX probe has source and a recorded foreground diagnostic run: binary `f47431b7746cdf54d847d7008547c0d7af0bce8a579f7596cccd5d95334c9efa` reported generated-present intervals but exited 1 with Vulkan validation errors. This is failed-run diagnostic evidence, not a validation-clean generated frame, physical-display proof, production FG delivery or Gate 1 acceptance. Preserving the native Vulkan DLSS/DLAA baseline remains required. This P0 gate is separate from the exhausted P2 Gate B review budget."
+      },
+      "source_refs": [
+        "docs/STATUS.md",
+        "https://github.com/freefrank/LostOdysseyRecomp/commit/39bbda6ff1cb8216582798bebab21a3a5395a36e",
+        "https://github.com/freefrank/LostOdysseyRecomp/commit/871685fdd75b84c00bb9ebb685f36d90169eb82d",
+        "tools/tests/streamline_fg/README.md",
+        "out/streamline-fg-p0/gate1-codex-apidump-01/manifest.json",
+        "out/streamline-fg-p0/p0-api-layout-trace.md",
+        "out/streamline-fg-p0/p0-host-remediation-followup.md"
+      ],
+      "source_lines": [],
+      "record_type": "backlog"
+    },
+    {
+      "key": "temporal-phased-p1-runnable-fsr",
+      "title": "P1: Deliver runnable FSR 3.1.4 Vulkan Super Resolution",
+      "body": "<!-- lo-project:temporal-phased-p1-runnable-fsr -->\n\n## Summary and objectives\n\nIntegrate FidelityFX SDK v1.1.4 FSR 3.1.4 Vulkan source for Windows and native Linux, delivering runnable temporal upscaling with real low-resolution rendering.\n\n## Scope and completion criteria\n\n- [ ] Lock FidelityFX SDK v1.1.4 (commit hash) and construct minimal Vulkan upscaler build (`gpu/fsr_upscaler.h/.cpp`, `cmake/LoFsr.cmake`).\n- [ ] Build for Windows Vulkan and native Linux; P2 uses the user-accepted APEX 15W Deck proxy for this iteration without claiming Steam Deck hardware equivalence.\n- [ ] Implement Quality, Balanced, Performance, and Native AA (1:1) modes with independent FSR quality helper sizing.\n- [ ] Integrate real low-resolution scene rendering, resident SDK context management, isolated command recording, output target promotion, and safe fallback.\n- [ ] Reconcile jitter phase requests with single-jitter ownership and ensure camera/delta-time metadata conversion.\n\n## Status and scope\n\nG002/P1 is complete. FSR 3.1.4 Vulkan SR was delivered and validated on Windows and native Linux in commit `87a1691`. Evidence boundaries are recorded in the current FSR handoff and historical evidence. This does not claim Steam Deck equivalence or complete P2 acceptance.\n\n## Validation and acceptance\n\n- Real frame submission records verify correct provider identity, input/output dimensions, jitter, reset, and actual GPU dispatch.\n- Depth and motion vectors align during camera translation and rotation.\n- Failure fallback paths cleanly restore baseline image without blank or stale frames.\n\nDependencies (source keys): `temporal-phased-p0-common-contracts-probe`, `issue10-fsr-upscaling-frame-generation`.\n\nstage_detail: Complete; delivered and validated on Windows and native Linux (commit `87a1691`); P2 remains separate and in progress\n\n## Sources\n\n- https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK/releases/tag/v1.1.4\n- https://github.com/freefrank/LostOdysseyRecomp/issues/10\n",
+      "issue_url": null,
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Temporal rendering",
+        "Status": "Done",
+        "Delivery": "Validated",
+        "Release": "v0.7.0",
+        "Start date": null,
+        "Target date": null,
+        "Evidence": "G002/P1 complete: FSR 3.1.4 Vulkan Super Resolution delivered and validated on Windows and native Linux (commit `87a1691`). This is bounded platform validation; it does not establish Steam Deck equivalence or complete P2 acceptance."
+      },
+      "source_refs": [
+        "https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK/releases/tag/v1.1.4",
+        "https://github.com/freefrank/LostOdysseyRecomp/issues/10"
       ],
       "source_lines": [],
       "record_type": "backlog"
@@ -4020,6 +4069,49 @@
         "out/streamline-fg-p0/fsr-p2-battle-mapped-01/manual-mapped-01/",
         "https://github.com/freefrank/LostOdysseyRecomp/commit/ebefab459515fcd629e9758c8726d5b9b6c4b04b",
         "docs/notes/fsr-dlss-fg-codex-history.zh-CN.md"
+      ],
+      "source_lines": [],
+      "record_type": "backlog"
+    },
+    {
+      "key": "temporal-phased-p3-fg-infrastructure",
+      "title": "P3: Implement frame generation presentation infrastructure and leases",
+      "body": "<!-- lo-project:temporal-phased-p3-fg-infrastructure -->\n\n## Summary and objectives\n\nImplement Streamline presentation hooks, full-drawable HUDless color extraction, guest UI separation, resource lease tracking, and Reflex frame tokens without activating frame generation.\n\n## Scope and completion criteria\n\n- [ ] Integrate researched Streamline manual hooks into Plume Vulkan backend and device creation flow following coexistence architecture evaluation.\n- [ ] Retain independent full output-resolution HUDless scene texture after scene promotion and prior to first guest UI draw.\n- [ ] Separate guest UI layers (dialogue, combat HUD, Aim Ring, damage numbers) with dedicated alpha/composition representation.\n- [ ] Implement `PresentFrameInputs` lease mechanism tracking render submission and FG consumer release, preventing premature buffer recycling.\n- [ ] Integrate Streamline Reflex frame tokens across CPU simulation, render submit, and present boundaries without altering guest tick rate or game pacing.\n\n## Status and scope\n\nPlanned production phase following P0 architecture evaluation and P2 validation. Implementation has not started. Unvalidated Streamline/NGX probe source exists in the working tree; it does not establish production integration or active FG.\n\n## Validation and acceptance\n\n- Resize, minimize, mode switch, and exit clean without leaked GPU resources or device hanging.\n- UI separation verified with HUDless, UI mask, and final composite verification.\n- Disabled FG introduces zero extra per-frame copy overhead or CPU/GPU synchronization wait.\n\nDependencies (source keys): `temporal-phased-p0-common-contracts-probe`, `frame-generation-research`.\n\nstage_detail: Not started; planned phase 3; probe source is unvalidated and is not production integration\n\n## Sources\n\n- C:/Users/freefrank/Downloads/LORecomp_FSR_DLSS_FG_implementation_plan.zh-CN.md\n- https://github.com/NVIDIA-RTX/Streamline/blob/main/docs/ProgrammingGuideDLSS_G.md\n- https://github.com/NVIDIA-RTX/Streamline/blob/main/docs/ProgrammingGuideManualHooking.md\n",
+      "issue_url": null,
+      "fields": {
+        "Kind": "Infrastructure",
+        "Area": "Temporal rendering",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Release": "v0.7.0",
+        "Start date": null,
+        "Target date": null,
+        "Evidence": "Planned production phase; not started. Unvalidated Streamline/NGX probe source exists in the working tree, but it does not establish production hooks, HUDless/UI separation, leases, Reflex integration or active FG."
+      },
+      "source_refs": [
+        "https://github.com/NVIDIA-RTX/Streamline/blob/main/docs/ProgrammingGuideDLSS_G.md",
+        "https://github.com/NVIDIA-RTX/Streamline/blob/main/docs/ProgrammingGuideManualHooking.md"
+      ],
+      "source_lines": [],
+      "record_type": "backlog"
+    },
+    {
+      "key": "temporal-phased-p4-dlss-fg-2x",
+      "title": "P4: Deliver fixed 2× DLSS Frame Generation on Windows Vulkan",
+      "body": "<!-- lo-project:temporal-phased-p4-dlss-fg-2x -->\n\n## Summary and objectives\n\nEnable fixed 2× DLSS Frame Generation on Windows Vulkan for supported NVIDIA RTX hardware across DLSS Quality+FG, DLAA+FG, and FSR+FG combinations.\n\n## Scope and completion criteria\n\n- [ ] Enable fixed 2× DLSS-G mode under Windows Vulkan for supported RTX hardware.\n- [ ] Validate multi-provider combinations: DLSS Quality+FG, DLAA+FG, and FSR+FG.\n- [ ] Implement capability probing (HAGS, driver, Vulkan API support) with clear user-facing diagnostic reasons when unsupported.\n- [ ] Ensure safe FG suspension and restoration during scene cuts, FMVs, loading, pause, and window/swapchain recreation.\n- [ ] Preserve game simulation speed, input response timing, and Aim Ring pacing independent of displayed frame rate.\n\n## Status and scope\n\nPlanned phase following P3 presentation infrastructure. Production implementation has not started. Local Streamline/NGX probe source is unvalidated and does not establish FG delivery. Broader backlog (D3D12 FG, FSR FG, dynamic MFG) remains deferred for this iteration, not cancelled.\n\n## Validation and acceptance\n\n- Real generated frame production and display confirmed via SDK diagnostics and presentation metrics.\n- Game logic speed and input latency remain decoupled from display frame rate.\n- Disabled FG cleanly restores baseline native presentation path.\n\nDependencies (source keys): `temporal-phased-p3-fg-infrastructure`, `temporal-phased-p2-fsr-quality-hardware`.\n\nstage_detail: Not started; planned phase 4\n\n## Sources\n\n- C:/Users/freefrank/Downloads/LORecomp_FSR_DLSS_FG_implementation_plan.zh-CN.md\n- https://github.com/NVIDIA-RTX/Streamline/blob/main/docs/ProgrammingGuideDLSS_G.md\n",
+      "issue_url": null,
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Temporal rendering",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Release": "v0.7.0",
+        "Start date": null,
+        "Target date": null,
+        "Evidence": "Planned phase following P3. Production implementation has not started. Broader D3D12 FG, FSR FG and dynamic MFG remain deferred backlog for this iteration, not cancelled."
+      },
+      "source_refs": [
+        "https://github.com/NVIDIA-RTX/Streamline/blob/main/docs/ProgrammingGuideDLSS_G.md"
       ],
       "source_lines": [],
       "record_type": "backlog"
@@ -4708,17 +4800,17 @@
     {
       "key": "issue10-fsr-upscaling-frame-generation",
       "title": "[Feature] FSR Support",
-      "body": "<!-- lo-project:issue10-fsr-upscaling-frame-generation -->\n\nOpen Issue #10 requests FSR upscaling with adjustable sharpening. The maintainer's Issue comment also identifies future FSR frame generation and upscaling as roadmap work.\n\n## Frame-generation plan association\n\nThe v0.7.0 plan tracks FSR Frame Generation 2× with DLSS-G through `frame-generation-research`, requiring separate D3D12 and Vulkan acceptance. That plan is not implementation or validation evidence.\n\nFSR upscaling and adjustable sharpening remain separate Issue #10 scope. They are not counted as frame-generation delivery and receive no v0.7.0 completion claim from this association.\n\n## Status and scope\n\nThis is an unstarted future graphics request. No API implementation, benchmark, compatibility result, player acceptance, package, or delivery date is established.\n\n## Sources\n\n- https://github.com/freefrank/LostOdysseyRecomp/issues/10\n- https://github.com/freefrank/LostOdysseyRecomp/issues/10#issuecomment-5586831250\n- [v0.7.0 frame-generation plan](https://github.com/freefrank/LostOdysseyRecomp/blob/main/docs/notes/v0.7.0-frame-generation-plan.md)\n",
+      "body": "<!-- lo-project:issue10-fsr-upscaling-frame-generation -->\n\nOpen Issue #10 requests FSR upscaling with adjustable sharpening. The maintainer's Issue comment also identifies future FSR frame generation and upscaling as roadmap work.\n\n## Active phased plan and implementation — 2026-09-24\n\nPer user approval of the FSR + DLSS FG implementation plan, P1/G002 FSR 3.1.4 Vulkan Super Resolution is complete on Windows and native Linux (commit `87a1691`). P2/G003 quality and hardware validation remains in progress; APEX 15W is the user-accepted Deck proxy for this iteration, without hardware-equivalence claims. Phased execution follows:\n- P0: Common contracts and FG coexistence evaluation; Gate 1 remains NOT PASSED (attempt 1/3), and the experimental probe foreground run reported generated-present intervals but exited 1 with Vulkan validation errors, so it is diagnostic evidence only.\n- P1: Runnable FSR 3.1.4 Vulkan SR, completed on Windows and native Linux (commit `87a1691`).\n- P2: FSR visual quality and multi-platform hardware validation, in progress; final visual acceptance pending.\n\nFSR Frame Generation is deferred for this iteration and retained under the broader frame-generation backlog. Preserving the existing DLSS/DLAA baseline is a requirement pending production compilation and game regression evidence.\n\n## Status and scope\n\nP0 common contracts have targeted CPU 8/8 and frame-plan 1/1 checks recorded; P0 Gate 1 remains NOT PASSED (attempt 1/3, two material reviews remain). The probe has failed-run runtime diagnostics but no validation-clean generated frame or physical-display acceptance. P1 is complete; P2 remains in progress with bounded validation and final visual acceptance pending.\n\n## Sources\n\n- https://github.com/freefrank/LostOdysseyRecomp/issues/10\n- https://github.com/freefrank/LostOdysseyRecomp/issues/10#issuecomment-5586831250\n- [v0.7.0 frame-generation plan](https://github.com/freefrank/LostOdysseyRecomp/blob/main/docs/notes/v0.7.0-frame-generation-plan.md)\n",
       "issue_url": "https://github.com/freefrank/LostOdysseyRecomp/issues/10",
       "fields": {
         "Kind": "Feature",
         "Area": "Graphics features",
         "Status": "In Progress",
-        "Delivery": "Not started",
+        "Delivery": "In progress",
         "Release": null,
-        "Start date": null,
+        "Start date": "2026-09-22",
         "Target date": null,
-        "Evidence": "Issue #10 retains separate FSR upscaling/sharpening scope. Its FSR Frame Generation association is planned under frame-generation-research for v0.7.0 D3D12/Vulkan 2× work; no implementation, validation, acceptance, or release has started."
+        "Evidence": "Issue #10 remains the broader FSR request. P1/G002 FSR 3.1.4 Vulkan SR is complete (Windows and native Linux, commit `87a1691`); P2/G003 quality and hardware work is in progress with bounded evidence and final visual acceptance pending. FSR Frame Generation remains deferred this iteration under the preserved broader FG backlog."
       },
       "source_refs": [
         "https://github.com/freefrank/LostOdysseyRecomp/issues/10",
