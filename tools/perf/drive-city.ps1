@@ -1,6 +1,26 @@
+param(
+    [switch]$Help,
+    [string]$RunDirectory,
+    [string]$OutputDirectory,
+    [string]$PlayerSaveDirectory
+)
+
+if ($Help) {
+    Write-Output 'Usage: pwsh -File tools/perf/drive-city.ps1 -RunDirectory <game-build> -OutputDirectory <results> -PlayerSaveDirectory <player-save> [-Help]'
+    Write-Output 'Launches and controls LostOdysseyRecomp.exe, writes logs/screenshots/summary and checks save metadata; review the local README before running.'
+    return
+}
+if (-not $RunDirectory -or -not $OutputDirectory -or -not $PlayerSaveDirectory) {
+    throw 'RunDirectory, OutputDirectory and PlayerSaveDirectory are required. Use -Help for usage.'
+}
 $ErrorActionPreference = 'Stop'
-$run = Join-Path $PSScriptRoot 'run'
-$out = $PSScriptRoot
+$run = (Resolve-Path -LiteralPath $RunDirectory).Path
+if (-not (Test-Path -LiteralPath (Join-Path $run 'LostOdysseyRecomp.exe') -PathType Leaf)) {
+    throw "Game executable not found in RunDirectory: $run"
+}
+$out = [System.IO.Path]::GetFullPath($OutputDirectory)
+$playerSave = [System.IO.Path]::GetFullPath($PlayerSaveDirectory)
+New-Item -ItemType Directory -Force -Path $out | Out-Null
 $shots = Join-Path $run 'shots2'
 $logDir = Join-Path $env:TEMP 'lo-city-logs'
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
@@ -14,7 +34,6 @@ Set-Content -Path $inputPath -Value '1 0 0 0 0' -Encoding ascii
 Set-Content -Path $shotRequestPath -Value '0 0' -Encoding ascii
 
 $saveRoot = Join-Path $run 'save'
-$playerSave = 'D:\Mihoyo\LostOdysseyRecomp-windows-x64\save'
 $origSaves = Get-ChildItem $saveRoot -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object {
     [pscustomobject]@{ Path = $_.FullName; Length = $_.Length; LastWriteTimeUtc = $_.LastWriteTimeUtc.ToString('o') }
 }
@@ -297,7 +316,7 @@ $summary = [ordered]@{
 $summary | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $out 'drive-summary.json') -Encoding utf8
 Write-Status 'finished' $summary
 Write-Output ($summary | ConvertTo-Json -Depth 5)
-$classifier = Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) 'tools\perf\classify-city-timing.ps1'
+$classifier = Join-Path $PSScriptRoot 'classify-city-timing.ps1'
 if (Test-Path -LiteralPath $classifier) {
     Write-Output '--- classify-city-timing ---'
     & $classifier -LogPath $logPath

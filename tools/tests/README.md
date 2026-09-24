@@ -1,5 +1,59 @@
 # Test suites
 
+## Test targets and harness catalog
+
+Automated and standalone tests are organized by execution requirements and subsystem boundaries. Select targets appropriate to the changed area; `tools/test.bat` (forwarding to `run.py`) is an older convenience runner, not an exhaustive registry of all test suites. Do not rerun previously passed tests without invalidated code or flags.
+
+### 1. CPU contract and unit test targets
+
+These native C++ and Python fixtures execute without requiring a GPU device. Most run against synthetic data or internal models; importer and storage suites operate on explicit mock/temporary paths or optional test directories specified via CLI:
+
+| CMake target / Script | Area | Primary verification |
+|---|---|---|
+| `LoNativeDlssCpuTests` | Native DLSS / DLAA | CPU-only contract test target defined in `tools/tests/native_dlss/CMakeLists.txt` (`-DLO_NATIVE_DLSS_CPU_ONLY=ON`), executing the registered native DLSS/DLAA and FSR policy/contract suites. |
+| `LoPortableShaderPackTest` | Shader pack | Zstandard compression, block streaming, index serialization, and payload integrity. |
+| `LoPortableShaderPackIntegrationTest` | Shader pack | Lazy runtime loading, dictionary deduplication, and corrupt frame recovery. |
+| `LoPortableShaderContractTest` | Shader pack | Layout revisions, shader key mapping, and runtime compatibility hashing. |
+| `LoStorageTest` | File I/O & storage | Guest read/write/scatter lifetime, handle invalidation, and asynchronous notification. |
+| `LoVertexCacheTest` | Vertex pipeline | Bounded vertex and index cache eviction, mutation tracking, and replacement accounting. |
+| `LoImportGameTest` | Importer | ISO detection, STFS payload parsing, chunk bounds, and I/O failure recovery. |
+| `LoInstallerControllerTest` | Installer | State machine transitions, publication rollback, and progress reporting. |
+| `tools/tests/ppc_codegen_test.py` | PPC recompiler | Code generation manifest integrity, jump tables, and generator receipts. |
+| `tools/tests/disc_set_test.py` | Disc management | Multi-disc set detection and metadata ordering. |
+
+### 2. GPU hardware fixtures
+
+These fixtures require a compatible Vulkan (or D3D12) physical GPU device and driver. They execute real GPU commands, allocations, and readbacks, and have device side effects. Exit code 0 indicates successful completion of the test sequence:
+
+| CMake target / Executable | Subsystem | Device scope & side effects |
+|---|---|---|
+| `LoNativeDlssExecutionTest` | Native DLSS / Vulkan | Validates Vulkan bridge hooks, plan switches, and batch non-demotion without NGX runtime. |
+| `LoFsrAdapterGpuTest` | FSR 3.1.4 adapter | Validates standalone FSR Vulkan session dispatch, transient input recovery (`--transient-only`), gap reset, and P2 RCAS/mask passes (`--p2-only`). |
+| `motion_replay_gpu_test` | Motion vectors | Replays motion vectors on Vulkan and validates depth buffer retirement (`--depth-retirement-only`). |
+| `LoPresentCaptureTest` | Presentation capture | Multi-frame swapchain image readback and error injection across D3D12 and Vulkan. |
+| `LoDepthClearGpuTest` | Depth buffer | Validates 720-to-1 depth-clear layout coalescing on Vulkan (`--vulkan --coalesced-only`). |
+| `LoStreamlineFgProbe` | Frame Generation | Standalone coexistence probe for native NGX SR and Streamline DLSS FG. Refer to [`tools/tests/streamline_fg/README.md`](streamline_fg/README.md). |
+
+### 3. Offline analysis and verification test scripts
+
+Python suites validating offline tools, data pipelines, and packaging manifests using synthetic test data:
+
+| Script | Validates | Description |
+|---|---|---|
+| `tools/tests/shader_analysis_tools_test.py` | `tools/shader_analysis/` | Validates source collection, HLSL dependency slicing, SPIR-V inspection, and CPX decoding against synthetic microcodes. |
+| `tools/tests/capture_analysis_tools_test.py` | `tools/capture_analysis/` | Validates archive inspection and image difference metrics on synthetic F1 captures. |
+| `tools/tests/portable_shader_merge_test.py` | `LoShaderPackTool merge` | Validates tab-separated manifest parsing, inclusion/exclusion rules, and microcode deduplication. |
+| `tools/tests/release_package_verify_test.py` | `tools/release/verify_package.py` | Validates release ZIP archive checksums, manifests, version tags, and provenance checks. |
+| `tools/tests/drive_city_save_test.py` | `tools/drive_city.py` | Validates game save isolation, staging backup, and error rollback logic for `tools/drive_city.py`. |
+| `tools/asm-profiler/test_report.py` | `tools/asm-profiler/` | Validates x64 disassembly parsing and HTML profiler report generation. Refer to [`tools/asm-profiler/README.md`](../asm-profiler/README.md). |
+
+### 4. Standalone menu fixtures and live game drivers
+
+- **Standalone synthetic menu fixtures** (`LoMenuFlowTest`, `LoMenuRenderTest`): Self-contained test executables validating menu row navigation, hidden items, focus jumps, and rendering layout without launching the full game. They emit synthetic BMP captures and notices to the specified output directory.
+- **Active game drivers** (`tools/perf/drive-city.ps1`): Automated benchmark harness that launches the actual Windows game executable, injects controller inputs, takes screenshots, and monitors/compares player save files. Requires explicit `-RunDirectory`, `-OutputDirectory`, and `-PlayerSaveDirectory`. Refer to [`tools/perf/README.md`](../perf/README.md).
+
+---
+
 ## Issue #53 I/O lifetime and diagnostics regression
 
 `LoStorageTest io-lifetime <output>` exercises real guest read/write/scatter, close and duplicate imports, APC/event publication ordering, independent-file progress and positioned reads. Run `python -B tools/tests/io_lifetime_test.py <LoStorageTest-executable> --out <new-directory>` for the lifetime, invalid-handle and diagnostics selectors. Use `--mode io-lifetime`, `--mode io-invalid-handle` or `--mode io-diagnostics` to select one. The runner enables `LO_IO_DIAGNOSTICS=1` for the diagnostics selector, applies a 30-second process timeout, and attempts a debugger stack capture before terminating a timed-out child. Direct `LoStorageTest io-diagnostics <output>` invocation requires that environment variable to be set before startup.

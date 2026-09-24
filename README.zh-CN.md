@@ -34,11 +34,11 @@ Quality、Balanced、Performance、Native AA 均有 Windows 运行证据；原�
 
 ## v0.6.15 发布版
 
-于 2026-09-24 完成发布准备。在既有官方 NVIDIA NGX DLSS 310.9.1 基础上，整合了官方 FidelityFX SDK v1.1.4（FSR 3.1.4 实现）的发布构建支持。包含原生 DLSS SR/DLAA 时序生命周期修复（BR-01、BR-02）、带状态校验反馈的图形菜单稳定性重构（BR-03、`GraphicsRow`）、F1 呈现前最终交换链截图与同步 NGX Evaluate 输入/输出捕获、FSR 暂态输入拒绝恢复与 UMA 显存分配支持、`LoShaderPackTool merge` 便携式着色器合并工具及 45 条新增实机着色器整合（总计 28,527 项），以及包含许可证检查的发布与 CI 工作流。测试的 Windows 渲染画面与 Linux 运行验证均已获用户验收；广泛场景覆盖、确定性生产渲染器故障注入序列以及 DLSS/FSR 帧生成仍属于实验性未决阶段。详见[更新日志](CHANGELOG.md#v0615--2026-09-24)与[开发状态](docs/STATUS.md)。
+已发布 [v0.6.15](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.15)（于 2026-09-24T19:47:35Z 从 source `6eef30d257f2e14ce30a546217574a0dc74fad69` 通过 Release CI [36044604844](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/36044604844) 发布为最新公开版本）。在既有官方 NVIDIA NGX DLSS 310.9.1 基础上，整合了官方 FidelityFX SDK v1.1.4（FSR 3.1.4 实现）的发布构建支持。包含原生 DLSS SR/DLAA 时序生命周期修复（BR-01、BR-02）、带状态校验反馈的图形菜单稳定性重构（BR-03、`GraphicsRow`）、F1 呈现前最终交换链截图与同步 NGX Evaluate 输入/输出捕获、FSR 暂态输入拒绝恢复与 UMA 显存分配支持、安装包内直接内置 28,527 项便携式 Vulkan 着色器整合（用户无需额外下载独立着色器包），以及包含许可证检查的发布与 CI 工作流。测试的 Windows 渲染画面与 Linux 运行验证均已获用户验收；广泛场景覆盖、确定性生产渲染器故障注入序列以及 DLSS/FSR 帧生成仍属于实验性未决阶段。详见[更新日志](CHANGELOG.md#v0615--2026-09-24)与[开发状态](docs/STATUS.md)。
 
 ## v0.6.11 发布版
 
-已发布 [v0.6.11](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.11)（于 2026-09-22T06:44:37Z 从 source `3daba37` 通过 Release CI [35687931776](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35687931776) 发布为最新公开版本）。引入实验性原生 NVIDIA DLSS 超分辨率（SR）与 DLAA 支持、游戏内图形设置缩放技术选项、长列表视口滚动以及 Start/Enter 聚焦“保存”且不立即保存的功能。Windows 与 Linux 发布包已内置官方 NVIDIA NGX 运行库。画质、运动响应及玩家验收均未宣称完成。详见[更新日志](CHANGELOG.md#v0611--2026-09-22)与[开发状态](docs/STATUS.md)。
+已发布 [v0.6.11](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.11)（于 2026-09-22T06:44:37Z 从 source `3daba37` 通过 Release CI [35687931776](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35687931776) 发布）。引入实验性原生 NVIDIA DLSS 超分辨率（SR）与 DLAA 支持、游戏内图形设置缩放技术选项、长列表视口滚动以及 Start/Enter 聚焦“保存”且不立即保存的功能。Windows 与 Linux 发布包已内置官方 NVIDIA NGX 运行库。画质、运动响应及玩家验收均未宣称完成。详见[更新日志](CHANGELOG.md#v0611--2026-09-22)与[开发状态](docs/STATUS.md)。
 
 ## v0.6.7 发布版
 

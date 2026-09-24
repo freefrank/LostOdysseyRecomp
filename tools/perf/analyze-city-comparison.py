@@ -1,4 +1,7 @@
-import json, math, re, statistics, sys
+"""Summarize city rendering timing from one or more drive-city summaries."""
+
+import argparse
+import json, math, re, statistics
 from pathlib import Path
 
 def stats(values, frame_times=False, duration=True):
@@ -16,11 +19,16 @@ def stats(values, frame_times=False, duration=True):
     return result
 
 def analyze(summary_path):
-    summary=json.loads(Path(summary_path).read_text(encoding='utf-8-sig'))
+    summary_path=Path(summary_path).resolve()
+    summary=json.loads(summary_path.read_text(encoding='utf-8-sig'))
     render={}; present={}; beats=[]; vertex_stages={}
     log_path=Path(summary['log'])
+    if not log_path.is_absolute():
+        log_path=summary_path.parent/log_path
     if not log_path.exists() and summary.get('retained_log'):
         log_path=Path(summary['retained_log'])
+        if not log_path.is_absolute():
+            log_path=summary_path.parent/log_path
     for line in log_path.read_text(encoding='utf-8', errors='replace').splitlines():
         d=dict(re.findall(r'(\w+)=([^\s]+)', line))
         if 'render timing frame=' in line and int(d['draws']) >= 800:
@@ -60,6 +68,12 @@ def analyze(summary_path):
         stable_common=window(1600,2800),
         heartbeat=dict(n=len(beats), mean=statistics.mean(beats), min=min(beats), max=max(beats)) if beats else {})
 
-if __name__ == '__main__':
-    result={Path(p).stem:analyze(p) for p in sys.argv[1:]}
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('summaries', nargs='+', type=Path, help='drive-summary.json files to compare')
+    args = parser.parse_args(argv)
+    result={p.stem:analyze(p) for p in args.summaries}
     print(json.dumps(result,indent=2))
+
+if __name__ == '__main__':
+    main()

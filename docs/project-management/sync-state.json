@@ -2595,16 +2595,16 @@
       "fields": {
         "Kind": "Feature",
         "Area": "Shaders",
-        "Status": "In Progress",
-        "Delivery": "In progress",
+        "Status": "Done",
+        "Delivery": "Released",
         "Release": "v0.6.15",
         "Start date": "2026-09-16",
-        "Target date": "2026-09-17",
-        "Evidence": "Implemented relocatable portable Vulkan shader pack (.lospv) with SHA-256 deduplication and Zstandard chunked compression, bundled in v0.5.20. Target v0.6.15 release in preparation: maintenance merge recompiled and integrated 45 shaders from test captures and Windows distribution (28,482 -> 28,527 shaders; `out/merged-shaders/portable_vk.lospv`, 178,332,830 bytes, SHA-256 `b486c87d...`); verify-runtime confirmed all payloads and runtime compatibility. Shader replacement and distribution in progress; commit, push, tag, and release remain pending.",
+        "Target date": "2026-09-24",
+        "Evidence": "Implemented relocatable portable Vulkan shader pack (.lospv) with SHA-256 deduplication and Zstandard chunked compression, originally bundled in v0.5.20. In v0.6.15, maintenance merge incorporated 45 recompiled shaders from test captures and Windows distribution into the baseline pack (28,482 -> 28,527 shaders; `out/merged-shaders/portable_vk.lospv`, 178,332,830 bytes, SHA-256 `b486c87d121968bcec67fae6bc1aa7926378455281bc8b2a221409b8c06c6e2b`); verify-runtime confirmed all payloads and runtime compatibility. Bundled into Windows x64 ZIP and Linux x64 AppImage release packages (standalone Vulkan bundle removed per user preference); fixed pack hash gate passed in Release CI 36044604844 from commit `6eef30d257f2e14ce30a546217574a0dc74fad69`. Published in v0.6.15 at 2026-09-24T19:47:35Z.",
         "Source key": "portable-vulkan-shader-pack"
       },
       "title": "Portable Vulkan shader pack (.lospv)",
-      "body_sha256": "40a9bfc98c532d89e36894a215163a1289abbcbca04cc09d6be463363b54b539"
+      "body_sha256": "66abc944f34e40af18294f83b19c04f9ef6b86172a53f0db34cc7d135d28c07a"
     },
     "shader-preparation-optimization": {
       "id": "PVTI_lAHOAAsUY84Biy1azg7fPzU",
@@ -2702,12 +2702,12 @@
         "Status": "In Progress",
         "Delivery": "In progress",
         "Release": "v0.7.0",
-        "Evidence": "G003/P2 remains In Progress (full gate open). User accepted Windows visuals and Linux AMD 8060S RADV link + adapter transient verification for this round's scope; supplemental Linux tasks cancelled. Target v0.6.15 release preparation in progress; commit, push, merge, tag, and release pending. Checkpoint: FSR branch `23f0864` plus local repairs, merge tooling and CI checks. `LoFsrAdapterGpuTest --transient-only` passed on RTX 5080 and AMD 8060S RADV: NaN dt rejected with `InputUnavailable`/`useId 0`, next frame recovers dispatch with gap reset and blue 128->96 readback. Full Windows build passed exit 0 (EXE `3689f20b...`, logs `out/fsr-repair-build-20260924/`). Release workflow added `prepare-fsr` (pinned SDK `c6efa6b`), FSR ON/REQUIRE ON, license check; static check passed, Release CI not run. Full P2 hardware matrix and playthrough open; APEX 15W is Deck proxy only.",
+        "Evidence": "G003/P2 remains In Progress (full gate open, target milestone v0.7.0). Delivered scope published in v0.6.15 (2026-09-24T19:47:35Z, commit `6eef30d257f2e14ce30a546217574a0dc74fad69`, Release CI 36044604844 passed Windows/Linux/FSRinputs, pack hash, and FidelityFX license gates; Windows ZIP size 243647221 sha256 2b690ae..., Linux AppImage size 250927608 sha7d4ef5d...). User accepted Windows visual rendering and Linux AMD 8060S RADV link + adapter transient verification; supplemental Linux testing cancelled with no new hardware tests. `LoFsrAdapterGpuTest --transient-only` passed on RTX 5080 and AMD 8060S RADV (NaN dt rejected with `InputUnavailable`/`useId 0`, recovery with gap reset and blue 128->96 readback). Full P2 multi-platform hardware matrix, playthrough, reactive mask tuning, and SDR color round-trip completion remain open.",
         "Source key": "temporal-phased-p2-fsr-quality-hardware",
         "Start date": "2026-09-23"
       },
       "title": "P2: Validate FSR visual quality and multi-platform hardware",
-      "body_sha256": "c512c798f89c002c0477f326e55ff0b895cba03099c5c0601310f78b7cbf4088"
+      "body_sha256": "9d6e78e4595f9725164cc0d70fb75122aaa9d1074992fd59a1c7f29d24054039"
     },
     "temporal-phased-p3-fg-infrastructure": {
       "id": "PVTI_lAHOAAsUY84Biy1azg8QYrU",
@@ -2736,6 +2736,20 @@
       },
       "title": "P4: Deliver fixed 2× DLSS Frame Generation on Windows Vulkan",
       "body_sha256": "b44135271776d65b351c84520744bd2f0c881ce498094dff946d7e9f38037c8a"
+    },
+    "d3d12-bundled-shader-pack": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg8n2NU",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Shaders",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Release": "Next release",
+        "Evidence": "Planned for next release after v0.6.15 (version unspecified); implementation and verification not started. Reuses existing portable pack reader/writer, deduplication, and LoShaderPackTool to support D3D12/DXIL backend contracts, container validation, generation/merge, renderer runtime loading, and Windows packaging. Requires new runtime support as current renderer hard-restricts Vulkan/CheckSpirv; excludes driver PSO caching to target HLSL->DXIL compile latency reduction. Expected verification includes DXIL runtime hit, backend isolation, and invalid contract rejection on Windows hardware; none executed yet.",
+        "Source key": "d3d12-bundled-shader-pack"
+      },
+      "title": "D3D12 bundled portable shader pack (.lospv)",
+      "body_sha256": "7af3e7013850c46d555f7d588c0580c3ea2586c644923eb61f65379d7e0c9c97"
     }
   }
 }

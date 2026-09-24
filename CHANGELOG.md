@@ -8,11 +8,17 @@ One record of completed changes, with unpublished work separated from verified r
 
 ### English
 
-- None currently.
+- Reusable developer tooling catalog and test harness indexing:
+  - Added `tools/README.md` cataloging formal offline analysis scripts (shader, capture, performance), packaging/release helpers, profiling tools, and build drivers with explicit side-effect classifications.
+  - Added structured top-level test navigation to `tools/tests/README.md` grouping targets across CPU contracts, GPU hardware fixtures, offline analyzers, and in-game drivers.
+  - Clarified project tool conventions: reusable utilities live under `tools/`, while `out/` is reserved for ignored build artifacts and temporary outputs and must not be indexed.
 
 ### 简体中文
 
-- 暂无。
+- 可复用开发者工具全景索引与测试套件目录整理：
+  - 新增 `tools/README.md` 索引正式离线分析脚本（着色器、截图、性能）、打包发布辅助工具、性能分析器及构建入口，并明确标注副作用分类。
+  - 为 `tools/tests/README.md` 增加顶部结构化导航，按 CPU 契约、GPU 硬件 fixture、离线分析与实机驱动对测试目标与用例进行清晰分类。
+  - 明确项目工具使用约定：可复用工具统一归入 `tools/`，`out/` 仅用于被忽略的构建产物与临时输出，禁止对其建立索引。
 
 ## v0.6.15 — 2026-09-24
 

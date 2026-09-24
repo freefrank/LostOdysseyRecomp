@@ -1,5 +1,8 @@
 # FSR分支修复：录制恢复、设备丢失与Vulkan内存选择
 
+> [!NOTE]
+> **2026-09-24 状态说明**：本篇记录为 FSR 分支独立修复时的阶段性验证记录。后续该分支修复已随提交 `6eef30d257f2e14ce30a546217574a0dc74fad69` 合并至 `main` 并包含于公开正式发布的 [v0.6.15](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.15)（Release CI [36044604844](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/36044604844)）。用户已验收实测的 Windows 画面与 Linux 运行验证；P2 全场景完整画质验收依然独立且保持 In Progress。
+
 源码基线：`main`的`5f67b8c3d1f11ee7b1bea55fa3da7e4f00f943bc`。本轮只交付到`FSR`分支，不合并main、不发布版本。P2仍为In Progress；本页不取代[当前交接](fsr-dlss-fg-codex-handoff.zh-CN.md)中的既有画面证据与验收边界。
 
 核心修复提交：`fae701043861719c26920ce5bdaab9745584e5ea`。提交前验证见[Actions运行35976343011](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35976343011)：Windows/MSVC及Linux/GCC的CPU测试组均13/13通过；Linux原生FSR开启/关闭适配器对象、超分调度器、两段转换GLSL/SPIR-V及SDK内存选择前后对照均通过。验证后才将同一SHA-256补丁提交到FSR。临时源码快照、补丁传输与自动提交工作流在收尾提交中移除；仅保留只读权限的正式回归工作流。

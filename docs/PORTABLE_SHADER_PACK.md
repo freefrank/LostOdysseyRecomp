@@ -1,8 +1,14 @@
-# Portable Vulkan shader pack — v0.6.1 release
+# Portable Vulkan shader pack
 
 Base: `menu@257f3866e9f9f5d3e65550c86dce453290cf7ee4`.
 This change follows reblue's build/distribution separation; it does not copy its
 renderer or change Lost Odyssey's shader translation semantics.
+
+## v0.6.15 release
+
+The v0.6.15 GitHub Release was published on 2026-09-24T19:47:35Z from source `6eef30d257f2e14ce30a546217574a0dc74fad69` via Release CI [36044604844](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/36044604844). The updated portable Vulkan shader pack contains 28,527 shaders (178,332,830 bytes, SHA-256 `b486c87d121968bcec67fae6bc1aa7926378455281bc8b2a221409b8c06c6e2b`), consolidating 45 newly compiled microcodes from recent gameplay caches with the 28,482 baseline records.
+
+Fixed hash and FidelityFX license gates passed in Release CI. The pack is bundled directly into the official Windows and Linux application packages; users do not need a standalone Vulkan bundle, and the standalone ZIP and sidecar were removed from public release assets. A DX12 bundle is planned for a future release (unversioned, not yet implemented).
 
 ## v0.6.1 release
 
@@ -196,7 +202,7 @@ LoShaderPackTool merge <baseline.lospv> <decrypted-image.bin> <manifest.tsv> <ou
 
 ### Development merge verification
 
-A local test merge produced `out/merged-shaders/portable_vk.lospv` (178,332,830 bytes, SHA-256 `b486c87d121968bcec67fae6bc1aa7926378455281bc8b2a221409b8c06c6e2b`). Starting from the 28,482 baseline shaders, 45 raw microcodes gathered from recent gameplay testing were recompiled and merged, reaching 28,527 total shaders (0 skipped, 1 excluded: `vs_8f6ce5a4f714294a` due to missing supplementary source metadata; original cache entry retained). Verification via `LoShaderPackTool verify-runtime` confirmed `all_payloads_verified: true` and `runtime_compatibility_verified: true`. Detailed logs are recorded in `out/merged-shaders/merge-execution.log`, `verification.log`, and `merge-report.json`. This merged artifact has not replaced the user's active game pack, has not been published to release repositories, and is not yet bundled into release distribution archives. As of 2026-09-24, this pack is prepared as candidate for the v0.6.15 release baseline while replacement and packaging lanes remain in progress.
+A local test merge produced `out/merged-shaders/portable_vk.lospv` (178,332,830 bytes, SHA-256 `b486c87d121968bcec67fae6bc1aa7926378455281bc8b2a221409b8c06c6e2b`). Starting from the 28,482 baseline shaders, 45 raw microcodes gathered from recent gameplay testing were recompiled and merged, reaching 28,527 total shaders (0 skipped, 1 excluded: `vs_8f6ce5a4f714294a` due to missing supplementary source metadata; original cache entry retained). Verification via `LoShaderPackTool verify-runtime` confirmed `all_payloads_verified: true` and `runtime_compatibility_verified: true`. Detailed logs are recorded in `out/merged-shaders/merge-execution.log`, `verification.log`, and `merge-report.json`. On 2026-09-24, this merged 28,527-shader pack was packaged directly into the official v0.6.15 Windows and Linux application archives via Release CI [36044604844](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/36044604844); standalone bundles were omitted from publication.
 
 ## Size claim and acceptance limits
 
