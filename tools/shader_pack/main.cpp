@@ -1,4 +1,5 @@
 #include "gpu/shader/portable_shader_contract.h"
+#include "merge.h"
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -7,11 +8,13 @@
 
 int main(int argc,char** argv) try {
     const auto command = argc > 1 ? std::string_view(argv[1]) : std::string_view{};
+    if (command == "merge") return Merge(argc, argv);
     const bool runtime = command == "verify-runtime";
     if ((runtime ? argc != 4 : argc != 3) ||
         (command != "inspect" && command != "verify" && !runtime)) {
         std::cerr << "Usage: LoShaderPackTool <inspect|verify> pack.lospv\n"
-                     "       LoShaderPackTool verify-runtime pack.lospv decrypted-image.bin\n";
+                     "       LoShaderPackTool verify-runtime pack.lospv decrypted-image.bin\n"
+                     "       LoShaderPackTool merge baseline.lospv decrypted-image.bin manifest.tsv output-dir\n";
         return 2;
     }
     const bool verified = command != "inspect";

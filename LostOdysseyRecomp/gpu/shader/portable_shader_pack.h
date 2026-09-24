@@ -43,6 +43,7 @@ struct Report {
     std::string producer; // provenance, never compared with the local compiler
 };
 
+class Reader;
 class Writer {
     struct Impl;
     std::unique_ptr<Impl> impl_;
@@ -55,6 +56,9 @@ public:
     // Only successful SPIR-V binaries; text is counted but never serialized.
     void Add(uint64_t hash, const TranslatedShader&, std::span<const uint8_t> binary);
     void OmitFailure(size_t hlslBytes, size_t diagnosticBytes);
+    // Offline re-export of existing records, preserving metadata and omitted counts.
+    // Import into an empty writer before appending new records.
+    void Import(Reader& source);
     Report Finish(); // atomic publication; destruction before Finish discards temp
 };
 
@@ -69,10 +73,12 @@ public:
     Reader(const Reader&) = delete;
     Reader& operator=(const Reader&) = delete;
     std::optional<Record> Get(bool pixel, uint64_t hash);
+    bool Contains(bool pixel, uint64_t hash) const; // index only; no payload I/O
     const Report& Info() const;
     void VerifyAll(); // offline release validation; does not create GPU modules
     uint64_t PayloadReadBytes() const;
     // Inspection is structural only, NOT an authorization/compatibility check.
     static Report Inspect(const std::filesystem::path&, bool verifyPayloads = false);
+    friend class Writer;
 };
 } // namespace xenos::portable_pack

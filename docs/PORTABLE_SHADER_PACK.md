@@ -176,6 +176,28 @@ failure retry and export also bypass it. Ordinary `skip_shader_prebuild` and
 `LO_NO_SHADER_PREPARE` suppress bulk prebuild, but still allow this index-only
 pack path and on-demand cache use. The pack contains no negative records.
 
+## Merge new shader caches into baseline packs
+
+`LoShaderPackTool` provides a `merge` subcommand to import newly observed shader caches into an existing portable pack baseline without recompiling unchanged records:
+
+```sh
+LoShaderPackTool merge <baseline.lospv> <decrypted-image.bin> <manifest.tsv> <output-dir>
+```
+
+- **Manifest format**: A tab-separated file with header `action\tstage\thash\tsource\tprovenance`. Each row defines:
+  - `action`: `include` or `exclude`.
+  - `stage`: `vs` or `ps`.
+  - `hash`: 16-character lowercase hexadecimal guest shader hash.
+  - `source`: Relative path from the manifest file to the raw microcode binary; use `-` for excluded entries.
+  - `provenance`: Origin description text.
+- **Compilation & Preservation**: New microcodes are compiled using the current shader translator and DXC. `Contains` checks whether a candidate key already exists; `Writer::Import` preserves baseline metadata, omissions, and byte payloads without recompilation.
+- **Safety & Atomicity**: The baseline pack and input sources are opened read-only. Merged packs and reports are assembled in an exclusive temporary directory before publishing to `<output-dir>`, and the tool rejects existing output destinations to prevent accidental overwrite. The tool CLI has no hardcoded count limit.
+- **DXC requirement**: Compilation requires SPIR-V code generation support. Use the repository-bundled DXC binaries rather than generic system DXC installations that may lack SPIR-V emission.
+
+### Development merge verification
+
+A local test merge produced `out/merged-shaders/portable_vk.lospv` (178,332,830 bytes, SHA-256 `b486c87d121968bcec67fae6bc1aa7926378455281bc8b2a221409b8c06c6e2b`). Starting from the 28,482 baseline shaders, 45 raw microcodes gathered from recent gameplay testing were recompiled and merged, reaching 28,527 total shaders (0 skipped, 1 excluded: `vs_8f6ce5a4f714294a` due to missing supplementary source metadata; original cache entry retained). Verification via `LoShaderPackTool verify-runtime` confirmed `all_payloads_verified: true` and `runtime_compatibility_verified: true`. Detailed logs are recorded in `out/merged-shaders/merge-execution.log`, `verification.log`, and `merge-report.json`. This merged artifact has not replaced the user's active game pack, has not been published to release repositories, and is not yet bundled into release distribution archives. As of 2026-09-24, this pack is prepared as candidate for the v0.6.15 release baseline while replacement and packaging lanes remain in progress.
+
 ## Size claim and acceptance limits
 
 No complete real startup bundle or SPIR-V corpus was provided in this session.

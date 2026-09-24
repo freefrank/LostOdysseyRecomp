@@ -25,3 +25,17 @@
 拉取本分支后，需要重新运行原有CMake配置并重建FSR SDK静态库/游戏目标，使生成的Vulkan backend更新。SDK shader permutations、mask上限、RCAS默认设置、战斗shader映射均未改动，不需要因本轮代码修复重新生成SDK shader permutations。
 
 下一次有明确授权的运行应确认初始化、短暂fallback后恢复、provider切换与战斗画面，并观察是否存在真实内存分配或设备丢失错误。本轮没有启动、控制或关闭游戏，没有读取或改写存档，没有把既有雾效观察判作新增缺陷，也没有验证Steam Deck实机、最新Linux战斗映射或完整P2画质。
+
+## 2026-09-24 合并准备检查
+
+当前FSR分支HEAD为`23f0864`。此前的分支交付历史和验证范围保留；本地另有一处尚未提交的追加修复：审阅发现`tools/tests/native_dlss/CMakeLists.txt`中三项FSR测试重复`add_test`，CPU-only配置的提前`return()`遮住了第二处注册；现已删除第二处，保留GPU配置中的各一次注册。
+
+对追加修复运行`cmake -S tools/tests/native_dlss -B C:/Users/freefrank/AppData/Local/Temp/opencode/lo-native-dlss-reg-Ndlv1o -DLO_NATIVE_DLSS_CPU_ONLY=OFF -DBUILD_TESTING=ON -DLO_NATIVE_DLSS_ENABLE_VALIDATION_LAYER=OFF`，配置生成成功；`ctest --show-only=json-v1 -C Debug`列出16项测试，三项FSR均只注册一次，未执行测试。复用`23f0864`的CI记录：[35976658348](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35976658348)中Windows/Linux CPU组各13/13通过；[35976658408](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35976658408)中Linux原生FSR开／关对象、SPIR-V及selector检查通过。这些结果不覆盖本地追加修复的运行测试。
+
+新增测试用例并在 RTX 5080 硬件上实测可执行文件 `LoFsrAdapterGpuTest --transient-only` 一次通过（PASS）。N 帧完成真实 SDK dispatch 提交并等待 fence 读回；N+1 帧保持相同配置、请求签名、各周期与有效输入纹理，传入非有限 dt（NaN），生产 `Controller::RecordIsolated` 正确返回 `InputUnavailable` 与 `useId 0`，不执行 GPU dispatch 与命令提交，`lastDispatchRenderFrameId` 保持为 N，未重新创建 context，`EnsureSession` 保持 `Ready`；N+2 帧恢复有效 dt（16.6ms）且 `input_reset=false`，成功 dispatch 并触发 SDK gap reset（`gap_reset=true`），输出图像中心蓝色通道由 128 变为 96 证实采用了新输入；N+3 帧无 gap reset 持续 dispatch（`gap_reset=false`）。本次测试仅覆盖 adapter 与 SDK 层的暂态隔离与恢复能力，不覆盖生产 renderer 完整回退链调度，也不代表游戏实机画面通过，不能作为完整 P2 验收或 UMA 硬件验证。
+
+发布与 CI 工作流同步进行了支持更新。`.github/workflows/native-dlss-cpu.yml` 新增双平台独立的 `out/native-dlss-config` 非 CPU-only CMake 生成及 CTest GPU 单次注册校验（Windows 初始化 Plume `D3D12MemoryAllocator` 子模块），原有 CPU 路径保持不变。`.github/workflows/release.yml` 新增 Windows `prepare-fsr` 任务，检出固定 commit `c6efa6bf7f2027b3ec94f28578bb5965eabb9e55` 的 FidelityFX SDK 并生成 Vulkan shader，打包为 `fsr-vulkan-build-inputs` artifact；`release-windows` 与 `release-linux` 下载并消费该 artifact，配置并强制 `LO_ENABLE_FSR=ON` 与 `LO_REQUIRE_FSR=ON`，并在打包步骤中增加 `LICENSE-FidelityFX.txt` 存在性断言；`tools/build_release.bat` 负责转发 `LO_ENABLE_FSR`、`LO_REQUIRE_FSR`、`LO_FSR_SDK_ROOT` 与 `LO_FSR_SHADER_DIR` 四项参数。工作流已完成静态结构校验，尚未在 Actions 中运行，不代表发布产物打包已获验证。
+
+本地 Windows Clang 增量构建（`out/build/windows-clang`）同一次 configure 与 build 均以 exit 0 成功完成，FSR 静态库、`LoShaderPackTool`（SHA-256 `830b314da541b280d9816f069f6069d095a247fcdcc9929a35ff01571f0fe93a`）与完整游戏可执行文件 `LostOdysseyRecomp.exe`（生成时间 `2026-09-24 11:17:48 -0600`，SHA-256 `3689f20b3eab2558de60ba8143822c5fa4aa116fb9bad4ed08e6facecbf5765c`）均已链接成功。构建生成的 `ffx_vk.cpp` 包含 `vulkan_memory_policy.h`，链接目标包含 FSR 库，暂存许可证与 SDK/shader 一致（SHA-256 `c93d509cd69d50698796c9c3274247352736ef122a3197ace2010f0978e21aa6`），旧可执行文件与 PDB 已备份。过程记录保留于 `out/fsr-repair-build-20260924/windows-clang-configure.log`、`windows-clang-build.log` 与 `final-identity.txt`。
+
+在 Windows 本地构建完成后，用户已明确确认当前画面无问题。针对 Linux 端验证，Linux 执行环境（`psvita distrobox psbuild`）报告游戏链接与 `LoFsrAdapterGpuTest --transient-only` 在 AMD Radeon 8060S RADV STRIX_HALO 上通过（复用 SDK 与 shader，未回传详细 exit code 与产物 hash），用户据此明确确认 Linux 验证通过，补证任务已取消收尾。上述结论覆盖当前画面验收与双平台测试结果，但不代表确定性生产渲染器故障注入序列或完整 P2 门禁全部通过。工作流更新（`native-dlss-cpu.yml` 与 `release.yml`）尚未在 Actions 中触发运行。截至 2026-09-24，用户已授权进行 v0.6.15 版本发布准备；分支合并、tag 打标与 Release CI 正在进行中，未公开前不作已发布断言，P2 状态保持 In Progress。

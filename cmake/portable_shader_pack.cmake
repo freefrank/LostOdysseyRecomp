@@ -32,8 +32,16 @@ if(WIN32)
     target_link_libraries(lo_portable_shader_pack PRIVATE bcrypt)
 endif()
 
-add_executable(LoShaderPackTool EXCLUDE_FROM_ALL "${LO_PACK_ROOT}/tools/shader_pack/main.cpp")
-target_link_libraries(LoShaderPackTool PRIVATE lo_portable_shader_pack)
+if(NOT TARGET fmt::fmt)
+    add_subdirectory("${LO_PACK_ROOT}/tools/XenosRecomp/thirdparty/fmt" "${CMAKE_CURRENT_BINARY_DIR}/lo_pack_fmt" EXCLUDE_FROM_ALL)
+endif()
+add_executable(LoShaderPackTool EXCLUDE_FROM_ALL
+    "${LO_PACK_ROOT}/tools/shader_pack/main.cpp"
+    "${LO_PACK_ROOT}/tools/shader_pack/merge.cpp"
+    "${LO_PACK_ROOT}/LostOdysseyRecomp/gpu/shader/xenos_translator.cpp"
+    "${LO_PACK_ROOT}/LostOdysseyRecomp/gpu/shader/dxc_compiler.cpp")
+target_include_directories(LoShaderPackTool PRIVATE "${LO_PACK_ROOT}/tools/XenosRecomp/thirdparty/dxc-bin/inc")
+target_link_libraries(LoShaderPackTool PRIVATE lo_portable_shader_pack fmt::fmt ${CMAKE_DL_LIBS})
 add_executable(LoPortableShaderPackTest EXCLUDE_FROM_ALL "${LO_PACK_ROOT}/tools/tests/portable_shader_pack_test.cpp")
 target_link_libraries(LoPortableShaderPackTest PRIVATE lo_portable_shader_pack)
 add_executable(LoPortableShaderPackIntegrationTest EXCLUDE_FROM_ALL

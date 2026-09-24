@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <vector>
@@ -105,14 +106,14 @@ struct Fixture {
             RenderFormat::R8G8B8A8_UNORM));
     }
 
-    void UploadInputs() {
+    void UploadInputs(uint8_t blue = 128) {
         auto* bytes = static_cast<uint8_t*>(upload->map()); Check(bytes != nullptr, "map upload");
         std::memset(bytes, 0, 5 * kUploadImageBytes);
         for (uint32_t y = 0; y < kRender; ++y) for (uint32_t x = 0; x < kRender; ++x) {
             auto* rgba = bytes + y * kUploadRowBytes + x * 4;
             rgba[0] = uint8_t(32 + x * 2);
             rgba[1] = uint8_t(64 + y * 2);
-            rgba[2] = 128;
+            rgba[2] = blue;
             rgba[3] = 192;
             const float canonical = 1.0f / (1.0f + float(x) / kRender);
             const float rawDepth = .001f + .999f * canonical;
@@ -183,7 +184,7 @@ struct Fixture {
             pixels[center], pixels[center + 1], pixels[center + 2], pixels[center + 3]);
     }
 
-    void RecordAndSubmit(bool reset, float delta, bool expectedDispatchReset, bool expectedGapReset) {
+    std::vector<uint8_t> RecordAndSubmit(bool reset, float delta, bool expectedDispatchReset, bool expectedGapReset) {
         Check(fsr.EnsureSession(Device(), config) == gpu::fsr::Status::Ready, "FSR context ready");
         inputs.renderFrameId = nextRenderFrame++;
         inputs.resetHistory = reset;
@@ -201,7 +202,66 @@ struct Fixture {
         Submit(Device(), Queue(), *fence, {prefix.get(), isolated.get()});
         fsr.OnBatchSubmitted(attempt.useId, ++serial);
         fsr.ReleaseCompletedThrough(serial);
-        CheckOutput(Readback());
+        auto pixels = Readback();
+        CheckOutput(pixels);
+        return pixels;
+    }
+
+    void RunTransientOnly() {
+        const auto initial = RecordAndSubmit(true, 0.0f, true, false);
+        const auto firstFrame = inputs.renderFrameId;
+        const auto fixedConfig = config;
+        const auto fixedRequest = inputs.plan.requestSignature;
+        const auto deviceEpoch = inputs.plan.deviceEpoch;
+        const auto geometryEpoch = inputs.plan.geometryEpoch;
+        const auto temporalEpoch = inputs.temporalEpoch;
+        const auto prepareMilliseconds = fsr.LastDiagnostics().lastPrepareMilliseconds;
+        const auto submittedSerial = serial;
+
+        inputs.renderFrameId = nextRenderFrame++;
+        inputs.resetHistory = false;
+        inputs.jitter = gpu::temporal::FrameJitter(serial + 1, kRender, kRender);
+        Check(inputs.renderFrameId == firstFrame + 1 && config == fixedConfig &&
+            inputs.plan.requestSignature == fixedRequest && inputs.plan.deviceEpoch == deviceEpoch &&
+            inputs.plan.geometryEpoch == geometryEpoch && inputs.temporalEpoch == temporalEpoch &&
+            inputs.CompleteForConsumer(), "N+1 same request, epochs and valid textures");
+        const auto rejected = fsr.RecordIsolated(Isolated(), config, inputs,
+            Metadata(false, std::numeric_limits<float>::quiet_NaN()), Native(*output));
+        Check(rejected.status == gpu::fsr::Status::InputUnavailable && rejected.useId == 0,
+            "N+1 nonfinite frame delta is transient InputUnavailable without a use");
+        const auto& rejectedDiagnostics = fsr.LastDiagnostics();
+        Check(rejectedDiagnostics.lastDispatchRenderFrameId == firstFrame &&
+            rejectedDiagnostics.lastDispatchReset && !rejectedDiagnostics.lastResetForFrameGap &&
+            rejectedDiagnostics.lastPrepareMilliseconds == prepareMilliseconds &&
+            serial == submittedSerial, "N+1 did not dispatch, submit, or recreate the context");
+        Check(fsr.HasFeatureState() && fsr.EnsureSession(Device(), config) == gpu::fsr::Status::Ready,
+            "N+1 session remains Ready without reconfiguration");
+        std::printf("FSR transient N+1: status=InputUnavailable useId=%llu last_dispatch=%llu session=Ready submitted_serial=%llu\n",
+            static_cast<unsigned long long>(rejected.useId),
+            static_cast<unsigned long long>(rejectedDiagnostics.lastDispatchRenderFrameId),
+            static_cast<unsigned long long>(serial));
+
+        UploadInputs(96); // A new image distinguishes the recovered dispatch from N's readback.
+        const auto recovered = RecordAndSubmit(false, 16.6f, true, true);
+        const size_t centerBlue = (size_t(kRender / 2) * kRender + kRender / 2) * 4 + 2;
+        Check(inputs.renderFrameId == firstFrame + 2 && config == fixedConfig &&
+            inputs.plan.requestSignature == fixedRequest && inputs.plan.deviceEpoch == deviceEpoch &&
+            inputs.plan.geometryEpoch == geometryEpoch && inputs.temporalEpoch == temporalEpoch &&
+            fsr.LastDiagnostics().lastPrepareMilliseconds == prepareMilliseconds &&
+            int(initial[centerBlue]) - int(recovered[centerBlue]) > 20,
+            "N+2 same context and request, fresh-color output after SDK gap reset");
+        std::printf("FSR transient N+2: frame=%llu input_reset=0 sdk_reset=1 gap_reset=1 blue=%u->%u\n",
+            static_cast<unsigned long long>(inputs.renderFrameId), initial[centerBlue], recovered[centerBlue]);
+
+        const auto continuous = RecordAndSubmit(false, 16.6f, false, false);
+        Check(inputs.renderFrameId == firstFrame + 3 && config == fixedConfig &&
+            inputs.plan.requestSignature == fixedRequest && inputs.plan.deviceEpoch == deviceEpoch &&
+            inputs.plan.geometryEpoch == geometryEpoch && inputs.temporalEpoch == temporalEpoch &&
+            fsr.LastDiagnostics().lastPrepareMilliseconds == prepareMilliseconds &&
+            std::abs(int(continuous[centerBlue]) - int(recovered[centerBlue])) < 20,
+            "N+3 continuous SDK dispatch without gap reset");
+        std::printf("FSR transient N+3: frame=%llu input_reset=0 sdk_reset=0 gap_reset=0 blue=%u\n",
+            static_cast<unsigned long long>(inputs.renderFrameId), continuous[centerBlue]);
     }
 
     void DiscardAndRecreate() {
@@ -331,9 +391,12 @@ int main(int argc, char** argv) {
     try {
         const bool gapOnly = argc == 2 && std::strcmp(argv[1], "--gap-only") == 0;
         const bool p2Only = argc == 2 && std::strcmp(argv[1], "--p2-only") == 0;
-        Check(argc == 1 || gapOnly || p2Only, "usage: LoFsrAdapterGpuTest [--gap-only|--p2-only]");
+        const bool transientOnly = argc == 2 && std::strcmp(argv[1], "--transient-only") == 0;
+        Check(argc == 1 || gapOnly || p2Only || transientOnly,
+            "usage: LoFsrAdapterGpuTest [--gap-only|--p2-only|--transient-only]");
         Fixture fixture;
         if (p2Only) { fixture.P2MaskAndRcas(); std::puts("FSR P2 mask and RCAS: PASS"); return 0; }
+        if (transientOnly) { fixture.RunTransientOnly(); std::puts("FSR adapter Vulkan transient: PASS"); return 0; }
         fixture.RecordAndSubmit(true, 0.0f, true, false);
         fixture.RecordAndSubmit(false, 16.6f, false, false);
         ++fixture.nextRenderFrame; // A captured game frame where FSR was ineligible.

@@ -364,6 +364,11 @@ Reader::Reader(const std::filesystem::path& p,const Digest& expected):impl_(std:
 Reader::~Reader()=default;
 const Report& Reader::Info() const { return impl_->header.report; }
 uint64_t Reader::PayloadReadBytes() const { return impl_->payloadRead.load(); }
+bool Reader::Contains(bool pixel,uint64_t hash) const {
+    const auto& entries=impl_->entries; const Key key{pixel,hash};
+    const auto it=std::lower_bound(entries.begin(),entries.end(),key,[](const Entry& e,const Key& k){return e.key<k;});
+    return it!=entries.end() && it->key==key;
+}
 std::optional<Record> Reader::Get(bool pixel,uint64_t hash) {
     auto& r=*impl_; const Key key{pixel,hash};
     auto it=std::lower_bound(r.entries.begin(),r.entries.end(),key,[](const Entry& e,const Key& k){return e.key<k;});
@@ -379,6 +384,28 @@ void Reader::VerifyAll() {
     for(const auto& e:r.entries) entries.push_back(&e);
     std::sort(entries.begin(),entries.end(),[&](auto a,auto b){return r.blobs[a->blob].block<r.blobs[b->blob].block;});
     for(const auto* e:entries) (void)Get(e->key.first,e->key.second);
+}
+void Writer::Import(Reader& source) {
+    auto& w=*impl_; auto& r=*source.impl_;
+    if(w.finished || !w.entries.empty() || w.header.report.failuresOmitted ||
+       w.header.report.contract!=r.header.report.contract)
+        Bad("incompatible or nonempty portable import");
+    std::lock_guard lock(r.mutex);
+    // Entry order in the index is by key, whereas payloads are stored by blob.
+    // Import aliases together so each compressed block is read exactly once.
+    std::vector<const Entry*> entries;
+    entries.reserve(r.entries.size());
+    for(const auto& e:r.entries) entries.push_back(&e);
+    std::sort(entries.begin(),entries.end(),[&](auto a,auto b){return a->blob<b->blob;});
+    for(const auto* e:entries) {
+        const auto& blob=r.blobs[e->blob];
+        r.LoadBlock(blob.block);
+        const auto binary=std::span<const uint8_t>(r.decoded).subspan(blob.offset,blob.size);
+        Add(e->key.second,e->info,binary);
+    }
+    w.header.report.failuresOmitted=r.header.report.failuresOmitted;
+    w.header.report.hlslBytesOmitted+=r.header.report.hlslBytesOmitted;
+    w.header.report.diagnosticBytesOmitted+=r.header.report.diagnosticBytesOmitted;
 }
 Report Reader::Inspect(const std::filesystem::path& p,bool verify) {
     // Explicitly offline: a self-reported contract is NEVER used by runtime.

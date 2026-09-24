@@ -109,6 +109,29 @@ int main(int argc,char** argv) try {
     p::Reader blocked(big,contract);Check(blocked.PayloadReadBytes()==0,"large pack lazy open");
     Check(blocked.Get(false,1)->binary==bigA,"first block");Check(blocked.Get(false,2)->binary==bigB,"second block");
     Check(blocked.Get(false,3)->binary==bigA,"evicted block alias");
+    // Import is sequential by blob: preserve all original shader metadata,
+    // aliases and omission totals, without repeatedly inflating old blocks.
+    auto imported=root/"imported.lospv";
+    p::Reader importSource(file,contract);
+    {p::Writer w(imported,contract,"offline-merge");w.Import(importSource);w.Add(31,vs,bigA);report=w.Finish();}
+    Check(report.records==4 && report.failuresOmitted==1,"import counts plus new key");
+    Check(report.hlslBytesOmitted==p::Reader(file,contract).Info().hlslBytesOmitted+vs.hlsl.size(),"import omission accounting");
+    Check(importSource.PayloadReadBytes()==p::Reader(file,contract).Info().compressedBytes,"import reads each block once");
+    p::Reader merged(imported,contract);
+    Check(merged.Get(false,30)->binary==vb && merged.Get(false,30)->info.vertexFetchSlotMask[1]==vs.vertexFetchSlotMask[1],"import retains old SPIR-V and metadata");
+    Check(merged.Get(true,20)->binary==pb && merged.Get(true,21)->binary==pb &&
+          merged.Get(true,21)->info.writesDepth,"import retains aliases and stage metadata");
+    Check(merged.Get(false,31)->binary==bigA,"import adds new key without replacing old keys");
+    p::Reader twoBlockSource(big,contract);
+    auto twoBlockTarget=root/"two-block-import.lospv";
+    {p::Writer w(twoBlockTarget,contract,"two-block-merge");w.Import(twoBlockSource);w.Finish();}
+    Check(twoBlockSource.PayloadReadBytes()==p::Reader(big,contract).Info().compressedBytes,
+          "import reads each compressed block once despite aliases");
+    p::Reader twoBlockMerged(twoBlockTarget,contract);
+    Check(twoBlockMerged.Get(false,1)->binary==bigA && twoBlockMerged.Get(false,2)->binary==bigB &&
+          twoBlockMerged.Get(false,3)->binary==bigA,"import preserves multiple blocks and aliases");
+    {p::Writer w(bad,p::Contract(24,"vulkan1.2;O3","guest","prelude","discovery",xex),"wrong");
+     Reject([&]{w.Import(importSource);},"cross-contract import accepted");}
     std::atomic<bool> concurrentOk{true};std::vector<std::jthread> threads;
     for(int t=0;t<8;++t)threads.emplace_back([&]{try{for(int i=0;i<32;++i){auto r=reader.Get(true,20+(i%2));if(!r || r->binary!=pb)concurrentOk=false;}}catch(...){concurrentOk=false;}});
     threads.clear();Check(concurrentOk,"concurrent reader");

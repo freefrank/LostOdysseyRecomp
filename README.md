@@ -27,22 +27,18 @@ image quality and stability remain under validation.
 
 ### Experimental opt-in FSR SR
 
-Source builds may opt into the experimental FSR 3.1.4 path on
+Source builds and release packaging workflows support the experimental FSR 3.1.4 path on
 Windows and native Linux with `LO_ENABLE_FSR=ON` and `LO_REQUIRE_FSR=ON`, using
 FidelityFX SDK v1.1.4's FSR 3.1.4 implementation.
-Quality, Balanced, Performance and Native AA have bounded Windows runtime evidence;
-native Linux RADV also has real Quality, Performance and Native AA submissions.
-Controlled Windows static-scene motion/depth checks passed. Full image-quality
-coverage, player acceptance, and DLSS frame generation remain open. This round's
-low-power hardware requirement was covered on the user-approved APEX 15W proxy; it
-does not establish Steam Deck hardware behavior. These source-build results do not
-change the public release configuration.
+Quality, Balanced, Performance and Native AA have bounded runtime evidence on Windows;
+native Linux RADV has Quality, Performance and Native AA evidence. Tested Windows rendering visuals and Linux runtime execution (on AMD
+Radeon 8060S RADV STRIX_HALO) passed user acceptance. Full image-quality coverage across all
+scenes and DLSS/FSR frame generation remain open. Low-power hardware testing covered an approved
+APEX 15W proxy without establishing Steam Deck hardware equivalence.
 
-### Unreleased development updates
+## v0.6.15 release
 
-Current source work following v0.6.11 includes temporal lifecycle and capability race fixes (BR-01, BR-02), in-game graphics menu stability with verified execution status feedback (BR-03, `GraphicsRow`), final pre-present swapchain screenshots and synchronous NGX Evaluate input/output capture in F1 state archives, and a depth view lifetime UAF fix for DLSS Quality to DLAA transitions. Focused unit and hardware fixtures verify these changes; they are not in the public v0.6.11 binaries, and end-to-end capture and visual acceptance remain limited. See [Project Status](docs/STATUS.md) and the [Handoff Document](HANDOFF.md) for details.
-
-A separate, unreleased P2 follow-up adds three battle motion-vector shader mappings. CPU and Vulkan GPU fixtures passed, and one manual battle run recorded completed FSR uses without motion-vector first failures. This does not establish visual acceptance or full P2 completion. See the [FSR progress notes](docs/notes/fsr-dlss-fg-codex-progress.zh-CN.md) for scope and limits.
+Prepared for release on 2026-09-24. Integrates official FidelityFX SDK v1.1.4 (FSR 3.1.4) source-build packaging support alongside official NVIDIA NGX DLSS 310.9.1. It includes native DLSS SR/DLAA temporal lifecycle fixes (BR-01, BR-02), in-game graphics menu stability with verified execution status feedback (BR-03, `GraphicsRow`), F1 pre-present swapchain screenshots and synchronous NGX Evaluate input/output capture, FSR transient input rejection recovery and UMA memory allocation support, the `LoShaderPackTool merge` tool with 45 newly consolidated shaders (28,527 total), and CI/release packaging workflow integration with license assertions. Tested Windows rendering visuals and Linux runtime execution passed user acceptance; broad scene coverage, deterministic production renderer fault injection, and DLSS/FSR frame generation remain experimental and open. See the [changelog](CHANGELOG.md#v0615--2026-09-24) and [development status](docs/STATUS.md) for validation boundaries.
 
 ## v0.6.11 release
 

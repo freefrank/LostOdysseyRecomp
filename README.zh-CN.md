@@ -26,17 +26,15 @@ Windows 与 Linux 正式发布包中已内置官方 NGX 运行库；画质与稳
 
 ### 实验性可选 FSR 超分
 
-源码构建可在 Windows 与原生 Linux 通过 `LO_ENABLE_FSR=ON` 和
-`LO_REQUIRE_FSR=ON` 选择性启用固定 FidelityFX SDK v1.1.4（FSR 3.1.4 实现）的实验性路径。
-Quality、Balanced、Performance、Native AA 均有 Windows 有界运行证据；原生 Linux RADV
-已有 Quality、Performance 和 Native AA 的真实提交。Windows 受控静态场景的运动／深度检查已通过。
-完整画质、玩家验收和 DLSS 帧生成仍未完成。本轮低功耗硬件要求已按用户决定使用 APEX 15W 代理设备验证；这不代表 Steam Deck 的硬件表现。源码构建结果不改变公开发布配置。
+源码构建与发布打包工作流支持在 Windows 与原生 Linux 通过 `LO_ENABLE_FSR=ON` 和
+`LO_REQUIRE_FSR=ON` 启用固定 FidelityFX SDK v1.1.4（FSR 3.1.4 实现）的实验性路径。
+Quality、Balanced、Performance、Native AA 均有 Windows 运行证据；原生 Linux RADV 已有 Quality、Performance 和 Native AA 的运行证据。
+实测的 Windows 渲染画面与 Linux 运行验证（AMD Radeon 8060S RADV STRIX_HALO）均已获用户验收。
+全场景画质覆盖与 DLSS/FSR 帧生成仍待开展。低功耗硬件要求按用户授权通过 APEX 15W 代理设备验证，不代表 Steam Deck 硬件等价。
 
-### 未发布开发进展
+## v0.6.15 发布版
 
-当前开发分支（v0.6.11 之后）的工作包含时序生命周期与能力竞争修复（BR-01、BR-02）、带有经校验执行状态反馈的游戏内图形菜单稳定性重构（BR-03、`GraphicsRow`）、F1 状态捕获中的呈现前交换链最终截图与同步 NGX Evaluate 输入/输出拷贝捕获，以及 DLSS Quality 切换至 DLAA 时的深度视图生命周期 UAF 修复。定向单元测试与硬件 fixture 验证了这些改动；它们未包含在公开的 v0.6.11 二进制包中，端到端导帧和画面验收仍有限。详见[项目状态](docs/STATUS.md)与[交接文档](HANDOFF.md)。
-
-另有尚未发布的 P2 后续工作增加了三组战斗运动矢量 shader 映射；CPU 与 Vulkan GPU fixture 已通过，一次手动战斗运行记录到已完成的 FSR 使用且没有运动矢量首错记录。这不代表画面验收或 P2 全面完成。详见[FSR 进度记录](docs/notes/fsr-dlss-fg-codex-progress.zh-CN.md)。
+于 2026-09-24 完成发布准备。在既有官方 NVIDIA NGX DLSS 310.9.1 基础上，整合了官方 FidelityFX SDK v1.1.4（FSR 3.1.4 实现）的发布构建支持。包含原生 DLSS SR/DLAA 时序生命周期修复（BR-01、BR-02）、带状态校验反馈的图形菜单稳定性重构（BR-03、`GraphicsRow`）、F1 呈现前最终交换链截图与同步 NGX Evaluate 输入/输出捕获、FSR 暂态输入拒绝恢复与 UMA 显存分配支持、`LoShaderPackTool merge` 便携式着色器合并工具及 45 条新增实机着色器整合（总计 28,527 项），以及包含许可证检查的发布与 CI 工作流。测试的 Windows 渲染画面与 Linux 运行验证均已获用户验收；广泛场景覆盖、确定性生产渲染器故障注入序列以及 DLSS/FSR 帧生成仍属于实验性未决阶段。详见[更新日志](CHANGELOG.md#v0615--2026-09-24)与[开发状态](docs/STATUS.md)。
 
 ## v0.6.11 发布版
 

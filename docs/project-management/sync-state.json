@@ -1791,7 +1791,7 @@
         "Evidence": "Native Vulkan DLSS/DLAA delivery commit `871685fdd75b84c00bb9ebb685f36d90169eb82d` and its bounded verification remain valid. FSR 3.1.4 Vulkan SR P1 is complete on Windows and native Linux (commit `87a1691`); P2 remains In Progress with visual acceptance pending. P0 common contracts have recorded targeted checks, but P0 Gate 1 remains NOT PASSED (attempt 1/3, two material reviews remaining). Experimental Streamline/NGX probe foreground run reported generated-present intervals but exited 1 with Vulkan validation errors; no validation-clean generated frame or physical-display acceptance is established. See current FSR handoff for limits."
       },
       "title": "Integrate vendor temporal upscaling after input validation",
-      "body_sha256": "9fb5b556e3d2cc75b17a5c56cb0acda45b0715533a587190825810a8338b446b"
+      "body_sha256": "f6f13c54dc8ccf7aec684d4b13193e98df1d45846e47fb4437d9d5a36e17ab37"
     },
     "taa-motion-quality": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56fGM",
@@ -2595,16 +2595,16 @@
       "fields": {
         "Kind": "Feature",
         "Area": "Shaders",
-        "Status": "Done",
-        "Delivery": "Released",
-        "Release": "v0.5.20",
+        "Status": "In Progress",
+        "Delivery": "In progress",
+        "Release": "v0.6.15",
         "Start date": "2026-09-16",
         "Target date": "2026-09-17",
-        "Evidence": "Implemented relocatable portable Vulkan shader pack (.lospv) with SHA-256 bytecode deduplication and Zstandard chunked block compression (28,482 shaders in 169.9 MB). Decoupled from host paths and DXC DLL hashes; verified 1.2s zero-compile startup on WSL2 Linux with 0 DXC calls. Bundled automatically in Windows x64 ZIP and Linux x64 AppImage release packages and published as standalone ZIP in v0.5.20.",
+        "Evidence": "Implemented relocatable portable Vulkan shader pack (.lospv) with SHA-256 deduplication and Zstandard chunked compression, bundled in v0.5.20. Target v0.6.15 release in preparation: maintenance merge recompiled and integrated 45 shaders from test captures and Windows distribution (28,482 -> 28,527 shaders; `out/merged-shaders/portable_vk.lospv`, 178,332,830 bytes, SHA-256 `b486c87d...`); verify-runtime confirmed all payloads and runtime compatibility. Shader replacement and distribution in progress; commit, push, tag, and release remain pending.",
         "Source key": "portable-vulkan-shader-pack"
       },
       "title": "Portable Vulkan shader pack (.lospv)",
-      "body_sha256": "5c31d514aa63c4c7098cc9b70784053ecda3c0afbc34b1677ef51baf680afa37"
+      "body_sha256": "40a9bfc98c532d89e36894a215163a1289abbcbca04cc09d6be463363b54b539"
     },
     "shader-preparation-optimization": {
       "id": "PVTI_lAHOAAsUY84Biy1azg7fPzU",
@@ -2702,12 +2702,12 @@
         "Status": "In Progress",
         "Delivery": "In progress",
         "Release": "v0.7.0",
-        "Evidence": "G003/P2 remains In Progress; final visual acceptance is pending. Checkpoint `ebefab459515fcd629e9758c8726d5b9b6c4b04b` delivered Windows FSR Vulkan mask/RCAS and transient-fallback work plus three battle shader mappings. Candidate `cb41c99cdc44456864ac0d44cfcd815c2d099f89595840f4e76df2a2db12c352` (source `d78d80f3add32494c53f67702d27d52c5c5e23aa82d690339cba046768c6357e`) identifies the manual run, not a release. CPU passed 768 samples; GPU fixtures covered three mappings in six DXIL/SPIR-V variants. One Windows Vulkan battle window recorded 2,476 completed FSR uses and zero `mv_first_failure`, limited to that scene. APEX 15W is the user-accepted Deck proxy, not Deck-equivalent. SDK consumption and controlled performance checks passed; latest Linux shader/hot-change coverage and final visual acceptance remain pending. f6 is fixture-only; 02d8 remains excluded for unproven screen-UV binding, with no established runtime blocker.",
+        "Evidence": "G003/P2 remains In Progress (full gate open). User accepted Windows visuals and Linux AMD 8060S RADV link + adapter transient verification for this round's scope; supplemental Linux tasks cancelled. Target v0.6.15 release preparation in progress; commit, push, merge, tag, and release pending. Checkpoint: FSR branch `23f0864` plus local repairs, merge tooling and CI checks. `LoFsrAdapterGpuTest --transient-only` passed on RTX 5080 and AMD 8060S RADV: NaN dt rejected with `InputUnavailable`/`useId 0`, next frame recovers dispatch with gap reset and blue 128->96 readback. Full Windows build passed exit 0 (EXE `3689f20b...`, logs `out/fsr-repair-build-20260924/`). Release workflow added `prepare-fsr` (pinned SDK `c6efa6b`), FSR ON/REQUIRE ON, license check; static check passed, Release CI not run. Full P2 hardware matrix and playthrough open; APEX 15W is Deck proxy only.",
         "Source key": "temporal-phased-p2-fsr-quality-hardware",
         "Start date": "2026-09-23"
       },
       "title": "P2: Validate FSR visual quality and multi-platform hardware",
-      "body_sha256": "c908926784c6ea00212f31351c7e8220a821cad2ea9cfddbd3739cc77d7214dd"
+      "body_sha256": "c512c798f89c002c0477f326e55ff0b895cba03099c5c0601310f78b7cbf4088"
     },
     "temporal-phased-p3-fg-infrastructure": {
       "id": "PVTI_lAHOAAsUY84Biy1azg8QYrU",

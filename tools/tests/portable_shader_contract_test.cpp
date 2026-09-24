@@ -31,10 +31,17 @@ int main(int argc, char** argv) try {
         xenos::kShaderCommonHlsl, xenos::resources::variants::DiscoveryIdentity, image);
     if (contract != direct) throw std::runtime_error("shared contract drift");
     Write(root / "image.bin", image);
+    // A source whose renderer-byte FNV key is already in the synthetic pack,
+    // allowing the merge CLI to exercise source/hash validation without DXC.
+    Bytes source(12, 0);
+    source[0]=1; source[4]=2;
+    uint64_t sourceHash=0xcbf29ce484222325ull;
+    for(auto byte:source) {sourceHash^=byte;sourceHash*=0x100000001b3ull;}
+    Write(root / "source.bin", source);
     xenos::TranslatedShader shader;
     for (const auto* producer : {"matching", "explicit"}) {
         pack::Writer writer(root / (std::string(producer) + ".lospv"), contract, producer);
-        writer.Add(1, shader, Binary()); writer.Finish();
+        writer.Add(1, shader, Binary()); writer.Add(sourceHash, shader, Binary()); writer.Finish();
     }
     image[600] ^= 1;
     Write(root / "wrong-image.bin", image);

@@ -43,9 +43,52 @@ jobs:
           python3 tools/release/extract_release_notes.py --changelog CHANGELOG.md --version "$RELEASE_TAG" --output out/releases/release-notes.md
           gh release create "$RELEASE_TAG" --verify-tag --draft --notes-file out/releases/release-notes.md
 
+  prepare-fsr:
+    name: Prepare FSR Vulkan build inputs
+    runs-on: windows-2022
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Checkout pinned FidelityFX SDK
+        uses: actions/checkout@v4
+        with:
+          repository: GPUOpen-LibrariesAndSDKs/FidelityFX-SDK
+          ref: c6efa6bf7f2027b3ec94f28578bb5965eabb9e55
+          path: out/deps/fidelityfx-sdk
+          sparse-checkout: |
+            /LICENSE.txt
+            /sdk/include/
+            /sdk/src/shared/
+            /sdk/src/components/fsr3upscaler/
+            /sdk/src/backends/shared/
+            /sdk/src/backends/vk/
+            /sdk/tools/binary_store/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Generate FSR Vulkan shaders
+        shell: cmd
+        run: |
+          python tools/fsr/generate_shaders.py --sdk out/deps/fidelityfx-sdk --output out/fsr-shaders-vk --threads 2 || exit /b 1
+          python tools/fsr/prepare_adapter_shaders.py --glslang out/deps/fidelityfx-sdk/sdk/tools/binary_store/glslangValidator.exe --output out/fsr-shaders-vk || exit /b 1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fsr-vulkan-build-inputs
+          path: |
+            out/deps/fidelityfx-sdk/sdk
+            out/deps/fidelityfx-sdk/LICENSE.txt
+            out/fsr-shaders-vk
+          if-no-files-found: error
+          include-hidden-files: true
+
   release-windows:
     name: Windows Release
-    needs: [create-draft-release]
+    needs: [create-draft-release, prepare-fsr]
     runs-on: windows-2022
     timeout-minutes: 180
     permissions:
@@ -60,6 +103,10 @@ jobs:
           ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
           submodules: recursive
           persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: fsr-vulkan-build-inputs
+          path: out
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -80,6 +127,17 @@ jobs:
         env:
           LO_BUILD_XEX_PATH: out/build-input/default.xex
         run: python tools/release/fetch_build_input.py
+      - name: Retrieve pinned portable shader pack input
+        uses: actions/checkout@v4
+        with:
+          repository: freefrank/LostOdysseyRecomp-build-inputs
+          ref: 2695699896a956af7206fcabdbe9de319aa4b955
+          path: out/shader-input
+          sparse-checkout: |
+            shaders/
+          sparse-checkout-cone-mode: false
+          ssh-key: ${{ secrets.LO_BUILD_INPUT_KEY }}
+          persist-credentials: false
       - name: Fetch NVIDIA DLSS SDK
         run: python tools/release/fetch_dlss_sdk.py --dest out/deps/nvidia-dlss
       - name: Generate game code
@@ -95,15 +153,31 @@ jobs:
           LO_ENABLE_DLSS: 'ON'
           LO_REQUIRE_DLSS: 'ON'
           LO_DLSS_SDK_ROOT: out\deps\nvidia-dlss
+          LO_ENABLE_FSR: 'ON'
+          LO_REQUIRE_FSR: 'ON'
+          LO_FSR_SDK_ROOT: ${{ github.workspace }}/out/deps/fidelityfx-sdk
+          LO_FSR_SHADER_DIR: ${{ github.workspace }}/out/fsr-shaders-vk
         run: call tools\build_release.bat
       - name: Fetch portable shader pack
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ env.RELEASE_TAG }}
         run: |
-          python tools/release/fetch_shader_pack.py --target-dir out/build/release/LostOdysseyRecomp/shaders --pack-tool out/build/release/LostOdysseyRecomp/LoShaderPackTool.exe --tag "$env:RELEASE_TAG" --fallback-tag v0.6.1
+          # The pinned input takes priority over a previously staged valid pack.
+          Remove-Item -LiteralPath out/build/release/LostOdysseyRecomp/shaders/portable_vk.lospv -ErrorAction SilentlyContinue
+          python tools/release/fetch_shader_pack.py --target-dir out/build/release/LostOdysseyRecomp/shaders --pack-tool out/build/release/LostOdysseyRecomp/LoShaderPackTool.exe --tag "$env:RELEASE_TAG"
+      - name: Confirm pinned portable shader pack
+        run: |
+          $expected = 'b486c87d121968bcec67fae6bc1aa7926378455281bc8b2a221409b8c06c6e2b'
+          $manifest = Get-Content out/shader-input/shaders/manifest.json -Raw | ConvertFrom-Json
+          if ($manifest.sha256 -ne $expected -or $manifest.records -ne 28527) { throw 'Private shader pack input has an unexpected identity.' }
+          $actual = (Get-FileHash out/build/release/LostOdysseyRecomp/shaders/portable_vk.lospv -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw 'Release shader pack differs from the pinned 28527-record input.' }
       - name: Package runtime
         run: |
+          if (-not (Test-Path -LiteralPath out/build/release/LostOdysseyRecomp/licenses/LICENSE-FidelityFX.txt -PathType Leaf)) {
+            throw 'FSR license was not staged by the Windows runtime build.'
+          }
           if ($env:RELEASE_TAG) {
             python tools/package_release.py --version $env:RELEASE_TAG
           } else {
@@ -140,7 +214,7 @@ jobs:
 
   release-linux:
     name: Linux Release
-    needs: [create-draft-release]
+    needs: [create-draft-release, prepare-fsr]
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     permissions:
@@ -158,6 +232,10 @@ jobs:
           ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
           submodules: recursive
           persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: fsr-vulkan-build-inputs
+          path: out
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -205,6 +283,17 @@ jobs:
         env:
           LO_BUILD_XEX_PATH: out/build-input/default.xex
         run: python tools/release/fetch_build_input.py
+      - name: Retrieve pinned portable shader pack input
+        uses: actions/checkout@v4
+        with:
+          repository: freefrank/LostOdysseyRecomp-build-inputs
+          ref: 2695699896a956af7206fcabdbe9de319aa4b955
+          path: out/shader-input
+          sparse-checkout: |
+            shaders/
+          sparse-checkout-cone-mode: false
+          ssh-key: ${{ secrets.LO_BUILD_INPUT_KEY }}
+          persist-credentials: false
       - name: Apply dependency patches
         run: |
           git -C tools/XenonRecomp apply --reverse --check ../patches/XenonRecomp-lostodyssey.patch >/dev/null 2>&1 || git -C tools/XenonRecomp apply ../patches/XenonRecomp-lostodyssey.patch
@@ -231,7 +320,11 @@ jobs:
             -DCMAKE_CXX_COMPILER=clang++ \
             -DLO_ENABLE_DLSS=ON \
             -DLO_REQUIRE_DLSS=ON \
-            -DLO_DLSS_SDK_ROOT="$GITHUB_WORKSPACE/out/deps/nvidia-dlss"
+            -DLO_DLSS_SDK_ROOT="$GITHUB_WORKSPACE/out/deps/nvidia-dlss" \
+            -DLO_ENABLE_FSR=ON \
+            -DLO_REQUIRE_FSR=ON \
+            -DLO_FSR_SDK_ROOT="$GITHUB_WORKSPACE/out/deps/fidelityfx-sdk" \
+            -DLO_FSR_SHADER_DIR="$GITHUB_WORKSPACE/out/fsr-shaders-vk"
           cmake --build out/build/linux --target LostOdysseyRecomp LoShaderPackTool --parallel 2
       - name: Install linuxdeploy
         run: |
@@ -243,11 +336,20 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          python tools/release/fetch_shader_pack.py --target-dir out/build/linux/shaders --pack-tool out/build/linux/LostOdysseyRecomp/LoShaderPackTool --tag "$RELEASE_TAG" --fallback-tag v0.6.1
+          rm -f out/build/linux/shaders/portable_vk.lospv
+          python tools/release/fetch_shader_pack.py --target-dir out/build/linux/shaders --pack-tool out/build/linux/LostOdysseyRecomp/LoShaderPackTool --tag "$RELEASE_TAG"
+      - name: Confirm pinned portable shader pack
+        run: |
+          python3 -c 'import json; m=json.load(open("out/shader-input/shaders/manifest.json")); assert (m["sha256"],m["records"]) == ("b486c87d121968bcec67fae6bc1aa7926378455281bc8b2a221409b8c06c6e2b",28527), "Private shader pack input has an unexpected identity"'
+          printf '%s  %s\n' 'b486c87d121968bcec67fae6bc1aa7926378455281bc8b2a221409b8c06c6e2b' 'out/build/linux/shaders/portable_vk.lospv' | sha256sum --check
       - name: Package AppImage
         env:
           APPIMAGE_EXTRACT_AND_RUN: '1'
         run: |
+          if [ ! -f out/build/linux/LostOdysseyRecomp/licenses/LICENSE-FidelityFX.txt ]; then
+            echo 'FSR license was not staged by the Linux runtime build.' >&2
+            exit 1
+          fi
           if [ -n "$RELEASE_TAG" ]; then
             python tools/package_appimage.py --build out/build/linux --output out/releases --version "$RELEASE_TAG" --linuxdeploy out/tools/linuxdeploy/linuxdeploy
           else

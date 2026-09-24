@@ -44,8 +44,15 @@ jobs:
         run: |
           git submodule update --init --depth 1 thirdparty/plume
           git -C thirdparty/plume apply ../../tools/patches/plume-lostodyssey.patch
+      - name: Initialize Plume Windows CMake source
+        if: runner.os == 'Windows'
+        run: git -C thirdparty/plume submodule update --init --depth 1 contrib/D3D12MemoryAllocator
       - name: Configure without Vulkan loader, vendor SDKs or game assets
         run: cmake -S tools/tests/native_dlss -B out/native-dlss-cpu -DLO_NATIVE_DLSS_CPU_ONLY=ON -DCMAKE_BUILD_TYPE=Release
+      - name: Configure GPU fixture registration without building or running it
+        run: cmake -S tools/tests/native_dlss -B out/native-dlss-config -DLO_NATIVE_DLSS_CPU_ONLY=OFF -DBUILD_TESTING=ON -DPLUME_SDL_VULKAN_ENABLED=OFF -DCMAKE_BUILD_TYPE=Release
+      - name: Check GPU fixture CTest registration
+        run: python -c "import json, subprocess; tests=json.loads(subprocess.check_output(['ctest', '--test-dir', 'out/native-dlss-config', '-C', 'Release', '--show-only=json-v1']))['tests']; names=[test['name'] for test in tests]; assert names.count('LoNativeDlssExecutionTest') == 1, names; print('GPU fixture registered once; no GPU test executed')"
       - name: Build CPU contract fixtures
         run: cmake --build out/native-dlss-cpu --config Release --target LoNativeDlssCpuTests --parallel 2
       - name: Run CPU contracts (not GPU or image-quality acceptance)
