@@ -1,0 +1,27 @@
+name: AF repair workspace
+on:
+  push:
+    branches: [AF]
+    paths: ['.github/workflows/af-repair-workspace.yml']
+permissions:
+  contents: read
+jobs:
+  workspace:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Prepare pinned Plume dependencies
+        run: |
+          git submodule update --init --depth 1 thirdparty/plume
+          git -C thirdparty/plume apply ../../tools/patches/plume-lostodyssey.patch
+          git -C thirdparty/plume submodule update --init --depth 1 contrib/volk contrib/Vulkan-Headers contrib/VulkanMemoryAllocator
+      - name: Archive public sources only
+        run: tar --exclude-vcs --exclude='./out' -czf /tmp/af-workspace.tar.gz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: af-workspace
+          path: /tmp/af-workspace.tar.gz
+          retention-days: 1
