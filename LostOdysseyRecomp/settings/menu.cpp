@@ -17,6 +17,7 @@ extern "C" PPC_FUNC(__imp__sub_82481BE8);
 extern "C" PPC_FUNC(__imp__sub_82870E38);
 extern "C" PPC_FUNC(__imp__sub_828710A0);
 extern "C" PPC_FUNC(__imp__sub_82889E50);
+namespace settings { void RequestMainMenuAfterSettingsClose(PPCContext& ctx, uint8_t* base, uint32_t settingsMenu); }
 namespace settings
 {
 namespace
@@ -43,6 +44,9 @@ bool collectionPrompt = false;
 int collectionChoice = 1;
 bool restartPrompt = false, savedRestartPrompt = false, restartSaveFailed = false;
 int restartChoice = 0;
+bool mainMenuPrompt = false;
+int mainMenuChoice = 1;
+bool mainMenuRequested = false;
 Config restartAfter;
 int tab = 0, row = 0;
 bool bypass = false, sawModal = false;
@@ -53,6 +57,12 @@ constexpr uint32_t resolutions16_9[][2] = {
     {1280, 720}, {1600, 900}, {1920, 1080}, {2560, 1440}, {3840, 2160}};
 constexpr uint32_t resolutions21_9[][2] = {
     {1720, 720}, {2560, 1080}, {3440, 1440}, {3840, 1600}, {5120, 2160}};
+// Menu positions are independent of the persisted quality IDs (Quality=0, Balanced=1, Performance=2, native AA=3).
+constexpr uint32_t qualityMenuIds[] = {2, 1, 0, 3};
+constexpr uint32_t QualityMenuIndex(uint32_t id)
+{
+    return id < 3 ? 2 - id : 3;
+}
 inline bool IsUltrawideAspect(uint32_t width, uint32_t height)
 {
     return width && height && (uint64_t(width) * 9 > uint64_t(height) * 16);
@@ -322,6 +332,7 @@ void Publish(uint8_t *base, uint32_t config)
                    (flags & 0x02000000) ? 1 : 0);
         next.rows.back().controllerButtons = true;
         addAction(L"Restore game defaults", L"恢復遊戲預設設定", Tr(L"Restore", L"恢復"));
+        addAction(L"Quit to Main Menu", L"退出到主選單", Tr(L"Return", L"返回"));
     }
     else if (tab == 1)
     {
@@ -384,8 +395,8 @@ void Publish(uint8_t *base, uint32_t config)
                    graphics_menu::AaChoice(edit)));
         const bool savedFsr = edit.upscaler == gpu::upscaling::Upscaler::Fsr;
         auto dlssQuality = makeChoices(savedFsr ? L"FSR quality" : L"DLSS quality", savedFsr ? L"FSR 品質" : L"DLSS 品質",
-                   {Tr(L"Quality", L"品質"), Tr(L"Balanced", L"平衡"), Tr(L"Performance", L"效能"), savedFsr ? L"Native AA" : L"DLAA"},
-                   std::min(savedFsr ? uint32_t(edit.fsrQuality) : uint32_t(edit.dlssQuality), 3u));
+                   {Tr(L"Performance", L"效能"), Tr(L"Balanced", L"平衡"), Tr(L"Quality", L"品質"), savedFsr ? L"Native AA" : L"DLAA"},
+                   QualityMenuIndex(savedFsr ? uint32_t(edit.fsrQuality) : uint32_t(edit.dlssQuality)));
         // Hidden instead of removed so this logical id stays stable for input, drawing and hit-testing.
         dlssQuality.hidden = GraphicsRowHidden(int(GraphicsRow::DlssQuality));
         placeGraphics(GraphicsRow::DlssQuality, std::move(dlssQuality));
@@ -482,8 +493,8 @@ void Publish(uint8_t *base, uint32_t config)
             break;
         case GraphicsRow::DlssQuality:
             next.help = edit.upscaler == gpu::upscaling::Upscaler::Fsr ?
-                Tr(L"Quality, Balanced, Performance, or Native AA. Native AA keeps the output resolution.", L"品質、平衡、效能或 Native AA。Native AA 維持輸出解析度。") : Tr(L"Quality, Balanced, Performance, or DLAA. The status line shows the submitted mode.",
-                           L"品質、平衡、效能或 DLAA。狀態列顯示已提交的模式。");
+                Tr(L"Performance, Balanced, Quality, or Native AA. Native AA keeps the output resolution.", L"效能、平衡、品質或 Native AA。Native AA 維持輸出解析度。") : Tr(L"Performance, Balanced, Quality, or DLAA. The status line shows the submitted mode.",
+                           L"效能、平衡、品質或 DLAA。狀態列顯示已提交的模式。");
             break;
         case GraphicsRow::FsrSharpness:
             next.help = Tr(L"FSR sharpening: Off disables RCAS; 1-100% sets sharpening strength.",
@@ -536,6 +547,14 @@ void Publish(uint8_t *base, uint32_t config)
         next.dialogMessage = gpu::taa_collection::Message(edit.uiLanguage);
         next.dialogChoices = {Tr(L"Yes", L"是"), Tr(L"No", L"否")};
         next.dialogSelection = collectionChoice;
+    }
+    if (mainMenuPrompt)
+    {
+        next.dialogTitle = Tr(L"Quit to Main Menu", L"退出到主選單");
+        next.dialogMessage = Tr(L"Return to the main menu? Unsaved progress will be lost.",
+                                L"返回主選單嗎？尚未儲存的進度將會遺失。");
+        next.dialogChoices = {Tr(L"Return", L"返回"), Tr(L"Cancel", L"取消")};
+        next.dialogSelection = mainMenuChoice;
     }
     next.notice = tab == 2 ? DlssNotice() : std::wstring{};
     std::lock_guard lock(snapshotMutex);
@@ -697,6 +716,7 @@ PPC_FUNC(sub_822F19B0)
         bypass = false;
         sawModal = false;
         closing = false;
+        mainMenuRequested = false;
         active = false;
     }
     if (closing)
@@ -705,7 +725,15 @@ PPC_FUNC(sub_822F19B0)
         // completion notification. Never replace these with a state write.
         __imp__sub_822F19B0(ctx, base);
         if (PPC_LOAD_U32(menu + 4) <= 2)
+        {
             closing = false;
+            if (mainMenuRequested)
+            {
+                mainMenuRequested = false;
+                PPCContext request = ctx;
+                RequestMainMenuAfterSettingsClose(request, base, menu);
+            }
+        }
         return;
     }
     if (state != 4)
@@ -750,6 +778,7 @@ PPC_FUNC(sub_822F19B0)
         restartPrompt = false;
         savedRestartPrompt = false;
         restartSaveFailed = false;
+        mainMenuPrompt = false;
         status.clear();
         Publish(base, config);
         LOG_INFO("settings: replacement opened at guest menu {:#x}", menu);
@@ -771,6 +800,29 @@ PPC_FUNC(sub_822F19B0)
     }
     input |= mouseAction.exchange(0);
     swapConfirm = (PPC_LOAD_U32(config + 4) & 0x02000000) != 0;
+    auto closeSettings = [&] {
+        // Retail 822F2904 applies the guest configuration before asking again.
+        // Its accepted confirmation at 822F2098 calls 82889E50, which refreshes
+        // language resources and starts state 3. Preserve those real operations
+        // and the parent's persistence/completion path without a second dialog.
+        closing = true;
+        bypass = false;
+        sawModal = false;
+        releaseToParent = true;
+        active = false;
+        cancelPolls = 0;
+        pending = 0;
+        PPCContext apply = ctx;
+        apply.r3.u64 = config;
+        language::TraceConfig(base, config, "menu-before-close");
+        __imp__sub_82870E38(apply, base);
+        language::TraceConfig(base, config, "menu-after-close-apply");
+        PPCContext close = ctx;
+        close.r3.u64 = menu;
+        __imp__sub_82889E50(close, base);
+        LOG_INFO("settings: replacement closing menu={:08X} state={} (native completion)",
+                 menu, PPC_LOAD_U32(menu + 4));
+    };
     if (restart::ConsumeLaunchFailure())
     {
         status = Tr(L"Restart could not be started. This game is still running; your saved settings are safe.",
@@ -844,6 +896,27 @@ PPC_FUNC(sub_822F19B0)
         Publish(base, config);
         return;
     }
+    if (mainMenuPrompt)
+    {
+        if (int selected = mouseDialog.exchange(-1); selected >= 0)
+            mainMenuChoice = std::min(selected, 1);
+        if (input & 3) mainMenuChoice = 1 - mainMenuChoice;
+        if (input & 0x2000) mainMenuChoice = 1;
+        if (input & 0x3000)
+        {
+            mainMenuPrompt = false;
+            if (mainMenuChoice == 0)
+            {
+                // Close the retail Settings task first, then request the title
+                // transition after the native completion notification.
+                mainMenuRequested = true;
+                closeSettings();
+                return;
+            }
+        }
+        Publish(base, config);
+        return;
+    }
     auto graphicsSaved = [&] {
         status = Tr(L"Display settings saved.", L"顯示設定已儲存。");
         if (restart::Required(previousDisplay, edit))
@@ -891,7 +964,7 @@ PPC_FUNC(sub_822F19B0)
         row = 0;
         status.clear();
     }
-    const int count = tab == 0 ? 8 : tab == 1 ? 3 : tab == 2 ? int(GraphicsRow::Count) : 5;
+    const int count = tab == 0 ? GameMainMenuRow + 1 : tab == 1 ? 3 : tab == 2 ? int(GraphicsRow::Count) : 5;
     // Provider-specific rows keep their logical ids and navigation skips them
     // when unavailable. Keyboard Enter reaches the menu as GAMEPAD_START
     // (hid.cpp), so one branch covers gamepad Start and Enter.
@@ -925,7 +998,7 @@ PPC_FUNC(sub_822F19B0)
     };
     if (delta)
     {
-        if (tab == 0 && row < 7)
+        if (tab == 0 && row < GameRestoreRow)
         {
             if (row == 0)
                 PPC_STORE_U32(config, cycle(PPC_LOAD_U32(config), 3));
@@ -999,8 +1072,10 @@ PPC_FUNC(sub_822F19B0)
                 break;
             case GraphicsRow::DlssQuality:
                 if (edit.upscaler == gpu::upscaling::Upscaler::Fsr)
-                    edit.fsrQuality = gpu::upscaling::FsrQuality(cycle(uint32_t(edit.fsrQuality), 4));
-                else edit.dlssQuality = gpu::upscaling::DlssQuality(cycle(uint32_t(edit.dlssQuality), 4));
+                    edit.fsrQuality = gpu::upscaling::FsrQuality(
+                        qualityMenuIds[cycle(QualityMenuIndex(uint32_t(edit.fsrQuality)), std::size(qualityMenuIds))]);
+                else edit.dlssQuality = gpu::upscaling::DlssQuality(
+                    qualityMenuIds[cycle(QualityMenuIndex(uint32_t(edit.dlssQuality)), std::size(qualityMenuIds))]);
                 break;
             case GraphicsRow::FsrSharpness:
                 edit.fsrSharpnessPercent = uint32_t(std::clamp(int(edit.fsrSharpnessPercent) + delta, 0, 100));
@@ -1039,7 +1114,7 @@ PPC_FUNC(sub_822F19B0)
         __imp__sub_82870E38(call, base);
         language::TraceConfig(base, config, "menu-after-apply");
     }
-    if ((input & 0x1000) && tab == 0 && row == 7)
+    if ((input & 0x1000) && tab == 0 && row == GameRestoreRow)
     {
         PPCContext call = ctx;
         call.r3.u32 = config;
@@ -1050,6 +1125,12 @@ PPC_FUNC(sub_822F19B0)
         __imp__sub_82870E38(call, base);
         language::TraceConfig(base, config, "menu-after-defaults");
         status = Tr(L"Game defaults restored.", L"遊戲預設設定已恢復。");
+    }
+    if ((input & 0x1000) && tab == 0 && row == GameMainMenuRow)
+    {
+        mainMenuPrompt = true;
+        mainMenuChoice = 1; // Require an explicit selection of Return; Back always cancels.
+        status.clear();
     }
     if ((input & 0x1000) && tab == 2 && row == int(GraphicsRow::Save))
     {
@@ -1109,27 +1190,7 @@ PPC_FUNC(sub_822F19B0)
     }
     if (input & 0x2000)
     {
-        // Retail 822F2904 applies the guest configuration before asking again.
-        // Its accepted confirmation at 822F2098 calls 82889E50, which refreshes
-        // language resources and starts state 3. Preserve those real operations
-        // and the parent's persistence/completion path without a second dialog.
-        closing = true;
-        bypass = false;
-        sawModal = false;
-        releaseToParent = true;
-        active = false;
-        cancelPolls = 0;
-        pending = 0;
-        PPCContext apply = ctx;
-        apply.r3.u64 = config;
-        language::TraceConfig(base, config, "menu-before-close");
-        __imp__sub_82870E38(apply, base);
-        language::TraceConfig(base, config, "menu-after-close-apply");
-        PPCContext close = ctx;
-        close.r3.u64 = menu;
-        __imp__sub_82889E50(close, base);
-        LOG_INFO("settings: replacement closing menu={:08X} state={} (native completion)",
-                 menu, PPC_LOAD_U32(menu + 4));
+        closeSettings();
         return;
     }
     // The status line follows the latest DLSS result, including while the menu sits idle.

@@ -54,6 +54,7 @@ struct Config
     bool fxaa = false; // Legacy serialized mirror; antialiasing is authoritative.
     bool automaticUpdates = true;
     bool skipShaderPrebuild = false;
+    bool saveAnywhere = false; // Debug-only preference; defaults off for existing profiles.
     bool operator==(const Config &) const = default;
 };
 Config GetConfig();
@@ -61,5 +62,6 @@ void PreviewConfig(const Config &config);
 // Atomic replacement, preserving the previous file if writing fails.
 bool SaveConfig(const Config &config);
 bool SaveDebugLanguage(uint32_t language);
+bool SaveSaveAnywhere(bool enabled);
 uint32_t GameLanguage();
 } // namespace settings

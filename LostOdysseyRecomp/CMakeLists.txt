@@ -668,6 +668,27 @@ if(MSVC)
     target_compile_options(LoDebugMenuInteractionTest PRIVATE /utf-8 /UNDEBUG)
 endif()
 
+if(WIN32)
+    add_executable(LoSaveAnywhereConfigTest EXCLUDE_FROM_ALL
+        ${CMAKE_SOURCE_DIR}/tools/tests/save_anywhere_config_test.cpp)
+    target_include_directories(LoSaveAnywhereConfigTest PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,INCLUDE_DIRECTORIES>)
+    target_compile_features(LoSaveAnywhereConfigTest PRIVATE cxx_std_20)
+    target_link_libraries(LoSaveAnywhereConfigTest PRIVATE fmt::fmt)
+    if(MSVC)
+        target_compile_options(LoSaveAnywhereConfigTest PRIVATE /utf-8)
+    endif()
+endif()
+
+add_executable(LoQuitTextHookTest EXCLUDE_FROM_ALL
+    ${CMAKE_SOURCE_DIR}/tools/tests/quit_text_hook_test.cpp)
+target_include_directories(LoQuitTextHookTest PRIVATE ${LO_RUNTIME_ROOT})
+target_compile_features(LoQuitTextHookTest PRIVATE cxx_std_20)
+
+add_executable(LoQuitActionHookTest EXCLUDE_FROM_ALL
+    ${CMAKE_SOURCE_DIR}/tools/tests/quit_action_hook_test.cpp)
+target_include_directories(LoQuitActionHookTest PRIVATE ${LO_RUNTIME_ROOT})
+target_compile_features(LoQuitActionHookTest PRIVATE cxx_std_20)
+
 add_executable(LoShaderPreparationQueueTest EXCLUDE_FROM_ALL
     ${CMAKE_SOURCE_DIR}/tools/tests/shader_preparation_queue_test.cpp)
 target_include_directories(LoShaderPreparationQueueTest PRIVATE ${LO_RUNTIME_ROOT})

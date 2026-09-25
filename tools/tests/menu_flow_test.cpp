@@ -3,8 +3,13 @@
 #include <stdafx.h>
 #include <gpu/video.h>
 #include <settings/config.h>
+#define SDL_MAIN_HANDLED // This host fixture supplies its own main and does not initialize SDL.
+#include <SDL.h>
 #include <fstream>
 #include <stdexcept>
+#include <tuple>
+extern "C" int SDLCALL MenuFlowPushEvent(SDL_Event* event);
+namespace settings { void RequestMainMenuAfterSettingsClose(PPCContext& ctx, uint8_t* base, uint32_t settingsMenu); }
 namespace gpu::video {
 plume::RenderDevice* MenuFlowTestDevice();
 inline bool WindowModeOverridden() { return false; }
@@ -43,7 +48,9 @@ bool MenuFlowDisplayModeFailed();
 #define __imp__sub_828710A0 MenuFlowDefaults
 #define __imp__sub_82889E50 MenuFlowClose
 #define Translate MenuFlowTranslate
+#define SDL_PushEvent MenuFlowPushEvent
 #include "../../LostOdysseyRecomp/settings/menu.cpp"
+#undef SDL_PushEvent
 #undef Translate
 #undef GetConfig
 #undef SaveConfig
@@ -83,6 +90,7 @@ std::vector<char> calls;
 settings::Config currentConfig{}, diskConfig{};
 unsigned saves = 0, previews = 0, requests = 0;
 bool saveFails = false, modeFailed = false;
+unsigned quitEventAttempts = 0, mainMenuRequests = 0;
 gpu::video::DisplayChangeTracker displayChanges;
 void Require(bool condition, const char* message)
 {
@@ -141,6 +149,19 @@ bool settings::MenuFlowSaveConfig(const Config& value)
     if (saveFails) return false;
     currentConfig = diskConfig = value;
     return true;
+}
+extern "C" int SDLCALL MenuFlowPushEvent(SDL_Event* event)
+{
+    (void)event;
+    ++quitEventAttempts;
+    throw std::runtime_error("return to main menu must never push an SDL event");
+}
+void settings::RequestMainMenuAfterSettingsClose(PPCContext& ctx, uint8_t* base, uint32_t settingsMenu)
+{
+    Require(settingsMenu == Menu && PPC_LOAD_U32(settingsMenu + 4) <= 2 &&
+            !settings::active && ctx.r3.u32 == Menu, "main-menu request follows native Settings completion");
+    (void)base;
+    ++mainMenuRequests;
 }
 void settings::MenuFlowPreviewConfig(const Config& value) { ++previews; currentConfig = value; }
 uint64_t gpu::video::MenuFlowBeginDisplayChange(const settings::Config& value)
@@ -290,8 +311,30 @@ void CheckBr03DlssMenu(uint8_t* base)
     settings::row = int(GraphicsRow::DlssQuality);
     settings::pending = 0;
     Tick(base);
-    Require(settings::snapshot.help == L"Quality, Balanced, Performance, or DLAA. The status line shows the submitted mode.",
+    Require(settings::snapshot.help == L"Performance, Balanced, Quality, or DLAA. The status line shows the submitted mode.",
             "quality help names the submitted mode");
+    auto checkQuality = [&](const std::vector<std::wstring>& choices, int selected, const char* message) {
+        const auto& quality = settings::snapshot.rows[int(GraphicsRow::DlssQuality)];
+        Require(quality.choices == choices && quality.selectedChoice == selected && quality.value == choices[size_t(selected)],
+                message);
+    };
+    const std::vector<std::wstring> dlssChoices{L"Performance", L"Balanced", L"Quality", L"DLAA"};
+    checkQuality(dlssChoices, 2, "saved DLSS Quality displays in third position");
+    settings::pending = 8; Tick(base);
+    Require(settings::edit.dlssQuality == DlssQuality::Dlaa, "DLSS right from Quality selects DLAA");
+    checkQuality(dlssChoices, 3, "DLAA displays in fourth position");
+    settings::pending = 8; Tick(base);
+    Require(settings::edit.dlssQuality == DlssQuality::Performance, "DLSS right wraps to Performance");
+    checkQuality(dlssChoices, 0, "DLSS Performance displays first");
+    settings::pending = 8; Tick(base);
+    Require(settings::edit.dlssQuality == DlssQuality::Balanced, "DLSS right selects Balanced");
+    checkQuality(dlssChoices, 1, "DLSS Balanced displays second");
+    settings::pending = 8; Tick(base);
+    Require(settings::edit.dlssQuality == DlssQuality::Quality, "DLSS right selects Quality");
+    checkQuality(dlssChoices, 2, "DLSS Quality displays third after cycling");
+    settings::pending = 4; Tick(base);
+    Require(settings::edit.dlssQuality == DlssQuality::Balanced, "DLSS left from Quality selects Balanced");
+    settings::edit.dlssQuality = DlssQuality::Quality;
     settings::row = int(GraphicsRow::AntiAliasing);
     settings::pending = 0;
     Tick(base);
@@ -299,7 +342,25 @@ void CheckBr03DlssMenu(uint8_t* base)
     Tick(base);
     Require(settings::edit.upscaler == Upscaler::Fsr && !settings::snapshot.rows[int(GraphicsRow::DlssQuality)].hidden,
             "FSR can be selected independently on D3D12");
-    Require(settings::snapshot.rows[int(GraphicsRow::DlssQuality)].choices.back() == L"Native AA", "FSR uses Native AA quality label");
+    settings::row = int(GraphicsRow::DlssQuality);
+    settings::edit.fsrQuality = gpu::upscaling::FsrQuality::Quality;
+    settings::pending = 0; Tick(base);
+    const std::vector<std::wstring> fsrChoices{L"Performance", L"Balanced", L"Quality", L"Native AA"};
+    checkQuality(fsrChoices, 2, "saved FSR Quality displays in third position with Native AA last");
+    Require(settings::snapshot.help == L"Performance, Balanced, Quality, or Native AA. Native AA keeps the output resolution.",
+            "FSR help matches the choice order");
+    settings::pending = 4; Tick(base);
+    Require(settings::edit.fsrQuality == gpu::upscaling::FsrQuality::Balanced, "FSR left from Quality selects Balanced");
+    checkQuality(fsrChoices, 1, "FSR Balanced displays second");
+    settings::pending = 4; Tick(base);
+    Require(settings::edit.fsrQuality == gpu::upscaling::FsrQuality::Performance, "FSR left selects Performance");
+    checkQuality(fsrChoices, 0, "FSR Performance displays first");
+    settings::pending = 4; Tick(base);
+    Require(settings::edit.fsrQuality == gpu::upscaling::FsrQuality::NativeAA, "FSR left wraps to Native AA");
+    checkQuality(fsrChoices, 3, "FSR Native AA displays last");
+    settings::pending = 8; Tick(base);
+    Require(settings::edit.fsrQuality == gpu::upscaling::FsrQuality::Performance, "FSR right wraps to Performance");
+    settings::row = int(GraphicsRow::AntiAliasing);
     settings::pending = 8;
     Tick(base);
     Require(settings::edit.upscaler == Upscaler::Off && settings::snapshot.rows[int(GraphicsRow::DlssQuality)].hidden, "DLSS can be turned off on D3D12");
@@ -1043,6 +1104,78 @@ int main(int argc, char** argv)
             Require(saves == beforeSave + 1 && diskConfig.fsrSharpnessPercent == 64 &&
                     currentConfig.fsrSharpnessPercent == 64, "existing Save action persists FSR sharpness");
             std::puts("PASS FSR sharpness menu visibility, 0/100 bounds, description, stable ids and Save");
+        }
+        // The host Settings game tab is reached from the retail System menu.
+        // Only explicit dialog confirmation may request the guest title transition.
+        {
+            settings::tab = 0;
+            settings::row = settings::GameMainMenuRow;
+            settings::edit.uiLanguage = 0;
+            settings::status.clear();
+            settings::pending = 0; Tick(base);
+            Require(settings::snapshot.rows.size() == 9 &&
+                    settings::snapshot.rows[settings::GameRestoreRow].name == L"Restore game defaults" &&
+                    settings::snapshot.rows[settings::GameMainMenuRow].name == L"Quit to Main Menu" &&
+                    settings::snapshot.rows[settings::GameMainMenuRow].value == L"Return",
+                    "Quit to Main Menu follows the existing game actions");
+            Require(settings::graphics_menu::IsAction(0, settings::GameMainMenuRow), "mouse treats Return as an action");
+            const unsigned beforeSaves = saves, beforeApplies = applies, beforeCloses = closes;
+            settings::pending = 8; Tick(base);
+            Require(!settings::mainMenuPrompt && !mainMenuRequests, "right arrow cannot return to title");
+            settings::PointerClick(500, 150 + settings::GameMainMenuRow * 43 + 20, false);
+            Tick(base);
+            Require(settings::mainMenuPrompt && settings::snapshot.dialogTitle == L"Quit to Main Menu" &&
+                    settings::snapshot.dialogMessage == L"Return to the main menu? Unsaved progress will be lost." &&
+                    settings::snapshot.dialogChoices == std::vector<std::wstring>{L"Return", L"Cancel"} &&
+                    settings::snapshot.dialogSelection == 1 && !mainMenuRequests,
+                    "mouse opens confirmation with Cancel preselected and no transition");
+            settings::pending = 0x1000; Tick(base);
+            Require(!settings::mainMenuPrompt && !mainMenuRequests && settings::snapshot.dialogChoices.empty(),
+                    "confirm on default Cancel dismisses without returning");
+            settings::pending = 0x1000; Tick(base);
+            Require(settings::mainMenuPrompt && settings::snapshot.dialogSelection == 1, "gamepad reopens safe main-menu dialog");
+            settings::pending = 1; Tick(base);
+            Require(settings::snapshot.dialogSelection == 0 && !mainMenuRequests, "up selects Return without dispatching");
+            settings::pending = 0x2000; Tick(base);
+            Require(!settings::mainMenuPrompt && !mainMenuRequests && !settings::closing,
+                    "Back cancels even when Return is selected");
+            settings::edit.uiLanguage = 1;
+            settings::pending = 0; Tick(base);
+            Require(settings::snapshot.rows[settings::GameMainMenuRow].name == L"退出到主選單", "traditional Chinese main-menu label");
+            settings::pending = 0x1000; Tick(base);
+            Require(settings::snapshot.dialogTitle == L"退出到主選單" &&
+                    settings::snapshot.dialogMessage == L"返回主選單嗎？尚未儲存的進度將會遺失。" &&
+                    settings::snapshot.dialogChoices == std::vector<std::wstring>{L"返回", L"取消"} &&
+                    settings::snapshot.dialogSelection == 1,
+                    "traditional Chinese confirmation and default cancellation");
+            for (const auto& [language, title, message, choice, cancel] : {
+                     std::tuple{2u, L"メインメニューに戻る", L"メインメニューに戻りますか？保存していない進行状況は失われます。", L"戻る", L"キャンセル"},
+                     std::tuple{3u, L"메인 메뉴로 돌아가기", L"메인 메뉴로 돌아갈까요? 저장하지 않은 진행 상황은 사라집니다.", L"돌아가기", L"취소"},
+                     std::tuple{4u, L"退出到主菜单", L"返回主菜单吗？未保存的进度将会丢失。", L"返回", L"取消"}})
+            {
+                settings::edit.uiLanguage = language;
+                settings::pending = 0; Tick(base);
+                Require(settings::snapshot.rows[settings::GameMainMenuRow].name == title &&
+                        settings::snapshot.dialogTitle == title && settings::snapshot.dialogMessage == message &&
+                        settings::snapshot.dialogChoices == std::vector<std::wstring>{choice, cancel} &&
+                        settings::snapshot.dialogSelection == 1,
+                        "Japanese, Korean and Simplified Chinese preserve translated confirmation and default Cancel");
+            }
+            settings::edit.uiLanguage = 1;
+            settings::pending = 0; Tick(base);
+            settings::pending = 1; Tick(base);
+            settings::pending = 0x1000; Tick(base);
+            Require(!settings::mainMenuPrompt && settings::closing && !settings::active &&
+                    mainMenuRequests == 0 && applies == beforeApplies + 1 && closes == beforeCloses + 1,
+                    "confirmed Return closes the retail Settings task before requesting title");
+            settings::pending = 0; Tick(base);
+            Require(mainMenuRequests == 1 && quitEventAttempts == 0 && saves == beforeSaves &&
+                    applies == beforeApplies + 1 && closes == beforeCloses + 1,
+                    "native completion requests title exactly once without SDL_QUIT or settings file writes");
+            settings::pending = 0; Tick(base);
+            Require(mainMenuRequests == 1 && quitEventAttempts == 0,
+                    "repeated native ticks do not request title or SDL_QUIT again");
+            std::puts("PASS System Settings Quit to Main Menu: cancellation, Chinese labels, native close then one title request, no SDL_QUIT");
         }
         if (argc == 3)
         {
