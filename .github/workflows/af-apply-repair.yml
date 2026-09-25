@@ -3,7 +3,7 @@ on:
   push:
     branches: [AF]
     paths:
-      - 'tools/patches/af-repair-*.b64'
+      - 'tools/patches/af-repair-*'
       - '.github/workflows/af-apply-repair.yml'
 permissions:
   contents: read
@@ -28,10 +28,14 @@ jobs:
           python -c "from pathlib import Path; import base64,lzma,hashlib; d=lzma.decompress(base64.b64decode(''.join(Path('tools/patches/af-repair-'+str(i)+'.b64').read_text() for i in range(5)))); assert hashlib.sha256(d).hexdigest()=='659e7ebbcabebedbbe9912350f53350b7c842e6e53c5e84c682895c2df2e4dde'; Path('af-repair.patch').write_bytes(d)"
           git apply --check af-repair.patch
           git apply af-repair.patch
-          python -c "from pathlib import Path; p=Path('tools/tests/anisotropic_filtering/CMakeLists.txt'); s=p.read_text(); needle='    target_compile_features(\u0024{target} PRIVATE cxx_std_20)'; assert s.count(needle)==1; p.write_text(s.replace(needle,needle+'\n    target_compile_definitions(\u0024{target} PRIVATE NOMINMAX)'))"
+          python tools/patches/af-repair-adjust.py
           git diff --check
       - name: Prepare pinned public sampler types
-        run: git submodule update --init --depth 1 thirdparty/plume
+        shell: bash
+        run: |
+          git submodule update --init --depth 1 thirdparty/plume
+          git -C thirdparty/plume apply ../../tools/patches/plume-lostodyssey.patch
+          if [ "$RUNNER_OS" = Linux ]; then sudo apt-get update -qq && sudo apt-get install -y libx11-dev; fi
       - name: Test production palette and renderer methods
         shell: bash
         run: |
@@ -58,7 +62,7 @@ jobs:
           python -c "from pathlib import Path; import base64,lzma,hashlib; d=lzma.decompress(base64.b64decode(''.join(Path('tools/patches/af-repair-'+str(i)+'.b64').read_text() for i in range(5)))); assert hashlib.sha256(d).hexdigest()=='659e7ebbcabebedbbe9912350f53350b7c842e6e53c5e84c682895c2df2e4dde'; Path('af-repair.patch').write_bytes(d)"
           git apply --check af-repair.patch
           git apply af-repair.patch
-          python -c "from pathlib import Path; p=Path('tools/tests/anisotropic_filtering/CMakeLists.txt'); s=p.read_text(); needle='    target_compile_features(\u0024{target} PRIVATE cxx_std_20)'; assert s.count(needle)==1; p.write_text(s.replace(needle,needle+'\n    target_compile_definitions(\u0024{target} PRIVATE NOMINMAX)'))"
+          python tools/patches/af-repair-adjust.py
       - name: Prepare pinned Plume backend
         run: |
           git submodule update --init --depth 1 thirdparty/plume
@@ -81,8 +85,11 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - name: Commit only the tested repair and remove transport helpers
+        with:
+          persist-credentials: false
+      - name: Store tested source blobs for maintainer commit
         env:
+          GH_TOKEN: ${{ github.token }}
           EXPECTED_HEAD: ${{ github.sha }}
         run: |
           set -euo pipefail
@@ -90,12 +97,25 @@ jobs:
           python -c "from pathlib import Path; import base64,lzma,hashlib; d=lzma.decompress(base64.b64decode(''.join(Path('tools/patches/af-repair-'+str(i)+'.b64').read_text() for i in range(5)))); assert hashlib.sha256(d).hexdigest()=='659e7ebbcabebedbbe9912350f53350b7c842e6e53c5e84c682895c2df2e4dde'; Path('af-repair.patch').write_bytes(d)"
           git apply --check af-repair.patch
           git apply af-repair.patch
-          python -c "from pathlib import Path; p=Path('tools/tests/anisotropic_filtering/CMakeLists.txt'); s=p.read_text(); needle='    target_compile_features(\u0024{target} PRIVATE cxx_std_20)'; assert s.count(needle)==1; p.write_text(s.replace(needle,needle+'\n    target_compile_definitions(\u0024{target} PRIVATE NOMINMAX)'))"
-          git rm .github/workflows/af-apply-repair.yml tools/patches/af-repair-*.b64
-          git add --all -- .github/workflows/af-regression.yml .github/workflows/af-repair-workspace.yml LostOdysseyRecomp/gpu/renderer.cpp LostOdysseyRecomp/gpu/sampler_description.h LostOdysseyRecomp/gpu/sampler_palette.h LostOdysseyRecomp/settings/config.cpp LostOdysseyRecomp/settings/translations.h docs/notes/anisotropic-filtering.md tools/tests/anisotropic_filtering tools/tests/settings_menu/generate_runtime_fixture.py
-          git diff --cached --check
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m "Fix live AF with immutable sampler table generations and regression tests" -m "Preserve recorded descriptors through each batch fence, publish replacements transactionally, keep AF-independent recipe indices, protect non-material sampling, and snapshot settings once per frame. Validated by Windows/Linux CPU and menu fixtures plus software Vulkan dispatch/readback."
-          git push origin HEAD:refs/heads/AF
-          git rev-parse HEAD
+          python tools/patches/af-repair-adjust.py
+          git diff --check
+          python - <<'PY'
+          import os, json, urllib.request
+          from pathlib import Path
+          paths = ['.github/workflows/af-regression.yml', 'LostOdysseyRecomp/gpu/renderer.cpp', 'LostOdysseyRecomp/gpu/sampler_description.h', 'LostOdysseyRecomp/gpu/sampler_palette.h', 'LostOdysseyRecomp/settings/config.cpp', 'LostOdysseyRecomp/settings/translations.h', 'docs/notes/anisotropic-filtering.md', 'tools/tests/anisotropic_filtering/CMakeLists.txt', 'tools/tests/anisotropic_filtering/generate_renderer_fixture.py', 'tools/tests/anisotropic_filtering/palette_test.cpp', 'tools/tests/anisotropic_filtering/sample.comp', 'tools/tests/anisotropic_filtering/vulkan_test.cpp', 'tools/tests/settings_menu/generate_runtime_fixture.py']
+          entries = []
+          for path in paths:
+              body = json.dumps({'encoding': 'utf-8', 'content': Path(path).read_text(encoding='utf-8')}).encode()
+              request = urllib.request.Request('https://api.github.com/repos/freefrank/LostOdysseyRecomp/git/blobs', data=body, headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Content-Type': 'application/json', 'Accept': 'application/vnd.github+json'}, method='POST')
+              with urllib.request.urlopen(request) as response:
+                  sha = json.load(response)['sha']
+              entries.append({'path': path, 'mode': '100644', 'type': 'blob', 'sha': sha})
+          result = {'parent': os.environ['EXPECTED_HEAD'], 'entries': entries}
+          Path('af-tested-blobs.json').write_text(json.dumps(result))
+          print('AF_TESTED_BLOBS=' + json.dumps(result))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: af-tested-blobs
+          path: af-tested-blobs.json
+          retention-days: 1
