@@ -16,7 +16,7 @@ namespace gpu::frame_plan
 {
     bool wire::CatalogStage::Write(uint32_t index, uint32_t value, SurfaceRole& committedRole, uint32_t& committedSurface, uint32_t& committedColor)
     {
-        if (index == CatalogBase) { active = value == CatalogMagic; role = SurfaceRole::Unknown; surfaceInfo = colorInfo = 0; return false; }
+        if (index == CatalogBase) { active = value == CatalogMagic; surfaceInfo = colorInfo = 0; role = SurfaceRole::Unknown; return false; }
         if (!active || index < CatalogBase || index > CatalogBase + 4) return false;
         if (index == CatalogBase + 1) role = SurfaceRole(value);
         else if (index == CatalogBase + 2) surfaceInfo = value;
@@ -146,7 +146,25 @@ namespace gpu::frame_plan
         NoteDlssRuntime(CurrentDlssEffect());
     }
     std::optional<upscaling::SizingKey> TakeSizingRequest() { return sizingCache.TakeSizingRequest(); }
-    void PublishSizing(upscaling::OutputSizing sizing) { sizingCache.PublishSizing(std::move(sizing)); }
+    void PublishSizing(upscaling::OutputSizing sizing)
+    {
+        // One record per mode and real query, not per frame. GUI users should
+        // not have to redirect stderr to obtain the rejected vendor dimensions.
+        if (sizing.key.provider == upscaling::Upscaler::Dlss) {
+            for (size_t i = 0; i < sizing.modes.size(); ++i) {
+                const auto& mode = sizing.modes[i];
+                const auto raw = [](const std::optional<int32_t>& value) {
+                    return value ? std::to_string(*value) : std::string("unavailable");
+                };
+                LOG_INFO("DLSS sizing: quality={} output={}x{} optimal={}x{} minimum={}x{} maximum={}x{} state={} issue={} native_result={} get_width={} get_height={} cleanup={} device_epoch={}",
+                    i, sizing.key.outputWidth, sizing.key.outputHeight, mode.optimal.width, mode.optimal.height,
+                    mode.minimum.width, mode.minimum.height, mode.maximum.width, mode.maximum.height,
+                    uint32_t(mode.state), upscaling::SizingIssueName(mode.issue), raw(mode.ngxResult),
+                    raw(mode.optimalWidthResult), raw(mode.optimalHeightResult), raw(mode.cleanupResult), sizing.key.deviceEpoch);
+            }
+        }
+        sizingCache.PublishSizing(std::move(sizing));
+    }
     void ResetSizing(uint64_t deviceEpoch) { sizingCache.ResetSizing(deviceEpoch); }
     void TagReservedCommand(uint32_t ring, uint32_t commandAddress)
     {
@@ -196,8 +214,8 @@ namespace gpu::frame_plan
     {
         { std::lock_guard lock(deviceMutex);
             if (device != readyDevice || !LoadWord(device + 0x30) || !LoadWord(device + 0x34) ||
-                (emittedGeneration == streamGeneration && emittedSerial == plan.cpuSerial && emittedEpoch == plan.geometryEpoch &&
-                 emittedSignature == plan.requestSignature && emittedSizingRevision == plan.sizingRevision)) return false; }
+                (emittedSerial == plan.cpuSerial && emittedEpoch == plan.geometryEpoch &&
+                 emittedSignature == plan.requestSignature && emittedSizingRevision == plan.sizingRevision && emittedGeneration == streamGeneration)) return false; }
         const auto words = wire::EncodePlan(plan);
         if (!gpu::frame_plan::EmitPrivatePacket(device, wire::PlanBase, words)) return false;
         // The display target exists before the world target table is populated;
