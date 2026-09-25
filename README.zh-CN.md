@@ -24,15 +24,14 @@ Windows x64 · Direct3D 12 · Vulkan · PowerPC 静态重编译
 原生 NVIDIA DLSS 超分辨率与 DLAA 属于实验性功能。
 Windows 与 Linux 正式发布包中已内置官方 NGX 运行库；画质与稳定性仍在验证中。
 
-v0.6.20 已发布，包含 Hybrid 相机／深度运动回退、有界 DLSS 尺寸恢复及文档记录的屏幕采样试验。文档范围内的手动验收已完成；更广泛覆盖仍待完成。
+v0.6.20 已发布，包含 Hybrid 相机／深度运动回退、有界 DLSS 尺寸恢复及已记录的屏幕采样试验。在插帧延期至 v0.8.0 后，面向 v0.7.0 的现有 DLSS/DLAA 功能已通过全部用户验收。本次验收不改变既有测试覆盖。
 
 ### 实验性可选 FSR 超分
 
 源码构建与发布打包工作流支持在 Windows 与原生 Linux 通过 `LO_ENABLE_FSR=ON` 和
 `LO_REQUIRE_FSR=ON` 启用固定 FidelityFX SDK v1.1.4（FSR 3.1.4 实现）的实验性路径。
 Quality、Balanced、Performance、Native AA 均有 Windows 运行证据；原生 Linux RADV 已有 Quality、Performance 和 Native AA 的运行证据。
-实测的 Windows 渲染画面与 Linux 运行验证（AMD Radeon 8060S RADV STRIX_HALO）均已获用户验收。
-全场景画质覆盖与 DLSS/FSR 帧生成仍待开展。低功耗硬件要求按用户授权通过 APEX 15W 代理设备验证，不代表 Steam Deck 硬件等价。
+实测的 Windows 渲染画面与 Linux 运行验证（AMD Radeon 8060S RADV STRIX_HALO）均已获用户验收，v0.7.0 的 FSR P2 验收已全部通过。插帧与 macOS 支持已延期至 v0.8.0。本次验收不改变既有测试覆盖。低功耗硬件要求按用户授权通过 APEX 15W 代理设备验证，不代表 Steam Deck 硬件等价。
 
 ## v0.6.20 发布版
 
@@ -92,7 +91,7 @@ Quality、Balanced、Performance、Native AA 均有 Windows 运行证据；原�
 - **加固导入器**：资源只有在最终 `write`、`flush`、`close` 均成功后才会发布；XDVDFS 扫描按 2048 字节边界进行；目标目录页支持通过按钮、`F2` 或手柄 `Y` 创建并进入文件夹。
 - **真实资料验证**：导入器识别了 `G:/ROMS/US` 下全部四张 USA/Europe 光盘镜像，并成功完成隔离的 Disc 1 导入。四盘完整安装、交互 UI 验收和游戏运行仍未验证。
 
-下一阶段 **v0.7.0** 计划继续优化性能并加入 QOL 功能、DLSS/FSR Scaling、Frame Generation，同时发布 macOS 版本。
+**v0.7.0** 里程碑聚焦性能优化、QOL 改进以及原生 DLSS/DLAA 和 FSR 超分辨率（用户验收已通过）。插帧（Frame Generation）与 macOS 版本发布已延期至 **v0.8.0**。
 
 发布包和独立 shader pack 可从 [v0.6.0 发布页](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.0)下载。Release CI 已通过必要的审计和 Windows/Linux 打包门槛，公开资产已与 SHA-256 校验文件核对。原生 Linux GPU、Steam Deck、AppImage 更新事务和全流程游戏仍不在已验证范围内。
 

@@ -25,7 +25,7 @@ Native NVIDIA DLSS Super Resolution and DLAA are experimental features.
 Windows and Linux release packages include official NGX runtime libraries;
 image quality and stability remain under validation.
 
-Published v0.6.20 includes Hybrid camera/depth motion fallback, bounded DLSS sizing recovery and the documented screen-sampling trial. Manual acceptance is complete for the documented scope; broader coverage remains pending.
+Published v0.6.20 includes Hybrid camera/depth motion fallback, bounded DLSS sizing recovery and the documented screen-sampling trial. Following the deferral of Frame Generation to v0.8.0, the existing DLSS SR & DLAA implementation targeting v0.7.0 has passed user acceptance. User acceptance does not alter existing test coverage.
 
 ### Experimental opt-in FSR SR
 
@@ -34,8 +34,7 @@ Windows and native Linux with `LO_ENABLE_FSR=ON` and `LO_REQUIRE_FSR=ON`, using
 FidelityFX SDK v1.1.4's FSR 3.1.4 implementation.
 Quality, Balanced, Performance and Native AA have bounded runtime evidence on Windows;
 native Linux RADV has Quality, Performance and Native AA evidence. Tested Windows rendering visuals and Linux runtime execution (on AMD
-Radeon 8060S RADV STRIX_HALO) passed user acceptance. Full image-quality coverage across all
-scenes and DLSS/FSR frame generation remain open. Low-power hardware testing covered an approved
+Radeon 8060S RADV STRIX_HALO) passed user acceptance, concluding FSR P2 acceptance for v0.7.0. Frame generation and macOS support are deferred to v0.8.0. User acceptance does not alter existing test coverage. Low-power hardware testing covered an approved
 APEX 15W proxy without establishing Steam Deck hardware equivalence.
 
 ## v0.6.20 release
@@ -96,7 +95,7 @@ Published release: [v0.6.0](https://github.com/freefrank/LostOdysseyRecomp/relea
 - **Hardened importer**: final writes, flushes and closes are checked before publication, XDVDFS scanning follows 2048-byte boundaries, and the destination browser can create and enter a folder with the button, `F2`, or controller `Y`.
 - **Real source validation**: the importer recognized all four USA/Europe disc images under `G:/ROMS/US`; an isolated Disc 1 import completed successfully. Four-disc installation, interactive UI acceptance, and gameplay remain unverified.
 
-The next **v0.7.0** milestone is planned to continue performance work and add quality-of-life features, DLSS/FSR scaling, frame generation, and a macOS release.
+The **v0.7.0** milestone focuses on performance optimizations, quality-of-life features, and native DLSS/DLAA and FSR upscaling (with user acceptance passed). Frame generation and the macOS release are deferred to **v0.8.0**.
 
 The release packages and standalone shader pack are available from the [v0.6.0 release](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.0). Release CI passed the required audit and Windows/Linux packaging gates. The published artifacts were verified against their SHA-256 sidecars; native Linux GPU, Steam Deck, AppImage update transactions, and full-game playthrough remain outside the verified scope.
 

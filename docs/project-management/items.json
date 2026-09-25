@@ -3637,7 +3637,7 @@
         "Area": "Temporal rendering",
         "Status": "Todo",
         "Delivery": "Deferred",
-        "Release": "v0.7.0",
+        "Release": "v0.8.0",
         "Start date": null,
         "Target date": null,
         "Evidence": "Broader historical goals (2× DLSS-G on D3D12 and 2× FSR FG on D3D12/Vulkan) remain deferred backlog; dynamic MFG is deferred by the current plan. Active FG production work is phased through P0 architecture evaluation, P3 infrastructure and P4 Windows Vulkan DLSS FG. Experimental probe run reported generated-present intervals but exited 1 with Vulkan validation errors; it is failed-run diagnostic evidence, not production FG delivery or Gate 1 acceptance."
@@ -3972,12 +3972,12 @@
       "fields": {
         "Kind": "Feature",
         "Area": "Temporal rendering",
-        "Status": "In Progress",
-        "Delivery": "In progress",
-        "Release": null,
+        "Status": "Done",
+        "Delivery": "Validated",
+        "Release": "v0.7.0",
         "Start date": "2026-09-20",
         "Target date": null,
-        "Evidence": "Native Vulkan DLSS/DLAA delivery commit `871685fdd75b84c00bb9ebb685f36d90169eb82d` and its bounded verification remain valid. FSR 3.1.4 Vulkan SR P1 is complete on Windows and native Linux (commit `87a1691`); P2 remains In Progress with visual acceptance pending. P0 common contracts have recorded targeted checks, but P0 Gate 1 remains NOT PASSED (attempt 1/3, two material reviews remaining). Experimental Streamline/NGX probe foreground run reported generated-present intervals but exited 1 with Vulkan validation errors; no validation-clean generated frame or physical-display acceptance is established. See current FSR handoff for limits."
+        "Evidence": "Native Vulkan DLSS/DLAA and FSR 3.1.4 upscaling complete. Following the deferral of Frame Generation and macOS to v0.8.0, v0.7.0 upscaling deliverables passed complete user acceptance. Retains verified runtime delivery commits (0625923, 871685f, 87a1691); already-accepted gates are closed."
       },
       "source_refs": [
         "https://github.com/freefrank/LostOdysseyRecomp/commit/871685fdd75b84c00bb9ebb685f36d90169eb82d",
@@ -4003,7 +4003,7 @@
         "Area": "Temporal rendering",
         "Status": "In Progress",
         "Delivery": "In progress",
-        "Release": "v0.7.0",
+        "Release": "v0.8.0",
         "Start date": "2026-09-22",
         "Target date": null,
         "Evidence": "P0 common temporal-upscaler contracts are implemented; recorded targeted checks passed (CPU 8/8 and affected frame-plan 1/1). P0 Gate 1 remains NOT PASSED (attempt 1/3; two material reviews remain). The experimental standalone Streamline/NGX probe has source and a recorded foreground diagnostic run: binary `f47431b7746cdf54d847d7008547c0d7af0bce8a579f7596cccd5d95334c9efa` reported generated-present intervals but exited 1 with Vulkan validation errors. This is failed-run diagnostic evidence, not a validation-clean generated frame, physical-display proof, production FG delivery or Gate 1 acceptance. Preserving the native Vulkan DLSS/DLAA baseline remains required. This P0 gate is separate from the exhausted P2 Gate B review budget."
@@ -4050,12 +4050,12 @@
       "fields": {
         "Kind": "Feature",
         "Area": "Temporal rendering",
-        "Status": "In Progress",
-        "Delivery": "In progress",
+        "Status": "Done",
+        "Delivery": "Validated",
         "Release": "v0.7.0",
         "Start date": "2026-09-23",
         "Target date": null,
-        "Evidence": "G003/P2 remains In Progress (full gate open, target milestone v0.7.0). Delivered scope published in v0.6.15 (2026-09-24T19:47:35Z, commit `6eef30d257f2e14ce30a546217574a0dc74fad69`, Release CI 36044604844 passed Windows/Linux/FSRinputs, pack hash, and FidelityFX license gates; Windows ZIP size 243647221 sha256 2b690ae..., Linux AppImage size 250927608 sha7d4ef5d...). User accepted Windows visual rendering and Linux AMD 8060S RADV link + adapter transient verification; supplemental Linux testing cancelled with no new hardware tests. `LoFsrAdapterGpuTest --transient-only` passed on RTX 5080 and AMD 8060S RADV (NaN dt rejected with `InputUnavailable`/`useId 0`, recovery with gap reset and blue 128->96 readback). Full P2 multi-platform hardware matrix, playthrough, reactive mask tuning, and SDR color round-trip completion remain open."
+        "Evidence": "G003/P2 complete. Following the deferral of Frame Generation and macOS to v0.8.0, FSR 3.1.4 (P2) multi-platform visual quality and runtime validation within v0.7.0 scope passed complete user acceptance. Bounded verification on Windows (v0.6.15/v0.6.19) and Linux AMD 8060S RADV retained; no new hardware tests claimed, already-accepted gates are closed."
       },
       "source_refs": [
         "docs/notes/native-dlss-color-qualification-plan.md",
@@ -4094,7 +4094,7 @@
         "Area": "Temporal rendering",
         "Status": "Todo",
         "Delivery": "Not started",
-        "Release": "v0.7.0",
+        "Release": "v0.8.0",
         "Start date": null,
         "Target date": null,
         "Evidence": "Planned production phase; not started. Unvalidated Streamline/NGX probe source exists in the working tree, but it does not establish production hooks, HUDless/UI separation, leases, Reflex integration or active FG."
@@ -4116,7 +4116,7 @@
         "Area": "Temporal rendering",
         "Status": "Todo",
         "Delivery": "Not started",
-        "Release": "v0.7.0",
+        "Release": "v0.8.0",
         "Start date": null,
         "Target date": null,
         "Evidence": "Planned phase following P3. Production implementation has not started. Broader D3D12 FG, FSR FG and dynamic MFG remain deferred backlog for this iteration, not cancelled."
@@ -4817,11 +4817,11 @@
         "Kind": "Feature",
         "Area": "Graphics features",
         "Status": "Done",
-        "Delivery": "In progress",
+        "Delivery": "Validated",
         "Release": null,
         "Start date": "2026-09-22",
         "Target date": null,
-        "Evidence": "Issue #10 closed on GitHub by maintainer as Released. P1/G002 FSR 3.1.4 Vulkan SR is complete (Windows and native Linux, commit `87a1691`); P2/G003 quality and hardware work is in progress with bounded evidence and final visual acceptance pending. FSR Frame Generation remains deferred this iteration under the preserved broader FG backlog."
+        "Evidence": "FSR upscaling request satisfied and verified in v0.6.15/v0.6.19. Frame generation deferred to v0.8.0 backlog. User acceptance recorded."
       },
       "source_refs": [
         "https://github.com/freefrank/LostOdysseyRecomp/issues/10",
@@ -5028,7 +5028,7 @@
         "Area": "Platforms",
         "Status": "Todo",
         "Delivery": "Not started",
-        "Release": null,
+        "Release": "v0.8.0",
         "Start date": null,
         "Target date": null
       },

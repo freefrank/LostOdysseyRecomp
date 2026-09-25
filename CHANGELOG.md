@@ -6,9 +6,19 @@ One record of completed changes, with unpublished work separated from verified r
 
 ## Unreleased / 未发布
 
-No unreleased entries.
+### English
 
-暂无未发布条目。
+- Milestone scope and acceptance update (v0.7.0 / v0.8.0):
+  - Deferred Frame Generation (P0 Streamline coexistence evaluation and P3/P4 implementation) and macOS release support to milestone v0.8.0.
+  - With Frame Generation and macOS deferred to v0.8.0, all existing v0.7.0 upscaler deliverables—Native Vulkan DLSS Super Resolution / DLAA and FSR 3.1.4 (P2) multi-platform visual quality and runtime validation—have passed complete user acceptance.
+  - User acceptance does not alter existing test coverage.
+
+### 简体中文
+
+- 里程碑范围与验收同步（v0.7.0 / v0.8.0）：
+  - 将插帧（P0 Streamline 共存评估与 P3/P4 实现）及 macOS 平台支持延期至 v0.8.0。
+  - 移走插帧与 macOS 后，v0.7.0 现有的超分交付范围——原生 Vulkan DLSS 超分辨率／DLAA 及 FSR 3.1.4（P2）多平台画质与运行验证——已全部通过用户验收。
+  - 本次验收不改变既有测试覆盖。
 
 ## v0.6.20 — 2026-09-25
 

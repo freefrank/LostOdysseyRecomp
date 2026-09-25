@@ -1,5 +1,23 @@
 # Project status
 
+## Unreleased development & milestone status — 2026-09-25 / 未发布开发与里程碑状态
+
+Status as of 2026-09-25:
+- **v0.7.0 milestone scope & user acceptance**:
+  - The user deferred Frame Generation (P0 Streamline coexistence evaluation and P3/P4 implementation) and macOS release support to v0.8.0.
+  - With Frame Generation and macOS deferred to v0.8.0, all remaining v0.7.0 deliverables—Native Vulkan DLSS Super Resolution / DLAA and FSR 3.1.4 (P2) multi-platform visual quality and runtime validation—have passed complete user acceptance.
+  - User acceptance does not alter existing test coverage.
+  - v0.7.0 is unreleased.
+
+## v0.6.20 published / v0.6.20 已发布
+
+Status as of 2026-09-25:
+v0.6.20 was published on 2026-09-25T21:15:07Z from source commit `be842b91d7367fd198074b1b8d3c1bc3ef4372a6` via Release CI [36188596414](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/36188596414) as the latest public release. It packages the screen-sampling jitter candidate batch, late-pass e810 trial, temporal jitter held-candidate follow-up, Hybrid camera/depth motion fallback, bounded DLSS sizing recovery, and offline F1 capture diagnostics.
+
+Release and delivery verification:
+- Release CI [36188596414](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/36188596414) completed successfully across all jobs. Public release packages are available at [GitHub Release v0.6.20](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.20).
+- Windows ZIP `LostOdysseyRecomp-windows-x64-v0.6.20.zip` (243,700,717 bytes) and Linux AppImage `LostOdysseyRecomp-linux-x64-v0.6.20.AppImage` (251,005,432 bytes) along with their `.sha256` sidecars are available; no new hash download verification was performed.
+
 ## v0.6.19 published / v0.6.19 已发布
 
 Status as of 2026-09-25:
