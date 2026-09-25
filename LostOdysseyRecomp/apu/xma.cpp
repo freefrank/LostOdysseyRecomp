@@ -1,6 +1,7 @@
 #include <stdafx.h>
 #include "xma.h"
 #include "xma_loop.h"
+#include "xma_decode_reporting.h"
 #include <kernel/memory.h>
 #include <os/logger.h>
 #include <os/thread_name.h>
@@ -362,19 +363,28 @@ namespace apu::xma
                 if (decoded < 0 || ctx.frame->nb_samples != 512 || ctx.frame->format != AV_SAMPLE_FMT_FLTP)
                 {
                     if (g_audioDiagnostics) ++ctx.decodeErrors;
-                    static unsigned errors = 0;
-                    if (errors++ < 16)
+                    // Serialized by g_mutex; context reuse must not reset the
+                    // process-wide capture budget or hide later scene failures.
+                    static DecodeFailureReports reports;
+                    const auto report = reports.Observe(DecodeFailureReports::Clock::now());
+                    const uint32_t id = uint32_t(&ctx - g_contexts);
+                    const auto* stage = DecodeFailureStage(sent, decoded);
+                    if (report.emit)
                     {
-                        const uint32_t id = uint32_t(&ctx - g_contexts);
-                        LOG_WARNING("xma frame decode failed: result={} context={} stereo={} input={} offset={} bytes={}",
-                            decoded, id, data.isStereo(), data.currentBuffer(), data.inputReadOffset(), bytes + 1);
+                        LOG_WARNING("xma frame decode failed: result={} context={} stereo={} input={} offset={} bytes={} stage={} send_result={} receive_called={} samples={} format={} failure={} suppressed_global={}",
+                            decoded, id, data.isStereo(), data.currentBuffer(), data.inputReadOffset(), bytes + 1,
+                            stage, sent, sent >= 0, decoded >= 0 ? ctx.frame->nb_samples : 0,
+                            decoded >= 0 ? ctx.frame->format : -1, report.ordinal, report.suppressed);
+                    }
+                    if (report.capture)
+                    {
                         // Exact decoder input, not a later guest-buffer snapshot.
                         // Opt-in and bounded; these private samples stay local.
                         if (const char* directory = getenv("LO_XMA_ERROR_CAPTURE_DIR"))
                         {
                             std::error_code error;
                             std::filesystem::create_directories(directory, error);
-                            const auto prefix = std::filesystem::path(directory) / fmt::format("error-{}-context-{}", errors, id);
+                            const auto prefix = std::filesystem::path(directory) / fmt::format("error-{}-context-{}", report.ordinal, id);
                             const auto packetPath = prefix.string() + ".frame";
                             if (!error && !std::filesystem::exists(packetPath))
                             {
@@ -382,7 +392,9 @@ namespace apu::xma
                                 packetFile.write(reinterpret_cast<const char*>(ctx.compressed.data()), bytes + 1);
                                 std::ofstream stateFile(prefix.string() + ".txt");
                                 stateFile << "result " << decoded << " channels " << (data.isStereo() ? 2 : 1)
-                                          << " rate " << data.sampleRate() << "\n";
+                                          << " rate " << data.sampleRate()
+                                          << " stage " << stage << " send_result " << sent
+                                          << " receive_called " << (sent >= 0) << "\n";
                                 for (uint32_t word : data.d) stateFile << fmt::format("{:08X} ", word);
                                 stateFile << "\npacket " << packetIndex << " offset " << offset
                                           << " pending_skip " << ctx.packetsSkip << "\n";
@@ -397,7 +409,7 @@ namespace apu::xma
                                 // Preserve the interleaved packet headers along with
                                 // the failed frame. Later streaming refills can replace
                                 // this data before an external sampler observes it.
-                                if (errors == 1)
+                                if (report.ordinal == 1)
                                 {
                                     for (unsigned buffer = 0; buffer < 2; ++buffer)
                                     {
