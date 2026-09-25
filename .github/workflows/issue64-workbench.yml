@@ -1,0 +1,42 @@
+name: Issue 64 workbench
+on:
+  push:
+    branches: [fix/issue-64-hybrid-motion]
+    paths: [.github/workflows/issue64-workbench.yml, tools/tests/issue64/**]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect source call sites and public issue logs
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re, urllib.request
+          paths = {
+            'LostOdysseyRecomp/gpu/renderer.cpp': (r'motionReplay|motionView|MotionOptions|srRequested|motionOptions|FinishMotion|ClassifySrIncomplete', 8),
+            'LostOdysseyRecomp/gpu/dlss_ngx.cpp': (r'QueryOutputSizing', 85),
+            'LostOdysseyRecomp/gpu/video.cpp': (r'ServicePendingDlssSizing', 100),
+          }
+          for name,(pattern,radius) in paths.items():
+            lines=Path(name).read_text().splitlines(); keep=set()
+            for i,line in enumerate(lines):
+              if re.search(pattern,line): keep.update(range(max(0,i-radius),min(len(lines),i+radius+1)))
+            print('\nSOURCE '+name+' lines='+str(len(lines)))
+            for i in sorted(keep): print(str(i+1)+': '+lines[i])
+          for name in ['tools/tests/motion_replay/CMakeLists.txt','.github/workflows/fsr-native-compile.yml']:
+            print('\nFILE '+name+'\n'+Path(name).read_text())
+          for url in ['https://github.com/user-attachments/files/32638600/runtime-1790312535279695.log','https://github.com/user-attachments/files/32638628/runtime.log']:
+            print('\nISSUE_ATTACHMENT '+url)
+            try:
+              with urllib.request.urlopen(url,timeout=40) as response: data=response.read(16*1024*1024+1)
+              if len(data)>16*1024*1024: raise ValueError('log exceeds diagnostic limit')
+              lines=data.decode('utf-8',errors='replace').splitlines()
+              matches=[(i+1,line) for i,line in enumerate(lines) if re.search(r'DLSS|FSR|NGX|driver|device name|version=|source_revision|build_revision|GPU:|mv_first_failure',line,re.I)]
+              for i,line in matches[:45]+matches[-70:]: print(str(i)+': '+line)
+            except Exception as error: print('UNAVAILABLE '+str(error))
+          PY
