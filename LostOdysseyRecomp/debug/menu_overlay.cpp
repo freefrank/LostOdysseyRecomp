@@ -139,6 +139,8 @@ namespace debug_menu
             case InputAction::Right: nav = cheat_overlay::Nav::Right; break;
             case InputAction::Confirm: nav = cheat_overlay::Nav::Confirm; break;
             case InputAction::Cancel: nav = cheat_overlay::Nav::Cancel; break;
+            case InputAction::PrevCategory: nav = cheat_overlay::Nav::PrevCategory; break;
+            case InputAction::NextCategory: nav = cheat_overlay::Nav::NextCategory; break;
             default: break;
             }
             if (nav)
@@ -408,8 +410,11 @@ namespace debug_menu
         // Footer at bottom of panel
         int footerY = panelY + panelH - 32;
         r.DrawHLine(panelX, footerY - 6, panelW, host_ui::MakeColor(255, 60, 65, 75));
-        std::wstring help = zh ? L"方向键/左摇杆: 导航   A/Enter: 确定   B/Esc: 返回   LB/RB: 切页"
-                               : L"D-Pad/Stick: Nav   A/Enter: Confirm   B/Esc: Back   LB/RB: Tab";
+        std::wstring help = state.activeTab == 2
+            ? (zh ? L"方向键/左摇杆: 导航   A/Enter: 确定   B/Esc: 返回   LB/RB: 切页   LT/RT: 类别"
+                  : L"D-Pad/Stick: Nav  A/Enter: OK  B/Esc: Back  LB/RB: Tab  LT/RT: Category")
+            : (zh ? L"方向键/左摇杆: 导航   A/Enter: 确定   B/Esc: 返回   LB/RB: 切页"
+                  : L"D-Pad/Stick: Nav   A/Enter: Confirm   B/Esc: Back   LB/RB: Tab");
         int helpW = r.MeasureWString(help);
         r.DrawWString(panelX + (panelW - helpW) / 2, footerY, help, host_ui::MakeColor(255, 170, 175, 185));
 

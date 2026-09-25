@@ -25,6 +25,7 @@ int main(int argc,char** argv) {
     Check(session.Get().available && !session.Get().enabled);
     Model m;
     m.row=3;m.Input(Nav::Confirm,false);Check(m.confirm && !m.yes);
+    m.Input(Nav::NextCategory,false);Check(m.confirm && m.category==0);
     m.Input(Nav::Confirm,false);Check(!session.Get().enabled); // default Cancel
     m.Input(Nav::Confirm,false);m.Input(Nav::Right,false);m.Input(Nav::Cancel,false);Check(!session.Get().enabled);
     m.Input(Nav::Confirm,false);m.Input(Nav::Right,false);m.Input(Nav::Confirm,false);Check(session.Get().enabled);
@@ -44,6 +45,11 @@ int main(int argc,char** argv) {
     for(unsigned n=0;n<45;++n)m.Input(Nav::Right,false);
     Check(m.picked==235);m.Input(Nav::Confirm,false);Check(m.equipment==235);
     m.row=0;m.Input(Nav::Right,false);Check(m.category==4 && m.row==0);
+    m.row=3;m.Input(Nav::NextCategory,false);Check(m.category==5 && m.row==0);
+    m.row=1;m.Input(Nav::NextCategory,false);Check(m.category==0 && m.row==0);
+    m.row=3;m.Input(Nav::PrevCategory,false);Check(m.category==5 && m.row==0);
+    m.Open(Picker::Character,0);m.Input(Nav::NextCategory,false);
+    Check(m.category==5 && m.picker==Picker::Character);m.Input(Nav::Cancel,false);
     m.category=0;m.row=1;fast_forward::Enable(false);m.Input(Nav::Confirm,false);Check(fast_forward::GetStatus().enabled);
     m.row=2;for(unsigned n=0;n<5;++n)m.Input(Nav::Right,false);Check(fast_forward::GetStatus().multiplier==2);
     fast_forward::Enable(false);

@@ -7,7 +7,7 @@
 namespace debug_menu::cheat_overlay {
 using cheats::Action;
 using cheats::Request;
-enum class Nav { Up, Down, Left, Right, Confirm, Cancel };
+enum class Nav { Up, Down, Left, Right, Confirm, Cancel, PrevCategory, NextCategory };
 enum class Picker { None, Character, Item, Skill, Equipment };
 inline constexpr const wchar_t* Categories[][2] = {
     {L"Quick tools",L"快捷操作"}, {L"Characters",L"角色与技能"},
@@ -27,6 +27,7 @@ struct Model {
     Request request;
     std::wstring notice;
     unsigned Rows() const { constexpr unsigned rows[]={7,8,6,5,7,2}; return rows[category]; }
+    void ChangeCategory(int direction) { category=Wrap(category,direction,unsigned(std::size(Categories))); row=0; }
     std::span<const cheats::data::Entry> EquipmentList() const {
         if (equipmentSlot==0) return cheats::data::Weapons;
         if (equipmentSlot==1) return cheats::data::Rings;
@@ -111,12 +112,16 @@ struct Model {
             }
             return true;
         }
+        if (nav==Nav::PrevCategory || nav==Nav::NextCategory) {
+            ChangeCategory(nav==Nav::PrevCategory ? -1 : 1);
+            return true;
+        }
         if (nav==Nav::Cancel) return false;
         if (nav==Nav::Up) { if (row>0) --row; return true; }
         if (nav==Nav::Down) { if (row+1<Rows()) ++row; return true; }
         const bool activate=nav==Nav::Confirm;
         const int direction=nav==Nav::Left ? -1 : 1;
-        if (row==0) { category=Wrap(category,direction,6); return true; }
+        if (row==0) { ChangeCategory(direction); return true; }
         if (category==0) {
             const auto speed=fast_forward::GetStatus();
             if (row==1) fast_forward::Enable(!speed.enabled);
