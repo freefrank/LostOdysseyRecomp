@@ -4816,12 +4816,12 @@
       "fields": {
         "Kind": "Feature",
         "Area": "Graphics features",
-        "Status": "In Progress",
+        "Status": "Done",
         "Delivery": "In progress",
         "Release": null,
         "Start date": "2026-09-22",
         "Target date": null,
-        "Evidence": "Issue #10 remains the broader FSR request. P1/G002 FSR 3.1.4 Vulkan SR is complete (Windows and native Linux, commit `87a1691`); P2/G003 quality and hardware work is in progress with bounded evidence and final visual acceptance pending. FSR Frame Generation remains deferred this iteration under the preserved broader FG backlog."
+        "Evidence": "Issue #10 closed on GitHub by maintainer as Released. P1/G002 FSR 3.1.4 Vulkan SR is complete (Windows and native Linux, commit `87a1691`); P2/G003 quality and hardware work is in progress with bounded evidence and final visual acceptance pending. FSR Frame Generation remains deferred this iteration under the preserved broader FG backlog."
       },
       "source_refs": [
         "https://github.com/freefrank/LostOdysseyRecomp/issues/10",
@@ -5623,6 +5623,293 @@
         "Target date": null,
         "Evidence": "Planned for next release after v0.6.15 (version unspecified); implementation and verification not started. Reuses existing portable pack reader/writer, deduplication, and LoShaderPackTool to support D3D12/DXIL backend contracts, container validation, generation/merge, renderer runtime loading, and Windows packaging. Requires new runtime support as current renderer hard-restricts Vulkan/CheckSpirv; excludes driver PSO caching to target HLSL->DXIL compile latency reduction. Expected verification includes DXIL runtime hit, backend isolation, and invalid contract rejection on Windows hardware; none executed yet."
       }
+    },
+    {
+      "key": "issue-35-graphic-improvements-quit-to-desktop",
+      "title": "[Feature] Graphic improvements and ability to quit game to desktop",
+      "body": "<!-- lo-project:issue-35-graphic-improvements-quit-to-desktop -->\n\nOpen Issue #35 requests texture anisotropic filtering (AF) and an in-game option to quit to desktop from the menus.\n\n## Implementation and validation — v0.6.19 (in preparation)\n\nBoth requested features are implemented in main:\n\n1. **Anisotropic Filtering (AF):**\n   - Added live anisotropic filtering controls (Off, 2x, 4x, 8x, 16x) in Graphics settings.\n   - Built immutable sampler table generations and safe retirement/release after GPU execution completion, preventing lifetime UAF and sampler descriptor races.\n   - Bounded validation: AF branch Windows/Linux CPU builds and softwareVulkan Actions run 36079262997 passed; merged `settings_interaction` test 1/1 passed. Full-game physical GPU testing and visual parity remain pending.\n   - Commits: `6ff3afe`, `0954701`, `970a75f`, `6fcbde8`, `59652f4`, `6d23f15`, `5516fdc`, `2fe97d3`.\n\n2. **System Quit to Desktop:**\n   - Implemented in-game \"Quit to Desktop\" option under the System menu.\n   - Matched two real guest callers (`0x822E256C` and `0x822E26B8`) and fixed UTF-16 NUL-termination string copy length.\n   - Bounded validation: v4 user explicitly verified clean and successful exit to desktop.\n   - Commits: `2cdac2a`, `05eccec`.\n\nImplementation is in main; planned for closure by main agent after official v0.6.19 release; remains open unreleased at this time.\n\n## Sources\n\n- https://github.com/freefrank/LostOdysseyRecomp/issues/35\n- https://github.com/freefrank/LostOdysseyRecomp/commit/6ff3afe\n- https://github.com/freefrank/LostOdysseyRecomp/commit/0954701\n- https://github.com/freefrank/LostOdysseyRecomp/commit/970a75f\n- https://github.com/freefrank/LostOdysseyRecomp/commit/5516fdc\n- https://github.com/freefrank/LostOdysseyRecomp/commit/2cdac2a\n- https://github.com/freefrank/LostOdysseyRecomp/commit/05eccec\n- https://github.com/freefrank/LostOdysseyRecomp/commit/2fe97d3\n",
+      "issue_url": "https://github.com/freefrank/LostOdysseyRecomp/issues/35",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Graphics features",
+        "Status": "Done",
+        "Delivery": "Validated",
+        "Release": "v0.6.19",
+        "Start date": "2026-09-15",
+        "Target date": "2026-09-24",
+        "Evidence": "Implemented both AF and Quit to Desktop in main for v0.6.19. AF live options with immutable sampler generations passed CPU and softwareVulkan Actions 36079262997, settings_interaction 1/1; physical GPU validation pending. System Quit to Desktop matched callers 0x822E256C/0x822E26B8 + UTF16 NUL fix; v4 user confirmed successful exit. Implementation in main; planned for closure by main agent after official v0.6.19 release; remains open unreleased at this time."
+      },
+      "source_refs": [
+        "https://github.com/freefrank/LostOdysseyRecomp/issues/35",
+        "https://github.com/freefrank/LostOdysseyRecomp/commit/6ff3afe",
+        "https://github.com/freefrank/LostOdysseyRecomp/commit/5516fdc",
+        "https://github.com/freefrank/LostOdysseyRecomp/commit/2cdac2a",
+        "https://github.com/freefrank/LostOdysseyRecomp/commit/05eccec",
+        "https://github.com/freefrank/LostOdysseyRecomp/commit/2fe97d3"
+      ],
+      "source_lines": [],
+      "record_type": "issue"
+    },
+    {
+      "key": "issue-61-remember-save-anywhere",
+      "title": "[Feature] Remember \"Save Anywhere\" choice from the Debug Menu",
+      "body": "<!-- lo-project:issue-61-remember-save-anywhere -->\n\nOpen Issue #61 requests persisting the Debug Menu's \"Save Anywhere\" toggle across launches instead of having to turn it on every session.\n\n## Implementation and validation — v0.6.19 (in preparation)\n\n- Implemented persistence of the Save Anywhere preference within debug configuration.\n- Retained default value as `false` to preserve original game design boundary unless explicitly enabled.\n- Bounded validation: re-verified CPU cross-process configuration persistence. Physical device testing per individual item remains open.\n- Commits: `2cdac2a`, `05eccec`.\n\nImplementation is in main; planned for closure by main agent after official v0.6.19 release; remains open unreleased at this time.\n\n## Sources\n\n- https://github.com/freefrank/LostOdysseyRecomp/issues/61\n- https://github.com/freefrank/LostOdysseyRecomp/commit/2cdac2a\n- https://github.com/freefrank/LostOdysseyRecomp/commit/05eccec\n",
+      "issue_url": "https://github.com/freefrank/LostOdysseyRecomp/issues/61",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Save & Storage",
+        "Status": "Done",
+        "Delivery": "Validated",
+        "Release": "v0.6.19",
+        "Start date": "2026-09-21",
+        "Target date": "2026-09-24",
+        "Evidence": "Implemented Save Anywhere preference persistence in debug settings, default false. Verified CPU cross-process persistence; physical-device per-item testing remains pending. Commit 2cdac2a / 05eccec. Implementation in main; planned for closure by main agent after official v0.6.19 release; remains open unreleased at this time."
+      },
+      "source_refs": [
+        "https://github.com/freefrank/LostOdysseyRecomp/issues/61",
+        "https://github.com/freefrank/LostOdysseyRecomp/commit/2cdac2a",
+        "https://github.com/freefrank/LostOdysseyRecomp/commit/05eccec"
+      ],
+      "source_lines": [],
+      "record_type": "issue"
+    },
+    {
+      "key": "settings-scaling-aa-presets",
+      "title": "Streamlined Anti-Aliasing and Scaling presets (Performance, Balanced, Quality, DLAA, NativeAA)",
+      "body": "<!-- lo-project:settings-scaling-aa-presets -->\n\nConsolidate Anti-Aliasing and upscaling options in Settings to provide clear presets: Performance, Balanced, Quality, DLAA, and NativeAA.\n\n## Implementation and validation — v0.6.19 (in preparation)\n\n- Streamlined AA selection into unified presets: Performance, Balanced, Quality, DLAA, and NativeAA.\n- Avoids redundant full-screen software filtering by caching the menu backdrop during settings navigation (no end-to-end latency claimed).\n- Bounded validation: menu interaction regression test suite passed (1/1).\n- Commits: `19a5f7f`, `c9c3104`, `05eccec`.\n\n## Sources\n\n- https://github.com/freefrank/LostOdysseyRecomp/commit/19a5f7f\n- https://github.com/freefrank/LostOdysseyRecomp/commit/c9c3104\n- https://github.com/freefrank/LostOdysseyRecomp/commit/05eccec\n",
+      "issue_url": null,
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Graphics features",
+        "Status": "Done",
+        "Delivery": "Validated",
+        "Release": "v0.6.19",
+        "Start date": "2026-09-24",
+        "Target date": "2026-09-25",
+        "Evidence": "Unified AA selection into Performance, Balanced, Quality, DLAA, and NativeAA presets; avoids redundant full-screen software filtering with cached menu backdrop (no end-to-end latency claimed). Verified via menu interaction regression test suite (1/1). Commits 19a5f7f, c9c3104, 05eccec."
+      },
+      "source_refs": [
+        "https://github.com/freefrank/LostOdysseyRecomp/commit/19a5f7f",
+        "https://github.com/freefrank/LostOdysseyRecomp/commit/c9c3104",
+        "https://github.com/freefrank/LostOdysseyRecomp/commit/05eccec"
+      ],
+      "source_lines": [],
+      "record_type": "backlog"
+    },
+    {
+      "key": "settings-main-menu-title-helper",
+      "title": "Confirmed return to Title menu after Settings: request Title after native Settings closes",
+      "body": "<!-- lo-project:settings-main-menu-title-helper -->\n\nAdd confirmed return from Settings to the main Title menu by waiting for native Settings to close before requesting Title.\n\n## Implementation and validation — v0.6.19 (in preparation)\n\n- Corrected Settings confirmation return handling to wait for native Settings to close before requesting the Title menu.\n- Bounded validation: LoMenuFlowTest passed across 8 test groups on Windows this round; merged independent `settings_interaction` 1/1 verified separately; physical device run remains unperformed.\n- Commits: `6e06743`, `05eccec`.\n\n## Sources\n\n- https://github.com/freefrank/LostOdysseyRecomp/commit/6e06743\n- https://github.com/freefrank/LostOdysseyRecomp/commit/05eccec\n",
+      "issue_url": null,
+      "fields": {
+        "Kind": "Bug",
+        "Area": "Settings",
+        "Status": "Done",
+        "Delivery": "Validated",
+        "Release": "v0.6.19",
+        "Start date": "2026-09-24",
+        "Target date": "2026-09-25",
+        "Evidence": "Added confirmed Settings return to Title menu, waiting for native Settings closure before requesting Title. Windows LoMenuFlowTest passed across 8 test groups this round; merged independent settings_interaction 1/1 verified separately; physical device run remains unperformed. Commits 6e06743, 05eccec."
+      },
+      "source_refs": [
+        "https://github.com/freefrank/LostOdysseyRecomp/commit/6e06743",
+        "https://github.com/freefrank/LostOdysseyRecomp/commit/05eccec"
+      ],
+      "source_lines": [],
+      "record_type": "backlog"
+    },
+    {
+      "key": "cheat-menu-controller-navigation",
+      "title": "Categorized cheat menu navigation with controller LT/RT triggers and bilingual footer",
+      "body": "<!-- lo-project:cheat-menu-controller-navigation -->\n\nAdd categorized cheat navigation in the debug menu with controller shoulder triggers and bilingual guidance.\n\n## Implementation and validation — v0.6.19 (in preparation)\n\n- Implemented edge-triggered category switching using LT/RT controller triggers.\n- Added bilingual English and Chinese navigation tip footer.\n- Bounded validation: user previously verified and accepted on physical controller.\n- Commits: `a21e973`, `166b15f`, `217df8c`.\n\n## Sources\n\n- https://github.com/freefrank/LostOdysseyRecomp/commit/a21e973\n- https://github.com/freefrank/LostOdysseyRecomp/commit/166b15f\n- https://github.com/freefrank/LostOdysseyRecomp/commit/217df8c\n",
+      "issue_url": null,
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Debug menu",
+        "Status": "Done",
+        "Delivery": "Validated",
+        "Release": "v0.6.19",
+        "Start date": "2026-09-24",
+        "Target date": "2026-09-24",
+        "Evidence": "Categorized cheats with LT/RT edge-triggered navigation and bilingual footer tips; user verified on physical controller. Commits a21e973, 166b15f, 217df8c."
+      },
+      "source_refs": [
+        "https://github.com/freefrank/LostOdysseyRecomp/commit/a21e973",
+        "https://github.com/freefrank/LostOdysseyRecomp/commit/166b15f",
+        "https://github.com/freefrank/LostOdysseyRecomp/commit/217df8c"
+      ],
+      "source_lines": [],
+      "record_type": "backlog"
+    },
+    {
+      "key": "input-rumble-cursor-ime-improvements",
+      "title": "Input and controller improvements (runtime rumble state, idle cursor hiding, gameplay IME disable)",
+      "body": "<!-- lo-project:input-rumble-cursor-ime-improvements -->\n\nImprove input handling across runtime controller rumble motor state, cursor visibility, and IME focus.\n\n## Implementation and validation — v0.6.19 (in preparation)\n\n- Maintains runtime XInput motor state for controller rumble during gameplay (not cross-session persistent preference).\n- Automatically hide mouse cursor when idle and disable gameplay IME interference.\n- Bounded validation: verified input event hooks and runtime motor state handling.\n- Commits: `a8cc779`, `417eaac`, `217df8c`.\n\n## Sources\n\n- https://github.com/freefrank/LostOdysseyRecomp/commit/a8cc779\n- https://github.com/freefrank/LostOdysseyRecomp/commit/417eaac\n- https://github.com/freefrank/LostOdysseyRecomp/commit/217df8c\n",
+      "issue_url": null,
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Input",
+        "Status": "Done",
+        "Delivery": "Validated",
+        "Release": "v0.6.19",
+        "Start date": "2026-09-24",
+        "Target date": "2026-09-25",
+        "Evidence": "Maintains runtime XInput motor rumble state during gameplay (not cross-session preference); idle cursor hiding and gameplay IME disabling implemented and integrated into main. Commits a8cc779, 417eaac, 217df8c."
+      },
+      "source_refs": [
+        "https://github.com/freefrank/LostOdysseyRecomp/commit/a8cc779",
+        "https://github.com/freefrank/LostOdysseyRecomp/commit/417eaac",
+        "https://github.com/freefrank/LostOdysseyRecomp/commit/217df8c"
+      ],
+      "source_lines": [],
+      "record_type": "backlog"
+    },
+    {
+      "key": "issue-49-physical-pixel-window-coords",
+      "title": "[Bug] video: could not establish physical-pixel window coordinates",
+      "body": "<!-- lo-project:issue-49-physical-pixel-window-coords -->\n\nOpen Issue #49 reports a video initialization failure on laptop (Ryzen 5500 + RTX 3050 driver 472.12).\n\n## Investigation and status\n\n- The log shows a startup failure before reaching any GPU backend, where `SetThreadDpiAwarenessContext(PMv2)` returns null and `window_pixels::Context::Ready()` remains false.\n- Maintainer review (2026-09-24T23:11:46Z) confirmed: \"still gonna dig deeper later.\"\n- Retained as an active investigation; not closed as unsupported.\n\n## Sources\n\n- https://github.com/freefrank/LostOdysseyRecomp/issues/49\n",
+      "issue_url": "https://github.com/freefrank/LostOdysseyRecomp/issues/49",
+      "fields": {
+        "Kind": "Bug",
+        "Area": "Desktop windowing",
+        "Status": "In Progress",
+        "Delivery": "In progress",
+        "Release": null,
+        "Start date": "2026-09-24",
+        "Target date": null,
+        "Evidence": "Under active maintainer investigation (freefrank: 'still gonna dig deeper later.', 2026-09-24T23:11:46Z). Reporter log indicates startup failure where SetThreadDpiAwarenessContext(PMv2) returns null before GPU backend initializes. Retained as open investigation; not closed as unsupported."
+      },
+      "source_refs": [
+        "https://github.com/freefrank/LostOdysseyRecomp/issues/49"
+      ],
+      "source_lines": [],
+      "record_type": "issue"
+    },
+    {
+      "key": "issue-37-portforge-integration",
+      "title": "Add to PortForge?",
+      "body": "<!-- lo-project:issue-37-portforge-integration -->\n\nIssue #37 proposes launcher integration via PortForge `.forge.json` manifest.\n\n## Status and scope\n\n- User explicitly authorized implementation. Parallel librarian and explorer tasks are currently auditing external `.forge.json` manifest contracts and local repository paths.\n- Status is in-progress investigation and adaptation preparation; no code or acceptance yet.\n- Native Linux AppImage packages are already independently published and supported in release assets.\n\n## Sources\n\n- https://github.com/freefrank/LostOdysseyRecomp/issues/37\n",
+      "issue_url": "https://github.com/freefrank/LostOdysseyRecomp/issues/37",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Updates and packaging",
+        "Status": "In Progress",
+        "Delivery": "In progress",
+        "Release": null,
+        "Start date": "2026-09-15",
+        "Target date": null,
+        "Evidence": "Authorized for implementation; in-progress investigation and adaptation preparation with parallel librarian/explorer contract audit. No code or acceptance yet. Native Linux AppImage packages are already independently published."
+      },
+      "source_refs": [
+        "https://github.com/freefrank/LostOdysseyRecomp/issues/37"
+      ],
+      "source_lines": [],
+      "record_type": "issue"
+    },
+    {
+      "key": "issue-54-japanese-cutscene-language",
+      "title": "[Bug] USA/Europe English: one cutscene after the second boss plays in Japanese, reverts at the Cages scene",
+      "body": "<!-- lo-project:issue-54-japanese-cutscene-language -->\n\nOpen Issue #54 reports cutscenes playing in Japanese during English USA/Europe playthrough.\n\n## Status and verification boundary\n\n- Invalid voice-menu selection handling fix was packaged in v0.6.3 with optional language tracing.\n- Retained open: recent player feedback indicates cutscene language still reverts to Japanese on Disc 3 and other scenes, beyond the initial voice menu selection fix.\n- Under active monitoring.\n\n## Sources\n\n- https://github.com/freefrank/LostOdysseyRecomp/issues/54\n",
+      "issue_url": "https://github.com/freefrank/LostOdysseyRecomp/issues/54",
+      "fields": {
+        "Kind": "Bug",
+        "Area": "Audio and language",
+        "Status": "Awaiting validation",
+        "Delivery": "Awaiting validation",
+        "Release": "v0.6.3",
+        "Start date": "2026-09-24",
+        "Target date": null,
+        "Evidence": "Invalid voice-menu selection handling fix packaged in v0.6.3 with language tracing. Retained open: recent feedback indicates Japanese cutscene reversions continue on Disc 3 and other scenes; under active monitoring."
+      },
+      "source_refs": [
+        "https://github.com/freefrank/LostOdysseyRecomp/issues/54"
+      ],
+      "source_lines": [],
+      "record_type": "issue"
+    },
+    {
+      "key": "issue-55-disc1-boss-voice-silent",
+      "title": "[Bug] Voice lines silent during the intermission at the third/final boss of Disc 1",
+      "body": "<!-- lo-project:issue-55-disc1-boss-voice-silent -->\n\nOpen Issue #55 reports missing voice lines during intermission at the third/final boss of Disc 1 while other audio continues.\n\n## Status and scope\n\n- General voice playback is mostly improved, but a specific single spoken line during the Obsidian Miasma sequence remains missing, awaiting reproduction save.\n- Not a broad failure of all final boss voice lines. Investigation and reproduction pending.\n\n## Sources\n\n- https://github.com/freefrank/LostOdysseyRecomp/issues/55\n",
+      "issue_url": "https://github.com/freefrank/LostOdysseyRecomp/issues/55",
+      "fields": {
+        "Kind": "Bug",
+        "Area": "Audio",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Release": null,
+        "Start date": "2026-09-23",
+        "Target date": null,
+        "Evidence": "Issue #55 audio report: general voice playback mostly improved, but single spoken line during Obsidian Miasma sequence remains missing, awaiting reproduction save; not a broad failure of all final boss lines."
+      },
+      "source_refs": [
+        "https://github.com/freefrank/LostOdysseyRecomp/issues/55"
+      ],
+      "source_lines": [],
+      "record_type": "issue"
+    },
+    {
+      "key": "issue-48-motion-sickness-qol",
+      "title": "[Feature] Motion Sickness QOL",
+      "body": "<!-- lo-project:issue-48-motion-sickness-qol -->\n\nOpen Issue #48 requests accessibility options to disable camera head-bobbing and motion blur to reduce motion sickness.\n\n## Status and scope\n\n- Feature request in backlog; implementation not started.\n\n## Sources\n\n- https://github.com/freefrank/LostOdysseyRecomp/issues/48\n",
+      "issue_url": "https://github.com/freefrank/LostOdysseyRecomp/issues/48",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Graphics features",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Release": null,
+        "Start date": "2026-09-19",
+        "Target date": null,
+        "Evidence": "Feature request for camera head-bobbing toggle and motion blur toggle for motion sickness reduction. In backlog; implementation not started."
+      },
+      "source_refs": [
+        "https://github.com/freefrank/LostOdysseyRecomp/issues/48"
+      ],
+      "source_lines": [],
+      "record_type": "issue"
+    },
+    {
+      "key": "issue-40-controller-mod-support",
+      "title": "[Feature] PS5 controls or even more, mod support (with a wiki)",
+      "body": "<!-- lo-project:issue-40-controller-mod-support -->\n\nOpen Issue #40 requests PlayStation controller button glyphs and mod support documentation.\n\n## Status and scope\n\n- Controller navigation and rumble persistence are improved in main; PlayStation button glyph mapping and mod documentation framework remain in backlog.\n\n## Sources\n\n- https://github.com/freefrank/LostOdysseyRecomp/issues/40\n",
+      "issue_url": "https://github.com/freefrank/LostOdysseyRecomp/issues/40",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Input",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Release": null,
+        "Start date": "2026-09-16",
+        "Target date": null,
+        "Evidence": "Feature request for PlayStation button glyphs and mod support documentation wiki. Gamepad navigation and rumble are improved in main; PS button glyphs and mod documentation framework remain in backlog."
+      },
+      "source_refs": [
+        "https://github.com/freefrank/LostOdysseyRecomp/issues/40"
+      ],
+      "source_lines": [],
+      "record_type": "issue"
+    },
+    {
+      "key": "issue-30-dof-toggle-slider",
+      "title": "[Feature] DoF Toggle/Slider",
+      "body": "<!-- lo-project:issue-30-dof-toggle-slider -->\n\nOpen Issue #30 requests a toggle or slider for Depth of Field due to character-relative blur appearance.\n\n## Status and scope\n\n- Feature request / rendering quality investigation in backlog. Initial triage requested F1 render capture ZIP and repro parameters; implementation not started.\n\n## Sources\n\n- https://github.com/freefrank/LostOdysseyRecomp/issues/30\n",
+      "issue_url": "https://github.com/freefrank/LostOdysseyRecomp/issues/30",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Graphics quality",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Release": null,
+        "Start date": "2026-09-14",
+        "Target date": null,
+        "Evidence": "Feature request for Depth-of-Field toggle or adjustment slider due to character-relative blur appearance. Initial triage requested F1 render capture ZIP; in backlog."
+      },
+      "source_refs": [
+        "https://github.com/freefrank/LostOdysseyRecomp/issues/30"
+      ],
+      "source_lines": [],
+      "record_type": "issue"
     }
   ]
 }

@@ -4,12 +4,23 @@
 
 `[ ]` 待完成 · `[~]` 进行中 · `[x]` 在所述范围内已有证据。[公开维护者 Project](https://github.com/users/freefrank/projects/3) 是当前工作项的事实来源。本镜像只保留方向、未完成事项和验证边界；实现、玩家验收和发布状态彼此独立。
 
-v0.6.3 已于 2026-09-19T23:56:08Z 从 tag/source commit `93bdbc1ccae7652e38dc80db24a9d25a34a72a47` 发布。Release CI [35476569158](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35476569158) 首次通过 Windows/Linux 打包。其资产和验证边界见[状态记录](STATUS.md)。
+v0.6.15 已于 2026-09-24T19:47:35Z 从 tag/source commit `6eef30d257f2e14ce30a546217574a0dc74fad69` 发布。Release CI [36044604844](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/36044604844) 通过 Windows 与 Linux 打包。当前正在进行 v0.6.19 的发布准备：发布准备提交 `1b2ea6635c5ac4f7cf3c9186fda3cd05575db97d` 与 tag `v0.6.19` 已推送到 main，Release CI [36092250520](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/36092250520) 正在运行中（截至 UTC 2026-09-25）。正式发布时间尚无，未标 Released。
 
 ## 交付
 
-[v0.6.3](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.3) 是当前公开发布版本，包含 Issue #53/#54 修正、大顶点缓存采样比较和 F1 归档导出；沿用已有有界验证，未新增实机性能验收。Windows ZIP 和 Linux AppImage 均内置 shader 集合，没有单独 shader 发布包。真实更新事务、实体手柄输入、Linux 原生 GPU、Steam Deck 和 GUI 验收仍待完成。
+[v0.6.15](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.15) 是最新公开发布版本，包含更新的便携式 Vulkan 着色器包（.lospv，28,527 个着色器）与开发者工具整理。
 
+[v0.6.19](https://github.com/freefrank/LostOdysseyRecomp/tree/main) 尚在准备中（未发布）：
+- [x] **各向异性过滤（AF）实时选项：**图形设置中提供实时各向异性过滤选项（关、2x、4x、8x、16x），通过不可变 sampler table generation 与 GPU 完成后安全回收避免 UAF 和描述符竞态（Issue #35）。Windows 与 Linux CPU 构建及 softwareVulkan Actions 运行 36079262997 通过，合并后 `settings_interaction` 1/1 通过。全游戏实体 GPU 结论与实机画质仍待验证。实现已合入 main；计划在 v0.6.19 正式发布后由主代理关闭 Issue #35，此刻保持 open 未发布。
+- [x] **系统“退出到桌面”：**系统菜单中提供“退出到桌面”选项（Issue #35），匹配 `0x822E256C` 与 `0x822E26B8` 两个真实 guest 调用点并修复 UTF-16 NUL 截断复制长度。v4 用户明确验证退出成功。实现已合入 main；计划在 v0.6.19 正式发布后由主代理关闭，此刻保持 open 未发布。
+- [x] **“随时保存”偏好持久化：**在 debug 配置中记住“随时保存”（Save Anywhere）选择，默认保持 `false`（Issue #61）。CPU 跨进程配置持久化验证通过；单项实体机实测仍待进行。实现已合入 main；计划在 v0.6.19 正式发布后由主代理关闭，此刻保持 open 未发布。
+- [x] **精简缩放与抗锯齿预设：**在设置菜单中整合抗锯齿与缩放预设（Performance、Balanced、Quality、DLAA、NativeAA）；通过缓存菜单背景避免重复整屏软件滤波（无实测端到端延迟结论）。经由菜单交互回归测试套件（1/1）验证通过。
+- [x] **Settings 确认返回主菜单：**新增 Settings 确认返回主菜单处理，等待原生 Settings 关闭后再请求 Title。本轮 Windows 上 LoMenuFlowTest 8 组测试通过，合并独立 `settings_interaction` 1/1 另行记录；未进行实机单项运行。
+- [x] **分类金手指手柄导航：**debug 金手指菜单支持手柄 LT/RT 肩键边沿触发切换类别，并提供中英文底部导航提示。用户此前已在实体手柄上验收。
+- [x] **输入与手柄改进：**手柄震动运行期 XInput motor 状态保持（非跨会话持久化偏好）、鼠标闲置自动隐藏及游戏运行时禁用 IME 输入法干扰。
+- [~] **v0.6.19 发布打包与公开：**发布准备提交 `1b2ea66` 与 tag `v0.6.19` 已推送；Release CI [36092250520](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/36092250520) 运行中。正式发布包、玩家验收及 Issue 关闭仍待 CI 完成与正式发布后执行。
+
+- [x] **v0.6.15 发布：**从 `6eef30d` 发布；Release CI 36044604844、pack hash 门禁、Windows ZIP 与 Linux AppImage 打包均通过并内置便携式 Vulkan 着色器包（28,527 个着色器）。
 - [x] **v0.6.3 发布：**从 `93bdbc1` 发布；Release CI 35476569158、包 hash、sidecar、GitHub digest 和 Windows manifest 核验均通过。源码有界证据及运行时／玩家验收边界仍见[状态记录](STATUS.md)。
 - [x] **v0.6.2 发布：**已接受的 Uhra 4K Vulkan TAA 策略和实验性几何运动矢量 replay 已进入 Windows/Linux 发布包。CI、包交付和公开 sidecar 已通过核验；更广场景、1080p internal 到 4K output 的移动相机覆盖、Linux 原生 GPU、Steam Deck 和 D3D12 replay PSO 验收仍开放。
 
@@ -38,6 +49,11 @@ D3D12 仍是可用基线。Windows Vulkan 已有 RTX 5080 实机场景的界定�
 <a id="近期优先事项"></a>
 ## 当前事项与验收边界
 
+- [~] **Issue #49 窗口坐标初始化排查：**保留为维护者活跃排查事项（freefrank 确认：“still gonna dig deeper later.”，2026-09-24T23:11:46Z）；旧系统环境下渲染器初始化前 `SetThreadDpiAwarenessContext(PMv2)` 返回 null 导致启动终止。不按 unsupported 关闭。
+- [~] **Issue #37 PortForge 启动器集成：**已获授权推进实现；当前处于调研与适配准备阶段，正并行核对外部 `.forge.json` 清单合同及本地路径，尚无代码或验收。原生 Linux AppImage 发布包已独立发布并受支持。
+- [~] **Issue #54 与 #55 语音与过场反馈：**语音及过场语言反馈保持开放；Issue #54 在 v0.6.3 语音菜单修复后近期仍有盘 3 等日文过场复现；Issue #55 主体已改善，但 Obsidian Miasma 单句人声缺失待存档复现（非全盘终 Boss 人声缺失）。
+- [ ] **Issue #30、#40、#48 体验与功能积压：**景深滑块/开关（#30）、PS 手柄按键提示与 Mod 文档（#40）、晕动症视角防抖与动态模糊开关（#48）保持为待办积压。
+- [x] **Issue #53 盘 2 加载卡死：**已于 2026-09-19 关闭并在 v0.6.3 中发布，保持关闭，不重开。
 - [x] **v0.5.4 发布：**已于 2026-09-11T01:36:30Z 从 `2ad94d418bb0478417ab9589109f1f685ed92eb3` 公开发布；CI 34550200618 通过。44,237,061-byte ZIP 的 SHA-256 为 `104ced8b60c16cd1b9013543a3940c9ed8d7cf904c3d05a6a8ef8d591f51d218`；包来源、版本、全部 50 个文件 hash/CRC 及四个匿名资源下载均通过。本条只记录发布交付；各项运行时和玩家验收边界仍见下文。
 - [x] **移除 PPC 预编译同步并改为在线全源码编译：**在 v0.5.20（commit `9a1617a`、`693042d`、`03f0d9f`）中，PowerPC 预编译静态库缓存与远程同步机制（`LO_PREBUILT_PPC_DIR`、`ppc_sync.py`、`ppc_prebuilt.py`）已彻底移除。Windows 与 Linux 构建均统一在 CI 及本地 Release 构建中从源码在线编译 `LostOdysseyRecompLib` 客户机 PowerPC 代码。消除了平台专属静态库缓存契约，并为未来架构（如 ARM64）铺平道路。早期 direct-main 同步与 fingerprint 审计证据保留为历史。
 - [x] **便携式 Vulkan 着色器包（.lospv）与 Linux AppImage 发布：**可重定位便携式 Vulkan 着色器包（`.lospv`）已实现，包含 SPIR-V 字节码 SHA-256 去重与分块 Zstandard 压缩（28,482 个着色器压缩为 169.9 MB），最初随 [v0.5.20](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.20) 正式发布。维护合并将测试 capture 与 Windows 分发中的 45 个重编译着色器合入基线包（28,482 -> 28,527；产物 `out/merged-shaders/portable_vk.lospv`，178,332,830 字节，SHA-256 `b486c87d121968bcec67fae6bc1aa7926378455281bc8b2a221409b8c06c6e2b`），`verify-runtime` 验证全部 payload 及运行时兼容。着色器包内置于 Windows x64 ZIP 与 Linux x64 AppImage 并随 [v0.6.15](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.15) 正式发布（源码 commit `6eef30d257f2e14ce30a546217574a0dc74fad69`，Release CI [36044604844](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/36044604844) 固定 pack hash 门禁通过；按用户需求不发布独立 Vulkan bundle）。详见 [STATUS](STATUS.md)。

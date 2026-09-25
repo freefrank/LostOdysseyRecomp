@@ -2215,9 +2215,9 @@
       "fields": {
         "Kind": "Feature",
         "Area": "Graphics features",
-        "Status": "In Progress",
+        "Status": "Done",
         "Delivery": "In progress",
-        "Evidence": "Issue #10 remains the broader FSR request. P1/G002 FSR 3.1.4 Vulkan SR is complete (Windows and native Linux, commit `87a1691`); P2/G003 quality and hardware work is in progress with bounded evidence and final visual acceptance pending. FSR Frame Generation remains deferred this iteration under the preserved broader FG backlog.",
+        "Evidence": "Issue #10 closed on GitHub by maintainer as Released. P1/G002 FSR 3.1.4 Vulkan SR is complete (Windows and native Linux, commit `87a1691`); P2/G003 quality and hardware work is in progress with bounded evidence and final visual acceptance pending. FSR Frame Generation remains deferred this iteration under the preserved broader FG backlog.",
         "Source key": "issue10-fsr-upscaling-frame-generation",
         "Start date": "2026-09-22"
       }
@@ -2750,6 +2750,183 @@
       },
       "title": "D3D12 bundled portable shader pack (.lospv)",
       "body_sha256": "7af3e7013850c46d555f7d588c0580c3ea2586c644923eb61f65379d7e0c9c97"
+    },
+    "issue-35-graphic-improvements-quit-to-desktop": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg8re9E",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Graphics features",
+        "Status": "Done",
+        "Delivery": "Validated",
+        "Release": "v0.6.19",
+        "Start date": "2026-09-15",
+        "Target date": "2026-09-24",
+        "Evidence": "Implemented both AF and Quit to Desktop in main for v0.6.19. AF live options with immutable sampler generations passed CPU and softwareVulkan Actions 36079262997, settings_interaction 1/1; physical GPU validation pending. System Quit to Desktop matched callers 0x822E256C/0x822E26B8 + UTF16 NUL fix; v4 user confirmed successful exit. Implementation in main; planned for closure by main agent after official v0.6.19 release; remains open unreleased at this time.",
+        "Source key": "issue-35-graphic-improvements-quit-to-desktop"
+      }
+    },
+    "issue-61-remember-save-anywhere": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg8re-I",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Save & Storage",
+        "Status": "Done",
+        "Delivery": "Validated",
+        "Release": "v0.6.19",
+        "Start date": "2026-09-21",
+        "Target date": "2026-09-24",
+        "Evidence": "Implemented Save Anywhere preference persistence in debug settings, default false. Verified CPU cross-process persistence; physical-device per-item testing remains pending. Commit 2cdac2a / 05eccec. Implementation in main; planned for closure by main agent after official v0.6.19 release; remains open unreleased at this time.",
+        "Source key": "issue-61-remember-save-anywhere"
+      }
+    },
+    "settings-scaling-aa-presets": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg8re_I",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Graphics features",
+        "Status": "Done",
+        "Delivery": "Validated",
+        "Release": "v0.6.19",
+        "Start date": "2026-09-24",
+        "Target date": "2026-09-25",
+        "Evidence": "Unified AA selection into Performance, Balanced, Quality, DLAA, and NativeAA presets; avoids redundant full-screen software filtering with cached menu backdrop (no end-to-end latency claimed). Verified via menu interaction regression test suite (1/1). Commits 19a5f7f, c9c3104, 05eccec.",
+        "Source key": "settings-scaling-aa-presets"
+      },
+      "title": "Streamlined Anti-Aliasing and Scaling presets (Performance, Balanced, Quality, DLAA, NativeAA)",
+      "body_sha256": "e282e575ea8dcdd89f55ee3403bd27136b5b7e87443a972f86448c2edbc87d53"
+    },
+    "settings-main-menu-title-helper": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg8re_o",
+      "fields": {
+        "Kind": "Bug",
+        "Area": "Settings",
+        "Status": "Done",
+        "Delivery": "Validated",
+        "Release": "v0.6.19",
+        "Start date": "2026-09-24",
+        "Target date": "2026-09-25",
+        "Evidence": "Added confirmed Settings return to Title menu, waiting for native Settings closure before requesting Title. Windows LoMenuFlowTest passed across 8 test groups this round; merged independent settings_interaction 1/1 verified separately; physical device run remains unperformed. Commits 6e06743, 05eccec.",
+        "Source key": "settings-main-menu-title-helper"
+      },
+      "title": "Confirmed return to Title menu after Settings: request Title after native Settings closes",
+      "body_sha256": "7d5805f4a0c8b474edb1408e4ca39752da6648bdd296d982e1f7d56810ab0fbf"
+    },
+    "cheat-menu-controller-navigation": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg8re_8",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Debug menu",
+        "Status": "Done",
+        "Delivery": "Validated",
+        "Release": "v0.6.19",
+        "Start date": "2026-09-24",
+        "Target date": "2026-09-24",
+        "Evidence": "Categorized cheats with LT/RT edge-triggered navigation and bilingual footer tips; user verified on physical controller. Commits a21e973, 166b15f, 217df8c.",
+        "Source key": "cheat-menu-controller-navigation"
+      },
+      "title": "Categorized cheat menu navigation with controller LT/RT triggers and bilingual footer",
+      "body_sha256": "e3e4e1b1e3e533fbce02c850568f0e458f3431ba5f2216bcec07ebce13e125e3"
+    },
+    "input-rumble-cursor-ime-improvements": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg8rfAs",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Input",
+        "Status": "Done",
+        "Delivery": "Validated",
+        "Release": "v0.6.19",
+        "Start date": "2026-09-24",
+        "Target date": "2026-09-25",
+        "Evidence": "Maintains runtime XInput motor rumble state during gameplay (not cross-session preference); idle cursor hiding and gameplay IME disabling implemented and integrated into main. Commits a8cc779, 417eaac, 217df8c.",
+        "Source key": "input-rumble-cursor-ime-improvements"
+      },
+      "title": "Input and controller improvements (runtime rumble state, idle cursor hiding, gameplay IME disable)",
+      "body_sha256": "35b02581a36e3d59bc6eb3767174678ca505c1801cdc450b270458d6d78b4e51"
+    },
+    "issue-49-physical-pixel-window-coords": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg8rhKA",
+      "fields": {
+        "Kind": "Bug",
+        "Area": "Desktop windowing",
+        "Status": "In Progress",
+        "Delivery": "In progress",
+        "Start date": "2026-09-24",
+        "Evidence": "Under active maintainer investigation (freefrank: 'still gonna dig deeper later.', 2026-09-24T23:11:46Z). Reporter log indicates startup failure where SetThreadDpiAwarenessContext(PMv2) returns null before GPU backend initializes. Retained as open investigation; not closed as unsupported.",
+        "Source key": "issue-49-physical-pixel-window-coords"
+      }
+    },
+    "issue-37-portforge-integration": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg8rhLU",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Updates and packaging",
+        "Status": "In Progress",
+        "Delivery": "In progress",
+        "Start date": "2026-09-15",
+        "Evidence": "Authorized for implementation; in-progress investigation and adaptation preparation with parallel librarian/explorer contract audit. No code or acceptance yet. Native Linux AppImage packages are already independently published.",
+        "Source key": "issue-37-portforge-integration"
+      }
+    },
+    "issue-54-japanese-cutscene-language": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg8rhNE",
+      "fields": {
+        "Kind": "Bug",
+        "Area": "Audio and language",
+        "Status": "Awaiting validation",
+        "Delivery": "Awaiting validation",
+        "Release": "v0.6.3",
+        "Start date": "2026-09-24",
+        "Evidence": "Invalid voice-menu selection handling fix packaged in v0.6.3 with language tracing. Retained open: recent feedback indicates Japanese cutscene reversions continue on Disc 3 and other scenes; under active monitoring.",
+        "Source key": "issue-54-japanese-cutscene-language"
+      }
+    },
+    "issue-55-disc1-boss-voice-silent": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg8rhO4",
+      "fields": {
+        "Kind": "Bug",
+        "Area": "Audio",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Start date": "2026-09-23",
+        "Evidence": "Issue #55 audio report: general voice playback mostly improved, but single spoken line during Obsidian Miasma sequence remains missing, awaiting reproduction save; not a broad failure of all final boss lines.",
+        "Source key": "issue-55-disc1-boss-voice-silent"
+      }
+    },
+    "issue-48-motion-sickness-qol": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg8rhQk",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Graphics features",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Start date": "2026-09-19",
+        "Evidence": "Feature request for camera head-bobbing toggle and motion blur toggle for motion sickness reduction. In backlog; implementation not started.",
+        "Source key": "issue-48-motion-sickness-qol"
+      }
+    },
+    "issue-40-controller-mod-support": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg8rhTE",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Input",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Start date": "2026-09-16",
+        "Evidence": "Feature request for PlayStation button glyphs and mod support documentation wiki. Gamepad navigation and rumble are improved in main; PS button glyphs and mod documentation framework remain in backlog.",
+        "Source key": "issue-40-controller-mod-support"
+      }
+    },
+    "issue-30-dof-toggle-slider": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg8rhUo",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Graphics quality",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Start date": "2026-09-14",
+        "Evidence": "Feature request for Depth-of-Field toggle or adjustment slider due to character-relative blur appearance. Initial triage requested F1 render capture ZIP; in backlog.",
+        "Source key": "issue-30-dof-toggle-slider"
+      }
     }
   }
 }
