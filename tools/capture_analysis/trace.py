@@ -131,6 +131,15 @@ def parse_frame(capture, frame_name):
         elif line.startswith("shaders ") and current is not None:
             current["raw_shader"] = line
             current["shader"] = fields(line[len("shaders "):])
+        elif line.startswith("jitter ") and current is not None:
+            current["runtime_jitter"] = fields(line[len("jitter "):])
+        elif line.startswith("jitter_uploaded_vp ") and current is not None:
+            words = line.split()[1:]
+            if len(words) != 16 or any(not re.fullmatch(r"[0-9a-fA-F]{8}", word) for word in words):
+                raise ValueError(f"invalid uploaded VP for draw {current['id']}")
+            current["uploaded_vp"] = [int(word, 16) for word in words]
+        elif line.startswith("texture_binding ") and current is not None:
+            current.setdefault("texture_bindings", []).append(fields(line[len("texture_binding "):]))
         elif line.startswith(("end ", "drops ")):
             result["footer"].append(line)
             if line.startswith("end "):

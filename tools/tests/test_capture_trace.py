@@ -75,6 +75,26 @@ class TraceTest(unittest.TestCase):
         self.assertIsNone(pair["metadata"]["second"]["end"])
         self.assertEqual(pair["metadata"]["first"]["missing_shader_draws"], [2])
 
+    def test_actual_upload_evidence_is_distinct_from_guest_registers(self):
+        text = FRAME_A.replace("shaders vs=aaaa ps=bbbb ps_status=bound\n",
+            "shaders vs=aaaa ps=bbbb ps_status=bound\n"
+            "jitter applied=true slot=7 rejection=0 phase=3 ndc_x=38000000 ndc_y=00000000\n"
+            "jitter_uploaded_vp " + " ".join(f"{i:08x}" for i in range(16)) + "\n"
+            "texture_binding slot=0 bank=0 kind=3 guest_width=1 guest_height=1 host_width=1 host_height=1\n")
+        capture = trace.Capture(["frame-01-f12/render-state.txt"], lambda _: text.encode())
+        frame = trace.parse_frame(capture, "frame-01-f12")
+        first = frame["draws"][0]
+        self.assertEqual(first["runtime_jitter"]["applied"], "true")
+        self.assertEqual(first["uploaded_vp"], list(range(16)))
+        self.assertEqual(first["texture_bindings"][0]["kind"], "3")
+        self.assertEqual(first["register_changes"], {1: 1, 2: 2})
+        self.assertNotIn("runtime_jitter", frame["draws"][1])
+        self.assertNotIn("texture_bindings", frame["draws"][1])
+        bad = trace.Capture(["frame-01-f12/render-state.txt"],
+            lambda _: text.replace("jitter_uploaded_vp 00000000", "jitter_uploaded_vp").encode())
+        with self.assertRaisesRegex(ValueError, "invalid uploaded VP"):
+            trace.parse_frame(bad, "frame-01-f12")
+
     def test_new_output_guard_and_frame_boundary(self):
         capture_dir = self.root / "extracted"
         capture_dir.mkdir()

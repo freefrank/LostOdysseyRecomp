@@ -167,6 +167,9 @@ def aggregate(captures):
                         "position_chain_hint": candidate["position_chain_hint"],
                         "position_window_constants": candidate["position_window_constants"],
                         "strict_depth_pairs": draw["matching_depth_draws"],
+                        "geometry_depth_pairs": draw["matching_geometry_depth_draws"],
+                        "runtime_jitter": draw.get("runtime_jitter"),
+                        "texture_bindings": draw.get("texture_bindings", []),
                         "missing_evidence": draw["missing_evidence"],
                         "pass_registers": draw["pass_registers"]})
             for draw in frame.get("unmapped_draws", []):
@@ -192,12 +195,14 @@ def aggregate(captures):
         entry["stage_counts"] = {stage: sum(o["stage"] == stage for o in occurrences) for stage in STAGES}
         entry["position_hint_draw_count"] = sum(any(s["position_chain_hint"] for s in o["slots"]) for o in occurrences)
         entry["strict_depth_paired_draw_count"] = sum(any(s["strict_depth_pairs"] for s in o["slots"]) for o in occurrences)
+        entry["geometry_depth_paired_draw_count"] = sum(any(s["geometry_depth_pairs"] for s in o["slots"]) for o in occurrences)
         entry["before_resolve_position_and_depth_draw_count"] = sum(
             o["stage"] == STAGES[0] and any(s["position_chain_hint"] and s["strict_depth_pairs"]
                                            for s in o["slots"]) for o in occurrences)
         entry["unknown_or_unmatched_draw_count"] = sum(not o["slots"] for o in occurrences)
     return sorted(shaders.values(), key=lambda e: (-e["before_resolve_position_and_depth_draw_count"],
-        -e["strict_depth_paired_draw_count"], -e["position_hint_draw_count"], -e["draw_count"], e["vs"]))
+        -e["strict_depth_paired_draw_count"], -e["position_hint_draw_count"],
+        -e["geometry_depth_paired_draw_count"], -e["draw_count"], e["vs"]))
 
 
 def analyze(inputs, mapping_header):
@@ -251,6 +256,7 @@ def analyze(inputs, mapping_header):
         "limits": ["All parsed draws are analyzed with the explicit exclusive max(draw ID)+1 cutoff.",
             "First resolve separates trace order only; neither early nor later draws have proven scene/pixel coverage.",
             "Strict depth pairs match captured fields, not host allocation identity or GPU completion; multiple pairs remain ambiguous.",
+            "Geometry depth pairs allow different pass states and report those differences; they are not authorization to map a shader.",
             "Position hints are lexical, and unmatched/missing evidence is not a passing mapping review.",
             "No images, binary surfaces or shader payload hashes were read; runtime/GPU provenance is only the recorded metadata."]}
 

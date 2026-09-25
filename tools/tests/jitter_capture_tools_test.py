@@ -67,7 +67,7 @@ class JitterCaptureToolsTest(unittest.TestCase):
             capture, mapping = self.make_capture(Path(tmp))
             result = jitter_candidates.analyze(capture, mapping, 42)
             frame = result["frames"][0]
-            self.assertEqual(frame["before_draw"], 2)
+            self.assertEqual((frame["before_draw"], frame["cutoff_source"]), (4, "full_frame"))
             hinted = [candidate for candidate in frame["candidates"] if candidate["position_chain_hint"]]
             self.assertEqual([(item["vs"], item["candidate_slot"]) for item in hinted], [(MATERIAL, 7)])
             self.assertEqual(hinted[0]["draws"][0]["matching_depth_draws"], [{"draw": 0, "vs": DEPTH}])
@@ -76,6 +76,38 @@ class JitterCaptureToolsTest(unittest.TestCase):
             later = jitter_candidates.analyze(capture, mapping, 42, before_draw=4)["frames"][0]
             self.assertEqual((later["before_draw"], later["cutoff_source"]), (4, "explicit"))
             self.assertEqual(len(next(item for item in later["candidates"] if item["candidate_slot"] == 7)["draws"]), 2)
+
+    def test_late_light_geometry_survives_pass_changes_without_strict_pair(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            capture, mapping = self.make_capture(Path(tmp))
+            path = capture / "frame-01-f42" / "render-state.txt"
+            text = path.read_text().replace("draw 3 prim=4 indices=6 indexed=true base=0x80\n",
+                "draw 3 prim=4 indices=6 indexed=true base=0x80\n" + reg(0x2200, 0x00700263) +
+                reg(0x2201, 0x01000101) + reg(0x2081, 0x00100010))
+            path.write_text(text)
+            frame = jitter_candidates.analyze(capture, mapping, 42)["frames"][0]
+            late = next(c for c in frame["candidates"] if c["candidate_slot"] == 7)["draws"][1]
+            self.assertEqual(late["matching_depth_draws"], [])
+            self.assertEqual(late["matching_geometry_depth_draws"][0]["draw"], 0)
+            self.assertIn("0x2200", late["matching_geometry_depth_draws"][0]["pass_differences"])
+            with trace.load_capture(capture) as opened:
+                with self.assertRaises(ValueError):
+                    export_jitter_fixture.collect(opened, "frame-01-f42", [(3, MATERIAL, 7)], DEPTH, 4, before_draw=4)
+            # Same registers with different geometry must not receive this association.
+            path.write_text(text.replace("draw 3 prim=4 indices=6 indexed=true base=0x80",
+                                         "draw 3 prim=4 indices=6 indexed=true base=0x90"))
+            frame = jitter_candidates.analyze(capture, mapping, 42)["frames"][0]
+            late = next(c for c in frame["candidates"] if c["candidate_slot"] == 7)["draws"][1]
+            self.assertEqual(late["matching_geometry_depth_draws"], [])
+
+    def test_default_scan_does_not_require_a_resolve(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            capture, mapping = self.make_capture(Path(tmp))
+            path = capture / "frame-01-f42" / "render-state.txt"
+            path.write_text("\n".join(line for line in path.read_text().splitlines() if not line.startswith("resolve ")))
+            frame = jitter_candidates.analyze(capture, mapping, 42)["frames"][0]
+            self.assertEqual(frame["cutoff_source"], "full_frame")
+            self.assertEqual(len(next(c for c in frame["candidates"] if c["candidate_slot"] == 7)["draws"]), 2)
 
     def test_fixture_needs_explicit_identity_and_exact_pair(self):
         with tempfile.TemporaryDirectory() as tmp:

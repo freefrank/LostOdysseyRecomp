@@ -9,6 +9,7 @@
 #include "f16385_jitter_capture.h"
 #include "f2548_jitter_capture.h"
 #include "f6131_late_floor_jitter_capture.h"
+#include "f6131_e810_jitter_capture.h"
 #include "feedback_mapping_cases.h"
 
 using namespace gpu::temporal;
@@ -1207,6 +1208,116 @@ static void CapturedF6131LateFloor()
     std::printf("Captured f6131 late floor: %u checks, five draws, 32 phases, 1440p/4K; old clip %.6f px, tex0 %.6f px, depth lookup error %.6f px\n",
         checks,oldClipSeparation,oldTex0Separation,maxDepthError);
 }
+
+// f6131 VS e810 lines 405-422: fetched position through c0..3, then the
+// distinct c7..10 camera accumulation. The result is copied to oPos and o4.
+static Float4 E810Clip(const Constants& c, Float4 point)
+{
+    point[3]=1;
+    auto world=Mul(point[3],S(C(c,3),"wxyz"));
+    world=Mad(point[2],S(C(c,2),"wxyz"),world);
+    world=Mad(point[1],S(C(c,1),"wxyz"),world);
+    world=Mad(point[0],S(C(c,0),"wxyz"),world);
+    auto clip=Mul(world[0],C(c,10));
+    clip=Mad(world[3],C(c,9),clip);
+    clip=Mad(world[2],C(c,8),clip);
+    return Mad(world[1],C(c,7),clip);
+}
+// f6131 PS fe31 lines 404-410: i4.xy/w -> c0 YX scale/bias -> tex0 YX.
+static std::array<float,2> E810Tex0(const Constants& ps, Float4 i4)
+{
+    const float inverseW=1.f/i4[3];
+    const Float4 r5{inverseW*i4[0],inverseW*i4[1],0,0};
+    const auto c0=C(ps,0);
+    const Float4 swizzled{r5[1]*c0[1]+c0[2],r5[0]*c0[0]+c0[3],0,0};
+    return {swizzled[1],swizzled[0]};
+}
+static void CapturedF6131E810ConstantSample()
+{
+    using namespace f6131_e810_capture;
+    const auto& draw=draws[0];
+    Constants original{},originalDepth{},originalPs{};
+    std::copy(draw.vertex.begin(),draw.vertex.end(),original.begin());
+    std::copy(draw.vertexLate.begin(),draw.vertexLate.end(),original.begin()+254*4);
+    std::copy(draw.depth.begin(),draw.depth.end(),originalDepth.begin());
+    std::copy(draw.pixel.begin(),draw.pixel.end(),originalPs.begin());
+    std::array<uint32_t,16> vp{};
+    std::copy_n(original.begin()+7*4,16,vp.begin());
+    Check(draw.vs==0xe810cfacc107fd3cull && draw.ps==0xfe31f3d6588fde95ull &&
+        draw.depthVs==0xb030ab4e17a20783ull && draw.slot==7 &&
+        std::equal(vp.begin(),vp.end(),originalDepth.begin()+4*4),
+        "f6131 e810 draw746 and depth178 share captured scene VP");
+    // Exact texture0 fetch words from draw746. The guest 1x1 RGBA upload uses
+    // base 0x17000, 2D fetch, repeat U/V. The no-resolve argument below is
+    // a controlled test assumption; the old F1 trace cannot prove cache state.
+    constexpr uint32_t fetch0=0x80400002u,fetch1=0x00017086u,fetch2=0u,fetch5=0x00000218u;
+    Check(IsSingleTexelScreenFetch(fetch0,fetch1,fetch2,fetch5,false),
+        "f6131 e810 texture0 qualifies as a constant one-texel screen sample");
+    for (const auto invalid: {std::array<uint32_t,4>{fetch0,fetch1,fetch2,fetch5&~(3u<<9)},
+        {fetch0,fetch1&0xfffu,fetch2,fetch5}, {fetch0,fetch1^1u,fetch2,fetch5},
+        {fetch0,fetch1,1u,fetch5}, {fetch0|(4u<<10),fetch1,fetch2,fetch5},
+        {fetch0|(4u<<13),fetch1,fetch2,fetch5}, {fetch0^3u,fetch1,fetch2,fetch5}})
+        Check(!IsSingleTexelScreenFetch(invalid[0],invalid[1],invalid[2],invalid[3],false),
+            "e810 wrong dimension, base, format, size, wrap or fetch type is rejected");
+    Check(!IsSingleTexelScreenFetch(fetch0,fetch1,fetch2,fetch5,true),
+        "e810 same-address resolved surface is not a constant guest upload");
+    Check(PositionVPSlot(draw.vs)==-1 && DrawPositionVPSlot(draw.vs,draw.ps,false)==-1 &&
+        DrawPositionVPSlot(draw.vs,draw.ps,true)==7 &&
+        DrawPositionVPSlot(draw.vs,0x5b11f88a8bb293dfull,true)==-1,
+        "e810 remains outside VS-wide map and accepts only the exact eligible PS pair");
+    double oldSeparation=0;
+    for (const auto extent:{Viewport{0,0,2560,1440},Viewport{0,0,3840,2160}})
+        for (uint64_t phase=0;phase<32;++phase)
+        {
+            const SceneAnchor anchor{vp,extent,54};
+            auto depth=originalDepth,layer=original,ps=originalPs,depthPs=originalPs;
+            Check(ApplyDrawJitter(draw.depthVs,0,phase,true,true,&anchor,54,extent,
+                depth.data(),depthPs.data()).applied,"e810 paired depth accepts shared jitter");
+            const auto result=ApplyDrawJitter(draw.vs,draw.ps,phase,true,true,&anchor,
+                54,extent,layer.data(),ps.data(),nullptr,nullptr,1,nullptr,true);
+            Check(result.applied && result.slot==7 && !result.shadowCompensated && ps==originalPs,
+                "eligible e810/fe31 upload jitters slot 7 without PS edits");
+            for (unsigned i=0;i<layer.size();++i)
+                if (i<7*4 || i>=11*4 || i%4>=2)
+                    Check(layer[i]==original[i],"e810 leaves world, UV, lighting and clip ZW constants intact");
+            for (const auto point:{Float4{-250,-100,20,1},Float4{120,90,80,1},
+                Float4{10,250,160,1}})
+            {
+                const auto reference=TireDepthB030(depth,point);
+                const auto current=E810Clip(layer,point),old=E810Clip(original,point);
+                // HLSL copies the computed r0 to o4 unchanged; the PS uses it as i4.
+                Check(current==reference,
+                    "e810 independent oPos and copied o4 align with paired depth");
+                Check(current[2]==old[2] && current[3]==old[3],
+                    "e810 preserves clip Z and W");
+                Check(std::isfinite(reference[3]) && std::abs(reference[3])>1,
+                    "e810 synthetic point has nondegenerate clip W");
+                const auto sample=E810Tex0(ps,current),oldSample=E810Tex0(originalPs,old);
+                for (unsigned axis=0;axis<2;++axis)
+                {
+                    const double pixels=(double(current[axis])/current[3]-double(old[axis])/old[3])*
+                        (axis?extent.height:extent.width)*(axis?-.5:.5);
+                    const double samplePixels=(double(sample[axis])-oldSample[axis])*(axis?extent.height:extent.width);
+                    Check(std::abs(samplePixels-pixels)<.003,
+                        "e810 projected tex0 coordinate follows the same screen pixel shift");
+                    oldSeparation=std::max(oldSeparation,std::abs(pixels));
+                }
+            }
+            for (unsigned variant=0;variant<2;++variant)
+            {
+                auto rejected=original,rejectedPs=originalPs;
+                const auto failure=ApplyDrawJitter(draw.vs,variant?0x5b11f88a8bb293dfull:draw.ps,
+                    phase,true,true,&anchor,54,extent,rejected.data(),rejectedPs.data(),
+                    nullptr,nullptr,1,nullptr,variant!=0);
+                Check(!failure.applied && failure.rejection==JitterRejection::UnknownShader &&
+                    rejected==original && rejectedPs==originalPs,
+                    "e810 without eligibility or with another PS leaves both banks unchanged");
+            }
+        }
+    Check(oldSeparation>.3,"unmapped e810 control separates from jittered depth by a visible phase");
+    std::printf("Captured f6131 e810 constant sample: %u checks, draw746/depth178, 32 phases, 1440p/4K; old separation %.6f px\n",
+        checks,oldSeparation);
+}
 static float Dot(const Float4& a,const Float4& b)
 {
     float result=0;
@@ -1362,6 +1473,8 @@ int main(int argc,char** argv)
     { CapturedF2548Layers(); return 0; }
     if (argc==2 && std::strcmp(argv[1],"--captured-f6131-late-floor")==0)
     { CapturedF6131LateFloor(); return 0; }
+    if (argc==2 && std::strcmp(argv[1],"--captured-f6131-e810")==0)
+    { CapturedF6131E810ConstantSample(); return 0; }
     if (argc==2 && std::strcmp(argv[1],"--captured-f5912-layers")==0)
     { CapturedF5912Layers(); return 0; }
     if (argc==2 && std::strcmp(argv[1],"--captured-f5997-layers")==0)
@@ -1373,6 +1486,7 @@ int main(int argc,char** argv)
     if (argc==2 && std::strcmp(argv[1],"--captured-static-layers")==0) return 0;
     CapturedF2548Layers();
     CapturedF6131LateFloor();
+    CapturedF6131E810ConstantSample();
     FeedbackMappingBatch();
     TireMaterialCoverage();
     BattleCoverage();

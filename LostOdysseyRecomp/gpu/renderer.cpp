@@ -5497,7 +5497,15 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 rasterViewport.x *= rasterScaleX; rasterViewport.y *= rasterScaleY;
                 rasterViewport.width *= rasterScaleX; rasterViewport.height *= rasterScaleY;
                 render_batch::CpuTimer<> taaJitter(cpuTimingEnabled);
-                const int temporalSlot=temporal::PositionVPSlot(key.vs);
+                const bool constantScreenSample = key.vs == 0xe810cfacc107fd3cull &&
+                    key.ps == 0xfe31f3d6588fde95ull && ps &&
+                    (ps->info.textureSlotMask & 1) && ps->info.textureDimension[0] == 1 &&
+                    !(vs->info.textureSlotMask & 1) &&
+                    temporal::IsSingleTexelScreenFetch(Reg(REG_FETCH_CONSTANTS), Reg(REG_FETCH_CONSTANTS + 1),
+                        Reg(REG_FETCH_CONSTANTS + 2), Reg(REG_FETCH_CONSTANTS + 5),
+                        FindResolved((Reg(REG_FETCH_CONSTANTS + 1) >> 12) << 12,
+                            Reg(REG_FETCH_CONSTANTS + 1) & 0x3f) != nullptr);
+                const int temporalSlot=temporal::DrawPositionVPSlot(key.vs, key.ps, constantScreenSample);
                 if((temporalActive||activeSpatialAA)&&temporalSlot>=0&&temporalViewport&&depth&&(depthControl&4)) {
                     temporal::SceneAnchor anchor;
                     std::copy_n(vsConstants+temporalSlot*4,16,anchor.vpBits.begin());
@@ -5577,7 +5585,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     depth ? depth->allocationSerial : 0,
                     {rasterViewport.x, rasterViewport.y, rasterViewport.width, rasterViewport.height},
                     vsConstants, psConstants, &temporalScene.Depth(), jitterSampledDepth ? &*jitterSampledDepth : nullptr,
-                    ActiveTaaOptions().jitter_scale, dlssSrRequested ? &frameRasterJitter : nullptr);
+                    ActiveTaaOptions().jitter_scale, dlssSrRequested ? &frameRasterJitter : nullptr,
+                    constantScreenSample);
                 if (temporalActive && drawJitter.applied) {
                     if (!actualRasterJitterCaptured) {
                         actualRasterJitter = drawJitter.sample;
@@ -5804,6 +5813,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 const uint32_t sceneCopyBank = ps && ps->info.textureDimension[0] == 2 ? 1 :
                     ps && ps->info.textureDimension[0] == 3 ? 2 : 0;
                 std::optional<binding::Producer> boundSceneProducer;
+                // F1 records the actual texture0 binding even when opt-in
+                // feedback collection is disabled or the PS pair is not sampled.
+                std::optional<binding::Texture> captureTexture0;
                 bool failedPlan = false;
 #if defined(LO_GPU_PLUME)
                 struct AlphaBridgeFetchRequest {
@@ -5850,7 +5862,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         HostTexture* dummy = declared == 2 ? &dummyTexture3D : declared == 3 ? &dummyTextureCube : &dummyTexture2D;
                         uint32_t dimension = (fetch[5] >> 9) & 3; // 0 1D, 1 2D, 2 3D, 3 cube
                         std::optional<binding::Texture> selectedBinding;
-                        if (bindingRecord && slot == 0 && bank == bindingBank) selectedBinding.emplace();
+                        if (slot == 0 && ((bindingRecord && bank == bindingBank) ||
+                            (!debugCaptureDir.empty() && ps && (ps->info.textureSlotMask & 1) && bank == sceneCopyBank)))
+                            selectedBinding.emplace();
                         HostTexture* tex = (fetch[0] & 3) == 2 ? GetTexture(fetch, dimension,
                             selectedBinding ? &*selectedBinding : nullptr, bindingEpoch) : nullptr;
                         if (!tex)
@@ -5872,7 +5886,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                 selectedBinding->dimension = dimension;
                                 selectedBinding->bank = bank;
                                 selectedBinding->guestExtent = {1, 1};
-                                bindingRecord->texture = *selectedBinding;
+                                if (bindingRecord && bank == bindingBank) bindingRecord->texture = *selectedBinding;
+                                if (!debugCaptureDir.empty() && bank == sceneCopyBank) captureTexture0 = *selectedBinding;
                             }
                             if (trackBinding && fullSceneCopy && slot == 0 && bank == sceneCopyBank)
                                 boundSceneProducer.emplace().Unknown(bindingEpoch, frame);
@@ -6325,7 +6340,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                     selectedBinding->resolveGap = -1;
                                 }
                             }
-                            bindingRecord->texture = *selectedBinding;
+                            if (bindingRecord && bank == bindingBank) bindingRecord->texture = *selectedBinding;
+                            if (!debugCaptureDir.empty() && bank == sceneCopyBank) captureTexture0 = *selectedBinding;
                         }
                         if (trackBinding && fullSceneCopy && slot == 0 && bank == sceneCopyBank) {
                             boundSceneProducer = tex->bindingProducer;
@@ -7711,6 +7727,31 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     }
                 }
 
+                if (!debugCaptureDir.empty()) {
+                    // This point follows command recording. It proves the upload
+                    // and binding choice, not GPU completion or pixel coverage.
+                    debugTrace << fmt::format("jitter applied={} slot={} rejection={} phase={} ndc_x={:08x} ndc_y={:08x} shadow_compensated={} raster_width={} raster_height={}\n",
+                        drawJitter.applied, drawJitter.slot, uint32_t(drawJitter.rejection), drawJitter.sample.phase,
+                        std::bit_cast<uint32_t>(drawJitter.sample.ndcX), std::bit_cast<uint32_t>(drawJitter.sample.ndcY),
+                        drawJitter.shadowCompensated, rasterViewport.width, rasterViewport.height);
+                    if (drawJitter.slot >= 0 && drawJitter.slot <= 252) {
+                        debugTrace << "jitter_uploaded_vp";
+                        for (unsigned i = 0; i < 16; ++i)
+                            debugTrace << fmt::format(" {:08x}", vsConstants[drawJitter.slot * 4 + i]);
+                        debugTrace << '\n';
+                    }
+                    if (captureTexture0) {
+                        const auto& texture = *captureTexture0;
+                        const uint32_t fetchBase = (Reg(REG_FETCH_CONSTANTS + 1) >> 12) << 12;
+                        const uint32_t fetchAddress = fetchBase ? fetchBase : (Reg(REG_FETCH_CONSTANTS + 5) >> 12) << 12;
+                        debugTrace << fmt::format("texture_binding slot=0 bank={} kind={} guest_width={} guest_height={} host_width={} host_height={} parent_width={} parent_height={} resolve_age={} resolve_gap={} producer_state={} producer_age={} producer_draws={} resolve_counter={} guest_fetch_address={:#x} guest_format={}\n",
+                            texture.bank, uint32_t(texture.kind), texture.guestExtent[0], texture.guestExtent[1],
+                            texture.hostExtent[0], texture.hostExtent[1], texture.parentExtent[0], texture.parentExtent[1],
+                            texture.resolveFrameAge, texture.resolveGap, uint32_t(texture.producerState),
+                            texture.producerFrameAge, texture.producerDraws, resolveWriteOrdinal,
+                            fetchAddress, texture.guestFormat);
+                    }
+                }
                 if (trackBinding) {
                     if (key.colorMask) {
                         if (fullSceneCopy && boundSceneProducer)

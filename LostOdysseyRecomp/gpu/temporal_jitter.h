@@ -70,6 +70,19 @@ struct DrawJitter
     bool applied = false, shadowCompensated = false;
 };
 
+// Reviewed e810/fe31 uses a 1x1 RGBA guest upload at texture0. A resolve can
+// return a scaled/cropped host image, including an old-frame address alias;
+// exclude it before treating projected UV movement as a constant sample.
+inline bool IsSingleTexelScreenFetch(uint32_t typePitch, uint32_t addressFormat,
+    uint32_t size, uint32_t control, bool hasResolvedSurface) {
+    // Repeat U/V makes the single texel constant even at the screen edge;
+    // border-address modes can vary with projected coordinates and stay held.
+    return (typePitch & 3) == 2 && (typePitch & ((7u << 10) | (7u << 13))) == 0 &&
+        (addressFormat & 0x3f) == 6 &&
+        (addressFormat >> 12) != 0 && (size & 0x03ffffffu) == 0 &&
+        ((control >> 9) & 3) == 1 && !hasResolvedSurface;
+}
+
 // Modify temporary upload copies only. The unmodified guest VP remains the
 // camera identity, and the PS adjustment is authorized by an exact shader pair.
 inline DrawJitter ApplyDrawJitter(uint64_t vs, uint64_t ps, uint64_t frame,
@@ -77,10 +90,11 @@ inline DrawJitter ApplyDrawJitter(uint64_t vs, uint64_t ps, uint64_t frame,
     uint64_t depthAllocation, const Viewport& rasterViewport,
     uint32_t* vsConstants, uint32_t* psConstants,
     const SceneResolve* sceneDepth = nullptr, const SceneResolve* sampledDepth = nullptr,
-    double jitterScale = 1, const JitterSample* frameSample = nullptr)
+    double jitterScale = 1, const JitterSample* frameSample = nullptr,
+    bool constantScreenSample = false)
 {
     DrawJitter result;
-    result.slot = PositionVPSlot(vs);
+    result.slot = DrawPositionVPSlot(vs, ps, constantScreenSample);
     if (!enabled) return result;
     const auto reject = [&](JitterRejection why) { result.rejection = why; return result; };
     if (result.slot < 0) return reject(JitterRejection::UnknownShader);

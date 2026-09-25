@@ -22,6 +22,7 @@ PASS_REGS = (0x2000, 0x2001, 0x2002, 0x2080, 0x2081, 0x2082,
              *range(0x210f, 0x2115), 0x2206, 0x2208)
 PAIR_REGS = (0x2000, 0x2002, 0x2080, 0x2081, 0x2082,
              *range(0x210f, 0x2115), 0x2200, 0x2206)
+COMPARE_REGS = tuple(sorted(set(PASS_REGS) | set(PAIR_REGS) | {0x2201}))
 
 
 def position_slots(header: Path) -> dict[str, int]:
@@ -87,10 +88,10 @@ def position_window_constants(hlsl: str) -> set[int]:
 
 def analyze_frame(capture, directory: str, mapping: dict[str, int], before_draw: int | None = None) -> dict:
     frame = trace.parse_frame(capture, directory)
-    cutoff = before_draw if before_draw is not None else first_resolve_draw(capture.read_text(f"{directory}/render-state.txt"))
+    cutoff = before_draw if before_draw is not None else max((draw["id"] for draw in frame["draws"]), default=-1) + 1
     if cutoff <= 0:
-        raise ValueError("pre-resolve or explicit draw boundary must be positive")
-    cutoff_source = "explicit" if before_draw is not None else "first_resolve"
+        raise ValueError("empty frame or nonpositive draw boundary")
+    cutoff_source = "explicit" if before_draw is not None else "full_frame"
     scene_path = f"{directory}/temporal-scene.json"
     scene = json.loads(capture.read_text(scene_path)) if scene_path in capture.names else None
     vp = scene.get("vp_u32") if scene else None
@@ -123,7 +124,8 @@ def analyze_frame(capture, directory: str, mapping: dict[str, int], before_draw:
                 elif state.get(0x2208) == 5 and state.get(0x2200, 0) != 0:
                     # Mode/depth state is only a depth-pass hint. The draw's
                     # actual raster result is not reconstructed here.
-                    depth_draws.append((draw["id"], vs, geometry, world, fetch95, pair_state))
+                    depth_draws.append((draw["id"], vs, geometry, world, fetch95, pair_state,
+                                        fields.get("prim"), {reg: state.get(reg) for reg in COMPARE_REGS}))
             continue
         unlisted.add(vs)
         if not vp:
@@ -134,9 +136,21 @@ def analyze_frame(capture, directory: str, mapping: dict[str, int], before_draw:
             if camera_bits(state, candidate_slot) != vp:
                 continue
             matches = [{"draw": prior_id, "vs": prior_vs} for
-                       prior_id, prior_vs, prior_geometry, prior_world, prior_fetch, prior_pass in depth_draws
+                       prior_id, prior_vs, prior_geometry, prior_world, prior_fetch, prior_pass, _, _ in depth_draws
                        if not missing and geometry == prior_geometry and world == prior_world and fetch95 == prior_fetch
                        and pair_state == prior_pass]
+            # Late lighting intentionally changes depth writes, stencil, blend
+            # and scissor. Keep its geometry association separate from the strict
+            # same-pass pair used by fixture export; neither proves pixel coverage.
+            geometry_matches = []
+            for prior_id, prior_vs, prior_geometry, prior_world, prior_fetch, _, prior_prim, prior_state in depth_draws:
+                if (missing or fields.get("prim") is None or fields.get("prim") != prior_prim or
+                        geometry != prior_geometry or world != prior_world or fetch95 != prior_fetch):
+                    continue
+                differences = {f"0x{reg:04x}": {"depth": prior_state.get(reg), "candidate": state.get(reg)}
+                               for reg in COMPARE_REGS
+                               if prior_state.get(reg) != state.get(reg)}
+                geometry_matches.append({"draw": prior_id, "vs": prior_vs, "pass_differences": differences})
             key = (vs, candidate_slot)
             hlsl_path = f"shaders/{vs}.hlsl"
             if vs not in position_hints:
@@ -149,6 +163,9 @@ def analyze_frame(capture, directory: str, mapping: dict[str, int], before_draw:
             entry["draws"].append({"draw": draw["id"], "ps": shader.get("ps"),
                 "indices": fields.get("indices"), "index_base": fields.get("base"),
                 "matching_depth_draws": matches,
+                "matching_geometry_depth_draws": geometry_matches,
+                "runtime_jitter": draw.get("runtime_jitter"),
+                "texture_bindings": draw.get("texture_bindings", []),
                 "missing_evidence": missing,
                 "pass_registers": {f"0x{reg:04x}": f"0x{state[reg]:08x}" for reg in PASS_REGS if reg in state}})
     return {"directory": directory, "frame": frame["frame"], "before_draw": cutoff,
@@ -182,7 +199,7 @@ def main(argv=None):
     parser.add_argument("--input", required=True, type=Path)
     parser.add_argument("--mapping", required=True, type=Path)
     parser.add_argument("--frame", type=int)
-    parser.add_argument("--before-draw", type=int)
+    parser.add_argument("--before-draw", type=int, help="exclusive draw limit; default scans the complete frame")
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args(argv)
     if args.output.exists():

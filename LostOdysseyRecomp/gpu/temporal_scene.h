@@ -108,6 +108,14 @@ inline int PositionVPSlot(uint64_t shader) {
     default:return -1;
     }
 }
+// e810 has eleven observed PS partners. Only this independently reviewed pair
+// may use the slot-7 path, and only with a constant single-texel screen sample.
+// Keep it out of the VS-wide table so other consumers cannot self-anchor it.
+inline int DrawPositionVPSlot(uint64_t vs, uint64_t ps, bool constantScreenSample = false) {
+    if (vs == 0xe810cfacc107fd3cull && ps == 0xfe31f3d6588fde95ull && constantScreenSample) return 7;
+    return PositionVPSlot(vs);
+}
+
 // Ordered observations from one renderer frame. This associates selected draw
 // constants with their actual depth allocation and a later pre-UI scene copy;
 // it does not discover shaders, object motion, jitter or camera cuts.
