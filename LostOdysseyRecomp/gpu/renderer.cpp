@@ -978,6 +978,7 @@ namespace gpu::renderer
             size_t texBytes = 0;
             void ResetTimers() { tDraw = tShader = tPipeline = tTexture = tResolve = tFlush = 0; tConst = tSets = tVertex = tBind = tIndex = tRecord = 0; tRt = tTaa = tNestedFlush = 0; tShaderLookup = tPipelineLookup = tSceneCopy = 0; nShader = nPipeline = nTexture = nResolve = 0; texBytes = 0; }
             std::map<uint64_t, std::unique_ptr<RenderSampler>> samplers;
+            uint32_t appliedAnisotropy = UINT32_MAX;
             std::map<std::pair<const RenderTexture*, const RenderTexture*>, std::unique_ptr<RenderFramebuffer>> framebuffers;
 
             std::string shaderCacheDir;
@@ -3390,8 +3391,80 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             }
 
             // ---- samplers ---------------------------------------------------------
+            uint64_t ApplyAnisotropicOverride(uint64_t key, uint32_t level) const
+            {
+                key &= ~((uint64_t(1) << 15) | (uint64_t(7) << 16));
+                if (!level) return key;
+                const uint32_t code = level == 16 ? 4 : level == 8 ? 3 : level == 4 ? 2 : 1;
+                return key | (uint64_t(1) << 15) | (uint64_t(code) << 16);
+            }
+
+            bool RefreshAnisotropicFiltering()
+            {
+                const uint32_t requested = settings::GetConfig().anisotropicFiltering;
+                if (requested == appliedAnisotropy) return true;
+                if (!staticSet0 || (vulkan && !staticSamplerSet)) {
+                    appliedAnisotropy = requested;
+                    return true;
+                }
+
+                std::map<uint64_t, std::unique_ptr<RenderSampler>> replacement;
+                auto createForKey = [&](uint64_t key) -> RenderSampler* {
+                    auto found = replacement.find(key);
+                    if (found != replacement.end()) return found->second.get();
+                    RenderSamplerDesc desc;
+                    auto filter = [](uint32_t f) { return f == 0 ? RenderFilter::NEAREST : RenderFilter::LINEAR; };
+                    desc.magFilter = filter(key & 3);
+                    desc.minFilter = filter((key >> 2) & 3);
+                    desc.mipmapMode = ((key >> 4) & 3) == 0 ? RenderMipmapMode::NEAREST : RenderMipmapMode::LINEAR;
+                    auto clamp = [](uint32_t mode) {
+                        switch (mode) {
+                        case 0: return RenderTextureAddressMode::WRAP;
+                        case 1: return RenderTextureAddressMode::MIRROR;
+                        case 3: case 5: return RenderTextureAddressMode::MIRROR_ONCE;
+                        case 6: case 7: return RenderTextureAddressMode::BORDER;
+                        default: return RenderTextureAddressMode::CLAMP;
+                        }
+                    };
+                    desc.addressU = clamp((key >> 6) & 7);
+                    desc.addressV = clamp((key >> 9) & 7);
+                    desc.addressW = clamp((key >> 12) & 7);
+                    desc.anisotropyEnabled = ((key >> 15) & 1) != 0;
+                    const uint32_t code = (key >> 16) & 7;
+                    desc.maxAnisotropy = code >= 4 ? 16 : code == 3 ? 8 : code == 2 ? 4 : 2;
+                    auto sampler = device->createSampler(desc);
+                    if (!sampler) return nullptr;
+                    RenderSampler* result = sampler.get();
+                    replacement.emplace(key, std::move(sampler));
+                    return result;
+                };
+
+                const uint64_t defaultKey = ApplyAnisotropicOverride(0x2 | (0x2 << 2) | (0x1 << 4), requested);
+                RenderSampler* defaultSampler = createForKey(defaultKey);
+                if (!defaultSampler) {
+                    LOG_WARNING("renderer: anisotropic filtering {}x could not create default sampler; keeping {}x", requested, appliedAnisotropy);
+                    return false;
+                }
+                auto* set = vulkan ? staticSamplerSet.get() : staticSet0.get();
+                for (uint32_t i = 0; i < kSamplerPalette; ++i) {
+                    RenderSampler* sampler = defaultSampler;
+                    for (const auto& [originalKey, slot] : samplerPalette)
+                        if (slot == i) { sampler = createForKey(ApplyAnisotropicOverride(originalKey, requested)); break; }
+                    if (!sampler) {
+                        LOG_WARNING("renderer: anisotropic filtering {}x sampler rebuild failed at slot {}; keeping {}x", requested, i, appliedAnisotropy);
+                        return false;
+                    }
+                    set->setSampler(samplerDescriptorBase + i, sampler);
+                }
+                samplers = std::move(replacement);
+                appliedAnisotropy = requested;
+                LOG_INFO("renderer: anisotropic filtering live update {}x", requested);
+                return true;
+            }
+
             uint32_t GetSamplerIndex(uint64_t key)
             {
+                RefreshAnisotropicFiltering();
                 auto it = samplerPalette.find(key);
                 if (it != samplerPalette.end())
                     return it->second;
@@ -3440,7 +3513,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 desc.addressV = clamp((key >> 9) & 7);
                 desc.addressW = clamp((key >> 12) & 7);
                 desc.anisotropyEnabled = ((key >> 15) & 1) != 0;
-                desc.maxAnisotropy = 4;
+                const uint32_t anisotropyCode = (key >> 16) & 7;
+                desc.maxAnisotropy = anisotropyCode >= 4 ? 16 : anisotropyCode == 3 ? 8 : anisotropyCode == 2 ? 4 : 2;
                 auto sampler = device->createSampler(desc);
                 RenderSampler* result = sampler.get();
                 samplers.emplace(key, std::move(sampler));
@@ -6240,6 +6314,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         // reconstruction at the bloom shader's fractional UVs.
                         if (bloomFiltered && !temporalDisplay)
                             samplerKey = (samplerKey & ~uint64_t(0xF)) | 0x5;
+                        samplerKey = ApplyAnisotropicOverride(samplerKey, settings::GetConfig().anisotropicFiltering);
                         shared.samplerIndex[slot] = GetSamplerIndex(samplerKey);
                         textureBindings[bank][slot] = temporalDisplay ? temporalDisplay :
                             bloomFiltered ? bloomFiltered->texture.get() : hdrBinding ? hdrBinding : tex->texture.get();

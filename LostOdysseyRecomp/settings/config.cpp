@@ -16,6 +16,8 @@ Config Validate(Config value)
         value.internalResolution != 1440 && value.internalResolution != 2160)
         value.internalResolution = 0;
     if (value.scalingQuality > 1) value.scalingQuality = 1;
+    if (value.anisotropicFiltering != 0 && value.anisotropicFiltering != 2 && value.anisotropicFiltering != 4 &&
+        value.anisotropicFiltering != 8 && value.anisotropicFiltering != 16) value.anisotropicFiltering = 0;
     if (!gpu::upscaling::KnownUpscaler(value.upscaler)) value.upscaler = gpu::upscaling::Upscaler::Off;
     value.dlssQuality = gpu::upscaling::NormalizeDlssQuality(value.dlssQuality);
     value.fsrQuality = gpu::upscaling::NormalizeFsrQuality(value.fsrQuality);
@@ -89,6 +91,8 @@ Config Read()
             value.antialiasing = number;
         else if (key == "scaling_quality")
             value.scalingQuality = number;
+        else if (key == "anisotropic_filtering")
+            value.anisotropicFiltering = number;
         else if (key == "upscaler")
             value.upscaler = gpu::upscaling::Upscaler(number);
         else if (key == "dlss_quality")
@@ -181,6 +185,7 @@ static bool WriteConfig(const Config &value)
            << "\ndebug_language=" << value.debugLanguage
            << "\nantialiasing=" << value.antialiasing << "\nframe_rate=" << value.frameRate
            << "\nscaling_quality=" << value.scalingQuality
+           << "\nanisotropic_filtering=" << value.anisotropicFiltering
            << "\nupscaler=" << uint32_t(value.upscaler) << "\ndlss_quality=" << uint32_t(value.dlssQuality)
            << "\nfsr_quality=" << uint32_t(value.fsrQuality)
            << "\nfsr_sharpness=" << value.fsrSharpnessPercent
