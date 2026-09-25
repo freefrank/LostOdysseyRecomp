@@ -26,7 +26,7 @@ DLSS尺寸查询增加有限恢复：同一缓存key/设备epoch下，首次失�
 
 初始原生适配器[Actions 36176866401](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/36176866401)：FSR及NGX SDK-on/off源文件编译通过。以上证据早于最后的NGX布局与捕获元数据修正，不能代替最终提交的复验。
 
-最终提交使用保留的只读工作流`SR hybrid regression`复验：两平台CPU、Linux sanitizers、实际Vulkan像素、几何replay、TAA、嵌入式renderer、捕获JSON，以及固定生产SDK头文件的on/off编译。结果以对应提交的Actions记录为准。临时补丁脚本和写入工作流已移除。
+最终代码/CI提交`d6bb513680d4ee8754fed5b03725647de21cda09`已通过[Actions 36178376986](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/36178376986)：Windows与Linux CPU两个job，以及`vulkan-and-native` job均为success；Linux ASan/UBSan、实际Vulkan像素、几何replay、TAA、嵌入式renderer、捕获JSON，以及固定生产SDK头文件的on/off编译均通过。此后的本文件更新只补充证据与复验步骤，不改变受测运行时代码。临时补丁脚本和写入工作流已移除，保留只读工作流`SR hybrid regression`。
 
 测试覆盖运动方向、32个jitter相位、几何覆盖优先、无效深度、reset、连续帧恢复、旧帧/epoch拒绝、批次耗尽后恢复、GENERAL/SHADER_READ资格，以及SDK绑定元数据。嵌入式renderer使用替代vendor边界；源文件编译不等于真实NGX/FSR SDK执行。没有完整游戏链接、RTX实机、Steam Deck、画质或性能验收。
 
@@ -39,14 +39,26 @@ Windows PowerShell：
 ```powershell
 $env:LO_SR_HYBRID_MV = "1"
 $env:LO_MV_LOG = "1"
-.\LostOdysseyRecomp.exe
+.\LostOdysseyRecomp.exe 2> sr-diagnostics.log
 ```
 
 Linux：
 
 ```bash
-LO_SR_HYBRID_MV=1 LO_MV_LOG=1 ./LostOdysseyRecomp
+LO_SR_HYBRID_MV=1 LO_MV_LOG=1 ./LostOdysseyRecomp 2>sr-diagnostics.log
 ```
+
+`DLSS sizing:`原始尺寸诊断写入stderr，应同时保留`sr-diagnostics.log`和程序生成的runtime日志；每次对照运行先另存上一份诊断文件。
+
+无需游戏资产的CPU复验，在仓库根目录执行：
+
+```bash
+cmake -S tools/tests/sr_hybrid -B out/hybrid-cpu -DCMAKE_BUILD_TYPE=Release
+cmake --build out/hybrid-cpu --config Release --parallel 2
+ctest --test-dir out/hybrid-cpu -C Release -V
+```
+
+完整的Vulkan/原生头文件复验依赖和命令见[保留的CI工作流](../../.github/workflows/sr-hybrid-regression.yml)。
 
 A/B对照将`LO_SR_HYBRID_MV`改为`0`后重启程序；这是进程启动开关，不是运行中热切换。必须使用同一EXE、存档、分辨率与相近镜头路线。诊断完成后关闭`LO_MV_LOG`，性能比较不得包含F1捕获/readback过程。
 
