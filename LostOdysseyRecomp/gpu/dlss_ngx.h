@@ -166,6 +166,9 @@ private:
     bool sessionInitialized_ = false;
     bool featureConfigValid_ = false;
     bool sessionFailed_ = false;
+    // Only bounded sizing requests may reopen a cleaned-up initialization.
+    // Device loss, failed cleanup and live feature resources are not retryable.
+    bool sessionRetryable_ = false;
     bool featureFailed_ = false;
     uint64_t lastSrAttemptFrameId_ = 0;
 };
