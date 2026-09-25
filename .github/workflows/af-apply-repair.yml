@@ -1,0 +1,101 @@
+name: Validate and publish AF repair
+on:
+  push:
+    branches: [AF]
+    paths:
+      - 'tools/patches/af-repair-*.b64'
+      - '.github/workflows/af-apply-repair.yml'
+permissions:
+  contents: read
+concurrency:
+  group: af-repair-publish
+  cancel-in-progress: false
+jobs:
+  cpu:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Apply checksum-verified repair
+        shell: bash
+        run: |
+          python -c "from pathlib import Path; import base64,lzma,hashlib; d=lzma.decompress(base64.b64decode(''.join(Path('tools/patches/af-repair-'+str(i)+'.b64').read_text() for i in range(5)))); assert hashlib.sha256(d).hexdigest()=='659e7ebbcabebedbbe9912350f53350b7c842e6e53c5e84c682895c2df2e4dde'; Path('af-repair.patch').write_bytes(d)"
+          git apply --check af-repair.patch
+          git apply af-repair.patch
+          python -c "from pathlib import Path; p=Path('tools/tests/anisotropic_filtering/CMakeLists.txt'); s=p.read_text(); needle='    target_compile_features(\u0024{target} PRIVATE cxx_std_20)'; assert s.count(needle)==1; p.write_text(s.replace(needle,needle+'\n    target_compile_definitions(\u0024{target} PRIVATE NOMINMAX)'))"
+          git diff --check
+      - name: Prepare pinned public sampler types
+        run: git submodule update --init --depth 1 thirdparty/plume
+      - name: Test production palette and renderer methods
+        shell: bash
+        run: |
+          sanitize=OFF
+          if [ "$RUNNER_OS" = Linux ]; then sanitize=ON; fi
+          cmake -S tools/tests/anisotropic_filtering -B out/af -DCMAKE_BUILD_TYPE=Debug -DLO_AF_SANITIZE=$sanitize
+          cmake --build out/af --config Debug --parallel 2
+          ctest --test-dir out/af -C Debug --output-on-failure
+      - name: Test settings interaction and rasterization
+        run: |
+          cmake -S tools/tests/settings_menu -B out/settings-menu -DCMAKE_BUILD_TYPE=Release
+          cmake --build out/settings-menu --config Release --parallel 2
+          ctest --test-dir out/settings-menu -C Release --output-on-failure
+  vulkan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Apply checksum-verified repair
+        shell: bash
+        run: |
+          python -c "from pathlib import Path; import base64,lzma,hashlib; d=lzma.decompress(base64.b64decode(''.join(Path('tools/patches/af-repair-'+str(i)+'.b64').read_text() for i in range(5)))); assert hashlib.sha256(d).hexdigest()=='659e7ebbcabebedbbe9912350f53350b7c842e6e53c5e84c682895c2df2e4dde'; Path('af-repair.patch').write_bytes(d)"
+          git apply --check af-repair.patch
+          git apply af-repair.patch
+          python -c "from pathlib import Path; p=Path('tools/tests/anisotropic_filtering/CMakeLists.txt'); s=p.read_text(); needle='    target_compile_features(\u0024{target} PRIVATE cxx_std_20)'; assert s.count(needle)==1; p.write_text(s.replace(needle,needle+'\n    target_compile_definitions(\u0024{target} PRIVATE NOMINMAX)'))"
+      - name: Prepare pinned Plume backend
+        run: |
+          git submodule update --init --depth 1 thirdparty/plume
+          git -C thirdparty/plume apply ../../tools/patches/plume-lostodyssey.patch
+          git -C thirdparty/plume submodule update --init --depth 1 contrib/volk contrib/Vulkan-Headers contrib/VulkanMemoryAllocator
+      - name: Install software Vulkan and validation
+        run: sudo apt-get update -qq && sudo apt-get install -y libx11-dev glslang-tools mesa-vulkan-drivers vulkan-validationlayers
+      - name: Execute native descriptor isolation and readback
+        run: |
+          cmake -S tools/tests/anisotropic_filtering -B out/af-vk -DCMAKE_BUILD_TYPE=Debug -DLO_AF_VULKAN_TEST=ON
+          cmake --build out/af-vk --parallel 2
+          export VK_ICD_FILENAMES="$(find /usr/share/vulkan/icd.d -name '*lvp*' -print -quit)"
+          test -n "$VK_ICD_FILENAMES"
+          ctest --test-dir out/af-vk --output-on-failure
+  publish:
+    needs: [cpu, vulkan]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Commit only the tested repair and remove transport helpers
+        env:
+          EXPECTED_HEAD: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git ls-remote origin refs/heads/AF | cut -f1)" = "$EXPECTED_HEAD"
+          python -c "from pathlib import Path; import base64,lzma,hashlib; d=lzma.decompress(base64.b64decode(''.join(Path('tools/patches/af-repair-'+str(i)+'.b64').read_text() for i in range(5)))); assert hashlib.sha256(d).hexdigest()=='659e7ebbcabebedbbe9912350f53350b7c842e6e53c5e84c682895c2df2e4dde'; Path('af-repair.patch').write_bytes(d)"
+          git apply --check af-repair.patch
+          git apply af-repair.patch
+          python -c "from pathlib import Path; p=Path('tools/tests/anisotropic_filtering/CMakeLists.txt'); s=p.read_text(); needle='    target_compile_features(\u0024{target} PRIVATE cxx_std_20)'; assert s.count(needle)==1; p.write_text(s.replace(needle,needle+'\n    target_compile_definitions(\u0024{target} PRIVATE NOMINMAX)'))"
+          git rm .github/workflows/af-apply-repair.yml tools/patches/af-repair-*.b64
+          git add --all -- .github/workflows/af-regression.yml .github/workflows/af-repair-workspace.yml LostOdysseyRecomp/gpu/renderer.cpp LostOdysseyRecomp/gpu/sampler_description.h LostOdysseyRecomp/gpu/sampler_palette.h LostOdysseyRecomp/settings/config.cpp LostOdysseyRecomp/settings/translations.h docs/notes/anisotropic-filtering.md tools/tests/anisotropic_filtering tools/tests/settings_menu/generate_runtime_fixture.py
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m "Fix live AF with immutable sampler table generations and regression tests" -m "Preserve recorded descriptors through each batch fence, publish replacements transactionally, keep AF-independent recipe indices, protect non-material sampling, and snapshot settings once per frame. Validated by Windows/Linux CPU and menu fixtures plus software Vulkan dispatch/readback."
+          git push origin HEAD:refs/heads/AF
+          git rev-parse HEAD
