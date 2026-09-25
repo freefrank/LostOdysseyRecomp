@@ -463,13 +463,29 @@ upscaling::OutputSizing Controller::QueryOutputSizing(const plume::VulkanInterfa
     upscaling::OutputSizing sizing;
     sizing.key = key;
     const auto setAll = [&](upscaling::SizingState state, std::optional<int32_t> result = std::nullopt) {
-        for (auto& mode : sizing.modes) { mode.state = state; mode.ngxResult = result; }
+        for (auto& mode : sizing.modes) {
+            mode.state = state;
+            mode.ngxResult = result;
+            mode.issue = upscaling::SizingIssue::Prerequisite;
+        }
     };
     if (!key.outputWidth || !key.outputHeight) { setAll(upscaling::SizingState::Error); return sizing; }
 #if !defined(LO_DLSS_SDK)
     setAll(upscaling::SizingState::Unavailable);
     return sizing;
 #else
+    // Reopen only on a bounded sizing request for this same device, with no
+    // resources left from initialization. Never clear a device-loss latch.
+    if (sessionFailed_) {
+        if (sessionInterface_ != &vulkanInterface || sessionDevice_ != &device ||
+            sessionInstance_ != vulkanInterface.instance || !sessionRetryable_ ||
+            sessionInitialized_ || capabilityParameters_ || featureParameters_ || HasFeatureState()) {
+            setAll(upscaling::SizingState::Error);
+            return sizing;
+        }
+        sessionFailed_ = false;
+        sessionRetryable_ = false;
+    }
     const auto& instanceStatus = vulkanInterface.getExternalExtensionStatus();
     const auto& deviceStatus = device.getExternalExtensionStatus();
     if (instanceStatus.state != plume::VulkanExtensionState::Enabled || deviceStatus.state != plume::VulkanExtensionState::Enabled) {
@@ -536,6 +552,7 @@ upscaling::OutputSizing Controller::QueryOutputSizing(const plume::VulkanInterfa
         int raw = 0;
         const auto getResult = NVSDK_NGX_Parameter_GetI(parameters, parameter, &raw);
         value.raw = int32_t(getResult);
+        value.value.reset();
         if (!NVSDK_NGX_FAILED(getResult)) value.value = raw;
         RecordCall(keyName, int32_t(getResult), NVSDK_NGX_FAILED(getResult));
     };
@@ -553,25 +570,69 @@ upscaling::OutputSizing Controller::QueryOutputSizing(const plume::VulkanInterfa
         // SDK array that can go out of bounds when DLAA is appended.
         for (const auto quality : upscaling::kDlssQualityModes) {
             auto& mode = sizing.modes[upscaling::DlssQualityIndex(quality)];
+            // GetOptimalSettings mutates its capability map. Give each mode a
+            // separate map so missing outputs cannot inherit the previous mode.
+            NVSDK_NGX_Parameter* modeParameters = nullptr;
+            const auto parameterResult = NVSDK_NGX_VULKAN_GetCapabilityParameters(&modeParameters);
+            RecordCall("Sizing_GetModeCapabilityParameters", int32_t(parameterResult), NVSDK_NGX_FAILED(parameterResult));
+            if (NVSDK_NGX_FAILED(parameterResult) || !modeParameters) {
+                mode.state = upscaling::SizingState::Error;
+                mode.issue = upscaling::SizingIssue::CapabilityParameters;
+                mode.ngxResult = int32_t(parameterResult);
+                if (modeParameters) {
+                    const auto cleanup = NVSDK_NGX_VULKAN_DestroyParameters(modeParameters);
+                    mode.cleanupResult = int32_t(cleanup);
+                    RecordCall("Sizing_DestroyModeParameters", int32_t(cleanup), NVSDK_NGX_FAILED(cleanup));
+                    if (NVSDK_NGX_FAILED(cleanup)) mode.issue = upscaling::SizingIssue::CleanupFailed;
+                }
+                continue;
+            }
             uint32_t optimalWidth = 0, optimalHeight = 0, maxWidth = 0, maxHeight = 0, minWidth = 0, minHeight = 0;
             float sharpness = 0.0f;
-            const auto optimalResult = NGX_DLSS_GET_OPTIMAL_SETTINGS(parameters, key.outputWidth, key.outputHeight,
+            const auto optimalResult = NGX_DLSS_GET_OPTIMAL_SETTINGS(modeParameters, key.outputWidth, key.outputHeight,
                 ToNgxQuality(quality), &optimalWidth, &optimalHeight, &maxWidth, &maxHeight, &minWidth, &minHeight, &sharpness);
             mode.ngxResult = int32_t(optimalResult);
             RecordCall("Sizing_DLSS_GetOptimalSettings", int32_t(optimalResult), NVSDK_NGX_FAILED(optimalResult));
-            const bool valid = !NVSDK_NGX_FAILED(optimalResult) && optimalWidth && optimalHeight && minWidth && minHeight &&
-                maxWidth && maxHeight && minWidth <= optimalWidth && optimalWidth <= maxWidth &&
-                minHeight <= optimalHeight && optimalHeight <= maxHeight &&
-                upscaling::ValidDlssRenderExtent(quality, {optimalWidth, optimalHeight}, {key.outputWidth, key.outputHeight});
-            // A DLAA-only failure must not disable the three existing SR modes.
-            mode.state = valid ? upscaling::SizingState::Ready :
+            if (!NVSDK_NGX_FAILED(optimalResult)) {
+                // The helper returns the callback status, not the required
+                // output getter statuses. Its optional min/max fallback stays.
+                unsigned int checkedWidth = 0, checkedHeight = 0;
+                const auto widthResult = NVSDK_NGX_Parameter_GetUI(modeParameters, NVSDK_NGX_Parameter_OutWidth, &checkedWidth);
+                const auto heightResult = NVSDK_NGX_Parameter_GetUI(modeParameters, NVSDK_NGX_Parameter_OutHeight, &checkedHeight);
+                mode.optimalWidthResult = int32_t(widthResult);
+                mode.optimalHeightResult = int32_t(heightResult);
+                if (NVSDK_NGX_FAILED(widthResult) || NVSDK_NGX_FAILED(heightResult) ||
+                    checkedWidth != optimalWidth || checkedHeight != optimalHeight)
+                    mode.issue = upscaling::SizingIssue::OptimalRead;
+                else if (!optimalWidth || !optimalHeight || !minWidth || !minHeight || !maxWidth || !maxHeight)
+                    mode.issue = upscaling::SizingIssue::ZeroExtent;
+                else if (minWidth > optimalWidth || optimalWidth > maxWidth ||
+                    minHeight > optimalHeight || optimalHeight > maxHeight)
+                    mode.issue = upscaling::SizingIssue::InvalidRange;
+                else if (!upscaling::ValidDlssRenderExtent(quality,
+                    {optimalWidth, optimalHeight}, {key.outputWidth, key.outputHeight}))
+                    mode.issue = upscaling::SizingIssue::DlaaExtentMismatch;
+            } else {
+                mode.issue = upscaling::SizingIssue::OptimalQuery;
+            }
+            mode.state = mode.issue == upscaling::SizingIssue::None ? upscaling::SizingState::Ready :
                 optimalResult == NVSDK_NGX_Result_FAIL_FeatureNotSupported ? upscaling::SizingState::Unavailable : upscaling::SizingState::Error;
-            // Retain raw extents even on error, for diagnostics only. Consumers
-            // must still require Ready; never invent a DLAA 1:1 vendor result.
-            mode.optimal = {optimalWidth, optimalHeight}; mode.minimum = {minWidth, minHeight}; mode.maximum = {maxWidth, maxHeight};
-            std::fprintf(stderr, "DLSS sizing: mode=%u output=%ux%u optimal=%ux%u minimum=%ux%u maximum=%ux%u raw_ngx=0x%08x state=%u\n",
+            // Retain actual vendor extents, even on failure. Never invent DLAA sizing.
+            mode.optimal = {optimalWidth, optimalHeight};
+            mode.minimum = {minWidth, minHeight};
+            mode.maximum = {maxWidth, maxHeight};
+            const auto cleanup = NVSDK_NGX_VULKAN_DestroyParameters(modeParameters);
+            mode.cleanupResult = int32_t(cleanup);
+            RecordCall("Sizing_DestroyModeParameters", int32_t(cleanup), NVSDK_NGX_FAILED(cleanup));
+            if (NVSDK_NGX_FAILED(cleanup)) {
+                mode.state = upscaling::SizingState::Error;
+                mode.issue = upscaling::SizingIssue::CleanupFailed;
+            }
+            std::fprintf(stderr, "DLSS sizing: mode=%u output=%ux%u optimal=%ux%u minimum=%ux%u maximum=%ux%u raw_ngx=0x%08x state=%u issue=%s get_width=0x%08x get_height=0x%08x cleanup=0x%08x\n",
                 unsigned(quality), key.outputWidth, key.outputHeight, optimalWidth, optimalHeight,
-                minWidth, minHeight, maxWidth, maxHeight, unsigned(optimalResult), unsigned(mode.state));
+                minWidth, minHeight, maxWidth, maxHeight, unsigned(optimalResult), unsigned(mode.state),
+                upscaling::SizingIssueName(mode.issue), unsigned(mode.optimalWidthResult.value_or(0)),
+                unsigned(mode.optimalHeightResult.value_or(0)), unsigned(cleanup));
         }
     }
     if (temporarySession) {
@@ -579,7 +640,13 @@ upscaling::OutputSizing Controller::QueryOutputSizing(const plume::VulkanInterfa
         RecordCall("Sizing_DestroyParameters", int32_t(destroyResult), NVSDK_NGX_FAILED(destroyResult));
         const auto shutdownResult = NVSDK_NGX_VULKAN_Shutdown1(device.vk);
         RecordCall("Sizing_Shutdown1", int32_t(shutdownResult), NVSDK_NGX_FAILED(shutdownResult));
-        if (NVSDK_NGX_FAILED(destroyResult) || NVSDK_NGX_FAILED(shutdownResult)) setAll(upscaling::SizingState::Error);
+        if (NVSDK_NGX_FAILED(destroyResult) || NVSDK_NGX_FAILED(shutdownResult)) {
+            for (auto& mode : sizing.modes) {
+                mode.state = upscaling::SizingState::Error;
+                mode.issue = upscaling::SizingIssue::CleanupFailed;
+                mode.cleanupResult = int32_t(NVSDK_NGX_FAILED(destroyResult) ? destroyResult : shutdownResult);
+            }
+        }
     }
     return sizing;
 #endif
@@ -592,35 +659,54 @@ SrStatus Controller::EnsureSession(const plume::VulkanDevice& device) {
 #else
     if (sessionDevice_ && sessionDevice_ != &device) return SrStatus::NeedsReconfigure;
     if (sessionInstance_ == VK_NULL_HANDLE) return SrStatus::Bypass;
-    if (sessionInitialized_) return capabilityParameters_ ? SrStatus::Executable : SrStatus::Failed;
     if (sessionFailed_) return SrStatus::Failed;
+    if (sessionInitialized_) return capabilityParameters_ ? SrStatus::Executable : SrStatus::Failed;
     const auto& deviceStatus = device.getExternalExtensionStatus();
     if ((sessionInterface_ && sessionInterface_->getExternalExtensionStatus().state != plume::VulkanExtensionState::Enabled) ||
         deviceStatus.state != plume::VulkanExtensionState::Enabled)
         return SrStatus::Bypass;
 
     std::string reason;
-    if (!CreateApplicationDataPath(reason)) { sessionFailed_ = true; return SrStatus::Failed; }
+    if (!CreateApplicationDataPath(reason)) {
+        sessionFailed_ = true;
+        sessionRetryable_ = true; // No NGX call or resource exists yet.
+        return SrStatus::Failed;
+    }
     DiscoveryInfo info(applicationDataPath_, runtimePath_);
     auto result = NVSDK_NGX_VULKAN_Init_with_ProjectID(kProjectId, NVSDK_NGX_ENGINE_TYPE_CUSTOM, "LostOdysseyRecomp",
         info.appDataPath.c_str(), sessionInstance_, device.physicalDevice, device.vk, vkGetInstanceProcAddr,
         vkGetDeviceProcAddr, &info.featureInfo);
     RecordCall("Session_Init_with_ProjectID", int32_t(result), NVSDK_NGX_FAILED(result));
-    if (NVSDK_NGX_FAILED(result)) { sessionFailed_ = true; return SrStatus::Failed; }
+    if (NVSDK_NGX_FAILED(result)) {
+        sessionFailed_ = true;
+        // Platform errors may conceal device loss and remain terminal.
+        sessionRetryable_ = result == NVSDK_NGX_Result_Fail || result == NVSDK_NGX_Result_FAIL_NotInitialized;
+        return SrStatus::Failed;
+    }
 
     NVSDK_NGX_Parameter* capabilities = nullptr;
     result = NVSDK_NGX_VULKAN_GetCapabilityParameters(&capabilities);
     RecordCall("Session_GetCapabilityParameters", int32_t(result), NVSDK_NGX_FAILED(result));
     if (NVSDK_NGX_FAILED(result) || !capabilities) {
+        bool clean = true;
+        if (capabilities) {
+            const auto destroyResult = NVSDK_NGX_VULKAN_DestroyParameters(capabilities);
+            RecordCall("Session_DestroyCapabilityParameters", int32_t(destroyResult), NVSDK_NGX_FAILED(destroyResult));
+            clean = !NVSDK_NGX_FAILED(destroyResult);
+        }
         const auto shutdownResult = NVSDK_NGX_VULKAN_Shutdown1(device.vk);
         RecordCall("Session_Shutdown1", int32_t(shutdownResult), NVSDK_NGX_FAILED(shutdownResult));
         sessionFailed_ = true;
+        sessionRetryable_ = clean && !NVSDK_NGX_FAILED(shutdownResult) &&
+            (result == NVSDK_NGX_Result_Success || result == NVSDK_NGX_Result_Fail ||
+             result == NVSDK_NGX_Result_FAIL_NotInitialized);
         return SrStatus::Failed;
     }
     const auto read = [&](const char* name, const char* key, CapabilityValue& value) {
         int raw = 0;
         const auto getResult = NVSDK_NGX_Parameter_GetI(capabilities, key, &raw);
         value.raw = int32_t(getResult);
+        value.value.reset();
         if (!NVSDK_NGX_FAILED(getResult)) value.value = raw;
         RecordCall(name, int32_t(getResult), NVSDK_NGX_FAILED(getResult));
     };
@@ -637,12 +723,23 @@ SrStatus Controller::EnsureSession(const plume::VulkanDevice& device) {
         RecordCall("Session_DestroyCapabilityParameters", int32_t(destroyResult), NVSDK_NGX_FAILED(destroyResult));
         const auto shutdownResult = NVSDK_NGX_VULKAN_Shutdown1(device.vk);
         RecordCall("Session_Shutdown1", int32_t(shutdownResult), NVSDK_NGX_FAILED(shutdownResult));
-        sessionFailed_ = capability.decision == CapabilityDecision::ApiError;
-        return capability.decision == CapabilityDecision::Unavailable ? SrStatus::Bypass : SrStatus::Failed;
+        const bool clean = !NVSDK_NGX_FAILED(destroyResult) && !NVSDK_NGX_FAILED(shutdownResult);
+        const auto retryableResult = [](const std::optional<int32_t>& raw) {
+            return raw && (*raw == int32_t(NVSDK_NGX_Result_Success) ||
+                *raw == int32_t(NVSDK_NGX_Result_Fail) || *raw == int32_t(NVSDK_NGX_Result_FAIL_NotInitialized));
+        };
+        sessionFailed_ = !clean || capability.decision == CapabilityDecision::ApiError;
+        sessionRetryable_ = clean && capability.decision == CapabilityDecision::ApiError &&
+            retryableResult(report_.srAvailable.raw) && retryableResult(report_.needsUpdatedDriver.raw) &&
+            retryableResult(report_.minDriverVersionMajor.raw) && retryableResult(report_.minDriverVersionMinor.raw) &&
+            retryableResult(report_.featureInitResult.raw) &&
+            (!report_.featureInitResult.value || retryableResult(report_.featureInitResult.value));
+        return clean && capability.decision == CapabilityDecision::Unavailable ? SrStatus::Bypass : SrStatus::Failed;
     }
     capabilityParameters_ = capabilities;
     sessionDevice_ = &device;
     sessionInitialized_ = true;
+    sessionRetryable_ = false;
     report_.state = ProbeState::Available;
     report_.reason = "NGX persistent Super Sampling session ready";
     return SrStatus::Executable;
@@ -873,6 +970,7 @@ void Controller::ReleaseCompletedThrough(uint64_t submissionSerial) {
 
 void Controller::AbandonUsesAfterDeviceLoss() {
     srUses_.AbandonAfterDeviceLoss();
+    sessionRetryable_ = false;
     sessionFailed_ = true;
 }
 
@@ -911,6 +1009,7 @@ void Controller::ShutdownAfterGpuDrain() {
 #endif
     sessionInitialized_ = false;
     sessionFailed_ = false;
+    sessionRetryable_ = false;
     sessionInterface_ = nullptr;
     sessionDevice_ = nullptr;
     sessionInstance_ = VK_NULL_HANDLE;
