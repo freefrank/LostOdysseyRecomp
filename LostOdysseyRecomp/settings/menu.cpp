@@ -411,6 +411,10 @@ void Publish(uint8_t *base, uint32_t config)
                                         std::min(edit.fsrSharpnessPercent, 100u));
         fsrSharpness.hidden = GraphicsRowHidden(int(GraphicsRow::FsrSharpness));
         placeGraphics(GraphicsRow::FsrSharpness, std::move(fsrSharpness));
+        const uint32_t afChoice = edit.anisotropicFiltering == 16 ? 4 : edit.anisotropicFiltering == 8 ? 3 :
+                                  edit.anisotropicFiltering == 4 ? 2 : edit.anisotropicFiltering == 2 ? 1 : 0;
+        placeGraphics(GraphicsRow::AnisotropicFiltering, makeChoices(L"Anisotropic filtering", L"各向異性過濾",
+                   {Tr(L"Off", L"關"), L"2×", L"4×", L"8×", L"16×"}, afChoice));
         placeGraphics(GraphicsRow::ScalingQuality, makeChoices(L"Scaling filter", L"縮放濾鏡",
                    {Tr(L"Standard", L"標準"), Tr(L"High", L"高")},
                    std::min(edit.scalingQuality, 1u)));
@@ -499,6 +503,10 @@ void Publish(uint8_t *base, uint32_t config)
         case GraphicsRow::FsrSharpness:
             next.help = Tr(L"FSR sharpening: Off disables RCAS; 1-100% sets sharpening strength.",
                            L"FSR 銳化：關閉會停用 RCAS；1-100% 調整銳化強度。");
+            break;
+        case GraphicsRow::AnisotropicFiltering:
+            next.help = Tr(L"Improves texture clarity at oblique viewing angles. Changes apply immediately after saving.",
+                           L"提升斜角觀看時的紋理清晰度。儲存後立即套用。");
             break;
         case GraphicsRow::ScalingQuality:
             next.help = Tr(L"Controls filtering when upscaling is active.",
@@ -1080,6 +1088,14 @@ PPC_FUNC(sub_822F19B0)
             case GraphicsRow::FsrSharpness:
                 edit.fsrSharpnessPercent = uint32_t(std::clamp(int(edit.fsrSharpnessPercent) + delta, 0, 100));
                 break;
+            case GraphicsRow::AnisotropicFiltering:
+            {
+                constexpr uint32_t levels[] = {0, 2, 4, 8, 16};
+                uint32_t index = edit.anisotropicFiltering == 16 ? 4 : edit.anisotropicFiltering == 8 ? 3 :
+                                 edit.anisotropicFiltering == 4 ? 2 : edit.anisotropicFiltering == 2 ? 1 : 0;
+                edit.anisotropicFiltering = levels[cycle(index, 5)];
+                break;
+            }
             case GraphicsRow::ScalingQuality:
                 edit.scalingQuality = cycle(edit.scalingQuality, 2);
                 break;

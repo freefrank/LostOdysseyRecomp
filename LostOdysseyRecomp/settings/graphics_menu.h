@@ -35,5 +35,6 @@ inline bool IsAction(int tab, int row)
            (tab == 3 && row == 3);
 }
 static_assert(int(GraphicsRow::DlssQuality) + 1 == int(GraphicsRow::FsrSharpness));
+static_assert(int(GraphicsRow::FsrSharpness) + 1 == int(GraphicsRow::AnisotropicFiltering));
 static_assert(int(GraphicsRow::Save) + 1 == int(GraphicsRow::Count));
 }

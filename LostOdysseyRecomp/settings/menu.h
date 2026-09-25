@@ -17,11 +17,12 @@ enum class GraphicsRow : int
     AntiAliasing = 4,
     DlssQuality = 5,
     FsrSharpness = 6,
-    ScalingQuality = 7,
-    FrameRate = 8,
-    Brightness = 9,
-    Save = 10,
-    Count = 11,
+    AnisotropicFiltering = 7,
+    ScalingQuality = 8,
+    FrameRate = 9,
+    Brightness = 10,
+    Save = 11,
+    Count = 12,
 };
 // Called by input polling before returning the guest-facing controller state.
 bool FilterInput(uint16_t &buttons, int16_t leftX, int16_t leftY);
