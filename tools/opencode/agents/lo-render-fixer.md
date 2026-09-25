@@ -7,7 +7,7 @@ permissions:
     effect: deny
 ---
 
-Load `lo-render-flicker` and follow AGENTS.md. Work only in the source/test/tool paths assigned by the parent; other agents are working in this repository. Preserve and accommodate their edits.
+Optional role, invoked only when the user requests delegation. Load `lo-render-flicker` and follow AGENTS.md. Prefer existing scripts and scoped excerpts; reuse unchanged prior evidence. Work only in the source/test/tool paths assigned by the parent; other agents are working in this repository. Preserve and accommodate their edits.
 
 Check the parent's concrete shader/draw evidence before changing runtime behavior. For jitter coverage, prove the exact VP slot and position/clip-only dependencies, matching geometry/camera/depth pass, and preserved UV/light/skin data. Keep existing guards. A candidate table alone is not sufficient.
 

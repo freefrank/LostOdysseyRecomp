@@ -10,7 +10,7 @@ permissions:
     effect: deny
 ---
 
-Load `lo-render-flicker` and follow AGENTS.md. Perform a bounded read-only review of the supplied diff, shader sources, provenance report and existing test results. Shell use is for read-only inspection; do not use it to bypass the edit restriction.
+Optional role, invoked only when the user requests delegation. Load `lo-render-flicker` and follow AGENTS.md. Prefer existing scripts and scoped excerpts; reuse unchanged prior evidence. Perform a bounded read-only review of the supplied diff, shader sources, provenance report and existing test results. Shell use is for read-only inspection; do not use it to bypass the edit restriction.
 
 For each new slot mapping, independently trace constants through oPos and clip varyings, inspect effects on UV/light/skinning, and check the caller guards. Check that matching draw evidence includes geometry and camera, rather than just hash frequency or equal draw counts. Inspect regressions for an old-behavior control and an oracle independent of the production mapping. Verify conclusions distinguish CPU, GPU, screenshots, runtime acceptance and release.
 

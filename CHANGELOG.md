@@ -8,6 +8,8 @@ One record of completed changes, with unpublished work separated from verified r
 
 ### English
 
+- OpenCode render workflow now defaults to one agent, script summaries and reuse of unchanged shader reviews/tests; additional agents require a user request.
+
 - Developer tooling: added reusable offline F1 capture preview, full-frame coverage, trace, and temporal-jitter candidate tools, a streaming private feedback-coverage report, a task-based tools index, the recovered private feedback-archive package, and an installable OpenCode render-investigation workflow; reviewed candidates remain separate from the production shader map.
 - Temporal jitter mapping batch: added 35 reviewed VS mappings (map 84→119) across slots 0/1/4/7/8, with 44 candidate VS held for unresolved clip-XY producer or mixed-camera evidence. `LoTemporalJitterTest --feedback-mapping-batch` passed 216,625 focused checks; source, synthetic CPU and representative-PS scope is recorded in the mapping manifest, while GPU, player and release validation remain pending.
 - Capture CLI maintenance: fixed the direct `image_diff.py` subprocess path after an `inspect.py` import collision and kept the image comparison path Pillow-only; two affected checks, including the direct CLI regression, passed.
@@ -15,6 +17,8 @@ One record of completed changes, with unpublished work separated from verified r
 - Exploration bridge flicker investigation: aligned two observed material position paths with scene depth through the temporal-scene slot mappings `a027ab99fa3e3b0d -> slot 7` and `ff769ec7b88e575f -> slot 8`. The focused `--captured-f2548-layers` check passed 722,316 checks across 11 captured draws and 32 phases at 720p through 4K; the old-material negative control showed 0.487760 px separation. Same-scene visual acceptance and release remain pending.
 
 ### 简体中文
+
+- OpenCode 渲染工作流默认单 agent，先运行脚本并读取摘要，复用未变化的 shader 审核及测试结果；仅在用户要求时启动其他 agent。
 
 - 开发工具：新增可复用的 F1 捕获预览、全帧覆盖、寄存器状态和时序抖动候选离线工具、私有反馈覆盖流式报告、按任务组织的工具索引、恢复的私有反馈归档包，以及可安装的 OpenCode 渲染调查工作流；审核中的候选与生产 shader 映射分离。
 - 时序抖动映射批次：新增 35 条已审阅 VS 映射（映射表 84→119），覆盖 slot 0/1/4/7/8；44 个候选 VS 因 clip-XY producer 或混合相机证据不足暂缓。`LoTemporalJitterTest --feedback-mapping-batch` 通过 216,625 项定向检查；源码、合成 CPU 和代表性 PS 范围记录在映射清单中，GPU、玩家和发布验证仍待完成。
