@@ -9,7 +9,8 @@ namespace gpu::temporal
 // tire layers in Map3 frame 24389 and battle terrain/objects/skinned layers in
 // frames 2871 and 26786, Map16 ground/material passes in frame 18420, and
 // static/skinned scene paths in captures 17624-17626 and 21480-21482.
-// Also includes source-reviewed player-feedback paths (2026-09-25).
+// Also includes source-reviewed player-feedback paths (2026-09-25), plus the
+// separately marked, user-accepted screen-sampling batch.
 // A slot alone never
 // authorizes jitter: renderer also checks viewport/VTE, ordered scene allocation,
 // and exact unmodified camera bits. Fullscreen/postprocess/UI shaders are absent.
@@ -105,6 +106,23 @@ inline int PositionVPSlot(uint64_t shader) {
     case 0xb14ecb62fe79be01ull:case 0xc01a72e0eb5e026aull:case 0xc560d140940528bcull:
     case 0xd6ead6f46d70b19aull:case 0xe8747802c970e598ull:case 0xf5ca0812e57cd43cull:return 7;
     case 0x0e5a12f70e7cb5beull:case 0xf3838aa008bc39d8ull:return 8;
+    // 2026-09-25 screen-sampling batch: source-reviewed VP slots and user
+    // scene acceptance; this does not establish every producer/consumer path.
+    // See docs/notes/jitter-screen-batch-2026-09-25.md.
+    case 0x02d8d17463de32cdull:case 0x1b99a8476ec606b1ull:case 0x21b1d8c82e81fa02ull:
+    case 0x22225401fc8ea621ull:case 0x23041a74b20c4332ull:case 0x24ac4f2d476bf078ull:
+    case 0x29c6ee5dc3e841f5ull:case 0x30c7df4b111290faull:case 0x32f09dcd84b93237ull:
+    case 0x3359fe19a89b5e42ull:case 0x35e5f4651ffc54a2ull:case 0x3a818cf89cbff74aull:
+    case 0x3ee6416e9416bfc4ull:case 0x3f522a748751d16aull:case 0x418b5eb1b1726eb9ull:
+    case 0x4523afe2cc9fe50dull:case 0x48b893348dc956c2ull:case 0x4a25a2f1ae004a7full:
+    case 0x5d51dfb03c579740ull:case 0x5ef85743ad497c11ull:case 0x795375250cf5c245ull:
+    case 0x7baa15e8628a2d31ull:case 0x840bd920f0539521ull:case 0x912f560f1b64450bull:
+    case 0x951ceb61bbce7190ull:case 0x9a771ff60d9fd73full:case 0x9f41368e6ee52741ull:
+    case 0x9fa6242c88d0bd9dull:case 0xb8f5cf595e31578bull:case 0xbc5225aaa002037cull:
+    case 0xbf8d4de60c64f55dull:case 0xc66b9e0de0e9331cull:case 0xd1c61a2a7b0049d5ull:
+    case 0xd24619b1a13523dcull:case 0xf25929da09e30a5cull:return 7;
+    case 0x490e7455d880426cull:case 0x8d32020847a4f6b2ull:case 0xb60fba087b51eb53ull:
+    case 0xd34f09f9fcce78a1ull:case 0xe0624eec8073b957ull:return 8;
     default:return -1;
     }
 }

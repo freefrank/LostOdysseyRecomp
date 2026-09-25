@@ -24,7 +24,7 @@ Windows x64 · Direct3D 12 · Vulkan · PowerPC 静态重编译
 原生 NVIDIA DLSS 超分辨率与 DLAA 属于实验性功能。
 Windows 与 Linux 正式发布包中已内置官方 NGX 运行库；画质与稳定性仍在验证中。
 
-开发构建包含 Hybrid 相机／深度运动回退和有界 DLSS 尺寸恢复。
+v0.6.20 候选包含 Hybrid 相机／深度运动回退、有界 DLSS 尺寸恢复及文档记录的屏幕采样试验。文档范围内的手动验收已完成；发布和更广泛覆盖仍待完成。
 
 ### 实验性可选 FSR 超分
 

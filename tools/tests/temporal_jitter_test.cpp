@@ -11,6 +11,7 @@
 #include "f6131_late_floor_jitter_capture.h"
 #include "f6131_e810_jitter_capture.h"
 #include "feedback_mapping_cases.h"
+#include "screen_batch_cases.h"
 
 using namespace gpu::temporal;
 using Constants = std::array<uint32_t, 256 * 4>;
@@ -121,6 +122,125 @@ static Float4 FeedbackPosition(const Constants& c, Float4 v, const FeedbackMappi
     clip=Mad(world[1],C(c,shader.slot+2),clip);
     clip=Mad(world[0],C(c,shader.slot+1),clip);
     return Mad(world[2],C(c,shader.slot),clip);
+}
+
+// Only the source-reviewed final four-row VP accumulation is modeled here.
+// The 40 shader programs have three distinct scalar orders in their HLSL;
+// vertex fetch, preceding world operations and PS sampling are outside this test.
+static Float4 ScreenBatchClip(const Constants& c, unsigned slot,
+    screen_batch_capture::Family family, const Float4& source)
+{
+    using screen_batch_capture::Family;
+    const std::array<unsigned,4> order=family==Family::A ? std::array<unsigned,4>{3,1,0,2} :
+        family==Family::B ? std::array<unsigned,4>{0,3,2,1} :
+                            std::array<unsigned,4>{2,0,1,3};
+    auto clip=Mul(source[order[0]],C(c,slot+3));
+    clip=Mad(source[order[1]],C(c,slot+2),clip);
+    clip=Mad(source[order[2]],C(c,slot+1),clip);
+    return Mad(source[order[3]],C(c,slot),clip);
+}
+static void ScreenMappingBatch()
+{
+    std::array<uint64_t,40> seen{};
+    size_t unique=0;
+    double oldSeparation=0,maxPixelError=0;
+    const unsigned firstCheck=checks;
+    for (const auto& item:screen_batch_capture::pairs)
+    {
+        if (std::find(seen.begin(),seen.begin()+unique,item.vs)==seen.begin()+unique)
+        {
+            Check(unique<seen.size(),"screen batch fixture has at most 40 unique VS");
+            if (unique<seen.size()) seen[unique++]=item.vs;
+        }
+        Check(PositionVPSlot(item.vs)==int(item.slot) &&
+            DrawPositionVPSlot(item.vs,item.ps,false)==int(item.slot),
+            "screen batch observed VS/PS pair maps to its reviewed camera slot");
+        Constants original{},originalPs{};
+        for (unsigned i=0;i<original.size();++i)
+        {
+            original[i]=std::bit_cast<uint32_t>(float(int((i*17)%47)-23)/16.f);
+            originalPs[i]=std::bit_cast<uint32_t>(float(int((i*13)%31)-15)/8.f);
+        }
+        const std::array<float,16> vp{1.3f,.2f,.03f,.01f, -.15f,1.7f,.4f,-.07f,
+            .31f,-.22f,.91f,.13f, .25f,-.5f,.75f,4.f};
+        std::array<uint32_t,16> vpBits{};
+        for (unsigned i=0;i<16;++i)
+            vpBits[i]=original[item.slot*4+i]=std::bit_cast<uint32_t>(vp[i]);
+        for (const auto extent:{Viewport{0,0,2560,1440},Viewport{0,0,3840,2160}})
+            for (uint64_t phase=0;phase<32;++phase)
+            {
+                const SceneAnchor anchor{vpBits,extent,54};
+                auto changed=original,ps=originalPs,legacy=original,legacyPs=originalPs;
+                const auto jitter=ApplyDrawJitter(item.vs,item.ps,phase,true,true,&anchor,
+                    54,extent,changed.data(),ps.data());
+                Check(jitter.applied && jitter.slot==int(item.slot) &&
+                    !jitter.shadowCompensated && ps==originalPs,
+                    "screen batch jitter changes VS position without changing PS constants");
+                const auto omitted=ApplyDrawJitter(0,item.ps,phase,true,true,&anchor,
+                    54,extent,legacy.data(),legacyPs.data());
+                Check(!omitted.applied && omitted.rejection==JitterRejection::UnknownShader &&
+                    legacy==original && legacyPs==originalPs,
+                    "screen batch old unmapped control leaves uploads unchanged");
+                bool otherConstantsUnchanged=true;
+                for (unsigned i=0;i<changed.size();++i)
+                    if (i<item.slot*4 || i>=(item.slot+4)*4 || i%4>=2)
+                        otherConstantsUnchanged &= changed[i]==original[i];
+                Check(otherConstantsUnchanged,
+                    "screen batch keeps VP ZW and all non-VP VS constants exact");
+                for (const auto source:{Float4{-.4f,.7f,1.2f,1.f},
+                    Float4{1.1f,-.6f,2.3f,1.f},Float4{-1.2f,.3f,.8f,1.f}})
+                {
+                    const auto before=ScreenBatchClip(original,item.slot,item.family,source);
+                    const auto after=ScreenBatchClip(changed,item.slot,item.family,source);
+                    Check(std::isfinite(before[3]) && std::abs(before[3])>.1 &&
+                        after[2]==before[2] && after[3]==before[3],
+                        "screen batch independent final clip retains Z and W");
+                    for (unsigned axis=0;axis<2;++axis)
+                    {
+                        const double pixels=(double(after[axis])/after[3]-
+                            double(before[axis])/before[3])*(axis?extent.height:extent.width)*
+                            (axis?-.5:.5);
+                        const double expected=axis?jitter.sample.pixelY:jitter.sample.pixelX;
+                        maxPixelError=std::max(maxPixelError,std::abs(pixels-expected));
+                        oldSeparation=std::max(oldSeparation,std::abs(pixels));
+                        Check(std::abs(pixels-expected)<.003,
+                            "screen batch source-reviewed VP accumulation follows shared pixel jitter");
+                    }
+                }
+            }
+        const Viewport extent{0,0,2560,1440};
+        const SceneAnchor anchor{vpBits,extent,54};
+        for (unsigned rejection=0;rejection<6;++rejection)
+        {
+            auto values=original,ps=originalPs;
+            auto candidateAnchor=anchor;
+            bool enabled=true,compatible=true;
+            const SceneAnchor* selected=&candidateAnchor;
+            uint64_t depth=54;
+            auto expected=JitterRejection::Disabled;
+            if (rejection==0) enabled=false;
+            if (rejection==1) {compatible=false;expected=JitterRejection::IncompatibleViewport;}
+            if (rejection==2) {selected=nullptr;expected=JitterRejection::MissingCamera;}
+            if (rejection==3) {candidateAnchor.vpBits[0]^=1;expected=JitterRejection::CameraMismatch;}
+            if (rejection==4) {depth=55;expected=JitterRejection::DepthMismatch;}
+            if (rejection==5)
+            {
+                values[item.slot*4]=candidateAnchor.vpBits[0]=
+                    std::bit_cast<uint32_t>(std::numeric_limits<float>::infinity());
+                expected=JitterRejection::InvalidConstants;
+            }
+            const auto untouched=values;
+            const auto result=ApplyDrawJitter(item.vs,item.ps,0,enabled,compatible,
+                selected,depth,extent,values.data(),ps.data());
+            Check(!result.applied && result.rejection==expected &&
+                values==untouched && ps==originalPs,
+                "screen batch rejection guards leave both uploads untouched");
+        }
+    }
+    Check(unique==40 && oldSeparation>.3 && maxPixelError<.003,
+        "screen batch covers 40 unique shaders with visible old offset and bounded pixel error");
+    std::printf("Screen mapping batch: %zu observed VS/PS pairs, %zu VS, 32 phases, 1440p/4K; old separation %.6f px, max pixel error %.6f px, %u checks (CPU VP tail only)\n",
+        screen_batch_capture::pairs.size(),unique,oldSeparation,maxPixelError,checks-firstCheck);
 }
 
 static void FeedbackMappingBatch()
@@ -1356,8 +1476,8 @@ static void BattleP2CpuJitter()
     const float ndcScale[]{1,1,-1},ndcOffset[]{0,0,1};
     Check(IsJitterViewport({0,0,1280,720},0x43f,ndcScale,ndcOffset),
         "battle guest-camera gate uses verified 720p viewport");
-    Check(PositionVPSlot(0x02d8d17463de32cdull)<0,
-        "unreviewed screen-UV shader remains excluded");
+    Check(PositionVPSlot(0xbda41a11626a545cull)<0,
+        "mixed-camera shader remains excluded");
     Check(battle4bd[0].vp!=battle4bd[1].vp && battle4bd[1].vp!=battle4bd[2].vp &&
         battle4bd[0].other!=battle4bd[1].other && battle4bd[1].other!=battle4bd[2].other,
         "three historical skinned draws contain evolving camera and palette banks");
@@ -1465,6 +1585,8 @@ int main(int argc,char** argv)
 {
     if (argc==2 && std::strcmp(argv[1],"--feedback-mapping-batch")==0)
     { FeedbackMappingBatch();return 0; }
+    if (argc==2 && std::strcmp(argv[1],"--screen-mapping-batch")==0)
+    { ScreenMappingBatch();return 0; }
     if (argc==2 && std::strcmp(argv[1],"--battle-p2-cpu")==0)
     { BattleP2CpuJitter();return 0; }
     if (argc==2 && std::strcmp(argv[1],"--captured-f16385-layers")==0)
@@ -1488,6 +1610,7 @@ int main(int argc,char** argv)
     CapturedF6131LateFloor();
     CapturedF6131E810ConstantSample();
     FeedbackMappingBatch();
+    ScreenMappingBatch();
     TireMaterialCoverage();
     BattleCoverage();
     Map16Coverage();
