@@ -1,0 +1,41 @@
+name: Integrate issue 64 repair
+on:
+  push:
+    branches: [fix/issue-64-hybrid-motion]
+    paths: [.github/workflows/issue64-integrate.yml]
+permissions:
+  contents: write
+jobs:
+  integrate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+      - name: Apply identity-checked implementation and reviewed native refinements
+        run: |
+          python3 tools/tests/issue64/apply.py
+          python3 tools/tests/issue64/refine.py
+          git diff --check
+          cmake -S tools/tests/sr_hybrid -B out/integrate-cpu -DCMAKE_BUILD_TYPE=Release
+          cmake --build out/integrate-cpu --parallel 2
+          ctest --test-dir out/integrate-cpu -V
+      - name: Commit only the agreed source and tests, fast-forward only
+        env:
+          TARGET_BRANCH: fix/issue-64-hybrid-motion
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add LostOdysseyRecomp/gpu/dlss_ngx.cpp LostOdysseyRecomp/gpu/fsr_upscaler.cpp \
+            LostOdysseyRecomp/gpu/renderer.cpp LostOdysseyRecomp/gpu/temporal_frame_inputs.h \
+            LostOdysseyRecomp/gpu/temporal_history.h LostOdysseyRecomp/gpu/upscaling_plan.h \
+            LostOdysseyRecomp/gpu/upscaling_plan.cpp LostOdysseyRecomp/gpu/sr_hybrid_mask.h \
+            LostOdysseyRecomp/gpu/dlss_evaluate_capture.h tools/tests/motion_replay/CMakeLists.txt \
+            tools/tests/sr_hybrid_motion_gpu_test.cpp tools/tests/dlss_evaluate_capture_contract_test.cpp
+          git diff --cached --stat
+          git commit -m 'fix(gpu): integrate hybrid SR motion, native mask contracts and bounded NGX sizing recovery' \
+            -m 'Initial CPU/ASan, actual renderer compile and software Vulkan checks: Actions 36176747773. Native SDK-on/off source checks: Actions 36176866401. Reviewed follow-up corrects the NGX GENERAL-layout contract and exports actual mask bindings; final retained CI validates this committed tree. No game, RTX, performance or whole-issue acceptance claimed.'
+          git push origin "HEAD:refs/heads/$TARGET_BRANCH"
+          git log -1 --format='INTEGRATED_COMMIT=%H TREE=%T'
