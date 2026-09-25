@@ -143,6 +143,7 @@ CLAUDE.md
 
 # Local agent state and tool artifacts
 /.omo/
+/.omx/
 /node_modules/
 /nul
 /AGENTS.md
