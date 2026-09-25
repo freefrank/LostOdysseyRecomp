@@ -15,6 +15,12 @@ ASSIGN = re.compile(r"^(?:(?:float[1-4]?|uint|int|bool)\s+)?(r\d+|xePV|ps|oPos|a
 REF = re.compile(r"\b(r\d+|xePV|ps|oPos|a0|aL)(?:\.([xyzw]+))?\b")
 CONST = re.compile(r"\bc\[(\d+)([^\]]*)\](?:\.([xyzw]+))?")
 ROW = re.compile(r"(?:\*\s*c\[(\d+)\]\.[xyzw]{4}|c\[(\d+)\]\.[xyzw]{4}\s*\*|dot\([^;]*?c\[(\d+)\]\.[xyzw]{4})")
+STATIC_CONST_CALL = re.compile(r"\bXeConst\(\s*(\d+)u?\s*\)")
+
+
+def normalize_constants(text):
+    """Recognize current translator literal reads without resolving dynamic ones."""
+    return STATIC_CONST_CALL.sub(r"c[\1]", text)
 
 
 def analyze(text):
@@ -28,7 +34,7 @@ def analyze(text):
     nodes, state, writes, unknown = [], {}, [], []
     for index, line in enumerate(body):
         stripped = line.strip()
-        match = ASSIGN.fullmatch(stripped)
+        match = ASSIGN.fullmatch(normalize_constants(stripped))
         if not match:
             if re.search(r"\boPos\b.*=", stripped):
                 unknown.append(start+index+1)
@@ -73,12 +79,13 @@ def analyze(text):
     ids = closure(final)
     wids = closure(state.get(("oPos", "w"), set()))
     constants = sorted({value for n in ids for value, relative in nodes[n]["constants"] if not relative})
-    relative = any(relative for n in ids for value, relative in nodes[n]["constants"]) or any("XeConst(" in nodes[n]["rhs"] for n in ids)
+    relative = any(relative for n in ids for value, relative in nodes[n]["constants"]) or any(
+        re.search(r"\bXeConst\s*\(|\bc\[(?!\d+\])", nodes[n]["rhs"]) for n in ids)
     wconstants = sorted({value for n in wids for value, relative in nodes[n]["constants"] if not relative})
     source_lines = {nodes[n]["line"]: nodes[n]["text"] for n in ids}
     rows = defaultdict(list)
     for line, statement in sorted(source_lines.items()):
-        for match in ROW.finditer(statement):
+        for match in ROW.finditer(normalize_constants(statement)):
             rows[int(next(g for g in match.groups() if g is not None))].append(line)
     blocks = []
     for slot in sorted(rows):
@@ -90,6 +97,8 @@ def analyze(text):
     slots = sorted({block["slot"] for block in final_blocks})
     if unknown or control:
         classification = "unresolved_control_flow"
+    elif relative:
+        classification = "unresolved_dynamic_constants"
     elif slots and any(block["in_w"] for block in final_blocks):
         classification = "matrix_position_candidate"
     elif slots:

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Lost Odyssey Feedback"
+  short_description: "Track shader feedback evidence and review gaps"
+  default_prompt: "Use $lo-feedback-triage to update the feedback ledger and report new repair candidates and evidence gaps."

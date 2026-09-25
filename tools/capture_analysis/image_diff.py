@@ -7,8 +7,7 @@ from pathlib import Path
 
 
 def compare(first, second, roi=None):
-    from PIL import Image
-    import numpy as np
+    from PIL import Image, ImageChops, ImageStat
 
     with Image.open(first) as source_a, Image.open(second) as source_b:
         if source_a.size != source_b.size:
@@ -18,13 +17,16 @@ def compare(first, second, roi=None):
         x0, y0, x1, y1 = box
         if not (0 <= x0 < x1 <= width and 0 <= y0 < y1 <= height):
             raise ValueError("ROI must be within both images and nonempty")
-        a = np.asarray(source_a.convert("RGB").crop(box), dtype=np.int16)
-        b = np.asarray(source_b.convert("RGB").crop(box), dtype=np.int16)
-    delta = np.abs(a - b)
+        a = source_a.convert("RGB").crop(box)
+        b = source_b.convert("RGB").crop(box)
+    delta = ImageChops.difference(a, b)
+    red, green, blue = delta.split()
+    largest = ImageChops.lighter(ImageChops.lighter(red, green), blue)
+    histogram = largest.histogram()
     return ({"size": [width, height], "roi": list(box), "pixels": (x1 - x0) * (y1 - y0),
-             "mean_abs_rgb": float(delta.mean()),
-             "pixels_gt16": int(np.count_nonzero(np.max(delta, axis=2) > 16)),
-             "max_abs_channel": int(delta.max())}, delta)
+             "mean_abs_rgb": sum(ImageStat.Stat(delta).mean) / 3,
+             "pixels_gt16": sum(histogram[17:]),
+             "max_abs_channel": largest.getextrema()[1]}, delta)
 
 
 def main(argv=None):
@@ -56,10 +58,8 @@ def main(argv=None):
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(json.dumps(metrics, indent=2) + "\n", encoding="utf-8")
         if diff_path:
-            from PIL import Image
-            import numpy as np
             diff_path.parent.mkdir(parents=True, exist_ok=True)
-            Image.fromarray(np.minimum(delta, 255).astype("uint8"), "RGB").save(diff_path)
+            delta.save(diff_path)
     except (OSError, ValueError) as error:
         parser.error(str(error))
 

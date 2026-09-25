@@ -8,6 +8,19 @@ This directory contains version-controlled developer utilities, build helpers, o
 - **`out/` is strictly for ignored outputs**: The `out/` directory is listed in `.gitignore` and `.stignore`. It is reserved for build binaries, ephemeral test outputs, capture extractions, intermediate reports, and temporary caches. Do not index `out/`, commit files from `out/`, or write tools that depend on executable scripts located in `out/`. Tools may explicitly consume build artifacts, captures, or logs stored in `out/` as inputs when passed via command-line arguments.
 - **Side-effect awareness**: Tools differ in their operational side effects. Analysis scripts that parse input files and write reports produce no application state mutations. Build tools compile artifacts into explicit output directories. Active game drivers spawn game processes, send inputs, and alter save data. Network scripts fetch remote assets or push git commits. Check each tool's side-effect classification before execution.
 
+## Quick navigation by task
+
+| Task | Start here | Main effects |
+|---|---|---|
+| Inspect an F1 capture, compare frames, or review temporal-jitter candidates | [`capture_analysis/README.md`](capture_analysis/README.md) | Read capture files; write explicit reports, previews, or reviewed fixtures. No game launch. |
+| Translate or audit shaders and portable shader packs | [`shader_analysis/README.md`](shader_analysis/README.md), [`PORTABLE_SHADER_PACK.md`](../docs/PORTABLE_SHADER_PACK.md) | Read inputs and write explicit reports/build outputs; shader-pack merge compiles and writes a new pack. |
+| Archive private opt-in feedback and review cases | [`feedback_archive/README.md`](feedback_archive/README.md) | Offline ledger writes selected private archive paths; archive refresh performs read-only D1 queries. No public data or Git publication. |
+| Build runtime, tools, or release packages | [`BUILDING.md`](../docs/BUILDING.md), [`release/README.md`](release/README.md) | Compiles or packages into explicit outputs; release fetchers use network access. |
+| Run a live benchmark or inspect a running process | [`perf/README.md`](perf/README.md), [`asm-profiler/README.md`](asm-profiler/README.md) | May launch/control the game, modify isolated saves, or attach to a process. Read prerequisites first. |
+| Install the reusable OpenCode render workflow | [`opencode/README.md`](opencode/README.md) | Writes only the four managed Markdown files under the explicit `.opencode/` output. |
+
+The catalog below lists maintained groups and representative root utilities. `thirdparty/`, generated outputs, caches, and `out/` artifacts are not cataloged as project tools. Deprecated installer/updater or runner-only copies remain historical and are not maintained entry points.
+
 ---
 
 ## Tool catalog
@@ -20,7 +33,7 @@ This directory contains version-controlled developer utilities, build helpers, o
 | `LoShaderTool` (`tools/xenos_shader_tool/`) | Offline Xenon microcode translator and compiler to DXIL and SPIR-V. | Build tool: Compiles microcode binaries into output targets. | Source: `tools/xenos_shader_tool/` |
 | `tools/shader_analysis/collect_sources.py` | Collects and deduplicates raw `vs_*.bin` and `ps_*.bin` microcode files by FNV-1a hash across labeled directories. | Write: Generates deduplicated source directory and `provenance.json` at explicit `--output`. Inputs are read-only. | [`tools/shader_analysis/README.md`](shader_analysis/README.md) |
 | `tools/shader_analysis/audit_vs.py` | Statically analyzes vertex shader HLSL for `oPos` position and matrix slot dependencies. | Input read-only; writes JSON report to explicit `--output`. | [`tools/shader_analysis/README.md`](shader_analysis/README.md) |
-| `tools/shader_analysis/audit_ps.py` | Statically analyzes pixel shader HLSL for texture bindings, sampler usage, and taint propagation. | Input read-only; writes JSON report to explicit `--output`. | [`tools/shader_analysis/README.md`](shader_analysis/README.md) |
+| `tools/shader_analysis/audit_ps.py` | Statically analyzes pixel shader HLSL for texture bindings, sampler usage, taint propagation, and optional `--clip-input N` components. | Input read-only; writes JSON report to explicit `--output`; unresolved branches remain unsupported. | [`tools/shader_analysis/README.md`](shader_analysis/README.md) |
 | `tools/shader_analysis/inspect_spirv_position.py` | Inspects compiled SPIR-V binary position decorations using an explicit SPIR-V core grammar. | Input read-only; writes JSON report to explicit `--output`. | [`tools/shader_analysis/README.md`](shader_analysis/README.md) |
 | `tools/shader_analysis/cpx.py` | Decodes a single CPX package binary to an output file using pure Python. | Write: Writes decoded package to explicit `--output`. Input is read-only. | [`tools/shader_analysis/README.md`](shader_analysis/README.md) |
 | `tools/generate_shader_index.py` | Generates shader resource mapping indices from FPD archive files. | Generation utility: Parses game resources, emits index definitions. | Source: `tools/` |
@@ -33,6 +46,11 @@ This directory contains version-controlled developer utilities, build helpers, o
 |---|---|---|---|
 | `tools/capture_analysis/inspect.py` | Inspects F1 render captures (ZIP archive or directory) and summarizes capture-info and frame render-state events. | Input read-only; writes JSON report to explicit `--output` without payload extraction. | [`tools/capture_analysis/README.md`](capture_analysis/README.md) |
 | `tools/capture_analysis/image_diff.py` | Computes mean/maximum RGB channel difference and thresholded outlier metrics across two images with optional ROI. | Input read-only; writes metrics JSON to explicit `--output` and optional difference PNG to `--diff-image`. | [`tools/capture_analysis/README.md`](capture_analysis/README.md) |
+| `tools/capture_analysis/preview.py` | Exports selected capture screenshots/resolves as PNG and optional full-resolution ROI metrics. | Input read-only; writes a new preview directory. Requires Pillow. | [`tools/capture_analysis/README.md`](capture_analysis/README.md) |
+| `tools/capture_analysis/coverage.py` | Summarizes unmapped VS evidence across complete draw intervals in one or more explicit captures. | Input read-only; writes a new JSON report and never edits the production map. | [`tools/capture_analysis/README.md`](capture_analysis/README.md) |
+| `tools/capture_analysis/trace.py` / `compare_traces.py` | Reads cumulative register state and compares selected F1 capture frames. | Input read-only; writes JSON reports to explicit new paths. | [`tools/capture_analysis/README.md`](capture_analysis/README.md) |
+| `tools/capture_analysis/jitter_candidates.py` | Triage unlisted position shaders against an explicit mapping and draw boundary. | Input read-only; writes candidate JSON and never edits the production shader map. | [`tools/capture_analysis/README.md`](capture_analysis/README.md) |
+| `tools/capture_analysis/export_jitter_fixture.py` | Serializes explicitly reviewed capture draw/register pairs into a compact C++ fixture. | Input read-only; writes a fixture to an explicit path and does not choose mappings or edit production code. | [`tools/capture_analysis/README.md`](capture_analysis/README.md) |
 | `tools/ppm2png.py` | Standalone converter from binary Netpbm P6 PPM to PNG without external dependencies. | Conversion: Reads PPM, writes PNG to destination. | Source: `tools/ppm2png.py` |
 
 ### 3. Performance analysis and benchmark drivers
@@ -96,6 +114,22 @@ This directory contains version-controlled developer utilities, build helpers, o
 | `tools/issue_triage/triage.py` | Automated triage script for GitHub Issues using LLM code context matching. | **REMOTE I/O**: Queries GitHub API; may invoke LLM model APIs and post comments if authorized. |
 | `tools/issue_triage/code_context.py` | Extracts codebase symbol context for issue reports. | Read-only: Scans repository code. |
 | `tools/project_management/` | Helper scripts for syncing GitHub Project fields, items, and roadmap mirrors. | Workflow integration: Updates project tracking state. |
+
+### 9. Private feedback archive
+
+| Tool / Path | Purpose | Type & side effects | Reference |
+|---|---|---|---|
+| `tools/feedback_archive/` | Archives opt-in D1 feedback into an explicitly selected private directory and maintains offline review ledgers and the `lo-feedback-triage` skill. | Archive refresh: read-only remote queries plus local staged writes. Ledger and review: local writes only. No game operations, public publication, or Git push. | [`tools/feedback_archive/README.md`](feedback_archive/README.md) |
+| `tools/feedback_archive/scripts/jitter_coverage.py` | Streams private VS/PS observations against an explicit mapping to rank jitter-coverage candidates. | Read-only archive input; writes a new report outside the archive. Does not edit the production map or represent player counts. | [`tools/feedback_archive/README.md`](feedback_archive/README.md) |
+| `tools/feedback_archive/scripts/export_programs.py` | Exports explicitly selected, identity-verified VS/PS payloads for source review. | Read-only archive input; writes verified payloads and provenance to a new directory outside the archive. | [`tools/feedback_archive/README.md`](feedback_archive/README.md) |
+
+### 10. OpenCode render investigation workflow
+
+| Tool / Path | Purpose | Type & side effects | Reference |
+|---|---|---|---|
+| `tools/opencode/install.py` | Installs the maintained `lo-render-flicker` skill and three render investigation agents into `.opencode/`. | Local write: creates or updates only the four managed Markdown files under the explicit output directory. | [`tools/opencode/README.md`](opencode/README.md) |
+
+Install from the repository root with `python -B tools/opencode/install.py --output .opencode`; add `--overwrite` only when updating those managed files. The installed `.opencode/` state is ignored.
 
 ---
 

@@ -9,6 +9,7 @@ namespace gpu::temporal
 // tire layers in Map3 frame 24389 and battle terrain/objects/skinned layers in
 // frames 2871 and 26786, Map16 ground/material passes in frame 18420, and
 // static/skinned scene paths in captures 17624-17626 and 21480-21482.
+// Also includes source-reviewed player-feedback paths (2026-09-25).
 // A slot alone never
 // authorizes jitter: renderer also checks viewport/VTE, ordered scene allocation,
 // and exact unmodified camera bits. Fullscreen/postprocess/UI shaders are absent.
@@ -55,7 +56,10 @@ inline int PositionVPSlot(uint64_t shader) {
     case 0x0743de0d691de4c9ull:case 0x25a13c85314d2c4bull:case 0xa2eef6788cd4d60bull:
     case 0xa936005072d293ddull:case 0xc0e0f4c574750856ull:case 0xf91227f682ce9042ull:
     // f2358: stairs / save point static scene & lighting passes; c7-c10 position only.
-    case 0x69e9adcf2e1b6887ull:case 0x6a8c2c78737dc94cull:case 0xa20d6099a44e2cd5ull:return 7;
+    case 0x69e9adcf2e1b6887ull:case 0x6a8c2c78737dc94cull:case 0xa20d6099a44e2cd5ull:
+    // f2548-f2550: static material companion of f7fd depth; c7-c10
+    // feed only position/o4 clip copy. Separate fetch94 lighting is unchanged.
+    case 0xa027ab99fa3e3b0dull:return 7;
     case 0x1da1ddc75da8e994ull:case 0x22557143e0f243ddull:case 0x4c87bb5b986defc8ull:case 0xa6c8c11c6dd07144ull:
     case 0xe8c0d438c690c784ull:case 0x576d669b2ad3c898ull:
     case 0x188061ace0615678ull:case 0xdc7f83af67c53ba1ull:case 0x68014a17a2a9a4bdull:
@@ -69,13 +73,33 @@ inline int PositionVPSlot(uint64_t shader) {
     case 0x8d9770d1bd8ba0faull:
     // Battle companion: c8-c11 clip position and o2 copy; non-VP basis untouched.
     case 0xf6f074ce5d305448ull:
-    case 0x6761469677f921c6ull:return 8;
+    case 0x6761469677f921c6ull:
+    // f2548-f2550: matched static depth geometry; c8-c11 position/o2 only,
+    // leaving the independent c7 UV transform and c12 lighting untouched.
+    case 0xff769ec7b88e575full:return 8;
     // f5446-f5448 enemy skinning: c230-c233 post-skin clip position only.
     case 0x4bd8985d84983b83ull:
     case 0x31bde3e2770db187ull:case 0x7e8492365edcf556ull:return 230;
     case 0x118a37c0d32c0477ull:case 0x3148f81d65d3b5f4ull:case 0xb7557072899a63a1ull:case 0xc84ca5209e98e743ull:
     case 0x0eb223d33f8e8e0cull:case 0x1e9017d2b296f480ull:
     case 0x87a76ceaf1eaec11ull:case 0x81bc335604d04e8bull:return 233;
+    // 2026-09-25 feedback batch: exact VS and every observed PS reviewed.
+    // These VP paths have no observed clip-XY sampling consumer or known
+    // finite-camera mismatch. Detailed identities/holds and synthetic CPU
+    // validation scope: docs/notes/jitter-coverage-2026-09-25.md.
+    case 0x2d458def192151acull:case 0x6b757ded853a7fc5ull:case 0x6d3d954bb6d86bc1ull:return 0;
+    case 0x0fa0396a659f8da5ull:return 1;
+    case 0x2b36b5ca7a88912eull:case 0xac81dd5f6ed83c3eull:return 4;
+    case 0x03a4238064e6c836ull:case 0x09f67586057d7083ull:case 0x1a2f72d1dce268bdull:
+    case 0x22993b734c035ae6ull:case 0x276b01d4190fdc00ull:case 0x3638b6b020b068fcull:
+    case 0x3bb0b196f11e64e5ull:case 0x4ce42af298a9baefull:case 0x59006824a7515704ull:
+    case 0x6508c631689c4ffaull:case 0x6976f82de60cb915ull:case 0x753287173badc7d1ull:
+    case 0x7f2f709e14788599ull:case 0x8060e3f548febc94ull:case 0x8261a0b7daeac888ull:
+    case 0x8b986c8d09eab4e4ull:case 0x8f6ce5a4f714294aull:case 0xa0a7fc243e60b248ull:
+    case 0xa6314f321efa4d14ull:case 0xae45651b20b50163ull:case 0xb0b143a646a921a7ull:
+    case 0xb14ecb62fe79be01ull:case 0xc01a72e0eb5e026aull:case 0xc560d140940528bcull:
+    case 0xd6ead6f46d70b19aull:case 0xe8747802c970e598ull:case 0xf5ca0812e57cd43cull:return 7;
+    case 0x0e5a12f70e7cb5beull:case 0xf3838aa008bc39d8ull:return 8;
     default:return -1;
     }
 }

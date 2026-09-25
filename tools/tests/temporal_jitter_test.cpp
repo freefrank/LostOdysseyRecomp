@@ -7,6 +7,8 @@
 #include "f5997_jitter_capture.h"
 #include "f5912_jitter_capture.h"
 #include "f16385_jitter_capture.h"
+#include "f2548_jitter_capture.h"
+#include "feedback_mapping_cases.h"
 
 using namespace gpu::temporal;
 using Constants = std::array<uint32_t, 256 * 4>;
@@ -63,6 +65,168 @@ static Float4 Mul(float scalar, const Float4& value)
 static Float4 Mad(float scalar, const Float4& value, const Float4& add)
 {
     return {scalar*value[0]+add[0],scalar*value[1]+add[1],scalar*value[2]+add[2],scalar*value[3]+add[3]};
+}
+
+// Independent transcription of the reviewed feedback programs. Inputs/constants
+// below are synthetic: compact player feedback does not contain vertex buffers
+// or constant banks. Preserve source operation order and register swizzles; do
+// not use Transform or reconstruct a projection from the production slot table.
+static Float4 FeedbackPosition(const Constants& c, Float4 v, const FeedbackMappingCase& shader)
+{
+    v[3]=1;
+    Float4 world{}, clip{};
+    if (shader.family==FeedbackProjection::Depth0)
+    {
+        world=Mul(v[3],S(C(c,7),"wzxy"));
+        world=Mad(v[2],S(C(c,6),"wzyx"),S(world,"xywz"));
+        world=Mad(v[1],S(C(c,5),"yxzw"),S(world,"zwyx"));
+        world=Mad(v[0],S(C(c,4),"zywx"),S(world,"zxwy"));
+        clip=Mul(world[2],C(c,3));
+        clip=Mad(world[0],S(C(c,2),"wzyx"),S(clip,"wzyx"));
+        clip=Mad(world[1],C(c,1),S(clip,"wzyx"));
+        return Mad(world[3],C(c,0),clip);
+    }
+    if (shader.family==FeedbackProjection::Material0)
+    {
+        world=Mul(v[3],S(C(c,8),"wxyz"));
+        world=Mad(v[2],S(C(c,7),"wxyz"),world);
+        world=Mad(v[1],S(C(c,6),"wxyz"),world);
+        world=Mad(v[0],S(C(c,5),"wxyz"),world);
+        clip=Mul(world[0],C(c,3));
+        clip=Mad(world[3],C(c,2),clip);
+        clip=Mad(world[2],C(c,1),clip);
+        return Mad(world[1],C(c,0),clip);
+    }
+    if (shader.family==FeedbackProjection::Alternate7)
+    {
+        world=Mul(v[3],S(C(c,3),"wzxy"));
+        world=Mad(v[2],S(C(c,2),"wzyx"),S(world,"xywz"));
+        world=Mad(v[1],S(C(c,1),"yxzw"),S(world,"zwyx"));
+        world=Mad(v[0],S(C(c,0),"zywx"),S(world,"zxwy"));
+        clip=Mul(world[2],C(c,10));
+        clip=Mad(world[0],C(c,9),clip);
+        clip=Mad(world[1],C(c,8),clip);
+        return Mad(world[3],C(c,7),clip);
+    }
+    // 0fa039 uses c5..8 for world position; the static c4/c7/c8
+    // families use c0..3. All have the same swizzled world and VP tail.
+    const unsigned worldSlot=shader.family==FeedbackProjection::Material1?5:0;
+    world=Mul(v[3],S(C(c,worldSlot+3),"xywz"));
+    world=Mad(v[2],S(C(c,worldSlot+2),"wxzy"),S(world,"zxwy"));
+    world=Mad(v[1],S(C(c,worldSlot+1),"zwyx"),S(world,"zxwy"));
+    world=Mad(v[0],S(C(c,worldSlot),"yzxw"),S(world,"zxwy"));
+    clip=Mul(world[3],C(c,shader.slot+3));
+    clip=Mad(world[1],C(c,shader.slot+2),clip);
+    clip=Mad(world[0],C(c,shader.slot+1),clip);
+    return Mad(world[2],C(c,shader.slot),clip);
+}
+
+static void FeedbackMappingBatch()
+{
+    const unsigned startChecks=checks;
+    double maxError=0, legacySeparation=0;
+    for (const auto& shader : feedbackMappings)
+    {
+        double shaderLegacySeparation=0;
+        Check(PositionVPSlot(shader.vs)==int(shader.slot),"reviewed feedback VS resolves its exact VP slot");
+        for (unsigned scene=0;scene<3;++scene)
+        {
+            Constants original{}, originalPs{};
+            for (unsigned i=0;i<original.size();++i)
+            {
+                // Nonzero, non-symmetric independent world/UV/lighting data.
+                original[i]=std::bit_cast<uint32_t>(float(int((i*17+scene*11)%41)-20)/16.f);
+                originalPs[i]=std::bit_cast<uint32_t>(float(int((i*13+scene*7)%29)-14)/8.f);
+            }
+            const std::array<float,16> vp{1.3f,.2f,.03f,.01f, -.15f,1.7f,.4f,-.07f,
+                .31f,-.22f,.91f,.13f, .25f+scene*.125f,-.5f,.75f,4.f};
+            SceneAnchor anchor{};
+            anchor.depthAllocation=37;
+            for (unsigned i=0;i<vp.size();++i)
+                anchor.vpBits[i]=original[shader.slot*4+i]=std::bit_cast<uint32_t>(vp[i]);
+            for (const auto extent : {Viewport{0,0,1280,720},Viewport{0,0,1920,1080},
+                Viewport{0,0,2560,1440},Viewport{0,0,3840,2160}})
+            {
+                anchor.viewport=extent;
+                for (uint64_t frame=0;frame<32;++frame)
+                {
+                    auto values=original, ps=originalPs;
+                    const auto result=ApplyDrawJitter(shader.vs,shader.ps,frame,true,true,
+                        &anchor,37,extent,values.data(),ps.data());
+                    Check(result.applied && !result.shadowCompensated,"reviewed feedback upload applies ordinary scene jitter");
+                    Check(ps==originalPs,"feedback mappings never modify PS constants");
+                    auto legacy=original, legacyPs=originalPs;
+                    const auto legacyResult=ApplyDrawJitter(0,shader.ps,frame,true,true,
+                        &anchor,37,extent,legacy.data(),legacyPs.data());
+                    Check(legacyResult.rejection==JitterRejection::UnknownShader && legacy==original && legacyPs==originalPs,
+                        "legacy unrecognized upload does not jitter either bank");
+                    bool unchanged=true;
+                    for (unsigned i=0;i<values.size();++i)
+                        if (i<shader.slot*4 || i>=(shader.slot+4)*4 || i%4>=2)
+                            unchanged &= values[i]==original[i];
+                    Check(unchanged,"only VP XY changes; VP ZW, UV, lighting and other VS constants stay exact");
+                    for (const auto vertex : {Float4{-.3f,.5f,.2f,1},Float4{.7f,-.2f,.4f,1},Float4{.1f,.9f,-.6f,1}})
+                    {
+                        const auto before=FeedbackPosition(original,vertex,shader);
+                        const auto after=FeedbackPosition(values,vertex,shader);
+                        const auto legacyClip=FeedbackPosition(legacy,vertex,shader);
+                        Check(std::isfinite(before[3]) && std::abs(before[3])>.05,"synthetic reference has useful clip W");
+                        Check(after[2]==before[2] && after[3]==before[3],"independent program preserves clip Z and W (including PS W-only inputs)");
+                        for (unsigned axis=0;axis<2;++axis)
+                        {
+                            const double pixels=(double(after[axis])-before[axis])/before[3]*
+                                (axis?extent.height:extent.width)*.5;
+                            const double expected=axis?-result.sample.pixelY:result.sample.pixelX;
+                            maxError=std::max(maxError,std::abs(pixels-expected));
+                            const double separation=std::abs((double(after[axis])-legacyClip[axis])/legacyClip[3])*
+                                (axis?extent.height:extent.width)*.5;
+                            shaderLegacySeparation=std::max(shaderLegacySeparation,separation);
+                            Check(std::abs(pixels-expected)<.003,"independent shader projection follows shared pixel jitter");
+                        }
+                    }
+                }
+            }
+            // These controls test actual immutable uploads, including when the
+            // same camera matrix is present at a different constant slot.
+            for (unsigned rejection=0;rejection<7;++rejection)
+            {
+                auto values=original, ps=originalPs;
+                auto rejectedAnchor=anchor;
+                bool enabled=true, compatible=true;
+                const SceneAnchor* selected=&rejectedAnchor;
+                uint64_t depth=37;
+                JitterRejection expected=JitterRejection::Disabled;
+                if (rejection==0) enabled=false;
+                if (rejection==1) { compatible=false; expected=JitterRejection::IncompatibleViewport; }
+                if (rejection==2) { selected=nullptr; expected=JitterRejection::MissingCamera; }
+                if (rejection==3) { rejectedAnchor.vpBits[0]^=1; expected=JitterRejection::CameraMismatch; }
+                if (rejection==4) { depth=38; expected=JitterRejection::DepthMismatch; }
+                if (rejection==5)
+                {
+                    std::copy(anchor.vpBits.begin(),anchor.vpBits.end(),values.begin()+200*4);
+                    values[shader.slot*4]^=1;
+                    expected=JitterRejection::CameraMismatch;
+                }
+                if (rejection==6)
+                {
+                    values[shader.slot*4]=rejectedAnchor.vpBits[0]=std::bit_cast<uint32_t>(std::numeric_limits<float>::infinity());
+                    expected=JitterRejection::InvalidConstants;
+                }
+                const auto untouched=values;
+                const auto result=ApplyDrawJitter(shader.vs,shader.ps,5,enabled,compatible,
+                    selected,depth,anchor.viewport,values.data(),ps.data());
+                Check(!result.applied && result.rejection==expected,"feedback rejection retains the required runtime guard");
+                Check(values==untouched && ps==originalPs,"rejected feedback draw leaves both banks byte-for-byte intact");
+            }
+        }
+        Check(shaderLegacySeparation>.48,"each reviewed program exposes the old unjittered projection separation");
+        legacySeparation=std::max(legacySeparation,shaderLegacySeparation);
+    }
+    for (const auto vs : feedbackHeldMappings)
+        Check(PositionVPSlot(vs)==-1,"unresolved screen sampling or camera evidence stays unmapped");
+    Check(legacySeparation>.48,"unmapped legacy control misses a visible subpixel phase");
+    std::printf("Feedback mapping batch: %zu VS, 3 synthetic banks, 32 phases, 720p-4K; max error %.6f px; legacy separation %.6f px; %u checks\n",
+        std::size(feedbackMappings),maxError,legacySeparation,checks-startChecks);
 }
 
 // Independently transcribed POSITION paths, including world-space swizzles and
@@ -792,6 +956,76 @@ static void CapturedF16385Layers()
     std::printf("Captured f16385 layers: %u checks, 12 draws across three frames, two shaders, 32 phases, 1080p/4K; legacy separation %.6f pixels\n",checks,legacySeparation);
 }
 
+// The f2548 pre-resolve depth geometry uses f7fd c4-c7. Its matching textured
+// material draws use a027 c7-c10 or ff769 c8-c11 for clip position. Their
+// world/fetch95/index geometry and camera bits match the paired depth draws.
+// The reference functions transcribe the captured HLSL instruction order.
+static Float4 Battle8dClip(const Constants& c, Float4 r6);
+static void CapturedF2548Layers()
+{
+    double legacySeparation = 0;
+    for (const auto& draw : f2548_capture::draws)
+    {
+        Constants original{}, originalPs{}, originalDepth{};
+        std::copy(draw.vertex.begin(), draw.vertex.end(), original.begin());
+        std::copy(draw.vertexLate.begin(), draw.vertexLate.end(), original.begin()+254*4);
+        std::copy(draw.pixel.begin(), draw.pixel.end(), originalPs.begin());
+        std::copy(draw.depth.begin(), draw.depth.end(), originalDepth.begin());
+        std::array<uint32_t,16> vp{};
+        std::copy_n(original.begin() + draw.slot*4, 16, vp.begin());
+        Check(draw.depthVs == 0xf7fd88506d704a3dull &&
+              std::equal(vp.begin(), vp.end(), originalDepth.begin()+16),
+              "f2548 material and depth share the captured camera");
+        const auto materialPath = draw.slot == 7 ? TireLightA27 : Battle8dClip;
+        for (const auto extent : {Viewport{0,0,1280,720}, Viewport{0,0,3840,2160}})
+            for (uint64_t phase = 0; phase < 32; ++phase)
+            {
+                const SceneAnchor anchor{vp,extent,54};
+                auto layer = original, depth = originalDepth, ps = originalPs;
+                Check(ApplyDrawJitter(draw.depthVs,0,phase,true,true,&anchor,
+                    54,extent,depth.data(),ps.data()).applied,
+                    "f2548 paired depth accepts scene camera");
+                const auto applied = ApplyDrawJitter(draw.vs,draw.ps,phase,true,true,&anchor,
+                    54,extent,layer.data(),ps.data());
+                Check(applied.applied && !applied.shadowCompensated && ps == originalPs,
+                    "f2548 material changes position without changing pixel constants");
+                for (unsigned i = 0; i < layer.size(); ++i)
+                    if (i < draw.slot*4 || i >= (draw.slot+4)*4 || i%4 >= 2)
+                        Check(layer[i] == original[i],
+                            "f2548 UV, world, lighting, and clip ZW constants are preserved");
+                for (const auto local : {Float4{-250,-100,20,1}, Float4{120,90,80,1},
+                                         Float4{10,250,160,1}})
+                {
+                    const auto d = TireDepthB030(depth,local);
+                    const auto m = materialPath(layer,local);
+                    const auto old = materialPath(original,local);
+                    Check(d == m, "f2548 independently transcribed depth/material clips agree");
+                    Check(m[2] == old[2] && m[3] == old[3],
+                        "f2548 material jitter preserves depth and W");
+                    legacySeparation = std::max({legacySeparation,
+                        std::abs(double(d[0])/d[3]-double(old[0])/old[3])*extent.width*.5,
+                        std::abs(double(d[1])/d[3]-double(old[1])/old[3])*extent.height*.5});
+                }
+                for (unsigned mutation = 0; mutation < 2; ++mutation)
+                {
+                    auto rejected = original, rejectedPs = originalPs;
+                    if (!mutation) rejected[draw.slot*4] ^= 1;
+                    const auto before = rejected;
+                    const auto result = ApplyDrawJitter(draw.vs,draw.ps,phase,true,true,&anchor,
+                        mutation ? 55 : 54,extent,rejected.data(),rejectedPs.data());
+                    Check(!result.applied && rejected == before && rejectedPs == originalPs &&
+                        result.rejection == (mutation ? JitterRejection::DepthMismatch :
+                                              JitterRejection::CameraMismatch),
+                        "f2548 mismatched camera or depth rejects without writes");
+                }
+            }
+    }
+    Check(legacySeparation > .3,
+        "f2548 unjittered material separates from jittered depth in negative control");
+    std::printf("Captured f2548 layers: %u checks, 11 draws, 32 phases, 720p/4K; legacy separation %.6f pixels\n",
+        checks,legacySeparation);
+}
+
 // Compact cumulative-register reconstructions (original capture files and
 // SHA-256 in out/streamline-fg-p0/fsr-p2-battle-cpu-01/source-samples.json).
 // f1991 draw699 and f2163 draw540: c0..3 world, c7 UV, c8..11 VP, c12 light.
@@ -1012,10 +1246,14 @@ static void BattleP2CpuJitter()
 
 int main(int argc,char** argv)
 {
+    if (argc==2 && std::strcmp(argv[1],"--feedback-mapping-batch")==0)
+    { FeedbackMappingBatch();return 0; }
     if (argc==2 && std::strcmp(argv[1],"--battle-p2-cpu")==0)
     { BattleP2CpuJitter();return 0; }
     if (argc==2 && std::strcmp(argv[1],"--captured-f16385-layers")==0)
     { CapturedF16385Layers(); return 0; }
+    if (argc==2 && std::strcmp(argv[1],"--captured-f2548-layers")==0)
+    { CapturedF2548Layers(); return 0; }
     if (argc==2 && std::strcmp(argv[1],"--captured-f5912-layers")==0)
     { CapturedF5912Layers(); return 0; }
     if (argc==2 && std::strcmp(argv[1],"--captured-f5997-layers")==0)
@@ -1025,6 +1263,8 @@ int main(int argc,char** argv)
     CapturedF16385Layers();
     CapturedStaticLayerCoverage();
     if (argc==2 && std::strcmp(argv[1],"--captured-static-layers")==0) return 0;
+    CapturedF2548Layers();
+    FeedbackMappingBatch();
     TireMaterialCoverage();
     BattleCoverage();
     Map16Coverage();

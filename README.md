@@ -12,7 +12,7 @@ Optional diagnostics are off by default and can be disabled in Settings. See [Pr
 
 ### [Latest download](https://github.com/freefrank/LostOdysseyRecomp/releases/latest) · [Installation guide](docs/INSTALLING.md) · [Report an issue](https://github.com/freefrank/LostOdysseyRecomp/issues)
 
-[简体中文](README.zh-CN.md) · [Changelog](CHANGELOG.md) · [Projects](https://github.com/users/freefrank/projects/3) · [Build from source](docs/BUILDING.md)
+[简体中文](README.zh-CN.md) · [Changelog](CHANGELOG.md) · [Developer tools](tools/README.md) · [Projects](https://github.com/users/freefrank/projects/3) · [Build from source](docs/BUILDING.md)
 
 </div>
 

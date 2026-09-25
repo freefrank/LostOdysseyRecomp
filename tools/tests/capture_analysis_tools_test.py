@@ -6,6 +6,7 @@ import io
 from contextlib import redirect_stderr
 from pathlib import Path
 import sys
+import subprocess
 import tempfile
 import unittest
 import zipfile
@@ -80,6 +81,14 @@ class CaptureAnalysisToolsTest(unittest.TestCase):
             self.assertEqual(json.loads(json_file.read_text())["pixels_gt16"], 1)
             with Image.open(png_file) as diff:
                 self.assertEqual(diff.getpixel((0, 0)), (20, 0, 0))
+            # Direct CLI sets sys.path[0] to capture_analysis/, where inspect.py
+            # used to shadow stdlib inspect during NumPy import.
+            cli_output = root / "cli.json"
+            run = subprocess.run([sys.executable, str(Path(image_diff.__file__).resolve()),
+                "--first", str(first), "--second", str(second), "--output", str(cli_output)],
+                capture_output=True, text=True)
+            self.assertEqual(run.returncode, 0, run.stderr)
+            self.assertEqual(json.loads(cli_output.read_text()), full)
             with self.assertRaisesRegex(ValueError, "ROI"):
                 image_diff.compare(first, second, (0, 0, 3, 1))
 

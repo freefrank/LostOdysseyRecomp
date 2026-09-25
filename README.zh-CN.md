@@ -12,7 +12,7 @@ Windows x64 · Direct3D 12 · Vulkan · PowerPC 静态重编译
 
 ### [下载最新版本](https://github.com/freefrank/LostOdysseyRecomp/releases/latest) · [安装指南](docs/INSTALLING.md) · [反馈问题](https://github.com/freefrank/LostOdysseyRecomp/issues)
 
-[English](README.md) · [更新日志](CHANGELOG.md) · [Projects](https://github.com/users/freefrank/projects/3) · [从源码构建](docs/BUILDING.md)
+[English](README.md) · [更新日志](CHANGELOG.md) · [开发工具](tools/README.md) · [Projects](https://github.com/users/freefrank/projects/3) · [从源码构建](docs/BUILDING.md)
 
 </div>
 
