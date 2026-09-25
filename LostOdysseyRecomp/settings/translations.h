@@ -16,6 +16,11 @@ static inline const wchar_t *Translate(uint32_t language, const wchar_t *en, con
         const wchar_t *key, *japanese, *korean, *simplified;
     };
     static constexpr Entry entries[] = {
+        {L"Anisotropic filtering", L"異方性フィルタリング", L"비등방성 필터링", L"各向异性过滤"},
+        {L"Improves texture clarity at oblique viewing angles. Changes apply immediately after saving.",
+         L"斜めから見たテクスチャの鮮明さを改善します。保存後すぐに適用されます。",
+         L"비스듬한 각도에서 텍스처 선명도를 개선합니다. 저장 후 바로 적용됩니다.",
+         L"提升斜角观看时的纹理清晰度。保存后立即应用。"},
         {L"Save graphics settings", L"画面設定を保存", L"그래픽 설정 저장", L"保存图形设置"},
         {L"Widescreen", L"ワイドスクリーン", L"와이드스크린", L"宽屏"},
         {L"Switches resolution choices between 16:9 and 21:9 ultrawide.",

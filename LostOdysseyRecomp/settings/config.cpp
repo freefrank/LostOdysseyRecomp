@@ -65,6 +65,7 @@ Config Read()
         // Presence wins over the legacy key even if the new value is malformed.
         if (name == "antialiasing") { hasAntialiasing = true; value.antialiasing = 0; }
         if (name == "internal_resolution") value.internalResolution = 0;
+        if (name == "anisotropic_filtering") value.anisotropicFiltering = 0;
         uint32_t number = 0;
         const auto digits = key.substr(equal + 1);
         auto parsed = std::from_chars(digits.data(), digits.data() + digits.size(), number);

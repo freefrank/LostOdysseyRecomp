@@ -138,8 +138,21 @@ int main(int argc, char** argv) {
     tick(8);Check(settings::edit.fsrSharpnessPercent==1,"sharpness increments");
     settings::edit.fsrSharpnessPercent=100;tick(8);Check(settings::edit.fsrSharpnessPercent==100,"sharpness upper bound");
     settings::edit.upscaler=Upscaler::Off;settings::row=int(GraphicsRow::AntiAliasing);tick(2);
-    Check(settings::row==int(GraphicsRow::ScalingQuality),"navigation skips both hidden provider rows");
+    Check(settings::row==int(GraphicsRow::AnisotropicFiltering),"navigation skips hidden provider rows to AF");
     tick(1);Check(settings::row==int(GraphicsRow::AntiAliasing),"reverse navigation skips hidden rows");
+    // AF changes only after Save, does not require a restart, and survives all levels.
+    settings::row=int(GraphicsRow::AnisotropicFiltering);settings::edit.anisotropicFiltering=0;
+    const auto afSaved=settings::GetConfig();
+    for(uint32_t level:{2u,4u,8u,16u,0u}) {
+        tick(8);Check(settings::edit.anisotropicFiltering==level,"AF cycles forward");
+        Check(settings::GetConfig().anisotropicFiltering==afSaved.anisotropicFiltering,"unsaved AF not applied");
+    }
+    tick(4);Check(settings::edit.anisotropicFiltering==16,"AF cycles backward");
+    auto afAfter=afSaved;afAfter.anisotropicFiltering=16;
+    Check(!settings::restart::Required(afSaved,afAfter),"AF needs no restart");
+    settings::edit=afAfter;settings::row=int(GraphicsRow::Save);tick(0x1000);
+    Check(settings::GetConfig().anisotropicFiltering==16,"Save applies AF");
+    settings::savedConfig=afSaved;settings::edit=afSaved;
     settings::edit.upscaler=Upscaler::Fsr;settings::row=int(GraphicsRow::AntiAliasing);tick();
     auto click=[&](int row,float x,bool reverse){
         int visible=0;for(int i=0;i<row;++i)visible+=!settings::snapshot.rows[i].hidden;

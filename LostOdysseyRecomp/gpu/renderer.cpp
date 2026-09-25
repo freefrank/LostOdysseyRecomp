@@ -17,6 +17,7 @@
 #include "geometry_prepare.h"
 #include "vertex_cache.h"
 #include "texture_descriptor_cache.h"
+#include "sampler_palette.h"
 #include "texture_key.h"
 #include "depth_format.h"
 #include "depth_clear_layout.h"
@@ -65,6 +66,8 @@
 #ifdef LO_GPU_PLUME
 #include <plume_render_interface.h>
 #include <plume_render_interface_builders.h>
+#include <plume_vulkan.h>
+#include "sampler_description.h"
 #include "dlss_ngx.h"
 #include "temporal_upscaler.h"
 #include "fsr_projection.h"
@@ -400,6 +403,7 @@ namespace gpu::renderer
                 std::vector<std::string> captureFailures;
             };
 #endif
+            using SamplerPalette = sampling::Palette<RenderSampler, RenderDescriptorSet>;
             struct GpuSlot {
                 std::unique_ptr<RenderCommandList> list;
                 // The prefix is list. An NGX recording error must never place
@@ -416,6 +420,7 @@ namespace gpu::renderer
                 std::vector<std::unique_ptr<RenderDescriptorSet>> setPools[4];
                 uint32_t setPoolUsed[4] = {};
                 TextureSetCache textureSetCache[3];
+                std::vector<SamplerPalette::Lease> samplerVersions;
                 std::vector<std::unique_ptr<HostTexture>> retiredTextures;
                 // Reused only after this slot's fence completes. Each draw gets
                 // a distinct output while commands in the slot remain in flight.
@@ -513,7 +518,6 @@ namespace gpu::renderer
             uint32_t vfetchDescriptorBase = 0, samplerDescriptorBase = 0;
             std::unique_ptr<RenderDescriptorSet> staticSet0;     // ring buffers + sampler palette
             std::unique_ptr<RenderDescriptorSet> staticDummySets[3]; // unused 2D / 3D / cube banks
-            std::map<uint64_t, uint32_t> samplerPalette;         // sampler key -> palette index
             static constexpr uint32_t kSamplerPalette = 64;
 
             std::unique_ptr<RenderBuffer> dummyBuffer;
@@ -977,9 +981,14 @@ namespace gpu::renderer
             uint32_t nShader = 0, nPipeline = 0, nTexture = 0, nResolve = 0;
             size_t texBytes = 0;
             void ResetTimers() { tDraw = tShader = tPipeline = tTexture = tResolve = tFlush = 0; tConst = tSets = tVertex = tBind = tIndex = tRecord = 0; tRt = tTaa = tNestedFlush = 0; tShaderLookup = tPipelineLookup = tSceneCopy = 0; nShader = nPipeline = nTexture = nResolve = 0; texBytes = 0; }
-            std::map<uint64_t, std::unique_ptr<RenderSampler>> samplers;
-            std::array<std::vector<std::unique_ptr<RenderSampler>>, kGpuSlots> retiredSamplers;
-            uint32_t appliedAnisotropy = UINT32_MAX;
+            SamplerPalette samplerState;
+            std::shared_ptr<RenderSampler> defaultSampler;
+            uint32_t maximumAnisotropy = 0;
+            uint32_t lastAnisotropyRequest = UINT32_MAX;
+            uint64_t anisotropyConfigFrame = ~0ull, samplerFailureFrame = ~0ull;
+            // Bound table generations only. Reserve ample headroom in D3D12's
+            // 2048-entry sampler heap, including the immutable host table.
+            static constexpr size_t kSamplerVersionsPerBatch = 8;
             std::map<std::pair<const RenderTexture*, const RenderTexture*>, std::unique_ptr<RenderFramebuffer>> framebuffers;
 
             std::string shaderCacheDir;
@@ -1714,10 +1723,22 @@ namespace gpu::renderer
                 if (!staticSet0) return InitFailure("vertex_fetch_set.create");
                 for (uint32_t i = 0; i < (vulkan?1:kVertexFetchSlots); i++)
                     staticSet0->setBuffer(vfetchDescriptorBase + i, vertexArena.get(), gpu::render_arena::kVertexArenaSize);
-                RenderSampler* defaultSampler = GetSampler(0x2 | (0x2 << 2) | (0x1 << 4)); // linear, wrap
+                defaultSampler = device->createSampler(sampling::Describe(sampling::DefaultKey));
                 if (!defaultSampler) return InitFailure("default_sampler.create");
                 for (uint32_t i = 0; i < kSamplerPalette; i++)
-                    (vulkan?staticSamplerSet.get():staticSet0.get())->setSampler(samplerDescriptorBase + i, defaultSampler);
+                    (vulkan?staticSamplerSet.get():staticSet0.get())->setSampler(samplerDescriptorBase + i, defaultSampler.get());
+                if (!samplerState.Initialize([&](uint64_t key) { return CreateGuestSampler(key); },
+                    [&](const auto& handles) { return CreateSamplerTable(handles); }))
+                    return InitFailure("guest_sampler_table.create");
+                maximumAnisotropy = 16; // D3D12's supported anisotropy range.
+                if (vulkan) {
+                    const auto* native = static_cast<const VulkanDevice*>(device);
+                    VkPhysicalDeviceFeatures features{};
+                    vkGetPhysicalDeviceFeatures(native->physicalDevice, &features);
+                    // Pinned Plume enables the supported base features at device creation.
+                    maximumAnisotropy = features.samplerAnisotropy
+                        ? uint32_t(native->physicalDeviceProperties.limits.maxSamplerAnisotropy) : 0;
+                }
 
                 CreateDummyTexture(dummyTexture2D, RenderTextureDimension::TEXTURE_2D, 0);
                 CreateDummyTexture(dummyTexture3D, RenderTextureDimension::TEXTURE_3D, 0);
@@ -3111,7 +3132,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             ++fb;
                 for (auto& cache : s.textureSetCache) cache.Clear();
                 s.retiredTextures.clear();
-                retiredSamplers[i].clear();
+                s.samplerVersions.clear();
                 s.bloomPrefilterUsed = 0;
                 if(temporalHistory)temporalHistory->ReleaseCompletedThrough(s.temporalSerial);
                 else if(sparseCollector)sparseCollector->ReleaseCompleted();
@@ -3393,137 +3414,64 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             }
 
             // ---- samplers ---------------------------------------------------------
-            uint64_t ApplyAnisotropicOverride(uint64_t key, uint32_t level) const
+            std::shared_ptr<RenderSampler> CreateGuestSampler(uint64_t key)
             {
-                key &= ~((uint64_t(1) << 15) | (uint64_t(7) << 16));
-                if (!level) return key;
-                const uint32_t code = level == 16 ? 4 : level == 8 ? 3 : level == 4 ? 2 : 1;
-                return key | (uint64_t(1) << 15) | (uint64_t(code) << 16);
+                if (key == sampling::DefaultKey) return defaultSampler;
+                return device->createSampler(sampling::Describe(key));
             }
 
-            bool RefreshAnisotropicFiltering()
+            std::shared_ptr<RenderDescriptorSet> CreateSamplerTable(
+                const std::array<std::shared_ptr<RenderSampler>, kSamplerPalette>& handles)
             {
-                const uint32_t requested = settings::GetConfig().anisotropicFiltering;
-                if (requested == appliedAnisotropy) return true;
-                if (!staticSet0 || (vulkan && !staticSamplerSet)) {
-                    appliedAnisotropy = requested;
-                    return true;
-                }
-
-                std::map<uint64_t, std::unique_ptr<RenderSampler>> replacement;
-                auto createForKey = [&](uint64_t key) -> RenderSampler* {
-                    auto found = replacement.find(key);
-                    if (found != replacement.end()) return found->second.get();
-                    RenderSamplerDesc desc;
-                    auto filter = [](uint32_t f) { return f == 0 ? RenderFilter::NEAREST : RenderFilter::LINEAR; };
-                    desc.magFilter = filter(key & 3);
-                    desc.minFilter = filter((key >> 2) & 3);
-                    desc.mipmapMode = ((key >> 4) & 3) == 0 ? RenderMipmapMode::NEAREST : RenderMipmapMode::LINEAR;
-                    auto clamp = [](uint32_t mode) {
-                        switch (mode) {
-                        case 0: return RenderTextureAddressMode::WRAP;
-                        case 1: return RenderTextureAddressMode::MIRROR;
-                        case 3: case 5: return RenderTextureAddressMode::MIRROR_ONCE;
-                        case 6: case 7: return RenderTextureAddressMode::BORDER;
-                        default: return RenderTextureAddressMode::CLAMP;
-                        }
-                    };
-                    desc.addressU = clamp((key >> 6) & 7);
-                    desc.addressV = clamp((key >> 9) & 7);
-                    desc.addressW = clamp((key >> 12) & 7);
-                    desc.anisotropyEnabled = ((key >> 15) & 1) != 0;
-                    const uint32_t code = (key >> 16) & 7;
-                    desc.maxAnisotropy = code >= 4 ? 16 : code == 3 ? 8 : code == 2 ? 4 : 2;
-                    auto sampler = device->createSampler(desc);
-                    if (!sampler) return nullptr;
-                    RenderSampler* result = sampler.get();
-                    replacement.emplace(key, std::move(sampler));
-                    return result;
-                };
-
-                const uint64_t defaultKey = ApplyAnisotropicOverride(0x2 | (0x2 << 2) | (0x1 << 4), requested);
-                RenderSampler* defaultSampler = createForKey(defaultKey);
-                if (!defaultSampler) {
-                    LOG_WARNING("renderer: anisotropic filtering {}x could not create default sampler; keeping {}x", requested, appliedAnisotropy);
-                    return false;
-                }
-                auto* set = vulkan ? staticSamplerSet.get() : staticSet0.get();
-                for (uint32_t i = 0; i < kSamplerPalette; ++i) {
-                    RenderSampler* sampler = defaultSampler;
-                    for (const auto& [originalKey, slot] : samplerPalette)
-                        if (slot == i) { sampler = createForKey(ApplyAnisotropicOverride(originalKey, requested)); break; }
-                    if (!sampler) {
-                        LOG_WARNING("renderer: anisotropic filtering {}x sampler rebuild failed at slot {}; keeping {}x", requested, i, appliedAnisotropy);
-                        return false;
-                    }
-                    set->setSampler(samplerDescriptorBase + i, sampler);
-                }
-                auto& retired = retiredSamplers[gpuSlot];
-                for (auto& [key, sampler] : samplers)
-                    if (sampler) retired.push_back(std::move(sampler));
-                samplers = std::move(replacement);
-                appliedAnisotropy = requested;
-                LOG_INFO("renderer: anisotropic filtering live update {}x", requested);
-                return true;
+                // Never mutate a bound descriptor set. D3D12 set zero contains
+                // both the sampler table and the immutable vertex-buffer bank.
+                auto set = setBuilders[vulkan ? 4 : 0].create(device);
+                if (!set) return {};
+                if (!vulkan) for (uint32_t i = 0; i < kVertexFetchSlots; ++i)
+                    set->setBuffer(vfetchDescriptorBase + i, vertexArena.get(), gpu::render_arena::kVertexArenaSize);
+                for (uint32_t i = 0; i < kSamplerPalette; ++i)
+                    set->setSampler(samplerDescriptorBase + i, handles[i].get());
+                return set;
             }
 
-            uint32_t GetSamplerIndex(uint64_t key)
+            void RefreshAnisotropicFiltering()
             {
-                RefreshAnisotropicFiltering();
-                auto it = samplerPalette.find(key);
-                if (it != samplerPalette.end())
-                    return it->second;
-                if (samplerPalette.size() >= kSamplerPalette)
-                {
-                    static bool reported = false;
-                    if (!reported)
-                    {
-                        reported = true;
-                        LOG_WARNING("renderer: sampler palette exhausted: key={:#x}, capacity={}; using slot 0", key, kSamplerPalette);
-                    }
-                    return 0;
+                // One coherent settings snapshot per renderer frame, outside
+                // texture binding. A rejected request is retried only after a
+                // setting change, never once per texture/draw.
+                if (anisotropyConfigFrame == frame) return;
+                anisotropyConfigFrame = frame;
+                const auto requested = settings::GetConfig().anisotropicFiltering;
+                if (requested == lastAnisotropyRequest) return;
+                lastAnisotropyRequest = requested;
+                const auto effective = sampling::ClampLevel(requested, maximumAnisotropy);
+                if (!samplerState.Reconfigure(effective,
+                    [&](uint64_t key) { return CreateGuestSampler(key); },
+                    [&](const auto& handles) { return CreateSamplerTable(handles); })) {
+                    LOG_WARNING("renderer: AF request {}x rejected; retaining {}x and its descriptor table",
+                        requested, samplerState.Level());
+                    return;
                 }
-                uint32_t index = uint32_t(samplerPalette.size());
-                samplerPalette.emplace(key, index);
-                (vulkan?staticSamplerSet.get():staticSet0.get())->setSampler(samplerDescriptorBase + index, GetSampler(key));
-                if (getenv("LO_TRACE_SAMPLERS"))
-                    LOG_INFO("renderer: sampler palette slot={} key={:#x}", index, key);
+                LOG_INFO("renderer: AF requested={}x applied={}x (device maximum={}x)",
+                    requested, samplerState.Level(), maximumAnisotropy);
+            }
+
+            std::optional<uint32_t> GetSamplerIndex(uint64_t key, bool eligible)
+            {
+                const auto index = samplerState.Select(sampling::Recipe(key, eligible),
+                    [&](uint64_t actual) { return CreateGuestSampler(actual); },
+                    [&](const auto& handles) { return CreateSamplerTable(handles); });
+                if (!index && samplerFailureFrame != frame) {
+                    samplerFailureFrame = frame;
+                    LOG_WARNING("renderer: sampler table allocation/capacity failure; skipping affected draw, not aliasing slot zero");
+                }
                 return index;
             }
 
-            RenderSampler* GetSampler(uint64_t key)
+            uint64_t ActualSamplerKey(uint32_t index) const
             {
-                auto it = samplers.find(key);
-                if (it != samplers.end())
-                    return it->second.get();
-
-                // key: bits 0-1 mag, 2-3 min, 4-5 mip, 6-8 clampX, 9-11 clampY, 12-14 clampZ, 15 anisotropic
-                RenderSamplerDesc desc;
-                auto filter = [](uint32_t f) { return f == 0 ? RenderFilter::NEAREST : RenderFilter::LINEAR; };
-                desc.magFilter = filter(key & 3);
-                desc.minFilter = filter((key >> 2) & 3);
-                desc.mipmapMode = ((key >> 4) & 3) == 0 ? RenderMipmapMode::NEAREST : RenderMipmapMode::LINEAR;
-                auto clamp = [](uint32_t c)
-                {
-                    switch (c)
-                    {
-                    case 0: return RenderTextureAddressMode::WRAP;
-                    case 1: return RenderTextureAddressMode::MIRROR;
-                    case 3: case 5: return RenderTextureAddressMode::MIRROR_ONCE;
-                    case 6: case 7: return RenderTextureAddressMode::BORDER;
-                    default: return RenderTextureAddressMode::CLAMP;
-                    }
-                };
-                desc.addressU = clamp((key >> 6) & 7);
-                desc.addressV = clamp((key >> 9) & 7);
-                desc.addressW = clamp((key >> 12) & 7);
-                desc.anisotropyEnabled = ((key >> 15) & 1) != 0;
-                const uint32_t anisotropyCode = (key >> 16) & 7;
-                desc.maxAnisotropy = anisotropyCode >= 4 ? 16 : anisotropyCode == 3 ? 8 : anisotropyCode == 2 ? 4 : 2;
-                auto sampler = device->createSampler(desc);
-                RenderSampler* result = sampler.get();
-                samplers.emplace(key, std::move(sampler));
-                return result;
+                const auto version = samplerState.Current();
+                return version ? version->Key(index) : sampling::DefaultKey;
             }
 
             // ---- shaders ------------------------------------------------------------
@@ -5132,7 +5080,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 // would rewind the descriptor pools and upload ring that this draw's
                 // already-recorded state points at.
                 const bool poolsFull = Gpu().setPoolUsed[1] >= descriptorBatchLimit ||
-                    Gpu().setPoolUsed[2] >= descriptorBatchLimit || Gpu().setPoolUsed[3] >= descriptorBatchLimit;
+                    Gpu().setPoolUsed[2] >= descriptorBatchLimit || Gpu().setPoolUsed[3] >= descriptorBatchLimit ||
+                    Gpu().samplerVersions.size() >= kSamplerVersionsPerBatch;
                 const bool ringLow = Gpu().uploadOffset + kUploadHeadroom > kUploadRingSize;
                 const auto wrap = gpu::render_arena::EvaluateWrap(
                     gpuSlot, Gpu().arenaOffset, gpuSlots[(gpuSlot + 1) % kGpuSlots].arenaOffset);
@@ -5174,6 +5123,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     drops.modeMask |= 1u << modeControl;
                     return;
                 }
+                RefreshAnisotropicFiltering();
+                samplerState.BeginDraw();
                 const bool trackBinding = taa_collection::Enabled();
                 const uint64_t bindingEpoch = trackBinding ? taa_collection::ConsentEpoch() : 0;
 
@@ -6319,8 +6270,14 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         // reconstruction at the bloom shader's fractional UVs.
                         if (bloomFiltered && !temporalDisplay)
                             samplerKey = (samplerKey & ~uint64_t(0xF)) | 0x5;
-                        samplerKey = ApplyAnisotropicOverride(samplerKey, settings::GetConfig().anisotropicFiltering);
-                        shared.samplerIndex[slot] = GetSamplerIndex(samplerKey);
+                        const bool afEligible = sampling::Eligible(samplerKey, tex->guestBytes != 0,
+                            dimension, s == ps && depth && (depthControl & 2) && !(shared.vtxFmt & 1) &&
+                                !((vs->info.textureSlotMask >> slot) & 1),
+                            temporalDisplay || bloomFiltered || hdrBinding);
+                        const auto samplerIndex = GetSamplerIndex(samplerKey, afEligible);
+                        if (!samplerIndex) { failedPlan = true; return; }
+                        shared.samplerIndex[slot] = *samplerIndex;
+                        samplerKey = ActualSamplerKey(*samplerIndex);
                         textureBindings[bank][slot] = temporalDisplay ? temporalDisplay :
                             bloomFiltered ? bloomFiltered->texture.get() : hdrBinding ? hdrBinding : tex->texture.get();
 #if defined(LO_GPU_PLUME)
@@ -6480,9 +6437,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     texture.sign = shared.textureInfo[0] & 0xff;
                     texture.swizzle = (shared.textureInfo[0] >> 8) & 0xfff;
                     texture.swapRedBlue = (shared.textureInfo[0] & (1u << 20)) != 0;
-                    uint64_t actualSampler = 0x2 | (0x2 << 2) | (0x1 << 4); // Palette initialization.
-                    for (const auto& [sampler, index] : samplerPalette)
-                        if (index == shared.samplerIndex[0]) { actualSampler = sampler; break; }
+                    const uint64_t actualSampler = ActualSamplerKey(shared.samplerIndex[0]);
                     texture.sampler = {uint32_t((actualSampler >> 6) & 7), uint32_t((actualSampler >> 9) & 7),
                         uint32_t((actualSampler >> 12) & 7), uint32_t((actualSampler >> 2) & 3),
                         uint32_t(actualSampler & 3), uint32_t((actualSampler >> 4) & 3)};
@@ -6712,8 +6667,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         uint32_t fetch[6];
                         for (uint32_t word = 0; word < 6; ++word) fetch[word] = Reg(REG_FETCH_CONSTANTS + slot * 6 + word);
                         std::optional<uint64_t> samplerKey;
-                        for (const auto& [candidate, index] : samplerPalette)
-                            if (index == shared.samplerIndex[slot]) { samplerKey = candidate; break; }
+                        samplerKey = ActualSamplerKey(shared.samplerIndex[slot]);
                         p2Evidence << (slot ? "," : "") << "{\"slot\":" << slot << ",\"words\":["
                             << fetch[0] << ',' << fetch[1] << ',' << fetch[2] << ',' << fetch[3] << ',' << fetch[4] << ',' << fetch[5]
                             << "],\"shared_texture_info\":" << shared.textureInfo[slot]
@@ -6758,6 +6712,11 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         << ",\"blend_control\":" << key.blend << ",\"color_mask\":" << key.colorMask
                         << ",\"exp_bias\":\"unknown\"}}\n";
                 }
+                const auto samplerVersion = samplerState.Current();
+                if (!samplerVersion) return;
+                sampling::Retain(Gpu().samplerVersions, samplerVersion);
+                set0 = vulkan ? staticSet0.get() : samplerVersion->descriptors.get();
+                RenderDescriptorSet* set4 = vulkan ? samplerVersion->descriptors.get() : nullptr;
                 commandList->setPipeline(pipeline);
                 commandList->setGraphicsPipelineLayout(pipelineLayout.get());
                 if (vulkan) {
@@ -6775,7 +6734,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 commandList->setGraphicsDescriptorSet(set1, 1);
                 commandList->setGraphicsDescriptorSet(set2, 2);
                 commandList->setGraphicsDescriptorSet(set3, 3);
-                if(vulkan) commandList->setGraphicsDescriptorSet(staticSamplerSet.get(),4);
+                if(vulkan) commandList->setGraphicsDescriptorSet(set4,4);
 
                 int32_t baseVertex = int32_t(Reg(REG_VGT_INDX_OFFSET));
                 static uint32_t drawLogs = 0;
@@ -6958,7 +6917,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                 std::bit_cast<uint32_t>(float(drawJitter.sample.pixelY))};
                             const RenderBufferReference alphaConstants[3] = {
                                 {uploadRing, vsOffset}, {uploadRing, sharedOffset}, {uploadRing, psOffset}};
-                            RenderDescriptorSet* alphaSets[] = {set0, set1, set2, set3, staticSamplerSet.get()};
+                            RenderDescriptorSet* alphaSets[] = {set0, set1, set2, set3, set4};
                             auto equality = PrepareFsrAlphaEquality(*color, *depth, drawsThisFrame);
                             RecordFsrAlphaEqualitySnapshot(equality, *color, *depth, false);
                             Transition(*depth, RenderTextureLayout::DEPTH_READ, RenderBarrierStage::GRAPHICS);
@@ -6996,7 +6955,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             commandList->setGraphicsDescriptorSet(set1, 1);
                             commandList->setGraphicsDescriptorSet(set2, 2);
                             commandList->setGraphicsDescriptorSet(set3, 3);
-                            commandList->setGraphicsDescriptorSet(staticSamplerSet.get(), 4);
+                            commandList->setGraphicsDescriptorSet(set4, 4);
                         } else if (fsrAlphaReplay->FailedThisFrame()) {
                             fsrAlphaRawViews.clear();
                             if (fsrAlphaBridge) fsrAlphaBridge->DiscardUnsubmitted();
@@ -7075,12 +7034,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         if (slot == 2 && !needDof) continue;
                         if (slot == 3 && !needBloom) continue;
                         if (!alphaPostInputs[slot]) continue;
-                        // GetSamplerIndex falls back to palette slot zero when
-                        // exhausted. The shader samples that actual slot, so
-                        // never infer its footprint from the requested key.
-                        const auto palette = samplerPalette.find(alphaPostInputs[slot]->samplerKey);
-                        if (palette == samplerPalette.end() ||
-                            palette->second != shared.samplerIndex[slot]) {
+                        // Validate the actual immutable table entry used by this draw.
+                        if (ActualSamplerKey(shared.samplerIndex[slot]) != alphaPostInputs[slot]->samplerKey) {
                             samplerSupported = false;
                             continue;
                         }
@@ -7193,16 +7148,14 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         for (unsigned slot : {0u, 2u, 3u}) {
                             if (slot != 0) alphaPostprocessGuards += ',';
                             const auto& input = alphaPostInputs[slot];
-                            const auto palette = input ? samplerPalette.find(input->samplerKey) : samplerPalette.end();
-                            uint64_t effectiveKey = 0;
-                            for (const auto& [candidate, index] : samplerPalette)
-                                if (index == shared.samplerIndex[slot]) { effectiveKey = candidate; break; }
+                            const uint64_t effectiveKey = ActualSamplerKey(shared.samplerIndex[slot]);
+                            const bool samplerMatches = input && input->samplerKey == effectiveKey;
                             alphaPostprocessGuards += fmt::format(
                                 "{{\"slot\":{},\"input\":{},\"requested_key\":{},"
                                 "\"palette_index\":{},\"actual_index\":{},"
                                 "\"effective_key\":{},\"footprint\":{}}}",
                                 slot, input ? "true" : "false", input ? input->samplerKey : 0,
-                                palette != samplerPalette.end() ? int64_t(palette->second) : -1,
+                                samplerMatches ? int64_t(shared.samplerIndex[slot]) : -1,
                                 shared.samplerIndex[slot], effectiveKey,
                                 input ? uint32_t(fsr_alpha::LOD0ClampFootprint(input->samplerKey, true)) : 0u);
                         }
@@ -7234,7 +7187,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             const RenderBufferReference maskConstants[3] = {
                                 {uploadRing, vsOffset}, {uploadRing, sharedOffset}, {uploadRing, psOffset}};
                             RenderDescriptorSet* maskSets[] = {set0, maskSet1, maskSet2,
-                                maskSet3, staticSamplerSet.get()};
+                                maskSet3, set4};
                             std::shared_ptr<FsrAlphaBridgeDiagnostic> postEvidence;
                             if (FsrAlphaBridgeTraceEnabled() && fsrAlphaBridgeTraceCount < 128) {
                                 postEvidence = std::make_shared<FsrAlphaBridgeDiagnostic>();
@@ -7304,9 +7257,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                 fields += "],\"inputs\":[";
                                 bool firstInput = true;
                                 const auto paletteKey = [&](uint32_t index) {
-                                    for (const auto& [candidateKey, paletteIndex] : samplerPalette)
-                                        if (paletteIndex == index) return candidateKey;
-                                    return uint64_t(0);
+                                    return ActualSamplerKey(index);
                                 };
                                 for (unsigned slot : {0u, 2u, 3u}) {
                                     if (!alphaPostInputs[slot] || (slot == 2 && !needDof) ||
@@ -7431,7 +7382,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             commandList->setGraphicsDescriptorSet(set1, 1);
                             commandList->setGraphicsDescriptorSet(set2, 2);
                             commandList->setGraphicsDescriptorSet(set3, 3);
-                            commandList->setGraphicsDescriptorSet(staticSamplerSet.get(), 4);
+                            commandList->setGraphicsDescriptorSet(set4, 4);
                         }
                     }
                     else alphaPostprocessReason = fsr_alpha::PostprocessGuardReason(completeInputs, geometrySupported,
@@ -7530,15 +7481,13 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             for (unsigned slot : {0u, 2u, 3u}) {
                                 if (slot != 0) alphaPostprocessGuards += ',';
                                 const auto& input = alphaPostInputs[slot];
-                                const auto palette = input ? samplerPalette.find(input->samplerKey) : samplerPalette.end();
-                                uint64_t effectiveKey = 0;
-                                for (const auto& [candidate, index] : samplerPalette)
-                                    if (index == shared.samplerIndex[slot]) { effectiveKey = candidate; break; }
+                                const uint64_t effectiveKey = ActualSamplerKey(shared.samplerIndex[slot]);
+                                const bool samplerMatches = input && input->samplerKey == effectiveKey;
                                 alphaPostprocessGuards += fmt::format(
                                     "{{\"slot\":{},\"input\":{},\"requested_key\":{},"
                                     "\"palette_index\":{},\"actual_index\":{},\"effective_key\":{}}}",
                                     slot, input ? "true" : "false", input ? input->samplerKey : 0,
-                                    palette != samplerPalette.end() ? int64_t(palette->second) : -1,
+                                    samplerMatches ? int64_t(shared.samplerIndex[slot]) : -1,
                                     shared.samplerIndex[slot], effectiveKey);
                             }
                             alphaPostprocessGuards += ']';
@@ -7680,7 +7629,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                     const uint64_t mvOffset = Upload(&c, sizeof(c));
                                     const RenderBufferReference cb[4] = {{uploadRing, vsOffset}, {uploadRing, sharedOffset},
                                         {uploadRing, psOffset}, {uploadRing, mvOffset}};
-                                    RenderDescriptorSet* sets[] = {set0, set1, set2, set3, staticSamplerSet.get()};
+                                    RenderDescriptorSet* sets[] = {set0, set1, set2, set3, set4};
                                     if (!motionReplay->Draw(commandList, prepared.pipeline, cb, sets, vulkan ? 5 : 4,
                                         rasterViewport, scissor, useIndices, indexCount, baseVertex)) {
                                         logFirstMotionFailure("replay_draw_failed", 5);
@@ -7696,7 +7645,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             else { SetConstantBuffer(vsOffset,0); SetConstantBuffer(sharedOffset,1); SetConstantBuffer(psOffset,2); }
                             commandList->setGraphicsDescriptorSet(set0,0); commandList->setGraphicsDescriptorSet(set1,1);
                             commandList->setGraphicsDescriptorSet(set2,2); commandList->setGraphicsDescriptorSet(set3,3);
-                            if (vulkan) commandList->setGraphicsDescriptorSet(staticSamplerSet.get(),4);
+                            if (vulkan) commandList->setGraphicsDescriptorSet(set4,4);
                         }
                     }
                 }
