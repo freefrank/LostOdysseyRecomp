@@ -1,0 +1,70 @@
+name: Issue 64 native adapter workbench
+on:
+  push:
+    branches: [fix/issue-64-hybrid-motion]
+    paths: [.github/workflows/issue64-native-workbench.yml]
+permissions:
+  contents: read
+jobs:
+  native:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Stage identical runtime edits
+        run: python3 tools/tests/issue64/apply.py
+      - name: Get public source dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y libx11-dev glslang-tools spirv-tools ninja-build libvulkan-dev mesa-vulkan-drivers
+          git submodule update --init --depth 1 thirdparty/plume tools/XenosRecomp tools/XenonRecomp thirdparty/unordered_dense
+          git -C thirdparty/plume apply ../../tools/patches/plume-lostodyssey.patch
+          git -C thirdparty/plume submodule update --init --depth 1 contrib/volk contrib/Vulkan-Headers contrib/VulkanMemoryAllocator
+          git -C tools/XenosRecomp submodule update --init --recursive --depth 1
+          git -C tools/XenonRecomp submodule update --init --depth 1 thirdparty/tomlplusplus
+          mkdir -p out/fsr-sdk out/ngx-sdk out/dxc
+          git -C out/fsr-sdk init
+          git -C out/fsr-sdk remote add origin https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK.git
+          git -C out/fsr-sdk fetch --depth 1 origin c6efa6bf7f2027b3ec94f28578bb5965eabb9e55
+          git -C out/fsr-sdk sparse-checkout set sdk/include sdk/src/backends/vk
+          git -C out/fsr-sdk checkout FETCH_HEAD
+          git -C out/ngx-sdk init
+          git -C out/ngx-sdk remote add origin https://github.com/NVIDIA/DLSS.git
+          git -C out/ngx-sdk fetch --depth 1 origin
+          git -C out/ngx-sdk sparse-checkout set include
+          git -C out/ngx-sdk checkout FETCH_HEAD
+          git -C out/ngx-sdk log -1 --format='NGX_HEADER_REVISION=%H'
+          curl --fail --location --retry 2 https://github.com/microsoft/DirectXShaderCompiler/releases/download/v1.8.2505.1/linux_dxc_2025_07_14.x86_64.tar.gz -o out/dxc.tar.gz
+          echo 'f2213da1fc99dc8778c8823078e16ba97c7f80f86a1d4520ab1adf4b462bc48c  out/dxc.tar.gz' | sha256sum -c -
+          tar -xzf out/dxc.tar.gz -C out/dxc
+      - name: Compile actual FSR SDK-on/off and native NGX SDK-on/off adapters
+        run: |
+          bash tools/fsr/native_compile_check.sh out/fsr-sdk out/fsr-native-compile "$(command -v glslangValidator)"
+          for mode in on off; do
+            flags=''
+            if [ "$mode" = on ]; then flags='-DLO_DLSS_SDK=1'; fi
+            c++ -std=c++20 -O2 -include bit -DLO_GPU_PLUME=1 $flags \
+              -I LostOdysseyRecomp -I thirdparty/plume -I thirdparty/plume/contrib/volk \
+              -I thirdparty/plume/contrib/Vulkan-Headers/include -I thirdparty/plume/contrib/VulkanMemoryAllocator/include \
+              -I out/ngx-sdk/include -c LostOdysseyRecomp/gpu/dlss_ngx.cpp -o "out/ngx-$mode.o"
+          done
+          echo 'NATIVE_ADAPTER_COMPILE_OK; no NGX execution or FSR dispatch claimed'
+      - name: Retain public source and header-only/native build inputs for local verification
+        if: always()
+        run: |
+          git diff --binary > out/issue64-runtime.patch
+          git rev-parse HEAD > out/issue64-input-commit.txt
+          tar --exclude=.git --exclude='*.o' --exclude='out/dxc.tar.gz' --exclude='out/fsr-native-compile' \
+            --exclude='tools/XenosRecomp/thirdparty/dxc-bin/bin' --exclude='tools/XenosRecomp/thirdparty/dxc-bin/lib' \
+            -czf /tmp/issue64-public-source.tar.gz LostOdysseyRecomp tools cmake thirdparty CMakeLists.txt \
+            out/dxc out/fsr-sdk/sdk/include out/ngx-sdk/include out/issue64-runtime.patch out/issue64-input-commit.txt
+          sha256sum /tmp/issue64-public-source.tar.gz
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: issue64-public-source
+          path: /tmp/issue64-public-source.tar.gz
+          compression-level: 0
+          if-no-files-found: error
