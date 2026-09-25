@@ -978,6 +978,7 @@ namespace gpu::renderer
             size_t texBytes = 0;
             void ResetTimers() { tDraw = tShader = tPipeline = tTexture = tResolve = tFlush = 0; tConst = tSets = tVertex = tBind = tIndex = tRecord = 0; tRt = tTaa = tNestedFlush = 0; tShaderLookup = tPipelineLookup = tSceneCopy = 0; nShader = nPipeline = nTexture = nResolve = 0; texBytes = 0; }
             std::map<uint64_t, std::unique_ptr<RenderSampler>> samplers;
+            std::array<std::vector<std::unique_ptr<RenderSampler>>, kGpuSlots> retiredSamplers;
             uint32_t appliedAnisotropy = UINT32_MAX;
             std::map<std::pair<const RenderTexture*, const RenderTexture*>, std::unique_ptr<RenderFramebuffer>> framebuffers;
 
@@ -3456,6 +3457,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     }
                     set->setSampler(samplerDescriptorBase + i, sampler);
                 }
+                auto& retired = retiredSamplers[gpuSlot];
+                for (auto& [key, sampler] : samplers)
+                    if (sampler) retired.push_back(std::move(sampler));
                 samplers = std::move(replacement);
                 appliedAnisotropy = requested;
                 LOG_INFO("renderer: anisotropic filtering live update {}x", requested);
