@@ -1,0 +1,49 @@
+name: Issue 64 compile only
+on:
+  push:
+    branches: [fix/issue-64-sizing-recovery]
+    paths:
+      - 'LostOdysseyRecomp/gpu/**'
+      - 'LostOdysseyRecomp/settings/**'
+      - '.github/workflows/issue64-compile.yml'
+permissions:
+  contents: read
+concurrency:
+  group: issue64-compile-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  compile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile existing settings harness (do not run tests)
+        run: |
+          cmake -S tools/tests/settings_menu -B out/issue64-menu -DCMAKE_BUILD_TYPE=Release
+          cmake --build out/issue64-menu --parallel 2
+      - name: Prepare pinned public SDK headers
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y libx11-dev libvulkan-dev
+          git submodule update --init --depth 1 thirdparty/plume
+          git -C thirdparty/plume apply ../../tools/patches/plume-lostodyssey.patch
+          git -C thirdparty/plume submodule update --init --depth 1 contrib/volk contrib/Vulkan-Headers contrib/VulkanMemoryAllocator
+          mkdir -p out/issue64-ngx
+          git -C out/issue64-ngx init
+          git -C out/issue64-ngx remote add origin https://github.com/NVIDIA/DLSS.git
+          git -C out/issue64-ngx fetch --depth 1 origin 374959484e79a640feaba44c93ac8cfb0a03f5b5
+          git -C out/issue64-ngx sparse-checkout set include
+          git -C out/issue64-ngx checkout FETCH_HEAD
+      - name: Compile production NGX adapter with SDK on and off
+        run: |
+          for mode in on off; do
+            flags=''
+            if [ "$mode" = on ]; then flags='-DLO_DLSS_SDK=1'; fi
+            c++ -std=c++20 -O2 -include bit -DLO_GPU_PLUME=1 $flags \
+              -I LostOdysseyRecomp -I thirdparty/plume -I thirdparty/plume/contrib/volk \
+              -I thirdparty/plume/contrib/Vulkan-Headers/include -I thirdparty/plume/contrib/VulkanMemoryAllocator/include \
+              -I out/issue64-ngx/include -c LostOdysseyRecomp/gpu/dlss_ngx.cpp -o "out/issue64-ngx-$mode.o"
+          done
+          echo 'COMPILE_ONLY_OK; no tests or real GPU validation performed'
