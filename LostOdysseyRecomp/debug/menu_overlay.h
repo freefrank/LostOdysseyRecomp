@@ -17,7 +17,9 @@ namespace debug_menu
         Confirm,
         Cancel,
         PrevTab,
-        NextTab
+        NextTab,
+        PrevCategory,
+        NextCategory
     };
 
     void ToggleOverlay();

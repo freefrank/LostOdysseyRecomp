@@ -22,6 +22,8 @@ git -C thirdparty/plume apply --reverse --check ../../tools/patches/plume-lostod
 
 继续修改依赖后需同步相应补丁，并重新构建验证。游戏数据、生成的 PPC 代码及工具缓存不属于补丁。
 
+拉取更新了受跟踪的 XenonRecomp 补丁时，应先检查 `tools/XenonRecomp/` 的**实际已修改工作树**，将其与更新后的补丁谨慎同步；不要在已有修改上盲目重复应用，也不要丢弃无关的本地改动。确认实际源码与预期补丁一致后，按仓库根目录的正常顺序执行 `.\tools\build_tools.bat`、`python -B tools/ppc_codegen.py generate`、`.\tools\build_runtime.bat`。`build_tools.bat` 会尝试自动应用补丁，遇到部分更新的工作树时应先理顺源码与补丁，而不是随意重盖工具收据或复用旧生成器。仅增量构建运行时或执行 `python -B tools/ppc_codegen.py check`，都不能证明实际依赖源码已跟上受跟踪补丁；例如本地头文件中残留旧 `PPCTimeBase` 时，可能继续生成使用旧时钟路径的 PPC 代码。
+
 Vulkan 改动应从受跟踪的 plume 子模块状态和上方补丁应用；它们不替代驱动提供的 `vulkan-1.dll`／ICD，也不要求另行捆绑 SDK。保持 plume 源码与补丁处于兼容提交，并在修改过的依赖树上应用前先审阅补丁。
 
 2026-09-07 核验：保留原有 hunk 后，Plume 补丁从固定 HEAD `d890ac8` 应用到隔离 index／object store，所得 Git 规范化 blob 与当前源一致；XenonRecomp 补丁从固定 HEAD `ddd128b` 的同类核验也通过。现有工作树的 CRLF／混合换行导致部分原始文件字节不同，未重写换行或宣称 raw 字节一致；真实子模块源文件、index 和 HEAD 均未改变。证据：`out/v0.4.0-followup/patch-sync-validation.json`。

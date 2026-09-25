@@ -108,7 +108,7 @@ void hid::ClearKeyboardState()
     g_keys.fill(0);
 }
 
-static uint16_t ReadRawButtonsLocked()
+static uint16_t ReadRawButtonsLocked(uint8_t& lt, uint8_t& rt)
 {
     uint16_t buttons = 0;
     for (auto* controller : g_controllers)
@@ -130,6 +130,8 @@ static uint16_t ReadRawButtonsLocked()
         if (btn(SDL_CONTROLLER_BUTTON_B)) buttons |= XAMINPUT_GAMEPAD_B;
         if (btn(SDL_CONTROLLER_BUTTON_X)) buttons |= XAMINPUT_GAMEPAD_X;
         if (btn(SDL_CONTROLLER_BUTTON_Y)) buttons |= XAMINPUT_GAMEPAD_Y;
+        lt = std::max(lt, uint8_t(std::max(0, int(SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_TRIGGERLEFT))) >> 7));
+        rt = std::max(rt, uint8_t(std::max(0, int(SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_TRIGGERRIGHT))) >> 7));
     }
     return buttons;
 }
@@ -137,11 +139,21 @@ static uint16_t ReadRawButtonsLocked()
 // Protected by g_getStateMutex. Only ProcessHostInput advances release state.
 static uint16_t s_quarantinedButtons = 0;
 
-static void ProcessHostInput(uint16_t buttons)
+static void ProcessHostInput(uint16_t buttons, uint8_t lt, uint8_t rt)
 {
     // Both callers hold g_getStateMutex before sampling their input.
     // A guest read never clears a newer quarantine using an older button sample.
     s_quarantinedButtons &= buttons;
+    // Match fast-forward's release-to-arm hysteresis. Sample even with the
+    // overlay hidden or on another tab, so a held LT cannot switch Cheats on entry.
+    static bool leftArmed = false, rightArmed = false;
+    const auto triggerPress = [](uint8_t value, bool& armed) {
+        if (value <= 32) armed = true;
+        else if (value >= 64 && armed) { armed = false; return true; }
+        return false;
+    };
+    const bool leftPressed = triggerPress(lt, leftArmed);
+    const bool rightPressed = triggerPress(rt, rightArmed);
     static uint16_t s_prevGamepadButtons = 0;
     const uint16_t chordMask = XAMINPUT_GAMEPAD_LEFT_SHOULDER | XAMINPUT_GAMEPAD_RIGHT_SHOULDER;
     const bool prevChord = (s_prevGamepadButtons & chordMask) == chordMask;
@@ -169,6 +181,8 @@ static void ProcessHostInput(uint16_t buttons)
         }
         else if ((pressed & XAMINPUT_GAMEPAD_LEFT_SHOULDER) && !curChord) debug_menu::HandleInput(debug_menu::InputAction::PrevTab);
         else if ((pressed & XAMINPUT_GAMEPAD_RIGHT_SHOULDER) && !curChord) debug_menu::HandleInput(debug_menu::InputAction::NextTab);
+        else if (leftPressed && rt <= 32) debug_menu::HandleInput(debug_menu::InputAction::PrevCategory);
+        else if (rightPressed && lt <= 32) debug_menu::HandleInput(debug_menu::InputAction::NextCategory);
     }
     s_prevGamepadButtons = buttons;
 }
@@ -176,13 +190,14 @@ static void ProcessHostInput(uint16_t buttons)
 void hid::PumpHostInput()
 {
     std::lock_guard stateLock(g_getStateMutex);
+    uint8_t lt = 0, rt = 0;
     uint16_t buttons = 0;
     {
         std::lock_guard lock(g_hidMutex);
         if (g_externalPump) SDL_GameControllerUpdate();
-        buttons = ReadRawButtonsLocked();
+        buttons = ReadRawButtonsLocked(lt, rt);
     }
-    ProcessHostInput(buttons);
+    ProcessHostInput(buttons, lt, rt);
 }
 
 void hid::Poll()
@@ -462,7 +477,7 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
 
     if (!g_externalPump)
     {
-        ProcessHostInput(gp.wButtons);
+        ProcessHostInput(gp.wButtons, gp.bLeftTrigger, gp.bRightTrigger);
     }
 
     // Read-only on guest paths. The host sampler (or the serialized standalone
