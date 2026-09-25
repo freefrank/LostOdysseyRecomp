@@ -2,7 +2,7 @@
 #include "sr_hybrid_motion.h"
 #ifdef LO_GPU_PLUME
 #include "shader/dxc_compiler.h"
-#include <plume_render_interface.h>
+#include <plume_vulkan.h>
 #include <plume_render_interface_builders.h>
 #include <algorithm>
 #include <cstring>
@@ -20,7 +20,6 @@ class SrHybridMotionGPU {
         std::unique_ptr<plume::RenderBuffer> constants;
         std::unique_ptr<plume::RenderDescriptorSet> set;
         std::unique_ptr<plume::RenderFramebuffer> framebuffer;
-        plume::RenderTextureLayout layout = plume::RenderTextureLayout::UNKNOWN;
     };
     plume::RenderDevice* device_ = nullptr;
     std::unique_ptr<plume::RenderPipelineLayout> layout_;
@@ -34,6 +33,21 @@ class SrHybridMotionGPU {
     static void Describe(plume::RenderDescriptorSetBuilder& b) {
         b.begin(); b.addTexture(0); b.addTexture(1); b.addTexture(2);
         b.addConstantBuffer(3); b.end();
+    }
+    // Caller first verifies the Vulkan backend. No base RenderTexture exposes
+    // allocation metadata; validate the native image, exact subresource and layout.
+    static bool ImageMatches(plume::RenderTexture* texture, plume::RenderDevice* device,
+        uint32_t width, uint32_t height, plume::RenderFormat format, VkFormat nativeFormat) {
+        if (!texture) return false;
+        const auto& image = *static_cast<const plume::VulkanTexture*>(texture);
+        return image.device == device && image.vk && image.imageView && image.allocation &&
+            image.desc.width == width && image.desc.height == height && image.desc.format == format &&
+            image.imageFormat == nativeFormat && image.desc.dimension == plume::RenderTextureDimension::TEXTURE_2D &&
+            image.desc.mipLevels == 1 && image.desc.arraySize == 1 &&
+            image.imageSubresourceRange.aspectMask == VK_IMAGE_ASPECT_COLOR_BIT &&
+            image.imageSubresourceRange.baseMipLevel == 0 && image.imageSubresourceRange.levelCount == 1 &&
+            image.imageSubresourceRange.baseArrayLayer == 0 && image.imageSubresourceRange.layerCount == 1 &&
+            image.textureLayout == plume::RenderTextureLayout::SHADER_READ;
     }
     bool Init(plume::RenderDevice* device) {
         if (initAttempted_) return device == device_ && bool(pipeline_);
@@ -91,17 +105,15 @@ public:
         const MotionFrameView* geometry, uint64_t frame, uint64_t epoch, uint64_t allocation,
         uint32_t width, uint32_t height, double jx, double jy, bool reset, uint64_t serial) {
         resourceFailed_ = false;
-        if (!commands || !depth || !serial || depth->desc.width != width || depth->desc.height != height ||
-            depth->desc.format != plume::RenderFormat::R32_FLOAT) return {};
+        if (!device || !commands || !serial || device->getCapabilities().shaderFormat != plume::RenderShaderFormat::SPIRV ||
+            !ImageMatches(depth,device,width,height,plume::RenderFormat::R32_FLOAT,VK_FORMAT_R32_SFLOAT)) return {};
         // A stale ready view is a contract failure, not a coverage gap.
         if (geometry && geometry->ready && !SrHybridGeometryMatches(*geometry,frame,epoch,allocation,width,height)) return {};
         auto constants = MakeSrHybridConstants(current,previous,width,height,jx,jy,reset);
         if (!constants) return {};
         const bool overlay = geometry && SrHybridGeometryMatches(*geometry,frame,epoch,allocation,width,height);
-        if (overlay && (geometry->velocity->desc.width != width || geometry->velocity->desc.height != height ||
-            geometry->velocity->desc.format != plume::RenderFormat::R16G16_FLOAT ||
-            geometry->reactive->desc.width != width || geometry->reactive->desc.height != height ||
-            geometry->reactive->desc.format != plume::RenderFormat::R8_UNORM)) return {};
+        if (overlay && (!ImageMatches(geometry->velocity,device,width,height,plume::RenderFormat::R16G16_FLOAT,VK_FORMAT_R16G16_SFLOAT) ||
+            !ImageMatches(geometry->reactive,device,width,height,plume::RenderFormat::R8_UNORM,VK_FORMAT_R8_UNORM))) return {};
         if (!Init(device)) { resourceFailed_ = true; return {}; }
         // Never recycle the currently exposed result even when its last known
         // fence completed: a later consumer in the same frame may still use it.
@@ -137,7 +149,7 @@ public:
             plume::RenderTextureBarrier(batch.motion.get(),plume::RenderTextureLayout::SHADER_READ));
         commands->barriers(plume::RenderBarrierStage::ALL,
             plume::RenderTextureBarrier(batch.uncertainty.get(),plume::RenderTextureLayout::SHADER_READ));
-        batch.serial = serial; batch.layout = plume::RenderTextureLayout::SHADER_READ; active_ = &batch;
+        batch.serial = serial; active_ = &batch;
         return {batch.motion.get(),nullptr,batch.uncertainty.get(),frame,epoch,allocation,width,height,true,MotionState::Hybrid};
     }
 };
