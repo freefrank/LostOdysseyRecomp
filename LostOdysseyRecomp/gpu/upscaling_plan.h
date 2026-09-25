@@ -153,6 +153,8 @@ BackendDeviceSnapshot PublishedDeviceCapability();
 // state after recording the latest request; it never waits for GPU work.
 class SizingCache {
 public:
+    using Clock = uint64_t(*)(); // monotonic milliseconds; injectable in CPU tests
+    explicit SizingCache(Clock clock = nullptr) : clock_(clock ? clock : &SteadyMilliseconds) {}
     OutputSizing LookupOrRequestSizing(const SizingKey& key);
     std::optional<SizingKey> TakeSizingRequest();
     void PublishSizing(OutputSizing sizing);
@@ -163,6 +165,10 @@ public:
 private:
     std::mutex mutex_;
     std::array<std::optional<OutputSizing>, 8> entries_{};
+    struct RetryState { unsigned failures = 0; uint64_t notBefore = 0; };
+    std::array<RetryState,8> retries_{};
+    Clock clock_;
+    static uint64_t SteadyMilliseconds();
     std::optional<SizingKey> pending_;
     std::optional<SizingKey> inFlight_;
     uint64_t deviceEpoch_ = 0;

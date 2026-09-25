@@ -1,6 +1,7 @@
 #pragma once
 #include "motion_vector.h"
 #include "motion_frame.h"
+#include "sr_hybrid_motion_gpu.h"
 #include "temporal_frame_inputs.h"
 #include "temporal_input_capture_failure.h"
 #include "temporal_aa.h"
@@ -176,6 +177,8 @@ class HistoryOwner {
     std::array<Image,2> depth_,history_;
     Image source_,display_;
     MotionFrameView motionView_{};
+    SrHybridMotionGPU hybridMotion_;
+    bool hybridAttempted_ = false;
     struct RetiredImage { uint64_t serial; std::unique_ptr<plume::RenderTexture> texture; };
     std::vector<RetiredImage> retired_;
     std::array<Frame,2> frames_;
@@ -288,7 +291,8 @@ public:
     }
     uint64_t CapturedColorOrdinal() const { return frames_[frame_%2].colorOrdinal; }
     // External passes sampling our owned depth join THIS owner's submission serial.
-    void RecordExternalRead() { aa_.RecordExternalUse(); }
+    void RecordExternalRead() { aa_.RecordExternalUse(); hybridMotion_.RecordConsumerUse(aa_.RecordedSerial()); }
+    bool HybridResourceFailed() const { return hybridAttempted_ && !motionVectorValid_ && hybridMotion_.ResourceFailed(); }
     // Frame identity is supplied by renderer, never CPU presented-swap count.
     void BeginFrame(uint64_t frame,uint64_t epoch,bool diagnostics=false) {
         diagnosticsEnabled_=diagnostics;
@@ -336,9 +340,9 @@ public:
     // a legacy resolve. This advances input history independently of taaResolved.
     bool CaptureColorInputs(plume::RenderCommandList* commands, plume::RenderTexture* source,
         const SceneObservation& scene, const frame_plan::FramePlan& plan, const JitterSample& jitter, ColorEncoding encoding,
-        const MotionFrameView* motion = nullptr, TemporalResetReason reset = TemporalResetReason::None) {
+        const MotionFrameView* motion = nullptr, TemporalResetReason reset = TemporalResetReason::None, bool allowHybrid = false) {
         auto& current=frames_[frame_%2];const auto& previous=frames_[(frame_+1)%2];
-        captureFailure_=InputCaptureFailure::None;
+        captureFailure_=InputCaptureFailure::None; hybridAttempted_=false;
         if(frameResourceFailure_!=InputCaptureFailure::None) {captureFailure_=frameResourceFailure_;return false;}
         if(!commands) { captureFailure_=InputCaptureFailure::MissingCommands; return false; }
         if(!source) { captureFailure_=InputCaptureFailure::MissingSource; return false; }
@@ -368,14 +372,30 @@ public:
             if(previous.colorEncoding!=encoding) automatic=automatic|TemporalResetReason::ColorEncodingChanged;
             if(previous.plan.consumer!=plan.consumer) automatic=automatic|TemporalResetReason::ConsumerChanged;
             if(previous.plan.width!=plan.width||previous.plan.height!=plan.height) automatic=automatic|TemporalResetReason::ExtentChanged;
-            if(!ContinuousHistoryCamera(*current.camera,*previous.camera)) automatic=automatic|TemporalResetReason::CameraDiscontinuity;
+            if(!previous.camera || !ContinuousHistoryCamera(*current.camera,*previous.camera)) automatic=automatic|TemporalResetReason::CameraDiscontinuity;
             if(!SameInputConfiguration(previous.plan,plan)) automatic=automatic|TemporalResetReason::PlanConfigurationChanged;
+        }
+        // Only production SR opts in. Probe/legacy TAA and future FG keep their
+        // existing contracts. A stale ready geometry view cannot be papered over.
+        if (allowHybrid && upscaling::MatchesSrProvider(plan.requestedUpscaler,plan.consumer) &&
+            plan.frameGeneration == upscaling::FrameGeneration::Off &&
+            !(motion && motion->ready && !motionVectorValid_)) {
+            hybridAttempted_ = true;
+            const bool hybridReset = (reset|automatic) != TemporalResetReason::None ||
+                !previous.camera || (motion && motion->ready && motion->state == MotionState::ResetInitialization);
+            const auto composed = hybridMotion_.Render(device_,commands,depth_[frame_%2].texture.get(),
+                *current.camera,previous.camera ? &*previous.camera : nullptr,
+                motionVectorValid_ ? &motionView_ : nullptr,frame_,epoch_,current.allocation,width_,height_,
+                jitter.pixelX,jitter.pixelY,hybridReset,aa_.RecordedSerial()+1);
+            if (composed.ready) { motionView_=composed; motionVectorValid_=true; }
+            // An optional composer failure may retain already-valid geometric
+            // motion; it may never turn missing resources into complete inputs.
         }
         if(upscaling::RequiresMotionDepth(plan.consumer,plan.frameGeneration)&&!motionVectorValid_)
             automatic=automatic|TemporalResetReason::IncompleteInputs;
         current.inputReset=reset|automatic;
         current.inputsComplete=!upscaling::RequiresMotionDepth(plan.consumer,plan.frameGeneration)||motionVectorValid_;
-        aa_.RecordExternalUse(); return true;
+        aa_.RecordExternalUse(); hybridMotion_.RecordConsumerUse(aa_.RecordedSerial()); return true;
     }
     TemporalFrameInputs CurrentInputs() const {
         const auto& current=frames_[frame_%2]; TemporalFrameInputs result;
@@ -493,13 +513,14 @@ public:
     plume::RenderTexture* CurrentMotionVector() const {return motionVectorValid_?motionView_.velocity:nullptr;}
     plume::RenderTexture* CurrentMotionDepths() const {return motionVectorValid_?motionView_.depths:nullptr;}
     plume::RenderTexture* CurrentReactiveMask() const {return motionVectorValid_?motionView_.reactive:nullptr;}
-    void ReleaseCompleted() {if(sparse_)sparse_->ReleaseCompleted();sparseReleaseSerial_=0;aa_.ReleaseCompleted();retired_.clear();}
+    void ReleaseCompleted() {if(sparse_)sparse_->ReleaseCompleted();sparseReleaseSerial_=0;hybridMotion_.ReleaseCompletedThrough(aa_.RecordedSerial());aa_.ReleaseCompleted();retired_.clear();}
     uint64_t RecordedSerial() const {return aa_.RecordedSerial();}
     void ReleaseCompletedThrough(uint64_t serial) {
         if(sparse_&&sparseReleaseSerial_&&sparseReleaseSerial_<=serial) {
             sparse_->ReleaseCompleted();sparseReleaseSerial_=0;
         }
         aa_.ReleaseCompletedThrough(serial);
+        hybridMotion_.ReleaseCompletedThrough(serial);
         std::erase_if(retired_,[serial](const RetiredImage& image){return image.serial<=serial;});
     }
 };

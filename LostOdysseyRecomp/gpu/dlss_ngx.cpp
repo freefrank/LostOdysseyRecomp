@@ -4,11 +4,13 @@
 
 #include "dlss_ngx.h"
 #include "dlss_evaluate_capture.h"
+#include "sr_hybrid_mask.h"
 
 #if defined(LO_GPU_PLUME)
 #include "temporal_frame_inputs.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -564,7 +566,12 @@ upscaling::OutputSizing Controller::QueryOutputSizing(const plume::VulkanInterfa
             // A DLAA-only failure must not disable the three existing SR modes.
             mode.state = valid ? upscaling::SizingState::Ready :
                 optimalResult == NVSDK_NGX_Result_FAIL_FeatureNotSupported ? upscaling::SizingState::Unavailable : upscaling::SizingState::Error;
-            if (valid) { mode.optimal = {optimalWidth, optimalHeight}; mode.minimum = {minWidth, minHeight}; mode.maximum = {maxWidth, maxHeight}; }
+            // Retain raw extents even on error, for diagnostics only. Consumers
+            // must still require Ready; never invent a DLAA 1:1 vendor result.
+            mode.optimal = {optimalWidth, optimalHeight}; mode.minimum = {minWidth, minHeight}; mode.maximum = {maxWidth, maxHeight};
+            std::fprintf(stderr, "DLSS sizing: mode=%u output=%ux%u optimal=%ux%u minimum=%ux%u maximum=%ux%u raw_ngx=0x%08x state=%u\n",
+                unsigned(quality), key.outputWidth, key.outputHeight, optimalWidth, optimalHeight,
+                minWidth, minHeight, maxWidth, maxHeight, unsigned(optimalResult), unsigned(mode.state));
         }
     }
     if (temporarySession) {
@@ -691,7 +698,8 @@ SrAttempt Controller::RecordIsolated(plume::VulkanCommandList& isolatedCommandLi
     };
     if (!config.renderExtent.width || !config.renderExtent.height || !config.outputExtent.width || !config.outputExtent.height ||
         config.deviceEpoch != inputs.plan.deviceEpoch || inputs.plan.consumer != upscaling::TemporalConsumer::DlssSr ||
-        !inputs.CompleteForConsumer() || !temporal::MatchesDepthConvention(inputs.depthConvention, config.depthInverted) ||
+        !inputs.CompleteForConsumer() || !temporal::ValidSrHybridMask(inputs,sessionDevice_,plume::RenderTextureLayout::GENERAL) ||
+        !temporal::MatchesDepthConvention(inputs.depthConvention, config.depthInverted) ||
         !validRegion(inputs.color) || !validRegion(inputs.depth) || !validRegion(inputs.motion) ||
         !ValidImage(output, sessionDevice_) || output.desc.width != config.outputExtent.width || output.desc.height != config.outputExtent.height ||
         static_cast<const plume::VulkanTexture*>(inputs.depth.texture)->imageFormat != VK_FORMAT_R32_SFLOAT ||
@@ -773,11 +781,19 @@ SrAttempt Controller::RecordIsolated(plume::VulkanCommandList& isolatedCommandLi
     auto depthResource = ImageResource(depth, false);
     auto motionResource = ImageResource(motion, false);
     auto outputResource = ImageResource(output, true);
+    const bool hybridMotion = inputs.motionState == temporal::MotionState::Hybrid;
+    NVSDK_NGX_Resource_VK hybridBiasResource{};
+    if (hybridMotion) hybridBiasResource = ImageResource(
+        *static_cast<const plume::VulkanTexture*>(inputs.motionInvalidity.texture),false);
     NVSDK_NGX_VK_DLSS_Eval_Params evaluate = {};
     evaluate.Feature.pInColor = &colorResource;
     evaluate.Feature.pInOutput = &outputResource;
     evaluate.pInDepth = &depthResource;
     evaluate.pInMotionVectors = &motionResource;
+    // Confidence biases toward current color. It is neither material alpha nor
+    // an SDK guarantee that temporal history will be completely rejected.
+    evaluate.pInBiasCurrentColorMask = hybridMotion ? &hybridBiasResource : nullptr;
+    evaluate.InBiasCurrentColorSubrectBase = {0,0};
     evaluate.InJitterOffsetX = float(inputs.jitter.pixelX);
     evaluate.InJitterOffsetY = float(inputs.jitter.pixelY);
     evaluate.InRenderSubrectDimensions = {config.renderExtent.width, config.renderExtent.height};
@@ -803,9 +819,11 @@ SrAttempt Controller::RecordIsolated(plume::VulkanCommandList& isolatedCommandLi
         frozen.renderHeight = evaluate.InRenderSubrectDimensions.Height;
         frozen.reset = evaluate.InReset != 0; frozen.featureCreated = created;
         frozen.inputHistoryReset = inputs.resetHistory;
+        frozen.biasCurrentColorBound = evaluate.pInBiasCurrentColorMask != nullptr;
         capture->sdk = frozen;
     }
-    // Transparency and exposure resources remain null. Auto exposure is only
+    // Transparency and exposure resources remain null; hybrid confidence is
+    // independently bound above. Auto exposure is only
     // selected by SrConfig and no guest alpha/mask is bound to NGX.
 #if defined(LO_NATIVE_DLSS_TEST_INJECT_EVALUATE_FAILURE)
     if (const char* inject = std::getenv("LO_DLSS_TEST_INJECT_EVALUATE_FAILURE"); inject && *inject == '1') {

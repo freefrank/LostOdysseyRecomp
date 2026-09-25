@@ -2,6 +2,7 @@
 #include "fsr_dispatch_policy.h"
 #include "dlss_evaluate_capture.h"
 #include "fsr_mask_policy.h"
+#include "sr_hybrid_mask.h"
 
 #if defined(LO_GPU_PLUME)
 #include <plume_vulkan.h>
@@ -625,6 +626,11 @@ Attempt Controller::RecordIsolated(plume::VulkanCommandList& commands, const Con
         return attempt;
     }
 
+    if (!temporal::ValidSrHybridMask(inputs,impl_->device)) {
+        logGuardRejection("hybrid_confidence_mask"); return attempt;
+    }
+    const auto* hybridConfidence = inputs.motionState == temporal::MotionState::Hybrid ?
+        static_cast<const plume::VulkanTexture*>(inputs.motionInvalidity.texture) : nullptr;
     auto maskDecision = QualifyNativeMask(inputs);
     if (maskDecision.useReactive && !impl_->reactiveMask && !impl_->reactiveScratchUnavailable) {
         impl_->reactiveMask = CreateTexture(*impl_->device, config.renderWidth, config.renderHeight,
@@ -743,7 +749,10 @@ Attempt Controller::RecordIsolated(plume::VulkanCommandList& commands, const Con
     dispatch.motionVectors = MakeResource(motion, FFX_RESOURCE_STATE_COMPUTE_READ);
     dispatch.reactive = maskDecision.useReactive ?
         MakeResource(*impl_->reactiveMask, FFX_RESOURCE_STATE_COMPUTE_READ) : FfxResource{};
-    dispatch.transparencyAndComposition = {};
+    // Preserve the audited material reactive mask. Hybrid motion confidence
+    // separately biases accumulation through the composition input, not alpha.
+    dispatch.transparencyAndComposition = hybridConfidence ?
+        MakeResource(*hybridConfidence,FFX_RESOURCE_STATE_COMPUTE_READ) : FfxResource{};
     dispatch.dilatedDepth = MakeResource(*impl_->dilatedDepth, FFX_RESOURCE_STATE_UNORDERED_ACCESS, FFX_RESOURCE_USAGE_UAV);
     dispatch.dilatedMotionVectors = MakeResource(*impl_->dilatedMotion, FFX_RESOURCE_STATE_UNORDERED_ACCESS, FFX_RESOURCE_USAGE_UAV);
     dispatch.reconstructedPrevNearestDepth = MakeResource(*impl_->previousDepth, FFX_RESOURCE_STATE_UNORDERED_ACCESS, FFX_RESOURCE_USAGE_UAV);
@@ -783,7 +792,7 @@ Attempt Controller::RecordIsolated(plume::VulkanCommandList& commands, const Con
         recorded.depthScale = frame.depthScale; recorded.depthBias = frame.depthBias;
         recorded.renderWidth = dispatch.renderSize.width; recorded.renderHeight = dispatch.renderSize.height;
         recorded.outputWidth = dispatch.upscaleSize.width; recorded.outputHeight = dispatch.upscaleSize.height;
-        recorded.reset = dispatch.reset;
+        recorded.reset = dispatch.reset; recorded.compositionBound = hybridConfidence != nullptr;
         capture->stage = "dispatch"; capture->evaluated = true;
     }
     const auto result = ffxFsr3UpscalerContextDispatch(impl_->context.get(), &dispatch);

@@ -697,7 +697,7 @@ namespace gpu::renderer
                 DlssSceneInputSelection selected;
                 const bool recoverablePending = motionReplay && motionReplay->PipelinePendingThisFrame()
                     && !motionReplay->AbortedThisFrame() && !drawTemporalTracker.Failed();
-                if (recoverablePending) {
+                if (recoverablePending && !(inputs.motionState == temporal::MotionState::Hybrid && inputs.CompleteForConsumer())) {
                     NoteDlssFrameFallback(frame_plan::DlssEffectReason::MotionPipelinePending);
                     selected.kind = DlssSceneInputSelection::Kind::Pending;
                     return selected;
@@ -6108,7 +6108,11 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                     }
                                 };
                                 if (!temporalHistory->CaptureColorInputs(commandList, tex->texture.get(), temporalScene, activePlan, sample,
-                                        qualifiedEncoding, &motionView)) {
+                                        qualifiedEncoding, &motionView,
+                                        srTimeReset ? temporal::TemporalResetReason::FrameDiscontinuity : temporal::TemporalResetReason::None,
+                                        dlssSrRequested && motionOptions.enabled && motionOptions.replay && motionOptions.consume &&
+                                        temporal::SrHybridMotionEnabled() && !motionInitFailed &&
+                                        !(motionReplay && motionReplay->ResourceFailedThisFrame()))) {
                                     const bool frameOnly = temporal::ClassifySrCaptureFailure(temporalHistory->LastInputCaptureFailure()) ==
                                         temporal::SrSceneInputFailure::FrameFallback;
                                     logDlssInputFailure("capture_color_inputs", frameOnly ? "frame_fallback" : "request_failure");
@@ -6122,6 +6126,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                         inputs.resetHistory = true;
                                         inputs.resetReasons = inputs.resetReasons | temporal::TemporalResetReason::FrameDiscontinuity;
                                     }
+                                    if (motionOptions.log && inputs.motionState == temporal::MotionState::Hybrid && frame % 120 == 0)
+                                        LOG_INFO("SR hybrid MV: frame={} geometry_view_ready={} reset={} input={}x{} confidence_mask=1",
+                                            frame, motionView.ready, inputs.resetHistory, inputs.plan.width, inputs.plan.height);
                                     const auto selected = SelectDlssSceneCopyInputs(inputs);
                                     if (selected.kind == DlssSceneInputSelection::Kind::Pending) {
                                         static uint64_t loggedPendingSignature = 0;
@@ -6131,7 +6138,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                                 frame, activePlan.requestSignature, inputs.resetHistory ? 1 : 0);
                                         }
                                     } else if (selected.kind == DlssSceneInputSelection::Kind::Incomplete) {
-                                        const bool resourceFailed = motionInitFailed ||
+                                        const bool resourceFailed = motionInitFailed || temporalHistory->HybridResourceFailed() ||
                                             (motionReplay && motionReplay->ResourceFailedThisFrame());
                                         const bool frameOnly = temporal::ClassifySrIncomplete(inputs, resourceFailed) ==
                                             temporal::SrSceneInputFailure::FrameFallback;

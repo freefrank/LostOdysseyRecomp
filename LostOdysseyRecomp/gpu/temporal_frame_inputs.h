@@ -52,7 +52,7 @@ inline constexpr bool KnownDepthConvention(DepthConvention value) {
 inline constexpr bool MatchesDepthConvention(DepthConvention value, bool inverted) {
     return KnownDepthConvention(value) && (inverted == (value == DepthConvention::Reversed));
 }
-enum class MotionState : uint32_t { Unavailable = 0, ResetInitialization = 1, Tracked = 2 };
+enum class MotionState : uint32_t { Unavailable = 0, ResetInitialization = 1, Tracked = 2, Hybrid = 3 };
 struct ConsumerRoute {
     bool legacyTaa = false, dlssInputs = false, dlssSr = false, inputProbe = false, spatialAA = false;
     bool sr = false;
@@ -122,6 +122,8 @@ struct TemporalFrameInputs {
         if (!currentInputsComplete || !color.Complete() || !depth.Complete()) return false;
         return !upscaling::RequiresMotionDepth(plan.consumer, plan.frameGeneration) ||
             (KnownDepthConvention(depthConvention) && motionState != MotionState::Unavailable &&
+             uint32_t(motionState) <= uint32_t(MotionState::Hybrid) &&
+             (motionState != MotionState::Hybrid || plan.frameGeneration == upscaling::FrameGeneration::Off) &&
              motion.Complete() && motionInvalidity.Complete());
     }
 };

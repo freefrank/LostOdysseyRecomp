@@ -36,7 +36,7 @@ struct Parameters {
     float jitterX = 0, jitterY = 0, mvScaleX = 0, mvScaleY = 0, preExposure = 0, exposureScale = 0;
     uint32_t colorX = 0, colorY = 0, depthX = 0, depthY = 0, mvX = 0, mvY = 0;
     uint32_t outputX = 0, outputY = 0, renderWidth = 0, renderHeight = 0;
-    bool reset = false, featureCreated = false, inputHistoryReset = false;
+    bool reset = false, featureCreated = false, inputHistoryReset = false, biasCurrentColorBound = false;
 };
 
 struct FsrDispatch {
@@ -45,7 +45,7 @@ struct FsrDispatch {
     float fovYRadians = 0, viewSpaceToMeters = 0, depthScale = 0, depthBias = 0;
     uint32_t renderWidth = 0, renderHeight = 0, outputWidth = 0, outputHeight = 0;
     bool reset = false;
-    bool maskBound = false, rcasEnabled = false;
+    bool maskBound = false, rcasEnabled = false, compositionBound = false;
     uint32_t maskRejection = 0, maskSemantic = 0, maskCoverage = 0;
     uint64_t maskSourceAllocation = 0, maskSourceWriteOrdinal = 0, maskColorOrdinal = 0;
     VkFormat reactiveFormat = VK_FORMAT_UNDEFINED;
@@ -463,10 +463,13 @@ struct Page {
                  << ",\"fov_y_radians\":" << p.fovYRadians
                  << ",\"view_space_to_meters\":" << p.viewSpaceToMeters
                   << ",\"depth_scale\":" << p.depthScale << ",\"depth_bias\":" << p.depthBias
-                  << ",\"invalidity_bound_to_sdk\":false,\"reactive_bound_to_sdk\":" << (p.maskBound ? "true" : "false")
+                  << ",\"motion_state\":" << uint32_t(e->inputs.motionState)
+                  << ",\"invalidity_bound_to_sdk\":" << (p.compositionBound ? "true" : "false")
+                  << ",\"reactive_bound_to_sdk\":" << (p.maskBound ? "true" : "false")
                   << ",\"reactive_format\":" << int(p.reactiveFormat)
                   << ",\"reactive_cap\":" << p.reactiveCap
-                  << ",\"transparency_composition_bound_to_sdk\":false"
+                  << ",\"transparency_composition_bound_to_sdk\":" << (p.compositionBound ? "true" : "false")
+                  << ",\"hybrid_confidence_bound_to_sdk\":" << (p.compositionBound ? "true" : "false")
                   << ",\"rcas_enabled\":" << (p.rcasEnabled ? "true" : "false")
                   << ",\"rcas_strength\":" << p.rcasStrength << '}'
                   << ",\"fsr_mask\":{\"semantic\":" << p.maskSemantic << ",\"coverage\":" << p.maskCoverage
@@ -571,6 +574,8 @@ struct Page {
             file << std::setprecision(9) << ",\"sdk\":{\"jitter_input_pixels\":[" << s.jitterX << ',' << s.jitterY
                  << "],\"reset\":" << (s.reset ? "true" : "false") << ",\"feature_created\":" << (s.featureCreated ? "true" : "false")
                  << ",\"input_history_reset\":" << (s.inputHistoryReset ? "true" : "false")
+                 << ",\"motion_state\":" << uint32_t(e.inputs.motionState)
+                 << ",\"bias_current_color_bound_to_sdk\":" << (s.biasCurrentColorBound ? "true" : "false")
                  << ",\"reset_reason_bits\":" << uint32_t(e.inputs.resetReasons) << ",\"reset_reasons\":[";
             bool first = true;
             for (uint32_t bit = 0; bit < 10; ++bit) {

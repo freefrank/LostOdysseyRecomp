@@ -160,3 +160,20 @@ if((UNIX AND NOT APPLE) OR WIN32)
  set_tests_properties(LoNativeDlssRendererNativeTest PROPERTIES LABELS "native-dlss;ngx-renderer" TIMEOUT 180 SKIP_RETURN_CODE 77)
  set_tests_properties(LoNativeDlssRendererTest PROPERTIES LABELS "native-dlss;gpu-renderer" TIMEOUT 180)
 endif()
+
+# SR hybrid producer: real Vulkan pixels, plus strict CPU identity/retry contracts.
+add_executable(sr_hybrid_motion_gpu_test "${ROOT}/tools/tests/sr_hybrid_motion_gpu_test.cpp" "${CMAKE_CURRENT_LIST_DIR}/platform_stub.cpp")
+target_link_libraries(sr_hybrid_motion_gpu_test PRIVATE mv_runtime)
+add_test(NAME sr_hybrid_motion_gpu COMMAND sr_hybrid_motion_gpu_test)
+add_executable(sr_hybrid_motion_test "${ROOT}/tools/tests/sr_hybrid_motion_test.cpp" "${ROOT}/LostOdysseyRecomp/gpu/upscaling_plan.cpp")
+target_include_directories(sr_hybrid_motion_test PRIVATE "${ROOT}/LostOdysseyRecomp")
+add_test(NAME sr_hybrid_motion_cpu COMMAND sr_hybrid_motion_test)
+
+# Capture assertions must execute in Release too.
+if(MSVC)
+ target_compile_options(LoDlssEvaluateCaptureContractTest PRIVATE /UNDEBUG)
+else()
+ target_compile_options(LoDlssEvaluateCaptureContractTest PRIVATE -UNDEBUG)
+endif()
+add_test(NAME hybrid_capture_metadata COMMAND LoDlssEvaluateCaptureContractTest --evaluate-capture-contract-only)
+set_tests_properties(sr_hybrid_motion_gpu hybrid_capture_metadata PROPERTIES TIMEOUT 180)

@@ -159,6 +159,11 @@ public:
             if(expectedComplete) {
                 Check(inputs.motionState==temporal::MotionState::Hybrid && inputs.resetHistory==expectedReset,"owner reset and Hybrid state");
                 Check(temporal::ValidSrHybridMask(inputs,static_cast<VulkanDevice*>(device_.get())),"native confidence region qualification");
+                cmd_->barriers(RenderBarrierStage::ALL,RenderTextureBarrier(inputs.motionInvalidity.texture,RenderTextureLayout::GENERAL));
+                Check(temporal::ValidSrHybridMask(inputs,static_cast<VulkanDevice*>(device_.get()),RenderTextureLayout::GENERAL),"NGX confidence accepts required GENERAL layout");
+                Check(!temporal::ValidSrHybridMask(inputs,static_cast<VulkanDevice*>(device_.get())),"FSR confidence rejects NGX-only layout");
+                cmd_->barriers(RenderBarrierStage::ALL,RenderTextureBarrier(inputs.motionInvalidity.texture,RenderTextureLayout::SHADER_READ));
+                Check(!temporal::ValidSrHybridMask(inputs,static_cast<VulkanDevice*>(device_.get()),RenderTextureLayout::GENERAL),"NGX confidence rejects untransitioned FSR layout");
                 auto stale=inputs;stale.motionInvalidity.width--;Check(!temporal::ValidSrHybridMask(stale,static_cast<VulkanDevice*>(device_.get())),"native confidence extent rejection");
             }
             cmd_->barriers(RenderBarrierStage::ALL,RenderTextureBarrier(depth_.get(),RenderTextureLayout::SHADER_READ));

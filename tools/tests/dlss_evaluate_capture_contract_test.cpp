@@ -48,6 +48,8 @@ int main(int argc, char** argv) {
             e->sdk.renderWidth = 4; e->sdk.renderHeight = 4;
             e->sdk.featureCreated = i == 0; e->sdk.inputHistoryReset = false;
             e->sdk.reset = e->sdk.featureCreated;
+            e->sdk.biasCurrentColorBound = i == 0;
+            e->inputs.motionState = i == 0 ? gpu::temporal::MotionState::Hybrid : gpu::temporal::MotionState::Tracked;
             e->input.format = VK_FORMAT_R16G16B16A16_SFLOAT;
             e->input.texelBytes = 8; e->input.width = e->input.height = 4;
             e->input.storageWidth = e->input.storageHeight = 8;
@@ -65,6 +67,24 @@ int main(int argc, char** argv) {
         assert(json["page"].get<int>() == 2 && json["attempt_count"].get<int>() == 6);
         assert(json["evaluate_count"].get<int>() == 5 && json["truncated"].get<bool>());
         assert(json["evaluations"][0]["sdk"]["reset"].get<bool>());
+        assert(json["evaluations"][0]["sdk"]["bias_current_color_bound_to_sdk"].get<bool>());
+        assert(!json["evaluations"][1]["sdk"]["bias_current_color_bound_to_sdk"].get<bool>());
+        assert(json["evaluations"][0]["sdk"]["motion_state"].get<int>() == 3);
+        Page fsrPage; fsrPage.frame = 93;
+        for (bool hybrid : {false,true}) {
+            auto e = std::make_shared<EvaluateCapture>(); e->fsr = true;
+            e->inputs.motionState = hybrid ? gpu::temporal::MotionState::Hybrid : gpu::temporal::MotionState::Tracked;
+            e->fsrDispatch.compositionBound = hybrid; fsrPage.entries.push_back(e);
+        }
+        assert(fsrPage.Export(dir));
+        std::ifstream fsrFile(dir / "fsr-evaluations.json");
+        const auto fsrJson = nlohmann::json::parse(fsrFile);
+        assert(!fsrJson["dispatches"][0]["sdk"]["transparency_composition_bound_to_sdk"].get<bool>());
+        assert(fsrJson["dispatches"][1]["sdk"]["transparency_composition_bound_to_sdk"].get<bool>());
+        assert(fsrJson["dispatches"][1]["sdk"]["invalidity_bound_to_sdk"].get<bool>());
+        assert(fsrJson["dispatches"][1]["sdk"]["hybrid_confidence_bound_to_sdk"].get<bool>());
+        assert(fsrJson["dispatches"][1]["sdk"]["motion_state"].get<int>() == 3);
+        assert(!fsrJson["dispatches"][1]["sdk"]["reactive_bound_to_sdk"].get<bool>());
         assert(!json["evaluations"][1]["sdk"]["reset"].get<bool>());
         assert(json["evaluations"][1]["evaluate_index"].is_null());
         assert(json["evaluations"][0]["sdk"]["jitter_input_pixels"][0].get<double>() == .375);
