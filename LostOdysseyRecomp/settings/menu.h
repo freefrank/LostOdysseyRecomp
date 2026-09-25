@@ -3,6 +3,9 @@
 #include <vector>
 namespace settings
 {
+// Game tab actions follow the seven adjustable retail settings.
+inline constexpr int GameRestoreRow = 7;
+inline constexpr int GameMainMenuRow = 8;
 // Logical ids for the graphics tab. MenuSnapshot::row stores these as int.
 // Count is the tab length, not the on-screen viewport.
 enum class GraphicsRow : int

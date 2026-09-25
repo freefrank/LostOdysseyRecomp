@@ -103,6 +103,8 @@ Config Read()
             value.fxaa = number == 1;
         else if (key == "skip_shader_prebuild")
             value.skipShaderPrebuild = number == 1;
+        else if (key == "save_anywhere" && number <= 1)
+            value.saveAnywhere = number == 1;
         else if (key == "automatic_updates")
         {
             // Unknown values keep the safe package default (enabled).
@@ -161,6 +163,7 @@ void PreviewConfig(const Config &value)
     std::lock_guard lock(mutex);
     auto merged = Validate(value);
     merged.debugLanguage = Current().debugLanguage;
+    merged.saveAnywhere = Current().saveAnywhere;
     Current() = merged;
 }
 uint32_t GameLanguage()
@@ -186,7 +189,8 @@ static bool WriteConfig(const Config &value)
            << "\nfsr_sharpness=" << value.fsrSharpnessPercent
            << "\ninternal_resolution=" << value.internalResolution
            << "\nfxaa=" << value.fxaa << "\nautomatic_updates=" << value.automaticUpdates
-           << "\nskip_shader_prebuild=" << (value.skipShaderPrebuild ? 1 : 0) << '\n';
+           << "\nskip_shader_prebuild=" << (value.skipShaderPrebuild ? 1 : 0)
+           << "\nsave_anywhere=" << (value.saveAnywhere ? 1 : 0) << '\n';
     output.flush();
     if (!output)
         return false;
@@ -210,6 +214,7 @@ bool SaveConfig(const Config &requested)
     std::lock_guard lock(mutex);
     auto value = Validate(requested);
     value.debugLanguage = Current().debugLanguage;
+    value.saveAnywhere = Current().saveAnywhere;
     if (!WriteConfig(value)) return false;
     Current() = value;
     return true;
@@ -222,6 +227,16 @@ bool SaveDebugLanguage(uint32_t language)
     persisted.debugLanguage = language <= 1 ? language : 0;
     if (!WriteConfig(persisted)) return false;
     Current().debugLanguage = persisted.debugLanguage;
+    return true;
+}
+bool SaveSaveAnywhere(bool enabled)
+{
+    std::lock_guard lock(mutex);
+    // Merge with the persisted settings, not a pending graphics preview.
+    auto persisted = Read();
+    persisted.saveAnywhere = enabled;
+    if (!WriteConfig(persisted)) return false;
+    Current().saveAnywhere = enabled;
     return true;
 }
 } // namespace settings
