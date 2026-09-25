@@ -24,7 +24,7 @@ Windows x64 · Direct3D 12 · Vulkan · PowerPC 静态重编译
 原生 NVIDIA DLSS 超分辨率与 DLAA 属于实验性功能。
 Windows 与 Linux 正式发布包中已内置官方 NGX 运行库；画质与稳定性仍在验证中。
 
-v0.6.20 候选包含 Hybrid 相机／深度运动回退、有界 DLSS 尺寸恢复及文档记录的屏幕采样试验。文档范围内的手动验收已完成；发布和更广泛覆盖仍待完成。
+v0.6.20 已发布，包含 Hybrid 相机／深度运动回退、有界 DLSS 尺寸恢复及文档记录的屏幕采样试验。文档范围内的手动验收已完成；更广泛覆盖仍待完成。
 
 ### 实验性可选 FSR 超分
 
@@ -34,9 +34,13 @@ Quality、Balanced、Performance、Native AA 均有 Windows 运行证据；原�
 实测的 Windows 渲染画面与 Linux 运行验证（AMD Radeon 8060S RADV STRIX_HALO）均已获用户验收。
 全场景画质覆盖与 DLSS/FSR 帧生成仍待开展。低功耗硬件要求按用户授权通过 APEX 15W 代理设备验证，不代表 Steam Deck 硬件等价。
 
+## v0.6.20 发布版
+
+[v0.6.20](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.20) 已于 2026-09-25T21:15:07Z 发布，源码为 `be842b91d7367fd198074b1b8d3c1bc3ef4372a6`，[Windows/Linux Release CI](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/36188596414) 全部通过。包含已获用户实机验收的桥面光照修复与40个屏幕采样候选扩展，以及 Hybrid 运动回退和 F1 诊断。安装包与校验文件已公开；按用户要求未追加本地产物验证。
+
 ## v0.6.19 发布版
 
-已发布 [v0.6.19](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.19)（于 2026-09-25T04:18:21Z 从 source `1b2ea6635c5ac4f7cf3c9186fda3cd05575db97d` 通过 Release CI [36092250520](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/36092250520) 发布为最新公开版本）。整合了游戏内实时各向异性过滤（Off / 2x / 4x / 8x / 16x，保存后生效无需重启）及基于不可变代际管理和生命周期同步的采样器表重构、图形设置菜单 DLSS/FSR 画质档位排序与整合抗锯齿交互、避免每次导航重复进行整屏背景软件滤波的静态菜单装饰缓存、经实机验收的原生系统菜单“退出到桌面”`SDL_QUIT` 路由、设置菜单“退出到主菜单”标题跳转、调试“随时存档”跨进程状态持久化、作弊菜单侧栏 LT/RT 手柄分类切换与底栏提示、鼠标闲置自动隐藏、游戏窗口输入法按键拦截修复，以及开发者工具与测试套件全景索引。独立 CPU 契约、Linux 软件 Vulkan 仿真以及限定的实体手柄与原生退出测试均已通过；全游戏实机 GPU 场景验证、其余语言逐项实机确认以及缺少 mip 链导致的远景闪烁修复仍待推进。详见[更新日志](CHANGELOG.md#v0619--2026-09-25)与[开发状态](docs/STATUS.md)。
+已发布 [v0.6.19](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.19)（于 2026-09-25T04:18:21Z 从 source `1b2ea6635c5ac4f7cf3c9186fda3cd05575db97d` 通过 Release CI [36092250520](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/36092250520) 发布为当时的最新公开版本）。整合了游戏内实时各向异性过滤（Off / 2x / 4x / 8x / 16x，保存后生效无需重启）及基于不可变代际管理和生命周期同步的采样器表重构、图形设置菜单 DLSS/FSR 画质档位排序与整合抗锯齿交互、避免每次导航重复进行整屏背景软件滤波的静态菜单装饰缓存、经实机验收的原生系统菜单“退出到桌面”`SDL_QUIT` 路由、设置菜单“退出到主菜单”标题跳转、调试“随时存档”跨进程状态持久化、作弊菜单侧栏 LT/RT 手柄分类切换与底栏提示、鼠标闲置自动隐藏、游戏窗口输入法按键拦截修复，以及开发者工具与测试套件全景索引。独立 CPU 契约、Linux 软件 Vulkan 仿真以及限定的实体手柄与原生退出测试均已通过；全游戏实机 GPU 场景验证、其余语言逐项实机确认以及缺少 mip 链导致的远景闪烁修复仍待推进。详见[更新日志](CHANGELOG.md#v0619--2026-09-25)与[开发状态](docs/STATUS.md)。
 
 ## v0.6.15 发布版
 

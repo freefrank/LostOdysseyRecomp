@@ -25,7 +25,7 @@ Native NVIDIA DLSS Super Resolution and DLAA are experimental features.
 Windows and Linux release packages include official NGX runtime libraries;
 image quality and stability remain under validation.
 
-The v0.6.20 candidate includes Hybrid camera/depth motion fallback, bounded DLSS sizing recovery and the documented screen-sampling trial. Manual acceptance is complete for the documented scope; release publication and broader coverage remain pending.
+Published v0.6.20 includes Hybrid camera/depth motion fallback, bounded DLSS sizing recovery and the documented screen-sampling trial. Manual acceptance is complete for the documented scope; broader coverage remains pending.
 
 ### Experimental opt-in FSR SR
 
@@ -38,9 +38,13 @@ Radeon 8060S RADV STRIX_HALO) passed user acceptance. Full image-quality coverag
 scenes and DLSS/FSR frame generation remain open. Low-power hardware testing covered an approved
 APEX 15W proxy without establishing Steam Deck hardware equivalence.
 
+## v0.6.20 release
+
+[v0.6.20](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.20) was published on 2026-09-25T21:15:07Z from `be842b91d7367fd198074b1b8d3c1bc3ef4372a6` after successful [Windows/Linux Release CI](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/36188596414). It includes the user-accepted floor-light repair and 40 screen-sampling mappings, Hybrid motion fallback and F1 diagnostics. Packages and checksum files are public; no additional local artifact validation was performed, as requested.
+
 ## v0.6.19 release
 
-Published release [v0.6.19](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.19) on 2026-09-25T04:18:21Z from source `1b2ea6635c5ac4f7cf3c9186fda3cd05575db97d` via Release CI [36092250520](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/36092250520) as the latest public release. Integrates live in-game anisotropic filtering (Off / 2x / 4x / 8x / 16x, applying on save without restart) with immutable sampler table generation management and descriptor lifetime synchronization, streamlined graphics menu DLSS/FSR quality ordering and unified AA navigation, cached menu backdrops avoiding repeated full-background software filtering on navigation, native System "Quit to Desktop" routing to `SDL_QUIT` with physical-hardware user acceptance, in-game Settings "Quit to Main Menu" title transition, debug "Save Anywhere" session persistence, cheats sidebar LT/RT category cycling with controller on-screen footer, idle cursor auto-hide, IME composition suppression during gameplay, and developer tooling catalog reorganization. Standalone CPU contracts, Linux software Vulkan emulation, and bounded physical-controller and quit tests passed; whole-game physical GPU validation, individual UI language verifications, and distant mip shimmering fixes remain open. See the [changelog](CHANGELOG.md#v0619--2026-09-25) and [development status](docs/STATUS.md).
+Published release [v0.6.19](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.19) on 2026-09-25T04:18:21Z from source `1b2ea6635c5ac4f7cf3c9186fda3cd05575db97d` via Release CI [36092250520](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/36092250520) as the then-current public release. Integrates live in-game anisotropic filtering (Off / 2x / 4x / 8x / 16x, applying on save without restart) with immutable sampler table generation management and descriptor lifetime synchronization, streamlined graphics menu DLSS/FSR quality ordering and unified AA navigation, cached menu backdrops avoiding repeated full-background software filtering on navigation, native System "Quit to Desktop" routing to `SDL_QUIT` with physical-hardware user acceptance, in-game Settings "Quit to Main Menu" title transition, debug "Save Anywhere" session persistence, cheats sidebar LT/RT category cycling with controller on-screen footer, idle cursor auto-hide, IME composition suppression during gameplay, and developer tooling catalog reorganization. Standalone CPU contracts, Linux software Vulkan emulation, and bounded physical-controller and quit tests passed; whole-game physical GPU validation, individual UI language verifications, and distant mip shimmering fixes remain open. See the [changelog](CHANGELOG.md#v0619--2026-09-25) and [development status](docs/STATUS.md).
 
 ## v0.6.15 release
 
