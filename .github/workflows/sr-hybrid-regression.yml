@@ -1,0 +1,103 @@
+name: SR hybrid regression
+on:
+  push:
+    branches: [main, fix/issue-64-hybrid-motion]
+    paths: ['LostOdysseyRecomp/gpu/**', 'tools/tests/*test.cpp', 'tools/tests/motion_replay/**', 'tools/tests/sr_hybrid/**', '.github/workflows/sr-hybrid-regression.yml']
+  pull_request:
+    paths: ['LostOdysseyRecomp/gpu/**', 'tools/tests/*test.cpp', 'tools/tests/motion_replay/**', 'tools/tests/sr_hybrid/**', '.github/workflows/sr-hybrid-regression.yml']
+permissions:
+  contents: read
+concurrency:
+  group: sr-hybrid-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  cpu:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build and run standalone CPU contracts
+        run: |
+          cmake -S tools/tests/sr_hybrid -B out/hybrid-cpu -DCMAKE_BUILD_TYPE=Release
+          cmake --build out/hybrid-cpu --config Release --parallel 2
+          ctest --test-dir out/hybrid-cpu -C Release -V
+      - name: ASan and UBSan
+        if: runner.os == 'Linux'
+        run: |
+          cmake -S tools/tests/sr_hybrid -B out/hybrid-asan -DLO_HYBRID_SANITIZE=ON -DCMAKE_BUILD_TYPE=Debug
+          cmake --build out/hybrid-asan --parallel 2
+          ctest --test-dir out/hybrid-asan -V
+  vulkan-and-native:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install public compiler and software Vulkan dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ninja-build libx11-dev libvulkan-dev mesa-vulkan-drivers vulkan-validationlayers glslang-tools spirv-tools libzstd-dev
+          git submodule update --init --depth 1 thirdparty/plume tools/XenosRecomp tools/XenonRecomp thirdparty/unordered_dense
+          git -C thirdparty/plume apply ../../tools/patches/plume-lostodyssey.patch
+          git -C thirdparty/plume submodule update --init --depth 1 contrib/volk contrib/Vulkan-Headers contrib/VulkanMemoryAllocator
+          git -C tools/XenosRecomp submodule update --init --recursive --depth 1
+          git -C tools/XenonRecomp submodule update --init --depth 1 thirdparty/tomlplusplus
+          mkdir -p out/dxc
+          curl --fail --location --retry 2 https://github.com/microsoft/DirectXShaderCompiler/releases/download/v1.8.2505.1/linux_dxc_2025_07_14.x86_64.tar.gz -o out/dxc.tar.gz
+          echo 'f2213da1fc99dc8778c8823078e16ba97c7f80f86a1d4520ab1adf4b462bc48c  out/dxc.tar.gz' | sha256sum -c -
+          tar -xzf out/dxc.tar.gz -C out/dxc
+      - name: Compile production renderer boundary and actual GPU fixtures
+        run: |
+          cmake -S tools/tests/motion_replay -B out/hybrid-gpu -G Ninja -DCMAKE_BUILD_TYPE=Release -DLO_ENABLE_DLSS=OFF -DLO_ENABLE_FSR=OFF
+          cmake --build out/hybrid-gpu --target sr_hybrid_motion_gpu_test motion_renderer_compile motion_replay_gpu_test temporal_aa_regression temporal_frame_inputs_test native_dlss_p2_routing_test motion_vector_test LoNativeDlssRendererTest LoDlssEvaluateCaptureContractTest --parallel 2
+      - name: Execute Vulkan, renderer and capture regressions
+        shell: bash
+        run: |
+          export LD_LIBRARY_PATH="$PWD/out/dxc/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          export VK_ICD_FILENAMES="$(find /usr/share/vulkan/icd.d -name '*lvp*.json' | head -1)"
+          test -n "$VK_ICD_FILENAMES"
+          export VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation
+          mkdir -p out/vulkan-settings
+          printf 'khronos_validation.debug_action = VK_DBG_LAYER_ACTION_LOG_MSG\nkhronos_validation.report_flags = error\n' > out/vulkan-settings/vk_layer_settings.txt
+          export VK_LAYER_SETTINGS_PATH="$PWD/out/vulkan-settings"
+          ctest --test-dir out/hybrid-gpu -V -R '^(sr_hybrid_motion_gpu|motion_gpu|motion_cpu|temporal_aa_legacy|temporal_frame_inputs|native_dlss_p2_routing|LoNativeDlssRendererTest|hybrid_capture_metadata)$' 2>&1 | tee out/hybrid-vulkan.log
+          if grep -E 'Validation Error|VUID-' out/hybrid-vulkan.log; then exit 1; fi
+      - name: Compile both SDK adapters with pinned production headers
+        run: |
+          mkdir -p out/fsr-sdk out/ngx-sdk
+          git -C out/fsr-sdk init
+          git -C out/fsr-sdk remote add origin https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK.git
+          git -C out/fsr-sdk fetch --depth 1 origin c6efa6bf7f2027b3ec94f28578bb5965eabb9e55
+          git -C out/fsr-sdk sparse-checkout set sdk/include sdk/src/backends/vk
+          git -C out/fsr-sdk checkout FETCH_HEAD
+          git -C out/ngx-sdk init
+          git -C out/ngx-sdk remote add origin https://github.com/NVIDIA/DLSS.git
+          git -C out/ngx-sdk fetch --depth 1 origin 374959484e79a640feaba44c93ac8cfb0a03f5b5
+          git -C out/ngx-sdk sparse-checkout set include
+          git -C out/ngx-sdk checkout FETCH_HEAD
+          bash tools/fsr/native_compile_check.sh out/fsr-sdk out/fsr-native-compile "$(command -v glslangValidator)"
+          for mode in on off; do
+            flags=''
+            if [ "$mode" = on ]; then flags='-DLO_DLSS_SDK=1'; fi
+            c++ -std=c++20 -O2 -include bit -DLO_GPU_PLUME=1 $flags \
+              -I LostOdysseyRecomp -I thirdparty/plume -I thirdparty/plume/contrib/volk \
+              -I thirdparty/plume/contrib/Vulkan-Headers/include -I thirdparty/plume/contrib/VulkanMemoryAllocator/include \
+              -I out/ngx-sdk/include -c LostOdysseyRecomp/gpu/dlss_ngx.cpp -o "out/ngx-$mode.o"
+          done
+          echo 'NATIVE_ADAPTER_COMPILE_OK; no vendor SDK execution or game acceptance claimed'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sr-hybrid-validation
+          path: |
+            out/hybrid-vulkan.log
+            out/hybrid-gpu/Testing/Temporary/LastTest.log
+            out/fsr-native-compile/sdk-memory-regression.json
+          if-no-files-found: ignore
