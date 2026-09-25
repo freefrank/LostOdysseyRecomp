@@ -3111,6 +3111,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             ++fb;
                 for (auto& cache : s.textureSetCache) cache.Clear();
                 s.retiredTextures.clear();
+                retiredSamplers[i].clear();
                 s.bloomPrefilterUsed = 0;
                 if(temporalHistory)temporalHistory->ReleaseCompletedThrough(s.temporalSerial);
                 else if(sparseCollector)sparseCollector->ReleaseCompleted();
