@@ -223,6 +223,32 @@ const wchar_t *BackendPendingSentence(gpu::backend::Backend backend)
     return Tr(L"Graphics backend change is not applied. DLSS is checked after restart.",
               L"圖形後端變更尚未套用。DLSS 會在重新啟動後再確認。");
 }
+const wchar_t* FsrFallbackSentence(gpu::frame_plan::DlssEffectReason reason)
+{
+    using gpu::frame_plan::DlssEffectReason;
+    switch (reason) {
+    case DlssEffectReason::NoEligibleScene:
+        return Tr(L"FSR: no eligible scene in the latest frame. Menus and transitions may use normal rendering.",
+                  L"FSR：最近一幀沒有合格場景。選單和過場可能使用常規渲染。");
+    case DlssEffectReason::UnknownColorEncoding:
+        return Tr(L"FSR: scene color source is not verified. Normal rendering is used for this frame.",
+                  L"FSR：場景色彩來源尚未確認，這一幀使用常規渲染。");
+    case DlssEffectReason::MotionPipelinePending:
+        return Tr(L"FSR: motion data is still being prepared.", L"FSR：正在準備運動資料。");
+    case DlssEffectReason::FeatureReconfigurePending:
+        return Tr(L"FSR: waiting to rebuild the upscaler.", L"FSR：正在等待重建縮放器。");
+    case DlssEffectReason::PromotionUnavailable:
+        return Tr(L"FSR: output was not adopted this frame.", L"FSR：這一幀未能採用輸出。");
+    case DlssEffectReason::RequestFailure:
+        return Tr(L"FSR request failed. Change the upscaler setting or restart to retry.",
+                  L"FSR 請求失敗。請變更縮放設定或重新啟動後重試。");
+    case DlssEffectReason::GpuWorkStopped:
+        return Tr(L"FSR: GPU work has stopped. Restart is required.", L"FSR：GPU 工作已停止，需要重新啟動。");
+    default:
+        return Tr(L"FSR has not submitted output for the current request. Normal rendering is in use.",
+                  L"FSR 目前的請求尚無已提交輸出，正在使用常規渲染。");
+    }
+}
 // The first sentence is the classified result. Active with an execution record
 // reads quality and size from that submitted frame, not from an unsaved edit or
 // the CPU plan. Submitted means that output was accepted for submission. It does
@@ -236,14 +262,36 @@ std::wstring DlssNotice()
     if (GetConfig().upscaler == gpu::upscaling::Upscaler::Fsr ||
         (execution && execution->actualProvider == gpu::upscaling::Upscaler::Fsr)) {
         std::wstring fsrText;
-        if (execution && execution->actualProvider == gpu::upscaling::Upscaler::Fsr &&
+        const bool matchingRequest = running.hasPlan && running.plannedRequest == gpu::upscaling::Upscaler::Fsr;
+        const bool matchingExecution = matchingRequest && execution &&
+            execution->actualProvider == gpu::upscaling::Upscaler::Fsr &&
+            execution->plan.deviceEpoch == running.device.deviceEpoch &&
+            execution->plan.requestSignature == running.requestSignature &&
+            execution->plan.geometryEpoch == running.geometryEpoch;
+        if (running.device.gpuWorkStopped)
+            fsrText = FsrFallbackSentence(gpu::frame_plan::DlssEffectReason::GpuWorkStopped);
+        else if (running.device.backend != gpu::backend::Backend::Vulkan)
+            fsrText = Tr(L"FSR needs Vulkan and a restart.", L"FSR 需要 Vulkan，並在重新啟動後才會使用。");
+        else if (!running.device.deviceReady)
+            fsrText = Tr(L"FSR: graphics device is not ready.", L"FSR：圖形裝置尚未就緒。");
+        else if (!running.device.fsrAvailable)
+            fsrText = Tr(L"FSR is unavailable on this device or build.", L"目前的裝置或版本無法使用 FSR。");
+        else if (matchingRequest && running.failure)
+            fsrText = FsrFallbackSentence(gpu::frame_plan::DlssEffectReason::RequestFailure);
+        else if (matchingExecution && execution->submissionSerial &&
+            execution->plan.consumer == gpu::upscaling::TemporalConsumer::FsrSr &&
             execution->outcome == gpu::frame_plan::DlssExecutionOutcome::Submitted) {
             const wchar_t* modes[] = {Tr(L"Quality", L"品質"), Tr(L"Balanced", L"平衡"), Tr(L"Performance", L"效能"), L"Native AA"};
             fsrText = std::wstring(L"FSR ") + modes[uint32_t(gpu::upscaling::NormalizeFsrQuality(execution->plan.fsrQuality))] +
                 Tr(L" output submitted.", L" 輸出已提交。") + ExecutionSizeSuffix(execution->plan);
             if (edit.upscaler == gpu::upscaling::Upscaler::Fsr && edit.fsrQuality != execution->plan.fsrQuality)
                 fsrText += Tr(L" The selected FSR quality is not applied yet.", L" 選取的 FSR 品質尚未套用。");
-        } else fsrText = Tr(L"FSR has no submitted output. Normal rendering is used until it is ready.", L"FSR 尚無已提交的輸出。準備完成前使用常規渲染。");
+        } else {
+            fsrText = FsrFallbackSentence(matchingExecution ? execution->reason :
+                gpu::frame_plan::DlssEffectReason::AwaitingGpuFrame);
+        }
+        if (edit.graphicsBackend != running.device.backend)
+            fsrText += Tr(L" The selected graphics backend applies after restart.", L" 選取的圖形後端會在重新啟動後套用。");
         if (edit.upscaler != gpu::upscaling::Upscaler::Fsr)
             fsrText += Tr(L" The selected upscaler is not applied yet.", L" 選取的縮放技術尚未套用。");
         return fsrText;
