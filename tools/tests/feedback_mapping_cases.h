@@ -82,7 +82,6 @@ inline constexpr uint64_t feedbackHeldMappings[]{
     0xd24619b1a13523dcull,
     0xe810cfacc107fd3cull,
     0xf25929da09e30a5cull,
-    0x2078ccaa70d44732ull,
     0x490e7455d880426cull,
     0x8d32020847a4f6b2ull,
     0xb60fba087b51eb53ull,

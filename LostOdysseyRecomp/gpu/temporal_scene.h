@@ -76,7 +76,12 @@ inline int PositionVPSlot(uint64_t shader) {
     case 0x6761469677f921c6ull:
     // f2548-f2550: matched static depth geometry; c8-c11 position/o2 only,
     // leaving the independent c7 UV transform and c12 lighting untouched.
-    case 0xff769ec7b88e575full:return 8;
+    case 0xff769ec7b88e575full:
+    // f6131-f6133: late additive floor lighting matches the f7fd depth and
+    // ff769 material geometry. c8-c11 feed oPos and o5; PS 4013372b6413788f
+    // samples the current scene light resolve through o5.xy/w, so the lookup
+    // must follow the same raster jitter. c7 material UV and PS banks stay intact.
+    case 0x2078ccaa70d44732ull:return 8;
     // f5446-f5448 enemy skinning: c230-c233 post-skin clip position only.
     case 0x4bd8985d84983b83ull:
     case 0x31bde3e2770db187ull:case 0x7e8492365edcf556ull:return 230;

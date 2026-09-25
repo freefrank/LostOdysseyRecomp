@@ -8,6 +8,7 @@
 #include "f5912_jitter_capture.h"
 #include "f16385_jitter_capture.h"
 #include "f2548_jitter_capture.h"
+#include "f6131_late_floor_jitter_capture.h"
 #include "feedback_mapping_cases.h"
 
 using namespace gpu::temporal;
@@ -1101,6 +1102,111 @@ static Float4 Battle8dClip(const Constants& c, Float4 r6)
     r4=Mad(r6[0],C(c,9),r4);
     return Mad(r6[2],C(c,8),r4); // oPos and o2; c7 UV is independent.
 }
+
+struct LateFloorOutput { Float4 position, clipCopy; std::array<float,2> materialUv; };
+// f6131 VS 2078 copies the c8..11 result to both oPos and o5. Its separate
+// r0.xy*c7.xy+c7.wz calculation feeds o0; the PS samples tex0 from i5, not o0.
+static LateFloorOutput LateFloor2078(const Constants& c, Float4 local,
+    std::array<float,2> fetchedUv)
+{
+    const auto clip=Battle8dClip(c,local);
+    const auto uv=C(c,7);
+    return {clip,clip,{fetchedUv[0]*uv[0]+uv[3],fetchedUv[1]*uv[1]+uv[2]}};
+}
+// f6131 PS 4013: rcp(i5.w), multiply i5.xy, r6.yx*c0.yx+c0.zw,
+// then sample tex0 at r6.yx. Keep this independent of the VS upload helper.
+static std::array<float,2> LateFloorTex0(const Constants& ps, const Float4& i5)
+{
+    const float reciprocal=1.f/i5[3];
+    const float x=reciprocal*i5[0], y=reciprocal*i5[1];
+    const auto c0=C(ps,0);
+    const float r6x=y*c0[1]+c0[2], r6y=x*c0[0]+c0[3];
+    return {r6y,r6x};
+}
+static void CapturedF6131LateFloor()
+{
+    double oldClipSeparation=0, oldTex0Separation=0, maxDepthError=0;
+    for (const auto& draw:f6131_late_floor_capture::draws)
+    {
+        Constants original{}, originalDepth{}, originalPs{};
+        std::copy(draw.vertex.begin(),draw.vertex.end(),original.begin());
+        std::copy(draw.vertexLate.begin(),draw.vertexLate.end(),original.begin()+254*4);
+        std::copy(draw.depth.begin(),draw.depth.end(),originalDepth.begin());
+        std::copy(draw.pixel.begin(),draw.pixel.end(),originalPs.begin());
+        std::array<uint32_t,16> vp{};
+        std::copy_n(original.begin()+8*4,16,vp.begin());
+        Check(draw.vs==0x2078ccaa70d44732ull && draw.ps==0x4013372b6413788full &&
+            draw.depthVs==0xf7fd88506d704a3dull && draw.slot==8 &&
+            std::equal(vp.begin(),vp.end(),originalDepth.begin()+4*4),
+            "f6131 late floor uses the captured depth camera and reviewed shader pair");
+        for (const auto extent:{Viewport{0,0,2560,1440},Viewport{0,0,3840,2160}})
+            for (uint64_t phase=0;phase<32;++phase)
+            {
+                const SceneAnchor anchor{vp,extent,54};
+                auto late=original,depth=originalDepth,ps=originalPs,depthPs=originalPs;
+                Check(ApplyDrawJitter(draw.depthVs,0,phase,true,true,&anchor,54,extent,
+                    depth.data(),depthPs.data()).applied,"f6131 depth camera accepts jitter");
+                const auto result=ApplyDrawJitter(draw.vs,draw.ps,phase,true,true,&anchor,
+                    54,extent,late.data(),ps.data());
+                Check(result.applied && result.slot==8 && !result.shadowCompensated &&
+                    ps==originalPs,"f6131 late draw jitters slot 8 without changing PS constants");
+                for (unsigned i=0;i<late.size();++i)
+                    if (i<32 || i>=48 || i%4>=2)
+                        Check(late[i]==original[i],"f6131 world, UV, lighting and clip ZW constants stay exact");
+                for (const auto local:{Float4{-250,-100,20,1},Float4{120,90,80,1},
+                    Float4{10,250,160,1}})
+                {
+                    const auto d=TireDepthB030(depth,local);
+                    const auto current=LateFloor2078(late,local,{.125f,.875f});
+                    const auto old=LateFloor2078(original,local,{.125f,.875f});
+                    Check(d==current.position && current.clipCopy==current.position,
+                        "f6131 independent late clip and copied i5 align with paired depth");
+                    Check(current.position[2]==old.position[2] && current.position[3]==old.position[3],
+                        "f6131 late draw preserves clip Z and W");
+                    Check(current.materialUv==old.materialUv,
+                        "f6131 c7 material UV is independent of position jitter");
+                    Check(std::isfinite(d[3]) && std::abs(d[3])>1,
+                        "f6131 synthetic point has nondegenerate clip W");
+                    const auto currentLookup=LateFloorTex0(ps,current.clipCopy);
+                    const auto depthLookup=LateFloorTex0(originalPs,d);
+                    const auto oldLookup=LateFloorTex0(originalPs,old.clipCopy);
+                    for (unsigned axis=0;axis<2;++axis)
+                    {
+                        const double dimension=axis?extent.height:extent.width;
+                        // Host viewport Y and captured PS c0.y both point down.
+                        const double clipPixels=(double(d[axis])/d[3]-
+                            double(old.position[axis])/old.position[3])*dimension*(axis?-.5:.5);
+                        const double tex0Pixels=(double(currentLookup[axis])-
+                            double(oldLookup[axis]))*dimension;
+                        maxDepthError=std::max(maxDepthError,
+                            std::abs((double(currentLookup[axis])-depthLookup[axis])*dimension));
+                        oldClipSeparation=std::max(oldClipSeparation,std::abs(clipPixels));
+                        oldTex0Separation=std::max(oldTex0Separation,std::abs(tex0Pixels));
+                        Check(std::abs((double(currentLookup[axis])-depthLookup[axis])*dimension)<.003,
+                            "f6131 clip-derived tex0 samples the paired depth pixel");
+                        Check(std::abs(tex0Pixels-clipPixels)<.003,
+                            "f6131 tex0 lookup follows the independent clip pixel shift");
+                    }
+                }
+                for (unsigned mutation=0;mutation<2;++mutation)
+                {
+                    auto rejected=original,rejectedPs=originalPs;
+                    if (!mutation) rejected[8*4]^=1;
+                    const auto before=rejected;
+                    const auto failure=ApplyDrawJitter(draw.vs,draw.ps,phase,true,true,&anchor,
+                        mutation?55:54,extent,rejected.data(),rejectedPs.data());
+                    Check(!failure.applied && rejected==before && rejectedPs==originalPs &&
+                        failure.rejection==(mutation?JitterRejection::DepthMismatch:
+                            JitterRejection::CameraMismatch),
+                        "f6131 camera or depth mismatch rejects without changing constants");
+                }
+            }
+    }
+    Check(oldClipSeparation>.3 && oldTex0Separation>.3,
+        "f6131 unmapped late draw separates from depth and tex0 by a visible subpixel phase");
+    std::printf("Captured f6131 late floor: %u checks, five draws, 32 phases, 1440p/4K; old clip %.6f px, tex0 %.6f px, depth lookup error %.6f px\n",
+        checks,oldClipSeparation,oldTex0Separation,maxDepthError);
+}
 static float Dot(const Float4& a,const Float4& b)
 {
     float result=0;
@@ -1254,6 +1360,8 @@ int main(int argc,char** argv)
     { CapturedF16385Layers(); return 0; }
     if (argc==2 && std::strcmp(argv[1],"--captured-f2548-layers")==0)
     { CapturedF2548Layers(); return 0; }
+    if (argc==2 && std::strcmp(argv[1],"--captured-f6131-late-floor")==0)
+    { CapturedF6131LateFloor(); return 0; }
     if (argc==2 && std::strcmp(argv[1],"--captured-f5912-layers")==0)
     { CapturedF5912Layers(); return 0; }
     if (argc==2 && std::strcmp(argv[1],"--captured-f5997-layers")==0)
@@ -1264,6 +1372,7 @@ int main(int argc,char** argv)
     CapturedStaticLayerCoverage();
     if (argc==2 && std::strcmp(argv[1],"--captured-static-layers")==0) return 0;
     CapturedF2548Layers();
+    CapturedF6131LateFloor();
     FeedbackMappingBatch();
     TireMaterialCoverage();
     BattleCoverage();

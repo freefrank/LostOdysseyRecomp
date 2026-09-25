@@ -25,6 +25,8 @@ Native NVIDIA DLSS Super Resolution and DLAA are experimental features.
 Windows and Linux release packages include official NGX runtime libraries;
 image quality and stability remain under validation.
 
+Development builds include Hybrid camera/depth motion fallback and bounded DLSS sizing recovery.
+
 ### Experimental opt-in FSR SR
 
 Source builds and release packaging workflows support the experimental FSR 3.1.4 path on

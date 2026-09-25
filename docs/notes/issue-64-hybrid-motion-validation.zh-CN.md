@@ -81,3 +81,23 @@ FSR的`fsr-evaluations.json`中检查`motion_state=3`、`transparency_compositio
 DLAA仍报SizingError时，保留`DLSS sizing:`中的quality、output、optimal/min/max和raw_ngx；确认有限重试后仍失败，再研究具体NGX/驱动返回。`UnknownColorEncoding`或无合格相机/深度仍需独立定位，不应通过清空资格检查来“修复”。
 
 关闭#64的条件：报告者原失败路线实际提交并可恢复，DLAA尺寸问题有解释或独立修复，A/B画质没有明显回归。自动测试通过不能替代这一步。
+
+## 6. 2026-09-25 RTX 5080 实机复验
+
+使用同一`e2131d7f` EXE（SHA-256：`E4A9AAF7756D5D5AAF170E6A41C787FCC8E566DE7FC4C3375DA33CB490B6E6FE`），Vulkan、RTX 5080、驱动`616.56`、`3840x2160`。ON/OFF目标环境变量分别确认生效为`1/0`。完整SDK-on Windows build成功；本次没有重跑已有CI。
+
+DLSS Quality的成对捕获为ON `6131-6133`、OFF `2516-2518`。两组各帧均为`vendor_success=true`、`adopted=true`、`checked_submit=true`、`gpu_completed=true`；ON为`motion_state=3`且`bias_current_color_bound_to_sdk=true`，OFF为`motion_state=1`且该绑定为`false`。另有ON DLAA提交`frame=7590`；本次所有DLSS sizing mode均成功，没有`SizingError`。因此已确认真实DLSS SDK提交、Hybrid运动状态和bias接线生效。
+
+FSR捕获为ON Native AA `f9858-9860`、OFF Quality `f4541-4543`，quality不一致，不能作为严格A/B画质对照。两组均有`checked_submit=true`、`gpu_completed=true`；ON为`motion_state=3`、Hybrid mask为`true`，但该捕获因`capture_limit`省略原始输入/输出，不能据此判断像素级结果；OFF为`motion_state=1`、mask为`false`。
+
+用户实测确认Hybrid开启和关闭时地板仍有上次尝试修复的闪烁，实机画质验收失败，不能合并到`main`。四组导出的`seq00`、`seq02`地板稳定，`seq05`已出现明暗交替；该变化早于DLSS/FSR处理。ON DLSS首次可见变化范围为`draw748..1316`，更细的draw归因尚未完成，不能据此宣称Hybrid是唯一根因。F1 readback会造成约2--3秒帧间隔/reset，不能用来代表正常运行性能，也不能直接证明历史reset根因。
+
+原始证据保存在本地忽略产物目录：`out/validation/issue64/manual-e2131d7/analysis/all-floor-metrics.json`和`all-floor-comparison.png`。这些文件用于复核，不是公共发布附件。该次Hybrid ON/OFF运行的状态是：真实SDK执行和绑定已验证，但地板闪烁未解决；这条历史失败记录保留，不代表后续地板单项修复的验收结果。
+
+## 7. 后期光照候选的限定范围修复
+
+根据新的ON DLSS捕获，在生产`temporal_scene.h`中为此前`held`的`2078ccaa70d44732`增加单条slot 8映射，对应后期光照`draw1206..1210`。这不是对原35-source批次统计的改写：历史批次仍为35个source，历史映射数量仍记为119；本次是其后的单项限定范围映射。
+
+`LoTemporalJitterTest --captured-f6131-late-floor`通过334,086项检查，覆盖5条捕获绘制、32个相位和1440p/4K；旧clip分离为0.488091 px，tex0分离为0.488205 px，paired-depth lookup误差为0。`--feedback-mapping-batch`在从held列表移除该候选后通过216,624项，原35个VS的其他结果不变。这些是捕获常量、独立公式和合成顶点的CPU检查，不是真实GPU地板像素验收。捕获分析已核对`seq04`（`draw1199`）为`b0d9000`、format 6、2560x1440，`draw1206..1210`的texture 0与其地址和format相同、guest尺寸为1280x720；producer `draw1058..1197`共140条绘制、6个VS均已映射且VP匹配。实际guard与像素相位仍未核实。完整Windows SDK-on build已成功。新候选EXE（`e2131d7+dirty`，仅含本次runtime单项映射）SHA-256为`05A2C9EC8983D293946D9987B828EF1BB45B3405090BC9056BF8D5FE25B0BF03`，在`manual-floor-fix1`目录完成本地实机验收；`sr-diagnostics.log`记录frame 1320的`geometry_view_ready=true`、`reset=false`、`input=2560x1440`、`confidence_mask=1`。新证据已将范围限定到该后期地板光照映射；仍未证明producer实际通过jitter守卫、像素采样相位或完整像素覆盖。用户已接受该场景地板修复，本地验收完成，当前可接受合并到`main`；这不扩大为所有模式、全游戏或Issue #64原RTX 4080 SUPER DLAA报告者已验收。Issue #64保持开放，尚未发布新的Release。
+
+此前的`2e33e75`修复已经包含在远端`main`及本次EXE中；`a027ab99fa3e3b0d`和`ff769ec7b88e575f`的slot 7/8映射均已存在。上次审查保留为`held`的后期光照候选`2078ccaa70d44732`在本次变更前仍未映射；新ON DLSS三帧中，它与PS `4013372b6413788f`出现在`draw1206-1210`，对应`seq04`（draw1199）的光照mask阶段，slot 8精确匹配场景VP，五组几何均匹配更早的深度/材质绘制。地板颜色稳定状态是`seq00`和`seq02`，不能把`seq04`当作地板颜色稳定帧。这缩小了后续调查范围并促成本次单项映射，但生产者实际通过jitter守卫、像素采样相位及实际像素覆盖尚未验证，不能认定该候选是唯一根因。另一候选`e810cfacc107fd3c`位于draw746，早于地板仍稳定的seq02，当前证据优先排查后期候选。
