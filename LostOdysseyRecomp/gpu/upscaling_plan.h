@@ -106,12 +106,34 @@ struct SizingKey {
 
 enum class SizingState : uint32_t { Pending, Ready, Unavailable, Error };
 
+// CPU-side diagnostics only; no change to persisted quality IDs or wire plans.
+enum class SizingIssue : uint8_t {
+    None, Prerequisite, CapabilityParameters, OptimalQuery, OptimalRead,
+    ZeroExtent, InvalidRange, DlaaExtentMismatch, CleanupFailed
+};
+inline constexpr const char* SizingIssueName(SizingIssue issue) {
+    switch (issue) {
+    case SizingIssue::None: return "none";
+    case SizingIssue::Prerequisite: return "prerequisite";
+    case SizingIssue::CapabilityParameters: return "capability_parameters";
+    case SizingIssue::OptimalQuery: return "optimal_query";
+    case SizingIssue::OptimalRead: return "optimal_read";
+    case SizingIssue::ZeroExtent: return "zero_extent";
+    case SizingIssue::InvalidRange: return "invalid_range";
+    case SizingIssue::DlaaExtentMismatch: return "dlaa_extent_mismatch";
+    case SizingIssue::CleanupFailed: return "cleanup_failed";
+    }
+    return "unknown";
+}
+
 struct ModeSizing {
     SizingState state = SizingState::Pending;
     resolution::Size optimal{};
     resolution::Size minimum{};
     resolution::Size maximum{};
     std::optional<int32_t> ngxResult;
+    SizingIssue issue = SizingIssue::None;
+    std::optional<int32_t> optimalWidthResult, optimalHeightResult, cleanupResult;
     bool operator==(const ModeSizing&) const = default;
 };
 
