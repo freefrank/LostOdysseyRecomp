@@ -5910,6 +5910,29 @@
       ],
       "source_lines": [],
       "record_type": "issue"
+    },
+    {
+      "key": "anti-aliasing-consolidation-remove-experimental-taa",
+      "title": "Consolidate anti-aliasing options and remove standalone experimental TAA",
+      "body": "<!-- lo-project:anti-aliasing-consolidation-remove-experimental-taa -->\n\n## Summary and objectives\n\nPlan anti-aliasing option consolidation for the next release after v0.6.19 (version unspecified), removing the standalone experimental TAA user option while retaining Off, FXAA, spatial SMAA, DLSS, and FSR temporal upscaling.\n\n## Scope and technical boundaries\n\n- Remove standalone experimental TAA user option from settings and runtime presentation.\n- Retain anti-aliasing and scaling options: Off, FXAA, spatial SMAA, DLSS, and FSR.\n- Disable temporal camera jitter and in-house TAA accumulation on FXAA and SMAA paths.\n- Preserve necessary common jitter, depth, and motion vector input handling on DLSS and FSR paths.\n- Migrate legacy TAA configurations to a stable spatial AA mode (exact default to be determined during implementation).\n- Context: User reported ground flickering in capture `render-17903110123692464-f2548.zip` (v0.6.19 declared in capture header, not verified by executable hash; Vulkan, RTX 5080, 4K); structural checks on f2548 are complete, but the specific ground draw/shader, flickering stage, and root cause remain undetermined.\n\n## Planned verification and limits\n\n- Acceptance requires separate ground-flicker validation under DLSS and FSR.\n- Removing standalone TAA must not be claimed as an automatic ground-flicker resolution.\n- Verify migration of legacy TAA settings to stable spatial AA mode.\n- Status: Planned for next release after v0.6.19 (version unspecified); implementation and verification not started.\n\nDependencies (source keys): `smaa-camera-taa-settings`, `settings-scaling-aa-presets`, `vendor-temporal-upscaling`.\n\nstage_detail: Planned for next release after v0.6.19; implementation and verification not started\n",
+      "issue_url": null,
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Graphics features",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Release": "Next release",
+        "Start date": null,
+        "Target date": null,
+        "Evidence": "Planned for next release after v0.6.19 (version unspecified); implementation and verification not started. Removes standalone experimental TAA user option while retaining Off, FXAA, spatial SMAA, DLSS, and FSR. FXAA/SMAA paths disable temporal camera jitter and in-house TAA history accumulation; DLSS/FSR retain common jitter, depth, and motion vector inputs. Legacy TAA settings migrate to stable spatial AA. User reported ground flickering in capture render-17903110123692464-f2548.zip (v0.6.19 declared in capture header, not verified by executable hash; Vulkan, RTX 5080). Structural checks on f2548 are complete; specific ground draw/shader, flickering stage, and root cause remain undetermined. Acceptance requires separate DLSS and FSR ground-flicker verification; removing standalone TAA does not claim ground-flicker resolution."
+      },
+      "source_refs": [
+        "docs/ROADMAP.md",
+        "docs/ROADMAP.zh-CN.md",
+        "out/diagnostics/render-f2548-summary.json"
+      ],
+      "source_lines": [],
+      "record_type": "backlog"
     }
   ]
 }

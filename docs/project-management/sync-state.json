@@ -2927,6 +2927,20 @@
         "Evidence": "Feature request for Depth-of-Field toggle or adjustment slider due to character-relative blur appearance. Initial triage requested F1 render capture ZIP; in backlog.",
         "Source key": "issue-30-dof-toggle-slider"
       }
+    },
+    "anti-aliasing-consolidation-remove-experimental-taa": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg8r_Y8",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Graphics features",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Release": "Next release",
+        "Evidence": "Planned for next release after v0.6.19 (version unspecified); implementation and verification not started. Removes standalone experimental TAA user option while retaining Off, FXAA, spatial SMAA, DLSS, and FSR. FXAA/SMAA paths disable temporal camera jitter and in-house TAA history accumulation; DLSS/FSR retain common jitter, depth, and motion vector inputs. Legacy TAA settings migrate to stable spatial AA. User reported ground flickering in capture render-17903110123692464-f2548.zip (v0.6.19 declared in capture header, not verified by executable hash; Vulkan, RTX 5080). Structural checks on f2548 are complete; specific ground draw/shader, flickering stage, and root cause remain undetermined. Acceptance requires separate DLSS and FSR ground-flicker verification; removing standalone TAA does not claim ground-flicker resolution.",
+        "Source key": "anti-aliasing-consolidation-remove-experimental-taa"
+      },
+      "title": "Consolidate anti-aliasing options and remove standalone experimental TAA",
+      "body_sha256": "49d79ef799eea5769606d9666edd03bfb93b78ae087e45bc059c9422e28b18af"
     }
   }
 }
