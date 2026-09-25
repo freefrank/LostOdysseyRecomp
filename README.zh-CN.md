@@ -32,6 +32,10 @@ Quality、Balanced、Performance、Native AA 均有 Windows 运行证据；原�
 实测的 Windows 渲染画面与 Linux 运行验证（AMD Radeon 8060S RADV STRIX_HALO）均已获用户验收。
 全场景画质覆盖与 DLSS/FSR 帧生成仍待开展。低功耗硬件要求按用户授权通过 APEX 15W 代理设备验证，不代表 Steam Deck 硬件等价。
 
+## v0.6.19 发布准备
+
+准备发布于 2026-09-25。整合了游戏内实时各向异性过滤（Off / 2x / 4x / 8x / 16x，保存后生效无需重启）及基于不可变代际管理和生命周期同步的采样器表重构、图形设置菜单 DLSS/FSR 画质档位排序与整合抗锯齿交互、避免每次导航重复进行整屏背景软件滤波的静态菜单装饰缓存、经实机验收的原生系统菜单“退出到桌面”`SDL_QUIT` 路由、设置菜单“退出到主菜单”标题跳转、调试“随时存档”跨进程状态持久化、作弊菜单侧栏 LT/RT 手柄分类切换与底栏提示、鼠标闲置自动隐藏、游戏窗口输入法按键拦截修复，以及开发者工具与测试套件全景索引。独立 CPU 契约、Linux 软件 Vulkan 仿真以及限定的实体手柄与原生退出测试均已通过；全游戏实机 GPU 场景验证、其余语言逐项实机确认以及缺少 mip 链导致的远景闪烁修复仍待推进。详见[更新日志](CHANGELOG.md#v0619--2026-09-25)与[开发状态](docs/STATUS.md)。
+
 ## v0.6.15 发布版
 
 已发布 [v0.6.15](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.15)（于 2026-09-24T19:47:35Z 从 source `6eef30d257f2e14ce30a546217574a0dc74fad69` 通过 Release CI [36044604844](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/36044604844) 发布为最新公开版本）。在既有官方 NVIDIA NGX DLSS 310.9.1 基础上，整合了官方 FidelityFX SDK v1.1.4（FSR 3.1.4 实现）的发布构建支持。包含原生 DLSS SR/DLAA 时序生命周期修复（BR-01、BR-02）、带状态校验反馈的图形菜单稳定性重构（BR-03、`GraphicsRow`）、F1 呈现前最终交换链截图与同步 NGX Evaluate 输入/输出捕获、FSR 暂态输入拒绝恢复与 UMA 显存分配支持、安装包内直接内置 28,527 项便携式 Vulkan 着色器整合（用户无需额外下载独立着色器包），以及包含许可证检查的发布与 CI 工作流。测试的 Windows 渲染画面与 Linux 运行验证均已获用户验收；广泛场景覆盖、确定性生产渲染器故障注入序列以及 DLSS/FSR 帧生成仍属于实验性未决阶段。详见[更新日志](CHANGELOG.md#v0615--2026-09-24)与[开发状态](docs/STATUS.md)。

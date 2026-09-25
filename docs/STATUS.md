@@ -1,5 +1,22 @@
 # Project status
 
+## v0.6.19 Release Preparation (2026-09-25) / v0.6.19 发布准备（2026-09-25）
+
+Status as of 2026-09-25:
+The codebase is prepared for the v0.6.19 release, integrating live anisotropic filtering, overhauled quit actions, graphics menu quality and interaction improvements, and debug Save Anywhere persistence into `main`. The release branch combines recent work:
+- Live anisotropic filtering (`Off / 2x / 4x / 8x / 16x`) applying upon saving graphics settings on the next rendered frame without restarting. Immutable sampler descriptor tables (`sampler_palette.h`) replace the active table only after allocations succeed, with previous generations pinned to active GPU command batches until fence completion. Windows and Linux standalone CPU contract suites and Linux software Vulkan emulation (Actions 36079262997, 1,000 mode switches, fault injections, descriptor lifetimes, and `settings_interaction` 1/1) passed; physical-hardware GPU testing across all scenes remains open.
+- Settings menu DLSS and FSR quality ordering (`Performance -> Balanced -> Quality -> DLAA`, FSR Native AA last) and unified AA flow with cached static backdrops avoiding repeated full-background software filtering on navigation. Rebuilt standalone `LoMenuFlowTest` passed all 8 test groups; real-device end-to-end latency is not measured.
+- Native System menu "Quit to Desktop" routed to `SDL_QUIT` across both verified live guest callers (`0x822E256C` and `0x822E26B8`) with UTF-16 null terminator descriptor bounds fix (`text.size() + 1`). Physical-hardware testing on verified candidate build v4 explicitly accepted that confirming Quit to Desktop exits the process.
+- In-game Settings "Quit to Main Menu" returning to Title via `RequestMainMenuAfterSettingsClose` after retail close without `SDL_QUIT`. Synthetic menu flow checks passed; in-game hardware execution and dialog display remain unverified by users item by item.
+- Debug "Save Anywhere" session persistence in `settings.ini` without player menu inclusion (Issue #61). Contract checks passed (`LoSaveAnywhereConfigTest`).
+- Cheats sidebar LT/RT category switching with single-step navigation and English/Chinese on-screen control footer, tested on a physical controller.
+- Input usability improvements: idle cursor auto-hide (Issue #50), gameplay window IME composition suppression, and persistent controller rumble.
+- Developer tooling catalog in `tools/README.md` and structured test harness indexing in `tools/tests/README.md`.
+
+Release preparation status:
+- Release packaging, CI run execution, and asset publication remain in progress; v0.6.19 is not yet published on GitHub Releases.
+- Prior verified public release remains v0.6.15.
+
 ## v0.6.15 published / v0.6.15 已发布
 
 Status as of 2026-09-24:

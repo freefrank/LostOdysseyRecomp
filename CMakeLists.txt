@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.28)
-project(LostOdysseyRecomp VERSION 0.6.15 LANGUAGES C CXX)
+project(LostOdysseyRecomp VERSION 0.6.19 LANGUAGES C CXX)
 include(GNUInstallDirs)
 # Source version, not a release/commit or clean-checkout assertion.
 # Capture before nested projects can replace PROJECT_VERSION in their scope.
