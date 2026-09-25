@@ -2757,11 +2757,11 @@
         "Kind": "Feature",
         "Area": "Graphics features",
         "Status": "Done",
-        "Delivery": "Validated",
+        "Delivery": "Released",
         "Release": "v0.6.19",
         "Start date": "2026-09-15",
-        "Target date": "2026-09-24",
-        "Evidence": "Implemented both AF and Quit to Desktop in main for v0.6.19. AF live options with immutable sampler generations passed CPU and softwareVulkan Actions 36079262997, settings_interaction 1/1; physical GPU validation pending. System Quit to Desktop matched callers 0x822E256C/0x822E26B8 + UTF16 NUL fix; v4 user confirmed successful exit. Implementation in main; planned for closure by main agent after official v0.6.19 release; remains open unreleased at this time.",
+        "Target date": "2026-09-25",
+        "Evidence": "Published in v0.6.19 (commit 1b2ea66, Release CI 36092250520). Implemented live AF options (Off, 2x..16x) with immutable sampler table generations (CPU/softwareVulkan Actions 36079262997 and settings_interaction 1/1 passed; physical GPU validation pending) and in-game System Quit to Desktop matching callers 0x822E256C/0x822E26B8 with UTF-16 NUL copy fix (v4 user confirmed clean exit). Issue #35 verified closed on GitHub.",
         "Source key": "issue-35-graphic-improvements-quit-to-desktop"
       }
     },
@@ -2771,11 +2771,11 @@
         "Kind": "Feature",
         "Area": "Save & Storage",
         "Status": "Done",
-        "Delivery": "Validated",
+        "Delivery": "Released",
         "Release": "v0.6.19",
         "Start date": "2026-09-21",
-        "Target date": "2026-09-24",
-        "Evidence": "Implemented Save Anywhere preference persistence in debug settings, default false. Verified CPU cross-process persistence; physical-device per-item testing remains pending. Commit 2cdac2a / 05eccec. Implementation in main; planned for closure by main agent after official v0.6.19 release; remains open unreleased at this time.",
+        "Target date": "2026-09-25",
+        "Evidence": "Published in v0.6.19 (commit 1b2ea66, Release CI 36092250520). Save Anywhere preference persistence implemented in debug settings, default false. Verified CPU cross-process persistence; physical-device per-item testing remains pending. Issue #61 verified closed on GitHub.",
         "Source key": "issue-61-remember-save-anywhere"
       }
     },
@@ -2785,15 +2785,15 @@
         "Kind": "Feature",
         "Area": "Graphics features",
         "Status": "Done",
-        "Delivery": "Validated",
+        "Delivery": "Released",
         "Release": "v0.6.19",
         "Start date": "2026-09-24",
         "Target date": "2026-09-25",
-        "Evidence": "Unified AA selection into Performance, Balanced, Quality, DLAA, and NativeAA presets; avoids redundant full-screen software filtering with cached menu backdrop (no end-to-end latency claimed). Verified via menu interaction regression test suite (1/1). Commits 19a5f7f, c9c3104, 05eccec.",
+        "Evidence": "Published in v0.6.19 (commit 1b2ea66, Release CI 36092250520). Unified AA selection into Performance, Balanced, Quality, DLAA, and NativeAA presets; avoids redundant full-screen software filtering with cached menu backdrop (no end-to-end latency claimed). Verified via menu interaction regression test suite (1/1).",
         "Source key": "settings-scaling-aa-presets"
       },
       "title": "Streamlined Anti-Aliasing and Scaling presets (Performance, Balanced, Quality, DLAA, NativeAA)",
-      "body_sha256": "e282e575ea8dcdd89f55ee3403bd27136b5b7e87443a972f86448c2edbc87d53"
+      "body_sha256": "b09250fafb289d2c63feef28c1eec8cee4be0f26e1596f5eccd1d836a286d541"
     },
     "settings-main-menu-title-helper": {
       "id": "PVTI_lAHOAAsUY84Biy1azg8re_o",
@@ -2801,15 +2801,15 @@
         "Kind": "Bug",
         "Area": "Settings",
         "Status": "Done",
-        "Delivery": "Validated",
+        "Delivery": "Released",
         "Release": "v0.6.19",
         "Start date": "2026-09-24",
         "Target date": "2026-09-25",
-        "Evidence": "Added confirmed Settings return to Title menu, waiting for native Settings closure before requesting Title. Windows LoMenuFlowTest passed across 8 test groups this round; merged independent settings_interaction 1/1 verified separately; physical device run remains unperformed. Commits 6e06743, 05eccec.",
+        "Evidence": "Published in v0.6.19 (commit 1b2ea66, Release CI 36092250520). Added confirmed Settings return to Title menu, waiting for native Settings closure before requesting Title. Windows LoMenuFlowTest passed across 8 test groups this round; merged independent settings_interaction 1/1 verified separately; physical device run remains unperformed.",
         "Source key": "settings-main-menu-title-helper"
       },
       "title": "Confirmed return to Title menu after Settings: request Title after native Settings closes",
-      "body_sha256": "7d5805f4a0c8b474edb1408e4ca39752da6648bdd296d982e1f7d56810ab0fbf"
+      "body_sha256": "de08ed40977ab83ce8016637b3cdae6d7fb69193303feb737843c8dac60ff049"
     },
     "cheat-menu-controller-navigation": {
       "id": "PVTI_lAHOAAsUY84Biy1azg8re_8",
@@ -2817,15 +2817,15 @@
         "Kind": "Feature",
         "Area": "Debug menu",
         "Status": "Done",
-        "Delivery": "Validated",
+        "Delivery": "Released",
         "Release": "v0.6.19",
         "Start date": "2026-09-24",
-        "Target date": "2026-09-24",
-        "Evidence": "Categorized cheats with LT/RT edge-triggered navigation and bilingual footer tips; user verified on physical controller. Commits a21e973, 166b15f, 217df8c.",
+        "Target date": "2026-09-25",
+        "Evidence": "Published in v0.6.19 (commit 1b2ea66, Release CI 36092250520). Categorized cheats with LT/RT edge-triggered navigation and bilingual footer tips; user verified on physical controller.",
         "Source key": "cheat-menu-controller-navigation"
       },
       "title": "Categorized cheat menu navigation with controller LT/RT triggers and bilingual footer",
-      "body_sha256": "e3e4e1b1e3e533fbce02c850568f0e458f3431ba5f2216bcec07ebce13e125e3"
+      "body_sha256": "6eee17c620f2722060b2e6fab902f93def7c1836465c523c12d36e399bf030eb"
     },
     "input-rumble-cursor-ime-improvements": {
       "id": "PVTI_lAHOAAsUY84Biy1azg8rfAs",
@@ -2833,15 +2833,15 @@
         "Kind": "Feature",
         "Area": "Input",
         "Status": "Done",
-        "Delivery": "Validated",
+        "Delivery": "Released",
         "Release": "v0.6.19",
         "Start date": "2026-09-24",
         "Target date": "2026-09-25",
-        "Evidence": "Maintains runtime XInput motor rumble state during gameplay (not cross-session preference); idle cursor hiding and gameplay IME disabling implemented and integrated into main. Commits a8cc779, 417eaac, 217df8c.",
+        "Evidence": "Published in v0.6.19 (commit 1b2ea66, Release CI 36092250520). Maintains runtime XInput motor rumble state during gameplay (not cross-session preference); idle cursor hiding and gameplay IME disabling implemented and integrated into main.",
         "Source key": "input-rumble-cursor-ime-improvements"
       },
       "title": "Input and controller improvements (runtime rumble state, idle cursor hiding, gameplay IME disable)",
-      "body_sha256": "35b02581a36e3d59bc6eb3767174678ca505c1801cdc450b270458d6d78b4e51"
+      "body_sha256": "21b0247dbfa8e485cc66120460db2ee5581c4d986b5e487d69a094e4c86beeed"
     },
     "issue-49-physical-pixel-window-coords": {
       "id": "PVTI_lAHOAAsUY84Biy1azg8rhKA",

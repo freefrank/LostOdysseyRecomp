@@ -1,21 +1,39 @@
 # Project status
 
-## v0.6.19 Release Preparation (2026-09-25) / v0.6.19 发布准备（2026-09-25）
+## v0.6.19 published / v0.6.19 已发布
 
 Status as of 2026-09-25:
-The codebase is prepared for the v0.6.19 release, integrating live anisotropic filtering, overhauled quit actions, graphics menu quality and interaction improvements, and debug Save Anywhere persistence into `main`. The release branch combines recent work:
-- Live anisotropic filtering (`Off / 2x / 4x / 8x / 16x`) applying upon saving graphics settings on the next rendered frame without restarting. Immutable sampler descriptor tables (`sampler_palette.h`) replace the active table only after allocations succeed, with previous generations pinned to active GPU command batches until fence completion. Windows and Linux standalone CPU contract suites and Linux software Vulkan emulation (Actions 36079262997, 1,000 mode switches, fault injections, descriptor lifetimes, and `settings_interaction` 1/1) passed; physical-hardware GPU testing across all scenes remains open.
-- Settings menu DLSS and FSR quality ordering (`Performance -> Balanced -> Quality -> DLAA`, FSR Native AA last) and unified AA flow with cached static backdrops avoiding repeated full-background software filtering on navigation. Rebuilt standalone `LoMenuFlowTest` passed all 8 test groups; real-device end-to-end latency is not measured.
-- Native System menu "Quit to Desktop" routed to `SDL_QUIT` across both verified live guest callers (`0x822E256C` and `0x822E26B8`) with UTF-16 null terminator descriptor bounds fix (`text.size() + 1`). Physical-hardware testing on verified candidate build v4 explicitly accepted that confirming Quit to Desktop exits the process.
-- In-game Settings "Quit to Main Menu" returning to Title via `RequestMainMenuAfterSettingsClose` after retail close without `SDL_QUIT`. Synthetic menu flow checks passed; in-game hardware execution and dialog display remain unverified by users item by item.
-- Debug "Save Anywhere" session persistence in `settings.ini` without player menu inclusion (Issue #61). Contract checks passed (`LoSaveAnywhereConfigTest`).
-- Cheats sidebar LT/RT category switching with single-step navigation and English/Chinese on-screen control footer, tested on a physical controller.
-- Input usability improvements: idle cursor auto-hide (Issue #50), gameplay window IME composition suppression, and persistent controller rumble.
-- Developer tooling catalog in `tools/README.md` and structured test harness indexing in `tools/tests/README.md`.
+v0.6.19 was published on 2026-09-25T04:18:21Z from tag/source commit `1b2ea6635c5ac4f7cf3c9186fda3cd05575db97d` via Release CI [36092250520](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/36092250520) as the latest public release (non-draft, non-prerelease). It packages live anisotropic filtering, overhauled quit actions, graphics menu quality and interaction improvements, and debug Save Anywhere persistence.
 
-Release preparation status:
-- Release packaging, CI run execution, and asset publication remain in progress; v0.6.19 is not yet published on GitHub Releases.
-- Prior verified public release remains v0.6.15.
+Release and delivery verification:
+- Release CI [36092250520](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/36092250520) succeeded across all four jobs (create draft, prepare FSR, Windows build, Linux build). Public release packages are available at [GitHub Release v0.6.19](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.19).
+- Package validation via `verify_package.py` verified Windows clean repository state, target version 0.6.19, commit matching, and 53 manifest entries (`out/release-v0.6.19/windows-verification.json`).
+- Windows ZIP `LostOdysseyRecomp-windows-x64-v0.6.19.zip`: 243,683,094 bytes, SHA-256 `3f4d634dbc3af9b94c491bdf7557890c20944b1778f3b1867e45927a081e3444`.
+- Linux AppImage `LostOdysseyRecomp-linux-x64-v0.6.19.AppImage`: 251,001,336 bytes, SHA-256 `860d77f8c68a59fc258ad21e9efea79ac370a29369490402b55f0139e28ce3c4`.
+- All four public download links (both packages and their `.sha256` sidecars) returned anonymous HTTP HEAD 200. Sidecar checksums, GitHub asset API digests, and downloaded file hashes match exactly.
+- Tracked issues: GitHub Issues #35 (anisotropic filtering and Quit to Desktop) and #61 (Debug Save Anywhere persistence) are closed. Issue #37 (PortForge launcher integration) remains in progress and is not included in this release.
+
+Included changes and implementation:
+- **Live Anisotropic Filtering**: Added `Off / 2x / 4x / 8x / 16x` controls to the in-game Graphics menu, persisted under `anisotropic_filtering` in `settings.ini` (defaulting to Off) and clamped to the device's Vulkan capabilities. Settings apply upon saving graphics settings on the next rendered frame without restarting. Immutable sampler descriptor tables (`sampler_palette.h`) replace the active table only after allocations succeed, with previous generations pinned to active GPU command batches until fence completion.
+- **Settings menu layout and performance**: Unified AA and DLSS/FSR selection, ordered DLSS quality as Performance, Balanced, Quality, and DLAA with FSR placing Native AA last, placed FSR sharpness after quality, and positioned Save last. Cached static menu decorations at native resolution to avoid repeated full-background software filtering on navigation; real-device end-to-end latency is not measured.
+- **Quit action paths**:
+  - Swapped native System menu quit to "Quit to Desktop", overriding text across all nine supported languages. String copy length includes the UTF-16 null terminator (`text.size() + 1`) to eliminate trailing garbage characters in downstream copies. The native Yes confirmation callsite routes to `SDL_QUIT` with cancel recovery.
+  - Added "Quit to Main Menu" in Settings -> Game with confirmation defaulting to Cancel; confirming waits for retail Settings close before returning directly to Title on the same thread (`RequestMainMenuAfterSettingsClose`), without dispatching `SDL_QUIT` or saving settings.
+- **Debug Save Anywhere persistence (Issue #61)**: Preserved debug "Save Anywhere" state across sessions in `settings.ini` without player settings menu exposure. Contract checks passed (`LoSaveAnywhereConfigTest`).
+- **Controller and usability**: Cheats sidebar LT/RT category switching with single-step navigation and English/Chinese on-screen control footer, tested on a physical controller. Input usability improvements: idle cursor auto-hide (Issue #50), gameplay window IME composition suppression, and persistent controller rumble.
+- **Developer tooling**: Reusable script catalog in `tools/README.md` and structured test harness indexing in `tools/tests/README.md`.
+
+Evidence baseline and validation limits:
+- **Physical hardware verification**: User explicitly verified and accepted native System "Quit to Desktop" exiting the process on the verified build. Cheats sidebar LT/RT category switching and 2× speed hold/release were verified on physical controllers.
+- **Automated and synthetic test suites**:
+  - Standalone AF CPU contract tests on Windows and Linux and Linux software Vulkan emulation (Actions 36079262997) passed 1,000 mode switches, fault injections, descriptor lifetimes, and `settings_interaction` 1/1.
+  - Rebuilt standalone `LoMenuFlowTest` passed all 8 test groups covering quality ordering, Cancel defaults, and quit flows.
+  - Standalone `LoQuitTextHookTest`, `LoQuitActionHookTest` (verifying generated PPC callers), and `LoSaveAnywhereConfigTest` passed.
+  - Windows `cheats_ui` regression passed (1/1).
+- **Known limits and open scope**:
+  - Whole-game physical GPU validation across diverse scenes remains open; AF tests do not establish physical GPU stability across all scenes.
+  - Guest mip selection, single-level texture upload, and shader translation are untouched; distant-texture shimmer caused by missing mip chains is not resolved by AF.
+  - Settings "Quit to Main Menu", individual localized text strings, and Save Anywhere reload camera offsets remain unverified item by item on physical hardware.
 
 ## v0.6.15 published / v0.6.15 已发布
 

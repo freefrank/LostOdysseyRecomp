@@ -4,21 +4,19 @@
 
 `[ ]` 待完成 · `[~]` 进行中 · `[x]` 在所述范围内已有证据。[公开维护者 Project](https://github.com/users/freefrank/projects/3) 是当前工作项的事实来源。本镜像只保留方向、未完成事项和验证边界；实现、玩家验收和发布状态彼此独立。
 
-v0.6.15 已于 2026-09-24T19:47:35Z 从 tag/source commit `6eef30d257f2e14ce30a546217574a0dc74fad69` 发布。Release CI [36044604844](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/36044604844) 通过 Windows 与 Linux 打包。当前正在进行 v0.6.19 的发布准备：发布准备提交 `1b2ea6635c5ac4f7cf3c9186fda3cd05575db97d` 与 tag `v0.6.19` 已推送到 main，Release CI [36092250520](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/36092250520) 正在运行中（截至 UTC 2026-09-25）。正式发布时间尚无，未标 Released。
+v0.6.19 已于 2026-09-25T04:18:21Z 从 tag/source commit `1b2ea6635c5ac4f7cf3c9186fda3cd05575db97d` 公开发布。Release CI [36092250520](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/36092250520) 4 个 job 均成功完成。Windows ZIP（243,683,094 字节，SHA-256 `3f4d634dbc3af9b94c491bdf7557890c20944b1778f3b1867e45927a081e3444`）与 Linux AppImage（251,001,336 字节，SHA-256 `860d77f8c68a59fc258ad21e9efea79ac370a29369490402b55f0139e28ce3c4`）打包核验通过，sidecar 与 GitHub digest 一致。
 
 ## 交付
 
-[v0.6.15](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.15) 是最新公开发布版本，包含更新的便携式 Vulkan 着色器包（.lospv，28,527 个着色器）与开发者工具整理。
-
-[v0.6.19](https://github.com/freefrank/LostOdysseyRecomp/tree/main) 尚在准备中（未发布）：
-- [x] **各向异性过滤（AF）实时选项：**图形设置中提供实时各向异性过滤选项（关、2x、4x、8x、16x），通过不可变 sampler table generation 与 GPU 完成后安全回收避免 UAF 和描述符竞态（Issue #35）。Windows 与 Linux CPU 构建及 softwareVulkan Actions 运行 36079262997 通过，合并后 `settings_interaction` 1/1 通过。全游戏实体 GPU 结论与实机画质仍待验证。实现已合入 main；计划在 v0.6.19 正式发布后由主代理关闭 Issue #35，此刻保持 open 未发布。
-- [x] **系统“退出到桌面”：**系统菜单中提供“退出到桌面”选项（Issue #35），匹配 `0x822E256C` 与 `0x822E26B8` 两个真实 guest 调用点并修复 UTF-16 NUL 截断复制长度。v4 用户明确验证退出成功。实现已合入 main；计划在 v0.6.19 正式发布后由主代理关闭，此刻保持 open 未发布。
-- [x] **“随时保存”偏好持久化：**在 debug 配置中记住“随时保存”（Save Anywhere）选择，默认保持 `false`（Issue #61）。CPU 跨进程配置持久化验证通过；单项实体机实测仍待进行。实现已合入 main；计划在 v0.6.19 正式发布后由主代理关闭，此刻保持 open 未发布。
-- [x] **精简缩放与抗锯齿预设：**在设置菜单中整合抗锯齿与缩放预设（Performance、Balanced、Quality、DLAA、NativeAA）；通过缓存菜单背景避免重复整屏软件滤波（无实测端到端延迟结论）。经由菜单交互回归测试套件（1/1）验证通过。
-- [x] **Settings 确认返回主菜单：**新增 Settings 确认返回主菜单处理，等待原生 Settings 关闭后再请求 Title。本轮 Windows 上 LoMenuFlowTest 8 组测试通过，合并独立 `settings_interaction` 1/1 另行记录；未进行实机单项运行。
-- [x] **分类金手指手柄导航：**debug 金手指菜单支持手柄 LT/RT 肩键边沿触发切换类别，并提供中英文底部导航提示。用户此前已在实体手柄上验收。
-- [x] **输入与手柄改进：**手柄震动运行期 XInput motor 状态保持（非跨会话持久化偏好）、鼠标闲置自动隐藏及游戏运行时禁用 IME 输入法干扰。
-- [~] **v0.6.19 发布打包与公开：**发布准备提交 `1b2ea66` 与 tag `v0.6.19` 已推送；Release CI [36092250520](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/36092250520) 运行中。正式发布包、玩家验收及 Issue 关闭仍待 CI 完成与正式发布后执行。
+[v0.6.19](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.19) 是当前公开发布版本，包含各向异性过滤实时选项、游戏内退出到桌面、调试菜单随时保存偏好持久化、精简抗锯齿与缩放预设、Settings 确认返回主菜单、分类金手指手柄 LT/RT 导航及手柄震动运行期状态保持：
+- [x] **v0.6.19 发布：**从 `1b2ea66` 发布；Release CI 36092250520、包 hash、sidecar、GitHub digest 与匿名资源下载核验均通过。Issue #35 与 #61 已关闭。源码有界证据及运行时／玩家验收边界仍见[状态记录](STATUS.md)。
+- [x] **各向异性过滤（AF）实时选项：**图形设置中提供实时各向异性过滤选项（关、2x、4x、8x、16x），通过不可变 sampler table generation 与 GPU 完成后安全回收避免 UAF 和描述符竞态（Issue #35）。Windows 与 Linux CPU 构建及 softwareVulkan Actions 运行 36079262997 通过，合并后 `settings_interaction` 1/1 通过。全游戏实体 GPU 结论与实机画质仍待验证。随 v0.6.19 发布；Issue #35 在 GitHub 上已关闭。
+- [x] **系统“退出到桌面”：**系统菜单中提供“退出到桌面”选项（Issue #35），匹配 `0x822E256C` 与 `0x822E26B8` 两个真实 guest 调用点并修复 UTF-16 NUL 截断复制长度。v4 用户明确验证退出成功。随 v0.6.19 发布；Issue #35 在 GitHub 上已关闭。
+- [x] **“随时保存”偏好持久化：**在 debug 配置中记住“随时保存”（Save Anywhere）选择，默认保持 `false`（Issue #61）。CPU 跨进程配置持久化验证通过；单项实体机实测仍待进行。随 v0.6.19 发布；Issue #61 在 GitHub 上已关闭。
+- [x] **精简缩放与抗锯齿预设：**在设置菜单中整合抗锯齿与缩放预设（Performance、Balanced、Quality、DLAA、NativeAA）；通过缓存菜单背景避免重复整屏软件滤波（无实测端到端延迟结论）。经由菜单交互回归测试套件（1/1）验证通过。随 v0.6.19 发布。
+- [x] **Settings 确认返回主菜单：**新增 Settings 确认返回主菜单处理，等待原生 Settings 关闭后再请求 Title。本轮 Windows 上 LoMenuFlowTest 8 组测试通过，合并独立 `settings_interaction` 1/1 另行记录；未进行实机单项运行。随 v0.6.19 发布。
+- [x] **分类金手指手柄导航：**debug 金手指菜单支持手柄 LT/RT 肩键边沿触发切换类别，并提供中英文底部导航提示。用户此前已在实体手柄上验收。随 v0.6.19 发布。
+- [x] **输入与手柄改进：**手柄震动运行期 XInput motor 状态保持（非跨会话持久化偏好）、鼠标闲置自动隐藏及游戏运行时禁用 IME 输入法干扰。随 v0.6.19 发布。
 
 - [x] **v0.6.15 发布：**从 `6eef30d` 发布；Release CI 36044604844、pack hash 门禁、Windows ZIP 与 Linux AppImage 打包均通过并内置便携式 Vulkan 着色器包（28,527 个着色器）。
 - [x] **v0.6.3 发布：**从 `93bdbc1` 发布；Release CI 35476569158、包 hash、sidecar、GitHub digest 和 Windows manifest 核验均通过。源码有界证据及运行时／玩家验收边界仍见[状态记录](STATUS.md)。
