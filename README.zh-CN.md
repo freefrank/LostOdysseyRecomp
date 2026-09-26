@@ -35,6 +35,14 @@ v0.6.20 已发布，包含 Hybrid 相机／深度运动回退、有界 DLSS 尺�
 Quality、Balanced、Performance、Native AA 均有 Windows 运行证据；原生 Linux RADV 已有 Quality、Performance 和 Native AA 的运行证据。
 实测的 Windows 渲染画面与 Linux 运行验证（AMD Radeon 8060S RADV STRIX_HALO）均已获用户验收，v0.7.0 的 FSR P2 验收已全部通过。插帧与 macOS 支持已延期至 v0.8.0。本次验收不改变既有测试覆盖。低功耗硬件要求按用户授权通过 APEX 15W 代理设备验证，不代表 Steam Deck 硬件等价。
 
+### 自动 PlayStation 手柄按键提示（未发布）
+
+项目支持基于 SDL 自动识别最近活动的控制器类型并动态切换按键提示：
+- **宿主界面**：设置菜单、安装器界面及调试覆盖层自动切换为对应的 PlayStation 图标（叉、圈、方块、三角、L1、R1、L2、R2 与 Options/Share）。
+- **客端游戏本体**：在 GPU 上传阶段通过精确内容哈希识别两张已确证图集（`rpmenurescommon` 中的 `Icon_Page_0` 与英文字体包 `Texture2D_1`），安全替换为不可变 PlayStation 纹理，受 GPU 停止 guard 与退休审阅保护。完整覆盖 ABXY 动作键、肩键（LB/RB/LT/RT -> L1/R1/L2/R2）及暂停菜单 Start/Select（菜单/分享）。
+- 在本地开发构建（`HEAD d677a48-dirty`，二进制 SHA `1ae34ffd7eedcc415816c30b6e74b31d5ca2c0d936cd6aadbf72b49aeca709a4`）上完成，经用户在暂停菜单与过场动画复查后明确“验收通过”；未提交未发布。
+- 边界说明：用户实机验收覆盖实测手柄与场景，不代表所有硬件或全流程通关覆盖。Issue #40 同时提及的 Mod 支持本次未做，不视为该 Issue 整体完成。
+
 ## v0.6.20 发布版
 
 [v0.6.20](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.20) 已于 2026-09-25T21:15:07Z 发布，源码为 `be842b91d7367fd198074b1b8d3c1bc3ef4372a6`，[Windows/Linux Release CI](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/36188596414) 全部通过。包含已获用户实机验收的桥面光照修复与40个屏幕采样候选扩展，以及 Hybrid 运动回退和 F1 诊断。安装包与校验文件已公开；按用户要求未追加本地产物验证。
@@ -93,7 +101,7 @@ Quality、Balanced、Performance、Native AA 均有 Windows 运行证据；原�
 - **加固导入器**：资源只有在最终 `write`、`flush`、`close` 均成功后才会发布；XDVDFS 扫描按 2048 字节边界进行；目标目录页支持通过按钮、`F2` 或手柄 `Y` 创建并进入文件夹。
 - **真实资料验证**：导入器识别了 `G:/ROMS/US` 下全部四张 USA/Europe 光盘镜像，并成功完成隔离的 Disc 1 导入。四盘完整安装、交互 UI 验收和游戏运行仍未验证。
 
-**v0.7.0** 里程碑聚焦性能优化、QOL 改进以及原生 DLSS/DLAA 和 FSR 超分辨率（用户验收已通过）。插帧（Frame Generation）与 macOS 版本发布已延期至 **v0.8.0**。
+**v0.7.0** 里程碑聚焦性能优化、QOL 改进以及原生 DLSS/DLAA 和 FSR 超分辨率（用户验收已通过）。插帧（Frame Generation）与拓展平台目标——包括 macOS AArch64（Apple Silicon）、Linux AArch64 及实验性 Android 支持——已规划至 **v0.8.0**；这些平台目标仅为规划方向，不代表当前已有实现或测试覆盖。
 
 发布包和独立 shader pack 可从 [v0.6.0 发布页](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.0)下载。Release CI 已通过必要的审计和 Windows/Linux 打包门槛，公开资产已与 SHA-256 校验文件核对。原生 Linux GPU、Steam Deck、AppImage 更新事务和全流程游戏仍不在已验证范围内。
 

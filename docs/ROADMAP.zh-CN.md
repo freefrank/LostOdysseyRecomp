@@ -40,9 +40,18 @@ v0.6.20 已于 2026-09-25T21:15:07Z 从 tag/source commit `be842b91d7367fd198074
 
 - [~] **P0：通用超分／插帧契约与 Streamline 共存架构评估：**通用时序超分契约已实现，已有记录的定向 CPU 8/8 与 frame-plan 1/1 检查通过。随插帧推迟至 v0.8.0，未完成的 Streamline 共存架构评估及 P0 Gate 1 门禁（当前 NOT PASSED）移入 v0.8.0 承接，不标记完成。独立实验 Streamline/NGX 探针已有源码和一次前台诊断运行：二进制 `f47431b7746cdf54d847d7008547c0d7af0bce8a579f7596cccd5d95334c9efa` 报告了生成帧区间，但因 Vulkan validation errors 以 exit 1 结束。这是失败运行的诊断证据，不是通过验证的生成帧、物理显示证明、生产级 FG 交付或 Gate 1 验收。P0 尚未完成。详见[探针记录](../tools/tests/streamline_fg/README.md)。
 - [ ] **P3：帧生成呈现基础设施与资源租约：**计划中的生产阶段，尚未开始实现。随插帧推迟至 v0.8.0。工作树中已有未经验证的 Streamline/NGX 探针源码，但这不代表生产 hook、HUDless/UI 分离、资源租约、Reflex 接线或帧生成已实现。
-- [ ] **P4：Windows Vulkan 固定 2× DLSS 帧生成：**随插帧推迟至 v0.8.0。在运行时支持的 RTX 硬件上交付 Windows Vulkan 下固定 2× DLSS-G，覆盖 DLSS Quality+FG、DLAA+FG 及 FSR+FG 组合；具备切场景、过场影片、暂停、窗口重建下的安全停用与恢复，关闭时安全回到基线路径。要求真实生成帧呈现核验与解耦的游戏节奏；尚未开始。
-- [ ] **延期帧生成积压项（D3D12 FG、FSR FG 与动态多帧生成）：**延期 FG 积压项保留原优先级，作为未来规划而非 v0.8.0 必交付项。历史计划中的更广泛目标（D3D12 2× DLSS-G，以及 D3D12 与 Vulkan 2× FSR Frame Generation）仍作为未来积压需求完整保留，动态多帧生成（MFG）亦由新方案明确延期；本轮迭代暂缓实施，不作静默删除或取消。见历史 [v0.7.0 计划](notes/v0.7.0-frame-generation-plan.md)。
-- [ ] **macOS 发布规划：**随用户决定推迟至 v0.8.0 发布目标。当前仅为路线图目标，尚无 macOS 构建、后端、包、兼容性验证、玩家验收或发布产物。
+- [ ] **P4：Windows Vulkan 固定 2× DLSS 帧生成：**沿用 P4 作为 v0.8.0 规划目标。在运行时支持的 RTX 硬件上交付 Windows Vulkan 下固定 2× DLSS-G，覆盖 DLSS Quality+FG、DLAA+FG 及 FSR+FG 组合；具备切场景、过场影片、暂停、窗口重建下的安全停用与恢复，关闭时安全回到基线路径。要求真实生成帧呈现核验与解耦的游戏节奏；尚未开始。
+- [ ] **FSR 帧生成：**根据用户规划决定，从积压项提升为独立的 v0.8.0 里程碑目标。建立 FSR 帧生成支持，不擅自预定图形 API、目标平台或插帧倍率。生产级实现与运行时验证尚未开始。
+- [ ] **可选的 120 FPS 候选方案评估：**纳入 v0.8.0 里程碑规划目标（复用 `optional-120fps`）。在显式实验开关（`LO_EXPERIMENTAL_120=1`）下评估原生独立 120 FPS 呈现（非 FG 生成显示帧），验证客体速度、Aim Ring 判定时机、音频同步与过场动画，默认回退至 60 FPS 基线。
+- [ ] **延期帧生成积压项（D3D12 DLSS FG 与动态多帧生成）：**延期 FG 积压项保留原优先级，作为未来规划而非 v0.8.0 必交付项。D3D12 2× DLSS-G 等历史需求仍作为未来积压目标保留，动态多帧生成（MFG）亦明确延期。见历史 [v0.7.0 计划](notes/v0.7.0-frame-generation-plan.md)。
+- [ ] **macOS（AArch64 / Apple Silicon）发布规划：**随用户决定推迟至 v0.8.0 发布目标，明确面向 macOS AArch64 / Apple Silicon。当前仅为路线图目标，尚无 macOS 构建、后端、包、兼容性验证、玩家验收或发布产物。
+- [ ] **原生 Linux AArch64 平台支持：**纳入 v0.8.0 规划目标。建立 Linux AArch64 编译路径、着色器编译器工具链与依赖分发；PR #60 提供了有界的实验性 DXC 回退构建探索。当前为规划目标，尚无官方 AArch64 发布包、实体硬件验证或发布产物。
+- [ ] **实验性 Android 平台支持：**纳入 v0.8.0 规划目标（明确为实验性支持）。探索 Android NDK 构建、Vulkan 视口呈现、触控/手柄输入及音频适配。当前仅为路线图探索目标，尚无实现代码、APK 产物、实体设备验证或发布。
+
+<a id="v090-pm4-translator"></a>
+## v0.9.0 计划
+
+- [ ] **移除 PM4 转换器：**v0.9.0 发布目标为移除遗留的 PM4 数据包转换层，当前处于规划状态。排查命令处理器（`gpu/command_processor.cpp`）全部 PM4 解码与派发依赖，制定并执行移除方案，不预定具体替代架构或运行时实现。
 
 <a id="v050-pc-graphics"></a>
 <a id="下一主版本v050--pc-vulkan-与-direct3d-11"></a>
@@ -56,7 +65,8 @@ D3D12 仍是可用基线。Windows Vulkan 已有 RTX 5080 实机场景的界定�
 - [~] **Issue #49 窗口坐标初始化排查：**保留为维护者活跃排查事项（freefrank 确认：“still gonna dig deeper later.”，2026-09-24T23:11:46Z）；旧系统环境下渲染器初始化前 `SetThreadDpiAwarenessContext(PMv2)` 返回 null 导致启动终止。不按 unsupported 关闭。
 - [~] **Issue #37 PortForge 启动器集成：**已获授权推进实现；当前处于调研与适配准备阶段，正并行核对外部 `.forge.json` 清单合同及本地路径，尚无代码或验收。原生 Linux AppImage 发布包已独立发布并受支持。
 - [~] **Issue #54 与 #55 语音与过场反馈：**语音及过场语言反馈保持开放；Issue #54 在 v0.6.3 语音菜单修复后近期仍有盘 3 等日文过场复现；Issue #55 主体已改善，但 Obsidian Miasma 单句人声缺失待存档复现（非全盘终 Boss 人声缺失）。
-- [ ] **Issue #30、#40、#48 体验与功能积压：**景深滑块/开关（#30）、PS 手柄按键提示与 Mod 文档（#40）、晕动症视角防抖与动态模糊开关（#48）保持为待办积压。
+- [x] **PlayStation 手柄按键提示（Issue #40 部分完成）：**PlayStation 手柄自动检测与图标替换已实现并在本地未提交构建（HEAD `d677a48`+dirty，测试可执行文件 SHA-256 `1ae34ffd7eedcc415816c30b6e74b31d5ca2c0d936cd6aadbf72b49aeca709a4`）中通过用户验收。覆盖 SDL PS 手柄类型识别与活动设备热切换、宿主设置／安装器／调试菜单图标与 L1/R1/L2/R2、客体公共 `Icon_Page_0` 与英文 `Font Icon Texture2D_1` 精确 SHA-256 哈希匹配替换、PlayStation 副本惰性 GPU 纹理生成，以及 ABXY、肩键、Start/Back（Options/Share/Touchpad）映射。离线测试、TU、完整构建通过，GPU 错误路径完成 review，用户通过暂停菜单、过场 Start/Select 及肩键复测完成实景验收。仅记录核验范围，不扩大至全部场景与未知硬件。Mod 支持与文档 Wiki 仍作为 Issue #40 待办保留（Issue #40 保持开启）。
+- [ ] **Issue #30、#40（剩余）、#48 体验与功能积压：**景深滑块/开关（#30）、Mod 支持与文档 Wiki（#40 剩余待办）、晕动症视角防抖与动态模糊开关（#48）保持为待办积压。
 - [x] **Issue #53 盘 2 加载卡死：**已于 2026-09-19 关闭并在 v0.6.3 中发布，保持关闭，不重开。
 - [x] **v0.5.4 发布：**已于 2026-09-11T01:36:30Z 从 `2ad94d418bb0478417ab9589109f1f685ed92eb3` 公开发布；CI 34550200618 通过。44,237,061-byte ZIP 的 SHA-256 为 `104ced8b60c16cd1b9013543a3940c9ed8d7cf904c3d05a6a8ef8d591f51d218`；包来源、版本、全部 50 个文件 hash/CRC 及四个匿名资源下载均通过。本条只记录发布交付；各项运行时和玩家验收边界仍见下文。
 - [x] **移除 PPC 预编译同步并改为在线全源码编译：**在 v0.5.20（commit `9a1617a`、`693042d`、`03f0d9f`）中，PowerPC 预编译静态库缓存与远程同步机制（`LO_PREBUILT_PPC_DIR`、`ppc_sync.py`、`ppc_prebuilt.py`）已彻底移除。Windows 与 Linux 构建均统一在 CI 及本地 Release 构建中从源码在线编译 `LostOdysseyRecompLib` 客户机 PowerPC 代码。消除了平台专属静态库缓存契约，并为未来架构（如 ARM64）铺平道路。早期 direct-main 同步与 fingerprint 审计证据保留为历史。

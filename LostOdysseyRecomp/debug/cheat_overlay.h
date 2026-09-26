@@ -2,6 +2,7 @@
 #include "cheats.h"
 #include "fast_forward.h"
 #include "../host_ui/rasterizer.h"
+#include "controller_hint.h"
 #include <string>
 
 namespace debug_menu::cheat_overlay {
@@ -187,13 +188,13 @@ inline const wchar_t* ResultText(cheats::Result result,bool zh) {
     default:return zh ? L"等待读档完成并进入可控制场景" : L"Waiting for a loaded, playable field";
     }
 }
-inline void Render(host_ui::Rasterizer& r,const Model& m,bool zh,int x,int y,int width) {
+inline void Render(host_ui::Rasterizer& r,const Model& m,bool zh,int x,int y,int width,bool playStation) {
     const auto s=cheats::session.Get(); const auto speed=fast_forward::GetStatus();
     const auto color=host_ui::MakeColor;
     const auto text=color(255,226,233,243),muted=color(255,145,158,178),gold=color(255,229,196,126);
     const int side=142,gap=16,rx=x+side+gap,rw=width-side-gap,rowH=35;
     auto drawText=[&](int px,int py,std::wstring t,int maxWidth,uint32_t c) {
-        r.DrawWString(px,py,Fit(r,std::move(t),maxWidth),c);
+        r.DrawWString(px,py,Fit(r,controller_hint::ShoulderLabels(std::move(t),playStation),maxWidth),c);
     };
     for(unsigned i=0;i<6;++i) {
         const bool selected=m.category==i;
@@ -269,6 +270,7 @@ inline void Render(host_ui::Rasterizer& r,const Model& m,bool zh,int x,int y,int
         {L"Guest flag only. No executable patches. Leave this OFF during normal play.",L"只修改 guest 标记，不改宿主机器码。正常游玩建议关闭。"}};
     // Warnings wrap instead of disappearing behind an ellipsis.
     auto paragraph=[&](int px,int py,std::wstring value,int maxWidth,uint32_t c) {
+        value=controller_hint::ShoulderLabels(std::move(value),playStation);
         for(unsigned line=0;!value.empty() && line<2;++line) {
             size_t n=value.size();
             while(n>1 && r.MeasureWString(value.substr(0,n))>maxWidth)--n;
@@ -277,7 +279,10 @@ inline void Render(host_ui::Rasterizer& r,const Model& m,bool zh,int x,int y,int
             value.erase(0,n);while(!value.empty() && value.front()==L' ')value.erase(0,1);
         }
     };
-    paragraph(x,y+296,hints[m.category][zh],width,muted);
+    paragraph(x,y+296,(playStation && m.category==2)
+        ? (zh ? L"选择物品：按确定键打开可翻页列表；修改后在游戏内整理物品以刷新。"
+              : L"Choose item: Confirm opens a paged list. Sort the inventory once to refresh.")
+        : hints[m.category][zh],width,muted);
     std::wstring status=ResultText(s.result,zh);
     if(s.available) {
         if(m.category==1 || m.category==3) {
@@ -299,7 +304,12 @@ inline void Render(host_ui::Rasterizer& r,const Model& m,bool zh,int x,int y,int
             drawText(x+24,py+9,m.PickName(i),width-48,selected ? gold:text);
         }
         drawText(x+18,y+309,std::to_wstring(m.picked+1)+L" / "+std::to_wstring(count),width-36,muted);
-        drawText(x+18,y+337,zh ? L"A / Enter：选择   B / Esc：返回（不修改）" : L"A / Enter: select   B / Esc: back (no writes)",width-36,muted);
+        if(playStation) {
+            int px=controller_hint::Draw(r,x+18,y+337,true,hid::prompts::Face::A,
+                zh ? L" / Enter：选择" : L" / Enter: select",muted)+20;
+            controller_hint::Draw(r,px,y+337,true,hid::prompts::Face::B,
+                zh ? L" / Esc：返回（不修改）" : L" / Esc: back (no writes)",muted);
+        } else drawText(x+18,y+337,zh ? L"A / Enter：选择   B / Esc：返回（不修改）" : L"A / Enter: select   B / Esc: back (no writes)",width-36,muted);
     }
     if(m.confirm) {
         r.FillRect(x,y,width,365,color(250,24,31,42));
@@ -314,7 +324,14 @@ inline void Render(host_ui::Rasterizer& r,const Model& m,bool zh,int x,int y,int
             r.FillRect(px,py,bw,42,selected ? color(255,59,70,86):color(255,31,38,49));
             drawText(px+14,py+13,i ? (zh ? L"确认":L"Confirm"):(zh ? L"取消":L"Cancel"),bw-28,selected ? gold:text);
         }
-        drawText(x+24,y+311,zh ? L"左 / 右：选择   A：确定   B：取消" : L"Left / Right: choose   A: accept   B: cancel",width-48,muted);
+        if(playStation) {
+            int px=x+24;
+            px+=r.DrawWString(px,y+311,zh ? L"左 / 右：选择   " : L"Left / Right: choose   ",muted);
+            px=controller_hint::Draw(r,px,y+311,true,hid::prompts::Face::A,
+                zh ? L"：确定" : L": accept",muted)+20;
+            controller_hint::Draw(r,px,y+311,true,hid::prompts::Face::B,
+                zh ? L"：取消" : L": cancel",muted);
+        } else drawText(x+24,y+311,zh ? L"左 / 右：选择   A：确定   B：取消" : L"Left / Right: choose   A: accept   B: cancel",width-48,muted);
     }
 }
 } // namespace debug_menu::cheat_overlay

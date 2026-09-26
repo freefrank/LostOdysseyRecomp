@@ -24,6 +24,7 @@
 #include "polygon_offset.h"
 #include "pipeline_cache.h"
 #include "texture_layout.h"
+#include "controller_atlas.h"
 #include "temporal_scene.h"
 #include "temporal_jitter.h"
 #include "temporal_history.h"
@@ -36,6 +37,8 @@
 #include "fsr_alpha_propagation_gpu.h"
 #include "presentation.h"
 #include <settings/config.h>
+#include <hid/hid.h>
+#include <hid/controller_atlas_glyphs.h>
 #include "shader/xenos_translator.h"
 #include "shader/dxc_compiler.h"
 #include "shader/cache.h"
@@ -323,6 +326,16 @@ namespace gpu::renderer
             uint32_t guestAddress = 0, guestBytes = 0;
             uint64_t guestHash = 0;
             uint64_t checkedFrame = ~0ull;
+            // The source remains BC3. Only a verified controller atlas owns an
+            // optional, single-mip RGBA PlayStation child; retirement of the
+            // source also retires its child after the GPU fence.
+            enum class AtlasState : uint8_t { None, Pending, Ready, Failed };
+            AtlasState atlasState = AtlasState::None;
+            std::vector<uint8_t> atlasPendingRgba;
+            std::unique_ptr<HostTexture> atlasPlayStation;
+            bool controllerAtlasRecognized = false;
+            bool controllerAtlasPlayStationVariant = false;
+            controller_atlas::Identity controllerAtlasIdentity = controller_atlas::Identity::Unknown;
             uint64_t clearedFrame = ~0ull;   // LO_CLEAR_RT debugging
             uint64_t sdrProducerFrame = ~0ull;
             uint32_t qualifiedSdrWidth = 0;
@@ -914,6 +927,17 @@ namespace gpu::renderer
             }
             bool resolveReadback = false; // LO_RESOLVE_READBACK=1: legacy CPU write-back into guest memory
             bool textureRevalidate = true; // LO_TEXTURE_STATIC=1 disables re-hashing cached textures
+            uint64_t controllerAtlasFamilyFrame = ~0ull;
+            bool controllerAtlasPlayStationFamily = false;
+            uint64_t controllerAtlasTraceFrame = ~0ull;
+            uint32_t controllerAtlasTraceCount = 0;
+            struct ControllerAtlasTraceCandidate {
+                RenderTexture* image = nullptr;
+                uint32_t bank = 0, slot = 0, guestAddress = 0;
+                bool playStation = false;
+                controller_atlas::Identity identity = controller_atlas::Identity::Unknown;
+                const char* stage = nullptr;
+            };
             uint32_t textureReuploads = 0;
             uint32_t dummyBindings = 0;
 
@@ -4519,6 +4543,88 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 texture.bindingProducer.Describe(*output, epoch, frame);
             }
 
+            HostTexture* SelectControllerAtlas(HostTexture* source, binding::Texture* bindingInfo, uint64_t epoch)
+            {
+                if (!source) return nullptr;
+                if (source->atlasState == HostTexture::AtlasState::None) {
+                    DescribeBindingTexture(bindingInfo, *source, binding::TextureKind::GuestUpload, epoch);
+                    return source;
+                }
+                if (controllerAtlasFamilyFrame != frame) {
+                    controllerAtlasPlayStationFamily = hid::UsesPlayStationPrompts();
+                    controllerAtlasFamilyFrame = frame;
+                }
+                if (controllerAtlasPlayStationFamily && source->atlasState == HostTexture::AtlasState::Pending) {
+                    auto variant = std::make_unique<HostTexture>();
+                    variant->format = RenderFormat::R8G8B8A8_UNORM;
+                    variant->width = variant->bindingWidth = controller_atlas::Width;
+                    variant->height = variant->bindingHeight = controller_atlas::Height;
+                    variant->controllerAtlasRecognized = true;
+                    variant->controllerAtlasPlayStationVariant = true;
+                    variant->controllerAtlasIdentity = source->controllerAtlasIdentity;
+                    variant->texture = device->createTexture(RenderTextureDesc::Texture2D(
+                        variant->width, variant->height, 1, variant->format));
+                    // The source stays intact as BC3 for Xbox. The designer's
+                    // pure RGBA patch changes only the private pending copy.
+                    constexpr size_t rowBytes = size_t(controller_atlas::Width) * 4;
+                    const bool patched = variant->texture &&
+                        source->atlasPendingRgba.size() == rowBytes * controller_atlas::Height &&
+                        hid::prompts::atlas::PatchPlayStationAtlasRgba(
+                            source->atlasPendingRgba.data(), rowBytes,
+                            source->atlasPendingRgba.data(), rowBytes,
+                            controller_atlas::Width, controller_atlas::Height);
+                    // Upload may Flush/Begin and change the current slot, list and
+                    // ring. Do not retain references to any of them across it.
+                    const uint64_t offset = patched ? Upload(source->atlasPendingRgba.data(),
+                        source->atlasPendingRgba.size(), 512) : UINT64_MAX;
+                    if (offset != UINT64_MAX) {
+                        Transition(*variant, RenderTextureLayout::COPY_DEST, RenderBarrierStage::COPY);
+                        commandList->copyTextureRegion(RenderTextureCopyLocation::Subresource(variant->texture.get()),
+                            RenderTextureCopyLocation::PlacedFootprint(uploadRing, variant->format,
+                                variant->width, variant->height, 1, variant->width, offset));
+                        Transition(*variant, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
+                        source->atlasPlayStation = std::move(variant);
+                        source->atlasState = HostTexture::AtlasState::Ready;
+                    } else {
+                        source->atlasState = HostTexture::AtlasState::Failed;
+                        if (!video::GpuWorkStopped())
+                            LOG_WARNING("renderer: controller atlas PS patch/upload unavailable; using original BC3");
+                    }
+                    source->atlasPendingRgba.clear();
+                    source->atlasPendingRgba.shrink_to_fit();
+                }
+                // A failed Upload may mean the GPU queue stopped during rollover.
+                // Returning the original texture then would let Draw bind and
+                // record against a stopped list. Keep source ownership intact;
+                // the caller's PlanSuppressed path stops this draw.
+                if (video::GpuWorkStopped()) return nullptr;
+                HostTexture* selected = controllerAtlasPlayStationFamily && source->atlasPlayStation
+                    ? source->atlasPlayStation.get() : source;
+                DescribeBindingTexture(bindingInfo, *selected, binding::TextureKind::GuestUpload, epoch);
+                return selected;
+            }
+
+            void TraceControllerAtlasRecorded(const std::vector<ControllerAtlasTraceCandidate>& candidates,
+                const TextureSetCache::Key (&bindings)[3], uint64_t vsHash, uint64_t psHash)
+            {
+                if (candidates.empty()) return;
+                if (controllerAtlasTraceFrame != frame) {
+                    controllerAtlasTraceFrame = frame;
+                    controllerAtlasTraceCount = 0;
+                }
+                for (const auto& candidate : candidates) {
+                    if (controllerAtlasTraceCount >= 64) break;
+                    if (bindings[candidate.bank][candidate.slot] != candidate.image) continue;
+                    ++controllerAtlasTraceCount;
+                    LOG_INFO("controller atlas frame={} debugDraw={} draw={} vs={:016x} ps={:016x} stage={} bank={} slot={} atlas={} family={} guest={:#x} host={} state=recorded",
+                        frame, debugCaptureDir.empty() ? -1 : int(debugDraw ? debugDraw - 1 : 0),
+                        drawsThisFrame, vsHash, psHash, candidate.stage, candidate.bank, candidate.slot,
+                        controller_atlas::Name(candidate.identity),
+                        candidate.playStation ? "playstation" : "xbox", candidate.guestAddress,
+                        static_cast<const void*>(candidate.image));
+                }
+            }
+
             HostTexture* GetTexture(const uint32_t* fetch, uint32_t dimension,
                 binding::Texture* bindingInfo = nullptr, uint64_t bindingEpoch = 0)
             {
@@ -4615,14 +4721,12 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     // it, so a cached upload can be all zeroes forever. Re-hash the
                     // guest bytes once per frame and re-upload when they change.
                     if (!textureRevalidate || cached->checkedFrame == frame || cached->guestBytes == 0) {
-                        DescribeBindingTexture(bindingInfo, *cached, binding::TextureKind::GuestUpload, bindingEpoch);
-                        return cached;
+                        return SelectControllerAtlas(cached, bindingInfo, bindingEpoch);
                     }
                     cached->checkedFrame = frame;
                     const uint64_t now = SampleHash(Phys(cached->guestAddress), cached->guestBytes);
                     if (now == cached->guestHash) {
-                        DescribeBindingTexture(bindingInfo, *cached, binding::TextureKind::GuestUpload, bindingEpoch);
-                        return cached;
+                        return SelectControllerAtlas(cached, bindingInfo, bindingEpoch);
                     }
                     textureReuploads++;
                     Gpu().retiredTextures.push_back(std::move(it->second));
@@ -4724,6 +4828,17 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 tex->guestBytes = uint32_t(std::min<uint64_t>(uint64_t(faceStride) * faces, 64u << 20));
                 tex->guestHash = SampleHash(src, tex->guestBytes);
                 tex->checkedFrame = frame;
+                if (controller_atlas::Candidate(dimension, format, originalWidth, originalHeight,
+                        width, height, sourceMip)) {
+                    auto rgba = controller_atlas::DecodeBc3(staging.data(), staging.size(), rowPitch);
+                    const auto identity = controller_atlas::Identify(rgba);
+                    if (identity != controller_atlas::Identity::Unknown) {
+                        tex->controllerAtlasRecognized = true;
+                        tex->controllerAtlasIdentity = identity;
+                        tex->atlasState = HostTexture::AtlasState::Pending;
+                        tex->atlasPendingRgba = std::move(rgba);
+                    }
+                }
                 uint32_t texWidth = fi.blockWidth > 1 ? blocksX * fi.blockWidth : width;
                 uint32_t texHeight = fi.blockHeight > 1 ? blocksY * fi.blockHeight : height;
                 tex->bindingWidth = texWidth; tex->bindingHeight = texHeight;
@@ -4751,9 +4866,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 Transition(*tex, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
 
                 HostTexture* result = tex.get();
-                DescribeBindingTexture(bindingInfo, *result, binding::TextureKind::GuestUpload, bindingEpoch);
                 textures.emplace(key, std::move(tex));
-                return result;
+                return SelectControllerAtlas(result, bindingInfo, bindingEpoch);
             }
 
             void InvalidateRange(uint32_t address, uint32_t size)
@@ -5817,6 +5931,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 // feedback collection is disabled or the PS pair is not sampled.
                 std::optional<binding::Texture> captureTexture0;
                 bool failedPlan = false;
+                static const bool traceControllerAtlas = getenv("LO_CONTROLLER_ATLAS_TRACE") != nullptr;
+                std::vector<ControllerAtlasTraceCandidate> controllerAtlasCandidates;
 #if defined(LO_GPU_PLUME)
                 struct AlphaBridgeFetchRequest {
                     uint32_t slot = 0, bank = 0, address = 0, fetchFormat = 0, resolveFormat = 0;
@@ -6302,6 +6418,15 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         samplerKey = ActualSamplerKey(*samplerIndex);
                         textureBindings[bank][slot] = temporalDisplay ? temporalDisplay :
                             bloomFiltered ? bloomFiltered->texture.get() : hdrBinding ? hdrBinding : tex->texture.get();
+                        // Candidate only: a later VS binding or a failed draw
+                        // can still replace/cancel it. Confirm after recording.
+                        if (traceControllerAtlas && tex->controllerAtlasRecognized &&
+                            textureBindings[bank][slot] == tex->texture.get() &&
+                            controllerAtlasCandidates.size() < kTextureSlots * 2)
+                            controllerAtlasCandidates.push_back({tex->texture.get(), bank, slot,
+                                (fetch[1] >> 12) << 12, tex->controllerAtlasPlayStationVariant,
+                                tex->controllerAtlasIdentity,
+                                s == ps ? "ps" : "vs"});
 #if defined(LO_GPU_PLUME)
                         if (s == ps && key.ps == 0xb4b4d54a7a2d6b96ull && slot == 1 && bank == 0 &&
                             !temporalDisplay && !bloomFiltered && !hdrBinding)
@@ -6894,6 +7019,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 {
                     commandList->drawInstanced(indexCount, 1, uint32_t(baseVertex), 0);
                 }
+                // These are recorded draws. Verify the pointer survived all
+                // shader bindings and descriptor acquisition, including slot>0.
+                if (traceControllerAtlas)
+                    TraceControllerAtlasRecorded(controllerAtlasCandidates, textureBindings, key.vs, key.ps);
   #if defined(LO_GPU_PLUME)
                 bool alphaReplayRecorded = false;
                 // Controlled P2 collection: this raw R8 mask is deliberately

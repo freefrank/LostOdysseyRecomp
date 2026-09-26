@@ -2,6 +2,7 @@
 #include "menu_assets.h"
 #include "translations.h"
 #include "../host_ui/rasterizer.h"
+#include "../hid/controller_glyphs.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -229,9 +230,40 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
     const uint32_t selectedInk = MakeColor(255, 35, 36, 36);
     const uint32_t outline = MakeColor(255, 39, 40, 40);
 
-    auto text = [&](int x, int y, int w, int h, const std::wstring &value, int size, uint32_t color,
-                    bool bold = false, int alignment = 0 /* 0=left, 1=center, 2=right */,
-                    uint32_t edge = MakeColor(255, 39, 40, 40), int minimum = 13) {
+    // Replace isolated physical button labels at render time so hot-plug and
+    // active-controller changes do not require rebuilding translated help text.
+    // Private face codepoints use vector drawing below, without font coverage.
+    auto promptText = [&](std::wstring value) {
+        if (!current.playStationPrompts) return value;
+        const auto word = [](wchar_t c) {
+            return (c >= L'A' && c <= L'Z') || (c >= L'a' && c <= L'z') || (c >= L'0' && c <= L'9');
+        };
+        for (size_t i = 0; i + 1 < value.size(); ++i)
+        {
+            const bool isolated = (i == 0 || !word(value[i - 1])) &&
+                                  (i + 2 == value.size() || !word(value[i + 2]));
+            if (!isolated || (value[i] != L'L' && value[i] != L'R')) continue;
+            if (value[i + 1] == L'B') value[i + 1] = L'1';
+            else if (value[i + 1] == L'T') value[i + 1] = L'2';
+        }
+        for (size_t i = 0; i < value.size(); ++i)
+        {
+            const bool isolated = (i == 0 || !word(value[i - 1])) && (i + 1 == value.size() || !word(value[i + 1]));
+            if (!isolated) continue;
+            switch (value[i]) {
+            case L'A': value[i] = 0xe100; break;
+            case L'B': value[i] = 0xe101; break;
+            case L'X': value[i] = 0xe102; break;
+            case L'Y': value[i] = 0xe103; break;
+            }
+        }
+        return value;
+    };
+
+    auto text = [&](int x, int y, int w, int h, const std::wstring &source, int size, uint32_t color,
+                     bool bold = false, int alignment = 0 /* 0=left, 1=center, 2=right */,
+                     uint32_t edge = MakeColor(255, 39, 40, 40), int minimum = 13) {
+        const std::wstring value = promptText(source);
         if (current.assets && !value.empty())
         {
             const auto covers = [&](const menu_assets::Font &font) {
@@ -279,7 +311,7 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
             for (wchar_t c : value)
             {
                 auto g = host_ui::font::GetGlyph(uint32_t(c));
-                tw += int((g.width + 1) * fscale);
+                tw += int(((c >= 0xe100 && c <= 0xe103) ? 17 : (g.width + 1)) * fscale);
             }
             return tw;
         };
@@ -306,14 +338,31 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
         const double glyphHeight = 16.0 * fontScale;
         int top = int(std::lround(screenY + (screenH - glyphHeight) * 0.5));
 
-        // Draw outline if edge requested
+        auto draw = [&](int dx, int dy, uint32_t inkColor) {
+            int cx = left + dx;
+            for (const auto c : value)
+            {
+                if (c >= 0xe100 && c <= 0xe103)
+                {
+                    const auto face = hid::prompts::Face(c - 0xe100);
+                    hid::prompts::DrawFace(face, cx, top + dy, std::max(1, int(16 * fontScale)),
+                        [&](int ax, int ay, int bx, int by) {
+                            const int steps = std::max(std::abs(bx - ax), std::abs(by - ay));
+                            for (int i = 0; i <= steps; ++i)
+                                r.FillRect(ax + (bx - ax) * i / std::max(steps, 1),
+                                           ay + (by - ay) * i / std::max(steps, 1),
+                                           std::max(1, int(fontScale)), std::max(1, int(fontScale)), inkColor);
+                        });
+                    cx += int(17 * fontScale);
+                }
+                else cx += r.DrawChar(cx, top + dy, uint32_t(c), inkColor, fontScale);
+            }
+        };
         if (edge != 0)
-        {
             for (int dy = -1; dy <= 1; ++dy)
                 for (int dx = -1; dx <= 1; ++dx)
-                    if (dx || dy) r.DrawWString(left + dx, top + dy, value, edge, fontScale);
-        }
-        r.DrawWString(left, top, value, color, fontScale);
+                    if (dx || dy) draw(dx, dy, edge);
+        draw(0, 0, color);
     };
 
     auto brushedCell = [&](int x, int y, int w, int h, uint32_t base) {
@@ -366,7 +415,14 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
         line(x, y, x, y + 24, MakeColor(255, 42, 43, 43));
         line(x + 24, y, x + 24, y + 24, MakeColor(255, 42, 43, 43));
         line(x + 6, y + 4, x + 17, y + 4, Shade(base, 58));
-        text(x, y, 24, 24, std::wstring(1, letter), 15, ink, true, 1, outline, 12);
+        if (current.playStationPrompts)
+        {
+            const auto face = letter == L'A' ? hid::prompts::Face::A : hid::prompts::Face::B;
+            hid::prompts::DrawFace(face, x + 4, y + 4, 16, [&](int ax, int ay, int bx, int by) {
+                line(ax, ay, bx, by, ink, 2);
+            });
+        }
+        else text(x, y, 24, 24, std::wstring(1, letter), 15, ink, true, 1, outline, 12);
     };
 
     // Repainting the textured backdrop at 4K dominated every selection change.

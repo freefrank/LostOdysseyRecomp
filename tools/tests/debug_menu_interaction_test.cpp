@@ -49,6 +49,8 @@ struct MockServices
 } g_mock;
 } // namespace
 
+namespace hid { bool UsesPlayStationPrompts() { return false; } }
+
 namespace settings
 {
 Config GetConfig()

@@ -3640,7 +3640,7 @@
         "Release": "v0.8.0",
         "Start date": null,
         "Target date": null,
-        "Evidence": "Broader historical goals (2× DLSS-G on D3D12 and 2× FSR FG on D3D12/Vulkan) remain deferred backlog; dynamic MFG is deferred by the current plan. Active FG production work is phased through P0 architecture evaluation, P3 infrastructure and P4 Windows Vulkan DLSS FG. Experimental probe run reported generated-present intervals but exited 1 with Vulkan validation errors; it is failed-run diagnostic evidence, not production FG delivery or Gate 1 acceptance."
+        "Evidence": "FSR Frame Generation is promoted to an independent v0.8.0 target; broader historical goals (2× DLSS-G on D3D12 and dynamic MFG) remain deferred backlog. Active FG production work is phased through P0 architecture evaluation, P3 infrastructure and P4 Windows Vulkan DLSS FG."
       },
       "source_refs": [
         "docs/notes/v0.7.0-frame-generation-plan.md",
@@ -4119,10 +4119,32 @@
         "Release": "v0.8.0",
         "Start date": null,
         "Target date": null,
-        "Evidence": "Planned phase following P3. Production implementation has not started. Broader D3D12 FG, FSR FG and dynamic MFG remain deferred backlog for this iteration, not cancelled."
+        "Evidence": "Retained as P4 milestone v0.8.0 target per user decision. Production implementation has not started. Requires verified generated frame presentation and decoupled game pacing."
       },
       "source_refs": [
         "https://github.com/NVIDIA-RTX/Streamline/blob/main/docs/ProgrammingGuideDLSS_G.md"
+      ],
+      "source_lines": [],
+      "record_type": "backlog"
+    },
+    {
+      "key": "fsr-frame-generation",
+      "title": "Deliver FSR Frame Generation",
+      "body": "<!-- lo-project:fsr-frame-generation -->\n\nDeliver FSR Frame Generation as an independent roadmap target for milestone v0.8.0 per user planning decision.\n\n## Scope and completion criteria\n\n- [ ] Evaluate and establish FSR Frame Generation integration contracts alongside existing temporal upscaling.\n- [ ] Define presentation, swapchain pacing, and UI separation paths for FSR Frame Generation without predetermining the graphics API, target platform, or frame rate multiplier.\n- [ ] Verify generated frame delivery and decoupled simulation pacing upon implementation authorization.\n\n## Boundaries\n\nIndependent milestone v0.8.0 planning target per user decision. Does not predetermine or restrict graphics API (Vulkan / Direct3D 12), target platform (Windows / Linux), or frame rate multiplier (2× or dynamic). Production implementation and runtime validation not started.\n\nstage_detail: Not started; milestone v0.8.0 planning\n\n## Sources\n\n- [docs/ROADMAP.md](https://github.com/freefrank/LostOdysseyRecomp/blob/main/docs/ROADMAP.md)\n- [docs/notes/v0.7.0-frame-generation-plan.md](https://github.com/freefrank/LostOdysseyRecomp/blob/main/docs/notes/v0.7.0-frame-generation-plan.md)\n",
+      "issue_url": null,
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Temporal rendering",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Release": "v0.8.0",
+        "Start date": null,
+        "Target date": null,
+        "Evidence": "Promoted from backlog to an independent milestone v0.8.0 target per user planning decision. Target platform, graphics API, and frame multiplier are not predetermined. Implementation and validation not started."
+      },
+      "source_refs": [
+        "docs/ROADMAP.md",
+        "docs/notes/v0.7.0-frame-generation-plan.md"
       ],
       "source_lines": [],
       "record_type": "backlog"
@@ -4193,16 +4215,17 @@
     {
       "key": "optional-120fps",
       "title": "Evaluate the optional 120 FPS candidate",
-      "body": "<!-- lo-project:optional-120fps -->\n\n120 FPS 候选尚未验收；用户允许困难时先交付 60 FPS。\n\n## Scope and completion criteria\n\n- [ ] 保留 LO_EXPERIMENTAL_120=1 的显式实验入口和默认60行为\n- [ ] 验证客体实际速度、Ring、音频、过场与资源消耗\n- [ ] 外部闭源实现仅作可行性线索，不能替代本项目证明\n\n## Validation and acceptance\n\n同场景按墙钟验证运动/战斗正确速度及实际独立帧；未通过不得作为常规支持发布。\n\n尚未完成所列场景验收；实现/发布/测试与用户验收独立。\n\nstage_detail: Awaiting validation\n\n## Sources\n\n- [docs/notes/v0.4.0-development.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/notes/v0.4.0-development.md) (repository reference; working-tree requirements may be newer)\n",
+      "body": "<!-- lo-project:optional-120fps -->\n\nEvaluate the optional 120 FPS candidate for milestone v0.8.0 per user planning decision. Focus is native independent 120 FPS presentation, not FG-generated display frames.\n\n## Scope and completion criteria\n\n- [ ] Retain explicit experimental entry  and default 60 FPS behavior.\n- [ ] Verify native independent 120 FPS presentation (not FG-generated display frames).\n- [ ] Validate object pacing, Aim Ring timing, audio sync, cutscenes, and resource usage at 120 FPS.\n- [ ] External closed-source implementations serve as feasibility references only, not project verification.\n\n## Validation and acceptance\n\nVerify wall-clock motion/combat speed and actual independent display frames in matching scenes; do not release as standard support without passing checks.\n\nMilestone v0.8.0 target; implementation, release, testing, and user acceptance remain distinct.\n\nstage_detail: Not started; milestone v0.8.0 planning\n\n## Sources\n\n- [docs/notes/v0.4.0-development.md](https://github.com/freefrank/LostOdysseyRecomp/blob/147bffb214cd3650f3eadb810e86f7237511ac23/docs/notes/v0.4.0-development.md) (repository reference; working-tree requirements may be newer)\n",
       "issue_url": null,
       "fields": {
         "Kind": "Research",
         "Area": "Frame pacing",
         "Status": "Todo",
-        "Delivery": "Awaiting validation",
-        "Release": null,
+        "Delivery": "Not started",
+        "Release": "v0.8.0",
         "Start date": null,
-        "Target date": null
+        "Target date": null,
+        "Evidence": "Promoted to milestone v0.8.0 planning target per user decision. Evaluates native independent 120 FPS presentation (not FG-generated display frames). Implementation and validation not started."
       },
       "source_refs": [
         "docs/notes/v0.4.0-development.md"
@@ -5020,8 +5043,8 @@
     },
     {
       "key": "native-macos-platform",
-      "title": "Establish a native macOS port",
-      "body": "<!-- lo-project:native-macos-platform -->\n\nNative macOS port is future platform work with no release or date assigned.\n\n## Scope and completion criteria\n\n- [ ] Establish toolchain, dependencies, distribution and platform integration feasibility.\n- [ ] Define rendering/window/input/audio/filesystem requirements for native macOS.\n- [ ] Validate a proportionate native macOS path only after implementation is authorized.\n\n## Boundaries\n\nThis does not imply support, implementation, package availability, or inclusion in v0.5.0.\n",
+      "title": "Establish a native macOS (AArch64 / Apple Silicon) port",
+      "body": "<!-- lo-project:native-macos-platform -->\n\nNative macOS AArch64 (Apple Silicon) port planned as a roadmap target for milestone v0.8.0.\n\n## Scope and completion criteria\n\n- [ ] Establish toolchain, dependencies, distribution and platform integration feasibility on macOS AArch64 / Apple Silicon.\n- [ ] Define Metal/Vulkan (MoltenVK), window, input, audio, and guest memory alignment requirements for native macOS.\n- [ ] Validate a proportionate native macOS AArch64 path after implementation is authorized.\n\n## Boundaries\n\nTarget only; does not establish current implementation, packaging, hardware validation, player acceptance or publication.\n",
       "issue_url": null,
       "fields": {
         "Kind": "Feature",
@@ -5030,7 +5053,8 @@
         "Delivery": "Not started",
         "Release": "v0.8.0",
         "Start date": null,
-        "Target date": null
+        "Target date": null,
+        "Evidence": "Roadmap target for v0.8.0 explicitly focused on macOS AArch64 / Apple Silicon. No macOS build, backend, package, or validation artifact exists."
       },
       "source_refs": [],
       "source_lines": [],
@@ -5872,23 +5896,45 @@
     {
       "key": "issue-40-controller-mod-support",
       "title": "[Feature] PS5 controls or even more, mod support (with a wiki)",
-      "body": "<!-- lo-project:issue-40-controller-mod-support -->\n\nOpen Issue #40 requests PlayStation controller button glyphs and mod support documentation.\n\n## Status and scope\n\n- Controller navigation and rumble persistence are improved in main; PlayStation button glyph mapping and mod documentation framework remain in backlog.\n\n## Sources\n\n- https://github.com/freefrank/LostOdysseyRecomp/issues/40\n",
+      "body": "<!-- lo-project:issue-40-controller-mod-support -->\n\nOpen Issue #40 requests PlayStation controller button glyphs and mod support documentation.\n\n## Status and scope\n\n- PlayStation controller glyph auto-detection, texture hashing and UI presentation are implemented and validated in the local working tree (see `playstation-controller-glyphs`).\n- Mod support and documentation wiki remain active backlog items; Issue #40 remains open to track remaining requirements.\n\n## Sources\n\n- https://github.com/freefrank/LostOdysseyRecomp/issues/40\n",
       "issue_url": "https://github.com/freefrank/LostOdysseyRecomp/issues/40",
       "fields": {
         "Kind": "Feature",
         "Area": "Input",
-        "Status": "Todo",
-        "Delivery": "Not started",
+        "Status": "In Progress",
+        "Delivery": "In progress",
         "Release": null,
         "Start date": "2026-09-16",
         "Target date": null,
-        "Evidence": "Feature request for PlayStation button glyphs and mod support documentation wiki. Gamepad navigation and rumble are improved in main; PS button glyphs and mod documentation framework remain in backlog."
+        "Evidence": "PlayStation controller automatic glyph detection and texture replacement completed and user-accepted in local working tree (tracked in playstation-controller-glyphs). Issue #40 remains open for remaining mod support and documentation wiki backlog."
       },
       "source_refs": [
         "https://github.com/freefrank/LostOdysseyRecomp/issues/40"
       ],
       "source_lines": [],
       "record_type": "issue"
+    },
+    {
+      "key": "playstation-controller-glyphs",
+      "title": "Automatic PlayStation controller button glyphs",
+      "body": "<!-- lo-project:playstation-controller-glyphs -->\n\nDeliver automatic PlayStation controller detection and button glyph switching across host UI, debug overlay, and guest in-game textures.\n\n## Scope and completion criteria\n\n- [x] Detect SDL PlayStation controller types and handle active gamepad hot-switching.\n- [x] Implement host settings, installer, and debug menu glyphs with L1/R1/L2/R2.\n- [x] Exact SHA-256 hash match replacement for guest common `Icon_Page_0` and English `Font Icon Texture2D_1`.\n- [x] Lazy GPU texture clone generation for PlayStation button assets.\n- [x] Full ABXY (Cross/Circle/Square/Triangle), shoulder buttons, and Start/Back (Options/Share/Touchpad) mapping.\n- [x] Reviewed GPU error and allocation fallback paths.\n\n## Validation and acceptance\n\n- Offline unit tests, TU, and complete clean build passed.\n- GPU error paths reviewed.\n- Real-world player acceptance confirmed on local uncommitted build (HEAD `d677a48`+dirty, test executable SHA-256 `1ae34ffd7eedcc415816c30b6e74b31d5ca2c0d936cd6aadbf72b49aeca709a4`).\n- User verified pause menu, cutscene Start/Select, and shoulder buttons retest.\n- Bounded to verified scenarios; does not extrapolate to all scenes or unverified hardware.\n\n## Boundaries\n\nUncommitted local build; not yet committed or released in a public version package. Fulfills the controller glyph portion of Issue #40; mod support and wiki remain separate in backlog.\n\nstage_detail: Validated by user; uncommitted local build\n\n## Sources\n\n- https://github.com/freefrank/LostOdysseyRecomp/issues/40\n- [docs/ROADMAP.md](https://github.com/freefrank/LostOdysseyRecomp/blob/main/docs/ROADMAP.md)\n",
+      "issue_url": null,
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Input",
+        "Status": "Done",
+        "Delivery": "Validated",
+        "Release": null,
+        "Start date": "2026-09-16",
+        "Target date": "2026-09-26",
+        "Evidence": "PlayStation controller auto-detection and glyph replacement validated by user in local build (HEAD d677a48+dirty, testexe 1ae34ffd7eedcc415816c30b6e74b31d5ca2c0d936cd6aadbf72b49aeca709a4). Covers SDL PS type detection, active device switching, host/debug glyphs, guest Icon_Page_0 and Texture2D_1 hash match, lazy GPU clone, and ABXY/shoulders/StartBack. Verified via pause, cutscenes, shoulder retest. Mod support remains open in Issue #40."
+      },
+      "source_refs": [
+        "https://github.com/freefrank/LostOdysseyRecomp/issues/40",
+        "docs/ROADMAP.md"
+      ],
+      "source_lines": [],
+      "record_type": "backlog"
     },
     {
       "key": "issue-30-dof-toggle-slider",
@@ -5930,6 +5976,63 @@
         "docs/ROADMAP.md",
         "docs/ROADMAP.zh-CN.md",
         "out/diagnostics/render-f2548-summary.json"
+      ],
+      "source_lines": [],
+      "record_type": "backlog"
+    },
+    {
+      "key": "linux-aarch64-platform",
+      "title": "Establish native Linux AArch64 platform support",
+      "body": "<!-- lo-project:linux-aarch64-platform -->\n\nEstablish native Linux AArch64 platform support as a roadmap target for milestone v0.8.0.\n\n## Scope and completion criteria\n\n- [ ] Establish native Linux AArch64 build path, shader compiler (DXC/SPIRV-Cross) toolchain, and dependency distribution.\n- [ ] Account for 64KB page size / memory mapping and NEON/SIMD guest runtime alignment.\n- [ ] Deliver a reproducible build and AppImage package on Linux AArch64 when authorized.\n\n## Boundaries and evidence\n\nTarget only; bounded experimental source-build exploration exists in external PR #60 (live DXC fallback). No official release packaging, hardware execution validation, player acceptance or publication is established.\n",
+      "issue_url": null,
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Platforms",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Release": "v0.8.0",
+        "Start date": null,
+        "Target date": null,
+        "Evidence": "Planned v0.8.0 platform target. Bounded experimental AArch64 build path under investigation in PR #60 (live DXC fallback and CMake cross-compilation). Implementation, native runner hardware validation, and packaging not started."
+      },
+      "source_refs": [
+        "https://github.com/freefrank/LostOdysseyRecomp/pull/60"
+      ]
+    },
+    {
+      "key": "experimental-android-platform",
+      "title": "Experimental Android platform support",
+      "body": "<!-- lo-project:experimental-android-platform -->\n\nExperimental Android platform support planned as an exploratory roadmap target for milestone v0.8.0.\n\n## Scope and completion criteria\n\n- [ ] Investigate Android NDK toolchain integration, CMake build flow, and C++ runtime requirements.\n- [ ] Evaluate Android Vulkan swapchain, subsurface presentation, and shader compilation constraints.\n- [ ] Define guest memory mapping, touch/virtual controls, controller input, and audio routing.\n- [ ] Establish a minimal proof-of-concept APK/library build path when authorized.\n\n## Boundaries\n\nTarget only; experimental scope. No current implementation, Android build system, APK packaging, physical device validation, or publication exists.\n",
+      "issue_url": null,
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Platforms",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Release": "v0.8.0",
+        "Start date": null,
+        "Target date": null,
+        "Evidence": "Planned v0.8.0 experimental platform target. Feasibility exploration for Android NDK, Vulkan surface, and touch/gamepad input. No implementation or build pipeline established."
+      },
+      "source_refs": []
+    },
+    {
+      "key": "remove-pm4-translator",
+      "title": "Remove the PM4 translator",
+      "body": "<!-- lo-project:remove-pm4-translator -->\n\nRemove the legacy PM4 packet translation layer in milestone v0.9.0 (currently in planning status).\n\n## Scope and completion criteria\n\n- [ ] Audit PM4 packet decoders and translation paths in the command processor (`gpu/command_processor.cpp`).\n- [ ] Identify dependencies on PM4 synchronization, register state tracking, and draw dispatch.\n- [ ] Execute the migration plan to eliminate the legacy PM4 translation layer without predetermining an alternative architecture or implementation.\n\n## Boundaries\n\nMilestone delivery target is removing the PM4 translator, currently in planning status. Does not predetermine or restrict alternative presentation architectures, direct execution, or runtime implementations.\n",
+      "issue_url": null,
+      "fields": {
+        "Kind": "Infrastructure",
+        "Area": "GPU architecture",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Release": "v0.9.0",
+        "Start date": null,
+        "Target date": null,
+        "Evidence": "Planned v0.9.0 delivery target to remove the legacy PM4 packet translation layer; currently in planning status. Does not predetermine alternative presentation architectures, direct execution, or runtime implementations."
+      },
+      "source_refs": [
+        "gpu/command_processor.cpp"
       ],
       "source_lines": [],
       "record_type": "backlog"

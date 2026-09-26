@@ -1,7 +1,8 @@
+#define SDL_MAIN_HANDLED
 #include <stdafx.h>
 #include <hid/hid.h>
+#include <hid/controller_prompts.h>
 #include <debug/menu_overlay.h>
-#define SDL_MAIN_HANDLED
 #include <SDL.h>
 #include <condition_variable>
 #include <future>
@@ -46,6 +47,49 @@ static void Check(bool value, const char* message)
 
 int main()
 {
+    using namespace hid::prompts;
+    Check(IsPlayStation(SDL_CONTROLLER_TYPE_PS3) && IsPlayStation(SDL_CONTROLLER_TYPE_PS4) &&
+          IsPlayStation(SDL_CONTROLLER_TYPE_PS5), "PlayStation SDL types");
+    Check(!IsPlayStation(SDL_CONTROLLER_TYPE_XBOXONE) && !IsPlayStation(SDL_CONTROLLER_TYPE_UNKNOWN),
+          "non-PlayStation SDL types");
+    Check(Symbol(Face::Y) == L'\u25b3' && Symbol(Face::B) == L'\u25cb' &&
+          Symbol(Face::A) == L'\u00d7' && Symbol(Face::X) == L'\u25a1', "four physical face mappings");
+    auto lines = [](Face face) {
+        std::vector<std::array<int, 4>> result;
+        DrawFace(face, 0, 0, 20, [&](int x, int y, int x2, int y2) {
+            result.push_back({x, y, x2, y2});
+        });
+        return result;
+    };
+    Check(lines(Face::Y).size() == 3 && lines(Face::Y)[0] == std::array{10, 2, 19, 18}, "triangle strokes");
+    Check(lines(Face::B).size() == 8 && lines(Face::B)[0] == std::array{7, 2, 13, 2}, "circle strokes");
+    Check(lines(Face::A).size() == 2 && lines(Face::A)[0] == std::array{3, 3, 17, 17}, "cross strokes");
+    Check(lines(Face::X).size() == 4 && lines(Face::X)[0] == std::array{3, 3, 17, 3}, "square strokes");
+    ActiveController prompts;
+    prompts.Connected(11, SDL_CONTROLLER_TYPE_PS4);
+    Check(prompts.PlayStation(), "PS4 connected");
+    prompts.Connected(12, SDL_CONTROLLER_TYPE_XBOXONE);
+    prompts.Observe(12, 1u << SDL_CONTROLLER_BUTTON_A, false);
+    Check(!prompts.PlayStation(), "Xbox activity takes over");
+    prompts.Observe(11, 0, true);
+    Check(prompts.PlayStation(), "PS4 stick takes over");
+    prompts.Keyboard();
+    Check(!prompts.PlayStation(), "keyboard takes over");
+    prompts.Observe(11, 0, true);
+    Check(!prompts.PlayStation(), "held PS4 stick does not override keyboard");
+    prompts.Observe(11, 0, false);
+    prompts.Observe(11, 1u << SDL_CONTROLLER_BUTTON_B, false);
+    Check(prompts.PlayStation(), "new PS4 button press takes over");
+    prompts.Disconnected(11);
+    Check(!prompts.PlayStation(), "PS4 removal falls back to Xbox");
+    prompts.Connected(13, SDL_CONTROLLER_TYPE_PS5);
+    prompts.Observe(13, 1u << SDL_CONTROLLER_BUTTON_Y, false);
+    Check(prompts.PlayStation(), "PS5 button takes over");
+    prompts.Disconnected(13);
+    Check(!prompts.PlayStation(), "PS5 removal falls back to Xbox");
+    prompts.Disconnected(12);
+    Check(!prompts.PlayStation(), "all controllers removed");
+
     hid::Init();
     const int first = SDL_JoystickAttachVirtual(SDL_JOYSTICK_TYPE_GAMECONTROLLER, SDL_CONTROLLER_AXIS_MAX, SDL_CONTROLLER_BUTTON_MAX, 0);
     const int second = SDL_JoystickAttachVirtual(SDL_JOYSTICK_TYPE_GAMECONTROLLER, SDL_CONTROLLER_AXIS_MAX, SDL_CONTROLLER_BUTTON_MAX, 0);
@@ -61,6 +105,7 @@ int main()
         return state.Gamepad;
     };
     sample(); // consume added events
+    Check(!hid::UsesPlayStationPrompts(), "virtual non-PS controller retains regular prompts");
     SDL_JoystickSetVirtualButton(a, SDL_CONTROLLER_BUTTON_A, 1);
     Check(sample().wButtons & XAMINPUT_GAMEPAD_A, "first controller A");
     SDL_JoystickSetVirtualButton(a, SDL_CONTROLLER_BUTTON_A, 0);
@@ -69,6 +114,7 @@ int main()
     Check((state.wButtons & XAMINPUT_GAMEPAD_B) && !(state.wButtons & XAMINPUT_GAMEPAD_A), "second controller takes over");
     hid::HandleKeyboardEvent(SDL_SCANCODE_Z, true);
     state = sample();
+    Check(!hid::UsesPlayStationPrompts(), "keyboard retains regular prompts");
     Check((state.wButtons & (XAMINPUT_GAMEPAD_A | XAMINPUT_GAMEPAD_B)) == (XAMINPUT_GAMEPAD_A | XAMINPUT_GAMEPAD_B), "keyboard with connected controllers");
     hid::HandleKeyboardEvent(SDL_SCANCODE_Z, false);
     Check(!(sample().wButtons & XAMINPUT_GAMEPAD_A), "keyboard release");
@@ -161,5 +207,6 @@ int main()
     hid::HandleControllerEvent(SDL_CONTROLLERDEVICEREMOVED, instance);
     Check(sample().wButtons == 0, "external hot-unplug clears held input");
     SDL_Quit();
-    puts("PASS: multiple controllers, keyboard switching, deadzone, triggers, hot-unplug and state reset");
+    puts("PASS: SDL PS types, PS/nonPS active device, keyboard, hotplug, four face mappings; virtual input merger");
+    return 0;
 }

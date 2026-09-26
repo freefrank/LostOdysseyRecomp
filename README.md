@@ -39,6 +39,14 @@ native Linux RADV has Quality, Performance and Native AA evidence. Tested Window
 Radeon 8060S RADV STRIX_HALO) passed user acceptance, concluding FSR P2 acceptance for v0.7.0. Frame generation and macOS support are deferred to v0.8.0. User acceptance does not alter existing test coverage. Low-power hardware testing covered an approved
 APEX 15W proxy without establishing Steam Deck hardware equivalence.
 
+### Automatic PlayStation controller prompts (Unreleased)
+
+The recomp automatically detects active PlayStation gamepads via SDL and updates button prompts:
+- **Host UI**: Settings menu, Installer UI, and Debug overlay render matching PlayStation glyphs (Cross, Circle, Square, Triangle, L1, R1, L2, R2, and Options/Share).
+- **Guest runtime**: Texture upload intercepts identify two confirmed controller prompt atlases by exact content hash (`rpmenurescommon` `Icon_Page_0` and English font `Texture2D_1`), swapping to immutable PlayStation replacement textures under GPU stop guards and retirement review. Replaces action buttons, shoulder buttons, and pause menu Start/Select (Options/Create).
+- Verified on local development build (`HEAD d677a48-dirty`, binary SHA `1ae34ffd7eedcc415816c30b6e74b31d5ca2c0d936cd6aadbf72b49aeca709a4`) and accepted by the user after pause menu and cutscene review; uncommitted and unpublished.
+- Validation limits: User acceptance on real hardware is bounded to tested controller hardware and scenes, without claiming universal controller hardware compatibility or 100% full-game playthrough coverage. Issue #40 mod support was not implemented in this scope.
+
 ## v0.6.20 release
 
 [v0.6.20](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.20) was published on 2026-09-25T21:15:07Z from `be842b91d7367fd198074b1b8d3c1bc3ef4372a6` after successful [Windows/Linux Release CI](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/36188596414). It includes the user-accepted floor-light repair and 40 screen-sampling mappings, Hybrid motion fallback and F1 diagnostics. Packages and checksum files are public; no additional local artifact validation was performed, as requested.
@@ -97,7 +105,7 @@ Published release: [v0.6.0](https://github.com/freefrank/LostOdysseyRecomp/relea
 - **Hardened importer**: final writes, flushes and closes are checked before publication, XDVDFS scanning follows 2048-byte boundaries, and the destination browser can create and enter a folder with the button, `F2`, or controller `Y`.
 - **Real source validation**: the importer recognized all four USA/Europe disc images under `G:/ROMS/US`; an isolated Disc 1 import completed successfully. Four-disc installation, interactive UI acceptance, and gameplay remain unverified.
 
-The **v0.7.0** milestone focuses on performance optimizations, quality-of-life features, and native DLSS/DLAA and FSR upscaling (with user acceptance passed). Frame generation and the macOS release are deferred to **v0.8.0**.
+The **v0.7.0** milestone focuses on performance optimizations, quality-of-life features, and native DLSS/DLAA and FSR upscaling (with user acceptance passed). Frame generation and expanded platform targets—including macOS AArch64 (Apple Silicon), Linux AArch64, and experimental Android support—are planned for **v0.8.0**; these platform targets represent roadmap planning rather than current implementation or verified coverage.
 
 The release packages and standalone shader pack are available from the [v0.6.0 release](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.0). Release CI passed the required audit and Windows/Linux packaging gates. The published artifacts were verified against their SHA-256 sidecars; native Linux GPU, Steam Deck, AppImage update transactions, and full-game playthrough remain outside the verified scope.
 

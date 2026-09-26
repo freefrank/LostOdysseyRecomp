@@ -4,6 +4,7 @@
 #include "installer_font.h"
 #include "file_browser.h"
 #include "import_game.h"
+#include "../hid/controller_prompts.h"
 
 #include <atomic>
 #include <chrono>
@@ -48,13 +49,22 @@ void DrawFileIcon(SDL_Renderer* renderer, int x, int y, bool selected)
 }
 
 // Controller button prompt chip (e.g. [A], [B], [X])
-void DrawButtonPrompt(SDL_Renderer* renderer, int x, int y, std::string_view btn, std::string_view label, Color btnColor)
+void DrawButtonPrompt(SDL_Renderer* renderer, int x, int y, std::string_view btn, std::string_view label, Color btnColor, bool playStation)
 {
-    int btnW = ui::MeasureTextWidth(btn, 1.0f) + 8;
+    int btnW = playStation ? 24 : ui::MeasureTextWidth(btn, 1.0f) + 8;
     int btnH = 20;
     FillRect(renderer, x, y, btnW, btnH, btnColor);
     DrawRect(renderer, x, y, btnW, btnH, COLOR_BORDER_DARK);
-    ui::DrawString(renderer, x + 4, y + 2, btn, 20, 20, 20, 255, 1.0f);
+    if (playStation && btn.size() == 1)
+    {
+        using hid::prompts::Face;
+        const auto face = btn == "A" ? Face::A : btn == "B" ? Face::B : btn == "X" ? Face::X : Face::Y;
+        SDL_SetRenderDrawColor(renderer, 20, 20, 20, 255);
+        hid::prompts::DrawFace(face, x + 4, y + 2, 16, [&](int ax, int ay, int bx, int by) {
+            SDL_RenderDrawLine(renderer, ax, ay, bx, by);
+        });
+    }
+    else ui::DrawString(renderer, x + 4, y + 2, btn, 20, 20, 20, 255, 1.0f);
     ui::DrawString(renderer, x + btnW + 6, y + 2, label, COLOR_INK.r, COLOR_INK.g, COLOR_INK.b, 255, 1.0f);
 }
 
@@ -204,6 +214,7 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
     }
 
     std::vector<SDL_GameController*> controllers;
+    hid::prompts::ActiveController promptController;
     for (int i = 0; i < SDL_NumJoysticks(); ++i)
     {
         if (SDL_IsGameController(i))
@@ -211,6 +222,7 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
             if (auto* pad = SDL_GameControllerOpen(i))
             {
                 controllers.push_back(pad);
+                promptController.Connected(SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pad)), SDL_GameControllerGetType(pad));
             }
         }
     }
@@ -769,6 +781,7 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
                 break;
 
             case SDL_KEYDOWN:
+                promptController.Keyboard();
                 if (state.destNaming)
                 {
                     switch (event.key.keysym.sym)
@@ -861,12 +874,16 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
                     return SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pad)) == id;
                 });
                 if (!opened && SDL_IsGameController(event.cdevice.which))
-                    if (auto* pad = SDL_GameControllerOpen(event.cdevice.which)) controllers.push_back(pad);
+                    if (auto* pad = SDL_GameControllerOpen(event.cdevice.which)) {
+                        controllers.push_back(pad);
+                        promptController.Connected(id, SDL_GameControllerGetType(pad));
+                    }
                 break;
             }
             case SDL_CONTROLLERDEVICEREMOVED:
                 std::erase_if(controllers, [&](auto* pad) {
                     if (SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pad)) != event.cdevice.which) return false;
+                    promptController.Disconnected(event.cdevice.which);
                     SDL_GameControllerClose(pad);
                     return true;
                 });
@@ -1060,6 +1077,27 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
         case ui::Direction::None: break;
         }
 
+        SDL_GameControllerUpdate();
+        for (auto* pad : controllers)
+        {
+            if (!SDL_GameControllerGetAttached(pad)) continue;
+            uint32_t buttons = 0;
+            for (int button = SDL_CONTROLLER_BUTTON_A; button < SDL_CONTROLLER_BUTTON_MAX; ++button)
+                if (SDL_GameControllerGetButton(pad, SDL_GameControllerButton(button))) buttons |= 1u << button;
+            const auto moved = [&](SDL_GameControllerAxis axis) {
+                return std::abs(int(SDL_GameControllerGetAxis(pad, axis))) > 12000;
+            };
+            const bool stick = moved(SDL_CONTROLLER_AXIS_LEFTX) || moved(SDL_CONTROLLER_AXIS_LEFTY) ||
+                               moved(SDL_CONTROLLER_AXIS_RIGHTX) || moved(SDL_CONTROLLER_AXIS_RIGHTY) ||
+                               SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_TRIGGERLEFT) > 12000 ||
+                               SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > 12000;
+            promptController.Observe(SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pad)), buttons, stick);
+        }
+        const bool playStation = promptController.PlayStation();
+        auto buttonPrompt = [&](int x, int y, std::string_view btn, std::string_view label, Color color) {
+            DrawButtonPrompt(renderer, x, y, btn, label, color, playStation);
+        };
+
         // Render pass
         int w = LOGICAL_WIN_WIDTH;
         int h = LOGICAL_WIN_HEIGHT;
@@ -1082,40 +1120,40 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
 
         if (state.screen == ScreenState::BrowseSource || state.screen == ScreenState::BrowseDest)
         {
-            DrawButtonPrompt(renderer, chipX, chipY, "A", "Open", COLOR_GREEN);
+            buttonPrompt(chipX, chipY, "A", "Open", COLOR_GREEN);
             chipX += 90;
-            DrawButtonPrompt(renderer, chipX, chipY, "X", "Select", COLOR_CYAN);
+            buttonPrompt(chipX, chipY, "X", "Select", COLOR_CYAN);
             chipX += 100;
             if (state.screen == ScreenState::BrowseDest)
             {
-                DrawButtonPrompt(renderer, chipX, chipY, "Y", "New folder", COLOR_ACCENT_GOLD);
+                buttonPrompt(chipX, chipY, "Y", "New folder", COLOR_ACCENT_GOLD);
                 chipX += 145;
             }
-            DrawButtonPrompt(renderer, chipX, chipY, "B", "Back", COLOR_RED);
+            buttonPrompt(chipX, chipY, "B", "Back", COLOR_RED);
             chipX += 90;
             DrawNavigationPrompt(renderer, dpadIcon, chipX, chipY, "Move");
         }
         else if (state.screen == ScreenState::ReviewDiscs)
         {
-            DrawButtonPrompt(renderer, chipX, chipY, "A", "Select", COLOR_GREEN);
+            buttonPrompt(chipX, chipY, "A", "Select", COLOR_GREEN);
             chipX += 100;
-            DrawButtonPrompt(renderer, chipX, chipY, "B", "Back", COLOR_RED);
+            buttonPrompt(chipX, chipY, "B", "Back", COLOR_RED);
             chipX += 90;
             DrawNavigationPrompt(renderer, dpadIcon, chipX, chipY, "Move");
         }
         else if (state.screen == ScreenState::Importing)
         {
-            DrawButtonPrompt(renderer, chipX, chipY, "B", "Cancel", COLOR_RED);
+            buttonPrompt(chipX, chipY, "B", "Cancel", COLOR_RED);
         }
         else if (state.screen == ScreenState::Complete)
         {
-            DrawButtonPrompt(renderer, chipX, chipY, "A", "Launch", COLOR_GREEN);
+            buttonPrompt(chipX, chipY, "A", "Launch", COLOR_GREEN);
         }
         else if (state.screen == ScreenState::Error)
         {
-            DrawButtonPrompt(renderer, chipX, chipY, "A", "Retry", COLOR_GREEN);
+            buttonPrompt(chipX, chipY, "A", "Retry", COLOR_GREEN);
             chipX += 100;
-            DrawButtonPrompt(renderer, chipX, chipY, "B", "Exit", COLOR_RED);
+            buttonPrompt(chipX, chipY, "B", "Exit", COLOR_RED);
         }
 
         // Row 2: Keyboard shortcuts hint line
@@ -1275,12 +1313,12 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
                 const int actionY = bodyY + bodyH - 44;
                 DrawBevelPanel(renderer, mainX + 14, actionY, 216, 30, COLOR_RAIL);
                 ui::DrawString(renderer, mainX + 24, actionY + 7,
-                               state.destNaming ? "CREATE FOLDER" : "NEW FOLDER  [F2 / Y]",
+                               state.destNaming ? "CREATE FOLDER" : playStation ? "NEW FOLDER  [F2]" : "NEW FOLDER  [F2 / Y]",
                                COLOR_CYAN.r, COLOR_CYAN.g, COLOR_CYAN.b, 255, 0.9f);
                 if (state.destNaming)
                 {
                     DrawBevelPanel(renderer, mainX + 244, actionY, 146, 30, COLOR_RAIL);
-                    ui::DrawString(renderer, mainX + 254, actionY + 7, "CANCEL  [B]",
+                    ui::DrawString(renderer, mainX + 254, actionY + 7, playStation ? "CANCEL" : "CANCEL  [B]",
                                    COLOR_RED.r, COLOR_RED.g, COLOR_RED.b, 255, 0.9f);
                 }
                 if (state.destNaming)
@@ -1469,7 +1507,12 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
             }
             ui::DrawString(renderer, 40, bodyY + 140, summary, COLOR_ACCENT_GOLD.r, COLOR_ACCENT_GOLD.g, COLOR_ACCENT_GOLD.b, 255, 1.0f);
             ui::DrawString(renderer, 40, bodyY + 170, "Configuration file game-path.txt has been updated.", COLOR_MUTED.r, COLOR_MUTED.g, COLOR_MUTED.b, 255, 0.95f);
-            ui::DrawString(renderer, 40, bodyY + 220, "Press [A] or [Enter] to exit installer.", COLOR_INK.r, COLOR_INK.g, COLOR_INK.b, 255, 1.0f);
+            if (playStation)
+            {
+                ui::DrawString(renderer, 40, bodyY + 222, "Press", COLOR_INK.r, COLOR_INK.g, COLOR_INK.b, 255, 1.0f);
+                buttonPrompt(94, bodyY + 219, "A", "or [Enter] to exit installer.", COLOR_GREEN);
+            }
+            else ui::DrawString(renderer, 40, bodyY + 220, "Press [A] or [Enter] to exit installer.", COLOR_INK.r, COLOR_INK.g, COLOR_INK.b, 255, 1.0f);
         }
         else if (state.screen == ScreenState::Error)
         {
@@ -1481,7 +1524,12 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
             ui::DrawString(renderer, 40, bodyY + 115, state.importError, COLOR_RED.r, COLOR_RED.g, COLOR_RED.b, 255, 1.0f);
 
             ui::DrawString(renderer, 40, bodyY + 160, "Any partial files were rolled back. Original game sources were kept safe.", COLOR_MUTED.r, COLOR_MUTED.g, COLOR_MUTED.b, 255, 0.95f);
-            ui::DrawString(renderer, 40, bodyY + 200, "Press [B] or [Enter] to return and retry.", COLOR_INK.r, COLOR_INK.g, COLOR_INK.b, 255, 1.0f);
+            if (playStation)
+            {
+                ui::DrawString(renderer, 40, bodyY + 202, "Press", COLOR_INK.r, COLOR_INK.g, COLOR_INK.b, 255, 1.0f);
+                buttonPrompt(94, bodyY + 199, "B", "or [Enter] to return and retry.", COLOR_RED);
+            }
+            else ui::DrawString(renderer, 40, bodyY + 200, "Press [B] or [Enter] to return and retry.", COLOR_INK.r, COLOR_INK.g, COLOR_INK.b, 255, 1.0f);
         }
 
         SDL_RenderPresent(renderer);

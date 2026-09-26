@@ -15,6 +15,10 @@
 #include "../gpu/renderer.h"
 #include "../settings/config.h"
 #include "cheat_overlay.h"
+#include "controller_hint.h"
+
+// hid.h also declares guest XAMINPUT types; the overlay only needs this host state.
+namespace hid { bool UsesPlayStationPrompts(); }
 
 namespace debug_menu
 {
@@ -381,6 +385,7 @@ namespace debug_menu
         if (!state.visible) return;
 
         bool zh = state.chinese;
+        const bool playStation = hid::UsesPlayStationPrompts();
 
         // Dim background slightly to focus attention on debug overlay
         r.FillRect(0, 0, r.width, r.height, host_ui::MakeColor(140, 0, 0, 0));
@@ -394,7 +399,8 @@ namespace debug_menu
         host_ui::DrawPanel(r, panelX, panelY, panelW, panelH, host_ui::MakeColor(235, 20, 22, 26), host_ui::MakeColor(255, 75, 85, 95));
 
         // Header Title (Centered in header bar by DrawHeader)
-        std::wstring headerTitle = zh ? L"Lost Odyssey — 调试菜单 (F1 / LB+RB)" : L"Lost Odyssey — Debug Menu (F1 / LB+RB)";
+        std::wstring headerTitle = controller_hint::ShoulderLabels(
+            zh ? L"Lost Odyssey — 调试菜单 (F1 / LB+RB)" : L"Lost Odyssey — Debug Menu (F1 / LB+RB)", playStation);
         host_ui::DrawHeader(r, panelX, panelY, panelW, 36, headerTitle);
 
         // Centered Tab buttons
@@ -410,13 +416,21 @@ namespace debug_menu
         // Footer at bottom of panel
         int footerY = panelY + panelH - 32;
         r.DrawHLine(panelX, footerY - 6, panelW, host_ui::MakeColor(255, 60, 65, 75));
-        std::wstring help = state.activeTab == 2
-            ? (zh ? L"方向键/左摇杆: 导航   A/Enter: 确定   B/Esc: 返回   LB/RB: 切页   LT/RT: 类别"
-                  : L"D-Pad/Stick: Nav  A/Enter: OK  B/Esc: Back  LB/RB: Tab  LT/RT: Category")
-            : (zh ? L"方向键/左摇杆: 导航   A/Enter: 确定   B/Esc: 返回   LB/RB: 切页"
-                  : L"D-Pad/Stick: Nav   A/Enter: Confirm   B/Esc: Back   LB/RB: Tab");
-        int helpW = r.MeasureWString(help);
-        r.DrawWString(panelX + (panelW - helpW) / 2, footerY, help, host_ui::MakeColor(255, 170, 175, 185));
+        const wchar_t* nav = zh ? L"方向键/摇杆: 导航" : L"D-Pad/Stick: Nav";
+        const wchar_t* accept = zh ? L"/Enter: 确定" : (state.activeTab == 2 ? L"/Enter: OK" : L"/Enter: Confirm");
+        const wchar_t* back = zh ? L"/Esc: 返回" : L"/Esc: Back";
+        const std::wstring tabs = controller_hint::ShoulderLabels(
+            zh ? (state.activeTab == 2 ? L"LB/RB: 切页  LT/RT: 类别" : L"LB/RB: 切页")
+               : (state.activeTab == 2 ? L"LB/RB: Tab  LT/RT: Category" : L"LB/RB: Tab"), playStation);
+        constexpr int gap = 13;
+        const int helpW = r.MeasureWString(nav) + controller_hint::Width(r, playStation, accept)
+            + controller_hint::Width(r, playStation, back) + r.MeasureWString(tabs) + 3 * gap;
+        const uint32_t helpColor = host_ui::MakeColor(255, 170, 175, 185);
+        int helpX = panelX + (panelW - helpW) / 2;
+        helpX += r.DrawWString(helpX, footerY, nav, helpColor) + gap;
+        helpX = controller_hint::Draw(r, helpX, footerY, playStation, hid::prompts::Face::A, accept, helpColor) + gap;
+        helpX = controller_hint::Draw(r, helpX, footerY, playStation, hid::prompts::Face::B, back, helpColor) + gap;
+        r.DrawWString(helpX, footerY, tabs, helpColor);
 
         int contentY = tabY + 42;
 
@@ -564,7 +578,7 @@ namespace debug_menu
         }
         else if (state.activeTab == 2)
         {
-            cheat_overlay::Render(r, state.cheatsPage, zh, panelX + 30, contentY, panelW - 60);
+            cheat_overlay::Render(r, state.cheatsPage, zh, panelX + 30, contentY, panelW - 60, playStation);
         }
 
         // Status message at bottom of panel (Centered)

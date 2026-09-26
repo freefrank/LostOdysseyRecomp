@@ -1,5 +1,6 @@
 #include <settings/menu_render.h>
 #include <settings/menu_assets.h>
+#include <hid/controller_glyphs.h>
 #include <lzokay.hpp>
 #include <algorithm>
 #include <cstdio>
@@ -148,11 +149,73 @@ int main(int argc, char **argv)
         {L"Restore Game Defaults", L"Restore", true, {L"Restore"}, 0}};
     snapshot.help = L"Set the speed at which text is displayed.";
     Require(settings::RasterizeMenu(snapshot,1280,720,pixels), "gameplay reference rasterization failed");
+    // The original-language font and Unifont need not contain these glyphs:
+    // the PS confirmation options, footer and all four symbols use line art.
+    const auto regularPixels = pixels;
+    snapshot.playStationPrompts = true;
+    snapshot.help = L"A: confirm  B: back  X: select  Y: new folder";
+    Require(settings::RasterizeMenu(snapshot,1280,720,pixels), "PlayStation menu rasterization failed");
+    Require(pixels != regularPixels, "PlayStation hints did not change pixels");
+    auto changed = [&](int x, int y, int w, int h) {
+        size_t count = 0;
+        for (int py = y; py < y + h; ++py)
+            for (int px = x; px < x + w; ++px)
+                count += pixels[size_t(py) * 1280 + px] != regularPixels[size_t(py) * 1280 + px];
+        return count;
+    };
+    Require(changed(420, 410, 26, 24) > 8, "PlayStation confirmation button missing");
+    // Inspect the produced PPM for the four distinct fallback shapes.
+    if (argc > 1) {
+        std::ofstream f(std::filesystem::path(argv[1])/"gameplay-playstation.ppm",std::ios::binary);
+        f<<"P6\n1280 720\n255\n";
+        for(auto p:pixels) { const char rgb[]={char(p),char(p>>8),char(p>>16)};f.write(rgb,3); }
+    }
+    snapshot.playStationPrompts = false;
+    snapshot.help = L"Set the speed at which text is displayed.";
+    pixels = regularPixels;
     if (argc>1) {
         std::ofstream f(std::filesystem::path(argv[1])/"gameplay-reference.ppm",std::ios::binary);
         f<<"P6\n1280 720\n255\n";
         for(auto p:pixels) { const char rgb[]={char(p),char(p>>8),char(p>>16)};f.write(rgb,3); }
     }
+    // The live Settings help is translated before render. Only PS style
+    // changes complete shoulder labels; Xbox text and nearby words survive.
+    auto shoulderSnapshot = [&](const wchar_t* help, bool ps) {
+        snapshot.help = help;
+        snapshot.playStationPrompts = ps;
+        Require(settings::RasterizeMenu(snapshot,1280,720,pixels), "shoulder prompt rasterization failed");
+        return pixels;
+    };
+    auto saveShoulder = [&](const char* name) {
+        if (argc <= 1) return;
+        std::ofstream f(std::filesystem::path(argv[1])/name,std::ios::binary);
+        Require(bool(f), "could not open shoulder screenshot");
+        f<<"P6\n1280 720\n255\n";
+        for(auto p:pixels) { const char rgb[]={char(p),char(p>>8),char(p>>16)};f.write(rgb,3); }
+        Require(bool(f), "could not write shoulder screenshot");
+    };
+    const auto shoulderReference = shoulderSnapshot(L"LB / RB: category   LT + RT: edit   VOLT: unchanged",false);
+    saveShoulder("shoulders-reference.ppm");
+    const auto shoulderPlayStation = shoulderSnapshot(L"LB / RB: category   LT + RT: edit   VOLT: unchanged",true);
+    saveShoulder("shoulders-playstation.ppm");
+    auto changedFooter = [&](const std::vector<uint32_t>& before, const std::vector<uint32_t>& after) {
+        size_t count=0;
+        for(int y=645;y<700;++y)
+            for(int x=130;x<1195;++x)
+                count+=before[size_t(y)*1280+x]!=after[size_t(y)*1280+x];
+        return count;
+    };
+    Require(changedFooter(shoulderReference,shoulderPlayStation)>30, "PS shoulder labels did not update Settings footer");
+    Require(shoulderSnapshot(L"LB / RB: category   LT + RT: edit   VOLT: unchanged",false)==shoulderReference,
+            "non-PS Settings footer did not restore");
+    snapshot.language=4;
+    const auto chineseShoulderReference=shoulderSnapshot(L"LB / RB：分类  LT+RT：类别",false);
+    const auto chineseShoulderPlayStation=shoulderSnapshot(L"LB / RB：分类  LT+RT：类别",true);
+    Require(changedFooter(chineseShoulderReference,chineseShoulderPlayStation)>20,
+            "Chinese PS shoulder labels did not update Settings footer");
+    snapshot.language=0;
+    snapshot.playStationPrompts=false;
+    snapshot.help=L"Set the speed at which text is displayed.";
     std::puts("English gameplay reference rendered at 1280x720");
     snapshot.tab = 1;
     snapshot.row = 1;

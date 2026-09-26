@@ -11,6 +11,7 @@ extern std::atomic<uint32_t> g_presentedSwaps;
 #include <debug/menu_overlay.h>
 #include <debug/frame_timing.h>
 #include "test_input_pulse.h"
+#include "controller_prompts.h"
 
 // SDL game controller -> XInput state. Player 1 only for now; the keyboard
 // mirrors the pad so the game can be driven without a controller.
@@ -18,6 +19,24 @@ extern std::atomic<uint32_t> g_presentedSwaps;
 namespace
 {
     std::vector<SDL_GameController*> g_controllers;
+    hid::prompts::ActiveController g_promptController;
+    std::atomic<bool> g_playStationPrompts{false};
+    void PublishPromptStyle() { g_playStationPrompts.store(g_promptController.PlayStation(), std::memory_order_relaxed); }
+
+    void ObserveController(SDL_GameController* controller)
+    {
+        uint32_t buttons = 0;
+        for (int b = SDL_CONTROLLER_BUTTON_A; b < SDL_CONTROLLER_BUTTON_MAX; ++b)
+            if (SDL_GameControllerGetButton(controller, SDL_GameControllerButton(b))) buttons |= uint32_t(1) << b;
+        const auto moving = [&](SDL_GameControllerAxis axis) {
+            return std::abs(int(SDL_GameControllerGetAxis(controller, axis))) > 12000;
+        };
+        const bool stick = moving(SDL_CONTROLLER_AXIS_LEFTX) || moving(SDL_CONTROLLER_AXIS_LEFTY) ||
+                           moving(SDL_CONTROLLER_AXIS_RIGHTX) || moving(SDL_CONTROLLER_AXIS_RIGHTY) ||
+                           SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_TRIGGERLEFT) > 12000 ||
+                           SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > 12000;
+        g_promptController.Observe(SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(controller)), buttons, stick);
+    }
     std::array<Uint8, SDL_NUM_SCANCODES> g_keys{};
     Mutex g_hidMutex;
     // Serializes host sampling/actions with the complete guest input transaction.
@@ -37,6 +56,8 @@ namespace
             if (auto* pad = SDL_GameControllerOpen(i))
             {
                 g_controllers.push_back(pad);
+                g_promptController.Connected(id, SDL_GameControllerGetType(pad));
+                PublishPromptStyle();
                 LOG_INFO("controller added: {} instance={} ({} connected)", SDL_GameControllerName(pad), id, g_controllers.size());
             }
             else LOG_WARNING("controller: open failed: {}", SDL_GetError());
@@ -90,6 +111,8 @@ void hid::HandleControllerEvent(uint32_t eventType, int32_t which)
         std::erase_if(g_controllers, [&](auto* pad) {
             if (SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pad)) != which) return false;
             LOG_INFO("controller removed: instance={}", which);
+            g_promptController.Disconnected(which);
+            PublishPromptStyle();
             SDL_GameControllerClose(pad);
             return true;
         });
@@ -99,8 +122,14 @@ void hid::HandleControllerEvent(uint32_t eventType, int32_t which)
 void hid::HandleKeyboardEvent(int32_t scancode, bool pressed)
 {
     std::lock_guard lock(g_hidMutex);
-    if (scancode >= 0 && scancode < SDL_NUM_SCANCODES) g_keys[scancode] = pressed;
+    if (scancode >= 0 && scancode < SDL_NUM_SCANCODES)
+    {
+        g_keys[scancode] = pressed;
+        if (pressed) { g_promptController.Keyboard(); PublishPromptStyle(); }
+    }
 }
+
+bool hid::UsesPlayStationPrompts() { return g_playStationPrompts.load(std::memory_order_relaxed); }
 
 void hid::ClearKeyboardState()
 {
@@ -114,6 +143,7 @@ static uint16_t ReadRawButtonsLocked(uint8_t& lt, uint8_t& rt)
     for (auto* controller : g_controllers)
     {
         if (!SDL_GameControllerGetAttached(controller)) continue;
+        ObserveController(controller);
         auto btn = [&](SDL_GameControllerButton b) { return SDL_GameControllerGetButton(controller, b) != 0; };
 
         if (btn(SDL_CONTROLLER_BUTTON_DPAD_UP)) buttons |= XAMINPUT_GAMEPAD_DPAD_UP;
@@ -133,6 +163,7 @@ static uint16_t ReadRawButtonsLocked(uint8_t& lt, uint8_t& rt)
         lt = std::max(lt, uint8_t(std::max(0, int(SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_TRIGGERLEFT))) >> 7));
         rt = std::max(rt, uint8_t(std::max(0, int(SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_TRIGGERRIGHT))) >> 7));
     }
+    PublishPromptStyle();
     return buttons;
 }
 
@@ -238,6 +269,7 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
         for (auto* controller : g_controllers)
         {
             if (!SDL_GameControllerGetAttached(controller)) continue;
+            ObserveController(controller);
             auto btn = [&](SDL_GameControllerButton b) { return SDL_GameControllerGetButton(controller, b) != 0; };
             auto axis = [&](SDL_GameControllerAxis a) { return SDL_GameControllerGetAxis(controller, a); };
 
@@ -263,6 +295,7 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
             MergeStick(gp.sThumbRX, gp.sThumbRY, axis(SDL_CONTROLLER_AXIS_RIGHTX), flip(axis(SDL_CONTROLLER_AXIS_RIGHTY)), 8689);
         }
         controllerConnected = !g_controllers.empty();
+        PublishPromptStyle();
         keys = g_keys;
     }
 

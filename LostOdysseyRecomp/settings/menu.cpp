@@ -12,6 +12,7 @@
 #include <os/logger.h>
 #include <stdafx.h>
 #include "language_trace.h"
+#include <hid/hid.h>
 extern "C" PPC_FUNC(__imp__sub_822F19B0);
 extern "C" PPC_FUNC(__imp__sub_82481BE8);
 extern "C" PPC_FUNC(__imp__sub_82870E38);
@@ -1278,16 +1279,21 @@ bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint3
         std::lock_guard lock(snapshotMutex);
         current = snapshot;
     }
+    // Input style can change without a guest menu tick (hot-plug or keyboard).
+    current.playStationPrompts = hid::UsesPlayStationPrompts();
     // This cache belongs to the sole presentation thread. Dimensions must be
     // checked independently: portrait and landscape buffers can have equal area.
     static uint32_t cachedWidth = 0, cachedHeight = 0;
-    if (revision == current.revision && cachedWidth == width && cachedHeight == height && !pixels.empty())
+    static bool cachedPlayStation = false;
+    if (revision == current.revision && cachedWidth == width && cachedHeight == height &&
+        cachedPlayStation == current.playStationPrompts && !pixels.empty())
         return true;
     current.assets = menu_assets::Cached(FileSystem::GetGameRoot(), current.language);
     if (!RasterizeMenu(current, width, height, pixels))
         return false;
     cachedWidth = width;
     cachedHeight = height;
+    cachedPlayStation = current.playStationPrompts;
     revision = current.revision;
     return true;
 }

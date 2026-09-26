@@ -1638,7 +1638,7 @@
         "Delivery": "Deferred",
         "Source key": "frame-generation-research",
         "Release": "v0.8.0",
-        "Evidence": "Broader historical goals (2× DLSS-G on D3D12 and 2× FSR FG on D3D12/Vulkan) remain deferred backlog; dynamic MFG is deferred by the current plan. Active FG production work is phased through P0 architecture evaluation, P3 infrastructure and P4 Windows Vulkan DLSS FG. Experimental probe run reported generated-present intervals but exited 1 with Vulkan validation errors; it is failed-run diagnostic evidence, not production FG delivery or Gate 1 acceptance."
+        "Evidence": "FSR Frame Generation is promoted to an independent v0.8.0 target; broader historical goals (2× DLSS-G on D3D12 and dynamic MFG) remain deferred backlog. Active FG production work is phased through P0 architecture evaluation, P3 infrastructure and P4 Windows Vulkan DLSS FG."
       },
       "title": "Evaluate frame generation integration",
       "body_sha256": "5e1c896d79232b40cd971c043120d9a2215c3727e9fc5abc19bc385039f888fc"
@@ -1836,11 +1836,13 @@
         "Kind": "Research",
         "Area": "Frame pacing",
         "Status": "Todo",
-        "Delivery": "Awaiting validation",
-        "Source key": "optional-120fps"
+        "Delivery": "Not started",
+        "Source key": "optional-120fps",
+        "Release": "v0.8.0",
+        "Evidence": "Promoted to milestone v0.8.0 planning target per user decision. Evaluates native independent 120 FPS presentation (not FG-generated display frames). Implementation and validation not started."
       },
       "title": "Evaluate the optional 120 FPS candidate",
-      "body_sha256": "423d3f67519ce32e4f4aded7a1b66dc6a71a009d8804e5b643fdf0e3b420c009"
+      "body_sha256": "5ad0261598c3eb1c136a1a27c10bc67355dec8d7c6fdf20dacedf86729dab60d"
     },
     "audio-and-language-regression": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56fKw",
@@ -2283,10 +2285,11 @@
         "Status": "Todo",
         "Delivery": "Not started",
         "Source key": "native-macos-platform",
-        "Release": "v0.8.0"
+        "Release": "v0.8.0",
+        "Evidence": "Roadmap target for v0.8.0 explicitly focused on macOS AArch64 / Apple Silicon. No macOS build, backend, package, or validation artifact exists."
       },
-      "title": "Establish a native macOS port",
-      "body_sha256": "8b7624814fb79b9cc1b56b27b5ea56e99226759165aaa090cc99e9730b7eca49"
+      "title": "Establish a native macOS (AArch64 / Apple Silicon) port",
+      "body_sha256": "ae0ca84faeed79cc6b9f4b17c3320699fa8cd7d91fab7fa922b643f91ed8ce35"
     },
     "intermittent-fullscreen-underscan": {
       "id": "PVTI_lAHOAAsUY84Biy1azg6Ku0U",
@@ -2733,7 +2736,7 @@
         "Status": "Todo",
         "Delivery": "Not started",
         "Release": "v0.8.0",
-        "Evidence": "Planned phase following P3. Production implementation has not started. Broader D3D12 FG, FSR FG and dynamic MFG remain deferred backlog for this iteration, not cancelled.",
+        "Evidence": "Retained as P4 milestone v0.8.0 target per user decision. Production implementation has not started. Requires verified generated frame presentation and decoupled game pacing.",
         "Source key": "temporal-phased-p4-dlss-fg-2x"
       },
       "title": "P4: Deliver fixed 2× DLSS Frame Generation on Windows Vulkan",
@@ -2911,10 +2914,10 @@
       "fields": {
         "Kind": "Feature",
         "Area": "Input",
-        "Status": "Todo",
-        "Delivery": "Not started",
+        "Status": "In Progress",
+        "Delivery": "In progress",
         "Start date": "2026-09-16",
-        "Evidence": "Feature request for PlayStation button glyphs and mod support documentation wiki. Gamepad navigation and rumble are improved in main; PS button glyphs and mod documentation framework remain in backlog.",
+        "Evidence": "PlayStation controller automatic glyph detection and texture replacement completed and user-accepted in local working tree (tracked in playstation-controller-glyphs). Issue #40 remains open for remaining mod support and documentation wiki backlog.",
         "Source key": "issue-40-controller-mod-support"
       }
     },
@@ -2943,6 +2946,78 @@
       },
       "title": "Consolidate anti-aliasing options and remove standalone experimental TAA",
       "body_sha256": "49d79ef799eea5769606d9666edd03bfb93b78ae087e45bc059c9422e28b18af"
+    },
+    "linux-aarch64-platform": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg814A8",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Platforms",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Release": "v0.8.0",
+        "Evidence": "Planned v0.8.0 platform target. Bounded experimental AArch64 build path under investigation in PR #60 (live DXC fallback and CMake cross-compilation). Implementation, native runner hardware validation, and packaging not started.",
+        "Source key": "linux-aarch64-platform"
+      },
+      "title": "Establish native Linux AArch64 platform support",
+      "body_sha256": "fbda6d032cd8f621524f20bdc4554b3986c6de092878ccaf6170b51ccea26f59"
+    },
+    "experimental-android-platform": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg814CI",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Platforms",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Release": "v0.8.0",
+        "Evidence": "Planned v0.8.0 experimental platform target. Feasibility exploration for Android NDK, Vulkan surface, and touch/gamepad input. No implementation or build pipeline established.",
+        "Source key": "experimental-android-platform"
+      },
+      "title": "Experimental Android platform support",
+      "body_sha256": "970e9404c678b3c48e563cb420546bcefcfe5be97c356c52600e27d12ab719fe"
+    },
+    "remove-pm4-translator": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg816wM",
+      "fields": {
+        "Kind": "Infrastructure",
+        "Area": "GPU architecture",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Release": "v0.9.0",
+        "Evidence": "Planned v0.9.0 delivery target to remove the legacy PM4 packet translation layer; currently in planning status. Does not predetermine alternative presentation architectures, direct execution, or runtime implementations.",
+        "Source key": "remove-pm4-translator"
+      },
+      "title": "Remove the PM4 translator",
+      "body_sha256": "7e9742a343e0fd456da2f1cbf0fac171995656221031398197a8952e7892d0ad"
+    },
+    "fsr-frame-generation": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg83gNM",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Temporal rendering",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Release": "v0.8.0",
+        "Evidence": "Promoted from backlog to an independent milestone v0.8.0 target per user planning decision. Target platform, graphics API, and frame multiplier are not predetermined. Implementation and validation not started.",
+        "Source key": "fsr-frame-generation"
+      },
+      "title": "Deliver FSR Frame Generation",
+      "body_sha256": "89327f55b8254c9acef542fc1b76829f50844ab18448d91cc7e35bb8fa6e141e"
+    },
+    "playstation-controller-glyphs": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg84rkg",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Input",
+        "Status": "Done",
+        "Delivery": "Validated",
+        "Start date": "2026-09-16",
+        "Target date": "2026-09-26",
+        "Evidence": "PlayStation controller auto-detection and glyph replacement validated by user in local build (HEAD d677a48+dirty, testexe 1ae34ffd7eedcc415816c30b6e74b31d5ca2c0d936cd6aadbf72b49aeca709a4). Covers SDL PS type detection, active device switching, host/debug glyphs, guest Icon_Page_0 and Texture2D_1 hash match, lazy GPU clone, and ABXY/shoulders/StartBack. Verified via pause, cutscenes, shoulder retest. Mod support remains open in Issue #40.",
+        "Source key": "playstation-controller-glyphs"
+      },
+      "title": "Automatic PlayStation controller button glyphs",
+      "body_sha256": "1ad23506756ce78fd21f9c22d640d5eb6b5082c449993458c69fbaebc3e9781a"
     }
-  }
+  },
+  "project_id": "PVT_kwHOAAsUY84Biy1a"
 }

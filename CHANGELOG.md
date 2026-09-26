@@ -8,19 +8,25 @@ One record of completed changes, with unpublished work separated from verified r
 
 ### English
 
+- Automatic PlayStation controller prompts: SDL tracks the most recently active controller to automatically switch between Xbox and PlayStation button glyphs. Host UI (Settings menu, Installer UI, Debug overlay) renders PlayStation glyphs including L1/R1/L2/R2 and Options/Share. Guest game runtime detects two confirmed texture atlases via exact BC3 content hash matching (`rpmenurescommon` `Icon_Page_0` hash `8e181...` and English font `Texture2D_1` hash `cfd30b830a2fbf5d12520ea5c6cc2a6a3a37d534f8f4c7f846fdc50520ba8229`), validated with authentic BC3 recognition and a production upload fixture. Guest rendering safely swaps between original Xbox textures and immutable PlayStation replacement textures under GPU stop guards and retirement review. Replaces action buttons (Cross/Circle/Square/Triangle), shoulder buttons (L1/R1/L2/R2), and pause menu Start/Select (Options/Create), including fixes for pause menu Start/Select and shoulder omissions. Corrects previous notes stating only common was identified and guest replacement was unimplemented. Verified on local development build (`HEAD d677a48-dirty`, binary SHA `1ae34ffd7eedcc415816c30b6e74b31d5ca2c0d936cd6aadbf72b49aeca709a4`) and explicitly accepted by the user after pause menu and cutscene review; uncommitted and unpublished. Reused existing host, HID, glyph, and GPU test suite baselines without rerunning builds. User acceptance on real hardware is bounded to tested controller hardware and scenes, without claiming universal controller hardware compatibility or 100% full-game playthrough coverage. Issue #40 mod support was not implemented in this scope.
 - DLSS/DLAA fallback: unavailable or failure-disabled frame plans now substitute SMAA for saved TAA, avoiding legacy temporal jitter/history on those fallback plans. Saved Off/FXAA/SMAA selections and settings are preserved. Three focused CPU test executables passed, including recovery and routing coverage; visual validation remains pending.
 - Milestone scope and acceptance update (v0.7.0 / v0.8.0):
   - Deferred Frame Generation (P0 Streamline coexistence evaluation and P3/P4 implementation) and macOS release support to milestone v0.8.0.
   - With Frame Generation and macOS deferred to v0.8.0, all existing v0.7.0 upscaler deliverables—Native Vulkan DLSS Super Resolution / DLAA and FSR 3.1.4 (P2) multi-platform visual quality and runtime validation—have passed complete user acceptance.
   - User acceptance does not alter existing test coverage.
+- Planning targets for v0.8.0:
+  - Added Linux AArch64, macOS AArch64 (Apple Silicon), and experimental Android support as future roadmap targets for v0.8.0 alongside Frame Generation; this planning update does not represent existing implementation, test coverage, or delivery, nor does targeting Apple Silicon preclude other macOS architectures.
 
 ### 简体中文
 
+- PlayStation 手柄按键提示自动替换：基于 SDL 自动识别最近活动的控制器类型，在 Xbox 与 PlayStation 提示间自适应切换。宿主界面（设置菜单、安装器、调试覆盖层）支持 PlayStation 按键符号及 L1/R1/L2/R2 与 Options/Share。客端游戏本体通过完整内容哈希匹配两张已确证的图集（`rpmenurescommon` 中的 `Icon_Page_0` 哈希 `8e181...` 以及英文字体包 `Texture2D_1` 哈希 `cfd30b830a2fbf5d12520ea5c6cc2a6a3a37d534f8f4c7f846fdc50520ba8229`，均通过真实 BC3 识别与 production upload fixture），在原始 Xbox 纹理与 PlayStation 不可变替换纹理之间安全切换，受 GPU 停止 guard 与退休审阅保护。覆盖 ABXY 动作键、肩键（LB/RB/LT/RT -> L1/R1/L2/R2）及暂停菜单 Start/Select（菜单/分享），包含最新补齐的暂停菜单 Start/Select 与肩键遗漏。纠正此前关于只有 common 包且客端未实现的叙述。在本地开发构建（`HEAD d677a48-dirty`，二进制 SHA `1ae34ffd7eedcc415816c30b6e74b31d5ca2c0d936cd6aadbf72b49aeca709a4`）上完成验证，经用户在暂停菜单与过场动画复查后明确“验收通过”；未提交未发布。复用既有 host、HID、glyph 与 GPU 测试套件及构建结果，不重复测试构建。用户实机验收覆盖实测手柄与场景，不外推至所有手柄硬件或全游戏场景。Issue #40 同时提及的 Mod 支持本次未做，不宣称该 Issue 全部完成。
 - DLSS/DLAA 回退：不可用或因失败被禁用的帧计划将已保存的 TAA 替换为 SMAA，避免这些回退帧计划启用旧时序抖动与历史。保留 Off/FXAA/SMAA 选择，不改写设置。三个定向 CPU 测试程序已通过，覆盖恢复与路由；画面验证待完成。
 - 里程碑范围与验收同步（v0.7.0 / v0.8.0）：
   - 将插帧（P0 Streamline 共存评估与 P3/P4 实现）及 macOS 平台支持延期至 v0.8.0。
   - 移走插帧与 macOS 后，v0.7.0 现有的超分交付范围——原生 Vulkan DLSS 超分辨率／DLAA 及 FSR 3.1.4（P2）多平台画质与运行验证——已全部通过用户验收。
   - 本次验收不改变既有测试覆盖。
+- v0.8.0 规划目标更新：
+  - 新增 Linux AArch64、macOS AArch64（Apple Silicon）以及实验性 Android 支持作为 v0.8.0 的未来规划目标（与插帧并列）；本轮仅为目标规划，不代表已有实现、测试覆盖或交付，明确 Apple Silicon 目标亦不排除后续支持其他 macOS 架构的可能性，且不对 Android 承诺完整支持。
 
 ## v0.6.20 — 2026-09-25
 

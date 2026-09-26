@@ -1,13 +1,26 @@
 # Project status
 
-## Unreleased development & milestone status — 2026-09-25 / 未发布开发与里程碑状态
+## Unreleased development & milestone status — 2026-09-26 / 未发布开发与里程碑状态
 
-Status as of 2026-09-25:
+Status as of 2026-09-26:
+- **PlayStation controller prompt auto-replacement (Issue #40 partial, user-accepted)**:
+  - Automatic detection: SDL tracks the most recently active controller to dynamically switch between Xbox and PlayStation button glyphs.
+  - Host UI: Settings menu, Installer UI, and Debug overlay display PlayStation glyphs including Cross, Circle, Square, Triangle, L1, R1, L2, R2, and Options/Share.
+  - Guest game runtime: Texture atlas content-hash matching identifies both `rpmenurescommon` `Icon_Page_0` (hash `8e181...`) and English font `Texture2D_1` (hash `cfd30b830a2fbf5d12520ea5c6cc2a6a3a37d534f8f4c7f846fdc50520ba8229`) via authentic BC3 matching and a production upload fixture. Guest rendering swaps between original Xbox 360 prompt textures and immutable PlayStation replacement textures under GPU stop guards and retirement review. Replaces action buttons, shoulder buttons (LB/RB/LT/RT -> L1/R1/L2/R2), and pause menu Start/Select (Options/Create), including fixes for pause menu Start/Select and shoulder omissions.
+  - Corrects previous notes stating only common was audited and guest replacement was unimplemented.
+  - Verification & User Acceptance: Verified on local development build (`HEAD d677a48-dirty`, binary SHA `1ae34ffd7eedcc415816c30b6e74b31d5ca2c0d936cd6aadbf72b49aeca709a4`). Explicitly accepted by the user ("验收通过") after pause menu and cutscene review; uncommitted and unpublished.
+  - Validation limits: Existing host, HID, glyph, and GPU tests and builds were reused without rerunning. Acceptance is bounded to real-device testing on the user's setup and verified scenes; it does not claim universal controller hardware compatibility or 100% full-game playthrough coverage. Issue #40 mod support was not implemented in this scope; Issue #40 is not claimed as fully completed.
+- **DLSS/DLAA fallback to spatial AA (commit 60168b7)**:
+  - When DLSS or DLAA is unavailable or failure-disabled, frame plans substitute SMAA for saved TAA, avoiding legacy temporal jitter and history feedback on fallback frame plans.
+  - Saved Off, FXAA, and SMAA user selections and settings are preserved without rewriting configuration.
+  - Verified by three focused CPU tests (`frame_plan_test`, `native_dlaa_test`, `native_dlss_p2_routing_test`) covering recovery and routing; visual quality validation remains pending.
 - **v0.7.0 milestone scope & user acceptance**:
   - The user deferred Frame Generation (P0 Streamline coexistence evaluation and P3/P4 implementation) and macOS release support to v0.8.0.
   - With Frame Generation and macOS deferred to v0.8.0, all remaining v0.7.0 deliverables—Native Vulkan DLSS Super Resolution / DLAA and FSR 3.1.4 (P2) multi-platform visual quality and runtime validation—have passed complete user acceptance.
   - User acceptance does not alter existing test coverage.
   - v0.7.0 is unreleased.
+- **v0.8.0 roadmap targets**:
+  - Added Linux AArch64, macOS AArch64 (specifically Apple Silicon, without precluding other macOS architectures), and experimental Android support as roadmap targets for v0.8.0 alongside Frame Generation. These are roadmap planning targets only, not existing implementations, verified test coverage, or delivered features.
 
 ## v0.6.20 published / v0.6.20 已发布
 
