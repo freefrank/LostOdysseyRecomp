@@ -39,8 +39,8 @@ struct FsrMaskInput {
     FsrMaskCoverage coverage = FsrMaskCoverage::Unavailable;
 };
 
-// Unknown is the only safe default. An R8_UNORM allocation is storage metadata,
-// not proof of an SDR transfer function or of a pre-UI tone-map boundary.
+// Unknown is the default. An R8_UNORM allocation alone cannot prove the transfer
+// function. The best-effort scene route labels an assumption separately below.
 enum class ColorEncoding : uint32_t { Unknown = 0, Sdr = 1, HdrLinear = 2 };
 // Storage format does not identify near/far ordering. HistoryOwner's reviewed
 // scene anchor uses reversed Z; independent synthetic producers must declare
@@ -117,6 +117,8 @@ struct TemporalFrameInputs {
     MotionState motionState = MotionState::Unavailable;
     bool currentInputsComplete = false, resetHistory = true;
     TemporalResetReason resetReasons = TemporalResetReason::FirstFrame;
+    // Runtime compatibility assumption, never a replacement SDR provenance token.
+    bool colorEncodingAssumed = false;
 
     bool CompleteForConsumer() const {
         if (!currentInputsComplete || !color.Complete() || !depth.Complete()) return false;
