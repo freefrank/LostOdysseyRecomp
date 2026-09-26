@@ -216,9 +216,11 @@ jobs:
     name: Linux Release
     needs: [create-draft-release, prepare-fsr]
     runs-on: ubuntu-24.04
-    timeout-minutes: 180
+    timeout-minutes: 360
     permissions:
       contents: write
+    env:
+      FLATPAK_OUTPUT: ${{ github.workspace }}/out/flatpak/ci-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - name: Validate requested tag
         if: env.RELEASE_TAG != ''
@@ -387,3 +389,150 @@ jobs:
             exit 0
           fi
           gh release upload "$RELEASE_TAG" "${linux_assets[@]}" --clobber
+      - name: Checkout pinned FFmpeg source for Flatpak
+        uses: actions/checkout@v4
+        with:
+          repository: xenia-project/FFmpeg
+          ref: 15ece0882e8d5875051ff5b73c5a8326f7cee9f5
+          path: out/deps/ffmpeg-flatpak
+          submodules: recursive
+          persist-credentials: false
+      - name: Checkout pinned Zstd source for Flatpak
+        uses: actions/checkout@v4
+        with:
+          repository: facebook/zstd
+          ref: f8745da6ff1ad1e7bab384bd1f9d742439278e99
+          path: out/deps/zstd-flatpak
+          submodules: recursive
+          persist-credentials: false
+      - name: Install Flatpak build tools and selected runtime
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends flatpak flatpak-builder
+          sudo flatpak --system remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+          sudo flatpak --system install -y --noninteractive flathub \
+            org.freedesktop.Platform//26.08 \
+            org.freedesktop.Sdk//26.08 \
+            org.freedesktop.Sdk.Extension.llvm22//26.08
+          printf 'Host tools and installed Flatpak refs:\n'
+          flatpak --version
+          flatpak-builder --version
+          cmake --version
+          python3 --version
+          sudo flatpak --system info --show-ref org.freedesktop.Platform//26.08
+          sudo flatpak --system info --show-ref org.freedesktop.Sdk//26.08
+          sudo flatpak --system info --show-ref org.freedesktop.Sdk.Extension.llvm22//26.08
+          sudo flatpak --system info --show-commit org.freedesktop.Platform//26.08
+          sudo flatpak --system info --show-commit org.freedesktop.Sdk//26.08
+          sudo flatpak --system info --show-commit org.freedesktop.Sdk.Extension.llvm22//26.08
+      - name: Build private-input Flatpak from pinned sources
+        run: |
+          set -euo pipefail
+          python3 -B tools/package_flatpak.py \
+            --source "$GITHUB_WORKSPACE" \
+            --output "$FLATPAK_OUTPUT" \
+            --ppc "$GITHUB_WORKSPACE/LostOdysseyRecompLib/ppc" \
+            --codegen-manifest "$GITHUB_WORKSPACE/LostOdysseyRecompLib/ppc/codegen-manifest.json" \
+            --default-xex "$GITHUB_WORKSPACE/LostOdysseyRecompLib/private/disc1/default.xex" \
+            --image-disc1 "$GITHUB_WORKSPACE/LostOdysseyRecompLib/private/image_disc1.bin" \
+            --image-sym "$GITHUB_WORKSPACE/LostOdysseyRecompLib/private/image_disc1.bin.sym" \
+            --ngx-sdk "$GITHUB_WORKSPACE/out/deps/nvidia-dlss" \
+            --fsr-sdk "$GITHUB_WORKSPACE/out/deps/fidelityfx-sdk" \
+            --fsr-shaders "$GITHUB_WORKSPACE/out/fsr-shaders-vk" \
+            --shader-pack "$GITHUB_WORKSPACE/out/build/linux/shaders/portable_vk.lospv" \
+            --ffmpeg-source "$GITHUB_WORKSPACE/out/deps/ffmpeg-flatpak" \
+            --zstd-source "$GITHUB_WORKSPACE/out/deps/zstd-flatpak"
+          shopt -s nullglob
+          bundles=("$FLATPAK_OUTPUT"/*.flatpak)
+          test "${#bundles[@]}" -eq 1
+          test -s "$FLATPAK_OUTPUT/source.json"
+          (cd "$FLATPAK_OUTPUT" && sha256sum --check "$(basename "${bundles[0]}").sha256")
+          flatpak-builder --run "$FLATPAK_OUTPUT/builder" "$FLATPAK_OUTPUT/build-manifest.json" sh -eu -c '
+            for tool in /usr/lib/sdk/llvm22/bin/clang++ /usr/bin/cmake /usr/bin/python3 /usr/bin/ninja; do
+              test -x "$tool"
+              "$tool" --version
+            done
+          '
+      - name: Install and inspect Flatpak in temporary user installation
+        run: |
+          set -euo pipefail
+          check_home=$(mktemp -d "$RUNNER_TEMP/lo-flatpak-user.XXXXXX")
+          trap 'rm -rf "$check_home"' EXIT
+          export HOME="$check_home"
+          export XDG_DATA_HOME="$check_home/.local/share"
+          export XDG_CONFIG_HOME="$check_home/.config"
+          export XDG_CACHE_HOME="$check_home/.cache"
+          export XDG_STATE_HOME="$check_home/.local/state"
+          mkdir -p "$XDG_DATA_HOME" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" "$XDG_STATE_HOME"
+          shopt -s nullglob
+          bundles=("$FLATPAK_OUTPUT"/*.flatpak)
+          test "${#bundles[@]}" -eq 1
+          flatpak --user install -y --noninteractive --no-deps --no-related "${bundles[0]}"
+          app_ref=io.github.freefrank.LostOdysseyRecomp//dev
+          test "$(flatpak --user info --show-ref "$app_ref")" = 'app/io.github.freefrank.LostOdysseyRecomp/x86_64/dev'
+          test "$(flatpak --user info --show-runtime "$app_ref")" = 'org.freedesktop.Platform/x86_64/26.08'
+          # Launch only a shell in the installed app's sandbox, never the game.
+          flatpak --user run --command=sh "$app_ref" -eu -c '
+            test -f /app/bin/LostOdysseyRecomp
+            test -f /app/lib/libdxcompiler.so
+            test -f /app/bin/libnvidia-ngx-dlss.so.310.9.1
+            for alias in libnvidia-ngx-dlss.so libnvidia-ngx-dlss.so.1; do
+              test -L "/app/bin/$alias"
+              test "$(readlink "/app/bin/$alias")" = libnvidia-ngx-dlss.so.310.9.1
+            done
+            test -s /app/bin/shaders/portable_vk.lospv
+            test ! -e /app/bin/portable_vk.lospv
+            test ! -e /app/LostOdysseyRecompLib/private/disc1/default.xex
+            test ! -e /app/flatpak-inputs
+            test -s /app/share/licenses/lost-odyssey-recomp/NVIDIA-DLSS/LICENSE.txt
+            test -s /app/share/licenses/lost-odyssey-recomp/NVIDIA-DLSS/NOTICE.txt
+            test -s /app/share/licenses/lost-odyssey-recomp/LICENSE-FidelityFX.txt
+            test -s /app/share/licenses/lost-odyssey-recomp/zstd-LICENSE.txt
+            command -v ldd
+            for binary in /app/bin/LostOdysseyRecomp /app/lib/libdxcompiler.so /app/bin/libnvidia-ngx-dlss.so.310.9.1; do
+              if deps=$(LC_ALL=C ldd -r "$binary" 2>&1); then
+                printf "%s\n" "$deps"
+              else
+                status=$?
+                printf "%s\n" "$deps" >&2
+                echo "ldd -r failed for $binary (exit $status)" >&2
+                exit "$status"
+              fi
+              if printf "%s\n" "$deps" | grep -Eiq "not found|undefined symbol|symbol lookup error"; then
+                echo "Unresolved loader dependency or relocation in $binary" >&2
+                exit 1
+              fi
+            done
+            app_probe="/app/.lo-flatpak-install-check-$$"
+            test ! -e "$app_probe"
+            if ( : > "$app_probe" ) 2>/dev/null; then
+              rm -f "$app_probe"
+              echo "/app is writable" >&2
+              exit 1
+            fi
+            XDG_STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
+            test -n "${XDG_DATA_HOME:-}" && test -n "${XDG_CONFIG_HOME:-}"
+            test "$XDG_DATA_HOME" != "$XDG_CONFIG_HOME"
+            test "$XDG_DATA_HOME" != "$XDG_STATE_HOME"
+            test "$XDG_CONFIG_HOME" != "$XDG_STATE_HOME"
+            check_writable_dir() {
+              dir="$1/lo-flatpak-install-check"
+              mkdir -p "$dir"
+              : > "$dir/write-check"
+              test -w "$dir/write-check"
+              rm "$dir/write-check"
+              rmdir "$dir"
+            }
+            for dir in "$XDG_DATA_HOME" "$XDG_CONFIG_HOME" "$XDG_STATE_HOME"; do
+              check_writable_dir "$dir"
+            done
+          '
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LostOdysseyRecomp-linux-x64-flatpak
+          path: |
+            ${{ env.FLATPAK_OUTPUT }}/*.flatpak
+            ${{ env.FLATPAK_OUTPUT }}/*.flatpak.sha256
+            ${{ env.FLATPAK_OUTPUT }}/source.json
+          if-no-files-found: error

@@ -152,6 +152,10 @@ function(lo_enable_fsr target)
             COMMAND ${CMAKE_COMMAND} -E copy_if_different "${LO_FSR_SHADER_DIR}/LICENSE-FidelityFX.txt"
                 "$<TARGET_FILE_DIR:${target}>/licenses/LICENSE-FidelityFX.txt")
         endif()
+        if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+            install(FILES "${LO_FSR_SHADER_DIR}/LICENSE-FidelityFX.txt"
+                DESTINATION "${CMAKE_INSTALL_DATADIR}/licenses/lost-odyssey-recomp")
+        endif()
     else()
         target_compile_definitions(${target} PRIVATE LO_HAS_FSR=0)
     endif()

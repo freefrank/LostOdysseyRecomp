@@ -82,6 +82,7 @@ The catalog below lists maintained groups and representative root utilities. `th
 | `tools/release/sync_shader_pack.py` | Synchronizes portable shader pack release payloads. | **Remote git push**: Chunks `portable_vk.lospv` and commits + pushes directly to the private build-inputs repository (`freefrank/LostOdysseyRecomp-build-inputs:main`); pass `--dry-run` to chunk locally without pushing. | Source: `tools/release/` |
 | `tools/package_release.py` | Builds Windows release ZIP packaging binaries, licenses, and shader pack. | Packaging: Creates release ZIP archive in output directory. | Source: `tools/package_release.py` |
 | `tools/package_appimage.py` | Packages Linux x86_64 AppImage using `linuxdeploy`. | Packaging: Assembles AppImage bundle. | Source: `tools/package_appimage.py` |
+| `tools/package_flatpak.py` | Builds offline Linux x86_64 Flatpak bundle using `flatpak-builder` and Freedesktop 26.08 SDK/runtime. | Packaging: Stages tracked source, generated PPC code, private disc inputs, pinned dependencies, licenses, and shader pack; exports OSTree repo and builds standalone `.flatpak` bundle. | [`docs/BUILDING.md`](../docs/BUILDING.md#packaging-flatpak) |
 
 ### 6. Build entrypoints
 

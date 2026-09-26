@@ -1,14 +1,15 @@
 {
   "app-id": "io.github.freefrank.LostOdysseyRecomp",
   "runtime": "org.freedesktop.Platform",
-  "runtime-version": "24.08",
+  "runtime-version": "26.08",
   "sdk": "org.freedesktop.Sdk",
   "sdk-extensions": [
-    "org.freedesktop.Sdk.Extension.llvm18"
+    "org.freedesktop.Sdk.Extension.llvm22"
   ],
   "command": "LostOdysseyRecomp",
   "finish-args": [
     "--share=network",
+    "--share=ipc",
     "--socket=wayland",
     "--socket=fallback-x11",
     "--socket=pulseaudio",
@@ -21,17 +22,25 @@
   "modules": [
     {
       "name": "LostOdysseyRecomp",
-      "buildsystem": "cmake-ninja",
-      "config-opts": [
-        "-DCMAKE_BUILD_TYPE=Release",
-        "-DCMAKE_INSTALL_PREFIX=/app",
-        "-DCMAKE_C_COMPILER=clang",
-        "-DCMAKE_CXX_COMPILER=clang++"
+      "buildsystem": "simple",
+      "build-options": {
+        "build-args": ["--unshare=network"],
+        "strip": true,
+        "env": {
+          "PATH": "/usr/lib/sdk/llvm22/bin:/usr/bin:/bin"
+        }
+      },
+      "build-commands": [
+        "python3 -c 'from pathlib import Path; p=Path(\"packaging/linux/patches/sdl2-pipewire-node-type.patch\"); s=Path(\"thirdparty/SDL/src/audio/pipewire/SDL_pipewire.c\"); b=p.read_bytes().replace(b\"\\r\\n\", b\"\\n\"); Path(\".flatpak-sdl-pipewire.patch\").write_bytes(b.replace(b\"\\n\", b\"\\r\\n\") if b\"\\r\\n\" in s.read_bytes() else b)' && patch -d thirdparty/SDL -p1 --binary --fuzz=0 --forward --batch -i ../../.flatpak-sdl-pipewire.patch && rm .flatpak-sdl-pipewire.patch",
+        "cmake -S . -B _flatpak_build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/app -DCMAKE_INSTALL_LIBDIR=lib -DFMT_INSTALL=OFF -DSDL_PIPEWIRE=ON -DCMAKE_C_COMPILER=/usr/lib/sdk/llvm22/bin/clang -DCMAKE_CXX_COMPILER=/usr/lib/sdk/llvm22/bin/clang++ -DLO_ENABLE_DLSS=ON -DLO_REQUIRE_DLSS=ON -DLO_DLSS_SDK_ROOT=/run/build/LostOdysseyRecomp/flatpak-inputs/ngx -DLO_ENABLE_FSR=ON -DLO_REQUIRE_FSR=ON -DLO_FSR_SDK_ROOT=/run/build/LostOdysseyRecomp/flatpak-inputs/fsr -DLO_FSR_SHADER_DIR=/run/build/LostOdysseyRecomp/flatpak-inputs/fsr-shaders -DLO_PORTABLE_SHADER_PACK=/run/build/LostOdysseyRecomp/flatpak-inputs/portable_vk.lospv -DFETCHCONTENT_SOURCE_DIR_LO_FFMPEG=/run/build/LostOdysseyRecomp/flatpak-inputs/ffmpeg -DFETCHCONTENT_SOURCE_DIR_LO_PACK_ZSTD=/run/build/LostOdysseyRecomp/flatpak-inputs/zstd -DCMAKE_DISABLE_FIND_PACKAGE_zstd=TRUE -DFETCHCONTENT_FULLY_DISCONNECTED=ON",
+        "cmake --build _flatpak_build --target LostOdysseyRecomp --parallel 2",
+        "cmake --install _flatpak_build --prefix /app",
+        "rm -rf /app/include /app/lib/*.a /app/lib/cmake /app/lib/pkgconfig"
       ],
       "sources": [
         {
           "type": "dir",
-          "path": "../.."
+          "path": "__STAGED_SOURCE__"
         }
       ]
     }

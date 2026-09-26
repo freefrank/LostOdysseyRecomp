@@ -21,10 +21,12 @@ One record of completed changes, with unpublished work separated from verified r
 ### English
 
 - In-game disc and DLC re-import: Gameplay settings adds "Import discs & DLC", confirming a restart with `--install` after waiting for the existing guest process to exit (Windows and Linux). The installer review allows selecting specific discs or DLCs to re-import, replacing only selected items while preserving unselected content, staging all files before final publish, and rolling back on failure or cancellation. Game paths update on commit callback without changing defaults on DLC-only imports or missing Disc 1; protects source media, saves, profiles, and cache. Prepared for v0.7.1.
+- Flatpak offline packaging and runtime support: Added `tools/package_flatpak.py` offline packaging script and manifest template (`packaging/linux/io.github.freefrank.LostOdysseyRecomp.json`) targeting the `org.freedesktop.Platform 26.08` runtime and SDK with Clang/LLVM 22. Staging bundles tracked source files, submodules, generated PPC translation sources, private disc inputs (`default.xex`, `image_disc1.bin`, `image_disc1.bin.sym`), pinned NGX, FSR, FFmpeg, and Zstd sources, prebuilt shaders, and Linux license files, while applying an upstream PipeWire compatibility patch (`6be87ceb33a9aad3bf5204bb13b3a5e8b498fd26`) to SDL 2.30.12 with PipeWire enabled and excluding private assets and sources from the exported bundle. The development bundle was verified on target device hardware (`psvita`) with user acceptance; prepared for release as the build input for Flathub application submission.
 
 ### 简体中文
 
 - 游戏内光盘与 DLC 重新导入：游戏玩法（Gameplay）设置新增“导入光盘与 DLC”（Import discs & DLC），确认后等待旧游戏进程退出并带 `--install` 重启（支持 Windows 与 Linux）。安装器 Review 界面支持选择特定光盘或 DLC 进行增量重导，仅替换所选项并保留未选内容，全量暂存完毕后统一发布，失败或取消时自动回退。提交回调中更新游戏路径，仅导 DLC 或缺少 Disc 1 时不修改默认启动路径；保护源介质、存档、配置文件与缓存。准备纳入 v0.7.1。
+- Flatpak 离线打包与运行支持：新增 `tools/package_flatpak.py` 离线打包工具与清单模板（`packaging/linux/io.github.freefrank.LostOdysseyRecomp.json`），基于 Freedesktop SDK/Platform 26.08 与 Clang/LLVM 22。暂存过程整合 Git 跟踪源码、子模块、已生成 PPC 代码、私有光盘数据（`default.xex`、`image_disc1.bin`、`image_disc1.bin.sym`）、固定版本 NGX/FSR/FFmpeg/Zstd 依赖、预编译着色器包与分发许可，为 SDL 2.30.12 应用上游 PipeWire 兼容补丁（`6be87ceb33a9aad3bf5204bb13b3a5e8b498fd26`）并启用 PipeWire，且不在最终导出的 bundle 中暴露私有资产与源码。生成的开发版 bundle 在目标设备（`psvita`）完成安装与启动实机验证并获用户验收；作为 Flathub 新应用提交输入准备纳入 v0.7.1。
 
 ## v0.7.0 — 2026-09-26
 

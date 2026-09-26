@@ -98,15 +98,55 @@ python3 tools/package_appimage.py --build out/build/linux-clang --output out/rel
 
 The tool stages the executable, icons, desktop entry, metainfo, vendored DXC library and licenses into an AppDir layout and produces `LostOdysseyRecomp-linux-x64-<tag>.AppImage`.
 
-### Building with Flatpak builder
+### Packaging Flatpak
 
-A source-build Flatpak manifest is provided at `packaging/linux/io.github.freefrank.LostOdysseyRecomp.json` (targeting the `org.freedesktop.Platform 24.08` runtime and SDK). Build locally with:
+The repository provides an automated offline Flatpak packaging tool `tools/package_flatpak.py` using manifest template `packaging/linux/io.github.freefrank.LostOdysseyRecomp.json`. The package targets the `org.freedesktop.Platform 26.08` runtime and SDK with Clang/LLVM 22 (`org.freedesktop.Sdk.Extension.llvm22`).
+
+#### Prerequisites
+
+Install the required Freedesktop 26.08 platform, SDK, and LLVM 22 extension from Flathub:
 
 ```bash
-flatpak-builder --user --install --force-clean build-dir packaging/linux/io.github.freefrank.LostOdysseyRecomp.json
+flatpak --system install flathub \
+  org.freedesktop.Platform//26.08 \
+  org.freedesktop.Sdk//26.08 \
+  org.freedesktop.Sdk.Extension.llvm22//26.08
 ```
 
-This manifest builds from source; it is not a prebuilt Flathub submission.
+Ensure `flatpak` and `flatpak-builder` are available on the host system.
+
+#### Staged offline packaging
+
+Packaging runs with network access unshared (`--unshare=network`). `tools/package_flatpak.py` prepares an isolated build directory, staging Git-tracked files, submodules, generated PPC translation sources, private disc assets, pinned dependencies, and prebuilt shaders:
+
+```bash
+python3 -B tools/package_flatpak.py \
+  --source . \
+  --output out/flatpak-build \
+  --ppc LostOdysseyRecompLib/ppc \
+  --codegen-manifest LostOdysseyRecompLib/ppc/codegen-manifest.json \
+  --default-xex LostOdysseyRecompLib/private/disc1/default.xex \
+  --image-disc1 LostOdysseyRecompLib/private/image_disc1.bin \
+  --image-sym LostOdysseyRecompLib/private/image_disc1.bin.sym \
+  --ngx-sdk out/deps/nvidia-dlss \
+  --fsr-sdk out/deps/fidelityfx-sdk \
+  --fsr-shaders out/fsr-shaders-vk \
+  --shader-pack out/build/linux/shaders/portable_vk.lospv \
+  --ffmpeg-source out/deps/ffmpeg-flatpak \
+  --zstd-source out/deps/zstd-flatpak
+```
+
+The script builds inside the sandbox, finishes the app permissions, validates the install tree (ensuring required libraries and licenses are present while private assets and sources are excluded), exports an OSTree repository, and creates a standalone `.flatpak` bundle alongside SHA-256 and `source.json` manifests.
+
+#### Standalone bundle installation and update limits
+
+Install the generated bundle locally:
+
+```bash
+flatpak --user install --bundle out/flatpak-build/LostOdysseyRecomp-v<version>-<commit>-dev.flatpak
+```
+
+Standalone bundles installed directly from `.flatpak` files do not attach an OSTree remote repository and cannot receive updates via `flatpak update`. Upgrading a local installation requires installing a newly generated `.flatpak` bundle. Regular updates will be available once published via an OSTree remote or Flathub (submission pending).
 
 ## Launch with a consistent working directory
 

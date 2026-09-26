@@ -75,5 +75,27 @@ function(lo_enable_dlss target)
         elseif(NOT EXISTS "${LO_DLSS_RUNTIME_FILE}")
             message(WARNING "NGX bootstrap SDK is enabled but the SR runtime is absent; probes will report runtime unavailable")
         endif()
+
+        if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND EXISTS "${LO_DLSS_RUNTIME_FILE}")
+            # The NGX loader looks beside the executable. Preserve the release
+            # filename and the relative aliases without bundling system libraries.
+            install(FILES "${LO_DLSS_RUNTIME_FILE}" DESTINATION "${CMAKE_INSTALL_BINDIR}")
+            set(_lo_dlss_install_dir "${CMAKE_CURRENT_BINARY_DIR}/lo-dlss-install")
+            file(MAKE_DIRECTORY "${_lo_dlss_install_dir}")
+            foreach(_lo_dlss_alias IN ITEMS libnvidia-ngx-dlss.so libnvidia-ngx-dlss.so.1)
+                file(REMOVE "${_lo_dlss_install_dir}/${_lo_dlss_alias}")
+                file(CREATE_LINK "libnvidia-ngx-dlss.so.310.9.1"
+                    "${_lo_dlss_install_dir}/${_lo_dlss_alias}" SYMBOLIC)
+                install(FILES "${_lo_dlss_install_dir}/${_lo_dlss_alias}"
+                    DESTINATION "${CMAKE_INSTALL_BINDIR}")
+            endforeach()
+
+            set(_lo_dlss_license_dir "${CMAKE_INSTALL_DATADIR}/licenses/lost-odyssey-recomp/NVIDIA-DLSS")
+            install(FILES "${LO_DLSS_SDK_ROOT}/LICENSE.txt" DESTINATION "${_lo_dlss_license_dir}")
+            file(WRITE "${_lo_dlss_install_dir}/NOTICE.txt"
+                "This software contains source code and/or runtime components provided by NVIDIA Corporation.\n"
+                "NVIDIA DLSS SDK Version: 310.9.1 (commit 374959484e79a640feaba44c93ac8cfb0a03f5b5)\n")
+            install(FILES "${_lo_dlss_install_dir}/NOTICE.txt" DESTINATION "${_lo_dlss_license_dir}")
+        endif()
     endif()
 endfunction()

@@ -33,7 +33,7 @@ Windows 与 Linux 支持实验性的 NVIDIA DLSS（超分辨率与 DLAA）和 AM
 
 ## 路线图
 
-**v0.7.0** 版本已发布，包含性能优化、易用性改进、PlayStation 手柄按键提示、v1 图像 Mod API 以及原生 DLSS/DLAA 和 FSR 超分辨率。已规划至 **v0.8.0** 的路线图目标包括 DLSS 插帧（保留 Windows Vulkan 下固定 2× DLSS FG，并纳入 D3D12 DLSS FG）、动态多帧生成（动态 MFG；目标 API、平台或生成倍率不作预先设定）、独立 FSR 插帧、原生独立 120 FPS 候选评估（`LO_EXPERIMENTAL_120=1`，评估原生呈现节奏）、移除既有 PM4 数据包转换层、Flatpak 发布包（不承诺 Flathub 已接受或发布）、Linux AArch64、macOS AArch64（Apple Silicon）以及实验性 Android 支持。上述内容均属于未完成路线图规划，不宣称当前已有实现、测试验证、用户验收或发布交付；开发顺序见[路线图](docs/ROADMAP.zh-CN.md)。
+**v0.7.0** 版本已发布，包含性能优化、易用性改进、PlayStation 手柄按键提示、v1 图像 Mod API 以及原生 DLSS/DLAA 和 FSR 超分辨率。已规划至 **v0.8.0** 的路线图目标包括 DLSS 插帧（保留 Windows Vulkan 下固定 2× DLSS FG，并纳入 D3D12 DLSS FG）、动态多帧生成（动态 MFG；目标 API、平台或生成倍率不作预先设定）、独立 FSR 插帧、原生独立 120 FPS 候选评估（`LO_EXPERIMENTAL_120=1`，评估原生呈现节奏）、移除既有 PM4 数据包转换层、Flatpak 发布包（开发分支已实现离线打包工具并完成实机启动验证，Flathub 提交准备中，尚未公开发布）、Linux AArch64、macOS AArch64（Apple Silicon）以及实验性 Android 支持。上述内容均属于未完成路线图规划，不宣称当前已有实现、测试验证、用户验收或发布交付；开发顺序见[路线图](docs/ROADMAP.zh-CN.md)。
 
 历史版本发布说明与详细变更记录见[更新日志](CHANGELOG.md)。
 
@@ -76,7 +76,7 @@ Windows 与 Linux 支持实验性的 NVIDIA DLSS（超分辨率与 DLAA）和 AM
 | CPU 使用率 | 减少不必要的轮询，复用渲染计算 |
 | 输入与调试 | 手柄和键盘输入；英文／简体中文游戏内浮层调试菜单（F1 或手柄 LB+RB）提供捕获、地图信息与同地图 POI 传送 |
 
-发布包通过 `LostOdysseyRecomp.exe` 的 **Files** 或 **Folder** 导入游戏光盘和受支持的 DLC。当前开发版本新增 **Gameplay → 导入光盘与 DLC** 入口，可重新打开导入器并替换所选光盘与 DLC；此菜单入口尚未发布。验证边界见[安装说明](docs/INSTALLING.md#automatic-content-import)和[开发状态](docs/STATUS.md)。
+发布包通过 `LostOdysseyRecomp.exe` 的 **Files** 或 **Folder** 导入游戏光盘和受支持的 DLC。当前开发版本新增 **Gameplay → 导入光盘与 DLC** 入口，可重新打开导入器并替换所选光盘与 DLC；此菜单入口尚未发布。官方公开版本提供 Windows ZIP 与 Linux AppImage 发布包。开发树提供了基于 Freedesktop 26.08 的 Flatpak 自动化离线打包工具（`tools/package_flatpak.py`）；Flathub 正式提交仍在准备中，当前公开发布仍为 Windows ZIP 与 Linux AppImage。验证边界见[安装说明](docs/INSTALLING.md#automatic-content-import)、[构建说明](docs/BUILDING.md#packaging-flatpak)和[开发状态](docs/STATUS.md)。
 
 验证进展和剩余工作见[公开维护者 Project](https://github.com/users/freefrank/projects/3)。
 
