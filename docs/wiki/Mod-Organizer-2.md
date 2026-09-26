@@ -1,98 +1,48 @@
-# Mod Organizer 2 compatibility
+# Mod Organizer 2 and external managers
 
-LostOdysseyRecomp's mod ABI is designed so Mod Organizer 2 can manage files without understanding FPD/UE3 archives.
+The runtime implements a manager-neutral overlay contract. It does not ship a LostOdysseyRecomp MO2 game plugin, and real Windows MO2/USVFS operation has not been established by the standalone tests. Treat this page as the integration contract and acceptance checklist, not a claim of turnkey MO2 support.
 
-## Principle
+## Package contract
 
-MO2 owns installation, enable/disable state, ordering and file conflicts. LostOdysseyRecomp consumes the final filesystem view presented to the process.
+Compile an overlay package:
 
-Do not duplicate MO2's priority system inside a mod package. If two MO2 mods provide the same virtual path, the file visible through MO2's VFS is authoritative.
+```sh
+python tools/modding/lo_mod.py pack my-menu/mod.json --layout overlay --output my-menu-overlay.zip
+```
 
-Native/non-MO2 installations continue to use LostOdysseyRecomp's normal `mods/` discovery.
-
-## Recommended MO2 package layout
-
-Each MO2 mod installs files below one common runtime overlay root:
+The ZIP contains paths such as:
 
 ```text
-mods/
-  overlay/
-    manifest.ini
-    textures/
-      <runtime-fingerprint>.lotex
-    fonts/
-    models/
-    movies/
+mods/overlay/images/key-fnv1a64-<16 lowercase hex digits>.lotex
 ```
 
-The important property is that competing mods use the same destination path for the same resource. MO2 can then report and resolve the conflict itself.
+The hash is derived from the canonical resource key, not from texture contents or a runtime fingerprint. Two mods targeting the same identity use the same path. There is no shared `manifest.ini` that competing packages can accidentally replace. The runtime validates the embedded full key after selecting the visible file.
 
-Example:
+## Runtime setup
+
+A MO2 game integration/root mapping must project the package's `mods/` directory into the root actually opened by LostOdysseyRecomp. Launch the actual game executable through that managed process so the VFS applies. Installing files into an unrelated conventional `Data/` directory will not work.
+
+Set the managed process environment to:
 
 ```text
-mods/overlay/textures/fnv1a64-0123456789abcdef.lotex
+LO_MODS_MODE=overlay
+LO_MODS_DIR=<absolute path to the runtime-visible mods directory>
 ```
 
-A second enabled mod replacing the same texture supplies that same virtual path. LostOdysseyRecomp sees only MO2's winning file.
+The directory override is optional only when the mapping exactly matches the application's portable or installed default. It points to `mods`, not `mods/overlay` and not MO2's directory holding separate installed mod packages. The project does not currently include a plugin or installer to configure this mapping automatically.
 
-## Runtime lookup order
+In overlay mode, the runtime sees the external manager's winning file. It ignores standalone `mod.ini` priorities and trusted providers entirely. A missing visible overlay falls back to the original asset, preventing a second standalone installation from silently reviving a disabled mod. Invalid selected payloads also use the original.
 
-For manager-neutral behavior:
+Close/restart the game after enable/disable/order changes. The runtime has no filesystem watcher. A future integrated manager may call the host reload API at a safe boundary.
 
-1. Check the merged `mods/overlay/` namespace.
-2. Fall back to standalone per-mod manifests under `mods/<mod-id>/mod.ini`.
-3. Fall back to the original game resource.
+## Other managers and Steam Deck
 
-The merged overlay has precedence because an external manager has already resolved conflicts.
+A manager may materialize the same overlay on disk without a VFS. For Linux/Steam Deck, deploy files under the selected mods root and use overlay mode. Remove no-longer-enabled winning files when updating the materialized view, and update it while the game is closed. Preserve unrelated mods and imported game data.
 
-## MO2 executable setup
+This describes native filesystem deployment; it does not claim that Windows USVFS works with a native Linux executable. Mod installation tooling and runtime image consumers are separate compatibility requirements.
 
-The game executable must be launched through MO2 so its VFS is active. Configure the LostOdysseyRecomp executable itself as the managed executable; mods must not patch the imported game archives.
+## Windows acceptance still required
 
-No MO2 plugin is required for the basic ABI. A future optional MO2 plugin may add resource browsing, manifest import and automatic PNG/DDS to `.lotex` compilation.
+Use two deliberately different replacements for the same supported native-menu key. Verify that launching through a real MO2 instance exposes the mapped file, changing MO2 order selects the other artwork, disabling both restores the original, and a standalone/provider copy cannot reappear in overlay mode. Repeat with a non-ASCII installation path. Confirm imported archive hashes do not change, and verify a normal un-managed launch separately.
 
-## Portable and installed layouts
-
-The runtime must resolve its mod root using the same user-path policy as normal startup. MO2 packages should target the runtime-visible `mods/` tree rather than absolute machine-specific paths.
-
-This also keeps the mod format usable outside MO2. Linux/Steam Deck managers can materialize the same overlay tree without USVFS.
-
-## Conflict semantics
-
-For `mods/overlay/`, conflict identity is the destination path:
-
-```
-textures/<runtime-fingerprint>.lotex
-```
-
-For standalone manifests, conflict identity remains:
-
-```
-AssetKind + canonical resource key
-```
-
-Standalone `priority=` remains supported only for the built-in per-mod loader. It has no effect on files already merged by MO2.
-
-## Future asset types
-
-The same overlay convention is reserved for:
-
-```text
-mods/overlay/fonts/
-mods/overlay/models/
-mods/overlay/movies/
-```
-
-Texture support is the first runtime implementation. The directory reservation does not imply that font/model/movie replacement is implemented yet.
-
-## Validation
-
-MO2 compatibility is not considered verified merely because the layout is VFS-friendly. Windows acceptance requires launching through a real MO2/USVFS instance and confirming:
-
-- overlay files are visible to LostOdysseyRecomp;
-- enabling/disabling a mod changes the visible replacement;
-- MO2 conflict ordering selects the expected file;
-- the original game archives remain unchanged;
-- normal launch without MO2 still falls back correctly.
-
-Linux/Steam Deck compatibility is a separate manager/materialized-overlay path; this document does not claim USVFS support there.
+The runtime rejects symlinks that escape the selected root. VFS filesystem-query behavior must be tested with these containment checks; do not disable path validation merely to claim compatibility. General guest GPU textures still require the separate renderer work described in [runtime texture replacement](Runtime-Texture-Replacement.md).
