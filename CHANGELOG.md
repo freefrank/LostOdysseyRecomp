@@ -8,6 +8,7 @@ One record of completed changes, with unpublished work separated from verified r
 
 ### English
 
+- DLSS/DLAA fallback: unavailable or failure-disabled frame plans now substitute SMAA for saved TAA, avoiding legacy temporal jitter/history on those fallback plans. Saved Off/FXAA/SMAA selections and settings are preserved. Three focused CPU test executables passed, including recovery and routing coverage; visual validation remains pending.
 - Milestone scope and acceptance update (v0.7.0 / v0.8.0):
   - Deferred Frame Generation (P0 Streamline coexistence evaluation and P3/P4 implementation) and macOS release support to milestone v0.8.0.
   - With Frame Generation and macOS deferred to v0.8.0, all existing v0.7.0 upscaler deliverables—Native Vulkan DLSS Super Resolution / DLAA and FSR 3.1.4 (P2) multi-platform visual quality and runtime validation—have passed complete user acceptance.
@@ -15,6 +16,7 @@ One record of completed changes, with unpublished work separated from verified r
 
 ### 简体中文
 
+- DLSS/DLAA 回退：不可用或因失败被禁用的帧计划将已保存的 TAA 替换为 SMAA，避免这些回退帧计划启用旧时序抖动与历史。保留 Off/FXAA/SMAA 选择，不改写设置。三个定向 CPU 测试程序已通过，覆盖恢复与路由；画面验证待完成。
 - 里程碑范围与验收同步（v0.7.0 / v0.8.0）：
   - 将插帧（P0 Streamline 共存评估与 P3/P4 实现）及 macOS 平台支持延期至 v0.8.0。
   - 移走插帧与 macOS 后，v0.7.0 现有的超分交付范围——原生 Vulkan DLSS 超分辨率／DLAA 及 FSR 3.1.4（P2）多平台画质与运行验证——已全部通过用户验收。

@@ -404,7 +404,7 @@ void TestSceneInputRecovery() {
     Require(hardPlanner.ReportFailure({hard.geometryEpoch, hard.requestSignature, hard.legacyHeight,
         frame_plan::FailureReason::InvalidInput}), "genuine request failure is reported to production planner");
     const auto latched = hardPlanner.Begin(Input(sizing, false));
-    Require(latched.consumer == upscaling::TemporalConsumer::LegacyTaa &&
+    Require(latched.consumer == upscaling::TemporalConsumer::None &&
         hardPlanner.Observe().persistentFailure == frame_plan::FailureReason::InvalidInput,
         "hard failure remains signature-latched under identical settings");
 }
@@ -423,7 +423,7 @@ int main() {
     Require(planner.ReportFailure({sr.geometryEpoch, sr.requestSignature, sr.legacyHeight,
         gpu::frame_plan::FailureReason::InvalidInput}), "native SR failure latches matching request");
     const auto fallback = planner.Begin(Input(sizing, false));
-    Require(fallback.consumer == gpu::upscaling::TemporalConsumer::LegacyTaa,
+    Require(fallback.consumer == gpu::upscaling::TemporalConsumer::None,
         "native SR failure disables only the matching next CPU request");
     Require(fallback.width == fallback.legacyWidth && fallback.height == fallback.legacyHeight,
         "native SR fallback preserves current-frame legacy geometry policy");

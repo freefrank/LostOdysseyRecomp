@@ -1,6 +1,8 @@
 // CPU-only tests of the production planner and sizing policy. No NGX execution,
 // Vulkan submission, motion-response or image-quality acceptance is implied.
 #include "gpu/frame_plan.h"
+#include "gpu/temporal_frame_inputs.h"
+#include "gpu/temporal_lifecycle.h"
 #include <array>
 #include <cstdio>
 #include <cstdlib>
@@ -61,6 +63,42 @@ void RoundTrip(const FramePlan& plan) {
 }
 
 int main() {
+    // Exercise the production planner -> renderer route -> jitter policy, not
+    // just the displayed availability label. Saved AA remains a user request.
+    for (auto quality : kDlssQualityModes) for (uint32_t aa=0;aa<=3;++aa) {
+        const auto output=ResolveOutputRegion({1920,1080});
+        auto sizing=Sizing(output);
+        auto input=Input(sizing,output);
+        input.quality=quality;input.antialiasing=aa;input.device.dlssAvailable=false;
+        PlannerState planner;
+        const auto spatial=[&](const FramePlan& plan) {
+            const auto route=temporal::RouteConsumer(plan,false);
+            Check(plan.legacyAA==aa && plan.effectiveAA==(aa==3?2:aa),"DLSS fallback preserves saved AA and substitutes SMAA only for TAA");
+            Check(plan.consumer==TemporalConsumer::None && route.spatialAA==(aa!=0) &&
+                !route.legacyTaa && !route.dlssInputs && !route.sr,"DLSS fallback reaches spatial renderer route");
+            temporal::FrameStartPolicy policy{};
+            policy.legacyTaa=route.legacyTaa;policy.dlssInputs=route.dlssInputs;
+            policy.dlssSr=route.sr;policy.inputProbe=route.inputProbe;
+            policy.frame=42;policy.supportedFrame=41;
+            const auto start=temporal::ResolveFrameStartConsumers(policy);
+            Check(!start.jitter && !start.allowHistory && !start.experiment,"fallback does not retain jitter/history from an earlier supported frame");
+            RoundTrip(plan);
+        };
+        const auto unavailable=planner.Begin(input);spatial(unavailable);
+        input.device.dlssAvailable=true;
+        const auto ready=planner.Begin(input);
+        Check(ready.consumer==TemporalConsumer::DlssSr && ready.effectiveAA==0 &&
+            ready.geometryEpoch!=unavailable.geometryEpoch,"capability recovery restores native DLSS with a new epoch");
+        Check(planner.ReportFailure({ready.geometryEpoch,ready.requestSignature,ready.legacyHeight,
+            FailureReason::DlssUnavailable}),"native request failure is accepted");
+        const auto failed=planner.Begin(input);spatial(failed);
+        Check(failed.requestSignature==ready.requestSignature && failed.geometryEpoch!=ready.geometryEpoch,
+            "latched fallback keeps request identity but invalidates temporal history epoch");
+        input.upscaler=Upscaler::Off;
+        const auto explicitAA=planner.Begin(input);
+        Check(explicitAA.effectiveAA==aa && (explicitAA.consumer==TemporalConsumer::LegacyTaa)==(aa==3),
+            "explicit AA without DLSS remains unchanged, including requested TAA");
+    }
     static_assert(uint32_t(DlssQuality::Quality) == 0 && uint32_t(DlssQuality::Balanced) == 1);
     static_assert(uint32_t(DlssQuality::Performance) == 2 && uint32_t(DlssQuality::Dlaa) == 3);
     static_assert(kDlssQualityModes.size() == 4 && wire::PlanWordCount == 24 && wire::Version == 3);
@@ -108,7 +146,7 @@ int main() {
         sizing.modes[nativeIndex].state = state;
         PlannerState planner;
         auto fallback = planner.Begin(input);
-        Check(fallback.consumer == TemporalConsumer::LegacyTaa && fallback.effectiveAA == 3, "unready DLAA retains legacy AA");
+        Check(fallback.consumer == TemporalConsumer::None && fallback.effectiveAA == 2, "unready DLAA falls back to spatial SMAA");
         Check(fallback.width == 1280 && fallback.height == 720, "unready DLAA retains legacy internal resolution");
         input.quality = DlssQuality::Quality;
         Check(planner.Begin(input).consumer == TemporalConsumer::DlssSr, "DLAA-only failure does not disable Quality");
@@ -117,7 +155,7 @@ int main() {
     sizing = Sizing(output);
     sizing.modes[nativeIndex].optimal = {1707, 960};
     PlannerState malformedPlanner;
-    Check(malformedPlanner.Begin(input).consumer == TemporalConsumer::LegacyTaa, "malformed Ready DLAA is not silently accepted");
+    Check(malformedPlanner.Begin(input).consumer == TemporalConsumer::None, "malformed Ready DLAA is not silently accepted");
     sizing = Sizing(output);
     for (auto bad : {4u, std::numeric_limits<uint32_t>::max()}) {
         input.quality = DlssQuality(bad);
@@ -132,7 +170,7 @@ int main() {
     {
         PlannerState planner;
         input.device.dlssAvailable = false;
-        Check(planner.Begin(input).consumer == TemporalConsumer::LegacyTaa, "unavailable NGX falls back");
+        Check(planner.Begin(input).consumer == TemporalConsumer::None, "unavailable NGX falls back");
         input.device.dlssAvailable = true;
         input.readback = true;
         auto readback = planner.Begin(input);
@@ -169,8 +207,8 @@ int main() {
         const PlanFailure failure{active.geometryEpoch, active.requestSignature, active.legacyHeight, FailureReason::DlssUnavailable};
         Check(planner.ReportFailure(failure), "accept matching failed DLAA attempt");
         const auto fallback = planner.Begin(input);
-        Check(fallback.consumer == TemporalConsumer::LegacyTaa && fallback.width == 1280, "failed DLAA restores original request");
-        Check(planner.Begin(input).consumer == TemporalConsumer::LegacyTaa, "failure latch prevents per-frame NGX retry");
+        Check(fallback.consumer == TemporalConsumer::None && fallback.width == 1280, "failed DLAA restores original request");
+        Check(planner.Begin(input).consumer == TemporalConsumer::None, "failure latch prevents per-frame NGX retry");
         input.quality = DlssQuality::Quality;
         Check(planner.Begin(input).consumer == TemporalConsumer::DlssSr, "new SR request clears DLAA failure latch");
         Check(!planner.ReportFailure(failure), "stale DLAA failure cannot poison a new request");

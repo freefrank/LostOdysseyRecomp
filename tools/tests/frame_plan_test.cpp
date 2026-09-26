@@ -165,7 +165,7 @@ int main()
     PlannerInput dlssLegacy{}; dlssLegacy.internalResolution=1080; dlssLegacy.antialiasing=3;
     dlssLegacy.upscaler=gpu::upscaling::Upscaler::Dlss; dlssLegacy.output={{1920,1080},0,0,1920,1080};
     const auto ordinaryLegacy=requestedDlssLegacy.Begin(dlssLegacy);
-    Require(ordinaryLegacy.consumer==gpu::upscaling::TemporalConsumer::LegacyTaa&&ordinaryLegacy.height==1080,
+    Require(ordinaryLegacy.consumer==gpu::upscaling::TemporalConsumer::None&&ordinaryLegacy.height==1080,
         "requested DLSS without ready input sizing produces an actual legacy plan");
     Require(requestedDlssLegacy.ReportFailure({ordinaryLegacy.geometryEpoch,ordinaryLegacy.requestSignature,810,FailureReason::DlssOutOfMemory}),
         "ordinary requested-DLSS legacy OOM is accepted");
@@ -183,28 +183,28 @@ int main()
     Require(dlssFallback.ReportFailure({probePlan.geometryEpoch,probePlan.requestSignature,720,FailureReason::DlssOutOfMemory}),
         "DLSS input failure is accepted before legacy fallback");
     const auto fallbackLegacy=dlssFallback.Begin(dlssProbe);
-    Require(!fallbackLegacy.failed&&fallbackLegacy.consumer==gpu::upscaling::TemporalConsumer::LegacyTaa&&fallbackLegacy.height==1080&&
+    Require(!fallbackLegacy.failed&&fallbackLegacy.consumer==gpu::upscaling::TemporalConsumer::None&&fallbackLegacy.height==1080&&
         fallbackLegacy.geometryEpoch!=probePlan.geometryEpoch&&fallbackLegacy.requestSignature==probePlan.requestSignature,
         "DLSS failure disables DLSS for a fresh legacy fallback without changing request identity");
     Require(dlssFallback.ReportFailure({fallbackLegacy.geometryEpoch,fallbackLegacy.requestSignature,810,FailureReason::DlssOutOfMemory}),
         "actual legacy fallback OOM is accepted");
     const auto fallbackReduced=dlssFallback.Begin(dlssProbe);
-    Require(!fallbackReduced.failed&&fallbackReduced.consumer==gpu::upscaling::TemporalConsumer::LegacyTaa&&fallbackReduced.height==810&&
+    Require(!fallbackReduced.failed&&fallbackReduced.consumer==gpu::upscaling::TemporalConsumer::None&&fallbackReduced.height==810&&
         fallbackReduced.geometryEpoch!=fallbackLegacy.geometryEpoch&&fallbackReduced.requestSignature==probePlan.requestSignature,
         "actual legacy fallback OOM reduces with a fresh epoch and stable request signature");
     const auto fallbackContinued=dlssFallback.Begin(dlssProbe);
     const auto fallbackContinuedAgain=dlssFallback.Begin(dlssProbe);
-    Require(fallbackContinued.consumer==gpu::upscaling::TemporalConsumer::LegacyTaa&&fallbackContinued.height==810&&
+    Require(fallbackContinued.consumer==gpu::upscaling::TemporalConsumer::None&&fallbackContinued.height==810&&
         fallbackContinued.geometryEpoch==fallbackReduced.geometryEpoch&&fallbackContinued.requestSignature==probePlan.requestSignature&&
-        fallbackContinuedAgain.consumer==gpu::upscaling::TemporalConsumer::LegacyTaa&&fallbackContinuedAgain.height==810&&
+        fallbackContinuedAgain.consumer==gpu::upscaling::TemporalConsumer::None&&fallbackContinuedAgain.height==810&&
         fallbackContinuedAgain.geometryEpoch==fallbackReduced.geometryEpoch&&fallbackContinuedAgain.requestSignature==probePlan.requestSignature,
         "DLSS-disabled request keeps the reduced legacy plan across later serials");
     Require(dlssFallback.ReportFailure({fallbackContinuedAgain.geometryEpoch,fallbackContinuedAgain.requestSignature,720,FailureReason::DlssOutOfMemory}),
         "continued legacy plan accepts a later OOM");
     const auto fallbackFloor=dlssFallback.Begin(dlssProbe);
     const auto fallbackFloorContinued=dlssFallback.Begin(dlssProbe);
-    Require(fallbackFloor.consumer==gpu::upscaling::TemporalConsumer::LegacyTaa&&fallbackFloor.height==720&&
-        fallbackFloor.geometryEpoch!=fallbackReduced.geometryEpoch&&fallbackFloorContinued.consumer==gpu::upscaling::TemporalConsumer::LegacyTaa&&
+    Require(fallbackFloor.consumer==gpu::upscaling::TemporalConsumer::None&&fallbackFloor.height==720&&
+        fallbackFloor.geometryEpoch!=fallbackReduced.geometryEpoch&&fallbackFloorContinued.consumer==gpu::upscaling::TemporalConsumer::None&&
         fallbackFloorContinued.height==720&&fallbackFloorContinued.geometryEpoch==fallbackFloor.geometryEpoch&&
         fallbackFloorContinued.requestSignature==probePlan.requestSignature,
         "subsequent legacy OOM reaches a stable floor without re-enabling DLSS");

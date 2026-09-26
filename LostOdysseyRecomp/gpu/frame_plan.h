@@ -290,6 +290,16 @@ namespace gpu::frame_plan
             }
             if (latched_) ClearAttemptMailbox();
 
+            // Unavailable/disabled DLSS must not silently enable legacy TAA.
+            // Keep the saved AA and request identity for recovery, but use
+            // spatial SMAA for this plan (Off/FXAA/SMAA already stay intact).
+            if (p.requestedUpscaler == upscaling::Upscaler::Dlss &&
+                p.consumer == upscaling::TemporalConsumer::LegacyTaa) {
+                p.effectiveAA = 2;
+                p.consumer = upscaling::TemporalConsumer::None;
+                p.inputProbe = false;
+            }
+
             const bool changed = !lastFinal_ || lastFinal_->requestSignature != p.requestSignature ||
                 lastFinal_->width != p.width || lastFinal_->height != p.height ||
                 lastFinal_->consumer != p.consumer ||

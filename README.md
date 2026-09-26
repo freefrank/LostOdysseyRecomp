@@ -27,6 +27,8 @@ image quality and stability remain under validation.
 
 Published v0.6.20 includes Hybrid camera/depth motion fallback, bounded DLSS sizing recovery and the documented screen-sampling trial. Following the deferral of Frame Generation to v0.8.0, the existing DLSS SR & DLAA implementation targeting v0.7.0 has passed user acceptance. User acceptance does not alter existing test coverage.
 
+Unreleased source change: when DLSS/DLAA is unavailable or disabled after failures, a saved TAA selection falls back to SMAA. Saved Off, FXAA and SMAA selections are preserved without rewriting settings. CPU routing checks passed; visual validation is pending.
+
 ### Experimental opt-in FSR SR
 
 Source builds and release packaging workflows support the experimental FSR 3.1.4 path on
