@@ -50,7 +50,7 @@ priority=100
 image:bin/xenon/sys/engineresources.xxx#8:DefaultTexture=images/default_texture.png
 ```
 
-Higher `priority` wins when multiple enabled mods replace the same asset.
+Higher `priority` wins when multiple standalone mods replace the same asset. External managers that provide a merged overlay, such as Mod Organizer 2, resolve conflicts before the runtime sees the files; their final virtual filesystem view is authoritative.
 
 Reserved future kinds use the same syntax:
 
@@ -82,6 +82,9 @@ const auto& path = replacement ? replacement->path : request.originalPath;
 If no enabled mod provides the key, loading falls through to the original resource.
 
 ## Mod-manager contract
+
+Mod Organizer 2 is a first-class target. See [Mod Organizer 2 compatibility](Mod-Organizer-2.md). MO2-compatible packages should converge on `mods/overlay/` so identical resources map to identical virtual paths and MO2 can expose conflicts normally. The built-in per-mod `priority=` mechanism is retained for standalone installs and must not override a manager-resolved overlay.
+
 
 A manager only needs to install/remove mod directories, enable/disable them, assign deterministic priorities, and detect conflicts by `AssetKind + canonical key`.
 
