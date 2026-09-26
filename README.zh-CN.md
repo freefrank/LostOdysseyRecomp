@@ -33,7 +33,7 @@ Windows 与 Linux 支持实验性的 NVIDIA DLSS（超分辨率与 DLAA）和 AM
 
 ## 路线图
 
-**v0.7.0** 版本已发布，包含性能优化、易用性改进、PlayStation 手柄按键提示、v1 图像 Mod API 以及原生 DLSS/DLAA 和 FSR 超分辨率。已规划至 **v0.8.0** 的路线图目标包括 DLSS 插帧（Windows Vulkan 下固定 2× DLSS FG）、独立 FSR 插帧、原生独立 120 FPS 候选评估（`LO_EXPERIMENTAL_120=1`，评估原生呈现节奏）、移除既有 PM4 数据包转换层、Linux AArch64、macOS AArch64（Apple Silicon）以及实验性 Android 支持。上述内容均属于路线图规划目标，不代表当前已有实现或已验证覆盖；详情参见[路线图](docs/ROADMAP.zh-CN.md)。
+**v0.7.0** 版本已发布，包含性能优化、易用性改进、PlayStation 手柄按键提示、v1 图像 Mod API 以及原生 DLSS/DLAA 和 FSR 超分辨率。已规划至 **v0.8.0** 的路线图目标包括 DLSS 插帧（保留 Windows Vulkan 下固定 2× DLSS FG，并纳入 D3D12 DLSS FG）、动态多帧生成（动态 MFG；目标 API、平台或生成倍率不作预先设定）、独立 FSR 插帧、原生独立 120 FPS 候选评估（`LO_EXPERIMENTAL_120=1`，评估原生呈现节奏）、移除既有 PM4 数据包转换层、Flatpak 发布包（不承诺 Flathub 已接受或发布）、Linux AArch64、macOS AArch64（Apple Silicon）以及实验性 Android 支持。上述内容均属于未完成路线图规划，不宣称当前已有实现、测试验证、用户验收或发布交付；开发顺序见[路线图](docs/ROADMAP.zh-CN.md)。
 
 历史版本发布说明与详细变更记录见[更新日志](CHANGELOG.md)。
 

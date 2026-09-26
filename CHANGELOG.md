@@ -9,12 +9,12 @@ One record of completed changes, with unpublished work separated from verified r
 ### English
 
 - Planning targets for v0.8.0:
-  - Added Linux AArch64, macOS AArch64 (Apple Silicon), experimental Android support, and removal of the legacy PM4 packet translation layer as future roadmap targets for v0.8.0 alongside Frame Generation; this planning update does not represent existing implementation, test coverage, or delivery, nor does targeting Apple Silicon preclude other macOS architectures.
+  - Added D3D12 DLSS Frame Generation and dynamic Multi-Frame Generation (dynamic MFG; target APIs, platforms, or generation multipliers not predetermined) to the v0.8.0 roadmap, alongside existing fixed 2× DLSS FG on Windows Vulkan and independent FSR Frame Generation. Added a Flatpak release package (without promising Flathub acceptance or publication), Linux AArch64, macOS AArch64 (Apple Silicon), experimental Android support, and removal of the legacy PM4 packet translation layer as future roadmap targets for v0.8.0. All newly incorporated items represent uncompleted roadmap planning rather than current implementation, test verification, user acceptance, or release delivery, nor does targeting Apple Silicon preclude other macOS architectures or promise complete Android support.
 
 ### 简体中文
 
 - v0.8.0 规划目标更新：
-  - 新增 Linux AArch64、macOS AArch64（Apple Silicon）、实验性 Android 支持以及移除既有 PM4 数据包转换层作为 v0.8.0 的未来规划目标（与插帧并列）；本轮仅为目标规划，不代表已有实现、测试覆盖或交付，明确 Apple Silicon 目标亦不排除后续支持其他 macOS 架构的可能性，且不对 Android 承诺完整支持。
+  - 将 D3D12 DLSS 插帧（D3D12 DLSS FG）与动态多帧生成（动态 MFG，目标 API、平台或生成倍率不作预先设定）纳入本期 v0.8.0 路线图规划，并保留现有 Windows Vulkan 下固定 2× DLSS FG 与独立 FSR 插帧规划目标；新增 Flatpak 发布包（不承诺 Flathub 已接受或发布）、Linux AArch64、macOS AArch64（Apple Silicon）、实验性 Android 支持以及移除既有 PM4 数据包转换层作为未来规划目标。所有新纳入项目均为未完成规划，不宣称已有实现、测试验证、用户验收或发布交付，明确 Apple Silicon 目标亦不排除后续支持其他 macOS 架构的可能性，且不对 Android 承诺完整支持。
 
 ## v0.7.1 — 2026-09-26
 

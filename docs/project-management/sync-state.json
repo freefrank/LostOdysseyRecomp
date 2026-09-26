@@ -1640,7 +1640,7 @@
         "Delivery": "Deferred",
         "Source key": "frame-generation-research",
         "Release": "v0.8.0",
-        "Evidence": "FSR Frame Generation is promoted to an independent v0.8.0 target; broader historical goals (2× DLSS-G on D3D12 and dynamic MFG) remain deferred backlog. Active FG production work is phased through P0 architecture evaluation, P3 infrastructure and P4 Windows Vulkan DLSS FG."
+        "Evidence": "FSR Frame Generation, D3D12 DLSS FG, and dynamic MFG are promoted to milestone v0.8.0 targets per user planning decision. Active FG production work is phased through P0 architecture evaluation, P3 infrastructure and P4 Windows Vulkan DLSS FG."
       },
       "title": "Evaluate frame generation integration",
       "body_sha256": "5e1c896d79232b40cd971c043120d9a2215c3727e9fc5abc19bc385039f888fc"
@@ -2294,7 +2294,7 @@
         "Delivery": "Not started",
         "Source key": "native-macos-platform",
         "Release": "v0.8.0",
-        "Evidence": "Roadmap target for v0.8.0 explicitly focused on macOS AArch64 / Apple Silicon. No macOS build, backend, package, or validation artifact exists."
+        "Evidence": "Roadmap target for v0.8.0 (execution step 10); graphics backend and dependency feasibility investigation starts early in parallel. No macOS build, backend, package, or validation artifact exists."
       },
       "title": "Establish a native macOS (AArch64 / Apple Silicon) port",
       "body_sha256": "ae0ca84faeed79cc6b9f4b17c3320699fa8cd7d91fab7fa922b643f91ed8ce35"
@@ -2993,7 +2993,7 @@
         "Status": "Todo",
         "Delivery": "Not started",
         "Release": "v0.8.0",
-        "Evidence": "Planned v0.8.0 delivery target to remove the legacy PM4 packet translation layer; currently in planning status. Does not predetermine alternative presentation architectures, direct execution, or runtime implementations.",
+        "Evidence": "Planned v0.8.0 delivery target (execution step 8); replacement architecture investigation starts early in parallel. Does not predetermine alternative presentation architectures, direct execution, or runtime implementations.",
         "Source key": "remove-pm4-translator"
       },
       "title": "Remove the PM4 translator",
@@ -3028,6 +3028,48 @@
       },
       "title": "Automatic PlayStation controller button glyphs",
       "body_sha256": "d6f1b842a802132f4681806920c29fce675bdf71b5b354c3c6b9112b82debcdd"
+    },
+    "d3d12-dlss-frame-generation": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg88w7k",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Temporal rendering",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Release": "v0.8.0",
+        "Evidence": "Promoted to a milestone v0.8.0 planning target per user decision. Focuses on DLSS Frame Generation on the Direct3D 12 backend, independent of the Windows Vulkan P4 milestone. Implementation and validation not started.",
+        "Source key": "d3d12-dlss-frame-generation"
+      },
+      "title": "Deliver D3D12 DLSS Frame Generation",
+      "body_sha256": "639282cba20d4a17692ccff7d5eae3de0142b7b1581f82d9840b5f4db832047d"
+    },
+    "dynamic-mfg": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg88w8Q",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Temporal rendering",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Release": "v0.8.0",
+        "Evidence": "Promoted to an independent milestone v0.8.0 target per user planning decision. Target platform and frame multiplier are not predetermined. Implementation and validation not started.",
+        "Source key": "dynamic-mfg"
+      },
+      "title": "Deliver Dynamic Multi-Frame Generation (MFG)",
+      "body_sha256": "5c367f084835a2bd1f200be8c804e9cd9edb9f374750ba49ccea46ed979a1c30"
+    },
+    "flatpak-release": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg88zAQ",
+      "fields": {
+        "Kind": "Release",
+        "Area": "Release Engineering",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Release": "v0.8.0",
+        "Evidence": "Added as an independent parallel delivery target for milestone v0.8.0 per user decision. Advances alongside execution step 1. Scope is delivering a functional Flatpak package, distinct from broader Steam Deck hardware verification or mandatory Flathub store publishing.",
+        "Source key": "flatpak-release"
+      },
+      "title": "Deliver Flatpak package release",
+      "body_sha256": "fd472330e683db6000f52a60504ba8cd11620f97cba7cb8e373b2b77922781f1"
     }
   },
   "project_id": "PVT_kwHOAAsUY84Biy1a"

@@ -33,18 +33,27 @@ Reviewed on 2026-09-26 against live Issues, Project fields, merged commits and r
 
 ## v0.8.0 plans
 
-- [~] **P0:** common temporal contracts are implemented; Streamline/NGX coexistence Gate 1 remains unpassed.
-- [ ] **P3:** production frame-generation presentation infrastructure, leases and UI separation.
-- [ ] **P4:** fixed 2× DLSS Frame Generation on Windows Vulkan, including DLSS/DLAA/FSR combinations and safe suspension/recovery.
-- [ ] **FSR Frame Generation:** independent target; API, platform and multiplier are not predetermined.
-- [ ] **Optional native 120 FPS:** independent game presentation, not generated frames; requires pacing, Ring, audio and cutscene validation, with 60 FPS as default.
-- [ ] **Linux AArch64 and macOS AArch64 / Apple Silicon:** platform delivery targets; no official packages or hardware acceptance claimed.
-- [ ] **Remove the PM4 translator:** moved from v0.9.0 to v0.8.0; replacement architecture remains undecided.
-- [ ] **Experimental Android:** exploratory platform target, no APK or device validation yet.
+Planned development sequence (ordered execution arrangement; does not construct artificial hard technical dependencies between subsequent and preceding items; P0/P3/P4 represent stage identifiers, not priority levels):
+
+1. [~] **P0:** common temporal contracts are implemented; Streamline/NGX coexistence Gate 1 remains unpassed.
+2. [ ] **P3:** production frame-generation presentation infrastructure, leases and UI separation.
+3. [ ] **P4:** fixed 2× DLSS Frame Generation on Windows Vulkan, including DLSS/DLAA/FSR combinations and safe suspension/recovery.
+4. [ ] **FSR Frame Generation:** independent target; API, platform and multiplier are not predetermined.
+5. [ ] **D3D12 DLSS Frame Generation:** planning target for DLSS Frame Generation on the D3D12 backend, independent of the Windows Vulkan P4 milestone.
+6. [ ] **Dynamic MFG:** independent target for dynamic multi-frame generation; platform and multiplier are not predetermined.
+7. [ ] **Optional native 120 FPS:** independent game presentation, not generated frames; requires pacing, Ring, audio and cutscene validation, with 60 FPS as default.
+8. [ ] **Remove the PM4 translator:** replacement architecture investigation starts early alongside preceding phases; execution follows frame pacing and presentation work.
+9. [ ] **Linux AArch64:** platform delivery target; no official packages or hardware acceptance claimed.
+10. [ ] **macOS AArch64 / Apple Silicon:** graphics backend and dependency feasibility investigation starts early; platform delivery target.
+11. [ ] **Experimental Android:** exploratory platform target, no APK or device validation yet.
+
+Parallel tracks:
+
+- [ ] **Flatpak release:** independent package delivery running in parallel starting from step 1; distinct from broader Steam Deck hardware verification or mandatory Flathub publishing.
 
 ## Later backlog
 
-D3D12 DLSS FG and dynamic MFG remain deferred rather than mandatory v0.8.0 goals. DX11, HDR output, higher-resolution shadows, SSAO/depth access, GI/reflections, ray tracing and the paused Switch work remain independent proposals. WMV playback, temporary protagonist damage controls and other unproven items retain their current Project scope; they were not marked complete without evidence.
+DX11, HDR output, higher-resolution shadows, SSAO/depth access, GI/reflections, ray tracing and the paused Switch work remain independent proposals. WMV playback, temporary protagonist damage controls and other unproven items retain their current Project scope; they were not marked complete without evidence.
 
 See the [Project](https://github.com/users/freefrank/projects/3) for individual evidence and the [historical roadmap](archive/ROADMAP-2026-09-10.md) for earlier detail. This reconciliation did not rerun builds, games or tests.
 

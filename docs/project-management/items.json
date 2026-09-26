@@ -3641,7 +3641,7 @@
         "Release": "v0.8.0",
         "Start date": null,
         "Target date": null,
-        "Evidence": "FSR Frame Generation is promoted to an independent v0.8.0 target; broader historical goals (2× DLSS-G on D3D12 and dynamic MFG) remain deferred backlog. Active FG production work is phased through P0 architecture evaluation, P3 infrastructure and P4 Windows Vulkan DLSS FG."
+        "Evidence": "FSR Frame Generation, D3D12 DLSS FG, and dynamic MFG are promoted to milestone v0.8.0 targets per user planning decision. Active FG production work is phased through P0 architecture evaluation, P3 infrastructure and P4 Windows Vulkan DLSS FG."
       },
       "source_refs": [
         "docs/notes/v0.7.0-frame-generation-plan.md",
@@ -5057,7 +5057,7 @@
         "Release": "v0.8.0",
         "Start date": null,
         "Target date": null,
-        "Evidence": "Roadmap target for v0.8.0 explicitly focused on macOS AArch64 / Apple Silicon. No macOS build, backend, package, or validation artifact exists."
+        "Evidence": "Roadmap target for v0.8.0 (execution step 10); graphics backend and dependency feasibility investigation starts early in parallel. No macOS build, backend, package, or validation artifact exists."
       },
       "source_refs": [],
       "source_lines": [],
@@ -6032,10 +6032,78 @@
         "Release": "v0.8.0",
         "Start date": null,
         "Target date": null,
-        "Evidence": "Planned v0.8.0 delivery target to remove the legacy PM4 packet translation layer; currently in planning status. Does not predetermine alternative presentation architectures, direct execution, or runtime implementations."
+        "Evidence": "Planned v0.8.0 delivery target (execution step 8); replacement architecture investigation starts early in parallel. Does not predetermine alternative presentation architectures, direct execution, or runtime implementations."
       },
       "source_refs": [
         "gpu/command_processor.cpp"
+      ],
+      "source_lines": [],
+      "record_type": "backlog"
+    },
+    {
+      "key": "d3d12-dlss-frame-generation",
+      "title": "Deliver D3D12 DLSS Frame Generation",
+      "body": "<!-- lo-project:d3d12-dlss-frame-generation -->\n\nDeliver DLSS Frame Generation on the Direct3D 12 backend as a milestone v0.8.0 planning target per user decision.\n\n## Scope and completion criteria\n\n- [ ] Establish DLSS Frame Generation integration contracts and swapchain presentation under the Direct3D 12 backend.\n- [ ] Implement capability probing, device initialization, and safe suspension/recovery during scene transitions and window/swapchain changes.\n- [ ] Preserve game simulation pacing, input latency, and Aim Ring timing decoupled from generated frame presentation.\n\n## Boundaries\n\nIndependent milestone v0.8.0 planning target per user decision, separate from the Windows Vulkan P4 milestone. Production implementation and runtime validation not started.\n\nstage_detail: Not started; milestone v0.8.0 planning\n\n## Sources\n\n- [docs/ROADMAP.md](https://github.com/freefrank/LostOdysseyRecomp/blob/main/docs/ROADMAP.md)\n- [docs/notes/v0.7.0-frame-generation-plan.md](https://github.com/freefrank/LostOdysseyRecomp/blob/main/docs/notes/v0.7.0-frame-generation-plan.md)\n",
+      "issue_url": null,
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Temporal rendering",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Release": "v0.8.0",
+        "Start date": null,
+        "Target date": null,
+        "Evidence": "Promoted to a milestone v0.8.0 planning target per user decision. Focuses on DLSS Frame Generation on the Direct3D 12 backend, independent of the Windows Vulkan P4 milestone. Implementation and validation not started."
+      },
+      "source_refs": [
+        "docs/ROADMAP.md",
+        "docs/notes/v0.7.0-frame-generation-plan.md"
+      ],
+      "source_lines": [],
+      "record_type": "backlog"
+    },
+    {
+      "key": "dynamic-mfg",
+      "title": "Deliver Dynamic Multi-Frame Generation (MFG)",
+      "body": "<!-- lo-project:dynamic-mfg -->\n\nDeliver Dynamic Multi-Frame Generation (MFG) as an independent roadmap target for milestone v0.8.0 per user planning decision.\n\n## Scope and completion criteria\n\n- [ ] Evaluate and establish dynamic multi-frame generation integration contracts, pacing models, and frame generation scheduling.\n- [ ] Define presentation, swapchain scheduling, and UI separation paths without predetermining the target platform or frame multiplier.\n- [ ] Verify generated frame delivery and decoupled simulation pacing upon implementation authorization.\n\n## Boundaries\n\nIndependent milestone v0.8.0 planning target per user decision. Does not predetermine or restrict target platform or frame multiplier. Production implementation and runtime validation not started.\n\nstage_detail: Not started; milestone v0.8.0 planning\n\n## Sources\n\n- [docs/ROADMAP.md](https://github.com/freefrank/LostOdysseyRecomp/blob/main/docs/ROADMAP.md)\n- [docs/notes/v0.7.0-frame-generation-plan.md](https://github.com/freefrank/LostOdysseyRecomp/blob/main/docs/notes/v0.7.0-frame-generation-plan.md)\n",
+      "issue_url": null,
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Temporal rendering",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Release": "v0.8.0",
+        "Start date": null,
+        "Target date": null,
+        "Evidence": "Promoted to an independent milestone v0.8.0 target per user planning decision. Target platform and frame multiplier are not predetermined. Implementation and validation not started."
+      },
+      "source_refs": [
+        "docs/ROADMAP.md",
+        "docs/notes/v0.7.0-frame-generation-plan.md"
+      ],
+      "source_lines": [],
+      "record_type": "backlog"
+    },
+    {
+      "key": "flatpak-release",
+      "title": "Deliver Flatpak package release",
+      "body": "<!-- lo-project:flatpak-release -->\n\nDeliver a standalone Flatpak package release in milestone v0.8.0, running in parallel starting from step 1.\n\n## Scope and completion criteria\n\n- [ ] Complete and validate the Flatpak build packaging pipeline using `packaging/linux/io.github.freefrank.LostOdysseyRecomp.json`.\n- [ ] Verify runtime sandbox permissions for graphics (Vulkan), audio, controller access, and configurable game data paths.\n- [ ] Deliver an installable Flatpak bundle / repository package artifact for Linux users.\n\n## Boundaries\n\nIndependent package delivery target running in parallel with v0.8.0 development steps. Distinct from broader Steam Deck hardware-specific validation and not contingent upon mandatory Flathub publishing. Production package delivery and user validation not yet established.\n\nstage_detail: Not started; milestone v0.8.0 parallel track\n\n## Sources\n\n- [packaging/linux/io.github.freefrank.LostOdysseyRecomp.json](https://github.com/freefrank/LostOdysseyRecomp/blob/main/packaging/linux/io.github.freefrank.LostOdysseyRecomp.json)\n- [docs/INSTALLING.md](https://github.com/freefrank/LostOdysseyRecomp/blob/main/docs/INSTALLING.md)\n- [docs/BUILDING.md](https://github.com/freefrank/LostOdysseyRecomp/blob/main/docs/BUILDING.md)\n- [docs/ROADMAP.md](https://github.com/freefrank/LostOdysseyRecomp/blob/main/docs/ROADMAP.md)\n",
+      "issue_url": null,
+      "fields": {
+        "Kind": "Release",
+        "Area": "Release Engineering",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Release": "v0.8.0",
+        "Start date": null,
+        "Target date": null,
+        "Evidence": "Added as an independent parallel delivery target for milestone v0.8.0 per user decision. Advances alongside execution step 1. Scope is delivering a functional Flatpak package, distinct from broader Steam Deck hardware verification or mandatory Flathub store publishing."
+      },
+      "source_refs": [
+        "packaging/linux/io.github.freefrank.LostOdysseyRecomp.json",
+        "docs/INSTALLING.md",
+        "docs/BUILDING.md",
+        "docs/ROADMAP.md"
       ],
       "source_lines": [],
       "record_type": "backlog"
