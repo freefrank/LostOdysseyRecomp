@@ -165,7 +165,7 @@ void TemporalUpscaler::OnSubmitted(SrUseToken token, uint64_t checkedSerial) {
 }
 void TemporalUpscaler::OnDiscarded(SrUseToken token) {
     RouteDiscarded(token, dlss_);
-    if (token.provider == upscaling::Upscaler::Fsr && token.useId) fsr_->OnDiscarded(token.useId);
+    if (token.provider == upscaling::Upscaler::Fsr && token.useId) fsr_->OnBatchDiscarded(token.useId);
 }
 void TemporalUpscaler::ReleaseCompleted(uint64_t serial) { if (serial) { dlss_.ReleaseCompletedThrough(serial); fsr_->ReleaseCompletedThrough(serial); } }
 bool TemporalUpscaler::HasFeatureState() const { return dlss_.HasFeatureState() || fsr_->HasFeatureState(); }
