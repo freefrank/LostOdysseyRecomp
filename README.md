@@ -41,11 +41,11 @@ APEX 15W proxy without establishing Steam Deck hardware equivalence.
 
 ### Automatic PlayStation controller prompts (Unreleased)
 
-The recomp automatically detects active PlayStation gamepads via SDL and updates button prompts:
-- **Host UI**: Settings menu, Installer UI, and Debug overlay render matching PlayStation glyphs (Cross, Circle, Square, Triangle, L1, R1, L2, R2, and Options/Share).
-- **Guest runtime**: Texture upload intercepts identify two confirmed controller prompt atlases by exact content hash (`rpmenurescommon` `Icon_Page_0` and English font `Texture2D_1`), swapping to immutable PlayStation replacement textures under GPU stop guards and retirement review. Replaces action buttons, shoulder buttons, and pause menu Start/Select (Options/Create).
-- Verified on local development build (`HEAD d677a48-dirty`, binary SHA `1ae34ffd7eedcc415816c30b6e74b31d5ca2c0d936cd6aadbf72b49aeca709a4`) and accepted by the user after pause menu and cutscene review; uncommitted and unpublished.
-- Validation limits: User acceptance on real hardware is bounded to tested controller hardware and scenes, without claiming universal controller hardware compatibility or 100% full-game playthrough coverage. Issue #40 mod support was not implemented in this scope.
+The recomp automatically detects the most recently active gamepad via SDL and updates button prompts:
+- **Controller prompts**: Updates ABXY action buttons, shoulder buttons (LB/RB/LT/RT to L1/R1/L2/R2), and Start/Select (Options/Share and Options/Create) across host menus (settings, installer, debug overlay) and in-game pause menu and cutscenes.
+- **Technical reference**: Texture replacement, atlas hash matching, and GPU upload lifecycle details are documented in the [Issue #40 UI resource map](docs/notes/issue-40-ui-resource-map.md) and [development status](docs/STATUS.md).
+- **Status & acceptance**: Verified in development testing and accepted by the user after pause menu and cutscene review; committed to `main` in `5700ca5` and pending release.
+- **Validation limits**: User acceptance is bounded to tested controller hardware and verified scenes, without claiming universal controller hardware compatibility or complete full-game playthrough coverage. Issue #40 mod support was not implemented in this scope.
 
 ## v0.6.20 release
 
@@ -105,7 +105,7 @@ Published release: [v0.6.0](https://github.com/freefrank/LostOdysseyRecomp/relea
 - **Hardened importer**: final writes, flushes and closes are checked before publication, XDVDFS scanning follows 2048-byte boundaries, and the destination browser can create and enter a folder with the button, `F2`, or controller `Y`.
 - **Real source validation**: the importer recognized all four USA/Europe disc images under `G:/ROMS/US`; an isolated Disc 1 import completed successfully. Four-disc installation, interactive UI acceptance, and gameplay remain unverified.
 
-The **v0.7.0** milestone focuses on performance optimizations, quality-of-life features, and native DLSS/DLAA and FSR upscaling (with user acceptance passed). Frame generation and expanded platform targets—including macOS AArch64 (Apple Silicon), Linux AArch64, and experimental Android support—are planned for **v0.8.0**; these platform targets represent roadmap planning rather than current implementation or verified coverage.
+The **v0.7.0** milestone focuses on performance optimizations, quality-of-life features, and native DLSS/DLAA and FSR upscaling (with user acceptance passed; unreleased). Planned roadmap targets for **v0.8.0** include DLSS Frame Generation (fixed 2× DLSS FG on Windows Vulkan), independent FSR Frame Generation, native independent 120 FPS candidate evaluation (`LO_EXPERIMENTAL_120=1`, evaluating native presentation pacing), Linux AArch64, macOS AArch64 (Apple Silicon), and experimental Android support. Planned for **v0.9.0** is the removal of the legacy PM4 packet translation layer. All v0.8.0 and v0.9.0 targets represent roadmap planning rather than current implementation or verified coverage; see the [roadmap](docs/ROADMAP.md) for details.
 
 The release packages and standalone shader pack are available from the [v0.6.0 release](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.0). Release CI passed the required audit and Windows/Linux packaging gates. The published artifacts were verified against their SHA-256 sidecars; native Linux GPU, Steam Deck, AppImage update transactions, and full-game playthrough remain outside the verified scope.
 

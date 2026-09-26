@@ -37,11 +37,11 @@ Quality、Balanced、Performance、Native AA 均有 Windows 运行证据；原�
 
 ### 自动 PlayStation 手柄按键提示（未发布）
 
-项目支持基于 SDL 自动识别最近活动的控制器类型并动态切换按键提示：
-- **宿主界面**：设置菜单、安装器界面及调试覆盖层自动切换为对应的 PlayStation 图标（叉、圈、方块、三角、L1、R1、L2、R2 与 Options/Share）。
-- **客端游戏本体**：在 GPU 上传阶段通过精确内容哈希识别两张已确证图集（`rpmenurescommon` 中的 `Icon_Page_0` 与英文字体包 `Texture2D_1`），安全替换为不可变 PlayStation 纹理，受 GPU 停止 guard 与退休审阅保护。完整覆盖 ABXY 动作键、肩键（LB/RB/LT/RT -> L1/R1/L2/R2）及暂停菜单 Start/Select（菜单/分享）。
-- 在本地开发构建（`HEAD d677a48-dirty`，二进制 SHA `1ae34ffd7eedcc415816c30b6e74b31d5ca2c0d936cd6aadbf72b49aeca709a4`）上完成，经用户在暂停菜单与过场动画复查后明确“验收通过”；未提交未发布。
-- 边界说明：用户实机验收覆盖实测手柄与场景，不代表所有硬件或全流程通关覆盖。Issue #40 同时提及的 Mod 支持本次未做，不视为该 Issue 整体完成。
+项目基于 SDL 自动识别最近活动的手柄并动态切换按键提示：
+- **按键提示切换**：覆盖 ABXY 动作键、肩键（LB/RB/LT/RT 对应 L1/R1/L2/R2）及暂停菜单 Start/Select（Options/Share 与 Options/Create），覆盖宿主界面（设置菜单、安装器、调试覆盖层）与客端游戏（暂停菜单及过场动画）。
+- **技术文档**：客端纹理替换、图集内容哈希匹配与 GPU 上传生命周期细节归档于 [Issue #40 界面资源映射](docs/notes/issue-40-ui-resource-map.zh-CN.md)及[开发状态](docs/STATUS.md)。
+- **状态与验收**：功能已通过用户在暂停菜单与过场动画的实机验收，已提交至 `main` 分支（提交 `5700ca5`），待发布。
+- **边界说明**：用户实机验收覆盖实测手柄与场景，不代表所有手柄硬件或全流程通关覆盖。Issue #40 同时提及的 Mod 支持本次未做，不视为该 Issue 整体完成。
 
 ## v0.6.20 发布版
 
@@ -101,7 +101,7 @@ Quality、Balanced、Performance、Native AA 均有 Windows 运行证据；原�
 - **加固导入器**：资源只有在最终 `write`、`flush`、`close` 均成功后才会发布；XDVDFS 扫描按 2048 字节边界进行；目标目录页支持通过按钮、`F2` 或手柄 `Y` 创建并进入文件夹。
 - **真实资料验证**：导入器识别了 `G:/ROMS/US` 下全部四张 USA/Europe 光盘镜像，并成功完成隔离的 Disc 1 导入。四盘完整安装、交互 UI 验收和游戏运行仍未验证。
 
-**v0.7.0** 里程碑聚焦性能优化、QOL 改进以及原生 DLSS/DLAA 和 FSR 超分辨率（用户验收已通过）。插帧（Frame Generation）与拓展平台目标——包括 macOS AArch64（Apple Silicon）、Linux AArch64 及实验性 Android 支持——已规划至 **v0.8.0**；这些平台目标仅为规划方向，不代表当前已有实现或测试覆盖。
+**v0.7.0** 里程碑聚焦性能优化、QOL 改进以及原生 DLSS/DLAA 和 FSR 超分辨率（用户验收已通过；未发布）。已规划至 **v0.8.0** 的路线图目标包括 DLSS 插帧（Windows Vulkan 下固定 2× DLSS FG）、独立 FSR 插帧、原生独立 120 FPS 候选评估（`LO_EXPERIMENTAL_120=1`，评估原生呈现节奏）、Linux AArch64、macOS AArch64（Apple Silicon）以及实验性 Android 支持。**v0.9.0** 里程碑规划移除既有 PM4 数据包转换层。上述内容均属于路线图规划目标，不代表当前已有实现或已验证覆盖；详情参见[路线图](docs/ROADMAP.zh-CN.md)。
 
 发布包和独立 shader pack 可从 [v0.6.0 发布页](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.0)下载。Release CI 已通过必要的审计和 Windows/Linux 打包门槛，公开资产已与 SHA-256 校验文件核对。原生 Linux GPU、Steam Deck、AppImage 更新事务和全流程游戏仍不在已验证范围内。
 
