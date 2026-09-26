@@ -107,7 +107,14 @@ The catalog below lists maintained groups and representative root utilities. `th
 | `tools/gen_function_bounds.py` | Extracts function boundary markers from map files. | Generation: Outputs function bounds table. | Source: `tools/gen_function_bounds.py` |
 | `tools/xexdump/` | Dumps decrypted and decompressed XEX memory image to a flat binary and extracts symbols. Usage: `xexdump <in.xex> <out.bin>`. | Write: Dumps flat memory image to `<out.bin>` and symbol table to `<out.bin>.sym`. | Source: `tools/xexdump/` |
 
-### 8. Project management and issue triage
+### 8. Modding tools
+
+| Tool / Path | Purpose | Type & side effects |
+|---|---|---|
+| `tools/modding/lo_mod.py` | Builds v1 image mod ZIPs with `LOTEX1` payloads and validated relative asset keys. | Local write: Creates a mod archive at an explicit output path; does not modify imported game files. |
+| `tools/modding/publish_wiki.py` | Stages the maintained Modding API and workflow pages into an existing cloned Wiki repository. | Local write: Updates only managed Wiki pages and navigation; requires an explicit cloned destination. |
+
+### 9. Project management and issue triage
 
 | Tool / Path | Purpose | Type & side effects |
 |---|---|---|
@@ -115,7 +122,7 @@ The catalog below lists maintained groups and representative root utilities. `th
 | `tools/issue_triage/code_context.py` | Extracts codebase symbol context for issue reports. | Read-only: Scans repository code. |
 | `tools/project_management/` | Helper scripts for syncing GitHub Project fields, items, and roadmap mirrors. | Workflow integration: Updates project tracking state. |
 
-### 9. Private feedback archive
+### 10. Private feedback archive
 
 | Tool / Path | Purpose | Type & side effects | Reference |
 |---|---|---|---|
@@ -123,7 +130,7 @@ The catalog below lists maintained groups and representative root utilities. `th
 | `tools/feedback_archive/scripts/jitter_coverage.py` | Streams private VS/PS observations against an explicit mapping to rank jitter-coverage candidates. | Read-only archive input; writes a new report outside the archive. Does not edit the production map or represent player counts. | [`tools/feedback_archive/README.md`](feedback_archive/README.md) |
 | `tools/feedback_archive/scripts/export_programs.py` | Exports explicitly selected, identity-verified VS/PS payloads for source review. | Read-only archive input; writes verified payloads and provenance to a new directory outside the archive. | [`tools/feedback_archive/README.md`](feedback_archive/README.md) |
 
-### 10. OpenCode render investigation workflow
+### 11. OpenCode render investigation workflow
 
 | Tool / Path | Purpose | Type & side effects | Reference |
 |---|---|---|---|
