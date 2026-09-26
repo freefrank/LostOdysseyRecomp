@@ -41,7 +41,8 @@ inline constexpr FsrQuality NormalizeFsrQuality(FsrQuality value) {
 enum class FrameGeneration : uint32_t { Off = 0, Dlss2x = 1 };
 inline constexpr bool KnownFrameGeneration(FrameGeneration value) { return uint32_t(value) <= uint32_t(FrameGeneration::Dlss2x); }
 // DLAA consumes the output content extent, not drawable bars or guest padding.
-// A failed/mismatched vendor query must not be replaced with a guessed 1:1 size.
+// Compatibility may propose a separately labelled native trial, but actual
+// DLAA resources and SDK creation/evaluation must still use real 1:1 extents.
 inline constexpr bool ValidDlssRenderExtent(DlssQuality quality, resolution::Size render,
     resolution::Size output) {
     return KnownDlssQuality(quality) && render.width && render.height && output.width && output.height &&
@@ -109,7 +110,7 @@ enum class SizingState : uint32_t { Pending, Ready, Unavailable, Error };
 // CPU-side diagnostics only; no change to persisted quality IDs or wire plans.
 enum class SizingIssue : uint8_t {
     None, Prerequisite, CapabilityParameters, OptimalQuery, OptimalRead,
-    ZeroExtent, InvalidRange, DlaaExtentMismatch, CleanupFailed
+    ZeroExtent, InvalidRange, DlaaExtentMismatch, CleanupFailed, NativeDlaaTrial
 };
 inline constexpr const char* SizingIssueName(SizingIssue issue) {
     switch (issue) {
@@ -122,18 +123,22 @@ inline constexpr const char* SizingIssueName(SizingIssue issue) {
     case SizingIssue::InvalidRange: return "invalid_range";
     case SizingIssue::DlaaExtentMismatch: return "dlaa_extent_mismatch";
     case SizingIssue::CleanupFailed: return "cleanup_failed";
+    case SizingIssue::NativeDlaaTrial: return "application_native_dlaa_trial";
     }
     return "unknown";
 }
 
 struct ModeSizing {
     SizingState state = SizingState::Pending;
+    // Input selected for planning. Normally the vendor optimum; a labelled
+    // native trial preserves the original recommendation in vendorOptimal.
     resolution::Size optimal{};
     resolution::Size minimum{};
     resolution::Size maximum{};
     std::optional<int32_t> ngxResult;
     SizingIssue issue = SizingIssue::None;
     std::optional<int32_t> optimalWidthResult, optimalHeightResult, cleanupResult;
+    std::optional<resolution::Size> vendorOptimal;
     bool operator==(const ModeSizing&) const = default;
 };
 
@@ -167,7 +172,7 @@ struct BackendDeviceSnapshot {
 };
 
 // The snapshot fields are stored together, including gpuWorkStopped. A reader
-// cannot observe a new epoch paired with the previous backend or DLSS flag.
+// cannot observe a new epoch paired with an old backend or DLSS flag.
 void PublishDeviceCapability(BackendDeviceSnapshot snapshot);
 BackendDeviceSnapshot PublishedDeviceCapability();
 
@@ -182,7 +187,7 @@ public:
     void PublishSizing(OutputSizing sizing);
     void ResetSizing(uint64_t deviceEpoch);
     // Copy a cached result without recording a GPU request. Unknown and stale
-    // epochs return empty; they are not treated as a permanent device failure.
+    // epochs are not treated as a permanent device failure.
     std::optional<OutputSizing> Peek(const SizingKey& key);
 private:
     std::mutex mutex_;
