@@ -19,97 +19,23 @@ Optional diagnostics are off by default and can be disabled in Settings. See [Pr
 > [!IMPORTANT]
 > **This project is still in early testing.** Opening areas and selected scenes have been tested; a complete playthrough has not. Rendering and stability issues remain. You must supply your own supported game files.
 
-### Experimental native DLSS SR & DLAA
+### Upscaling (DLSS & FSR)
 
-Native NVIDIA DLSS Super Resolution and DLAA are experimental features.
-Windows and Linux release packages include official NGX runtime libraries;
-image quality and stability remain under validation.
+NVIDIA DLSS (Super Resolution & DLAA) and AMD FSR 3.1 are supported as experimental upscalers on Windows and Linux; technical details and validation boundaries are documented in [development status](docs/STATUS.md). When DLSS or DLAA is unavailable or disabled, a saved TAA selection falls back to SMAA while preserving other anti-aliasing choices.
 
-Published v0.6.20 includes Hybrid camera/depth motion fallback, bounded DLSS sizing recovery and the documented screen-sampling trial. Following the deferral of Frame Generation to v0.8.0, the existing DLSS SR & DLAA implementation targeting v0.7.0 has passed user acceptance. User acceptance does not alter existing test coverage.
-
-Unreleased source change: when DLSS/DLAA is unavailable or disabled after failures, a saved TAA selection falls back to SMAA. Saved Off, FXAA and SMAA selections are preserved without rewriting settings. CPU routing checks passed; visual validation is pending.
-
-### Experimental opt-in FSR SR
-
-Source builds and release packaging workflows support the experimental FSR 3.1.4 path on
-Windows and native Linux with `LO_ENABLE_FSR=ON` and `LO_REQUIRE_FSR=ON`, using
-FidelityFX SDK v1.1.4's FSR 3.1.4 implementation.
-Quality, Balanced, Performance and Native AA have bounded runtime evidence on Windows;
-native Linux RADV has Quality, Performance and Native AA evidence. Tested Windows rendering visuals and Linux runtime execution (on AMD
-Radeon 8060S RADV STRIX_HALO) passed user acceptance, concluding FSR P2 acceptance for v0.7.0. Frame generation and macOS support are deferred to v0.8.0. User acceptance does not alter existing test coverage. Low-power hardware testing covered an approved
-APEX 15W proxy without establishing Steam Deck hardware equivalence.
-
-### Automatic PlayStation controller prompts (Unreleased)
+### Automatic PlayStation controller prompts
 
 The recomp automatically detects the most recently active gamepad via SDL and updates button prompts:
 - **Controller prompts**: Updates ABXY action buttons, shoulder buttons (LB/RB/LT/RT to L1/R1/L2/R2), and Start/Select (Options/Share and Options/Create) across host menus (settings, installer, debug overlay) and in-game pause menu and cutscenes.
 - **Technical reference**: Texture replacement, atlas hash matching, and GPU upload lifecycle details are documented in the [Issue #40 UI resource map](docs/notes/issue-40-ui-resource-map.md) and [development status](docs/STATUS.md).
-- **Status & acceptance**: Verified in development testing and accepted by the user after pause menu and cutscene review; committed to `main` in `5700ca5` and pending release.
+- **Status & acceptance**: Verified in development testing and accepted by the user after pause menu and cutscene review; included in v0.7.0.
 - **Validation limits**: User acceptance is bounded to tested controller hardware and verified scenes, without claiming universal controller hardware compatibility or complete full-game playthrough coverage. Issue #40 mod support was not implemented in this scope.
 
-## v0.6.20 release
+## Roadmap
 
-[v0.6.20](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.20) was published on 2026-09-25T21:15:07Z from `be842b91d7367fd198074b1b8d3c1bc3ef4372a6` after successful [Windows/Linux Release CI](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/36188596414). It includes the user-accepted floor-light repair and 40 screen-sampling mappings, Hybrid motion fallback and F1 diagnostics. Packages and checksum files are public; no additional local artifact validation was performed, as requested.
+The **v0.7.0** release delivered performance optimizations, quality-of-life improvements, PlayStation controller prompts, the v1 Mod API, and native DLSS/DLAA and FSR upscaling. Planned roadmap targets for **v0.8.0** include DLSS Frame Generation (fixed 2× DLSS FG on Windows Vulkan), independent FSR Frame Generation, native independent 120 FPS candidate evaluation (`LO_EXPERIMENTAL_120=1`, evaluating native presentation pacing), removal of the legacy PM4 packet translation layer, Linux AArch64, macOS AArch64 (Apple Silicon), and experimental Android support. All v0.8.0 targets represent roadmap planning rather than current implementation or verified coverage; see the [roadmap](docs/ROADMAP.md) for details.
 
-## v0.6.19 release
-
-Published release [v0.6.19](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.19) on 2026-09-25T04:18:21Z from source `1b2ea6635c5ac4f7cf3c9186fda3cd05575db97d` via Release CI [36092250520](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/36092250520) as the then-current public release. Integrates live in-game anisotropic filtering (Off / 2x / 4x / 8x / 16x, applying on save without restart) with immutable sampler table generation management and descriptor lifetime synchronization, streamlined graphics menu DLSS/FSR quality ordering and unified AA navigation, cached menu backdrops avoiding repeated full-background software filtering on navigation, native System "Quit to Desktop" routing to `SDL_QUIT` with physical-hardware user acceptance, in-game Settings "Quit to Main Menu" title transition, debug "Save Anywhere" session persistence, cheats sidebar LT/RT category cycling with controller on-screen footer, idle cursor auto-hide, IME composition suppression during gameplay, and developer tooling catalog reorganization. Standalone CPU contracts, Linux software Vulkan emulation, and bounded physical-controller and quit tests passed; whole-game physical GPU validation, individual UI language verifications, and distant mip shimmering fixes remain open. See the [changelog](CHANGELOG.md#v0619--2026-09-25) and [development status](docs/STATUS.md).
-
-## v0.6.15 release
-
-Published release [v0.6.15](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.15) on 2026-09-24T19:47:35Z from source `6eef30d257f2e14ce30a546217574a0dc74fad69` via Release CI [36044604844](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/36044604844) as the latest public release. It integrates official FidelityFX SDK v1.1.4 (FSR 3.1.4) source-build packaging support alongside official NVIDIA NGX DLSS 310.9.1. It includes native DLSS SR/DLAA temporal lifecycle fixes (BR-01, BR-02), in-game graphics menu stability with verified execution status feedback (BR-03, `GraphicsRow`), F1 pre-present swapchain screenshots and synchronous NGX Evaluate input/output capture, FSR transient input rejection recovery and UMA memory allocation support, and 28,527 consolidated portable Vulkan shaders bundled directly into the application distribution packages. Tested Windows rendering visuals and Linux runtime execution passed user acceptance; broad scene coverage, deterministic production renderer fault injection, and DLSS/FSR frame generation remain experimental and open. See the [changelog](CHANGELOG.md#v0615--2026-09-24) and [development status](docs/STATUS.md) for validation boundaries.
-
-## v0.6.11 release
-
-Published release [v0.6.11](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.11) on 2026-09-22T06:44:37Z from source `3daba37` via Release CI [35687931776](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35687931776). It introduces experimental native NVIDIA DLSS Super Resolution (SR) and DLAA support, in-game Graphics menu upscaler options, list viewport scrolling, and Start/Enter focus-jump to Save. Windows and Linux release packages bundle verified official NVIDIA NGX libraries. Visual quality, motion response, and player acceptance remain unclaimed. See the [changelog](CHANGELOG.md#v0611--2026-09-22) and [development status](docs/STATUS.md) for validation limits.
-
-## v0.6.7 release
-
-Published release [v0.6.7](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.7) on 2026-09-20T20:09:28Z from source `f92c24d` via Release CI [35533399325](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35533399325) as the latest public release. It adds an in-game Graphics menu Widescreen switch and expanded 21:9 resolution presets (1720×720, 2560×1080, 3440×1440, 3840×1600, 5120×2160), with closest vertical height matching when toggling aspect ratio, automatic detection for existing configurations, and synchronization with first-launch setup across 5 languages. Issue #17 is resolved and closed.
-
-> [!WARNING]
-> **Ultrawide support remains EXPERIMENTAL across diverse hardware and aspect ratio combinations.**
-
-See the [changelog](CHANGELOG.md#v067--2026-09-20) and [development status](docs/STATUS.md) for validation limits.
-
-## v0.6.6 release
-
-Published release [v0.6.6](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.6) (reissued 2026-09-20 from source `c6cbd1f` via Release CI [35527543573](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35527543573)). It introduces initial native ultrawide (21:9) support (Issue #17), a shadow-map rendering repair across all aspect ratios and high internal resolutions, and Linux AppImage updater rollback-preserving cleanup.
-
-The shadow fix repairs effective-height render-target caching and depth-only rasterization modes 4 and 5; shadows were confirmed fixed in user testing of the affected scene. Reissue packages have been verified and uploaded; the initial `c953bb5` packages are superseded, and players who downloaded the earlier build should redownload to get the fix.
-
-See the [changelog](CHANGELOG.md#v066--2026-09-20) and [development status](docs/STATUS.md) for validation limits.
-
-## v0.6.3 release
-
-Published at [GitHub Release v0.6.3](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.3) on 2026-09-19T23:56:08Z. It restores bounded sampled comparison for large vertex-cache hits to reduce CPU comparison cost while keeping small vertex buffers and index-cache source validation exact. `LoVertexCacheTest` passed 3,668,957 focused checks; no release-binary performance or full-game result is claimed. It also includes the Issue #54 language-menu safety correction, Issue #53 file-I/O locking and bounded diagnostics, deterministic I/O lifetime regression coverage, and platform-native asynchronous F1 render-state archives. The Windows ZIP and Linux AppImage, plus their sidecars, passed package hash and public delivery checks. Linux native GPU, Steam Deck, AppImage runtime and broader gameplay remain pending. See the [changelog](CHANGELOG.md#v063--2026-09-19).
-
-## v0.6.2 release
-
-Published release: [v0.6.2](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.2). The Windows ZIP and Linux AppImage include the shader set; this release has no separate shader package. v0.6.2 packages experimental geometric motion-vector replay and the accepted main-path TAA policy. The normal TAA path uses 0.5 jitter scale, stationary motion snapping, stationary color clipping and multi-surface history with RGBA8 history at `31/33`; experimental FP16 history and moving bilinear fallback remain off. On Vulkan with an RTX 5080, the same Uhra 4K scene was accepted by the user at about 60 FPS. This is scene- and machine-limited evidence, not whole-game or cross-platform acceptance.
-
-The candidate comparison measured 60.34/59.00 FPS against 54.61 FPS for a separate Release build and 54.57 FPS for the previous RelWithDebInfo main binary in hidden muted A-B-A-B captures without pacing. The 1080p-internal to 4K moving-camera limitation, broader scene coverage, D3D12 replay PSO follow-up, Linux native GPU and Steam Deck validation remain open.
-
-## v0.6.1 release
-
-Published release: [v0.6.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.1). It checks for updates before importing game data on Windows and Linux. A newer release opens an app-branded prompt with release notes and **Install** or **Later** actions; accepting applies the update and relaunches before import. Download progress remains in the existing updater window.
-
-Release CI [35374267882](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35374267882) passed the Windows and Linux release jobs and focused regressions. Live update acceptance, physical controller input and network downloading remain unverified.
-
-## v0.6.0 release
-
-Published release: [v0.6.0](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.0). It provides Windows x64 and native Linux x64 packages. The Windows ZIP and Linux AppImage bundle the portable Vulkan shader pack so supported installations can start without a long first-run compilation step. The bundle covers the tested shader set; an uncovered shader can still compile on demand and may cause a brief hitch.
-
-- **Large performance and stability pass**: repaired shader and pipeline preparation, wait and thread lifetime, presentation, clock, updater, geometry cache, and Linux runtime paths. The earlier 15 W measurements used sampled cache matching and are not final v0.6.0 FPS evidence; Steam Deck hardware acceptance remains open.
-- **Native Linux release**: Vulkan ELF and AppImage packaging are included in the release scope. Linux validation currently covers WSL2 with Mesa Dozen; native Linux GPU, AppImage update transactions, Steam Deck, and full-game playthrough remain open.
-- **Hardened importer**: final writes, flushes and closes are checked before publication, XDVDFS scanning follows 2048-byte boundaries, and the destination browser can create and enter a folder with the button, `F2`, or controller `Y`.
-- **Real source validation**: the importer recognized all four USA/Europe disc images under `G:/ROMS/US`; an isolated Disc 1 import completed successfully. Four-disc installation, interactive UI acceptance, and gameplay remain unverified.
-
-The **v0.7.0** milestone focuses on performance optimizations, quality-of-life features, and native DLSS/DLAA and FSR upscaling (with user acceptance passed; unreleased). Planned roadmap targets for **v0.8.0** include DLSS Frame Generation (fixed 2× DLSS FG on Windows Vulkan), independent FSR Frame Generation, native independent 120 FPS candidate evaluation (`LO_EXPERIMENTAL_120=1`, evaluating native presentation pacing), Linux AArch64, macOS AArch64 (Apple Silicon), and experimental Android support. Planned for **v0.9.0** is the removal of the legacy PM4 packet translation layer. All v0.8.0 and v0.9.0 targets represent roadmap planning rather than current implementation or verified coverage; see the [roadmap](docs/ROADMAP.md) for details.
-
-The release packages and standalone shader pack are available from the [v0.6.0 release](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.0). Release CI passed the required audit and Windows/Linux packaging gates. The published artifacts were verified against their SHA-256 sidecars; native Linux GPU, Steam Deck, AppImage update transactions, and full-game playthrough remain outside the verified scope.
-
-Earlier release details are maintained in the [changelog](CHANGELOG.md).
+Past release notes and detailed changes are recorded in the [changelog](CHANGELOG.md).
 
 ## Start playing
 
@@ -119,7 +45,7 @@ Earlier release details are maintained in the [changelog](CHANGELOG.md).
 
 No Python or Visual Studio installation is needed for the release package. Later launches reuse the shader cache. Keep your save and profile folders when updating.
 
-The published updater checks GitHub's latest Release: a higher numeric version updates, and an equal numeric version with a different `-suffix` also triggers an update. The v0.5.7 release additionally permits recovery from an empty updater-only folder and stale or malformed local metadata. After a successful update, the helper asks whether to launch the game and defaults to **No**; silent runs complete without launching. Download integrity checks, safe extraction and rollback remain enabled.
+The published updater checks GitHub's latest Release: a higher numeric version updates, and an equal numeric version with a different `-suffix` also triggers an update. The updater additionally permits recovery from an empty updater-only folder and stale or malformed local metadata. After a successful update, the helper asks whether to launch the game and defaults to **No**; silent runs complete without launching. Download integrity checks, safe extraction and rollback remain enabled.
 
 | Requirement | Supported configuration |
 | :--- | :--- |
@@ -150,7 +76,7 @@ See the [installation guide](docs/INSTALLING.md) for accepted disc versions, fil
 | CPU use | Reduced unnecessary polling and reuse of rendering work |
 | Input and debug | Controller and keyboard input; English/Simplified Chinese in-game overlay debug menu (F1 or LB+RB) with capture, map information and same-map POI teleport |
 
-Published packages import game discs and supported DLC with **Files** or **Folder** in `LostOdysseyRecomp.exe`. The same built-in importer can be reopened when assets are missing. See the [installation guide](docs/INSTALLING.md#automatic-content-import) and [development status](docs/STATUS.md) for validation limits.
+Published packages import game discs and supported DLC with **Files** or **Folder** in `LostOdysseyRecomp.exe`. The current development build also adds **Gameplay → Import discs & DLC** to reopen the importer and replace selected discs and DLC; this menu entry is not yet released. See the [installation guide](docs/INSTALLING.md#automatic-content-import) and [development status](docs/STATUS.md) for validation limits.
 
 Validation progress and remaining work are tracked in the [Maintainer Project](https://github.com/users/freefrank/projects/3).
 

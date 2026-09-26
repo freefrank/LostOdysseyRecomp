@@ -19,93 +19,23 @@ Windows x64 · Direct3D 12 · Vulkan · PowerPC 静态重编译
 > [!IMPORTANT]
 > **本项目仍处于早期测试阶段。** 已测试开场区域和部分场景，尚未通关。渲染和稳定性仍有问题。请自行提供受支持版本的游戏文件。
 
-### 实验性原生 DLSS SR 与 DLAA
+### 超分辨率（DLSS 与 FSR）
 
-原生 NVIDIA DLSS 超分辨率与 DLAA 属于实验性功能。
-Windows 与 Linux 正式发布包中已内置官方 NGX 运行库；画质与稳定性仍在验证中。
+Windows 与 Linux 支持实验性的 NVIDIA DLSS（超分辨率与 DLAA）和 AMD FSR 3.1 超分辨率选项，技术细节与验证边界详见[开发状态](docs/STATUS.md)。当 DLSS 或 DLAA 不可用或被禁用时，已保存的 TAA 选择自动回退至 SMAA，其余抗锯齿选择保持不变。
 
-v0.6.20 已发布，包含 Hybrid 相机／深度运动回退、有界 DLSS 尺寸恢复及已记录的屏幕采样试验。在插帧延期至 v0.8.0 后，面向 v0.7.0 的现有 DLSS/DLAA 功能已通过全部用户验收。本次验收不改变既有测试覆盖。
-
-未发布源码改动：DLSS/DLAA 不可用或因失败被禁用时，已保存的 TAA 选择回退到 SMAA；Off、FXAA、SMAA 保持原选择，不改写设置。CPU 路由检查已通过，画面验证待完成。
-
-### 实验性可选 FSR 超分
-
-源码构建与发布打包工作流支持在 Windows 与原生 Linux 通过 `LO_ENABLE_FSR=ON` 和
-`LO_REQUIRE_FSR=ON` 启用固定 FidelityFX SDK v1.1.4（FSR 3.1.4 实现）的实验性路径。
-Quality、Balanced、Performance、Native AA 均有 Windows 运行证据；原生 Linux RADV 已有 Quality、Performance 和 Native AA 的运行证据。
-实测的 Windows 渲染画面与 Linux 运行验证（AMD Radeon 8060S RADV STRIX_HALO）均已获用户验收，v0.7.0 的 FSR P2 验收已全部通过。插帧与 macOS 支持已延期至 v0.8.0。本次验收不改变既有测试覆盖。低功耗硬件要求按用户授权通过 APEX 15W 代理设备验证，不代表 Steam Deck 硬件等价。
-
-### 自动 PlayStation 手柄按键提示（未发布）
+### 自动 PlayStation 手柄按键提示
 
 项目基于 SDL 自动识别最近活动的手柄并动态切换按键提示：
 - **按键提示切换**：覆盖 ABXY 动作键、肩键（LB/RB/LT/RT 对应 L1/R1/L2/R2）及暂停菜单 Start/Select（Options/Share 与 Options/Create），覆盖宿主界面（设置菜单、安装器、调试覆盖层）与客端游戏（暂停菜单及过场动画）。
 - **技术文档**：客端纹理替换、图集内容哈希匹配与 GPU 上传生命周期细节归档于 [Issue #40 界面资源映射](docs/notes/issue-40-ui-resource-map.zh-CN.md)及[开发状态](docs/STATUS.md)。
-- **状态与验收**：功能已通过用户在暂停菜单与过场动画的实机验收，已提交至 `main` 分支（提交 `5700ca5`），待发布。
+- **状态与验收**：功能已通过用户在暂停菜单与过场动画的实机验收，已纳入 v0.7.0 发布版。
 - **边界说明**：用户实机验收覆盖实测手柄与场景，不代表所有手柄硬件或全流程通关覆盖。Issue #40 同时提及的 Mod 支持本次未做，不视为该 Issue 整体完成。
 
-## v0.6.20 发布版
+## 路线图
 
-[v0.6.20](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.20) 已于 2026-09-25T21:15:07Z 发布，源码为 `be842b91d7367fd198074b1b8d3c1bc3ef4372a6`，[Windows/Linux Release CI](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/36188596414) 全部通过。包含已获用户实机验收的桥面光照修复与40个屏幕采样候选扩展，以及 Hybrid 运动回退和 F1 诊断。安装包与校验文件已公开；按用户要求未追加本地产物验证。
+**v0.7.0** 版本已发布，包含性能优化、易用性改进、PlayStation 手柄按键提示、v1 图像 Mod API 以及原生 DLSS/DLAA 和 FSR 超分辨率。已规划至 **v0.8.0** 的路线图目标包括 DLSS 插帧（Windows Vulkan 下固定 2× DLSS FG）、独立 FSR 插帧、原生独立 120 FPS 候选评估（`LO_EXPERIMENTAL_120=1`，评估原生呈现节奏）、移除既有 PM4 数据包转换层、Linux AArch64、macOS AArch64（Apple Silicon）以及实验性 Android 支持。上述内容均属于路线图规划目标，不代表当前已有实现或已验证覆盖；详情参见[路线图](docs/ROADMAP.zh-CN.md)。
 
-## v0.6.19 发布版
-
-已发布 [v0.6.19](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.19)（于 2026-09-25T04:18:21Z 从 source `1b2ea6635c5ac4f7cf3c9186fda3cd05575db97d` 通过 Release CI [36092250520](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/36092250520) 发布为当时的最新公开版本）。整合了游戏内实时各向异性过滤（Off / 2x / 4x / 8x / 16x，保存后生效无需重启）及基于不可变代际管理和生命周期同步的采样器表重构、图形设置菜单 DLSS/FSR 画质档位排序与整合抗锯齿交互、避免每次导航重复进行整屏背景软件滤波的静态菜单装饰缓存、经实机验收的原生系统菜单“退出到桌面”`SDL_QUIT` 路由、设置菜单“退出到主菜单”标题跳转、调试“随时存档”跨进程状态持久化、作弊菜单侧栏 LT/RT 手柄分类切换与底栏提示、鼠标闲置自动隐藏、游戏窗口输入法按键拦截修复，以及开发者工具与测试套件全景索引。独立 CPU 契约、Linux 软件 Vulkan 仿真以及限定的实体手柄与原生退出测试均已通过；全游戏实机 GPU 场景验证、其余语言逐项实机确认以及缺少 mip 链导致的远景闪烁修复仍待推进。详见[更新日志](CHANGELOG.md#v0619--2026-09-25)与[开发状态](docs/STATUS.md)。
-
-## v0.6.15 发布版
-
-已发布 [v0.6.15](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.15)（于 2026-09-24T19:47:35Z 从 source `6eef30d257f2e14ce30a546217574a0dc74fad69` 通过 Release CI [36044604844](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/36044604844) 发布为最新公开版本）。在既有官方 NVIDIA NGX DLSS 310.9.1 基础上，整合了官方 FidelityFX SDK v1.1.4（FSR 3.1.4 实现）的发布构建支持。包含原生 DLSS SR/DLAA 时序生命周期修复（BR-01、BR-02）、带状态校验反馈的图形菜单稳定性重构（BR-03、`GraphicsRow`）、F1 呈现前最终交换链截图与同步 NGX Evaluate 输入/输出捕获、FSR 暂态输入拒绝恢复与 UMA 显存分配支持、安装包内直接内置 28,527 项便携式 Vulkan 着色器整合（用户无需额外下载独立着色器包），以及包含许可证检查的发布与 CI 工作流。测试的 Windows 渲染画面与 Linux 运行验证均已获用户验收；广泛场景覆盖、确定性生产渲染器故障注入序列以及 DLSS/FSR 帧生成仍属于实验性未决阶段。详见[更新日志](CHANGELOG.md#v0615--2026-09-24)与[开发状态](docs/STATUS.md)。
-
-## v0.6.11 发布版
-
-已发布 [v0.6.11](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.11)（于 2026-09-22T06:44:37Z 从 source `3daba37` 通过 Release CI [35687931776](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35687931776) 发布）。引入实验性原生 NVIDIA DLSS 超分辨率（SR）与 DLAA 支持、游戏内图形设置缩放技术选项、长列表视口滚动以及 Start/Enter 聚焦“保存”且不立即保存的功能。Windows 与 Linux 发布包已内置官方 NVIDIA NGX 运行库。画质、运动响应及玩家验收均未宣称完成。详见[更新日志](CHANGELOG.md#v0611--2026-09-22)与[开发状态](docs/STATUS.md)。
-
-## v0.6.7 发布版
-
-已发布 [v0.6.7](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.7)（于 2026-09-20T20:09:28Z 从 source `f92c24d` 通过 Release CI [35533399325](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35533399325) 发布为最新公开版本）。在游戏内图形设置中增加“宽屏”开关并扩充 21:9 分辨率预设（1720×720、2560×1080、3440×1440、3840×1600、5120×2160），比例切换时按垂直高度最近匹配，自动推导识别旧配置，并在 5 种语言中同步更新首次启动设置向导。Issue #17 已解决并关闭。
-
-> [!WARNING]
-> **超宽屏支持在多样化硬件与多分辨率组合下仍处于实验性阶段（EXPERIMENTAL）。**
-
-验证边界详见[更新日志](CHANGELOG.md#v067--2026-09-20)与[开发状态](docs/STATUS.md)。
-
-## v0.6.6 发布版
-
-已发布 [v0.6.6](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.6)（于 2026-09-20 从 source `c6cbd1f` 通过 Release CI [35527543573](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35527543573) 完成同版本重新发布）。包含原生超宽屏 (21:9) 初始支持（Issue #17）、针对所有比例与高内部分辨率的阴影贴图渲染修复，以及 Linux AppImage 更新器保留回滚的清理逻辑。
-
-阴影修复修正了 effective-height 渲染目标缓存以及模式 4 与 5 的仅深度光栅化；受影响场景经用户实机测试确认阴影已恢复正常。重新发布的资产已核验并上传；初版 `c953bb5` 资产已被替代，已下载旧版本的用户需重新下载以获取修复。
-
-验证边界详见[更新日志](CHANGELOG.md#v066--2026-09-20)与[开发状态](docs/STATUS.md)。
-
-## v0.6.3 发布版
-
-已于 2026-09-19T23:56:08Z 发布到 [GitHub Release v0.6.3](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.3)。大顶点缓存命中恢复为有界采样比较，以降低 CPU 比较成本；小顶点缓冲和 index cache 源数据校验继续保持精确。`LoVertexCacheTest` 通过 3,668,957 项定向检查；尚未宣称发布二进制性能或全游戏结果。本版本还包含 Issue #54 语言菜单安全修正、Issue #53 文件 I/O 锁范围修正和有界诊断、确定性的 I/O 生命周期回归覆盖，以及使用平台归档格式的异步 F1 渲染状态导出。Windows ZIP、Linux AppImage 及其 sidecar 已通过包 hash 和公开交付核验。Linux 原生 GPU、Steam Deck、AppImage 运行时及更广游戏流程仍待完成。详见[更新日志](CHANGELOG.md#v063--2026-09-19)。
-
-## v0.6.2 发布版
-
-已发布版本：[v0.6.2](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.2)。Windows ZIP 和 Linux AppImage 均内置 shader 集合；本版本没有单独 shader 发布包。v0.6.2 包含实验性几何运动矢量 replay，以及已接受的主路径 TAA 策略。正常 TAA 路径使用 0.5 抖动幅度、静止运动 snap、静止颜色裁剪和多表面 history，RGBA8 history 权重为 `31/33`；实验性 FP16 history 和 moving bilinear fallback 仍关闭。在 RTX 5080 的 Vulkan、Uhra 4K 同一场景中，用户以约 60 FPS 接受了画面质量。这是限定场景和本机的证据，不代表全游戏或跨平台验收。
-
-隐藏静音、无 pacing 的 A-B-A-B 对照中，候选为 60.34/59.00 FPS，独立 Release 构建为 54.61 FPS，之前的 RelWithDebInfo 主程序为 54.57 FPS。1080p internal 到 4K output 的移动相机限制、更广场景覆盖、D3D12 replay PSO 后续工作、Linux 原生 GPU 和 Steam Deck 验证仍开放。
-
-## v0.6.1 发布版
-
-已发布版本：[v0.6.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.1)。Windows 和 Linux 现在会在导入游戏资料前检查更新。发现新版本时，带有应用品牌的提示会显示发布说明以及“安装”或“稍后”操作；接受后在导入前应用更新并重新启动。下载进度仍使用现有的更新器窗口。
-
-[Release CI 35374267882](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35374267882) 的 Windows/Linux 发布任务及定向回归均通过。在线更新接受、实体手柄输入和网络下载仍未验证。
-
-## v0.6.0 发布版
-
-已发布版本：[v0.6.0](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.0)。提供 Windows x64 与原生 Linux x64 发布包。Windows ZIP 与 Linux AppImage 内置便携式 Vulkan 着色器包，让受支持的安装首次进入游戏时不再经历冗长的编译过程。着色器包覆盖当前测试过的集合，遗漏的着色器仍会按需编译，可能造成短暂卡顿。
-
-- **大幅性能与稳定性改进**：修复 shader 与管线准备、等待与线程生命周期、呈现、时钟、更新器、几何缓存和 Linux 运行路径。此前 15W 测试使用了抽样缓存匹配，不能作为 0.6.0 最终 FPS 证据；Steam Deck 实机验收仍待完成。
-- **原生 Linux 发布**：发布范围包含 Vulkan ELF 与 AppImage。当前 Linux 验证覆盖 WSL2 Mesa Dozen；原生 Linux GPU、AppImage 更新事务、Steam Deck 和全流程游戏仍未验证。
-- **加固导入器**：资源只有在最终 `write`、`flush`、`close` 均成功后才会发布；XDVDFS 扫描按 2048 字节边界进行；目标目录页支持通过按钮、`F2` 或手柄 `Y` 创建并进入文件夹。
-- **真实资料验证**：导入器识别了 `G:/ROMS/US` 下全部四张 USA/Europe 光盘镜像，并成功完成隔离的 Disc 1 导入。四盘完整安装、交互 UI 验收和游戏运行仍未验证。
-
-**v0.7.0** 里程碑聚焦性能优化、QOL 改进以及原生 DLSS/DLAA 和 FSR 超分辨率（用户验收已通过；未发布）。已规划至 **v0.8.0** 的路线图目标包括 DLSS 插帧（Windows Vulkan 下固定 2× DLSS FG）、独立 FSR 插帧、原生独立 120 FPS 候选评估（`LO_EXPERIMENTAL_120=1`，评估原生呈现节奏）、Linux AArch64、macOS AArch64（Apple Silicon）以及实验性 Android 支持。**v0.9.0** 里程碑规划移除既有 PM4 数据包转换层。上述内容均属于路线图规划目标，不代表当前已有实现或已验证覆盖；详情参见[路线图](docs/ROADMAP.zh-CN.md)。
-
-发布包和独立 shader pack 可从 [v0.6.0 发布页](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.0)下载。Release CI 已通过必要的审计和 Windows/Linux 打包门槛，公开资产已与 SHA-256 校验文件核对。原生 Linux GPU、Steam Deck、AppImage 更新事务和全流程游戏仍不在已验证范围内。
-
-更早版本的改动见[更新日志](CHANGELOG.md)。
+历史版本发布说明与详细变更记录见[更新日志](CHANGELOG.md)。
 
 ## 开始游戏
 
@@ -115,7 +45,7 @@ Quality、Balanced、Performance、Native AA 均有 Windows 运行证据；原�
 
 发布包不需要安装 Python 或 Visual Studio。后续启动会复用着色器缓存；更新程序时请保留存档和档案文件夹。
 
-已发布的更新器会检查 GitHub 最新 Release：数字版本更高时更新，数字版本相同但 `-后缀` 不同时也会触发更新。v0.5.7 发布版另外允许从只有 updater 的空目录以及过期或损坏的本地 metadata 恢复。更新成功后，helper 会询问是否启动游戏，默认选择**否**；silent 运行会完成更新但不启动游戏。下载完整性校验、安全解压和回滚仍然保留。
+已发布的更新器会检查 GitHub 最新 Release：数字版本更高时更新，数字版本相同但 `-后缀` 不同时也会触发更新。更新器另外支持从只有 updater 的空目录以及过期或损坏的本地 metadata 恢复。更新成功后，helper 会询问是否启动游戏，默认选择**否**；silent 运行会完成更新但不启动游戏。下载完整性校验、安全解压和回滚仍然保留。
 
 | 要求 | 支持范围 |
 | :--- | :--- |
@@ -146,7 +76,7 @@ Quality、Balanced、Performance、Native AA 均有 Windows 运行证据；原�
 | CPU 使用率 | 减少不必要的轮询，复用渲染计算 |
 | 输入与调试 | 手柄和键盘输入；英文／简体中文游戏内浮层调试菜单（F1 或手柄 LB+RB）提供捕获、地图信息与同地图 POI 传送 |
 
-发布包通过 `LostOdysseyRecomp.exe` 的 **Files** 或 **Folder** 导入游戏光盘和受支持的 DLC。资源缺失时可再次打开同一内置导入器。验证边界见[安装说明](docs/INSTALLING.md#automatic-content-import)和[开发状态](docs/STATUS.md)。
+发布包通过 `LostOdysseyRecomp.exe` 的 **Files** 或 **Folder** 导入游戏光盘和受支持的 DLC。当前开发版本新增 **Gameplay → 导入光盘与 DLC** 入口，可重新打开导入器并替换所选光盘与 DLC；此菜单入口尚未发布。验证边界见[安装说明](docs/INSTALLING.md#automatic-content-import)和[开发状态](docs/STATUS.md)。
 
 验证进展和剩余工作见[公开维护者 Project](https://github.com/users/freefrank/projects/3)。
 

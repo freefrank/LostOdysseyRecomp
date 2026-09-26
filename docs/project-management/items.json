@@ -6019,17 +6019,17 @@
     {
       "key": "remove-pm4-translator",
       "title": "Remove the PM4 translator",
-      "body": "<!-- lo-project:remove-pm4-translator -->\n\nRemove the legacy PM4 packet translation layer in milestone v0.9.0 (currently in planning status).\n\n## Scope and completion criteria\n\n- [ ] Audit PM4 packet decoders and translation paths in the command processor (`gpu/command_processor.cpp`).\n- [ ] Identify dependencies on PM4 synchronization, register state tracking, and draw dispatch.\n- [ ] Execute the migration plan to eliminate the legacy PM4 translation layer without predetermining an alternative architecture or implementation.\n\n## Boundaries\n\nMilestone delivery target is removing the PM4 translator, currently in planning status. Does not predetermine or restrict alternative presentation architectures, direct execution, or runtime implementations.\n",
+      "body": "<!-- lo-project:remove-pm4-translator -->\n\nRemove the legacy PM4 packet translation layer in milestone v0.8.0 (currently in planning status).\n\n## Scope and completion criteria\n\n- [ ] Audit PM4 packet decoders and translation paths in the command processor (`gpu/command_processor.cpp`).\n- [ ] Identify dependencies on PM4 synchronization, register state tracking, and draw dispatch.\n- [ ] Execute the migration plan to eliminate the legacy PM4 translation layer without predetermining an alternative architecture or implementation.\n\n## Boundaries\n\nMilestone delivery target is removing the PM4 translator, currently in planning status. Does not predetermine or restrict alternative presentation architectures, direct execution, or runtime implementations.\n",
       "issue_url": null,
       "fields": {
         "Kind": "Infrastructure",
         "Area": "GPU architecture",
         "Status": "Todo",
         "Delivery": "Not started",
-        "Release": "v0.9.0",
+        "Release": "v0.8.0",
         "Start date": null,
         "Target date": null,
-        "Evidence": "Planned v0.9.0 delivery target to remove the legacy PM4 packet translation layer; currently in planning status. Does not predetermine alternative presentation architectures, direct execution, or runtime implementations."
+        "Evidence": "Planned v0.8.0 delivery target to remove the legacy PM4 packet translation layer; currently in planning status. Does not predetermine alternative presentation architectures, direct execution, or runtime implementations."
       },
       "source_refs": [
         "gpu/command_processor.cpp"

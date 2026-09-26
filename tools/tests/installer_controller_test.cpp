@@ -1,4 +1,5 @@
 #include <cassert>
+#include <stdexcept>
 
 #include "install/installer_ui.h"
 #include "install/installer_navigation.h"
@@ -51,6 +52,12 @@ int main()
     session.BeginScan();
     session.FinishScan(mixed);
     if (!session.CanImport()) return 16;
+    if (session.SelectedContent().discs.size() != 4 || session.SelectedContent().packages.size() != 2) return 24;
+    if (!session.ToggleSelection(0) || !session.ToggleSelection(5)) return 25;
+    if (session.SelectedContent().discs.size() != 3 || session.SelectedContent().packages.size() != 1) return 26;
+    if (session.ToggleSelection(6)) return 27;
+    for (size_t i = 1; i < 5; ++i) session.ToggleSelection(i);
+    if (session.CanImport() || session.BeginImport()) return 28;
     session.BeginScan();
     if (session.BeginImport() || !session.scanResult.discs.empty()) return 17;
     session.FailScan("No supported sources in B");
@@ -73,6 +80,87 @@ int main()
     dlcScan.packages.resize(1);
     session.FinishScan(std::move(dlcScan));
     if (!session.BeginImport() || session.installSuccess) return 23;
+
+    // The UI commit writes the effective root supplied by ReimportContent,
+    // never the potentially nested path chosen in the destination browser.
+    install::InstallResult committed;
+    committed.discs = {2};
+    committed.destination = (std::filesystem::path("selected") / "root").string();
+    std::filesystem::path written;
+    install::CommitImportedGamePath(committed, [&](const std::filesystem::path& root, std::string&) {
+        written = root; return true;
+    });
+    if (written != std::filesystem::path(committed.destination)) return 29;
+    committed.discs.clear(); // DLC-only must not rewrite the configured game path.
+    written.clear();
+    install::CommitImportedGamePath(committed, [&](const std::filesystem::path&, std::string&) {
+        written = "unexpected"; return true;
+    });
+    if (!written.empty()) return 30;
+    committed.discs = {1};
+    try {
+        install::CommitImportedGamePath(committed, [](const std::filesystem::path&, std::string& error) {
+            error = "denied"; return false;
+        });
+        return 31;
+    } catch (const install::Error& error) {
+        if (std::string_view(error.what()).find("game-path.txt: denied") == std::string_view::npos) return 32;
+    }
+
+    // SDL_QUIT requests cancellation while the worker is still copying. The
+    // final joined worker event decides whether it cancelled or committed.
+    using Outcome = install::InstallerSessionState::ImportOutcome;
+    session.userCancelled = true;
+    if (session.FinishImport(committed, false, false) != Outcome::Complete ||
+        session.userCancelled || !session.installSuccess) return 33;
+    session.userCancelled = true;
+    install::InstallResult cancelled; cancelled.cancelled = true;
+    if (session.FinishImport(cancelled, true, true) != Outcome::Cancelled ||
+        !session.userCancelled || session.installSuccess) return 34;
+    install::InstallResult failed; failed.error = "commit failed and selected slots rolled back";
+    if (session.FinishImport(failed, false, true) != Outcome::Failed ||
+        session.userCancelled || session.installSuccess) return 35;
+
+    // Close during a copy: request cancellation, join the worker, then consume
+    // its final event. There must be no game-path write on cancellation.
+    std::atomic<bool> closeRequested{false};
+    install::InstallResult lastEvent;
+    std::thread copying([&] {
+        while (!closeRequested.load()) std::this_thread::yield();
+        lastEvent.cancelled = true;
+    });
+    session.userCancelled = true;
+    bool consumed = false;
+    install::JoinWorkerAndConsume(copying, closeRequested, [&] {
+        consumed = true;
+        session.FinishImport(lastEvent, lastEvent.cancelled, true);
+    });
+    if (!consumed || !session.userCancelled || session.installSuccess || !written.empty()) return 37;
+
+    // Close after the commit but before the completion event was read:
+    // the committed result wins over the close request.
+    closeRequested = false;
+    std::atomic<bool> published{false};
+    std::thread afterCommit([&] {
+        install::CommitImportedGamePath(committed, [&](const std::filesystem::path& root, std::string&) {
+            written = root; return true;
+        });
+        published = true;
+        while (!closeRequested.load()) std::this_thread::yield();
+        lastEvent = committed;
+    });
+    while (!published.load()) std::this_thread::yield();
+    session.userCancelled = true;
+    consumed = false;
+    install::JoinWorkerAndConsume(afterCommit, closeRequested, [&] {
+        consumed = true;
+        session.FinishImport(lastEvent, false, false);
+    });
+    if (!consumed || session.userCancelled || !session.installSuccess ||
+        written != std::filesystem::path(committed.destination)) return 38;
+
+    for (uint32_t language = 0; language < 5; ++language)
+        if (install::ReviewReplaceHint(language).empty()) return 36;
 
     return 0;
 }

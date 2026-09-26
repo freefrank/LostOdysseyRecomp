@@ -82,6 +82,9 @@ struct InstallResult
 
 using Progress = std::function<void(uint64_t done, uint64_t total, std::string_view label)>;
 using Cancelled = std::function<bool()>;
+// Called after all selected slots are published but before old slots are deleted.
+// Throw on path-persistence failure to restore every selected old slot.
+using Commit = std::function<void(const InstallResult&)>;
 
 std::vector<std::filesystem::path> Discover(const std::filesystem::path& path);
 Scan ScanSource(const std::filesystem::path& path, const Cancelled& cancelled = {});
@@ -107,9 +110,21 @@ inline std::vector<int> InstallDiscs(const std::filesystem::path& source,
 
 // Integrated install for scanned discs and DLC packages
 InstallResult InstallContent(const ContentScan& selection,
-                             const std::filesystem::path& destination,
-                             const Progress& progress = {},
-                             const Cancelled& cancelled = {});
+                              const std::filesystem::path& destination,
+                              const Progress& progress = {},
+                              const Cancelled& cancelled = {});
+
+// Replace only selected discN and dlc/<contentId> slots. `destination` must be
+// the exact installation root, even if its own name is discN. A root with
+// a flat default.xex requires a separate destination when replacing discs.
+// Persist result.destination in commit; failure rolls back before returning.
+// commit is skipped (with a warning) when a DLC-only destination has no bootable
+// default.xex or disc1/default.xex; do not make such a new root the game default.
+InstallResult ReimportContent(const ContentScan& selection,
+                              const std::filesystem::path& destination,
+                              const Progress& progress = {},
+                              const Cancelled& cancelled = {},
+                              const Commit& commit = {});
 
 std::filesystem::path DefaultGameDirectory(const std::filesystem::path& executableDirectory);
 bool WriteGamePath(const std::filesystem::path& executableDirectory,
@@ -122,5 +137,6 @@ void SetTestMd5(uint32_t disc, std::string_view hex, bool europe);
 void ClearTestOverrides();
 void SetTestDlcWriteFailure(std::string_view filename, std::string_view stage);
 void SetTestDiscWriteFailure(std::string_view filename, std::string_view stage);
+void SetTestPublishFailure(std::string_view slot, std::string_view stage);
 #endif
 }

@@ -48,6 +48,9 @@ int restartChoice = 0;
 bool mainMenuPrompt = false;
 int mainMenuChoice = 1;
 bool mainMenuRequested = false;
+bool importPrompt = false;
+int importChoice = 1;
+bool importLaunchPending = false;
 Config restartAfter;
 int tab = 0, row = 0;
 bool bypass = false, sawModal = false;
@@ -382,6 +385,7 @@ void Publish(uint8_t *base, uint32_t config)
         next.rows.back().controllerButtons = true;
         addAction(L"Restore game defaults", L"恢復遊戲預設設定", Tr(L"Restore", L"恢復"));
         addAction(L"Quit to Main Menu", L"退出到主選單", Tr(L"Return", L"返回"));
+        addAction(L"Import discs & DLC", L"匯入光碟與 DLC", Tr(L"Open", L"開啟"));
     }
     else if (tab == 1)
     {
@@ -512,6 +516,9 @@ void Publish(uint8_t *base, uint32_t config)
     if (tab == 3 && row == 1)
         next.help = Tr(L"Game language takes effect after restarting. Requires matching language assets.",
                        L"遊戲語言重新啟動後生效，需要對應語言資源。中文遊戲文本需要亞洲版資源。");
+    if (tab == 0 && row == GameImportRow)
+        next.help = Tr(L"Close the game to import selected discs or DLC again. Other content and saves stay intact.",
+                       L"關閉遊戲並重新匯入所選光碟或 DLC；其他內容與存檔保留。");
     if (tab == 2)
     {
         switch (GraphicsRow(row))
@@ -612,6 +619,14 @@ void Publish(uint8_t *base, uint32_t config)
                                 L"返回主選單嗎？尚未儲存的進度將會遺失。");
         next.dialogChoices = {Tr(L"Return", L"返回"), Tr(L"Cancel", L"取消")};
         next.dialogSelection = mainMenuChoice;
+    }
+    if (importPrompt)
+    {
+        next.dialogTitle = Tr(L"Import discs & DLC", L"匯入光碟與 DLC");
+        next.dialogMessage = Tr(L"Close the game and open the importer? Unsaved progress will be lost.",
+                                L"關閉遊戲並開啟匯入器嗎？尚未儲存的進度將會遺失。");
+        next.dialogChoices = {Tr(L"Open importer", L"開啟匯入器"), Tr(L"Cancel", L"取消")};
+        next.dialogSelection = importChoice;
     }
     next.notice = tab == 2 ? DlssNotice() : std::wstring{};
     std::lock_guard lock(snapshotMutex);
@@ -836,6 +851,8 @@ PPC_FUNC(sub_822F19B0)
         savedRestartPrompt = false;
         restartSaveFailed = false;
         mainMenuPrompt = false;
+        importPrompt = false;
+        importLaunchPending = false;
         status.clear();
         Publish(base, config);
         LOG_INFO("settings: replacement opened at guest menu {:#x}", menu);
@@ -882,9 +899,20 @@ PPC_FUNC(sub_822F19B0)
     };
     if (restart::ConsumeLaunchFailure())
     {
-        status = Tr(L"Restart could not be started. This game is still running; your saved settings are safe.",
-                    L"無法啟動重新啟動程序。本遊戲仍在執行，已儲存的設定安全保留。");
+        status = importLaunchPending
+            ? Tr(L"Could not open importer. The game is still running; try again.",
+                 L"無法開啟匯入器。遊戲仍在執行，請重試。")
+            : Tr(L"Restart could not be started. This game is still running; your saved settings are safe.",
+                 L"無法啟動重新啟動程序。本遊戲仍在執行，已儲存的設定安全保留。");
+        importLaunchPending = false;
         Publish(base, config);
+    }
+    // A parked child will open the importer only after this process exits.
+    // Further presses must not queue another child or alter the pending action.
+    if (restart::InstallRequested())
+    {
+        Publish(base, config);
+        return;
     }
     if (collectionPrompt) {
         if (int selected = mouseDialog.exchange(-1); selected >= 0) collectionChoice = std::min(selected, 1);
@@ -974,6 +1002,25 @@ PPC_FUNC(sub_822F19B0)
         Publish(base, config);
         return;
     }
+    if (importPrompt)
+    {
+        if (int selected = mouseDialog.exchange(-1); selected >= 0)
+            importChoice = std::min(selected, 1);
+        if (input & 3) importChoice = 1 - importChoice;
+        if (input & 0x2000) importChoice = 1;
+        if (input & 0x3000)
+        {
+            importPrompt = false;
+            if (importChoice == 0)
+            {
+                restart::RequestInstall();
+                importLaunchPending = true;
+                status = Tr(L"Closing game and opening importer…", L"正在關閉遊戲並開啟匯入器……");
+            }
+        }
+        Publish(base, config);
+        return;
+    }
     auto graphicsSaved = [&] {
         status = Tr(L"Display settings saved.", L"顯示設定已儲存。");
         if (restart::Required(previousDisplay, edit))
@@ -1021,7 +1068,7 @@ PPC_FUNC(sub_822F19B0)
         row = 0;
         status.clear();
     }
-    const int count = tab == 0 ? GameMainMenuRow + 1 : tab == 1 ? 3 : tab == 2 ? int(GraphicsRow::Count) : 5;
+    const int count = tab == 0 ? GameImportRow + 1 : tab == 1 ? 3 : tab == 2 ? int(GraphicsRow::Count) : 5;
     // Provider-specific rows keep their logical ids and navigation skips them
     // when unavailable. Keyboard Enter reaches the menu as GAMEPAD_START
     // (hid.cpp), so one branch covers gamepad Start and Enter.
@@ -1195,6 +1242,12 @@ PPC_FUNC(sub_822F19B0)
     {
         mainMenuPrompt = true;
         mainMenuChoice = 1; // Require an explicit selection of Return; Back always cancels.
+        status.clear();
+    }
+    if ((input & 0x1000) && tab == 0 && row == GameImportRow)
+    {
+        importPrompt = true;
+        importChoice = 1;
         status.clear();
     }
     if ((input & 0x1000) && tab == 2 && row == int(GraphicsRow::Save))

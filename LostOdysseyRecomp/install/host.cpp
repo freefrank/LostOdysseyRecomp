@@ -20,8 +20,12 @@ HostResult RunHost(const std::filesystem::path& executableDirectory, std::filesy
         }
     }
 
-    // Launch the game-like self-drawn SDL2 installer UI
-    auto res = ShowInstallerUI(executableDirectory, {}, *gameRoot);
+    // Recognize returns the boot disc path for a multi-disc install. The UI
+    // expects the common parent, otherwise adding disc 2 would nest it in disc1.
+    auto destination = *gameRoot;
+    if (destination.filename() == "disc1" && settings::game_path::HasDefaultXex(destination))
+        destination = destination.parent_path();
+    auto res = ShowInstallerUI(executableDirectory, {}, destination);
     if (res.cancelled)
         return HostResult::Cancelled;
     if (!res.success)

@@ -76,6 +76,14 @@ int main()
     after = before;
     after.gameLanguage = 2;
     Require(settings::restart::Required(before, after), "game language change did not require restart");
+    settings::restart::RequestInstall();
+    Require(settings::restart::Requested() && settings::restart::InstallRequested() &&
+            settings::restart::LaunchArguments(true).find(L"--install") != std::wstring::npos,
+            "import request chooses the existing install CLI entry after handshake");
+    settings::restart::Cancel();
+    Require(!settings::restart::Requested() && !settings::restart::InstallRequested() &&
+            settings::restart::LaunchArguments(false).find(L"--install") == std::wstring::npos,
+            "ordinary restart does not open importer");
 
     wchar_t executable[32768]{};
     Require(GetModuleFileNameW(nullptr, executable, DWORD(std::size(executable))) != 0,

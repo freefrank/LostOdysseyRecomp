@@ -81,6 +81,7 @@ DlssEffectSnapshot menuFlowDlssEffect{};
 DlssEffectSnapshot CurrentDlssEffect() { return menuFlowDlssEffect; }
 std::optional<UpscalerExecutionObservation> CurrentUpscalerExecution() { return menuFlowDlssEffect.execution; }
 }
+namespace hid { bool UsesPlayStationPrompts() { return false; } }
 
 namespace {
 constexpr uint32_t Menu = 0x10000, ConfigData = 0x21000;
@@ -1013,9 +1014,11 @@ int main(int argc, char** argv)
 
             settings::row = int(GraphicsRow::AntiAliasing);
             settings::pending = 2; Tick(base); // D-pad down
-            Require(settings::row == int(GraphicsRow::ScalingQuality), "down from Upscaler skips hidden DLSS quality");
+            Require(settings::row == int(GraphicsRow::AnisotropicFiltering),
+                    "down from Upscaler skips hidden quality and sharpness rows");
             settings::pending = 1; Tick(base); // D-pad up
-            Require(settings::row == int(GraphicsRow::AntiAliasing), "up from Scaling quality skips hidden DLSS quality");
+            Require(settings::row == int(GraphicsRow::AntiAliasing),
+                    "up from anisotropic filtering skips hidden quality and sharpness rows");
 
             // Start (0x10) jumps focus to Save graphics settings without saving
             settings::pending = 0x10; Tick(base);
@@ -1113,7 +1116,7 @@ int main(int argc, char** argv)
             settings::edit.uiLanguage = 0;
             settings::status.clear();
             settings::pending = 0; Tick(base);
-            Require(settings::snapshot.rows.size() == 9 &&
+            Require(settings::snapshot.rows.size() == 10 &&
                     settings::snapshot.rows[settings::GameRestoreRow].name == L"Restore game defaults" &&
                     settings::snapshot.rows[settings::GameMainMenuRow].name == L"Quit to Main Menu" &&
                     settings::snapshot.rows[settings::GameMainMenuRow].value == L"Return",
@@ -1176,6 +1179,81 @@ int main(int argc, char** argv)
             Require(mainMenuRequests == 1 && quitEventAttempts == 0,
                     "repeated native ticks do not request title or SDL_QUIT again");
             std::puts("PASS System Settings Quit to Main Menu: cancellation, Chinese labels, native close then one title request, no SDL_QUIT");
+        }
+        // The importer is launched only after the safe restart child waits for
+        // this process to stop reading installed content. The fixture exercises
+        // actual menu input/dispatch without launching any process or importer.
+        {
+            PPC_STORE_U32(Menu + 4, 4);
+            settings::restart::Cancel(); // Prior graphics-restart fixture did not run a video-thread exit.
+            Tick(base);
+            const unsigned importSaves = saves, importApplies = applies, importCloses = closes;
+            settings::tab = 0;
+            settings::row = settings::GameMainMenuRow;
+            settings::edit.uiLanguage = 0;
+            settings::pending = 2; Tick(base);
+            Require(settings::row == settings::GameImportRow && settings::snapshot.scroll == 0 &&
+                    settings::snapshot.rows.size() == 10 &&
+                    settings::snapshot.rows[settings::GameImportRow].name == L"Import discs & DLC" &&
+                    settings::snapshot.rows[settings::GameImportRow].value == L"Open" &&
+                    settings::graphics_menu::IsAction(0, settings::GameImportRow),
+                    "gamepad reaches visible importer action after Main Menu");
+            settings::pending = 8; Tick(base);
+            Require(!settings::importPrompt && !settings::restart::Requested(), "right arrow cannot launch importer");
+            settings::PointerClick(500, 150 + settings::GameImportRow * 43 + 20, false);
+            Tick(base);
+            Require(settings::importPrompt && settings::snapshot.dialogSelection == 1 &&
+                    settings::snapshot.dialogChoices == std::vector<std::wstring>{L"Open importer", L"Cancel"} &&
+                    !settings::restart::Requested(), "mouse opens cancel-first dialog without starting importer");
+            settings::pending = 0x1000; Tick(base);
+            Require(!settings::importPrompt && !settings::restart::Requested(), "confirm on default Cancel dismisses");
+            settings::pending = 0x1000; Tick(base);
+            settings::pending = 1; Tick(base);
+            settings::pending = 0x2000; Tick(base);
+            Require(!settings::importPrompt && !settings::restart::Requested(), "Back cancels selected import action");
+            for (const auto& [language, name] : {
+                     std::pair{1u, L"匯入光碟與 DLC"}, std::pair{2u, L"ディスクとDLCをインポート"},
+                     std::pair{3u, L"디스크 및 DLC 가져오기"}, std::pair{4u, L"导入光盘与 DLC"}})
+            {
+                settings::edit.uiLanguage = language;
+                settings::pending = 0; Tick(base);
+                Require(settings::snapshot.rows[settings::GameImportRow].name == name, "translated importer action");
+            }
+            settings::edit.uiLanguage = 0;
+            settings::pending = 0; Tick(base);
+            auto preview = settings::snapshot;
+            preview.assets.reset();
+            std::vector<uint32_t> pixels;
+            Require(settings::RasterizeMenu(preview, 1280, 720, pixels), "importer menu preview");
+            const auto evidence = std::filesystem::current_path() / "out" / "import-menu-preview";
+            std::filesystem::create_directories(evidence);
+            WriteBmp(evidence / "import-action.bmp", pixels);
+            settings::pending = 0x1000; Tick(base);
+            Require(settings::importPrompt && settings::snapshot.dialogSelection == 1, "gamepad opens importer dialog");
+            preview = settings::snapshot;
+            preview.assets.reset();
+            Require(settings::RasterizeMenu(preview, 1280, 720, pixels), "importer dialog preview");
+            WriteBmp(evidence / "import-confirmation.bmp", pixels);
+            settings::pending = 1; Tick(base);
+            settings::pending = 0x1000; Tick(base);
+#ifdef _WIN32
+            Require(settings::restart::InstallRequested() && !settings::importPrompt &&
+                    settings::snapshot.help == L"Closing game and opening importer…" &&
+                    saves == importSaves && applies == importApplies && closes == importCloses,
+                    "confirmation requests one install restart without saving or closing settings as a guest action");
+            settings::pending = 0x1000; Tick(base);
+            Require(settings::restart::InstallRequested() && !settings::importPrompt,
+                    "repeated confirmation cannot spawn a second child");
+            // Process exit is exercised by restart_test's isolated child; reset
+            // only this fixture's request before testing duplicate presses.
+            settings::restart::Cancel();
+#else
+            Require(!settings::restart::Requested(), "unsupported restart never overlaps live guest");
+#endif
+            settings::pending = 0; Tick(base);
+            Require(!settings::restart::Requested() && !settings::importPrompt,
+                    "idle ticks do not create a second import request");
+            std::puts("PASS import action: gamepad/mouse focus, cancel-first dialog, translations, guarded restart request, previews");
         }
         if (argc == 3)
         {

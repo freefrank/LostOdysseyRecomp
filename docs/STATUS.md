@@ -3,24 +3,35 @@
 ## Unreleased development & milestone status — 2026-09-26 / 未发布开发与里程碑状态
 
 Status as of 2026-09-26:
+- **In-game disc and DLC re-import (v0.7.1 source; release pending)**:
+  - Gameplay settings integration: Settings menu (Gameplay) adds "Import discs & DLC", prompting for confirmation and restarting with `--install` after waiting for the previous guest process to exit (implemented for Windows and Linux). Host resolves current running disc paths relative to the installation root.
+  - Selective re-import & staging: Installer Review UI allows selecting specific discs or DLC packages; re-import replaces only selected disc numbers or DLC IDs, preserving existing unselected content. Staging completes fully before unified publish, rolling back on failure or cancellation.
+  - Path commitment & asset safety: Game path is saved in the commit callback; DLC-only imports preserve default launch game path; directories missing Disc 1 are not set as default; flat disc imports prompt/require selecting another directory. Protects source files, saves, profiles, and shader caches without claiming absolute crash atomicity.
+  - Verification & limits: Core review items addressed and synthetic `LoImportGameTest --reimport` passed. Designer targeted tests (`LoMenuFlow`, `LoInstallerController`, `LoInstallHost`) passed with review screenshots. Windows restart flow reused previous passing results. Linux WSL Manjaro process fixture passed; AppImage environment is shim-only and real package execution remains unverified.
+  - Read-only source scan evidence: User-authorized recognition scan verified `G:\ROMS\X360CH176` (4 GOD discs Asia v4 + 3 LIVE DLCs: Seeker of the Deep!, Double Bonus Pack, Triple Bonus Pack) and `G:\ROMS\US` (4 ISO discs USA/Europe v3, no DLC) with 0 rejections and exit code 0 (`out/reimport-source-scan-20260926/scan.log`).
+  - Build & delivery status: Prepared for v0.7.1; uncommitted and unpublished. Production Windows incremental build passed (`tools/build_runtime.bat LostOdysseyRecomp`, exit 0, BUILD OK; log `out/build/windows-clang/reimport-production-build.log`), compiling and linking updated UI and core components into `out/build/windows-clang/LostOdysseyRecomp/LostOdysseyRecomp.exe` (SHA-256 `2d78620230817471c92b4a370c66b2b6add5ad225ac2e7b7d89bc3d66151654d`). This build was a development build prior to the version bump to 0.7.1, not the final v0.7.1 release binary. No physical import, gameplay session, or additional manual tests were executed; gameplay acceptance and release packaging remain pending. Source recognition scan verified disc and DLC structures without requiring full-disc import as a mandatory prerequisite.
+- **v0.8.0 roadmap targets**:
+  - Added Linux AArch64, macOS AArch64 (specifically Apple Silicon, without precluding other macOS architectures), experimental Android support, and removal of the legacy PM4 packet translation layer (promoted from v0.9.0) as roadmap targets for v0.8.0 alongside Frame Generation. These are roadmap planning targets only, not existing implementations, verified test coverage, or delivered features.
+
+## v0.7.0 published / v0.7.0 已发布
+
+Status as of 2026-09-26:
+v0.7.0 was published on 2026-09-26 from source commit/tag `4142f235f46255953980c175a86bd919de77967e` via Release CI [36228746088](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/36228746088) as the latest public release.
 - **PlayStation controller prompt auto-replacement (Issue #40 partial, user-accepted)**:
   - Automatic detection: SDL tracks the most recently active controller to dynamically switch between Xbox and PlayStation button glyphs.
   - Host UI: Settings menu, Installer UI, and Debug overlay display PlayStation glyphs including Cross, Circle, Square, Triangle, L1, R1, L2, R2, and Options/Share.
-  - Guest game runtime: Texture atlas content-hash matching identifies both `rpmenurescommon` `Icon_Page_0` (hash `8e181...`) and English font `Texture2D_1` (hash `cfd30b830a2fbf5d12520ea5c6cc2a6a3a37d534f8f4c7f846fdc50520ba8229`) via authentic BC3 matching and a production upload fixture. Guest rendering swaps between original Xbox 360 prompt textures and immutable PlayStation replacement textures under GPU stop guards and retirement review. Replaces action buttons, shoulder buttons (LB/RB/LT/RT -> L1/R1/L2/R2), and pause menu Start/Select (Options/Create), including fixes for pause menu Start/Select and shoulder omissions.
-  - Corrects previous notes stating only common was audited and guest replacement was unimplemented.
-  - Verification & User Acceptance: Verified on local development build (`HEAD d677a48-dirty`, binary SHA `1ae34ffd7eedcc415816c30b6e74b31d5ca2c0d936cd6aadbf72b49aeca709a4` at review). Explicitly accepted by the user ("验收通过") after pause menu and cutscene review; committed to `main` in `5700ca5` and pending release.
-  - Validation limits: Existing host, HID, glyph, and GPU tests and builds were reused without rerunning. Acceptance is bounded to real-device testing on the user's setup and verified scenes; it does not claim universal controller hardware compatibility or 100% full-game playthrough coverage. Issue #40 mod support was not implemented in this scope; Issue #40 is not claimed as fully completed.
+  - Guest game runtime: Texture atlas content-hash matching identifies both `rpmenurescommon` `Icon_Page_0` and English font `Texture2D_1` via authentic BC3 matching and a production upload fixture. Guest rendering swaps between original Xbox 360 prompt textures and immutable PlayStation replacement textures under GPU stop guards and retirement review. Replaces action buttons, shoulder buttons (LB/RB/LT/RT -> L1/R1/L2/R2), and pause menu Start/Select (Options/Create).
+  - Verification & User Acceptance: Verified on development build and explicitly accepted by the user ("验收通过") after pause menu and cutscene review; published in v0.7.0.
+  - Validation limits: Acceptance is bounded to real-device testing on the user's setup and verified scenes; does not claim universal controller hardware compatibility or 100% full-game playthrough coverage. Issue #40 mod support was not implemented in this scope.
 - **DLSS/DLAA fallback to spatial AA (commit 60168b7)**:
   - When DLSS or DLAA is unavailable or failure-disabled, frame plans substitute SMAA for saved TAA, avoiding legacy temporal jitter and history feedback on fallback frame plans.
   - Saved Off, FXAA, and SMAA user selections and settings are preserved without rewriting configuration.
-  - Verified by three focused CPU tests (`frame_plan_test`, `native_dlaa_test`, `native_dlss_p2_routing_test`) covering recovery and routing; visual quality validation remains pending.
-- **v0.7.0 milestone scope & user acceptance**:
-  - The user deferred Frame Generation (P0 Streamline coexistence evaluation and P3/P4 implementation) and macOS release support to v0.8.0.
-  - With Frame Generation and macOS deferred to v0.8.0, all remaining v0.7.0 deliverables—Native Vulkan DLSS Super Resolution / DLAA and FSR 3.1.4 (P2) multi-platform visual quality and runtime validation—have passed complete user acceptance.
-  - User acceptance does not alter existing test coverage.
-  - v0.7.0 is unreleased.
-- **v0.8.0 roadmap targets**:
-  - Added Linux AArch64, macOS AArch64 (specifically Apple Silicon, without precluding other macOS architectures), and experimental Android support as roadmap targets for v0.8.0 alongside Frame Generation. These are roadmap planning targets only, not existing implementations, verified test coverage, or delivered features.
+  - Verified by three focused CPU tests (`frame_plan_test`, `native_dlaa_test`, `native_dlss_p2_routing_test`) covering recovery and routing; published in v0.7.0. Visual quality validation of this fallback remains pending.
+- **v0.7.0 upscaling deliverables & user acceptance**:
+  - Native Vulkan DLSS Super Resolution / DLAA and FSR 3.1.4 (P2) multi-platform visual quality and runtime validation passed user acceptance within the documented test coverage. Frame Generation and macOS deferred to v0.8.0.
+- **Mod API v1 (merged PR #68, commit 457ba24)**:
+  - Merged C++ Mod API, v1 image mod ZIP/`LOTEX1` packer, native menu atlas and font page replacement, and CI test coverage; published in v0.7.0.
+- Release packages and SHA-256 sidecars are available at [GitHub Release v0.7.0](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.7.0).
 
 ## v0.6.20 published / v0.6.20 已发布
 

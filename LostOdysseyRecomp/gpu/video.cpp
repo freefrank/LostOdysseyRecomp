@@ -1223,7 +1223,7 @@ namespace gpu::video
             return;
         if (settings::restart::Requested()) {
             renderer::WaitDebugCaptureArchive();
-#ifdef _WIN32
+#if defined(_WIN32) || defined(__linux__)
             if (settings::restart::LaunchWaitingChild()) {
                 os::shaderlog::CloseForExit();
                 fflush(nullptr);

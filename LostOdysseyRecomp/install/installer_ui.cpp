@@ -5,6 +5,7 @@
 #include "file_browser.h"
 #include "import_game.h"
 #include "../hid/controller_prompts.h"
+#include "../settings/config.h"
 
 #include <atomic>
 #include <chrono>
@@ -159,6 +160,7 @@ struct UIState : InstallerSessionState
     std::filesystem::path selectedSource;
     std::atomic<bool> isScanning{ false };
     int reviewSelectedIndex = 0;
+    int reviewScrollOffset = 0;
 
     // Destination browsing
     std::filesystem::path selectedDest;
@@ -260,6 +262,13 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
         windowWidth = std::min(windowWidth, displayBounds.w);
         windowHeight = std::min(windowHeight, displayBounds.h);
     }
+#ifdef LO_INSTALLER_UI_TESTING
+    if (SDL_getenv("LO_IMPORTER_PREVIEW_BMP"))
+    {
+        windowWidth = LOGICAL_WIN_WIDTH;
+        windowHeight = LOGICAL_WIN_HEIGHT;
+    }
+#endif
     windowWidth = std::max(1, windowWidth);
     windowHeight = std::max(1, windowHeight);
 
@@ -314,7 +323,43 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
 
     SDL_Texture* dpadIcon = CreateDpadIcon(renderer);
     UIState state;
+    const uint32_t uiLanguage = settings::GetConfig().uiLanguage;
     state.roots = ui::GetSystemRoots();
+#ifdef LO_INSTALLER_UI_TESTING
+    if (SDL_getenv("LO_IMPORTER_PREVIEW_BMP"))
+    {
+        // Test-only review fixture: no source scan, content write or import.
+        ContentScan preview;
+        for (int number = 1; number <= 4; ++number)
+        {
+            DiscInfo disc;
+            disc.disc = number;
+            disc.discs = 4;
+            disc.edition = "Asia";
+            disc.files = 218;
+            disc.bytes = 244000000;
+            preview.discs.push_back(std::move(disc));
+        }
+        for (int i = 0; i < 9; ++i)
+        {
+            DlcPackageInfo dlc;
+            dlc.displayName = "Additional content " + std::to_string(i + 1);
+            dlc.contentId = "DLC-" + std::to_string(i + 1);
+            dlc.files = 12;
+            dlc.bytes = 120000;
+            preview.packages.push_back(std::move(dlc));
+        }
+        state.FinishScan(std::move(preview));
+        state.ToggleSelection(1);
+        state.screen = ScreenState::ReviewDiscs;
+        state.reviewSelectedIndex = 1;
+        if (const char* scroll = SDL_getenv("LO_IMPORTER_PREVIEW_SCROLL"); scroll && *scroll)
+        {
+            state.reviewScrollOffset = 2;
+            state.reviewSelectedIndex = 12;
+        }
+    }
+#endif
 
     std::filesystem::path startSource = initialSource;
     if (startSource.empty() || !std::filesystem::exists(startSource))
@@ -385,7 +430,7 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
 
         if (workerThread.joinable()) workerThread.join();
 
-        const ContentScan selection = state.scanResult;
+        const ContentScan selection = state.SelectedContent();
         const auto destination = state.selectedDest;
         workerThread = std::thread([&state, executableDirectory, selection, destination]() {
             UIState::WorkerEvent event;
@@ -401,7 +446,14 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
                     return state.cancelRequested.load();
                 };
 
-                event.install = InstallContent(selection, destination, progressCb, cancelCb);
+                event.install = ReimportContent(selection, destination, progressCb, cancelCb,
+                    [&](const InstallResult& committed) {
+                        if (state.cancelRequested.load())
+                            throw Error("Import cancelled; original files were kept", true);
+                        CommitImportedGamePath(committed, [&](const std::filesystem::path& root, std::string& error) {
+                            return WriteGamePath(executableDirectory, root, error);
+                        });
+                    });
                 if (!event.install.error.empty() || event.install.cancelled)
                     event.type = UIState::WorkerEvent::Type::ImportFailed;
                 else
@@ -438,6 +490,7 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
             {
                 state.FinishScan(std::move(event.scan));
                 state.reviewSelectedIndex = ReviewActionStart(state.scanResult);
+                state.reviewScrollOffset = 0;
                 state.isScanning = false;
             }
             else if (event.type == UIState::WorkerEvent::Type::ScanFailed)
@@ -445,43 +498,19 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
                 state.FailScan(std::move(event.error));
                 state.isScanning = false;
             }
-            else if (event.type == UIState::WorkerEvent::Type::ImportFinished)
-            {
-                state.isImporting = false;
-                state.installResult = std::move(event.install);
-                state.installedDiscs = state.installResult.discs;
-                bool pathSaved = true;
-                if (ShouldPersistGamePath(state.installResult))
-                {
-                    std::string pathError;
-                    if (!WriteGamePath(executableDirectory, state.selectedDest, pathError))
-                    { state.importError = "Failed to update game-path.txt: " + pathError; pathSaved = false; }
-                }
-                if (ShouldReportImportSuccess(state.installResult, pathSaved))
-                {
-                    state.installSuccess = true;
-                    state.screen = ScreenState::Complete;
-                }
-                else
-                    state.screen = ScreenState::Error;
-            }
             else
             {
                 state.isImporting = false;
                 state.installResult = std::move(event.install);
                 state.installedDiscs = state.installResult.discs;
                 state.importError = event.error.empty() ? state.installResult.error : event.error;
-                if (ShouldPersistGamePath(state.installResult))
+                switch (state.FinishImport(state.installResult, event.cancelled,
+                                           event.type != UIState::WorkerEvent::Type::ImportFinished || !state.importError.empty()))
                 {
-                    std::string pathError;
-                    if (!WriteGamePath(executableDirectory, state.selectedDest, pathError))
-                    {
-                        if (!state.importError.empty()) state.importError += "; ";
-                        state.importError += "Failed to update game-path.txt: " + pathError;
-                    }
+                case InstallerSessionState::ImportOutcome::Complete: state.screen = ScreenState::Complete; break;
+                case InstallerSessionState::ImportOutcome::Cancelled: state.screen = ScreenState::ReviewDiscs; break;
+                case InstallerSessionState::ImportOutcome::Failed: state.screen = ScreenState::Error; break;
                 }
-                if (event.cancelled || state.installResult.cancelled) { state.userCancelled = true; state.screen = ScreenState::ReviewDiscs; }
-                else state.screen = ScreenState::Error;
             }
         }
     };
@@ -532,6 +561,7 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
     };
 
     constexpr int VISIBLE_ITEMS = 14;
+    constexpr int REVIEW_VISIBLE_ITEMS = 11;
 
     auto handleNavUp = [&]() {
         if (state.isScanning.load() || state.isImporting.load()) return;
@@ -566,6 +596,15 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
                         state.destScrollOffset = state.destSelectedIndex;
                 }
             }
+        }
+        else if (state.screen == ScreenState::ReviewDiscs)
+        {
+            state.reviewSelectedIndex = std::max(0, state.reviewSelectedIndex - 1);
+            if (state.reviewSelectedIndex < state.reviewScrollOffset)
+                state.reviewScrollOffset = state.reviewSelectedIndex;
+            if (state.reviewSelectedIndex < ReviewActionStart(state.scanResult) &&
+                state.reviewSelectedIndex >= state.reviewScrollOffset + REVIEW_VISIBLE_ITEMS)
+                state.reviewScrollOffset = state.reviewSelectedIndex - REVIEW_VISIBLE_ITEMS + 1;
         }
     };
 
@@ -603,6 +642,13 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
                 }
             }
         }
+        else if (state.screen == ScreenState::ReviewDiscs)
+        {
+            state.reviewSelectedIndex = std::min(ReviewActionStart(state.scanResult) + 2, state.reviewSelectedIndex + 1);
+            if (state.reviewSelectedIndex < ReviewActionStart(state.scanResult) &&
+                state.reviewSelectedIndex >= state.reviewScrollOffset + REVIEW_VISIBLE_ITEMS)
+                state.reviewScrollOffset = state.reviewSelectedIndex - REVIEW_VISIBLE_ITEMS + 1;
+        }
     };
 
     auto handleNavLeft = [&]() {
@@ -617,7 +663,8 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
         }
         else if (state.screen == ScreenState::ReviewDiscs)
         {
-            state.reviewSelectedIndex = std::max(ReviewActionStart(state.scanResult), state.reviewSelectedIndex - 1);
+            if (state.reviewSelectedIndex >= ReviewActionStart(state.scanResult))
+                state.reviewSelectedIndex = std::max(ReviewActionStart(state.scanResult), state.reviewSelectedIndex - 1);
         }
     };
 
@@ -633,7 +680,8 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
         }
         else if (state.screen == ScreenState::ReviewDiscs)
         {
-            state.reviewSelectedIndex = std::min(ReviewActionStart(state.scanResult) + 2, state.reviewSelectedIndex + 1);
+            if (state.reviewSelectedIndex >= ReviewActionStart(state.scanResult))
+                state.reviewSelectedIndex = std::min(ReviewActionStart(state.scanResult) + 2, state.reviewSelectedIndex + 1);
         }
     };
 
@@ -694,7 +742,11 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
         else if (state.screen == ScreenState::ReviewDiscs)
         {
             int actionStart = ReviewActionStart(state.scanResult);
-            if (state.reviewSelectedIndex == actionStart)
+            if (state.reviewSelectedIndex < actionStart)
+            {
+                state.ToggleSelection(state.reviewSelectedIndex);
+            }
+            else if (state.reviewSelectedIndex == actionStart)
             {
                 startImport();
             }
@@ -746,6 +798,7 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
         }
         else if (state.screen == ScreenState::ReviewDiscs)
         {
+            state.reviewScrollOffset = 0;
             state.screen = ScreenState::BrowseSource;
         }
         else if (state.screen == ScreenState::BrowseDest)
@@ -865,6 +918,12 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
                         state.destNewName += event.text.text;
                     state.destStatus.clear();
                 }
+                break;
+
+            case SDL_MOUSEWHEEL:
+                if (state.screen == ScreenState::ReviewDiscs && !state.isScanning.load())
+                    state.reviewScrollOffset = std::clamp(state.reviewScrollOffset - event.wheel.y,
+                        0, std::max(0, ReviewActionStart(state.scanResult) - REVIEW_VISIBLE_ITEMS));
                 break;
 
             case SDL_CONTROLLERDEVICEADDED:
@@ -1015,6 +1074,19 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
                     }
                     else if (state.screen == ScreenState::ReviewDiscs)
                     {
+                        constexpr int tableY = 80 + 110;
+                        constexpr int firstRowY = tableY + 32;
+                        if (mx >= 40 && mx <= winW - 40 && my >= firstRowY &&
+                            my < firstRowY + REVIEW_VISIBLE_ITEMS * 28)
+                        {
+                            const int item = state.reviewScrollOffset + (my - firstRowY) / 28;
+                            if (item < ReviewActionStart(state.scanResult))
+                            {
+                                state.reviewSelectedIndex = item;
+                                handleAction();
+                            }
+                            break;
+                        }
                         int btnY = curBodyY + curBodyH - 65;
                         int btnW = 230;
                         int btnH = 38;
@@ -1135,7 +1207,7 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
         }
         else if (state.screen == ScreenState::ReviewDiscs)
         {
-            buttonPrompt(chipX, chipY, "A", "Select", COLOR_GREEN);
+            buttonPrompt(chipX, chipY, "A", "Toggle / open", COLOR_GREEN);
             chipX += 100;
             buttonPrompt(chipX, chipY, "B", "Back", COLOR_RED);
             chipX += 90;
@@ -1147,7 +1219,7 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
         }
         else if (state.screen == ScreenState::Complete)
         {
-            buttonPrompt(chipX, chipY, "A", "Launch", COLOR_GREEN);
+            buttonPrompt(chipX, chipY, "A", "Finish", COLOR_GREEN);
         }
         else if (state.screen == ScreenState::Error)
         {
@@ -1174,7 +1246,7 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
         else if (state.screen == ScreenState::ReviewDiscs)
         {
             ui::DrawString(renderer, kbTextX, kbY,
-                           "[Enter] Select  [Esc] Back  [Arrows] Move",
+                            "[Enter] Toggle / open  [Esc] Back  [Arrows] Move",
                            COLOR_MUTED.r, COLOR_MUTED.g, COLOR_MUTED.b, 255, 0.85f);
         }
         else if (state.screen == ScreenState::Importing)
@@ -1186,7 +1258,7 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
         else if (state.screen == ScreenState::Complete)
         {
             ui::DrawString(renderer, kbTextX, kbY,
-                           "[Enter] Launch  [Esc] Exit",
+                           "[Enter] Finish  [Esc] Exit",
                            COLOR_MUTED.r, COLOR_MUTED.g, COLOR_MUTED.b, 255, 0.85f);
         }
         else if (state.screen == ScreenState::Error)
@@ -1344,7 +1416,7 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
             int cardW = w - 40;
             DrawBevelPanel(renderer, 20, bodyY, cardW, bodyH, COLOR_STEEL_PANEL);
 
-            ui::DrawString(renderer, 40, bodyY + 20, "SCANNED GAME DISCS REVIEW", COLOR_ACCENT_GOLD.r, COLOR_ACCENT_GOLD.g, COLOR_ACCENT_GOLD.b, 255, 1.25f);
+            ui::DrawString(renderer, 40, bodyY + 20, "SCANNED CONTENT REVIEW", COLOR_ACCENT_GOLD.r, COLOR_ACCENT_GOLD.g, COLOR_ACCENT_GOLD.b, 255, 1.25f);
 
             const auto sourceUtf8 = state.selectedSource.u8string();
             std::string sourceInfo = ui::TruncateTextWidth("Source: " + std::string(sourceUtf8.begin(), sourceUtf8.end()), cardW - 40, 0.95f);
@@ -1373,48 +1445,64 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
                 ui::DrawString(renderer, 500, tableY + 5, "SIZE", COLOR_ACCENT_GOLD.r, COLOR_ACCENT_GOLD.g, COLOR_ACCENT_GOLD.b, 255, 0.9f);
                 ui::DrawString(renderer, 650, tableY + 5, "STATUS / HASH", COLOR_ACCENT_GOLD.r, COLOR_ACCENT_GOLD.g, COLOR_ACCENT_GOLD.b, 255, 0.9f);
 
-                int rowY = tableY + 32;
-                for (size_t i = 0; i < state.scanResult.discs.size(); ++i)
+                const int firstRowY = tableY + 32;
+                for (int visibleRow = 0; visibleRow < REVIEW_VISIBLE_ITEMS; ++visibleRow)
                 {
-                    const auto& d = state.scanResult.discs[i];
-                    std::string discName = "Disc " + std::to_string(d.disc) + " of " + std::to_string(d.discs);
-                    std::string filesStr = std::to_string(d.files);
-                    std::string sizeStr = FormatBytes(d.bytes);
-                    std::string hashStatus = d.identity.empty() ? "Verified" : d.identity;
-
-                    ui::DrawString(renderer, 50, rowY, discName, COLOR_INK.r, COLOR_INK.g, COLOR_INK.b, 255, 1.0f);
-                    ui::DrawString(renderer, 220, rowY, d.edition, COLOR_CYAN.r, COLOR_CYAN.g, COLOR_CYAN.b, 255, 1.0f);
-                    ui::DrawString(renderer, 400, rowY, filesStr, COLOR_INK.r, COLOR_INK.g, COLOR_INK.b, 255, 1.0f);
-                    ui::DrawString(renderer, 500, rowY, sizeStr, COLOR_INK.r, COLOR_INK.g, COLOR_INK.b, 255, 1.0f);
-                    ui::DrawString(renderer, 650, rowY, hashStatus, COLOR_GREEN.r, COLOR_GREEN.g, COLOR_GREEN.b, 255, 1.0f);
-                    rowY += 28;
-                }
-
-                for (const auto& package : state.scanResult.packages)
-                {
-                    ui::DrawString(renderer, 50, rowY, "DLC", COLOR_INK.r, COLOR_INK.g, COLOR_INK.b, 255, 1.0f);
-                    ui::DrawString(renderer, 220, rowY, ui::TruncateTextWidth(package.displayName, 168, 1.0f), COLOR_CYAN.r, COLOR_CYAN.g, COLOR_CYAN.b, 255, 1.0f);
-                    ui::DrawString(renderer, 400, rowY, std::to_string(package.files), COLOR_INK.r, COLOR_INK.g, COLOR_INK.b, 255, 1.0f);
-                    ui::DrawString(renderer, 500, rowY, FormatBytes(package.bytes), COLOR_INK.r, COLOR_INK.g, COLOR_INK.b, 255, 1.0f);
-                    ui::DrawString(renderer, 650, rowY, "Ready", COLOR_GREEN.r, COLOR_GREEN.g, COLOR_GREEN.b, 255, 1.0f);
-                    rowY += 28;
+                    const int item = state.reviewScrollOffset + visibleRow;
+                    if (item >= ReviewActionStart(state.scanResult)) break;
+                    const int rowY = firstRowY + visibleRow * 28;
+                    const bool checked = state.selected[item];
+                    const bool focused = state.reviewSelectedIndex == item;
+                    if (focused) DrawSelectionBar(renderer, 44, rowY - 4, cardW - 48, 26);
+                    const auto primary = focused ? COLOR_SEL_INK : checked ? COLOR_INK : COLOR_MUTED;
+                    const auto secondary = focused ? COLOR_SEL_INK : checked ? COLOR_CYAN : COLOR_MUTED;
+                    const auto status = focused ? COLOR_SEL_INK : checked ? COLOR_GREEN : COLOR_MUTED;
+                    ui::DrawString(renderer, 50, rowY, checked ? "[x]" : "[ ]", primary.r, primary.g, primary.b, 255, 1.0f);
+                    if (item < int(state.scanResult.discs.size()))
+                    {
+                        const auto& d = state.scanResult.discs[item];
+                        ui::DrawString(renderer, 86, rowY, "Disc " + std::to_string(d.disc) + " of " + std::to_string(d.discs), primary.r, primary.g, primary.b, 255, 1.0f);
+                        ui::DrawString(renderer, 220, rowY, d.edition, secondary.r, secondary.g, secondary.b, 255, 1.0f);
+                        ui::DrawString(renderer, 400, rowY, std::to_string(d.files), primary.r, primary.g, primary.b, 255, 1.0f);
+                        ui::DrawString(renderer, 500, rowY, FormatBytes(d.bytes), primary.r, primary.g, primary.b, 255, 1.0f);
+                        ui::DrawString(renderer, 650, rowY, d.identity.empty() ? "Verified" : d.identity, status.r, status.g, status.b, 255, 1.0f);
+                    }
+                    else
+                    {
+                        const auto& package = state.scanResult.packages[item - int(state.scanResult.discs.size())];
+                        ui::DrawString(renderer, 86, rowY, "DLC", primary.r, primary.g, primary.b, 255, 1.0f);
+                        ui::DrawString(renderer, 220, rowY, ui::TruncateTextWidth(package.displayName, 168, 1.0f), secondary.r, secondary.g, secondary.b, 255, 1.0f);
+                        ui::DrawString(renderer, 400, rowY, std::to_string(package.files), primary.r, primary.g, primary.b, 255, 1.0f);
+                        ui::DrawString(renderer, 500, rowY, FormatBytes(package.bytes), primary.r, primary.g, primary.b, 255, 1.0f);
+                        ui::DrawString(renderer, 650, rowY,
+                                       ui::TruncateTextWidth(package.contentId, cardW - 670, 1.0f),
+                                       status.r, status.g, status.b, 255, 1.0f);
+                    }
                 }
 
                 if (state.scanResult.discs.empty() && state.scanResult.packages.empty())
                 {
-                    ui::DrawString(renderer, 50, rowY, "No valid Lost Odyssey discs or XEX files found in this folder.", COLOR_RED.r, COLOR_RED.g, COLOR_RED.b, 255, 1.0f);
-                    ui::DrawString(renderer, 50, rowY + 22, "Make sure the folder contains disc1..disc4 or default.xex.", COLOR_MUTED.r, COLOR_MUTED.g, COLOR_MUTED.b, 255, 1.0f);
+                    ui::DrawString(renderer, 50, firstRowY, "No valid Lost Odyssey discs or XEX files found in this folder.", COLOR_RED.r, COLOR_RED.g, COLOR_RED.b, 255, 1.0f);
+                    ui::DrawString(renderer, 50, firstRowY + 22, "Make sure the folder contains disc1..disc4 or default.xex.", COLOR_MUTED.r, COLOR_MUTED.g, COLOR_MUTED.b, 255, 1.0f);
                 }
+                if (state.reviewScrollOffset > 0)
+                    ui::DrawString(renderer, 1225, tableY + 5, "^", COLOR_ACCENT_GOLD.r, COLOR_ACCENT_GOLD.g, COLOR_ACCENT_GOLD.b, 255, 0.9f);
+                if (ReviewActionStart(state.scanResult) > state.reviewScrollOffset + REVIEW_VISIBLE_ITEMS)
+                    ui::DrawString(renderer, 1225, firstRowY + (REVIEW_VISIBLE_ITEMS - 1) * 28, "v", COLOR_ACCENT_GOLD.r, COLOR_ACCENT_GOLD.g, COLOR_ACCENT_GOLD.b, 255, 0.9f);
 
                 // Action Buttons
                 int btnY = bodyY + bodyH - 65;
+                const auto hint = ReviewReplaceHint(uiLanguage);
+                ui::DrawString(renderer, 40, btnY - 33,
+                               ui::TruncateTextWidth(hint, cardW - 80, 0.88f),
+                               COLOR_GOLD_MUTED.r, COLOR_GOLD_MUTED.g, COLOR_GOLD_MUTED.b, 255, 0.88f);
                 int btnW = 230;
                 int btnH = 38;
                 int actionStart = ReviewActionStart(state.scanResult);
 
                 // Button 1: Start Import
                 bool b1Sel = (state.reviewSelectedIndex == actionStart);
-                if (b1Sel)
+                if (b1Sel && state.CanImport())
                 {
                     DrawSelectionBar(renderer, 40, btnY, btnW, btnH);
                     ui::DrawString(renderer, 75, btnY + 10, "START IMPORT", COLOR_SEL_INK.r, COLOR_SEL_INK.g, COLOR_SEL_INK.b, 255, 1.1f);
@@ -1422,7 +1510,8 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
                 else
                 {
                     DrawBevelPanel(renderer, 40, btnY, btnW, btnH, COLOR_RAIL);
-                    ui::DrawString(renderer, 75, btnY + 10, "START IMPORT", COLOR_INK.r, COLOR_INK.g, COLOR_INK.b, 255, 1.1f);
+                    const auto ink = state.CanImport() ? COLOR_INK : COLOR_MUTED;
+                    ui::DrawString(renderer, 75, btnY + 10, "START IMPORT", ink.r, ink.g, ink.b, 255, 1.1f);
                 }
 
                 // Button 2: Change Destination
@@ -1498,21 +1587,37 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
 
             ui::DrawString(renderer, 40, bodyY + 40, "IMPORT COMPLETED SUCCESSFULLY!", COLOR_GREEN.r, COLOR_GREEN.g, COLOR_GREEN.b, 255, 1.25f);
             ui::DrawString(renderer, 40, bodyY + 80, "Game files were installed to:", COLOR_INK.r, COLOR_INK.g, COLOR_INK.b, 255, 1.0f);
-            ui::DrawString(renderer, 40, bodyY + 105, state.selectedDest.string(), COLOR_CYAN.r, COLOR_CYAN.g, COLOR_CYAN.b, 255, 1.0f);
+            ui::DrawString(renderer, 40, bodyY + 105,
+                           ui::TruncateTextWidth(state.installResult.destination, cardW - 80, 1.0f),
+                           COLOR_CYAN.r, COLOR_CYAN.g, COLOR_CYAN.b, 255, 1.0f);
 
-            std::string summary = "Discs imported: ";
-            for (int discNum : state.installedDiscs)
+            std::string summary;
+            if (!state.installedDiscs.empty())
             {
-                summary += "Disc " + std::to_string(discNum) + " ";
+                summary = "Discs imported: ";
+                for (int discNum : state.installedDiscs)
+                    summary += "Disc " + std::to_string(discNum) + " ";
+                if (!state.installResult.dlcImported.empty())
+                    summary += "  /  DLC imported: " + std::to_string(state.installResult.dlcImported.size());
             }
+            else
+                summary = "DLC imported: " + std::to_string(state.installResult.dlcImported.size()) +
+                          "  /  Already current: " + std::to_string(state.installResult.dlcUnchanged.size());
             ui::DrawString(renderer, 40, bodyY + 140, summary, COLOR_ACCENT_GOLD.r, COLOR_ACCENT_GOLD.g, COLOR_ACCENT_GOLD.b, 255, 1.0f);
-            ui::DrawString(renderer, 40, bodyY + 170, "Configuration file game-path.txt has been updated.", COLOR_MUTED.r, COLOR_MUTED.g, COLOR_MUTED.b, 255, 0.95f);
+            const std::string pathStatus = !state.installResult.warning.empty()
+                ? state.installResult.warning
+                : ShouldPersistGamePath(state.installResult)
+                    ? "Game path updated after importing the selected discs."
+                    : "Game path unchanged; selected DLC was imported.";
+            ui::DrawString(renderer, 40, bodyY + 170,
+                           ui::TruncateTextWidth(pathStatus, cardW - 80, 0.95f),
+                           COLOR_MUTED.r, COLOR_MUTED.g, COLOR_MUTED.b, 255, 0.95f);
             if (playStation)
             {
                 ui::DrawString(renderer, 40, bodyY + 222, "Press", COLOR_INK.r, COLOR_INK.g, COLOR_INK.b, 255, 1.0f);
-                buttonPrompt(94, bodyY + 219, "A", "or [Enter] to exit installer.", COLOR_GREEN);
+                buttonPrompt(94, bodyY + 219, "A", "or [Enter] to close importer.", COLOR_GREEN);
             }
-            else ui::DrawString(renderer, 40, bodyY + 220, "Press [A] or [Enter] to exit installer.", COLOR_INK.r, COLOR_INK.g, COLOR_INK.b, 255, 1.0f);
+            else ui::DrawString(renderer, 40, bodyY + 220, "Press [A] or [Enter] to close importer.", COLOR_INK.r, COLOR_INK.g, COLOR_INK.b, 255, 1.0f);
         }
         else if (state.screen == ScreenState::Error)
         {
@@ -1523,7 +1628,7 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
             ui::DrawString(renderer, 40, bodyY + 90, "Details:", COLOR_INK.r, COLOR_INK.g, COLOR_INK.b, 255, 1.0f);
             ui::DrawString(renderer, 40, bodyY + 115, state.importError, COLOR_RED.r, COLOR_RED.g, COLOR_RED.b, 255, 1.0f);
 
-            ui::DrawString(renderer, 40, bodyY + 160, "Any partial files were rolled back. Original game sources were kept safe.", COLOR_MUTED.r, COLOR_MUTED.g, COLOR_MUTED.b, 255, 0.95f);
+            ui::DrawString(renderer, 40, bodyY + 160, "Check the details above. Original source files were kept safe.", COLOR_MUTED.r, COLOR_MUTED.g, COLOR_MUTED.b, 255, 0.95f);
             if (playStation)
             {
                 ui::DrawString(renderer, 40, bodyY + 202, "Press", COLOR_INK.r, COLOR_INK.g, COLOR_INK.b, 255, 1.0f);
@@ -1532,15 +1637,27 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
             else ui::DrawString(renderer, 40, bodyY + 200, "Press [B] or [Enter] to return and retry.", COLOR_INK.r, COLOR_INK.g, COLOR_INK.b, 255, 1.0f);
         }
 
+#ifdef LO_INSTALLER_UI_TESTING
+        if (const char* preview = SDL_getenv("LO_IMPORTER_PREVIEW_BMP"))
+        {
+            if (auto* surface = SDL_CreateRGBSurfaceWithFormat(0, LOGICAL_WIN_WIDTH, LOGICAL_WIN_HEIGHT,
+                                                                32, SDL_PIXELFORMAT_ARGB8888))
+            {
+                if (SDL_RenderReadPixels(renderer, nullptr, surface->format->format,
+                                         surface->pixels, surface->pitch) == 0)
+                    SDL_SaveBMP(surface, preview);
+                SDL_FreeSurface(surface);
+            }
+            state.quit = state.userCancelled = true;
+        }
+#endif
         SDL_RenderPresent(renderer);
         SDL_Delay(16);
     }
 
-    if (workerThread.joinable())
-    {
-        state.cancelRequested = true;
-        workerThread.join();
-    }
+    // A close request can race the worker's last event. A committed import
+    // remains successful even when the window was closed a frame earlier.
+    JoinWorkerAndConsume(workerThread, state.cancelRequested, consumeWorkerEvents);
 
     for (auto* pad : controllers)
     {
@@ -1553,8 +1670,8 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
     SDL_Quit();
 
     result.success = state.installSuccess;
-    result.cancelled = state.userCancelled;
-    result.destination = state.selectedDest;
+    result.cancelled = state.userCancelled && !state.installSuccess;
+    result.destination = state.installSuccess ? std::filesystem::path(state.installResult.destination) : state.selectedDest;
     result.error = state.importError;
 
     return result;

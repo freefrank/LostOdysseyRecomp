@@ -35,6 +35,15 @@ lo_add_header_test(LoImportIsoLocatorTest ${CMAKE_SOURCE_DIR}/tools/tests/import
 target_sources(LoImportIsoLocatorTest PRIVATE ${LO_RUNTIME_ROOT}/install/import_image.cpp)
 lo_add_header_test(LoImportPayloadProbe ${CMAKE_SOURCE_DIR}/tools/tests/import_payload_probe.cpp)
 lo_add_header_test(LoInstallerControllerTest ${CMAKE_SOURCE_DIR}/tools/tests/installer_controller_test.cpp)
+lo_add_header_test(LoInstallerReviewPreviewTest ${CMAKE_SOURCE_DIR}/tools/tests/installer_review_preview_test.cpp)
+target_sources(LoInstallerReviewPreviewTest PRIVATE
+    ${LO_RUNTIME_ROOT}/install/installer_ui.cpp
+    ${LO_RUNTIME_ROOT}/install/installer_font.cpp)
+target_include_directories(LoInstallerReviewPreviewTest PRIVATE ${CMAKE_SOURCE_DIR}/thirdparty/SDL/include)
+target_compile_definitions(LoInstallerReviewPreviewTest PRIVATE LO_INSTALLER_UI_TESTING SDL_MAIN_HANDLED)
+target_link_libraries(LoInstallerReviewPreviewTest PRIVATE SDL2::SDL2-static)
+lo_add_header_test(LoInstallHostTest ${CMAKE_SOURCE_DIR}/tools/tests/install_host_test.cpp)
+target_sources(LoInstallHostTest PRIVATE ${LO_RUNTIME_ROOT}/install/host.cpp)
 lo_add_header_test(LoFileBrowserFolderTest ${CMAKE_SOURCE_DIR}/tools/tests/file_browser_folder_test.cpp)
 target_sources(LoImportPayloadProbe PRIVATE
     ${LO_RUNTIME_ROOT}/install/import_game.cpp
@@ -708,7 +717,7 @@ if(WIN32)
         ${CMAKE_SOURCE_DIR}/tools/tests/menu_flow_test.cpp
         ${LO_RUNTIME_ROOT}/settings/menu_assets.cpp
         ${LO_RUNTIME_ROOT}/settings/menu_render.cpp)
-    target_include_directories(LoMenuFlowTest PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,INCLUDE_DIRECTORIES>)
+    target_include_directories(LoMenuFlowTest PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,INCLUDE_DIRECTORIES> ${CMAKE_SOURCE_DIR}/thirdparty/SDL/include)
     target_compile_features(LoMenuFlowTest PRIVATE cxx_std_20)
     target_compile_options(LoMenuFlowTest PRIVATE /utf-8)
     target_compile_definitions(LoMenuFlowTest PRIVATE NOMINMAX LO_GPU_PLUME)

@@ -78,6 +78,11 @@ void InstallPhysicalWatchpoint();
 
 int main(int argc, char* argv[])
 {
+#if defined(__linux__) && !defined(_WIN32)
+    // Park a restart child before even the updater's startup cleanup runs.
+    if (settings::restart::WaitForParentIfRestartChild(argc, argv) == settings::restart::ChildHandshake::Invalid)
+        return 1;
+#endif
 #if defined(_WIN32) || defined(__linux__)
     if (const auto applyResult = updater::TryRunApplyMode()) return *applyResult;
 #ifdef _WIN32

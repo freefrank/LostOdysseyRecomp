@@ -1,6 +1,7 @@
 #include <cassert>
 #include <algorithm>
 #include <chrono>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -282,10 +283,214 @@ void RunDiscIoTest(const std::filesystem::path& source, const std::filesystem::p
     Require(std::filesystem::exists(destination / "disc1" / "lo.fpd"), "retry did not publish disc");
     std::cout << "[PASS] Disc open/write/flush/close failures abort publication and allow retry" << std::endl;
 }
+
+void RunReimportTest()
+{
+    const auto root = std::filesystem::temp_directory_path() /
+        ("lo-reimport-test-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    struct Cleanup {
+        std::filesystem::path path;
+        ~Cleanup() { install::SetTestPublishFailure({}, {}); install::SetTestDlcWriteFailure({}, {});
+                     std::error_code ec; std::filesystem::remove_all(path, ec); install::ClearTestOverrides(); }
+    } cleanup{root};
+    std::filesystem::create_directories(root);
+    static const uint32_t media[3] = {0, 0x39F7D748, 0x0EF8CEA8};
+    for (uint32_t n = 1; n <= 2; ++n)
+    {
+        const auto xex = MakeXex(n, media[n]);
+        install::SetTestSha256(n, install::crypto::Sha256Hex(xex.data(), xex.size()), false);
+        WriteDiscFiles(root / "sources" / ("disc" + std::to_string(n)), n);
+    }
+    WriteTinyStfs(root / "sources" / "source.stfs");
+    const auto selection = install::ScanContent(std::vector<std::filesystem::path>{
+        root / "sources" / "disc1", root / "sources" / "source.stfs"});
+    Require(selection.discs.size() == 1 && selection.packages.size() == 1, "combined source scan failed");
+    const auto dest = root / "game";
+    const auto oldDisc = dest / "disc1", untouched = dest / "disc2";
+    const auto oldDlc = dest / "dlc" / selection.packages.front().contentId;
+    std::filesystem::create_directories(dest);
+    std::filesystem::copy(root / "sources" / "disc1", oldDisc, std::filesystem::copy_options::recursive);
+    std::filesystem::copy(root / "sources" / "disc2", untouched, std::filesystem::copy_options::recursive);
+    install::ContentScan dlcOnly; dlcOnly.packages = selection.packages;
+    install::InstallContent(dlcOnly, dest);
+    auto marker = [](const std::filesystem::path& path) { std::ofstream(path) << "old"; };
+    marker(oldDisc / "sentinel"); marker(oldDlc / "sentinel");
+    auto oldState = [&] {
+        Require(ReadBytes(oldDisc / "sentinel") == std::vector<uint8_t>({'o', 'l', 'd'}) &&
+                ReadBytes(oldDlc / "sentinel") == std::vector<uint8_t>({'o', 'l', 'd'}), "old slots were not restored");
+        Require(!std::filesystem::exists(oldDisc / "lo.fpd"), "damaged old disc was replaced on failure");
+    };
+    marker(untouched / "retained"); marker(dest / "save-sentinel");
+    std::filesystem::create_directories(dest / ".import-staging-stale");
+    marker(dest / ".import-staging-stale" / "keep");
+    // A retained disc can have damaged resources; its compatible XEX is enough.
+    std::filesystem::remove(untouched / "lo.fpd");
+    // A selected old disc can be damaged and must not be revalidated.
+    std::filesystem::remove(oldDisc / "lo.fpd");
+    oldState();
+    auto expectFailure = [&](const std::string& label, const install::Commit& cb = {}) {
+        bool failed = false;
+        try { install::ReimportContent(selection, dest, {}, {}, cb); }
+        catch (const std::exception&) { failed = true; }
+        Require(failed, label + " did not fail");
+        oldState();
+        Require(std::filesystem::exists(untouched / "retained"), label + " changed retained disc");
+        Require(!std::filesystem::exists(dest / ".import.lock"), label + " left lock");
+    };
+    install::SetTestDlcWriteFailure("payload.bin", "write");
+    expectFailure("DLC preparation failure");
+    install::SetTestDlcWriteFailure({}, {});
+    install::SetTestPublishFailure(selection.packages.front().contentId, "publish");
+    expectFailure("DLC publish failure");
+    install::SetTestPublishFailure({}, {});
+    expectFailure("commit failure", [](const install::InstallResult&) { throw std::runtime_error("path persistence failed"); });
+    bool nonStdRethrown = false;
+    try { install::ReimportContent(selection, dest, {}, {}, [](const install::InstallResult&) { throw 1; }); }
+    catch (int value) { nonStdRethrown = value == 1; }
+    Require(nonStdRethrown, "non-standard callback failure was not rethrown");
+    oldState();
+    Require(!std::filesystem::exists(dest / ".import.lock"), "non-standard callback failure left lock");
+    bool cancelOnPublish = false;
+    bool cancelled = false;
+    try { install::ReimportContent(selection, dest, [&](uint64_t, uint64_t, std::string_view label) {
+            if (label == "payload.bin") cancelOnPublish = true;
+        }, [&] { return cancelOnPublish; }); }
+    catch (const install::Error& error) { cancelled = error.cancelled(); }
+    Require(cancelled, "cancellation before commit did not abort");
+    oldState();
+
+    // Deliberately fail restoration; the old DLC remains in an explicitly
+    // reported staging/old/dlc/<id> directory for manual recovery.
+    install::SetTestPublishFailure(selection.packages.front().contentId, "rollback-old");
+    bool preserved = false;
+    try { install::ReimportContent(selection, dest, {}, {}, [](const install::InstallResult&) { throw std::runtime_error("abort"); }); }
+    catch (const install::Error& error)
+    {
+        auto message = std::string(error.what());
+        for (const auto& entry : std::filesystem::directory_iterator(dest))
+        {
+            if (entry.path().filename().string().starts_with(".import-staging-") &&
+                std::filesystem::exists(entry.path() / "old" / "dlc" / selection.packages.front().contentId / "sentinel"))
+                preserved = message.find((entry.path() / "old" / "dlc" / selection.packages.front().contentId).string()) != std::string::npos;
+        }
+    }
+    Require(preserved, "rollback failure did not preserve/report old backup");
+    install::SetTestPublishFailure({}, {});
+
+    // A selected old disc may have lost its XEX; the destination is explicitly
+    // the installation root, independent of that selected slot's health.
+    std::filesystem::remove(oldDisc / "default.xex");
+    auto successful = install::ReimportContent(selection, dest, {}, {}, [&](const install::InstallResult& result) {
+        Require(result.destination == std::filesystem::absolute(dest).lexically_normal().string(), "callback received wrong root");
+        Require(std::filesystem::exists(oldDisc / "lo.fpd") && std::filesystem::exists(oldDlc / "payload.bin"), "callback called before all publish");
+    });
+    Require(successful.discs == std::vector<int>{1} && successful.dlcImported.size() == 1, "selected slots missing in result");
+    Require(!std::filesystem::exists(oldDisc / "sentinel") && !std::filesystem::exists(oldDlc / "sentinel"), "selected slots not replaced");
+    Require(std::filesystem::exists(untouched / "retained") && std::filesystem::exists(dest / "save-sentinel"), "unselected files were changed");
+    Require(!std::filesystem::exists(dest / ".import.lock"), "successful reimport retained lock");
+    Require(std::filesystem::exists(dest / ".import-staging-stale" / "keep"), "unowned staging was removed");
+    marker(oldDisc / "replace-again");
+    install::ContentScan discOnly; discOnly.discs = selection.discs;
+    install::SetTestPublishFailure("staging", "cleanup");
+    auto cleanupWarning = install::ReimportContent(discOnly, dest);
+    install::SetTestPublishFailure({}, {});
+    Require(!cleanupWarning.warning.empty() && !std::filesystem::exists(oldDisc / "replace-again"),
+        "post-commit cleanup failure incorrectly failed or reverted import");
+    bool retainedBackup = false;
+    for (const auto& entry : std::filesystem::directory_iterator(dest))
+        if (entry.path().filename().string().starts_with(".import-staging-") &&
+            std::filesystem::exists(entry.path() / "old" / "disc1" / "replace-again")) retainedBackup = true;
+    Require(retainedBackup, "cleanup warning lost old backup");
+
+    const char* oldProfile = std::getenv("LO_PROFILE_DIR");
+    const std::string previousProfile = oldProfile ? oldProfile : "";
+    const bool hadProfile = oldProfile != nullptr;
+    const auto profileWithinSlot = oldDisc / "profile";
+    std::filesystem::create_directories(profileWithinSlot);
+#ifdef _WIN32
+    _putenv_s("LO_PROFILE_DIR", profileWithinSlot.string().c_str());
+#else
+    setenv("LO_PROFILE_DIR", profileWithinSlot.string().c_str(), 1);
+#endif
+    bool protectedProfile = false;
+    try { install::ReimportContent(selection, dest); }
+    catch (const install::Error& error) { protectedProfile = std::string(error.what()).find("profile") != std::string::npos; }
+#ifdef _WIN32
+    _putenv_s("LO_PROFILE_DIR", hadProfile ? previousProfile.c_str() : "");
+#else
+    if (hadProfile) setenv("LO_PROFILE_DIR", previousProfile.c_str(), 1);
+    else unsetenv("LO_PROFILE_DIR");
+#endif
+    Require(protectedProfile && std::filesystem::exists(profileWithinSlot), "actual profile root inside selected disc was replaced");
+
+    // In the opposite direction, an entire installation may itself be rooted
+    // inside the active profile; neither nested slot may be replaced.
+    marker(dest / "nested-profile-sentinel");
+#ifdef _WIN32
+    _putenv_s("LO_PROFILE_DIR", dest.string().c_str());
+#else
+    setenv("LO_PROFILE_DIR", dest.string().c_str(), 1);
+#endif
+    bool protectedNested = false;
+    try { install::ReimportContent(selection, dest); }
+    catch (const install::Error& error) { protectedNested = std::string(error.what()).find("profile") != std::string::npos; }
+#ifdef _WIN32
+    _putenv_s("LO_PROFILE_DIR", hadProfile ? previousProfile.c_str() : "");
+#else
+    if (hadProfile) setenv("LO_PROFILE_DIR", previousProfile.c_str(), 1);
+    else unsetenv("LO_PROFILE_DIR");
+#endif
+    Require(protectedNested && std::filesystem::exists(dest / "nested-profile-sentinel") &&
+            std::filesystem::exists(oldDisc / "default.xex"), "selected slot inside active profile root was replaced");
+
+    // A root directory named disc1 must remain the root. The parent and all
+    // unselected siblings are untouched even if disc1 is selected for repair.
+    const auto namedRoot = root / "named" / "disc1";
+    std::filesystem::create_directories(namedRoot);
+    std::filesystem::copy(root / "sources" / "disc1", namedRoot / "disc1", std::filesystem::copy_options::recursive);
+    std::filesystem::copy(root / "sources" / "disc2", namedRoot / "disc2", std::filesystem::copy_options::recursive);
+    marker(namedRoot / "disc1" / "old-selected");
+    marker(namedRoot / "disc2" / "retained");
+    marker(root / "named" / "parent-sentinel");
+    auto namedResult = install::ReimportContent(discOnly, namedRoot);
+    Require(namedResult.destination == std::filesystem::absolute(namedRoot).lexically_normal().string() &&
+            std::filesystem::exists(namedRoot / "disc1" / "default.xex") &&
+            !std::filesystem::exists(namedRoot / "disc1" / "old-selected") &&
+            std::filesystem::exists(namedRoot / "disc2" / "retained") &&
+            std::filesystem::exists(root / "named" / "parent-sentinel"), "disc1-named installation root or retained content changed");
+
+    bool calledOnDlcOnly = false;
+    auto dlcWithoutDisc = install::ReimportContent(dlcOnly, root / "dlc-only", {}, {},
+        [&](const install::InstallResult&) { calledOnDlcOnly = true; });
+    Require(!calledOnDlcOnly && !dlcWithoutDisc.warning.empty(), "DLC-only new destination was offered as game default");
+    Require(std::filesystem::exists(root / "dlc-only" / "dlc" / selection.packages.front().contentId / "payload.bin"),
+        "DLC-only import failed");
+
+    // The source may be a file or a directory; both overlap directions must be rejected.
+    for (const auto& source : {root / "sources" / "disc1", root / "sources" / "source.stfs"})
+    {
+        auto nested = source == root / "sources" / "source.stfs" ? dlcOnly : selection;
+        if (nested.discs.size()) nested.discs.front().path = dest / "disc1";
+        else nested.packages.front().path = dest / "source.stfs";
+        bool refused = false;
+        try { install::ReimportContent(nested, dest); } catch (const install::Error&) { refused = true; }
+        Require(refused, "overlapping file/directory source accepted");
+    }
+    bool flatRejected = false;
+    std::filesystem::copy_file(root / "sources" / "disc1" / "default.xex", dest / "default.xex");
+    try { install::ReimportContent(selection, dest); } catch (const install::Error&) { flatRejected = true; }
+    Require(flatRejected, "flat default.xex destination accepted for disc replacement");
+    std::cout << "[PASS] selective reimport, preparation/publish/callback rollback, retained backups and overlap" << std::endl;
+}
 } // namespace
 
 int main(int argc, char** argv)
 {
+    if (argc > 1 && std::string(argv[1]) == "--reimport")
+    {
+        try { RunReimportTest(); return 0; }
+        catch (const std::exception& error) { std::cerr << error.what() << std::endl; return 1; }
+    }
     if (argc > 1 && std::string(argv[1]) == "--dlc-io")
     {
         try { RunDlcIoTest(); return 0; }

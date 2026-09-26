@@ -46,12 +46,9 @@ v0.6.20 was published on 2026-09-25T21:15:07Z from tag/source commit `be842b91d7
 - [ ] **Deferred frame-generation backlog (D3D12 DLSS FG, dynamic MFG):** deferred FG backlog retains its original priority as future goals rather than mandatory v0.8.0 deliverables. Historical requirements for 2× DLSS-G on D3D12 remain active future backlog goals, and dynamic multi-frame generation (MFG) remains explicitly deferred. See the historical [v0.7.0 plan](notes/v0.7.0-frame-generation-plan.md).
 - [ ] **macOS (AArch64 / Apple Silicon) release planning:** deferred to milestone v0.8.0 alongside user decision, explicitly targeting macOS AArch64 / Apple Silicon. This is a roadmap target only: no macOS build, backend, package, compatibility validation, player acceptance or release artifact exists yet.
 - [ ] **Native Linux AArch64 platform support:** planned roadmap target for milestone v0.8.0. Establish the Linux AArch64 build path, shader compiler toolchain, and dependency distribution; PR #60 provides bounded exploratory live DXC fallback work. Target only: no official AArch64 package, hardware validation, or release artifact exists yet.
-- [ ] **Experimental Android platform support:** planned exploratory roadmap target for milestone v0.8.0 (explicitly experimental). Explore Android NDK integration, Vulkan surface presentation, touch/gamepad input, and audio routing. Target only: no implementation code, APK package, physical device validation, or release exists.
-
 <a id="v090-pm4-translator"></a>
-## v0.9.0 plans
-
-- [ ] **Remove the PM4 translator:** planned target for milestone v0.9.0 to remove the legacy PM4 packet translation layer, currently in planning status. Audit PM4 packet decoders and translation paths in the command processor (`gpu/command_processor.cpp`), map dependencies on PM4 synchronization, register state tracking, and draw dispatch, and execute the removal without predetermining alternative architectures or runtime execution.
+- [ ] **Remove the PM4 translator:** planned target for milestone v0.8.0 to remove the legacy PM4 packet translation layer, currently in planning status. Audit PM4 packet decoders and translation paths in the command processor (`gpu/command_processor.cpp`), map dependencies on PM4 synchronization, register state tracking, and draw dispatch, and execute the removal without predetermining alternative architectures or runtime execution.
+- [ ] **Experimental Android platform support:** planned exploratory roadmap target for milestone v0.8.0 (explicitly experimental). Explore Android NDK integration, Vulkan surface presentation, touch/gamepad input, and audio routing. Target only: no implementation code, APK package, physical device validation, or release exists.
 
 <a id="v050-pc-graphics"></a>
 <a id="next-major-milestone-v050--pc-vulkan-and-direct3d-11"></a>

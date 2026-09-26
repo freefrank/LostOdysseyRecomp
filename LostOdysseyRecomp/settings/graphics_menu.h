@@ -30,7 +30,7 @@ inline void SelectAa(Config& config, uint32_t choice)
 }
 inline bool IsAction(int tab, int row)
 {
-    return (tab == 0 && (row == GameRestoreRow || row == GameMainMenuRow)) ||
+    return (tab == 0 && (row == GameRestoreRow || row == GameMainMenuRow || row == GameImportRow)) ||
            (tab == 2 && (row == int(GraphicsRow::Brightness) || row == int(GraphicsRow::Save))) ||
            (tab == 3 && row == 3);
 }

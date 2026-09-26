@@ -13,8 +13,10 @@
 #include <array>
 #include <cctype>
 #include <charconv>
+#include <chrono>
 #include <cstdio>
 #include <cstring>
+#include <exception>
 #include <fstream>
 #include <functional>
 #include <iostream>
@@ -63,7 +65,38 @@ std::string g_testDlcFailureFile;
 std::string g_testDlcFailureStage;
 std::string g_testDiscFailureFile;
 std::string g_testDiscFailureStage;
+std::string g_testPublishFailureSlot;
+std::string g_testPublishFailureStage;
 #endif
+
+std::string ToLower(std::string_view str);
+
+// Compare complete path components (a sibling such as disc10 is not disc1).
+bool ContainsPath(const std::filesystem::path& parent, const std::filesystem::path& child)
+{
+    auto a = parent.begin(), b = child.begin();
+    for (; a != parent.end() && b != child.end(); ++a, ++b)
+    {
+#ifdef _WIN32
+        if (ToLower(a->string()) != ToLower(b->string())) return false;
+#else
+        if (*a != *b) return false;
+#endif
+    }
+    return a == parent.end();
+}
+
+void RenameSlot(const std::filesystem::path& from, const std::filesystem::path& to,
+                std::string_view slot, std::string_view stage)
+{
+#ifdef LO_IMPORT_TESTING
+    if (slot == g_testPublishFailureSlot && stage == g_testPublishFailureStage)
+        throw Error("Injected " + std::string(stage) + " failure: " + from.string());
+#endif
+    std::error_code ec;
+    std::filesystem::rename(from, to, ec);
+    if (ec) throw Error("Could not " + std::string(stage) + " " + from.string() + " -> " + to.string() + ": " + ec.message());
+}
 
 void CheckDiscOutput(std::ofstream& out, const std::filesystem::path& path, std::string_view stage)
 {
@@ -942,6 +975,12 @@ void SetTestDiscWriteFailure(std::string_view filename, std::string_view stage)
     g_testDiscFailureFile = filename;
     g_testDiscFailureStage = stage;
 }
+
+void SetTestPublishFailure(std::string_view slot, std::string_view stage)
+{
+    g_testPublishFailureSlot = slot;
+    g_testPublishFailureStage = stage;
+}
 #endif
 
 std::vector<std::filesystem::path> Discover(const std::filesystem::path& path)
@@ -1090,10 +1129,12 @@ Scan ScanSource(const std::filesystem::path& path, const Cancelled& cancelled)
 // ----------------------------------------------------------------------------
 // Transactional Installer (Discs and DLC)
 // ----------------------------------------------------------------------------
-InstallResult InstallContent(const ContentScan& selection,
-                             const std::filesystem::path& destination,
-                             const Progress& progress,
-                             const Cancelled& cancelled)
+static InstallResult ImportContentImpl(const ContentScan& selection,
+                                const std::filesystem::path& destination,
+                                const Progress& progress,
+                                const Cancelled& cancelled,
+                                bool replace,
+                                const Commit& commit)
 {
     auto checkCancelled = [&]() -> bool {
         return cancelled && cancelled();
@@ -1116,10 +1157,11 @@ InstallResult InstallContent(const ContentScan& selection,
     }
     result.destination = dest.string();
 
-    // DLC destination root rule: if inside disc1..disc4, use parent
+    // Legacy install callers may pass an installed disc directory. Reimport
+    // always receives an explicit installation root, even when named disc1.
     auto gameRootDir = dest;
     std::string leafName = ToLower(gameRootDir.filename().string());
-    if (leafName == "disc1" || leafName == "disc2" || leafName == "disc3" || leafName == "disc4")
+    if (!replace && (leafName == "disc1" || leafName == "disc2" || leafName == "disc3" || leafName == "disc4"))
     {
         if (std::filesystem::exists(gameRootDir / "default.xex", ec))
             gameRootDir = gameRootDir.parent_path();
@@ -1127,36 +1169,34 @@ InstallResult InstallContent(const ContentScan& selection,
     dest = gameRootDir;
     result.destination = dest.string();
 
+    if (replace && !selection.discs.empty() && std::filesystem::exists(dest / "default.xex", ec))
+        throw Error("A flat default.xex installation needs a separate destination for disc reimport: " + dest.string());
+
     reportProgress(0, 0, "Checking selected source");
 
-    // Verify source and destination separation
+    // Check every source against the effective root, including ISO/STFS files and
+    // the GOD header paired with its .data directory. Resolve existing aliases.
+    const auto canonicalDest = std::filesystem::weakly_canonical(dest);
+    auto checkSource = [&](const std::filesystem::path& path) {
+        const auto canonicalSource = std::filesystem::weakly_canonical(path);
+        if (ContainsPath(canonicalSource, canonicalDest) || ContainsPath(canonicalDest, canonicalSource))
+            throw Error("Source and destination must be separate folders: " + path.string());
+    };
     for (const auto& disc : selection.discs)
     {
-        auto resolvedSrc = std::filesystem::absolute(disc.path, ec).lexically_normal();
-        if (dest == resolvedSrc)
-            throw Error("Source and destination must be separate folders");
-
-        auto relDest = dest.lexically_relative(resolvedSrc);
-        if (!relDest.empty() && relDest.native()[0] != '.')
-            throw Error("Source and destination must be separate folders");
-
-        auto relSrc = resolvedSrc.lexically_relative(dest);
-        if (!relSrc.empty() && relSrc.native()[0] != '.')
-            throw Error("Source and destination must be separate folders");
+        checkSource(disc.path);
+        if (disc.kind == Kind::God)
+        {
+            const auto data = disc.path;
+            const auto header = data.parent_path() / data.stem();
+            checkSource(header);
+        }
     }
 
     for (const auto& package : selection.packages)
-    {
-        if (!std::filesystem::is_directory(package.path)) continue;
-        const auto source = std::filesystem::absolute(package.path).lexically_normal();
-        auto contains = [](const auto& parent, const auto& child) {
-            const auto relative = child.lexically_relative(parent);
-            return !relative.empty() && *relative.begin() != "..";
-        };
-        if (contains(source, dest) || contains(dest, source))
-            throw Error("Source and destination must be separate folders");
-    }
+        checkSource(package.path);
     std::filesystem::create_directories(dest, ec);
+    if (ec) throw Error("Could not create destination: " + ec.message());
 
     // Destination directory link/junction check
     if (IsSymlinkOrReparse(dest))
@@ -1203,6 +1243,43 @@ InstallResult InstallContent(const ContentScan& selection,
         ~LockGuard() { if (fn) fn(); }
     } guard{unlock};
 
+    if (selection.discs.empty() && selection.packages.empty())
+        throw Error("Select at least one disc or DLC package");
+
+    // Exclusive staging: never delete a pre-existing staging path (it may hold
+    // the only copy of a previous transaction's failed rollback).
+    std::filesystem::path stagingPath;
+    for (unsigned attempt = 0; attempt < 100; ++attempt)
+    {
+        const auto nonce = std::chrono::steady_clock::now().time_since_epoch().count();
+        auto candidate = dest / (".import-staging-" + ProcessIdString() + "-" + std::to_string(nonce) + "-" + std::to_string(attempt));
+        ec.clear();
+        if (std::filesystem::create_directory(candidate, ec)) { stagingPath = candidate; break; }
+        if (ec && ec != std::errc::file_exists) throw Error("Could not create import staging: " + ec.message());
+    }
+    if (stagingPath.empty()) throw Error("Could not reserve a unique import staging directory");
+
+    // Only paths selected for replacement are entered in this publication list.
+    struct Slot { std::filesystem::path target, staged, backup; bool old = false, published = false; };
+    std::vector<Slot> slots;
+    bool preserveStaging = false;
+    auto cleanupStaging = [&]() {
+        if (preserveStaging) return;
+#ifdef LO_IMPORT_TESTING
+        if (g_testPublishFailureSlot == "staging" && g_testPublishFailureStage == "cleanup")
+        {
+            result.warning += "Import staging cleanup failed; remove " + stagingPath.string() + ": injected failure";
+            return;
+        }
+#endif
+        std::error_code removeEc;
+        std::filesystem::remove_all(stagingPath, removeEc);
+        if (removeEc)
+            result.warning += "Import staging cleanup failed; remove " + stagingPath.string() + ": " + removeEc.message();
+    };
+
+    try
+    {
     // ------------------------------------------------------------------------
     // Phase 1: Install Discs
     // ------------------------------------------------------------------------
@@ -1210,7 +1287,7 @@ InstallResult InstallContent(const ContentScan& selection,
     {
         for (const auto& d : selection.discs)
         {
-            if (std::filesystem::exists(dest / ("disc" + std::to_string(d.disc)), ec))
+            if (!replace && std::filesystem::exists(dest / ("disc" + std::to_string(d.disc)), ec))
                 throw Error("Disc " + std::to_string(d.disc) + " is already installed; existing files were kept");
         }
 
@@ -1218,10 +1295,25 @@ InstallResult InstallContent(const ContentScan& selection,
         for (uint32_t n = 1; n <= 4; ++n)
         {
             auto existing = dest / ("disc" + std::to_string(n));
-            if (std::filesystem::exists(existing, ec))
+            if (std::filesystem::exists(existing, ec) &&
+                std::none_of(selection.discs.begin(), selection.discs.end(), [n](const DiscInfo& disc) { return disc.disc == n; }))
             {
-                std::vector<Entry> existingEntries;
-                DiscInfo installed = PrepareDisc(existing, Kind::Folder, existingEntries, true, checkCancelled);
+                if (IsSymlinkOrReparse(existing)) throw Error("Disc destination is a link: " + existing.string());
+                // Retained discs only need an edition-compatible XEX identity;
+                // do not require a second complete scan of installed resources.
+                const auto xexPath = existing / "default.xex";
+                if (IsSymlinkOrReparse(xexPath) || !std::filesystem::is_regular_file(xexPath, ec) ||
+                    std::filesystem::file_size(xexPath, ec) > 32 * 1024 * 1024)
+                    throw Error("Retained disc XEX is missing or invalid: " + existing.string());
+                std::ifstream xex(xexPath, std::ios::binary);
+                std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(xex)), {});
+                if (bytes.empty() || bytes.size() > 32 * 1024 * 1024) throw Error("Retained disc XEX is missing or invalid: " + existing.string());
+                auto info = ParseExecution(bytes);
+                if (info.title != "4D5307FA" || info.discs != 4)
+                    throw Error("Retained disc XEX has incompatible title or disc count: " + existing.string());
+                auto [edition, identity] = IdentifyDisc(info, Sha256Bytes(bytes.data(), bytes.size()), Md5Bytes(bytes.data(), bytes.size()));
+                DiscInfo installed;
+                installed.disc = info.disc; installed.edition = edition;
                 if (installed.disc != n || installed.edition != targetEdition)
                     throw Error("Cannot mix Europe/Asia and USA/Europe discs in one installation");
             }
@@ -1256,19 +1348,7 @@ InstallResult InstallContent(const ContentScan& selection,
         if (!ec && spaceInfo.free < totalDiscBytes + 64ULL * 1024 * 1024)
             throw Error("Not enough free space for the selected discs");
 
-        std::string stagingName = ".import-staging-" + ProcessIdString();
-        std::filesystem::path stagingPath = dest / stagingName;
-        std::filesystem::remove_all(stagingPath, ec);
-        std::filesystem::create_directories(stagingPath, ec);
-
-        auto cleanupStaging = [&]() {
-            std::error_code removeEc;
-            std::filesystem::remove_all(stagingPath, removeEc);
-        };
-
         uint64_t doneBytes = 0;
-        try
-        {
             for (const auto& ld : loadedDiscs)
             {
                 if (checkCancelled())
@@ -1356,38 +1436,13 @@ InstallResult InstallContent(const ContentScan& selection,
             if (checkCancelled())
                 throw Error("Import cancelled; original files were kept", true);
 
-            // Publish: rename discs from staging to destination
-            std::vector<std::string> published;
-            try
+            for (const auto& ld : loadedDiscs)
             {
-                for (const auto& ld : loadedDiscs)
-                {
-                    std::string discDirName = "disc" + std::to_string(ld.info.disc);
-                    std::filesystem::rename(stagingPath / discDirName, dest / discDirName, ec);
-                    if (ec) throw Error("Failed to publish disc: " + ec.message());
-                    published.push_back(discDirName);
-                    result.discs.push_back(static_cast<int>(ld.info.disc));
-                }
+                auto name = "disc" + std::to_string(ld.info.disc);
+                slots.push_back({dest / name, stagingPath / name, stagingPath / "old" / name});
+                result.discs.push_back(static_cast<int>(ld.info.disc));
             }
-            catch (...)
-            {
-                for (auto it = published.rbegin(); it != published.rend(); ++it)
-                {
-                    std::error_code rollbackEc;
-                    std::filesystem::rename(dest / *it, stagingPath / *it, rollbackEc);
-                }
-                cleanupStaging();
-                throw;
-            }
-
-            cleanupStaging();
-        }
-        catch (...)
-        {
-            cleanupStaging();
-            throw;
-        }
-        std::sort(result.discs.begin(), result.discs.end());
+            std::sort(result.discs.begin(), result.discs.end());
     }
 
     // ------------------------------------------------------------------------
@@ -1398,13 +1453,17 @@ InstallResult InstallContent(const ContentScan& selection,
         auto dlcRoot = dest / "dlc";
         if (IsSymlinkOrReparse(dlcRoot)) throw Error("DLC destination must not contain links or junctions");
         std::filesystem::create_directories(dlcRoot, ec);
+        if (ec) throw Error("Could not create DLC directory: " + ec.message());
 
         struct DlcInstallPackage { DlcPackageInfo info; std::unique_ptr<StfsPackage> stfs; std::optional<ExtractedDlc> extracted; };
         std::vector<DlcInstallPackage> dlcPackages;
+        std::set<std::string> selectedContentIds;
         for (const auto& pkgInfo : selection.packages)
         {
             if (checkCancelled())
                 throw Error("DLC import cancelled; source files were kept", true);
+            if (!selectedContentIds.insert(pkgInfo.contentId).second)
+                throw Error("Duplicate selected DLC content ID: " + pkgInfo.contentId);
 
             DlcInstallPackage package{pkgInfo, nullptr, std::nullopt};
             if (std::filesystem::is_directory(pkgInfo.path))
@@ -1423,8 +1482,10 @@ InstallResult InstallContent(const ContentScan& selection,
             }
 
             auto targetDir = dlcRoot / pkgInfo.contentId;
+            if (IsSymlinkOrReparse(targetDir)) throw Error("DLC destination is a link: " + targetDir.string());
             if (std::filesystem::exists(targetDir, ec))
             {
+                if (replace) { dlcPackages.push_back(std::move(package)); continue; }
                 if (package.extracted)
                 {
                     auto existing = ReadExtractedDlc(targetDir, checkCancelled);
@@ -1463,19 +1524,10 @@ InstallResult InstallContent(const ContentScan& selection,
             if (!ec && spaceInfo.free < totalDlcBytes + 16ULL * 1024 * 1024)
                 throw Error("Not enough free space for the selected DLC");
 
-            std::string dlcStagingName = ".dlc-import-" + ProcessIdString();
-            std::filesystem::path dlcStagingPath = dest / dlcStagingName;
-            std::filesystem::remove_all(dlcStagingPath, ec);
-            std::filesystem::create_directories(dlcStagingPath, ec);
-
-            auto cleanupDlcStaging = [&]() {
-                std::error_code removeEc;
-                std::filesystem::remove_all(dlcStagingPath, removeEc);
-            };
+            const auto dlcStagingPath = stagingPath / "dlc";
+            std::filesystem::create_directories(dlcStagingPath);
 
             uint64_t dlcDone = 0;
-            try
-            {
                 for (const auto& pkg : dlcPackages)
                 {
                     const auto& info = pkg.info;
@@ -1604,41 +1656,117 @@ InstallResult InstallContent(const ContentScan& selection,
                 if (checkCancelled())
                     throw Error("DLC import cancelled; source files were kept", true);
 
-                // Publish DLC
-                std::vector<std::string> publishedDlc;
-                try
+                for (const auto& pkg : dlcPackages)
                 {
-                    for (const auto& pkg : dlcPackages)
-                    {
-                        const auto& info = pkg.info;
-                        std::filesystem::rename(dlcStagingPath / info.contentId, dlcRoot / info.contentId, ec);
-                        if (ec) throw Error("Failed to publish DLC: " + ec.message());
-                        publishedDlc.push_back(info.contentId);
-                        result.dlcImported.push_back(info.contentId);
-                    }
+                    const auto& id = pkg.info.contentId;
+                    slots.push_back({dlcRoot / id, dlcStagingPath / id, stagingPath / "old" / "dlc" / id});
+                    result.dlcImported.push_back(id);
                 }
-                catch (...)
-                {
-                    for (auto it = publishedDlc.rbegin(); it != publishedDlc.rend(); ++it)
-                    {
-                        std::error_code rbEc;
-                        std::filesystem::rename(dlcRoot / *it, dlcStagingPath / *it, rbEc);
-                    }
-                    cleanupDlcStaging();
-                    throw;
-                }
-                cleanupDlcStaging();
-            }
-            catch (...)
-            {
-                cleanupDlcStaging();
-                throw;
-            }
         }
     }
 
-    reportProgress(1, 1, "Import complete");
+    // One commit for all selected discs and DLC; reverse every rename on failure.
+    const auto dataRoot = os::user_paths::UsePortableLayout() ? std::filesystem::current_path() : os::user_paths::DataDir();
+    const std::array protectedRoots{
+        std::filesystem::weakly_canonical(os::user_paths::ProfileDir()),
+        std::filesystem::weakly_canonical(dataRoot / "save"),
+        std::filesystem::weakly_canonical(dataRoot / "cache")};
+    for (const auto& slot : slots)
+    {
+        const auto target = std::filesystem::weakly_canonical(slot.target);
+        for (const auto& root : protectedRoots)
+            if (ContainsPath(target, root) || ContainsPath(root, target))
+                throw Error("Import would replace a profile, save or cache root: " + root.string());
+    }
+    if (checkCancelled()) throw Error("Import cancelled; original files were kept", true);
+    try
+    {
+        for (auto& slot : slots)
+        {
+            if (IsSymlinkOrReparse(slot.target)) throw Error("Import target is a link: " + slot.target.string());
+            std::filesystem::create_directories(slot.target.parent_path());
+            if (std::filesystem::exists(slot.target))
+            {
+                if (!replace) throw Error("Import target already exists: " + slot.target.string());
+                std::filesystem::create_directories(slot.backup.parent_path());
+                RenameSlot(slot.target, slot.backup, slot.target.filename().string(), "backup");
+                slot.old = true;
+            }
+            RenameSlot(slot.staged, slot.target, slot.target.filename().string(), "publish");
+            slot.published = true;
+        }
+        if (checkCancelled()) throw Error("Import cancelled; original files were kept", true);
+        if (commit)
+        {
+            if (std::filesystem::is_regular_file(dest / "default.xex") ||
+                std::filesystem::is_regular_file(dest / "disc1" / "default.xex"))
+                commit(result);
+            else
+                result.warning += "Destination has no Disc 1; game path was not updated. ";
+        }
+    }
+    catch (...)
+    {
+        const auto failure = std::current_exception();
+        std::string rollbackErrors;
+        for (auto it = slots.rbegin(); it != slots.rend(); ++it)
+        {
+            auto& slot = *it;
+            try
+            {
+                if (slot.published) RenameSlot(slot.target, slot.staged, slot.target.filename().string(), "rollback-new");
+                // Never replace a live new slot if moving it away failed.
+                if (slot.old && std::filesystem::exists(slot.target))
+                    throw Error("Cannot restore old slot while new slot remains at " + slot.target.string());
+                if (slot.old) RenameSlot(slot.backup, slot.target, slot.target.filename().string(), "rollback-old");
+            }
+            catch (const std::exception& error)
+            {
+                preserveStaging = true;
+                rollbackErrors += " [" + std::string(error.what()) + "; old backup: " + slot.backup.string() + "]";
+            }
+        }
+        if (!rollbackErrors.empty())
+        {
+            std::string reason = "Non-standard publication failure";
+            try { std::rethrow_exception(failure); }
+            catch (const std::exception& error) { reason = error.what(); }
+            catch (...) {}
+            throw Error(reason + "; rollback incomplete, keep staging " + stagingPath.string() + ":" + rollbackErrors);
+        }
+        std::rethrow_exception(failure);
+    }
+
+    } // preparation and publication
+    catch (...)
+    {
+        cleanupStaging();
+        throw;
+    }
+    // The callback is the commit point. Cleanup problems must not turn a
+    // committed import into a failure that prompts the user to retry.
+    cleanupStaging();
+    try { reportProgress(1, 1, "Import complete"); }
+    catch (const std::exception& error) { result.warning += " Progress reporting failed after commit: " + std::string(error.what()); }
+    catch (...) { result.warning += " Progress reporting failed after commit."; }
     return result;
+}
+
+InstallResult InstallContent(const ContentScan& selection,
+                             const std::filesystem::path& destination,
+                             const Progress& progress,
+                             const Cancelled& cancelled)
+{
+    return ImportContentImpl(selection, destination, progress, cancelled, false, {});
+}
+
+InstallResult ReimportContent(const ContentScan& selection,
+                              const std::filesystem::path& destination,
+                              const Progress& progress,
+                              const Cancelled& cancelled,
+                              const Commit& commit)
+{
+    return ImportContentImpl(selection, destination, progress, cancelled, true, commit);
 }
 
 std::vector<int> InstallDiscs(const std::filesystem::path& source,

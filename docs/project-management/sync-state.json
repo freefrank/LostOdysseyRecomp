@@ -2982,12 +2982,12 @@
         "Area": "GPU architecture",
         "Status": "Todo",
         "Delivery": "Not started",
-        "Release": "v0.9.0",
-        "Evidence": "Planned v0.9.0 delivery target to remove the legacy PM4 packet translation layer; currently in planning status. Does not predetermine alternative presentation architectures, direct execution, or runtime implementations.",
+        "Release": "v0.8.0",
+        "Evidence": "Planned v0.8.0 delivery target to remove the legacy PM4 packet translation layer; currently in planning status. Does not predetermine alternative presentation architectures, direct execution, or runtime implementations.",
         "Source key": "remove-pm4-translator"
       },
       "title": "Remove the PM4 translator",
-      "body_sha256": "7e9742a343e0fd456da2f1cbf0fac171995656221031398197a8952e7892d0ad"
+      "body_sha256": "870827978fa798f90ffc49bd863fc956cb3ce32024f8c8413516ec82dedd88df"
     },
     "fsr-frame-generation": {
       "id": "PVTI_lAHOAAsUY84Biy1azg83gNM",

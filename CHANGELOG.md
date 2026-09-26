@@ -9,12 +9,22 @@ One record of completed changes, with unpublished work separated from verified r
 ### English
 
 - Planning targets for v0.8.0:
-  - Added Linux AArch64, macOS AArch64 (Apple Silicon), and experimental Android support as future roadmap targets for v0.8.0 alongside Frame Generation; this planning update does not represent existing implementation, test coverage, or delivery, nor does targeting Apple Silicon preclude other macOS architectures.
+  - Added Linux AArch64, macOS AArch64 (Apple Silicon), experimental Android support, and removal of the legacy PM4 packet translation layer as future roadmap targets for v0.8.0 alongside Frame Generation; this planning update does not represent existing implementation, test coverage, or delivery, nor does targeting Apple Silicon preclude other macOS architectures.
 
 ### 简体中文
 
 - v0.8.0 规划目标更新：
-  - 新增 Linux AArch64、macOS AArch64（Apple Silicon）以及实验性 Android 支持作为 v0.8.0 的未来规划目标（与插帧并列）；本轮仅为目标规划，不代表已有实现、测试覆盖或交付，明确 Apple Silicon 目标亦不排除后续支持其他 macOS 架构的可能性，且不对 Android 承诺完整支持。
+  - 新增 Linux AArch64、macOS AArch64（Apple Silicon）、实验性 Android 支持以及移除既有 PM4 数据包转换层作为 v0.8.0 的未来规划目标（与插帧并列）；本轮仅为目标规划，不代表已有实现、测试覆盖或交付，明确 Apple Silicon 目标亦不排除后续支持其他 macOS 架构的可能性，且不对 Android 承诺完整支持。
+
+## v0.7.1 — 2026-09-26
+
+### English
+
+- In-game disc and DLC re-import: Gameplay settings adds "Import discs & DLC", confirming a restart with `--install` after waiting for the existing guest process to exit (Windows and Linux). The installer review allows selecting specific discs or DLCs to re-import, replacing only selected items while preserving unselected content, staging all files before final publish, and rolling back on failure or cancellation. Game paths update on commit callback without changing defaults on DLC-only imports or missing Disc 1; protects source media, saves, profiles, and cache. Prepared for v0.7.1.
+
+### 简体中文
+
+- 游戏内光盘与 DLC 重新导入：游戏玩法（Gameplay）设置新增“导入光盘与 DLC”（Import discs & DLC），确认后等待旧游戏进程退出并带 `--install` 重启（支持 Windows 与 Linux）。安装器 Review 界面支持选择特定光盘或 DLC 进行增量重导，仅替换所选项并保留未选内容，全量暂存完毕后统一发布，失败或取消时自动回退。提交回调中更新游戏路径，仅导 DLC 或缺少 Disc 1 时不修改默认启动路径；保护源介质、存档、配置文件与缓存。准备纳入 v0.7.1。
 
 ## v0.7.0 — 2026-09-26
 
