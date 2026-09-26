@@ -360,14 +360,14 @@ public:
         // The renderer has already selected a complete scene-copy boundary and
         // this owner has its matching camera/depth. Missing tonemap certification
         // may lower image quality; it need not prevent an SR bring-up attempt.
-        // Never infer HDR from format, never change legacy/probe/FG behavior,
-        // and do not use allocation padding as the valid scene rectangle.
+        // The caller's existing SourceFormat/scene-rectangle copy contract stays
+        // in force. RenderTexture is abstract; do not read native backend fields
+        // through it or guess a transfer function from an allocation descriptor.
         const bool assumeSdr = sr_compatibility::Enabled() && allowHybrid &&
             encoding == ColorEncoding::Unknown &&
             upscaling::MatchesSrProvider(plan.requestedUpscaler,plan.consumer) &&
             plan.frameGeneration == upscaling::FrameGeneration::Off && !plan.requiresReadback &&
-            sourceFormat_ == plume::RenderFormat::R8G8B8A8_UNORM &&
-            source->desc.format == sourceFormat_ && source->desc.width == width_ && source->desc.height == height_;
+            sourceFormat_ == plume::RenderFormat::R8G8B8A8_UNORM;
         if (assumeSdr) {
             encoding = ColorEncoding::Sdr;
             if (!previous.colorEncodingAssumed || previous.number + 1 != frame_)
