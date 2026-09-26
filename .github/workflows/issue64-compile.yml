@@ -36,14 +36,20 @@ jobs:
           git -C out/issue64-ngx fetch --depth 1 origin 374959484e79a640feaba44c93ac8cfb0a03f5b5
           git -C out/issue64-ngx sparse-checkout set include
           git -C out/issue64-ngx checkout FETCH_HEAD
-      - name: Compile production NGX adapter with SDK on and off
+      - name: Compile production adapters and history with SDK on and off
+        shell: bash
         run: |
+          includes=(-I LostOdysseyRecomp -I thirdparty/plume -I thirdparty/plume/contrib/volk
+            -I thirdparty/plume/contrib/Vulkan-Headers/include
+            -I thirdparty/plume/contrib/VulkanMemoryAllocator/include -I out/issue64-ngx/include)
           for mode in on off; do
-            flags=''
-            if [ "$mode" = on ]; then flags='-DLO_DLSS_SDK=1'; fi
-            c++ -std=c++20 -O2 -include bit -DLO_GPU_PLUME=1 $flags \
-              -I LostOdysseyRecomp -I thirdparty/plume -I thirdparty/plume/contrib/volk \
-              -I thirdparty/plume/contrib/Vulkan-Headers/include -I thirdparty/plume/contrib/VulkanMemoryAllocator/include \
-              -I out/issue64-ngx/include -c LostOdysseyRecomp/gpu/dlss_ngx.cpp -o "out/issue64-ngx-$mode.o"
+            flags=()
+            if [ "$mode" = on ]; then flags=(-DLO_DLSS_SDK=1); fi
+            for source in dlss_ngx temporal_upscaler; do
+              c++ -std=c++20 -O2 -include bit -DLO_GPU_PLUME=1 "${flags[@]}" "${includes[@]}" \
+                -c "LostOdysseyRecomp/gpu/$source.cpp" -o "out/issue64-$source-$mode.o"
+            done
+            printf '#include "gpu/temporal_history.h"\n' | \
+              c++ -std=c++20 -include bit -DLO_GPU_PLUME=1 "${flags[@]}" "${includes[@]}" -x c++ -fsyntax-only -
           done
           echo 'COMPILE_ONLY_OK; no tests or real GPU validation performed'
