@@ -7,7 +7,9 @@
 #include "temporal_aa.h"
 #include "temporal_scene.h"
 #include "taa_live_control.h"
+#include "sr_compatibility.h"
 #include <cstdlib>
+#include <cstdio>
 
 namespace gpu::temporal {
 struct HistoryContinuityDepthRange {
@@ -166,6 +168,7 @@ class HistoryOwner {
         double jx=0,jy=0;
         bool completed=false,stableGrid=false,inputsComplete=false,taaResolved=false;
         ColorEncoding colorEncoding=ColorEncoding::Sdr;
+        bool colorEncodingAssumed=false;
         TemporalResetReason inputReset=TemporalResetReason::FirstFrame;
         frame_plan::FramePlan plan{};
         JitterSample jitter{};
@@ -354,11 +357,30 @@ public:
         if(scene.Color().width!=width_||scene.Color().height!=height_) { captureFailure_=InputCaptureFailure::SceneColorExtentMismatch; return false; }
         if(!plan.width||!plan.height) { captureFailure_=InputCaptureFailure::PlanExtentInvalid; return false; }
         if(plan.width!=width_||plan.height!=height_) { captureFailure_=InputCaptureFailure::PlanExtentMismatch; return false; }
+        // The renderer has already selected a complete scene-copy boundary and
+        // this owner has its matching camera/depth. Missing tonemap certification
+        // may lower image quality; it need not prevent an SR bring-up attempt.
+        // Never infer HDR from format, never change legacy/probe/FG behavior,
+        // and do not use allocation padding as the valid scene rectangle.
+        const bool assumeSdr = sr_compatibility::Enabled() && allowHybrid &&
+            encoding == ColorEncoding::Unknown &&
+            upscaling::MatchesSrProvider(plan.requestedUpscaler,plan.consumer) &&
+            plan.frameGeneration == upscaling::FrameGeneration::Off && !plan.requiresReadback &&
+            sourceFormat_ == plume::RenderFormat::R8G8B8A8_UNORM &&
+            source->desc.format == sourceFormat_ && source->desc.width == width_ && source->desc.height == height_;
+        if (assumeSdr) {
+            encoding = ColorEncoding::Sdr;
+            if (!previous.colorEncodingAssumed || previous.number + 1 != frame_)
+                std::fprintf(stderr,
+                    "SR compatibility: provider=%u frame=%llu assuming SDR at eligible RGBA8 scene copy %ux%u; LO_SR_COMPAT=0 restores color certification\n",
+                    unsigned(plan.requestedUpscaler), static_cast<unsigned long long>(frame_), width_, height_);
+        }
         Transition(commands,source_,plume::RenderTextureLayout::COPY_DEST);
         commands->copyTextureRegion(plume::RenderTextureCopyLocation::Subresource(source_.texture.get()),plume::RenderTextureCopyLocation::Subresource(source));
         Transition(commands,source_,plume::RenderTextureLayout::SHADER_READ);
         current.colorOrdinal=scene.Color().ordinal; current.jx=jitter.pixelX; current.jy=jitter.pixelY;
         current.plan=plan;current.jitter=jitter;current.colorEncoding=encoding;
+        current.colorEncodingAssumed=assumeSdr;
         motionVectorValid_=motion&&motion->ready&&motion->frame==frame_&&motion->epoch==epoch_&&
             motion->depthAllocation==current.allocation&&motion->width==width_&&motion->height==height_&&
             motion->velocity&&motion->reactive;
@@ -369,7 +391,8 @@ public:
             if(previous.number+1!=frame_) automatic=automatic|TemporalResetReason::FrameDiscontinuity;
             if(previous.epoch!=epoch_) automatic=automatic|TemporalResetReason::EpochChanged;
             if(previous.allocation!=current.allocation) automatic=automatic|TemporalResetReason::AllocationChanged;
-            if(previous.colorEncoding!=encoding) automatic=automatic|TemporalResetReason::ColorEncodingChanged;
+            if(previous.colorEncoding!=encoding || previous.colorEncodingAssumed!=assumeSdr)
+                automatic=automatic|TemporalResetReason::ColorEncodingChanged;
             if(previous.plan.consumer!=plan.consumer) automatic=automatic|TemporalResetReason::ConsumerChanged;
             if(previous.plan.width!=plan.width||previous.plan.height!=plan.height) automatic=automatic|TemporalResetReason::ExtentChanged;
             if(!previous.camera || !ContinuousHistoryCamera(*current.camera,*previous.camera)) automatic=automatic|TemporalResetReason::CameraDiscontinuity;
@@ -409,6 +432,7 @@ public:
         result.motion={motionView_.velocity,{width_,height_},0,0,width_,height_};
         result.motionInvalidity={motionView_.reactive,{width_,height_},0,0,width_,height_};
         result.jitter=current.jitter; result.colorEncoding=current.colorEncoding; result.currentInputsComplete=current.inputsComplete;
+        result.colorEncodingAssumed=current.colorEncodingAssumed;
         result.motionState=motionView_.state; result.resetReasons=current.inputReset;
         result.resetHistory=result.resetReasons!=TemporalResetReason::None;
         return result;
