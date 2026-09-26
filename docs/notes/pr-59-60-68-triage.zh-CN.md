@@ -15,3 +15,7 @@
 合并提交为 `457ba24adb768474c3229d34ccaee0bc1cc93789`，PR head 为 `435b424`。已合入 API、`LOTEX1`/PNG packer、原生菜单图集与字体页面替换；通用客端纹理、TTF、模型和影片尚未接入。C++ 双平台 Mod API 与 9 项 Python 测试的 CI 已通过，该 PR head 的其他检查也通过；合并到当前主线后的检查另记如下。
 
 Wiki 发布 workflow `36226859217` 重跑成功并确认 `has_wiki=true`，PR 正文已修正，Wiki 已实际发布。合并后的 workflow `36228382565` 已全项 SUCCESS，Windows／Linux tests 和 publish-wiki 均通过；SR hybrid workflow `36228382568` 也已全项 SUCCESS。Settings／AF workflow 最初被主线 PlayStation 提示夹具缺口阻塞，原因是 `hid::UsesPlayStationPrompts()` 没有测试替身；main 已加入可控 stub 与 Xbox→PlayStation→Xbox 像素断言，本地 Release `LoSettingsInteraction` 编译及 `settings_interaction` 1/1 已通过。修复后的 Settings workflow `36228625840` 与 AF workflow `36228625841` 均已 SUCCESS；本地 fixture 1/1 与 Settings 双平台结果也已通过。原生画面验收以及 Mod Organizer 2／USVFS 验收仍待完成；PR #68 不等同于发布验收。
+
+## v0.7.0 发布记录
+
+源代码与 tag 为 `4142f235f46255953980c175a86bd919de77967e`。CI workflow [`36228746088`](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/36228746088) 的 Windows、Linux、FSR 与 draft 检查全部 SUCCESS，随后已公开发布 [v0.7.0](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.7.0)。发布复用既有功能验证；Mod API 的原生视觉与 Mod Organizer 2／USVFS 验收仍待完成。
