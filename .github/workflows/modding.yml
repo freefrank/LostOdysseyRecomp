@@ -1,0 +1,104 @@
+name: Mod API and Wiki
+
+on:
+  push:
+    branches: [main, feature/mod-asset-interface]
+    paths:
+      - 'LostOdysseyRecomp/modding/**'
+      - 'LostOdysseyRecomp/settings/menu_assets.*'
+      - 'tools/modding/**'
+      - 'tools/tests/mod_*'
+      - 'docs/wiki/**'
+      - 'CMakeLists.txt'
+      - '.github/workflows/modding.yml'
+  pull_request:
+    paths:
+      - 'LostOdysseyRecomp/modding/**'
+      - 'LostOdysseyRecomp/settings/menu_assets.*'
+      - 'tools/modding/**'
+      - 'tools/tests/mod_*'
+      - 'docs/wiki/**'
+      - 'CMakeLists.txt'
+      - '.github/workflows/modding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install Pillow
+      - name: Configure standalone API tests
+        run: cmake -S . -B build-mod-tests -DLO_BUILD_RUNTIME=OFF -DLO_BUILD_RECOMP_LIB=OFF -DLO_BUILD_TOOLS=OFF -DLO_BUILD_GPU=OFF -DLO_BUILD_MOD_TESTS=ON
+      - run: cmake --build build-mod-tests --config Release --target LoModApiTest
+      - run: ctest --test-dir build-mod-tests -C Release --output-on-failure
+      - run: python tools/tests/mod_tools_test.py
+
+  publish-wiki:
+    needs: tests
+    if: github.event_name == 'push' && github.repository == 'freefrank/LostOdysseyRecomp'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    concurrency:
+      group: modding-wiki-publication
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Publish managed mod pages without replacing unrelated Wiki content
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          export GIT_TERMINAL_PROMPT=0
+          export GIT_ASKPASS="$RUNNER_TEMP/lo-wiki-askpass.sh"
+          cat > "$GIT_ASKPASS" <<'ASKPASS'
+          #!/bin/sh
+          case "$1" in
+            *Username*) printf '%s\n' x-access-token ;;
+            *) printf '%s\n' "$GH_TOKEN" ;;
+          esac
+          ASKPASS
+          chmod 700 "$GIT_ASKPASS"
+          trap 'rm -f "$GIT_ASKPASS"' EXIT
+          wiki="$RUNNER_TEMP/lo-modding-wiki"
+          if ! git clone --depth 1 "https://github.com/${GITHUB_REPOSITORY}.wiki.git" "$wiki"; then
+            echo '::error::Cannot clone Wiki. Enable Wiki and create its first page, then rerun this job.'
+            exit 1
+          fi
+          python tools/modding/publish_wiki.py --source docs/wiki --wiki "$wiki" --repository "$GITHUB_REPOSITORY" --revision "$GITHUB_SHA"
+          git -C "$wiki" config user.name 'github-actions[bot]'
+          git -C "$wiki" config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git -C "$wiki" add -- Modding.md Creating-Mods.md Modding-API.md Mod-Organizer-2.md Runtime-Texture-Replacement.md Modding-Validation.md Home.md _Sidebar.md
+          if ! git -C "$wiki" diff --cached --quiet; then
+            git -C "$wiki" commit -m "docs(mods): publish API v1 from ${GITHUB_SHA}"
+            git -C "$wiki" push origin HEAD
+          fi
+          branch=$(git -C "$wiki" symbolic-ref --short HEAD)
+          local_sha=$(git -C "$wiki" rev-parse HEAD)
+          remote_sha=$(git -C "$wiki" ls-remote origin "refs/heads/$branch" | cut -f1)
+          test "$local_sha" = "$remote_sha"
+          echo "Published Wiki commit: $remote_sha"
+          echo "Wiki: https://github.com/${GITHUB_REPOSITORY}/wiki/Modding"
+          {
+            echo '## Mod Wiki published'
+            echo "Source commit: $GITHUB_SHA"
+            echo "Wiki commit: $remote_sha"
+            echo "https://github.com/${GITHUB_REPOSITORY}/wiki/Modding"
+          } >> "$GITHUB_STEP_SUMMARY"

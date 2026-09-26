@@ -33,6 +33,7 @@
 #include "updater/apply_mode.h"
 #include "version.h"
 #include "install/host.h"
+#include "modding/mod_api.h"
 
 #ifdef _WIN32
 #include <timeapi.h>
@@ -129,6 +130,10 @@ int main(int argc, char* argv[])
     }
     const auto executableDirectory = ExecutableDirectory();
     os::user_paths::Initialize(executableDirectory);
+    const auto modsRoot = os::user_paths::UsePortableLayout()
+        ? executableDirectory / "mods"
+        : os::user_paths::DataDir() / "mods";
+    modding::Initialize(modsRoot);
 #if defined(_WIN32) || defined(__linux__)
     // Direct launches keep all portable data beside the executable. Explicit
     // --game launches retain their caller's working directory for isolated tests.
