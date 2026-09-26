@@ -86,7 +86,9 @@ out/build/linux-clang/LostOdysseyRecomp/LostOdysseyRecomp
 
 ### DXC shared library on Linux
 
-CMake automatically copies the Linux DXC shared library from `tools/XenosRecomp/thirdparty/dxc-bin/lib/x64/libdxcompiler.so` into the output folder next to the `LostOdysseyRecomp` ELF during build. If you need a custom DXC location, set the `LO_DXC_PATH` environment variable before running.
+CMake selects the bundled Linux DXC shared library by target architecture: `lib/x64/libdxcompiler.so` for x86-64 and `lib/arm64/libdxcompiler.so` for AArch64. If you need a custom DXC location, set the `LO_DXC_PATH` environment variable before running.
+
+For the experimental Linux AArch64 cross-build path, including building an ARM64 `libdxcompiler.so` and combining live DXC fallback with the portable Vulkan shader pack, see [Linux AArch64 build notes](LINUX_ARM64.md).
 
 ### Packaging AppImage
 
