@@ -7,6 +7,7 @@
 #include <map>
 #include <mutex>
 #include <set>
+#include <sstream>
 #include <system_error>
 
 namespace modding {
@@ -14,13 +15,14 @@ namespace {
 struct Entry {
     AssetId id;
     std::filesystem::path base, file;
-    std::string modId, directory;
+    std::string modId;
     int32_t priority = 0;
 };
 struct Snapshot {
-    std::filesystem::path root;
+    std::filesystem::path root, defaultRoot;
     std::map<std::string, Entry> entries;
     std::vector<Diagnostic> diagnostics;
+    ResolutionMode mode = ResolutionMode::Combined;
     bool enabled = false;
 };
 std::mutex gMutex;
@@ -30,6 +32,13 @@ uint64_t gGeneration = 0;
 thread_local bool gInProvider = false;
 constexpr size_t kMaxManifestBytes = 1024 * 1024;
 
+std::string Utf8(const std::filesystem::path& path) {
+    const auto text = path.generic_u8string();
+    return {text.begin(), text.end()};
+}
+std::filesystem::path FromUtf8(std::string_view text) {
+    return std::filesystem::path(std::u8string(text.begin(), text.end()));
+}
 std::string_view Trim(std::string_view s) {
     const auto first = s.find_first_not_of(" \t\r\n");
     if (first == s.npos) return {};
@@ -59,7 +68,7 @@ std::optional<std::filesystem::path> Relative(std::string_view text) {
     std::string s(text);
     std::replace(s.begin(), s.end(), '\\', '/');
     if (s.front() == '/' || s.find(':') != s.npos) return {};
-    auto path = std::filesystem::u8path(s);
+    auto path = FromUtf8(s);
     if (path.is_absolute() || path.has_root_name() || path.has_root_directory()) return {};
     for (const auto& part : path) if (part == "..") return {};
     return path.lexically_normal();
@@ -101,8 +110,16 @@ void LoadManifest(Snapshot& snapshot, const std::filesystem::path& manifest, std
     std::error_code ec;
     const auto size = std::filesystem::file_size(manifest, ec);
     if (ec || size > kMaxManifestBytes) { Diagnose(snapshot, manifest, 0, "manifest exceeds 1 MiB or cannot be read"); return; }
-    std::ifstream input(manifest, std::ios::binary);
-    if (!input) { Diagnose(snapshot, manifest, 0, "cannot open manifest"); return; }
+    // Bound the read itself, not just getline after allocation. Reject files
+    // changed between stat/open/read rather than allocating an unbounded line.
+    std::ifstream file(manifest, std::ios::binary);
+    if (!file) { Diagnose(snapshot, manifest, 0, "cannot open manifest"); return; }
+    std::string bytes(static_cast<size_t>(size), '\0');
+    if (!file.read(bytes.data(), static_cast<std::streamsize>(bytes.size())) ||
+        file.peek() != std::char_traits<char>::eof() || file.bad()) {
+        Diagnose(snapshot, manifest, 0, "manifest changed or could not be read"); return;
+    }
+    std::istringstream input(std::move(bytes));
     std::vector<std::pair<size_t, std::string>> lines;
     std::string line;
     size_t lineNo = 0, consumed = 0;
@@ -115,11 +132,11 @@ void LoadManifest(Snapshot& snapshot, const std::filesystem::path& manifest, std
         if (!text.empty() && text.front() != '#' && text.front() != ';') lines.emplace_back(lineNo, text);
     }
     if (!input.eof()) { Diagnose(snapshot, manifest, lineNo, "manifest read failed"); return; }
-    std::string id = manifest.parent_path().filename().string();
+    std::string id = Utf8(manifest.parent_path().filename());
     int32_t priority = 0;
     bool enabled = true;
     std::set<std::string> metadata;
-    // Parse metadata first, so a trailing priority/enabled field affects every entry.
+    // Parse metadata first: trailing priority/enabled fields affect every entry.
     for (const auto& [n, text] : lines) {
         const auto equal = text.find('=');
         if (equal == text.npos) { Diagnose(snapshot, manifest, n, "expected key=value"); return; }
@@ -136,6 +153,7 @@ void LoadManifest(Snapshot& snapshot, const std::filesystem::path& manifest, std
         else valid = false;
         if (!valid) { Diagnose(snapshot, manifest, n, "unknown, duplicate or invalid metadata: " + std::string(key)); return; }
     }
+    if (!metadata.count("api_version")) { Diagnose(snapshot, manifest, 0, "api_version=1 is required"); return; }
     if (!enabled) return;
     if (!ModIdValid(id) || !ids.insert(id).second) { Diagnose(snapshot, manifest, 0, "invalid or duplicate mod id: " + id); return; }
     for (const auto& [n, text] : lines) {
@@ -147,15 +165,13 @@ void LoadManifest(Snapshot& snapshot, const std::filesystem::path& manifest, std
         const auto key = CanonicalKey(Trim(left.substr(colon + 1)));
         const auto relative = Relative(Trim(std::string_view(text).substr(equal + 1)));
         if (!kind || key.empty() || !relative) { Diagnose(snapshot, manifest, n, "invalid asset kind, identity or relative path"); continue; }
-        Entry entry{{*kind, key}, manifest.parent_path(), manifest.parent_path() / *relative, id,
-                    manifest.parent_path().filename().string(), priority};
+        Entry entry{{*kind, key}, manifest.parent_path(), manifest.parent_path() / *relative, id, priority};
         if (!ContainedFile(entry.base, entry.file) || !ContainedFile(snapshot.root, entry.file)) {
             Diagnose(snapshot, manifest, n, "replacement is missing or escapes the mod directory"); continue;
         }
         const auto lookup = LookupKey(entry.id);
         const auto it = snapshot.entries.find(lookup);
-        // Directories are sorted. Equal priority: lexically later directory wins;
-        // repeated resource entries in that manifest: last declaration wins.
+        // Sorted directories: later directory wins ties, last entry wins in a file.
         if (it == snapshot.entries.end() || priority >= it->second.priority)
             snapshot.entries.insert_or_assign(lookup, std::move(entry));
     }
@@ -164,10 +180,10 @@ void LoadManifest(Snapshot& snapshot, const std::filesystem::path& manifest, std
 
 std::string MakeManifestKey(std::string_view package, uint32_t exportIndex, std::string_view object) {
     if (!SafeText(package) || !SafeText(object) || package.find_first_of("#=") != package.npos ||
-        object.find_first_of("#:=/\\") != object.npos) return {};
+        object.find_first_of("#:=/\\") != object.npos || Trim(package) != package || Trim(object) != object) return {};
     const auto relative = Relative(package);
     if (!relative || *relative == ".") return {};
-    auto path = relative->generic_string();
+    auto path = Utf8(*relative);
     if (path.empty() || path.back() == '/') return {};
     for (char& c : path) if (c >= 'A' && c <= 'Z') c += 'a' - 'A';
     const auto key = path + "#" + std::to_string(exportIndex) + ":" + std::string(object);
@@ -187,25 +203,35 @@ std::filesystem::path OverlayRelativePath(const AssetId& id) {
 }
 void Initialize(const std::filesystem::path& requestedRoot) {
     auto snapshot = std::make_shared<Snapshot>();
+    snapshot->defaultRoot = requestedRoot;
     try {
         auto root = requestedRoot;
         if (const auto* overrideRoot = std::getenv("LO_MODS_DIR"); overrideRoot && *overrideRoot)
-            root = std::filesystem::u8path(overrideRoot);
+            root = FromUtf8(overrideRoot);
         std::error_code ec;
         snapshot->root = std::filesystem::absolute(root, ec).lexically_normal();
         snapshot->enabled = !ec && !root.empty();
+        if (const auto* mode = std::getenv("LO_MODS_MODE"); mode && *mode) {
+            const std::string_view value(mode);
+            if (value == "overlay") snapshot->mode = ResolutionMode::Overlay;
+            else if (value == "standalone") snapshot->mode = ResolutionMode::Standalone;
+            else if (value != "combined") {
+                snapshot->enabled = false;
+                Diagnose(*snapshot, snapshot->root, 0, "LO_MODS_MODE must be combined, standalone or overlay");
+            }
+        }
         if (const auto* flag = std::getenv("LO_MODS"); flag && (std::string_view(flag) == "0" || std::string_view(flag) == "false"))
             snapshot->enabled = false;
-        if (snapshot->enabled && std::filesystem::is_directory(snapshot->root, ec)) {
+        if (snapshot->enabled && snapshot->mode != ResolutionMode::Overlay && std::filesystem::is_directory(snapshot->root, ec)) {
             std::vector<std::filesystem::path> dirs;
             std::filesystem::directory_iterator it(snapshot->root, ec), end;
             for (; !ec && it != end; it.increment(ec)) {
-                const auto name = it->path().filename().string();
+                const auto name = Utf8(it->path().filename());
                 std::error_code entryError;
                 if (name != "overlay" && !name.empty() && name.front() != '.' && it->is_directory(entryError)) dirs.push_back(it->path());
             }
             if (ec) Diagnose(*snapshot, snapshot->root, 0, "directory scan incomplete: " + ec.message());
-            std::sort(dirs.begin(), dirs.end(), [](const auto& a, const auto& b) { return a.filename().generic_string() < b.filename().generic_string(); });
+            std::sort(dirs.begin(), dirs.end(), [](const auto& a, const auto& b) { return Utf8(a.filename()) < Utf8(b.filename()); });
             std::set<std::string> ids;
             for (const auto& dir : dirs) {
                 try { LoadManifest(*snapshot, dir / "mod.ini", ids); }
@@ -214,10 +240,15 @@ void Initialize(const std::filesystem::path& requestedRoot) {
         }
     } catch (const std::exception& e) { snapshot->enabled = false; Diagnose(*snapshot, requestedRoot, 0, e.what()); }
     for (const auto& d : snapshot->diagnostics)
-        std::fprintf(stderr, "[mods] %s:%zu: %s\n", d.manifest.string().c_str(), d.line, d.message.c_str());
+        std::fprintf(stderr, "[mods] %s:%zu: %s\n", Utf8(d.manifest).c_str(), d.line, d.message.c_str());
     std::lock_guard lock(gMutex);
     gSnapshot = std::move(snapshot);
     ++gGeneration;
+}
+void Reload() {
+    std::filesystem::path root;
+    { std::lock_guard lock(gMutex); root = gSnapshot->defaultRoot; }
+    Initialize(root);
 }
 void Shutdown() {
     // Release providers outside the mutex: their destructors may call this API.
@@ -231,6 +262,7 @@ void Shutdown() {
 }
 uint64_t Generation() { std::lock_guard lock(gMutex); return gGeneration; }
 std::filesystem::path Root() { std::lock_guard lock(gMutex); return gSnapshot->root; }
+ResolutionMode Mode() { std::lock_guard lock(gMutex); return gSnapshot->mode; }
 std::vector<Diagnostic> Diagnostics() { std::lock_guard lock(gMutex); return gSnapshot->diagnostics; }
 std::optional<ResolvedAsset> Resolve(const AssetRequest& request) {
     if (!KindValid(request.id.kind)) return {};
@@ -242,12 +274,16 @@ std::optional<ResolvedAsset> Resolve(const AssetRequest& request) {
     {
         std::lock_guard lock(gMutex);
         snapshot = gSnapshot;
-        if (!gInProvider) if (const auto it = gProviders.find(request.id.kind); it != gProviders.end()) provider = it->second;
+        if (!gInProvider && snapshot->mode != ResolutionMode::Overlay)
+            if (const auto it = gProviders.find(request.id.kind); it != gProviders.end()) provider = it->second;
     }
     if (!snapshot->enabled) return {};
-    const auto overlay = snapshot->root / OverlayRelativePath(normalized.id);
-    if (ContainedFile(snapshot->root / "overlay", overlay) && ContainedFile(snapshot->root, overlay))
-        return ResolvedAsset{normalized.id, overlay, "@overlay", 0};
+    if (snapshot->mode != ResolutionMode::Standalone) {
+        const auto overlay = snapshot->root / OverlayRelativePath(normalized.id);
+        if (ContainedFile(snapshot->root / "overlay", overlay) && ContainedFile(snapshot->root, overlay))
+            return ResolvedAsset{normalized.id, overlay, "@overlay", 0};
+    }
+    if (snapshot->mode == ResolutionMode::Overlay) return {};
     if (provider) {
         struct Guard { Guard() { gInProvider = true; } ~Guard() { gInProvider = false; } } guard;
         try {
@@ -255,7 +291,7 @@ std::optional<ResolvedAsset> Resolve(const AssetRequest& request) {
             std::error_code ec;
             if (result && result->id.kind == normalized.id.kind && CanonicalKey(result->id.key) == normalized.id.key &&
                 std::filesystem::is_regular_file(result->path, ec) && !ec) { result->id = normalized.id; return result; }
-        } catch (...) { /* An optional provider must not prevent vanilla loading. */ }
+        } catch (...) { /* Optional providers must not prevent vanilla loading. */ }
     }
     if (const auto it = snapshot->entries.find(LookupKey(normalized.id)); it != snapshot->entries.end()) {
         const auto& e = it->second;

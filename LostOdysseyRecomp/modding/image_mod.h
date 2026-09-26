@@ -17,6 +17,7 @@ struct ImageData {
 inline std::optional<ImageData> ReadImageReplacement(const AssetRequest& request,
                                                     uint32_t expectedWidth, uint32_t expectedHeight) noexcept {
     try {
+        if (request.id.kind != AssetKind::Image) return {};
         const auto resolved = Resolve(request);
         if (!resolved) return {};
         auto decode = [&]() -> std::optional<ImageData> {
@@ -50,7 +51,11 @@ inline std::optional<ImageData> ReadImageReplacement(const AssetRequest& request
             return image;
         };
         auto image = decode();
-        if (!image) std::fprintf(stderr, "[mods] invalid image, using original: %s\n", resolved->path.string().c_str());
+        if (!image) {
+            const auto path = resolved->path.generic_u8string();
+            std::fprintf(stderr, "[mods] invalid image, using original: %s\n",
+                std::string(path.begin(), path.end()).c_str());
+        }
         return image;
     } catch (...) { return {}; }
 }
