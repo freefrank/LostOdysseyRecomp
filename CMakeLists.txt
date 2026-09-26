@@ -58,12 +58,39 @@ if(LO_BUILD_RUNTIME)
     endif()
     add_subdirectory(thirdparty)
     add_subdirectory(LostOdysseyRecomp)
+    # These focused targets explicitly compile menu_assets.cpp rather than using
+    # the runtime's recursive source list, so they need its mod resolver too.
+    foreach(_lo_menu_test IN ITEMS LoMenuRenderTest LoMenuFlowTest)
+        if(TARGET ${_lo_menu_test})
+            target_sources(${_lo_menu_test} PRIVATE
+                ${CMAKE_SOURCE_DIR}/LostOdysseyRecomp/modding/mod_api.cpp)
+        endif()
+    endforeach()
     if(LO_BUILD_GPU)
         add_subdirectory(tools/tests/native_dlss)
     endif()
     if(TARGET LoPpcAutoSync)
         add_dependencies(LostOdysseyRecomp LoPpcAutoSync)
     endif()
+endif()
+
+# No private game data, generated PPC library, GPU or third-party dependency.
+option(LO_BUILD_MOD_TESTS "Build standalone mod API and image contract tests" OFF)
+if(LO_BUILD_MOD_TESTS)
+    enable_testing()
+    find_package(Threads REQUIRED)
+    add_executable(LoModApiTest
+        tools/tests/mod_api_test.cpp
+        LostOdysseyRecomp/modding/mod_api.cpp)
+    target_include_directories(LoModApiTest PRIVATE LostOdysseyRecomp)
+    target_compile_features(LoModApiTest PRIVATE cxx_std_20)
+    target_link_libraries(LoModApiTest PRIVATE Threads::Threads)
+    if(MSVC)
+        target_compile_options(LoModApiTest PRIVATE /UNDEBUG)
+    else()
+        target_compile_options(LoModApiTest PRIVATE -UNDEBUG)
+    endif()
+    add_test(NAME LoModApiTest COMMAND LoModApiTest)
 endif()
 
 if(UNIX AND LO_BUILD_RUNTIME)
