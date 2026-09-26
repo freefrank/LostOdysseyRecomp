@@ -389,7 +389,23 @@ jobs:
             exit 0
           fi
           gh release upload "$RELEASE_TAG" "${linux_assets[@]}" --clobber
+      - name: Reuse published Flatpak asset when available
+        id: flatpak-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ -n "$RELEASE_TAG" ]; then
+            assets=$(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name')
+            if printf '%s\n' "$assets" | grep -Fxq -- "LostOdysseyRecomp-linux-x64-${RELEASE_TAG}.flatpak"; then
+              echo 'build=false' >> "$GITHUB_OUTPUT"
+              echo "Reusing the published Flatpak asset for $RELEASE_TAG."
+              exit 0
+            fi
+          fi
+          echo 'build=true' >> "$GITHUB_OUTPUT"
       - name: Checkout pinned FFmpeg source for Flatpak
+        if: steps.flatpak-release.outputs.build == 'true'
         uses: actions/checkout@v4
         with:
           repository: xenia-project/FFmpeg
@@ -398,6 +414,7 @@ jobs:
           submodules: recursive
           persist-credentials: false
       - name: Checkout pinned Zstd source for Flatpak
+        if: steps.flatpak-release.outputs.build == 'true'
         uses: actions/checkout@v4
         with:
           repository: facebook/zstd
@@ -406,6 +423,7 @@ jobs:
           submodules: recursive
           persist-credentials: false
       - name: Install Flatpak build tools and selected runtime
+        if: steps.flatpak-release.outputs.build == 'true'
         run: |
           set -euo pipefail
           sudo apt-get update
@@ -427,6 +445,7 @@ jobs:
           sudo flatpak --system info --show-commit org.freedesktop.Sdk//26.08
           sudo flatpak --system info --show-commit org.freedesktop.Sdk.Extension.llvm22//26.08
       - name: Build private-input Flatpak from pinned sources
+        if: steps.flatpak-release.outputs.build == 'true'
         run: |
           set -euo pipefail
           python3 -B tools/package_flatpak.py \
@@ -455,6 +474,7 @@ jobs:
             done
           '
       - name: Install and inspect Flatpak in temporary user installation
+        if: steps.flatpak-release.outputs.build == 'true'
         run: |
           set -euo pipefail
           check_home=$(mktemp -d "$RUNNER_TEMP/lo-flatpak-user.XXXXXX")
@@ -529,6 +549,7 @@ jobs:
             done
           '
       - uses: actions/upload-artifact@v4
+        if: steps.flatpak-release.outputs.build == 'true'
         with:
           name: LostOdysseyRecomp-linux-x64-flatpak
           path: |
