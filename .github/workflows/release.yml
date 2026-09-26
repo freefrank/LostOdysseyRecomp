@@ -190,27 +190,24 @@ jobs:
             out/releases/LostOdysseyRecomp-*.zip
             out/releases/LostOdysseyRecomp-*.sha256
           if-no-files-found: error
-      - name: Upload Windows assets to draft release
+      - name: Upload Windows assets to release
         if: env.RELEASE_TAG != ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $assets = @(Get-ChildItem out/releases/LostOdysseyRecomp-*.zip,out/releases/LostOdysseyRecomp-*.sha256 | ForEach-Object FullName)
           if ($assets.Count -eq 0) { throw 'No Windows release assets to upload.' }
-          $json = gh release view $env:RELEASE_TAG --json isDraft,assets
-          if ($LASTEXITCODE -ne 0) { throw 'Draft release is missing.' }
+          $json = gh release view $env:RELEASE_TAG --json assets
+          if ($LASTEXITCODE -ne 0) { throw 'Release is missing.' }
           $release = $json | ConvertFrom-Json
-          if (-not $release.isDraft) {
-            Write-Host 'Release already published; preserving its reviewed assets.'
-            exit 0
-          }
           $existing = @($release.assets | ForEach-Object { $_.name })
           $missing = @($assets | Where-Object { $existing -notcontains [IO.Path]::GetFileName($_) })
           if ($missing.Count -eq 0) {
-            Write-Host 'Windows assets already on the draft; preserving its reviewed assets.'
+            Write-Host 'Windows assets already on the release; preserving its reviewed assets.'
             exit 0
           }
           gh release upload $env:RELEASE_TAG @missing
+          if ($LASTEXITCODE -ne 0) { throw 'Windows release asset upload failed.' }
 
   release-linux:
     name: Linux Release
@@ -364,11 +361,12 @@ jobs:
             out/releases/LostOdysseyRecomp-*.AppImage
             out/releases/LostOdysseyRecomp-*.AppImage.sha256
           if-no-files-found: error
-      - name: Upload Linux assets to draft release
+      - name: Upload Linux assets to release
         if: env.RELEASE_TAG != ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
           linux_assets=()
           for file in out/releases/LostOdysseyRecomp-*.AppImage out/releases/LostOdysseyRecomp-*.AppImage.sha256; do
             if [ -f "$file" ]; then
@@ -379,16 +377,18 @@ jobs:
             echo "No Linux release assets to upload." >&2
             exit 1
           fi
-          if ! gh release view "$RELEASE_TAG" --json isDraft >/dev/null; then
-            echo "Draft release is missing." >&2
-            exit 1
-          fi
-          is_draft=$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)
-          if [ "$is_draft" != "true" ]; then
-            echo "Release already published; refusing to overwrite Linux assets."
+          existing=$(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name')
+          missing=()
+          for file in "${linux_assets[@]}"; do
+            if ! grep -Fxq -- "$(basename "$file")" <<< "$existing"; then
+              missing+=("$file")
+            fi
+          done
+          if [ "${#missing[@]}" -eq 0 ]; then
+            echo "Linux assets already on the release; preserving its reviewed assets."
             exit 0
           fi
-          gh release upload "$RELEASE_TAG" "${linux_assets[@]}" --clobber
+          gh release upload "$RELEASE_TAG" "${missing[@]}"
       - name: Reuse published Flatpak asset when available
         id: flatpak-release
         env:
