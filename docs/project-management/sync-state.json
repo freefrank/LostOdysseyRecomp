@@ -1475,12 +1475,14 @@
       "fields": {
         "Kind": "Bug",
         "Area": "Input",
-        "Status": "Todo",
-        "Delivery": "Not started",
-        "Source key": "ime-game-controls"
+        "Status": "Done",
+        "Delivery": "Released",
+        "Source key": "ime-game-controls",
+        "Release": "v0.6.19",
+        "Evidence": "Gameplay SDL text input/IME is disabled on window creation and focus regain, shipped in v0.6.19 (CHANGELOG). This completes the implementation request; broader physical IME combinations remain regression coverage, not unimplemented work."
       },
       "title": "Prevent IME interference with gameplay controls",
-      "body_sha256": "0bc3717b715fc926f1714d507e9ed3de1d999e86e27d092073a9f16974419de5"
+      "body_sha256": "b6f945026505970b90943bd0642ee134e6ed38af6a5d5949cc41ce1fd5c3d8a3"
     },
     "enemy-encounter-poses": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56evg",
@@ -1685,12 +1687,14 @@
         "Kind": "Feature",
         "Area": "Platforms",
         "Status": "In Progress",
-        "Delivery": "In progress",
+        "Delivery": "Released",
         "Source key": "linux-steamdeck-platform",
-        "Start date": "2026-09-14"
+        "Start date": "2026-09-14",
+        "Evidence": "Linux x64 Vulkan runtime, SDL menus, importer, updater and AppImage are released. Native AMD Radeon 8060S RADV execution and FSR acceptance are recorded; WSL-only wording is obsolete. Steam Deck hardware, native Steam runtime/Flathub and full-game coverage remain separate open scope; APEX 15W is a proxy, not Deck hardware equivalence.",
+        "Release": "v0.7.0"
       },
       "title": "Port and validate Linux and Steam Deck",
-      "body_sha256": "7f0cb95406b652c973ea2e54dbc6f30acb3e8cadcecd3b150a285f17dfc57981"
+      "body_sha256": "dbd31da8eb62c74f543b8f4b38f5976047232fc01837c1d439043ea8f292301f"
     },
     "screen-space-gi-ssr": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56e-0",
@@ -1721,12 +1725,14 @@
       "fields": {
         "Kind": "Feature",
         "Area": "Mod support",
-        "Status": "Todo",
-        "Delivery": "Not started",
-        "Source key": "texture-replacement-mod-loader"
+        "Status": "In Progress",
+        "Delivery": "Released",
+        "Source key": "texture-replacement-mod-loader",
+        "Release": "v0.7.0",
+        "Evidence": "PR #68 / 457ba24 shipped Mod API v1, deterministic manifest resolution, reload/disabled fallback, LOTEX1/PNG packer and native menu atlas/font replacement in v0.7.0. Mod API and Wiki CI 36228382565 and 36228744475 succeeded. Remaining scope: arbitrary guest texture/model consumers and real external-manager/game acceptance; do not call the delivered framework Not started."
       },
       "title": "Support texture replacement and a mod loader",
-      "body_sha256": "7b3d10c9a79107ec35fce0063502490b9eecd20710ecd306bd50ba6a0768a6f5"
+      "body_sha256": "306729acfb4ee3c597a7ae3ea6f0acbfe941a4bb571c93a23e8073470c452519"
     },
     "switch-platform-alignment": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56fA0",
@@ -1759,12 +1765,13 @@
         "Kind": "Research",
         "Area": "Temporal rendering",
         "Status": "In Progress",
-        "Delivery": "In progress",
+        "Delivery": "Implemented",
         "Source key": "native-object-motion",
-        "Evidence": "Four-save survey and F1 archives remain retained. Motion cold-start shared helper with explicit Pending fallback recovery passed 38 GPU checks; native object/skinned motion vectors remain unproven. SDR/motion replay input probing completed before actual production SR confirmation. No native object/skinned repair, full P3 input coverage, player visual acceptance or release is claimed. Evidence: out/tmp/isolated-motion-cold-start/cold_start_rev2.log; .cache/evidence/game-sr-runtime.json; historical out/save-temporal-survey-20260910/REPORT.md, analysis-summary.json, submission-research.md, F1-REPORT.md, f1-zip-audit.json."
+        "Evidence": "7002f9c and cac8535 implemented motion architecture, rigid/skinned fixtures and TAA integration; v0.6.2 shipped experimental geometric replay, followed by bounded battle replay and Hybrid SR in v0.6.20. CHANGELOG records 768 CPU clips, six shader GPU fixtures and a bounded RTX 5080 battle run. Remaining: unmapped draws, broader skeletal/scene coverage and D3D12 replay PSO; no longer an unimplemented September 10 survey.",
+        "Release": "v0.7.0"
       },
       "title": "Develop native object and skeletal motion vectors",
-      "body_sha256": "8d1455d9f1eac1b553a4c033fb945b6a2b4ae02e277b54c7fd35a970c76e917e"
+      "body_sha256": "049429164f9ffc9fad8d2adca0ec08470c86b08d9934439160001e3646b843ed"
     },
     "temporal-color-exposure": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56fEU",
@@ -1772,12 +1779,13 @@
         "Kind": "Research",
         "Area": "Temporal rendering",
         "Status": "In Progress",
-        "Delivery": "In progress",
+        "Delivery": "Implemented",
         "Source key": "temporal-color-exposure",
-        "Evidence": "Narrow SDR producer-resolve qualification is implemented and proven in the actual Windows RTX 5080 game run: Quality 1707x960 to 2560x1440, DisplayEncoded color and reversed-Z depth. Persistent session sizing passed at 720p and 1440p; same-scale color-height growth passed 14,720 pixels. HDR, exposure and the full color contract remain incomplete; visual/player acceptance is not claimed."
+        "Evidence": "Qualified SDR color/depth/motion contracts are implemented and used by delivered DLSS/FSR; their bounded user acceptance is recorded in v0.7.0. Remaining item scope is HDR/exposure and broader producer qualification, not the already shipped SDR upscaler contract.",
+        "Release": "v0.7.0"
       },
       "title": "Define the temporal color and exposure contract",
-      "body_sha256": "ea11c472bef6182aa16508da1e19a1947dd04f6ad5eb2ee10f0e3bbe6d2fd7cc"
+      "body_sha256": "b1633375b8d90eb7c11e5a29676c43a4433aa16a67038103181d8b9825b6a9ca"
     },
     "vendor-temporal-upscaling": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56fFA",
@@ -2462,17 +2470,17 @@
     "performance-and-shader-startup": {
       "id": "PVTI_lAHOAAsUY84Biy1azg6qLPE",
       "fields": {
-        "Evidence": "R3 CPU waiting-path modernization checkpoint on unpublished deck branch: condition-variable predicate/deadline waits in notified_wait.h for Event/Semaphore/Mutant (replacing 200us polling in kernel/imports.cpp); CommandProcessor write-pointer/shutdown notifications and 500us bounded wait preserving event pumping (gpu/command_processor.{h,cpp}). Fixtures LoNotifiedWaitTest and LoPollWaitTest passed; full Windows build/diff check passed; native Linux build/codegen passed. AMD Radeon 8060S native Vulkan run at 15W STAPM / 25W Fast / 20W Slow: 1280x720 swapchain, ran 90s without error; 60W startup shader prep 28,484 records (28,482 ready, 2 deterministic failures). Earlier stable windows 58.46-58.58 fps; later heavier scene 37-40 fps (not locked 60 fps). No visual player acceptance, commit, push, or release. Prior Cards A-D evidence retained. Target v0.5.9.",
+        "Evidence": "Bounded city/cache improvements, shader preparation and notified-wait modernization are on main and shipped; notified_wait.h entered history in c1a36c6. Prior deck-branch/uncommitted descriptions are historical, not current delivery state. Retain measured scene limits; remaining stalls, two compiler failures and whole-game/15W performance goals are not established.",
         "Kind": "Feature",
         "Area": "Runtime performance",
         "Status": "In Progress",
-        "Delivery": "In progress",
-        "Release": "v0.5.9",
+        "Delivery": "Released",
+        "Release": "v0.7.0",
         "Start date": "2026-09-11",
         "Source key": "performance-and-shader-startup"
       },
       "title": "Investigate remaining stalls and shader-startup compiler failures",
-      "body_sha256": "ae11ae18ea9559bc2660fa270d8fbcc50f19da9aa9119cb081543eb54f8c62af"
+      "body_sha256": "7c0e092c394bd2ae3889382c651ce3269e2cc7ad38533ec7acbe9949647646df"
     },
     "vulkan-ps-loopend-predicate-exit": {
       "id": "PVTI_lAHOAAsUY84Biy1azg6sV44",
@@ -2542,14 +2550,14 @@
       "fields": {
         "Kind": "Infrastructure",
         "Area": "Maintainer workflow",
-        "Status": "In Progress",
-        "Delivery": "Implemented",
+        "Status": "Done",
+        "Delivery": "Validated",
         "Start date": "2026-09-14",
-        "Evidence": "Published on main through 600b08e: Issue-opened triage, @codex comment handling and read-only tracked first-party retrieval are deployed. Secret configured and BOM handling corrected. Nineteen triage/mention plus seven retrieval tests passed; local synthetic mention and real #27/source/API Chinese dry run succeeded without POST. Hosted workflow-dispatch run 34887742345 succeeded but used the ordinary path with no comment_id. A real issue_comment public reply, triage quality, repair, validation, acceptance and release remain pending.",
+        "Evidence": "Deployed Issue-opened and @codex reply workflow; previously passed 19 triage/mention and 7 retrieval checks. Real public @codex response now verified at https://github.com/freefrank/LostOdysseyRecomp/issues/21#issuecomment-5669773986 (per-comment deduplication marker 5669768211); real Issue-opened bot replies also visible on #28/#29/#30/#40. Future answer quality and bug repairs are separate work.",
         "Source key": "openai-compatible-issue-triage-automation"
       },
       "title": "Automate new GitHub Issue analysis and replies",
-      "body_sha256": "70f33d305366ad5f876fbffbad67071dc61e70011c64f57c7d5f2c56bf788dbd"
+      "body_sha256": "bf7f9c2cae0014e4f5b8829c1711216b1ef65be05b868b790a62f6aeb04230bc"
     },
     "issue-27-spanish-fmv-subtitles": {
       "id": "PVTI_lAHOAAsUY84Biy1azg67xS8",
@@ -2865,11 +2873,12 @@
       "fields": {
         "Kind": "Feature",
         "Area": "Updates and packaging",
-        "Status": "In Progress",
-        "Delivery": "In progress",
+        "Status": "Done",
+        "Delivery": "Released",
         "Start date": "2026-09-15",
-        "Evidence": "Authorized for implementation; in-progress investigation and adaptation preparation with parallel librarian/explorer contract audit. No code or acceptance yet. Native Linux AppImage packages are already independently published.",
-        "Source key": "issue-37-portforge-integration"
+        "Evidence": "PortForge Windows/Linux manifest committed in 9abda30 and included in v0.6.20. Live Issue #37 is CLOSED and Project Status is already Done (read back 2026-09-26). No additional launcher hardware coverage inferred.",
+        "Source key": "issue-37-portforge-integration",
+        "Release": "v0.6.20"
       }
     },
     "issue-54-japanese-cutscene-language": {
@@ -2877,11 +2886,11 @@
       "fields": {
         "Kind": "Bug",
         "Area": "Audio and language",
-        "Status": "Awaiting validation",
+        "Status": "Done",
         "Delivery": "Awaiting validation",
         "Release": "v0.6.3",
         "Start date": "2026-09-24",
-        "Evidence": "Invalid voice-menu selection handling fix packaged in v0.6.3 with language tracing. Retained open: recent feedback indicates Japanese cutscene reversions continue on Disc 3 and other scenes; under active monitoring.",
+        "Evidence": "Live Issue #54 is CLOSED and the maintainer Project Status is Done (2026-09-26 readback). Respect tracker closure. PR #66/ab24e0b adds late XMA diagnostics, not a proven cutscene-language root-cause repair; prior Disc 3 CGI language reports remain historical evidence, with no new reporter acceptance inferred.",
         "Source key": "issue-54-japanese-cutscene-language"
       }
     },
@@ -2890,10 +2899,10 @@
       "fields": {
         "Kind": "Bug",
         "Area": "Audio",
-        "Status": "Todo",
-        "Delivery": "Not started",
+        "Status": "Done",
+        "Delivery": "Awaiting validation",
         "Start date": "2026-09-23",
-        "Evidence": "Issue #55 audio report: general voice playback mostly improved, but single spoken line during Obsidian Miasma sequence remains missing, awaiting reproduction save; not a broad failure of all final boss lines.",
+        "Evidence": "Live Issue #55 is CLOSED and the maintainer Project Status is Done (2026-09-26 readback). Reporter confirmed general playback improved, with later individual missing-line reports retained. PR #66/ab24e0b supplies diagnostics, not proof of all-line repair. Closure is not broader audio acceptance.",
         "Source key": "issue-55-disc1-boss-voice-silent"
       }
     },
@@ -2915,10 +2924,11 @@
         "Kind": "Feature",
         "Area": "Input",
         "Status": "In Progress",
-        "Delivery": "In progress",
+        "Delivery": "Released",
         "Start date": "2026-09-16",
-        "Evidence": "PlayStation controller automatic glyph detection and texture replacement completed and user-accepted in local working tree (tracked in playstation-controller-glyphs). Issue #40 remains open for remaining mod support and documentation wiki backlog.",
-        "Source key": "issue-40-controller-mod-support"
+        "Evidence": "PlayStation prompts accepted and released; Mod API v1 plus docs/wiki mod guides delivered via #68/457ba24 and successful Mod API and Wiki CI 36228744475. Maintainer confirms PS controller and mod framework added in Issue #40. Issue remains OPEN; real MO2 integration and broader guest textures/models are not delivered by native-menu v1. Wiki/framework must no longer be listed as absent.",
+        "Source key": "issue-40-controller-mod-support",
+        "Release": "v0.7.0"
       }
     },
     "issue-30-dof-toggle-slider": {
@@ -3009,14 +3019,15 @@
         "Kind": "Feature",
         "Area": "Input",
         "Status": "Done",
-        "Delivery": "Validated",
+        "Delivery": "Released",
         "Start date": "2026-09-16",
         "Target date": "2026-09-26",
-        "Evidence": "PlayStation controller auto-detection and glyph replacement validated by user in local build (HEAD d677a48+dirty, testexe 1ae34ffd7eedcc415816c30b6e74b31d5ca2c0d936cd6aadbf72b49aeca709a4). Covers SDL PS type detection, active device switching, host/debug glyphs, guest Icon_Page_0 and Texture2D_1 hash match, lazy GPU clone, and ABXY/shoulders/StartBack. Verified via pause, cutscenes, shoulder retest. Mod support remains open in Issue #40.",
-        "Source key": "playstation-controller-glyphs"
+        "Evidence": "User-accepted PlayStation host and guest glyphs committed in 5700ca5 and published in v0.7.0 (4142f23, Release CI 36228746088). Pause/cutscene/shoulder acceptance retained within tested controller and scene scope.",
+        "Source key": "playstation-controller-glyphs",
+        "Release": "v0.7.0"
       },
       "title": "Automatic PlayStation controller button glyphs",
-      "body_sha256": "1ad23506756ce78fd21f9c22d640d5eb6b5082c449993458c69fbaebc3e9781a"
+      "body_sha256": "d6f1b842a802132f4681806920c29fce675bdf71b5b354c3c6b9112b82debcdd"
     }
   },
   "project_id": "PVT_kwHOAAsUY84Biy1a"
