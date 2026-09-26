@@ -47,6 +47,10 @@ void Store32(uint8_t* base,uint32_t p,uint32_t v) { for(int i=0;i<4;++i)base[p+i
 unsigned checks=0,saves=0,applies=0,closes=0,consents=0;
 void Check(bool v,const char* message) { ++checks;if(!v){fprintf(stderr,"FAIL: %s\n",message);std::exit(1);} }
 struct FileSystem { static std::filesystem::path GetGameRoot(){return {};} };
+namespace hid {
+bool playStationPrompts = false;
+bool UsesPlayStationPrompts() { return playStationPrompts; }
+}
 namespace settings {
 Config savedConfig;
 Config GetConfig(){return savedConfig;}
@@ -191,6 +195,20 @@ int main(int argc, char** argv) {
     settings::tab=3;settings::row=4;tick(0x1000);Check(!settings::collectionPrompt && !consents,"A does not toggle collection");
     tick(8);Check(settings::collectionPrompt,"right enables collection confirmation");
     settings::collectionChoice=1;tick(0x1000);Check(!settings::collectionPrompt && consents==1,"A still confirms modal dialog");
+    // A controller-style change must invalidate the raster cache without a guest tick.
+    std::vector<uint32_t> promptPixels;
+    uint64_t promptRevision = UINT64_MAX;
+    Check(settings::DrawMenu(promptPixels,promptRevision,1280,720),"Xbox prompts render");
+    const auto xboxPixels = promptPixels;
+    const auto sameRevision = promptRevision;
+    hid::playStationPrompts = true;
+    Check(settings::DrawMenu(promptPixels,promptRevision,1280,720),"PlayStation prompts render");
+    Check(promptRevision == sameRevision && promptPixels != xboxPixels,
+        "controller style changes pixels with unchanged menu revision");
+    hid::playStationPrompts = false;
+    Check(settings::DrawMenu(promptPixels,promptRevision,1280,720),"Xbox prompts restore");
+    Check(promptRevision == sameRevision && promptPixels == xboxPixels,
+        "controller style round trip restores original pixels");
     if (argc > 1) {
         std::filesystem::create_directories(argv[1]);
         for (uint32_t language : {0u,4u}) {
