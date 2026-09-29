@@ -10,13 +10,13 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 - Removed an intermediate CPU copy on validated renderer index-cache hits; converted little-endian indices are reused directly. Live-game performance validation is pending.
 
-- Added an opt-in native command path for SDK bulk register writes and bounded indexed quads / four-vertex title fans (`LO_NATIVE_COMMANDS=1`), retaining the original PM4 path as fallback. Other packets and Xenos rendering remain. The final bounded CPU comparison regressed, so this experimental route remains default-off.
+- Added an opt-in native command path for SDK bulk register writes and bounded indexed quads / four-vertex title fans (`LO_NATIVE_COMMANDS=1`), retaining the original PM4 path as fallback. The ordinary 60 FPS Uhra comparison had a lower point estimate with `all`, but ranges overlap. A more discriminating 120 FPS target reached about 105 FPS and measured -0.4240% actual rate, +0.1907% CmdProc CPU and +3.7693% whole-process CPU; no throughput advantage or formal performance acceptance is claimed. The separate `LO_GPU_STATS=1` comparison is diagnostic because it changes renderer CPU timing; the older lightweight title result remains historical. Other packets and Xenos rendering remain, and this experimental route stays default-off.
 
 ### 简体中文
 
 - 去掉 renderer 索引缓存命中后的中间 CPU 拷贝，直接复用已转换为小端的索引数据；游戏性能收益仍待实测。
 
-- 新增可选的原生命令路径，接管 SDK 批量寄存器写入、限定索引四边形及四顶点标题 fan 绘制（`LO_NATIVE_COMMANDS=1`），保留原 PM4 回退。其他命令与 Xenos 渲染转换仍保留；最终限定范围 CPU 对照出现退步，实验路径保持默认关闭。
+- 新增可选的原生命令路径，接管 SDK 批量寄存器写入、限定索引四边形及四顶点标题 fan 绘制（`LO_NATIVE_COMMANDS=1`），保留原 PM4 回退。普通 60 FPS Uhra 对照的 `all` 点估计较低，但单次范围重叠。更有判别力的 120 FPS 目标实际约 105 FPS，实际速率低 0.4240%，CmdProc CPU 高 0.1907%，全进程 CPU 高 3.7693%；不宣称吞吐收益或正式性能验收。单独的 `LO_GPU_STATS=1` 对照仅作诊断，因为它会改变 renderer CPU 计时；较早的轻负载标题结果作为历史记录保留。其他命令与 Xenos 渲染转换仍保留，实验路径继续默认关闭。
 
 ## [v0.7.15 — 2026-09-29](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.7.15)
 

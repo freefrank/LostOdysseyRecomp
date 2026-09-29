@@ -1,6 +1,10 @@
 # Native command bypass: first runtime implementation
 
-Renderer data-path follow-up: [endian conversion and index-cache reuse](renderer-endian-reuse.md). It removes one index-hit CPU copy but has no live-game performance result and does not replace the negative title CPU comparison below.
+Next development handoff: [native graphics frontend and PM4 removal (Chinese)](native-renderer-pm4-removal-handoff.zh-CN.md). It carries the Uhra 120 FPS evidence, the proposed earlier mesh/state interception, and the ordering, replay and acceptance contracts for the replacement architecture.
+
+Renderer data-path follow-up: [endian conversion and index-cache reuse](renderer-endian-reuse.md). It removes one index-hit CPU copy but has no live-game performance result and does not replace the historical title CPU comparison below.
+
+The title pair below is retained as historical probe evidence. The current performance decision uses the ordinary Uhra city-plaza comparisons recorded in [native-command-uhra-results.json](native-command-uhra-results.json). The 120 FPS target did not cap the measured rate, making that run more useful for comparing throughput; a separate `LO_GPU_STATS=1` four-run comparison is retained for diagnostic coverage because that instrumentation changes renderer CPU timing.
 
 Source baseline: `2ce27e35428d85abde20afb5b6b2c59052810b13`, with the architecture research from `3a95001`.
 
@@ -49,6 +53,13 @@ python tools/perf/run_native_title.py --build C:/candidate --baseline D:/install
 
 `native commands:` log receipts distinguish native register blocks, register words, indexed draws, auto-index fans, predicated skips, title shader-pair hits and equivalent PM4 packet/word counts. `native_words` includes the private record headers. No byte reduction is implied for every register mask. CPU measurements use OS thread times; completed-frame boundaries are sampled from one-second receipts, so their ratio is a bounded-window estimate. Separate-process title images can have different cloud animation phases; the probe explicitly does not claim same-input image replay.
 
+For the current scene workload, use the same driver with `--scene uhra`. It copies the same isolated baseline for each mode and sends the fixed Continue/Uhra input. Ordinary scene entry requires the `xenon_scr.fpd` load and 3,300 completed frames; optional `--scene-stats` also requires the diagnostic heartbeat. Ordinary CPU timing uses `psutil` OS thread snapshots with the denominator from `LO_FRAME_TIMING` completed-frame receipts. `LO_GPU_STATS=1` changes renderer CPU timing and belongs only to the diagnostic comparison. Screenshot capture occurs outside the timed sample. Pass `--fps 120` to run the higher native target.
+
+```powershell
+python tools/perf/run_native_title.py --scene uhra --build C:/candidate --baseline C:/baseline --game D:/game/disc1 --output C:/evidence/uhra-off --mode off
+python tools/perf/run_native_title.py --scene uhra --build C:/candidate --baseline C:/baseline --game D:/game/disc1 --output C:/evidence/uhra-all --mode all
+```
+
 ## Runtime result
 
 The final same-executable D3D12 title pair completed normally, but **the performance go gate did not pass**. Each run used 720p, a 60 FPS cap, SR/FG off, shader prebuild skipped, hidden/muted execution and no input. Screenshot readback was outside the CPU sample. Both processes exited 0 after normal owner cleanup, without forced termination; baseline metadata was unchanged and neither runtime log contained an error-severity record.
@@ -68,3 +79,32 @@ The final enabled receipt at swap 1560 consumed 355,197 native register blocks, 
 The final screenshots show the title text and cloud background on both paths without an obvious new defect. They were taken in separate processes at different animation phases; no identical-input image, exact-pixel, resize, fault-injection or complete resource-lifetime qualification is claimed. Normal exit and bounded rendering are the synchronization/lifetime evidence available here.
 
 Raw local evidence is retained under `out/native-pm4/title-final-off/` and `out/native-pm4/title-final-on/`. The [sanitized result record](native-command-bypass-results.json) retains the numbers and limits. An earlier startup attempt exhausted its warmup bound during shader prebuild and exited normally. The older bulk-only pair predates the corrected draw hooks and is not used to assert a final gain. The retained final summaries have unique CmdProc/process CPU values; unnamed or duplicated thread labels may overwrite each other, so their thread dictionary must not be summed. The driver now aggregates future duplicate labels without altering these retained measurements.
+
+## Runtime result: Uhra city-plaza scene
+
+The ordinary scene comparison used the same development executable (SHA-256 `cc04ae26c1a610dd92c6038c02f73b64b268ef65508c250824a8d23b988d3b83`) in four interleaved D3D12 runs: `off-1`, `all-1`, `all-2`, and `off-2`. Its link inputs include the branch objects, but its embedded `0.7.11/45fbeb2-dirty` version stamp is stale; this is not a clean HEAD build claim. Each run used 1280×720, a 60 FPS cap, SR and FG off, 20 seconds, the isolated `issue70-runtime/baseline`, and the Disc 1 game data. The driver entered the same Uhra city plaza through the fixed Continue input. CPU timing came from `psutil` OS thread snapshots divided by `LO_FRAME_TIMING` completed-frame receipts. Screenshots show the same plaza and were captured outside the timed window.
+
+| Interleaved Uhra sample | Original PM4 (`off`) | Native commands (`all`) |
+|---|---:|---:|
+| Mean CmdProc CPU / frame | 7.551031 ms | 7.157140 ms |
+| Mean whole-process CPU / frame | 14.410547 ms | 14.074803 ms |
+| CmdProc change | — | -5.216% |
+| Whole-process change | — | -2.330% |
+
+All four ordinary runs exited with code 0, were not force-stopped, preserved the baseline, and show the same Uhra plaza without an obvious new defect; animation phases differ. The separate `LO_GPU_STATS=1` diagnostic runs retained the draw-density and command-consumption checks, but that instrumentation changes renderer CPU timing and is not used as the ordinary performance basis.
+
+The ordinary Uhra point estimate is lower with `all`, but the single-run ranges overlap. This is one scene and four samples; the 60 FPS cap does not establish stable throughput gain, GPU time, or formal performance acceptance. No same-input pixel comparison or complete playthrough was performed. The `e2a600b` index-cache reuse change was present in both modes, so this A/B cannot attribute its effect separately. Keep the experimental path default-off and do not expand it on this evidence. Ordinary-run summaries are retained under `out/native-pm4/uhra-lite-{off-1,all-1,all-2,off-2}/`; diagnostic summaries are under `out/native-pm4/uhra-20260929-{off-1,all-1,all-2,off-2}/`.
+
+### 120 FPS target comparison
+
+The second ordinary four-run comparison used the same executable, scene, resolution, backend, SR/FG settings and 20-second duration with a 120 FPS target. The measured rate was about 105 FPS in both modes, so the target did not cap the run. Mean results were:
+
+| 120 FPS target sample | Original PM4 (`off`) | Native commands (`all`) |
+|---|---:|---:|
+| Mean actual rate | 105.1506 FPS | 104.7048 FPS |
+| Mean CmdProc CPU / frame | 7.786641 ms | 7.801491 ms |
+| Mean whole-process CPU / frame | 13.974594 ms | 14.501339 ms |
+| Mean Guest Main / frame | 2.226368 ms | 2.576964 ms |
+| `all` change | — | -0.4240% FPS, +0.1907% CmdProc, +3.7693% process CPU |
+
+All four runs exited normally, preserved the baseline, recorded no runtime errors, and showed the same Uhra plaza view with different NPC animation phases. This higher target did not measure a throughput or CmdProc advantage. The process CPU increase is an observation from this run and is not attributed to a mechanism. The 120 FPS comparison also does not establish formal performance acceptance or a general hardware result. Raw evidence is retained under `out/native-pm4/uhra-120-{off-1,all-1,all-2,off-2}/`.

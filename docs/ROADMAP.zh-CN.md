@@ -48,7 +48,7 @@ Issue、Project 字段和已合并提交于 2026-09-28 核对，发布记录于 
 5. [~] **D3D12 DLSS 插帧后续：**D3D12 DLSS FG 和图像菜单即时切换已随 v0.7.9 交付；更广验证和 failure injection 覆盖仍待完成。
 6. [~] **动态 MFG 后续：**D3D12 adapter 已包含受能力限制的诊断动态 MFG 路径，游戏内菜单仍只提供固定模式。更广 API、平台、倍率和硬件验证仍待完成。
 7. [x] **原生 90／120 FPS 与 VRR：**原生游戏呈现和 FreeSync／G-SYNC Compatible 输出节奏已随 v0.7.15 发布，并获维护者验收。同场景输出节奏和硬件指示器变化已有有界用户证据；Ring、音频、过场、更广游戏、退出生命周期、FG 画质和独立 120 FPS 实体显示帧测量仍属后续覆盖，默认保留 30 FPS。
-8. [ ] **移除 PM4 转换器：**[架构梳理](notes/native-migration-boundaries.md)已推进到[可选 SDK 状态／四边形／标题 fan 旁路](notes/native-command-bypass.md)，标题目标 draw 已实际命中。最终同 EXE 对照的 CmdProc CPU 耗时增加约 23.7%，性能门槛未通过；保持默认关闭，不据此扩大范围，完整移除 PM4 仍待完成。
+8. [ ] **移除 PM4 转换器：**[架构梳理](notes/native-migration-boundaries.md)已推进到[可选 SDK 状态／四边形／标题 fan 旁路](notes/native-command-bypass.md)。普通 60 FPS Uhra 对照中，`all` 的点估计较低：CmdProc 每帧平均 CPU 低 5.216%，全进程每帧平均 CPU 低 2.330%，但单次范围重叠。更有判别力的 120 FPS 目标实际约 105 FPS，`all` 的实际速率低 0.4240%，CmdProc CPU 高 0.1907%，全进程 CPU 高 3.7693%；这不能证明吞吐或 CmdProc 收益，也不构成正式性能验收。保持原型默认关闭；性能资格和完整移除 PM4 仍待完成。较早标题结果和 `LO_GPU_STATS=1` 诊断对照分开记录。
 9. [ ] **Linux AArch64：**平台交付目标，尚不宣称官方包或实机验收。
 10. [ ] **macOS AArch64／Apple Silicon：**图形后端与依赖可行性提前调查，平台交付目标。
 11. [ ] **实验性 Android：**探索目标，尚无 APK 或设备验证。

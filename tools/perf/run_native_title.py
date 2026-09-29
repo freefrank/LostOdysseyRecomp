@@ -1,13 +1,14 @@
-"""Bounded Windows title probe. Launches only an isolated executable/profile copy.
+"""Bounded Windows native-command probe for title or Uhra gameplay.
 
 Requires psutil. Measures OS thread CPU separately from guest-swap wall timing.
-No player input, source modification, game-data write, or dependency installation.
+Uhra uses fixed automated input. Source game data and baseline state are read-only.
 """
 from __future__ import annotations
 
 import argparse
 import ctypes
 from ctypes import wintypes
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -34,6 +35,33 @@ def latest_frame(log: Path) -> int:
         stream.seek(max(0, log.stat().st_size - 131072))
         matches = re.findall(rb"frame timing completed=(\d+)", stream.read())
     return int(matches[-1]) if matches else 0
+
+
+def latest_uhra_heartbeat(log: Path) -> tuple[int, int, str] | None:
+    if not log.exists():
+        return None
+    with log.open("rb") as stream:
+        stream.seek(max(0, log.stat().st_size - 1048576))
+        tail = stream.read()
+    matches = re.findall(
+        rb"heartbeat: swap #(\d+)[^\r\n]*?, (\d+) draws/frame[^\r\n]*?last file '([^']+)'",
+        tail,
+    )
+    if len(matches) < 2:
+        return None
+    last = [(int(frame), int(draws), name.decode("ascii", errors="replace"))
+            for frame, draws, name in matches[-2:]]
+    if all(draws >= 800 and name == "xenon_scr.fpd" for _, draws, name in last):
+        return last[-1]
+    return None
+
+
+def uhra_file_loaded(log: Path) -> bool:
+    if not log.exists():
+        return False
+    with log.open("rb") as stream:
+        stream.seek(max(0, log.stat().st_size - 1048576))
+        return b"open 'game:\\xenon_scr.fpd'" in stream.read().lower()
 
 
 def thread_names(pid: int) -> dict[int, str]:
@@ -94,13 +122,24 @@ def main() -> int:
     for name in ("build", "baseline", "game", "output"):
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--mode", choices=("off", "registers", "all"), required=True)
+    parser.add_argument("--scene", choices=("title", "uhra"), default="title")
+    parser.add_argument("--scene-stats", action="store_true",
+                        help="enable LO_GPU_STATS scene heartbeats and renderer CPU timers")
     parser.add_argument("--backend", choices=("d3d12", "vulkan"), default="d3d12")
+    parser.add_argument("--fps", type=int, choices=(60, 120), default=60,
+                        help="native game-frame target for the isolated profile")
     parser.add_argument("--sample-seconds", type=int, default=15)
-    parser.add_argument("--warmup-frame", type=int, default=600)
-    parser.add_argument("--startup-timeout", type=int, default=120)
+    parser.add_argument("--warmup-frame", type=int)
+    parser.add_argument("--startup-timeout", type=int)
     args = parser.parse_args()
+    if args.warmup_frame is None:
+        args.warmup_frame = 3300 if args.scene == "uhra" else 600
+    if args.startup_timeout is None:
+        args.startup_timeout = 180 if args.scene == "uhra" else 120
     if os.name != "nt":
         parser.error("Windows is required")
+    if args.scene_stats and args.scene != "uhra":
+        parser.error("--scene-stats requires --scene uhra")
     if not (5 <= args.sample_seconds <= 120 and 1 <= args.warmup_frame <= 18000
             and 10 <= args.startup_timeout <= 600):
         parser.error("invalid bounded duration or frame")
@@ -127,7 +166,7 @@ def main() -> int:
     settings_path = run / "settings.ini"
     settings = dict(line.split("=", 1) for line in settings_path.read_text(encoding="utf-8").splitlines()
                     if "=" in line)
-    settings.update(width="1280", height="720", window_mode="0", frame_rate="60",
+    settings.update(width="1280", height="720", window_mode="0", frame_rate=str(args.fps),
                     graphics_backend="0" if args.backend == "d3d12" else "1",
                     antialiasing="0", upscaler="0", internal_resolution="720",
                     frame_generation_provider="0", automatic_updates="0", skip_shader_prebuild="1")
@@ -140,8 +179,21 @@ def main() -> int:
                LO_SHADER_CACHE_DIR=str(run / "shader-cache"),
                LO_SCREENSHOT_REQUEST=str(run / "screenshot-request.txt"),
                LO_SCREENSHOT_PATH=str(run / "scene.ppm"))
-    result = {"mode": args.mode, "backend": args.backend, "executable": str(build / "LostOdysseyRecomp.exe"),
-              "input": "none", "hidden": True, "muted": True,
+    if args.scene == "uhra":
+        env.update(LO_AUTO_BUTTONS="s@120,a@240,a@360,a@480,a@700,a@900",
+                   LO_AUTO_PULSE="6", LO_AUTO_STICK="0,18000,1600,1900")
+        if args.scene_stats:
+            env["LO_GPU_STATS"] = "1"
+    with (run / "LostOdysseyRecomp.exe").open("rb") as executable:
+        executable_sha256 = hashlib.file_digest(executable, "sha256").hexdigest()
+    result = {"mode": args.mode, "scene": args.scene, "backend": args.backend,
+              "target_fps": args.fps,
+              "scene_stats": args.scene_stats,
+              "executable": str(build / "LostOdysseyRecomp.exe"),
+              "executable_sha256": executable_sha256,
+              "baseline": str(baseline), "game": str(game),
+              "input": "none" if args.scene == "title" else "fixed Continue and Uhra route",
+              "hidden": True, "muted": True,
               "cpu_scope": "OS user+kernel thread CPU; frame boundaries sampled from one-second log receipts",
               "same_input_image_replay": False, "forced_stop": False}
     proc = None
@@ -154,13 +206,27 @@ def main() -> int:
             (run / "run.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
             log = run / "runtime.log"
             deadline = time.monotonic() + args.startup_timeout
-            while proc.poll() is None and time.monotonic() < deadline and latest_frame(log) < args.warmup_frame:
+            def ready() -> bool:
+                if latest_frame(log) < args.warmup_frame:
+                    return False
+                if args.scene == "title":
+                    return True
+                if not uhra_file_loaded(log):
+                    return False
+                if not args.scene_stats:
+                    return True
+                heartbeat = latest_uhra_heartbeat(log)
+                return heartbeat is not None and heartbeat[0] >= args.warmup_frame - 120
+
+            while proc.poll() is None and time.monotonic() < deadline and not ready():
                 time.sleep(0.2)
-            if proc.poll() is not None or latest_frame(log) < args.warmup_frame:
-                result["failure"] = "startup did not reach the requested completed-frame boundary"
+            if proc.poll() is not None or not ready():
+                result["failure"] = "startup did not reach the requested scene/frame boundary"
             else:
                 names = thread_names(proc.pid)
                 first_frame = latest_frame(log)
+                if args.scene_stats:
+                    result["start_heartbeat"] = latest_uhra_heartbeat(log)
                 first = cpu_snapshot(proc.pid)
                 deadline = time.monotonic() + args.sample_seconds
                 while proc.poll() is None and time.monotonic() < deadline:
@@ -181,6 +247,10 @@ def main() -> int:
                                   thread_cpu_ms=deltas,
                                   cmdproc_cpu_ms_per_logged_frame=deltas.get("GPU CmdProc", 0) / frames
                                   if frames and "GPU CmdProc" in deltas else None)
+                    if args.scene_stats:
+                        result["end_heartbeat"] = latest_uhra_heartbeat(log)
+                        if result["end_heartbeat"] is None:
+                            result["failure"] = "Uhra high-draw scene was lost during CPU sample"
                     # Readback is outside the timing window.
                     (run / "screenshot-request.txt").write_text("1 1\n", encoding="ascii")
                     deadline = time.monotonic() + 8

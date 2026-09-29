@@ -1,0 +1,71 @@
+{
+  "schema": "lo.native-command.bounded-comparison/uhra/3",
+  "source_branch": "feature/native-pm4-bypass",
+  "source_head": "e2a600b",
+  "same_executable_sha256": "cc04ae26c1a610dd92c6038c02f73b64b268ef65508c250824a8d23b988d3b83",
+  "embedded_version_stamp": "0.7.11/45fbeb2-dirty (stale; link response references branch objects)",
+  "backend": "D3D12",
+  "output": [1280, 720],
+  "ordinary_60_target_fps": 60,
+  "upscaler": "off",
+  "frame_generation": "off",
+  "duration_seconds": 20,
+  "scene": "Uhra city plaza via Continue",
+  "baseline_preserved": true,
+  "sampling": "psutil OS thread snapshots; denominator from LO_FRAME_TIMING completed-frame receipts; LO_GPU_STATS heartbeat only gates diagnostic scene entry",
+  "runs": [
+    {"name": "off-1", "mode": "off", "cmdproc_cpu_ms_per_frame": 7.831918, "process_cpu_ms_per_frame": 15.133078, "exit_code": 0, "forced_stop": false},
+    {"name": "all-1", "mode": "all", "cmdproc_cpu_ms_per_frame": 6.927213, "process_cpu_ms_per_frame": 13.066067, "exit_code": 0, "forced_stop": false},
+    {"name": "all-2", "mode": "all", "cmdproc_cpu_ms_per_frame": 7.387067, "process_cpu_ms_per_frame": 15.083540, "exit_code": 0, "forced_stop": false},
+    {"name": "off-2", "mode": "off", "cmdproc_cpu_ms_per_frame": 7.270145, "process_cpu_ms_per_frame": 13.688017, "exit_code": 0, "forced_stop": false}
+  ],
+  "means": {
+    "off_cmdproc_cpu_ms_per_frame": 7.551031,
+    "all_cmdproc_cpu_ms_per_frame": 7.157140,
+    "cmdproc_change_percent_all_vs_off": -5.216,
+    "off_process_cpu_ms_per_frame": 14.410547,
+    "all_process_cpu_ms_per_frame": 14.074803,
+    "process_change_percent_all_vs_off": -2.330
+  },
+  "visual_inspection": "All four screenshots show the same Uhra plaza without an obvious new defect; animation phases differ",
+  "decision": "ordinary-run point estimate is lower with all, but the single-run ranges overlap and the 60 FPS cap does not establish stable throughput gain or formal performance acceptance",
+  "diagnostic_comparison": {
+    "evidence": "out/native-pm4/uhra-20260929-{off-1,all-1,all-2,off-2}/",
+    "purpose": "LO_GPU_STATS=1 four-run diagnostic comparison",
+    "limitation": "LO_GPU_STATS changes renderer CPU timing and is not the ordinary-run performance basis"
+  },
+  "ordinary_run_evidence": "out/native-pm4/uhra-lite-{off-1,all-1,all-2,off-2}/",
+  "fps_120_comparison": {
+    "target_fps": 120,
+    "duration_seconds": 20,
+    "evidence": "out/native-pm4/uhra-120-{off-1,all-1,all-2,off-2}/",
+    "runs": [
+      {"name": "off-1", "mode": "off", "frames": 2115, "seconds": 20.1242, "fps": 105.0973, "cmdproc_cpu_ms_per_frame": 7.757092, "process_cpu_ms_per_frame": 13.903664, "guest_main_ms_per_frame": 2.282801},
+      {"name": "all-1", "mode": "all", "frames": 2112, "seconds": 20.1239, "fps": 104.9498, "cmdproc_cpu_ms_per_frame": 7.753314, "process_cpu_ms_per_frame": 14.574455, "guest_main_ms_per_frame": 2.581972},
+      {"name": "all-2", "mode": "all", "frames": 2102, "seconds": 20.1226, "fps": 104.4597, "cmdproc_cpu_ms_per_frame": 7.849667, "process_cpu_ms_per_frame": 14.428223, "guest_main_ms_per_frame": 2.571955},
+      {"name": "off-2", "mode": "off", "frames": 2117, "seconds": 20.1228, "fps": 105.2039, "cmdproc_cpu_ms_per_frame": 7.816190, "process_cpu_ms_per_frame": 14.045524, "guest_main_ms_per_frame": 2.169934}
+    ],
+    "means": {
+      "off_fps": 105.1506,
+      "all_fps": 104.7048,
+      "fps_change_percent_all_vs_off": -0.4240,
+      "off_cmdproc_cpu_ms_per_frame": 7.786641,
+      "all_cmdproc_cpu_ms_per_frame": 7.801491,
+      "cmdproc_change_percent_all_vs_off": 0.1907,
+      "off_process_cpu_ms_per_frame": 13.974594,
+      "all_process_cpu_ms_per_frame": 14.501339,
+      "process_change_percent_all_vs_off": 3.7693,
+      "off_guest_main_ms_per_frame": 2.226368,
+      "all_guest_main_ms_per_frame": 2.576964,
+      "guest_main_change_percent_all_vs_off": 15.747
+    },
+    "interpretation": "The 120 FPS target did not cap the roughly 105 FPS measured rate; no throughput or CmdProc advantage was measured. Process CPU increase is a run observation and is not assigned to a mechanism."
+  },
+  "limitations": [
+    "one Uhra scene and four samples",
+    "single-run ranges overlap",
+    "60 FPS cap does not measure uncapped throughput; the 120 FPS run reached about 105 FPS and does not establish a stable throughput result",
+    "no same-input pixel comparison or complete playthrough",
+    "e2a600b index-cache reuse is present in both modes and cannot be isolated by this A/B"
+  ]
+}
