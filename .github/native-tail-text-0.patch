@@ -1,0 +1,52 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 65faaa7..a1322e6 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -10,0 +11,2 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
++- Added a separately opt-in prepared SDK tail handoff (`LO_NATIVE_FRONTEND_PREPARED=1` with mesh). Original shader/derived preparation and fallback remain; game performance is unverified.
++
+@@ -20,0 +23,2 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
++- 新增独立开关的SDK准备后接管路径（mesh模式加`LO_NATIVE_FRONTEND_PREPARED=1`），保留原shader／派生状态准备及回退；游戏性能仍待验证。
++
+diff --git a/LostOdysseyRecomp/gpu/command_processor.cpp b/LostOdysseyRecomp/gpu/command_processor.cpp
+index 494379e..fbcd052 100644
+--- a/LostOdysseyRecomp/gpu/command_processor.cpp
++++ b/LostOdysseyRecomp/gpu/command_processor.cpp
+@@ -243 +243,2 @@ namespace gpu
+-            LOG_INFO("native frontend: mode=mesh (experimental ordinary SDK pre-flush path; mixed PM4 remains)");
++            LOG_INFO("native frontend: mode=mesh prepared_tail={} (experimental ordinary SDK path; mixed PM4 remains)",
++                native_frontend::preparedTailEnabled);
+@@ -717 +718,3 @@ namespace gpu
+-            return native_frontend::meshEnabled && ExecuteNativeMesh(reader);
++            return native_frontend::meshEnabled && ExecuteNativeMesh(reader, false);
++        if (packet == native_frontend::kPreparedMesh)
++            return native_frontend::preparedTailEnabled && ExecuteNativeMesh(reader, true);
+@@ -915 +918 @@ namespace gpu
+-    bool CommandProcessor::ExecuteNativeMesh(Reader& reader)
++    bool CommandProcessor::ExecuteNativeMesh(Reader& reader, bool preparedTail)
+@@ -951 +954,3 @@ namespace gpu
+-        return ExecuteDraw(mesh.draw.initiator, mesh.draw.dmaBase, mesh.draw.dmaSize, true);
++        const bool executed = ExecuteDraw(mesh.draw.initiator, mesh.draw.dmaBase, mesh.draw.dmaSize, true);
++        if (preparedTail) ++m_frontend.preparedDraws;
++        return executed;
+@@ -1076 +1081 @@ namespace gpu
+-                LOG_INFO("native frontend: swap={} mode=mesh mesh_commands={} native_draws={} other_draws={} predicated_skips={} words={} state_values={} producer_revision={} stream_coherency_waits={}",
++                LOG_INFO("native frontend: swap={} mode=mesh mesh_commands={} native_draws={} other_draws={} predicated_skips={} words={} state_values={} producer_revision={} stream_coherency_waits={} prepared_draws={}",
+@@ -1078 +1083 @@ namespace gpu
+-                    m_frontend.predicatedSkips, m_frontend.words, m_frontend.stateValues, m_frontend.lastProducerRevision, m_frontend.streamCoherencyWaits);
++                    m_frontend.predicatedSkips, m_frontend.words, m_frontend.stateValues, m_frontend.lastProducerRevision, m_frontend.streamCoherencyWaits, m_frontend.preparedDraws);
+diff --git a/LostOdysseyRecomp/gpu/command_processor.h b/LostOdysseyRecomp/gpu/command_processor.h
+index 3cd3daa..d743baf 100644
+--- a/LostOdysseyRecomp/gpu/command_processor.h
++++ b/LostOdysseyRecomp/gpu/command_processor.h
+@@ -94 +94 @@ namespace gpu
+-        bool ExecuteNativeMesh(Reader& reader);
++        bool ExecuteNativeMesh(Reader& reader, bool preparedTail);
+@@ -110 +110 @@ namespace gpu
+-            uint64_t streamCoherencyWaits = 0;
++            uint64_t streamCoherencyWaits = 0, preparedDraws = 0;
+diff --git a/LostOdysseyRecomp/gpu/native_mesh.h b/LostOdysseyRecomp/gpu/native_mesh.h
+index 2dfe397..3bf1523 100644
+--- a/LostOdysseyRecomp/gpu/native_mesh.h
++++ b/LostOdysseyRecomp/gpu/native_mesh.h
+@@ -13,0 +14,2 @@ constexpr uint32_t kMesh = 0x80004C4D;
