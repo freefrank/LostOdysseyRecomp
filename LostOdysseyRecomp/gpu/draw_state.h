@@ -35,6 +35,7 @@ namespace gpu::renderer
         }
         size_t Size() const { return words_.size(); }
         bool HasLegacyFallback() const { return zeroFallbackBE_ != nullptr; }
+        DrawWords NativeValues() const { return DrawWords(words_); }
         uint32_t Read(size_t index) const
         {
             if (index >= words_.size()) return 0;

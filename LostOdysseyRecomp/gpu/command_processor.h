@@ -6,6 +6,8 @@
 #include <thread>
 #include <vector>
 #include "gpu/frame_plan.h"
+#include "gpu/draw_state_cache.h"
+#include "gpu/native_mesh.h"
 
 // Ordered Xenos/native command consumer. PM4 remains the fallback for guest
 // operations not yet replaced by the optional native SDK hooks. Both routes
@@ -87,7 +89,8 @@ namespace gpu
         void DispatchInterrupt(uint32_t source, uint32_t cpu);
 
         bool ExecuteNativeCommand(Reader& reader, uint32_t tag);
-        bool ExecuteDraw(uint32_t initiator, uint32_t dmaBase, uint32_t dmaSize);
+        bool ExecuteDraw(uint32_t initiator, uint32_t dmaBase, uint32_t dmaSize, bool nativeMesh = false);
+        bool ExecuteNativeMesh(Reader& reader);
         uint32_t ExecutePrimaryBuffer(uint32_t readIndex, uint32_t writeIndex);
         void ExecuteIndirectBuffer(uint32_t physicalAddress, uint32_t dwordCount);
         bool ExecutePacket(Reader& reader);
@@ -98,6 +101,18 @@ namespace gpu
         uint8_t* TranslatePhysical(uint32_t physicalAddress);
 
         std::vector<uint32_t> m_registers;
+        renderer::ExecutionDrawState m_drawState;
+        std::atomic<bool> m_drawStateInvalidated{false};
+        struct FrontendCounters
+        {
+            uint64_t meshCommands = 0, nativeDraws = 0, otherDraws = 0, predicatedSkips = 0;
+            uint64_t words = 0, stateValues = 0, lastProducerRevision = 0;
+            // Consumer revisions advance at actual execution, including replay.
+            // Uncovered raw MMIO writes keep renderer reuse keys untracked.
+            std::array<uint64_t, native_frontend::kGroupCount> appliedRevisions{};
+            uint64_t pm4Type0 = 0, pm4Type1 = 0;
+            std::array<uint64_t, 128> opcodes{};
+        } m_frontend;
         struct MovieClearStage
         {
             bool active = false;

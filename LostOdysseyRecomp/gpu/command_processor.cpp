@@ -53,6 +53,7 @@ namespace gpu
         }();
         return overrideFps >= 0 ? uint32_t(overrideFps) : g_frameRateTarget.load(std::memory_order_relaxed);
     }
+    namespace { thread_local CommandProcessor* g_drawStateOwner = nullptr; }
     CommandProcessor g_commandProcessor;
     static std::atomic<uint32_t> g_swapCount{ 0 };
     static std::atomic<uint32_t> g_completedSwaps{ 0 };
@@ -234,6 +235,11 @@ namespace gpu
     bool CommandProcessor::Init()
     {
         m_registers.assign(REGISTER_COUNT, 0);
+        m_drawState.Reset();
+        m_drawStateInvalidated.store(false, std::memory_order_relaxed);
+        m_frontend = {};
+        if (native_frontend::meshEnabled)
+            LOG_INFO("native frontend: mode=mesh (experimental ordinary SDK pre-flush path; mixed PM4 remains)");
         m_native = {};
         if (native_command::mode != native_command::Mode::Off)
             LOG_INFO("native commands: mode={} (experimental SDK register/quad bypass)", native_command::ModeName());
@@ -409,6 +415,11 @@ namespace gpu
         }
 
         m_registers[index] = value;
+        if (native_frontend::meshEnabled && index >= 0x2000 && index < 0x2400 &&
+            renderer::kDrawScalarOffsets[index - 0x2000] != 0xffff) {
+            if (g_drawStateOwner == this) m_drawState.Observe(index, value);
+            else m_drawStateInvalidated.store(true, std::memory_order_release);
+        }
 
         // Guest code reads registers back with plain loads from the MMIO
         // window (the D3D interrupt handler inspects the scratch registers),
@@ -486,6 +497,12 @@ namespace gpu
 
     void CommandProcessor::WorkerMain()
     {
+        struct OwnerScope
+        {
+            CommandProcessor* previous;
+            explicit OwnerScope(CommandProcessor* owner) : previous(g_drawStateOwner) { g_drawStateOwner = owner; }
+            ~OwnerScope() { g_drawStateOwner = previous; }
+        } ownerScope(this);
         os::SetCurrentThreadName("GPU CmdProc");
         const bool timingEnabled = frame_timing::Enabled();
         auto idleStart = std::chrono::steady_clock::time_point{};
@@ -695,6 +712,9 @@ namespace gpu
             r.d2 = ByteSwap(*reinterpret_cast<uint32_t*>(reader.base + (reader.readOffset + 8) % reader.size));
         }
 
+        if (packet == native_frontend::kMesh)
+            return native_frontend::meshEnabled && ExecuteNativeMesh(reader);
+
         if (native_command::mode != native_command::Mode::Off &&
             (packet == native_command::kRegisters || packet == native_command::kIndexedQuad ||
              packet == native_command::kAutoFan))
@@ -712,6 +732,7 @@ namespace gpu
 
     bool CommandProcessor::ExecutePacketType0(Reader& reader, uint32_t packet)
     {
+        if (native_frontend::diagnosticsEnabled) ++m_frontend.pm4Type0;
         uint32_t count = ((packet >> 16) & 0x3FFF) + 1;
         uint32_t baseIndex = packet & 0x7FFF;
         bool writeOneReg = (packet >> 15) & 1;
@@ -725,6 +746,7 @@ namespace gpu
 
     bool CommandProcessor::ExecutePacketType1(Reader& reader, uint32_t packet)
     {
+        if (native_frontend::diagnosticsEnabled) ++m_frontend.pm4Type1;
         uint32_t i1 = packet & 0x7FF, i2 = (packet >> 11) & 0x7FF;
         uint32_t d1 = reader.ReadAndSwap();
         uint32_t d2 = reader.ReadAndSwap();
@@ -733,7 +755,7 @@ namespace gpu
         return true;
     }
 
-    bool CommandProcessor::ExecuteDraw(uint32_t initiator, uint32_t dmaBase, uint32_t dmaSize)
+    bool CommandProcessor::ExecuteDraw(uint32_t initiator, uint32_t dmaBase, uint32_t dmaSize, bool nativeMesh)
     {
         static bool titleObserved = false;
         if (native_command::mode == native_command::Mode::All && !titleObserved &&
@@ -769,7 +791,14 @@ namespace gpu
             }
             auto registers = renderer::DrawWords::Legacy(m_registers,
                 static_cast<const uint8_t*>(g_memory.Translate(MMIO_BASE)));
-            renderer::Draw(renderer::CaptureLegacyDrawState(di, registers, shaders[0], shaders[1]));
+            if (nativeMesh) {
+                if (m_drawStateInvalidated.exchange(false, std::memory_order_acquire)) m_drawState.Reset();
+                renderer::Draw(m_drawState.ForDraw(di, registers, shaders[0], shaders[1]));
+                ++m_frontend.nativeDraws;
+            } else {
+                renderer::Draw(renderer::CaptureLegacyDrawState(di, registers, shaders[0], shaders[1]));
+                if (native_frontend::meshEnabled) ++m_frontend.otherDraws;
+            }
         }
 
         uint32_t modeControl = 0;
@@ -818,6 +847,37 @@ namespace gpu
         return true;
     }
 
+    bool CommandProcessor::ExecuteNativeMesh(Reader& reader)
+    {
+        using namespace native_frontend;
+        g_workerStage.store("native mesh execution", std::memory_order_relaxed);
+        std::array<uint32_t, kMaxWords - 1> body;
+        if (!reader.ReadNativeWords(1, body.data()) || body[0] < kHeaderWords ||
+            body[0] > kMaxWords || !reader.ReadNativeWords(body[0] - 2, body.data() + 1))
+            return false;
+        DecodedMesh mesh;
+        if (!Decode(std::span(body.data(), body[0] - 1), mesh)) return false;
+        ++m_frontend.meshCommands;
+        m_frontend.words += body[0];
+        m_frontend.lastProducerRevision = mesh.producerRevision;
+        // Applying a delta updates the explicit effective state and the guest
+        // compatibility mirror once. Draw does not reconstruct that state from
+        // the register bank. Constants inherit their stable worker-owned views.
+        ApplyDeltas(mesh, [&](uint32_t index, uint32_t value) { WriteRegister(index, value); });
+        for (uint32_t group = 0; group < kGroupCount; ++group) {
+            if (mesh.deltas[group].mask) ++m_frontend.appliedRevisions[group];
+            m_frontend.stateValues += mesh.deltas[group].values.size();
+        }
+        if (!(m_binSelect & m_binMask)) { ++m_frontend.predicatedSkips; return true; }
+        WriteRegister(0x21FC, mesh.draw.initiator);
+        if (mesh.draw.Indexed()) {
+            WriteRegister(0x21FA, mesh.draw.dmaBase);
+            WriteRegister(0x21FB, mesh.draw.dmaSize);
+        }
+        // No consumer fallback after state application, upload, or rendering.
+        return ExecuteDraw(mesh.draw.initiator, mesh.draw.dmaBase, mesh.draw.dmaSize, true);
+    }
+
     bool CommandProcessor::ExecuteNativeCommand(Reader& reader, uint32_t tag)
     {
         using namespace native_command;
@@ -851,6 +911,12 @@ namespace gpu
             auto* mirror = reinterpret_cast<uint32_t*>(g_memory.Translate(MMIO_BASE));
             if (!ApplyRegisters(first, mask, std::span(values.data(), count),
                 m_registers, std::span(mirror, REGISTER_COUNT))) return false;
+            if (native_frontend::meshEnabled) {
+                VisitRuns(mask, [&](uint32_t offset, uint32_t run, uint32_t packed) {
+                    for (uint32_t i = 0; i < run; ++i)
+                        m_drawState.Observe(first + offset + i, values[packed + i]);
+                });
+            }
             ++m_native.registerBlocks;
             m_native.registerWords += count;
             m_native.nativeWords += RegisterWords(mask);
@@ -882,6 +948,7 @@ namespace gpu
     bool CommandProcessor::ExecutePacketType3(Reader& reader, uint32_t packet)
     {
         const uint32_t opcode = (packet >> 8) & 0x7F;
+        if (native_frontend::diagnosticsEnabled) ++m_frontend.opcodes[opcode];
         g_lastOpcode.store(opcode, std::memory_order_relaxed);
         g_workerStage.store("PM4 execution", std::memory_order_relaxed);
         const uint32_t count = ((packet >> 16) & 0x3FFF) + 1;
@@ -932,6 +999,22 @@ namespace gpu
             reader.Advance(count - 4);
             ++m_counter;
             uint32_t swaps = ++g_swapCount;
+            if (native_frontend::meshEnabled && (swaps % 120) == 0) {
+                LOG_INFO("native frontend: swap={} mode=mesh mesh_commands={} native_draws={} other_draws={} predicated_skips={} words={} state_values={} producer_revision={}",
+                    swaps, m_frontend.meshCommands, m_frontend.nativeDraws, m_frontend.otherDraws,
+                    m_frontend.predicatedSkips, m_frontend.words, m_frontend.stateValues, m_frontend.lastProducerRevision);
+                if (native_frontend::diagnosticsEnabled) {
+                    std::array<uint64_t, uint32_t(native_frontend::Reject::CountReasons)> outcomes{};
+                    native_frontend::ProducerOutcomeSnapshot(outcomes);
+                    std::string fallback, opcodes;
+                    for (uint32_t i = 1; i < outcomes.size(); ++i)
+                        if (outcomes[i]) fallback += fmt::format(" {}={}", native_frontend::RejectName(native_frontend::Reject(i)), outcomes[i]);
+                    for (uint32_t i = 0; i < m_frontend.opcodes.size(); ++i)
+                        if (m_frontend.opcodes[i]) opcodes += fmt::format(" {:02x}={}", i, m_frontend.opcodes[i]);
+                    LOG_INFO("native frontend diagnostics: producer_accepted={} fallback:{} pm4_type0={} pm4_type1={} pm4_opcodes:{}",
+                        outcomes[0], fallback, m_frontend.pm4Type0, m_frontend.pm4Type1, opcodes);
+                }
+            }
             if (native_command::mode != native_command::Mode::Off && (swaps % 120) == 0)
                 LOG_INFO("native commands: swap={} mode={} register_blocks={} register_words={} indexed_quads={} auto_fans={} predicated_skips={} title_cloud_draws={} native_words={} eliminated_pm4_packets={} equivalent_pm4_words={}",
                     swaps, native_command::ModeName(), m_native.registerBlocks, m_native.registerWords,
