@@ -199,3 +199,7 @@ consumer of a resource; Streamline's private dispatch table is not intercepted.
 Missing trace entries must not be used to assign ownership to the SDK. Trace
 runs are diagnostic runs, not performance baselines. This instrumentation does
 not fix Present hazards, authorize ImageView destruction, or prove display FPS.
+
+## Native command title probe
+
+`run_native_title.py` is an active, bounded Windows driver requiring installed `psutil`. It copies the supplied baseline profile/save/settings/shaders into a new output, runs the same candidate with `--mode off|registers|all`, applies 720p/60 FPS, SR/FG off and shader prebuild skipped to both paths, remains hidden and muted, sends no input, measures OS thread CPU, requests a screenshot outside the timing sample, and closes only its own process. Baseline metadata is checked after the run. The completed-frame denominator is sampled from one-second log receipts; separate-process images do not constitute identical-input replay. See [the implementation note](../../docs/notes/native-command-bypass.md) for arguments and boundaries.

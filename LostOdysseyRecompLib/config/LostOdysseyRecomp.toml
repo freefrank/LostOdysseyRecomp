@@ -199,3 +199,12 @@ name = "FramePlanDirectCanvas"
 address = 0x823E98E0
 registers = ["r1", "r30"]
 after_instruction = false
+
+# Native SDK draw record; decline before mutation to retain the exact PM4 path.
+# The original UP resource copies and final device cursor publication stay live.
+[[midasm_hook]]
+name = "NativeIndexedQuad"
+address = 0x823CD44C
+registers = ["r31", "r30", "r29", "r27", "r28", "r11"]
+after_instruction = false
+jump_address_on_true = 0x823CD52C

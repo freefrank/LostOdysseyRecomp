@@ -1,4 +1,5 @@
 #include <stdafx.h>
+#include "gpu/native_command_stream.h"
 #include "command_processor.h"
 #include "movie_clear.h"
 #include "frame_plan.h"
@@ -204,6 +205,17 @@ namespace gpu
         return v;
     }
 
+    bool CommandProcessor::Reader::ReadNativeWords(uint32_t count, uint32_t* destination)
+    {
+        if (count > ReadCount() / 4 || readOffset > size || (readOffset & 3) ||
+            (!ring && uint64_t(readOffset) + uint64_t(count) * 4 > size)) return false;
+        const uint32_t first = std::min(count, (size - readOffset) / 4);
+        std::memcpy(destination, base + readOffset, first * 4);
+        if (first < count) std::memcpy(destination + first, base, (count - first) * 4);
+        Advance(count);
+        return true;
+    }
+
     void CommandProcessor::Reader::Advance(uint32_t dwords)
     {
         readOffset += dwords * 4;
@@ -221,6 +233,9 @@ namespace gpu
     bool CommandProcessor::Init()
     {
         m_registers.assign(REGISTER_COUNT, 0);
+        m_native = {};
+        if (native_command::mode != native_command::Mode::Off)
+            LOG_INFO("native commands: mode={} (experimental SDK register/quad bypass)", native_command::ModeName());
 
         // Registers the guest reads back through plain loads: keep the MMIO
         // window populated with big-endian values (Xenia ReadRegister defaults).
@@ -679,6 +694,9 @@ namespace gpu
             r.d2 = ByteSwap(*reinterpret_cast<uint32_t*>(reader.base + (reader.readOffset + 8) % reader.size));
         }
 
+        if (packet == native_command::kRegisters || packet == native_command::kIndexedQuad)
+            return ExecuteNativeCommand(reader, packet);
+
         switch (packet >> 30)
         {
         case 0: return ExecutePacketType0(reader, packet);
@@ -710,6 +728,117 @@ namespace gpu
         WriteRegister(i1, d1);
         WriteRegister(i2, d2);
         return true;
+    }
+
+    bool CommandProcessor::ExecuteDraw(uint32_t initiator, uint32_t dmaBase, uint32_t dmaSize)
+    {
+        const uint32_t primType = initiator & 0x3F;
+        const uint32_t sourceSelect = (initiator >> 6) & 3;
+        const uint32_t numIndices = initiator >> 16;
+        {
+            renderer::DrawInfo di;
+            di.primitiveType = primType;
+            di.indexCount = numIndices;
+            di.indexed = sourceSelect == 0;
+            di.indexBufferWords = dmaSize & 0xFFFFFF;
+            di.indexEndian = dmaSize >> 30;
+            di.index32 = ((initiator >> 11) & 1) != 0;
+            // VGT_DMA_BASE is aligned to the index element size. Keeping
+            // bit 1 for 16-bit indices is essential for mesh subranges.
+            di.indexBase = dmaBase & (di.index32 ? ~3u : ~1u);
+            renderer::Draw(di);
+        }
+
+        uint32_t modeControl = 0;
+        bool isCopy = false;
+        if (g_gpuStats) {
+            g_frame.draws++;
+            g_frame.prim[primType & 63]++;
+            if (sourceSelect == 0) g_frame.indexed++;
+            if (sourceSelect == 2) g_frame.autoIndex++;
+            modeControl = ReadRegister(0x2208);
+            isCopy = (modeControl & 7) == 6; // xenos::ModeControl::kCopy
+            if (isCopy) g_frame.copies++;
+        }
+
+        if (g_gpuStats && g_detailBudget == 60)
+        {
+            // Once per detailed frame: every non-zero fetch constant slot
+            // (0x4800 + 6 dwords each) and the first vertex ALU constants.
+            for (uint32_t slot = 0; slot < 96; slot++)
+            {
+                uint32_t w[6];
+                bool any = false;
+                for (int k = 0; k < 6; k++) { w[k] = ReadRegister(0x4800 + slot * 6 + k); any |= w[k] != 0; }
+                if (any)
+                    LOG_INFO("  fetch[{}] = {:#x} {:#x} {:#x} {:#x} {:#x} {:#x}", slot, w[0], w[1], w[2], w[3], w[4], w[5]);
+            }
+            for (uint32_t c = 0; c < 8; c++)
+                LOG_INFO("  vsconst c{} = {:#x} {:#x} {:#x} {:#x}", c, ReadRegister(0x4000 + c * 4), ReadRegister(0x4001 + c * 4), ReadRegister(0x4002 + c * 4), ReadRegister(0x4003 + c * 4));
+            LOG_INFO("  viewport xs={:#x} xo={:#x} ys={:#x} yo={:#x} zs={:#x} zo={:#x} vte={:#x} su_sc={:#x} colorctl={:#x} copyDestInfo={:#x}",
+                ReadRegister(0x210F), ReadRegister(0x2110), ReadRegister(0x2111), ReadRegister(0x2112), ReadRegister(0x2113), ReadRegister(0x2114),
+                ReadRegister(0x2206), ReadRegister(0x2205), ReadRegister(0x2202), ReadRegister(0x231B));
+        }
+        if (g_gpuStats && g_detailBudget > 0)
+        {
+            g_detailBudget--;
+            if (isCopy)
+                LOG_INFO("  resolve: copyCtl={:#x} dest={:#x} pitch={:#x} destInfo={:#x} surf={:#x} color={:#x} depth={:#x}",
+                    ReadRegister(0x2318), ReadRegister(0x2319), ReadRegister(0x231A), ReadRegister(0x231B),
+                    ReadRegister(0x2000), ReadRegister(0x2001), ReadRegister(0x2002));
+            else
+                LOG_INFO("  draw prim={} n={} src={} vs={:016x}/{} ps={:016x}/{} color={:#x} depth={:#x} surf={:#x} mode={:#x} blend={:#x} depthCtl={:#x} scissor={:#x}-{:#x} pgm={:#x} idx={:#x}/{:#x}",
+                    primType, numIndices, sourceSelect, g_activeShader[0], g_activeShaderSize[0], g_activeShader[1], g_activeShaderSize[1],
+                    ReadRegister(0x2001), ReadRegister(0x2002), ReadRegister(0x2000), modeControl, ReadRegister(0x2201), ReadRegister(0x2200),
+                    ReadRegister(0x2081), ReadRegister(0x2082), ReadRegister(0x2180), dmaBase, dmaSize);
+        }
+        return true;
+    }
+
+    bool CommandProcessor::ExecuteNativeCommand(Reader& reader, uint32_t tag)
+    {
+        using namespace native_command;
+        static_assert(REGISTER_COUNT == kRegisterCount);
+        g_workerStage.store("native command execution", std::memory_order_relaxed);
+        uint32_t header[3];
+        if (!reader.ReadNativeWords(3, header)) return false;
+        if (tag == kRegisters)
+        {
+            const uint32_t first = header[0];
+            const uint64_t mask = (uint64_t(header[1]) << 32) | header[2];
+            if (!RegisterRange(first, mask)) return false;
+            const uint32_t count = ValueCount(mask);
+            std::array<uint32_t, 64> values;
+            if (!reader.ReadNativeWords(count, values.data())) return false;
+            auto* mirror = reinterpret_cast<uint32_t*>(g_memory.Translate(MMIO_BASE));
+            if (!ApplyRegisters(first, mask, std::span(values.data(), count),
+                m_registers, std::span(mirror, REGISTER_COUNT))) return false;
+            ++m_native.registerBlocks;
+            m_native.registerWords += count;
+            m_native.nativeWords += RegisterWords(mask);
+            const auto runs = RunCount(mask);
+            m_native.pm4Packets += runs;
+            m_native.pm4Words += count + runs;
+            return true;
+        }
+        const auto initiator = header[0];
+        if (tag != kIndexedQuad || !IndexedQuad(initiator)) return false;
+        m_native.nativeWords += kDrawWords;
+        ++m_native.pm4Packets;
+        m_native.pm4Words += 5; // replaced DRAW_INDX: header, viz, init, DMA pair.
+        if (!(m_binSelect & m_binMask))
+        {
+            ++m_native.predicatedSkips;
+            return true;
+        }
+        WriteRegister(0x21FC, initiator);
+        WriteRegister(0x21FA, header[1]);
+        WriteRegister(0x21FB, header[2]);
+        ++m_native.indexedQuads;
+        if (GetActiveShaderByteHash(false) == 0x81217dc973d5dc31ull &&
+            GetActiveShaderByteHash(true) == 0xcd6adb98ab83bf90ull)
+            ++m_native.titleCloudDraws;
+        return ExecuteDraw(initiator, header[1], header[2]);
     }
 
     bool CommandProcessor::ExecutePacketType3(Reader& reader, uint32_t packet)
@@ -765,6 +894,11 @@ namespace gpu
             reader.Advance(count - 4);
             ++m_counter;
             uint32_t swaps = ++g_swapCount;
+            if (native_command::mode != native_command::Mode::Off && (swaps % 120) == 0)
+                LOG_INFO("native commands: swap={} mode={} register_blocks={} register_words={} indexed_quads={} predicated_skips={} title_cloud_draws={} native_words={} eliminated_pm4_packets={} equivalent_pm4_words={}",
+                    swaps, native_command::ModeName(), m_native.registerBlocks, m_native.registerWords,
+                    m_native.indexedQuads, m_native.predicatedSkips, m_native.titleCloudDraws,
+                    m_native.nativeWords, m_native.pm4Packets, m_native.pm4Words);
             g_presentedSwaps = swaps;
             // Optional progress log with the last game file the title opened.
             if (g_gpuStats && (swaps % 60) == 1)
@@ -1300,9 +1434,7 @@ namespace gpu
             uint32_t initiator = reader.ReadAndSwap();
             consumed++;
             WriteRegister(0x21FC, initiator);
-            uint32_t primType = initiator & 0x3F;
             uint32_t sourceSelect = (initiator >> 6) & 3;
-            uint32_t numIndices = initiator >> 16;
             uint32_t dmaBase = 0, dmaSize = 0;
             if (sourceSelect == 0 && consumed + 2 <= count)
             {
@@ -1314,64 +1446,7 @@ namespace gpu
             }
             reader.Advance(count - consumed);
 
-            {
-                renderer::DrawInfo di;
-                di.primitiveType = primType;
-                di.indexCount = numIndices;
-                di.indexed = sourceSelect == 0;
-                di.indexBufferWords = dmaSize & 0xFFFFFF;
-                di.indexEndian = dmaSize >> 30;
-                di.index32 = ((initiator >> 11) & 1) != 0;
-                // VGT_DMA_BASE is aligned to the index element size. Keeping
-                // bit 1 for 16-bit indices is essential for mesh subranges.
-                di.indexBase = dmaBase & (di.index32 ? ~3u : ~1u);
-                renderer::Draw(di);
-            }
-
-            uint32_t modeControl = 0;
-            bool isCopy = false;
-            if (g_gpuStats) {
-                g_frame.draws++;
-                g_frame.prim[primType & 63]++;
-                if (sourceSelect == 0) g_frame.indexed++;
-                if (sourceSelect == 2) g_frame.autoIndex++;
-                modeControl = ReadRegister(0x2208);
-                isCopy = (modeControl & 7) == 6; // xenos::ModeControl::kCopy
-                if (isCopy) g_frame.copies++;
-            }
-
-            if (g_gpuStats && g_detailBudget == 60)
-            {
-                // Once per detailed frame: every non-zero fetch constant slot
-                // (0x4800 + 6 dwords each) and the first vertex ALU constants.
-                for (uint32_t slot = 0; slot < 96; slot++)
-                {
-                    uint32_t w[6];
-                    bool any = false;
-                    for (int k = 0; k < 6; k++) { w[k] = ReadRegister(0x4800 + slot * 6 + k); any |= w[k] != 0; }
-                    if (any)
-                        LOG_INFO("  fetch[{}] = {:#x} {:#x} {:#x} {:#x} {:#x} {:#x}", slot, w[0], w[1], w[2], w[3], w[4], w[5]);
-                }
-                for (uint32_t c = 0; c < 8; c++)
-                    LOG_INFO("  vsconst c{} = {:#x} {:#x} {:#x} {:#x}", c, ReadRegister(0x4000 + c * 4), ReadRegister(0x4001 + c * 4), ReadRegister(0x4002 + c * 4), ReadRegister(0x4003 + c * 4));
-                LOG_INFO("  viewport xs={:#x} xo={:#x} ys={:#x} yo={:#x} zs={:#x} zo={:#x} vte={:#x} su_sc={:#x} colorctl={:#x} copyDestInfo={:#x}",
-                    ReadRegister(0x210F), ReadRegister(0x2110), ReadRegister(0x2111), ReadRegister(0x2112), ReadRegister(0x2113), ReadRegister(0x2114),
-                    ReadRegister(0x2206), ReadRegister(0x2205), ReadRegister(0x2202), ReadRegister(0x231B));
-            }
-            if (g_gpuStats && g_detailBudget > 0)
-            {
-                g_detailBudget--;
-                if (isCopy)
-                    LOG_INFO("  resolve: copyCtl={:#x} dest={:#x} pitch={:#x} destInfo={:#x} surf={:#x} color={:#x} depth={:#x}",
-                        ReadRegister(0x2318), ReadRegister(0x2319), ReadRegister(0x231A), ReadRegister(0x231B),
-                        ReadRegister(0x2000), ReadRegister(0x2001), ReadRegister(0x2002));
-                else
-                    LOG_INFO("  draw prim={} n={} src={} vs={:016x}/{} ps={:016x}/{} color={:#x} depth={:#x} surf={:#x} mode={:#x} blend={:#x} depthCtl={:#x} scissor={:#x}-{:#x} pgm={:#x} idx={:#x}/{:#x}",
-                        primType, numIndices, sourceSelect, g_activeShader[0], g_activeShaderSize[0], g_activeShader[1], g_activeShaderSize[1],
-                        ReadRegister(0x2001), ReadRegister(0x2002), ReadRegister(0x2000), modeControl, ReadRegister(0x2201), ReadRegister(0x2200),
-                        ReadRegister(0x2081), ReadRegister(0x2082), ReadRegister(0x2180), dmaBase, dmaSize);
-            }
-            return true;
+            return ExecuteDraw(initiator, dmaBase, dmaSize);
         }
 
         default:

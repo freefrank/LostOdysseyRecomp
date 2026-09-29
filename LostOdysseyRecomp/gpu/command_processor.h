@@ -7,11 +7,10 @@
 #include <vector>
 #include "gpu/frame_plan.h"
 
-// Minimal Xenos command processor: consumes the primary ring buffer, executes
-// the PM4 packets the CPU synchronises against (memory writes, fences, waits,
-// indirect buffers, swaps, interrupts) and skips everything that would draw.
+// Ordered Xenos/native command consumer. PM4 remains the fallback for guest
+// operations not yet replaced by the optional native SDK hooks. Both routes
+// share register state, the renderer, ring/IB order and GPU resource ownership.
 // Register semantics follow Xenia's gpu/command_processor.cc (BSD-3).
-// Draw/state packets are the hook point for the future plume renderer.
 
 namespace gpu
 {
@@ -78,6 +77,7 @@ namespace gpu
                 return writeOffset >= readOffset ? writeOffset - readOffset : size - readOffset + writeOffset;
             }
             uint32_t ReadAndSwap();
+            bool ReadNativeWords(uint32_t count, uint32_t* destination);
             void Advance(uint32_t dwords);
         };
 
@@ -86,6 +86,8 @@ namespace gpu
         void InterruptMain();
         void DispatchInterrupt(uint32_t source, uint32_t cpu);
 
+        bool ExecuteNativeCommand(Reader& reader, uint32_t tag);
+        bool ExecuteDraw(uint32_t initiator, uint32_t dmaBase, uint32_t dmaSize);
         uint32_t ExecutePrimaryBuffer(uint32_t readIndex, uint32_t writeIndex);
         void ExecuteIndirectBuffer(uint32_t physicalAddress, uint32_t dwordCount);
         bool ExecutePacket(Reader& reader);
@@ -125,6 +127,13 @@ namespace gpu
         std::thread m_worker;
         std::thread m_vsync;
         std::thread m_interruptThread;
+
+        struct NativeCounters
+        {
+            uint64_t registerBlocks = 0, registerWords = 0, nativeWords = 0;
+            uint64_t pm4Packets = 0, pm4Words = 0;
+            uint64_t indexedQuads = 0, predicatedSkips = 0, titleCloudDraws = 0;
+        } m_native;
     };
 
     extern CommandProcessor g_commandProcessor;

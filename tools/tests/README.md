@@ -10,6 +10,7 @@ These native C++ and Python fixtures execute without requiring a GPU device. Mos
 
 | CMake target / Script | Area | Primary verification |
 |---|---|---|
+| `LoNativeCommandStreamTest` | Native command bypass | Independent PM4 register/mirror equivalence over 134 masks, owned snapshots, replay, bounds and indexed-quad fields. CPU-only; no GPU/performance claim. |
 | `LoNativeDlssCpuTests` | Native DLSS / DLAA | CPU-only contract test target defined in `tools/tests/native_dlss/CMakeLists.txt` (`-DLO_NATIVE_DLSS_CPU_ONLY=ON`), executing the registered native DLSS/DLAA and FSR policy/contract suites. |
 | `LoPortableShaderPackTest` | Shader pack | Zstandard compression, block streaming, index serialization, and payload integrity. |
 | `LoPortableShaderPackIntegrationTest` | Shader pack | Lazy runtime loading, dictionary deduplication, and corrupt frame recovery. |
