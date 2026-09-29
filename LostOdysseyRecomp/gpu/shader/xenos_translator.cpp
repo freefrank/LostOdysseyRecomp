@@ -481,7 +481,9 @@ namespace xenos
 
                 enum { VECTOR_0, VECTOR_1, VECTOR_2, SCALAR_0, SCALAR_1, SCALAR_CONSTANT_0, SCALAR_CONSTANT_1 };
 
-                auto op = [&](size_t operand)
+                // componentMask selects vector operand components explicitly
+                // (bit i = component i); zero follows the opcode and write mask.
+                auto op = [&](size_t operand, uint32_t componentMask = 0)
                 {
                     uint32_t reg = 0, swizzle = 0;
                     bool select = true, negate = false, abs = false;
@@ -551,6 +553,7 @@ namespace xenos
                         case AluVectorOpcode::Dp4: case AluVectorOpcode::Max4: mask = 0b1111; break;
                         default: mask = instr.vectorWriteMask != 0 ? instr.vectorWriteMask : 0b1; break;
                         }
+                        if (componentMask != 0) mask = componentMask;
                         for (uint32_t i = 0; i < 4; i++)
                             if ((mask >> i) & 1)
                                 result += kSwizzles[((swizzle >> (i * 2)) + i) & 3];
@@ -611,7 +614,8 @@ namespace xenos
                 if (instr.vectorOpcode >= AluVectorOpcode::SetpEqPush && instr.vectorOpcode <= AluVectorOpcode::SetpGePush)
                 {
                     indent();
-                    print("p0 = {} == 0.0 && {} ", op(VECTOR_0), op(VECTOR_1));
+                    // Xenia ucode.h: the predicate tests src0.w and src1.w only.
+                    print("p0 = {} == 0.0 && {} ", op(VECTOR_0, 0b1000), op(VECTOR_1, 0b1000));
                     switch (instr.vectorOpcode)
                     {
                     case AluVectorOpcode::SetpEqPush: out += "=="; break;
@@ -624,7 +628,7 @@ namespace xenos
                 else if (instr.vectorOpcode == AluVectorOpcode::MaxA)
                 {
                     indent();
-                    println("a0 = (int)clamp(floor(({}).w + 0.5), -256.0, 255.0);", op(VECTOR_0));
+                    println("a0 = (int)clamp(floor({} + 0.5), -256.0, 255.0);", op(VECTOR_0, 0b1000));
                 }
 
                 uint32_t vectorWriteMask = instr.vectorWriteMask;
@@ -669,12 +673,17 @@ namespace xenos
                     case AluVectorOpcode::Max4: print("max4({})", op(VECTOR_0)); break;
                     case AluVectorOpcode::SetpEqPush: case AluVectorOpcode::SetpNePush:
                     case AluVectorOpcode::SetpGtPush: case AluVectorOpcode::SetpGePush:
-                        print("p0 ? 0.0 : {} + 1.0", op(VECTOR_0)); break;
+                        print("p0 ? 0.0 : {} + 1.0", op(VECTOR_0, 0b0001)); break;
                     case AluVectorOpcode::KillEq: print("select(any({} == {}), 1.0, 0.0)", op(VECTOR_0), op(VECTOR_1)); break;
                     case AluVectorOpcode::KillGt: print("select(any({} > {}), 1.0, 0.0)", op(VECTOR_0), op(VECTOR_1)); break;
                     case AluVectorOpcode::KillGe: print("select(any({} >= {}), 1.0, 0.0)", op(VECTOR_0), op(VECTOR_1)); break;
                     case AluVectorOpcode::KillNe: print("select(any({} != {}), 1.0, 0.0)", op(VECTOR_0), op(VECTOR_1)); break;
                     case AluVectorOpcode::Dst: print("dst({}, {})", op(VECTOR_0), op(VECTOR_1)); break;
+                    default:
+                        // Opcodes 30 and 31 are undefined; keep the shader valid.
+                        out += "0.0";
+                        note(fmt::format("unknown vector opcode {}", uint32_t(instr.vectorOpcode)));
+                        break;
                     }
                     if (instr.vectorSaturate)
                         out += ')';
