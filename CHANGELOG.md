@@ -8,9 +8,13 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 ### English
 
+- Removed an intermediate CPU copy on validated renderer index-cache hits; converted little-endian indices are reused directly. Live-game performance validation is pending.
+
 - Added an opt-in native command path for SDK bulk register writes and bounded indexed quads / four-vertex title fans (`LO_NATIVE_COMMANDS=1`), retaining the original PM4 path as fallback. Other packets and Xenos rendering remain. The final bounded CPU comparison regressed, so this experimental route remains default-off.
 
 ### 简体中文
+
+- 去掉 renderer 索引缓存命中后的中间 CPU 拷贝，直接复用已转换为小端的索引数据；游戏性能收益仍待实测。
 
 - 新增可选的原生命令路径，接管 SDK 批量寄存器写入、限定索引四边形及四顶点标题 fan 绘制（`LO_NATIVE_COMMANDS=1`），保留原 PM4 回退。其他命令与 Xenos 渲染转换仍保留；最终限定范围 CPU 对照出现退步，实验路径保持默认关闭。
 

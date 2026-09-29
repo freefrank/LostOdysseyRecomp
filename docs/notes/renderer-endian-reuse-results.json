@@ -1,0 +1,185 @@
+{
+  "source_baseline": "ce45afe2774efe0cea87e64ccc1fafc0199e8f62",
+  "measurement_scope": "synthetic CPU microbenchmark: two 1024-word ALU banks per iteration, 100000 iterations per row; not game frame time",
+  "compiler": "Windows clang-cl /O2 /std:c++20 /MT /EHsc -march=sandybridge -fno-strict-aliasing",
+  "constant_cache_prototype_retained_in_runtime": false,
+  "rows": [
+    {
+      "round": 0,
+      "mode": "bulk",
+      "changed_words_per_draw": 0,
+      "ns_per_draw": 138.555,
+      "checksum": 57190864
+    },
+    {
+      "round": 0,
+      "mode": "cached",
+      "changed_words_per_draw": 0,
+      "ns_per_draw": 210.19,
+      "checksum": 57190864
+    },
+    {
+      "round": 0,
+      "mode": "bulk",
+      "changed_words_per_draw": 4,
+      "ns_per_draw": 144.544,
+      "checksum": 2539600305
+    },
+    {
+      "round": 0,
+      "mode": "cached",
+      "changed_words_per_draw": 4,
+      "ns_per_draw": 232.293,
+      "checksum": 2539600305
+    },
+    {
+      "round": 0,
+      "mode": "bulk",
+      "changed_words_per_draw": 64,
+      "ns_per_draw": 147.083,
+      "checksum": 1399729597
+    },
+    {
+      "round": 0,
+      "mode": "cached",
+      "changed_words_per_draw": 64,
+      "ns_per_draw": 160.777,
+      "checksum": 1399729597
+    },
+    {
+      "round": 0,
+      "mode": "bulk",
+      "changed_words_per_draw": 2048,
+      "ns_per_draw": 1032.149,
+      "checksum": 1614873088
+    },
+    {
+      "round": 0,
+      "mode": "cached",
+      "changed_words_per_draw": 2048,
+      "ns_per_draw": 1612.944,
+      "checksum": 1614873088
+    },
+    {
+      "round": 1,
+      "mode": "cached",
+      "changed_words_per_draw": 0,
+      "ns_per_draw": 206.166,
+      "checksum": 57190864
+    },
+    {
+      "round": 1,
+      "mode": "bulk",
+      "changed_words_per_draw": 0,
+      "ns_per_draw": 142.095,
+      "checksum": 57190864
+    },
+    {
+      "round": 1,
+      "mode": "cached",
+      "changed_words_per_draw": 4,
+      "ns_per_draw": 228.505,
+      "checksum": 2539600305
+    },
+    {
+      "round": 1,
+      "mode": "bulk",
+      "changed_words_per_draw": 4,
+      "ns_per_draw": 139.33,
+      "checksum": 2539600305
+    },
+    {
+      "round": 1,
+      "mode": "cached",
+      "changed_words_per_draw": 64,
+      "ns_per_draw": 151.968,
+      "checksum": 1399729597
+    },
+    {
+      "round": 1,
+      "mode": "bulk",
+      "changed_words_per_draw": 64,
+      "ns_per_draw": 141.277,
+      "checksum": 1399729597
+    },
+    {
+      "round": 1,
+      "mode": "cached",
+      "changed_words_per_draw": 2048,
+      "ns_per_draw": 1613.027,
+      "checksum": 1614873088
+    },
+    {
+      "round": 1,
+      "mode": "bulk",
+      "changed_words_per_draw": 2048,
+      "ns_per_draw": 1031.439,
+      "checksum": 1614873088
+    },
+    {
+      "round": 2,
+      "mode": "bulk",
+      "changed_words_per_draw": 0,
+      "ns_per_draw": 138.292,
+      "checksum": 57190864
+    },
+    {
+      "round": 2,
+      "mode": "cached",
+      "changed_words_per_draw": 0,
+      "ns_per_draw": 207.134,
+      "checksum": 57190864
+    },
+    {
+      "round": 2,
+      "mode": "bulk",
+      "changed_words_per_draw": 4,
+      "ns_per_draw": 139.769,
+      "checksum": 2539600305
+    },
+    {
+      "round": 2,
+      "mode": "cached",
+      "changed_words_per_draw": 4,
+      "ns_per_draw": 227.779,
+      "checksum": 2539600305
+    },
+    {
+      "round": 2,
+      "mode": "bulk",
+      "changed_words_per_draw": 64,
+      "ns_per_draw": 143.715,
+      "checksum": 1399729597
+    },
+    {
+      "round": 2,
+      "mode": "cached",
+      "changed_words_per_draw": 64,
+      "ns_per_draw": 160.313,
+      "checksum": 1399729597
+    },
+    {
+      "round": 2,
+      "mode": "bulk",
+      "changed_words_per_draw": 2048,
+      "ns_per_draw": 1047.547,
+      "checksum": 1614873088
+    },
+    {
+      "round": 2,
+      "mode": "cached",
+      "changed_words_per_draw": 2048,
+      "ns_per_draw": 1653.121,
+      "checksum": 1614873088
+    }
+  ],
+  "index_hit_copy_removal": {
+    "implemented": true,
+    "avoided_cpu_copy_bytes": "4 * final_index_count per validated index-cache hit",
+    "renderer_compile_exit": 0,
+    "development_link_exit": 0,
+    "live_game_validated": false,
+    "measured_frame_time_gain": null,
+    "measured_gpu_time_gain": null
+  }
+}

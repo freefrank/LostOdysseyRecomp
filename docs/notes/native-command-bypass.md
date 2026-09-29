@@ -1,5 +1,7 @@
 # Native command bypass: first runtime implementation
 
+Renderer data-path follow-up: [endian conversion and index-cache reuse](renderer-endian-reuse.md). It removes one index-hit CPU copy but has no live-game performance result and does not replace the negative title CPU comparison below.
+
 Source baseline: `2ce27e35428d85abde20afb5b6b2c59052810b13`, with the architecture research from `3a95001`.
 
 ## Implemented scope

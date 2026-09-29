@@ -7092,8 +7092,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 // Index buffer / primitive conversion. Static geometry skips
                 // ConvertIndices and primitive expansion on an exact-content
                 // hit; the cached output is already post-expansion.
-                auto& indices = indexScratch;
-                if (!info.indexed) indices.clear();
+                auto& indexBuild = indexScratch;
+                if (!info.indexed) indexBuild.clear();
                 bool useIndices = false;
                 RenderFormat indexFormat = RenderFormat::R32_UINT;
                 uint32_t indexCount = info.indexCount;
@@ -7115,7 +7115,6 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         auto it = indexCache.find(indexKey);
                         if (it != indexCache.end() && it->second.content.Matches(indexSrc, indexSrcBytes))
                         {
-                            indices = it->second.data;
                             cachedIndexEntry = &it->second;
                             it->second.lastFrame = frame;
                             if (cpuTimingEnabled) ++indexCacheHits;
@@ -7125,15 +7124,15 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         else
                         {
                             // Convert below, then replace the cached result.
-                            indices.resize(indexSrcCount);
-                            geometry_prepare::ConvertIndices(indexSrc, indices.data(), indexSrcCount, info.index32, info.indexEndian);
+                            indexBuild.resize(indexSrcCount);
+                            geometry_prepare::ConvertIndices(indexSrc, indexBuild.data(), indexSrcCount, info.index32, info.indexEndian);
                             useIndices = true;
                         }
                     }
                     else
                     {
-                        indices.resize(indexSrcCount);
-                        geometry_prepare::ConvertIndices(indexSrc, indices.data(), indexSrcCount, info.index32, info.indexEndian);
+                        indexBuild.resize(indexSrcCount);
+                        geometry_prepare::ConvertIndices(indexSrc, indexBuild.data(), indexSrcCount, info.index32, info.indexEndian);
                         useIndices = true;
                     }
                 }
@@ -7142,21 +7141,21 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 {
                 case 13: // quad list -> triangle list
                 {
-                    geometry_prepare::ExpandQuadList(indices, primitiveScratch, useIndices, info.indexCount);
+                    geometry_prepare::ExpandQuadList(indexBuild, primitiveScratch, useIndices, info.indexCount);
                     break;
                 }
                 case 5: // triangle fan -> list
                 {
                     auto& out = primitiveScratch;
                     out.clear();
-                    uint32_t n = useIndices ? uint32_t(indices.size()) : info.indexCount;
+                    uint32_t n = useIndices ? uint32_t(indexBuild.size()) : info.indexCount;
                     out.reserve(n > 2 ? size_t(n - 2) * 3 : 0);
                     for (uint32_t i = 2; i < n; i++)
                     {
-                        uint32_t a = useIndices ? indices[0] : 0, b = useIndices ? indices[i - 1] : i - 1, c = useIndices ? indices[i] : i;
+                        uint32_t a = useIndices ? indexBuild[0] : 0, b = useIndices ? indexBuild[i - 1] : i - 1, c = useIndices ? indexBuild[i] : i;
                         out.insert(out.end(), { a, b, c });
                     }
-                    indices.swap(out);
+                    indexBuild.swap(out);
                     useIndices = true;
                     break;
                 }
@@ -7168,12 +7167,16 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     // Store the post-expansion result against the exact source
                     // bytes; a later identical draw copies it verbatim.
                     geometry_prepare::IndexEntry entry;
-                    entry.data = indices;
+                    entry.data = indexBuild;
                     entry.content.Capture(indexSrc, indexSrcBytes);
                     entry.lastFrame = frame;
                     indexCache.emplace(indexKey, std::move(entry));
                     if (cpuTimingEnabled) ++indexCacheMisses;
                 }
+                // Borrow the already-converted little-endian cache data. A hit
+                // performs no conversion or scratch-vector copy; the cache entry
+                // already stays alive for this draw and its motion hash below.
+                const auto& indices = indexCached ? cachedIndexEntry->data : indexBuild;
                 if (useIndices)
                     indexCount = uint32_t(indices.size());
                 if (indexCount == 0)
