@@ -11,6 +11,7 @@
 #include "register_snapshot.h"
 #include "shader_identity.h"
 #include <debug/frame_timing.h>
+#include <debug/map_info.h>
 #include <cpu/guest_thread.h>
 #include <kernel/memory.h>
 #include <kernel/function.h>
@@ -782,15 +783,20 @@ namespace gpu
             di.indexBase = dmaBase & (di.index32 ? ~3u : ~1u);
             // Capture at execution time on this worker. Borrowed constant banks
             // remain live only until Draw returns; no delayed CP/global reads.
+            auto registers = renderer::DrawWords::Legacy(m_registers,
+                static_cast<const uint8_t*>(g_memory.Translate(MMIO_BASE)));
             renderer::ShaderBinding shaders[2];
-            for (uint32_t stage = 0; stage < 2; ++stage) {
+            // Resolve/non-drawing modes never consume a shader; depth-only
+            // draws consume VS only. Preserve loaded shader snapshots, but do
+            // not resolve inactive byte identities before the renderer's gate.
+            const auto mode = registers.Read(0x2208) & 7;
+            const uint32_t activeStages = mode == 4 ? 2 : mode == 5 ? 1 : 0;
+            for (uint32_t stage = 0; stage < activeStages; ++stage) {
                 uint32_t count = 0;
                 const auto* words = GetActiveShader(stage != 0, count, shaders[stage].commandHash);
                 shaders[stage].words = std::span<const uint32_t>(words, count);
                 shaders[stage].byteHash = count ? GetActiveShaderByteHash(stage != 0) : 0;
             }
-            auto registers = renderer::DrawWords::Legacy(m_registers,
-                static_cast<const uint8_t*>(g_memory.Translate(MMIO_BASE)));
             if (nativeMesh) {
                 if (m_drawStateInvalidated.exchange(false, std::memory_order_acquire)) m_drawState.Reset();
                 renderer::Draw(m_drawState.ForDraw(di, registers, shaders[0], shaders[1]));
@@ -1088,6 +1094,16 @@ namespace gpu
                     m_native.indexedQuads, m_native.autoFans, m_native.predicatedSkips, m_native.titleCloudDraws,
                     m_native.nativeWords, m_native.pm4Packets, m_native.pm4Words);
             g_presentedSwaps = swaps;
+            // Low-frequency, opt-in scene evidence uses a fresh game-thread
+            // map observation, never the last opened asset as a scene ID.
+            static const bool sceneProbe = getenv("LO_NATIVE_PROBE_SCENE") != nullptr;
+            if (sceneProbe && swaps % 120 == 0) {
+                const auto observation = debug_menu::ObserveMapInfo();
+                const auto package = std::filesystem::path(observation.info.package).u8string();
+                LOG_INFO("native probe scene: swap={} observation={} available={} map_id={} package='{}'",
+                    swaps, observation.serial, observation.info.available, observation.info.id,
+                    reinterpret_cast<const char*>(package.c_str()));
+            }
             // Optional progress log with the last game file the title opened.
             if (g_gpuStats && (swaps % 60) == 1)
             {

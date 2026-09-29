@@ -6,7 +6,7 @@ import tempfile
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'perf'))
-from native_probe_log import NativeProbeLog, frontend_delta, probe_environment
+from native_probe_log import NativeProbeLog, frontend_delta, frontend_coverage, scene_window, probe_environment
 
 
 class ProbeLogTest(unittest.TestCase):
@@ -24,6 +24,8 @@ class ProbeLogTest(unittest.TestCase):
         self.append(b"[io] open 'game:\\xenon_scr.fpd'\nframe timing completed=12\n")
         self.assertFalse(self.log.ready('uhra', 3300, False))
         self.append(b'draw trace\n' * 150000 + b'present timing completed=3315\n')
+        self.assertFalse(self.log.ready('uhra', 3300, False))  # asset-load evidence is insufficient
+        self.append(b"native probe scene: swap=3315 observation=20 available=true map_id=7 package='test_map'\n")
         self.assertTrue(self.log.ready('uhra', 3300, False))
         self.assertEqual(self.log.completed, 3315)
         before = self.log.offset
@@ -36,7 +38,8 @@ class ProbeLogTest(unittest.TestCase):
         self.assertEqual(self.log.completed, 0)
         self.append(b"16\nheartbeat: swap #3301 105.0 fps, 1981 draws/frame, last file 'xenon_scr.fpd'\n")
         self.assertFalse(self.log.ready('uhra', 3300, True))
-        self.append(b"heartbeat: swap #3361 105.0 fps, 1900 draws/frame, last file 'xenon_scr.fpd'\n")
+        self.append(b"heartbeat: swap #3361 105.0 fps, 1900 draws/frame, last file 'xenon_scr.fpd'\n"
+                    b"native probe scene: swap=3315 observation=20 available=true map_id=7 package='test_map'\n")
         self.assertTrue(self.log.ready('uhra', 3300, True))
         self.append(b"heartbeat: swap #3421 60.0 fps, 40 draws/frame, last file 'menu.fpd'\n")
         self.log.poll()
@@ -87,11 +90,58 @@ class ProbeLogTest(unittest.TestCase):
         self.assertNotIn('LO_RENDER_TIMING',env)
         self.assertNotIn('lo_fps',env)
         self.assertNotIn('VK_INSTANCE_LAYERS',env)
+        self.assertNotIn('LO_AUTO_STICK', env)
+        self.assertEqual(env['LO_NATIVE_PROBE_SCENE'], '1')
+        args.movement = 'fixed-swaps'
+        self.assertIn('LO_AUTO_STICK', probe_environment(args, Path('isolated'), inherited))
         args.render_timing = True
         args.frontend_stats = True
         env = probe_environment(args, Path('isolated'), inherited)
         self.assertEqual(env['LO_RENDER_TIMING'],'1')
         self.assertEqual(env['LO_NATIVE_FRONTEND_STATS'],'1')
+
+
+    def test_skipped_commands_are_not_backend_draws(self):
+        first = dict(swap=120, mesh_commands=2, native_draws=0, other_draws=10,
+                     predicated_skips=2, words=20, state_values=5)
+        last = dict(swap=240, mesh_commands=100, native_draws=0, other_draws=20,
+                    predicated_skips=100, words=1000, state_values=500)
+        delta = frontend_delta(first, last)
+        self.assertGreater(delta['mesh_commands'], 0)
+        self.assertEqual(delta['native_draws'], 0)
+        self.assertEqual(frontend_coverage(delta)['native_draw_fraction'], 0)
+        last['native_draws'] = 5
+        coverage = frontend_coverage(frontend_delta(first, last))
+        self.assertAlmostEqual(coverage['native_draw_fraction'], 5 / 15)
+        self.assertAlmostEqual(coverage['native_draws_per_receipt_swap'], 5 / 120)
+
+    def test_live_scene_stale_change_and_return(self):
+        self.append(b"native probe scene: swap=3300 observation=20 available=true map_id=7 package='test_map'\n"
+                    b"frame timing completed=3300\n")
+        self.assertTrue(self.log.ready('uhra', 3300, False))
+        first = self.log.scene
+        changes = self.log.scene_changes
+        self.append(b"native probe scene: swap=3420 observation=25 available=true map_id=7 package='test_map'\n"
+                    b"frame timing completed=3420\n")
+        self.log.poll()
+        self.assertTrue(scene_window(first, self.log.scene, self.log.scene_changes == changes, self.log.completed))
+        self.append(b"native probe scene: swap=3540 observation=30 available=false map_id=0 package=''\n"
+                    b"native probe scene: swap=3660 observation=35 available=true map_id=7 package='test_map'\n"
+                    b"frame timing completed=3660\n")
+        self.log.poll()
+        self.assertFalse(scene_window(first, self.log.scene, self.log.scene_changes == changes, self.log.completed))
+        self.append(b"frame timing completed=4500\n")
+        self.assertFalse(self.log.ready('uhra', 3300, False))  # old serial cannot latch readiness
+
+    def test_frozen_or_different_map_is_not_fresh_evidence(self):
+        first = dict(swap=3300, observation=20, available=True, map_id=7, package='test_map')
+        same = dict(first, swap=3420)
+        self.assertFalse(scene_window(first, same, True, 3420))
+        other = dict(first, swap=3420, observation=25, map_id=8)
+        self.assertFalse(scene_window(first, other, True, 3420))
+        refreshed = dict(first, swap=3420, observation=25)
+        self.assertFalse(scene_window(first, refreshed, True, 4000))
+        self.assertTrue(scene_window(first, refreshed, True, 3420))
 
 
 if __name__ == '__main__':

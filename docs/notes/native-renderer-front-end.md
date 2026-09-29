@@ -1,5 +1,9 @@
 # Native renderer front-end: ordinary mesh implementation
 
+Current follow-up: [acceptance rework](native-frontend-rework.md). The initial
+checkpoint below predates the maintainer-supplied limited D3D12 report;
+performance acceptance remains failed and the default remains off.
+
 Date: 2026-09-29. Base: `62fc70588807aadeed88fefd238d7f14c84c8883`.
 Branch: `feature/native-renderer-front-end`.
 Runtime checkpoint: `2c85a3af290aac13dd658ad33cf39f9a12df47fd`.

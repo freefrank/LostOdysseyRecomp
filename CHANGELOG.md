@@ -8,6 +8,8 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 ### English
 
+- Hoisted legacy ALU snapshot checks out of the per-word read and avoided inactive shader identity capture. The native probe now requires actual native backend draws and fresh map observations, records boundary images, and defaults to stationary input. Native frontend stays off; the reported Uhra performance failure is not overturned by CPU-only checks.
+
 - **Native renderer front-end (development, opt-in)**: Added a shared explicit `DrawState` backend and complete ordinary indexed/non-indexed mesh hooks before SDK state flush. Accepted calls emit owned ordered state deltas, preserve mixed legacy state/predication, and use shared native stream coherency. Windows renderer/CP/producer compilation and the 128-case canonical SDK CPU oracle passed, including stream-wait ordering with zero native flush calls. Added independent `LO_NATIVE_FRONTEND=mesh` / `--native-frontend` selection and corrected diagnostic receipt/scene parsing. Shader/derived preparation, UP/special/recorded paths and legacy presentation scheduling remain; no full application link, new-path game/GPU run, Uhra performance win, user acceptance or release is claimed. See [implementation and remaining coverage](docs/notes/native-renderer-front-end.md).
 
 - Removed an intermediate CPU copy on validated renderer index-cache hits; converted little-endian indices are reused directly. Live-game performance validation is pending.
@@ -15,6 +17,8 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Added an opt-in native command path for SDK bulk register writes and bounded indexed quads / four-vertex title fans (`LO_NATIVE_COMMANDS=1`), retaining the original PM4 path as fallback. The ordinary 60 FPS Uhra comparison had a lower point estimate with `all`, but ranges overlap. A more discriminating 120 FPS target reached about 105 FPS and measured -0.4240% actual rate, +0.1907% CmdProc CPU and +3.7693% whole-process CPU; no throughput advantage or formal performance acceptance is claimed. The separate `LO_GPU_STATS=1` comparison is diagnostic because it changes renderer CPU timing; the older lightweight title result remains historical. Other packets and Xenos rendering remain, and this experimental route stays default-off.
 
 ### 简体中文
+
+- 将legacy ALU快照的通用检查移出逐word读取，并跳过非绘制模式和不活跃shader的身份读取。原生探针改为要求实际native后端draw与新鲜地图观察，保存采样边界截图，默认静止输入。原生前端仍默认关闭；CPU检查不改变已有Uhra性能验收未通过的结论。
 
 - **原生图形前端（开发中、按需开启）**：新增共用的显式`DrawState`后端，在普通indexed/non-indexed mesh的SDK状态flush之前接管完整调用。受支持调用提交自有值的有序状态delta，保留native/legacy状态一致性与predication，并通过共用执行器处理原生stream coherency。Windows renderer/CP/producer编译及128例原SDK CPU对照通过，包含stream等待顺序，native路径SDK flush调用为零。新增独立`LO_NATIVE_FRONTEND=mesh` / `--native-frontend`开关，并修复诊断回执和场景标记解析。Shader/派生状态准备、UP/特殊/录制路径及legacy呈现调度仍待迁移；未宣称完整应用链接、新路径游戏/GPU运行、Uhra性能收益、用户验收或发布。详见[实现与剩余覆盖](docs/notes/native-renderer-front-end.md)。
 

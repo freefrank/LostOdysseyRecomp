@@ -1,7 +1,7 @@
 """Bounded Windows native-command probe for title or Uhra gameplay.
 
 Requires psutil. Measures OS thread CPU separately from guest-swap wall timing.
-Uhra uses fixed automated input. Source game data and baseline state are read-only.
+Uhra defaults to stationary Continue input. Source game data and baseline state are read-only.
 """
 from __future__ import annotations
 
@@ -12,14 +12,13 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import re
 import shutil
 import subprocess
 import time
 
 import psutil
 
-from native_probe_log import NativeProbeLog, frontend_delta, probe_environment
+from native_probe_log import NativeProbeLog, frontend_delta, frontend_coverage, scene_window, probe_environment
 
 
 def metadata(root: Path) -> list[tuple[str, int, int]]:
@@ -28,42 +27,6 @@ def metadata(root: Path) -> list[tuple[str, int, int]]:
         paths.extend(p for p in (root / name).rglob("*") if p.is_file())
     return sorted((str(p.relative_to(root)), p.stat().st_size, p.stat().st_mtime_ns)
                   for p in paths if p.is_file())
-
-
-def latest_frame(log: Path) -> int:
-    if not log.exists():
-        return 0
-    with log.open("rb") as stream:
-        stream.seek(max(0, log.stat().st_size - 131072))
-        matches = re.findall(rb"(?:frame|present) timing completed=(\d+)", stream.read())
-    return int(matches[-1]) if matches else 0
-
-
-def latest_uhra_heartbeat(log: Path) -> tuple[int, int, str] | None:
-    if not log.exists():
-        return None
-    with log.open("rb") as stream:
-        stream.seek(max(0, log.stat().st_size - 1048576))
-        tail = stream.read()
-    matches = re.findall(
-        rb"heartbeat: swap #(\d+)[^\r\n]*?, (\d+) draws/frame[^\r\n]*?last file '([^']+)'",
-        tail,
-    )
-    if len(matches) < 2:
-        return None
-    last = [(int(frame), int(draws), name.decode("ascii", errors="replace"))
-            for frame, draws, name in matches[-2:]]
-    if all(draws >= 800 and name == "xenon_scr.fpd" for _, draws, name in last):
-        return last[-1]
-    return None
-
-
-def uhra_file_loaded(log: Path) -> bool:
-    if not log.exists():
-        return False
-    with log.open("rb") as stream:
-        stream.seek(max(0, log.stat().st_size - 1048576))
-        return b"open 'game:\\xenon_scr.fpd'" in stream.read().lower()
 
 
 def thread_names(pid: int) -> dict[int, str]:
@@ -119,6 +82,26 @@ def close_owned_windows(pid: int) -> bool:
     return posted
 
 
+def request_screenshot(proc: subprocess.Popen, run: Path, serial: int) -> str | None:
+    before = set(run.glob("scene_*.ppm"))
+    (run / "screenshot-request.txt").write_text(f"{serial} 1\n", encoding="ascii")
+    deadline = time.monotonic() + 8
+    while proc.poll() is None and time.monotonic() < deadline:
+        new = set(run.glob("scene_*.ppm")) - before
+        # The file becomes visible before readback finishes writing it. The
+        # runtime success receipt is the publication boundary, not existence.
+        log = run / "runtime.log"
+        if new and log.exists():
+            with log.open('rb') as stream:
+                stream.seek(max(0, log.stat().st_size - 131072))
+                tail = stream.read()
+            for image in sorted(new):
+                if (image.name.encode() + b" (ok)") in tail:
+                    return image.name
+        time.sleep(0.2)
+    return None
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("build", "baseline", "game", "output"):
@@ -131,6 +114,10 @@ def main() -> int:
     parser.add_argument("--frontend-stats", action="store_true",
                         help="diagnostic fallback and remaining PM4 opcode counts")
     parser.add_argument("--scene", choices=("title", "uhra"), default="title")
+    parser.add_argument("--movement", choices=("stationary", "fixed-swaps"), default="stationary",
+                        help="stationary is required for cross-build comparisons")
+    parser.add_argument("--expected-map-id", type=int,
+                        help="map ID verified from the chosen Uhra save; otherwise manual scene review is required")
     parser.add_argument("--scene-stats", action="store_true",
                         help="enable LO_GPU_STATS scene heartbeats and renderer CPU timers")
     parser.add_argument("--backend", choices=("d3d12", "vulkan"), default="d3d12")
@@ -192,7 +179,10 @@ def main() -> int:
               "executable": str(build / "LostOdysseyRecomp.exe"),
               "executable_sha256": executable_sha256,
               "baseline": str(baseline), "game": str(game),
-              "input": "none" if args.scene == "title" else "fixed Continue and Uhra route",
+              "input": "none" if args.scene == "title" else "Continue; " + args.movement,
+              "movement": args.movement, "expected_map_id": args.expected_map_id,
+              "cross_build_input_comparable": args.movement == "stationary",
+              "scene_review_required": args.scene == "uhra" and args.expected_map_id is None,
               "hidden": True, "muted": True,
               "cpu_scope": "OS user+kernel thread CPU; frame boundaries sampled from one-second log receipts",
               "same_input_image_replay": False, "forced_stop": False}
@@ -209,6 +199,8 @@ def main() -> int:
             deadline = time.monotonic() + args.startup_timeout
             def ready() -> bool:
                 scene_ready = probe.ready(args.scene, args.warmup_frame, args.scene_stats)
+                if args.scene == "uhra" and args.expected_map_id is not None:
+                    scene_ready = scene_ready and probe.scene['map_id'] == args.expected_map_id
                 acknowledged = args.native_frontend == "off" or probe.frontend is not None
                 return scene_ready and acknowledged
 
@@ -217,8 +209,21 @@ def main() -> int:
             if proc.poll() is not None or not ready():
                 result["failure"] = "startup did not reach the requested scene/frame or acknowledge native frontend"
             else:
+                # Both boundary images are outside CPU sampling. Allow the
+                # first readback to retire before taking the initial CPU time.
+                result['start_screenshot'] = request_screenshot(proc, run, 1)
+                if result['start_screenshot'] is None:
+                    raise RuntimeError("start-boundary screenshot was not produced")
+                settle = time.monotonic() + 2
+                while proc.poll() is None and time.monotonic() < settle:
+                    time.sleep(0.2)
+                    probe.poll()
+                if proc.poll() is not None or not ready():
+                    raise RuntimeError("scene/frame readiness was lost before CPU sample")
                 names = thread_names(proc.pid)
                 probe.poll()
+                result['start_scene'] = probe.scene
+                first_scene_changes = probe.scene_changes
                 first_frame = probe.completed
                 first_generation = probe.generation
                 first_frontend = probe.frontend
@@ -239,8 +244,16 @@ def main() -> int:
                     result["end_frontend_diagnostics"] = probe.diagnostics
                     result["frontend_execution_window"] = frontend_delta(first_frontend, probe.frontend)
                     execution = result["frontend_execution_window"]
-                    if args.native_frontend == "mesh" and (not execution or not execution["mesh_commands"]):
-                        result["failure"] = "no ordinary native mesh execution demonstrated in the sample"
+                    result['frontend_coverage'] = frontend_coverage(execution)
+                    if args.native_frontend == "mesh" and (not execution or not execution["native_draws"]):
+                        result["failure"] = "no actual native backend draw demonstrated (skipped mesh commands do not qualify)"
+                    if args.scene == "uhra":
+                        result['end_scene'] = probe.scene
+                        result['scene_window_valid'] = scene_window(
+                            result['start_scene'], probe.scene, probe.scene_changes == first_scene_changes,
+                            last_frame)
+                        if not result['scene_window_valid']:
+                            result['failure'] = "map identity changed, became unavailable, or stopped refreshing during sample"
                     if probe.generation != first_generation:
                         result["failure"] = "runtime log was replaced or truncated during CPU sample"
                     frames = last_frame - first_frame
@@ -262,13 +275,13 @@ def main() -> int:
                         result["end_heartbeat"] = probe.uhra_heartbeat()
                         if result["end_heartbeat"] is None:
                             result["failure"] = "Uhra high-draw scene was lost during CPU sample"
-                    # Readback is outside the timing window.
-                    (run / "screenshot-request.txt").write_text("1 1\n", encoding="ascii")
-                    deadline = time.monotonic() + 8
-                    while proc.poll() is None and time.monotonic() < deadline and not list(run.glob("scene_*.ppm")):
-                        time.sleep(0.2)
+                    result['end_screenshot'] = request_screenshot(proc, run, 2)
+                    if result['end_screenshot'] is None:
+                        result['failure'] = "end-boundary screenshot was not produced"
                 else:
                     result["failure"] = "process exited during CPU sample"
+    except (OSError, RuntimeError, psutil.Error) as error:
+        result['failure'] = str(error)
     finally:
         if proc is not None and proc.poll() is None:
             result["close_posted"] = close_owned_windows(proc.pid)

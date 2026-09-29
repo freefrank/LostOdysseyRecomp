@@ -58,5 +58,34 @@ int main()
     DrawWords(native).Subspan(1,100).Copy(extended);
     Require(extended == std::array<uint32_t,5>{0,3,0,0,0}, "borrowed bank bounds and partial snapshots");
     Require(DrawWords(native).Subspan(100,2).Read(0) == 0, "out-of-range view is empty");
+    // Differential bulk-copy coverage against scalar Read, including an
+    // unaligned BE mirror, partial banks, high constants and post-capture writes.
+    for (size_t size : {size_t(0), size_t(1), size_t(15), size_t(16), size_t(17), size_t(1024)}) {
+        std::vector<uint32_t> source(size);
+        std::vector<uint8_t> bytes(size * 4 + 1);
+        for (size_t pattern = 0; pattern < 4; ++pattern) {
+            for (size_t i = 0; i < size; ++i) {
+                source[i] = pattern == 0 || (i % (pattern + 1)) == 0 ? 0u : uint32_t(0x80000000u + i);
+                uint32_t bits = uint32_t(0x7fc00000u + i); // retain NaN payload bits
+                for (size_t b = 0; b < 4; ++b) bytes[1 + i * 4 + b] = uint8_t(bits >> (24 - b * 8));
+            }
+            const auto view = DrawWords::Legacy(source, bytes.data() + 1);
+            for (size_t length : {size_t(0), size / 2, size, size + 3}) {
+                std::vector<uint32_t> result(length, 0xdeadbeef);
+                view.Copy(result);
+                for (size_t i = 0; i < length; ++i)
+                    Require(result[i] == view.Read(i), "bulk copy must equal scalar view including padded tail");
+            }
+            if (size) {
+                source[size - 1] = 0;
+                bytes.back() ^= 3; // unobserved guest-MMIO mutation must remain visible
+                std::vector<uint32_t> result(size);
+                view.Copy(result);
+                Require(result.back() == view.Read(size - 1), "no revision-only reuse hides a direct MMIO write");
+                result.back() = 123;
+                Require(source.back() == 0, "working copy never mutates the source");
+            }
+        }
+    }
     std::cout << "draw-state adapter contracts passed\n";
 }

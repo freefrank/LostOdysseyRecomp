@@ -9,6 +9,7 @@ std::mutex mutex;
 std::map<std::wstring, uint32_t> definitions;
 debug_menu::MapInfo snapshot;
 std::chrono::steady_clock::time_point lastUpdate;
+uint64_t observationSerial = 0;
 
 bool Address(uint32_t p) { return p >= 0x100000 && p < 0x7BFF0000 && !(p & 3); }
 std::wstring Text(uint8_t* base, uint32_t p, uint32_t limit = 256) {
@@ -97,10 +98,17 @@ done:
             reinterpret_cast<const char*>(name.c_str()));
     }
     snapshot = std::move(current);
+    ++observationSerial;
 }
 
 debug_menu::MapInfo debug_menu::GetMapInfo() {
     std::lock_guard lock(mutex);
     if (std::chrono::steady_clock::now() - lastUpdate > std::chrono::seconds(2)) return {};
     return snapshot;
+}
+
+debug_menu::MapObservation debug_menu::ObserveMapInfo() {
+    std::lock_guard lock(mutex);
+    if (std::chrono::steady_clock::now() - lastUpdate > std::chrono::seconds(2)) return {};
+    return {snapshot, observationSerial};
 }

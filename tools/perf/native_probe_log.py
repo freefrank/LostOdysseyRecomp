@@ -11,6 +11,9 @@ _HEARTBEAT = re.compile(
     rb"heartbeat: swap #(\d+)[^\r\n]*?, (\d+) draws/frame[^\r\n]*?last file '([^']+)'")
 _FRONTEND = re.compile(rb"native frontend: swap=(\d+) mode=mesh\b[^\r\n]*")
 _COUNTER = re.compile(rb"([a-z_]+)=(\d+)")
+_SCENE_RECEIPT = re.compile(
+    rb"native probe scene: swap=(\d+) observation=(\d+) available=(true|false|0|1) "
+    rb"map_id=(\d+) package='([^']*)'")
 _SCENE = b"open 'game:\\xenon_scr.fpd'"
 
 
@@ -28,6 +31,8 @@ class NativeProbeLog:
         self.pending = b""
         self.completed = 0
         self.scene_loaded = False
+        self.scene: dict | None = None
+        self.scene_changes = 0
         self.heartbeats: deque[tuple[int, int, str]] = deque(maxlen=2)
         self.frontend: dict[str, int] | None = None
         self.diagnostics: str | None = None
@@ -38,6 +43,8 @@ class NativeProbeLog:
         self.pending = b""
         self.completed = 0
         self.scene_loaded = False
+        self.scene: dict | None = None
+        self.scene_changes = 0
         self.heartbeats.clear()
         self.frontend = None
         self.diagnostics = None
@@ -48,6 +55,17 @@ class NativeProbeLog:
             self.completed = int(match[1])
         if _SCENE in line.lower():
             self.scene_loaded = True
+        if match := _SCENE_RECEIPT.search(line):
+            current = {"swap": int(match[1]), "observation": int(match[2]),
+                       "available": match[3] in (b'true', b'1'), "map_id": int(match[4]),
+                       "package": match[5].decode('utf-8', errors='replace')}
+            if self.scene is not None and (
+                    not current['available'] or not self.scene['available'] or
+                    current['observation'] <= self.scene['observation'] or
+                    current['map_id'] != self.scene['map_id'] or
+                    current['package'] != self.scene['package']):
+                self.scene_changes += 1
+            self.scene = current
         if match := _HEARTBEAT.search(line):
             self.heartbeats.append((int(match[1]), int(match[2]),
                                     match[3].decode('ascii', errors='replace')))
@@ -89,13 +107,18 @@ class NativeProbeLog:
             return self.heartbeats[-1]
         return None
 
+    def fresh_scene(self) -> bool:
+        # A receipt can precede its own completed-present line by one swap.
+        return bool(self.scene and self.scene['available'] and self.scene['observation'] > 0
+                    and self.scene['package'] and -1 <= self.completed - self.scene['swap'] <= 240)
+
     def ready(self, scene: str, warmup_frame: int, require_heartbeat: bool) -> bool:
         self.poll()  # Always observe early load markers, even before warm-up.
         if self.completed < warmup_frame:
             return False
         if scene == 'title':
             return True
-        if not self.scene_loaded:
+        if not self.fresh_scene():
             return False
         beat = self.uhra_heartbeat()
         return not require_heartbeat or (beat is not None and beat[0] >= warmup_frame - 120)
@@ -112,6 +135,28 @@ def frontend_delta(first: dict[str, int] | None, last: dict[str, int] | None) ->
             **{key: last[key] - first[key] for key in counters}}
 
 
+def frontend_coverage(delta: dict[str, int] | None) -> dict | None:
+    if delta is None:
+        return None
+    swaps = delta['end_swap'] - delta['start_swap']
+    total = delta['native_draws'] + delta['other_draws']
+    return {'native_draws_per_receipt_swap': delta['native_draws'] / swaps,
+            'native_draw_fraction': delta['native_draws'] / total if total else None,
+            'backend_calls': total, 'receipt_swaps': swaps}
+
+
+def scene_window(first: dict | None, last: dict | None, unchanged: bool,
+                 last_completed: int) -> bool:
+    # Proves matching observed map identity across receipts, not pixel equality
+    # or a particular Uhra location. Screenshots/expected map ID are separate.
+    return bool(first and last and unchanged and first['available'] and last['available']
+                and first['observation'] > 0 and last['observation'] > first['observation']
+                and last['swap'] > first['swap']
+                and last['map_id'] == first['map_id'] and first['package']
+                and last['package'] == first['package']
+                and -1 <= last_completed - last['swap'] <= 240)
+
+
 def probe_environment(args: argparse.Namespace, run: Path, inherited: dict[str, str]) -> dict[str, str]:
     env = {k: v for k, v in inherited.items()
            if not k.upper().startswith(("LO_", "VK_LAYER", "VK_INSTANCE_LAYERS"))}
@@ -124,7 +169,11 @@ def probe_environment(args: argparse.Namespace, run: Path, inherited: dict[str, 
                LO_SCREENSHOT_PATH=str(run / "scene.ppm"))
     if args.scene == "uhra":
         env.update(LO_AUTO_BUTTONS="s@120,a@240,a@360,a@480,a@700,a@900",
-                   LO_AUTO_PULSE="6", LO_AUTO_STICK="0,18000,1600,1900")
+                   LO_AUTO_PULSE="6", LO_NATIVE_PROBE_SCENE="1")
+        # Cross-build comparisons must not move for a frame-count-dependent
+        # interval. The previous route remains an explicit exploratory option.
+        if getattr(args, 'movement', 'stationary') == 'fixed-swaps':
+            env['LO_AUTO_STICK'] = "0,18000,1600,1900"
     if args.scene_stats:
         env["LO_GPU_STATS"] = "1"
     if args.render_timing:

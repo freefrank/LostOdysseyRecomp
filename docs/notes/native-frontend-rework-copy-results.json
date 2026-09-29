@@ -1,0 +1,194 @@
+{
+  "scope": "synthetic two-1024-word-copy code-shape isolation; not game/renderer frame times",
+  "baseline": "6ad3b89947bbf9d439e48bf6f3f7662c7d4f3cdc",
+  "compiler": "clang version 17.0.0 (https://github.com/swiftlang/llvm-project.git 10999b6d034fe318f3d56c83bddb6572593a8bb0)",
+  "platform": "Linux-6.18.44-x86_64-with-glibc2.41",
+  "flags": "-std=c++20 -O2 -march=sandybridge",
+  "iterations_per_sample": 100000,
+  "rounds": 3,
+  "identical_input_checksums": true,
+  "medians": [
+    {
+      "legacy_mmio": false,
+      "zero_stride": 0,
+      "previous_ns": 104.619,
+      "current_ns": 106.336
+    },
+    {
+      "legacy_mmio": false,
+      "zero_stride": 1,
+      "previous_ns": 101.361,
+      "current_ns": 113.01
+    },
+    {
+      "legacy_mmio": false,
+      "zero_stride": 4,
+      "previous_ns": 104.091,
+      "current_ns": 111.043
+    },
+    {
+      "legacy_mmio": true,
+      "zero_stride": 0,
+      "previous_ns": 1171.848,
+      "current_ns": 622.452
+    },
+    {
+      "legacy_mmio": true,
+      "zero_stride": 1,
+      "previous_ns": 1107.333,
+      "current_ns": 556.943
+    },
+    {
+      "legacy_mmio": true,
+      "zero_stride": 4,
+      "previous_ns": 1056.196,
+      "current_ns": 484.819
+    }
+  ],
+  "samples": [
+    {
+      "round": "0",
+      "legacy_mmio": "0",
+      "zero_stride": "0",
+      "previous_ns": "97.221",
+      "current_ns": "97.421",
+      "checksum": "216426190859511"
+    },
+    {
+      "round": "0",
+      "legacy_mmio": "0",
+      "zero_stride": "1",
+      "previous_ns": "101.361",
+      "current_ns": "113.010",
+      "checksum": "2408987"
+    },
+    {
+      "round": "0",
+      "legacy_mmio": "0",
+      "zero_stride": "4",
+      "previous_ns": "103.014",
+      "current_ns": "111.043",
+      "checksum": "162319643784135"
+    },
+    {
+      "round": "0",
+      "legacy_mmio": "1",
+      "zero_stride": "0",
+      "previous_ns": "1099.967",
+      "current_ns": "778.088",
+      "checksum": "216426190859511"
+    },
+    {
+      "round": "0",
+      "legacy_mmio": "1",
+      "zero_stride": "1",
+      "previous_ns": "1107.333",
+      "current_ns": "640.836",
+      "checksum": "214224496298861"
+    },
+    {
+      "round": "0",
+      "legacy_mmio": "1",
+      "zero_stride": "4",
+      "previous_ns": "1056.196",
+      "current_ns": "484.819",
+      "checksum": "215902032204567"
+    },
+    {
+      "round": "1",
+      "legacy_mmio": "0",
+      "zero_stride": "0",
+      "previous_ns": "104.619",
+      "current_ns": "106.336",
+      "checksum": "216426190859511"
+    },
+    {
+      "round": "1",
+      "legacy_mmio": "0",
+      "zero_stride": "1",
+      "previous_ns": "93.496",
+      "current_ns": "106.864",
+      "checksum": "2408987"
+    },
+    {
+      "round": "1",
+      "legacy_mmio": "0",
+      "zero_stride": "4",
+      "previous_ns": "115.270",
+      "current_ns": "107.009",
+      "checksum": "162319643784135"
+    },
+    {
+      "round": "1",
+      "legacy_mmio": "1",
+      "zero_stride": "0",
+      "previous_ns": "1171.848",
+      "current_ns": "517.792",
+      "checksum": "216426190859511"
+    },
+    {
+      "round": "1",
+      "legacy_mmio": "1",
+      "zero_stride": "1",
+      "previous_ns": "1171.520",
+      "current_ns": "556.943",
+      "checksum": "214224496298861"
+    },
+    {
+      "round": "1",
+      "legacy_mmio": "1",
+      "zero_stride": "4",
+      "previous_ns": "1219.343",
+      "current_ns": "476.732",
+      "checksum": "215902032204567"
+    },
+    {
+      "round": "2",
+      "legacy_mmio": "0",
+      "zero_stride": "0",
+      "previous_ns": "127.273",
+      "current_ns": "136.459",
+      "checksum": "216426190859511"
+    },
+    {
+      "round": "2",
+      "legacy_mmio": "0",
+      "zero_stride": "1",
+      "previous_ns": "113.122",
+      "current_ns": "113.682",
+      "checksum": "2408987"
+    },
+    {
+      "round": "2",
+      "legacy_mmio": "0",
+      "zero_stride": "4",
+      "previous_ns": "104.091",
+      "current_ns": "186.111",
+      "checksum": "162319643784135"
+    },
+    {
+      "round": "2",
+      "legacy_mmio": "1",
+      "zero_stride": "0",
+      "previous_ns": "1306.688",
+      "current_ns": "622.452",
+      "checksum": "216426190859511"
+    },
+    {
+      "round": "2",
+      "legacy_mmio": "1",
+      "zero_stride": "1",
+      "previous_ns": "1066.826",
+      "current_ns": "482.176",
+      "checksum": "214224496298861"
+    },
+    {
+      "round": "2",
+      "legacy_mmio": "1",
+      "zero_stride": "4",
+      "previous_ns": "1001.885",
+      "current_ns": "516.487",
+      "checksum": "215902032204567"
+    }
+  ]
+}

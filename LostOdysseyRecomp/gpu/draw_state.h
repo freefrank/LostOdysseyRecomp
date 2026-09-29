@@ -61,8 +61,26 @@ namespace gpu::renderer
             const size_t count = std::min(destination.size(), words_.size());
             if (count && !zeroFallbackBE_)
                 std::memcpy(destination.data(), words_.data(), count * sizeof(uint32_t));
-            else
-                for (size_t i = 0; i < count; ++i) destination[i] = Read(i);
+            else if (count)
+            {
+                // Bounds and fallback policy are invariant across this bank.
+                // Do not route every ALU lane through the general Read view:
+                // the extra per-lane tests inhibit bulk-loop optimization.
+                const auto* source = words_.data();
+                const auto* fallbackBE = zeroFallbackBE_;
+                for (size_t i = 0; i < count; ++i)
+                {
+                    uint32_t value = source[i];
+                    if (value == 0)
+                    {
+                        std::memcpy(&value, fallbackBE + i * 4, 4);
+                        if constexpr (std::endian::native == std::endian::little)
+                            value = (value >> 24) | ((value >> 8) & 0xff00u) |
+                                ((value << 8) & 0xff0000u) | (value << 24);
+                    }
+                    destination[i] = value;
+                }
+            }
             std::fill(destination.begin() + count, destination.end(), 0);
         }
     private:

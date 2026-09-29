@@ -256,3 +256,17 @@ Portable parser/environment regression checks are
 `psutil`. Actual game runs require both. See the
 [implementation, SDK contracts and remaining dependencies](../../docs/notes/native-renderer-front-end.md)
 and [bounded validation record](../../docs/notes/native-renderer-front-end-evidence.json).
+
+### Native acceptance rework: stationary, witnessed samples
+
+`run_native_title.py --scene uhra` now defaults to stationary Continue input.
+Use the same save/camera for off/mesh comparisons; `--movement fixed-swaps` is
+exploratory and must not be used to attribute cross-build changes. The candidate
+must contain the low-frequency `native probe scene` map-observation receipt.
+The runner requires fresh matching sample-boundary map observations and actual
+`native_draws`, saves start/end screenshots outside CPU sampling, and reports
+coverage on the receipt window. Supply an independently verified
+`--expected-map-id N` or manually review the Uhra boundary images; map equality
+does not establish identical camera/NPC animation/pixels. Missing/stale/changed
+map observations fail the sample instead of reusing a historical asset-open
+marker. See [rework scope](../../docs/notes/native-frontend-rework.md).

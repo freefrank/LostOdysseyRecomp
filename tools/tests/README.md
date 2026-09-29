@@ -744,3 +744,11 @@ Focused verification fixtures introduced for post-v0.6.11 lifecycle fixes, capab
 | `motion_replay_gpu_test` | `motion_replay_gpu_test.exe --depth-retirement-only` | 26 Vulkan hardware checks (RTX 5080 D32S8) verifying external depth unbinding before texture destruction. |
 | `LoDlssEvaluateCaptureContractTest` | `LoDlssEvaluateCaptureContractTest.exe --evaluate-capture-contract-only` | Contract checks for RGBA8/RGBA16F Evaluate capture, quotas (4 entries/128 MiB), truncation, and formatting. |
 | `LoNativeDlssRendererTest` | `LoNativeDlssRendererTest.exe --evaluate-capture-only` | Vulkan hardware execution of isolated pre-Evaluate input and post-Evaluate scratch output copies with checked submit. |
+
+### Native acceptance rework contracts
+
+`draw_state_test.cpp` covers bulk/scalar equivalence for native and legacy views,
+unaligned mirrors, full/partial/empty banks, zero fallback and direct MMIO writes.
+`native_probe_log_test.py` rejects stale/map-transition evidence and distinguishes
+predicated mesh commands from actual backend draw calls. These portable checks
+and `tools/perf/draw_words_bench.cpp` are CPU-only, not game or GPU acceptance.
