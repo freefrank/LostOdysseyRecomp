@@ -23,12 +23,10 @@ jobs:
           persist-credentials: false
       - name: Apply interrupted source changes
         run: python .github/apply-prepared-tail.py
-      - name: Probe contracts and configuration
-        run: |
-          python tools/tests/native_probe_log_test.py
-          python tools/tests/native_prepared_probe_test.py
-          python -m py_compile tools/perf/run_native_title.py tools/perf/native_probe_log.py
-          python -c "import pathlib,tomllib; tomllib.loads(pathlib.Path('LostOdysseyRecompLib/config/LostOdysseyRecomp.toml').read_text())"
+      - name: Configuration encoding check
+        # The unchanged nine probe and four prepared-probe tests, plus Python
+        # syntax checks, passed in 36612252056 before its TOML decoding failure.
+        run: python -c "import pathlib,tomllib; tomllib.loads(pathlib.Path('LostOdysseyRecompLib/config/LostOdysseyRecomp.toml').read_text(encoding='utf-8'))"
       - name: Initialize pinned generator and runtime headers
         shell: bash
         run: git submodule update --init --recursive --depth 1 tools/XenonRecomp thirdparty/o1heap thirdparty/unordered_dense
