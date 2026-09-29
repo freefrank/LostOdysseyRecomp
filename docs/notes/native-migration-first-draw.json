@@ -1,0 +1,151 @@
+{
+  "schema": "lo.native-migration.candidate/1",
+  "purpose": "research_record_only_not_a_runtime_allowlist",
+  "candidate_id": "title-cloud-layer-v1",
+  "source_baseline": "2ce27e35428d85abde20afb5b6b2c59052810b13",
+  "research_date": "2026-09-28",
+  "timezone": "America/Edmonton",
+  "candidate_selected": true,
+  "qualified_for_bypass": false,
+  "prototype_implemented": false,
+  "scope": {
+    "scene": "title_menu_cloud_background",
+    "selected_draw_count": 1,
+    "excluded": [
+      "logo",
+      "menu_text",
+      "blur_chain",
+      "resolve",
+      "swap",
+      "other_scenes"
+    ]
+  },
+  "historical_observation": {
+    "log": "out/title-background-before/run.log",
+    "lines": [
+      231,
+      236
+    ],
+    "image": "out/title-background-before/steps/f619_draw0028_1280x736.ppm",
+    "renderer_frame": 619,
+    "step_draw_ordinal": 28,
+    "step_draw_ordinal_base": 1,
+    "is_current_runtime_qualification": false,
+    "is_correct_image_baseline": false,
+    "caveat": "Pre packed-mip-fix black-background record; identifies the draw only.",
+    "renderer_logged_vs": "81217dc973d5dc31",
+    "renderer_logged_ps": "cd6adb98ab83bf90",
+    "current_shader_hash_namespace_required": "RendererByteFnv",
+    "must_not_match_against_namespace": "CommandWordFnv",
+    "primitive_type_numeric": 5,
+    "index_count": 6,
+    "indexed": true,
+    "index_base": null,
+    "index_32bit": null,
+    "index_bytes": null,
+    "target": {
+      "edram_base": "0x2d0",
+      "format_numeric": 3,
+      "storage_extent": [
+        1280,
+        736
+      ],
+      "viewport": [
+        0,
+        0,
+        1280,
+        720
+      ],
+      "scissor": [
+        0,
+        0,
+        1280,
+        720
+      ]
+    },
+    "vertex_fetch": {
+      "slot": 95,
+      "dwords": 32,
+      "endian_numeric": 2
+    },
+    "textures": [
+      {
+        "slot": 0,
+        "extent": [
+          256,
+          256
+        ],
+        "format_numeric": 6
+      },
+      {
+        "slot": 1,
+        "extent": [
+          256,
+          256
+        ],
+        "format_numeric": 6
+      },
+      {
+        "slot": 2,
+        "extent": [
+          4,
+          4
+        ],
+        "format_numeric": 18,
+        "packed_mip_obligation": true
+      },
+      {
+        "slot": 3,
+        "extent": [
+          4,
+          64
+        ],
+        "format_numeric": 20,
+        "packed_mip_obligation": true
+      }
+    ],
+    "state": {
+      "mode": 4,
+      "blend": "0x10001",
+      "write_mask": "0x7",
+      "cull": "0x2",
+      "depth_control": "0x700770"
+    },
+    "following_resolve_guest_address_in_this_run_only": "0x09fa0000"
+  },
+  "unproven_current_identity": {
+    "source_executable_identity": null,
+    "guest_producer_pc": null,
+    "guest_caller_lr": null,
+    "command_span": null,
+    "primary_ring_address": null,
+    "ib_ancestry": null,
+    "buffer_generation": null,
+    "pm4_opcode": null,
+    "complete_register_and_shader_state": null,
+    "complete_index_vertex_and_constant_snapshot": null,
+    "resource_generation_and_lifetime": null,
+    "submission_serial_and_completion_fence": null
+  },
+  "required_gates": [
+    "attribute_exact_guest_producer_to_ordered_command_span_and_selected_renderer_draw",
+    "confirm_current_shader_identity_namespace_and_complete_state",
+    "capture_equivalent_inputs_including_packed_mips_depth_and_alpha_state",
+    "preserve_guest_abi_cp_state_and_all_unreplaced_pm4_ordering",
+    "fallback_only_before_side_effects_and_never_replay_a_submitted_draw",
+    "retain_upload_descriptors_textures_and_targets_until_real_gpu_completion",
+    "compare_draw_resolve_final_images_and_successor_state",
+    "measure_total_net_cpu_cost_separately_from_gpu_and_frame_pacing",
+    "exercise_rejections_epoch_changes_exit_and_resource_reuse"
+  ],
+  "measurement_results": {
+    "same_input_image_comparison": null,
+    "cpu_time": null,
+    "gpu_time": null,
+    "frame_pacing": null,
+    "synchronization": null,
+    "resource_lifetime": null
+  },
+  "scope_expansion_authorized": false,
+  "report": "native-migration-boundaries.md"
+}
