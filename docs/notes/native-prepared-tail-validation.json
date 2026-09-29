@@ -1,0 +1,56 @@
+{
+  "date": "2026-09-29",
+  "branch": "fix/native-frontend-rework",
+  "runtime_source_commit": "e6c9effb6ed5d47cf83c7e2ff907800d102d9247",
+  "previous_interrupted_checkpoint": "2a4d553fab5dbd3862a9a200d3867901415e19d4",
+  "ci_run": 36612827990,
+  "ci_input_commit": "2b05c914e13a35e6991247271646d0407e11c980",
+  "source_application": "Checks and publication applied the same blob-verified saved diff and exact-context probe/oracle edits. Publication removed incomplete patch/base64 files and the one-shot delivery workflow.",
+  "published_source_verified": true,
+  "canonical_ppc_regeneration": "passed",
+  "windows_production_translation_units": {
+    "LostOdysseyRecomp/gpu/command_processor.cpp": "compiled",
+    "LostOdysseyRecomp/gpu/native_mesh_hooks.cpp": "compiled"
+  },
+  "entry_oracle": {
+    "passed": true,
+    "cases": 128,
+    "source": "canonical generated SDK",
+    "predicates": ["pass", "skip"],
+    "stream_wait_order": "verified",
+    "original_helper_calls": 1451,
+    "native_flush_calls": 0
+  },
+  "prepared_tail_oracle": {
+    "passed": true,
+    "cases": 96,
+    "accepted_tail_cases": 64,
+    "retained_legacy_tail_cases": 32,
+    "canonical_prefix_and_tail": true,
+    "shader_and_derived_helpers": "opaque effect models, not real shader variant validation",
+    "predicates": ["pass", "skip"],
+    "future_alu_dirty_flags": "preserved",
+    "nonvolatile_registers_stack_and_link_restoration": "verified",
+    "scope_cleared_after_return": "verified"
+  },
+  "probe_checks": {
+    "run": 36612252056,
+    "existing_probe_cases_passed": 9,
+    "prepared_probe_cases_passed": 4,
+    "python_syntax": "passed",
+    "note": "Reused unchanged passing probe checks. That run subsequently failed on Windows default-codepage TOML reading; explicit UTF-8 parsing passed in the final run. A separate fixture declaration-linkage error was corrected before the final oracle execution."
+  },
+  "artifact_id": 11054496807,
+  "artifact_sha256": "c116a97e980f3d56acd055bf622b045dc11dd40aa03de49fe23a36de576ff05a",
+  "application_link_performed": false,
+  "clean_release_build_performed": false,
+  "game_or_gpu_validation_performed": false,
+  "uhra_performance_retest_performed": false,
+  "complete_pm4_removal": false,
+  "performance_accepted": false,
+  "default_native_frontend": "off",
+  "default_prepared_tail": "off",
+  "required_opt_in": ["LO_NATIVE_FRONTEND=mesh", "LO_NATIVE_FRONTEND_PREPARED=1"],
+  "retained_pm4_scope": "Original shader/derived preparation and initial ALU prefix still use their existing implementation; the new path replaces only the remaining ordinary state/draw tail.",
+  "acceptance_baseline": "The user-supplied Uhra no-stable-benefit and off-mode-regression observations remain unresolved; CPU contract success does not supersede them."
+}
