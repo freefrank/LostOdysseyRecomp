@@ -1,0 +1,84 @@
+name: Native acceptance rework checks and source delivery
+on:
+  push:
+    branches: [fix/native-frontend-rework]
+    paths:
+      - .github/workflows/native-rework-stage1.yml
+      - .github/native-rework-apply.py
+      - .github/native-rework-stage1-*.b64
+permissions:
+  contents: read
+jobs:
+  checks:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - name: Preserve source bytes
+        shell: bash
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify reviewed source payload
+        run: python .github/native-rework-apply.py
+      - name: Portable contracts and syntax
+        run: |
+          python tools/tests/native_probe_log_test.py
+          python -m py_compile tools/perf/native_probe_log.py tools/perf/run_native_title.py
+      - name: Linux draw-state contract and code-shape benchmark
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out/native-rework
+          g++ -std=c++20 -O2 -march=sandybridge -Wall -Wextra -Werror -I LostOdysseyRecomp tools/tests/draw_state_test.cpp -o out/native-rework/draw-state
+          out/native-rework/draw-state | tee out/native-rework/contract.log
+          g++ -std=c++20 -O2 -march=sandybridge -I LostOdysseyRecomp tools/perf/draw_words_bench.cpp -o out/native-rework/bench
+          out/native-rework/bench > out/native-rework/bench.csv
+          echo 'CPU_ONLY: no production TU, full application, game or GPU acceptance' > out/native-rework/SCOPE.txt
+      - name: Windows draw-state contract and code-shape benchmark
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          call tools\setup_windows.bat || exit /b 1
+          mkdir out\native-rework
+          clang-cl /nologo /std:c++20 /O2 /EHsc /W4 /WX -march=sandybridge /I LostOdysseyRecomp tools\tests\draw_state_test.cpp /Fe:out\native-rework\draw-state.exe || exit /b 1
+          out\native-rework\draw-state.exe > out\native-rework\contract.log 2>&1 || (type out\native-rework\contract.log & exit /b 1)
+          clang-cl /nologo /std:c++20 /O2 /EHsc -march=sandybridge /I LostOdysseyRecomp tools\perf\draw_words_bench.cpp /Fe:out\native-rework\bench.exe || exit /b 1
+          out\native-rework\bench.exe > out\native-rework\bench.csv || exit /b 1
+          echo CPU_ONLY: no production TU, full application, game or GPU acceptance > out\native-rework\SCOPE.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-rework-cpu-${{ runner.os }}
+          path: out/native-rework/
+          retention-days: 7
+  publish:
+    needs: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish exactly the checked source and remove one-shot transport
+        shell: bash
+        run: |
+          set -euo pipefail
+          python .github/native-rework-apply.py
+          git rm .github/native-rework-stage1-*.b64 .github/native-rework-apply.py .github/workflows/native-rework-stage1.yml .github/workflows/native-rework-source.yml
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'perf(native): streamline legacy state reads and require live probe evidence'
+          git push origin HEAD:refs/heads/fix/native-frontend-rework
+          git rev-parse HEAD > SOURCE.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-rework-published-source
+          path: SOURCE.txt
+          retention-days: 7
