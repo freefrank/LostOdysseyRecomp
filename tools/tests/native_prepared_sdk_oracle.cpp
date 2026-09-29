@@ -5,8 +5,7 @@
 
 extern "C" PPC_FUNC(__imp__sub_823C6860);
 extern "C" PPC_FUNC(__imp__sub_827B56B0);
-extern "C" PPC_FUNC(sub_823C6860);
-extern "C" PPC_FUNC(sub_827B56B0);
+// sub_823C6860/sub_827B56B0 use the canonical shared-header declarations.
 extern uint32_t oracle_preparation_model, oracle_preparation_calls;
 namespace gpu::native_frontend {
 void ExecuteOriginalWithPreparedTail(PPCContext&, uint8_t*, bool);

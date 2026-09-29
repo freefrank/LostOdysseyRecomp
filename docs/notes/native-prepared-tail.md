@@ -1,0 +1,63 @@
+# Native handoff after SDK preparation
+
+Date: 2026-09-29. Branch: `fix/native-frontend-rework`.
+This separately opt-in bridge preserves original SDK shader/derived preparation;
+it does not port shader selection or eliminate all PM4.
+
+## Execution contract
+
+The ordinary entry guard still rejects unprepared shader/derived state. When
+`LO_NATIVE_FRONTEND=mesh` and `LO_NATIVE_FRONTEND_PREPARED=1`, that fallback
+opens a thread-local scope for the original invocation and guest stack frame.
+The canonical SDK executes its initial ALU uploads and optional shader/derived
+helpers. The new hook then attempts to hand off only the remaining scalar,
+fetch, stream, bool/loop state and draw. A rejected tail resumes the remaining
+instructions of the SAME invocation; it never repeats the completed prefix.
+
+| SDK entry | Post-preparation hook | Original epilogue | Saved draw arguments |
+| --- | --- | --- | --- |
+| `823C6860` | `823C6914` | `823C6CB0` | r16 primitive, r19 first index, r17 count |
+| `827B56B0` | `827B5764` | `827B5A90` | r25 primitive, r21 first vertex, r22 count |
+
+Both points follow the optional `823C6E18` and `823C2200` calls and use their
+live returned r30 mask, plus r28/r27 fetch/misc masks. These boundaries were
+identified by the canonical [SDK metadata run](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/36608366692).
+The normal entry shader guard is unchanged; even the tail declines a returned
+mask that still asks for shader preparation. Device, recorded-mode, count,
+index-resource and dual-encoding capacity checks run before tail mutation.
+The TLS scope rejects direct implementation callers, wrong entry kinds and
+nested frames. Successful emission jumps to the original frame-restoring
+epilogue. It acknowledges only masks at device+16/+24/+32; future ALU dirtiness
+at +0/+8 survives exactly as in the original tail.
+
+The distinct `0x80004C50` tag uses the existing bounded v2 semantic delta
+payload. It inherits the already executed shader/ALU prefix in stream order.
+No host pointers, side queue, new shader compiler or resource/fence owner are
+introduced. The tail has a maximum 397-word local encoder buffer rather than
+the full mesh encoder's 2500 words. Predicate skipping still occurs after
+unpredicated state and coherency effects, before draw/DMA updates.
+
+## Evidence and reproduction
+
+Regenerate PPC with the checked-in configuration before building. The code is
+not a patch to a generated C++ file. Existing builds lacking the new callbacks
+cannot validate this bridge. The ordinary mesh control remains available with
+the prepared flag absent/zero; both default native options remain off.
+`run_native_title.py --native-frontend mesh --prepared-tail` explicitly injects
+the new flag, records it, and requires a positive `prepared_draws` delta.
+That receipt counts actual CP backend calls after predication, not just
+created commands or successful shader preparation. `native_draws` includes
+prepared draws; the entry `shader_prepare` counter still records its initial
+rejection and must not be subtracted from these asynchronous execution counts.
+
+The expanded SDK oracle compares the actual canonical prefix/tail on its
+ordinary synthetic cases, including dirty state, predication, stream ordering
+and nonvolatile epilogue restoration. Separate **opaque preparation-effect
+models** test that ordered prefix writes are retained, future ALU dirty flags
+survive, and an uncleared shader mask declines the tail. Those models are NOT
+implementations or validation of real shader variants/derived-state selection.
+New compile/oracle results must be attached after execution; no real-game,
+GPU, coverage percentage or performance result is claimed for this bridge.
+The supplied Uhra no-benefit/off-regression report remains the acceptance
+baseline. Additional callback overhead with both modes off also needs the
+same-stationary-view regression check; no zero-overhead claim is made.

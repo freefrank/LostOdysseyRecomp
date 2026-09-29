@@ -129,6 +129,8 @@ def frontend_delta(first: dict[str, int] | None, last: dict[str, int] | None) ->
     if first is None or last is None or last.get('swap', 0) <= first.get('swap', 0):
         return None
     counters = ('mesh_commands', 'native_draws', 'other_draws', 'predicated_skips', 'words', 'state_values')
+    if 'prepared_draws' in first or 'prepared_draws' in last:
+        counters += ('prepared_draws',)
     if any(key not in first or key not in last or last[key] < first[key] for key in counters):
         return None
     return {'start_swap': first['swap'], 'end_swap': last['swap'],
@@ -167,6 +169,10 @@ def probe_environment(args: argparse.Namespace, run: Path, inherited: dict[str, 
                LO_SHADER_CACHE_DIR=str(run / "shader-cache"),
                LO_SCREENSHOT_REQUEST=str(run / "screenshot-request.txt"),
                LO_SCREENSHOT_PATH=str(run / "scene.ppm"))
+    if getattr(args, "prepared_tail", False):
+        if args.native_frontend != "mesh":
+            raise ValueError("prepared tail requires mesh frontend")
+        env["LO_NATIVE_FRONTEND_PREPARED"] = "1"
     if args.scene == "uhra":
         env.update(LO_AUTO_BUTTONS="s@120,a@240,a@360,a@480,a@700,a@900",
                    LO_AUTO_PULSE="6", LO_NATIVE_PROBE_SCENE="1")

@@ -11,11 +11,14 @@ namespace gpu::native_frontend
 // position. No pointers, transient handles, or first-consumption retirement:
 // the command is safe to replay with the caller's unchanged state inherited.
 constexpr uint32_t kMesh = 0x80004C4D;
+// Same bounded v2 payload, distinct provenance for executed prepared-tail draws.
+constexpr uint32_t kPreparedMesh = 0x80004C50;
 constexpr uint32_t kVersion = 2;
 constexpr uint32_t kV1GroupCount = 11;
 constexpr uint32_t kHeaderWords = 9;
 constexpr uint32_t kMaxWords = 2500;
 extern const bool meshEnabled;
+extern const bool preparedTailEnabled;
 extern const bool diagnosticsEnabled;
 void ProducerOutcomeSnapshot(std::span<uint64_t> destination);
 

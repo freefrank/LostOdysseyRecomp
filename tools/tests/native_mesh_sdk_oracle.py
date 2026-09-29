@@ -56,6 +56,10 @@ def generate(root: Path, output: Path) -> None:
         else:
             raise RuntimeError(f"Unmodeled generated helper call {name}")
     source += ['bool NativeAutoFan(PPCRegister&,PPCRegister&,PPCRegister&,PPCRegister&,PPCRegister&) { return false; }']
+    for name in ('NativePreparedIndexed', 'NativePreparedAuto'):
+        if any(f'if ({name}(' in body for body in bodies.values()):
+            arguments = ','.join(['PPCRegister&'] * 8)
+            source.append(f'extern bool {name}({arguments});')
     source += [bodies[address] for address in sorted(bodies)]
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text('\n'.join(source)+'\n',encoding='utf-8')

@@ -240,7 +240,8 @@ namespace gpu
         m_drawStateInvalidated.store(false, std::memory_order_relaxed);
         m_frontend = {};
         if (native_frontend::meshEnabled)
-            LOG_INFO("native frontend: mode=mesh (experimental ordinary SDK pre-flush path; mixed PM4 remains)");
+            LOG_INFO("native frontend: mode=mesh prepared_tail={} (experimental ordinary SDK path; mixed PM4 remains)",
+                native_frontend::preparedTailEnabled);
         m_native = {};
         if (native_command::mode != native_command::Mode::Off)
             LOG_INFO("native commands: mode={} (experimental SDK register/quad bypass)", native_command::ModeName());
@@ -714,7 +715,9 @@ namespace gpu
         }
 
         if (packet == native_frontend::kMesh)
-            return native_frontend::meshEnabled && ExecuteNativeMesh(reader);
+            return native_frontend::meshEnabled && ExecuteNativeMesh(reader, false);
+        if (packet == native_frontend::kPreparedMesh)
+            return native_frontend::preparedTailEnabled && ExecuteNativeMesh(reader, true);
 
         if (native_command::mode != native_command::Mode::Off &&
             (packet == native_command::kRegisters || packet == native_command::kIndexedQuad ||
@@ -912,7 +915,7 @@ namespace gpu
         }
     }
 
-    bool CommandProcessor::ExecuteNativeMesh(Reader& reader)
+    bool CommandProcessor::ExecuteNativeMesh(Reader& reader, bool preparedTail)
     {
         using namespace native_frontend;
         g_workerStage.store("native mesh execution", std::memory_order_relaxed);
@@ -948,7 +951,9 @@ namespace gpu
             WriteRegister(0x21FB, mesh.draw.dmaSize);
         }
         // No consumer fallback after state application, upload, or rendering.
-        return ExecuteDraw(mesh.draw.initiator, mesh.draw.dmaBase, mesh.draw.dmaSize, true);
+        const bool executed = ExecuteDraw(mesh.draw.initiator, mesh.draw.dmaBase, mesh.draw.dmaSize, true);
+        if (preparedTail) ++m_frontend.preparedDraws;
+        return executed;
     }
 
     bool CommandProcessor::ExecuteNativeCommand(Reader& reader, uint32_t tag)
@@ -1073,9 +1078,9 @@ namespace gpu
             ++m_counter;
             uint32_t swaps = ++g_swapCount;
             if (native_frontend::meshEnabled && (swaps % 120) == 0) {
-                LOG_INFO("native frontend: swap={} mode=mesh mesh_commands={} native_draws={} other_draws={} predicated_skips={} words={} state_values={} producer_revision={} stream_coherency_waits={}",
+                LOG_INFO("native frontend: swap={} mode=mesh mesh_commands={} native_draws={} other_draws={} predicated_skips={} words={} state_values={} producer_revision={} stream_coherency_waits={} prepared_draws={}",
                     swaps, m_frontend.meshCommands, m_frontend.nativeDraws, m_frontend.otherDraws,
-                    m_frontend.predicatedSkips, m_frontend.words, m_frontend.stateValues, m_frontend.lastProducerRevision, m_frontend.streamCoherencyWaits);
+                    m_frontend.predicatedSkips, m_frontend.words, m_frontend.stateValues, m_frontend.lastProducerRevision, m_frontend.streamCoherencyWaits, m_frontend.preparedDraws);
                 if (native_frontend::diagnosticsEnabled) {
                     std::array<uint64_t, uint32_t(native_frontend::Reject::CountReasons)> outcomes{};
                     native_frontend::ProducerOutcomeSnapshot(outcomes);

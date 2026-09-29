@@ -216,3 +216,19 @@ address = 0x827B5984
 registers = ["r31", "r30", "r25", "r28", "r11"]
 after_instruction = false
 jump_address_on_true = 0x827B5A68
+
+# Post-shader/derived-preparation tails. Whole-entry preflight remains intact.
+# Declines resume the remaining SDK instructions; successes retain its epilogue.
+[[midasm_hook]]
+name = "NativePreparedIndexed"
+address = 0x823C6914
+registers = ["r1", "r31", "r16", "r19", "r17", "r30", "r28", "r27"]
+after_instruction = false
+jump_address_on_true = 0x823C6CB0
+
+[[midasm_hook]]
+name = "NativePreparedAuto"
+address = 0x827B5764
+registers = ["r1", "r31", "r25", "r21", "r22", "r30", "r28", "r27"]
+after_instruction = false
+jump_address_on_true = 0x827B5A90

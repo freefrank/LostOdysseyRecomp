@@ -74,3 +74,13 @@ source and raw machine results were not reopened or overwritten. The supplied
 negative performance record remains the acceptance baseline. Retest the changed
 paths with a new properly identified build; do not reuse old partial object
 directories as proof of candidate provenance, or rerun for documentation alone.
+
+
+## Follow-up: preserve preparation, hand off its tail
+
+The separate [prepared-tail bridge](native-prepared-tail.md) adds an opt-in
+continuation after the original shader/derived helpers. It does not delete
+the entry guard or replace real shader preparation. First-stage Linux/Windows
+CPU checks passed in run `36607496609`; changed CP/map production TUs compiled
+in `36608024058`. New prepared-tail contracts require their own check; neither
+run is a game performance result.

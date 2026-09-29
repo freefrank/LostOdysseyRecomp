@@ -270,3 +270,11 @@ coverage on the receipt window. Supply an independently verified
 does not establish identical camera/NPC animation/pixels. Missing/stale/changed
 map observations fail the sample instead of reusing a historical asset-open
 marker. See [rework scope](../../docs/notes/native-frontend-rework.md).
+
+### Prepared SDK tail experiment
+
+Add `--prepared-tail` with `--native-frontend mesh`. This separately enables
+`LO_NATIVE_FRONTEND_PREPARED=1` and requires an increase in executed
+`prepared_draws`, not just commands or skipped predicates. Keep the flag
+absent for the original mesh control. Regenerate PPC before building.
+See [the continuation contract](../../docs/notes/native-prepared-tail.md).

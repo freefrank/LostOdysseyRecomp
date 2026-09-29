@@ -1,5 +1,7 @@
 # Project status
 
+- **Prepared SDK tail rework (2026-09-29)**: [A separate opt-in continuation](notes/native-prepared-tail.md) preserves original shader/derived preparation and attempts native submission afterward. First-stage CPU/prod-adapter checks pass; prepared-tail compile/oracle and game acceptance remain separate. No native default or release change.
+
 ## Current project & milestone status — 2026-09-29 / 当前项目与里程碑状态
 
 Status as of 2026-09-29:

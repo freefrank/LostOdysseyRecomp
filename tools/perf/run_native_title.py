@@ -109,6 +109,8 @@ def main() -> int:
     parser.add_argument("--mode", choices=("off", "registers", "all"), required=True)
     parser.add_argument("--native-frontend", choices=("off", "mesh"), default="off",
                         help="ordinary SDK pre-flush frontend; independent of legacy --mode")
+    parser.add_argument("--prepared-tail", action="store_true",
+                        help="enable post-SDK-preparation continuation; requires mesh frontend")
     parser.add_argument("--render-timing", action="store_true",
                         help="explicit diagnostic renderer timing; excluded from ordinary performance acceptance")
     parser.add_argument("--frontend-stats", action="store_true",
@@ -127,6 +129,8 @@ def main() -> int:
     parser.add_argument("--warmup-frame", type=int)
     parser.add_argument("--startup-timeout", type=int)
     args = parser.parse_args()
+    if args.prepared_tail and args.native_frontend != "mesh":
+        parser.error("--prepared-tail requires --native-frontend mesh")
     if args.warmup_frame is None:
         args.warmup_frame = 3300 if args.scene == "uhra" else 600
     if args.startup_timeout is None:
@@ -172,7 +176,7 @@ def main() -> int:
     result = {"mode": args.mode, "scene": args.scene, "backend": args.backend,
               "target_fps": args.fps,
               "scene_stats": args.scene_stats,
-              "native_frontend": args.native_frontend,
+              "native_frontend": args.native_frontend, "prepared_tail": args.prepared_tail,
               "render_timing": args.render_timing, "frontend_stats": args.frontend_stats,
               "measurement_kind": "diagnostic" if (args.scene_stats or args.render_timing or args.frontend_stats) else "ordinary",
               "frontend_counter_scope": "executed CP backend calls; independent receipt swap window, not host GPU draws",
@@ -254,6 +258,8 @@ def main() -> int:
                             last_frame)
                         if not result['scene_window_valid']:
                             result['failure'] = "map identity changed, became unavailable, or stopped refreshing during sample"
+                    if args.prepared_tail and (not execution or not execution.get("prepared_draws", 0)):
+                        result["failure"] = "no post-preparation native draw executed in the sample"
                     if probe.generation != first_generation:
                         result["failure"] = "runtime log was replaced or truncated during CPU sample"
                     frames = last_frame - first_frame

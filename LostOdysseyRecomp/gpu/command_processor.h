@@ -91,7 +91,7 @@ namespace gpu
         bool ExecuteNativeCommand(Reader& reader, uint32_t tag);
         bool ExecuteDraw(uint32_t initiator, uint32_t dmaBase, uint32_t dmaSize, bool nativeMesh = false);
         void ExecuteWait(uint32_t waitInfo, uint32_t pollRegAddr, uint32_t ref, uint32_t mask, uint32_t wait);
-        bool ExecuteNativeMesh(Reader& reader);
+        bool ExecuteNativeMesh(Reader& reader, bool preparedTail);
         uint32_t ExecutePrimaryBuffer(uint32_t readIndex, uint32_t writeIndex);
         void ExecuteIndirectBuffer(uint32_t physicalAddress, uint32_t dwordCount);
         bool ExecutePacket(Reader& reader);
@@ -107,7 +107,7 @@ namespace gpu
         struct FrontendCounters
         {
             uint64_t meshCommands = 0, nativeDraws = 0, otherDraws = 0, predicatedSkips = 0;
-            uint64_t streamCoherencyWaits = 0;
+            uint64_t streamCoherencyWaits = 0, preparedDraws = 0;
             uint64_t words = 0, stateValues = 0, lastProducerRevision = 0;
             // Consumer revisions advance at actual execution, including replay.
             // Uncovered raw MMIO writes keep renderer reuse keys untracked.
