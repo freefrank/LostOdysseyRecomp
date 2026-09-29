@@ -55,6 +55,18 @@ replace('tools/perf/run_native_title.py',
     '                    if args.prepared_tail and (not execution or not execution.get("prepared_draws", 0)):\n                        result["failure"] = "no post-preparation native draw executed in the sample"\n                    if probe.generation != first_generation:')
 with Path('tools/perf/README.md').open('a', encoding='utf-8', newline='\n') as out:
     out.write('\n### Prepared SDK tail experiment\n\nAdd `--prepared-tail` with `--native-frontend mesh`. This separately enables\n`LO_NATIVE_FRONTEND_PREPARED=1` and requires an increase in executed\n`prepared_draws`, not just commands or skipped predicates. Keep the flag\nabsent for the original mesh control. Regenerate PPC before building.\nSee [the continuation contract](../../docs/notes/native-prepared-tail.md).\n')
-subprocess.run(['git', 'add', 'tools/perf/native_probe_log.py', 'tools/perf/run_native_title.py', 'tools/perf/README.md'], check=True)
+# Strong SDK entry declarations already exist in the canonical shared header.
+# Its weak-symbol linkage must not be replaced by an ad-hoc extern-C declaration.
+replace('tools/tests/native_prepared_sdk_oracle.cpp',
+    'extern "C" PPC_FUNC(sub_823C6860);\nextern "C" PPC_FUNC(sub_827B56B0);',
+    '// sub_823C6860/sub_827B56B0 use the canonical shared-header declarations.')
+# Existing manual entry-only oracle remains usable after the config gains the
+# new callbacks; it must declare callbacks embedded in the selected functions.
+replace('tools/tests/native_mesh_sdk_oracle.py',
+    "    source += [bodies[address] for address in sorted(bodies)]",
+    "    for name in ('NativePreparedIndexed', 'NativePreparedAuto'):\n        if any(f'if ({name}(' in body for body in bodies.values()):\n            arguments = ','.join(['PPCRegister&'] * 8)\n            source.append(f'extern bool {name}({arguments});')\n    source += [bodies[address] for address in sorted(bodies)]")
+subprocess.run(['git', 'add', 'tools/perf/native_probe_log.py', 'tools/perf/run_native_title.py',
+                'tools/perf/README.md', 'tools/tests/native_prepared_sdk_oracle.cpp',
+                'tools/tests/native_mesh_sdk_oracle.py'], check=True)
 subprocess.run(['git', 'diff', '--cached', '--check'], check=True)
 print('PREPARED_SOURCE_APPLIED: runtime/config/probe/docs; not GPU validation')
