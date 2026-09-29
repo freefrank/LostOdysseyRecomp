@@ -1,0 +1,62 @@
++    // At the post-preparation boundary the original prefix already handled
++    // its initial ALU banks. A preparation helper may have dirtied them again
++    // for a future call; the original tail does not acknowledge those banks.
++    for (uint32_t offset = Tail ? 16u : 0u; offset < 40; offset += 8)
+@@ -83,0 +116,35 @@ Reject Submit(PPCContext& ctx, uint8_t* base, bool indexed)
++Reject Submit(PPCContext& ctx, uint8_t* base, bool indexed)
++{
++    const uint32_t device = ctx.r3.u32;
++    if (const auto reason = DeviceReason(base, device); reason != Reject::None) return reason;
++    const DirtyState dirty{Load64(base, device), Load64(base, device + 8),
++        Load64(base, device + 16), Load64(base, device + 24),
++        Load64(base, device + 32), Load64(base, device + 40)};
++    return Emit<false>(base, device, indexed, ctx.r4.u32,
++        indexed ? ctx.r6.u32 : ctx.r5.u32, indexed ? ctx.r7.u32 : ctx.r6.u32, dirty);
++}
++}
++// This scope authorizes only the matching invocation/frame, never an arbitrary
++// caller of a generated implementation or a nested SDK entry on the same device.
++void ExecuteOriginalWithPreparedTail(PPCContext& ctx, uint8_t* base, bool indexed)
++{
++    const auto original = indexed ? __imp__sub_823C6860 : __imp__sub_827B56B0;
++    if (!preparedTailEnabled) { original(ctx, base); return; }
++    const PreparedCall call{base, ctx.r3.u32, ctx.r1.u32, indexed};
++    PreparedScope scope(call);
++    original(ctx, base);
++}
++bool SubmitPrepared(uint32_t stack, uint32_t device, bool indexed,
++    uint32_t primitive, uint32_t first, uint32_t count,
++    uint64_t main, uint64_t fetchRaster, uint64_t misc)
++{
++    if (!preparedTailEnabled || !preparedCall || preparedCall->indexed != indexed ||
++        preparedCall->device != device ||
++        stack != preparedCall->stack - (indexed ? 240u : 208u)) return false;
++    auto* base = preparedCall->base;
++    if (DeviceReason(base, device) != Reject::None) return false;
++    // Both helpers (when needed) already ran in the canonical SDK prefix.
++    // Use their LIVE returned mask, not the old device+16 dirty word. Still
++    // reject an unconsumed shader mask rather than deleting its guard.
++    const DirtyState dirty{0, 0, main, fetchRaster, misc, 0};
++    return Emit<true>(base, device, indexed, primitive, first, count, dirty) == Reject::None;
+@@ -102 +169,4 @@ PPC_FUNC(sub_823C6860)
+-    if (!gpu::native_frontend::TrySubmit(ctx, base, true))
++    if (gpu::native_frontend::TrySubmit(ctx, base, true)) return;
++    if (gpu::native_frontend::preparedTailEnabled)
++        gpu::native_frontend::ExecuteOriginalWithPreparedTail(ctx, base, true);
++    else
+@@ -108 +178,4 @@ PPC_FUNC(sub_827B56B0)
+-    if (!gpu::native_frontend::TrySubmit(ctx, base, false))
++    if (gpu::native_frontend::TrySubmit(ctx, base, false)) return;
++    if (gpu::native_frontend::preparedTailEnabled)
++        gpu::native_frontend::ExecuteOriginalWithPreparedTail(ctx, base, false);
++    else
+@@ -110,0 +184,18 @@ PPC_FUNC(sub_827B56B0)
++
++// Configured immediately after optional shader and derived-state preparation,
++// before scalar/fetch/stream dirty writers. A successful tail handoff branches
++// to the ORIGINAL SDK epilogue, preserving its saved LR/SP/nonvolatile state.
++bool NativePreparedIndexed(PPCRegister& stack, PPCRegister& device,
++    PPCRegister& primitive, PPCRegister& first, PPCRegister& count,
++    PPCRegister& main, PPCRegister& fetchRaster, PPCRegister& misc)
++{
++    return gpu::native_frontend::SubmitPrepared(stack.u32, device.u32, true,
