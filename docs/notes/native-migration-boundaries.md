@@ -1,5 +1,7 @@
 # 原生迁移架构边界与首个 PM4 旁路候选
 
+运行时后续：已实现并命中标题云雾 draw 的原生命令旁路。当前原始调用是 primitive 5、4 顶点、非索引；本历史报告中的 6 索引描述 renderer 展开后的几何。最新同 EXE 对照的 CmdProc CPU 耗时增加约 23.7%，性能门槛未通过，旁路保持默认关闭。详见[实现与实际结果](native-command-bypass.md)。
+
 研究日期：2026-09-28（America/Edmonton）
 源码基线：`2ce27e35428d85abde20afb5b6b2c59052810b13`
 关联 Project：`native-migration-architecture-boundaries`、`native-renderer-pm4-bypass-prototype`

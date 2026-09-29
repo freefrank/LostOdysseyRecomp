@@ -694,7 +694,9 @@ namespace gpu
             r.d2 = ByteSwap(*reinterpret_cast<uint32_t*>(reader.base + (reader.readOffset + 8) % reader.size));
         }
 
-        if (packet == native_command::kRegisters || packet == native_command::kIndexedQuad)
+        if (native_command::mode != native_command::Mode::Off &&
+            (packet == native_command::kRegisters || packet == native_command::kIndexedQuad ||
+             packet == native_command::kAutoFan))
             return ExecuteNativeCommand(reader, packet);
 
         switch (packet >> 30)
@@ -732,6 +734,15 @@ namespace gpu
 
     bool CommandProcessor::ExecuteDraw(uint32_t initiator, uint32_t dmaBase, uint32_t dmaSize)
     {
+        static bool titleObserved = false;
+        if (native_command::mode == native_command::Mode::All && !titleObserved &&
+            GetActiveShaderByteHash(false) == 0x81217dc973d5dc31ull &&
+            GetActiveShaderByteHash(true) == 0xcd6adb98ab83bf90ull)
+        {
+            titleObserved = true;
+            LOG_INFO("native title candidate: raw_initiator={:#x} primitive={} count={} source={} dma_base={:#x} dma_size={:#x}",
+                initiator, initiator & 63, initiator >> 16, (initiator >> 6) & 3, dmaBase, dmaSize);
+        }
         const uint32_t primType = initiator & 0x3F;
         const uint32_t sourceSelect = (initiator >> 6) & 3;
         const uint32_t numIndices = initiator >> 16;
@@ -800,6 +811,21 @@ namespace gpu
         using namespace native_command;
         static_assert(REGISTER_COUNT == kRegisterCount);
         g_workerStage.store("native command execution", std::memory_order_relaxed);
+        if (tag == kAutoFan)
+        {
+            uint32_t initiator;
+            if (!reader.ReadNativeWords(1, &initiator) || !AutoFan(initiator)) return false;
+            m_native.nativeWords += kAutoFanWords;
+            ++m_native.pm4Packets;
+            m_native.pm4Words += 3;
+            if (!(m_binSelect & m_binMask)) { ++m_native.predicatedSkips; return true; }
+            WriteRegister(0x21FC, initiator); // auto source leaves DMA base/size alone.
+            ++m_native.autoFans;
+            if (GetActiveShaderByteHash(false) == 0x81217dc973d5dc31ull &&
+                GetActiveShaderByteHash(true) == 0xcd6adb98ab83bf90ull)
+                ++m_native.titleCloudDraws;
+            return ExecuteDraw(initiator, 0, 0);
+        }
         uint32_t header[3];
         if (!reader.ReadNativeWords(3, header)) return false;
         if (tag == kRegisters)
@@ -895,9 +921,9 @@ namespace gpu
             ++m_counter;
             uint32_t swaps = ++g_swapCount;
             if (native_command::mode != native_command::Mode::Off && (swaps % 120) == 0)
-                LOG_INFO("native commands: swap={} mode={} register_blocks={} register_words={} indexed_quads={} predicated_skips={} title_cloud_draws={} native_words={} eliminated_pm4_packets={} equivalent_pm4_words={}",
+                LOG_INFO("native commands: swap={} mode={} register_blocks={} register_words={} indexed_quads={} auto_fans={} predicated_skips={} title_cloud_draws={} native_words={} eliminated_pm4_packets={} equivalent_pm4_words={}",
                     swaps, native_command::ModeName(), m_native.registerBlocks, m_native.registerWords,
-                    m_native.indexedQuads, m_native.predicatedSkips, m_native.titleCloudDraws,
+                    m_native.indexedQuads, m_native.autoFans, m_native.predicatedSkips, m_native.titleCloudDraws,
                     m_native.nativeWords, m_native.pm4Packets, m_native.pm4Words);
             g_presentedSwaps = swaps;
             // Optional progress log with the last game file the title opened.

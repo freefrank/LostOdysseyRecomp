@@ -132,6 +132,7 @@ namespace gpu
         {
             uint64_t registerBlocks = 0, registerWords = 0, nativeWords = 0;
             uint64_t pm4Packets = 0, pm4Words = 0;
+            uint64_t autoFans = 0;
             uint64_t indexedQuads = 0, predicatedSkips = 0, titleCloudDraws = 0;
         } m_native;
     };

@@ -15,6 +15,8 @@ namespace gpu::native_command
 static_assert(std::endian::native == std::endian::little);
 constexpr uint32_t kRegisters = 0x80004C52;
 constexpr uint32_t kIndexedQuad = 0x80004C44;
+constexpr uint32_t kAutoFan = 0x80004C46;
+constexpr uint32_t kAutoFanWords = 2;
 constexpr uint32_t kRegisterHeaderWords = 4;
 constexpr uint32_t kMaxRegisterWords = kRegisterHeaderWords + 64;
 constexpr uint32_t kDrawWords = 4;
@@ -118,10 +120,18 @@ inline bool ApplyRegisters(uint32_t first, uint64_t mask,
     return true;
 }
 
+constexpr bool AutoFan(uint32_t initiator)
+{
+    return initiator == 0x00040085u; // four vertices, auto source, triangle fan.
+}
+
 constexpr bool IndexedQuad(uint32_t initiator)
 {
-    return (initiator & 0x3Fu) == 5 && ((initiator >> 6) & 3u) == 0 &&
-        (initiator >> 16) == 6;
+    // Guest triangle list=4; fan=5 is expanded later by the renderer.
+    const auto primitive = initiator & 0x3Fu;
+    const auto count = initiator >> 16;
+    return ((initiator >> 6) & 3u) == 0 &&
+        ((primitive == 4 && count == 6) || (primitive == 5 && count == 4));
 }
 
 inline bool EncodeIndexedQuad(uint32_t initiator, uint32_t dmaBase,

@@ -1,0 +1,80 @@
+{
+  "schema": "lo.native-command.bounded-comparison/1",
+  "source_baseline": "2ce27e35428d85abde20afb5b6b2c59052810b13",
+  "initial_implementation_commit": "fab15ff43109c2be5bd68a4d3c8e787bb3915bd0",
+  "final_source": "raw-list/fan selector and NativeAutoFan corrections in this commit",
+  "same_executable": true,
+  "backend": "D3D12",
+  "output": [
+    1280,
+    720
+  ],
+  "target_fps": 60,
+  "upscaler": "off",
+  "frame_generation": "off",
+  "hidden": true,
+  "muted": true,
+  "input": "none",
+  "shader_prebuild": "skipped on both paths",
+  "cpu_scope": "OS thread user+kernel CPU divided by completed-frame count from one-second log receipts; approximate bounded-window ratio",
+  "off": {
+    "start_frame": 645,
+    "end_frame": 1551,
+    "frames": 906,
+    "sample_wall_seconds": 15.12634949999483,
+    "process_cpu_ms": 2468.75,
+    "cmdproc_cpu_ms_per_logged_frame": 1.1727373068432672,
+    "exit_code": 0,
+    "forced_stop": false,
+    "baseline_preserved": true,
+    "cmdproc_cpu_ms": 1062.5
+  },
+  "all": {
+    "start_frame": 643,
+    "end_frame": 1548,
+    "frames": 905,
+    "sample_wall_seconds": 15.136698299997079,
+    "process_cpu_ms": 2890.625,
+    "cmdproc_cpu_ms_per_logged_frame": 1.4502762430939227,
+    "exit_code": 0,
+    "forced_stop": false,
+    "baseline_preserved": true,
+    "cmdproc_cpu_ms": 1312.5
+  },
+  "cmdproc_cpu_change_percent": 23.665908352291186,
+  "performance_go_gate_passed": false,
+  "decision": "keep experimental default-off; do not expand or enable by default on this evidence",
+  "cumulative_receipt": {
+    "swap": 1560,
+    "register_blocks": 355197,
+    "register_words": 1785881,
+    "indexed_quads": 22537,
+    "auto_fans": 1486,
+    "predicated_skips": 0,
+    "title_cloud_draws": 1486,
+    "native_words": 3299789,
+    "eliminated_pm4_packets": 661774,
+    "equivalent_pm4_words": 2540775
+  },
+  "last_120_swap_rate_per_frame": {
+    "register_blocks": 236.0,
+    "register_words": 1182.0,
+    "indexed_quads": 15.0,
+    "auto_fans": 1.0,
+    "predicated_skips": 0.0,
+    "title_cloud_draws": 1.0,
+    "native_words": 2188.0,
+    "eliminated_pm4_packets": 440.0,
+    "equivalent_pm4_words": 1684.0
+  },
+  "same_input_image_replay": false,
+  "visual_inspection": "both retained final screenshots show title text and cloud background without an obvious new defect; different animation phases",
+  "gpu_duration_ms": null,
+  "synchronization_scope": "normal rendering and owner cleanup in these two runs only; no GPU validation/fault injection/resize coverage",
+  "evidence": {
+    "off": "out/native-pm4/title-final-off",
+    "all": "out/native-pm4/title-final-on"
+  },
+  "prior_attempts": "initial startup exceeded warmup during shader prebuild and exited normally; older bulk-only pair predates final draw hooks and is not the final performance result",
+  "measurement_note": "final unique GPU CmdProc and process CPU values remain valid; unnamed/duplicate thread-name dictionary entries in the retained summaries can be overwritten and must not be summed as a total CPU budget"
+}

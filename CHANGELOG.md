@@ -8,11 +8,11 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 ### English
 
-- Added an opt-in native command path for SDK bulk register writes and six-index triangle UP draws (`LO_NATIVE_COMMANDS=1`), retaining the original PM4 path as fallback. This is partial PM4-cost removal; other packets and Xenos rendering remain.
+- Added an opt-in native command path for SDK bulk register writes and bounded indexed quads / four-vertex title fans (`LO_NATIVE_COMMANDS=1`), retaining the original PM4 path as fallback. Other packets and Xenos rendering remain. The final bounded CPU comparison regressed, so this experimental route remains default-off.
 
 ### 简体中文
 
-- 新增可选的原生命令路径，接管 SDK 批量寄存器写入和六索引三角形 UP 绘制（`LO_NATIVE_COMMANDS=1`），保留原 PM4 回退。当前仅移除这些路径的 PM4 成本，其他命令与 Xenos 渲染转换仍保留。
+- 新增可选的原生命令路径，接管 SDK 批量寄存器写入、限定索引四边形及四顶点标题 fan 绘制（`LO_NATIVE_COMMANDS=1`），保留原 PM4 回退。其他命令与 Xenos 渲染转换仍保留；最终限定范围 CPU 对照出现退步，实验路径保持默认关闭。
 
 ## [v0.7.15 — 2026-09-29](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.7.15)
 

@@ -51,7 +51,7 @@ def thread_names(pid: int) -> dict[int, str]:
             continue
         name = ctypes.c_void_p()
         try:
-            if kernel.GetThreadDescription(handle, ctypes.byref(name)) == 0 and name.value:
+            if kernel.GetThreadDescription(handle, ctypes.byref(name)) >= 0 and name.value:
                 names[thread.id] = ctypes.wstring_at(name)
         finally:
             if name.value:
@@ -169,8 +169,12 @@ def main() -> int:
                     last = cpu_snapshot(proc.pid)
                     last_frame = latest_frame(log)
                     frames = last_frame - first_frame
-                    deltas = {names.get(tid, str(tid)): (cpu - first["threads"][tid]) * 1000
-                              for tid, cpu in last["threads"].items() if tid in first["threads"]}
+                    deltas = {}
+                    for tid, cpu in last["threads"].items():
+                        if tid not in first["threads"]:
+                            continue
+                        label = names.get(tid) or str(tid)
+                        deltas[label] = deltas.get(label, 0.0) + (cpu - first["threads"][tid]) * 1000
                     result.update(start_frame=first_frame, end_frame=last_frame, frames=frames,
                                   sample_wall_seconds=last["monotonic"] - first["monotonic"],
                                   process_cpu_ms=(last["process_seconds"] - first["process_seconds"]) * 1000,

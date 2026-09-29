@@ -1,6 +1,7 @@
 #include <stdafx.h>
 #include "gpu/native_command_stream.h"
 #include "kernel/memory.h"
+#include "os/logger.h"
 #include <array>
 #include <cstdlib>
 #include <cstring>
@@ -93,14 +94,21 @@ PPC_FUNC(sub_823C1BD8)
 // At 0x823CD44C in sub_823CD050, after state/geometry allocation and the
 // special-submission branch, before PM4 DRAW_INDX emission. True skips to
 // 0x823CD52C, keeping the original resource copies and deferred cursor publish.
-// Scope: six-index triangle-list UP draws. This includes the title-cloud
-// candidate; matching geometry alone does not identify a scene or material.
+// Scope: six-index list / four-index fan UP draws. Host draw counts are
+// post-expansion; matching geometry alone does not identify a material.
 bool NativeIndexedQuad(PPCRegister& device, PPCRegister& cursor,
     PPCRegister& initiator, PPCRegister& dmaBase, PPCRegister& dmaSize,
     PPCRegister& end)
 {
     using namespace gpu::native_command;
     auto* base = g_memory.base;
+    static thread_local unsigned traces = 0;
+    if (mode == Mode::All && traces < 4) {
+        ++traces;
+        LOG_INFO("native UP producer: initiator={:#x} primitive={} count={} source={} live={}",
+            initiator.u32, initiator.u32 & 63, initiator.u32 >> 16,
+            (initiator.u32 >> 6) & 3, LiveDevice(base, device.u32));
+    }
     if (mode != Mode::All || !IndexedQuad(initiator.u32) ||
         !LiveDevice(base, device.u32) ||
         !CanAppend(cursor.u32, Load(base, device.u32 + 0x34), kDrawWords)) return false;
@@ -108,6 +116,24 @@ bool NativeIndexedQuad(PPCRegister& device, PPCRegister& cursor,
     EncodeIndexedQuad(initiator.u32, dmaBase.u32, dmaSize.u32, encoded);
     const uint32_t writtenEnd = cursor.u32 + kDrawWords * 4;
     std::memcpy(base + cursor.u32 + 4, encoded.data(), encoded.size() * 4);
+    cursor.u64 = writtenEnd - 4;
+    end.u64 = writtenEnd;
+    return true;
+}
+
+// Ordinary DrawPrimitive producer, after state flush and its special-stream
+// branch. The original downstream publication and count bookkeeping remain.
+bool NativeAutoFan(PPCRegister& device, PPCRegister& cursor,
+    PPCRegister& primitive, PPCRegister& count, PPCRegister& end)
+{
+    using namespace gpu::native_command;
+    auto* base = g_memory.base;
+    if (mode != Mode::All || (primitive.u32 & 63) != 5 || count.u32 != 4 ||
+        !LiveDevice(base, device.u32) ||
+        !CanAppend(cursor.u32, Load(base, device.u32 + 0x34), 3)) return false;
+    const uint32_t encoded[kAutoFanWords] = {GuestWord(kAutoFan), 0x00040085u};
+    const auto writtenEnd = cursor.u32 + sizeof(encoded);
+    std::memcpy(base + cursor.u32 + 4, encoded, sizeof(encoded));
     cursor.u64 = writtenEnd - 4;
     end.u64 = writtenEnd;
     return true;

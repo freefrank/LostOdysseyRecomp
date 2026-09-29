@@ -89,17 +89,23 @@ int main()
     assert(!CanAppend(0x10001, 0x10040, 4));
     assert(!CanAppend(0xFFFFFFF0, 0xFFFFFFFC, 4));
     assert(!CanAppend(0x10000, 0x10040, 0));
+    assert(AutoFan(0x40085));
+    assert(!AutoFan(0x60085));
+    assert(!AutoFan(0x40005));
+    assert(!AutoFan(0x40086));
     std::array<uint32_t, kDrawWords + 1> draw; draw.fill(99);
     for (uint32_t index32 : {0u, 0x800u})
     {
-        assert(EncodeIndexedQuad(0x60005 | index32, 0xABCDEF02, 0x80000006, draw));
-        assert(GuestWord(draw[0]) == kIndexedQuad && draw[1] == (0x60005 | index32));
+        assert(EncodeIndexedQuad(0x60004 | index32, 0xABCDEF02, 0x80000006, draw));
+        assert(GuestWord(draw[0]) == kIndexedQuad && draw[1] == (0x60004 | index32));
         assert(draw[2] == 0xABCDEF02 && draw[3] == 0x80000006 && draw[4] == 99);
     }
+    assert(EncodeIndexedQuad(0x40005, 0xAB02, 0x80000004, draw)); // four-index fan becomes six host indices.
+    assert(!EncodeIndexedQuad(0x60005, 0, 0, draw)); // six-index fan is not a quad.
     assert(!EncodeIndexedQuad(0x60085, 0, 0, draw)); // auto-index source excluded.
     assert(!EncodeIndexedQuad(0x60008, 0, 0, draw)); // rectangle primitive excluded.
     assert(!EncodeIndexedQuad(0x90005, 0, 0, draw));
-    assert(!EncodeIndexedQuad(0x60005, 0, 0, std::span(draw).first(3)));
+    assert(!EncodeIndexedQuad(0x60004, 0, 0, std::span(draw).first(3)));
     std::puts("native command stream: reference PM4 state/mirror, source snapshot, replay, bounds and indexed-quad checks passed");
     std::printf("mask cases: %u\n", masks);
 }

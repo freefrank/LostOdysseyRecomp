@@ -7,7 +7,7 @@
   "timezone": "America/Edmonton",
   "candidate_selected": true,
   "qualified_for_bypass": false,
-  "prototype_implemented": false,
+  "prototype_implemented": true,
   "scope": {
     "scene": "title_menu_cloud_background",
     "selected_draw_count": 1,
@@ -111,7 +111,8 @@
       "cull": "0x2",
       "depth_control": "0x700770"
     },
-    "following_resolve_guest_address_in_this_run_only": "0x09fa0000"
+    "following_resolve_guest_address_in_this_run_only": "0x09fa0000",
+    "geometry_log_scope": "renderer post-expansion geometry; six host indices do not imply six guest input indices"
   },
   "unproven_current_identity": {
     "source_executable_identity": null,
@@ -139,13 +140,48 @@
     "exercise_rejections_epoch_changes_exit_and_resource_reuse"
   ],
   "measurement_results": {
-    "same_input_image_comparison": null,
-    "cpu_time": null,
+    "same_input_image_comparison": {
+      "performed": false,
+      "separate_process_screenshots_inspected": true
+    },
+    "cpu_time": {
+      "record": "native-command-bypass-results.json",
+      "cmdproc_change_percent": 23.665908352291186,
+      "go_gate_passed": false
+    },
     "gpu_time": null,
     "frame_pacing": null,
-    "synchronization": null,
-    "resource_lifetime": null
+    "synchronization": {
+      "normal_exit_on_both_paths": true,
+      "validation_layers_or_fault_injection": false
+    },
+    "resource_lifetime": {
+      "bounded_rendering_and_normal_cleanup": true,
+      "full_qualification": false
+    }
   },
   "scope_expansion_authorized": false,
-  "report": "native-migration-boundaries.md"
+  "report": "native-command-bypass.md",
+  "performance_go_gate_passed": false,
+  "current_runtime_observation": {
+    "guest_function": "sub_827B56B0",
+    "guest_interception_pc": "0x827B5984",
+    "continuation_pc": "0x827B5A68",
+    "original_pm4_opcode": "0x22",
+    "raw_initiator": "0x00040085",
+    "primitive": 5,
+    "primitive_name": "triangle_fan",
+    "vertex_count": 4,
+    "source_select": 2,
+    "indexed": false,
+    "host_triangle_index_count": 6,
+    "native_tag": "0x80004C46",
+    "renderer_byte_fnv_vs": "81217dc973d5dc31",
+    "renderer_byte_fnv_ps": "cd6adb98ab83bf90",
+    "observed_title_matches_at_swap_1560": 1486,
+    "intercept_semantics": "value record in the existing ordered guest ring/IB allocation; all other state and backend ownership retained",
+    "caller_lr": null,
+    "specific_ring_ib_addresses": null,
+    "exact_gpu_fence_receipt": null
+  }
 }
