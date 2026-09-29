@@ -1,0 +1,67 @@
+name: Native rework production adapters
+# Read-only verification of changed production units; no publication or game.
+on:
+  workflow_dispatch:
+  push:
+    branches: [fix/native-frontend-rework]
+    paths:
+      - .github/workflows/native-rework-production.yml
+      - LostOdysseyRecomp/gpu/command_processor.cpp
+      - LostOdysseyRecomp/debug/map_info.cpp
+      - LostOdysseyRecomp/debug/map_info.h
+      - LostOdysseyRecomp/gpu/draw_state.h
+permissions:
+  contents: read
+jobs:
+  compile:
+    runs-on: windows-2022
+    timeout-minutes: 25
+    steps:
+      - name: Preserve source bytes
+        shell: bash
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Initialize pinned SDK and runtime headers
+        shell: bash
+        run: git submodule update --init --recursive --depth 1 tools/XenonRecomp thirdparty/o1heap thirdparty/unordered_dense
+      # Same authorized input contract as native-sdk-contract.yml. Never export
+      # the private input, generated program, object files or credentials.
+      - uses: actions/checkout@v4
+        with:
+          repository: freefrank/LostOdysseyRecomp-build-inputs
+          ref: 77f076e0e03966736cbf8919ce793bafadce82d9
+          path: out/build-input
+          sparse-checkout: /default.xex
+          sparse-checkout-cone-mode: false
+          ssh-key: ${{ secrets.LO_BUILD_INPUT_KEY }}
+          persist-credentials: false
+      - name: Stage authorized build input
+        env:
+          LO_BUILD_XEX_PATH: out/build-input/default.xex
+        run: python tools/release/fetch_build_input.py
+      - name: Generate canonical headers
+        shell: cmd
+        run: |
+          mkdir out\native-rework-production
+          call tools\build_tools.bat > out\native-rework-production\codegen.log 2>&1 || (type out\native-rework-production\codegen.log & exit /b 1)
+          python tools\ppc_codegen.py generate >> out\native-rework-production\codegen.log 2>&1 || (type out\native-rework-production\codegen.log & exit /b 1)
+      - name: Compile changed command processor and map observation provider
+        shell: cmd
+        run: |
+          call tools\setup_windows.bat || exit /b 1
+          set "LO_INCLUDES=/I LostOdysseyRecomp /I LostOdysseyRecompLib /I tools\XenonRecomp\XenonUtils /I tools\XenonRecomp\thirdparty\simde /I tools\XenonRecomp\thirdparty\fmt\include /I tools\XenonRecomp\thirdparty\xxHash /I thirdparty\unordered_dense\include /I thirdparty\o1heap\o1heap"
+          set "LO_COMPILE=/nologo /std:c++20 /O2 /EHsc -march=sandybridge -fno-strict-aliasing /DLO_GPU_PLUME=1"
+          clang-cl %LO_COMPILE% %LO_INCLUDES% /c LostOdysseyRecomp\gpu\command_processor.cpp /Fo:out\native-rework-production\command_processor.obj > out\native-rework-production\production-build.log 2>&1 || (type out\native-rework-production\production-build.log & exit /b 1)
+          clang-cl %LO_COMPILE% %LO_INCLUDES% /c LostOdysseyRecomp\debug\map_info.cpp /Fo:out\native-rework-production\map_info.obj >> out\native-rework-production\production-build.log 2>&1 || (type out\native-rework-production\production-build.log & exit /b 1)
+          git rev-parse HEAD > out\native-rework-production\SOURCE.txt
+          echo TWO_PRODUCTION_TUS_COMPILED: no application link, game, GPU, new SDK oracle or performance acceptance > out\native-rework-production\SCOPE.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-rework-production-evidence
+          path: |
+            out/native-rework-production/*.log
+            out/native-rework-production/*.txt
+          retention-days: 7
