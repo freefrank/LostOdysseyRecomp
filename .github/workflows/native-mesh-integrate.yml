@@ -1,0 +1,91 @@
+name: Native mesh integration and SDK oracle
+on:
+  push:
+    branches: [feature/native-renderer-front-end]
+    paths:
+      - .github/workflows/native-mesh-integrate.yml
+      - tools/native_mesh_stage.py
+      - tools/native-mesh-stage-*.b64
+permissions:
+  contents: write
+jobs:
+  integrate:
+    runs-on: windows-2022
+    timeout-minutes: 25
+    steps:
+      - name: Preserve reviewed source bytes
+        shell: bash
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 20
+      - name: Apply reviewed mesh source
+        run: python tools/native_mesh_stage.py
+      - name: Compile asset-free contracts
+        shell: cmd
+        run: |
+          call tools\setup_windows.bat || exit /b 1
+          clang-cl /nologo /std:c++20 /EHsc /W4 /WX /I LostOdysseyRecomp tools\tests\draw_state_test.cpp /Fe:out\native-p2\draw_state_test.exe > out\native-p2\cpu-build.log 2>&1 || (type out\native-p2\cpu-build.log & exit /b 1)
+          clang-cl /nologo /std:c++20 /EHsc /W4 /WX /I LostOdysseyRecomp tools\tests\native_mesh_test.cpp /Fe:out\native-p2\native_mesh_test.exe >> out\native-p2\cpu-build.log 2>&1 || (type out\native-p2\cpu-build.log & exit /b 1)
+          out\native-p2\draw_state_test.exe > out\native-p2\cpu-test.log 2>&1 || (type out\native-p2\cpu-test.log & exit /b 1)
+          out\native-p2\native_mesh_test.exe >> out\native-p2\cpu-test.log 2>&1 || (type out\native-p2\cpu-test.log & exit /b 1)
+          type out\native-p2\cpu-test.log
+      - name: Initialize pinned SDK and runtime headers
+        shell: bash
+        run: git submodule update --init --recursive --depth 1 tools/XenonRecomp thirdparty/o1heap thirdparty/unordered_dense
+      - uses: actions/checkout@v4
+        with:
+          repository: freefrank/LostOdysseyRecomp-build-inputs
+          ref: 77f076e0e03966736cbf8919ce793bafadce82d9
+          path: out/build-input
+          sparse-checkout: /default.xex
+          sparse-checkout-cone-mode: false
+          ssh-key: ${{ secrets.LO_BUILD_INPUT_KEY }}
+          persist-credentials: false
+      - name: Stage pinned authorized build input
+        env:
+          LO_BUILD_XEX_PATH: out/build-input/default.xex
+        run: python tools/release/fetch_build_input.py
+      - name: Canonical SDK code generation
+        shell: cmd
+        run: |
+          call tools\build_tools.bat > out\native-p2\codegen.log 2>&1 || (type out\native-p2\codegen.log & exit /b 1)
+          out\build\tools\xexdump.exe LostOdysseyRecompLib\private\disc1\default.xex LostOdysseyRecompLib\private\image_disc1.bin >> out\native-p2\codegen.log 2>&1 || exit /b 1
+          python tools\ppc_codegen.py generate >> out\native-p2\codegen.log 2>&1 || (type out\native-p2\codegen.log & exit /b 1)
+          python tools\tests\native_mesh_sdk_oracle.py --output out\native-p2\sdk_oracle.cpp || exit /b 1
+      - name: Compile production consumer and producer; compare original SDK
+        shell: cmd
+        run: |
+          call tools\setup_windows.bat || exit /b 1
+          set "LO_INCLUDES=/I LostOdysseyRecomp /I LostOdysseyRecompLib /I tools\XenonRecomp\XenonUtils /I tools\XenonRecomp\thirdparty\simde /I tools\XenonRecomp\thirdparty\fmt\include /I tools\XenonRecomp\thirdparty\xxHash /I thirdparty\unordered_dense\include /I thirdparty\o1heap\o1heap"
+          set "LO_COMPILE=/nologo /std:c++20 /EHsc -march=sandybridge -fno-strict-aliasing /DLO_GPU_PLUME=1"
+          clang-cl %LO_COMPILE% %LO_INCLUDES% /c LostOdysseyRecomp\gpu\command_processor.cpp /Fo:out\native-p2\command_processor.obj > out\native-p2\production-build.log 2>&1 || (type out\native-p2\production-build.log & exit /b 1)
+          clang-cl %LO_COMPILE% %LO_INCLUDES% /c LostOdysseyRecomp\gpu\native_mesh_hooks.cpp /Fo:out\native-p2\native_mesh_hooks.obj >> out\native-p2\production-build.log 2>&1 || (type out\native-p2\production-build.log & exit /b 1)
+          clang-cl %LO_COMPILE% %LO_INCLUDES% out\native-p2\sdk_oracle.cpp tools\tests\native_mesh_sdk_oracle.cpp out\native-p2\native_mesh_hooks.obj /Fe:out\native-p2\sdk_oracle.exe > out\native-p2\oracle-build.log 2>&1 || (type out\native-p2\oracle-build.log & exit /b 1)
+          set LO_NATIVE_FRONTEND=mesh
+          out\native-p2\sdk_oracle.exe > out\native-p2\oracle-test.log 2>&1 || (type out\native-p2\oracle-test.log & exit /b 1)
+          type out\native-p2\oracle-test.log
+      - name: Commit and push verified runtime sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git config user.name 'dotSlash'
+          git config user.email 'freefrank21@gmail.com'
+          while IFS= read -r file; do git add -- "$file"; done < out/native-p2/FILES.txt
+          git rm tools/native_mesh_stage.py tools/native-mesh-stage-0.b64 tools/native-mesh-stage-1.b64 tools/native-mesh-stage-2.b64
+          git commit -m 'feat(gpu): intercept ordinary mesh before SDK flush with ordered native state'
+          git fetch origin feature/native-renderer-front-end
+          git rebase FETCH_HEAD
+          git rev-parse HEAD > out/native-p2/COMMIT.txt
+          git push origin HEAD:refs/heads/feature/native-renderer-front-end
+          echo 'COMPILE_AND_SDK_CPU_ORACLE_ONLY: no real game, GPU image or performance acceptance' > out/native-p2/VALIDATION.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-mesh-integration-evidence
+          path: |
+            out/native-p2/*.log
+            out/native-p2/*.txt
+            out/native-p2/SOURCE_SHA256.json
+          retention-days: 7
