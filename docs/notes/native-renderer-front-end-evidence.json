@@ -1,0 +1,104 @@
+{
+  "schema_version": 1,
+  "date": "2026-09-29",
+  "base": "62fc70588807aadeed88fefd238d7f14c84c8883",
+  "runtime_commit": "2c85a3af290aac13dd658ad33cf39f9a12df47fd",
+  "branch": "feature/native-renderer-front-end",
+  "implementation": "opt-in ordinary mesh plus stream-coherency subset; mixed native/legacy",
+  "complete_pm4_removal": false,
+  "default_enabled": false,
+  "full_application_link": false,
+  "real_game_validation": false,
+  "gpu_validation": false,
+  "measured_game_coverage": null,
+  "uhra_120_abba": null,
+  "performance_accepted": false,
+  "user_accepted": false,
+  "released": false,
+  "source_sha256": {
+    "LostOdysseyRecomp/gpu/draw_state.h": "c7a872ece1aee3c62594f0a5d61905f55af9417143e1c7c980b490940d12b0d3",
+    "LostOdysseyRecomp/gpu/legacy_draw_state.h": "c232c9aad6713f69c448062509460cfee7fe75057f51f9f9cd5bf6b176649ea1",
+    "LostOdysseyRecomp/gpu/draw_state_cache.h": "b574d3b16b14983c714d16551ebe6ac88989b48a2fe4aea7622c1d9d42576571",
+    "LostOdysseyRecomp/gpu/native_mesh.h": "3426e59d77deb410a38ebc0ae4d4e22fa45e38639b30b00b23eebd836ddad376",
+    "LostOdysseyRecomp/gpu/native_mesh_hooks.cpp": "48df7a530bef3d5b6db4151272d964e5bb83504432645c833e6426d7484a7f69",
+    "LostOdysseyRecomp/gpu/renderer.cpp": "4a6ee9d03fdfb67012e51401f519df1de6dea2a106fccc8b20d0f3e41d06a096",
+    "LostOdysseyRecomp/gpu/renderer.h": "28e90d8a9799ecf91161a7aea0c7e05fbf19f5e404c7de0be01e6a5e4d87ae6a",
+    "LostOdysseyRecomp/gpu/command_processor.cpp": "e364ff42ab820d1127074f21ff2b76f623d241ee3cbadc60b4e5f781bfeb0adc",
+    "LostOdysseyRecomp/gpu/command_processor.h": "023eb3dcd6e555ab12ef4e830aca3e8aa64a94232ea459e8ee5dca9c29bed2d3",
+    "tools/tests/draw_state_test.cpp": "2a7c8bcdd2776a61b95379ee4bd051a22d6f17456076cb92855064598c4a207d",
+    "tools/tests/native_mesh_test.cpp": "6992ba4ef94930e147fa15e454343dbcca295090be7e0a77e80ed07aadc617b6",
+    "tools/tests/native_mesh_sdk_oracle.cpp": "c37943cdfee6d17e93f56f68a3803a578b58e5066c6b31459cc46fcc5b3c36a2",
+    "tools/tests/native_mesh_sdk_oracle.py": "d68b257321345a138047e4630bd77ecf3df8a6853a42fa4f250cab093d451986",
+    "tools/perf/native_probe_log.py": "d667c920cc0aab0faaf6ab6554de05463c215927d7682ff73dff407c5f5d1430",
+    "tools/perf/run_native_title.py": "7ae8d05eb500e539ee6814ab3b3815f608823a611e37dee1eec8c5026a199b75",
+    "tools/tests/native_probe_log_test.py": "1d9bb18f2ae20125b4d6e70ed834f0c859832e1d40987ba8fb17bd3790ce3562"
+  },
+  "validation": [
+    {
+      "stage": "p1",
+      "run_id": 36540593846,
+      "job_id": 109314785082,
+      "artifact_id": 11021075087,
+      "scope": "renderer TU and explicit-state CPU contract",
+      "compile_test_steps": "passed",
+      "whole_job": "failed during source staging/publication after tests; fixed in source-only publish",
+      "source_equivalence": "input/output SHA256 verified by publish workflow",
+      "raw_log_sha256": {
+        "build.log": "fd60e1c5341e7263566e18f42d7dda44129ca80afd959d13d996e97f73b7652c",
+        "configure.log": "00c3f5a47a4a62bbe6563852fdd077568bf53c2caff09b39591ca826ed5b4ad5"
+      },
+      "transcripts": {}
+    },
+    {
+      "stage": "p2",
+      "run_id": 36544598596,
+      "job_id": 109327838754,
+      "artifact_id": 11021357607,
+      "scope": "CP/producer TUs, CPU contracts and ordinary SDK oracle",
+      "compile_test_steps": "passed",
+      "whole_job": "failed during source staging/publication after tests; fixed in source-only publish",
+      "source_equivalence": "input/output SHA256 verified by publish workflow",
+      "raw_log_sha256": {
+        "codegen.log": "c165683f8c3b26b35f67248dc204e4fe1b653d2f6fc57c55511449e7e84ba28c",
+        "cpu-build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "cpu-test.log": "978dc0c0dbb83586561811a328aac1286d473c58a35f9823cf51d5736d6ab115",
+        "oracle-build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "oracle-test.log": "57f5bf0dd34f002dc185711662755afd6a20c293bba0cccbf844826c2a82f5d1",
+        "production-build.log": "ae9c248f604fe615bc477faeb9ad0cb63df47c824f9def4314dac74c84a4f0c5"
+      },
+      "transcripts": {
+        "oracle-test.log": "SDK_ORACLE_PASS cases=128 predicates=pass,skip original_helpers=1334 native_flush_calls=0 source=canonical_generated_sdk gpu_or_game_validation=false",
+        "cpu-test.log": "draw-state adapter contracts passed\nnative mesh and mixed draw-state contracts passed"
+      }
+    },
+    {
+      "stage": "p3",
+      "run_id": 36546697149,
+      "job_id": 109334695786,
+      "artifact_id": 11022971717,
+      "scope": "CP/producer TUs, stream SDK oracle and six probe contracts",
+      "compile_test_steps": "passed",
+      "whole_job": "failed during source staging/publication after tests; fixed in source-only publish",
+      "source_equivalence": "input/output SHA256 verified by publish workflow; Python EOF-only normalization had identical AST",
+      "raw_log_sha256": {
+        "codegen.log": "1e556cad110d3336047c6d12c9cc2e2453e1534889b1eee66fe928511f1b6a0c",
+        "cpu-build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "cpu-test.log": "1bde0a5caa45edcd8785e9946b3fa4b6126f77696a7f7c121a6f808b174806e4",
+        "oracle-build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "oracle-test.log": "5aeb3c487ffb74aa8cbfcdbdb91bd8ec8f72065b624c2bced2f4f5fa56f83d19",
+        "production-build.log": "400f6a731d2faab0860250bfe716ad62cda5460a5c9cbd5a27017f8da3f1968e"
+      },
+      "transcripts": {
+        "oracle-test.log": "SDK_ORACLE_PASS cases=128 predicates=pass,skip stream_wait_order=verified original_helpers=1451 native_flush_calls=0 source=canonical_generated_sdk gpu_or_game_validation=false",
+        "cpu-test.log": "native mesh and mixed draw-state contracts passed\n......\n----------------------------------------------------------------------\nRan 6 tests in 0.080s\n\nOK"
+      }
+    }
+  ],
+  "limits": [
+    "SDK oracle compares 128 synthetic ordinary calls, not real GPU work or scene coverage.",
+    "Linux evidence is portable GCC C++20 CPU tests only; no production Vulkan validation.",
+    "Renderer still copies VS/PS working constants and maintains mixed-mode register/MMIO state.",
+    "Shader/derived preparation, UP/special/recorded paths, generic events and presentation still use legacy.",
+    "Historical off/all Uhra evidence is unchanged and does not measure this front-end."
+  ]
+}
