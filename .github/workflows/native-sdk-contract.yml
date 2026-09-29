@@ -1,21 +1,26 @@
-name: Native SDK entry contract inspection
+name: Native front-end canonical SDK oracle
+# Manual, bounded CPU verification. Does not publish source or run the game.
+# Earlier compiler/oracle evidence remains valid for unchanged sources.
 on:
-  push:
-    branches: [feature/native-renderer-front-end]
-    paths: [.github/workflows/native-sdk-contract.yml, tools/perf/inspect_native_sdk.py]
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  inspect:
+  sdk-oracle:
     runs-on: windows-2022
     timeout-minutes: 25
     steps:
+      - name: Preserve source line endings
+        shell: bash
+        run: git config --global core.autocrlf false
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Initialize code generation dependencies
+      - name: Initialize pinned SDK and runtime headers
         shell: bash
-        run: git submodule update --init --recursive --depth 1 tools/XenonRecomp
+        run: git submodule update --init --recursive --depth 1 tools/XenonRecomp thirdparty/o1heap thirdparty/unordered_dense
+      # Reuses the existing release input and access contract. Never export
+      # the private input, generated program, credentials or game assets.
       - uses: actions/checkout@v4
         with:
           repository: freefrank/LostOdysseyRecomp-build-inputs
@@ -29,17 +34,33 @@ jobs:
         env:
           LO_BUILD_XEX_PATH: out/build-input/default.xex
         run: python tools/release/fetch_build_input.py
-      - name: Generate through canonical entry point
+      - name: Generate original SDK comparison
         shell: cmd
         run: |
-          call tools\build_tools.bat || exit /b 1
-          out\build\tools\xexdump.exe LostOdysseyRecompLib\private\disc1\default.xex LostOdysseyRecompLib\private\image_disc1.bin || exit /b 1
-          python tools\ppc_codegen.py generate || exit /b 1
-      - name: Extract bounded SDK contracts
-        run: python tools/perf/inspect_native_sdk.py --output out/native-sdk-contract
+          mkdir out\native-sdk-oracle
+          call tools\build_tools.bat > out\native-sdk-oracle\codegen.log 2>&1 || (type out\native-sdk-oracle\codegen.log & exit /b 1)
+          out\build\tools\xexdump.exe LostOdysseyRecompLib\private\disc1\default.xex LostOdysseyRecompLib\private\image_disc1.bin >> out\native-sdk-oracle\codegen.log 2>&1 || exit /b 1
+          python tools\ppc_codegen.py generate >> out\native-sdk-oracle\codegen.log 2>&1 || (type out\native-sdk-oracle\codegen.log & exit /b 1)
+          python tools\tests\native_mesh_sdk_oracle.py --output out\native-sdk-oracle\sdk_oracle.cpp || exit /b 1
+      - name: Compile production consumer and producer; compare canonical SDK
+        shell: cmd
+        run: |
+          call tools\setup_windows.bat || exit /b 1
+          set "LO_INCLUDES=/I LostOdysseyRecomp /I LostOdysseyRecompLib /I tools\XenonRecomp\XenonUtils /I tools\XenonRecomp\thirdparty\simde /I tools\XenonRecomp\thirdparty\fmt\include /I tools\XenonRecomp\thirdparty\xxHash /I thirdparty\unordered_dense\include /I thirdparty\o1heap\o1heap"
+          set "LO_COMPILE=/nologo /std:c++20 /EHsc -march=sandybridge -fno-strict-aliasing /DLO_GPU_PLUME=1"
+          clang-cl %LO_COMPILE% %LO_INCLUDES% /c LostOdysseyRecomp\gpu\command_processor.cpp /Fo:out\native-sdk-oracle\command_processor.obj > out\native-sdk-oracle\production-build.log 2>&1 || (type out\native-sdk-oracle\production-build.log & exit /b 1)
+          clang-cl %LO_COMPILE% %LO_INCLUDES% /c LostOdysseyRecomp\gpu\native_mesh_hooks.cpp /Fo:out\native-sdk-oracle\native_mesh_hooks.obj >> out\native-sdk-oracle\production-build.log 2>&1 || (type out\native-sdk-oracle\production-build.log & exit /b 1)
+          clang-cl %LO_COMPILE% %LO_INCLUDES% out\native-sdk-oracle\sdk_oracle.cpp tools\tests\native_mesh_sdk_oracle.cpp out\native-sdk-oracle\native_mesh_hooks.obj /Fe:out\native-sdk-oracle\sdk_oracle.exe > out\native-sdk-oracle\oracle-build.log 2>&1 || (type out\native-sdk-oracle\oracle-build.log & exit /b 1)
+          set LO_NATIVE_FRONTEND=mesh
+          out\native-sdk-oracle\sdk_oracle.exe > out\native-sdk-oracle\oracle-test.log 2>&1 || (type out\native-sdk-oracle\oracle-test.log & exit /b 1)
+          type out\native-sdk-oracle\oracle-test.log
+          git rev-parse HEAD > out\native-sdk-oracle\SOURCE.txt
+          echo COMPILE_AND_CPU_SDK_ONLY: no full application link, game, GPU or performance acceptance > out\native-sdk-oracle\SCOPE.txt
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: native-sdk-contract
-          path: out/native-sdk-contract/*.json
-          if-no-files-found: error
-          retention-days: 1
+          name: native-sdk-oracle-evidence
+          path: |
+            out/native-sdk-oracle/*.log
+            out/native-sdk-oracle/*.txt
+          retention-days: 7

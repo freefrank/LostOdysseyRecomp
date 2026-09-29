@@ -1,0 +1,63 @@
+name: Native front-end CPU contracts
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - LostOdysseyRecomp/gpu/draw_state*.h
+      - LostOdysseyRecomp/gpu/legacy_draw_state.h
+      - LostOdysseyRecomp/gpu/native_mesh*.h
+      - LostOdysseyRecomp/gpu/native_mesh*.cpp
+      - LostOdysseyRecomp/gpu/command_processor.cpp
+      - tools/tests/draw_state_test.cpp
+      - tools/tests/native_mesh_test.cpp
+      - tools/perf/native_probe_log.py
+      - tools/tests/native_probe_log_test.py
+permissions:
+  contents: read
+jobs:
+  contracts:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Linux portable CPU contracts
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out/native-contracts
+          g++ -std=c++20 -Wall -Wextra -Werror -I LostOdysseyRecomp tools/tests/draw_state_test.cpp -o out/native-contracts/draw-state
+          g++ -std=c++20 -Wall -Wextra -Werror -I LostOdysseyRecomp tools/tests/native_mesh_test.cpp -o out/native-contracts/mesh
+          out/native-contracts/draw-state | tee out/native-contracts/cpu.log
+          out/native-contracts/mesh | tee -a out/native-contracts/cpu.log
+          python tools/tests/native_probe_log_test.py 2>&1 | tee -a out/native-contracts/cpu.log
+          git rev-parse HEAD > out/native-contracts/SOURCE.txt
+          echo 'CPU_ONLY: no full runtime build, GPU, game or performance acceptance' > out/native-contracts/SCOPE.txt
+      - name: Windows portable CPU contracts
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          call tools\setup_windows.bat || exit /b 1
+          mkdir out\native-contracts
+          clang-cl /nologo /std:c++20 /EHsc /W4 /WX /I LostOdysseyRecomp tools\tests\draw_state_test.cpp /Fe:out\native-contracts\draw-state.exe || exit /b 1
+          clang-cl /nologo /std:c++20 /EHsc /W4 /WX /I LostOdysseyRecomp tools\tests\native_mesh_test.cpp /Fe:out\native-contracts\mesh.exe || exit /b 1
+          out\native-contracts\draw-state.exe > out\native-contracts\cpu.log 2>&1 || (type out\native-contracts\cpu.log & exit /b 1)
+          out\native-contracts\mesh.exe >> out\native-contracts\cpu.log 2>&1 || (type out\native-contracts\cpu.log & exit /b 1)
+          python tools\tests\native_probe_log_test.py >> out\native-contracts\cpu.log 2>&1 || (type out\native-contracts\cpu.log & exit /b 1)
+          type out\native-contracts\cpu.log
+          git rev-parse HEAD > out\native-contracts\SOURCE.txt
+          echo CPU_ONLY: no full runtime build, GPU, game or performance acceptance > out\native-contracts\SCOPE.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-frontend-cpu-${{ runner.os }}
+          path: |
+            out/native-contracts/*.log
+            out/native-contracts/*.txt
+          retention-days: 7
