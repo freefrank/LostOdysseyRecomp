@@ -1,0 +1,29 @@
+name: Native rework public source
+on:
+  push:
+    branches: [fix/native-frontend-rework]
+    paths: [.github/workflows/native-rework-source.yml]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Export tracked public source only
+        shell: bash
+        run: |
+          set -euo pipefail
+          git archive --format=tar.gz HEAD -o native-rework-source.tar.gz
+          git rev-parse HEAD > SOURCE_REF.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-rework-public-source
+          path: |
+            native-rework-source.tar.gz
+            SOURCE_REF.txt
+          retention-days: 1
+          compression-level: 0
