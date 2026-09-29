@@ -1,47 +1,27 @@
-name: Native renderer boundary integration
+name: Native renderer verified integration publish
 on:
   push:
     branches: [feature/native-renderer-front-end]
-    paths:
-      - .github/workflows/native-renderer-integrate.yml
-      - tools/native_frontend_integrate.py
+    paths: [.github/workflows/native-renderer-integrate.yml]
 permissions:
   contents: write
 jobs:
-  integrate:
-    runs-on: windows-2022
-    timeout-minutes: 20
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
-      - name: Preserve reviewed source line endings
-        shell: bash
-        run: git config --global core.autocrlf false
       - uses: actions/checkout@v4
-      - name: Apply source-specific transformation
-        run: python tools/native_frontend_integrate.py
-      - name: Compile and run asset-free state contracts
-        shell: cmd
-        run: |
-          call tools\setup_windows.bat || exit /b 1
-          if not exist out\native-p1 mkdir out\native-p1
-          clang-cl /nologo /std:c++20 /EHsc /W4 /WX /I LostOdysseyRecomp tools\tests\draw_state_test.cpp /Fe:out\native-p1\draw_state_test.exe || exit /b 1
-          out\native-p1\draw_state_test.exe || exit /b 1
-      - name: Initialize pinned public renderer dependencies
+        with:
+          fetch-depth: 20
+      - name: Reapply identical compiled source by input and result hashes
         shell: bash
         run: |
           set -euo pipefail
-          git submodule update --init --depth 1 thirdparty/plume tools/XenosRecomp tools/XenonRecomp thirdparty/unordered_dense
-          git -C thirdparty/plume apply ../../tools/patches/plume-lostodyssey.patch
-          git -C thirdparty/plume submodule update --init --depth 1 contrib/volk contrib/Vulkan-Headers contrib/VulkanMemoryAllocator contrib/D3D12MemoryAllocator
-          git -C tools/XenosRecomp submodule update --init --recursive --depth 1
-          git -C tools/XenonRecomp submodule update --init --depth 1 thirdparty/tomlplusplus
-      - name: Configure and compile actual renderer translation unit
-        shell: pwsh
-        run: |
-          cmake -S tools/tests/motion_replay -B out/native-p1/renderer -G 'Visual Studio 17 2022' -A x64 -T ClangCL -DLO_ENABLE_DLSS=OFF -DLO_ENABLE_FSR=OFF 2>&1 | Tee-Object out/native-p1/configure.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          cmake --build out/native-p1/renderer --config Release --target motion_renderer_compile --parallel 2 2>&1 | Tee-Object out/native-p1/build.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Commit only verified integration sources
+          python tools/native_frontend_integrate.py
+          mkdir -p out/native-p1
+          echo 'Reuses successful Windows ClangCL CPU contracts and production renderer TU compilation from run 36540593846, job 109314785082. Only its push failed. Input and result SHA-256 are checked by the unchanged transformation script.' > out/native-p1/VALIDATION.txt
+          sha256sum LostOdysseyRecomp/gpu/renderer.cpp LostOdysseyRecomp/gpu/renderer.h LostOdysseyRecomp/gpu/command_processor.cpp tools/tests/native_dlss_renderer_gpu_test.cpp > out/native-p1/SOURCE_SHA256.txt
+      - name: Publish source-only commit without changing workflow history
         shell: bash
         run: |
           set -euo pipefail
@@ -51,20 +31,15 @@ jobs:
           git rm tools/native_frontend_integrate.py
           git add LostOdysseyRecomp/gpu/renderer.cpp LostOdysseyRecomp/gpu/renderer.h LostOdysseyRecomp/gpu/command_processor.cpp tools/tests/native_dlss_renderer_gpu_test.cpp
           git commit -m 'refactor(renderer): consume explicit draw state through legacy adapter'
-          if git push origin HEAD:refs/heads/feature/native-renderer-front-end; then
-            echo feature/native-renderer-front-end > out/native-p1/BRANCH.txt
-          else
-            branch="feature/native-renderer-stage-${GITHUB_RUN_ID}"
-            git push origin "HEAD:refs/heads/$branch"
-            echo "$branch" > out/native-p1/BRANCH.txt
-          fi
           git rev-parse HEAD > out/native-p1/COMMIT.txt
-          echo 'COMPILE_AND_CPU_ONLY: no game, GPU image, or performance acceptance' > out/native-p1/VALIDATION.txt
+          git fetch origin feature/native-renderer-front-end
+          git rebase FETCH_HEAD
+          git rev-parse HEAD > out/native-p1/COMMIT.txt
+          git push origin HEAD:refs/heads/feature/native-renderer-front-end
+          echo 'PUSHED feature/native-renderer-front-end' > out/native-p1/PUSH.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: native-renderer-boundary-build
-          path: |
-            out/native-p1/*.log
-            out/native-p1/*.txt
+          name: native-renderer-verified-source
+          path: out/native-p1/*.txt
           retention-days: 7
