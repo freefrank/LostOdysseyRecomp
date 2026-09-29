@@ -1,0 +1,51 @@
+name: Native SDK preparation boundary inventory
+on:
+  workflow_dispatch:
+  push:
+    branches: [fix/native-frontend-rework]
+    paths:
+      - .github/workflows/native-tail-inventory.yml
+      - tools/shader_analysis/native_sdk_tail_inventory.py
+permissions:
+  contents: read
+jobs:
+  inventory:
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Initialize pinned generator
+        shell: bash
+        run: git submodule update --init --recursive --depth 1 tools/XenonRecomp
+      - uses: actions/checkout@v4
+        with:
+          repository: freefrank/LostOdysseyRecomp-build-inputs
+          ref: 77f076e0e03966736cbf8919ce793bafadce82d9
+          path: out/build-input
+          sparse-checkout: /default.xex
+          sparse-checkout-cone-mode: false
+          ssh-key: ${{ secrets.LO_BUILD_INPUT_KEY }}
+          persist-credentials: false
+      - name: Stage existing authorized SDK input
+        env:
+          LO_BUILD_XEX_PATH: out/build-input/default.xex
+        run: python tools/release/fetch_build_input.py
+      - name: Generate internally and derive bounded metadata
+        shell: cmd
+        run: |
+          mkdir out\native-tail-inventory
+          call tools\build_tools.bat > out\native-tail-inventory\generator.log 2>&1 || (type out\native-tail-inventory\generator.log & exit /b 1)
+          python tools\ppc_codegen.py generate >> out\native-tail-inventory\generator.log 2>&1 || exit /b 1
+          python tools\shader_analysis\native_sdk_tail_inventory.py --output out\native-tail-inventory\boundaries.json || exit /b 1
+          git rev-parse HEAD > out\native-tail-inventory\SOURCE.txt
+          echo STATIC_METADATA_ONLY: no production code or private generated sources exported, no new execution validation > out\native-tail-inventory\SCOPE.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-tail-boundary-metadata
+          path: |
+            out/native-tail-inventory/boundaries.json
+            out/native-tail-inventory/SOURCE.txt
+            out/native-tail-inventory/SCOPE.txt
+          retention-days: 7
