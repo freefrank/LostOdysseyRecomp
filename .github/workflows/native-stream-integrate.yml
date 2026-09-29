@@ -1,0 +1,93 @@
+name: Native stream coherency integration
+on:
+  push:
+    branches: [feature/native-renderer-front-end]
+    paths: [.github/workflows/native-stream-integrate.yml]
+permissions:
+  contents: write
+jobs:
+  integrate:
+    runs-on: windows-2022
+    timeout-minutes: 25
+    steps:
+      - name: Preserve source bytes
+        shell: bash
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 20
+      - name: Apply reviewed source
+        run: python tools/native_stream_stage.py
+      - name: CPU wire and probe contracts
+        shell: cmd
+        run: |
+          call tools\setup_windows.bat || exit /b 1
+          clang-cl /nologo /std:c++20 /EHsc /W4 /WX /I LostOdysseyRecomp tools\tests\native_mesh_test.cpp /Fe:out\native-p3\native_mesh_test.exe > out\native-p3\cpu-build.log 2>&1 || (type out\native-p3\cpu-build.log & exit /b 1)
+          out\native-p3\native_mesh_test.exe > out\native-p3\cpu-test.log 2>&1 || (type out\native-p3\cpu-test.log & exit /b 1)
+          python tools\tests\native_probe_log_test.py >> out\native-p3\cpu-test.log 2>&1 || (type out\native-p3\cpu-test.log & exit /b 1)
+          type out\native-p3\cpu-test.log
+      - name: Initialize pinned SDK and runtime headers
+        shell: bash
+        run: git submodule update --init --recursive --depth 1 tools/XenonRecomp thirdparty/o1heap thirdparty/unordered_dense
+      - uses: actions/checkout@v4
+        with:
+          repository: freefrank/LostOdysseyRecomp-build-inputs
+          ref: 77f076e0e03966736cbf8919ce793bafadce82d9
+          path: out/build-input
+          sparse-checkout: /default.xex
+          sparse-checkout-cone-mode: false
+          ssh-key: ${{ secrets.LO_BUILD_INPUT_KEY }}
+          persist-credentials: false
+      - name: Stage authorized build input
+        env:
+          LO_BUILD_XEX_PATH: out/build-input/default.xex
+        run: python tools/release/fetch_build_input.py
+      - name: Generate actual SDK oracle
+        shell: cmd
+        run: |
+          call tools\build_tools.bat > out\native-p3\codegen.log 2>&1 || (type out\native-p3\codegen.log & exit /b 1)
+          out\build\tools\xexdump.exe LostOdysseyRecompLib\private\disc1\default.xex LostOdysseyRecompLib\private\image_disc1.bin >> out\native-p3\codegen.log 2>&1 || exit /b 1
+          python tools\ppc_codegen.py generate >> out\native-p3\codegen.log 2>&1 || exit /b 1
+          python tools\tests\native_mesh_sdk_oracle.py --output out\native-p3\sdk_oracle.cpp || exit /b 1
+      - name: Compile production synchronization and test original SDK ordering
+        shell: cmd
+        run: |
+          call tools\setup_windows.bat || exit /b 1
+          set "LO_INCLUDES=/I LostOdysseyRecomp /I LostOdysseyRecompLib /I tools\XenonRecomp\XenonUtils /I tools\XenonRecomp\thirdparty\simde /I tools\XenonRecomp\thirdparty\fmt\include /I tools\XenonRecomp\thirdparty\xxHash /I thirdparty\unordered_dense\include /I thirdparty\o1heap\o1heap"
+          set "LO_COMPILE=/nologo /std:c++20 /EHsc -march=sandybridge -fno-strict-aliasing /DLO_GPU_PLUME=1"
+          clang-cl %LO_COMPILE% %LO_INCLUDES% /c LostOdysseyRecomp\gpu\command_processor.cpp /Fo:out\native-p3\command_processor.obj > out\native-p3\production-build.log 2>&1 || (type out\native-p3\production-build.log & exit /b 1)
+          clang-cl %LO_COMPILE% %LO_INCLUDES% /c LostOdysseyRecomp\gpu\native_mesh_hooks.cpp /Fo:out\native-p3\native_mesh_hooks.obj >> out\native-p3\production-build.log 2>&1 || (type out\native-p3\production-build.log & exit /b 1)
+          clang-cl %LO_COMPILE% %LO_INCLUDES% out\native-p3\sdk_oracle.cpp tools\tests\native_mesh_sdk_oracle.cpp out\native-p3\native_mesh_hooks.obj /Fe:out\native-p3\sdk_oracle.exe > out\native-p3\oracle-build.log 2>&1 || (type out\native-p3\oracle-build.log & exit /b 1)
+          set LO_NATIVE_FRONTEND=mesh
+          out\native-p3\sdk_oracle.exe > out\native-p3\oracle-test.log 2>&1 || (type out\native-p3\oracle-test.log & exit /b 1)
+          type out\native-p3\oracle-test.log
+      - name: Stage exact verified sources
+        shell: python
+        run: |
+          from pathlib import Path
+          import json,subprocess
+          files=json.loads(Path('out/native-p3/SOURCE_SHA256.json').read_text())
+          subprocess.run(['git','add','--',*[entry[0] for entry in files]],check=True)
+          subprocess.run(['git','rm','tools/native_stream_stage.py','tools/native-stream-stage.b64'],check=True)
+      - name: Commit and push source changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --cached --check
+          git config user.name 'dotSlash'
+          git config user.email 'freefrank21@gmail.com'
+          git commit -m 'feat(gpu): replace mesh stream PM4 waits with shared native coherency'
+          git fetch origin feature/native-renderer-front-end
+          git rebase FETCH_HEAD
+          git rev-parse HEAD > out/native-p3/COMMIT.txt
+          git push origin HEAD:refs/heads/feature/native-renderer-front-end
+          echo 'COMPILE_AND_SDK_CPU_ORACLE_ONLY: no GPU, real game or performance acceptance' > out/native-p3/VALIDATION.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-stream-evidence
+          path: |
+            out/native-p3/*.log
+            out/native-p3/*.txt
+            out/native-p3/SOURCE_SHA256.json
+          retention-days: 7
