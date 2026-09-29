@@ -1,0 +1,83 @@
+name: Native SDK entry contract inspection
+on:
+  push:
+    branches: [feature/native-renderer-front-end]
+    paths: [.github/workflows/native-sdk-contract.yml]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: windows-2022
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Initialize code generation dependencies
+        shell: bash
+        run: git submodule update --init --recursive --depth 1 tools/XenonRecomp
+      # Same pinned input and access mechanism as the existing release build.
+      # Never archive the XEX, image, whole generated program or credentials.
+      - uses: actions/checkout@v4
+        with:
+          repository: freefrank/LostOdysseyRecomp-build-inputs
+          ref: 77f076e0e03966736cbf8919ce793bafadce82d9
+          path: out/build-input
+          sparse-checkout: /default.xex
+          sparse-checkout-cone-mode: false
+          ssh-key: ${{ secrets.LO_BUILD_INPUT_KEY }}
+          persist-credentials: false
+      - name: Stage authorized build input
+        env:
+          LO_BUILD_XEX_PATH: out/build-input/default.xex
+        run: python tools/release/fetch_build_input.py
+      - name: Generate through canonical entry point
+        shell: cmd
+        run: |
+          call tools\build_tools.bat || exit /b 1
+          out\build\tools\xexdump.exe LostOdysseyRecompLib\private\disc1\default.xex LostOdysseyRecompLib\private\image_disc1.bin || exit /b 1
+          python tools\ppc_codegen.py generate || exit /b 1
+      - name: Extract bounded SDK control flow and caller contracts
+        shell: python
+        run: |
+          from pathlib import Path
+          import json, re, subprocess
+          seeds = {'823D45E8', '827B56B0', '823CD050', '823C1BD8'}
+          functions = {}
+          callers = []
+          for path in sorted(Path('LostOdysseyRecompLib/ppc').glob('ppc_recomp.*.cpp')):
+              text = path.read_text(encoding='utf-8')
+              for match in re.finditer(r'PPC_FUNC_IMPL\(__imp__sub_([0-9A-Fa-f]{8})\) \{.*?\n\}', text, re.S):
+                  address = match[1].upper()
+                  body = match[0]
+                  calls = set(re.findall(r'\bsub_([0-9A-Fa-f]{8})\(ctx, base\)', body))
+                  calls = {c.upper() for c in calls}
+                  if calls & seeds:
+                      callers.append({'address':address, 'file':str(path), 'line':text.count('\n',0,match.start())+1, 'calls':sorted(calls & seeds)})
+                  number = int(address,16)
+                  if not (0x823B0000 <= number < 0x823F0000 or 0x82790000 <= number < 0x827D0000):
+                      continue
+                  first = text.count('\n',0,match.start())+1
+                  instructions = []
+                  for offset,line in enumerate(body.splitlines()):
+                      line = line.strip()
+                      if line.startswith('// ') or line.startswith('loc_'):
+                          instructions.append([first+offset,line])
+                  functions[address] = {'file':str(path), 'line':first, 'calls':sorted(calls), 'control_flow':instructions}
+          selected = set(seeds)
+          for _ in range(2):
+              selected |= {callee for address in list(selected) for callee in functions.get(address,{}).get('calls',[]) if callee in functions}
+          output = Path('out/native-sdk-contract'); output.mkdir(parents=True,exist_ok=True)
+          metadata = {'source':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'seeds':sorted(seeds),'selected':sorted(selected),'callers':callers,'dynamic_frequency':'not measured'}
+          (output/'index.json').write_text(json.dumps(metadata,indent=2),encoding='utf-8')
+          for address in selected:
+              if address in functions:
+                  (output/(address+'.json')).write_text(json.dumps(functions[address],indent=2),encoding='utf-8')
+          if not seeds <= functions.keys(): raise SystemExit('Missing SDK seed function')
+          print('Extracted',len(selected),'SDK contracts; no game assets or complete generated program exported.')
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-sdk-contract
+          path: out/native-sdk-contract/*.json
+          if-no-files-found: error
+          retention-days: 1
