@@ -1,0 +1,30 @@
+name: Native front-end documentation synchronization
+on:
+  push:
+    branches: [feature/native-renderer-front-end]
+    paths: [.github/workflows/native-docs-sync.yml]
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 20
+      - name: Synchronize reviewed documentation only
+        run: python tools/native_docs_sync.py
+      - name: Preserve existing validation and push documentation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git config user.name 'dotSlash'
+          git config user.email 'freefrank21@gmail.com'
+          git add CHANGELOG.md docs/STATUS.md docs/ROADMAP.md docs/ROADMAP.zh-CN.md tools/perf/README.md
+          git rm tools/native_docs_sync.py
+          git commit -m 'docs(native): synchronize staged mesh delivery and unimplemented PM4 coverage'
+          git fetch origin feature/native-renderer-front-end
+          git rebase FETCH_HEAD
+          git push origin HEAD:refs/heads/feature/native-renderer-front-end
