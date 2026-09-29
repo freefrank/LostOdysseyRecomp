@@ -5,6 +5,7 @@
 #include "frame_plan.h"
 #include "video.h"
 #include "renderer.h"
+#include "legacy_draw_state.h"
 #include "frame_pacer.h"
 #include "deadline_wait.h"
 #include "register_snapshot.h"
@@ -757,7 +758,18 @@ namespace gpu
             // VGT_DMA_BASE is aligned to the index element size. Keeping
             // bit 1 for 16-bit indices is essential for mesh subranges.
             di.indexBase = dmaBase & (di.index32 ? ~3u : ~1u);
-            renderer::Draw(di);
+            // Capture at execution time on this worker. Borrowed constant banks
+            // remain live only until Draw returns; no delayed CP/global reads.
+            renderer::ShaderBinding shaders[2];
+            for (uint32_t stage = 0; stage < 2; ++stage) {
+                uint32_t count = 0;
+                const auto* words = GetActiveShader(stage != 0, count, shaders[stage].commandHash);
+                shaders[stage].words = std::span<const uint32_t>(words, count);
+                shaders[stage].byteHash = count ? GetActiveShaderByteHash(stage != 0) : 0;
+            }
+            auto registers = renderer::DrawWords::Legacy(m_registers,
+                static_cast<const uint8_t*>(g_memory.Translate(MMIO_BASE)));
+            renderer::Draw(renderer::CaptureLegacyDrawState(di, registers, shaders[0], shaders[1]));
         }
 
         uint32_t modeControl = 0;

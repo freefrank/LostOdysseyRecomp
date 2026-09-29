@@ -11,7 +11,6 @@
 #include "render_resolution.h"
 #include "movie_clear.h"
 #include "video.h"
-#include "command_processor.h"
 #include "shader_source_capture.h"
 #include "position_evidence_collection.h"
 #include "geometry_prepare.h"
@@ -185,47 +184,12 @@ namespace gpu::renderer
 
     namespace
     {
-        // ---- register indices ---------------------------------------------
-        constexpr uint32_t REG_RB_SURFACE_INFO = 0x2000;
-        constexpr uint32_t REG_RB_COLOR_INFO = 0x2001;
-        constexpr uint32_t REG_RB_DEPTH_INFO = 0x2002;
-        constexpr uint32_t REG_RB_DEPTH_CLEAR = 0x200B;
-        constexpr uint32_t REG_RB_COLOR_CLEAR = 0x200C;
-        constexpr uint32_t REG_PA_SC_WINDOW_OFFSET = 0x2080;
-        constexpr uint32_t REG_PA_SC_WINDOW_SCISSOR_TL = 0x2081;
-        constexpr uint32_t REG_PA_SC_WINDOW_SCISSOR_BR = 0x2082;
-        constexpr uint32_t REG_VGT_INDX_OFFSET = 0x2102;
-        constexpr uint32_t REG_RB_COLOR_MASK = 0x2104;
-        constexpr uint32_t REG_RB_ALPHA_REF = 0x210E;
-        constexpr uint32_t REG_RB_STENCILREFMASK_BF = 0x210C;
-        constexpr uint32_t REG_RB_STENCILREFMASK = 0x210D;
-        constexpr uint32_t REG_PA_CL_VPORT_XSCALE = 0x210F;
-        constexpr uint32_t REG_RB_DEPTHCONTROL = 0x2200;
-        constexpr uint32_t REG_RB_BLENDCONTROL0 = 0x2201;
-        constexpr uint32_t REG_RB_COLORCONTROL = 0x2202;
-        constexpr uint32_t REG_PA_SU_SC_MODE_CNTL = 0x2205;
-        constexpr uint32_t REG_PA_SU_POINT_SIZE = 0x2280;
-        constexpr uint32_t REG_PA_SU_POINT_MINMAX = 0x2281;
-        constexpr uint32_t REG_PA_CL_VTE_CNTL = 0x2206;
-        constexpr uint32_t REG_RB_MODECONTROL = 0x2208;
-        constexpr uint32_t REG_PA_SU_VTX_CNTL = 0x2302;
-        constexpr uint32_t REG_RB_COPY_CONTROL = 0x2318;
-        constexpr uint32_t REG_RB_COPY_DEST_BASE = 0x2319;
-        constexpr uint32_t REG_RB_COPY_DEST_PITCH = 0x231A;
-        constexpr uint32_t REG_RB_COPY_DEST_INFO = 0x231B;
-        constexpr uint32_t REG_ALU_CONSTANTS = 0x4000;
-        constexpr uint32_t REG_FETCH_CONSTANTS = 0x4800;
-        constexpr uint32_t REG_BOOL_CONSTANTS = 0x4900;
-        constexpr uint32_t REG_LOOP_CONSTANTS = 0x4908;
-
         constexpr uint32_t kUploadRingSize = 96u << 20;
         constexpr uint32_t kUploadHeadroom = 24u << 20;     // per-draw slack checked before a draw records anything
         constexpr uint32_t kReadbackSize = 128u << 20;
         constexpr uint32_t kVertexFetchSlots = 96;
         constexpr uint32_t kTextureSlots = 32;
 
-        uint32_t Reg(uint32_t index) { return g_commandProcessor.ReadRegister(index); }
-        float RegF(uint32_t index) { uint32_t v = Reg(index); float f; memcpy(&f, &v, 4); return f; }
         uint8_t* Phys(uint32_t physicalAddress) { return static_cast<uint8_t*>(g_memory.Translate(0xA0000000u + (physicalAddress & 0x1FFFFFFF))); }
 
         struct HotCaptureEnvironment
@@ -5603,29 +5567,31 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             }
 
             // ---- draw -------------------------------------------------------------------
-            void Draw(const DrawInfo& info)
+            void Draw(const DrawState& state)
             {
+                const auto& info = state.draw;
                 ScopedTimer timer{ tDraw, cpuTimingEnabled };
                 if(collectionFrame!=frame){collectionFrame=frame;taa_collection::BeginDiagnosticsFrame(frame);}
                 if (!debugCaptureDir.empty())
                 {
                     debugTrace << fmt::format("draw {} prim={} indices={} indexed={} base={:#x} words={} endian={} index32={}\n",
                         debugDraw++, info.primitiveType, info.indexCount, info.indexed, info.indexBase, info.indexBufferWords, info.indexEndian, info.index32);
-                    const bool first = debugRegisters.empty();
-                    if (first) debugRegisters.resize(REGISTER_COUNT);
+                    const bool first = debugRegisters.size() != state.legacyTraceRegisters.Size() || debugRegisters.empty();
+                    if (first) debugRegisters.resize(state.legacyTraceRegisters.Size());
                     for (uint32_t i = 0; i < debugRegisters.size(); ++i)
                     {
-                        const auto value = Reg(i);
+                        const auto value = state.legacyTraceRegisters.Read(i);
                         if (first || debugRegisters[i] != value)
                             debugTrace << fmt::format("{:04x} {:08x}\n", i, value);
                         debugRegisters[i] = value;
                     }
                 }
-                DrawImpl(info);
+                DrawImpl(state);
             }
 
-            void DrawImpl(const DrawInfo& info)
+            void DrawImpl(const DrawState& state)
             {
+                const auto& info = state.draw;
                 struct FgUiDrawExit {
                     Renderer& renderer;
                     ~FgUiDrawExit() {
@@ -5635,7 +5601,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         }
                     }
                 } fgUiDrawExit{*this};
-                const uint32_t modeControl = Reg(REG_RB_MODECONTROL) & 7;
+                const uint32_t modeControl = state.pipeline.modeControl & 7;
                 // All draw-side writes, including uploads, AA, alias transfers and
                 // optimized clears, are outside the consecutive-resolve window.
                 if (modeControl != 6) consecutiveResolveCopies.Invalidate();
@@ -5693,7 +5659,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 
                 if (modeControl == 6)
                 {
-                    Resolve();
+                    Resolve(state);
                     return;
                 }
                 if (modeControl != 4 && modeControl != 5)
@@ -5707,7 +5673,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 const bool trackBinding = taa_collection::Enabled();
                 const uint64_t bindingEpoch = trackBinding ? taa_collection::ConsentEpoch() : 0;
 
-                // Shaders come from the command processor's last IM_LOAD.
+                // Immutable shader bindings are supplied by either front-end adapter.
                 uint32_t vsCount = 0, psCount = 0;
                 uint64_t vsCommandHash = 0, psCommandHash = 0;
                 const uint32_t* vsWords = nullptr;
@@ -5715,8 +5681,12 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 uint64_t vsHash = 0, psHash = 0;
                 {
                     render_batch::CpuTimer<> shaderLookupTimer(cpuTimingEnabled);
-                    vsWords = g_commandProcessor.GetActiveShader(false, vsCount, vsCommandHash);
-                    psWords = g_commandProcessor.GetActiveShader(true, psCount, psCommandHash);
+                    vsWords = state.vertexShader.words.data();
+                    psWords = state.pixelShader.words.data();
+                    vsCount = uint32_t(state.vertexShader.words.size());
+                    psCount = uint32_t(state.pixelShader.words.size());
+                    vsCommandHash = state.vertexShader.commandHash;
+                    psCommandHash = state.pixelShader.commandHash;
                     if (!vsWords || vsCount == 0)
                     {
                         shaderLookupTimer.AddTo(tShaderLookup);
@@ -5725,9 +5695,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         drops.shader++;
                         return;
                     }
-                    vsHash = g_commandProcessor.GetActiveShaderByteHash(false);
+                    vsHash = state.vertexShader.byteHash;
                     psHash = modeControl == 4 && psWords && psCount
-                        ? g_commandProcessor.GetActiveShaderByteHash(true) : 0;
+                        ? state.pixelShader.byteHash : 0;
                     shaderLookupTimer.AddTo(tShaderLookup);
                 }
                 Shader* vs = GetShader(false, vsWords, vsCount, vsHash);
@@ -5744,20 +5714,20 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
 
                 // Render targets.
-                uint32_t surfaceInfo = Reg(REG_RB_SURFACE_INFO);
+                uint32_t surfaceInfo = state.targets.surfaceInfo;
                 uint32_t pitch = surfaceInfo & 0x3FFF;
                 if (pitch == 0)
                 {
                     drops.pitch++;
                     return;
                 }
-                uint32_t scissorBr = Reg(REG_PA_SC_WINDOW_SCISSOR_BR);
-                uint32_t scissorTl = Reg(REG_PA_SC_WINDOW_SCISSOR_TL);
+                uint32_t scissorBr = state.viewport.scissorBR;
+                uint32_t scissorTl = state.viewport.scissorTL;
                 uint32_t rtHeight = GuessTargetHeight(pitch, (scissorBr >> 16) & 0x3FFF);
 
-                uint32_t colorInfo = Reg(REG_RB_COLOR_INFO);
-                uint32_t depthInfo = Reg(REG_RB_DEPTH_INFO);
-                uint32_t depthControl = Reg(REG_RB_DEPTHCONTROL);
+                uint32_t colorInfo = state.targets.colorInfo[0];
+                uint32_t depthInfo = state.targets.depthInfo;
+                uint32_t depthControl = state.pipeline.depthControl;
                 bool colorWrites = modeControl == 4;
                 HostTexture* color = nullptr;
                 HostTexture* depth = nullptr;
@@ -5815,10 +5785,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     render_batch::CpuTimer<> pipelineLookupTimer(cpuTimingEnabled);
                     key.vs = vsHash;
                 key.ps = ps ? psHash : 0;
-                key.blend = Reg(REG_RB_BLENDCONTROL0);
+                key.blend = state.pipeline.blendControl;
                 key.depthControl = depthControl;
-                key.stencilRefMask = Reg(REG_RB_STENCILREFMASK) & 0xFFFFFF;
-                key.stencilRefMaskBack = Reg(REG_RB_STENCILREFMASK_BF) & 0xFFFFFF;
+                key.stencilRefMask = state.pipeline.stencilRefMask & 0xFFFFFF;
+                key.stencilRefMaskBack = state.pipeline.stencilRefMaskBack & 0xFFFFFF;
                 // LO_DEBUG_NODEPTH=1 (+ LO_DEBUG_VS=<hash>): depth test ALWAYS for the
                 // selected draws only, to tell "rejected by the depth test" from
                 // "never rasterised" without disturbing the rest of the frame.
@@ -5828,7 +5798,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     if (debugNoDepth && (!debugVsForDepth || key.vs == debugVsForDepth))
                         key.depthControl = (key.depthControl & ~0x70u) | (7u << 4);
                 }
-                key.modeCull = Reg(REG_PA_SU_SC_MODE_CNTL) & 0x3807;
+                key.modeCull = state.pipeline.modeCull & 0x3807;
                 if (depth && (depthControl & 2))
                 {
                     // The supported polygonal draws are triangles, fans, strips
@@ -5837,7 +5807,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         info.primitiveType == 6 || info.primitiveType == 13;
                     const auto bias = gpu::GetPolygonOffset(key.modeCull, polygonal,
                         (depthInfo & (1u << 16)) != 0,
-                        RegF(0x2380), RegF(0x2381), RegF(0x2382), RegF(0x2383));
+                        state.pipeline.polygonOffset[0], state.pipeline.polygonOffset[1], state.pipeline.polygonOffset[2], state.pipeline.polygonOffset[3]);
                     // Same-binary A/B regression switch; normal rendering applies
                     // guest bias without changing exposure or shadow materials.
                     static const bool disableBias = getenv("LO_NO_POLYGON_OFFSET") != nullptr;
@@ -5857,7 +5827,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         }
                     }
                 }
-                key.colorMask = colorWrites ? (Reg(REG_RB_COLOR_MASK) & 0xF) : 0;
+                key.colorMask = colorWrites ? (state.pipeline.colorMask & 0xF) : 0;
                 key.prim = info.primitiveType;
                 key.rtFormat = uint32_t(draw_attachment::DepthOnly(key.colorMask, depth != nullptr)
                     ? RenderFormat::UNKNOWN : color->format);
@@ -5890,11 +5860,11 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 // diagnostic switch provides a same-binary performance control.
                 static const bool legacyConstants = getenv("LO_LEGACY_CONSTANT_READS") != nullptr;
                 if (legacyConstants) {
-                    for (uint32_t i = 0; i < 256 * 4; i++) vsConstants[i] = Reg(REG_ALU_CONSTANTS + i);
-                    for (uint32_t i = 0; i < 256 * 4; i++) psConstants[i] = Reg(REG_ALU_CONSTANTS + 256 * 4 + i);
+                    for (uint32_t i = 0; i < 256 * 4; i++) vsConstants[i] = state.AluConstant(i);
+                    for (uint32_t i = 0; i < 256 * 4; i++) psConstants[i] = state.AluConstant(256 * 4 + i);
                 } else {
-                    g_commandProcessor.ReadRegisters(REG_ALU_CONSTANTS, 256 * 4, vsConstants);
-                    g_commandProcessor.ReadRegisters(REG_ALU_CONSTANTS + 256 * 4, 256 * 4, psConstants);
+                    state.vertexConstants.Copy(vsConstants);
+                    state.pixelConstants.Copy(psConstants);
                 }
                 // Diagnostic selection uses only GPU draw constants, not the CPU
                 // presented-swap counter. Shader/layout recognition is deliberately
@@ -6036,16 +6006,16 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 std::optional<temporal::SceneAnchor> temporalDrawAnchor;
 
                 SharedConstants shared{};
-                for (uint32_t i = 0; i < 8; i++) shared.bools[i] = Reg(REG_BOOL_CONSTANTS + i);
-                for (uint32_t i = 0; i < 32; i++) shared.loops[i] = Reg(REG_LOOP_CONSTANTS + i);
-                shared.transfer[0] = Reg(REG_PA_SU_POINT_SIZE);
-                shared.transfer[1] = Reg(REG_PA_SU_POINT_MINMAX);
+                for (uint32_t i = 0; i < 8; i++) shared.bools[i] = state.boolConstants.Read(i);
+                for (uint32_t i = 0; i < 32; i++) shared.loops[i] = state.loopConstants.Read(i);
+                shared.transfer[0] = state.pipeline.pointSize;
+                shared.transfer[1] = state.pipeline.pointMinMax;
                 shared.transfer[2] = std::bit_cast<uint32_t>(pointSizeLimit);
 
-                uint32_t vte = Reg(REG_PA_CL_VTE_CNTL);
-                float xs = RegF(REG_PA_CL_VPORT_XSCALE), xo = RegF(REG_PA_CL_VPORT_XSCALE + 1);
-                float ys = RegF(REG_PA_CL_VPORT_XSCALE + 2), yo = RegF(REG_PA_CL_VPORT_XSCALE + 3);
-                float zs = RegF(REG_PA_CL_VPORT_XSCALE + 4), zo = RegF(REG_PA_CL_VPORT_XSCALE + 5);
+                uint32_t vte = state.viewport.transformControl;
+                float xs = state.viewport.scaleOffset[0], xo = state.viewport.scaleOffset[1];
+                float ys = state.viewport.scaleOffset[2], yo = state.viewport.scaleOffset[3];
+                float zs = state.viewport.scaleOffset[4], zo = state.viewport.scaleOffset[5];
                 RenderViewport viewport(0.0f, 0.0f, float(rasterTarget->guestWidth), float(rasterTarget->guestHeight));
                 shared.ndcScale[0] = shared.ndcScale[1] = shared.ndcScale[2] = 1.0f;
                 if (vte & 1) // viewport scale enabled: vertices are in NDC, use a real viewport
@@ -6076,7 +6046,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 viewport.minDepth = 0.0f;
                 viewport.maxDepth = 1.0f;
                 shared.vtxFmt = (vte >> 8) & 7;
-                if ((Reg(REG_PA_SU_VTX_CNTL) & 1) == 0)
+                if ((state.viewport.vertexControl & 1) == 0)
                 {
                     shared.halfPixel[0] = 1.0f / viewport.width;
                     shared.halfPixel[1] = -1.0f / viewport.height;
@@ -6093,10 +6063,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     key.ps == 0xfe31f3d6588fde95ull && ps &&
                     (ps->info.textureSlotMask & 1) && ps->info.textureDimension[0] == 1 &&
                     !(vs->info.textureSlotMask & 1) &&
-                    temporal::IsSingleTexelScreenFetch(Reg(REG_FETCH_CONSTANTS), Reg(REG_FETCH_CONSTANTS + 1),
-                        Reg(REG_FETCH_CONSTANTS + 2), Reg(REG_FETCH_CONSTANTS + 5),
-                        FindResolved((Reg(REG_FETCH_CONSTANTS + 1) >> 12) << 12,
-                            Reg(REG_FETCH_CONSTANTS + 1) & 0x3f) != nullptr);
+                    temporal::IsSingleTexelScreenFetch(state.fetchConstants.Read(0), state.fetchConstants.Read(1),
+                        state.fetchConstants.Read(2), state.fetchConstants.Read(5),
+                        FindResolved((state.fetchConstants.Read(1) >> 12) << 12,
+                            state.fetchConstants.Read(1) & 0x3f) != nullptr);
                 const bool bdaMaterialPair = key.vs == 0xbda41a11626a545cull && key.ps == 0xa9e9542e2c60029aull;
                 const int temporalSlot=temporal::DrawPositionVPSlot(key.vs, key.ps, constantScreenSample);
                 // bda also appears with a different camera. Require a scene
@@ -6114,11 +6084,11 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 const bool jitterShadowPair = key.vs == 0x99c2b4b0960a9ccdull && key.ps == 0xd55a20d004031279ull;
                 if (temporalActive && temporalJitter && jitterShadowPair)
                 {
-                    const uint32_t fetch0 = Reg(REG_FETCH_CONSTANTS), fetch1 = Reg(REG_FETCH_CONSTANTS + 1);
+                    const uint32_t fetch0 = state.fetchConstants.Read(0), fetch1 = state.fetchConstants.Read(1);
                     const uint32_t address = (fetch1 >> 12) << 12;
                     auto* source = (fetch0 & 3) == 2 ? FindResolved(address, fetch1 & 0x3f) : nullptr;
                     if (source && source->tex && source->tex->texture && source->tex->format == RenderFormat::R32_FLOAT &&
-                        temporal::IsFullSceneDepthFetch(Reg(REG_FETCH_CONSTANTS + 2), Reg(REG_FETCH_CONSTANTS + 5),
+                        temporal::IsFullSceneDepthFetch(state.fetchConstants.Read(2), state.fetchConstants.Read(5),
                             source->tex->guestWidth, source->tex->guestHeight))
                         jitterSampledDepth = temporal::SceneResolve{source->frame, source->writeOrdinal,
                             address, source->destFormat, source->tex->width, source->tex->height,
@@ -6250,7 +6220,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     if (cfmt >= 4 && cfmt != 10 && cfmt != 12)
                         shared.flags |= 32u;    // signed format (16_16_FLOAT, 32_FLOAT)
                 }
-                uint32_t colorControl = Reg(REG_RB_COLORCONTROL);
+                uint32_t colorControl = state.pipeline.colorControl;
                 // LO_PS_DEBUG=<n>: paint draws with at least n indices magenta.
                 static const uint32_t psDebugMin = getenv("LO_PS_DEBUG") ? std::max(1ul, strtoul(getenv("LO_PS_DEBUG"), nullptr, 10)) : 0;
                 // LO_DEBUG_VS=<hex hash>: restrict the debug overrides to one vertex shader.
@@ -6273,7 +6243,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if ((colorControl & 8) && !noAlphaTest)
                 {
                     shared.flags |= 1;
-                    shared.alphaTest[0] = RegF(REG_RB_ALPHA_REF);
+                    shared.alphaTest[0] = state.pipeline.alphaRef;
                     shared.alphaTest[1] = float(colorControl & 7);
                 }
 
@@ -6298,8 +6268,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 {
                     if (!((vs->info.vertexFetchSlotMask[slot >> 6] >> (slot & 63)) & 1))
                         continue;
-                    uint32_t d0 = Reg(REG_FETCH_CONSTANTS + slot * 2);
-                    uint32_t d1 = Reg(REG_FETCH_CONSTANTS + slot * 2 + 1);
+                    uint32_t d0 = state.fetchConstants.Read(slot * 2);
+                    uint32_t d1 = state.fetchConstants.Read(slot * 2 + 1);
                     // A slot the shader reads but we cannot bind is a silent failure: the
                     // shader then fetches from arena offset 0, i.e. some other draw's data.
                     const char* skip = nullptr;
@@ -6343,8 +6313,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     // be compared bit for bit rather than to the six digits of {:g}.
                     std::string raw;
                     for (uint32_t ci = 0; ci <= 10; ci++)
-                        raw += fmt::format(" c{}={:08x},{:08x},{:08x},{:08x}", ci, Reg(REG_ALU_CONSTANTS + ci * 4), Reg(REG_ALU_CONSTANTS + ci * 4 + 1), Reg(REG_ALU_CONSTANTS + ci * 4 + 2), Reg(REG_ALU_CONSTANTS + ci * 4 + 3));
-                    SHADER_LOG_INFO("vertex-fetch", None, "renderer: draw vfetch{} | indxOffset={} raw{}", vfTraceLine, int32_t(Reg(REG_VGT_INDX_OFFSET)), raw);
+                        raw += fmt::format(" c{}={:08x},{:08x},{:08x},{:08x}", ci, state.AluConstant(ci * 4), state.AluConstant(ci * 4 + 1), state.AluConstant(ci * 4 + 2), state.AluConstant(ci * 4 + 3));
+                    SHADER_LOG_INFO("vertex-fetch", None, "renderer: draw vfetch{} | indxOffset={} raw{}", vfTraceLine, int32_t(state.baseVertex), raw);
                 }
 
                 tVertex0.AddTo(tVertex);
@@ -6363,22 +6333,22 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                        info.primitiveType!=4||!info.indexed||info.indexCount!=6||info.indexBufferWords<6||
                        viewport.x!=0||viewport.y!=0||viewport.width<=0||viewport.height<=0||viewport.width>pitch||viewport.height>rtHeight||
                        key.colorMask!=15||(depthControl&3)||shared.vtxFmt!=4||
-                       (key.modeCull&3)|| (Reg(REG_RB_COLORCONTROL)&8))return reject(1);
+                       (key.modeCull&3)|| (state.pipeline.colorControl&8))return reject(1);
                     const uint32_t blend=key.blend;
                     if(BlendFactor(blend&31)!=RenderBlend::ONE||BlendFactor((blend>>8)&31)!=RenderBlend::ZERO||
                        BlendOp((blend>>5)&7)!=RenderBlendOperation::ADD)return reject(2);
                     int l=scissorTl&0x3fff,t=(scissorTl>>16)&0x3fff,r=scissorBr&0x3fff,b=(scissorBr>>16)&0x3fff;
-                    const uint32_t window=Reg(REG_PA_SC_WINDOW_OFFSET);
+                    const uint32_t window=state.viewport.windowOffset;
                     if(!(scissorTl&0x80000000u)&&window){int ox=int32_t(window<<17)>>17,oy=int32_t(window<<1)>>17;l+=ox;r+=ox;t+=oy;b+=oy;}
                     if(l>0||t>0||r<viewport.width||b<viewport.height)return reject(3);
-                    uint32_t d0=Reg(REG_FETCH_CONSTANTS+95*2),d1=Reg(REG_FETCH_CONSTANTS+95*2+1),words=(d1>>2)&0xffffff;
+                    uint32_t d0=state.fetchConstants.Read(95*2),d1=state.fetchConstants.Read(95*2+1),words=(d1>>2)&0xffffff;
                     if((d0&3)!=3||!words||uint64_t(d0&0x1ffffffcu)+uint64_t(words)*4>0x20000000ull||
                        uint64_t(info.indexBase&0x1fffffffu)+(info.index32?24:12)>0x20000000ull)return reject(4);
                     float xy[6][2];float xmin=INFINITY,ymin=INFINITY,xmax=-INFINITY,ymax=-INFINITY;
                     for(unsigned i=0;i<6;++i){
                         uint32_t v=0;if(info.index32)memcpy(&v,Phys(info.indexBase)+i*4,4);else memcpy(&v,Phys(info.indexBase)+i*2,2);
                         v=GpuSwap(v,info.indexEndian);if(!info.index32)v&=0xffff;
-                        int64_t index=int64_t(v)+int32_t(Reg(REG_VGT_INDX_OFFSET));if(index<0||uint64_t(index)*8+4>words)return reject(5);
+                        int64_t index=int64_t(v)+int32_t(state.baseVertex);if(index<0||uint64_t(index)*8+4>words)return reject(5);
                         float pos[4];for(unsigned k=0;k<4;++k){uint32_t raw;memcpy(&raw,Phys(d0&~3u)+index*32+k*4,4);raw=GpuSwap(raw,d1&3);memcpy(pos+k,&raw,4);}
                         fullCopyVertices+=fmt::format(" i{}={} pos=({:g},{:g},{:g},{:g})",i,index,pos[0],pos[1],pos[2],pos[3]);
                         if(!std::isfinite(pos[0])||!std::isfinite(pos[1])||pos[3]!=1)return reject(6);
@@ -6400,7 +6370,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }();
                 if(key.vs==0x8bbd4da701845d16ull&&key.ps==0xcda578aef1724fdcull) {
                     static const uint64_t start=getenv("LO_SCENE_AA_LOG_START_FRAME")?strtoull(getenv("LO_SCENE_AA_LOG_START_FRAME"),nullptr,10):~0ull;
-                    if(frame>=start&&frame-start<128)SHADER_LOG_INFO("scene-aa", None, "renderer scene AA guard f{} full={} reason={} mode={} jitter={} blend={:#x} mask={} vtx={} prim={} n={} cull={:#x} ctl={:#x} vp=({},{},{},{}) extent={}x{} fetch95={:08x},{:08x} quad={} ",frame,fullSceneCopy,fullCopyReason,sceneAAMode,temporalJitter,key.blend,key.colorMask,shared.vtxFmt,info.primitiveType,info.indexCount,key.modeCull,Reg(REG_RB_COLORCONTROL),viewport.x,viewport.y,viewport.width,viewport.height,pitch,rtHeight,Reg(REG_FETCH_CONSTANTS+190),Reg(REG_FETCH_CONSTANTS+191),fullCopyVertices);
+                    if(frame>=start&&frame-start<128)SHADER_LOG_INFO("scene-aa", None, "renderer scene AA guard f{} full={} reason={} mode={} jitter={} blend={:#x} mask={} vtx={} prim={} n={} cull={:#x} ctl={:#x} vp=({},{},{},{}) extent={}x{} fetch95={:08x},{:08x} quad={} ",frame,fullSceneCopy,fullCopyReason,sceneAAMode,temporalJitter,key.blend,key.colorMask,shared.vtxFmt,info.primitiveType,info.indexCount,key.modeCull,state.pipeline.colorControl,viewport.x,viewport.y,viewport.width,viewport.height,pitch,rtHeight,state.fetchConstants.Read(190),state.fetchConstants.Read(191),fullCopyVertices);
                 }
                     sceneCopyTimer.AddTo(tSceneCopy);
                 }
@@ -6454,7 +6424,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         if (!((s->info.textureSlotMask >> slot) & 1))
                             continue;
                         uint32_t fetch[6];
-                        for (int i = 0; i < 6; i++) fetch[i] = Reg(REG_FETCH_CONSTANTS + slot * 6 + i);
+                        for (int i = 0; i < 6; i++) fetch[i] = state.fetchConstants.Read(slot * 6 + i);
                         const uint32_t declared = s->info.textureDimension[slot];
                         const uint32_t bank = declared == 2 ? 1 : declared == 3 ? 2 : 0;
                         activeTextureSlots[bank] |= uint32_t(1) << slot;
@@ -7200,7 +7170,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 // Record.
                 ScopedTimer recordTimer{ tRecord, cpuTimingEnabled };
                 RenderRect scissor(int32_t(scissorTl & 0x3FFF), int32_t((scissorTl >> 16) & 0x3FFF), int32_t(scissorBr & 0x3FFF), int32_t((scissorBr >> 16) & 0x3FFF));
-                uint32_t windowOffset = Reg(REG_PA_SC_WINDOW_OFFSET);
+                uint32_t windowOffset = state.viewport.windowOffset;
                 if (!(scissorTl & 0x80000000u) && windowOffset)
                 {
                     int32_t ox = int32_t(windowOffset << 17) >> 17, oy = int32_t(windowOffset << 1) >> 17;
@@ -7275,8 +7245,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     // identity that can later support an oracle mapping decision.
                     const uint32_t targetFormat = (colorInfo >> 16) & 0xF;
                     const uint32_t targetBase = colorInfo & 0xFFF;
-                    const uint32_t f0 = Reg(REG_FETCH_CONSTANTS);
-                    const uint32_t f1 = Reg(REG_FETCH_CONSTANTS + 1);
+                    const uint32_t f0 = state.fetchConstants.Read(0);
+                    const uint32_t f1 = state.fetchConstants.Read(1);
                     const uint32_t sampledAddress = (f1 >> 12) << 12;
                     const uint32_t sampledFormat = f1 & 0x3F;
                     const ResolvedSurface* sampled = (f0 & 3) == 2 ? FindResolved(sampledAddress, sampledFormat) : nullptr;
@@ -7307,7 +7277,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     p2Evidence << ",\"fetch_slots\":[";
                     for (uint32_t slot = 0; slot < 4; ++slot) {
                         uint32_t fetch[6];
-                        for (uint32_t word = 0; word < 6; ++word) fetch[word] = Reg(REG_FETCH_CONSTANTS + slot * 6 + word);
+                        for (uint32_t word = 0; word < 6; ++word) fetch[word] = state.fetchConstants.Read(slot * 6 + word);
                         std::optional<uint64_t> samplerKey;
                         samplerKey = ActualSamplerKey(shared.samplerIndex[slot]);
                         p2Evidence << (slot ? "," : "") << "{\"slot\":" << slot << ",\"words\":["
@@ -7352,7 +7322,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     if (depth) p2Evidence << depth->allocationSerial; else p2Evidence << "null";
                     p2Evidence << ",\"depth_extent\":";
                     if (depth) p2Evidence << '[' << depth->width << ',' << depth->height << ']'; else p2Evidence << "null";
-                    p2Evidence << "},\"render_state\":{\"color_control\":" << Reg(REG_RB_COLORCONTROL)
+                    p2Evidence << "},\"render_state\":{\"color_control\":" << state.pipeline.colorControl
                         << ",\"blend_control\":" << key.blend << ",\"color_mask\":" << key.colorMask
                         << ",\"exp_bias\":\"unknown\"}}\n";
                 }
@@ -7382,7 +7352,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 commandList->setGraphicsDescriptorSet(set3, 3);
                 if(vulkan) commandList->setGraphicsDescriptorSet(set4,4);
 
-                int32_t baseVertex = int32_t(Reg(REG_VGT_INDX_OFFSET));
+                int32_t baseVertex = int32_t(state.baseVertex);
                 static uint32_t drawLogs = 0;
                 if (psTraceRemaining && ps && key.ps == psTraceHash)
                 {
@@ -7423,12 +7393,12 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     // the head of every vertex stream (as floats).
                     std::string detail;
                     for (uint32_t ci : { 0u, 8u, 9u, 10u, 233u, 234u, 235u, 236u, 254u, 255u })
-                        detail += fmt::format(" c{}=({:g},{:g},{:g},{:g})", ci, RegF(REG_ALU_CONSTANTS + ci * 4), RegF(REG_ALU_CONSTANTS + ci * 4 + 1), RegF(REG_ALU_CONSTANTS + ci * 4 + 2), RegF(REG_ALU_CONSTANTS + ci * 4 + 3));
+                        detail += fmt::format(" c{}=({:g},{:g},{:g},{:g})", ci, state.AluConstantFloat(ci * 4), state.AluConstantFloat(ci * 4 + 1), state.AluConstantFloat(ci * 4 + 2), state.AluConstantFloat(ci * 4 + 3));
                     for (uint32_t slot = 0; slot < kVertexFetchSlots; slot++)
                     {
                         if (!((vs->info.vertexFetchSlotMask[slot >> 6] >> (slot & 63)) & 1))
                             continue;
-                        uint32_t d0 = Reg(REG_FETCH_CONSTANTS + slot * 2), d1 = Reg(REG_FETCH_CONSTANTS + slot * 2 + 1);
+                        uint32_t d0 = state.fetchConstants.Read(slot * 2), d1 = state.fetchConstants.Read(slot * 2 + 1);
                         detail += fmt::format(" vf{}=[type {} addr {:#x} dwords {} endian {}:", slot, d0 & 3, d0 & ~3u, (d1 >> 2) & 0xFFFFFF, d1 & 3);
                         const uint32_t* src = reinterpret_cast<const uint32_t*>(Phys(d0 & ~3u));
                         for (uint32_t i = 0; i < std::min(24u, (d1 >> 2) & 0xFFFFFF); i++)
@@ -7443,14 +7413,14 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         for (uint32_t ci = 0; ci < 256; ci++)
                         {
                             float v[4]; bool any = false;
-                            for (int k = 0; k < 4; k++) { v[k] = RegF(REG_ALU_CONSTANTS + ci * 4 + k); any |= v[k] != 0.0f; }
+                            for (int k = 0; k < 4; k++) { v[k] = state.AluConstantFloat(ci * 4 + k); any |= v[k] != 0.0f; }
                             if (any) consts += fmt::format(" c{}=({:g},{:g},{:g},{:g})", ci, v[0], v[1], v[2], v[3]);
                         }
                         SHADER_LOG_INFO("draw-constants", RendererByteFnv, "renderer: draw consts{}", consts);
                     }
                     if (info.indexed)
                     {
-                        detail += fmt::format(" idx=[base {:#x} words {} endian {} 32bit {} offset {}:", info.indexBase, info.indexBufferWords, info.indexEndian, info.index32, int32_t(Reg(REG_VGT_INDX_OFFSET)));
+                        detail += fmt::format(" idx=[base {:#x} words {} endian {} 32bit {} offset {}:", info.indexBase, info.indexBufferWords, info.indexEndian, info.index32, int32_t(state.baseVertex));
                         const uint8_t* src = Phys(info.indexBase);
                         for (int i = 0; i < 12; i++)
                         {
@@ -7485,13 +7455,13 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         for (uint32_t slot = 0; slot < kTextureSlots; slot++)
                         {
                             if (!((sh->info.textureSlotMask >> slot) & 1)) continue;
-                            uint32_t f0 = Reg(REG_FETCH_CONSTANTS + slot * 6), f1 = Reg(REG_FETCH_CONSTANTS + slot * 6 + 1), f2 = Reg(REG_FETCH_CONSTANTS + slot * 6 + 2);
+                            uint32_t f0 = state.fetchConstants.Read(slot * 6), f1 = state.fetchConstants.Read(slot * 6 + 1), f2 = state.fetchConstants.Read(slot * 6 + 2);
                             if ((f0 & 3) != 2) { texs += fmt::format(" t{}=[none]", slot); continue; }
                             uint32_t base = (f1 >> 12) << 12;
                             bool fromResolve = FindResolved(base, f1 & 0x3F) != nullptr;
-                            texs += fmt::format(" t{}=[fmt {} {}x{} at {:#x}{} sign={:#x} swizzle={:#x}]", slot, f1 & 0x3F, (f2 & 0x1FFF) + 1, ((f2 >> 13) & 0x1FFF) + 1, base, fromResolve ? " resolved" : "", (f0 >> 2) & 0xFF, (Reg(REG_FETCH_CONSTANTS + slot * 6 + 3) >> 1) & 0xFFF);
+                            texs += fmt::format(" t{}=[fmt {} {}x{} at {:#x}{} sign={:#x} swizzle={:#x}]", slot, f1 & 0x3F, (f2 & 0x1FFF) + 1, ((f2 >> 13) & 0x1FFF) + 1, base, fromResolve ? " resolved" : "", (f0 >> 2) & 0xFF, (state.fetchConstants.Read(slot * 6 + 3) >> 1) & 0xFFF);
                             texs += fmt::format(" fetch{}={:08x},{:08x},{:08x},{:08x},{:08x},{:08x}", slot, f0, f1, f2,
-                                Reg(REG_FETCH_CONSTANTS + slot * 6 + 3), Reg(REG_FETCH_CONSTANTS + slot * 6 + 4), Reg(REG_FETCH_CONSTANTS + slot * 6 + 5));
+                                state.fetchConstants.Read(slot * 6 + 3), state.fetchConstants.Read(slot * 6 + 4), state.fetchConstants.Read(slot * 6 + 5));
                         }
                     }
                     SHADER_LOG_INFO("draw-textures", RendererByteFnv, "renderer: draw textures{}", texs);
@@ -7499,13 +7469,13 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (drawLogs < 24 || (traceFrame && frame >= traceFrame && frame < traceFrame + traceCount))
                 {
                     drawLogs++;
-                    SHADER_LOG_INFO("draw-state", RendererByteFnv, "renderer: clip f{} vs={:016x} ps={:016x} control={:#x}", frame, key.vs, key.ps, Reg(0x2204));
+                    SHADER_LOG_INFO("draw-state", RendererByteFnv, "renderer: clip f{} vs={:016x} ps={:016x} control={:#x}", frame, key.vs, key.ps, state.pipeline.clipControl);
                     SHADER_LOG_INFO("draw-state", RendererByteFnv, "renderer: draw f{} prim={} n={} idx={} vs={:016x} ps={:016x} rt={:#x}/{} {}x{} depth={:#x} dinfo={:#x} blend={:#x} mask={:#x} cull={:#x} colorctl={:#x} aref={:g} ring(vs={:#x} ps={:#x} sh={:#x}) vp=({},{} {}x{} z {}..{}) vte={:#x} scissor=({},{})-({},{}) ndc=({},{}) off=({},{}) mode={} c255=({:g},{:g},{:g},{:g})",
                         frame, info.primitiveType, indexCount, useIndices, key.vs, key.ps, colorInfo & 0xFFF, (colorInfo >> 16) & 0xF, pitch, rtHeight, depthControl, depthInfo,
-                        key.blend, key.colorMask, key.modeCull, Reg(REG_RB_COLORCONTROL), RegF(REG_RB_ALPHA_REF), vsOffset, psOffset, sharedOffset,
+                        key.blend, key.colorMask, key.modeCull, state.pipeline.colorControl, state.pipeline.alphaRef, vsOffset, psOffset, sharedOffset,
                         viewport.x, viewport.y, viewport.width, viewport.height, viewport.minDepth, viewport.maxDepth, vte,
                         scissor.left, scissor.top, scissor.right, scissor.bottom, shared.ndcScale[0], shared.ndcScale[1], shared.ndcOffset[0], shared.ndcOffset[1], modeControl,
-                        RegF(REG_ALU_CONSTANTS + 255 * 4), RegF(REG_ALU_CONSTANTS + 255 * 4 + 1), RegF(REG_ALU_CONSTANTS + 255 * 4 + 2), RegF(REG_ALU_CONSTANTS + 255 * 4 + 3));
+                        state.AluConstantFloat(255 * 4), state.AluConstantFloat(255 * 4 + 1), state.AluConstantFloat(255 * 4 + 2), state.AluConstantFloat(255 * 4 + 3));
                 }
                 if (useIndices)
                 {
@@ -8411,13 +8381,13 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         save(prefix + ".indices.bin", indices.data(), indices.size() * sizeof(uint32_t));
                         std::ofstream meta(prefix + ".txt");
                         meta << fmt::format("vs={:016x}\nps={:016x}\nmode={}\ncount={}\nbase_vertex={}\nindexed={}\nviewport={} {} {} {}\n",
-                            key.vs, key.ps, modeControl, indexCount, int32_t(Reg(REG_VGT_INDX_OFFSET)), useIndices,
+                            key.vs, key.ps, modeControl, indexCount, int32_t(state.baseVertex), useIndices,
                             rasterViewport.x, rasterViewport.y, rasterViewport.width, rasterViewport.height);
                         meta << fmt::format("frame={}\nsubmitted={}\n", frame, drawsThisFrame);
                         for (uint32_t slot = 0; slot < kVertexFetchSlots; ++slot)
                         {
                             if (!((vs->info.vertexFetchSlotMask[slot >> 6] >> (slot & 63)) & 1)) continue;
-                            uint32_t d0 = Reg(REG_FETCH_CONSTANTS + slot * 2), d1 = Reg(REG_FETCH_CONSTANTS + slot * 2 + 1);
+                            uint32_t d0 = state.fetchConstants.Read(slot * 2), d1 = state.fetchConstants.Read(slot * 2 + 1);
                             uint32_t words = (d1 >> 2) & 0xFFFFFF;
                             std::vector<uint32_t> stream(words);
                             geometry_prepare::CopyDwordsSwapped(stream.data(), Phys(d0 & ~3u), words, d1 & 3);
@@ -8444,8 +8414,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     }
                     if (captureTexture0) {
                         const auto& texture = *captureTexture0;
-                        const uint32_t fetchBase = (Reg(REG_FETCH_CONSTANTS + 1) >> 12) << 12;
-                        const uint32_t fetchAddress = fetchBase ? fetchBase : (Reg(REG_FETCH_CONSTANTS + 5) >> 12) << 12;
+                        const uint32_t fetchBase = (state.fetchConstants.Read(1) >> 12) << 12;
+                        const uint32_t fetchAddress = fetchBase ? fetchBase : (state.fetchConstants.Read(5) >> 12) << 12;
                         debugTrace << fmt::format("texture_binding slot=0 bank={} kind={} guest_width={} guest_height={} host_width={} host_height={} parent_width={} parent_height={} resolve_age={} resolve_gap={} producer_state={} producer_age={} producer_draws={} resolve_counter={} guest_fetch_address={:#x} guest_format={}\n",
                             texture.bank, uint32_t(texture.kind), texture.guestExtent[0], texture.guestExtent[1],
                             texture.hostExtent[0], texture.hostExtent[1], texture.parentExtent[0], texture.parentExtent[1],
@@ -8519,14 +8489,14 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         else if (jitterLogSkinned) jitterLogSlot = 233;
                     }
                     if (jitterLogSlot >= 0)
-                        for (unsigned i = 0; i < 16; ++i) guestVp[i] = Reg(REG_ALU_CONSTANTS + jitterLogSlot * 4 + i);
+                        for (unsigned i = 0; i < 16; ++i) guestVp[i] = state.AluConstant(jitterLogSlot * 4 + i);
                     const bool shadowPair = jitterShadowPair;
                     if (shadowPair)
-                        for (unsigned i = 0; i < 16; ++i) guestShadow[i] = Reg(REG_ALU_CONSTANTS + 256 * 4 + 2 * 4 + i);
+                        for (unsigned i = 0; i < 16; ++i) guestShadow[i] = state.AluConstant(256 * 4 + 2 * 4 + i);
                     const bool staticMesh = jitterLogStaticMesh;
                     SHADER_LOG_INFO("temporal", RendererByteFnv, "renderer temporal draw f{} submitted={} vs={:016x} ps={:016x} slot={} log_slot={} indices={} index_base={:x} base_vertex={} fetch95={:08x},{:08x} world_c0_c3={:016x} enabled={} viewport={} applied={} shadow={} rejection={} phase={} ndc=({:.9g},{:.9g}) extent={}x{} depth={} layer_bias={:.9g} sampled_depth={:x}/{} scene_depth={:x}/{} vp_guest=[{}] vp_upload=[{}] ps_c2_c5_guest=[{}] ps_c2_c5_upload=[{}]",
                         frame, drawsThisFrame, key.vs, key.ps, temporalSlot, jitterLogSlot, info.indexCount, info.indexBase, baseVertex,
-                        Reg(REG_FETCH_CONSTANTS + 190), Reg(REG_FETCH_CONSTANTS + 191), staticMesh ? Fnv1a(vsConstants, 16 * sizeof(uint32_t)) : 0,
+                        state.fetchConstants.Read(190), state.fetchConstants.Read(191), staticMesh ? Fnv1a(vsConstants, 16 * sizeof(uint32_t)) : 0,
                         temporalExperiment && temporalJitter, temporalViewport,
                         drawJitter.applied, drawJitter.shadowCompensated, uint32_t(drawJitter.rejection), uint32_t(frame % 32 + 1),
                         drawJitter.sample.ndcX, drawJitter.sample.ndcY, rasterViewport.width, rasterViewport.height,
@@ -8570,7 +8540,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             .blend = key.blend,
                             .depthControl = key.depthControl,
                             .modeCull = key.modeCull,
-                            .colorControl = Reg(REG_RB_COLORCONTROL),
+                            .colorControl = state.pipeline.colorControl,
                             .guestTargetFormat = (colorInfo >> 16) & 0xF,
                             .targetExpBias = targetExpBias,
                             .vtxFmt = shared.vtxFmt,
@@ -8710,7 +8680,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     for (uint32_t slot = 0; slot < kVertexFetchSlots; slot++)
                     {
                         if (!((vs->info.vertexFetchSlotMask[slot >> 6] >> (slot & 63)) & 1)) continue;
-                        uint32_t d0 = Reg(REG_FETCH_CONSTANTS + slot * 2), d1 = Reg(REG_FETCH_CONSTANTS + slot * 2 + 1);
+                        uint32_t d0 = state.fetchConstants.Read(slot * 2), d1 = state.fetchConstants.Read(slot * 2 + 1);
                         uint32_t sizeDwords = (d1 >> 2) & 0xFFFFFF;
                         uint32_t stride = info.indexCount ? sizeDwords / info.indexCount : 0;
                         if ((d0 & 3) != 3 || stride < 3) break;
@@ -8744,7 +8714,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     {
                         const bool depthFloat = ((depthInfo >> 16) & 1) != 0;
                         const uint32_t depth24 = depthFloat ? Float32To20e4(rectZ) : PackDepth24Unorm(rectZ);
-                        const uint32_t word = (depth24 << 8) | (Reg(REG_RB_STENCILREFMASK) & 0xFF);
+                        const uint32_t word = (depth24 << 8) | (state.pipeline.stencilRefMask & 0xFF);
                         static uint32_t loggedFills = 0;
                         for (auto& [k, tex] : renderTargets)
                         {
@@ -9362,7 +9332,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             // destination memory (destPitch x destHeight texels, rectangle placed at its
             // window position). No GPU sync, no tiling, no guest memory writes.
             bool ResolveOnGpu(HostTexture& color, uint32_t destBase, uint32_t destFormat, uint32_t destPitch, uint32_t destHeight,
-                              uint32_t x0, uint32_t y0, uint32_t w, uint32_t h)
+                              uint32_t x0, uint32_t y0, uint32_t w, uint32_t h, bool swapRedBlue)
             {
                 if (!Begin()) return false;
                 const uint32_t guestW = std::clamp<uint32_t>(std::max(destPitch, x0 + w), 1, 8192);
@@ -9420,7 +9390,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
                 rs.destFormat = destFormat;
                 rs.destPitch = destPitch;
-                rs.swapRedBlue = ((Reg(REG_RB_COPY_DEST_INFO) >> 24) & 1) != 0;
+                rs.swapRedBlue = swapRedBlue;
                 if (x0 >= texW || y0 >= texH) return true;
                 w = std::min(w, texW - x0);
                 h = std::min(h, texH - y0);
@@ -9484,31 +9454,31 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 return true;
             }
 
-            void Resolve()
+            void Resolve(const DrawState& state)
             {
                 ScopedTimer timer{ tResolve, cpuTimingEnabled };
                 nResolve++;
                 consecutiveResolveCopies.BeginResolve();
-                ResolveImpl();
+                ResolveImpl(state);
                 consecutiveResolveCopies.EndResolve();
             }
 
-            void ResolveImpl()
+            void ResolveImpl(const DrawState& state)
             {
-                uint32_t copyControl = Reg(REG_RB_COPY_CONTROL);
+                uint32_t copyControl = state.resolve.control;
                 uint32_t srcSelect = copyControl & 7;
-                uint32_t destBase = Reg(REG_RB_COPY_DEST_BASE) & 0x1FFFFFFF;
-                uint32_t destPitchReg = Reg(REG_RB_COPY_DEST_PITCH);
+                uint32_t destBase = state.resolve.destinationBase & 0x1FFFFFFF;
+                uint32_t destPitchReg = state.resolve.destinationPitch;
                 uint32_t destPitch = destPitchReg & 0x3FFF;
                 uint32_t destHeight = (destPitchReg >> 16) & 0x3FFF;
-                uint32_t destInfo = Reg(REG_RB_COPY_DEST_INFO);
+                uint32_t destInfo = state.resolve.destinationInfo;
                 uint32_t destFormat = (destInfo >> 7) & 0x3F;
                 uint32_t destEndian = destInfo & 7;
 
-                uint32_t surfaceInfo = Reg(REG_RB_SURFACE_INFO);
+                uint32_t surfaceInfo = state.targets.surfaceInfo;
                 uint32_t pitch = surfaceInfo & 0x3FFF;
-                uint32_t scissorBr = Reg(REG_PA_SC_WINDOW_SCISSOR_BR);
-                uint32_t scissorTl = Reg(REG_PA_SC_WINDOW_SCISSOR_TL);
+                uint32_t scissorBr = state.viewport.scissorBR;
+                uint32_t scissorTl = state.viewport.scissorTL;
                 uint32_t rtHeight = GuessTargetHeight(pitch, (scissorBr >> 16) & 0x3FFF);
                 if (pitch == 0 || destPitch == 0 || destHeight == 0 || destBase == 0)
                     return;
@@ -9522,7 +9492,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 bool depthCopy = srcSelect == 4;
                 if (depthCopy)
                 {
-                    uint32_t depthInfo = Reg(REG_RB_DEPTH_INFO);
+                    uint32_t depthInfo = state.targets.depthInfo;
                     HostTexture* depthRt = GetRenderTarget(depthInfo & 0xFFF, (depthInfo >> 16) & 1, pitch, rtHeight, true);
                     if (depthRt && !resolveReadback)
                     {
@@ -9536,7 +9506,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         if (!warned) { LOG_WARNING("renderer: depth resolve readback not implemented"); warned = true; }
                     }
                     if (!Begin()) return;
-                    if (copyControl & 0x200) ClearDepthTarget(pitch, rtHeight);
+                    if (copyControl & 0x200) ClearDepthTarget(state, pitch, rtHeight);
                     return;
                 }
                 if (resolveReadback && destFormat != 6 && destFormat != 7 && destFormat != 32)
@@ -9546,7 +9516,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     return;
                 }
 
-                uint32_t colorInfo = Reg(REG_RB_COLOR_INFO + (srcSelect < 4 ? (srcSelect == 0 ? 0 : 2 + (srcSelect - 1)) : 0));
+                uint32_t colorInfo = state.targets.colorInfo[srcSelect < 4 ? srcSelect : 0];
                 {
                     const uint32_t traceFrame = TraceFrame();
                     static const uint32_t traceCount = getenv("LO_DRAW_TRACE_COUNT") ? strtoul(getenv("LO_DRAW_TRACE_COUNT"), nullptr, 10) : 1;
@@ -9561,7 +9531,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (!color || !color->texture) return;
                 if (!resolveReadback)
                 {
-                    if (!ResolveOnGpu(*color, destBase, destFormat, destPitch, destHeight, x0, y0, copyWidth, copyHeight))
+                    if (!ResolveOnGpu(*color, destBase, destFormat, destPitch, destHeight, x0, y0, copyWidth, copyHeight, ((destInfo >> 24) & 1) != 0))
                         return;
                     InvalidateRange(destBase, ((destPitch + 31) & ~31u) * copyHeight * (destFormat == 32 ? 8 : 4));
                 }
@@ -9675,7 +9645,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (copyControl & 0x100)
                 {
                     consecutiveResolveCopies.Invalidate();
-                    uint32_t clear = Reg(REG_RB_COLOR_CLEAR);
+                    uint32_t clear = state.resolve.colorClear;
                     RenderColor c(float((clear >> 16) & 0xFF) / 255.0f, float((clear >> 8) & 0xFF) / 255.0f, float(clear & 0xFF) / 255.0f, float(clear >> 24) / 255.0f);
                     Transition(*color, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
                     commandList->setFramebuffer(GetFramebuffer(color, nullptr));
@@ -9691,18 +9661,18 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     color->sdrProducerFrame = ~0ull;
                 }
                 if (copyControl & 0x200)
-                    ClearDepthTarget(pitch, rtHeight);
+                    ClearDepthTarget(state, pitch, rtHeight);
             }
 
-            void ClearDepthTarget(uint32_t pitch, uint32_t rtHeight)
+            void ClearDepthTarget(const DrawState& state, uint32_t pitch, uint32_t rtHeight)
             {
                 consecutiveResolveCopies.Invalidate();
-                uint32_t depthInfo = Reg(REG_RB_DEPTH_INFO);
+                uint32_t depthInfo = state.targets.depthInfo;
                 HostTexture* depth = GetRenderTarget(depthInfo & 0xFFF, (depthInfo >> 16) & 1, pitch, rtHeight, true);
                 if (!depth || !depth->texture) return;
                 Transition(*depth, RenderTextureLayout::DEPTH_WRITE, RenderBarrierStage::GRAPHICS);
                 commandList->setFramebuffer(GetFramebuffer(nullptr, depth));
-                uint32_t clear = Reg(REG_RB_DEPTH_CLEAR);
+                uint32_t clear = state.resolve.depthClear;
                 commandList->clearDepthStencil(true, true, float(clear >> 8) / 16777215.0f, clear & 0xFF);
                 if (taa_collection::Enabled()) depth->bindingProducer.Clear(taa_collection::ConsentEpoch(), frame, true);
             }
@@ -9809,10 +9779,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
         }
     }
 
-    void Draw(const DrawInfo& info)
+    void Draw(const DrawState& state)
     {
         if (g_renderer)
-            g_renderer->Draw(info);
+            g_renderer->Draw(state);
     }
 
     void FinalizeDebugCapture(bool ok);
@@ -10651,7 +10621,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
     bool Init() { return false; }
     void Shutdown() {}
     void ScaleResolvedSize(uint32_t, uint32_t&, uint32_t&) {}
-    void Draw(const DrawInfo&) {}
+    void Draw(const DrawState&) {}
     bool DrainForFrameGenerationReconfigure() { return true; }
     void Flush() {}
     void PreparePresent(uint32_t) {}

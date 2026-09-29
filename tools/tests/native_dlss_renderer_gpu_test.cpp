@@ -93,12 +93,8 @@ void ReportDlssExecution(const DlssExecutionObservation& observation) {
 }
 }
 namespace gpu::taa_collection { bool Enabled() { return false; } }
-// Only the resolve's swap-red/blue MMIO bit is used by the new asset-free case.
-// Register setup is synthetic; actual resolve/copy and handoff code is unchanged.
-namespace gpu {
-CommandProcessor g_commandProcessor;
-uint32_t CommandProcessor::ReadRegister(uint32_t) { return 0; }
-}
+// Resolve copy flags are explicit inputs; this fixture no longer needs a
+// synthetic command processor or MMIO register reader.
 
 
 namespace {

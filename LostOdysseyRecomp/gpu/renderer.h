@@ -6,28 +6,18 @@ namespace gpu::frame_generation { struct ResolvedHandoff; struct CompositeHandof
 #include <vector>
 #include <string>
 #include "present_capture.h"
+#include "draw_state.h"
 
 namespace plume { struct RenderTexture; }
 namespace gpu::frame_plan { struct FramePlan; }
 namespace gpu::frame_plan { enum class SurfaceRole : uint32_t; }
 
-// Xenos draw backend on plume: turns the command processor's register state
-// plus a DRAW_INDX packet into host draws, emulates EDRAM render targets as
+// Shared Xenos draw backend on plume: consumes explicit draw state, emulates
+// EDRAM render targets as
 // host textures and writes resolves back into guest memory. Everything runs
 // on the command processor thread.
 namespace gpu::renderer
 {
-    struct DrawInfo
-    {
-        uint32_t primitiveType = 0;     // xenos::PrimitiveType
-        uint32_t indexCount = 0;        // VGT_DRAW_INITIATOR.num_indices
-        bool indexed = false;           // source select kDMA
-        uint32_t indexBase = 0;         // guest physical address of the index buffer
-        uint32_t indexBufferWords = 0;  // VGT_DMA_SIZE.num_words
-        uint32_t indexEndian = 0;       // VGT_DMA_SIZE.swap_mode
-        bool index32 = false;           // VGT_DRAW_INITIATOR.index_size
-    };
-
     // Initialises against the presenter's device; returns false without a GPU.
     bool Init();
     void Shutdown();
@@ -60,8 +50,9 @@ namespace gpu::renderer
     // Normal window close waits for the in-flight archive before process exit.
     void WaitDebugCaptureArchive();
 
-    // Called for every DRAW_INDX / DRAW_INDX_2 after the registers were updated.
-    void Draw(const DrawInfo& info);
+    // Synchronous, CP-worker-only. Borrowed state must remain valid until return.
+    // Both native and legacy adapters call this same preparation/recording path.
+    void Draw(const DrawState& state);
 
     // Called on XE_SWAP before the frontbuffer is presented: finishes all work.
     void Flush();
