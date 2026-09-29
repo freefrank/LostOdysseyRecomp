@@ -1632,13 +1632,29 @@ namespace gpu::renderer
                 uint64_t vsOffset = UINT64_MAX;
                 uint64_t psOffset = UINT64_MAX;
                 uint64_t sharedOffset = UINT64_MAX;
+                // Snapshot generation (+1) each uploaded ALU bank came from; 0 when
+                // unknown or when the draw modified its copy (jitter).
+                uint64_t vsGeneration = 0, psGeneration = 0;
             };
             UploadedConstants uploadedConstants[kGpuSlots];
 
-            uint64_t UploadUnchanged(int bank, const void* data, size_t size)
+            // ALU constants are read from the command processor only when a bank's
+            // generation changed. drawConstants is the copy a draw may modify (TAA
+            // jitter); it is restored from the snapshot after a modification.
+            uint32_t constantSnapshot[2][256 * 4]{};
+            uint64_t constantSnapshotGeneration[2]{UINT64_MAX, UINT64_MAX};
+            uint32_t drawConstants[2][256 * 4]{};
+            bool drawConstantsModified[2]{true, true};
+
+            // generation: snapshot generation + 1 when data is the unmodified snapshot
+            // of that generation, else 0. A matching generation skips the compare.
+            uint64_t UploadUnchanged(int bank, const void* data, size_t size, uint64_t generation = 0)
             {
                 auto& before = uploadedConstants[gpuSlot];
                 uint64_t lastOffset = bank == 0 ? before.vsOffset : bank == 1 ? before.psOffset : before.sharedOffset;
+                const uint64_t lastGeneration = bank == 0 ? before.vsGeneration : bank == 1 ? before.psGeneration : 0;
+                if (generation && lastOffset != UINT64_MAX && lastGeneration == generation)
+                    return lastOffset;
                 const void* last = bank == 0 ? static_cast<const void*>(before.vs) :
                     bank == 1 ? static_cast<const void*>(before.ps) : static_cast<const void*>(&before.shared);
                 if (lastOffset != UINT64_MAX && std::memcmp(last, data, size) == 0)
@@ -1647,8 +1663,8 @@ namespace gpu::renderer
                 auto& after = uploadedConstants[gpuSlot];
                 if (offset != UINT64_MAX)
                 {
-                    if (bank == 0) { std::memcpy(after.vs, data, size); after.vsOffset = offset; }
-                    else if (bank == 1) { std::memcpy(after.ps, data, size); after.psOffset = offset; }
+                    if (bank == 0) { std::memcpy(after.vs, data, size); after.vsOffset = offset; after.vsGeneration = generation; }
+                    else if (bank == 1) { std::memcpy(after.ps, data, size); after.psOffset = offset; after.psGeneration = generation; }
                     else { std::memcpy(&after.shared, data, size); after.sharedOffset = offset; }
                 }
                 return offset;
@@ -5885,16 +5901,45 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 // for either stage. Uploading fewer left the tail reading back
                 // as zero, which zeroed the light terms of every character
                 // material - they index c[253..255].
-                uint32_t vsConstants[256 * 4], psConstants[256 * 4];
+                auto& vsConstants = drawConstants[0];
+                auto& psConstants = drawConstants[1];
+                uint64_t constantGeneration[2]{};
                 // Preserve the full banks and zero-register MMIO fallback. The
                 // diagnostic switch provides a same-binary performance control.
                 static const bool legacyConstants = getenv("LO_LEGACY_CONSTANT_READS") != nullptr;
+                // LO_CONSTANT_SNAPSHOT_VERIFY=1 compares every reused snapshot with a
+                // full register read and logs any bank that changed without a
+                // generation change (a store that bypassed WriteRegister).
+                static const bool verifyConstants = getenv("LO_CONSTANT_SNAPSHOT_VERIFY") != nullptr;
                 if (legacyConstants) {
                     for (uint32_t i = 0; i < 256 * 4; i++) vsConstants[i] = Reg(REG_ALU_CONSTANTS + i);
                     for (uint32_t i = 0; i < 256 * 4; i++) psConstants[i] = Reg(REG_ALU_CONSTANTS + 256 * 4 + i);
+                    drawConstantsModified[0] = drawConstantsModified[1] = true;
                 } else {
-                    g_commandProcessor.ReadRegisters(REG_ALU_CONSTANTS, 256 * 4, vsConstants);
-                    g_commandProcessor.ReadRegisters(REG_ALU_CONSTANTS + 256 * 4, 256 * 4, psConstants);
+                    for (uint32_t bank = 0; bank < 2; ++bank) {
+                        const uint64_t generation = g_commandProcessor.ConstantGeneration(bank);
+                        const bool refresh = generation != constantSnapshotGeneration[bank];
+                        if (refresh) {
+                            g_commandProcessor.ReadRegisters(REG_ALU_CONSTANTS + bank * 256 * 4, 256 * 4, constantSnapshot[bank]);
+                            constantSnapshotGeneration[bank] = generation;
+                        } else if (verifyConstants) {
+                            uint32_t check[256 * 4];
+                            g_commandProcessor.ReadRegisters(REG_ALU_CONSTANTS + bank * 256 * 4, 256 * 4, check);
+                            if (std::memcmp(check, constantSnapshot[bank], sizeof(check)) != 0) {
+                                static uint32_t reported = 0;
+                                if (reported++ < 16)
+                                    LOG_ERROR("renderer: {} constants changed without a generation change (frame {})",
+                                        bank ? "pixel" : "vertex", frame);
+                                std::memcpy(constantSnapshot[bank], check, sizeof(check));
+                                drawConstantsModified[bank] = true;
+                            }
+                        }
+                        if (refresh || drawConstantsModified[bank]) {
+                            std::memcpy(drawConstants[bank], constantSnapshot[bank], sizeof(drawConstants[bank]));
+                            drawConstantsModified[bank] = false;
+                        }
+                        constantGeneration[bank] = generation + 1;
+                    }
                 }
                 // Diagnostic selection uses only GPU draw constants, not the CPU
                 // presented-swap counter. Shader/layout recognition is deliberately
@@ -6184,6 +6229,11 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     vsConstants, psConstants, &temporalScene.Depth(), jitterSampledDepth ? &*jitterSampledDepth : nullptr,
                     ActiveTaaOptions().jitter_scale, dlssSrRequested ? &frameRasterJitter : nullptr,
                     constantScreenSample);
+                // Jitter writes the draw's constant copy; the next draw restores it.
+                if (drawJitter.applied) {
+                    drawConstantsModified[0] = true;
+                    if (drawJitter.shadowCompensated) drawConstantsModified[1] = true;
+                }
                 if (temporalActive && drawJitter.applied) {
                     if (!actualRasterJitterCaptured) {
                         actualRasterJitter = drawJitter.sample;
@@ -7080,8 +7130,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 tBind0.AddTo(tBind);
                 render_batch::CpuTimer<> tIndex0(cpuTimingEnabled);
 
-                uint64_t vsOffset = UploadUnchanged(0, vsConstants, sizeof(vsConstants));
-                uint64_t psOffset = UploadUnchanged(1, psConstants, sizeof(psConstants));
+                uint64_t vsOffset = UploadUnchanged(0, vsConstants, sizeof(vsConstants),
+                    drawConstantsModified[0] ? 0 : constantGeneration[0]);
+                uint64_t psOffset = UploadUnchanged(1, psConstants, sizeof(psConstants),
+                    drawConstantsModified[1] ? 0 : constantGeneration[1]);
                 uint64_t sharedOffset = UploadUnchanged(2, &shared, sizeof(shared));
                 if (vsOffset == UINT64_MAX || psOffset == UINT64_MAX || sharedOffset == UINT64_MAX)
                 {

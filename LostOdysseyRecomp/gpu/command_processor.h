@@ -53,6 +53,11 @@ namespace gpu
         uint32_t ReadRegister(uint32_t index);
         // Same values as ordered ReadRegister calls, without a call per word.
         void ReadRegisters(uint32_t first, uint32_t count, uint32_t* destination);
+        // ALU constant banks (0: vertex 0x4000-0x43FF, 1: pixel 0x4400-0x47FF). The
+        // generation changes whenever WriteRegister changes a value in the bank, so
+        // the renderer re-reads a bank only after it changed.
+        static constexpr uint32_t kAluConstantBase = 0x4000, kAluConstantBankSize = 0x400;
+        uint64_t ConstantGeneration(uint32_t bank) const { return m_constantGeneration[bank & 1].load(std::memory_order_acquire); }
         // Microcode of the last IM_LOAD for the vertex (false) / pixel (true) stage.
         const uint32_t* GetActiveShader(bool pixel, uint32_t& dwordCount, uint64_t& commandHash) const;
         // Byte identity of the owned IM_LOAD snapshot; resolved once per change.
@@ -112,6 +117,7 @@ namespace gpu
         std::mutex m_writePtrMutex;
         std::condition_variable m_writePtrChanged;
         std::atomic<uint32_t> m_counter{ 0 };
+        std::atomic<uint64_t> m_constantGeneration[2]{};
         std::atomic<bool> m_running{ false };
 
         uint32_t m_interruptCallback = 0;

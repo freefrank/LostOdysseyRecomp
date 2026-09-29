@@ -221,6 +221,7 @@ namespace gpu
     bool CommandProcessor::Init()
     {
         m_registers.assign(REGISTER_COUNT, 0);
+        for (auto& generation : m_constantGeneration) generation.fetch_add(1, std::memory_order_release);
 
         // Registers the guest reads back through plain loads: keep the MMIO
         // window populated with big-endian values (Xenia ReadRegister defaults).
@@ -392,7 +393,10 @@ namespace gpu
             break;
         }
 
+        const bool constantChanged = index - kAluConstantBase < 2 * kAluConstantBankSize && m_registers[index] != value;
         m_registers[index] = value;
+        if (constantChanged)
+            m_constantGeneration[(index - kAluConstantBase) / kAluConstantBankSize].fetch_add(1, std::memory_order_release);
 
         // Guest code reads registers back with plain loads from the MMIO
         // window (the D3D interrupt handler inspects the scratch registers),
