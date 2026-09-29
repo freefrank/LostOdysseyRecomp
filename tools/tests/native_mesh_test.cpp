@@ -28,7 +28,7 @@ int main()
         indexed32.dmaSize == 0xc001fffe, "32-bit SDK index count/start/endian contract");
     Check(QualifyDirty({0,0,1ull<<17}) == Reject::ShaderPrepare, "shader preparation has guest side effects");
     Check(QualifyDirty({0,0,1,0,0,1}) == Reject::DerivedPrepare, "derived state intersection cannot be cleared");
-    Check(QualifyDirty({0,0,0,0,1ull<<49}) == Reject::StreamPrepare, "stream event preparation remains ordered legacy");
+    Check(QualifyDirty({0,0,0,0,1ull<<49}) == Reject::None, "stream coherency is now a semantic native operation");
     DirtyState dirty{(1ull<<63)|1, (1ull<<62)|1,
         (1ull<<11)|(1ull<<12)|(1ull<<57)|(1ull<<21),
         (1ull<<31)|(1ull<<34), (1ull<<37)|(1ull<<38)|(1ull<<56), 0};
@@ -41,7 +41,7 @@ int main()
     Check(Decode(std::span(storage.data()+1, prepared.words-1), decoded), "validate native mesh");
     Check(decoded.producerRevision == 37, "producer revision transported by value");
     std::vector<uint32_t> registers(0x5003, 0x11111111);
-    ApplyDeltas(decoded, [&](uint32_t index, uint32_t value){ registers[index] = value; });
+    ApplyDeltas(decoded, [&](uint32_t index, uint32_t value){ registers[index] = value; }, [](uint32_t) { Check(false, "unexpected stream group in v1 fixture"); });
     Check(registers[0x4000] == source(1920) && registers[0x43ff] == source(1920+4092), "VS dirty chunk ordering");
     Check(registers[0x4410] == source(6016+64) && registers[0x47ff] == source(6016+4092), "PS dirty chunk ordering");
     Check(registers[0x2200] == source(10548) && registers[0x2184] == source(10528+16), "main dirty bit rotation");
@@ -54,7 +54,7 @@ int main()
     // A replay observes new inherited values, while captured values cannot be
     // changed by producer overwrites of the original device state.
     registers[0x2101] = 99; registers[0x4000] = 42;
-    ApplyDeltas(decoded, [&](uint32_t index, uint32_t value){ registers[index] = value; });
+    ApplyDeltas(decoded, [&](uint32_t index, uint32_t value){ registers[index] = value; }, [](uint32_t) { Check(false, "unexpected stream group in v1 fixture"); });
     Check(registers[0x2101] == 99 && registers[0x4000] == source(1920), "replay stable payload and inherited state");
     auto bad = storage;
     bad[2] |= 0x8000;
@@ -64,11 +64,29 @@ int main()
     Check(!Decode(std::span(storage.data()+1, prepared.words-2), decoded), "truncated body rejected");
     bad = storage; bad[3] |= 0x4000;
     Check(!Decode(std::span(bad.data()+1, prepared.words-1), decoded), "unsupported initiator bits rejected");
+    // Older value-owned v1 command buffers still replay. The new stream group
+    // is never accepted under the old version, including a truncated prefix.
+    auto oldVersion = storage; oldVersion[2] = (1u << 16) | (storage[2] & 0xffff);
+    Check(Decode(std::span(oldVersion.data()+1,prepared.words-1),decoded), "v1 record compatibility");
+    DirtyState streamDirty{}; streamDirty.misc = (1ull<<49)|(1ull<<54)|(1ull<<56);
+    Check(Prepare(indexed16,streamDirty,prepared), "stream updates enter native pre-flush path");
+    Check(Encode(prepared,38,source,storage), "stream control captured by value");
+    Check(Decode(std::span(storage.data()+1,prepared.words-1),decoded), "stream wire validated");
+    Check(decoded.streamControl == source(10396), "coherency control retains recording-time value");
+    std::vector<uint32_t> execution;
+    ApplyDeltas(decoded, [&](uint32_t index,uint32_t value) {
+        execution.push_back(index); registers[index]=value;
+    }, [&](uint32_t control) { Check(control==source(10396), "owned stream control"); execution.push_back(0xffffffff); });
+    Check(execution.front()==0xffffffff && execution[1]==0x2388 && execution[5]==0x239c &&
+        execution[9]==0x4900 && execution.back()==0x2102, "wait before stream fetch before bool/loop before base vertex");
+    Check(registers[0x2388]==source(10272) && registers[0x239f]==source(10272+23*4), "stream mask rotation and endpoints");
+    storage[2]=(1u<<16)|(storage[2]&0xffff);
+    Check(!Decode(std::span(storage.data()+1,prepared.words-1),decoded), "stream group requires v2");
     // All dirty masks fit a bounded record and decode without reading slack.
     std::mt19937_64 random(47);
     for (int trial = 0; trial < 300; ++trial) {
         DirtyState sample{random(),random(),random(),random(),random(),0};
-        sample.main &= ~(15ull<<17); sample.misc &= ~(63ull<<49);
+        sample.main &= ~(15ull<<17);
         Check(Prepare(AutoDraw(4,17,311),sample,prepared), "bounded random group preparation");
         Check(Encode(prepared,uint64_t(trial),source,storage), "bounded random group encoding");
         Check(Decode(std::span(storage.data()+1,prepared.words-1),decoded), "bounded random group decoding");

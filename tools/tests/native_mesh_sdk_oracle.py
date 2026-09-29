@@ -1,6 +1,6 @@
 """Build a bounded SDK oracle from canonical generated sources, without exporting them.
 
-Only the two ordinary draw entries and three pure dirty writers are selected.
+Only the two ordinary draw entries and the dirty writers, including stream coherency are selected.
 Save/restore helper shims preserve their nonvolatile registers; unsupported SDK
 allocation/shader/recording helpers fail immediately rather than pretending to run.
 """
@@ -9,7 +9,7 @@ import argparse
 from pathlib import Path
 import re
 
-SELECTED = {"823C6860", "827B56B0", "823C1BD8", "823C6CB8", "823C78E0"}
+SELECTED = {"823C6860", "827B56B0", "823C1BD8", "823C6CB8", "823C78E0", "823C7A40"}
 ENTRIES = {"823C6860", "827B56B0"}
 
 

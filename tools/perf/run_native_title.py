@@ -19,6 +19,8 @@ import time
 
 import psutil
 
+from native_probe_log import NativeProbeLog, frontend_delta, probe_environment
+
 
 def metadata(root: Path) -> list[tuple[str, int, int]]:
     paths = [root / "settings.ini"]
@@ -33,7 +35,7 @@ def latest_frame(log: Path) -> int:
         return 0
     with log.open("rb") as stream:
         stream.seek(max(0, log.stat().st_size - 131072))
-        matches = re.findall(rb"frame timing completed=(\d+)", stream.read())
+        matches = re.findall(rb"(?:frame|present) timing completed=(\d+)", stream.read())
     return int(matches[-1]) if matches else 0
 
 
@@ -122,6 +124,12 @@ def main() -> int:
     for name in ("build", "baseline", "game", "output"):
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--mode", choices=("off", "registers", "all"), required=True)
+    parser.add_argument("--native-frontend", choices=("off", "mesh"), default="off",
+                        help="ordinary SDK pre-flush frontend; independent of legacy --mode")
+    parser.add_argument("--render-timing", action="store_true",
+                        help="explicit diagnostic renderer timing; excluded from ordinary performance acceptance")
+    parser.add_argument("--frontend-stats", action="store_true",
+                        help="diagnostic fallback and remaining PM4 opcode counts")
     parser.add_argument("--scene", choices=("title", "uhra"), default="title")
     parser.add_argument("--scene-stats", action="store_true",
                         help="enable LO_GPU_STATS scene heartbeats and renderer CPU timers")
@@ -171,24 +179,16 @@ def main() -> int:
                     antialiasing="0", upscaler="0", internal_resolution="720",
                     frame_generation_provider="0", automatic_updates="0", skip_shader_prebuild="1")
     settings_path.write_text("\n".join(f"{k}={v}" for k, v in settings.items()) + "\n", encoding="utf-8")
-    env = {k: v for k, v in os.environ.items()
-           if not k.startswith(("LO_", "VK_LAYER", "VK_INSTANCE_LAYERS"))}
-    env.update(LO_NATIVE_COMMANDS="0" if args.mode == "off" else args.mode,
-               LO_BACKGROUND="1", LO_AUDIO_MUTE="1", LO_DLSS_FG="0", LO_FG_PROVIDER="off",
-               LO_FRAME_TIMING="1", LO_LOG_FILE=str(run / "runtime.log"),
-               LO_SHADER_CACHE_DIR=str(run / "shader-cache"),
-               LO_SCREENSHOT_REQUEST=str(run / "screenshot-request.txt"),
-               LO_SCREENSHOT_PATH=str(run / "scene.ppm"))
-    if args.scene == "uhra":
-        env.update(LO_AUTO_BUTTONS="s@120,a@240,a@360,a@480,a@700,a@900",
-                   LO_AUTO_PULSE="6", LO_AUTO_STICK="0,18000,1600,1900")
-        if args.scene_stats:
-            env["LO_GPU_STATS"] = "1"
+    env = probe_environment(args, run, os.environ)
     with (run / "LostOdysseyRecomp.exe").open("rb") as executable:
         executable_sha256 = hashlib.file_digest(executable, "sha256").hexdigest()
     result = {"mode": args.mode, "scene": args.scene, "backend": args.backend,
               "target_fps": args.fps,
               "scene_stats": args.scene_stats,
+              "native_frontend": args.native_frontend,
+              "render_timing": args.render_timing, "frontend_stats": args.frontend_stats,
+              "measurement_kind": "diagnostic" if (args.scene_stats or args.render_timing or args.frontend_stats) else "ordinary",
+              "frontend_counter_scope": "executed CP backend calls; independent receipt swap window, not host GPU draws",
               "executable": str(build / "LostOdysseyRecomp.exe"),
               "executable_sha256": executable_sha256,
               "baseline": str(baseline), "game": str(game),
@@ -205,36 +205,47 @@ def main() -> int:
             result["pid"] = proc.pid
             (run / "run.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
             log = run / "runtime.log"
+            probe = NativeProbeLog(log)
             deadline = time.monotonic() + args.startup_timeout
             def ready() -> bool:
-                if latest_frame(log) < args.warmup_frame:
-                    return False
-                if args.scene == "title":
-                    return True
-                if not uhra_file_loaded(log):
-                    return False
-                if not args.scene_stats:
-                    return True
-                heartbeat = latest_uhra_heartbeat(log)
-                return heartbeat is not None and heartbeat[0] >= args.warmup_frame - 120
+                scene_ready = probe.ready(args.scene, args.warmup_frame, args.scene_stats)
+                acknowledged = args.native_frontend == "off" or probe.frontend is not None
+                return scene_ready and acknowledged
 
             while proc.poll() is None and time.monotonic() < deadline and not ready():
                 time.sleep(0.2)
             if proc.poll() is not None or not ready():
-                result["failure"] = "startup did not reach the requested scene/frame boundary"
+                result["failure"] = "startup did not reach the requested scene/frame or acknowledge native frontend"
             else:
                 names = thread_names(proc.pid)
-                first_frame = latest_frame(log)
+                probe.poll()
+                first_frame = probe.completed
+                first_generation = probe.generation
+                first_frontend = probe.frontend
+                result["start_frontend"] = first_frontend
+                result["start_frontend_diagnostics"] = probe.diagnostics
                 if args.scene_stats:
-                    result["start_heartbeat"] = latest_uhra_heartbeat(log)
+                    result["start_heartbeat"] = probe.uhra_heartbeat()
                 first = cpu_snapshot(proc.pid)
                 deadline = time.monotonic() + args.sample_seconds
                 while proc.poll() is None and time.monotonic() < deadline:
                     time.sleep(0.2)
+                    probe.poll()
                 if proc.poll() is None:
                     last = cpu_snapshot(proc.pid)
-                    last_frame = latest_frame(log)
+                    probe.poll()
+                    last_frame = probe.completed
+                    result["end_frontend"] = probe.frontend
+                    result["end_frontend_diagnostics"] = probe.diagnostics
+                    result["frontend_execution_window"] = frontend_delta(first_frontend, probe.frontend)
+                    execution = result["frontend_execution_window"]
+                    if args.native_frontend == "mesh" and (not execution or not execution["mesh_commands"]):
+                        result["failure"] = "no ordinary native mesh execution demonstrated in the sample"
+                    if probe.generation != first_generation:
+                        result["failure"] = "runtime log was replaced or truncated during CPU sample"
                     frames = last_frame - first_frame
+                    if frames <= 0:
+                        result["failure"] = "no completed-frame progress during CPU sample"
                     deltas = {}
                     for tid, cpu in last["threads"].items():
                         if tid not in first["threads"]:
@@ -248,7 +259,7 @@ def main() -> int:
                                   cmdproc_cpu_ms_per_logged_frame=deltas.get("GPU CmdProc", 0) / frames
                                   if frames and "GPU CmdProc" in deltas else None)
                     if args.scene_stats:
-                        result["end_heartbeat"] = latest_uhra_heartbeat(log)
+                        result["end_heartbeat"] = probe.uhra_heartbeat()
                         if result["end_heartbeat"] is None:
                             result["failure"] = "Uhra high-draw scene was lost during CPU sample"
                     # Readback is outside the timing window.

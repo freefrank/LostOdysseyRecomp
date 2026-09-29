@@ -29,7 +29,23 @@ static void Put64(uint8_t* base,uint32_t address,uint64_t value)
 struct Result
 {
     std::vector<uint32_t> registers = std::vector<uint32_t>(0x5003,0xdeadbeef);
-    uint32_t draws = 0;
+    uint32_t draws = 0, coherencyWaits = 0;
+    std::vector<uint32_t> synchronization;
+    void Write(uint32_t index,uint32_t value) {
+        registers[index]=value;
+        if(index==0x2007 || (index>=0x0a2f && index<=0x0a31) ||
+           (index>=0x2388 && index<0x23a0) || (index>=0x4900 && index<0x4928)) {
+            synchronization.push_back(index); synchronization.push_back(value);
+        }
+        if(index==0x0a31) registers[index]|=0x80000000u;
+    }
+    void Wait(uint32_t info,uint32_t address,uint32_t reference,uint32_t mask,uint32_t interval) {
+        Check(info==3 && address==0xa31 && reference==0 && mask==0x80000000u && interval==8,
+              "only the SDK's fixed coherency wait belongs to this fixture");
+        synchronization.insert(synchronization.end(),{0xffffffff,info,address,reference,mask,interval});
+        registers[address]&=~0x80000000u; // same completion as CP's shared wait executor
+        Check((registers[address]&mask)==reference,"coherency wait predicate"); ++coherencyWaits;
+    }
 };
 static Result ReadLegacy(const uint8_t* base,uint32_t end,bool predicate)
 {
@@ -43,10 +59,14 @@ static Result ReadLegacy(const uint8_t* base,uint32_t end,bool predicate)
         if(type==0) {
             const auto first=header&0x7fff;
             Check(first+count<=result.registers.size(),"legacy oracle register bound");
-            for(uint32_t i=0;i<count;++i)result.registers[first+i]=Get(base,cursor+i*4);
+            for(uint32_t i=0;i<count;++i)result.Write(first+i,Get(base,cursor+i*4));
         } else if(type==3) {
-            Check(((header>>8)&0x7f)==0x22,"unexpected legacy opcode in accepted SDK path");
-            if(predicate || !(header&1)) {
+            const auto opcode=(header>>8)&0x7f;
+            Check(opcode==0x22 || opcode==0x3c,"unexpected legacy opcode in accepted SDK path");
+            if(opcode==0x3c) {
+                Check(count==5 && !(header&1),"stream wait size and unpredicated ordering");
+                result.Wait(Get(base,cursor),Get(base,cursor+4),Get(base,cursor+8),Get(base,cursor+12),Get(base,cursor+16));
+            } else if(predicate || !(header&1)) {
                 const auto initiator=Get(base,cursor+4);
                 result.registers[0x21fc]=initiator;
                 if(((initiator>>6)&3)==0) {
@@ -69,7 +89,12 @@ static Result ReadNative(const uint8_t* base,uint32_t end,bool predicate)
     DecodedMesh mesh;
     Check(Decode(std::span(body,body[0]-1),mesh),"actual producer payload validation");
     Result result;
-    ApplyDeltas(mesh,[&](uint32_t index,uint32_t value){result.registers[index]=value;});
+    ApplyDeltas(mesh,[&](uint32_t index,uint32_t value){result.Write(index,value);},
+        [&](uint32_t control) {
+            result.Write(0x2007,control);result.Write(0xa31,0x10000);
+            result.Write(0xa2f,0);result.Write(0xa30,4096);
+            result.Wait(3,0xa31,0,0x80000000u,8);
+        });
     if(predicate) {
         result.registers[0x21fc]=mesh.draw.initiator;
         if(mesh.draw.Indexed()) {
@@ -102,7 +127,7 @@ int main()
         const bool indexed=(trial&1)!=0;
         const bool index32=(trial&2)!=0;
         const uint32_t count=(trial<4 || trial%4==0)?65535u:trial+1;
-        DirtyState dirty{random(),random(),random()&~(15ull<<17),random(),random()&~(63ull<<49),0};
+        DirtyState dirty{random(),random(),random()&~(15ull<<17),random(),random(),0};
         if(trial==0)dirty={};
         Put64(base,kDevice,dirty.vertex);Put64(base,kDevice+8,dirty.pixel);
         Put64(base,kDevice+16,dirty.main);Put64(base,kDevice+24,dirty.fetchRaster);
@@ -133,6 +158,10 @@ int main()
             Check(false,"native state or predication differs from canonical SDK output");
         }
         Check(nativePass.draws==legacyPass.draws && nativeSkip.draws==legacySkip.draws,"draw count and predicate contract");
+        Check(nativePass.synchronization==legacyPass.synchronization &&
+              nativeSkip.synchronization==legacySkip.synchronization,"stream/coherency/bool ordering differs from SDK");
+        Check(nativePass.coherencyWaits==legacyPass.coherencyWaits &&
+              nativeSkip.coherencyWaits==legacySkip.coherencyWaits,"predicated draw must not suppress preceding wait");
         for(uint32_t offset=0;offset<40;offset+=4)Check(Get(base,kDevice+offset)==0,"dirty acknowledgement incomplete");
         // Decline a shader-preparation transition before guest mutation.
         Put64(base,kDevice+16,1ull<<17);
@@ -144,6 +173,6 @@ int main()
         ++compared;
     }
     VirtualFree(base,0,MEM_RELEASE);
-    std::cout<<"SDK_ORACLE_PASS cases="<<compared<<" predicates=pass,skip original_helpers="<<oracle_sdk_helper_calls
+    std::cout<<"SDK_ORACLE_PASS cases="<<compared<<" predicates=pass,skip stream_wait_order=verified original_helpers="<<oracle_sdk_helper_calls
              <<" native_flush_calls=0 source=canonical_generated_sdk gpu_or_game_validation=false\n";
 }

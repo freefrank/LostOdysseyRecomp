@@ -847,6 +847,65 @@ namespace gpu
         return true;
     }
 
+    // Shared execution semantics, independent of PM4 operand parsing. Native
+    // stream updates use the same coherency completion and shutdown behavior.
+    void CommandProcessor::ExecuteWait(uint32_t waitInfo, uint32_t pollRegAddr,
+        uint32_t ref, uint32_t mask, uint32_t wait)
+    {
+        const bool isMemory = (waitInfo & 0x10) != 0;
+        if (g_traceBudget > 0 || (g_swapCount >= 110 && isMemory && (pollRegAddr & ~3u) >= 0xB000 && (pollRegAddr & ~3u) < 0xB020))
+            LOG_INFO("WAIT_REG_MEM {} {:#x} op={} ref={:#x} mask={:#x} value now {:#x} swap #{}", isMemory ? "mem" : "reg", pollRegAddr, waitInfo & 7, ref, mask,
+                isMemory ? GpuSwap(*reinterpret_cast<uint32_t*>(TranslatePhysical(pollRegAddr & ~3u)), pollRegAddr & 3) : 0, g_swapCount.load());
+        g_workerStage.store("WAIT_REG_MEM", std::memory_order_relaxed);
+        auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (m_running)
+        {
+            uint32_t value;
+            if (isMemory)
+                value = GpuSwap(*reinterpret_cast<volatile uint32_t*>(TranslatePhysical(pollRegAddr & ~3u)), pollRegAddr & 3);
+            else
+            {
+                if (pollRegAddr == REG_COHER_STATUS_HOST)
+                    m_registers[REG_COHER_STATUS_HOST] &= ~0x80000000u; // "make coherent"
+                value = ReadRegister(pollRegAddr);
+            }
+            bool matched = false;
+            switch (waitInfo & 7)
+            {
+            case 0: matched = false; break;
+            case 1: matched = (value & mask) < ref; break;
+            case 2: matched = (value & mask) <= ref; break;
+            case 3: matched = (value & mask) == ref; break;
+            case 4: matched = (value & mask) != ref; break;
+            case 5: matched = (value & mask) >= ref; break;
+            case 6: matched = (value & mask) > ref; break;
+            case 7: matched = true; break;
+            }
+            if (matched)
+                break;
+            video::PumpEvents();
+            if (video::IsHostOverlayActive())
+            {
+                static auto s_lastWaitOverlayPresent = std::chrono::steady_clock::time_point{};
+                const auto now = std::chrono::steady_clock::now();
+                if (now - s_lastWaitOverlayPresent >= std::chrono::milliseconds(16))
+                {
+                    s_lastWaitOverlayPresent = now;
+                    video::PresentHostOverlay();
+                }
+            }
+            if (std::chrono::steady_clock::now() > deadline)
+            {
+                LOG_WARNING("WAIT_REG_MEM stalled 5s ({} {:#x} ref {:#x} mask {:#x} value {:#x}), still waiting", isMemory ? "mem" : "reg", pollRegAddr, ref, mask, value);
+                deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+            }
+            if (wait >= 0x100)
+                std::this_thread::sleep_for(std::chrono::milliseconds(wait / 0x100));
+            else
+                std::this_thread::yield();
+        }
+    }
+
     bool CommandProcessor::ExecuteNativeMesh(Reader& reader)
     {
         using namespace native_frontend;
@@ -863,7 +922,15 @@ namespace gpu
         // Applying a delta updates the explicit effective state and the guest
         // compatibility mirror once. Draw does not reconstruct that state from
         // the register bank. Constants inherit their stable worker-owned views.
-        ApplyDeltas(mesh, [&](uint32_t index, uint32_t value) { WriteRegister(index, value); });
+        ApplyDeltas(mesh, [&](uint32_t index, uint32_t value) { WriteRegister(index, value); },
+            [&](uint32_t streamControl) {
+                WriteRegister(0x2007, streamControl);
+                WriteRegister(REG_COHER_STATUS_HOST, 0x10000);
+                WriteRegister(0x0A2F, 0);
+                WriteRegister(0x0A30, 4096);
+                ExecuteWait(3, REG_COHER_STATUS_HOST, 0, 0x80000000u, 8);
+                ++m_frontend.streamCoherencyWaits;
+            });
         for (uint32_t group = 0; group < kGroupCount; ++group) {
             if (mesh.deltas[group].mask) ++m_frontend.appliedRevisions[group];
             m_frontend.stateValues += mesh.deltas[group].values.size();
@@ -1000,9 +1067,9 @@ namespace gpu
             ++m_counter;
             uint32_t swaps = ++g_swapCount;
             if (native_frontend::meshEnabled && (swaps % 120) == 0) {
-                LOG_INFO("native frontend: swap={} mode=mesh mesh_commands={} native_draws={} other_draws={} predicated_skips={} words={} state_values={} producer_revision={}",
+                LOG_INFO("native frontend: swap={} mode=mesh mesh_commands={} native_draws={} other_draws={} predicated_skips={} words={} state_values={} producer_revision={} stream_coherency_waits={}",
                     swaps, m_frontend.meshCommands, m_frontend.nativeDraws, m_frontend.otherDraws,
-                    m_frontend.predicatedSkips, m_frontend.words, m_frontend.stateValues, m_frontend.lastProducerRevision);
+                    m_frontend.predicatedSkips, m_frontend.words, m_frontend.stateValues, m_frontend.lastProducerRevision, m_frontend.streamCoherencyWaits);
                 if (native_frontend::diagnosticsEnabled) {
                     std::array<uint64_t, uint32_t(native_frontend::Reject::CountReasons)> outcomes{};
                     native_frontend::ProducerOutcomeSnapshot(outcomes);
@@ -1225,57 +1292,7 @@ namespace gpu
                 }
                 return true;
             }
-            if (g_traceBudget > 0 || (g_swapCount >= 110 && isMemory && (pollRegAddr & ~3u) >= 0xB000 && (pollRegAddr & ~3u) < 0xB020))
-                LOG_INFO("WAIT_REG_MEM {} {:#x} op={} ref={:#x} mask={:#x} value now {:#x} swap #{}", isMemory ? "mem" : "reg", pollRegAddr, waitInfo & 7, ref, mask,
-                    isMemory ? GpuSwap(*reinterpret_cast<uint32_t*>(TranslatePhysical(pollRegAddr & ~3u)), pollRegAddr & 3) : 0, g_swapCount.load());
-            g_workerStage.store("WAIT_REG_MEM", std::memory_order_relaxed);
-            auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-            while (m_running)
-            {
-                uint32_t value;
-                if (isMemory)
-                    value = GpuSwap(*reinterpret_cast<volatile uint32_t*>(TranslatePhysical(pollRegAddr & ~3u)), pollRegAddr & 3);
-                else
-                {
-                    if (pollRegAddr == REG_COHER_STATUS_HOST)
-                        m_registers[REG_COHER_STATUS_HOST] &= ~0x80000000u; // "make coherent"
-                    value = ReadRegister(pollRegAddr);
-                }
-                bool matched = false;
-                switch (waitInfo & 7)
-                {
-                case 0: matched = false; break;
-                case 1: matched = (value & mask) < ref; break;
-                case 2: matched = (value & mask) <= ref; break;
-                case 3: matched = (value & mask) == ref; break;
-                case 4: matched = (value & mask) != ref; break;
-                case 5: matched = (value & mask) >= ref; break;
-                case 6: matched = (value & mask) > ref; break;
-                case 7: matched = true; break;
-                }
-                if (matched)
-                    break;
-                video::PumpEvents();
-                if (video::IsHostOverlayActive())
-                {
-                    static auto s_lastWaitOverlayPresent = std::chrono::steady_clock::time_point{};
-                    const auto now = std::chrono::steady_clock::now();
-                    if (now - s_lastWaitOverlayPresent >= std::chrono::milliseconds(16))
-                    {
-                        s_lastWaitOverlayPresent = now;
-                        video::PresentHostOverlay();
-                    }
-                }
-                if (std::chrono::steady_clock::now() > deadline)
-                {
-                    LOG_WARNING("WAIT_REG_MEM stalled 5s ({} {:#x} ref {:#x} mask {:#x} value {:#x}), still waiting", isMemory ? "mem" : "reg", pollRegAddr, ref, mask, value);
-                    deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
-                }
-                if (wait >= 0x100)
-                    std::this_thread::sleep_for(std::chrono::milliseconds(wait / 0x100));
-                else
-                    std::this_thread::yield();
-            }
+            ExecuteWait(waitInfo, pollRegAddr, ref, mask, wait);
             return true;
         }
 

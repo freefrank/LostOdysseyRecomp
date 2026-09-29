@@ -11,7 +11,8 @@ namespace gpu::native_frontend
 // position. No pointers, transient handles, or first-consumption retirement:
 // the command is safe to replay with the caller's unchanged state inherited.
 constexpr uint32_t kMesh = 0x80004C4D;
-constexpr uint32_t kVersion = 1;
+constexpr uint32_t kVersion = 2;
+constexpr uint32_t kV1GroupCount = 11;
 constexpr uint32_t kHeaderWords = 9;
 constexpr uint32_t kMaxWords = 2500;
 extern const bool meshEnabled;
@@ -21,7 +22,7 @@ void ProducerOutcomeSnapshot(std::span<uint64_t> destination);
 enum class Group : uint32_t
 {
     VertexConstants, PixelConstants, Pipeline, ProgramControl, Targets,
-    Raster, Fetch, PointRaster, DrawControl, PolygonOffset, BoolLoop, Count
+    Raster, Fetch, PointRaster, DrawControl, PolygonOffset, BoolLoop, StreamFetch, Count
 };
 constexpr uint32_t kGroupCount = uint32_t(Group::Count);
 struct GroupLayout
@@ -36,7 +37,7 @@ constexpr std::array<GroupLayout, kGroupCount> kGroups{{
     {10368, 0x2000, 16, 1}, {10444, 0x2100, 21, 1},
     {1152, 0x4800, 32, 6}, {10596, 0x2280, 21, 1},
     {10680, 0x2300, 38, 1}, {10832, 0x2380, 8, 1},
-    {10112, 0x4900, 1, 40}
+    {10112, 0x4900, 1, 40}, {10272, 0x2388, 6, 4}
 }};
 constexpr uint64_t HighMask(uint32_t bits)
 {
@@ -81,7 +82,6 @@ constexpr Reject QualifyDirty(const DirtyState& state)
 {
     if (state.main & (uint64_t(15) << 17)) return Reject::ShaderPrepare;
     if (state.main & state.derived) return Reject::DerivedPrepare;
-    if (state.misc & (uint64_t(63) << 49)) return Reject::StreamPrepare;
     return Reject::None;
 }
 constexpr std::array<uint64_t, kGroupCount> Masks(const DirtyState& d)
@@ -91,7 +91,8 @@ constexpr std::array<uint64_t, kGroupCount> Masks(const DirtyState& d)
         (d.main << 6) & HighMask(16), (d.main << 22) & HighMask(21),
         d.fetchRaster << 32, (d.fetchRaster << 9) & HighMask(21),
         (d.misc << 26) & HighMask(38), (d.misc << 18) & HighMask(8),
-        (d.misc & (uint64_t(1) << 56)) ? HighMask(1) : 0};
+        (d.misc & (uint64_t(1) << 56)) ? HighMask(1) : 0,
+        (d.misc << 9) & HighMask(6)};
 }
 struct PreparedMesh
 {
@@ -119,6 +120,10 @@ inline bool Prepare(const MeshDraw& draw, const DirtyState& dirty, PreparedMesh&
         // both encodings to fit also excludes original SDK allocation effects.
         staged.legacyWordsBound += fields * (layout.wordsPerField + 4);
         if (i == uint32_t(Group::Fetch)) staged.legacyWordsBound += 4;
+        if (i == uint32_t(Group::StreamFetch)) {
+            ++staged.words; // owned stream-control value, preceding coherency wait
+            staged.legacyWordsBound += 13; // control, coherency range, fixed wait
+        }
     }
     if (staged.words > kMaxWords) return false;
     result = staged;
@@ -167,6 +172,7 @@ bool Encode(const PreparedMesh& prepared, uint64_t producerRevision,
         const auto maskWords = MaskWords(layout.fields);
         if (maskWords) output[at++] = uint32_t(mask >> 32);
         if (maskWords == 2) output[at++] = uint32_t(mask);
+        if (group == uint32_t(Group::StreamFetch)) output[at++] = read(10396);
         native_command::VisitRuns(mask, [&](uint32_t first, uint32_t count, uint32_t) {
             const uint32_t start = first * layout.wordsPerField;
             const uint32_t end = start + count * layout.wordsPerField;
@@ -185,6 +191,7 @@ struct DecodedMesh
 {
     MeshDraw draw;
     uint64_t producerRevision = 0;
+    uint32_t streamControl = 0;
     std::array<DeltaView, kGroupCount> deltas{};
 };
 // Full validation precedes every observable write. The caller supplies the
@@ -192,8 +199,10 @@ struct DecodedMesh
 inline bool Decode(std::span<const uint32_t> body, DecodedMesh& result)
 {
     if (body.size() < kHeaderWords - 1 || body.size() + 1 > kMaxWords ||
-        body[0] != body.size() + 1 || (body[1] >> 16) != kVersion ||
-        (body[1] & 0xffffu) >= (1u << kGroupCount)) return false;
+        body[0] != body.size() + 1) return false;
+    const auto version = body[1] >> 16;
+    if ((version != 1 && version != kVersion) ||
+        (body[1] & 0xffffu) >= (1u << (version == 1 ? kV1GroupCount : kGroupCount))) return false;
     DecodedMesh staged;
     staged.draw = {body[2], body[3], body[4], body[5]};
     const auto source = (body[2] >> 6) & 3;
@@ -210,6 +219,10 @@ inline bool Decode(std::span<const uint32_t> body, DecodedMesh& result)
         uint64_t mask = maskWords ? uint64_t(body[at++]) << 32 : HighMask(1);
         if (maskWords == 2) mask |= body[at++];
         if (!mask || (mask & ~HighMask(layout.fields))) return false;
+        if (group == uint32_t(Group::StreamFetch)) {
+            if (at >= body.size()) return false;
+            staged.streamControl = body[at++];
+        }
         const size_t count = size_t(std::popcount(mask)) * layout.wordsPerField;
         if (body.size() - at < count) return false;
         staged.deltas[group] = {mask, body.subspan(at, count)};
@@ -221,13 +234,17 @@ inline bool Decode(std::span<const uint32_t> body, DecodedMesh& result)
 }
 // State deltas and the base-vertex write are unpredicated; the draw/DMA writes
 // are predicated separately by the command processor, exactly like the SDK.
-template<class ApplyValue>
-void ApplyDeltas(const DecodedMesh& mesh, ApplyValue&& apply)
+template<class ApplyValue, class MakeStreamCoherent>
+void ApplyDeltas(const DecodedMesh& mesh, ApplyValue&& apply, MakeStreamCoherent&& coherent)
 {
-    for (uint32_t group = 0; group < kGroupCount; ++group) {
+    // Wire v1 bank indices stay stable. SDK execution places stream coherency
+    // and fetch updates after polygon offset but BEFORE the bool/loop bank.
+    constexpr std::array<uint32_t, kGroupCount> executionOrder{0,1,2,3,4,5,6,7,8,9,11,10};
+    for (const uint32_t group : executionOrder) {
         const auto& delta = mesh.deltas[group];
         if (!delta.mask) continue;
         const auto& layout = kGroups[group];
+        if (group == uint32_t(Group::StreamFetch)) coherent(mesh.streamControl);
         native_command::VisitRuns(delta.mask, [&](uint32_t first, uint32_t count, uint32_t packed) {
             for (uint32_t i = 0; i < count * layout.wordsPerField; ++i)
                 apply(layout.registerFirst + first * layout.wordsPerField + i,
