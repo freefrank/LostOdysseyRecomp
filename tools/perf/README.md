@@ -203,3 +203,56 @@ not fix Present hazards, authorize ImageView destruction, or prove display FPS.
 ## Native command scene probe
 
 `run_native_title.py` is an active, bounded Windows driver requiring installed `psutil`. It retains the title probe and also supports `--scene uhra` with `--fps 60|120`, which enters the Uhra city-plaza route through the fixed Continue input. Ordinary CPU timing uses `psutil` OS thread snapshots divided by `LO_FRAME_TIMING` completed-frame receipts. `LO_GPU_STATS=1` heartbeats gate diagnostic scene entry and provide draw-density evidence, but change renderer CPU timing; they are not the ordinary performance basis. Both modes use the same candidate, isolated baseline, SR/FG off, muted execution and timer-external screenshots. Separate-process images do not constitute identical-input replay. The current 60 FPS, 120 FPS and diagnostic results are recorded in [the Uhra comparison](../../docs/notes/native-command-uhra-results.json), and the title result remains historical in [the implementation note](../../docs/notes/native-command-bypass.md).
+
+### Ordinary-mesh native front-end
+
+The separate `--native-frontend off|mesh` option selects the pre-flush ordinary
+mesh implementation. `--mode` still selects the older sparse/quad/fan hooks;
+use `--mode off` in both cases to isolate the new work. The driver records both
+options and the actual candidate executable SHA-256. A mesh run that never
+acknowledges the new mode, or has no executed native mesh in the sample, fails
+rather than silently benchmarking an old executable.
+
+The following is the new ordinary Uhra ABBA procedure, **not a completed
+measurement**. Point `$nativeBuild` at a build of this development branch, not
+the historical `out/endian-constants/runtime` executable. Keep the baseline and
+game paths read-only. Every output directory must be new.
+
+```powershell
+$nativeBuild = 'out/native-renderer/runtime' # replace with the actual candidate build
+$nativeBaseline = 'C:/Users/freefrank/ownCloud/Git/LostOdysseyRecomp/out/issue70-runtime/baseline'
+$nativeGame = 'D:/Mihoyo/LostOdysseyRecomp-windows-x64/game/disc1'
+$nativeRun = Get-Date -Format 'yyyyMMdd-HHmmss'
+$nativeCases = @(
+    @{Name='off-1'; Frontend='off'}, @{Name='mesh-1'; Frontend='mesh'},
+    @{Name='mesh-2'; Frontend='mesh'}, @{Name='off-2'; Frontend='off'}
+)
+foreach ($case in $nativeCases) {
+    $output = "out/native-pm4/frontend-$nativeRun-$($case.Name)"
+    python tools/perf/run_native_title.py --build $nativeBuild --baseline $nativeBaseline --game $nativeGame --output $output --mode off --native-frontend $case.Frontend --scene uhra --fps 120 --backend d3d12 --warmup-frame 3300 --sample-seconds 20 --startup-timeout 180
+    if ($LASTEXITCODE -ne 0) { throw "Native front-end probe failed: $output" }
+}
+```
+
+Ordinary comparisons must omit `--render-timing`, `--scene-stats` and
+`--frontend-stats`. Each enables an explicit diagnostic and labels the result
+accordingly. `--frontend-stats` adds producer fallback reasons and remaining
+PM4 opcode/type counts; the other two can turn on per-draw renderer timing.
+Both `frame timing completed=` and `present timing completed=` are accepted.
+The scene marker is latched during incremental reads, so large later logs do
+not evict startup evidence. Inherited `LO_*` variables are cleared and these
+options are explicitly injected into the child environment.
+
+Low-cost native execution receipts are recorded separately from diagnostic
+counters. Their coverage window is expressed in their own swap receipts, not
+silently normalized to a different CPU sample window or to host-expanded GPU
+draws. Inspect CmdProc, Guest Main, whole-process CPU and throughput together.
+Log reset/truncation or missing completed-frame progress invalidates the sample.
+Rollback is `LO_NATIVE_FRONTEND=off` (or unset), followed by a process restart;
+`LO_NATIVE_COMMANDS=off` additionally disables the earlier prototype.
+
+Portable parser/environment regression checks are
+`python tools/tests/native_probe_log_test.py`; they do not require Windows or
+`psutil`. Actual game runs require both. See the
+[implementation, SDK contracts and remaining dependencies](../../docs/notes/native-renderer-front-end.md)
+and [bounded validation record](../../docs/notes/native-renderer-front-end-evidence.json).
