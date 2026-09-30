@@ -13,10 +13,7 @@ After reviewing, testing and committing a change:
 
 The script checks the public baseline, new commit attribution after the reviewed
 v0.5.0 public baseline, and tracked artifact
-paths. Before either remote is updated it runs `ppc_sync.py ensure-push`, which
-retargets the private PPC cache when only the root `CMakeLists.txt` fingerprint
-changed and refuses to publish if the PPC library itself must be rebuilt. It
-then pushes the exact same commit to both remotes and verifies both remote
+paths. It then pushes the exact same commit to both remotes and verifies both remote
 heads. It publishes committed changes only. It does not commit local edits or
 replace code review and secret scanning. If the second push fails, fix the
 connection or authentication and rerun; the first push is safe to repeat.

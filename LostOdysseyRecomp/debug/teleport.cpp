@@ -1,4 +1,5 @@
 #include <stdafx.h>
+#include "gpu/frame_plan.h"
 #include <kernel/heap.h>
 #include <kernel/memory.h>
 #include <os/logger.h>
@@ -8,6 +9,8 @@
 #include "frame_timing.h"
 #include "map_poi.h"
 #include "map_info.h"
+#include <host_ui/host_ui.h>
+#include "cheats.h"
 
 extern "C" PPC_FUNC(__imp__sub_82290B60);
 extern "C" PPC_FUNC(__imp__sub_822FA548);
@@ -24,6 +27,8 @@ struct Identity
 std::mutex stateMutex;
 debug_menu::TeleportSnapshot snapshot;
 Identity identity;
+uint64_t sceneGeneration = 1;
+uint64_t requestGeneration = 0;
 Operation pending = Operation::None;
 Position requested{};
 uint64_t lastTick = 0;
@@ -32,8 +37,7 @@ std::vector<debug_menu::LiveMapPoi> livePois;
 
 uint64_t Now()
 {
-    return uint64_t(std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::steady_clock::now().time_since_epoch()).count());
+    return host_ui::GetActiveGameTimeMs();
 }
 
 bool Finite(Position p)
@@ -131,13 +135,15 @@ Identity FindPlayer(uint8_t* base)
 bool Request(Operation op, Position position = {}, uint64_t poiId = 0)
 {
     std::lock_guard lock(stateMutex);
-    if (!snapshot.available || Now() - lastTick > 1000 || pending != Operation::None ||
+    const bool paused = host_ui::IsGamePaused();
+    if (!snapshot.available || (!paused && Now() - lastTick > 1000) || pending != Operation::None ||
         !Finite(position) || (op == Operation::Restore && !snapshot.bookmarkAvailable)) return false;
     if (op == Operation::Poi && std::none_of(snapshot.pois.begin(), snapshot.pois.end(),
         [poiId](const auto& p) { return p.id == poiId; })) return false;
     pending = op;
     requested = position;
     requestedPoi = poiId;
+    requestGeneration = sceneGeneration;
     snapshot.status = L"等待游戏线程执行";
     return true;
 }
@@ -222,6 +228,7 @@ void Tick(PPCContext& ctx, uint8_t* base)
         if (current != identity || (lastTick && Now() - lastTick > 1000))
         {
             identity = current;
+            ++sceneGeneration;
             pending = Operation::None;
             snapshot.bookmarkAvailable = false;
             snapshot.pois.clear();
@@ -250,6 +257,11 @@ void Tick(PPCContext& ctx, uint8_t* base)
         std::lock_guard lock(stateMutex);
         const auto op = std::exchange(pending, Operation::None);
         if (!snapshot.available || op == Operation::None) return;
+        if (requestGeneration != sceneGeneration)
+        {
+            snapshot.status = L"场景已变化，操作已取消";
+            return;
+        }
         if (op == Operation::Save)
         {
             snapshot.bookmark = position;
@@ -378,7 +390,8 @@ debug_menu::TeleportSnapshot debug_menu::GetTeleportSnapshot()
 {
     std::lock_guard lock(stateMutex);
     auto result = snapshot;
-    if (Now() - lastTick > 1000)
+    const bool paused = host_ui::IsGamePaused();
+    if (!paused && Now() - lastTick > 1000)
     {
         result.available = false;
         result.bookmarkAvailable = false;
@@ -402,7 +415,7 @@ PPC_FUNC(sub_82290B60)
     if (getenv("LO_TELEPORT_COMMAND_FILE") && !observed.exchange(true))
         LOG_INFO("teleport scene hook this={:#x} caller={:#x}", ctx.r3.u32, uint32_t(ctx.lr));
     const bool engine = ctx.r3.u32 == PPC_LOAD_U32(0x83315FB4);
-    if (engine) frame_timing::EngineTick(ctx.f1.f64);
+    if (engine) { debug_menu::cheats::Tick(ctx, base); gpu::frame_plan::BeginCpuFrame(); frame_timing::EngineTick(ctx.f1.f64); }
     __imp__sub_82290B60(ctx, base);
     if (engine) { debug_menu::UpdateMapInfo(base); Tick(ctx, base); }
 }

@@ -1,5 +1,15 @@
 # 阴影纹理采样 LOD（2026-09-05）
 
+## 2026-09-24：f2548 桥面闪烁调查
+
+捕获 `D:/Mihoyo/LostOdysseyRecomp-windows-x64/captures/render-17903110123692464-f2548.zip` 来自 v0.6.19、revision `1b2ea6635c5a`，Vulkan／RTX 5080，3840×2160。f2548 的桥面在 f2549–f2550 恢复正常；差异在最早的颜色 resolve（seq00、draw790）已经存在，因此不是后续 DLSS 输出或后处理首次引入。三帧均为 1513 条 draw 记录、1497 条提交绘制，未见丢弃记录。
+
+源码核对将 `a027ab99fa3e3b0d` 映射到 slot 7，将 `ff769ec7b88e575f` 映射到 slot 8。捕获中 a027 每帧为 draw722–725 的 4 条绘制，ff769 每帧为 draw727–733 的 7 条绘制；它们都在 seq00、draw790 之前。两组绘制与相邻已知材质共享 RT、depth、scissor、viewport 和 VTE，16 个相机常量字逐字匹配。对应 HLSL 变化只涉及位置／clip 计算；独立对象 UV 和补光路径没有改动。匹配的深度 shader `f7fd88506d704a3d` 使用 slot 4，index base/count 也匹配，为位置路径配对依据，不能单独证明 GPU 实际上传或深度测试结果。
+
+该运行的实际 frame plan 为 DLSS SR consumer 3（DLAA 也走此路径）；存储的 AA=3 不能证明旧 TAA consumer 正在运行。NGX 元数据显示 `no_eligible_scene` 且零次评估，但启用的 SR consumer 仍让 `ResolveFrameStartConsumers` 保留 raster jitter，因此零次 NGX 评估不排除 DLAA 输入 jitter 对结果的影响。`temporal_history_verified=false`，捕获中的限频 temporal summary 没有覆盖这些帧。
+
+定向 `--captured-f2548-layers` 回归现已通过：722,316 项检查覆盖 11 条捕获绘制、32 个相位以及 720p、1080p、1440p、4K 四种分辨率；旧材质负对照产生 0.487760 px 分离。该结果验证了捕获层的位置算术与映射，不等于正常时序的画面修复。当前仍缺正常时序运行时 A/B、同场景玩家验收和发布；对应详细记录见 `out/f2548-investigation/FINDINGS.md`。
+
 ## v0.4.2 已发布 — 2026-09-08
 
 已发布的 v0.4.2 包含六条已核对的战斗地形／物件／蒙皮 TAA 路径。17,287 项 CPU 检查、原 Map3 战斗 32 相位对照及原轮胎回归属于下文标识的独立候选；这些结果不等于最终 v0.4.2 包的实跑。敌人消散闪烁仍未修复，原报告者及更广场景验收保持待办。正式包 CI、产物身份／完整性和匿名下载核验已通过，复用既有功能证据，未重复运行应用；详见[状态总表](../STATUS.md)。下文保留各阶段证据。

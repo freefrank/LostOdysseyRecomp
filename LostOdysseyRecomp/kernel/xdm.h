@@ -124,71 +124,75 @@
 #define PAGE_READWRITE 0x04
 #endif
 
+#include "dispatcher_wait.h"
+#include "handle_table.h"
+#include <memory>
+
 struct KernelObject
 {
-    virtual ~KernelObject() {}
-
-    virtual uint32_t Wait(uint32_t timeout)
-    {
-        assert(false && "Wait not implemented for this kernel object.");
-        return STATUS_TIMEOUT;
+    virtual ~KernelObject() = default;
+    virtual kernel::wait::Target* WaitTarget() { return nullptr; }
+    virtual uint32_t Wait(uint32_t timeout) {
+        auto* target = WaitTarget();
+        return target ? target->Wait(timeout) : STATUS_INVALID_HANDLE;
     }
 };
+// Function-local registry is intentionally process-lifetime: global guest heap
+// teardown must not race registry destruction while detached guest workers exit.
+kernel::HandleTable<KernelObject>& KernelHandles();
 
 template<typename T, typename... Args>
-inline T* CreateKernelObject(Args&&... args)
+inline std::shared_ptr<T> CreateKernelObject(Args&&... args)
 {
     static_assert(std::is_base_of_v<KernelObject, T>);
-    return g_userHeap.Alloc<T>(std::forward<Args>(args)...);
+    void* storage = g_userHeap.Alloc(sizeof(T));
+    if (!storage) throw std::bad_alloc();
+    T* raw;
+    try { raw = new (storage) T(std::forward<Args>(args)...); }
+    catch (...) { g_userHeap.Free(storage); throw; }
+    std::shared_ptr<T> object(raw, [](T* p) { p->~T(); g_userHeap.Free(p); });
+    KernelHandles().Insert(g_memory.MapVirtual(raw), object);
+    return object;
 }
 
 template<typename T = KernelObject>
-inline T* GetKernelObject(uint32_t handle)
+inline std::shared_ptr<T> GetKernelObject(uint32_t handle)
 {
-    assert(handle != GUEST_INVALID_HANDLE_VALUE);
-    return reinterpret_cast<T*>(g_memory.Translate(handle));
+    return std::dynamic_pointer_cast<T>(KernelHandles().Acquire(handle));
 }
-
 uint32_t GetKernelHandle(KernelObject* obj);
-
-void DestroyKernelObject(KernelObject* obj);
-void DestroyKernelObject(uint32_t handle);
-
-bool IsKernelObject(uint32_t handle);
-bool IsKernelObject(void* obj);
-bool IsInvalidKernelObject(void* obj);
-
-template<typename T = void>
-inline T* GetInvalidKernelObject()
-{
-    return reinterpret_cast<T*>(g_memory.Translate(GUEST_INVALID_HANDLE_VALUE));
+template<class T> inline uint32_t GetKernelHandle(const std::shared_ptr<T>& obj) {
+    return GetKernelHandle(obj.get());
 }
-
+bool DestroyKernelObject(uint32_t handle);
+template<class T> inline bool DestroyKernelObject(const std::shared_ptr<T>& obj) {
+    return DestroyKernelObject(GetKernelHandle(obj));
+}
+bool IsKernelObject(uint32_t handle);
+uint32_t DuplicateKernelHandle(uint32_t source, bool closeSource);
+uint32_t ReferenceKernelHandle(uint32_t handle);
+void ReferenceKernelObject(uint32_t address);
+void DereferenceKernelObject(uint32_t address);
 extern Mutex g_kernelLock;
 
-// Lazily attach a host object to a guest dispatcher header (events,
-// semaphores, mutants, critical sections). The guest never touches
-// WaitListHead so it doubles as our signature + back-pointer.
+// Embedded dispatchers keep their canonical handle in the guest header; callers
+// retain their own reference before dropping the attachment lock.
 template<typename T>
-inline T* QueryKernelObject(XDISPATCHER_HEADER& header)
+inline std::shared_ptr<T> QueryKernelObject(XDISPATCHER_HEADER& header)
 {
     std::lock_guard guard{ g_kernelLock };
-    if (header.WaitListHead.Flink != OBJECT_SIGNATURE)
-    {
-        header.WaitListHead.Flink = OBJECT_SIGNATURE;
-        auto* obj = CreateKernelObject<T>(reinterpret_cast<typename T::guest_type*>(&header));
-        header.WaitListHead.Blink = g_memory.MapVirtual(obj);
-        return obj;
+    if (header.WaitListHead.Flink == OBJECT_SIGNATURE) {
+        if (auto object = GetKernelObject<T>(header.WaitListHead.Blink)) return object;
     }
-
-    return static_cast<T*>(g_memory.Translate(header.WaitListHead.Blink.get()));
+    auto object = CreateKernelObject<T>(reinterpret_cast<typename T::guest_type*>(&header));
+    header.WaitListHead.Blink = GetKernelHandle(object);
+    header.WaitListHead.Flink = OBJECT_SIGNATURE;
+    return object;
 }
-
 template<typename T>
-inline T* TryQueryKernelObject(XDISPATCHER_HEADER& header)
+inline std::shared_ptr<T> TryQueryKernelObject(XDISPATCHER_HEADER& header)
 {
-    if (header.WaitListHead.Flink != OBJECT_SIGNATURE)
-        return nullptr;
-
-    return static_cast<T*>(g_memory.Translate(header.WaitListHead.Blink.get()));
+    std::lock_guard guard{ g_kernelLock };
+    return header.WaitListHead.Flink == OBJECT_SIGNATURE
+        ? GetKernelObject<T>(header.WaitListHead.Blink) : nullptr;
 }

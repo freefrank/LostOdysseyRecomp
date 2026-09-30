@@ -1,6 +1,7 @@
 #include <stdafx.h>
 #include <os/logger.h>
 #include "save_anywhere.h"
+#include <settings/config.h>
 #include <fstream>
 
 extern "C" PPC_FUNC(__imp__sub_822E0E10);
@@ -11,7 +12,11 @@ namespace
     constexpr uint32_t SaveRow = 0x8326D690;
     constexpr uint32_t Visible = 0x80000000;
     constexpr uint32_t Enabled = 0x40000000;
-    std::atomic<bool> requested{false};
+    std::atomic<bool>& Requested()
+    {
+        static std::atomic<bool> requested{settings::GetConfig().saveAnywhere};
+        return requested;
+    }
     // Only the guest menu thread reads/writes these fields and the menu table.
     bool known = false;
     uint32_t originalEnabled = 0, lastWritten = 0;
@@ -45,7 +50,7 @@ namespace
             originalEnabled = flags & Enabled;
             known = true;
         }
-        const bool allow = requested.load(std::memory_order_relaxed) && (flags & Visible);
+        const bool allow = Requested().load(std::memory_order_relaxed) && (flags & Visible);
         lastWritten = (flags & ~Enabled) | (allow ? Enabled : originalEnabled);
         PPC_STORE_U32(SaveRow, lastWritten);
     }
@@ -53,12 +58,14 @@ namespace
 
 bool debug_menu::SaveAnywhereEnabled()
 {
-    return requested.load(std::memory_order_relaxed);
+    return Requested().load(std::memory_order_relaxed);
 }
 
 void debug_menu::SetSaveAnywhereEnabled(bool enabled)
 {
-    requested.store(enabled, std::memory_order_relaxed);
+    Requested().store(enabled, std::memory_order_relaxed);
+    if (!settings::SaveSaveAnywhere(enabled))
+        LOG_WARNING("debug menu: failed to persist save anywhere setting");
     LOG_INFO("debug menu: save anywhere {} (reopen System menu to refresh)", enabled);
 }
 

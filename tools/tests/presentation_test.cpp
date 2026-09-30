@@ -8,6 +8,87 @@ namespace plume
 std::unique_ptr<RenderInterface> CreateD3D12Interface();
 std::unique_ptr<RenderInterface> CreateVulkanInterface();
 }
+// Record two distinct compositions before submitting either. This catches
+// descriptor reuse and premature framebuffer destruction in the FG UI path.
+static int TestSeparatedUi(plume::RenderDevice* device)
+{
+    using namespace plume;
+    constexpr uint32_t width = 3, height = 1, rowPixels = 64;
+    auto queue = device->createCommandQueue(RenderCommandListType::DIRECT);
+    if (!queue) return 1;
+    auto commands = queue->createCommandList();
+    auto fence = device->createCommandFence();
+    gpu::Presentation presentation;
+    if (!queue || !commands || !fence || !presentation.Init(device)) return 1;
+    auto texture = [&](bool target) {
+        return device->createTexture(RenderTextureDesc::Texture2D(width, height, 1,
+            RenderFormat::R8G8B8A8_UNORM,
+            target ? RenderTextureFlag::RENDER_TARGET : RenderTextureFlag::NONE));
+    };
+    auto scene = texture(false), uiA = texture(false), uiB = texture(false);
+    auto targetA = texture(true), targetB = texture(true);
+    auto upload = device->createBuffer(RenderBufferDesc::UploadBuffer(512 * 3));
+    auto readA = device->createBuffer(RenderBufferDesc::ReadbackBuffer(256));
+    auto readB = device->createBuffer(RenderBufferDesc::ReadbackBuffer(256));
+    if (!scene || !uiA || !uiB || !targetA || !targetB || !upload || !readA || !readB) return 1;
+    // Blue scene, red/green straight-alpha overlays at 0, 128/255 and 1.
+    auto* data = static_cast<uint32_t*>(upload->map());
+    if (!data) return 1;
+    for (uint32_t x = 0; x < width; ++x) {
+        const uint32_t alpha = x == 0 ? 0 : x == 1 ? 128 : 255;
+        data[x] = 0xffff0000;
+        data[128 + x] = (alpha << 24) | 0x000000ff;
+        data[256 + x] = (alpha << 24) | 0x0000ff00;
+    }
+    upload->unmap();
+    commands->begin();
+    RenderTexture* inputs[] = {scene.get(), uiA.get(), uiB.get()};
+    for (uint32_t i = 0; i < 3; ++i) {
+        commands->barriers(RenderBarrierStage::COPY,
+            RenderTextureBarrier(inputs[i], RenderTextureLayout::COPY_DEST));
+        auto location = RenderTextureCopyLocation::PlacedFootprint(upload.get(),
+            RenderFormat::R8G8B8A8_UNORM, width, height, 1, rowPixels, i * 512);
+        commands->copyTextureRegion(RenderTextureCopyLocation::Subresource(inputs[i]), location);
+    }
+    auto leaseA = presentation.DrawSeparatedUi(commands.get(), scene.get(), uiA.get(),
+        targetA.get(), width, height, false);
+    auto leaseB = presentation.DrawSeparatedUi(commands.get(), scene.get(), uiB.get(),
+        targetB.get(), width, height, false);
+    if (!leaseA || !leaseB) return 1;
+    RenderTexture* targets[] = {targetA.get(), targetB.get()};
+    RenderBuffer* readbacks[] = {readA.get(), readB.get()};
+    for (uint32_t i = 0; i < 2; ++i) {
+        commands->barriers(RenderBarrierStage::COPY,
+            RenderTextureBarrier(targets[i], RenderTextureLayout::COPY_SOURCE));
+        commands->copyTextureRegion(RenderTextureCopyLocation::PlacedFootprint(readbacks[i],
+            RenderFormat::R8G8B8A8_UNORM, width, height, 1, rowPixels),
+            RenderTextureCopyLocation::Subresource(targets[i]));
+    }
+    commands->end();
+    const RenderCommandList* lists[] = {commands.get()};
+    queue->executeCommandLists(lists, 1, nullptr, 0, nullptr, 0, fence.get());
+    queue->waitForCommandFence(fence.get());
+    leaseA.reset();
+    leaseB.reset();
+    const uint32_t expected[2][3] = {
+        {0xffff0000, 0xff7f0080, 0xff0000ff},
+        {0xffff0000, 0xff7f8000, 0xff00ff00}};
+    bool pass = true;
+    for (uint32_t i = 0; i < 2; ++i) {
+        const auto* pixels = static_cast<const uint32_t*>(readbacks[i]->map());
+        if (!pixels) return 1;
+        for (uint32_t x = 0; x < width; ++x) {
+            for (uint32_t shift = 0; shift < 32; shift += 8)
+                pass &= std::abs(int((pixels[x] >> shift) & 255) -
+                    int((expected[i][x] >> shift) & 255)) <= 1;
+            printf("Separated UI frame=%u pixel=%u actual=%08x expected=%08x\n",
+                i, x, pixels[x], expected[i][x]);
+        }
+        readbacks[i]->unmap();
+    }
+    printf("Separated UI alpha and concurrent resource leases: %s\n", pass ? "PASS" : "FAIL");
+    return pass ? 0 : 1;
+}
 int main(int argc, char** argv)
 {
     using namespace plume;
@@ -18,6 +99,8 @@ int main(int argc, char** argv)
     auto device = api->createDevice();
     if(!device)return 2;
     printf("Backend: %s on %s\n",vulkan?"Vulkan":"D3D12",device->getDescription().name.c_str());
+    if (argc == 2 && std::string(argv[1]) == "--separated-ui-only")
+        return TestSeparatedUi(device.get());
     if (argc == 6 && std::string(argv[1]) == "--capture")
         return ReplayPresentationCapture(device.get(), argv[2], std::stoul(argv[3]), std::stoul(argv[4]), argv[5]);
     if (argc != 1) return 2;

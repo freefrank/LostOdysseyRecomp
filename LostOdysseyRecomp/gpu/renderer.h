@@ -1,10 +1,15 @@
 #pragma once
+namespace gpu::frame_generation { struct ResolvedHandoff; struct CompositeHandoff; }
 
 #include <cstdint>
+#include <filesystem>
 #include <vector>
 #include <string>
+#include "present_capture.h"
 
 namespace plume { struct RenderTexture; }
+namespace gpu::frame_plan { struct FramePlan; }
+namespace gpu::frame_plan { enum class SurfaceRole : uint32_t; }
 
 // Xenos draw backend on plume: turns the command processor's register state
 // plus a DRAW_INDX packet into host draws, emulates EDRAM render targets as
@@ -28,6 +33,17 @@ namespace gpu::renderer
     void Shutdown();
     // Report the actual swapchain extent; the next renderer frame applies Auto.
     void SetOutputSize(uint32_t width, uint32_t height);
+    // The aspect attached to the renderer's current allocation epoch. Guest
+    // camera hooks use this rather than a concurrently resized swapchain.
+    float ActiveOutputAspect();
+    // The command processor commits only tagged CPU frame plans. Renderer
+    // allocation consumes this immutable plan instead of the window size.
+    void SelectFramePlan(const frame_plan::FramePlan& plan);
+    void RegisterCatalogSurface(frame_plan::SurfaceRole role, uint32_t surfaceInfo, uint32_t colorInfo);
+    // Ordered host-private movie command, consumed on the command processor
+    // thread after the movie helper has drawn its safe-area destination.
+    void ClearMovieBars(uint32_t surfaceInfo, uint32_t colorInfo,
+        float x, float y, float width, float height, float safeLeft, float safeRight);
     // Convert the guest frontbuffer content extent to this surface's physical
     // pixels (storage padding remains excluded).
     void ScaleResolvedSize(uint32_t physicalAddress, uint32_t& width, uint32_t& height);
@@ -35,7 +51,12 @@ namespace gpu::renderer
     void RequestDebugCapture();
     std::wstring DebugCaptureStatus();
     bool DebugCaptureBusy();
-    void FinishDebugCapture(uint32_t frontbuffer);
+    // Fixes this XE_SWAP's guest export and ticket before presentation.
+    void PrepareDebugCaptureFrame(uint32_t frontbuffer, uint32_t swap, present_capture::Ticket &ticket);
+    // Writes the final pre-present image, then advances or archives. No capture is a no-op.
+    void CompleteDebugCaptureFrame(const present_capture::Result &presented);
+    // Starts the next frame directory only after the current export has finished.
+    void PollDebugCapture();
     // Normal window close waits for the in-flight archive before process exit.
     void WaitDebugCaptureArchive();
 
@@ -44,9 +65,15 @@ namespace gpu::renderer
 
     // Called on XE_SWAP before the frontbuffer is presented: finishes all work.
     void Flush();
+    // Drain renderer submissions before replacing the D3D12 presentation queue.
+    bool DrainForFrameGenerationReconfigure();
+    // Called after a drained D3D12 provider change, before the next scene frame.
+    void SetFrameGenerationInputCaptureEnabled(bool enabled);
     // Record the frontbuffer COPY_SOURCE barrier on the still-open swap list.
     // Must run before Flush so Present does not submit a second command list.
     void PreparePresent(uint32_t physicalAddress);
+    // A failed allocation epoch must not fall through to stale CPU frontbuffer data.
+    bool SuppressPresent();
 
     // Guest memory range was written by the GPU (resolve) or is known dirty.
     void InvalidateGuestRange(uint32_t physicalAddress, uint32_t size);
@@ -56,7 +83,13 @@ namespace gpu::renderer
     // barrier on the swap list; AcquireResolvedSurface then hands that texture
     // over (format is a plume::RenderFormat) without a second Flush, or returns
     // nullptr when nothing was resolved there.
-    plume::RenderTexture* AcquireResolvedSurface(uint32_t physicalAddress, uint32_t& width, uint32_t& height, uint32_t& format);
+    plume::RenderTexture* AcquireResolvedSurface(uint32_t physicalAddress, uint32_t& width, uint32_t& height, uint32_t& format,
+        frame_plan::FramePlan* sourcePlan = nullptr, frame_generation::ResolvedHandoff* handoff = nullptr);
+    // Opt-in DLSS-G input from the exact current full resolve. Waits for the
+    // producer fence only after a matching composited backbuffer is selected.
+    bool AcquireFgCompositeInputs(uint32_t physicalAddress, frame_generation::CompositeHandoff& handoff);
+    // Diagnostic invalidation only. Submitted copies retain their GPU-slot owners.
+    void CancelFgHandoffs();
     // Same renderer/presentation thread, after XE_SWAP Flush and acquisition.
     // True only for a full resolve of the actual processed scene target in the
     // just-completed frame; stale surfaces and unrecognized paths return false.
@@ -67,4 +100,8 @@ namespace gpu::renderer
     std::vector<uint32_t> GetResolvedAddresses();
     // Writes every colour render target as <prefix>_rt_<base>_<fmt>_<w>x<h>.ppm (debugging).
     void DumpRenderTargets(const char* prefix);
+#if defined(LO_RENDERER_P2_SELFTEST)
+    // Guarded runtime bootstrap for the scene-copy promotion GPU fixture.
+    int RunSceneCopyPromotionSelfTest(const std::filesystem::path& evidenceDirectory);
+#endif
 }

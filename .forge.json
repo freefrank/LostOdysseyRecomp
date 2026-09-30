@@ -1,0 +1,44 @@
+{
+  "defaultVersion": "0.6.19",
+  "userDataPaths": [
+    { "locationType": "runDir", "path": "install/save" },
+    { "locationType": "runDir", "path": "install/profile" },
+    { "locationType": "linuxData", "path": "lost-odyssey-recomp/save" },
+    { "locationType": "linuxData", "path": "lost-odyssey-recomp/profile" }
+  ],
+  "builds": [
+    {
+      "versions": ["0.6.19"],
+      "targetPlatforms": ["Windows-x64"],
+      "dependencies": [],
+      "steps": [
+        { "step": "createDir", "path": ".build" },
+        {
+          "step": "fetch",
+          "url": "https://github.com/freefrank/LostOdysseyRecomp/releases/download/v0.6.19/LostOdysseyRecomp-windows-x64-v0.6.19.zip",
+          "dest": ".build/package.zip"
+        },
+        { "step": "extract", "src": ".build/package.zip", "dest": ".build" },
+        { "step": "deletePath", "path": ".build/package.zip" },
+        { "step": "move", "src": ".build/LostOdysseyRecomp-windows-x64-v0.6.19", "dest": "install" },
+        { "step": "deletePath", "path": ".build" },
+        { "step": "defineExecutable", "executable": "install/LostOdysseyRecomp.exe", "title": "Play" }
+      ]
+    },
+    {
+      "versions": ["0.6.19"],
+      "targetPlatforms": ["Linux-x64"],
+      "dependencies": ["chmod"],
+      "steps": [
+        { "step": "createDir", "path": "install" },
+        {
+          "step": "fetch",
+          "url": "https://github.com/freefrank/LostOdysseyRecomp/releases/download/v0.6.19/LostOdysseyRecomp-linux-x64-v0.6.19.AppImage",
+          "dest": "install/LostOdysseyRecomp.AppImage"
+        },
+        { "step": "run", "cmd": "chmod", "args": ["+x", "install/LostOdysseyRecomp.AppImage"] },
+        { "step": "defineExecutable", "executable": "install/LostOdysseyRecomp.AppImage", "title": "Play" }
+      ]
+    }
+  ]
+}

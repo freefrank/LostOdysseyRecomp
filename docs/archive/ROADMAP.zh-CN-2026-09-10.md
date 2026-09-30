@@ -8,7 +8,7 @@
 
 状态：`[ ]` 计划／待完成 · `[~]` 进行中 · `[x]` 已在所述范围验证。
 
-工作项状态和优先级由[维护者公开 Project](https://github.com/users/freefrank/projects/3) 管理。本路线图是仓库内的公开中文镜像，由 [project_manager](../agents/project-management.md) 按需同步；实现、验证、玩家验收与发布证据分别保留。
+工作项状态和优先级由[维护者公开 Project](https://github.com/users/freefrank/projects/3) 管理。本路线图是仓库内的公开中文镜像，由 [project_manager](../project-management/README.md) 按需同步；实现、验证、玩家验收与发布证据分别保留。
 
 ## 当前进度与下一步 — 2026-09-09
 

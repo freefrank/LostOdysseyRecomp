@@ -3,6 +3,13 @@
 #include <kernel/xdm.h>
 #include <kernel/xam.h>
 #include <kernel/io/file_system.h>
+#include <kernel/io/file_system_test.h>
+#include <kernel/io/io_diagnostics.h>
+#include <condition_variable>
+#ifndef _WIN32
+#include <sys/mman.h>
+#include <unistd.h>
+#endif
 #include <stdexcept>
 #include <apu/xma.h>
 #include <gpu/ppc_mmio.h>
@@ -18,6 +25,10 @@ PPC_FUNC(__imp__NtCreateEvent);
 PPC_FUNC(__imp__NtCreateFile);
 PPC_FUNC(__imp__NtWriteFile);
 PPC_FUNC(__imp__NtReadFile);
+PPC_FUNC(__imp__NtReadFileScatter);
+PPC_FUNC(__imp__NtClose);
+PPC_FUNC(__imp__NtDuplicateObject);
+PPC_FUNC(__imp__NtWaitForSingleObjectEx);
 PPC_FUNC(__imp__NtQueryDirectoryFile);
 PPC_FUNC(__imp__NtFlushBuffersFile);
 PPC_FUNC(__imp__XamSwapDisc);
@@ -145,6 +156,592 @@ static void CheckConcurrentReads(uint32_t file)
     for (auto& thread : threads) thread.join();
     std::printf("concurrent positioned reads: %u mismatches / %u requests\n", failures.load(), workers * iterations);
     Check(failures == 0, "shared file handle must preserve each request's offset");
+}
+
+// These tests pause actual guest imports at deterministic boundaries. A failed
+// deadline terminates the test process, so a regression cannot hang in join().
+[[noreturn]] static void IoFailure(const char* message)
+{
+    std::fprintf(stderr, "FAIL io-lifetime: %s\n", message);
+    std::fflush(nullptr);
+    std::_Exit(1);
+}
+
+static void IoCheck(bool condition, const char* message)
+{
+    if (!condition) IoFailure(message);
+}
+
+class IoTask
+{
+    const char* name;
+    std::mutex mutex;
+    std::condition_variable cv;
+    bool finished = false;
+    std::exception_ptr error;
+    std::thread thread;
+public:
+    template<class F> IoTask(const char* label, F action) : name(label), thread([this, action = std::move(action)] {
+        try { action(); } catch (...) { error = std::current_exception(); }
+        { std::lock_guard lock(mutex); finished = true; }
+        cv.notify_all();
+    }) {}
+    void Join()
+    {
+        std::unique_lock lock(mutex);
+        if (!cv.wait_for(lock, std::chrono::seconds(60), [&] { return finished; })) IoFailure(name);
+        lock.unlock();
+        thread.join();
+        if (error)
+        {
+            try { std::rethrow_exception(error); }
+            catch (const std::exception& e) { IoFailure(e.what()); }
+            catch (...) { IoFailure(name); }
+        }
+    }
+    ~IoTask() { if (thread.joinable()) IoFailure("test abandoned a running worker"); }
+};
+
+class IoReadGate;
+static std::atomic<IoReadGate*> s_ioReadGate{nullptr};
+
+class IoReadGate
+{
+    uint32_t handle;
+    file_system_test::Stage pauseAt;
+    std::mutex mutex;
+    std::condition_variable cv;
+    std::array<unsigned, 6> counts{};
+    bool paused = false;
+    bool released = false;
+    static void Hook(file_system_test::Stage stage, uint32_t handle)
+    {
+        if (auto* gate = s_ioReadGate.load()) gate->Visit(stage, handle);
+    }
+    void Visit(file_system_test::Stage stage, uint32_t value)
+    {
+        if (value != handle) return;
+        std::unique_lock lock(mutex);
+        ++counts[size_t(stage)];
+        const bool mustPause = stage == pauseAt && !paused;
+        if (mustPause) { paused = true; released = false; }
+        cv.notify_all();
+        if (mustPause && !cv.wait_for(lock, std::chrono::seconds(60), [&] { return released; }))
+            IoFailure("read hook was not released");
+    }
+public:
+    IoReadGate(uint32_t value, file_system_test::Stage stage) : handle(value), pauseAt(stage)
+    {
+        s_ioReadGate = this;
+        file_system_test::SetHook(Hook);
+    }
+    ~IoReadGate()
+    {
+        file_system_test::SetHook(nullptr);
+        s_ioReadGate = nullptr;
+    }
+    void Wait(file_system_test::Stage stage, unsigned expected = 1)
+    {
+        std::unique_lock lock(mutex);
+        if (!cv.wait_for(lock, std::chrono::seconds(60), [&] { return counts[size_t(stage)] >= expected; }))
+            IoFailure("read did not reach its expected hook stage");
+    }
+    unsigned Count(file_system_test::Stage stage)
+    {
+        std::lock_guard lock(mutex);
+        return counts[size_t(stage)];
+    }
+    void Release()
+    {
+        { std::lock_guard lock(mutex); released = true; }
+        cv.notify_all();
+    }
+    void ContinueTo(file_system_test::Stage stage)
+    {
+        { std::lock_guard lock(mutex); pauseAt = stage; paused = false; released = true; }
+        cv.notify_all();
+    }
+};
+
+struct IoRead
+{
+    static constexpr uint32_t count = 256;
+    uint8_t* bytes = static_cast<uint8_t*>(g_userHeap.Alloc(count));
+    XIO_STATUS_BLOCK* iosb = static_cast<XIO_STATUS_BLOCK*>(g_userHeap.Alloc(sizeof(XIO_STATUS_BLOCK)));
+    be<uint64_t>* offset = g_userHeap.Alloc<be<uint64_t>>();
+    uint32_t status = 0xDEADBEEF;
+    explicit IoRead(uint64_t position = 0)
+    {
+        *offset = position;
+        std::memset(bytes, 0xA5, count);
+        iosb->Status = 0xDEADBEEF;
+        iosb->Information = 0xDEADBEEF;
+    }
+    ~IoRead() { g_userHeap.Free(bytes); g_userHeap.Free(iosb); g_userHeap.Free(offset); }
+    void Run(uint32_t handle, uint32_t event = 0, uint32_t routine = 0, uint32_t context = 0)
+    {
+        status = Call(__imp__NtReadFile, {handle, event, routine, context, Addr(iosb), Addr(bytes), count, Addr(offset)});
+    }
+    bool BytesMatch(uint8_t seed = 11) const
+    {
+        for (uint32_t i = 0; i < count; ++i)
+            if (bytes[i] != uint8_t((uint64_t(*offset) + i) * 37 + seed)) return false;
+        return true;
+    }
+    bool Complete(uint8_t seed = 11) const
+    {
+        return iosb->Status == STATUS_SUCCESS && iosb->Information == count && BytesMatch(seed);
+    }
+};
+
+static uint32_t OpenIoFixture(const char* path, uint32_t desiredAccess = 0x80000000)
+{
+    auto* name = static_cast<char*>(g_userHeap.Alloc(128));
+    auto* ansi = g_userHeap.Alloc<XANSI_STRING>();
+    auto* attributes = g_userHeap.Alloc<XOBJECT_ATTRIBUTES>();
+    auto* result = g_userHeap.Alloc<be<uint32_t>>();
+    auto* iosb = static_cast<XIO_STATUS_BLOCK*>(g_userHeap.Alloc(sizeof(XIO_STATUS_BLOCK)));
+    std::strcpy(name, path);
+    ansi->Buffer = name;
+    ansi->Length = uint16_t(std::strlen(name));
+    ansi->MaximumLength = uint16_t(std::strlen(name) + 1);
+    *attributes = {};
+    attributes->Name = ansi;
+    const auto status = Call(__imp__NtCreateFile, {Addr(result), desiredAccess, Addr(attributes), Addr(iosb), 0, 0, 1, 1, 0x40});
+    const uint32_t handle = *result;
+    g_userHeap.Free(name); g_userHeap.Free(ansi); g_userHeap.Free(attributes); g_userHeap.Free(result); g_userHeap.Free(iosb);
+    IoCheck(status == STATUS_SUCCESS, "open isolated fixture through NtCreateFile");
+    return handle;
+}
+
+static void CloseIoFixture(uint32_t handle)
+{
+    IoCheck(Call(__imp__NtClose, {handle}) == STATUS_SUCCESS, "close fixture through NtClose");
+}
+
+static void CheckInvalidIoHandle()
+{
+    auto* event = g_userHeap.Alloc<be<uint32_t>>();
+    IoCheck(Call(__imp__NtCreateEvent, {Addr(event), 0, 1, 0}) == STATUS_SUCCESS, "create handle for invalid I/O test");
+    const uint32_t invalid = *event;
+    CloseIoFixture(invalid);
+    IoCheck(!GetKernelObject(invalid), "invalid I/O test handle was not closed");
+
+#ifdef _WIN32
+    SYSTEM_INFO system{};
+    GetSystemInfo(&system);
+    const uint32_t pageSize = system.dwPageSize;
+#else
+    const long systemPageSize = sysconf(_SC_PAGESIZE);
+    IoCheck(systemPageSize > 0, "query OS page size for invalid I/O test");
+    const uint32_t pageSize = uint32_t(systemPageSize);
+#endif
+    const uint32_t offset = g_pageAllocator.Alloc(g_pageAllocator.virtualRegion, pageSize, pageSize);
+    IoCheck(offset != 0, "allocate guest page for unreadable offset");
+    void* offsetPage = g_memory.Translate(offset);
+#ifdef _WIN32
+    DWORD oldProtection = 0;
+    IoCheck(VirtualProtect(offsetPage, pageSize, PAGE_NOACCESS, &oldProtection) != 0,
+        "protect guest offset page against reads");
+    MEMORY_BASIC_INFORMATION protectedPage{};
+    IoCheck(VirtualQuery(offsetPage, &protectedPage, sizeof(protectedPage)) == sizeof(protectedPage) &&
+        protectedPage.Protect == PAGE_NOACCESS, "offset page is not actually inaccessible");
+#else
+    IoCheck(mprotect(offsetPage, pageSize, PROT_NONE) == 0, "protect guest offset page against reads");
+#endif
+    // The argument remains a real guest pointer through the import bridge.
+    // Any premature read of ByteOffset faults on the protected page.
+    auto* iosb = static_cast<XIO_STATUS_BLOCK*>(g_userHeap.Alloc(sizeof(XIO_STATUS_BLOCK)));
+    auto* bytes = static_cast<uint8_t*>(g_userHeap.Alloc(IoRead::count));
+    auto* segments = g_userHeap.Alloc<be<uint64_t>>();
+    *segments = Addr(bytes);
+    const std::array<PPCFunc*, 3> imports{__imp__NtReadFile, __imp__NtWriteFile, __imp__NtReadFileScatter};
+    const std::array<const char*, 3> names{"NtReadFile", "NtWriteFile", "NtReadFileScatter"};
+    for (size_t i = 0; i < imports.size(); ++i)
+    {
+        iosb->Status = 0xDEADBEEF;
+        iosb->Information = 0xDEADBEEF;
+        std::memset(bytes, 0xA5, IoRead::count);
+        const auto status = Call(imports[i], {invalid, 0, 0, 0, Addr(iosb),
+            i == 2 ? Addr(segments) : Addr(bytes), IoRead::count, offset});
+        IoCheck(status == STATUS_INVALID_HANDLE, "invalid handle I/O did not reject before reading the protected offset");
+        IoCheck(iosb->Status == 0xDEADBEEF && iosb->Information == 0xDEADBEEF &&
+            std::all_of(bytes, bytes + IoRead::count, [](uint8_t byte) { return byte == 0xA5; }),
+            "invalid handle I/O changed caller output");
+        std::printf("PASS: %s rejects a closed handle without reading the protected offset\n", names[i]);
+    }
+#ifdef _WIN32
+    DWORD replacedProtection = 0;
+    IoCheck(VirtualProtect(offsetPage, pageSize, oldProtection, &replacedProtection) != 0,
+        "restore protected guest page");
+#else
+    IoCheck(mprotect(offsetPage, pageSize, PROT_READ | PROT_WRITE) == 0, "restore protected guest page");
+#endif
+    g_pageAllocator.Free(g_pageAllocator.virtualRegion, offset);
+    g_userHeap.Free(event); g_userHeap.Free(iosb); g_userHeap.Free(bytes); g_userHeap.Free(segments);
+}
+
+static void CheckReadCloseLifetime(file_system_test::Stage pauseAt)
+{
+    const uint32_t original = OpenIoFixture("game:\\first.bin");
+    std::weak_ptr<KernelObject> lifetime = GetKernelObject(original);
+    IoRead read(131);
+    IoReadGate gate(original, pauseAt);
+    IoTask reader("close-racing read did not complete", [&] { read.Run(original); });
+    gate.Wait(pauseAt);
+    IoTask closer("NtClose waited for in-flight file I/O", [&] { CloseIoFixture(original); });
+    closer.Join();
+    IoCheck(!lifetime.expired(), "NtClose destroyed the acquired file while a read still owns it");
+    IoCheck(!GetKernelObject(original), "closed handle remains in the registry");
+    IoRead invalid;
+    invalid.Run(original);
+    IoCheck(invalid.status == STATUS_INVALID_HANDLE, "read accepted the closed handle");
+
+    // The old request must keep its own FILE even when a different file is
+    // opened after the public handle was closed. Numeric reuse is allocator-dependent.
+    const uint32_t replacement = OpenIoFixture("game:\\second.bin");
+    IoRead newRead(131);
+    newRead.Run(replacement);
+    IoCheck(newRead.status == STATUS_SUCCESS && newRead.Complete(193), "new file returned the old file's bytes");
+    CloseIoFixture(replacement);
+    IoCheck(!lifetime.expired(), "unrelated close released the in-flight file");
+    gate.Release();
+    reader.Join();
+    IoCheck(read.status == STATUS_SUCCESS && read.Complete(), "close changed the in-flight read's file or bytes");
+    IoCheck(lifetime.expired(), "file survives after its final read and handle are released");
+    IoCheck(gate.Count(file_system_test::Stage::CompletionPublished) == 1, "read published completion more than once");
+    std::printf("PASS: NtClose at %s preserves in-flight file and isolates a new open\n",
+        pauseAt == file_system_test::Stage::HandleAcquired ? "handle acquisition" : "I/O lock acquisition");
+}
+
+static void CheckDuplicateLifetime()
+{
+    auto* duplicate = g_userHeap.Alloc<be<uint32_t>>();
+    for (unsigned closeOrder = 0; closeOrder < 3; ++closeOrder)
+    {
+        const uint32_t original = OpenIoFixture("game:\\first.bin");
+        std::weak_ptr<KernelObject> lifetime = GetKernelObject(original);
+        IoCheck(Call(__imp__NtDuplicateObject, {original, Addr(duplicate), closeOrder == 2 ? 1u : 0u}) == STATUS_SUCCESS,
+            "duplicate file through NtDuplicateObject");
+        const uint32_t copy = *duplicate;
+        IoCheck(copy != original && GetKernelObject(copy) != nullptr, "duplicate did not create a distinct live handle");
+        uint32_t survivor;
+        if (closeOrder == 0) { CloseIoFixture(original); survivor = copy; }
+        else if (closeOrder == 1) { CloseIoFixture(copy); survivor = original; }
+        else { IoCheck(!GetKernelObject(original), "DUPLICATE_CLOSE_SOURCE kept its source handle"); survivor = copy; }
+        IoCheck(!lifetime.expired(), "closing one duplicate destroyed the shared file");
+        IoRead read(509);
+        read.Run(survivor);
+        IoCheck(read.status == STATUS_SUCCESS && read.Complete(), "surviving duplicate lost its file");
+        CloseIoFixture(survivor);
+        IoCheck(lifetime.expired(), "closing all duplicates retained the file");
+    }
+    g_userHeap.Free(duplicate);
+    std::puts("PASS: NtDuplicateObject survives both close orders and DUPLICATE_CLOSE_SOURCE");
+}
+
+static std::pair<uint64_t, uint64_t> CheckBlockedIoSnapshot(uint32_t file)
+{
+    io_diagnostics::SnapshotData snapshot;
+    IoTask observer("manual I/O snapshot waited for a file lock", [&] {
+        snapshot = io_diagnostics::Snapshot();
+        LoDumpIoDiagnostics("io-diagnostics-paused.jsonl");
+    });
+    observer.Join();
+    IoCheck(snapshot.enabled && snapshot.finishedNs >= snapshot.capturedNs,
+        "diagnostic snapshot was disabled or had reversed timestamps");
+    const io_diagnostics::Record* owner = nullptr;
+    const io_diagnostics::Record* waiter = nullptr;
+    for (const auto& record : snapshot.active)
+    {
+        if (record.handle != file || std::strcmp(record.operation, "NtReadFile") != 0) continue;
+        if (record.stage == io_diagnostics::Stage::IoLockAcquired) owner = &record;
+        if (record.stage == io_diagnostics::Stage::IoLockWait) waiter = &record;
+    }
+    IoCheck(owner && waiter, "snapshot omitted the controlled file lock owner or waiter");
+    IoCheck(owner->lockHeld && !waiter->lockHeld && owner->request != waiter->request && owner->hostTid != waiter->hostTid,
+        "snapshot confused lock ownership or requesting threads");
+    IoCheck(owner->objectInstance && owner->objectInstance == waiter->objectInstance &&
+        owner->objectAddress == waiter->objectAddress && owner->mutexAddress && owner->mutexAddress == waiter->mutexAddress,
+        "snapshot did not identify the shared file instance and mutex");
+    IoCheck(waiter->ownerObservationStable && waiter->observedOwnerRequest == owner->request &&
+        waiter->observedOwnerTid == owner->hostTid && waiter->snapshotOwnerResolved &&
+        waiter->snapshotOwnerRequest == owner->request && waiter->snapshotOwnerTid == owner->hostTid &&
+        !waiter->ownerChangedWhileWaiting, "snapshot failed to associate the waiter with its current owner");
+    IoCheck(owner->requestedOffset == 97 && waiter->requestedOffset == 769 && owner->length == IoRead::count &&
+        waiter->length == IoRead::count && std::string_view(owner->path).ends_with("first.bin") &&
+        std::strcmp(owner->path, waiter->path) == 0, "snapshot lost the file path, offsets, or lengths");
+
+    std::ifstream dump("io-diagnostics-paused.jsonl");
+    std::string line;
+    unsigned summaries = 0, activeReads = 0;
+    while (std::getline(dump, line))
+    {
+        const auto record = nlohmann::json::parse(line);
+        if (record.at("type") == "summary")
+        {
+            ++summaries;
+            IoCheck(record.at("enabled") == true && record.at("active_capacity") == io_diagnostics::ActiveCapacity &&
+                record.at("history_capacity") == io_diagnostics::HistoryCapacity,
+                "manual dump omitted enabled state or recorder bounds");
+        }
+        if (record.at("type") == "active" && record.at("handle") == file && record.at("operation") == "NtReadFile")
+            ++activeReads;
+    }
+    IoCheck(dump.eof() && summaries == 1 && activeReads == 2, "manual JSONL dump omitted the two blocked read records");
+    std::printf("PASS: manual snapshot sees owner request %llu and waiter %llu on object %llu; JSONL retained\n",
+        static_cast<unsigned long long>(owner->request), static_cast<unsigned long long>(waiter->request),
+        static_cast<unsigned long long>(owner->objectInstance));
+    return {owner->request, waiter->request};
+}
+
+static void CheckFinishedIoSnapshot(std::pair<uint64_t, uint64_t> requests)
+{
+    const auto snapshot = io_diagnostics::Snapshot();
+    const io_diagnostics::Record* completedOwner = nullptr;
+    for (const auto request : {requests.first, requests.second})
+    {
+        IoCheck(std::none_of(snapshot.active.begin(), snapshot.active.end(),
+            [&](const auto& record) { return record.request == request; }), "finished read remained active in diagnostics");
+        uint64_t transferred = 0, published = 0, unlocked = 0;
+        bool returned = false;
+        for (const auto& record : snapshot.history)
+        {
+            if (record.request != request) continue;
+            if (!transferred && record.stage == io_diagnostics::Stage::TransferDone) transferred = record.sequence;
+            if (!unlocked && record.stage == io_diagnostics::Stage::IoLockReleased && !record.lockHeld) unlocked = record.sequence;
+            if (record.stage == io_diagnostics::Stage::CompletionPublished)
+            {
+                IoCheck(!record.lockHeld, "completion was published while the file I/O mutex was held");
+                if (!published) published = record.sequence;
+            }
+            returned |= record.stage == io_diagnostics::Stage::ApiReturn && !record.lockHeld && record.hasResult &&
+                record.status == STATUS_SUCCESS && record.transferred == IoRead::count &&
+                record.resolvedOffset == (request == requests.first ? 97u : 769u);
+            if (request == requests.first && record.stage == io_diagnostics::Stage::ApiReturn) completedOwner = &record;
+        }
+        IoCheck(transferred && unlocked && published && returned, "completed read history lost its transfer, publication, unlock, or result");
+        IoCheck(transferred < unlocked && unlocked < published,
+            "read completion history did not release the I/O mutex between transfer and completion publication");
+    }
+    IoCheck(completedOwner != nullptr, "completed owner identity missing from diagnostic history");
+    uint64_t closeSequence = 0, destroySequence = 0;
+    unsigned closeCount = 0;
+    for (const auto& record : snapshot.history)
+    {
+        if (record.stage == io_diagnostics::Stage::CloseBegin && record.handle == completedOwner->handle)
+            IoCheck(record.objectInstance == 0, "close attempt prematurely attributed a previously observed object");
+        if (record.stage == io_diagnostics::Stage::CloseEnd && record.handle == completedOwner->handle)
+        {
+            ++closeCount;
+            closeSequence = record.sequence;
+            IoCheck(record.objectInstance == completedOwner->objectInstance && record.objectAddress == completedOwner->objectAddress,
+                "CloseEnd did not identify the file object actually removed from the handle table");
+        }
+        if (record.stage == io_diagnostics::Stage::Destroyed && record.objectInstance == completedOwner->objectInstance)
+            destroySequence = record.sequence;
+    }
+    IoCheck(closeCount == 1 && closeSequence && destroySequence > closeSequence,
+        "actual close identity was not recorded before final file destruction");
+    IoCheck(snapshot.active.size() <= io_diagnostics::ActiveCapacity && snapshot.history.size() <= io_diagnostics::HistoryCapacity,
+        "diagnostic storage exceeded its advertised bounds");
+    LoDumpIoDiagnostics("io-diagnostics-complete.jsonl");
+    std::puts("PASS: completed history records read stages and the actual closed file before destruction");
+}
+
+static void CheckIndependentIo(bool diagnostics = false)
+{
+    const uint32_t shared = OpenIoFixture("game:\\first.bin");
+    const uint32_t independent = OpenIoFixture("game:\\second.bin");
+    IoRead first(97), second(769), separate(205);
+    IoReadGate gate(shared, file_system_test::Stage::IoLockAcquired);
+    IoTask owner("I/O lock owner did not complete", [&] { first.Run(shared); });
+    gate.Wait(file_system_test::Stage::IoLockAcquired);
+    IoTask waiter("same-file waiter did not complete", [&] { second.Run(shared); });
+    gate.Wait(file_system_test::Stage::HandleAcquired, 2);
+    IoTask other("independent file was blocked by a different file's lock", [&] {
+        separate.Run(independent);
+        CloseIoFixture(independent);
+    });
+    other.Join();
+    IoCheck(separate.status == STATUS_SUCCESS && separate.Complete(193), "independent file read did not finish correctly");
+    IoCheck(gate.Count(file_system_test::Stage::IoLockAcquired) == 1, "same-file waiter bypassed its owner's lock");
+    std::pair<uint64_t, uint64_t> requests{};
+    if (diagnostics)
+    {
+        gate.Wait(file_system_test::Stage::IoLockWaiting, 2);
+        requests = CheckBlockedIoSnapshot(shared);
+    }
+    gate.Release();
+    owner.Join(); waiter.Join();
+    IoCheck(first.status == STATUS_SUCCESS && first.Complete() && second.status == STATUS_SUCCESS && second.Complete(),
+        "serialized reads lost their individual offsets");
+    CloseIoFixture(shared);
+    if (diagnostics) CheckFinishedIoSnapshot(requests);
+    std::puts("PASS: independent file I/O and close progress while a shared file has an owner and waiter");
+}
+
+struct IoApcObservation
+{
+    IoRead* read;
+    uint32_t context;
+    std::thread::id issuer;
+    std::atomic<unsigned> calls{0};
+    std::atomic<unsigned> failures{0};
+};
+static IoApcObservation* s_ioApcObservation;
+
+static PPC_FUNC(IoApcCallback)
+{
+    auto& observation = *s_ioApcObservation;
+    ++observation.calls;
+    if (std::this_thread::get_id() != observation.issuer || ctx.r3.u32 != observation.context ||
+        ctx.r4.u32 != Addr(observation.read->iosb) || ctx.r5.u32 != 0 || !observation.read->Complete())
+        ++observation.failures;
+}
+
+static void CheckIoCompletion()
+{
+    const uint32_t file = OpenIoFixture("game:\\first.bin");
+    std::weak_ptr<KernelObject> lifetime = GetKernelObject(file);
+    auto* eventOut = g_userHeap.Alloc<be<uint32_t>>();
+    auto* timeout = g_userHeap.Alloc<be<int64_t>>();
+    *timeout = 0;
+    IoCheck(Call(__imp__NtCreateEvent, {Addr(eventOut), 0, 1, 0}) == STATUS_SUCCESS, "create auto-reset I/O event");
+    const uint32_t event = *eventOut;
+    IoRead read(313);
+    IoApcObservation observation{&read, 0x53C0FFEE};
+    s_ioApcObservation = &observation;
+    PPCFunc* previous = g_memory.FindFunction(PPC_CODE_BASE);
+    g_memory.InsertFunction(PPC_CODE_BASE, IoApcCallback);
+    IoReadGate gate(file, file_system_test::Stage::TransferDone);
+    IoCheck(Call(__imp__NtWaitForSingleObjectEx, {event, 0, 0, Addr(timeout)}) == STATUS_TIMEOUT,
+        "I/O event was signaled before the read");
+    IoTask issuer("issuing thread did not complete its alertable waits", [&] {
+        observation.issuer = std::this_thread::get_id();
+        read.Run(file, event, PPC_CODE_BASE | 1u, observation.context);
+        IoCheck(observation.calls == 0, "APC ran before an alertable wait");
+        IoCheck(Call(__imp__NtWaitForSingleObjectEx, {event, 0, 0, Addr(timeout)}) == STATUS_TIMEOUT && observation.calls == 0,
+            "non-alertable wait delivered an APC");
+        IoCheck(Call(__imp__NtWaitForSingleObjectEx, {event, 0, 1, Addr(timeout)}) == STATUS_USER_APC,
+            "issuing thread's alertable wait did not deliver completion");
+        IoCheck(observation.calls == 1 && observation.failures == 0, "APC arguments, bytes, count, or issuing thread differ");
+        IoCheck(Call(__imp__NtWaitForSingleObjectEx, {event, 0, 1, Addr(timeout)}) == STATUS_TIMEOUT && observation.calls == 1,
+            "completion APC was delivered more than once");
+    });
+    gate.Wait(file_system_test::Stage::TransferDone);
+    IoCheck(read.BytesMatch() && read.iosb->Status == 0xDEADBEEF && read.iosb->Information == 0xDEADBEEF,
+        "transfer boundary did not precede IOSB publication");
+    IoCheck(Call(__imp__NtWaitForSingleObjectEx, {event, 0, 1, Addr(timeout)}) == STATUS_TIMEOUT && observation.calls == 0,
+        "I/O event was signaled before IOSB publication");
+    gate.ContinueTo(file_system_test::Stage::BeforeCompletion);
+    gate.Wait(file_system_test::Stage::BeforeCompletion);
+    IoRead second(901);
+    IoTask other("same-file read was blocked by a pending completion", [&] { second.Run(file); });
+    other.Join();
+    IoCheck(second.status == STATUS_SUCCESS && second.Complete(), "same-file read lost its bytes while the first completion was paused");
+    CloseIoFixture(file);
+    IoCheck(!lifetime.expired(), "closing the handle destroyed the file before read completion publication");
+    IoCheck(read.iosb->Status == 0xDEADBEEF && read.iosb->Information == 0xDEADBEEF &&
+        Call(__imp__NtWaitForSingleObjectEx, {event, 0, 1, Addr(timeout)}) == STATUS_TIMEOUT && observation.calls == 0,
+        "another request completed the paused read's IOSB, event, or APC");
+    gate.ContinueTo(file_system_test::Stage::CompletionPublished);
+    gate.Wait(file_system_test::Stage::CompletionPublished, 2);
+    IoCheck(read.Complete(), "event became observable before buffer and IOSB were complete");
+    IoCheck(Call(__imp__NtWaitForSingleObjectEx, {event, 0, 1, Addr(timeout)}) == STATUS_SUCCESS && observation.calls == 0,
+        "completion event missing or another thread delivered the issuing thread's APC");
+    IoCheck(Call(__imp__NtWaitForSingleObjectEx, {event, 0, 1, Addr(timeout)}) == STATUS_TIMEOUT && observation.calls == 0,
+        "one completion left multiple consumable event notifications");
+    gate.Release();
+    issuer.Join();
+    IoCheck(read.status == STATUS_SUCCESS && gate.Count(file_system_test::Stage::CompletionPublished) == 2,
+        "the two reads did not each publish one successful completion");
+    IoCheck(lifetime.expired(), "read retained the closed file after completing");
+    g_memory.InsertFunction(PPC_CODE_BASE, previous);
+    s_ioApcObservation = nullptr;
+    CloseIoFixture(event);
+    g_userHeap.Free(eventOut); g_userHeap.Free(timeout);
+    std::puts("PASS: pending read completion permits same-file I/O and survives close; event/IOSB and one issuing-thread APC remain correct");
+}
+
+static void CheckWriteAndScatterCompletion(bool writing)
+{
+    const uint8_t seed = writing ? 67 : 11;
+    const uint32_t file = OpenIoFixture(writing ? "game:\\write.bin" : "game:\\first.bin",
+        writing ? 0xC0000000u : 0x80000000u);
+    std::weak_ptr<KernelObject> lifetime = GetKernelObject(file);
+    auto* eventOut = g_userHeap.Alloc<be<uint32_t>>();
+    auto* timeout = g_userHeap.Alloc<be<int64_t>>();
+    auto* segments = g_userHeap.Alloc<be<uint64_t>>();
+    *timeout = 0;
+    IoCheck(Call(__imp__NtCreateEvent, {Addr(eventOut), 0, 1, 0}) == STATUS_SUCCESS, "create write/scatter auto-reset event");
+    const uint32_t event = *eventOut;
+    IoRead request(173), readback(173);
+    *segments = Addr(request.bytes);
+    if (writing)
+        for (uint32_t i = 0; i < IoRead::count; ++i) request.bytes[i] = uint8_t((173 + i) * 37 + seed);
+    IoReadGate gate(file, file_system_test::Stage::BeforeCompletion);
+    IoTask issuer("write/scatter request did not finish publication", [&] {
+        request.status = Call(writing ? __imp__NtWriteFile : __imp__NtReadFileScatter,
+            {file, event, 0, 0, Addr(request.iosb), writing ? Addr(request.bytes) : Addr(segments),
+                IoRead::count, Addr(request.offset)});
+    });
+    gate.Wait(file_system_test::Stage::BeforeCompletion);
+    IoCheck(request.BytesMatch(seed) && request.iosb->Status == 0xDEADBEEF && request.iosb->Information == 0xDEADBEEF,
+        "write/scatter transfer did not precede its IOSB publication");
+    IoCheck(Call(__imp__NtWaitForSingleObjectEx, {event, 0, 0, Addr(timeout)}) == STATUS_TIMEOUT,
+        "write/scatter signaled before completion publication");
+    IoTask other("write/scatter pending completion blocked same-file I/O", [&] { readback.Run(file); });
+    other.Join();
+    IoCheck(readback.status == STATUS_SUCCESS && readback.Complete(seed), "same-file readback failed before write/scatter completion");
+    CloseIoFixture(file);
+    IoCheck(!lifetime.expired(), "close destroyed a write/scatter request before completion publication");
+    gate.Release();
+    issuer.Join();
+    IoCheck(request.status == STATUS_SUCCESS && request.Complete(seed), "write/scatter completion bytes or IOSB differ");
+    IoCheck(Call(__imp__NtWaitForSingleObjectEx, {event, 0, 0, Addr(timeout)}) == STATUS_SUCCESS &&
+        Call(__imp__NtWaitForSingleObjectEx, {event, 0, 0, Addr(timeout)}) == STATUS_TIMEOUT,
+        "write/scatter did not publish one consumable completion event");
+    IoCheck(lifetime.expired(), "write/scatter retained the file after its final completion");
+    CloseIoFixture(event);
+    g_userHeap.Free(eventOut); g_userHeap.Free(timeout); g_userHeap.Free(segments);
+    std::printf("PASS: %s permits same-file I/O before completion and preserves bytes/IOSB/event across close\n",
+        writing ? "NtWriteFile" : "NtReadFileScatter");
+}
+
+static void CheckIoLifetime(bool diagnosticsOnly = false)
+{
+    std::setvbuf(stdout, nullptr, _IONBF, 0);
+    if (diagnosticsOnly) IoCheck(io_diagnostics::Enabled(), "io-diagnostics requires LO_IO_DIAGNOSTICS=1 before process startup");
+    const auto game = std::filesystem::absolute(diagnosticsOnly ? "io-diagnostics-fixture-game" : "io-lifetime-fixture-game");
+    IoCheck(!std::filesystem::exists(game), "I/O fixture destination must be new");
+    std::filesystem::create_directories(game);
+    for (const auto& [name, seed] : {std::pair{"first.bin", 11}, std::pair{"second.bin", 193}, std::pair{"write.bin", 7}})
+    {
+        std::ofstream output(game / name, std::ios::binary);
+        for (unsigned i = 0; i < 4096; ++i) output.put(char(uint8_t(i * 37 + seed)));
+        IoCheck(bool(output), "write isolated I/O fixture");
+    }
+    FileSystem::Init(game);
+    XamInit();
+    if (diagnosticsOnly)
+    {
+        CheckIndependentIo(true);
+        std::filesystem::remove_all(game);
+        return;
+    }
+    CheckReadCloseLifetime(file_system_test::Stage::HandleAcquired);
+    CheckReadCloseLifetime(file_system_test::Stage::IoLockAcquired);
+    CheckDuplicateLifetime();
+    CheckIndependentIo();
+    CheckIoCompletion();
+    CheckWriteAndScatterCompletion(true);
+    CheckWriteAndScatterCompletion(false);
+    const uint32_t concurrent = OpenIoFixture("game:\\first.bin");
+    CheckConcurrentReads(concurrent);
+    CloseIoFixture(concurrent);
+    std::filesystem::remove_all(game);
+    std::puts("PASS: deterministic guest I/O lifetime regression (synthetic fixture; not an Issue #53 gameplay reproduction)");
 }
 
 // Exercise the real MMIO bridge and decoder worker without private audio data.
@@ -474,6 +1071,9 @@ int main(int argc, char** argv)
         { Check(argc == 4,"discs requires absolute disc-set directory"); CheckDiscs(argv[3], std::string_view(argv[1]) == "disc-rejected"); return 0; }
         if (std::string_view(argv[1]) == "xma-commands") { CheckXmaCommands(); return 0; }
         if (std::string_view(argv[1]) == "directory-filter") { CheckDirectoryFilter(); return 0; }
+        if (std::string_view(argv[1]) == "io-lifetime") { CheckIoLifetime(); return 0; }
+        if (std::string_view(argv[1]) == "io-diagnostics") { CheckIoLifetime(true); return 0; }
+        if (std::string_view(argv[1]) == "io-invalid-handle") { CheckInvalidIoHandle(); return 0; }
         if (std::string_view(argv[1]) == "dlc" || std::string_view(argv[1]) == "dlc-restart")
         { Check(argc == 4, "dlc requires parser-imported game root"); CheckDlc(argv[3], std::string_view(argv[1]) == "dlc-restart"); return 0; }
         FileSystem::Init(std::filesystem::absolute("game"));

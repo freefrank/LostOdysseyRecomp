@@ -1,0 +1,28 @@
+name: FG development snapshot
+on:
+  push:
+    branches: ['fix/p0-shutdown-p4-continuity-20260927']
+    paths: ['.github/workflows/fg-dev-snapshot.yml']
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Archive tracked source
+        run: git archive HEAD -o /tmp/fg-source.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fg-development-source
+          path: /tmp/fg-source.tar
+          retention-days: 1
+      - name: Configure contracts
+        run: cmake -S tools/tests/streamline_fg -B build/fg-contracts -DLO_STREAMLINE_FG_CPU_ONLY=ON
+      - name: Build contracts
+        run: cmake --build build/fg-contracts --parallel 2
+      - name: Test contracts
+        run: ctest --test-dir build/fg-contracts --output-on-failure

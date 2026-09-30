@@ -1,19 +1,28 @@
 # 逆向与验证笔记
 
-先读[当前状态](../STATUS.md)和[接手入口](handoff.md)。日期化实验保留证据，不自动代表当前功能支持。过期GPU、内核和旧交接已移到[归档](../archive/README.md)。
+先读[当前状态](../STATUS.md)和[路线图](../ROADMAP.zh-CN.md)。[旧交接](handoff.md)和日期化实验保留当时证据，不自动代表当前功能支持。部分过期 GPU、内核和交接记录已移到[归档](../archive/README.md)。
 
-当前进度：[v0.4.2 修复与验证](../STATUS.md) · [v0.4.0 开发历史与限定验证](v0.4.0-development.md) · [路线图](../ROADMAP.zh-CN.md) · [v0.5.0 PC Vulkan／DX11 规划 TODO](../ROADMAP.zh-CN.md#v050-pc-graphics)。历史汇总：[2026-09-05成果与交接](../WORK_REPORT_2026-09-05.md)。
+当前进度：[项目状态](../STATUS.md) · [图形后端路线图](../ROADMAP.zh-CN.md#v050-pc-graphics) · [Linux／Steam Deck 评估](linux-port-evaluation-2026-09-13.md)。历史汇总：[2026-09-05成果与交接](../WORK_REPORT_2026-09-05.md)。Issue #53 当前记录：[Disc 2 加载调查与防御性修正](ISSUE_53_DISC2_HANG_FIX_REPORT.md)。
+
+## FSR / DLSS FG 记录
+
+- [当前 P2 交接](fsr-dlss-fg-codex-handoff.zh-CN.md)：现行实现、验证边界、证据路径和接续步骤。
+- [Codex 进度日志](fsr-dlss-fg-codex-progress.zh-CN.md)：保留日期化历史结果；其中旧“当前状态”不代表现状。
+- [Codex 历史交接](fsr-dlss-fg-codex-history.zh-CN.md)：保留早期暂停 checkpoint 和后续历史过程。
+- [OpenCode P0 handoff](fsr-dlss-fg-handoff.zh-CN.md)：早期阶段快照。
+- [导入需求与阶段映射](fsr-dlss-fg-imported-tasks.zh-CN.md)：需求来源与历史项目映射；进度字段已过期。
 
 ## 现有文档
 
 | 专项笔记 |
 |---|
+| [v0.6.0 发布前审计与修复状态（2026-09-18；未发布，运行时与真实更新验证仍有边界）](../audits/0.6.0-prerelease.md) |
 | [当前场景 TAA jitter 覆盖与静态 shader discovery（2026-09-13；候选，未验收）](taa-current-scene-2026-09-13.md) |
 | [Issue #7：议会崩溃、原生保存／读档与日志诊断](issue7-cutscene-crash.md) |
 | [PowerPC 位宽／控制流审查与九类语义修复](recompiler-width-audit.md) |
-| [Switch 评估与 v0.5.0 PC Vulkan／DX11 交接（2026-09-07；后端规划待实施、待验收，PC Vulkan 后再对齐 Switch）](switch-vulkan-handoff.md) |
+| [Switch 评估与 v0.5.0 PC Vulkan／DX11 历史交接（2026-09-07；当前后端状态见 STATUS）](switch-vulkan-handoff.md) |
 | [Linux／Steam Deck 首可玩评估与当前状态（2026-09-13—14；WSL 首可玩已验证，原生 GPU／Steam Deck 未验证）](linux-port-evaluation-2026-09-13.md) |
-| [v0.5.0 QOL 需求与未来验收标准（仅规划，12 项待完成／待验证）](v0.5.0-qol-requirements.md) |
+| [v0.5.0 QOL 历史需求与验收标准（当前进度见 STATUS）](v0.5.0-qol-requirements.md) |
 | [v0.4.0 开发历史与验证边界](v0.4.0-development.md) |
 | [v0.4.0 后续实现、正式包与验收范围](handoff-v0.4.0-followup.md) |
 | [凯姆首战身体阴影 v0.4.0 复查（2026-09-07 用户挂起，未确认复现）](kaim-body-shadow-v040.md) |
@@ -36,9 +45,9 @@
 | [Debug 地图 ID 和本地化名称（2026-09-05）](debug-map-info.md) |
 | [Debug 人物传送：逆向依据与验证边界（2026-09-04）](debug-teleport.md) |
 | [随机遇敌动画与战斗停滞调查（2026-09-04，主角与战斗停滞已修复，敌人待查）](encounter-animation.md) |
-| [GPU 当前说明（2026-09-05）](gpu.md) |
-| [接手入口（2026-09-05）](handoff.md) |
-| [内核 HLE 当前说明（2026-09-05）](kernel.md) |
+| [GPU 说明（2026-09-05 快照）](gpu.md) |
+| [接手入口（历史交接，当前状态以 STATUS 为准）](handoff.md) |
+| [内核 HLE 说明（2026-09-05 快照）](kernel.md) |
 | [光照 / 阴影续修（2026-09-04）](lighting-stencil-depth-clear.md) |
 | [火焰受击亮暗帧与灯光参数（2026-09-05）](fire-hit-rendering.md) |
 | [Polygon offset 接入与验证边界（2026-09-05）](polygon-offset.md) |

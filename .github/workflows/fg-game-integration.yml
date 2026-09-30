@@ -1,0 +1,78 @@
+name: FG game integration compile
+on:
+  push:
+    branches: [feature/reusable-fg-fsr-d3d12-mfg]
+    paths:
+      - LostOdysseyRecomp/gpu/**
+      - shared/frame_generation/**
+      - cmake/LoFrameGeneration.cmake
+      - tools/patches/plume-lostodyssey.patch
+      - tools/tests/frame_generation/**
+      - tools/tests/motion_replay/CMakeLists.txt
+      - .github/workflows/fg-game-integration.yml
+  pull_request:
+    paths:
+      - LostOdysseyRecomp/gpu/**
+      - shared/frame_generation/**
+      - cmake/LoFrameGeneration.cmake
+      - tools/patches/plume-lostodyssey.patch
+      - tools/tests/frame_generation/**
+      - tools/tests/motion_replay/CMakeLists.txt
+      - .github/workflows/fg-game-integration.yml
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - name: Preserve source line endings
+        shell: bash
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Initialize pinned public dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          git submodule update --init --depth 1 thirdparty/plume tools/XenosRecomp tools/XenonRecomp thirdparty/unordered_dense thirdparty/SDL
+          git -C thirdparty/plume apply ../../tools/patches/plume-lostodyssey.patch
+          git -C thirdparty/plume submodule update --init --depth 1 contrib/volk contrib/Vulkan-Headers contrib/VulkanMemoryAllocator contrib/D3D12MemoryAllocator
+          git -C tools/XenosRecomp submodule update --init --recursive --depth 1
+          git -C tools/XenonRecomp submodule update --init --depth 1 thirdparty/tomlplusplus
+      - uses: actions/checkout@v4
+        with:
+          repository: NVIDIA-RTX/Streamline
+          ref: 2122257e0fce486f91b385aa63b9a09b0a34b363
+          path: out/deps/streamline
+          sparse-checkout: include
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: GPUOpen-LibrariesAndSDKs/FidelityFX-SDK
+          ref: c6efa6bf7f2027b3ec94f28578bb5965eabb9e55
+          path: out/deps/fidelityfx
+          sparse-checkout: ffx-api/include
+          persist-credentials: false
+      - name: Configure actual game translation units
+        shell: pwsh
+        run: |
+          cmake -S tools/tests/motion_replay -B out/fg-game -G 'Visual Studio 17 2022' -A x64 -T ClangCL -DLO_ENABLE_DLSS=OFF -DLO_ENABLE_FSR=OFF -DLO_P2_VIDEO_COMPILE_CHECK=ON -DLO_P2_VIDEO_SDL_HEADERS="$pwd/thirdparty/SDL/include" -DLO_FG_GAME_COMPILE_CHECK=ON -DFRAMEGEN_WITH_DLSS=ON -DFRAMEGEN_WITH_FSR=ON -DFRAMEGEN_STREAMLINE_INCLUDE="$pwd/out/deps/streamline/include" -DFRAMEGEN_FIDELITYFX_INCLUDE="$pwd/out/deps/fidelityfx/ffx-api/include" 2>&1 | Tee-Object out/fg-game-configure.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Compile production renderer, video, bridge and link selected adapters
+        shell: pwsh
+        run: |
+          cmake --build out/fg-game --config Release --target motion_renderer_compile p2_video_compile LoFgGameBridgeLink LoFgGameInputTest --parallel 2 2>&1 | Tee-Object out/fg-game-build.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & out/fg-game/Release/LoFgGameBridgeLink.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ctest --test-dir out/fg-game -C Release --output-on-failure -R '^fg_game_input_contract$'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Output 'COMPILE_AND_CPU_ONLY: no SDK runtime, game launch or GPU acceptance performed'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fg-game-compile-logs
+          path: out/fg-game-*.log
+          retention-days: 7

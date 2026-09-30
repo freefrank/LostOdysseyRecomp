@@ -143,8 +143,11 @@ CLAUDE.md
 
 # Local agent state and tool artifacts
 /.omo/
+/.omx/
 /node_modules/
 /nul
 /AGENTS.md
 /docs/agents/
 /.opencode/
+/.lo-portable-backup/
+.slim/deepwork/

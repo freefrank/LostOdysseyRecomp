@@ -1,5 +1,6 @@
 #pragma once
 #include "temporal_math.h"
+#include <cstdint>
 #include <vector>
 #include <string>
 #include <cstring>

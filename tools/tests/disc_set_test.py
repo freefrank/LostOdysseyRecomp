@@ -53,9 +53,6 @@ def main():
         second = root/"disc2"
         (second/"LO.fpi").unlink()
         run("missing index")
-        make_disc(root, 2)
-        (second/"xenon_snd.fpd").write_bytes(b"short")
-        run("truncated archive")
         make_disc(root, 2, 4)
         run("mixed edition")
         make_disc(root, 2)
@@ -65,7 +62,7 @@ def main():
         run("wrong index disc")
         make_disc(root, 2)
         data = bytearray((second/"LO.fpi").read_bytes())
-        struct.pack_into("<I", data, 68, 0xFFFFFFFF)
+        struct.pack_into("<I", data, 32, 0xFFFFFFFF)
         (second/"LO.fpi").write_bytes(data)
         run("out-of-bounds index table")
         make_disc(root, 2)

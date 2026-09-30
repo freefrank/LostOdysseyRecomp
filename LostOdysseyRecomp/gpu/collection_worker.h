@@ -7,6 +7,7 @@
 #include <optional>
 #include <semaphore>
 #include <thread>
+#include <os/thread_name.h>
 #include <utility>
 
 namespace gpu::taa_collection {
@@ -69,6 +70,7 @@ public:
     template<class Function> explicit CollectionWorker(Function function)
         : control_(std::make_shared<Control>()) {
         std::thread([control = control_, function = std::move(function)]() mutable {
+            os::SetCurrentThreadName("Collect Worker");
             try { function(*control); } catch (...) { /* Optional collection cannot crash the game. */ }
         }).detach();
     }

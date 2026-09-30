@@ -15,13 +15,6 @@ namespace
 {
 using json = nlohmann::json;
 
-bool HexDigest(std::string_view value)
-{
-    return value.size() == 64 && std::all_of(value.begin(), value.end(), [](unsigned char c) {
-        return std::isxdigit(c) != 0;
-    });
-}
-
 std::string Lower(std::string value)
 {
     std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) { return char(std::tolower(c)); });
@@ -188,12 +181,11 @@ std::optional<PackageManifest> ParsePackageManifest(std::string_view text, std::
         std::set<std::string> seen;
         for (auto it = data["files"].begin(); it != data["files"].end(); ++it)
         {
-            if (!it.value().is_string()) { error = "package manifest hash is not a string"; return std::nullopt; }
-            FileEntry entry{PathFromUtf8(it.key()), Lower(it.value().get<std::string>())};
+            FileEntry entry{PathFromUtf8(it.key())};
             std::string pathError;
-            if (!IsSafePayloadPath(entry.path, pathError) || !HexDigest(entry.sha256))
+            if (!IsSafePayloadPath(entry.path, pathError))
             {
-                error = pathError.empty() ? "package manifest has an invalid SHA256" : pathError;
+                error = pathError;
                 return std::nullopt;
             }
             const auto key = Lower(PathUtf8(entry.path));
@@ -223,22 +215,58 @@ std::optional<Release> ParseGitHubRelease(std::string_view text, std::string &er
         }
         Release result;
         result.tag = data["tag_name"].get<std::string>();
+        const auto body = data.value("body", "");
+        const auto section = [&body](std::string_view heading) {
+            size_t start = std::string::npos;
+            for (size_t line = 0; line < body.size(); )
+            {
+                const auto end = body.find('\n', line);
+                const auto length = end == std::string::npos ? body.size() - line : end - line;
+                if (length >= heading.size() && body.compare(line, heading.size(), heading) == 0 &&
+                    (length == heading.size() || body[line + heading.size()] == '\r' || body[line + heading.size()] == ' '))
+                {
+                    start = line;
+                    break;
+                }
+                if (end == std::string::npos) break;
+                line = end + 1;
+            }
+            if (start == std::string::npos) return std::string{};
+            const auto content = start + heading.size();
+            auto end = body.size();
+            for (size_t line = body.find('\n', content); line != std::string::npos;
+                 line = body.find('\n', line + 1))
+            {
+                const auto next = line + 1;
+                if (next < body.size() && body[next] == '#')
+                {
+                    const auto marker = body.find_first_not_of('#', next);
+                    const auto level = marker - next;
+                    if (level > 0 && level <= 3 && marker != std::string::npos && body[marker] == ' ')
+                    {
+                        end = next;
+                        break;
+                    }
+                }
+            }
+            return body.substr(content, end - content);
+        };
+        result.changelogEnglish = section("### English");
+        result.changelogChinese = section("### 简体中文");
+        if (result.changelogEnglish.empty() && result.changelogChinese.empty())
+            result.changelogEnglish = body;
         if (!ParseVersion(result.tag)) { error = "GitHub release tag is not a supported version"; return std::nullopt; }
         for (const auto &asset : data["assets"])
         {
             if (!asset.is_object() || asset.value("state", "") != "uploaded" || !asset.contains("name") ||
                 !asset["name"].is_string() || !asset.contains("browser_download_url") ||
                 !asset["browser_download_url"].is_string() || !asset.contains("size") ||
-                !asset["size"].is_number_unsigned() || !asset.contains("digest") || !asset["digest"].is_string()) continue;
-            auto digest = asset["digest"].get<std::string>();
-            if (!digest.starts_with("sha256:")) continue;
-            digest = Lower(digest.substr(7));
-            if (!HexDigest(digest)) continue;
+                !asset["size"].is_number_unsigned()) continue;
             const auto url = asset["browser_download_url"].get<std::string>();
             if (!url.starts_with("https://github.com/freefrank/LostOdysseyRecomp/releases/download/")) continue;
             const auto size = asset["size"].get<uint64_t>();
             if (!size) continue;
-            result.assets.push_back({asset["name"].get<std::string>(), url, digest, size});
+            result.assets.push_back({asset["name"].get<std::string>(), url, size});
         }
         return result;
     }
@@ -247,6 +275,33 @@ std::optional<Release> ParseGitHubRelease(std::string_view text, std::string &er
         error = std::string("GitHub release JSON: ") + exception.what();
         return std::nullopt;
     }
+}
+
+std::string_view ReleaseChangelog(const Release &release, uint32_t uiLanguage)
+{
+    if (uiLanguage == 4 && !release.changelogChinese.empty()) return release.changelogChinese;
+    if (!release.changelogEnglish.empty()) return release.changelogEnglish;
+    return release.changelogChinese;
+}
+
+StartupPreferences ReadStartupPreferences(const std::filesystem::path &settingsPath)
+{
+    StartupPreferences result;
+    std::ifstream input(settingsPath);
+    std::string line;
+    while (std::getline(input, line))
+    {
+        const auto equal = line.find('=');
+        if (equal == std::string::npos) continue;
+        uint32_t value = 0;
+        const auto digits = line.substr(equal + 1);
+        const auto parsed = std::from_chars(digits.data(), digits.data() + digits.size(), value);
+        if (parsed.ec != std::errc{} || parsed.ptr != digits.data() + digits.size()) continue;
+        const auto key = line.substr(0, equal);
+        if (key == "ui_language") result.uiLanguage = value;
+        else if (key == "automatic_updates" && value <= 1) result.automaticUpdates = value == 1;
+    }
+    return result;
 }
 
 std::optional<ReleaseAsset> SelectAsset(const Release &release, std::string_view platform,
@@ -271,19 +326,21 @@ std::optional<ReleaseAsset> SelectAsset(const Release &release, std::string_view
 }
 
 bool WriteApplyPlan(const StagedUpdate &update, const std::filesystem::path &executable,
-                    const std::vector<std::wstring> &launchArguments, std::string &error)
+                    const std::vector<std::wstring> &launchArguments, std::string &error,
+                    bool launchAfterApply)
 {
     try
     {
         json data{{"schema", 1}, {"version", update.version}, {"install_root", PathUtf8(update.installRoot)},
                   {"stage_root", PathUtf8(update.stageRoot)}, {"executable", PathUtf8(executable)},
-                  {"launch_arguments", json::array()}, {"files", json::object()}};
+                  {"launch_arguments", json::array()}, {"launch_after_apply", launchAfterApply}, {"files", json::object()}};
         for (const auto &argument : launchArguments)
         {
             const auto utf8 = std::filesystem::path(argument).u8string();
             data["launch_arguments"].push_back(std::string(reinterpret_cast<const char *>(utf8.data()), utf8.size()));
         }
-        for (const auto &file : update.files) data["files"][PathUtf8(file.path)] = file.sha256;
+        for (const auto &file : update.files)
+            data["files"][PathUtf8(file.path)] = nullptr;
         std::ofstream output(update.planPath, std::ios::binary | std::ios::trunc);
         output << data.dump(2);
         output.flush();
@@ -318,6 +375,7 @@ std::optional<ApplyPlan> ReadApplyPlan(const std::filesystem::path &path, std::s
         result.installRoot = PathFromUtf8(data["install_root"].get<std::string>());
         result.stageRoot = PathFromUtf8(data["stage_root"].get<std::string>());
         result.executable = PathFromUtf8(data["executable"].get<std::string>());
+        result.launchAfterApply = data.value("launch_after_apply", false);
         for (const auto &argument : data["launch_arguments"])
         {
             if (!argument.is_string()) { error = "apply plan argument is not a string"; return std::nullopt; }
@@ -325,8 +383,7 @@ std::optional<ApplyPlan> ReadApplyPlan(const std::filesystem::path &path, std::s
         }
         for (auto it = data["files"].begin(); it != data["files"].end(); ++it)
         {
-            if (!it.value().is_string()) { error = "apply plan hash is not a string"; return std::nullopt; }
-            result.files.push_back({PathFromUtf8(it.key()), Lower(it.value().get<std::string>())});
+            result.files.push_back({PathFromUtf8(it.key())});
         }
         return result;
     }
@@ -355,16 +412,17 @@ bool ValidateApplyPlan(const ApplyPlan &plan, std::string &error)
     for (const auto &file : plan.files)
     {
         std::string pathError;
-        if (!IsSafePayloadPath(file.path, pathError) || !HexDigest(file.sha256))
+        if (!IsSafePayloadPath(file.path, pathError))
         {
-            error = pathError.empty() ? "apply plan has an invalid SHA256" : pathError;
+            error = pathError;
             return false;
         }
         if (!seen.insert(Lower(PathUtf8(file.path))).second) { error = "apply plan contains duplicate paths"; return false; }
         const auto staged = plan.stageRoot / file.path;
-        if (!std::filesystem::is_regular_file(staged) || Sha256File(staged, error) != file.sha256)
+        std::error_code filesystemError;
+        if (!std::filesystem::is_regular_file(staged, filesystemError) || filesystemError)
         {
-            if (error.empty()) error = "staged payload hash mismatch: " + PathUtf8(file.path);
+            error = "staged payload is missing: " + PathUtf8(file.path);
             return false;
         }
     }
@@ -377,6 +435,7 @@ const char *StatusName(StartupStatus status)
     {
     case StartupStatus::Disabled: return "disabled";
     case StartupStatus::UnmanagedBuild: return "unmanaged-build";
+    case StartupStatus::ExternalUpdateAvailable: return "external-update-available";
     case StartupStatus::CurrentPackageMismatch: return "current-package-mismatch";
     case StartupStatus::Offline: return "offline";
     case StartupStatus::UpToDate: return "up-to-date";

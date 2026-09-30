@@ -1,0 +1,29 @@
+name: FG public source snapshot
+on:
+  push:
+    branches: [feature/reusable-fg-fsr-d3d12-mfg]
+    paths: [.github/workflows/fg-source-snapshot.yml]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Export tracked public source only
+        shell: bash
+        run: |
+          set -euo pipefail
+          git archive --format=tar.gz HEAD -o fg-source-current.tar.gz
+          git rev-parse HEAD > SOURCE_REF.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fg-current-public-source
+          path: |
+            fg-source-current.tar.gz
+            SOURCE_REF.txt
+          retention-days: 1
+          compression-level: 0

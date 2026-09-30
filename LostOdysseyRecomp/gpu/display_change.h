@@ -57,4 +57,17 @@ public:
         ++serial; presentation = 0; result = DisplayChangeResult::Failed;
     }
 };
+// Once presentation has a drawable surface, every terminal exit completes its
+// ticket. Deferred zero-extent/minimized paths deliberately precede this guard.
+class DisplayCompletion {
+    DisplayChangeTracker* tracker;
+    uint64_t ticket;
+public:
+    DisplayCompletion(DisplayChangeTracker& value, uint64_t id) : tracker(&value), ticket(id) {}
+    DisplayCompletion(const DisplayCompletion&) = delete;
+    DisplayCompletion& operator=(const DisplayCompletion&) = delete;
+    ~DisplayCompletion() { if (tracker) tracker->Complete(ticket, false); }
+    void Complete(bool success) { if (tracker) tracker->Complete(ticket, success); tracker = nullptr; }
+};
+
 }

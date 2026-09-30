@@ -1,52 +1,70 @@
 """Build a portable Windows release using an explicit runtime payload allowlist."""
 import argparse
-import hashlib
-import importlib.metadata
 import json
 from pathlib import Path
 import shutil
 import subprocess
-import sys
 import tempfile
-from build_provenance import (source_state, read_stamp, validate_formal, validate_staged_binaries,
-                              normalize_release_version, valid_source_version)
+from portable_shader_pack_payload import stage_portable_shader_pack
+from release.version import normalize_release_version, valid_source_version
 
 ROOT = Path(__file__).resolve().parents[1]
-INSTALLER_ICON = ROOT / 'assets/lost-odyssey-recomp.ico'
 DXC_LICENSES = ROOT / 'thirdparty/dxc-licenses'
-
-
-def sha(path):
-    with path.open('rb') as f:
-        return hashlib.file_digest(f, 'sha256').hexdigest()
+STREAMLINE_RUNTIME = (
+    'sl.interposer.dll', 'sl.common.dll', 'sl.dlss_g.dll',
+    'sl.reflex.dll', 'sl.pcl.dll', 'nvngx_dlssg.dll',
+    'NvLowLatencyVk.dll',
+)
+STREAMLINE_LICENSES = (
+    'license.txt', '3rd-party-licenses.md',
+    'bin/x64/nvngx_dlss.license.txt', 'bin/x64/reflex.license.txt',
+)
+VC_RUNTIME = ('msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')
 
 
 def run(*args, **kwargs):
     return subprocess.check_output(args, cwd=ROOT, text=True, **kwargs).strip()
 
 
-def validated_dxc_payload(runtime_directory):
-    """Keep the exact compiler/validator pair used by the built runtime."""
-    provenance = json.loads((DXC_LICENSES / 'PROVENANCE.json').read_text(encoding='utf-8'))
+def check_dxc_payload(runtime_directory):
+    """Require the compiler pair and its license files for the package."""
     for name in ('dxcompiler.dll', 'dxil.dll'):
         path = runtime_directory / name
-        if not path.is_file() or sha(path) != provenance['files'][name]:
-            raise SystemExit(f'Built {name} does not match the validated DXC pair; rebuild or update its provenance and validation.')
-    for name, digest in provenance['licenses'].items():
-        if sha(DXC_LICENSES / name) != digest:
-            raise SystemExit(f'DXC license checksum mismatch: {name}')
-    return provenance
+        if not path.is_file() or not path.stat().st_size:
+            raise SystemExit(f'Missing or empty built DXC library: {name}')
+    if not DXC_LICENSES.is_dir():
+        raise SystemExit('Missing DXC licenses')
 
 
-def pyinstaller_license_payload():
-    # Wheels put COPYING.txt in dist-info/licenses, not in the Python module.
-    distribution = importlib.metadata.distribution('pyinstaller')
-    files = {f'PyInstaller-{Path(str(file)).name}': Path(distribution.locate_file(file))
-             for file in distribution.files or ()
-             if Path(str(file)).name.lower().startswith(('copying', 'license'))}
-    if not files or any(not file.is_file() for file in files.values()):
-        raise SystemExit('Missing installed PyInstaller license files.')
-    return files
+def stage_frame_generation_runtime(runtime_directory, package, licenses, streamline_sdk_root):
+    fsr_license = runtime_directory / 'licenses/LICENSE-FidelityFX.txt'
+    fsr_fg_runtime = runtime_directory / 'amd_fidelityfx_dx12.dll'
+    if fsr_fg_runtime.is_file():
+        if not fsr_license.is_file():
+            raise SystemExit('FSR FG runtime is present without the FidelityFX license.')
+        shutil.copy2(fsr_fg_runtime, package / fsr_fg_runtime.name)
+
+    streamline_present = [name for name in STREAMLINE_RUNTIME if (runtime_directory / name).is_file()]
+    if streamline_present:
+        missing = set(STREAMLINE_RUNTIME) - set(streamline_present)
+        if missing:
+            raise SystemExit(f'Incomplete Streamline runtime: {sorted(missing)}')
+        for name in STREAMLINE_LICENSES:
+            source = streamline_sdk_root / name
+            if not source.is_file():
+                raise SystemExit(f'Missing pinned Streamline SDK license: {source}')
+            destination = licenses / 'NVIDIA-Streamline' / Path(name).name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, destination)
+        for name in STREAMLINE_RUNTIME:
+            shutil.copy2(runtime_directory / name, package / name)
+
+    if streamline_present or fsr_fg_runtime.is_file():
+        for name in VC_RUNTIME:
+            source = runtime_directory / name
+            if not source.is_file():
+                raise SystemExit(f'Missing app-local VC143 redistributable: {name}')
+            shutil.copy2(source, package / name)
 
 
 def main():
@@ -54,6 +72,7 @@ def main():
     parser.add_argument('--build', type=Path, default=ROOT / 'out/build/release')
     parser.add_argument('--output', type=Path, default=ROOT / 'out/releases')
     parser.add_argument('--version', default='')
+    parser.add_argument('--streamline-sdk-root', type=Path, default=ROOT / 'out/deps/streamline')
     args = parser.parse_args()
     if args.version:
         try:
@@ -62,11 +81,8 @@ def main():
             raise SystemExit(str(error))
     build, output = args.build.resolve(), args.output.resolve()
     runtime = build / 'LostOdysseyRecomp/LostOdysseyRecomp.exe'
-    updater = build / 'LostOdysseyRecomp/LostOdysseyUpdater.exe'
     if not runtime.is_file():
         raise SystemExit('Build the Release runtime with tools/build_release.bat first.')
-    if not updater.is_file():
-        raise SystemExit('Build the LostOdysseyUpdater release helper before packaging.')
     version_stamp = runtime.parent / 'source-version.txt'
     if not version_stamp.is_file():
         raise SystemExit('Build the runtime to produce its linked source-version.txt before packaging.')
@@ -74,18 +90,17 @@ def main():
     if not valid_source_version(source_version):
         raise SystemExit('The linked runtime source version is invalid.')
     output.mkdir(parents=True, exist_ok=True)
-    dxc = validated_dxc_payload(runtime.parent)
-    state = source_state(ROOT)
+    check_dxc_payload(runtime.parent)
     try:
-        stamps = [read_stamp(binary, source_version) for binary in (runtime, updater)]
-        if len({stamp['source']['identity'] for stamp in stamps}) != 1:
-            raise ValueError('Runtime and updater were not built from the same captured source state.')
-        normalized_version = validate_formal(ROOT, args.version, source_version, state, stamps)
+        commit = run('git', 'rev-parse', 'HEAD')
+        normalized_version = 'v' + normalize_release_version(args.version) if args.version else ''
+        if args.version:
+            if normalized_version[1:] != source_version:
+                raise ValueError('Requested release version differs from the built runtime version.')
+            if run('git', 'rev-parse', '--verify', f'refs/tags/{args.version}^{{commit}}') != commit:
+                raise ValueError('Release tag differs from packaging commit.')
     except (ValueError, subprocess.CalledProcessError) as error:
-        raise SystemExit(f'Release provenance check failed: {error}')
-    commit = stamps[0]['source']['commit']
-    # Untagged local candidates are development artifacts even from clean source.
-    dirty = state['dirty'] or any(stamp['source']['dirty'] for stamp in stamps)
+        raise SystemExit(f'Release version check failed: {error}')
     development = not args.version
     name = 'LostOdysseyRecomp-windows-x64-' + (normalized_version or f'v{source_version}-{commit[:8]}') + ('-dev' if development else '')
     package_zip = output / (name + '.zip')
@@ -95,23 +110,48 @@ def main():
         work = Path(temporary)
         package = work / name
         package.mkdir()
-        subprocess.run([sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean', '--onefile',
-                        '--windowed', '--name', 'InstallGame', '--icon', str(INSTALLER_ICON),
-                        '--add-data', str(INSTALLER_ICON) + ';.', '--distpath', str(package),
-                        '--workpath', str(work / 'freeze'), '--specpath', str(work),
-                        str(ROOT / 'tools/installer/installer.py')], cwd=ROOT, check=True)
         shutil.copy2(runtime, package / runtime.name)
-        shutil.copy2(updater, package / updater.name)
-        validate_staged_binaries([package / runtime.name, package / updater.name], stamps)
         shutil.copy2(ROOT / 'docs/INSTALLING.md', package / 'README.md')
         licenses = package / 'licenses'
         licenses.mkdir()
+        fsr_license = runtime.parent / "licenses/LICENSE-FidelityFX.txt"
+        if fsr_license.is_file():
+            shutil.copy2(fsr_license, licenses / fsr_license.name)
+        stage_frame_generation_runtime(runtime.parent, package, licenses,
+                                       args.streamline_sdk_root.resolve())
+        stage_portable_shader_pack(runtime.parent, package, licenses)
         shutil.copy2(ROOT / 'LICENSE', licenses / 'LostOdysseyRecomp.txt')
         shutil.copy2(ROOT / 'thirdparty/miniz-UNLICENSE.txt', licenses / 'miniz-UNLICENSE.txt')
         shutil.copy2(ROOT / 'thirdparty/nlohmann-json-LICENSE.txt', licenses / 'nlohmann-json-LICENSE.txt')
         shutil.copy2(ROOT / 'thirdparty/lzokay/LICENSE', licenses / 'lzokay-LICENSE.txt')
+        shutil.copy2(ROOT / 'LostOdysseyRecomp/install/FONT-PROVENANCE.md', licenses / 'FONT-PROVENANCE.md')
+        shutil.copy2(ROOT / 'thirdparty/SDL/test/unifont-13.0.06-license.txt',
+                     licenses / 'Unifont-OFL-1.1.txt')
         for dll in ('dxcompiler.dll', 'dxil.dll'):
             shutil.copy2(runtime.parent / dll, package / dll)
+        dlss_runtime = runtime.parent / 'nvngx_dlss.dll'
+        if dlss_runtime.is_file():
+            shutil.copy2(dlss_runtime, package / 'nvngx_dlss.dll')
+            # NVIDIA DLSS SDK License and redistribution notice per Section 2(b)
+            dlss_sdk_root = None
+            for candidate in [
+                ROOT / 'out/deps/nvidia-dlss',
+                ROOT / '.cache/deps/nvidia-dlss-37495948',
+            ]:
+                if (candidate / 'LICENSE.txt').is_file():
+                    dlss_sdk_root = candidate
+                    break
+            if dlss_sdk_root:
+                dlss_lic_dest = licenses / 'NVIDIA-DLSS'
+                dlss_lic_dest.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(dlss_sdk_root / 'LICENSE.txt', dlss_lic_dest / 'LICENSE.txt')
+                notice_text = (
+                    "This software contains source code and/or runtime components provided by NVIDIA Corporation.\n"
+                    "NVIDIA DLSS SDK Version: 310.9.1 (commit 374959484e79a640feaba44c93ac8cfb0a03f5b5)\n"
+                )
+                (dlss_lic_dest / 'NOTICE.txt').write_text(notice_text, encoding='utf-8')
+            else:
+                raise SystemExit('nvngx_dlss.dll is packaged but DLSS SDK license is missing.')
         shutil.copytree(DXC_LICENSES, licenses / 'DXC')
         dependencies = [ROOT / 'thirdparty/SDL', ROOT / 'thirdparty/plume', ROOT / 'thirdparty/o1heap',
                         ROOT / 'thirdparty/unordered_dense', ROOT / 'thirdparty/smaa', ROOT / 'tools/XenonRecomp',
@@ -127,13 +167,6 @@ def main():
                     found.append(file)
             if not found:
                 raise SystemExit(f'Missing dependency license files: {directory.name}')
-        # Python and Tk are embedded in the one-file importer.
-        for file in Path(sys.base_prefix).glob('LICENSE*'):
-            shutil.copy2(file, licenses / ('Python-' + file.name))
-        for license_name, file in pyinstaller_license_payload().items():
-            shutil.copy2(file, licenses / license_name)
-        for file in (Path(sys.base_prefix) / 'tcl').glob('*/license*'):
-            shutil.copy2(file, licenses / ('TclTk-' + file.parent.name + '-' + file.name))
         # Fail packaging if a runtime dependency would require the developer's PATH.
         import pefile
         import os
@@ -154,16 +187,16 @@ def main():
                     continue
                 if redist or not (dll.lower().startswith(('api-ms-', 'ext-ms-')) or (system / dll).exists()):
                     raise SystemExit(f'Unbundled dependency: {binary.name} -> {dll}')
-        (package / 'manifest.json').write_text(json.dumps({
-            'commit': commit, 'build_commit': commit, 'packaging_commit': state['commit'],
+        payload_files = {p.relative_to(package).as_posix(): p for p in package.rglob('*') if p.is_file()}
+        file_sizes = {name: path.stat().st_size for name, path in payload_files.items()}
+        manifest = {
+            'commit': commit,
             'version': normalized_version, 'source_version': source_version, 'development_build': development,
-            'dirty': dirty, 'build_provenance': stamps, 'packaging_source': state,
-            'dxc_sha256': dxc['archive_sha256'], 'dxc': dxc,
             'dependencies': dependencies_report,
-            'files': {p.relative_to(package).as_posix(): sha(p) for p in package.rglob('*') if p.is_file()},
-        }, indent=2), encoding='utf-8')
+            'files': file_sizes,
+        }
+        (package / 'manifest.json').write_text(json.dumps(manifest, indent=2), encoding='utf-8')
         shutil.make_archive(str(package_zip.with_suffix('')), 'zip', work, name)
-    package_zip.with_suffix('.zip.sha256').write_text(sha(package_zip) + '  ' + package_zip.name + '\n')
     print(package_zip)
 
 

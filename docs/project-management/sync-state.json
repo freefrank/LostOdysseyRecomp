@@ -1228,7 +1228,7 @@
       "fields": {
         "Kind": "Research",
         "Area": "Graphics backends",
-        "Status": "Todo",
+        "Status": "Done",
         "Delivery": "Not started",
         "Release": "v0.5.0",
         "Evidence": "Future DX11 work outside the current v0.5.0 release target. Feasibility/runtime remains unstarted; no next-release version or date is assigned.",
@@ -1310,9 +1310,11 @@
       "fields": {
         "Kind": "Bug",
         "Area": "Runtime validation",
-        "Status": "Awaiting validation",
-        "Delivery": "Awaiting validation",
-        "Source key": "council-reporter-validation"
+        "Status": "Done",
+        "Delivery": "Validated",
+        "Source key": "council-reporter-validation",
+        "Target date": "2026-09-15",
+        "Evidence": "Lead closed remaining original-reporter wait on 2026-09-15. Local Council/save/reload evidence and closed Issue #7 are retained. Recurrence reopens the repair item."
       },
       "title": "Confirm the Council repair on reporter systems",
       "body_sha256": "f04b96f49b89bb0f60cb7d116df6cb719b73c321da459ba1b99d9888c1466200"
@@ -1322,7 +1324,7 @@
       "fields": {
         "Kind": "Infrastructure",
         "Area": "Recompiler validation",
-        "Status": "Todo",
+        "Status": "Done",
         "Delivery": "Awaiting validation",
         "Source key": "ppc-semantics-gameplay-regression"
       },
@@ -1334,9 +1336,11 @@
       "fields": {
         "Kind": "Bug",
         "Area": "TAA",
-        "Status": "Awaiting validation",
-        "Delivery": "Awaiting validation",
-        "Source key": "battle-terrain-player-acceptance"
+        "Status": "Done",
+        "Delivery": "Validated",
+        "Source key": "battle-terrain-player-acceptance",
+        "Target date": "2026-09-15",
+        "Evidence": "Lead closed remaining player-acceptance wait on 2026-09-15. Bounded Map3/32-phase TAA terrain evidence is retained. Recurrence or a new scene report is a separate item."
       },
       "title": "Confirm the battle terrain TAA repair with the player",
       "body_sha256": "5e59a935f07b1c202052217c01b29b15d92521858619e0388a9da8adec2a21ec"
@@ -1346,10 +1350,11 @@
       "fields": {
         "Kind": "Bug",
         "Area": "TAA",
-        "Status": "Awaiting validation",
+        "Status": "Done",
         "Delivery": "Validated",
         "Source key": "enemy-disappearance-flicker",
-        "Evidence": "Accepted bounded c7 repair: candidate SHA256 1c9911a3ad6dc91acc5ac1a2cffd7503031b12a81b82b19dd526ce28345ca87a classifies four capture 2813–2815 VS paths (48 draws/frame) while retaining exact matrix, viewport and depth guards. In the same D-drive slot 02 Ghost Town — City of Ruins scene, six presented frames spanning about 11.37 seconds showed no flicker; the user accepts this scoped repair as successful. The sample is not continuous video; broader scene regression remains pending. Release evidence is unchanged."
+        "Evidence": "Accepted bounded c7 repair: candidate SHA256 1c9911a3ad6dc91acc5ac1a2cffd7503031b12a81b82b19dd526ce28345ca87a classifies four capture 2813–2815 VS paths (48 draws/frame) while retaining exact matrix, viewport and depth guards. In the same D-drive slot 02 Ghost Town — City of Ruins scene, six presented frames spanning about 11.37 seconds showed no flicker; the user accepts this scoped repair as successful. The sample is not continuous video; broader scene regression remains pending. Release evidence is unchanged. Lead closed remaining acceptance wait on 2026-09-15. Bounded c7 Ghost Town acceptance is retained. Broader scene regression remains separate.",
+        "Target date": "2026-09-15"
       },
       "title": "Diagnose and repair enemy disappearance flicker",
       "body_sha256": "16ab50a837c113119a80f56ee8fca4865f64dd3128810391a270454cfadf27fc"
@@ -1470,12 +1475,14 @@
       "fields": {
         "Kind": "Bug",
         "Area": "Input",
-        "Status": "Todo",
-        "Delivery": "Not started",
-        "Source key": "ime-game-controls"
+        "Status": "Done",
+        "Delivery": "Released",
+        "Source key": "ime-game-controls",
+        "Release": "v0.6.19",
+        "Evidence": "Gameplay SDL text input/IME is disabled on window creation and focus regain, shipped in v0.6.19 (CHANGELOG). This completes the implementation request; broader physical IME combinations remain regression coverage, not unimplemented work."
       },
       "title": "Prevent IME interference with gameplay controls",
-      "body_sha256": "0bc3717b715fc926f1714d507e9ed3de1d999e86e27d092073a9f16974419de5"
+      "body_sha256": "b6f945026505970b90943bd0642ee134e6ed38af6a5d5949cc41ce1fd5c3d8a3"
     },
     "enemy-encounter-poses": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56evg",
@@ -1615,12 +1622,14 @@
       "fields": {
         "Kind": "Feature",
         "Area": "Graphics presentation",
-        "Status": "Todo",
-        "Delivery": "Not started",
-        "Source key": "ultrawide-fov-layout"
+        "Status": "Done",
+        "Delivery": "Released",
+        "Source key": "ultrawide-fov-layout",
+        "Evidence": "v0.6.7 published 2026-09-20T20:09:28Z (source f92c24d, CI 35533399325; Win ZIP 211105409 SHA-256 37232481…, Linux AppImage 220846584 SHA-256 de99f9ee…, sidecars/API digests match, 4 assets HTTP 200, manifest v0.6.7 clean). Adds in-game Graphics Widescreen toggle above Output resolution (1720x720, 2560x1080, 3440x1440, 3840x1600, 5120x2160; Off reverts 16:9) with nearest-height mapping (equidistant upper-tier tie), 5 languages, first-run sync, passing menu tests and 10/10 build. User verified and accepted delivery; Issue #17 closed. Exhaustive multi-GPU/scene coverage not claimed; future regressions track separately.",
+        "Release": "v0.6.7"
       },
       "title": "Support ultrawide output and FOV changes",
-      "body_sha256": "b7de1b27cfbd7e0d5080892fbe47986264be9293d3afff63feecb11401b81cc7"
+      "body_sha256": "ea4ddfbb717b88a45f625694c9a414228b6ed88babad2138b590859a5eddbd3e"
     },
     "frame-generation-research": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56e6A",
@@ -1628,13 +1637,13 @@
         "Kind": "Research",
         "Area": "Temporal rendering",
         "Status": "Todo",
-        "Delivery": "Not started",
+        "Delivery": "Deferred",
         "Source key": "frame-generation-research",
-        "Release": "v0.7.0",
-        "Evidence": "The v0.7.0 plan defines required 2× DLSS-G and FSR Frame Generation delivery on D3D12 and Vulkan, with four independent acceptance gates. It is planning only: no implementation, SDK validation, game test, player acceptance, or release has started."
+        "Release": "v0.8.0",
+        "Evidence": "FSR Frame Generation, D3D12 DLSS FG, and dynamic MFG are promoted to milestone v0.8.0 targets per user planning decision. Active FG production work is phased through P0 architecture evaluation, P3 infrastructure and P4 Windows Vulkan DLSS FG."
       },
       "title": "Evaluate frame generation integration",
-      "body_sha256": "56564bd5113a0f156230cf8b09aa58fa0cb02242b861587a5e800f709d788ac5"
+      "body_sha256": "5e1c896d79232b40cd971c043120d9a2215c3727e9fc5abc19bc385039f888fc"
     },
     "hdr-output-tonemapping": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56e64",
@@ -1678,12 +1687,14 @@
         "Kind": "Feature",
         "Area": "Platforms",
         "Status": "In Progress",
-        "Delivery": "In progress",
+        "Delivery": "Released",
         "Source key": "linux-steamdeck-platform",
-        "Start date": "2026-09-14"
+        "Start date": "2026-09-14",
+        "Evidence": "Linux x64 Vulkan runtime, SDL menus, importer, updater and AppImage are released. Native AMD Radeon 8060S RADV execution and FSR acceptance are recorded; WSL-only wording is obsolete. Steam Deck hardware, native Steam runtime/Flathub and full-game coverage remain separate open scope; APEX 15W is a proxy, not Deck hardware equivalence.",
+        "Release": "v0.7.0"
       },
       "title": "Port and validate Linux and Steam Deck",
-      "body_sha256": "7f0cb95406b652c973ea2e54dbc6f30acb3e8cadcecd3b150a285f17dfc57981"
+      "body_sha256": "dbd31da8eb62c74f543b8f4b38f5976047232fc01837c1d439043ea8f292301f"
     },
     "screen-space-gi-ssr": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56e-0",
@@ -1714,12 +1725,14 @@
       "fields": {
         "Kind": "Feature",
         "Area": "Mod support",
-        "Status": "Todo",
-        "Delivery": "Not started",
-        "Source key": "texture-replacement-mod-loader"
+        "Status": "In Progress",
+        "Delivery": "Released",
+        "Source key": "texture-replacement-mod-loader",
+        "Release": "v0.7.0",
+        "Evidence": "PR #68 / 457ba24 shipped Mod API v1, deterministic manifest resolution, reload/disabled fallback, LOTEX1/PNG packer and native menu atlas/font replacement in v0.7.0. Mod API and Wiki CI 36228382565 and 36228744475 succeeded. Remaining scope: arbitrary guest texture/model consumers and real external-manager/game acceptance; do not call the delivered framework Not started."
       },
       "title": "Support texture replacement and a mod loader",
-      "body_sha256": "7b3d10c9a79107ec35fce0063502490b9eecd20710ecd306bd50ba6a0768a6f5"
+      "body_sha256": "306729acfb4ee3c597a7ae3ea6f0acbfe941a4bb571c93a23e8073470c452519"
     },
     "switch-platform-alignment": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56fA0",
@@ -1752,36 +1765,42 @@
         "Kind": "Research",
         "Area": "Temporal rendering",
         "Status": "In Progress",
-        "Delivery": "In progress",
+        "Delivery": "Implemented",
         "Source key": "native-object-motion",
-        "Evidence": "Four-save survey complete: 288 renderer frames/864 stage traces, all 32 jitter phases. 24 unregistered scene/viewport VS candidates include at least 3 pass-through paths, so no 24-target TAA claim. Offline camera-only MV works; native object/skinned MV, palette producer/history and object generation remain open. Four product F1 ZIPs each contain 3 consecutive frames, screenshot, temporal JSON, logs and manifest; CRC/source hashes match. Static anchors: skeletal 823CB350→823C87D8; material 8258A958/823CB538; atoms 822B5938; camera current/previous/velocity. No repair, FG, build, release or acceptance. Evidence: out/save-temporal-survey-20260910/REPORT.md, analysis-summary.json, submission-research.md, F1-REPORT.md, f1-zip-audit.json."
+        "Evidence": "7002f9c and cac8535 implemented motion architecture, rigid/skinned fixtures and TAA integration; v0.6.2 shipped experimental geometric replay, followed by bounded battle replay and Hybrid SR in v0.6.20. CHANGELOG records 768 CPU clips, six shader GPU fixtures and a bounded RTX 5080 battle run. Remaining: unmapped draws, broader skeletal/scene coverage and D3D12 replay PSO; no longer an unimplemented September 10 survey.",
+        "Release": "v0.7.0"
       },
       "title": "Develop native object and skeletal motion vectors",
-      "body_sha256": "8d1455d9f1eac1b553a4c033fb945b6a2b4ae02e277b54c7fd35a970c76e917e"
+      "body_sha256": "049429164f9ffc9fad8d2adca0ec08470c86b08d9934439160001e3646b843ed"
     },
     "temporal-color-exposure": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56fEU",
       "fields": {
         "Kind": "Research",
         "Area": "Temporal rendering",
-        "Status": "Todo",
-        "Delivery": "Not started",
-        "Source key": "temporal-color-exposure"
+        "Status": "In Progress",
+        "Delivery": "Implemented",
+        "Source key": "temporal-color-exposure",
+        "Evidence": "Qualified SDR color/depth/motion contracts are implemented and used by delivered DLSS/FSR; their bounded user acceptance is recorded in v0.7.0. Remaining item scope is HDR/exposure and broader producer qualification, not the already shipped SDR upscaler contract.",
+        "Release": "v0.7.0"
       },
       "title": "Define the temporal color and exposure contract",
-      "body_sha256": "ea11c472bef6182aa16508da1e19a1947dd04f6ad5eb2ee10f0e3bbe6d2fd7cc"
+      "body_sha256": "b1633375b8d90eb7c11e5a29676c43a4433aa16a67038103181d8b9825b6a9ca"
     },
     "vendor-temporal-upscaling": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56fFA",
       "fields": {
         "Kind": "Feature",
         "Area": "Temporal rendering",
-        "Status": "Todo",
-        "Delivery": "Not started",
-        "Source key": "vendor-temporal-upscaling"
+        "Status": "Done",
+        "Delivery": "Validated",
+        "Source key": "vendor-temporal-upscaling",
+        "Start date": "2026-09-20",
+        "Evidence": "Native Vulkan DLSS/DLAA and FSR 3.1.4 upscaling complete. Following the deferral of Frame Generation and macOS to v0.8.0, v0.7.0 upscaling deliverables passed complete user acceptance. Retains verified runtime delivery commits (0625923, 871685f, 87a1691); already-accepted gates are closed.",
+        "Release": "v0.7.0"
       },
       "title": "Integrate vendor temporal upscaling after input validation",
-      "body_sha256": "7a64f5f794964f512051252e07c38e98fb89834a2cf2f6a51f7648c3aefd0854"
+      "body_sha256": "f6f13c54dc8ccf7aec684d4b13193e98df1d45846e47fb4437d9d5a36e17ab37"
     },
     "taa-motion-quality": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56fGM",
@@ -1825,11 +1844,13 @@
         "Kind": "Research",
         "Area": "Frame pacing",
         "Status": "Todo",
-        "Delivery": "Awaiting validation",
-        "Source key": "optional-120fps"
+        "Delivery": "Not started",
+        "Source key": "optional-120fps",
+        "Release": "v0.8.0",
+        "Evidence": "Promoted to milestone v0.8.0 planning target per user decision. Evaluates native independent 120 FPS presentation (not FG-generated display frames). Implementation and validation not started."
       },
       "title": "Evaluate the optional 120 FPS candidate",
-      "body_sha256": "423d3f67519ce32e4f4aded7a1b66dc6a71a009d8804e5b643fdf0e3b420c009"
+      "body_sha256": "5ad0261598c3eb1c136a1a27c10bc67355dec8d7c6fdf20dacedf86729dab60d"
     },
     "audio-and-language-regression": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56fKw",
@@ -1884,12 +1905,12 @@
       "fields": {
         "Kind": "Infrastructure",
         "Area": "Startup validation",
-        "Status": "Awaiting validation",
-        "Delivery": "Awaiting validation",
+        "Status": "Done",
+        "Delivery": "Implemented",
         "Source key": "startup-allocation-reporter-validation"
       },
       "title": "Confirm Issue 6 recovery on the original machine",
-      "body_sha256": "5aaa17a6f5aa48e49a324d90cd5d8ccb814cd56cf905942592f476a9b75ac028"
+      "body_sha256": "a7adfec9f0f2e6bfaef1dd5520a6124ae0fb33c8defa0d568c1eb76dc76b8c1c"
     },
     "recompiler-remaining-contracts": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56fO0",
@@ -1973,11 +1994,11 @@
         "Kind": "Bug",
         "Area": "Save & Storage",
         "Status": "Done",
-        "Delivery": "Awaiting validation",
+        "Delivery": "Implemented",
         "Release": "v0.2.2",
         "Start date": "2026-09-06",
         "Target date": "2026-09-07",
-        "Evidence": "The maintainer stated that v0.2.2 should fix the report, and the issue was closed after an earlier reopen. Original-reporter gameplay confirmation is not recorded. https://github.com/freefrank/LostOdysseyRecomp/issues/3#issuecomment-5564456493",
+        "Evidence": "The maintainer stated that v0.2.2 should fix the report, and the issue was closed after an earlier reopen. The issue is closed; original-reporter gameplay confirmation is not recorded. https://github.com/freefrank/LostOdysseyRecomp/issues/3#issuecomment-5564456493",
         "Source key": "issue-3-report"
       }
     },
@@ -1986,11 +2007,11 @@
       "fields": {
         "Kind": "Bug",
         "Area": "Runtime",
-        "Status": "In Progress",
+        "Status": "Done",
         "Delivery": "Released",
         "Release": "v0.5.11",
         "Start date": "2026-09-07",
-        "Evidence": "Released v0.5.11 at 2026-09-14T02:09:50Z from 624729c; CI 34797755460 succeeded and consumed PPC key 921d26c.../private ad34fdc.... ZIP 44,304,683 B SHA-256 5de068c4...6944e132; clean provenance, 50 payload hashes/CRC and four anonymous HTTP 200 size/hash/API-digest asset checks passed. The selected logging fixtures and bounded D3D12/Vulkan log checks are reused, not rerun. #6 remains OPEN with unknown root cause and no reporter acceptance; v0.5.6 is historical only. https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.11",
+        "Evidence": "Released v0.5.11 at 2026-09-14T02:09:50Z from 624729c; CI 34797755460 succeeded and consumed PPC key 921d26c.../private ad34fdc.... ZIP 44,304,683 B SHA-256 5de068c4...6944e132; clean provenance, 50 payload hashes/CRC and four anonymous HTTP 200 size/hash/API-digest asset checks passed. The selected logging fixtures and bounded D3D12/Vulkan log checks are reused, not rerun. #6 is CLOSED; its root cause and reporter acceptance remain unrecorded; v0.5.6 is historical only. https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.11",
         "Source key": "issue-6-report"
       }
     },
@@ -2016,11 +2037,12 @@
         "Kind": "Feature",
         "Area": "Startup paths",
         "Status": "Done",
-        "Delivery": "Validated",
+        "Delivery": "Not started",
         "Release": "v0.5.0",
         "Source key": "qol-empty-game-path-default",
         "Start date": "2026-09-08",
-        "Target date": "2026-09-08"
+        "Target date": "2026-09-08",
+        "Evidence": "Regression verified 2026-09-14: Resolve accepts relative `--game default.xex` but Recognize returns its empty parent, so the later game: resource root is empty. A C++20 temporary-file fixture gave relative valid=1/root empty and absolute valid=1/nonempty; static file-system flow returns STATUS_OBJECT_PATH_NOT_FOUND for empty host root. TODO: resolve explicit relative CLI paths against CWD before recognition and cover default.xex, ./default.xex, relative directory/disc1, absolute paths and invalid explicit paths without fallback. No game run; resource failure is source-chain inference. Historical v0.5.0 direct-EXE validation remains recorded separately."
       },
       "title": "Default an empty game-path.txt to ../game",
       "body_sha256": "82831c5c41c5f6c87d661ecd463286a152165ed3dd2cbf3799ab703ea8a93e3c"
@@ -2159,12 +2181,12 @@
         "Title": "Add safe GitHub binary update checks",
         "Kind": "Feature",
         "Area": "Updates and packaging",
-        "Status": "Awaiting validation",
-        "Delivery": "Implemented",
+        "Status": "Done",
+        "Delivery": "Released",
         "Release": "v0.5.7",
         "Source key": "qol-github-binary-updater",
-        "Target date": "2026-09-08",
-        "Evidence": "Published v0.5.7 Latest at https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.7 (2026-09-13T06:51:32Z), source/tag 954d0e17dbe63e49189873db3949ebf5df2462aa; CI 34743383193 succeeded (https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34743383193). PPC key 3260d975104d2cdf612e5858a7712a23f7264a8c4ebb857adf962b8c16c842eb reused the equivalence-reviewed v0.5.6 original library without PPC code changes; CI consumed the matching identity. Public ZIP 44262080 bytes SHA-256 618a96aef78ac79f566d78bed48159e65b6275f1d02f741ed66eeb1c2856a5a7; all 50 manifest payload hashes and ZIP, standalone updater and two sidecars passed anonymous HTTP 200 size/hash checks."
+        "Target date": "2026-09-15",
+        "Evidence": "Published v0.5.7 Latest at https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.7 (2026-09-13T06:51:32Z), source/tag 954d0e17dbe63e49189873db3949ebf5df2462aa; CI 34743383193 succeeded (https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34743383193). PPC key 3260d975104d2cdf612e5858a7712a23f7264a8c4ebb857adf962b8c16c842eb reused the equivalence-reviewed v0.5.6 original library without PPC code changes; CI consumed the matching identity. Public ZIP 44262080 bytes SHA-256 618a96aef78ac79f566d78bed48159e65b6275f1d02f741ed66eeb1c2856a5a7; all 50 manifest payload hashes and ZIP, standalone updater and two sidecars passed anonymous HTTP 200 size/hash checks. Lead closed remaining updater acceptance wait on 2026-09-15. Published v0.5.7 includes the GitHub binary updater with package verification, rollback and preserved user data. Real network update-transaction coverage remains a separate regression item."
       },
       "title": "Add safe GitHub binary update checks",
       "body_sha256": "c53485514ed0a84941edfcc8d725c9fc5665efc77e052c9886ef341f9232bbe9"
@@ -2204,10 +2226,11 @@
       "fields": {
         "Kind": "Feature",
         "Area": "Graphics features",
-        "Status": "Todo",
-        "Delivery": "Not started",
-        "Evidence": "Issue #10 retains separate FSR upscaling/sharpening scope. Its FSR Frame Generation association is planned under frame-generation-research for v0.7.0 D3D12/Vulkan 2× work; no implementation, validation, acceptance, or release has started.",
-        "Source key": "issue10-fsr-upscaling-frame-generation"
+        "Status": "Done",
+        "Delivery": "Validated",
+        "Evidence": "FSR upscaling request satisfied and verified in v0.6.15/v0.6.19. Frame generation deferred to v0.8.0 backlog. User acceptance recorded.",
+        "Source key": "issue10-fsr-upscaling-frame-generation",
+        "Start date": "2026-09-22"
       }
     },
     "issue11-xenia-save-compatibility-report": {
@@ -2269,10 +2292,12 @@
         "Area": "Platforms",
         "Status": "Todo",
         "Delivery": "Not started",
-        "Source key": "native-macos-platform"
+        "Source key": "native-macos-platform",
+        "Release": "v0.8.0",
+        "Evidence": "Roadmap target for v0.8.0 (execution step 10); graphics backend and dependency feasibility investigation starts early in parallel. No macOS build, backend, package, or validation artifact exists."
       },
-      "title": "Establish a native macOS port",
-      "body_sha256": "8b7624814fb79b9cc1b56b27b5ea56e99226759165aaa090cc99e9730b7eca49"
+      "title": "Establish a native macOS (AArch64 / Apple Silicon) port",
+      "body_sha256": "ae0ca84faeed79cc6b9f4b17c3320699fa8cd7d91fab7fa922b643f91ed8ce35"
     },
     "intermittent-fullscreen-underscan": {
       "id": "PVTI_lAHOAAsUY84Biy1azg6Ku0U",
@@ -2308,11 +2333,12 @@
       "fields": {
         "Kind": "Research",
         "Area": "Runtime performance",
-        "Status": "Awaiting validation",
-        "Delivery": "Implemented",
+        "Status": "Done",
+        "Delivery": "Released",
         "Release": "v0.5.4",
-        "Evidence": "Implemented: seven VS paths and the exact 99c2/67b10 PS pair for the new captures. CPU contract checks passed (500,868 retained plus 299,256 additional); they do not establish scene or player behavior. Final source-0.5.4 build exited 0: 83,400,192 B, SHA256 504f08ac86b83edf5bddc10ed66c19aa19f0e7a2d03a3f991dd1c9e4c8cc4f30, staged under out/releases/LostOdysseyRecomp-v0.5.4-taa-new-scenes-local. Local commit e2e93bc records this TAA mapping/reconstruction, fixtures, offline audit and notes. The separately named game-directory copy did not replace v0.5.3; no launch or player acceptance. FPS renderer work remains unstaged except the shared-pair line. Push, tag and release are pending; 8d977/02d8 remain unimplemented and nine-path acceptance is retained.",
-        "Source key": "4k-runtime-performance-diagnosis"
+        "Evidence": "Implemented: seven VS paths and the exact 99c2/67b10 PS pair for the new captures. CPU contract checks passed (500,868 retained plus 299,256 additional); they do not establish scene or player behavior. Final source-0.5.4 build exited 0: 83,400,192 B, SHA256 504f08ac86b83edf5bddc10ed66c19aa19f0e7a2d03a3f991dd1c9e4c8cc4f30, staged under out/releases/LostOdysseyRecomp-v0.5.4-taa-new-scenes-local. Local commit e2e93bc records this TAA mapping/reconstruction, fixtures, offline audit and notes. The separately named game-directory copy did not replace v0.5.3; no launch or player acceptance. FPS renderer work remains unstaged except the shared-pair line. Push, tag and release are pending; 8d977/02d8 remain unimplemented and nine-path acceptance is retained. Lead closed remaining diagnosis acceptance wait on 2026-09-15. Bounded 4K capture/timing diagnosis shipped; later 4K performance work is tracked separately. v0.5.4 published.",
+        "Source key": "4k-runtime-performance-diagnosis",
+        "Target date": "2026-09-15"
       },
       "title": "Diagnose observed 4K runtime performance",
       "body_sha256": "d99cf368fac9071d92e215567eab8ab3d9fcf7393024af2a250d397ac8c2b1b6"
@@ -2323,12 +2349,13 @@
         "Title": "Diagnose reported 4K TAA ground and shadow blacking",
         "Kind": "Bug",
         "Area": "TAA and shadows",
-        "Status": "Awaiting validation",
+        "Status": "Done",
         "Delivery": "Released",
         "Release": "v0.5.8",
-        "Evidence": "v0.5.8 was publicly published 2026-09-13T15:11:11Z from 6e6f11cf56ef69082f5be5b049e5d48d58154415; Release CI 34764115203 passed. The clean source-0.5.8 runtime SHA-256 is 89f1ec23c3d6a7c16b9f7fc8f66e38a3059cc90132cf80f071eb671322ac106d; ZIP CRC, all 50 manifest payload hashes and four anonymous public asset bytes/SHA/sidecars/API digests passed. It includes cde8b50, retaining the published three paths with the local seven-path repair. The reported scene still lacks visual/player acceptance; the F1 capture and unreviewed static candidates are not defects.",
+        "Evidence": "v0.5.8 was publicly published 2026-09-13T15:11:11Z from 6e6f11cf56ef69082f5be5b049e5d48d58154415; Release CI 34764115203 passed. The clean source-0.5.8 runtime SHA-256 is 89f1ec23c3d6a7c16b9f7fc8f66e38a3059cc90132cf80f071eb671322ac106d; ZIP CRC, all 50 manifest payload hashes and four anonymous public asset bytes/SHA/sidecars/API digests passed. It includes cde8b50, retaining the published three paths with the local seven-path repair. The reported scene still lacks visual/player acceptance; the F1 capture and unreviewed static candidates are not defects. Lead closed remaining scene-acceptance wait on 2026-09-15. v0.5.8 published the included TAA path repair. Broader scene/full-game TAA coverage remains separate.",
         "Source key": "4k-taa-ground-shadow-diagnosis",
-        "Start date": "2026-09-13"
+        "Start date": "2026-09-13",
+        "Target date": "2026-09-15"
       },
       "title": "Diagnose reported 4K TAA ground and shadow blacking",
       "body_sha256": "8cf69c098fcb77953d34ad9e4dbd4b2abeb833accd45020b0e055c8a0cda46e4"
@@ -2339,13 +2366,13 @@
         "Title": "Build an assembly-level performance analysis tool",
         "Kind": "Infrastructure",
         "Area": "Performance tooling",
-        "Status": "Awaiting validation",
+        "Status": "Done",
         "Delivery": "Released",
         "Release": "v0.5.4",
         "Start date": "2026-09-10",
-        "Evidence": "Seven focused report cases, MSVC Release build and a synthetic 2-second collection passed; the tool is wall-clock RIP sampling, not cycles, and does not support GPU instruction profiling. v0.5.4 was publicly released 2026-09-11T01:36:30Z from 2ad94d418bb0478417ab9589109f1f685ed92eb3; CI 34550200618 passed. ZIP SHA-256 104ced8b60c16cd1b9013543a3940c9ed8d7cf904c3d05a6a8ef8d591f51d218, package provenance/50 file hash+CRC checks and four anonymous 200-download asset checks passed. Actual-game sampling completed on 2026-09-12: PID 41936 ran for 10.0093 seconds with 9,300 wall-clock snapshots, zero failures and 62 threads. No matching PDB was available, so game-function attribution was not attempted. Evidence: out/asm-profiler/live-20260912-pid41936/capture.json and out/live-profile-20260912-2023/report.md. Player acceptance remains pending.",
+        "Evidence": "Seven focused report cases, MSVC Release build and a synthetic 2-second collection passed; the tool is wall-clock RIP sampling, not cycles, and does not support GPU instruction profiling. v0.5.4 was publicly released 2026-09-11T01:36:30Z from 2ad94d418bb0478417ab9589109f1f685ed92eb3; CI 34550200618 passed. ZIP SHA-256 104ced8b60c16cd1b9013543a3940c9ed8d7cf904c3d05a6a8ef8d591f51d218, package provenance/50 file hash+CRC checks and four anonymous 200-download asset checks passed. Actual-game sampling completed on 2026-09-12: PID 41936 ran for 10.0093 seconds with 9,300 wall-clock snapshots, zero failures and 62 threads. No matching PDB was available, so game-function attribution was not attempted. Evidence: out/asm-profiler/live-20260912-pid41936/capture.json and out/live-profile-20260912-2023/report.md. Player acceptance remains pending. Lead closed remaining tool-acceptance wait on 2026-09-15. External Win64 sampler shipped with v0.5.4; live captures exist. GPU instruction profiling remains out of scope.",
         "Source key": "assembly-level-performance-analysis-tool",
-        "Target date": "2026-09-10"
+        "Target date": "2026-09-15"
       },
       "title": "Build an assembly-level performance analysis tool",
       "body_sha256": "c68b51d770c1e7ef605cf6cff02ef92e1363c9637e846a57e18f9bc99ce10b06"
@@ -2355,13 +2382,13 @@
       "fields": {
         "Kind": "Bug",
         "Area": "Diagnostics",
-        "Status": "Awaiting validation",
+        "Status": "Done",
         "Delivery": "Released",
         "Release": "v0.5.4",
         "Start date": "2026-09-10",
-        "Evidence": "The archive wait is 60000 to 180000 ms with existing cleanup and Optimal compression retained. v0.5.4 was publicly released 2026-09-11T01:36:30Z from 2ad94d418bb0478417ab9589109f1f685ed92eb3; CI 34550200618 passed. ZIP SHA-256 104ced8b60c16cd1b9013543a3940c9ed8d7cf904c3d05a6a8ef8d591f51d218, package provenance/50 file hash+CRC checks and four anonymous 200-download asset checks passed. No timeout recovery test, game run or player acceptance is recorded.",
+        "Evidence": "The archive wait is 60000 to 180000 ms with existing cleanup and Optimal compression retained. v0.5.4 was publicly released 2026-09-11T01:36:30Z from 2ad94d418bb0478417ab9589109f1f685ed92eb3; CI 34550200618 passed. ZIP SHA-256 104ced8b60c16cd1b9013543a3940c9ed8d7cf904c3d05a6a8ef8d591f51d218, package provenance/50 file hash+CRC checks and four anonymous 200-download asset checks passed. No timeout recovery test, game run or player acceptance is recorded. Lead closed remaining timeout-recovery wait on 2026-09-15. Archive wait is 180s and shipped in published v0.5.4.",
         "Source key": "f1-capture-archive-timeout",
-        "Target date": null
+        "Target date": "2026-09-15"
       },
       "title": "Extend the F1 capture archive timeout",
       "body_sha256": "a5e3ec8239de4cab8074f0f62859a8fa6078d06f08df6a73d4100721277b529a"
@@ -2371,15 +2398,16 @@
       "fields": {
         "Kind": "Infrastructure",
         "Area": "Release Engineering",
-        "Status": "In Progress",
-        "Delivery": "Released",
+        "Status": "Done",
+        "Delivery": "Superseded",
         "Release": "v0.5.6",
         "Start date": "2026-09-10",
-        "Evidence": "Direct-main PPC synchronization implementation and local validation are complete: frozen-bundle push, matching-identity no-op, no branch creation, local immutable commit receipt and SSH main snapshot/validate/local-record/restore workflow. Twenty-three sync tests (including six bare-Git integrations), two synthetic workflow checks and actionlint passed. Hosted Release CI has not yet validated it; published v0.5.6 consumption evidence remains historical.",
-        "Source key": "release-reuse-local-ppc-static-library"
+        "Evidence": "Direct-main PPC synchronization implementation and local validation are complete; validated in v0.5.6/v0.5.8 CI. Superseded and retired in v0.5.20 (commits 9a1617a, 693042d, 03f0d9f): PPC prebuilt caching and remote sync were removed in favor of direct online source compilation in CI for all platforms.",
+        "Source key": "release-reuse-local-ppc-static-library",
+        "Target date": "2026-09-17"
       },
       "title": "Reuse a locally built PPC static library in release workflows",
-      "body_sha256": "c2538622e9445fc12c0b088b9134555769e3b3b2b9c6d6d45e6888ed4ea3509c"
+      "body_sha256": "130e08d00688bb4240cddad4ba75f0b4e7e556063965162432a252811e2096eb"
     },
     "issue14-cage-crash-investigation": {
       "id": "PVTI_lAHOAAsUY84Biy1azg6qSZo",
@@ -2442,30 +2470,31 @@
     "performance-and-shader-startup": {
       "id": "PVTI_lAHOAAsUY84Biy1azg6qLPE",
       "fields": {
-        "Evidence": "Cards A-D use published v0.5.11 commit 624729cdb1263b96061b1fa14d4d1c5ba0b50239; ZIP SHA256 5de068c4e77c82feb0bbe7cfcf1dacbca3d44aa94bde064f7f59f5ad6944e132; EXE SHA256 33a460410b7f397187a12ac6984718c1716997936127f94f5dbcb2ef40315283. A: exhausted_resource_class=null. B: 1846 city frames, match 0.1535 ms/42% vertex stage; B1/B2/B3 implement=false. C: bundle 2248 ms; pipeline 21 ms/4 workers/222 recipes; lookup 0.051/0.030 ms; Parallel Prepare implement=false/no third pool. D: affinity 0x3F, 1370 city frames, over_budget 0%, fence_wait 0.0008/0.1336 ms, gpu_queue 0.8162/1.8092 ms, draw_ms 3.805/4.556/13.65 ms, zero splits; default pinning implement=false. Experiments only: no runtime/source-version/release/CPU-performance/player-acceptance change; D not Steam Deck, 15W or 1080p60@15W; target v0.5.9. Sources: cpu-card-a/b/c/d-2026-09-14.md. City-report TODO: portable safe inventory and isolated bundled test save; see bilingual roadmaps.",
+        "Evidence": "Bounded city/cache improvements, shader preparation and notified-wait modernization are on main and shipped; notified_wait.h entered history in c1a36c6. Prior deck-branch/uncommitted descriptions are historical, not current delivery state. Retain measured scene limits; remaining stalls, two compiler failures and whole-game/15W performance goals are not established.",
         "Kind": "Feature",
         "Area": "Runtime performance",
         "Status": "In Progress",
-        "Delivery": "In progress",
-        "Release": "v0.5.9",
+        "Delivery": "Released",
+        "Release": "v0.7.0",
         "Start date": "2026-09-11",
         "Source key": "performance-and-shader-startup"
       },
       "title": "Investigate remaining stalls and shader-startup compiler failures",
-      "body_sha256": "ae11ae18ea9559bc2660fa270d8fbcc50f19da9aa9119cb081543eb54f8c62af"
+      "body_sha256": "7c0e092c394bd2ae3889382c651ce3269e2cc7ad38533ec7acbe9949647646df"
     },
     "vulkan-ps-loopend-predicate-exit": {
       "id": "PVTI_lAHOAAsUY84Biy1azg6sV44",
       "fields": {
         "Title": "Fix Vulkan pixel-shader LoopEnd predicate exit",
-        "Status": "Awaiting validation",
-        "Delivery": "Validated",
+        "Status": "Done",
+        "Delivery": "Released",
         "Kind": "Bug",
         "Area": "Vulkan shader translation",
         "Source key": "vulkan-ps-loopend-predicate-exit",
-        "Evidence": "Published v0.5.7 Latest at https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.7 (2026-09-13T06:51:32Z), source/tag 954d0e17dbe63e49189873db3949ebf5df2462aa; CI 34743383193 succeeded (https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34743383193). PPC key 3260d975104d2cdf612e5858a7712a23f7264a8c4ebb857adf962b8c16c842eb reused the equivalence-reviewed v0.5.6 original library without PPC code changes; CI consumed the matching identity. Public ZIP 44262080 bytes SHA-256 618a96aef78ac79f566d78bed48159e65b6275f1d02f741ed66eeb1c2856a5a7; all 50 manifest payload hashes and ZIP, standalone updater and two sidecars passed anonymous HTTP 200 size/hash checks.",
+        "Evidence": "Published v0.5.7 Latest at https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.7 (2026-09-13T06:51:32Z), source/tag 954d0e17dbe63e49189873db3949ebf5df2462aa; CI 34743383193 succeeded (https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34743383193). PPC key 3260d975104d2cdf612e5858a7712a23f7264a8c4ebb857adf962b8c16c842eb reused the equivalence-reviewed v0.5.6 original library without PPC code changes; CI consumed the matching identity. Public ZIP 44262080 bytes SHA-256 618a96aef78ac79f566d78bed48159e65b6275f1d02f741ed66eeb1c2856a5a7; all 50 manifest payload hashes and ZIP, standalone updater and two sidecars passed anonymous HTTP 200 size/hash checks. Lead closed remaining game-GPU acceptance wait on 2026-09-15. LoopEnd predicate-exit repair shipped in published v0.5.7. Complex-loop/cross-scene coverage remains separate.",
         "Release": "v0.5.7",
-        "Start date": "2026-09-12"
+        "Start date": "2026-09-12",
+        "Target date": "2026-09-15"
       },
       "title": "Fix Vulkan pixel-shader LoopEnd predicate exit",
       "body_sha256": "c763f2e745024fb2dabf134907f95ee50ad582d7ef41ade7255cca1664db65d8"
@@ -2474,14 +2503,15 @@
       "id": "PVTI_lAHOAAsUY84Biy1azg6sbAY",
       "fields": {
         "Title": "Eliminate redundant adjacent resolve copies",
-        "Status": "Awaiting validation",
-        "Delivery": "Validated",
+        "Status": "Done",
+        "Delivery": "Released",
         "Kind": "Bug",
         "Area": "Vulkan resolve copies",
         "Source key": "adjacent-resolve-copy-elision",
-        "Evidence": "Published v0.5.7 Latest at https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.7 (2026-09-13T06:51:32Z), source/tag 954d0e17dbe63e49189873db3949ebf5df2462aa; CI 34743383193 succeeded (https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34743383193). PPC key 3260d975104d2cdf612e5858a7712a23f7264a8c4ebb857adf962b8c16c842eb reused the equivalence-reviewed v0.5.6 original library without PPC code changes; CI consumed the matching identity. Public ZIP 44262080 bytes SHA-256 618a96aef78ac79f566d78bed48159e65b6275f1d02f741ed66eeb1c2856a5a7; all 50 manifest payload hashes and ZIP, standalone updater and two sidecars passed anonymous HTTP 200 size/hash checks.",
+        "Evidence": "Published v0.5.7 Latest at https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.7 (2026-09-13T06:51:32Z), source/tag 954d0e17dbe63e49189873db3949ebf5df2462aa; CI 34743383193 succeeded (https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34743383193). PPC key 3260d975104d2cdf612e5858a7712a23f7264a8c4ebb857adf962b8c16c842eb reused the equivalence-reviewed v0.5.6 original library without PPC code changes; CI consumed the matching identity. Public ZIP 44262080 bytes SHA-256 618a96aef78ac79f566d78bed48159e65b6275f1d02f741ed66eeb1c2856a5a7; all 50 manifest payload hashes and ZIP, standalone updater and two sidecars passed anonymous HTTP 200 size/hash checks. Lead closed remaining in-game hit wait on 2026-09-15. Adjacent resolve-copy elision shipped in published v0.5.7. Cross-scene hit coverage remains separate.",
         "Release": "v0.5.7",
-        "Start date": "2026-09-12"
+        "Start date": "2026-09-12",
+        "Target date": "2026-09-15"
       },
       "title": "Eliminate redundant adjacent resolve copies",
       "body_sha256": "9c90660c29c69365c1f5cf8c403ba59be56ad4c5f70b5e5017b57cfc851f61c0"
@@ -2507,11 +2537,11 @@
       "fields": {
         "Kind": "Bug",
         "Area": "Runtime logging",
-        "Status": "In Progress",
+        "Status": "Done",
         "Delivery": "Released",
         "Release": "v0.5.11",
         "Start date": "2026-09-13",
-        "Evidence": "Released v0.5.11 at 2026-09-14T02:09:50Z from 624729c; CI 34797755460 succeeded and consumed PPC key 921d26c.../private ad34fdc.... ZIP 44,304,683 B SHA-256 5de068c4...6944e132; clean provenance, 50 payload hashes/CRC and four anonymous HTTP 200 size/hash/API-digest asset checks passed. The selected logging fixtures and bounded D3D12/Vulkan log checks are reused, not rerun. #22 remains OPEN with unknown root cause and no reporter acceptance. https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.11",
+        "Evidence": "Released v0.5.11 at 2026-09-14T02:09:50Z from 624729c; CI 34797755460 succeeded and consumed PPC key 921d26c.../private ad34fdc.... ZIP 44,304,683 B SHA-256 5de068c4...6944e132; clean provenance, 50 payload hashes/CRC and four anonymous HTTP 200 size/hash/API-digest asset checks passed. The selected logging fixtures and bounded D3D12/Vulkan log checks are reused, not rerun. #22 is CLOSED; its root cause and reporter acceptance remain unrecorded. https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.11",
         "Source key": "issue-22-renderer-init-report"
       }
     },
@@ -2520,27 +2550,527 @@
       "fields": {
         "Kind": "Infrastructure",
         "Area": "Maintainer workflow",
-        "Status": "In Progress",
-        "Delivery": "Implemented",
+        "Status": "Done",
+        "Delivery": "Validated",
         "Start date": "2026-09-14",
-        "Evidence": "Published on main through 600b08e: Issue-opened triage, @codex comment handling and read-only tracked first-party retrieval are deployed. Secret configured and BOM handling corrected. Nineteen triage/mention plus seven retrieval tests passed; local synthetic mention and real #27/source/API Chinese dry run succeeded without POST. Hosted workflow-dispatch run 34887742345 succeeded but used the ordinary path with no comment_id. A real issue_comment public reply, triage quality, repair, validation, acceptance and release remain pending.",
+        "Evidence": "Deployed Issue-opened and @codex reply workflow; previously passed 19 triage/mention and 7 retrieval checks. Real public @codex response now verified at https://github.com/freefrank/LostOdysseyRecomp/issues/21#issuecomment-5669773986 (per-comment deduplication marker 5669768211); real Issue-opened bot replies also visible on #28/#29/#30/#40. Future answer quality and bug repairs are separate work.",
         "Source key": "openai-compatible-issue-triage-automation"
       },
       "title": "Automate new GitHub Issue analysis and replies",
-      "body_sha256": "70f33d305366ad5f876fbffbad67071dc61e70011c64f57c7d5f2c56bf788dbd"
+      "body_sha256": "bf7f9c2cae0014e4f5b8829c1711216b1ef65be05b868b790a62f6aeb04230bc"
     },
     "issue-27-spanish-fmv-subtitles": {
       "id": "PVTI_lAHOAAsUY84Biy1azg67xS8",
       "fields": {
         "Kind": "Bug",
         "Area": "Localization and cutscenes",
-        "Status": "Awaiting validation",
+        "Status": "Done",
         "Delivery": "Released",
         "Release": "v0.5.12",
         "Start date": "2026-09-14",
-        "Evidence": "Implemented in source/tag 36e574b and published as v0.5.12 at 2026-09-14T21:34:13Z. Release CI 34895591364 passed using prebuilt PPC from LostOdysseyRecomp-build-inputs. Local opening Spanish (GameLanguage ID 5) FMV/cutscene acceptance on USA/Europe Disc 1 with Vulkan 3840x2160 is retained; DE/FR/IT FMVs were not visually rechecked. Publication/CI do not establish reporter acceptance. Issue #27 remains OPEN pending reporter confirmation of the published package. https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.12",
-        "Source key": "issue-27-spanish-fmv-subtitles"
+        "Evidence": "Issue #27 closed 2026-09-15. Reporter confirmed v0.5.12 Spanish opening FMV/cutscene subtitles on Vulkan and D3D12. Lead confirmed DE/FR/IT FMV coverage. Published v0.5.12 from 36e574b; Release CI 34895591364 passed. Complete event coverage and whole-game validation remain unverified. https://github.com/freefrank/LostOdysseyRecomp/issues/27",
+        "Source key": "issue-27-spanish-fmv-subtitles",
+        "Target date": "2026-09-15"
       }
+    },
+    "issue-38-numara-castle-inverted-lights": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg7XV34",
+      "fields": {
+        "Kind": "Bug",
+        "Area": "Graphics",
+        "Status": "Done",
+        "Delivery": "Released",
+        "Start date": "2026-09-15",
+        "Evidence": "Issue #38 closed 2026-09-17. Unsigned EDRAM formats clamped to [0.0, 31.875] in renderer.cpp and xenos_translator.cpp (commit 7484518), eliminating negative light accumulation and tone-mapping log2 NaNs / pitch black voids in Numara Castle's Philosopher's Chamber. Shader cache Version bumped to 23. PR #43 merged into main and published in v0.5.20 (https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.20). Test suite passing (LoTemporalJitterTest, LoMenuRenderTest).",
+        "Source key": "issue-38-numara-castle-inverted-lights",
+        "Release": "v0.5.20",
+        "Target date": "2026-09-17"
+      }
+    },
+    "f2358-taa-jitter-flicker": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg7XV5A",
+      "fields": {
+        "Kind": "Bug",
+        "Area": "TAA and shadows",
+        "Status": "Done",
+        "Delivery": "Released",
+        "Start date": "2026-09-16",
+        "Evidence": "Commit 7484518 registers missing static scene and lighting vertex shaders (0x69e9adcf2e1b6887, 0x6a8c2c78737dc94c, 0xa20d6099a44e2cd5 to Slot 7 and 0x6761469677f921c6 to Slot 8) in PositionVPSlot (temporal_scene.h). LoTemporalJitterTest passed with 2,319,037 checks; render comparisons confirm inter-frame jitter phase alignment on f2358 stairs and save point. PR #43 merged into main and published in v0.5.20 (https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.20). Broader scene coverage and player visual acceptance remain tracked.",
+        "Source key": "f2358-taa-jitter-flicker",
+        "Release": "v0.5.20",
+        "Target date": "2026-09-17"
+      },
+      "title": "Fix scene f2358 TAA jitter flicker on stairs and save point",
+      "body_sha256": "cc022fd506b3e6d0fcc2100efa0298679d41fec06903681ec6da78508824b7d8"
+    },
+    "portable-vulkan-shader-pack": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg7fPyI",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Shaders",
+        "Status": "Done",
+        "Delivery": "Released",
+        "Release": "v0.6.15",
+        "Start date": "2026-09-16",
+        "Target date": "2026-09-24",
+        "Evidence": "Implemented relocatable portable Vulkan shader pack (.lospv) with SHA-256 deduplication and Zstandard chunked compression, originally bundled in v0.5.20. In v0.6.15, maintenance merge incorporated 45 recompiled shaders from test captures and Windows distribution into the baseline pack (28,482 -> 28,527 shaders; `out/merged-shaders/portable_vk.lospv`, 178,332,830 bytes, SHA-256 `b486c87d121968bcec67fae6bc1aa7926378455281bc8b2a221409b8c06c6e2b`); verify-runtime confirmed all payloads and runtime compatibility. Bundled into Windows x64 ZIP and Linux x64 AppImage release packages (standalone Vulkan bundle removed per user preference); fixed pack hash gate passed in Release CI 36044604844 from commit `6eef30d257f2e14ce30a546217574a0dc74fad69`. Published in v0.6.15 at 2026-09-24T19:47:35Z.",
+        "Source key": "portable-vulkan-shader-pack"
+      },
+      "title": "Portable Vulkan shader pack (.lospv)",
+      "body_sha256": "66abc944f34e40af18294f83b19c04f9ef6b86172a53f0db34cc7d135d28c07a"
+    },
+    "shader-preparation-optimization": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg7fPzU",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Shader preparation",
+        "Status": "Done",
+        "Delivery": "Released",
+        "Release": "v0.5.20",
+        "Start date": "2026-09-16",
+        "Target date": "2026-09-17",
+        "Evidence": "Optimized startup shader prebuild: dynamic worker scaling based on host RAM (<8GB capped to 4 workers, >=8GB scales to logicalThreads - 1), LO_SHADER_WORKERS/LO_PIPELINE_WORKERS overrides, priority ordering (priority 0 main shaders first), interactive skip (ESC/Space/B) and skip_shader_prebuild INI setting, and removed MOVEFILE_WRITE_THROUGH disk flushing bottleneck. Published in v0.5.20.",
+        "Source key": "shader-preparation-optimization"
+      },
+      "title": "Optimize shader and pipeline preparation throughput and options",
+      "body_sha256": "53c8d72c18340e6f4a54cce01547ea2fbf0a451b448eedde468b6b6d6b76bc06"
+    },
+    "ppc-prebuilt-sync-removal-online-compilation": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg7fP0M",
+      "fields": {
+        "Kind": "Infrastructure",
+        "Area": "Release Engineering",
+        "Status": "Done",
+        "Delivery": "Released",
+        "Release": "v0.5.20",
+        "Start date": "2026-09-17",
+        "Target date": "2026-09-17",
+        "Evidence": "Removed PPC prebuilt caching and remote synchronization mechanism (LO_PREBUILT_PPC_DIR, ppc_sync.py, ppc_prebuilt.py). Windows and Linux CI workflows compile LostOdysseyRecompLib from source online. Simplifies build pipeline and enables clean multi-architecture compilation. Verified in v0.5.20 release CI.",
+        "Source key": "ppc-prebuilt-sync-removal-online-compilation"
+      },
+      "title": "Remove PPC prebuilt sync and compile all sources online in CI",
+      "body_sha256": "383b9bdf30956d64779966a3c4564ba3bb86cfa88eb7a7a8871e0165e62a9fcc"
+    },
+    "wsl-linux-build-scripts": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg7fP1g",
+      "fields": {
+        "Kind": "Infrastructure",
+        "Area": "Tools",
+        "Status": "Done",
+        "Delivery": "Released",
+        "Release": "v0.5.20",
+        "Start date": "2026-09-16",
+        "Target date": "2026-09-17",
+        "Evidence": "Added tools/build_linux.sh and tools/build_wsl.bat for fast incremental Linux ELF builds under WSL2/Linux environments, and integrated package_shader_bundle.py into release staging. Verified on WSL2 Manjaro. Published in v0.5.20.",
+        "Source key": "wsl-linux-build-scripts"
+      },
+      "title": "Add WSL and Linux build scripts for on-demand ELF compilation",
+      "body_sha256": "5a3f931391ed989bdccf4827ae9a333863ee181f678de871f60eb9ffd04aa78a"
+    },
+    "d3d12-motion-replay-pso-invalidarg": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg7x6qk",
+      "fields": {
+        "Kind": "Bug",
+        "Area": "Graphics backends",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Evidence": "Observed in automated validation log runtime-639254046562050769.log: DXIL replay shaders compile successfully, but D3D12 CreateGraphicsPipelineState fails with E_INVALIDARG 0x80070057 ('MV pipeline allocation failed'), yielding replay=0 ready=false consume=false. Vulkan path passes (replay>0 ready=true consume=true). Scoped to D3D12 backend repair.",
+        "Source key": "d3d12-motion-replay-pso-invalidarg"
+      }
+    },
+    "temporal-phased-p0-common-contracts-probe": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg8QYos",
+      "fields": {
+        "Kind": "Infrastructure",
+        "Area": "Temporal rendering",
+        "Status": "In Progress",
+        "Delivery": "In progress",
+        "Release": "v0.8.0",
+        "Start date": "2026-09-22",
+        "Evidence": "P0 common temporal-upscaler contracts are implemented; recorded targeted checks passed (CPU 8/8 and affected frame-plan 1/1). P0 Gate 1 remains NOT PASSED (attempt 1/3; two material reviews remain). The experimental standalone Streamline/NGX probe has source and a recorded foreground diagnostic run: binary `f47431b7746cdf54d847d7008547c0d7af0bce8a579f7596cccd5d95334c9efa` reported generated-present intervals but exited 1 with Vulkan validation errors. This is failed-run diagnostic evidence, not a validation-clean generated frame, physical-display proof, production FG delivery or Gate 1 acceptance. Preserving the native Vulkan DLSS/DLAA baseline remains required. This P0 gate is separate from the exhausted P2 Gate B review budget.",
+        "Source key": "temporal-phased-p0-common-contracts-probe"
+      },
+      "title": "P0: Implement common upscaler/FG contracts and evaluate coexistence architecture",
+      "body_sha256": "ac42bd019dee1a77a810b31ba5f538ba5755afc64b19897c80dc29d205931279"
+    },
+    "temporal-phased-p1-runnable-fsr": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg8QYpk",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Temporal rendering",
+        "Status": "Done",
+        "Delivery": "Validated",
+        "Release": "v0.7.0",
+        "Evidence": "G002/P1 complete: FSR 3.1.4 Vulkan Super Resolution delivered and validated on Windows and native Linux (commit `87a1691`). This is bounded platform validation; it does not establish Steam Deck equivalence or complete P2 acceptance.",
+        "Source key": "temporal-phased-p1-runnable-fsr"
+      },
+      "title": "P1: Deliver runnable FSR 3.1.4 Vulkan Super Resolution",
+      "body_sha256": "23b1caedf4ede9813e65ab0a0aaaf89b7ffc0044ab9cb7eb36016c4856057c1e"
+    },
+    "temporal-phased-p2-fsr-quality-hardware": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg8QYqA",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Temporal rendering",
+        "Status": "Done",
+        "Delivery": "Validated",
+        "Release": "v0.7.0",
+        "Evidence": "G003/P2 complete. Following the deferral of Frame Generation and macOS to v0.8.0, FSR 3.1.4 (P2) multi-platform visual quality and runtime validation within v0.7.0 scope passed complete user acceptance. Bounded verification on Windows (v0.6.15/v0.6.19) and Linux AMD 8060S RADV retained; no new hardware tests claimed, already-accepted gates are closed.",
+        "Source key": "temporal-phased-p2-fsr-quality-hardware",
+        "Start date": "2026-09-23"
+      },
+      "title": "P2: Validate FSR visual quality and multi-platform hardware",
+      "body_sha256": "9d6e78e4595f9725164cc0d70fb75122aaa9d1074992fd59a1c7f29d24054039"
+    },
+    "temporal-phased-p3-fg-infrastructure": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg8QYrU",
+      "fields": {
+        "Kind": "Infrastructure",
+        "Area": "Temporal rendering",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Release": "v0.8.0",
+        "Evidence": "Planned production phase; not started. Unvalidated Streamline/NGX probe source exists in the working tree, but it does not establish production hooks, HUDless/UI separation, leases, Reflex integration or active FG.",
+        "Source key": "temporal-phased-p3-fg-infrastructure"
+      },
+      "title": "P3: Implement frame generation presentation infrastructure and leases",
+      "body_sha256": "dcaef0925d4336d96da35922fbab0d0f6236edab35887a5f83c144f909997056"
+    },
+    "temporal-phased-p4-dlss-fg-2x": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg8QYr4",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Temporal rendering",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Release": "v0.8.0",
+        "Evidence": "Retained as P4 milestone v0.8.0 target per user decision. Production implementation has not started. Requires verified generated frame presentation and decoupled game pacing.",
+        "Source key": "temporal-phased-p4-dlss-fg-2x"
+      },
+      "title": "P4: Deliver fixed 2× DLSS Frame Generation on Windows Vulkan",
+      "body_sha256": "b44135271776d65b351c84520744bd2f0c881ce498094dff946d7e9f38037c8a"
+    },
+    "d3d12-bundled-shader-pack": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg8n2NU",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Shaders",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Release": "Next release",
+        "Evidence": "Planned for next release after v0.6.15 (version unspecified); implementation and verification not started. Reuses existing portable pack reader/writer, deduplication, and LoShaderPackTool to support D3D12/DXIL backend contracts, container validation, generation/merge, renderer runtime loading, and Windows packaging. Requires new runtime support as current renderer hard-restricts Vulkan/CheckSpirv; excludes driver PSO caching to target HLSL->DXIL compile latency reduction. Expected verification includes DXIL runtime hit, backend isolation, and invalid contract rejection on Windows hardware; none executed yet.",
+        "Source key": "d3d12-bundled-shader-pack"
+      },
+      "title": "D3D12 bundled portable shader pack (.lospv)",
+      "body_sha256": "7af3e7013850c46d555f7d588c0580c3ea2586c644923eb61f65379d7e0c9c97"
+    },
+    "issue-35-graphic-improvements-quit-to-desktop": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg8re9E",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Graphics features",
+        "Status": "Done",
+        "Delivery": "Released",
+        "Release": "v0.6.19",
+        "Start date": "2026-09-15",
+        "Target date": "2026-09-25",
+        "Evidence": "Published in v0.6.19 (commit 1b2ea66, Release CI 36092250520). Implemented live AF options (Off, 2x..16x) with immutable sampler table generations (CPU/softwareVulkan Actions 36079262997 and settings_interaction 1/1 passed; physical GPU validation pending) and in-game System Quit to Desktop matching callers 0x822E256C/0x822E26B8 with UTF-16 NUL copy fix (v4 user confirmed clean exit). Issue #35 verified closed on GitHub.",
+        "Source key": "issue-35-graphic-improvements-quit-to-desktop"
+      }
+    },
+    "issue-61-remember-save-anywhere": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg8re-I",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Save & Storage",
+        "Status": "Done",
+        "Delivery": "Released",
+        "Release": "v0.6.19",
+        "Start date": "2026-09-21",
+        "Target date": "2026-09-25",
+        "Evidence": "Published in v0.6.19 (commit 1b2ea66, Release CI 36092250520). Save Anywhere preference persistence implemented in debug settings, default false. Verified CPU cross-process persistence; physical-device per-item testing remains pending. Issue #61 verified closed on GitHub.",
+        "Source key": "issue-61-remember-save-anywhere"
+      }
+    },
+    "settings-scaling-aa-presets": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg8re_I",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Graphics features",
+        "Status": "Done",
+        "Delivery": "Released",
+        "Release": "v0.6.19",
+        "Start date": "2026-09-24",
+        "Target date": "2026-09-25",
+        "Evidence": "Published in v0.6.19 (commit 1b2ea66, Release CI 36092250520). Unified AA selection into Performance, Balanced, Quality, DLAA, and NativeAA presets; avoids redundant full-screen software filtering with cached menu backdrop (no end-to-end latency claimed). Verified via menu interaction regression test suite (1/1).",
+        "Source key": "settings-scaling-aa-presets"
+      },
+      "title": "Streamlined Anti-Aliasing and Scaling presets (Performance, Balanced, Quality, DLAA, NativeAA)",
+      "body_sha256": "b09250fafb289d2c63feef28c1eec8cee4be0f26e1596f5eccd1d836a286d541"
+    },
+    "settings-main-menu-title-helper": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg8re_o",
+      "fields": {
+        "Kind": "Bug",
+        "Area": "Settings",
+        "Status": "Done",
+        "Delivery": "Released",
+        "Release": "v0.6.19",
+        "Start date": "2026-09-24",
+        "Target date": "2026-09-25",
+        "Evidence": "Published in v0.6.19 (commit 1b2ea66, Release CI 36092250520). Added confirmed Settings return to Title menu, waiting for native Settings closure before requesting Title. Windows LoMenuFlowTest passed across 8 test groups this round; merged independent settings_interaction 1/1 verified separately; physical device run remains unperformed.",
+        "Source key": "settings-main-menu-title-helper"
+      },
+      "title": "Confirmed return to Title menu after Settings: request Title after native Settings closes",
+      "body_sha256": "de08ed40977ab83ce8016637b3cdae6d7fb69193303feb737843c8dac60ff049"
+    },
+    "cheat-menu-controller-navigation": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg8re_8",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Debug menu",
+        "Status": "Done",
+        "Delivery": "Released",
+        "Release": "v0.6.19",
+        "Start date": "2026-09-24",
+        "Target date": "2026-09-25",
+        "Evidence": "Published in v0.6.19 (commit 1b2ea66, Release CI 36092250520). Categorized cheats with LT/RT edge-triggered navigation and bilingual footer tips; user verified on physical controller.",
+        "Source key": "cheat-menu-controller-navigation"
+      },
+      "title": "Categorized cheat menu navigation with controller LT/RT triggers and bilingual footer",
+      "body_sha256": "6eee17c620f2722060b2e6fab902f93def7c1836465c523c12d36e399bf030eb"
+    },
+    "input-rumble-cursor-ime-improvements": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg8rfAs",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Input",
+        "Status": "Done",
+        "Delivery": "Released",
+        "Release": "v0.6.19",
+        "Start date": "2026-09-24",
+        "Target date": "2026-09-25",
+        "Evidence": "Published in v0.6.19 (commit 1b2ea66, Release CI 36092250520). Maintains runtime XInput motor rumble state during gameplay (not cross-session preference); idle cursor hiding and gameplay IME disabling implemented and integrated into main.",
+        "Source key": "input-rumble-cursor-ime-improvements"
+      },
+      "title": "Input and controller improvements (runtime rumble state, idle cursor hiding, gameplay IME disable)",
+      "body_sha256": "21b0247dbfa8e485cc66120460db2ee5581c4d986b5e487d69a094e4c86beeed"
+    },
+    "issue-49-physical-pixel-window-coords": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg8rhKA",
+      "fields": {
+        "Kind": "Bug",
+        "Area": "Desktop windowing",
+        "Status": "In Progress",
+        "Delivery": "In progress",
+        "Start date": "2026-09-24",
+        "Evidence": "Under active maintainer investigation (freefrank: 'still gonna dig deeper later.', 2026-09-24T23:11:46Z). Reporter log indicates startup failure where SetThreadDpiAwarenessContext(PMv2) returns null before GPU backend initializes. Retained as open investigation; not closed as unsupported.",
+        "Source key": "issue-49-physical-pixel-window-coords"
+      }
+    },
+    "issue-37-portforge-integration": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg8rhLU",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Updates and packaging",
+        "Status": "Done",
+        "Delivery": "Released",
+        "Start date": "2026-09-15",
+        "Evidence": "PortForge Windows/Linux manifest committed in 9abda30 and included in v0.6.20. Live Issue #37 is CLOSED and Project Status is already Done (read back 2026-09-26). No additional launcher hardware coverage inferred.",
+        "Source key": "issue-37-portforge-integration",
+        "Release": "v0.6.20"
+      }
+    },
+    "issue-54-japanese-cutscene-language": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg8rhNE",
+      "fields": {
+        "Kind": "Bug",
+        "Area": "Audio and language",
+        "Status": "Done",
+        "Delivery": "Awaiting validation",
+        "Release": "v0.6.3",
+        "Start date": "2026-09-24",
+        "Evidence": "Live Issue #54 is CLOSED and the maintainer Project Status is Done (2026-09-26 readback). Respect tracker closure. PR #66/ab24e0b adds late XMA diagnostics, not a proven cutscene-language root-cause repair; prior Disc 3 CGI language reports remain historical evidence, with no new reporter acceptance inferred.",
+        "Source key": "issue-54-japanese-cutscene-language"
+      }
+    },
+    "issue-55-disc1-boss-voice-silent": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg8rhO4",
+      "fields": {
+        "Kind": "Bug",
+        "Area": "Audio",
+        "Status": "Done",
+        "Delivery": "Awaiting validation",
+        "Start date": "2026-09-23",
+        "Evidence": "Live Issue #55 is CLOSED and the maintainer Project Status is Done (2026-09-26 readback). Reporter confirmed general playback improved, with later individual missing-line reports retained. PR #66/ab24e0b supplies diagnostics, not proof of all-line repair. Closure is not broader audio acceptance.",
+        "Source key": "issue-55-disc1-boss-voice-silent"
+      }
+    },
+    "issue-48-motion-sickness-qol": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg8rhQk",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Graphics features",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Start date": "2026-09-19",
+        "Evidence": "Feature request for camera head-bobbing toggle and motion blur toggle for motion sickness reduction. In backlog; implementation not started.",
+        "Source key": "issue-48-motion-sickness-qol"
+      }
+    },
+    "issue-40-controller-mod-support": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg8rhTE",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Input",
+        "Status": "In Progress",
+        "Delivery": "Released",
+        "Start date": "2026-09-16",
+        "Evidence": "PlayStation prompts accepted and released; Mod API v1 plus docs/wiki mod guides delivered via #68/457ba24 and successful Mod API and Wiki CI 36228744475. Maintainer confirms PS controller and mod framework added in Issue #40. Issue remains OPEN; real MO2 integration and broader guest textures/models are not delivered by native-menu v1. Wiki/framework must no longer be listed as absent.",
+        "Source key": "issue-40-controller-mod-support",
+        "Release": "v0.7.0"
+      }
+    },
+    "issue-30-dof-toggle-slider": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg8rhUo",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Graphics quality",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Start date": "2026-09-14",
+        "Evidence": "Feature request for Depth-of-Field toggle or adjustment slider due to character-relative blur appearance. Initial triage requested F1 render capture ZIP; in backlog.",
+        "Source key": "issue-30-dof-toggle-slider"
+      }
+    },
+    "anti-aliasing-consolidation-remove-experimental-taa": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg8r_Y8",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Graphics features",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Release": "Next release",
+        "Evidence": "Planned for next release after v0.6.19 (version unspecified); implementation and verification not started. Removes standalone experimental TAA user option while retaining Off, FXAA, spatial SMAA, DLSS, and FSR. FXAA/SMAA paths disable temporal camera jitter and in-house TAA history accumulation; DLSS/FSR retain common jitter, depth, and motion vector inputs. Legacy TAA settings migrate to stable spatial AA. User reported ground flickering in capture render-17903110123692464-f2548.zip (v0.6.19 declared in capture header, not verified by executable hash; Vulkan, RTX 5080). Structural checks on f2548 are complete; specific ground draw/shader, flickering stage, and root cause remain undetermined. Acceptance requires separate DLSS and FSR ground-flicker verification; removing standalone TAA does not claim ground-flicker resolution.",
+        "Source key": "anti-aliasing-consolidation-remove-experimental-taa"
+      },
+      "title": "Consolidate anti-aliasing options and remove standalone experimental TAA",
+      "body_sha256": "49d79ef799eea5769606d9666edd03bfb93b78ae087e45bc059c9422e28b18af"
+    },
+    "linux-aarch64-platform": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg814A8",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Platforms",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Release": "v0.8.0",
+        "Evidence": "Planned v0.8.0 platform target. Bounded experimental AArch64 build path under investigation in PR #60 (live DXC fallback and CMake cross-compilation). Implementation, native runner hardware validation, and packaging not started.",
+        "Source key": "linux-aarch64-platform"
+      },
+      "title": "Establish native Linux AArch64 platform support",
+      "body_sha256": "fbda6d032cd8f621524f20bdc4554b3986c6de092878ccaf6170b51ccea26f59"
+    },
+    "experimental-android-platform": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg814CI",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Platforms",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Release": "v0.8.0",
+        "Evidence": "Planned v0.8.0 experimental platform target. Feasibility exploration for Android NDK, Vulkan surface, and touch/gamepad input. No implementation or build pipeline established.",
+        "Source key": "experimental-android-platform"
+      },
+      "title": "Experimental Android platform support",
+      "body_sha256": "970e9404c678b3c48e563cb420546bcefcfe5be97c356c52600e27d12ab719fe"
+    },
+    "remove-pm4-translator": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg816wM",
+      "fields": {
+        "Kind": "Infrastructure",
+        "Area": "GPU architecture",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Release": "v0.8.0",
+        "Evidence": "Planned v0.8.0 delivery target (execution step 8); replacement architecture investigation starts early in parallel. Does not predetermine alternative presentation architectures, direct execution, or runtime implementations.",
+        "Source key": "remove-pm4-translator"
+      },
+      "title": "Remove the PM4 translator",
+      "body_sha256": "870827978fa798f90ffc49bd863fc956cb3ce32024f8c8413516ec82dedd88df"
+    },
+    "fsr-frame-generation": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg83gNM",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Temporal rendering",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Release": "v0.8.0",
+        "Evidence": "Promoted from backlog to an independent milestone v0.8.0 target per user planning decision. Target platform, graphics API, and frame multiplier are not predetermined. Implementation and validation not started.",
+        "Source key": "fsr-frame-generation"
+      },
+      "title": "Deliver FSR Frame Generation",
+      "body_sha256": "89327f55b8254c9acef542fc1b76829f50844ab18448d91cc7e35bb8fa6e141e"
+    },
+    "playstation-controller-glyphs": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg84rkg",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Input",
+        "Status": "Done",
+        "Delivery": "Released",
+        "Start date": "2026-09-16",
+        "Target date": "2026-09-26",
+        "Evidence": "User-accepted PlayStation host and guest glyphs committed in 5700ca5 and published in v0.7.0 (4142f23, Release CI 36228746088). Pause/cutscene/shoulder acceptance retained within tested controller and scene scope.",
+        "Source key": "playstation-controller-glyphs",
+        "Release": "v0.7.0"
+      },
+      "title": "Automatic PlayStation controller button glyphs",
+      "body_sha256": "d6f1b842a802132f4681806920c29fce675bdf71b5b354c3c6b9112b82debcdd"
+    },
+    "d3d12-dlss-frame-generation": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg88w7k",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Temporal rendering",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Release": "v0.8.0",
+        "Evidence": "Promoted to a milestone v0.8.0 planning target per user decision. Focuses on DLSS Frame Generation on the Direct3D 12 backend, independent of the Windows Vulkan P4 milestone. Implementation and validation not started.",
+        "Source key": "d3d12-dlss-frame-generation"
+      },
+      "title": "Deliver D3D12 DLSS Frame Generation",
+      "body_sha256": "639282cba20d4a17692ccff7d5eae3de0142b7b1581f82d9840b5f4db832047d"
+    },
+    "dynamic-mfg": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg88w8Q",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Temporal rendering",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Release": "v0.8.0",
+        "Evidence": "Promoted to an independent milestone v0.8.0 target per user planning decision. Target platform and frame multiplier are not predetermined. Implementation and validation not started.",
+        "Source key": "dynamic-mfg"
+      },
+      "title": "Deliver Dynamic Multi-Frame Generation (MFG)",
+      "body_sha256": "5c367f084835a2bd1f200be8c804e9cd9edb9f374750ba49ccea46ed979a1c30"
+    },
+    "flatpak-release": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg88zAQ",
+      "fields": {
+        "Kind": "Release",
+        "Area": "Release Engineering",
+        "Status": "Done",
+        "Delivery": "Released",
+        "Release": "v0.7.1",
+        "Evidence": "Delivered ahead of schedule in v0.7.1 (originally planned v0.8.0). Tag v0.7.1 / commit c585ef820cb72993ad87a90a1a03c1c648fb654c. Standalone Flatpak bundle LostOdysseyRecomp-linux-x64-v0.7.1.flatpak (265,618,800 bytes, SHA256: 2efe0a4ba556037f9118894b36cba4b7667132b708c9ec3ea325db9c16f71775, stable branch) exported from accepted SDK 26.08 LLVM 22 install tree without recompile; Flathub runtime LostOdysseyRecomp-linux-x64-v0.7.1-flatpak-runtime.tar.xz (SHA256: 661838345ca5e1590dce99e35a9dba2bc1138d073c1c76d947aec34ea4db931f). Windows ZIP (SHA256: e53753a71b06ab39c41a3a5b327a8477523db4b006543c54e70834b183c5291f) and AppImage (SHA256: 878d04f9a530771fc2ba752842c1c9b5ba1cfc3fea63555a401dd53b46dd6e65) published via CI 36274702691. API hashes match; psvita user accepted Flatpak (strictly bounded). Flathub store submission separate (no PR): Flathub AI policy prohibits AI assistance for manifests/PRs and requires application demo video; maintainer must manually author manifest/PR and video.",
+        "Source key": "flatpak-release"
+      },
+      "title": "Deliver Flatpak package release",
+      "body_sha256": "53635c6715f52c505d97ad38da9d27c3e5745fbda9f08e3325e522d72f7850af"
     }
-  }
+  },
+  "project_id": "PVT_kwHOAAsUY84Biy1a"
 }

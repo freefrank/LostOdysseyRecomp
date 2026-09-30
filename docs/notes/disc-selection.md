@@ -6,7 +6,7 @@ Status: **2026-09-06, included in published v0.2**. Commit `dcc946299cdc29847837
 
 When the original game requests another disc, the host selects its already imported `discN` directory and the original manager reloads that disc's own `LO.fpi` and archives. No disc-selection button is required. All discs must belong to the same supported edition and retain the importer layout under one parent directory. Existing handles continue referring to their original files; new game-path opens use the selected disc.
 
-A missing or invalid target fails the request without changing the current mount. The player must import the required disc with InstallGame.exe. There is no rewritten combined FPI, and this implementation does not copy re:Blue code. The shared design goal is avoiding manual disc handling; Lost Odyssey retains its original index unload/reload flow.
+A missing or invalid target fails the request without changing the current mount. The player must import the required disc with the built-in importer in `LostOdysseyRecomp.exe`. There is no rewritten combined FPI, and this implementation does not copy re:Blue code. The shared design goal is avoiding manual disc handling; Lost Odyssey retains its original index unload/reload flow.
 
 ## Implementation
 

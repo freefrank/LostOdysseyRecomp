@@ -5,6 +5,9 @@
 
 #include <filesystem>
 #include <string_view>
+#include <memory>
+
+struct KernelObject;
 
 // Nt-level file system for the guest. Paths arrive as NT object names such as
 // "\Device\Cdrom0\xenon_sys.fpd", "\??\game:\..." or "d:\..." and are mapped
@@ -26,6 +29,9 @@ struct FileSystem
     // Atomically select an installed volume. Existing file handles retain their
     // original volume until the guest closes them during its index reload.
     static bool SelectDisc(uint32_t discNumber);
+
+    // Called only with diagnostics enabled and a retained object reference.
+    static void TraceHandleClose(uint32_t handle, const std::shared_ptr<KernelObject>& object, bool completed);
 
     // Resolve a guest path to a host path. Returns an empty path when the
     // device is unknown.

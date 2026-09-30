@@ -16,6 +16,11 @@
 #include <cwchar>
 #include <fstream>
 #include <limits>
+#include <string>
+#include <vector>
+#if defined(__linux__) && !defined(_WIN32)
+#include <unistd.h>
+#endif
 
 namespace updater
 {
@@ -134,11 +139,6 @@ bool ReadResponse(std::string_view url, size_t limit, std::string &body, std::st
 bool Download(std::string_view url, const std::filesystem::path &destination, uint64_t expectedSize,
               ProgressWindow &progress, std::string &error, bool &cancelled)
 {
-    if (!expectedSize || expectedSize > 1024ull * 1024 * 1024)
-    {
-        error = "update asset size is outside the supported range";
-        return false;
-    }
     InternetHandle session, connection, request;
     if (!OpenRequest(url, session, connection, request, error)) return false;
     std::ofstream output(destination, std::ios::binary | std::ios::trunc);
@@ -152,23 +152,112 @@ bool Download(std::string_view url, const std::filesystem::path &destination, ui
         if (!WinHttpReadData(request.value, buffer.data(), DWORD(buffer.size()), &read))
             return WindowsApiFailure("WinHttpReadData(update download)", GetLastError(), error);
         if (!read) break;
-        if (total > expectedSize || read > expectedSize - total)
-        {
-            error = "update download exceeded the declared asset size";
-            return false;
-        }
         output.write(buffer.data(), read);
         total += read;
         progress.SetDownloadProgress(total, expectedSize);
     }
     output.flush();
-    if (!output || total != expectedSize) { error = "update download size mismatch"; return false; }
+    if (!output) { error = "could not write update download"; return false; }
     return true;
+}
+
+std::wstring WideUtf8(std::string_view text)
+{
+    if (text.empty()) return {};
+    const int length = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(), int(text.size()), nullptr, 0);
+    if (!length) return L"(release notes unavailable)";
+    std::wstring result(size_t(length), L'\0');
+    MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(), int(text.size()), result.data(), length);
+    return result;
+}
+
+struct ConsentState
+{
+    bool accepted = false;
+    bool closed = false;
+};
+
+LRESULT CALLBACK ConsentWindowProc(HWND window, UINT message, WPARAM wparam, LPARAM lparam)
+{
+    auto *state = reinterpret_cast<ConsentState *>(GetWindowLongPtrW(window, GWLP_USERDATA));
+    if (message == WM_NCCREATE)
+    {
+        state = static_cast<ConsentState *>(reinterpret_cast<CREATESTRUCTW *>(lparam)->lpCreateParams);
+        SetWindowLongPtrW(window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(state));
+    }
+    if (message == WM_COMMAND && LOWORD(wparam) == IDYES)
+    {
+        state->accepted = true;
+        state->closed = true;
+        DestroyWindow(window);
+        return 0;
+    }
+    if (message == WM_COMMAND && LOWORD(wparam) == IDNO)
+    {
+        state->closed = true;
+        DestroyWindow(window);
+        return 0;
+    }
+    if (message == WM_CLOSE)
+    {
+        state->closed = true;
+        DestroyWindow(window);
+        return 0;
+    }
+    return DefWindowProcW(window, message, wparam, lparam);
+}
+
+bool ShowConsent(std::wstring_view title, std::wstring_view text)
+{
+    const auto instance = GetModuleHandleW(nullptr);
+    static const wchar_t className[] = L"LostOdysseyUpdateConsent";
+    static bool registered = false;
+    if (!registered)
+    {
+        WNDCLASSW klass{};
+        klass.hInstance = instance;
+        klass.lpfnWndProc = ConsentWindowProc;
+        klass.lpszClassName = className;
+        klass.hCursor = LoadCursorW(nullptr, MAKEINTRESOURCEW(32512));
+        if (!RegisterClassW(&klass) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) return false;
+        registered = true;
+    }
+    ConsentState state;
+    HWND window = CreateWindowExW(WS_EX_DLGMODALFRAME, className, std::wstring(title).c_str(),
+                                  WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
+                                  CW_USEDEFAULT, CW_USEDEFAULT, 620, 460, nullptr, nullptr, instance, &state);
+    if (!window) return false;
+    HWND notes = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", std::wstring(text).c_str(),
+                                 WS_CHILD | WS_VISIBLE | WS_VSCROLL | ES_MULTILINE | ES_READONLY | ES_AUTOVSCROLL,
+                                 16, 16, 572, 340, window, nullptr, instance, nullptr);
+    CreateWindowW(L"BUTTON", L"Install", WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON,
+                  376, 378, 100, 32, window, reinterpret_cast<HMENU>(IDYES), instance, nullptr);
+    CreateWindowW(L"BUTTON", L"Later", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+                  488, 378, 100, 32, window, reinterpret_cast<HMENU>(IDNO), instance, nullptr);
+    SendMessageW(notes, EM_SETSEL, 0, 0);
+    ShowWindow(window, SW_SHOW);
+    UpdateWindow(window);
+    MSG message{};
+    while (!state.closed && GetMessageW(&message, nullptr, 0, 0) > 0)
+    {
+        TranslateMessage(&message);
+        DispatchMessageW(&message);
+    }
+    return state.accepted;
+}
+
+bool ConfirmUpdate(const Release &release, const StartupOptions &options)
+{
+    const auto changelog = ReleaseChangelog(release, options.uiLanguage);
+    if (options.confirmUpdate) return options.confirmUpdate(release.tag, changelog, options.uiLanguage);
+    const auto message = WideUtf8(changelog);
+    return ShowConsent(L"Lost Odyssey " + WideUtf8(release.tag) + L" update", message);
 }
 #endif
 
 } // namespace
 
+#ifdef _WIN32
 StartupResult PrepareAtStartup(const StartupOptions &options)
 {
     StartupResult result;
@@ -190,7 +279,6 @@ StartupResult PrepareAtStartup(const StartupOptions &options)
     // The running game's version is sufficient; local package provenance is
     // unrelated to whether a newer release can replace this installation.
     const auto current = ParseVersion(options.currentVersion).value_or(*ParseVersion("0.0.0"));
-#ifdef _WIN32
     std::string releaseText;
     if (!ReadResponse(options.releaseApiUrl, 2 * 1024 * 1024, releaseText, error))
     {
@@ -219,6 +307,12 @@ StartupResult PrepareAtStartup(const StartupOptions &options)
         result.detail = error;
         return result;
     }
+    if (!ConfirmUpdate(*release, options))
+    {
+        result.status = StartupStatus::Cancelled;
+        result.detail = "user declined update";
+        return result;
+    }
     const auto operationName = "operation-" + std::to_string(GetCurrentProcessId()) + "-" + std::to_string(GetTickCount64());
     const auto operationRoot = std::filesystem::absolute(options.installRoot / ".update" / operationName);
     std::error_code filesystemError;
@@ -239,17 +333,9 @@ StartupResult PrepareAtStartup(const StartupOptions &options)
         result.detail = error;
         return result;
     }
-    progress.SetPhase(ProgressPhase::Verifying);
-    if (Sha256File(archive, error) != asset->sha256)
-    {
-        std::filesystem::remove_all(operationRoot, filesystemError);
-        result.status = StartupStatus::IntegrityFailed;
-        result.detail = error.empty() ? "GitHub asset digest mismatch" : error;
-        return result;
-    }
     StagedUpdate update;
     update.installRoot = std::filesystem::absolute(options.installRoot);
-    progress.SetPhase(ProgressPhase::CheckingPackage);
+    progress.SetPhase(ProgressPhase::Extracting);
     if (!StageArchive(archive, operationRoot, release->tag, update, error))
     {
         std::filesystem::remove_all(operationRoot, filesystemError);
@@ -258,18 +344,20 @@ StartupResult PrepareAtStartup(const StartupOptions &options)
         return result;
     }
     update.installRoot = std::filesystem::absolute(options.installRoot);
-    // Keep this updater's completion policy when installing an older release package.
-    const auto stagedHelper = options.installRoot / "LostOdysseyUpdater.exe";
-    if (!std::filesystem::is_regular_file(stagedHelper) ||
-        !std::filesystem::copy_file(stagedHelper, update.runnerPath, std::filesystem::copy_options::overwrite_existing,
-                                    filesystemError))
+    // Run from a private copy of the current updater entry point. A standalone
+    // helper must keep working when the main EXE is missing or damaged.
+    const auto runnerSource = options.runnerSource.empty()
+        ? options.installRoot / "LostOdysseyRecomp.exe" : options.runnerSource;
+    if (!std::filesystem::is_regular_file(runnerSource) ||
+        !std::filesystem::copy_file(runnerSource, update.runnerPath, std::filesystem::copy_options::overwrite_existing,
+                                     filesystemError))
     {
         std::filesystem::remove_all(operationRoot, filesystemError);
         result.status = StartupStatus::IntegrityFailed;
-        result.detail = "installation folder does not contain a usable updater";
+        result.detail = "could not copy the updater runner executable";
         return result;
     }
-    if (!WriteApplyPlan(update, std::filesystem::absolute(options.executable), options.launchArguments, error))
+    if (!WriteApplyPlan(update, std::filesystem::absolute(options.executable), options.launchArguments, error, true))
     {
         std::filesystem::remove_all(operationRoot, filesystemError);
         result.status = StartupStatus::IntegrityFailed;
@@ -281,12 +369,8 @@ StartupResult PrepareAtStartup(const StartupOptions &options)
     result.detail = release->tag;
     result.update = std::move(update);
     return result;
-#else
-    result.status = StartupStatus::UnmanagedBuild;
-    result.detail = "updater is not implemented for this platform";
-    return result;
-#endif
 }
+#endif
 
 std::wstring ApplyHelperArguments(const std::filesystem::path &planPath)
 {
@@ -306,6 +390,10 @@ std::filesystem::path CurrentExecutablePath()
     std::wstring value(32768, L'\0');
     const auto length = GetModuleFileNameW(nullptr, value.data(), DWORD(value.size()));
     if (length && length < value.size()) { value.resize(length); return std::filesystem::path(value); }
+#elif defined(__linux__)
+    std::array<char, 4096> value{};
+    const auto length = readlink("/proc/self/exe", value.data(), value.size() - 1);
+    if (length > 0) return std::filesystem::path(value.data(), value.data() + length);
 #endif
     return {};
 }
@@ -319,7 +407,8 @@ std::vector<std::wstring> CurrentLaunchArguments()
     for (int i = 1; arguments && i < count; ++i)
     {
         const std::wstring_view argument(arguments[i]);
-        if ((argument == L"--wait-process" || argument == L"--restart-ready") && i + 1 < count)
+        if ((argument == L"--wait-process" || argument == L"--restart-ready" || argument == L"--apply-plan") &&
+            i + 1 < count)
         {
             ++i;
             continue;
@@ -327,6 +416,23 @@ std::vector<std::wstring> CurrentLaunchArguments()
         result.emplace_back(argument);
     }
     if (arguments) LocalFree(arguments);
+#else
+    std::ifstream commandLine("/proc/self/cmdline", std::ios::binary);
+    std::vector<std::string> arguments;
+    std::string argument;
+    while (std::getline(commandLine, argument, '\0')) arguments.push_back(std::move(argument));
+    for (size_t i = 1; i < arguments.size(); ++i)
+    {
+        const auto &value = arguments[i];
+        if ((value == "--wait-process" || value == "--restart-ready" || value == "--apply-plan") &&
+            i + 1 < arguments.size())
+        {
+            ++i;
+            continue;
+        }
+        const auto utf8 = std::u8string(reinterpret_cast<const char8_t *>(value.data()), value.size());
+        result.push_back(std::filesystem::path(utf8).wstring());
+    }
 #endif
     return result;
 }

@@ -6,7 +6,7 @@
 
 namespace updater
 {
-enum class ProgressPhase { Verifying, CheckingPackage, Ready };
+enum class ProgressPhase { Extracting, Ready };
 class ProgressWindow
 {
 public:

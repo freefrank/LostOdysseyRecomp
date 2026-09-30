@@ -1,0 +1,592 @@
+#include "menu_overlay.h"
+#include <cstdint>
+#include <mutex>
+#include <vector>
+#include <string>
+#include <chrono>
+#include "../host_ui/rasterizer.h"
+#include "../host_ui/widgets.h"
+#include "../debug/teleport.h"
+#include "../debug/map_info.h"
+#include "../debug/map_poi.h"
+#include "../debug/save_anywhere.h"
+#include "../debug/battle_menu.h"
+#include "../debug/translations.h"
+#include "../gpu/renderer.h"
+#include "../settings/config.h"
+#include "cheat_overlay.h"
+#include "controller_hint.h"
+
+// hid.h also declares guest XAMINPUT types; the overlay only needs this host state.
+namespace hid { bool UsesPlayStationPrompts(); }
+
+namespace debug_menu
+{
+    struct OverlayState
+    {
+        bool visible = false;
+        int activeTab = 0; // 0: Overview, 1: Teleport, 2: Cheats
+        int selectedRow = 0;
+        bool chinese = false;
+        cheat_overlay::Model cheatsPage;
+
+        // Teleport edit state
+        int selectedAxis = 0; // 0: X, 1: Y, 2: Z
+        float editCoordinates[3] = {0.0f, 0.0f, 0.0f};
+        float stepSize = 100.0f;
+
+        // POI list
+        int selectedPoi = 0;
+        std::vector<debug_menu::MapPoi> pois;
+        uint64_t poiRevision = ~uint64_t(0);
+
+        std::wstring statusMessage;
+        std::chrono::steady_clock::time_point statusExpiry{};
+    };
+
+    static std::mutex g_overlayStateMutex;
+    static std::mutex g_overlayActionMutex;
+    static OverlayState g_overlayState;
+
+    static OverlayState GetOverlayStateSnapshot()
+    {
+        std::lock_guard lock(g_overlayStateMutex);
+        return g_overlayState;
+    }
+
+    static void SetOverlayStatus(std::wstring message)
+    {
+        std::lock_guard lock(g_overlayStateMutex);
+        g_overlayState.statusMessage = std::move(message);
+        g_overlayState.statusExpiry = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    }
+
+    static void ToggleOverlayLocked()
+    {
+        bool opening = false;
+        {
+            std::lock_guard lock(g_overlayStateMutex);
+            opening = !g_overlayState.visible;
+        }
+
+        const bool chinese = settings::GetConfig().debugLanguage == 1;
+        const auto snapshot = opening ? debug_menu::GetTeleportSnapshot() : TeleportSnapshot{};
+        {
+            std::lock_guard lock(g_overlayStateMutex);
+            g_overlayState.visible = opening;
+            g_overlayState.chinese = chinese;
+            g_overlayState.cheatsPage.Dismiss();
+            if (opening && snapshot.available)
+            {
+                g_overlayState.editCoordinates[0] = snapshot.current.x;
+                g_overlayState.editCoordinates[1] = snapshot.current.y;
+                g_overlayState.editCoordinates[2] = snapshot.current.z;
+            }
+        }
+        host_ui::SetGamePaused(opening);
+    }
+
+    void ToggleOverlay()
+    {
+        std::lock_guard actionLock(g_overlayActionMutex);
+        ToggleOverlayLocked();
+    }
+
+    bool IsOverlayVisible()
+    {
+        std::lock_guard lock(g_overlayStateMutex);
+        return g_overlayState.visible;
+    }
+
+    void UpdateOverlaySnapshot()
+    {
+        std::lock_guard actionLock(g_overlayActionMutex);
+        {
+            std::lock_guard lock(g_overlayStateMutex);
+            if (!g_overlayState.visible) return;
+        }
+        auto snapshot = debug_menu::GetTeleportSnapshot();
+        {
+            std::lock_guard lock(g_overlayStateMutex);
+            if (g_overlayState.visible)
+            {
+                if (!snapshot.status.empty() && g_overlayState.activeTab == 1 &&
+                    std::chrono::steady_clock::now() >= g_overlayState.statusExpiry)
+                {
+                    g_overlayState.statusMessage = snapshot.status;
+                }
+                if (snapshot.available && snapshot.poiRevision != g_overlayState.poiRevision)
+                {
+                    g_overlayState.pois = std::move(snapshot.pois);
+                    g_overlayState.poiRevision = snapshot.poiRevision;
+                    if (g_overlayState.selectedPoi >= int(g_overlayState.pois.size()))
+                        g_overlayState.selectedPoi = 0;
+                }
+            }
+        }
+    }
+
+    void HandleInput(InputAction action)
+    {
+        std::lock_guard actionLock(g_overlayActionMutex);
+        std::unique_lock stateLock(g_overlayStateMutex);
+        if (!g_overlayState.visible) return;
+
+        if (g_overlayState.activeTab == 2)
+        {
+            std::optional<cheat_overlay::Nav> nav;
+            switch (action)
+            {
+            case InputAction::Up: nav = cheat_overlay::Nav::Up; break;
+            case InputAction::Down: nav = cheat_overlay::Nav::Down; break;
+            case InputAction::Left: nav = cheat_overlay::Nav::Left; break;
+            case InputAction::Right: nav = cheat_overlay::Nav::Right; break;
+            case InputAction::Confirm: nav = cheat_overlay::Nav::Confirm; break;
+            case InputAction::Cancel: nav = cheat_overlay::Nav::Cancel; break;
+            case InputAction::PrevCategory: nav = cheat_overlay::Nav::PrevCategory; break;
+            case InputAction::NextCategory: nav = cheat_overlay::Nav::NextCategory; break;
+            default: break;
+            }
+            if (nav)
+            {
+                if (!g_overlayState.cheatsPage.Input(*nav, g_overlayState.chinese))
+                {
+                    stateLock.unlock();
+                    ToggleOverlayLocked();
+                }
+                return;
+            }
+        }
+
+        switch (action)
+        {
+        case InputAction::Cancel:
+            stateLock.unlock();
+            ToggleOverlayLocked();
+            return;
+        case InputAction::PrevTab:
+            g_overlayState.activeTab = (g_overlayState.activeTab + 3 - 1) % 3;
+            g_overlayState.selectedRow = 0;
+            g_overlayState.cheatsPage.Dismiss();
+            return;
+        case InputAction::NextTab:
+            g_overlayState.activeTab = (g_overlayState.activeTab + 1) % 3;
+            g_overlayState.selectedRow = 0;
+            g_overlayState.cheatsPage.Dismiss();
+            return;
+        case InputAction::Up:
+            if (g_overlayState.selectedRow > 0)
+                g_overlayState.selectedRow--;
+            return;
+        case InputAction::Down:
+            if (g_overlayState.activeTab == 0)
+            {
+                if (g_overlayState.selectedRow < 4)
+                    g_overlayState.selectedRow++;
+            }
+            else
+            {
+                if (g_overlayState.selectedRow < 7)
+                    g_overlayState.selectedRow++;
+            }
+            return;
+        default:
+            break;
+        }
+
+        if (g_overlayState.activeTab == 0)
+        {
+            // Overview:
+            // 0: Language (Toggle En / Zh)
+            // 1: Render Capture
+            // 2: Save Anywhere
+            // 3: Win Battle
+            // 4: Cancel Battle Request
+            if (action == InputAction::Confirm || action == InputAction::Left || action == InputAction::Right)
+            {
+                switch (g_overlayState.selectedRow)
+                {
+                case 0:
+                    g_overlayState.chinese = !g_overlayState.chinese;
+                    {
+                        const int language = g_overlayState.chinese ? 1 : 0;
+                        const bool zh = g_overlayState.chinese;
+                        stateLock.unlock();
+                        if (!settings::SaveDebugLanguage(language))
+                            SetOverlayStatus(zh ? L"保存语言配置失败" : L"Failed to save language setting");
+                    }
+                    return;
+                case 1:
+                    stateLock.unlock();
+                    gpu::renderer::RequestDebugCapture();
+                    SetOverlayStatus(g_overlayState.chinese ? L"已请求截取渲染状态" : L"Capture requested");
+                    return;
+                case 2:
+                    stateLock.unlock();
+                    debug_menu::SetSaveAnywhereEnabled(!debug_menu::SaveAnywhereEnabled());
+                    return;
+                case 3:
+                {
+                    const bool zh = g_overlayState.chinese;
+                    stateLock.unlock();
+                    const bool accepted = debug_menu::RequestVictory();
+                    SetOverlayStatus(accepted
+                        ? (zh ? L"已提交判胜请求（等待安全阶段生效）" : L"Victory requested (pending)")
+                        : (zh ? L"无法请求判胜（当前无活跃战斗）" : L"Cannot request victory (no active battle)"));
+                    return;
+                }
+                case 4:
+                {
+                    const bool zh = g_overlayState.chinese;
+                    stateLock.unlock();
+                    debug_menu::CancelVictory();
+                    SetOverlayStatus(zh ? L"已取消判胜请求" : L"Victory cancelled");
+                    return;
+                }
+                }
+            }
+        }
+        else if (g_overlayState.activeTab == 1)
+        {
+            // Teleport Tab:
+            // 0: Remember Current Pos
+            // 1: Restore Pos
+            // 2: Fill Current Pos
+            // 3: Select Axis (X/Y/Z) & Adjust with Left/Right
+            // 4: Teleport to XYZ
+            // 5: Step delta (+-100/+-500)
+            // 6: POI Selection (Left/Right)
+            // 7: Teleport to POI
+            switch (g_overlayState.selectedRow)
+            {
+            case 0:
+                if (action == InputAction::Confirm)
+                {
+                    const bool zh = g_overlayState.chinese;
+                    stateLock.unlock();
+                    const bool accepted = debug_menu::RequestSavePosition();
+                    SetOverlayStatus(accepted
+                        ? (zh ? L"已提交记录坐标请求（等待生效）" : L"Save position requested (pending)")
+                        : (zh ? L"无法记录坐标（当前不可用）" : L"Cannot save position (unavailable)"));
+                    return;
+                }
+                break;
+            case 1:
+                if (action == InputAction::Confirm)
+                {
+                    const bool zh = g_overlayState.chinese;
+                    stateLock.unlock();
+                    const bool accepted = debug_menu::RequestRestorePosition();
+                    SetOverlayStatus(accepted
+                        ? (zh ? L"已提交恢复坐标请求（等待生效）" : L"Restore position requested (pending)")
+                        : (zh ? L"无法恢复坐标（未记录或不可用）" : L"Cannot restore position (no bookmark or unavailable)"));
+                    return;
+                }
+                break;
+            case 2:
+                if (action == InputAction::Confirm)
+                {
+                    stateLock.unlock();
+                    auto s = debug_menu::GetTeleportSnapshot();
+                    if (s.available)
+                    {
+                        stateLock.lock();
+                        g_overlayState.editCoordinates[0] = s.current.x;
+                        g_overlayState.editCoordinates[1] = s.current.y;
+                        g_overlayState.editCoordinates[2] = s.current.z;
+                        g_overlayState.statusMessage = g_overlayState.chinese ? L"已填入当前角色坐标" : L"Position filled";
+                        g_overlayState.statusExpiry = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+                    }
+                    else
+                    {
+                        SetOverlayStatus(g_overlayState.chinese ? L"无法获取当前角色坐标" : L"Cannot fill position (unavailable)");
+                    }
+                    return;
+                }
+                break;
+            case 3: // Axis adjustment
+                if (action == InputAction::Confirm)
+                {
+                    g_overlayState.selectedAxis = (g_overlayState.selectedAxis + 1) % 3;
+                }
+                else if (action == InputAction::Left)
+                {
+                    g_overlayState.editCoordinates[g_overlayState.selectedAxis] -= g_overlayState.stepSize;
+                }
+                else if (action == InputAction::Right)
+                {
+                    g_overlayState.editCoordinates[g_overlayState.selectedAxis] += g_overlayState.stepSize;
+                }
+                break;
+            case 4:
+                if (action == InputAction::Confirm)
+                {
+                    debug_menu::Position p{
+                        g_overlayState.editCoordinates[0],
+                        g_overlayState.editCoordinates[1],
+                        g_overlayState.editCoordinates[2]
+                    };
+                    const bool zh = g_overlayState.chinese;
+                    stateLock.unlock();
+                    const bool accepted = debug_menu::RequestTeleport(p);
+                    SetOverlayStatus(accepted
+                        ? (zh ? L"已提交传送请求（等待生效）" : L"Teleport requested (pending)")
+                        : (zh ? L"传送请求被拒绝（坐标无效或不可用）" : L"Teleport request rejected (invalid or unavailable)"));
+                    return;
+                }
+                break;
+            case 5:
+                if (action == InputAction::Confirm || action == InputAction::Right)
+                {
+                    g_overlayState.stepSize = (g_overlayState.stepSize == 100.0f) ? 500.0f : (g_overlayState.stepSize == 500.0f ? 10.0f : 100.0f);
+                }
+                else if (action == InputAction::Left)
+                {
+                    g_overlayState.stepSize = (g_overlayState.stepSize == 100.0f) ? 10.0f : (g_overlayState.stepSize == 10.0f ? 500.0f : 100.0f);
+                }
+                break;
+            case 6: // POI selection
+                if (!g_overlayState.pois.empty())
+                {
+                    if (action == InputAction::Left)
+                    {
+                        g_overlayState.selectedPoi = (g_overlayState.selectedPoi + int(g_overlayState.pois.size()) - 1) % int(g_overlayState.pois.size());
+                    }
+                    else if (action == InputAction::Right)
+                    {
+                        g_overlayState.selectedPoi = (g_overlayState.selectedPoi + 1) % int(g_overlayState.pois.size());
+                    }
+                }
+                break;
+            case 7:
+                if (action == InputAction::Confirm && !g_overlayState.pois.empty())
+                {
+                    if (size_t(g_overlayState.selectedPoi) < g_overlayState.pois.size())
+                    {
+                        const auto id = g_overlayState.pois[g_overlayState.selectedPoi].id;
+                        const bool zh = g_overlayState.chinese;
+                        stateLock.unlock();
+                        const bool accepted = debug_menu::RequestPoiTeleport(id);
+                        SetOverlayStatus(accepted
+                            ? (zh ? L"已提交 POI 传送请求（等待生效）" : L"POI teleport requested (pending)")
+                            : (zh ? L"POI 传送请求被拒绝（不可用）" : L"POI teleport request rejected (unavailable)"));
+                        return;
+                    }
+                }
+                break;
+            }
+        }
+    }
+
+    // Render debug overlay onto a 1280x720 pixel buffer (alpha composited over frozen frame)
+    void RenderOverlay(host_ui::Rasterizer& r)
+    {
+        const OverlayState state = GetOverlayStateSnapshot();
+        if (!state.visible) return;
+
+        bool zh = state.chinese;
+        const bool playStation = hid::UsesPlayStationPrompts();
+
+        // Dim background slightly to focus attention on debug overlay
+        r.FillRect(0, 0, r.width, r.height, host_ui::MakeColor(140, 0, 0, 0));
+
+        // Draw Main Dialog Panel (Centered: 760 x 540)
+        int panelW = 760;
+        int panelH = 540;
+        int panelX = (1280 - panelW) / 2;
+        int panelY = (720 - panelH) / 2;
+
+        host_ui::DrawPanel(r, panelX, panelY, panelW, panelH, host_ui::MakeColor(235, 20, 22, 26), host_ui::MakeColor(255, 75, 85, 95));
+
+        // Header Title (Centered in header bar by DrawHeader)
+        std::wstring headerTitle = controller_hint::ShoulderLabels(
+            zh ? L"Lost Odyssey — 调试菜单 (F1 / LB+RB)" : L"Lost Odyssey — Debug Menu (F1 / LB+RB)", playStation);
+        host_ui::DrawHeader(r, panelX, panelY, panelW, 36, headerTitle);
+
+        // Centered Tab buttons
+        int tabW = 160;
+        int tabGap = 20;
+        int totalTabsW = tabW * 3 + tabGap * 2;
+        int tabStartX = panelX + (panelW - totalTabsW) / 2;
+        int tabY = panelY + 44;
+        host_ui::DrawButton(r, tabStartX, tabY, tabW, 30, zh ? L"常规" : L"Overview", state.activeTab == 0, state.activeTab == 0);
+        host_ui::DrawButton(r, tabStartX + tabW + tabGap, tabY, tabW, 30, zh ? L"传送" : L"Teleport", state.activeTab == 1, state.activeTab == 1);
+        host_ui::DrawButton(r, tabStartX + (tabW + tabGap) * 2, tabY, tabW, 30, zh ? L"辅助 / 修改" : L"Cheats", state.activeTab == 2, state.activeTab == 2);
+
+        // Footer at bottom of panel
+        int footerY = panelY + panelH - 32;
+        r.DrawHLine(panelX, footerY - 6, panelW, host_ui::MakeColor(255, 60, 65, 75));
+        const wchar_t* nav = zh ? L"方向键/摇杆: 导航" : L"D-Pad/Stick: Nav";
+        const wchar_t* accept = zh ? L"/Enter: 确定" : (state.activeTab == 2 ? L"/Enter: OK" : L"/Enter: Confirm");
+        const wchar_t* back = zh ? L"/Esc: 返回" : L"/Esc: Back";
+        const std::wstring tabs = controller_hint::ShoulderLabels(
+            zh ? (state.activeTab == 2 ? L"LB/RB: 切页  LT/RT: 类别" : L"LB/RB: 切页")
+               : (state.activeTab == 2 ? L"LB/RB: Tab  LT/RT: Category" : L"LB/RB: Tab"), playStation);
+        constexpr int gap = 13;
+        const int helpW = r.MeasureWString(nav) + controller_hint::Width(r, playStation, accept)
+            + controller_hint::Width(r, playStation, back) + r.MeasureWString(tabs) + 3 * gap;
+        const uint32_t helpColor = host_ui::MakeColor(255, 170, 175, 185);
+        int helpX = panelX + (panelW - helpW) / 2;
+        helpX += r.DrawWString(helpX, footerY, nav, helpColor) + gap;
+        helpX = controller_hint::Draw(r, helpX, footerY, playStation, hid::prompts::Face::A, accept, helpColor) + gap;
+        helpX = controller_hint::Draw(r, helpX, footerY, playStation, hid::prompts::Face::B, back, helpColor) + gap;
+        r.DrawWString(helpX, footerY, tabs, helpColor);
+
+        int contentY = tabY + 42;
+
+        if (state.activeTab == 0)
+        {
+            // Overview Content (Centered: 520px column width)
+            int btnW = 520;
+            int btnX = panelX + (panelW - btnW) / 2;
+            int rowH = 38;
+
+            // 0: Language
+            std::wstring langText = zh ? L"界面语言: 简体中文" : L"Language: English";
+            host_ui::DrawButton(r, btnX, contentY + 0 * rowH, btnW, 30, langText, state.selectedRow == 0);
+
+            // 1: Render Capture
+            std::wstring capText = zh ? L"截取渲染状态" : L"Capture Render State";
+            host_ui::DrawButton(r, btnX, contentY + 1 * rowH, btnW, 30, capText, state.selectedRow == 1);
+
+            // Status of capture (Centered under capture button if active)
+            std::wstring rawCapStat = gpu::renderer::DebugCaptureStatus();
+            if (!rawCapStat.empty())
+            {
+                std::wstring capStat = debug_menu::translations::Capture(rawCapStat, zh);
+                int capStatW = r.MeasureWString(capStat);
+                r.DrawWString(panelX + (panelW - capStatW) / 2, contentY + 1 * rowH + 34, capStat, host_ui::MakeColor(255, 200, 200, 100));
+            }
+
+            // 2: Save Anywhere
+            bool saveOn = debug_menu::SaveAnywhereEnabled();
+            std::wstring saveText = zh ? (saveOn ? L"随时存档: 开启" : L"随时存档: 关闭")
+                                       : (saveOn ? L"Save Anywhere: ON" : L"Save Anywhere: OFF");
+            host_ui::DrawButton(r, btnX, contentY + 2 * rowH + 8, btnW, 30, saveText, state.selectedRow == 2);
+
+            // Map info display (Centered)
+            auto mapInfo = debug_menu::GetMapInfo();
+            std::wstring mapText = zh ? L"当前地图: " : L"Current Map: ";
+            if (mapInfo.available)
+            {
+                mapText += mapInfo.name + L" (" + std::to_wstring(mapInfo.id) + L")";
+            }
+            else
+            {
+                mapText += zh ? L"未知" : L"Unknown";
+            }
+            int mapTextW = r.MeasureWString(mapText);
+            r.DrawWString(panelX + (panelW - mapTextW) / 2, contentY + 3 * rowH + 12, mapText, host_ui::MakeColor(255, 180, 210, 240));
+
+            // 3: Win Battle & 4: Cancel Victory (Side by side, centered total 520px)
+            int battleGap = 16;
+            int battleBtnW = (btnW - battleGap) / 2; // 252
+            std::wstring winText = zh ? L"当前战斗判胜" : L"Win Current Battle";
+            host_ui::DrawButton(r, btnX, contentY + 4 * rowH + 12, battleBtnW, 30, winText, state.selectedRow == 3);
+
+            std::wstring cancelWinText = zh ? L"取消判胜请求" : L"Cancel Victory Request";
+            host_ui::DrawButton(r, btnX + battleBtnW + battleGap, contentY + 4 * rowH + 12, battleBtnW, 30, cancelWinText, state.selectedRow == 4);
+
+            const wchar_t* rawBStat = debug_menu::Status();
+            if (rawBStat && *rawBStat)
+            {
+                std::wstring bStat = debug_menu::translations::Text(rawBStat, zh);
+                int bStatW = r.MeasureWString(bStat);
+                r.DrawWString(panelX + (panelW - bStatW) / 2, contentY + 5 * rowH + 18, bStat, host_ui::MakeColor(255, 220, 180, 120));
+            }
+        }
+        else if (state.activeTab == 1)
+        {
+            // Teleport Content (Centered 700px grid)
+            int gridW = 700;
+            int gridX = panelX + (panelW - gridW) / 2; // panelX + 30
+            int colGap = 14;
+
+            // Line 0 (Rows 0, 1, 2: Save, Restore, Fill)
+            int colW = (gridW - colGap * 2) / 3; // 224
+            host_ui::DrawButton(r, gridX, contentY + 0, colW, 30, zh ? L"记住当前位置" : L"Remember Position", state.selectedRow == 0);
+            host_ui::DrawButton(r, gridX + colW + colGap, contentY + 0, colW, 30, zh ? L"返回记录位置" : L"Restore Position", state.selectedRow == 1);
+            host_ui::DrawButton(r, gridX + (colW + colGap) * 2, contentY + 0, colW, 30, zh ? L"填入当前坐标" : L"Fill Coordinates", state.selectedRow == 2);
+
+            // Line 1: Current coordinates display (Centered)
+            auto posSnap = debug_menu::GetTeleportSnapshot();
+            std::wstring curPosStr = zh ? L"角色实时坐标: " : L"Player Position: ";
+            if (posSnap.available)
+            {
+                wchar_t buf[128];
+                swprintf(buf, 128, L"X: %.2f  Y: %.2f  Z: %.2f", posSnap.current.x, posSnap.current.y, posSnap.current.z);
+                curPosStr += buf;
+            }
+            else
+            {
+                curPosStr += zh ? L"不可用" : L"Unavailable";
+            }
+            int curPosW = r.MeasureWString(curPosStr);
+            r.DrawWString(panelX + (panelW - curPosW) / 2, contentY + 42, curPosStr, host_ui::MakeColor(255, 180, 220, 180));
+
+            // Line 2 (Row 3: Editable XYZ, Row 4: Teleport to Target)
+            wchar_t coordBuf[128];
+            const wchar_t* axisNames[] = {L"X", L"Y", L"Z"};
+            if (zh)
+            {
+                swprintf(coordBuf, 128, L"目标坐标 [%ls]: X: %.1f  Y: %.1f  Z: %.1f  (◄/► 微调)",
+                         axisNames[state.selectedAxis],
+                         state.editCoordinates[0],
+                         state.editCoordinates[1],
+                         state.editCoordinates[2]);
+            }
+            else
+            {
+                swprintf(coordBuf, 128, L"Target [%ls]: X: %.1f  Y: %.1f  Z: %.1f  (◄/► Adjust)",
+                         axisNames[state.selectedAxis],
+                         state.editCoordinates[0],
+                         state.editCoordinates[1],
+                         state.editCoordinates[2]);
+            }
+            int editW = 510;
+            int actionW = gridW - editW - colGap; // 176
+            host_ui::DrawButton(r, gridX, contentY + 70, editW, 30, coordBuf, state.selectedRow == 3);
+            host_ui::DrawButton(r, gridX + editW + colGap, contentY + 70, actionW, 30, zh ? L"传送到目标坐标" : L"Teleport to Target", state.selectedRow == 4);
+
+            // Line 3 (Row 5: Step Size, spanning grid width centered)
+            wchar_t stepBuf[64];
+            if (zh)
+                swprintf(stepBuf, 64, L"微调步长: ±%.0f (◄/► 切换)", state.stepSize);
+            else
+                swprintf(stepBuf, 64, L"Step Size: ±%.0f (◄/► Switch)", state.stepSize);
+            host_ui::DrawButton(r, gridX, contentY + 112, gridW, 30, stepBuf, state.selectedRow == 5);
+
+            // Line 4: POI Header (Centered)
+            std::wstring poiHdr = zh ? L"地图兴趣点:" : L"Points of Interest (POI):";
+            int poiHdrW = r.MeasureWString(poiHdr);
+            r.DrawWString(panelX + (panelW - poiHdrW) / 2, contentY + 154, poiHdr, host_ui::MakeColor(255, 230, 230, 230));
+
+            // Line 5 (Row 6: POI Selection, Row 7: Teleport to POI)
+            std::wstring poiName = zh ? L"无可用兴趣点" : L"No POIs available";
+            if (!state.pois.empty() && size_t(state.selectedPoi) < state.pois.size())
+            {
+                const auto& p = state.pois[state.selectedPoi];
+                std::wstring pLabel = debug_menu::translations::Poi(p.label, zh);
+                wchar_t pBuf[128];
+                swprintf(pBuf, 128, L"[%d/%d] %ls (%.0f, %.0f, %.0f)",
+                         state.selectedPoi + 1, int(state.pois.size()),
+                         pLabel.c_str(), p.position.x, p.position.y, p.position.z);
+                poiName = pBuf;
+            }
+            host_ui::DrawButton(r, gridX, contentY + 182, editW, 30, poiName, state.selectedRow == 6);
+            host_ui::DrawButton(r, gridX + editW + colGap, contentY + 182, actionW, 30, zh ? L"传送到此兴趣点" : L"Teleport to POI", state.selectedRow == 7);
+        }
+        else if (state.activeTab == 2)
+        {
+            cheat_overlay::Render(r, state.cheatsPage, zh, panelX + 30, contentY, panelW - 60, playStation);
+        }
+
+        // Status message at bottom of panel (Centered)
+        if (state.activeTab != 2 && !state.statusMessage.empty())
+        {
+            std::wstring dispMsg = debug_menu::translations::Text(state.statusMessage.c_str(), zh);
+            int msgW = r.MeasureWString(dispMsg);
+            r.DrawWString(panelX + (panelW - msgW) / 2, footerY - 26, dispMsg, host_ui::MakeColor(255, 120, 220, 150));
+        }
+    }
+}

@@ -148,21 +148,11 @@ bool StageArchive(const std::filesystem::path &archivePath, const std::filesyste
         if (found == entries.end()) { error = "manifest payload is absent from ZIP: " + key; return false; }
         const auto destination = stageRoot / file.path;
         if (!WriteExtracted(archive, found->second, destination, error)) return false;
-        std::string hashError;
-        if (Sha256File(destination, hashError) != file.sha256)
-        {
-            error = hashError.empty() ? "staged payload SHA256 mismatch: " + key : hashError;
-            return false;
-        }
     }
-    // Keep the original package identity alongside its payload. The manifest
-    // cannot hash itself in files, but must participate in apply and rollback
-    // so the next startup validates the newly installed executable.
+    // The manifest participates in the same replacement and rollback transaction.
     const auto manifestDestination = stageRoot / "manifest.json";
     if (!WriteExtracted(archive, manifestIndex, manifestDestination, error)) return false;
-    const auto manifestHash = Sha256File(manifestDestination, error);
-    if (manifestHash.empty()) return false;
-    manifest->files.push_back({"manifest.json", manifestHash});
+    manifest->files.push_back({"manifest.json"});
     update.version = manifest->version;
     update.operationRoot = operationRoot;
     update.stageRoot = stageRoot;

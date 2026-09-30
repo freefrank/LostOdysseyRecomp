@@ -13,6 +13,24 @@
 
 namespace gpu::geometry_prepare
 {
+    // Shared QuadList expansion used by the guest draw and its motion replay.
+    inline void ExpandQuadList(std::vector<uint32_t>& indices, std::vector<uint32_t>& primitiveScratch,
+        bool& useIndices, uint32_t indexCount)
+    {
+        auto& out = primitiveScratch;
+        out.clear();
+        uint32_t quads = (useIndices ? uint32_t(indices.size()) : indexCount) / 4;
+        out.reserve(quads * 6);
+        for (uint32_t q = 0; q < quads; q++)
+        {
+            uint32_t v[4];
+            for (int k = 0; k < 4; k++) v[k] = useIndices ? indices[q * 4 + k] : q * 4 + k;
+            out.insert(out.end(), { v[0], v[1], v[2], v[0], v[2], v[3] });
+        }
+        indices.swap(out);
+        useIndices = true;
+    }
+
     template<unsigned Endian>
     inline void CopyDwordsSwappedImpl(uint8_t* dst, const uint8_t* src, size_t dwords)
     {
@@ -83,46 +101,54 @@ namespace gpu::geometry_prepare
 #endif
     }
 
-    // Preserve the old large-buffer sampling coverage, using exact comparisons
-    // instead of serial hash arithmetic. Small buffers include trailing bytes.
-    class SampledContent
+    // Guest PPC stores are not all instrumented with a write generation yet.
+    // A cache hit must therefore compare every source byte against the owned
+    // CPU snapshot. Never read the write-combined GPU upload heap.
+    class ExactContent
     {
-        size_t sourceSize = 0;
-        std::vector<uint8_t> samples;
-        template<class Visitor> static bool Visit(size_t bytes, Visitor visitor)
-        {
-            if (bytes <= 8192) return visitor(0, bytes);
-            if (!visitor(0, 512) || !visitor(bytes - 512, 512)) return false;
-            const size_t step = (bytes - 1024) / 64;
-            for (size_t i = 0; i < 64; ++i)
-                if (!visitor(512 + i * step, 64)) return false;
-            return true;
-        }
+    protected:
+        std::vector<uint8_t> snapshot;
+        bool captured = false;
     public:
+        size_t Size() const { return snapshot.size(); }
+        size_t AllocatedBytes() const { return snapshot.capacity(); }
         bool Matches(const uint8_t* data, size_t bytes) const
         {
-            if (sourceSize != bytes || samples.size() != (bytes <= 8192 ? bytes : 5120)) return false;
-            size_t position = 0;
-            return Visit(bytes, [&](size_t offset, size_t count) {
-                const bool equal = !count || (count == 64
-                    ? EqualSampleBlock64(data + offset, samples.data() + position)
-                    : !std::memcmp(data + offset, samples.data() + position, count));
-                position += count;
-                return equal;
-            });
+            if (!captured || snapshot.size() != bytes) return false;
+            if (!bytes) return true;
+            return std::memcmp(data, snapshot.data(), bytes) == 0;
         }
         void Capture(const uint8_t* data, size_t bytes)
         {
-            sourceSize = bytes;
-            samples.resize(bytes <= 8192 ? bytes : 5120);
-            size_t position = 0;
-            Visit(bytes, [&](size_t offset, size_t count) {
-                if (count) std::memcpy(samples.data() + position, data + offset, count);
-                position += count;
-                return true;
-            });
+            snapshot.resize(bytes);
+            if (bytes) std::memcpy(snapshot.data(), data, bytes);
+            captured = true;
         }
     };
+    // Performance-first vertex policy: large buffers retain the v0.5.8 sample
+    // coverage. Unsampled writes may be missed; tracked in the roadmap (#57).
+    // Index caches must keep ExactContent, including motion-index hash reuse.
+    class VertexSampledContent : public ExactContent
+    {
+    public:
+        bool Matches(const uint8_t* data, size_t bytes) const
+        {
+            if (!captured || snapshot.size() != bytes) return false;
+            if (bytes <= 8192) return ExactContent::Matches(data, bytes);
+            if (std::memcmp(data, snapshot.data(), 512) != 0 ||
+                std::memcmp(data + bytes - 512, snapshot.data() + bytes - 512, 512) != 0)
+                return false;
+            const size_t step = (bytes - 1024) / 64;
+            for (size_t i = 0; i < 64; ++i)
+            {
+                const size_t offset = 512 + i * step;
+                if (!EqualSampleBlock64(data + offset, snapshot.data() + offset)) return false;
+            }
+            return true;
+        }
+    };
+    // Source compatibility for diagnostics that used the old helper name.
+    using SampledContent = ExactContent;
 
     template<bool Wide, unsigned Endian>
     inline void Convert(const uint8_t* src, uint32_t* dst, uint32_t count)

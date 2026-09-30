@@ -8,8 +8,10 @@ extern std::atomic<uint32_t> g_presentedSwaps;
 #include <vector>
 #include <SDL.h>
 #include <settings/menu.h>
+#include <debug/menu_overlay.h>
 #include <debug/frame_timing.h>
 #include "test_input_pulse.h"
+#include "controller_prompts.h"
 
 // SDL game controller -> XInput state. Player 1 only for now; the keyboard
 // mirrors the pad so the game can be driven without a controller.
@@ -17,8 +19,29 @@ extern std::atomic<uint32_t> g_presentedSwaps;
 namespace
 {
     std::vector<SDL_GameController*> g_controllers;
+    hid::prompts::ActiveController g_promptController;
+    std::atomic<bool> g_playStationPrompts{false};
+    void PublishPromptStyle() { g_playStationPrompts.store(g_promptController.PlayStation(), std::memory_order_relaxed); }
+
+    void ObserveController(SDL_GameController* controller)
+    {
+        uint32_t buttons = 0;
+        for (int b = SDL_CONTROLLER_BUTTON_A; b < SDL_CONTROLLER_BUTTON_MAX; ++b)
+            if (SDL_GameControllerGetButton(controller, SDL_GameControllerButton(b))) buttons |= uint32_t(1) << b;
+        const auto moving = [&](SDL_GameControllerAxis axis) {
+            return std::abs(int(SDL_GameControllerGetAxis(controller, axis))) > 12000;
+        };
+        const bool stick = moving(SDL_CONTROLLER_AXIS_LEFTX) || moving(SDL_CONTROLLER_AXIS_LEFTY) ||
+                           moving(SDL_CONTROLLER_AXIS_RIGHTX) || moving(SDL_CONTROLLER_AXIS_RIGHTY) ||
+                           SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_TRIGGERLEFT) > 12000 ||
+                           SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > 12000;
+        g_promptController.Observe(SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(controller)), buttons, stick);
+    }
     std::array<Uint8, SDL_NUM_SCANCODES> g_keys{};
     Mutex g_hidMutex;
+    // Serializes host sampling/actions with the complete guest input transaction.
+    // Lock order: logical input -> HID devices; never call menu code under g_hidMutex.
+    Mutex g_getStateMutex;
     uint32_t g_packet = 0;
 
     void OpenControllers()
@@ -33,6 +56,8 @@ namespace
             if (auto* pad = SDL_GameControllerOpen(i))
             {
                 g_controllers.push_back(pad);
+                g_promptController.Connected(id, SDL_GameControllerGetType(pad));
+                PublishPromptStyle();
                 LOG_INFO("controller added: {} instance={} ({} connected)", SDL_GameControllerName(pad), id, g_controllers.size());
             }
             else LOG_WARNING("controller: open failed: {}", SDL_GetError());
@@ -86,6 +111,8 @@ void hid::HandleControllerEvent(uint32_t eventType, int32_t which)
         std::erase_if(g_controllers, [&](auto* pad) {
             if (SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pad)) != which) return false;
             LOG_INFO("controller removed: instance={}", which);
+            g_promptController.Disconnected(which);
+            PublishPromptStyle();
             SDL_GameControllerClose(pad);
             return true;
         });
@@ -95,14 +122,113 @@ void hid::HandleControllerEvent(uint32_t eventType, int32_t which)
 void hid::HandleKeyboardEvent(int32_t scancode, bool pressed)
 {
     std::lock_guard lock(g_hidMutex);
-    if (scancode >= 0 && scancode < SDL_NUM_SCANCODES) g_keys[scancode] = pressed;
+    if (scancode >= 0 && scancode < SDL_NUM_SCANCODES)
+    {
+        g_keys[scancode] = pressed;
+        if (pressed) { g_promptController.Keyboard(); PublishPromptStyle(); }
+    }
 }
+
+bool hid::UsesPlayStationPrompts() { return g_playStationPrompts.load(std::memory_order_relaxed); }
 
 void hid::ClearKeyboardState()
 {
     std::lock_guard lock(g_hidMutex);
     g_keys.fill(0);
+}
 
+static uint16_t ReadRawButtonsLocked(uint8_t& lt, uint8_t& rt)
+{
+    uint16_t buttons = 0;
+    for (auto* controller : g_controllers)
+    {
+        if (!SDL_GameControllerGetAttached(controller)) continue;
+        ObserveController(controller);
+        auto btn = [&](SDL_GameControllerButton b) { return SDL_GameControllerGetButton(controller, b) != 0; };
+
+        if (btn(SDL_CONTROLLER_BUTTON_DPAD_UP)) buttons |= XAMINPUT_GAMEPAD_DPAD_UP;
+        if (btn(SDL_CONTROLLER_BUTTON_DPAD_DOWN)) buttons |= XAMINPUT_GAMEPAD_DPAD_DOWN;
+        if (btn(SDL_CONTROLLER_BUTTON_DPAD_LEFT)) buttons |= XAMINPUT_GAMEPAD_DPAD_LEFT;
+        if (btn(SDL_CONTROLLER_BUTTON_DPAD_RIGHT)) buttons |= XAMINPUT_GAMEPAD_DPAD_RIGHT;
+        if (btn(SDL_CONTROLLER_BUTTON_START)) buttons |= XAMINPUT_GAMEPAD_START;
+        if (btn(SDL_CONTROLLER_BUTTON_BACK)) buttons |= XAMINPUT_GAMEPAD_BACK;
+        if (btn(SDL_CONTROLLER_BUTTON_LEFTSTICK)) buttons |= XAMINPUT_GAMEPAD_LEFT_THUMB;
+        if (btn(SDL_CONTROLLER_BUTTON_RIGHTSTICK)) buttons |= XAMINPUT_GAMEPAD_RIGHT_THUMB;
+        if (btn(SDL_CONTROLLER_BUTTON_LEFTSHOULDER)) buttons |= XAMINPUT_GAMEPAD_LEFT_SHOULDER;
+        if (btn(SDL_CONTROLLER_BUTTON_RIGHTSHOULDER)) buttons |= XAMINPUT_GAMEPAD_RIGHT_SHOULDER;
+        if (btn(SDL_CONTROLLER_BUTTON_A)) buttons |= XAMINPUT_GAMEPAD_A;
+        if (btn(SDL_CONTROLLER_BUTTON_B)) buttons |= XAMINPUT_GAMEPAD_B;
+        if (btn(SDL_CONTROLLER_BUTTON_X)) buttons |= XAMINPUT_GAMEPAD_X;
+        if (btn(SDL_CONTROLLER_BUTTON_Y)) buttons |= XAMINPUT_GAMEPAD_Y;
+        lt = std::max(lt, uint8_t(std::max(0, int(SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_TRIGGERLEFT))) >> 7));
+        rt = std::max(rt, uint8_t(std::max(0, int(SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_TRIGGERRIGHT))) >> 7));
+    }
+    PublishPromptStyle();
+    return buttons;
+}
+
+// Protected by g_getStateMutex. Only ProcessHostInput advances release state.
+static uint16_t s_quarantinedButtons = 0;
+
+static void ProcessHostInput(uint16_t buttons, uint8_t lt, uint8_t rt)
+{
+    // Both callers hold g_getStateMutex before sampling their input.
+    // A guest read never clears a newer quarantine using an older button sample.
+    s_quarantinedButtons &= buttons;
+    // Match fast-forward's release-to-arm hysteresis. Sample even with the
+    // overlay hidden or on another tab, so a held LT cannot switch Cheats on entry.
+    static bool leftArmed = false, rightArmed = false;
+    const auto triggerPress = [](uint8_t value, bool& armed) {
+        if (value <= 32) armed = true;
+        else if (value >= 64 && armed) { armed = false; return true; }
+        return false;
+    };
+    const bool leftPressed = triggerPress(lt, leftArmed);
+    const bool rightPressed = triggerPress(rt, rightArmed);
+    static uint16_t s_prevGamepadButtons = 0;
+    const uint16_t chordMask = XAMINPUT_GAMEPAD_LEFT_SHOULDER | XAMINPUT_GAMEPAD_RIGHT_SHOULDER;
+    const bool prevChord = (s_prevGamepadButtons & chordMask) == chordMask;
+    const bool curChord = (buttons & chordMask) == chordMask;
+    if (curChord && !prevChord)
+    {
+        const bool wasVisible = debug_menu::IsOverlayVisible();
+        if (wasVisible)
+            s_quarantinedButtons |= chordMask;
+        // Publish quarantine before this call hides the overlay and resumes guest threads.
+        debug_menu::ToggleOverlay();
+    }
+    else if (debug_menu::IsOverlayVisible())
+    {
+        const uint16_t pressed = buttons & ~s_prevGamepadButtons;
+        if (pressed & XAMINPUT_GAMEPAD_DPAD_UP) debug_menu::HandleInput(debug_menu::InputAction::Up);
+        else if (pressed & XAMINPUT_GAMEPAD_DPAD_DOWN) debug_menu::HandleInput(debug_menu::InputAction::Down);
+        else if (pressed & XAMINPUT_GAMEPAD_DPAD_LEFT) debug_menu::HandleInput(debug_menu::InputAction::Left);
+        else if (pressed & XAMINPUT_GAMEPAD_DPAD_RIGHT) debug_menu::HandleInput(debug_menu::InputAction::Right);
+        else if (pressed & XAMINPUT_GAMEPAD_A) debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+        else if (pressed & XAMINPUT_GAMEPAD_B)
+        {
+            s_quarantinedButtons |= XAMINPUT_GAMEPAD_B;
+            debug_menu::HandleInput(debug_menu::InputAction::Cancel);
+        }
+        else if ((pressed & XAMINPUT_GAMEPAD_LEFT_SHOULDER) && !curChord) debug_menu::HandleInput(debug_menu::InputAction::PrevTab);
+        else if ((pressed & XAMINPUT_GAMEPAD_RIGHT_SHOULDER) && !curChord) debug_menu::HandleInput(debug_menu::InputAction::NextTab);
+        else if (leftPressed && rt <= 32) debug_menu::HandleInput(debug_menu::InputAction::PrevCategory);
+        else if (rightPressed && lt <= 32) debug_menu::HandleInput(debug_menu::InputAction::NextCategory);
+    }
+    s_prevGamepadButtons = buttons;
+}
+
+void hid::PumpHostInput()
+{
+    std::lock_guard stateLock(g_getStateMutex);
+    uint8_t lt = 0, rt = 0;
+    uint16_t buttons = 0;
+    {
+        std::lock_guard lock(g_hidMutex);
+        if (g_externalPump) SDL_GameControllerUpdate();
+        buttons = ReadRawButtonsLocked(lt, rt);
+    }
+    ProcessHostInput(buttons, lt, rt);
 }
 
 void hid::Poll()
@@ -128,40 +254,49 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
     if (dwUserIndex != 0)
         return ERROR_DEVICE_NOT_CONNECTED;
 
+    std::lock_guard stateLock(g_getStateMutex);
     Poll();
 
-    std::lock_guard lock(g_hidMutex);
     *pState = {};
     pState->dwPacketNumber = ++g_packet;
     auto& gp = pState->Gamepad;
+    std::array<Uint8, SDL_NUM_SCANCODES> keys{};
+    bool controllerConnected = false;
 
-    if (!g_externalPump) SDL_GameControllerUpdate();
-    for (auto* controller : g_controllers)
     {
-        if (!SDL_GameControllerGetAttached(controller)) continue;
-        auto btn = [&](SDL_GameControllerButton b) { return SDL_GameControllerGetButton(controller, b) != 0; };
-        auto axis = [&](SDL_GameControllerAxis a) { return SDL_GameControllerGetAxis(controller, a); };
+        std::lock_guard lock(g_hidMutex);
+        if (!g_externalPump) SDL_GameControllerUpdate();
+        for (auto* controller : g_controllers)
+        {
+            if (!SDL_GameControllerGetAttached(controller)) continue;
+            ObserveController(controller);
+            auto btn = [&](SDL_GameControllerButton b) { return SDL_GameControllerGetButton(controller, b) != 0; };
+            auto axis = [&](SDL_GameControllerAxis a) { return SDL_GameControllerGetAxis(controller, a); };
 
-        if (btn(SDL_CONTROLLER_BUTTON_DPAD_UP)) gp.wButtons |= XAMINPUT_GAMEPAD_DPAD_UP;
-        if (btn(SDL_CONTROLLER_BUTTON_DPAD_DOWN)) gp.wButtons |= XAMINPUT_GAMEPAD_DPAD_DOWN;
-        if (btn(SDL_CONTROLLER_BUTTON_DPAD_LEFT)) gp.wButtons |= XAMINPUT_GAMEPAD_DPAD_LEFT;
-        if (btn(SDL_CONTROLLER_BUTTON_DPAD_RIGHT)) gp.wButtons |= XAMINPUT_GAMEPAD_DPAD_RIGHT;
-        if (btn(SDL_CONTROLLER_BUTTON_START)) gp.wButtons |= XAMINPUT_GAMEPAD_START;
-        if (btn(SDL_CONTROLLER_BUTTON_BACK)) gp.wButtons |= XAMINPUT_GAMEPAD_BACK;
-        if (btn(SDL_CONTROLLER_BUTTON_LEFTSTICK)) gp.wButtons |= XAMINPUT_GAMEPAD_LEFT_THUMB;
-        if (btn(SDL_CONTROLLER_BUTTON_RIGHTSTICK)) gp.wButtons |= XAMINPUT_GAMEPAD_RIGHT_THUMB;
-        if (btn(SDL_CONTROLLER_BUTTON_LEFTSHOULDER)) gp.wButtons |= XAMINPUT_GAMEPAD_LEFT_SHOULDER;
-        if (btn(SDL_CONTROLLER_BUTTON_RIGHTSHOULDER)) gp.wButtons |= XAMINPUT_GAMEPAD_RIGHT_SHOULDER;
-        if (btn(SDL_CONTROLLER_BUTTON_A)) gp.wButtons |= XAMINPUT_GAMEPAD_A;
-        if (btn(SDL_CONTROLLER_BUTTON_B)) gp.wButtons |= XAMINPUT_GAMEPAD_B;
-        if (btn(SDL_CONTROLLER_BUTTON_X)) gp.wButtons |= XAMINPUT_GAMEPAD_X;
-        if (btn(SDL_CONTROLLER_BUTTON_Y)) gp.wButtons |= XAMINPUT_GAMEPAD_Y;
+            if (btn(SDL_CONTROLLER_BUTTON_DPAD_UP)) gp.wButtons |= XAMINPUT_GAMEPAD_DPAD_UP;
+            if (btn(SDL_CONTROLLER_BUTTON_DPAD_DOWN)) gp.wButtons |= XAMINPUT_GAMEPAD_DPAD_DOWN;
+            if (btn(SDL_CONTROLLER_BUTTON_DPAD_LEFT)) gp.wButtons |= XAMINPUT_GAMEPAD_DPAD_LEFT;
+            if (btn(SDL_CONTROLLER_BUTTON_DPAD_RIGHT)) gp.wButtons |= XAMINPUT_GAMEPAD_DPAD_RIGHT;
+            if (btn(SDL_CONTROLLER_BUTTON_START)) gp.wButtons |= XAMINPUT_GAMEPAD_START;
+            if (btn(SDL_CONTROLLER_BUTTON_BACK)) gp.wButtons |= XAMINPUT_GAMEPAD_BACK;
+            if (btn(SDL_CONTROLLER_BUTTON_LEFTSTICK)) gp.wButtons |= XAMINPUT_GAMEPAD_LEFT_THUMB;
+            if (btn(SDL_CONTROLLER_BUTTON_RIGHTSTICK)) gp.wButtons |= XAMINPUT_GAMEPAD_RIGHT_THUMB;
+            if (btn(SDL_CONTROLLER_BUTTON_LEFTSHOULDER)) gp.wButtons |= XAMINPUT_GAMEPAD_LEFT_SHOULDER;
+            if (btn(SDL_CONTROLLER_BUTTON_RIGHTSHOULDER)) gp.wButtons |= XAMINPUT_GAMEPAD_RIGHT_SHOULDER;
+            if (btn(SDL_CONTROLLER_BUTTON_A)) gp.wButtons |= XAMINPUT_GAMEPAD_A;
+            if (btn(SDL_CONTROLLER_BUTTON_B)) gp.wButtons |= XAMINPUT_GAMEPAD_B;
+            if (btn(SDL_CONTROLLER_BUTTON_X)) gp.wButtons |= XAMINPUT_GAMEPAD_X;
+            if (btn(SDL_CONTROLLER_BUTTON_Y)) gp.wButtons |= XAMINPUT_GAMEPAD_Y;
 
-        gp.bLeftTrigger = std::max(gp.bLeftTrigger, uint8_t(std::max(0, int(axis(SDL_CONTROLLER_AXIS_TRIGGERLEFT))) >> 7));
-        gp.bRightTrigger = std::max(gp.bRightTrigger, uint8_t(std::max(0, int(axis(SDL_CONTROLLER_AXIS_TRIGGERRIGHT))) >> 7));
-        auto flip = [](int16_t value) { return int16_t(std::min(32767, -int(value))); };
-        MergeStick(gp.sThumbLX, gp.sThumbLY, axis(SDL_CONTROLLER_AXIS_LEFTX), flip(axis(SDL_CONTROLLER_AXIS_LEFTY)), 7849);
-        MergeStick(gp.sThumbRX, gp.sThumbRY, axis(SDL_CONTROLLER_AXIS_RIGHTX), flip(axis(SDL_CONTROLLER_AXIS_RIGHTY)), 8689);
+            gp.bLeftTrigger = std::max(gp.bLeftTrigger, uint8_t(std::max(0, int(axis(SDL_CONTROLLER_AXIS_TRIGGERLEFT))) >> 7));
+            gp.bRightTrigger = std::max(gp.bRightTrigger, uint8_t(std::max(0, int(axis(SDL_CONTROLLER_AXIS_TRIGGERRIGHT))) >> 7));
+            auto flip = [](int16_t value) { return int16_t(std::min(32767, -int(value))); };
+            MergeStick(gp.sThumbLX, gp.sThumbLY, axis(SDL_CONTROLLER_AXIS_LEFTX), flip(axis(SDL_CONTROLLER_AXIS_LEFTY)), 7849);
+            MergeStick(gp.sThumbRX, gp.sThumbRY, axis(SDL_CONTROLLER_AXIS_RIGHTX), flip(axis(SDL_CONTROLLER_AXIS_RIGHTY)), 8689);
+        }
+        controllerConnected = !g_controllers.empty();
+        PublishPromptStyle();
+        keys = g_keys;
     }
 
     {
@@ -169,7 +304,7 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
         static uint16_t lastButtons = 0;
         if (trace && gp.wButtons != lastButtons)
         {
-            LOG_INFO("input: buttons {:#06x} (controller {})", gp.wButtons, !g_controllers.empty() ? "yes" : "no");
+            LOG_INFO("input: buttons {:#06x} (controller {})", gp.wButtons, controllerConnected ? "yes" : "no");
             lastButtons = gp.wButtons;
         }
     }
@@ -275,7 +410,6 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
     }
 
     // Event-thread snapshot: keyboard remains available with any number of pads.
-    const auto& keys = g_keys;
     if (!keys.empty())
     {
         if (keys[SDL_SCANCODE_UP]) gp.wButtons |= XAMINPUT_GAMEPAD_DPAD_UP;
@@ -299,8 +433,8 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
     }
 
     // Background integration input, opt-in per test process. A new serial starts
-    // One bounded pulse: "serial hexButtonMask leftX leftY polls [LT RT]".
-    // Optional analog triggers are 0..255; the legacy five fields imply zero. No OS input.
+    // One bounded pulse: "serial hexButtonMask leftX leftY polls [LT RT [rightX rightY]]".
+    // Triggers clamp to 0..255, sticks to int16; omitted fields imply zero. No OS input.
     static const bool inputTicks = [] { const char* value = getenv("LO_TEST_INPUT_TICKS"); return value && strcmp(value, "1") == 0; }();
     uint32_t traceInputSerial = 0;
     uint64_t traceInputTick = 0;
@@ -311,15 +445,16 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
         static TestInputPulse tickPulse;
         const uint64_t tick = inputTicks ? frame_timing::InputTick() : 0;
         static int leftX = 0, leftY = 0, leftTrigger = 0, rightTrigger = 0;
+        static int rightX = 0, rightY = 0;
         if (++pollCount % 12 == 0)
         {
             if (FILE* file = fopen(path, "r"))
             {
                 unsigned serial = 0, mask = 0, duration = 0;
-                int x = 0, y = 0, lt = 0, rt = 0;
-                const int fields = fscanf(file, "%u %x %d %d %u %d %d",
-                    &serial, &mask, &x, &y, &duration, &lt, &rt);
-                const bool valid = fields == 5 || fields == 7;
+                int x = 0, y = 0, lt = 0, rt = 0, rx = 0, ry = 0;
+                const int fields = fscanf(file, "%u %x %d %d %u %d %d %d %d",
+                    &serial, &mask, &x, &y, &duration, &lt, &rt, &rx, &ry);
+                const bool valid = fields == 5 || fields == 7 || fields == 9;
                 fclose(file);
                 if (valid && serial != lastSerial)
                 {
@@ -329,10 +464,12 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
                     leftY = std::clamp(y, -32768, 32767);
                     leftTrigger = std::clamp(lt, 0, 255);
                     rightTrigger = std::clamp(rt, 0, 255);
+                    rightX = std::clamp(rx, -32768, 32767);
+                    rightY = std::clamp(ry, -32768, 32767);
                     pollsLeft = std::min(duration, 6000u);
                     if (inputTicks) tickPulse.Set(tick, pollsLeft);
-                    LOG_INFO("background test input: serial={} buttons={:#x} stick={},{} polls={} triggers={},{}",
-                        serial, buttons, leftX, leftY, pollsLeft, leftTrigger, rightTrigger);
+                    LOG_INFO("background test input: serial={} buttons={:#x} stick={},{} polls={} triggers={},{} right_stick={},{}",
+                        serial, buttons, leftX, leftY, pollsLeft, leftTrigger, rightTrigger, rightX, rightY);
                     if (inputTicks)
                         LOG_INFO("test input accepted: serial={} controller=0 tick={} start={} ticks={} mode=engine_tick",
                             serial, tick, tickPulse.start, tickPulse.duration);
@@ -343,6 +480,8 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
         // zero-duration command; never leave the prior RT value latched.
         gp.bLeftTrigger = 0;
         gp.bRightTrigger = 0;
+        gp.sThumbRX = 0;
+        gp.sThumbRY = 0;
         const bool active = inputTicks ? tickPulse.Active(tick) : pollsLeft != 0;
         if (active)
         {
@@ -352,6 +491,8 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
             gp.wButtons |= uint16_t(buttons);
             gp.sThumbLX = int16_t(leftX);
             gp.sThumbLY = int16_t(leftY);
+            gp.sThumbRX = int16_t(rightX);
+            gp.sThumbRY = int16_t(rightY);
         }
         traceInputSerial = lastSerial;
         traceInputTick = tick;
@@ -359,8 +500,33 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
         traceInputActive = active;
     }
 
+    // Chord detection & host overlay input:
+    // When external event pump is active, PumpHostInput() on the window/event pump thread
+    // independently drives chord detection and menu navigation (even when guest is paused).
+    // When external pump is NOT active (e.g. standalone test), handle it here.
+    // Capture overlay state BEFORE processing input, because ProcessHostInput
+    // may close the overlay (Cancel/B), and we must still filter that button.
+    const bool overlayVisibleBefore = debug_menu::IsOverlayVisible();
+
+    if (!g_externalPump)
+    {
+        ProcessHostInput(gp.wButtons, gp.bLeftTrigger, gp.bRightTrigger);
+    }
+
+    // Read-only on guest paths. The host sampler (or the serialized standalone
+    // sampler above) clears quarantine only after observing a physical release.
+    gp.wButtons &= ~s_quarantinedButtons;
+
+    bool overlayOwnsInput = overlayVisibleBefore || debug_menu::IsOverlayVisible();
     const uint16_t beforeMenuButtons = gp.wButtons;
-    const bool menuFiltered = settings::FilterInput(gp.wButtons, gp.sThumbLX, gp.sThumbLY);
+    bool menuFiltered = false;
+    if (overlayOwnsInput) {
+        menuFiltered = true;
+        gp.wButtons = 0;
+    }
+    else {
+        menuFiltered = settings::FilterInput(gp.wButtons, gp.sThumbLX, gp.sThumbLY);
+    }
     if (menuFiltered) {
         gp.sThumbLX=gp.sThumbLY=gp.sThumbRX=gp.sThumbRY=0;
         gp.bLeftTrigger=gp.bRightTrigger=0;
@@ -395,17 +561,31 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
 
 uint32_t hid::SetState(uint32_t dwUserIndex, XAMINPUT_VIBRATION* pVibration)
 {
-    // Keep local debugging quiet. Opt in explicitly to restore controller rumble.
+    // Match XInput/Xam semantics: rumble is enabled by default and remains at
+    // the requested motor speeds until the guest changes or clears the state.
+    // LO_CONTROLLER_RUMBLE=0 is an explicit host-side opt-out.
     static const bool rumbleEnabled = [] {
         const char* value = getenv("LO_CONTROLLER_RUMBLE");
-        return value && strcmp(value, "1") == 0;
+        return !value || strcmp(value, "0") != 0;
     }();
     if (dwUserIndex != 0)
         return ERROR_DEVICE_NOT_CONNECTED;
     if (!rumbleEnabled) return ERROR_SUCCESS;
+
+    const uint32_t duration = (pVibration->wLeftMotorSpeed || pVibration->wRightMotorSpeed)
+        ? 0xFFFFFFFFu
+        : 0u;
+
     std::lock_guard lock(g_hidMutex);
     for (auto* controller : g_controllers)
-        SDL_GameControllerRumble(controller, pVibration->wLeftMotorSpeed, pVibration->wRightMotorSpeed, 100);
+    {
+        if (!SDL_GameControllerGetAttached(controller)) continue;
+        SDL_GameControllerRumble(
+            controller,
+            pVibration->wLeftMotorSpeed,
+            pVibration->wRightMotorSpeed,
+            duration);
+    }
     return ERROR_SUCCESS;
 }
 

@@ -127,7 +127,8 @@ float4 neighborhood(float4 pos : SV_Position) : SV_Target {
         c->barriers(RenderBarrierStage::GRAPHICS,RenderTextureBarrier(source,RenderTextureLayout::SHADER_READ));
         c->barriers(RenderBarrierStage::GRAPHICS,RenderTextureBarrier(stages[0].get(),RenderTextureLayout::COLOR_WRITE));
         c->setFramebuffer(fb[0].get());cropSet->setTexture(0,source,RenderTextureLayout::SHADER_READ);
-        struct { float x,y,w,h,sw,sh;uint32_t aa,pad; } crop{0,0,float(w),float(h),float(w),float(h),0,0};
+        struct { float x,y,w,h,sw,sh;uint32_t aa,filter,expandRange; }
+            crop{0,0,float(w),float(h),float(w),float(h),0,0,0};
         c->setGraphicsPipelineLayout(cropLayout);c->setPipeline(cropPipeline);
         c->setGraphicsPushConstants(0,&crop);c->setGraphicsDescriptorSet(cropSet.get(),0);c->drawInstanced(3,1,0,0);
         // Initialize every descriptor even where an entry point does not consume it.

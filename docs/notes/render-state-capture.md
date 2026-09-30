@@ -2,6 +2,39 @@
 
 Reviewed **2026-09-08**. Published v0.4.2 includes background ZIP compression, cleanup after success and default three-log retention. The actual export and retention results below belong to the identified capture candidate; v0.4.2 CI, package and anonymous-download checks pass as recorded in [STATUS.md](../STATUS.md), reusing the existing functional evidence. Published v0.4.1 introduced three-frame captures with a shared runtime log and smaller contents; the original single-frame capture shipped in v0.2.1. Capture remains diagnostic and does not repair rendering or establish compatibility.
 
+## 2026-09-22 candidate evidence: final swapchain presentation screenshot and DLSS coordination
+
+This section documents candidate changes implemented and reviewed in the working tree following v0.6.11, incorporating synchronous NGX Evaluate input/output capture and depth unbinding crash repairs. The full game executable was linked on 2026-09-22 at 20:32:58 -0600 (UTC 2026-09-23 02:32:58, 93,635,072 bytes, SHA-256 `08d50e3774d18a02d4f6eaf2267472e9fab75db36e3ee970980aa96faf641e9d`) from `0625923` plus uncommitted changes; earlier 16:24:35 and 19:33:37 intermediate builds are preserved. The historical v0.4.2/v0.4.1 records below are preserved untouched as earlier baselines.
+
+### User Operation and Trigger Contract
+- **Trigger**: In-game via keyboard **F1** or gamepad shoulder chord **LB+RB** on the General debug page, selecting **截取渲染状态 / Capture render state**. This triggers a consecutive 3-frame capture exported to `captures/render-<timestamp>-f<frame>.zip` (or `.tar.gz` on Linux) relative to working directory. It is not an immediate single-frame desktop screenshot shortcut.
+- **Explicit-only Readback**: GPU readback and texture map operations occur only upon explicit capture request; during normal frames without requests, zero readback allocation, copy, or memory mapping is executed.
+
+### Output Image Definitions and Frontbuffer Corrections
+- **`screenshot.bmp` (Final Presentation Surface)**: Captures the actual pre-present swapchain backbuffer image handed off to the host presentation system. When the active rendering path employs DLSS (SR or DLAA), letterboxing, or post-processing, this bitmap reflects those effects immediately prior to display presentation. It does not include desktop compositor or physical monitor color/scaling transforms.
+- **`guest-frontbuffer.bmp` (Resolved Host Texture)**: Preserved alongside `screenshot.bmp`. It captures the renderer's resolved host frontbuffer texture (which may already include DLSS/AA passes when enabled on that target, and is not guaranteed to remain at 720p or reflect unmodified guest RAM).
+- **Correlation Metadata**: Each frame's pair of bitmaps shares the exact same `XE_SWAP` ticket, renderer frame ID, swap serial, and device epoch (the three consecutive frames advance their frame and swap IDs accordingly), recording source write frame, actual dimensions, upscaling plan metadata, `present_accepted` status, and Vulkan submission serial or Direct3D fence value.
+- **Missing vs. Incomplete Captures**: If a frame capture fails, old bitmaps are never reused or fabricated; incomplete captures retain the directory marker, and runtime logs and ZIP archiving only execute after all three requested frames are closed.
+
+### Synchronous NGX Evaluate Capture
+- **Recording Lifecycle**: Inside `gpu::dlss::Controller::RecordIsolated`, when an explicit capture entry is active and final SDK parameters are confirmed, an isolated pre-Evaluate copy captures input color (`CopyImage` to staging buffer). The vendor `EVALUATE_DLSS_EXT` executes once; only when evaluation succeeds, an immediate post-Evaluate copy captures the scratch output texture. Staging transitions restore layouts to `VK_IMAGE_LAYOUT_GENERAL` ahead of subsequent composite and UI passes.
+- **Artifacts and Formats**: Export produces `dlss-evaluations.json` alongside indexed evaluation pairs: `dlss-input-NNN.bin`, `dlss-input-NNN-preview.bmp`, `dlss-output-NNN.bin`, and `dlss-output-NNN-preview.bmp`. Supports native `RGBA8_UNORM` and `RGBA16_FLOAT` raw buffers with clamped RGB preview BMPs.
+- **Diagnostics Metadata**: Captures input sub-pixel jitter (`jitterX`, `jitterY`), reset flags (`reset`, `featureCreated`, `inputHistoryReset`), execution identity tuples, resolution rectangles, and vendor result codes. Non-evaluated frames record explicit zero-evaluate fallback reasons without fabricating mock images. If SR plan sizing is not ready, page-level status logs `dlss_sr_plan_unavailable_this_frame` without speculative root-cause details.
+- **Buffer Safety and Quotas**: Capture memory is capped per frame page (maximum 4 saved evaluations, 128 MiB buffer quota); overflow entries are marked `truncated` and omitted from disk writes. Buffer mapping and unmapping occur cleanly prior to archive packaging.
+
+### API Decoupling and Synchronization
+- Refactored renderer debug capture lifecycle into explicit phases: `gpu::renderer::PrepareDebugCaptureFrame` (synchronous state capture and guest export on `XE_SWAP` before presentation), `gpu::renderer::CompleteDebugCaptureFrame` (writes final presentation image and updates frame progress), and `gpu::renderer::PollDebugCapture` (invoked post-present to maintain proper frame order and archiving sequence).
+
+### Verification
+- Focused test target `LoPresentCaptureTest` passed on Direct3D 12 and Vulkan hardware execution fixtures (4 test cases covering 3-frame sequences and injected submission/fence error paths):
+  - Verified 640×360 final swapchain screenshot vs. 320×240 guest frontbuffer layout with color letterbox and UI border patterns.
+  - Verified no allocations or readback side effects during zero-request frames.
+  - Verified clean handling of simulated submission/fence failures without stale data leakage and proper retention of in-flight buffers.
+  - Verified ZIP archive generation containing 6 correlated bitmaps (3 pairs, each matching its respective frame/swap ticket).
+- Capture close logic validation: `LoPresentCaptureTest --case close` passed using shared production finalize helpers and real archive invocation (verified 3-frame completion count 3, last attempted frame 12 rather than post-incremented 13, failure directory retention without ZIP, and incomplete partial bitmap removal). Production exits compiled cleanly under `PLUME`, `OFF`, and `UNIT` modes.
+- Evaluate capture contract and renderer verification: `LoDlssEvaluateCaptureContractTest.exe --evaluate-capture-contract-only` (contract verification covering RGBA8 and multi-entry limits) and `LoNativeDlssRendererTest.exe --evaluate-capture-only` (Vulkan execution covering RGBA16F synthetic vendor evaluation and checked submission) passed; `motion_renderer_compile` compiled cleanly.
+- Production status: Oracle static review confirmed main capture paths without blockers (including `resetAtFrameEnd` alignment to `temporalEnd.reset` while preserving independent `gapResetBeforeInputs`). Complete/Finalize/archive NGX integration paths and controller SDK parameter wiring are verified statically. Physical NGX visual quality acceptance and end-to-end user F1 export validation remain pending (user next step: Quality/DLAA export without needing to re-run Off baseline).
+
 <a id="background-archive-dev"></a>
 
 ## 2026-09-07 candidate evidence: background ZIP and three-log retention

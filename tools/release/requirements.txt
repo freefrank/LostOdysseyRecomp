@@ -1,1 +1,1 @@
-pyinstaller==6.16.0
+pefile==2024.8.26

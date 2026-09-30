@@ -17,6 +17,9 @@ void* operator new(size_t size) {
 void* operator new[](size_t size) { return ::operator new(size); }
 void operator delete(void* pointer) noexcept { std::free(pointer); }
 void operator delete[](void* pointer) noexcept { std::free(pointer); }
+// Match malloc-backed new when the native ABI selects sized deallocation.
+void operator delete(void* pointer, std::size_t) noexcept { std::free(pointer); }
+void operator delete[](void* pointer, std::size_t) noexcept { std::free(pointer); }
 
 using namespace gpu::taa_collection::shader_sources;
 static unsigned checks = 0;

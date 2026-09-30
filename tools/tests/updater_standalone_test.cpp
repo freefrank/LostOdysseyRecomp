@@ -3,6 +3,7 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -31,10 +32,10 @@ updater::StartupResult PrepareReady(const updater::StartupOptions &o) {
     fs::copy_file(o.installRoot / "LostOdysseyUpdater.exe", staged.stageRoot / "LostOdysseyUpdater.exe");
     fs::copy_file(o.installRoot / "LostOdysseyUpdater.exe", staged.runnerPath);
     std::string error;
-    const auto gameHash = updater::Sha256File(staged.stageRoot / "LostOdysseyRecomp.exe", error);
-    Write(staged.stageRoot / "manifest.json", "{\"version\":\"9.9.9\",\"development_build\":false,\"files\":{\"LostOdysseyRecomp.exe\":\"" + gameHash + "\"}}");
+    const auto gameSize = fs::file_size(staged.stageRoot / "LostOdysseyRecomp.exe");
+    Write(staged.stageRoot / "manifest.json", "{\"version\":\"9.9.9\",\"development_build\":false,\"files\":{\"LostOdysseyRecomp.exe\":" + std::to_string(gameSize) + "}}");
     for (const char *name : {"LostOdysseyRecomp.exe", "LostOdysseyUpdater.exe", "manifest.json"})
-        staged.files.push_back({name, updater::Sha256File(staged.stageRoot / name, error)});
+        staged.files.push_back({name});
     if (!error.empty() || !updater::WriteApplyPlan(staged, o.executable,
             {L"--context-marker", readyMarker.wstring(), L"standalone-\u4e2d\u6587"}, error))
         return {updater::StartupStatus::IntegrityFailed, error, {}};
@@ -88,14 +89,14 @@ int wmain(int argc, wchar_t **argv) {
     fs::copy_file(helper, localHelper); fs::copy_file(self, game);
     fs::current_path(unrelated);
     std::string error;
-    const auto hash = updater::Sha256File(game, error);
-    Expect(hash.size() == 64, "fixture game SHA256 computed");
+    const auto gameSize = fs::file_size(game);
     auto manifest = [&](const std::string &version = "0.5.0", bool dev = false, bool entry = true) {
-        Write(install / "manifest.json", "{\"version\":\"" + version + "\",\"development_build\":" + (dev ? "true" : "false") + ",\"files\":{\"" + (entry ? "LostOdysseyRecomp.exe" : "other.dll") + "\":\"" + hash + "\"}}");
+        Write(install / "manifest.json", "{\"version\":\"" + version + "\",\"development_build\":" + (dev ? "true" : "false") + ",\"files\":{\"" + (entry ? "LostOdysseyRecomp.exe" : "other.dll") + "\":" + std::to_string(gameSize) + "}}");
     };
     updater::StartupOptions options;
     auto configure = [&] { error.clear(); return updater::ConfigureStandalone(localHelper, options, error); };
     Expect(configure() && options.currentVersion == "0.0.0", "missing metadata permits recovery update");
+    Expect(fs::equivalent(options.runnerSource, localHelper), "standalone apply runner uses the running helper");
     { Child child; Expect(child.Start(localHelper, L"", unrelated), "real noargs helper starts hidden"); Expect(child.Finish() == 0, "real noargs helper without manifest respects opt-out"); }
     Write(install / "manifest.json", "not json"); Expect(configure(), "malformed manifest permits recovery update");
     manifest("0.5.0", true); Expect(configure(), "development package permits update");
@@ -112,6 +113,7 @@ int wmain(int argc, wchar_t **argv) {
     manifest();
     Expect(fs::equivalent(options.installRoot, install) && fs::equivalent(options.executable, game), "Unicode install resolved independently of cwd");
     fs::rename(game, install / "game.saved"); Expect(configure() && options.currentVersion == "0.0.0", "missing game permits fresh install despite stale metadata");
+    Expect(fs::equivalent(options.runnerSource, localHelper), "missing game still has a usable apply runner");
     fs::rename(install / "game.saved", game);
     Write(game, "tampered"); Expect(configure(), "modified game permits update");
     fs::copy_file(self, game, fs::copy_options::overwrite_existing);
@@ -164,7 +166,11 @@ int wmain(int argc, wchar_t **argv) {
     }
     Expect(result.find("updated=9.9.9") != std::string::npos, "real helper installs staged standalone update");
     Expect(!fs::exists(marker), "updated game never launches without consent in silent mode");
-    Expect(updater::Sha256File(game, error) == updater::Sha256File(probe, error), "game payload replaced with exact probe");
+    std::ifstream installed(game, std::ios::binary), expected(probe, std::ios::binary);
+    Expect(fs::file_size(game) == fs::file_size(probe) &&
+        std::equal(std::istreambuf_iterator<char>(installed), std::istreambuf_iterator<char>(),
+                   std::istreambuf_iterator<char>(expected), std::istreambuf_iterator<char>()),
+           "game payload replaced with exact probe");
     fs::current_path(oldCwd);
     std::error_code cleanup;
     for (int i = 0; i < 100; ++i) {

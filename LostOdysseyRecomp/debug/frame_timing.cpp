@@ -2,6 +2,7 @@
 #include "frame_timing.h"
 #include <gpu/command_processor.h>
 #include <gpu/frame_pacer.h>
+#include <settings/config.h>
 #include <gpu/render_timing.h>
 #include <os/logger.h>
 #include <chrono>
@@ -112,9 +113,9 @@ void Present(uint32_t swap, uint32_t fps, double flushMs, double waitMs, double 
     // Every-frame present timing already records this window. The 1s summary
     // is extra file I/O on the swap thread and has stalled city presents 200ms+.
     if (gpu::render_timing::Enabled()) return;
-    LOG_INFO("frame timing completed={} target={} window={:.6f}s presents={} rate={:.3f} flush={:.3f}ms pace={:.3f}ms present={:.3f}ms engine_ticks={} delta_sum={:.6f} intervals={} last_interval={:#x}->{:#x}",
+    LOG_INFO("frame timing completed={} target={} window={:.6f}s presents={} rate={:.3f} flush={:.3f}ms pace={:.3f}ms present={:.3f}ms engine_ticks={} delta_sum={:.6f} intervals={} last_interval={:#x}->{:#x} source=guest_swap engine_rate={:.3f} game_time_ratio={:.6f}",
         swap, fps, seconds, snapCount, snapCount / seconds, snapFlush / snapCount, snapWait / snapCount, snapPresent / snapCount,
-        snapTicks, snapDelta, snapIntervals, snapRequested, snapEncoded);
+        snapTicks, snapDelta, snapIntervals, snapRequested, snapEncoded, snapTicks / seconds, snapDelta / seconds);
     LOG_INFO("frame pacing completed={} samples={} sleep_requested={:.3f}ms sleep_actual={:.3f}ms wake_over={:.3f}ms wake_max={:.3f}ms slept={} over_1ms={} between={:.3f}ms paired={} cp_idle={:.3f}ms",
         swap, snapCount, snapSleepRequest / snapCount, snapSleepActual / snapCount, snapWakeOver / snapCount, snapWakeMax,
         snapSlept, snapOver1ms, snapPaired ? snapBetween / snapPaired : 0.0, snapPaired, snapIdle / snapCount);
@@ -131,11 +132,9 @@ PPC_FUNC(sub_827B6AD8)
         const char* value = getenv("LO_GUEST_INTERVAL");
         return !value || strcmp(value, "0") != 0;
     }();
-    static const bool immediate120 = [] {
-        const char* value = getenv("LO_EXPERIMENTAL_120");
-        return value && strcmp(value, "1") == 0;
-    }();
-    const auto mapped = mapInterval ? gpu::MapPresentInterval(requested, uint32_t(ctx.lr), gpu::GetFrameRateTarget(), immediate120) : requested;
+    // Native 90/120 use the same real-time engine path as 30/60. Only the
+    // identified game's present interval changes; no clock or delta scaling.
+    const auto mapped = mapInterval ? gpu::MapPresentInterval(requested, uint32_t(ctx.lr), gpu::GetFrameRateTarget(), settings::GetConfig().variableRefreshRate) : requested;
     if (mapped != requested) ctx.r7.u64 = (ctx.r7.u64 & 0xFFFFFFFF00000000ull) | mapped;
     if (uint32_t(ctx.lr) == 0x827B4A4C) frame_timing::GuestInterval(requested, ctx.r7.u32);
     __imp__sub_827B6AD8(ctx, base);

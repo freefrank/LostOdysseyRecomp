@@ -141,11 +141,11 @@ void Exercise(const std::filesystem::path &output)
             Check(!GetUpdateRect(window, nullptr, FALSE), "unchanged determinate value does not invalidate track");
         }
         Capture(window, output / "updater-download.bmp");
-        progress.SetPhase(updater::ProgressPhase::Verifying);
-        Check(Text(GetDlgItem(window, 102)) == L"Verifying…", "verification state");
-        Check(!IsWindowEnabled(GetDlgItem(window, IDCANCEL)), "verification cannot claim unsupported cancellation");
+        progress.SetPhase(updater::ProgressPhase::Extracting);
+        Check(Text(GetDlgItem(window, 102)) == L"Extracting…", "extraction state");
+        Check(!IsWindowEnabled(GetDlgItem(window, IDCANCEL)), "extraction cannot claim unsupported cancellation");
         SendMessageW(window, WM_CLOSE, 0, 0);
-        Check(!progress.Cancelled() && IsWindow(window), "verification close keeps transaction owner intact");
+        Check(!progress.Cancelled() && IsWindow(window), "extraction close keeps transaction owner intact");
         progress.SetPhase(updater::ProgressPhase::Ready);
         Check(Text(GetDlgItem(window, 104)) == L"100%", "ready is complete");
         Check(!IsWindowEnabled(GetDlgItem(window, settings::window_chrome::CloseId)), "ready close disabled");
@@ -158,8 +158,8 @@ void Exercise(const std::filesystem::path &output)
         updater::ProgressWindow progress(4);
         HWND window = FindWindowW(L"LostOdysseyUpdateProgress", nullptr);
         SetWindowPos(window, nullptr, 100, 100, Px(window, 440), Px(window, 280), SWP_NOZORDER | SWP_NOACTIVATE);
-        progress.SetPhase(updater::ProgressPhase::CheckingPackage);
-        Check(Text(GetDlgItem(window, 102)) == L"Checking package…", "English package phase regardless of game language");
+        progress.SetPhase(updater::ProgressPhase::Extracting);
+        Check(Text(GetDlgItem(window, 102)) == L"Extracting…", "English extraction phase regardless of game language");
         Bounds(window);
         Capture(window, output / "updater-narrow-zh.bmp");
     }
@@ -198,8 +198,8 @@ void Render(const std::filesystem::path &output, bool narrowOnly)
         HWND window = FindWindowW(L"LostOdysseyUpdateProgress", nullptr);
         SetWindowPos(window, nullptr, 100, 100, settings::window_chrome::Px(window, 440),
                      settings::window_chrome::Px(window, 280), SWP_NOZORDER | SWP_NOACTIVATE);
-        progress.SetPhase(updater::ProgressPhase::CheckingPackage);
-        Check(Text(GetDlgItem(window, 102)) == L"Checking package…", "English narrow package text");
+        progress.SetPhase(updater::ProgressPhase::Extracting);
+        Check(Text(GetDlgItem(window, 102)) == L"Extracting…", "English narrow extraction text");
         Capture(window, output / "updater-narrow-zh.bmp");
     }
 }

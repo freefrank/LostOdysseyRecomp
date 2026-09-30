@@ -1,5 +1,7 @@
 #include <stdafx.h>
 #include "command_processor.h"
+#include "movie_clear.h"
+#include "frame_plan.h"
 #include "video.h"
 #include "renderer.h"
 #include "frame_pacer.h"
@@ -8,14 +10,18 @@
 #include "shader_identity.h"
 #include <debug/frame_timing.h>
 #include <cpu/guest_thread.h>
+#include <cpu/poll_wait.h>
 #include <kernel/memory.h>
 #include <kernel/function.h>
 #include <os/logger.h>
+#include <os/thread_name.h>
 #include <os/shader_log.h>
 #include <chrono>
 #include <kernel/io/file_system.h>
+#include <notified_wait.h>
 #include <set>
 #include <mutex>
+#include <host_ui/host_ui.h>
 #include <fstream>
 #include <future>
 
@@ -23,11 +29,14 @@ void DumpGuestThreadStates();
 
 namespace gpu
 {
-    static std::atomic<uint32_t> g_frameRateTarget{30};
+    static std::atomic<uint32_t> g_frameRateTarget{frame_rate::kDefault};
     bool SetFrameRateTarget(uint32_t fps)
     {
-        if (fps != 30 && fps != 60 && fps != 120) return false;
-        g_frameRateTarget.store(fps, std::memory_order_relaxed);
+        if (!frame_rate::Supported(fps)) return false;
+        const auto previous = g_frameRateTarget.exchange(fps, std::memory_order_relaxed);
+        if (previous != fps)
+            LOG_INFO("native frame rate changed: requested={} effective={} source=guest_swap (FG is independent)",
+                fps, GetFrameRateTarget());
         return true;
     }
     uint32_t GetFrameRateTarget()
@@ -53,14 +62,16 @@ std::atomic<uint32_t> g_presentedSwaps{ 0 }; // global mirror for other subsyste
 namespace gpu
 {
     static std::atomic<uint32_t> g_traceBudget{ 0 };
+    static const bool g_capturePacketHistory = getenv("LO_GPU_TRACE") != nullptr;
 
-    // Ring of recently executed packets, dumped when the parser derails.
+    // Opt-in ring of recently executed packets, dumped when the parser derails.
     struct PacketRecord { uint32_t header; uint32_t offset; uint32_t d0, d1, d2; bool ring; };
     static PacketRecord g_history[64];
     static uint32_t g_historyPos = 0;
 
     static void DumpHistory(const char* why)
     {
+        if (!g_capturePacketHistory) return;
         LOG_WARNING("packet history ({}):", why);
         for (uint32_t i = 0; i < 64; i++)
         {
@@ -99,6 +110,8 @@ namespace gpu
     static std::mutex g_shaderMutex;
     static std::set<uint64_t> g_seenShaders;
     static const bool g_gpuStats = getenv("LO_GPU_STATS") != nullptr;
+    // Read once: CaptureShader runs for every changed IM_LOAD.
+    static const char* const g_shaderDumpDirectory = getenv("LO_SHADER_DUMP_DIR");
     static uint32_t g_detailBudget = 0;
 
     // words point at big-endian microcode in guest memory.
@@ -106,9 +119,11 @@ namespace gpu
     {
         if (type > 1 || count == 0 || count > 0x10000)
             return;
-        g_frame.shaderLoads++;
+        if (g_gpuStats) g_frame.shaderLoads++;
         auto& snapshot = g_activeShaderSnapshots[type];
         if (!snapshot.Load(words, count)) return;
+        const char* dumpDirectory = g_shaderDumpDirectory;
+        if (!g_gpuStats && !dumpDirectory) return;
         const uint64_t hash = snapshot.CommandHash();
         g_activeShader[type] = hash;
         g_activeShaderSize[type] = count;
@@ -118,9 +133,9 @@ namespace gpu
             return;
         if (g_gpuStats)
             SHADER_LOG_INFO("shader-observed", CommandWordFnv, "new {} shader {:016x} ({} dwords), {} distinct so far", type ? "pixel" : "vertex", hash, count, g_seenShaders.size());
-        if (const char* dir = getenv("LO_SHADER_DUMP_DIR"))
+        if (dumpDirectory)
         {
-            std::string path = fmt::format("{}/{}_{:016x}.bin", dir, type ? "ps" : "vs", hash);
+            std::string path = fmt::format("{}/{}_{:016x}.bin", dumpDirectory, type ? "ps" : "vs", hash);
             if (FILE* f = fopen(path.c_str(), "wb"))
             {
                 fwrite(snapshot.Words(), 4, count, f);
@@ -181,7 +196,9 @@ namespace gpu
         }
     }
 
-    uint32_t CommandProcessor::Reader::ReadAndSwap()
+    // inline: the release build inlines only marked functions (/Ob1), and this
+    // runs once per command word.
+    inline uint32_t CommandProcessor::Reader::ReadAndSwap()
     {
         if (!ring && readOffset >= size)
             return 0;
@@ -235,6 +252,13 @@ namespace gpu
             catch (...) { LOG_ERROR("graphics startup failed: unknown exception"); video::Shutdown(); }
             ready.set_value(success);
             if (success) WorkerMain();
+            if (video::ExitRequested()) {
+                host_ui::RequestStop();
+                m_running = false;
+                m_writePtrChanged.notify_all();
+                m_interruptCv.notify_all();
+                video::FinishRequestedExit();
+            }
         });
         if (!initialized.get()) {
             m_running = false;
@@ -253,12 +277,27 @@ namespace gpu
         return true;
     }
 
+    void CommandProcessor::RequestStopForExit()
+    {
+        m_running.store(false, std::memory_order_release);
+        m_writePtrChanged.notify_all();
+        m_interruptCv.notify_all();
+        m_waitProgress.notify_all();
+    }
+
     void CommandProcessor::Shutdown()
     {
-        m_running = false;
-        m_writePtrIndex.notify_all();
-        m_interruptSignal++;
-        m_interruptSignal.notify_all();
+        host_ui::RequestStop();
+        {
+            std::lock_guard lock(m_writePtrMutex);
+            m_running = false;
+        }
+        m_writePtrChanged.notify_all();
+        {
+            std::lock_guard lock(m_interruptMutex);
+        }
+        m_interruptCv.notify_all();
+        m_waitProgress.notify_all();
         for (auto* t : { &m_worker, &m_vsync, &m_interruptThread })
             if (t->joinable())
                 t->join();
@@ -290,17 +329,57 @@ namespace gpu
         static const bool traceIb = getenv("LO_TRACE_IB") != nullptr;
         if (traceIb)
             LOG_INFO("swap#{} WPTR <- {:#x} (rd {:#x})", g_swapCount.load(), dwordIndex, m_readPtrIndex);
-        m_writePtrIndex = dwordIndex;
-        m_writePtrIndex.notify_all();
-        if (m_workerSleeping.load(std::memory_order_relaxed))
         {
-            std::lock_guard lock(m_workerWakeMutex);
-            m_workerWake.notify_one();
+            std::lock_guard lock(m_writePtrMutex);
+            m_writePtrIndex = dwordIndex;
         }
+        m_writePtrChanged.notify_one();
     }
 
     void CommandProcessor::WriteRegister(uint32_t index, uint32_t value)
     {
+        if (index >= frame_plan::wire::CatalogBase && index <= frame_plan::wire::CatalogBase + 4)
+        {
+            frame_plan::SurfaceRole role;
+            uint32_t surfaceInfo = 0, colorInfo = 0;
+            if (m_catalog.Write(index, value, role, surfaceInfo, colorInfo))
+                renderer::RegisterCatalogSurface(role, surfaceInfo, colorInfo);
+            return;
+        }
+        if (index >= frame_plan::wire::PlanBase && index < frame_plan::wire::PlanBase + frame_plan::wire::PlanWordCount)
+        {
+            if (const auto plan = m_framePlan.Write(index, value))
+                renderer::SelectFramePlan(*plan);
+            return;
+        }
+        if (index >= movie_clear::RegisterBase && index <= movie_clear::Commit)
+        {
+            using namespace movie_clear;
+            switch (index)
+            {
+            case Begin:
+                m_movieClear = {};
+                m_movieClear.active = value == Magic;
+                break;
+            case SurfaceInfo: if (m_movieClear.active) m_movieClear.surfaceInfo = value; break;
+            case ColorInfo: if (m_movieClear.active) m_movieClear.colorInfo = value; break;
+            case OriginalX: if (m_movieClear.active) m_movieClear.x = value; break;
+            case OriginalY: if (m_movieClear.active) m_movieClear.y = value; break;
+            case OriginalWidth: if (m_movieClear.active) m_movieClear.width = value; break;
+            case OriginalHeight: if (m_movieClear.active) m_movieClear.height = value; break;
+            case SafeLeft: if (m_movieClear.active) m_movieClear.safeLeft = value; break;
+            case SafeRight: if (m_movieClear.active) m_movieClear.safeRight = value; break;
+            case Commit:
+                if (m_movieClear.active && value == Magic)
+                    renderer::ClearMovieBars(m_movieClear.surfaceInfo, m_movieClear.colorInfo,
+                        std::bit_cast<float>(m_movieClear.x), std::bit_cast<float>(m_movieClear.y),
+                        std::bit_cast<float>(m_movieClear.width), std::bit_cast<float>(m_movieClear.height),
+                        std::bit_cast<float>(m_movieClear.safeLeft), std::bit_cast<float>(m_movieClear.safeRight));
+                m_movieClear = {};
+                break;
+            }
+            return;
+        }
         if (index >= REGISTER_COUNT)
             return;
 
@@ -347,6 +426,45 @@ namespace gpu
         {
             m_registers[index] |= 0x80000000u;
         }
+    }
+
+    // WriteRegister's side effects all lie below 0x2400 (scratch writeback,
+    // coherency, read-only status) or at REGISTER_COUNT and above (frame plan,
+    // catalog, movie clear). The constant, fetch and bool/loop banks in between
+    // only update the register file and the big-endian MMIO image that guest
+    // loads read.
+    constexpr uint32_t kPlainRegisterFirst = 0x2400;
+    static_assert(REG_SCRATCH_REG7 < kPlainRegisterFirst && REG_COHER_STATUS_HOST < kPlainRegisterFirst &&
+        REG_RB_EDRAM_TIMING < kPlainRegisterFirst && REG_RB_BC_CONTROL < kPlainRegisterFirst &&
+        REG_D1MODE_V_COUNTER < kPlainRegisterFirst && REG_INTERRUPT_STATUS < kPlainRegisterFirst &&
+        REG_D1MODE_VIEWPORT_SIZE < kPlainRegisterFirst &&
+        movie_clear::RegisterBase >= REGISTER_COUNT && frame_plan::wire::PlanBase >= REGISTER_COUNT &&
+        frame_plan::wire::CatalogBase >= REGISTER_COUNT);
+
+    inline void CommandProcessor::WriteRegisterFast(uint32_t index, uint32_t value)
+    {
+        if (index >= kPlainRegisterFirst && index < REGISTER_COUNT)
+        {
+            m_registers[index] = value;
+            reinterpret_cast<be<uint32_t>*>(g_memory.Translate(MMIO_BASE))[index] = value;
+            return;
+        }
+        WriteRegister(index, value);
+    }
+
+    // A run of guest-endian words for plain registers: the MMIO image takes the
+    // words as they are and the register file their byte-swapped values, the
+    // same result as WriteRegisterFast on each word. False leaves the caller
+    // to write word by word.
+    inline bool CommandProcessor::WritePlainRun(uint32_t first, const uint32_t* guestWords, uint32_t count)
+    {
+        if (first < kPlainRegisterFirst || uint64_t(first) + count > REGISTER_COUNT)
+            return false;
+        std::memcpy(static_cast<uint8_t*>(g_memory.Translate(MMIO_BASE)) + size_t(first) * 4, guestWords, size_t(count) * 4);
+        uint32_t* registers = m_registers.data() + first;
+        for (uint32_t i = 0; i < count; ++i)
+            registers[i] = ByteSwap(guestWords[i]);
+        return true;
     }
 
     uint32_t CommandProcessor::ReadRegister(uint32_t index)
@@ -398,7 +516,7 @@ namespace gpu
 
     void CommandProcessor::WorkerMain()
     {
-        uint32_t idle = 0;
+        os::SetCurrentThreadName("GPU CmdProc");
         const bool timingEnabled = frame_timing::Enabled();
         auto idleStart = std::chrono::steady_clock::time_point{};
         bool timingIdle = false;
@@ -423,29 +541,34 @@ namespace gpu
 
             if (writePtr == 0xBAADF00D || m_readPtrIndex == writePtr || m_primaryBufferSize == 0)
             {
-                g_workerStage = "idle/event pump";
+                g_workerStage.store("idle/event pump", std::memory_order_relaxed);
                 if (timingEnabled && !timingIdle)
                 {
                     idleStart = std::chrono::steady_clock::now();
                     timingIdle = true;
                 }
-                if (++idle > 200)
                 {
-                    video::PumpEvents();
-                    // UpdateWritePointer wakes this wait immediately; the timeout keeps the
-                    // previous latency bound for write pointers mirrored through guest memory.
-                    std::unique_lock lock(m_workerWakeMutex);
-                    m_workerSleeping.store(true, std::memory_order_relaxed);
-                    m_workerWake.wait_for(lock, std::chrono::microseconds(500), [&] {
+                    std::unique_lock lock(m_writePtrMutex);
+                    notified_wait::For(m_writePtrChanged, lock, std::chrono::microseconds(500), [&] {
                         return !m_running || m_writePtrIndex.load() != writePtr;
                     });
-                    m_workerSleeping.store(false, std::memory_order_relaxed);
                 }
-                else
-                    std::this_thread::yield();
+                if (m_running)
+                {
+                    video::PumpEvents();
+                    if (video::IsHostOverlayActive())
+                    {
+                        static auto s_lastOverlayPresent = std::chrono::steady_clock::time_point{};
+                        const auto now = std::chrono::steady_clock::now();
+                        if (now - s_lastOverlayPresent >= std::chrono::milliseconds(16))
+                        {
+                            s_lastOverlayPresent = now;
+                            video::PresentHostOverlay();
+                        }
+                    }
+                }
                 continue;
             }
-            idle = 0;
             if (timingIdle)
             {
                 frame_timing::CpIdle(std::chrono::duration<double, std::milli>(
@@ -453,7 +576,7 @@ namespace gpu
                 timingIdle = false;
             }
 
-            g_workerStage = "PM4 execution";
+            g_workerStage.store("PM4 execution", std::memory_order_relaxed);
             m_readPtrIndex = ExecutePrimaryBuffer(m_readPtrIndex, writePtr);
 
             if (m_readPtrWritebackPhysical)
@@ -466,13 +589,14 @@ namespace gpu
     // hardware the two arrive on different CPUs).
     void CommandProcessor::VsyncMain()
     {
+        os::SetCurrentThreadName("GPU Vsync");
         GuestThreadContext ctx(2); // Xenia dispatches vblanks on CPU 2
         FramePacer pacer;
         while (m_running)
         {
             // Drop overdue wall-clock deadlines rather than deliver a burst
             // of synthetic catch-up interrupts after a host scheduling stall.
-            std::this_thread::sleep_until(pacer.Schedule(std::chrono::steady_clock::now(), 60));
+            std::this_thread::sleep_until(pacer.Schedule(std::chrono::steady_clock::now(), frame_rate::kGuestRefreshHz));
             ++m_counter;
 
             // Watchdog: no swap for 5 seconds -> dump what every guest thread waits on.
@@ -484,7 +608,8 @@ namespace gpu
                     if (++stillFrames == 300 && swaps > 0 && dumps++ < 2)
                     {
                         LOG_WARNING("GPU progress stalled: completed={} submitted={} stage={} opcode={:#x}",
-                            swaps, g_swapCount.load(), g_workerStage.load(), g_lastOpcode.load());
+                            swaps, g_swapCount.load(), g_workerStage.load(std::memory_order_relaxed),
+                            g_lastOpcode.load(std::memory_order_relaxed));
                         ::DumpGuestThreadStates();
                     }
                 }
@@ -511,20 +636,18 @@ namespace gpu
     // and a guest stack like any other guest code).
     void CommandProcessor::InterruptMain()
     {
+        os::SetCurrentThreadName("GPU Interrupt");
         GuestThreadContext ctx(2);
         while (m_running)
         {
             std::pair<uint32_t, uint32_t> item;
             {
-                std::lock_guard lock(m_interruptMutex);
-                if (m_pendingInterrupts.empty())
-                {
-                    uint32_t signal = m_interruptSignal.load();
-                    m_interruptMutex.unlock();
-                    m_interruptSignal.wait(signal);
-                    m_interruptMutex.lock();
-                    continue;
-                }
+                std::unique_lock lock(m_interruptMutex);
+                m_interruptCv.wait(lock, [this] {
+                    return !m_running || !m_pendingInterrupts.empty();
+                });
+                if (!m_running && m_pendingInterrupts.empty())
+                    break;
                 item = m_pendingInterrupts.front();
                 m_pendingInterrupts.erase(m_pendingInterrupts.begin());
             }
@@ -543,6 +666,11 @@ namespace gpu
                 LOG_VERBOSE("isr source={} cpu={} block=[{:#x} {:#x} {:#x} {:#x} {:#x} {:#x}]", item.first, item.second,
                     uint32_t(blk[0]), uint32_t(blk[1]), uint32_t(blk[2]), uint32_t(blk[3]), uint32_t(blk[4]), uint32_t(blk[5]));
             g_memory.FindFunction(m_interruptCallback)(ctx.ppcContext, g_memory.base);
+            {
+                std::lock_guard lock(m_waitProgressMutex);
+                m_interruptsCompleted.fetch_add(1, std::memory_order_release);
+            }
+            m_waitProgress.notify_all();
             if (trace)
                 LOG_VERBOSE("isr done block=[{:#x} {:#x} {:#x} {:#x} {:#x} {:#x}]",
                     uint32_t(blk[0]), uint32_t(blk[1]), uint32_t(blk[2]), uint32_t(blk[3]), uint32_t(blk[4]), uint32_t(blk[5]));
@@ -555,15 +683,14 @@ namespace gpu
             std::lock_guard lock(m_interruptMutex);
             m_pendingInterrupts.emplace_back(source, cpu);
         }
-        m_interruptSignal++;
-        m_interruptSignal.notify_all();
+        m_interruptCv.notify_one();
     }
 
     uint32_t CommandProcessor::ExecutePrimaryBuffer(uint32_t readIndex, uint32_t writeIndex)
     {
         Reader reader{ TranslatePhysical(m_primaryBufferPhysical), m_primaryBufferSize,
             (readIndex * 4) % m_primaryBufferSize, (writeIndex * 4) % m_primaryBufferSize, true };
-        while (reader.ReadCount())
+        while (reader.ReadCount() && m_running)
         {
             if (!ExecutePacket(reader))
             {
@@ -577,7 +704,7 @@ namespace gpu
     void CommandProcessor::ExecuteIndirectBuffer(uint32_t physicalAddress, uint32_t dwordCount)
     {
         Reader reader{ TranslatePhysical(physicalAddress), dwordCount * 4, 0, dwordCount * 4, false };
-        while (reader.ReadCount())
+        while (reader.ReadCount() && m_running)
         {
             if (!ExecutePacket(reader))
             {
@@ -594,6 +721,7 @@ namespace gpu
         if (packet == 0)
             return true;
 
+        if (g_capturePacketHistory)
         {
             auto& r = g_history[g_historyPos++ % 64];
             r.header = packet; r.offset = offset; r.ring = reader.ring;
@@ -617,10 +745,16 @@ namespace gpu
         uint32_t count = ((packet >> 16) & 0x3FFF) + 1;
         uint32_t baseIndex = packet & 0x7FFF;
         bool writeOneReg = (packet >> 15) & 1;
+        if (!writeOneReg)
+            if (const auto* words = reader.Contiguous(count); words && WritePlainRun(baseIndex, words, count))
+            {
+                reader.Advance(count);
+                return true;
+            }
         for (uint32_t m = 0; m < count; m++)
         {
             uint32_t data = reader.ReadAndSwap();
-            WriteRegister(writeOneReg ? baseIndex : baseIndex + m, data);
+            WriteRegisterFast(writeOneReg ? baseIndex : baseIndex + m, data);
         }
         return true;
     }
@@ -638,8 +772,8 @@ namespace gpu
     bool CommandProcessor::ExecutePacketType3(Reader& reader, uint32_t packet)
     {
         const uint32_t opcode = (packet >> 8) & 0x7F;
-        g_lastOpcode = opcode;
-        g_workerStage = "PM4 execution";
+        g_lastOpcode.store(opcode, std::memory_order_relaxed);
+        g_workerStage.store("PM4 execution", std::memory_order_relaxed);
         const uint32_t count = ((packet >> 16) & 0x3FFF) + 1;
 
         if (g_traceBudget > 0)
@@ -689,10 +823,8 @@ namespace gpu
             ++m_counter;
             uint32_t swaps = ++g_swapCount;
             g_presentedSwaps = swaps;
-            // Heartbeat: one line every 60 presented frames with the pace and the
-            // last game file the title opened, which is the cheapest "where is
-            // it now" indicator (movie archives, map packages, save data...).
-            if ((swaps % 60) == 1)
+            // Optional progress log with the last game file the title opened.
+            if (g_gpuStats && (swaps % 60) == 1)
             {
                 static auto lastBeat = std::chrono::steady_clock::now();
                 static uint32_t lastBeatSwaps = 0;
@@ -704,23 +836,29 @@ namespace gpu
                 LOG_INFO("heartbeat: swap #{} {:.1f} fps, {} draws/frame, frontbuffer {:#x} {}x{}, last file '{}'",
                     swaps, fps, g_frame.draws, frontbuffer, width, height, FileSystem::LastOpenedFile());
             }
-            g_workerStage = "renderer flush";
+            g_workerStage.store("renderer flush", std::memory_order_relaxed);
             // Optional deterministic trigger for a three-frame capture validation.
             static const uint32_t captureSwap = getenv("LO_DEBUG_CAPTURE_SWAP") ? strtoul(getenv("LO_DEBUG_CAPTURE_SWAP"), nullptr, 10) : 0;
             if (captureSwap && swaps == captureSwap) renderer::RequestDebugCapture();
-            renderer::FinishDebugCapture(frontbuffer);
+            present_capture::Ticket captureTicket;
+            present_capture::Result captureResult;
+            renderer::PrepareDebugCaptureFrame(frontbuffer, swaps, captureTicket);
             const auto timingFlush = std::chrono::steady_clock::now();
             renderer::PreparePresent(frontbuffer);
             renderer::Flush();
             const auto timingPace = std::chrono::steady_clock::now();
-            const auto fpsCap = GetFrameRateTarget();
+            const auto fpsCap = video::GetFramePacingTarget(GetFrameRateTarget());
             const bool timingEnabled = frame_timing::Enabled();
             frame_timing::PacingSample pacing;
             {
                 static FramePacer pacer;
+                static OutputFramePacer outputPacer;
                 static DeadlineWait pacingWait;
                 // Preserve the original schedule anchor; sleep without millisecond rounding.
-                const auto deadline = pacer.Schedule(timingPace, fpsCap);
+                const auto nativeDeadline = pacer.Schedule(timingPace, fpsCap);
+                const auto output = video::GetDynamicFgOutputPacing(GetFrameRateTarget());
+                const auto outputDeadline = outputPacer.Schedule(timingPace, output.outputFps, output.actualPresents);
+                const auto deadline = std::max(nativeDeadline, outputDeadline);
                 const auto sleepStart = timingEnabled ? std::chrono::steady_clock::now() : timingPace;
                 pacingWait.Until(deadline);
                 if (timingEnabled)
@@ -741,11 +879,14 @@ namespace gpu
                 if (dumpAt && swaps == dumpAt)
                     ::DumpGuestThreadStates();
             }
-            g_workerStage = "frontbuffer present";
+            g_workerStage.store("frontbuffer present", std::memory_order_relaxed);
             const auto presentsBefore = video::CompletedPresentCount();
-            video::PresentFrontbuffer(frontbuffer, width, height, ReadRegister(0x231B));
+            video::PresentFrontbuffer(frontbuffer, width, height, ReadRegister(0x231B),
+                captureTicket.active ? &captureTicket : nullptr, captureTicket.active ? &captureResult : nullptr);
+            renderer::CompleteDebugCaptureFrame(captureResult);
+            renderer::PollDebugCapture();
             pacing.presentAccepted = video::CompletedPresentCount() > presentsBefore;
-            g_workerStage = "window event pump";
+            g_workerStage.store("window event pump", std::memory_order_relaxed);
             video::PumpEvents();
             g_completedSwaps = swaps;
             static double previousSwapLogMs = 0, previousSwapPostMs = 0;
@@ -767,7 +908,7 @@ namespace gpu
                     std::chrono::steady_clock::now() - timingEnd).count();
             }
             const auto timingPostStart = timingEnabled ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
-            g_workerStage = "post-present capture/statistics";
+            g_workerStage.store("post-present capture/statistics", std::memory_order_relaxed);
             {
                 static const uint32_t shotSwap = getenv("LO_SCREENSHOT_SWAP") ? strtoul(getenv("LO_SCREENSHOT_SWAP"), nullptr, 10) : 0;
                 static const uint32_t shotEvery = getenv("LO_SCREENSHOT_EVERY") ? strtoul(getenv("LO_SCREENSHOT_EVERY"), nullptr, 10) : 0;
@@ -821,7 +962,7 @@ namespace gpu
                 if (swaps == 120 || swaps == 600 || swaps == 1500 || swaps == 3000)
                     g_detailBudget = 60;
             }
-            g_frame = FrameStats{};
+            if (g_gpuStats) g_frame = FrameStats{};
             if (swaps == 118 && getenv("LO_GPU_TRACE"))
                 g_traceBudget = 400;
             if (timingEnabled)
@@ -889,18 +1030,22 @@ namespace gpu
             if (g_traceBudget > 0 || (g_swapCount >= 110 && isMemory && (pollRegAddr & ~3u) >= 0xB000 && (pollRegAddr & ~3u) < 0xB020))
                 LOG_INFO("WAIT_REG_MEM {} {:#x} op={} ref={:#x} mask={:#x} value now {:#x} swap #{}", isMemory ? "mem" : "reg", pollRegAddr, waitInfo & 7, ref, mask,
                     isMemory ? GpuSwap(*reinterpret_cast<uint32_t*>(TranslatePhysical(pollRegAddr & ~3u)), pollRegAddr & 3) : 0, g_swapCount.load());
-            g_workerStage = "WAIT_REG_MEM";
+            g_workerStage.store("WAIT_REG_MEM", std::memory_order_relaxed);
             const auto waitStart = std::chrono::steady_clock::now();
             auto deadline = waitStart + std::chrono::seconds(5);
             // Xenia sleeps wait/256 ms between polls. That is an emulator heuristic, not packet
             // semantics: on the host the value (query results, CPU-side flags) usually changes
             // within microseconds, and whole-millisecond sleeps parked this thread for 13% of a
             // battle frame while the guest render thread waited on it in turn. Poll with a short
-            // backoff instead. LO_WAIT_REG_MEM_LEGACY=1 restores the millisecond sleeps.
+            // backoff instead. LO_WAIT_REG_MEM_LEGACY=1 restores the interval sleeps, which still
+            // end early when an interrupt handler completes.
             static const bool legacyWait = getenv("LO_WAIT_REG_MEM_LEGACY") != nullptr;
             uint32_t polls = 0;
             while (m_running)
             {
+                // Snapshot before reading, so a handler finishing after the read
+                // still ends the wait below instead of being missed.
+                const uint64_t progress = m_interruptsCompleted.load(std::memory_order_acquire);
                 uint32_t value;
                 if (isMemory)
                     value = GpuSwap(*reinterpret_cast<volatile uint32_t*>(TranslatePhysical(pollRegAddr & ~3u)), pollRegAddr & 3);
@@ -924,6 +1069,17 @@ namespace gpu
                 }
                 if (matched)
                     break;
+                video::PumpEvents();
+                if (video::IsHostOverlayActive())
+                {
+                    static auto s_lastWaitOverlayPresent = std::chrono::steady_clock::time_point{};
+                    const auto now = std::chrono::steady_clock::now();
+                    if (now - s_lastWaitOverlayPresent >= std::chrono::milliseconds(16))
+                    {
+                        s_lastWaitOverlayPresent = now;
+                        video::PresentHostOverlay();
+                    }
+                }
                 if (std::chrono::steady_clock::now() > deadline)
                 {
                     LOG_WARNING("WAIT_REG_MEM stalled 5s ({} {:#x} ref {:#x} mask {:#x} value {:#x}), still waiting", isMemory ? "mem" : "reg", pollRegAddr, ref, mask, value);
@@ -932,14 +1088,23 @@ namespace gpu
                 if (legacyWait)
                 {
                     if (wait >= 0x100)
-                        std::this_thread::sleep_for(std::chrono::milliseconds(wait / 0x100));
+                    {
+                        // Each frame D3D waits here for its interrupt handler to clear
+                        // the scratch writeback word. Re-check when any handler completes
+                        // rather than always sleeping the whole poll interval.
+                        std::unique_lock lock(m_waitProgressMutex);
+                        m_waitProgress.wait_for(lock, std::chrono::milliseconds(wait / 0x100), [&] {
+                            return m_interruptsCompleted.load(std::memory_order_relaxed) != progress || !m_running;
+                        });
+                    }
                     else
                         std::this_thread::yield();
                 }
                 else if (++polls <= 64)
                     std::this_thread::yield();
                 else
-                    std::this_thread::sleep_for(std::chrono::microseconds(polls <= 256 ? 50 : 200));
+                    // A plain sleep_for rounds up to whole milliseconds on Windows.
+                    poll_wait::Pause(polls <= 256 ? 50 : 200);
             }
             {
                 // Aggregated per target so a soak shows what the guest waits on and for how long.
@@ -966,7 +1131,7 @@ namespace gpu
                     for (auto& s : stats)
                         if (s.count)
                             text += fmt::format(" {}{:#x}:{}x/{:.1f}ms", (s.key & 0x80000000u) ? "mem" : "reg", s.key & 0x7FFFFFFFu, s.count, s.ms);
-                    LOG_INFO("WAIT_REG_MEM last 30 s ({}):{}", legacyWait ? "legacy millisecond sleeps" : "backoff", text);
+                    LOG_INFO("WAIT_REG_MEM last 30 s ({}):{}", legacyWait ? "legacy interval sleeps" : "backoff", text);
                     for (auto& s : stats)
                         s = {};
                 }
@@ -1083,7 +1248,7 @@ namespace gpu
             uint32_t initiator = reader.ReadAndSwap();
             WriteRegister(REG_VGT_EVENT_INITIATOR, initiator & 0x3F);
             reader.Advance(count - 1);
-            g_frame.zpdEvents++;
+            if (g_gpuStats) g_frame.zpdEvents++;
             uint32_t address = ReadRegister(0x2325) & 0x1FFFFFFF; // RB_SAMPLE_COUNT_ADDR
             if (address)
             {
@@ -1105,8 +1270,10 @@ namespace gpu
                 const bool isBegin = (recordBase & 0x3F) == 0x20;
                 auto* record = reinterpret_cast<uint32_t*>(TranslatePhysical(recordBase));
                 const bool sentinel = record[4] == 0xEDFEFFFFu || record[4] == 0xFFFFFEEDu || record[2] == 0xEDFEFFFFu || record[2] == 0xFFFFFEEDu;
-                if (isBegin) g_frame.zpdBegin++; else g_frame.zpdEnd++;
-                if (sentinel) g_frame.zpdSentinel++;
+                if (g_gpuStats) {
+                    if (isBegin) g_frame.zpdBegin++; else g_frame.zpdEnd++;
+                    if (sentinel) g_frame.zpdSentinel++;
+                }
                 static uint32_t logged = 0;
                 if (logged < 24)
                 {
@@ -1184,17 +1351,20 @@ namespace gpu
             if (type < 5)
             {
                 index += bases[type];
-                g_frame.constantWrites += n;
+                if (g_gpuStats) g_frame.constantWrites += n;
                 if (opcode == PM4_LOAD_ALU_CONSTANT)
                 {
                     auto* src = reinterpret_cast<be<uint32_t>*>(TranslatePhysical(address));
-                    for (uint32_t i = 0; i < n; i++)
-                        WriteRegister(index + i, src[i]);
+                    if (!WritePlainRun(index, reinterpret_cast<const uint32_t*>(src), n))
+                        for (uint32_t i = 0; i < n; i++)
+                            WriteRegisterFast(index + i, src[i]);
                 }
+                else if (const auto* words = reader.Contiguous(n); words && WritePlainRun(index, words, n))
+                    reader.Advance(n);
                 else
                 {
                     for (uint32_t i = 0; i < n; i++)
-                        WriteRegister(index + i, reader.ReadAndSwap());
+                        WriteRegisterFast(index + i, reader.ReadAndSwap());
                 }
             }
             else if (opcode == PM4_SET_CONSTANT)
@@ -1206,9 +1376,14 @@ namespace gpu
         case PM4_SET_SHADER_CONSTANTS:
         {
             uint32_t index = reader.ReadAndSwap() & 0xFFFF;
-            g_frame.constantWrites += count - 1;
+            if (g_gpuStats) g_frame.constantWrites += count - 1;
+            if (const auto* words = reader.Contiguous(count - 1); words && WritePlainRun(index, words, count - 1))
+            {
+                reader.Advance(count - 1);
+                return true;
+            }
             for (uint32_t i = 0; i < count - 1; i++)
-                WriteRegister(index + i, reader.ReadAndSwap());
+                WriteRegisterFast(index + i, reader.ReadAndSwap());
             return true;
         }
 
@@ -1276,13 +1451,17 @@ namespace gpu
                 renderer::Draw(di);
             }
 
-            g_frame.draws++;
-            g_frame.prim[primType & 63]++;
-            if (sourceSelect == 0) g_frame.indexed++;
-            if (sourceSelect == 2) g_frame.autoIndex++;
-            uint32_t modeControl = ReadRegister(0x2208);
-            bool isCopy = (modeControl & 7) == 6; // xenos::ModeControl::kCopy
-            if (isCopy) g_frame.copies++;
+            uint32_t modeControl = 0;
+            bool isCopy = false;
+            if (g_gpuStats) {
+                g_frame.draws++;
+                g_frame.prim[primType & 63]++;
+                if (sourceSelect == 0) g_frame.indexed++;
+                if (sourceSelect == 2) g_frame.autoIndex++;
+                modeControl = ReadRegister(0x2208);
+                isCopy = (modeControl & 7) == 6; // xenos::ModeControl::kCopy
+                if (isCopy) g_frame.copies++;
+            }
 
             if (g_gpuStats && g_detailBudget == 60)
             {
@@ -1319,9 +1498,9 @@ namespace gpu
         }
 
         default:
-            // Remaining state packets: no renderer yet, skip - but count them, so a
-            // draw or predication packet we never implemented cannot vanish silently.
-            g_frame.unknownOpcode[opcode & 127]++;
+            // Remaining state packets: no renderer yet. Count unhandled opcodes
+            // only when draw statistics are requested.
+            if (g_gpuStats) g_frame.unknownOpcode[opcode & 127]++;
             {
                 static uint32_t logged = 0;
                 if (logged < 32 && (opcode == 0x34 || opcode == 0x35 || opcode == 0x44 || opcode == 0x23 || opcode == 0x24 || opcode == 0x25))

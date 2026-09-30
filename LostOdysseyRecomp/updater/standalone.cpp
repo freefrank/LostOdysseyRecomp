@@ -46,6 +46,8 @@ bool ConfigureStandalone(const std::filesystem::path &helper, StartupOptions &op
     options.installRoot = std::filesystem::canonical(helper, ec).parent_path();
     if (ec || options.installRoot.empty()) { error = "Cannot locate the updater installation folder."; return false; }
     options.executable = options.installRoot / "LostOdysseyRecomp.exe";
+    options.runnerSource = std::filesystem::canonical(helper, ec);
+    if (ec) { error = "Cannot locate the updater executable."; return false; }
     // Version hints are optional; stale or modified installation metadata must
     // never prevent a direct update. Prefer the version shipped with the payload.
     options.currentVersion = "0.0.0";

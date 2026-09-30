@@ -3,6 +3,7 @@
 #include "binary_cache.h"
 #include "resource_cpx_index_sha256.h"
 #include <os/shader_log.h>
+#include <os/user_paths.h>
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -42,7 +43,6 @@ namespace xenos
         HMODULE g_module = nullptr;
 #else
         void* g_module = nullptr;
-        std::filesystem::path g_modulePath;
 #endif
         std::atomic<uint64_t> g_calls{0}, g_succeeded{0}, g_rejected{0}, g_infrastructureFailed{0};
         std::once_flag g_loadOnce;
@@ -103,6 +103,13 @@ namespace xenos
             {
                 candidates.push_back(cwd / "libdxcompiler.so");
             }
+            char selfPath[4096]{};
+            const ssize_t n = readlink("/proc/self/exe", selfPath, sizeof(selfPath) - 1);
+            if (n > 0)
+            {
+                selfPath[n] = '\0';
+                candidates.push_back(std::filesystem::path(selfPath).parent_path() / "libdxcompiler.so");
+            }
             const std::filesystem::path relativeDxc = "tools/XenosRecomp/thirdparty/dxc-bin/lib/x64/libdxcompiler.so";
             if (std::filesystem::exists(relativeDxc, ec))
             {
@@ -110,7 +117,6 @@ namespace xenos
             }
 
             void* module = nullptr;
-            std::filesystem::path loadedCandidate;
             for (const auto& candidate : candidates)
             {
                 if (candidate.empty())
@@ -123,28 +129,10 @@ namespace xenos
                     {
                         g_module = module;
                         g_createInstance = proc;
-                        loadedCandidate = candidate;
                         break;
                     }
                     dlclose(module);
                     module = nullptr;
-                }
-            }
-
-            if (g_module && g_createInstance)
-            {
-                Dl_info info{};
-                if (dladdr(reinterpret_cast<void*>(g_createInstance), &info) && info.dli_fname && info.dli_fname[0] != '\0')
-                {
-                    std::error_code canonEc;
-                    auto p = std::filesystem::canonical(info.dli_fname, canonEc);
-                    g_modulePath = canonEc ? std::filesystem::path(info.dli_fname) : p;
-                }
-                else if (!loadedCandidate.empty())
-                {
-                    std::error_code canonEc;
-                    auto p = std::filesystem::canonical(loadedCandidate, canonEc);
-                    g_modulePath = canonEc ? loadedCandidate : p;
                 }
             }
         }
@@ -171,35 +159,16 @@ namespace xenos
     {
         static const std::string identity = []() -> std::string {
             if (!DxcAvailable()) return {};
-            try {
-                auto hash = [](const std::filesystem::path& path) {
-                    std::ifstream in(path, std::ios::binary | std::ios::ate);
-                    const auto size = in.tellg();
-                    if (size <= 0 || size > 128 * 1024 * 1024) throw std::runtime_error("DXC module read unavailable");
-                    std::vector<uint8_t> bytes(static_cast<size_t>(size)); in.seekg(0);
-                    if (!in.read(reinterpret_cast<char*>(bytes.data()), size)) throw std::runtime_error("DXC module read incomplete");
-                    return resources::Sha256Hex(resources::Sha256(bytes));
-                };
-#ifdef _WIN32
-                auto pathOf = [](HMODULE module) {
-                    wchar_t path[32768];
-                    const DWORD size = GetModuleFileNameW(module, path, 32768);
-                    if (!size || size == 32768) throw std::runtime_error("DXC module path unavailable");
-                    return std::filesystem::path(path);
-                };
-                const auto compiler = pathOf(g_module);
-                // Retain the actual validator module, including an already
-                // loaded one, so its identity cannot drift after certification.
-                const auto loadedValidator = GetModuleHandleW(L"dxil.dll");
-                const auto validatorPath = loadedValidator ? pathOf(loadedValidator) : compiler.parent_path() / "dxil.dll";
-                static HMODULE retainedValidator = LoadLibraryW(validatorPath.c_str());
-                if (!retainedValidator) return {};
-                return hash(compiler) + ":" + hash(pathOf(retainedValidator));
-#else
-                if (g_modulePath.empty()) return {};
-                return hash(g_modulePath);
-#endif
-            } catch (...) { return {}; }
+            // Compiler version is cache compatibility metadata. Do not reread
+            // and hash entire compiler/validator libraries during game startup.
+            ComPtr<IDxcCompiler3> compiler;
+            ComPtr<IDxcVersionInfo> version;
+            if (FAILED(g_createInstance(kClsidDxcCompiler, __uuidof(IDxcCompiler3), reinterpret_cast<void**>(&compiler))) ||
+                FAILED(compiler->QueryInterface(__uuidof(IDxcVersionInfo), reinterpret_cast<void**>(&version))))
+                return {};
+            UINT32 major = 0, minor = 0;
+            if (FAILED(version->GetVersion(&major, &minor))) return {};
+            return "dxc-" + std::to_string(major) + "." + std::to_string(minor);
         }();
         return identity;
     }
@@ -348,7 +317,7 @@ namespace xenos
             ":" + std::to_string(std::strlen(profile)) + ":" + profile;
         const bool pixel = std::string_view(profile).starts_with("ps_");
         const char* configured = std::getenv("LO_SHADER_CACHE_DIR");
-        const auto directory = std::filesystem::path(configured ? configured : "cache/shaders") / "builtin";
+        const auto directory = (configured ? std::filesystem::path(configured) : (os::user_paths::UsePortableLayout() ? std::filesystem::path("cache/shaders") : os::user_paths::DataDir() / "cache/shaders")) / "builtin";
         const auto path = directory / cache::FileName(pixel, hash, identity);
         CompiledShader result;
         if (!configured || *configured) result.bytecode = cache::ReadBinary(path, pixel, hash, identity);

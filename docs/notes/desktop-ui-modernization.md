@@ -2,6 +2,10 @@
 
 This record covers the additional installer, updater and Debug Menu work targeting v0.5.0. Intermediate 0.4.xx versions remain internal. Public v0.4.2 packages and historical test binaries retain their original identities.
 
+## 2026-09-15 current source
+
+The Python/Tk installer in `tools/installer` and its PyInstaller `InstallGame.exe` helper have been removed. Current import and update UI is the native SDL path inside `LostOdysseyRecomp.exe`. The Tk/PyInstaller checkpoints below are retained as dated evidence and are not a current runnable entry point.
+
 ## Design and scope
 
 Retain lightweight Tk/native Win32 implementation, navy surfaces, silver text and a restrained warm accent. Keep persistent copy short: action names, useful state and errors. Window chrome must preserve taskbar, resizing, keyboard and DPI behavior. Existing import and update transactions remain the baseline; this work does not add a framework or change update channels.

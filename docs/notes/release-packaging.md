@@ -1,8 +1,54 @@
 # Installer and Windows release pipeline
 
-The portable importer lives in `tools/installer`. Its backend uses only the Python standard
-library. The graphical frontend uses Tk and is frozen into a single InstallGame.exe using
-PyInstaller. No interpreter installation is needed on the destination machine.
+The native SDL installer and its `ScanContent`/`InstallContent` flow run from
+`LostOdysseyRecomp.exe`. The Python `tools/installer` sources and frozen
+`InstallGame.exe` helper have been removed. Release packaging does not ship a
+separate `InstallGame.exe` or `LostOdysseyUpdater.exe`; the native importer and
+updater run from the single runtime binary. The CMake `LostOdysseyUpdater`
+target remains available for host-side fixtures.
+
+## Published v0.5.20 — 2026-09-17
+
+The published release notes are in the matching `v0.5.20` section of `CHANGELOG.md`.
+It includes host EDRAM unsigned format clamping (Issue #38), f2358 TAA jitter fixes,
+the relocatable portable Vulkan shader pack (`.lospv`) architecture, shader and
+pipeline preparation worker scaling, and the integrated in-game debug overlay and
+pure software cross-platform settings rasterizer from the menu branch.
+
+Both the Windows portable ZIP and Linux AppImage packages bundle `shaders/portable_vk.lospv`
+directly out-of-the-box via automated CI packaging (`tools/release/fetch_shader_pack.py`),
+providing instant first-launch startup with all 28,482 shaders ready without runtime DXC calls.
+
+## Published v0.5.14 — 2026-09-16
+
+The published release notes are in the matching `v0.5.14` section of
+`CHANGELOG.md`. It includes the embedded installer/updater fixes, Linux
+XDG/AppImage support, and the R3 notified-wait modernization. Release CI
+`35065717899` succeeded; Linux Release job `104695450320` succeeded on attempt
+1. The Linux x64 AppImage is 43,162,104 bytes with SHA-256
+`a9912d2a258f17a2fea1a4d7f99c9589b538e66efd25225b1ade74af606e6196`.
+The Windows ZIP is 32,915,456 bytes with SHA-256
+`c21224ed985ada3502e25b42dd9e9379cb95749b0f06cea6d838f4d60843c09d`.
+Publication completed at 2026-09-16T07:18:53Z from source/tag commit
+`caf8060d99e5f1e52aec9d545331efe59e0c01e8`; Steam Deck compatibility is not
+complete.
+
+The 47-file Windows manifest and Linux format/sidecar checks passed, and all
+four public ZIP/AppImage assets and sidecars matched their recorded bytes and
+hashes after redirect downloads. The AppImage has not been used in a real game
+or update run. Reuse the recorded focused fixtures; real network updates,
+complete interactive import and full-game validation remain outside this
+release's evidence.
+
+Packaging correction: a user launch of the original Linux AppImage exposed
+`execv` `ENOENT` because the desktop entry at the AppDir root was not discovered
+by linuxdeploy, leaving the package without `AppRun`. `tools/package_appimage.py`
+now deploys metadata explicitly in two stages and checks the internal executable
+before image generation. Linux packaging regression checks passed 5/5, and a
+repacked extract-and-run reached the expected no-game-files exit in WSL. The
+replacement Linux asset and sidecar are published and anonymously verified
+(43,162,104 bytes, SHA-256 `0991df9aca8e930fa8eacbd8afe99b7a3a81e940dfa740fcfbdba34cd54c4d0a`); the original
+runtime and library content hashes were unchanged in the repacked extract.
 
 ## Current v0.5.0 CI delivery — 2026-09-09
 
@@ -14,9 +60,9 @@ Prepare submodules and generate PPC sources as described in BUILDING.md. Then:
 
 ```powershell
 tools/build_release.bat
-python -m venv out/installer-venv
-out/installer-venv/Scripts/python.exe -m pip install -r tools/release/requirements.txt
-out/installer-venv/Scripts/python.exe tools/package_release.py
+python -m venv out/release-venv
+out/release-venv/Scripts/python.exe -m pip install -r tools/release/requirements.txt
+out/release-venv/Scripts/python.exe tools/package_release.py
 ```
 
 The dedicated `out/build/release` directory uses clang-cl, Release and static CRT.
@@ -34,11 +80,12 @@ as a Vulkan SDK component.
 Only explicitly selected payload files enter the ZIP. Game data, saves, settings, shader caches,
 private build inputs, generated source, logs and PDBs are not packaged. The manifest records the
 source commit, development state, payload checksums and DLL imports. The package has a separate
-SHA256 file. Dependency license texts accompany the binaries.
+SHA256 file. Dependency license texts accompany the binaries, including
+`licenses/FONT-PROVENANCE.md` and the complete SDL-sourced `licenses/Unifont-OFL-1.1.txt` notice for
+the embedded installer font.
 
 ## GitHub Actions
 
-`test-importer.yml` runs public fixture tests on pushes and pull requests without game data.
 `release.yml` builds when dispatched manually or when a `v*` tag is pushed.
 It uses hosted Windows 2022. Private inputs are checked out from a pinned commit of
 `freefrank/LostOdysseyRecomp-build-inputs` using a read-only deploy key stored in the

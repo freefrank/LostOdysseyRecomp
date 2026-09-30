@@ -22,7 +22,7 @@ void operator delete(void* value,size_t) noexcept {std::free(value);}
 void operator delete[](void* value,size_t) noexcept {std::free(value);}
 namespace gpu::taa_collection {
 bool WantSparse(){++requested;return true;}
-uint64_t ConsentEpoch(){return 1;}
+uint64_t ConsentEpoch() noexcept {return 1;}
 void SubmitSparse(SparseFrame){++submitted;}
 }
 

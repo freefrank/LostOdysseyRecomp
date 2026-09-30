@@ -27,9 +27,13 @@ struct GuestThreadParams
 
 struct GuestThreadHandle : KernelObject
 {
-    GuestThreadParams params;
-    std::atomic<bool> suspended;
-    std::atomic<bool> finished{ false };
+    struct Control {
+        GuestThreadParams params;
+        std::atomic<bool> suspended;
+        kernel::wait::Event completion{true, false};
+        explicit Control(const GuestThreadParams& p) : params(p), suspended((p.flags & 1) != 0) {}
+    };
+    std::shared_ptr<Control> control;
     std::thread thread;
 
     GuestThreadHandle(const GuestThreadParams& params);
@@ -37,13 +41,17 @@ struct GuestThreadHandle : KernelObject
 
     uint32_t GetThreadId() const;
 
-    uint32_t Wait(uint32_t timeout) override;
+    kernel::wait::Target* WaitTarget() override { return &control->completion; }
 };
 
 struct GuestThread
 {
+    // Cooperative pause point for code executing on behalf of a guest thread.
+    // Call only at boundaries where no host subsystem lock is held.
+    static void WaitIfPaused();
+
     static uint32_t Start(const GuestThreadParams& params);
-    static GuestThreadHandle* Start(const GuestThreadParams& params, uint32_t* threadId);
+    static std::shared_ptr<GuestThreadHandle> Start(const GuestThreadParams& params, uint32_t* threadId);
 
     static uint32_t GetCurrentThreadId();
     static void SetLastError(uint32_t error);

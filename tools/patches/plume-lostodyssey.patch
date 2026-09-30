@@ -1,5 +1,5 @@
 diff --git a/plume_d3d12.cpp b/plume_d3d12.cpp
-index 2cdcf18..39a4f6e 100644
+index 2cdcf18..0a2805e 100644
 --- a/plume_d3d12.cpp
 +++ b/plume_d3d12.cpp
 @@ -6,6 +6,7 @@
@@ -37,9 +37,18 @@ index 2cdcf18..39a4f6e 100644
                  return;
              }
  
-@@ -1346,13 +1347,13 @@ namespace plume {
+@@ -1342,21 +1343,30 @@ namespace plume {
+         swapChainDesc.SampleDesc.Count = 1;
+         swapChainDesc.Flags = swapChainFlags;
+ 
+-        IDXGISwapChain1 *swapChain1;
++        IDXGISwapChain1 *swapChain1 = nullptr;
          IDXGIFactory4 *dxgiFactory = commandQueue->device->renderInterface->dxgiFactory;
-         HRESULT res = dxgiFactory->CreateSwapChainForHwnd(commandQueue->d3d, desc.renderWindow, &swapChainDesc, nullptr, nullptr, &swapChain1);
+-        HRESULT res = dxgiFactory->CreateSwapChainForHwnd(commandQueue->d3d, desc.renderWindow, &swapChainDesc, nullptr, nullptr, &swapChain1);
++        const auto &hooks = commandQueue->device->presentationHooks;
++        HRESULT res = hooks.createSwapchain
++            ? hooks.createSwapchain(hooks.context, commandQueue->d3d, desc.renderWindow, &swapChainDesc, nullptr, &swapChain1)
++            : dxgiFactory->CreateSwapChainForHwnd(commandQueue->d3d, desc.renderWindow, &swapChainDesc, nullptr, nullptr, &swapChain1);
          if (FAILED(res)) {
 -            fprintf(stderr, "CreateSwapChainForHwnd failed with error code 0x%lX.\n", res);
 +            PLUME_LOG_ERROR("D3D12", "CreateSwapChainForHwnd", LogErrorDomain::HResult, res, "");
@@ -50,10 +59,50 @@ index 2cdcf18..39a4f6e 100644
          if (FAILED(res)) {
 -            fprintf(stderr, "MakeWindowAssociation failed with error code 0x%lX.\n", res);
 +            PLUME_LOG_ERROR("D3D12", "MakeWindowAssociation", LogErrorDomain::HResult, res, "");
++            swapChain1->Release();
              return;
          }
  
-@@ -1406,21 +1407,27 @@ namespace plume {
+-        d3d = static_cast<IDXGISwapChain3 *>(swapChain1);
++        res = swapChain1->QueryInterface(IID_PPV_ARGS(&d3d));
++        swapChain1->Release();
++        if (FAILED(res)) {
++            PLUME_LOG_ERROR("D3D12", "QueryInterface IDXGISwapChain3", LogErrorDomain::HResult, res, "");
++            return;
++        }
+         d3d->SetMaximumFrameLatency(desc.maxFrameLatency);
+         waitableObject = d3d->GetFrameLatencyWaitableObject();
+
+@@ -1376,10 +1386,10 @@ namespace plume {
+     }
+
+     D3D12SwapChain::~D3D12SwapChain() {
+-        for (uint32_t i = 0; i < desc.textureCount; i++) {
+-            if (textures[i].d3d != nullptr) {
+-                textures[i].d3d->Release();
+-                textures[i].d3d = nullptr;
++        for (auto &texture : textures) {
++            if (texture.d3d != nullptr) {
++                texture.d3d->Release();
++                texture.d3d = nullptr;
+             }
+         }
+
+@@ -1392,7 +1402,12 @@ namespace plume {
+         // If using present wait, we prefer using a SyncInterval of 0 even when Vsync is enabled. Tearing won't happen if DXGI_PRESENT_ALLOW_TEARING is not specified.
+         const bool tearingAllowed = (swapChainFlags & DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING) != 0U;
+         UINT syncInterval = (vsyncEnabled && !desc.enablePresentWait) ? 1 : 0;
+-        UINT flags = (!vsyncEnabled && tearingAllowed) ? DXGI_PRESENT_ALLOW_TEARING : 0;
++        // DXGI forbids ALLOW_TEARING in exclusive fullscreen. Query the actual
++        // swapchain state (Alt+Enter/driver transitions may bypass the UI).
++        BOOL exclusive = TRUE;
++        const bool windowed = !vsyncEnabled && tearingAllowed &&
++            SUCCEEDED(d3d->GetFullscreenState(&exclusive, nullptr)) && !exclusive;
++        UINT flags = windowed ? DXGI_PRESENT_ALLOW_TEARING : 0;
+         HRESULT res = d3d->Present(syncInterval, flags);
+         return SUCCEEDED(res);
+     }
+@@ -1406,21 +1416,27 @@ namespace plume {
      }
  
      bool D3D12SwapChain::resize() {
@@ -86,7 +135,7 @@ index 2cdcf18..39a4f6e 100644
              return false;
          }
  
-@@ -1451,10 +1458,7 @@ namespace plume {
+@@ -1451,10 +1467,7 @@ namespace plume {
      }
  
      void D3D12SwapChain::getWindowSize(uint32_t &dstWidth, uint32_t &dstHeight) const {
@@ -98,7 +147,7 @@ index 2cdcf18..39a4f6e 100644
      }
  
      void D3D12SwapChain::setTextures() {
-@@ -1463,6 +1467,13 @@ namespace plume {
+@@ -1463,6 +1476,13 @@ namespace plume {
          for (uint32_t i = 0; i < desc.textureCount; i++) {
              d3d->GetBuffer(i, IID_PPV_ARGS(&textures[i].d3d));
  
@@ -112,7 +161,7 @@ index 2cdcf18..39a4f6e 100644
              textures[i].desc.width = width;
              textures[i].desc.height = height;
              textures[i].resourceStates = D3D12_RESOURCE_STATE_PRESENT;
-@@ -1545,7 +1556,7 @@ namespace plume {
+@@ -1545,7 +1565,7 @@ namespace plume {
      void D3D12Framebuffer::createRenderTargetHeap(const D3D12Texture* texture, const D3D12TextureView* textureView) {
          const uint32_t targetAllocatorOffset = device->colorTargetHeapAllocator->allocate(1);
          if (targetAllocatorOffset == D3D12DescriptorHeapAllocator::INVALID_OFFSET) {
@@ -121,7 +170,7 @@ index 2cdcf18..39a4f6e 100644
              return;
          }
  
-@@ -1660,7 +1671,7 @@ namespace plume {
+@@ -1660,7 +1680,7 @@ namespace plume {
      void D3D12Framebuffer::createDepthStencilHeap(const D3D12Texture* texture, const D3D12TextureView* textureView, const bool readOnly) {
          const uint32_t targetAllocatorOffset = device->depthTargetHeapAllocator->allocate(1);
          if (targetAllocatorOffset == D3D12DescriptorHeapAllocator::INVALID_OFFSET) {
@@ -130,7 +179,7 @@ index 2cdcf18..39a4f6e 100644
              return;
          }
  
-@@ -1787,7 +1798,7 @@ namespace plume {
+@@ -1787,7 +1807,7 @@ namespace plume {
  
          HRESULT res = device->d3d->CreateQueryHeap(&queryHeapDesc, IID_PPV_ARGS(&d3d));
          if (FAILED(res)) {
@@ -139,7 +188,7 @@ index 2cdcf18..39a4f6e 100644
              return;
          }
  
-@@ -1844,13 +1855,13 @@ namespace plume {
+@@ -1844,13 +1864,13 @@ namespace plume {
  
          HRESULT res = queue->device->d3d->CreateCommandAllocator(commandListType, IID_PPV_ARGS(&commandAllocator));
          if (FAILED(res)) {
@@ -155,7 +204,66 @@ index 2cdcf18..39a4f6e 100644
              return;
          }
  
-@@ -2287,7 +2298,19 @@ namespace plume {
+@@ -1878,6 +1898,8 @@ namespace plume {
+     void D3D12CommandList::begin() {
+         assert(!open);
+ 
++        invalidateCachedNativeState();
++        resetRootBindingStats();
+         commandAllocator->Reset();
+         d3d->Reset(commandAllocator, nullptr);
+         open = true;
+@@ -1891,14 +1913,7 @@ namespace plume {
+ 
+         d3d->Close();
+         open = false;
+-        targetFramebuffer = nullptr;
+-        targetFramebufferSamplePositionsSet = false;
+-        activeComputePipelineLayout = nullptr;
+-        activeGraphicsPipelineLayout = nullptr;
+-        activeGraphicsPipeline = nullptr;
+-        activeTopology = D3D_PRIMITIVE_TOPOLOGY_UNDEFINED;
+-        activeStencilRef = 0;
+-        descriptorHeapsSet = false;
++        invalidateCachedNativeState();
+     }
+     
+     void D3D12CommandList::barriers(RenderBarrierStages stages, const RenderBufferBarrier *bufferBarriers, uint32_t bufferBarriersCount, const RenderTextureBarrier *textureBarriers, uint32_t textureBarriersCount) {
+@@ -2065,7 +2080,15 @@ namespace plume {
+         assert(pipelineLayout != nullptr);
+ 
+         const D3D12PipelineLayout *interfacePipelineLayout = static_cast<const D3D12PipelineLayout *>(pipelineLayout);
+-        d3d->SetComputeRootSignature(interfacePipelineLayout->rootSignature);
++        if (captureRootBindingStats) rootBindingStats.computeSignatures.requests++;
++        if (!computeRootSignatureValid || activeComputeRootSignature != interfacePipelineLayout->rootSignature) {
++            d3d->SetComputeRootSignature(interfacePipelineLayout->rootSignature);
++            activeComputeRootSignature = interfacePipelineLayout->rootSignature;
++            computeRootSignatureValid = true;
++            computeRootTables.clear();
++            if (captureRootBindingStats) rootBindingStats.computeSignatures.nativeCalls++;
++        }
++        else if (captureRootBindingStats) rootBindingStats.computeSignatures.skipped++;
+         activeComputePipelineLayout = interfacePipelineLayout;
+     }
+ 
+@@ -2091,7 +2114,15 @@ namespace plume {
+         assert(pipelineLayout != nullptr);
+ 
+         const D3D12PipelineLayout *interfacePipelineLayout = static_cast<const D3D12PipelineLayout *>(pipelineLayout);
+-        d3d->SetGraphicsRootSignature(interfacePipelineLayout->rootSignature);
++        if (captureRootBindingStats) rootBindingStats.graphicsSignatures.requests++;
++        if (!graphicsRootSignatureValid || activeGraphicsRootSignature != interfacePipelineLayout->rootSignature) {
++            d3d->SetGraphicsRootSignature(interfacePipelineLayout->rootSignature);
++            activeGraphicsRootSignature = interfacePipelineLayout->rootSignature;
++            graphicsRootSignatureValid = true;
++            graphicsRootTables.clear();
++            if (captureRootBindingStats) rootBindingStats.graphicsSignatures.nativeCalls++;
++        }
++        else if (captureRootBindingStats) rootBindingStats.graphicsSignatures.skipped++;
+         activeGraphicsPipelineLayout = interfacePipelineLayout;
+     }
+ 
+@@ -2287,7 +2318,19 @@ namespace plume {
          if (clearStencil) {
              clearFlags |= D3D12_CLEAR_FLAG_STENCIL;
          }
@@ -176,7 +284,7 @@ index 2cdcf18..39a4f6e 100644
      }
  
      void D3D12CommandList::copyBufferRegion(RenderBufferReference dstBuffer, RenderBufferReference srcBuffer, uint64_t size) {
-@@ -2312,9 +2335,14 @@ namespace plume {
+@@ -2312,9 +2355,14 @@ namespace plume {
  
          const D3D12_TEXTURE_COPY_LOCATION copyDstLocation = toD3D12(dstLocation);
          const D3D12_TEXTURE_COPY_LOCATION copySrcLocation = toD3D12(srcLocation);
@@ -193,7 +301,78 @@ index 2cdcf18..39a4f6e 100644
      }
  
      void D3D12CommandList::copyBuffer(const RenderBuffer *dstBuffer, const RenderBuffer *srcBuffer) {
-@@ -2587,11 +2615,15 @@ namespace plume {
+@@ -2441,11 +2489,43 @@ namespace plume {
+             ID3D12DescriptorHeap *descriptorHeaps[] = { queue->device->viewHeapAllocator->heap, queue->device->samplerHeapAllocator->heap };
+             d3d->SetDescriptorHeaps(std::size(descriptorHeaps), descriptorHeaps);
+             descriptorHeapsSet = true;
++            invalidateRootTables();
+         }
+     }
+ 
+     void D3D12CommandList::notifyDescriptorHeapWasChangedExternally() {
+         descriptorHeapsSet = false;
++        invalidateRootTables();
++    }
++
++    void D3D12CommandList::invalidateRootTables() {
++        graphicsRootTables.clear();
++        computeRootTables.clear();
++    }
++
++    void D3D12CommandList::invalidateCachedNativeState() {
++        targetFramebuffer = nullptr;
++        targetFramebufferSamplePositionsSet = false;
++        activeComputePipelineLayout = nullptr;
++        activeGraphicsPipelineLayout = nullptr;
++        activeGraphicsPipeline = nullptr;
++        activeGraphicsRootSignature = nullptr;
++        activeComputeRootSignature = nullptr;
++        graphicsRootSignatureValid = false;
++        computeRootSignatureValid = false;
++        activeTopology = D3D_PRIMITIVE_TOPOLOGY_UNDEFINED;
++        activeStencilRef = UINT32_MAX;
++        activeSamplePositions = false;
++        descriptorHeapsSet = false;
++        invalidateRootTables();
++    }
++
++    D3D12CommandList::RootBindingStats D3D12CommandList::getRootBindingStats() const {
++        return rootBindingStats;
++    }
++
++    void D3D12CommandList::resetRootBindingStats() {
++        rootBindingStats = {};
+     }
+ 
+     void D3D12CommandList::checkTopology() {
+@@ -2529,13 +2609,26 @@ namespace plume {
+             return;
+         }
+ 
++        checkDescriptorHeaps();
+         const D3D12_GPU_DESCRIPTOR_HANDLE gpuHandle = heapAllocator->getGPUHandleAt(heapAllocation.offset);
++        auto &rootTables = setCompute ? computeRootTables : graphicsRootTables;
++        RootBindingCount &count = setCompute ?
++            (heapAllocator == queue->device->viewHeapAllocator.get() ? rootBindingStats.computeViewTables : rootBindingStats.computeSamplerTables) :
++            (heapAllocator == queue->device->viewHeapAllocator.get() ? rootBindingStats.graphicsViewTables : rootBindingStats.graphicsSamplerTables);
++        if (captureRootBindingStats) count.requests++;
++        if (rootIndex < rootTables.size() && rootTables[rootIndex].valid && rootTables[rootIndex].handle == gpuHandle.ptr) {
++            if (captureRootBindingStats) count.skipped++;
++            return;
++        }
+         if (setCompute) {
+             d3d->SetComputeRootDescriptorTable(rootIndex, gpuHandle);
+         }
+         else {
+             d3d->SetGraphicsRootDescriptorTable(rootIndex, gpuHandle);
+         }
++        if (rootIndex >= rootTables.size()) rootTables.resize(rootIndex + 1);
++        rootTables[rootIndex] = { gpuHandle.ptr, true };
++        if (captureRootBindingStats) count.nativeCalls++;
+     }
+ 
+     void D3D12CommandList::setRootDescriptor(const D3D12PipelineLayout* activePipelineLayout, RenderBufferReference bufferReference, uint32_t rootDescriptorIndex, bool setCompute) {
+@@ -2587,11 +2680,15 @@ namespace plume {
  
          HRESULT res = device->d3d->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&d3d));
          if (FAILED(res)) {
@@ -210,7 +389,7 @@ index 2cdcf18..39a4f6e 100644
          fenceValue = 1;
      }
  
-@@ -2614,7 +2646,7 @@ namespace plume {
+@@ -2614,7 +2711,7 @@ namespace plume {
  
          HRESULT res = device->d3d->CreateFence(1, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&d3d));
          if (FAILED(res)) {
@@ -219,18 +398,32 @@ index 2cdcf18..39a4f6e 100644
              return;
          }
  
-@@ -2657,7 +2689,7 @@ namespace plume {
+@@ -2655,9 +2752,12 @@ namespace plume {
+             return;
+         }
  
-         HRESULT res = device->d3d->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&d3d));
+-        HRESULT res = device->d3d->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&d3d));
++        const auto &hooks = device->presentationHooks;
++        HRESULT res = hooks.createQueue
++            ? hooks.createQueue(hooks.context, &queueDesc, IID_PPV_ARGS(&d3d))
++            : device->d3d->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&d3d));
          if (FAILED(res)) {
 -            fprintf(stderr, "CreateCommandQueue failed with error code 0x%lX.\n", res);
 +            PLUME_LOG_ERROR("D3D12", "CreateCommandQueue", LogErrorDomain::HResult, res, "");
              return;
          }
      }
-@@ -2669,11 +2701,15 @@ namespace plume {
+@@ -2668,12 +2768,23 @@ namespace plume {
+         }
      }
- 
+
++    bool D3D12CommandQueue::recreateNativeQueue() {
++        D3D12CommandQueue replacement(device, type);
++        if (!replacement.d3d) return false;
++        std::swap(d3d, replacement.d3d);
++        return true;
++    }
++
      std::unique_ptr<RenderCommandList> D3D12CommandQueue::createCommandList() {
 -        return std::make_unique<D3D12CommandList>(this);
 +        auto object = std::make_unique<D3D12CommandList>(this);
@@ -246,7 +439,7 @@ index 2cdcf18..39a4f6e 100644
      }
  
      void D3D12CommandQueue::executeCommandLists(const RenderCommandList **commandLists, uint32_t commandListCount, RenderCommandSemaphore **waitSemaphores, uint32_t waitSemaphoreCount, RenderCommandSemaphore **signalSemaphores, uint32_t signalSemaphoreCount, RenderCommandFence *signalFence) {
-@@ -2762,7 +2798,10 @@ namespace plume {
+@@ -2762,7 +2873,10 @@ namespace plume {
  
          HRESULT res = device->allocator->CreateResource(&allocationDesc, &resourceDesc, resourceStates, nullptr, &allocation, IID_PPV_ARGS(&d3d));
          if (FAILED(res)) {
@@ -258,7 +451,7 @@ index 2cdcf18..39a4f6e 100644
              return;
          }
      }
-@@ -2782,7 +2821,15 @@ namespace plume {
+@@ -2782,7 +2896,15 @@ namespace plume {
          }
  
          void *outputData = nullptr;
@@ -275,7 +468,7 @@ index 2cdcf18..39a4f6e 100644
          return outputData;
      }
  
-@@ -2878,7 +2925,11 @@ namespace plume {
+@@ -2878,7 +3000,11 @@ namespace plume {
  
          HRESULT res = device->allocator->CreateResource(&allocationDesc, &resourceDesc, resourceStates, (desc.optimizedClearValue != nullptr) ? &optimizedClearValue : nullptr, &allocation, IID_PPV_ARGS(&d3d));
          if (FAILED(res)) {
@@ -288,7 +481,7 @@ index 2cdcf18..39a4f6e 100644
              return;
          }
      }
-@@ -2941,7 +2992,7 @@ namespace plume {
+@@ -2941,7 +3067,7 @@ namespace plume {
  
          HRESULT res = device->allocator->CreatePool(&poolDesc, &d3d);
          if (FAILED(res)) {
@@ -297,7 +490,7 @@ index 2cdcf18..39a4f6e 100644
              return;
          }
      }
-@@ -2957,7 +3008,9 @@ namespace plume {
+@@ -2957,7 +3083,9 @@ namespace plume {
      }
  
      std::unique_ptr<RenderTexture> D3D12Pool::createTexture(const RenderTextureDesc &desc) {
@@ -308,7 +501,7 @@ index 2cdcf18..39a4f6e 100644
      }
  
      // D3D12Shader
-@@ -3054,7 +3107,11 @@ namespace plume {
+@@ -3054,7 +3182,11 @@ namespace plume {
          psoDesc.pRootSignature = rootSignature->rootSignature;
          psoDesc.CS.pShaderBytecode = computeShader->d3d.data();
          psoDesc.CS.BytecodeLength = computeShader->d3d.size();
@@ -321,7 +514,7 @@ index 2cdcf18..39a4f6e 100644
      }
  
      D3D12ComputePipeline::~D3D12ComputePipeline() {
-@@ -3075,6 +3132,7 @@ namespace plume {
+@@ -3075,6 +3207,7 @@ namespace plume {
      // D3D12GraphicsPipeline
  
      D3D12GraphicsPipeline::D3D12GraphicsPipeline(D3D12Device *device, const RenderGraphicsPipelineDesc &desc) : D3D12Pipeline(device, Type::Graphics) {
@@ -329,7 +522,7 @@ index 2cdcf18..39a4f6e 100644
          assert(desc.pipelineLayout != nullptr);
  
          topology = toD3D12(desc.primitiveTopology);
-@@ -3199,7 +3257,14 @@ namespace plume {
+@@ -3199,7 +3332,14 @@ namespace plume {
  
          psoDesc.InputLayout = { inputElements.data(), UINT(inputElements.size()) };
  
@@ -345,7 +538,7 @@ index 2cdcf18..39a4f6e 100644
      }
  
      D3D12GraphicsPipeline::~D3D12GraphicsPipeline() {
-@@ -3393,21 +3458,21 @@ namespace plume {
+@@ -3393,21 +3533,21 @@ namespace plume {
              const D3D12RaytracingPipeline *previousRaytracingPipeline = static_cast<const D3D12RaytracingPipeline *>(previousPipeline);
              HRESULT res = device->d3d->AddToStateObject(&pipelineDesc, previousRaytracingPipeline->stateObject, IID_PPV_ARGS(&stateObject));
              if (FAILED(res)) {
@@ -370,7 +563,7 @@ index 2cdcf18..39a4f6e 100644
              return;
          }
  
-@@ -3621,13 +3686,14 @@ namespace plume {
+@@ -3621,13 +3761,14 @@ namespace plume {
          ID3DBlob *errorBlob;
          HRESULT res = D3D12SerializeRootSignature(&rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1_0, &signatureBlob, &errorBlob);
          if (FAILED(res)) {
@@ -387,7 +580,7 @@ index 2cdcf18..39a4f6e 100644
              return;
          }
      }
-@@ -3673,18 +3739,16 @@ namespace plume {
+@@ -3673,18 +3814,16 @@ namespace plume {
              const D3D_SHADER_MODEL supportedShaderModels[] = { D3D_SHADER_MODEL_6_0 };
  #       endif
              D3D12_FEATURE_DATA_SHADER_MODEL dataShaderModel = {};
@@ -413,7 +606,7 @@ index 2cdcf18..39a4f6e 100644
              }
  
              // Determine if the device supports sample locations.
-@@ -3754,6 +3818,7 @@ namespace plume {
+@@ -3754,6 +3893,7 @@ namespace plume {
                  adapter = adapterOption;
                  d3d = deviceOption;
                  shaderModel = dataShaderModel.HighestShaderModel;
@@ -421,7 +614,7 @@ index 2cdcf18..39a4f6e 100644
                  capabilities.geometryShader = true;
                  capabilities.raytracing = rtSupportOption;
                  capabilities.raytracingStateUpdate = rtStateUpdateSupportOption;
-@@ -3790,7 +3855,7 @@ namespace plume {
+@@ -3790,7 +3930,7 @@ namespace plume {
          }
  
          if (d3d == nullptr) {
@@ -430,7 +623,7 @@ index 2cdcf18..39a4f6e 100644
              return;
          }
  
-@@ -3806,7 +3871,7 @@ namespace plume {
+@@ -3806,7 +3946,7 @@ namespace plume {
  
          res = D3D12MA::CreateAllocator(&allocatorDesc, &allocator);
          if (FAILED(res)) {
@@ -439,7 +632,7 @@ index 2cdcf18..39a4f6e 100644
              release();
              return;
          }
-@@ -3881,7 +3946,7 @@ namespace plume {
+@@ -3881,7 +4021,7 @@ namespace plume {
          std::unique_ptr<D3D12CommandQueue> timestampCommandQueue = std::make_unique<D3D12CommandQueue>(this, RenderCommandListType::DIRECT);
          res = timestampCommandQueue->d3d->GetTimestampFrequency(&timestampFrequency);
          if (FAILED(res)) {
@@ -448,7 +641,7 @@ index 2cdcf18..39a4f6e 100644
          }
      }
  
-@@ -3894,7 +3959,10 @@ namespace plume {
+@@ -3894,7 +4034,10 @@ namespace plume {
      }
  
      std::unique_ptr<RenderDescriptorSet> D3D12Device::createDescriptorSet(const RenderDescriptorSetDesc &desc) {
@@ -460,7 +653,7 @@ index 2cdcf18..39a4f6e 100644
      }
  
      std::unique_ptr<RenderShader> D3D12Device::createShader(const void *data, uint64_t size, const char *entryPointName, RenderShaderFormat format) {
-@@ -3906,11 +3974,15 @@ namespace plume {
+@@ -3906,11 +4049,15 @@ namespace plume {
      }
  
      std::unique_ptr<RenderPipeline> D3D12Device::createComputePipeline(const RenderComputePipelineDesc &desc) {
@@ -478,7 +671,7 @@ index 2cdcf18..39a4f6e 100644
      }
  
      std::unique_ptr<RenderPipeline> D3D12Device::createRaytracingPipeline(const RenderRaytracingPipelineDesc &desc, const RenderPipeline *previousPipeline) {
-@@ -3918,20 +3990,28 @@ namespace plume {
+@@ -3918,20 +4065,28 @@ namespace plume {
      }
  
      std::unique_ptr<RenderCommandQueue> D3D12Device::createCommandQueue(RenderCommandListType type) {
@@ -511,7 +704,7 @@ index 2cdcf18..39a4f6e 100644
      }
  
      std::unique_ptr<RenderAccelerationStructure> D3D12Device::createAccelerationStructure(const RenderAccelerationStructureDesc &desc) {
-@@ -3943,15 +4023,21 @@ namespace plume {
+@@ -3943,15 +4098,21 @@ namespace plume {
      }
  
      std::unique_ptr<RenderPipelineLayout> D3D12Device::createPipelineLayout(const RenderPipelineLayoutDesc &desc) {
@@ -536,7 +729,7 @@ index 2cdcf18..39a4f6e 100644
      }
  
      std::unique_ptr<RenderFramebuffer> D3D12Device::createFramebuffer(const RenderFramebufferDesc &desc) {
-@@ -4161,7 +4247,9 @@ namespace plume {
+@@ -4161,7 +4322,9 @@ namespace plume {
      }
  
      bool D3D12Device::isValid() const {
@@ -547,7 +740,7 @@ index 2cdcf18..39a4f6e 100644
      }
  
      bool D3D12Device::beginCapture() {
-@@ -4195,7 +4283,7 @@ namespace plume {
+@@ -4195,7 +4358,7 @@ namespace plume {
  
          HRESULT res = CreateDXGIFactory2(dxgiFactoryFlags, IID_PPV_ARGS(&dxgiFactory));
          if (FAILED(res)) {
@@ -556,6 +749,89 @@ index 2cdcf18..39a4f6e 100644
              return;
          }
  
+diff --git a/plume_d3d12.h b/plume_d3d12.h
+index 4827452..85073ff 100644
+--- a/plume_d3d12.h
++++ b/plume_d3d12.h
+@@ -166,6 +166,24 @@ namespace plume {
+     };
+ 
+     struct D3D12CommandList : RenderCommandList {
++        struct RootBindingCount {
++            uint64_t requests = 0;
++            uint64_t nativeCalls = 0;
++            uint64_t skipped = 0;
++        };
++        struct RootBindingStats {
++            RootBindingCount graphicsViewTables;
++            RootBindingCount graphicsSamplerTables;
++            RootBindingCount computeViewTables;
++            RootBindingCount computeSamplerTables;
++            RootBindingCount graphicsSignatures;
++            RootBindingCount computeSignatures;
++        };
++        struct RootTableBinding {
++            uint64_t handle = 0;
++            bool valid = false;
++        };
++
+         ID3D12GraphicsCommandList *d3d = nullptr;
+         ID3D12GraphicsCommandList1 *d3dV1 = nullptr;
+         ID3D12GraphicsCommandList4 *d3dV4 = nullptr;
+@@ -181,6 +199,14 @@ namespace plume {
+         const D3D12PipelineLayout *activeGraphicsPipelineLayout = nullptr;
+         const D3D12GraphicsPipeline *activeGraphicsPipeline = nullptr;
+         bool descriptorHeapsSet = false;
++        ID3D12RootSignature *activeGraphicsRootSignature = nullptr;
++        ID3D12RootSignature *activeComputeRootSignature = nullptr;
++        bool graphicsRootSignatureValid = false;
++        bool computeRootSignatureValid = false;
++        std::vector<RootTableBinding> graphicsRootTables;
++        std::vector<RootTableBinding> computeRootTables;
++        bool captureRootBindingStats = false;
++        RootBindingStats rootBindingStats;
+         D3D12_PRIMITIVE_TOPOLOGY activeTopology = D3D_PRIMITIVE_TOPOLOGY_UNDEFINED;
+         uint32_t activeStencilRef = 0;
+         bool activeSamplePositions = false;
+@@ -226,6 +252,11 @@ namespace plume {
+         void writeTimestamp(const RenderQueryPool *queryPool, uint32_t queryIndex) override;
+         void checkDescriptorHeaps();
+         void notifyDescriptorHeapWasChangedExternally();
++        // Call around native command-list operations whose Plume state is not tracked.
++        void invalidateCachedNativeState();
++        RootBindingStats getRootBindingStats() const;
++        void resetRootBindingStats();
++        void invalidateRootTables();
+         void checkTopology();
+         void checkStencilRef();
+         void checkFramebufferSamplePositions();
+@@ -262,6 +293,9 @@ namespace plume {
+
+         D3D12CommandQueue(D3D12Device *device, RenderCommandListType type);
+         ~D3D12CommandQueue() override;
++        // Caller must have drained all work and released the old swapchain.
++        // Preserve this wrapper's address for renderer command lists.
++        bool recreateNativeQueue();
+         std::unique_ptr<RenderCommandList> createCommandList() override;
+         std::unique_ptr<RenderSwapChain> createSwapChain(const RenderSwapChainDesc &desc) override;
+         void executeCommandLists(const RenderCommandList **commandLists, uint32_t commandListCount, RenderCommandSemaphore **waitSemaphores, uint32_t waitSemaphoreCount, RenderCommandSemaphore **signalSemaphores, uint32_t signalSemaphoreCount, RenderCommandFence *signalFence) override;
+@@ -431,7 +465,16 @@ namespace plume {
+         ~D3D12PipelineLayout() override;
+     };
+ 
++    struct D3D12PresentationHooks {
++        void *context = nullptr;
++        HRESULT (*createQueue)(void *, const D3D12_COMMAND_QUEUE_DESC *, REFIID, void **) = nullptr;
++        HRESULT (*createSwapchain)(void *, ID3D12CommandQueue *, HWND, const DXGI_SWAP_CHAIN_DESC1 *,
++            const DXGI_SWAP_CHAIN_FULLSCREEN_DESC *, IDXGISwapChain1 **) = nullptr;
++    };
++
+     struct D3D12Device : RenderDevice {
++        D3D12PresentationHooks presentationHooks;
++
+         ID3D12Device8 *d3d = nullptr;
+         D3D12Interface *renderInterface = nullptr;
+         IDXGIAdapter1 *adapter = nullptr;
 diff --git a/plume_log.h b/plume_log.h
 new file mode 100644
 index 0000000..2f83160
@@ -745,7 +1021,7 @@ index 9dcfedf..e35a468 100644
          bool geometryShader = false;
  
 diff --git a/plume_vulkan.cpp b/plume_vulkan.cpp
-index f1dd503..7d348e0 100644
+index f1dd503..3483441 100644
 --- a/plume_vulkan.cpp
 +++ b/plume_vulkan.cpp
 @@ -9,6 +9,7 @@
@@ -756,7 +1032,36 @@ index f1dd503..7d348e0 100644
  
  #include <algorithm>
  #include <cmath>
-@@ -779,7 +780,7 @@ namespace plume {
+@@ -91,6 +92,28 @@ namespace plume {
+         VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME,
+     };
+ 
++    static void disableExternalExtensions(VulkanExtensionStatus &status, const std::string &reason, VkResult createFailure = VK_SUCCESS) {
++        status.state = VulkanExtensionState::Disabled;
++        status.reason = reason.empty() ? "External extension negotiation failed." : reason;
++        status.createFailure = createFailure;
++    }
++
++    static bool isDeviceFault(VkResult result) {
++        return result == VK_ERROR_DEVICE_LOST;
++    }
++
++    static std::string extensionFailureReason(const char *operation, VkResult result) {
++        return std::string(operation) + " failed with Vulkan result " + std::to_string(int32_t(result)) + ".";
++    }
++
++    static void collectExternalExtensionNames(const std::vector<VkExtensionProperties> &properties, std::unordered_set<std::string> &extensions) {
++        for (const VkExtensionProperties &property : properties) {
++            if (property.extensionName[0] != '\0') {
++                extensions.emplace(property.extensionName);
++            }
++        }
++    }
++
+     // Common functions.
+ 
+     static uint32_t roundUp(uint32_t value, uint32_t powerOf2Alignment) {
+@@ -779,7 +802,7 @@ namespace plume {
          nameInfo.pObjectName = name.c_str();
          VkResult res = vkSetDebugUtilsObjectNameEXT(device, &nameInfo);
          if (res != VK_SUCCESS) {
@@ -765,7 +1070,7 @@ index f1dd503..7d348e0 100644
              return;
          }
  #   endif
-@@ -835,7 +836,7 @@ namespace plume {
+@@ -835,7 +858,7 @@ namespace plume {
          bufferInfo.usage |= (desc.flags & RenderBufferFlag::ACCELERATION_STRUCTURE_INPUT) ? VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR : 0;
          bufferInfo.usage |= (desc.flags & RenderBufferFlag::SHADER_BINDING_TABLE) ? VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR : 0;
          
@@ -774,7 +1079,7 @@ index f1dd503..7d348e0 100644
          const bool useDeviceAddress = device->capabilities.bufferDeviceAddress && (desc.flags & deviceAddressMask);
          bufferInfo.usage |= useDeviceAddress ? VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT : 0;
          
-@@ -854,6 +855,8 @@ namespace plume {
+@@ -854,6 +877,8 @@ namespace plume {
          case RenderHeapType::UPLOAD:
              bufferInfo.usage |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
              createInfo.flags |= VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
@@ -783,7 +1088,7 @@ index f1dd503..7d348e0 100644
              break;
          case RenderHeapType::READBACK:
              bufferInfo.usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-@@ -890,7 +893,11 @@ namespace plume {
+@@ -890,7 +915,11 @@ namespace plume {
          }
  
          if (res != VK_SUCCESS) {
@@ -796,7 +1101,7 @@ index f1dd503..7d348e0 100644
              return;
          }
      }
-@@ -905,10 +912,15 @@ namespace plume {
+@@ -905,10 +934,15 @@ namespace plume {
          void *data = nullptr;
          VkResult res = vmaMapMemory(device->allocator, allocation, &data);
          if (res != VK_SUCCESS) {
@@ -813,7 +1118,7 @@ index f1dd503..7d348e0 100644
          return data;
      }
  
-@@ -950,7 +962,7 @@ namespace plume {
+@@ -950,7 +984,7 @@ namespace plume {
  
          VkResult res = vkCreateBufferView(buffer->device->vk, &createInfo, nullptr, &vk);
          if (res != VK_SUCCESS) {
@@ -822,7 +1127,7 @@ index f1dd503..7d348e0 100644
              return;
          }
      }
-@@ -1010,7 +1022,10 @@ namespace plume {
+@@ -1010,7 +1044,10 @@ namespace plume {
  
          VkResult res = vmaCreateImage(device->allocator, &imageInfo, &createInfo, &vk, &allocation, &allocationInfo);
          if (res != VK_SUCCESS) {
@@ -834,7 +1139,7 @@ index f1dd503..7d348e0 100644
              return;
          }
  
-@@ -1040,7 +1055,9 @@ namespace plume {
+@@ -1040,7 +1077,9 @@ namespace plume {
          VkImageViewCreateInfo viewInfo = {};
          viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
          viewInfo.image = vk;
@@ -845,7 +1150,7 @@ index f1dd503..7d348e0 100644
          viewInfo.format = format;
          viewInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
          viewInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-@@ -1050,7 +1067,7 @@ namespace plume {
+@@ -1050,7 +1089,7 @@ namespace plume {
          
          VkResult res = vkCreateImageView(device->vk, &viewInfo, nullptr, &imageView);
          if (res != VK_SUCCESS) {
@@ -854,7 +1159,7 @@ index f1dd503..7d348e0 100644
              return;
          }
      }
-@@ -1101,7 +1118,7 @@ namespace plume {
+@@ -1101,7 +1140,7 @@ namespace plume {
  
          VkResult res = vkCreateImageView(texture->device->vk, &viewInfo, nullptr, &vk);
          if (res != VK_SUCCESS) {
@@ -863,7 +1168,7 @@ index f1dd503..7d348e0 100644
              return;
          }
      }
-@@ -1131,7 +1148,7 @@ namespace plume {
+@@ -1131,7 +1170,7 @@ namespace plume {
  
          VkResult res = vkCreateAccelerationStructureKHR(device->vk, &createInfo, nullptr, &vk);
          if (res != VK_SUCCESS) {
@@ -872,7 +1177,7 @@ index f1dd503..7d348e0 100644
              return;
          }
      }
-@@ -1210,7 +1227,7 @@ namespace plume {
+@@ -1210,7 +1249,7 @@ namespace plume {
          
          VkResult res = vkCreateDescriptorSetLayout(device->vk, &setLayoutInfo, nullptr, &vk);
          if (res != VK_SUCCESS) {
@@ -881,7 +1186,7 @@ index f1dd503..7d348e0 100644
              return;
          }
      }
-@@ -1257,6 +1274,7 @@ namespace plume {
+@@ -1257,6 +1296,7 @@ namespace plume {
          for (uint32_t i = 0; i < desc.descriptorSetDescsCount; i++) {
              VulkanDescriptorSetLayout *setLayout = new VulkanDescriptorSetLayout(device, desc.descriptorSetDescs[i]);
              descriptorSetLayouts.emplace_back(setLayout);
@@ -889,7 +1194,7 @@ index f1dd503..7d348e0 100644
              setLayoutHandles.emplace_back(setLayout->vk);
          }
  
-@@ -1265,7 +1283,7 @@ namespace plume {
+@@ -1265,7 +1305,7 @@ namespace plume {
  
          VkResult res = vkCreatePipelineLayout(device->vk, &layoutInfo, nullptr, &vk);
          if (res != VK_SUCCESS) {
@@ -898,7 +1203,7 @@ index f1dd503..7d348e0 100644
              return;
          }
      }
-@@ -1299,7 +1317,7 @@ namespace plume {
+@@ -1299,7 +1339,7 @@ namespace plume {
          shaderInfo.codeSize = size;
          VkResult res = vkCreateShaderModule(device->vk, &shaderInfo, nullptr, &vk);
          if (res != VK_SUCCESS) {
@@ -907,7 +1212,7 @@ index f1dd503..7d348e0 100644
              return;
          }
      }
-@@ -1341,7 +1359,7 @@ namespace plume {
+@@ -1341,7 +1381,7 @@ namespace plume {
  
          VkResult res = vkCreateSampler(device->vk, &samplerInfo, nullptr, &vk);
          if (res != VK_SUCCESS) {
@@ -916,7 +1221,7 @@ index f1dd503..7d348e0 100644
              return;
          }
      }
-@@ -1392,7 +1410,9 @@ namespace plume {
+@@ -1392,7 +1432,9 @@ namespace plume {
  
          VkResult res = vkCreateComputePipelines(device->vk, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &vk);
          if (res != VK_SUCCESS) {
@@ -927,7 +1232,7 @@ index f1dd503..7d348e0 100644
              return;
          }
      }
-@@ -1504,8 +1524,9 @@ namespace plume {
+@@ -1504,8 +1546,9 @@ namespace plume {
  
          VkPipelineViewportStateCreateInfo viewportState = {};
          viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -939,7 +1244,7 @@ index f1dd503..7d348e0 100644
  
          VkPipelineRasterizationStateCreateInfo rasterization = {};
          rasterization.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-@@ -1651,7 +1672,9 @@ namespace plume {
+@@ -1651,7 +1694,9 @@ namespace plume {
  
          VkResult res = vkCreateGraphicsPipelines(device->vk, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &vk);
          if (res != VK_SUCCESS) {
@@ -950,7 +1255,7 @@ index f1dd503..7d348e0 100644
              return;
          }
      }
-@@ -1735,7 +1758,7 @@ namespace plume {
+@@ -1735,7 +1780,7 @@ namespace plume {
              return renderPass;
          }
          else {
@@ -959,7 +1264,7 @@ index f1dd503..7d348e0 100644
              return VK_NULL_HANDLE;
          }
      }
-@@ -1857,7 +1880,7 @@ namespace plume {
+@@ -1857,7 +1902,7 @@ namespace plume {
  
          VkResult res = vkCreateRayTracingPipelinesKHR(device->vk, nullptr, nullptr, 1, &pipelineInfo, nullptr, &vk);
          if (res != VK_SUCCESS) {
@@ -968,7 +1273,7 @@ index f1dd503..7d348e0 100644
              return;
          }
  
-@@ -1909,6 +1932,7 @@ namespace plume {
+@@ -1909,6 +1954,7 @@ namespace plume {
          }
  
          setLayout = new VulkanDescriptorSetLayout(device, desc);
@@ -976,7 +1281,7 @@ index f1dd503..7d348e0 100644
  
          descriptorPool = createDescriptorPool(device, typeCounts, desc.lastRangeIsBoundless);
          if (descriptorPool == VK_NULL_HANDLE) {
-@@ -1931,7 +1955,7 @@ namespace plume {
+@@ -1931,7 +1977,7 @@ namespace plume {
  
          VkResult res = vkAllocateDescriptorSets(device->vk, &allocateInfo, &vk);
          if (res != VK_SUCCESS) {
@@ -985,7 +1290,7 @@ index f1dd503..7d348e0 100644
              return;
          }
      }
-@@ -2066,7 +2090,7 @@ namespace plume {
+@@ -2066,7 +2112,7 @@ namespace plume {
              return descriptorPool;
          }
          else {
@@ -994,7 +1299,7 @@ index f1dd503..7d348e0 100644
              return VK_NULL_HANDLE;
          }
      }
-@@ -2083,6 +2107,8 @@ namespace plume {
+@@ -2083,6 +2129,8 @@ namespace plume {
          VkResult res;
  
  #   ifdef _WIN64
@@ -1003,7 +1308,7 @@ index f1dd503..7d348e0 100644
          assert(desc.renderWindow != 0);
          VkWin32SurfaceCreateInfoKHR surfaceCreateInfo = {};
          surfaceCreateInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
-@@ -2092,14 +2118,14 @@ namespace plume {
+@@ -2092,14 +2140,14 @@ namespace plume {
          VulkanInterface *renderInterface = commandQueue->device->renderInterface;
          res = vkCreateWin32SurfaceKHR(renderInterface->instance, &surfaceCreateInfo, nullptr, &surface);
          if (res != VK_SUCCESS) {
@@ -1020,7 +1325,7 @@ index f1dd503..7d348e0 100644
              return;
          }
  #   elif defined(__ANDROID__)
-@@ -2111,7 +2137,7 @@ namespace plume {
+@@ -2111,7 +2159,7 @@ namespace plume {
          VulkanInterface *renderInterface = commandQueue->device->renderInterface;
          res = vkCreateAndroidSurfaceKHR(renderInterface->instance, &surfaceCreateInfo, nullptr, &surface);
          if (res != VK_SUCCESS) {
@@ -1029,7 +1334,7 @@ index f1dd503..7d348e0 100644
              return;
          }
  #   elif defined(__linux__)
-@@ -2125,7 +2151,7 @@ namespace plume {
+@@ -2125,7 +2173,7 @@ namespace plume {
          VulkanInterface *renderInterface = commandQueue->device->renderInterface;
          res = vkCreateXlibSurfaceKHR(renderInterface->instance, &surfaceCreateInfo, nullptr, &surface);
          if (res != VK_SUCCESS) {
@@ -1038,7 +1343,7 @@ index f1dd503..7d348e0 100644
              return;
          }
  #   elif defined(__APPLE__)
-@@ -2141,7 +2167,7 @@ namespace plume {
+@@ -2141,7 +2189,7 @@ namespace plume {
          VulkanInterface *renderInterface = commandQueue->device->renderInterface;
          res = vkCreateMetalSurfaceEXT(renderInterface->instance, &surfaceCreateInfo, nullptr, &surface);
          if (res != VK_SUCCESS) {
@@ -1047,7 +1352,7 @@ index f1dd503..7d348e0 100644
              return;
          }
  #   endif
-@@ -2150,17 +2176,18 @@ namespace plume {
+@@ -2150,17 +2198,18 @@ namespace plume {
          VkPhysicalDevice physicalDevice = commandQueue->device->physicalDevice;
          res = vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, commandQueue->familyIndex, surface, &presentSupported);
          if (res != VK_SUCCESS) {
@@ -1069,7 +1374,7 @@ index f1dd503..7d348e0 100644
  
          // Pick an alpha compositing mode
          if (surfaceCapabilities.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR) {
-@@ -2170,12 +2197,12 @@ namespace plume {
+@@ -2170,12 +2219,12 @@ namespace plume {
              pickedAlphaFlag = VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR;
          }
          else {
@@ -1084,7 +1389,7 @@ index f1dd503..7d348e0 100644
  
          // Clamp the requested buffer count between the bounds of the surface capabilities.
          this->desc.textureCount = std::clamp(desc.textureCount, surfaceCapabilities.minImageCount, surfaceCapabilities.maxImageCount);
-@@ -2194,18 +2221,36 @@ namespace plume {
+@@ -2194,18 +2243,36 @@ namespace plume {
          immediatePresentModeSupported = std::find(presentModes.begin(), presentModes.end(), VK_PRESENT_MODE_IMMEDIATE_KHR) != presentModes.end();
          mailboxPresentModeSupported = std::find(presentModes.begin(), presentModes.end(), VK_PRESENT_MODE_MAILBOX_KHR) != presentModes.end();
  
@@ -1129,7 +1434,7 @@ index f1dd503..7d348e0 100644
              return;
          }
  
-@@ -2220,6 +2265,22 @@ namespace plume {
+@@ -2220,6 +2287,22 @@ namespace plume {
          if (pickedSurfaceFormat.format == VK_FORMAT_UNDEFINED) {
              pickedSurfaceFormat = compatibleSurfaceFormats[0];
          }
@@ -1152,7 +1457,7 @@ index f1dd503..7d348e0 100644
  
          // Sets the required presentation mode.
          setVsyncEnabled(true);
-@@ -2232,7 +2293,7 @@ namespace plume {
+@@ -2232,7 +2315,7 @@ namespace plume {
              pickedAlphaFlag = VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR;
          }
          else {
@@ -1161,7 +1466,7 @@ index f1dd503..7d348e0 100644
              return;
          }
  
-@@ -2254,6 +2315,9 @@ namespace plume {
+@@ -2254,6 +2337,9 @@ namespace plume {
      }
  
      bool VulkanSwapChain::present(uint32_t textureIndex, RenderCommandSemaphore **waitSemaphores, uint32_t waitSemaphoreCount) {
@@ -1171,7 +1476,7 @@ index f1dd503..7d348e0 100644
          thread_local std::vector<VkSemaphore> waitSemaphoresVector;
          waitSemaphoresVector.clear();
          for (uint32_t i = 0; i < waitSemaphoreCount; i++) {
-@@ -2286,6 +2350,7 @@ namespace plume {
+@@ -2286,6 +2372,7 @@ namespace plume {
              res = vkQueuePresentKHR(commandQueue->queue->vk, &presentInfo);
          }
  
@@ -1179,7 +1484,7 @@ index f1dd503..7d348e0 100644
  #if defined(__APPLE__)
          // Under MoltenVK, VK_SUBOPTIMAL_KHR does not result in a valid state for rendering. We intentionally
          // only check for this error during present to avoid having to synchronize manually against the semaphore
-@@ -2310,25 +2375,44 @@ namespace plume {
+@@ -2310,25 +2397,44 @@ namespace plume {
      }
  
      bool VulkanSwapChain::resize() {
@@ -1232,7 +1537,7 @@ index f1dd503..7d348e0 100644
  
          createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
          createInfo.surface = surface;
-@@ -2338,7 +2422,8 @@ namespace plume {
+@@ -2338,7 +2444,8 @@ namespace plume {
          createInfo.imageExtent.width = width;
          createInfo.imageExtent.height = height;
          createInfo.imageArrayLayers = 1;
@@ -1242,7 +1547,7 @@ index f1dd503..7d348e0 100644
          createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
          createInfo.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
          createInfo.compositeAlpha = pickedAlphaFlag;
-@@ -2348,12 +2433,13 @@ namespace plume {
+@@ -2348,12 +2455,13 @@ namespace plume {
  
          VkResult res = vkCreateSwapchainKHR(commandQueue->device->vk, &createInfo, nullptr, &vk);
          if (res != VK_SUCCESS) {
@@ -1257,7 +1562,7 @@ index f1dd503..7d348e0 100644
  
          // Reset present counter.
          presentCount = 1;
-@@ -2366,7 +2452,7 @@ namespace plume {
+@@ -2366,7 +2474,7 @@ namespace plume {
          vkGetSwapchainImagesKHR(commandQueue->device->vk, vk, &retrievedImageCount, nullptr);
          if (retrievedImageCount < desc.textureCount) {
              releaseSwapChain();
@@ -1266,7 +1571,7 @@ index f1dd503..7d348e0 100644
              return false;
          }
  
-@@ -2376,7 +2462,7 @@ namespace plume {
+@@ -2376,7 +2484,7 @@ namespace plume {
          res = vkGetSwapchainImagesKHR(commandQueue->device->vk, vk, &desc.textureCount, images.data());
          if (res != VK_SUCCESS) {
              releaseSwapChain();
@@ -1275,7 +1580,7 @@ index f1dd503..7d348e0 100644
              return false;
          }
  
-@@ -2403,7 +2489,7 @@ namespace plume {
+@@ -2403,7 +2511,7 @@ namespace plume {
      bool VulkanSwapChain::needsResize() const {
          uint32_t windowWidth, windowHeight;
          getWindowSize(windowWidth, windowHeight);
@@ -1284,7 +1589,7 @@ index f1dd503..7d348e0 100644
      }
  
      void VulkanSwapChain::setVsyncEnabled(bool vsyncEnabled) {
-@@ -2430,6 +2516,10 @@ namespace plume {
+@@ -2430,6 +2538,10 @@ namespace plume {
          return height;
      }
  
@@ -1295,7 +1600,7 @@ index f1dd503..7d348e0 100644
      RenderTexture *VulkanSwapChain::getTexture(uint32_t textureIndex) {
          return &textures[textureIndex];
      }
-@@ -2450,7 +2540,7 @@ namespace plume {
+@@ -2450,7 +2562,7 @@ namespace plume {
          VkRefreshCycleDurationGOOGLE refreshCycle = {};
          VkResult res = vkGetRefreshCycleDurationGOOGLE(commandQueue->device->vk, vk, &refreshCycle);
          if (res != VK_SUCCESS) {
@@ -1304,7 +1609,7 @@ index f1dd503..7d348e0 100644
              return 0;
          }
  
-@@ -2459,10 +2549,7 @@ namespace plume {
+@@ -2459,10 +2571,7 @@ namespace plume {
  
      void VulkanSwapChain::getWindowSize(uint32_t &dstWidth, uint32_t &dstHeight) const {
  #   if defined(_WIN64)
@@ -1316,7 +1621,7 @@ index f1dd503..7d348e0 100644
  #   elif defined(PLUME_SDL_VULKAN_ENABLED)
          SDL_GetWindowSizeInPixels(desc.renderWindow, (int *)(&dstWidth), (int *)(&dstHeight));
  #   elif defined(__ANDROID__)
-@@ -2483,10 +2570,15 @@ namespace plume {
+@@ -2483,10 +2592,15 @@ namespace plume {
      }
  
      bool VulkanSwapChain::acquireTexture(RenderCommandSemaphore *signalSemaphore, uint32_t *textureIndex) {
@@ -1332,7 +1637,7 @@ index f1dd503..7d348e0 100644
          if ((res != VK_SUCCESS) && (res != VK_SUBOPTIMAL_KHR)) {
              return false;
          }
-@@ -2496,6 +2588,7 @@ namespace plume {
+@@ -2496,6 +2610,7 @@ namespace plume {
  
      void VulkanSwapChain::releaseSwapChain() {
          if (vk != VK_NULL_HANDLE) {
@@ -1340,7 +1645,7 @@ index f1dd503..7d348e0 100644
              vkDestroySwapchainKHR(commandQueue->device->vk, vk, nullptr);
              vk = VK_NULL_HANDLE;
          }
-@@ -2627,7 +2720,7 @@ namespace plume {
+@@ -2627,7 +2742,7 @@ namespace plume {
  
          res = vkCreateRenderPass(device->vk, &passInfo, nullptr, &renderPass);
          if (res != VK_SUCCESS) {
@@ -1349,7 +1654,7 @@ index f1dd503..7d348e0 100644
              return;
          }
          
-@@ -2642,7 +2735,7 @@ namespace plume {
+@@ -2642,7 +2757,7 @@ namespace plume {
  
          res = vkCreateFramebuffer(device->vk, &fbInfo, nullptr, &vk);
          if (res != VK_SUCCESS) {
@@ -1358,7 +1663,7 @@ index f1dd503..7d348e0 100644
              return;
          }
      }
-@@ -2692,7 +2785,7 @@ namespace plume {
+@@ -2692,7 +2807,7 @@ namespace plume {
          
          VkResult res = vkCreateQueryPool(device->vk, &createInfo, nullptr, &vk);
          if (res != VK_SUCCESS) {
@@ -1367,7 +1672,7 @@ index f1dd503..7d348e0 100644
              return;
          }
          
-@@ -2706,7 +2799,7 @@ namespace plume {
+@@ -2706,7 +2821,7 @@ namespace plume {
      void VulkanQueryPool::queryResults() {
  	    VkResult res = vkGetQueryPoolResults(device->vk, vk, 0, uint32_t(results.size()), sizeof(uint64_t) * results.size(), results.data(), sizeof(uint64_t), VK_QUERY_RESULT_64_BIT);
          if (res != VK_SUCCESS) {
@@ -1376,7 +1681,7 @@ index f1dd503..7d348e0 100644
              return;
          }
  
-@@ -2765,7 +2858,7 @@ namespace plume {
+@@ -2765,7 +2880,7 @@ namespace plume {
  
          VkResult res = vkCreateCommandPool(queue->device->vk, &poolInfo, nullptr, &commandPool);
          if (res != VK_SUCCESS) {
@@ -1385,7 +1690,7 @@ index f1dd503..7d348e0 100644
              return;
          }
  
-@@ -2777,7 +2870,7 @@ namespace plume {
+@@ -2777,7 +2892,7 @@ namespace plume {
  
          res = vkAllocateCommandBuffers(queue->device->vk, &allocateInfo, &vk);
          if (res != VK_SUCCESS) {
@@ -1394,15 +1699,17 @@ index f1dd503..7d348e0 100644
              return;
          }
      }
-@@ -2794,6 +2887,7 @@ namespace plume {
+@@ -2794,6 +2909,9 @@ namespace plume {
  
      void VulkanCommandList::begin() {
          vkResetCommandBuffer(vk, 0);
 +        activeGraphicsDescriptorSets.clear();
++        recording = false;
++        externalCommandsOpen = false;
  
          VkCommandBufferBeginInfo beginInfo = {};
          beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-@@ -2801,7 +2895,7 @@ namespace plume {
+@@ -2801,17 +2919,21 @@ namespace plume {
  
          VkResult res = vkBeginCommandBuffer(vk, &beginInfo);
          if (res != VK_SUCCESS) {
@@ -1410,8 +1717,14 @@ index f1dd503..7d348e0 100644
 +            PLUME_LOG_ERROR("Vulkan", "vkBeginCommandBuffer", LogErrorDomain::VkResult, res, "");
              return;
          }
++
++        recording = true;
      }
-@@ -2811,7 +2905,7 @@ namespace plume {
+ 
+     void VulkanCommandList::end() {
++        assert(recording && "Command list must be recording.");
++        if (!recording) return;
+         endActiveRenderPass();
  
          VkResult res = vkEndCommandBuffer(vk);
          if (res != VK_SUCCESS) {
@@ -1420,7 +1733,38 @@ index f1dd503..7d348e0 100644
              return;
          }
  
-@@ -2986,6 +3080,11 @@ namespace plume {
+@@ -2819,6 +2941,30 @@ namespace plume {
+         activeComputePipelineLayout = nullptr;
+         activeGraphicsPipelineLayout = nullptr;
+         activeRaytracingPipelineLayout = nullptr;
++        activeGraphicsDescriptorSets.clear();
++        recording = false;
++        externalCommandsOpen = false;
++    }
++
++    VkCommandBuffer VulkanCommandList::beginExternalCommands() {
++        assert(recording && "External commands require a recording command list.");
++        assert(!externalCommandsOpen && "External command scope is already open.");
++        if (!recording || externalCommandsOpen) return VK_NULL_HANDLE;
++
++        endActiveRenderPass();
++        invalidateExternalCommandState();
++        externalCommandsOpen = true;
++        return vk;
++    }
++
++    void VulkanCommandList::endExternalCommands() {
++        assert(recording && "External commands require a recording command list.");
++        assert(externalCommandsOpen && "External command scope is not open.");
++        if (!recording || !externalCommandsOpen) return;
++
++        endActiveRenderPass();
++        invalidateExternalCommandState();
++        externalCommandsOpen = false;
+     }
+ 
+     void VulkanCommandList::barriers(RenderBarrierStages stages, const RenderBufferBarrier *bufferBarriers, uint32_t bufferBarriersCount, const RenderTextureBarrier *textureBarriers, uint32_t textureBarriersCount) {
+@@ -2986,6 +3132,11 @@ namespace plume {
      void VulkanCommandList::setGraphicsPipelineLayout(const RenderPipelineLayout *pipelineLayout) {
          assert(pipelineLayout != nullptr);
  
@@ -1432,7 +1776,7 @@ index f1dd503..7d348e0 100644
          activeGraphicsPipelineLayout = static_cast<const VulkanPipelineLayout *>(pipelineLayout);
      }
  
-@@ -3097,6 +3196,12 @@ namespace plume {
+@@ -3097,6 +3248,12 @@ namespace plume {
      }
  
      void VulkanCommandList::setFramebuffer(const RenderFramebuffer *framebuffer) {
@@ -1445,7 +1789,7 @@ index f1dd503..7d348e0 100644
          endActiveRenderPass();
  
          if (framebuffer != nullptr) {
-@@ -3229,7 +3334,29 @@ namespace plume {
+@@ -3229,7 +3386,29 @@ namespace plume {
              imageCopy.imageExtent.depth = srcLocation.placedFootprint.depth;
              vkCmdCopyBufferToImage(vk, srcBuffer->vk, dstTexture->vk, toImageLayout(dstTexture->textureLayout), 1, &imageCopy);
          }
@@ -1475,7 +1819,21 @@ index f1dd503..7d348e0 100644
              VkImageCopy imageCopy = {};
              imageCopy.srcSubresource.aspectMask = toAspectFlags(srcTexture->desc.format, srcTexture->desc.flags);
              imageCopy.srcSubresource.baseArrayLayer = srcLocation.subresource.arrayIndex;
-@@ -3494,6 +3621,22 @@ namespace plume {
+@@ -3488,12 +3667,36 @@ namespace plume {
+         }
+     }
+ 
++    void VulkanCommandList::invalidateExternalCommandState() {
++        activeGraphicsDescriptorSets.clear();
++        targetFramebuffer = nullptr;
++        activeComputePipelineLayout = nullptr;
++        activeGraphicsPipelineLayout = nullptr;
++        activeRaytracingPipelineLayout = nullptr;
++    }
++
+     void VulkanCommandList::setDescriptorSet(VkPipelineBindPoint bindPoint, const VulkanPipelineLayout *pipelineLayout, const RenderDescriptorSet *descriptorSet, uint32_t setIndex) {
+         assert(pipelineLayout != nullptr);
+         assert(descriptorSet != nullptr);
          assert(setIndex < pipelineLayout->descriptorSetLayouts.size());
  
          const VulkanDescriptorSet *interfaceSet = static_cast<const VulkanDescriptorSet *>(descriptorSet);
@@ -1498,7 +1856,7 @@ index f1dd503..7d348e0 100644
          vkCmdBindDescriptorSets(vk, bindPoint, pipelineLayout->vk, setIndex, 1, &interfaceSet->vk, 0, nullptr);
      }
  
-@@ -3509,7 +3652,7 @@ namespace plume {
+@@ -3509,7 +3712,7 @@ namespace plume {
  
          VkResult res = vkCreateFence(device->vk, &fenceInfo, nullptr, &vk);
          if (res != VK_SUCCESS) {
@@ -1507,7 +1865,7 @@ index f1dd503..7d348e0 100644
              return;
          }
      }
-@@ -3532,7 +3675,7 @@ namespace plume {
+@@ -3532,7 +3735,7 @@ namespace plume {
  
          VkResult res = vkCreateSemaphore(device->vk, &semaphoreInfo, nullptr, &vk);
          if (res != VK_SUCCESS) {
@@ -1516,7 +1874,7 @@ index f1dd503..7d348e0 100644
              return;
          }
      }
-@@ -3561,11 +3704,17 @@ namespace plume {
+@@ -3561,11 +3764,17 @@ namespace plume {
      }
  
      std::unique_ptr<RenderCommandList> VulkanCommandQueue::createCommandList() {
@@ -1536,7 +1894,7 @@ index f1dd503..7d348e0 100644
      }
  
      void VulkanCommandQueue::executeCommandLists(const RenderCommandList **commandLists, uint32_t commandListCount, RenderCommandSemaphore **waitSemaphores, uint32_t waitSemaphoreCount, RenderCommandSemaphore **signalSemaphores, uint32_t signalSemaphoreCount, RenderCommandFence *signalFence) {
-@@ -3626,7 +3775,7 @@ namespace plume {
+@@ -3626,7 +3835,7 @@ namespace plume {
          }
  
          if (res != VK_SUCCESS) {
@@ -1545,7 +1903,7 @@ index f1dd503..7d348e0 100644
              return;
          }
      }
-@@ -3637,7 +3786,7 @@ namespace plume {
+@@ -3637,7 +3846,7 @@ namespace plume {
          VulkanCommandFence *interfaceFence = static_cast<VulkanCommandFence *>(fence);
          VkResult res = vkWaitForFences(device->vk, 1, &interfaceFence->vk, VK_TRUE, UINT64_MAX);
          if (res != VK_SUCCESS) {
@@ -1554,7 +1912,7 @@ index f1dd503..7d348e0 100644
              return;
          }
  
-@@ -3670,7 +3819,7 @@ namespace plume {
+@@ -3670,7 +3879,7 @@ namespace plume {
          uint32_t memoryTypeIndex = 0;
          VkResult res = vmaFindMemoryTypeIndex(device->allocator, UINT32_MAX, &memoryInfo, &memoryTypeIndex);
          if (res != VK_SUCCESS) {
@@ -1563,7 +1921,7 @@ index f1dd503..7d348e0 100644
              return;
          }
  
-@@ -3682,7 +3831,7 @@ namespace plume {
+@@ -3682,7 +3891,7 @@ namespace plume {
  
          res = vmaCreatePool(device->allocator, &createInfo, &vk);
          if (res != VK_SUCCESS) {
@@ -1572,7 +1930,7 @@ index f1dd503..7d348e0 100644
              return;
          }
      }
-@@ -3742,7 +3891,7 @@ namespace plume {
+@@ -3742,7 +3951,7 @@ namespace plume {
          uint32_t deviceCount = 0;
          vkEnumeratePhysicalDevices(renderInterface->instance, &deviceCount, nullptr);
          if (deviceCount == 0) {
@@ -1581,7 +1939,7 @@ index f1dd503..7d348e0 100644
              return;
          }
          
-@@ -3787,7 +3936,7 @@ namespace plume {
+@@ -3787,7 +3996,7 @@ namespace plume {
          }
  
          if (physicalDevice == VK_NULL_HANDLE) {
@@ -1590,7 +1948,45 @@ index f1dd503..7d348e0 100644
              return;
          }
  
-@@ -3819,10 +3968,10 @@ namespace plume {
+@@ -3800,6 +4009,24 @@ namespace plume {
+ 
+         std::unordered_set<std::string> missingRequiredExtensions = RequiredDeviceExtensions;
+         std::unordered_set<std::string> supportedOptionalExtensions;
++        std::unordered_set<std::string> externalExtensions;
++        VulkanExtensionStatus &externalExtensionStatus = this->externalExtensionStatus;
++        if (renderInterface->externalExtensionStatus.state == VulkanExtensionState::Disabled) {
++            disableExternalExtensions(externalExtensionStatus, "External instance extensions are unavailable.");
++        }
++        else if (renderInterface->extensionHooks.queryDevice != nullptr) {
++            std::vector<VkExtensionProperties> requiredExtensions;
++            std::string reason;
++            if (!renderInterface->extensionHooks.queryDevice(renderInterface->extensionHooks.userData, renderInterface->instance, physicalDevice, requiredExtensions, reason)) {
++                disableExternalExtensions(externalExtensionStatus, reason.empty() ? "External device extension query failed." : reason);
++            }
++            else {
++                collectExternalExtensionNames(requiredExtensions, externalExtensions);
++                externalExtensionStatus.state = VulkanExtensionState::Enabled;
++                externalExtensionStatus.reason.clear();
++                externalExtensionStatus.createFailure = VK_SUCCESS;
++            }
++        }
+ #   if DLSS_ENABLED
+         const std::unordered_set<std::string> dlssExtensions = DLSS::getRequiredDeviceExtensionsVulkan(this);
+ #   endif
+@@ -3816,13 +4043,23 @@ namespace plume {
+             }
+ #       endif
+         }
++
++        if (externalExtensionStatus.state == VulkanExtensionState::Enabled) {
++            std::unordered_set<std::string> missingExternalExtensions = externalExtensions;
++            for (uint32_t i = 0; i < extensionCount; i++) {
++                missingExternalExtensions.erase(availableExtensions[i].extensionName);
++            }
++            if (!missingExternalExtensions.empty()) {
++                disableExternalExtensions(externalExtensionStatus, "Required external device extension is unavailable.");
++            }
++        }
          
          if (!missingRequiredExtensions.empty()) {
              for (const std::string &extension : missingRequiredExtensions) {
@@ -1603,7 +1999,7 @@ index f1dd503..7d348e0 100644
              return;
          }
  
-@@ -3839,7 +3988,7 @@ namespace plume {
+@@ -3839,7 +4076,7 @@ namespace plume {
          }
  
          VkPhysicalDeviceScalarBlockLayoutFeatures layoutFeatures = {};
@@ -1612,7 +2008,7 @@ index f1dd503..7d348e0 100644
          if (scalarBlockLayoutFound) {
              layoutFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES;
              layoutFeatures.pNext = featuresChain;
-@@ -3868,7 +4017,7 @@ namespace plume {
+@@ -3868,7 +4105,7 @@ namespace plume {
          }
  
          VkPhysicalDeviceBufferDeviceAddressFeatures bufferDeviceAddressFeatures = {};
@@ -1621,7 +2017,7 @@ index f1dd503..7d348e0 100644
          if (bufferDeviceAddressFound) {
              bufferDeviceAddressFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
              bufferDeviceAddressFeatures.pNext = featuresChain;
-@@ -3979,7 +4128,7 @@ namespace plume {
+@@ -3979,7 +4216,7 @@ namespace plume {
          vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, queueFamilyProperties.data());
  
          auto pickFamilyQueue = [&](RenderCommandListType type, VkQueueFlags flags) {
@@ -1630,7 +2026,7 @@ index f1dd503..7d348e0 100644
              uint32_t familySetBits = sizeof(uint32_t) * 8;
              uint32_t familyQueueCount = 0;
              bool familyUsed = false;
-@@ -3987,7 +4136,7 @@ namespace plume {
+@@ -3987,7 +4224,7 @@ namespace plume {
                  const VkQueueFamilyProperties &props = queueFamilyProperties[i];
  
                  // The family queue flags must contain all the flags required by the command list type.
@@ -1639,7 +2035,7 @@ index f1dd503..7d348e0 100644
                      continue;
                  }
  
-@@ -4003,14 +4152,19 @@ namespace plume {
+@@ -4003,14 +4240,19 @@ namespace plume {
                  }
              }
  
@@ -1662,16 +2058,44 @@ index f1dd503..7d348e0 100644
  
          // Create the struct to store the virtual queues.
          queueFamilies.resize(queueFamilyCount);
-@@ -4051,7 +4205,7 @@ namespace plume {
+@@ -4040,6 +4282,17 @@ namespace plume {
+             enabledExtensions.push_back(extension.c_str());
+         }
+ 
++        const size_t baselineExtensionCount = enabledExtensions.size();
++        if (externalExtensionStatus.state == VulkanExtensionState::Enabled) {
++            for (const std::string &extension : externalExtensions) {
++                if (std::find_if(enabledExtensions.begin(), enabledExtensions.end(), [&extension](const char *enabledExtension) {
++                    return extension == enabledExtension;
++                }) == enabledExtensions.end()) {
++                    enabledExtensions.push_back(extension.c_str());
++                }
++            }
++        }
++
+         VkDeviceCreateInfo createInfo = {};
+         createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+         createInfo.pNext = createDeviceChain;
+@@ -4050,8 +4303,17 @@ namespace plume {
+         createInfo.pEnabledFeatures = &deviceFeatures.features;
  
          VkResult res = vkCreateDevice(physicalDevice, &createInfo, nullptr, &vk);
++        if (res != VK_SUCCESS && externalExtensionStatus.state == VulkanExtensionState::Enabled) {
++            disableExternalExtensions(externalExtensionStatus, extensionFailureReason("vkCreateDevice", res), res);
++            if (!isDeviceFault(res)) {
++                enabledExtensions.resize(baselineExtensionCount);
++                createInfo.ppEnabledExtensionNames = enabledExtensions.data();
++                createInfo.enabledExtensionCount = uint32_t(enabledExtensions.size());
++                res = vkCreateDevice(physicalDevice, &createInfo, nullptr, &vk);
++            }
++        }
          if (res != VK_SUCCESS) {
 -            fprintf(stderr, "vkCreateDevice failed with error code 0x%X.\n", res);
 +            PLUME_LOG_ERROR("Vulkan", "vkCreateDevice", LogErrorDomain::VkResult, res, "");
              return;
          }
  
-@@ -4092,7 +4246,7 @@ namespace plume {
+@@ -4092,7 +4354,7 @@ namespace plume {
  
          res = vmaCreateAllocator(&allocatorInfo, &allocator);
          if (res != VK_SUCCESS) {
@@ -1680,7 +2104,7 @@ index f1dd503..7d348e0 100644
              release();
              return;
          }
-@@ -4120,6 +4274,7 @@ namespace plume {
+@@ -4120,6 +4382,7 @@ namespace plume {
          description.dedicatedVideoMemory = memoryHeapSize;
  
          // Fill capabilities.
@@ -1688,7 +2112,7 @@ index f1dd503..7d348e0 100644
          capabilities.geometryShader = deviceFeatures.features.geometryShader;
          capabilities.raytracing = rayTracingSupported;
          capabilities.raytracingStateUpdate = false;
-@@ -4161,23 +4316,33 @@ namespace plume {
+@@ -4161,23 +4424,33 @@ namespace plume {
      }
  
      std::unique_ptr<RenderDescriptorSet> VulkanDevice::createDescriptorSet(const RenderDescriptorSetDesc &desc) {
@@ -1727,7 +2151,7 @@ index f1dd503..7d348e0 100644
      }
  
      std::unique_ptr<RenderPipeline> VulkanDevice::createRaytracingPipeline(const RenderRaytracingPipelineDesc &desc, const RenderPipeline *previousPipeline) {
-@@ -4189,11 +4354,15 @@ namespace plume {
+@@ -4189,11 +4462,15 @@ namespace plume {
      }
  
      std::unique_ptr<RenderBuffer> VulkanDevice::createBuffer(const RenderBufferDesc &desc) {
@@ -1745,7 +2169,7 @@ index f1dd503..7d348e0 100644
      }
  
      std::unique_ptr<RenderAccelerationStructure> VulkanDevice::createAccelerationStructure(const RenderAccelerationStructureDesc &desc) {
-@@ -4205,15 +4374,21 @@ namespace plume {
+@@ -4205,15 +4482,21 @@ namespace plume {
      }
  
      std::unique_ptr<RenderPipelineLayout> VulkanDevice::createPipelineLayout(const RenderPipelineLayoutDesc &desc) {
@@ -1770,7 +2194,7 @@ index f1dd503..7d348e0 100644
      }
  
      std::unique_ptr<RenderFramebuffer> VulkanDevice::createFramebuffer(const RenderFramebufferDesc &desc) {
-@@ -4365,7 +4540,7 @@ namespace plume {
+@@ -4365,7 +4648,7 @@ namespace plume {
          groupHandles.resize(raytracingPipeline->groupCount * handleSize, 0);
          VkResult res = vkGetRayTracingShaderGroupHandlesKHR(vk, raytracingPipeline->vk, 0, raytracingPipeline->groupCount, groupHandles.size(), groupHandles.data());
          if (res != VK_SUCCESS) {
@@ -1779,17 +2203,36 @@ index f1dd503..7d348e0 100644
              return;
          }
          
-@@ -4444,7 +4619,7 @@ namespace plume {
+@@ -4444,7 +4727,11 @@ namespace plume {
      }
  
      bool VulkanDevice::isValid() const {
 -        return vk != nullptr;
 +        return vk != nullptr && allocator != VK_NULL_HANDLE && (nullDescriptorSupported || nullBuffer != nullptr);
++    }
++
++    const VulkanExtensionStatus &VulkanDevice::getExternalExtensionStatus() const {
++        return externalExtensionStatus;
      }
  
      bool VulkanDevice::beginCapture() {
-@@ -4466,7 +4641,7 @@ namespace plume {
+@@ -4460,13 +4747,20 @@ namespace plume {
+     // VulkanInterface
+ 
+ #if PLUME_SDL_VULKAN_ENABLED
+-    VulkanInterface::VulkanInterface(RenderWindow sdlWindow) {
++    VulkanInterface::VulkanInterface(RenderWindow sdlWindow) : VulkanInterface(sdlWindow, VulkanExtensionHooks()) {
++    }
++
++    VulkanInterface::VulkanInterface(RenderWindow sdlWindow, const VulkanExtensionHooks &extensionHooks) {
+ #else
+-    VulkanInterface::VulkanInterface() {
++    VulkanInterface::VulkanInterface() : VulkanInterface(VulkanExtensionHooks()) {
++    }
++
++    VulkanInterface::VulkanInterface(const VulkanExtensionHooks &extensionHooks) {
  #endif
++        this->extensionHooks = extensionHooks;
          VkResult res = volkInitialize();
          if (res != VK_SUCCESS) {
 -            fprintf(stderr, "volkInitialize failed with error code 0x%X.\n", res);
@@ -1797,7 +2240,36 @@ index f1dd503..7d348e0 100644
              return;
          }
  
-@@ -4535,10 +4710,10 @@ namespace plume {
+@@ -4496,6 +4790,7 @@ namespace plume {
+ 
+         std::unordered_set<std::string> requiredExtensions = RequiredInstanceExtensions;
+         std::unordered_set<std::string> supportedOptionalExtensions;
++        std::unordered_set<std::string> externalExtensions;
+ #   if DLSS_ENABLED
+         const std::unordered_set<std::string> dlssExtensions = DLSS::getRequiredInstanceExtensionsVulkan();
+ #   endif
+@@ -4518,6 +4813,20 @@ namespace plume {
+         }
+ #   endif
+ 
++        if (this->extensionHooks.queryInstance != nullptr) {
++            std::vector<VkExtensionProperties> requiredExternalExtensions;
++            std::string reason;
++            if (!this->extensionHooks.queryInstance(this->extensionHooks.userData, requiredExternalExtensions, reason)) {
++                disableExternalExtensions(externalExtensionStatus, reason.empty() ? "External instance extension query failed." : reason);
++            }
++            else {
++                collectExternalExtensionNames(requiredExternalExtensions, externalExtensions);
++                externalExtensionStatus.state = VulkanExtensionState::Enabled;
++                externalExtensionStatus.reason.clear();
++                externalExtensionStatus.createFailure = VK_SUCCESS;
++            }
++        }
++
+         std::unordered_set<std::string> missingRequiredExtensions = requiredExtensions;
+         for (uint32_t i = 0; i < extensionCount; i++) {
+             const std::string extensionName(availableExtensions[i].extensionName);
+@@ -4535,13 +4844,23 @@ namespace plume {
  
          if (!missingRequiredExtensions.empty()) {
              for (const std::string &extension : missingRequiredExtensions) {
@@ -1810,20 +2282,118 @@ index f1dd503..7d348e0 100644
              return;
          }
  
-@@ -4575,7 +4750,7 @@ namespace plume {
++        if (externalExtensionStatus.state == VulkanExtensionState::Enabled) {
++            std::unordered_set<std::string> missingExternalExtensions = externalExtensions;
++            for (uint32_t i = 0; i < extensionCount; i++) {
++                missingExternalExtensions.erase(availableExtensions[i].extensionName);
++            }
++            if (!missingExternalExtensions.empty()) {
++                disableExternalExtensions(externalExtensionStatus, "Required external instance extension is unavailable.");
++            }
++        }
++
+         std::vector<const char *> enabledExtensions;
+         for (const std::string &extension : requiredExtensions) {
+             enabledExtensions.push_back(extension.c_str());
+@@ -4551,6 +4870,17 @@ namespace plume {
+             enabledExtensions.push_back(extension.c_str());
+         }
+ 
++        const size_t baselineExtensionCount = enabledExtensions.size();
++        if (externalExtensionStatus.state == VulkanExtensionState::Enabled) {
++            for (const std::string &extension : externalExtensions) {
++                if (std::find_if(enabledExtensions.begin(), enabledExtensions.end(), [&extension](const char *enabledExtension) {
++                    return extension == enabledExtension;
++                }) == enabledExtensions.end()) {
++                    enabledExtensions.push_back(extension.c_str());
++                }
++            }
++        }
++
+         createInfo.ppEnabledExtensionNames = enabledExtensions.data();
+         createInfo.enabledExtensionCount = uint32_t(enabledExtensions.size());
+ 
+@@ -4574,8 +4904,17 @@ namespace plume {
+ #   endif
          
          res = vkCreateInstance(&createInfo, nullptr, &instance);
++        if (res != VK_SUCCESS && externalExtensionStatus.state == VulkanExtensionState::Enabled) {
++            disableExternalExtensions(externalExtensionStatus, extensionFailureReason("vkCreateInstance", res), res);
++            if (!isDeviceFault(res)) {
++                enabledExtensions.resize(baselineExtensionCount);
++                createInfo.ppEnabledExtensionNames = enabledExtensions.data();
++                createInfo.enabledExtensionCount = uint32_t(enabledExtensions.size());
++                res = vkCreateInstance(&createInfo, nullptr, &instance);
++            }
++        }
          if (res != VK_SUCCESS) {
 -            fprintf(stderr, "vkCreateInstance failed with error code 0x%X.\n", res);
 +            PLUME_LOG_ERROR("Vulkan", "vkCreateInstance", LogErrorDomain::VkResult, res, "");
              return;
          }
  
+@@ -4625,6 +4964,10 @@ namespace plume {
+         return instance != nullptr;
+     }
+ 
++    const VulkanExtensionStatus &VulkanInterface::getExternalExtensionStatus() const {
++        return externalExtensionStatus;
++    }
++
+     // Global creation function.
+ 
+ #if PLUME_SDL_VULKAN_ENABLED
+@@ -4632,10 +4975,20 @@ namespace plume {
+         std::unique_ptr<VulkanInterface> createdInterface = std::make_unique<VulkanInterface>(sdlWindow);
+         return createdInterface->isValid() ? std::move(createdInterface) : nullptr;
+     }
++
++    std::unique_ptr<RenderInterface> CreateVulkanInterface(RenderWindow sdlWindow, const VulkanExtensionHooks &extensionHooks) {
++        std::unique_ptr<VulkanInterface> createdInterface = std::make_unique<VulkanInterface>(sdlWindow, extensionHooks);
++        return createdInterface->isValid() ? std::move(createdInterface) : nullptr;
++    }
+ #else
+     std::unique_ptr<RenderInterface> CreateVulkanInterface() {
+         std::unique_ptr<VulkanInterface> createdInterface = std::make_unique<VulkanInterface>();
+         return createdInterface->isValid() ? std::move(createdInterface) : nullptr;
+     }
++
++    std::unique_ptr<RenderInterface> CreateVulkanInterface(const VulkanExtensionHooks &extensionHooks) {
++        std::unique_ptr<VulkanInterface> createdInterface = std::make_unique<VulkanInterface>(extensionHooks);
++        return createdInterface->isValid() ? std::move(createdInterface) : nullptr;
++    }
+ #endif
+ };
 diff --git a/plume_vulkan.h b/plume_vulkan.h
-index 0a1edbe..75404f0 100644
+index 0a1edbe..f065217 100644
 --- a/plume_vulkan.h
 +++ b/plume_vulkan.h
-@@ -235,6 +235,7 @@ namespace plume {
+@@ -48,6 +48,24 @@ namespace plume {
+     struct VulkanPool;
+     struct VulkanQueue;
+ 
++    enum class VulkanExtensionState {
++        NotRequested,
++        Enabled,
++        Disabled,
++    };
++
++    struct VulkanExtensionStatus {
++        VulkanExtensionState state = VulkanExtensionState::NotRequested;
++        std::string reason;
++        VkResult createFailure = VK_SUCCESS;
++    };
++
++    struct VulkanExtensionHooks {
++        void *userData = nullptr;
++        bool (*queryInstance)(void *, std::vector<VkExtensionProperties> &required, std::string &reason) = nullptr;
++        bool (*queryDevice)(void *, VkInstance, VkPhysicalDevice, std::vector<VkExtensionProperties> &required, std::string &reason) = nullptr;
++    };
++
+     struct VulkanBuffer : RenderBuffer {
+         VkBuffer vk = VK_NULL_HANDLE;
+         VulkanDevice *device = nullptr;
+@@ -235,6 +253,7 @@ namespace plume {
          VkSwapchainCreateInfoKHR createInfo = {};
          VkSurfaceFormatKHR pickedSurfaceFormat = {};
          VkPresentModeKHR createdPresentMode = VK_PRESENT_MODE_FIFO_KHR;
@@ -1831,7 +2401,7 @@ index 0a1edbe..75404f0 100644
          VkPresentModeKHR requiredPresentMode = VK_PRESENT_MODE_FIFO_KHR;
          VkCompositeAlphaFlagBitsKHR pickedAlphaFlag = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
          std::vector<VulkanTexture> textures;
-@@ -252,6 +253,7 @@ namespace plume {
+@@ -252,6 +271,7 @@ namespace plume {
          bool isVsyncEnabled() const override;
          uint32_t getWidth() const override;
          uint32_t getHeight() const override;
@@ -1839,11 +2409,77 @@ index 0a1edbe..75404f0 100644
          RenderTexture *getTexture(uint32_t textureIndex) override;
          uint32_t getTextureCount() const override;
          bool acquireTexture(RenderCommandSemaphore *signalSemaphore, uint32_t *textureIndex) override;
-@@ -300,6 +302,7 @@ namespace plume {
+@@ -300,13 +320,18 @@ namespace plume {
          const VulkanFramebuffer *targetFramebuffer = nullptr;
          const VulkanPipelineLayout *activeComputePipelineLayout = nullptr;
          const VulkanPipelineLayout *activeGraphicsPipelineLayout = nullptr;
 +        std::vector<VkDescriptorSet> activeGraphicsDescriptorSets;
          const VulkanPipelineLayout *activeRaytracingPipelineLayout = nullptr;
          VkRenderPass activeRenderPass = VK_NULL_HANDLE;
++        bool recording = false;
++        bool externalCommandsOpen = false;
  
+         VulkanCommandList(VulkanCommandQueue *queue);
+         ~VulkanCommandList() override;
+         void begin() override;
+         void end() override;
++        VkCommandBuffer beginExternalCommands();
++        void endExternalCommands();
+         void barriers(RenderBarrierStages stages, const RenderBufferBarrier *bufferBarriers, uint32_t bufferBarriersCount, const RenderTextureBarrier *textureBarriers, uint32_t textureBarriersCount) override;
+         void dispatch(uint32_t threadGroupCountX, uint32_t threadGroupCountY, uint32_t threadGroupCountZ) override;
+         void traceRays(uint32_t width, uint32_t height, uint32_t depth, RenderBufferReference shaderBindingTable, const RenderShaderBindingGroupsInfo &shaderBindingGroupsInfo) override;
+@@ -344,6 +369,7 @@ namespace plume {
+         void writeTimestamp(const RenderQueryPool *queryPool, uint32_t queryIndex) override;
+         void checkActiveRenderPass();
+         void endActiveRenderPass();
++        void invalidateExternalCommandState();
+         void setDescriptorSet(VkPipelineBindPoint bindPoint, const VulkanPipelineLayout *pipelineLayout, const RenderDescriptorSet *descriptorSet, uint32_t setIndex);
+     };
+ 
+@@ -417,6 +443,7 @@ namespace plume {
+         std::unique_ptr<RenderBuffer> nullBuffer;
+         bool loadStoreOpNoneSupported = false;
+         bool nullDescriptorSupported = false;
++        VulkanExtensionStatus externalExtensionStatus;
+ 
+         VulkanDevice(VulkanInterface *renderInterface, const std::string &preferredDeviceName);
+         ~VulkanDevice() override;
+@@ -444,6 +471,7 @@ namespace plume {
+         RenderSampleCounts getSampleCountsSupported(RenderFormat format) const override;
+         void release();
+         bool isValid() const;
++        const VulkanExtensionStatus &getExternalExtensionStatus() const;
+         bool beginCapture() override;
+         bool endCapture() override;
+     };
+@@ -453,11 +481,15 @@ namespace plume {
+         VkApplicationInfo appInfo = {};
+         RenderInterfaceCapabilities capabilities;
+         std::vector<std::string> deviceNames;
++        VulkanExtensionHooks extensionHooks;
++        VulkanExtensionStatus externalExtensionStatus;
+ 
+ #   if PLUME_SDL_VULKAN_ENABLED
+         VulkanInterface(RenderWindow sdlWindow);
++        VulkanInterface(RenderWindow sdlWindow, const VulkanExtensionHooks &extensionHooks);
+ #   else
+         VulkanInterface();
++        VulkanInterface(const VulkanExtensionHooks &extensionHooks);
+ #   endif
+ 
+         ~VulkanInterface() override;
+@@ -465,5 +497,14 @@ namespace plume {
+         const RenderInterfaceCapabilities &getCapabilities() const override;
+         const std::vector<std::string> &getDeviceNames() const override;
+         bool isValid() const;
++        const VulkanExtensionStatus &getExternalExtensionStatus() const;
+     };
++
++#   if PLUME_SDL_VULKAN_ENABLED
++    std::unique_ptr<RenderInterface> CreateVulkanInterface(RenderWindow sdlWindow);
++    std::unique_ptr<RenderInterface> CreateVulkanInterface(RenderWindow sdlWindow, const VulkanExtensionHooks &extensionHooks);
++#   else
++    std::unique_ptr<RenderInterface> CreateVulkanInterface();
++    std::unique_ptr<RenderInterface> CreateVulkanInterface(const VulkanExtensionHooks &extensionHooks);
++#   endif
+ };

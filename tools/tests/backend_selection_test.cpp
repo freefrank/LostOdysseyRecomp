@@ -44,19 +44,34 @@ int main() {
                 }
                 return {};
             }, [&] { ++resets; children.clear(); });
+#ifdef _WIN32
             assert(result.selected && attempts == 2 && resets == 1 && children.size() == 7);
             assert(result.requested == first && result.attempts.size() == (first == Backend::D3D11 ? 3 : 2));
             assert(*result.selected == (first == Backend::Vulkan ? Backend::D3D12 : Backend::Vulkan));
+#else
+            assert(!result.selected && attempts == 1 && resets == 1 && children.empty());
+            assert(result.requested == first && result.attempts.size() == (first == Backend::Vulkan ? 1 : 2));
+            assert(result.attempts.back().backend == Backend::Vulkan);
+#endif
         }
     }
     int attempts = 0, resets = 0;
     auto failed = Select(Backend::D3D11, [&](Backend) { ++attempts; return "unavailable"; }, [&] { ++resets; });
+#ifdef _WIN32
     assert(!failed.selected && attempts == 2 && resets == 2 && failed.attempts.size() == 3);
+#else
+    assert(!failed.selected && attempts == 1 && resets == 1 && failed.attempts.size() == 2);
+#endif
     assert(failed.Describe().find("Unsupported") != std::string::npos);
     attempts = resets = 0;
-    auto ready = Select(Backend::D3D11, [&](Backend b) { ++attempts; assert(b == Backend::D3D12); return std::string{}; }, [&] { ++resets; });
-    assert(ready.selected == Backend::D3D12 && attempts == 1 && resets == 0);
+#ifdef _WIN32
+    constexpr auto supported=Backend::D3D12;
+#else
+    constexpr auto supported=Backend::Vulkan;
+#endif
+    auto ready = Select(Backend::D3D11, [&](Backend b) { ++attempts; assert(b == supported); return std::string{}; }, [&] { ++resets; });
+    assert(ready.selected == supported && attempts == 1 && resets == 0);
     auto unknown = Select(static_cast<Backend>(999), [&](Backend) { ++attempts; return std::string{}; }, [&] { ++resets; });
     assert(!unknown.selected && attempts == 1 && resets == 0);
-    std::puts("PASS: parsing, precedence, minimum capabilities, 21 staged rollback/exception cases, explicit DX11, bounded dual failure, success retention");
+    std::puts("PASS: parsing, precedence, minimum capabilities, 21 staged rollback/exception cases, explicit DX11, platform-specific failure, success retention");
 }

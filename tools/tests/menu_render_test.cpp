@@ -1,5 +1,7 @@
 #include <settings/menu_render.h>
+#include <settings/menu.h>
 #include <settings/menu_assets.h>
+#include <hid/controller_glyphs.h>
 #include <lzokay.hpp>
 #include <algorithm>
 #include <cstdio>
@@ -18,20 +20,21 @@ int main(int argc, char **argv)
     settings::MenuSnapshot snapshot;
     snapshot.tab = 2;
     snapshot.language = 4;
-    snapshot.row = 4;
+    snapshot.row = 3;
     snapshot.rows = {
         {L"图形后端", L"Vulkan", true, {L"Direct3D 12", L"Vulkan"}, 1},
         {L"显示模式", L"无边框全屏", true, {L"窗口", L"无边框全屏", L"独占全屏"}, 1},
-        {L"输出分辨率", L"3840 × 2160", true,
-         {L"1280 × 720", L"1600 × 900", L"1920 × 1080", L"2560 × 1440", L"3840 × 2160"}, 4},
+        {L"宽屏", L"开", true, {L"开", L"关"}, 0},
+        {L"输出分辨率", L"3440 × 1440", true,
+         {L"1720 × 720", L"2560 × 1080", L"3440 × 1440", L"3840 × 1600", L"5120 × 2160"}, 2},
         {L"内部分辨率", L"自动（跟随输出）", true,
-         {L"自动（跟随输出）", L"1280 × 720", L"1920 × 1080", L"2560 × 1440", L"3840 × 2160"}, 0},
-        {L"抗锯齿", L"SMAA", true, {L"关", L"FXAA", L"SMAA", L"TAA（实验性）"}, 2},
+         {L"自动（跟随输出）", L"720p", L"1080p", L"1440p", L"2160p"}, 0},
+        {L"抗锯齿", L"TAA（实验性）", true, {L"关", L"FXAA", L"SMAA", L"TAA（实验性）"}, 3},
         {L"缩放质量", L"高", true, {L"标准", L"高"}, 1},
         {L"帧率", L"60 FPS（实验性）", true,
-         {L"30 FPS", L"60 FPS（实验性）", L"120 FPS（实验性）"}, 1},
+         {L"30 FPS", L"60 FPS（实验性）", L"90 FPS（实验性）", L"120 FPS（实验性）"}, 1},
         {L"亮度校准", L"打开", true, {L"打开"}, 0},
-        {L"应用显示设置", L"应用", true, {L"应用"}, 0}};
+        {L"保存图形设置", L"保存", true, {L"保存"}, 0}};
     snapshot.help = L"LB / RB：分类    方向键：选择 / 调整    A：确认    B：返回";
     if (argc > 2)
     {
@@ -102,26 +105,21 @@ int main(int argc, char **argv)
             return (p&255)>210 && ((p>>8)&255)>210 && ((p>>16)&255)>210;
         });
         Require(brightPixels > 100, "missing outlined light glyphs");
-        if (argc > 1 && w == 1280 && h == 720)
+        if (argc > 1)
         {
             std::filesystem::create_directories(argv[1]);
-            std::ofstream f(std::filesystem::path(argv[1]) / "first-frame.ppm", std::ios::binary);
+            std::ofstream f(std::filesystem::path(argv[1]) / (std::to_string(w) + "x" + std::to_string(h) + ".ppm"), std::ios::binary);
             f << "P6\n" << w << " " << h << "\n255\n";
             for (auto p : pixels) { const char rgb[] = {char(p), char(p >> 8), char(p >> 16)}; f.write(rgb, 3); }
         }
         if (w == 1280 && h == 720)
         {
             const auto luminance=[](uint32_t p){ return int(p&255)+int((p>>8)&255)+int((p>>16)&255); };
-            Require(luminance(pixels[340*1280+250]) > 500, "selected label bevel missing");
-            Require(luminance(pixels[340*1280+730]) > 500, "selected option bevel missing");
-            Require(luminance(pixels[340*1280+575]) < 500, "unselected option was highlighted");
+            const int selectedY = 150 + snapshot.row * 43;
+            Require(luminance(pixels[(selectedY + 18) * 1280 + 250]) > 500, "selected label bevel missing");
+            Require(luminance(pixels[(selectedY + 18) * 1280 + 700]) > 500, "selected option bevel missing");
+            Require(luminance(pixels[(selectedY + 18) * 1280 + 440]) < 500, "unselected option was highlighted");
             Require(pixels[640*1280+10] != 0xff000000u, "brushed-metal footer missing");
-        }
-        if (argc>1) {
-            std::filesystem::create_directories(argv[1]);
-            std::ofstream f(std::filesystem::path(argv[1])/(std::to_string(w)+"x"+std::to_string(h)+".ppm"),std::ios::binary);
-            f<<"P6\n"<<w<<" "<<h<<"\n255\n";
-            for(auto p:pixels) { const char rgb[]={char(p),char(p>>8),char(p>>16)};f.write(rgb,3); }
         }
         std::printf("original-style menu %ux%u: opaque, choice mapping, aspect fit passed\n",w,h);
     }
@@ -152,11 +150,73 @@ int main(int argc, char **argv)
         {L"Restore Game Defaults", L"Restore", true, {L"Restore"}, 0}};
     snapshot.help = L"Set the speed at which text is displayed.";
     Require(settings::RasterizeMenu(snapshot,1280,720,pixels), "gameplay reference rasterization failed");
+    // The original-language font and Unifont need not contain these glyphs:
+    // the PS confirmation options, footer and all four symbols use line art.
+    const auto regularPixels = pixels;
+    snapshot.playStationPrompts = true;
+    snapshot.help = L"A: confirm  B: back  X: select  Y: new folder";
+    Require(settings::RasterizeMenu(snapshot,1280,720,pixels), "PlayStation menu rasterization failed");
+    Require(pixels != regularPixels, "PlayStation hints did not change pixels");
+    auto changed = [&](int x, int y, int w, int h) {
+        size_t count = 0;
+        for (int py = y; py < y + h; ++py)
+            for (int px = x; px < x + w; ++px)
+                count += pixels[size_t(py) * 1280 + px] != regularPixels[size_t(py) * 1280 + px];
+        return count;
+    };
+    Require(changed(420, 410, 26, 24) > 8, "PlayStation confirmation button missing");
+    // Inspect the produced PPM for the four distinct fallback shapes.
+    if (argc > 1) {
+        std::ofstream f(std::filesystem::path(argv[1])/"gameplay-playstation.ppm",std::ios::binary);
+        f<<"P6\n1280 720\n255\n";
+        for(auto p:pixels) { const char rgb[]={char(p),char(p>>8),char(p>>16)};f.write(rgb,3); }
+    }
+    snapshot.playStationPrompts = false;
+    snapshot.help = L"Set the speed at which text is displayed.";
+    pixels = regularPixels;
     if (argc>1) {
         std::ofstream f(std::filesystem::path(argv[1])/"gameplay-reference.ppm",std::ios::binary);
         f<<"P6\n1280 720\n255\n";
         for(auto p:pixels) { const char rgb[]={char(p),char(p>>8),char(p>>16)};f.write(rgb,3); }
     }
+    // The live Settings help is translated before render. Only PS style
+    // changes complete shoulder labels; Xbox text and nearby words survive.
+    auto shoulderSnapshot = [&](const wchar_t* help, bool ps) {
+        snapshot.help = help;
+        snapshot.playStationPrompts = ps;
+        Require(settings::RasterizeMenu(snapshot,1280,720,pixels), "shoulder prompt rasterization failed");
+        return pixels;
+    };
+    auto saveShoulder = [&](const char* name) {
+        if (argc <= 1) return;
+        std::ofstream f(std::filesystem::path(argv[1])/name,std::ios::binary);
+        Require(bool(f), "could not open shoulder screenshot");
+        f<<"P6\n1280 720\n255\n";
+        for(auto p:pixels) { const char rgb[]={char(p),char(p>>8),char(p>>16)};f.write(rgb,3); }
+        Require(bool(f), "could not write shoulder screenshot");
+    };
+    const auto shoulderReference = shoulderSnapshot(L"LB / RB: category   LT + RT: edit   VOLT: unchanged",false);
+    saveShoulder("shoulders-reference.ppm");
+    const auto shoulderPlayStation = shoulderSnapshot(L"LB / RB: category   LT + RT: edit   VOLT: unchanged",true);
+    saveShoulder("shoulders-playstation.ppm");
+    auto changedFooter = [&](const std::vector<uint32_t>& before, const std::vector<uint32_t>& after) {
+        size_t count=0;
+        for(int y=645;y<700;++y)
+            for(int x=130;x<1195;++x)
+                count+=before[size_t(y)*1280+x]!=after[size_t(y)*1280+x];
+        return count;
+    };
+    Require(changedFooter(shoulderReference,shoulderPlayStation)>30, "PS shoulder labels did not update Settings footer");
+    Require(shoulderSnapshot(L"LB / RB: category   LT + RT: edit   VOLT: unchanged",false)==shoulderReference,
+            "non-PS Settings footer did not restore");
+    snapshot.language=4;
+    const auto chineseShoulderReference=shoulderSnapshot(L"LB / RB：分类  LT+RT：类别",false);
+    const auto chineseShoulderPlayStation=shoulderSnapshot(L"LB / RB：分类  LT+RT：类别",true);
+    Require(changedFooter(chineseShoulderReference,chineseShoulderPlayStation)>20,
+            "Chinese PS shoulder labels did not update Settings footer");
+    snapshot.language=0;
+    snapshot.playStationPrompts=false;
+    snapshot.help=L"Set the speed at which text is displayed.";
     std::puts("English gameplay reference rendered at 1280x720");
     snapshot.tab = 1;
     snapshot.row = 1;
@@ -185,5 +245,133 @@ int main(int argc, char **argv)
         for(auto p:pixels) { const char rgb[]={char(p),char(p>>8),char(p>>16)};f.write(rgb,3); }
     }
     std::puts("restart dialog: restart now/later/cancel surface passed");
+
+    snapshot.tab = 3;
+    snapshot.row = 0;
+    snapshot.dialogTitle.clear();
+    snapshot.dialogMessage.clear();
+    snapshot.dialogChoices.clear();
+    snapshot.rows = {
+        {L"設定界面語言", L"한국어", true, {L"English", L"繁體中文", L"日本語", L"한국어", L"简体中文"}, 3},
+        {L"遊戲語言", L"한국어", true, {L"English", L"日本語", L"한국어", L"繁體中文", L"简体中文"}, 2},
+        {L"自動更新", L"開", true, {L"開", L"關"}, 0},
+        {L"儲存設定", L"儲存", true, {L"儲存"}, 0}};
+    snapshot.help = L"設定界面語言立即生效。";
+    Require(settings::RasterizeMenu(snapshot, 1280, 720, pixels), "language tab rasterization failed");
+    if (argc > 1) {
+        std::ofstream f(std::filesystem::path(argv[1]) / "language-reference.ppm", std::ios::binary);
+        f << "P6\n1280 720\n255\n";
+        for (auto p : pixels) { const char rgb[] = {char(p), char(p >> 8), char(p >> 16)}; f.write(rgb, 3); }
+    }
+    std::puts("Language reference (with Korean 한국어) rendered at 1280x720");
+
+    // FG occupies a separated section inside the four-tab Graphics page.
+    // The hidden logical rows model scrolling to the section without changing
+    // row IDs; FSR hides the multiplier and compacts the visible list.
+    snapshot.tab = 2;
+    snapshot.language = 0;
+    snapshot.row = int(settings::GraphicsRow::FrameGeneration);
+    snapshot.rows.assign(size_t(settings::GraphicsRow::Count), {});
+    for (int i = 0; i < int(settings::GraphicsRow::FrameGeneration); ++i)
+        snapshot.rows[size_t(i)].hidden = true;
+    snapshot.rows[size_t(settings::GraphicsRow::FrameGeneration)] =
+        {L"Frame generation", L"DLSS", true, {L"Off", L"DLSS", L"FSR"}, 1};
+    snapshot.rows[size_t(settings::GraphicsRow::FrameGenerationMultiplier)] =
+        {L"FG multiplier", L"3×", true, {L"2×", L"3×", L"4×"}, 1};
+    snapshot.rows[size_t(settings::GraphicsRow::Brightness)] =
+        {L"Brightness calibration", L"Open", true, {L"Open"}, 0};
+    snapshot.rows[size_t(settings::GraphicsRow::Save)] =
+        {L"Save graphics settings", L"Save", true, {L"Save"}, 0};
+    snapshot.help = L"FG works independently of upscaling.";
+    Require(settings::RasterizeMenu(snapshot, 1280, 720, pixels), "Graphics FG section rasterization failed");
+    const auto fgPixels = pixels;
+    snapshot.tab = 3;
+    Require(settings::RasterizeMenu(snapshot, 1280, 720, pixels), "comparison tab rasterization failed");
+    int changedGraphicsTabPixels = 0;
+    for (int y = 110; y < 142; ++y)
+        for (int x = 386 + 2 * settings::MenuTabWidth; x < 386 + 3 * settings::MenuTabWidth; ++x)
+            changedGraphicsTabPixels += fgPixels[size_t(y) * 1280 + x] != pixels[size_t(y) * 1280 + x];
+    Require(changedGraphicsTabPixels > 20, "four-tab Graphics header has no visible selected state");
+    int sectionPixels = 0;
+    for (int x = 65; x < 1026; ++x)
+        sectionPixels += fgPixels[size_t(147) * 1280 + x] != pixels[size_t(147) * 1280 + x];
+    Require(sectionPixels > 20, "FG section divider is not visible");
+    snapshot.tab = 2;
+    auto& providerRow = snapshot.rows[size_t(settings::GraphicsRow::FrameGeneration)];
+    providerRow.value = L"FSR";
+    providerRow.selectedChoice = 2;
+    snapshot.rows[size_t(settings::GraphicsRow::FrameGenerationMultiplier)].hidden = true;
+    Require(settings::RasterizeMenu(snapshot, 1280, 720, pixels), "FSR Graphics section rasterization failed");
+    Require(pixels != fgPixels, "FSR Graphics section must differ from DLSS multiplier layout");
+    if (argc > 1) {
+        auto writeFg = [&](const char* name, const std::vector<uint32_t>& image) {
+            std::ofstream f(std::filesystem::path(argv[1]) / name, std::ios::binary);
+            f << "P6\n1280 720\n255\n";
+            for (auto p : image) { const char rgb[] = {char(p), char(p >> 8), char(p >> 16)}; f.write(rgb, 3); }
+            Require(bool(f), "FG preview write failed");
+        };
+        writeFg("fg-dlss-reference.ppm", fgPixels);
+        writeFg("fg-fsr-reference.ppm", pixels);
+    }
+    std::puts("four-tab Graphics FG section divider and DLSS/FSR row layouts rendered at 1280x720");
+
+    // Synthetic overflowing menu (>11 visible rows) to verify scroll clipping, hidden rows and overflow indicators.
+    {
+        // Reference snapshot: exactly 11 rows (the visible window), representing Option 3 through Option 13.
+        settings::MenuSnapshot refSnapshot;
+        refSnapshot.tab = 2;
+        refSnapshot.language = 0;
+        for (int i = 3; i < 14; ++i)
+            refSnapshot.rows.push_back({L"Option " + std::to_wstring(i), L"Val", true, {L"Val"}, 0});
+        refSnapshot.row = 10; // Corresponds to Option 13
+        refSnapshot.scroll = 0;
+        refSnapshot.help = L"Overflow test";
+        std::vector<uint32_t> refPixels;
+        Require(settings::RasterizeMenu(refSnapshot, 1280, 720, refPixels), "ref raster failed");
+
+        // Overflow snapshot: 16 rows total, with Option 2 marked hidden.
+        // Visible sequence: Option 0, 1 (above scroll=2), Option 3..13 (visible, 11 rows), Option 14, 15 (below).
+        settings::MenuSnapshot overflowSnapshot;
+        overflowSnapshot.tab = 2;
+        overflowSnapshot.language = 0;
+        for (int i = 0; i < 16; ++i)
+        {
+            settings::MenuRow row{L"Option " + std::to_wstring(i), L"Val", true, {L"Val"}, 0};
+            if (i == 2) row.hidden = true;
+            overflowSnapshot.rows.push_back(row);
+        }
+        overflowSnapshot.row = 13; // Option 13
+        overflowSnapshot.scroll = 2; // skips visible 0, 1 (and hidden 2) -> displays Option 3..13
+        overflowSnapshot.help = L"Overflow test";
+        Require(settings::RasterizeMenu(overflowSnapshot, 1280, 720, pixels), "overflow rasterization failed");
+
+        // Verify that slot 0 (y=150..191) renders Option 3 identically between ref and scrolled overflow.
+        // Label area: x in [82, 350], y in [155, 185]
+        bool slot0Matches = true;
+        for (int y = 155; y < 185; ++y)
+            for (int x = 82; x < 350; ++x)
+                if (pixels[y * 1280 + x] != refPixels[y * 1280 + x])
+                    slot0Matches = false;
+        Require(slot0Matches, "scrolled slot 0 must render Option 3 identical to reference");
+
+        // Verify overflow indicators:
+        // Top indicator at (1026-40..1026, 150-24..150-4) has rendered glyph pixels because scroll > 0
+        int topGlyphPixels = 0;
+        for (int y = 150 - 24; y < 150 - 4; ++y)
+            for (int x = 386 + 640 - 40; x < 386 + 640; ++x)
+                if (pixels[y * 1280 + x] != refPixels[y * 1280 + x])
+                    ++topGlyphPixels;
+        Require(topGlyphPixels > 10, "top overflow indicator glyph pixels missing");
+
+        // Bottom indicator at (1026-40..1026, 622..642) has rendered glyph pixels because rows remain below viewport
+        int bottomGlyphPixels = 0;
+        for (int y = 622; y < 642; ++y)
+            for (int x = 386 + 640 - 40; x < 386 + 640; ++x)
+                if (pixels[y * 1280 + x] != refPixels[y * 1280 + x])
+                    ++bottomGlyphPixels;
+        Require(bottomGlyphPixels > 10, "bottom overflow indicator glyph pixels missing");
+
+        std::puts("Synthetic overflow (>11 rows) pixel comparison and overflow indicators passed");
+    }
     return 0;
 }

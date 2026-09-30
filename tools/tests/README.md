@@ -1,6 +1,93 @@
 # Test suites
 
+## Test targets and harness catalog
+
+Automated and standalone tests are organized by execution requirements and subsystem boundaries. Select targets appropriate to the changed area; `tools/test.bat` (forwarding to `run.py`) is an older convenience runner, not an exhaustive registry of all test suites. Do not rerun previously passed tests without invalidated code or flags.
+
+### 1. CPU contract and unit test targets
+
+These native C++ and Python fixtures execute without requiring a GPU device. Most run against synthetic data or internal models; importer and storage suites operate on explicit mock/temporary paths or optional test directories specified via CLI:
+
+| CMake target / Script | Area | Primary verification |
+|---|---|---|
+| `LoNativeDlssCpuTests` | Native DLSS / DLAA | CPU-only contract test target defined in `tools/tests/native_dlss/CMakeLists.txt` (`-DLO_NATIVE_DLSS_CPU_ONLY=ON`), executing the registered native DLSS/DLAA and FSR policy/contract suites. |
+| `LoPortableShaderPackTest` | Shader pack | Zstandard compression, block streaming, index serialization, and payload integrity. |
+| `LoPortableShaderPackIntegrationTest` | Shader pack | Lazy runtime loading, dictionary deduplication, and corrupt frame recovery. |
+| `LoPortableShaderContractTest` | Shader pack | Layout revisions, shader key mapping, and runtime compatibility hashing. |
+| `LoStorageTest` | File I/O & storage | Guest read/write/scatter lifetime, handle invalidation, and asynchronous notification. |
+| `LoVertexCacheTest` | Vertex pipeline | Bounded vertex and index cache eviction, mutation tracking, and replacement accounting. |
+| `LoImportGameTest` | Importer | ISO detection, STFS payload parsing, chunk bounds, and I/O failure recovery. |
+| `LoInstallerControllerTest` | Installer | State machine transitions, publication rollback, and progress reporting. |
+| `LoSaveAnywhereConfigTest` | Debug & Settings | Windows contract test target defined in `LostOdysseyRecomp/CMakeLists.txt` (`EXCLUDE_FROM_ALL`), validating isolated `settings.ini` persistence, default handling for missing or invalid keys, immediate debug toggles, cross-process restoration, and non-committal of unconfirmed graphics previews. |
+| `LoQuitTextHookTest` | Guest System menu text | Standalone CPU fixture in `LostOdysseyRecomp/CMakeLists.txt` (`EXCLUDE_FROM_ALL`), covering overrides for label ID 9104, help ID 9114, and prompt ID 9120 across all 9 languages ("Quit to Desktop"), non-target fallback, guest UTF-16BE pointer handling, terminator-inclusive copied length (`text.size() + 1`), and simulated downstream deep-copy truncation without trailing garbage characters. Runtime hook compilation was checked separately; live menu display and user visual acceptance remain unverified. |
+| `LoQuitActionHookTest` | Guest quit routing & actions | Standalone CPU contract target in `LostOdysseyRecomp/CMakeLists.txt` (`EXCLUDE_FROM_ALL`), validating that confirmed Settings "Quit to Main Menu" waits for retail Settings close and invokes the original guest title transition on the same guest thread without dispatching `SDL_QUIT`, while confirmed native System "Quit to Desktop" Yes branches route to `SDL_QUIT` across both verified generated callsites (`0x822E256C` and `0x822E26B8`) with continuation-appropriate cancel recovery and non-Yes callers retaining retail behavior. Physical-hardware execution of the System quit-to-desktop action path was verified on the v4 build (`ffb59dbc...`); other menu actions remain unverified on hardware item by item. |
+| `tools/tests/ppc_codegen_test.py` | PPC recompiler | Focused generator and output checks; generation is explicit and is not a runtime build gate. |
+| `tools/tests/disc_set_test.py` | Disc management | Multi-disc set detection and metadata ordering. |
+
+### 2. GPU hardware fixtures
+
+These fixtures require a compatible Vulkan (or D3D12) physical GPU device and driver. They execute real GPU commands, allocations, and readbacks, and have device side effects. Exit code 0 indicates successful completion of the test sequence:
+
+| CMake target / Executable | Subsystem | Device scope & side effects |
+|---|---|---|
+| `LoNativeDlssExecutionTest` | Native DLSS / Vulkan | Validates Vulkan bridge hooks, plan switches, and batch non-demotion without NGX runtime. |
+| `LoFsrAdapterGpuTest` | FSR 3.1.4 adapter | Validates standalone FSR Vulkan session dispatch, transient input recovery (`--transient-only`), gap reset, and P2 RCAS/mask passes (`--p2-only`). |
+| `motion_replay_gpu_test` | Motion vectors | Replays motion vectors on Vulkan and validates depth buffer retirement (`--depth-retirement-only`). |
+| `LoPresentCaptureTest` | Presentation capture | Multi-frame swapchain image readback and error injection across D3D12 and Vulkan. |
+| `LoDepthClearGpuTest` | Depth buffer | Validates 720-to-1 depth-clear layout coalescing on Vulkan (`--vulkan --coalesced-only`). |
+| `LoStreamlineFgProbe` | Frame Generation | Standalone coexistence probe for native NGX SR and Streamline DLSS FG. Refer to [`tools/tests/streamline_fg/README.md`](streamline_fg/README.md). |
+
+### 3. Offline analysis and verification test scripts
+
+Python suites validating offline tools, data pipelines, and packaging manifests using synthetic test data:
+
+| Script | Validates | Description |
+|---|---|---|
+| `tools/tests/shader_analysis_tools_test.py` | `tools/shader_analysis/` | Validates source collection, HLSL dependency slicing, SPIR-V inspection, and CPX decoding against synthetic microcodes. |
+| `tools/tests/capture_analysis_tools_test.py` | `tools/capture_analysis/` | Validates archive inspection and image difference metrics on synthetic F1 captures. |
+| `tools/tests/portable_shader_merge_test.py` | `LoShaderPackTool merge` | Validates tab-separated manifest parsing, inclusion/exclusion rules, and microcode deduplication. |
+| `tools/tests/drive_city_save_test.py` | `tools/drive_city.py` | Validates game save isolation, staging backup, and error rollback logic for `tools/drive_city.py`. |
+| `tools/asm-profiler/test_report.py` | `tools/asm-profiler/` | Validates x64 disassembly parsing and HTML profiler report generation. Refer to [`tools/asm-profiler/README.md`](../asm-profiler/README.md). |
+
+### 4. Standalone menu fixtures and live game drivers
+
+- **Standalone synthetic menu fixtures** (`LoMenuFlowTest`, `LoMenuRenderTest`): Self-contained test executables validating menu row navigation, hidden items, focus jumps, and rendering layout without launching the full game. They emit synthetic BMP captures and notices to the specified output directory.
+- **Active game drivers** (`tools/perf/drive-city.ps1`): Automated benchmark harness that launches the actual Windows game executable, injects controller inputs, takes screenshots, and monitors/compares player save files. Requires explicit `-RunDirectory`, `-OutputDirectory`, and `-PlayerSaveDirectory`. Refer to [`tools/perf/README.md`](../perf/README.md).
+
+---
+
+## Issue #53 I/O lifetime and diagnostics regression
+
+`LoStorageTest io-lifetime <output>` exercises real guest read/write/scatter, close and duplicate imports, APC/event publication ordering, independent-file progress and positioned reads. Run `python -B tools/tests/io_lifetime_test.py <LoStorageTest-executable> --out <new-directory>` for the lifetime, invalid-handle and diagnostics selectors. Use `--mode io-lifetime`, `--mode io-invalid-handle` or `--mode io-diagnostics` to select one. The runner enables `LO_IO_DIAGNOSTICS=1` for the diagnostics selector, applies a 30-second process timeout, and attempts a debugger stack capture before terminating a timed-out child. Direct `LoStorageTest io-diagnostics <output>` invocation requires that environment variable to be set before startup.
+
+The lifetime, diagnostics and invalid-handle selectors are optional focused fixtures. The regression set checks that read, write and scatter operations release `ioMutex` before completion-side work, that close can complete without invalidating the retained operation, and that each request publishes its buffer and IOSB before notification. These checks do not reproduce the Issue #53 gameplay hang or establish a story transition.
+
+For runtime investigation, start with `LO_IO_DIAGNOSTICS=1`, then manually call the exported `LoDumpIoDiagnostics("/path/to/snapshot.jsonl")` from a debugger. Active requests and history are bounded to 256 and 2048 records. Snapshots do not acquire the file I/O mutex or dereference recorded object addresses; skipped/overwritten records are counted. Owner observations are clues tied to object instances and timestamps, not proof of a deadlock. See the [investigation report](../../docs/notes/ISSUE_53_DISC2_HANG_FIX_REPORT.md) for the validation boundary.
+
 ## Render batch policy and descriptor cache
+
+## Issue #70 native binding and scaler fixtures
+
+The current Issue #70 change adds DX12 native root binding de-duplication and
+cache invalidation at descriptor heaps, native root signature changes, native
+`Reset`/`Close`, and external-state boundaries. Runtime plus
+`LoNativeDlssD3D12ExecutionTest` built with
+exit 0. The no-window NGX fixture ran with Quality 853×480→1280×720 and DLAA
+1280×720→1280×720, with readback `3400,3800,3000,3c00`. The D3D12 FSR fixture
+built and ran with NativeAA 64×64→64×64 and Quality 64×64→96×96; both reported
+center `102,51,25,191`. See `out/issue70-validation/` for the retained logs.
+The `LoD3D12RootBindingTest` built and ran with exit 0, covering repeated
+bindings, view-slot changes, same handles at different root indices,
+graphics/compute switching, A→B→A signatures, external heap switch and
+recovery, external signature rewrite, reset, independent continuation, and
+descriptor address reuse. `D3D12GetDebugInterface` was unavailable, so the
+debug layer was not verified; the fixture records and closes command lists
+without draw/dispatch/readback or injected isolated failure.
+
+The anisotropic-filtering measurement fixture in `out/issue70-af-measurement`
+passed 2/2, including 93,237 AF palette checks and the synthetic renderer
+fixture; the `run-fg-game.ps1` PowerShell AST parse also passed. These checks do not establish
+target-game output, DX12/Vulkan frame-time parity, or Issue #70 resolution.
 
 ## v0.5.9 Vulkan selectors
 
@@ -28,12 +115,23 @@ CMake targets `LoRenderBatchPolicyTest` and `LoTextureDescriptorCacheTest` match
 ## Bounded vertex metadata cache
 
 `LoVertexCacheTest` is a native CPU-only fixture for the renderer's bounded
-vertex metadata cache. Its recorded run passed 3,569,548 checks once. It
-covers small capacities, recent-use retention, dense erase iteration during
-slot reset, refill/churn, and sample/key/offset/slot ownership after movement
-and replacement. At the default capacity, 196,645 unique insertions retained
-65,536 entries with 131,072 buckets and 131,109 evictions. It creates no GPU
-device and does not launch the game. Evidence: `out/perf-ring/vertex-stage/vertex-cache-test-evidence.json`.
+vertex and index metadata caches. The current focused run passed 3,668,947
+checks, including complete source-content mutation checks, exact key
+participation, replacement accounting, eviction and oversized-entry bypass.
+The related geometry and prerelease audit fixtures passed 16,809,648 and
+16,438 checks. These fixtures create no GPU device and do not launch the game;
+their correctness results do not establish frame-time cost. The earlier
+sampled-match performance measurements are historical until the repaired cache
+is measured with the final release binary.
+
+## City benchmark save safety
+
+`tools/tests/drive_city_save_test.py` exercises the file handling around
+`tools/drive_city.py`. Five focused cases passed: dry-run leaves the source and
+run save unchanged, identical or overlapping paths are rejected, staged copy,
+process-launch or replacement failure restores the prior run save, and a
+successful replacement preserves a recoverable backup. The fixture uses
+temporary synthetic saves and does not validate ordinary in-game save behavior.
 
 ## Assembly profiler report
 
@@ -55,87 +153,49 @@ Run the synthetic guard tests from the repository root with:
 python -B tools/tests/ppc_codegen_test.py
 ```
 
-The seven `unittest` cases cover a matching manifest, input/output/context drift, obsolete 64-bit jump-table switches, a stale generator receipt and invalidation after a failed generation. They use a temporary tree with synthetic files; they do not require game input, generated game sources, a native tool build or a game/runtime process. For a real generated tree, `python -B tools/ppc_codegen.py check` verifies the recorded input/output manifest, while `python -B tools/ppc_codegen.py generate` requires the receipt written by `tools/build_tools.bat` and regenerates the sources.
+`kernel_wait_handle_test.cpp` is an independent, on-demand C++ fixture for
+wait and handle-table semantics. It is not registered as a CMake target or an
+automatic build gate; this documentation does not claim that it was run in the
+current build.
+
+The focused `unittest` cases cover successful source replacement and failure rollback using temporary synthetic files; they do not require game input, generated game sources, a native tool build or a game/runtime process. A real build uses `python -B tools/ppc_codegen.py generate` explicitly after generator or configuration changes; no receipt, manifest or per-build hash gate is required.
 
 Run commands from the repository root. Select checks appropriate to the changed behavior; this entry point does not imply that every suite is required for every change.
 
-## PPC prebuilt bundle checks
-
-`test_ppc_prebuilt.py` exercises the synthetic export, restore and check contract
-for the PPC static-library bundle, including incremental output handling,
-receipt/input/output validation, shard boundaries and SHA256 checks. It uses a
-temporary fixture and does not require game input, a generated guest tree, a
-native build or a game process:
-
-```powershell
-python -B tools/tests/test_ppc_prebuilt.py
-```
-
-The 13 synthetic bundle checks pass. The separate `.github/workflows/test-ppc-prebuilt.yml`
-workflow runs this fixture independently of release packaging; actionlint 1.7.12
-also passes for both workflows. The fixture does not prove the hosted Release
-x64 `/MT` non-LTO build, runtime relink, gameplay launch or user acceptance. The
-real local export, restore and isolated CMake check are recorded in the [release
-packaging evidence](../../docs/notes/release-packaging.md).
-
-## PPC auto-sync boundary
-
-The current synchronization implementation fast-forwards the private PPC cache on
-`main`, preserves unrelated archive files and retries bounded concurrent advances. It
-retains existing `ppc/<key>` branches for historical build selection and does not create
-new PPC refs. Release CI validates the synchronized manifest fingerprint and compile
-contract before restore and records the immutable private `main` HEAD in its identity
-artifact. `actionlint` passed for the workflow change. The PPC sync suite passed
-23 tests in 19.858s, including six bare-Git integration cases covering single-ref main
-updates, unrelated blob preservation, stale PPC cleanup, bounded concurrent retry
-behavior, same-key no-op, identity rejection and policy rejection. Two isolated synthetic
-workflow checks also passed: matching input recorded the checkout commit, and mismatched
-input was rejected. This documentation does not claim that local auto-sync is enabled
-automatically.
-
-Historical hook behavior: the local auto-sync hook was a post-build action authorized by Git config
-`git config --local lo.ppcAutoSync true`; CMake `LO_PPC_AUTO_SYNC` reads that
-setting and may need reconfiguration when a cache is `OFF`. It is not a file watcher. The
-read-only `ppc_sync.py key` command could inspect the deterministic key, while
-`sync` could reuse an existing private branch or upload a changed bundle in shards
-of at most 40 MiB. CI, imported libraries and `LO_PPC_SYNC_ACTIVE` were excluded.
-Nineteen synthetic sync cases pass; the built-library roundtrip and
-change-during-build cases were also verified separately. The real target, same-key unchanged check and sparse
-restore/check are recorded in the [release packaging evidence](../../docs/notes/release-packaging.md).
-The earlier 13-case prebuilt fixture and workflow run remain historical evidence
-for the bundle format only. Run the synthetic sync suite with:
-
-```powershell
-python -B tools/tests/test_ppc_sync.py
-```
-
 ```powershell
 tools\test.bat --list
-tools\test.bat importer
 tools\test.bat shaders pipeline
 ```
 
 `tools/test.bat` forwards to `tools/tests/run.py`. Python is required; native fixture compilation also needs `clang-cl` and the Windows SDK discovered by `tools/setup_windows.bat`. Runtime suites use existing build outputs and never trigger an implicit full build. `--build-dir` defaults to `out/build/release`; it takes the CMake build root, not the directory containing the executable. The runner appends `LostOdysseyRecomp/<target>.exe`. A configured `out/build/windows-clang` can be supplied instead.
 
-## Installer window checks
+## Native installer checks
 
-`python -B tools/tests/test_installer_ui.py` selects the new Windows/Tk window checks only. The recorded nine passing cases cover resize hit targets, narrow layout/scrolling, long paths, cancel/retry/close, native frame styles, unchanged polling, DPI metrics and non-activating minimize. Two affected existing controller checks also passed; no importer backend suite was repeated. Subsequent copy reduction used real normal/minimum-size renders, without repeating these checks. Evidence and limitations: [desktop UI validation](../../docs/notes/desktop-ui-modernization.md), with the local report in `out/v0.5.0/ui-modernization/installer/REPORT.md`. These checks do not launch the game or establish physical multi-monitor interaction.
+Current importer coverage is the native `LoImportGameTest` and `LoInstallerControllerTest` targets. The Python/Tk `tools/installer` sources and `test_installer_ui.py` / `test_import_game.py` fixtures have been removed. Historical Tk window and drag-dispatch evidence remains in [desktop UI validation](../../docs/notes/desktop-ui-modernization.md) and `out/v0.5.0/ui-modernization/installer/REPORT.md`; those checks no longer have a runnable Python entry point.
 
-For the installer drag-dispatch re-entrancy regression, run the focused case directly:
+The user accepted the 2026-09-16 installer audit batch for commit. Repeated focused checks passed with exit 0: `LoInstallerControllerTest` and `LoImportGameTest --dlc-io`. The importer run covered 16 synthetic STFS payload/sidecar I/O failure points, publication failure handling, cleanup, retry state, and extracted-DLC trailing-separator scanning, using a 52 KiB STFS without a ROM. These are focused synthetic checks; they do not establish a complete interactive import, real disk-failure recovery or gameplay acceptance. Explicit close-result coverage for extracted DLC remains a non-blocking follow-up.
 
-```powershell
-python -B tools/tests/test_installer_ui.py DragDispatch
-```
+The 2026-09-18 importer hardening checks add resource and `import-info.json` open/write/flush/close failure injection, publication abort, rollback and retry coverage to `LoImportGameTest`. `import_iso_locator_test.cpp` covers standard, padded Chinese-path with an unaligned decoy, and chunk-boundary ISO locator cases; `file_browser_folder_test.cpp` covers destination-folder helper cases. The WSL SDL2 syntax check covers `installer_ui.cpp`. These checks do not establish a complete interactive import or runtime installer click-through. Explicit close-result coverage for extracted DLC remains a separate follow-up.
 
-The recorded result is 1/1. It uses a message-only HWND and no displayed window, and checks queued `WM_NCLBUTTONDOWN` dispatch with signed negative screen coordinates. The reporter separately confirmed the real installer drag fix. This check does not measure stall or performance behavior, launch the installer import flow, or launch the game. The broader `InstallerUI` fixture setup previously failed its foreground-HWND assertion before reaching drag behavior and is not evidence for this regression.
-
-The installer-only local package is `out/installer-drag-fix/dist/InstallGame.exe` (11,888,743 bytes; SHA256 `707CD7D2E9F4AB3BF33363E172FAAD5CFCFA6B1A53161FEE0E7F53735B7C7FA7`). It was built with Python 3.12.10 and PyInstaller 6.22.2. Read-only embedded-PYZ inspection of `WindowChrome.drag` found `PostMessageW`, no `SendMessageW`, and the four required modules; do not infer installer import-flow or game validation from that inspection.
+Real-drive validation on 2026-09-18 used the current importer sources and the
+read-only source tree `G:/ROMS/US`. `ScanContent` found all four USA/Europe
+disc ISOs, with 15 files per disc and no rejected sources or packages. An
+isolated Disc 1 import then completed in 74.44 seconds with no error or warning;
+the destination contained the 15 resource files plus `import-info.json`,
+totalling 5,712,711,997 bytes, and the recorded Disc 1 metadata/XEX SHA-256
+matched. No staging directory or import lock remained. This validates the
+native scan and one real Disc 1 transaction; it does not establish a four-disc
+install, interactive UI acceptance, gameplay or full output byte comparison.
 
 ## Updater window checks
 
 The focused updater fixture is recorded in `out/v0.5.0/ui-modernization/updater/fixture.log` and `manifest.json`. It passed native window/control creation, native styles, known and unknown progress, unchanged-value redraw caching, verification cancellation boundaries, ready-state controls, minimize, teardown, Chinese narrow layout, download close cancellation and late-progress handling. Final normal, unknown-total and narrow Chinese renders were refreshed separately and reviewed; those captures do not repeat the functional fixture. No game, network download, package transaction or updater helper was run, and physical monitor moves and live user-desktop gestures remain untested.
 
 The separate `LoUpdaterTest --version-policy` run from `out/build/windows-clang/LostOdysseyRecomp/LoUpdaterTest.exe` passed 14/14 cases. It covers numeric ordering, differing or identical suffixes, `v` prefixes and ignored build metadata. It is a focused policy check only; no network request, download, package transaction, helper, game launch or publication check was performed. Existing clients require a build containing the updated updater code.
+
+The 2026-09-16 `LoUpdaterApplyArgumentsTest` fixture passed 8 checks on rerun. The CMake target was registered in this change; the fixture verifies that `--apply-plan` is recognized as an independent Windows argument and cannot be triggered by an installation directory name or another command-line substring. This does not run a real updater transaction, replacement, helper handoff or game launch.
+
+The same audit's packaging and path fixtures passed `package_appimage.py` 3/3 checks and the WSL Manjaro `user_paths` fixture for portable, XDG, changed-CWD, `LO_PROFILE_DIR` override and Flatpak paths. The AppImage check is layout/script coverage and did not create a real AppImage; the path fixture does not establish a complete Linux package or game run.
 
 The archive staging check uses the same `shutil.make_archive` ZIP writer as the release packager. After building `LoUpdaterTest`, run:
 
@@ -180,11 +240,9 @@ Use the existing `LoMenuRenderTest` target for host raster checks; menu-asset de
 
 The later real-package observation is recorded in `out/v0.5.0/dlc-validation/REPORT.md`: three imports and intact duplicate recognition passed, while one historical game run faulted after partial content reads. Preserve that failure and the earlier synthetic results separately; no reward or dungeon acceptance is implied.
 
-The installer’s automatic content-import UX uses one Files/Folder selection flow. It recognizes game discs, STFS DLC and mixed sources from content, presents one review, and commits discs before the shared-path save and DLC transaction. The focused result recorded 13 new cases plus 2 directly affected GUI cases, all passing on the first run in 0.934 seconds. It reused 20 unchanged DLC cases, two native modes and the independent STFS review. Evidence: `out/v0.5.2/auto-import/installer/REPORT.md`, `result.json` and `tests-initial.log`. This check did not start Tk, the game, audio, a build or packaging.
+The native importer’s automatic content-import UX uses one Files/Folder selection flow. It recognizes game discs, STFS DLC and mixed sources from content, presents one review, and commits discs before the shared-path save and DLC transaction. Current coverage is `LoImportGameTest` and `LoInstallerControllerTest`. Historical Python `test_dlc_import.py` / `test_auto_import.py` results remain in `out/v0.5.1/dlc-import/importer/REPORT.md` and `out/v0.5.2/auto-import/installer/REPORT.md`; those Python entry points have been removed.
 
-`python -B tools/tests/test_dlc_import.py` selects the DLC parser/importer checks without the old disc suites. The historical v0.5.1 result has 22 passing focused cases, including independent STFS block-address vectors and windowless installer controller checks. `--runtime-fixture <new-directory>` creates a synthetic STFS package and imports it through the production Python reader for the native handoff.
-
-Build `LoStorageTest` only when the affected native inputs change. Its `dlc <new-isolation-directory> <imported-game-root>` and `dlc-restart <new-isolation-directory> <imported-game-root>` modes call the actual guest content and file imports, without a game window, renderer or audio. Both recorded modes passed, reading all 5,940 payload bytes in each process. Reproduction commands and retained results are in `out/v0.5.1/dlc-import/runtime/REPORT.md`; Python evidence is in the adjacent `importer/REPORT.md`. Synthetic tests do not establish real DLC rewards, areas or edition compatibility. Reuse these results for packaging and version changes.
+Build `LoStorageTest` only when the affected native inputs change. Its `dlc <new-isolation-directory> <imported-game-root>` and `dlc-restart <new-isolation-directory> <imported-game-root>` modes call the actual guest content and file imports, without a game window, renderer or audio. Both recorded modes passed, reading all 5,940 payload bytes in each process. Reproduction commands and retained results are in `out/v0.5.1/dlc-import/runtime/REPORT.md`. Synthetic tests do not establish real DLC rewards, areas or edition compatibility. Reuse these results for packaging and version changes.
 
 ## Selected native targets
 
@@ -289,7 +347,7 @@ The compact receiver checks are run from `tools/taa-collector` with `node --test
 
 The following CMake targets are `EXCLUDE_FROM_ALL`; they are not `tools/test.bat` suite names and are never run implicitly. Select only the target relevant to the change, build it explicitly, and run the resulting executable from an isolated working directory when it writes captures or caches:
 
-`LoFolderPickerTest`, `LoDebugMenuInteractionTest`, `LoGameWindowPixelsTest`, `LoShaderPreparationQueueTest`, `LoShaderStartupCacheTest`, `LoBackendCacheTest`, `LoBackendSelectionTest`, `LoBackendDeviceTest`, `LoRestartTest`, `LoGamePathTest`, `LoUpdaterTest`, `LoUpdaterStandaloneTest`, `LoUpdaterProgressTest`, `LoUpdaterHelperContextTest`, `LoUpdaterProbe`, `LoVulkanBackendTest`, and `LoPollWaitTest`.
+`LoFolderPickerTest`, `LoDebugMenuInteractionTest`, `LoSaveAnywhereConfigTest`, `LoQuitTextHookTest`, `LoQuitActionHookTest`, `LoGameWindowPixelsTest`, `LoShaderPreparationQueueTest`, `LoShaderStartupCacheTest`, `LoBackendCacheTest`, `LoBackendSelectionTest`, `LoBackendDeviceTest`, `LoRestartTest`, `LoGamePathTest`, `LoUpdaterTest`, `LoUpdaterStandaloneTest`, `LoUpdaterProgressTest`, `LoUpdaterHelperContextTest`, `LoUpdaterProbe`, `LoVulkanBackendTest`, and `LoPollWaitTest`.
 
 `LoGameWindowPixelsTest` checks hidden Windows/SDL client and drawable pixel sizes, cross-thread presentation dimensions, DPI messages and thread-context restoration. Build this optional target only when its window policy or inputs change:
 
@@ -361,7 +419,6 @@ tools\test.bat startup --build-dir out/build/release
 
 | Suite | Scope |
 |---|---|
-| `importer` | Importer input and extraction checks |
 | `shader-index` | Bare-resource and CPX layout-bound direct extraction, including automatic selection between same-name/same-size layouts by FPI identity; required-block/microcode validation, unknown-layout and failed-extraction fallback, duplicate/empty skips, unread-modification boundaries, strict/direct manifest separation, source equivalence, SHA256 vectors and explicit progress units |
 | `shaders` | Resource scanning, CPX decoding and bounded dynamic-VS fixtures |
 | `pipeline` | Pipeline recipe validation, corruption/truncation and atomic-write fixtures |
@@ -425,7 +482,7 @@ The development targets below are excluded from default builds and are not suite
 | `LoRenderResolutionGpuTest` | D3D12 numerical sampling with helpers extracted from production translation: 1×/1.5×/3× physical textures, guest dimensions versus ordinary uploaded textures, normalized/denormalized coordinates, signed offsets, weights and implicit/level-zero samples. Also checks invalid-width allocation rejection followed by a valid allocation, without OOM pressure. Requires GPU/Plume/DXC; uses a synthetic gradient, not a game scene. |
 | `LoPlumeLogTest` | Header-only Plume routing fixture for D3D12/Vulkan raw-code preservation, one-line bounded context, repeated-failure rate limiting, callback exception/re-entry guards and stderr fallback. No GPU, game assets or runtime PCH. |
 | `LoUpdaterHttpFailureTest` | Deterministic WinHTTP fault injection for terminal URL/session/request/send/receive/header/read failures, preserving each API name and raw Win32 error while retaining the existing non-fatal timeout/option policy. No network, game assets or GPU. |
-| `LoFramePacerTest` | Pure host deadline calculations, FPS changes, long-stall recovery and scoped guest interval/flag mapping, including the experimental 120 gate. No GPU, guest generation or runtime PCH required; this does not test gameplay speed. |
+| `LoFramePacerTest` | Native 30/60/90/120 settings/menu policy, host VSync policy, deadline calculations, all rate transitions, overload/stall recovery and scoped guest interval/flag mapping. No GPU, guest generation or runtime PCH required; this does not test gameplay speed. See [native high-refresh validation](../../docs/notes/native-90-120fps.md). |
 | `LoTemporalMathTest` | CPU camera-reference math with independent analytic point, translation/yaw, viewport/Y-sign/half-pixel and invalid-input checks. No GPU, guest generation or runtime PCH required. Static round trips and these fixtures do not establish runtime frame association, motion vectors or TAA. |
 | `LoTemporalSceneTest` | CPU scene-observation ordering, frame reset, depth-allocation identity, full extents and ambiguity rejection. No GPU, guest generation or runtime PCH required. It does not validate the renderer's actual scene/UI selection. |
 | `LoTemporalJitterTest` | CPU production jitter and shadow-reconstruction checks across all 32 phases at 720p/1080p/1440p/4K, including the current Map16 extension (20,635 recorded checks total; 3,348 Map16 checks). Retained constant fixtures independently emulate tire and battle depth/material/lighting position paths, skinned transforms and shadow reconstruction, including negative controls, clip-derived sampling coordinates, preserved Z/W and depth UV, and Off/atlas/identity rejection guards. No GPU, game assets, guest generation or runtime PCH required; this does not establish actual draw coverage or player-visible stability. |
@@ -635,11 +692,23 @@ See the [follow-up record](../../docs/notes/handoff-v0.4.0-followup.md) for curr
 
 ## CI and build boundaries
 
-Importer, shader and pipeline workflows are independent, path-filtered checks for main pushes, pull requests and manual dispatch. Tags do not repeat these jobs. The runtime workflow is manual only and selects one of `storage`, `hid` or `startup`, with its own explicit generation/build steps. CMake test targets are excluded from the default build; request the needed targets explicitly.
+Shader and pipeline workflows are independent, path-filtered checks for main pushes, pull requests and manual dispatch. Tags do not repeat these jobs. Native importer coverage is the explicit `LoImportGameTest` / `LoInstallerControllerTest` CMake targets, not a `tools/test.bat` suite. The runtime workflow is manual only and selects one of `storage`, `hid` or `startup`, with its own explicit generation/build steps. CMake test targets are excluded from the default build; request the needed targets explicitly.
 
 Release packaging accepts a manual `release_tag` and checks out that existing tag. Changing the workflow on main does not change the tagged game sources or require retagging them.
 
 Release packaging is separate from test CI. A build or fixture pass is not gameplay or visual acceptance. Passing checks should not be repeated or expanded without a new change, failure or unresolved concern. Avoid tests for reversible low-impact edits and tests that only mirror implementation details.
+
+The release workflow now compiles the Linux source once, retains the AppImage
+AppDir, and exports the stable Flatpak by reusing its
+`usr` tree without a second source build. The current AppImage packaging
+fixture passed 8/8 checks, Flatpak Python fixtures passed 6/6, the workflow
+shell fragments passed `bash -n`, actionlint 1.7.12 passed, the Flatpak reuse
+probe resolved 29 ELF files and four libraries, and the SDL PipeWire/static
+focused compile passed. The stable bundle exited 0, isolated user installation
+and sandbox shell checks passed, and the installed main ELF matched the
+AppImage input by SHA-256. Full Release CI has not run this workflow; these
+checks do not establish gameplay behavior or change the published v0.7.3
+provenance. Evidence is retained under `out/release-workflow-reuse/`.
 
 ## Shader identity reuse
 
@@ -656,3 +725,41 @@ Release packaging is separate from test CI. A build or fixture pass is not gamep
 `shader_resource_variants_test.cpp` supports `scratch --cpx-original decoded-file container-offset reference-vs` to extract an original SDK container into isolated input, generate first, then compare the captured reference. The 2026-09-13 fixture reproduces all 564 bytes of `1474db97dfc0afad` from original `11bc08f69da45bb3`, preserving the input and rejecting corruption. `scratch --linked-only original-source reference-fixed reference-linked` checks linked coverage without repeating already-passed fixed assertions. Historical references are subsets of the expanded coverage: 354 fixed and 2,245 combined outputs.
 
 The maintainer command `python tools/generate_shader_variants.py <decoded-xex> <raw-inventory> LostOdysseyRecomp/gpu/shader/resource_variants.h --cpx-inventory <decoded-package-inventory> --linked-header LostOdysseyRecomp/gpu/shader/resource_variant_links.h --check` verifies deterministic tables and their adjacent generated discovery identity. Remove `--check` to regenerate. Decoded inventories contain `packages` with `decoded_file`, `decoded_size`, `decoded_sha256` and shader container offsets; failed decodes and mismatched identities are rejected. Inputs must be original resources. See the [coverage record](../../docs/notes/shader-startup-coverage-2026-09-13.md) for provenance and limits.
+
+## Post-v0.6.11 DLSS & Render State Capture Fixtures
+
+Focused verification fixtures introduced for post-v0.6.11 lifecycle fixes, capability synchronization, runtime status logging, and render state capture:
+
+| Target | Binary / Selector | Scope and Coverage |
+|---|---|---|
+| `LoTemporalLifecycleBr01Test` | `LoTemporalLifecycleBr01Test.exe` | 154 CPU clock advancement and temporal lifecycle checks; 14 gap checks. |
+| `LoTemporalLifecycleBr01OwnerTest` | `LoTemporalLifecycleBr01OwnerTest.exe` | 12 Direct3D 12 hardware checks on RTX 5080 (motion stub, >250 ms gap, no game launch). |
+| `LoDlssCapabilitySnapshotTest` | `LoDlssCapabilitySnapshotTest.exe` | 43 CPU checks for mutex-protected device capability snapshot transitions. |
+| `LoDlssRuntimeStatusTest` | `LoDlssRuntimeStatusTest.exe` | 37 CPU checks for granular fallback/latched DLSS runtime status classifications. |
+| `LoVideoSubmissionStopTest` | `LoVideoSubmissionStopTest.exe` | 14 CPU checks verifying stopped status publication upon native submission failures. |
+| `LoDlssStatusLogTest` | `LoDlssStatusLogTest.exe` | 400 real logger checks verifying formatted DLSS runtime status lines and deduplication. |
+| `LoPresentCaptureTest` | `LoPresentCaptureTest.exe --backend <d3d12 or vulkan> --case <three-frame or failure>` | Four combinations of backend and case passed: 640×360 final vs 320×240 guest, no added capture GPU work without a request, and failure handling. |
+| `LoPresentCaptureTest` (Close) | `LoPresentCaptureTest.exe --case close` | Production finalize helpers and archive invocation (completion count 3, last frame 12, incomplete cleanup). |
+| `motion_replay_gpu_test` | `motion_replay_gpu_test.exe --depth-retirement-only` | 26 Vulkan hardware checks (RTX 5080 D32S8) verifying external depth unbinding before texture destruction. |
+| `LoDlssEvaluateCaptureContractTest` | `LoDlssEvaluateCaptureContractTest.exe --evaluate-capture-contract-only` | Contract checks for RGBA8/RGBA16F Evaluate capture, quotas (4 entries/128 MiB), truncation, and formatting. |
+| `LoNativeDlssRendererTest` | `LoNativeDlssRendererTest.exe --evaluate-capture-only` | Vulkan hardware execution of isolated pre-Evaluate input and post-Evaluate scratch output copies with checked submit. |
+
+## Quit-to-desktop message-pump regression (#82)
+
+`video_exit_pump_test.py` extracts the actual `PumpWindowEvents` prelude from an explicit `video.cpp`, compiles it with real SDL/Win32, and replaces the later UI body with counters. It creates only a hidden 64x64 window. A second thread uses a bounded synchronous native message to check that shutdown continues servicing the window thread; the fixture also checks late SDL-event disposal and an exit requested during native dispatch. It does not create a GPU device, change fullscreen state, launch the game, or touch saves.
+
+Use an x64 Developer Command Prompt with Clang and an existing static SDL build:
+
+```powershell
+python -B tools/tests/video_exit_pump_test.py `
+  --source LostOdysseyRecomp/gpu/video.cpp `
+  --sdl-include thirdparty/SDL/include `
+  --sdl-lib out/build/windows-clang/thirdparty/SDL/SDL2-static.lib `
+  --output out/issue82/exit-pump-check
+```
+
+The output directory must be new. It retains the extracted production prelude, native fixture, build/run logs and `results.json`. No full runtime build is implicit.
+
+On base `2ce27e3`, the fixture failed three checks: the post-exit synchronous message timed out, late SDL events remained queued, and an exit during native dispatch still allowed application work. With the #82 correction, all nine checks passed. Evidence is retained locally at `out/issue82/baseline-03/` and `out/issue82/fixed-03/` in the issue worktree. The changed full Windows `video.cpp` translation unit also compiled with D3D12, Streamline and both FG provider flags enabled, using existing dependency headers; this was a compile-only check, not a full executable link or live GPU shutdown test.
+
+The reporter's attached log is an F1 capture-time snapshot ending before the quit request. It does not identify the actual stalled native call. Reporter reproduction with the corrected build, and Linux/gameplay shutdown validation, remain pending. Use the active `logs/runtime-*.log` after reproduction to distinguish `capture-archive`, `gpu-reset` and `window-stop` shutdown stages; an F1 ZIP taken before quitting cannot contain those later records.

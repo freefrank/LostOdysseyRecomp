@@ -5,6 +5,7 @@
 #include <mutex>
 #include <thread>
 #include <vector>
+#include "gpu/frame_plan.h"
 
 // Minimal Xenos command processor: consumes the primary ring buffer, executes
 // the PM4 packets the CPU synchronises against (memory writes, fences, waits,
@@ -38,6 +39,8 @@ namespace gpu
     {
         bool Init();
         void Shutdown();
+        // Thread-safe request only; GPU destruction stays on the worker.
+        void RequestStopForExit();
 
         // Kernel entry points
         void InitializeRingBuffer(uint32_t physicalAddress, uint32_t sizeLog2);
@@ -76,7 +79,18 @@ namespace gpu
             }
             uint32_t ReadAndSwap();
             void Advance(uint32_t dwords);
+            // The next `count` guest-endian words when they neither wrap the ring
+            // nor pass the end of an indirect buffer; otherwise nullptr.
+            const uint32_t* Contiguous(uint32_t count) const
+            {
+                return uint64_t(readOffset) + uint64_t(count) * 4 <= size
+                    ? reinterpret_cast<const uint32_t*>(base + readOffset) : nullptr;
+            }
         };
+
+        // Same effects as WriteRegister; skips its special cases for plain banks.
+        void WriteRegisterFast(uint32_t index, uint32_t value);
+        bool WritePlainRun(uint32_t first, const uint32_t* guestWords, uint32_t count);
 
         void WorkerMain();
         void VsyncMain();
@@ -93,24 +107,34 @@ namespace gpu
         uint8_t* TranslatePhysical(uint32_t physicalAddress);
 
         std::vector<uint32_t> m_registers;
+        struct MovieClearStage
+        {
+            bool active = false;
+            uint32_t surfaceInfo = 0, colorInfo = 0;
+            uint32_t x = 0, y = 0, width = 0, height = 0, safeLeft = 0, safeRight = 0;
+        } m_movieClear;
+        gpu::frame_plan::wire::PlanStage m_framePlan;
+        gpu::frame_plan::wire::CatalogStage m_catalog;
         uint32_t m_primaryBufferPhysical = 0;
         uint32_t m_primaryBufferSize = 0;
         uint32_t m_readPtrIndex = 0;
         uint32_t m_readPtrWritebackPhysical = 0;
         std::atomic<uint32_t> m_writePtrIndex{ 0xBAADF00D };
-        // Wakes the idle worker as soon as the guest publishes more ring data instead of
-        // letting it finish a fixed sleep; the timed wait still catches mirrored updates.
-        std::mutex m_workerWakeMutex;
-        std::condition_variable m_workerWake;
-        std::atomic<bool> m_workerSleeping{ false };
+        std::mutex m_writePtrMutex;
+        std::condition_variable m_writePtrChanged;
         std::atomic<uint32_t> m_counter{ 0 };
         std::atomic<bool> m_running{ false };
 
         uint32_t m_interruptCallback = 0;
         uint32_t m_interruptUserData = 0;
-        Mutex m_interruptMutex;
+        std::mutex m_interruptMutex;
+        std::condition_variable m_interruptCv;
+        // Completed guest interrupt callbacks. A WAIT_REG_MEM released by a
+        // handler (D3D clears its scratch writeback word) re-checks at once.
+        std::atomic<uint64_t> m_interruptsCompleted{ 0 };
+        std::mutex m_waitProgressMutex;
+        std::condition_variable m_waitProgress;
         std::vector<std::pair<uint32_t, uint32_t>> m_pendingInterrupts; // (source, cpu)
-        std::atomic<uint32_t> m_interruptSignal{ 0 };
         uint64_t m_binMask = 0xFFFFFFFFFFFFFFFFull;
         uint64_t m_binSelect = 0xFFFFFFFFFFFFFFFFull;
 

@@ -1,10 +1,14 @@
 # USA/Europe edition support
 
+## 2026-09-19 Issue #54 language-menu safety correction — pending next release
+
+The language menu now rejects invalid table counts and indices without reading or rewriting a selection, and displays `—` for an unavailable entry. Its capacity follows the native parser limit of 16 entries. The existing `82481BE8` host-language coverage for IDs 1–9 and the separate text/voice selection semantics are unchanged. An opt-in, bounded `LO_TRACE_LANGUAGE=1` trace records the lookup, menu and native-cache stages for future reports. The specific cause of the reported cutscene voice issue remains unconfirmed; no save was available and no real-game reproduction was performed. This correction is pending the next release.
+
 Status: **2026-09-06, included in published v0.2**. Commit `dcc946299cdc2984783793ad5871a0ad0b90a2c9` and its `v0.2` tag were pushed to both remotes. The dated local test packages below preserve pre-release evidence; they are not the official release artifact. Chapter-boundary gameplay and a complete playthrough remain unverified.
 
 ## 2026-09-14 FMV/event subtitle mapping clarification — included in published v0.5.12
 
-The host `82481BE8` language-table hook now covers host game-language IDs 1–9, so the USA/Europe DE/FR/ES/IT event and FMV subtitle suffix mapping uses the same corrected path as the earlier SCH repair. The local USA/Europe test with `game_language=5` accepted the opening FMV subtitles on 2026-09-14 using Vulkan at 3840×2160 and a startup-bundle hit. This confirms the opening Spanish scene only. It does not establish complete event/FMV coverage, a complete playthrough, visual confirmation for German/French/Italian, or reporter acceptance. The fix is included in published [v0.5.12](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.12); publication checks did not re-verify the 50-file manifest.
+The host `82481BE8` language-table hook now covers host game-language IDs 1–9, so the USA/Europe DE/FR/ES/IT event and FMV subtitle suffix mapping uses the same corrected path as the earlier SCH repair. The local USA/Europe test with `game_language=5` accepted the opening FMV subtitles on 2026-09-14 using Vulkan at 3840×2160 and a startup-bundle hit. On 2026-09-15 the original reporter confirmed Spanish opening FMV subtitles on v0.5.12 (Vulkan and Direct3D 12), and DE/FR/IT FMV coverage was confirmed. Issue [#27](https://github.com/freefrank/LostOdysseyRecomp/issues/27) is closed. Complete event coverage and a complete playthrough remain unverified. The fix is included in published [v0.5.12](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.12); publication checks did not re-verify the 50-file manifest.
 
 ## Combined resource metadata — 2026-09-07
 
@@ -54,7 +58,7 @@ The local audit is recorded in `out/eu-import-audit/four-disc-audit.json`. Priva
 
 ## Implementation
 
-- The [importer](../../tools/installer/import_game.py) accepts the exact four new hashes alongside the existing Asian set and records the edition in import metadata. Input sets cannot mix editions. Incremental import checks the actual XEX of existing discs, including old installations without edition metadata, and rejects a mismatched edition or disc number. Existing discs remain protected from overwrite.
+- The [native importer](../../LostOdysseyRecomp/install/import_game.cpp) accepts the exact four new hashes alongside the existing Asian set and records the edition in import metadata. Input sets cannot mix editions. Incremental import checks the actual XEX of existing discs, including old installations without edition metadata, and rejects a mismatched edition or disc number. Existing discs remain protected from overwrite.
 - Runtime reads bounded XEX execution metadata before settings/configuration and selects game languages for the audited edition. This also works with manually extracted folders; language detection is not a substitute for import-time SHA256 validation.
 - USA/Europe game-language IDs are 1=English, 2=Japanese, 3=German, 4=French, 5=Spanish and 6=Italian. The Asian list remains 1/2/7/8/9. Both first-run setup and the in-game menu use the selected list; unavailable saved values fall back to English.
 - The host voice selector reads the original resource-populated language list rather than hardcoding English/Japanese/Korean and three choices. The original USA/Europe settings page exposes English, Japanese, German, French and Italian voice choices; displayed names and cycling now follow that list. This does not establish complete voice playback coverage.

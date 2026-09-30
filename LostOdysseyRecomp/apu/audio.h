@@ -16,4 +16,5 @@ namespace apu
     void RegisterClient(uint32_t callback, uint32_t param);
     void UnregisterClient();
     void SubmitFrame(const void* samples);
+    void SetPaused(bool paused);
 }

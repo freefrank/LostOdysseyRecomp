@@ -1,142 +1,312 @@
-// Production native window/message pump, with GPU/game state supplied by stubs.
-// Runs on a non-input desktop and never injects global keyboard/mouse input.
-#include "../../LostOdysseyRecomp/debug/menu_window.cpp"
-#include <cassert>
+#include <debug/menu_overlay.h>
+#include <debug/teleport.h>
+#include <debug/battle_menu.h>
+#include <debug/map_info.h>
+#include <debug/save_anywhere.h>
+#include <host_ui/host_ui.h>
+#include <host_ui/rasterizer.h>
+#include <debug/translations.h>
+#include <settings/config.h>
+
 #include <cstdio>
-#include <filesystem>
-namespace {
-void CaptureWindow(const std::filesystem::path& path)
+#include <cstdlib>
+#include <string>
+#include <vector>
+
+namespace
 {
-    RECT rect{}; GetWindowRect(menu, &rect);
-    const int width = rect.right-rect.left, height = rect.bottom-rect.top;
-    HDC screen = GetDC(menu), memory = CreateCompatibleDC(screen);
-    BITMAPINFO info{}; info.bmiHeader = {sizeof(BITMAPINFOHEADER), width, -height, 1, 32, BI_RGB};
-    void* pixels{}; HBITMAP bitmap = CreateDIBSection(screen, &info, DIB_RGB_COLORS, &pixels, nullptr, 0);
-    assert(bitmap && pixels); HGDIOBJ old = SelectObject(memory, bitmap);
-    RedrawWindow(menu, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
-    // Match the validated inactive-desktop updater capture contract.
-    SendMessageW(menu, WM_PRINT, reinterpret_cast<WPARAM>(memory), PRF_CLIENT | PRF_CHILDREN | PRF_ERASEBKGND);
-    BITMAPFILEHEADER file{}; file.bfType = 0x4D42; file.bfOffBits = sizeof(file) + sizeof(info.bmiHeader);
-    file.bfSize = file.bfOffBits + width*height*4;
-    FILE* output{}; _wfopen_s(&output, path.c_str(), L"wb"); assert(output);
-    fwrite(&file, sizeof(file), 1, output); fwrite(&info.bmiHeader, sizeof(info.bmiHeader), 1, output);
-    fwrite(pixels, size_t(width)*height*4, 1, output); fclose(output);
-    SelectObject(memory, old); DeleteObject(bitmap); DeleteDC(memory); ReleaseDC(menu, screen);
-}
-uint32_t selectedLanguage = 1;
-int captures = 0, teleports = 0;
-}
-namespace debug_menu {
-void RequestVictory() {} void CancelVictory() {} const wchar_t* Status() { return L"Ready"; }
-bool SaveAnywhereEnabled() { return false; } void SetSaveAnywhereEnabled(bool) {}
-MapInfo GetMapInfo() { return {true, 13, L"Fixture map", L"map_13"}; }
-TeleportSnapshot GetTeleportSnapshot() { TeleportSnapshot s; s.available = true; s.current = {10,20,30}; return s; }
-bool RequestTeleport(Position) { ++teleports; return true; } bool RequestTeleportOffset(Position) { return true; }
-bool RequestSavePosition() { return true; } bool RequestRestorePosition() { return true; }
-bool RequestPoiTeleport(uint64_t) { return true; }
-}
-namespace settings {
-Config GetConfig() { Config value; value.debugLanguage = selectedLanguage; return value; }
-bool SaveDebugLanguage(uint32_t value) { selectedLanguage = value; return true; }
-}
-namespace gpu::renderer {
-bool busy = false;
-std::wstring status = L"Ready";
-void RequestDebugCapture() { ++captures; }
-std::wstring DebugCaptureStatus() { return status; }
-bool DebugCaptureBusy() { return busy; }
+void Require(bool condition, const char* message)
+{
+    if (!condition)
+    {
+        std::fprintf(stderr, "REQUIRE FAILED: %s\n", message);
+        std::exit(1);
+    }
 }
 
-int main(int argc, char** argv)
+struct MockServices
 {
-    HDESK desktop = CreateDesktopW(L"LO_DebugMenu_Interaction_Test", nullptr, nullptr, 0, GENERIC_ALL, nullptr);
-    assert(desktop && SetThreadDesktop(desktop));
-    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-    _putenv_s("LO_BACKGROUND", ""); // Exercise normal product focus on this non-input desktop.
-    _putenv_s("LO_DEBUG_MENU_OPEN", "1");
-    debug_menu::Update();
-    assert(menu && IsWindowVisible(menu));
-    std::filesystem::path output = argc > 1 ? argv[1] : "out/v0.5.0/ui-modernization/native/debug";
-    std::filesystem::create_directories(output);
-    if (argc > 2 && std::string_view(argv[2]) == "--capture-only")
+    uint32_t selectedLanguage = 1;
+    bool saveLanguageSuccess = true;
+    bool captureRequested = false;
+    bool saveAnywhere = false;
+    bool allowVictory = true;
+    bool victoryRequested = false;
+    bool victoryCancelled = false;
+
+    bool allowTeleport = true;
+    bool allowSavePos = true;
+    bool allowRestorePos = true;
+    bool allowPoiTeleport = true;
+
+    int teleportCalls = 0;
+    int savePosCalls = 0;
+    int restorePosCalls = 0;
+    int poiTeleportCalls = 0;
+
+    debug_menu::Position lastTeleport{};
+    debug_menu::TeleportSnapshot snapshot;
+} g_mock;
+} // namespace
+
+namespace hid { bool UsesPlayStationPrompts() { return false; } }
+
+namespace settings
+{
+Config GetConfig()
+{
+    Config c;
+    c.debugLanguage = g_mock.selectedLanguage;
+    return c;
+}
+bool SaveDebugLanguage(uint32_t language)
+{
+    if (!g_mock.saveLanguageSuccess) return false;
+    g_mock.selectedLanguage = language;
+    return true;
+}
+}
+
+namespace gpu::renderer
+{
+void RequestDebugCapture() { g_mock.captureRequested = true; }
+std::wstring DebugCaptureStatus() { return L"Ready"; }
+}
+
+namespace debug_menu
+{
+MapInfo GetMapInfo()
+{
+    return {true, 42, L"Test Wasteland", L"wasteland_01"};
+}
+bool SaveAnywhereEnabled() { return g_mock.saveAnywhere; }
+void SetSaveAnywhereEnabled(bool enabled) { g_mock.saveAnywhere = enabled; }
+
+bool RequestVictory()
+{
+    if (!g_mock.allowVictory) return false;
+    g_mock.victoryRequested = true;
+    return true;
+}
+void CancelVictory()
+{
+    g_mock.victoryCancelled = true;
+}
+const wchar_t* Status()
+{
+    return g_mock.victoryRequested ? L"Waiting for safe phase" : L"Ready";
+}
+
+TeleportSnapshot GetTeleportSnapshot()
+{
+    return g_mock.snapshot;
+}
+
+bool RequestTeleport(Position position)
+{
+    if (!g_mock.allowTeleport) return false;
+    g_mock.lastTeleport = position;
+    ++g_mock.teleportCalls;
+    return true;
+}
+bool RequestTeleportOffset(Position) { return true; }
+
+bool RequestSavePosition()
+{
+    if (!g_mock.allowSavePos) return false;
+    ++g_mock.savePosCalls;
+    return true;
+}
+bool RequestRestorePosition()
+{
+    if (!g_mock.allowRestorePos) return false;
+    ++g_mock.restorePosCalls;
+    return true;
+}
+bool RequestPoiTeleport(uint64_t)
+{
+    if (!g_mock.allowPoiTeleport) return false;
+    ++g_mock.poiTeleportCalls;
+    return true;
+}
+}
+
+int main()
+{
+    // Setup initial mock environment
+    g_mock.snapshot.available = true;
+    g_mock.snapshot.current = {100.0f, 200.0f, 300.0f};
+    g_mock.snapshot.bookmarkAvailable = true;
+    g_mock.snapshot.bookmark = {50.0f, 60.0f, 70.0f};
+    g_mock.snapshot.poiRevision = 1;
+    g_mock.snapshot.pois = {
+        {1, L"Save Point 1", {100.0f, 200.0f, 300.0f}},
+        {2, L"Chest 1", {150.0f, 250.0f, 350.0f}}
+    };
+
+    Require(!debug_menu::IsOverlayVisible(), "Overlay should be initially hidden");
+    Require(!host_ui::IsGamePaused(), "Game should not be initially paused");
+
+    // 1. Toggle Overlay & Pause State
+    debug_menu::ToggleOverlay();
+    Require(debug_menu::IsOverlayVisible(), "ToggleOverlay did not make overlay visible");
+    Require(host_ui::IsGamePaused(), "ToggleOverlay did not pause the game");
+
+    // 2. Tab 0 (Overview) Row 0: Language Toggle & failure handling
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    Require(g_mock.selectedLanguage == 0, "Language toggle did not change to English");
+
+    g_mock.saveLanguageSuccess = false;
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    g_mock.saveLanguageSuccess = true;
+
+    // Row 1: Render Capture
+    debug_menu::HandleInput(debug_menu::InputAction::Down);
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    Require(g_mock.captureRequested, "Capture was not requested");
+
+    // Row 2: Save Anywhere
+    debug_menu::HandleInput(debug_menu::InputAction::Down);
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    Require(g_mock.saveAnywhere, "Save anywhere was not enabled");
+
+    // Row 3: Win Battle (Success and Rejection)
+    debug_menu::HandleInput(debug_menu::InputAction::Down);
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    Require(g_mock.victoryRequested, "Victory request not registered");
+
+    g_mock.allowVictory = false;
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+
+    // Row 4: Cancel Victory
+    debug_menu::HandleInput(debug_menu::InputAction::Down);
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    Require(g_mock.victoryCancelled, "Cancel victory was not called");
+
+    // 3. Tab Switching: NextTab -> Teleport Tab
+    debug_menu::HandleInput(debug_menu::InputAction::NextTab);
+    debug_menu::UpdateOverlaySnapshot();
+
+    // 4. Tab 1 (Teleport) Row 0: Save Position
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    Require(g_mock.savePosCalls == 1, "Save position was not called");
+
+    g_mock.allowSavePos = false;
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    Require(g_mock.savePosCalls == 1, "Save position should be rejected without increment");
+
+    // Row 1: Restore Position
+    debug_menu::HandleInput(debug_menu::InputAction::Down);
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    Require(g_mock.restorePosCalls == 1, "Restore position was not called");
+
+    g_mock.allowRestorePos = false;
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    Require(g_mock.restorePosCalls == 1, "Restore position should be rejected without increment");
+
+    // Row 2: Fill Current Coordinates
+    debug_menu::HandleInput(debug_menu::InputAction::Down);
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+
+    // Row 3: Coordinate Axis selection & adjustment
+    debug_menu::HandleInput(debug_menu::InputAction::Down);
+    debug_menu::HandleInput(debug_menu::InputAction::Left);
+    debug_menu::HandleInput(debug_menu::InputAction::Right);
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm); // Switch to Y axis
+    debug_menu::HandleInput(debug_menu::InputAction::Right);
+
+    // Row 4: Teleport to XYZ
+    debug_menu::HandleInput(debug_menu::InputAction::Down);
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    Require(g_mock.teleportCalls == 1, "Teleport XYZ was not called");
+    Require(g_mock.lastTeleport.x == 100.0f && g_mock.lastTeleport.y == 300.0f &&
+                g_mock.lastTeleport.z == 300.0f,
+            "Axis adjustment did not submit the expected XYZ coordinates");
+
+    // Dirty Z, then refill without closing/reopening the overlay. Opening also
+    // initializes XYZ, so testing only the initial fill misses a stale Z value.
+    debug_menu::HandleInput(debug_menu::InputAction::Up); // Row 3, Y selected
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm); // Switch to Z
+    debug_menu::HandleInput(debug_menu::InputAction::Right); // Z = 400
+    debug_menu::HandleInput(debug_menu::InputAction::Up); // Row 2: Fill
+    g_mock.snapshot.current = {-125.0f, 450.0f, 875.0f};
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    debug_menu::HandleInput(debug_menu::InputAction::Down);
+    debug_menu::HandleInput(debug_menu::InputAction::Down); // Row 4: Teleport
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    Require(g_mock.teleportCalls == 2, "Teleport after refilling coordinates was not called");
+    Require(g_mock.lastTeleport.x == -125.0f && g_mock.lastTeleport.y == 450.0f &&
+                g_mock.lastTeleport.z == 875.0f,
+            "Fill Coordinates did not replace every edited axis with the current position");
+
+    // An unavailable snapshot must preserve the user's target, not partially
+    // replace it with invalid coordinates.
+    debug_menu::HandleInput(debug_menu::InputAction::Up);
+    debug_menu::HandleInput(debug_menu::InputAction::Up); // Row 2: Fill
+    g_mock.snapshot.available = false;
+    g_mock.snapshot.current = {1.0f, 2.0f, 3.0f};
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    debug_menu::HandleInput(debug_menu::InputAction::Down);
+    debug_menu::HandleInput(debug_menu::InputAction::Down);
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    Require(g_mock.teleportCalls == 3, "Teleport after an unavailable fill was not called");
+    Require(g_mock.lastTeleport.x == -125.0f && g_mock.lastTeleport.y == 450.0f &&
+                g_mock.lastTeleport.z == 875.0f,
+            "An unavailable Fill Coordinates request changed the target");
+    g_mock.snapshot.available = true;
+
+    g_mock.allowTeleport = false;
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    Require(g_mock.teleportCalls == 3, "Teleport XYZ should be rejected without increment");
+
+    // Row 5: Step Size Switch
+    debug_menu::HandleInput(debug_menu::InputAction::Down);
+    debug_menu::HandleInput(debug_menu::InputAction::Right);
+    debug_menu::HandleInput(debug_menu::InputAction::Right);
+
+    // Row 6: POI Selection Cycling
+    debug_menu::HandleInput(debug_menu::InputAction::Down);
+    debug_menu::HandleInput(debug_menu::InputAction::Right);
+    debug_menu::HandleInput(debug_menu::InputAction::Left);
+
+    // Row 7: Teleport to POI
+    debug_menu::HandleInput(debug_menu::InputAction::Down);
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    Require(g_mock.poiTeleportCalls == 1, "POI teleport was not called");
+
+    g_mock.allowPoiTeleport = false;
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    Require(g_mock.poiTeleportCalls == 1, "POI teleport should be rejected without increment");
+
+    // 5. Render overlay into PixelBuffer with Rasterizer
+    host_ui::PixelBuffer frame;
+    Require(frame.Resize(), "Logical overlay allocation failed");
+    host_ui::Rasterizer rasterizer(frame);
+    debug_menu::RenderOverlay(rasterizer);
+
+    bool hasNonZeroPixel = false;
+    for (uint32_t px : frame.pixels)
     {
-        selectedLanguage = 0;
-        RefreshLanguage();
-        debug_menu::Update();
-        CaptureWindow(output / "overview-en.bmp");
-        gpu::renderer::status = L"ZIP 失败，原始文件保留 / ZIP failed: C:\\LostOdyssey\\captures\\long-path-for-render-capture\\2026-09-08\\frame-and-resource-details\\retained-original-files\\capture-render-state-with-a-long-filename-for-inspection.zip";
-        debug_menu::Update();
-        CaptureWindow(output / "long-error-en.bmp");
-        DestroyWindow(menu);
-        std::printf("CAPTURE ONLY: current-language overview and long error; no repeated functional checks\n");
-        return 0;
+        if (px != 0) { hasNonZeroPixel = true; break; }
     }
-    assert(IsWindowVisible(captureButton) && !IsWindowVisible(coordinates[0]));
-    assert(GetParent(captureButton) == viewport);
-    assert(GetWindowLongPtrW(viewport, GWL_EXSTYLE) & WS_EX_CONTROLPARENT);
-    CaptureWindow(output / "overview-zh.bmp");
-    SendMessageW(captureButton, BM_CLICK, 0, 0); assert(captures == 1);
-    SendMessageW(pages[1], BM_CLICK, 0, 0);
-    assert(activePage == 1 && IsWindowVisible(coordinates[0]) && !IsWindowVisible(captureButton));
-    SendMessageW(teleportButtons[2], BM_CLICK, 0, 0);
-    SendMessageW(teleportButtons[3], BM_CLICK, 0, 0); assert(teleports == 1);
-    CaptureWindow(output / "teleport-zh.bmp");
-    for (const WPARAM key : {WPARAM(VK_F1), WPARAM(VK_ESCAPE), WPARAM(0xC4)})
-    {
-        SetFocus(coordinates[0]);
-        assert(GetFocus() == coordinates[0]);
-        PostMessageW(coordinates[0], WM_KEYDOWN, key, 0);
-        debug_menu::Update();
-        assert(!IsWindowVisible(menu));
-        debug_menu::Toggle();
-        assert(IsWindowVisible(menu));
-    }
-    const HFONT titleFont = chrome.font;
-    RECT titleBefore{}; GetWindowRect(chrome.close, &titleBefore);
-    for (int i = 0; i < 5; ++i) SendMessageW(viewport, WM_VSCROLL, SB_BOTTOM, 0);
-    RECT titleAfter{}; GetWindowRect(chrome.close, &titleAfter);
-    assert(chrome.font == titleFont && EqualRect(&titleBefore, &titleAfter));
-    SetWindowPos(menu, nullptr, 0, 0, ui::Px(menu, 560), ui::Px(menu, 380), SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
-    SetFocus(teleportButtons[3]); RevealFocus();
-    RECT controlRect{}, clipRect{}; GetWindowRect(teleportButtons[3], &controlRect);
-    GetClientRect(viewport, &clipRect); MapWindowPoints(viewport, nullptr, reinterpret_cast<POINT*>(&clipRect), 2);
-    assert(controlRect.top >= clipRect.top && controlRect.bottom <= clipRect.bottom);
-    CaptureWindow(output / "small-focus.bmp");
-    SetWindowPos(menu, nullptr, 0, 0, ui::Px(menu, 720), ui::Px(menu, 800), SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
-    assert(scrollX == 0 && scrollY == 0);
-    POINT hit{ui::Px(menu, 30), ui::Px(menu, 24)}; ClientToScreen(menu, &hit);
-    assert(SendMessageW(menu, WM_NCHITTEST, 0, MAKELPARAM(hit.x, hit.y)) == HTCAPTION);
-    hit = {1, 1}; ClientToScreen(menu, &hit);
-    assert(SendMessageW(menu, WM_NCHITTEST, 0, MAKELPARAM(hit.x, hit.y)) == HTTOPLEFT);
-    SendMessageW(chrome.maximize, BM_CLICK, 0, 0); assert(IsZoomed(menu));
-    SendMessageW(chrome.maximize, BM_CLICK, 0, 0); assert(!IsZoomed(menu));
-    SendMessageW(chrome.minimize, BM_CLICK, 0, 0); assert(IsIconic(menu));
-    SendMessageW(menu, WM_SYSCOMMAND, SC_RESTORE, 0); assert(!IsIconic(menu));
-    RECT suggested{}; GetWindowRect(menu, &suggested);
-    SendMessageW(menu, WM_DPICHANGED, MAKELONG(GetDpiForWindow(menu), GetDpiForWindow(menu)), reinterpret_cast<LPARAM>(&suggested));
-    LOGFONTW actual{}; assert(GetObjectW(uiFont, sizeof(actual), &actual));
-    assert(actual.lfHeight == -ui::Px(menu, 15));
-    SendMessageW(pages[0], BM_CLICK, 0, 0);
-    SendMessageW(languageList, CB_SETCURSEL, 0, 0);
-    SendMessageW(menu, WM_COMMAND, MAKEWPARAM(104, CBN_SELCHANGE), reinterpret_cast<LPARAM>(languageList));
-    assert(!chinese && activePage == 0);
-    CaptureWindow(output / "overview-en.bmp");
-    gpu::renderer::busy = true;
-    gpu::renderer::status = L"正在截取 / Capturing: fixture-frame";
-    debug_menu::Update();
-    assert(!IsWindowEnabled(captureButton));
-    wchar_t text[512]{};
-    GetWindowTextW(captureStatus, text, int(std::size(text)));
-    assert(std::wcsstr(text, L"fixture-frame"));
-    gpu::renderer::busy = false;
-    gpu::renderer::status = L"ZIP 失败，原始文件保留 / ZIP failed: fixture-raw";
-    debug_menu::Update();
-    assert(IsWindowEnabled(captureButton));
-    GetWindowTextW(captureStatus, text, int(std::size(text)));
-    assert(std::wcsstr(text, L"fixture-raw") && std::wcsstr(text, L"failed"));
-    CaptureWindow(output / "capture-error.bmp");
-    SendMessageW(chrome.close, BM_CLICK, 0, 0); assert(!IsWindowVisible(menu));
-    DestroyWindow(menu);
-    assert(!menu && !viewport && !chrome.font && !uiFont && layoutControls.empty());
-    std::printf("PASS new chrome hit regions/close; paged callbacks; viewport focus/reclamp; stable title font; current-DPI layout; bilingual/status; child F1/Esc/B dismissal; cleanup\n");
+    Require(hasNonZeroPixel, "RenderOverlay produced completely blank frame");
+
+    // Verify accurate text measurement (ASCII 9px, CJK 17px)
+    Require(rasterizer.MeasureWString(L"A") == 9, "MeasureWString ASCII glyph width should be 9px");
+    Require(rasterizer.MeasureWString(L"中") == 17, "MeasureWString CJK glyph width should be 17px");
+    Require(rasterizer.MeasureWString(L"中文测试") == 17 * 4, "MeasureWString 4 CJK glyphs width should be 68px");
+
+    // Verify translations bidirectional clean mapping
+    Require(std::wstring(debug_menu::translations::Text(L"当前战斗判胜", false)) == L"Win Current Battle", "Win battle translation to English");
+    Require(std::wstring(debug_menu::translations::Text(L"Win Current Battle", true)) == L"当前战斗判胜", "Win battle translation to Chinese");
+    Require(std::wstring(debug_menu::translations::Poi(L"存档点 1", false)) == L"Save point 1", "POI translation to English");
+    Require(std::wstring(debug_menu::translations::Poi(L"Save Point 1", true)) == L"存档点 1", "POI translation to Chinese");
+
+    // 6. Dismiss overlay with Cancel (B / Esc)
+    debug_menu::HandleInput(debug_menu::InputAction::Cancel);
+    Require(!debug_menu::IsOverlayVisible(), "Cancel input did not hide overlay");
+    Require(!host_ui::IsGamePaused(), "Cancel input did not unpause game");
+
+    std::puts("PASS debug menu interaction: modal overlay, pause sync, navigation, error reporting, and rasterizer rendering");
+    return 0;
 }

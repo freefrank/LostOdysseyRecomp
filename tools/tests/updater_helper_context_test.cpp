@@ -110,7 +110,7 @@ int wmain(int argc, wchar_t **argv)
     update.operationRoot = operation;
     update.stageRoot = stage;
     update.planPath = operation / "apply-plan.json";
-    update.files = {{"LostOdysseyRecomp.exe", updater::Sha256File(stage / "LostOdysseyRecomp.exe", error)}};
+    update.files = {{"LostOdysseyRecomp.exe"}};
     const std::wstring unicodeArgument = L"context-´-′-中文";
     if (!error.empty() || !updater::WriteApplyPlan(update, install / "LostOdysseyRecomp.exe",
                                                     {L"--context-marker", marker.wstring(), unicodeArgument}, error))

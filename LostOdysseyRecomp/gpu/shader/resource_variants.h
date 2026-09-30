@@ -605,6 +605,9 @@ inline void Prefetch(std::span<const uint32_t> metadata, std::vector<Fetch>& fet
 }
 } // namespace detail
 
+// Returns 1 for valid bytes, 0 for missing, -1 for invalid. The caller owns code.
+using SourceReader = std::function<int(uint64_t, uint32_t, bool, std::vector<uint8_t>&)>;
+
 struct FixedVariantResult {
     size_t verifiedBases = 0, missingBases = 0, invalidBases = 0, generated = 0;
     uint64_t bytesRead = 0;
@@ -619,22 +622,31 @@ struct FixedVariantResult {
 inline FixedVariantResult GenerateFixedVariants(
     const std::filesystem::path& sourceDirectory,
     const std::function<void(uint64_t, std::span<const uint8_t>)>& save,
-    const std::function<bool()>& cancelled = {}) {
+    const std::function<bool()>& cancelled = {}, const SourceReader& readSource = {}) {
     if (!save) throw std::invalid_argument("fixed shader variants require a save callback");
     FixedVariantResult result;
     std::set<uint64_t> emitted;
     for (const auto& source : detail::sources) {
         if (cancelled && cancelled()) { result.cancelled = true; break; }
+        std::vector<uint8_t> code;
+        if (readSource) {
+            const int status = readSource(source.hash, source.size, false, code);
+            if (status == 0) { ++result.missingBases; continue; }
+            if (status != 1 || code.size() != source.size || detail::Hash(code) != source.hash) {
+                ++result.invalidBases; continue;
+            }
+        } else {
         std::ifstream in(sourceDirectory / detail::Name(source.hash), std::ios::binary | std::ios::ate);
         if (!in) { ++result.missingBases; continue; }
         if (in.tellg() != std::streamoff(source.size)) { ++result.invalidBases; continue; }
-        std::vector<uint8_t> code(source.size);
+        code.resize(source.size);
         in.seekg(0);
         in.read(reinterpret_cast<char*>(code.data()), std::streamsize(code.size()));
         result.bytesRead += uint64_t(in.gcount());
         if (!in || in.peek() != std::char_traits<char>::eof() || detail::Hash(code) != source.hash) {
             ++result.invalidBases;
             continue;
+        }
         }
         ++result.verifiedBases;
         const auto metadata = std::span(detail::fetchMetadata).subspan(source.first, source.count);
@@ -701,15 +713,24 @@ static_assert(ValidLinkMetadata(), "invalid original SDK shader link metadata");
 inline LinkedVariantResult GenerateLinkedVariants(
     const std::filesystem::path& sourceDirectory,
     const std::function<void(uint64_t, std::span<const uint8_t>)>& save,
-    const std::function<bool()>& cancelled = {}) {
+    const std::function<bool()>& cancelled = {}, const SourceReader& readSource = {},
+    const std::set<uint64_t>* fixedHashes = nullptr) {
     if (!save) throw std::invalid_argument("linked shader variants require a save callback");
     LinkedVariantResult result;
     std::set<uint64_t> emitted;
-    const auto fixed = GenerateFixedVariants(sourceDirectory,
-        [&](uint64_t hash, auto) { emitted.insert(hash); }, cancelled);
-    result.bytesRead = fixed.bytesRead;
-    if (fixed.cancelled) { result.cancelled = true; return result; }
+    if (fixedHashes) emitted = *fixedHashes;
+    else {
+        const auto fixed = GenerateFixedVariants(sourceDirectory,
+            [&](uint64_t hash, auto) { emitted.insert(hash); }, cancelled, readSource);
+        result.bytesRead = fixed.bytesRead;
+        if (fixed.cancelled) { result.cancelled = true; return result; }
+    }
     auto read = [&](uint64_t hash, uint32_t size, bool pixel, std::vector<uint8_t>& code) {
+        if (readSource) {
+            const int status = readSource(hash, size, pixel, code);
+            if (status != 1) return status;
+            return code.size() == size && detail::Hash(code) == hash ? 1 : -1;
+        }
         auto name = detail::Name(hash);
         if (pixel) name[0] = 'p';
         std::ifstream in(sourceDirectory / name, std::ios::binary | std::ios::ate);

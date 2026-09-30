@@ -38,13 +38,15 @@ bool Validate(const std::filesystem::path& directory, Identity expected)
     const auto length = input.tellg();
     // Original loader accepts at most 512 sectors of index data.
     if (length < 64 || length > 1024*1024) return false;
-    std::vector<uint8_t> bytes(static_cast<size_t>(length));
+    // Check the disc/index identity here. The game reads resource records on
+    // demand; switching discs does not need a full archive integrity scan.
+    std::array<uint8_t, 64> bytes{};
     input.seekg(0);
     if (!input.read(reinterpret_cast<char*>(bytes.data()), bytes.size())) return false;
     auto u16 = [&](size_t p) { return uint32_t(bytes[p]) | uint32_t(bytes[p+1]) << 8; };
     auto u32 = [&](size_t p) { return u16(p) | u16(p+2) << 16; };
     if (bytes[20] != expected.disc || bytes[21] != 4 || u16(24) != 1 || u16(26) != 13 ||
-        !u16(12) || u16(12)*2048u > bytes.size()) return false;
+        !u16(12) || u16(12)*2048u > uint64_t(length)) return false;
     const uint64_t archives = u32(32), entries = u32(36), strings = u32(40);
     if (archives < 64 || archives+13*48 > entries || entries > strings || strings > u16(12)*2048u ||
         entries+uint64_t(u32(28))*24 != strings) return false;
@@ -56,16 +58,6 @@ bool Validate(const std::filesystem::path& directory, Identity expected)
         std::error_code ec;
         const auto size = std::filesystem::file_size(directory / names[i], ec);
         if (ec || !size) return false;
-        const uint64_t record = archives+i*48;
-        const uint64_t begin = record+u32(record+4);
-        const uint64_t end = i == 12 ? strings : record+48+u32(record+52);
-        if (begin < entries || end < begin || end > strings || (end-begin)%24) return false;
-        for (uint64_t p = begin; p < end; p += 24)
-        {
-            const uint64_t length = u32(p+16);
-            const uint64_t offset = uint64_t(u32(p+8) & 0xFFFFFF) * 2048;
-            if (length && (offset > size || length > size-offset)) return false;
-        }
     }
     return true;
 }

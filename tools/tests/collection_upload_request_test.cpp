@@ -16,6 +16,9 @@ void* operator new(size_t size) {
 void* operator new[](size_t size) { return ::operator new(size); }
 void operator delete(void* pointer) noexcept { std::free(pointer); }
 void operator delete[](void* pointer) noexcept { std::free(pointer); }
+// Match malloc-backed new when the native ABI selects sized deallocation.
+void operator delete(void* pointer, std::size_t) noexcept { std::free(pointer); }
+void operator delete[](void* pointer, std::size_t) noexcept { std::free(pointer); }
 static void Check(bool ok, const char* message) {
     ++checks;
     if (!ok) { std::cerr << "FAILED: " << message << '\n'; std::exit(1); }

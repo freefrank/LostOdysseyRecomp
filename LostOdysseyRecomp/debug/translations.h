@@ -18,17 +18,17 @@ inline constexpr Entry Entries[] = {
     {L"开启后重新进入 System 菜单，再选择 Save。", L"Reopen the System menu, then select Save.", L"开启后重新进入 System 菜单，再选择 Save。"},
     {L"当前地图 / Map", L"Current map", L"当前地图"},
     {L"战斗 / Battle", L"Battle", L"战斗"},
-    {L"当前战斗判胜 / Win battle", L"Win current battle", L"当前战斗判胜"},
-    {L"取消请求", L"Cancel request", L"取消请求"},
+    {L"当前战斗判胜 / Win battle", L"Win Current Battle", L"当前战斗判胜"},
+    {L"取消请求", L"Cancel Request", L"取消请求"},
     {L"一次性请求；在战斗判定点执行。", L"One-shot request, applied at a safe battle phase.", L"一次性请求；在战斗判定点执行。"},
     {L"人物传送 / Teleport（仅当前地图）", L"Teleport (current map only)", L"人物传送（仅当前地图）"},
-    {L"记住当前位置", L"Remember position", L"记住当前位置"},
-    {L"返回记录位置", L"Return to bookmark", L"返回记录位置"},
-    {L"填入当前坐标", L"Use current position", L"填入当前坐标"},
+    {L"记住当前位置", L"Remember Position", L"记住当前位置"},
+    {L"返回记录位置", L"Restore Position", L"返回记录位置"},
+    {L"填入当前坐标", L"Fill Coordinates", L"填入当前坐标"},
     {L"传送到坐标", L"Teleport", L"传送到坐标"},
     {L"传送到此 POI", L"Go to POI", L"传送到此 POI"},
     {L"POI 仅含已加载区域；传送到达后仍会触发游戏事件。", L"POIs cover loaded areas; arrival can trigger game events.", L"POI 仅含已加载区域；到达后仍会触发游戏事件。"},
-    {L"截取渲染状态 / Capture render state", L"Capture render state", L"截取渲染状态"},
+    {L"截取渲染状态 / Capture render state", L"Capture Render State", L"截取渲染状态"},
     {L"截取下一完整帧；导出期间可能短暂停顿。", L"Capture the next full frame; exporting may briefly pause.", L"截取下一完整帧；导出期间可能短暂停顿。"},
     {L"Lost Odyssey — Debug Menu (F1)", L"Lost Odyssey — Debug Menu (F1)", L"失落的奥德赛 — 调试菜单 (F1)"},
     {L"当前地图 / Map: 加载中或尚未识别", L"Map: loading or not yet identified", L"当前地图：加载中或尚未识别"},
@@ -71,12 +71,38 @@ inline constexpr Entry Entries[] = {
     {L"ZIP 失败，原始文件保留 / ZIP failed: ", L"ZIP failed; raw files retained: ", L"ZIP 失败，原始文件保留："},
     {L"导出不完整 / Incomplete: ", L"Export incomplete: ", L"导出不完整："},
     {L"Language", L"Language", L"语言"},
-    {L"Could not save language. Check settings.ini permissions.", L"Could not save language. Check settings.ini permissions.", L"无法保存语言，请检查 settings.ini 写入权限。"},
+    {L"场景已变化，操作已取消", L"Scene changed; operation cancelled", L"场景已变化，操作已取消"},
+    {L"保存语言配置失败", L"Failed to save language setting", L"保存语言配置失败"},
+    {L"已请求截取渲染状态", L"Capture requested", L"已请求截取渲染状态"},
+    {L"已提交判胜请求（等待安全阶段生效）", L"Victory requested (pending)", L"已提交判胜请求（等待安全阶段生效）"},
+    {L"无法请求判胜（当前无活跃战斗）", L"Cannot request victory (no active battle)", L"无法请求判胜（当前无活跃战斗）"},
+    {L"已取消判胜请求", L"Victory cancelled", L"已取消判胜请求"},
+    {L"已提交记录坐标请求（等待生效）", L"Save position requested (pending)", L"已提交记录坐标请求（等待生效）"},
+    {L"无法记录坐标（当前不可用）", L"Cannot save position (unavailable)", L"无法记录坐标（当前不可用）"},
+    {L"已提交恢复坐标请求（等待生效）", L"Restore position requested (pending)", L"已提交恢复坐标请求（等待生效）"},
+    {L"无法恢复坐标（未记录或不可用）", L"Cannot restore position (no bookmark or unavailable)", L"无法恢复坐标（未记录或不可用）"},
+    {L"已填入当前角色坐标", L"Position filled", L"已填入当前角色坐标"},
+    {L"无法获取当前角色坐标", L"Cannot fill position (unavailable)", L"无法获取当前角色坐标"},
+    {L"已提交传送请求（等待生效）", L"Teleport requested (pending)", L"已提交传送请求（等待生效）"},
+    {L"传送请求被拒绝（坐标无效或不可用）", L"Teleport request rejected (invalid or unavailable)", L"传送请求被拒绝（坐标无效或不可用）"},
+    {L"已提交 POI 传送请求（等待生效）", L"POI teleport requested (pending)", L"已提交 POI 传送请求（等待生效）"},
+    {L"POI 传送请求被拒绝（不可用）", L"POI teleport request rejected (unavailable)", L"POI 传送请求被拒绝（不可用）"},
+    {L"Save Point", L"Save point", L"存档点"},
+    {L"Chest", L"Chest", L"宝箱 / 触碰点"},
+    {L"传送到目标坐标", L"Teleport to Target", L"传送到目标坐标"},
+    {L"传送到此兴趣点", L"Teleport to POI", L"传送到此兴趣点"},
+    {L"无可用兴趣点", L"No POIs available", L"无可用兴趣点"},
+    {L"Ready", L"Ready", L"就绪"},
 };
 inline const wchar_t* Text(const wchar_t* key, bool chinese)
 {
+    if (!key) return L"";
+    std::wstring_view sv(key);
     for (const auto& entry : Entries)
-        if (entry.key == key) return chinese ? entry.zh : entry.en;
+    {
+        if (entry.key == sv || entry.en == sv || entry.zh == sv)
+            return chinese ? entry.zh : entry.en;
+    }
     return key;
 }
 inline std::wstring Capture(const std::wstring& status, bool chinese)
@@ -91,7 +117,7 @@ inline std::wstring Capture(const std::wstring& status, bool chinese)
 inline std::wstring Poi(const std::wstring& label, bool chinese)
 {
     const auto split = label.rfind(L' ');
-    if (split == std::wstring::npos) return label;
+    if (split == std::wstring::npos) return std::wstring(Text(label.c_str(), chinese));
     const auto category = label.substr(0, split);
     return std::wstring(Text(category.c_str(), chinese)) + label.substr(split);
 }

@@ -199,15 +199,170 @@ void TestContentReplacement(size_t bytes)
         Check(!found->second.content.Matches(oldSource.data(), oldSource.size()), "replacement does not retain old samples");
     }
 }
+
+void TestIndexCache()
+{
+    using gpu::geometry_prepare::ConvertIndices;
+    using gpu::geometry_prepare::IndexCache;
+    using gpu::geometry_prepare::IndexEntry;
+    using gpu::geometry_prepare::IndexKey;
+    IndexCache cache(4);
+    std::vector<uint8_t> src(64);
+    for (size_t i = 0; i < src.size(); ++i) src[i] = uint8_t(i * 17 + 3);
+    constexpr uint32_t count = 16;
+    const size_t srcBytes = size_t(count) * 2;
+    const IndexKey key{0x12000000u, count, 4u, 0u, 2u};
+    Check(cache.find(key) == cache.end(), "absent index key misses");
+    std::vector<uint32_t> converted(count);
+    ConvertIndices(src.data(), converted.data(), count, false, 2u);
+    IndexEntry entry;
+    entry.data = converted;
+    entry.content.Capture(src.data(), srcBytes);
+    entry.lastFrame = 7;
+    cache.emplace(key, std::move(entry));
+    auto found = cache.find(key);
+    Check(found != cache.end(), "stored index key hits");
+    Check(found->second.data == converted, "cached output matches conversion");
+    Check(found->second.content.Matches(src.data(), srcBytes), "unchanged index source matches");
+    src[0] ^= 0x40;
+    Check(!found->second.content.Matches(src.data(), srcBytes), "mutated index source misses");
+    src[0] ^= 0x40;
+    Check(cache.find(IndexKey{0x12000000u, count, 13u, 0u, 2u}) == cache.end(), "primitive type participates in index key");
+    Check(cache.find(IndexKey{0x12000000u, count, 4u, 1u, 2u}) == cache.end(), "index width participates in index key");
+    Check(cache.find(IndexKey{0x12000000u, count, 4u, 0u, 1u}) == cache.end(), "endian mode participates in index key");
+    for (uint32_t i = 0; i < 100; ++i) {
+        IndexEntry filler;
+        filler.data = converted;
+        filler.content.Capture(src.data(), srcBytes);
+        filler.lastFrame = i;
+        cache.emplace(IndexKey{0x13000000u + i, count, 4u, 0u, 2u}, std::move(filler));
+    }
+    Check(cache.size() == 4, "index churn respects capacity");
+    Check(cache.bucket_count() != 0, "index buckets reserved before first insertion");
+}
+
+void TestIndexContentAndBudget()
+{
+    using namespace gpu::geometry_prepare;
+    // This is the source extent used by a 16-bit indexed draw. The old
+    // sampling scheme missed byte 601, within index 300.
+    std::vector<uint8_t> source(16384, 0);
+    const IndexKey key{0x12000000u, 8192u, 4u, 0u, 1u};
+    IndexCache cache(4, 50000);
+    IndexEntry initial;
+    initial.data.resize(key.count);
+    ConvertIndices(source.data(), initial.data.data(), key.count, false, key.endian);
+    initial.content.Capture(source.data(), source.size());
+    initial.lastFrame = 1;
+    cache.emplace(key, std::move(initial));
+    Check(cache.AllocatedBytes() == source.size() + key.count * sizeof(uint32_t), "index payload accounting");
+    source[601] = 1;
+    auto found = cache.find(key);
+    Check(found != cache.end() && !found->second.content.Matches(source.data(), source.size()),
+        "same-frame middle index mutation invalidates cached output");
+    found->second.motionIndexHash = 0x1234;
+    found->second.motionIndexHashReady = true;
+    IndexEntry replacement;
+    replacement.data.resize(key.count);
+    ConvertIndices(source.data(), replacement.data.data(), key.count, false, key.endian);
+    replacement.content.Capture(source.data(), source.size());
+    replacement.lastFrame = 1;
+    cache.emplace(key, std::move(replacement));
+    found = cache.find(key);
+    Check(found != cache.end() && found->second.content.Matches(source.data(), source.size()), "changed indices recaptured");
+    Check(found->second.data[300] == 1, "changed index converted instead of reusing old output");
+    Check(!found->second.motionIndexHashReady, "changed indices discard the cached motion signature");
+    Check(cache.AllocatedBytes() == 49152 && cache.PeakBytes() == 49152, "replacement does not double count bytes");
+
+    // A larger replacement for the same key cannot leave stale data behind.
+    IndexEntry oversized;
+    oversized.data.resize(10000);
+    oversized.content.Capture(source.data(), source.size());
+    cache.emplace(key, std::move(oversized));
+    Check(cache.find(key) == cache.end() && cache.AllocatedBytes() == 0, "oversized replacement bypasses cache");
+
+    IndexCache bounded(4, 1000);
+    for (uint32_t i = 0; i < 10; ++i)
+    {
+        IndexEntry entry;
+        entry.data.resize(128);
+        entry.content.Capture(source.data(), 256);
+        bounded.emplace(IndexKey{0x20000000u + i, 128u, 4u, 0u, 2u}, std::move(entry));
+        Check(bounded.AllocatedBytes() <= 1000, "index cache stays within byte budget");
+    }
+    Check(bounded.size() == 1 && bounded.Evictions() == 9 && bounded.PeakBytes() <= 1000,
+        "byte pressure evicts old index payloads");
+}
+
+void TestVertexSamplingPolicy()
+{
+    using namespace gpu::geometry_prepare;
+    std::vector<uint8_t> source(16384, 0);
+    VertexEntry vertex{};
+    IndexEntry index{};
+    vertex.content.Capture(source.data(), source.size());
+    index.content.Capture(source.data(), source.size());
+    source[601] = 1;
+    Check(vertex.content.Matches(source.data(), source.size()), "vertex sampling accepts known blind spot by policy");
+    Check(!index.content.Matches(source.data(), source.size()), "index validation remains exact despite vertex policy");
+    source[601] = 0;
+    for (size_t offset : {size_t(0), size_t(511), size_t(512), size_t(575), size_t(15872), size_t(16383)}) {
+        source[offset] = 1;
+        Check(!vertex.content.Matches(source.data(), source.size()), "vertex detects sampled changes");
+        source[offset] = 0;
+    }
+    source.resize(8192);
+    vertex.content.Capture(source.data(), source.size());
+    source[601] = 1;
+    Check(!vertex.content.Matches(source.data(), source.size()), "small vertex buffers remain exact");
+}
+
+void TestExactContent()
+{
+    using gpu::geometry_prepare::ExactContent;
+    for (size_t bytes : {size_t(0), size_t(1), size_t(511), size_t(512), size_t(8192), size_t(8193), size_t(16384), size_t(65536)})
+    {
+        // Every source byte participates, including the former sample gaps.
+        std::vector<uint8_t> source(bytes);
+        for (size_t i = 0; i < bytes; ++i) source[i] = uint8_t(i * 31 + 17);
+        ExactContent content;
+        Check(!content.Matches(source.data(), source.size()), "empty content never matches");
+        content.Capture(source.data(), source.size());
+        Check(content.Size() == bytes, "snapshot size tracks source");
+        Check(content.Matches(source.data(), source.size()), "identical small buffer matches");
+        Check(!content.Matches(source.data(), bytes + 1), "size change misses");
+        for (size_t i = 0; i < bytes; ++i)
+        {
+            source[i] ^= 0x55;
+            Check(!content.Matches(source.data(), source.size()), "any small-buffer mutation misses");
+            source[i] ^= 0x55;
+        }
+        Check(content.Matches(source.data(), source.size()), "small buffer matches after restore");
+    }
+}
 }
 
 int main()
 {
+    {
+        VertexCache bytes(100, 48);
+        bytes.emplace(1, Entry(1)); bytes.emplace(2, Entry(2)); bytes.emplace(3, Entry(3));
+        Check(bytes.size()==2 && bytes.CapturedBytes()==48, "snapshot byte budget");
+        auto huge=Entry(4); std::vector<uint8_t> payload(49); huge.content.Capture(payload.data(), payload.size());
+        bytes.emplace(4, std::move(huge));
+        Check(bytes.find(4)==bytes.end() && bytes.CapturedBytes()==48, "oversized entry bypass");
+        while (bytes.size()) bytes.erase(bytes.begin());
+        Check(bytes.CapturedBytes()==0, "snapshot accounting after slot erase");
+    }
     for (size_t capacity : {size_t(0), size_t(1), size_t(2), size_t(15), size_t(16), size_t(17), size_t(257), VertexCache::kCapacity})
         TestChurn(capacity);
     for (size_t capacity : {size_t(2), size_t(16), size_t(17)}) TestRecentUse(capacity);
     for (size_t capacity : {size_t(1), size_t(2), size_t(15), size_t(16), size_t(17), size_t(257)}) TestSlotReset(capacity);
     for (size_t bytes : {size_t(1), size_t(8192), size_t(8196), size_t(16384)}) TestContentReplacement(bytes);
+    TestIndexCache();
+    TestIndexContentAndBudget();
+    TestExactContent();
+    TestVertexSamplingPolicy();
     std::printf("vertex cache: %llu checks passed (bounded metadata fixture; no GPU or game)\n",
         static_cast<unsigned long long>(checks));
 }

@@ -8,6 +8,8 @@
 #include <string_view>
 #include <vector>
 
+#include "../os/user_paths.h"
+
 namespace settings::game_path
 {
     enum class Source
@@ -61,8 +63,25 @@ namespace settings::game_path
 
     inline std::filesystem::path PathFromUtf8(std::string_view value)
     {
+#ifndef _WIN32
+        std::string str(value);
+        for (char& c : str)
+        {
+            if (c == '\\')
+                c = '/';
+        }
+        if (str.size() >= 2 && std::isalpha(static_cast<unsigned char>(str[0])) && str[1] == ':')
+        {
+            char drive = static_cast<char>(std::tolower(static_cast<unsigned char>(str[0])));
+            std::string sub = (str.size() >= 3 && str[2] == '/') ? str.substr(3) : str.substr(2);
+            str = std::string("/mnt/") + drive + "/" + sub;
+        }
+        const auto utf8 = std::u8string(reinterpret_cast<const char8_t*>(str.data()), str.size());
+        return std::filesystem::path(utf8);
+#else
         const auto utf8 = std::u8string(reinterpret_cast<const char8_t*>(value.data()), value.size());
         return std::filesystem::path(utf8);
+#endif
     }
 
     inline std::optional<std::filesystem::path> Recognize(const std::filesystem::path& candidate)
@@ -94,6 +113,13 @@ namespace settings::game_path
         return std::nullopt;
     }
 
+    inline std::filesystem::path DefaultGameRoot(const std::filesystem::path& executableDirectory)
+    {
+        if (!os::user_paths::UsePortableLayout())
+            return (os::user_paths::DataDir() / "game").lexically_normal();
+        return (executableDirectory / "game").lexically_normal();
+    }
+
     inline Resolution Resolve(const std::filesystem::path& executableDirectory,
                              const std::optional<std::filesystem::path>& explicitGame = std::nullopt)
     {
@@ -104,13 +130,20 @@ namespace settings::game_path
         // path stays as supplied and never falls through to another install.
         if (explicitGame)
         {
-            if (const auto root = Recognize(*explicitGame))
+            auto candidate = *explicitGame;
+#ifndef _WIN32
+            candidate = PathFromUtf8(candidate.string());
+#endif
+            if (const auto root = Recognize(candidate))
                 return { *root, Source::ExplicitArgument, true, false };
-            return { *explicitGame, Source::ExplicitArgument, false, false };
+            return { candidate, Source::ExplicitArgument, false, false };
         }
 
         Resolution result;
-        std::ifstream location(exeDirectory / "game-path.txt", std::ios::binary);
+        const auto configPath = os::user_paths::UsePortableLayout()
+            ? exeDirectory / "game-path.txt"
+            : os::user_paths::ConfigDir() / "game-path.txt";
+        std::ifstream location(configPath, std::ios::binary);
         std::string configured;
         if (std::getline(location, configured) && !(configured = Trim(std::move(configured))).empty())
         {
@@ -124,17 +157,21 @@ namespace settings::game_path
         }
 
         // The order is intentional: an empty file (or no file) first gets the
-        // package default ../game beside the executable, then direct EXE and
-        // legacy/dev layouts. Every candidate is checked for a real default.xex.
-        const std::vector<std::filesystem::path> candidates = {
-            exeDirectory / ".." / "game" / "disc1",
-            exeDirectory / ".." / "game",
-            exeDirectory,
-            exeDirectory / "game" / "disc1",
-            exeDirectory / "game",
-            exeDirectory / ".." / ".." / ".." / "LostOdysseyRecompLib" / "private" / "disc1",
-            exeDirectory / "LostOdysseyRecompLib" / "private" / "disc1",
-        };
+        // package default ./game beside the executable, then direct EXE,
+        // parent ../game and legacy/dev layouts. Every candidate is checked for a real default.xex.
+        std::vector<std::filesystem::path> candidates;
+        if (!os::user_paths::UsePortableLayout())
+        {
+            candidates.push_back(os::user_paths::DataDir() / "game" / "disc1");
+            candidates.push_back(os::user_paths::DataDir() / "game");
+        }
+        candidates.push_back(exeDirectory / "game" / "disc1");
+        candidates.push_back(exeDirectory / "game");
+        candidates.push_back(exeDirectory);
+        candidates.push_back(exeDirectory / ".." / "game" / "disc1");
+        candidates.push_back(exeDirectory / ".." / "game");
+        candidates.push_back(exeDirectory / ".." / ".." / ".." / "LostOdysseyRecompLib" / "private" / "disc1");
+        candidates.push_back(exeDirectory / "LostOdysseyRecompLib" / "private" / "disc1");
         for (const auto& candidate : candidates)
         {
             if (const auto root = RecognizeDefaultDirectory(candidate))
@@ -142,8 +179,9 @@ namespace settings::game_path
         }
 
         // Keep a deterministic, useful path for the existing loader error and
-        // installer handoff when no candidate exists.
-        result.root = (exeDirectory / ".." / "game").lexically_normal();
+        // installer handoff when no candidate exists. Non-portable layouts use
+        // the XDG data game directory instead of a read-only install tree.
+        result.root = DefaultGameRoot(exeDirectory);
         result.source = Source::Fallback;
         result.valid = false;
         return result;

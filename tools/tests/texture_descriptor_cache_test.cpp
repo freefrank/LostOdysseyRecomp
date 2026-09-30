@@ -1,4 +1,5 @@
 #include "../../LostOdysseyRecomp/gpu/texture_descriptor_cache.h"
+#include <array>
 #include <cstdio>
 #include <cstdlib>
 
@@ -48,5 +49,33 @@ int main() {
     cache.Clear();
     cache.Clear();
     Check(cache.Acquire(key, create, reused) != current && !reused && allocations == 6);
+    // A reused pooled set rewrites only bindings it may still hold plus the new
+    // key's non-dummy bindings, and then matches the key in every binding.
+    using namespace gpu::texture_descriptors;
+    int dummy = 0, a = 0, b = 0, c = 0;
+    std::array<int*, 32> set{};
+    for (auto& binding : set) binding = &c; // unknown contents of a fresh set
+    unsigned writes = 0;
+    auto write = [&](uint32_t slot, int* texture) { set[slot] = texture; ++writes; };
+    std::array<int*, 32> keyA{};
+    keyA.fill(&dummy);
+    keyA[0] = &a;
+    keyA[31] = &b;
+    uint32_t mask = RewriteBindings(kUnknownBindings, keyA, &dummy, write);
+    Check(set == keyA && writes == 32 && mask == ((1u << 0) | (1u << 31)));
+    std::array<int*, 32> keyB{};
+    keyB.fill(&dummy);
+    keyB[5] = &a;
+    writes = 0;
+    mask = RewriteBindings(mask, keyB, &dummy, write);
+    Check(set == keyB && writes == 3 && mask == (1u << 5));
+    writes = 0;
+    mask = RewriteBindings(mask, keyB, &dummy, write);
+    Check(set == keyB && writes == 1);
+    // Another pass wrote arbitrary bindings: its set is unknown again.
+    set[9] = &c;
+    writes = 0;
+    mask = RewriteBindings(kUnknownBindings, keyA, &dummy, write);
+    Check(set == keyA && writes == 32 && NonDummyBindings(keyA, &dummy) == mask);
     std::printf("texture descriptor cache: %d checks passed (including 2000 repeated hits)\n", checks);
 }

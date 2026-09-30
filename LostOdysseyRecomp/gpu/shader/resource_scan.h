@@ -17,6 +17,9 @@
 
 namespace xenos::resources {
 namespace fs = std::filesystem;
+// Synchronous sink: spans expire when the callback returns. Empty selects the
+// legacy on-disk extraction used by developer tools and strict fixtures.
+using SourceSink = std::function<void(bool, std::span<const uint8_t>)>;
 inline uint32_t ReadBE(const uint8_t* p) {
     return (uint32_t(p[0]) << 24) | (uint32_t(p[1]) << 16) | (uint32_t(p[2]) << 8) | p[3];
 }
@@ -27,7 +30,9 @@ inline uint64_t Hash(std::span<const uint8_t> bytes, uint64_t h = 0xcbf29ce48422
 inline std::string SourceName(bool pixel, std::span<const uint8_t> bytes) {
     return cache::FileName(pixel, Hash(bytes)).substr(0, 19) + ".bin";
 }
-inline void SaveSource(const fs::path& source, bool pixel, std::span<const uint8_t> code) {
+inline void SaveSource(const fs::path& source, bool pixel, std::span<const uint8_t> code,
+                       const SourceSink& sink = {}) {
+    if (sink) { sink(pixel, code); return; }
     const auto filename = SourceName(pixel, code);
     // Avoid rewriting a valid source, but repair interrupted or corrupted writes.
     std::ifstream old(source/filename, std::ios::binary | std::ios::ate);
@@ -77,16 +82,21 @@ inline uint64_t Fingerprint(std::ifstream& in, uint64_t length, uint64_t& bytesR
 }
 inline bool ExtractIndexed(const fs::path& file, const fs::path& source,
                            std::span<const IndexFile> index, std::set<std::string>& names,
-                           uint64_t& bytesRead) {
+                           uint64_t& bytesRead, const SourceSink& sink = {}, bool trustImported = false) {
     const auto length = fs::file_size(file);
     const auto filename = file.filename().string();
     bool probed = false;
     uint64_t fingerprint = 0;
+    const bool uniqueLayout = trustImported && std::count_if(index.begin(), index.end(),
+        [&](const auto& profile) { return profile.name == filename && profile.size == length; }) == 1;
     std::ifstream in(file, std::ios::binary);
+    if (!in) throw std::runtime_error("cannot open indexed shader resource");
     for (const auto& profile : index) {
         if (profile.name != filename || profile.size != length) continue;
-        if (!probed) { fingerprint = Fingerprint(in, length, bytesRead); probed = true; }
-        if (profile.fingerprint != fingerprint) continue;
+        if (!uniqueLayout) {
+            if (!probed) { fingerprint = Fingerprint(in, length, bytesRead); probed = true; }
+            if (profile.fingerprint != fingerprint) continue;
+        }
         std::vector<std::pair<std::string, std::vector<uint8_t>>> prepared;
         bool valid = true;
         for (const auto& entry : profile.entries) {
@@ -102,9 +112,7 @@ inline bool ExtractIndexed(const fs::path& file, const fs::path& source,
         }
         if (!valid) continue;
         for (const auto& [name, code] : prepared) {
-            std::ofstream out(source / name, std::ios::binary | std::ios::trunc);
-            out.write(reinterpret_cast<const char*>(code.data()), code.size()); out.close();
-            if (!out) throw std::runtime_error("cannot write indexed shader");
+            SaveSource(source, name.starts_with("ps_"), code, sink);
             names.insert(name);
         }
         return true; // Includes verified resources containing no shader containers.
@@ -127,8 +135,9 @@ struct Result {
 // Prepare and verify every entry before publishing any source from this package.
 inline bool ExtractCpxIndexed(std::span<const uint8_t> encoded, const CpxIndexPackage& profile,
                               const fs::path& source, std::set<std::string>& names,
-                              uint64_t& decodedBytes) {
-    std::vector<uint8_t> decoded;
+                              uint64_t& decodedBytes, const SourceSink& sink = {}) {
+    std::vector<std::vector<uint8_t>> blocks;
+    std::vector<std::pair<bool,std::vector<uint8_t>>> prepared;
     try {
         cpx::Header header;
         if (!cpx::ReadHeader(encoded,header) || header.storedSize!=encoded.size() ||
@@ -151,23 +160,33 @@ inline bool ExtractCpxIndexed(std::span<const uint8_t> encoded, const CpxIndexPa
         }
         // Empty known packages require no decoded allocation or block execution.
         if (profile.entries.empty()) return true;
-        decoded.resize(header.decodedSize);
+        // Allocate only blocks intersecting shaders, not the whole decoded archive.
+        blocks.resize(header.blockCount);
         for (size_t i=0;i<header.blockCount;++i) {
             if (!needed[i]) continue;
             const size_t begin=ReadLE(encoded.data()+16+i*4);
             const size_t end=i+1<header.blockCount?ReadLE(encoded.data()+20+i*4):encoded.size();
             const size_t count=std::min(cpx::kBlockSize,size_t(header.decodedSize)-i*cpx::kBlockSize);
-            cpx::detail::DecodeBlock(encoded.subspan(begin,end-begin),header.bitWidth,
-                std::span(decoded).subspan(i*cpx::kBlockSize,count));
+            blocks[i].resize(count);
+            cpx::detail::DecodeBlock(encoded.subspan(begin,end-begin),header.bitWidth,blocks[i]);
             decodedBytes+=count;
         }
-        for (const auto& entry:profile.entries)
-            if (Hash(std::span(decoded).subspan(entry.offset,entry.size))!=entry.hash) return false;
+        for (const auto& entry:profile.entries) {
+            std::vector<uint8_t> code(entry.size);
+            size_t copied=0;
+            while (copied<code.size()) {
+                const size_t offset=size_t(entry.offset)+copied;
+                const size_t block=offset/cpx::kBlockSize, start=offset%cpx::kBlockSize;
+                const size_t count=std::min(code.size()-copied,blocks[block].size()-start);
+                std::copy_n(blocks[block].data()+start,count,code.data()+copied);copied+=count;
+            }
+            if (Hash(code)!=entry.hash) return false;
+            prepared.emplace_back(entry.pixel,std::move(code));
+        }
     } catch (const std::exception&) { return false; }
-    for (const auto& entry:profile.entries) {
-        const auto code=std::span(decoded).subspan(entry.offset,entry.size);
-        const auto name=SourceName(entry.pixel,code);
-        if (!names.contains(name)) { SaveSource(source,entry.pixel,code); names.insert(name); }
+    for (const auto& [pixel,code]:prepared) {
+        const auto name=SourceName(pixel,code);
+        if (!names.contains(name)) { SaveSource(source,pixel,code,sink); names.insert(name); }
     }
     return true;
 }
@@ -185,7 +204,7 @@ inline std::string FpiDigest(const fs::path& file, uint64_t& bytesRead) {
 // Unread blocks (including known empty packages) are deliberately not validated.
 inline bool ExtractCpxSparse(std::ifstream& in, uint64_t base, const CpxIndexPackage& profile,
                              const fs::path& source, std::set<std::string>& names,
-                             uint64_t& bytesRead, uint64_t& decodedBytes) {
+                             uint64_t& bytesRead, uint64_t& decodedBytes, const SourceSink& sink = {}) {
     if (profile.entries.empty()) return true;
     std::vector<std::vector<uint8_t>> blocks;
     std::vector<std::pair<bool,std::vector<uint8_t>>> prepared;
@@ -237,7 +256,7 @@ inline bool ExtractCpxSparse(std::ifstream& in, uint64_t base, const CpxIndexPac
     } catch (const std::exception&) { return false; }
     for (const auto& [pixel,code]:prepared) {
         const auto name=SourceName(pixel,code);
-        if (!names.contains(name)) { SaveSource(source,pixel,code); names.insert(name); }
+        if (!names.contains(name)) { SaveSource(source,pixel,code,sink); names.insert(name); }
     }
     return true;
 }
@@ -254,12 +273,12 @@ inline std::vector<IndexEntry> ContainerLocations(std::span<const uint8_t> data)
     return entries;
 }
 inline void ExtractContainers(std::span<const uint8_t> data, size_t core, const fs::path& source,
-                              std::set<std::string>& names) {
+                              std::set<std::string>& names, const SourceSink& sink = {}) {
     for (size_t i=0; i<core && i+36<=data.size(); ++i) {
         if (data[i]!=0x10 || data[i+1]!=0x2a || data[i+2]!=0x11) continue;
         bool pixel=false;
         auto code=Microcode(data.subspan(i),pixel);
-        if (!code.empty() && names.insert(SourceName(pixel,code)).second) SaveSource(source,pixel,code);
+        if (!code.empty() && names.insert(SourceName(pixel,code)).second) SaveSource(source,pixel,code,sink);
     }
 }
 inline Result Scan(const fs::path& root, const fs::path& cacheDir,
@@ -267,7 +286,7 @@ inline Result Scan(const fs::path& root, const fs::path& cacheDir,
                    std::span<const IndexFile> index = builtin::files,
                    std::span<const CpxIndexPackage> cpxIndex = builtin::cpxPackages,
                    std::span<const CpxIndexArchive> archiveIndex = builtin::cpxArchives,
-                   bool strict = false) {
+                   bool strict = false, const SourceSink& sink = {}) {
     Result result;
     // Built-in location indices refer only to the built-in package array.
     if (archiveIndex.data()==std::span<const CpxIndexArchive>(builtin::cpxArchives).data() &&
@@ -295,22 +314,24 @@ inline Result Scan(const fs::path& root, const fs::path& cacheDir,
         uint64_t totalBytes = 0;
         for (const auto& file : files) {
             const auto size = fs::file_size(file); totalBytes += size;
-            identity << fs::absolute(file).generic_string() << '\t' << size << '\t'
+            if (!sink) identity << fs::absolute(file).generic_string() << '\t' << size << '\t'
                      << fs::last_write_time(file).time_since_epoch().count() << '\n';
         }
         // FPI changes also invalidate the discovery cache. Like FPD identity,
         // this is a size/mtime fingerprint, not a full game-integrity digest.
-        for (const auto& file : indexes)
+        if (!sink) for (const auto& file : indexes)
             identity << fs::absolute(file).generic_string() << '\t' << fs::file_size(file) << '\t'
                      << fs::last_write_time(file).time_since_epoch().count() << '\n';
         const auto source = cacheDir / "source";
-        fs::create_directories(source);
+        if (!sink) fs::create_directories(source);
         const auto manifest = cacheDir / "resources.manifest";
         const std::string prefix = identity.str() + "--sources--\n";
-        std::ifstream old(manifest, std::ios::binary);
-        std::string contents((std::istreambuf_iterator<char>(old)), {});
-        old.close();
-        if (!strict && contents.starts_with(prefix)) {
+        std::string contents;
+        if (!sink) {
+            std::ifstream old(manifest, std::ios::binary);
+            contents.assign(std::istreambuf_iterator<char>(old), {});
+        }
+        if (!sink && !strict && contents.starts_with(prefix)) {
             const auto body=contents.substr(prefix.size());
             const auto footer=body.rfind("--complete--\t");
             const auto sourceList=body.substr(0,footer);
@@ -353,7 +374,7 @@ inline Result Scan(const fs::path& root, const fs::path& cacheDir,
         uint64_t completed=0;
         for (const auto& file : files) {
             const auto length=fs::file_size(file);
-            if (ExtractIndexed(file, source, index, names, result.bytesRead)) {
+            if (ExtractIndexed(file, source, index, names, result.bytesRead, sink, bool(sink) && !strict)) {
                 ++result.indexedFiles;
                 completed += length;
                 progress({ScanStage::IndexedExtraction,completed,totalBytes,ScanUnit::Bytes});
@@ -367,7 +388,7 @@ inline Result Scan(const fs::path& root, const fs::path& cacheDir,
                     if (!in.read(reinterpret_cast<char*>(bytes.data()), amount)) throw std::runtime_error("short resource read");
                     result.bytesRead += amount;
                     const auto core=std::min<uint64_t>(chunk,length-base);
-                    ExtractContainers(std::span<const uint8_t>(bytes.data(),amount),core,source,names);
+                    ExtractContainers(std::span<const uint8_t>(bytes.data(),amount),core,source,names,sink);
                     progress({ScanStage::FallbackScan,completed+base+core,totalBytes,ScanUnit::Bytes});
                 }
                 completed+=length;
@@ -408,7 +429,7 @@ inline Result Scan(const fs::path& root, const fs::path& cacheDir,
                             ++result.cpxPackages; ++result.duplicatePackages; continue;
                         }
                         const auto before=result.decodedBytes;
-                        if (ExtractCpxSparse(in,record.offset,profile,source,names,result.bytesRead,result.decodedBytes)) {
+                        if (ExtractCpxSparse(in,record.offset,profile,source,names,result.bytesRead,result.decodedBytes,sink)) {
                             ++result.cpxPackages; ++result.indexedPackages;
                             if (before!=result.decodedBytes) ++result.decodedPackages;
                             extractedProfiles.insert(binding->package); continue;
@@ -429,7 +450,7 @@ inline Result Scan(const fs::path& root, const fs::path& cacheDir,
                         if (!in.read(reinterpret_cast<char*>(encoded.data()+16),encoded.size()-16))
                             throw std::runtime_error("short replaced CPX read");
                         result.bytesRead+=encoded.size()-16; ++result.fallbackPackages;
-                        ExtractContainers(encoded,encoded.size(),source,names);
+                        ExtractContainers(encoded,encoded.size(),source,names,sink);
                     }
                     continue;
                 }
@@ -443,14 +464,14 @@ inline Result Scan(const fs::path& root, const fs::path& cacheDir,
                 if (seenPackages.contains(digest)) { ++result.duplicatePackages; continue; }
                 const auto matched=packageIndex.find(Sha256Hex(digest));
                 const auto beforeDecoded=result.decodedBytes;
-                if (!sparseFailed && matched!=packageIndex.end() && ExtractCpxIndexed(encoded,*matched->second,source,names,result.decodedBytes)) {
+                if (!sparseFailed && matched!=packageIndex.end() && ExtractCpxIndexed(encoded,*matched->second,source,names,result.decodedBytes,sink)) {
                     ++result.indexedPackages;
                 } else {
                     ++result.fallbackPackages;
                     progress({ScanStage::FallbackScan,extentDone-1,extentCount,ScanUnit::Entries});
                     if (!cpx::Decode(encoded,decoded)) throw std::runtime_error("invalid CPX block stream in " + file.filename().string());
                     result.decodedBytes+=decoded.size();
-                    ExtractContainers(decoded,decoded.size(),source,names);
+                    ExtractContainers(decoded,decoded.size(),source,names,sink);
                 }
                 if (beforeDecoded!=result.decodedBytes) ++result.decodedPackages;
                 seenPackages.insert(digest);
@@ -459,6 +480,8 @@ inline Result Scan(const fs::path& root, const fs::path& cacheDir,
         progress({ScanStage::IndexedExtraction,extentCount,extentCount,ScanUnit::Entries});
         result.shaders=names.size();
         if (names.empty()) { result.error="no supported shader containers found"; return result; }
+        // In-memory prebuild has no intermediate export or manifest to validate.
+        if (sink) return result;
         // Never mark an interrupted extraction complete. Sources are revalidated on reuse.
         const auto temp=cacheDir / "resources.manifest.tmp";
         std::ofstream out(temp,std::ios::binary | std::ios::trunc); out << prefix;

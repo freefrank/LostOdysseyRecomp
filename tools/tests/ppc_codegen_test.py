@@ -1,7 +1,7 @@
-"""Synthetic temporary-tree tests; no game input or runtime required."""
+"""Generation replacement and rollback using temporary files; no game required."""
 import importlib.util
-import json
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -17,64 +17,40 @@ class CodegenTest(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name).resolve()
         self.output = self.root / "LostOdysseyRecompLib/ppc"
-        files = {
-            "LostOdysseyRecompLib/config/LostOdysseyRecomp.toml": '[main]\nfile_path="../private/default.xex"\nout_directory_path="../ppc"\n',
-            "LostOdysseyRecompLib/private/default.xex": "synthetic input",
-            "tools/XenonRecomp/XenonUtils/ppc_context.h": "context",
-            "tools/ppc_codegen.py": "script",
-            "tools/xexdump/CMakeLists.txt": "build configuration",
-            "tools/build_tools.bat": "build script",
-            "tool.exe": "synthetic binary",
-        }
-        for name in ("ppc_config.h", "ppc_recomp_shared.h", "ppc_recomp.0.cpp", "ppc_func_mapping.cpp"):
-            files[f"LostOdysseyRecompLib/ppc/{name}"] = "synthetic output"
-        files["LostOdysseyRecompLib/ppc/ppc_context.h"] = '#pragma once\n#include "ppc_config.h"\n\ncontext'
-        for name, content in files.items():
-            p = self.root / name
-            p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_text(content)
-        _, _, inputs, _ = codegen.layout(self.root)
-        receipt = {"schema": 1, "inputs": codegen.snapshot(self.root, inputs),
-                   "outputs": codegen.outputs(self.root, self.output)}
-        (self.output / codegen.MANIFEST).write_text(json.dumps(receipt))
+        self.output.mkdir(parents=True)
+        config = self.root / "LostOdysseyRecompLib/config/LostOdysseyRecomp.toml"
+        config.parent.mkdir()
+        config.write_text('[main]\nout_directory_path="../ppc"\n')
+        self.previous = {name: b"previous output" for name in (
+            "ppc_config.h", "ppc_context.h", "ppc_recomp_shared.h",
+            "ppc_recomp.0.cpp", "ppc_recomp.1.cpp", "ppc_func_mapping.cpp")}
+        self.previous["notes.txt"] = b"keep unrelated files"
+        for name, data in self.previous.items():
+            (self.output / name).write_bytes(data)
 
-    def test_matching_manifest(self):
-        codegen.check(self.root)
+    def test_replace_generated_set(self):
+        def generate(*args, **kwargs):
+            for name in self.previous:
+                if name.endswith((".cpp", ".h")) and name != "ppc_recomp.1.cpp":
+                    (self.output / name).write_bytes(b"new output")
+        with patch.object(codegen.subprocess, "run", side_effect=generate):
+            codegen.generate(self.root, self.root / "tool")
+        self.assertFalse((self.output / "ppc_recomp.1.cpp").exists())
+        self.assertEqual((self.output / "ppc_recomp.0.cpp").read_bytes(), b"new output")
+        self.assertEqual((self.output / "notes.txt").read_bytes(), self.previous["notes.txt"])
 
-    def test_input_drift(self):
-        (self.root / "tools/XenonRecomp/new.cpp").write_text("new source")
-        with self.assertRaisesRegex(ValueError, "inputs changed"):
-            codegen.check(self.root)
-
-    def test_output_drift(self):
-        (self.output / "ppc_recomp.0.cpp").write_text("changed")
-        with self.assertRaisesRegex(ValueError, "sources changed"):
-            codegen.check(self.root)
-
-    def test_stale_context(self):
-        (self.output / "ppc_context.h").write_text("old context")
-        with self.assertRaisesRegex(ValueError, "context"):
-            codegen.check(self.root)
-
-    def test_old_switch(self):
-        (self.output / "ppc_recomp.0.cpp").write_text("switch (ctx.r11.u64) {}")
-        with self.assertRaisesRegex(ValueError, "64-bit"):
-            codegen.check(self.root)
-
-    def test_tool_drift(self):
-        executable = self.root / "tool.exe"
-        codegen.stamp_tool(self.root, executable)
-        executable.write_text("changed binary")
-        with self.assertRaisesRegex(ValueError, "receipt"):
-            codegen.generate(self.root, executable)
-
-    def test_success_exit_without_generation(self):
-        executable = self.root / "tool.exe"
-        codegen.stamp_tool(self.root, executable)
-        with patch.object(codegen.subprocess, "run"), self.assertRaisesRegex(ValueError, "Missing generated"):
-            codegen.generate(self.root, executable)
-        self.assertFalse((self.output / codegen.MANIFEST).exists())
-        self.assertEqual((self.output / "ppc_recomp.0.cpp").read_text(), "synthetic output")
+    def test_failed_generation_restores_previous_set(self):
+        for failure in (None, subprocess.CalledProcessError(1, "tool")):
+            with self.subTest(failure=failure):
+                def incomplete(*args, **kwargs):
+                    (self.output / "ppc_recomp.99.cpp").write_bytes(b"partial output")
+                    if failure:
+                        raise failure
+                with patch.object(codegen.subprocess, "run", side_effect=incomplete), self.assertRaises(
+                    (ValueError, subprocess.CalledProcessError)
+                ):
+                    codegen.generate(self.root, self.root / "tool")
+                self.assertEqual({p.name: p.read_bytes() for p in self.output.iterdir()}, self.previous)
 
 
 if __name__ == "__main__":

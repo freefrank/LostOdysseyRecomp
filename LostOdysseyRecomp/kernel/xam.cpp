@@ -147,13 +147,17 @@ void XamRootCreate(const std::string_view& root, const std::string_view& path)
     LOG_KERNEL("root '{}' -> '{}'", root, path);
 }
 
+static std::mutex g_listenerMutex;
+
 XamListener::XamListener()
 {
+    std::lock_guard lock(g_listenerMutex);
     g_listeners.insert(this);
 }
 
 XamListener::~XamListener()
 {
+    std::lock_guard lock(g_listenerMutex);
     g_listeners.erase(this);
 }
 
@@ -173,7 +177,8 @@ void XamRegisterContent(const XCONTENT_DATA& data, const std::string_view& root)
 
 uint32_t XamNotifyCreateListener(uint64_t qwAreas)
 {
-    auto* listener = CreateKernelObject<XamListener>();
+    auto listener = CreateKernelObject<XamListener>();
+    std::lock_guard lock(g_listenerMutex);
     listener->areas = qwAreas;
 
     // Games expect the dashboard's startup notifications on their first
@@ -199,6 +204,7 @@ uint32_t XamNotifyCreateListener(uint64_t qwAreas)
 
 void XamNotifyEnqueueEvent(uint32_t dwId, uint32_t dwParam)
 {
+    std::lock_guard lock(g_listenerMutex);
     for (const auto& listener : g_listeners)
     {
         if (((1ull << MSG_AREA(dwId)) & listener->areas) == 0)
@@ -209,7 +215,10 @@ void XamNotifyEnqueueEvent(uint32_t dwId, uint32_t dwParam)
 
 bool XNotifyGetNext(uint32_t hNotification, uint32_t dwMsgFilter, be<uint32_t>* pdwId, be<uint32_t>* pParam)
 {
-    auto& listener = *GetKernelObject<XamListener>(hNotification);
+    auto retained = GetKernelObject<XamListener>(hNotification);
+    if (!retained) return false;
+    std::lock_guard lock(g_listenerMutex);
+    auto& listener = *retained;
 
     if (dwMsgFilter)
     {
@@ -250,7 +259,7 @@ uint32_t XamContentCreateEnumerator(uint32_t dwUserIndex, uint32_t DeviceID, uin
     if (dwContentType == XCONTENTTYPE_DLC) DiscoverDlcContent();
     else DiscoverSavedContent();
     const auto& registry = g_contentRegistry[dwContentType - 1];
-    auto* enumerator = CreateKernelObject<ContentEnumerator>();
+    auto enumerator = CreateKernelObject<ContentEnumerator>();
     enumerator->fetch = cItem;
     for (const auto& [key, value] : registry)
         if (dwContentType != XCONTENTTYPE_DLC || DeviceID == 0 || DeviceID == value.DeviceID)
@@ -275,8 +284,10 @@ uint32_t XamEnumerate(uint32_t hEnum, uint32_t dwFlags, void* pvBuffer, uint32_t
 {
     if (!IsKernelObject(hEnum))
         return ERROR_INVALID_HANDLE;
-    auto* enumerator = GetKernelObject<XamEnumeratorBase>(hEnum);
-    if (auto* content = dynamic_cast<ContentEnumerator*>(enumerator);
+    auto enumerator = GetKernelObject<XamEnumeratorBase>(hEnum);
+    if (!enumerator) return ERROR_INVALID_HANDLE;
+    std::lock_guard lock(g_contentMutex);
+    if (auto* content = dynamic_cast<ContentEnumerator*>(enumerator.get());
         content && (!pvBuffer || cbBuffer < sizeof(XCONTENT_DATA) * content->fetch))
         return ERROR_INSUFFICIENT_BUFFER;
     if (pcItemsReturned) *pcItemsReturned = 0;

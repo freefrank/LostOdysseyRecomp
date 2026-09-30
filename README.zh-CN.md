@@ -12,84 +12,54 @@ Windows x64 · Direct3D 12 · Vulkan · PowerPC 静态重编译
 
 ### [下载最新版本](https://github.com/freefrank/LostOdysseyRecomp/releases/latest) · [安装指南](docs/INSTALLING.md) · [反馈问题](https://github.com/freefrank/LostOdysseyRecomp/issues)
 
-[English](README.md) · [更新日志](CHANGELOG.md) · [Projects](https://github.com/users/freefrank/projects/3) · [从源码构建](docs/BUILDING.md)
+[English](README.md) · [更新日志](CHANGELOG.md) · [开发工具](tools/README.md) · [Projects](https://github.com/users/freefrank/projects/3) · [从源码构建](docs/BUILDING.md)
 
 </div>
 
 > [!IMPORTANT]
 > **本项目仍处于早期测试阶段。** 已测试开场区域和部分场景，尚未通关。渲染和稳定性仍有问题。请自行提供受支持版本的游戏文件。
 
-Linux 首可玩支持目前仅限从源码构建的 Vulkan ELF；请参阅[构建指南](docs/BUILDING.md)和[安装指南](docs/INSTALLING.md)。目前没有发布 Linux 软件包。
+## 近期版本
 
-## v0.5.13 新增
+| 版本 | 主要更新 |
+| :--- | :--- |
+| [v0.7.15](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.7.15) | 原生 90／120 FPS 目标与 VRR 节奏控制、RGB Range 与 F1 变速控制、Hungry Man 计时修复、便携式游戏路径后备，以及限定范围的天空闪烁 TAA 映射。 |
+| [v0.7.10](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.7.10) | 更新内置 Vulkan shader（增加 19 条捕获记录），并提供放在 `shaders/` 下的独立 DX12 shader pack。 |
+| [v0.7.9](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.7.9) | Windows D3D12 帧生成（关／DLSS／FSR），保存后无需重启；修复 Ubuntu 22.04 AppImage 兼容性和更新器问题。 |
+| [v0.7.3](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.7.3) | 减少 D3D12 重复绑定，新增可选渲染诊断。 |
+| [v0.7.2](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.7.2) | D3D12 DLSS／FSR 超分路径和 DLAA 尺寸修正。 |
+| [v0.7.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.7.1) | 独立 Flatpak，以及游戏内光盘／DLC 选择和重新导入。 |
 
-已发布 Windows x64 包：[v0.5.13](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.13)。ZIP SHA-256 为 `a993071c24f7324a3ae3a0dbe24688afc60450d3da9f1a78fbf532c69f65bacd`。
-
-- **Alt+Enter** 可在 Windowed 与 Borderless 显示模式之间切换，不选择 DXGI exclusive fullscreen。支持左 Alt、右 Alt 和 AltGr；实际游戏窗口中两种 Alt 组合均已现场验收。全游戏、exclusive fullscreen、混合 DPI 和鼠标验证仍未核验；未启动发布包进行游戏实测验证。
-
-## v0.5.12 新增
-
-已发布 Windows x64 包：[v0.5.12](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.12)。
-
-- 修复受支持语言 ID 的 USA/Europe FMV 与事件字幕语言映射。本地西班牙语开场 FMV 检查已通过并获接受；德语、法语、意大利语 FMV 画面、完整事件覆盖、全游戏验证和报告者验收仍未核验。详见[版本支持说明](docs/notes/europe-support.md)。
-- ZIP SHA-256 为 `7cc99618cee509bdea000b736772344de60279f4a439a4f876cc7d49d4c8e60a`；公开 ZIP 和校验文件可从[最新发布](https://github.com/freefrank/LostOdysseyRecomp/releases/latest)下载。
-
-## v0.5.11 新增
-
-已发布 Windows x64 包：[v0.5.11](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.11)。
-
-- 底层 GPU 失败现记录 API、原始错误 code 和资源上下文；启动与早期分配失败会保留环境、构建和内存信息。WinHTTP 失败保留原始错误，重复失败会限频，GPU adapter/renderer 格式化失败有应急兜底。Issue #6 和 #22 仍在调查；这些诊断不宣称修复任一报告。
-
-## v0.5.10 新增
-
-已发布 Windows x64 包：[v0.5.10](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.10)。
-
-- Vulkan TAA jitter 映射现已覆盖 f5997、f5912 和 f16385 捕获中新增的 11 条材质与光照顶点 shader 路径。用户已验收报告中的闪烁场景；其他场景和全游戏覆盖仍未验证。详见 [TAA 覆盖记录](docs/notes/taa-f5997-2026-09-13.md)及 [f5912/f16385 TAA 记录](docs/notes/taa-f5912-f16385-2026-09-13.md)。
-- 启动 shader 准备现已加入已核验的原始 CPX 元数据和捕获到的 `1474db97dfc0afad` packed 静态网格声明。定向启动覆盖检查和 Release 构建已通过；实景帧时间仍未验证，详见[启动覆盖记录](docs/notes/shader-startup-coverage-2026-09-13.md)。
-
-## v0.5.9 新增
-
-- 已发布 Windows x64 包：[v0.5.9](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.9)。增加保守的 Vulkan 深度清除合并、texture-key avalanche、captured-shader identity 缓存、graphics descriptor 绑定抑制、Plume 绑定抑制和每 slot descriptor 复用，同时保留双 slot/fence 契约。
-- 60 W 固定视角 4K Vulkan 观测中的平均 FPS 从 7.49638 提升到 43.47614。这是有界候选证据，不代表 4K60、15 W 下 1080p60、全游戏行为或玩家验收。详见 [Vulkan 深度清除性能记录](docs/notes/vulkan-depth-clear-performance-2026-09-13.md)。
-
-## v0.5.8 新增
-
-- 已发布 Windows x64 包：[v0.5.8](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.8)。扩展当前场景 TAA jitter 覆盖，加入七条已审阅的主相机路径，并增加有界的 sampled-content SIMD 和 `LO_QUERY_TRACE` 缓存优化。
-- 这些改动保留限定诊断和固定场景证据。原场景 TAA 画面验收及稳定的全游戏 60 FPS 结果仍未验证。详细内容见[更新日志](CHANGELOG.md)。
-
-## v0.5.7 新增
-
-- 已发布 Windows x64 包：[v0.5.7](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.7)。它支持 updater-only 安装和过期 metadata 恢复，更新后会询问是否启动并默认选择**否**，同时包含有界的阴影循环与 resolve-copy 优化、HDR16 TAA bloom prefilter 和材质顶点 shader jitter 修复。
-- 用户已在报告的光影闪烁场景接受 HDR 关闭、materials 开启的修复；其他场景和硬件仍未验证。
-
-## v0.5.6 新增
-
-- 修复更新器 manifest 事务，增加 Issue #16 的窄范围 particle-material 回退，并加入 PPC 预编译发布路径及有界的渲染性能改进。
-- Windows x64 发布包：[v0.5.6](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.6)。#16 修复已在本地 main 构建上通过 D3D12／亚洲 Disc 3 目标场景；正式发布包已通过完整性检查。全游戏、Vulkan、其他区域及玩家验收仍未覆盖。
-
-## v0.5.4 新增
-
-- 防止 PPC 源码生成使用过期输入、残缺输出或旧式 64 位跳转表 switch。
-- 增加可选的 Win64 外部汇编分析器，支持离线报告。
-- 延长大体积捕获的 F1 菜单 ZIP 归档等待时间，并修复安装器拖动分发。
-
-更早版本的改动见[更新日志](CHANGELOG.md)。
+当前计划见[路线图](docs/ROADMAP.zh-CN.md)，详细版本记录见[更新日志](CHANGELOG.md)。
 
 ## 开始游戏
 
-1. **下载并完整解压** Windows 发布包，放在可写入的文件夹中。
+### Windows
+1. 从[最新 Release](https://github.com/freefrank/LostOdysseyRecomp/releases/latest) **下载并完整解压** v0.7.15 Windows 发布包（`LostOdysseyRecomp-windows-x64-v0.7.15.zip`），放在可写入的文件夹中。
 2. **运行 `LostOdysseyRecomp.exe` 并按提示导入游戏文件**。支持已提取文件夹、`default.xex`、XDVDFS ISO 或 GOD 容器。
 3. **选择语言和图形设置**，设置与着色器预编译完成后继续进入游戏。
 
+### Linux (Flatpak 或 AppImage)
+- **Flatpak bundle**：先确认安装 Freedesktop 26.08 平台运行时：
+  ```bash
+  flatpak --system install flathub org.freedesktop.Platform//26.08
+  ```
+  从[最新 Release](https://github.com/freefrank/LostOdysseyRecomp/releases/latest) 下载 v0.7.15 独立 `.flatpak` bundle（`LostOdysseyRecomp-linux-x64-v0.7.15.flatpak`）并执行安装：
+  ```bash
+  flatpak --user install --bundle LostOdysseyRecomp-linux-x64-v0.7.15.flatpak
+  flatpak run io.github.freefrank.LostOdysseyRecomp
+  ```
+- **AppImage**：下载 `LostOdysseyRecomp-linux-x64-v0.7.15.AppImage`，赋予执行权限（`chmod +x`）后直接运行。
+
 发布包不需要安装 Python 或 Visual Studio。后续启动会复用着色器缓存；更新程序时请保留存档和档案文件夹。
 
-已发布的更新器会检查 GitHub 最新 Release：数字版本更高时更新，数字版本相同但 `-后缀` 不同时也会触发更新。v0.5.7 发布版另外允许从只有 updater 的空目录以及过期或损坏的本地 metadata 恢复。更新成功后，helper 会询问是否启动游戏，默认选择**否**；silent 运行会完成更新但不启动游戏。下载完整性校验、安全解压和回滚仍然保留。
+当前分支的更新器会检查 GitHub 最新 Release：数字版本更高时更新，数字版本相同但 `-后缀` 不同时也会触发更新。更新器另外支持从只有 updater 的空目录以及过期或损坏的本地 metadata 恢复。更新成功后，helper 会询问是否启动游戏，默认选择**否**；silent 运行会完成更新但不启动游戏。下载完成后只进行普通 HTTP/I/O 处理、ZIP CRC 解析、路径保护与回滚，不增加 SHA-256 或大小认证。v0.7.9 Windows 过渡包一次性携带旧 SHA map，使已发布的 v0.7.3 更新器能够自动升级；v0.7.10 忽略这些值。
 
 | 要求 | 支持范围 |
 | :--- | :--- |
 | 系统 | Windows x64、支持 AVX 的 CPU、Direct3D 12 或 Vulkan 图形驱动 |
 | 游戏数据 | 已核对的 Europe, Asia 或 USA, Europe 版；启动需要 Disc 1 |
-| 其他光盘 | 通过 `InstallGame.exe` 追加导入；后续光盘流程尚未完整验证 |
+| 其他光盘 | 通过 `LostOdysseyRecomp.exe` 内置导入器追加光盘或 DLC；后续光盘流程尚未完整验证 |
 
 支持的光盘版本、文件位置和更新方式见[安装指南](docs/INSTALLING.md)。
 
@@ -105,25 +75,26 @@ Linux 首可玩支持目前仅限从源码构建的 Vulkan ELF；请参阅[构�
 
 | 功能 | 说明 |
 | :--- | :--- |
-| 游戏导入器 | 支持文件夹、XEX、ISO 和 GOD；复制原始文件 |
+| 游戏导入器 | 支持文件夹、XEX、ISO 和 GOD；原始资源不改动，暂存复制会在发布前检查最终写入结果 |
 | 首次启动设置 | 游戏初始化前选择语言和图形选项 |
 | 语言设置 | 英语、日语、韩语、繁体中文、简体中文界面，以及游戏语言选择 |
-| 图形设置 | 最高 4K 的 Auto／手动内部分辨率、Off／FXAA／SMAA／实验性 TAA、标准／高质量滤波、30／60 FPS 及输出／显示控制；全屏和跨 DPI 仍需更多测试 |
-| 设置菜单 | 原版字体与菜单风格；图形设置单击保存并应用，需要重启时选择 Now/Later |
-| 着色器预编译 | 内置资源索引、多线程编译、缓存复用 |
+| 图形设置 | Auto／手动内部分辨率（配置文件／兼容回退）、含宽屏开关的 16:9 / 21:9 分辨率预设、Off／FXAA／SMAA／实验性 TAA、缩放技术选项（关／DLSS／FSR 3.1，含画质档位）、标准／高质量滤波、可选 RGB Range 扩展（关／扩展）、30／60／90／120 FPS、FreeSync／G-SYNC Compatible VRR 及输出／显示控制；全屏、跨 DPI 和更广超分场景仍需更多测试 |
+| 帧生成设置 | 图像页内提供关／DLSS／FSR、DLSS 倍数、固定 2× FSR、会话状态及保存后即时生效；DLSS FG 切换到 FSR FG 需要重启；已限定验证 D3D12 Uhra 场景 |
+| 设置菜单 | 原版字体、支持长列表滚动的菜单风格；图形设置单击保存并应用，支持按 Start/Enter 聚焦“保存”且不立即保存，需要重启时选择 Now/Later |
+| 着色器预编译 | 内置便携式 Vulkan 着色器包（.lospv）、多线程自适应编译、即时跳过与缓存复用；独立 DX12 .lospd 资产放入 `shaders/` |
 | CPU 使用率 | 减少不必要的轮询，复用渲染计算 |
-| 输入与调试 | 手柄和键盘输入；英文／简体中文 F1 菜单提供捕获、地图信息与同地图 POI 传送 |
+| 输入与调试 | 手柄和键盘输入；英文／简体中文游戏内浮层调试菜单（F1 或手柄 LB+RB）提供捕获、地图信息与同地图 POI 传送 |
 
-打开 `InstallGame.exe`，选择 **Files** 或 **Folder**，即可导入游戏光盘和受支持的 DLC。见[安装说明](docs/INSTALLING.md#automatic-content-import)。
+发布包通过 `LostOdysseyRecomp.exe` 的 **Files** 或 **Folder** 导入游戏光盘和受支持的 DLC。自 v0.7.1 起新增 **Gameplay → 导入光盘与 DLC** 入口，可重新打开导入器并替换所选光盘与 DLC。v0.7.15 提供 Windows ZIP、Linux AppImage 与 Linux Flatpak 独立安装包，并提供放在 `shaders/` 下的独立 DX12 shader 资产。验证边界见[安装说明](docs/INSTALLING.md#automatic-content-import)、[构建说明](docs/BUILDING.md#packaging-flatpak)和[开发状态](docs/STATUS.md)。
 
 验证进展和剩余工作见[公开维护者 Project](https://github.com/users/freefrank/projects/3)。
 
 <details>
 <summary><strong>游戏版本与兼容性详情</strong></summary>
 
-支持的两个版本对应 [Lost Odyssey (Europe, Asia) (En,Ja,Zh,Ko) (Disc 1)，Redump 39111](https://redump.info/disc/39111) 与 [Lost Odyssey (USA, Europe) (En,Ja,Fr,De,Es,It) (Disc 1)，Redump 11817](https://redump.info/disc/11817)。本文将前者简称亚洲版：Disc 1 的 Title ID 为 `4D5307FA`、Media ID 为 `39F7D748`、标题／基础版本为 `0.0.0.4`、XeMID 为 `MS204204H0X14`。USA, Europe 版 Disc 1 的 Media ID 为 `368DE6DD`、版本为 `0.0.0.3`、XeMID 为 `MS204203W0X14`。这些身份字段与已核对的两套数据一致；尚未进行整张 ISO 与 Redump 哈希的完整比对。导入器严格核对每盘受支持的 XEX 哈希，不能仅凭区域名称判断。
+支持的两个版本对应 [Lost Odyssey (Europe, Asia) (En,Ja,Zh,Ko) (Disc 1)，Redump 39111](https://redump.info/disc/39111) 与 [Lost Odyssey (USA, Europe) (En,Ja,Fr,De,Es,It) (Disc 1)，Redump 11817](https://redump.info/disc/11817)。本文将前者简称亚洲版：Disc 1 的 Title ID 为 `4D5307FA`、Media ID 为 `39F7D748`、标题／基础版本为 `0.0.0.4`、XeMID 为 `MS204204H0X14`。USA, Europe 版 Disc 1 的 Media ID 为 `368DE6DD`、版本为 `0.0.0.3`、XeMID 为 `MS204203W0X14`。导入器按 title、media、version、base 和 disc 元数据识别受支持数据，不做整张 ISO 或逐文件 SHA-256 审计。
 
-支持 **USA, Europe 0.0.0.3 四盘版本**，严格校验 XEX 并阻止不同版本混装。游戏语言按安装版本提供：USA, Europe 版为英／日／德／法／西／意，已核对的 Europe, Asia 资源保留英／日／韩／繁中／简中选项。详见[版本说明](docs/notes/europe-support.md)。
+支持 **USA, Europe 0.0.0.3 四盘版本**，按元数据识别并阻止不同版本混装。游戏语言按安装版本提供：USA, Europe 版为英／日／德／法／西／意，已核对的 Europe, Asia 资源保留英／日／韩／繁中／简中选项。详见[版本说明](docs/notes/europe-support.md)。
 
 四盘全部导入后，游戏会自动读取所需光盘，无需手动换盘。详见[光盘处理说明](docs/notes/disc-selection.md)。
 
@@ -150,6 +121,8 @@ Pop-Location
 
 **启动与失败日志。** 正常启动会在工作目录写入 `logs/runtime-<timestamp>.log`，并同时输出到 `stderr`；设置 `LO_LOG_FILE=<path>` 可指定其他文件，设置 `LO_LOG_FILE=0` 可关闭重复文件输出。v0.5.11 还会记录 Windows build、进程／原生架构、source/build revision、PE 映像元数据、compiler、启动 memory baseline、GPU、原始 driver version、vendor/type 和 `reported_device_memory_bytes`。报告启动或渲染失败时，请附上当前 runtime log，并保留启动日志附近记录的 executable/source version、backend、GPU 和 driver 信息。诊断记录会保留原始 API code 及失败的资源或分配上下文，但这些记录本身不能确定根因。路径和保留规则见[构建与日志说明](docs/BUILDING.md)。
 
+遇到画面问题时，请在问题出现时按 **F1**，选择**捕获渲染状态**。等待后台归档完成，并附上状态消息所示路径下的归档文件：Windows 生成 `.zip` 归档，Linux 生成 `.tar.gz` 归档。如果归档失败，原始捕获目录会保留，以便恢复。
+
 | 动作 | 键盘 |
 | :--- | :--- |
 | Start / Back | Enter / Backspace |
@@ -157,7 +130,7 @@ Pop-Location
 | 十字键 / 左摇杆 | 方向键 / I、J、K、L |
 | 左 / 右肩键 | Q / W |
 | 左 / 右扳机 | E / R |
-| 调试菜单 | F1 |
+| 调试菜单 | F1 / 手柄 LB+RB |
 
 SDL 已映射手柄与键盘可同时用于玩家 1。未映射摇杆需要 SDL 手柄映射。见[输入说明](docs/notes/controller-input.md)。
 
@@ -173,9 +146,13 @@ SDL 已映射手柄与键盘可同时用于玩家 1。未映射摇杆需要 SDL 
 | `thirdparty/` | 渲染、音频及其他依赖 |
 | `docs/` | 当前状态、指南、逆向记录与历史归档 |
 
-[路线图](docs/ROADMAP.zh-CN.md) · [接手入口](docs/notes/handoff.md) · [渲染测试](docs/notes/rendering-validation.md) · [音频](docs/notes/audio-output.md) · [归档](docs/archive/README.md)
+[路线图](docs/ROADMAP.zh-CN.md) · [接手入口](docs/notes/handoff.md) · [渲染测试](docs/notes/rendering-validation.md) · [TAA 实时调试](docs/TAA_LIVE_DEBUG.md) · [音频](docs/notes/audio-output.md) · [归档](docs/archive/README.md)
 
 </details>
+
+## 赞助者
+
+感谢 **Cristian** 和 **Whitesun** 在 Ko-fi 上支持本项目。
 
 ## 致谢与游戏数据
 

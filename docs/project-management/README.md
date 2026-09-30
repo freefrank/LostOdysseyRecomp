@@ -1,6 +1,6 @@
 # Project synchronization records
 
-The [Lost Odyssey Recomp Roadmap](https://github.com/users/freefrank/projects/3) is a public maintainer Project, verified through GitHub GraphQL on 2026-09-08. The repository's English and Chinese roadmaps remain synchronized mirrors. Follow the [project_manager workflow](../agents/project-management.md) for on-demand maintenance.
+The [Lost Odyssey Recomp Roadmap](https://github.com/users/freefrank/projects/3) is a public maintainer Project, verified through GitHub GraphQL on 2026-09-08. The repository's English and Chinese roadmaps remain synchronized mirrors. Follow this document and the repository [agent instructions](../../AGENTS.md) for on-demand maintenance.
 
 ## Files
 

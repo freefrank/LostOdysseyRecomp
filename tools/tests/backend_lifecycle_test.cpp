@@ -87,7 +87,8 @@ void WaitDebugCaptureArchive() {
 }
 void SetOutputSize(uint32_t,uint32_t) {}
 void ScaleResolvedSize(uint32_t,uint32_t&,uint32_t&) {}
-plume::RenderTexture* AcquireResolvedSurface(uint32_t,uint32_t&,uint32_t&,uint32_t&) { return nullptr; }
+plume::RenderTexture* AcquireResolvedSurface(uint32_t,uint32_t&,uint32_t&,uint32_t&, frame_plan::FramePlan*, frame_generation::ResolvedHandoff*) { return nullptr; }
+void CancelFgHandoffs() {}
 bool SceneAAApplied(uint32_t) { return false; }
 bool ReadbackResolvedSurface(uint32_t,std::vector<uint32_t>&,uint32_t&,uint32_t&) { return false; }
 std::vector<uint32_t> GetResolvedAddresses() { return {}; }

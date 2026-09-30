@@ -1,6 +1,7 @@
 #include <stdafx.h>
 #include "memory.h"
 #include "guest_address_space.h"
+#include "updater/apply_arguments.h"
 #include <os/logger.h>
 #include <set>
 #include <utility>
@@ -68,6 +69,10 @@ void Memory::InstallFunctionTracers()
 
 Memory::Memory()
 {
+#ifdef _WIN32
+    if (updater::RequestsApplyMode(GetCommandLineW()))
+        return;
+#endif
     base = GuestAddressSpace::Allocate();
     if (!base)
         return;

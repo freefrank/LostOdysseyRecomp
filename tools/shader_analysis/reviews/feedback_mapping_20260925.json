@@ -1,0 +1,1856 @@
+{
+  "schema": "lostodyssey.reviewed-feedback-mappings.v1",
+  "date": "2026-09-25",
+  "archive_repository": "freefrank/LostOdysseyRecomp-build-inputs",
+  "archive_commit": "4191350b007be88acb0cf0d5850009b020242f62",
+  "checkpoint_utc": "2026-09-23T19:42:37Z",
+  "selection": "79 unmapped VS with strong unknown-shader independent scene/depth evidence; review includes all 186 observed VS/PS pairs, including pairs without strong records.",
+  "limits": "Reviewed source decisions, not an automatic map generator. Synthetic CPU arithmetic and immutable-upload tests do not establish GPU pixels, producer identity, future PS pairings, or player acceptance. Runtime remains a VS-wide allowlist.",
+  "counts": {
+    "reviewed_vs": 79,
+    "observed_pairs": 186,
+    "implemented_vs": 35,
+    "implemented_pairs": 65,
+    "held_vs": 44
+  },
+  "candidates": [
+    {
+      "vs": "2d458def192151ac",
+      "slot": 0,
+      "decision": "implemented",
+      "projection_family": "Material0",
+      "outputs": "o6 copies clip; PS uses initial o6.w for alpha and overwrites initial o6.xyz before later use; o2.w and UV/lighting are independent",
+      "reason": "12 strong and 19 guard-31 observations; exact PS does not use original clip XY as sample coordinates. Preserve clip W.",
+      "vs_sha256": "b8eadaae020070e3449dbe3c5db38e3f3b56b0706bcbe255d940104c9f2fa454",
+      "observed_ps": [
+        {
+          "hash": "4f9ef9b24449894b",
+          "sha256": "7b1ec1efddb02b76143d5b884232527ee608eed0093ab8958ab6b2e55941a549"
+        }
+      ]
+    },
+    {
+      "vs": "6b757ded853a7fc5",
+      "slot": 0,
+      "decision": "implemented",
+      "projection_family": "Material0",
+      "outputs": "o6 copies clip; PS overwrites initial o6.xyz before use, while initial o6.w reaches output alpha; UV/color/lighting independent",
+      "reason": "12 strong and 13 guard-31 observations; preserve clip W and independent varyings.",
+      "vs_sha256": "3de4215700aae491161d783f6c474128b8e0d09fed1494dd2651e33c2506f5f6",
+      "observed_ps": [
+        {
+          "hash": "4d5c5950fbf2614b",
+          "sha256": "b3935853788e7acd8cd1d4afe0ec8eebc1108192c4cdff0d11235af248c623b8"
+        }
+      ],
+      "control_flow_review": "PS 4d5c5950fbf2614b: initial i6.xyz copied to r6 is unconditionally overwritten at HLSL lines 461/465/481 before any use; first r6 texture lookup follows at 506. Guest if(p0) begins at 762 after another unconditional r6.xyz write at 761. Both paths retain only original clip W in output alpha; no original clip XY survives."
+    },
+    {
+      "vs": "6d3d954bb6d86bc1",
+      "slot": 0,
+      "decision": "implemented",
+      "projection_family": "Depth0",
+      "outputs": "no guest varying",
+      "reason": "31 strong and 39 guard-31 observations; observed pair is depth-only. Color companion not established.",
+      "vs_sha256": "c47d50ae26df6d3cb93b4a30a6d1ebcfd32c5f38a0887f1d320c0aa74e1d5a19",
+      "observed_ps": [
+        {
+          "hash": "0000000000000000",
+          "sha256": null
+        }
+      ]
+    },
+    {
+      "vs": "eb5f611c4321708e",
+      "slot": 0,
+      "decision": "held",
+      "projection_family": null,
+      "outputs": "UV and color independent; both PSs sample from o0 UV",
+      "reason": "First PS has 24 guard-31 scene observations, but second PS has 39 finite-VP guard-29 camera-mismatch observations and no guard-31 evidence. An older six-frame capture also showed other-camera c0 and incompatible Z viewport. VS-wide mapping could jitter that other-camera use after mapped-draw self-anchoring.",
+      "vs_sha256": "b85ebbde33bc114f7489f5c1c7da3808e3c25686b8ff85f826f9e4698bdc5ec9",
+      "observed_ps": [
+        {
+          "hash": "38b953b91dcfd9ce",
+          "sha256": "31583e62ac7bdfd78226913abf856baf256fe68379140df9bd6dffbd3b0a1bb8"
+        },
+        {
+          "hash": "3a8f27699d4cc077",
+          "sha256": "7ab39a08ddb3397307604303f2ea20065d34a27ad33ba6db6f184e1a2adb0564"
+        }
+      ]
+    },
+    {
+      "vs": "0fa0396a659f8da5",
+      "slot": 1,
+      "decision": "implemented",
+      "projection_family": "Material1",
+      "outputs": "o2 copies clip; PS uses initial o2.w for alpha, texture coordinates from o0 UV; o1 mask independent",
+      "reason": "12 strong and 13 guard-31 observations. Eleven kind-0/guard-13 records are unproven position results; three kind-1/guard-15 records fail finite-VP guard.",
+      "vs_sha256": "2353b8ec218ad415203993bbabc5c1e5ddcd9bdbd3dabb78873a0481166bd747",
+      "observed_ps": [
+        {
+          "hash": "69840967ab0852ae",
+          "sha256": "38c5cea65484149806a00cc0adbb2b3c1c80f1c83563f7052b3ecd26069e0b27"
+        }
+      ]
+    },
+    {
+      "vs": "2b36b5ca7a88912e",
+      "slot": 4,
+      "decision": "implemented",
+      "projection_family": "Static",
+      "outputs": "o0 UV and o1 color independent of clip; both exact PSs sample with coordinates derived from o0",
+      "reason": "Both observed PS pairs have 8 strong and 8 guard-31 observations each. Two additional kind-0/guard-13 records are unproven position results.",
+      "vs_sha256": "3ac2f93f9ed2d28b5fde27895cfaf0c22415073906cdf6ca9b4bcd604bd07bf5",
+      "observed_ps": [
+        {
+          "hash": "2c5592c279ce0048",
+          "sha256": "7cb720980555e77fb9c50b189c10d82e18b6584da92b37b52d546980c7c7d188"
+        },
+        {
+          "hash": "f77620dc74afa3a6",
+          "sha256": "84770d0f916512c80ef09ee0194860c95cbdd187fcd4b701ba38f065c9c9716b"
+        }
+      ]
+    },
+    {
+      "vs": "ac81dd5f6ed83c3e",
+      "slot": 4,
+      "decision": "implemented",
+      "projection_family": "Static",
+      "outputs": "o0 UV and o1 color independent of clip; exact PS samples from o0 UV",
+      "reason": "8 strong and 8 guard-31 observations; two additional kind-0/guard-13 records are unproven position results.",
+      "vs_sha256": "58e88dadf7565113d49839a44c218a975b3266659454388f867c026feb240af8",
+      "observed_ps": [
+        {
+          "hash": "fd5cf45672b8f9b6",
+          "sha256": "4df7defdeff31bc49a90df39ff96798410860b628c2eff4af9fbd21bd500d12f"
+        }
+      ]
+    },
+    {
+      "vs": "02d8d17463de32cd",
+      "slot": 7,
+      "decision": "held",
+      "projection_family": null,
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "At least one observed PS reads copied clip.xyz; dependency reaches texture fetch in conservative source-order trace",
+      "vs_sha256": "427efa53dd411ec71afb58bc8de328fd442074a86a400a2d36cd5855792848db",
+      "observed_ps": [
+        {
+          "hash": "1d8d788f2ac57b58",
+          "sha256": "5ef271a9f954cf64a7749c9cea740020fd4b286f147457e169be83112b853c39"
+        }
+      ]
+    },
+    {
+      "vs": "03a4238064e6c836",
+      "slot": 7,
+      "decision": "implemented",
+      "projection_family": "Static",
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "Final VP rows write position and copied clip; every observed PS reads only clip.w or overwrites clip.xyz",
+      "vs_sha256": "98fba713c64d25349c53d202cf3b462e8808dd57c1a6ffbf07b236f15f503f05",
+      "observed_ps": [
+        {
+          "hash": "a85fa3f22e2524e4",
+          "sha256": "890ea0679baa0adfbd7e10b3e6629b555722db99414dbbeedcd7fe968584e2df"
+        }
+      ]
+    },
+    {
+      "vs": "09f67586057d7083",
+      "slot": 7,
+      "decision": "implemented",
+      "projection_family": "Static",
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "Final VP rows write position and copied clip; every observed PS reads only clip.w or overwrites clip.xyz",
+      "vs_sha256": "678ec2585600b6fc911b43baff3883c34ec20a56a6845ac47741236132d4cea1",
+      "observed_ps": [
+        {
+          "hash": "2f606db52def4352",
+          "sha256": "8279723c5abdb853da2dfefee982cc015f32f2604f7d8f2556437b8e655d53eb"
+        }
+      ]
+    },
+    {
+      "vs": "1a2f72d1dce268bd",
+      "slot": 7,
+      "decision": "implemented",
+      "projection_family": "Static",
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "Final VP rows write position and copied clip; every observed PS reads only clip.w or overwrites clip.xyz",
+      "vs_sha256": "9e749469cecbea84446d53b15c003b285a3c4752acd829a0b2aa2a771d7c8e6b",
+      "observed_ps": [
+        {
+          "hash": "5fff3ecff0e2f9a1",
+          "sha256": "39e3eb8e2ba4eca162dffe5ae88c22e7c982f397d4710358ba7e459b3d116185"
+        },
+        {
+          "hash": "84241e133391e91b",
+          "sha256": "0fa81dbf75545db24af4c0b364b5b63b437ec6f70cfc72630569735d456d0617"
+        }
+      ]
+    },
+    {
+      "vs": "1b99a8476ec606b1",
+      "slot": 7,
+      "decision": "held",
+      "projection_family": null,
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "At least one observed PS reads copied clip.xyz; dependency reaches texture fetch in conservative source-order trace",
+      "vs_sha256": "1cde06a55d2ffd7412118c76978def5a61888cbd7005ec63620964c6081e2817",
+      "observed_ps": [
+        {
+          "hash": "4bf1892e68a9a689",
+          "sha256": "0f44672df132ca2d3dd43b6486d700ba7b8dfacced1c05a58a8a3dceff6fd86e"
+        },
+        {
+          "hash": "c5cef8dff28b3d04",
+          "sha256": "dfb943b76d7dad063619708fa8895bb39968d935474d0c135667cb2b75eeb1f6"
+        },
+        {
+          "hash": "c7024b1192ee8468",
+          "sha256": "f74d6cf4a8d4283cd456d5b30c09b8853d4d57218e57cfd8d9f5d5f900303055"
+        }
+      ]
+    },
+    {
+      "vs": "21b1d8c82e81fa02",
+      "slot": 7,
+      "decision": "held",
+      "projection_family": null,
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "At least one observed PS reads copied clip.xyz; dependency reaches texture fetch in conservative source-order trace",
+      "vs_sha256": "a86c14c809451a20c172d7b74ecbb678f0e3929f1d53ce0bd02edfe4923977b6",
+      "observed_ps": [
+        {
+          "hash": "b974e1de85f9afdc",
+          "sha256": "7f505e5c3b0f450a53cb613fe53ee2524756978ee841a25fb81725048f5d078f"
+        },
+        {
+          "hash": "d7a4da6f621d05ae",
+          "sha256": "0cb6b766b76ff749733700f4f97fd7dee9fef2593d91e04e5bb69b5a296b38bf"
+        }
+      ]
+    },
+    {
+      "vs": "22225401fc8ea621",
+      "slot": 7,
+      "decision": "held",
+      "projection_family": null,
+      "clip_outputs": [
+        4,
+        7
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "At least one observed PS reads copied clip.xyz; dependency reaches texture fetch in conservative source-order trace",
+      "vs_sha256": "c3822ae1a61d3c6e5ba561ebfb93534376a0f04b0f2acab995a4b2a7e1a78b3b",
+      "observed_ps": [
+        {
+          "hash": "6373dc6f789b2bf1",
+          "sha256": "ff9097db1d55a156b265b52fc8d19dbb6ee7cf2fdecd182887a6f147b56de082"
+        }
+      ]
+    },
+    {
+      "vs": "22993b734c035ae6",
+      "slot": 7,
+      "decision": "implemented",
+      "projection_family": "Static",
+      "clip_outputs": [
+        1
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "Final VP rows write position and copied clip; every observed PS reads only clip.w or overwrites clip.xyz",
+      "vs_sha256": "5d07393d09ccd5d415e4c5bb63e0f330d44fb48b212ba3d966fb6d52bf229749",
+      "observed_ps": [
+        {
+          "hash": "042b472a22384e2a",
+          "sha256": "43bae10576fddd20609362304c5143aa566dc8a97598a285581e4bb2e99bc2ec"
+        },
+        {
+          "hash": "42ef83d7f512e853",
+          "sha256": "b5ac298acdf74039f76326133b97c1af1acc21daf215e9fd8c54beaab32e9e5d"
+        },
+        {
+          "hash": "4c804674d3020558",
+          "sha256": "f3b68e07d3ee8885b2444e9e428949e85311f16c6c5163b97c0a41413c7667ee"
+        }
+      ]
+    },
+    {
+      "vs": "23041a74b20c4332",
+      "slot": 7,
+      "decision": "held",
+      "projection_family": null,
+      "clip_outputs": [
+        4,
+        5
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "At least one observed PS reads copied clip.xyz; dependency reaches texture fetch in conservative source-order trace",
+      "vs_sha256": "555db5ce14167a0b09dcc1840d617c262d8ea2d5f6e378e02e1a068664e800a8",
+      "observed_ps": [
+        {
+          "hash": "46fd8e896e5223b0",
+          "sha256": "f2a3e432e13cadd891d5d784b332b495e6a59ad0d9dfa597a9d3e828e9afa4ef"
+        }
+      ]
+    },
+    {
+      "vs": "24ac4f2d476bf078",
+      "slot": 7,
+      "decision": "held",
+      "projection_family": null,
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "At least one observed PS reads copied clip.xyz; dependency reaches texture fetch in conservative source-order trace",
+      "vs_sha256": "c6d80d9707f7a90a5ca468e6e54ace3ef8ab203457ec830915ee47dcf65fd13b",
+      "observed_ps": [
+        {
+          "hash": "ab8ee9e6ccd7145e",
+          "sha256": "99d407255d36a3fe7e852cc9fd478a3a2daa76461724b024320ded6aa80a5fdd"
+        }
+      ]
+    },
+    {
+      "vs": "276b01d4190fdc00",
+      "slot": 7,
+      "decision": "implemented",
+      "projection_family": "Static",
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "Final VP rows write position and copied clip; every observed PS reads only clip.w or overwrites clip.xyz",
+      "vs_sha256": "a5a40e70b83c0132651645d6eb4305f02b2447dad19248e0959ff4912396adaf",
+      "observed_ps": [
+        {
+          "hash": "23ab0f72cb66d185",
+          "sha256": "e330cbcf21a2b4286c6647a72008a78724eeb45d0a70ed9261a41108daf644fb"
+        }
+      ]
+    },
+    {
+      "vs": "29c6ee5dc3e841f5",
+      "slot": 7,
+      "decision": "held",
+      "projection_family": null,
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "At least one observed PS reads copied clip.xyz; dependency reaches texture fetch in conservative source-order trace",
+      "vs_sha256": "df9e6592b84a79962f95a801bcd9a40bc073e6caf521b28db1f18f19743087fa",
+      "observed_ps": [
+        {
+          "hash": "0c41b607e6c29644",
+          "sha256": "cffe83e7c10f1935efc7f6f1c3601f703ed8e8a4edee21949d068d58e1de4712"
+        },
+        {
+          "hash": "4a038534b6505d2d",
+          "sha256": "dcf5521d39d7cd003233356413bbc76ada750e01c8eee43be28494c82824fe83"
+        },
+        {
+          "hash": "5a34e4ad28cb1acd",
+          "sha256": "d2d23af76d5257c0d87fe54d346b7846555019d99488852a044a8612460c7c04"
+        },
+        {
+          "hash": "93d045dec4c164b2",
+          "sha256": "f6567ee50ba96df7d052a8ebfb5100a0f4092c6cc77fb6b2b8d76f5862ae3f36"
+        },
+        {
+          "hash": "d0c4ff46e740c0d4",
+          "sha256": "a65814947ad7604f850545adf7e944bf9e4a4ef18db06cc4af1ef8dbbbd82436"
+        },
+        {
+          "hash": "e3a6058c056b919b",
+          "sha256": "ddb9389d1d944c9c1203b48922427b2875e175eebc9381cf2fccc9727ca4f68e"
+        }
+      ]
+    },
+    {
+      "vs": "30c7df4b111290fa",
+      "slot": 7,
+      "decision": "held",
+      "projection_family": null,
+      "clip_outputs": [
+        4,
+        5
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "At least one observed PS reads copied clip.xyz; dependency reaches texture fetch in conservative source-order trace",
+      "vs_sha256": "57c8df0a54b3bb7a9761837b386f7f6f275a1a0abc6d056b9c08dbbba624c5e6",
+      "observed_ps": [
+        {
+          "hash": "e2b7e7e5d683411b",
+          "sha256": "d0ad6fd91f20f5e78fe21b66fa1c1abb70baa6b978dac47dcd7911b0634c7c0a"
+        }
+      ]
+    },
+    {
+      "vs": "32f09dcd84b93237",
+      "slot": 7,
+      "decision": "held",
+      "projection_family": null,
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "At least one observed PS reads copied clip.xyz; dependency reaches texture fetch in conservative source-order trace",
+      "vs_sha256": "f07eb9285e76cc116604981716223603d0f1db8f2310cb48c5d9437a1858f737",
+      "observed_ps": [
+        {
+          "hash": "27f22bce227d1804",
+          "sha256": "942b545706b94b427abc286509b22ec83d068ab338138130e1d64e12bd1505e8"
+        }
+      ]
+    },
+    {
+      "vs": "3359fe19a89b5e42",
+      "slot": 7,
+      "decision": "held",
+      "projection_family": null,
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "At least one observed PS reads copied clip.xyz; dependency reaches texture fetch in conservative source-order trace",
+      "vs_sha256": "e03a185406346b2e246c2e4655ea48bce3ad60166e668628dc45feda3d1869a0",
+      "observed_ps": [
+        {
+          "hash": "cd8fc8ea0c53a863",
+          "sha256": "6d9d8f3b42fbcf7a619e661f22f8631ded9225193c9ff3815223ae3a83b0f71d"
+        }
+      ]
+    },
+    {
+      "vs": "35e5f4651ffc54a2",
+      "slot": 7,
+      "decision": "held",
+      "projection_family": null,
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "At least one observed PS reads copied clip.xyz; dependency reaches texture fetch in conservative source-order trace",
+      "vs_sha256": "478836bdba0add2ca1429117a10745067aa890885929ff93254757b421e61ea6",
+      "observed_ps": [
+        {
+          "hash": "6caf2bceb69a1be1",
+          "sha256": "943ba5fa122d9b9a7792b5e819313abaf9739956f0687b1fe24237f9061d3f13"
+        }
+      ]
+    },
+    {
+      "vs": "3638b6b020b068fc",
+      "slot": 7,
+      "decision": "implemented",
+      "projection_family": "Static",
+      "clip_outputs": [
+        1,
+        3
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "Final VP rows write position and copied clip; every observed PS reads only clip.w or overwrites clip.xyz",
+      "vs_sha256": "7fb0238997a568357ba94b5d64364d975a7d714d87115d30c241fb02dc9f1fe8",
+      "observed_ps": [
+        {
+          "hash": "4f69db2650939d07",
+          "sha256": "5d2d07b2c504b1a3c0d2eca0a57c603c6a4d5ce86650242f7bd78ab0fc159113"
+        },
+        {
+          "hash": "63d62a64de42a9c2",
+          "sha256": "ad170ac1279e22892cee417d0b64b293424bfdd659c566183aba4a6dcee8af75"
+        }
+      ]
+    },
+    {
+      "vs": "3a818cf89cbff74a",
+      "slot": 7,
+      "decision": "held",
+      "projection_family": null,
+      "clip_outputs": [
+        3,
+        6
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "At least one observed PS reads copied clip.xyz; dependency reaches texture fetch in conservative source-order trace",
+      "vs_sha256": "1300f6105d2f690d770ab35d447572e67c2206cff0f4fe0b84a3c2f8c0a9ffe8",
+      "observed_ps": [
+        {
+          "hash": "c1cac3cf6c1fa9a3",
+          "sha256": "5759b133a17a776598efdd5e70dad8d8f509be16373aaa682a5267de6db23ee6"
+        }
+      ]
+    },
+    {
+      "vs": "3bb0b196f11e64e5",
+      "slot": 7,
+      "decision": "implemented",
+      "projection_family": "Static",
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "Final VP rows write position and copied clip; every observed PS reads only clip.w or overwrites clip.xyz",
+      "vs_sha256": "fbfd838291309b956fc229fe876b5f9ad7773cf45f43d6a43d1da59d36509e3a",
+      "observed_ps": [
+        {
+          "hash": "069095bcbf086364",
+          "sha256": "9c6f5a267e3846a16d4ba1d9ff035f9ce435131739b8e2a6b619155fe71285ed"
+        }
+      ]
+    },
+    {
+      "vs": "3ee6416e9416bfc4",
+      "slot": 7,
+      "decision": "held",
+      "projection_family": null,
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "At least one observed PS reads copied clip.xyz; dependency reaches texture fetch in conservative source-order trace",
+      "vs_sha256": "8904301edfb1175e4c15e8f540fd77fce4ddfce8b8dc86baf6e14cbcdda8081e",
+      "observed_ps": [
+        {
+          "hash": "c775090829b8d5ba",
+          "sha256": "06b749f59886d978cdb395e7721facf62b29d791ecc911559ba94ce1974605bc"
+        }
+      ]
+    },
+    {
+      "vs": "3f522a748751d16a",
+      "slot": 7,
+      "decision": "held",
+      "projection_family": null,
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "At least one observed PS reads copied clip.xyz; dependency reaches texture fetch in conservative source-order trace",
+      "vs_sha256": "b2d4cfbc5b9c7a476df8e6127dd8e98e2612f0ca8c0fa28cef6c6d5dc1a5579b",
+      "observed_ps": [
+        {
+          "hash": "09796f8c45487899",
+          "sha256": "db12c0faad1ed30a0fe1e306806fe785d847c48aa41430f4ae95543d90717ba9"
+        },
+        {
+          "hash": "51d2db62fad5fd50",
+          "sha256": "e2ce4019d79aaeb41c2badf6d333355bcb8e6e06e49fa63c3a63f05f09c7bc8d"
+        },
+        {
+          "hash": "5e431275429b0deb",
+          "sha256": "cb097980c528a2d2f86cb6b82ffaefb4d6a68834f3105957776f0bb4324f177c"
+        },
+        {
+          "hash": "62f70bc41d61c73b",
+          "sha256": "fd8d70336bd24e45028797975d9c74d50239c893ce2ff3fd02c06437c6e8bfe1"
+        },
+        {
+          "hash": "766c5b6f398bb3c0",
+          "sha256": "472dac5b1369989dc09548cb6138f36db92aa79708604d54910a8bfcb0d1e333"
+        },
+        {
+          "hash": "c0b84bc491adac2c",
+          "sha256": "7112e3110193d2ea20d7b68abab452e6071b56c262943fa39f2cf798f2207b2c"
+        },
+        {
+          "hash": "fa255f9ab7a4118a",
+          "sha256": "ae379cb71752e62a2d81c16c8a698fc03d61a54394096e451ca546715e7a6d32"
+        },
+        {
+          "hash": "ffe51db4743b46b9",
+          "sha256": "ec59d2e57ed43242302ac6b78e0f959dcb7ae1edf26695e101f856e8a0995492"
+        }
+      ]
+    },
+    {
+      "vs": "418b5eb1b1726eb9",
+      "slot": 7,
+      "decision": "held",
+      "projection_family": null,
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "At least one observed PS reads copied clip.xyz; dependency reaches texture fetch in conservative source-order trace",
+      "vs_sha256": "b98205f3efb3463830734496daeda2d4ca6a9faa4cff3ab04965d6207f2dbe26",
+      "observed_ps": [
+        {
+          "hash": "0e7b5a377aa44212",
+          "sha256": "ed3a4617ff2db9f1583fdacadbdebe090381abc9c1960b2ebb4ca73a16db0608"
+        },
+        {
+          "hash": "246d0bdcb9bfd1cd",
+          "sha256": "45fac80f19d49dd6f2813ea7e08bbaa073fd890358dab4b685053e110e4f2d09"
+        },
+        {
+          "hash": "2e1d20e872fb1837",
+          "sha256": "e1b033954ccc9ca488429d974137abf12a283ae2e8691441a52e9a03f0782dce"
+        },
+        {
+          "hash": "7f0b13c483fe08ad",
+          "sha256": "a2b29d3a75129ce80483ee5271a1e57d26674b518ac82ce5cf07e15a466fa228"
+        },
+        {
+          "hash": "9dbde169f68c12f0",
+          "sha256": "8f31e05fb0b871051498c9f357bfde2d25ad9a10b0e57da4c27d50cbbcddc955"
+        },
+        {
+          "hash": "c114215aefee792a",
+          "sha256": "965c798b1e70c69d272a4920de5a5ee7c2b5ae320c6bb343b58ab15c057aac6d"
+        },
+        {
+          "hash": "c370881ecd43f958",
+          "sha256": "cb77bbd0e576864bb3d56b0532781c38ebe85c9754438fc4592c717e9bcdddbb"
+        },
+        {
+          "hash": "c87f298e72402efa",
+          "sha256": "941b29b16c60d4ebcace1e55e00676e5c40d63bb3a5de15f8c44b3dd009e91bd"
+        },
+        {
+          "hash": "c93efa2410722c5b",
+          "sha256": "d1835a349b7311044a9955f31eb45a423fc8b9dcb5957b618ae6340e836b0b8e"
+        }
+      ]
+    },
+    {
+      "vs": "4523afe2cc9fe50d",
+      "slot": 7,
+      "decision": "held",
+      "projection_family": null,
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "At least one observed PS reads copied clip.xyz; dependency reaches texture fetch in conservative source-order trace",
+      "vs_sha256": "de44604b2406b5f79e89dde8c8d917a79ae47b513e543b09baedc89a1b1f2c30",
+      "observed_ps": [
+        {
+          "hash": "4bf1892e68a9a689",
+          "sha256": "0f44672df132ca2d3dd43b6486d700ba7b8dfacced1c05a58a8a3dceff6fd86e"
+        }
+      ]
+    },
+    {
+      "vs": "48b893348dc956c2",
+      "slot": 7,
+      "decision": "held",
+      "projection_family": null,
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "At least one observed PS reads copied clip.xyz; dependency reaches texture fetch in conservative source-order trace",
+      "vs_sha256": "7165ec6f40b47c3cc05f7ffc84ee23a018a03b379c864c3a8ef09cc31f14d414",
+      "observed_ps": [
+        {
+          "hash": "10335e108f835159",
+          "sha256": "fa868f4fcd78c87d3f7eae2ca2c4295487dfef6d078366e02b1b2e162eaad106"
+        },
+        {
+          "hash": "26d700dc3dee7af8",
+          "sha256": "4c9963b7231ec8af5b805de2d2545b06d2333ffe8725a77dda28a0e8136a9026"
+        },
+        {
+          "hash": "2a461f77c0564e5e",
+          "sha256": "c724380b479b8f84e7571d2ff75c117d1066a26af8c2bf7e222b6f9c7f33aa7a"
+        },
+        {
+          "hash": "42ddb7ff9cfa396c",
+          "sha256": "59ba0e29019d841ac70bd4199c5c1335c90baca7f587925476ee2a48f7ac7b68"
+        },
+        {
+          "hash": "542b10e504efdc50",
+          "sha256": "630fa8183aedb82a7f7098c0857f7fd9d5b589351e63aa657421e631272866c8"
+        },
+        {
+          "hash": "5f9f877455d226b1",
+          "sha256": "7d19161ede3ae464776ed4305619bce8e6e1f8b0ddd22315559f2493ca724bea"
+        },
+        {
+          "hash": "a211e263f0eb01d7",
+          "sha256": "974aad3cf21245fb6a2fdfc6ff9313f96f51042530dfe3c91ce4ed8044394904"
+        },
+        {
+          "hash": "b05ca8763fa954f8",
+          "sha256": "39e6aac2d3c1644882a475d6e4431a3d06f7de3874c5e6701f8fcfd88897258f"
+        },
+        {
+          "hash": "e847e5011b776f4d",
+          "sha256": "6025db519fa979d78919b6e6bee4c4a0ee86ba4de127ad1c832593d3ca46be86"
+        },
+        {
+          "hash": "f812d8ff6ff0f33d",
+          "sha256": "be4211ece37459fc4882e47d812f1d9ddfa7267a4752fccd108c940180c83a1d"
+        }
+      ]
+    },
+    {
+      "vs": "4a25a2f1ae004a7f",
+      "slot": 7,
+      "decision": "held",
+      "projection_family": null,
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "At least one observed PS reads copied clip.xyz; dependency reaches texture fetch in conservative source-order trace",
+      "vs_sha256": "dfb9ede50aa520a1881954d2847d361d3e5cc6ce091fe4e733e8469ef3f42eea",
+      "observed_ps": [
+        {
+          "hash": "4884d4907cd772e4",
+          "sha256": "dc18f534d71e5175780b6dc2aadaa50433d56ec4a5ae26259d6d3bc0cdbfbbd6"
+        }
+      ]
+    },
+    {
+      "vs": "4ce42af298a9baef",
+      "slot": 7,
+      "decision": "implemented",
+      "projection_family": "Static",
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "Final VP rows write position and copied clip; every observed PS reads only clip.w or overwrites clip.xyz",
+      "vs_sha256": "0d19f6a707461a76f43ad7ef8280708788222954171b7ecf66ae8ba51185e2d6",
+      "observed_ps": [
+        {
+          "hash": "2f606db52def4352",
+          "sha256": "8279723c5abdb853da2dfefee982cc015f32f2604f7d8f2556437b8e655d53eb"
+        }
+      ]
+    },
+    {
+      "vs": "59006824a7515704",
+      "slot": 7,
+      "decision": "implemented",
+      "projection_family": "Static",
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "Final VP rows write position and copied clip; every observed PS reads only clip.w or overwrites clip.xyz",
+      "vs_sha256": "78630df49b87a7fde49d9ec867aeb6243de867be68fe0b8ebe1a3c39546ef263",
+      "observed_ps": [
+        {
+          "hash": "23ab0f72cb66d185",
+          "sha256": "e330cbcf21a2b4286c6647a72008a78724eeb45d0a70ed9261a41108daf644fb"
+        }
+      ]
+    },
+    {
+      "vs": "5d51dfb03c579740",
+      "slot": 7,
+      "decision": "held",
+      "projection_family": null,
+      "clip_outputs": [
+        3
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "At least one observed PS reads copied clip.xyz; dependency reaches texture fetch in conservative source-order trace",
+      "vs_sha256": "b1229ff36fed1695fb44251aa5d432ec3355b30009916acfdd8776ac67620ef8",
+      "observed_ps": [
+        {
+          "hash": "73af1f21b21e7d70",
+          "sha256": "ec1a208532bc7043f0fef84393b6d7c066cba95e22717b2e53f29dcfabc28f99"
+        }
+      ]
+    },
+    {
+      "vs": "5ef85743ad497c11",
+      "slot": 7,
+      "decision": "held",
+      "projection_family": null,
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "At least one observed PS reads copied clip.xyz; dependency reaches texture fetch in conservative source-order trace",
+      "vs_sha256": "55b41b54da51ee39491f35426ea2455b8ecd714f94e24731a9dbcc9e7b52e078",
+      "observed_ps": [
+        {
+          "hash": "20ddb2f66d8e3b4c",
+          "sha256": "7512a0c1d0b5a63b7bc471b54bc9143241dc9e0756310ca27501aaa5adb88026"
+        },
+        {
+          "hash": "2791eb6b41171ae1",
+          "sha256": "74a852b67e1dac360c888161512bae5ca0277a07386a302a172327de63646e75"
+        },
+        {
+          "hash": "4d05f850b60fed03",
+          "sha256": "c5b00d9dc595c7df5b7899783e1059f70f25b81d4e0d5c151873e3b08fc74081"
+        },
+        {
+          "hash": "7883985d8c2fd48a",
+          "sha256": "038f079f1151e8d1a27ff1af95dd89cebbc385123f00d62abd5d6f390e2eaff0"
+        },
+        {
+          "hash": "b7a43b51194d8e66",
+          "sha256": "310fc60efce6544404824d0479f3f988362108596123d40c52dd5e203d58b9b3"
+        }
+      ]
+    },
+    {
+      "vs": "6508c631689c4ffa",
+      "slot": 7,
+      "decision": "implemented",
+      "projection_family": "Static",
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "Final VP rows write position and copied clip; every observed PS reads only clip.w or overwrites clip.xyz",
+      "vs_sha256": "f18fbe885b0617084d8a5852dc1d66eeb409732f20d1ea52b641959494fce595",
+      "observed_ps": [
+        {
+          "hash": "23ab0f72cb66d185",
+          "sha256": "e330cbcf21a2b4286c6647a72008a78724eeb45d0a70ed9261a41108daf644fb"
+        }
+      ]
+    },
+    {
+      "vs": "6976f82de60cb915",
+      "slot": 7,
+      "decision": "implemented",
+      "projection_family": "Static",
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "Final VP rows write position and copied clip; every observed PS reads only clip.w or overwrites clip.xyz",
+      "vs_sha256": "33f8d08f10a756252c1c81d1897fd25c58ddb236f907fa3c5f60989a3bf49781",
+      "observed_ps": [
+        {
+          "hash": "26bc87530b577ba2",
+          "sha256": "678c046b695e339bbc517ae7f75b6a75483f7b80c4d0c15b7ebee98dc1a4f572"
+        },
+        {
+          "hash": "32c081f0168ce7c0",
+          "sha256": "d7c4d75496b8a4e61d2ce105a7183de6da420e331dd603ed8695dd9dd0c1ed50"
+        },
+        {
+          "hash": "39012c25703938bf",
+          "sha256": "00a2bb542b7737a463c9d614f67e2d99908d836afd75e6a1ff18236fb1c00aba"
+        },
+        {
+          "hash": "47eb7f2db437a83c",
+          "sha256": "40b394973af588b90320aa9caefa596b34baa123f5c671a37465446bbd0911ca"
+        },
+        {
+          "hash": "4b19516080d72771",
+          "sha256": "11d39446bf2eab3bb317e392f8741d0ba19b8976df65a31a3bbc40b34c92a977"
+        },
+        {
+          "hash": "51e535371caec84c",
+          "sha256": "4e3a629ce417abb1e3f0eade0e90c0410501b3ffaa83628ec2d38b95ccc825f9"
+        },
+        {
+          "hash": "6f1da507c55ee143",
+          "sha256": "1986f0bdbe7c39492f5f6cf34c4ae746ebb7a1c53026cd70ea02f0fe8f21c695"
+        },
+        {
+          "hash": "7c92aead444a9fd9",
+          "sha256": "72d5b67fe339c1c29446c930224d8f6289a90309afeae90a8cc78fd26918ac7e"
+        },
+        {
+          "hash": "c1ee5034271b3a4a",
+          "sha256": "4db413acc3a031e6d2dda4d2cc4bb81316de5cceeaf51624f2ada6c1d886f269"
+        },
+        {
+          "hash": "c64c4e34d0893982",
+          "sha256": "67c3ff3cf29da143f5abfd877c13902aa7d9335b5c7d3bee4da6cddb43729d3f"
+        },
+        {
+          "hash": "cb4c68879f20825b",
+          "sha256": "ce76c44cda9ae77dee4491c427265085db698c7d35df6ce99e9a579efed08b75"
+        },
+        {
+          "hash": "f39d6bafefb61167",
+          "sha256": "e62252b4ae566932d68f3633d718d27d6b1e4eb41d2a897fdcfbb338c07882e5"
+        }
+      ]
+    },
+    {
+      "vs": "753287173badc7d1",
+      "slot": 7,
+      "decision": "implemented",
+      "projection_family": "Static",
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "Final VP rows write position and copied clip; every observed PS reads only clip.w or overwrites clip.xyz",
+      "vs_sha256": "67c2439a4b2a9868230a8c16f2410eabea394dea04302a3332e4624121f5d918",
+      "observed_ps": [
+        {
+          "hash": "2f606db52def4352",
+          "sha256": "8279723c5abdb853da2dfefee982cc015f32f2604f7d8f2556437b8e655d53eb"
+        }
+      ]
+    },
+    {
+      "vs": "795375250cf5c245",
+      "slot": 7,
+      "decision": "held",
+      "projection_family": null,
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "At least one observed PS reads copied clip.xyz; dependency reaches texture fetch in conservative source-order trace",
+      "vs_sha256": "ac3dcc519a15143a8d6d714e32d0bfcebd2a93c770bfc03fbcad63e8105281bf",
+      "observed_ps": [
+        {
+          "hash": "3cb497f65f17b461",
+          "sha256": "d764fdb006b7794abf1f45d82cf166add6440b19e4b3c08f5c9f64888d59956c"
+        },
+        {
+          "hash": "9fc469ebcd162f19",
+          "sha256": "2124ddb79e9c28e1c0e3c98eba1ac45763597fe34a9f88219bf2815a05768137"
+        },
+        {
+          "hash": "c4a85c15cd88d0f1",
+          "sha256": "339d69f4648356e172b06e77aef4358f9d9ff96be0a5204d252dd4b32ccbedb4"
+        },
+        {
+          "hash": "f0ba0b25539eb9a7",
+          "sha256": "4a463f1c022cfa77c0219c8fde0f707de081ea0ee4798cf742058eb5713696e8"
+        }
+      ]
+    },
+    {
+      "vs": "7baa15e8628a2d31",
+      "slot": 7,
+      "decision": "held",
+      "projection_family": null,
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "At least one observed PS reads copied clip.xyz; dependency reaches texture fetch in conservative source-order trace",
+      "vs_sha256": "3825583b44b281bca4b2824d6d899e3e62c8400bb991998a2d41047efd84844e",
+      "observed_ps": [
+        {
+          "hash": "4893caf4add05ba4",
+          "sha256": "1bb8dcdab5d78af254e7bb777a837d29b7b4d08e49340295c15c63cea3f0178e"
+        },
+        {
+          "hash": "9aa6d33f7d42180a",
+          "sha256": "ba706f2b378784e8b8cf93efff6a98410e62c5ecb8ac37bd6afc8411e8dd8079"
+        },
+        {
+          "hash": "bdaee332751319cd",
+          "sha256": "82b1a80ff2f123213dc922e09ac554f70fcded58c24462a26ca88a6f4e20708c"
+        },
+        {
+          "hash": "d99044209040d559",
+          "sha256": "834d807b44de79df347e1a444203a84ff806aa49e81dbccef6ba8f7332172c34"
+        },
+        {
+          "hash": "f44bd9f99330b36d",
+          "sha256": "1f78ad84691295e6f4968107ff6d818205d094abc70f7d8621fd7c37ecd09c2d"
+        }
+      ]
+    },
+    {
+      "vs": "7f2f709e14788599",
+      "slot": 7,
+      "decision": "implemented",
+      "projection_family": "Alternate7",
+      "clip_outputs": [
+        0
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "Final VP rows write position and copied clip; every observed PS reads only clip.w or overwrites clip.xyz",
+      "vs_sha256": "951c7af15ca697cd6bae769cc2a54f60e0a875545f72fd7434bc00de79ae3437",
+      "observed_ps": [
+        {
+          "hash": "730efd8459839fb7",
+          "sha256": "c306a963a7272e1a367434fd98dc1ed9ed50e0bfa547c5ff72ef4d6d58bf645c"
+        }
+      ]
+    },
+    {
+      "vs": "8060e3f548febc94",
+      "slot": 7,
+      "decision": "implemented",
+      "projection_family": "Static",
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "Final VP rows write position and copied clip; every observed PS reads only clip.w or overwrites clip.xyz",
+      "vs_sha256": "99f0839c3b9237d26f324357fc92cac79c3f9eff82a340ff88061b50c283b2a0",
+      "observed_ps": [
+        {
+          "hash": "a85fa3f22e2524e4",
+          "sha256": "890ea0679baa0adfbd7e10b3e6629b555722db99414dbbeedcd7fe968584e2df"
+        }
+      ]
+    },
+    {
+      "vs": "8261a0b7daeac888",
+      "slot": 7,
+      "decision": "implemented",
+      "projection_family": "Static",
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "Final VP rows write position and copied clip; every observed PS reads only clip.w or overwrites clip.xyz",
+      "vs_sha256": "9bdd558a299207681c3454c97824cfe2dfa8ab191c8a4531f938d4e54ec87d84",
+      "observed_ps": [
+        {
+          "hash": "e3a453ca3a9f399b",
+          "sha256": "0bbdfc3a92563622c541d758cbb31390baaa4d78f6802c4ab4040cf85e6f398f"
+        }
+      ]
+    },
+    {
+      "vs": "840bd920f0539521",
+      "slot": 7,
+      "decision": "held",
+      "projection_family": null,
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "At least one observed PS reads copied clip.xyz; dependency reaches texture fetch in conservative source-order trace",
+      "vs_sha256": "7786880f696528cffadfa928327c31790c5bb779442a0560b8bd1e40195f54c7",
+      "observed_ps": [
+        {
+          "hash": "27b157cb0a792b9a",
+          "sha256": "492b456ccda007894626fe09207a0a1f84e108a4815d9020e4f08949cca3920c"
+        },
+        {
+          "hash": "a1da9f43c02e4b0d",
+          "sha256": "98df09fe81fc186ebda047b85fe01abd464b4e83d5f122a07f78a39f41f7778c"
+        }
+      ]
+    },
+    {
+      "vs": "8b986c8d09eab4e4",
+      "slot": 7,
+      "decision": "implemented",
+      "projection_family": "Static",
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "Final VP rows write position and copied clip; every observed PS reads only clip.w or overwrites clip.xyz",
+      "vs_sha256": "d5c94b4379f1338a57dc8d044d46eea4ea1c0f75c04e9fddf1c67e953b991f61",
+      "observed_ps": [
+        {
+          "hash": "23ab0f72cb66d185",
+          "sha256": "e330cbcf21a2b4286c6647a72008a78724eeb45d0a70ed9261a41108daf644fb"
+        }
+      ]
+    },
+    {
+      "vs": "8f6ce5a4f714294a",
+      "slot": 7,
+      "decision": "implemented",
+      "projection_family": "Static",
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "Final VP rows write position and copied clip; every observed PS reads only clip.w or overwrites clip.xyz",
+      "vs_sha256": "8c0e5bf4b849fa102f8c1446f0a64e81544868b5e9e529c909d96a39c116598c",
+      "observed_ps": [
+        {
+          "hash": "a85fa3f22e2524e4",
+          "sha256": "890ea0679baa0adfbd7e10b3e6629b555722db99414dbbeedcd7fe968584e2df"
+        }
+      ]
+    },
+    {
+      "vs": "912f560f1b64450b",
+      "slot": 7,
+      "decision": "held",
+      "projection_family": null,
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "At least one observed PS reads copied clip.xyz; dependency reaches texture fetch in conservative source-order trace",
+      "vs_sha256": "0f420e57b9d2777f111245fe45b01c8c786d0933b84eac37cfac5eb31b3ac869",
+      "observed_ps": [
+        {
+          "hash": "4bf1892e68a9a689",
+          "sha256": "0f44672df132ca2d3dd43b6486d700ba7b8dfacced1c05a58a8a3dceff6fd86e"
+        }
+      ]
+    },
+    {
+      "vs": "951ceb61bbce7190",
+      "slot": 7,
+      "decision": "held",
+      "projection_family": null,
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "At least one observed PS reads copied clip.xyz; dependency reaches texture fetch in conservative source-order trace",
+      "vs_sha256": "a16a537c13741aeb3a92c9d863aca221db666b66a9980c6a41c4314d83ea5876",
+      "observed_ps": [
+        {
+          "hash": "1fd1d86d22f26ac4",
+          "sha256": "b43714b758ba40328c845444de62b5f14e51da589eee8f85181a9d1840e81bec"
+        },
+        {
+          "hash": "2b502060030cf3c4",
+          "sha256": "867b558eff38ead6a51f3e6ce6570af2602b54a5ecea5316b384a2364bcd1cdb"
+        },
+        {
+          "hash": "696ca0c4dfd2b25f",
+          "sha256": "2f3a0b76d20dc0a04bec6f1d7af061923a5009e39cdccf6280739a7f9813dca9"
+        }
+      ]
+    },
+    {
+      "vs": "9a771ff60d9fd73f",
+      "slot": 7,
+      "decision": "held",
+      "projection_family": null,
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "At least one observed PS reads copied clip.xyz; dependency reaches texture fetch in conservative source-order trace",
+      "vs_sha256": "6a8f9acd29548302779212ef21e9dbd27a4fc9a846b38372854f364aae18e6d6",
+      "observed_ps": [
+        {
+          "hash": "03b4bf1e19f26e90",
+          "sha256": "f96e3d0b7b4c2693f35a687fc9044789bf4be6caa10c84451b99a202bb95b1d4"
+        },
+        {
+          "hash": "c4a85c15cd88d0f1",
+          "sha256": "339d69f4648356e172b06e77aef4358f9d9ff96be0a5204d252dd4b32ccbedb4"
+        }
+      ]
+    },
+    {
+      "vs": "9f41368e6ee52741",
+      "slot": 7,
+      "decision": "held",
+      "projection_family": null,
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "At least one observed PS reads copied clip.xyz; dependency reaches texture fetch in conservative source-order trace",
+      "vs_sha256": "6a72ab2994caf4f1454ddc2f048dcb03227d07af2fa3e3f2d577a257a4cce867",
+      "observed_ps": [
+        {
+          "hash": "ba2de76084071fea",
+          "sha256": "a31528578bf23e6c5da54b80c06c1011b9ad962cb43399b52b5aa96031d62526"
+        }
+      ]
+    },
+    {
+      "vs": "9fa6242c88d0bd9d",
+      "slot": 7,
+      "decision": "held",
+      "projection_family": null,
+      "clip_outputs": [
+        3
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "At least one observed PS reads copied clip.xyz; dependency reaches texture fetch in conservative source-order trace",
+      "vs_sha256": "80ef394654d64b229f9b642259ba11e0b19df24712be31c6a63e35d77ea780ef",
+      "observed_ps": [
+        {
+          "hash": "04a415102bcd90e8",
+          "sha256": "6f38858c792cfdcf8618778f711746c37c14c84b1f8393a5192cf85c27ff451d"
+        }
+      ]
+    },
+    {
+      "vs": "a0a7fc243e60b248",
+      "slot": 7,
+      "decision": "implemented",
+      "projection_family": "Static",
+      "clip_outputs": [
+        1
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "Final VP rows write position and copied clip; every observed PS reads only clip.w or overwrites clip.xyz",
+      "vs_sha256": "2a9b791bb914bb187e91079dcd5f897a55a9c1e2562854d09b389e7d6fb1e921",
+      "observed_ps": [
+        {
+          "hash": "4836f2562fb65cfa",
+          "sha256": "834c7327800b9b629072d07633ec49a50c142b9805da1b1bb06a54d44a5f47b2"
+        },
+        {
+          "hash": "e43fabdebe2348c0",
+          "sha256": "35a6f7a12657c7daf7fa7dcf010a9761e7af8c161d6adeb515046036bbfca0a8"
+        },
+        {
+          "hash": "fd351d6e88767cb4",
+          "sha256": "981a7b95b60fbfe9818ae64679440b54966451b2a2c7ea45ffd30a49eabcb3b4"
+        }
+      ]
+    },
+    {
+      "vs": "a6314f321efa4d14",
+      "slot": 7,
+      "decision": "implemented",
+      "projection_family": "Static",
+      "clip_outputs": [
+        1
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "Final VP rows write position and copied clip; every observed PS reads only clip.w or overwrites clip.xyz",
+      "vs_sha256": "13593c2459e1b4de2f0aa5da82e8745ba602fe7fd1eba128a746d0ee5e59d77e",
+      "observed_ps": [
+        {
+          "hash": "4a32c94f383f60b7",
+          "sha256": "c736dd7f8f9065d78da5741bdb0a473b17a58b293784770f7eda18a35f46947a"
+        },
+        {
+          "hash": "9d738ce057088702",
+          "sha256": "8e8529d2c6d447109244d12b9fb0b8c9058ba642a5c9de04025a85fa0c2a4240"
+        },
+        {
+          "hash": "cca4df9624e783b4",
+          "sha256": "85184ec6c51c8f4c95e3212744c418edb3d62ac47f285b0522205213eef8429d"
+        }
+      ]
+    },
+    {
+      "vs": "ae45651b20b50163",
+      "slot": 7,
+      "decision": "implemented",
+      "projection_family": "Static",
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "Final VP rows write position and copied clip; every observed PS reads only clip.w or overwrites clip.xyz",
+      "vs_sha256": "a141ad760271403b0f825e0641a1963390d252297b7044e550f660d5894d3cb1",
+      "observed_ps": [
+        {
+          "hash": "2f606db52def4352",
+          "sha256": "8279723c5abdb853da2dfefee982cc015f32f2604f7d8f2556437b8e655d53eb"
+        }
+      ]
+    },
+    {
+      "vs": "b0b143a646a921a7",
+      "slot": 7,
+      "decision": "implemented",
+      "projection_family": "Static",
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "Final VP rows write position and copied clip; every observed PS reads only clip.w or overwrites clip.xyz",
+      "vs_sha256": "b7ff4711f21a8104d3a393e77f56c9ab1f9630650b9771f45773a9e15afd3d04",
+      "observed_ps": [
+        {
+          "hash": "09358fffc4385f14",
+          "sha256": "2b2259ae4731d4840c78a4aa1a854ab95063853f68528eadb2c40c30de43e633"
+        },
+        {
+          "hash": "e446d190da77e6c1",
+          "sha256": "05b367e0312d55635d598fa32110879659698bf82b58cfb0b159a30abf2f9642"
+        }
+      ]
+    },
+    {
+      "vs": "b14ecb62fe79be01",
+      "slot": 7,
+      "decision": "implemented",
+      "projection_family": "Alternate7",
+      "clip_outputs": [
+        3
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "Final VP rows write position and copied clip; every observed PS reads only clip.w or overwrites clip.xyz",
+      "vs_sha256": "4ccaba54f93c407756522548e57725106a9dee506f72b1c81de62c9ea15b603d",
+      "observed_ps": [
+        {
+          "hash": "63a139fb4b924758",
+          "sha256": "91b6e2ae8b42e0b8d8008afc2dfbbbcee9c6c2614eab9eb5b2957db136e322f1"
+        }
+      ]
+    },
+    {
+      "vs": "b8f5cf595e31578b",
+      "slot": 7,
+      "decision": "held",
+      "projection_family": null,
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "At least one observed PS reads copied clip.xyz; dependency reaches texture fetch in conservative source-order trace",
+      "vs_sha256": "b68627c1a66b05de85ba9324747cb6ccdebdda0a120066a74fac3a6d55aa3739",
+      "observed_ps": [
+        {
+          "hash": "0346a6dfb9c92ebf",
+          "sha256": "39249766b19f806b8ca826fb5d3cdac5ba76cd816c877ebdf83e72b6360d69b9"
+        },
+        {
+          "hash": "2c430e9b7f82205a",
+          "sha256": "d6fc1b847c06bf81f718262ee526d5f0d770dc046eacd610315f5af82a8f183b"
+        },
+        {
+          "hash": "c4a85c15cd88d0f1",
+          "sha256": "339d69f4648356e172b06e77aef4358f9d9ff96be0a5204d252dd4b32ccbedb4"
+        }
+      ]
+    },
+    {
+      "vs": "bc5225aaa002037c",
+      "slot": 7,
+      "decision": "held",
+      "projection_family": null,
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "At least one observed PS reads copied clip.xyz; dependency reaches texture fetch in conservative source-order trace",
+      "vs_sha256": "84ca34a5c9da2440f7fc28b14609a99ba2596792ed2ecdfea62e740dafc2f638",
+      "observed_ps": [
+        {
+          "hash": "8040e3bc7acdef0f",
+          "sha256": "43e70cc3013825e1982d5932e9623d0da44f5a38a28daf14a76eb266b27db93c"
+        },
+        {
+          "hash": "8564785f6570ec38",
+          "sha256": "a1916868100c7dc795b76500390a975be726108340e19646e2b3917053e741da"
+        }
+      ]
+    },
+    {
+      "vs": "bda41a11626a545c",
+      "slot": 7,
+      "decision": "held",
+      "projection_family": null,
+      "clip_outputs": [
+        1
+      ],
+      "camera_mismatch_records": 48,
+      "reason": "Known slot with guard29 camera mismatch observed; static PS W-only alone insufficient",
+      "vs_sha256": "25b7a5995f31c3254617053c92ac4cdeaae600d36a38f70e49e3c45acf9e0eaa",
+      "observed_ps": [
+        {
+          "hash": "1693d368b809e65d",
+          "sha256": "c73a96ca36a2e3e74583f9dc5ba706f510afff2591d0a1350d84a1986046f041"
+        },
+        {
+          "hash": "72bcd05d7ab61ce1",
+          "sha256": "f24278342c9ce6f8164cd62a99123559ba408508baf1ad101530b0ff719a13f3"
+        },
+        {
+          "hash": "a9e9542e2c60029a",
+          "sha256": "6a804f6a16e91199c15bf6a8b580d27fdbd5412355365c6eba7ce8e9b7a5dd95"
+        },
+        {
+          "hash": "e086f5f676c72482",
+          "sha256": "6a8e5209c32a6d7dcc2805ba6d9a62ebb60ad939645873a8e91dbc33887a86cb"
+        },
+        {
+          "hash": "e2b89a553d00ef47",
+          "sha256": "789bdb6b19399f4652b50205744286bf492535471344fdd89feefe2c29143663"
+        },
+        {
+          "hash": "fd46e0190f5f6c50",
+          "sha256": "b9ae94521bd080afb8b69e1d0225178e1e87f54834854ff15bc530026aabd37f"
+        }
+      ]
+    },
+    {
+      "vs": "bf8d4de60c64f55d",
+      "slot": 7,
+      "decision": "held",
+      "projection_family": null,
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "At least one observed PS reads copied clip.xyz; dependency reaches texture fetch in conservative source-order trace",
+      "vs_sha256": "e78d18119507a8318d7948f6107fa3f0dbb3ce6cf889f478909e205d8a672ccc",
+      "observed_ps": [
+        {
+          "hash": "4bf1892e68a9a689",
+          "sha256": "0f44672df132ca2d3dd43b6486d700ba7b8dfacced1c05a58a8a3dceff6fd86e"
+        }
+      ]
+    },
+    {
+      "vs": "c01a72e0eb5e026a",
+      "slot": 7,
+      "decision": "implemented",
+      "projection_family": "Static",
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "Final VP rows write position and copied clip; every observed PS reads only clip.w or overwrites clip.xyz",
+      "vs_sha256": "31db0d9e6da85f0bf9be5f8371c02da6afcab2169a32eae553c51471a5af8816",
+      "observed_ps": [
+        {
+          "hash": "a85fa3f22e2524e4",
+          "sha256": "890ea0679baa0adfbd7e10b3e6629b555722db99414dbbeedcd7fe968584e2df"
+        }
+      ]
+    },
+    {
+      "vs": "c560d140940528bc",
+      "slot": 7,
+      "decision": "implemented",
+      "projection_family": "Static",
+      "clip_outputs": [
+        1
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "Final VP rows write position and copied clip; every observed PS reads only clip.w or overwrites clip.xyz",
+      "vs_sha256": "a0b819f63594e875d49342ec48471dd957c701fc2b295a6aa9f356527bd0dc32",
+      "observed_ps": [
+        {
+          "hash": "15e058b115d8368b",
+          "sha256": "87b6452746d13be96e3f34ea882d14791c246ca5ca1c23eaee431d960ee41164"
+        },
+        {
+          "hash": "1b7011e202bde83b",
+          "sha256": "38bfed642d5398649beaec34eb497cf0e8d2c40702de15e48b1caf686785cc5b"
+        },
+        {
+          "hash": "46a0302eb4dea367",
+          "sha256": "84e4948c4ba7fa9c7430eec05647bd7a32a816d17bdab0f830f85b92a1ce9ff8"
+        },
+        {
+          "hash": "cca4df9624e783b4",
+          "sha256": "85184ec6c51c8f4c95e3212744c418edb3d62ac47f285b0522205213eef8429d"
+        },
+        {
+          "hash": "ff6ab214b822f3ec",
+          "sha256": "41e0cb41ac5721cd3fb842ef11fdbc76f772cefe1f845288a6a2061e4f13a71c"
+        }
+      ]
+    },
+    {
+      "vs": "c66b9e0de0e9331c",
+      "slot": 7,
+      "decision": "held",
+      "projection_family": null,
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "At least one observed PS reads copied clip.xyz; dependency reaches texture fetch in conservative source-order trace",
+      "vs_sha256": "0cabfdf0c00b5a362c612e43446a8e80fd10dda46f94742cbf150366f90c08b2",
+      "observed_ps": [
+        {
+          "hash": "c44ebbbc0207b5a9",
+          "sha256": "c1fbb8ac26c884681ec1759738ce0451e8181dcf293710ebe9433c486d48f836"
+        },
+        {
+          "hash": "d0d7801796e1ca87",
+          "sha256": "f53a31d7fea29fedcc068e833b7bd35f310b763b6544270f5ea489f7d94fa441"
+        }
+      ]
+    },
+    {
+      "vs": "d1c61a2a7b0049d5",
+      "slot": 7,
+      "decision": "held",
+      "projection_family": null,
+      "clip_outputs": [
+        4,
+        5
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "At least one observed PS reads copied clip.xyz; dependency reaches texture fetch in conservative source-order trace",
+      "vs_sha256": "9d5d54b87c98f97987f30dcb2d5de968ea1c64c68c5323772fecb1e0236e1782",
+      "observed_ps": [
+        {
+          "hash": "302d967cb250d451",
+          "sha256": "7f708ce7b73fba949edb105f1d314ebb5b26b0545bb0924a8e3bea951427b3d9"
+        },
+        {
+          "hash": "37215ad20a8cb769",
+          "sha256": "fc59b24f3d0a2d262b48a70b37b2ba1ade429429d6f71c5b0fa296e3f76d0b04"
+        }
+      ]
+    },
+    {
+      "vs": "d24619b1a13523dc",
+      "slot": 7,
+      "decision": "held",
+      "projection_family": null,
+      "clip_outputs": [
+        4,
+        5
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "At least one observed PS reads copied clip.xyz; dependency reaches texture fetch in conservative source-order trace",
+      "vs_sha256": "b270099a4fee2008a3370636345ecab01f0617cee5e0b222cc2c5bae759c984b",
+      "observed_ps": [
+        {
+          "hash": "07d76d6e247dc717",
+          "sha256": "b0cb5b0c07b7419fe0ea591bd34ef96676f16803821999ebccf61ac7fa089100"
+        },
+        {
+          "hash": "876bbd69cad646c3",
+          "sha256": "efc69b24c379e4fdb9ae6793150a63d331d953cf68843ae173f497f41fc99170"
+        },
+        {
+          "hash": "a21bf1f1d8f76c4b",
+          "sha256": "1eb14439a3820f5ad20af4c67635a4b9b3c1c1a55f6315066b7406fcf0e3e701"
+        },
+        {
+          "hash": "aaf2cef804a3e16f",
+          "sha256": "fa8a33f49cadae832880f5f26c119d553464981ab28a06355027e66d98c347ea"
+        }
+      ]
+    },
+    {
+      "vs": "d6ead6f46d70b19a",
+      "slot": 7,
+      "decision": "implemented",
+      "projection_family": "Static",
+      "clip_outputs": [
+        1
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "Final VP rows write position and copied clip; every observed PS reads only clip.w or overwrites clip.xyz",
+      "vs_sha256": "d6efff29ef87920576498c9fcd2aeee5a4ed4d311cacd9c89bbca977363be642",
+      "observed_ps": [
+        {
+          "hash": "6f0c25f9a0481ea8",
+          "sha256": "388fae5b59de8d3027d5b16ed84db3a2805833e0f14b8e89c80ff47e26d2134c"
+        },
+        {
+          "hash": "ee0ca031637ada81",
+          "sha256": "d92a18caf4b2fce1275d3e1bfd3a2bec824c1d3182bebe755a39a87f994da30e"
+        },
+        {
+          "hash": "ff4eb234bb9e576b",
+          "sha256": "6c3ecd6c8db93ad33e32b8d7d84be4436ccf65b7ac051bb4df2e945d9a8b7c82"
+        }
+      ]
+    },
+    {
+      "vs": "e810cfacc107fd3c",
+      "slot": 7,
+      "decision": "held",
+      "projection_family": null,
+      "clip_outputs": [],
+      "camera_mismatch_records": 0,
+      "reason": "Exact late-pass capture review: copied clip XY/W feeds PS fe31f3d6588fde95 texture0; producer allocation and temporal alignment remain unproven.",
+      "vs_sha256": "b6d49e6a480a2dbd66d3a1e9e54700a1bb692537037a3240a3757e4f794c8fef",
+      "observed_ps": [
+        {
+          "hash": "3b45f8f248182356",
+          "sha256": "c1a53b2bbc82d360c1e876ec9c275227a3f2418b7b0a51ca36c5622818edf7e4"
+        },
+        {
+          "hash": "5b11f88a8bb293df",
+          "sha256": "bb381c241644ea8aa7d1f9903a21483bf550517302bb8efa76ae2c726b22dd5e"
+        },
+        {
+          "hash": "78a5c96b2d7eaa91",
+          "sha256": "75c03288849945a2083ebd2affa4c0b4040dc9834e961b0e80581c9a81593c0e"
+        },
+        {
+          "hash": "827f18c3f617e562",
+          "sha256": "6d6a496c1fffeed88d53cb4f321d6bfcf290f48aada285a1a0710f8046a3c226"
+        },
+        {
+          "hash": "8bc0c849ae1ec109",
+          "sha256": "2f616677b1e078aae95079545e951efa2414aeed8874e5351fe69b1f178b772a"
+        },
+        {
+          "hash": "a5c326bc64cc266a",
+          "sha256": "566facec68abcb61bc45a2314f40e3deb5e44e955c604481194c8beb8acb8071"
+        },
+        {
+          "hash": "c44ebbbc0207b5a9",
+          "sha256": "c1fbb8ac26c884681ec1759738ce0451e8181dcf293710ebe9433c486d48f836"
+        },
+        {
+          "hash": "d0d7801796e1ca87",
+          "sha256": "f53a31d7fea29fedcc068e833b7bd35f310b763b6544270f5ea489f7d94fa441"
+        },
+        {
+          "hash": "dba6015f3b42f468",
+          "sha256": "801ac6b16cf410e9c626c90a51801f9a874addcdc0b4cdd7cfa5f48e02cc26c0"
+        },
+        {
+          "hash": "de9e5b2d3ae57285",
+          "sha256": "134092ce805eb9d6aa5b3028f98e2d99ac3c01ab184f9e0429cb844fbf1cc0cb"
+        },
+        {
+          "hash": "fe31f3d6588fde95",
+          "sha256": "7fab9f9bed14ee4fd343b07ccf983a7dce04903c7f6219a177d70e7fcb22ba85"
+        }
+      ]
+    },
+    {
+      "vs": "e8747802c970e598",
+      "slot": 7,
+      "decision": "implemented",
+      "projection_family": "Static",
+      "clip_outputs": [
+        1
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "Final VP rows write position and copied clip; every observed PS reads only clip.w or overwrites clip.xyz",
+      "vs_sha256": "aa3fbefdb8f16e76930dae08ac650afcbaf34052caa1e7747cf06c5761d70a96",
+      "observed_ps": [
+        {
+          "hash": "fd351d6e88767cb4",
+          "sha256": "981a7b95b60fbfe9818ae64679440b54966451b2a2c7ea45ffd30a49eabcb3b4"
+        }
+      ]
+    },
+    {
+      "vs": "f25929da09e30a5c",
+      "slot": 7,
+      "decision": "held",
+      "projection_family": null,
+      "clip_outputs": [
+        4
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "At least one observed PS reads copied clip.xyz; dependency reaches texture fetch in conservative source-order trace",
+      "vs_sha256": "00e781c0ae2929b36d83399b2eb89767900b8f11a88d458f83d403495d379c7d",
+      "observed_ps": [
+        {
+          "hash": "732188549b9971e2",
+          "sha256": "d2226ca20b8d64bca0d305223e9544c9d9472128ced606ecccca9a68502ab2e3"
+        },
+        {
+          "hash": "db718e79b2fc7d64",
+          "sha256": "bd43833f2deb94d64631f84bef3f1697b40a84896a92de4134e15d364fabcb21"
+        },
+        {
+          "hash": "ee21d8c64c163ae2",
+          "sha256": "c8cb601cb2a74fc0ae9f5e535e4f2ce332814234172a673798894ead72bff5eb"
+        }
+      ]
+    },
+    {
+      "vs": "f5ca0812e57cd43c",
+      "slot": 7,
+      "decision": "implemented",
+      "projection_family": "Static",
+      "clip_outputs": [
+        1
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "Final VP rows write position and copied clip; every observed PS reads only clip.w or overwrites clip.xyz",
+      "vs_sha256": "09fed4c8f3c3ae9ed96e06c332ae23bed02ff1e014a49646ed5087c4ea641604",
+      "observed_ps": [
+        {
+          "hash": "5b0c2c071555614d",
+          "sha256": "95c882ddd6e9a054f1a710615b49fe63ba617a7b63546f9c3145377310eea6f9"
+        }
+      ]
+    },
+    {
+      "vs": "0e5a12f70e7cb5be",
+      "slot": 8,
+      "decision": "implemented",
+      "projection_family": "Static",
+      "clip_outputs": [
+        2
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "Final VP rows write position and copied clip; every observed PS reads only clip.w or overwrites clip.xyz",
+      "vs_sha256": "b8b55372a6ac2b1e261edb37b781e4c8317690c5d22987a323e46a2a6dc9fd80",
+      "observed_ps": [
+        {
+          "hash": "6d8a07a07c42e89f",
+          "sha256": "b04b05776eb6bc302b5f802127841a5e555fab096e77e9ac81d9477a481ea875"
+        },
+        {
+          "hash": "7887e7d02006dbdd",
+          "sha256": "786dde6b03eb27b8da6081c4a74458fbab6e601a6cdf89ce15b9dd4cdaedfe60"
+        }
+      ]
+    },
+    {
+      "vs": "2078ccaa70d44732",
+      "slot": 8,
+      "decision": "held",
+      "projection_family": null,
+      "clip_outputs": [
+        5,
+        6
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "At least one observed PS reads copied clip.xyz; dependency reaches texture fetch in conservative source-order trace",
+      "vs_sha256": "b8ecaa9f0b1da6653703777be5b48ea65679c5c3a2093a621d3578cc76cd37cd",
+      "observed_ps": [
+        {
+          "hash": "4013372b6413788f",
+          "sha256": "9828716745c605e24e66aad3680333afcff22fe7a66d3d757b4e201db69ffac7"
+        }
+      ]
+    },
+    {
+      "vs": "490e7455d880426c",
+      "slot": 8,
+      "decision": "held",
+      "projection_family": null,
+      "clip_outputs": [
+        5
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "At least one observed PS reads copied clip.xyz; dependency reaches texture fetch in conservative source-order trace",
+      "vs_sha256": "a7cffa5ab27802ffa0d79704158b9067481833f9aeec91118919959a62408ce8",
+      "observed_ps": [
+        {
+          "hash": "5bb55abd32c85549",
+          "sha256": "2d5da3eaeb9afc56dc3f66bb9fd13c359e60389b1c7054960b412c4b76155ec6"
+        },
+        {
+          "hash": "82454c2f05cd9089",
+          "sha256": "ae32c82d6c69365f2d7f59600fd7baa8a9efc4c565169f6981032d5471452e4e"
+        }
+      ]
+    },
+    {
+      "vs": "8d32020847a4f6b2",
+      "slot": 8,
+      "decision": "held",
+      "projection_family": null,
+      "clip_outputs": [
+        5,
+        6
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "At least one observed PS reads copied clip.xyz; dependency reaches texture fetch in conservative source-order trace",
+      "vs_sha256": "c2bc7e85d2155d8b12bca589ee725f4cec9f03f94ad66a34c725573fcd57cc92",
+      "observed_ps": [
+        {
+          "hash": "2f62cba5fba742fd",
+          "sha256": "91b7986418ddb8220521d2a6fe0e6b4d4ea778e8d9f480d7f0f042fddf0f01bc"
+        },
+        {
+          "hash": "eb4b6a883ac46d6c",
+          "sha256": "772514c43ceb58c41876d543bce50a5359691f0fd4808d19c2878a89ce7580b0"
+        }
+      ]
+    },
+    {
+      "vs": "b60fba087b51eb53",
+      "slot": 8,
+      "decision": "held",
+      "projection_family": null,
+      "clip_outputs": [
+        5
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "At least one observed PS reads copied clip.xyz; dependency reaches texture fetch in conservative source-order trace",
+      "vs_sha256": "859a3a6e5cc1d83b0e0cdba15b6e3f33913ce9f59b14c66ef65eccda610375f7",
+      "observed_ps": [
+        {
+          "hash": "21f408cfbd4775cb",
+          "sha256": "1a02aa2781841c992b41628ac3a97a8db897ee0983fe2e2700f099ddc9d7e005"
+        },
+        {
+          "hash": "773ab14612b5142e",
+          "sha256": "8a26ca439240d57f094ea5d88b82bf3205bc70d0c56481e7851ef45b6dac7581"
+        },
+        {
+          "hash": "b1021328ce5dd6d4",
+          "sha256": "c1189693130e1597bc21b5314025b5acffd7cb8297c62e1d77aacf58cfd2fbb2"
+        }
+      ]
+    },
+    {
+      "vs": "d34f09f9fcce78a1",
+      "slot": 8,
+      "decision": "held",
+      "projection_family": null,
+      "clip_outputs": [
+        5
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "At least one observed PS reads copied clip.xyz; dependency reaches texture fetch in conservative source-order trace",
+      "vs_sha256": "dfbbfb1c0e908fc953677b3477cb1f147b64df7c2a6e28448d36e412541cdcb8",
+      "observed_ps": [
+        {
+          "hash": "f65c30fd709d4553",
+          "sha256": "22d91721421c3eae6d5ddcbc2837b7325580a70f37acd6f0c98243ad7df21604"
+        }
+      ]
+    },
+    {
+      "vs": "e0624eec8073b957",
+      "slot": 8,
+      "decision": "held",
+      "projection_family": null,
+      "clip_outputs": [
+        5
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "At least one observed PS reads copied clip.xyz; dependency reaches texture fetch in conservative source-order trace",
+      "vs_sha256": "3d748ca71ec120b4236858752e81cea7e98f22ae61ec0b5269fe74149d3cd09c",
+      "observed_ps": [
+        {
+          "hash": "2e3d170dd0efb438",
+          "sha256": "5e6ec2f109ab25aa99037f0cf4b078d2269f145605a7f11951370b35e149beee"
+        }
+      ]
+    },
+    {
+      "vs": "f3838aa008bc39d8",
+      "slot": 8,
+      "decision": "implemented",
+      "projection_family": "Static",
+      "clip_outputs": [
+        2
+      ],
+      "camera_mismatch_records": 0,
+      "reason": "Final VP rows write position and copied clip; every observed PS reads only clip.w or overwrites clip.xyz",
+      "vs_sha256": "d28c52193abfb84d6fe4bf8725bf3d9d107c9e93ab949fba53e0048e080a8d41",
+      "observed_ps": [
+        {
+          "hash": "155d57e3b85a6f2c",
+          "sha256": "b730d02fb1396a9a056156784f2263df2d77cb12552f71d8ccc005906595e3e9"
+        },
+        {
+          "hash": "1e3ae05c839c73b5",
+          "sha256": "29950827bb991499f7a4af941ff964746cc0246a15a49089f33b8d700a821660"
+        },
+        {
+          "hash": "c10afa9017be91aa",
+          "sha256": "5485ee7c631757e6d8ccb2fd1cbba1933d277547b59361742e175235e49e8eba"
+        }
+      ]
+    }
+  ],
+  "projection_family_scope": "Projection family names select independently transcribed CPU fixtures for implemented entries only; held entries have no numeric fixture."
+}

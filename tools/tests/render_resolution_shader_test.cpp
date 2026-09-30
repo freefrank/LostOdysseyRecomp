@@ -2,11 +2,36 @@
 #include <gpu/shader/xenos_translator.h>
 #include <gpu/shader/xenos_shader_code.h>
 #include <gpu/shader/dxc_compiler.h>
+#include <gpu/shader/motion_replay_hlsl.h>
 #include <array>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <stdexcept>
 #include <string>
+#include <vector>
+
+static bool WritesSpirvPointSize(const std::vector<uint8_t>& bytes) {
+    if (bytes.size() < 20 || bytes.size() % 4) return false;
+    std::vector<uint32_t> words(bytes.size() / 4);
+    std::memcpy(words.data(), bytes.data(), bytes.size());
+    if (words[0] != 0x07230203) return false;
+    uint32_t pointSizeId = 0;
+    for (size_t i = 5; i < words.size();) {
+        const uint32_t count = words[i] >> 16, opcode = words[i] & 0xffff;
+        if (!count || i + count > words.size()) return false;
+        if (opcode == 71 && count >= 4 && words[i + 2] == 11 && words[i + 3] == 1)
+            pointSizeId = words[i + 1]; // OpDecorate BuiltIn PointSize
+        i += count;
+    }
+    if (!pointSizeId) return false;
+    for (size_t i = 5; i < words.size();) {
+        const uint32_t count = words[i] >> 16, opcode = words[i] & 0xffff;
+        if (opcode == 62 && count >= 3 && words[i + 1] == pointSizeId) return true; // OpStore
+        i += count;
+    }
+    return false;
+}
 
 int main() {
     try {
@@ -41,7 +66,39 @@ int main() {
             if (!compiled.ok) throw std::runtime_error(compiled.errors);
             ++checks;
         }
-        std::printf("render resolution shader: %u translated fetch/weights programs compiled\n", checks);
+        for (bool guestExportsPointSize : {false, true}) {
+            std::array<uint32_t, 6> code{};
+            ControlFlowExecInstruction cf{};
+            cf.address = 1; cf.count = 1; cf.opcode = ControlFlowOpcode::ExecEnd;
+            std::memcpy(code.data(), &cf, 6);
+            AluInstruction alu{};
+            alu.exportData = 1;
+            alu.vectorDest = uint32_t(guestExportsPointSize ? ExportRegister::VSPointSizeEdgeFlagKillVertex : ExportRegister::VSPosition);
+            alu.vectorWriteMask = 1;
+            alu.vectorOpcode = AluVectorOpcode::Add;
+            alu.scalarOpcode = AluScalarOpcode::RetainPrev;
+            std::memcpy(code.data() + 3, &alu, 12);
+            auto translated = TranslateShader(code.data(), uint32_t(code.size()), false);
+            if (!translated.errors.empty() || translated.usesPointSize != guestExportsPointSize)
+                throw std::runtime_error("point size export classification failed");
+            for (auto format : {ShaderBinaryFormat::Spirv, ShaderBinaryFormat::Dxil}) {
+                auto compiled = CompileHlsl(translated.hlsl, "main", "vs_6_0", format);
+                if (!compiled.ok) throw std::runtime_error(compiled.errors);
+                if (format == ShaderBinaryFormat::Spirv && !WritesSpirvPointSize(compiled.bytecode))
+                    throw std::runtime_error("vertex shader does not write SPIR-V PointSize");
+                ++checks;
+                if (!guestExportsPointSize) {
+                    const auto replay = motion_replay::Vertex(translated);
+                    if (replay.empty()) throw std::runtime_error("motion replay vertex wrapper missing");
+                    auto replayCompiled = CompileHlsl(replay, "main", "vs_6_0", format);
+                    if (!replayCompiled.ok) throw std::runtime_error(replayCompiled.errors);
+                    if (format == ShaderBinaryFormat::Spirv && !WritesSpirvPointSize(replayCompiled.bytecode))
+                        throw std::runtime_error("motion replay vertex does not write SPIR-V PointSize");
+                    ++checks;
+                }
+            }
+        }
+        std::printf("render resolution shader: %u translation and compilation checks passed\n", checks);
         return 0;
     } catch (const std::exception& error) {
         std::fprintf(stderr, "%s\n", error.what());

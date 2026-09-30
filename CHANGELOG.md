@@ -1,22 +1,686 @@
 # Changelog / 更新日志
 
-One record of completed changes, with unpublished work separated from verified releases. Dates below are UTC release dates. Planned work belongs in the [roadmap](docs/ROADMAP.md), not release entries.
+Brief release highlights, newest first. Dates are UTC. Technical validation is recorded in [development status](docs/STATUS.md); future plans are in the [roadmap](docs/ROADMAP.md).
 
-本文统一记录已完成改动，并区分未发布内容与已确认发布版本；日期采用 UTC 发布日期。后续计划见[路线图](docs/ROADMAP.zh-CN.md)，不作为已发布功能记录。
+按新到旧记录简短更新，日期采用 UTC。技术验证见[开发状态](docs/STATUS.md)，后续计划见[路线图](docs/ROADMAP.zh-CN.md)。
 
-## Unreleased / 未发布
+## Unreleased / 未发布 (target v0.7.20 / 目标 v0.7.20)
 
 ### English
 
-- Add the first playable Linux Vulkan-only, unbundled ELF path. The `linux-clang` CMake preset builds generated PowerPC sources directly, loads `libdxcompiler.so` through the Linux DXC path, uses SDL Vulkan presentation, and supports explicit `--game` candidates for the install root, `disc1` or `default.xex`.
-- The first playable was accepted on a local WSL2 Manjaro path using Mesa Dozen Vulkan-on-D3D12, with a watched window session and clean exit after the user closed it. This is not native-Linux-GPU, whole-game, Steam Deck, package, installer or published-release acceptance; no Linux package is published.
+- Capped frame generation multiplier requests at 6×, the most DLSS multi-frame generation supports. The Graphics menu offers 2× to 6×, `settings.ini` values above 6 fall back to 2×, and `LO_FG_MULTIPLIER` accepts 2 to 6. Each request is still limited to what the GPU and driver report.
+- Keep Windows native messages pumping during GPU shutdown to prevent a DXGI quit-to-desktop deadlock (#82). The hang reproduced locally in D3D12 exclusive fullscreen with DLSS frame generation, and the fixed build quit in about 2 seconds. Reporter confirmation is pending.
+- Reduced command-processor CPU overhead on the default render path. `WAIT_REG_MEM` polls wake as soon as an interrupt callback finishes instead of sleeping through the poll interval, constant and fetch register runs are copied in bulk, debug environment variables are read once, and a texture-set cache miss rewrites only the bindings that can change. In the Uhra plaza at 3840x2160 on D3D12 with a 120 FPS target, the frame rate rose from about 98 to about 119 FPS, which is the cap, and command-processor CPU time fell from about 8.6 to about 5.9 ms per frame. With the frame cap removed through the `LO_FPS=0` diagnostic override, the same scene ran at about 142 FPS, compared with about 96 FPS on main.
+
+### 简体中文
+
+- 插帧倍率上限改为 6×，即 DLSS 多帧生成支持的最大值。图形菜单只提供 2× 到 6×，`settings.ini` 中大于 6 的值回退为 2×，`LO_FG_MULTIPLIER` 只接受 2 到 6。每次请求仍受显卡和驱动报告的上限限制。
+- 退出期间继续处理Windows窗口消息，修复DXGI清理时可能出现的退出桌面死锁（#82）。本机在D3D12独占全屏并开启DLSS插帧时复现了卡死，修复后约2秒正常退出；报告者复测待完成。
+- 降低默认渲染路径中命令处理器的 CPU 开销：`WAIT_REG_MEM` 轮询在中断回调完成后立即唤醒，不再睡满整个轮询间隔；常量和 fetch 寄存器的连续写入改为批量复制；调试环境变量只读取一次；纹理描述符集缓存未命中时只重写可能变化的绑定。在 D3D12、3840x2160、120 FPS 目标下的 Uhra 广场，帧率从约 98 FPS 提升到约 119 FPS（已到上限），命令处理器 CPU 时间从约 8.6 降到约 5.9 ms/帧。用 `LO_FPS=0` 诊断开关取消帧率上限后，同一场景约 142 FPS，main 约 96 FPS。
+
+## [v0.7.15 — 2026-09-29](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.7.15)
+
+### English
+
+- Added native 90/120 FPS graphics targets and FreeSync / G-SYNC Compatible VRR output pacing. Switching from DLSS FG to FSR FG requires a restart.
+- Added an optional Graphics RGB Range expansion from 16–235 to 0–255, plus Hold/Toggle speed mode in F1 Cheats; Hold remains the default.
+- Fixed the Hungry Man errand timer at higher frame rates and made portable installs prefer the `game` directory beside the executable, with `../game` retained as a fallback.
+- Added a targeted TAA jitter mapping for the reported sky-flicker path. Broader gameplay and physical-display coverage remain separate follow-up work.
+- The maintainer accepted all functionality included in the v0.7.15 release on 2026-09-29. This acceptance is limited to the released feature set and does not establish complete playthrough, all-scene, cross-GPU or physical-display coverage.
+
+### 简体中文
+
+- 新增原生 90／120 FPS 图形目标和 FreeSync／G-SYNC Compatible VRR 输出节奏控制。从 DLSS FG 切换到 FSR FG 必须重启。
+- 图像设置新增可选的 RGB Range 扩展，将游戏画面的 RGB 范围从 16–235 扩展到 0–255；F1 Cheats 新增按住／切换变速模式，默认仍为按住。
+- 修复高帧率下 Hungry Man 差事计时，并让便携式安装优先使用可执行文件旁的 `game` 目录，同时保留 `../game` 作为后备路径。
+- 针对反馈的天空闪烁路径新增限定范围的 TAA 抖动映射；更广游戏流程和实体显示覆盖作为后续回归工作。
+- 维护者于 2026-09-29 确认 v0.7.15 本轮发布的全部功能通过验收。该验收限于已发布功能，不等于完整通关、所有场景、跨 GPU 或实体显示覆盖。
+
+## [v0.7.10 — 2026-09-28](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.7.10)
+
+### English
+
+- Added refreshed bundled Vulkan shaders with 19 additional captured shader records.
+- Added a separate DX12 shader pack for `shaders/portable_dx12.lospd`.
+
+### 简体中文
+
+- 更新内置 Vulkan shader，增加 19 条捕获的 shader 记录。
+- 新增独立 DX12 shader pack，放入 `shaders/portable_dx12.lospd`。
+
+## v0.7.9 — 2026-09-28
+
+### English
+
+- Added Windows D3D12 frame generation in Graphics: Off/DLSS/FSR, DLSS multipliers and fixed 2× FSR. Save to apply without restarting.
+- Fixed stale rendering bindings and Vulkan frame-generation input handling.
+- Fixed AppImage compatibility with Ubuntu 22.04, improved Flatpak packaging.
+- Simplified Windows updates while preserving rollback on failure.
+
+### 简体中文
+
+- 图像设置新增 Windows D3D12 帧生成：关／DLSS／FSR，支持 DLSS 倍数及固定 2× FSR，保存后无需重启即可生效。
+- 修复残留渲染绑定与 Vulkan 帧生成输入处理。
+- 修复 Ubuntu 22.04 AppImage 兼容性，改进 Flatpak 打包。
+- 简化 Windows 更新流程，保留失败回滚。
+
+## v0.7.3 — 2026-09-27
+
+### English
+
+- Reduced redundant D3D12 graphics and compute bindings.
+- Added optional rendering diagnostics and improved release uploads.
+
+### 简体中文
+
+- 减少 D3D12 图形与计算中的重复绑定。
+- 新增可选渲染诊断，改进发布上传流程。
+
+## v0.7.2 — 2026-09-27
+
+### English
+
+- Added experimental DLSS/DLAA and FSR upscaling on Windows D3D12.
+- Fixed incorrect DLAA resolution errors.
+
+### 简体中文
+
+- Windows D3D12 新增实验性 DLSS／DLAA 与 FSR 超分支持。
+- 修复 DLAA 错误报告分辨率异常的问题。
+
+## v0.7.1 — 2026-09-26
+
+### English
+
+- Added official standalone Linux Flatpak packages and improved PipeWire audio compatibility.
+- Added in-game disc/DLC re-import with item selection and failure rollback.
+
+### 简体中文
+
+- 新增官方 Linux Flatpak 独立安装包，改善 PipeWire 音频兼容性。
+- 支持从游戏内重新导入指定光盘／DLC，并在失败时回滚。
+
+## v0.7.0 — 2026-09-26
+
+### English
+
+- Added automatic PlayStation controller prompts in supported menus.
+- Improved Vulkan DLSS/DLAA and FSR upscaling, with SMAA fallback when DLSS/DLAA is unavailable.
+- Added the C++ Mod API and native menu image/font-page replacement tools.
+
+### 简体中文
+
+- 支持在适用菜单中自动切换 PlayStation 手柄提示。
+- 改进 Vulkan DLSS／DLAA 与 FSR 超分，DLSS／DLAA 不可用时回退至 SMAA。
+- 新增 C++ Mod API，以及原生菜单图像／字体页面替换工具。
+
+## v0.6.20 — 2026-09-25
+
+### English
+
+- OpenCode render workflow now defaults to one agent, script summaries and reuse of unchanged shader reviews/tests; additional agents require a user request.
+
+- Developer tooling: added reusable offline F1 capture preview, full-frame coverage, trace, and temporal-jitter candidate tools, a streaming private feedback-coverage report, a task-based tools index, the recovered private feedback-archive package, and an installable OpenCode render-investigation workflow; reviewed candidates remain separate from the production shader map.
+- Historical temporal jitter mapping batch: added 35 reviewed VS mappings (map 84→119) across slots 0/1/4/7/8, with 44 candidate VS held for unresolved clip-XY producer or mixed-camera evidence. `LoTemporalJitterTest --feedback-mapping-batch` passed 216,625 focused checks; later entries record the separately authorized follow-up trials and their bounded acceptance scope.
+- Temporal jitter held-candidate follow-up: added one limited slot-8 mapping for the late-light candidate observed at `draw1206..1210`, aligning the floor light pass with the scene depth/material jitter path. The map now contains 120 entries after the earlier 35-source batch. Captured-floor CPU checks passed 334,086 checks and the mapping batch passed 216,624 after removing this held candidate; the complete Windows SDK-on build succeeded, and the user accepted the bounded RTX 5080 floor-scene run. Broader runtime coverage remains open.
+- Hybrid SR and bounded NGX sizing recovery: development builds include camera/depth Hybrid motion fallback for DLSS/FSR and bounded retry recovery for transient DLSS sizing failures; validation remains limited to the documented scope.
+- F1 capture diagnostics: full-frame jitter candidate triage is now the default, with strict geometry/depth pairing available as a separate report; successful draw records include jitter/uploaded-VP and tex0 binding metadata while preserving unknown states when evidence is incomplete. Capture command records do not imply GPU completion, and reviewed fixture export behavior is unchanged.
+- Late-pass e810 trial: added a guarded `e810cfacc107fd3c`/`fe31` slot-7 path requiring `constantScreenSample`, valid format-6 2D guest 1×1 tex0, repeat UV, no same-address resolved hit and no VS tex0 read. The SDK-on guarded build exited 0 and `--captured-f6131-e810` passed 66,252 checks across 32 phases at 1440p/4K. Independent capture review confirmed the mapping applied and bound on every accepted frame; the bounded RTX 5080 visual run was accepted by the user. Remaining candidates are tracked separately in the screen-sampling batch, and no broad candidate mapping is claimed.
+- Screen-sampling candidate batch: authorized a separate manual trial adding exactly 40 VS mappings (35 slot 7, 5 slot 8) covering 101 observed PS pairings, excluding the two mixed-camera cases. The selector passed 78,316 CPU checks across 32 phases at 1440p/4K, with 0.487798 px old separation and 0.000279 px maximum projection error. The batch build passed, package `manual-screen-batch1` is available, and the user accepted the manual run; no new capture evidence, whole-game or cross-hardware claim is made, and v0.6.20 was published on 2026-09-25.
+- Capture CLI maintenance: fixed the direct `image_diff.py` subprocess path after an `inspect.py` import collision and kept the image comparison path Pillow-only; two affected checks, including the direct CLI regression, passed.
+
+- Exploration bridge flicker investigation: aligned two observed material position paths with scene depth through the temporal-scene slot mappings `a027ab99fa3e3b0d -> slot 7` and `ff769ec7b88e575f -> slot 8`. The focused `--captured-f2548-layers` check passed 722,316 checks across 11 captured draws and 32 phases at 720p through 4K; the old-material negative control showed 0.487760 px separation. A later bounded floor-light follow-up was accepted on RTX 5080; broader same-scene coverage remains open; the fix is included in v0.6.20.
+
+### 简体中文
+
+- OpenCode 渲染工作流默认单 agent，先运行脚本并读取摘要，复用未变化的 shader 审核及测试结果；仅在用户要求时启动其他 agent。
+
+- 开发工具：新增可复用的 F1 捕获预览、全帧覆盖、寄存器状态和时序抖动候选离线工具、私有反馈覆盖流式报告、按任务组织的工具索引、恢复的私有反馈归档包，以及可安装的 OpenCode 渲染调查工作流；审核中的候选与生产 shader 映射分离。
+- 历史时序抖动映射批次：新增 35 条已审阅 VS 映射（映射表 84→119），覆盖 slot 0/1/4/7/8；44 个候选 VS 因 clip-XY producer 或混合相机证据不足暂缓。`LoTemporalJitterTest --feedback-mapping-batch` 通过 216,625 项定向检查；后续条目记录了另行授权的跟进试验及其限定验收范围。
+- 时序抖动暂缓候选后续：根据后期光照捕获（`draw1206..1210`）增加一条限定范围的 slot 8 生产映射，使地板光照与场景深度／材质抖动路径对齐。此前 35-source 批次之后，映射表现为 120 条。捕获地板 CPU 检查通过 334,086 项，移除该暂缓候选后的映射批次通过 216,624 项；完整 Windows SDK-on build 已成功，用户已验收限定的 RTX 5080 地板场景，其他运行范围仍待完成。
+- Hybrid SR 与有界 NGX 尺寸恢复：开发构建包含 DLSS/FSR 相机／深度 Hybrid 运动回退，以及针对暂态 DLSS 尺寸失败的有界重试恢复；验证范围仍以文档记录为准。
+- F1 捕获诊断：时序抖动候选分析默认覆盖整帧，严格几何／深度配对改为单独报告；成功记录的绘制新增 jitter／已上传 VP 以及 tex0 绑定元数据，证据不足时保留 unknown。捕获命令被记录不等于 GPU 已完成，审核夹具导出行为保持不变。
+- 后期 e810 trial：增加受守卫的 `e810cfacc107fd3c`／`fe31` slot 7 路径，要求 `constantScreenSample`、有效 format-6 2D、guest 1×1 tex0、repeat UV、无同地址已解析命中且 VS 不读取 tex0。SDK-on 受守卫构建退出码为 0，`--captured-f6131-e810` 在 1440p/4K 的 32 个相位通过 66,252 项检查；独立捕获复核确认映射在验收帧上实际应用并绑定，限定 RTX 5080 画面运行已获用户验收，剩余候选另见屏幕采样批次，不宣称批量候选映射。
+- 屏幕采样候选批次：授权单独的实机试验，增加40条VS映射（slot 7为35条、slot 8为5条），覆盖101个已观察PS配对，并排除两个混合相机案例。selector通过78,316项CPU检查，覆盖32个相位和1440p/4K，旧分离为0.487798 px、最大投影误差为0.000279 px；批次构建已通过，`manual-screen-batch1`包已准备，用户已验收手动运行；不宣称新的capture证据、画面全覆盖或跨硬件结果，v0.6.20 已于 2026-09-25 发布。
+- 捕获 CLI 维护：修复 `image_diff.py` 直接子进程调用与 `inspect.py` 的导入冲突，并保持图像比较路径仅依赖 Pillow；两个受影响检查（含直接 CLI 回归）均已通过。
+
+- 探索场景桥面闪烁调查：通过时序场景 slot 映射 `a027ab99fa3e3b0d -> slot 7`、`ff769ec7b88e575f -> slot 8`，使两条已观察到的材质位置路径与场景深度对齐。定向 `--captured-f2548-layers` 检查通过 722,316 项检查，覆盖 11 条捕获绘制、720p 至 4K 的 32 个相位；旧材质负对照分离为 0.487760 px。后续限定的RTX 5080地板光照场景已获用户验收，更广场景覆盖仍待完成；v0.6.20 已于 2026-09-25 发布。
+
+## v0.6.19 — 2026-09-25
+
+### English
+
+- Live anisotropic filtering: added live anisotropic filtering controls (`Off / 2x / 4x / 8x / 16x`) to the Graphics settings menu, persisted under `anisotropic_filtering` in `settings.ini` (defaulting to Off) and clamped to the Vulkan device's hardware maximum. Changes apply upon saving graphics settings on the next rendered frame without restarting the game. Replaced mutable sampler descriptor tables with an immutable generation-based architecture (`sampler_palette.h`): candidate tables are assembled in advance and replace the active table only after allocations succeed, while previous generations remain pinned to active GPU command batches until fence completion, preventing in-flight descriptor races and allocation failures from corrupting active draws. Bounded Windows and Linux standalone CPU contract tests and Linux software Vulkan emulation (Actions 36079262997, covering 1,000 mode switches, fault injections, descriptor lifetimes, and `settings_interaction` 1/1) passed; physical-hardware GPU testing across all gameplay scenes remains open. Guest mip selection, single-level texture upload, and shader translation remain untouched; AF does not resolve distant-texture shimmer caused by missing mip chains.
+- Settings menu DLSS and FSR quality ordering: DLSS quality choices and left/right cycling now order consistently as Performance, Balanced, Quality, and DLAA, with FSR placing Native AA last. Persisted configuration values, defaults, and GPU runtime behavior remain unchanged. Rebuilt standalone `LoMenuFlowTest` passed across all 8 test groups; physical-hardware verification across all quality levels remains pending.
+- Settings menu interaction and performance: merged AA and DLSS/FSR selection into a unified flow, placed FSR sharpness directly after quality, and kept Save last. A confirms actions and dialogs only; Left/Right adjusts choices, with mouse adjustment retained. Cached static menu decoration at native output resolution to avoid repeated full-background software filtering on navigation; real-device end-to-end latency is not measured.
+- System and Settings quit menu actions:
+  - Swapped the native System menu quit entry to "Quit to Desktop" across all nine supported game languages. Trailing garbage characters observed in in-game captures were resolved by including the UTF-16 null terminator in the string copy bounds. The native confirmation Yes routes to `SDL_QUIT` with cancel recovery. In bounded physical-hardware testing on a verified build, the user explicitly confirmed that selecting and confirming "Quit to Desktop" in the native System menu successfully exits the game process.
+  - Added a "Quit to Main Menu" action at the bottom of the System -> Settings -> Game page, supporting English, Traditional Chinese, Simplified Chinese, Japanese, and Korean. Confirmation defaults to Cancel, and Back cancels; confirming waits for retail Settings close completion before returning directly to the title screen without posting `SDL_QUIT` or saving settings. Standalone `LoMenuFlowTest` passed all 8 test groups; physical-hardware execution and dialog display remain unverified by users item by item.
+- Debug Save Anywhere persistence (Issue #61): preserved the debug "Save Anywhere" toggle across sessions in `settings.ini` without adding it to the player settings menu. The setting defaults to disabled and persists immediately when toggled in the debug menu while keeping unconfirmed graphics previews intact. Windows standalone test `LoSaveAnywhereConfigTest` passed configuration parsing, cross-process restoration, and preview coexistence. In-game validation on physical hardware remains pending, and camera offset upon reload remains a known limitation.
+- Controller and usability improvements:
+  - Cheats sidebar: LT selects the previous category and RT the next, wrapping at either end with single-step navigation per press; added an on-screen English/Chinese control footer. Controller switching was confirmed on a physical controller, and Windows `cheats_ui` regression passed (1/1).
+  - Implemented Issue #50 cursor auto-hide: the mouse pointer hides after 2 seconds of inactivity over the game window, reappears on pointer activity, and is restored when focus leaves the window.
+  - Disabled SDL text input/IME composition for the gameplay window on creation and focus regain so active IMEs do not consume normal gameplay keys.
+  - Controller rumble is enabled by default with persistent XInput/Xam-style motor state; `LO_CONTROLLER_RUMBLE=0` remains the explicit opt-out.
+- Developer tooling and build guidance:
+  - Added `tools/README.md` cataloging formal offline analysis scripts, packaging/release helpers, profiling tools, and build drivers with explicit side-effect classifications, and added top-level structured navigation to `tools/tests/README.md`.
+  - Clarified how to reconcile the modified XenonRecomp tree after tracked patch updates, rebuild generator tools, regenerate PPC, and rebuild the runtime. Physical controller testing confirmed 2× hold fast-forward and release speed restoration once local clock sources were synchronized.
+
+### 简体中文
+
+- 实时各向异性过滤（AF）：在图形设置菜单中新增实时各向异性过滤选项（`Off / 2x / 4x / 8x / 16x`），配置项保存在 `settings.ini` 的 `anisotropic_filtering`（默认关闭），并根据当前 Vulkan 设备的硬件上限向下钳制。保存图形设置后在下一渲染帧生效，无需重启游戏。将易变 sampler 描述符表重构为不可变代际管理架构（`sampler_palette.h`）：候选表预先构建并在分配成功后替换活跃表，历史代际在对应 GPU 批次经栅栏检测完成前持续被引用钉住，避免了运行中描述符竞态以及分配失败破坏活跃渲染。Windows 与 Linux 独立 CPU 契约测试和 Linux 软件 Vulkan 仿真（Actions 36079262997，涵盖 1000 次档位切换、故障注入以及设置交互 1/1）已通过；全游戏实机 GPU 验证仍待推进。游戏原版 mip 选择、单层纹理上传与着色器翻译未做修改；AF 不解决因缺少 mip 链导致的远景纹理闪烁问题。
+- 设置菜单 DLSS 与 FSR 画质档位排序：DLSS 画质选项与左右循环顺序统一调整为 Performance、Balanced、Quality 与 DLAA，FSR 相应将 Native AA 置于最后。已保存配置与 GPU 运行时行为不变。重建后的离线 `LoMenuFlowTest` 全部 8 组测试均已通过；全档位实机验证仍待推进。
+- 设置菜单交互与性能优化：合并抗锯齿与 DLSS/FSR 入口，FSR 锐化紧随画质选项，保存置于最后。A 仅确认操作与对话框，方向键左右调整选项，保留鼠标调整。按输出分辨率缓存静态菜单装饰，避免每次导航重复进行整屏背景软件滤波；尚未测量实机端到端延迟。
+- 原生系统菜单与设置菜单退出动作：
+  - 将原生系统菜单退出入口调整为“退出到桌面（Quit to Desktop）”，覆盖全部 9 种语言的文案显示。字符串复制长度包含 UTF-16 终止符，消除了此前实机截图反馈中文案尾部乱码。确认对话框的 Yes 分支路由至 `SDL_QUIT` 并具备取消恢复逻辑。在已验证构建的实机测试中，用户明确确认原生系统菜单确认退出到桌面已成功退出游戏进程。
+  - 在系统菜单的设置→游戏页末尾新增“退出到主菜单（Quit to Main Menu）”选项，支持英文、繁体中文、简体中文、日文和韩文。确认对话框默认选中取消，返回键直接取消；确认后等待原版设置应用与关闭完成，直接返回标题画面，不投递 `SDL_QUIT` 且不触发设置保存。离线事件流测试通过；实机跳转及对话框显示尚未逐项实机验收。
+- 调试随时存档状态保存（Issue #61）：在重启后记住调试菜单中的随时存档（Save Anywhere）开关状态，保存在 `settings.ini` 且不加入玩家设置菜单。默认关闭，调试菜单切换即时持久化且不提交未确认的图形预览。Windows 独立测试 `LoSaveAnywhereConfigTest` 通过了解析、跨进程恢复与预览共存检查。实机游戏验证仍待推进，读档后的镜头偏移仍属已知局限。
+- 手柄与可用性改进：
+  - 作弊菜单侧栏：LT 切到上一分类、RT 切到下一分类，首尾循环，每次按下只切换一次（长按不连跳）；增加中英双语屏幕操作提示。实体手柄确认切换与无连跳正常，Windows `cheats_ui` 回归测试通过（1/1）。
+  - 实现 Issue #50 鼠标自动隐藏：鼠标在游戏窗口内停顿 2 秒无操作后自动隐藏，移动后恢复。
+  - 游戏窗口创建及重新获焦时显式关闭 SDL 文本输入／IME 组合，避免输入法抢占游戏按键。
+  - 手柄震动默认开启并保持 XInput/Xam 状态语义，仍可通过 `LO_CONTROLLER_RUMBLE=0` 显式关闭。
+- 开发者工具与构建指引：
+  - 新增 `tools/README.md` 索引离线分析、打包发布、性能分析与构建工具并标注副作用分类，为 `tools/tests/README.md` 增加顶部结构化导航。
+  - 明确同步被跟踪 XenonRecomp 补丁后重建生成器工具、重新生成 PPC 和重建运行时的流程。实体手柄验证确认时钟源同步后 2× 按住加速与松开恢复正常。
+
+## v0.6.15 — 2026-09-24
+
+### English
+
+- Battle motion-vector replay follow-up (P2 remains in progress): added exact shader-slot mappings for three observed battle vertex programs and a shared quad-list geometry helper. CPU checks passed 768 clips; GPU fixtures compiled the six mapped microcodes to DXIL/SPIR-V and passed Vulkan replay checks for alpha discard, palette motion, and two-quad geometry. A bounded RTX 5080 Vulkan manual battle run on candidate `cb41c99` recorded 2,476 completed FSR uses and no motion-vector first failures in that run. This is bounded scene evidence; broader scene/platform coverage and full P2 acceptance remain open. `02d8` remains unmapped, and the `f6` mapping is fixture-only with no observation in that game run.
+- Experimental opt-in FSR SR development updates:
+  - Added the fixed FidelityFX SDK v1.1.4 (FSR 3.1.4) source-build path for Windows and native Linux behind `LO_ENABLE_FSR=ON` and `LO_REQUIRE_FSR=ON`, with bounded Windows execution evidence for all four presets and native Linux RADV Quality, Performance and Native AA submissions. Full quality/performance, Steam Deck, player, and DLSS frame-generation acceptance remain pending.
+  - Added opt-in three-frame FSR input/output capture with completed-submission metadata, camera/depth motion diagnostics, and bounded right-stick test input. Controlled Windows translation/yaw checks passed for static geometry; this is not full image-quality acceptance.
+  - Added explicitly enabled raw material-alpha replay for six audited shader pairs, with R8 MAX accumulation and same-draw color/depth readback diagnostics. Windows and native Linux RADV town captures produced nonzero alpha while preserving original color and depth bytes. Postprocess propagation and SDK reactive/transparency inputs remain pending.
+  - Added opt-in alpha-mask resolve/fetch bridging with frame, allocation, write-version and final-image checks. A Windows town capture copied 409,440 pixels exactly, including 150 nonzero pixels, and linked reused resolves to the actual shader bindings. Later P2 work verified the Windows SDK reactive mask input; Linux builds were performed for earlier bridge revisions, not the latest battle shader mappings.
+  - Added opt-in completed-submission GPU timestamps for the isolated FSR prepare/SDK/encode/copy path. Windows runtime diagnostics produced valid query records; this does not establish a performance improvement.
+  - Added pixel coverage qualification for fractional viewports and exact rectangle corner checks for P2 R8 alpha postprocess propagation. Intersected resolve validRect bounds to keep padding invalid, added `depth_color_tile_clear` tracking with qualifying inset geometry replacement and unknown writer invalidation, permitted raw retention on initial clear while preserving old raw source disabling, separated input missing from sampler unsupported rejections, and added opt-in trace diagnostics. Python reference tools corrected Vulkan Y coordinates, fixed project HLSL `FLT_MIN` negative bounds handling, and added an independent clear-background checker suite.
+  - Verified P2 postprocess routing via CPU suites (`LoNativeDlssP2RoutingTest`, `LoFsrAlphaPropagationPolicyTest`), Python synthetic clear background and tonemap regression cases, and Windows RTX 5080 Vulkan 1280x720 FSR Quality capture (`fsr-postprocess-windows-03`): all 6 audited draws recorded and published with 0 interior/background pixel mismatches across 5 blur draws and 1 tone draw (correcting reference `FLT_MIN` artifact; original 1-pixel report preserved), 0 byte diff across original color copies, and completed independent oracle transfer chains. Detailed evidence and artifacts are recorded in [FSR progress notes](docs/notes/fsr-dlss-fg-codex-progress.zh-CN.md).
+  - Verification limits remain bounded: full depth invariance, host prefilter substitution, broad P2 visual quality, and latest Linux battle-mapping coverage are not established. The later P2 checkpoint has separate bounded raster-edge, SDK-mask, color, and performance evidence; see [FSR progress notes](docs/notes/fsr-dlss-fg-codex-progress.zh-CN.md) and the dated handoff. No full P2 acceptance is claimed.
+  - Fixed presented screenshots interpreting BGRA swapchain pixels as RGBA; verified with a native Linux Native AA capture.
+  - Repaired FSR record-time transient input rejection so a single-frame fallback can retry, and stop GPU work on prepare-stage `DeviceLost`. The generated FidelityFX Vulkan memory selector requires all requested property bits while allowing CPU-visible device-local memory on UMA, excluding unenabled AMD device-coherent memory types; the default non-CPU-only native DLSS test configuration no longer registers three FSR tests twice. Windows/Linux CI passed 13/13 CPU tests and Linux native FSR-on/off object and SPIR-V compilation; the corrected non-CPU-only CMake configuration lists 16 tests without running them, and `native-dlss-cpu.yml` was updated with non-CPU-only configure and single-entry CTest registration checks on Windows and Linux. RTX 5080 Vulkan fixture execution passed `LoFsrAdapterGpuTest --transient-only`: Frame N normal dispatch and readback; Frame N+1 matching request and valid textures with NaN delta time returned `InputUnavailable` and `useId 0` without GPU submission, preserved `lastDispatchRenderFrameId == N`, and kept the session Ready; Frame N+2 restored valid delta time with `input_reset=false` and successfully dispatched with SDK gap reset (`blue 128->96`); and Frame N+3 continued without gap reset. Release packaging workflows (`release.yml`, `tools/build_release.bat`) were updated to generate shared Vulkan shaders from pinned FidelityFX SDK `c6efa6bf7f2027b3ec94f28578bb5965eabb9e55`, forward parameters, and enforce FSR on release jobs with license verification. A local Windows Clang incremental build linked the FSR static library, `LoShaderPackTool` (SHA-256 `830b314da541b280d9816f069f6069d095a247fcdcc9929a35ff01571f0fe93a`), and full game executable `LostOdysseyRecomp.exe` (`3689f20b3eab2558de60ba8143822c5fa4aa116fb9bad4ed08e6facecbf5765c`). The user confirmed current Windows visuals without issue, and accepted Linux verification based on execution reports of game linkage and `LoFsrAdapterGpuTest --transient-only` passing on an AMD Radeon 8060S RADV STRIX_HALO environment. These results conclude current visual and platform checks without establishing deterministic production renderer fault-injection handling or whole-game P2 gate completion. Updated CI and release workflows remain unexecuted in Actions, and P2 remains in progress. See [FSR repair notes](docs/notes/fsr-repair-2026-09-24.zh-CN.md).
+
+- Native DLSS SR/DLAA lifecycle and capability coordination updates (BR-01, BR-02):
+  - Fixed temporal history lifecycle handling so DLSS SR and DLAA properly advance temporal frame time and preserve jitter across frame gaps without spurious resets (BR-01).
+  - Resolved capability status data race between CPU planning and GPU worker updates by publishing a mutex-protected by-value device snapshot (BR-02).
+- Graphics menu stability and runtime DLSS execution feedback updates (BR-03 & GraphicsRow):
+  - Refactored Graphics menu row indices into a shared `GraphicsRow` enumeration (`0..10`), publishing row IDs and updating navigation, help text, action handlers, and test fixtures by ID to eliminate positional index drift.
+  - Upgraded DLSS runtime status feedback: the `Active` status now strictly requires observing that the production renderer adopted DLSS RGB output and completed checked Vulkan command submission.
+  - Surfaced specific runtime fallback and latching failure reasons, covering pending motion pipeline, unknown/unqualified color encoding, feature recreation, promotion mapping failure, no eligible drawables, waiting for initial results, input probe mode, and stopped status.
+  - Added identity filtering across device epoch, request signature, and geometry epoch; preserved new fallback reasons across intra-frame plan switches; and published an immediate stopped status upon `SubmitVulkan` or `WaitForGpuFence` failures.
+  - Retained uncommitted menu edit notes while reporting active mode and extents directly from `execution.plan`, without claiming GPU execution completion, presentation, or full-frame DLSS.
+  - Focused verification passed: new CPU unit suite `LoDlssRuntimeStatusTest` (37 checks), updated `LoDlssCapabilitySnapshotTest` (43 checks re-run following revised Active semantics), standalone submission error injection `LoVideoSubmissionStopTest` (14 checks), hardware synthetic Vulkan execution on an RTX 5080 without NGX (`--status-only` and `--plan-identity` multi-case plan switches and batch non-demotion), and full `LoMenuFlowTest` generating 18 BMP captures and notices under `out/br03-dlss-menu/`. Prior BR-01 CPU/owner test results and existing GPU suites were preserved without re-runs. Production translation units compiled cleanly, and the full game executable target `LostOdysseyRecomp` linked cleanly (`build/LostOdysseyRecomp/LostOdysseyRecomp.exe`, 93,565,952 bytes, built from `0625923` plus uncommitted changes including `GpuSwap` preprocessing fix, accompanied by `nvngx_dlss.dll`, `dxcompiler.dll`, and `dxil.dll`). In-game visual quality verification, player acceptance, and release publication remain pending. See [native DLSS validation](docs/notes/native-dlss-validation.md) for detailed boundaries.
+
+- Diagnostics logging and F1 render-state capture updates:
+  - Settings save feedback now explicitly logs upscaler, quality, and frame-rate selections upon success.
+  - Added structured DLSS runtime status logging using existing phase/execution classifications (`Off`, `AwaitingExecution`, `Submitted`, `Fallback`, `NeedsVulkanRestart`, `DeviceUnavailable`, `TemporaryFallback`, `InputProbeOnly`, `GpuStopped`) with readable reasons, active extents, render frame, and identity context (`deviceEpoch`, `requestSignature`, `geometryEpoch`, `submissionSerial`). Transitions deduplicate repetitive output while recovery logs as normal `Submitted`; `Submitted` signifies target adoption and checked submission, not GPU execution completion.
+  - F1 render-state capture (`screenshot.bmp`) updated to capture the final pre-present swapchain image immediately before display handoff when the active rendering path employs DLSS/letterbox/post-processing, while `guest-frontbuffer.bmp` retains the resolved host texture; each frame's pair shares a matching `XE_SWAP` ticket, write frame, extents, and submission serial or D3D fence. Zero-request frames perform no readback allocations or copies.
+  - Fixed a crash (access violation in `VulkanTextureView` destructor) when switching from DLSS Quality to DLAA caused by external depth texture destruction preceding retired motion stencil views. Retired framebuffer views now bind `externalDepth` identity, releasing depth views immediately upon GPU completion before texture destruction.
+  - Implemented synchronous NGX Evaluate input/output capture: Controller records an isolated pre-Evaluate input color copy and post-Evaluate scratch output copy with layout restoration to GENERAL, ahead of composite and UI passes. Capture exports `dlss-evaluations.json`, `dlss-input-NNN.bin`, `dlss-input-NNN-preview.bmp`, `dlss-output-NNN.bin`, and `dlss-output-NNN-preview.bmp` (in RGBA8 or RGBA16F formats with informative previews, jitter samples, reset flags, and execution identities). Frames without evaluation record explicit fallback reasons without fabricating images.
+  - Focused verification passed: new CPU suite `LoDlssStatusLogTest` (400 logger checks), hardware fixture `LoPresentCaptureTest` (4 Direct3D 12 and Vulkan multi-frame/error cases), capture close helper test (`LoPresentCaptureTest --case close`), standalone depth retirement suite `motion_replay_gpu_test.exe --depth-retirement-only` (26 checks on RTX 5080 Vulkan D32S8), and evaluate capture suites `LoDlssEvaluateCaptureContractTest.exe --evaluate-capture-contract-only` and `LoNativeDlssRendererTest.exe --evaluate-capture-only` (with `motion_renderer_compile` clean compilation). The full game executable target `LostOdysseyRecomp` completed linking successfully (`build/LostOdysseyRecomp/LostOdysseyRecomp.exe`, 93,635,072 bytes, SHA-256 `08d50e3774d18a02d4f6eaf2267472e9fab75db36e3ee970980aa96faf641e9d`, UTC 2026-09-23 02:32:58 / local 2026-09-22 20:32:58 -0600, built from `0625923` plus uncommitted changes with source ID `bdd9539ee4f176bdda0d9660bb5621b8a90a09acf8f8faa8427c10f2075c2688`; earlier 16:24:35 and 19:33:37 intermediate builds preserved). In-game visual quality verification, player acceptance, and release publication remain pending.
+
+- Portable shader pack merge tooling and candidate consolidation (`LoShaderPackTool`):
+  - Added `merge` subcommand to `LoShaderPackTool` (`LoShaderPackTool merge <baseline> <decrypted-image> <manifest.tsv> <output-dir>`) with tab-separated manifest parsing (`action\tstage\thash\tsource\tprovenance`), selective `include`/`exclude` actions, microcode translation and DXC compilation for new shaders, and direct `Writer::Import` preservation of baseline shaders, metadata, and omissions without recompilation.
+  - Enforced read-only input protection, exclusive temporary directory staging before atomic publication, existing target directory rejection, and SPIR-V code generation through repository-bundled DXC. Focused core and merge unit tests passed.
+  - Executed a local merge producing candidate pack `out/merged-shaders/portable_vk.lospv` (178,332,830 bytes, SHA-256 `b486c87d121968bcec67fae6bc1aa7926378455281bc8b2a221409b8c06c6e2b`): imported 28,482 baseline shaders and compiled 45 new microcodes from recent gameplay caches to reach 28,527 total shaders (0 skipped, 1 excluded: `vs_8f6ce5a4f714294a` due to missing source metadata). Runtime compatibility and payload integrity passed verification (`all_payloads_verified: true`, `runtime_compatibility_verified: true`). The pack has not replaced the active game pack or been uploaded/bundled into release distributions. See [Portable Shader Pack](docs/PORTABLE_SHADER_PACK.md).
+
+### 简体中文
+
+- 战斗运动矢量 replay 后续（P2 仍在进行中）：为三个实测战斗顶点程序增加精确 shader-slot 映射，并抽取共享 quad-list 几何辅助函数。CPU 检查通过 768 个 clip；GPU fixture 将六段映射 microcode 编译为 DXIL/SPIR-V，并通过 Vulkan replay 的 alpha discard、调色板运动和双 quad 几何检查。RTX 5080 Vulkan 上针对候选版本 `cb41c99` 的有界手动战斗运行记录了 2,476 次已完成 FSR 使用，本次运行没有运动矢量首错记录。这是限定场景证据；更广场景与平台覆盖及完整 P2 验收仍未完成。`02d8` 仍未映射；`f6` 映射仅在 fixture 中验证，未在该游戏运行中观察到。
+- 实验性可选 FSR 超分开发更新：
+  - 增加固定 FidelityFX SDK v1.1.4（FSR 3.1.4 实现）的源码构建路径，通过 `LO_ENABLE_FSR=ON` 与 `LO_REQUIRE_FSR=ON` 在 Windows 和原生 Linux 选择性启用；Windows 四档已有有界运行证据，原生 Linux RADV 已有 Quality、Performance 和 Native AA 真实提交；完整画质／性能、Steam Deck、玩家及 DLSS 帧生成验收仍待完成。
+  - 增加显式启用的 FSR 三帧输入／输出捕获、提交完成元数据、相机／深度运动诊断及有界右摇杆测试输入。Windows 受控移动／旋转的静态几何检查通过，不代表完整画质验收。
+  - 增加显式启用的原始材质 alpha replay，覆盖六组已审计着色器，使用 R8 MAX 累积并提供同一次绘制的颜色／深度读回诊断。Windows 与原生 Linux RADV 城镇捕获均获得非零 alpha，原颜色和深度字节保持不变；后处理传播与 SDK reactive／transparency 输入仍待完成。
+  - 增加显式启用的 alpha mask resolve／fetch 桥接，核对帧、分配、写入版本及最终绑定图像。Windows 城镇实景的 409,440 个复制像素完全一致，其中 150 个非零，并将复用 resolve 关联到实际着色器绑定。后续 P2 工作已验证 Windows SDK reactive mask 输入；Linux 构建对应较早的桥接版本，不覆盖最新战斗 shader 映射。
+  - 增加显式启用的 FSR prepare／SDK／encode／copy 段 GPU timestamp，在提交完成后读取。Windows 实景已取得有效查询记录，不代表性能收益。
+  - 增加针对 P2 R8 后处理传播的支持小数 viewport 的像素覆盖判定与精确矩形角点检查。resolve 阶段采用 validRect 交集裁剪并确保 padding 保持无效，接入真实 `depth_color_tile_clear` 全量清屏追踪并支持合格内缩（inset）几何替换与未知写入者失效，首次 clear 允许保留 raw 收集且旧 raw 禁用策略保持有效，细化区分输入缺失与采样器不支持等回退原因，并增加选择性诊断 trace 日志。Python 离线参考工具修正了 Vulkan Y 轴坐标与项目 HLSL `FLT_MIN` 负极值处理，并加入独立的 clear 背景检查套件。
+  - 定向验证通过 CPU 测试（`LoNativeDlssP2RoutingTest`、`LoFsrAlphaPropagationPolicyTest`）、Python clear 背景与 tonemap 回归用例，以及 Windows RTX 5080 Vulkan 1280x720 FSR Quality 实景运行（`fsr-postprocess-windows-03`）：6 个已审计 draw 全部成功 record/publish，5 组 blur 与 1 组 tone 逐像素比对零差异（修正参考端 `FLT_MIN` 误解，原单像素失败报告原样保留），原始颜色零差异，且独立 oracle 传输链与最终场景提交全部完成。详细证据见 [FSR 进度记录](docs/notes/fsr-dlss-fg-codex-progress.zh-CN.md)。
+  - 验证范围仍有限：尚未证明完整深度不变性、host prefilter 替换与广泛 P2 画质；最新战斗 shader 映射也未在 Linux 验证。后续 P2 检查点另有有界 raster edge、SDK mask、色彩与性能证据，详见 [FSR 进度记录](docs/notes/fsr-dlss-fg-codex-progress.zh-CN.md)及日期交接；不代表 P2 整体验收。
+  - 修复最终呈现截图将 BGRA 交换链像素按 RGBA 解读的问题，已用原生 Linux Native AA 截图验证。
+  - 修复 FSR 录制阶段暂态输入拒绝，使单帧回退后可重试，并在准备阶段遇到 `DeviceLost` 时停止 GPU 工作。生成的 FidelityFX Vulkan 内存选择器要求全部请求属性位匹配，允许 UMA 的 CPU 可见 device-local 内存，排除未启用的 AMD device-coherent 类型；默认非 CPU-only 原生 DLSS 测试配置不再重复注册三项 FSR 测试。Windows/Linux CI 的 CPU 测试均为 13/13 通过，Linux 原生 FSR 开启／关闭对象与 SPIR-V 编译通过；修正后的非 CPU-only CMake 配置列出 16 项测试，未执行测试；`native-dlss-cpu.yml` 补充了双平台非 CPU-only CMake 配置与 CTest 单次注册校验。RTX 5080 Vulkan 实测通过 `LoFsrAdapterGpuTest --transient-only`：N 帧正常 dispatch 与读回；N+1 帧相同请求与有效纹理下传入 NaN 帧间隔，返回生产 `Controller::RecordIsolated` 状态 `InputUnavailable` 与 `useId 0` 且不提交 GPU，保持 `lastDispatchRenderFrameId == N` 与会话 Ready；N+2 帧恢复有效间隔且 `input_reset=false`，成功 dispatch 并触发 SDK gap reset（蓝色通道 `128->96` 证实新输入）；N+3 帧无 gap reset 持续 dispatch。发布工作流（`release.yml`、`tools/build_release.bat`）更新为从固定 SDK commit `c6efa6bf7f2027b3ec94f28578bb5965eabb9e55` 生成共享 Vulkan shader 产物，转发参数并在发布任务打包中增加 license 检查。本地 Windows Clang 增量构建已成功链接 FSR 静态库、`LoShaderPackTool`（SHA-256 `830b314da541b280d9816f069f6069d095a247fcdcc9929a35ff01571f0fe93a`）与完整游戏可执行文件 `LostOdysseyRecomp.exe`（SHA-256 `3689f20b3eab2558de60ba8143822c5fa4aa116fb9bad4ed08e6facecbf5765c`）。用户已确认 Windows 当前画面无问题，并依据 Linux 执行环境（`psvita distrobox psbuild`、AMD Radeon 8060S RADV STRIX_HALO）的游戏链接与 `LoFsrAdapterGpuTest --transient-only` 通过报告确认 Linux 验证通过。本轮画面与平台核验已告收尾，但不代表确定性生产渲染器故障注入序列或完整 P2 门禁全部通过；更新后的 CI 与 Release 工作流尚未在 Actions 中运行，P2 仍在进行中。详见 [FSR 修复记录](docs/notes/fsr-repair-2026-09-24.zh-CN.md)。
+
+- 原生 DLSS SR/DLAA 生命周期与能力协调更新（BR-01、BR-02）：
+  - 修复时序生命周期处理，使 DLSS SR 与 DLAA 在正常推进时正确更新帧时间，并在长间隔后保留抖动，避免异常重置历史（BR-01）。
+  - 通过互斥锁保护的按值设备快照，消除 CPU 规划器与 GPU 工作线程间的能力读取数据竞争（BR-02）。
+- 图形菜单稳定性与 DLSS 运行时执行反馈更新（BR-03 与 GraphicsRow）：
+  - 将图形设置菜单行下标重构为共享的 `GraphicsRow` 枚举（`0..10`），帮助文本、焦点导航、选项变更与测试用例统一按行 ID 索引，消除数字下标错位风险。
+  - 增强 DLSS 运行时状态反馈：仅当确认真实渲染器实际采用 DLSS RGB 目标且经 checked 检查成功提交 Vulkan 命令后，菜单才显示为已采用并提交（Active 对应已提交输出，非宣称整帧 GPU 呈现或实际完成）。
+  - 提供细分的执行层回退与闭锁失败原因，包括运动矢量管线就绪中（motion pending）、未确认色彩编码（Unknown）、feature 重建中、目标提升失败、无合格绘制目标、等待首个结果、输入探针模式及停止运行。
+  - 增加设备周期、请求签名与几何周期身份过滤；同帧 plan 切换保留最新失败原因；在 `SubmitVulkan` 或 `WaitForGpuFence` 失败时立即发布停止状态。
+  - 菜单运行模式与分辨率尺寸直接取自 `execution.plan`，并保留未保存编辑项的附加提示说明，不宣称 GPU 完成、呈现或整帧 DLSS 画面。
+  - 定向验证通过：新增 CPU 单元测试 `LoDlssRuntimeStatusTest`（37 项检查）、按新 Active 语义更新断言并重新运行的 `LoDlssCapabilitySnapshotTest`（43 项检查全部通过）、底层提交失败注入测试 `LoVideoSubmissionStopTest`（14 项检查）、RTX 5080 真实 Vulkan 无 NGX 生产入口硬件测试（`--status-only` 与 `--plan-identity` 覆盖多场景 plan 切换与非空批次不降级），以及生成 18 张 BMP 截图与 notices 的 `LoMenuFlowTest` 交互测试。原有 BR-01 CPU/owner 验证结论严格复用，其他既有 GPU 测试套件无重复运行。受影响生产对象增量编译通过。
+- 诊断日志、F1 状态截图与深度生命周期崩溃修复：
+  - 设置保存成功日志补齐 upscaler、quality 与 frame_rate 参数。
+  - 增加结构化 DLSS 运行时日志，基于既有枚举分类输出（Off、AwaitingExecution、Submitted、Fallback、GpuStopped 等），记录可读原因、请求与实际尺寸、render_frame 及身份上下文；语义去重并平抑日志刷新，恢复情况按标准 Submitted 记录，Submitted 严格对应采用与 checked 提交成功而非 GPU 完成。
+  - F1 状态捕获中的 `screenshot.bmp` 改为呈现前的最终交换链图像（在实际启用 DLSS/黑边/后处理路径时反映相应效果），`guest-frontbuffer.bmp` 保留 resolved host 纹理，每帧成对图片共享同张 `XE_SWAP` ticket、帧号与提交序号/fence。无捕获请求时完全不产生读回或内存拷贝。
+  - 修复 Quality 切换至 DLAA 时因外部 depth 纹理先销毁、已退休 motion stencil 视图后解构导致的非法访问崩溃。将 retired 视图绑定 `externalDepth` 身份，在 GPU 完成后且销毁纹理前解绑深度视图。
+  - 实现 NGX Evaluate 同次输入输出捕获：在 isolated 录制中，实际参数确认后依次执行 Evaluate 前输入色彩拷贝、vendor Evaluate、成功后 scratch 输出拷贝并恢复 GENERAL 布局，早于复合与 UI 阶段。导出 `dlss-evaluations.json`、`dlss-input-NNN.bin` / `-preview.bmp`、`dlss-output-NNN.bin` / `-preview.bmp`（真实 RGBA8/RGBA16F 格式，包含抖动、重置标志与执行身份），未 Evaluate 帧明确记录回退原因而不伪造图片。
+  - 定向验证通过：新增 CPU 测试 `LoDlssStatusLogTest`（400 项 logger 检查）、呈现捕获测试 `LoPresentCaptureTest`（D3D12/Vulkan 连续 3 帧与提交/fence 错误注入共 4 项硬件用例及 `--case close` 收尾用例）、深度退休硬件测试（`motion_replay_gpu_test.exe --depth-retirement-only`，RTX 5080 Vulkan D32S8 通过 26 项检查），以及 Evaluate 捕获套件 `LoDlssEvaluateCaptureContractTest.exe --evaluate-capture-contract-only` 与 `LoNativeDlssRendererTest.exe --evaluate-capture-only`（`motion_renderer_compile` 编译通过）。完整程序目标 `LostOdysseyRecomp` 成功完成最新本地构建与链接（产物 `build/LostOdysseyRecomp/LostOdysseyRecomp.exe`，93,635,072 字节，SHA-256 `08d50e3774d18a02d4f6eaf2267472e9fab75db36e3ee970980aa96faf641e9d`，UTC 2026-09-23 02:32:58 / 当地 2026-09-22 20:32:58 -0600，基于 `0625923` 叠加未提交改动，源码标识 `bdd9539ee4f176bdda0d9660bb5621b8a90a09acf8f8faa8427c10f2075c2688`；旧 16:24:35 与 19:33:37 产物历史保留）。实机画质验证、玩家验收及公开发布仍待进行。
+
+- 便携式着色器包合并工具与候选整合（`LoShaderPackTool`）：
+  - `LoShaderPackTool` 新增 `merge` 子命令（`LoShaderPackTool merge <baseline> <decrypted-image> <manifest.tsv> <output-dir>`），支持制表符分隔的清单解析（`action\tstage\thash\tsource\tprovenance`）、细粒度 `include`/`exclude` 动作、新增微码的翻译与 DXC 编译，以及通过 `Writer::Import` 直接导入基线着色器、元数据与省略记录而无需重新编译。
+  - 强制输入与基线包只读保护、独占临时目录组装后原子发布、目标已存在时拒绝覆盖，并要求使用仓库内置 DXC 确保 SPIR-V 代码生成。定向核心测试与 merge 单元测试均已通过。
+  - 完成本地候选包整合（产物 `out/merged-shaders/portable_vk.lospv`，178,332,830 字节，SHA-256 `b486c87d121968bcec67fae6bc1aa7926378455281bc8b2a221409b8c06c6e2b`）：直接导入 28,482 项基线着色器，编译合入 45 条近期实机缓存微码，总计 28,527 项着色器（0 项跳过，1 项 `vs_8f6ce5a4f714294a` 因缺失补充来源记录排除，原缓存保留）。新包通过运行时兼容与载荷校验（`all_payloads_verified: true`、`runtime_compatibility_verified: true`）。该产物尚未替换用户实机游戏包、未上传 release 仓库、未进入正式发行包。详见[便携式着色器包说明](docs/PORTABLE_SHADER_PACK.md)。
+
+## v0.6.11 — 2026-09-22
+
+### English
+
+- Add experimental native NVIDIA DLSS Super Resolution (SR) and Deep Learning Anti-Aliasing (DLAA) support, with official packaged NGX libraries for Windows and Linux:
+  - Integrates official NVIDIA DLSS SDK `310.9.1` (`374959484e79a640feaba44c93ac8cfb0a03f5b5`). Windows release ZIP packages `nvngx_dlss.dll` with static CRT bootstrap libraries, verified LICENSE and NOTICE. Linux AppImage bundles canonical `usr/bin/libnvidia-ngx-dlss.so.310.9.1` with `usr/lib` symlinks, license, and notice.
+  - Implements Plume Vulkan bridge extension hooks (`VulkanExtensionHooks`, `VulkanExtensionStatus`), external command boundaries (`beginExternalCommands`, `endExternalCommands`), and capability probes (`LoNativeDlssProbe`, `LoNativeDlssReportTest`).
+  - Implements CPU frame planner contracts with versioned 24-word snapshot packets, request signatures, geometry epochs, and exact NGX output sizing queries for 16:9, 21:9, and non-standard drawables.
+  - Renderer captures pre-TAA color, single-channel R32 current depth, and unjittered geometric motion vectors in input pixel units (`previousPixel - currentPixel`), with explicit history reset triggers (camera cut, extent, epoch, format) and GPU fence-qualified resource retirement.
+  - Introduces experimental DLAA mode (quality index 3) operating with 1:1 input-to-output resolution on supported RTX configurations, backed by 350 CPU contract checks (`LoNativeDlaaTest`) and runtime query bounds.
+  - Implements persistent NGX session controller supporting native `NGX_VULKAN_CREATE_DLSS_EXT1` and `NGX_VULKAN_EVALUATE_DLSS_EXT`, monotonic submission-serial tracking, SDR qualified color encoding bypass, and destination target promotion architecture with parked low-resolution fallback mappings.
+- In-game Settings menu graphics updates and list viewport scrolling:
+  - In Settings -> Graphics, exposed **Upscaler** (`Off`, `DLSS`) and **DLSS quality** (`Quality`, `Balanced`, `Performance`, `DLAA`).
+  - DLSS quality row automatically hides when Upscaler is set to `Off`, preserving logical row indexing while navigation smoothly skips hidden entries.
+  - Removed the **Internal resolution** row from the menu while retaining its persisted value in configuration for legacy fallbacks.
+  - Added scrolling support for overflowing menu lists exceeding 11 rows: visible list tracks focus, accounts for hidden rows in rendering and pointer hit testing, and displays subtle top and bottom scroll indicators.
+  - On Graphics and Language tabs, pressing Start (or Enter) jumps focus directly to the **Save settings** row without triggering an immediate save, suppressing same-tick confirm input to prevent accidental saves.
+  - Fixed MSVC build of the native DLSS test fixture by enforcing `/utf-8` source encoding for non-BOM CJK strings in `CMakeLists.txt`.
+- Release delivery & verification status:
+  - Published release [v0.6.11](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.11) built from commit `3daba372ea34c93b65b55c25ee5daa4f4ed5573d` via Release CI [35687931776](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35687931776).
+  - Public release assets verified against SHA-256 sidecars and GitHub digests: Windows ZIP `362592d16f45bc56fd686c4f0bc4c4e23e8a82eafffdcd8f6c77971ed3c9e823`, Linux AppImage `2e2ada519ae7b3b63be306d7d301bf26be677c0af08f13b7653c2e54c9727bf9`.
+  - Windows manifest confirms non-development version `v0.6.11`, commit `3daba37`, and bundled `nvngx_dlss.dll` matching the audited SDK. Linux AppImage SquashFS inspection confirms canonical `usr/bin/libnvidia-ngx-dlss.so.310.9.1`, library symlinks, license, and notice files.
+  - CPU tests (8/8 native DLSS suites and 350 DLAA checks), synthetic overflowing menu render tests (`LoMenuRenderTest`), menu flow tests (`LoMenuFlowTest`), and Windows/Linux packaging builds passed.
+  - Prior bounded live-game production runs on an RTX 5080 confirmed Quality NGX SR (`1707x960` to `2560x1440`, DisplayEncoded color, reversed-Z depth, 1 Create, 24 retained successful Evaluate records). User runtime logs confirm NGX availability, sizing across 1440p and 4K switches, and transient motion pipeline pending fallbacks.
+  - DLSS and DLAA remain experimental features with bounded verification. Gate 3 is not approved. Visual quality, motion response, fine lines, occlusion, UI elements, reset behavior, and player acceptance are not claimed.
+
+### 简体中文
+
+- 增加实验性原生 NVIDIA DLSS 超分辨率（SR）与深度学习抗锯齿（DLAA）支持，并在 Windows 与 Linux 正式发布包中内置官方 NGX 运行库：
+  - 接入官方 NVIDIA DLSS SDK `310.9.1`（commit `374959484e79a640feaba44c93ac8cfb0a03f5b5`）。Windows 发布包包含带静态 CRT 引导库的 `nvngx_dlss.dll` 及 LICENSE 与 NOTICE；Linux AppImage 内置规范的 `usr/bin/libnvidia-ngx-dlss.so.310.9.1`、`usr/lib` 软链接及对应授权说明文件。
+  - 实现 Plume Vulkan 桥接扩展钩子（`VulkanExtensionHooks`、`VulkanExtensionStatus`）、外部命令边界（`beginExternalCommands`、`endExternalCommands`）以及独立与集成能力探测程序（`LoNativeDlssProbe`、`LoNativeDlssReportTest`）。
+  - 实现 CPU 帧计划器契约，支持版本化 24-word 快照数据包、请求签名、几何周期以及针对 16:9、21:9 和非标准尺寸的精确 NGX 输出区域查询。
+  - 渲染器独立采集 TAA 前颜色、单通道 R32 当前深度以及未抖动的像素单位几何运动矢量（`previousPixel - currentPixel`），具备显式历史重置策略（切镜、尺寸、周期与格式变更）及基于 GPU fence 序列的生命周期管理。
+  - 引入实验性 DLAA 模式（质量索引 3），在受支持的 RTX 配置上以 1:1 输入输出比例运行，并通过 350 项 CPU 契约检查（`LoNativeDlaaTest`）及运行时尺寸查询约束验证。
+  - 实现持久化 NGX 会话控制器，支持原生 `NGX_VULKAN_CREATE_DLSS_EXT1` 与 `NGX_VULKAN_EVALUATE_DLSS_EXT`、单调提交序号管理、SDR 合格色彩编码旁路保护，以及基于停放低分辨率目标的目标提升架构。
+- 游戏内设置菜单图形选项及列表视口滚动更新：
+  - 在“设置” -> “图形”中，增加**缩放技术**（关、DLSS）与 **DLSS 质量**（质量、平衡、性能、DLAA）选项。
+  - 当缩放技术为“关”时自动隐藏“DLSS 质量”行，保持逻辑行号稳定并在导航中平滑跳过隐藏行。
+  - 从图形菜单中移除“内部分辨率”行，但保留已配置在文件中的原有数值以供兼容回退使用。
+  - 增加超过 11 行的长列表滚动支持：视口自动跟随焦点行，在渲染和指针点击判定中适配隐藏行偏移，并显示顶部和底部滚动指示器。
+  - 在“图形”与“语言”分页中，按 Start（或 Enter）直接将焦点移动至“保存设置”行而不会立即触发保存，同时抑制同帧确认输入以防止误触。
+  - 在 `tools/tests/native_dlss/CMakeLists.txt` 中增加 `/utf-8` 编译选项，修复 MSVC 下非 BOM CJK 字符串的解析问题。
+- 发布交付与验证状态：
+  - 公开版本 [v0.6.11](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.11) 已从 commit `3daba372ea34c93b65b55c25ee5daa4f4ed5573d` 通过 Release CI [35687931776](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35687931776) 完成构建发布。
+  - 公开资产经 SHA-256 sidecar 与 GitHub digests 核验无误：Windows ZIP `362592d16f45bc56fd686c4f0bc4c4e23e8a82eafffdcd8f6c77971ed3c9e823`，Linux AppImage `2e2ada519ae7b3b63be306d7d301bf26be677c0af08f13b7653c2e54c9727bf9`。
+  - Windows manifest 确认正式版本 `v0.6.11`、源码 commit `3daba37`，打包的 `nvngx_dlss.dll` 与 SDK 严格吻合；Linux AppImage 经 SquashFS 解构核实包含 `usr/bin/libnvidia-ngx-dlss.so.310.9.1`、库软链、License 及 Notice。
+  - CPU 测试（8/8 项原生 DLSS 测试套件及 350 项 DLAA 检查）、`LoMenuRenderTest` 超长列表像素级比对、`LoMenuFlowTest` 交互流转测试及 Windows/Linux 打包均已通过。
+  - RTX 5080 上前期的有界真实游戏运行已确认 Quality 模式 NGX SR（`1707x960 -> 2560x1440`、DisplayEncoded 色彩、reversed-Z 深度、1 次成功 Create、24 条保留的成功 Evaluate 记录）。用户实机日志确认了 RTX 5080 上的 NGX 可用性、1440p/4K 切换及暂态 motion pipeline pending 回退。
+  - DLSS 与 DLAA 仍属于具备有界验证的实验性功能。Gate 3 尚未批准；画质、细线、运动响应、遮挡、UI 元素、重置行为和玩家验收均未宣称完成。
+
+## v0.6.7 — 2026-09-20
+
+### English
+
+- Add in-game Graphics menu Widescreen switch and expanded 21:9 resolution presets (Issue #17):
+  - In Settings -> Graphics, a new **Widescreen** toggle appears immediately above **Output resolution**.
+  - When Widescreen is **Off**, Output resolution offers five standard 16:9 tiers: 1280×720, 1600×900, 1920×1080, 2560×1440, and 3840×2160.
+  - When Widescreen is **On**, Output resolution offers five common 21:9 ultrawide tiers: 1720×720, 2560×1080, 3440×1440, 3840×1600, and 5120×2160.
+  - Toggling aspect ratio maps to the nearest preset by vertical height, choosing the higher tier in equidistant ties (e.g. 900p maps to 1080p).
+  - The switch state is derived dynamically from configured width and height without adding new INI keys; existing 3440×1440 configurations automatically open with Widescreen enabled.
+  - Saving settings applies the chosen resolution and commits it to disk; exiting without saving preserves existing configuration. First-launch setup resolution choices are also updated to include matching presets. Localized terms and help descriptions are provided in English, Japanese, Korean, Traditional Chinese, and Simplified Chinese.
+  - Validation includes `menu_flow_test` covering initial 3440×1440 auto-derivation, 5 ultrawide tiers cycling, height-preserving 2160p toggle back to 16:9, cancel discard, and Save display change state machine; `menu_render_test` layout verification (`out/snapshots/menu_1280x720_21_9.png`); and incremental runtime build verification.
+  - In local runtime testing, the user confirmed functionality is working as expected and authorized closing Issue #17. Ultrawide support remains experimental across diverse hardware and aspect ratio combinations.
+
+### 简体中文
+
+- 游戏内图形设置增加“宽屏”开关并扩充 21:9 分辨率预设（Issue #17）：
+  - 在“设置” -> “图形”中，“输出分辨率”上方新增**宽屏**切换开关。
+  - 宽屏为**关**时，输出分辨率提供 5 档标准 16:9 选项：1280×720、1600×900、1920×1080、2560×1440 与 3840×2160。
+  - 宽屏为**开**时，输出分辨率提供 5 档常见 21:9 超宽屏选项：1720×720、2560×1080、3440×1440、3840×1600 与 5120×2160。
+  - 切换比例时按高度差最近匹配目标档位，等距时选取较高档位（例如 900p 切换至 1080p）。
+  - 开关状态直接由当前配置的宽度与高度推导，不增加额外 INI 字段；原有 3440×1440 配置会自动识别并打开宽屏。
+  - 保存图形设置将应用新分辨率并写入磁盘；取消或返回则不改动配置。首次启动设置向导的分辨率列表中也同步补齐对应预设。已适配英语、日语、韩语、繁体中文与简体中文 5 种语言的词条与提示文案。
+  - 验证覆盖：`menu_flow_test` 验证了初始 3440×1440 自动推导、五档循环、关闭时保留 2160 高度、取消／重开恢复及 Save 显示状态机；`menu_render_test` 离线渲染（`out/snapshots/menu_1280x720_21_9.png`）验证了 10 行菜单布局；主程序增量构建通过。
+  - 在本地构建实机测试中，用户已明确确认功能正常并授权关闭 Issue #17。超宽屏支持在多样化硬件与多分辨率组合下仍保持实验性。
+
+## v0.6.6 — 2026-09-20
+
+### English
+
+- Add initial native ultrawide (21:9) support (Issue #17): render targets follow the native display aspect ratio using Hor+ projection adjustments applied before derived matrices and view-frustum culling, keeping 16:9 safe-region HUD and ordered left/right pillarbox bars during video playback. The frame plan manages queue epoch tracking and render-target catalog roles.
+- Fix shadow-map rendering across all aspect ratios and high internal resolutions by correcting effective-height render target caching to avoid unnecessary 640×640 recreation and updating depth rasterization without color writes to cover modes 4 and 5 while preserving `SV_Depth` and alpha. In user testing of the affected scene, shadows were confirmed fixed.
+- Note on same-version reissue: v0.6.6 was reissued on 2026-09-20 from source commit `c6cbd1f62414a46c00c6312559edcd8d217bc9ee` via Release CI [35527543573](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35527543573) to include this shadow fix. Initial published v0.6.6 packages (commit `c953bb5`) lacked this fix and are superseded; redownload the release packages to obtain the fix.
+- **User note**: Ultrawide support remains EXPERIMENTAL and currently ONLY 3440×1440 is supported (2560×1080 is not currently advertised or supported despite appearing as an unverified UI option).
+- Focused checks passed for `windows-clang` runtime build, `LoFramePlanTest` (18 checks), `LoTargetMappingTest` (7 checks), resolution (40 checks) and temporal math fixtures; in Vulkan testing with packed shaders, a native save loaded at 13.93s, captured two frames during scene transition at swaps 382–383, and verified 3440×1472 padded color/depth allocations with 3440×1440 resolve content. Comprehensive visual Hor+, HUD positioning, dynamic resize, broader scene shadow validation, failure injection, other backends, and full player acceptance remain pending.
+- On Linux, the AppImage updater removes the exact temporary previous AppImage after the replacement reaches normal startup, while preserving it when replacement execution fails so rollback remains available. The focused WSL Manjaro Linux restart/rollback regression passed. Packaged AppImage, Fedora desktop and user acceptance remain pending.
+
+### 简体中文
+
+- 增加原生超宽屏 (21:9) 初始支持（Issue #17）：渲染目标依原生显示比例分配，在派生矩阵与视锥裁剪前应用 Hor+ 投影调整，并在视频播放期间保持 16:9 HUD 安全区与有序左右立柱黑边。FramePlan 负责队列周期跟踪与目标分类角色管理。
+- 修复全显示比例与高内部分辨率下的阴影贴图（shadow map）渲染：修正 effective-height 渲染目标缓存以避免不必要的 640×640 重新创建，并在无颜色写入的深度光栅化中覆盖模式 4 与 5，同时保留 `SV_Depth` 与 alpha。受影响场景经用户实机测试确认阴影已恢复正常。
+- 同版本重新发布说明：v0.6.6 已于 2026-09-20 从 source commit `c6cbd1f62414a46c00c6312559edcd8d217bc9ee` 通过 Release CI [35527543573](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35527543573) 完成同版本重新发布，以纳入该阴影修复。初版已发布的 v0.6.6 资产（commit `c953bb5`）不包含该修复并已被替代；请重新下载发布包以获取修复。
+- **用户提示**：超宽屏支持仍处于**实验性（EXPERIMENTAL）**阶段，目前**仅支持 3440×1440**（界面虽有 2560×1080 选项但尚未验证支持，请勿作为受支持分辨率使用）。
+- `windows-clang` 运行时构建、`LoFramePlanTest`（18 项检查）、`LoTargetMappingTest`（7 项检查）、分辨率（40 项）与时序数学测试均已通过；在 Vulkan 搭配打包着色器测试中，原生存档于 13.93 秒成功载入，在场景过渡期间捕获 swap 382–383 的两帧，日志确认 3440×1472 对齐的色彩／深度缓冲分配及 3440×1440 resolve 画面。完整实机 Hor+ 视觉呈现、HUD 排布、动态调整大小、更广场景阴影验证、故障注入、其他图形后端及完整玩家验收仍待完成。
+- Linux AppImage 更新器会在替换版本正常启动后删除对应的临时旧版 AppImage；如果替换版本执行失败，则保留旧版 AppImage 以便回滚。定向 WSL Manjaro Linux 重启／回滚回归已通过；打包 AppImage、Fedora 桌面和用户验收仍待完成。
+
+## v0.6.3 — 2026-09-19
+
+### English
+
+- Revert large vertex-cache hits to bounded sampled content comparison to prioritize draw-time CPU cost. Small vertex buffers remain exact; large buffers compare the head and tail plus strided samples, while index-cache hits retain exact source-byte verification. The focused `LoVertexCacheTest` passed 3,668,957 checks, including sampled changes, small-buffer exactness and the selected large-vertex blind-spot policy. The synthetic blind spot is known; no known game bug has been caused by sampling, and no game or release-binary performance result is claimed. A reliable low-cost vertex invalidation mechanism remains backlog work.
+- Harden Issue #54 language-menu selection: invalid language-table counts and indices no longer read or rewrite a selection, and unavailable entries display as `—` instead of fabricating a language. The menu capacity follows the native parser limit (16 entries), while the existing USA/Europe `82481BE8` host-language mapping and independent text/voice handling remain unchanged. An opt-in, bounded `LO_TRACE_LANGUAGE=1` trace is available for future reports, including the menu apply/close boundary snapshot. The specific cause of the reported cutscene voice issue remains unconfirmed; no save was available and no real-game reproduction was performed.
+- Apply a defensive file-I/O locking fix for Issue #53: read, write and scatter paths keep the per-file mutex only while updating seek, transfer, position and size state, then publish completion results through the retained handle reference. The original Disc 2 hang was not reproduced, so its root cause remains unconfirmed.
+- Add opt-in, bounded I/O diagnostics for future Issue #53 reports, including file-handle lifecycle, mutex wait/acquisition, transfer, completion publication and API-return stages, plus manual JSONL snapshots.
+- Add deterministic guest I/O lifetime, APC/event ordering, independent-file and duplicate-handle regression coverage, and reuse the multi-disc checks on Windows and Linux. These checks do not establish a story transition or player acceptance.
+- Use the platform archive format for asynchronous F1 render-state exports: Windows produces `.zip`, while Linux uses the system `tar` and `gzip` tools to produce `.tar.gz`. Focused WSL Manjaro g++ C++20 `-Wall -Wextra -Werror` checks pass for byte-identical 8 MiB/log extraction, asynchronous preparation, archive collisions, missing `tar`, unreadable sources, symlink-root rejection and shutdown joining. AppImage runtime and in-game/user acceptance remain pending.
+
+Published at [GitHub Release v0.6.3](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.3) on 2026-09-19T23:56:08Z from tag/source commit `93bdbc1ccae7652e38dc80db24a9d25a34a72a47`. Release CI [35476569158](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35476569158) passed Windows and Linux packaging on its first attempt. The four public assets are the Windows ZIP and Linux AppImage plus their `.sha256` sidecars; both package hashes match their sidecars and GitHub digests, and public sidecars returned HTTP 200. The Windows ZIP is 211,084,312 bytes with SHA-256 `9737befe09bc011c17327d5a83df8e437ab7e03a0f107b4acf40621dfd5fee08`; the Linux AppImage is 220,813,816 bytes with SHA-256 `b4f0448e6e661f51a2cab07209289188c786710929e4c4334f09786f125e7ed7`. The Windows manifest reports version/source version `0.6.3`, commit `93bdbc1` and `dirty=false`; all 49 payload hashes and the embedded shader were verified. Linux native GPU, Steam Deck, AppImage runtime and broader gameplay remain unverified.
+
+### 简体中文
+
+- 为优先降低绘制阶段 CPU 成本，将大顶点缓存命中恢复为有界 sampled-content 比较。小顶点缓冲仍逐字节精确比较；大缓冲比较头尾片段和跨区采样；index cache 命中继续保留完整源字节校验。定向 `LoVertexCacheTest` 通过 3,668,957 项检查，覆盖采样变化、小缓冲精确性和已选择的大顶点采样盲区策略。已知存在合成盲区；目前没有任何已知游戏 bug 由采样引起，也没有据此宣称实机或发布二进制性能结果。可靠且低成本的顶点失效机制仍列入 backlog。
+- 加固 Issue #54 的语言菜单选择：语言表数量或索引无效时不再读取或改写选择，无效条目显示为 `—`，避免伪造语言；菜单容量遵循原生解析器的 16 项限制。既有 USA/Europe `82481BE8` 宿主语言映射以及文字／配音独立处理保持不变。新增默认关闭且有界的 `LO_TRACE_LANGUAGE=1` 追踪，包含 menu apply/close 边界快照，供后续报告使用。具体过场配音问题的根因尚未确认；没有存档，本次未做实机复现。
+- 为 Issue #53 应用防御性文件 I/O 锁范围修正：读取、写入和 scatter 路径只在更新 seek、传输、位置和大小状态时持有文件互斥锁，随后通过保留的句柄引用发布完成结果。原 Disc 2 卡住未能复现，根因仍未确认。
+- 增加默认关闭且有界的 I/O 诊断，记录文件句柄生命周期、互斥锁等待／取得、传输、完成发布和 API 返回阶段，并支持手动导出 JSONL 快照。
+- 在 Windows 与 Linux 补充真实客户机 I/O 生命周期、APC／event 顺序、独立文件和复制句柄回归覆盖，并复用多盘测试。这些检查不代表已完成剧情换盘或玩家验收。
+- 为异步 F1 渲染状态导出使用平台归档格式：Windows 生成 `.zip`，Linux 使用系统 `tar` 和 `gzip` 生成 `.tar.gz`。WSL Manjaro g++ C++20 `-Wall -Wextra -Werror` 定向检查已通过，覆盖 8 MiB／日志逐字节一致解包、异步 prepare、归档冲突、缺少 `tar`、源文件不可读、拒绝符号链接根目录和退出时 join。AppImage 运行时及游戏内／用户验收仍待完成。
+
+v0.6.3 已于 2026-09-19T23:56:08Z 从 tag/source commit `93bdbc1ccae7652e38dc80db24a9d25a34a72a47` 发布到 [GitHub Release](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.3)。Release CI [35476569158](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35476569158) 首次通过 Windows/Linux 打包。四个公开资产为 Windows ZIP、Linux AppImage 及各自 `.sha256` sidecar；两个主体包 hash 与 sidecar 和 GitHub digest 一致，公开 sidecar 返回 HTTP 200。Windows ZIP 大小为 211,084,312 字节，SHA-256 为 `9737befe09bc011c17327d5a83df8e437ab7e03a0f107b4acf40621dfd5fee08`；Linux AppImage 大小为 220,813,816 字节，SHA-256 为 `b4f0448e6e661f51a2cab07209289188c786710929e4c4334f09786f125e7ed7`。Windows manifest 报告版本／source version 为 `0.6.3`、commit `93bdbc1`、`dirty=false`；49 个 payload hash 和内置 shader 均已核验。Linux 原生 GPU、Steam Deck、AppImage 运行时和更广游戏流程仍未验证。
+
+## v0.6.2 — 2026-09-19
+
+### English
+
+- Apply the accepted Uhra TAA policy to the normal TAA path: 0.5 jitter scale, stationary motion snapping, stationary color clipping and multi-surface history, with RGBA8 history at `31/33`. Experimental FP16 history and moving bilinear fallback remain off.
+- Enable experimental geometric motion-vector replay for TAA by default, while retaining `LO_MV_ENABLE=0` as a comparison switch. Repeated instances are paired by stable submission order so adjacent-frame Nth-to-Nth motion matching remains intact.
+- Reuse exact-content index fingerprints in the index cache while retaining complete source-byte verification. In the same Uhra Vulkan 4K internal/output scene on an RTX 5080, hidden muted A-B-A-B captures without pacing measured 60.34/59.00 FPS for the candidate, versus 54.61 FPS for a separate Release build and 54.57 FPS for the former RelWithDebInfo main binary.
+- Validation includes MV audit steady tracked/matched/replay 988 with failed 0, `LoMotionVectorTest` 71 checks and `LoVertexCacheTest` 3,668,948 checks. User foreground review of the same Uhra steel-frame scene found image quality acceptable at about 60 FPS.
+- Scope remains bounded to the tested Uhra scene, Vulkan and the local RTX 5080. The 1080p-internal to 4K moving-camera limitation, broader scene coverage and D3D12 replay PSO creation follow-up remain open.
+
+### 简体中文
+
+- 将已接受的 Uhra TAA 策略应用到正常 TAA 路径：0.5 抖动幅度、静止运动 snap、静止颜色裁剪和多表面 history，使用 RGBA8 history 与 `31/33` 权重。实验性 FP16 history 和 moving bilinear fallback 仍关闭。
+- TAA 默认启用实验性几何运动矢量 replay，保留 `LO_MV_ENABLE=0` 对照开关。重复实例继续按稳定提交顺序配对，保持相邻帧 Nth-to-Nth 运动匹配。
+- index cache 复用 exact-content index fingerprint，同时保留完整源字节验证。在 RTX 5080 的 Vulkan、Uhra 4K 内部／输出同一场景中，隐藏静音、无 pacing 的 A-B-A-B 对照测得候选 60.34/59.00 FPS；独立 Release 构建为 54.61 FPS，之前的 RelWithDebInfo 主程序为 54.57 FPS。
+- 验证包括 MV audit steady tracked/matched/replay 为 988、failed 为 0，`LoMotionVectorTest` 71 项和 `LoVertexCacheTest` 3,668,948 项。用户在同一 Uhra 钢架场景前台观察，确认画质可接受、约 60 FPS。
+- 范围限定为已测试的 Uhra 场景、Vulkan 和本机 RTX 5080。1080p internal 到 4K output 的移动相机限制、更广场景覆盖和 D3D12 replay PSO 创建后续工作仍开放。
+
+Published at [GitHub Release v0.6.2](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.2) on 2026-09-19T21:16:38Z from tag/source commit `7f99786f302b4ef3e5f672eacdba2b7a62972fda`. Release CI [35467796768](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/35467796768) succeeded on its second attempt for Windows/Linux Release packaging. The final public delivery has four assets: the Windows ZIP, Linux AppImage and their `.sha256` sidecars; both platform packages include the shader set, with no separate shader package. The Windows ZIP SHA-256 is `99495f62315f44bfa1eb34ce294b8b08c9e173193e86482c2dfa4427b10963c7`; the Linux AppImage SHA-256 is `a4542b8eeee6b5ac27f4dc8e4e8f0ec184e1f0c7620e8846429a1455b3942ecd`. The Windows manifest reports version/source version `0.6.2`, commit `7f99786`, and `dirty=false`. The package hashes match their sidecars and public sidecars returned HTTP 200. Linux native GPU, Steam Deck and broader gameplay remain unverified.
+
+## v0.6.1 — 2026-09-18 / Published / 已发布
+
+### English
+
+- Check for updates before importing game data on Windows and Linux. Up-to-date and offline checks continue normally; headless and background runs skip the automatic UI.
+- When a newer release is available, an app-branded prompt shows its release notes with **Install** and **Later** actions. Keyboard and mouse input are supported, with controller input wired through the same prompt; accepting applies the update and relaunches before import. Download progress remains in the existing updater window.
+- Windows runtime build, focused Windows/Linux prompt tests and changed Linux syntax checks pass. Live update acceptance, physical controller input and network downloading remain unverified.
+
+### 简体中文
+
+- Windows 和 Linux 现在会在导入游戏资料前检查更新。版本已是最新或无法联网时继续正常流程；无头和后台运行会跳过自动界面。
+- 发现新版本时，带有应用品牌的提示会显示发布说明以及“安装”和“稍后”操作。提示支持键盘和鼠标，手柄输入也接入同一提示；接受后在导入前应用更新并重新启动。下载进度仍使用现有的更新器窗口。
+- Windows 运行时构建、Windows/Linux 更新提示专项测试和修改后的 Linux 语法检查已通过。在线更新接受、实体手柄输入和网络下载仍未验证。
+
+Published at [GitHub Release v0.6.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.1) from `ebd2ef13969a28fcabf26a4eb2dafa9c09ca965d`. Release CI `35374267882` passed the Windows and Linux release jobs and their focused regressions. The Windows ZIP, Linux AppImage and standalone shader pack SHA-256 values are `fb0fdfc823c53515eac300d7596c7bfe98127402ba90476dd093b8c82e80c689`, `5ef83615d4eb16922e51f74ebaf6002aedd51bbb1bb2eb3dd19964a79317b47c` and `387a23b9328b8136847d48b37b574fddd600a526eb837807fbb08b758c6de4d9`; public sidecars returned HTTP 200.
+
+已从 `ebd2ef13969a28fcabf26a4eb2dafa9c09ca965d` 发布到 [GitHub Release v0.6.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.1)。Release CI `35374267882` 的 Windows/Linux 发布任务及两平台定向回归均通过。Windows ZIP、Linux AppImage 和独立 shader pack 的 SHA-256 分别为 `fb0fdfc823c53515eac300d7596c7bfe98127402ba90476dd093b8c82e80c689`、`5ef83615d4eb16922e51f74ebaf6002aedd51bbb1bb2eb3dd19964a79317b47c` 和 `387a23b9328b8136847d48b37b574fddd600a526eb837807fbb08b758c6de4d9`；公开 sidecar 均返回 HTTP 200。
+
+## v0.6.0 — 2026-09-18 / Published / 已发布
+
+### English
+
+- 0.6.0 prerelease audit repairs: atomic multi-object waits, reference-counted
+  kernel handles and non-blocking thread close with independently owned worker state.
+- Retry transient shader/module failures with bounded backoff; preserve permanent
+  negative compilation results. Cancel every eager shader/PSO preparation phase.
+- Preserve presentation resources on allocation/map failure, resolve display
+  transactions, and synchronize backend selection with window policy updates.
+- Compare vertex cache content exactly with a bounded CPU snapshot budget; no
+  per-draw cryptographic hashing. Honor serial overrides and Linux memory limits.
+- Repair the 0.6.0 audit findings in the geometry, benchmark, clock and updater
+  paths: large vertex/index cache hits compare complete source content; the
+  index cache has a 64 MiB payload budget and evicts or bypasses entries under
+  pressure; `tools/drive_city.py --dry-run` is read-only and protects overlapping
+  save paths; guest PPC timebase now uses the same pause-aware high-resolution
+  clock as the active game clock; Linux update apply removes completed staging
+  data and restores the previous AppImage when the replacement cannot `execv`;
+  standalone Windows recovery copies its runner from the helper itself.
+- Harden importer publication: disc resources and `import-info.json` now require
+  successful write, flush and close operations before staged data is published;
+  any finalization failure aborts the transaction without rereading the full
+  resource. Align XDVDFS signature scanning to 2048-byte boundaries and reuse
+  the identity-verified reader during installation while retaining the final
+  identity check. The destination browser can create a uniquely named folder
+  with the button, `F2`, or destination-page controller `Y`, edit its name,
+  enter and select it automatically, and report collisions, permission
+  failures and read-only destinations without starting an import.
+- Share the portable shader runtime contract with the release verifier; pin shader
+  inputs and gate releases on native/portable pack regressions. Guard x86 compiler
+  flags by target architecture. These changes do not certify gameplay or Deck FPS.
+- GPU index conversion cache (`LostOdysseyRecomp/gpu/renderer.cpp`, `LostOdysseyRecomp/gpu/vertex_cache.h`): cache post-expansion indices for large buffers (`count >= 256`) keyed by extent plus conversion parameters and validated against exact source content. The cache now has a bounded 64 MiB payload budget and reports bytes, peaks and evictions. Previous 15W city measurements used sampled matching and do not carry over as performance evidence after the correctness repair; remeasure with the final release binary. Extended `tools/tests/vertex_cache_test.cpp` with key-participation, hit/miss, exact-mutation and bounded-churn checks.
+- Build: `EXPORT_COMPILE_COMMANDS` enabled and `LO_BOLT_READY` retained so Clang builds stay BOLT-ready (`emit-relocs` + line tables, baseline-neutral).
+
+### 简体中文
+
+- 0.6.0预发布审计修复：原子化多对象等待、句柄引用管理及不阻塞的线程句柄关闭。
+- shader暂时失败可退避重试，确定性失败保留负缓存；取消覆盖shader和PSO准备各阶段。
+- 呈现资源分配或映射失败保留旧资源并结束显示事务，同步后端选择与窗口策略。
+- 顶点缓存采用有内存上限的精确内容比较，不增加逐draw加密哈希；修正串行优先级及Linux内存检测。
+- 修复0.6.0审计发现的几何、基准工具、时钟和更新器问题：大顶点／索引缓存命中完整比较源内容；索引缓存增加64 MiB有效载荷上限并在压力下淘汰或绕过；`tools/drive_city.py --dry-run` 改为只读并拒绝重叠存档路径；PPC timebase 与感知暂停的高精度游戏时钟统一；Linux 更新成功后清理暂存，替换后无法 `execv` 时恢复旧 AppImage；Windows 独立恢复使用 helper 自身作为 runner。
+- 加固导入器发布流程：光盘资源与 `import-info.json` 只有在 `write`、`flush`、`close` 均成功后才发布暂存数据；最终写入失败会中止事务，不重复读取全部大文件。XDVDFS 签名扫描改为按 2048 字节边界前进，安装阶段复用已完成身份校验的读取器，同时保留最终身份复核。目标目录页支持通过按钮、`F2` 或目标页手柄 `Y` 创建唯一默认名称的文件夹，创建后自动进入并选中；支持改名，并明确报告重名、权限失败和只读目录，创建不会自动开始导入。
+- 发布工具共享runtime的shader兼容契约，固定输入版本，发布前执行回归；按目标架构限定x86编译参数。
+  本轮改动不代表已经通过游戏全流程或Steam Deck帧率验收。
+- GPU索引转换缓存（`LostOdysseyRecomp/gpu/renderer.cpp`、`LostOdysseyRecomp/gpu/vertex_cache.h`）：对大缓冲（`count >= 256`）按范围和转换参数缓存展开后的索引，并对源内容进行完整比较。缓存增加64 MiB有效载荷上限，超限时淘汰或绕过，并记录字节数、峰值和淘汰次数。此前15W乌斯拉进城数据基于抽样比较，正确性修复后不再作为当前性能证据；应使用最终发布二进制重新测量。`tools/tests/vertex_cache_test.cpp`新增键参与度、命中/失效、完整变异和有界抖动检查。
+- 构建：启用`EXPORT_COMPILE_COMMANDS`，保留`LO_BOLT_READY`使Clang构建持续BOLT就绪（`emit-relocs` + 行号表，基线代价中性）。
+
+## v0.5.20 — 2026-09-17 / Published / 已发布
+
+### English
+
+- Fix Issue #38 inverted/black light fixtures ("anti-lights emitting darkness") in Numara Castle (Philosopher's Chamber):
+  - In `LostOdysseyRecomp/gpu/renderer.cpp` and `LostOdysseyRecomp/gpu/shader/xenos_translator.cpp`, correct the host EDRAM epilogue clamping for unsigned formats (formats 0, 1, 2, 3, 10, 12, including 7e3 `COLOR_2_10_10_10_FLOAT`). Clamping lower bound is now strictly `0.0` for unsigned targets, preventing additive blending passes from accumulating negative light and tone-mapping `log2` from triggering NaNs / black voids.
+  - Bump shader cache `Version` from 22 to 23 in `cache.h` to invalidate stale DXIL binaries.
+- Fix TAA flicker on stairs and save point in `f2358`:
+  - Register missing static scene and lighting vertex shaders (`0x69e9adcf2e1b6887`, `0x6a8c2c78737dc94c`, `0xa20d6099a44e2cd5` to Slot 7 and `0x6761469677f921c6` to Slot 8) in `PositionVPSlot` (`LostOdysseyRecomp/gpu/temporal_scene.h`), eliminating inter-frame phase jitter artifacts.
+- Optimize shader and pipeline prebuilding concurrency and throughput:
+  - Dynamically scale concurrent DXC and pipeline workers based on host physical memory and CPU thread count (`HostWorkerCap`). Hosts with >= 8 GB RAM automatically use `logicalThreads - 1` workers, while low-memory environments (< 8 GB RAM) retain a 4-worker safety cap to prevent OOM.
+  - Support explicit worker concurrency overrides via environment variables `LO_SHADER_WORKERS` and `LO_PIPELINE_WORKERS` (accepting numeric counts, `0`, or `max`).
+  - Eliminate `MOVEFILE_WRITE_THROUGH` forced disk flushes on Windows shader checkpoint saves, allowing OS write-caching to accelerate compilation throughput.
+  - Prioritize primary game and executable shaders ahead of predictive expansion variants during preparation, ensuring essential scene shaders compile first.
+  - Add interactive skip support to the shader preparation screen (press ESC, Space, or Controller B to skip remaining compilation and start the game immediately).
+  - Add `skip_shader_prebuild` configuration setting in `settings.ini` to permanently bypass startup compilation on low-end systems.
+  - Add `tools/release/package_shader_bundle.py` utility to package precompiled startup bundles into release archives for distribution without Git LFS.
+
+- Add portable Vulkan shader pack distribution architecture (`.lospv`):
+  - Introduce independent, read-only `.lospv` distribution artifact for successful SPIR-V binaries and essential `TranslatedShader` metadata, completely stripping HLSL sources, diagnostics, and failure records.
+  - Implement SHA-256 deduplication of SPIR-V bytecode and chunked Zstandard block compression (~1 MiB blocks) with single-block streaming cache, significantly reducing distribution size and startup RSS (169.9 MB package for 28,482 shaders).
+  - Runtime module creation is performed lazily upon first use in rendering, bypassing startup discovery/translation/DXC overhead when a valid pack is present (verified 1.2s startup on WSL Linux with 0 DXC calls).
+  - Decouple compatibility contract from host install path and host DXC DLL/SO SHA-256, allowing portable pack reuse across platforms and CPU architectures (x86-64 / ARM64, Windows / Linux / Steam Deck).
+  - Add `LoShaderPackTool` inspection/verification utility, `tools/build_linux.sh` and `tools/build_wsl.bat` for fast on-demand incremental builds, and update packaging scripts (`package_shader_bundle.py`, `package_release.py`, `package_appimage.py`) to verify and package `.lospv` release assets.
+- Remove PowerPC prebuilt library cache and remote synchronization (`LO_PREBUILT_PPC_DIR`, `ppc_sync.py`, `ppc_prebuilt.py`):
+  - Compile `LostOdysseyRecompLib` guest PowerPC code directly from recompiled source on all platforms (Windows and Linux) in CI and local release builds, eliminating platform-specific static library caching and providing architecture portability for future targets (such as ARM64).
+  - Automatically bundle the portable Vulkan shader pack (`shaders/portable_vk.lospv`) into both Windows portable ZIP and Linux AppImage release artifacts via `tools/release/fetch_shader_pack.py`.
+- Keep extraction and fixed/linked shader sources in bounded memory instead of
+  exporting and re-reading temporary sources during prebuild; retain compiled
+  checkpoints for interrupted-startup recovery.
+- Bind startup bundles to the current runtime/compiler contract, restore event
+  pumping and transactional error propagation, and fix cancellation wakeups.
+- Cap concurrent DXC preparation at four workers, release retained HLSL, and
+  decode only indexed CPX blocks. Preserve explicit diagnostic/full-scan controls.
+- Add game-data-free CPU/sanitizer and production-function regression coverage.
+  See [audit scope, evidence and remaining hardware checks](docs/MENU_SHADER_PREBUILD_AUDIT.md).
+
+
+- Menu branch fixes improve the in-game debug overlay across output resolutions and protect shared overlay state during concurrent access. The software UI now uses the intended RGBA channel order, HID locking covers the complete device operation, and guest pause uses cooperative safe points so overlay interaction does not suspend worker threads indefinitely.
+- Addressed code review report items R1 through R10:
+  - Decoupled host controller input pumping (`PumpHostInput`) and overlay presentation (`PresentHostOverlay`) from guest pause, and added SDL event pumping to GPU `WAIT_REG_MEM` loops (R1, R2).
+  - Replaced atomic wait in `InterruptMain` with `std::condition_variable` and integrated `host_ui::RequestStop()` to guarantee cancellable shutdown without lost wakeups (R5a, R5b).
+  - Implemented pause-aware active game clock (`GetActiveGameTimeMs`) and scene generation tracking for teleport and battle commands, preserving bookmarks and pending states across pauses, and provided accurate asynchronous status feedback in the debug overlay (R3, R9).
+  - Enabled custom settings on Linux via renderer capability check (`LO_GPU_PLUME`), isolated settings buffer caching from debug overlay compositing, guarded mouse click propagation under modal overlays, and corrected straight-alpha source-over blending math (R4, R7, R8, R10).
+  - Migrated `LoDebugMenuInteractionTest` to the host overlay model, covering navigation, state synchronization, and error handling (R6).
+- Addressed third-round code review report items R11 through R17:
+  - Synchronized `g_pixels` buffer, dimensions, and added exact-size validation in `SaveScreenshot` CPU fallback to eliminate out-of-bounds reads during menu presentation (R11).
+  - Deduplicated keyboard navigation between window event pump and host HID polling by removing raw key polling from `PumpHostInput` (R12).
+  - Implemented button release quarantine for overlay close actions (B button and LB+RB chord) to prevent consumed buttons from leaking to underlying settings and game simulation (R13).
+  - Added throttled 16ms host overlay presentation inside GPU `PM4_WAIT_REG_MEM` loops to ensure UI refreshes even when CP waits on paused guest conditions (R14).
+  - Propagated active presentation tickets from `DisplayChangeTracker` in `PresentHostOverlay` to properly resolve display change transactions (R15).
+  - Protected overlay status feedback with minimum display durations so immediate command rejections are not overwritten by stale service snapshots (R16).
+  - Configured platform-appropriate graphics backend choices and graceful manual-restart guidance on non-Windows platforms (R17).
+  - Relocated `LoDebugMenuInteractionTest` into the cross-platform test suite in CMake.
+- Maintained and expanded test suite: `LoHidTest`, `LoHostUiCompositeTest`, `LoDebugOverlayTest`, `LoDebugMenuInteractionTest`, and `LoMenuRenderTest` all built and passed.
+
+### 简体中文
+
+- 修复 Issue #38 努玛拉城哲学者之间（Philosopher's Chamber）黑光灯具问题：
+  - 在 `LostOdysseyRecomp/gpu/renderer.cpp` 与 `LostOdysseyRecomp/gpu/shader/xenos_translator.cpp` 中修正着色器尾声对无符号 EDRAM 格式（格式 0、1、2、3、10、12，含 7e3 格式 `COLOR_2_10_10_10_FLOAT`）的物理范围截断。无符号目标下限严格截断至 `0.0`，杜绝加法光照混合通道写入负数及后续色调映射 `log2(负数)` 扩散至全屏的巨大黑洞。
+  - 将 `cache.h` 中的着色器缓存版本号 `Version` 由 22 提升至 23，自动使磁盘旧版 DXIL 缓存失效。
+- 修复 `f2358` 场景阶梯与保存点光球处的 TAA 抖动闪烁：
+  - 在 `LostOdysseyRecomp/gpu/temporal_scene.h` 的 `PositionVPSlot` 中补充注册遗漏的静态场景与光照顶点着色器（`0x69e9adcf2e1b6887`、`0x6a8c2c78737dc94c`、`0xa20d6099a44e2cd5` 映射至 Slot 7，`0x6761469677f921c6` 映射至 Slot 8），消除帧间相机抖动补偿相位不匹配导致的闪烁。
+- 优化着色器与管线预构建并发编译效率与 I/O 吞吐：
+  - 基于宿主物理内存容量与 CPU 逻辑线程数动态调整 DXC 与管线并发工作线程数（`HostWorkerCap`）。宿主物理内存 >= 8 GB 时自动使用 `logicalThreads - 1` 线程充分发挥多核并发性能，仅在物理内存 < 8 GB 的低内存环境中保留 4 线程安全上限以防 OOM。
+  - 支持通过环境变量 `LO_SHADER_WORKERS` 与 `LO_PIPELINE_WORKERS` 显式指定工作线程数（支持数值、`0` 或 `max` 全核）。
+  - 移除 Windows 单文件着色器落盘时的 `MOVEFILE_WRITE_THROUGH` 物理强行刷盘标志，利用系统写缓冲消除小文件磁头寻道阻塞，显著提升写入吞吐。
+  - 引入着色器预构建优先级排序：核心 XEX 与游戏包体真实着色器（优先级 0）优先编译，预测性展开变体（优先级 1）靠后编译，确保基础画面即时就绪。
+  - 启动预构建界面增加按键跳过支持：按 ESC、空格键或手柄 B 键可随时安全跳过剩余预编译直接进入游戏，已编译内容自动持久化保存。
+  - `settings.ini` 增加 `skip_shader_prebuild` 配置项，方便低配电脑与掌机用户永久绕过全量预编译。
+  - 新增 `tools/release/package_shader_bundle.py` 打包脚本，支持将预编译启动包打入独立 Release 附件分发，避免消耗 Git LFS 配额。
+
+- 新增可分发便携式 Vulkan 着色器包架构（`.lospv`）：
+  - 引入独立、只读的 `.lospv` 分发资产，仅封装成功编译的 SPIR-V 字节码与必要 `TranslatedShader` 元数据，彻底剥离 HLSL 源码、诊断日志与编译失败条目。
+  - 实现 SPIR-V 字节码 SHA-256 精确去重与分块 Zstandard 压缩（约 1 MiB 数据块），采用单块流式解码缓存，大幅压缩分发体积并削减启动 RSS 内存占用（28,482 个着色器压缩至 169.9 MB）。
+  - 运行时着色器模块创建改为按需惰性加载（Lazy loading），存在有效便携包时直接秒级进入游戏并跳过启动阶段全量预编译（WSL Linux 实测 1.2 秒启动，0 次 DXC 调用与重翻译）；遇到未覆盖着色器时保留本地按需编译回退。
+  - 兼容性契约与宿主绝对路径、宿主 DXC 动态库哈希完全解耦，支持跨系统与跨 CPU 架构（Windows / Linux / Steam Deck，x86-64 / ARM64）通用复用。
+  - 提供 `LoShaderPackTool` 检查与完整性校验工具，新增 `tools/build_linux.sh` 与 `tools/build_wsl.bat` 便捷增量构建脚本，并更新打包流程（`package_shader_bundle.py`、`package_release.py`、`package_appimage.py`），支持在发布时按需校验并打包独立的 `.lospv` Release 附件。
+- 移除 PowerPC 预编译静态库缓存与远程同步机制（`LO_PREBUILT_PPC_DIR`、`ppc_sync.py`、`ppc_prebuilt.py`）：
+  - 所有平台（Windows 与 Linux）在 CI 及本地 Release 构建中均统一从重编译源码直接在线编译 `LostOdysseyRecompLib`，彻底消除特定平台的静态库依赖契约，为未来扩展更多硬件架构（如 ARM64）铺平道路。
+  - 发布流程中通过 `tools/release/fetch_shader_pack.py` 自动获取便携式 Vulkan 着色器包，直接内置到 Windows 便携 ZIP 与 Linux AppImage 发布产物中（`shaders/portable_vk.lospv`）。
+- 将解包及固定/链接着色器源码保存在有界内存中，而非在预构建期间导出并重新读取临时源码；保留已编译检查点以供启动中断后恢复。
+- 将启动包绑定到当前运行时/编译器契约，恢复事件泵送与事务性错误传递，并修复取消唤醒机制。
+- 低内存环境下限制 DXC 预处理并发工作线程，释放保留的 HLSL，且仅解码索引后的 CPX 数据块。保留显式诊断/全量扫描控制。
+- 增加脱离游戏数据的 CPU/Sanitizer 以及生产功能回归测试覆盖。详见[审计范围、证据及剩余硬件检查](docs/MENU_SHADER_PREBUILD_AUDIT.md)。
+- menu 分支修复了游戏内调试浮层在不同输出分辨率下的合成，并保护并发访问中的共享浮层状态。软件 UI 现使用正确的 RGBA 通道顺序，HID 锁覆盖完整设备操作，客户机暂停通过协作安全点完成，避免浮层交互无限期挂起工作线程。
+- 完整修复代码审查报告 R1 至 R10 缺陷项：
+  - 将手柄宿主输入泵（`PumpHostInput`）与浮层呈现（`PresentHostOverlay`）与客户机暂停解耦，并在 GPU `WAIT_REG_MEM` 循环中注入事件泵，防止暂停期间卡死（R1, R2）。
+  - 使用 `std::condition_variable` 替换 `InterruptMain` 中的原子变量等待，并在退出流程接入 `host_ui::RequestStop()`，消除漏唤醒并确保可取消销毁（R5a, R5b）。
+  - 引入感知暂停的主动游戏时钟（`GetActiveGameTimeMs`）与场景代数（`sceneGeneration`），防止暂停超时误判失效并保留传送标记与胜负请求；浮层 UI 准确反馈异步命令状态，杜绝虚假成功提示（R3, R9）。
+  - 移除 Linux 设置菜单入口的平台宏限制，改为按渲染器能力启用（`LO_GPU_PLUME`）；拆分独立呈现缓冲隔离设置底图缓存，拦截模态下底层鼠标点击穿透，并修正 `ColorBlend` 的 straight-alpha source-over 混合算法（R4, R7, R8, R10）。
+  - 将废弃的原生窗口测试迁移为浮层交互测试 `LoDebugMenuInteractionTest`，覆盖模态切换、导航、错误反馈及光栅化渲染（R6）。
+- 完整修复第三轮代码审查报告 R11 至 R17 缺陷项：
+  - 同步菜单呈现时的 `g_pixels` 缓冲与元数据，并在 `SaveScreenshot` 的 CPU 回退分支增加严格尺寸一致性校验，根除截图越界读取隐患（R11）。
+  - 去除 `PumpHostInput` 中的按键重复轮询，统一由窗口事件泵处理键盘导航，解决方向与切页键双重触发问题（R12）。
+  - 引入按键释放隔离（Release Quarantine）机制，关闭浮层的 B 键及肩键组合（LB+RB）在物理松开前持续过滤，防止泄漏到底层设置及游戏（R13）。
+  - 在 GPU `PM4_WAIT_REG_MEM` 循环中增加 16ms 节拍的浮层独立呈现，解决等待停滞期间的菜单重绘饥饿问题（R14）。
+  - 浮层呈现接入 `DisplayChangeTracker` 的有效展示凭证（Presentation Ticket），修复暂停期间全屏切换事务挂起缺陷（R15）。
+  - 为浮层命令反馈增加最短保留时间，防止即时拒绝提示被过期的业务快照无条件覆盖（R16）。
+  - 在 Linux 平台上按实际能力展示唯一的 Vulkan 图形后端，并将重启对话框调整为友好的手动重启提示（R17）。
+  - 将 `LoDebugMenuInteractionTest` 测试目标移出 Windows 独占条件，加入跨平台测试套件。
+- 维持并扩充测试套件：`LoHidTest`、`LoHostUiCompositeTest`、`LoDebugOverlayTest`、`LoDebugMenuInteractionTest` 与 `LoMenuRenderTest` 全部重新编译并测试通过。
+
+Published at [GitHub Release v0.5.20](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.20) on 2026-09-17. / 已于 2026-09-17 发布于 [GitHub Release v0.5.20](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.20)。
+
+## Historical development checkpoints / 历史开发检查点
+
+### English
+
+- In-game debug overlay and cross-platform settings rasterizer (unpublished development):
+  - Replace standalone Win32 debug dialog window with cross-platform in-game UI overlay rendered directly via swapchain blending, toggled with keyboard F1 or gamepad shoulder chord LB+RB.
+  - Automatically pause guest simulation while overlay is visible: freeze `KeTimeStampBundle` timestamp advances and pause audio streaming (`apu::SetPaused`), avoiding GPU CP synchronization deadlocks caused by suspended waiting threads.
+  - Full keyboard and gamepad navigation support: D-pad / left stick, A/Enter confirm, B/Escape return, LB/RB/Tab page switching between Overview and Teleport tabs.
+  - Settings menu completely removes Windows GDI dependencies, implementing a pure software 1280x720 cross-platform rasterizer rendered via the GPU swapchain, eliminating high-resolution (4K+) CPU rasterization slowdown and frame drops.
+  - Extract `host_ui` shared module providing software rasterization primitives, pixel buffer blending, and Unifont bitmap font decoding.
+  - Bounded verification: verified on Windows and Linux (RADV Vulkan) native builds with screenshot evidence retained.
+
+- Linux installer, importer, updater, and packaging support (unpublished development):
+  - Retain embedded SDL installer UI (`ShowInstallerUI`) and built-in file browser on Linux without requiring desktop document portal integrations; missing `default.xex` or `--install` invokes host installer.
+  - Add writable user paths via `os/user_paths.h` following XDG conventions (`XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME`) when running in non-portable mode. Support read-only installation layouts, suppress `chdir` into read-only executable directories on Linux, and map Flatpak data directory to `/var/data`. Resolution of `game-path.txt` and default directories uses `ConfigDir`/`DataDir` when `!UsePortableLayout()`.
+  - Add POSIX updater support: POSIX SHA256 (`import_crypto`), libcurl HTTP transport (`posix_http.cpp`), and POSIX startup check (`posix_startup.cpp`) targeting GitHub asset `LostOdysseyRecomp-linux-x64-<tag>.AppImage`. Apply mode executes atomic rename on `$APPIMAGE` followed by `execv`.
+  - In Flatpak environments (`FLATPAK_ID` or `/.flatpak-info`), the updater reports `StartupStatus::ExternalUpdateAvailable`, never writes to `/app`, and prompts users to run `flatpak update io.github.freefrank.LostOdysseyRecomp`.
+  - Add Linux SDL update confirmation and progress UI (`posix_ui.cpp`, `progress_posix.inl`), launching the updater child process via `posix_spawn` with `--apply-plan` and `--wait-process`.
+  - Add Linux packaging specifications under `packaging/linux/`: desktop entry, 256x256 application icon, AppStream metainfo, and source-build Flatpak manifest (`io.github.freefrank.LostOdysseyRecomp.json`, freedesktop 24.08 platform with `filesystem=host`). Add `tools/package_appimage.py` for AppDir layout generation via `linuxdeploy`. CMake configures UNIX install targets with `$ORIGIN` RPATH, linking libcurl on UNIX only.
+  - Add `release-linux` GitHub Actions job on `ubuntu-24.04` in `.github/workflows/release.yml`: compiles PowerPC code from source (`LO_PREBUILT_PPC_DIR` empty, as the Windows prebuilt library is `clang-cl /MT` only) and packages the AppImage. The Windows ZIP release job remains unchanged.
+  - Retained boundaries: first-run HWND settings wizard remains a Win32 dialog with a stubbed `SaveConfig` on Linux; in-game F1 debug menu remains a Win32 stub. No Flathub package submission or Steam Deck sniper container build is claimed.
+  - Focused verification: `LoGamePathTest` PASS, `LoUserPathsTest` PASS, `LoUpdaterPosixSha256Test` compiled cleanly, `LoUpdaterSdlUiTest` covered by worker, `package_appimage.py --dry-layout` ran on Windows. No hosted Linux CI run has completed yet.
+
+- Modernize CPU waiting paths (R3 implementation): introduce `LostOdysseyRecomp/notified_wait.h` providing condition-variable predicate and deadline waits (`notified_wait::For`, `notified_wait::Until`). In `kernel/imports.cpp`, replace 200 µs polling loops for finite Event, Semaphore, and Mutant waits with condition-variable waits while preserving consume, recursive ownership, and timeout semantics. In `gpu/command_processor.{h,cpp}`, notify on write-pointer updates and shutdown, replacing the 200-iteration yield loop in `WorkerMain` with a bounded 500 µs condition-variable wait while preserving SDL event pumping. Add direct fixture `LoNotifiedWaitTest` (`tools/tests/notified_wait_test.cpp`).
+- CPU waiting-path verification: Windows `LoNotifiedWaitTest` passed pre-notify, early wake, deadline, and CP-pointer wake cases; `LoPollWaitTest` passed; full Windows target compiled; diff check passed; native Linux build and codegen passed with maintained dependency patches. A 15 W native Vulkan run on AMD Radeon 8060S (STAPM 15 W / Fast 25 W / Slow 20 W) created/resized a 1280x720 swapchain, started guest execution, completed 28,484 startup shaders at allowed 60 W (28,482 ready, 2 deterministic failures), consumed the startup bundle, and ran 90 seconds without error. Target was 60 FPS: earlier stable windows observed around 58.46–58.58 FPS, and a later heavier scene ran around 37–40 FPS (do not claim locked 60 FPS). No player visual acceptance, push, or release exists.
+- Unify content importer and updater into the single `LostOdysseyRecomp.exe` runtime binary; exclude separate `InstallGame.exe` and `LostOdysseyUpdater.exe` helper executables from the release payload while retaining the legacy updater build target for fixtures. Packaging now distributes only `LostOdysseyRecomp.exe`, DXC libraries, licenses and manifests.
+- Remove the Python/Tk `tools/installer` sources, their fixture tests and `test-importer.yml`. Release CI now reads the Disc 1 XEX SHA-256 from `LostOdysseyRecomp/install/import_game.cpp`. Current importer coverage is `LoImportGameTest` and `LoInstallerControllerTest`.
+- Update embedded SDL installer controller and UI to support mixed disc and DLC discovery and import (`ScanContent`/`InstallContent`), transactional staging, cancellable background scanning and import, preserved game paths for DLC-only runs, and partial-disc preservation on DLC failure. Add game-style brushed steel UI styling, graphic folder/file icons, centered selection bar, and precise UTF-8 width-measured text truncation with CJK glyph rendering.
+- Installer navigation and D-pad icon updates: Review screen action buttons now navigate Left/Right only, with Up/Down leaving selection unchanged; a cached 32x32 transparent dark-cross D-pad bitmap icon with pale triangular arrows replaces the text PAD label in source, destination, and review footers; controller left stick maps SDL `LEFTX`/`LEFTY` motion to directional navigation using strongest-axis resolution with deadzone 16000 and held-threshold 10000, initial 350 ms delay and 120 ms repeat rate, window focus and worker-busy guards, and controller device hotplug handling.
+- Installer UI follow-up fixes: read import errors from destination `InstallResult` objects, allow Escape/B during scan to request cancellation and immediately return to the source browser (late successful scans intentionally not auto-transitioned), convert and width-clip review paths via UTF-8, and clip DLC names to avoid overwriting the Files column. Real keyboard navigation in the source browser, a scan of 4 Asia GOD discs and 3 DLC packages (`out/installer-god-review-fixed.png`), and custom destination picker opening (`out/installer-destination.png`) were verified on local sources without copy/import or source modifications; read-only Oracle review confirmed no regressions under the cancellation contract.
+- Navigation verification: Windows main build and installer controller tests passed (`LoInstallerControllerTest`), with 14 explicit axis mapper checks. Keyboard navigation verified Left/Right clamping between Start import and Change source, no Up/Down selection changes, and Right + Enter from Start import opening Change destination. Six `out/navigation-*.png` captures record the states; independent visual review of five captures passed within that scope. Real stick hardware and full UI acceptance remain unverified.
+- Fixed discovery and transactional import of extracted DLC directories containing `.lo-content`, `.lo-dlc-header`, and `.lo-dlc.json`. Validate identity, safe manifest paths, sizes and payload hashes, preserve sidecars, reject overlapping destinations, and keep identical imports unchanged. The extracted-DLC-only fixture imported and byte-compared all three real packages in temporary storage and passed duplicate, invalid-source and mid-copy cancellation checks. Live installer review now shows four discs and three Ready DLC entries for the supplied extracted game directory (`out/extracted-dlc-review.png`); originals were not modified.
+- Update main executable startup to check and prompt for updates before game initialization using lightweight settings preferences (`automatic_updates` and `ui_language` without altering edition game language), parse English/Chinese release notes from GitHub Release bodies with consent dialog before download, run updates from a private copy of the main binary in `--apply-plan` mode, and auto-restart after update when requested.
+- 2026-09-16 installer/updater audit fixes (unpublished development): require successful STFS DLC payload and sidecar I/O before publishing an import; clear stale scan selections and block failed or empty scans, and clear cancellation state on retry; parse Windows `--apply-plan` as an independent argument; resolve Linux `ProfileDir` under the XDG data directory while retaining `LO_PROFILE_DIR` and handling directory-creation failure without throwing; exclude `libwayland*` during linuxdeploy dependency deployment before AppImage output generation; and fix extracted-DLC trailing-separator ancestor traversal with cancellation support.
+- The user accepted this development batch for commit. Repeated focused verification passed with exit 0: `LoInstallerControllerTest`, `LoUpdaterApplyArgumentsTest` (8 checks), `LoImportGameTest --dlc-io`, and the AppImage script checks (3/3). The Windows `LoUserPathsTest` cannot cover Linux behavior; the separate WSL Manjaro fixture already passed portable, XDG, changed-CWD, `LO_PROFILE_DIR` override and Flatpak paths. The Windows main target incremental build also completed successfully; existing deprecated compiler warnings remain.
+- Non-blocking follow-up: add a root guard for the `ExistingDlcPayloadMatches` ancestor walk (the only current caller generates `dest/dlc/<hexID>`, so trailing-slash reachability is unconfirmed), and add explicit close-result coverage for extracted DLC. No repeated-import hang is established.
+- Acceptance is limited to this development batch and its focused checks: no real AppImage package, live network or in-place update, complete interactive game import, or full-game playthrough has been performed; no release has been published.
+- Importer POSIX lock and process-id compatibility fixes pass Linux WSL synthetic tests (`LoImportGameTest`). Windows updater startup/restart tests pass (`LoUpdaterTest --startup-restart`, `LoUpdaterStartupOrderTest`). Configured Windows main build passed after final changes; prior tests were reused.
+- Bounded verification only: real network update downloads, in-place installed-game binary replacement, full live import completion in UI, and full-game play remain unverified. Game visual fidelity, actual controller hardware acceptance, and full UI visual acceptance are NOT established. AppImage is not packaged, macOS is untested, and the POSIX updater path has not had a live update run. Importer POSIX file locking is fixed, but general Linux game compatibility is not established.
+
+- Prior installer migration checkpoint: Folder/XEX, XDVDFS ISO, GOD and STFS DLC discovery, portable hashing, edition-aware identity checks, transactional disc staging/rollback, and self-drawn SDL2 host UI. Focused synthetic transaction/cancellation/mixed-edition/DLC checks passed; prior audited read-only scans (USA ISO, Asia GOD+DLC, Asia folders) are retained as bounded evidence, not release or cross-platform acceptance.
+- The first playable Linux Vulkan-only, unbundled ELF path remains a source-built path (`linux-clang` preset on WSL2 Manjaro with Mesa Dozen Vulkan-on-D3D12); no Linux package is published.
 - Deploy the GitHub Issue triage workflow update at `600b08e` with authorized human `@codex` comment requests, per-comment deduplication, recent human discussion and bounded first-party code retrieval. Nineteen triage/mention checks and seven retrieval checks pass; a real public `@codex` reply remains to be observed.
 
 ### 简体中文
 
-- 增加首个可玩的 Linux Vulkan-only 未打包 ELF 路径。`linux-clang` CMake preset 直接编译生成的 PowerPC 源码，通过 Linux DXC 路径加载 `libdxcompiler.so`，使用 SDL Vulkan presentation，并支持将安装根目录、`disc1` 或 `default.xex` 作为显式 `--game` 候选。
-- 首可玩路径已在本地 WSL2 Manjaro 的 Mesa Dozen Vulkan-on-D3D12 环境中由用户观看窗口并在用户关闭后正常退出。该结果不代表原生 Linux GPU、全游戏、Steam Deck、安装包、安装器或已发布版本验收；目前没有发布 Linux 包。
+- 游戏内调试浮层与跨平台设置菜单光栅化（未发布开发内容）：
+  - 调试菜单从独立 Win32 窗口改为通过交换链混合渲染的跨平台游戏内 UI 浮层（Overlay），支持键盘 F1 与手柄双肩键组合（LB+RB 同时按下）随时呼出与隐藏。
+  - 菜单呼出时自动暂停客户机模拟：冻结 `KeTimeStampBundle` 时间戳递增并暂停音频流（`apu::SetPaused`），避免挂起等待线程导致的 GPU CP 同步死锁。
+  - 支持全功能键盘及手柄导航：十字键／左摇杆导航、A/Enter 确认、B/Esc 返回、LB/RB/Tab 切换 Overview 与 Teleport 分页。
+  - 设置菜单彻底去除 Windows GDI 依赖，实现纯软件 1280x720 跨平台光栅化，并经由 GPU 交换链呈现，解决 4K 等高分辨率 CPU 渲染导致的菜单卡顿与掉帧。
+  - 提取 `host_ui` 共享模块，共用纯 CPU 光栅化基础原语、像素缓冲区混合与 Unifont 点阵字体解码。
+  - 定向验证：在 Windows 与 Linux（RADV Vulkan）原生构建下验证通过，并保留实机截图证据。
+
+- Linux 安装器、导入器、更新器与打包支持（未发布开发内容）：
+  - Linux 保留内置 SDL 安装器界面（`ShowInstallerUI`）和内建文件浏览器，无需依赖桌面文档门户（portal）；缺少 `default.xex` 或指定 `--install` 时启动宿主安装器。
+  - 增加通过 `os/user_paths.h` 管理的写入路径：在非便携模式下遵循 XDG 规范（`XDG_CONFIG_HOME`、`XDG_DATA_HOME`、`XDG_STATE_HOME`）。识别只读安装目录并在 Linux 下避免切换工作目录至只读可执行文件路径；Flatpak 数据目录映射到 `/var/data`。在 `!UsePortableLayout()` 时，`game-path.txt` 与默认游戏路径解析改用 `ConfigDir`/`DataDir`。
+  - 增加 POSIX 更新器支持：实现 POSIX SHA256（`import_crypto`）、libcurl HTTP 传输（`posix_http.cpp`）与 POSIX 启动检查（`posix_startup.cpp`），对应 GitHub 资源 `LostOdysseyRecomp-linux-x64-<tag>.AppImage`。更新应用模式在 Linux 下重命名 `$APPIMAGE` 后调用 `execv`。
+  - 在 Flatpak 环境下（检测 `FLATPAK_ID` 或 `/.flatpak-info`），更新器返回 `StartupStatus::ExternalUpdateAvailable`，不写入 `/app`，并提示运行 `flatpak update io.github.freefrank.LostOdysseyRecomp`。
+  - 增加 Linux SDL 更新确认及下载进度界面（`posix_ui.cpp`、`progress_posix.inl`）；在 `main.cpp` 中通过 `posix_spawn` 携带 `--apply-plan` 与 `--wait-process` 启动更新器子进程。
+  - 添加 `packaging/linux/` 下的 Linux 打包定义：桌面启动文件、256x256 图标、AppStream metainfo 与源码构建 Flatpak 清单（`io.github.freefrank.LostOdysseyRecomp.json`，基于 freedesktop 24.08 运行时，赋予 `filesystem=host`）。增加 `tools/package_appimage.py`，使用 `linuxdeploy` 生成 AppDir 布局。CMake 增加 UNIX 安装目标及 `$ORIGIN` RPATH，且仅在 UNIX 下链接 libcurl。
+  - 在 `.github/workflows/release.yml` 中新增 `ubuntu-24.04` 上的 `release-linux` GitHub Actions 任务：从源码直接生成并编译 PowerPC 代码（`LO_PREBUILT_PPC_DIR` 留空，因 Windows 预编译 `.lib` 仅支持 `clang-cl /MT`），并打包 AppImage。原 Windows ZIP 发布流程保持不变。
+  - 保留的平台边界：首次运行 HWND 设置向导在 Linux 下仍为 stub 化的 `SaveConfig`；游戏内 F1 调试菜单在 Linux 下仍为 Win32 stub。未提交至 Flathub，未打包 Steam Deck 原生 sniper 运行时版本。
+  - 定向验证：`LoGamePathTest` 通过，`LoUserPathsTest` 通过，`LoUpdaterPosixSha256Test` 编译通过，`LoUpdaterSdlUiTest` 覆盖通过，Windows 上成功执行 `package_appimage.py --dry-layout`。新增的托管 Linux CI 任务尚未实际运行。
+
+- 现代化 CPU 等待路径（R3 实现）：引入 `LostOdysseyRecomp/notified_wait.h`，提供条件变量谓词与截止期等待工具（`notified_wait::For`、`notified_wait::Until`）。在 `kernel/imports.cpp` 中，将 Event、Semaphore 和 Mutant 有限超时等待中的 200 µs 轮询循环替换为条件变量等待，同时保留原有的消费、递归所有权与超时语义。在 `gpu/command_processor.{h,cpp}` 中，在写指针更新与关闭时触发通知，将 `WorkerMain` 中的 200 次 yield 循环替换为带 500 µs 上限的条件变量等待，并保留 SDL 窗口事件轮询（`video::PumpEvents()`）。增加直接测试夹具 `LoNotifiedWaitTest`（`tools/tests/notified_wait_test.cpp`）。
+- CPU 等待路径验证：Windows `LoNotifiedWaitTest` 预通知、提前唤醒、截止期超时和 CP 写指针唤醒用例全部通过；`LoPollWaitTest` 回归测试通过；完整 Windows 目标成功编译；diff 校验通过；依赖补丁应用后原生 Linux 构建与代码生成通过。AMD Radeon 8060S 上进行的 15 W 原生 Vulkan 实机运行（STAPM 15 W / Fast 25 W / Slow 20 W）创建并调整 1280x720 swapchain，启动 guest 运行，在允许的 60 W 功耗下完成 28,484 个已知 shader 的准备（28,482 就绪，2 个确定性失败），消费启动包，并持续运行 90 秒无错误或致命诊断。目标帧率为 60 FPS：前期稳定区间约 58.46–58.58 FPS，后期复杂场景约 37–40 FPS（不宣称锁定 60 FPS）。未进行玩家视觉验收，未执行提交、推送或发布。
+- 将内容导入器与更新器整合至单个 `LostOdysseyRecomp.exe` 运行时主二进制中；发布打包中排除独立的 `InstallGame.exe` 与 `LostOdysseyUpdater.exe` 辅助可执行文件，同时保留旧版更新器编译目标供测试夹具使用。发布打包现仅分发 `LostOdysseyRecomp.exe`、DXC 运行库、许可证及校验清单。
+- 删除 Python/Tk `tools/installer` 源码、对应 fixture 测试和 `test-importer.yml`。Release CI 现从 `LostOdysseyRecomp/install/import_game.cpp` 读取 Disc 1 XEX SHA-256。当前导入器覆盖为 `LoImportGameTest` 与 `LoInstallerControllerTest`。
+- 更新内置 SDL 安装器控制器与界面：支持光盘与 DLC 混合发现及安装（`ScanContent`/`InstallContent`）、事务式暂存、后台可取消的扫描与导入、纯 DLC 导入时不覆盖已有游戏路径、DLC 出错时保留已完成的光盘路径。增加游戏风格的拉丝钢质界面样式、图形化文件夹／文件图标、垂直居中选择条，以及基于 UTF-8 字符宽度精确测量的文本省略截断与 CJK 字符渲染。
+- 安装器导航与十字键图标更新：确认界面操作按钮现仅支持左／右键切换选择，上／下键保持当前选择不变；源路径、目标路径及确认界面底部以 32x32 缓存的透明黑十字带浅色三角箭头 D-pad 位图图标替代文本 PAD 提示；手柄左摇杆通过 SDL `LEFTX`/`LEFTY` 轴移动映射到方向导航，采用主轴强度判定，死区为 16000、持续触发阈值为 10000，初始延迟 350 ms、重复间隔 120 ms，并具备窗口焦点与工作线程忙碌保护及手柄热插拔支持。
+- 安装器 UI 后续修复：从目标 `InstallResult` 对象读取导入错误；扫描中按 Escape/B 请求取消并立即返回源路径浏览（延迟扫描完成故意不自动跳转）；确认界面路径经 UTF-8 转换并按宽度裁剪；DLC 显示名称按 168 像素宽度裁剪以避免覆盖文件数列。在本地真实源上验证了真实键盘在源路径浏览中的导航、4 张亚洲版 GOD 光盘与 3 个 DLC 的扫描（`out/installer-god-review-fixed.png`）以及自定义目标选择器的打开（`out/installer-destination.png`），未执行实际复制／导入或修改原始源文件；只读 Oracle 审阅确认取消契约下无回归问题。
+- 导航验证：Windows 主程序编译与 `LoInstallerControllerTest` 通过，包含 14 项显式轴映射检查。实机键盘验证左／右键在 Start import 与 Change source 间切换并限制边界，上／下键不改变选择，从 Start import 按右键加 Enter 打开 Change destination。六张 `out/navigation-*.png` 记录状态，独立视觉审阅五张截图在限定范围内通过。真实摇杆硬件与完整 UI 验收仍未完成。
+- 修复带 `.lo-content`、`.lo-dlc-header`、`.lo-dlc.json` 的已解包 DLC 目录识别及事务式导入。校验身份、清单路径、大小与内容哈希，保留 sidecar，拒绝源目标重叠，相同内容重复导入保持不变。独立 DLC 检查在临时目录导入并逐字节比对三个真实包，重复导入、无效源和中途取消检查通过。主程序扫描所提供的解包游戏目录现显示四张光盘与三个 Ready DLC（`out/extracted-dlc-review.png`），原目录未修改。
+- 更新主程序启动流程：在游戏初始化前使用轻量设置项（`automatic_updates` 和 `ui_language`，不改变版本游戏语言）检查并提示更新；从 GitHub Release 正文解析中英文更新日志并在下载前弹出确认框；使用主二进制私有副本以 `--apply-plan`模式执行更新，并在应用后按计划自动重启。
+- 2026-09-16 安装器／更新器审计修复（未发布开发内容）：要求 STFS DLC payload 和 sidecar 的 I/O 成功后才发布导入；清理过期扫描选择并阻止失败或空扫描导入，重试时清除取消状态；将 Windows `--apply-plan` 按独立参数解析；在保留 `LO_PROFILE_DIR` 的同时将 Linux `ProfileDir` 固定到 XDG data 目录，并处理目录创建失败而不抛出异常；在 linuxdeploy 依赖部署阶段排除 `libwayland*`，在生成 AppImage 输出前完成；修复已解包 DLC 尾部分隔符导致的祖先遍历死循环，并支持取消。
+- 用户已接受本开发批次进入 commit 流程。定向验证复跑均以 exit 0 通过：`LoInstallerControllerTest`、`LoUpdaterApplyArgumentsTest`（8 项）、`LoImportGameTest --dlc-io` 和 AppImage 脚本检查（3/3）。Windows `LoUserPathsTest` 无法覆盖 Linux 行为；独立的 WSL Manjaro fixture 已通过 portable、XDG、切换 CWD、`LO_PROFILE_DIR` override 和 Flatpak 路径。Windows 主目标增量构建也已成功完成，仍有既存弃用编译警告。
+- 非阻塞后续：为 `ExistingDlcPayloadMatches` 祖先遍历增加 root guard（当前唯一调用方生成 `dest/dlc/<hexID>`，尾斜杠是否可达尚未证实），并增加 extracted DLC 的显式 close 结果覆盖。没有证据证明重复导入会死循环。
+- 验收仅覆盖本开发批次及定向检查：未执行真实 AppImage 封包、在线或原地更新、UI 完整真实导入或全游戏流程；没有发布版本。
+- 导入器 POSIX 文件锁与进程 ID 兼容性修复已通过 Linux WSL 合成测试（`LoImportGameTest`）。Windows 更新器启动与重启测试已通过（`LoUpdaterTest --startup-restart`、`LoUpdaterStartupOrderTest`）。配置的 Windows 主程序在最终改动后已通过编译；复用既有测试，未重复运行。
+- 仅限有界验证：真实网络更新下载、现场替换运行中的游戏二进制、UI 中完整执行真实导入以及全游戏游玩仍未验证。游戏画面还原度、真实手柄硬件验收以及整套 UI 视觉验收尚未确立。未打包 AppImage，macOS 未测试，POSIX 更新器路径尚未进行真实更新运行。导入器 POSIX 文件锁已修复，但不代表全平台游戏可用。
+
+- 先前安装器迁移检查点：Folder/XEX、XDVDFS ISO、GOD 和 STFS DLC 扫描、可移植哈希、版本对应的身份校验、事务式暂存／回滚，以及自绘 SDL2 宿主界面。定向合成事务／取消／混合版本／DLC 检查已通过；先前已审计的只读扫描（美版 ISO、亚洲 GOD+DLC、亚洲文件夹）作为有界证据保留，不代表发布或跨平台验收。
+- 首个可玩的 Linux Vulkan-only 未打包 ELF 路径仍为源码构建路径（WSL2 Manjaro + Mesa Dozen Vulkan-on-D3D12）；目前没有发布 Linux 包。
 - 已在 `600b08e` 部署 GitHub Issue triage workflow 更新，支持授权协作者的 `@codex` 评论请求、按评论去重、最近人类讨论和有界的 first-party 代码检索。19 项 triage/mention 检查及 7 项 retrieval 检查已通过；首次公开 `@codex` 回复仍待观察。
+
+## v0.5.14 — 2026-09-16 / Published / 已发布
+
+### English
+
+- The main binary now provides the installer and updater in one place, with safer DLC import failure handling, reliable scan and retry behavior, exact apply-mode argument handling, Linux XDG profile paths, extracted-DLC trailing-separator scanning, and AppImage dependency filtering.
+- Linux x64 AppImage is available alongside the Windows x64 ZIP, with the embedded installer/updater and XDG user data paths. AppImage gameplay and in-place updating remain unverified; complete Steam Deck compatibility is not established.
+- CPU waiting paths now use condition-variable notifications in place of the former polling loops. Focused verification is retained in the historical development record.
+- Real network updates, AppImage gameplay or update runs, complete UI import, and full-game validation remain unverified.
+
+The published Linux AppImage had a packaging correction after a user launch exposed `execv` `ENOENT`: the original published package lacked `AppRun` because its desktop entry was placed at the AppDir root. `tools/package_appimage.py` now deploys metadata explicitly, uses two packaging stages, and checks the internal executable before output. The corrected Linux asset and checksum are published (SHA-256 `0991df9aca8e930fa8eacbd8afe99b7a3a81e940dfa740fcfbdba34cd54c4d0a`), with an anonymous download verified. The runtime and library bytes are unchanged; this correction does not claim gameplay or live-update validation.
+
+### 简体中文
+
+- 已替换缺少 `AppRun` 入口的 Linux AppImage 和校验文件，修复启动时的 `execv` 报错。原主程序与库内容不变；5/5 打包回归通过，WSL 已验证进入主程序，未追加游戏或在线更新验证。
+
+- 主二进制现已统一提供安装器与更新器，并改进 DLC 导入失败处理、扫描与重试行为、apply 模式参数解析、Linux XDG profile 路径、已解包 DLC 尾部分隔符扫描和 AppImage 依赖过滤。
+- 同时提供 Windows x64 ZIP 和 Linux x64 AppImage，包含内嵌安装器／更新器与 XDG 用户数据路径。AppImage 游戏运行和原地更新仍未验证，完整 Steam Deck 兼容性尚未确立。
+- CPU 等待路径使用条件变量通知替代原有轮询循环，定向验证保留在历史开发记录中。
+- 真实在线更新、AppImage 游戏或更新运行、UI 完整导入和全游戏验证仍未核验。
+
+Published at [GitHub Release v0.5.14](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.14) on 2026-09-16T07:18:53Z from source/tag commit `caf8060d99e5f1e52aec9d545331efe59e0c01e8`. Release CI `35065717899` succeeded. The Windows ZIP is 32,915,456 bytes with SHA-256 `c21224ed985ada3502e25b42dd9e9379cb95749b0f06cea6d838f4d60843c09d`; the Linux AppImage is 43,162,104 bytes with SHA-256 `a9912d2a258f17a2fea1a4d7f99c9589b538e66efd25225b1ade74af606e6196`. The 47-file Windows manifest and Linux format/sidecar checks passed; anonymous downloads of all four public assets matched their recorded bytes and hashes. Publication does not claim packaged gameplay or live update validation.
 
 ## v0.5.13 — 2026-09-14 / Published / 已发布
 
@@ -39,16 +703,16 @@ Published at [GitHub Release v0.5.13](https://github.com/freefrank/LostOdysseyRe
 ### English
 
 - Fix USA/Europe FMV and event subtitle language mapping. The `82481BE8` hook now returns the original executable language-table pointer for host `GameLanguage()` IDs 1–9, preserving the existing Simplified Chinese repair. Callers that pre-filter with `r4=0` can resolve INT/JPN/DEU/FRA/SPA/ITA suffixes instead of aliasing to the ID-0 English record. Issue [#27](https://github.com/freefrank/LostOdysseyRecomp/issues/27).
-- A local USA/Europe Spanish opening-FMV check passed on 2026-09-14 with `game_language=5` and Vulkan at 3840×2160. German, French and Italian FMV visuals, complete event coverage and whole-game validation remain unverified.
+- A local USA/Europe Spanish opening-FMV check passed on 2026-09-14 with `game_language=5` and Vulkan at 3840×2160. On 2026-09-15 the original reporter confirmed Spanish opening FMV subtitles on v0.5.12 (Vulkan and Direct3D 12), and DE/FR/IT FMV coverage was confirmed. Complete event coverage and whole-game validation remain unverified. Issue [#27](https://github.com/freefrank/LostOdysseyRecomp/issues/27) is closed.
 
-Published at [GitHub Release v0.5.12](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.12) on 2026-09-14T21:34:13Z. Release CI [34895591364](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34895591364) succeeded for source/tag commit `36e574b64e0cbb11ddcdc7f68cbc36214b5c084f` after the PPC cache was synchronized. CI used the prebuilt PPC artifact from `LostOdysseyRecomp-build-inputs`, not `rebuild_ppc`; cache key `cb4a75c2d3fa6e3d5f92e3431e7006f77fd7927dd97f05d27eb488ea4cf87e44` came from private commit `5df5b6efb38537386f6c9522ae9126d800032559`. The Windows ZIP is 44,304,445 bytes with SHA-256 `7cc99618cee509bdea000b736772344de60279f4a439a4f876cc7d49d4c8e60a`; the runtime is 83,536,384 bytes with SHA-256 `d394c173cfa8ecc6ea57c1b9671a1a574ae02d2cd4bb76008392caca66686974`; the updater is 846,336 bytes with SHA-256 `36787c2314d9d554010193a4f020eb8d1a848292920e40af3bb7fb44f1a3893e`. The ZIP hash matches its sidecar, and both public ZIP and `.sha256` downloads returned HTTP 302 to GitHub release assets. Issue [#27](https://github.com/freefrank/LostOdysseyRecomp/issues/27) remains open pending reporter confirmation. Publication checks do not claim 50-file manifest re-verification, German/French/Italian FMV visuals, whole-game validation or reporter acceptance.
+Published at [GitHub Release v0.5.12](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.12) on 2026-09-14T21:34:13Z. Release CI [34895591364](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34895591364) succeeded for source/tag commit `36e574b64e0cbb11ddcdc7f68cbc36214b5c084f` after the PPC cache was synchronized. CI used the prebuilt PPC artifact from `LostOdysseyRecomp-build-inputs`, not `rebuild_ppc`; cache key `cb4a75c2d3fa6e3d5f92e3431e7006f77fd7927dd97f05d27eb488ea4cf87e44` came from private commit `5df5b6efb38537386f6c9522ae9126d800032559`. The Windows ZIP is 44,304,445 bytes with SHA-256 `7cc99618cee509bdea000b736772344de60279f4a439a4f876cc7d49d4c8e60a`; the runtime is 83,536,384 bytes with SHA-256 `d394c173cfa8ecc6ea57c1b9671a1a574ae02d2cd4bb76008392caca66686974`; the updater is 846,336 bytes with SHA-256 `36787c2314d9d554010193a4f020eb8d1a848292920e40af3bb7fb44f1a3893e`. The ZIP hash matches its sidecar, and both public ZIP and `.sha256` downloads returned HTTP 302 to GitHub release assets. Issue [#27](https://github.com/freefrank/LostOdysseyRecomp/issues/27) is closed after reporter Spanish confirmation and lead DE/FR/IT FMV confirmation on 2026-09-15. Publication checks do not claim 50-file manifest re-verification or whole-game validation.
 
 ### 简体中文
 
 - 修复 USA/Europe FMV／事件字幕语言映射。`82481BE8` hook 现在会为宿主 `GameLanguage()` ID 1–9 返回原可执行文件语言表指针，并保留既有简体中文修复。调用方以 `r4=0` 预筛选时，可解析 INT/JPN/DEU/FRA/SPA/ITA 后缀，而不再别名到 ID-0 英文记录。[#27](https://github.com/freefrank/LostOdysseyRecomp/issues/27)。
-- 2026-09-14 本地 USA/Europe 西班牙语开场 FMV 检查通过，`game_language=5`，Vulkan 3840×2160。德语、法语、意大利语 FMV 画面、完整事件覆盖和全游戏验证仍未核验。
+- 2026-09-14 本地 USA/Europe 西班牙语开场 FMV 检查通过，`game_language=5`，Vulkan 3840×2160。2026-09-15 原报告者确认 v0.5.12 西班牙语开场 FMV 字幕（Vulkan 与 Direct3D 12），德语、法语、意大利语 FMV 覆盖亦已确认。完整事件覆盖和全游戏验证仍未核验。Issue [#27](https://github.com/freefrank/LostOdysseyRecomp/issues/27) 已关闭。
 
-已于 2026-09-14T21:34:13Z 发布 [GitHub Release v0.5.12](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.12)。Release CI [34895591364](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34895591364) 使用源码／标签提交 `36e574b64e0cbb11ddcdc7f68cbc36214b5c084f` 成功；PPC 使用 `LostOdysseyRecomp-build-inputs` 中的预编译缓存，而非 `rebuild_ppc`。缓存 key 为 `cb4a75c2d3fa6e3d5f92e3431e7006f77fd7927dd97f05d27eb488ea4cf87e44`，来自私有提交 `5df5b6efb38537386f6c9522ae9126d800032559`。Windows ZIP 大小为 44,304,445 字节，SHA-256 为 `7cc99618cee509bdea000b736772344de60279f4a439a4f876cc7d49d4c8e60a`；runtime 为 83,536,384 字节，SHA-256 为 `d394c173cfa8ecc6ea57c1b9671a1a574ae02d2cd4bb76008392caca66686974`；updater 为 846,336 字节，SHA-256 为 `36787c2314d9d554010193a4f020eb8d1a848292920e40af3bb7fb44f1a3893e`。ZIP 哈希与 sidecar 一致，ZIP 和 `.sha256` 两个公开下载均返回 HTTP 302 到 GitHub release-assets。Issue [#27](https://github.com/freefrank/LostOdysseyRecomp/issues/27) 仍开放，等待报告者确认。发布检查不宣称重新核对 50 文件 manifest、德／法／意 FMV 画面、全游戏验证或报告者验收。
+已于 2026-09-14T21:34:13Z 发布 [GitHub Release v0.5.12](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.12)。Release CI [34895591364](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34895591364) 使用源码／标签提交 `36e574b64e0cbb11ddcdc7f68cbc36214b5c084f` 成功；PPC 使用 `LostOdysseyRecomp-build-inputs` 中的预编译缓存，而非 `rebuild_ppc`。缓存 key 为 `cb4a75c2d3fa6e3d5f92e3431e7006f77fd7927dd97f05d27eb488ea4cf87e44`，来自私有提交 `5df5b6efb38537386f6c9522ae9126d800032559`。Windows ZIP 大小为 44,304,445 字节，SHA-256 为 `7cc99618cee509bdea000b736772344de60279f4a439a4f876cc7d49d4c8e60a`；runtime 为 83,536,384 字节，SHA-256 为 `d394c173cfa8ecc6ea57c1b9671a1a574ae02d2cd4bb76008392caca66686974`；updater 为 846,336 字节，SHA-256 为 `36787c2314d9d554010193a4f020eb8d1a848292920e40af3bb7fb44f1a3893e`。ZIP 哈希与 sidecar 一致，ZIP 和 `.sha256` 两个公开下载均返回 HTTP 302 到 GitHub release-assets。Issue [#27](https://github.com/freefrank/LostOdysseyRecomp/issues/27) 已于 2026-09-15 关闭（报告者确认西班牙语，维护者确认德／法／意 FMV）。发布检查不宣称重新核对 50 文件 manifest 或全游戏验证。
 
 ## v0.5.11 — 2026-09-14 / Published / 已发布
 

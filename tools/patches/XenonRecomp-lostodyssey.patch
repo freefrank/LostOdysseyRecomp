@@ -686,13 +686,13 @@ index 31a86cd3e970c0ceebbcd94a9c06137ad817e1ea..b573187aa282a65209d206f7e44f3f5b
 
 +// LostOdysseyRecomp: guest timebase (mftb). The Xbox 360 timebase runs at
 +// 49.875 MHz and titles divide mftb deltas by KeQueryPerformanceFrequency, so
-+// the two must agree; derive it from the host monotonic clock instead of the
-+// host TSC (which ticks ~70x faster and made the game run at that speed).
++// the two must agree. The runtime supplies a pause-aware monotonic clock;
++// using the host TSC made the game run about 70x faster.
 +#define PPC_TIMEBASE_FREQUENCY 49875000ull
++uint64_t LostOdysseyActiveGameTimeNs();
 +inline uint64_t PPCTimeBase()
 +{
-+    const auto now = std::chrono::steady_clock::now().time_since_epoch();
-+    const auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
++    const uint64_t ns = LostOdysseyActiveGameTimeNs();
 +    return uint64_t(ns / 1000000000) * PPC_TIMEBASE_FREQUENCY +
 +           (uint64_t(ns % 1000000000) * PPC_TIMEBASE_FREQUENCY) / 1000000000ull;
 +}

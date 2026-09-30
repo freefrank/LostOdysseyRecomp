@@ -17,7 +17,7 @@
 namespace xenos::startup_cache {
 namespace fs = std::filesystem;
 using Digest = resources::Sha256Digest;
-inline constexpr uint32_t Schema = 1;
+inline constexpr uint32_t Schema = 2;
 inline constexpr uint32_t MaxRecords = 100000;
 inline constexpr uint32_t MaxRecordBytes = 32u << 20;
 inline constexpr uint64_t Magic = 0x31454c444e42534cULL; // LSBNDLE1
@@ -125,6 +125,21 @@ inline std::string Snapshot(const fs::path& game, const fs::path& cacheDir,
         identity.compiler, xex, includeCompiled, includeSources, &identity);
 }
 
+// Imported game assets are trusted on the normal startup path. Bind generated
+// cache data to the current compiler/backend/translator and already-loaded XEX,
+// without enumerating or re-reading the game or loose shader cache directories.
+// Explicit full-scan/dump/retry controls bypass the bundle in the renderer.
+inline std::string RuntimeIdentity(const fs::path& game, const cache::Identity& identity,
+    std::span<const uint8_t> xex,
+    std::string_view discovery = resources::variants::DiscoveryIdentity) {
+    if (!cache::ValidIdentity(identity)) throw std::runtime_error("unsupported shader cache identity");
+    std::ostringstream out;
+    out << "trusted-import-bundle=" << Schema << '\n' << cache::IdentityKey(identity) << '\n'
+        << fs::absolute(game).lexically_normal().generic_string() << '\n'
+        << Hex(xex) << '\n' << discovery << '\n';
+    return Hex(Bytes(out.str()));
+}
+
 struct Record {
     uint64_t hash = 0;
     TranslatedShader info;
@@ -178,7 +193,8 @@ inline std::vector<uint8_t> Encode(const Record& r, std::string_view common) {
     e.Text(i.errors); e.Text(r.failure); e.Blob(r.binary);
     return std::move(e.bytes);
 }
-inline Record Decode(std::span<const uint8_t> bytes, std::string_view common, cache::Format format) {
+inline Record Decode(std::span<const uint8_t> bytes, std::string_view common, cache::Format format,
+    bool retainHlsl = true) {
     Decoder d{bytes}; Record r; auto& i=r.info;
     auto boolean=[&] { const auto n=d.U32(); if(n>1) throw std::runtime_error("invalid startup cache flag"); return n!=0; };
     r.hash=d.U64(); i.isPixelShader=boolean(); i.vertexFetchSlotsUsed=d.U32();
@@ -186,8 +202,16 @@ inline Record Decode(std::span<const uint8_t> bytes, std::string_view common, ca
     const auto dimensions=d.Blob(); if(dimensions.size()!=32) throw std::runtime_error("invalid texture metadata");
     std::copy(dimensions.begin(),dimensions.end(),i.textureDimension);
     i.writesDepth=boolean(); i.colorTargetsWritten=d.U32(); i.usesPointSize=boolean(); i.usesRelativeConstants=boolean();
-    const bool sharedPrelude=boolean(); i.hlsl=d.Text();
-    if(sharedPrelude) { i.hlsl+=Prelude(common,i.isPixelShader);i.hlsl+=d.Text(); }
+    const bool sharedPrelude=boolean();
+    const auto prefix=d.Blob();
+    const auto suffix=sharedPrelude ? d.Blob() : std::span<const uint8_t>{};
+    if (retainHlsl) {
+        i.hlsl.assign(reinterpret_cast<const char*>(prefix.data()),prefix.size());
+        if(sharedPrelude) {
+            i.hlsl+=Prelude(common,i.isPixelShader);
+            i.hlsl.append(reinterpret_cast<const char*>(suffix.data()),suffix.size());
+        }
+    }
     i.errors=d.Text(); r.failure=d.Text(); const auto binary=d.Blob();
     if(!d.bytes.empty() || !r.hash || i.colorTargetsWritten>15 || (r.failure.empty() && !cache::CompleteBinary(binary,format)) ||
         (!r.failure.empty() && !binary.empty())) throw std::runtime_error("invalid startup cache payload");
@@ -221,83 +245,103 @@ class Writer {
     fs::path path,temp;
     std::ofstream out;
     uint64_t count=0;
-    Encoder digests;
     std::string common;
 public:
     Writer(const fs::path& target,std::string_view commonText) : path(target),temp(Temporary(target)),out(temp,std::ios::binary),common(commonText) {
         WriteNumber(out,Magic);WriteNumber(out,Schema);WriteNumber(out,0);
         WriteRaw(out,std::array<uint8_t,64>{}); // Final input snapshot (hex).
         WriteNumber(out,common.size());WriteRaw(out,Bytes(common));
-        const auto digest=resources::Sha256(Bytes(common));
-        digests.bytes.insert(digests.bytes.end(),digest.begin(),digest.end());
     }
     ~Writer() { out.close();std::error_code ec;fs::remove(temp,ec); }
     void Add(const Record& record) {
         if(++count>MaxRecords) throw std::runtime_error("too many startup cache records");
         const auto bytes=Encode(record,common);
         if(bytes.size()>MaxRecordBytes) throw std::runtime_error("startup cache record too large");
-        const auto digest=resources::Sha256(bytes);WriteNumber(out,bytes.size());WriteRaw(out,digest);WriteRaw(out,bytes);
-        digests.bytes.insert(digests.bytes.end(),digest.begin(),digest.end());
+        // Reserved checksum slot preserves the existing bundle layout.
+        WriteNumber(out,bytes.size());WriteRaw(out,Digest{});WriteRaw(out,bytes);
     }
     void Finish(std::string_view snapshot) {
         if(!count || snapshot.size()!=64) throw std::runtime_error("incomplete startup cache publication");
-        digests.Text(snapshot);digests.U64(count);digests.U64(Schema);
-        WriteNumber(out,Magic);WriteRaw(out,resources::Sha256(digests.bytes));
+        WriteNumber(out,Magic);WriteRaw(out,Digest{});
         out.seekp(16);WriteNumber(out,count);WriteRaw(out,Bytes(snapshot));out.close();
         if(!out) throw std::runtime_error("startup cache close failed");
         Publish(temp,path);
     }
 };
+inline std::string ReadBundleIdentity(const fs::path& path) {
+    std::error_code ec;
+    if (!fs::is_regular_file(path, ec)) return {};
+    std::ifstream in(path, std::ios::binary);
+    if (!in) return {};
+    try {
+        if (ReadNumber(in) != Magic || ReadNumber(in) != Schema) return {};
+        const auto count = ReadNumber(in);
+        if (!count || count > MaxRecords) return {};
+        std::string identity(64, '\0');
+        if (!in.read(identity.data(), identity.size())) return {};
+        return identity;
+    } catch (...) { return {}; }
+}
+using Progress = std::function<void(uint32_t done, uint32_t total)>;
 struct LoadResult { bool ok=false;uint32_t records=0;uint64_t bytesRead=0;std::string reason; };
 inline LoadResult Load(const fs::path& path,std::string_view snapshot,cache::Format format,
-    const std::function<void(Record&&)>& consume,const std::function<void()>& pump={}) {
+    const std::function<void(Record&&)>& consume,const std::function<void()>& pump={},
+    const Progress& progress={}, bool retainHlsl=true) {
     LoadResult result;
     try {
-        std::ifstream in(path,std::ios::binary);if(!in) {result.reason="bundle missing";return result;}
+        // pubsetbuf must precede open; the external buffer must outlive filebuf.
+        std::vector<char> ioBuffer(256 << 10);
+        std::ifstream in;
+        in.rdbuf()->pubsetbuf(ioBuffer.data(), ioBuffer.size());
+        in.open(path,std::ios::binary);if(!in) {result.reason="bundle missing";return result;}
         if(ReadNumber(in)!=Magic || ReadNumber(in)!=Schema) throw std::runtime_error("bundle format changed");
         const auto count=ReadNumber(in);if(!count || count>MaxRecords) throw std::runtime_error("invalid bundle record count");
         std::string identity(64,'\0');in.read(identity.data(),identity.size());
         if(!in || identity!=snapshot) throw std::runtime_error("resource/source/binary/compiler identity changed");
         const auto commonSize=ReadNumber(in);if(commonSize>MaxRecordBytes) throw std::runtime_error("invalid bundle prelude length");
         std::string common(size_t(commonSize),'\0');if(!in.read(common.data(),common.size())) throw std::runtime_error("truncated bundle prelude");
-        const auto begin=in.tellg();
-        // Validate the complete file first, then re-read with bounded memory.
-        // A consumer or second-pass IO failure must roll back caller state.
-        for(int pass=0;pass<2;++pass) {
-            in.clear();in.seekg(begin);Encoder digests;std::set<std::pair<bool,uint64_t>> keys;
-            const auto commonDigest=resources::Sha256(Bytes(common));
-            digests.bytes.insert(digests.bytes.end(),commonDigest.begin(),commonDigest.end());
-            for(uint64_t index=0;index<count;++index) {
-                const auto size=ReadNumber(in);if(size>MaxRecordBytes || size<32) throw std::runtime_error("invalid bundle record length");
-                Digest expected{};in.read(reinterpret_cast<char*>(expected.data()),expected.size());
-                std::vector<uint8_t> bytes(static_cast<size_t>(size));
-                if(!in.read(reinterpret_cast<char*>(bytes.data()),bytes.size())) throw std::runtime_error("truncated bundle record");
-                result.bytesRead+=bytes.size();
-                if(resources::Sha256(bytes)!=expected) throw std::runtime_error("bundle record digest mismatch");
-                auto record=Decode(bytes,common,format);
-                if(!keys.emplace(record.info.isPixelShader,record.hash).second) throw std::runtime_error("duplicate bundle record");
-                digests.bytes.insert(digests.bytes.end(),expected.begin(),expected.end());
-                if(pass) consume(std::move(record));
-                if(pump && index%128==0) pump();
+
+        std::set<std::pair<bool,uint64_t>> keys;
+
+        if(progress) progress(0,uint32_t(count));
+        if(pump) pump();
+        auto lastPump=std::chrono::steady_clock::now();
+        for(uint64_t index=0;index<count;++index) {
+            const auto size=ReadNumber(in);if(size>MaxRecordBytes || size<32) throw std::runtime_error("invalid bundle record length");
+            in.ignore(Digest{}.size());
+            std::vector<uint8_t> bytes(static_cast<size_t>(size));
+            if(!in.read(reinterpret_cast<char*>(bytes.data()),bytes.size())) throw std::runtime_error("truncated bundle record");
+            result.bytesRead+=bytes.size();
+            auto record=Decode(bytes,common,format,retainHlsl);
+            if(!keys.emplace(record.info.isPixelShader,record.hash).second) throw std::runtime_error("duplicate bundle record");
+            consume(std::move(record));
+            const auto now=std::chrono::steady_clock::now();
+            if(index+1==count || now-lastPump>=std::chrono::milliseconds(16)) {
+                if(progress) progress(uint32_t(index+1),uint32_t(count));
+                if(pump) pump();
+                lastPump=now;
             }
-            digests.Text(snapshot);digests.U64(count);digests.U64(Schema);
-            if(ReadNumber(in)!=Magic) throw std::runtime_error("bundle completion marker missing");
-            Digest digest{};in.read(reinterpret_cast<char*>(digest.data()),digest.size());
-            if(!in || digest!=resources::Sha256(digests.bytes) || in.peek()!=std::char_traits<char>::eof())
-                throw std::runtime_error("bundle completion digest mismatch");
         }
+
+        if(ReadNumber(in)!=Magic) throw std::runtime_error("bundle completion marker missing");
+        in.ignore(Digest{}.size());
+        if(in.gcount()!=Digest{}.size() || !in || in.peek()!=std::char_traits<char>::eof())
+            throw std::runtime_error("bundle completion marker truncated");
+
         result.ok=true;result.records=uint32_t(count);
     } catch(const std::exception& e) {result.reason=e.what();}
     return result;
 }
 inline LoadResult Load(const fs::path& path,std::string_view snapshot,bool spirv,
-    const std::function<void(Record&&)>& consume,const std::function<void()>& pump={}) {
-    return Load(path,snapshot,spirv ? cache::Format::Spirv : cache::Format::Dxil,consume,pump);
+    const std::function<void(Record&&)>& consume,const std::function<void()>& pump={},
+    const Progress& progress={}, bool retainHlsl=true) {
+    return Load(path,snapshot,spirv ? cache::Format::Spirv : cache::Format::Dxil,consume,pump,progress,retainHlsl);
 }
 inline LoadResult LoadTransactional(const fs::path& path,std::string_view snapshot,bool spirv,
     const std::function<void(Record&&)>& consume,const std::function<void()>& rollback,
-    const std::function<void()>& validateInputs,const std::function<void()>& pump={}) {
-    auto result=Load(path,snapshot,spirv,consume,pump);
+    const std::function<void()>& validateInputs,const std::function<void()>& pump={},
+    const Progress& progress={}, bool retainHlsl=true) {
+    auto result=Load(path,snapshot,spirv,consume,pump,progress,retainHlsl);
     if(result.ok) try {validateInputs();}
         catch(const std::exception& e) {result.ok=false;result.reason=e.what();}
     if(!result.ok) rollback();
@@ -305,9 +349,10 @@ inline LoadResult LoadTransactional(const fs::path& path,std::string_view snapsh
 }
 inline LoadResult LoadTransactional(const fs::path& path,std::string_view snapshot,const cache::Identity& identity,
     const std::function<void(Record&&)>& consume,const std::function<void()>& rollback,
-    const std::function<void()>& validateInputs,const std::function<void()>& pump={}) {
+    const std::function<void()>& validateInputs,const std::function<void()>& pump={},
+    const Progress& progress={}, bool retainHlsl=true) {
     if (!cache::ValidIdentity(identity)) { rollback(); return {false,0,0,"unsupported shader cache identity"}; }
-    auto result=Load(path,snapshot,identity.format,consume,pump);
+    auto result=Load(path,snapshot,identity.format,consume,pump,progress,retainHlsl);
     if(result.ok) try {validateInputs();}
         catch(const std::exception& e) {result.ok=false;result.reason=e.what();}
     if(!result.ok) rollback();
@@ -330,8 +375,7 @@ inline std::string ReadFailure(const fs::path& path,std::string_view key) {
         std::ifstream in(path,std::ios::binary|std::ios::ate);const auto size=in.tellg();
         if(size<136 || size>8*1024*1024) return {};
         std::string bytes(size_t(size),'\0');in.seekg(0);if(!in.read(bytes.data(),bytes.size())) return {};
-        if(bytes.substr(0,8)!="LOFAIL1\n" || bytes.substr(8,64)!=key ||
-            Hex(Bytes(std::string_view(bytes).substr(136)))!=bytes.substr(72,64)) return {};
+        if(bytes.substr(0,8)!="LOFAIL1\n" || bytes.substr(8,64)!=key) return {};
         return bytes.substr(136);
     } catch(...) {return {};}
 }
@@ -339,7 +383,7 @@ inline bool WriteFailure(const fs::path& path,std::string_view key,std::string_v
     if(!deterministic || key.size()!=64 || error.empty() || error.size()>(8u<<20)-136) return false;
     const auto temp=Temporary(path);
     try {
-        std::ofstream out(temp,std::ios::binary);out<<"LOFAIL1\n"<<key<<Hex(Bytes(error))<<error;out.close();
+        std::ofstream out(temp,std::ios::binary);out<<"LOFAIL1\n"<<key<<std::string(64,'0')<<error;out.close();
         if(!out) throw std::runtime_error("cannot write compiler failure record");
         Publish(temp,path);return true;
     } catch(...) {std::error_code ec;fs::remove(temp,ec);return false;}

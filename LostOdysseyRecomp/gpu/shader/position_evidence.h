@@ -185,10 +185,11 @@ public:
         Summary result;
         if(hlsl.size()>2*1024*1024) {result.issues=32;return result;}
         const auto main=hlsl.find("void main(");
-        constexpr std::string_view startMarker="float4 oPointSize = 0.0;";
+        constexpr std::string_view startMarker="float4 oPointSize = ";
         const auto start=main==hlsl.npos?hlsl.npos:hlsl.find(startMarker,main);
-        const auto end=start==hlsl.npos?hlsl.npos:hlsl.find("if ((xeFlags & 8u) == 0u)",start);
-        if(start==hlsl.npos || end==hlsl.npos) {result.issues=4;return result;}
+        const auto bodyStart=start==hlsl.npos?hlsl.npos:hlsl.find(';',start);
+        const auto end=bodyStart==hlsl.npos?hlsl.npos:hlsl.find("if ((xeFlags & 8u) == 0u)",bodyStart);
+        if(bodyStart==hlsl.npos || end==hlsl.npos) {result.issues=4;return result;}
         // Initialize translator temporaries (before the body marker).
         const auto zero=Literal();Value zeros;zeros.id.fill(zero.id[0]);
         for(unsigned i=0;i<256;++i)values["r"+std::to_string(i)]=zeros;
@@ -196,7 +197,7 @@ public:
         values["xePV"]=zeros;values["xeDiscard"]=zeros;values["xeVfetchBase"]=zero;
         for(const auto name:{"ps","a0","aL","p0"})values[name]=zero;
         auto vertex=Parse("xeVertexId");values["r0"].id[0]=vertex.id[0];
-        auto body=hlsl.substr(start+startMarker.size(),end-start-startMarker.size());
+        auto body=hlsl.substr(bodyStart+1,end-bodyStart-1);
         unsigned lines=0;
         while(!body.empty()) {
             auto n=body.find('\n');auto line=Trim(body.substr(0,n));

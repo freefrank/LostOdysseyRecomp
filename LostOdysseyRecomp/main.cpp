@@ -15,6 +15,8 @@
 #include <apu/xma.h>
 #include <hid/hid.h>
 #include <os/logger.h>
+#include <os/thread_name.h>
+#include <os/user_paths.h>
 #include <os/shader_log.h>
 #include <os/log_file.h>
 #include <os/crash_handler.h>
@@ -27,11 +29,20 @@
 #include "settings/game_path.h"
 #include "settings/restart.h"
 #include "updater/update.h"
+#include "updater/game_prompt.h"
+#include "updater/apply_mode.h"
 #include "version.h"
+#include "install/host.h"
+#include "modding/mod_api.h"
 
 #ifdef _WIN32
 #include <timeapi.h>
 #include <shellapi.h>
+#endif
+#if defined(__linux__) && !defined(_WIN32)
+#include <spawn.h>
+#include <unistd.h>
+extern char** environ;
 #endif
 
 // Runtime entry: set up guest memory, load default.xex and run its entry point
@@ -40,7 +51,7 @@
 
 static std::filesystem::path ExecutableDirectory()
 {
-#ifdef _WIN32
+#if defined(_WIN32)
     wchar_t executable[32768]{};
     if (GetModuleFileNameW(nullptr, executable, 32768))
         return std::filesystem::path(executable).parent_path();
@@ -67,11 +78,26 @@ void InstallPhysicalWatchpoint();
 
 int main(int argc, char* argv[])
 {
+#if defined(__linux__) && !defined(_WIN32)
+    // Park a restart child before even the updater's startup cleanup runs.
+    if (settings::restart::WaitForParentIfRestartChild(argc, argv) == settings::restart::ChildHandshake::Invalid)
+        return 1;
+#endif
+#if defined(_WIN32) || defined(__linux__)
+    if (const auto applyResult = updater::TryRunApplyMode()) return *applyResult;
 #ifdef _WIN32
     // A restart child must park before touching logs, settings, profiles,
     // saves, caches, or guest state. Invalid handshake arguments fail closed.
     if (settings::restart::WaitForParentIfRestartChild() == settings::restart::ChildHandshake::Invalid)
         return 1;
+#endif
+#endif
+#if defined(_WIN32) && (defined(LO_ENABLE_STREAMLINE_FG) || defined(LO_ENABLE_D3D12_FG))
+    // SDK-created present threads inherit the process DPI default. Establish
+    // physical pixels before any installer/setup HWND, not only on SDL's thread.
+    // Persisted FG settings cannot be read until the profile path is initialized.
+    const bool fgDpiSet = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    const DWORD fgDpiError = !fgDpiSet ? GetLastError() : 0;
 #endif
 #ifdef _WIN32
     // The CRT's narrow argv can best-fit Unicode (for example acute -> prime)
@@ -90,7 +116,17 @@ int main(int argc, char* argv[])
     argc = wideArgc;
     argv = argumentPointers.data();
 #endif
-    bool explicitGame=false, requestedSetup=false, setupOnly=false, prepareShadersOnly=false;
+#if defined(LO_RENDERER_P2_SELFTEST)
+    for (int i = 1; i < argc; ++i)
+    {
+        if (strcmp(argv[i], "--self-test-scene-copy-promotion") != 0)
+            continue;
+        if (i + 1 >= argc)
+            return 1;
+        return gpu::renderer::RunSceneCopyPromotionSelfTest(std::filesystem::u8path(argv[i + 1]));
+    }
+#endif
+    bool explicitGame=false, requestedSetup=false, setupOnly=false, prepareShadersOnly=false, requestedInstall=false;
     std::optional<std::filesystem::path> explicitGamePath;
     for(int i=1;i<argc;++i) {
         if (strcmp(argv[i], "--game") == 0)
@@ -102,12 +138,18 @@ int main(int argc, char* argv[])
         requestedSetup |= strcmp(argv[i],"--setup")==0 || strcmp(argv[i],"--setup-only")==0;
         setupOnly |= strcmp(argv[i],"--setup-only")==0;
         prepareShadersOnly |= strcmp(argv[i],"--prepare-shaders-only")==0;
+        requestedInstall |= strcmp(argv[i],"--install")==0;
     }
     const auto executableDirectory = ExecutableDirectory();
+    os::user_paths::Initialize(executableDirectory);
+    const auto modsRoot = os::user_paths::UsePortableLayout()
+        ? executableDirectory / "mods"
+        : os::user_paths::DataDir() / "mods";
+    modding::Initialize(modsRoot);
 #if defined(_WIN32) || defined(__linux__)
     // Direct launches keep all portable data beside the executable. Explicit
     // --game launches retain their caller's working directory for isolated tests.
-    if(!explicitGame) {
+    if(!explicitGame && os::user_paths::UsePortableLayout()) {
         std::filesystem::current_path(executableDirectory);
     }
 #endif
@@ -120,7 +162,7 @@ int main(int argc, char* argv[])
             std::chrono::system_clock::now().time_since_epoch()).count();
         const std::filesystem::path logPath = logOverride
             ? std::filesystem::u8path(logOverride)
-            : std::filesystem::path(fmt::format("logs/runtime-{}.log", ticks));
+            : (os::user_paths::UsePortableLayout() ? std::filesystem::path(fmt::format("logs/runtime-{}.log", ticks)) : os::user_paths::StateDir() / "logs" / fmt::format("runtime-{}.log", ticks));
         std::error_code ec;
         if (logPath.has_parent_path())
             std::filesystem::create_directories(logPath.parent_path(), ec);
@@ -133,6 +175,9 @@ int main(int argc, char* argv[])
         else LOG_WARNING("could not open log file: {}", FileSystem::PathUtf8(logPath));
     }
     InstallCrashHandler();
+#if defined(_WIN32) && (defined(LO_ENABLE_STREAMLINE_FG) || defined(LO_ENABLE_D3D12_FG))
+    LOG_INFO("FG: process physical-pixel awareness set={} error={}", fgDpiSet, fgDpiError);
+#endif
 #ifdef _WIN32
     timeBeginPeriod(1);
 #endif
@@ -166,46 +211,85 @@ int main(int argc, char* argv[])
     }
     os::diagnostics::LogStartupEnvironment();
 
+#if defined(_WIN32) || defined(__linux__)
+    // Check for a newer runtime before opening the content importer or setup.
+    if (!getenv("LO_HEADLESS") && !getenv("LO_BACKGROUND"))
+    {
+        const auto startupPreferences = updater::ReadStartupPreferences(
+            os::user_paths::UsePortableLayout()
+                ? std::filesystem::current_path() / "settings.ini"
+                : os::user_paths::ConfigDir() / "settings.ini");
+        if (startupPreferences.automaticUpdates)
+        {
+            updater::StartupOptions updateOptions;
+            updateOptions.currentVersion = lo_version::Source;
+            updateOptions.installRoot = executableDirectory;
+            updateOptions.executable = updater::CurrentExecutablePath();
+            updateOptions.launchArguments = updater::CurrentLaunchArguments();
+            updateOptions.automaticUpdates = true;
+            updateOptions.uiLanguage = startupPreferences.uiLanguage;
+            updateOptions.confirmUpdate = &updater::game_prompt::ConfirmBeforeImport;
+            const auto updateResult = updater::PrepareAtStartup(updateOptions);
+            LOG_INFO("update check: {} {}", updater::StatusName(updateResult.status), updateResult.detail);
+            if (updateResult.status == updater::StartupStatus::Ready && updateResult.update)
+            {
+                const auto &prepared = *updateResult.update;
+                // The helper waits for this process to exit before replacing it.
+#ifdef _WIN32
+                if (settings::restart::LaunchWaitingProcess(prepared.runnerPath.wstring(),
+                                                             updater::ApplyHelperArguments(prepared.planPath)))
+                    return 0;
+#elif defined(__linux__)
+                const std::string selfExe = updater::CurrentExecutablePath().string();
+                const std::string planStr = prepared.planPath.string();
+                const std::string waitPid = std::to_string(getpid());
+                std::vector<char*> args;
+                args.push_back(const_cast<char*>(selfExe.c_str()));
+                args.push_back(const_cast<char*>("--apply-plan"));
+                args.push_back(const_cast<char*>(planStr.c_str()));
+                args.push_back(const_cast<char*>("--wait-process"));
+                args.push_back(const_cast<char*>(waitPid.c_str()));
+                args.push_back(nullptr);
+                pid_t pid = 0;
+                if (posix_spawn(&pid, selfExe.c_str(), nullptr, nullptr, args.data(), environ) == 0)
+                    return 0;
+#endif
+                LOG_ERROR("update runner failed its restart handshake; staged update preserved at {}",
+                          FileSystem::PathUtf8(prepared.operationRoot));
+                std::ofstream diagnostic(prepared.operationRoot / "handoff-failure.txt", std::ios::trunc);
+                diagnostic << "The staged update runner did not complete the restart handshake.\n"
+                           << "Staged files were preserved for inspection.\n";
+                return 1;
+            }
+        }
+    }
+#endif
+
     const auto gameResolution = FindGameRoot(executableDirectory, explicitGamePath);
     auto gameRoot = gameResolution.root;
     if (gameResolution.configuredPathRejected)
         LOG_WARNING("game-path.txt did not identify a default.xex; retaining the configured path for installer/error handling");
-#ifdef _WIN32
-    if(!explicitGame && !std::filesystem::exists(gameRoot/"default.xex") && std::filesystem::exists("InstallGame.exe")) {
-        const auto installer=std::filesystem::absolute("InstallGame.exe").wstring();
-        SHELLEXECUTEINFOW launch{sizeof(launch)};
-        launch.fMask=SEE_MASK_NOCLOSEPROCESS; launch.lpFile=installer.c_str(); launch.nShow=SW_SHOWNORMAL;
-        launch.lpParameters=L"--return-to-game";
-        if(!ShellExecuteExW(&launch)) return 1;
-        if(launch.hProcess) { WaitForSingleObject(launch.hProcess,INFINITE); CloseHandle(launch.hProcess); }
-        gameRoot=FindGameRoot(executableDirectory, explicitGamePath).root;
-        if(!std::filesystem::exists(gameRoot/"default.xex")) return 0;
-    }
-#endif
-    settings::ConfigureGameLanguages(gameRoot / "default.xex");
-#ifdef _WIN32
-    // Preserve edition-aware lazy settings validation before consulting the
-    // persisted updater opt-out. A ready helper takes over before first-run,
-    // profile, cache, or guest initialization; every other result fails open.
-    const auto startupConfig = settings::GetConfig();
-    updater::StartupOptions updateOptions;
-    updateOptions.currentVersion = lo_version::Source;
-    updateOptions.installRoot = executableDirectory;
-    updateOptions.executable = updater::CurrentExecutablePath();
-    updateOptions.launchArguments = updater::CurrentLaunchArguments();
-    updateOptions.automaticUpdates = startupConfig.automaticUpdates;
-    updateOptions.uiLanguage = startupConfig.uiLanguage;
-    const auto updateResult = updater::PrepareAtStartup(updateOptions);
-    LOG_INFO("update check: {} ({})", updater::StatusName(updateResult.status), updateResult.detail);
-    if (updateResult.status == updater::StartupStatus::Ready && updateResult.update)
+
+    if (requestedInstall)
     {
-        const auto &prepared = *updateResult.update;
-        if (settings::restart::LaunchWaitingProcess(prepared.runnerPath.wstring(),
-                                                    updater::ApplyHelperArguments(prepared.planPath)))
-            return 0;
-        LOG_WARNING("update helper did not complete its readiness handshake; continuing current version");
+        const auto result = install::RunHost(executableDirectory, &gameRoot, true);
+        return (result == install::HostResult::Installed || result == install::HostResult::AlreadyPresent) ? 0 : 1;
     }
-#endif
+
+    if (!explicitGame && !std::filesystem::exists(gameRoot / "default.xex"))
+    {
+        if (getenv("LO_HEADLESS") || getenv("LO_BACKGROUND"))
+        {
+            LOG_ERROR("missing default.xex in game root: headless or background environment prevents opening installer UI");
+            return 1;
+        }
+        const auto result = install::RunHost(executableDirectory, &gameRoot);
+        if (result != install::HostResult::Installed && result != install::HostResult::AlreadyPresent)
+            return result == install::HostResult::Cancelled ? 0 : 1;
+        if (!std::filesystem::exists(gameRoot / "default.xex"))
+            return 1;
+    }
+    settings::ConfigureGameLanguages(gameRoot / "default.xex");
     gpu::taa_collection::Initialize();
     struct CollectionShutdown
     {
@@ -290,6 +374,7 @@ int main(int argc, char* argv[])
         hid::Init(); // otherwise the video thread initialises it
 
     LOG_INFO("starting guest at {:#x}", entry);
+    os::SetCurrentThreadName("Guest Main");
     GuestThread::Start({ entry, 0, 0 });
 
     LOG_INFO("guest main thread returned");

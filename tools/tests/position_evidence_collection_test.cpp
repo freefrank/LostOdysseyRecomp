@@ -71,7 +71,13 @@ int main(){
     while(!ready&&std::chrono::steady_clock::now()<deadline);
     Check(ready&&output==expected);
     trackAllocations=true;
-    Check(collection->TryGet(1,words,2,output));
+    // TryGet may legitimately report busy while the worker acknowledges its
+    // batch. A ready result does not promise that the next try_lock succeeds.
+    ready=false;
+    const auto cachedDeadline=std::chrono::steady_clock::now()+2s;
+    do { ready=collection->TryGet(1,words,2,output); if(!ready)std::this_thread::yield(); }
+    while(!ready&&std::chrono::steady_clock::now()<cachedDeadline);
+    Check(ready && output==expected);
     Check(allocations==0);
     trackAllocations=false;
     collection->Stop();

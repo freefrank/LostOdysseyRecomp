@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cpu/guest_thread.h>
 #include <cpu/ppc_context.h>
 #include <array>
 #include <tuple>
@@ -226,6 +227,10 @@ std::enable_if_t<(I < sizeof...(TArgs)), void> _translate_args_to_guest(PPCConte
 template<auto Func>
 PPC_FUNC(HostToGuestFunction)
 {
+    // Generated guest code reaches host imports through this bridge. Stop before
+    // entering the host implementation, while none of its subsystem locks exist.
+    GuestThread::WaitIfPaused();
+
     using ret_t = decltype(std::apply(Func, function_args(Func)));
 
     auto args = function_args(Func);

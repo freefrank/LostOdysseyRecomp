@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Lost Odyssey Recomp
+GenericName=Xbox 360 Game Recompilation
+Comment=Native Xbox 360 static recompilation for Lost Odyssey
+Exec=LostOdysseyRecomp
+Icon=io.github.freefrank.LostOdysseyRecomp
+Terminal=false
+Categories=Game;Emulator;
+StartupNotify=true

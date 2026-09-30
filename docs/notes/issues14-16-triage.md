@@ -1,5 +1,9 @@
 # Issue #14–#16 triage — 2026-09-12
 
+> **日期化分流快照。** 下文记录 2026-09-12 读取到的 Issue 状态和当时证据；当前 Issue 状态以 live tracker 和最新项目同步记录为准。
+
+当前 tracker 核验时间为 2026-09-18T07:33:59Z：Issues #14, #15 and #16 are **CLOSED / Done**. Vulkan、其他地区覆盖和玩家验收仍是独立回归边界。
+
 This note records the current investigation boundary. [GitHub Issue #14](https://github.com/freefrank/LostOdysseyRecomp/issues/14), [#15](https://github.com/freefrank/LostOdysseyRecomp/issues/15) and [#16](https://github.com/freefrank/LostOdysseyRecomp/issues/16) were read as OPEN on 2026-09-12. Issue state, implementation, validation and reporter acceptance remain separate.
 
 ## Issue #14

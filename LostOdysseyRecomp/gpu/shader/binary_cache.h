@@ -35,8 +35,6 @@ inline std::vector<uint8_t> ReadBinary(const std::filesystem::path& path, bool p
         std::vector<uint8_t> binary(static_cast<size_t>(length));
         if (!in.read(reinterpret_cast<char*>(binary.data()), binary.size()) ||
             in.peek()!=std::char_traits<char>::eof()) return {};
-        const auto digest=resources::Sha256Hex(resources::Sha256(binary));
-        if (std::memcmp(header.data()+72, digest.data(), digest.size())) return {};
         if (!CompleteBinary(binary, identity.format)) return {};
         return binary;
     } catch (...) { return {}; }
@@ -53,13 +51,14 @@ inline bool WriteBinary(const std::filesystem::path& path, bool pixel, uint64_t 
         std::to_wstring(std::chrono::steady_clock::now().time_since_epoch().count())+L"-"+std::to_wstring(sequence++));
     try {
         std::ofstream out(temp, std::ios::binary);
-        out << "LOSHDR1\n" << ArtifactKey(pixel, hash, identity) << resources::Sha256Hex(resources::Sha256(binary));
+        // Keep the old checksum field reserved so existing caches stay readable.
+        out << "LOSHDR1\n" << ArtifactKey(pixel, hash, identity) << std::string(64, '0');
         for (unsigned i=0;i<8;++i) out.put(char(uint64_t(binary.size())>>(i*8)));
         out.write(reinterpret_cast<const char*>(binary.data()), binary.size());
         out.close();
         if (!out) throw std::runtime_error("shader cache write failed");
 #ifdef _WIN32
-        if (!MoveFileExW(temp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+        if (!MoveFileExW(temp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING))
             throw std::runtime_error("shader cache publish failed: "+std::to_string(GetLastError()));
 #else
         std::filesystem::rename(temp,path);

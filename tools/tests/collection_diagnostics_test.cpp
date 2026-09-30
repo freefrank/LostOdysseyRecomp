@@ -13,6 +13,9 @@ void* operator new(size_t size){if(watch)++allocations;if(void* p=std::malloc(si
 void* operator new[](size_t size){return ::operator new(size);}
 void operator delete(void* p) noexcept {std::free(p);}
 void operator delete[](void* p) noexcept {std::free(p);}
+// Match malloc-backed new when the native ABI selects sized deallocation.
+void operator delete(void* pointer, std::size_t) noexcept { std::free(pointer); }
+void operator delete[](void* pointer, std::size_t) noexcept { std::free(pointer); }
 static void Check(bool value,const char* name){++checks;if(!value){std::cerr<<"FAILED: "<<name<<'\n';std::exit(1);}}
 static binding::Record Sample() {
     binding::Record r;r.vs=0xe810cfacc107fd3cull;r.ps=0x5b11f88a8bb293dfull;

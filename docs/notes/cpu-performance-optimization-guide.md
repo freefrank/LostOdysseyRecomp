@@ -2,8 +2,14 @@
 
 日期：2026-09-14  
 分支：`cpu-perf` / 实验分支 `cpu-perf-exp`  
-状态：**指南，未实施运行时。** Card A / Card B / Card C / Card D（进程级 3C6T 信封）已用 published v0.5.11 测过（耗尽资源类 = null；B1/B2/B3、Parallel Prepare 与默认 pinning 均不实施）。不授权改运行时、不改源版本、不宣称验收或发布。
+状态：**指南与 R3 实现记录。** Card A / Card B / Card C / Card D（进程级 3C6T 信封）已用 published v0.5.11 测过（耗尽资源类 = null；B1/B2/B3、Parallel Prepare 与默认 pinning 均不实施）。2026-09-15 在本地 `deck` 分支已实现 R3 等待路径现代化（`notified_wait.h`、内核对象条件变量等待、CommandProcessor 写指针与关闭通知及 500 µs 上限等待），未提交、未改源版本、无发布。
 正文：简体中文；符号、路径、函数名保持英文。
+
+### 当前状态澄清（2026-09-15）
+
+2026-09-15 本地 `deck` 分支已实现并验证 R3 CPU 等待路径优化，作为开发中未提交变更保留：
+- **等待路径现代化**：引入 `LostOdysseyRecomp/notified_wait.h`，在 `kernel/imports.cpp` 中将 Event、Semaphore 和 Mutant 有限超时等待的 200 µs 轮询循环替换为条件变量谓词/截止期等待，保留消费、递归与超时语义；在 `gpu/command_processor.{h,cpp}` 中增加写指针更新与关闭通知，以 500 µs 有界等待替代原 200 次 yield 循环并保留 SDL 窗口事件泵送。
+- **验证范围与边界**：Windows `LoNotifiedWaitTest`（预通知、提前唤醒、截止期超时、写指针唤醒）和 `LoPollWaitTest` 通过；Windows 完整目标编译及 diff 检查通过；依赖补丁应用后 Linux 原生构建与 codegen 通过。Radeon 8060S 上进行的 15 W 原生 Vulkan 实测（STAPM 15 W / Fast 25 W / Slow 20 W）创建/调整 1280x720 swapchain，启动 guest 并在 60 W 功耗下准备 28,484 个 shader（28,482 就绪，2 确定性失败），消费启动包后无错误运行 90 秒；目标 60 FPS，前期稳定窗口约 58.46–58.58 FPS，后期复杂场景约 37–40 FPS（**不宣称锁定 60 FPS**）。无玩家视觉验收，未提交、推送或发布。详见 [当前状态](../STATUS.md)。
 
 配套记录：
 

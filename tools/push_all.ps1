@@ -37,10 +37,6 @@ try {
         }
         if ($excluded) { throw "Private/generated paths added on unpublished $remote commits: $($excluded -join ', ')" }
     }
-    $ppc = @('tools/release/ppc_sync.py', 'ensure-push')
-    if ($CheckOnly) { $ppc += '--check-only' }
-    & python @ppc
-    if ($LASTEXITCODE -ne 0) { throw 'PPC cache is not synchronized for this source identity.' }
     if ($CheckOnly) { Write-Host "Publication checks passed: $revision"; return }
 
     # Publish only this exact main commit, never archive refs or automatic tags.

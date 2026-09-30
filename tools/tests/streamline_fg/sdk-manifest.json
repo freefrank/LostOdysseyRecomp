@@ -1,0 +1,10 @@
+{
+  "sdk": "NVIDIA Streamline",
+  "release": "v2.14.1",
+  "commit": "2122257e0fce486f91b385aa63b9a09b0a34b363",
+  "asset": "streamline-sdk-v2.14.1.zip",
+  "asset_size": 275994000,
+  "asset_sha256": "92c4d954631a1710da86ca3fa8d5034f2b9503838c95fc4ae977ae149319781b",
+  "runtime_files": ["sl.interposer.dll", "sl.common.dll", "sl.dlss_g.dll", "sl.reflex.dll", "sl.pcl.dll", "nvngx_dlssg.dll"],
+  "excluded": ["sl.dlss.dll", "nvngx_dlss.dll (provided separately by native NGX SDK)"]
+}

@@ -7,6 +7,7 @@
 #include <cpu/ppc_context.h>
 #include <cpu/guest_thread.h>
 #include <cpu/poll_wait.h>
+#include <notified_wait.h>
 #include "function.h"
 #include "xbox.h"
 #include "heap.h"
@@ -22,6 +23,8 @@
 #include <apu/xma.h>
 #include <os/logger.h>
 #include <os/shader_log.h>
+#include <os/user_paths.h>
+#include <host_ui/host_ui.h>
 #include <csetjmp>
 
 // Kernel HLE for xboxkrnl.exe / xam.xex imports. Reference behaviour: Xenia
@@ -169,164 +172,30 @@ static bool DeliverUserApcs()
 
 struct Event final : KernelObject, HostObject<XKEVENT>
 {
-    bool manualReset;
-    std::atomic<bool> signaled;
-
-    Event(XKEVENT* header) : manualReset(!header->Type), signaled(!!header->SignalState) {}
-    Event(bool manualReset, bool initialState) : manualReset(manualReset), signaled(initialState) {}
-
-    uint32_t Wait(uint32_t timeout) override
-    {
-        if (timeout == 0)
-        {
-            if (manualReset)
-                return signaled ? STATUS_SUCCESS : STATUS_TIMEOUT;
-
-            bool expected = true;
-            return signaled.compare_exchange_strong(expected, false) ? STATUS_SUCCESS : STATUS_TIMEOUT;
-        }
-
-        auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout);
-        while (true)
-        {
-            if (manualReset)
-            {
-                if (signaled)
-                    return STATUS_SUCCESS;
-            }
-            else
-            {
-                bool expected = true;
-                if (signaled.compare_exchange_weak(expected, false))
-                    return STATUS_SUCCESS;
-            }
-
-            if (timeout == INFINITE)
-            {
-                signaled.wait(false);
-            }
-            else
-            {
-                if (std::chrono::steady_clock::now() >= deadline)
-                    return STATUS_TIMEOUT;
-                std::this_thread::sleep_for(std::chrono::microseconds(200));
-            }
-        }
-    }
-
-    bool Set()
-    {
-        signaled = true;
-        signaled.notify_all();
-        return TRUE;
-    }
-
-    bool Reset()
-    {
-        signaled = false;
-        return TRUE;
-    }
+    kernel::wait::Event state;
+    Event(XKEVENT* header) : state(!header->Type, !!header->SignalState) {}
+    Event(bool manualReset, bool initialState) : state(manualReset, initialState) {}
+    kernel::wait::Target* WaitTarget() override { return &state; }
+    bool Set() { return state.Set(); }
+    bool Reset() { return state.Reset(); }
+    bool IsSignaled() { return state.IsSignaled(); }
 };
-
-static std::atomic<uint32_t> g_keSetEventGeneration;
-
 struct Semaphore final : KernelObject, HostObject<XKSEMAPHORE>
 {
-    std::atomic<uint32_t> count;
-    uint32_t maximumCount;
-
-    Semaphore(XKSEMAPHORE* semaphore) : count(semaphore->Header.SignalState), maximumCount(semaphore->Limit) {}
-    Semaphore(uint32_t count, uint32_t maximumCount) : count(count), maximumCount(maximumCount) {}
-
-    uint32_t Wait(uint32_t timeout) override
-    {
-        auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout);
-        while (true)
-        {
-            uint32_t current = count.load();
-            if (current != 0)
-            {
-                if (count.compare_exchange_weak(current, current - 1))
-                    return STATUS_SUCCESS;
-                continue;
-            }
-
-            if (timeout == 0)
-                return STATUS_TIMEOUT;
-
-            if (timeout == INFINITE)
-            {
-                count.wait(0);
-            }
-            else
-            {
-                if (std::chrono::steady_clock::now() >= deadline)
-                    return STATUS_TIMEOUT;
-                std::this_thread::sleep_for(std::chrono::microseconds(200));
-            }
-        }
-    }
-
-    void Release(uint32_t releaseCount, uint32_t* previousCount)
-    {
-        if (previousCount != nullptr)
-            *previousCount = count;
-
-        count += releaseCount;
-        count.notify_all();
-    }
+    kernel::wait::Semaphore state;
+    Semaphore(XKSEMAPHORE* s) : state(s->Header.SignalState, s->Limit) {}
+    Semaphore(uint32_t count, uint32_t maximum) : state(count, maximum) {}
+    kernel::wait::Target* WaitTarget() override { return &state; }
+    bool Release(uint32_t amount, uint32_t* previous) { return state.Release(amount, previous); }
 };
-
-// Mutant (NtCreateMutant): recursive, owner tracked by guest thread block.
 struct Mutant final : KernelObject, HostObject<XDISPATCHER_HEADER>
 {
-    std::atomic<uint32_t> owner{ 0 };
-    uint32_t recursion = 0;
-
+    kernel::wait::Mutant state;
     Mutant(XDISPATCHER_HEADER*) {}
-    Mutant(bool initialOwner)
-    {
-        if (initialOwner)
-        {
-            owner = g_ppcContext->r13.u32;
-            recursion = 1;
-        }
-    }
-
-    uint32_t Wait(uint32_t timeout) override
-    {
-        uint32_t self = g_ppcContext->r13.u32;
-        auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout);
-        while (true)
-        {
-            uint32_t expected = 0;
-            if (owner.compare_exchange_weak(expected, self) || expected == self)
-            {
-                recursion++;
-                return STATUS_SUCCESS;
-            }
-
-            if (timeout == 0)
-                return STATUS_TIMEOUT;
-            if (timeout == INFINITE)
-                owner.wait(expected);
-            else
-            {
-                if (std::chrono::steady_clock::now() >= deadline)
-                    return STATUS_TIMEOUT;
-                std::this_thread::sleep_for(std::chrono::microseconds(200));
-            }
-        }
-    }
-
-    void Release()
-    {
-        if (--recursion == 0)
-        {
-            owner.store(0);
-            owner.notify_all();
-        }
-    }
+    Mutant(bool initialOwner) : state(initialOwner ? g_ppcContext->r13.u32 : 0) {}
+    kernel::wait::Target* WaitTarget() override { return &state; }
+    uint32_t Wait(uint32_t timeout) override { return state.Wait(timeout, g_ppcContext->r13.u32); }
+    bool Release() { return state.Release(g_ppcContext->r13.u32); }
 };
 
 static inline void CloseKernelObject(XDISPATCHER_HEADER& header)
@@ -347,8 +216,9 @@ static uint32_t GuestTimeoutToMilliseconds(be<int64_t>* timeout)
     return uint32_t((-t) / 10000);
 }
 
-static KernelObject* ResolveWaitObject(XDISPATCHER_HEADER* header)
+static std::shared_ptr<KernelObject> ResolveWaitObject(XDISPATCHER_HEADER* header)
 {
+    if (!header) return nullptr;
     switch (header->Type)
     {
     case 0: case 1: return QueryKernelObject<Event>(*header);
@@ -366,8 +236,7 @@ void KernelSignalEventHandle(uint32_t handle)
 {
     if (handle == 0 || handle == GUEST_INVALID_HANDLE_VALUE)
         return;
-    if (IsKernelObject(handle))
-        static_cast<Event*>(GetKernelObject(handle))->Set();
+    if (auto event = GetKernelObject<Event>(handle)) event->Set();
 }
 
 // ---------------------------------------------------------------------------
@@ -388,27 +257,21 @@ static uint32_t NtSetEvent(uint32_t handle, be<uint32_t>* previousState)
     static const bool traceEvents = getenv("LO_TRACE_EVENTS") != nullptr;
     if (traceEvents)
         LOG_KERNEL("handle={:#x} lr={:#x}", handle, uint32_t(g_ppcContext->lr));
-    if (!IsKernelObject(handle))
-        return STATUS_INVALID_HANDLE;
-    auto* ev = static_cast<Event*>(GetKernelObject(handle));
+    auto ev = GetKernelObject<Event>(handle);
+    if (!ev) return STATUS_INVALID_HANDLE;
     if (previousState)
-        *previousState = ev->signaled ? 1 : 0;
+        *previousState = ev->IsSignaled() ? 1 : 0;
     ev->Set();
-    ++g_keSetEventGeneration;
-    g_keSetEventGeneration.notify_all();
     return STATUS_SUCCESS;
 }
 
 static uint32_t NtPulseEvent(uint32_t handle, be<uint32_t>* previousState)
 {
-    if (!IsKernelObject(handle))
-        return STATUS_INVALID_HANDLE;
-    auto* ev = static_cast<Event*>(GetKernelObject(handle));
+    auto ev = GetKernelObject<Event>(handle);
+    if (!ev) return STATUS_INVALID_HANDLE;
     if (previousState)
-        *previousState = ev->signaled ? 1 : 0;
+        *previousState = ev->IsSignaled() ? 1 : 0;
     ev->Set();
-    ++g_keSetEventGeneration;
-    g_keSetEventGeneration.notify_all();
     std::this_thread::yield();
     ev->Reset();
     return STATUS_SUCCESS;
@@ -416,9 +279,9 @@ static uint32_t NtPulseEvent(uint32_t handle, be<uint32_t>* previousState)
 
 static uint32_t NtClearEvent(uint32_t handle)
 {
-    if (!IsKernelObject(handle))
-        return STATUS_INVALID_HANDLE;
-    static_cast<Event*>(GetKernelObject(handle))->Reset();
+    auto event = GetKernelObject<Event>(handle);
+    if (!event) return STATUS_INVALID_HANDLE;
+    event->Reset();
     return STATUS_SUCCESS;
 }
 
@@ -428,8 +291,6 @@ static bool KeSetEvent(XKEVENT* pEvent, uint32_t Increment, bool Wait)
     if (traceEvents)
         LOG_KERNEL("event={:#x} lr={:#x}", g_memory.MapVirtual(pEvent), uint32_t(g_ppcContext->lr));
     bool result = QueryKernelObject<Event>(*pEvent)->Set();
-    ++g_keSetEventGeneration;
-    g_keSetEventGeneration.notify_all();
     return result;
 }
 
@@ -444,117 +305,65 @@ static uint32_t KeWaitForSingleObject(XDISPATCHER_HEADER* Object, uint32_t WaitR
     if (Alertable && DeliverUserApcs())
         return STATUS_USER_APC;
     const uint32_t timeout = GuestTimeoutToMilliseconds(Timeout);
-    auto* obj = ResolveWaitObject(Object);
+    auto obj = ResolveWaitObject(Object);
     if (!obj)
         return STATUS_TIMEOUT;
     return obj->Wait(timeout);
 }
 
+static uint32_t WaitObjects(const std::vector<std::shared_ptr<KernelObject>>& objects,
+    uint32_t waitType, uint32_t timeout)
+{
+    if (waitType > 1 || objects.empty() || objects.size() > 64) return STATUS_INVALID_PARAMETER;
+    std::array<kernel::wait::Target*, 64> targets{};
+    for (size_t i = 0; i < objects.size(); ++i) {
+        if (!objects[i] || !(targets[i] = objects[i]->WaitTarget())) return STATUS_INVALID_HANDLE;
+    }
+    return kernel::wait::Multiple({targets.data(), objects.size()}, waitType == 0,
+        timeout, g_ppcContext->r13.u32);
+}
 static uint32_t KeWaitForMultipleObjects(uint32_t Count, xpointer<XDISPATCHER_HEADER>* Objects, uint32_t WaitType, uint32_t WaitReason, uint32_t WaitMode, uint32_t Alertable, be<int64_t>* Timeout)
 {
-    WaitScope scope("KeWaitForMultipleObjects", Count ? uint32_t(Objects[0].ptr) : 0);
-    if (Alertable && DeliverUserApcs())
-        return STATUS_USER_APC;
-    const uint32_t timeout = GuestTimeoutToMilliseconds(Timeout);
-
-    if (WaitType == 0) // wait all
-    {
-        for (size_t i = 0; i < Count; i++)
-            if (auto* obj = ResolveWaitObject(Objects[i]))
-                obj->Wait(timeout);
-        return STATUS_SUCCESS;
-    }
-
-    std::vector<KernelObject*> objs(Count);
-    for (size_t i = 0; i < Count; i++)
-        objs[i] = ResolveWaitObject(Objects[i]);
-
-    auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout);
-    while (true)
-    {
-        uint32_t generation = g_keSetEventGeneration.load();
-        for (size_t i = 0; i < Count; i++)
-            if (objs[i] && objs[i]->Wait(0) == STATUS_SUCCESS)
-                return STATUS_WAIT_0 + uint32_t(i);
-
-        if (timeout == 0)
-            return STATUS_TIMEOUT;
-        if (timeout != INFINITE && std::chrono::steady_clock::now() >= deadline)
-            return STATUS_TIMEOUT;
-
-        // Wake on any event change, with a short timeout so semaphores and
-        // mutants (which don't bump the generation) are polled too.
-        for (int spins = 0; spins < 5 && g_keSetEventGeneration.load() == generation; spins++)
-            std::this_thread::sleep_for(std::chrono::microseconds(200));
-    }
+    if (!Objects || !Count || Count > 64 || WaitType > 1) return STATUS_INVALID_PARAMETER;
+    WaitScope scope("KeWaitForMultipleObjects", uint32_t(Objects[0].ptr));
+    if (Alertable && DeliverUserApcs()) return STATUS_USER_APC;
+    std::vector<std::shared_ptr<KernelObject>> objects;
+    objects.reserve(Count);
+    for (size_t i = 0; i < Count; ++i) objects.push_back(ResolveWaitObject(Objects[i]));
+    return WaitObjects(objects, WaitType, GuestTimeoutToMilliseconds(Timeout));
 }
-
 static uint32_t NtWaitForSingleObjectEx(uint32_t Handle, uint32_t WaitMode, uint32_t Alertable, be<int64_t>* Timeout)
 {
     WaitScope scope("NtWaitForSingleObjectEx", Handle);
-    if (Alertable && DeliverUserApcs())
-        return STATUS_USER_APC;
-    uint32_t timeout = GuestTimeoutToMilliseconds(Timeout);
-    if (Handle == CURRENT_THREAD_HANDLE)
-        return STATUS_TIMEOUT;
-    if (IsKernelObject(Handle))
-        return GetKernelObject(Handle)->Wait(timeout);
-
-    LOG_KERNEL("unrecognized handle {:#x}", Handle);
-    return STATUS_INVALID_HANDLE;
+    if (Alertable && DeliverUserApcs()) return STATUS_USER_APC;
+    if (Handle == CURRENT_THREAD_HANDLE) return STATUS_TIMEOUT;
+    auto object = GetKernelObject(Handle);
+    return object ? object->Wait(GuestTimeoutToMilliseconds(Timeout)) : STATUS_INVALID_HANDLE;
 }
-
 static uint32_t NtWaitForMultipleObjectsEx(uint32_t Count, be<uint32_t>* Handles, uint32_t WaitType, uint32_t WaitMode, uint32_t Alertable, be<int64_t>* Timeout)
 {
-    WaitScope scope("NtWaitForMultipleObjectsEx", Count ? uint32_t(Handles[0]) : 0);
-    if (Alertable && DeliverUserApcs())
-        return STATUS_USER_APC;
-    const uint32_t timeout = GuestTimeoutToMilliseconds(Timeout);
-    static const bool traceEvents = getenv("LO_TRACE_EVENTS") != nullptr;
-    if (traceEvents)
-    {
-        std::string hs;
-        for (uint32_t i = 0; i < Count; i++) hs += fmt::format(" {:#x}", uint32_t(Handles[i]));
-        LOG_KERNEL("count={} waitAll={} timeout={} handles:{} lr={:#x}", Count, WaitType == 0, timeout, hs, uint32_t(g_ppcContext->lr));
-    }
-    std::vector<KernelObject*> objs(Count, nullptr);
-    for (size_t i = 0; i < Count; i++)
-        if (IsKernelObject(Handles[i]))
-            objs[i] = GetKernelObject(Handles[i]);
-
-    if (WaitType == 0)
-    {
-        for (auto* o : objs)
-            if (o) o->Wait(timeout);
-        return STATUS_SUCCESS;
-    }
-
-    auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout);
-    while (true)
-    {
-        for (size_t i = 0; i < Count; i++)
-            if (objs[i] && objs[i]->Wait(0) == STATUS_SUCCESS)
-                return STATUS_WAIT_0 + uint32_t(i);
-        if (timeout == 0)
-            return STATUS_TIMEOUT;
-        if (timeout != INFINITE && std::chrono::steady_clock::now() >= deadline)
-            return STATUS_TIMEOUT;
-        std::this_thread::sleep_for(std::chrono::microseconds(200));
-    }
+    if (!Handles || !Count || Count > 64 || WaitType > 1) return STATUS_INVALID_PARAMETER;
+    WaitScope scope("NtWaitForMultipleObjectsEx", uint32_t(Handles[0]));
+    if (Alertable && DeliverUserApcs()) return STATUS_USER_APC;
+    std::vector<std::shared_ptr<KernelObject>> objects;
+    objects.reserve(Count);
+    for (size_t i = 0; i < Count; ++i) objects.push_back(GetKernelObject(Handles[i]));
+    return WaitObjects(objects, WaitType, GuestTimeoutToMilliseconds(Timeout));
 }
 
 static uint32_t NtCreateSemaphore(be<uint32_t>* Handle, XOBJECT_ATTRIBUTES* ObjectAttributes, uint32_t InitialCount, uint32_t MaximumCount)
 {
+    if (!Handle || !MaximumCount || InitialCount > MaximumCount) return STATUS_INVALID_PARAMETER;
     *Handle = GetKernelHandle(CreateKernelObject<Semaphore>(InitialCount, MaximumCount));
     return STATUS_SUCCESS;
 }
 
 static uint32_t NtReleaseSemaphore(uint32_t Handle, uint32_t ReleaseCount, be<int32_t>* PreviousCount)
 {
-    if (!IsKernelObject(Handle))
-        return STATUS_INVALID_HANDLE;
+    auto semaphore = GetKernelObject<Semaphore>(Handle);
+    if (!semaphore) return STATUS_INVALID_HANDLE;
     uint32_t previousCount;
-    static_cast<Semaphore*>(GetKernelObject(Handle))->Release(ReleaseCount, &previousCount);
+    if (!semaphore->Release(ReleaseCount, &previousCount)) return 0xC0000047; // SEMAPHORE_LIMIT_EXCEEDED
     if (PreviousCount != nullptr)
         *PreviousCount = int32_t(previousCount);
     return STATUS_SUCCESS;
@@ -570,7 +379,7 @@ static void KeInitializeSemaphore(XKSEMAPHORE* semaphore, uint32_t count, uint32
 
 static uint32_t KeReleaseSemaphore(XKSEMAPHORE* semaphore, uint32_t increment, uint32_t adjustment, uint32_t wait)
 {
-    auto* object = QueryKernelObject<Semaphore>(semaphore->Header);
+    auto object = QueryKernelObject<Semaphore>(semaphore->Header);
     uint32_t previous;
     object->Release(adjustment, &previous);
     return previous;
@@ -584,9 +393,9 @@ static uint32_t NtCreateMutant(be<uint32_t>* Handle, XOBJECT_ATTRIBUTES* ObjectA
 
 static uint32_t NtReleaseMutant(uint32_t Handle, be<int32_t>* PreviousCount)
 {
-    if (!IsKernelObject(Handle))
-        return STATUS_INVALID_HANDLE;
-    static_cast<Mutant*>(GetKernelObject(Handle))->Release();
+    auto mutant = GetKernelObject<Mutant>(Handle);
+    if (!mutant) return STATUS_INVALID_HANDLE;
+    if (!mutant->Release()) return 0xC0000046; // MUTANT_NOT_OWNED
     if (PreviousCount)
         *PreviousCount = 0;
     return STATUS_SUCCESS;
@@ -718,7 +527,7 @@ static uint32_t ExCreateThread(be<uint32_t>* handle, uint32_t stackSize, be<uint
         LOG_KERNEL("stack={:#x} startup={:#x} start={:#x} ctx={:#x} flags={:#x}", stackSize, xApiThreadStartup, startAddress, startContext, creationFlags);
 
     uint32_t hostThreadId;
-    auto* hThread = GuestThread::Start(params, &hostThreadId);
+    auto hThread = GuestThread::Start(params, &hostThreadId);
     *handle = GetKernelHandle(hThread);
     if (threadId != nullptr)
         *threadId = hostThreadId;
@@ -745,11 +554,11 @@ void GuestThreadRunWithTerminateHook(void (*run)(void*), void* arg)
     poll_wait::ResetThread();
 }
 
-static GuestThreadHandle* ThreadFromHandle(uint32_t handle)
+static std::shared_ptr<GuestThreadHandle> ThreadFromHandle(uint32_t handle)
 {
     if (handle == CURRENT_THREAD_HANDLE || !IsKernelObject(handle))
         return nullptr;
-    return static_cast<GuestThreadHandle*>(GetKernelObject(handle));
+    return GetKernelObject<GuestThreadHandle>(handle);
 }
 
 static void KeSetBasePriorityThread(uint32_t thread, int priority)
@@ -757,7 +566,7 @@ static void KeSetBasePriorityThread(uint32_t thread, int priority)
 #ifdef _WIN32
     if (priority == 16) priority = 15;
     else if (priority == -16) priority = -15;
-    auto* t = ThreadFromHandle(thread);
+    auto t = ThreadFromHandle(thread);
     SetThreadPriority(t ? t->thread.native_handle() : GetCurrentThread(), priority);
 #endif
 }
@@ -765,7 +574,7 @@ static void KeSetBasePriorityThread(uint32_t thread, int priority)
 static int KeQueryBasePriorityThread(uint32_t thread)
 {
 #ifdef _WIN32
-    auto* t = ThreadFromHandle(thread);
+    auto t = ThreadFromHandle(thread);
     return GetThreadPriority(t ? t->thread.native_handle() : GetCurrentThread());
 #else
     return 0;
@@ -781,32 +590,32 @@ static uint32_t KeSetAffinityThread(uint32_t Thread, uint32_t Affinity, be<uint3
 
 static uint32_t NtSuspendThread(uint32_t handle, be<uint32_t>* suspendCount)
 {
-    auto* t = ThreadFromHandle(handle);
+    auto t = ThreadFromHandle(handle);
     if (!t)
         return STATUS_INVALID_HANDLE;
-    t->suspended = true;
+    t->control->suspended = true;
     if (suspendCount) *suspendCount = 0;
     return STATUS_SUCCESS;
 }
 
 static uint32_t NtResumeThread(uint32_t handle, be<uint32_t>* suspendCount)
 {
-    auto* t = ThreadFromHandle(handle);
+    auto t = ThreadFromHandle(handle);
     if (!t)
         return STATUS_INVALID_HANDLE;
-    t->suspended = false;
-    t->suspended.notify_all();
+    t->control->suspended = false;
+    t->control->suspended.notify_all();
     if (suspendCount) *suspendCount = 1;
     return STATUS_SUCCESS;
 }
 
 static uint32_t KeResumeThread(uint32_t handle)
 {
-    auto* t = ThreadFromHandle(handle);
+    auto t = ThreadFromHandle(handle);
     if (!t)
         return 0;
-    t->suspended = false;
-    t->suspended.notify_all();
+    t->control->suspended = false;
+    t->control->suspended.notify_all();
     return 1;
 }
 
@@ -817,7 +626,7 @@ static uint32_t KeDelayExecutionThread(uint32_t WaitMode, bool Alertable, be<int
         return STATUS_USER_APC;
     uint32_t timeout = GuestTimeoutToMilliseconds(Timeout);
     if (timeout >= 10 && timeout != INFINITE)
-        LOG_KERNEL("sleep {} ms", timeout);
+        LOGFN_IMPL(Verbose, "sleep {} ms", timeout);
     if (timeout == 0)
     {
         if (!poll_wait::ZeroDelay())
@@ -834,30 +643,24 @@ static uint32_t KeDelayExecutionThread(uint32_t WaitMode, bool Alertable, be<int
 
 static uint32_t ObReferenceObjectByHandle(uint32_t handle, uint32_t objectType, be<uint32_t>* object)
 {
-    *object = handle;
-    return STATUS_SUCCESS;
+    if (!object) return STATUS_INVALID_PARAMETER;
+    *object = ReferenceKernelHandle(handle);
+    return *object ? STATUS_SUCCESS : STATUS_INVALID_HANDLE;
 }
-
-static void ObDereferenceObject(uint32_t object) {}
-static void ObReferenceObject(uint32_t object) {}
-
+static void ObDereferenceObject(uint32_t object) { DereferenceKernelObject(object); }
+static void ObReferenceObject(uint32_t object) { ReferenceKernelObject(object); }
 static uint32_t NtClose(uint32_t handle)
 {
-    if (handle == GUEST_INVALID_HANDLE_VALUE || handle == 0)
-        return STATUS_INVALID_HANDLE;
-    if (IsKernelObject(handle))
-    {
-        DestroyKernelObject(handle);
-        return STATUS_SUCCESS;
-    }
-    LOG_KERNEL("unrecognized handle {:#x}", handle);
-    return STATUS_INVALID_HANDLE;
+    return DestroyKernelObject(handle) ? STATUS_SUCCESS : STATUS_INVALID_HANDLE;
 }
-
 static uint32_t NtDuplicateObject(uint32_t handle, be<uint32_t>* newHandle, uint32_t options)
 {
-    if (newHandle)
-        *newHandle = handle;
+    if (!newHandle) return (options & 1) ? NtClose(handle) : STATUS_INVALID_PARAMETER;
+    *newHandle = 0;
+    if (!IsKernelObject(handle)) return STATUS_INVALID_HANDLE;
+    const auto duplicate = DuplicateKernelHandle(handle, (options & 1) != 0);
+    if (!duplicate) return STATUS_NO_MEMORY;
+    *newHandle = duplicate;
     return STATUS_SUCCESS;
 }
 
@@ -1686,8 +1489,7 @@ static std::mutex g_profileMutex;
 
 static std::string ProfileSettingPath(uint32_t id)
 {
-    const char* dir = getenv("LO_PROFILE_DIR");
-    return fmt::format("{}/setting_{:08x}.bin", dir ? dir : "profile", id);
+    return FileSystem::PathUtf8(os::user_paths::ProfileDir() / fmt::format("setting_{:08x}.bin", id));
 }
 
 static ProfileSetting* FindProfileSetting(uint32_t id)
@@ -1717,8 +1519,13 @@ static void StoreProfileSetting(uint32_t id, uint8_t type, const uint8_t* data, 
     ProfileSetting& entry = g_profileSettings[id];
     entry.type = type;
     entry.data.assign(data, data + size);
-    const char* dir = getenv("LO_PROFILE_DIR");
-    std::filesystem::create_directories(dir ? dir : "profile");
+    std::error_code error;
+    std::filesystem::create_directories(os::user_paths::ProfileDir(), error);
+    if (error)
+    {
+        LOG_WARNING("could not create profile directory: {}", error.message());
+        return;
+    }
     if (FILE* f = fopen(ProfileSettingPath(id).c_str(), "wb"))
     {
         fwrite(&type, 1, 1, f);
@@ -2017,7 +1824,7 @@ static uint32_t XNotifyPositionUI(uint32_t) { return 0; }
 static uint32_t XamTaskSchedule(uint32_t callback, uint32_t context, be<uint32_t>* optionalPtr, be<uint32_t>* handle)
 {
     LOG_KERNEL("callback={:#x} context={:#x}", callback, context);
-    auto* hThread = GuestThread::Start({ callback, context, 0, 0 }, nullptr);
+    auto hThread = GuestThread::Start({ callback, context, 0, 0 }, nullptr);
     if (handle)
         *handle = GetKernelHandle(hThread);
     return STATUS_SUCCESS;

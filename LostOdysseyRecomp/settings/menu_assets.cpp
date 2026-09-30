@@ -1,4 +1,5 @@
 #include "menu_assets.h"
+#include <modding/image_mod.h>
 #include <gpu/shader/cpx_decode.h>
 #include <lzokay.hpp>
 #include <algorithm>
@@ -153,12 +154,20 @@ void Bc3(const uint8_t *b, Image &image, uint32_t x, uint32_t y)
             alpha[(abits >> (3 * i)) & 7] << 24 | c[0] << 16 | c[1] << 8 | c[2];
     }
 }
-Image Texture(const Package &package, const Export &e)
+Image Texture(const Package &package, const Export &e, std::string_view packagePath)
 {
     auto object = package.Read(e); auto r = object.native;
     const auto width = object.integers.at("SizeX"), height = object.integers.at("SizeY");
     Check(object.integers.at("Format") == 7 && width >= 128 && height >= 128 && width <= 2048 && height <= 2048);
     Check((width & (width - 1)) == 0 && (height & (height - 1)) == 0);
+    if (!packagePath.empty())
+    {
+        // Extractor export indices are zero-based, unlike UE object references.
+        const auto key = modding::MakeManifestKey(packagePath, uint32_t(&e - package.exports.data()), e.name);
+        if (auto replacement = modding::ReadImageReplacement(
+                {{modding::AssetKind::Image, key}, {}}, uint32_t(width), uint32_t(height)))
+            return Image{replacement->width, replacement->height, std::move(replacement->pixels)};
+    }
     Check(r.U32() == 0 && r.U32() == 0 && r.U32() == 0); const auto sourceOffset = r.U32();
     Check(sourceOffset == r.pos);
     const auto mipCount = r.U32(); Check(mipCount > 0 && mipCount <= 12);
@@ -302,7 +311,7 @@ struct Index
 };
 }
 
-Font DecodeFont(std::span<const uint8_t> bytes, const std::string &name)
+Font DecodeFont(std::span<const uint8_t> bytes, const std::string &name, std::string_view packagePath)
 {
     Package package(bytes); const auto &e = package.Find(name, "Font");
     auto r = package.Read(e).native; const auto count = r.U32(); Check(count && count <= 16384);
@@ -326,7 +335,7 @@ Font DecodeFont(std::span<const uint8_t> bytes, const std::string &name)
     for (const auto ref : refs)
     {
         const auto &page = package.exports[ref - 1]; Check(page.outer == int32_t(&e - package.exports.data() + 1));
-        auto image = Texture(package, page); totalPixels += image.pixels.size(); Check(totalPixels <= 16 * 1024 * 1024);
+        auto image = Texture(package, page, packagePath); totalPixels += image.pixels.size(); Check(totalPixels <= 16 * 1024 * 1024);
         font.pages.push_back(std::move(image));
     }
     for (const auto &[cp, g] : font.glyphs)
@@ -337,9 +346,9 @@ Font DecodeFont(std::span<const uint8_t> bytes, const std::string &name)
     }
     return font;
 }
-Image DecodeTexture(std::span<const uint8_t> bytes, const std::string &name)
+Image DecodeTexture(std::span<const uint8_t> bytes, const std::string &name, std::string_view packagePath)
 {
-    Package package(bytes); return Texture(package, package.Find(name, "Texture2D"));
+    Package package(bytes); return Texture(package, package.Find(name, "Texture2D"), packagePath);
 }
 std::shared_ptr<const Assets> Load(const std::filesystem::path &gameRoot, uint32_t language) noexcept
 {
@@ -352,13 +361,15 @@ std::shared_ptr<const Assets> Load(const std::filesystem::path &gameRoot, uint32
         Index index(disc / "LO.fpi");
         constexpr const char *languages[] = {"int", "chi", "jpn", "kor", "sch"};
         const std::string selected = languages[language < std::size(languages) ? language : 0];
+        const auto commonPath = "bin/xenon/loc/" + selected + "/menu/rpfontscommon_" + selected + ".xxx";
         auto common = index.ReadPackage(disc, selected, "rpfontscommon");
         auto assets = std::make_shared<Assets>(); assets->language = selected;
-        assets->body = DecodeFont(common, "Maru23");
-        try { assets->title = DecodeFont(common, "LocTit1"); } catch (...) { /* Body face remains available. */ }
-        try { assets->fallback = DecodeFont(common, "Abc"); } catch (...) { /* Missing glyphs retain GDI fallback. */ }
+        assets->body = DecodeFont(common, "Maru23", commonPath);
+        try { assets->title = DecodeFont(common, "LocTit1", commonPath); } catch (...) { /* Body face remains available. */ }
+        try { assets->fallback = DecodeFont(common, "Abc", commonPath); } catch (...) { /* Missing glyphs retain GDI fallback. */ }
+        const auto menuPath = "bin/xenon/loc/" + selected + "/menu/rpmenurescommon_" + selected + ".xxx";
         auto menu = index.ReadPackage(disc, selected, "rpmenurescommon");
-        assets->menu = DecodeTexture(menu, "UI_MAIN_00");
+        assets->menu = DecodeTexture(menu, "UI_MAIN_00", menuPath);
         // The UV layout below is the verified 512x1024 common menu atlas.
         Check(assets->menu.width == 512 && assets->menu.height == 1024);
         return assets;
@@ -367,12 +378,16 @@ std::shared_ptr<const Assets> Load(const std::filesystem::path &gameRoot, uint32
 }
 std::shared_ptr<const Assets> Cached(const std::filesystem::path &gameRoot, uint32_t language) noexcept
 {
-    // Only the presentation thread calls this. A changed root discards the old cache.
+    // Only the presentation thread calls this. No per-frame filesystem scans.
     static std::filesystem::path root;
+    static uint64_t generation = 0;
     static std::map<uint32_t, std::shared_ptr<const Assets>> cache;
     try
     {
-        if (root != gameRoot) { root = gameRoot; cache.clear(); }
+        const auto currentGeneration = modding::Generation();
+        if (root != gameRoot || generation != currentGeneration) {
+            root = gameRoot; generation = currentGeneration; cache.clear();
+        }
         auto [entry, inserted] = cache.try_emplace(language);
         if (inserted) entry->second = Load(gameRoot, language);
         return entry->second;

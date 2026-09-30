@@ -1,0 +1,19 @@
+{
+  "app-id": "io.github.freefrank.LostOdysseyRecomp",
+  "runtime": "org.freedesktop.Platform",
+  "runtime-version": "26.08",
+  "sdk": "org.freedesktop.Sdk",
+  "command": "LostOdysseyRecomp",
+  "finish-args": [
+    "--share=network",
+    "--share=ipc",
+    "--socket=wayland",
+    "--socket=fallback-x11",
+    "--socket=pulseaudio",
+    "--device=all",
+    "--filesystem=host",
+    "--filesystem=/media",
+    "--filesystem=/run/media",
+    "--filesystem=/mnt"
+  ]
+}

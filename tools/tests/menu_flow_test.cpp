@@ -3,13 +3,32 @@
 #include <stdafx.h>
 #include <gpu/video.h>
 #include <settings/config.h>
+#define SDL_MAIN_HANDLED // This host fixture supplies its own main and does not initialize SDL.
+#include <SDL.h>
 #include <fstream>
 #include <stdexcept>
-namespace gpu::video { plume::RenderDevice* MenuFlowTestDevice(); }
+#include <tuple>
+extern "C" int SDLCALL MenuFlowPushEvent(SDL_Event* event);
+namespace settings { void RequestMainMenuAfterSettingsClose(PPCContext& ctx, uint8_t* base, uint32_t settingsMenu); }
+namespace gpu::video {
+plume::RenderDevice* MenuFlowTestDevice();
+inline bool WindowModeOverridden() { return false; }
+inline std::optional<gpu::backend::Backend> SelectedBackend() { return gpu::backend::Backend::D3D12; }
+}
+#include <kernel/io/file_system.h>
+inline std::filesystem::path FileSystem::GetGameRoot() { return {}; }
+namespace gpu::taa_collection {
+inline const wchar_t* Label(uint32_t) { return L"Collection"; }
+inline const wchar_t* Message(uint32_t) { return L"Message"; }
+inline bool Enabled() { return false; }
+inline int Consent() { return 0; }
+inline bool SetConsent(bool) { return true; }
+}
 namespace settings {
 Config MenuFlowGetConfig();
 bool MenuFlowSaveConfig(const Config&);
 void MenuFlowPreviewConfig(const Config&);
+inline uint32_t GameLanguage() { return 1; }
 }
 namespace gpu::video {
 uint64_t MenuFlowBeginDisplayChange(const settings::Config&);
@@ -29,7 +48,9 @@ bool MenuFlowDisplayModeFailed();
 #define __imp__sub_828710A0 MenuFlowDefaults
 #define __imp__sub_82889E50 MenuFlowClose
 #define Translate MenuFlowTranslate
+#define SDL_PushEvent MenuFlowPushEvent
 #include "../../LostOdysseyRecomp/settings/menu.cpp"
+#undef SDL_PushEvent
 #undef Translate
 #undef GetConfig
 #undef SaveConfig
@@ -44,6 +65,29 @@ bool MenuFlowDisplayModeFailed();
 #undef __imp__sub_828710A0
 #undef __imp__sub_82889E50
 
+namespace gpu::video {
+FrameGenerationStatus menuFlowFgStatus{};
+FrameGenerationStatus GetFrameGenerationStatus() { return menuFlowFgStatus; }
+}
+
+// Compile the real settings reader/writer into this menu fixture as well.
+// Its public entry points stay distinct from the menu hook's mock persistence.
+#define GameLanguage MenuFlowRealGameLanguage
+#undef LOG_INFO
+#define LOG_INFO(...) ((void)0)
+#include "../../LostOdysseyRecomp/settings/config.cpp"
+#undef LOG_INFO
+#undef GameLanguage
+
+using settings::GraphicsRow;
+
+namespace gpu::frame_plan {
+DlssEffectSnapshot menuFlowDlssEffect{};
+DlssEffectSnapshot CurrentDlssEffect() { return menuFlowDlssEffect; }
+std::optional<UpscalerExecutionObservation> CurrentUpscalerExecution() { return menuFlowDlssEffect.execution; }
+}
+namespace hid { bool UsesPlayStationPrompts() { return false; } }
+
 namespace {
 constexpr uint32_t Menu = 0x10000, ConfigData = 0x21000;
 bool deviceReady = true;
@@ -52,16 +96,11 @@ std::vector<char> calls;
 settings::Config currentConfig{}, diskConfig{};
 unsigned saves = 0, previews = 0, requests = 0;
 bool saveFails = false, modeFailed = false;
+unsigned quitEventAttempts = 0, mainMenuRequests = 0;
 gpu::video::DisplayChangeTracker displayChanges;
 void Require(bool condition, const char* message)
 {
     if (!condition) throw std::runtime_error(message);
-}
-bool covers(const settings::menu_assets::Font& font, const std::wstring& text)
-{
-    return std::all_of(text.begin(), text.end(), [&](wchar_t c) {
-        return c == L' ' || font.glyphs.contains(uint32_t(c));
-    });
 }
 void Poll(uint16_t buttons, bool consumed, int16_t x = 0, int16_t y = 0)
 {
@@ -111,6 +150,19 @@ bool settings::MenuFlowSaveConfig(const Config& value)
     currentConfig = diskConfig = value;
     return true;
 }
+extern "C" int SDLCALL MenuFlowPushEvent(SDL_Event* event)
+{
+    (void)event;
+    ++quitEventAttempts;
+    throw std::runtime_error("return to main menu must never push an SDL event");
+}
+void settings::RequestMainMenuAfterSettingsClose(PPCContext& ctx, uint8_t* base, uint32_t settingsMenu)
+{
+    Require(settingsMenu == Menu && PPC_LOAD_U32(settingsMenu + 4) <= 2 &&
+            !settings::active && ctx.r3.u32 == Menu, "main-menu request follows native Settings completion");
+    (void)base;
+    ++mainMenuRequests;
+}
 void settings::MenuFlowPreviewConfig(const Config& value) { ++previews; currentConfig = value; }
 uint64_t gpu::video::MenuFlowBeginDisplayChange(const settings::Config& value)
 {
@@ -148,6 +200,556 @@ extern "C" PPC_FUNC(MenuFlowClose)
 extern "C" PPC_FUNC(MenuFlowOriginalLanguage) { (void)ctx; (void)base; }
 extern "C" PPC_FUNC(MenuFlowDefaults) { (void)ctx; (void)base; }
 
+std::string Utf8(const std::wstring& text)
+{
+    if (text.empty()) return {};
+    const int size = WideCharToMultiByte(CP_UTF8, 0, text.c_str(), -1, nullptr, 0, nullptr, nullptr);
+    std::string out(size > 1 ? size - 1 : 0, '\0');
+    if (size > 1) WideCharToMultiByte(CP_UTF8, 0, text.c_str(), -1, out.data(), size, nullptr, nullptr);
+    return out;
+}
+int BrightGlyphs(const std::vector<uint32_t>& pixels, int y0, int y1)
+{
+    int count = 0;
+    for (int y = y0; y < y1; ++y)
+        for (int x = 131; x < 1190; ++x)
+        {
+            const auto p = pixels[size_t(y) * 1280 + x];
+            if (int(p & 255) + int((p >> 8) & 255) + int((p >> 16) & 255) > 500) ++count;
+        }
+    return count;
+}
+bool OptionRowsMatch(const std::vector<uint32_t>& withNotice, const std::vector<uint32_t>& without)
+{
+    for (int y = 0; y < 640; ++y)
+        for (int x = 0; x < 1280; ++x)
+            if (withNotice[size_t(y) * 1280 + x] != without[size_t(y) * 1280 + x]) return false;
+    return true;
+}
+// Stub observation only. This does not claim a production GPU submission.
+// The menu trusts phase and the snapshot reason; it does not read outcome or ids.
+gpu::frame_plan::DlssExecutionObservation SubmittedObservation(gpu::upscaling::DlssQuality quality,
+    uint32_t inW = 0, uint32_t inH = 0, uint32_t outW = 0, uint32_t outH = 0)
+{
+    gpu::frame_plan::DlssExecutionObservation observed;
+    observed.plan.requestedUpscaler = gpu::upscaling::Upscaler::Dlss;
+    observed.plan.dlssQuality = quality;
+    observed.plan.consumer = gpu::upscaling::TemporalConsumer::DlssSr;
+    observed.plan.width = inW;
+    observed.plan.height = inH;
+    observed.plan.output.width = outW;
+    observed.plan.output.height = outH;
+    observed.renderFrame = 8675309;
+    observed.submissionSerial = 424242;
+    observed.outcome = gpu::frame_plan::DlssExecutionOutcome::Submitted;
+    observed.reason = gpu::frame_plan::DlssEffectReason::None;
+    return observed;
+}
+void CheckBr03DlssMenu(uint8_t* base)
+{
+    using gpu::backend::Backend;
+    using gpu::frame_plan::DlssEffectPhase;
+    using gpu::frame_plan::DlssEffectReason;
+    using gpu::upscaling::DlssQuality;
+    using gpu::upscaling::SizingState;
+    using gpu::upscaling::Upscaler;
+    const auto needsVulkan = std::wstring(L"DLSS needs Vulkan and a restart.");
+    const auto evidence = std::filesystem::current_path() / "out" / "br03-dlss-menu";
+    std::filesystem::create_directories(evidence);
+    std::ofstream notes(evidence / "notices.txt", std::ios::binary);
+    auto saveState = [&](const char* name) {
+        auto preview = settings::snapshot;
+        preview.assets.reset();
+        std::vector<uint32_t> pixels, plain;
+        Require(settings::RasterizeMenu(preview, 1280, 720, pixels), "BR-03 raster");
+        Require(BrightGlyphs(pixels, 672, 692) > 20, "status line is painted in the help bar");
+        auto cleared = preview;
+        cleared.notice.clear();
+        Require(settings::RasterizeMenu(cleared, 1280, 720, plain), "BR-03 raster without notice");
+        Require(OptionRowsMatch(pixels, plain), "status line does not move the option rows");
+        int differ = 0;
+        for (int y = 650; y < 694; ++y)
+            for (int x = 116; x < 1210; ++x)
+                differ += pixels[size_t(y) * 1280 + x] != plain[size_t(y) * 1280 + x];
+        Require(differ > 20, "renderer paints snapshot.notice");
+        WriteBmp(evidence / name, pixels);
+        notes << name << "\t" << Utf8(preview.notice) << "\n";
+    };
+
+    deviceReady = true;
+    settings::restartPrompt = false;
+    settings::collectionPrompt = false;
+    settings::displayTicket = 0;
+    settings::closing = false;
+    settings::bypass = false;
+    currentConfig.uiLanguage = 0;
+    currentConfig.graphicsBackend = settings::GraphicsBackend::D3D12;
+    currentConfig.upscaler = Upscaler::Dlss;
+    currentConfig.dlssQuality = DlssQuality::Quality;
+    settings::active = false;
+    PPC_STORE_U32(Menu + 4, 4);
+    gpu::frame_plan::DlssEffectSnapshot running{};
+    running.device.backend = Backend::D3D12;
+    running.device.deviceReady = true;
+    running.phase = DlssEffectPhase::NeedsVulkanRestart;
+    gpu::frame_plan::menuFlowDlssEffect = running;
+    Tick(base);
+    Require(settings::active, "BR-03 menu is open");
+    settings::tab = 2;
+    settings::row = int(GraphicsRow::AntiAliasing);
+    settings::status.clear();
+    settings::pending = 0;
+    Tick(base);
+    Require(settings::snapshot.notice == needsVulkan, "D3D12 DLSS shows Vulkan restart");
+    Require(settings::snapshot.rows.size() == size_t(GraphicsRow::Count), "BR-03 keeps every graphics row");
+    Require(settings::snapshot.rows[int(GraphicsRow::AntiAliasing)].enabled && settings::snapshot.rows[int(GraphicsRow::AntiAliasing)].choices.size() == 6, "DLSS and FSR choices stay enabled on D3D12");
+    Require(!settings::snapshot.rows[int(GraphicsRow::DlssQuality)].hidden && settings::snapshot.rows[int(GraphicsRow::DlssQuality)].enabled, "quality row stays available");
+    Require(settings::snapshot.rows[int(GraphicsRow::Backend)].enabled && settings::snapshot.rows[int(GraphicsRow::Backend)].choices.size() == 3, "backend choices stay available");
+    Require(settings::snapshot.help == L"Saves the DLSS preference. The status line shows the latest DLSS result.",
+            "upscaler help points at the status line");
+    saveState("01-d3d12-needs-vulkan.bmp");
+    settings::row = int(GraphicsRow::DlssQuality);
+    settings::pending = 0;
+    Tick(base);
+    Require(settings::snapshot.help == L"Performance, Balanced, Quality, or DLAA. The status line shows the submitted mode.",
+            "quality help names the submitted mode");
+    auto checkQuality = [&](const std::vector<std::wstring>& choices, int selected, const char* message) {
+        const auto& quality = settings::snapshot.rows[int(GraphicsRow::DlssQuality)];
+        Require(quality.choices == choices && quality.selectedChoice == selected && quality.value == choices[size_t(selected)],
+                message);
+    };
+    const std::vector<std::wstring> dlssChoices{L"Performance", L"Balanced", L"Quality", L"DLAA"};
+    checkQuality(dlssChoices, 2, "saved DLSS Quality displays in third position");
+    settings::pending = 8; Tick(base);
+    Require(settings::edit.dlssQuality == DlssQuality::Dlaa, "DLSS right from Quality selects DLAA");
+    checkQuality(dlssChoices, 3, "DLAA displays in fourth position");
+    settings::pending = 8; Tick(base);
+    Require(settings::edit.dlssQuality == DlssQuality::Performance, "DLSS right wraps to Performance");
+    checkQuality(dlssChoices, 0, "DLSS Performance displays first");
+    settings::pending = 8; Tick(base);
+    Require(settings::edit.dlssQuality == DlssQuality::Balanced, "DLSS right selects Balanced");
+    checkQuality(dlssChoices, 1, "DLSS Balanced displays second");
+    settings::pending = 8; Tick(base);
+    Require(settings::edit.dlssQuality == DlssQuality::Quality, "DLSS right selects Quality");
+    checkQuality(dlssChoices, 2, "DLSS Quality displays third after cycling");
+    settings::pending = 4; Tick(base);
+    Require(settings::edit.dlssQuality == DlssQuality::Balanced, "DLSS left from Quality selects Balanced");
+    settings::edit.dlssQuality = DlssQuality::Quality;
+    settings::row = int(GraphicsRow::AntiAliasing);
+    settings::pending = 0;
+    Tick(base);
+    settings::pending = 8;
+    Tick(base);
+    Require(settings::edit.upscaler == Upscaler::Fsr && !settings::snapshot.rows[int(GraphicsRow::DlssQuality)].hidden,
+            "FSR can be selected independently on D3D12");
+    settings::row = int(GraphicsRow::DlssQuality);
+    settings::edit.fsrQuality = gpu::upscaling::FsrQuality::Quality;
+    settings::pending = 0; Tick(base);
+    const std::vector<std::wstring> fsrChoices{L"Performance", L"Balanced", L"Quality", L"Native AA"};
+    checkQuality(fsrChoices, 2, "saved FSR Quality displays in third position with Native AA last");
+    Require(settings::snapshot.help == L"Performance, Balanced, Quality, or Native AA. Native AA keeps the output resolution.",
+            "FSR help matches the choice order");
+    settings::pending = 4; Tick(base);
+    Require(settings::edit.fsrQuality == gpu::upscaling::FsrQuality::Balanced, "FSR left from Quality selects Balanced");
+    checkQuality(fsrChoices, 1, "FSR Balanced displays second");
+    settings::pending = 4; Tick(base);
+    Require(settings::edit.fsrQuality == gpu::upscaling::FsrQuality::Performance, "FSR left selects Performance");
+    checkQuality(fsrChoices, 0, "FSR Performance displays first");
+    settings::pending = 4; Tick(base);
+    Require(settings::edit.fsrQuality == gpu::upscaling::FsrQuality::NativeAA, "FSR left wraps to Native AA");
+    checkQuality(fsrChoices, 3, "FSR Native AA displays last");
+    settings::pending = 8; Tick(base);
+    Require(settings::edit.fsrQuality == gpu::upscaling::FsrQuality::Performance, "FSR right wraps to Performance");
+    settings::row = int(GraphicsRow::AntiAliasing);
+    settings::pending = 8;
+    Tick(base);
+    Require(settings::edit.upscaler == Upscaler::Off && settings::snapshot.rows[int(GraphicsRow::DlssQuality)].hidden, "DLSS can be turned off on D3D12");
+    Require(settings::snapshot.notice == needsVulkan + L" The Off choice is not applied yet.",
+            "turning DLSS off before it is applied does not claim the plan is off");
+    for (int i = 0; i < 4; ++i) { settings::pending = 8; Tick(base); } // Off -> FXAA -> SMAA -> TAA -> DLSS
+    Require(settings::edit.upscaler == Upscaler::Dlss && settings::snapshot.notice == needsVulkan, "DLSS can be turned back on");
+
+    running = {};
+    running.device.backend = Backend::Vulkan;
+    running.device.deviceReady = true;
+    running.device.dlssAvailable = false;
+    running.phase = DlssEffectPhase::DeviceUnavailable;
+    gpu::frame_plan::menuFlowDlssEffect = running;
+    settings::edit.graphicsBackend = settings::GraphicsBackend::Vulkan;
+    settings::pending = 0;
+    Tick(base);
+    Require(settings::snapshot.notice == L"DLSS is not available on this device.", "Vulkan device unavailable");
+    Require(settings::snapshot.rows[int(GraphicsRow::AntiAliasing)].enabled && !settings::snapshot.rows[int(GraphicsRow::DlssQuality)].hidden, "unavailable device does not lock DLSS");
+    saveState("02-vulkan-device-unavailable.bmp");
+
+    running.device.dlssAvailable = true;
+    running.device.deviceReady = true;
+    running.phase = DlssEffectPhase::TemporaryFallback;
+    running.reason = DlssEffectReason::SizingPending;
+    running.hasPlan = true;
+    running.plannedRequest = Upscaler::Dlss;
+    running.plannedQuality = DlssQuality::Quality;
+    running.sizingKnown = true;
+    running.sizingState = SizingState::Error;
+    gpu::frame_plan::menuFlowDlssEffect = running;
+    settings::pending = 0;
+    Tick(base);
+    Require(settings::snapshot.notice == L"DLSS is querying the render resolution. Normal rendering is used for now.",
+            "size pending comes from the classified reason, not sizingState");
+    saveState("03-size-pending.bmp");
+
+    running.device.deviceReady = true;
+    running.device.dlssAvailable = true;
+    running.reason = DlssEffectReason::DeviceNotReady;
+    running.sizingState = SizingState::Ready;
+    gpu::frame_plan::menuFlowDlssEffect = running;
+    settings::pending = 0;
+    Tick(base);
+    Require(settings::snapshot.notice == L"DLSS is waiting for the graphics device. Normal rendering is used for now.",
+            "device wait comes from the classified reason, not deviceReady");
+
+    running.device.deviceReady = true;
+    running.device.dlssAvailable = true;
+    running.phase = DlssEffectPhase::Active;
+    running.reason = DlssEffectReason::None;
+    running.plannedQuality = DlssQuality::Performance;
+    running.inputWidth = 111;
+    running.inputHeight = 222;
+    running.outputWidth = 333;
+    running.outputHeight = 444;
+    running.execution = SubmittedObservation(DlssQuality::Quality);
+    gpu::frame_plan::menuFlowDlssEffect = running;
+    settings::edit.dlssQuality = DlssQuality::Balanced;
+    settings::pending = 0;
+    Tick(base);
+    Require(settings::snapshot.notice == L"Submitted DLSS Quality output. The selected DLSS quality is not applied yet.",
+            "editing quality does not replace the submitted Quality output");
+    Require(settings::snapshot.notice.find(L"Performance") == std::wstring::npos,
+            "CPU plan quality is not described as the submitted mode");
+    Require(settings::snapshot.notice.find(L"111") == std::wstring::npos, "CPU plan size is not shown for Active");
+
+    const auto savesBefore = saves;
+    running.execution = SubmittedObservation(DlssQuality::Quality, 1707, 960, 2560, 1440);
+    running.plannedQuality = DlssQuality::Balanced;
+    gpu::frame_plan::menuFlowDlssEffect = running;
+    settings::edit.dlssQuality = DlssQuality::Quality;
+    settings::pending = 0;
+    Tick(base);
+    Require(settings::snapshot.notice == L"Submitted DLSS Quality output. 1707×960 - 2560×1440",
+            "active text names the submitted output and its sizes");
+    Require(settings::snapshot.notice.find(L"8675309") == std::wstring::npos, "status hides the render frame id");
+    Require(settings::snapshot.notice.find(L"424242") == std::wstring::npos, "status hides the submission serial");
+    Require(settings::snapshot.notice.find(L"Balanced") == std::wstring::npos, "CPU plan quality is not the submitted mode");
+    Require(saves == savesBefore, "status refresh does not save");
+    saveState("04-active-frame-plan.bmp");
+
+    running.execution = SubmittedObservation(DlssQuality::Dlaa, 2560, 1440, 2560, 1440);
+    running.plannedQuality = DlssQuality::Quality;
+    running.inputWidth = 11;
+    gpu::frame_plan::menuFlowDlssEffect = running;
+    settings::edit.dlssQuality = DlssQuality::Dlaa;
+    settings::pending = 0;
+    Tick(base);
+    Require(settings::snapshot.notice == L"Submitted DLAA output. 2560×1440 - 2560×1440", "DLAA names the submitted output");
+    Require(settings::snapshot.notice.find(L"Quality") == std::wstring::npos, "DLAA does not keep the CPU plan mode");
+
+    running = {};
+    running.device.backend = Backend::D3D12;
+    running.device.deviceReady = true;
+    running.phase = DlssEffectPhase::NeedsVulkanRestart;
+    running.plannedRequest = Upscaler::Dlss;
+    running.plannedQuality = DlssQuality::Balanced;
+    gpu::frame_plan::menuFlowDlssEffect = running;
+    settings::edit.graphicsBackend = settings::GraphicsBackend::D3D12;
+    settings::edit.upscaler = Upscaler::Dlss;
+    settings::edit.dlssQuality = DlssQuality::Balanced;
+    settings::row = int(GraphicsRow::Backend);
+    settings::pending = 0;
+    Tick(base);
+    Require(settings::snapshot.notice == needsVulkan, "matching D3D12 edit still needs Vulkan");
+    const auto savesAtCycle = saves;
+    settings::pending = 8;
+    Tick(base);
+    Require(settings::edit.graphicsBackend == settings::GraphicsBackend::Vulkan, "Vulkan can be selected while running D3D12");
+    Require(settings::edit.upscaler == Upscaler::Dlss && settings::edit.dlssQuality == DlssQuality::Balanced,
+            "backend edit keeps the DLSS preference");
+    Require(settings::snapshot.rows[int(GraphicsRow::Backend)].enabled && settings::snapshot.rows[int(GraphicsRow::Backend)].selectedChoice == 1, "Vulkan cell stays selectable");
+    Require(settings::snapshot.rows[int(GraphicsRow::AntiAliasing)].enabled && !settings::snapshot.rows[int(GraphicsRow::DlssQuality)].hidden, "pending backend does not hide DLSS");
+    Require(settings::snapshot.notice == needsVulkan + L" Still using Direct3D 12 until restart. DLSS is checked after restart.",
+            "pending backend is added after the current plan and does not replace it");
+    Require(saves == savesAtCycle, "selecting Vulkan does not save by itself");
+    saveState("05-backend-pending.bmp");
+    settings::pending = 8;
+    Tick(base);
+    Require(settings::edit.graphicsBackend == settings::GraphicsBackend::D3D11, "Direct3D 11 remains selectable");
+    Require(settings::snapshot.notice == needsVulkan + L" Still using Direct3D 12 until restart. DLSS is checked after restart.",
+            "an unapplied backend still names the running device");
+
+    settings::edit.graphicsBackend = settings::GraphicsBackend::D3D12;
+    settings::status = L"Display settings saved.";
+    settings::row = int(GraphicsRow::Save);
+    settings::pending = 0;
+    Tick(base);
+    Require(settings::snapshot.help == L"Display settings saved.", "save message stays on the help line");
+    Require(settings::snapshot.notice == needsVulkan, "save message does not hide the DLSS status");
+
+    settings::status.clear();
+    settings::edit.uiLanguage = 4;
+    settings::edit.graphicsBackend = settings::GraphicsBackend::Vulkan;
+    settings::edit.upscaler = Upscaler::Dlss;
+    settings::edit.dlssQuality = DlssQuality::Quality;
+    running = {};
+    running.device.backend = Backend::Vulkan;
+    running.device.deviceReady = true;
+    running.device.dlssAvailable = true;
+    running.phase = DlssEffectPhase::Active;
+    running.reason = DlssEffectReason::None;
+    running.hasPlan = true;
+    running.plannedRequest = Upscaler::Dlss;
+    running.plannedQuality = DlssQuality::Balanced;
+    running.sizingKnown = true;
+    running.sizingState = SizingState::Ready;
+    running.inputWidth = 9;
+    running.inputHeight = 9;
+    running.outputWidth = 9;
+    running.outputHeight = 9;
+    running.execution = SubmittedObservation(DlssQuality::Quality, 1280, 720, 1920, 1080);
+    gpu::frame_plan::menuFlowDlssEffect = running;
+    settings::pending = 0;
+    Tick(base);
+    Require(settings::snapshot.notice == L"已提交 DLSS 质量输出。 1280×720 - 1920×1080", "simplified status");
+    saveState("06-active-simplified.bmp");
+    settings::edit.uiLanguage = 1;
+    settings::pending = 0;
+    Tick(base);
+    Require(settings::snapshot.notice == L"已提交 DLSS 品質輸出。 1280×720 - 1920×1080", "traditional status");
+    settings::edit.uiLanguage = 2;
+    settings::pending = 0;
+    Tick(base);
+    Require(settings::snapshot.notice == L"DLSS 品質出力を提出しました。 1280×720 - 1920×1080", "japanese status");
+    settings::edit.uiLanguage = 3;
+    settings::pending = 0;
+    Tick(base);
+    Require(settings::snapshot.notice == L"DLSS 품질 출력을 제출했습니다. 1280×720 - 1920×1080", "korean status");
+
+    settings::edit.uiLanguage = 0;
+    settings::tab = 0;
+    settings::pending = 0;
+    Tick(base);
+    Require(settings::snapshot.notice.empty(), "other tabs keep a single help line");
+    settings::tab = 2;
+    running.phase = DlssEffectPhase::TemporaryFallback;
+    running.reason = DlssEffectReason::SizingPending;
+    running.plannedQuality = DlssQuality::Quality;
+    running.sizingState = SizingState::Error;
+    gpu::frame_plan::menuFlowDlssEffect = running;
+    settings::pending = 0;
+    Tick(base);
+    Require(settings::snapshot.notice == L"DLSS is querying the render resolution. Normal rendering is used for now.",
+            "an open graphics page reads a new result without reopening");
+    Require(settings::snapshot.notice.find(L"1280") == std::wstring::npos, "a querying result does not keep the submitted size");
+    settings::edit.upscaler = Upscaler::Off;
+    settings::pending = 0;
+    Tick(base);
+    Require(settings::snapshot.notice == L"DLSS is querying the render resolution. Normal rendering is used for now. The Off choice is not applied yet.",
+            "an unsaved Off choice does not replace a plan that is still querying resolution");
+    Require(settings::snapshot.rows[int(GraphicsRow::DlssQuality)].hidden && settings::snapshot.rows.size() == size_t(GraphicsRow::Count),
+            "turning DLSS off hides quality and keeps the row count");
+    const auto activePlan = std::wstring(L"Submitted DLSS Quality output. 1707×960 - 2560×1440");
+    running = {};
+    running.device.backend = Backend::Vulkan;
+    running.device.deviceReady = true;
+    running.device.dlssAvailable = true;
+    running.phase = DlssEffectPhase::Active;
+    running.reason = DlssEffectReason::None;
+    running.hasPlan = true;
+    running.plannedRequest = Upscaler::Dlss;
+    running.plannedQuality = DlssQuality::Performance;
+    running.sizingKnown = true;
+    running.sizingState = SizingState::Ready;
+    running.inputWidth = 111;
+    running.inputHeight = 222;
+    running.outputWidth = 333;
+    running.outputHeight = 444;
+    running.execution = SubmittedObservation(DlssQuality::Quality, 1707, 960, 2560, 1440);
+    gpu::frame_plan::menuFlowDlssEffect = running;
+    settings::edit.uiLanguage = 0;
+    settings::edit.graphicsBackend = settings::GraphicsBackend::Vulkan;
+    settings::edit.upscaler = Upscaler::Off;
+    settings::edit.dlssQuality = DlssQuality::Quality;
+    settings::tab = 2;
+    settings::pending = 0;
+    Tick(base);
+    Require(settings::snapshot.notice == activePlan + L" The Off choice is not applied yet.",
+            "Active plan stays visible when Off is not saved");
+    Require(settings::snapshot.notice.find(L"DLSS is not in use") == std::wstring::npos, "unsaved Off does not claim DLSS stopped");
+    saveState("07-active-edit-off-unsaved.bmp");
+    settings::edit.upscaler = Upscaler::Dlss;
+    settings::edit.dlssQuality = DlssQuality::Balanced;
+    settings::pending = 0;
+    Tick(base);
+    Require(settings::snapshot.notice == activePlan + L" The selected DLSS quality is not applied yet.",
+            "Active Quality stays visible when Balanced is not saved");
+    Require(settings::snapshot.notice.find(L"DLSS Balanced") == std::wstring::npos, "unsaved Balanced is not described as submitted");
+    Require(settings::snapshot.notice.find(L"Performance") == std::wstring::npos, "CPU plan quality is not described as submitted");
+    Require(settings::snapshot.notice.find(L"DLSS is not running") == std::wstring::npos,
+            "an unsaved quality edit is not a fallback");
+    saveState("08-active-quality-unapplied.bmp");
+    running.phase = DlssEffectPhase::Inactive;
+    running.plannedRequest = Upscaler::Off;
+    running.plannedQuality = DlssQuality::Quality;
+    running.device.backend = Backend::D3D12;
+    running.inputWidth = running.inputHeight = running.outputWidth = running.outputHeight = 0;
+    gpu::frame_plan::menuFlowDlssEffect = running;
+    settings::edit.graphicsBackend = settings::GraphicsBackend::D3D12;
+    settings::edit.upscaler = Upscaler::Dlss;
+    settings::edit.dlssQuality = DlssQuality::Quality;
+    settings::pending = 0;
+    Tick(base);
+    Require(settings::snapshot.notice == L"DLSS is not in use. The DLSS choice is not applied yet.",
+            "inactive D3D12 DLSS reports pending choice without claiming submitted output");
+    Require(settings::snapshot.notice.find(L"Submitted") == std::wstring::npos,
+            "unsaved DLSS is not described as submitted output");
+    Require(settings::snapshot.notice.find(L"1707") == std::wstring::npos, "an inactive result does not keep a submitted size");
+    Require(settings::snapshot.rows[int(GraphicsRow::AntiAliasing)].enabled && !settings::snapshot.rows[int(GraphicsRow::DlssQuality)].hidden, "unsaved DLSS choice stays available");
+    saveState("09-d3d12-edit-dlss-unsaved.bmp");
+    running.device.backend = Backend::Vulkan;
+    gpu::frame_plan::menuFlowDlssEffect = running;
+    settings::edit.graphicsBackend = settings::GraphicsBackend::Vulkan;
+    settings::pending = 0;
+    Tick(base);
+    Require(settings::snapshot.notice == L"DLSS is not in use. The DLSS choice is not applied yet.",
+            "unsaved DLSS on Vulkan stays not in use without a Vulkan warning");
+
+    settings::edit.uiLanguage = 0;
+    settings::edit.graphicsBackend = settings::GraphicsBackend::Vulkan;
+    settings::edit.upscaler = Upscaler::Dlss;
+    settings::edit.dlssQuality = DlssQuality::Quality;
+    settings::status.clear();
+    settings::tab = 2;
+    settings::row = int(GraphicsRow::AntiAliasing);
+    auto show = [&](DlssEffectPhase phase, DlssEffectReason reason) {
+        running.phase = phase;
+        running.reason = reason;
+        running.device.backend = Backend::Vulkan;
+        running.device.deviceReady = true;
+        running.device.dlssAvailable = true;
+        gpu::frame_plan::menuFlowDlssEffect = running;
+        settings::pending = 0;
+        Tick(base);
+    };
+    const auto savesAtExecution = saves;
+    running = {};
+    running.execution = SubmittedObservation(DlssQuality::Quality, 1707, 960, 2560, 1440);
+    running.plannedRequest = Upscaler::Dlss;
+    running.plannedQuality = DlssQuality::Quality;
+    running.inputWidth = 1707;
+    running.inputHeight = 960;
+    running.outputWidth = 2560;
+    running.outputHeight = 1440;
+    show(DlssEffectPhase::AwaitingExecution, DlssEffectReason::AwaitingGpuFrame);
+    Require(settings::snapshot.notice == L"Waiting for the first DLSS result.",
+            "waiting for the first result is not submitted output");
+    Require(settings::snapshot.notice.find(L"Submitted") == std::wstring::npos, "waiting cannot claim a submission");
+    Require(settings::snapshot.notice.find(L"1707") == std::wstring::npos, "waiting does not show a planned size");
+    Require(settings::active && settings::tab == 2, "refresh keeps the graphics page open");
+    saveState("10-awaiting-first-result.bmp");
+    show(DlssEffectPhase::AwaitingExecution, DlssEffectReason::None);
+    Require(settings::snapshot.notice == L"Waiting for the first DLSS result.",
+            "awaiting phase without a reason still waits");
+
+    running.execution = SubmittedObservation(DlssQuality::Quality, 1280, 720, 1920, 1080);
+    show(DlssEffectPhase::InputProbeOnly, DlssEffectReason::InputProbeOnly);
+    Require(settings::snapshot.notice == L"Input capture only. DLSS is not run.",
+            "input capture does not execute DLSS");
+    Require(settings::snapshot.notice.find(L"Submitted") == std::wstring::npos, "input capture is not active");
+    saveState("11-input-probe.bmp");
+
+    running.execution->reason = DlssEffectReason::RequestFailure;
+    show(DlssEffectPhase::TemporaryFallback, DlssEffectReason::MotionPipelinePending);
+    Require(settings::snapshot.notice == L"Motion data is still being prepared.",
+            "motion preparation uses the snapshot reason, not the observation reason");
+    saveState("12-motion-preparing.bmp");
+    show(DlssEffectPhase::TemporaryFallback, DlssEffectReason::UnknownColorEncoding);
+    Require(settings::snapshot.notice == L"Color conditions do not support DLSS.", "unsupported color");
+    saveState("13-color-unsupported.bmp");
+    show(DlssEffectPhase::TemporaryFallback, DlssEffectReason::NoEligibleScene);
+    Require(settings::snapshot.notice == L"No eligible scene this frame.", "no eligible scene");
+    saveState("14-no-eligible-scene.bmp");
+    show(DlssEffectPhase::TemporaryFallback, DlssEffectReason::FeatureReconfigurePending);
+    Require(settings::snapshot.notice == L"Waiting to rebuild DLSS.", "rebuild wait");
+    saveState("15-rebuild-waiting.bmp");
+    show(DlssEffectPhase::TemporaryFallback, DlssEffectReason::PromotionUnavailable);
+    Require(settings::snapshot.notice == L"DLSS output was not adopted.", "output not adopted");
+
+    running.sizingState = SizingState::Pending;
+    running.sizingKnown = false;
+    show(DlssEffectPhase::TemporaryFallback, DlssEffectReason::SizingError);
+    Require(settings::snapshot.notice == L"Render resolution query failed.", "resolution query failed");
+    saveState("16-resolution-query-failed.bmp");
+    running.sizingState = SizingState::Error;
+    show(DlssEffectPhase::TemporaryFallback, DlssEffectReason::SizingUnavailable);
+    Require(settings::snapshot.notice == L"Render resolution is unavailable.", "resolution unavailable");
+    running.failure = gpu::frame_plan::FailureReason::InvalidInput;
+    show(DlssEffectPhase::TemporaryFallback, DlssEffectReason::RequestFailure);
+    Require(settings::snapshot.notice == L"DLSS request failed and fell back. No automatic retry.",
+            "request failure names the fallback and does not promise a retry");
+    Require(settings::snapshot.notice.find(L"InvalidInput") == std::wstring::npos, "failure enum is not shown");
+    Require(settings::snapshot.notice.find(L"will retry") == std::wstring::npos, "request failure does not promise a retry");
+    saveState("17-request-failed.bmp");
+    show(DlssEffectPhase::TemporaryFallback, DlssEffectReason::CapabilityUnavailable);
+    Require(settings::snapshot.notice == L"DLSS is not available on this device.",
+            "capability reason is shown without a device-flag decision");
+
+    running.failure = gpu::frame_plan::FailureReason::DlssOutOfMemory;
+    running.execution.reset();
+    show(DlssEffectPhase::GpuStopped, DlssEffectReason::GpuWorkStopped);
+    Require(settings::snapshot.notice == L"GPU work has stopped.", "GPU work stopped");
+    Require(settings::snapshot.notice.find(L"OutOfMemory") == std::wstring::npos, "GPU stop hides the failure code");
+    Require(settings::snapshot.notice.find(L"Submitted") == std::wstring::npos, "GPU stop is not active");
+    saveState("18-gpu-stopped.bmp");
+    running.failure.reset();
+    show(DlssEffectPhase::GpuStopped, DlssEffectReason::None);
+    Require(settings::snapshot.notice == L"GPU work has stopped.", "GPU stop phase is enough when no reason is set");
+
+    running.execution = SubmittedObservation(DlssQuality::Performance, 1280, 720, 1920, 1080);
+    running.plannedQuality = DlssQuality::Quality;
+    running.inputWidth = 111;
+    settings::edit.dlssQuality = DlssQuality::Performance;
+    show(DlssEffectPhase::Active, DlssEffectReason::RequestFailure);
+    Require(settings::snapshot.notice == L"Submitted DLSS Performance output. 1280×720 - 1920×1080",
+            "Active uses the submitted mode even if a stale reason is set");
+    Require(settings::snapshot.notice.find(L"Quality output") == std::wstring::npos, "Active does not use the CPU plan mode");
+    Require(settings::snapshot.notice.find(L"111×") == std::wstring::npos, "Active does not use the CPU plan size");
+    Require(settings::snapshot.notice.find(L"failed") == std::wstring::npos, "Active does not show a stale failure reason");
+
+    running.execution = SubmittedObservation(DlssQuality::Balanced, 1500, 844, 2560, 1440);
+    running.plannedQuality = DlssQuality::Balanced;
+    settings::edit.dlssQuality = DlssQuality::Quality;
+    show(DlssEffectPhase::Active, DlssEffectReason::None);
+    Require(settings::snapshot.notice ==
+                L"Submitted DLSS Balanced output. 1500×844 - 2560×1440 The selected DLSS quality is not applied yet.",
+            "submitted Balanced stays visible when the edit is still Quality");
+    Require(settings::snapshot.notice.find(L"Quality output") == std::wstring::npos, "the edit is not described as submitted");
+
+    running.execution.reset();
+    running.plannedQuality = DlssQuality::Quality;
+    settings::edit.dlssQuality = DlssQuality::Performance;
+    show(DlssEffectPhase::Active, DlssEffectReason::None);
+    Require(settings::snapshot.notice == L"Waiting for the first DLSS result.",
+            "Active without an execution record waits and does not claim a submission");
+    Require(settings::snapshot.notice.find(L"Submitted") == std::wstring::npos, "missing execution is not described as submitted");
+    Require(settings::snapshot.notice.find(L"Performance") == std::wstring::npos, "missing execution does not name the edit");
+    Require(settings::snapshot.notice.find(L"not applied") == std::wstring::npos,
+            "missing execution does not invent a quality comparison");
+    Require(saves == savesAtExecution, "execution status refresh does not save");
+    Require(settings::snapshot.rows.size() == size_t(GraphicsRow::Count), "execution status keeps every graphics row");
+    Require(settings::active, "execution status refresh leaves the menu open");
+    notes.close();
+    Require(bool(notes), "write BR-03 notice list");
+    std::puts("PASS BR-03 menu status from stubbed snapshots: submitted output, waiting, probe, fallback reasons, GPU stopped, unsaved edits");
+}
+
 int main(int argc, char** argv)
 {
     uint8_t* base = nullptr;
@@ -184,7 +786,7 @@ int main(int argc, char** argv)
             Require(settings::active && closes == oldCloses + 1, "same address reopens without duplicate close");
         }
         // Existing brightness handoff must return to this same replacement.
-        settings::tab = 2; settings::row = 7;
+        settings::tab = 2; settings::row = int(GraphicsRow::Brightness);
         PPC_STORE_U32(Menu + 0x558 + 0x84, 0x22000);
         PPC_STORE_U32(0x22000 + 4, 12);
         settings::pending = 0x3000; Tick(base);
@@ -206,7 +808,7 @@ int main(int argc, char** argv)
         Require(ticks == oldTicks + 1, "no-device retail fallback retained");
         std::puts("PASS actual menu hook: edit/apply, close order/context, native completion, held-key gate, swapped buttons, reopen, calibration return, no-device fallback");
         deviceReady = true;
-        settings::tab = 2; settings::row = 8;
+        settings::tab = 2; settings::row = int(GraphicsRow::Save);
         settings::edit = currentConfig;
         const auto original = currentConfig;
         settings::edit.width = original.width + 160;
@@ -283,6 +885,523 @@ int main(int argc, char** argv)
         Require(displayChanges.Query(invalidated) == gpu::video::DisplayChangeResult::Failed && !displayChanges.PresentationTicket(),
                 "reset invalidates pending and late presentation results");
         std::puts("PASS actual Graphics Save: write failure, one click/apply acknowledgment, rollback and disk error, same-mode retry, stale completion, Now/Later, reset invalidation");
+
+        // Widescreen workflow verification:
+        // 1. Initial 3440x1440 configuration: widescreen switch derives ON, selects 3440x1440 in 21:9 list
+        {
+            currentConfig.width = 3440;
+            currentConfig.height = 1440;
+            diskConfig = currentConfig;
+            settings::edit = currentConfig;
+            settings::tab = 2;
+            settings::row = int(GraphicsRow::Widescreen);
+            settings::Publish(base, ConfigData);
+            Require(settings::snapshot.rows.size() == size_t(GraphicsRow::Count), "graphics tab has one row per id");
+            const auto& wsRow = settings::snapshot.rows[int(GraphicsRow::Widescreen)];
+            Require(wsRow.name == L"Widescreen" && wsRow.value == L"On" && wsRow.selectedChoice == 0,
+                    "initial 3440x1440 automatically enables Widescreen switch");
+            const auto& resRow = settings::snapshot.rows[int(GraphicsRow::OutputResolution)];
+            Require(resRow.name == L"Output resolution", "output resolution keeps its graphics id");
+            Require(resRow.choices.size() == 5, "21:9 resolution choices count is 5");
+            Require(resRow.choices[0] == L"1720 × 720" && resRow.choices[1] == L"2560 × 1080" &&
+                    resRow.choices[2] == L"3440 × 1440" && resRow.choices[3] == L"3840 × 1600" &&
+                    resRow.choices[4] == L"5120 × 2160", "21:9 resolution choices match specification");
+            Require(resRow.selectedChoice == 2 && resRow.value == L"3440 × 1440",
+                    "3440x1440 selected in 21:9 output choices");
+        }
+
+        // 2. Start from 16:9 1280x720, toggle switch ON -> 1720x720, cycle all 5 ultrawide tiers including 5120x2160
+        {
+            currentConfig.width = 1280;
+            currentConfig.height = 720;
+            diskConfig = currentConfig;
+            settings::edit = currentConfig;
+            settings::tab = 2;
+            settings::row = int(GraphicsRow::Widescreen);
+            settings::Publish(base, ConfigData);
+            Require(settings::snapshot.rows[int(GraphicsRow::Widescreen)].value == L"Off", "1280x720 starts with Widescreen Off");
+            Require(settings::snapshot.rows[int(GraphicsRow::OutputResolution)].choices.size() == 5 &&
+                    settings::snapshot.rows[int(GraphicsRow::OutputResolution)].choices[0] == L"1280 × 720" &&
+                    settings::snapshot.rows[int(GraphicsRow::OutputResolution)].choices[4] == L"3840 × 2160",
+                    "16:9 resolution choices present");
+
+            // Toggle switch ON (delta +1)
+            settings::pending = 0x1008; Tick(base);
+            Require(settings::edit.width == 1720 && settings::edit.height == 720,
+                    "toggle ON from 1280x720 maps to 1720x720");
+            Require(settings::snapshot.rows[int(GraphicsRow::Widescreen)].value == L"On", "Widescreen switch is now On");
+            Require(settings::snapshot.rows[int(GraphicsRow::OutputResolution)].selectedChoice == 0 &&
+                    settings::snapshot.rows[int(GraphicsRow::OutputResolution)].value == L"1720 × 720", "1720x720 selected");
+
+            // Move to output resolution and cycle forward through all 5 ultrawide tiers
+            settings::row = int(GraphicsRow::OutputResolution);
+            constexpr uint32_t expected21_9[][2] = {
+                {2560, 1080}, {3440, 1440}, {3840, 1600}, {5120, 2160}, {1720, 720}};
+            for (size_t i = 0; i < 5; ++i)
+            {
+                settings::pending = 0x1008; Tick(base); // Right arrow / Confirm
+                Require(settings::edit.width == expected21_9[i][0] && settings::edit.height == expected21_9[i][1],
+                        "cycle 21:9 resolution matches expected tier");
+            }
+            Require(settings::edit.width == 1720 && settings::edit.height == 720, "cycled back to 1720x720");
+
+            // Direct step to 5120x2160
+            settings::edit.width = 5120;
+            settings::edit.height = 2160;
+            settings::Publish(base, ConfigData);
+            Require(settings::snapshot.rows[int(GraphicsRow::OutputResolution)].selectedChoice == 4 &&
+                    settings::snapshot.rows[int(GraphicsRow::OutputResolution)].value == L"5120 × 2160", "5120x2160 tier verified");
+
+            // Switch back to 16:9: height 2160 preserves height and maps to 3840x2160
+            settings::row = int(GraphicsRow::Widescreen);
+            settings::pending = 0x1008; Tick(base);
+            Require(settings::edit.width == 3840 && settings::edit.height == 2160,
+                    "switch to 16:9 preserves 2160 height mapping to 3840x2160");
+            Require(settings::snapshot.rows[int(GraphicsRow::Widescreen)].value == L"Off", "switch is now Off");
+            Require(settings::snapshot.rows[int(GraphicsRow::OutputResolution)].choices[4] == L"3840 × 2160", "16:9 4K selected");
+
+            // Cancel / exit without saving: disk remains untouched at initial 1280x720
+            const auto oldSaves = saves;
+            const unsigned oldCloses = closes;
+            settings::pending = 0x2000; Tick(base); // Back button to close menu
+            Require(closes == oldCloses + 1, "close called on Back");
+            Require(saves == oldSaves, "cancel does not write to disk");
+            Require(diskConfig.width == 1280 && diskConfig.height == 720, "disk config unchanged on cancel");
+
+            // Native tick completes the close
+            Tick(base);
+            Require(!settings::closing && PPC_LOAD_U32(Menu + 4) == 1, "native tick completes close");
+            settings::releaseToParent = false;
+            settings::waitForRelease = false;
+
+            // Reopen menu: edit restores cleanly from GetConfig()
+            PPC_STORE_U32(Menu + 4, 4); Tick(base); Poll(0, true);
+            Require(settings::edit.width == 1280 && settings::edit.height == 720,
+                    "reopening restores saved config without unapplied preview changes");
+
+            // Switch to 3440x1440 and Save: goes through display change state machine
+            settings::tab = 2;
+            settings::row = int(GraphicsRow::Widescreen);
+            settings::pending = 0x1008; Tick(base); // Switch ON -> 1720x720
+            settings::row = int(GraphicsRow::OutputResolution);
+            settings::pending = 0x1008; Tick(base); // 2560x1080
+            settings::pending = 0x1008; Tick(base); // 3440x1440
+            Require(settings::edit.width == 3440 && settings::edit.height == 1440, "selected 3440x1440");
+            settings::row = int(GraphicsRow::Save);
+            settings::pending = 0x1000; Tick(base);
+            Require(saves == oldSaves + 1 && diskConfig.width == 3440 && diskConfig.height == 1440,
+                    "Save persists 3440x1440 to disk config");
+            auto saveTicket = settings::displayTicket;
+            Require(saveTicket != 0, "Save triggers BeginDisplayChange ticket");
+            displayChanges.WindowComplete(saveTicket, true);
+            displayChanges.Complete(saveTicket, true); Tick(base);
+            Require(!settings::displayTicket, "display state machine completed successfully for 3440x1440");
+            Require(settings::status == L"Display settings saved.", "status shows display saved");
+        }
+        std::puts("PASS Widescreen workflow: 3440x1440 auto-derive, 5 ultrawide tiers cycle incl 5120x2160, height-preserved 16:9 switch, cancel discard, Save state machine");
+
+        // Start / Enter focus-jump, simultaneous confirm suppression, PointerClick viewport clipping and DLSS quality visibility:
+        {
+            const auto savesBefore = saves;
+            settings::tab = 2; // Graphics tab
+            settings::row = int(GraphicsRow::Backend);
+            settings::edit.upscaler = gpu::upscaling::Upscaler::Off;
+            settings::Publish(base, ConfigData);
+
+            Require(settings::snapshot.rows.size() == size_t(GraphicsRow::Count), "graphics tab has one row per id");
+            Require(settings::snapshot.rows[int(GraphicsRow::DlssQuality)].hidden, "DLSS quality is hidden when upscaler is Off");
+
+            settings::row = int(GraphicsRow::AntiAliasing);
+            settings::pending = 2; Tick(base); // D-pad down
+            Require(settings::row == int(GraphicsRow::AnisotropicFiltering),
+                    "down from Upscaler skips hidden quality and sharpness rows");
+            settings::pending = 1; Tick(base); // D-pad up
+            Require(settings::row == int(GraphicsRow::AntiAliasing),
+                    "up from anisotropic filtering skips hidden quality and sharpness rows");
+
+            // Start (0x10) jumps focus to Save graphics settings without saving
+            settings::pending = 0x10; Tick(base);
+            Require(settings::row == int(GraphicsRow::Save), "Start jumps focus to Save");
+            Require(saves == savesBefore, "Start jump does not save immediately");
+
+            // Simultaneous Start (0x10) + Confirm (0x1000) does NOT save on the same tick
+            settings::row = int(GraphicsRow::Backend);
+            settings::pending = 0x1010; Tick(base);
+            Require(settings::row == int(GraphicsRow::Save), "simultaneous Start+A still focuses Save row");
+            Require(saves == savesBefore, "simultaneous Start+A suppresses same-tick save");
+
+            // Subsequent A (0x1000) on focused Save row executes the save
+            settings::pending = 0x1000; Tick(base);
+            Require(saves == savesBefore + 1, "subsequent A on Save row triggers save");
+
+            // Language tab (tab 3): Start (0x10) jumps focus to Save settings (row 3)
+            settings::tab = 3;
+            settings::row = 0;
+            settings::pending = 0x10; Tick(base);
+            Require(settings::row == 3, "Start on Language tab jumps to Save settings (row 3)");
+
+            // PointerClick boundary tests:
+            // Valid slot 0 (y = 150) hits row 0
+            settings::PointerClick(100.0f, 150.0f, false);
+            Require(settings::mouseRow.load() == 0, "click at y=150 selects visible slot 0 (row 0)");
+
+            // Click at y < 150 (above rows) is ignored
+            settings::mouseRow = -1;
+            settings::PointerClick(100.0f, 140.0f, false);
+            Require(settings::mouseRow.load() == -1, "click above y=150 ignored");
+
+            // Click below visible viewport (y >= 640 or slot >= 11) is ignored
+            settings::mouseRow = -1;
+            settings::PointerClick(100.0f, 640.0f, false);
+            Require(settings::mouseRow.load() == -1, "click at y=640 (below viewport) ignored");
+            settings::PointerClick(100.0f, 700.0f, false);
+            Require(settings::mouseRow.load() == -1, "click at y=700 (below viewport) ignored");
+
+            std::puts("PASS Start/Enter focus jump, simultaneous confirm suppression, and PointerClick viewport clipping");
+        }
+        // FG is a dedicated section within Graphics. Its rows share the
+        // Graphics Save action while Language retains its separate Save.
+        {
+            using framegen::Provider;
+            const auto priorCurrent = currentConfig;
+            const auto priorDisk = diskConfig;
+            settings::Config saved = currentConfig;
+            saved.graphicsBackend = settings::GraphicsBackend::D3D12;
+            saved.uiLanguage = 0;
+            saved.frameGenerationProvider = Provider::Off;
+            saved.frameGenerationMultiplier = 2;
+            currentConfig = diskConfig = saved;
+            settings::edit = saved;
+            settings::tab = 2;
+            settings::row = int(GraphicsRow::FrameGeneration);
+            settings::pending = 0; Tick(base);
+            Require(settings::snapshot.rows.size() == size_t(GraphicsRow::Count), "Graphics page includes FG section rows");
+            Require(settings::snapshot.rows[int(GraphicsRow::FrameGeneration)].choices ==
+                    std::vector<std::wstring>{L"Off", L"DLSS", L"FSR"},
+                    "D3D12 FG section offers Off, DLSS and FSR");
+            Require(settings::snapshot.rows[int(GraphicsRow::FrameGenerationMultiplier)].hidden,
+                    "Off hides the multiplier");
+            Require(settings::snapshot.notice == L"Frame generation is off.", "FG status shows Off");
+            gpu::video::menuFlowFgStatus.phase = gpu::video::FrameGenerationPhase::Pending;
+            settings::pending = 0; Tick(base);
+            Require(settings::snapshot.notice == L"Applying FG settings…", "FG status shows pending transition");
+            gpu::video::menuFlowFgStatus.phase = gpu::video::FrameGenerationPhase::Ready;
+            gpu::video::menuFlowFgStatus.applied = Provider::Dlss;
+            settings::pending = 0; Tick(base);
+            Require(settings::snapshot.notice.find(L"DLSS FG ready.") != std::wstring::npos,
+                    "FG status names the applied provider");
+            gpu::video::menuFlowFgStatus.phase = gpu::video::FrameGenerationPhase::Unavailable;
+            gpu::video::menuFlowFgStatus.environmentOverride = true;
+            settings::pending = 0; Tick(base);
+            Require(settings::snapshot.notice.find(L"FG is unavailable") != std::wstring::npos &&
+                    settings::snapshot.notice.find(L"diagnostic override") != std::wstring::npos,
+                    "FG status exposes fallback and diagnostic override");
+            gpu::video::menuFlowFgStatus = {};
+            settings::pending = 2; Tick(base);
+            Require(settings::row == int(GraphicsRow::VariableRefreshRate), "Off navigation skips hidden multiplier");
+
+            settings::row = int(GraphicsRow::FrameGeneration);
+            settings::pending = 8; Tick(base);
+            Require(settings::edit.frameGenerationProvider == Provider::Dlss &&
+                    !settings::snapshot.rows[int(GraphicsRow::FrameGenerationMultiplier)].hidden,
+                    "DLSS reveals multiplier row");
+            settings::row = int(GraphicsRow::FrameGenerationMultiplier);
+            settings::pending = 4; Tick(base);
+            Require(settings::edit.frameGenerationMultiplier == 6 &&
+                    settings::snapshot.rows[int(GraphicsRow::FrameGenerationMultiplier)].value == L"6×" &&
+                    settings::snapshot.rows[int(GraphicsRow::FrameGenerationMultiplier)].choices.size() == 5,
+                    "DLSS multiplier wraps from 2 to 6");
+            settings::pending = 8; Tick(base);
+            Require(settings::edit.frameGenerationMultiplier == 2, "DLSS multiplier wraps from 6 to 2");
+            settings::pending = 8; Tick(base);
+            Require(settings::edit.frameGenerationMultiplier == 3, "DLSS multiplier accepts 3x");
+
+            settings::row = int(GraphicsRow::FrameGeneration);
+            settings::pending = 8; Tick(base);
+            Require(settings::edit.frameGenerationProvider == Provider::Fsr &&
+                    settings::edit.frameGenerationMultiplier == 2 &&
+                    settings::snapshot.rows[int(GraphicsRow::FrameGenerationMultiplier)].hidden,
+                    "FSR uses fixed 2x and hides multiplier");
+            settings::pending = 2; Tick(base);
+            Require(settings::row == int(GraphicsRow::VariableRefreshRate), "FSR navigation skips hidden multiplier");
+            settings::row = int(GraphicsRow::FrameGeneration);
+            settings::pending = 4; Tick(base);
+            Require(settings::edit.frameGenerationProvider == Provider::Dlss, "FG provider cycles back to DLSS");
+            settings::row = int(GraphicsRow::FrameGenerationMultiplier);
+            settings::pending = 8; Tick(base);
+            Require(settings::edit.frameGenerationMultiplier == 3, "DLSS multiplier can be reselected after FSR");
+
+            settings::edit.scalingQuality = saved.scalingQuality == 0 ? 1 : 0;
+            settings::edit.uiLanguage = saved.uiLanguage == 4 ? 0 : 4;
+            settings::edit.frameGenerationMode = framegen::Mode::Dynamic;
+            settings::edit.frameGenerationTargetFps = 144;
+            settings::row = int(GraphicsRow::FrameGeneration);
+            const auto beforeSave = saves;
+            settings::pending = 0x1010; Tick(base);
+            Require(settings::row == int(GraphicsRow::Save) && saves == beforeSave,
+                    "Start plus Confirm in Graphics focuses Save without writing");
+            settings::pending = 0x1000; Tick(base);
+            Require(saves == beforeSave + 1 && diskConfig.frameGenerationProvider == Provider::Dlss &&
+                    diskConfig.frameGenerationMultiplier == 3 &&
+                    diskConfig.frameGenerationMode == framegen::Mode::Dynamic &&
+                    diskConfig.frameGenerationTargetFps == 144 &&
+                    diskConfig.scalingQuality == settings::edit.scalingQuality &&
+                    diskConfig.uiLanguage == saved.uiLanguage,
+                    "Graphics Save commits FG and graphics together without Language edits");
+            Require(settings::edit.uiLanguage != saved.uiLanguage &&
+                    settings::snapshot.help == L"显示设置已保存。",
+                    "Graphics Save preserves pending Language edit and acknowledges save");
+
+            // The Language page still saves only language fields, leaving a
+            // pending FG change for the shared Graphics Save action.
+            const auto graphicsSaved = diskConfig;
+            settings::edit.frameGenerationProvider = Provider::Fsr;
+            settings::edit.frameGenerationMultiplier = 2;
+            settings::tab = 3;
+            settings::row = 3;
+            const auto beforeLanguageSave = saves;
+            settings::pending = 0x1000; Tick(base);
+            Require(saves == beforeLanguageSave + 1 && diskConfig.uiLanguage == settings::edit.uiLanguage &&
+                    diskConfig.frameGenerationProvider == graphicsSaved.frameGenerationProvider &&
+                    diskConfig.frameGenerationMultiplier == graphicsSaved.frameGenerationMultiplier,
+                    "Language Save does not apply a pending Graphics FG change");
+            Require(settings::edit.frameGenerationProvider == Provider::Fsr,
+                    "Language Save keeps the unsaved FG selection");
+
+            settings::tab = 0;
+            settings::row = 0;
+            settings::pending = 0; Tick(base);
+            settings::PointerClick(float(386 + 2 * settings::MenuTabWidth + 8), 126.0f, false);
+            settings::pending = 0; Tick(base);
+            Require(settings::tab == 2 && settings::row == 0, "mouse selects the Graphics tab");
+            settings::row = int(GraphicsRow::FrameGeneration);
+            settings::pending = 0; Tick(base);
+            int visibleFg = 0;
+            for (int i = 0; i < int(GraphicsRow::FrameGeneration); ++i)
+                visibleFg += !settings::snapshot.rows[size_t(i)].hidden;
+            const int fgSlot = visibleFg - settings::snapshot.scroll;
+            Require(fgSlot >= 0 && fgSlot < settings::kMenuVisibleRows,
+                    "focused FG section stays inside scrolled Graphics viewport");
+            settings::PointerClick(100.0f, float(150 + fgSlot * 43 + 18), false);
+            settings::pending = 0; Tick(base);
+            Require(settings::row == int(GraphicsRow::FrameGeneration),
+                    "mouse hit-testing maps scrolled FG section to its logical row");
+            settings::pending = 0x200; Tick(base);
+            Require(settings::tab == 3, "right shoulder moves Graphics to Language in four tabs");
+            settings::pending = 0x200; Tick(base);
+            Require(settings::tab == 0, "right shoulder wraps Language to Gameplay");
+            gpu::video::menuFlowFgStatus.sessionProvider = Provider::Dlss;
+            gpu::video::menuFlowFgStatus.requested = Provider::Fsr;
+            settings::tab = 2;
+            settings::row = int(GraphicsRow::Save);
+            settings::pending = 0x1000; Tick(base);
+            Require(settings::restartPrompt && settings::savedRestartPrompt &&
+                    settings::snapshot.dialogMessage.find(L"DLSS FG") != std::wstring::npos &&
+                    settings::snapshot.dialogMessage.find(L"FSR FG") != std::wstring::npos,
+                    "DLSS FG to FSR FG save explains that restart is required");
+            settings::pending = 0x2000; Tick(base);
+            Require(!settings::restartPrompt && diskConfig.frameGenerationProvider == Provider::Fsr,
+                    "Later retains the FSR FG choice for the next launch");
+            gpu::video::menuFlowFgStatus = {};
+            currentConfig = priorCurrent;
+            diskConfig = priorDisk;
+            std::puts("PASS Graphics FG section: provider/input navigation, DLSS multiplier bounds, FSR fixed 2x, shared Save, Language isolation, mouse/scroll and four-tab navigation");
+        }
+        // FSR sharpness follows quality; Save is always last. Off disables
+        // RCAS, and percent changes are bounded.
+        {
+            static_assert(int(GraphicsRow::Save) + 1 == int(GraphicsRow::Count) && int(GraphicsRow::FsrSharpness) == 6);
+            settings::tab = 2;
+            settings::status.clear();
+            settings::edit = currentConfig;
+            settings::edit.upscaler = gpu::upscaling::Upscaler::Off;
+            settings::edit.fsrSharpnessPercent = 0;
+            settings::row = int(GraphicsRow::AntiAliasing);
+            settings::pending = 0; Tick(base);
+            Require(settings::snapshot.rows[int(GraphicsRow::FsrSharpness)].hidden, "Off hides FSR sharpness");
+            settings::row = int(GraphicsRow::Save);
+            settings::pending = 2; Tick(base);
+            Require(settings::row == int(GraphicsRow::Backend), "navigation skips hidden FSR sharpness");
+            settings::edit.upscaler = gpu::upscaling::Upscaler::Dlss;
+            settings::pending = 0; Tick(base);
+            Require(settings::snapshot.rows[int(GraphicsRow::FsrSharpness)].hidden, "DLSS hides FSR sharpness");
+            settings::edit.upscaler = gpu::upscaling::Upscaler::Fsr;
+            settings::row = int(GraphicsRow::FsrSharpness);
+            settings::pending = 0; Tick(base);
+            Require(!settings::snapshot.rows[int(GraphicsRow::FsrSharpness)].hidden &&
+                    settings::snapshot.rows[int(GraphicsRow::FsrSharpness)].value == L"Off" &&
+                    settings::snapshot.rows[int(GraphicsRow::FsrSharpness)].choices.size() == 101,
+                    "FSR displays Off and 1-100 percent options");
+            Require(settings::snapshot.help.find(L"Off disables RCAS") != std::wstring::npos,
+                    "FSR help describes RCAS disabled at zero");
+            settings::row = int(GraphicsRow::DlssQuality);
+            settings::pending = 2; Tick(base);
+            Require(settings::row == int(GraphicsRow::FsrSharpness) && settings::snapshot.scroll == 0,
+                    "D-pad reaches FSR sharpness directly after quality without scrolling");
+            settings::pending = 4; Tick(base);
+            Require(settings::edit.fsrSharpnessPercent == 0, "left at zero does not wrap to 100");
+            settings::pending = 8; Tick(base);
+            Require(settings::edit.fsrSharpnessPercent == 1 &&
+                    settings::snapshot.rows[int(GraphicsRow::FsrSharpness)].value == L"1%", "right turns on 1 percent");
+            settings::edit.fsrSharpnessPercent = 100;
+            settings::pending = 8; Tick(base);
+            Require(settings::edit.fsrSharpnessPercent == 100 &&
+                    settings::snapshot.rows[int(GraphicsRow::FsrSharpness)].value == L"100%", "right at 100 clamps");
+            settings::edit.fsrSharpnessPercent = 64;
+            const unsigned beforeSave = saves;
+            settings::row = int(GraphicsRow::Save);
+            settings::pending = 0x1000; Tick(base);
+            Require(saves == beforeSave + 1 && diskConfig.fsrSharpnessPercent == 64 &&
+                    currentConfig.fsrSharpnessPercent == 64, "existing Save action persists FSR sharpness");
+            std::puts("PASS FSR sharpness menu visibility, 0/100 bounds, description, stable ids and Save");
+        }
+        // The host Settings game tab is reached from the retail System menu.
+        // Only explicit dialog confirmation may request the guest title transition.
+        {
+            settings::tab = 0;
+            settings::row = settings::GameMainMenuRow;
+            settings::edit.uiLanguage = 0;
+            settings::status.clear();
+            settings::pending = 0; Tick(base);
+            Require(settings::snapshot.rows.size() == 10 &&
+                    settings::snapshot.rows[settings::GameRestoreRow].name == L"Restore game defaults" &&
+                    settings::snapshot.rows[settings::GameMainMenuRow].name == L"Quit to Main Menu" &&
+                    settings::snapshot.rows[settings::GameMainMenuRow].value == L"Return",
+                    "Quit to Main Menu follows the existing game actions");
+            Require(settings::graphics_menu::IsAction(0, settings::GameMainMenuRow), "mouse treats Return as an action");
+            const unsigned beforeSaves = saves, beforeApplies = applies, beforeCloses = closes;
+            settings::pending = 8; Tick(base);
+            Require(!settings::mainMenuPrompt && !mainMenuRequests, "right arrow cannot return to title");
+            settings::PointerClick(500, 150 + settings::GameMainMenuRow * 43 + 20, false);
+            Tick(base);
+            Require(settings::mainMenuPrompt && settings::snapshot.dialogTitle == L"Quit to Main Menu" &&
+                    settings::snapshot.dialogMessage == L"Return to the main menu? Unsaved progress will be lost." &&
+                    settings::snapshot.dialogChoices == std::vector<std::wstring>{L"Return", L"Cancel"} &&
+                    settings::snapshot.dialogSelection == 1 && !mainMenuRequests,
+                    "mouse opens confirmation with Cancel preselected and no transition");
+            settings::pending = 0x1000; Tick(base);
+            Require(!settings::mainMenuPrompt && !mainMenuRequests && settings::snapshot.dialogChoices.empty(),
+                    "confirm on default Cancel dismisses without returning");
+            settings::pending = 0x1000; Tick(base);
+            Require(settings::mainMenuPrompt && settings::snapshot.dialogSelection == 1, "gamepad reopens safe main-menu dialog");
+            settings::pending = 1; Tick(base);
+            Require(settings::snapshot.dialogSelection == 0 && !mainMenuRequests, "up selects Return without dispatching");
+            settings::pending = 0x2000; Tick(base);
+            Require(!settings::mainMenuPrompt && !mainMenuRequests && !settings::closing,
+                    "Back cancels even when Return is selected");
+            settings::edit.uiLanguage = 1;
+            settings::pending = 0; Tick(base);
+            Require(settings::snapshot.rows[settings::GameMainMenuRow].name == L"退出到主選單", "traditional Chinese main-menu label");
+            settings::pending = 0x1000; Tick(base);
+            Require(settings::snapshot.dialogTitle == L"退出到主選單" &&
+                    settings::snapshot.dialogMessage == L"返回主選單嗎？尚未儲存的進度將會遺失。" &&
+                    settings::snapshot.dialogChoices == std::vector<std::wstring>{L"返回", L"取消"} &&
+                    settings::snapshot.dialogSelection == 1,
+                    "traditional Chinese confirmation and default cancellation");
+            for (const auto& [language, title, message, choice, cancel] : {
+                     std::tuple{2u, L"メインメニューに戻る", L"メインメニューに戻りますか？保存していない進行状況は失われます。", L"戻る", L"キャンセル"},
+                     std::tuple{3u, L"메인 메뉴로 돌아가기", L"메인 메뉴로 돌아갈까요? 저장하지 않은 진행 상황은 사라집니다.", L"돌아가기", L"취소"},
+                     std::tuple{4u, L"退出到主菜单", L"返回主菜单吗？未保存的进度将会丢失。", L"返回", L"取消"}})
+            {
+                settings::edit.uiLanguage = language;
+                settings::pending = 0; Tick(base);
+                Require(settings::snapshot.rows[settings::GameMainMenuRow].name == title &&
+                        settings::snapshot.dialogTitle == title && settings::snapshot.dialogMessage == message &&
+                        settings::snapshot.dialogChoices == std::vector<std::wstring>{choice, cancel} &&
+                        settings::snapshot.dialogSelection == 1,
+                        "Japanese, Korean and Simplified Chinese preserve translated confirmation and default Cancel");
+            }
+            settings::edit.uiLanguage = 1;
+            settings::pending = 0; Tick(base);
+            settings::pending = 1; Tick(base);
+            settings::pending = 0x1000; Tick(base);
+            Require(!settings::mainMenuPrompt && settings::closing && !settings::active &&
+                    mainMenuRequests == 0 && applies == beforeApplies + 1 && closes == beforeCloses + 1,
+                    "confirmed Return closes the retail Settings task before requesting title");
+            settings::pending = 0; Tick(base);
+            Require(mainMenuRequests == 1 && quitEventAttempts == 0 && saves == beforeSaves &&
+                    applies == beforeApplies + 1 && closes == beforeCloses + 1,
+                    "native completion requests title exactly once without SDL_QUIT or settings file writes");
+            settings::pending = 0; Tick(base);
+            Require(mainMenuRequests == 1 && quitEventAttempts == 0,
+                    "repeated native ticks do not request title or SDL_QUIT again");
+            std::puts("PASS System Settings Quit to Main Menu: cancellation, Chinese labels, native close then one title request, no SDL_QUIT");
+        }
+        // The importer is launched only after the safe restart child waits for
+        // this process to stop reading installed content. The fixture exercises
+        // actual menu input/dispatch without launching any process or importer.
+        {
+            PPC_STORE_U32(Menu + 4, 4);
+            settings::restart::Cancel(); // Prior graphics-restart fixture did not run a video-thread exit.
+            Tick(base);
+            const unsigned importSaves = saves, importApplies = applies, importCloses = closes;
+            settings::tab = 0;
+            settings::row = settings::GameMainMenuRow;
+            settings::edit.uiLanguage = 0;
+            settings::pending = 2; Tick(base);
+            Require(settings::row == settings::GameImportRow && settings::snapshot.scroll == 0 &&
+                    settings::snapshot.rows.size() == 10 &&
+                    settings::snapshot.rows[settings::GameImportRow].name == L"Import discs & DLC" &&
+                    settings::snapshot.rows[settings::GameImportRow].value == L"Open" &&
+                    settings::graphics_menu::IsAction(0, settings::GameImportRow),
+                    "gamepad reaches visible importer action after Main Menu");
+            settings::pending = 8; Tick(base);
+            Require(!settings::importPrompt && !settings::restart::Requested(), "right arrow cannot launch importer");
+            settings::PointerClick(500, 150 + settings::GameImportRow * 43 + 20, false);
+            Tick(base);
+            Require(settings::importPrompt && settings::snapshot.dialogSelection == 1 &&
+                    settings::snapshot.dialogChoices == std::vector<std::wstring>{L"Open importer", L"Cancel"} &&
+                    !settings::restart::Requested(), "mouse opens cancel-first dialog without starting importer");
+            settings::pending = 0x1000; Tick(base);
+            Require(!settings::importPrompt && !settings::restart::Requested(), "confirm on default Cancel dismisses");
+            settings::pending = 0x1000; Tick(base);
+            settings::pending = 1; Tick(base);
+            settings::pending = 0x2000; Tick(base);
+            Require(!settings::importPrompt && !settings::restart::Requested(), "Back cancels selected import action");
+            for (const auto& [language, name] : {
+                     std::pair{1u, L"匯入光碟與 DLC"}, std::pair{2u, L"ディスクとDLCをインポート"},
+                     std::pair{3u, L"디스크 및 DLC 가져오기"}, std::pair{4u, L"导入光盘与 DLC"}})
+            {
+                settings::edit.uiLanguage = language;
+                settings::pending = 0; Tick(base);
+                Require(settings::snapshot.rows[settings::GameImportRow].name == name, "translated importer action");
+            }
+            settings::edit.uiLanguage = 0;
+            settings::pending = 0; Tick(base);
+            auto preview = settings::snapshot;
+            preview.assets.reset();
+            std::vector<uint32_t> pixels;
+            Require(settings::RasterizeMenu(preview, 1280, 720, pixels), "importer menu preview");
+            const auto evidence = std::filesystem::current_path() / "out" / "import-menu-preview";
+            std::filesystem::create_directories(evidence);
+            WriteBmp(evidence / "import-action.bmp", pixels);
+            settings::pending = 0x1000; Tick(base);
+            Require(settings::importPrompt && settings::snapshot.dialogSelection == 1, "gamepad opens importer dialog");
+            preview = settings::snapshot;
+            preview.assets.reset();
+            Require(settings::RasterizeMenu(preview, 1280, 720, pixels), "importer dialog preview");
+            WriteBmp(evidence / "import-confirmation.bmp", pixels);
+            settings::pending = 1; Tick(base);
+            settings::pending = 0x1000; Tick(base);
+#ifdef _WIN32
+            Require(settings::restart::InstallRequested() && !settings::importPrompt &&
+                    settings::snapshot.help == L"Closing game and opening importer…" &&
+                    saves == importSaves && applies == importApplies && closes == importCloses,
+                    "confirmation requests one install restart without saving or closing settings as a guest action");
+            settings::pending = 0x1000; Tick(base);
+            Require(settings::restart::InstallRequested() && !settings::importPrompt,
+                    "repeated confirmation cannot spawn a second child");
+            // Process exit is exercised by restart_test's isolated child; reset
+            // only this fixture's request before testing duplicate presses.
+            settings::restart::Cancel();
+#else
+            Require(!settings::restart::Requested(), "unsupported restart never overlaps live guest");
+#endif
+            settings::pending = 0; Tick(base);
+            Require(!settings::restart::Requested() && !settings::importPrompt,
+                    "idle ticks do not create a second import request");
+            std::puts("PASS import action: gamepad/mouse focus, cancel-first dialog, translations, guarded restart request, previews");
+        }
         if (argc == 3)
         {
             settings::status.clear();
@@ -290,17 +1409,138 @@ int main(int argc, char** argv)
             auto assets = settings::menu_assets::Cached(argv[1], 4);
             Require(bool(assets), "installed SCH assets");
             std::filesystem::create_directories(argv[2]);
-            for (int selected : {4, 6})
+            auto labelPainted = [&](settings::MenuSnapshot preview, int label,
+                                    const std::vector<uint32_t>& rendered) {
+                preview.rows[size_t(label)].name.clear();
+                std::vector<uint32_t> withoutLabel;
+                Require(settings::RasterizeMenu(preview, 1280, 720, withoutLabel), "blank-label comparison raster");
+                size_t changedPixels = 0;
+                for (int y = 150; y < 640; ++y)
+                    for (int x = 65; x < 365; ++x)
+                        changedPixels += rendered[size_t(y) * 1280 + x] != withoutLabel[size_t(y) * 1280 + x];
+                return changedPixels > 20;
+            };
+            for (GraphicsRow selected : {GraphicsRow::AntiAliasing, GraphicsRow::FrameRate})
             {
-                settings::row = selected; settings::Publish(base, ConfigData);
+                settings::row = int(selected); settings::Publish(base, ConfigData);
                 auto preview = settings::snapshot; preview.assets = assets;
-                for (int label : {4, 6, 8})
-                    Require(covers(assets->body, preview.rows[label].name), "changed label must use original body face");
                 std::vector<uint32_t> pixels;
                 Require(settings::RasterizeMenu(preview, 1280, 720, pixels), "translated Graphics preview");
-                WriteBmp(std::filesystem::path(argv[2]) / (selected == 4 ? "graphics-aa.bmp" : "graphics-rate.bmp"), pixels);
+                Require(labelPainted(preview, int(selected), pixels), "selected Graphics label must paint visible pixels");
+                WriteBmp(std::filesystem::path(argv[2]) / (selected == GraphicsRow::AntiAliasing ? "graphics-aa.bmp" : "graphics-rate.bmp"), pixels);
             }
-            std::puts("PASS two Graphics previews from actual Publish/Translate, normal and selected changed labels");
+            settings::tab = 2;
+            settings::row = int(GraphicsRow::FrameGeneration);
+            settings::edit.graphicsBackend = settings::GraphicsBackend::D3D12;
+            settings::edit.frameGenerationProvider = framegen::Provider::Dlss;
+            settings::edit.frameGenerationMultiplier = 3;
+            gpu::video::menuFlowFgStatus.phase = gpu::video::FrameGenerationPhase::Ready;
+            gpu::video::menuFlowFgStatus.applied = framegen::Provider::Dlss;
+            for (uint32_t language : {4u, 0u})
+            {
+                settings::edit.uiLanguage = language;
+                settings::Publish(base, ConfigData);
+                auto preview = settings::snapshot;
+                preview.assets = settings::menu_assets::Cached(argv[1], language);
+                Require(bool(preview.assets), "installed FG preview assets");
+                std::vector<uint32_t> pixels;
+                Require(settings::RasterizeMenu(preview, 1280, 720, pixels), "translated FG preview");
+                Require(labelPainted(preview, int(GraphicsRow::FrameGeneration), pixels),
+                        "FG provider label must paint visible pixels");
+                WriteBmp(std::filesystem::path(argv[2]) /
+                    (language == 4 ? "fg-zh-dlss.bmp" : "fg-en-dlss.bmp"), pixels);
+            }
+            settings::edit.frameGenerationProvider = framegen::Provider::Fsr;
+            settings::edit.frameGenerationMultiplier = 2;
+            gpu::video::menuFlowFgStatus.applied = framegen::Provider::Fsr;
+            settings::Publish(base, ConfigData);
+            auto fsrPreview = settings::snapshot;
+            fsrPreview.assets = settings::menu_assets::Cached(argv[1], 0);
+            Require(fsrPreview.rows[int(GraphicsRow::FrameGenerationMultiplier)].hidden,
+                    "actual English FSR preview hides the multiplier");
+            std::vector<uint32_t> fsrPixels;
+            Require(settings::RasterizeMenu(fsrPreview, 1280, 720, fsrPixels),
+                    "actual English Graphics FSR preview");
+            WriteBmp(std::filesystem::path(argv[2]) / "fg-en-fsr.bmp", fsrPixels);
+            gpu::video::menuFlowFgStatus = {};
+            std::puts("PASS Graphics and bilingual DLSS/English FSR section previews from actual Publish/Translate with installed assets");
+        }
+        CheckBr03DlssMenu(base);
+        {
+            const auto originalDir = std::filesystem::current_path();
+            const auto sandbox = std::filesystem::temp_directory_path() /
+                ("lo-fsr-sharpness-settings-" + std::to_string(GetCurrentProcessId()));
+            std::filesystem::create_directories(sandbox);
+            std::filesystem::current_path(sandbox);
+            auto writeIni = [](const char* contents) {
+                std::ofstream output("settings.ini", std::ios::trunc);
+                output << contents;
+                Require(bool(output), "write isolated settings.ini");
+            };
+            writeIni("upscaler=2\nfsr_sharpness=75\n");
+            Require(settings::Read().fsrSharpnessPercent == 75, "FSR sharpness reads from INI");
+            writeIni("fsr_sharpness=101\n");
+            Require(settings::Read().fsrSharpnessPercent == 100, "out-of-range INI sharpness clamps to 100");
+            writeIni("fsr_sharpness=4294967295\n");
+            Require(settings::Read().fsrSharpnessPercent == 100, "largest uint32 clamps to 100");
+            writeIni("fsr_sharpness=-1\n");
+            Require(settings::Read().fsrSharpnessPercent == 0, "negative sharpness keeps Off default");
+            writeIni("fsr_sharpness=garbage\n");
+            Require(settings::Read().fsrSharpnessPercent == 0, "invalid sharpness keeps Off default");
+            settings::Config sharpness{};
+            sharpness.upscaler = gpu::upscaling::Upscaler::Fsr;
+            sharpness.fsrSharpnessPercent = 64;
+            Require(settings::SaveConfig(sharpness), "real config save succeeds in sandbox");
+            Require(settings::GetConfig().fsrSharpnessPercent == 64 && settings::Read().fsrSharpnessPercent == 64,
+                    "real config retains sharpness after save and disk reload");
+            std::ifstream persisted("settings.ini");
+            const std::string text((std::istreambuf_iterator<char>(persisted)), std::istreambuf_iterator<char>());
+            Require(text.find("fsr_sharpness=64\n") != std::string::npos, "INI writes fsr_sharpness key");
+            persisted.close(); // Windows cannot replace settings.ini while this reader holds it.
+            sharpness.fsrSharpnessPercent = 102;
+            Require(settings::SaveConfig(sharpness) && settings::Read().fsrSharpnessPercent == 100,
+                    "real save validates out-of-range sharpness");
+            sharpness.fsrSharpnessPercent = 0;
+            Require(settings::SaveConfig(sharpness) && settings::Read().fsrSharpnessPercent == 0,
+                    "Off roundtrips as zero");
+            writeIni("frame_generation_provider=1\nframe_generation_mode=0\nframe_generation_multiplier=6\n");
+            const auto maxFg = settings::Read();
+            Require(maxFg.frameGenerationProvider == framegen::Provider::Dlss &&
+                    maxFg.frameGenerationMultiplier == 6, "DLSS maximum multiplier reads from INI");
+            writeIni("frame_generation_provider=1\nframe_generation_multiplier=7\n");
+            Require(settings::Read().frameGenerationMultiplier == 2, "out-of-range FG multiplier resets to 2");
+            writeIni("frame_generation_provider=1\nframe_generation_multiplier=16\n");
+            Require(settings::Read().frameGenerationMultiplier == 2, "former 16x maximum resets to 2");
+            writeIni("frame_generation_provider=99\nframe_generation_multiplier=2\n");
+            Require(settings::Read().frameGenerationProvider == framegen::Provider::Off,
+                    "unknown FG provider resets to Off");
+            writeIni("frame_generation_provider=2\nframe_generation_mode=1\nframe_generation_multiplier=6\nframe_generation_target_fps=144\n");
+            const auto fsrFg = settings::Read();
+            Require(fsrFg.frameGenerationProvider == framegen::Provider::Fsr &&
+                    fsrFg.frameGenerationMode == framegen::Mode::Fixed &&
+                    fsrFg.frameGenerationMultiplier == 2 && fsrFg.frameGenerationTargetFps == 0,
+                    "FSR INI normalizes to fixed 2x");
+            settings::Config fgConfig{};
+            fgConfig.frameGenerationProvider = framegen::Provider::Dlss;
+            fgConfig.frameGenerationMultiplier = 2;
+            Require(settings::SaveConfig(fgConfig) && settings::Read().frameGenerationMultiplier == 2,
+                    "minimum DLSS multiplier survives real save/reload");
+            fgConfig.frameGenerationMultiplier = 6;
+            Require(settings::SaveConfig(fgConfig), "maximum DLSS multiplier saves");
+            const auto savedFg = settings::Read();
+            Require(savedFg.frameGenerationProvider == framegen::Provider::Dlss &&
+                    savedFg.frameGenerationMultiplier == 6, "maximum DLSS multiplier survives real save/reload");
+            {
+                std::ifstream fgIni("settings.ini");
+                const std::string fgText((std::istreambuf_iterator<char>(fgIni)), std::istreambuf_iterator<char>());
+                Require(fgText.find("frame_generation_provider=1\n") != std::string::npos &&
+                        fgText.find("frame_generation_multiplier=6\n") != std::string::npos,
+                        "real INI writes FG provider and multiplier");
+            }
+            std::puts("PASS FG settings.ini provider and multiplier validation, FSR normalization, and min/max save/reload");
+            std::filesystem::current_path(originalDir);
+            std::filesystem::remove_all(sandbox);
+            std::puts("PASS FSR sharpness settings.ini read, validation and save/reload roundtrip");
         }
         VirtualFree(base, 0, MEM_RELEASE);
         return 0;

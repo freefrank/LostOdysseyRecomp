@@ -4,7 +4,7 @@
 
 ## Prerequisites
 
-The tested environment is Windows x64 with Direct3D 12 or the optional Vulkan backend, Visual Studio 2022 Build Tools and Windows SDK, LLVM clang-cl, CMake 3.28+, Ninja and Python 3.11+ (the code-generation guard uses the standard-library `tomllib` module). The runtime requires Clang; the `windows-msvc` preset is not a supported runtime alternative. Generated code uses AVX instructions. Windows 10 1803+ is required by the current memory-mapping path; this is not a guarantee for every GPU/driver combination.
+The tested environment is Windows x64 with Direct3D 12 or the optional Vulkan backend, Visual Studio 2022 Build Tools and Windows SDK, LLVM clang-cl, CMake 3.28+, Ninja and Python 3.11+ (the generation wrapper uses the standard-library `tomllib` module). The runtime requires Clang; the `windows-msvc` preset is not a supported runtime alternative. Generated code uses AVX instructions. Windows 10 1803+ is required by the current memory-mapping path; this is not a guarantee for every GPU/driver combination.
 
 The scripts [build_runtime.bat](../tools/build_runtime.bat), [build_tools.bat](../tools/build_tools.bat) and [CMakePresets.json](../CMakePresets.json) discover Visual Studio with `vswhere` and resolve tools from `PATH`. Use `LO_VCVARS64` or `LLVM_ROOT` for custom installations. Keep personal overrides in the ignored `CMakeUserPresets.json`.
 
@@ -22,92 +22,64 @@ python -B tools/ppc_codegen.py generate
 .\tools\build_runtime.bat
 ```
 
-`build_tools.bat` builds the generator and records a receipt containing the generator binary and source hashes. `ppc_codegen.py generate` verifies that receipt, hashes the TOML and generator inputs before and after execution, writes an output manifest for the generated C++/header files and rejects obsolete 64-bit jump-table switches. Use `python -B tools/ppc_codegen.py check` to verify an existing generated tree without regenerating it; if the inputs or outputs changed, regenerate from the repository root. Configured runtime builds also run `LoPpcCodegenCheck` as an order dependency before compiling guest objects. See [recompilation notes](notes/recomp.md) for function boundaries and switch-table maintenance. These commands describe the checked-in scripts; a new-machine end-to-end bootstrap has not been retested as part of this documentation update.
+After a pull that updates the tracked XenonRecomp patch, inspect and synchronize the *actual* modified `tools/XenonRecomp/` tree with the updated patch before rebuilding. Do not blindly reapply patches over a modified dependency tree or discard unrelated local changes. Once the tree matches the intended patch, rebuild the generator, explicitly regenerate PPC sources, then rebuild the runtime. If `build_tools.bat` cannot handle a partially updated patched tree, reconcile that tree first.
 
-### Optional PPC prebuilt library
+`build_tools.bat` builds the generator. `ppc_codegen.py generate` generates the guest sources and performs basic output and failure handling; a failed generation preserves the previous output tree. Use `python -B tools/ppc_codegen.py generate` after generator or configuration changes. Runtime builds consume the generated sources directly without a per-build repository scan, manifest, stamp or hash gate. See [recompilation notes](notes/recomp.md) for function boundaries and switch-table maintenance.
 
-Release packaging uses a PPC static library restored from the private immutable
-`ppc/<key>` branch selected by the input/compiler key. The XEX input remains
-from its pinned private commit and is checked against its pinned SHA256. Local builds can opt into the same path by
-restoring the bundle into an ignored output directory and setting
-`LO_PREBUILT_PPC_DIR`; CMake checks the existing generated tree, then consumes
-`LostOdysseyRecompLib.lib` and skips compiling generated PPC C++ sources. The
-release workflow runs its separate `Generate game code` step before this CMake
-configuration. Clear the variable to return to the ordinary generated-source build.
+### PowerPC recompilation from source
 
-From `cmd` or an x64 Developer Command Prompt, keep the compiler environment in
-the same shell before running the exporter:
+All platforms compile recompiled PowerPC guest code directly from generated sources in `LostOdysseyRecompLib/ppc/`. The build does not depend on prebuilt static libraries or remote PPC synchronization, ensuring clean provenance, reproducible multi-platform builds, and forward compatibility with additional architectures (such as ARM64).
 
-```cmd
-call tools\setup_windows.bat
-python tools\release\ppc_prebuilt.py export --build-dir out\build\fps-0.5.4 --output out\ppc-export
-```
-
-The export/restore commands above are retained for offline bundle diagnostics.
-The current upload path is the post-build auto-sync hook or
-`ppc_sync.py sync`, which selects an immutable `ppc/<key>` branch.
-
-Then restore and check the fresh export from PowerShell:
-
-```powershell
-python tools/release/ppc_prebuilt.py restore --bundle out/ppc-export --output out/ppc-prebuilt
-python tools/release/ppc_prebuilt.py check --bundle out/ppc-prebuilt --build-dir out/build/fps-0.5.4
-```
-
-For a local prebuilt runtime build in PowerShell:
-
-```powershell
-$env:LO_PREBUILT_PPC_DIR = (Resolve-Path out/ppc-prebuilt).Path
-.\tools\build_release.bat
-Remove-Item Env:LO_PREBUILT_PPC_DIR
-```
-
-The release contract is x64 clang-cl, Release, static CRT (`/MT`) and non-LTO.
-Preserve codegen receipts, input/output and CMake hashes, compile flags/includes,
-shard hashes and library SHA256 as evidence. The 13 synthetic bundle checks pass;
-the local Release/x64 clang-cl export, restore and isolated prebuilt CMake check
-also pass. The complete runtime was inspected through its Ninja dependency/link
-graph and has zero PPC compile commands while referencing the imported library;
-the runtime was not relinked or launched. See the [release packaging evidence](notes/release-packaging.md).
-
-### Local PPC auto-sync
-
-Local builds may opt into post-build PPC synchronization only after enabling the
-local Git setting with `git config --local lo.ppcAutoSync true`. The CMake option
-reads that setting; if an existing cache is `OFF`, reconfigure with
-`-DLO_PPC_AUTO_SYNC=ON` as needed, while `OFF` disables the hook. CMake alone does
-not grant the script's upload authorization. The hook runs only after a
-successful PPC library build and invokes `ppc_sync.py sync --already-built`. It
-is not a file watcher, and editing files does not trigger it.
-
-The sync key covers PPC inputs and compiler arguments. If the same key already
-exists remotely, no compilation or upload occurs. A changed key uses a new
-immutable private `ppc/<key>` branch with dynamically sized shards of at most
-40 MiB; old branches are
-retained. Imported libraries, CI and `LO_PPC_SYNC_ACTIVE` are excluded from
-uploads. Sync failures report a build or retry failure and do not silently fall
-back. For a manual run, prepare the Windows environment in one `cmd` session:
-
-```cmd
-call tools\setup_windows.bat
-python tools\release\ppc_sync.py sync --build-dir out\build\fps-0.5.4
-```
-
-Non-Release builds may create the independent `out/build/ppc-sync-Release`
-configuration and build only its Release PPC library; that configuration keeps
-the hook off to prevent recursion. The read-only key command accepts
-`--build-dir DIR [--github-output PATH]`; `--force` enables one manual sync and
-`--already-built` is reserved for the internal hook.
-
-Nineteen synthetic sync cases pass. Separately, the built-library roundtrip and
-change-during-build cases pass. The real `LoPpcAutoSync` target, same-key unchanged
-check and sparse restore/check also pass; the target produced no PPC C++ compile
-commands and did not build or launch the runtime. See the [release packaging
-evidence](notes/release-packaging.md) for the branch, commit and retained logs.
+After generating the guest sources with `tools/ppc_codegen.py generate`, simply configure CMake and build the target. CMake compiles the generated sources directly; regenerate explicitly when the generator or its configuration changes.
 
 Audio configuration fetches the pinned Xenia FFmpeg source via CMake FetchContent, so first configuration needs network access. See [ffmpeg.cmake](../thirdparty/ffmpeg.cmake) and its [license](../thirdparty/ffmpeg-LICENSE.txt). This is a frame-level XMAFRAMES decoder, not a system FFmpeg executable requirement.
 
-Release builds do not require a separately installed Vulkan SDK. Windows Vulkan headers, volk and VMA come from the patched plume submodule; the GPU driver supplies `vulkan-1.dll` and its ICD. The runtime requests Vulkan 1.2, buffer-device-address, geometry shaders and Win32 WSI. Use the exact paired DXC v1.8.2407 DLLs copied by CMake and tracked in [DXC provenance](../thirdparty/dxc-licenses/PROVENANCE.json); do not substitute one DLL independently. Building the runtime also builds `LostOdysseyUpdater` in the same output directory, which the package step expects.
+Release builds do not require a separately installed Vulkan SDK. Windows Vulkan headers, volk and VMA come from the patched plume submodule; the GPU driver supplies `vulkan-1.dll` and its ICD. The runtime requests Vulkan 1.2, buffer-device-address, geometry shaders and Win32 WSI. Keep the paired DXC v1.8.2407 DLLs together with their license files; do not substitute one DLL independently. Release packaging ships the single `LostOdysseyRecomp.exe` binary; the updater and importer run from that binary.
+
+### Windows Direct3D 12 DLSS and FSR development paths
+
+The local Windows Direct3D 12 paths for DLSS SR/DLAA and FSR 3.1 are enabled
+by the normal Clang runtime build and have bounded build, fixture and Uhra
+validation; broader game coverage remains experimental. DLSS uses the local NGX SDK root:
+
+```powershell
+cmake -S . -B out/build/d3d12-upscalers -G Ninja `
+  -DLO_ENABLE_DLSS=ON -DLO_REQUIRE_DLSS=ON `
+  -DLO_DLSS_SDK_ROOT='C:\path\to\nvidia-dlss-sdk'
+```
+
+FSR D3D12 additionally requires offline DXIL inputs. Generate the pinned FSR
+shader headers and adapter conversion headers with the repository tools, then
+provide the resulting directories through `LO_FSR_DX12_SHADER_DIR` and
+`LO_FSR_DX12_ADAPTER_DIR`:
+
+```powershell
+python tools/fsr/generate_dx12_shaders.py `
+  --sdk 'C:\path\to\fidelityfx-sdk' `
+  --dxc-dir 'C:\path\to\dxc' `
+  --output 'C:\path\to\fsr-dx12-shaders'
+python tools/fsr/prepare_adapter_shaders_dx12.py `
+  --dxc 'C:\path\to\dxc\dxc.exe' `
+  --output 'C:\path\to\fsr-dx12-adapter'
+```
+
+```powershell
+cmake -S . -B out/build/d3d12-upscalers -G Ninja `
+  -DLO_ENABLE_FSR=ON -DLO_REQUIRE_FSR=ON `
+  -DLO_FSR_SDK_ROOT='C:\path\to\fidelityfx-sdk' `
+  -DLO_FSR_SHADER_DIR='C:\path\to\fsr-vulkan-shaders' `
+  -DLO_FSR_DX12_SHADER_DIR='C:\path\to\fsr-dx12-shaders' `
+  -DLO_FSR_DX12_ADAPTER_DIR='C:\path\to\fsr-dx12-adapter'
+```
+
+The checked local D3D12 evidence now includes a full Windows Clang build,
+RTX 5080 DLSS Quality/DLAA and FSR Quality/Native AA fixture readback, hybrid
+motion checks (D3D12 3527 / Vulkan 3415), and 11 DXIL/SPIR-V motion shader
+compilation checks. It does not establish broad game-scene rendering,
+performance, or player acceptance. Offline
+shader generation belongs to the build pipeline; it is not a player runtime
+step. Linux continues to use the Vulkan FSR path and does not require these
+D3D12 directories.
 
 ## Building on Linux
 
@@ -116,10 +88,12 @@ Building the native Linux ELF works on Linux distributions (such as Ubuntu or Ma
 ### Linux host prerequisites
 
 - Clang / Clang++ (LLVM toolchain)
+- LLD linker
 - Ninja
 - CMake 3.28+
 - Python 3.11+ (needs standard-library `tomllib`)
 - Vulkan loader and Mesa (or another Vulkan ICD compatible with your hardware)
+- libcurl development package (`libcurl4-openssl-dev` on Debian/Ubuntu) for updater HTTP support on UNIX
 - Typical C++ build development packages
 - Running `vulkaninfo` is useful for verifying your driver setup, though not strictly required by CMake
 
@@ -127,7 +101,7 @@ SDL2 build dependencies are already vendored in the repository tree.
 
 ### Linux PowerPC source generation
 
-Linux compiles generated PowerPC source code directly from `LostOdysseyRecompLib/ppc/`. The Windows prebuilt static library is not used on Linux.
+Linux compiles generated PowerPC source code directly from `LostOdysseyRecompLib/ppc/` using Clang. Release CI for Linux generates PPC sources from repository tools and inputs on Ubuntu 24.04 before building.
 
 If `LostOdysseyRecompLib/ppc/` is empty or missing, generate the sources from the repository root:
 
@@ -158,6 +132,86 @@ out/build/linux-clang/LostOdysseyRecomp/LostOdysseyRecomp
 ### DXC shared library on Linux
 
 CMake automatically copies the Linux DXC shared library from `tools/XenosRecomp/thirdparty/dxc-bin/lib/x64/libdxcompiler.so` into the output folder next to the `LostOdysseyRecomp` ELF during build. If you need a custom DXC location, set the `LO_DXC_PATH` environment variable before running.
+
+### Packaging AppImage
+
+Linux releases can package an AppImage using `tools/package_appimage.py` with `linuxdeploy`:
+
+```bash
+python3 tools/package_appimage.py --build out/build/linux-clang --output out/releases --appdir out/releases/linux.AppDir --linuxdeploy /path/to/linuxdeploy
+```
+
+The tool stages the executable, icons, desktop entry, metainfo, vendored DXC library and licenses into an AppDir layout and produces `LostOdysseyRecomp-linux-x64-<tag>.AppImage`.
+
+The release workflow keeps this AppDir for the Linux packaging job. Its
+Flatpak export reuses the already packaged `usr` tree from the persistent
+AppDir instead of compiling the source a second time. The stable bundle export
+and isolated user installation/sandbox shell checks passed. Release CI [36500844014](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/36500844014)
+ran this workflow successfully for v0.7.15; the published package facts and
+validation limits are recorded in [development status](STATUS.md).
+
+### Packaging Flatpak
+
+The repository provides `tools/package_flatpak.py` to export a Flatpak from an existing AppImage AppDir using the manifest metadata in `packaging/linux/io.github.freefrank.LostOdysseyRecomp.json`. The AppDir is the only binary input; this exporter does not compile source code or use `flatpak-builder`.
+
+#### Prerequisites
+
+Install the required Freedesktop 26.08 platform runtime and SDK from Flathub:
+
+```bash
+flatpak --system install flathub \
+  org.freedesktop.Platform//26.08 \
+  org.freedesktop.Sdk//26.08
+```
+
+Ensure `flatpak` is available on the host system.
+
+#### AppDir export
+
+Export a stable release bundle when the AppDir runtime version matches the
+checkout source version:
+
+```bash
+python3 -B tools/package_flatpak.py \
+  --appdir out/releases/linux.AppDir \
+  --output out/releases/flatpak-v0.7.3 \
+  --version v0.7.3
+```
+
+For a development bundle, omit `--version`; the exporter uses a `dev` branch
+name and emits a commit-suffixed development filename. It validates the
+payload tree and copies the AppDir `usr` tree into a Flatpak runtime. It runs
+the runtime dependency probe; no runtime-wide digest gate is required.
+The output may contain internal source records for debugging; these are not
+required public Release attachments or runtime gates.
+
+#### Standalone bundle installation and update limits
+
+Because standalone `.flatpak` bundles do not embed a remote runtime repository URL, ensure the required `org.freedesktop.Platform 26.08` runtime is installed before installing the bundle:
+
+```bash
+flatpak --system install flathub org.freedesktop.Platform//26.08
+```
+
+Install the published stable release bundle:
+
+```bash
+flatpak --user install --bundle LostOdysseyRecomp-linux-x64-v0.7.2.flatpak
+```
+
+Or install a locally packaged development bundle:
+
+```bash
+flatpak --user install --bundle out/flatpak-build/LostOdysseyRecomp-v<version>-<commit>-dev.flatpak
+```
+
+Launch the installed sandbox application:
+
+```bash
+flatpak run io.github.freefrank.LostOdysseyRecomp
+```
+
+Standalone bundles installed directly from `.flatpak` files do not configure an OSTree remote repository and cannot receive updates via `flatpak update`. Upgrading a local installation requires installing a newly downloaded or generated `.flatpak` bundle. Automatic updates will be available once published via an OSTree remote or Flathub (submission pending).
 
 ## Launch with a consistent working directory
 
@@ -191,7 +245,7 @@ and logs.
 
 Clear test-only environment variables before manual play. Do not treat a window staying open, a heartbeat, or nonzero PCM as proof a scene is correct.
 
-The shader compiler uses the paired `dxcompiler.dll`/`dxil.dll` copied beside the runtime. Custom development builds must preserve the v1.8.2407 pair and its license/provenance checks; the Windows SDK fallback is not the tested packaging contract.
+The shader compiler uses the paired `dxcompiler.dll`/`dxil.dll` copied beside the runtime. Custom development builds must preserve the v1.8.2407 pair and its license files; the Windows SDK fallback is not the tested packaging contract.
 
 Generated baseline mappings, branch targets, import listings and Ghidra exports are local analysis artifacts. They are ignored; regenerate them from your own data when extending the recompiler configuration. Checked-in TOML and manual boundary/switch overrides remain the build inputs.
 

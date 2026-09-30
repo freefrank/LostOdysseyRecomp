@@ -3,6 +3,8 @@
 #include <filesystem>
 #include <span>
 #include "gpu/backend_selection.h"
+#include "gpu/upscaling_plan.h"
+#include "../../shared/frame_generation/core.h"
 namespace settings
 {
 enum class WindowMode : uint32_t
@@ -45,9 +47,22 @@ struct Config
 #endif
     uint32_t antialiasing = 0; // 0 Off, 1 FXAA, 2 SMAA, 3 experimental camera-based TAA.
     uint32_t frameRate = 30;
+    bool variableRefreshRate = false; // Opt-in VRR-friendly presentation; does not enable monitor/driver VRR.
     uint32_t scalingQuality = 1; // 0 bilinear, 1 bicubic spatial resampling.
+    bool expandRgbRange = false; // Expand game image RGB 16-235 to 0-255 at presentation.
+    uint32_t anisotropicFiltering = 0; // 0 Off, otherwise 2/4/8/16x. Applied live by the renderer.
+    gpu::upscaling::Upscaler upscaler = gpu::upscaling::Upscaler::Off;
+    gpu::upscaling::DlssQuality dlssQuality = gpu::upscaling::DlssQuality::Quality;
+    gpu::upscaling::FsrQuality fsrQuality = gpu::upscaling::FsrQuality::Quality;
+    uint32_t fsrSharpnessPercent = 0; // 0 disables FSR RCAS; 1-100 sets its strength.
+    framegen::Provider frameGenerationProvider = framegen::Provider::Off; // D3D12; reconciled at the next presentation boundary.
+    framegen::Mode frameGenerationMode = framegen::Mode::Fixed;
+    uint32_t frameGenerationMultiplier = 2; // Requested total output frames per rendered frame.
+    uint32_t frameGenerationTargetFps = 0; // Dynamic mode: 0 asks the SDK to use the display rate.
     bool fxaa = false; // Legacy serialized mirror; antialiasing is authoritative.
     bool automaticUpdates = true;
+    bool skipShaderPrebuild = false;
+    bool saveAnywhere = false; // Debug-only preference; defaults off for existing profiles.
     bool operator==(const Config &) const = default;
 };
 Config GetConfig();
@@ -55,5 +70,6 @@ void PreviewConfig(const Config &config);
 // Atomic replacement, preserving the previous file if writing fails.
 bool SaveConfig(const Config &config);
 bool SaveDebugLanguage(uint32_t language);
+bool SaveSaveAnywhere(bool enabled);
 uint32_t GameLanguage();
 } // namespace settings

@@ -1,0 +1,57 @@
+name: Reusable frame generation
+on:
+  push:
+    branches: [feature/reusable-fg-fsr-d3d12-mfg]
+    paths: [shared/frame_generation/**, tools/tests/frame_generation/**, .github/workflows/reusable-fg.yml]
+  pull_request:
+    paths: [shared/frame_generation/**, tools/tests/frame_generation/**, .github/workflows/reusable-fg.yml]
+permissions:
+  contents: read
+jobs:
+  core:
+    strategy:
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: cmake -S tools/tests/frame_generation -B out/fg-core
+      - run: cmake --build out/fg-core --config Release
+      - run: ctest --test-dir out/fg-core -C Release --output-on-failure
+  native:
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        provider: [DLSS, FSR, BOTH]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        if: matrix.provider != 'FSR'
+        with:
+          repository: NVIDIA-RTX/Streamline
+          ref: 2122257e0fce486f91b385aa63b9a09b0a34b363
+          path: out/deps/streamline
+          sparse-checkout: include
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        if: matrix.provider != 'DLSS'
+        with:
+          repository: GPUOpen-LibrariesAndSDKs/FidelityFX-SDK
+          ref: c6efa6bf7f2027b3ec94f28578bb5965eabb9e55
+          path: out/deps/fidelityfx
+          sparse-checkout: ffx-api/include
+          persist-credentials: false
+      - name: Configure independent SDK adapters
+        shell: pwsh
+        run: |
+          $dlss = if ('${{ matrix.provider }}' -ne 'FSR') { 'ON' } else { 'OFF' }
+          $fsr = if ('${{ matrix.provider }}' -ne 'DLSS') { 'ON' } else { 'OFF' }
+          cmake -S tools/tests/frame_generation -B out/fg-native -A x64 "-DFRAMEGEN_WITH_DLSS=$dlss" "-DFRAMEGEN_WITH_FSR=$fsr" -DFRAMEGEN_STREAMLINE_INCLUDE="$pwd/out/deps/streamline/include" -DFRAMEGEN_FIDELITYFX_INCLUDE="$pwd/out/deps/fidelityfx/ffx-api/include"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - run: cmake --build out/fg-native --config Release --parallel 2
+      - run: ctest --test-dir out/fg-native -C Release --output-on-failure

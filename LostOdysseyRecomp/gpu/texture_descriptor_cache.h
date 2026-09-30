@@ -1,12 +1,45 @@
 #pragma once
 
 #include <array>
+#include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <unordered_map>
 
 namespace gpu::texture_descriptors {
+// A pooled set keeps its views across completed-fence intervals. The mask names
+// the bindings that may hold something other than the bank's dummy texture;
+// a set whose other bindings are unknown uses kUnknownBindings.
+constexpr uint32_t kUnknownBindings = ~uint32_t(0);
+
+template<class Texture, size_t Slots>
+uint32_t NonDummyBindings(const std::array<Texture*, Slots>& key, const Texture* dummy)
+{
+    static_assert(Slots <= 32);
+    uint32_t mask = 0;
+    for (size_t slot = 0; slot < Slots; ++slot)
+        if (key[slot] != dummy) mask |= uint32_t(1) << slot;
+    return mask;
+}
+
+// Writes the bindings that make a pooled set equal to `key`: those it may still
+// hold from earlier use plus the key's own non-dummy bindings. Every other
+// binding already holds the dummy the key names. Returns the set's new mask.
+template<class Texture, size_t Slots, class Write>
+uint32_t RewriteBindings(uint32_t previous, const std::array<Texture*, Slots>& key,
+    const Texture* dummy, Write&& write)
+{
+    const uint32_t next = NonDummyBindings(key, dummy);
+    uint32_t pending = previous | next;
+    if constexpr (Slots < 32) pending &= (uint32_t(1) << Slots) - 1;
+    for (; pending; pending &= pending - 1) {
+        const auto slot = uint32_t(std::countr_zero(pending));
+        write(slot, key[slot]);
+    }
+    return next;
+}
+
 // One cache per descriptor bank and completed-fence interval. A hit never
 // updates descriptors: their full contents remain immutable until Clear().
 template<class Texture, class Set, size_t Slots>

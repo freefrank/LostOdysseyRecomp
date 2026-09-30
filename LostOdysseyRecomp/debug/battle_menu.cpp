@@ -2,6 +2,7 @@
 #include <os/logger.h>
 #include "battle_menu.h"
 #include "opening_state.h"
+#include <host_ui/host_ui.h>
 
 extern std::atomic<uint32_t> g_presentedSwaps;
 extern "C" PPC_FUNC(__imp__sub_8238A640);
@@ -36,17 +37,21 @@ namespace
     std::atomic<uint64_t> lastBattleTick{0};
     uint64_t Now()
     {
-        return uint64_t(std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now().time_since_epoch()).count());
+        return host_ui::GetActiveGameTimeMs();
     }
 }
 
-void debug_menu::RequestVictory()
+bool debug_menu::RequestVictory()
 {
-    if (Now() - lastBattleTick.load() > 1000) return;
+    const bool paused = host_ui::IsGamePaused();
+    if (!paused && Now() - lastBattleTick.load() > 1000) return false;
     State expected = State::Ready;
     if (state.compare_exchange_strong(expected, State::Pending))
+    {
         LOG_INFO("debug menu: victory requested for current battle");
+        return true;
+    }
+    return false;
 }
 
 void debug_menu::CancelVictory()
@@ -57,7 +62,8 @@ void debug_menu::CancelVictory()
 
 const wchar_t* debug_menu::Status()
 {
-    if (Now() - lastBattleTick.load() > 1000) return L"当前没有可跳过的战斗 / No active battle";
+    const bool paused = host_ui::IsGamePaused();
+    if (!paused && Now() - lastBattleTick.load() > 1000) return L"当前没有可跳过的战斗 / No active battle";
     switch (state.load())
     {
     case State::Ready: return L"战斗中：可请求判胜 / Battle active";
@@ -87,7 +93,10 @@ PPC_FUNC(sub_8238A640)
     {
         if (previousTick == 0 || now - previousTick > 1000 || previousPhase == 0 ||
             (phase < previousPhase && previousPhase >= 12))
-            state = State::Ready;
+        {
+            if (state != State::Pending)
+                state = State::Ready;
+        }
         if (state == State::Cancelled) state = State::Ready;
         lastBattleTick = now;
         // Deterministic one-shot input for local integration tests, disabled by default.

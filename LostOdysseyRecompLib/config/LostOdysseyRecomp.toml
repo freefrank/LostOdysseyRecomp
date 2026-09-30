@@ -164,8 +164,38 @@ invalid_instructions = [
     { data = 0x47000202, size = 4 },
 ]
 
-[midasm_hook]
-# 示例：
-# [midasm_hook.SomeHookName]
-# address = 0x00000000
-# registers = ["r3", "r4"]
+[[midasm_hook]]
+name = "HorPlusViewProjection"
+address = 0x82301DA0
+registers = ["r1", "r31"]
+after_instruction = false
+
+[[midasm_hook]]
+name = "FramePlanBeforeExecute"
+address = 0x824857C8
+registers = ["r1", "r31"]
+after_instruction = false
+
+[[midasm_hook]]
+name = "FramePlanAfterExecute"
+address = 0x824857F8
+registers = []
+after_instruction = false
+
+[[midasm_hook]]
+name = "FramePlanDirectCanvas"
+address = 0x825B2A4C
+registers = ["r1", "r9"]
+after_instruction = false
+
+[[midasm_hook]]
+name = "FramePlanDirectCanvas"
+address = 0x823039C8
+registers = ["r1", "r27"]
+after_instruction = false
+
+[[midasm_hook]]
+name = "FramePlanDirectCanvas"
+address = 0x823E98E0
+registers = ["r1", "r30"]
+after_instruction = false

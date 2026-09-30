@@ -4,6 +4,7 @@
 #include <memory>
 #include <span>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -29,13 +30,14 @@ struct Assets
     Image menu;
     std::string language;
 };
-// Reads the small FPI index, then only the selected menu package extents.
-// No game writes, guest memory, renderer dependency or external asset cache.
+// Reads selected FPI package extents and optional, validated image overlays.
+// No game writes, guest memory or renderer dependency.
 std::shared_ptr<const Assets> Load(const std::filesystem::path &gameRoot, uint32_t language) noexcept;
-// Presentation-thread cache, including failed loads. No per-frame disk scans.
+// Presentation-thread cache, invalidated by root or mod generation changes.
 std::shared_ptr<const Assets> Cached(const std::filesystem::path &gameRoot, uint32_t language) noexcept;
 
-// Bounded pure readers, also exercised by the focused asset fixture.
-Font DecodeFont(std::span<const uint8_t> package, const std::string &name);
-Image DecodeTexture(std::span<const uint8_t> package, const std::string &name);
+// Empty packagePath keeps the pure original-resource readers used by fixtures.
+// With a package identity, Texture2D pixels (including font pages) may be replaced.
+Font DecodeFont(std::span<const uint8_t> package, const std::string &name, std::string_view packagePath = {});
+Image DecodeTexture(std::span<const uint8_t> package, const std::string &name, std::string_view packagePath = {});
 }

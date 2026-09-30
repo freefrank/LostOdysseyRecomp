@@ -4,7 +4,17 @@
 #include <kernel/heap.h>
 #include <kernel/function.h>
 #include <os/logger.h>
+#include <os/thread_name.h>
+#include <host_ui/host_ui.h>
+#include <cstdio>
 #include "ppc_context.h"
+
+// The generated mftb helper links to this runtime clock without depending on
+// the host UI header or its include paths.
+uint64_t LostOdysseyActiveGameTimeNs()
+{
+    return host_ui::GetActiveGameTimeNs();
+}
 
 // Layout mirrors the real kernel's per-thread block closely enough for the
 // game's inline accesses (r13 -> PCR, PCR+0 -> TLS, PCR+0x100 -> TEB).
@@ -52,23 +62,23 @@ GuestThreadContext::~GuestThreadContext()
     g_pageAllocator.Free(g_pageAllocator.virtualRegion, g_memory.MapVirtual(thread));
 }
 
-static void GuestThreadFunc(GuestThreadHandle* hThread)
+static void GuestThreadFunc(std::shared_ptr<GuestThreadHandle::Control> state)
 {
-    hThread->suspended.wait(true);
-    GuestThread::Start(hThread->params);
-    hThread->finished = true;
-    hThread->finished.notify_all();
+    char name[16];
+    std::snprintf(name, sizeof(name), "Guest %x", state->params.function);
+    os::SetCurrentThreadName(name);
+    state->suspended.wait(true);
+    GuestThread::Start(state->params);
+    state->completion.Set();
 }
-
 GuestThreadHandle::GuestThreadHandle(const GuestThreadParams& params)
-    : params(params), suspended((params.flags & 0x1) != 0), thread(GuestThreadFunc, this)
+    : control(std::make_shared<Control>(params)), thread(GuestThreadFunc, control)
 {
 }
-
 GuestThreadHandle::~GuestThreadHandle()
 {
-    if (thread.joinable())
-        thread.join();
+    // Closing a handle is not a wait. The worker's shared control survives it.
+    if (thread.joinable()) thread.detach();
 }
 
 template <typename ThreadType>
@@ -85,30 +95,10 @@ uint32_t GuestThreadHandle::GetThreadId() const
     return CalcThreadId(thread.get_id());
 }
 
-uint32_t GuestThreadHandle::Wait(uint32_t timeout)
-{
-    if (timeout == INFINITE)
-    {
-        if (thread.joinable())
-            thread.join();
-        return STATUS_WAIT_0;
-    }
-
-    if (timeout == 0)
-        return finished ? STATUS_WAIT_0 : STATUS_TIMEOUT;
-
-    auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout);
-    while (!finished)
-    {
-        if (std::chrono::steady_clock::now() >= deadline)
-            return STATUS_TIMEOUT;
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    }
-    return STATUS_WAIT_0;
-}
-
 uint32_t GuestThread::Start(const GuestThreadParams& params)
 {
+    WaitIfPaused();
+
     const auto procMask = (uint8_t)(params.flags >> 24);
     const auto cpuNumber = procMask == 0 ? 0 : 7 - std::countl_zero(procMask);
 
@@ -128,7 +118,7 @@ uint32_t GuestThread::Start(const GuestThreadParams& params)
     return ctx.ppcContext.r3.u32;
 }
 
-GuestThreadHandle* GuestThread::Start(const GuestThreadParams& params, uint32_t* threadId)
+std::shared_ptr<GuestThreadHandle> GuestThread::Start(const GuestThreadParams& params, uint32_t* threadId)
 {
     auto hThread = CreateKernelObject<GuestThreadHandle>(params);
 
@@ -136,6 +126,11 @@ GuestThreadHandle* GuestThread::Start(const GuestThreadParams& params, uint32_t*
         *threadId = hThread->GetThreadId();
 
     return hThread;
+}
+
+void GuestThread::WaitIfPaused()
+{
+    host_ui::WaitIfPaused();
 }
 
 uint32_t GuestThread::GetCurrentThreadId()

@@ -1,8 +1,14 @@
 # 设置菜单与显示选项
 
+## 2026-09-19 Issue #54 语言选择安全修正（待下个版本发布）
+
+语言菜单现在只接受原生语言表范围内的有效数量和索引。数量为零或超出容量、索引越界时，不读取对应语言表，也不改写当前选择；无效菜单项显示为 `—`，避免用 clamp 后的值伪造语言。菜单容量按原生 parser 的 16 项限制处理。既有 `82481BE8` USA/Europe 宿主覆盖语义保持不变，文字和配音选择仍独立处理。
+
+新增默认关闭且有界的 `LO_TRACE_LANGUAGE=1` 追踪，可记录 lookup 原始参数、host/original 返回指针、菜单 open/apply/default/close 的配置数量与索引、映射 ID，以及 `82481E78`/`82481F40` 的有效缓存 UTF-16 和返回 ID；close 快照位于 apply 之后、close 之前。该追踪用于后续问题取证；具体过场配音问题的根因尚未确认；没有存档，本次未做实机复现。修正将在下个版本发布。
+
 ## 2026-09-14 欧美版字幕映射已包含在 v0.5.12
 
-`82481BE8` hook 的 USA/Europe FMV／事件字幕语言映射修复已包含在已发布的 [v0.5.12](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.12)。本地 `game_language=5`、Vulkan 3840×2160 的西班牙语开场 FMV 检查已通过并获接受；这仍仅覆盖开场场景。德语、法语、意大利语 FMV 画面、完整事件覆盖、全游戏验证和报告者验收仍未核验。发布检查未重新核对 50 文件 manifest。
+`82481BE8` hook 的 USA/Europe FMV／事件字幕语言映射修复已包含在已发布的 [v0.5.12](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.12)。本地 `game_language=5`、Vulkan 3840×2160 的西班牙语开场 FMV 检查已通过并获接受。2026-09-15 原报告者确认 v0.5.12 西班牙语开场 FMV 字幕（Vulkan 与 Direct3D 12），德语、法语、意大利语 FMV 覆盖亦已确认。Issue [#27](https://github.com/freefrank/LostOdysseyRecomp/issues/27) 已关闭。完整事件覆盖和全游戏验证仍未核验。发布检查未重新核对 50 文件 manifest。
 
 2026-09-05，实现及验证记录。参考 [reblue](https://github.com/zolaware/reblue) 将新菜单接回原入口、分离设置数据与绘制的结构；没有复制 Blue Dragon 的游戏地址或菜单实现。
 

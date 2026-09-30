@@ -1,12 +1,14 @@
 [submodule "tools/XenonRecomp"]
 	path = tools/XenonRecomp
 	url = https://github.com/hedge-dev/XenonRecomp.git
+	ignore = dirty
 [submodule "tools/XenosRecomp"]
 	path = tools/XenosRecomp
 	url = https://github.com/hedge-dev/XenosRecomp.git
 [submodule "thirdparty/plume"]
 	path = thirdparty/plume
 	url = https://github.com/renderbag/plume.git
+	ignore = dirty
 [submodule "tools/reverse-skill"]
 	path = tools/reverse-skill
 	url = https://github.com/zhaoxuya520/reverse-skill.git

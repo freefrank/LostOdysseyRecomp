@@ -103,10 +103,12 @@ try
     Require(WorkerCount(0, 10, false) == 1, "unknown logical count must use one worker");
     Require(WorkerCount(1, 10, false) == 1, "single logical thread must use one worker");
     Require(WorkerCount(2, 10, false) == 1, "two logical threads must leave one free");
-    Require(WorkerCount(8, 10, false) == 7, "multi-core count must use logical minus one");
+    Require(WorkerCount(8, 10, false) == 4, "DXC worker working sets must be capped");
     Require(WorkerCount(8, 3, false) == 3, "worker count must not exceed jobs");
     Require(WorkerCount(8, 10, true) == 1, "serial control must use one worker");
     Require(WorkerCount(8, 0, false) == 0, "empty input must start no workers");
+
+    Require(WorkerCount(128, 1000, false) == 4, "many-core hosts must obey the memory cap");
 
     constexpr size_t jobs = 97;
     std::array<std::atomic<unsigned>, jobs> prepared{};
@@ -203,6 +205,24 @@ try
         std::chrono::steady_clock::now() - consumerFailureStarted).count();
     Require(consumerFailureObserved && consumerFailureMs < 2000,
         "consumer failure did not wake and join blocked producers");
+
+    for (unsigned round = 0; round < 200; ++round) {
+        size_t calls = 0;
+        bool threw = false;
+        try {
+            const auto stress = xenos::preparation::RunBounded<size_t>(100, 4, 1,
+                [](size_t index) { std::this_thread::yield(); return index; },
+                [&](size_t) {
+                    if (++calls < 2) return true;
+                    if (round & 1) throw std::runtime_error("stress cancellation");
+                    return false;
+                }, [] {});
+            Require(stress.cancelled && calls == 2, "stress cancellation lost");
+        } catch (const std::runtime_error& e) {
+            threw = std::string(e.what()) == "stress cancellation";
+        }
+        Require(threw == bool(round & 1), "stress consumer exception lost");
+    }
 
     const auto cache = output / "shader.cache";
     const std::array<uint8_t, 4> oldBytes{1, 2, 3, 4};

@@ -4,7 +4,7 @@ namespace debug_menu
 {
     void Toggle();
     void Update();
-    void RequestVictory();
+    bool RequestVictory();
     void CancelVictory();
     const wchar_t* Status();
 }

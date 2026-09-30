@@ -5,7 +5,8 @@ namespace xenos::resources {
 // Source locations for PM4_IM_LOAD_IMMEDIATE arrays in the supported XEX.
 // Metadata only. Copy bytes from the loaded original image after exact hash
 // verification; no game shader bytecode is embedded in this program.
-inline size_t ExtractXexShaders(std::span<const uint8_t> image, const fs::path& source) {
+inline size_t ExtractXexShaders(std::span<const uint8_t> image, const fs::path& source,
+                                const SourceSink& sink = {}) {
     constexpr IndexEntry entries[] = {
         {0x185B10,60,0x8471352ddebb20e4ULL,false},
         {0x185B4C,36,0x63c971f5e9d59913ULL,true},
@@ -17,7 +18,7 @@ inline size_t ExtractXexShaders(std::span<const uint8_t> image, const fs::path& 
         if (entry.offset>image.size() || entry.size>image.size()-entry.offset) continue;
         const auto code=image.subspan(entry.offset,entry.size);
         if (Hash(code)!=entry.hash) continue;
-        SaveSource(source,entry.pixel,code); ++count;
+        SaveSource(source,entry.pixel,code,sink); ++count;
     }
     return count;
 }

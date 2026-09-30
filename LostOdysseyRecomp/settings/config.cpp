@@ -1,7 +1,10 @@
 #include "config.h"
+#include <gpu/frame_rate.h>
 #include <filesystem>
 #include <fstream>
 #include <os/logger.h>
+#include <os/user_paths.h>
+#include <gpu/dlss_status_log.h>
 #include <stdafx.h>
 namespace settings
 {
@@ -14,9 +17,30 @@ Config Validate(Config value)
         value.internalResolution != 1440 && value.internalResolution != 2160)
         value.internalResolution = 0;
     if (value.scalingQuality > 1) value.scalingQuality = 1;
+    if (value.anisotropicFiltering != 0 && value.anisotropicFiltering != 2 && value.anisotropicFiltering != 4 &&
+        value.anisotropicFiltering != 8 && value.anisotropicFiltering != 16) value.anisotropicFiltering = 0;
+    if (!gpu::upscaling::KnownUpscaler(value.upscaler)) value.upscaler = gpu::upscaling::Upscaler::Off;
+    value.dlssQuality = gpu::upscaling::NormalizeDlssQuality(value.dlssQuality);
+    value.fsrQuality = gpu::upscaling::NormalizeFsrQuality(value.fsrQuality);
+    value.fsrSharpnessPercent = std::min(value.fsrSharpnessPercent, 100u);
+    if (value.frameGenerationProvider != framegen::Provider::Off &&
+        value.frameGenerationProvider != framegen::Provider::Dlss &&
+        value.frameGenerationProvider != framegen::Provider::Fsr)
+        value.frameGenerationProvider = framegen::Provider::Off;
+    if (value.frameGenerationMode != framegen::Mode::Fixed && value.frameGenerationMode != framegen::Mode::Dynamic)
+        value.frameGenerationMode = framegen::Mode::Fixed;
+    if (value.frameGenerationMultiplier < 2 || value.frameGenerationMultiplier > framegen::kMaxMultiplier)
+        value.frameGenerationMultiplier = 2;
+    if (value.frameGenerationTargetFps > 1000) value.frameGenerationTargetFps = 0;
+    if (value.frameGenerationProvider == framegen::Provider::Fsr)
+    {
+        value.frameGenerationMode = framegen::Mode::Fixed;
+        value.frameGenerationMultiplier = 2;
+        value.frameGenerationTargetFps = 0;
+    }
     if (value.antialiasing > 3) value.antialiasing = 0;
     value.fxaa = value.antialiasing == 1;
-    if (value.frameRate != 30 && value.frameRate != 60 && value.frameRate != 120) value.frameRate = 30;
+    value.frameRate = gpu::frame_rate::Normalize(value.frameRate);
     if (value.debugLanguage > 1) value.debugLanguage = 0;
     if (value.uiLanguage > 4)
         value.uiLanguage = 0;
@@ -45,7 +69,8 @@ Config Read()
 {
     Config value;
     bool hasAntialiasing = false;
-    std::ifstream input("settings.ini");
+    const auto path = os::user_paths::UsePortableLayout() ? std::filesystem::path("settings.ini") : os::user_paths::ConfigDir() / "settings.ini";
+    std::ifstream input(path);
     std::string key;
     while (std::getline(input, key))
     {
@@ -56,6 +81,7 @@ Config Read()
         // Presence wins over the legacy key even if the new value is malformed.
         if (name == "antialiasing") { hasAntialiasing = true; value.antialiasing = 0; }
         if (name == "internal_resolution") value.internalResolution = 0;
+        if (name == "anisotropic_filtering") value.anisotropicFiltering = 0;
         uint32_t number = 0;
         const auto digits = key.substr(equal + 1);
         auto parsed = std::from_chars(digits.data(), digits.data() + digits.size(), number);
@@ -82,10 +108,38 @@ Config Read()
             value.antialiasing = number;
         else if (key == "scaling_quality")
             value.scalingQuality = number;
+        else if (key == "expand_rgb_range" && number <= 1)
+            value.expandRgbRange = number == 1;
+        else if (key == "anisotropic_filtering")
+            value.anisotropicFiltering = number;
+        else if (key == "upscaler")
+            value.upscaler = gpu::upscaling::Upscaler(number);
+        else if (key == "dlss_quality")
+            value.dlssQuality = gpu::upscaling::DlssQuality(number);
+        else if (key == "fsr_quality")
+            value.fsrQuality = gpu::upscaling::FsrQuality(number);
+        else if (key == "fsr_sharpness")
+            value.fsrSharpnessPercent = number;
+        else if (key == "frame_generation_provider")
+            value.frameGenerationProvider = number <= uint32_t(framegen::Provider::Fsr)
+                ? framegen::Provider(number) : framegen::Provider::Off;
+        else if (key == "frame_generation_mode")
+            value.frameGenerationMode = number <= uint32_t(framegen::Mode::Dynamic)
+                ? framegen::Mode(number) : framegen::Mode::Fixed;
+        else if (key == "frame_generation_multiplier")
+            value.frameGenerationMultiplier = number;
+        else if (key == "frame_generation_target_fps")
+            value.frameGenerationTargetFps = number;
+        else if (key == "variable_refresh_rate")
+            value.variableRefreshRate = number == 1;
         else if (key == "frame_rate")
             value.frameRate = number;
         else if (key == "fxaa")
             value.fxaa = number == 1;
+        else if (key == "skip_shader_prebuild")
+            value.skipShaderPrebuild = number == 1;
+        else if (key == "save_anywhere" && number <= 1)
+            value.saveAnywhere = number == 1;
         else if (key == "automatic_updates")
         {
             // Unknown values keep the safe package default (enabled).
@@ -144,6 +198,7 @@ void PreviewConfig(const Config &value)
     std::lock_guard lock(mutex);
     auto merged = Validate(value);
     merged.debugLanguage = Current().debugLanguage;
+    merged.saveAnywhere = Current().saveAnywhere;
     Current() = merged;
 }
 uint32_t GameLanguage()
@@ -153,15 +208,31 @@ uint32_t GameLanguage()
 }
 static bool WriteConfig(const Config &value)
 {
-    std::ofstream output("settings.ini.tmp", std::ios::trunc);
+    const auto path = os::user_paths::UsePortableLayout() ? std::filesystem::path("settings.ini") : os::user_paths::ConfigDir() / "settings.ini";
+    std::error_code ec;
+    std::filesystem::create_directories(path.parent_path(), ec);
+    const auto temporary = path.parent_path() / (path.filename().string() + ".tmp");
+    std::ofstream output(temporary, std::ios::trunc);
     output << "ui_language=" << value.uiLanguage << "\ngame_language=" << value.gameLanguage
            << "\nwidth=" << value.width << "\nheight=" << value.height << "\nwindow_mode=" << uint32_t(value.windowMode)
            << "\ngraphics_backend=" << uint32_t(value.graphicsBackend)
            << "\ndebug_language=" << value.debugLanguage
            << "\nantialiasing=" << value.antialiasing << "\nframe_rate=" << value.frameRate
            << "\nscaling_quality=" << value.scalingQuality
+           << "\nexpand_rgb_range=" << (value.expandRgbRange ? 1 : 0)
+           << "\nanisotropic_filtering=" << value.anisotropicFiltering
+           << "\nupscaler=" << uint32_t(value.upscaler) << "\ndlss_quality=" << uint32_t(value.dlssQuality)
+           << "\nfsr_quality=" << uint32_t(value.fsrQuality)
+           << "\nfsr_sharpness=" << value.fsrSharpnessPercent
+           << "\nvariable_refresh_rate=" << (value.variableRefreshRate ? 1 : 0)
+           << "\nframe_generation_provider=" << uint32_t(value.frameGenerationProvider)
+           << "\nframe_generation_mode=" << uint32_t(value.frameGenerationMode)
+           << "\nframe_generation_multiplier=" << value.frameGenerationMultiplier
+           << "\nframe_generation_target_fps=" << value.frameGenerationTargetFps
            << "\ninternal_resolution=" << value.internalResolution
-           << "\nfxaa=" << value.fxaa << "\nautomatic_updates=" << value.automaticUpdates << '\n';
+           << "\nfxaa=" << value.fxaa << "\nautomatic_updates=" << value.automaticUpdates
+           << "\nskip_shader_prebuild=" << (value.skipShaderPrebuild ? 1 : 0)
+           << "\nsave_anywhere=" << (value.saveAnywhere ? 1 : 0) << '\n';
     output.flush();
     if (!output)
         return false;
@@ -169,17 +240,15 @@ static bool WriteConfig(const Config &value)
     if (!output)
         return false;
 #ifdef _WIN32
-    if (!MoveFileExW(L"settings.ini.tmp", L"settings.ini", MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+    if (!MoveFileExW(temporary.wstring().c_str(), path.wstring().c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
         return false;
 #else
     std::error_code error;
-    std::filesystem::rename("settings.ini.tmp", "settings.ini", error);
+    std::filesystem::rename(temporary, path, error);
     if (error)
         return false;
 #endif
-    LOG_INFO("settings saved: {}x{} internal_resolution={} mode={} backend={} AA={} language={} (backend/game language apply at restart)",
-             value.width, value.height, value.internalResolution, uint32_t(value.windowMode),
-             uint32_t(value.graphicsBackend), value.antialiasing, value.gameLanguage);
+    LogSettingsSaved(value);
     return true;
 }
 bool SaveConfig(const Config &requested)
@@ -187,6 +256,7 @@ bool SaveConfig(const Config &requested)
     std::lock_guard lock(mutex);
     auto value = Validate(requested);
     value.debugLanguage = Current().debugLanguage;
+    value.saveAnywhere = Current().saveAnywhere;
     if (!WriteConfig(value)) return false;
     Current() = value;
     return true;
@@ -199,6 +269,16 @@ bool SaveDebugLanguage(uint32_t language)
     persisted.debugLanguage = language <= 1 ? language : 0;
     if (!WriteConfig(persisted)) return false;
     Current().debugLanguage = persisted.debugLanguage;
+    return true;
+}
+bool SaveSaveAnywhere(bool enabled)
+{
+    std::lock_guard lock(mutex);
+    // Merge with the persisted settings, not a pending graphics preview.
+    auto persisted = Read();
+    persisted.saveAnywhere = enabled;
+    if (!WriteConfig(persisted)) return false;
+    Current().saveAnywhere = enabled;
     return true;
 }
 } // namespace settings

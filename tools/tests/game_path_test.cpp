@@ -4,6 +4,7 @@
 #include <fstream>
 #include <cstdlib>
 #include <iostream>
+#include <optional>
 #include <string>
 
 namespace fs = std::filesystem;
@@ -69,14 +70,27 @@ int main()
     fs::create_directories(unrelatedDirectory);
     fs::current_path(unrelatedDirectory);
 
-    // A blank file selects ../game relative to the executable, even when the
+    // A blank file selects ./game relative to the executable, even when the
     // caller's working directory points elsewhere.
+    const auto adjacentGame = fixture.exe / "game";
+    const auto adjacentDisc = adjacentGame / "disc1";
+    fixture.Marker(adjacentDisc);
+    fixture.Config(" \t\r\n");
+    CheckRoot(Resolve(fixture.exe), adjacentDisc, Source::DefaultSearch,
+              "blank game-path.txt did not select ./game/disc1");
+
+    // When both adjacent ./game and parent ../game exist, adjacent ./game takes priority.
     const auto packageGame = fixture.root / "game";
     const auto packageDisc = packageGame / "disc1";
     fixture.Marker(packageDisc);
-    fixture.Config(" \t\r\n");
+    CheckRoot(Resolve(fixture.exe), adjacentDisc, Source::DefaultSearch,
+              "adjacent ./game/disc1 did not have priority over ../game/disc1");
+
+    // Parent ../game is still recognized as a fallback when adjacent ./game is absent.
+    std::error_code error;
+    fs::remove_all(adjacentGame, error);
     CheckRoot(Resolve(fixture.exe), packageDisc, Source::DefaultSearch,
-              "blank game-path.txt did not select ../game/disc1");
+              "fallback parent ../game/disc1 was not recognized");
 
     // A configured direct game directory has priority over defaults.
     const auto direct = fixture.root / "direct-game";
@@ -100,8 +114,7 @@ int main()
     CheckRoot(Resolve(fixture.exe), xexDirectory, Source::ConfiguredFile,
               "configured default.xex was not recognized");
 
-    // Direct EXE-directory startup remains usable when ../game is absent.
-    std::error_code error;
+    // Direct EXE-directory startup remains usable when ./game and ../game are absent.
     fs::remove_all(packageGame, error);
     fixture.Config("\n");
     const auto exeGame = fixture.exe;
@@ -110,21 +123,29 @@ int main()
               "EXE-directory default.xex was not recognized");
     fs::remove(exeGame / "default.xex", error);
 
-    // The legacy nested game layout is a deterministic later fallback.
+    // The nested game layout is recognized.
     const auto nested = fixture.exe / "game" / "disc1";
     fixture.Marker(nested);
     CheckRoot(Resolve(fixture.exe), nested, Source::DefaultSearch,
-              "nested game/disc1 fallback was not recognized");
+              "nested game/disc1 was not recognized");
 
     // With no marker anywhere, the returned path still records the documented
-    // package default so the loader/installer can report the missing resource.
+    // package default ./game so the loader/installer can report the missing resource.
     fs::remove_all(fixture.exe / "game", error);
     fixture.Config("\n");
     const auto noCandidate = Resolve(fixture.exe);
-    Check(noCandidate.root == (fixture.exe / ".." / "game").lexically_normal(),
-          "missing default did not retain ../game");
+    Check(noCandidate.root == (fixture.exe / "game").lexically_normal(),
+          "missing default did not retain ./game");
     Check(noCandidate.source == Source::Fallback && !noCandidate.valid,
           "missing default did not report fallback state");
+
+    // When game-path.txt is missing entirely, fallback path is also ./game.
+    fs::remove(fixture.exe / "game-path.txt", error);
+    const auto noConfigResult = Resolve(fixture.exe);
+    Check(noConfigResult.root == (fixture.exe / "game").lexically_normal(),
+          "missing game-path.txt did not fallback to ./game");
+    Check(noConfigResult.source == Source::Fallback && !noConfigResult.valid,
+          "missing game-path.txt did not report fallback state");
 
     // Unicode configuration is read as UTF-8 and remains independent of cwd.
     const auto unicodeDirectory = fs::path(std::u8string(u8"游戏´′"));
@@ -163,6 +184,47 @@ int main()
     Check(explicitResult.root == missing, "explicit path was rewritten");
     Check(explicitResult.source == Source::ExplicitArgument, "explicit source was lost");
     Check(!explicitResult.valid, "missing explicit path was treated as valid");
+
+#ifndef _WIN32
+    {
+        const bool previousPortable = os::user_paths::g_usePortableLayout;
+        os::user_paths::g_usePortableLayout = false;
+        const auto previousEnv = [](const char* name) -> std::optional<std::string> {
+            if (const char* value = std::getenv(name)) return value;
+            return std::nullopt;
+        };
+        const auto savedDataHome = previousEnv("XDG_DATA_HOME");
+        const auto savedConfigHome = previousEnv("XDG_CONFIG_HOME");
+        const auto dataHome = fixture.root / "xdg-data";
+        const auto configHome = fixture.root / "xdg-config";
+        setenv("XDG_DATA_HOME", dataHome.c_str(), 1);
+        setenv("XDG_CONFIG_HOME", configHome.c_str(), 1);
+        const auto dataGame = dataHome / "lost-odyssey-recomp" / "game";
+        const auto dataDisc = dataGame / "disc1";
+        fixture.Marker(dataDisc);
+        fixture.Marker(adjacentDisc);
+        CheckRoot(Resolve(fixture.exe), dataDisc, Source::DefaultSearch,
+                  "non-portable XDG game did not take priority over adjacent game");
+
+        fs::remove_all(dataGame, error);
+        CheckRoot(Resolve(fixture.exe), adjacentDisc, Source::DefaultSearch,
+                  "non-portable adjacent game fallback was not recognized");
+
+        fs::remove_all(adjacentGame, error);
+        const auto nonPortable = Resolve(fixture.exe);
+        Check(nonPortable.root == (dataHome / "lost-odyssey-recomp" / "game").lexically_normal(),
+              "non-portable fallback did not use the XDG data game directory");
+        Check(nonPortable.source == Source::Fallback && !nonPortable.valid,
+              "non-portable missing default did not report fallback state");
+        os::user_paths::g_usePortableLayout = previousPortable;
+        const auto restoreEnv = [](const char* name, const std::optional<std::string>& value) {
+            if (value) setenv(name, value->c_str(), 1);
+            else unsetenv(name);
+        };
+        restoreEnv("XDG_DATA_HOME", savedDataHome);
+        restoreEnv("XDG_CONFIG_HOME", savedConfigHome);
+    }
+#endif
 
     fs::current_path(originalDirectory);
     std::cout << "PASS: game path discovery fixture\n";

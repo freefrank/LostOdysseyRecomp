@@ -1,23 +1,35 @@
 # Installing Lost Odyssey Recomp
 
-This guide describes the current Windows v0.5.4 package, with Direct3D 12 and Vulkan graphics backends.
+This guide describes the current development branch and the next package transition, with Direct3D 12 and Vulkan graphics backends. The importer and updater are built into **LostOdysseyRecomp.exe**; there is no separate `InstallGame.exe` or `LostOdysseyUpdater.exe`.
 
-1. Extract the entire package to a writable folder, outside Program Files. Keep the executable, importer, updater helper, validated DXC v1.8.2407 DLL pair and license files together.
-2. Run **LostOdysseyRecomp.exe** directly. If game files are missing, the importer opens; select your source and review its recognition result before importing.
+1. Extract the entire package to a writable folder, outside Program Files. Keep the main executable, validated DXC v1.8.2407 DLL pair and license files together.
+2. Run **LostOdysseyRecomp.exe** directly. If game files are missing, the built-in importer opens; select your source and review its recognition result before importing.
 3. On first launch, choose interface/game language and graphics settings. The game continues after setup and the separate shader preparation stages.
 
-You can also run **InstallGame.exe** separately to import additional discs or DLC. Disc 1 is required to start.
+The built-in importer can also be opened from the game to import additional discs or DLC. Disc 1 is required to start.
 
-The package includes the game executable, importer, updater helper, validated DXC v1.8.2407 DLL pair, dependency licenses and a SHA256 manifest. Python and Visual Studio are not required. Windows x64 and an AVX-capable CPU are required. D3D12 is the default graphics path; the development Vulkan path requires a compatible Windows driver and uses the driver-provided Vulkan loader rather than a bundled SDK.
+The package includes the game executable and built-in importer/updater, the DXC v1.8.2407 DLL pair and dependency licenses. Python and Visual Studio are not required. Windows x64 and an AVX-capable CPU are required. D3D12 is the default graphics path; the development Vulkan path requires a compatible Windows driver and uses the driver-provided Vulkan loader rather than a bundled SDK.
 Game files are supplied by the user and are not included in the download.
 
 <a id="automatic-content-import"></a>
 
 ## Automatic content import
 
-Run **InstallGame.exe**, then choose **Files** to select one or more files, or **Folder** to scan a directory. The importer recognizes supported game discs and Lost Odyssey DLC from their headers and structure; you do not need to choose a disc or DLC mode. Mixed selections are reviewed together before import.
+On first launch of **LostOdysseyRecomp.exe**, choose **Files** to select one or more files, or **Folder** to scan a directory. The same content importer can be reopened from the game when assets are missing. It recognizes supported game discs and Lost Odyssey DLC from their headers and structure; you do not need to choose a disc or DLC mode. Mixed selections are reviewed together before import.
 
 The import order is game-disc transaction, shared game-path save, then DLC transaction. If DLC import fails or is cancelled after discs succeed, the completed discs remain installed and the retry contains only the remaining DLC. A game-path save failure is warned about without rolling back completed imports. DLC-only imports do not change `game-path.txt`.
+
+Disc resource copies and `import-info.json` are published only after their writes,
+flushes and closes succeed. A final write error aborts the staged import before
+publication; the importer does not reread the complete resource to perform this
+check. XDVDFS discovery advances on 2048-byte boundaries and the install phase
+reuses the identity-verified reader while retaining a final identity check.
+
+On the destination page, use **New folder**, `F2`, or controller `Y` to create a
+folder. A unique default name is supplied and can be edited with the keyboard.
+After creation the browser enters and selects the folder, without starting an
+import. Name collisions, permission failures and read-only destinations are
+reported clearly. The source browser keeps its existing `Y` behavior.
 
 ## Supported sources
 
@@ -35,7 +47,7 @@ The importer accepts these audited sets, both with Title ID `4D5307FA`:
 | Asian multilingual | 4 | `39F7D748`, `0EF8CEA8`, `309E3386`, `7B21A91D` |
 | USA/Europe | 3 | `368DE6DD`, `1888BE4E`, `6DD59D08`, `0C0E80B5` |
 
-Each XEX SHA256 must match one of the audited supported builds. Discs from different editions cannot be mixed,
+Each XEX must carry the metadata of one audited supported build. Discs from different editions cannot be mixed,
 either in a single import or when adding to an existing installation. Other builds, title updates
 and modified XEX files need separate compatibility work.
 
@@ -43,19 +55,24 @@ Game-language choices follow the installed edition: English, Japanese, German, F
 and Italian for USA/Europe; English, Japanese, Korean, Traditional Chinese and Simplified Chinese
 for the audited Asian set. The settings interface retains its existing five translations.
 A saved game-language choice unavailable in the current edition falls back to English.
+The embedded installer UI font is a packed Unifont subset from the pinned SDL source; it is not an
+original Lost Odyssey font and does not claim full Unicode coverage or game-style visual fidelity.
 
 Discs are copied to `game/disc1` through `game/disc4` by default. You can select an external
-game destination; the executable reads `game-path.txt` beside the executable. For direct startup,
-an explicit `--game` directory has priority. Otherwise a valid non-empty `game-path.txt` locates
-the configured game; an empty or missing file defaults to `../game` relative to the executable and
-can discover the adjacent `game` resources. An invalid non-empty configuration or explicit path is
+game destination. In portable mode, the executable reads `game-path.txt` beside itself; an empty
+or missing file prefers `game` beside the executable and retains a parent `../game` location as a
+compatibility fallback. In non-portable Linux mode, the path file is under
+`XDG_CONFIG_HOME/lost-odyssey-recomp` (normally `~/.config/lost-odyssey-recomp`), and the default
+game data is under `XDG_DATA_HOME/lost-odyssey-recomp/game` (normally
+`~/.local/share/lost-odyssey-recomp/game`). Flatpak defaults to `/var/data/game`. For direct startup, an
+explicit `--game` directory has priority. An invalid non-empty configuration or explicit path is
 reported and does not silently select an older installation.
 The original game's disc request automatically selects the
 corresponding imported `discN` directory. No manual disc-selection button is required. Keep all
 four discs from the same edition under the same parent directory. The original game reloads
 the target disc's own index and archives; the importer does not merge them into one rewritten index.
 If the target is missing, from another edition or incomplete, the request fails and the current
-mount remains selected. Import the required disc with InstallGame.exe. This feature is not in v0.1.
+mount remains selected. Import the required disc with the built-in importer.
 Controlled switching tests do not establish chapter-boundary progression or full-game compatibility.
 
 ## DLC recognition
@@ -66,7 +83,7 @@ Review the detected package names, content IDs and game discs together, then con
 
 All discs share `game/dlc/<content-id>/`. Selecting an existing `game/disc1` through `game/disc4` directory also uses this shared location. Keep the extracted files and their hidden metadata together. DLC import leaves `game-path.txt`, source packages, saves, profiles and settings unchanged.
 
-An identical, intact installation is recognized without copying it again. A conflicting or damaged package with the same ID is reported and left unchanged. Importing stages the selected packages before publication; cancellation removes this operation's temporary data. The importer checks structure and file integrity, without verifying Microsoft signatures. Other games, title updates, SVOD DLC and arbitrary loose DLC folders are unsupported.
+An existing installation with the same content ID and expected size is recognized without copying it again. A conflicting package is reported and left unchanged. Importing stages the selected packages before publication; cancellation removes this operation's temporary data. The importer checks structure, path and I/O results, without verifying Microsoft signatures or doing a full source hash scan. Other games, title updates, SVOD DLC and arbitrary loose DLC folders are unsupported.
 
 Three real DLC packages have been imported and read at runtime through their headers, complete indexes and payloads in 24 total reads without a crash; imported files and isolated user data remained unchanged. Rewards, dungeon gameplay and broader edition compatibility still need verification. DLC files are not included in the program download.
 
@@ -100,7 +117,11 @@ published installation without retaining those folders.
 
 This section describes running the native Linux unbundled executable.
 
-There are currently no prebuilt Linux GitHub Releases, installers, AppImage packages, Flatpaks, or Steam Deck packages for this drop. Build the native ELF locally following [BUILDING.md](BUILDING.md).
+The v0.6.1 release includes native Linux x64 packaging. Download the AppImage from the [v0.6.1 GitHub Release](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.1), or build the native ELF locally following [BUILDING.md](BUILDING.md). The AppImage update path, native Linux GPU coverage and Steam Deck experience still require the validation described below.
+
+### Flatpak source manifest
+
+`packaging/linux/io.github.freefrank.LostOdysseyRecomp.json` is a source-build Flatpak manifest; it is not a published Flatpak package. The Flatpak importer defaults to `/var/data` for game files. Its SDL built-in file browser deliberately receives the required real host-path permissions (`host`, `/media`, `/run/media`, and `/mnt`) rather than using a document portal, so select a different writable destination when `/var/data` is unsuitable.
 
 The verified first-playable path is WSL2 Manjaro using Mesa Dozen's Vulkan-on-D3D12 layer. Native Linux NVIDIA/Mesa ICD paths have not been tested; this result does not establish general Linux GPU compatibility.
 
@@ -118,7 +139,7 @@ Linux runs through Vulkan only. Direct3D 12 is Windows-only and is unavailable o
 
 ### First-run configuration
 
-The interactive GUI folder-picker importer (`InstallGame.exe`) is Windows-only. On Linux, tell the game where your files are located using the `--game` command-line argument, or by creating a `game-path.txt` file containing the folder path right beside the executable.
+The embedded Files/Folder importer has native source handling and cross-platform POSIX lock compatibility, but the interactive graphical window remains Windows-only in current builds. On Linux, tell the game where your files are located using the `--game` command-line argument. For a portable ELF, you can instead create `game-path.txt` beside the executable; non-portable mode reads its path file from `XDG_CONFIG_HOME/lost-odyssey-recomp` and defaults to `XDG_DATA_HOME/lost-odyssey-recomp/game`.
 
 ### Launching the game
 
@@ -138,7 +159,7 @@ If you are running in WSL and accessing your existing Windows game dump:
 ./LostOdysseyRecomp --game /mnt/d/Mihoyo/LostOdysseyRecomp-windows-x64/game
 ```
 
-You can also place a `game-path.txt` file next to the binary with your game path, or place an extracted disc folder at `game` adjacent to the executable, then launch:
+In portable mode, you can also place a `game-path.txt` file next to the binary with your game path, or place an extracted disc folder at `game` adjacent to the executable, then launch:
 
 ```bash
 ./LostOdysseyRecomp

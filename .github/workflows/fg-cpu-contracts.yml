@@ -1,0 +1,54 @@
+name: FG CPU contracts
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/fg-cpu-contracts.yml'
+      - 'LostOdysseyRecomp/gpu/dlss_fg_*.h'
+      - 'LostOdysseyRecomp/gpu/dlss_ngx.*'
+      - 'LostOdysseyRecomp/gpu/temporal_upscaler.*'
+      - 'LostOdysseyRecomp/gpu/streamline_vulkan_dispatch.*'
+      - 'LostOdysseyRecomp/gpu/renderer.cpp'
+      - 'LostOdysseyRecomp/gpu/video.*'
+      - 'LostOdysseyRecomp/gpu/command_processor.*'
+      - 'LostOdysseyRecomp/gpu/dlss_frame_generation.*'
+      - 'LostOdysseyRecomp/gpu/frame_generation_composite.h'
+      - 'LostOdysseyRecomp/gpu/temporal_frame_inputs.h'
+      - 'tools/tests/streamline_fg/**'
+      - 'tools/tests/temporal_frame_inputs_test.cpp'
+      - 'tools/tests/temporal_upscaler_contract_test.cpp'
+      - 'tools/tests/frame_plan_test.cpp'
+      - 'tools/tests/native_dlss_submission_lifetime_test.cpp'
+      - 'LostOdysseyRecomp/gpu/frame_plan.h'
+      - 'LostOdysseyRecomp/gpu/upscaling_plan.*'
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Configure GPU-free contracts
+        run: cmake -S tools/tests/streamline_fg -B build/fg-contracts -DLO_STREAMLINE_FG_CPU_ONLY=ON
+      - name: Build
+        run: cmake --build build/fg-contracts --config Release --parallel 2
+      - name: Test
+        run: ctest --test-dir build/fg-contracts -C Release --output-on-failure
+      - name: Preserve contract log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fg-contracts-${{ matrix.os }}
+          path: build/fg-contracts/Testing/Temporary/LastTest.log
+          if-no-files-found: ignore
+          retention-days: 7

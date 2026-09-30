@@ -1,0 +1,107 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index fc251a9..d012b8a 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -83,7 +83,7 @@ endif()
+ # If we're on x64 system and targetting non-x64 (i.e. cross-compiling) we need to execute x86/64 build of shadermake
+ # because that's all Windows x64 can run.
+ # Windows-on-Arm64 can run either x64 or arm64, so can set `-DSHADERMAKE_TOOL=0` to prevent this.
+-if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "AMD64" AND ${STREAMLINE_TARGET_ARCH} STREQUAL "arm64" AND NOT DEFINED SHADERMAKE_TOOL)
++if("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "AMD64" AND ${STREAMLINE_TARGET_ARCH} STREQUAL "arm64" AND NOT DEFINED SHADERMAKE_TOOL)
+     message(STATUS "Enabling SHADERMAKE_TOOL to cross-compile ${STREAMLINE_TARGET_ARCH} (on ${CMAKE_SYSTEM_PROCESSOR})")
+     set(SHADERMAKE_TOOL ON)
+ else()
+diff --git a/donut/include/donut/app/DeviceManager.h b/donut/include/donut/app/DeviceManager.h
+index 9abd48b..f8c701d 100644
+--- a/donut/include/donut/app/DeviceManager.h
++++ b/donut/include/donut/app/DeviceManager.h
+@@ -321,6 +321,7 @@ namespace donut::app
+ 
+     public:
+         [[nodiscard]] virtual nvrhi::IDevice *GetDevice() const = 0;
++        [[nodiscard]] virtual nvrhi::IDevice *GetNativeDevice() const { return GetDevice(); }
+         [[nodiscard]] virtual const char *GetRendererString() const = 0;
+         [[nodiscard]] virtual nvrhi::GraphicsAPI GetGraphicsAPI() const = 0;
+ 
+diff --git a/donut/include/donut/app/DeviceManager_VK.h b/donut/include/donut/app/DeviceManager_VK.h
+index 4034ea4..2589d4c 100644
+--- a/donut/include/donut/app/DeviceManager_VK.h
++++ b/donut/include/donut/app/DeviceManager_VK.h
+@@ -73,6 +73,7 @@ public:
+ 
+         return m_NvrhiDevice;
+     }
++    [[nodiscard]] nvrhi::IDevice* GetNativeDevice() const override { return m_NvrhiDevice; }
+     
+     [[nodiscard]] nvrhi::GraphicsAPI GetGraphicsAPI() const override
+     {
+diff --git a/donut/src/app/vulkan/DeviceManager_VK.cpp b/donut/src/app/vulkan/DeviceManager_VK.cpp
+index 060a5d0..2f06aad 100644
+--- a/donut/src/app/vulkan/DeviceManager_VK.cpp
++++ b/donut/src/app/vulkan/DeviceManager_VK.cpp
+@@ -671,6 +671,7 @@ bool DeviceManager_VK::createDevice()
+         .setAttachmentFragmentShadingRate(true);
+     auto vulkan13features = vk::PhysicalDeviceVulkan13Features()
+         .setSynchronization2(synchronization2Supported)
++        .setPrivateData(true)
+         .setMaintenance4(maintenance4Features.maintenance4);
+     auto aftermathFeatures = vk::DeviceDiagnosticsConfigCreateInfoNV()
+         .setFlags(vk::DeviceDiagnosticsConfigFlagBitsNV::eEnableResourceTracking
+@@ -711,6 +712,7 @@ bool DeviceManager_VK::createDevice()
+         .setShaderInt16(true)
+         .setFillModeNonSolid(true)
+         .setFragmentStoresAndAtomics(true)
++        .setIndependentBlend(true)
+         .setDualSrcBlend(true)
+         .setVertexPipelineStoresAndAtomics(true)
+         .setShaderInt64(true)
+diff --git a/src/SLWrapper.cpp b/src/SLWrapper.cpp
+index fd0d11c..2b413ac 100644
+--- a/src/SLWrapper.cpp
++++ b/src/SLWrapper.cpp
+@@ -35,6 +35,7 @@
+ 
+ #include <donut/core/log.h>
+ #include <filesystem>
++#include <cstdlib>
+ #include <dxgi.h>
+ #include <dxgi1_5.h>
+ 
+@@ -272,7 +273,11 @@ void SLWrapper::QueueGPUWaitOnSyncObjectSet(nvrhi::IDevice* pDevice, nvrhi::Comm
+     case nvrhi::GraphicsAPI::VULKAN:
+     {
+         auto pVkDevice = dynamic_cast<nvrhi::vulkan::IDevice*>(pDevice);
+-        assert(pVkDevice != nullptr);
++        if (pVkDevice == nullptr)
++        {
++            log::fatal("Vulkan queue wait requires the native NVRHI device!");
++            std::abort();
++        }
+         pVkDevice->queueWaitForSemaphore(nvrhi::CommandQueue::Graphics, reinterpret_cast<VkSemaphore>(syncObj), syncObjVal);
+     }
+     break;
+diff --git a/src/StreamlineSample.cpp b/src/StreamlineSample.cpp
+index 4cd2cf8..33b1f51 100644
+--- a/src/StreamlineSample.cpp
++++ b/src/StreamlineSample.cpp
+@@ -833,7 +833,7 @@ void StreamlineSample::RenderScene(nvrhi::IFramebuffer* framebuffer)
+                 {
+                     // This wait is redundant until SL DLSS FG allows SMSCG but done for now for demonstration purposes.
+                     // It needs to be queued before any of the inputs are modified in the subsequent command list submission.
+-                    NVWrapper::Get().QueueGPUWaitOnSyncObjectSet(GetDevice(), nvrhi::CommandQueue::Graphics, pDLSSGInputsProcessingFence, lastPresentDLSSGInputsProcessingFenceValue);
++                    NVWrapper::Get().QueueGPUWaitOnSyncObjectSet(GetDeviceManager()->GetNativeDevice(), nvrhi::CommandQueue::Graphics, pDLSSGInputsProcessingFence, lastPresentDLSSGInputsProcessingFenceValue);
+                 }
+             }
+             else
+diff --git a/src/main.cpp b/src/main.cpp
+index e448ea2..77b50de 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -302,6 +302,7 @@ int main(int __argc, const char* const* __argv)
+         deviceParams.requiredVulkanInstanceExtensions.push_back("VK_KHR_get_physical_device_properties2");
+         deviceParams.requiredVulkanDeviceExtensions.push_back("VK_KHR_ray_tracing_pipeline");
+         deviceParams.requiredVulkanDeviceExtensions.push_back("VK_KHR_ray_query");
++        deviceParams.requiredVulkanDeviceExtensions.push_back("VK_KHR_deferred_host_operations");
+         deviceParams.requiredVulkanDeviceExtensions.push_back("VK_KHR_acceleration_structure");
+         deviceParams.requiredVulkanDeviceExtensions.push_back("VK_KHR_pipeline_library");
+     }

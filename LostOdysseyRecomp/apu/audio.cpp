@@ -3,6 +3,7 @@
 #include <cpu/guest_thread.h>
 #include <kernel/memory.h>
 #include <os/logger.h>
+#include <os/thread_name.h>
 #include <SDL.h>
 #include <cmath>
 
@@ -66,6 +67,7 @@ namespace apu
 
         void DriverMain()
         {
+            os::SetCurrentThreadName("Audio Driver");
             GuestThreadContext ctx(3);
             constexpr auto framePeriod = std::chrono::microseconds(1000000ull * XAUDIO_NUM_SAMPLES / XAUDIO_SAMPLES_HZ);
             auto next = std::chrono::steady_clock::now();
@@ -171,5 +173,13 @@ namespace apu
         if (n == 1 || (n % 1875) == 0) // every ~10 s
             LOG_INFO("audio frames submitted: {} peak={} queued={} mute={} queue_drops={} queue_errors={}", n, peak,
                 g_device ? SDL_GetQueuedAudioSize(g_device) : 0, mute, queueDrops, queueErrors);
+    }
+
+    void SetPaused(bool paused)
+    {
+        if (g_device)
+        {
+            SDL_PauseAudioDevice(g_device, paused ? 1 : 0);
+        }
     }
 }
