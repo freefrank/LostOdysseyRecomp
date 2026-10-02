@@ -408,11 +408,14 @@ bool GraphicsRowHidden(int r)
 {
 #if LO_PLATFORM_ANDROID
     // Android owns the native surface; the renderer derives aspect from its drawable.
-    // NGX and frame generation have no Android providers in this build.
+    // NGX and frame generation have no Android providers in this build, and the
+    // surface stays SDR, so the HDR rows and the HDR calibration page are hidden.
     if (r == int(GraphicsRow::Backend) || r == int(GraphicsRow::DisplayMode) ||
         r == int(GraphicsRow::Widescreen) || r == int(GraphicsRow::OutputResolution) ||
         r == int(GraphicsRow::VariableRefreshRate) || r == int(GraphicsRow::FrameGeneration) ||
-        r == int(GraphicsRow::FrameGenerationMultiplier))
+        r == int(GraphicsRow::FrameGenerationMultiplier) || r == int(GraphicsRow::Hdr) ||
+        r == int(GraphicsRow::HdrPaperWhite) || r == int(GraphicsRow::HdrPeak) ||
+        r == int(GraphicsRow::Brightness))
         return true;
     if (r == int(GraphicsRow::DlssQuality) || r == int(GraphicsRow::FsrSharpness))
         return !graphics_menu::AndroidFsrAvailable || edit.upscaler != gpu::upscaling::Upscaler::Fsr;

@@ -13,6 +13,10 @@ inline bool HdrAvailable(GraphicsBackend backend)
     return backend == GraphicsBackend::D3D12 || backend == GraphicsBackend::Vulkan;
 #elif LO_PLATFORM_MACOS
     return backend == GraphicsBackend::Metal;
+#elif LO_PLATFORM_ANDROID
+    // The Android surface stays SDR, so HDR output and its calibration have no effect.
+    (void)backend;
+    return false;
 #else
     return backend == GraphicsBackend::Vulkan;
 #endif
