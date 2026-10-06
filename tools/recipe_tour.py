@@ -5,6 +5,7 @@
   python tools/recipe_tour.py battles <run_dir> [--formations all|cover|3,10-20] [--hold 45] [--budget S] [--disc N]
   python tools/recipe_tour.py stages  <run_dir> --stages names.txt [--formation 3]
   python tools/recipe_tour.py maps    <run_dir> --maps maps.json [--discs 1,2,3,4] [--budget S]
+  python tools/recipe_tour.py scenes  <run_dir>
 
 <run_dir> is a staged game folder (settings.ini, a save whose Continue loads a
 field save, profile/, shaders/ with the matching pack) plus launch.json:
@@ -29,6 +30,8 @@ battles  starts each formation through the walking-encounter path, presses A on
          (diagnostic build) retries only those on disc N.
 stages   fights one weak formation on each listed battle stage (the random
          encounter stages that no formation names).
+scenes   splits the run's recipe file into per-map / per-formation files from the
+         logs, for tagging with tools/pipeline_recipes.py merge FILE@battle:ID.
 maps     needs the diagnostic map jump / disc request / package probe build
          (LO_DIAG_MAPJUMP/DISC/PROBE_COMMAND_FILE, not in main): per disc, probe
          the maps, jump to each, turn the camera and dwell.
@@ -480,9 +483,67 @@ def maps(run, args):
     print(f"recipes in cache: {recipes(run)}", flush=True)
 
 
+MISS = re.compile(r"renderer: pipeline miss frame=\d+ map=(\S+) battle=\d+ vs=([0-9a-f]+) ps=([0-9a-f]+)")
+
+
+def scenes(run):
+    """Split the run's recipe file by scene for builds without scene tags: each key goes to
+    scenes/<kind>-<id>.bin for every map or tour battle whose log shows a draw-time creation
+    of its VS/PS pair (LO_PIPELINE_MISS_LOG lines); keys never seen there go to untagged.bin.
+    Merge them with tools/pipeline_recipes.py merge OUT untagged.bin battle-3.bin@battle:3 ..."""
+    pairs = {}
+    for log in sorted(run.glob("logs/runtime-*.log")) + sorted(run.glob("runtime-*.log")):
+        battle = None
+        for line in log.read_text(encoding="utf-8", errors="replace").splitlines():
+            m = re.search(r"battle tour: formation (\d+) drawn", line)
+            if m:
+                battle = int(m.group(1))
+            elif MAP.search(line):
+                battle = None
+            m = MISS.search(line)
+            if m:
+                scene = f"battle-{battle}" if battle is not None else f"map-{m.group(1)}" if m.group(1) != "-" else None
+                if scene:
+                    pairs.setdefault(scene, set()).add((int(m.group(2), 16), int(m.group(3), 16)))
+    path = run / "shader-cache" / "pipelines.bin"
+    if not path.exists():
+        path = run / "shader-cache" / "pipelines_vk12_1.bin"
+    data = path.read_bytes()
+    count, record = struct.unpack_from("<I", data, 24)[0], struct.unpack_from("<I", data, 20)[0]
+    records = [data[48 + i * record: 48 + (i + 1) * record] for i in range(count)]
+    out = run / "scenes"
+    out.mkdir(exist_ok=True)
+    for old in out.glob("*.bin"):
+        old.unlink()
+
+    def write(name, chosen):
+        body = b"".join(chosen)
+        header = bytearray(data[:48])
+        struct.pack_into("<I", header, 24, len(chosen))
+        struct.pack_into("<Q", header, 32, fnv(body))
+        struct.pack_into("<Q", header, 40, fnv(bytes(header[:40])))
+        (out / f"{name}.bin").write_bytes(bytes(header) + body)
+
+    tagged = set()
+    for scene, wanted in sorted(pairs.items()):
+        chosen = [r for r in records if struct.unpack_from("<QQ", r) in wanted]
+        if chosen:
+            write(scene, chosen)
+            tagged.update(chosen)
+    write("untagged", [r for r in records if r not in tagged])
+    print(f"{path.name}: {count} recipes, {len(tagged)} in {len(pairs)} scenes, {count - len(tagged)} untagged")
+
+
+def fnv(data):
+    h = 0xCBF29CE484222325
+    for b in data:
+        h = ((h ^ b) * 0x100000001B3) & 0xFFFFFFFFFFFFFFFF
+    return h
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("command", choices=["list", "battles", "stages", "maps"])
+    ap.add_argument("command", choices=["list", "battles", "stages", "maps", "scenes"])
     ap.add_argument("run", type=Path)
     ap.add_argument("--formations", default="cover", help="all (priority order), cover or a list like 3,10-20")
     ap.add_argument("--part", default="0/1", help="K/N: every Nth formation from the K-th, to split a tour between hosts")
@@ -498,7 +559,7 @@ def main():
     run = args.run.resolve()
     args.budget = min(args.budget, 900)  # shared hosts: keep chunks short
     {"list": lambda: list_formations(run), "battles": lambda: battles(run, args), "stages": lambda: stages(run, args),
-     "maps": lambda: maps(run, args)}[args.command]()
+     "maps": lambda: maps(run, args), "scenes": lambda: scenes(run)}[args.command]()
 
 
 if __name__ == "__main__":
