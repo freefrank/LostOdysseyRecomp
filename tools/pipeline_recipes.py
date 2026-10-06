@@ -3,7 +3,7 @@
 
 Usage:
   python tools/pipeline_recipes.py info FILE...
-  python tools/pipeline_recipes.py merge OUT IN...      # union; scenes merge
+  python tools/pipeline_recipes.py merge OUT IN[@SCENE]...   # union; scenes merge
   python tools/pipeline_recipes.py subtract OUT A B     # recipes of A whose keys are not in B
   python tools/pipeline_recipes.py strip OUT IN         # drop scene tags
 
@@ -11,6 +11,8 @@ Reads file versions 1 and 2 (gpu/pipeline_cache.h). Keys of recipe version 1
 are normalized like gpu::pipeline_cache::Normalize; output is always file
 version 2, recipe version 2, with the first input's translator version. A
 shipped corpus (shaders/pipelines_corpus.bin) is a merge of learned files.
+IN@SCENE adds a scene to every recipe of that input (map:ID or battle:ID),
+for files recorded by builds without scene tags.
 """
 import struct
 import sys
@@ -25,6 +27,14 @@ RECIPE_VERSION = 2
 MANY = 0xFFFFFFFF
 NO_BLEND = 0x00010001
 KINDS = {1: "map", 2: "battle"}
+
+
+def parse_scene(text):
+    kind, _, number = text.partition(":")
+    codes = {name: code for code, name in KINDS.items()}
+    if kind not in codes or not number:
+        raise SystemExit(f"bad scene {text!r}: use map:ID or battle:ID")
+    return codes[kind] << 28 | (int(number, 0) & 0x0FFFFFFF)
 
 
 def fnv(data):
@@ -132,11 +142,13 @@ def main(argv):
         info(args)
     elif command == "merge" and len(args) >= 2:
         merged, version = {}, None
-        for path in args[1:]:
+        for spec in args[1:]:
+            path, _, scene = spec.rpartition("@") if "@" in spec else (spec, "", "")
+            extra = [parse_scene(scene)] if scene else []
             shader_version, recipes = load(path)
             version = version or shader_version
             for key, scenes in recipes.items():
-                add_scenes(merged.setdefault(key, []), scenes)
+                add_scenes(merged.setdefault(key, []), scenes + extra)
         write(args[0], version, merged)
     elif command == "subtract" and len(args) == 3:
         version, a = load(args[1])
