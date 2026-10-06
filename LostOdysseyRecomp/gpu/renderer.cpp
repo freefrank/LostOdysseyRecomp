@@ -4960,7 +4960,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
                 auto& entry = it->second;
                 if (!entry.learned && learnedRecipes >= gpu::pipeline_cache::kMaxRecords) return;
-                if (entry.learned && entry.scenes.Contains(sceneTag)) return;
+                if (entry.learned && (entry.scenes.Many() || entry.scenes.Contains(sceneTag))) return;
                 std::lock_guard lock(pipelineRecipeMutex);
                 if (!entry.learned) { entry.learned = true; ++learnedRecipes; pipelineRecipesDirty = true; }
                 pipelineRecipesDirty |= entry.scenes.Add(sceneTag);
