@@ -82,7 +82,10 @@ class Game:
         (r / "shader-cache").mkdir(exist_ok=True)
         cmd = self.config.get("prefix", []) + [self.config["exe"], "--game", p(self.config["game"]), "--quiet-kernel"]
         out = (r / "logs" / f"stdout-{self.index:02d}.log").open("wb")
-        self.proc = subprocess.Popen(cmd, cwd=r, env=env, stdin=subprocess.DEVNULL, stdout=out, stderr=out)
+        # A background shell starts us with SIGINT ignored; give the game its default so it can quit cleanly.
+        reset = None if os.name == "nt" else (lambda: signal.signal(signal.SIGINT, signal.SIG_DFL))
+        self.proc = subprocess.Popen(cmd, cwd=r, env=env, stdin=subprocess.DEVNULL, stdout=out, stderr=out,
+                                     preexec_fn=reset)
         self.offset = 0
 
     def stop(self, flush=True):
@@ -164,21 +167,41 @@ def parse_formations(lines):
     return table
 
 
-def cover(table):
-    def features(f):
+def priority(table):
+    """Formations in visiting order: a greedy cover of every enemy config (model)
+    and fixed stage, then of every config/parameter pair, then the rest."""
+    def models(f):
+        return {("enemy", c) for c, _ in f["slots"]} | {("stage", f["stage"])}
+
+    def pairs(f):
         return {("enemy", c, p) for c, p in f["slots"]} | {("stage", f["stage"])}
-    wanted = set().union(*(features(f) for f in table.values()))
-    chosen, seen = [], set()
-    while seen != wanted:
-        best = max(table, key=lambda i: (len(features(table[i]) - seen), -i))
-        chosen.append(best)
-        seen |= features(table[best])
-    return sorted(chosen)
+    order, left = [], set(table)
+    for features in (models, pairs):
+        wanted = set().union(*(features(f) for f in table.values()))
+        seen = set().union(set(), *(features(table[i]) for i in order))
+        while seen != wanted:
+            best = max(left, key=lambda i: (len(features(table[i]) - seen), -i))
+            order.append(best)
+            left.discard(best)
+            seen |= features(table[best])
+    return order + sorted(left)
+
+
+def cover(table):
+    """The priority order up to the point where every config/parameter pair and stage was seen."""
+    order = priority(table)
+    feats = lambda i: {("enemy", c, p) for c, p in table[i]["slots"]} | {("stage", table[i]["stage"])}
+    wanted, seen = set().union(*(feats(i) for i in table)), set()
+    for n, i in enumerate(order):
+        seen |= feats(i)
+        if seen == wanted:
+            return order[:n + 1]
+    return order
 
 
 def select(spec, table):
     if spec == "all":
-        return sorted(table)
+        return priority(table)
     if spec == "cover":
         return cover(table)
     ids = []
@@ -288,7 +311,8 @@ def battles(run, args):
         tried.setdefault(r["formation"], []).append(r)
     done = {f for f, rs in tried.items() if any(r["status"] != "fatal" for r in rs) or
             any(r.get("disc", 1) == args.disc for r in rs)}
-    todo = [i for i in select(args.formations, table) if i not in done]
+    k, n = (int(x) for x in args.part.split("/"))
+    todo = [i for j, i in enumerate(select(args.formations, table)) if j % n == k and i not in done]
     if args.disc != 1:
         todo = [i for i in todo if i in tried]  # other discs only retry missing resources
     print(f"disc {args.disc}: {len(todo)} formations to visit", flush=True)
@@ -406,7 +430,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("command", choices=["list", "battles", "stages", "maps"])
     ap.add_argument("run", type=Path)
-    ap.add_argument("--formations", default="cover")
+    ap.add_argument("--formations", default="cover", help="all (priority order), cover or a list like 3,10-20")
+    ap.add_argument("--part", default="0/1", help="K/N: every Nth formation from the K-th, to split a tour between hosts")
     ap.add_argument("--hold", type=float, default=45, help="seconds after the first command before Victory")
     ap.add_argument("--budget", type=float, default=1200, help="stop starting new work after this many seconds")
     ap.add_argument("--maps", help="map list JSON (maps: name -> {id}, visited: [names])")
