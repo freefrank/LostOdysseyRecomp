@@ -22,7 +22,6 @@ std::atomic<void (*)(uint32_t)> sceneListener{nullptr};
 std::atomic<uint32_t> pendingScene{0}, battleScene{0};
 // The snapshot's map as a scene tag, readable without the lock once a frame.
 std::atomic<uint32_t> currentMapScene{0};
-std::atomic<std::chrono::steady_clock::rep> mapSceneUpdated{0};
 uint32_t MapScene(uint32_t id) { return gpu::pipeline_cache::SceneTag(gpu::pipeline_cache::kSceneMap, id); }
 void NotifySceneLoad(uint32_t tag) {
     if (const auto listener = sceneListener.load()) listener(tag);
@@ -137,7 +136,6 @@ void debug_menu::UpdateMapInfo(uint8_t* base) {
         loggedNamed = !current.name.empty();
     }
     currentMapScene = current.available ? MapScene(current.id) : 0;
-    mapSceneUpdated = now.time_since_epoch().count();
     snapshot = std::move(current);
 }
 
@@ -198,9 +196,9 @@ void debug_menu::PollSceneLoads(uint8_t* base) {
 
 uint32_t debug_menu::CurrentSceneTag() {
     if (CurrentBattle()) return battleScene;
-    // Same staleness rule as GetMapInfo.
-    const auto updated = std::chrono::steady_clock::time_point(std::chrono::steady_clock::duration(mapSceneUpdated.load()));
-    const uint32_t map = std::chrono::steady_clock::now() - updated > std::chrono::seconds(2) ? 0 : currentMapScene.load();
+    // No staleness rule as in GetMapInfo: a game thread that waits for a long
+    // frame has not left its map.
+    const uint32_t map = currentMapScene;
     return map ? map : pendingScene.load();
 }
 
