@@ -1,6 +1,6 @@
 # 首次使用管线的卡顿：方案（2026-10-05）
 
-> 状态：P0、P1 已实现（2026-10-06，见文末“P0/P1 实现与测量”），P2–P4 未开始。影响所有平台：Windows（D3D12 / Vulkan）、Linux、macOS、Android。
+> 状态：P0、P1 已实现（2026-10-06，见文末“P0/P1 实现与测量”）；P2、P3 已实现（2026-10-06，见文末“P2 实现与测量”“P3 实现与测量”）；P4 进行中。影响所有平台：Windows（D3D12 / Vulkan）、Linux、macOS、Android。
 
 ## 现象
 
@@ -182,3 +182,90 @@ P0 → P1 → P2 → P3 → P4。
 | 暖 | 244 | 50 ms | 26 ms（171 条） |
 
 未测：Android 平板（TB321FU，Turnip）。0.8.38-dev-pipecache 调试包已装上，但平板锁屏，游戏停在启动阶段，没有得到预建数字；Mac 和原生 Linux 只测了启动预建，没有游玩。
+
+## P2 实现与测量（2026-10-06）
+
+**实现。** plume Vulkan 在设备支持 `VK_EXT_graphics_pipeline_library`（`graphicsPipelineLibraryFastLinking` 为真）和 `VK_EXT_extended_dynamic_state` 时报告 `fastLinkPipelines`。绘制时未命中（`GetPipeline`）的管线由四个库部件快速链接，不做链接期优化：
+
+- 顶点输入：只有图元拓扑和 primitive restart；
+- 光栅化前：VS（rect list 时加 GS），按 depth clamp、depth bias 是否开启区分；
+- 片元着色：PS；
+- 片元输出：混合、写掩码、格式。
+
+部件按着色器模块和 render pass 兼容类（RT 格式、深度格式、采样数）缓存在设备上。剔除、正反面、depth bias、深度测试/写入/比较、模板测试/操作/掩码/参考值都是动态状态，每次绑定链接出的管线时重新设置。启动预建仍建完整管线。
+
+预建结束后，一个后台线程按已知配方为它们的着色器建部件（`prepareGraphicsPipelineLibraries`），之后已知着色器的新组合只需链接。`LO_NO_PIPELINE_LIBRARY=1` 关闭，用于对照。D3D12 和 Metal 不受影响。
+
+**测量。** psvita，Proton GE10-34 下的 Windows 版 Vulkan 后端（winevulkan → RADV，Radeon 8060S），Uhra 存档开机进图（Uhra 住宅区，map 20），`MESA_SHADER_CACHE_DISABLE=1`，空的驱动缓存。
+
+| 情形 | 关（`LO_NO_PIPELINE_LIBRARY=1`） | 开 |
+|---|---|---|
+| 没有配方，`skip_shader_prebuild=1`：绘制时建管线合计 / 最差一帧 | 1807 ms / 1198 ms（171 条） | 1004 ms / 710 ms |
+| 预建 1707 条配方（316 张地图巡游减去 Uhra 的 243 条），再进 Uhra：合计 / 最差一帧 | 1259 ms / 880 ms | 439 ms / 285 ms |
+
+第二种情形里部件后台预建用了 6.0 s（1700 条配方），在进图之前完成。逐条看（`LO_PIPELINE_MISS_LOG=1`）：VS 和 PS 都见过的 172 条平均 0.24 ms；PS 是新的 62 条平均 5.2 ms，合计 324 ms，是剩下的主要部分。新着色器要靠 P3 的配方语料提前覆盖。
+
+**验证。** psvita 原生 Linux 构建（RADV，Mesa 26.2.2），Vulkan validation layer 1.4.341，Uhra 开机进图，同样的设置下开/关各跑：
+
+- 没有只在链接路径出现的消息。`VUID-vkCmdDraw-renderPass-02684`（render pass 的 dependency 数 2 与 0 不兼容）在 main 上就有：framebuffer 的 render pass 带两个外部依赖，管线的不带。用 `LO_VK_NO_PASS_DEPS=1` 去掉依赖后两种模式都是 0，说明部件用的 render pass 没有别的不兼容。
+- 后台线程建完 1700 条配方的部件（0 失败），同时绘制时在链接，没有线程安全类消息；没有动态状态类消息。
+- 截图与整体编译的版本对比，静态场景一致。
+
+**稳态开销。** 最坏情况：`skip_shader_prebuild=1`、空缓存，所有游戏管线都是链接出来的，与全部整体编译对比（原生 Linux，ABBA 各两次，进图 10 s 后取 25 s）：
+
+| 分辨率 | GPU 时间 | 录制 | 帧时间 |
+|---|---|---|---|
+| 1600x900 | 4.63 vs 4.31 ms（+0.32） | +0.21 ms | 9.91 vs 9.68 ms |
+| 内部 3840x2160 | 16.04 vs 15.70 ms（+0.34） | +0.55 ms | 22.62 vs 22.20 ms |
+
+GPU 多出的时间不随分辨率变，是每次绘制的固定开销（没有链接期优化的 VS→PS 接口），不是像素着色变慢。实际游玩中只有本次运行第一次见到的管线是链接出来的，下次启动由配方预建成整体管线，所以不做后台优化编译。正反面模板状态相同时只设一次（`VK_STENCIL_FACE_FRONT_AND_BACK`），减少绑定时的调用。
+
+## P3 实现与测量（2026-10-06，分支 feat/pipeline-prefetch）
+
+**规范化。** `gpu::pipeline_cache::Normalize` 在查找、记录和创建之前清掉 `DescribePipeline` 不读的位：Z 关闭或没有深度目标时的 Z 比较函数；stencil 关闭时的全部 stencil 字段和参考值/掩码；没开背面 stencil 时的背面字段；early-Z 位；polygon offset 开关（偏移量已经算进 bias）；深度测试关闭时的 bias；`-0.0` 斜率；写掩码为 0 时的混合（`DescribePipeline` 现在把这种绘制当作不混合）；点、线、线带、三角带、rect list 以外的图元都按三角形列表。绘制本身的启发式判断仍用原始键。
+
+- 配方版本 2。版本 1 的文件读入时规范化，并在下次保存时改写；地图巡游的 1950 条变成 1902 条。
+- 校验：用补丁版对 1950 条原始键逐条比较 `DescribePipeline(原键)` 和 `DescribePipeline(规范化键)`，只有 346 条斜率为 `-0.0` 的键按位不同，数值相等。
+
+**文件版本 2。** 每条 104 字节：64 字节键、8 个场景标签、校验和。标签是 `类型 << 28 | ID`：地图为地图定义 ID，战斗为 loader 战斗槽里的战斗 ID；`0xF0000000` 表示在任何场景之外画的（标题、开机菜单）；超过 8 个场景记为“多场景”。`tools/pipeline_recipes.py` 读写两种版本（`info`、`merge`、`subtract`、`strip`），`merge OUT IN@battle:ID` 给不带标签的旧文件补标签。
+
+**场景识别。** 引擎 tick 读 loader 的请求槽（`0x832631F0 + 3168`，槽 0 地图跳转、槽 1 战斗；相位在 +0，名字 FString 在 +4，ID 在 +16），也记下 world 里新出现的地图。当前场景：战斗中用战斗 ID；否则用当前地图；切换期间用正在加载的场景。
+
+**预取。** 地图或战斗开始加载时，渲染线程在帧末把这个场景所有还没建的已知配方交给 worker 线程（线程数为逻辑核数一半）。建好的管线在渲染线程收进管线表；绘制碰到排队中的任务就自己建，碰到正在编译的任务就等它（Vulkan 有 pipeline library 时直接 fast-link）。`LO_NO_PIPELINE_PREFETCH=1` 关闭预取。
+
+**语料。** 可选的 `shaders/pipelines_corpus.bin`（打开的 shader pack 旁边或 pack 的安装位置，`LO_PIPELINE_CORPUS` 可指定）并入已知配方，不写进玩家的文件，也不检查翻译器版本。
+
+**启动预建。** 默认预建玩家学到的全部配方，加上语料里没有标签、在场景外画过、或出现在至少 4 个场景（`LO_PIPELINE_PREBUILD_SCENES`）的配方；其余交给场景预取。`LO_PIPELINE_PREBUILD=all` 全部预建，`=common` 对学到的配方也用同一规则。Vulkan 的 pipeline library 预编译覆盖全部已知配方。
+
+**测量。** 场景：Uhra 存档开机进 u3b（地图 20），15 秒后调试跳到第一次去的 u36（地图 16），各停 20 秒。语料就是同一场景上一次运行学到的配方（411–416 条），所以这是“语料完整”时的上限。每次运行都从空的着色器缓存目录开始；psvita 关掉了 vkd3d 和 Mesa 的磁盘缓存。下表“最长帧”取 `LO_RENDER_TIMING` 的 `draw_ms`，它包括绘制时创建着色器模块的时间（Metal 上这部分比管线本身贵）。
+
+psvita，Proton GE10-34 / vkd3d-proton D3D12，RADV：
+
+| 运行 | 启动预建 | 开机地图最长帧 | 跳图后最长帧 | 绘制时建管线 |
+|---|---|---|---|---|
+| P2 基线（cea0413a，无配方） | — | 2046 ms | （基线没有跳图命令） | 243 条，3189 ms |
+| 有语料，不预建不预取 | — | 2072 ms | 1662 ms | 415 条，5387 ms |
+| 全部预建（`LO_PIPELINE_PREBUILD=all`） | 412 条，1036 ms | 53 ms | 56 ms | 2 条，10 ms |
+| 默认（学到的 + 场景外 + 常用） | 13 条，56 ms | 66 ms | 176 ms | 15 条，188 ms（另有 16 条等预取任务，共 38 ms） |
+| 只预取（不预建） | — | 66 ms（标题 121 ms） | 122 ms | 25 条，293 ms |
+
+- 开机：读档请求到地图出现约 3 秒；默认模式下 218 条配方（含 178 个着色器模块）在 0.9 秒内建完。
+- 跳图：请求到地图出现只有 0.3–0.5 秒；172 条在 0.3 秒内建完，最后几帧仍有少量未命中或等待。这是提前量的上限，P4 可以继续处理。
+
+psvita，Proton 下的 Vulkan（RADV，pipeline library 开）：不预取时 220 次绘制时创建全部 fast-link，合计 17 ms；默认模式 9 次、14 ms。两者地图里最长帧都在 56 ms 以内，差别是预取给出的是完整优化的管线。pipeline library 预编译覆盖语料，407 条在后台 1.5 秒。
+
+M1 Max，Metal（同一二进制第二次以后运行，系统着色器缓存已热）：
+
+| 运行 | 启动预建 | 开机地图最长帧 | 跳图后最长帧 |
+|---|---|---|---|
+| 无语料（新二进制第一次运行，冷） | — | 5148 ms | 1849 ms + 1229 ms |
+| 有语料，不预建不预取 | — | 734 ms | 300 ms |
+| 全部预建 | 412 条，382 ms | 61 ms | 46 ms |
+| 默认 | 13 条，50 ms | 59 ms | 49 ms |
+| 只预取 | — | 60 ms | 48 ms |
+
+- Metal 上贵的是着色器模块（SPIR-V 转 MSL 再编译），原来在渲染线程上逐个创建：一次场景预取的准备花了 7.8 秒，全部预建 10.3 秒。现在模块也在 worker 线程上建：预取 390 条配方和 267 个模块 0.4 秒，全部预建 0.38 秒。
+
+**启动预建的取舍。** 默认只预建玩家学到的配方和语料里的场景外/常用配方，其余靠场景预取：在测过的场景里首次进入的结果和全部预建相同，启动时间不随语料大小增长（D3D12 冷启动全部预建约 2.5 ms/条，Android 约 80 ms/条）。玩家自己学到的配方仍然全部预建，和 P3 之前一样。
+
+**未测：** Android；战斗（战斗 ID 的请求槽读法来自 `patches/encounter_defer.cpp`，`scene load: battle` 日志还没有在真实战斗里核对过）；冷 Metal 系统缓存下的预取。
