@@ -2,6 +2,9 @@
 // command processor thread; existing pipeline workers see immutable shader maps.
 // Shared with pipeline workers that load sibling shaders (Reader::Get is thread-safe).
 std::shared_ptr<xenos::portable_pack::Reader> portableShaderPack;
+// The accepted pack, for the pipeline workers' own reader.
+std::filesystem::path portableShaderPackPath;
+xenos::portable_pack::Digest portableShaderPackContract{};
 std::unique_ptr<xenos::portable_pack::Writer> portableShaderExport;
 
 bool PortableExportRequested() const
@@ -57,6 +60,8 @@ bool TryOpenPortableShaderPack(std::span<const uint8_t> xex)
             LOG_INFO("renderer: portable shader pack hit: {}: {} records, {} unique binaries, {} file bytes, {} index bytes; lazy modules, no guest shader DXC prebuild",
                 path.string(), report.records, report.uniqueBinaries, report.fileBytes, report.indexBytes);
             portableShaderPack = std::move(pack);
+            portableShaderPackPath = path;
+            portableShaderPackContract = contract;
             return true;
         } catch (const std::exception& e) {
             LOG_WARNING("renderer: portable shader pack {} rejected; trying the next location or the local cache: {}",

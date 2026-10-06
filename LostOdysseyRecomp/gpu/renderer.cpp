@@ -728,6 +728,8 @@ namespace gpu::renderer
                 std::atomic<uint32_t> done{0}; // finished jobs not collected yet
                 bool stop = false;
                 std::vector<std::thread> threads;
+                std::once_flag packOnce;
+                std::shared_ptr<xenos::portable_pack::Reader> pack;
                 ~PipelineWorkers() {
                     { std::lock_guard lock(mutex); stop = true; }
                     wake.notify_all();
@@ -4871,14 +4873,28 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 jobs = {};
             }
 
-            // Any thread: loads a sibling's pack shader once. True when it has a module.
-            bool LoadSiblingShader(SiblingShader& shader)
+            // Workers read sibling shaders through their own pack reader: Reader::Get
+            // decompresses under its lock, which would stall this thread's shader loads.
+            xenos::portable_pack::Reader* WorkerShaderPack(SiblingShader& shader)
+            {
+                std::call_once(pipelineWorkers.packOnce, [&] {
+                    try {
+                        pipelineWorkers.pack = std::make_shared<xenos::portable_pack::Reader>(
+                            portableShaderPackPath, portableShaderPackContract, PortablePackFormat());
+                    } catch (const std::exception& e) { LOG_WARNING("renderer: pipeline worker shader pack: {}", e.what()); }
+                });
+                return pipelineWorkers.pack ? pipelineWorkers.pack.get() : shader.pack.get();
+            }
+
+            // Loads a sibling's pack shader once. True when it has a module.
+            bool LoadSiblingShader(SiblingShader& shader, bool worker)
             {
                 std::lock_guard lock(shader.mutex);
                 if (shader.state == SiblingShader::State::Empty) {
                     shader.state = SiblingShader::State::Failed;
                     try {
-                        if (auto record = shader.pack->Get(shader.pixel, shader.hash)) {
+                        auto& pack = worker ? *WorkerShaderPack(shader) : *shader.pack;
+                        if (auto record = pack.Get(shader.pixel, shader.hash)) {
                             shader.module = device->createShader(record->binary.data(), record->binary.size(), "main", renderFormat);
                             if (shader.module) {
                                 shader.raw = shader.module.get();
@@ -4922,7 +4938,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 const auto found = pending.find(hash);
                 if (found == pending.end()) return false;
                 const auto shader = found->second;
-                if (!LoadSiblingShader(*shader)) return false;
+                if (!LoadSiblingShader(*shader, false)) return false;
                 PublishSiblingShader(shader);
                 return true;
             }
@@ -4950,7 +4966,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     try {
                         if (!job.loadVs && !job.loadPs)
                             pipeline = CreatePipeline(key, job.vs, job.ps, false, fastLinkPipelines);
-                        else if ((!job.loadVs || LoadSiblingShader(*job.loadVs)) && (!job.loadPs || LoadSiblingShader(*job.loadPs))) {
+                        else if ((!job.loadVs || LoadSiblingShader(*job.loadVs, true)) && (!job.loadPs || LoadSiblingShader(*job.loadPs, true))) {
                             // Rect-list siblings never load their VS here, so no variant is read.
                             static Shader unloaded;
                             auto desc = DescribePipeline(key, job.vs ? job.vs : &unloaded, key.ps ? (job.ps ? job.ps : &unloaded) : nullptr, false);
