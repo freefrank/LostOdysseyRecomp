@@ -753,6 +753,7 @@ namespace gpu::renderer
             // Pack shaders that sibling jobs load, until published; failures stay.
             std::unordered_map<uint64_t, std::shared_ptr<SiblingShader>> siblingShaders[2];
             std::unordered_set<PipelineKey, PipelineKeyHash> failedPipelineJobs, unusedSiblings;
+            bool pipelineDeferred = false; // GetPipeline's nullptr is a skipped draw, not a failure
             struct PipelineJobStats { uint32_t queued = 0, built = 0, failed = 0, hits = 0, waited = 0, skipped = 0, shaders = 0; double waitMs = 0, workerMs = 0; };
             PipelineJobStats pipelineJobStats; // current frame
             std::unordered_map<RenderTargetKey, std::unique_ptr<HostTexture>, RenderTargetKeyHash> renderTargets;
@@ -5149,9 +5150,14 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         const PipelineKey& sibling = siblingIndex.keys[index];
                         if (sibling == key || pipelines.contains(sibling) || w.jobs.contains(sibling) ||
                             failedPipelineJobs.contains(sibling)) return true;
+                        // Rect-list variants are built from guest microcode at the first draw.
+                        if (sibling.prim == 8 && rectListExpansion) {
+                            const auto vs = shaders[0].find(sibling.vs);
+                            if (vs == shaders[0].end() || !vs->second.rectList) return true;
+                        }
+                        // A sibling shares a loaded shader with key, so at most one of these is pending.
                         PipelineJob job;
                         if (!SiblingShaderFor(false, sibling.vs, job.vs, job.loadVs)) return true;
-                        if (sibling.prim == 8 && rectListExpansion && (!job.vs || !job.vs->rectList)) return true;
                         if (sibling.ps && !SiblingShaderFor(true, sibling.ps, job.ps, job.loadPs)) return true;
                         w.jobs.emplace(sibling, std::move(job));
                         picks.push_back(sibling);
@@ -6934,6 +6940,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     job = ClaimPipelineJob(key, defer);
                     if (job == JobState::Deferred) {
                         ++pipelineJobStats.skipped;
+                        pipelineDeferred = true;
                         return nullptr;
                     }
                 }
@@ -6947,6 +6954,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     QueueRequestedPipeline(key, vs, ps);
                     NotePipelineMiss(key, elapsed(), recipe, "defer");
                     ++pipelineJobStats.skipped;
+                    pipelineDeferred = true;
                     return nullptr;
                 }
                 if (job == JobState::Running) pipeline = WaitPipelineJob(key);
@@ -7430,6 +7438,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 RenderPipeline* pipeline = GetPipeline(key, vs, ps, color->format, depth ? depth->format : RenderFormat::UNKNOWN, true);
                 if (!pipeline)
                 {
+                    if (std::exchange(pipelineDeferred, false)) return; // counted as skipped
                     drops.pipeline++;
                     drops.primMask |= 1u << (info.primitiveType & 31);
                     return;
