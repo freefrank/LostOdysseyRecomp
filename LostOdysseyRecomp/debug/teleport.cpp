@@ -12,6 +12,7 @@
 #include "map_info.h"
 #include <host_ui/host_ui.h>
 #include "cheats.h"
+#include "battle_tour.h"
 
 extern "C" PPC_FUNC(__imp__sub_82290B60);
 extern "C" PPC_FUNC(__imp__sub_822FA548);
@@ -510,5 +511,5 @@ PPC_FUNC(sub_82290B60)
     const bool engine = ctx.r3.u32 == PPC_LOAD_U32(0x83315FB4);
     if (engine) { debug_menu::cheats::Tick(ctx, base); gpu::frame_plan::BeginCpuFrame(); frame_timing::EngineTick(ctx.f1.f64); }
     __imp__sub_82290B60(ctx, base);
-    if (engine) { debug_menu::UpdateMapInfo(base); debug_menu::PartySwitchTick(base); Tick(ctx, base); MapJumpTick(ctx, base); }
+    if (engine) { debug_menu::UpdateMapInfo(base); debug_menu::PartySwitchTick(base); Tick(ctx, base); MapJumpTick(ctx, base); debug_menu::battle_tour::Poll(base); }
 }
