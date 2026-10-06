@@ -1,6 +1,8 @@
 // Included inside the renderer implementation class. All methods run on the
 // command processor thread; existing pipeline workers see immutable shader maps.
 std::unique_ptr<xenos::portable_pack::Reader> portableShaderPack;
+// Where the open pack was found; the pipeline corpus ships beside it.
+std::filesystem::path portableShaderPackPath;
 std::unique_ptr<xenos::portable_pack::Writer> portableShaderExport;
 
 bool PortableExportRequested() const
@@ -56,6 +58,7 @@ bool TryOpenPortableShaderPack(std::span<const uint8_t> xex)
             LOG_INFO("renderer: portable shader pack hit: {}: {} records, {} unique binaries, {} file bytes, {} index bytes; lazy modules, no guest shader DXC prebuild",
                 path.string(), report.records, report.uniqueBinaries, report.fileBytes, report.indexBytes);
             portableShaderPack = std::move(pack);
+            portableShaderPackPath = path;
             return true;
         } catch (const std::exception& e) {
             LOG_WARNING("renderer: portable shader pack {} rejected; trying the next location or the local cache: {}",

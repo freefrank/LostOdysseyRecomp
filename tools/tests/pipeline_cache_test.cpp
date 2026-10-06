@@ -64,6 +64,102 @@ static bool ValidateEnums(const cache::Key& key)
         (key.depthFormat == 0 || key.depthFormat == 9);
 }
 
+static std::vector<cache::Key> Keys(const std::vector<cache::Record>& records)
+{
+    std::vector<cache::Key> keys;
+    for (const auto& record : records) keys.push_back(record.key);
+    return keys;
+}
+
+static std::vector<cache::Record> Records(std::span<const cache::Key> keys)
+{
+    std::vector<cache::Record> records;
+    for (const auto& key : keys) records.push_back({ key, {} });
+    return records;
+}
+
+// A version 1 file (72-byte records, no scenes) as written before Normalize.
+static void WriteV1(const fs::path& path, std::span<const cache::Key> keys, uint32_t shaderVersion, uint32_t recipeVersion)
+{
+    std::vector<uint8_t> bytes(cache::kHeaderBytes + keys.size() * cache::kRecordBytesV1, 0);
+    for (size_t i = 0; i < keys.size(); ++i)
+    {
+        uint8_t* out = bytes.data() + cache::kHeaderBytes + i * cache::kRecordBytesV1;
+        const auto encoded = cache::detail::Encode(keys[i]);
+        std::copy(encoded.begin(), encoded.end(), out);
+        cache::detail::Put64(out + cache::kKeyBytes, cache::detail::Hash(encoded));
+    }
+    std::copy(cache::detail::kMagic.begin(), cache::detail::kMagic.end(), bytes.begin());
+    cache::detail::Put32(bytes.data() + 8, 1);
+    cache::detail::Put32(bytes.data() + 12, shaderVersion);
+    cache::detail::Put32(bytes.data() + 16, recipeVersion);
+    cache::detail::Put32(bytes.data() + 20, uint32_t(cache::kRecordBytesV1));
+    cache::detail::Put32(bytes.data() + 24, uint32_t(keys.size()));
+    PayloadChecksum(bytes);
+    RawWrite(path, bytes);
+}
+
+static void NormalizationTests(const fs::path& root)
+{
+    // Stencil, Z function, early Z, offset enables and blend without a color
+    // mask are not pipeline state; the Z write bit and real stencil state are.
+    cache::Key raw{};
+    raw.vs = 1;
+    raw.depthControl = 0x1234567C; // Z and stencil off, Z write on
+    raw.modeCull = 0x3805;
+    raw.colorMask = 0;
+    raw.blend = 0x10203040;
+    raw.prim = 13;
+    raw.depthFormat = 9;
+    raw.stencilRefMask = 0x123456;
+    raw.stencilRefMaskBack = 0x654321;
+    raw.slopeBias = 0x80000000;
+    const auto norm = cache::Normalize(raw);
+    Check(norm.depthControl == 0x4 && norm.modeCull == 0x5 && norm.blend == cache::kNoBlend && norm.prim == 4 &&
+        !norm.stencilRefMask && !norm.stencilRefMaskBack && !norm.slopeBias, "irrelevant state cleared");
+    Check(cache::Normalize(norm) == norm && cache::IsValid(norm), "normalization idempotent and valid");
+
+    auto stencil = raw;
+    stencil.depthControl = 0x12345603; // Z, stencil, front face only
+    stencil.colorMask = 0xF;
+    stencil.depthBias = -5;
+    const auto front = cache::Normalize(stencil);
+    Check(front.depthControl == 0x00045603 && front.stencilRefMask == 0x123456 && !front.stencilRefMaskBack &&
+        front.depthBias == -5 && front.blend == (0x10203040u & 0x1FFF1FFFu), "front stencil and bias kept");
+    stencil.depthControl |= 0x80;
+    Check(cache::Normalize(stencil).stencilRefMaskBack == 0x654321, "back stencil kept when enabled");
+    stencil.depthFormat = 0;
+    Check(cache::Normalize(stencil).depthControl == 0 && !cache::Normalize(stencil).depthBias, "no depth target");
+
+    // Version 1 recipes load through Normalize and merge into one record.
+    const fs::path v1 = root / "v1.bin";
+    auto other = raw;
+    other.blend = 0x01010101; // differs only in ignored state
+    const cache::Key v1Keys[] = { raw, other };
+    WriteV1(v1, v1Keys, 29, 1);
+    Check(cache::Load(v1, 29, 2).status == cache::Status::Incompatible, "old recipe version needs opt-in");
+    auto loaded = cache::Load(v1, 29, 2, {}, 1);
+    Check(loaded.status == cache::Status::Loaded && loaded.migrated && loaded.duplicates == 1 &&
+        Keys(loaded.records) == std::vector<cache::Key>{ norm }, "version 1 migration");
+    Check(cache::Load(v1, cache::kAnyShaderVersion, 2, {}, 1).status == cache::Status::Loaded, "any shader version");
+
+    // Scenes: overflow collapses to "many"; duplicates merge on write.
+    cache::Scenes scenes;
+    for (uint32_t id = 1; id <= cache::kSceneSlots; ++id) Check(scenes.Add(cache::SceneTag(cache::kSceneMap, id)), "scene added");
+    Check(!scenes.Add(cache::SceneTag(cache::kSceneMap, 1)) && !scenes.Many(), "scene present");
+    Check(scenes.Add(cache::SceneTag(cache::kSceneBattle, 7)) && scenes.Many() && scenes.Count() > cache::kSceneSlots, "scene overflow");
+    const fs::path tagged = root / "tagged.bin";
+    cache::Record a{ norm, {} }, b{ norm, {} };
+    a.scenes.Add(cache::SceneTag(cache::kSceneMap, 20));
+    b.scenes.Add(cache::SceneTag(cache::kSceneBattle, 3));
+    const cache::Record pair[] = { a, b };
+    const auto written = cache::Write(tagged, pair, 29, 2);
+    loaded = cache::Load(tagged, 29, 2);
+    Check(written.ok && written.duplicates == 1 && loaded.status == cache::Status::Loaded && !loaded.migrated &&
+        loaded.records.size() == 1 && loaded.records[0].scenes.Contains(cache::SceneTag(cache::kSceneMap, 20)) &&
+        loaded.records[0].scenes.Contains(cache::SceneTag(cache::kSceneBattle, 3)), "scene round trip");
+}
+
 int main(int argc, char** argv)
 {
     try
@@ -81,9 +177,10 @@ int main(int argc, char** argv)
         second.depthBias = std::numeric_limits<int32_t>::min();
         second.slopeBias = std::bit_cast<uint32_t>(-0.0f);
         std::vector<cache::Key> keys{ key, second, key };
+        const auto records = Records(keys);
 
         Check(cache::Load(path, shaderVersion, recipeVersion).status == cache::Status::Missing, "missing file");
-        const auto written = cache::Write(path, keys, shaderVersion, recipeVersion, ValidateEnums);
+        const auto written = cache::Write(path, records, shaderVersion, recipeVersion, ValidateEnums);
         Check(written.ok && written.written == 2 && written.duplicates == 1, "write deduplication");
         const auto original = Read(path);
         Check(original.size() == cache::kHeaderBytes + 2 * cache::kRecordBytes, "explicit framing");
@@ -92,8 +189,8 @@ int main(int argc, char** argv)
         Check(original[cache::kHeaderBytes + 56] == 0x77 && original[cache::kHeaderBytes + 59] == 0xFF,
             "little-endian signed bias bits");
         auto loaded = cache::Load(path, shaderVersion, recipeVersion, ValidateEnums);
-        Check(loaded.status == cache::Status::Loaded && loaded.keys == std::vector<cache::Key>{ key, second }, "key round trip");
-        Check(cache::Write(path, keys, shaderVersion, recipeVersion, ValidateEnums).ok && Read(path) == original,
+        Check(loaded.status == cache::Status::Loaded && Keys(loaded.records) == std::vector<cache::Key>{ key, second }, "key round trip");
+        Check(cache::Write(path, records, shaderVersion, recipeVersion, ValidateEnums).ok && Read(path) == original,
             "deterministic replacement");
         Check(cache::KeyHash{}(key) == static_cast<size_t>(cache::detail::Hash(cache::detail::Encode(key))),
             "stable key hash");
@@ -114,10 +211,10 @@ int main(int argc, char** argv)
             changed[i] ^= 0x80;
             RawWrite(badPath, changed);
             loaded = cache::Load(badPath, shaderVersion, recipeVersion, ValidateEnums);
-            Check(loaded.status != cache::Status::Loaded && loaded.keys.empty(), "single-byte corruption rejected");
+            Check(loaded.status != cache::Status::Loaded && loaded.records.empty(), "single-byte corruption rejected");
             RawWrite(badPath, std::span(original).first(i));
             loaded = cache::Load(badPath, shaderVersion, recipeVersion, ValidateEnums);
-            Check(loaded.status != cache::Status::Loaded && loaded.keys.empty(), "truncation rejected");
+            Check(loaded.status != cache::Status::Loaded && loaded.records.empty(), "truncation rejected");
         }
         auto changed = original;
         changed.push_back(0);
@@ -162,16 +259,18 @@ int main(int argc, char** argv)
             case 7: invalid.prim = 31; break;
             case 8: invalid.rtFormat = 0xFFFFFFFF; break;
             }
-            Check(!cache::Write(path, { &invalid, 1 }, shaderVersion, recipeVersion, ValidateEnums).ok && Read(path) == original,
+            const cache::Record invalidRecord{ invalid, {} };
+            Check(!cache::Write(path, { &invalidRecord, 1 }, shaderVersion, recipeVersion, ValidateEnums).ok && Read(path) == original,
                 "invalid write preserves destination");
             changed = original;
             const auto encoded = cache::detail::Encode(invalid);
             std::copy(encoded.begin(), encoded.end(), changed.begin() + cache::kHeaderBytes);
-            cache::detail::Put64(changed.data() + cache::kHeaderBytes + cache::kKeyBytes, cache::detail::Hash(encoded));
+            cache::detail::Put64(changed.data() + cache::kHeaderBytes + cache::kKeyBytes + cache::kSceneBytes,
+                cache::detail::Hash({ changed.data() + cache::kHeaderBytes, cache::kKeyBytes + cache::kSceneBytes }));
             PayloadChecksum(changed);
             RawWrite(badPath, changed);
             loaded = cache::Load(badPath, shaderVersion, recipeVersion, ValidateEnums);
-            Check(loaded.status == cache::Status::Invalid && loaded.keys.empty(), "invalid semantic state rejected");
+            Check(loaded.status == cache::Status::Invalid && loaded.records.empty(), "invalid semantic state rejected");
         }
 
         changed = original;
@@ -181,23 +280,24 @@ int main(int argc, char** argv)
         PayloadChecksum(changed);
         RawWrite(badPath, changed);
         loaded = cache::Load(badPath, shaderVersion, recipeVersion, ValidateEnums);
-        Check(loaded.status == cache::Status::Loaded && loaded.keys.size() == 2 && loaded.duplicates == 1, "read deduplication");
+        Check(loaded.status == cache::Status::Loaded && loaded.records.size() == 2 && loaded.duplicates == 1, "read deduplication");
 
         const cache::Validator throwing = [](const cache::Key&) -> bool { throw std::runtime_error("fixture failure"); };
-        Check(!cache::Write(path, keys, shaderVersion, recipeVersion, throwing).ok && Read(path) == original,
+        Check(!cache::Write(path, records, shaderVersion, recipeVersion, throwing).ok && Read(path) == original,
             "validator exception preserves destination");
-        Check(cache::Load(path, shaderVersion, recipeVersion, throwing).keys.empty(), "validator exception returns no recipes");
+        Check(cache::Load(path, shaderVersion, recipeVersion, throwing).records.empty(), "validator exception returns no recipes");
 
 #ifdef _WIN32
         // Deny DELETE sharing so Windows rejects the final atomic replacement
         // after the temporary file has already been fully written and closed.
         HANDLE locked = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
         Check(locked != INVALID_HANDLE_VALUE, "lock existing destination");
-        const auto lockedResult = cache::Write(path, { &second, 1 }, shaderVersion, recipeVersion, ValidateEnums);
+        const cache::Record secondRecord{ second, {} };
+        const auto lockedResult = cache::Write(path, { &secondRecord, 1 }, shaderVersion, recipeVersion, ValidateEnums);
         CloseHandle(locked);
         Check(!lockedResult.ok && Read(path) == original, "failed replacement preserves destination");
 #endif
-        Check(!cache::Write(path / "child.bin", keys, shaderVersion, recipeVersion).ok && Read(path) == original,
+        Check(!cache::Write(path / "child.bin", records, shaderVersion, recipeVersion).ok && Read(path) == original,
             "invalid parent preserves destination");
         for (const auto& entry : fs::directory_iterator(root))
             Check(entry.path().filename().u8string().find(u8".tmp-") == std::u8string::npos, "temporary files cleaned");
@@ -205,16 +305,17 @@ int main(int argc, char** argv)
         const fs::path maxPath = root / "bounded.bin";
         std::vector<cache::Key> maxKeys(cache::kMaxRecords, key);
         for (size_t i = 0; i < maxKeys.size(); ++i) maxKeys[i].vs += i;
-        Check(cache::Write(maxPath, maxKeys, shaderVersion, recipeVersion, ValidateEnums).ok, "record cap accepted");
+        Check(cache::Write(maxPath, Records(maxKeys), shaderVersion, recipeVersion, ValidateEnums).ok, "record cap accepted");
         loaded = cache::Load(maxPath, shaderVersion, recipeVersion, ValidateEnums);
-        Check(loaded.status == cache::Status::Loaded && loaded.keys == maxKeys, "record cap round trip");
+        Check(loaded.status == cache::Status::Loaded && Keys(loaded.records) == maxKeys, "record cap round trip");
         maxKeys.push_back(second);
-        Check(!cache::Write(path, maxKeys, shaderVersion, recipeVersion).ok && Read(path) == original, "record cap overflow preserves destination");
+        Check(!cache::Write(path, Records(maxKeys), shaderVersion, recipeVersion).ok && Read(path) == original, "record cap overflow preserves destination");
 
-        Check(cache::Write(maxPath, {}, shaderVersion, recipeVersion).ok, "empty cache replacement");
+        Check(cache::Write(maxPath, std::span<const cache::Record>{}, shaderVersion, recipeVersion).ok, "empty cache replacement");
         loaded = cache::Load(maxPath, shaderVersion, recipeVersion);
-        Check(loaded.status == cache::Status::Loaded && loaded.keys.empty(), "empty cache round trip");
-        std::cout << "pipeline cache tests passed: round trip, exact keys, dedup, versions, "
+        Check(loaded.status == cache::Status::Loaded && loaded.records.empty(), "empty cache round trip");
+        NormalizationTests(root);
+        std::cout << "pipeline cache tests passed: round trip, exact keys, dedup, versions, normalization, v1 migration, scenes, "
             << original.size() << " byte corruptions + truncations, state validation, atomic failure, cap="
             << cache::kMaxRecords << "\n";
         return 0;
