@@ -5,7 +5,8 @@ Usage: python tools/pipeline_misses.py <runtime log> [--frames N]
 
 Reads the per-frame "renderer: pipeline misses" lines (always written) and,
 when the run had LO_PIPELINE_MISS_LOG=1, the per-creation "pipeline miss"
-lines. A scene is the map id, or the battle number plus its map.
+lines. A scene is the map id, or the battle number plus its map. Draws that
+waited for a scene prefetch job count their wait as stall time ("wait ms").
 """
 import argparse
 import re
@@ -16,6 +17,7 @@ FIELD = re.compile(r"(\w+)=(\S+)")
 SUMMARY = "renderer: pipeline misses "
 DETAIL = "renderer: pipeline miss "
 PREPARE = "renderer: pipeline preparation:"
+WAITS = "renderer: pipeline prefetch waits "
 
 
 def fields(line, marker):
@@ -33,7 +35,7 @@ def main():
     parser.add_argument("--frames", type=int, default=5, help="worst frames to list (default 5)")
     args = parser.parse_args()
 
-    scenes = defaultdict(lambda: {"frames": 0, "misses": 0, "ms": 0.0, "worst": 0.0,
+    scenes = defaultdict(lambda: {"frames": 0, "misses": 0, "ms": 0.0, "worst": 0.0, "prefetched": 0, "wait": 0.0,
                                   "detail": 0, "recipe": 0, "new_vs": 0, "new_ps": 0, "known_pair": 0})
     worst = []
     prepares = []
@@ -41,13 +43,16 @@ def main():
         for line in log:
             if PREPARE in line:
                 prepares.append(line.split(PREPARE, 1)[1].strip())
-            elif SUMMARY in line:
-                f = fields(line, SUMMARY)
+            elif SUMMARY in line or WAITS in line:
+                f = fields(line, SUMMARY if SUMMARY in line else WAITS)
                 s = scenes[scene(f)]
-                ms = float(f.get("ms", 0))
+                wait = float(f.get("prefetch_wait_ms", 0))
+                ms = float(f.get("ms", 0)) + wait
                 s["frames"] += 1
                 s["misses"] += int(f.get("count", 0))
                 s["ms"] += ms
+                s["wait"] += wait
+                s["prefetched"] += int(f.get("prefetched", 0))
                 s["worst"] = max(s["worst"], ms)
                 worst.append((ms, int(f.get("frame", 0)), int(f.get("count", 0)), scene(f)))
             elif DETAIL in line:
@@ -65,13 +70,18 @@ def main():
         print("no pipeline misses logged")
         return 0
     detail = any(s["detail"] for s in scenes.values())
+    prefetch = any(s["prefetched"] or s["wait"] for s in scenes.values())
     header = f"{'scene':<24} {'frames':>6} {'misses':>6} {'total ms':>9} {'worst ms':>9}"
+    if prefetch:
+        header += f" {'prefetched':>10} {'wait ms':>8}"
     if detail:
         header += f" {'in recipes':>10} {'new VS':>6} {'new PS':>6} {'known VS+PS':>11}"
     print(header)
     total = {"frames": 0, "misses": 0, "ms": 0.0}
     for name, s in sorted(scenes.items(), key=lambda item: -item[1]["ms"]):
         row = f"{name:<24} {s['frames']:>6} {s['misses']:>6} {s['ms']:>9.1f} {s['worst']:>9.1f}"
+        if prefetch:
+            row += f" {s['prefetched']:>10} {s['wait']:>8.1f}"
         if detail:
             row += f" {s['recipe']:>10} {s['new_vs']:>6} {s['new_ps']:>6} {s['known_pair']:>11}"
         print(row)
