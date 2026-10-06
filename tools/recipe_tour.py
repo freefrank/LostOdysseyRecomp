@@ -253,9 +253,9 @@ def fight(game, fid, hold, stage=""):
                 t["moved"] = time.time()
                 if phase == 2 and not t["command"]:
                     t["command"] = time.time()
-                if phase in (11, 12) and not t["end"]:
+                if phase in (11, 12, 13) and not t["end"]:  # victory, defeat, scripted end
                     t["end"] = time.time()
-                    r["status"] = "defeat" if phase == 12 else "forced" if t["victory_asked"] else "victory"
+                    r["status"] = {12: "defeat", 13: "ended"}.get(phase, "forced" if t["victory_asked"] else "victory")
 
     nudged = False
     while time.time() - began < 45 and not t["first"] and not fatal and game.proc.poll() is None:
@@ -268,7 +268,7 @@ def fight(game, fid, hold, stage=""):
         r["status"] = "fatal" if fatal else "nobattle" if t["drawn"] else "nodraw"
     while t["first"]:
         scan()
-        if t["field"] or (r["status"] == "defeat" and time.time() - t["end"] > 8):
+        if t["field"] or (r["status"] in ("defeat", "ended") and time.time() - t["end"] > 15):
             break
         # Scripted battles can wait on input the harness never gives.
         stalled = time.time() - t["moved"] > 60 and not t["end"] or time.time() - began > 240
@@ -288,7 +288,7 @@ def fight(game, fid, hold, stage=""):
     r["wall_s"] = round(time.time() - began, 1)
     r["phases"] = r["phases"][:60]
     # Back in the field after a natural victory or an escape-type loss: go on.
-    return r, not (t["field"] and r["status"] in ("victory", "defeat"))
+    return r, not (t["field"] and r["status"] in ("victory", "defeat", "ended"))
 
 
 def stages(run, args):
