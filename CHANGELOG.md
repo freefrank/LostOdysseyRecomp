@@ -4,6 +4,16 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 按新到旧记录简短更新，日期采用 UTC。技术验证见[开发状态](docs/STATUS.md)，后续计划见[路线图](docs/ROADMAP.zh-CN.md)。
 
+## Unreleased
+
+### English
+
+- Vulkan: a pipeline first needed during play is linked from per-shader parts instead of compiled whole, so new maps, enemies and effects stutter less when their shaders were seen before.
+
+### 简体中文
+
+- Vulkan：游玩中第一次用到的管线改为由按着色器预编的部件链接而成，不再整体编译；着色器以前出现过时，新地图、新敌人和新特效的卡顿更短。
+
 ## [v0.8.44](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.8.44) — 2026-10-06
 
 ### English
