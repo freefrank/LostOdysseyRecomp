@@ -1472,7 +1472,7 @@ index 0000000..2f83160
 +        static_cast<uint32_t>(code), __VA_ARGS__); \
 +} while (0)
 diff --git a/plume_render_interface.h b/plume_render_interface.h
-index 2048557..9c3c406 100644
+index 2048557..6ebfb8a 100644
 --- a/plume_render_interface.h
 +++ b/plume_render_interface.h
 @@ -95,6 +95,8 @@ namespace plume {
@@ -1517,7 +1517,7 @@ index 2048557..9c3c406 100644
          virtual ~RenderQueryPool() { }
          virtual void queryResults() = 0;
          virtual const uint64_t *getResults() const = 0;
-@@ -241,6 +255,19 @@ namespace plume {
+@@ -241,6 +255,22 @@ namespace plume {
          virtual std::unique_ptr<RenderCommandSemaphore> createCommandSemaphore() = 0;
          virtual std::unique_ptr<RenderFramebuffer> createFramebuffer(const RenderFramebufferDesc &desc) = 0;
          virtual std::unique_ptr<RenderQueryPool> createQueryPool(uint32_t queryCount) = 0;
@@ -1534,11 +1534,14 @@ index 2048557..9c3c406 100644
 +        virtual bool getPipelineCacheData(std::vector<uint8_t> &) { return false; }
 +        // Size getPipelineCacheData would return, without copying; 0 when unknown.
 +        virtual size_t getPipelineCacheSize() { return 0; }
++        // Builds the libraries a fastLink pipeline with this desc would link, so a
++        // later createGraphicsPipeline only links. Any thread. False when unsupported.
++        virtual bool prepareGraphicsPipelineLibraries(const RenderGraphicsPipelineDesc &) { return false; }
          virtual void setBottomLevelASBuildInfo(RenderBottomLevelASBuildInfo &buildInfo, const RenderBottomLevelASMesh *meshes, uint32_t meshCount, bool preferFastBuild = true, bool preferFastTrace = false) = 0;
          virtual void setTopLevelASBuildInfo(RenderTopLevelASBuildInfo &buildInfo, const RenderTopLevelASInstance *instances, uint32_t instanceCount, bool preferFastBuild = true, bool preferFastTrace = false) = 0;
          virtual void setShaderBindingTableInfo(RenderShaderBindingTableInfo &tableInfo, const RenderShaderBindingGroups &groups, const RenderPipeline *pipeline, RenderDescriptorSet **descriptorSets, uint32_t descriptorSetCount) = 0;
 diff --git a/plume_render_interface_types.h b/plume_render_interface_types.h
-index 9dcfedf..b646cf7 100644
+index 9dcfedf..e1105fd 100644
 --- a/plume_render_interface_types.h
 +++ b/plume_render_interface_types.h
 @@ -37,6 +37,29 @@ namespace plume {
@@ -1634,7 +1637,7 @@ index 9dcfedf..b646cf7 100644
          uint32_t renderTargetCount = 0;
          bool logicOpEnabled = false;
          RenderLogicOperation logicOp = RenderLogicOperation::NOOP;
-@@ -1305,6 +1352,10 @@ namespace plume {
+@@ -1305,6 +1352,14 @@ namespace plume {
          uint32_t inputElementsCount = 0;
          const RenderSpecConstant *specConstants = nullptr;
          uint32_t specConstantsCount = 0;
@@ -1642,10 +1645,14 @@ index 9dcfedf..b646cf7 100644
 +        // pipeline library entry after it (mixed with the shader bytecode), Metal
 +        // adds such pipelines to its binary archive. Vulkan caches every pipeline.
 +        uint64_t cacheKey = 0;
++        // Vulkan with capabilities.fastLinkPipelines: link the pipeline from cached
++        // per-shader libraries instead of compiling it whole. The shaders must
++        // outlive the device. Ignored by other backends and unsupported states.
++        bool fastLink = false;
      };
  
      struct RenderRaytracingPipelineLibrarySymbol {
-@@ -1762,6 +1813,7 @@ namespace plume {
+@@ -1762,6 +1817,7 @@ namespace plume {
      };
  
      struct RenderDeviceCapabilities {
@@ -1653,7 +1660,16 @@ index 9dcfedf..b646cf7 100644
          // Geometry shaders.
          bool geometryShader = false;
  
-@@ -1808,6 +1860,9 @@ namespace plume {
+@@ -1799,6 +1855,8 @@ namespace plume {
+         // Draw.
+         bool triangleFan = false;
+         bool dynamicDepthBias = false;
++        // Graphics pipeline libraries with fast linking (RenderGraphicsPipelineDesc::fastLink).
++        bool fastLinkPipelines = false;
+ 
+         // UMA.
+         bool uma = false;
+@@ -1808,6 +1866,9 @@ namespace plume {
  
          // Query Pools.
          bool queryPools = false;
@@ -1664,10 +1680,10 @@ index 9dcfedf..b646cf7 100644
  
      struct RenderInterfaceCapabilities {
 diff --git a/plume_vulkan.cpp b/plume_vulkan.cpp
-index f1dd503..0fea5a4 100644
+index f1dd503..6573b46 100644
 --- a/plume_vulkan.cpp
 +++ b/plume_vulkan.cpp
-@@ -9,6 +9,9 @@
+@@ -9,10 +9,15 @@
  #define VOLK_IMPLEMENTATION 
  
  #include "plume_vulkan.h"
@@ -1677,7 +1693,13 @@ index f1dd503..0fea5a4 100644
  
  #include <algorithm>
  #include <cmath>
-@@ -62,6 +65,7 @@ namespace plume {
+ #include <climits>
++#include <iterator>
++#include <string>
+ #include <unordered_map>
+ 
+ #if DLSS_ENABLED
+@@ -62,6 +67,7 @@ namespace plume {
      };
  
      static const std::unordered_set<std::string> OptionalInstanceExtensions = {
@@ -1685,7 +1707,7 @@ index f1dd503..0fea5a4 100644
  #   if defined(__APPLE__)
          // Tells the system Vulkan loader to enumerate portability drivers, if supported.
          VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
-@@ -73,6 +77,7 @@ namespace plume {
+@@ -73,6 +79,7 @@ namespace plume {
      };
      
      static const std::unordered_set<std::string> OptionalDeviceExtensions = {
@@ -1693,7 +1715,16 @@ index f1dd503..0fea5a4 100644
          VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
          VK_EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME,
          VK_EXT_ROBUSTNESS_2_EXTENSION_NAME,
-@@ -91,6 +96,38 @@ namespace plume {
+@@ -81,6 +88,8 @@ namespace plume {
+         VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
+         VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
+         VK_KHR_PIPELINE_LIBRARY_EXTENSION_NAME,
++        VK_EXT_GRAPHICS_PIPELINE_LIBRARY_EXTENSION_NAME,
++        VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME,
+         VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
+         VK_EXT_SAMPLE_LOCATIONS_EXTENSION_NAME,
+         VK_EXT_LOAD_STORE_OP_NONE_EXTENSION_NAME,
+@@ -91,6 +100,38 @@ namespace plume {
          VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME,
      };
  
@@ -1732,7 +1763,7 @@ index f1dd503..0fea5a4 100644
      // Common functions.
  
      static uint32_t roundUp(uint32_t value, uint32_t powerOf2Alignment) {
-@@ -123,6 +160,10 @@ namespace plume {
+@@ -123,6 +164,10 @@ namespace plume {
              return VK_FORMAT_R32G32B32_SINT;
          case RenderFormat::R16G16B16A16_TYPELESS:
              return VK_FORMAT_R16G16B16A16_SFLOAT;
@@ -1743,7 +1774,7 @@ index f1dd503..0fea5a4 100644
          case RenderFormat::R16G16B16A16_FLOAT:
              return VK_FORMAT_R16G16B16A16_SFLOAT;
          case RenderFormat::R16G16B16A16_UNORM:
-@@ -779,7 +820,7 @@ namespace plume {
+@@ -779,7 +824,7 @@ namespace plume {
          nameInfo.pObjectName = name.c_str();
          VkResult res = vkSetDebugUtilsObjectNameEXT(device, &nameInfo);
          if (res != VK_SUCCESS) {
@@ -1752,7 +1783,7 @@ index f1dd503..0fea5a4 100644
              return;
          }
  #   endif
-@@ -835,7 +876,7 @@ namespace plume {
+@@ -835,7 +880,7 @@ namespace plume {
          bufferInfo.usage |= (desc.flags & RenderBufferFlag::ACCELERATION_STRUCTURE_INPUT) ? VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR : 0;
          bufferInfo.usage |= (desc.flags & RenderBufferFlag::SHADER_BINDING_TABLE) ? VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR : 0;
          
@@ -1761,7 +1792,7 @@ index f1dd503..0fea5a4 100644
          const bool useDeviceAddress = device->capabilities.bufferDeviceAddress && (desc.flags & deviceAddressMask);
          bufferInfo.usage |= useDeviceAddress ? VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT : 0;
          
-@@ -854,6 +895,8 @@ namespace plume {
+@@ -854,6 +899,8 @@ namespace plume {
          case RenderHeapType::UPLOAD:
              bufferInfo.usage |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
              createInfo.flags |= VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
@@ -1770,7 +1801,7 @@ index f1dd503..0fea5a4 100644
              break;
          case RenderHeapType::READBACK:
              bufferInfo.usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-@@ -890,7 +933,11 @@ namespace plume {
+@@ -890,7 +937,11 @@ namespace plume {
          }
  
          if (res != VK_SUCCESS) {
@@ -1783,7 +1814,7 @@ index f1dd503..0fea5a4 100644
              return;
          }
      }
-@@ -905,10 +952,15 @@ namespace plume {
+@@ -905,10 +956,15 @@ namespace plume {
          void *data = nullptr;
          VkResult res = vmaMapMemory(device->allocator, allocation, &data);
          if (res != VK_SUCCESS) {
@@ -1800,7 +1831,7 @@ index f1dd503..0fea5a4 100644
          return data;
      }
  
-@@ -950,7 +1002,7 @@ namespace plume {
+@@ -950,7 +1006,7 @@ namespace plume {
  
          VkResult res = vkCreateBufferView(buffer->device->vk, &createInfo, nullptr, &vk);
          if (res != VK_SUCCESS) {
@@ -1809,7 +1840,7 @@ index f1dd503..0fea5a4 100644
              return;
          }
      }
-@@ -1010,7 +1062,10 @@ namespace plume {
+@@ -1010,7 +1066,10 @@ namespace plume {
  
          VkResult res = vmaCreateImage(device->allocator, &imageInfo, &createInfo, &vk, &allocation, &allocationInfo);
          if (res != VK_SUCCESS) {
@@ -1821,7 +1852,7 @@ index f1dd503..0fea5a4 100644
              return;
          }
  
-@@ -1040,7 +1095,9 @@ namespace plume {
+@@ -1040,7 +1099,9 @@ namespace plume {
          VkImageViewCreateInfo viewInfo = {};
          viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
          viewInfo.image = vk;
@@ -1832,7 +1863,7 @@ index f1dd503..0fea5a4 100644
          viewInfo.format = format;
          viewInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
          viewInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-@@ -1050,7 +1107,7 @@ namespace plume {
+@@ -1050,7 +1111,7 @@ namespace plume {
          
          VkResult res = vkCreateImageView(device->vk, &viewInfo, nullptr, &imageView);
          if (res != VK_SUCCESS) {
@@ -1841,7 +1872,7 @@ index f1dd503..0fea5a4 100644
              return;
          }
      }
-@@ -1101,7 +1158,7 @@ namespace plume {
+@@ -1101,7 +1162,7 @@ namespace plume {
  
          VkResult res = vkCreateImageView(texture->device->vk, &viewInfo, nullptr, &vk);
          if (res != VK_SUCCESS) {
@@ -1850,7 +1881,7 @@ index f1dd503..0fea5a4 100644
              return;
          }
      }
-@@ -1131,7 +1188,7 @@ namespace plume {
+@@ -1131,7 +1192,7 @@ namespace plume {
  
          VkResult res = vkCreateAccelerationStructureKHR(device->vk, &createInfo, nullptr, &vk);
          if (res != VK_SUCCESS) {
@@ -1859,7 +1890,7 @@ index f1dd503..0fea5a4 100644
              return;
          }
      }
-@@ -1210,7 +1267,7 @@ namespace plume {
+@@ -1210,7 +1271,7 @@ namespace plume {
          
          VkResult res = vkCreateDescriptorSetLayout(device->vk, &setLayoutInfo, nullptr, &vk);
          if (res != VK_SUCCESS) {
@@ -1868,7 +1899,7 @@ index f1dd503..0fea5a4 100644
              return;
          }
      }
-@@ -1257,6 +1314,7 @@ namespace plume {
+@@ -1257,6 +1318,7 @@ namespace plume {
          for (uint32_t i = 0; i < desc.descriptorSetDescsCount; i++) {
              VulkanDescriptorSetLayout *setLayout = new VulkanDescriptorSetLayout(device, desc.descriptorSetDescs[i]);
              descriptorSetLayouts.emplace_back(setLayout);
@@ -1876,7 +1907,7 @@ index f1dd503..0fea5a4 100644
              setLayoutHandles.emplace_back(setLayout->vk);
          }
  
-@@ -1265,7 +1323,7 @@ namespace plume {
+@@ -1265,7 +1327,7 @@ namespace plume {
  
          VkResult res = vkCreatePipelineLayout(device->vk, &layoutInfo, nullptr, &vk);
          if (res != VK_SUCCESS) {
@@ -1885,7 +1916,7 @@ index f1dd503..0fea5a4 100644
              return;
          }
      }
-@@ -1299,7 +1357,7 @@ namespace plume {
+@@ -1299,7 +1361,7 @@ namespace plume {
          shaderInfo.codeSize = size;
          VkResult res = vkCreateShaderModule(device->vk, &shaderInfo, nullptr, &vk);
          if (res != VK_SUCCESS) {
@@ -1894,7 +1925,7 @@ index f1dd503..0fea5a4 100644
              return;
          }
      }
-@@ -1341,7 +1399,7 @@ namespace plume {
+@@ -1341,7 +1403,7 @@ namespace plume {
  
          VkResult res = vkCreateSampler(device->vk, &samplerInfo, nullptr, &vk);
          if (res != VK_SUCCESS) {
@@ -1903,7 +1934,7 @@ index f1dd503..0fea5a4 100644
              return;
          }
      }
-@@ -1390,9 +1448,11 @@ namespace plume {
+@@ -1390,9 +1452,11 @@ namespace plume {
          pipelineInfo.layout = pipelineLayout->vk;
          pipelineInfo.stage = stageInfo;
  
@@ -1917,7 +1948,16 @@ index f1dd503..0fea5a4 100644
              return;
          }
      }
-@@ -1504,8 +1564,9 @@ namespace plume {
+@@ -1414,6 +1478,8 @@ namespace plume {
+ 
+     // VulkanGraphicsPipeline
+ 
++    VulkanGraphicsPipeline::VulkanGraphicsPipeline(VulkanDevice *device) : VulkanPipeline(device, Type::Graphics) { }
++
+     VulkanGraphicsPipeline::VulkanGraphicsPipeline(VulkanDevice *device, const RenderGraphicsPipelineDesc &desc) : VulkanPipeline(device, Type::Graphics) {
+         assert(desc.pipelineLayout != nullptr);
+ 
+@@ -1504,8 +1570,9 @@ namespace plume {
  
          VkPipelineViewportStateCreateInfo viewportState = {};
          viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -1929,7 +1969,7 @@ index f1dd503..0fea5a4 100644
  
          VkPipelineRasterizationStateCreateInfo rasterization = {};
          rasterization.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-@@ -1617,6 +1678,11 @@ namespace plume {
+@@ -1617,6 +1684,11 @@ namespace plume {
              dynamicStates.emplace_back(VK_DYNAMIC_STATE_DEPTH_BIAS);
          }
  
@@ -1941,7 +1981,7 @@ index f1dd503..0fea5a4 100644
          VkPipelineDynamicStateCreateInfo dynamicState = {};
          dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
          dynamicState.pDynamicStates = dynamicStates.data();
-@@ -1649,9 +1715,11 @@ namespace plume {
+@@ -1649,9 +1721,11 @@ namespace plume {
          pipelineInfo.layout = pipelineLayout->vk;
          pipelineInfo.renderPass = renderPass;
  
@@ -1955,7 +1995,7 @@ index f1dd503..0fea5a4 100644
              return;
          }
      }
-@@ -1735,7 +1803,7 @@ namespace plume {
+@@ -1735,11 +1809,378 @@ namespace plume {
              return renderPass;
          }
          else {
@@ -1964,7 +2004,378 @@ index f1dd503..0fea5a4 100644
              return VK_NULL_HANDLE;
          }
      }
-@@ -1857,7 +1925,7 @@ namespace plume {
+ 
++    // LostOdysseyRecomp: graphics pipeline libraries (VK_EXT_graphics_pipeline_library).
++    // A fast-linked pipeline joins four cached parts: vertex input (topology),
++    // pre-rasterization (VS, GS), fragment shader (PS) and fragment output (blend,
++    // formats). Cull mode, front face, depth bias and depth/stencil state are dynamic
++    // (VK_EXT_extended_dynamic_state), so they do not multiply the shader parts.
++    // Parts name shader modules by handle; their shaders must outlive the device.
++
++    struct VulkanPipelineLibraries {
++        std::mutex mutex;
++        std::unordered_map<std::string, VkPipeline> parts;
++        // One render pass per attachment layout; all parts of a pipeline must use compatible ones.
++        std::unordered_map<std::string, VkRenderPass> renderPasses;
++
++        void destroy(VkDevice device) {
++            for (auto &entry : parts) {
++                vkDestroyPipeline(device, entry.second, nullptr);
++            }
++
++            for (auto &entry : renderPasses) {
++                vkDestroyRenderPass(device, entry.second, nullptr);
++            }
++
++            parts.clear();
++            renderPasses.clear();
++        }
++    };
++
++    struct VulkanLibrarySet {
++        VkPipeline parts[4] = {};
++        VkRenderPass renderPass = VK_NULL_HANDLE;
++    };
++
++    template <typename T>
++    static void appendKey(std::string &key, const T &value) {
++        key.append(reinterpret_cast<const char *>(&value), sizeof(T));
++    }
++
++    static bool fastLinkEligible(const VulkanDevice *device, const RenderGraphicsPipelineDesc &desc) {
++        return desc.fastLink && (device->pipelineLibraries != nullptr) && (desc.vertexShader != nullptr) &&
++            (desc.specConstantsCount == 0) && (desc.inputSlotsCount == 0) && (desc.inputElementsCount == 0) &&
++            !desc.dynamicDepthBiasEnabled && !desc.multisampling.sampleLocationsEnabled;
++    }
++
++    // Returns the cached part for key, building it outside the lock on a miss so a
++    // slow compile on one thread does not stall the others.
++    template <typename Create>
++    static VkPipeline getLibraryPart(VulkanDevice *device, const std::string &key, const Create &create) {
++        VulkanPipelineLibraries &libraries = *device->pipelineLibraries;
++        {
++            std::lock_guard<std::mutex> lock(libraries.mutex);
++            auto it = libraries.parts.find(key);
++            if (it != libraries.parts.end()) {
++                return it->second;
++            }
++        }
++
++        VkPipeline part = create();
++        if (part == VK_NULL_HANDLE) {
++            return VK_NULL_HANDLE;
++        }
++
++        std::lock_guard<std::mutex> lock(libraries.mutex);
++        auto result = libraries.parts.emplace(key, part);
++        if (!result.second) {
++            vkDestroyPipeline(device->vk, part, nullptr);
++        }
++
++        return result.first->second;
++    }
++
++    static VkPipeline createLibraryPart(VulkanDevice *device, VkGraphicsPipelineCreateInfo &info, VkGraphicsPipelineLibraryFlagsEXT flags) {
++        VkGraphicsPipelineLibraryCreateInfoEXT libraryInfo = {};
++        libraryInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_LIBRARY_CREATE_INFO_EXT;
++        libraryInfo.flags = flags;
++
++        info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
++        info.pNext = &libraryInfo;
++        info.flags |= VK_PIPELINE_CREATE_LIBRARY_BIT_KHR;
++
++        VkPipeline part = VK_NULL_HANDLE;
++        VkResult res = vkCreateGraphicsPipelines(device->vk, device->pipelineCache, 1, &info, nullptr, &part);
++        if (res != VK_SUCCESS) {
++            PLUME_LOG_ERROR("Vulkan", "vkCreateGraphicsPipelines", LogErrorDomain::VkResult, res, "library=0x%X", unsigned(flags));
++            return VK_NULL_HANDLE;
++        }
++
++        return part;
++    }
++
++    static VkRenderPass getCompatibleRenderPass(VulkanDevice *device, const RenderGraphicsPipelineDesc &desc) {
++        VkFormat formats[RenderGraphicsPipelineDesc::MaxRenderTargets] = {};
++        const uint32_t count = std::min(desc.renderTargetCount, RenderGraphicsPipelineDesc::MaxRenderTargets);
++        const VkFormat depthFormat = toVk(desc.depthTargetFormat);
++        const VkSampleCountFlagBits samples = VkSampleCountFlagBits(desc.multisampling.sampleCount);
++        std::string key;
++        appendKey(key, count);
++        for (uint32_t i = 0; i < count; i++) {
++            formats[i] = toVk(desc.renderTargetFormat[i]);
++            appendKey(key, formats[i]);
++        }
++
++        appendKey(key, depthFormat);
++        appendKey(key, samples);
++
++        VulkanPipelineLibraries &libraries = *device->pipelineLibraries;
++        std::lock_guard<std::mutex> lock(libraries.mutex);
++        auto it = libraries.renderPasses.find(key);
++        if (it != libraries.renderPasses.end()) {
++            return it->second;
++        }
++
++        VkRenderPass renderPass = VulkanGraphicsPipeline::createRenderPass(device, formats, count, depthFormat, samples);
++        if (renderPass != VK_NULL_HANDLE) {
++            libraries.renderPasses.emplace(key, renderPass);
++        }
++
++        return renderPass;
++    }
++
++    static VkPipelineShaderStageCreateInfo libraryStage(const RenderShader *shader, VkShaderStageFlagBits stage) {
++        const VulkanShader *interfaceShader = static_cast<const VulkanShader *>(shader);
++        VkPipelineShaderStageCreateInfo info = {};
++        info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
++        info.stage = stage;
++        info.module = interfaceShader->vk;
++        info.pName = interfaceShader->entryPointName.c_str();
++        return info;
++    }
++
++    static bool getLibrarySet(VulkanDevice *device, const RenderGraphicsPipelineDesc &desc, VulkanLibrarySet &set) {
++        set.renderPass = getCompatibleRenderPass(device, desc);
++        if (set.renderPass == VK_NULL_HANDLE) {
++            return false;
++        }
++
++        const VkPipelineLayout layout = static_cast<const VulkanPipelineLayout *>(desc.pipelineLayout)->vk;
++
++        // Identical in every part that takes it (VUID-VkGraphicsPipelineCreateInfo-pLibraries-06635).
++        VkPipelineMultisampleStateCreateInfo multisampling = {};
++        multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
++        multisampling.rasterizationSamples = VkSampleCountFlagBits(desc.multisampling.sampleCount);
++        multisampling.alphaToCoverageEnable = desc.alphaToCoverageEnabled;
++
++        // Vertex input: only the topology; vertex fetch happens in the shaders.
++        const VkPrimitiveTopology topology = toVk(desc.primitiveTopology);
++        const VkBool32 primitiveRestart = (desc.primitiveTopology == RenderPrimitiveTopology::LINE_STRIP) || (desc.primitiveTopology == RenderPrimitiveTopology::TRIANGLE_STRIP);
++        std::string key(1, 'V');
++        appendKey(key, topology);
++        appendKey(key, primitiveRestart);
++        set.parts[0] = getLibraryPart(device, key, [&]() {
++            VkPipelineVertexInputStateCreateInfo vertexInput = {};
++            vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
++
++            VkPipelineInputAssemblyStateCreateInfo inputAssembly = {};
++            inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
++            inputAssembly.topology = topology;
++            inputAssembly.primitiveRestartEnable = primitiveRestart;
++
++            VkGraphicsPipelineCreateInfo info = {};
++            info.pVertexInputState = &vertexInput;
++            info.pInputAssemblyState = &inputAssembly;
++            return createLibraryPart(device, info, VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT);
++        });
++
++        // Pre-rasterization: depth bias enable is static (it needs extended dynamic state 2).
++        const VkShaderModule vertexModule = static_cast<const VulkanShader *>(desc.vertexShader)->vk;
++        const VkShaderModule geometryModule = (desc.geometryShader != nullptr) ? static_cast<const VulkanShader *>(desc.geometryShader)->vk : VK_NULL_HANDLE;
++        const VkBool32 depthClamp = !desc.depthClipEnabled;
++        const VkBool32 depthBias = (desc.depthBias != 0) || (desc.depthBiasClamp != 0.0f) || (desc.slopeScaledDepthBias != 0.0f);
++        key.assign(1, 'P');
++        appendKey(key, vertexModule);
++        appendKey(key, geometryModule);
++        appendKey(key, layout);
++        appendKey(key, set.renderPass);
++        appendKey(key, depthClamp);
++        appendKey(key, depthBias);
++        appendKey(key, multisampling.rasterizationSamples);
++        appendKey(key, multisampling.alphaToCoverageEnable);
++        set.parts[1] = getLibraryPart(device, key, [&]() {
++            VkPipelineShaderStageCreateInfo stages[2];
++            uint32_t stageCount = 0;
++            stages[stageCount++] = libraryStage(desc.vertexShader, VK_SHADER_STAGE_VERTEX_BIT);
++            if (desc.geometryShader != nullptr) {
++                stages[stageCount++] = libraryStage(desc.geometryShader, VK_SHADER_STAGE_GEOMETRY_BIT);
++            }
++
++            VkPipelineViewportStateCreateInfo viewportState = {};
++            viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
++            viewportState.viewportCount = 1;
++            viewportState.scissorCount = 1;
++
++            VkPipelineRasterizationStateCreateInfo rasterization = {};
++            rasterization.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
++            rasterization.depthClampEnable = depthClamp;
++            rasterization.polygonMode = VK_POLYGON_MODE_FILL;
++            rasterization.lineWidth = 1.0f;
++            rasterization.depthBiasEnable = depthBias;
++
++            static const VkDynamicState dynamicStates[] = {
++                VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR, VK_DYNAMIC_STATE_DEPTH_BIAS,
++                VK_DYNAMIC_STATE_CULL_MODE_EXT, VK_DYNAMIC_STATE_FRONT_FACE_EXT };
++            VkPipelineDynamicStateCreateInfo dynamicState = {};
++            dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
++            dynamicState.pDynamicStates = dynamicStates;
++            dynamicState.dynamicStateCount = uint32_t(std::size(dynamicStates));
++
++            VkGraphicsPipelineCreateInfo info = {};
++            info.pStages = stages;
++            info.stageCount = stageCount;
++            info.pViewportState = &viewportState;
++            info.pRasterizationState = &rasterization;
++            info.pMultisampleState = &multisampling;
++            info.pDynamicState = &dynamicState;
++            info.layout = layout;
++            info.renderPass = set.renderPass;
++            return createLibraryPart(device, info, VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT);
++        });
++
++        // Fragment shader: all depth/stencil state is dynamic.
++        const VkShaderModule fragmentModule = (desc.pixelShader != nullptr) ? static_cast<const VulkanShader *>(desc.pixelShader)->vk : VK_NULL_HANDLE;
++        key.assign(1, 'F');
++        appendKey(key, fragmentModule);
++        appendKey(key, layout);
++        appendKey(key, set.renderPass);
++        appendKey(key, multisampling.rasterizationSamples);
++        appendKey(key, multisampling.alphaToCoverageEnable);
++        set.parts[2] = getLibraryPart(device, key, [&]() {
++            VkPipelineShaderStageCreateInfo stage = {};
++            if (desc.pixelShader != nullptr) {
++                stage = libraryStage(desc.pixelShader, VK_SHADER_STAGE_FRAGMENT_BIT);
++            }
++
++            VkPipelineDepthStencilStateCreateInfo depthStencil = {};
++            depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
++            depthStencil.maxDepthBounds = 1.0f;
++
++            static const VkDynamicState dynamicStates[] = {
++                VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE_EXT, VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE_EXT,
++                VK_DYNAMIC_STATE_DEPTH_COMPARE_OP_EXT, VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE_EXT,
++                VK_DYNAMIC_STATE_STENCIL_OP_EXT, VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
++                VK_DYNAMIC_STATE_STENCIL_WRITE_MASK, VK_DYNAMIC_STATE_STENCIL_REFERENCE };
++            VkPipelineDynamicStateCreateInfo dynamicState = {};
++            dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
++            dynamicState.pDynamicStates = dynamicStates;
++            dynamicState.dynamicStateCount = uint32_t(std::size(dynamicStates));
++
++            VkGraphicsPipelineCreateInfo info = {};
++            info.pStages = (desc.pixelShader != nullptr) ? &stage : nullptr;
++            info.stageCount = (desc.pixelShader != nullptr) ? 1 : 0;
++            info.pDepthStencilState = &depthStencil;
++            info.pMultisampleState = &multisampling;
++            info.pDynamicState = &dynamicState;
++            info.layout = layout;
++            info.renderPass = set.renderPass;
++            return createLibraryPart(device, info, VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT);
++        });
++
++        // Fragment output: blend state and formats, static.
++        VkPipelineColorBlendAttachmentState attachments[RenderGraphicsPipelineDesc::MaxRenderTargets] = {};
++        const uint32_t attachmentCount = std::min(desc.renderTargetCount, RenderGraphicsPipelineDesc::MaxRenderTargets);
++        const VkBool32 logicOpEnable = desc.logicOpEnabled;
++        const VkLogicOp logicOp = toVk(desc.logicOp);
++        const VkBool32 dynamicBlendConstants = desc.dynamicBlendConstantsEnabled;
++        key.assign(1, 'O');
++        appendKey(key, set.renderPass);
++        for (uint32_t i = 0; i < attachmentCount; i++) {
++            const RenderBlendDesc &blendDesc = desc.renderTargetBlend[i];
++            VkPipelineColorBlendAttachmentState &attachment = attachments[i];
++            attachment.blendEnable = blendDesc.blendEnabled;
++            attachment.srcColorBlendFactor = toVk(blendDesc.srcBlend);
++            attachment.dstColorBlendFactor = toVk(blendDesc.dstBlend);
++            attachment.colorBlendOp = toVk(blendDesc.blendOp);
++            attachment.srcAlphaBlendFactor = toVk(blendDesc.srcBlendAlpha);
++            attachment.dstAlphaBlendFactor = toVk(blendDesc.dstBlendAlpha);
++            attachment.alphaBlendOp = toVk(blendDesc.blendOpAlpha);
++            attachment.colorWriteMask = blendDesc.renderTargetWriteMask;
++            appendKey(key, attachment);
++        }
++
++        appendKey(key, logicOpEnable);
++        appendKey(key, logicOp);
++        appendKey(key, dynamicBlendConstants);
++        appendKey(key, multisampling.rasterizationSamples);
++        appendKey(key, multisampling.alphaToCoverageEnable);
++        set.parts[3] = getLibraryPart(device, key, [&]() {
++            VkPipelineColorBlendStateCreateInfo colorBlend = {};
++            colorBlend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
++            colorBlend.logicOpEnable = logicOpEnable;
++            colorBlend.logicOp = logicOp;
++            colorBlend.pAttachments = (attachmentCount > 0) ? attachments : nullptr;
++            colorBlend.attachmentCount = attachmentCount;
++
++            const VkDynamicState blendConstants = VK_DYNAMIC_STATE_BLEND_CONSTANTS;
++            VkPipelineDynamicStateCreateInfo dynamicState = {};
++            dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
++            dynamicState.pDynamicStates = &blendConstants;
++            dynamicState.dynamicStateCount = dynamicBlendConstants ? 1 : 0;
++
++            VkGraphicsPipelineCreateInfo info = {};
++            info.pColorBlendState = &colorBlend;
++            info.pMultisampleState = &multisampling;
++            info.pDynamicState = &dynamicState;
++            info.renderPass = set.renderPass;
++            return createLibraryPart(device, info, VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT);
++        });
++
++        return (set.parts[0] != VK_NULL_HANDLE) && (set.parts[1] != VK_NULL_HANDLE) &&
++            (set.parts[2] != VK_NULL_HANDLE) && (set.parts[3] != VK_NULL_HANDLE);
++    }
++
++    static std::unique_ptr<RenderPipeline> createLinkedGraphicsPipeline(VulkanDevice *device, const RenderGraphicsPipelineDesc &desc) {
++        VulkanLibrarySet set;
++        if (!getLibrarySet(device, desc, set)) {
++            return nullptr;
++        }
++
++        VkPipelineLibraryCreateInfoKHR libraryInfo = {};
++        libraryInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LIBRARY_CREATE_INFO_KHR;
++        libraryInfo.libraryCount = uint32_t(std::size(set.parts));
++        libraryInfo.pLibraries = set.parts;
++
++        VkGraphicsPipelineCreateInfo info = {};
++        info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
++        info.pNext = &libraryInfo;
++        info.layout = static_cast<const VulkanPipelineLayout *>(desc.pipelineLayout)->vk;
++        info.renderPass = set.renderPass;
++
++        // A fast link without link-time optimization. It skips the pipeline cache:
++        // the next start builds the full pipeline from the recipe instead.
++        auto pipeline = std::make_unique<VulkanGraphicsPipeline>(device);
++        VkResult res = vkCreateGraphicsPipelines(device->vk, VK_NULL_HANDLE, 1, &info, nullptr, &pipeline->vk);
++        if (res != VK_SUCCESS) {
++            PLUME_LOG_ERROR("Vulkan", "vkCreateGraphicsPipelines", LogErrorDomain::VkResult, res, "linked from libraries");
++            pipeline->vk = VK_NULL_HANDLE;
++            return nullptr;
++        }
++
++        pipeline->linked = true;
++        pipeline->dynamicBlendConstants = desc.dynamicBlendConstantsEnabled;
++
++        VulkanLinkedPipelineState &state = pipeline->linkedState;
++        state.cullMode = toVk(desc.cullMode);
++        state.frontFace = toVk(desc.frontFace);
++        state.depthBiasConstant = float(desc.depthBias);
++        state.depthBiasClamp = desc.depthBiasClamp;
++        state.depthBiasSlope = desc.slopeScaledDepthBias;
++        state.depthTestEnable = desc.depthEnabled;
++        state.depthWriteEnable = desc.depthWriteEnabled;
++        state.depthCompareOp = toVk(desc.depthFunction);
++        state.stencilTestEnable = desc.stencilEnabled;
++        auto stencilFace = [&](const RenderStencilFaceDesc &face) {
++            VkStencilOpState op = {};
++            op.failOp = toVk(face.failOp);
++            op.passOp = toVk(face.passOp);
++            op.depthFailOp = toVk(face.depthFailOp);
++            op.compareOp = toVk(face.compareFunction);
++            op.compareMask = desc.stencilReadMask;
++            op.writeMask = desc.stencilWriteMask;
++            op.reference = desc.stencilReference;
++            return op;
++        };
++
++        state.front = stencilFace(desc.stencilFrontFace);
++        state.back = stencilFace(desc.stencilBackFace);
++        return pipeline;
++    }
++
+     // VulkanRaytracingPipeline
+ 
+     VulkanRaytracingPipeline::VulkanRaytracingPipeline(VulkanDevice *device, const RenderRaytracingPipelineDesc &desc, const RenderPipeline *previousPipeline) : VulkanPipeline(device, VulkanPipeline::Type::Raytracing) {
+@@ -1857,7 +2298,7 @@ namespace plume {
  
          VkResult res = vkCreateRayTracingPipelinesKHR(device->vk, nullptr, nullptr, 1, &pipelineInfo, nullptr, &vk);
          if (res != VK_SUCCESS) {
@@ -1973,7 +2384,7 @@ index f1dd503..0fea5a4 100644
              return;
          }
  
-@@ -1909,6 +1977,7 @@ namespace plume {
+@@ -1909,6 +2350,7 @@ namespace plume {
          }
  
          setLayout = new VulkanDescriptorSetLayout(device, desc);
@@ -1981,7 +2392,7 @@ index f1dd503..0fea5a4 100644
  
          descriptorPool = createDescriptorPool(device, typeCounts, desc.lastRangeIsBoundless);
          if (descriptorPool == VK_NULL_HANDLE) {
-@@ -1931,7 +2000,7 @@ namespace plume {
+@@ -1931,7 +2373,7 @@ namespace plume {
  
          VkResult res = vkAllocateDescriptorSets(device->vk, &allocateInfo, &vk);
          if (res != VK_SUCCESS) {
@@ -1990,7 +2401,7 @@ index f1dd503..0fea5a4 100644
              return;
          }
      }
-@@ -2066,7 +2135,7 @@ namespace plume {
+@@ -2066,7 +2508,7 @@ namespace plume {
              return descriptorPool;
          }
          else {
@@ -1999,7 +2410,7 @@ index f1dd503..0fea5a4 100644
              return VK_NULL_HANDLE;
          }
      }
-@@ -2083,6 +2152,8 @@ namespace plume {
+@@ -2083,6 +2525,8 @@ namespace plume {
          VkResult res;
  
  #   ifdef _WIN64
@@ -2008,7 +2419,7 @@ index f1dd503..0fea5a4 100644
          assert(desc.renderWindow != 0);
          VkWin32SurfaceCreateInfoKHR surfaceCreateInfo = {};
          surfaceCreateInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
-@@ -2092,14 +2163,14 @@ namespace plume {
+@@ -2092,14 +2536,14 @@ namespace plume {
          VulkanInterface *renderInterface = commandQueue->device->renderInterface;
          res = vkCreateWin32SurfaceKHR(renderInterface->instance, &surfaceCreateInfo, nullptr, &surface);
          if (res != VK_SUCCESS) {
@@ -2025,7 +2436,7 @@ index f1dd503..0fea5a4 100644
              return;
          }
  #   elif defined(__ANDROID__)
-@@ -2111,7 +2182,7 @@ namespace plume {
+@@ -2111,7 +2555,7 @@ namespace plume {
          VulkanInterface *renderInterface = commandQueue->device->renderInterface;
          res = vkCreateAndroidSurfaceKHR(renderInterface->instance, &surfaceCreateInfo, nullptr, &surface);
          if (res != VK_SUCCESS) {
@@ -2034,7 +2445,7 @@ index f1dd503..0fea5a4 100644
              return;
          }
  #   elif defined(__linux__)
-@@ -2125,7 +2196,7 @@ namespace plume {
+@@ -2125,7 +2569,7 @@ namespace plume {
          VulkanInterface *renderInterface = commandQueue->device->renderInterface;
          res = vkCreateXlibSurfaceKHR(renderInterface->instance, &surfaceCreateInfo, nullptr, &surface);
          if (res != VK_SUCCESS) {
@@ -2043,7 +2454,7 @@ index f1dd503..0fea5a4 100644
              return;
          }
  #   elif defined(__APPLE__)
-@@ -2141,7 +2212,7 @@ namespace plume {
+@@ -2141,7 +2585,7 @@ namespace plume {
          VulkanInterface *renderInterface = commandQueue->device->renderInterface;
          res = vkCreateMetalSurfaceEXT(renderInterface->instance, &surfaceCreateInfo, nullptr, &surface);
          if (res != VK_SUCCESS) {
@@ -2052,7 +2463,7 @@ index f1dd503..0fea5a4 100644
              return;
          }
  #   endif
-@@ -2150,17 +2221,18 @@ namespace plume {
+@@ -2150,17 +2594,18 @@ namespace plume {
          VkPhysicalDevice physicalDevice = commandQueue->device->physicalDevice;
          res = vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, commandQueue->familyIndex, surface, &presentSupported);
          if (res != VK_SUCCESS) {
@@ -2074,7 +2485,7 @@ index f1dd503..0fea5a4 100644
  
          // Pick an alpha compositing mode
          if (surfaceCapabilities.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR) {
-@@ -2170,22 +2242,16 @@ namespace plume {
+@@ -2170,22 +2615,16 @@ namespace plume {
              pickedAlphaFlag = VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR;
          }
          else {
@@ -2099,7 +2510,7 @@ index f1dd503..0fea5a4 100644
          uint32_t presentModeCount = 0;
          vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &presentModeCount, nullptr);
  
-@@ -2194,32 +2260,7 @@ namespace plume {
+@@ -2194,32 +2633,7 @@ namespace plume {
          immediatePresentModeSupported = std::find(presentModes.begin(), presentModes.end(), VK_PRESENT_MODE_IMMEDIATE_KHR) != presentModes.end();
          mailboxPresentModeSupported = std::find(presentModes.begin(), presentModes.end(), VK_PRESENT_MODE_MAILBOX_KHR) != presentModes.end();
  
@@ -2133,7 +2544,7 @@ index f1dd503..0fea5a4 100644
  
          // Sets the required presentation mode.
          setVsyncEnabled(true);
-@@ -2232,7 +2273,7 @@ namespace plume {
+@@ -2232,7 +2646,7 @@ namespace plume {
              pickedAlphaFlag = VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR;
          }
          else {
@@ -2142,7 +2553,7 @@ index f1dd503..0fea5a4 100644
              return;
          }
  
-@@ -2240,6 +2281,53 @@ namespace plume {
+@@ -2240,6 +2654,53 @@ namespace plume {
          commandQueue->swapChains.insert(this);
      }
  
@@ -2196,7 +2607,7 @@ index f1dd503..0fea5a4 100644
      VulkanSwapChain::~VulkanSwapChain() {
          releaseImageViews();
          releaseSwapChain();
-@@ -2254,6 +2342,9 @@ namespace plume {
+@@ -2254,6 +2715,9 @@ namespace plume {
      }
  
      bool VulkanSwapChain::present(uint32_t textureIndex, RenderCommandSemaphore **waitSemaphores, uint32_t waitSemaphoreCount) {
@@ -2206,7 +2617,7 @@ index f1dd503..0fea5a4 100644
          thread_local std::vector<VkSemaphore> waitSemaphoresVector;
          waitSemaphoresVector.clear();
          for (uint32_t i = 0; i < waitSemaphoreCount; i++) {
-@@ -2281,11 +2372,15 @@ namespace plume {
+@@ -2281,11 +2745,15 @@ namespace plume {
          }
          
          VkResult res;
@@ -2223,7 +2634,7 @@ index f1dd503..0fea5a4 100644
  #if defined(__APPLE__)
          // Under MoltenVK, VK_SUBOPTIMAL_KHR does not result in a valid state for rendering. We intentionally
          // only check for this error during present to avoid having to synchronize manually against the semaphore
-@@ -2310,35 +2405,63 @@ namespace plume {
+@@ -2310,35 +2778,63 @@ namespace plume {
      }
  
      bool VulkanSwapChain::resize() {
@@ -2298,7 +2709,7 @@ index f1dd503..0fea5a4 100644
          createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
          createInfo.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
          createInfo.compositeAlpha = pickedAlphaFlag;
-@@ -2346,14 +2469,45 @@ namespace plume {
+@@ -2346,14 +2842,45 @@ namespace plume {
          createInfo.clipped = VK_TRUE;
          createInfo.oldSwapchain = vk;
  
@@ -2346,7 +2757,7 @@ index f1dd503..0fea5a4 100644
  
          // Reset present counter.
          presentCount = 1;
-@@ -2366,7 +2520,7 @@ namespace plume {
+@@ -2366,7 +2893,7 @@ namespace plume {
          vkGetSwapchainImagesKHR(commandQueue->device->vk, vk, &retrievedImageCount, nullptr);
          if (retrievedImageCount < desc.textureCount) {
              releaseSwapChain();
@@ -2355,7 +2766,7 @@ index f1dd503..0fea5a4 100644
              return false;
          }
  
-@@ -2376,7 +2530,7 @@ namespace plume {
+@@ -2376,7 +2903,7 @@ namespace plume {
          res = vkGetSwapchainImagesKHR(commandQueue->device->vk, vk, &desc.textureCount, images.data());
          if (res != VK_SUCCESS) {
              releaseSwapChain();
@@ -2364,7 +2775,7 @@ index f1dd503..0fea5a4 100644
              return false;
          }
  
-@@ -2401,9 +2555,15 @@ namespace plume {
+@@ -2401,9 +2928,15 @@ namespace plume {
      }
  
      bool VulkanSwapChain::needsResize() const {
@@ -2381,7 +2792,7 @@ index f1dd503..0fea5a4 100644
      }
  
      void VulkanSwapChain::setVsyncEnabled(bool vsyncEnabled) {
-@@ -2430,6 +2590,10 @@ namespace plume {
+@@ -2430,6 +2963,10 @@ namespace plume {
          return height;
      }
  
@@ -2392,7 +2803,7 @@ index f1dd503..0fea5a4 100644
      RenderTexture *VulkanSwapChain::getTexture(uint32_t textureIndex) {
          return &textures[textureIndex];
      }
-@@ -2450,7 +2614,7 @@ namespace plume {
+@@ -2450,7 +2987,7 @@ namespace plume {
          VkRefreshCycleDurationGOOGLE refreshCycle = {};
          VkResult res = vkGetRefreshCycleDurationGOOGLE(commandQueue->device->vk, vk, &refreshCycle);
          if (res != VK_SUCCESS) {
@@ -2401,7 +2812,7 @@ index f1dd503..0fea5a4 100644
              return 0;
          }
  
-@@ -2459,10 +2623,7 @@ namespace plume {
+@@ -2459,10 +2996,7 @@ namespace plume {
  
      void VulkanSwapChain::getWindowSize(uint32_t &dstWidth, uint32_t &dstHeight) const {
  #   if defined(_WIN64)
@@ -2413,7 +2824,7 @@ index f1dd503..0fea5a4 100644
  #   elif defined(PLUME_SDL_VULKAN_ENABLED)
          SDL_GetWindowSizeInPixels(desc.renderWindow, (int *)(&dstWidth), (int *)(&dstHeight));
  #   elif defined(__ANDROID__)
-@@ -2483,10 +2644,15 @@ namespace plume {
+@@ -2483,10 +3017,15 @@ namespace plume {
      }
  
      bool VulkanSwapChain::acquireTexture(RenderCommandSemaphore *signalSemaphore, uint32_t *textureIndex) {
@@ -2429,7 +2840,7 @@ index f1dd503..0fea5a4 100644
          if ((res != VK_SUCCESS) && (res != VK_SUBOPTIMAL_KHR)) {
              return false;
          }
-@@ -2496,6 +2662,7 @@ namespace plume {
+@@ -2496,6 +3035,7 @@ namespace plume {
  
      void VulkanSwapChain::releaseSwapChain() {
          if (vk != VK_NULL_HANDLE) {
@@ -2437,7 +2848,7 @@ index f1dd503..0fea5a4 100644
              vkDestroySwapchainKHR(commandQueue->device->vk, vk, nullptr);
              vk = VK_NULL_HANDLE;
          }
-@@ -2618,16 +2785,42 @@ namespace plume {
+@@ -2618,16 +3158,42 @@ namespace plume {
              subpass.pDepthStencilAttachment = &depthReference;
          }
  
@@ -2481,7 +2892,7 @@ index f1dd503..0fea5a4 100644
              return;
          }
          
-@@ -2642,7 +2835,7 @@ namespace plume {
+@@ -2642,7 +3208,7 @@ namespace plume {
  
          res = vkCreateFramebuffer(device->vk, &fbInfo, nullptr, &vk);
          if (res != VK_SUCCESS) {
@@ -2490,7 +2901,7 @@ index f1dd503..0fea5a4 100644
              return;
          }
      }
-@@ -2679,20 +2872,21 @@ namespace plume {
+@@ -2679,20 +3245,21 @@ namespace plume {
  
      // VulkanQueryPool
  
@@ -2515,7 +2926,7 @@ index f1dd503..0fea5a4 100644
              return;
          }
          
-@@ -2704,9 +2898,28 @@ namespace plume {
+@@ -2704,9 +3271,28 @@ namespace plume {
      }
  
      void VulkanQueryPool::queryResults() {
@@ -2545,7 +2956,7 @@ index f1dd503..0fea5a4 100644
              return;
          }
  
-@@ -2765,7 +2978,7 @@ namespace plume {
+@@ -2765,7 +3351,7 @@ namespace plume {
  
          VkResult res = vkCreateCommandPool(queue->device->vk, &poolInfo, nullptr, &commandPool);
          if (res != VK_SUCCESS) {
@@ -2554,7 +2965,7 @@ index f1dd503..0fea5a4 100644
              return;
          }
  
-@@ -2777,7 +2990,7 @@ namespace plume {
+@@ -2777,7 +3363,7 @@ namespace plume {
  
          res = vkAllocateCommandBuffers(queue->device->vk, &allocateInfo, &vk);
          if (res != VK_SUCCESS) {
@@ -2563,7 +2974,7 @@ index f1dd503..0fea5a4 100644
              return;
          }
      }
-@@ -2794,6 +3007,10 @@ namespace plume {
+@@ -2794,6 +3380,10 @@ namespace plume {
  
      void VulkanCommandList::begin() {
          vkResetCommandBuffer(vk, 0);
@@ -2574,7 +2985,7 @@ index f1dd503..0fea5a4 100644
  
          VkCommandBufferBeginInfo beginInfo = {};
          beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-@@ -2801,17 +3018,21 @@ namespace plume {
+@@ -2801,17 +3391,21 @@ namespace plume {
  
          VkResult res = vkBeginCommandBuffer(vk, &beginInfo);
          if (res != VK_SUCCESS) {
@@ -2598,7 +3009,7 @@ index f1dd503..0fea5a4 100644
              return;
          }
  
-@@ -2819,6 +3040,30 @@ namespace plume {
+@@ -2819,6 +3413,30 @@ namespace plume {
          activeComputePipelineLayout = nullptr;
          activeGraphicsPipelineLayout = nullptr;
          activeRaytracingPipelineLayout = nullptr;
@@ -2629,7 +3040,7 @@ index f1dd503..0fea5a4 100644
      }
  
      void VulkanCommandList::barriers(RenderBarrierStages stages, const RenderBufferBarrier *bufferBarriers, uint32_t bufferBarriersCount, const RenderTextureBarrier *textureBarriers, uint32_t textureBarriersCount) {
-@@ -2952,6 +3197,10 @@ namespace plume {
+@@ -2952,6 +3570,31 @@ namespace plume {
          case VulkanPipeline::Type::Graphics: {
              const VulkanGraphicsPipeline *graphicsPipeline = static_cast<const VulkanGraphicsPipeline *>(interfacePipeline);
              vkCmdBindPipeline(vk, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline->vk);
@@ -2637,10 +3048,31 @@ index f1dd503..0fea5a4 100644
 +            if (graphicsPipeline->dynamicBlendConstants && blendConstantsSet) {
 +                vkCmdSetBlendConstants(vk, blendConstants);
 +            }
++
++            // The same holds for every state a linked pipeline keeps dynamic.
++            if (graphicsPipeline->linked) {
++                const VulkanLinkedPipelineState &state = graphicsPipeline->linkedState;
++                vkCmdSetCullModeEXT(vk, state.cullMode);
++                vkCmdSetFrontFaceEXT(vk, state.frontFace);
++                vkCmdSetDepthBias(vk, state.depthBiasConstant, state.depthBiasClamp, state.depthBiasSlope);
++                vkCmdSetDepthTestEnableEXT(vk, state.depthTestEnable);
++                vkCmdSetDepthWriteEnableEXT(vk, state.depthWriteEnable);
++                vkCmdSetDepthCompareOpEXT(vk, state.depthCompareOp);
++                vkCmdSetStencilTestEnableEXT(vk, state.stencilTestEnable);
++                const VkStencilOpState *faces[] = { &state.front, &state.back };
++                const VkStencilFaceFlags faceFlags[] = { VK_STENCIL_FACE_FRONT_BIT, VK_STENCIL_FACE_BACK_BIT };
++                for (uint32_t i = 0; i < 2; i++) {
++                    const VkStencilOpState &face = *faces[i];
++                    vkCmdSetStencilOpEXT(vk, faceFlags[i], face.failOp, face.passOp, face.depthFailOp, face.compareOp);
++                    vkCmdSetStencilCompareMask(vk, faceFlags[i], face.compareMask);
++                    vkCmdSetStencilWriteMask(vk, faceFlags[i], face.writeMask);
++                    vkCmdSetStencilReference(vk, faceFlags[i], face.reference);
++                }
++            }
              break;
          }
          case VulkanPipeline::Type::Raytracing: {
-@@ -2986,6 +3235,11 @@ namespace plume {
+@@ -2986,6 +3629,11 @@ namespace plume {
      void VulkanCommandList::setGraphicsPipelineLayout(const RenderPipelineLayout *pipelineLayout) {
          assert(pipelineLayout != nullptr);
  
@@ -2652,7 +3084,7 @@ index f1dd503..0fea5a4 100644
          activeGraphicsPipelineLayout = static_cast<const VulkanPipelineLayout *>(pipelineLayout);
      }
  
-@@ -2998,6 +3252,12 @@ namespace plume {
+@@ -2998,6 +3646,12 @@ namespace plume {
      }
  
      void VulkanCommandList::setGraphicsDescriptorSet(RenderDescriptorSet *descriptorSet, uint32_t setIndex) {
@@ -2665,7 +3097,7 @@ index f1dd503..0fea5a4 100644
          setDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, activeGraphicsPipelineLayout, descriptorSet, setIndex);
      }
  
-@@ -3097,6 +3357,12 @@ namespace plume {
+@@ -3097,6 +3751,12 @@ namespace plume {
      }
  
      void VulkanCommandList::setFramebuffer(const RenderFramebuffer *framebuffer) {
@@ -2678,7 +3110,7 @@ index f1dd503..0fea5a4 100644
          endActiveRenderPass();
  
          if (framebuffer != nullptr) {
-@@ -3112,6 +3378,15 @@ namespace plume {
+@@ -3112,6 +3772,15 @@ namespace plume {
          vkCmdSetDepthBias(vk, depthBias, depthBiasClamp, slopeScaledDepthBias);
      }
  
@@ -2694,7 +3126,7 @@ index f1dd503..0fea5a4 100644
      static void clearCommonRectVector(uint32_t width, uint32_t height, const RenderRect *clearRects, uint32_t clearRectsCount, std::vector<VkClearRect> &rectVector) {
          rectVector.clear();
  
-@@ -3229,7 +3504,29 @@ namespace plume {
+@@ -3229,7 +3898,29 @@ namespace plume {
              imageCopy.imageExtent.depth = srcLocation.placedFootprint.depth;
              vkCmdCopyBufferToImage(vk, srcBuffer->vk, dstTexture->vk, toImageLayout(dstTexture->textureLayout), 1, &imageCopy);
          }
@@ -2724,7 +3156,7 @@ index f1dd503..0fea5a4 100644
              VkImageCopy imageCopy = {};
              imageCopy.srcSubresource.aspectMask = toAspectFlags(srcTexture->desc.format, srcTexture->desc.flags);
              imageCopy.srcSubresource.baseArrayLayer = srcLocation.subresource.arrayIndex;
-@@ -3466,6 +3763,28 @@ namespace plume {
+@@ -3466,6 +4157,28 @@ namespace plume {
          vkCmdWriteTimestamp(vk, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, interfaceQueryPool->vk, queryIndex);
      }
  
@@ -2753,7 +3185,7 @@ index f1dd503..0fea5a4 100644
      void VulkanCommandList::checkActiveRenderPass() {
          assert(targetFramebuffer != nullptr);
          
-@@ -3488,12 +3807,36 @@ namespace plume {
+@@ -3488,12 +4201,36 @@ namespace plume {
          }
      }
  
@@ -2790,7 +3222,7 @@ index f1dd503..0fea5a4 100644
          vkCmdBindDescriptorSets(vk, bindPoint, pipelineLayout->vk, setIndex, 1, &interfaceSet->vk, 0, nullptr);
      }
  
-@@ -3509,7 +3852,7 @@ namespace plume {
+@@ -3509,7 +4246,7 @@ namespace plume {
  
          VkResult res = vkCreateFence(device->vk, &fenceInfo, nullptr, &vk);
          if (res != VK_SUCCESS) {
@@ -2799,7 +3231,7 @@ index f1dd503..0fea5a4 100644
              return;
          }
      }
-@@ -3532,7 +3875,7 @@ namespace plume {
+@@ -3532,7 +4269,7 @@ namespace plume {
  
          VkResult res = vkCreateSemaphore(device->vk, &semaphoreInfo, nullptr, &vk);
          if (res != VK_SUCCESS) {
@@ -2808,7 +3240,7 @@ index f1dd503..0fea5a4 100644
              return;
          }
      }
-@@ -3557,15 +3900,21 @@ namespace plume {
+@@ -3557,15 +4294,21 @@ namespace plume {
      }
  
      VulkanCommandQueue::~VulkanCommandQueue() {
@@ -2833,7 +3265,7 @@ index f1dd503..0fea5a4 100644
      }
  
      void VulkanCommandQueue::executeCommandLists(const RenderCommandList **commandLists, uint32_t commandListCount, RenderCommandSemaphore **waitSemaphores, uint32_t waitSemaphoreCount, RenderCommandSemaphore **signalSemaphores, uint32_t signalSemaphoreCount, RenderCommandFence *signalFence) {
-@@ -3626,7 +3975,7 @@ namespace plume {
+@@ -3626,7 +4369,7 @@ namespace plume {
          }
  
          if (res != VK_SUCCESS) {
@@ -2842,7 +3274,7 @@ index f1dd503..0fea5a4 100644
              return;
          }
      }
-@@ -3637,7 +3986,7 @@ namespace plume {
+@@ -3637,7 +4380,7 @@ namespace plume {
          VulkanCommandFence *interfaceFence = static_cast<VulkanCommandFence *>(fence);
          VkResult res = vkWaitForFences(device->vk, 1, &interfaceFence->vk, VK_TRUE, UINT64_MAX);
          if (res != VK_SUCCESS) {
@@ -2851,7 +3283,7 @@ index f1dd503..0fea5a4 100644
              return;
          }
  
-@@ -3670,7 +4019,7 @@ namespace plume {
+@@ -3670,7 +4413,7 @@ namespace plume {
          uint32_t memoryTypeIndex = 0;
          VkResult res = vmaFindMemoryTypeIndex(device->allocator, UINT32_MAX, &memoryInfo, &memoryTypeIndex);
          if (res != VK_SUCCESS) {
@@ -2860,7 +3292,7 @@ index f1dd503..0fea5a4 100644
              return;
          }
  
-@@ -3682,7 +4031,7 @@ namespace plume {
+@@ -3682,7 +4425,7 @@ namespace plume {
  
          res = vmaCreatePool(device->allocator, &createInfo, &vk);
          if (res != VK_SUCCESS) {
@@ -2869,7 +3301,7 @@ index f1dd503..0fea5a4 100644
              return;
          }
      }
-@@ -3703,13 +4052,15 @@ namespace plume {
+@@ -3703,13 +4446,15 @@ namespace plume {
      
      // VulkanQueueFamily
  
@@ -2886,7 +3318,7 @@ index f1dd503..0fea5a4 100644
              uint32_t virtualQueueCount = uint32_t(queues[i].virtualQueues.size());
              if (virtualQueueCount < lowestCount) {
                  queueIndex = i;
-@@ -3717,6 +4068,7 @@ namespace plume {
+@@ -3717,6 +4462,7 @@ namespace plume {
              }
          }
  
@@ -2894,7 +3326,7 @@ index f1dd503..0fea5a4 100644
          if (queues[queueIndex].mutex == nullptr) {
              queues[queueIndex].mutex = std::make_unique<std::mutex>();
          }
-@@ -3724,14 +4076,29 @@ namespace plume {
+@@ -3724,14 +4470,29 @@ namespace plume {
          virtualQueue->queue = &queues[queueIndex];
          virtualQueue->queueIndex = queueIndex;
          queues[queueIndex].virtualQueues.insert(virtualQueue);
@@ -2924,7 +3356,7 @@ index f1dd503..0fea5a4 100644
      // VulkanDevice
      
      VulkanDevice::VulkanDevice(VulkanInterface *renderInterface, const std::string &preferredDeviceName) {
-@@ -3742,7 +4109,7 @@ namespace plume {
+@@ -3742,7 +4503,7 @@ namespace plume {
          uint32_t deviceCount = 0;
          vkEnumeratePhysicalDevices(renderInterface->instance, &deviceCount, nullptr);
          if (deviceCount == 0) {
@@ -2933,7 +3365,7 @@ index f1dd503..0fea5a4 100644
              return;
          }
          
-@@ -3787,7 +4154,7 @@ namespace plume {
+@@ -3787,7 +4548,7 @@ namespace plume {
          }
  
          if (physicalDevice == VK_NULL_HANDLE) {
@@ -2942,7 +3374,7 @@ index f1dd503..0fea5a4 100644
              return;
          }
  
-@@ -3800,6 +4167,24 @@ namespace plume {
+@@ -3800,6 +4561,24 @@ namespace plume {
  
          std::unordered_set<std::string> missingRequiredExtensions = RequiredDeviceExtensions;
          std::unordered_set<std::string> supportedOptionalExtensions;
@@ -2967,7 +3399,7 @@ index f1dd503..0fea5a4 100644
  #   if DLSS_ENABLED
          const std::unordered_set<std::string> dlssExtensions = DLSS::getRequiredDeviceExtensionsVulkan(this);
  #   endif
-@@ -3807,7 +4192,9 @@ namespace plume {
+@@ -3807,7 +4586,9 @@ namespace plume {
              const std::string extensionName(availableExtensions[i].extensionName);
              missingRequiredExtensions.erase(extensionName);
  
@@ -2978,7 +3410,7 @@ index f1dd503..0fea5a4 100644
                  supportedOptionalExtensions.insert(extensionName);
              }
  #       if DLSS_ENABLED
-@@ -3816,13 +4203,23 @@ namespace plume {
+@@ -3816,13 +4597,23 @@ namespace plume {
              }
  #       endif
          }
@@ -3004,7 +3436,7 @@ index f1dd503..0fea5a4 100644
              return;
          }
  
-@@ -3839,7 +4236,7 @@ namespace plume {
+@@ -3839,7 +4630,7 @@ namespace plume {
          }
  
          VkPhysicalDeviceScalarBlockLayoutFeatures layoutFeatures = {};
@@ -3013,7 +3445,7 @@ index f1dd503..0fea5a4 100644
          if (scalarBlockLayoutFound) {
              layoutFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES;
              layoutFeatures.pNext = featuresChain;
-@@ -3868,13 +4265,49 @@ namespace plume {
+@@ -3868,13 +4659,49 @@ namespace plume {
          }
  
          VkPhysicalDeviceBufferDeviceAddressFeatures bufferDeviceAddressFeatures = {};
@@ -3064,10 +3496,53 @@ index f1dd503..0fea5a4 100644
          VkPhysicalDevicePortabilitySubsetFeaturesKHR portabilityFeatures = {};
          const bool portabilityFound = supportedOptionalExtensions.find(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME) != supportedOptionalExtensions.end();
          if (portabilityFound) {
-@@ -3923,6 +4356,23 @@ namespace plume {
+@@ -3896,6 +4723,21 @@ namespace plume {
+             featuresChain = &accelerationStructureFeatures;
+         }
  
++        VkPhysicalDeviceGraphicsPipelineLibraryFeaturesEXT pipelineLibraryFeatures = {};
++        VkPhysicalDeviceExtendedDynamicStateFeaturesEXT dynamicStateFeatures = {};
++        const bool pipelineLibraryFound = (supportedOptionalExtensions.find(VK_KHR_PIPELINE_LIBRARY_EXTENSION_NAME) != supportedOptionalExtensions.end()) &&
++            (supportedOptionalExtensions.find(VK_EXT_GRAPHICS_PIPELINE_LIBRARY_EXTENSION_NAME) != supportedOptionalExtensions.end()) &&
++            (supportedOptionalExtensions.find(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME) != supportedOptionalExtensions.end());
++        if (pipelineLibraryFound) {
++            pipelineLibraryFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GRAPHICS_PIPELINE_LIBRARY_FEATURES_EXT;
++            pipelineLibraryFeatures.pNext = featuresChain;
++            featuresChain = &pipelineLibraryFeatures;
++
++            dynamicStateFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT;
++            dynamicStateFeatures.pNext = featuresChain;
++            featuresChain = &dynamicStateFeatures;
++        }
++
+         VkPhysicalDeviceFeatures2 deviceFeatures = {};
+         deviceFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+         deviceFeatures.pNext = featuresChain;
+@@ -3921,8 +4763,44 @@ namespace plume {
+             vkGetPhysicalDeviceProperties2(physicalDevice, &deviceProperties2);
+         }
+ 
++        // Linking at draw time only pays off when the driver links quickly.
++        VkPhysicalDeviceGraphicsPipelineLibraryPropertiesEXT pipelineLibraryProperties = {};
++        if (pipelineLibraryFeatures.graphicsPipelineLibrary && dynamicStateFeatures.extendedDynamicState) {
++            pipelineLibraryProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GRAPHICS_PIPELINE_LIBRARY_PROPERTIES_EXT;
++
++            VkPhysicalDeviceProperties2 deviceProperties2 = {};
++            deviceProperties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
++            deviceProperties2.pNext = &pipelineLibraryProperties;
++            vkGetPhysicalDeviceProperties2(physicalDevice, &deviceProperties2);
++        }
++
          // Build the device creation chain.
          void *createDeviceChain = nullptr;
++        const bool fastLinkSupported = pipelineLibraryProperties.graphicsPipelineLibraryFastLinking;
++        if (fastLinkSupported) {
++            pipelineLibraryFeatures.pNext = createDeviceChain;
++            createDeviceChain = &pipelineLibraryFeatures;
++
++            dynamicStateFeatures.pNext = createDeviceChain;
++            createDeviceChain = &dynamicStateFeatures;
++        }
 +        if (float16Found) {
 +            float16Features.pNext = createDeviceChain;
 +            createDeviceChain = &float16Features;
@@ -3088,7 +3563,7 @@ index f1dd503..0fea5a4 100644
          const bool rayTracingSupported = rayTracingPipelineFeatures.rayTracingPipeline && accelerationStructureFeatures.accelerationStructure;
          if (rayTracingSupported) {
              rayTracingPipelineFeatures.pNext = createDeviceChain;
-@@ -3978,8 +4428,16 @@ namespace plume {
+@@ -3978,8 +4856,16 @@ namespace plume {
          std::vector<bool> queueFamilyUsed(queueFamilyCount, false);
          vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, queueFamilyProperties.data());
  
@@ -3106,7 +3581,7 @@ index f1dd503..0fea5a4 100644
              uint32_t familySetBits = sizeof(uint32_t) * 8;
              uint32_t familyQueueCount = 0;
              bool familyUsed = false;
-@@ -3987,7 +4445,7 @@ namespace plume {
+@@ -3987,7 +4873,7 @@ namespace plume {
                  const VkQueueFamilyProperties &props = queueFamilyProperties[i];
  
                  // The family queue flags must contain all the flags required by the command list type.
@@ -3115,7 +3590,7 @@ index f1dd503..0fea5a4 100644
                      continue;
                  }
  
-@@ -4003,14 +4461,19 @@ namespace plume {
+@@ -4003,14 +4889,19 @@ namespace plume {
                  }
              }
  
@@ -3138,7 +3613,7 @@ index f1dd503..0fea5a4 100644
  
          // Create the struct to store the virtual queues.
          queueFamilies.resize(queueFamilyCount);
-@@ -4040,6 +4503,17 @@ namespace plume {
+@@ -4040,6 +4931,17 @@ namespace plume {
              enabledExtensions.push_back(extension.c_str());
          }
  
@@ -3156,7 +3631,7 @@ index f1dd503..0fea5a4 100644
          VkDeviceCreateInfo createInfo = {};
          createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
          createInfo.pNext = createDeviceChain;
-@@ -4050,8 +4524,17 @@ namespace plume {
+@@ -4050,8 +4952,17 @@ namespace plume {
          createInfo.pEnabledFeatures = &deviceFeatures.features;
  
          VkResult res = vkCreateDevice(physicalDevice, &createInfo, nullptr, &vk);
@@ -3175,7 +3650,7 @@ index f1dd503..0fea5a4 100644
              return;
          }
  
-@@ -4092,7 +4575,7 @@ namespace plume {
+@@ -4092,7 +5003,7 @@ namespace plume {
  
          res = vmaCreateAllocator(&allocatorInfo, &allocator);
          if (res != VK_SUCCESS) {
@@ -3184,7 +3659,7 @@ index f1dd503..0fea5a4 100644
              release();
              return;
          }
-@@ -4120,6 +4603,7 @@ namespace plume {
+@@ -4120,6 +5031,7 @@ namespace plume {
          description.dedicatedVideoMemory = memoryHeapSize;
  
          // Fill capabilities.
@@ -3192,9 +3667,11 @@ index f1dd503..0fea5a4 100644
          capabilities.geometryShader = deviceFeatures.features.geometryShader;
          capabilities.raytracing = rayTracingSupported;
          capabilities.raytracingStateUpdate = false;
-@@ -4136,6 +4620,9 @@ namespace plume {
+@@ -4135,7 +5047,11 @@ namespace plume {
+         capabilities.maxTextureSize = physicalDeviceProperties.limits.maxImageDimension2D;
          capabilities.preferHDR = memoryHeapSize > (512 * 1024 * 1024);
          capabilities.dynamicDepthBias = true;
++        capabilities.fastLinkPipelines = fastLinkSupported;
          capabilities.queryPools = true;
 +        capabilities.occlusionQueries = true;
 +        // Enabled with every other supported core feature above.
@@ -3202,7 +3679,7 @@ index f1dd503..0fea5a4 100644
          capabilities.uma = (description.type == RenderDeviceType::INTEGRATED) && hasHostVisibleDeviceLocalMemory;
          capabilities.gpuUploadHeap = capabilities.uma;
  
-@@ -4154,6 +4641,77 @@ namespace plume {
+@@ -4154,6 +5070,86 @@ namespace plume {
          if (!nullDescriptorSupported) {
              nullBuffer = createBuffer(RenderBufferDesc::DefaultBuffer(16, RenderBufferFlag::VERTEX));
          }
@@ -3212,6 +3689,10 @@ index f1dd503..0fea5a4 100644
 +        pipelineCacheInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
 +        if (vkCreatePipelineCache(vk, &pipelineCacheInfo, nullptr, &pipelineCache) != VK_SUCCESS) {
 +            pipelineCache = VK_NULL_HANDLE;
++        }
++
++        if (fastLinkSupported) {
++            pipelineLibraries = std::make_unique<VulkanPipelineLibraries>();
 +        }
 +    }
 +
@@ -3277,10 +3758,15 @@ index f1dd503..0fea5a4 100644
 +        }
 +
 +        return size;
++    }
++
++    bool VulkanDevice::prepareGraphicsPipelineLibraries(const RenderGraphicsPipelineDesc &desc) {
++        VulkanLibrarySet set;
++        return fastLinkEligible(this, desc) && getLibrarySet(this, desc, set);
      }
  
      VulkanDevice::~VulkanDevice() {
-@@ -4161,23 +4719,33 @@ namespace plume {
+@@ -4161,23 +5157,39 @@ namespace plume {
      }
  
      std::unique_ptr<RenderDescriptorSet> VulkanDevice::createDescriptorSet(const RenderDescriptorSetDesc &desc) {
@@ -3313,13 +3799,19 @@ index f1dd503..0fea5a4 100644
  
      std::unique_ptr<RenderPipeline> VulkanDevice::createGraphicsPipeline(const RenderGraphicsPipelineDesc &desc) {
 -        return std::make_unique<VulkanGraphicsPipeline>(this, desc);
++        if (fastLinkEligible(this, desc)) {
++            if (auto linked = createLinkedGraphicsPipeline(this, desc)) {
++                return linked;
++            }
++        }
++
 +        auto object = std::make_unique<VulkanGraphicsPipeline>(this, desc);
 +        if (object->vk == VK_NULL_HANDLE) return nullptr;
 +        return object;
      }
  
      std::unique_ptr<RenderPipeline> VulkanDevice::createRaytracingPipeline(const RenderRaytracingPipelineDesc &desc, const RenderPipeline *previousPipeline) {
-@@ -4185,15 +4753,21 @@ namespace plume {
+@@ -4185,15 +5197,21 @@ namespace plume {
      }
  
      std::unique_ptr<RenderCommandQueue> VulkanDevice::createCommandQueue(RenderCommandListType type) {
@@ -3344,7 +3836,7 @@ index f1dd503..0fea5a4 100644
      }
  
      std::unique_ptr<RenderAccelerationStructure> VulkanDevice::createAccelerationStructure(const RenderAccelerationStructureDesc &desc) {
-@@ -4205,15 +4779,21 @@ namespace plume {
+@@ -4205,15 +5223,21 @@ namespace plume {
      }
  
      std::unique_ptr<RenderPipelineLayout> VulkanDevice::createPipelineLayout(const RenderPipelineLayoutDesc &desc) {
@@ -3369,7 +3861,7 @@ index f1dd503..0fea5a4 100644
      }
  
      std::unique_ptr<RenderFramebuffer> VulkanDevice::createFramebuffer(const RenderFramebufferDesc &desc) {
-@@ -4224,6 +4804,11 @@ namespace plume {
+@@ -4224,6 +5248,11 @@ namespace plume {
          return std::make_unique<VulkanQueryPool>(this, queryCount);
      }
  
@@ -3381,7 +3873,7 @@ index f1dd503..0fea5a4 100644
      void VulkanDevice::setBottomLevelASBuildInfo(RenderBottomLevelASBuildInfo &buildInfo, const RenderBottomLevelASMesh *meshes, uint32_t meshCount, bool preferFastBuild, bool preferFastTrace) {
          assert(meshes != nullptr);
          assert(meshCount > 0);
-@@ -4365,7 +4950,7 @@ namespace plume {
+@@ -4365,7 +5394,7 @@ namespace plume {
          groupHandles.resize(raytracingPipeline->groupCount * handleSize, 0);
          VkResult res = vkGetRayTracingShaderGroupHandlesKHR(vk, raytracingPipeline->vk, 0, raytracingPipeline->groupCount, groupHandles.size(), groupHandles.data());
          if (res != VK_SUCCESS) {
@@ -3390,10 +3882,15 @@ index f1dd503..0fea5a4 100644
              return;
          }
          
-@@ -4432,6 +5017,11 @@ namespace plume {
+@@ -4432,6 +5461,16 @@ namespace plume {
      void VulkanDevice::release() {
          nullBuffer = nullptr; // force destruction before destroying allocator
  
++        if (pipelineLibraries != nullptr) {
++            pipelineLibraries->destroy(vk);
++            pipelineLibraries.reset();
++        }
++
 +        if (pipelineCache != VK_NULL_HANDLE) {
 +            vkDestroyPipelineCache(vk, pipelineCache, nullptr);
 +            pipelineCache = VK_NULL_HANDLE;
@@ -3402,7 +3899,7 @@ index f1dd503..0fea5a4 100644
          if (allocator != VK_NULL_HANDLE) {
              vmaDestroyAllocator(allocator);
              allocator = VK_NULL_HANDLE;
-@@ -4444,7 +5034,11 @@ namespace plume {
+@@ -4444,7 +5483,11 @@ namespace plume {
      }
  
      bool VulkanDevice::isValid() const {
@@ -3415,7 +3912,7 @@ index f1dd503..0fea5a4 100644
      }
  
      bool VulkanDevice::beginCapture() {
-@@ -4460,13 +5054,22 @@ namespace plume {
+@@ -4460,13 +5503,22 @@ namespace plume {
      // VulkanInterface
  
  #if PLUME_SDL_VULKAN_ENABLED
@@ -3442,7 +3939,7 @@ index f1dd503..0fea5a4 100644
              return;
          }
  
-@@ -4496,6 +5099,7 @@ namespace plume {
+@@ -4496,6 +5548,7 @@ namespace plume {
  
          std::unordered_set<std::string> requiredExtensions = RequiredInstanceExtensions;
          std::unordered_set<std::string> supportedOptionalExtensions;
@@ -3450,7 +3947,7 @@ index f1dd503..0fea5a4 100644
  #   if DLSS_ENABLED
          const std::unordered_set<std::string> dlssExtensions = DLSS::getRequiredInstanceExtensionsVulkan();
  #   endif
-@@ -4518,6 +5122,20 @@ namespace plume {
+@@ -4518,6 +5571,20 @@ namespace plume {
          }
  #   endif
  
@@ -3471,7 +3968,7 @@ index f1dd503..0fea5a4 100644
          std::unordered_set<std::string> missingRequiredExtensions = requiredExtensions;
          for (uint32_t i = 0; i < extensionCount; i++) {
              const std::string extensionName(availableExtensions[i].extensionName);
-@@ -4535,13 +5153,23 @@ namespace plume {
+@@ -4535,13 +5602,23 @@ namespace plume {
  
          if (!missingRequiredExtensions.empty()) {
              for (const std::string &extension : missingRequiredExtensions) {
@@ -3497,7 +3994,7 @@ index f1dd503..0fea5a4 100644
          std::vector<const char *> enabledExtensions;
          for (const std::string &extension : requiredExtensions) {
              enabledExtensions.push_back(extension.c_str());
-@@ -4551,6 +5179,17 @@ namespace plume {
+@@ -4551,6 +5628,17 @@ namespace plume {
              enabledExtensions.push_back(extension.c_str());
          }
  
@@ -3515,7 +4012,7 @@ index f1dd503..0fea5a4 100644
          createInfo.ppEnabledExtensionNames = enabledExtensions.data();
          createInfo.enabledExtensionCount = uint32_t(enabledExtensions.size());
  
-@@ -4574,8 +5213,17 @@ namespace plume {
+@@ -4574,8 +5662,17 @@ namespace plume {
  #   endif
          
          res = vkCreateInstance(&createInfo, nullptr, &instance);
@@ -3534,7 +4031,7 @@ index f1dd503..0fea5a4 100644
              return;
          }
  
-@@ -4625,6 +5273,10 @@ namespace plume {
+@@ -4625,6 +5722,10 @@ namespace plume {
          return instance != nullptr;
      }
  
@@ -3545,7 +4042,7 @@ index f1dd503..0fea5a4 100644
      // Global creation function.
  
  #if PLUME_SDL_VULKAN_ENABLED
-@@ -4632,10 +5284,20 @@ namespace plume {
+@@ -4632,10 +5733,20 @@ namespace plume {
          std::unique_ptr<VulkanInterface> createdInterface = std::make_unique<VulkanInterface>(sdlWindow);
          return createdInterface->isValid() ? std::move(createdInterface) : nullptr;
      }
@@ -3567,7 +4064,7 @@ index f1dd503..0fea5a4 100644
  #endif
  };
 diff --git a/plume_vulkan.h b/plume_vulkan.h
-index 0a1edbe..115d082 100644
+index 0a1edbe..122b07b 100644
 --- a/plume_vulkan.h
 +++ b/plume_vulkan.h
 @@ -10,6 +10,7 @@
@@ -3578,7 +4075,11 @@ index 0a1edbe..115d082 100644
  #include <set>
  #include <unordered_map>
  #include <unordered_set>
-@@ -48,6 +49,24 @@ namespace plume {
+@@ -45,9 +46,28 @@ namespace plume {
+     struct VulkanCommandQueue;
+     struct VulkanDevice;
+     struct VulkanInterface;
++    struct VulkanPipelineLibraries;
      struct VulkanPool;
      struct VulkanQueue;
  
@@ -3603,15 +4104,39 @@ index 0a1edbe..115d082 100644
      struct VulkanBuffer : RenderBuffer {
          VkBuffer vk = VK_NULL_HANDLE;
          VulkanDevice *device = nullptr;
-@@ -185,6 +204,7 @@ namespace plume {
+@@ -182,10 +202,31 @@ namespace plume {
+         RenderPipelineProgram getProgram(const std::string &name) const override;
+     };
+ 
++    // Rasterizer and depth/stencil state a fast-linked pipeline keeps dynamic;
++    // setPipeline applies it on every bind.
++    struct VulkanLinkedPipelineState {
++        VkCullModeFlags cullMode = VK_CULL_MODE_NONE;
++        VkFrontFace frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
++        float depthBiasConstant = 0.0f;
++        float depthBiasClamp = 0.0f;
++        float depthBiasSlope = 0.0f;
++        VkBool32 depthTestEnable = VK_FALSE;
++        VkBool32 depthWriteEnable = VK_FALSE;
++        VkCompareOp depthCompareOp = VK_COMPARE_OP_ALWAYS;
++        VkBool32 stencilTestEnable = VK_FALSE;
++        VkStencilOpState front = {};
++        VkStencilOpState back = {};
++    };
++
      struct VulkanGraphicsPipeline : VulkanPipeline {
          VkPipeline vk = VK_NULL_HANDLE;
          VkRenderPass renderPass = VK_NULL_HANDLE;
 +        bool dynamicBlendConstants = false;
++        // Linked from the device's pipeline libraries; state is set at bind time.
++        bool linked = false;
++        VulkanLinkedPipelineState linkedState;
  
++        VulkanGraphicsPipeline(VulkanDevice *device);
          VulkanGraphicsPipeline(VulkanDevice *device, const RenderGraphicsPipelineDesc &desc);
          ~VulkanGraphicsPipeline() override;
-@@ -235,12 +255,14 @@ namespace plume {
+         void setName(const std::string &name) override;
+@@ -235,12 +276,14 @@ namespace plume {
          VkSwapchainCreateInfoKHR createInfo = {};
          VkSurfaceFormatKHR pickedSurfaceFormat = {};
          VkPresentModeKHR createdPresentMode = VK_PRESENT_MODE_FIFO_KHR;
@@ -3626,7 +4151,7 @@ index 0a1edbe..115d082 100644
  
          VulkanSwapChain(VulkanCommandQueue *commandQueue, const RenderSwapChainDesc &desc);
          ~VulkanSwapChain() override;
-@@ -252,6 +274,10 @@ namespace plume {
+@@ -252,6 +295,10 @@ namespace plume {
          bool isVsyncEnabled() const override;
          uint32_t getWidth() const override;
          uint32_t getHeight() const override;
@@ -3637,7 +4162,7 @@ index 0a1edbe..115d082 100644
          RenderTexture *getTexture(uint32_t textureIndex) override;
          uint32_t getTextureCount() const override;
          bool acquireTexture(RenderCommandSemaphore *signalSemaphore, uint32_t *textureIndex) override;
-@@ -285,8 +311,9 @@ namespace plume {
+@@ -285,8 +332,9 @@ namespace plume {
          VulkanDevice *device = nullptr;
          std::vector<uint64_t> results;
          VkQueryPool vk = VK_NULL_HANDLE;
@@ -3648,7 +4173,7 @@ index 0a1edbe..115d082 100644
          virtual ~VulkanQueryPool() override;
          virtual void queryResults() override;
          virtual const uint64_t *getResults() const override;
-@@ -300,13 +327,21 @@ namespace plume {
+@@ -300,13 +348,21 @@ namespace plume {
          const VulkanFramebuffer *targetFramebuffer = nullptr;
          const VulkanPipelineLayout *activeComputePipelineLayout = nullptr;
          const VulkanPipelineLayout *activeGraphicsPipelineLayout = nullptr;
@@ -3670,7 +4195,7 @@ index 0a1edbe..115d082 100644
          void barriers(RenderBarrierStages stages, const RenderBufferBarrier *bufferBarriers, uint32_t bufferBarriersCount, const RenderTextureBarrier *textureBarriers, uint32_t textureBarriersCount) override;
          void dispatch(uint32_t threadGroupCountX, uint32_t threadGroupCountY, uint32_t threadGroupCountZ) override;
          void traceRays(uint32_t width, uint32_t height, uint32_t depth, RenderBufferReference shaderBindingTable, const RenderShaderBindingGroupsInfo &shaderBindingGroupsInfo) override;
-@@ -329,6 +364,7 @@ namespace plume {
+@@ -329,6 +385,7 @@ namespace plume {
          void setScissors(const RenderRect *scissorRects, uint32_t count) override;
          void setFramebuffer(const RenderFramebuffer *framebuffer) override;
          void setDepthBias(float depthBias, float depthBiasClamp, float slopeScaledDepthBias) override;
@@ -3678,7 +4203,7 @@ index 0a1edbe..115d082 100644
          void clearColor(uint32_t attachmentIndex, RenderColor colorValue, const RenderRect *clearRects, uint32_t clearRectsCount) override;
          void clearDepthStencil(bool clearDepth, bool clearStencil, float depthValue, uint32_t stencilValue, const RenderRect *clearRects, uint32_t clearRectsCount) override;
          void copyBufferRegion(RenderBufferReference dstBuffer, RenderBufferReference srcBuffer, uint64_t size) override;
-@@ -342,8 +378,11 @@ namespace plume {
+@@ -342,8 +399,11 @@ namespace plume {
          void discardTexture(const RenderTexture* texture) override;
          void resetQueryPool(const RenderQueryPool *queryPool, uint32_t queryFirstIndex, uint32_t queryCount) override;
          void writeTimestamp(const RenderQueryPool *queryPool, uint32_t queryIndex) override;
@@ -3690,7 +4215,7 @@ index 0a1edbe..115d082 100644
          void setDescriptorSet(VkPipelineBindPoint bindPoint, const VulkanPipelineLayout *pipelineLayout, const RenderDescriptorSet *descriptorSet, uint32_t setIndex);
      };
  
-@@ -393,13 +432,17 @@ namespace plume {
+@@ -393,13 +453,17 @@ namespace plume {
          VkQueue vk;
          std::unique_ptr<std::mutex> mutex;
          std::unordered_set<const VulkanCommandQueue *> virtualQueues;
@@ -3709,7 +4234,7 @@ index 0a1edbe..115d082 100644
      };
  
      struct VulkanDevice : RenderDevice {
-@@ -417,6 +460,14 @@ namespace plume {
+@@ -417,6 +481,16 @@ namespace plume {
          std::unique_ptr<RenderBuffer> nullBuffer;
          bool loadStoreOpNoneSupported = false;
          bool nullDescriptorSupported = false;
@@ -3721,10 +4246,12 @@ index 0a1edbe..115d082 100644
 +        VulkanExtensionStatus externalExtensionStatus;
 +        // Passed to every graphics and compute pipeline creation.
 +        VkPipelineCache pipelineCache = VK_NULL_HANDLE;
++        // Parts for fast-linked graphics pipelines; null without capabilities.fastLinkPipelines.
++        std::unique_ptr<VulkanPipelineLibraries> pipelineLibraries;
  
          VulkanDevice(VulkanInterface *renderInterface, const std::string &preferredDeviceName);
          ~VulkanDevice() override;
-@@ -436,6 +487,10 @@ namespace plume {
+@@ -436,6 +510,11 @@ namespace plume {
          std::unique_ptr<RenderCommandSemaphore> createCommandSemaphore() override;
          std::unique_ptr<RenderFramebuffer> createFramebuffer(const RenderFramebufferDesc &desc) override;
          std::unique_ptr<RenderQueryPool> createQueryPool(uint32_t queryCount) override;
@@ -3732,10 +4259,11 @@ index 0a1edbe..115d082 100644
 +        bool loadPipelineCache(const void *data, size_t size, bool &accepted) override;
 +        bool getPipelineCacheData(std::vector<uint8_t> &data) override;
 +        size_t getPipelineCacheSize() override;
++        bool prepareGraphicsPipelineLibraries(const RenderGraphicsPipelineDesc &desc) override;
          void setBottomLevelASBuildInfo(RenderBottomLevelASBuildInfo &buildInfo, const RenderBottomLevelASMesh *meshes, uint32_t meshCount, bool preferFastBuild, bool preferFastTrace) override;
          void setTopLevelASBuildInfo(RenderTopLevelASBuildInfo &buildInfo, const RenderTopLevelASInstance *instances, uint32_t instanceCount, bool preferFastBuild, bool preferFastTrace) override;
          void setShaderBindingTableInfo(RenderShaderBindingTableInfo &tableInfo, const RenderShaderBindingGroups &groups, const RenderPipeline *pipeline, RenderDescriptorSet **descriptorSets, uint32_t descriptorSetCount) override;
-@@ -444,6 +499,7 @@ namespace plume {
+@@ -444,6 +523,7 @@ namespace plume {
          RenderSampleCounts getSampleCountsSupported(RenderFormat format) const override;
          void release();
          bool isValid() const;
@@ -3743,7 +4271,7 @@ index 0a1edbe..115d082 100644
          bool beginCapture() override;
          bool endCapture() override;
      };
-@@ -451,13 +507,21 @@ namespace plume {
+@@ -451,13 +531,21 @@ namespace plume {
      struct VulkanInterface : RenderInterface {
          VkInstance instance = VK_NULL_HANDLE;
          VkApplicationInfo appInfo = {};
@@ -3765,7 +4293,7 @@ index 0a1edbe..115d082 100644
  #   endif
  
          ~VulkanInterface() override;
-@@ -465,5 +529,14 @@ namespace plume {
+@@ -465,5 +553,14 @@ namespace plume {
          const RenderInterfaceCapabilities &getCapabilities() const override;
          const std::vector<std::string> &getDeviceNames() const override;
          bool isValid() const;

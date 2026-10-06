@@ -78,6 +78,7 @@
 #include <os/logger.h>
 #include <os/shader_log.h>
 #include <os/stale_files.h>
+#include <os/thread_name.h>
 #include "color_qualification.h"
 #include "render_timing.h"
 #include "render_batch_policy.h"
@@ -672,6 +673,16 @@ namespace gpu::renderer
             PipelineMiss firstPipelineMiss;
             uint32_t pipelineMissCount = 0;
             double pipelineMissMs = 0;
+            // Vulkan graphics pipeline libraries: a draw-time miss links per-shader
+            // parts instead of compiling the whole pipeline. A background thread builds
+            // the parts for the shaders of known recipes. Declared after the shader
+            // and pipeline maps so it stops first.
+            bool fastLinkPipelines = false;
+            struct LibraryPrecompile {
+                std::atomic<bool> stop{false};
+                std::thread thread;
+                ~LibraryPrecompile() { stop = true; if (thread.joinable()) thread.join(); }
+            } libraryPrecompile;
             std::unordered_map<RenderTargetKey, std::unique_ptr<HostTexture>, RenderTargetKeyHash> renderTargets;
             std::unordered_map<TextureKey, std::unique_ptr<HostTexture>, TextureKeyHash> textures;
 
@@ -2186,6 +2197,7 @@ namespace gpu::renderer
                 PrepareKnownShaders();
                 if (initializationModuleFailure) return InitFailure("known_shaders.prepare");
                 PrepareKnownPipelines();
+                StartLibraryPrecompile();
                 taa_collection::SetDevice(nativeVulkan ? "vulkan" : vulkan ? "metal" : "d3d12", device->getDescription().name, device->getDescription().driverVersion);
                 const auto dxcStats = xenos::GetDxcStatistics();
                 LOG_INFO("renderer: startup DXC actual calls {}, succeeded {}, deterministic rejections {}, infrastructure failures {}",
@@ -4618,6 +4630,45 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 SaveDriverPipelineCache(true);
             }
 
+            // Turns on fast-linked draw-time pipelines and builds the libraries for the
+            // shaders of the known recipes on a background thread.
+            void StartLibraryPrecompile()
+            {
+                fastLinkPipelines = device->getCapabilities().fastLinkPipelines && !getenv("LO_NO_PIPELINE_LIBRARY");
+                LOG_INFO("renderer: graphics pipeline libraries {}", fastLinkPipelines ? "on" :
+                    device->getCapabilities().fastLinkPipelines ? "off (LO_NO_PIPELINE_LIBRARY)" : "unsupported");
+                if (!fastLinkPipelines) return;
+                std::vector<PipelineKey> keys;
+                {
+                    std::lock_guard lock(pipelineRecipeMutex);
+                    keys.assign(pipelineRecipes.begin(), pipelineRecipes.end());
+                }
+                std::vector<RenderGraphicsPipelineDesc> descs;
+                descs.reserve(keys.size());
+                for (const auto& key : keys) {
+                    const auto vs = shaders[0].find(key.vs), ps = shaders[1].find(key.ps);
+                    if (vs == shaders[0].end() || !vs->second.valid || (key.ps && (ps == shaders[1].end() || !ps->second.valid)))
+                        continue;
+                    if (key.prim == 8 && rectListExpansion && !vs->second.rectList) continue;
+                    auto desc = DescribePipeline(key, &vs->second, key.ps ? &ps->second : nullptr, false);
+                    desc.fastLink = true;
+                    descs.push_back(desc);
+                }
+                if (descs.empty()) return;
+                libraryPrecompile.thread = std::thread([this, descs = std::move(descs)] {
+                    os::SetCurrentThreadName("Pipeline Libraries");
+                    const auto started = std::chrono::steady_clock::now();
+                    size_t done = 0, failed = 0;
+                    for (const auto& desc : descs) {
+                        if (libraryPrecompile.stop) break;
+                        if (!device->prepareGraphicsPipelineLibraries(desc)) ++failed;
+                        ++done;
+                    }
+                    LOG_INFO("renderer: pipeline libraries for {} of {} recipes, {} failed, {:.0f} ms", done, descs.size(), failed,
+                        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count());
+                });
+            }
+
             // Enables the backend's persistent pipeline cache, seeded from its file.
             // Returns a short status for the preparation summary.
             std::string LoadDriverPipelineCache()
@@ -6464,7 +6515,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 nPipeline++;
                 if (gpuStatsEnabled) ++runtimePipelineCreates;
                 const auto started = std::chrono::steady_clock::now();
-                auto pipeline = CreatePipeline(key, vs, ps, true);
+                auto pipeline = CreatePipeline(key, vs, ps, true, fastLinkPipelines);
                 const bool recipe = pipelineRecipes.contains(key);
                 NotePipelineMiss(key, std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count(), recipe);
                 RenderPipeline* result = pipeline.get();
@@ -6480,7 +6531,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 return result;
             }
 
-            std::unique_ptr<RenderPipeline> CreatePipeline(const PipelineKey& key, Shader* vs, Shader* ps, bool trace)
+            std::unique_ptr<RenderPipeline> CreatePipeline(const PipelineKey& key, Shader* vs, Shader* ps, bool trace, bool fastLink = false)
             {
                 if (nativeVulkan && key.prim == 1 && vs && vs->shader && vk_object_trace::Permit())
                     std::fprintf(stderr, "VK_OBJECT_TRACE route=renderer event=point_pipeline vs_hash=0x%llx module=0x%llx uses_point_size_metadata=%u color_mask=%u depth_format=%u\n",
@@ -6490,6 +6541,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 // Only exact game-state pipelines get a persistent name; the variant
                 // paths edit DescribePipeline's result and stay unnamed.
                 desc.cacheKey = gpu::pipeline_cache::detail::Hash(gpu::pipeline_cache::detail::Encode(key)) | 1;
+                desc.fastLink = fastLink;
                 return device->createGraphicsPipeline(desc);
             }
             RenderGraphicsPipelineDesc DescribePipeline(const PipelineKey& key, Shader* vs, Shader* ps, bool trace)
