@@ -1637,14 +1637,14 @@
       "fields": {
         "Kind": "Research",
         "Area": "Temporal rendering",
-        "Status": "Paused",
-        "Delivery": "Deferred",
+        "Status": "Done",
+        "Delivery": "Released",
         "Source key": "frame-generation-research",
-        "Release": "v0.9.0",
-        "Evidence": "Historical broad frame-generation research is deferred. Active delivered work is tracked by the D3D12 FSR/DLSS FG records; active Vulkan work remains in P0/P3/P4. This item stays as deferred backlog rather than an active Todo."
+        "Release": "v0.7.35",
+        "Evidence": "Marked done by the maintainer on 2026-10-06. The four combinations of the v0.7.0 plan shipped: 2x DLSS-G and FSR frame generation on Direct3D 12 in v0.7.9, and Vulkan DLSS-G and FSR 3.1 frame generation in v0.7.35 (the Vulkan FSR path labelled experimental). Later releases added XeSS frame generation on Direct3D 12 (v0.8.30). No separate acceptance record for this research item."
       },
       "title": "Evaluate frame generation integration",
-      "body_sha256": "5e1c896d79232b40cd971c043120d9a2215c3727e9fc5abc19bc385039f888fc"
+      "body_sha256": "69a78e7a176e5fd66c88d7bd8dc126539bfdab1c0d75a31af3358398a3e676e3"
     },
     "hdr-output-tonemapping": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56e64",
