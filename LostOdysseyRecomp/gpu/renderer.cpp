@@ -79,6 +79,8 @@
 #include <os/shader_log.h>
 #include <os/stale_files.h>
 #include <os/thread_name.h>
+#include <condition_variable>
+#include <deque>
 #include "color_qualification.h"
 #include "render_timing.h"
 #include "render_batch_policy.h"
@@ -668,6 +670,7 @@ namespace gpu::renderer
             std::future<std::string> driverCacheWrite;
             // Draw-time pipeline creations (misses) of the current frame. A shader is
             // "seen" when an earlier recipe or created pipeline used it.
+            const bool pipelineMissVerbose = getenv("LO_PIPELINE_MISS_LOG") != nullptr;
             std::unordered_set<uint64_t> pipelineShadersSeen[2];
             struct PipelineMiss { PipelineKey key{}; double ms = 0; bool recipe = false, vsSeen = false, psSeen = false; };
             PipelineMiss firstPipelineMiss;
@@ -683,6 +686,52 @@ namespace gpu::renderer
                 std::thread thread;
                 ~LibraryPrecompile() { stop = true; if (thread.joinable()) thread.join(); }
             } libraryPrecompile;
+            // Draw-time pipeline workers. A miss also queues its siblings: known
+            // recipes that share its VS or PS, are not built yet and whose shaders
+            // are loaded. Workers build them so the scene's next draws hit. Only the
+            // render thread touches the pipeline map; finished builds wait in `jobs`
+            // until it collects them. A draw whose pipeline is in flight waits for
+            // that build, or with LO_PIPELINE_ASYNC=1 is skipped until it is ready.
+            // Started on the first miss; stops before the maps above are destroyed.
+            struct PipelineJob {
+                Shader* vs = nullptr;
+                Shader* ps = nullptr;
+                std::unique_ptr<RenderPipeline> pipeline;
+                double ms = 0;
+                enum class State : uint8_t { Queued, Running, Done } state = State::Queued;
+                bool requested = false; // a skipped draw needs it, not only a sibling
+            };
+            struct PipelineWorkers {
+                std::mutex mutex;
+                std::condition_variable wake, finished;
+                std::deque<PipelineKey> queue; // may hold claimed keys; workers skip them
+                std::unordered_map<PipelineKey, PipelineJob, PipelineKeyHash> jobs; // until collected
+                size_t queued = 0;
+                std::atomic<uint32_t> done{0}; // finished jobs not collected yet
+                bool stop = false;
+                std::vector<std::thread> threads;
+                ~PipelineWorkers() {
+                    { std::lock_guard lock(mutex); stop = true; }
+                    wake.notify_all();
+                    for (auto& thread : threads) thread.join();
+                }
+            } pipelineWorkers;
+            const unsigned pipelineWorkerCount = [] {
+                if (const char* value = getenv("LO_PIPELINE_MISS_WORKERS")) return unsigned(std::clamp(atoi(value), 0, 16));
+                return std::clamp(std::thread::hardware_concurrency() / 4, 2u, 6u);
+            }();
+            const bool pipelineSiblings = pipelineWorkerCount && !getenv("LO_NO_PIPELINE_SIBLINGS");
+            const bool pipelineAsync = pipelineWorkerCount && getenv("LO_PIPELINE_ASYNC") &&
+                std::string_view(getenv("LO_PIPELINE_ASYNC")) != "0";
+            // Recipes not built when the first miss happened, indexed by shader.
+            struct SiblingIndex {
+                bool built = false;
+                std::vector<PipelineKey> keys;
+                std::unordered_map<uint64_t, std::vector<uint32_t>> byVs, byPs;
+            } siblingIndex;
+            std::unordered_set<PipelineKey, PipelineKeyHash> failedPipelineJobs, unusedSiblings;
+            struct PipelineJobStats { uint32_t queued = 0, built = 0, failed = 0, hits = 0, waited = 0, skipped = 0; double waitMs = 0, workerMs = 0; };
+            PipelineJobStats pipelineJobStats; // current frame
             std::unordered_map<RenderTargetKey, std::unique_ptr<HostTexture>, RenderTargetKeyHash> renderTargets;
             std::unordered_map<TextureKey, std::unique_ptr<HostTexture>, TextureKeyHash> textures;
 
@@ -4770,28 +4819,241 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     debug_menu::CurrentBattle());
             }
 
-            void NotePipelineMiss(const PipelineKey& key, double ms, bool recipe)
+            // source: create (built here), claim (a queued sibling, built here), wait
+            // (for a worker's build) or defer (queued; the draw is skipped).
+            void NotePipelineMiss(const PipelineKey& key, double ms, bool recipe, const char* source = "create")
             {
-                static const bool verbose = getenv("LO_PIPELINE_MISS_LOG") != nullptr;
                 const PipelineMiss miss{ key, ms, recipe, pipelineShadersSeen[0].contains(key.vs), pipelineShadersSeen[1].contains(key.ps) };
                 pipelineShadersSeen[0].insert(key.vs);
                 pipelineShadersSeen[1].insert(key.ps);
                 if (!pipelineMissCount++) firstPipelineMiss = miss;
                 pipelineMissMs += ms;
-                if (verbose)
-                    LOG_INFO("renderer: pipeline miss frame={} {} vs={:016x} ps={:016x} ms={:.2f} recipe={} vs_seen={} ps_seen={}",
-                        frame, SceneLabel(), key.vs, key.ps, ms, int(miss.recipe), int(miss.vsSeen), int(miss.psSeen));
+                if (pipelineMissVerbose)
+                    LOG_INFO("renderer: pipeline miss frame={} {} vs={:016x} ps={:016x} ms={:.2f} recipe={} vs_seen={} ps_seen={} src={}",
+                        frame, SceneLabel(), key.vs, key.ps, ms, int(miss.recipe), int(miss.vsSeen), int(miss.psSeen), source);
             }
 
             void ReportPipelineMisses()
             {
-                if (!pipelineMissCount) return;
-                const auto& first = firstPipelineMiss;
-                LOG_INFO("renderer: pipeline misses frame={} count={} ms={:.2f} {} first_vs={:016x} first_ps={:016x} first_ms={:.2f} recipe={} vs_seen={} ps_seen={}",
-                    frame, pipelineMissCount, pipelineMissMs, SceneLabel(), first.key.vs, first.key.ps, first.ms,
-                    int(first.recipe), int(first.vsSeen), int(first.psSeen));
+                auto& jobs = pipelineJobStats;
+                if (jobs.queued || jobs.built || jobs.failed || jobs.hits || jobs.skipped)
+                    LOG_INFO("renderer: pipeline workers frame={} {} queued={} built={} failed={} hits={} skipped={} worker_ms={:.1f}",
+                        frame, SceneLabel(), jobs.queued, jobs.built, jobs.failed, jobs.hits, jobs.skipped, jobs.workerMs);
+                if (pipelineMissCount) {
+                    const auto& first = firstPipelineMiss;
+                    LOG_INFO("renderer: pipeline misses frame={} count={} ms={:.2f} {} first_vs={:016x} first_ps={:016x} first_ms={:.2f} recipe={} vs_seen={} ps_seen={} waited={} wait_ms={:.2f}",
+                        frame, pipelineMissCount, pipelineMissMs, SceneLabel(), first.key.vs, first.key.ps, first.ms,
+                        int(first.recipe), int(first.vsSeen), int(first.psSeen), jobs.waited, jobs.waitMs);
+                }
                 pipelineMissCount = 0;
                 pipelineMissMs = 0;
+                jobs = {};
+            }
+
+            void PipelineWorkerLoop()
+            {
+                os::SetCurrentThreadName("Pipeline Worker");
+                auto& w = pipelineWorkers;
+                std::unique_lock lock(w.mutex);
+                for (;;) {
+                    w.wake.wait(lock, [&] { return w.stop || !w.queue.empty(); });
+                    if (w.stop) return;
+                    const PipelineKey key = w.queue.front();
+                    w.queue.pop_front();
+                    const auto found = w.jobs.find(key);
+                    if (found == w.jobs.end() || found->second.state != PipelineJob::State::Queued) continue;
+                    // Running jobs stay in the map: the render thread only erases queued or done ones.
+                    auto& job = found->second;
+                    job.state = PipelineJob::State::Running;
+                    --w.queued;
+                    lock.unlock();
+                    const auto started = std::chrono::steady_clock::now();
+                    std::unique_ptr<RenderPipeline> pipeline;
+                    try { pipeline = CreatePipeline(key, job.vs, job.ps, false, fastLinkPipelines); }
+                    catch (const std::exception& e) { LOG_WARNING("renderer: pipeline worker: {}", e.what()); }
+                    const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
+                    lock.lock();
+                    job.pipeline = std::move(pipeline);
+                    job.ms = ms;
+                    job.state = PipelineJob::State::Done;
+                    w.done.fetch_add(1, std::memory_order_release);
+                    w.finished.notify_all();
+                }
+            }
+
+            bool StartPipelineWorkers()
+            {
+                auto& w = pipelineWorkers;
+                if (!w.threads.empty()) return true;
+                if (!pipelineWorkerCount) return false;
+                try {
+                    for (unsigned i = 0; i < pipelineWorkerCount; ++i)
+                        w.threads.emplace_back([this] { PipelineWorkerLoop(); });
+                } catch (const std::exception& e) { LOG_WARNING("renderer: pipeline workers: {}", e.what()); }
+                LOG_INFO("renderer: {} draw-time pipeline workers, siblings {}, skip draws while building {}",
+                    w.threads.size(), pipelineSiblings ? "on" : "off (LO_NO_PIPELINE_SIBLINGS)",
+                    pipelineAsync ? "on (LO_PIPELINE_ASYNC)" : "off");
+                return !w.threads.empty();
+            }
+
+            // Render thread: moves finished builds into the pipeline map.
+            void CollectPipelineJobs()
+            {
+                auto& w = pipelineWorkers;
+                if (!w.done.load(std::memory_order_acquire)) return;
+                std::lock_guard lock(w.mutex);
+                for (auto it = w.jobs.begin(); it != w.jobs.end();) {
+                    if (it->second.state != PipelineJob::State::Done) { ++it; continue; }
+                    auto& job = it->second;
+                    pipelineJobStats.workerMs += job.ms;
+                    if (!job.pipeline) {
+                        failedPipelineJobs.insert(it->first);
+                        ++pipelineJobStats.failed;
+                    } else {
+                        ++pipelineJobStats.built;
+                        if (pipelineMissVerbose && !job.requested) unusedSiblings.insert(it->first);
+                        AddPipeline(it->first, std::move(job.pipeline));
+                    }
+                    it = w.jobs.erase(it);
+                }
+                w.done.store(0, std::memory_order_relaxed);
+            }
+
+            enum class JobState { None, Claimed, Running, Deferred };
+            // Render thread, on a miss of key: Claimed takes a queued build away from
+            // the workers (the caller builds it; waiting would be no faster), Running
+            // means WaitPipelineJob gets it, and with defer the draw is skipped instead.
+            JobState ClaimPipelineJob(const PipelineKey& key, bool defer)
+            {
+                auto& w = pipelineWorkers;
+                std::lock_guard lock(w.mutex);
+                const auto found = w.jobs.find(key);
+                if (found == w.jobs.end()) return JobState::None;
+                auto& job = found->second;
+                if (defer && job.state != PipelineJob::State::Done) {
+                    if (job.state == PipelineJob::State::Queued && !job.requested) {
+                        job.requested = true;
+                        w.queue.push_front(key);
+                        w.wake.notify_one();
+                    }
+                    return JobState::Deferred;
+                }
+                if (job.state != PipelineJob::State::Queued) return JobState::Running;
+                w.jobs.erase(found);
+                --w.queued;
+                return JobState::Claimed;
+            }
+
+            std::unique_ptr<RenderPipeline> WaitPipelineJob(const PipelineKey& key)
+            {
+                auto& w = pipelineWorkers;
+                std::unique_lock lock(w.mutex);
+                const auto found = w.jobs.find(key);
+                auto& job = found->second;
+                const auto started = std::chrono::steady_clock::now();
+                w.finished.wait(lock, [&] { return job.state == PipelineJob::State::Done; });
+                pipelineJobStats.waitMs += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
+                ++pipelineJobStats.waited;
+                pipelineJobStats.workerMs += job.ms;
+                auto pipeline = std::move(job.pipeline);
+                w.jobs.erase(found);
+                return pipeline;
+            }
+
+            // Render thread: queues key for a skipped draw.
+            void QueueRequestedPipeline(const PipelineKey& key, Shader* vs, Shader* ps)
+            {
+                auto& w = pipelineWorkers;
+                {
+                    std::lock_guard lock(w.mutex);
+                    auto& job = w.jobs[key];
+                    job.vs = vs;
+                    job.ps = ps;
+                    job.requested = true;
+                    w.queue.push_front(key);
+                    ++w.queued;
+                }
+                w.wake.notify_one();
+            }
+
+            // Render thread: queues the not yet built recipes that share key's PS, then
+            // those that share its VS (same formats and primitive first). Their shaders
+            // must already be loaded; the shader maps belong to this thread.
+            void QueuePipelineSiblings(const PipelineKey& key)
+            {
+                constexpr size_t kPerMiss = 16, kMaxQueued = 256;
+                if (!pipelineSiblings) return;
+                if (!siblingIndex.built) {
+                    siblingIndex.built = true;
+                    for (const auto& recipe : pipelineRecipes) {
+                        if (pipelines.contains(recipe)) continue;
+                        const auto index = uint32_t(siblingIndex.keys.size());
+                        siblingIndex.keys.push_back(recipe);
+                        siblingIndex.byVs[recipe.vs].push_back(index);
+                        if (recipe.ps) siblingIndex.byPs[recipe.ps].push_back(index);
+                    }
+                }
+                const auto vsFamily = siblingIndex.byVs.find(key.vs);
+                const auto psFamily = key.ps ? siblingIndex.byPs.find(key.ps) : siblingIndex.byPs.end();
+                if (vsFamily == siblingIndex.byVs.end() && psFamily == siblingIndex.byPs.end()) return;
+                if (!StartPipelineWorkers()) return;
+                auto& w = pipelineWorkers;
+                size_t added = 0;
+                {
+                    std::lock_guard lock(w.mutex);
+                    // False stops the scan.
+                    const auto consider = [&](uint32_t index) {
+                        if (added >= kPerMiss || w.queued >= kMaxQueued) return false;
+                        const PipelineKey& sibling = siblingIndex.keys[index];
+                        if (sibling == key || pipelines.contains(sibling) || w.jobs.contains(sibling) ||
+                            failedPipelineJobs.contains(sibling)) return true;
+                        const auto vs = shaders[0].find(sibling.vs);
+                        if (vs == shaders[0].end() || !vs->second.valid) return true;
+                        if (sibling.prim == 8 && rectListExpansion && !vs->second.rectList) return true;
+                        Shader* ps = nullptr;
+                        if (sibling.ps) {
+                            const auto found = shaders[1].find(sibling.ps);
+                            if (found == shaders[1].end() || !found->second.valid) return true;
+                            ps = &found->second;
+                        }
+                        auto& job = w.jobs[sibling];
+                        job.vs = &vs->second;
+                        job.ps = ps;
+                        w.queue.push_back(sibling);
+                        ++w.queued;
+                        ++added;
+                        return true;
+                    };
+                    const auto similar = [&](uint32_t index) {
+                        const PipelineKey& sibling = siblingIndex.keys[index];
+                        return sibling.rtFormat == key.rtFormat && sibling.depthFormat == key.depthFormat && sibling.prim == key.prim;
+                    };
+                    bool more = true;
+                    if (psFamily != siblingIndex.byPs.end())
+                        for (const uint32_t index : psFamily->second)
+                            if (!(more = consider(index))) break;
+                    if (more && vsFamily != siblingIndex.byVs.end()) {
+                        for (const uint32_t index : vsFamily->second)
+                            if (similar(index) && !(more = consider(index))) break;
+                        if (more)
+                            for (const uint32_t index : vsFamily->second)
+                                if (!similar(index) && !consider(index)) break;
+                    }
+                }
+                if (added) {
+                    pipelineJobStats.queued += uint32_t(added);
+                    w.wake.notify_all();
+                }
+            }
+
+            void AddPipeline(const PipelineKey& key, std::unique_ptr<RenderPipeline> pipeline)
+            {
+                pipelines.emplace(key, std::move(pipeline));
+                if (pipelineCacheEnabled && pipelineRecipes.size() < gpu::pipeline_cache::kMaxRecords &&
+                    gpu::pipeline_cache::IsValid(key) && ValidPipelineRecipe(key) && !pipelineRecipes.contains(key)) {
+                    std::lock_guard lock(pipelineRecipeMutex);
+                    pipelineRecipesDirty = pipelineRecipes.insert(key).second || pipelineRecipesDirty;
+                }
             }
 
             void SavePipelineRecipes(bool force = false)
@@ -6505,29 +6767,50 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 return table[f & 7];
             }
 
-            RenderPipeline* GetPipeline(const PipelineKey& key, Shader* vs, Shader* ps, RenderFormat, RenderFormat)
+            // mayDefer: with LO_PIPELINE_ASYNC=1 the draw may be skipped (nullptr) while
+            // its pipeline is built on a worker.
+            RenderPipeline* GetPipeline(const PipelineKey& key, Shader* vs, Shader* ps, RenderFormat, RenderFormat, bool mayDefer = false)
             {
                 auto it = pipelines.find(key);
                 if (it != pipelines.end()) {
+                    if (!unusedSiblings.empty() && unusedSiblings.erase(key)) ++pipelineJobStats.hits;
                     return it->second.get();
                 }
                 ScopedTimer timer{ tPipeline, cpuTimingEnabled };
-                nPipeline++;
-                if (gpuStatsEnabled) ++runtimePipelineCreates;
                 const auto started = std::chrono::steady_clock::now();
-                auto pipeline = CreatePipeline(key, vs, ps, true, fastLinkPipelines);
-                const bool recipe = pipelineRecipes.contains(key);
-                NotePipelineMiss(key, std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count(), recipe);
-                RenderPipeline* result = pipeline.get();
-                // A failed speculative creation must not poison the draw cache.
-                if (result) {
-                    pipelines.emplace(key, std::move(pipeline));
-                    if (pipelineCacheEnabled && !recipe && pipelineRecipes.size() < gpu::pipeline_cache::kMaxRecords &&
-                        gpu::pipeline_cache::IsValid(key) && ValidPipelineRecipe(key)) {
-                        std::lock_guard lock(pipelineRecipeMutex);
-                        pipelineRecipesDirty = pipelineRecipes.insert(key).second || pipelineRecipesDirty;
+                std::unique_ptr<RenderPipeline> pipeline;
+                JobState job = JobState::None;
+                const bool defer = mayDefer && pipelineAsync;
+                if (!pipelineWorkers.threads.empty()) {
+                    CollectPipelineJobs();
+                    if (it = pipelines.find(key); it != pipelines.end()) {
+                        if (!unusedSiblings.empty() && unusedSiblings.erase(key)) ++pipelineJobStats.hits;
+                        return it->second.get();
+                    }
+                    job = ClaimPipelineJob(key, defer);
+                    if (job == JobState::Deferred) {
+                        ++pipelineJobStats.skipped;
+                        return nullptr;
                     }
                 }
+                nPipeline++;
+                if (gpuStatsEnabled) ++runtimePipelineCreates;
+                const bool recipe = pipelineRecipes.contains(key);
+                const auto elapsed = [&] { return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count(); };
+                // Siblings first: workers build them while this thread builds or waits.
+                QueuePipelineSiblings(key);
+                if (defer && job == JobState::None && !failedPipelineJobs.contains(key) && StartPipelineWorkers()) {
+                    QueueRequestedPipeline(key, vs, ps);
+                    NotePipelineMiss(key, elapsed(), recipe, "defer");
+                    ++pipelineJobStats.skipped;
+                    return nullptr;
+                }
+                if (job == JobState::Running) pipeline = WaitPipelineJob(key);
+                else pipeline = CreatePipeline(key, vs, ps, true, fastLinkPipelines);
+                NotePipelineMiss(key, elapsed(), recipe, job == JobState::Running ? "wait" : job == JobState::Claimed ? "claim" : "create");
+                RenderPipeline* result = pipeline.get();
+                // A failed speculative creation must not poison the draw cache.
+                if (result) AddPipeline(key, std::move(pipeline));
                 return result;
             }
 
@@ -6997,7 +7280,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 key.depthFormat = depth ? uint32_t(depth->format) : 0;
                     pipelineLookupTimer.AddTo(tPipelineLookup);
                 }
-                RenderPipeline* pipeline = GetPipeline(key, vs, ps, color->format, depth ? depth->format : RenderFormat::UNKNOWN);
+                RenderPipeline* pipeline = GetPipeline(key, vs, ps, color->format, depth ? depth->format : RenderFormat::UNKNOWN, true);
                 if (!pipeline)
                 {
                     drops.pipeline++;
@@ -12254,6 +12537,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 page.closed = true;
             }
             taa_collection::EndDiagnosticsFrame(collectionRenderer.frame,collectionFrame);
+            g_renderer->CollectPipelineJobs();
             g_renderer->ReportPipelineMisses();
             g_renderer->SavePipelineRecipes();
             if (stats && g_renderer->frame % 600 == 0)
