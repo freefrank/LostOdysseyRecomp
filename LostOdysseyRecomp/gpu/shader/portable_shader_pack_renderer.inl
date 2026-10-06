@@ -1,6 +1,7 @@
 // Included inside the renderer implementation class. All methods run on the
 // command processor thread; existing pipeline workers see immutable shader maps.
-std::unique_ptr<xenos::portable_pack::Reader> portableShaderPack;
+// Shared with pipeline workers that load sibling shaders (Reader::Get is thread-safe).
+std::shared_ptr<xenos::portable_pack::Reader> portableShaderPack;
 std::unique_ptr<xenos::portable_pack::Writer> portableShaderExport;
 
 bool PortableExportRequested() const
@@ -71,6 +72,8 @@ bool TryLoadPortableShader(bool pixel, uint64_t hash)
     if (!portableShaderPack || !hash) return false;
     auto& cache = shaders[pixel ? 1 : 0];
     if (const auto found = cache.find(hash); found != cache.end()) return found->second.valid;
+    // A pipeline worker may have loaded it for a sibling recipe already.
+    if (AdoptSiblingShader(pixel, hash)) return cache.contains(hash);
     try {
         auto record = portableShaderPack->Get(pixel, hash);
         if (!record) return false; // Missing is not a negative-cache entry.

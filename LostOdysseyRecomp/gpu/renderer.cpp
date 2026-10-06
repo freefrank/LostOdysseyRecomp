@@ -687,15 +687,31 @@ namespace gpu::renderer
                 ~LibraryPrecompile() { stop = true; if (thread.joinable()) thread.join(); }
             } libraryPrecompile;
             // Draw-time pipeline workers. A miss also queues its siblings: known
-            // recipes that share its VS or PS, are not built yet and whose shaders
-            // are loaded. Workers build them so the scene's next draws hit. Only the
-            // render thread touches the pipeline map; finished builds wait in `jobs`
-            // until it collects them. A draw whose pipeline is in flight waits for
-            // that build, or with LO_PIPELINE_ASYNC=1 is skipped until it is ready.
-            // Started on the first miss; stops before the maps above are destroyed.
+            // recipes that share its VS or PS and are not built yet. Workers build
+            // them so the scene's next draws hit; a sibling's other shader, when not
+            // loaded yet, comes from the portable pack on the worker and is handed to
+            // the shader map by this thread. Only the render thread touches the
+            // pipeline and shader maps; finished builds wait in `jobs` until it
+            // collects them. A draw whose pipeline is in flight waits for that build,
+            // or with LO_PIPELINE_ASYNC=1 is skipped until it is ready. Started on the
+            // first miss; stops before the maps above are destroyed.
+            // Worker-made modules whose hash got another module first. Kept: plume's
+            // pipeline libraries key on module handles, which must not be reused.
+            std::vector<std::unique_ptr<RenderShader>> orphanShaders;
+            struct SiblingShader {
+                bool pixel = false;
+                uint64_t hash = 0;
+                std::shared_ptr<xenos::portable_pack::Reader> pack;
+                std::mutex mutex;
+                enum class State : uint8_t { Empty, Loaded, Published, Failed } state = State::Empty;
+                std::unique_ptr<RenderShader> module; // Loaded: until the render thread publishes it
+                RenderShader* raw = nullptr;          // set once
+                xenos::TranslatedShader info;
+            };
             struct PipelineJob {
                 Shader* vs = nullptr;
                 Shader* ps = nullptr;
+                std::shared_ptr<SiblingShader> loadVs, loadPs; // instead of vs / ps
                 std::unique_ptr<RenderPipeline> pipeline;
                 double ms = 0;
                 enum class State : uint8_t { Queued, Running, Done } state = State::Queued;
@@ -704,7 +720,9 @@ namespace gpu::renderer
             struct PipelineWorkers {
                 std::mutex mutex;
                 std::condition_variable wake, finished;
-                std::deque<PipelineKey> queue; // may hold claimed keys; workers skip them
+                // Keys a skipped draw needs go first; siblings of the latest miss next.
+                // Both may hold claimed or dropped keys; workers skip those.
+                std::deque<PipelineKey> requested, siblings;
                 std::unordered_map<PipelineKey, PipelineJob, PipelineKeyHash> jobs; // until collected
                 size_t queued = 0;
                 std::atomic<uint32_t> done{0}; // finished jobs not collected yet
@@ -721,6 +739,7 @@ namespace gpu::renderer
                 return std::clamp(std::thread::hardware_concurrency() / 4, 2u, 6u);
             }();
             const bool pipelineSiblings = pipelineWorkerCount && !getenv("LO_NO_PIPELINE_SIBLINGS");
+            const bool pipelineSiblingShaders = !getenv("LO_NO_PIPELINE_SIBLING_SHADERS");
             const bool pipelineAsync = pipelineWorkerCount && getenv("LO_PIPELINE_ASYNC") &&
                 std::string_view(getenv("LO_PIPELINE_ASYNC")) != "0";
             // Recipes not built when the first miss happened, indexed by shader.
@@ -729,8 +748,10 @@ namespace gpu::renderer
                 std::vector<PipelineKey> keys;
                 std::unordered_map<uint64_t, std::vector<uint32_t>> byVs, byPs;
             } siblingIndex;
+            // Pack shaders that sibling jobs load, until published; failures stay.
+            std::unordered_map<uint64_t, std::shared_ptr<SiblingShader>> siblingShaders[2];
             std::unordered_set<PipelineKey, PipelineKeyHash> failedPipelineJobs, unusedSiblings;
-            struct PipelineJobStats { uint32_t queued = 0, built = 0, failed = 0, hits = 0, waited = 0, skipped = 0; double waitMs = 0, workerMs = 0; };
+            struct PipelineJobStats { uint32_t queued = 0, built = 0, failed = 0, hits = 0, waited = 0, skipped = 0, shaders = 0; double waitMs = 0, workerMs = 0; };
             PipelineJobStats pipelineJobStats; // current frame
             std::unordered_map<RenderTargetKey, std::unique_ptr<HostTexture>, RenderTargetKeyHash> renderTargets;
             std::unordered_map<TextureKey, std::unique_ptr<HostTexture>, TextureKeyHash> textures;
@@ -4836,9 +4857,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             void ReportPipelineMisses()
             {
                 auto& jobs = pipelineJobStats;
-                if (jobs.queued || jobs.built || jobs.failed || jobs.hits || jobs.skipped)
-                    LOG_INFO("renderer: pipeline workers frame={} {} queued={} built={} failed={} hits={} skipped={} worker_ms={:.1f}",
-                        frame, SceneLabel(), jobs.queued, jobs.built, jobs.failed, jobs.hits, jobs.skipped, jobs.workerMs);
+                if (jobs.queued || jobs.built || jobs.failed || jobs.hits || jobs.skipped || jobs.shaders)
+                    LOG_INFO("renderer: pipeline workers frame={} {} queued={} built={} failed={} hits={} skipped={} shaders={} worker_ms={:.1f}",
+                        frame, SceneLabel(), jobs.queued, jobs.built, jobs.failed, jobs.hits, jobs.skipped, jobs.shaders, jobs.workerMs);
                 if (pipelineMissCount) {
                     const auto& first = firstPipelineMiss;
                     LOG_INFO("renderer: pipeline misses frame={} count={} ms={:.2f} {} first_vs={:016x} first_ps={:016x} first_ms={:.2f} recipe={} vs_seen={} ps_seen={} waited={} wait_ms={:.2f}",
@@ -4850,16 +4871,73 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 jobs = {};
             }
 
+            // Any thread: loads a sibling's pack shader once. True when it has a module.
+            bool LoadSiblingShader(SiblingShader& shader)
+            {
+                std::lock_guard lock(shader.mutex);
+                if (shader.state == SiblingShader::State::Empty) {
+                    shader.state = SiblingShader::State::Failed;
+                    try {
+                        if (auto record = shader.pack->Get(shader.pixel, shader.hash)) {
+                            shader.module = device->createShader(record->binary.data(), record->binary.size(), "main", renderFormat);
+                            if (shader.module) {
+                                shader.raw = shader.module.get();
+                                shader.info = std::move(record->info);
+                                shader.state = SiblingShader::State::Loaded;
+                            }
+                        }
+                    } catch (const std::exception& e) {
+                        LOG_WARNING("renderer: sibling {} shader {:016x}: {}", shader.pixel ? "pixel" : "vertex", shader.hash, e.what());
+                    }
+                }
+                return shader.raw != nullptr;
+            }
+
+            // Render thread: moves a loaded sibling shader into the shader map.
+            void PublishSiblingShader(const std::shared_ptr<SiblingShader>& shader)
+            {
+                {
+                    std::lock_guard lock(shader->mutex);
+                    if (shader->state != SiblingShader::State::Loaded) return;
+                    auto& cache = shaders[shader->pixel ? 1 : 0];
+                    if (!cache.contains(shader->hash)) {
+                        auto& entry = cache[shader->hash];
+                        entry.info = std::move(shader->info);
+                        entry.shader = std::move(shader->module);
+                        entry.valid = true;
+                        ++pipelineJobStats.shaders;
+                    } else orphanShaders.push_back(std::move(shader->module));
+                    shader->state = SiblingShader::State::Published;
+                }
+                auto& pending = siblingShaders[shader->pixel ? 1 : 0];
+                if (const auto found = pending.find(shader->hash); found != pending.end() && found->second == shader)
+                    pending.erase(found);
+            }
+
+            // Render thread, before loading a pack shader itself: takes the module a
+            // sibling job made (or makes it), so each shader has one module.
+            bool AdoptSiblingShader(bool pixel, uint64_t hash)
+            {
+                auto& pending = siblingShaders[pixel ? 1 : 0];
+                const auto found = pending.find(hash);
+                if (found == pending.end()) return false;
+                const auto shader = found->second;
+                if (!LoadSiblingShader(*shader)) return false;
+                PublishSiblingShader(shader);
+                return true;
+            }
+
             void PipelineWorkerLoop()
             {
                 os::SetCurrentThreadName("Pipeline Worker");
                 auto& w = pipelineWorkers;
                 std::unique_lock lock(w.mutex);
                 for (;;) {
-                    w.wake.wait(lock, [&] { return w.stop || !w.queue.empty(); });
+                    w.wake.wait(lock, [&] { return w.stop || !w.requested.empty() || !w.siblings.empty(); });
                     if (w.stop) return;
-                    const PipelineKey key = w.queue.front();
-                    w.queue.pop_front();
+                    auto& queue = w.requested.empty() ? w.siblings : w.requested;
+                    const PipelineKey key = queue.front();
+                    queue.pop_front();
                     const auto found = w.jobs.find(key);
                     if (found == w.jobs.end() || found->second.state != PipelineJob::State::Queued) continue;
                     // Running jobs stay in the map: the render thread only erases queued or done ones.
@@ -4869,8 +4947,18 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     lock.unlock();
                     const auto started = std::chrono::steady_clock::now();
                     std::unique_ptr<RenderPipeline> pipeline;
-                    try { pipeline = CreatePipeline(key, job.vs, job.ps, false, fastLinkPipelines); }
-                    catch (const std::exception& e) { LOG_WARNING("renderer: pipeline worker: {}", e.what()); }
+                    try {
+                        if (!job.loadVs && !job.loadPs)
+                            pipeline = CreatePipeline(key, job.vs, job.ps, false, fastLinkPipelines);
+                        else if ((!job.loadVs || LoadSiblingShader(*job.loadVs)) && (!job.loadPs || LoadSiblingShader(*job.loadPs))) {
+                            // Rect-list siblings never load their VS here, so no variant is read.
+                            static Shader unloaded;
+                            auto desc = DescribePipeline(key, job.vs ? job.vs : &unloaded, key.ps ? (job.ps ? job.ps : &unloaded) : nullptr, false);
+                            if (job.loadVs) desc.vertexShader = job.loadVs->raw;
+                            if (job.loadPs) desc.pixelShader = job.loadPs->raw;
+                            pipeline = CreatePipeline(key, desc, fastLinkPipelines);
+                        }
+                    } catch (const std::exception& e) { LOG_WARNING("renderer: pipeline worker: {}", e.what()); }
                     const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
                     lock.lock();
                     job.pipeline = std::move(pipeline);
@@ -4890,13 +4978,30 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     for (unsigned i = 0; i < pipelineWorkerCount; ++i)
                         w.threads.emplace_back([this] { PipelineWorkerLoop(); });
                 } catch (const std::exception& e) { LOG_WARNING("renderer: pipeline workers: {}", e.what()); }
-                LOG_INFO("renderer: {} draw-time pipeline workers, siblings {}, skip draws while building {}",
+                LOG_INFO("renderer: {} draw-time pipeline workers, siblings {}{}, skip draws while building {}",
                     w.threads.size(), pipelineSiblings ? "on" : "off (LO_NO_PIPELINE_SIBLINGS)",
+                    pipelineSiblings && !pipelineSiblingShaders ? " (loaded shaders only)" : "",
                     pipelineAsync ? "on (LO_PIPELINE_ASYNC)" : "off");
                 return !w.threads.empty();
             }
 
-            // Render thread: moves finished builds into the pipeline map.
+            // Render thread: hands a finished job's shaders and pipeline to the maps.
+            void FinishPipelineJob(const PipelineKey& key, PipelineJob& job)
+            {
+                for (const auto* shader : { &job.loadVs, &job.loadPs })
+                    if (*shader) PublishSiblingShader(*shader);
+                pipelineJobStats.workerMs += job.ms;
+                if (!job.pipeline) {
+                    failedPipelineJobs.insert(key);
+                    ++pipelineJobStats.failed;
+                    return;
+                }
+                ++pipelineJobStats.built;
+                if (pipelineMissVerbose && !job.requested) unusedSiblings.insert(key);
+                AddPipeline(key, std::move(job.pipeline));
+            }
+
+            // Render thread: moves finished builds into the maps.
             void CollectPipelineJobs()
             {
                 auto& w = pipelineWorkers;
@@ -4904,16 +5009,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 std::lock_guard lock(w.mutex);
                 for (auto it = w.jobs.begin(); it != w.jobs.end();) {
                     if (it->second.state != PipelineJob::State::Done) { ++it; continue; }
-                    auto& job = it->second;
-                    pipelineJobStats.workerMs += job.ms;
-                    if (!job.pipeline) {
-                        failedPipelineJobs.insert(it->first);
-                        ++pipelineJobStats.failed;
-                    } else {
-                        ++pipelineJobStats.built;
-                        if (pipelineMissVerbose && !job.requested) unusedSiblings.insert(it->first);
-                        AddPipeline(it->first, std::move(job.pipeline));
-                    }
+                    FinishPipelineJob(it->first, it->second);
                     it = w.jobs.erase(it);
                 }
                 w.done.store(0, std::memory_order_relaxed);
@@ -4933,7 +5029,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (defer && job.state != PipelineJob::State::Done) {
                     if (job.state == PipelineJob::State::Queued && !job.requested) {
                         job.requested = true;
-                        w.queue.push_front(key);
+                        w.requested.push_back(key);
                         w.wake.notify_one();
                     }
                     return JobState::Deferred;
@@ -4944,6 +5040,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 return JobState::Claimed;
             }
 
+            // The pipeline is final; the caller adds it to the map.
             std::unique_ptr<RenderPipeline> WaitPipelineJob(const PipelineKey& key)
             {
                 auto& w = pipelineWorkers;
@@ -4955,6 +5052,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 pipelineJobStats.waitMs += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
                 ++pipelineJobStats.waited;
                 pipelineJobStats.workerMs += job.ms;
+                for (const auto* shader : { &job.loadVs, &job.loadPs })
+                    if (*shader) PublishSiblingShader(*shader);
                 auto pipeline = std::move(job.pipeline);
                 w.jobs.erase(found);
                 return pipeline;
@@ -4970,18 +5069,45 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     job.vs = vs;
                     job.ps = ps;
                     job.requested = true;
-                    w.queue.push_front(key);
+                    w.requested.push_back(key);
                     ++w.queued;
                 }
                 w.wake.notify_one();
             }
 
+            // Render thread: a loaded shader, or a pack shader a worker can load.
+            bool SiblingShaderFor(bool pixel, uint64_t hash, Shader*& loaded, std::shared_ptr<SiblingShader>& pending)
+            {
+                auto& cache = shaders[pixel ? 1 : 0];
+                if (const auto found = cache.find(hash); found != cache.end()) {
+                    loaded = found->second.valid ? &found->second : nullptr;
+                    return loaded != nullptr;
+                }
+                if (!pipelineSiblingShaders || !portableShaderPack) return false;
+                auto& slot = siblingShaders[pixel ? 1 : 0][hash];
+                if (!slot) {
+                    if (!portableShaderPack->Contains(pixel, hash)) {
+                        siblingShaders[pixel ? 1 : 0].erase(hash);
+                        return false;
+                    }
+                    slot = std::make_shared<SiblingShader>();
+                    slot->pixel = pixel;
+                    slot->hash = hash;
+                    slot->pack = portableShaderPack;
+                }
+                // A worker may be loading it; only a known failure rules it out.
+                if (std::unique_lock lock(slot->mutex, std::try_to_lock); lock.owns_lock() && slot->state == SiblingShader::State::Failed)
+                    return false;
+                pending = slot;
+                return true;
+            }
+
             // Render thread: queues the not yet built recipes that share key's PS, then
-            // those that share its VS (same formats and primitive first). Their shaders
-            // must already be loaded; the shader maps belong to this thread.
+            // those that share its VS (same formats and primitive first). The latest
+            // miss's siblings go first; the oldest queued ones are dropped.
             void QueuePipelineSiblings(const PipelineKey& key)
             {
-                constexpr size_t kPerMiss = 16, kMaxQueued = 256;
+                constexpr size_t kPerMiss = 16, kMaxQueued = 128;
                 if (!pipelineSiblings) return;
                 if (!siblingIndex.built) {
                     siblingIndex.built = true;
@@ -4998,30 +5124,21 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (vsFamily == siblingIndex.byVs.end() && psFamily == siblingIndex.byPs.end()) return;
                 if (!StartPipelineWorkers()) return;
                 auto& w = pipelineWorkers;
-                size_t added = 0;
+                std::vector<PipelineKey> picks;
                 {
                     std::lock_guard lock(w.mutex);
                     // False stops the scan.
                     const auto consider = [&](uint32_t index) {
-                        if (added >= kPerMiss || w.queued >= kMaxQueued) return false;
+                        if (picks.size() >= kPerMiss) return false;
                         const PipelineKey& sibling = siblingIndex.keys[index];
                         if (sibling == key || pipelines.contains(sibling) || w.jobs.contains(sibling) ||
                             failedPipelineJobs.contains(sibling)) return true;
-                        const auto vs = shaders[0].find(sibling.vs);
-                        if (vs == shaders[0].end() || !vs->second.valid) return true;
-                        if (sibling.prim == 8 && rectListExpansion && !vs->second.rectList) return true;
-                        Shader* ps = nullptr;
-                        if (sibling.ps) {
-                            const auto found = shaders[1].find(sibling.ps);
-                            if (found == shaders[1].end() || !found->second.valid) return true;
-                            ps = &found->second;
-                        }
-                        auto& job = w.jobs[sibling];
-                        job.vs = &vs->second;
-                        job.ps = ps;
-                        w.queue.push_back(sibling);
-                        ++w.queued;
-                        ++added;
+                        PipelineJob job;
+                        if (!SiblingShaderFor(false, sibling.vs, job.vs, job.loadVs)) return true;
+                        if (sibling.prim == 8 && rectListExpansion && (!job.vs || !job.vs->rectList)) return true;
+                        if (sibling.ps && !SiblingShaderFor(true, sibling.ps, job.ps, job.loadPs)) return true;
+                        w.jobs.emplace(sibling, std::move(job));
+                        picks.push_back(sibling);
                         return true;
                     };
                     const auto similar = [&](uint32_t index) {
@@ -5039,9 +5156,20 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             for (const uint32_t index : vsFamily->second)
                                 if (!similar(index) && !consider(index)) break;
                     }
+                    for (auto it = picks.rbegin(); it != picks.rend(); ++it)
+                        w.siblings.push_front(*it);
+                    w.queued += picks.size();
+                    while (w.queued > kMaxQueued && !w.siblings.empty()) {
+                        const PipelineKey old = w.siblings.back();
+                        w.siblings.pop_back();
+                        const auto found = w.jobs.find(old);
+                        if (found == w.jobs.end() || found->second.state != PipelineJob::State::Queued || found->second.requested) continue;
+                        w.jobs.erase(found);
+                        --w.queued;
+                    }
                 }
-                if (added) {
-                    pipelineJobStats.queued += uint32_t(added);
+                if (!picks.empty()) {
+                    pipelineJobStats.queued += uint32_t(picks.size());
                     w.wake.notify_all();
                 }
             }
@@ -6820,7 +6948,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     std::fprintf(stderr, "VK_OBJECT_TRACE route=renderer event=point_pipeline vs_hash=0x%llx module=0x%llx uses_point_size_metadata=%u color_mask=%u depth_format=%u\n",
                         vk_object_trace::Id(key.vs), vk_object_trace::Id(static_cast<const VulkanShader*>(vs->shader.get())->vk),
                         unsigned(vs->info.usesPointSize), key.colorMask, key.depthFormat);
-                auto desc = DescribePipeline(key, vs, ps, trace);
+                return CreatePipeline(key, DescribePipeline(key, vs, ps, trace), fastLink);
+            }
+            std::unique_ptr<RenderPipeline> CreatePipeline(const PipelineKey& key, RenderGraphicsPipelineDesc desc, bool fastLink)
+            {
                 // Only exact game-state pipelines get a persistent name; the variant
                 // paths edit DescribePipeline's result and stay unnamed.
                 desc.cacheKey = gpu::pipeline_cache::detail::Hash(gpu::pipeline_cache::detail::Encode(key)) | 1;
