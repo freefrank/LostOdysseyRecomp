@@ -1,6 +1,7 @@
 // Included inside the renderer implementation class. All methods run on the
 // command processor thread; existing pipeline workers see immutable shader maps.
-std::unique_ptr<xenos::portable_pack::Reader> portableShaderPack;
+// Shared so scene prefetch workers can keep reading it after the renderer drops it.
+std::shared_ptr<xenos::portable_pack::Reader> portableShaderPack;
 // Where the open pack was found; the pipeline corpus ships beside it.
 std::filesystem::path portableShaderPackPath;
 std::unique_ptr<xenos::portable_pack::Writer> portableShaderExport;

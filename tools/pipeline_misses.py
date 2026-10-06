@@ -7,6 +7,9 @@ Reads the per-frame "renderer: pipeline misses" lines (always written) and,
 when the run had LO_PIPELINE_MISS_LOG=1, the per-creation "pipeline miss"
 lines. A scene is the map id, or the battle number plus its map. Draws that
 waited for a scene prefetch job count their wait as stall time ("wait ms").
+With LO_RENDER_TIMING=1 it also lists the frames with the longest draw_ms
+("render timing" lines), which include draw-time shader module creation: on
+Metal, MSL compilation of pack shaders costs more than the pipelines.
 """
 import argparse
 import re
@@ -18,6 +21,7 @@ SUMMARY = "renderer: pipeline misses "
 DETAIL = "renderer: pipeline miss "
 PREPARE = "renderer: pipeline preparation:"
 WAITS = "renderer: pipeline prefetch waits "
+TIMING = "render timing frame="
 
 
 def fields(line, marker):
@@ -39,9 +43,14 @@ def main():
                                   "detail": 0, "recipe": 0, "new_vs": 0, "new_ps": 0, "known_pair": 0})
     worst = []
     prepares = []
+    timing = []  # (draw_ms, frame, pipelines, pipeline_ms)
     with open(args.log, encoding="utf-8", errors="replace") as log:
         for line in log:
-            if PREPARE in line:
+            if TIMING in line:
+                f = dict(FIELD.findall(line.split("render timing ", 1)[1]))
+                timing.append((float(f.get("draw_ms", 0)), int(f.get("frame", 0)), int(f.get("pipelines", 0)),
+                               float(f.get("pipeline_ms", 0))))
+            elif PREPARE in line:
                 prepares.append(line.split(PREPARE, 1)[1].strip())
             elif SUMMARY in line or WAITS in line:
                 f = fields(line, SUMMARY if SUMMARY in line else WAITS)
@@ -66,6 +75,10 @@ def main():
 
     for prepare in prepares:
         print(f"prebuild: {prepare}")
+    if timing:
+        print(f"render timing: {len(timing)} frames, longest draw_ms:")
+        for draw_ms, frame, pipelines, pipeline_ms in sorted(timing, reverse=True)[:args.frames]:
+            print(f"  frame {frame}: {draw_ms:.1f} ms ({pipelines} pipelines, {pipeline_ms:.1f} ms)")
     if not scenes:
         print("no pipeline misses logged")
         return 0
