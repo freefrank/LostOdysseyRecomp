@@ -11,7 +11,9 @@ field save, profile/, shaders/ with the matching pack) plus launch.json:
   {"exe": ..., "game": ".../disc1", "path": "win|z|posix", "prefix": ["umu-run"],
    "env": {"K": "V" or "glob:/pattern"}, "interrupt": [...], "kill": [...]}
 ("interrupt" asks the game to quit so it flushes the recipe file, "kill" cleans up;
-both default to signalling the launched process.)
+both default to signalling the launched process. On a shared host, "waiters" (a
+command listing lock users) and "mine" (a substring of our own) make a chunk
+give the lock back at once while another job waits.)
 Recipes go to <run_dir>/shader-cache. Each command resumes from its result file.
 
 list     logs the formation table (LO_DEBUG_BATTLE_FILE "list") into formations.json.
@@ -142,6 +144,19 @@ class Game:
             return False
         time.sleep(3)
         return True
+
+
+def others_waiting(config):
+    """Shared hosts: launch.json "waiters" lists lock users, lines without "mine" belong to other jobs."""
+    if not config.get("waiters"):
+        return False
+    lines = subprocess.run(config["waiters"], capture_output=True, text=True).stdout.splitlines()
+    return any(config.get("mine", "\0") not in line for line in lines)
+
+
+def yield_lock():
+    print("other jobs wait for the game lock; giving it back", flush=True)
+    sys.exit(0)
 
 
 def recipes(run):
@@ -286,6 +301,8 @@ def stages(run, args):
     if not todo:
         sys.exit(3)
     game, started, booted = Game(run), time.time(), False
+    if others_waiting(game.config):
+        yield_lock()
     try:
         for name in todo:
             if time.time() - started > args.budget:
@@ -321,6 +338,8 @@ def battles(run, args):
     if not todo:
         sys.exit(3)
     game, started, booted = Game(run), time.time(), False
+    if others_waiting(game.config):
+        yield_lock()
     try:
         for fid in todo:
             if time.time() - started > args.budget:
@@ -375,9 +394,18 @@ def maps(run, args):
     names, ids = tour["visited"], {k: v["id"] for k, v in tour["maps"].items()}
     out = run / "maps.json"
     done = json.loads(out.read_text()) if out.exists() else {}
+    discs = [int(d) for d in args.discs.split(",")]
+    pending = {m for m in names if m not in done and not m.startswith(("xxx_", "z0g_"))}
+    probed = [run / f"found-{d}.json" for d in discs]
+    if not pending or all(f.exists() for f in probed) and not pending & set().union(
+            *(json.loads(f.read_text()) for f in probed)):
+        print(f"no reachable maps left ({len(pending)} not on any disc)", flush=True)
+        sys.exit(3)
     game, started = Game(run), time.time()
+    if others_waiting(game.config):
+        yield_lock()
     try:
-        for disc in [int(d) for d in args.discs.split(",")]:
+        for disc in discs:
             pending = [m for m in names if m not in done and not m.startswith(("xxx_", "z0g_"))]
             found_file = run / f"found-{disc}.json"
             if not pending or time.time() - started > args.budget:
@@ -435,7 +463,7 @@ def main():
     ap.add_argument("--formations", default="cover", help="all (priority order), cover or a list like 3,10-20")
     ap.add_argument("--part", default="0/1", help="K/N: every Nth formation from the K-th, to split a tour between hosts")
     ap.add_argument("--hold", type=float, default=45, help="seconds after the first command before Victory")
-    ap.add_argument("--budget", type=float, default=1200, help="stop starting new work after this many seconds")
+    ap.add_argument("--budget", type=float, default=900, help="stop starting new work after this many seconds (max 900)")
     ap.add_argument("--maps", help="map list JSON (maps: name -> {id}, visited: [names])")
     ap.add_argument("--stages", help="stages: file with battle map package names")
     ap.add_argument("--formation", type=int, default=3, help="stages: formation to fight (default 3, two weak enemies)")
@@ -443,6 +471,7 @@ def main():
     ap.add_argument("--disc", type=int, default=1, help="battles: request this disc after boot (diagnostic build)")
     args = ap.parse_args()
     run = args.run.resolve()
+    args.budget = min(args.budget, 900)  # shared hosts: keep chunks short
     {"list": lambda: list_formations(run), "battles": lambda: battles(run, args), "stages": lambda: stages(run, args),
      "maps": lambda: maps(run, args)}[args.command]()
 
