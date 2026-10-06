@@ -4782,12 +4782,12 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (!fastLinkPipelines) return;
                 std::vector<RenderGraphicsPipelineDesc> descs;
                 descs.reserve(knownRecipes.size());
+                // Corpus recipes left to scene prefetch get their libraries too.
                 for (const auto& [key, entry] : knownRecipes) {
-                    const auto vs = shaders[0].find(key.vs), ps = shaders[1].find(key.ps);
-                    if (vs == shaders[0].end() || !vs->second.valid || (key.ps && (ps == shaders[1].end() || !ps->second.valid)))
-                        continue;
-                    if (key.prim == 8 && rectListExpansion && !vs->second.rectList) continue;
-                    auto desc = DescribePipeline(key, &vs->second, key.ps ? &ps->second : nullptr, false);
+                    Shader* vs = nullptr;
+                    Shader* ps = nullptr;
+                    if (!RecipeShaders(key, vs, ps)) continue;
+                    auto desc = DescribePipeline(key, vs, ps, false);
                     desc.fastLink = true;
                     descs.push_back(desc);
                 }
