@@ -13,6 +13,19 @@ import sys
 
 MAGIC = b"LOPSO001"
 HEADER, KEY, RECORD, MAX_RECORDS = 48, 64, 72, 16384
+# plume RenderFormat values the renderer accepts (ValidPipelineRecipe in gpu/renderer.cpp):
+# UNKNOWN, R16G16B16A16_FLOAT, R32G32_FLOAT, R8G8B8A8_UNORM, R16G16_FLOAT, R32_FLOAT; depth D32_FLOAT_S8_UINT.
+COLOR_FORMATS, DEPTH_FORMATS = {0, 10, 16, 20, 26, 34}, {0, 33}
+
+
+def valid(key):
+    """pipeline_cache::IsValid plus the renderer's ValidPipelineRecipe; one bad key makes Load drop the file."""
+    vs = struct.unpack_from("<Q", key)[0]
+    (blend, depth, cull, mask, prim, rt, ds, flags, sref, sref_back, bias, slope) = struct.unpack_from("<12I", key, 16)
+    slope_f = struct.unpack("<f", struct.pack("<I", slope))[0]
+    return (not cull & ~0x3807 and not mask & ~0xF and not sref & ~0xFFFFFF and not sref_back & ~0xFFFFFF
+            and flags == 0 and slope_f == slope_f and abs(slope_f) != float("inf")
+            and vs != 0 and prim <= 32 and rt in COLOR_FORMATS and ds in DEPTH_FORMATS)
 
 
 def fnv(data):
@@ -37,6 +50,8 @@ def load(path):
         record = data[HEADER + i * RECORD: HEADER + (i + 1) * RECORD]
         if struct.unpack_from("<Q", record, KEY)[0] != fnv(record[:KEY]):
             sys.exit(f"{path}: record {i} checksum mismatch")
+        if not valid(record[:KEY]):
+            sys.exit(f"{path}: record {i} has state the renderer rejects")
         keys.append(record[:KEY])
     return versions, keys
 

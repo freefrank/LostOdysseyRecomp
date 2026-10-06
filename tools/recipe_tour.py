@@ -264,7 +264,9 @@ def fight(game, fid, hold, stage=""):
                 not t["victory_asked"] or time.time() - t["victory_asked"] > 10):
             game.command("battle.txt", "victory")
             t["victory_asked"] = time.time()
-        if t["command"] or t["end"]:
+        # A answers command menus, results and messages; before the first command
+        # only press it when the intro waits on something (no phase change for 20 s).
+        if t["command"] or t["end"] or time.time() - t["moved"] > 20:
             game.command("input.txt", f"{A_BUTTON} 0 0 6")
         time.sleep(2)
     r["intro_s"] = round(t["command"] - t["first"], 1) if t["command"] and t["first"] else None
