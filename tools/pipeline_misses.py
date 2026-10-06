@@ -9,7 +9,10 @@ lines. A scene is the map id, or the battle number plus its map. Draws that
 waited for a scene prefetch job count their wait as stall time ("wait ms").
 With LO_RENDER_TIMING=1 it also lists the frames with the longest draw_ms
 ("render timing" lines), which include draw-time shader module creation: on
-Metal, MSL compilation of pack shaders costs more than the pipelines.
+Metal, MSL compilation of pack shaders costs more than the pipelines. The
+"pipeline workers" lines add sibling builds queued and finished, draws served
+by them (hits, needs LO_PIPELINE_MISS_LOG=1) and draws skipped while their
+pipeline was building (LO_PIPELINE_ASYNC=1).
 """
 import argparse
 import re
@@ -22,6 +25,7 @@ DETAIL = "renderer: pipeline miss "
 PREPARE = "renderer: pipeline preparation:"
 WAITS = "renderer: pipeline prefetch waits "
 TIMING = "render timing frame="
+WORKERS = "renderer: pipeline workers "
 
 
 def fields(line, marker):
@@ -40,7 +44,8 @@ def main():
     args = parser.parse_args()
 
     scenes = defaultdict(lambda: {"frames": 0, "misses": 0, "ms": 0.0, "worst": 0.0, "prefetched": 0, "wait": 0.0,
-                                  "detail": 0, "recipe": 0, "new_vs": 0, "new_ps": 0, "known_pair": 0})
+                                  "detail": 0, "recipe": 0, "new_vs": 0, "new_ps": 0, "known_pair": 0,
+                                  "jobs": 0, "queued": 0, "built": 0, "hits": 0, "skipped": 0})
     worst = []
     prepares = []
     timing = []  # (draw_ms, frame, pipelines, pipeline_ms)
@@ -64,6 +69,12 @@ def main():
                 s["prefetched"] += int(f.get("prefetched", 0))
                 s["worst"] = max(s["worst"], ms)
                 worst.append((ms, int(f.get("frame", 0)), int(f.get("count", 0)), scene(f)))
+            elif WORKERS in line:
+                f = fields(line, WORKERS)
+                s = scenes[scene(f)]
+                s["jobs"] += 1
+                for key in ("queued", "built", "hits", "skipped"):
+                    s[key] += int(f.get(key, 0))
             elif DETAIL in line:
                 f = fields(line, DETAIL)
                 s = scenes[scene(f)]
@@ -84,11 +95,14 @@ def main():
         return 0
     detail = any(s["detail"] for s in scenes.values())
     prefetch = any(s["prefetched"] or s["wait"] for s in scenes.values())
+    jobs = any(s["jobs"] for s in scenes.values())
     header = f"{'scene':<24} {'frames':>6} {'misses':>6} {'total ms':>9} {'worst ms':>9}"
     if prefetch:
         header += f" {'prefetched':>10} {'wait ms':>8}"
     if detail:
         header += f" {'in recipes':>10} {'new VS':>6} {'new PS':>6} {'known VS+PS':>11}"
+    if jobs:
+        header += f" {'siblings':>8} {'built':>6} {'hits':>6} {'skipped':>7}"
     print(header)
     total = {"frames": 0, "misses": 0, "ms": 0.0}
     for name, s in sorted(scenes.items(), key=lambda item: -item[1]["ms"]):
@@ -97,6 +111,8 @@ def main():
             row += f" {s['prefetched']:>10} {s['wait']:>8.1f}"
         if detail:
             row += f" {s['recipe']:>10} {s['new_vs']:>6} {s['new_ps']:>6} {s['known_pair']:>11}"
+        if jobs:
+            row += f" {s['queued']:>8} {s['built']:>6} {s['hits']:>6} {s['skipped']:>7}"
         print(row)
         for key in total:
             total[key] += s[key]
