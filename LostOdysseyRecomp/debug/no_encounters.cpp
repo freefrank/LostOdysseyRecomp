@@ -80,7 +80,7 @@ PPC_FUNC(sub_829E3268)
     if (caller != WalkingEncounterReturn)
         return;
     int32_t formation = -1;
-    if (debug_menu::battle_tour::Take(formation))
+    if (debug_menu::battle_tour::Take(base, formation))
     {
         PPC_STORE_U32(formationSlot, static_cast<uint32_t>(formation));
         ctx.r3.u64 = 1;
@@ -122,6 +122,8 @@ PPC_FUNC(sub_829E3048)
     PPC_STORE_U32(Encounter + 564, 0xFFFFFFFF);
     PPC_STORE_U32(Encounter + 580, PPC_LOAD_U32(Encounter + 576));
     __imp__sub_829E3048(ctx, base);
+    if (tour)
+        debug_menu::battle_tour::RestoreStage(base);
     if (ctx.r3.u32 == 1 && !tour)
         return; // the draw already reset the threshold and distance
 
