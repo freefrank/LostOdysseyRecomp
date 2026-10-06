@@ -4854,14 +4854,22 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (!fastLinkPipelines) return;
                 std::vector<RenderGraphicsPipelineDesc> descs;
                 descs.reserve(knownRecipes.size());
-                // Corpus recipes left to scene prefetch get their libraries too.
+                // Corpus recipes left to scene prefetch get their libraries too. Their
+                // shader modules are made here, before the library thread starts.
+                const auto started = std::chrono::steady_clock::now();
                 std::vector<std::pair<bool, uint64_t>> load;
                 for (const auto& [key, entry] : knownRecipes) {
                     Shader* vs = nullptr;
                     Shader* ps = nullptr;
                     FindRecipeShaders(key, vs, ps, &load);
                 }
+                std::sort(load.begin(), load.end());
+                load.erase(std::unique(load.begin(), load.end()), load.end());
+                const size_t modules = load.size();
                 LoadPackShaders(std::move(load));
+                if (modules)
+                    LOG_INFO("renderer: pipeline libraries: {} shader modules for known recipes, {:.0f} ms", modules,
+                        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count());
                 for (const auto& [key, entry] : knownRecipes) {
                     Shader* vs = nullptr;
                     Shader* ps = nullptr;
