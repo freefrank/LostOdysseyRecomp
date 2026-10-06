@@ -5281,7 +5281,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 for (size_t i = 0; i < count; ++i)
                     prefetchPool.workers.emplace_back([this] { PrefetchWorker(); });
                 LOG_INFO("renderer: pipeline workers: {}, {} for draw-time jobs; siblings {}, skipped draws {}", count,
-                    prefetchPool.smallCap, pipelineSiblings ? "on" : "off", pipelineAsync ? "on (LO_PIPELINE_ASYNC)" : "off");
+                    prefetchPool.smallCap, !pipelineSiblings ? "off" : video::IsMetal() && !getenv("LO_PIPELINE_SIBLINGS") ? "off on Metal" : "on",
+                    pipelineAsync ? "on (LO_PIPELINE_ASYNC)" : "off");
             }
 
             // Under the pool mutex: the next job by priority whose kind has a free
@@ -5529,7 +5530,11 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             void QueuePipelineSiblings(const PipelineKey& key)
             {
                 constexpr size_t kPerMiss = 16;
-                if (!pipelineSiblings || !pipelineCacheEnabled) return;
+                // Not on Metal unless LO_PIPELINE_SIBLINGS=1: a pipeline is cheap there and
+                // a shader module (MSL compilation) is not, and sibling modules made on the
+                // workers held up this thread's own (M1 Max: a 0.75 s first map frame took 4.9 s).
+                static const bool metalSiblings = getenv("LO_PIPELINE_SIBLINGS") != nullptr;
+                if (!pipelineSiblings || !pipelineCacheEnabled || (video::IsMetal() && !metalSiblings)) return;
                 if (!siblingIndex.built) {
                     siblingIndex.built = true;
                     for (const auto& [recipe, entry] : knownRecipes) {
