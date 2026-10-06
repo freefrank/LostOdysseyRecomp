@@ -1,6 +1,6 @@
 # 首次使用管线的卡顿：方案（2026-10-05）
 
-> 状态：P0、P1 已实现（2026-10-06，见文末“P0/P1 实现与测量”），P2–P4 未开始。影响所有平台：Windows（D3D12 / Vulkan）、Linux、macOS、Android。
+> 状态：P0、P1 已实现（2026-10-06，见文末“P0/P1 实现与测量”）；P2 已实现（2026-10-06，见文末“P2 实现与测量”）；P3、P4 进行中。影响所有平台：Windows（D3D12 / Vulkan）、Linux、macOS、Android。
 
 ## 现象
 
@@ -182,3 +182,25 @@ P0 → P1 → P2 → P3 → P4。
 | 暖 | 244 | 50 ms | 26 ms（171 条） |
 
 未测：Android 平板（TB321FU，Turnip）。0.8.38-dev-pipecache 调试包已装上，但平板锁屏，游戏停在启动阶段，没有得到预建数字；Mac 和原生 Linux 只测了启动预建，没有游玩。
+
+## P2 实现与测量（2026-10-06）
+
+**实现。** plume Vulkan 在设备支持 `VK_EXT_graphics_pipeline_library`（`graphicsPipelineLibraryFastLinking` 为真）和 `VK_EXT_extended_dynamic_state` 时报告 `fastLinkPipelines`。绘制时未命中（`GetPipeline`）的管线由四个库部件快速链接，不做链接期优化：
+
+- 顶点输入：只有图元拓扑和 primitive restart；
+- 光栅化前：VS（rect list 时加 GS），按 depth clamp、depth bias 是否开启区分；
+- 片元着色：PS；
+- 片元输出：混合、写掩码、格式。
+
+部件按着色器模块和 render pass 兼容类（RT 格式、深度格式、采样数）缓存在设备上。剔除、正反面、depth bias、深度测试/写入/比较、模板测试/操作/掩码/参考值都是动态状态，每次绑定链接出的管线时重新设置。启动预建仍建完整管线，链接出的管线下次启动由配方预建成完整管线，所以不做后台的优化编译替换。
+
+预建结束后，一个后台线程按已知配方为它们的着色器建部件（`prepareGraphicsPipelineLibraries`），之后已知着色器的新组合只需链接。`LO_NO_PIPELINE_LIBRARY=1` 关闭，用于对照。D3D12 和 Metal 不受影响。
+
+**测量。** psvita，Proton GE10-34 下的 Windows 版 Vulkan 后端（winevulkan → RADV，Radeon 8060S），Uhra 存档开机进图（Uhra 住宅区，map 20），`MESA_SHADER_CACHE_DISABLE=1`，空的驱动缓存。
+
+| 情形 | 关（`LO_NO_PIPELINE_LIBRARY=1`） | 开 |
+|---|---|---|
+| 没有配方，`skip_shader_prebuild=1`：绘制时建管线合计 / 最差一帧 | 1807 ms / 1198 ms（171 条） | 1004 ms / 710 ms |
+| 预建 1707 条配方（316 张地图巡游减去 Uhra 的 243 条），再进 Uhra：合计 / 最差一帧 | 1259 ms / 880 ms | 439 ms / 285 ms |
+
+第二种情形里部件后台预建用了 6.0 s（1700 条配方），在进图之前完成。逐条看（`LO_PIPELINE_MISS_LOG=1`）：VS 和 PS 都见过的 172 条平均 0.24 ms；PS 是新的 62 条平均 5.2 ms，合计 324 ms，是剩下的主要部分。新着色器要靠 P3 的配方语料提前覆盖。

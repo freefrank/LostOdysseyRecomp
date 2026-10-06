@@ -56,6 +56,8 @@ Vulkan 改动应从受跟踪的 plume 子模块状态和上方补丁应用；它
 
 2026-10-06 持久化管线缓存：`RenderDevice` 新增 `loadPipelineCache`、`getPipelineCacheData`、`getPipelineCacheSize`（默认实现表示不支持），`RenderGraphicsPipelineDesc` 新增 `cacheKey`。Vulkan 每个设备建一个 `VkPipelineCache`，图形和计算管线创建都传入它，`loadPipelineCache` 把保存的数据合并进去。D3D12 用 `ID3D12PipelineLibrary`：`cacheKey` 非零的管线按 `cacheKey` 与 VS/PS/GS 字节码的哈希命名，创建前 `LoadGraphicsPipeline`，未命中时创建后 `StorePipeline`；种子数据被拒（`D3D12_ERROR_ADAPTER_NOT_FOUND`、`D3D12_ERROR_DRIVER_VERSION_MISMATCH`、`E_INVALIDARG`）时换成空库。新补丁在固定 HEAD `d890ac8` 的干净副本上应用后与本地依赖源码一致，`plume-android.patch` 与 `plume-macos.patch` 仍可叠加应用。
 
+2026-10-06 图形管线库（首次卡顿 P2）：Vulkan 设备支持 `VK_EXT_graphics_pipeline_library`（且 `graphicsPipelineLibraryFastLinking` 为真）和 `VK_EXT_extended_dynamic_state` 时启用两者，并报告 `capabilities.fastLinkPipelines`。`RenderGraphicsPipelineDesc::fastLink` 为真的管线由四个缓存的库部件快速链接（不做链接期优化，也不进 `VkPipelineCache`）：顶点输入（图元拓扑）、光栅化前（VS、GS）、片元着色（PS）、片元输出（混合和格式）。剔除、正反面、depth bias 和深度/模板状态改为动态状态，`setPipeline` 每次绑定这类管线时重新设置。部件以着色器模块句柄为键，所以这些着色器必须活到设备销毁。`RenderDevice::prepareGraphicsPipelineLibraries` 只建部件不链接，默认实现返回 false，Metal 后端和 `plume-macos.patch` 无需改动。新补丁在固定 HEAD `d890ac8` 的干净副本上应用后与本地依赖源码一致，`plume-android.patch` 与 `plume-macos.patch` 仍可叠加应用。
+
 ## macOS: plume Metal patch
 
 `plume-macos.patch` applies on top of `plume-lostodyssey.patch` and changes `plume_metal.cpp`, `plume_metal.h`, `plume_apple.h`, `plume_apple.mm` and plume's `CMakeLists.txt` (the Apple files and the CMake change come with HDR output, PR #145):
