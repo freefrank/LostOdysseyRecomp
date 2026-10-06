@@ -20,8 +20,11 @@ list     logs the formation table (LO_DEBUG_BATTLE_FILE "list") into formations.
 battles  starts each formation through the walking-encounter path, presses A on
          every command prompt, requests the debug Victory after --hold seconds
          and goes on from the field; defeat, a forced victory or a stall restarts
-         the game. "cover" picks formations until every enemy config/parameter
-         pair and every fixed battle stage has been seen once. Formations whose
+         the game (a battle is capped at 150 s). A formation whose enemy models
+         were all fought already (here or in peer-*.jsonl from other hosts) is
+         skipped unless --no-skip; stages come from the stage and map tours.
+         "cover" picks formations until every enemy config/parameter pair and
+         every fixed battle stage has been seen once. Formations whose
          resources are not on the mounted disc fail ("fatal"); --disc N
          (diagnostic build) retries only those on disc N.
 stages   fights one weak formation on each listed battle stage (the random
@@ -271,7 +274,7 @@ def fight(game, fid, hold, stage=""):
         if t["field"] or (r["status"] in ("defeat", "ended") and time.time() - t["end"] > 15):
             break
         # Scripted battles can wait on input the harness never gives.
-        stalled = time.time() - t["moved"] > 60 and not t["end"] or time.time() - began > 240
+        stalled = time.time() - t["moved"] > 45 and not t["end"] or time.time() - began > 150
         if fatal or game.proc.poll() is not None or stalled:
             r["status"] = "fatal" if fatal else "dead" if game.proc.poll() is not None else "stall"
             break
@@ -320,10 +323,26 @@ def stages(run, args):
     print(f"recipes in cache: {recipes(run)}", flush=True)
 
 
+def fought_models(run):
+    """Enemy configs (models) of every battle that got past its intro, here or on a peer host
+    (peer-*.jsonl: copies of the other hosts' battles.jsonl)."""
+    models = set()
+    for path in [run / "battles.jsonl", *sorted(run.glob("peer-*.jsonl"))]:
+        if path.exists():
+            for line in path.read_text().splitlines():
+                r = json.loads(line)
+                if r["status"] in ("victory", "forced", "defeat", "ended") or 2 in r["phases"]:
+                    models |= {c for c, _ in r["slots"]}
+    return models
+
+
 def battles(run, args):
     table = {int(k): v for k, v in json.loads((run / "formations.json").read_text()).items()}
     out = run / "battles.jsonl"
     results = [json.loads(l) for l in out.read_text().splitlines()] if out.exists() else []
+
+    def seen(fid):  # every enemy model of this formation was already fought
+        return not args.no_skip and {c for c, _ in table[fid]["slots"]} <= fought_models(run)
     # A formation is done unless its resources were missing on every disc tried so far.
     tried = {}
     for r in results:
@@ -334,7 +353,10 @@ def battles(run, args):
     todo = [i for j, i in enumerate(select(args.formations, table)) if j % n == k and i not in done]
     if args.disc != 1:
         todo = [i for i in todo if i in tried]  # other discs only retry missing resources
-    print(f"disc {args.disc}: {len(todo)} formations to visit", flush=True)
+    skipped = [i for i in todo if seen(i)]
+    todo = [i for i in todo if i not in skipped]
+    print(f"disc {args.disc}: {len(todo)} formations to visit, {len(skipped)} skipped "
+          f"(all enemy models already fought)", flush=True)
     if not todo:
         sys.exit(3)
     game, started, booted = Game(run), time.time(), False
@@ -344,6 +366,8 @@ def battles(run, args):
         for fid in todo:
             if time.time() - started > args.budget:
                 break
+            if seen(fid):  # fought on a peer host meanwhile
+                continue
             if not booted and not (game.boot() and request_disc(game, args.disc)):
                 sys.exit("boot failed")
             r, restart = fight(game, fid, args.hold)
@@ -462,6 +486,7 @@ def main():
     ap.add_argument("run", type=Path)
     ap.add_argument("--formations", default="cover", help="all (priority order), cover or a list like 3,10-20")
     ap.add_argument("--part", default="0/1", help="K/N: every Nth formation from the K-th, to split a tour between hosts")
+    ap.add_argument("--no-skip", action="store_true", help="also fight formations whose enemy models were all fought")
     ap.add_argument("--hold", type=float, default=45, help="seconds after the first command before Victory")
     ap.add_argument("--budget", type=float, default=900, help="stop starting new work after this many seconds (max 900)")
     ap.add_argument("--maps", help="map list JSON (maps: name -> {id}, visited: [names])")
