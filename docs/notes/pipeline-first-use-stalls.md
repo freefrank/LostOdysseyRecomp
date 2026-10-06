@@ -284,7 +284,7 @@ M1 Max，Metal（同一二进制第二次以后运行，系统着色器缓存已
 
 **跳过绘制（`LO_PIPELINE_ASYNC=1`，默认关）。** 主绘制路径上，管线还没建好（包括场景预取正在建的）时，这次绘制直接跳过，管线交给 worker（`src=defer`），物体会短暂缺失；场景拷贝提升路径从不跳过。跳过的绘制不计入 `drops.pipeline`，记在 `pipeline workers ... skipped=` 里。被跳过的也可能是深度、模板或之后要 resolve 的绘制，所以不只是少画一个物体。
 
-**读包。** worker 线程各开一个 pack reader：`Reader::Get` 在锁内解压整块，共用一个 reader 会挡住渲染线程自己的着色器加载。启动时 `LoadPackShaders` 的线程也各用一个。
+**读包。** worker 线程各开一个 pack reader：`Reader::Get` 在锁内解压整块，共用一个 reader 会挡住渲染线程自己的着色器加载。启动时 `LoadPackShaders` 的线程也各用一个（psvita 上最多 32 个，每个读 2.5 MB 索引），启动反而更快：Vulkan 为 1270 个已知着色器建模块 1026 → 124 ms，B 的启动预建 D3D12 2000 → 1654 ms、Vulkan 2093 → 1099 ms。
 
 **日志。** 每次未命中多了 `src=create|claim|inline|defer`；每帧多一行 `renderer: pipeline workers frame=… queued= built= hits= skipped= shaders=`（`hits` 需要 `LO_PIPELINE_MISS_LOG=1`）。pack 着色器的加载现在计入 `shader_ms`，和之前的版本比较时要注意。`tools/pipeline_misses.py` 多了兄弟配方的列。
 
@@ -306,9 +306,9 @@ Proton / vkd3d-proton D3D12：
 | C | P4 | 61 ms（6 条） | 43 ms | 61 ms | 336 ms |
 | C | P4 + 跳过绘制 | 13 ms | 13 ms | 61 ms | 280 ms |
 
-Proton 下的 Vulkan（RADV，pipeline library 开）：P3 起启动时为全部已知配方建着色器模块和 library，A 里的未命中都是 fast-link，P4 没有可省的：A 的合计 20 → 17 ms，最长帧间隔 57 → 54–57 ms；B 410 → 417 ms（误差内）；C 13 → 9 ms，最长帧间隔 51 → 54 ms。跳过绘制时 A 的合计 4 ms。
+Proton 下的 Vulkan（RADV，pipeline library 开）：P3 起启动时为全部已知配方建着色器模块和 library，A 里的未命中都是 fast-link，P4 没有可省的。三个场景的差别都在两次基线之间的波动内（A 的合计 20 / 17 ms、最长帧间隔 57–58 / 54–57 ms；B 410 / 417 ms；C 13 / 9 ms）。跳过绘制时 A 的合计 4 ms。
 
-M1 Max，Metal（系统着色器缓存已热）：A 的基线最长帧间隔 750 / 742 ms（主要是渲染线程建着色器模块），P4 默认（兄弟配方关）738 / 729 ms，兄弟配方打开时 4881 / 780 ms；B 341 → 343 ms；C 的超过 50 ms 帧合计 298 / 300 → 250 ms。跳过绘制对 Metal 帮助不大（A 713 ms），因为贵的是着色器模块，不是管线。
+M1 Max，Metal（系统着色器缓存已热）：没有可测出的差别。A 的最长帧间隔：基线 750 / 742 ms（主要是渲染线程建着色器模块），P4 默认（兄弟配方关）738 / 729 ms，兄弟配方打开时 4881 / 780 ms；B 341 / 343 ms；C 的超过 50 ms 帧合计 298 / 300 / 250 ms（第三个也是兄弟配方关）和打开时的 242 ms 都在同一波动范围里。4.9 秒那一帧里有 282 个兄弟着色器模块，渲染线程的 `shader_ms` 是 4.8 秒；可能是它在等 worker 上的模块，也可能是 MSL 编译之间的争用，日志分不出来。跳过绘制对 Metal 帮助不大（A 713 ms），因为贵的是着色器模块，不是管线。
 
 **兄弟配方的浪费。** D3D12 的 A 里开机进图时排了约 1400 条兄弟配方，建了约 800 条，这张地图用到的不到 100 条。多建的都是别的地图的真实配方，以后会用到，但每次这样的爆发会让 P1 的驱动缓存多出约 14 MB，也多占显存。
 
