@@ -56,6 +56,8 @@ Vulkan 改动应从受跟踪的 plume 子模块状态和上方补丁应用；它
 
 2026-10-06 持久化管线缓存：`RenderDevice` 新增 `loadPipelineCache`、`getPipelineCacheData`、`getPipelineCacheSize`（默认实现表示不支持），`RenderGraphicsPipelineDesc` 新增 `cacheKey`。Vulkan 每个设备建一个 `VkPipelineCache`，图形和计算管线创建都传入它，`loadPipelineCache` 把保存的数据合并进去。D3D12 用 `ID3D12PipelineLibrary`：`cacheKey` 非零的管线按 `cacheKey` 与 VS/PS/GS 字节码的哈希命名，创建前 `LoadGraphicsPipeline`，未命中时创建后 `StorePipeline`；种子数据被拒（`D3D12_ERROR_ADAPTER_NOT_FOUND`、`D3D12_ERROR_DRIVER_VERSION_MISMATCH`、`E_INVALIDARG`）时换成空库。新补丁在固定 HEAD `d890ac8` 的干净副本上应用后与本地依赖源码一致，`plume-android.patch` 与 `plume-macos.patch` 仍可叠加应用。
 
+2026-10-06 render pass 依赖一致：framebuffer 的 render pass 带有为 Adreno 加的两条外部 subpass 依赖，`VulkanGraphicsPipeline::createRenderPass` 给管线建的 render pass 却没有依赖。依赖属于 render pass 兼容性的一部分，验证层因此对每次 draw 报 `VUID-vkCmdDraw-renderPass-02684`／`VUID-vkCmdDrawIndexed-renderPass-02684`（`dependencyCount` 2 != 0）。两处现在都调用 `setAttachmentPassDependencies`，依赖完全相同，`LO_VK_NO_PASS_DEPS=1` 同时去掉两边的依赖。新补丁在固定 HEAD `d890ac8` 的干净副本上生成（先应用原补丁重新生成，与原补丁逐字节一致），`plume-android.patch` 与 `plume-macos.patch` 仍可叠加应用。
+
 ## macOS: plume Metal patch
 
 `plume-macos.patch` applies on top of `plume-lostodyssey.patch` and changes `plume_metal.cpp`, `plume_metal.h`, `plume_apple.h`, `plume_apple.mm` and plume's `CMakeLists.txt` (the Apple files and the CMake change come with HDR output, PR #145):
