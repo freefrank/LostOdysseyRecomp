@@ -1,6 +1,12 @@
 #include <stdafx.h>
 #include <os/logger.h>
+#include <algorithm>
+#include <atomic>
 #include <map>
+#include <optional>
+#include <vector>
+#include <gpu/pipeline_cache.h>
+#include "battle_menu.h"
 #include "map_info.h"
 
 extern "C" PPC_FUNC(__imp__sub_82A0D648);
@@ -9,6 +15,17 @@ std::mutex mutex;
 std::map<std::wstring, uint32_t> definitions;
 debug_menu::MapInfo snapshot;
 std::chrono::steady_clock::time_point lastUpdate;
+// Map IDs present in the world at the last update; a new one is a map load.
+std::vector<uint32_t> presentMaps;
+std::atomic<void (*)(uint32_t)> sceneListener{nullptr};
+// Scene of the last loader request until it is on screen; the requested battle.
+std::atomic<uint32_t> pendingScene{0}, battleScene{0};
+// The snapshot's map as a scene tag, readable without the lock once a frame.
+std::atomic<uint32_t> currentMapScene{0};
+uint32_t MapScene(uint32_t id) { return gpu::pipeline_cache::SceneTag(gpu::pipeline_cache::kSceneMap, id); }
+void NotifySceneLoad(uint32_t tag) {
+    if (const auto listener = sceneListener.load()) listener(tag);
+}
 
 bool Address(uint32_t p) { return p >= 0x100000 && p < 0x7BFF0000 && !(p & 3); }
 std::wstring Text(uint8_t* base, uint32_t p, uint32_t limit = 256) {
@@ -54,6 +71,7 @@ void debug_menu::UpdateMapInfo(uint8_t* base) {
     if (now - lastUpdate < std::chrono::milliseconds(250)) return;
     lastUpdate = now;
     MapInfo current;
+    std::vector<uint32_t> present;
     const auto world = PPC_LOAD_U32(0x83318744);
     if (Address(world)) {
         const auto levels = PPC_LOAD_U32(world + 0x44), count = PPC_LOAD_U32(world + 0x48);
@@ -65,19 +83,29 @@ void debug_menu::UpdateMapInfo(uint8_t* base) {
                     const auto package = ObjectName(base, object);
                     const auto found = definitions.find(package);
                     if (found != definitions.end()) {
-                        if (current.available && current.id != found->second) {
-                            current = {}; // A streaming transition is ambiguous.
-                            goto done;
+                        if (std::find(present.begin(), present.end(), found->second) == present.end()) {
+                            present.push_back(found->second);
+                            current.package = package;
                         }
-                        current.available = true;
-                        current.id = found->second;
-                        current.package = package;
                         break;
                     }
                     object = PPC_LOAD_U32(object + 0x28);
                 }
             }
         }
+    }
+    // A map that appears in the world is being loaded, even while a streaming
+    // transition still holds the previous one.
+    for (const uint32_t id : present)
+        if (std::find(presentMaps.begin(), presentMaps.end(), id) == presentMaps.end())
+            NotifySceneLoad(MapScene(id));
+    presentMaps = present;
+    // Several maps at once is an ambiguous streaming transition.
+    if (present.size() == 1) {
+        current.available = true;
+        current.id = present.front();
+    } else {
+        current.package.clear();
     }
     if (current.available) {
         // Live localized FString array indexed by map-definition ID, not font text ID.
@@ -89,7 +117,6 @@ void debug_menu::UpdateMapInfo(uint8_t* base) {
                 current.name = Text(base, PPC_LOAD_U32(item), length);
         }
     }
-done:
     // Map changes are always logged, once per resolved map and once when it is
     // lost: they place runtime reports such as temporal suspects without a capture.
     static bool loggedAvailable = false;
@@ -108,6 +135,7 @@ done:
         loggedId = current.id;
         loggedNamed = !current.name.empty();
     }
+    currentMapScene = current.available ? MapScene(current.id) : 0;
     snapshot = std::move(current);
 }
 
@@ -115,4 +143,65 @@ debug_menu::MapInfo debug_menu::GetMapInfo() {
     std::lock_guard lock(mutex);
     if (std::chrono::steady_clock::now() - lastUpdate > std::chrono::seconds(2)) return {};
     return snapshot;
+}
+
+void debug_menu::PollSceneLoads(uint8_t* base) {
+    // The loader's request slots (see patches/encounter_defer.cpp): phase at +0,
+    // FString name at +4, ID at +16. Slot 0 is the map jump, slot 1 the battle.
+    constexpr uint32_t MapSlot = 0x832631F0 + 3168, BattleSlot = MapSlot + 88;
+    static int32_t mapPhase = 0, battlePhase = 0;
+    static uint32_t battleId = ~0u;
+    static bool battleStarted = false;
+    const auto phase = static_cast<int32_t>(PPC_LOAD_U32(MapSlot));
+    if (phase > 0 && mapPhase <= 0) {
+        const auto name = Key(Text(base, PPC_LOAD_U32(MapSlot + 4), 64));
+        std::optional<uint32_t> id;
+        {
+            std::lock_guard lock(mutex);
+            if (const auto found = definitions.find(name); found != definitions.end()) id = found->second;
+        }
+        const auto text = std::filesystem::path(name).u8string();
+        LOG_INFO("scene load: map {} id={}", reinterpret_cast<const char*>(text.c_str()), id ? std::to_string(*id) : "-");
+        if (id) {
+            pendingScene = MapScene(*id);
+            NotifySceneLoad(MapScene(*id));
+        }
+    }
+    mapPhase = phase;
+
+    const auto requested = static_cast<int32_t>(PPC_LOAD_U32(BattleSlot));
+    const uint32_t id = PPC_LOAD_U32(BattleSlot + 16);
+    if (requested > 0 && (battlePhase <= 0 || id != battleId)) {
+        const auto tag = gpu::pipeline_cache::SceneTag(gpu::pipeline_cache::kSceneBattle, id);
+        LOG_INFO("scene load: battle id={}", int32_t(id));
+        battleId = id;
+        battleScene = tag;
+        pendingScene = tag;
+        battleStarted = false;
+        NotifySceneLoad(tag);
+    }
+    battlePhase = requested;
+
+    // A requested map stays the loading scene until it is the current map, a
+    // battle until its field is back.
+    uint32_t pending = pendingScene;
+    const uint32_t map = currentMapScene;
+    if (pending >> 28 == gpu::pipeline_cache::kSceneBattle) {
+        if (CurrentBattle()) battleStarted = true;
+        else if (battleStarted && map) pendingScene.compare_exchange_strong(pending, 0u);
+    } else if (pending && map == pending) {
+        pendingScene.compare_exchange_strong(pending, 0u);
+    }
+}
+
+uint32_t debug_menu::CurrentSceneTag() {
+    if (CurrentBattle()) return battleScene;
+    // No staleness rule as in GetMapInfo: a game thread that waits for a long
+    // frame has not left its map.
+    const uint32_t map = currentMapScene;
+    return map ? map : pendingScene.load();
+}
+
+void debug_menu::SetSceneLoadListener(void (*listener)(uint32_t)) {
+    sceneListener = listener;
 }

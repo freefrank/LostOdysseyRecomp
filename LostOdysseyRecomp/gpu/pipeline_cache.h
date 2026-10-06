@@ -18,6 +18,7 @@
 #include <span>
 #include <string>
 #include <system_error>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -42,11 +43,61 @@ namespace gpu::pipeline_cache
         bool operator==(const Key&) const = default;
     };
 
+    // Scenes a recipe was drawn in: up to kSceneSlots tags, 0 = empty slot.
+    // A tag is kind << 28 | id; kManyScenes replaces the list once it overflows.
+    // kNoScene: drawn while no map or battle was known (title, boot menus).
+    inline constexpr size_t kSceneSlots = 8;
+    inline constexpr uint32_t kSceneMap = 1, kSceneBattle = 2;
+    inline constexpr uint32_t kNoScene = 0xF0000000u, kManyScenes = 0xFFFFFFFFu;
+    inline constexpr uint32_t SceneTag(uint32_t kind, uint32_t id) noexcept { return kind << 28 | (id & 0x0FFFFFFFu); }
+    struct Scenes
+    {
+        std::array<uint32_t, kSceneSlots> tags{};
+        bool operator==(const Scenes&) const = default;
+        bool Contains(uint32_t tag) const noexcept
+        {
+            return tag && std::find(tags.begin(), tags.end(), tag) != tags.end();
+        }
+        bool Many() const noexcept { return tags[0] == kManyScenes; }
+        size_t Count() const noexcept
+        {
+            return Many() ? kSceneSlots + 1 : size_t(std::count_if(tags.begin(), tags.end(), [](uint32_t t) { return t != 0; }));
+        }
+        // Returns whether the list changed.
+        bool Add(uint32_t tag) noexcept
+        {
+            if (!tag || Many() || Contains(tag)) return false;
+            for (auto& slot : tags)
+                if (!slot) { slot = tag; return true; }
+            tags = {};
+            tags[0] = kManyScenes;
+            return true;
+        }
+        bool Merge(const Scenes& other) noexcept
+        {
+            if (other.Many()) { const bool changed = !Many(); tags = other.tags; return changed; }
+            bool changed = false;
+            for (const uint32_t tag : other.tags) changed |= Add(tag);
+            return changed;
+        }
+    };
+    struct Record
+    {
+        Key key;
+        Scenes scenes;
+        bool operator==(const Record&) const = default;
+    };
+
     inline constexpr size_t kMaxRecords = 16384;
     inline constexpr size_t kKeyBytes = 64;
-    inline constexpr size_t kRecordBytes = kKeyBytes + 8;
+    inline constexpr size_t kSceneBytes = kSceneSlots * 4;
+    // File version 1 records hold the key and its checksum; version 2 adds the scenes.
+    inline constexpr size_t kRecordBytesV1 = kKeyBytes + 8;
+    inline constexpr size_t kRecordBytes = kKeyBytes + kSceneBytes + 8;
     inline constexpr size_t kHeaderBytes = 48;
-    inline constexpr uint32_t kFileVersion = 1;
+    inline constexpr uint32_t kFileVersion = 2;
+    // Load(): accept any translator version (a shipped corpus outlives it).
+    inline constexpr uint32_t kAnyShaderVersion = 0;
     using Validator = std::function<bool(const Key&)>;
 
     namespace detail
@@ -211,8 +262,7 @@ namespace gpu::pipeline_cache
     };
 
     // These masks are the values emitted by the current renderer. Primitive and
-    // format values are deliberately left to the caller's Validator. No key bits
-    // are canonicalized: a warmed entry must equal the later draw's exact key.
+    // format values are deliberately left to the caller's Validator.
     inline bool IsValid(const Key& key) noexcept
     {
         return !(key.modeCull & ~0x3807U) && !(key.colorMask & ~0xFU) &&
@@ -220,13 +270,58 @@ namespace gpu::pipeline_cache
             key.flags == 0 && std::isfinite(std::bit_cast<float>(key.slopeBias));
     }
 
+    // RB_BLENDCONTROL for "no blending": ONE, ADD, ZERO for color and alpha.
+    inline constexpr uint32_t kNoBlend = 0x00010001u;
+
+    // Clears the key bits the renderer's DescribePipeline does not turn into
+    // pipeline state, so draws that differ only there share one pipeline and one
+    // recipe. Every rule here must match DescribePipeline (renderer.cpp):
+    // - depthControl: bit 3 (early Z) is never read; Z enable and the Z function
+    //   only matter with a depth target and Z enabled; stencil state only with a
+    //   depth target and stencil enabled, back-face stencil only with bit 7. The
+    //   Z write bit is kept: DescribePipeline copies it unconditionally.
+    // - Polygon offset enables (modeCull 0x3800) are already folded into the bias
+    //   values, which only apply with depth testing on.
+    // - Blend state is ignored without a color write mask (DescribePipeline
+    //   treats such a draw as unblended), and bits 13-15/29-31 are never read.
+    // - Every primitive other than points, lines, line strips, triangle strips
+    //   and rectangle lists is drawn as a triangle list.
+    inline Key Normalize(Key key) noexcept
+    {
+        const bool depthTarget = key.depthFormat != 0;
+        uint32_t control = key.depthControl & ~0x8u;
+        const bool depthOn = depthTarget && (control & 2);
+        const bool stencilOn = depthTarget && (control & 1);
+        if (!depthOn) {
+            control &= ~0x72u;
+            key.depthBias = 0;
+            key.slopeBias = 0;
+        }
+        if (!stencilOn) {
+            control &= 0x76u;
+            key.stencilRefMask = key.stencilRefMaskBack = 0;
+        } else if (!(control & 0x80)) {
+            control &= 0x000FFFFFu;
+            key.stencilRefMaskBack = 0;
+        }
+        key.depthControl = control;
+        key.modeCull &= 0x7u;
+        if (key.slopeBias == 0x80000000u) key.slopeBias = 0; // -0.0
+        key.blend = (key.colorMask & 0xF) ? key.blend & 0x1FFF1FFFu : kNoBlend;
+        if (key.prim != 1 && key.prim != 2 && key.prim != 3 && key.prim != 6 && key.prim != 8) key.prim = 4;
+        return key;
+    }
+
     enum class Status { Missing, Loaded, Incompatible, Invalid, IoError };
     struct LoadResult
     {
         Status status = Status::Invalid;
-        std::vector<Key> keys;
+        std::vector<Record> records;
         std::string error;
         size_t duplicates = 0;
+        // An older file or recipe version, or keys that normalization changed:
+        // the caller should write the file again.
+        bool migrated = false;
     };
     struct WriteResult
     {
@@ -236,17 +331,22 @@ namespace gpu::pipeline_cache
         size_t duplicates = 0;
     };
 
+    // Reads file version 1 (keys only) and 2 (keys and scenes). Recipe versions
+    // from oldestRecipeVersion up to recipeVersion are accepted; keys of an older
+    // one are normalized (version 1 keys predate Normalize). shaderVersion may be
+    // kAnyShaderVersion. Duplicate keys merge their scenes.
     inline LoadResult Load(const std::filesystem::path& path, uint32_t shaderVersion,
-                           uint32_t recipeVersion, const Validator& validate = {})
+                           uint32_t recipeVersion, const Validator& validate = {},
+                           uint32_t oldestRecipeVersion = 0)
     {
         auto fail = [](Status status, const std::string& error) {
-            return LoadResult{ status, {}, error, 0 };
+            return LoadResult{ status, {}, error, 0, false };
         };
         try
         {
             std::error_code ec;
             if (!std::filesystem::exists(path, ec))
-                return ec ? fail(Status::IoError, ec.message()) : LoadResult{ Status::Missing, {}, {}, 0 };
+                return ec ? fail(Status::IoError, ec.message()) : LoadResult{ Status::Missing, {}, {}, 0, false };
             const auto size = std::filesystem::file_size(path, ec);
             if (ec) return fail(Status::IoError, ec.message());
             if (size < kHeaderBytes || size > kHeaderBytes + kMaxRecords * kRecordBytes)
@@ -261,32 +361,47 @@ namespace gpu::pipeline_cache
                 if (bytes[i] != detail::kMagic[i]) return fail(Status::Invalid, "invalid recipe signature");
             if (detail::Read64(bytes.data() + 40) != detail::Hash(std::span(bytes).first(40)))
                 return fail(Status::Invalid, "recipe header checksum mismatch");
-            if (detail::Read32(bytes.data() + 8) != kFileVersion ||
-                detail::Read32(bytes.data() + 12) != shaderVersion ||
-                detail::Read32(bytes.data() + 16) != recipeVersion)
+            const uint32_t fileVersion = detail::Read32(bytes.data() + 8);
+            const uint32_t fileRecipeVersion = detail::Read32(bytes.data() + 16);
+            const uint32_t oldest = oldestRecipeVersion ? std::min(oldestRecipeVersion, recipeVersion) : recipeVersion;
+            if ((fileVersion != 1 && fileVersion != kFileVersion) ||
+                (shaderVersion != kAnyShaderVersion && detail::Read32(bytes.data() + 12) != shaderVersion) ||
+                fileRecipeVersion < oldest || fileRecipeVersion > recipeVersion)
                 return fail(Status::Incompatible, "recipe cache version mismatch");
+            const size_t recordBytes = fileVersion == 1 ? kRecordBytesV1 : kRecordBytes;
+            const size_t checkedBytes = recordBytes - 8;
             const uint32_t count = detail::Read32(bytes.data() + 24);
-            if (detail::Read32(bytes.data() + 20) != kRecordBytes ||
+            if (detail::Read32(bytes.data() + 20) != recordBytes ||
                 detail::Read32(bytes.data() + 28) != 0 || count > kMaxRecords ||
-                bytes.size() != kHeaderBytes + size_t(count) * kRecordBytes)
+                bytes.size() != kHeaderBytes + size_t(count) * recordBytes)
                 return fail(Status::Invalid, "invalid recipe record framing");
             if (detail::Read64(bytes.data() + 32) != detail::Hash(std::span(bytes).subspan(kHeaderBytes)))
                 return fail(Status::Invalid, "recipe payload checksum mismatch");
 
-            LoadResult result{ Status::Loaded, {}, {}, 0 };
-            result.keys.reserve(count);
-            std::unordered_set<Key, KeyHash> seen;
+            const bool normalize = fileRecipeVersion < recipeVersion;
+            LoadResult result{ Status::Loaded, {}, {}, 0, fileVersion != kFileVersion || normalize };
+            result.records.reserve(count);
+            std::unordered_map<Key, size_t, KeyHash> seen;
             seen.reserve(count);
             for (size_t i = 0; i < count; ++i)
             {
-                const uint8_t* record = bytes.data() + kHeaderBytes + i * kRecordBytes;
-                if (detail::Read64(record + kKeyBytes) != detail::Hash({ record, kKeyBytes }))
+                const uint8_t* record = bytes.data() + kHeaderBytes + i * recordBytes;
+                if (detail::Read64(record + checkedBytes) != detail::Hash({ record, checkedBytes }))
                     return fail(Status::Invalid, "recipe record checksum mismatch");
-                const Key key = detail::Decode(record);
-                if (!IsValid(key) || (validate && !validate(key)))
+                Record entry{ detail::Decode(record), {} };
+                if (!IsValid(entry.key) || (validate && !validate(entry.key)))
                     return fail(Status::Invalid, "recipe contains unsupported state");
-                if (seen.insert(key).second) result.keys.push_back(key);
-                else ++result.duplicates;
+                if (fileVersion != 1)
+                    for (size_t slot = 0; slot < kSceneSlots; ++slot)
+                        entry.scenes.tags[slot] = detail::Read32(record + kKeyBytes + 4 * slot);
+                if (normalize) entry.key = Normalize(entry.key);
+                const auto [found, inserted] = seen.try_emplace(entry.key, result.records.size());
+                if (inserted) result.records.push_back(entry);
+                else
+                {
+                    result.records[found->second].scenes.Merge(entry.scenes);
+                    ++result.duplicates;
+                }
             }
             return result;
         }
@@ -296,42 +411,50 @@ namespace gpu::pipeline_cache
         }
     }
 
-    inline WriteResult Write(const std::filesystem::path& path, std::span<const Key> keys,
+    // Writes file version 2. Duplicate keys merge their scenes.
+    inline WriteResult Write(const std::filesystem::path& path, std::span<const Record> records,
                              uint32_t shaderVersion, uint32_t recipeVersion,
                              const Validator& validate = {})
     {
         WriteResult result;
         try
         {
-            if (keys.size() > kMaxRecords)
+            if (records.size() > kMaxRecords)
             {
                 result.error = "recipe record limit exceeded";
                 return result;
             }
-            std::vector<uint8_t> bytes(kHeaderBytes, 0);
-            bytes.reserve(kHeaderBytes + keys.size() * kRecordBytes);
-            std::unordered_set<Key, KeyHash> seen;
-            seen.reserve(keys.size());
-            for (const Key& key : keys)
+            std::vector<Record> unique;
+            unique.reserve(records.size());
+            std::unordered_map<Key, size_t, KeyHash> seen;
+            seen.reserve(records.size());
+            for (const Record& record : records)
             {
-                if (!IsValid(key) || (validate && !validate(key)))
+                if (!IsValid(record.key) || (validate && !validate(record.key)))
                 {
                     result.error = "recipe contains unsupported state";
                     return result;
                 }
-                if (!seen.insert(key).second) { ++result.duplicates; continue; }
-                const auto encoded = detail::Encode(key);
-                const size_t offset = bytes.size();
-                bytes.resize(offset + kRecordBytes);
-                std::copy(encoded.begin(), encoded.end(), bytes.begin() + static_cast<ptrdiff_t>(offset));
-                detail::Put64(bytes.data() + offset + kKeyBytes, detail::Hash(encoded));
+                const auto [found, inserted] = seen.try_emplace(record.key, unique.size());
+                if (inserted) unique.push_back(record);
+                else { unique[found->second].scenes.Merge(record.scenes); ++result.duplicates; }
+            }
+            std::vector<uint8_t> bytes(kHeaderBytes + unique.size() * kRecordBytes, 0);
+            for (size_t i = 0; i < unique.size(); ++i)
+            {
+                uint8_t* out = bytes.data() + kHeaderBytes + i * kRecordBytes;
+                const auto encoded = detail::Encode(unique[i].key);
+                std::copy(encoded.begin(), encoded.end(), out);
+                for (size_t slot = 0; slot < kSceneSlots; ++slot)
+                    detail::Put32(out + kKeyBytes + 4 * slot, unique[i].scenes.tags[slot]);
+                detail::Put64(out + kKeyBytes + kSceneBytes, detail::Hash({ out, kKeyBytes + kSceneBytes }));
             }
             std::copy(detail::kMagic.begin(), detail::kMagic.end(), bytes.begin());
             detail::Put32(bytes.data() + 8, kFileVersion);
             detail::Put32(bytes.data() + 12, shaderVersion);
             detail::Put32(bytes.data() + 16, recipeVersion);
             detail::Put32(bytes.data() + 20, static_cast<uint32_t>(kRecordBytes));
-            detail::Put32(bytes.data() + 24, static_cast<uint32_t>(seen.size()));
+            detail::Put32(bytes.data() + 24, static_cast<uint32_t>(unique.size()));
             detail::Put64(bytes.data() + 32, detail::Hash(std::span(bytes).subspan(kHeaderBytes)));
             detail::Put64(bytes.data() + 40, detail::Hash(std::span(bytes).first(40)));
 
@@ -341,7 +464,7 @@ namespace gpu::pipeline_cache
                 return result;
             }
             result.ok = true;
-            result.written = seen.size();
+            result.written = unique.size();
             return result;
         }
         catch (const std::exception& e)
