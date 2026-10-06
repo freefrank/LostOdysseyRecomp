@@ -686,7 +686,7 @@ namespace gpu::renderer
             uint64_t preparedPipelineHits = 0, runtimePipelineCreates = 0;
             std::mutex pipelineRecipeMutex;
             // Scene being drawn (debug_menu::CurrentSceneTag), checked once a frame.
-            uint32_t sceneTag = 0, sceneSerial = 1;
+            uint32_t sceneTag = gpu::pipeline_cache::kNoScene, sceneSerial = 1;
             // The driver's own pipeline cache file; empty when disabled.
             std::filesystem::path driverCachePath;
             std::atomic<size_t> driverCacheBytes{0}; // largest size loaded or written
@@ -4658,9 +4658,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 
             // Which known recipes startup builds; scene loads prefetch the others.
             // Default: the player's learned recipes, and corpus recipes that are
-            // common (untagged, or drawn in at least LO_PIPELINE_PREBUILD_SCENES
-            // scenes, default 4). LO_PIPELINE_PREBUILD=all builds every recipe,
-            // =common applies the common rule to learned recipes too.
+            // common (untagged, drawn outside any scene, or in at least
+            // LO_PIPELINE_PREBUILD_SCENES scenes, default 4). LO_PIPELINE_PREBUILD=all
+            // builds every recipe, =common applies the common rule to learned ones too.
             static bool PrebuildAtStartup(const RecipeEntry& entry)
             {
                 enum class Mode { All, Learned, Common };
@@ -4674,7 +4674,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }();
                 if (mode == Mode::All || (mode == Mode::Learned && entry.learned)) return true;
                 const size_t count = entry.scenes.Count();
-                return count == 0 || count >= threshold;
+                return count == 0 || count >= threshold || entry.scenes.Contains(gpu::pipeline_cache::kNoScene);
             }
 
             // Looks up the shaders of a recipe for creation on any thread. Rect-list
@@ -4960,7 +4960,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
                 auto& entry = it->second;
                 if (!entry.learned && learnedRecipes >= gpu::pipeline_cache::kMaxRecords) return;
-                if (entry.learned && (!sceneTag || entry.scenes.Contains(sceneTag))) return;
+                if (entry.learned && entry.scenes.Contains(sceneTag)) return;
                 std::lock_guard lock(pipelineRecipeMutex);
                 if (!entry.learned) { entry.learned = true; ++learnedRecipes; pipelineRecipesDirty = true; }
                 pipelineRecipesDirty |= entry.scenes.Add(sceneTag);
@@ -4969,7 +4969,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             // Once a frame: a new scene makes every pipeline record its next use.
             void UpdateSceneTag()
             {
-                const uint32_t tag = debug_menu::CurrentSceneTag();
+                const uint32_t current = debug_menu::CurrentSceneTag();
+                const uint32_t tag = current ? current : gpu::pipeline_cache::kNoScene;
                 if (tag == sceneTag) return;
                 sceneTag = tag;
                 ++sceneSerial;

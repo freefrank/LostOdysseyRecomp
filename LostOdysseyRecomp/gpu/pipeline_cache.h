@@ -45,9 +45,10 @@ namespace gpu::pipeline_cache
 
     // Scenes a recipe was drawn in: up to kSceneSlots tags, 0 = empty slot.
     // A tag is kind << 28 | id; kManyScenes replaces the list once it overflows.
+    // kNoScene: drawn while no map or battle was known (title, boot menus).
     inline constexpr size_t kSceneSlots = 8;
     inline constexpr uint32_t kSceneMap = 1, kSceneBattle = 2;
-    inline constexpr uint32_t kManyScenes = 0xFFFFFFFFu;
+    inline constexpr uint32_t kNoScene = 0xF0000000u, kManyScenes = 0xFFFFFFFFu;
     inline constexpr uint32_t SceneTag(uint32_t kind, uint32_t id) noexcept { return kind << 28 | (id & 0x0FFFFFFFu); }
     struct Scenes
     {

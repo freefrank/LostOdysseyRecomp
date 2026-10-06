@@ -25,6 +25,7 @@ RECORD_V1 = KEY + 8
 RECORD_V2 = KEY + SLOTS * 4 + 8
 RECIPE_VERSION = 2
 MANY = 0xFFFFFFFF
+NO_SCENE = 0xF0000000
 NO_BLEND = 0x00010001
 KINDS = {1: "map", 2: "battle"}
 
@@ -117,7 +118,11 @@ def write(path, shader_version, recipes):
 
 
 def scene_name(tag):
-    return "many" if tag == MANY else f"{KINDS.get(tag >> 28, tag >> 28)} {tag & 0x0FFFFFFF}"
+    if tag == MANY:
+        return "many"
+    if tag == NO_SCENE:
+        return "outside scenes"
+    return f"{KINDS.get(tag >> 28, tag >> 28)} {tag & 0x0FFFFFFF}"
 
 
 def info(paths):
