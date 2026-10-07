@@ -10,6 +10,7 @@ on:
       - shared/frame_generation/**
       - cmake/LoFrameGeneration.cmake
       - tools/patches/plume-lostodyssey.patch
+      - tools/patches/plume-sdl3.patch
       - tools/tests/frame_generation/**
       - tools/tests/motion_replay/**
       - tools/tests/native_dlss_renderer_gpu_test.cpp
@@ -20,6 +21,7 @@ on:
       - shared/frame_generation/**
       - cmake/LoFrameGeneration.cmake
       - tools/patches/plume-lostodyssey.patch
+      - tools/patches/plume-sdl3.patch
       - tools/tests/frame_generation/**
       - tools/tests/motion_replay/**
       - tools/tests/native_dlss_renderer_gpu_test.cpp
@@ -46,6 +48,7 @@ jobs:
           if [ -n "${LO_GIT_REFERENCE:-}" ]; then fetch=(--reference "$LO_GIT_REFERENCE"); else fetch=(--depth 1); fi
           git submodule update --init "${fetch[@]}" thirdparty/plume tools/XenosRecomp tools/XenonRecomp thirdparty/unordered_dense thirdparty/SDL
           git -C thirdparty/plume apply ../../tools/patches/plume-lostodyssey.patch
+          git -C thirdparty/plume apply ../../tools/patches/plume-sdl3.patch
           git -C thirdparty/plume submodule update --init "${fetch[@]}" contrib/volk contrib/Vulkan-Headers contrib/VulkanMemoryAllocator contrib/D3D12MemoryAllocator
           git -C tools/XenosRecomp submodule update --init --recursive "${fetch[@]}"
           git -C tools/XenonRecomp submodule update --init "${fetch[@]}" thirdparty/tomlplusplus
