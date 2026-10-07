@@ -53,6 +53,8 @@ struct FileSystem { static std::filesystem::path GetGameRoot(){return {};} };
 namespace hid {
 bool playStationPrompts = false;
 bool UsesPlayStationPrompts() { return playStationPrompts; }
+void SetVibrationStrength(uint32_t) {}
+void PreviewVibration() {}
 }
 namespace settings {
 Config savedConfig;
@@ -119,7 +121,7 @@ int main(int argc, char** argv) {
     // A must not cycle ANY ordinary setting, not just the new graphics choice.
     for(int tab=0;tab<4;++tab){
         settings::tab=tab;
-        const int count=tab==0?7:tab==1?4:tab==2?int(settings::GraphicsRow::Count):3;
+        const int count=tab==0?7:tab==1?5:tab==2?int(settings::GraphicsRow::Count):3;
         for(int row=0;row<count;++row){
             // A on HDR peak opens its calibration page by design.
             if(settings::graphics_menu::IsAction(tab,row) || (tab==2 && row==int(settings::GraphicsRow::HdrPeak)))continue;
@@ -133,7 +135,7 @@ int main(int argc, char** argv) {
     }
     settings::tab=0;settings::row=0;tick(8);
     Check(PPC_LOAD_U32(ConfigData)==1 && applies==1,"right still applies gameplay setting");
-    settings::tab=1;settings::row=3;tick(8);
+    settings::tab=1;settings::row=4;tick(8);
     Check(settings::edit.audioOutput==1 && settings::savedConfig.audioOutput==1 && apu::surround && applies==1,
           "audio output switches live and saves without a guest apply");
     using settings::GraphicsRow;using gpu::upscaling::Upscaler;

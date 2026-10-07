@@ -15,6 +15,12 @@ namespace hid
     bool UsesPlayStationPrompts();
     // Physical SDL controllers may be discovered through HIDAPI without an Android InputDevice.
     bool HasConnectedController();
+    // Player rumble strength, 0-100 percent of the guest's motor speeds (100 = retail).
+    // A change rescales a rumble that is already running.
+    void SetVibrationStrength(uint32_t percent);
+    // Short pulse at the strongest guest level and the current strength, so the
+    // player can feel the setting. Skipped while the guest is rumbling.
+    void PreviewVibration();
 
     uint32_t GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState);
     uint32_t SetState(uint32_t dwUserIndex, XAMINPUT_VIBRATION* pVibration);

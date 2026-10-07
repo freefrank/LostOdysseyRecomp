@@ -571,9 +571,11 @@ uint32_t XamInputGetState(uint32_t userIndex, uint32_t flags, XAMINPUT_STATE* st
     return result;
 }
 
-uint32_t XamInputSetState(uint32_t userIndex, uint32_t flags, XAMINPUT_VIBRATION* vibration)
+uint32_t XamInputSetState(uint32_t userIndex, uint32_t flags, const XAMINPUT_VIBRATION* vibration)
 {
-    ByteSwapInplace(vibration->wLeftMotorSpeed);
-    ByteSwapInplace(vibration->wRightMotorSpeed);
-    return hid::SetState(userIndex, vibration);
+    // The request is input only: swap a host copy and leave guest memory as the game wrote it.
+    XAMINPUT_VIBRATION host = *vibration;
+    ByteSwapInplace(host.wLeftMotorSpeed);
+    ByteSwapInplace(host.wRightMotorSpeed);
+    return hid::SetState(userIndex, &host);
 }

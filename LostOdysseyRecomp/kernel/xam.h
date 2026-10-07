@@ -34,4 +34,4 @@ uint32_t XamContentClose(const char* szRootName, XXOVERLAPPED* pOverlapped);
 
 uint32_t XamInputGetCapabilities(uint32_t unk, uint32_t userIndex, uint32_t flags, XAMINPUT_CAPABILITIES* caps);
 uint32_t XamInputGetState(uint32_t userIndex, uint32_t flags, XAMINPUT_STATE* state);
-uint32_t XamInputSetState(uint32_t userIndex, uint32_t flags, XAMINPUT_VIBRATION* vibration);
+uint32_t XamInputSetState(uint32_t userIndex, uint32_t flags, const XAMINPUT_VIBRATION* vibration);

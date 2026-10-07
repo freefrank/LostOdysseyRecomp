@@ -47,6 +47,38 @@ namespace
     Mutex g_getStateMutex;
     uint32_t g_packet = 0;
 
+    // Match XInput/Xam semantics: rumble is enabled by default and remains at
+    // the requested motor speeds until the guest changes or clears the state.
+    // LO_CONTROLLER_RUMBLE=0 is an explicit host-side opt-out.
+    bool RumbleEnabled()
+    {
+        static const bool enabled = [] {
+            const char* value = getenv("LO_CONTROLLER_RUMBLE");
+            return !value || strcmp(value, "0") != 0;
+        }();
+        return enabled;
+    }
+    std::atomic<uint32_t> g_vibrationPercent{100};
+    // The guest's last request, kept to rescale it when the strength changes. Guarded by g_hidMutex.
+    uint16_t g_guestLeftMotor = 0, g_guestRightMotor = 0;
+
+    void RumbleAll(uint16_t left, uint16_t right, uint32_t duration)
+    {
+        for (auto* controller : g_controllers)
+        {
+            if (!SDL_GameControllerGetAttached(controller)) continue;
+            SDL_GameControllerRumble(controller, left, right, duration);
+        }
+    }
+    // Caller holds g_hidMutex.
+    void ApplyGuestRumble()
+    {
+        const uint32_t percent = g_vibrationPercent.load(std::memory_order_relaxed);
+        const auto left = uint16_t(uint32_t(g_guestLeftMotor) * percent / 100);
+        const auto right = uint16_t(uint32_t(g_guestRightMotor) * percent / 100);
+        RumbleAll(left, right, (left || right) ? 0xFFFFFFFFu : 0u);
+    }
+
     void OpenControllers()
     {
         for (int i = 0; i < SDL_NumJoysticks(); ++i)
@@ -590,32 +622,32 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
 
 uint32_t hid::SetState(uint32_t dwUserIndex, XAMINPUT_VIBRATION* pVibration)
 {
-    // Match XInput/Xam semantics: rumble is enabled by default and remains at
-    // the requested motor speeds until the guest changes or clears the state.
-    // LO_CONTROLLER_RUMBLE=0 is an explicit host-side opt-out.
-    static const bool rumbleEnabled = [] {
-        const char* value = getenv("LO_CONTROLLER_RUMBLE");
-        return !value || strcmp(value, "0") != 0;
-    }();
     if (dwUserIndex != 0)
         return ERROR_DEVICE_NOT_CONNECTED;
-    if (!rumbleEnabled) return ERROR_SUCCESS;
-
-    const uint32_t duration = (pVibration->wLeftMotorSpeed || pVibration->wRightMotorSpeed)
-        ? 0xFFFFFFFFu
-        : 0u;
+    if (!RumbleEnabled()) return ERROR_SUCCESS;
 
     std::lock_guard lock(g_hidMutex);
-    for (auto* controller : g_controllers)
-    {
-        if (!SDL_GameControllerGetAttached(controller)) continue;
-        SDL_GameControllerRumble(
-            controller,
-            pVibration->wLeftMotorSpeed,
-            pVibration->wRightMotorSpeed,
-            duration);
-    }
+    g_guestLeftMotor = pVibration->wLeftMotorSpeed;
+    g_guestRightMotor = pVibration->wRightMotorSpeed;
+    ApplyGuestRumble();
     return ERROR_SUCCESS;
+}
+
+void hid::SetVibrationStrength(uint32_t percent)
+{
+    percent = std::min(percent, 100u);
+    if (g_vibrationPercent.exchange(percent) == percent || !RumbleEnabled()) return;
+    std::lock_guard lock(g_hidMutex);
+    if (g_guestLeftMotor || g_guestRightMotor) ApplyGuestRumble();
+}
+
+void hid::PreviewVibration()
+{
+    if (!RumbleEnabled()) return;
+    std::lock_guard lock(g_hidMutex);
+    if (g_guestLeftMotor || g_guestRightMotor) return;
+    const auto level = uint16_t(0xFFFFu * g_vibrationPercent.load(std::memory_order_relaxed) / 100);
+    RumbleAll(level, level, 200);
 }
 
 uint32_t hid::GetCapabilities(uint32_t dwUserIndex, XAMINPUT_CAPABILITIES* pCaps)

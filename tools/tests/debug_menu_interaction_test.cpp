@@ -68,6 +68,7 @@ bool SaveDebugLanguage(uint32_t language)
     g_mock.selectedLanguage = language;
     return true;
 }
+bool SaveFastForward(bool, uint32_t, uint32_t) { return true; }
 }
 
 namespace gpu::renderer
