@@ -194,16 +194,11 @@ duplicate SDL startup observed with the previous default launch mode. On
 foreground return, the renderer recreates the Vulkan surface and swapchain
 after draining queued GPU work instead of presenting to the abandoned Surface.
 
-The Android branch now uses SDL2 revision
-`b7502f1a884c055f8535cf8d2be3f44c41669a43` (2.33.0), matching the controller
-update from [PR #97](https://github.com/freefrank/LostOdysseyRecomp/pull/97)
-referenced by [issue #103](https://github.com/freefrank/LostOdysseyRecomp/issues/103).
-This includes upstream controller mappings and drivers, but does not establish
-Android compatibility for each controller or USB/Bluetooth mode.
-`tools/android/build-runtime.sh` also applies
-`tools/patches/sdl-android-surface-lock.patch`: native-window queries use SDL's
-Activity mutex, and Vulkan surface creation retains the native window while
-calling the driver. Direct CMake invocations must apply this patch first.
+The Android build uses the repository's pinned SDL 3.4.18 revision. This brings
+the current controller mappings and HIDAPI drivers to the APK, but does not
+establish Android compatibility for every controller or USB/Bluetooth mode.
+The former SDL2 native-window patch is not applied to SDL3; surface ownership
+must be verified by the foreground-return and Vulkan recreation device test.
 
 ## Shader pack
 

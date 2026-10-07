@@ -9,7 +9,7 @@ This is a target catalog and a record of earlier focused results. Versioned chec
 The independent suite below builds without private game data, generated PPC
 sources, a GPU or the full runtime dependency tree. It covers the 13 confirmed
 issues described in [the fix record](../../docs/notes/PROJECT_REVIEW_FIXES_20260930.md).
-Use GCC/Clang, Python 3.11+, CMake 3.20+ and SDL2 development files on Linux:
+Use GCC/Clang, Python 3.11+, CMake 3.20+ and SDL3 development files on Linux:
 
 ```bash
 git submodule update --init --depth 1 tools/XenonRecomp
@@ -23,7 +23,7 @@ ASan/UBSan are enabled by default; `-DLO_REVIEW_SANITIZE=OFF` disables them for
 native targets and selectable Python fixtures (the allocator fixture always
 uses them). `-DLO_REVIEW_SDL_TESTS=OFF` omits the SDL fixtures when development
 files are unavailable. An existing SDL library can be supplied with
-`-DLO_REVIEW_SDL_LIBRARY=/absolute/path/to/libSDL2.so`; that mode requires the
+`-DLO_REVIEW_SDL_LIBRARY=/absolute/path/to/libSDL3.so`; that mode requires the
 pinned `thirdparty/SDL` headers. The SDL tests cover both `posix_ui.cpp` and
 the actual production `progress.cpp` implementation, using the dummy driver.
 
@@ -814,7 +814,7 @@ Use an x64 Developer Command Prompt with Clang and an existing static SDL build:
 python -B tools/tests/video_exit_pump_test.py `
   --source LostOdysseyRecomp/gpu/video.cpp `
   --sdl-include thirdparty/SDL/include `
-  --sdl-lib out/build/windows-clang/thirdparty/SDL/SDL2-static.lib `
+  --sdl-lib out/build/windows-clang/thirdparty/SDL/SDL3-static.lib `
   --output out/issue82/exit-pump-check
 ```
 
