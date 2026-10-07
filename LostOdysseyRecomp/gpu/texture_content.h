@@ -25,39 +25,54 @@ namespace gpu::texture_cache
     // Cheap per-frame check: every byte of small extents, otherwise the head,
     // the tail and 64 evenly spread 64-byte windows. The inline multiply-xor
     // loop is deliberate: ~20k short XXH3 calls per frame cost as much as a
-    // full scan of all active textures.
+    // full scan of all active textures. Four independent lanes hide the
+    // multiply latency; each step is invertible, so any changed byte changes
+    // its lane and the result.
     inline uint64_t SampledContentHash(const void* data, size_t bytes)
     {
         const auto* p = static_cast<const uint8_t*>(data);
-        uint64_t h = 0x9E3779B97F4A7C15ull ^ bytes;
+        uint64_t lane[4] = {0x9E3779B97F4A7C15ull ^ bytes, 0xC2B2AE3D27D4EB4Full ^ bytes,
+            0x165667B19E3779F9ull ^ bytes, 0x27D4EB2F165667C5ull ^ bytes};
+        auto step = [](uint64_t& h, uint64_t v)
+        {
+            h = (h ^ v) * 0x100000001B3ull;
+            h ^= h >> 29;
+        };
         auto mix = [&](const uint8_t* q, size_t n)
         {
             size_t i = 0;
-            for (; i + 8 <= n; i += 8)
+            for (; i + 32 <= n; i += 32)
+                for (size_t k = 0; k < 4; ++k)
+                {
+                    uint64_t v;
+                    memcpy(&v, q + i + k * 8, 8);
+                    step(lane[k], v);
+                }
+            for (size_t k = 0; i + 8 <= n; i += 8, ++k)
             {
                 uint64_t v;
                 memcpy(&v, q + i, 8);
-                h = (h ^ v) * 0x100000001B3ull;
-                h ^= h >> 29;
+                step(lane[k], v);
             }
             if (i < n)
             {
                 uint64_t v = 0;
                 memcpy(&v, q + i, n - i);
-                h = (h ^ v) * 0x100000001B3ull;
-                h ^= h >> 29;
+                step(lane[3], v);
             }
         };
         if (bytes <= 8192)
-        {
             mix(p, bytes);
-            return h;
+        else
+        {
+            mix(p, 512);
+            mix(p + bytes - 512, 512);
+            const size_t stride = (bytes - 1024) / 64;
+            for (size_t i = 0; i < 64; i++)
+                mix(p + 512 + i * stride, 64);
         }
-        mix(p, 512);
-        mix(p + bytes - 512, 512);
-        const size_t step = (bytes - 1024) / 64;
-        for (size_t i = 0; i < 64; i++)
-            mix(p + 512 + i * step, 64);
+        uint64_t h = lane[0];
+        for (size_t k = 1; k < 4; ++k) step(h, lane[k]);
         return h;
     }
 
