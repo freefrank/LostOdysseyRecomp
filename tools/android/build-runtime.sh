@@ -30,8 +30,8 @@ if git -C "$repo/thirdparty/plume" apply --ignore-space-change --reverse --check
 else
     apply_patch_once "$repo/thirdparty/plume" "$repo/tools/patches/plume-lostodyssey.patch"
 fi
+apply_patch_once "$repo/thirdparty/plume" "$repo/tools/patches/plume-sdl3.patch"
 apply_patch_once "$repo/thirdparty/plume" "$repo/tools/patches/plume-android.patch"
-apply_patch_once "$repo/thirdparty/SDL" "$repo/tools/patches/sdl-android-surface-lock.patch"
 
 cmake -S "$repo" -B "$build" -G Ninja \
     -DCMAKE_TOOLCHAIN_FILE="$ndk/build/cmake/android.toolchain.cmake" \
@@ -44,7 +44,7 @@ cmake --build "$build" --target LostOdysseyRecomp -j "${LO_BUILD_JOBS:-4}"
 stage="$repo/packaging/android/build/runtime-jni/arm64-v8a"
 mkdir -p "$stage"
 cp "$build/LostOdysseyRecomp/libmain.so" "$stage/"
-cp "$build/thirdparty/SDL/libSDL2.so" "$stage/"
+cp "$build/thirdparty/SDL/libSDL3.so" "$stage/"
 cp "$ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so" "$stage/"
 cp "$dxc" "$stage/libdxcompiler.so"
 # libadrenotools hook libraries (custom Vulkan driver loading), when built.

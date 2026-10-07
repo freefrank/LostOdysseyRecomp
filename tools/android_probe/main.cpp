@@ -1,8 +1,8 @@
 #include "memory_probe.h"
 #include "vulkan_probe.h"
 
-#include <SDL.h>
-#include <SDL_system.h>
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_system.h>
 #include <android/log.h>
 #include <jni.h>
 
@@ -22,13 +22,13 @@ void Publish(const std::string& report) {
     std::istringstream lines(report);
     for (std::string line; std::getline(lines, line);)
         __android_log_print(ANDROID_LOG_INFO, "LOAndroidProbe", "%s", line.c_str());
-    if (const char* path = SDL_AndroidGetInternalStoragePath()) {
+    if (const char* path = SDL_GetAndroidInternalStoragePath()) {
         std::ofstream file(std::string(path) + "/probe-report.txt", std::ios::trunc);
         file << report;
         if (!file) __android_log_print(ANDROID_LOG_ERROR, "LOAndroidProbe", "Cannot write probe-report.txt");
     }
-    auto* env = static_cast<JNIEnv*>(SDL_AndroidGetJNIEnv());
-    auto activity = static_cast<jobject>(SDL_AndroidGetActivity());
+    auto* env = static_cast<JNIEnv*>(SDL_GetAndroidJNIEnv());
+    auto activity = static_cast<jobject>(SDL_GetAndroidActivity());
     if (!env || !activity) return;
     jclass type = env->GetObjectClass(activity);
     jmethodID method = env->GetMethodID(type, "showProbeReport", "(Ljava/lang/String;)V");
@@ -47,15 +47,17 @@ void Publish(const std::string& report) {
     env->DeleteLocalRef(activity);
 }
 
-void OpenControllers(std::vector<SDL_GameController*>& controllers) {
-    for (int i = 0; i < SDL_NumJoysticks(); ++i) {
-        if (!SDL_IsGameController(i)) continue;
-        const SDL_JoystickID id = SDL_JoystickGetDeviceInstanceID(i);
+void OpenControllers(std::vector<SDL_Gamepad*>& controllers) {
+    int count = 0;
+    SDL_JoystickID* ids = SDL_GetGamepads(&count);
+    for (int i = 0; i < count; ++i) {
+        const SDL_JoystickID id = ids[i];
         if (std::any_of(controllers.begin(), controllers.end(), [id](auto* pad) {
-                return SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pad)) == id;
+                return SDL_GetJoystickID(SDL_GetGamepadJoystick(pad)) == id;
             })) continue;
-        if (auto* pad = SDL_GameControllerOpen(i)) controllers.push_back(pad);
+        if (auto* pad = SDL_OpenGamepad(id)) controllers.push_back(pad);
     }
+    SDL_free(ids);
 }
 } // namespace
 
@@ -73,22 +75,23 @@ extern "C" int SDL_main(int, char**) {
     // SDLActivity may restart the entry point without unloading libmain.so.
     runProbe.store(true);
     runTone.store(false);
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0) {
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS)) {
         Publish(std::string("SDL video initialization failed: ") + SDL_GetError());
         return 1;
     }
-    const bool audioReady = SDL_InitSubSystem(SDL_INIT_AUDIO) == 0;
-    const bool inputReady = SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER) == 0;
-    SDL_Window* window = SDL_CreateWindow("Lost Odyssey Android Probe", SDL_WINDOWPOS_UNDEFINED,
-            SDL_WINDOWPOS_UNDEFINED, 960, 540, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
+    const bool audioReady = SDL_InitSubSystem(SDL_INIT_AUDIO);
+    const bool inputReady = SDL_InitSubSystem(SDL_INIT_GAMEPAD);
+    SDL_Window* window = SDL_CreateWindow("Lost Odyssey Android Probe", 960, 540,
+            SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
     std::string windowError = window ? "" : SDL_GetError();
     SDL_AudioSpec desired{};
     desired.freq = 48000;
-    desired.format = AUDIO_F32SYS;
+    desired.format = SDL_AUDIO_F32;
     desired.channels = 2;
-    desired.samples = 512;
-    SDL_AudioDeviceID audio = audioReady ? SDL_OpenAudioDevice(nullptr, 0, &desired, nullptr, 0) : 0;
-    std::vector<SDL_GameController*> controllers;
+    SDL_AudioStream* audio = audioReady
+        ? SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &desired, nullptr, nullptr)
+        : nullptr;
+    std::vector<SDL_Gamepad*> controllers;
     if (inputReady) OpenControllers(controllers);
     std::string report;
     bool running = true;
@@ -102,7 +105,7 @@ extern "C" int SDL_main(int, char**) {
                               : "Vulkan window creation failed: " + windowError) << "\n";
             result << "Audio device: " << (audio ? "opened (use Test audio to hear a tone)" : "unavailable") << "\n";
             result << "SDL controllers: " << controllers.size() << "\n";
-            for (auto* pad : controllers) result << "  " << SDL_GameControllerName(pad) << "\n";
+            for (auto* pad : controllers) result << "  " << SDL_GetGamepadName(pad) << "\n";
             result << "Report: app internal files/probe-report.txt; logcat tag LOAndroidProbe\n";
             report = result.str();
             Publish(report);
@@ -112,49 +115,49 @@ extern "C" int SDL_main(int, char**) {
                 std::vector<float> samples(48000 * 2 / 5);
                 for (size_t i = 0; i < samples.size() / 2; ++i)
                     samples[i * 2] = samples[i * 2 + 1] = 0.08f * std::sin(2.0f * 3.14159265f * 440.0f * i / 48000.0f);
-                SDL_ClearQueuedAudio(audio);
-                const int queued = SDL_QueueAudio(audio, samples.data(), static_cast<Uint32>(samples.size() * sizeof(float)));
-                SDL_PauseAudioDevice(audio, 0);
-                Publish(report + (queued == 0 ? "Audio tone queued; audibility needs listener confirmation.\n"
+                SDL_ClearAudioStream(audio);
+                const bool queued = SDL_PutAudioStreamData(audio, samples.data(), int(samples.size() * sizeof(float)));
+                SDL_ResumeAudioStreamDevice(audio);
+                Publish(report + (queued ? "Audio tone queued; audibility needs listener confirmation.\n"
                                              : std::string("Audio queue failed: ") + SDL_GetError() + "\n"));
             } else Publish(report + "Audio test unavailable: no opened device.\n");
         }
         SDL_Event event;
         if (!SDL_WaitEventTimeout(&event, 100)) continue;
         switch (event.type) {
-        case SDL_QUIT: running = false; break;
-        case SDL_KEYDOWN:
-            if (event.key.keysym.sym == SDLK_AC_BACK || event.key.keysym.sym == SDLK_ESCAPE) running = false;
+        case SDL_EVENT_QUIT: running = false; break;
+        case SDL_EVENT_KEY_DOWN:
+            if (event.key.key == SDLK_AC_BACK || event.key.key == SDLK_ESCAPE) running = false;
             break;
-        case SDL_APP_WILLENTERBACKGROUND:
+        case SDL_EVENT_WILL_ENTER_BACKGROUND:
             foreground = false;
-            if (audio) SDL_PauseAudioDevice(audio, 1);
+            if (audio) SDL_PauseAudioStreamDevice(audio);
             Publish(report + "Lifecycle: entered background; Vulkan probe resources already released.\n");
             break;
-        case SDL_APP_DIDENTERFOREGROUND:
+        case SDL_EVENT_DID_ENTER_FOREGROUND:
             foreground = true;
             runProbe.store(true);
             break;
-        case SDL_CONTROLLERDEVICEADDED:
+        case SDL_EVENT_GAMEPAD_ADDED:
             OpenControllers(controllers);
             runProbe.store(true);
             break;
-        case SDL_CONTROLLERDEVICEREMOVED:
+        case SDL_EVENT_GAMEPAD_REMOVED:
             controllers.erase(std::remove_if(controllers.begin(), controllers.end(), [](auto* pad) {
-                if (SDL_GameControllerGetAttached(pad)) return false;
-                SDL_GameControllerClose(pad);
+                if (SDL_GamepadConnected(pad)) return false;
+                SDL_CloseGamepad(pad);
                 return true;
             }), controllers.end());
             runProbe.store(true);
             break;
-        case SDL_CONTROLLERBUTTONDOWN:
-            Publish(report + "Controller button received: " + std::to_string(event.cbutton.button) + "\n");
+        case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+            Publish(report + "Controller button received: " + std::to_string(event.gbutton.button) + "\n");
             break;
         default: break;
         }
     }
-    for (auto* pad : controllers) SDL_GameControllerClose(pad);
-    if (audio) SDL_CloseAudioDevice(audio);
+    for (auto* pad : controllers) SDL_CloseGamepad(pad);
+    if (audio) SDL_DestroyAudioStream(audio);
     if (window) SDL_DestroyWindow(window);
     SDL_Quit();
     return 0;

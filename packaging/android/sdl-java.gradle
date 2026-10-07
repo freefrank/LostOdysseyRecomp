@@ -39,17 +39,7 @@ def prepareSdlJava = tasks.register('prepareSdlJava', Sync) {
                     && mUsbManager != null && mUsbManager.hasPermission(usbDevice);
                 handleUsbDevicePermission(usbDevice, granted);
             }''')
-        // The pinned SDL2 revision registers USB broadcasts through its own
-        // API-guarded registerReceiverCompat helper with RECEIVER_NOT_EXPORTED.
-        replaceOnce('''                if (Build.VERSION.SDK_INT >= 33 /* Android 14.0 (U) */) {
-                   Intent intent = new Intent(HIDDeviceManager.ACTION_USB_PERMISSION);
-                   intent.setPackage(mContext.getPackageName());
-                   mUsbManager.requestPermission(usbDevice, PendingIntent.getBroadcast(mContext, 0, intent, flags));
-               } else {
-                   mUsbManager.requestPermission(usbDevice, PendingIntent.getBroadcast(mContext, 0, new Intent(HIDDeviceManager.ACTION_USB_PERMISSION), flags));
-               }''', '''                Intent intent = new Intent(HIDDeviceManager.ACTION_USB_PERMISSION);
-                intent.setPackage(mContext.getPackageName());
-                mUsbManager.requestPermission(usbDevice, PendingIntent.getBroadcast(mContext, 0, intent, flags));''')
+        // SDL3 already scopes the USB permission intent to this package.
         hidJava.setText(patched, 'UTF-8')
     }
 }

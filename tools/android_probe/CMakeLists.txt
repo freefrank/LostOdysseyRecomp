@@ -19,10 +19,10 @@ add_subdirectory("${LO_PROBE_REPO_ROOT}/thirdparty/SDL" "${CMAKE_CURRENT_BINARY_
 add_library(main SHARED main.cpp memory_probe.cpp vulkan_probe.cpp)
 target_compile_features(main PRIVATE cxx_std_20)
 target_include_directories(main PRIVATE "${LO_PROBE_REPO_ROOT}/LostOdysseyRecomp")
-target_link_libraries(main PRIVATE SDL2::SDL2 vulkan android log)
+target_link_libraries(main PRIVATE SDL3::SDL3 vulkan android log)
 target_compile_options(main PRIVATE -Wall -Wextra -Wpedantic)
 # Keep every packaged native library compatible with 16 KB Android loaders.
 # This is ELF alignment only; the probe separately reports guest mapping support.
-foreach(target IN ITEMS main SDL2)
+foreach(target IN ITEMS main SDL3-shared)
     target_link_options(${target} PRIVATE "-Wl,-z,max-page-size=16384")
 endforeach()

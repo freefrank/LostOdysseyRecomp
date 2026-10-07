@@ -2,8 +2,8 @@
 #include "../../LostOdysseyRecomp/gpu/backend_selection.h"
 #include "../../LostOdysseyRecomp/gpu/render_arena_policy.h"
 
-#include <SDL.h>
-#include <SDL_vulkan.h>
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_vulkan.h>
 #include <vulkan/vulkan.h>
 
 #include <algorithm>
@@ -309,7 +309,7 @@ std::string ProbeVulkan(SDL_Window* window) {
     InstanceGuard state;
     VkResult result = vkCreateInstance(&instanceInfo, nullptr, &state.instance);
     if (result != VK_SUCCESS) return out.str() + "Vulkan instance failed: " + ResultText(result) + "\n";
-    const bool haveSurface = SDL_Vulkan_CreateSurface(window, state.instance, &state.surface) == SDL_TRUE;
+    const bool haveSurface = SDL_Vulkan_CreateSurface(window, state.instance, nullptr, &state.surface);
     if (!haveSurface) out << "SDL Vulkan surface failed: " << SDL_GetError() << '\n';
     uint32_t deviceCount = 0;
     result = vkEnumeratePhysicalDevices(state.instance, &deviceCount, nullptr);

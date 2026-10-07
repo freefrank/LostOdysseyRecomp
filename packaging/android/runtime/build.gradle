@@ -7,7 +7,7 @@ apply from: '../sdl-java.gradle'
 // The full runtime requires host-generated PPC sources and CMake 3.28+.
 // tools/android/build-runtime.sh builds/stages its NDK libraries first.
 def stagedLibraries = rootProject.layout.buildDirectory.dir('runtime-jni')
-def runtimeLibraries = ['libmain.so', 'libSDL2.so', 'libc++_shared.so', 'libdxcompiler.so']
+def runtimeLibraries = ['libmain.so', 'libSDL3.so', 'libc++_shared.so', 'libdxcompiler.so']
 // libadrenotools hook libraries: present only when the custom Vulkan driver loader is built.
 def optionalLibraries = ['libhook_impl.so', 'libmain_hook.so', 'libfile_redirect_hook.so', 'libgsl_alloc_hook.so']
 def checkNativeLibraries = tasks.register('checkNativeLibraries') {

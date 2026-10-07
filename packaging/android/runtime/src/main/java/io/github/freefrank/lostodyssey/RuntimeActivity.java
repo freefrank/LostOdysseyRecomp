@@ -182,7 +182,7 @@ public final class RuntimeActivity extends SDLActivity {
 
     @Override
     protected String[] getLibraries() {
-        return new String[] { "c++_shared", "SDL2", "main" };
+        return new String[] { "c++_shared", "SDL3", "main" };
     }
 
     @Override
