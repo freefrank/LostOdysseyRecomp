@@ -34,6 +34,7 @@ struct RendererFixture {
     xenos::cache::Identity cacheIdentity=xenos::cache::MakeIdentity(xenos::cache::Backend::Vulkan,"local");
     Device driver;Device* device=&driver;
     std::array<std::unordered_map<uint64_t,Shader>,2> shaders;
+    bool TakeShaderJob(bool,uint64_t){return false;} // no pipeline workers here
     #include "gpu/shader/portable_shader_pack_renderer.inl"
 };
 int checks=0;

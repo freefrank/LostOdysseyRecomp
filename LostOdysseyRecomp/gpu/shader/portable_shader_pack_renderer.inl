@@ -2,8 +2,10 @@
 // command processor thread; existing pipeline workers see immutable shader maps.
 // Shared so scene prefetch workers can keep reading it after the renderer drops it.
 std::shared_ptr<xenos::portable_pack::Reader> portableShaderPack;
-// Where the open pack was found; the pipeline corpus ships beside it.
+// Where the open pack was found; the pipeline corpus ships beside it. Worker
+// threads open their own readers of it.
 std::filesystem::path portableShaderPackPath;
+xenos::portable_pack::Digest portableShaderPackContract{};
 std::unique_ptr<xenos::portable_pack::Writer> portableShaderExport;
 
 bool PortableExportRequested() const
@@ -60,6 +62,7 @@ bool TryOpenPortableShaderPack(std::span<const uint8_t> xex)
                 path.string(), report.records, report.uniqueBinaries, report.fileBytes, report.indexBytes);
             portableShaderPack = std::move(pack);
             portableShaderPackPath = path;
+            portableShaderPackContract = contract;
             return true;
         } catch (const std::exception& e) {
             LOG_WARNING("renderer: portable shader pack {} rejected; trying the next location or the local cache: {}",
@@ -75,6 +78,8 @@ bool TryLoadPortableShader(bool pixel, uint64_t hash)
     if (!portableShaderPack || !hash) return false;
     auto& cache = shaders[pixel ? 1 : 0];
     if (const auto found = cache.find(hash); found != cache.end()) return found->second.valid;
+    // A pipeline worker may be making this module for a prefetched recipe.
+    if (TakeShaderJob(pixel, hash)) return true;
     try {
         auto record = portableShaderPack->Get(pixel, hash);
         if (!record) return false; // Missing is not a negative-cache entry.
