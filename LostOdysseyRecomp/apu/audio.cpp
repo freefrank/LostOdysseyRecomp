@@ -182,6 +182,8 @@ namespace apu
     void Init(bool surround)
     {
         g_surroundRequested = g_surroundOpen = surround;
+        // SDL3 picks 1024-frame device buffers at 48 kHz; keep SDL2's 512.
+        SDL_SetHint(SDL_HINT_AUDIO_DEVICE_SAMPLE_FRAMES, "512");
         g_audioReady = SDL_InitSubSystem(SDL_INIT_AUDIO);
         {
             std::lock_guard lock(g_deviceMutex);
