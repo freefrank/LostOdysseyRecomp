@@ -231,11 +231,11 @@ query($owner: String!, $name: String!, $label: [String!], $issues: String, $disc
   repository(owner: $owner, name: $name) {
     issues(first: 50, after: $issues, labels: $label, states: [OPEN, CLOSED]) @include(if: $withIssues) {
       pageInfo { hasNextPage endCursor }
-      nodes { id number url body closed comments(last: 30) { nodes { body } } }
+      nodes { id number url body closed comments(last: 100) { nodes { body } } }
     }
     discussions(first: 50, after: $discussions) @include(if: $withDiscussions) {
       pageInfo { hasNextPage endCursor }
-      nodes { id number url body closed comments(last: 30) { nodes { body } } }
+      nodes { id number url body closed comments(last: 100) { nodes { body } } }
     }
   }
 }'''
@@ -382,7 +382,9 @@ def main():
                         budget -= 1
                     last = int(message['id'])
             finally:
-                if last != mirror['last']:
+                # GITHUB_TOKEN may not edit Discussions ("Resource not accessible by
+                # integration"); there the comment markers alone record progress.
+                if last != mirror['last'] and kind == 'issue':
                     body = BODY_MARKER.sub(f'<!-- discord-sync thread={thread_id} last={last} -->',
                                            mirror['body'])
                     github.mutate(f'Record progress on {kind} #{mirror["number"]}',
