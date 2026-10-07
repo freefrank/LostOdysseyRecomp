@@ -18,6 +18,8 @@ Graphics中新增`FreeSync / G-SYNC Compatible`开关；默认Off，选择On后�
 
 刷新率由窗口线程读取并通过原子快照交给呈现线程：Windows使用窗口所在显示器的当前显示模式，其他平台通过SDL2当前显示模式查询。每500ms刷新，并在移动窗口、显示器/尺寸变化和重新获得焦点后请求重查。渲染线程不访问SDL窗口；无有效刷新率时记录0，保留既有目标，不猜测为60Hz。这是当前模式刷新率，**不是显示器VRR范围或实际扫描频率检测**。
 
+2026-10-07 更新（[PR #289](https://github.com/freefrank/LostOdysseyRecomp/pull/289)已合并到 main，尚未发布；最新发布 v0.8.53）：运行时已从SDL2迁移到SDL 3.4.18，上一段“通过SDL2当前显示模式查询”描述的是 v0.8.53 及更早的SDL2版本。现行源码在非Windows平台调用`SDL_GetCurrentDisplayMode`；SDL3报告小数刷新率（例如120Hz显示为119.99），`gpu/video.cpp`的`PollDisplayRefresh`四舍五入为整数Hz后再交给`vrr::OutputLimit`，所以“当前模式刷新率减3”的预算规则不变。Windows仍读取窗口所在显示器的当前显示模式。迁移的验证记录中没有VRR或限帧测量，本文的测量范围不变。
+
 D3D12复用Plume已有的flip-discard、能力查询、创建/ResizeBuffers时的`ALLOW_TEARING`。此次补上Present时的实际全屏状态检查：只在窗口/无边框、允许tearing且SyncInterval=0时传入`DXGI_PRESENT_ALLOW_TEARING`，独占全屏不传该标志。Vulkan沿用Plume的异步模式选择；不支持immediate时接受现有后端回退并发出警告，不循环重建交换链。窗口系统或驱动仍可限制呈现节奏。
 
 ## 限帧与FG

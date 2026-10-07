@@ -400,7 +400,14 @@ and `lo-release-flatpak` volumes through `container.options`, and lists both
 in `container.valid_volumes`.
 
 The Linux image has no CMake or compiler, so the workflows install `cmake`,
-`g++` and, where needed, `python3` and `libsdl2-dev` first.
+`g++` and, where needed, `python3` first. Since the SDL3 migration (#289,
+2026-10-07) no workflow installs an SDL package: `review-regressions.yml`
+initializes the `thirdparty/SDL` submodule and, when CMake finds no SDL3
+package, builds the pinned SDL 3.4.18 statically with the X11 and Wayland
+backends off (the fixtures use the dummy video driver). The Linux release job
+adds `libxtst-dev` to its X11 development packages, because SDL3's CMake stops
+configuring when only some X11 extension headers are installed. Before #289 the
+review job installed `libsdl2-dev`.
 
 On T640, `act_runner` runs from `C:\act_runner` as the `gitea-act-runner`
 scheduled task (SYSTEM, at boot). The task runs `start-runner.cmd`, which sets
