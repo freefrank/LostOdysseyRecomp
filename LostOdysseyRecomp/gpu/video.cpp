@@ -2003,11 +2003,18 @@ namespace gpu::video
             const int display = ChosenDisplay(config, displays);
             LOG_INFO("video: displays: {}; configured=\"{}\"#{} chosen={}", DescribeDisplays(displays),
                 config.displayName, config.displayIndex, display);
-            g_window = SDL_CreateWindow(lo_version::WindowTitle, config.width, config.height, flags);
-            if (g_window && display >= 0) {
-                const auto position = SDL_WINDOWPOS_CENTERED_DISPLAY(DisplayIDForIndex(display));
-                SDL_SetWindowPosition(g_window, position, position);
-            }
+            // Create the window on its display: a later move across a DPI
+            // boundary would size the frame for the wrong monitor.
+            const auto position = display >= 0 ? SDL_WINDOWPOS_CENTERED_DISPLAY(DisplayIDForIndex(display)) : SDL_WINDOWPOS_CENTERED;
+            const SDL_PropertiesID windowProperties = SDL_CreateProperties();
+            SDL_SetStringProperty(windowProperties, SDL_PROP_WINDOW_CREATE_TITLE_STRING, lo_version::WindowTitle);
+            SDL_SetNumberProperty(windowProperties, SDL_PROP_WINDOW_CREATE_X_NUMBER, position);
+            SDL_SetNumberProperty(windowProperties, SDL_PROP_WINDOW_CREATE_Y_NUMBER, position);
+            SDL_SetNumberProperty(windowProperties, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, config.width);
+            SDL_SetNumberProperty(windowProperties, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, config.height);
+            SDL_SetNumberProperty(windowProperties, SDL_PROP_WINDOW_CREATE_FLAGS_NUMBER, flags);
+            g_window = SDL_CreateWindowWithProperties(windowProperties);
+            SDL_DestroyProperties(windowProperties);
             if (!g_window)
             {
                 LOG_WARNING("video: window creation failed: {}", SDL_GetError());
@@ -2999,7 +3006,7 @@ namespace gpu::video
                     // fullscreen covers the display the window is on: leave it,
                     // move, and let the mode below enter it again.
                     if (SDL_GetWindowFlags(g_window) & SDL_WINDOW_FULLSCREEN) SDL_SetWindowFullscreen(g_window, false);
-                    SDL_SetWindowPosition(g_window, SDL_WINDOWPOS_CENTERED_DISPLAY(DisplayIDForIndex(target)), SDL_WINDOWPOS_CENTERED_DISPLAY(DisplayIDForIndex(target)));
+                    window_mode::CenterOnDisplay(g_window, DisplayIDForIndex(target));
                     state.placement.valid = false; // The windowed rectangle was on the old display.
                     LOG_INFO("video: window {} from display {} to display {} \"{}\"; displays: {}",
                         revert ? "moved back" : "moved", current, target, displays[size_t(target)].name, DescribeDisplays(displays));
@@ -3013,7 +3020,7 @@ namespace gpu::video
             const int hotkeyTarget = std::exchange(state.hotkeyTarget, -1);
             if (hotkeyTarget >= 0 && hotkeyTarget != WindowDisplayIndex(g_window)) {
                 if (SDL_GetWindowFlags(g_window) & SDL_WINDOW_FULLSCREEN) SDL_SetWindowFullscreen(g_window, false);
-                SDL_SetWindowPosition(g_window, SDL_WINDOWPOS_CENTERED_DISPLAY(DisplayIDForIndex(hotkeyTarget)), SDL_WINDOWPOS_CENTERED_DISPLAY(DisplayIDForIndex(hotkeyTarget)));
+                window_mode::CenterOnDisplay(g_window, DisplayIDForIndex(hotkeyTarget));
             }
             if (wasWindowed && mode != settings::WindowMode::Windowed) state.placement.Capture(g_window);
             const bool result = SDL_SetWindowFullscreen(g_window, mode == settings::WindowMode::Borderless);

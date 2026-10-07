@@ -38,12 +38,12 @@ template<class F> auto Owner(F fn) {
 }
 
 // Included rather than reimplemented: enables observation of private resources.
-SDL_Window* TestCreateWindow(const char* title,int w,int h,SDL_WindowFlags flags) {
+SDL_Window* TestCreateWindowWithProperties(SDL_PropertiesID props) {
     if(fixture::failWindow) {
         if(fixture::extraVideoReference) fixture::Check(SDL_InitSubSystem(SDL_INIT_VIDEO),"extra SDL reference failed");
-        SDL_SetError("fixture-injected SDL_CreateWindow failure"); return nullptr;
+        SDL_SetError("fixture-injected SDL_CreateWindowWithProperties failure"); return nullptr;
     }
-    return SDL_CreateWindow(title,w,h,flags);
+    return SDL_CreateWindowWithProperties(props);
 }
 void TestQuitSubSystem(Uint32 flags) {
     SDL_QuitSubSystem(flags);
@@ -53,10 +53,10 @@ void TestQuitSubSystem(Uint32 flags) {
         SDL_QuitSubSystem(SDL_INIT_VIDEO);
     }
 }
-#define SDL_CreateWindow TestCreateWindow
+#define SDL_CreateWindowWithProperties TestCreateWindowWithProperties
 #define SDL_QuitSubSystem TestQuitSubSystem
 #include "../../LostOdysseyRecomp/gpu/video.cpp"
-#undef SDL_CreateWindow
+#undef SDL_CreateWindowWithProperties
 #undef SDL_QuitSubSystem
 
 namespace settings {

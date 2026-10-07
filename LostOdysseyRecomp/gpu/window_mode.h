@@ -60,6 +60,21 @@ struct Placement {
     }
 };
 
+// Centers a windowed (not fullscreen) window on another display.
+inline void CenterOnDisplay(SDL_Window* window, SDL_DisplayID display) {
+    const int position = int(SDL_WINDOWPOS_CENTERED_DISPLAY(display));
+#ifdef _WIN32
+    // SDL3 sizes the frame for the monitor the window leaves and ignores the
+    // DPI change its own move causes, so crossing a DPI boundary changes the
+    // client area. Restore the size on the new monitor, then center again.
+    int width = 0, height = 0;
+    SDL_GetWindowSize(window, &width, &height);
+    SDL_SetWindowPosition(window, position, position);
+    if (width > 0 && height > 0) SDL_SetWindowSize(window, width, height);
+#endif
+    SDL_SetWindowPosition(window, position, position);
+}
+
 #ifdef _WIN32
 // Called on the PMv2 window owner after SDL processes native DPI/display events.
 // Repair only an incorrect outer rectangle; the renderer retains aspect ratio.

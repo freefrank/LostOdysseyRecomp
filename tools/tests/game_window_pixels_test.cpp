@@ -166,8 +166,7 @@ void RunRenderingFixes()
         const auto destroy = [](SDL_Window* window) { SDL_DestroyWindow(window); };
         std::unique_ptr<SDL_Window, decltype(destroy)> window(SDL_CreateWindow("Lost Odyssey rendering window fixture",
             1280, 720, SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE), destroy);
-        if (window) SDL_SetWindowPosition(window.get(), SDL_WINDOWPOS_CENTERED_DISPLAY(displays[display]),
-                                           SDL_WINDOWPOS_CENTERED_DISPLAY(displays[display]));
+        if (window) window_mode::CenterOnDisplay(window.get(), displays[display]);
         Check(window != nullptr, SDL_GetError()); Pump();
         CheckPhysicalSize(window.get(), 1280, 720);
         SDL_SetWindowSize(window.get(), 3840, 2160); Pump();
@@ -190,7 +189,7 @@ void RunRenderingFixes()
         CheckPhysicalSize(window.get(), 1136, 684);
         if (count > 1) {
             const int next = (display + 1) % count;
-            SDL_SetWindowPosition(window.get(), SDL_WINDOWPOS_CENTERED_DISPLAY(displays[next]), SDL_WINDOWPOS_CENTERED_DISPLAY(displays[next])); Pump();
+            window_mode::CenterOnDisplay(window.get(), displays[next]); Pump();
             CheckPhysicalSize(window.get(), 1136, 684);
         }
         std::printf("borderless display=%d physical=%ldx%ld windowed-placement-restored=1\n", display,
@@ -246,8 +245,7 @@ void RunCycle(int cycle)
             const auto destroy = [](SDL_Window* window) { SDL_DestroyWindow(window); };
             std::unique_ptr<SDL_Window, decltype(destroy)> window(SDL_CreateWindow("Lost Odyssey pixel fixture",
                 640, 360, SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE), destroy);
-            if (window) SDL_SetWindowPosition(window.get(), SDL_WINDOWPOS_CENTERED_DISPLAY(displays[display]),
-                                               SDL_WINDOWPOS_CENTERED_DISPLAY(displays[display]));
+            if (window) gpu::video::window_mode::CenterOnDisplay(window.get(), displays[display]);
             Check(window != nullptr, SDL_GetError());
             Pump();
             CheckPhysicalSize(window.get(), 640, 360);
@@ -258,7 +256,7 @@ void RunCycle(int cycle)
             if (count > 1)
             {
                 const int next = (display + 1) % count;
-                SDL_SetWindowPosition(window.get(), SDL_WINDOWPOS_CENTERED_DISPLAY(displays[next]), SDL_WINDOWPOS_CENTERED_DISPLAY(displays[next]));
+                gpu::video::window_mode::CenterOnDisplay(window.get(), displays[next]);
                 Pump();
                 CheckPhysicalSize(window.get(), 1280, 720);
             }
