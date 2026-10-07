@@ -1933,9 +1933,13 @@ namespace gpu::video
             flags |= SDL_WINDOW_VULKAN;
 #endif
             // Fullscreen later uses the display the window was created on.
-            const int display = ChosenDisplay(config, QueryDisplayNames());
+            const auto displays = QueryDisplayNames();
+            std::string listed;
+            for (const auto& name : displays) listed += (listed.empty() ? "\"" : ", \"") + name + "\"";
+            const int display = ChosenDisplay(config, displays);
+            LOG_INFO("video: displays: {} configured=\"{}\"#{} chosen={}", listed.empty() ? std::string("none") : listed,
+                config.displayName, config.displayIndex, display);
             const int position = display >= 0 ? int(SDL_WINDOWPOS_CENTERED_DISPLAY(display)) : int(SDL_WINDOWPOS_CENTERED);
-            if (display >= 0) LOG_INFO("video: window on display {} \"{}\"", display, config.displayName);
             g_window = SDL_CreateWindow(lo_version::WindowTitle, position, position,
                 config.width, config.height, flags);
             if (!g_window)
@@ -2935,6 +2939,7 @@ namespace gpu::video
 #endif
             g_displayFailed=result!=0;
             g_displayMode.store(int(mode));
+            LOG_INFO("video: window mode={} display={} result={}", int(mode), SDL_GetWindowDisplayIndex(g_window), result);
             state.applied=config; state.initialized=true;
             g_nextRefreshPoll = {}; // Re-query after a mode transition on the next window pump.
             g_windowResizeRequested = true;
