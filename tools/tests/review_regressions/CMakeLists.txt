@@ -87,7 +87,9 @@ if(LO_REVIEW_SDL_TESTS)
             set(SDL_WAYLAND OFF CACHE BOOL "" FORCE)
             set(SDL_UNIX_CONSOLE_BUILD ON CACHE BOOL "" FORCE)
             add_subdirectory("${LO_ROOT}/thirdparty/SDL" sdl EXCLUDE_FROM_ALL)
-            add_library(lo_review_sdl ALIAS SDL3::SDL3-static)
+            # SDL3::SDL3-static is itself an alias, so it cannot be aliased again.
+            add_library(lo_review_sdl INTERFACE)
+            target_link_libraries(lo_review_sdl INTERFACE SDL3::SDL3-static)
         endif()
     endif()
     lo_review_test(LoUpdaterSdlUiTest updater_sdl_ui_test.cpp

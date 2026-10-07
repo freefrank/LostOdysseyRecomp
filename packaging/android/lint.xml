@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<lint>
+    <!-- SDL's own Java, copied from thirdparty/SDL by sdl-java.gradle. It checks
+         Bluetooth permissions at run time, creates its API 29 listener only on
+         API 29+, and registers the pre-Android 13 USB receiver without flags in
+         an SDK_INT branch; lint cannot see those guards. -->
+    <issue id="MissingPermission">
+        <ignore path="**/build/generated/sdl-java/**" />
+    </issue>
+    <issue id="NewApi">
+        <ignore path="**/build/generated/sdl-java/**" />
+    </issue>
+    <issue id="UnspecifiedRegisterReceiverFlag">
+        <ignore path="**/build/generated/sdl-java/**" />
+    </issue>
+</lint>

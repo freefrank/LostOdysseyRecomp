@@ -32,7 +32,7 @@ android {
     }
     // Compile a generated copy of the pinned SDL Java shim with local Android fixes.
     sourceSets.main.java.srcDir layout.buildDirectory.dir('generated/sdl-java')
-    lint { baseline = file('lint-baseline.xml') }
+    lint { lintConfig = file('../lint.xml') }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
