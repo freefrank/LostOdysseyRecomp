@@ -111,12 +111,12 @@ set_tests_properties(LoSceneCopyCompositeTest PROPERTIES LABELS "native-dlss;gpu
 
 option(LO_P2_VIDEO_COMPILE_CHECK "Compile actual video.cpp in the asset-free boundary" OFF)
 if(LO_P2_VIDEO_COMPILE_CHECK)
- # This target only compiles video.cpp. Windows CI can use the pinned SDL
+ # This target only compiles video.cpp. CI can use the pinned SDL3
  # headers without building an unrelated SDL runtime library.
  set(LO_P2_VIDEO_SDL_HEADERS "" CACHE PATH "Pinned SDL include directory for compile-only video checking")
  if(LO_P2_VIDEO_SDL_HEADERS)
-  if(NOT EXISTS "${LO_P2_VIDEO_SDL_HEADERS}/SDL.h")
-   message(FATAL_ERROR "LO_P2_VIDEO_SDL_HEADERS must contain the actual SDL headers")
+  if(NOT EXISTS "${LO_P2_VIDEO_SDL_HEADERS}/SDL3/SDL.h")
+   message(FATAL_ERROR "LO_P2_VIDEO_SDL_HEADERS must contain the SDL3 include tree")
   endif()
   add_library(p2_video_sdl_headers INTERFACE)
   target_include_directories(p2_video_sdl_headers INTERFACE "${LO_P2_VIDEO_SDL_HEADERS}")
