@@ -1,0 +1,83 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 0789c20..6bb792b 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -29,13 +29,13 @@ endif()
+ 
+ # Enable SDL Vulkan support
+ if(PLUME_SDL_VULKAN_ENABLED)
+-    if (NOT TARGET SDL2::SDL2)
+-        find_package(SDL2 REQUIRED)
++    if (NOT TARGET SDL3::SDL3)
++        find_package(SDL3 REQUIRED)
+     else()
+-        set(SDL2_INCLUDE_DIRS "$<TARGET_PROPERTY:SDL2::SDL2,INTERFACE_INCLUDE_DIRECTORIES>")
++        set(SDL3_INCLUDE_DIRS "$<TARGET_PROPERTY:SDL3::SDL3,INTERFACE_INCLUDE_DIRECTORIES>")
+     endif()
+ 
+-    message(STATUS "Plume - Building with SDL2_INCLUDE_DIRS: ${SDL2_INCLUDE_DIRS}")
++    message(STATUS "Plume - Building with SDL3_INCLUDE_DIRS: ${SDL3_INCLUDE_DIRS}")
+ endif()
+ 
+ # Enable D3D12 Agility SDK support
+@@ -91,7 +91,7 @@ endif()
+ 
+ if(PLUME_SDL_VULKAN_ENABLED)
+     target_compile_definitions(plume PUBLIC PLUME_SDL_VULKAN_ENABLED)
+-    target_include_directories(plume PUBLIC ${SDL2_INCLUDE_DIRS})
++    target_include_directories(plume PUBLIC ${SDL3_INCLUDE_DIRS})
+ endif()
+ 
+ if(PLUME_D3D12_AGILITY_SDK_ENABLED)
+diff --git a/plume_render_interface_types.h b/plume_render_interface_types.h
+index e1105fd..937edec 100644
+--- a/plume_render_interface_types.h
++++ b/plume_render_interface_types.h
+@@ -30,7 +30,7 @@
+ #endif
+ 
+ #ifdef PLUME_SDL_VULKAN_ENABLED
+-#include <SDL_vulkan.h>
++#include <SDL3/SDL_vulkan.h>
+ #endif
+ 
+ namespace plume {
+diff --git a/plume_vulkan.cpp b/plume_vulkan.cpp
+index 6444d72..33d7b6d 100644
+--- a/plume_vulkan.cpp
++++ b/plume_vulkan.cpp
+@@ -2577,8 +2577,7 @@ namespace plume {
+         }
+ #   elif defined(PLUME_SDL_VULKAN_ENABLED)
+         VulkanInterface *renderInterface = commandQueue->device->renderInterface;
+-        SDL_bool sdlRes = SDL_Vulkan_CreateSurface(desc.renderWindow, renderInterface->instance, &surface);
+-        if (sdlRes == SDL_FALSE) {
++        if (!SDL_Vulkan_CreateSurface(desc.renderWindow, renderInterface->instance, nullptr, &surface)) {
+             PLUME_LOG_ERROR("Vulkan", "SDL_Vulkan_CreateSurface", LogErrorDomain::SDL, 0, "%s", SDL_GetError());
+             return;
+         }
+@@ -5569,19 +5568,11 @@ namespace plume {
+ 
+ #   if PLUME_SDL_VULKAN_ENABLED
+         // Push the extensions specified by SDL as required.
+-        // SDL2 has this awkward requirement for the window to pull the extensions from. 
+-        // This can be removed when upgrading to SDL3.
+-        if (sdlWindow != nullptr) {
+-            uint32_t sdlVulkanExtensionCount = 0;
+-            if (SDL_Vulkan_GetInstanceExtensions(sdlWindow, &sdlVulkanExtensionCount, nullptr)) {
+-                std::vector<char *> sdlVulkanExtensions;
+-                sdlVulkanExtensions.resize(sdlVulkanExtensionCount);
+-                if (SDL_Vulkan_GetInstanceExtensions(sdlWindow, &sdlVulkanExtensionCount, (const char **)(sdlVulkanExtensions.data()))) {
+-                    for (char *sdlVulkanExtension : sdlVulkanExtensions) {
+-                        requiredExtensions.insert(sdlVulkanExtension);
+-                    }
+-                }
+-            }
++        uint32_t sdlVulkanExtensionCount = 0;
++        const char * const *sdlVulkanExtensions = SDL_Vulkan_GetInstanceExtensions(&sdlVulkanExtensionCount);
++        if (sdlVulkanExtensions != nullptr) {
++            for (uint32_t i = 0; i < sdlVulkanExtensionCount; ++i)
++                requiredExtensions.insert(sdlVulkanExtensions[i]);
+         }
+ #   endif
+ 

@@ -1,6 +1,6 @@
 #include "game_prompt.h"
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include <host_ui/rasterizer.h>
 #if defined(__ANDROID__)
 #include <hid/android_touch.h>
@@ -134,7 +134,7 @@ bool ConfirmBeforeImport(std::string_view version, std::string_view changelog, u
     const char* requestedDriver = std::getenv("SDL_VIDEODRIVER");
     if (requestedDriver && std::string_view(requestedDriver) == "dummy")
         return false;
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER | SDL_INIT_EVENTS) != 0)
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD | SDL_INIT_EVENTS))
         return false;
     if (const char* driver = SDL_GetCurrentVideoDriver();
         driver && std::string_view(driver) == "dummy")
@@ -142,14 +142,15 @@ bool ConfirmBeforeImport(std::string_view version, std::string_view changelog, u
         SDL_Quit();
         return false;
     }
-    SDL_Window* window = SDL_CreateWindow("Lost Odyssey Recomp",
-        SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720,
-        SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
+    SDL_Window* window = SDL_CreateWindow("Lost Odyssey Recomp", 1280, 720,
+        SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
+    if (window) SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
     SDL_Renderer* renderer = window
-        ? SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC)
+        ? SDL_CreateRenderer(window, nullptr)
         : nullptr;
     if (!renderer && window)
-        renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
+        renderer = SDL_CreateRenderer(window, "software");
+    if (renderer) SDL_SetRenderVSync(renderer, 1);
     SDL_Texture* texture = renderer
         ? SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ABGR8888,
               SDL_TEXTUREACCESS_STREAMING, 1280, 720)
@@ -161,11 +162,15 @@ bool ConfirmBeforeImport(std::string_view version, std::string_view changelog, u
         SDL_Quit();
         return false;
     }
-    SDL_RenderSetLogicalSize(renderer, 1280, 720);
-    std::vector<SDL_GameController*> controllers;
-    for (int i = 0; i < SDL_NumJoysticks(); ++i)
-        if (SDL_IsGameController(i))
-            if (auto* controller = SDL_GameControllerOpen(i)) controllers.push_back(controller);
+    SDL_SetRenderLogicalPresentation(renderer, 1280, 720, SDL_LOGICAL_PRESENTATION_LETTERBOX);
+    std::vector<SDL_Gamepad*> controllers;
+    int gamepadCount = 0;
+    if (SDL_JoystickID* gamepads = SDL_GetGamepads(&gamepadCount))
+    {
+        for (int i = 0; i < gamepadCount; ++i)
+            if (auto* controller = SDL_OpenGamepad(gamepads[i])) controllers.push_back(controller);
+        SDL_free(gamepads);
+    }
 
     {
         std::lock_guard lock(state.mutex);
@@ -186,9 +191,8 @@ bool ConfirmBeforeImport(std::string_view version, std::string_view changelog, u
         {
             do
             {
-                if (event.type == SDL_QUIT ||
-                    (event.type == SDL_WINDOWEVENT && event.window.windowID == windowId &&
-                     event.window.event == SDL_WINDOWEVENT_CLOSE))
+                if (event.type == SDL_EVENT_QUIT ||
+                    (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && event.window.windowID == windowId))
                 {
                     std::lock_guard lock(state.mutex);
                     Resolve(false);
@@ -206,7 +210,7 @@ bool ConfirmBeforeImport(std::string_view version, std::string_view changelog, u
         Render(rasterizer);
         SDL_UpdateTexture(texture, nullptr, pixels.pixels.data(), 1280 * sizeof(uint32_t));
         SDL_RenderClear(renderer);
-        SDL_RenderCopy(renderer, texture, nullptr, nullptr);
+        SDL_RenderTexture(renderer, texture, nullptr, nullptr);
         SDL_RenderPresent(renderer);
     }
     bool accepted = false;
@@ -214,7 +218,7 @@ bool ConfirmBeforeImport(std::string_view version, std::string_view changelog, u
         std::lock_guard lock(state.mutex);
         accepted = state.accepted;
     }
-    for (auto* controller : controllers) SDL_GameControllerClose(controller);
+    for (auto* controller : controllers) SDL_CloseGamepad(controller);
     SDL_DestroyTexture(texture);
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
@@ -233,15 +237,15 @@ bool HandleEvent(const SDL_Event &event, uint32_t windowId, int windowWidth, int
     std::lock_guard lock(state.mutex);
     if (state.phase == Phase::Hidden) return false;
     if (state.phase == Phase::Checking)
-        return event.type == SDL_KEYDOWN || event.type == SDL_KEYUP ||
-               event.type == SDL_MOUSEBUTTONDOWN || event.type == SDL_MOUSEWHEEL ||
-               event.type == SDL_CONTROLLERBUTTONDOWN;
+        return event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_KEY_UP ||
+               event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_WHEEL ||
+               event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN;
 
-    if (event.type == SDL_KEYDOWN)
+    if (event.type == SDL_EVENT_KEY_DOWN)
     {
         if (event.key.windowID != windowId) return false;
         if (event.key.repeat) return true;
-        switch (event.key.keysym.sym)
+        switch (event.key.key)
         {
         case SDLK_UP: state.scroll = std::max(0, state.scroll - 1); break;
         case SDLK_DOWN: state.scroll = std::min(MaxScroll(), state.scroll + 1); break;
@@ -257,13 +261,13 @@ bool HandleEvent(const SDL_Event &event, uint32_t windowId, int windowWidth, int
         }
         return true;
     }
-    if (event.type == SDL_KEYUP && event.key.windowID == windowId) return true;
-    if (event.type == SDL_MOUSEWHEEL && event.wheel.windowID == windowId)
+    if (event.type == SDL_EVENT_KEY_UP && event.key.windowID == windowId) return true;
+    if (event.type == SDL_EVENT_MOUSE_WHEEL && event.wheel.windowID == windowId)
     {
-        state.scroll = std::clamp(state.scroll - event.wheel.y * 3, 0, MaxScroll());
+        state.scroll = std::clamp(state.scroll - int(event.wheel.y * 3), 0, MaxScroll());
         return true;
     }
-    if (event.type == SDL_MOUSEBUTTONDOWN && event.button.windowID == windowId)
+    if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN && event.button.windowID == windowId)
     {
         const double scale = std::min(windowWidth / 1280.0, windowHeight / 720.0);
         const int x = scale > 0 ? int((event.button.x - (windowWidth - 1280 * scale) / 2) / scale) : 0;
@@ -275,16 +279,16 @@ bool HandleEvent(const SDL_Event &event, uint32_t windowId, int windowWidth, int
         }
         return true;
     }
-    if (event.type == SDL_CONTROLLERBUTTONDOWN)
+    if (event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN)
     {
-        switch (event.cbutton.button)
+        switch (event.gbutton.button)
         {
-        case SDL_CONTROLLER_BUTTON_DPAD_UP: state.scroll = std::max(0, state.scroll - 1); break;
-        case SDL_CONTROLLER_BUTTON_DPAD_DOWN: state.scroll = std::min(MaxScroll(), state.scroll + 1); break;
-        case SDL_CONTROLLER_BUTTON_DPAD_LEFT: state.selected = 0; break;
-        case SDL_CONTROLLER_BUTTON_DPAD_RIGHT: state.selected = 1; break;
-        case SDL_CONTROLLER_BUTTON_A: Resolve(state.selected == 0); break;
-        case SDL_CONTROLLER_BUTTON_B: Resolve(false); break;
+        case SDL_GAMEPAD_BUTTON_DPAD_UP: state.scroll = std::max(0, state.scroll - 1); break;
+        case SDL_GAMEPAD_BUTTON_DPAD_DOWN: state.scroll = std::min(MaxScroll(), state.scroll + 1); break;
+        case SDL_GAMEPAD_BUTTON_DPAD_LEFT: state.selected = 0; break;
+        case SDL_GAMEPAD_BUTTON_DPAD_RIGHT: state.selected = 1; break;
+        case SDL_GAMEPAD_BUTTON_SOUTH: Resolve(state.selected == 0); break;
+        case SDL_GAMEPAD_BUTTON_EAST: Resolve(false); break;
         default: break;
         }
         return true;

@@ -126,11 +126,11 @@ int DrawGlyph(SDL_Renderer* renderer, int x, int y, uint32_t codepoint,
 
                     if (pw <= 1 && ph <= 1)
                     {
-                        SDL_RenderDrawPoint(renderer, px0, py0);
+                        SDL_RenderPoint(renderer, px0, py0);
                     }
                     else
                     {
-                        SDL_Rect rc{ px0, py0, pw, ph };
+                        SDL_FRect rc{ float(px0), float(py0), float(pw), float(ph) };
                         SDL_RenderFillRect(renderer, &rc);
                     }
                 }
@@ -159,11 +159,11 @@ int DrawGlyph(SDL_Renderer* renderer, int x, int y, uint32_t codepoint,
 
                     if (pw <= 1 && ph <= 1)
                     {
-                        SDL_RenderDrawPoint(renderer, px0, py0);
+                        SDL_RenderPoint(renderer, px0, py0);
                     }
                     else
                     {
-                        SDL_Rect rc{ px0, py0, pw, ph };
+                        SDL_FRect rc{ float(px0), float(py0), float(pw), float(ph) };
                         SDL_RenderFillRect(renderer, &rc);
                     }
                 }

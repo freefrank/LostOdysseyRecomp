@@ -1,6 +1,6 @@
 #pragma once
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include "controller_glyphs.h"
 #include <algorithm>
 #include <cstdint>
@@ -8,10 +8,10 @@
 
 namespace hid::prompts
 {
-inline bool IsPlayStation(SDL_GameControllerType type)
+inline bool IsPlayStation(SDL_GamepadType type)
 {
-    return type == SDL_CONTROLLER_TYPE_PS3 || type == SDL_CONTROLLER_TYPE_PS4 ||
-           type == SDL_CONTROLLER_TYPE_PS5;
+    return type == SDL_GAMEPAD_TYPE_PS3 || type == SDL_GAMEPAD_TYPE_PS4 ||
+           type == SDL_GAMEPAD_TYPE_PS5;
 }
 
 // Owned by the caller's input lock/event loop. Multiple pads can drive guest
@@ -21,28 +21,28 @@ class ActiveController
     struct Device
     {
         SDL_JoystickID id;
-        SDL_GameControllerType type;
+        SDL_GamepadType type;
         uint32_t buttons = 0;
         bool stick = false;
     };
     std::vector<Device> devices_;
-    SDL_JoystickID active_ = -1;
+    SDL_JoystickID active_ = 0;
 
 public:
-    void Connected(SDL_JoystickID id, SDL_GameControllerType type)
+    void Connected(SDL_JoystickID id, SDL_GamepadType type)
     {
         if (std::none_of(devices_.begin(), devices_.end(), [=](const Device &d) { return d.id == id; }))
         {
             devices_.push_back({id, type});
-            if (active_ == -1) active_ = id;
+            if (active_ == 0) active_ = id;
         }
     }
     void Disconnected(SDL_JoystickID id)
     {
         std::erase_if(devices_, [=](const Device &d) { return d.id == id; });
-        if (active_ == id) active_ = devices_.empty() ? -1 : devices_.front().id;
+        if (active_ == id) active_ = devices_.empty() ? 0 : devices_.front().id;
     }
-    void Keyboard() { active_ = -2; }
+    void Keyboard() { active_ = UINT32_MAX; }
     void Observe(SDL_JoystickID id, uint32_t buttons, bool stick)
     {
         for (auto &device : devices_)

@@ -62,8 +62,7 @@
 #include <host_ui/host_ui.h>
 #include <host_ui/rasterizer.h>
 
-#include <SDL.h>
-#include <SDL_syswm.h>
+#include <SDL3/SDL.h>
 #include "window_pixels.h"
 #include "window_mode.h"
 #include "display_choice.h"
@@ -212,8 +211,8 @@ static void LogVulkanPhysicalDevices(VkInstance instance)
 // on Qualcomm devices, in a dialog elsewhere) instead of closing (#185).
 static void ReportGraphicsFailureToActivity(const std::string& reason)
 {
-    auto* env = static_cast<JNIEnv*>(SDL_AndroidGetJNIEnv());
-    auto activity = static_cast<jobject>(SDL_AndroidGetActivity());
+    auto* env = static_cast<JNIEnv*>(SDL_GetAndroidJNIEnv());
+    auto activity = static_cast<jobject>(SDL_GetAndroidActivity());
     if (!env || !activity) return;
     jclass type = env->GetObjectClass(activity);
     jmethodID method = type ? env->GetMethodID(type, "reportGraphicsFailure", "(Ljava/lang/String;)V") : nullptr;
@@ -262,10 +261,8 @@ namespace gpu::video
         uintptr_t CurrentAndroidNativeWindow()
         {
             if (!g_window) return 0;
-            SDL_SysWMinfo info{};
-            SDL_VERSION(&info.version);
-            if (!SDL_GetWindowWMInfo(g_window, &info) || info.subsystem != SDL_SYSWM_ANDROID) return 0;
-            return reinterpret_cast<uintptr_t>(info.info.android.window);
+            return reinterpret_cast<uintptr_t>(SDL_GetPointerProperty(SDL_GetWindowProperties(g_window),
+                SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER, nullptr));
         }
 #endif
 #if LO_PLATFORM_MACOS
@@ -286,7 +283,8 @@ namespace gpu::video
         void SetGameCursorHidden(bool hidden)
         {
             if (!g_cursorManaged || g_cursorHidden == hidden) return;
-            SDL_ShowCursor(hidden ? SDL_DISABLE : SDL_ENABLE);
+            if (hidden) SDL_HideCursor();
+            else SDL_ShowCursor();
             g_cursorHidden = hidden;
         }
 
@@ -295,7 +293,7 @@ namespace gpu::video
         void DestroyWindowResources()
         {
             if (g_cursorManaged) {
-                SDL_ShowCursor(SDL_ENABLE);
+                SDL_ShowCursor();
                 g_cursorManaged = false;
                 g_cursorHidden = false;
             }
@@ -1751,18 +1749,39 @@ namespace gpu::video
         return text.empty() ? std::string("none") : text;
     }
     // Window owner thread only: SDL's display list is not thread-safe.
+    static SDL_DisplayID DisplayIDForIndex(int index) {
+        int count = 0;
+        SDL_DisplayID* ids = SDL_GetDisplays(&count);
+        const auto id = ids && index >= 0 && index < count ? ids[index] : SDL_DisplayID(0);
+        SDL_free(ids);
+        return id;
+    }
+    static int DisplayIndexForID(SDL_DisplayID id) {
+        int count = 0;
+        SDL_DisplayID* ids = SDL_GetDisplays(&count);
+        int index = -1;
+        for (int i = 0; ids && i < count; ++i)
+            if (ids[i] == id) { index = i; break; }
+        SDL_free(ids);
+        return index;
+    }
+    static int WindowDisplayIndex(SDL_Window* window) {
+        return DisplayIndexForID(SDL_GetDisplayForWindow(window));
+    }
     static std::vector<display_choice::Display> QueryDisplays() {
         std::vector<display_choice::Display> displays;
-        const int count = SDL_GetNumVideoDisplays();
+        int count = 0;
+        SDL_DisplayID* ids = SDL_GetDisplays(&count);
         for (int i = 0; i < count; ++i) {
-            const char* name = SDL_GetDisplayName(i);
+            const char* name = SDL_GetDisplayName(ids[i]);
             display_choice::Display display{name && *name ? std::string(name) : "Display " + std::to_string(i + 1)};
             SDL_Rect bounds{};
-            if (SDL_GetDisplayBounds(i, &bounds) == 0) {
+            if (SDL_GetDisplayBounds(ids[i], &bounds)) {
                 display.x = bounds.x; display.y = bounds.y; display.width = bounds.w; display.height = bounds.h;
             }
             displays.push_back(std::move(display));
         }
+        SDL_free(ids);
         std::lock_guard lock(g_gpuNamesMutex);
         g_displays = displays;
         return displays;
@@ -1786,7 +1805,10 @@ namespace gpu::video
         // SDL restores a fullscreen window to its windowed rectangle, which is
         // still on the old display: put that rectangle on this one.
         if (SDL_GetWindowFlags(g_window) & SDL_WINDOW_FULLSCREEN)
-            SDL_SetWindowPosition(g_window, SDL_WINDOWPOS_CENTERED_DISPLAY(display), SDL_WINDOWPOS_CENTERED_DISPLAY(display));
+        {
+            const auto position = SDL_WINDOWPOS_CENTERED_DISPLAY(DisplayIDForIndex(display));
+            SDL_SetWindowPosition(g_window, position, position);
+        }
         state.placement.valid = false;
         const auto& name = displays[size_t(display)].name;
         const bool automatic = settings::GetConfig().displayName.empty();
@@ -1958,7 +1980,7 @@ namespace gpu::video
         auto createWindow = [] {
             g_windowDisplay = {};
             g_windowModeOverridden = false;
-            if (SDL_InitSubSystem(SDL_INIT_VIDEO) != 0)
+            if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
             {
                 LOG_WARNING("video: SDL video init failed: {}", SDL_GetError());
                 return false;
@@ -1969,7 +1991,7 @@ namespace gpu::video
             // but must never show a window or take focus from the desktop user.
             const bool background = getenv("LO_BACKGROUND") != nullptr;
             const auto config=settings::GetConfig();
-            uint32_t flags = SDL_WINDOW_RESIZABLE | (background ? SDL_WINDOW_HIDDEN : SDL_WINDOW_SHOWN);
+            SDL_WindowFlags flags = SDL_WINDOW_RESIZABLE | (background ? SDL_WINDOW_HIDDEN : 0);
 #if LO_PLATFORM_MACOS
             // macOS renders through plume's Metal backend (CAMetalLayer).
             flags |= SDL_WINDOW_METAL;
@@ -1981,15 +2003,17 @@ namespace gpu::video
             const int display = ChosenDisplay(config, displays);
             LOG_INFO("video: displays: {}; configured=\"{}\"#{} chosen={}", DescribeDisplays(displays),
                 config.displayName, config.displayIndex, display);
-            const int position = display >= 0 ? int(SDL_WINDOWPOS_CENTERED_DISPLAY(display)) : int(SDL_WINDOWPOS_CENTERED);
-            g_window = SDL_CreateWindow(lo_version::WindowTitle, position, position,
-                config.width, config.height, flags);
+            g_window = SDL_CreateWindow(lo_version::WindowTitle, config.width, config.height, flags);
+            if (g_window && display >= 0) {
+                const auto position = SDL_WINDOWPOS_CENTERED_DISPLAY(DisplayIDForIndex(display));
+                SDL_SetWindowPosition(g_window, position, position);
+            }
             if (!g_window)
             {
                 LOG_WARNING("video: window creation failed: {}", SDL_GetError());
                 return false;
             }
-            g_windowDisplay.expectedDisplay = SDL_GetWindowDisplayIndex(g_window);
+            g_windowDisplay.expectedDisplay = WindowDisplayIndex(g_window);
 #if defined(__ANDROID__)
             const auto nativeWindow = CurrentAndroidNativeWindow();
             g_androidNativeWindowIdentity = nativeWindow;
@@ -2001,14 +2025,14 @@ namespace gpu::video
 
             // The game never accepts host text entry. Keep SDL text input/IME
             // disabled so an active IME cannot consume gameplay key presses.
-            SDL_StopTextInput();
+            SDL_StopTextInput(g_window);
 
             // Keep the pointer usable for mouse-driven host UI, then hide it
             // after brief inactivity while it remains over the game window.
             g_cursorManaged = !background;
             g_cursorHidden = false;
             if (g_cursorManaged) {
-                SDL_ShowCursor(SDL_ENABLE);
+                SDL_ShowCursor();
                 g_lastPointerActivity = std::chrono::steady_clock::now();
             }
 
@@ -2018,16 +2042,15 @@ namespace gpu::video
             hid::Init();
             hid::SetExternalEventPump(true);
 #ifdef _WIN32
-            SDL_SysWMinfo info{};
-            SDL_VERSION(&info.version);
-            if (!SDL_GetWindowWMInfo(g_window, &info))
+            g_nativeWindow = reinterpret_cast<HWND>(SDL_GetPointerProperty(SDL_GetWindowProperties(g_window),
+                SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr));
+            if (!g_nativeWindow)
             {
                 LOG_WARNING("video: native window lookup failed: {}", SDL_GetError());
                 SDL_DestroyWindow(g_window);
                 g_window = nullptr;
                 return false;
             }
-            g_nativeWindow = info.info.win.window;
             // SDL's Windows class loads the first RT_GROUP_ICON from this EXE.
             // Keep Explorer and the game window on the same shared resource.
             const auto resourceIcon = LoadIconW(GetModuleHandleW(nullptr), L"IDI_LOST_ODYSSEY_RECOMP");
@@ -2036,10 +2059,7 @@ namespace gpu::video
 #endif
 #if LO_PLATFORM_MACOS
             // plume's Metal swap chain presents to this view's CAMetalLayer.
-            SDL_SysWMinfo info{};
-            SDL_VERSION(&info.version);
-            if (SDL_GetWindowWMInfo(g_window, &info))
-                g_metalView = SDL_Metal_CreateView(g_window);
+            g_metalView = SDL_Metal_CreateView(g_window);
             if (!g_metalView)
             {
                 LOG_WARNING("video: Metal view creation failed: {}", SDL_GetError());
@@ -2047,7 +2067,8 @@ namespace gpu::video
                 g_window = nullptr;
                 return false;
             }
-            g_cocoaWindow = info.info.cocoa.window;
+            g_cocoaWindow = SDL_GetPointerProperty(SDL_GetWindowProperties(g_window),
+                SDL_PROP_WINDOW_COCOA_WINDOW_POINTER, nullptr);
             g_metalLayer = SDL_Metal_GetLayer(g_metalView);
 #endif
             return true;
@@ -2759,10 +2780,10 @@ namespace gpu::video
             EnumDisplaySettingsW(monitor.szDevice, ENUM_CURRENT_SETTINGS, &mode))
             refresh = mode.dmDisplayFrequency;
 #else
-        const int display = SDL_GetWindowDisplayIndex(g_window);
-        SDL_DisplayMode mode{};
-        if (display >= 0 && SDL_GetCurrentDisplayMode(display, &mode) == 0 && mode.refresh_rate > 0)
-            refresh = uint32_t(mode.refresh_rate);
+        const auto display = WindowDisplayIndex(g_window);
+        const SDL_DisplayMode* mode = display ? SDL_GetCurrentDisplayMode(display) : nullptr;
+        if (mode && mode->refresh_rate > 0)
+            refresh = uint32_t(mode->refresh_rate);
 #endif
         if (!vrr::OutputLimit(refresh)) refresh = 0; // Unknown, not an invented 60 Hz.
         g_displayRefreshHz.store(refresh, std::memory_order_relaxed);
@@ -2815,14 +2836,14 @@ namespace gpu::video
         if (ExitRequested()) {
             // Service native messages, but do not run UI/settings/display work
             // or accumulate input events after the renderer starts tearing down.
-            SDL_FlushEvents(SDL_FIRSTEVENT, SDL_LASTEVENT);
+            SDL_FlushEvents(SDL_EVENT_FIRST, SDL_EVENT_LAST);
             return;
         }
         // Service close even during an outstanding FG window handshake. The
         // regular event loop below cannot run while that handshake is pending.
         PollDisplayRefresh();
         SDL_Event closeEvent{};
-        if (SDL_PeepEvents(&closeEvent, 1, SDL_GETEVENT, SDL_QUIT, SDL_QUIT) > 0) {
+        if (SDL_PeepEvents(&closeEvent, 1, SDL_GETEVENT, SDL_EVENT_QUIT, SDL_EVENT_QUIT) > 0) {
             RequestExit();
             return;
         }
@@ -2967,7 +2988,7 @@ namespace gpu::video
             if (displayChanged) {
                 const auto displays = QueryDisplays();
                 int target = ChosenDisplay(config, displays);
-                const int current = SDL_GetWindowDisplayIndex(g_window);
+                const int current = WindowDisplayIndex(g_window);
                 // A reverted choice may be Automatic, which never moves the window:
                 // go back to the display the confirmed-or-reverted move left.
                 if (revert && g_displayMovedFrom >= 0 && size_t(g_displayMovedFrom) < displays.size())
@@ -2977,8 +2998,8 @@ namespace gpu::video
                     // SDL only records the position of a fullscreen window, and
                     // fullscreen covers the display the window is on: leave it,
                     // move, and let the mode below enter it again.
-                    if (SDL_GetWindowFlags(g_window) & SDL_WINDOW_FULLSCREEN) SDL_SetWindowFullscreen(g_window, 0);
-                    SDL_SetWindowPosition(g_window, SDL_WINDOWPOS_CENTERED_DISPLAY(target), SDL_WINDOWPOS_CENTERED_DISPLAY(target));
+                    if (SDL_GetWindowFlags(g_window) & SDL_WINDOW_FULLSCREEN) SDL_SetWindowFullscreen(g_window, false);
+                    SDL_SetWindowPosition(g_window, SDL_WINDOWPOS_CENTERED_DISPLAY(DisplayIDForIndex(target)), SDL_WINDOWPOS_CENTERED_DISPLAY(DisplayIDForIndex(target)));
                     state.placement.valid = false; // The windowed rectangle was on the old display.
                     LOG_INFO("video: window {} from display {} to display {} \"{}\"; displays: {}",
                         revert ? "moved back" : "moved", current, target, displays[size_t(target)].name, DescribeDisplays(displays));
@@ -2990,31 +3011,31 @@ namespace gpu::video
             // Win+Shift+arrow in fullscreen that Windows did not carry out itself:
             // move to the adjacent display and let the mode below re-enter fullscreen.
             const int hotkeyTarget = std::exchange(state.hotkeyTarget, -1);
-            if (hotkeyTarget >= 0 && hotkeyTarget != SDL_GetWindowDisplayIndex(g_window)) {
-                if (SDL_GetWindowFlags(g_window) & SDL_WINDOW_FULLSCREEN) SDL_SetWindowFullscreen(g_window, 0);
-                SDL_SetWindowPosition(g_window, SDL_WINDOWPOS_CENTERED_DISPLAY(hotkeyTarget), SDL_WINDOWPOS_CENTERED_DISPLAY(hotkeyTarget));
+            if (hotkeyTarget >= 0 && hotkeyTarget != WindowDisplayIndex(g_window)) {
+                if (SDL_GetWindowFlags(g_window) & SDL_WINDOW_FULLSCREEN) SDL_SetWindowFullscreen(g_window, false);
+                SDL_SetWindowPosition(g_window, SDL_WINDOWPOS_CENTERED_DISPLAY(DisplayIDForIndex(hotkeyTarget)), SDL_WINDOWPOS_CENTERED_DISPLAY(DisplayIDForIndex(hotkeyTarget)));
             }
             if (wasWindowed && mode != settings::WindowMode::Windowed) state.placement.Capture(g_window);
-            int result=SDL_SetWindowFullscreen(g_window,mode==settings::WindowMode::Borderless?SDL_WINDOW_FULLSCREEN_DESKTOP:0);
-            if (result == 0 && mode == settings::WindowMode::Windowed) {
+            const bool result = SDL_SetWindowFullscreen(g_window, mode == settings::WindowMode::Borderless);
+            if (result && mode == settings::WindowMode::Windowed) {
                 if ((!wasWindowed || reapply) && !sizeChanged && state.placement.valid) state.placement.Restore(g_window);
                 else if (sizeChanged) SDL_SetWindowSize(g_window,config.width,config.height);
             }
 #ifdef _WIN32
             // SDL owns the fullscreen transition. A failed bounds repair must
             // not roll the shortcut back to windowed.
-            if (result == 0 && mode == settings::WindowMode::Borderless)
+            if (result && mode == settings::WindowMode::Borderless)
                 window_mode::FitBorderless(g_nativeWindow);
 #endif
-            g_displayFailed=result!=0;
+            g_displayFailed=!result;
             g_displayMode.store(int(mode));
-            LOG_INFO("video: window mode={} display={} result={}", int(mode), SDL_GetWindowDisplayIndex(g_window), result);
+            LOG_INFO("video: window mode={} display={} result={}", int(mode), WindowDisplayIndex(g_window), result);
             state.applied=config; state.initialized=true;
-            if (hotkeyTarget >= 0) OnSystemDisplayMove(SDL_GetWindowDisplayIndex(g_window), "Win+Shift+arrow in fullscreen");
-            state.expectedDisplay = SDL_GetWindowDisplayIndex(g_window);
+            if (hotkeyTarget >= 0) OnSystemDisplayMove(WindowDisplayIndex(g_window), "Win+Shift+arrow in fullscreen");
+            state.expectedDisplay = WindowDisplayIndex(g_window);
             g_nextRefreshPoll = {}; // Re-query after a mode transition on the next window pump.
             g_windowResizeRequested = true;
-            g_displayChanges.WindowComplete(ticket, result == 0);
+            g_displayChanges.WindowComplete(ticket, result);
 #if (defined(_WIN32) && (defined(LO_ENABLE_STREAMLINE_FG) || defined(LO_ENABLE_D3D12_FG) || defined(LO_ENABLE_VULKAN_FSR_FG))) || (defined(__APPLE__) && defined(LO_ENABLE_METALFX_FG))
             g_fgWindowChange = 0;
 #endif
@@ -3023,7 +3044,7 @@ namespace gpu::video
         // display change below). If it has not after a moment, do it here.
         if (state.hotkeyDirection && now - state.hotkeyAt >= std::chrono::milliseconds(300)) {
             const int direction = std::exchange(state.hotkeyDirection, 0);
-            const int display = SDL_GetWindowDisplayIndex(g_window);
+            const int display = WindowDisplayIndex(g_window);
             if (display == state.hotkeyFrom && (SDL_GetWindowFlags(g_window) & SDL_WINDOW_FULLSCREEN)) {
                 state.hotkeyTarget = display_choice::Adjacent(QueryDisplays(), display, direction);
                 if (state.hotkeyTarget >= 0) g_reapplyWindow = true;
@@ -3042,15 +3063,16 @@ namespace gpu::video
         SDL_Event event;
         while (SDL_PollEvent(&event))
         {
+            const bool windowEvent = event.type >= SDL_EVENT_WINDOW_FIRST && event.type <= SDL_EVENT_WINDOW_LAST;
 #if defined(__ANDROID__)
-            if (event.type == SDL_APP_WILLENTERBACKGROUND || event.type == SDL_APP_DIDENTERBACKGROUND) {
+            if (event.type == SDL_EVENT_WILL_ENTER_BACKGROUND || event.type == SDL_EVENT_DID_ENTER_BACKGROUND) {
                 g_androidWasBackgrounded = true;
                 g_androidSurfaceReady = false;
             }
-            if (event.type == SDL_APP_DIDENTERFOREGROUND ||
-                (event.type == SDL_WINDOWEVENT && event.window.windowID == SDL_GetWindowID(g_window) &&
-                 (event.window.event == SDL_WINDOWEVENT_RESIZED || event.window.event == SDL_WINDOWEVENT_RESTORED ||
-                  event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED || event.window.event == SDL_WINDOWEVENT_FOCUS_GAINED))) {
+            if (event.type == SDL_EVENT_DID_ENTER_FOREGROUND ||
+                (windowEvent && event.window.windowID == SDL_GetWindowID(g_window) &&
+                 (event.type == SDL_EVENT_WINDOW_RESIZED || event.type == SDL_EVENT_WINDOW_RESTORED ||
+                  event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED || event.type == SDL_EVENT_WINDOW_FOCUS_GAINED))) {
                 const auto nativeWindow = CurrentAndroidNativeWindow();
                 if (nativeWindow) {
                     const auto previous = g_androidNativeWindowIdentity.exchange(nativeWindow);
@@ -3064,75 +3086,74 @@ namespace gpu::video
                 g_androidSurfaceReady = nativeWindow != 0;
             }
 #endif
-            if (event.type == SDL_DISPLAYEVENT ||
-                (event.type == SDL_WINDOWEVENT &&
-                 (event.window.event == SDL_WINDOWEVENT_MOVED || event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED ||
-                  event.window.event == SDL_WINDOWEVENT_DISPLAY_CHANGED || event.window.event == SDL_WINDOWEVENT_FOCUS_GAINED)))
+            if ((event.type >= SDL_EVENT_DISPLAY_FIRST && event.type <= SDL_EVENT_DISPLAY_LAST) ||
+                event.type == SDL_EVENT_WINDOW_MOVED || event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED ||
+                event.type == SDL_EVENT_WINDOW_DISPLAY_CHANGED || event.type == SDL_EVENT_WINDOW_FOCUS_GAINED)
                 g_nextRefreshPoll = {};
-            if (event.type == SDL_DISPLAYEVENT &&
-                (event.display.event == SDL_DISPLAYEVENT_CONNECTED || event.display.event == SDL_DISPLAYEVENT_DISCONNECTED)) {
+            if (event.type == SDL_EVENT_DISPLAY_ADDED || event.type == SDL_EVENT_DISPLAY_REMOVED) {
                 LOG_INFO("video: displays changed: {}", DescribeDisplays(QueryDisplays())); // Refreshes the menu's list.
                 // Indices shift and Windows may move the window off a removed
                 // display; that is not the player choosing a display.
                 state.topologyChanged = now;
-                state.expectedDisplay = SDL_GetWindowDisplayIndex(g_window);
+                state.expectedDisplay = WindowDisplayIndex(g_window);
             }
             const bool pointerActivity =
-                event.type == SDL_MOUSEMOTION ||
-                event.type == SDL_MOUSEBUTTONDOWN ||
-                event.type == SDL_MOUSEBUTTONUP ||
-                event.type == SDL_MOUSEWHEEL;
+                event.type == SDL_EVENT_MOUSE_MOTION ||
+                event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
+                event.type == SDL_EVENT_MOUSE_BUTTON_UP ||
+                event.type == SDL_EVENT_MOUSE_WHEEL;
             if (pointerActivity) {
                 g_lastPointerActivity = std::chrono::steady_clock::now();
                 SetGameCursorHidden(false);
             }
-            if (event.type == SDL_WINDOWEVENT && event.window.windowID == SDL_GetWindowID(g_window)) {
-                if (event.window.event == SDL_WINDOWEVENT_ENTER) {
+            if (windowEvent &&
+                event.window.windowID == SDL_GetWindowID(g_window)) {
+                if (event.type == SDL_EVENT_WINDOW_MOUSE_ENTER) {
                     g_lastPointerActivity = std::chrono::steady_clock::now();
                     SetGameCursorHidden(false);
                 }
-                else if (event.window.event == SDL_WINDOWEVENT_LEAVE ||
-                         event.window.event == SDL_WINDOWEVENT_FOCUS_LOST) {
+                else if (event.type == SDL_EVENT_WINDOW_MOUSE_LEAVE ||
+                         event.type == SDL_EVENT_WINDOW_FOCUS_LOST) {
                     // Never leave the OS pointer hidden when the user leaves the game.
                     SetGameCursorHidden(false);
                 }
-                else if (event.window.event == SDL_WINDOWEVENT_FOCUS_GAINED) {
+                else if (event.type == SDL_EVENT_WINDOW_FOCUS_GAINED) {
                     // Reassert the gameplay input contract after focus changes.
-                    SDL_StopTextInput();
+                    SDL_StopTextInput(g_window);
                 }
             }
             if (g_shaderProgress.load() != 0) {
-                if (event.type == SDL_KEYDOWN && !event.key.repeat) {
-                    if (event.key.keysym.sym == SDLK_ESCAPE || event.key.keysym.sym == SDLK_SPACE ||
-                        event.key.keysym.sym == SDLK_b) {
+                if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat) {
+                    if (event.key.key == SDLK_ESCAPE || event.key.key == SDLK_SPACE ||
+                        event.key.key == SDLK_B) {
                         RequestSkipShaderPreparation();
                     }
-                } else if (event.type == SDL_CONTROLLERBUTTONDOWN) {
-                    if (event.cbutton.button == SDL_CONTROLLER_BUTTON_B || event.cbutton.button == SDL_CONTROLLER_BUTTON_START) {
+                } else if (event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN) {
+                    if (event.gbutton.button == SDL_GAMEPAD_BUTTON_EAST || event.gbutton.button == SDL_GAMEPAD_BUTTON_START) {
                         RequestSkipShaderPreparation();
                     }
                 }
             }
-            if (event.type == SDL_KEYUP && event.key.keysym.scancode == state.consumedKey) {
+            if (event.type == SDL_EVENT_KEY_UP && event.key.scancode == state.consumedKey) {
                 state.consumedKey = SDL_SCANCODE_UNKNOWN;
                 continue;
             }
-            if (event.type == SDL_KEYDOWN && event.key.keysym.scancode == state.consumedKey) continue;
+            if (event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == state.consumedKey) continue;
             // Win+Shift+Left/Right: Windows moves windowed windows to the next
             // display; fullscreen is followed up after a moment if it did not move.
-            if (event.type == SDL_KEYDOWN && !event.key.repeat &&
-                (event.key.keysym.sym == SDLK_LEFT || event.key.keysym.sym == SDLK_RIGHT) &&
-                (event.key.keysym.mod & KMOD_GUI) && (event.key.keysym.mod & KMOD_SHIFT)) {
+            if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat &&
+                (event.key.key == SDLK_LEFT || event.key.key == SDLK_RIGHT) &&
+                (event.key.mod & SDL_KMOD_GUI) && (event.key.mod & SDL_KMOD_SHIFT)) {
                 if ((SDL_GetWindowFlags(g_window) & SDL_WINDOW_FULLSCREEN) && !getenv("LO_BACKGROUND")) {
-                    state.hotkeyDirection = event.key.keysym.sym == SDLK_LEFT ? -1 : 1;
-                    state.hotkeyFrom = SDL_GetWindowDisplayIndex(g_window);
+                    state.hotkeyDirection = event.key.key == SDLK_LEFT ? -1 : 1;
+                    state.hotkeyFrom = WindowDisplayIndex(g_window);
                     state.hotkeyAt = now;
                 }
                 continue; // A window shortcut, not game input.
             }
-            if (event.type == SDL_KEYDOWN && window_mode::IsToggleChord(event.key) &&
+            if (event.type == SDL_EVENT_KEY_DOWN && window_mode::IsToggleChord(event.key) &&
                 window_mode::TargetsGameWindow(event.key, SDL_GetWindowID(g_window))) {
-                state.consumedKey = event.key.keysym.scancode ? event.key.keysym.scancode : SDL_SCANCODE_RETURN;
+                state.consumedKey = event.key.scancode ? event.key.scancode : SDL_SCANCODE_RETURN;
                 const auto next = config.windowMode == settings::WindowMode::Windowed
                     ? settings::WindowMode::Borderless : settings::WindowMode::Windowed;
                 const auto ticket = g_displayChanges.TryBegin(config.width, config.height, uint32_t(next));
@@ -3148,35 +3169,35 @@ namespace gpu::video
                 }
                 continue;
             }
-            if (event.type == SDL_KEYDOWN && window_mode::TargetsGameWindow(event.key, SDL_GetWindowID(g_window)) &&
+            if (event.type == SDL_EVENT_KEY_DOWN && window_mode::TargetsGameWindow(event.key, SDL_GetWindowID(g_window)) &&
                 !debug_menu::IsOverlayVisible()) {
-                uint32_t key = uint32_t(event.key.keysym.sym);
-                if (event.key.keysym.sym >= SDLK_KP_1 && event.key.keysym.sym <= SDLK_KP_9)
-                    key = '1' + uint32_t(event.key.keysym.sym - SDLK_KP_1);
-                else if (event.key.keysym.sym == SDLK_KP_0) key = '0';
-                else if (event.key.keysym.sym == SDLK_KP_ENTER) key = 13;
+                uint32_t key = uint32_t(event.key.key);
+                if (event.key.key >= SDLK_KP_1 && event.key.key <= SDLK_KP_9)
+                    key = '1' + uint32_t(event.key.key - SDLK_KP_1);
+                else if (event.key.key == SDLK_KP_0) key = '0';
+                else if (event.key.key == SDLK_KP_ENTER) key = 13;
                 if (settings::CalibrationKey(key)) { hid::ClearKeyboardState(); continue; }
             }
-            if (event.type == SDL_MOUSEMOTION && !debug_menu::IsOverlayVisible()) {
+            if (event.type == SDL_EVENT_MOUSE_MOTION && !debug_menu::IsOverlayVisible()) {
                 int w=0,h=0; SDL_GetWindowSize(g_window,&w,&h);
                 const float scale=std::min(w/1280.0f,h/720.0f);
                 if (scale>0) settings::PointerDrag((event.motion.x-(w-1280*scale)*0.5f)/scale,
                     (event.motion.y-(h-720*scale)*0.5f)/scale, (event.motion.state & SDL_BUTTON_LMASK) != 0);
             }
-            if (event.type == SDL_MOUSEBUTTONUP && event.button.button == SDL_BUTTON_LEFT)
+            if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT)
                 settings::PointerDrag(0,0,false);
-            if (event.type == SDL_KEYDOWN || event.type == SDL_KEYUP)
-                hid::HandleKeyboardEvent(event.key.keysym.scancode, event.type == SDL_KEYDOWN);
-            if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_FOCUS_LOST) {
+            if (event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_KEY_UP)
+                hid::HandleKeyboardEvent(event.key.scancode, event.type == SDL_EVENT_KEY_DOWN);
+            if (event.type == SDL_EVENT_WINDOW_FOCUS_LOST) {
                 state.consumedKey = SDL_SCANCODE_UNKNOWN;
                 hid::ClearKeyboardState();
             }
-            if (event.type == SDL_WINDOWEVENT && event.window.windowID == SDL_GetWindowID(g_window) &&
-                (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED || event.window.event == SDL_WINDOWEVENT_DISPLAY_CHANGED ||
+            if (windowEvent && event.window.windowID == SDL_GetWindowID(g_window) &&
+                (event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED || event.type == SDL_EVENT_WINDOW_DISPLAY_CHANGED ||
 #if defined(__ANDROID__)
-                 event.window.event == SDL_WINDOWEVENT_RESIZED ||
+                 event.type == SDL_EVENT_WINDOW_RESIZED ||
 #endif
-                 event.window.event == SDL_WINDOWEVENT_RESTORED)) {
+                 event.type == SDL_EVENT_WINDOW_RESTORED)) {
 #ifdef _WIN32
                 if (!getenv("LO_BACKGROUND") && state.applied.windowMode == settings::WindowMode::Borderless)
                     window_mode::FitBorderless(g_nativeWindow);
@@ -3185,16 +3206,16 @@ namespace gpu::video
             }
             // Our own placements set expectedDisplay; any other display change is
             // the player's (Win+Shift+arrow, dragging, snapping).
-            if (event.type == SDL_WINDOWEVENT && event.window.windowID == SDL_GetWindowID(g_window) &&
-                event.window.event == SDL_WINDOWEVENT_DISPLAY_CHANGED && state.initialized && !getenv("LO_BACKGROUND")) {
-                const int display = SDL_GetWindowDisplayIndex(g_window);
+            if (event.type == SDL_EVENT_WINDOW_DISPLAY_CHANGED && event.window.windowID == SDL_GetWindowID(g_window) &&
+                state.initialized && !getenv("LO_BACKGROUND")) {
+                const int display = WindowDisplayIndex(g_window);
                 if (display >= 0 && display != state.expectedDisplay) {
                     if (now - state.topologyChanged < std::chrono::seconds(3)) state.expectedDisplay = display;
                     else OnSystemDisplayMove(display, "moved by the player or Windows");
                     state.hotkeyDirection = 0; // Windows carried out Win+Shift+arrow itself.
                 }
             }
-            if(event.type==SDL_MOUSEBUTTONDOWN) {
+            if(event.type==SDL_EVENT_MOUSE_BUTTON_DOWN) {
                 if (!debug_menu::IsOverlayVisible()) {
                     int w=0,h=0; SDL_GetWindowSize(g_window,&w,&h);
                     const float scale=std::min(w/1280.0f,h/720.0f);
@@ -3202,16 +3223,16 @@ namespace gpu::video
                         (event.button.y-(h-720*scale)*0.5f)/scale,event.button.button==SDL_BUTTON_RIGHT);
                 }
             }
-            if (event.type == SDL_KEYDOWN)
-                LOG_INFO("video key: {} name: '{}' repeat {}", event.key.keysym.sym, SDL_GetKeyName(event.key.keysym.sym), event.key.repeat);
-            if (event.type == SDL_KEYDOWN && !event.key.repeat && event.key.keysym.sym == SDLK_F1)
+            if (event.type == SDL_EVENT_KEY_DOWN)
+                LOG_INFO("video key: {} name: '{}' repeat {}", event.key.key, SDL_GetKeyName(event.key.key), event.key.repeat);
+            if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat && event.key.key == SDLK_F1)
             {
                 LOG_INFO("[host_ui] F1 key triggered!");
                 debug_menu::Toggle();
             }
-            else if (event.type == SDL_KEYDOWN && !event.key.repeat && debug_menu::IsOverlayVisible())
+            else if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat && debug_menu::IsOverlayVisible())
             {
-                switch (event.key.keysym.sym)
+                switch (event.key.key)
                 {
                 case SDLK_UP: debug_menu::HandleInput(debug_menu::InputAction::Up); break;
                 case SDLK_DOWN: debug_menu::HandleInput(debug_menu::InputAction::Down); break;
@@ -3221,14 +3242,14 @@ namespace gpu::video
                 case SDLK_KP_ENTER: debug_menu::HandleInput(debug_menu::InputAction::Confirm); break;
                 case SDLK_ESCAPE: debug_menu::HandleInput(debug_menu::InputAction::Cancel); break;
                 case SDLK_TAB:
-                case SDLK_q: debug_menu::HandleInput(debug_menu::InputAction::PrevTab); break;
-                case SDLK_e: debug_menu::HandleInput(debug_menu::InputAction::NextTab); break;
+                case SDLK_Q: debug_menu::HandleInput(debug_menu::InputAction::PrevTab); break;
+                case SDLK_E: debug_menu::HandleInput(debug_menu::InputAction::NextTab); break;
                 default: break;
                 }
             }
-            if (event.type == SDL_CONTROLLERDEVICEADDED || event.type == SDL_CONTROLLERDEVICEREMOVED)
-                hid::HandleControllerEvent(event.type, event.cdevice.which);
-            if (event.type == SDL_QUIT)
+            if (event.type == SDL_EVENT_GAMEPAD_ADDED || event.type == SDL_EVENT_GAMEPAD_REMOVED)
+                hid::HandleControllerEvent(event.type, event.gdevice.which);
+            if (event.type == SDL_EVENT_QUIT)
             {
                 RequestExit();
                 return;

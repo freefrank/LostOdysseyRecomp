@@ -6,7 +6,7 @@
 #include "../install/installer_navigation.h"
 
 #ifndef _WIN32
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 #include <algorithm>
 #include <atomic>
@@ -25,6 +25,34 @@ using namespace install::ui;
 
 namespace
 {
+std::vector<SDL_Gamepad*> OpenProgressGamepads()
+{
+    std::vector<SDL_Gamepad*> result;
+    int count = 0;
+    if (SDL_JoystickID* ids = SDL_GetGamepads(&count))
+    {
+        for (int i = 0; i < count; ++i)
+            if (auto* pad = SDL_OpenGamepad(ids[i])) result.push_back(pad);
+        SDL_free(ids);
+    }
+    return result;
+}
+
+SDL_Window* CreateProgressWindow(const char* title, int width, int height)
+{
+    SDL_Window* window = SDL_CreateWindow(title, width, height, 0);
+    if (window) SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+    return window;
+}
+
+SDL_Renderer* CreateProgressRenderer(SDL_Window* window)
+{
+    SDL_Renderer* renderer = SDL_CreateRenderer(window, nullptr);
+    if (!renderer) renderer = SDL_CreateRenderer(window, "software");
+    if (renderer) SDL_SetRenderVSync(renderer, 1);
+    return renderer;
+}
+
 std::string FormatBytes(uint64_t bytes)
 {
     double gib = static_cast<double>(bytes) / (1024.0 * 1024.0 * 1024.0);
@@ -111,7 +139,7 @@ bool ConfirmUpdateSdl(std::string_view version, std::string_view changelog, uint
     const bool dummy = (driver && std::string_view(driver) == "dummy") ||
                        (std::getenv("SDL_VIDEODRIVER") && std::string_view(std::getenv("SDL_VIDEODRIVER")) == "dummy");
 
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER) != 0)
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD))
     {
         return false;
     }
@@ -122,36 +150,24 @@ bool ConfirmUpdateSdl(std::string_view version, std::string_view changelog, uint
         return false;
     }
 
-    std::vector<SDL_GameController*> controllers;
-    for (int i = 0; i < SDL_NumJoysticks(); ++i)
-    {
-        if (SDL_IsGameController(i))
-            if (auto* pad = SDL_GameControllerOpen(i))
-                controllers.push_back(pad);
-    }
+    std::vector<SDL_Gamepad*> controllers = OpenProgressGamepads();
 
     constexpr int WIN_WIDTH = 640;
     constexpr int WIN_HEIGHT = 460;
 
-    SDL_Window* window = SDL_CreateWindow(
-        "Lost Odyssey Recomp - Update Available",
-        SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-        WIN_WIDTH, WIN_HEIGHT,
-        SDL_WINDOW_SHOWN
-    );
+    SDL_Window* window = CreateProgressWindow("Lost Odyssey Recomp - Update Available", WIN_WIDTH, WIN_HEIGHT);
 
     if (!window)
     {
-        for (auto* pad : controllers) SDL_GameControllerClose(pad);
+        for (auto* pad : controllers) SDL_CloseGamepad(pad);
         return false;
     }
 
-    SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-    if (!renderer) renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
+    SDL_Renderer* renderer = CreateProgressRenderer(window);
     if (!renderer)
     {
         SDL_DestroyWindow(window);
-        for (auto* pad : controllers) SDL_GameControllerClose(pad);
+        for (auto* pad : controllers) SDL_CloseGamepad(pad);
         return false;
     }
 
@@ -166,10 +182,10 @@ bool ConfirmUpdateSdl(std::string_view version, std::string_view changelog, uint
 
     while (!done)
     {
-        uint64_t now = SDL_GetTicks64();
+        uint64_t now = SDL_GetTicks();
         for (auto* pad : controllers)
         {
-            int axisX = SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_LEFTX);
+            int axisX = SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFTX);
             Direction dir = stick.Update(axisX, 0, now);
             if (dir == Direction::Left) selectedButton = 0;
             else if (dir == Direction::Right) selectedButton = 1;
@@ -180,31 +196,31 @@ bool ConfirmUpdateSdl(std::string_view version, std::string_view changelog, uint
         {
             switch (event.type)
             {
-            case SDL_QUIT:
+            case SDL_EVENT_QUIT:
                 done = true;
                 accepted = false;
                 break;
-            case SDL_KEYDOWN:
-                switch (event.key.keysym.sym)
+            case SDL_EVENT_KEY_DOWN:
+                switch (event.key.key)
                 {
                 case SDLK_ESCAPE:
                     done = true;
                     accepted = false;
                     break;
                 case SDLK_LEFT:
-                case SDLK_a:
+                case SDLK_A:
                     selectedButton = 0;
                     break;
                 case SDLK_RIGHT:
-                case SDLK_d:
+                case SDLK_D:
                     selectedButton = 1;
                     break;
                 case SDLK_UP:
-                case SDLK_w:
+                case SDLK_W:
                     if (scrollOffset > 0) scrollOffset--;
                     break;
                 case SDLK_DOWN:
-                case SDLK_s:
+                case SDLK_S:
                     if (scrollOffset + MAX_VISIBLE_LINES < static_cast<int>(logLines.size()))
                         scrollOffset++;
                     break;
@@ -217,27 +233,27 @@ bool ConfirmUpdateSdl(std::string_view version, std::string_view changelog, uint
                     break;
                 }
                 break;
-            case SDL_CONTROLLERBUTTONDOWN:
-                switch (event.cbutton.button)
+            case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+                switch (event.gbutton.button)
                 {
-                case SDL_CONTROLLER_BUTTON_DPAD_LEFT:
+                case SDL_GAMEPAD_BUTTON_DPAD_LEFT:
                     selectedButton = 0;
                     break;
-                case SDL_CONTROLLER_BUTTON_DPAD_RIGHT:
+                case SDL_GAMEPAD_BUTTON_DPAD_RIGHT:
                     selectedButton = 1;
                     break;
-                case SDL_CONTROLLER_BUTTON_DPAD_UP:
+                case SDL_GAMEPAD_BUTTON_DPAD_UP:
                     if (scrollOffset > 0) scrollOffset--;
                     break;
-                case SDL_CONTROLLER_BUTTON_DPAD_DOWN:
+                case SDL_GAMEPAD_BUTTON_DPAD_DOWN:
                     if (scrollOffset + MAX_VISIBLE_LINES < static_cast<int>(logLines.size()))
                         scrollOffset++;
                     break;
-                case SDL_CONTROLLER_BUTTON_A:
+                case SDL_GAMEPAD_BUTTON_SOUTH:
                     accepted = (selectedButton == 0);
                     done = true;
                     break;
-                case SDL_CONTROLLER_BUTTON_B:
+                case SDL_GAMEPAD_BUTTON_EAST:
                     accepted = false;
                     done = true;
                     break;
@@ -245,7 +261,7 @@ bool ConfirmUpdateSdl(std::string_view version, std::string_view changelog, uint
                     break;
                 }
                 break;
-            case SDL_MOUSEBUTTONDOWN:
+            case SDL_EVENT_MOUSE_BUTTON_DOWN:
                 if (event.button.button == SDL_BUTTON_LEFT)
                 {
                     int mx = event.button.x, my = event.button.y;
@@ -267,7 +283,7 @@ bool ConfirmUpdateSdl(std::string_view version, std::string_view changelog, uint
                     }
                 }
                 break;
-            case SDL_MOUSEWHEEL:
+            case SDL_EVENT_MOUSE_WHEEL:
                 if (event.wheel.y > 0 && scrollOffset > 0) scrollOffset--;
                 else if (event.wheel.y < 0 && scrollOffset + MAX_VISIBLE_LINES < static_cast<int>(logLines.size())) scrollOffset++;
                 break;
@@ -334,7 +350,7 @@ bool ConfirmUpdateSdl(std::string_view version, std::string_view changelog, uint
 
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
-    for (auto* pad : controllers) SDL_GameControllerClose(pad);
+    for (auto* pad : controllers) SDL_CloseGamepad(pad);
     return accepted;
 }
 
@@ -345,43 +361,31 @@ void ShowExternalUpdateNoticeSdl(std::string_view version, uint32_t uiLanguage)
     const bool dummy = (driver && std::string_view(driver) == "dummy") ||
                        (std::getenv("SDL_VIDEODRIVER") && std::string_view(std::getenv("SDL_VIDEODRIVER")) == "dummy");
 
-    if (dummy || SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER) != 0)
+    if (dummy || !SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD))
     {
         return;
     }
 
-    std::vector<SDL_GameController*> controllers;
-    for (int i = 0; i < SDL_NumJoysticks(); ++i)
-    {
-        if (SDL_IsGameController(i))
-            if (auto* pad = SDL_GameControllerOpen(i))
-                controllers.push_back(pad);
-    }
+    std::vector<SDL_Gamepad*> controllers = OpenProgressGamepads();
 
     constexpr int WIN_WIDTH = 700;
     constexpr int WIN_HEIGHT = 340;
 
     const auto title = std::string(text.title) + ": " + std::string(version);
 
-    SDL_Window* window = SDL_CreateWindow(
-        title.c_str(),
-        SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-        WIN_WIDTH, WIN_HEIGHT,
-        SDL_WINDOW_SHOWN
-    );
+    SDL_Window* window = CreateProgressWindow(title.c_str(), WIN_WIDTH, WIN_HEIGHT);
 
     if (!window)
     {
-        for (auto* pad : controllers) SDL_GameControllerClose(pad);
+        for (auto* pad : controllers) SDL_CloseGamepad(pad);
         return;
     }
 
-    SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-    if (!renderer) renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
+    SDL_Renderer* renderer = CreateProgressRenderer(window);
     if (!renderer)
     {
         SDL_DestroyWindow(window);
-        for (auto* pad : controllers) SDL_GameControllerClose(pad);
+        for (auto* pad : controllers) SDL_CloseGamepad(pad);
         return;
     }
 
@@ -391,10 +395,10 @@ void ShowExternalUpdateNoticeSdl(std::string_view version, uint32_t uiLanguage)
         SDL_Event event;
         while (SDL_PollEvent(&event))
         {
-            if (event.type == SDL_QUIT ||
-                event.type == SDL_KEYDOWN ||
-                event.type == SDL_CONTROLLERBUTTONDOWN ||
-                event.type == SDL_MOUSEBUTTONDOWN)
+            if (event.type == SDL_EVENT_QUIT ||
+                event.type == SDL_EVENT_KEY_DOWN ||
+                event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN ||
+                event.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
             {
                 done = true;
                 break;
@@ -423,14 +427,14 @@ void ShowExternalUpdateNoticeSdl(std::string_view version, uint32_t uiLanguage)
 
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
-    for (auto* pad : controllers) SDL_GameControllerClose(pad);
+    for (auto* pad : controllers) SDL_CloseGamepad(pad);
 }
 
 struct ProgressWindow::Impl
 {
     SDL_Window* window = nullptr;
     SDL_Renderer* renderer = nullptr;
-    std::vector<SDL_GameController*> controllers;
+    std::vector<SDL_Gamepad*> controllers;
     std::string phaseText;
     std::string detailText;
     std::string amountText;
@@ -446,32 +450,21 @@ struct ProgressWindow::Impl
         dummy = (driver && std::string_view(driver) == "dummy") ||
                 (std::getenv("SDL_VIDEODRIVER") && std::string_view(std::getenv("SDL_VIDEODRIVER")) == "dummy");
 
-        if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER) != 0)
+        if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD))
         {
             return;
         }
 
-        for (int i = 0; i < SDL_NumJoysticks(); ++i)
-        {
-            if (SDL_IsGameController(i))
-                if (auto* pad = SDL_GameControllerOpen(i))
-                    controllers.push_back(pad);
-        }
+        controllers = OpenProgressGamepads();
 
         constexpr int WIN_WIDTH = 540;
         constexpr int WIN_HEIGHT = 220;
 
-        window = SDL_CreateWindow(
-            "Lost Odyssey Recomp - Updating",
-            SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-            WIN_WIDTH, WIN_HEIGHT,
-            SDL_WINDOW_SHOWN
-        );
+        window = CreateProgressWindow("Lost Odyssey Recomp - Updating", WIN_WIDTH, WIN_HEIGHT);
 
         if (window)
         {
-            renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-            if (!renderer) renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
+            renderer = CreateProgressRenderer(window);
         }
     }
 
@@ -479,7 +472,7 @@ struct ProgressWindow::Impl
     {
         if (renderer) SDL_DestroyRenderer(renderer);
         if (window) SDL_DestroyWindow(window);
-        for (auto* pad : controllers) SDL_GameControllerClose(pad);
+        for (auto* pad : controllers) SDL_CloseGamepad(pad);
     }
 
     void Pump()
@@ -491,18 +484,18 @@ struct ProgressWindow::Impl
         {
             switch (event.type)
             {
-            case SDL_QUIT:
+            case SDL_EVENT_QUIT:
                 if (cancellable) cancelled = true;
                 break;
-            case SDL_KEYDOWN:
-                if (event.key.keysym.sym == SDLK_ESCAPE && cancellable)
+            case SDL_EVENT_KEY_DOWN:
+                if (event.key.key == SDLK_ESCAPE && cancellable)
                     cancelled = true;
                 break;
-            case SDL_CONTROLLERBUTTONDOWN:
-                if (event.cbutton.button == SDL_CONTROLLER_BUTTON_B && cancellable)
+            case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+                if (event.gbutton.button == SDL_GAMEPAD_BUTTON_EAST && cancellable)
                     cancelled = true;
                 break;
-            case SDL_MOUSEBUTTONDOWN:
+            case SDL_EVENT_MOUSE_BUTTON_DOWN:
                 if (cancellable && event.button.button == SDL_BUTTON_LEFT)
                 {
                     int mx = event.button.x, my = event.button.y;

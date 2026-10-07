@@ -1,5 +1,5 @@
 #include <stdafx.h>
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include <atomic>
 #include <os/logger.h>
 #include "quit_action_hook.h"
@@ -46,14 +46,14 @@ PPC_FUNC(sub_8287A188)
     settings::quit_action::Dispatch(ctx,
         [] {
             SDL_Event event{};
-            event.type = SDL_QUIT;
-            const int result = SDL_PushEvent(&event);
-            if (result <= 0)
-                LOG_WARNING("settings: System Quit to Desktop could not queue SDL_QUIT (result {}, SDL: {}); returning to game for retry",
+            event.type = SDL_EVENT_QUIT;
+            const bool result = SDL_PushEvent(&event);
+            if (!result)
+                LOG_WARNING("settings: System Quit to Desktop could not queue SDL_EVENT_QUIT (result {}, SDL: {}); returning to game for retry",
                     result, SDL_GetError());
             else
-                LOG_INFO("settings: System Quit to Desktop queued SDL_QUIT (result {})", result);
-            return result > 0;
+                LOG_INFO("settings: System Quit to Desktop queued SDL_EVENT_QUIT (result {})", result);
+            return result;
         },
         [base](PPCContext& call) {
             // Only 822E26B8 reaches here: mirror modal-16's non-Yes branch.

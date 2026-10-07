@@ -4,7 +4,7 @@
 
 #include "../gpu/shader/portable_shader_pack_location.h"
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include <host_ui/rasterizer.h>
 #if defined(__ANDROID__)
 #include <hid/android_touch.h>
@@ -176,29 +176,35 @@ public:
     {
         const char *driver = std::getenv("SDL_VIDEODRIVER");
         if (driver && std::string_view(driver) == "dummy") return false;
-        constexpr uint32_t subsystems = SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER | SDL_INIT_EVENTS;
-        if (SDL_InitSubSystem(subsystems) != 0) return false;
+        constexpr uint32_t subsystems = SDL_INIT_VIDEO | SDL_INIT_GAMEPAD | SDL_INIT_EVENTS;
+        if (!SDL_InitSubSystem(subsystems)) return false;
         initialized_ = subsystems;
         if (const char *current = SDL_GetCurrentVideoDriver(); current && std::string_view(current) == "dummy")
             return false;
-        window_ = SDL_CreateWindow("Lost Odyssey Recomp", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720,
-                                   SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
+        window_ = SDL_CreateWindow("Lost Odyssey Recomp", 1280, 720,
+                                   SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
         if (!window_) return false;
-        renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-        if (!renderer_) renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_SOFTWARE);
+        SDL_SetWindowPosition(window_, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+        renderer_ = SDL_CreateRenderer(window_, nullptr);
+        if (!renderer_) renderer_ = SDL_CreateRenderer(window_, "software");
+        if (renderer_) SDL_SetRenderVSync(renderer_, 1);
         texture_ = renderer_ ? SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STREAMING, 1280, 720)
                              : nullptr;
         if (!texture_) return false;
-        SDL_RenderSetLogicalSize(renderer_, 1280, 720);
-        for (int i = 0; i < SDL_NumJoysticks(); ++i)
-            if (SDL_IsGameController(i))
-                if (auto *controller = SDL_GameControllerOpen(i)) controllers_.push_back(controller);
+        SDL_SetRenderLogicalPresentation(renderer_, 1280, 720, SDL_LOGICAL_PRESENTATION_LETTERBOX);
+        int count = 0;
+        if (SDL_JoystickID *ids = SDL_GetGamepads(&count))
+        {
+            for (int i = 0; i < count; ++i)
+                if (auto *controller = SDL_OpenGamepad(ids[i])) controllers_.push_back(controller);
+            SDL_free(ids);
+        }
         pixels_.Resize(1280, 720);
         return true;
     }
     ~PromptWindow()
     {
-        for (auto *controller : controllers_) SDL_GameControllerClose(controller);
+        for (auto *controller : controllers_) SDL_CloseGamepad(controller);
         if (texture_) SDL_DestroyTexture(texture_);
         if (renderer_) SDL_DestroyRenderer(renderer_);
         if (window_) SDL_DestroyWindow(window_);
@@ -212,7 +218,7 @@ public:
     {
         SDL_UpdateTexture(texture_, nullptr, pixels_.pixels.data(), 1280 * sizeof(uint32_t));
         SDL_RenderClear(renderer_);
-        SDL_RenderCopy(renderer_, texture_, nullptr, nullptr);
+        SDL_RenderTexture(renderer_, texture_, nullptr, nullptr);
         SDL_RenderPresent(renderer_);
     }
 
@@ -221,7 +227,7 @@ private:
     SDL_Window *window_ = nullptr;
     SDL_Renderer *renderer_ = nullptr;
     SDL_Texture *texture_ = nullptr;
-    std::vector<SDL_GameController *> controllers_;
+    std::vector<SDL_Gamepad *> controllers_;
     host_ui::PixelBuffer pixels_;
 };
 
@@ -229,13 +235,13 @@ enum class Action { None, Activate, Primary, Secondary, Left, Right, Close };
 
 Action ReadAction(const SDL_Event &event, uint32_t windowId, int width, int height)
 {
-    if (event.type == SDL_QUIT ||
-        (event.type == SDL_WINDOWEVENT && event.window.windowID == windowId && event.window.event == SDL_WINDOWEVENT_CLOSE))
+    if (event.type == SDL_EVENT_QUIT ||
+        (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && event.window.windowID == windowId))
         return Action::Close;
     // This is the process's only window, so a key event without a focused window counts too.
-    if (event.type == SDL_KEYDOWN && (event.key.windowID == windowId || !event.key.windowID) && !event.key.repeat)
+    if (event.type == SDL_EVENT_KEY_DOWN && (event.key.windowID == windowId || !event.key.windowID) && !event.key.repeat)
     {
-        switch (event.key.keysym.sym)
+        switch (event.key.key)
         {
         case SDLK_LEFT: return Action::Left;
         case SDLK_RIGHT: return Action::Right;
@@ -246,18 +252,18 @@ Action ReadAction(const SDL_Event &event, uint32_t windowId, int width, int heig
         default: return Action::None;
         }
     }
-    if (event.type == SDL_CONTROLLERBUTTONDOWN)
+    if (event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN)
     {
-        switch (event.cbutton.button)
+        switch (event.gbutton.button)
         {
-        case SDL_CONTROLLER_BUTTON_DPAD_LEFT: return Action::Left;
-        case SDL_CONTROLLER_BUTTON_DPAD_RIGHT: return Action::Right;
-        case SDL_CONTROLLER_BUTTON_A: return Action::Activate;
-        case SDL_CONTROLLER_BUTTON_B: return Action::Secondary;
+        case SDL_GAMEPAD_BUTTON_DPAD_LEFT: return Action::Left;
+        case SDL_GAMEPAD_BUTTON_DPAD_RIGHT: return Action::Right;
+        case SDL_GAMEPAD_BUTTON_SOUTH: return Action::Activate;
+        case SDL_GAMEPAD_BUTTON_EAST: return Action::Secondary;
         default: return Action::None;
         }
     }
-    if (event.type == SDL_MOUSEBUTTONDOWN && event.button.windowID == windowId)
+    if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN && event.button.windowID == windowId)
     {
         const double scale = std::min(width / 1280.0, height / 720.0);
         if (scale <= 0) return Action::None;

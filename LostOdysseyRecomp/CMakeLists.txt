@@ -64,7 +64,7 @@ target_sources(LoInstallerReviewPreviewTest PRIVATE
     ${LO_RUNTIME_ROOT}/install/installer_font.cpp)
 target_include_directories(LoInstallerReviewPreviewTest PRIVATE ${CMAKE_SOURCE_DIR}/thirdparty/SDL/include)
 target_compile_definitions(LoInstallerReviewPreviewTest PRIVATE LO_INSTALLER_UI_TESTING SDL_MAIN_HANDLED)
-target_link_libraries(LoInstallerReviewPreviewTest PRIVATE SDL2::SDL2-static)
+target_link_libraries(LoInstallerReviewPreviewTest PRIVATE SDL3::SDL3-static)
 lo_add_header_test(LoInstallHostTest ${CMAKE_SOURCE_DIR}/tools/tests/install_host_test.cpp)
 target_sources(LoInstallHostTest PRIVATE ${LO_RUNTIME_ROOT}/install/host.cpp)
 lo_add_header_test(LoFileBrowserFolderTest ${CMAKE_SOURCE_DIR}/tools/tests/file_browser_folder_test.cpp)
@@ -91,7 +91,7 @@ add_executable(LoUpdaterSdlUiTest EXCLUDE_FROM_ALL
     ${LO_RUNTIME_ROOT}/updater/update.cpp)
 target_include_directories(LoUpdaterSdlUiTest PRIVATE ${LO_RUNTIME_ROOT})
 target_compile_features(LoUpdaterSdlUiTest PRIVATE cxx_std_20)
-target_link_libraries(LoUpdaterSdlUiTest PRIVATE SDL2::SDL2-static)
+target_link_libraries(LoUpdaterSdlUiTest PRIVATE SDL3::SDL3-static)
 if(MSVC)
     target_compile_options(LoUpdaterSdlUiTest PRIVATE /utf-8 /UNDEBUG)
 else()
@@ -106,7 +106,7 @@ if(NOT WIN32)
     target_include_directories(LoUpdaterSdlProductionTest PRIVATE ${LO_RUNTIME_ROOT})
     target_compile_features(LoUpdaterSdlProductionTest PRIVATE cxx_std_20)
     target_compile_options(LoUpdaterSdlProductionTest PRIVATE -UNDEBUG)
-    target_link_libraries(LoUpdaterSdlProductionTest PRIVATE SDL2::SDL2-static)
+    target_link_libraries(LoUpdaterSdlProductionTest PRIVATE SDL3::SDL3-static)
 endif()
 add_executable(LoUpdaterGamePromptTest EXCLUDE_FROM_ALL
     ${CMAKE_SOURCE_DIR}/tools/tests/updater_game_prompt_test.cpp
@@ -114,7 +114,7 @@ add_executable(LoUpdaterGamePromptTest EXCLUDE_FROM_ALL
 target_include_directories(LoUpdaterGamePromptTest PRIVATE ${LO_RUNTIME_ROOT})
 target_compile_features(LoUpdaterGamePromptTest PRIVATE cxx_std_20)
 target_compile_definitions(LoUpdaterGamePromptTest PRIVATE SDL_MAIN_HANDLED)
-target_link_libraries(LoUpdaterGamePromptTest PRIVATE SDL2::SDL2-static)
+target_link_libraries(LoUpdaterGamePromptTest PRIVATE SDL3::SDL3-static)
 endif()
 
 set(LO_PRIVATE_DIR ${CMAKE_SOURCE_DIR}/LostOdysseyRecompLib/private)
@@ -191,7 +191,8 @@ target_include_directories(LostOdysseyRecomp PRIVATE
 
 target_precompile_headers(LostOdysseyRecomp PRIVATE stdafx.h)
 target_compile_features(LostOdysseyRecomp PRIVATE cxx_std_20)
-target_compile_options(LostOdysseyRecomp PRIVATE -fno-strict-aliasing -Wno-switch -Wno-unused-function)
+target_compile_options(LostOdysseyRecomp PRIVATE
+    $<$<CXX_COMPILER_ID:Clang>:-fno-strict-aliasing;-Wno-switch;-Wno-unused-function>)
 target_compile_definitions(LostOdysseyRecomp PRIVATE NOMINMAX LO_SOURCE_VERSION="${LO_SOURCE_VERSION}")
 
 target_link_libraries(LostOdysseyRecomp PRIVATE
@@ -202,7 +203,7 @@ target_link_libraries(LostOdysseyRecomp PRIVATE
     fmt::fmt
     xxHash::xxhash
     o1heap
-    SDL2::SDL2)
+    SDL3::SDL3)
 if(ANDROID)
     target_link_libraries(LostOdysseyRecomp PRIVATE android log dl nlohmann_json::nlohmann_json)
 elseif(UNIX)
@@ -346,7 +347,7 @@ if(WIN32)
         ${CMAKE_SOURCE_DIR}/tools/tests/game_window_pixels_test.cpp)
     target_compile_features(LoGameWindowPixelsTest PRIVATE cxx_std_20)
     target_compile_options(LoGameWindowPixelsTest PRIVATE /utf-8 /W4 /WX)
-    target_link_libraries(LoGameWindowPixelsTest PRIVATE SDL2::SDL2-static user32)
+    target_link_libraries(LoGameWindowPixelsTest PRIVATE SDL3::SDL3-static user32)
     set_target_properties(LoGameWindowPixelsTest PROPERTIES DISABLE_PRECOMPILE_HEADERS ON)
 
     add_executable(LoRestartTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/restart_test.cpp)
@@ -460,9 +461,9 @@ target_compile_options(LoHidTest PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,COM
 target_compile_features(LoHidTest PRIVATE cxx_std_20)
 set_target_properties(LoHidTest PROPERTIES DISABLE_PRECOMPILE_HEADERS ON)
 if(ANDROID)
-    target_link_libraries(LoHidTest PRIVATE fmt::fmt SDL2::SDL2 xxHash::xxhash)
+    target_link_libraries(LoHidTest PRIVATE fmt::fmt SDL3::SDL3 xxHash::xxhash)
 else()
-    target_link_libraries(LoHidTest PRIVATE fmt::fmt SDL2::SDL2-static xxHash::xxhash)
+    target_link_libraries(LoHidTest PRIVATE fmt::fmt SDL3::SDL3-static xxHash::xxhash)
 endif()
 
 if(NOT ANDROID)
@@ -475,7 +476,7 @@ if(NOT ANDROID)
     target_compile_options(LoAndroidTouchInputTest PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,COMPILE_OPTIONS>)
     target_compile_features(LoAndroidTouchInputTest PRIVATE cxx_std_20)
     set_target_properties(LoAndroidTouchInputTest PROPERTIES DISABLE_PRECOMPILE_HEADERS ON)
-    target_link_libraries(LoAndroidTouchInputTest PRIVATE fmt::fmt SDL2::SDL2-static xxHash::xxhash)
+    target_link_libraries(LoAndroidTouchInputTest PRIVATE fmt::fmt SDL3::SDL3-static xxHash::xxhash)
 endif()
 
 add_executable(LoShaderTool
@@ -847,7 +848,7 @@ if(WIN32 AND LO_BUILD_GPU)
     # video.cpp reads LO_HAS_FSR / LO_HAS_FSR_D3D12; this fixture links no FSR backend.
     target_compile_definitions(LoBackendLifecycleTest PRIVATE LO_GPU_PLUME SDL_MAIN_HANDLED LO_HAS_FSR=0 LO_HAS_FSR_D3D12=0)
     target_link_options(LoBackendLifecycleTest PRIVATE /SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup)
-    target_link_libraries(LoBackendLifecycleTest PRIVATE plume d3d12 dxgi fmt::fmt SDL2::SDL2-static xxHash::xxhash)
+    target_link_libraries(LoBackendLifecycleTest PRIVATE plume d3d12 dxgi fmt::fmt SDL3::SDL3-static xxHash::xxhash)
     foreach(target LoBackendDeviceTest LoBackendCacheTest LoBackendLifecycleTest)
         target_include_directories(${target} PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,INCLUDE_DIRECTORIES>)
         target_compile_definitions(${target} PRIVATE NOMINMAX)
@@ -903,13 +904,13 @@ if(WIN32 AND LO_BUILD_GPU)
     target_compile_features(LoPresentCaptureTest PRIVATE cxx_std_20)
     set_target_properties(LoPresentCaptureTest PROPERTIES DISABLE_PRECOMPILE_HEADERS ON)
     target_link_options(LoPresentCaptureTest PRIVATE /SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup)
-    target_link_libraries(LoPresentCaptureTest PRIVATE plume d3d12 dxgi fmt::fmt SDL2::SDL2-static xxHash::xxhash)
+    target_link_libraries(LoPresentCaptureTest PRIVATE plume d3d12 dxgi fmt::fmt SDL3::SDL3-static xxHash::xxhash)
 endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND LO_BUILD_GPU)
     add_executable(LoHdrSurfaceTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/hdr_surface_test.cpp)
     target_compile_features(LoHdrSurfaceTest PRIVATE cxx_std_20)
-    target_link_libraries(LoHdrSurfaceTest PRIVATE plume SDL2::SDL2-static ${CMAKE_DL_LIBS})
+    target_link_libraries(LoHdrSurfaceTest PRIVATE plume SDL3::SDL3-static ${CMAKE_DL_LIBS})
 endif()
 
 if(APPLE AND LO_BUILD_GPU)

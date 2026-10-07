@@ -2,7 +2,7 @@
 
 #ifdef _WIN32
 #include <windows.h>
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 namespace gpu::video::window_pixels
 {
@@ -20,11 +20,9 @@ public:
         previous_ = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         if (!previous_) return;
 
-        // SDL window sizes and mouse coordinates must stay in physical pixels.
-        // Set this before SDL's first video initialization, including retries.
-        // It is an application-wide SDL policy, not a change to Windows scaling
-        // or to the native settings, installer, updater and Debug Menu layouts.
-        ready_ = SDL_SetHintWithPriority(SDL_HINT_WINDOWS_DPI_SCALING, "0", SDL_HINT_OVERRIDE) == SDL_TRUE;
+        // SDL3 handles DPI awareness internally once the owner thread is
+        // per-monitor aware. Pixel-sensitive paths query the drawable size.
+        ready_ = true;
     }
 
     ~Context()

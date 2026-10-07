@@ -22,7 +22,7 @@
 #include <vector>
 #include <deque>
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 namespace install
 {
@@ -65,7 +65,7 @@ void DrawButtonPrompt(SDL_Renderer* renderer, int x, int y, std::string_view btn
         const auto face = btn == "A" ? Face::A : btn == "B" ? Face::B : btn == "X" ? Face::X : Face::Y;
         SDL_SetRenderDrawColor(renderer, 20, 20, 20, 255);
         hid::prompts::DrawFace(face, x + 4, y + 2, 16, [&](int ax, int ay, int bx, int by) {
-            SDL_RenderDrawLine(renderer, ax, ay, bx, by);
+            SDL_RenderLine(renderer, ax, ay, bx, by);
         });
     }
     else ui::DrawString(renderer, x + 4, y + 2, btn, 20, 20, 20, 255, 1.0f);
@@ -107,8 +107,8 @@ SDL_Texture* CreateDpadIcon(SDL_Renderer* renderer)
 
 void DrawNavigationPrompt(SDL_Renderer* renderer, SDL_Texture* icon, int x, int y, std::string_view label)
 {
-    const SDL_Rect target{ x, y - 6, 32, 32 };
-    SDL_RenderCopy(renderer, icon, nullptr, &target);
+    const SDL_FRect target{ float(x), float(y - 6), 32.0f, 32.0f };
+    SDL_RenderTexture(renderer, icon, nullptr, &target);
     ui::DrawString(renderer, x + 38, y + 2, label, COLOR_INK.r, COLOR_INK.g, COLOR_INK.b, 255, 1.0f);
 }
 
@@ -212,25 +212,25 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
 {
     InstallerResult result;
 
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER | SDL_INIT_EVENTS) < 0)
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD | SDL_INIT_EVENTS))
     {
         result.error = std::string("SDL_Init failed: ") + SDL_GetError();
         return result;
     }
 
-    std::vector<SDL_GameController*> controllers;
+    std::vector<SDL_Gamepad*> controllers;
     hid::prompts::ActiveController promptController;
-    for (int i = 0; i < SDL_NumJoysticks(); ++i)
+    int gamepadCount = 0;
+    SDL_JoystickID* gamepadIds = SDL_GetGamepads(&gamepadCount);
+    for (int i = 0; i < gamepadCount; ++i)
     {
-        if (SDL_IsGameController(i))
+        if (auto* pad = SDL_OpenGamepad(gamepadIds[i]))
         {
-            if (auto* pad = SDL_GameControllerOpen(i))
-            {
-                controllers.push_back(pad);
-                promptController.Connected(SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pad)), SDL_GameControllerGetType(pad));
-            }
+            controllers.push_back(pad);
+            promptController.Connected(SDL_GetJoystickID(SDL_GetGamepadJoystick(pad)), SDL_GetGamepadType(pad));
         }
     }
+    SDL_free(gamepadIds);
 
     constexpr int LOGICAL_WIN_WIDTH = 1280;
     constexpr int LOGICAL_WIN_HEIGHT = 720;
@@ -239,7 +239,8 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
     int requestedHeight = LOGICAL_WIN_HEIGHT;
 
     SDL_Rect displayBounds{};
-    if (SDL_GetDisplayUsableBounds(0, &displayBounds) == 0 && displayBounds.w > 0 && displayBounds.h > 0)
+    const SDL_DisplayID primaryDisplay = SDL_GetPrimaryDisplay();
+    if (primaryDisplay && SDL_GetDisplayUsableBounds(primaryDisplay, &displayBounds) && displayBounds.w > 0 && displayBounds.h > 0)
     {
         int targetW = static_cast<int>(std::round(displayBounds.w * 0.8f));
         int targetH = static_cast<int>(std::round(displayBounds.h * 0.8f));
@@ -249,12 +250,8 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
     }
 
     float uiScale = 1.0f;
-    float ddpi = 0.0f, hdpi = 0.0f, vdpi = 0.0f;
-    if (SDL_GetDisplayDPI(0, &ddpi, &hdpi, &vdpi) == 0 && hdpi > 0.0f)
-    {
-        // Standard baseline display DPI is 96.0f
-        uiScale = hdpi / 96.0f;
-    }
+    if (primaryDisplay)
+        uiScale = SDL_GetDisplayContentScale(primaryDisplay);
     uiScale = std::clamp(uiScale, 1.0f, 2.0f);
 
     int windowWidth = static_cast<int>(std::round(requestedWidth * uiScale));
@@ -277,53 +274,53 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
 
     SDL_Window* window = SDL_CreateWindow(
         "Lost Odyssey Recomp - Game Content Installer",
-        SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
         windowWidth, windowHeight,
-        SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI
+        SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY
     );
+    if (window) SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
 
     if (!window)
     {
         result.error = std::string("SDL_CreateWindow failed: ") + SDL_GetError();
         for (auto* pad : controllers)
         {
-            SDL_GameControllerClose(pad);
+            SDL_CloseGamepad(pad);
         }
         SDL_Quit();
         return result;
     }
 
-    SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    SDL_Renderer* renderer = SDL_CreateRenderer(window, nullptr);
     if (!renderer)
     {
-        renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
+        renderer = SDL_CreateRenderer(window, "software");
     }
     if (!renderer)
     {
         result.error = std::string("SDL_CreateRenderer failed: ") + SDL_GetError();
         for (auto* pad : controllers)
         {
-            SDL_GameControllerClose(pad);
+            SDL_CloseGamepad(pad);
         }
         SDL_DestroyWindow(window);
         SDL_Quit();
         return result;
     }
 
-    if (SDL_RenderSetLogicalSize(renderer, LOGICAL_WIN_WIDTH, LOGICAL_WIN_HEIGHT) != 0)
+    SDL_SetRenderVSync(renderer, 1);
+    if (!SDL_SetRenderLogicalPresentation(renderer, LOGICAL_WIN_WIDTH, LOGICAL_WIN_HEIGHT,
+                                           SDL_LOGICAL_PRESENTATION_LETTERBOX))
     {
-        result.error = std::string("SDL_RenderSetLogicalSize failed: ") + SDL_GetError();
+        result.error = std::string("SDL_SetRenderLogicalPresentation failed: ") + SDL_GetError();
         for (auto* pad : controllers)
         {
-            SDL_GameControllerClose(pad);
+            SDL_CloseGamepad(pad);
         }
         SDL_DestroyRenderer(renderer);
         SDL_DestroyWindow(window);
         SDL_Quit();
         return result;
     }
-    SDL_RenderSetIntegerScale(renderer, SDL_FALSE);
-
     SDL_Texture* dpadIcon = CreateDpadIcon(renderer);
     UIState state;
     const uint32_t uiLanguage = settings::GetConfig().uiLanguage;
@@ -535,7 +532,7 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
 
     auto cancelNewFolder = [&]() {
         state.destNaming = false;
-        SDL_StopTextInput();
+        SDL_StopTextInput(window);
     };
 
     auto beginNewFolder = [&]() {
@@ -546,7 +543,7 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
         state.destNameReplaceOnType = true;
         state.destNaming = true;
         state.destStatus.clear();
-        SDL_StartTextInput();
+        SDL_StartTextInput(window);
     };
 
     auto confirmNewFolder = [&]() {
@@ -834,7 +831,7 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
         {
             switch (event.type)
             {
-            case SDL_QUIT:
+            case SDL_EVENT_QUIT:
                 state.quit = true;
                 state.userCancelled = true;
                 if (state.isImporting.load() || state.isScanning.load())
@@ -843,11 +840,11 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
                 }
                 break;
 
-            case SDL_KEYDOWN:
+            case SDL_EVENT_KEY_DOWN:
                 promptController.Keyboard();
                 if (state.destNaming)
                 {
-                    switch (event.key.keysym.sym)
+                    switch (event.key.key)
                     {
                     case SDLK_RETURN: case SDLK_KP_ENTER: confirmNewFolder(); break;
                     case SDLK_ESCAPE: cancelNewFolder(); break;
@@ -866,25 +863,25 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
                     }
                     break;
                 }
-                switch (event.key.keysym.sym)
+                switch (event.key.key)
                 {
                 case SDLK_ESCAPE:
                     handleCancel();
                     break;
                 case SDLK_UP:
-                case SDLK_w:
+                case SDLK_W:
                     handleNavUp();
                     break;
                 case SDLK_DOWN:
-                case SDLK_s:
+                case SDLK_S:
                     handleNavDown();
                     break;
                 case SDLK_LEFT:
-                case SDLK_a:
+                case SDLK_A:
                     handleNavLeft();
                     break;
                 case SDLK_RIGHT:
-                case SDLK_d:
+                case SDLK_D:
                     handleNavRight();
                     break;
                 case SDLK_RETURN:
@@ -892,7 +889,7 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
                     handleAction();
                     break;
                 case SDLK_TAB:
-                case SDLK_f:
+                case SDLK_F:
                     handleSelectCurrent();
                     break;
                 case SDLK_F2:
@@ -919,7 +916,7 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
                 }
                 break;
 
-            case SDL_TEXTINPUT:
+            case SDL_EVENT_TEXT_INPUT:
                 if (state.destNaming && event.text.text[0])
                 {
                     if (state.destNameReplaceOnType) state.destNewName.clear();
@@ -930,66 +927,66 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
                 }
                 break;
 
-            case SDL_MOUSEWHEEL:
+            case SDL_EVENT_MOUSE_WHEEL:
                 if (state.screen == ScreenState::ReviewDiscs && !state.isScanning.load())
-                    state.reviewScrollOffset = std::clamp(state.reviewScrollOffset - event.wheel.y,
+                    state.reviewScrollOffset = std::clamp(state.reviewScrollOffset - int(event.wheel.y),
                         0, std::max(0, ReviewActionStart(state.scanResult) - REVIEW_VISIBLE_ITEMS));
                 break;
 
-            case SDL_CONTROLLERDEVICEADDED:
+            case SDL_EVENT_GAMEPAD_ADDED:
             {
-                const auto id = SDL_JoystickGetDeviceInstanceID(event.cdevice.which);
+                const auto id = event.gdevice.which;
                 const bool opened = std::any_of(controllers.begin(), controllers.end(), [id](auto* pad) {
-                    return SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pad)) == id;
+                    return SDL_GetJoystickID(SDL_GetGamepadJoystick(pad)) == id;
                 });
-                if (!opened && SDL_IsGameController(event.cdevice.which))
-                    if (auto* pad = SDL_GameControllerOpen(event.cdevice.which)) {
+                if (!opened)
+                    if (auto* pad = SDL_OpenGamepad(id)) {
                         controllers.push_back(pad);
-                        promptController.Connected(id, SDL_GameControllerGetType(pad));
+                        promptController.Connected(id, SDL_GetGamepadType(pad));
                     }
                 break;
             }
-            case SDL_CONTROLLERDEVICEREMOVED:
+            case SDL_EVENT_GAMEPAD_REMOVED:
                 std::erase_if(controllers, [&](auto* pad) {
-                    if (SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pad)) != event.cdevice.which) return false;
-                    promptController.Disconnected(event.cdevice.which);
-                    SDL_GameControllerClose(pad);
+                    if (SDL_GetJoystickID(SDL_GetGamepadJoystick(pad)) != event.gdevice.which) return false;
+                    promptController.Disconnected(event.gdevice.which);
+                    SDL_CloseGamepad(pad);
                     return true;
                 });
                 break;
 
-            case SDL_CONTROLLERBUTTONDOWN:
+            case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
                 if (state.destNaming)
                 {
-                    if (event.cbutton.button == SDL_CONTROLLER_BUTTON_A ||
-                        event.cbutton.button == SDL_CONTROLLER_BUTTON_Y) confirmNewFolder();
-                    else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_B) cancelNewFolder();
+                    if (event.gbutton.button == SDL_GAMEPAD_BUTTON_SOUTH ||
+                        event.gbutton.button == SDL_GAMEPAD_BUTTON_NORTH) confirmNewFolder();
+                    else if (event.gbutton.button == SDL_GAMEPAD_BUTTON_EAST) cancelNewFolder();
                     break;
                 }
-                switch (event.cbutton.button)
+                switch (event.gbutton.button)
                 {
-                case SDL_CONTROLLER_BUTTON_DPAD_UP:
+                case SDL_GAMEPAD_BUTTON_DPAD_UP:
                     handleNavUp();
                     break;
-                case SDL_CONTROLLER_BUTTON_DPAD_DOWN:
+                case SDL_GAMEPAD_BUTTON_DPAD_DOWN:
                     handleNavDown();
                     break;
-                case SDL_CONTROLLER_BUTTON_DPAD_LEFT:
+                case SDL_GAMEPAD_BUTTON_DPAD_LEFT:
                     handleNavLeft();
                     break;
-                case SDL_CONTROLLER_BUTTON_DPAD_RIGHT:
+                case SDL_GAMEPAD_BUTTON_DPAD_RIGHT:
                     handleNavRight();
                     break;
-                case SDL_CONTROLLER_BUTTON_A:
+                case SDL_GAMEPAD_BUTTON_SOUTH:
                     handleAction();
                     break;
-                case SDL_CONTROLLER_BUTTON_B:
+                case SDL_GAMEPAD_BUTTON_EAST:
                     handleCancel();
                     break;
-                case SDL_CONTROLLER_BUTTON_X:
+                case SDL_GAMEPAD_BUTTON_WEST:
                     handleSelectCurrent();
                     break;
-                case SDL_CONTROLLER_BUTTON_Y:
+                case SDL_GAMEPAD_BUTTON_NORTH:
                     if (state.screen == ScreenState::BrowseDest) beginNewFolder();
                     else handleSelectCurrent();
                     break;
@@ -998,11 +995,11 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
                 }
                 break;
 
-            case SDL_MOUSEBUTTONDOWN:
+            case SDL_EVENT_MOUSE_BUTTON_DOWN:
                 if (event.button.button == SDL_BUTTON_LEFT)
                 {
                     // SDL already converts button.x/y to logical coordinates after
-                    // SDL_RenderSetLogicalSize; do not convert a second time.
+                    // SDL_SetRenderLogicalPresentation; do not convert a second time.
                     int mx = event.button.x;
                     int my = event.button.y;
                     int winW = LOGICAL_WIN_WIDTH;
@@ -1140,9 +1137,9 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
         {
             for (auto* controller : controllers)
             {
-                if (!SDL_GameControllerGetAttached(controller)) continue;
-                const int x = SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_LEFTX);
-                const int y = SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_LEFTY);
+                if (!SDL_GamepadConnected(controller)) continue;
+                const int x = SDL_GetGamepadAxis(controller, SDL_GAMEPAD_AXIS_LEFTX);
+                const int y = SDL_GetGamepadAxis(controller, SDL_GAMEPAD_AXIS_LEFTY);
                 if (std::max(std::abs(x), std::abs(y)) > std::max(std::abs(stickX), std::abs(stickY)))
                 {
                     stickX = x;
@@ -1187,7 +1184,7 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
             }
         }
 #endif
-        switch (stickNavigation.Update(stickX, stickY, SDL_GetTicks64()))
+        switch (stickNavigation.Update(stickX, stickY, SDL_GetTicks()))
         {
         case ui::Direction::Left: handleNavLeft(); break;
         case ui::Direction::Right: handleNavRight(); break;
@@ -1196,21 +1193,21 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
         case ui::Direction::None: break;
         }
 
-        SDL_GameControllerUpdate();
+        SDL_UpdateGamepads();
         for (auto* pad : controllers)
         {
-            if (!SDL_GameControllerGetAttached(pad)) continue;
+            if (!SDL_GamepadConnected(pad)) continue;
             uint32_t buttons = 0;
-            for (int button = SDL_CONTROLLER_BUTTON_A; button < SDL_CONTROLLER_BUTTON_MAX; ++button)
-                if (SDL_GameControllerGetButton(pad, SDL_GameControllerButton(button))) buttons |= 1u << button;
-            const auto moved = [&](SDL_GameControllerAxis axis) {
-                return std::abs(int(SDL_GameControllerGetAxis(pad, axis))) > 12000;
+            for (int button = SDL_GAMEPAD_BUTTON_SOUTH; button < SDL_GAMEPAD_BUTTON_COUNT; ++button)
+                if (SDL_GetGamepadButton(pad, SDL_GamepadButton(button))) buttons |= 1u << button;
+            const auto moved = [&](SDL_GamepadAxis axis) {
+                return std::abs(int(SDL_GetGamepadAxis(pad, axis))) > 12000;
             };
-            const bool stick = moved(SDL_CONTROLLER_AXIS_LEFTX) || moved(SDL_CONTROLLER_AXIS_LEFTY) ||
-                               moved(SDL_CONTROLLER_AXIS_RIGHTX) || moved(SDL_CONTROLLER_AXIS_RIGHTY) ||
-                               SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_TRIGGERLEFT) > 12000 ||
-                               SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > 12000;
-            promptController.Observe(SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pad)), buttons, stick);
+            const bool stick = moved(SDL_GAMEPAD_AXIS_LEFTX) || moved(SDL_GAMEPAD_AXIS_LEFTY) ||
+                               moved(SDL_GAMEPAD_AXIS_RIGHTX) || moved(SDL_GAMEPAD_AXIS_RIGHTY) ||
+                               SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER) > 12000 ||
+                               SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) > 12000;
+            promptController.Observe(SDL_GetJoystickID(SDL_GetGamepadJoystick(pad)), buttons, stick);
         }
         const bool playStation = promptController.PlayStation();
         auto buttonPrompt = [&](int x, int y, std::string_view btn, std::string_view label, Color color) {
@@ -1334,7 +1331,7 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
             DrawBevelPanel(renderer, 20, bodyY, rootsW, bodyH, COLOR_STEEL_PANEL);
             ui::DrawString(renderer, 32, bodyY + 14, "SYSTEM DRIVES", COLOR_ACCENT_GOLD.r, COLOR_ACCENT_GOLD.g, COLOR_ACCENT_GOLD.b, 255, 0.9f);
             SetDrawColor(renderer, COLOR_BORDER_LINE);
-            SDL_RenderDrawLine(renderer, 24, bodyY + 34, 20 + rootsW - 4, bodyY + 34);
+            SDL_RenderLine(renderer, 24, bodyY + 34, 20 + rootsW - 4, bodyY + 34);
 
             int rootItemY = bodyY + 44;
             int rootItemH = 28;
@@ -1718,13 +1715,10 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
 #ifdef LO_INSTALLER_UI_TESTING
         if (const char* preview = SDL_getenv("LO_IMPORTER_PREVIEW_BMP"))
         {
-            if (auto* surface = SDL_CreateRGBSurfaceWithFormat(0, LOGICAL_WIN_WIDTH, LOGICAL_WIN_HEIGHT,
-                                                                32, SDL_PIXELFORMAT_ARGB8888))
+            if (auto* surface = SDL_RenderReadPixels(renderer, nullptr))
             {
-                if (SDL_RenderReadPixels(renderer, nullptr, surface->format->format,
-                                         surface->pixels, surface->pitch) == 0)
-                    SDL_SaveBMP(surface, preview);
-                SDL_FreeSurface(surface);
+                SDL_SaveBMP(surface, preview);
+                SDL_DestroySurface(surface);
             }
             state.quit = state.userCancelled = true;
         }
@@ -1739,7 +1733,7 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
 
     for (auto* pad : controllers)
     {
-        SDL_GameControllerClose(pad);
+        SDL_CloseGamepad(pad);
     }
 
     SDL_DestroyTexture(dpadIcon);

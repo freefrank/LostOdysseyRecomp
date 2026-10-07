@@ -27,12 +27,21 @@ git -C thirdparty/plume apply --reverse --check ../../tools/patches/plume-lostod
 ## Android plume patch
 
 `plume-android.patch` contains the Android-specific plume integration needed by
-the experimental runtime. Apply it after `plume-lostodyssey.patch` when building
+the experimental runtime. Apply it after `plume-lostodyssey.patch` and
+`plume-sdl3.patch` when building
 the `LO_BUILD_ANDROID_RUNTIME=ON` target. The Android runtime also enables the
 SDL Vulkan bridge from the parent CMake target; the patch does not establish
 device compatibility, 16 KB support or gameplay acceptance. Recheck the
 submodule state and regenerate the patch from the intended upstream-patch base
 after changing either the dependent source or this patch.
+
+## SDL3 plume patch
+
+`plume-sdl3.patch` moves plume's optional SDL Vulkan surface integration to
+SDL3. Apply it after `plume-lostodyssey.patch` and before either platform
+overlay. It uses SDL3's allocator-aware Vulkan surface call and its window-free
+instance-extension query. The patch is kept separate because plume remains a
+pinned upstream submodule.
 
 拉取更新了受跟踪的 XenonRecomp 补丁时，应先检查 `tools/XenonRecomp/` 的**实际已修改工作树**，将其与更新后的补丁谨慎同步；不要在已有修改上盲目重复应用，也不要丢弃无关的本地改动。确认实际源码与预期补丁一致后，按仓库根目录的正常顺序执行 `.\tools\build_tools.bat`、`python -B tools/ppc_codegen.py generate`、`.\tools\build_runtime.bat`。`build_tools.bat` 会尝试自动应用补丁，遇到部分更新的工作树时应先理顺源码与补丁，而不是随意重盖工具收据或复用旧生成器。仅增量构建运行时或执行 `python -B tools/ppc_codegen.py check`，都不能证明实际依赖源码已跟上受跟踪补丁；例如本地头文件中残留旧 `PPCTimeBase` 时，可能继续生成使用旧时钟路径的 PPC 代码。
 
@@ -62,7 +71,7 @@ Vulkan 改动应从受跟踪的 plume 子模块状态和上方补丁应用；它
 
 ## macOS: plume Metal patch
 
-`plume-macos.patch` applies on top of `plume-lostodyssey.patch` and changes `plume_metal.cpp`, `plume_metal.h`, `plume_apple.h`, `plume_apple.mm` and plume's `CMakeLists.txt` (the Apple files and the CMake change come with HDR output, PR #145):
+`plume-macos.patch` applies after `plume-lostodyssey.patch` and `plume-sdl3.patch` and changes `plume_metal.cpp`, `plume_metal.h`, `plume_apple.h`, `plume_apple.mm` and plume's `CMakeLists.txt` (the Apple files and the CMake change come with HDR output, PR #145):
 
 - `MetalShader` also accepts SPIR-V and translates it to MSL with SPIRV-Cross (`thirdparty/SPIRV-Cross`), using the options of plume's reference converter (`examples/cmake/tools/spirv_cross_msl.cpp`) so the output matches the backend's binding model. MSL 2.3 is used instead of 2.1 because the runtime's SPIR-V reads 64-bit device addresses. Fast math is disabled to match DXC.
 - `MetalDevice::createShader` returns null when translation or compilation fails, as failed Vulkan and D3D12 shader creation does.
@@ -82,6 +91,7 @@ Apply it after the upstream patch, from the repository root:
 
 ```sh
 git -C thirdparty/plume apply ../../tools/patches/plume-lostodyssey.patch
+git -C thirdparty/plume apply ../../tools/patches/plume-sdl3.patch
 git -C thirdparty/plume apply ../../tools/patches/plume-macos.patch
 ```
 

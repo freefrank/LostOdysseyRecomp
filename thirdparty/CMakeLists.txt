@@ -17,7 +17,8 @@ else()
     set(SDL_SHARED OFF CACHE BOOL "" FORCE)
     set(SDL_STATIC ON CACHE BOOL "" FORCE)
 endif()
-set(SDL_TEST OFF CACHE BOOL "" FORCE)
+set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
+set(SDL_TESTS OFF CACHE BOOL "" FORCE)
 
 # o1heap's own CMakeLists only builds its tests; wrap the single source file.
 add_library(o1heap STATIC "${CMAKE_CURRENT_SOURCE_DIR}/o1heap/o1heap/o1heap.c")
@@ -40,7 +41,7 @@ if(LO_BUILD_GPU)
         # The pinned plume CMake option only recognizes desktop Linux. Its SDL
         # surface path also supports Android without changing the submodule.
         target_compile_definitions(plume PUBLIC PLUME_SDL_VULKAN_ENABLED)
-        target_link_libraries(plume PUBLIC SDL2::SDL2)
+        target_link_libraries(plume PUBLIC SDL3::SDL3)
     endif()
     if(TARGET sdl_headers_copy)
         add_dependencies(plume sdl_headers_copy)

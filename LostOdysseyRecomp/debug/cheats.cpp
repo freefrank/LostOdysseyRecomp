@@ -7,7 +7,7 @@
 #include <settings/menu.h>
 #include <host_ui/host_ui.h>
 #include <hid/android_touch.h>
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include <optional>
 
 namespace debug_menu::cheats {
@@ -108,18 +108,21 @@ void PollHostControls() {
     uint64_t devices = 14695981039346656037ull;
     static uint64_t previousDevices = 0;
     if (allowed) {
-        for (int i=0; i<SDL_NumJoysticks(); ++i) {
-            const auto instance = SDL_JoystickGetDeviceInstanceID(i);
-            auto* controller = SDL_GameControllerFromInstanceID(instance);
-            if (!controller || !SDL_GameControllerGetAttached(controller)) continue;
+        int count = 0;
+        SDL_JoystickID* ids = SDL_GetGamepads(&count);
+        for (int i = 0; i < count; ++i) {
+            const auto instance = ids[i];
+            auto* controller = SDL_GetGamepadFromID(instance);
+            if (!controller || !SDL_GamepadConnected(controller)) continue;
             connected = true;
             devices = (devices ^ uint32_t(instance)) * 1099511628211ull;
-            auto trigger = [&](SDL_GameControllerAxis axis) {
-                return uint8_t(std::max(0, int(SDL_GameControllerGetAxis(controller, axis))) >> 7);
+            auto trigger = [&](SDL_GamepadAxis axis) {
+                return uint8_t(std::max(0, int(SDL_GetGamepadAxis(controller, axis))) >> 7);
             };
-            lt = std::max(lt, trigger(SDL_CONTROLLER_AXIS_TRIGGERLEFT));
-            rt = std::max(rt, trigger(SDL_CONTROLLER_AXIS_TRIGGERRIGHT));
+            lt = std::max(lt, trigger(SDL_GAMEPAD_AXIS_LEFT_TRIGGER));
+            rt = std::max(rt, trigger(SDL_GAMEPAD_AXIS_RIGHT_TRIGGER));
         }
+        SDL_free(ids);
     }
 #if LO_PLATFORM_ANDROID
     // The on-screen LT/RT count as a controller, as they do for the game (#194).

@@ -7,7 +7,7 @@ namespace hid
     // When another thread owns the SDL event loop (the video thread), it
     // forwards controller hot-plug events here and Poll() stops pumping.
     void SetExternalEventPump(bool external);
-    void HandleControllerEvent(uint32_t eventType, int32_t deviceIndexOrInstance);
+    void HandleControllerEvent(uint32_t eventType, uint32_t joystickId);
     void HandleKeyboardEvent(int32_t scancode, bool pressed);
     void ClearKeyboardState();
     void PumpHostInput();

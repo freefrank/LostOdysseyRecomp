@@ -7,7 +7,7 @@
 
 #include <cstdlib>
 #if defined(__ANDROID__)
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #elif defined(__linux__) && !defined(_WIN32)
 #include <unistd.h>
 #endif

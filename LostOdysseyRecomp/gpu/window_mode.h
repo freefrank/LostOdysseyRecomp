@@ -1,5 +1,5 @@
 #pragma once
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -30,14 +30,14 @@ inline bool TargetsGameWindow(const SDL_KeyboardEvent& event, uint32_t gameWindo
 
 inline bool IsToggleChord(const SDL_KeyboardEvent& event) {
     // Right Alt is often AltGr: fake Left Ctrl, MODE, and no KMOD_ALT on Enter.
-    constexpr auto disallowed = KMOD_SHIFT | KMOD_GUI;
-    const bool enter = event.keysym.scancode == SDL_SCANCODE_RETURN ||
-        event.keysym.scancode == SDL_SCANCODE_KP_ENTER ||
-        event.keysym.sym == SDLK_RETURN || event.keysym.sym == SDLK_KP_ENTER;
-    const bool alt = (event.keysym.mod & (KMOD_ALT | KMOD_MODE)) ||
+    constexpr auto disallowed = SDL_KMOD_SHIFT | SDL_KMOD_GUI;
+    const bool enter = event.scancode == SDL_SCANCODE_RETURN ||
+        event.scancode == SDL_SCANCODE_KP_ENTER ||
+        event.key == SDLK_RETURN || event.key == SDLK_KP_ENTER;
+    const bool alt = (event.mod & (SDL_KMOD_ALT | SDL_KMOD_MODE)) ||
         MenuAltHeld() || LeftAltHeld() || RightAltHeld();
-    return event.type == SDL_KEYDOWN && !event.repeat && enter && alt &&
-        !(event.keysym.mod & disallowed);
+    return event.type == SDL_EVENT_KEY_DOWN && !event.repeat && enter && alt &&
+        !(event.mod & disallowed);
 }
 
 struct Placement {

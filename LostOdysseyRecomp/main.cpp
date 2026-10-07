@@ -53,7 +53,7 @@ extern char** environ;
 #include <mach-o/dyld.h>
 #endif
 #if LO_PLATFORM_ANDROID
-#include <SDL_system.h>
+#include <SDL3/SDL_system.h>
 #endif
 
 // Runtime entry: set up guest memory, load default.xex and run its entry point
@@ -65,7 +65,7 @@ static std::filesystem::path ExecutableDirectory()
 #if LO_PLATFORM_ANDROID
     // app_process is the executable on Android. SDL supplies the app-owned
     // writable directory, independent of the APK/native library installation.
-    const char* path = SDL_AndroidGetInternalStoragePath();
+    const char* path = SDL_GetAndroidInternalStoragePath();
     return path ? std::filesystem::path(path) : std::filesystem::path{};
 #elif defined(_WIN32)
     wchar_t executable[32768]{};

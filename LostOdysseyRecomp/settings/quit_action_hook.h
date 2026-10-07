@@ -17,7 +17,7 @@ inline constexpr bool IsSystemYesCaller(uint32_t lr)
 }
 
 // Called only after the retail Settings close task has ticked. It is the
-// original guest title transition, deliberately independent of SDL_QUIT.
+// original guest title transition, deliberately independent of SDL_EVENT_QUIT.
 template<class Context, class State, class Original>
 bool RequestTitle(Context& ctx, uint32_t settingsMenu, State&& state, Original&& original)
 {

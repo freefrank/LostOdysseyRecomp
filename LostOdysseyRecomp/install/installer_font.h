@@ -4,7 +4,7 @@
 #include <string>
 #include <string_view>
 #include <vector>
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 namespace install::ui
 {

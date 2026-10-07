@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cstdint>
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 namespace install::ui
 {
@@ -40,14 +40,14 @@ inline void SetDrawColor(SDL_Renderer* renderer, Color c)
 inline void DrawRect(SDL_Renderer* renderer, int x, int y, int w, int h, Color c)
 {
     SetDrawColor(renderer, c);
-    SDL_Rect r{ x, y, w, h };
-    SDL_RenderDrawRect(renderer, &r);
+    SDL_FRect r{ float(x), float(y), float(w), float(h) };
+    SDL_RenderRect(renderer, &r);
 }
 
 inline void FillRect(SDL_Renderer* renderer, int x, int y, int w, int h, Color c)
 {
     SetDrawColor(renderer, c);
-    SDL_Rect r{ x, y, w, h };
+    SDL_FRect r{ float(x), float(y), float(w), float(h) };
     SDL_RenderFillRect(renderer, &r);
 }
 
@@ -55,21 +55,21 @@ inline void DrawBevelPanel(SDL_Renderer* renderer, int x, int y, int w, int h, C
 {
     FillRect(renderer, x, y, w, h, fillCol);
     SetDrawColor(renderer, COLOR_BORDER_LIGHT);
-    SDL_RenderDrawLine(renderer, x, y, x + w - 1, y);
-    SDL_RenderDrawLine(renderer, x, y, x, y + h - 1);
+    SDL_RenderLine(renderer, x, y, x + w - 1, y);
+    SDL_RenderLine(renderer, x, y, x, y + h - 1);
     SetDrawColor(renderer, COLOR_BORDER_DARK);
-    SDL_RenderDrawLine(renderer, x, y + h - 1, x + w - 1, y + h - 1);
-    SDL_RenderDrawLine(renderer, x + w - 1, y, x + w - 1, y + h - 1);
+    SDL_RenderLine(renderer, x, y + h - 1, x + w - 1, y + h - 1);
+    SDL_RenderLine(renderer, x + w - 1, y, x + w - 1, y + h - 1);
 }
 
 inline void DrawSelectionBar(SDL_Renderer* renderer, int x, int y, int w, int h)
 {
     FillRect(renderer, x, y, w, h, COLOR_SEL_SURFACE);
     SetDrawColor(renderer, COLOR_SEL_TOP);
-    SDL_RenderDrawLine(renderer, x, y, x + w - 1, y);
-    SDL_RenderDrawLine(renderer, x, y + 1, x + w - 1, y + 1);
+    SDL_RenderLine(renderer, x, y, x + w - 1, y);
+    SDL_RenderLine(renderer, x, y + 1, x + w - 1, y + 1);
     SetDrawColor(renderer, COLOR_SEL_BOTTOM);
-    SDL_RenderDrawLine(renderer, x, y + h - 1, x + w - 1, y + h - 1);
-    SDL_RenderDrawLine(renderer, x, y + h - 2, x + w - 1, y + h - 2);
+    SDL_RenderLine(renderer, x, y + h - 1, x + w - 1, y + h - 1);
+    SDL_RenderLine(renderer, x, y + h - 2, x + w - 1, y + h - 2);
 }
 } // namespace install::ui

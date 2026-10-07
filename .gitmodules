@@ -21,7 +21,7 @@
 [submodule "thirdparty/SDL"]
 	path = thirdparty/SDL
 	url = https://github.com/libsdl-org/SDL.git
-	branch = SDL2
+	branch = main
 [submodule "thirdparty/SPIRV-Cross"]
 	path = thirdparty/SPIRV-Cross
 	url = https://github.com/KhronosGroup/SPIRV-Cross.git

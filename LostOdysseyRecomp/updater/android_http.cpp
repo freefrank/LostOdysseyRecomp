@@ -1,7 +1,7 @@
 #if defined(__ANDROID__)
 #include "http.h"
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include <jni.h>
 
 #include <fstream>
@@ -169,7 +169,7 @@ private:
 template <typename Body>
 bool WithJava(std::string &error, Body &&body)
 {
-    auto *env = static_cast<JNIEnv *>(SDL_AndroidGetJNIEnv());
+    auto *env = static_cast<JNIEnv *>(SDL_GetAndroidJNIEnv());
     if (!env) { error = "Java VM unavailable"; return false; }
     if (env->PushLocalFrame(32) != 0)
     {
