@@ -1,0 +1,9 @@
+# Ko-fi / Buy Me a Coffee -> Discord #supporters relay. Deploy with `npx wrangler deploy`
+# from this directory; set DISCORD_WEBHOOK_URL, KOFI_VERIFICATION_TOKEN and BMC_WEBHOOK_SECRET
+# with `npx wrangler secret put <NAME>`. Webhook URLs: https://supporters.dotslash.pro/kofi
+# and https://supporters.dotslash.pro/bmc
+name = "lo-supporter-relay"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+workers_dev = false
+routes = [{ pattern = "supporters.dotslash.pro", custom_domain = true }]
