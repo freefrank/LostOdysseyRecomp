@@ -3,7 +3,9 @@
 One-way: Discord -> GitHub. DISCORD_FORUMS maps each forum channel id to "issues" or to a
 Discussions category slug. Each forum thread becomes one issue or Discussion; replies become
 comments. Progress lives in a hidden marker in the issue or Discussion body, so no state
-file is needed. Edits, deletions and replies written on GitHub are not synced.
+file is needed. Edits, deletions and replies written on GitHub are not synced. The one
+GitHub -> Discord path: closing or reopening an issue adds or removes the forum's Solved tag
+(the bot needs Manage Threads there), and the Solved tag closes or reopens the issue.
 """
 from datetime import datetime, timezone
 import json
@@ -18,7 +20,8 @@ import urllib.request
 DISCORD_API = 'https://discord.com/api/v10'
 GITHUB_API = 'https://api.github.com'
 USER_AGENT = 'DiscordBot (https://github.com/freefrank/LostOdysseyRecomp, 1)'
-BODY_MARKER = re.compile(r'<!-- discord-sync thread=(\d+) last=(\d+) -->')
+# solved= is the Solved/closed state both sides last agreed on (issues only).
+BODY_MARKER = re.compile(r'<!-- discord-sync thread=(\d+) last=(\d+)(?: solved=([01]))? -->')
 COMMENT_MARKER = re.compile(r'<!-- discord-msg (\d+) -->')
 MESSAGE_TYPES = {0, 19}  # default and reply; everything else is a system message
 MESSAGE_CONTENT_FLAGS = (1 << 18) | (1 << 19)  # GATEWAY_MESSAGE_CONTENT and its _LIMITED form
@@ -64,6 +67,23 @@ class Discord:
     def get(self, path, **params):
         query = '?' + urllib.parse.urlencode(params) if params else ''
         return http_json(DISCORD_API + path + query, self.headers)
+
+    def set_solved(self, thread, solved_tag, solved, dry_run):
+        """Add or remove the Solved tag; needs Manage Threads on the forum."""
+        tags = [t for t in thread.get('applied_tags', []) if t != solved_tag]
+        if solved:
+            tags = [solved_tag] + tags[:4]  # a post holds at most 5 tags
+        print(('[dry run] ' if dry_run else '') +
+              f'{"Add" if solved else "Remove"} Solved tag on Discord thread {thread["id"]}')
+        if dry_run:
+            return
+        path = DISCORD_API + f'/channels/{thread["id"]}'
+        archived = (thread.get('thread_metadata') or {}).get('archived')
+        # An archived thread only accepts unarchiving, so reopen it for the edit.
+        http_json(path, self.headers, 'PATCH', {'applied_tags': tags, **({'archived': False} if archived else {})})
+        if archived:
+            http_json(path, self.headers, 'PATCH', {'archived': True})
+        thread['applied_tags'] = tags
 
     def message(self, channel_id, message_id):
         try:
@@ -128,6 +148,9 @@ MUTATIONS = {
         }''',
         'close': '''mutation($id: ID!) {
           closeIssue(input: {issueId: $id, stateReason: COMPLETED}) { clientMutationId }
+        }''',
+        'reopen': '''mutation($id: ID!) {
+          reopenIssue(input: {issueId: $id}) { clientMutationId }
         }''',
     },
     'discussion': {
@@ -262,7 +285,8 @@ def load_mirrors(github, owner, name, label):
                 for comment in node['comments']['nodes']:
                     for found in COMMENT_MARKER.findall(comment['body'] or ''):
                         last = max(last, int(found))
-                mirrors[match.group(1)] = {**node, 'kind': kind, 'last': last}
+                solved = None if match.group(3) is None else match.group(3) == '1'
+                mirrors[match.group(1)] = {**node, 'kind': kind, 'last': last, 'solved': solved}
             pending[field] = page['pageInfo']['hasNextPage']
             cursors[field] = page['pageInfo']['endCursor']
     return mirrors
@@ -367,34 +391,57 @@ def main():
                 budget -= 1
 
         kind = mirror['kind']
+        number = mirror['number']
         last = mirror['last']
-        if int(thread.get('last_message_id') or 0) > last:
-            new = [m for m in discord.messages_after(thread_id, last) if int(m['id']) > last]
-            by_id = {m['id']: m for m in new}
-            try:
+        agreed = mirror.get('solved')
+        state = agreed
+        solved_tag = next((i for i, n in tag_names.items() if n.lower() == 'solved'), None)
+        try:
+            if int(thread.get('last_message_id') or 0) > last:
+                new = [m for m in discord.messages_after(thread_id, last) if int(m['id']) > last]
+                by_id = {m['id']: m for m in new}
                 for message in new:
                     if budget <= 1:
                         break
                     if not message['author'].get('bot') and message.get('type') in MESSAGE_TYPES:
-                        github.mutate(f'Comment on {kind} #{mirror["number"]} from message {message["id"]}',
+                        github.mutate(f'Comment on {kind} #{number} from message {message["id"]}',
                                       MUTATIONS[kind]['comment'], id=mirror['id'],
                                       body=comment_body(message, guild_id, thread_id, channel_names, by_id))
                         budget -= 1
                     last = int(message['id'])
-            finally:
-                # GITHUB_TOKEN may not edit Discussions ("Resource not accessible by
-                # integration"); there the comment markers alone record progress.
-                if last != mirror['last'] and kind == 'issue':
-                    body = BODY_MARKER.sub(f'<!-- discord-sync thread={thread_id} last={last} -->',
-                                           mirror['body'])
-                    github.mutate(f'Record progress on {kind} #{mirror["number"]}',
-                                  MUTATIONS[kind]['update'], id=mirror['id'], body=body)
-                    budget -= 1
 
-        solved = {i for i, n in tag_names.items() if n.lower() == 'solved'}
-        if solved & set(applied) and not mirror.get('closed'):
-            github.mutate(f'Close {kind} #{mirror["number"]}', MUTATIONS[kind]['close'], id=mirror['id'])
-            budget -= 1
+            if solved_tag and kind == 'discussion':
+                if solved_tag in applied and not mirror.get('closed'):
+                    github.mutate(f'Close discussion #{number}', MUTATIONS[kind]['close'], id=mirror['id'])
+                    budget -= 1
+            elif solved_tag:
+                # Issue state follows whichever side changed since the last agreed state.
+                on_discord = solved_tag in applied
+                on_github = bool(mirror.get('closed'))
+                if on_discord == on_github:
+                    state = on_discord
+                elif agreed is None or on_discord != agreed:
+                    action = 'close' if on_discord else 'reopen'
+                    github.mutate(f'{action.capitalize()} issue #{number} to match Discord',
+                                  MUTATIONS['issue'][action], id=mirror['id'])
+                    budget -= 1
+                    state = on_discord
+                else:
+                    try:
+                        discord.set_solved(thread, solved_tag, on_github, github.dry_run)
+                        state = on_github
+                    except SyncError as exc:
+                        print(f'  Discord tag not changed: {exc}')
+        finally:
+            # GITHUB_TOKEN may not edit Discussions ("Resource not accessible by
+            # integration"); there the comment markers alone record progress.
+            if kind == 'issue' and (last != mirror['last'] or state != agreed):
+                solved = '' if state is None else f' solved={int(state)}'
+                body = BODY_MARKER.sub(f'<!-- discord-sync thread={thread_id} last={last}{solved} -->',
+                                       mirror['body'])
+                github.mutate(f'Record sync state on issue #{number}',
+                              MUTATIONS['issue']['update'], id=mirror['id'], body=body)
+                budget -= 1
     return 0
 
 
