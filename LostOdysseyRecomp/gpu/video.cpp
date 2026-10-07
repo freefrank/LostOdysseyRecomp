@@ -3696,7 +3696,28 @@ namespace gpu::video
         // would rebuild the same swapchain on every frame. SDL resize events
         // set g_forceSwapResize; preserve out-of-date and present-mode requests.
         const auto* androidSwap = static_cast<const plume::VulkanSwapChain*>(g_swapChain.get());
-        const bool backendNeedsResize = androidSwap->surfaceOutOfDate ||
+        // The resize event can arrive before the surface reports its new
+        // extent (fold/unfold, rotation), so the rebuild takes the old size
+        // and the frame is stretched. Compare the driver's extent, not SDL's,
+        // for a few seconds after each resize request.
+        static std::chrono::steady_clock::time_point androidExtentCheckUntil{};
+        const auto extentNow = std::chrono::steady_clock::now();
+        if (g_forceSwapResize) androidExtentCheckUntil = extentNow + std::chrono::seconds(3);
+        bool androidExtentStale = false;
+        if (!g_forceSwapResize && extentNow < androidExtentCheckUntil && !g_swapChain->isEmpty()) {
+            VkSurfaceCapabilitiesKHR capabilities{};
+            if (vkGetPhysicalDeviceSurfaceCapabilitiesKHR(androidSwap->commandQueue->device->physicalDevice,
+                    androidSwap->surface, &capabilities) == VK_SUCCESS &&
+                capabilities.currentExtent.width != UINT32_MAX &&
+                (capabilities.currentExtent.width != g_swapChain->getWidth() ||
+                 capabilities.currentExtent.height != g_swapChain->getHeight())) {
+                androidExtentStale = true;
+                LOG_INFO("video output: surface extent now {}x{}, swapchain {}x{}; resizing again",
+                    capabilities.currentExtent.width, capabilities.currentExtent.height,
+                    g_swapChain->getWidth(), g_swapChain->getHeight());
+            }
+        }
+        const bool backendNeedsResize = androidSwap->surfaceOutOfDate || androidExtentStale ||
             androidSwap->requiredPresentMode != androidSwap->createdPresentMode;
 #else
         const bool backendNeedsResize = g_swapChain->needsResize();
