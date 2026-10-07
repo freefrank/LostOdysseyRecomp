@@ -17,7 +17,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - New Audio output setting (Settings > Audio): 5.1 surround sends the game's own 5.1 mix to 5.1 and 7.1 speaker setups (#174).
 - Exclusive fullscreen was removed; the display mode is Windowed or Fullscreen (borderless), and a saved exclusive fullscreen choice starts in Fullscreen.
 - A new GPU setting picks the graphics card to render with on PCs that have more than one; it applies after a restart (#202).
-- A new Display setting picks the monitor the game uses, windowed or fullscreen; monitors of the same model are listed by number and position (#201).
+- A new Display setting picks the monitor the game uses, windowed or fullscreen; monitors of the same model are listed by number and position; after a switch the game asks to keep the new display and returns to the previous one after 5 seconds without an answer (#201).
 - Keyboard: in the settings, Enter jumps to the Save button and a second Enter saves.
 
 ### 简体中文
@@ -31,7 +31,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - 新增“音频输出”设置（设置 > 声音）：选择 5.1 环绕声后，游戏自带的 5.1 混音会输出到 5.1 和 7.1 扬声器（#174）。
 - 移除独占全屏；显示模式只有窗口和全屏（无边框），之前保存为独占全屏的设置改为以全屏启动。
 - 新增 GPU 设置，在有多张显卡的电脑上可选择用哪一张渲染，重启后生效（#202）。
-- 新增显示器设置，可选择游戏在窗口或全屏下使用的显示器；同型号的多台显示器按编号和位置区分（#201）。
+- 新增显示器设置，可选择游戏在窗口或全屏下使用的显示器；同型号的多台显示器按编号和位置区分；切换后会询问是否保留新显示器，5 秒内未回应则回到之前的显示器（#201）。
 - 键盘：设置中按 Enter 跳到“保存”按钮，再按一次 Enter 即保存。
 
 ## [v0.8.44](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.8.44) — 2026-10-06

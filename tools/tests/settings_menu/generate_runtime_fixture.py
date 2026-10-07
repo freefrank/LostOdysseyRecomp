@@ -78,8 +78,14 @@ FrameGenerationStatus fgStatus{};
 FrameGenerationStatus GetFrameGenerationStatus(){return fgStatus;}
 std::optional<gpu::backend::Backend> SelectedBackend(){return gpu::backend::Backend::Vulkan;}
 DisplayChangeResult QueryDisplayChange(uint64_t){return DisplayChangeResult::Applied;}
-settings::Config displayRequest; unsigned displayRequests=0;
-uint64_t BeginDisplayChange(const settings::Config& c){displayRequest=c;++displayRequests;return 1;}
+settings::Config displayRequest, movedTo; unsigned displayRequests=0, revertRequests=0; uint64_t displayMoves=0;
+// Models the window thread: a named display other than the current one moves the window.
+uint64_t BeginDisplayChange(const settings::Config& c){
+    displayRequest=c;++displayRequests;
+    if(!c.displayName.empty() && (c.displayName!=movedTo.displayName || c.displayIndex!=movedTo.displayIndex)){++displayMoves;movedTo=c;}
+    return 1;}
+uint64_t DisplayMoveCount(){return displayMoves;}
+uint64_t BeginDisplayRevert(const settings::Config& c){displayRequest=c;++displayRequests;++revertRequests;movedTo=c;return 1;}
 bool DisplayModeFailed(){return false;}
 bool WindowModeOverridden(){return false;}
 std::vector<std::string> GpuDeviceNames(){return {"GPU A","GPU B"};}
@@ -277,11 +283,56 @@ int main(int argc, char** argv) {
               gpu::video::displayRequest.displayName=="M27P20","Save requests the move to the third display");
         Check(settings::GetConfig().displayIndex==2,"display choice saved");
         tick();Check(!settings::restartPrompt,"display choice needs no restart");
+        // The moved window asks to keep the display; without an answer it reverts after 5 s.
+        auto dialogHas=[&](int choice,const wchar_t* text){
+            return int(settings::snapshot.dialogChoices.size())>choice &&
+                   settings::snapshot.dialogChoices[choice].find(text)!=std::wstring::npos;};
+        Check(settings::displayConfirm && settings::snapshot.dialogTitle==L"Keep this display?" &&
+              dialogHas(0,L"Keep") && dialogHas(1,L"Revert (5)"),"moved window asks to keep the display with a 5 s countdown");
+        settings::menuClockOffset+=std::chrono::milliseconds(2100);tick();
+        Check(settings::displayConfirm && dialogHas(1,L"Revert (3)"),"countdown follows the clock");
+        tick(8);Check(settings::displayConfirm && settings::GetConfig().displayIndex==2,"other buttons do not answer the prompt");
+        auto reverts=gpu::video::revertRequests;
+        settings::menuClockOffset+=std::chrono::seconds(3);tick();
+        Check(!settings::displayConfirm && gpu::video::revertRequests==reverts+1 &&
+              settings::GetConfig().displayName.empty() && gpu::video::displayRequest.displayName.empty() &&
+              settings::edit.displayName.empty(),"no answer in 5 s restores the previous (Automatic) display");
+        tick();Check(settings::status==L"Previous display restored.","timeout revert completion is reported");
+        // Explicit revert with B.
+        settings::row=int(GraphicsRow::Display);tick(8);tick(8);
+        Check(settings::edit.displayIndex==1,"second display chosen again");
+        settings::row=int(GraphicsRow::Save);tick(0x1000);tick();
+        Check(settings::displayConfirm,"second move asks again");
+        reverts=gpu::video::revertRequests;
+        tick(0x2000);
+        Check(!settings::displayConfirm && gpu::video::revertRequests==reverts+1 && settings::GetConfig().displayName.empty(),
+              "B reverts to the previous display");
+        tick();
+        // Escape (keyboard) reverts too.
+        settings::row=int(GraphicsRow::Display);tick(8);tick(8);
+        settings::row=int(GraphicsRow::Save);tick(0x1000);tick();
+        Check(settings::displayConfirm && settings::CalibrationKey(27),"Escape is taken by the display prompt");
+        reverts=gpu::video::revertRequests;tick();
+        Check(!settings::displayConfirm && gpu::video::revertRequests==reverts+1,"Escape reverts to the previous display");
+        tick();Check(!settings::CalibrationKey(27),"Escape is released after the prompt");
+        // Keep with Start (keyboard Enter): the choice stays saved, nothing reverts.
+        settings::row=int(GraphicsRow::Display);tick(8);tick(8);
+        settings::row=int(GraphicsRow::Save);tick(0x1000);tick();
+        Check(settings::displayConfirm,"third move asks again");
+        reverts=gpu::video::revertRequests;
+        tick(0x10);
+        Check(!settings::displayConfirm && gpu::video::revertRequests==reverts && settings::GetConfig().displayIndex==1 &&
+              settings::GetConfig().displayName=="M27P20" && settings::status==L"Display kept.","Enter keeps the new display");
+        settings::menuClockOffset+=std::chrono::seconds(10);tick();
+        Check(gpu::video::revertRequests==reverts && settings::GetConfig().displayIndex==1,"a kept display does not revert later");
         settings::row=int(GraphicsRow::Display);tick();
-        Check(settings::snapshot.rows[int(GraphicsRow::Display)].selectedChoice==3,"saved third display stays selected");
-        tick(8);Check(settings::edit.displayName.empty() && settings::edit.displayIndex==0,"cycle returns to Automatic");
-        settings::savedConfig.displayIndex=5;settings::edit=settings::savedConfig;tick();
+        Check(settings::snapshot.rows[int(GraphicsRow::Display)].selectedChoice==2,"kept second display stays selected");
+        // Saving an unchanged display does not ask again.
+        settings::row=int(GraphicsRow::Save);tick(0x1000);tick();
+        Check(!settings::displayConfirm,"unchanged display saves without the prompt");
+        settings::savedConfig.displayIndex=5;settings::edit=settings::savedConfig;settings::row=int(GraphicsRow::Display);tick();
         Check(settings::snapshot.rows[int(GraphicsRow::Display)].selectedChoice==1,"a missing index falls back to the first same-named display");
+        settings::menuClockOffset={};
         gpu::video::displays={{"Display 1",0,0,1920,1080}};
         settings::restartPrompt=settings::savedRestartPrompt=false;settings::displayTicket=0;
     }

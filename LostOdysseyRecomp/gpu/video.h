@@ -116,6 +116,11 @@ namespace gpu::video
     // Called after saving Current(). Forces an actual retry even for the same
     // mode. Completion includes the window operation and one presented frame.
     uint64_t BeginDisplayChange(const settings::Config& config);
+    // Times the window moved to another display for a saved display choice.
+    uint64_t DisplayMoveCount();
+    // BeginDisplayChange that also returns the window to the display the last
+    // move left, even when the restored choice is Automatic.
+    uint64_t BeginDisplayRevert(const settings::Config& config);
     DisplayChangeResult QueryDisplayChange(uint64_t ticket);
     // Updates the title on the window owner thread. total=0 restores the title.
     enum class PreparationStage : uint32_t { Shaders, Pipelines, CacheValidation, IndexedExtraction, FallbackScan, CachedShaders };

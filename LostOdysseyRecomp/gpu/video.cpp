@@ -2609,6 +2609,14 @@ namespace gpu::video
         g_reapplyWindow = true;
         return ticket;
     }
+    static std::atomic<uint64_t> g_displayMoves{0};
+    static std::atomic<bool> g_displayRevert{false};
+    static int g_displayMovedFrom = -1; // Window owner thread only.
+    uint64_t DisplayMoveCount() { return g_displayMoves.load(); }
+    uint64_t BeginDisplayRevert(const settings::Config& config) {
+        g_displayRevert = true;
+        return BeginDisplayChange(config);
+    }
     DisplayChangeResult QueryDisplayChange(uint64_t ticket) { return g_displayChanges.Query(ticket); }
 
     namespace {
@@ -2923,19 +2931,25 @@ namespace gpu::video
             const auto mode=getenv("LO_BACKGROUND")?settings::WindowMode::Windowed:config.windowMode;
             const bool wasWindowed = !state.initialized || state.applied.windowMode == settings::WindowMode::Windowed;
             const bool sizeChanged = !state.initialized || config.width != state.applied.width || config.height != state.applied.height;
+            const bool revert = g_displayRevert.exchange(false);
             if (displayChanged) {
                 const auto displays = QueryDisplays();
-                const int target = ChosenDisplay(config, displays);
+                int target = ChosenDisplay(config, displays);
                 const int current = SDL_GetWindowDisplayIndex(g_window);
+                // A reverted choice may be Automatic, which never moves the window:
+                // go back to the display the confirmed-or-reverted move left.
+                if (revert && g_displayMovedFrom >= 0 && size_t(g_displayMovedFrom) < displays.size())
+                    target = g_displayMovedFrom;
                 if (target >= 0 && target != current) {
+                    if (!revert) { g_displayMovedFrom = current; ++g_displayMoves; }
                     // SDL only records the position of a fullscreen window, and
                     // fullscreen covers the display the window is on: leave it,
                     // move, and let the mode below enter it again.
                     if (SDL_GetWindowFlags(g_window) & SDL_WINDOW_FULLSCREEN) SDL_SetWindowFullscreen(g_window, 0);
                     SDL_SetWindowPosition(g_window, SDL_WINDOWPOS_CENTERED_DISPLAY(target), SDL_WINDOWPOS_CENTERED_DISPLAY(target));
                     state.placement.valid = false; // The windowed rectangle was on the old display.
-                    LOG_INFO("video: window moved from display {} to display {} \"{}\"; displays: {}",
-                        current, target, displays[size_t(target)].name, DescribeDisplays(displays));
+                    LOG_INFO("video: window {} from display {} to display {} \"{}\"; displays: {}",
+                        revert ? "moved back" : "moved", current, target, displays[size_t(target)].name, DescribeDisplays(displays));
                 } else {
                     LOG_INFO("video: display choice \"{}\"#{} -> {}; window stays on display {}",
                         config.displayName, config.displayIndex, target, current);

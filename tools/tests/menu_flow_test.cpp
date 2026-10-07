@@ -35,6 +35,9 @@ namespace gpu::video {
 uint64_t MenuFlowBeginDisplayChange(const settings::Config&);
 DisplayChangeResult MenuFlowQueryDisplayChange(uint64_t);
 bool MenuFlowDisplayModeFailed();
+// No display list here, so a display choice never moves the window.
+inline uint64_t DisplayMoveCount() { return 0; }
+inline uint64_t BeginDisplayRevert(const settings::Config& c) { return MenuFlowBeginDisplayChange(c); }
 }
 #define GetConfig MenuFlowGetConfig
 #define SaveConfig MenuFlowSaveConfig

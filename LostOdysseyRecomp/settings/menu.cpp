@@ -66,6 +66,16 @@ Config edit;
 Config previousDisplay;
 uint64_t displayTicket = 0;
 bool displayRollback = false, rollbackSaveFailed = false;
+// Keep-or-revert prompt after a saved display choice moved the window. Without
+// an answer the previous display returns when the countdown ends.
+constexpr auto kDisplayConfirmTime = std::chrono::seconds(5);
+bool displayConfirm = false, displayReverting = false;
+int displayConfirmChoice = 0;
+uint64_t displayMovesBefore = 0;
+std::chrono::steady_clock::time_point displayConfirmDeadline;
+std::atomic<bool> displayConfirmOpen{false}, displayConfirmEscape{false};
+std::chrono::steady_clock::duration menuClockOffset{}; // Tests advance the menu clock.
+std::chrono::steady_clock::time_point MenuNow() { return std::chrono::steady_clock::now() + menuClockOffset; }
 bool collectionPrompt = false;
 int collectionChoice = 1;
 bool restartPrompt = false, savedRestartPrompt = false, restartSaveFailed = false;
@@ -257,6 +267,31 @@ DisplayChoiceList DisplayChoices()
         result.selected = found < 0 ? uint32_t(result.labels.size() - 1) : uint32_t(found) + 1;
     }
     return result;
+}
+void KeepDisplayChoice()
+{
+    displayConfirm = false;
+    displayConfirmOpen = false;
+    status = Tr(L"Display kept.", L"已保留這台顯示器。");
+    LOG_INFO("settings: display choice kept: \"{}\"#{}", edit.displayName, edit.displayIndex);
+}
+// Restores the previous display choice in settings.ini and moves the window
+// back to where it was, in the current mode.
+void RevertDisplayChoice(const char *reason)
+{
+    displayConfirm = false;
+    displayConfirmOpen = false;
+    Config reverted = GetConfig();
+    reverted.displayName = previousDisplay.displayName;
+    reverted.displayIndex = previousDisplay.displayIndex;
+    rollbackSaveFailed = !SaveConfig(reverted);
+    if (rollbackSaveFailed) PreviewConfig(reverted);
+    edit.displayName = reverted.displayName;
+    edit.displayIndex = reverted.displayIndex;
+    displayReverting = true;
+    displayTicket = gpu::video::BeginDisplayRevert(reverted);
+    status = Tr(L"Returning to the previous display…", L"正在回到之前的顯示器……");
+    LOG_INFO("settings: display choice reverted ({}): back to \"{}\"#{}", reason, reverted.displayName, reverted.displayIndex);
 }
 uint32_t ConfigAddress(uint8_t *base)
 {
@@ -1140,6 +1175,18 @@ void Publish(uint8_t *base, uint32_t config)
         next.dialogChoices = {Tr(L"Open importer", L"開啟匯入器"), Tr(L"Cancel", L"取消")};
         next.dialogSelection = importChoice;
     }
+    if (displayConfirm)
+    {
+        // Shown over a restart prompt from the same save; that one follows.
+        const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(displayConfirmDeadline - MenuNow()).count();
+        const auto seconds = std::max<long long>(0, (left + 999) / 1000);
+        next.dialogTitle = Tr(L"Keep this display?", L"保留這台顯示器嗎？");
+        next.dialogMessage = Tr(L"The game moved to the chosen display. Without an answer it returns to the previous display.",
+                                L"遊戲已移到所選的顯示器。若未回應，將回到之前的顯示器。");
+        next.dialogChoices = {Tr(L"Keep", L"保留"),
+                              std::wstring(Tr(L"Revert", L"還原")) + L" (" + std::to_wstring(seconds) + L")"};
+        next.dialogSelection = displayConfirmChoice;
+    }
 #if LO_PLATFORM_ANDROID
     next.notice = tab == 2 && graphics_menu::AndroidFsrAvailable &&
         edit.upscaler == gpu::upscaling::Upscaler::Fsr ? DlssNotice() : std::wstring{};
@@ -1224,6 +1271,12 @@ HdrCalibration GetHdrCalibration()
 }
 bool CalibrationKey(uint32_t key)
 {
+    // Escape has no controller mapping; it answers Revert on the display prompt.
+    if (key == 27 && displayConfirmOpen.load())
+    {
+        displayConfirmEscape = true;
+        return true;
+    }
     const bool brightnessKey = brightnessOpen.load() && (key == 13 || key == 27);
     if (!brightnessKey && (!calibrationOpen.load() || !(key == 8 || key == 13 || key == 27 || (key >= '0' && key <= '9'))))
         return false;
@@ -1513,6 +1566,8 @@ PPC_FUNC(sub_822F19B0)
         mainMenuPrompt = false;
         importPrompt = false;
         importLaunchPending = false;
+        displayConfirm = displayReverting = false;
+        displayConfirmOpen = false;
         status.clear();
         Publish(base, config);
         LOG_INFO("settings: replacement opened at guest menu {:#x}", menu);
@@ -1600,6 +1655,24 @@ PPC_FUNC(sub_822F19B0)
             if (gpu::taa_collection::SetConsent(collectionChoice == 0)) { collectionPrompt = false; status.clear(); }
             else status = Tr(L"Settings could not be saved.", L"無法儲存設定。");
         }
+        Publish(base, config);
+        return;
+    }
+    if (displayConfirm)
+    {
+        if (int selected = mouseDialog.exchange(-1); selected >= 0)
+            displayConfirmChoice = std::min(selected, 1);
+        if (input & 3) displayConfirmChoice = 1 - displayConfirmChoice;
+        // A / Start (keyboard Enter) answer the selected choice; B, Back and
+        // Escape revert. An answer in the last tick still counts.
+        const bool revert = displayConfirmEscape.exchange(false) || (input & 0x2020);
+        const bool choose = (input & 0x1010) != 0;
+        if (!revert && choose && displayConfirmChoice == 0)
+            KeepDisplayChoice();
+        else if (revert || choose)
+            RevertDisplayChoice("player");
+        else if (MenuNow() >= displayConfirmDeadline)
+            RevertDisplayChoice("no answer in 5 s");
         Publish(base, config);
         return;
     }
@@ -1937,6 +2010,18 @@ PPC_FUNC(sub_822F19B0)
             restartSaveFailed = false;
             restartChoice = 0;
         }
+        // Only a display choice that actually moved the window asks to be kept.
+        if ((edit.displayName != previousDisplay.displayName || edit.displayIndex != previousDisplay.displayIndex) &&
+            gpu::video::DisplayMoveCount() != displayMovesBefore)
+        {
+            displayConfirm = true;
+            displayConfirmOpen = true;
+            displayConfirmEscape = false;
+            displayConfirmChoice = 0;
+            displayConfirmDeadline = MenuNow() + kDisplayConfirmTime;
+            LOG_INFO("settings: display choice \"{}\"#{} moved the window; waiting 5 s for Keep",
+                     edit.displayName, edit.displayIndex);
+        }
     };
     if (displayTicket)
     {
@@ -1947,7 +2032,16 @@ PPC_FUNC(sub_822F19B0)
             return;
         }
         displayTicket = 0;
-        if (displayRollback)
+        if (displayReverting)
+        {
+            displayReverting = false;
+            status = result != gpu::video::DisplayChangeResult::Applied
+                ? Tr(L"Could not return to the previous display.", L"無法回到之前的顯示器。")
+                : rollbackSaveFailed
+                    ? Tr(L"Previous display restored; settings file could not be updated.", L"已回到之前的顯示器，但無法更新設定檔。")
+                    : Tr(L"Previous display restored.", L"已回到之前的顯示器。");
+        }
+        else if (displayRollback)
         {
             displayRollback = false;
             status = result == gpu::video::DisplayChangeResult::Applied
@@ -2288,6 +2382,7 @@ PPC_FUNC(sub_822F19B0)
     if ((input & 0x1000) && tab == 2 && row == int(GraphicsRow::Save))
     {
         previousDisplay = GetConfig();
+        displayMovesBefore = gpu::video::DisplayMoveCount();
         Config graphics = edit;
         graphics.uiLanguage = previousDisplay.uiLanguage;
         graphics.gameLanguage = previousDisplay.gameLanguage;
