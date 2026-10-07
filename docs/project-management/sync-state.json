@@ -3677,15 +3677,15 @@
       "fields": {
         "Kind": "Feature",
         "Area": "Graphics performance",
-        "Status": "Awaiting validation",
+        "Status": "Done",
         "Delivery": "Implemented",
         "Release": "v0.9.0",
         "Start date": "2026-10-05",
-        "Evidence": "P0 and P1 (miss log, persistent driver caches) shipped in v0.8.39 (PR #249, not accepted). P2 to P4 are merged on main, not released: #260 and #259 (Vulkan draw-time pipelines linked from pipeline library parts), #261 (scene-tagged recipes, loading-screen prefetch), #262 (shared worker pool, sibling recipes, LO_PIPELINE_ASYNC=1 off by default), #263 (battle tour), #264 (corpus download; 3934-recipe corpus published to the shader-packs prerelease 2026-10-07T00:15Z), merged 2026-10-06T22:52Z to 2026-10-07T00:24Z. Measured on psvita (Radeon 8060S, RADV) and an M1 Max; validation layer clean on the new Vulkan path; P4 gain on D3D12 only, Vulkan and Metal within noise (note has numbers). Not tested: Android (TB321FU, Turnip), NVIDIA and Intel Windows Vulkan, cold Metal system cache. No player confirmation.",
+        "Evidence": "P0/P1 shipped in v0.8.39 (PR #249). P2-P4 merged on main, not released: #260/#259 (Vulkan pipeline libraries), #261 (scene-tagged recipes, loading-screen prefetch), #262 (shared worker pool, siblings), #263 (battle tour), #264 (corpus download; 3934-recipe corpus published to shader-packs 2026-10-07T00:15Z). Measured on psvita (RADV) and an M1 Max. Android TB321FU (Turnip, debug build of 2b5044af, 2026-10-06): with the corpus the first Uhra visit and first battle created no draw-time pipelines (old conditions 155, worst 2028 ms); cold first-start prebuild ~18 s (0.48 s on the next start). The maintainer accepted the effect without further tuning. Not tested: NVIDIA/Intel Windows Vulkan, cold Metal cache.",
         "Source key": "pipeline-first-use-stalls"
       },
       "title": "Stop first-use pipeline stalls on all platforms (P0 to P4)",
-      "body_sha256": "a64fe930d723bc812b4b963f298324672fb29f73285bc6a970a99334315d8f8a"
+      "body_sha256": "469ac9858d1e5377a64545f605a53a074053e59c745464d53a311d3f60792bbf"
     },
     "release-v0-8-44": {
       "id": "PVTI_lAHOAAsUY84Biy1azg-8oo4",

@@ -145,3 +145,7 @@ Plan and apply (maintainer's session, 2026-10-07 about 00:40 UTC): the plan repo
 - **`temporal-phased-p0-common-contracts-probe` moved to the backlog.** In Progress / Validated / v0.9.0 → Paused / Deferred / no Release, the convention of the other backlog items. The Release field was cleared on the Project with `gh project item-edit --clear` and set to null in `sync-state.json` (the sync tool skips null); the Evidence and a dated body section record the move. Both roadmaps list the remaining coverage in the later backlog.
 
 Plan and apply: 0 created, 1 updated, 289 unchanged, 0 conflicts, 4 operations; the re-plan showed 0 operations and 0 conflicts over 290 items, and `gh project item-list` read the four items back with the values above.
+
+## First-use pipeline stalls accepted, 2026-10-06 (Android)
+
+After the tablet run (TB321FU, Turnip, debug build of main `2b5044af`; numbers in the plan note's "Android 实测" section) the maintainer accepted the effect and asked for no further tuning ("能生效就可以"). `pipeline-first-use-stalls`: Awaiting validation / Implemented / v0.9.0 → Done / Implemented / v0.9.0 (Delivery stays Implemented until a release carries it); Evidence and a dated body section record the Android result. Both roadmaps mark the item `[x]` with a dated update. Plan: 1 updated, 289 unchanged, 0 conflicts, 3 operations; `--apply` succeeded, the re-plan showed 0 operations, and the Project read the item back as Done / Implemented / v0.9.0.
