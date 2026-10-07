@@ -76,6 +76,14 @@ int wmain(int argc, wchar_t** argv)
     Check(settings::Read().noRandomEncounters, "no random encounters read from INI");
     Write("no_random_encounters=2\n");
     Check(!settings::Read().noRandomEncounters, "invalid no random encounters value defaults off");
+    Check(!settings::Read().fastForward && settings::Read().fastForwardMode == 0 && settings::Read().fastForwardRate == 2,
+        "missing fast-forward keys default to off, Hold, 2x");
+    Write("fast_forward=1\nfast_forward_mode=1\nfast_forward_rate=6\n");
+    Check(settings::Read().fastForward && settings::Read().fastForwardMode == 1 && settings::Read().fastForwardRate == 6,
+        "fast-forward keys read from INI");
+    Write("fast_forward=2\nfast_forward_mode=7\nfast_forward_rate=5\n");
+    Check(!settings::Read().fastForward && settings::Read().fastForwardMode == 0 && settings::Read().fastForwardRate == 2,
+        "invalid fast-forward values default to off, Hold, 2x");
 
     Write("shadow_resolution=2\nambient_occlusion=1\n");
     Check(settings::Read().shadowResolution == 2 && settings::Read().ambientOcclusion == 1,
@@ -112,6 +120,10 @@ int wmain(int argc, wchar_t** argv)
     Check(settings::SaveNoRandomEncounters(true) && settings::GetConfig().noRandomEncounters &&
           Contents().find("no_random_encounters=1\n") != std::string::npos,
         "no random encounters persists");
+    Check(settings::SaveFastForward(true, 1, 8) && settings::GetConfig().fastForward &&
+          settings::GetConfig().fastForwardRate == 8 &&
+          Contents().find("fast_forward=1\nfast_forward_mode=1\nfast_forward_rate=8\n") != std::string::npos,
+        "fast-forward choices persist");
     settings::Config graphics = settings::GetConfig();
     graphics.width = 1800;
     graphics.shadowResolution = 4;
@@ -122,6 +134,8 @@ int wmain(int argc, wchar_t** argv)
         "shadow and AO choices roundtrip through stable INI keys");
     Check(settings::Read().saveAnywhere, "ordinary save retains debug-only preference");
     Check(settings::Read().noRandomEncounters, "ordinary save retains no random encounters");
+    Check(settings::Read().fastForward && settings::Read().fastForwardMode == 1 && settings::Read().fastForwardRate == 8,
+        "ordinary save retains fast-forward choices");
     Check(settings::SaveDebugLanguage(1) && settings::Read().saveAnywhere,
         "debug language save retains save-anywhere preference");
     for (const auto fps : gpu::frame_rate::kNativeRates)

@@ -11,6 +11,7 @@ source = (a.root / 'LostOdysseyRecomp/settings/config.cpp').read_text(encoding='
 source = re.sub(r'^#include[^\n]*\n', '', source, flags=re.M)
 prefix = r'''
 #include <settings/config.h>
+#include <debug/fast_forward.h>
 #include <gpu/frame_rate.h>
 #include <algorithm>
 #include <array>

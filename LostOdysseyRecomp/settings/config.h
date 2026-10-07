@@ -86,6 +86,11 @@ struct Config
     bool skipShaderPrebuild = false;
     bool saveAnywhere = false; // Debug-only preference; defaults off for existing profiles.
     bool noRandomEncounters = false; // Debug-only preference, persisted like saveAnywhere.
+    // Debug-menu fast-forward, persisted like saveAnywhere: switch, 0 Hold / 1 Toggle,
+    // multiplier (one of debug_menu::fast_forward::Rates).
+    bool fastForward = false;
+    uint32_t fastForwardMode = 0;
+    uint32_t fastForwardRate = 2;
     bool operator==(const Config &) const = default;
 };
 Config GetConfig();
@@ -95,5 +100,6 @@ bool SaveConfig(const Config &config);
 bool SaveDebugLanguage(uint32_t language);
 bool SaveSaveAnywhere(bool enabled);
 bool SaveNoRandomEncounters(bool enabled);
+bool SaveFastForward(bool enabled, uint32_t mode, uint32_t rate);
 uint32_t GameLanguage();
 } // namespace settings
