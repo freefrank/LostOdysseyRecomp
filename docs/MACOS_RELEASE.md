@@ -36,6 +36,37 @@ python3 tools/package_macos.py --build <build dir> --output <dir> --version v0.8
   accepts the four packages built by CI (Windows ZIP, AppImage, Flatpak and the
   Android APK) and, at most, this one disk image beside them.
 
+### v0.8.53 image
+
+The v0.8.53 release was published at 2026-10-07T08:09:55Z ([release
+record](STATUS.md#v0853-published--2026-10-07)). The image was built on the
+maintainer's M1 Max from tag `v0.8.53` (`c3bce085`) with
+`validation/mac-release-build.sh v0.8.53 v0.8.53 tag` (the build took 37 s and
+reported source version 0.8.53), copied to the PC and uploaded to the draft
+release by hand with `gh release upload` (GitHub dates the asset
+2026-10-07T07:46:33Z; the four CI packages are dated 08:08:59Z to 08:09:00Z).
+GitHub lists `LostOdysseyRecomp-macos-arm64-v0.8.53.dmg` at 60,616,756 bytes with
+SHA-256 `814b0e27352e03a02a04c0a28e96555e349fc1335b3b76a9d54befd31615f4c5`. No
+comparison of that digest with a hash computed on the Mac or on the PC copy is
+recorded. Checks on the built file:
+
+- `hdiutil verify` reports the image VALID.
+- `codesign --verify` passes on the app. The signature is ad hoc.
+- The `Info.plist` `CFBundleShortVersionString` is `0.8.53`.
+
+`validation/mac-pack-check.sh` ran on `main` at `aa5f4b1a`, before the tag, and
+listed shader packs for both runtime contracts, unchanged since v0.8.30, with
+the pipeline corpus listed; the release run's Linux job repeated the check on the
+tag build and found the same contracts (see the [pack
+reference](PORTABLE_SHADER_PACK.md#update-2026-10-06-later-still-no-new-packs-for-v0844)
+for the contracts, unchanged since v0.8.44).
+
+Limits: no game run was made with this image, it was not installed from the
+download, and no Gatekeeper check is recorded here. The app's
+`LSMinimumSystemVersion` was not among the reported checks (the script declares
+15.0, see above). These facts come from the maintainer's Mac session and the
+GitHub asset metadata; the check output was not re-run for this record.
+
 ### v0.8.44 image
 
 The v0.8.44 release was published at 2026-10-06T17:34:21Z ([release

@@ -3678,14 +3678,14 @@
         "Kind": "Feature",
         "Area": "Graphics performance",
         "Status": "Done",
-        "Delivery": "Implemented",
-        "Release": "v0.9.0",
+        "Delivery": "Released",
+        "Release": "v0.8.53",
         "Start date": "2026-10-05",
-        "Evidence": "P0/P1 shipped in v0.8.39 (PR #249). P2-P4 merged on main, not released: #260/#259 (Vulkan pipeline libraries), #261 (scene-tagged recipes, loading-screen prefetch), #262 (shared worker pool, siblings), #263 (battle tour), #264 (corpus download; 3934-recipe corpus published to shader-packs 2026-10-07T00:15Z). Measured on psvita (RADV) and an M1 Max. Android TB321FU (Turnip, debug build of 2b5044af, 2026-10-06): with the corpus the first Uhra visit and first battle created no draw-time pipelines (old conditions 155, worst 2028 ms); cold first-start prebuild ~18 s (0.48 s on the next start). The maintainer accepted the effect without further tuning. Not tested: NVIDIA/Intel Windows Vulkan, cold Metal cache.",
+        "Evidence": "All phases are released. P0/P1 shipped in v0.8.39 (PR #249). P2-P4 shipped in v0.8.53 (published 2026-10-07T08:09:55Z, not accepted): #260/#259 (Vulkan pipeline libraries), #261 (scene-tagged recipes, loading-screen prefetch), #262 (shared worker pool, siblings), #263 (battle tour), #264 (corpus download; the 3934-recipe corpus was published to shader-packs 2026-10-07T00:15Z, before the release). Measured on psvita (RADV) and an M1 Max. Android TB321FU (Turnip, debug build of 2b5044af, 2026-10-06): with the corpus the first Uhra visit and first battle created no draw-time pipelines (old conditions 155, worst 2028 ms); cold first-start prebuild ~18 s (0.48 s on the next start). The maintainer accepted the effect on that build without further tuning; no game run with the v0.8.53 packages. Not tested: NVIDIA/Intel Windows Vulkan, cold Metal cache.",
         "Source key": "pipeline-first-use-stalls"
       },
       "title": "Stop first-use pipeline stalls on all platforms (P0 to P4)",
-      "body_sha256": "469ac9858d1e5377a64545f605a53a074053e59c745464d53a311d3f60792bbf"
+      "body_sha256": "18fb75430644054a42278b6b6754a94692fa105996431dcca33f19012adc7af2"
     },
     "release-v0-8-44": {
       "id": "PVTI_lAHOAAsUY84Biy1azg-8oo4",
@@ -3944,9 +3944,10 @@
         "Kind": "Feature",
         "Area": "User interface",
         "Status": "Done",
-        "Delivery": "Implemented",
-        "Evidence": "Request (2026-09-30): make the game menu animation about twice as fast. The maintainer declined a separate switch (original game behaviour; 2026-09-30 and 2026-10-06) and pointed to the debug menu's fast-forward, which also speeds the menu animation; the reporter then asked for those settings to persist ('will do', 2026-10-07). PR #269 (merged 2026-10-07T03:01:14Z as 35e22a28, not released) saves the F1 Cheats fast-forward switch, Hold/Toggle mode and 2x-8x rate to settings.ini (fast_forward, fast_forward_mode, fast_forward_rate) and restores them at start. Checked with the config and debug-menu tests and on psvita (Proton D3D12: on, Toggle, 4x survived a restart); the quit path was not run. The Issue was closed with the PR merge at 03:01:15Z. No reporter confirmation is recorded.",
-        "Source key": "issue-104-faster-menu-animation"
+        "Delivery": "Released",
+        "Evidence": "Request (2026-09-30): make the game menu animation about twice as fast. The maintainer declined a separate switch (original game behaviour; 2026-09-30 and 2026-10-06) and pointed to the debug menu's fast-forward, which also speeds the menu animation; the reporter then asked for those settings to persist ('will do', 2026-10-07). PR #269 (merged 2026-10-07T03:01:14Z as 35e22a28, shipped in v0.8.53, published 2026-10-07T08:09:55Z, not accepted) saves the F1 Cheats fast-forward switch, Hold/Toggle mode and 2x-8x rate to settings.ini (fast_forward, fast_forward_mode, fast_forward_rate) and restores them at start. Checked with the config and debug-menu tests and on psvita (Proton D3D12: on, Toggle, 4x survived a restart); the quit path was not run. The Issue was closed with the PR merge at 03:01:15Z. No reporter confirmation is recorded.",
+        "Source key": "issue-104-faster-menu-animation",
+        "Release": "v0.8.53"
       }
     },
     "issue-151-animated-options-menu": {
@@ -3966,9 +3967,10 @@
         "Kind": "Feature",
         "Area": "Audio",
         "Status": "Done",
-        "Delivery": "Implemented",
-        "Evidence": "Request (2026-10-03): add 5.1 audio output, since the original mix is 5.1. PR #271 (merged 2026-10-07T03:35:13Z as a5fa8961, not released) adds Settings > Audio > Audio output: Stereo (default, fold-down unchanged) or 5.1 surround (audio_output), applied live. The game's six channels pass through unmixed; a device with fewer than six channels falls back to stereo with a log line and a help hint; a 7.1 device takes the 5.1 stream through SDL; Windows needs the system speakers set to 5.1 or 7.1. Checked on psvita (Proton/WASAPI, recorded null sinks): all six channels carry sound, the stereo fold of the 5.1 capture matches the stereo capture within 0.1 dB, a 2-channel sink falls back and a 7.1 sink takes the reopen path. Not tested: real 5.1 speakers (a commenter offered to, 2026-10-05), native Linux, macOS, Android. The Issue was closed with the PR merge at 03:35:15Z. No reporter confirmation is recorded.",
-        "Source key": "issue-174-surround-5-1-audio"
+        "Delivery": "Released",
+        "Evidence": "Request (2026-10-03): add 5.1 audio output, since the original mix is 5.1. PR #271 (merged 2026-10-07T03:35:13Z as a5fa8961, shipped in v0.8.53, published 2026-10-07T08:09:55Z, not accepted) adds Settings > Audio > Audio output: Stereo (default) or 5.1 surround (audio_output), applied live. The six channels pass through unmixed; fewer channels fall back to stereo with a log line and a help hint; 7.1 takes the 5.1 stream through SDL. PR #279 (merged 07:43:18Z, v0.8.53) names the Windows Sound control panel steps in that hint. Checked on psvita (Proton/WASAPI, null sinks): all six channels carry sound, the stereo fold matches within 0.1 dB, a 2-channel sink falls back, a 7.1 sink reopens. The maintainer confirmed 5.1 on an HDMI soundbar set to 7.1 in the classic Sound panel (log: 8 channels, 5.1 stream mapped; maintainer's report, before the release). Not tested: native Linux, macOS, Android, the commenter's 5.1 setup. Closed with the PR merge at 03:35:15Z. No reporter confirmation is recorded.",
+        "Source key": "issue-174-surround-5-1-audio",
+        "Release": "v0.8.53"
       }
     },
     "issue-198-rumble-intensity": {
@@ -3977,9 +3979,10 @@
         "Kind": "Feature",
         "Area": "Input",
         "Status": "Done",
-        "Delivery": "Implemented",
-        "Evidence": "Request (2026-10-04): add an option for the rumble intensity, which is too strong on a DualSense. PR #270 (merged 2026-10-07T03:17:30Z as 3182adab, not released) adds a Vibration slider to Settings > Audio: 0-100 % in 10 % steps, default 100 (retail), saved as vibration. It applies at once, rescales a rumble that is already running and plays a short preview pulse; the minimum turns rumble off and LO_CONTROLLER_RUMBLE=0 still disables it. Checked with LoHidTest (virtual SDL pad) and the config and menu tests. Not run: a physical DualSense, so how the levels feel is unchecked. The Issue was closed with the PR merge at 03:17:31Z. No reporter confirmation is recorded.",
-        "Source key": "issue-198-rumble-intensity"
+        "Delivery": "Released",
+        "Evidence": "Request (2026-10-04): add an option for the rumble intensity, which is too strong on a DualSense. PR #270 (merged 2026-10-07T03:17:30Z as 3182adab, shipped in v0.8.53, published 2026-10-07T08:09:55Z, not accepted) adds a Vibration slider to Settings > Audio: 0-100 % in 10 % steps, default 100 (retail), saved as vibration. It applies at once, rescales a rumble that is already running and plays a short preview pulse; the minimum turns rumble off and LO_CONTROLLER_RUMBLE=0 still disables it. PR #273 (merged 03:15:47Z, v0.8.53) copies the guest's vibration struct before byte-swapping it; this game is not affected. Checked with LoHidTest (virtual SDL pad) and the config and menu tests. Not run: a physical DualSense, so how the levels feel is unchecked and no result is reported. The Issue was closed with the PR merge at 03:17:31Z. No reporter confirmation is recorded.",
+        "Source key": "issue-198-rumble-intensity",
+        "Release": "v0.8.53"
       }
     },
     "issue-201-display-choice": {
@@ -3988,9 +3991,10 @@
         "Kind": "Feature",
         "Area": "Desktop windowing",
         "Status": "Done",
-        "Delivery": "Implemented",
-        "Evidence": "Request (2026-10-04): choose the monitor for windowed and fullscreen modes without changing the primary display. PR #274 (merged 2026-10-07T03:42:11Z as 475d8c65) adds a Display row (display_name + display_index). PR #276 (merged 07:08:08Z as 6ed90748) follows the maintainer's test with three identical monitors: labels with number, model, size and position; Enter on Save now saves; a 5-second Keep/Revert prompt after a switch; Win+Shift+arrow moves are followed in windowed and fullscreen. #274 also removed exclusive fullscreen (Borderless is now called Fullscreen). The maintainer tested the switch on a Windows PC with three monitors and accepted it on 2026-10-07 (maintainer's report; no Issue comment records it). Not released. Not tested: mixed DPI, native Linux, Android. The Issue was closed at 07:08:30Z. No reporter confirmation is recorded.",
-        "Source key": "issue-201-display-choice"
+        "Delivery": "Released",
+        "Evidence": "Request (2026-10-04): choose the monitor for windowed and fullscreen modes without changing the primary display. PR #274 (merged 2026-10-07T03:42:11Z as 475d8c65, shipped in v0.8.53, published 2026-10-07T08:09:55Z, not accepted) adds a Display row (display_name + display_index). PR #276 (merged 07:08:08Z as 6ed90748, v0.8.53) follows the maintainer's test with three identical monitors: labels with number, model, size and position; Enter on Save now saves; a 5-second Keep/Revert prompt after a switch; Win+Shift+arrow moves are followed in windowed and fullscreen. #274 also removed exclusive fullscreen (Borderless is now called Fullscreen). The maintainer tested the switch on a Windows PC with three monitors on 2026-10-07, before the release, and accepted it (maintainer's report; no Issue comment records it; not the release package). Not tested: mixed DPI, native Linux, Android. The Issue was closed at 07:08:30Z. No reporter confirmation is recorded.",
+        "Source key": "issue-201-display-choice",
+        "Release": "v0.8.53"
       }
     },
     "issue-202-gpu-choice": {
@@ -3999,10 +4003,27 @@
         "Kind": "Feature",
         "Area": "Graphics backends",
         "Status": "Done",
-        "Delivery": "Implemented",
-        "Evidence": "Request (2026-10-04): add a rendering device selector for multi-GPU and Optimus systems, for Direct3D 12 and Vulkan. PR #274 (merged 2026-10-07T03:42:11Z as 475d8c65, not released) adds a GPU row to Graphics: Automatic plus the adapters the running backend lists (Direct3D 12, Vulkan, Metal), saved by name as gpu_device and applied after a restart; a missing or unusable adapter falls back to automatic with a warning; the row is hidden with one adapter and on Android. Checked on psvita (Proton Vulkan: Automatic gives RADV, llvmpipe by name gives llvmpipe, a missing name warns and falls back; Direct3D 12 lists one adapter, row hidden) and on an M1 Max (Metal). Not tested: Optimus or multi-adapter Direct3D 12 on Windows. The Issue was closed with the PR merge at 03:42:13Z. No reporter confirmation is recorded.",
-        "Source key": "issue-202-gpu-choice"
+        "Delivery": "Released",
+        "Evidence": "Request (2026-10-04): add a rendering device selector for multi-GPU and Optimus systems, for Direct3D 12 and Vulkan. PR #274 (merged 2026-10-07T03:42:11Z as 475d8c65, shipped in v0.8.53, published 2026-10-07T08:09:55Z, not accepted) adds a GPU row to Graphics: Automatic plus the adapters the running backend lists (Direct3D 12, Vulkan, Metal), saved by name as gpu_device and applied after a restart; a missing or unusable adapter falls back to automatic with a warning; the row is hidden with one adapter and on Android. Checked on psvita (Proton Vulkan: Automatic gives RADV, llvmpipe by name gives llvmpipe, a missing name warns and falls back; Direct3D 12 lists one adapter, row hidden) and on an M1 Max (Metal). Not tested: Optimus or multi-adapter Direct3D 12 on Windows. The Issue was closed with the PR merge at 03:42:13Z. No reporter confirmation is recorded.",
+        "Source key": "issue-202-gpu-choice",
+        "Release": "v0.8.53"
       }
+    },
+    "release-v0-8-53": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg_FlvE",
+      "fields": {
+        "Kind": "Release",
+        "Area": "Release Engineering",
+        "Status": "Done",
+        "Delivery": "Released",
+        "Release": "v0.8.53",
+        "Start date": "2026-10-07",
+        "Target date": "2026-10-07",
+        "Evidence": "Published v0.8.53 at 2026-10-07T08:09:55Z: latest release, annotated tag at commit c3bce085 on main, built and published by Gitea Actions run 401 (API id 793; six jobs succeeded, about 25 minutes from the tag push). Assets: Windows ZIP 150,459,333 B (SHA-256 cb0efb14...), Linux AppImage 76,478,968 B (ab22f1bd...), Flatpak 54,289,688 B (3cb68233...), Android APK 45,360,582 B (dde253af...; CI-built) and macOS DMG 60,616,756 B (814b0e27...; built on the maintainer's M1 Max from the tag, hdiutil verify valid, ad-hoc signature, uploaded by hand). No shader pack was published. Published, not accepted: 21 PRs from #258 to #280; no game run with the v0.8.53 packages and no player acceptance is recorded. The maintainer accepted the first-use stall result on a tablet debug build (2026-10-06) and the display choice on a three-monitor PC (2026-10-07), both before the release; 5.1 was reported working on an HDMI soundbar; vibration feel on a DualSense is not reported.",
+        "Source key": "release-v0-8-53"
+      },
+      "title": "Publish the first-use pipeline stall fixes, display and audio settings in v0.8.53",
+      "body_sha256": "165c5cc740731fc649cdc7a8d8443577a0dc993a69c5d2047f04c3de13665124"
     }
   },
   "project_id": "PVT_kwHOAAsUY84Biy1a"
