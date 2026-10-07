@@ -37,6 +37,9 @@ inline uint32_t GameLanguageIndex(uint32_t id)
 // Scaling filter: MetalFX spatial upscaling before presentation (macOS only).
 inline constexpr uint32_t ScalingMetalFx = 2;
 inline constexpr int InternalResolutionNative = 1;
+// Audio output: the stereo downmix, or the game's 5.1 channels passed through.
+inline constexpr uint32_t AudioOutputStereo = 0;
+inline constexpr uint32_t AudioOutputSurround = 1;
 
 struct Config
 {
@@ -83,6 +86,7 @@ struct Config
     uint32_t frameGenerationTargetFps = 0; // Dynamic mode: 0 asks the SDK to use the display rate.
     bool fxaa = false; // Legacy serialized mirror; antialiasing is authoritative.
     bool automaticUpdates = true;
+    uint32_t audioOutput = AudioOutputStereo; // Applied live; saved by SaveAudioOutput.
     bool skipShaderPrebuild = false;
     bool saveAnywhere = false; // Debug-only preference; defaults off for existing profiles.
     bool noRandomEncounters = false; // Debug-only preference, persisted like saveAnywhere.
@@ -95,5 +99,6 @@ bool SaveConfig(const Config &config);
 bool SaveDebugLanguage(uint32_t language);
 bool SaveSaveAnywhere(bool enabled);
 bool SaveNoRandomEncounters(bool enabled);
+bool SaveAudioOutput(uint32_t output);
 uint32_t GameLanguage();
 } // namespace settings

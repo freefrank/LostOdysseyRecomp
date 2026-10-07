@@ -14,6 +14,7 @@
 #include <os/logger.h>
 #include <stdafx.h>
 #include "language_trace.h"
+#include <apu/audio.h>
 #include <hid/hid.h>
 extern "C" PPC_FUNC(__imp__sub_822F19B0);
 extern "C" PPC_FUNC(__imp__sub_82481BE8);
@@ -582,6 +583,8 @@ void Publish(uint8_t *base, uint32_t config)
         }
         addSlider(L"Music", L"音樂音量", PPC_LOAD_U32(config + 8));
         addSlider(L"Sound effects", L"音效音量", PPC_LOAD_U32(config + 12));
+        addChoices(L"Audio output", L"音訊輸出", {Tr(L"Stereo", L"立體聲"), Tr(L"5.1 surround", L"5.1 環繞聲")},
+                   edit.audioOutput);
     }
     else if (tab == 2)
     {
@@ -782,6 +785,12 @@ void Publish(uint8_t *base, uint32_t config)
     if (tab == 0 && row == GameImportRow)
         next.help = Tr(L"Close the game to import selected discs or DLC again. Other content and saves stay intact.",
                        L"關閉遊戲並重新匯入所選光碟或 DLC；其他內容與存檔保留。");
+    if (tab == 1 && row == 3 && status.empty())
+        next.help = edit.audioOutput == AudioOutputSurround && apu::OutputChannels() == 2
+            ? Tr(L"The output device is not set to 5.1, so the stereo mix is in use. Set the system speakers to 5.1 or 7.1 and select 5.1 again.",
+                 L"輸出裝置未設定為 5.1，正在使用立體聲混音。請將系統喇叭設定為 5.1 或 7.1 後重新選擇 5.1。")
+            : Tr(L"5.1 sends the game's surround mix to a 5.1 or 7.1 speaker setup. Applies immediately.",
+                 L"5.1 會將遊戲的環繞聲混音輸出到 5.1 或 7.1 喇叭，立即套用。");
     if (tab == 2)
     {
         switch (GraphicsRow(row))
@@ -1855,7 +1864,7 @@ PPC_FUNC(sub_822F19B0)
         row = 0;
         status.clear();
     }
-    const int count = tab == 0 ? GameImportRow + 1 : tab == 1 ? 3 : tab == 2 ? int(GraphicsRow::Count) : 5;
+    const int count = tab == 0 ? GameImportRow + 1 : tab == 1 ? 4 : tab == 2 ? int(GraphicsRow::Count) : 5;
     // Provider-specific rows keep their logical ids and navigation skips them
     // when unavailable. Keyboard Enter reaches the menu as GAMEPAD_START
     // (hid.cpp), so one branch covers gamepad Start and Enter.
@@ -1900,6 +1909,14 @@ PPC_FUNC(sub_822F19B0)
                 PPC_STORE_U32(config + 4, PPC_LOAD_U32(config + 4) ^ masks[row]);
             }
             changed = true;
+        }
+        else if (tab == 1 && row == 3)
+        {
+            // Host setting: applied and saved at once, like the guest rows above it.
+            edit.audioOutput = cycle(edit.audioOutput, 2);
+            apu::SetSurround(edit.audioOutput == AudioOutputSurround);
+            if (!SaveAudioOutput(edit.audioOutput))
+                status = Tr(L"Could not save settings.", L"無法儲存設定。");
         }
         else if (tab == 1)
         {
