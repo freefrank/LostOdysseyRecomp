@@ -20,6 +20,7 @@ USER_AGENT = 'DiscordBot (https://github.com/freefrank/LostOdysseyRecomp, 1)'
 BODY_MARKER = re.compile(r'<!-- discord-sync thread=(\d+) last=(\d+) -->')
 COMMENT_MARKER = re.compile(r'<!-- discord-msg (\d+) -->')
 MESSAGE_TYPES = {0, 19}  # default and reply; everything else is a system message
+MESSAGE_CONTENT_FLAGS = (1 << 18) | (1 << 19)  # GATEWAY_MESSAGE_CONTENT and its _LIMITED form
 WRITE_DELAY = 1.0
 
 
@@ -225,6 +226,11 @@ def main():
 
     discord = Discord(discord_token)
     github = GitHub(env('GITHUB_TOKEN'), dry_run)
+
+    # Without the Message Content intent Discord returns empty text, which would be
+    # copied to GitHub as blank posts.
+    if not discord.get('/applications/@me').get('flags', 0) & MESSAGE_CONTENT_FLAGS:
+        raise SyncError('Message Content Intent is off for the bot (Developer Portal > Bot)')
 
     forum = discord.get(f'/channels/{forum_id}')
     tag_names = {t['id']: t['name'] for t in forum.get('available_tags', [])}
