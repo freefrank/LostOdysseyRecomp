@@ -74,7 +74,7 @@ bool SaveDisplayChoice(const std::string&,uint32_t) { return false; }
 namespace hid {
 void Init() {} // No real controllers, keyboard state, or SDL joystick thread.
 void SetExternalEventPump(bool v) { fixture::externalPump=v; }
-void HandleControllerEvent(uint32_t,int32_t) {}
+void HandleControllerEvent(uint32_t,uint32_t) {}
 void HandleKeyboardEvent(int32_t,bool) {}
 void ClearKeyboardState() {}
 void PumpHostInput() {}
