@@ -37,6 +37,8 @@ namespace gpu
     constexpr uint32_t REG_INTERRUPT_STATUS = 0x1951;
     constexpr uint32_t REG_D1MODE_VIEWPORT_SIZE = 0x1961;
 
+    struct ConstantBankSnapshot;
+
     struct CommandProcessor
     {
         bool Init();
@@ -57,11 +59,10 @@ namespace gpu
         uint32_t ReadRegister(uint32_t index);
         // Same values as ordered ReadRegister calls, without a call per word.
         void ReadRegisters(uint32_t first, uint32_t count, uint32_t* destination);
-        // Capture a constant bank and the words whose zero register value makes
-        // direct MMIO stores visible. Recheck only those words between writes.
-        uint32_t ReadConstantBank(uint32_t bank, uint32_t* destination, uint16_t* fallbackOffsets);
-        bool RefreshConstantFallbacks(uint32_t bank, const uint16_t* fallbackOffsets,
-            uint32_t fallbackCount, uint32_t* snapshot, uint64_t& snapshotVersion);
+        // Bring a renderer copy of a constant bank up to date: blocks command writes
+        // changed since the last update, then zero-register words whose direct
+        // MMIO store changed. Returns the 16-word blocks re-read or changed.
+        uint64_t UpdateConstantSnapshot(uint32_t bank, ConstantBankSnapshot& snapshot);
         // ALU constant banks (0: vertex 0x4000-0x43FF, 1: pixel 0x4400-0x47FF). The
         // generation changes whenever command packets change a value in the bank.
         // Direct MMIO stores are checked separately at zero-register fallback words.
@@ -105,6 +106,7 @@ namespace gpu
 
         // Same effects as WriteRegister; skips its special cases for plain banks.
         void WriteRegisterFast(uint32_t index, uint32_t value);
+        void MarkConstantsChanged(uint32_t bank, uint64_t blocks);
         bool WritePlainRun(uint32_t first, const uint32_t* guestWords, uint32_t count);
 
         void WorkerMain();
@@ -146,6 +148,7 @@ namespace gpu
         std::atomic<bool> m_wake{ false }; // Wake(): end the current idle or WAIT_REG_MEM wait early
         std::atomic<uint32_t> m_counter{ 0 };
         std::atomic<uint64_t> m_constantGeneration[2]{};
+        std::atomic<uint64_t> m_constantDirty[2]{}; // 16-word blocks changed since the last snapshot update
         std::atomic<bool> m_running{ false };
 
         IndirectBufferGuard m_indirectGuard;

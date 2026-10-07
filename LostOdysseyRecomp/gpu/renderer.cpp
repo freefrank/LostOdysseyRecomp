@@ -1934,14 +1934,12 @@ namespace gpu::renderer
             };
             UploadedConstants uploadedConstants[kGpuSlots];
 
-            // ALU banks are rebuilt when command writes advance their generation;
-            // zero-register MMIO fallbacks are checked on reuse. drawConstants is
-            // the copy a draw may modify (TAA jitter).
-            uint32_t constantSnapshot[2][256 * 4]{};
+            // ALU banks follow command writes by dirty block and zero-register
+            // MMIO stores by compare. drawConstants is the copy a draw may modify
+            // (TAA jitter).
+            ConstantBankSnapshot constantSnapshot[2];
             uint64_t constantSnapshotGeneration[2]{UINT64_MAX, UINT64_MAX};
             uint64_t constantSnapshotVersion[2]{};
-            uint16_t constantFallbackOffsets[2][256 * 4]{};
-            uint32_t constantFallbackCount[2]{};
             uint32_t drawConstants[2][256 * 4]{};
             bool drawConstantsModified[2]{true, true};
 
@@ -7865,33 +7863,28 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 } else {
                     for (uint32_t bank = 0; bank < 2; ++bank) {
                         const uint64_t generation = g_commandProcessor.ConstantGeneration(bank);
+                        auto& snapshot = constantSnapshot[bank];
                         const bool refresh = generation != constantSnapshotGeneration[bank];
-                        bool snapshotChanged = refresh;
-                        if (refresh) {
-                            constantFallbackCount[bank] = g_commandProcessor.ReadConstantBank(
-                                bank, constantSnapshot[bank], constantFallbackOffsets[bank]);
-                            constantSnapshotGeneration[bank] = generation;
-                            ++constantSnapshotVersion[bank];
-                        } else if (g_commandProcessor.RefreshConstantFallbacks(bank,
-                            constantFallbackOffsets[bank], constantFallbackCount[bank],
-                            constantSnapshot[bank], constantSnapshotVersion[bank])) {
-                            snapshotChanged = true;
-                        }
-                        if (!refresh && verifyConstants) {
+                        const uint64_t changedBlocks = g_commandProcessor.UpdateConstantSnapshot(bank, snapshot);
+                        bool snapshotChanged = refresh || changedBlocks;
+                        constantSnapshotGeneration[bank] = generation;
+                        if (snapshotChanged) ++constantSnapshotVersion[bank];
+                        if (verifyConstants) {
                             uint32_t check[256 * 4];
                             g_commandProcessor.ReadRegisters(REG_ALU_CONSTANTS + bank * 256 * 4, 256 * 4, check);
-                            if (std::memcmp(check, constantSnapshot[bank], sizeof(check)) != 0) {
+                            if (std::memcmp(check, snapshot.values, sizeof(check)) != 0) {
                                 static uint32_t reported = 0;
                                 if (reported++ < 16)
-                                    LOG_ERROR("renderer: {} constants changed without a generation change (frame {})",
+                                    LOG_ERROR("renderer: {} constants changed without a generation change or dirty block (frame {})",
                                         bank ? "pixel" : "vertex", frame);
-                                std::memcpy(constantSnapshot[bank], check, sizeof(check));
+                                std::memcpy(snapshot.values, check, sizeof(check));
+                                snapshot.valid = false;
                                 ++constantSnapshotVersion[bank];
                                 snapshotChanged = true;
                             }
                         }
                         if (snapshotChanged || drawConstantsModified[bank]) {
-                            std::memcpy(drawConstants[bank], constantSnapshot[bank], sizeof(drawConstants[bank]));
+                            std::memcpy(drawConstants[bank], snapshot.values, sizeof(drawConstants[bank]));
                             drawConstantsModified[bank] = false;
                         }
                         constantGeneration[bank] = constantSnapshotVersion[bank];

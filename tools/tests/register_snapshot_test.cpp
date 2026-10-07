@@ -54,28 +54,39 @@ int main() {
         gpu::CopyRegisterSnapshot(std::span<const uint32_t>(registers), 0, std::span<uint32_t>(output), mmio.data());
         Check(output[0] == value && output[1] == (value ? value : ~value)); ++checked;
     }
-    // A bypass MMIO write leaves the command generation alone. The tracked
-    // zero-register word still changes the snapshot and rejects the old GPU upload.
-    registers[0] = 0; registers[1] = 0x12345678; registers[2] = 0;
-    mmio[0].Set(0x01020304); mmio[1].Set(0xffffffff); mmio[2].Set(0);
-    gpu::CopyRegisterSnapshot(std::span<const uint32_t>(registers), 0,
-        std::span<uint32_t>(output), mmio.data());
-    std::array<uint16_t, 3> offsets{};
-    size_t fallbackCount = gpu::CollectRegisterFallbackOffsets(
-        std::span<const uint32_t>(registers).first(3), std::span<uint16_t>(offsets));
-    Check(fallbackCount == 2 && offsets[0] == 0 && offsets[1] == 2);
+    // Constant bank snapshot: dirty blocks are re-read; between command writes a
+    // bypass MMIO store changes only zero-register words and rejects the old upload.
+    std::vector<uint32_t> bank(1024), guest(1024); // guest-endian MMIO image
+    for (size_t i = 0; i < bank.size(); ++i) {
+        bank[i] = i % 5 ? uint32_t(i * 2654435761u) | 1 : 0;
+        guest[i] = gpu::SwapGuestWord(uint32_t(i * 2246822519u));
+    }
+    auto matches = [&](const gpu::ConstantBankSnapshot& s) {
+        for (size_t i = 0; i < bank.size(); ++i)
+            if (s.values[i] != (bank[i] ? bank[i] : gpu::SwapGuestWord(guest[i]))) return false;
+        return true;
+    };
+    gpu::ConstantBankSnapshot snapshot;
+    Check(gpu::UpdateConstantBankSnapshot(snapshot, bank.data(), guest.data(), 0) == ~0ull && matches(snapshot));
+    Check(gpu::UpdateConstantBankSnapshot(snapshot, bank.data(), guest.data(), 0) == 0);
     uint64_t version = 1;
     const uint64_t uploadedVersion = version, uploadedOffset = 64;
     Check(gpu::CanReuseUploadedConstants(uploadedOffset, uploadedVersion, version));
-    mmio[0].Set(0x55667788); mmio[1].Set(0xaaaaaaaa);
-    Check(gpu::RefreshRegisterSnapshotFallbacks(
-        std::span<const uint16_t>(offsets).first(fallbackCount),
-        std::span<uint32_t>(output), mmio.data(), version));
-    Check(output[0] == 0x55667788 && output[1] == registers[1] && version == 2);
+    guest[1] = gpu::SwapGuestWord(0xaaaaaaaa); // nonzero register: MMIO store is not visible
+    Check(gpu::UpdateConstantBankSnapshot(snapshot, bank.data(), guest.data(), 0) == 0 && matches(snapshot));
+    guest[700] = gpu::SwapGuestWord(0x55667788); // zero register in block 43
+    if (gpu::UpdateConstantBankSnapshot(snapshot, bank.data(), guest.data(), 0) == 1ull << 43) ++version;
+    Check(matches(snapshot) && version == 2 && snapshot.values[700] == 0x55667788);
     Check(!gpu::CanReuseUploadedConstants(uploadedOffset, uploadedVersion, version));
-    Check(!gpu::RefreshRegisterSnapshotFallbacks(
-        std::span<const uint16_t>(offsets).first(fallbackCount),
-        std::span<uint32_t>(output), mmio.data(), version) && version == 2);
+    Check(gpu::UpdateConstantBankSnapshot(snapshot, bank.data(), guest.data(), 0) == 0);
+    // A command write of zero exposes that word's MMIO value; a write to a zero
+    // register hides it. Both arrive as dirty blocks.
+    bank[33] = 0; guest[33] = 0; bank[700] = 0x01020304; guest[700] = gpu::SwapGuestWord(0x01020304);
+    Check(gpu::UpdateConstantBankSnapshot(snapshot, bank.data(), guest.data(), (1ull << 2) | (1ull << 43)) ==
+        ((1ull << 2) | (1ull << 43)) && matches(snapshot));
+    guest[33] = gpu::SwapGuestWord(0x0badf00d); guest[700] = gpu::SwapGuestWord(0xffffffff);
+    Check(gpu::UpdateConstantBankSnapshot(snapshot, bank.data(), guest.data(), 0) == 1ull << 2 &&
+        matches(snapshot) && snapshot.values[33] == 0x0badf00d);
     ++checked;
     std::printf("register snapshot: %u values, MMIO fallback and upload reuse checks passed\n", checked);
 }
