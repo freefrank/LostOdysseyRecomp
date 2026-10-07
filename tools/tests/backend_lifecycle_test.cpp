@@ -11,6 +11,7 @@
 #include <optional>
 #include <gpu/shader/dxc_compiler.h>
 #include <gpu/fsr_upscaler.h>
+#include <gpu/xess_upscaler.h>
 #include <settings/config.h>
 #include <settings/restart.h>
 #include <SDL.h>
@@ -68,6 +69,7 @@ bool IsOpen() { return false; }
 bool CalibrationKey(uint32_t) { return false; }
 HdrCalibration GetHdrCalibration() { return {}; }
 BrightnessCalibration GetBrightnessCalibration() { return {}; }
+bool SaveDisplayChoice(const std::string&,uint32_t) { return false; }
 }
 namespace hid {
 void Init() {} // No real controllers, keyboard state, or SDL joystick thread.
@@ -131,7 +133,7 @@ void SetHdrCalibrationSceneAvailable(bool) {}
 }
 namespace gpu {
 TemporalUpscaler::TemporalUpscaler(dlss::Controller& controller) : dlss_(&controller) {}
-TemporalUpscaler::~TemporalUpscaler() { fsr_.release(); } // No SDK adapter is ever constructed.
+TemporalUpscaler::~TemporalUpscaler() { fsr_.release(); xess_.release(); } // No SDK adapter is ever constructed.
 void TemporalUpscaler::ReleaseCompleted(uint64_t) {}
 void TemporalUpscaler::AbandonAfterDeviceLoss() {}
 void TemporalUpscaler::ShutdownAfterGpuDrain() {}
