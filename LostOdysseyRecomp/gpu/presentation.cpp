@@ -705,8 +705,18 @@ void Presentation::Draw(RenderCommandList *commands, RenderTexture *source, Rend
     if(options.antialiasing==Antialiasing::SMAA)
         source=p.smaa[hdrScene ? 1 : 0].Draw(commands,source,sw,sh,p.layout.get(),intermediatePipeline,hdrScene,
             ramp,Impl::kRampBytes);
-    else if(options.antialiasing==Antialiasing::FXAA)
+    else if(options.antialiasing==Antialiasing::FXAA) {
+        // Scene processing: the final pass would only copy the FXAA image at
+        // native size (texel centres, no output conversion), so FXAA writes
+        // the target directly.
+        if(!toSwapchain && sw==ow && sh==oh && !options.expandRgbRange && !options.displayGammaRamp &&
+           !options.displayAdjust && !options.brightnessPreview) {
+            render(source,target,sw,sh,ow,oh,0,0,float(sw),float(sh),1,0,0,false,intermediatePipeline);
+            commands->barriers(RenderBarrierStage::COPY,RenderTextureBarrier(original,RenderTextureLayout::COPY_SOURCE));
+            return;
+        }
         source=render(source,nullptr,sw,sh,sw,sh,0,0,float(sw),float(sh),1,0,0,false,intermediatePipeline);
+    }
     // Large reductions use full coverage at each stage. No tap count truncation,
     // and no artificial reduced input presented as a game rendering speedup.
     const uint32_t desiredW=std::max(1u,uint32_t(std::ceil(width)));
