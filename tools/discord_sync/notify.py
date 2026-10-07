@@ -3,7 +3,8 @@
 Reads the Actions event from GITHUB_EVENT_PATH. Pushes go to DISCORD_COMMITS_CHANNEL as one
 embed listing the commits, and so do opened, reopened or closed-unmerged pull requests
 (merged ones appear as commits); releases go to DISCORD_RELEASES_CHANNEL (an announcement channel)
-and are crossposted to following servers. Nothing in a commit message or release note can
+as one short line, crossposted to following servers, with the changelog in a thread under it.
+Re-running for a release that was already announced updates that message instead of posting again. Nothing in a commit message or release note can
 ping anyone. A manual run takes RELEASE_TAG to (re)post an existing release; DRY_RUN=true
 only prints the message.
 """
@@ -91,18 +92,62 @@ def pr_message(event):
 
 
 def release_message(release, repo_name):
+    """Short announcement; the changelog goes into a thread so the channel stays compact."""
     name = release.get('name') or release['tag_name']
-    notes = clip(release.get('body'), 3500)
     return {
         'allowed_mentions': NO_PINGS,
-        'content': f'**{repo_name} {name}** is out: <{release["html_url"]}>',
+        'content': f'**{repo_name} {name}** is out: <{release["html_url"]}>\n'
+                   'Changelog / 更新说明: see the thread below.',
+        'embeds': [],
+    }
+
+
+def changelog_messages(release):
+    """One embed per "### Section" of the release notes (English, 简体中文, ...)."""
+    body = (release.get('body') or '').strip()
+    parts = re.split(r'^###\s+(.+)$', body, flags=re.M)
+    sections = [('Changelog', parts[0])] if parts[0].strip() else []
+    sections += list(zip(parts[1::2], parts[2::2]))
+    if not sections:
+        sections = [('Changelog', 'See the release page.')]
+    return [{
+        'allowed_mentions': NO_PINGS,
         'embeds': [{
-            'title': f'{repo_name} {name}',
+            'title': clip(heading, 256),
             'url': release['html_url'],
-            'description': notes or 'See the release page for downloads.',
+            'description': clip(text, 4000),
             'color': 0xE0A030,
         }],
-    }
+    } for heading, text in sections if text.strip()]
+
+
+def announce_release(release, repo_name, channel, headers):
+    """Post (or update a previous post for this release) and put the changelog in its thread."""
+    message = release_message(release, repo_name)
+    me = http_json(f'{DISCORD_API}/users/@me', headers)['id']
+    marker = message['content'].split('\n', 1)[0]
+    recent = http_json(f'{DISCORD_API}/channels/{channel}/messages?limit=50', headers)
+    previous = next((m for m in recent if m['author']['id'] == me and m['content'].startswith(marker)), None)
+    if previous:
+        posted = http_json(f'{DISCORD_API}/channels/{channel}/messages/{previous["id"]}', headers, 'PATCH',
+                           message)
+        print(f'Updated message {posted["id"]} in channel {channel}')
+    else:
+        posted = http_json(f'{DISCORD_API}/channels/{channel}/messages', headers, 'POST', message)
+        print(f'Posted message {posted["id"]} to channel {channel}')
+        try:  # publish to servers following the announcement channel
+            http_json(f'{DISCORD_API}/channels/{channel}/messages/{posted["id"]}/crosspost', headers, 'POST')
+        except SyncError as exc:
+            print(f'Crosspost failed: {exc}')
+    if (previous or {}).get('thread'):
+        print('Changelog thread already exists.')
+        return
+    name = release.get('name') or release['tag_name']
+    thread = http_json(f'{DISCORD_API}/channels/{channel}/messages/{posted["id"]}/threads', headers, 'POST',
+                       {'name': clip(f'{name} changelog', 100), 'auto_archive_duration': 10080})
+    for part in changelog_messages(release):
+        http_json(f'{DISCORD_API}/channels/{thread["id"]}/messages', headers, 'POST', part)
+    print(f'Changelog posted in thread {thread["id"]}')
 
 
 def main():
@@ -137,16 +182,17 @@ def main():
         return 0
 
     print(json.dumps(message, ensure_ascii=False, indent=2))
+    if channel == os.environ.get('DISCORD_RELEASES_CHANNEL'):
+        for part in changelog_messages(release):
+            print(json.dumps(part, ensure_ascii=False, indent=2))
     if dry_run:
         return 0
     headers = {'Authorization': 'Bot ' + token}
+    if channel == os.environ.get('DISCORD_RELEASES_CHANNEL'):
+        announce_release(release, repo_name, channel, headers)
+        return 0
     posted = http_json(f'{DISCORD_API}/channels/{channel}/messages', headers, 'POST', message)
     print(f'Posted message {posted["id"]} to channel {channel}')
-    if channel == os.environ.get('DISCORD_RELEASES_CHANNEL'):
-        try:  # publish to servers following the announcement channel
-            http_json(f'{DISCORD_API}/channels/{channel}/messages/{posted["id"]}/crosspost', headers, 'POST')
-        except SyncError as exc:
-            print(f'Crosspost failed: {exc}')
     return 0
 
 
