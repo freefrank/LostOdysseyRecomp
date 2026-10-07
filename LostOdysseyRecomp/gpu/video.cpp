@@ -1751,8 +1751,8 @@ namespace gpu::video
     static int ChosenDisplay(const settings::Config& config, const std::vector<std::string>& names) {
         const int display = display_choice::Resolve(names, config.displayName, config.displayIndex);
         if (display < 0 && !config.displayName.empty())
-            LOG_WARNING("video: display \"{}\" #{} is not connected; using automatic placement",
-                config.displayName, config.displayIndex + 1);
+            LOG_WARNING("video: display \"{}\"#{} is not connected; using automatic placement",
+                config.displayName, config.displayIndex);
         return display;
     }
 
