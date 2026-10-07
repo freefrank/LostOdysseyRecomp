@@ -31,6 +31,7 @@ PREAMBLE = r'''
 #include <gpu/frame_generation_settings.h>
 #include <gpu/video.h>
 #include <gpu/display_change.h>
+#include <gpu/display_choice.h>
 #ifdef _WIN32
 #include <windows.h>
 #else
@@ -78,6 +79,9 @@ DisplayChangeResult QueryDisplayChange(uint64_t){return DisplayChangeResult::App
 uint64_t BeginDisplayChange(const settings::Config&){return 1;}
 bool DisplayModeFailed(){return false;}
 bool WindowModeOverridden(){return false;}
+std::vector<std::string> GpuDeviceNames(){return {"GPU A","GPU B"};}
+std::string ActiveGpuDeviceName(){return "GPU A";}
+std::vector<std::string> DisplayNames(){return {"Display 1"};}
 }
 namespace gpu::frame_plan {
 DlssEffectSnapshot CurrentDlssEffect(){return {};}
@@ -226,6 +230,18 @@ int main(int argc, char** argv) {
     Check(!settings::restart::Required(afSaved,afAfter),"AF needs no restart");
     settings::edit=afAfter;settings::row=int(GraphicsRow::Save);tick(0x1000);
     Check(settings::GetConfig().anisotropicFiltering==16,"Save applies AF");
+    // GPU choice: Automatic plus each adapter; a change saves and asks for a restart.
+    settings::savedConfig=afSaved;settings::edit=afSaved;
+    settings::row=int(GraphicsRow::Gpu);tick();
+    Check(!settings::snapshot.rows[int(GraphicsRow::Gpu)].hidden && settings::snapshot.rows[int(GraphicsRow::Gpu)].choices.size()==3,
+          "GPU row lists Automatic and both adapters");
+    Check(settings::snapshot.rows[int(GraphicsRow::Display)].hidden,"one display hides the display row");
+    tick(8);Check(settings::edit.gpuDevice=="GPU A","GPU cycles to the first adapter");
+    tick(8);tick(8);Check(settings::edit.gpuDevice.empty(),"GPU cycle returns to Automatic");
+    tick(4);Check(settings::edit.gpuDevice=="GPU B","GPU cycles backward");
+    settings::row=int(GraphicsRow::Save);tick(0x1000);tick();
+    Check(settings::restartPrompt && settings::GetConfig().gpuDevice=="GPU B","GPU change saves and asks for a restart");
+    settings::restartPrompt=settings::savedRestartPrompt=false;settings::displayTicket=0;
     settings::savedConfig=afSaved;settings::edit=afSaved;
     settings::edit.upscaler=Upscaler::Fsr;settings::row=int(GraphicsRow::AntiAliasing);tick();
     auto click=[&](int row,float x,bool reverse){
