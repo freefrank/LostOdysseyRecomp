@@ -10,11 +10,13 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 - Posts in the Discord #help forum become GitHub issues instead of Discussions; posts in the new #discussion, #ideas and #show-and-tell forums go to the matching Discussions categories.
 - Closing or reopening a #help issue on GitHub adds or removes the Solved tag on the Discord post, and the Solved tag closes or reopens the issue.
+- Automatic first replies on new issues are back on and now written by Claude, for issues opened on GitHub and those copied from Discord.
 
 ### 简体中文
 
 - Discord #help 论坛的帖子改为复制成 GitHub Issue，不再进 Discussions；新开的 #discussion、#ideas、#show-and-tell 论坛的帖子复制到 Discussions 的对应分类。
 - 在 GitHub 上关闭或重新打开 #help 对应的 issue，会给 Discord 帖子加上或去掉 Solved 标签；反过来，Solved 标签也会关闭或重新打开 issue。
+- 新 issue 的自动初步分析重新开启，改由 Claude 撰写；GitHub 上直接开的和从 Discord 复制来的 issue 都适用。
 
 ## [v0.8.53](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.8.53) — 2026-10-07
 
