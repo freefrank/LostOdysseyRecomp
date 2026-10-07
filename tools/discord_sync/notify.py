@@ -8,6 +8,7 @@ only prints the message.
 """
 import json
 import os
+import re
 import sys
 
 from discord_sync import DISCORD_API, GITHUB_API, SyncError, env, http_json
@@ -26,18 +27,26 @@ def push_message(event):
     if not commits:
         return None
     branch = event['ref'].rsplit('/', 1)[-1]
+    repo_url = event['repository']['html_url']
     lines = []
     for commit in commits[-MAX_COMMITS:]:
-        title = clip(commit['message'].splitlines()[0], 90).replace('[', '(').replace(']', ')')
+        title = commit['message'].splitlines()[0].strip()
+        sha = f'[`{commit["id"][:7]}`]({commit["url"]})'
         author = (commit.get('author') or {}).get('name', '')
-        lines.append(f'[`{commit["id"][:7]}`]({commit["url"]}) {title} - {author}')
+        # A squash merge ends its title with "(#123)"; lead with that PR link instead.
+        pr = re.search(r'\s*\(#(\d+)\)$', title)
+        title = clip(title[:pr.start()] if pr else title, 150).replace('[', '(').replace(']', ')')
+        if pr:
+            lines.append(f'[#{pr.group(1)}]({repo_url}/pull/{pr.group(1)}) {title} - {author} · {sha}')
+        else:
+            lines.append(f'{sha} {title} - {author}')
     if len(commits) > MAX_COMMITS:
         lines.append(f'…and {len(commits) - MAX_COMMITS} earlier')
     return {
         'allowed_mentions': NO_PINGS,
         'embeds': [{
             'title': f'{len(commits)} new commit{"s" if len(commits) != 1 else ""} on {branch}',
-            'url': event.get('compare') or event['repository']['html_url'],
+            'url': event.get('compare') or repo_url,
             'description': '\n'.join(lines),
             'color': 0x5865F2,
         }],
