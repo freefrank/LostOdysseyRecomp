@@ -92,7 +92,7 @@ int main() {
         std::fprintf(stderr, "SetWindowLongPtrW: %lu\n", GetLastError());
         SDL_DestroyWindow(video::g_window); SDL_Quit(); return 2;
     }
-    SDL_FlushEvents(SDL_FIRSTEVENT, SDL_LASTEVENT);
+    SDL_FlushEvents(SDL_EVENT_FIRST, SDL_EVENT_LAST);
     video::PumpWindowEvents();
     Check(video::ordinaryWork == 1 && video::displayWork == 1, "normal application work");
     SDL_Event quit{}; quit.type = SDL_EVENT_QUIT;

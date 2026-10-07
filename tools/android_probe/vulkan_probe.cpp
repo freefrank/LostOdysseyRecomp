@@ -135,7 +135,7 @@ std::string TryClearPresent(SDL_Window* window, VkPhysicalDevice physical, VkSur
     VkExtent2D extent = caps.currentExtent;
     if (extent.width == UINT32_MAX) {
         int width = 0, height = 0;
-        SDL_Vulkan_GetDrawableSize(window, &width, &height);
+        SDL_GetWindowSizeInPixels(window, &width, &height);
         extent.width = std::clamp(static_cast<uint32_t>(std::max(0, width)), caps.minImageExtent.width, caps.maxImageExtent.width);
         extent.height = std::clamp(static_cast<uint32_t>(std::max(0, height)), caps.minImageExtent.height, caps.maxImageExtent.height);
     }
@@ -283,12 +283,11 @@ std::string ProbeVulkan(SDL_Window* window) {
     std::ostringstream out;
     out << "Vulkan probe (clear/present only; game renderer and assets not initialized)\n";
     if (!window) return out.str() + "SDL window unavailable\n";
-    uint32_t extensionCount = 0;
-    if (!SDL_Vulkan_GetInstanceExtensions(window, &extensionCount, nullptr) || !extensionCount)
+    Uint32 extensionCount = 0;
+    const char* const* sdlExtensions = SDL_Vulkan_GetInstanceExtensions(&extensionCount);
+    if (!sdlExtensions || !extensionCount)
         return out.str() + "SDL Vulkan instance extensions unavailable: " + SDL_GetError() + "\n";
-    std::vector<const char*> extensions(extensionCount);
-    if (!SDL_Vulkan_GetInstanceExtensions(window, &extensionCount, extensions.data()))
-        return out.str() + "SDL Vulkan extension query failed: " + SDL_GetError() + "\n";
+    std::vector<const char*> extensions(sdlExtensions, sdlExtensions + extensionCount);
     uint32_t loaderVersion = VK_API_VERSION_1_0;
     auto enumerateVersion = reinterpret_cast<PFN_vkEnumerateInstanceVersion>(
         vkGetInstanceProcAddr(VK_NULL_HANDLE, "vkEnumerateInstanceVersion"));

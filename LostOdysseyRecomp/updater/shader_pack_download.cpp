@@ -5,6 +5,7 @@
 #include "../gpu/shader/portable_shader_pack_location.h"
 
 #include <SDL3/SDL.h>
+#include <hid/face_buttons.h>
 #include <host_ui/rasterizer.h>
 #if defined(__ANDROID__)
 #include <hid/android_touch.h>
@@ -188,6 +189,8 @@ public:
         renderer_ = SDL_CreateRenderer(window_, nullptr);
         if (!renderer_) renderer_ = SDL_CreateRenderer(window_, "software");
         if (renderer_) SDL_SetRenderVSync(renderer_, 1);
+        // SDL2 sampled textures with nearest filtering by default; SDL3 smooths them.
+        if (renderer_) SDL_SetDefaultTextureScaleMode(renderer_, SDL_SCALEMODE_NEAREST);
         texture_ = renderer_ ? SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STREAMING, 1280, 720)
                              : nullptr;
         if (!texture_) return false;
@@ -254,7 +257,7 @@ Action ReadAction(const SDL_Event &event, uint32_t windowId, int width, int heig
     }
     if (event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN)
     {
-        switch (event.gbutton.button)
+        switch (hid::face_buttons::FromEvent(event.gbutton))
         {
         case SDL_GAMEPAD_BUTTON_DPAD_LEFT: return Action::Left;
         case SDL_GAMEPAD_BUTTON_DPAD_RIGHT: return Action::Right;

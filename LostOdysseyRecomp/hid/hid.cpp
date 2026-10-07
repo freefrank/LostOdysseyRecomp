@@ -12,6 +12,7 @@ extern std::atomic<uint32_t> g_presentedSwaps;
 #include <debug/frame_timing.h>
 #include "test_input_pulse.h"
 #include "controller_prompts.h"
+#include "face_buttons.h"
 #include "android_touch.h"
 
 // SDL game controller -> XInput state. Player 1 only for now; the keyboard
@@ -192,6 +193,8 @@ static uint16_t ReadRawButtonsLocked(uint8_t& lt, uint8_t& rt)
         if (!SDL_GamepadConnected(controller)) continue;
         ObserveController(controller);
         auto btn = [&](SDL_GamepadButton b) { return SDL_GetGamepadButton(controller, b) != 0; };
+        const auto type = SDL_GetGamepadType(controller);
+        auto face = [&](SDL_GamepadButton b) { return btn(hid::face_buttons::Physical(type, b)); };
 
         if (btn(SDL_GAMEPAD_BUTTON_DPAD_UP)) buttons |= XAMINPUT_GAMEPAD_DPAD_UP;
         if (btn(SDL_GAMEPAD_BUTTON_DPAD_DOWN)) buttons |= XAMINPUT_GAMEPAD_DPAD_DOWN;
@@ -203,10 +206,10 @@ static uint16_t ReadRawButtonsLocked(uint8_t& lt, uint8_t& rt)
         if (btn(SDL_GAMEPAD_BUTTON_RIGHT_STICK)) buttons |= XAMINPUT_GAMEPAD_RIGHT_THUMB;
         if (btn(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER)) buttons |= XAMINPUT_GAMEPAD_LEFT_SHOULDER;
         if (btn(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER)) buttons |= XAMINPUT_GAMEPAD_RIGHT_SHOULDER;
-        if (btn(SDL_GAMEPAD_BUTTON_SOUTH)) buttons |= XAMINPUT_GAMEPAD_A;
-        if (btn(SDL_GAMEPAD_BUTTON_EAST)) buttons |= XAMINPUT_GAMEPAD_B;
-        if (btn(SDL_GAMEPAD_BUTTON_WEST)) buttons |= XAMINPUT_GAMEPAD_X;
-        if (btn(SDL_GAMEPAD_BUTTON_NORTH)) buttons |= XAMINPUT_GAMEPAD_Y;
+        if (face(SDL_GAMEPAD_BUTTON_SOUTH)) buttons |= XAMINPUT_GAMEPAD_A;
+        if (face(SDL_GAMEPAD_BUTTON_EAST)) buttons |= XAMINPUT_GAMEPAD_B;
+        if (face(SDL_GAMEPAD_BUTTON_WEST)) buttons |= XAMINPUT_GAMEPAD_X;
+        if (face(SDL_GAMEPAD_BUTTON_NORTH)) buttons |= XAMINPUT_GAMEPAD_Y;
         lt = std::max(lt, uint8_t(std::max(0, int(SDL_GetGamepadAxis(controller, SDL_GAMEPAD_AXIS_LEFT_TRIGGER))) >> 7));
         rt = std::max(rt, uint8_t(std::max(0, int(SDL_GetGamepadAxis(controller, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER))) >> 7));
     }
@@ -324,6 +327,8 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
             if (!SDL_GamepadConnected(controller)) continue;
             ObserveController(controller);
             auto btn = [&](SDL_GamepadButton b) { return SDL_GetGamepadButton(controller, b) != 0; };
+            const auto type = SDL_GetGamepadType(controller);
+            auto face = [&](SDL_GamepadButton b) { return btn(hid::face_buttons::Physical(type, b)); };
             auto axis = [&](SDL_GamepadAxis a) { return SDL_GetGamepadAxis(controller, a); };
 
             if (btn(SDL_GAMEPAD_BUTTON_DPAD_UP)) gp.wButtons |= XAMINPUT_GAMEPAD_DPAD_UP;
@@ -336,10 +341,10 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
             if (btn(SDL_GAMEPAD_BUTTON_RIGHT_STICK)) gp.wButtons |= XAMINPUT_GAMEPAD_RIGHT_THUMB;
             if (btn(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER)) gp.wButtons |= XAMINPUT_GAMEPAD_LEFT_SHOULDER;
             if (btn(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER)) gp.wButtons |= XAMINPUT_GAMEPAD_RIGHT_SHOULDER;
-            if (btn(SDL_GAMEPAD_BUTTON_SOUTH)) gp.wButtons |= XAMINPUT_GAMEPAD_A;
-            if (btn(SDL_GAMEPAD_BUTTON_EAST)) gp.wButtons |= XAMINPUT_GAMEPAD_B;
-            if (btn(SDL_GAMEPAD_BUTTON_WEST)) gp.wButtons |= XAMINPUT_GAMEPAD_X;
-            if (btn(SDL_GAMEPAD_BUTTON_NORTH)) gp.wButtons |= XAMINPUT_GAMEPAD_Y;
+            if (face(SDL_GAMEPAD_BUTTON_SOUTH)) gp.wButtons |= XAMINPUT_GAMEPAD_A;
+            if (face(SDL_GAMEPAD_BUTTON_EAST)) gp.wButtons |= XAMINPUT_GAMEPAD_B;
+            if (face(SDL_GAMEPAD_BUTTON_WEST)) gp.wButtons |= XAMINPUT_GAMEPAD_X;
+            if (face(SDL_GAMEPAD_BUTTON_NORTH)) gp.wButtons |= XAMINPUT_GAMEPAD_Y;
 
             gp.bLeftTrigger = std::max(gp.bLeftTrigger, uint8_t(std::max(0, int(axis(SDL_GAMEPAD_AXIS_LEFT_TRIGGER))) >> 7));
             gp.bRightTrigger = std::max(gp.bRightTrigger, uint8_t(std::max(0, int(axis(SDL_GAMEPAD_AXIS_RIGHT_TRIGGER))) >> 7));

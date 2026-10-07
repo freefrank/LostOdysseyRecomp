@@ -54,6 +54,7 @@
 #include <os/shader_log.h>
 #include <os/user_paths.h>
 #include <hid/hid.h>
+#include <hid/face_buttons.h>
 #if defined(__ANDROID__)
 #include <hid/android_touch.h>
 #endif
@@ -1996,7 +1997,9 @@ namespace gpu::video
             // macOS renders through plume's Metal backend (CAMetalLayer).
             flags |= SDL_WINDOW_METAL;
 #elif !defined(_WIN32)
-            flags |= SDL_WINDOW_VULKAN;
+            // Without it a scaled Wayland desktop gets a logical-size swapchain
+            // that the compositor upscales.
+            flags |= SDL_WINDOW_VULKAN | SDL_WINDOW_HIGH_PIXEL_DENSITY;
 #endif
             // Fullscreen later uses the display the window was created on.
             const auto displays = QueryDisplays();
@@ -2790,7 +2793,7 @@ namespace gpu::video
         const SDL_DisplayID display = SDL_GetDisplayForWindow(g_window);
         const SDL_DisplayMode* mode = display ? SDL_GetCurrentDisplayMode(display) : nullptr;
         if (mode && mode->refresh_rate > 0)
-            refresh = uint32_t(mode->refresh_rate);
+            refresh = uint32_t(mode->refresh_rate + 0.5f); // SDL3 reports fractional rates (119.99 for 120 Hz)
 #endif
         if (!vrr::OutputLimit(refresh)) refresh = 0; // Unknown, not an invented 60 Hz.
         g_displayRefreshHz.store(refresh, std::memory_order_relaxed);
@@ -3136,7 +3139,8 @@ namespace gpu::video
                         RequestSkipShaderPreparation();
                     }
                 } else if (event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN) {
-                    if (event.gbutton.button == SDL_GAMEPAD_BUTTON_EAST || event.gbutton.button == SDL_GAMEPAD_BUTTON_START) {
+                    const auto button = hid::face_buttons::FromEvent(event.gbutton);
+                    if (button == SDL_GAMEPAD_BUTTON_EAST || button == SDL_GAMEPAD_BUTTON_START) {
                         RequestSkipShaderPreparation();
                     }
                 }

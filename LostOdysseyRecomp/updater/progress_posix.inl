@@ -7,6 +7,7 @@
 
 #ifndef _WIN32
 #include <SDL3/SDL.h>
+#include <hid/face_buttons.h>
 
 #include <algorithm>
 #include <atomic>
@@ -50,6 +51,8 @@ SDL_Renderer* CreateProgressRenderer(SDL_Window* window)
     SDL_Renderer* renderer = SDL_CreateRenderer(window, nullptr);
     if (!renderer) renderer = SDL_CreateRenderer(window, "software");
     if (renderer) SDL_SetRenderVSync(renderer, 1);
+    // SDL2 sampled textures with nearest filtering by default; SDL3 smooths them.
+    if (renderer) SDL_SetDefaultTextureScaleMode(renderer, SDL_SCALEMODE_NEAREST);
     return renderer;
 }
 
@@ -194,6 +197,7 @@ bool ConfirmUpdateSdl(std::string_view version, std::string_view changelog, uint
         SDL_Event event;
         while (SDL_PollEvent(&event))
         {
+            hid::face_buttons::Normalize(event);
             switch (event.type)
             {
             case SDL_EVENT_QUIT:
@@ -284,8 +288,8 @@ bool ConfirmUpdateSdl(std::string_view version, std::string_view changelog, uint
                 }
                 break;
             case SDL_EVENT_MOUSE_WHEEL:
-                if (event.wheel.y > 0 && scrollOffset > 0) scrollOffset--;
-                else if (event.wheel.y < 0 && scrollOffset + MAX_VISIBLE_LINES < static_cast<int>(logLines.size())) scrollOffset++;
+                if (event.wheel.integer_y > 0 && scrollOffset > 0) scrollOffset--;
+                else if (event.wheel.integer_y < 0 && scrollOffset + MAX_VISIBLE_LINES < static_cast<int>(logLines.size())) scrollOffset++;
                 break;
             }
         }
@@ -482,6 +486,7 @@ struct ProgressWindow::Impl
         SDL_Event event;
         while (SDL_PollEvent(&event))
         {
+            hid::face_buttons::Normalize(event);
             switch (event.type)
             {
             case SDL_EVENT_QUIT:

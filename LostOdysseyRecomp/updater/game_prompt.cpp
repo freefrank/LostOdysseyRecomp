@@ -1,6 +1,7 @@
 #include "game_prompt.h"
 
 #include <SDL3/SDL.h>
+#include <hid/face_buttons.h>
 #include <host_ui/rasterizer.h>
 #if defined(__ANDROID__)
 #include <hid/android_touch.h>
@@ -151,6 +152,8 @@ bool ConfirmBeforeImport(std::string_view version, std::string_view changelog, u
     if (!renderer && window)
         renderer = SDL_CreateRenderer(window, "software");
     if (renderer) SDL_SetRenderVSync(renderer, 1);
+    // SDL2 sampled textures with nearest filtering by default; SDL3 smooths them.
+    if (renderer) SDL_SetDefaultTextureScaleMode(renderer, SDL_SCALEMODE_NEAREST);
     SDL_Texture* texture = renderer
         ? SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ABGR8888,
               SDL_TEXTUREACCESS_STREAMING, 1280, 720)
@@ -264,7 +267,7 @@ bool HandleEvent(const SDL_Event &event, uint32_t windowId, int windowWidth, int
     if (event.type == SDL_EVENT_KEY_UP && event.key.windowID == windowId) return true;
     if (event.type == SDL_EVENT_MOUSE_WHEEL && event.wheel.windowID == windowId)
     {
-        state.scroll = std::clamp(state.scroll - int(event.wheel.y * 3), 0, MaxScroll());
+        state.scroll = std::clamp(state.scroll - event.wheel.integer_y * 3, 0, MaxScroll());
         return true;
     }
     if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN && event.button.windowID == windowId)
@@ -281,7 +284,7 @@ bool HandleEvent(const SDL_Event &event, uint32_t windowId, int windowWidth, int
     }
     if (event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN)
     {
-        switch (event.gbutton.button)
+        switch (hid::face_buttons::FromEvent(event.gbutton))
         {
         case SDL_GAMEPAD_BUTTON_DPAD_UP: state.scroll = std::max(0, state.scroll - 1); break;
         case SDL_GAMEPAD_BUTTON_DPAD_DOWN: state.scroll = std::min(MaxScroll(), state.scroll + 1); break;

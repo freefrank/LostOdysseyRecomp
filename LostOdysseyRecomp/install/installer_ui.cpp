@@ -5,6 +5,7 @@
 #include "file_browser.h"
 #include "import_game.h"
 #include "../hid/controller_prompts.h"
+#include "../hid/face_buttons.h"
 #if defined(__ANDROID__)
 #include "../hid/android_touch.h"
 #endif
@@ -295,6 +296,8 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
     {
         renderer = SDL_CreateRenderer(window, "software");
     }
+    // SDL2 sampled textures with nearest filtering by default; SDL3 smooths them.
+    if (renderer) SDL_SetDefaultTextureScaleMode(renderer, SDL_SCALEMODE_NEAREST);
     if (!renderer)
     {
         result.error = std::string("SDL_CreateRenderer failed: ") + SDL_GetError();
@@ -829,6 +832,9 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
         SDL_Event event;
         while (SDL_PollEvent(&event))
         {
+            hid::face_buttons::Normalize(event);
+            // SDL3 no longer maps pointer events into the logical presentation.
+            SDL_ConvertEventToRenderCoordinates(renderer, &event);
             switch (event.type)
             {
             case SDL_EVENT_QUIT:
@@ -929,7 +935,7 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
 
             case SDL_EVENT_MOUSE_WHEEL:
                 if (state.screen == ScreenState::ReviewDiscs && !state.isScanning.load())
-                    state.reviewScrollOffset = std::clamp(state.reviewScrollOffset - int(event.wheel.y),
+                    state.reviewScrollOffset = std::clamp(state.reviewScrollOffset - event.wheel.integer_y,
                         0, std::max(0, ReviewActionStart(state.scanResult) - REVIEW_VISIBLE_ITEMS));
                 break;
 
@@ -998,8 +1004,7 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
             case SDL_EVENT_MOUSE_BUTTON_DOWN:
                 if (event.button.button == SDL_BUTTON_LEFT)
                 {
-                    // SDL already converts button.x/y to logical coordinates after
-                    // SDL_SetRenderLogicalPresentation; do not convert a second time.
+                    // button.x/y are logical: the poll loop converts every event.
                     int mx = event.button.x;
                     int my = event.button.y;
                     int winW = LOGICAL_WIN_WIDTH;

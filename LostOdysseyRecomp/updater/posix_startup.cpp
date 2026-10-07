@@ -60,7 +60,7 @@ StartupResult PrepareAtStartup(const StartupOptions &options)
     {
         result.status = StartupStatus::Cancelled; result.detail = "user declined update"; return result;
     }
-    if (SDL_OpenURL(asset->url.c_str()) != 0)
+    if (!SDL_OpenURL(asset->url.c_str()))
     {
         result.status = StartupStatus::DownloadFailed;
         result.detail = std::string("could not open ") + asset->url + ": " + SDL_GetError();
