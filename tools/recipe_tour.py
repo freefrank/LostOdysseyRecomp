@@ -1,47 +1,43 @@
 #!/usr/bin/env python3
-"""Automated tours that record pipeline recipes (pipelines.bin) for the shipped corpus.
+"""Automated tours that record pipeline recipes for the shipped corpus.
+
+Notes: docs/notes/pipeline-first-use-stalls.md, section 语料巡游.
 
   python tools/recipe_tour.py list    <run_dir>
-  python tools/recipe_tour.py battles <run_dir> [--formations all|cover|3,10-20] [--hold 45] [--budget S] [--disc N]
+  python tools/recipe_tour.py battles <run_dir> [--formations all|3,10-20] [--part K/N] [--disc N]
   python tools/recipe_tour.py stages  <run_dir> --stages names.txt [--formation 3]
-  python tools/recipe_tour.py maps    <run_dir> --maps maps.json [--discs 1,2,3,4] [--budget S]
-  python tools/recipe_tour.py scenes  <run_dir>
+  python tools/recipe_tour.py maps    <run_dir> --maps maps.json [--discs 1,2,3,4]
 
-<run_dir> is a staged game folder (settings.ini, a save whose Continue loads a
-field save, profile/, shaders/ with the matching pack) plus launch.json:
+<run_dir> holds a staged game (settings.ini, a save that Continue loads into the
+field, profile/, shaders/ with the matching pack) and launch.json:
   {"exe": ..., "game": ".../disc1", "path": "win|z|posix", "prefix": ["umu-run"],
-   "env": {"K": "V" or "glob:/pattern"}, "interrupt": [...], "kill": [...]}
-("interrupt" asks the game to quit so it flushes the recipe file, "kill" cleans up;
-both default to signalling the launched process. On a shared host, "waiters" (a
-command listing lock users) and "mine" (a substring of our own) make a chunk
-give the lock back at once while another job waits.)
-Recipes go to <run_dir>/shader-cache. Each command resumes from its result file.
+   "env": {"K": "V" or "glob:/pattern"}, "interrupt": [cmd], "kill": [cmd],
+   "waiters": [cmd], "mine": "substring"}
+"interrupt" asks the game to quit so it writes its recipe file (default: SIGINT /
+taskkill to the launched process). On a shared host "waiters" lists the users of
+the game lock; a chunk exits at once while a line without "mine" waits. Recipes
+land in <run_dir>/shader-cache; every command resumes from its result file and
+stops starting new work after --budget seconds (at most 15 min).
 
-list     logs the formation table (LO_DEBUG_BATTLE_FILE "list") into formations.json.
-battles  starts each formation through the walking-encounter path, presses A on
-         every command prompt, requests the debug Victory after --hold seconds
-         and goes on from the field; defeat, a forced victory or a stall restarts
-         the game (a battle is capped at 150 s). A formation whose enemy models
-         were all fought already (here or in peer-*.jsonl from other hosts) is
-         skipped unless --no-skip; stages come from the stage and map tours.
-         "cover" picks formations until every enemy config/parameter pair and
-         every fixed battle stage has been seen once. Formations whose
-         resources are not on the mounted disc fail ("fatal"); --disc N
-         (diagnostic build) retries only those on disc N.
-stages   fights one weak formation on each listed battle stage (the random
-         encounter stages that no formation names).
-scenes   splits the run's recipe file into per-map / per-formation files from the
-         logs, for tagging with tools/pipeline_recipes.py merge FILE@battle:ID.
-maps     needs the diagnostic map jump / disc request / package probe build
-         (LO_DIAG_MAPJUMP/DISC/PROBE_COMMAND_FILE, not in main): per disc, probe
-         the maps, jump to each, turn the camera and dwell.
+list     dumps the formation table (LO_DEBUG_BATTLE_FILE "list") to formations.json.
+battles  starts formations through the walking-encounter path, presses A at every
+         prompt, asks for the debug Victory after --hold seconds and goes on from
+         the field; defeat, a forced victory or a stall restarts the game. Order:
+         a greedy cover of every enemy model and fixed stage, then every enemy
+         parameter variant, then the rest. A formation is skipped once all its
+         enemy models were fought (also on peer hosts: peer-*.jsonl copies of
+         their battles.jsonl) unless --no-skip.
+stages   fights --formation once on every listed battle stage (battle map
+         package), for the area stages no formation names.
+maps     needs a diagnostic build with the LO_DIAG_MAPJUMP/DISC/PROBE command
+         files (not in main): per disc, probe the maps, jump to each, turn the
+         camera and dwell. --disc N on battles uses the same disc request.
 """
 import argparse
 import json
 import os
 import re
 import signal
-import struct
 import subprocess
 import sys
 import time
@@ -51,6 +47,7 @@ PHASE = re.compile(r"battle debug: core 0x832ca0e8 phase (\d+) -> (\d+)")
 MAP = re.compile(r"current map available=true id=(\d+) name=.* package=(\S+)")
 FORMATION = re.compile(r"battle tour: formation (\d+)(.*?)(?: slots:(.*))?$")
 A_BUTTON = "1000"
+ENDED = ("victory", "forced", "defeat", "ended")
 
 
 class Game:
@@ -58,8 +55,7 @@ class Game:
         self.run = run
         self.config = json.loads((run / "launch.json").read_text())
         self.proc = None
-        self.offset = 0
-        self.index = len(list((run / "logs").glob("runtime-*.log"))) if (run / "logs").exists() else 0
+        self.index = len(list(run.glob("logs/runtime-*.log")))
         self.serial = int(time.time() * 1000) % 1_000_000_000
 
     def path(self, p):
@@ -67,14 +63,15 @@ class Game:
         s = str(p)
         return s.replace("/", "\\") if style == "win" else "Z:" + s.replace("/", "\\") if style == "z" else s
 
-    def start(self, extra=None):
+    def start(self):
         self.stop()
         self.index += 1
-        (self.run / "logs").mkdir(exist_ok=True)
-        for name in ("input.txt", "battle.txt", "mapjump.txt", "disc.txt", "probe.txt"):
-            (self.run / name).unlink(missing_ok=True)
-        self.log = self.run / "logs" / f"runtime-{self.index:02d}.log"
         r, p = self.run, self.path
+        (r / "logs").mkdir(exist_ok=True)
+        (r / "shader-cache").mkdir(exist_ok=True)
+        for name in ("input.txt", "battle.txt", "mapjump.txt", "disc.txt", "probe.txt"):
+            (r / name).unlink(missing_ok=True)
+        self.log = r / "logs" / f"runtime-{self.index:02d}.log"
         env = {k: v for k, v in os.environ.items() if not k.startswith("LO_")}
         env.update(LO_AUDIO_MUTE="1", LO_BACKGROUND="1", LO_SHADER_PACK_DOWNLOAD="0", LO_TRACE_MAP_INFO="1",
                    LO_PIPELINE_MISS_LOG="1", LO_LOG_FILE=p(self.log), LO_SHADER_CACHE_DIR=p(r / "shader-cache"),
@@ -82,24 +79,23 @@ class Game:
                    LO_TEST_INPUT_FILE=p(r / "input.txt"), LO_TEST_INPUT_TICKS="1",
                    LO_DEBUG_BATTLE_FILE=p(r / "battle.txt"), LO_DIAG_MAPJUMP_COMMAND_FILE=p(r / "mapjump.txt"),
                    LO_DIAG_DISC_COMMAND_FILE=p(r / "disc.txt"), LO_DIAG_PROBE_COMMAND_FILE=p(r / "probe.txt"))
-        for k, v in {**self.config.get("env", {}), **(extra or {})}.items():
+        for k, v in self.config.get("env", {}).items():
             if v.startswith("glob:"):
                 hits = sorted(Path(v[5:]).parent.glob(Path(v[5:]).name))
                 v = str(hits[0]) if hits else ""
             env[k] = v
-        (r / "shader-cache").mkdir(exist_ok=True)
         cmd = self.config.get("prefix", []) + [self.config["exe"], "--game", p(self.config["game"]), "--quiet-kernel"]
         out = (r / "logs" / f"stdout-{self.index:02d}.log").open("wb")
-        # A background shell starts us with SIGINT ignored; give the game its default so it can quit cleanly.
+        # A background shell starts us with SIGINT ignored; the game needs the default to quit cleanly.
         reset = None if os.name == "nt" else (lambda: signal.signal(signal.SIGINT, signal.SIG_DFL))
         self.proc = subprocess.Popen(cmd, cwd=r, env=env, stdin=subprocess.DEVNULL, stdout=out, stderr=out,
                                      preexec_fn=reset)
         self.offset = 0
 
-    def stop(self, flush=True):
-        """Close request first (the exit path flushes the recipe file), then kill."""
-        if self.proc and self.proc.poll() is None and flush:
-            if self.config.get("interrupt"):  # e.g. a launcher (umu-run) between us and the game
+    def stop(self):
+        """Ask the game to quit (its exit path writes the recipe file), then kill what is left."""
+        if self.proc and self.proc.poll() is None:
+            if self.config.get("interrupt"):
                 subprocess.run(self.config["interrupt"], capture_output=True)
             elif os.name == "nt":
                 subprocess.run(["taskkill", "/PID", str(self.proc.pid)], capture_output=True)
@@ -109,9 +105,9 @@ class Game:
                 if self.proc.poll() is not None:
                     break
                 time.sleep(0.5)
-        if self.proc and self.proc.poll() is None:
-            self.proc.kill()
-        if self.config.get("kill"):
+            if self.proc.poll() is None:
+                self.proc.kill()
+        if self.proc and self.config.get("kill"):
             subprocess.run(self.config["kill"], capture_output=True)
             time.sleep(2)
         self.proc = None
@@ -144,32 +140,42 @@ class Game:
             time.sleep(0.25)
         return "timeout"
 
-    def boot(self):
+    def boot(self, disc=1):
         self.start()
         if self.wait_for(lambda l: "ok" if MAP.search(l) else None, 240) != "ok":
             return False
         time.sleep(3)
-        return True
+        if disc == 1:
+            return True
+        self.command("disc.txt", str(disc))  # diagnostic build: the original disc swap request
+        ok = self.wait_for(lambda l: "ok" if f"diag disc completed disc={disc}" in l else None, 90) == "ok"
+        time.sleep(3)
+        return ok
 
 
-def others_waiting(config):
-    """Shared hosts: launch.json "waiters" lists lock users, lines without "mine" belong to other jobs."""
+def lock_wanted(config):
+    """True when another job waits for a shared host's game lock (launch.json "waiters"/"mine")."""
     if not config.get("waiters"):
         return False
     lines = subprocess.run(config["waiters"], capture_output=True, text=True).stdout.splitlines()
     return any(config.get("mine", "\0") not in line for line in lines)
 
 
-def yield_lock():
-    print("other jobs wait for the game lock; giving it back", flush=True)
-    sys.exit(0)
+def start_chunk(run, todo, what):
+    print(f"{len(todo)} {what} to visit", flush=True)
+    if not todo:
+        sys.exit(3)
+    game = Game(run)
+    if lock_wanted(game.config):
+        print("another job waits for the game lock; giving it back", flush=True)
+        sys.exit(0)
+    return game, time.time()
 
 
-def recipes(run):
-    p = run / "shader-cache" / "pipelines.bin"
-    if not p.exists():
-        p = run / "shader-cache" / "pipelines_vk12_1.bin"
-    return struct.unpack_from("<I", p.read_bytes(), 24)[0] if p.exists() and p.stat().st_size >= 48 else 0
+def append(path, result):
+    with path.open("a") as f:
+        f.write(json.dumps(result) + "\n")
+    print(json.dumps(result), flush=True)
 
 
 def parse_formations(lines):
@@ -181,16 +187,14 @@ def parse_formations(lines):
         fields = dict(re.findall(r"\+(\d+)[=:](\S+)", m.group(2)))
         words = (m.group(3) or "").split()
         count = int(fields.get("152", "0"), 16)
-        # 32-byte slots: slot id, enemy config (model), enemy parameters.
+        # 32-byte slots: slot id, enemy config (model), enemy parameter id.
         slots = [[int(words[k * 8 + 1], 16), int(words[k * 8 + 2], 16)] for k in range(min(count, len(words) // 8))]
-        table[int(m.group(1))] = dict(stage=fields.get("0", ""), ai=fields.get("60", ""),
-                                      start=fields.get("72", ""), enemies=count, slots=slots)
+        table[int(m.group(1))] = dict(stage=fields.get("0", ""), ai=fields.get("60", ""), slots=slots)
     return table
 
 
 def priority(table):
-    """Formations in visiting order: a greedy cover of every enemy config (model)
-    and fixed stage, then of every config/parameter pair, then the rest."""
+    """Greedy cover of every enemy model and fixed stage, then of every model/parameter pair, then the rest."""
     def models(f):
         return {("enemy", c) for c, _ in f["slots"]} | {("stage", f["stage"])}
 
@@ -206,30 +210,6 @@ def priority(table):
             left.discard(best)
             seen |= features(table[best])
     return order + sorted(left)
-
-
-def cover(table):
-    """The priority order up to the point where every config/parameter pair and stage was seen."""
-    order = priority(table)
-    feats = lambda i: {("enemy", c, p) for c, p in table[i]["slots"]} | {("stage", table[i]["stage"])}
-    wanted, seen = set().union(*(feats(i) for i in table)), set()
-    for n, i in enumerate(order):
-        seen |= feats(i)
-        if seen == wanted:
-            return order[:n + 1]
-    return order
-
-
-def select(spec, table):
-    if spec == "all":
-        return priority(table)
-    if spec == "cover":
-        return cover(table)
-    ids = []
-    for part in spec.split(","):
-        a, _, b = part.partition("-")
-        ids += range(int(a), int(b or a) + 1)
-    return ids
 
 
 def fight(game, fid, hold, stage=""):
@@ -259,7 +239,7 @@ def fight(game, fid, hold, stage=""):
                 t["moved"] = time.time()
                 if phase == 2 and not t["command"]:
                     t["command"] = time.time()
-                if phase in (11, 12, 13) and not t["end"]:  # victory, defeat, scripted end
+                if phase in (11, 12, 13) and not t["end"]:  # victory, defeat or escape, scripted end
                     t["end"] = time.time()
                     r["status"] = {12: "defeat", 13: "ended"}.get(phase, "forced" if t["victory_asked"] else "victory")
 
@@ -267,7 +247,7 @@ def fight(game, fid, hold, stage=""):
     while time.time() - began < 45 and not t["first"] and not fatal and game.proc.poll() is None:
         scan()
         if not t["drawn"] and not nudged and time.time() - began > 15:
-            game.command("input.txt", "0 0 20000 60")  # walk a step if the update needs movement
+            game.command("input.txt", "0 0 20000 60")  # walk a step in case the update needs movement
             nudged = True
         time.sleep(0.5)
     if not t["first"]:
@@ -276,7 +256,7 @@ def fight(game, fid, hold, stage=""):
         scan()
         if t["field"] or (r["status"] in ("defeat", "ended") and time.time() - t["end"] > 15):
             break
-        # Scripted battles can wait on input the harness never gives.
+        # Scripted battles can wait for input the harness never gives.
         stalled = time.time() - t["moved"] > 45 and not t["end"] or time.time() - began > 150
         if fatal or game.proc.poll() is not None or stalled:
             r["status"] = "fatal" if fatal else "dead" if game.proc.poll() is not None else "stall"
@@ -285,30 +265,68 @@ def fight(game, fid, hold, stage=""):
                 not t["victory_asked"] or time.time() - t["victory_asked"] > 10):
             game.command("battle.txt", "victory")
             t["victory_asked"] = time.time()
-        # A answers command menus, results and messages; before the first command
-        # only press it when the intro waits on something (no phase change for 20 s).
+        # A answers commands, results and messages; before the first command only
+        # when the intro waits on something (no phase change for 20 s).
         if t["command"] or t["end"] or time.time() - t["moved"] > 20:
             game.command("input.txt", f"{A_BUTTON} 0 0 6")
         time.sleep(2)
-    r["intro_s"] = round(t["command"] - t["first"], 1) if t["command"] and t["first"] else None
     r["wall_s"] = round(time.time() - began, 1)
     r["phases"] = r["phases"][:60]
-    # Back in the field after a natural victory or an escape-type loss: go on.
+    # Back in the field after a natural victory or an escape: carry on in this process.
     return r, not (t["field"] and r["status"] in ("victory", "defeat", "ended"))
 
 
+def fought_models(run):
+    models = set()
+    for path in [run / "battles.jsonl", *sorted(run.glob("peer-*.jsonl"))]:
+        for line in path.read_text().splitlines() if path.exists() else []:
+            r = json.loads(line)
+            if r["status"] in ENDED or 2 in r["phases"]:
+                models |= {c for c, _ in r["slots"]}
+    return models
+
+
+def battles(run, args):
+    table = {int(k): v for k, v in json.loads((run / "formations.json").read_text()).items()}
+    out = run / "battles.jsonl"
+    tried = {}
+    for line in out.read_text().splitlines() if out.exists() else []:
+        r = json.loads(line)
+        tried.setdefault(r["formation"], []).append(r)
+    # Done unless its resources were missing on every disc tried so far.
+    done = {f for f, rs in tried.items() if any(r["status"] != "fatal" or r.get("disc", 1) == args.disc for r in rs)}
+    order = priority(table) if args.formations == "all" else [
+        i for part in args.formations.split(",") for i in range(int(part.split("-")[0]), int(part.split("-")[-1]) + 1)]
+    k, n = (int(x) for x in args.part.split("/"))
+    todo = [i for j, i in enumerate(order) if j % n == k and i not in done and (args.disc == 1 or i in tried)]
+
+    def seen(fid):
+        return not args.no_skip and {c for c, _ in table[fid]["slots"]} <= fought_models(run)
+    todo = [i for i in todo if not seen(i)]
+    game, started = start_chunk(run, todo, f"formations (disc {args.disc})")
+    booted = False
+    try:
+        for fid in todo:
+            if time.time() - started > args.budget:
+                break
+            if seen(fid):  # fought on a peer host meanwhile
+                continue
+            if not booted and not game.boot(args.disc):
+                sys.exit("boot failed")
+            r, restart = fight(game, fid, args.hold)
+            r.update(disc=args.disc, stage=table[fid]["stage"], slots=table[fid]["slots"])
+            append(out, r)
+            booted = not restart
+    finally:
+        game.stop()
+
+
 def stages(run, args):
-    """One battle of --formation on every listed stage (battle map package)."""
-    names = Path(args.stages).read_text().split()
     out = run / "stages.jsonl"
     done = {json.loads(l)["stage"] for l in out.read_text().splitlines()} if out.exists() else set()
-    todo = [n for n in names if n not in done]
-    print(f"{len(todo)} stages to visit", flush=True)
-    if not todo:
-        sys.exit(3)
-    game, started, booted = Game(run), time.time(), False
-    if others_waiting(game.config):
-        yield_lock()
+    todo = [n for n in Path(args.stages).read_text().split() if n not in done]
+    game, started = start_chunk(run, todo, "stages")
+    booted = False
     try:
         for name in todo:
             if time.time() - started > args.budget:
@@ -317,80 +335,20 @@ def stages(run, args):
                 sys.exit("boot failed")
             r, restart = fight(game, args.formation, args.hold, name)
             r["stage"] = name
-            with out.open("a") as f:
-                f.write(json.dumps(r) + "\n")
-            print(json.dumps(r), flush=True)
+            append(out, r)
             booted = not restart
     finally:
         game.stop()
-    print(f"recipes in cache: {recipes(run)}", flush=True)
-
-
-def fought_models(run):
-    """Enemy configs (models) of every battle that got past its intro, here or on a peer host
-    (peer-*.jsonl: copies of the other hosts' battles.jsonl)."""
-    models = set()
-    for path in [run / "battles.jsonl", *sorted(run.glob("peer-*.jsonl"))]:
-        if path.exists():
-            for line in path.read_text().splitlines():
-                r = json.loads(line)
-                if r["status"] in ("victory", "forced", "defeat", "ended") or 2 in r["phases"]:
-                    models |= {c for c, _ in r["slots"]}
-    return models
-
-
-def battles(run, args):
-    table = {int(k): v for k, v in json.loads((run / "formations.json").read_text()).items()}
-    out = run / "battles.jsonl"
-    results = [json.loads(l) for l in out.read_text().splitlines()] if out.exists() else []
-
-    def seen(fid):  # every enemy model of this formation was already fought
-        return not args.no_skip and {c for c, _ in table[fid]["slots"]} <= fought_models(run)
-    # A formation is done unless its resources were missing on every disc tried so far.
-    tried = {}
-    for r in results:
-        tried.setdefault(r["formation"], []).append(r)
-    done = {f for f, rs in tried.items() if any(r["status"] != "fatal" for r in rs) or
-            any(r.get("disc", 1) == args.disc for r in rs)}
-    k, n = (int(x) for x in args.part.split("/"))
-    todo = [i for j, i in enumerate(select(args.formations, table)) if j % n == k and i not in done]
-    if args.disc != 1:
-        todo = [i for i in todo if i in tried]  # other discs only retry missing resources
-    skipped = [i for i in todo if seen(i)]
-    todo = [i for i in todo if i not in skipped]
-    print(f"disc {args.disc}: {len(todo)} formations to visit, {len(skipped)} skipped "
-          f"(all enemy models already fought)", flush=True)
-    if not todo:
-        sys.exit(3)
-    game, started, booted = Game(run), time.time(), False
-    if others_waiting(game.config):
-        yield_lock()
-    try:
-        for fid in todo:
-            if time.time() - started > args.budget:
-                break
-            if seen(fid):  # fought on a peer host meanwhile
-                continue
-            if not booted and not (game.boot() and request_disc(game, args.disc)):
-                sys.exit("boot failed")
-            r, restart = fight(game, fid, args.hold)
-            r.update(disc=args.disc, stage=table[fid]["stage"], slots=table[fid]["slots"])
-            with out.open("a") as f:
-                f.write(json.dumps(r) + "\n")
-            print(json.dumps(r), flush=True)
-            booted = not restart
-    finally:
-        game.stop()
-    print(f"recipes in cache: {recipes(run)}", flush=True)
 
 
 def list_formations(run):
     game = Game(run)
+    lines, total = [], None
     try:
         if not game.boot():
             sys.exit("boot failed")
         game.command("battle.txt", "list")
-        lines, total, deadline = [], None, time.time() + 30
+        deadline = time.time() + 30
         while time.time() < deadline and (total is None or len(parse_formations(lines)) < total):
             for line in game.lines():
                 if "battle tour: formations=" in line:
@@ -402,18 +360,7 @@ def list_formations(run):
         game.stop()
     table = parse_formations(lines)
     (run / "formations.json").write_text(json.dumps(table, indent=0))
-    print(f"{len(table)} of {total} formations, cover {len(cover(table))}")
-
-
-def request_disc(game, disc):
-    """Diagnostic build only: the original disc swap request, then wait for it."""
-    if disc == 1:
-        return True
-    time.sleep(3)
-    game.command("disc.txt", str(disc))
-    ok = game.wait_for(lambda l: "ok" if f"diag disc completed disc={disc}" in l else None, 90) == "ok"
-    time.sleep(3)
-    return ok
+    print(f"{len(table)} of {total} formations")
 
 
 def maps(run, args):
@@ -424,36 +371,29 @@ def maps(run, args):
     discs = [int(d) for d in args.discs.split(",")]
     pending = {m for m in names if m not in done and not m.startswith(("xxx_", "z0g_"))}
     probed = [run / f"found-{d}.json" for d in discs]
-    if not pending or all(f.exists() for f in probed) and not pending & set().union(
-            *(json.loads(f.read_text()) for f in probed)):
-        print(f"no reachable maps left ({len(pending)} not on any disc)", flush=True)
-        sys.exit(3)
-    game, started = Game(run), time.time()
-    if others_waiting(game.config):
-        yield_lock()
+    if all(f.exists() for f in probed):  # maps on no disc are never reachable
+        pending &= set().union(*(json.loads(f.read_text()) for f in probed))
+    game, started = start_chunk(run, sorted(pending), "maps")
     try:
         for disc in discs:
-            pending = [m for m in names if m not in done and not m.startswith(("xxx_", "z0g_"))]
             found_file = run / f"found-{disc}.json"
-            if not pending or time.time() - started > args.budget:
+            if time.time() - started > args.budget:
                 break
-            if found_file.exists() and not set(json.loads(found_file.read_text())) & set(pending):
+            if found_file.exists() and not set(json.loads(found_file.read_text())) & pending:
                 continue
-            if not game.boot():
-                continue
-            if not request_disc(game, disc):
+            if not game.boot(disc):
                 continue
             game.command("probe.txt", " ".join(sorted(ids)))
             found = set()
 
-            def probed(line):
+            def probe(line):
                 if "diag probe package=" in line and line.rstrip().endswith("found=1"):
                     found.add(line.split("package=")[1].split()[0])
                 return "ok" if "diag probe done" in line else None
-            if game.wait_for(probed, 90) != "ok":
+            if game.wait_for(probe, 90) != "ok":
                 continue
             found_file.write_text(json.dumps(sorted(found)))
-            for name in [m for m in sorted(found) if m in pending]:
+            for name in sorted(found & pending):
                 if time.time() - started > args.budget or game.proc.poll() is not None:
                     break
                 began = time.time()
@@ -474,92 +414,34 @@ def maps(run, args):
                     game.command("input.txt", "0 0 0 240 0 0 -32000 0")
                     time.sleep(3)
                 done[name] = dict(result=result, disc=disc, s=round(time.time() - began))
+                pending.discard(name)
                 out.write_text(json.dumps(done, indent=0))
                 print(f"{name}: {result}", flush=True)
                 if result != "ok":
-                    break  # reboot this disc on the next chunk
+                    break  # the next chunk reboots this disc
     finally:
         game.stop()
-    print(f"recipes in cache: {recipes(run)}", flush=True)
-
-
-MISS = re.compile(r"renderer: pipeline miss frame=\d+ map=(\S+) battle=\d+ vs=([0-9a-f]+) ps=([0-9a-f]+)")
-
-
-def scenes(run):
-    """Split the run's recipe file by scene for builds without scene tags: each key goes to
-    scenes/<kind>-<id>.bin for every map or tour battle whose log shows a draw-time creation
-    of its VS/PS pair (LO_PIPELINE_MISS_LOG lines); keys never seen there go to untagged.bin.
-    Merge them with tools/pipeline_recipes.py merge OUT untagged.bin battle-3.bin@battle:3 ..."""
-    pairs = {}
-    for log in sorted(run.glob("logs/runtime-*.log")) + sorted(run.glob("runtime-*.log")):
-        battle = None
-        for line in log.read_text(encoding="utf-8", errors="replace").splitlines():
-            m = re.search(r"battle tour: formation (\d+) drawn", line)
-            if m:
-                battle = int(m.group(1))
-            elif MAP.search(line):
-                battle = None
-            m = MISS.search(line)
-            if m:
-                scene = f"battle-{battle}" if battle is not None else f"map-{m.group(1)}" if m.group(1) != "-" else None
-                if scene:
-                    pairs.setdefault(scene, set()).add((int(m.group(2), 16), int(m.group(3), 16)))
-    path = run / "shader-cache" / "pipelines.bin"
-    if not path.exists():
-        path = run / "shader-cache" / "pipelines_vk12_1.bin"
-    data = path.read_bytes()
-    count, record = struct.unpack_from("<I", data, 24)[0], struct.unpack_from("<I", data, 20)[0]
-    records = [data[48 + i * record: 48 + (i + 1) * record] for i in range(count)]
-    out = run / "scenes"
-    out.mkdir(exist_ok=True)
-    for old in out.glob("*.bin"):
-        old.unlink()
-
-    def write(name, chosen):
-        body = b"".join(chosen)
-        header = bytearray(data[:48])
-        struct.pack_into("<I", header, 24, len(chosen))
-        struct.pack_into("<Q", header, 32, fnv(body))
-        struct.pack_into("<Q", header, 40, fnv(bytes(header[:40])))
-        (out / f"{name}.bin").write_bytes(bytes(header) + body)
-
-    tagged = set()
-    for scene, wanted in sorted(pairs.items()):
-        chosen = [r for r in records if struct.unpack_from("<QQ", r) in wanted]
-        if chosen:
-            write(scene, chosen)
-            tagged.update(chosen)
-    write("untagged", [r for r in records if r not in tagged])
-    print(f"{path.name}: {count} recipes, {len(tagged)} in {len(pairs)} scenes, {count - len(tagged)} untagged")
-
-
-def fnv(data):
-    h = 0xCBF29CE484222325
-    for b in data:
-        h = ((h ^ b) * 0x100000001B3) & 0xFFFFFFFFFFFFFFFF
-    return h
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("command", choices=["list", "battles", "stages", "maps", "scenes"])
+    ap.add_argument("command", choices=["list", "battles", "stages", "maps"])
     ap.add_argument("run", type=Path)
-    ap.add_argument("--formations", default="cover", help="all (priority order), cover or a list like 3,10-20")
-    ap.add_argument("--part", default="0/1", help="K/N: every Nth formation from the K-th, to split a tour between hosts")
-    ap.add_argument("--no-skip", action="store_true", help="also fight formations whose enemy models were all fought")
-    ap.add_argument("--hold", type=float, default=45, help="seconds after the first command before Victory")
-    ap.add_argument("--budget", type=float, default=900, help="stop starting new work after this many seconds (max 900)")
-    ap.add_argument("--maps", help="map list JSON (maps: name -> {id}, visited: [names])")
+    ap.add_argument("--formations", default="all", help="battles: all (coverage order) or a list like 3,10-20")
+    ap.add_argument("--part", default="0/1", help="battles: K/N takes every Nth formation from the K-th (split hosts)")
+    ap.add_argument("--no-skip", action="store_true", help="battles: also fight formations whose models were fought")
+    ap.add_argument("--disc", type=int, default=1, help="battles: retry formations missing on disc 1 on this disc")
+    ap.add_argument("--hold", type=float, default=45, help="seconds after the first command before the Victory")
+    ap.add_argument("--budget", type=float, default=900, help="stop starting new work after this many seconds")
     ap.add_argument("--stages", help="stages: file with battle map package names")
-    ap.add_argument("--formation", type=int, default=3, help="stages: formation to fight (default 3, two weak enemies)")
+    ap.add_argument("--formation", type=int, default=3, help="stages: formation to fight (3: two weak enemies)")
+    ap.add_argument("--maps", help="maps: map list JSON (maps: name -> {id}, visited: [names])")
     ap.add_argument("--discs", default="1,2,3,4", help="maps: discs to visit")
-    ap.add_argument("--disc", type=int, default=1, help="battles: request this disc after boot (diagnostic build)")
     args = ap.parse_args()
+    args.budget = min(args.budget, 900)
     run = args.run.resolve()
-    args.budget = min(args.budget, 900)  # shared hosts: keep chunks short
-    {"list": lambda: list_formations(run), "battles": lambda: battles(run, args), "stages": lambda: stages(run, args),
-     "maps": lambda: maps(run, args), "scenes": lambda: scenes(run)}[args.command]()
+    {"list": lambda: list_formations(run), "battles": lambda: battles(run, args),
+     "stages": lambda: stages(run, args), "maps": lambda: maps(run, args)}[args.command]()
 
 
 if __name__ == "__main__":
