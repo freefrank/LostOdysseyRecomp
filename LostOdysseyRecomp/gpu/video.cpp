@@ -67,6 +67,7 @@
 #include "window_pixels.h"
 #include "window_mode.h"
 #include "display_choice.h"
+#include <os/hang_watch.h>
 #endif
 #include <os/logger.h>
 
@@ -171,7 +172,7 @@ static bool RetryWithSystemVulkanDriver(const char* stage)
 #endif
 }
 
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || (defined(_WIN32) && defined(LO_GPU_PLUME) && !defined(LO_VIDEO_SUBMISSION_UNIT))
 // Every GPU the instance reports, before device creation can fail or crash:
 // player reports name a phone, not the driver that actually loaded.
 static void LogVulkanPhysicalDevices(VkInstance instance)
@@ -188,20 +189,25 @@ static void LogVulkanPhysicalDevices(VkInstance instance)
         VkPhysicalDeviceProperties properties{};
         vkGetPhysicalDeviceProperties(device, &properties);
         const uint32_t driver = properties.driverVersion;
-        LOG_INFO("vulkan gpu: name='{}' vendor={:#06x} device={:#010x} api={}.{}.{} driver_raw={:#x} driver_decoded={}.{}.{}",
-            properties.deviceName, properties.vendorID, properties.deviceID,
+        LOG_INFO("vulkan gpu: name='{}' type={} vendor={:#06x} device={:#010x} api={}.{}.{} driver_raw={:#x} driver_decoded={}.{}.{}",
+            properties.deviceName, uint32_t(properties.deviceType), properties.vendorID, properties.deviceID,
             VK_API_VERSION_MAJOR(properties.apiVersion), VK_API_VERSION_MINOR(properties.apiVersion),
             VK_API_VERSION_PATCH(properties.apiVersion), driver, driver >> 22, (driver >> 12) & 0x3ff, driver & 0xfff);
         // driverName/driverInfo tell the Qualcomm proprietary driver from
         // Turnip and carry the Mesa or vendor build string.
         if (properties.apiVersion < VK_API_VERSION_1_2 || !vkGetPhysicalDeviceProperties2) continue;
-        VkPhysicalDeviceDriverProperties driverProperties{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES};
+        VkPhysicalDeviceIDProperties idProperties{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES};
+        VkPhysicalDeviceDriverProperties driverProperties{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES, &idProperties};
         VkPhysicalDeviceProperties2 properties2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2, &driverProperties};
         vkGetPhysicalDeviceProperties2(device, &properties2);
-        LOG_INFO("vulkan gpu driver: id={} name='{}' info='{}' conformance={}.{}.{}.{}",
+        uint32_t luid[2]{};
+        std::memcpy(luid, idProperties.deviceLUID, sizeof(luid));
+        LOG_INFO("vulkan gpu driver: id={} name='{}' info='{}' conformance={}.{}.{}.{} luid={} node_mask={:#x}",
             uint32_t(driverProperties.driverID), driverProperties.driverName, driverProperties.driverInfo,
             driverProperties.conformanceVersion.major, driverProperties.conformanceVersion.minor,
-            driverProperties.conformanceVersion.subminor, driverProperties.conformanceVersion.patch);
+            driverProperties.conformanceVersion.subminor, driverProperties.conformanceVersion.patch,
+            idProperties.deviceLUIDValid ? fmt::format("{:08x}:{:08x}", luid[1], luid[0]) : std::string("none"),
+            idProperties.deviceNodeMask);
     }
 }
 #endif
@@ -1736,6 +1742,94 @@ namespace gpu::video
         std::lock_guard lock(g_gpuNamesMutex);
         return g_activeGpuDeviceName;
     }
+    // Window thread liveness for the startup hang watch (#282), in ms of steady time.
+    static std::atomic<int64_t> g_windowPumpBeat{0};
+    static int64_t SteadyMilliseconds() {
+        return std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count();
+    }
+#ifdef _WIN32
+    // The game window as Win32 sees it; safe from any thread (no messages).
+    static std::string DescribeNativeWindow() {
+        const HWND window = g_nativeWindow;
+        if (!window) return "hwnd=none";
+        RECT client{}, frame{};
+        GetClientRect(window, &client);
+        GetWindowRect(window, &frame);
+        MONITORINFOEXW monitor{};
+        monitor.cbSize = sizeof(monitor);
+        const bool onMonitor = GetMonitorInfoW(MonitorFromWindow(window, MONITOR_DEFAULTTONULL), &monitor) != FALSE;
+        return fmt::format("hwnd={:#x} client={}x{} frame=({}, {})-({}, {}) monitor={} primary={} visible={} iconic={} foreground={} dpi={}",
+            uintptr_t(window), client.right, client.bottom, frame.left, frame.top, frame.right, frame.bottom,
+            onMonitor ? fmt::format("({}, {})-({}, {})", monitor.rcMonitor.left, monitor.rcMonitor.top,
+                monitor.rcMonitor.right, monitor.rcMonitor.bottom) : std::string("none"),
+            onMonitor && (monitor.dwFlags & MONITORINFOF_PRIMARY), IsWindowVisible(window) != FALSE,
+            IsIconic(window) != FALSE, GetForegroundWindow() == window, GetDpiForWindow(window));
+    }
+    // LO_TRACE_STARTUP: each DXGI adapter with its identity and whether D3D12
+    // can use it (a support check only; no device is kept), and the adapter
+    // plume's automatic choice would take.
+    static void LogDxgiAdapters(os::hang_watch::Watch& watch) {
+        static constexpr const char* kSupportSteps[] = {
+            "D3D12 support check, adapter #0", "D3D12 support check, adapter #1", "D3D12 support check, adapter #2",
+            "D3D12 support check, adapter #3", "D3D12 support check, adapter #4", "D3D12 support check, adapter #5",
+            "D3D12 support check, adapter #6", "D3D12 support check, adapter #7"};
+        IDXGIFactory1* factory = nullptr;
+        if (FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&factory))) || !factory) {
+            LOG_WARNING("dxgi adapters: factory creation failed");
+            return;
+        }
+        int automatic = -1;
+        SIZE_T automaticMemory = 0;
+        for (UINT i = 0; i < 8; ++i) {
+            IDXGIAdapter1* adapter = nullptr;
+            if (factory->EnumAdapters1(i, &adapter) == DXGI_ERROR_NOT_FOUND || !adapter) break;
+            DXGI_ADAPTER_DESC1 desc{};
+            adapter->GetDesc1(&desc);
+            UINT outputs = 0;
+            for (IDXGIOutput* output = nullptr; adapter->EnumOutputs(outputs, &output) != DXGI_ERROR_NOT_FOUND; ++outputs)
+                if (output) output->Release();
+            LARGE_INTEGER umd{};
+            const bool umdKnown = SUCCEEDED(adapter->CheckInterfaceSupport(__uuidof(IDXGIDevice), &umd));
+            const bool skipped = (desc.Flags & (DXGI_ADAPTER_FLAG_REMOTE | DXGI_ADAPTER_FLAG_SOFTWARE)) != 0;
+            std::string name;
+            {
+                const int wideLength = int(wcsnlen(desc.Description, std::size(desc.Description)));
+                const int size = WideCharToMultiByte(CP_UTF8, 0, desc.Description, wideLength, nullptr, 0, nullptr, nullptr);
+                name.resize(size_t(std::max(size, 0)));
+                if (size > 0) WideCharToMultiByte(CP_UTF8, 0, desc.Description, wideLength, name.data(), size, nullptr, nullptr);
+            }
+            LOG_INFO("dxgi adapter #{}: '{}' vendor={:#06x} device={:#06x} subsys={:#010x} rev={:#x} luid={:08x}:{:08x} "
+                     "flags={:#x}{}{} dedicated_video={} dedicated_system={} shared_system={} outputs={} umd={}",
+                i, name, desc.VendorId, desc.DeviceId, desc.SubSysId, desc.Revision,
+                uint32_t(desc.AdapterLuid.HighPart), uint32_t(desc.AdapterLuid.LowPart), desc.Flags,
+                (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) ? " software" : "", (desc.Flags & DXGI_ADAPTER_FLAG_REMOTE) ? " remote" : "",
+                uint64_t(desc.DedicatedVideoMemory), uint64_t(desc.DedicatedSystemMemory), uint64_t(desc.SharedSystemMemory),
+                outputs, umdKnown ? fmt::format("{}.{}.{}.{}", HIWORD(umd.HighPart), LOWORD(umd.HighPart),
+                    HIWORD(umd.LowPart), LOWORD(umd.LowPart)) : std::string("unknown"));
+            if (!skipped) {
+                // Logged before the check so a hang inside it names the adapter.
+                watch.Step(kSupportSteps[i]);
+                const HRESULT support = D3D12CreateDevice(adapter, D3D_FEATURE_LEVEL_11_0, __uuidof(ID3D12Device), nullptr);
+                watch.Step("DXGI adapter list");
+                LOG_INFO("dxgi adapter #{}: D3D12 support check result={:#x}", i, uint32_t(support));
+                if (SUCCEEDED(support) && (automatic < 0 || desc.DedicatedVideoMemory > automaticMemory)) {
+                    automatic = int(i);
+                    automaticMemory = desc.DedicatedVideoMemory;
+                }
+            }
+            adapter->Release();
+        }
+        factory->Release();
+        LOG_INFO("dxgi adapters: automatic selection takes #{} (the first usable adapter with the most dedicated video memory)",
+            automatic);
+    }
+    static std::string WindowWatchContext() {
+        const auto beat = g_windowPumpBeat.load(std::memory_order_relaxed);
+        return fmt::format("window thread last pumped {} ms ago; {}",
+            beat ? SteadyMilliseconds() - beat : int64_t(-1), DescribeNativeWindow());
+    }
+#endif
     static std::vector<display_choice::Display> g_displays;
     std::vector<display_choice::Display> Displays() {
         std::lock_guard lock(g_gpuNamesMutex);
@@ -2126,6 +2220,10 @@ namespace gpu::video
 #endif
 
 #if defined(LO_GPU_PLUME)
+#ifdef _WIN32
+        if (os::hang_watch::StartupTrace())
+            LOG_INFO("video: modules from outside Windows and the game folder at startup: {}", os::hang_watch::ForeignModules());
+#endif
         diagnostics::InstallPlumeLog();
         const auto selection = backend::Select(*requested, [](backend::Backend candidate) -> std::string {
             g_vulkan.store(candidate == backend::Backend::Vulkan);
@@ -2133,6 +2231,13 @@ namespace gpu::video
             g_reapplyWindow.store(true);
             g_initializing = true;
             LOG_INFO("video: trying {}", backend::Name(candidate));
+            // Any startup step that runs past 10 s logs its stack (#282: the
+            // driver's shader cache walk inside D3D12 device creation).
+#ifdef _WIN32
+            os::hang_watch::Watch startupWatch("DLSS controller creation", WindowWatchContext);
+#else
+            os::hang_watch::Watch startupWatch("DLSS controller creation", nullptr);
+#endif
 #ifdef _WIN32
             if (g_vulkan) {
                 g_dlssController = std::make_unique<dlss::Controller>(DlssApplicationDataPath(), DlssRuntimePath());
@@ -2143,6 +2248,7 @@ namespace gpu::video
 #endif
 #if defined(LO_ENABLE_STREAMLINE_FG)
                 if (fg.Enabled() && fg.config.provider == framegen::Provider::Dlss) {
+                    startupWatch.Step("Streamline runtime initialization");
                     std::string reason;
                     g_fgRuntime = std::make_unique<dlss_fg::Runtime>();
                     if (!g_fgRuntime->Initialize(StreamlineRuntimePath(), reason)) {
@@ -2152,6 +2258,7 @@ namespace gpu::video
                         g_fgDispatch = std::make_unique<dlss_fg::VulkanDispatch>(*g_fgRuntime, *g_dlssController);
                     }
                 }
+                startupWatch.Step("Vulkan instance creation");
                 g_interface = plume::CreateVulkanInterface(g_fgDispatch ? g_fgDispatch->Hooks() : g_dlssController->ExtensionHooks());
 #else
                 g_interface = plume::CreateVulkanInterface(g_dlssController->ExtensionHooks());
@@ -2165,8 +2272,14 @@ namespace gpu::video
                     !GetProcAddress(d3d12, "D3D12SerializeRootSignature"))
                     return "d3d12.dll unavailable";
                 if (!dxgi || !GetProcAddress(dxgi, "CreateDXGIFactory2")) return "dxgi.dll unavailable";
+                if (os::hang_watch::StartupTrace()) {
+                    startupWatch.Step("DXGI adapter list");
+                    LogDxgiAdapters(startupWatch);
+                    startupWatch.Step("DLSS controller creation");
+                }
                 g_dlssController = std::make_unique<dlss::Controller>(DlssApplicationDataPath(), DlssRuntimePath());
                 g_temporalUpscaler = std::make_unique<TemporalUpscaler>(*g_dlssController);
+                startupWatch.Step("D3D12 interface creation");
                 g_interface = plume::CreateD3D12Interface();
             }
 #elif LO_PLATFORM_MACOS
@@ -2185,6 +2298,11 @@ namespace gpu::video
             if (!g_interface) return "API/loader initialization failed";
 #ifdef __ANDROID__
             LogVulkanPhysicalDevices(static_cast<plume::VulkanInterface*>(g_interface.get())->instance);
+#elif defined(_WIN32)
+            if (g_vulkan && os::hang_watch::StartupTrace()) {
+                startupWatch.Step("Vulkan physical device list");
+                LogVulkanPhysicalDevices(static_cast<plume::VulkanInterface*>(g_interface.get())->instance);
+            }
 #endif
 #if defined(LO_ENABLE_VULKAN_FSR_FG) && defined(_WIN32)
             if (g_vulkan) {
@@ -2207,6 +2325,7 @@ namespace gpu::video
                 LOG_WARNING("video: GPU \"{}\" is not listed by {}; using automatic selection", preferredGpu, backend::Name(candidate));
                 preferredGpu.clear();
             }
+            startupWatch.Step("device creation");
             g_device = g_interface->createDevice(preferredGpu);
 #if defined(__ANDROID__) && defined(LO_HAS_ADRENOTOOLS)
             if (!g_device && RetryWithSystemVulkanDriver("device creation")) {
@@ -2228,7 +2347,13 @@ namespace gpu::video
                 }
                 return backend::Inspect(candidate, g_device.get());
             };
+            startupWatch.Step("device capability check");
             auto capabilities = openedDevice();
+#ifdef _WIN32
+            if (os::hang_watch::StartupTrace())
+                LOG_INFO("video: modules from outside Windows and the game folder after device creation: {}",
+                    os::hang_watch::ForeignModules());
+#endif
             if (!preferredGpu.empty()) {
                 const auto missing = backend::Missing(candidate, capabilities);
                 if (g_device && g_device->getDescription().name != preferredGpu) {
@@ -2256,6 +2381,7 @@ namespace gpu::video
                     capabilities.boundSets, capabilities.samplers, capabilities.sampledImages,
                     capabilities.storageBuffers, capabilities.pushConstants, capabilities.textureCompressionBC ? 1 : 0);
             if (const auto missing = backend::Missing(candidate, capabilities); !missing.empty()) return missing;
+            startupWatch.Step("DLSS/NGX capability probe");
             if (g_vulkan && g_dlssController) {
                 bool retainNgxForFg = false;
 #if defined(LO_ENABLE_STREAMLINE_FG) && defined(_WIN32)
@@ -2273,6 +2399,7 @@ namespace gpu::video
 #endif
 #if defined(LO_ENABLE_D3D12_FG) && defined(_WIN32)
             if (!g_vulkan) {
+                startupWatch.Step("D3D12 frame generation initialization");
                 const auto fg = frame_generation::ResolveD3D12Selection(settings::GetConfig(), std::getenv("LO_FG_PROVIDER"),
                     std::getenv("LO_FG_MODE"), std::getenv("LO_FG_MULTIPLIER"),
                     std::getenv("LO_FG_TARGET_FPS"), std::getenv("LO_DLSS_FG"), g_displayRefreshHz.load(std::memory_order_relaxed));
@@ -2291,10 +2418,17 @@ namespace gpu::video
                 }
             }
 #endif
+#ifdef _WIN32
+            const auto outputStart = std::chrono::steady_clock::now();
+            if (os::hang_watch::StartupTrace())
+                LOG_INFO("video: creating queue and swap chain; {}", DescribeNativeWindow());
+#endif
+            startupWatch.Step("command queue creation");
             g_queue = g_device->createCommandQueue(plume::RenderCommandListType::DIRECT);
             if (!g_queue) return "graphics queue creation failed";
 #if defined(LO_ENABLE_STREAMLINE_FG) && defined(_WIN32)
             if (g_fgDispatch && g_fgDispatch->FeatureSupported()) {
+                startupWatch.Step("Streamline device hooks and session");
                 std::string reason;
                 if (!g_fgDispatch->InstallDeviceHooks(static_cast<plume::VulkanInterface*>(g_interface.get())->instance,
                     static_cast<plume::VulkanDevice*>(g_device.get())->vk, reason)) return reason;
@@ -2310,6 +2444,7 @@ namespace gpu::video
             if (g_vulkan) {
                 const auto fg = VulkanFgRequest();
                 if (fg.Enabled() && fg.config.provider == framegen::Provider::Fsr) {
+                    startupWatch.Step("FSR frame generation session");
                     auto session = std::make_unique<fsr_fg::Session>();
                     std::string reason;
                     if (session->Initialize(*static_cast<plume::VulkanDevice*>(g_device.get()),
@@ -2323,6 +2458,7 @@ namespace gpu::video
                 }
             }
 #endif
+            startupWatch.Step("command list and synchronization objects");
             g_commandList = g_queue->createCommandList();
             g_fence = g_device->createCommandFence();
             g_acquireSemaphore = g_device->createCommandSemaphore();
@@ -2345,7 +2481,14 @@ namespace gpu::video
             } else if (!g_hdrSwapchain && hdrConfig.hdr) {
                 LOG_WARNING("HDR: SDR swap chain retained; frame generation keeps its SDR swap chain on this backend");
             }
+            startupWatch.Step("swap chain creation");
             g_swapChain = g_queue->createSwapChain(SwapChainDescription());
+#ifdef _WIN32
+            if (os::hang_watch::StartupTrace())
+                LOG_INFO("video: swap chain creation returned in {} ms ok={}",
+                    std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - outputStart).count(),
+                    g_swapChain && !g_swapChain->isEmpty());
+#endif
             if (!g_swapChain || g_swapChain->isEmpty()) return "window surface/swapchain initialization failed";
 #if defined(__ANDROID__)
             g_androidAppliedSurfaceChangeSerial = initialSurfaceSerial;
@@ -2375,6 +2518,7 @@ namespace gpu::video
                 else LOG_INFO("Vulkan FSR FG: Vulkan immediate presentation enabled");
             }
 #endif
+            startupWatch.Step("DLSS output sizing");
             if (g_temporalUpscaler && settings::GetConfig().upscaler == upscaling::Upscaler::Dlss) {
                 const auto output = upscaling::ResolveOutputRegion({g_swapChain->getWidth(), g_swapChain->getHeight()});
                 const upscaling::SizingKey key{g_deviceEpoch.load(std::memory_order_acquire), output.width, output.height,
@@ -2398,12 +2542,14 @@ namespace gpu::video
                 frame_plan::PublishSizing(sizing);
             }
             LogOutputPixels("created");
+            startupWatch.Step("presentation resources");
             g_uploadCapacity = uint64_t(kMaxWidth) * kMaxHeight * 4;
             g_uploadBuffer = g_device->createBuffer(plume::RenderBufferDesc::UploadBuffer(g_uploadCapacity));
             if (!g_uploadBuffer) return "presentation upload allocation failed";
             g_presentation = std::make_unique<Presentation>();
             if (!g_presentation->Init(g_device.get(), g_swapChain->getFormat())) return "presentation shader/pipeline initialization failed";
             g_presentationFormat = g_swapChain->getFormat();
+            startupWatch.Step("renderer initialization");
             if (!getenv("LO_NO_RENDERER") && !renderer::Init()) return "renderer initialization failed";
             UpdateHdrOutput(true);
             return {};
@@ -2838,6 +2984,7 @@ namespace gpu::video
 
     void PumpWindowEvents()
     {
+        g_windowPumpBeat.store(SteadyMilliseconds(), std::memory_order_relaxed);
         if (!g_window) return;
         // DXGI Present, fullscreen transitions and swapchain release may send
         // synchronous messages to this thread during GPU-owner cleanup. Keep

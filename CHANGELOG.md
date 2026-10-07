@@ -13,6 +13,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Automatic first replies on new issues are back on and now written by Claude, for issues opened on GitHub and those copied from Discord.
 - New releases are announced in the Discord #announcements channel, and new commits, new branches and new pull requests are listed in #development.
 - Supporters on Ko-fi and Buy Me a Coffee are thanked in the Discord #supporters channel.
+- When startup stops for more than 10 seconds, the log names the step and where it waits; `LO_TRACE_STARTUP=1` adds graphics adapter and add-on software details (#282).
 - Controllers, audio and the game window run on SDL 3.4.18 instead of SDL2, with newer controller mappings and drivers (#289).
 
 ### 简体中文
@@ -22,6 +23,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - 新 issue 的自动初步分析重新开启，改由 Claude 撰写；GitHub 上直接开的和从 Discord 复制来的 issue 都适用。
 - 新版本发布会在 Discord #announcements 频道公告，各分支的新提交、新建分支和新开的 pull request 会列在 #development。
 - 在 Ko-fi 和 Buy Me a Coffee 上支持项目的朋友会在 Discord #supporters 频道收到感谢。
+- 启动卡住超过 10 秒时，日志会记下卡住的步骤和等待位置；`LO_TRACE_STARTUP=1` 会额外记录显卡适配器和第三方软件信息（#282）。
 - 手柄、音频和游戏窗口从 SDL2 换成 SDL 3.4.18，带来更新的手柄映射和驱动（#289）。
 
 ## [v0.8.53](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.8.53) — 2026-10-07
