@@ -4,6 +4,16 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 按新到旧记录简短更新，日期采用 UTC。技术验证见[开发状态](docs/STATUS.md)，后续计划见[路线图](docs/ROADMAP.zh-CN.md)。
 
+## Unreleased
+
+### English
+
+- Posts in the Discord #help forum become GitHub issues instead of Discussions; posts in the new #discussion, #ideas and #show-and-tell forums go to the matching Discussions categories.
+
+### 简体中文
+
+- Discord #help 论坛的帖子改为复制成 GitHub Issue，不再进 Discussions；新开的 #discussion、#ideas、#show-and-tell 论坛的帖子复制到 Discussions 的对应分类。
+
 ## [v0.8.53](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.8.53) — 2026-10-07
 
 ### English

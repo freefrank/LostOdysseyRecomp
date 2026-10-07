@@ -1,8 +1,9 @@
-"""Copy Discord forum posts and replies into GitHub Discussions; no external dependencies.
+"""Copy Discord forum posts and replies into GitHub issues or Discussions; no external dependencies.
 
-One-way: Discord -> GitHub. Each forum thread becomes one Discussion; replies become
-comments. Progress lives in a hidden marker in the Discussion body, so no state file
-is needed. Edits, deletions and replies written on GitHub are not synced.
+One-way: Discord -> GitHub. DISCORD_FORUMS maps each forum channel id to "issues" or to a
+Discussions category slug. Each forum thread becomes one issue or Discussion; replies become
+comments. Progress lives in a hidden marker in the issue or Discussion body, so no state
+file is needed. Edits, deletions and replies written on GitHub are not synced.
 """
 from datetime import datetime, timezone
 import json
@@ -15,7 +16,7 @@ import urllib.parse
 import urllib.request
 
 DISCORD_API = 'https://discord.com/api/v10'
-GITHUB_GRAPHQL = 'https://api.github.com/graphql'
+GITHUB_API = 'https://api.github.com'
 USER_AGENT = 'DiscordBot (https://github.com/freefrank/LostOdysseyRecomp, 1)'
 BODY_MARKER = re.compile(r'<!-- discord-sync thread=(\d+) last=(\d+) -->')
 COMMENT_MARKER = re.compile(r'<!-- discord-msg (\d+) -->')
@@ -91,7 +92,7 @@ class GitHub:
         self.dry_run = dry_run
 
     def query(self, query, **variables):
-        reply = http_json(GITHUB_GRAPHQL, self.headers, 'POST',
+        reply = http_json(GITHUB_API + '/graphql', self.headers, 'POST',
                           {'query': query, 'variables': variables})
         if reply.get('errors'):
             raise SyncError('GraphQL: ' + '; '.join(e.get('message', '?') for e in reply['errors']))
@@ -104,6 +105,48 @@ class GitHub:
         data = self.query(query, **variables)
         time.sleep(WRITE_DELAY)
         return data
+
+    def post(self, description, path, payload):
+        print(('[dry run] ' if self.dry_run else '') + description)
+        if not self.dry_run:
+            http_json(GITHUB_API + path, self.headers, 'POST', payload)
+
+
+# GraphQL per target kind: create, comment, update body, close.
+MUTATIONS = {
+    'issue': {
+        'create': '''mutation($repo: ID!, $title: String!, $body: String!, $labels: [ID!]) {
+          createIssue(input: {repositoryId: $repo, title: $title, body: $body, labelIds: $labels}) {
+            issue { id number url body closed }
+          }
+        }''',
+        'comment': '''mutation($id: ID!, $body: String!) {
+          addComment(input: {subjectId: $id, body: $body}) { clientMutationId }
+        }''',
+        'update': '''mutation($id: ID!, $body: String!) {
+          updateIssue(input: {id: $id, body: $body}) { clientMutationId }
+        }''',
+        'close': '''mutation($id: ID!) {
+          closeIssue(input: {issueId: $id, stateReason: COMPLETED}) { clientMutationId }
+        }''',
+    },
+    'discussion': {
+        'create': '''mutation($repo: ID!, $category: ID!, $title: String!, $body: String!) {
+          createDiscussion(input: {repositoryId: $repo, categoryId: $category, title: $title, body: $body}) {
+            discussion { id number url body closed }
+          }
+        }''',
+        'comment': '''mutation($id: ID!, $body: String!) {
+          addDiscussionComment(input: {discussionId: $id, body: $body}) { clientMutationId }
+        }''',
+        'update': '''mutation($id: ID!, $body: String!) {
+          updateDiscussion(input: {discussionId: $id, body: $body}) { clientMutationId }
+        }''',
+        'close': '''mutation($id: ID!) {
+          closeDiscussion(input: {discussionId: $id, reason: RESOLVED}) { clientMutationId }
+        }''',
+    },
+}
 
 
 def env(name, default=None):
@@ -162,7 +205,7 @@ def message_text(message, link, channel_names):
     return body or '_(empty message)_'
 
 
-def discussion_body(thread, starter, tags, links, channel_names, last):
+def post_body(thread, starter, tags, links, channel_names, last):
     header = (f'Posted by **{author_name(starter["author"]) if starter else "unknown"}** in Discord '
               f'[#{links["forum_name"]}]({links["thread"]}) · '
               f'{stamp(starter["timestamp"]) if starter else snowflake_time(thread["id"]).strftime("%Y-%m-%d %H:%M UTC")}')
@@ -182,10 +225,15 @@ def comment_body(message, guild_id, thread_id, channel_names, by_id):
     return f'{header}\n\n{message_text(message, link, channel_names)}\n\n<!-- discord-msg {message["id"]} -->'
 
 
-DISCUSSIONS_QUERY = '''
-query($owner: String!, $name: String!, $category: ID!, $after: String) {
+MIRRORS_QUERY = '''
+query($owner: String!, $name: String!, $label: [String!], $issues: String, $discussions: String,
+      $withIssues: Boolean!, $withDiscussions: Boolean!) {
   repository(owner: $owner, name: $name) {
-    discussions(first: 50, after: $after, categoryId: $category) {
+    issues(first: 50, after: $issues, labels: $label, states: [OPEN, CLOSED]) @include(if: $withIssues) {
+      pageInfo { hasNextPage endCursor }
+      nodes { id number url body closed comments(last: 30) { nodes { body } } }
+    }
+    discussions(first: 50, after: $discussions) @include(if: $withDiscussions) {
       pageInfo { hasNextPage endCursor }
       nodes { id number url body closed comments(last: 30) { nodes { body } } }
     }
@@ -193,24 +241,31 @@ query($owner: String!, $name: String!, $category: ID!, $after: String) {
 }'''
 
 
-def load_mirrors(github, owner, name, category_id):
+def load_mirrors(github, owner, name, label):
+    """Find every issue (with the label) and Discussion that already mirrors a Discord thread."""
     mirrors = {}
-    after = None
-    while True:
-        page = github.query(DISCUSSIONS_QUERY, owner=owner, name=name,
-                            category=category_id, after=after)['repository']['discussions']
-        for node in page['nodes']:
-            match = BODY_MARKER.search(node['body'] or '')
-            if not match:
+    cursors = {'issues': None, 'discussions': None}
+    pending = {'issues': True, 'discussions': True}
+    while any(pending.values()):
+        repo = github.query(MIRRORS_QUERY, owner=owner, name=name, label=[label],
+                            issues=cursors['issues'], discussions=cursors['discussions'],
+                            withIssues=pending['issues'], withDiscussions=pending['discussions'])['repository']
+        for field, kind in (('issues', 'issue'), ('discussions', 'discussion')):
+            if not pending[field]:
                 continue
-            last = int(match.group(2))
-            for comment in node['comments']['nodes']:
-                for found in COMMENT_MARKER.findall(comment['body'] or ''):
-                    last = max(last, int(found))
-            mirrors[match.group(1)] = {**node, 'last': last}
-        if not page['pageInfo']['hasNextPage']:
-            return mirrors
-        after = page['pageInfo']['endCursor']
+            page = repo[field]
+            for node in page['nodes']:
+                match = BODY_MARKER.search(node['body'] or '')
+                if not match:
+                    continue
+                last = int(match.group(2))
+                for comment in node['comments']['nodes']:
+                    for found in COMMENT_MARKER.findall(comment['body'] or ''):
+                        last = max(last, int(found))
+                mirrors[match.group(1)] = {**node, 'kind': kind, 'last': last}
+            pending[field] = page['pageInfo']['hasNextPage']
+            cursors[field] = page['pageInfo']['endCursor']
+    return mirrors
 
 
 def main():
@@ -221,7 +276,10 @@ def main():
     dry_run = env('DRY_RUN', 'false').lower() == 'true'
     owner, name = env('GITHUB_REPOSITORY').split('/', 1)
     guild_id = env('DISCORD_GUILD_ID')
-    forum_id = env('DISCORD_FORUM_ID')
+    targets = json.loads(env('DISCORD_FORUMS'))
+    label = env('SYNC_LABEL', 'discord')
+    triage = os.environ.get('TRIAGE_WORKFLOW', '').strip()
+    triage_ref = env('TRIAGE_REF', 'main')
     budget = int(env('MAX_WRITES', '40'))
 
     discord = Discord(discord_token)
@@ -232,15 +290,14 @@ def main():
     if not discord.get('/applications/@me').get('flags', 0) & MESSAGE_CONTENT_FLAGS:
         raise SyncError('Message Content Intent is off for the bot (Developer Portal > Bot)')
 
-    forum = discord.get(f'/channels/{forum_id}')
-    tag_names = {t['id']: t['name'] for t in forum.get('available_tags', [])}
-    solved_tags = {i for i, n in tag_names.items() if n.lower() == 'solved'}
     channel_names = {c['id']: c['name'] for c in discord.get(f'/guilds/{guild_id}/channels')}
-
-    threads = {t['id']: t for t in discord.get(f'/guilds/{guild_id}/threads/active')['threads']
-               if t.get('parent_id') == forum_id}
-    archived = discord.get(f'/channels/{forum_id}/threads/archived/public', limit=50)
-    threads.update({t['id']: t for t in archived['threads']})
+    active = discord.get(f'/guilds/{guild_id}/threads/active')['threads']
+    forums, threads = {}, {}
+    for forum_id in targets:
+        forums[forum_id] = discord.get(f'/channels/{forum_id}')
+        threads.update({t['id']: t for t in active if t.get('parent_id') == forum_id})
+        archived = discord.get(f'/channels/{forum_id}/threads/archived/public', limit=50)
+        threads.update({t['id']: t for t in archived['threads']})
     channel_names.update({t['id']: t['name'] for t in threads.values()})
 
     repo = github.query('''query($owner: String!, $name: String!, $label: String!) {
@@ -249,13 +306,15 @@ def main():
         discussionCategories(first: 25) { nodes { id slug } }
         label(name: $label) { id }
       }
-    }''', owner=owner, name=name, label=env('DISCUSSION_LABEL', 'discord'))['repository']
-    slug = env('DISCUSSION_CATEGORY', 'q-a')
-    category = next((c['id'] for c in repo['discussionCategories']['nodes'] if c['slug'] == slug), None)
-    if not category:
-        raise SyncError(f'Discussion category {slug!r} not found')
+    }''', owner=owner, name=name, label=label)['repository']
+    categories = {c['slug']: c['id'] for c in repo['discussionCategories']['nodes']}
+    for forum_id, target in targets.items():
+        if target != 'issues' and target not in categories:
+            raise SyncError(f'Discussion category {target!r} for forum {forum_id} not found')
     label_id = (repo.get('label') or {}).get('id')
-    mirrors = load_mirrors(github, owner, name, category)
+    if not label_id:
+        raise SyncError(f'Label {label!r} not found')
+    mirrors = load_mirrors(github, owner, name, label)
     print(f'{len(threads)} forum thread(s), {len(mirrors)} already on GitHub')
 
     for thread_id in sorted(threads, key=int):
@@ -263,28 +322,33 @@ def main():
             print('Write budget used up; the rest waits for the next run.')
             break
         thread = threads[thread_id]
-        thread_link = f'https://discord.com/channels/{guild_id}/{thread_id}'
-        links = {'thread': thread_link, 'forum_name': forum.get('name', 'forum')}
-        tags = [tag_names[t] for t in thread.get('applied_tags', []) if t in tag_names]
+        forum = forums[thread['parent_id']]
+        target = targets[thread['parent_id']]
+        links = {'thread': f'https://discord.com/channels/{guild_id}/{thread_id}',
+                 'forum_name': forum.get('name', 'forum')}
+        tag_names = {t['id']: t['name'] for t in forum.get('available_tags', [])}
+        applied = thread.get('applied_tags', [])
         mirror = mirrors.get(thread_id)
 
         if mirror is None:
             starter = discord.message(thread_id, thread_id)
             if starter and (starter['author'].get('bot') or starter.get('type') not in MESSAGE_TYPES):
                 continue
-            body = discussion_body(thread, starter, tags, links, channel_names, thread_id)
-            data = github.mutate(f'Create Discussion for "{thread["name"]}" ({thread_id})', '''
-              mutation($repo: ID!, $category: ID!, $title: String!, $body: String!) {
-                createDiscussion(input: {repositoryId: $repo, categoryId: $category, title: $title, body: $body}) {
-                  discussion { id number url body closed }
-                }
-              }''', repo=repo['id'], category=category, title=thread['name'][:256], body=body)
+            kind = 'issue' if target == 'issues' else 'discussion'
+            body = post_body(thread, starter, [tag_names[t] for t in applied if t in tag_names],
+                             links, channel_names, thread_id)
+            where = 'issue' if kind == 'issue' else f'Discussion ({target})'
+            fields = ({'labels': [label_id]} if kind == 'issue' else {'category': categories[target]})
+            data = github.mutate(f'Create {where} for "{thread["name"]}" ({thread_id})',
+                                 MUTATIONS[kind]['create'], repo=repo['id'],
+                                 title=thread['name'][:256], body=body, **fields)
             budget -= 1
             if data is None:
                 continue
-            mirror = {**data['createDiscussion']['discussion'], 'last': int(thread_id)}
+            created = data['createIssue']['issue'] if kind == 'issue' else data['createDiscussion']['discussion']
+            mirror = {**created, 'kind': kind, 'last': int(thread_id)}
             print(f'  -> {mirror["url"]}')
-            if label_id:
+            if kind == 'discussion':
                 try:
                     github.mutate('  label', '''mutation($id: ID!, $labels: [ID!]!) {
                       addLabelsToLabelable(input: {labelableId: $id, labelIds: $labels}) { clientMutationId }
@@ -292,7 +356,17 @@ def main():
                 except SyncError as exc:
                     print(f'  label not added: {exc}')
                 budget -= 1
+            elif triage:
+                try:
+                    github.post(f'  triage #{mirror["number"]}',
+                                f'/repos/{owner}/{name}/actions/workflows/{triage}/dispatches',
+                                {'ref': triage_ref, 'inputs': {'issue_number': str(mirror['number']),
+                                                               'dry_run': 'false'}})
+                except SyncError as exc:
+                    print(f'  triage not started: {exc}')
+                budget -= 1
 
+        kind = mirror['kind']
         last = mirror['last']
         if int(thread.get('last_message_id') or 0) > last:
             new = [m for m in discord.messages_after(thread_id, last) if int(m['id']) > last]
@@ -302,27 +376,22 @@ def main():
                     if budget <= 1:
                         break
                     if not message['author'].get('bot') and message.get('type') in MESSAGE_TYPES:
-                        github.mutate(f'Comment on #{mirror["number"]} from message {message["id"]}', '''
-                          mutation($id: ID!, $body: String!) {
-                            addDiscussionComment(input: {discussionId: $id, body: $body}) { comment { id } }
-                          }''', id=mirror['id'],
-                            body=comment_body(message, guild_id, thread_id, channel_names, by_id))
+                        github.mutate(f'Comment on {kind} #{mirror["number"]} from message {message["id"]}',
+                                      MUTATIONS[kind]['comment'], id=mirror['id'],
+                                      body=comment_body(message, guild_id, thread_id, channel_names, by_id))
                         budget -= 1
                     last = int(message['id'])
             finally:
                 if last != mirror['last']:
                     body = BODY_MARKER.sub(f'<!-- discord-sync thread={thread_id} last={last} -->',
                                            mirror['body'])
-                    github.mutate(f'Record progress on #{mirror["number"]}', '''
-                      mutation($id: ID!, $body: String!) {
-                        updateDiscussion(input: {discussionId: $id, body: $body}) { clientMutationId }
-                      }''', id=mirror['id'], body=body)
+                    github.mutate(f'Record progress on {kind} #{mirror["number"]}',
+                                  MUTATIONS[kind]['update'], id=mirror['id'], body=body)
                     budget -= 1
 
-        if solved_tags & set(thread.get('applied_tags', [])) and not mirror.get('closed'):
-            github.mutate(f'Close #{mirror["number"]} as resolved', '''mutation($id: ID!) {
-              closeDiscussion(input: {discussionId: $id, reason: RESOLVED}) { clientMutationId }
-            }''', id=mirror['id'])
+        solved = {i for i, n in tag_names.items() if n.lower() == 'solved'}
+        if solved & set(applied) and not mirror.get('closed'):
+            github.mutate(f'Close {kind} #{mirror["number"]}', MUTATIONS[kind]['close'], id=mirror['id'])
             budget -= 1
     return 0
 
