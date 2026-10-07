@@ -109,10 +109,11 @@ static int RunGuest(uint32_t entry)
         return 1;
     }
     XexLoader::StartTimeStampThread();
-    apu::Init();
+    apu::Init(settings::GetConfig().audioOutput == settings::AudioOutputSurround);
     apu::xma::Init();
     if (getenv("LO_HEADLESS"))
         hid::Init(); // otherwise the video thread initialises it
+    hid::SetVibrationStrength(settings::GetConfig().vibrationPercent);
 
     LOG_INFO("starting guest at {:#x}", entry);
     os::SetCurrentThreadName("Guest Main");

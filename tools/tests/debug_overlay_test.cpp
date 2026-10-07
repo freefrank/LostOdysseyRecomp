@@ -66,6 +66,7 @@ Config GetConfig()
     return config;
 }
 bool SaveDebugLanguage(uint32_t) { return true; }
+bool SaveFastForward(bool, uint32_t, uint32_t) { return true; }
 }
 
 namespace gpu::renderer

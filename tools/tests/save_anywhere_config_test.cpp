@@ -76,6 +76,27 @@ int wmain(int argc, wchar_t** argv)
     Check(settings::Read().noRandomEncounters, "no random encounters read from INI");
     Write("no_random_encounters=2\n");
     Check(!settings::Read().noRandomEncounters, "invalid no random encounters value defaults off");
+    Check(!settings::Read().fastForward && settings::Read().fastForwardMode == 0 && settings::Read().fastForwardRate == 2,
+        "missing fast-forward keys default to off, Hold, 2x");
+    Write("fast_forward=1\nfast_forward_mode=1\nfast_forward_rate=6\n");
+    Check(settings::Read().fastForward && settings::Read().fastForwardMode == 1 && settings::Read().fastForwardRate == 6,
+        "fast-forward keys read from INI");
+    Write("fast_forward=2\nfast_forward_mode=7\nfast_forward_rate=5\n");
+    Check(!settings::Read().fastForward && settings::Read().fastForwardMode == 0 && settings::Read().fastForwardRate == 2,
+        "invalid fast-forward values default to off, Hold, 2x");
+
+    Check(settings::Read().vibrationPercent == 100, "missing vibration key keeps retail strength");
+    Write("vibration=40\n");
+    Check(settings::Read().vibrationPercent == 40, "vibration strength read from INI");
+    Write("vibration=250\n");
+    Check(settings::Read().vibrationPercent == 100, "vibration strength is bounded to 100");
+    Write("vibration=-5\n");
+    Check(settings::Read().vibrationPercent == 100, "malformed vibration keeps retail strength");
+    Check(settings::Read().audioOutput == settings::AudioOutputStereo, "missing audio output key keeps stereo");
+    Write("audio_output=1\n");
+    Check(settings::Read().audioOutput == settings::AudioOutputSurround, "5.1 audio output read from INI");
+    Write("audio_output=2\n");
+    Check(settings::Read().audioOutput == settings::AudioOutputStereo, "unknown audio output falls back to stereo");
 
     Write("shadow_resolution=2\nambient_occlusion=1\n");
     Check(settings::Read().shadowResolution == 2 && settings::Read().ambientOcclusion == 1,
@@ -112,16 +133,30 @@ int wmain(int argc, wchar_t** argv)
     Check(settings::SaveNoRandomEncounters(true) && settings::GetConfig().noRandomEncounters &&
           Contents().find("no_random_encounters=1\n") != std::string::npos,
         "no random encounters persists");
+    Check(settings::SaveFastForward(true, 1, 8) && settings::GetConfig().fastForward &&
+          settings::GetConfig().fastForwardRate == 8 &&
+          Contents().find("fast_forward=1\nfast_forward_mode=1\nfast_forward_rate=8\n") != std::string::npos,
+        "fast-forward choices persist");
+    Check(settings::SaveAudioOutput(settings::AudioOutputSurround) &&
+          settings::GetConfig().audioOutput == settings::AudioOutputSurround &&
+          Contents().find("audio_output=1\n") != std::string::npos, "audio output persists on its own");
     settings::Config graphics = settings::GetConfig();
+    graphics.audioOutput = settings::AudioOutputStereo;
     graphics.width = 1800;
     graphics.shadowResolution = 4;
     graphics.ambientOcclusion = 2;
+    graphics.vibrationPercent = 30;
     Check(settings::SaveConfig(graphics), "save ordinary settings");
     Check(settings::Read().shadowResolution == 4 && settings::Read().ambientOcclusion == 2 &&
           Contents().find("shadow_resolution=4\nambient_occlusion=2\n") != std::string::npos,
         "shadow and AO choices roundtrip through stable INI keys");
+    Check(settings::GetConfig().vibrationPercent == 30 && settings::Read().vibrationPercent == 30 &&
+          Contents().find("vibration=30\n") != std::string::npos, "vibration strength roundtrips");
     Check(settings::Read().saveAnywhere, "ordinary save retains debug-only preference");
     Check(settings::Read().noRandomEncounters, "ordinary save retains no random encounters");
+    Check(settings::Read().fastForward && settings::Read().fastForwardMode == 1 && settings::Read().fastForwardRate == 8,
+        "ordinary save retains fast-forward choices");
+    Check(settings::Read().audioOutput == settings::AudioOutputSurround, "ordinary save retains the audio output choice");
     Check(settings::SaveDebugLanguage(1) && settings::Read().saveAnywhere,
         "debug language save retains save-anywhere preference");
     for (const auto fps : gpu::frame_rate::kNativeRates)

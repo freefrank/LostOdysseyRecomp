@@ -150,10 +150,25 @@ namespace debug_menu
             }
             if (nav)
             {
+                const auto before = fast_forward::GetStatus();
                 if (!g_overlayState.cheatsPage.Input(*nav, g_overlayState.chinese))
                 {
                     stateLock.unlock();
                     ToggleOverlayLocked();
+                    return;
+                }
+                // Keep the player's fast-forward rows across restarts (#104).
+                const auto after = fast_forward::GetStatus();
+                if (after.enabled != before.enabled || after.mode != before.mode || after.multiplier != before.multiplier)
+                {
+                    const bool zh = g_overlayState.chinese;
+                    stateLock.unlock();
+                    if (!settings::SaveFastForward(after.enabled, after.mode == fast_forward::Mode::Toggle ? 1 : 0,
+                                                   after.multiplier))
+                    {
+                        std::lock_guard lock(g_overlayStateMutex);
+                        g_overlayState.cheatsPage.notice = zh ? L"保存变速设置失败" : L"Failed to save fast-forward setting";
+                    }
                 }
                 return;
             }

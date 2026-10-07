@@ -1,4 +1,5 @@
 #include "config.h"
+#include <debug/fast_forward.h>
 #include <gpu/frame_rate.h>
 #include <filesystem>
 #include <fstream>
@@ -34,6 +35,7 @@ Config Validate(Config value)
     if (value.anisotropicFiltering != 0 && value.anisotropicFiltering != 2 && value.anisotropicFiltering != 4 &&
         value.anisotropicFiltering != 8 && value.anisotropicFiltering != 16) value.anisotropicFiltering = 0;
     value.depthOfFieldPercent = std::min(value.depthOfFieldPercent, 100u);
+    value.vibrationPercent = std::min(value.vibrationPercent, 100u);
     value.hdrPaperWhiteNits = std::clamp(value.hdrPaperWhiteNits, 80u, 400u);
     value.hdrPeakNits = std::clamp(value.hdrPeakNits, 80u, 10000u);
     value.hdrPeakNits = std::max(value.hdrPeakNits, value.hdrPaperWhiteNits);
@@ -65,12 +67,18 @@ Config Validate(Config value)
     value.fxaa = value.antialiasing == 1;
     value.frameRate = gpu::frame_rate::Normalize(value.frameRate);
     if (value.debugLanguage > 1) value.debugLanguage = 0;
+    if (value.fastForwardMode > 1) value.fastForwardMode = 0;
+    namespace ff = debug_menu::fast_forward;
+    if (std::find(std::begin(ff::Rates), std::end(ff::Rates), value.fastForwardRate) == std::end(ff::Rates))
+        value.fastForwardRate = 2;
     if (value.uiLanguage > 4)
         value.uiLanguage = 0;
     if (GameLanguageIds[GameLanguageIndex(value.gameLanguage)] != value.gameLanguage)
         value.gameLanguage = 1;
     if (uint32_t(value.windowMode) > 1)
         value.windowMode = WindowMode::Windowed;
+    if (value.audioOutput > AudioOutputSurround)
+        value.audioOutput = AudioOutputStereo;
     if (!gpu::backend::Known(value.graphicsBackend))
 #ifdef _WIN32
         value.graphicsBackend = GraphicsBackend::D3D12;
@@ -164,6 +172,8 @@ Config Read()
             value.depthOfFieldPercent = number;
         else if (key == "bloom" && number <= 1)
             value.bloom = number == 1;
+        else if (key == "vibration")
+            value.vibrationPercent = number;
         else if (key == "upscaler")
             value.upscaler = gpu::upscaling::Upscaler(number);
         else if (key == "dlss_quality")
@@ -208,6 +218,14 @@ Config Read()
             value.saveAnywhere = number == 1;
         else if (key == "no_random_encounters" && number <= 1)
             value.noRandomEncounters = number == 1;
+        else if (key == "fast_forward" && number <= 1)
+            value.fastForward = number == 1;
+        else if (key == "fast_forward_mode")
+            value.fastForwardMode = number;
+        else if (key == "fast_forward_rate")
+            value.fastForwardRate = number;
+        else if (key == "audio_output")
+            value.audioOutput = number;
         else if (key == "automatic_updates")
         {
             // Unknown values keep the safe package default (enabled).
@@ -224,6 +242,13 @@ Config &Current()
 {
     static Config config = Read();
     return config;
+}
+// Debug-menu choices are saved on their own, never through a graphics save.
+void CopyFastForward(Config &to, const Config &from)
+{
+    to.fastForward = from.fastForward;
+    to.fastForwardMode = from.fastForwardMode;
+    to.fastForwardRate = from.fastForwardRate;
 }
 } // namespace
 void ConfigureGameLanguages(const std::filesystem::path &xexPath)
@@ -271,6 +296,8 @@ void PreviewConfig(const Config &value)
     merged.debugLanguage = Current().debugLanguage;
     merged.saveAnywhere = Current().saveAnywhere;
     merged.noRandomEncounters = Current().noRandomEncounters;
+    CopyFastForward(merged, Current());
+    merged.audioOutput = Current().audioOutput;
     Current() = merged;
 }
 uint32_t GameLanguage()
@@ -301,6 +328,7 @@ static bool WriteConfig(const Config &value)
            << "\nanisotropic_filtering=" << value.anisotropicFiltering
            << "\ndepth_of_field=" << value.depthOfFieldPercent
            << "\nbloom=" << (value.bloom ? 1 : 0)
+           << "\nvibration=" << value.vibrationPercent
            << "\nupscaler=" << uint32_t(value.upscaler) << "\ndlss_quality=" << uint32_t(value.dlssQuality)
            << "\nfsr_quality=" << uint32_t(value.fsrQuality)
            << "\nfsr_sharpness=" << value.fsrSharpnessPercent
@@ -315,9 +343,13 @@ static bool WriteConfig(const Config &value)
            << "\nframe_generation_target_fps=" << value.frameGenerationTargetFps
            << "\ninternal_resolution=" << value.internalResolution
            << "\nfxaa=" << value.fxaa << "\nautomatic_updates=" << value.automaticUpdates
+           << "\naudio_output=" << value.audioOutput
            << "\nskip_shader_prebuild=" << (value.skipShaderPrebuild ? 1 : 0)
            << "\nsave_anywhere=" << (value.saveAnywhere ? 1 : 0)
-           << "\nno_random_encounters=" << (value.noRandomEncounters ? 1 : 0) << '\n';
+           << "\nno_random_encounters=" << (value.noRandomEncounters ? 1 : 0)
+           << "\nfast_forward=" << (value.fastForward ? 1 : 0)
+           << "\nfast_forward_mode=" << value.fastForwardMode
+           << "\nfast_forward_rate=" << value.fastForwardRate << '\n';
     output.flush();
     if (!output)
         return false;
@@ -343,8 +375,20 @@ bool SaveConfig(const Config &requested)
     value.debugLanguage = Current().debugLanguage;
     value.saveAnywhere = Current().saveAnywhere;
     value.noRandomEncounters = Current().noRandomEncounters;
+    CopyFastForward(value, Current());
+    value.audioOutput = Current().audioOutput;
     if (!WriteConfig(value)) return false;
     Current() = value;
+    return true;
+}
+bool SaveAudioOutput(uint32_t output)
+{
+    std::lock_guard lock(mutex);
+    // Merge with the persisted settings, not a pending graphics preview.
+    auto persisted = Read();
+    persisted.audioOutput = output <= AudioOutputSurround ? output : AudioOutputStereo;
+    if (!WriteConfig(persisted)) return false;
+    Current().audioOutput = persisted.audioOutput;
     return true;
 }
 bool SaveDebugLanguage(uint32_t language)
@@ -374,6 +418,18 @@ bool SaveNoRandomEncounters(bool enabled)
     persisted.noRandomEncounters = enabled;
     if (!WriteConfig(persisted)) return false;
     Current().noRandomEncounters = enabled;
+    return true;
+}
+bool SaveFastForward(bool enabled, uint32_t mode, uint32_t rate)
+{
+    std::lock_guard lock(mutex);
+    auto persisted = Read();
+    persisted.fastForward = enabled;
+    persisted.fastForwardMode = mode;
+    persisted.fastForwardRate = rate;
+    persisted = Validate(persisted);
+    if (!WriteConfig(persisted)) return false;
+    CopyFastForward(Current(), persisted);
     return true;
 }
 } // namespace settings

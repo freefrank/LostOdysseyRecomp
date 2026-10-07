@@ -11,6 +11,7 @@ source = (a.root / 'LostOdysseyRecomp/settings/config.cpp').read_text(encoding='
 source = re.sub(r'^#include[^\n]*\n', '', source, flags=re.M)
 prefix = r'''
 #include <settings/config.h>
+#include <debug/fast_forward.h>
 #include <gpu/frame_rate.h>
 #include <algorithm>
 #include <array>
@@ -71,7 +72,7 @@ int main() {
         Check(settings::SaveSaveAnywhere(true), "debug toggle save");
         Check(settings::Read().variableRefreshRate == enabled, "other saves retain disk VRR setting");
     }
-    for (auto provider : {framegen::Provider::Fsr, framegen::Provider::MetalFx}) {
+    for (auto provider : {framegen::Provider::Fsr, framegen::Provider::MetalFx, framegen::Provider::Xess}) {
         auto config=settings::GetConfig(); config.frameGenerationProvider=provider;
         config.frameGenerationMode=framegen::Mode::Dynamic;
         config.frameGenerationMultiplier=6; config.frameGenerationTargetFps=144;
@@ -79,11 +80,13 @@ int main() {
         const auto disk=settings::Read();
         Check(disk.frameGenerationProvider==provider && disk.frameGenerationMode==framegen::Mode::Fixed &&
             disk.frameGenerationMultiplier==2 && !disk.frameGenerationTargetFps,
-            "FSR/MetalFX normalize to fixed 2x without discarding saved provider");
+            "FSR/MetalFX/XeSS normalize to fixed 2x without discarding saved provider");
     }
     Write("frame_generation_provider=3\n");
     Check(settings::Read().frameGenerationProvider==framegen::Provider::MetalFx,"MetalFX has stable INI value 3");
     Write("frame_generation_provider=4\n");
+    Check(settings::Read().frameGenerationProvider==framegen::Provider::Xess,"XeSS has stable INI value 4");
+    Write("frame_generation_provider=5\n");
     Check(settings::Read().frameGenerationProvider==framegen::Provider::Off,"unknown FG provider rejected");
     fs::current_path(previous);
     fs::remove_all(scratch);

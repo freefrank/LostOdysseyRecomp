@@ -126,7 +126,7 @@ Controllers and the keyboard work together for player 1. If your controller is n
 
 Press **Back** to zoom the minimap. Hold it for about half a second to hide the minimap, and press it again to show it.
 
-For Ring actions, use the controller's **right trigger** or **R**. To turn rumble off, set `LO_CONTROLLER_RUMBLE=0`.
+For Ring actions, use the controller's **right trigger** or **R**. **Vibration** in the Audio settings sets the rumble strength; at the minimum, rumble is off.
 
 ## Debug menu
 

@@ -121,6 +121,7 @@ namespace hid {
     void HandleKeyboardEvent(int32_t,bool); void ClearKeyboardState(); void PumpHostInput();
     void Poll(); uint32_t GetState(uint32_t,XAMINPUT_STATE*);
     uint32_t SetState(uint32_t,XAMINPUT_VIBRATION*);
+    void SetVibrationStrength(uint32_t); void PreviewVibration();
     uint32_t GetCapabilities(uint32_t,XAMINPUT_CAPABILITIES*);
 }
 ''' + body + r'''

@@ -18,8 +18,64 @@ namespace apu
         std::atomic<uint32_t> g_framesSubmitted{ 0 };
         os::GuestCodeThread g_thread; // runs the guest audio callback
         std::atomic<bool> g_running{ false };
+        // A live output change closes the device while guest threads may
+        // queue, clear or pause it; every use of g_device holds this lock.
+        std::mutex g_deviceMutex;
         SDL_AudioDeviceID g_device = 0;
-        constexpr uint32_t kStereoFrameBytes = XAUDIO_NUM_SAMPLES * 2 * sizeof(float);
+        uint32_t g_channels = 2; // interleaved channels queued to g_device
+        bool g_paused = false;
+        bool g_audioReady = false;
+        std::atomic<bool> g_surroundRequested{ false };
+        bool g_surroundOpen = false; // driver thread after Init
+        std::atomic<uint32_t> g_outputChannels{ 0 };
+
+        uint32_t FrameBytes() { return XAUDIO_NUM_SAMPLES * g_channels * sizeof(float); }
+
+        // Caller holds g_deviceMutex. 5.1 probes the device layout first:
+        // WASAPI reports its endpoint mix format here, while PulseAudio,
+        // PipeWire and Core Audio accept six channels and remix them.
+        void OpenDevice(bool surround)
+        {
+            if (g_device) SDL_CloseAudioDevice(g_device);
+            g_device = 0;
+            g_channels = 2;
+            SDL_AudioSpec desired{};
+            desired.freq = XAUDIO_SAMPLES_HZ;
+            desired.format = AUDIO_F32SYS;
+            desired.samples = 512;
+            if (surround)
+            {
+                desired.channels = 6;
+                SDL_AudioSpec obtained{};
+                g_device = SDL_OpenAudioDevice(nullptr, 0, &desired, &obtained, SDL_AUDIO_ALLOW_CHANNELS_CHANGE);
+                const int deviceChannels = g_device ? obtained.channels : 0;
+                if (g_device && deviceChannels != 6)
+                {
+                    SDL_CloseAudioDevice(g_device);
+                    // A 7.1 device takes the 5.1 channels through SDL's layout conversion.
+                    g_device = deviceChannels > 6 ? SDL_OpenAudioDevice(nullptr, 0, &desired, nullptr, 0) : 0;
+                    if (g_device) LOG_INFO("audio device has {} channels; SDL maps the 5.1 stream onto them", deviceChannels);
+                }
+                if (g_device) g_channels = 6;
+                else LOG_WARNING("5.1 output unavailable (device channels {}); using the stereo downmix", deviceChannels);
+            }
+            if (!g_device)
+            {
+                desired.channels = 2;
+                g_device = SDL_OpenAudioDevice(nullptr, 0, &desired, nullptr, 0);
+            }
+            if (g_device) SDL_PauseAudioDevice(g_device, g_paused ? 1 : 0);
+            if (!g_device) LOG_WARNING("audio device unavailable: {}", SDL_GetError());
+            else LOG_INFO("audio output: 48000 Hz {} float, SDL driver {}", g_channels == 6 ? "5.1" : "stereo", SDL_GetCurrentAudioDriver());
+            g_outputChannels = g_device ? g_channels : 0;
+        }
+
+        // Whole frames waiting in the device queue.
+        uint32_t QueuedFrames()
+        {
+            std::lock_guard lock(g_deviceMutex);
+            return g_device ? SDL_GetQueuedAudioSize(g_device) / FrameBytes() : 0;
+        }
 
         void CaptureRequested(const float* stereo, uint32_t frame)
         {
@@ -81,7 +137,15 @@ namespace apu
                 // Avoid a burst of catch-up callbacks after a host stall.
                 if (std::chrono::steady_clock::now() - next > framePeriod * 4)
                     next = std::chrono::steady_clock::now();
-                while (g_device && SDL_GetQueuedAudioSize(g_device) >= kStereoFrameBytes * 4)
+                if (const bool surround = g_surroundRequested; g_audioReady && surround != g_surroundOpen)
+                {
+                    std::lock_guard lock(g_deviceMutex);
+                    g_surroundOpen = surround;
+                    OpenDevice(surround);
+                }
+                else if (!g_outputChannels && g_device) // a request withdrawn before it was applied
+                    g_outputChannels = g_channels;
+                while (QueuedFrames() >= 4)
                     os::scheduling::PreciseSleepFor(std::chrono::milliseconds(1));
 
                 g_client.Dispatch([&](uint32_t callback, uint32_t param)
@@ -93,20 +157,15 @@ namespace apu
         }
     }
 
-    void Init()
+    void Init(bool surround)
     {
-        if (SDL_InitSubSystem(SDL_INIT_AUDIO) == 0)
+        g_surroundRequested = g_surroundOpen = surround;
+        g_audioReady = SDL_InitSubSystem(SDL_INIT_AUDIO) == 0;
         {
-            SDL_AudioSpec desired{};
-            desired.freq = XAUDIO_SAMPLES_HZ;
-            desired.format = AUDIO_F32SYS;
-            desired.channels = 2;
-            desired.samples = 512;
-            g_device = SDL_OpenAudioDevice(nullptr, 0, &desired, nullptr, 0);
-            if (g_device) SDL_PauseAudioDevice(g_device, 0);
+            std::lock_guard lock(g_deviceMutex);
+            if (g_audioReady) OpenDevice(surround);
+            else LOG_WARNING("audio device unavailable: {}", SDL_GetError());
         }
-        if (!g_device) LOG_WARNING("audio device unavailable: {}", SDL_GetError());
-        else LOG_INFO("audio output: 48000 Hz stereo float, SDL driver {}", SDL_GetCurrentAudioDriver());
         g_running = true;
         g_thread = os::GuestCodeThread(DriverMain);
         g_thread.detach();
@@ -118,9 +177,21 @@ namespace apu
         g_client.Register(callback, param);
     }
 
+    void SetSurround(bool surround)
+    {
+        g_surroundRequested = surround;
+        g_outputChannels = 0; // unknown until the driver thread has applied it
+    }
+
+    uint32_t OutputChannels()
+    {
+        return g_outputChannels;
+    }
+
     void UnregisterClient()
     {
         g_client.Unregister();
+        std::lock_guard lock(g_deviceMutex);
         if (g_device) SDL_ClearQueuedAudio(g_device);
     }
 
@@ -129,6 +200,9 @@ namespace apu
         if (!samples) return;
         const auto* words = static_cast<const uint32_t*>(samples);
         std::array<float, XAUDIO_NUM_SAMPLES * 2> stereo{};
+        // Guest planes FL, FR, FC, LFE, BL, BR match SDL's 6-channel order
+        // FL, FR, FC, LFE, SL/BL, SR/BR, so 5.1 interleaves them unchanged.
+        std::array<float, XAUDIO_NUM_SAMPLES * XAUDIO_NUM_CHANNELS> surround;
         float peak = 0;
         for (uint32_t i = 0; i < XAUDIO_NUM_SAMPLES; ++i)
         {
@@ -137,6 +211,7 @@ namespace apu
             {
                 const float value = std::bit_cast<float>(ByteSwap(words[c * XAUDIO_NUM_SAMPLES + i]));
                 channel[c] = std::isfinite(value) ? value : 0;
+                surround[i * 6 + c] = std::clamp(channel[c], -1.0f, 1.0f);
             }
             // Guest order: FL, FR, FC, LFE, BL, BR. Include center dialogue
             // and rear effects in the stereo fold-down, with headroom.
@@ -161,23 +236,36 @@ namespace apu
             if (!value) value = getenv("LO_BACKGROUND");
             return value && std::strcmp(value, "1") == 0;
         }();
-        if (mute) stereo.fill(0);
-        static uint32_t queueDrops = 0, queueErrors = 0;
-        if (g_device)
+        if (mute)
         {
-            if (SDL_GetQueuedAudioSize(g_device) < kStereoFrameBytes * 16)
-            {
-                if (SDL_QueueAudio(g_device, stereo.data(), sizeof(stereo)) != 0) ++queueErrors;
-            }
-            else ++queueDrops;
+            stereo.fill(0);
+            surround.fill(0);
         }
-        if (n == 1 || (n % 1875) == 0) // every ~10 s
+        static uint32_t queueDrops = 0, queueErrors = 0;
+        const bool report = n == 1 || (n % 1875) == 0; // every ~10 s
+        uint32_t queued = 0;
+        {
+            std::lock_guard lock(g_deviceMutex);
+            if (g_device)
+            {
+                const float* data = g_channels == 6 ? surround.data() : stereo.data();
+                if (SDL_GetQueuedAudioSize(g_device) < FrameBytes() * 16)
+                {
+                    if (SDL_QueueAudio(g_device, data, FrameBytes()) != 0) ++queueErrors;
+                }
+                else ++queueDrops;
+                if (report) queued = SDL_GetQueuedAudioSize(g_device);
+            }
+        }
+        if (report)
             LOG_INFO("audio frames submitted: {} peak={} queued={} mute={} queue_drops={} queue_errors={}", n, peak,
-                g_device ? SDL_GetQueuedAudioSize(g_device) : 0, mute, queueDrops, queueErrors);
+                queued, mute, queueDrops, queueErrors);
     }
 
     void SetPaused(bool paused)
     {
+        std::lock_guard lock(g_deviceMutex);
+        g_paused = paused;
         if (g_device)
         {
             SDL_PauseAudioDevice(g_device, paused ? 1 : 0);

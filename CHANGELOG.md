@@ -12,6 +12,9 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - First visits to maps and battles stutter less: the pipelines a scene is known to use are built while it loads.
 - DirectX 12: shorter stalls in the first frames of a new scene; when a pipeline is missing, pipelines that share its shaders are built on other CPU cores at the same time.
 - The game downloads a list of the pipelines that maps, cutscenes and battles use, recorded ahead of time, so even first visits stutter less; it is kept up to date in the background.
+- The F1 Debug Menu's fast-forward settings (on/off, Hold or Toggle, multiplier) are kept after a restart (#104).
+- New **Vibration** slider in the Audio settings sets the controller rumble strength; at the minimum, rumble is off (#198).
+- New Audio output setting (Settings > Audio): 5.1 surround sends the game's own 5.1 mix to 5.1 and 7.1 speaker setups (#174).
 - Exclusive fullscreen was removed; the display mode is windowed or borderless fullscreen, and a saved exclusive fullscreen choice starts in borderless fullscreen.
 - A new GPU setting picks the graphics card to render with on PCs that have more than one; it applies after a restart (#202).
 - A new Display setting picks the monitor the game uses, windowed or in borderless fullscreen (#201).
@@ -22,6 +25,9 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - 第一次进入地图和战斗时卡顿更少：场景已知会用到的管线在读盘时就建好。
 - DirectX 12：新场景开头几帧的卡顿更短；缺少某个管线时，和它共用着色器的管线会同时在其他 CPU 核心上建好。
 - 游戏会下载一份预先录好的地图、过场和战斗所用管线列表，第一次进入时卡顿也更少；这份列表会在后台自动更新。
+- F1 调试菜单的快进设置（开关、按住或切换、倍率）重启后会保留（#104）。
+- 声音设置新增**震动**滑块，可调整手柄震动强度，调到最小即关闭震动（#198）。
+- 新增“音频输出”设置（设置 > 声音）：选择 5.1 环绕声后，游戏自带的 5.1 混音会输出到 5.1 和 7.1 扬声器（#174）。
 - 移除独占全屏；显示模式只有窗口和无边框全屏，之前保存为独占全屏的设置改为以无边框全屏启动。
 - 新增 GPU 设置，在有多张显卡的电脑上可选择用哪一张渲染，重启后生效（#202）。
 - 新增显示器设置，可选择游戏在窗口或无边框全屏下使用的显示器（#201）。
