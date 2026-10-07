@@ -54,6 +54,7 @@ namespace apu
                     SDL_CloseAudioDevice(g_device);
                     // A 7.1 device takes the 5.1 channels through SDL's layout conversion.
                     g_device = deviceChannels > 6 ? SDL_OpenAudioDevice(nullptr, 0, &desired, nullptr, 0) : 0;
+                    if (g_device) LOG_INFO("audio device has {} channels; SDL maps the 5.1 stream onto them", deviceChannels);
                 }
                 if (g_device) g_channels = 6;
                 else LOG_WARNING("5.1 output unavailable (device channels {}); using the stereo downmix", deviceChannels);
