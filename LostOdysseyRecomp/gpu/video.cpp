@@ -66,6 +66,7 @@
 #include <SDL_syswm.h>
 #include "window_pixels.h"
 #include "window_mode.h"
+#include "display_choice.h"
 #endif
 #include <os/logger.h>
 
@@ -1729,6 +1730,31 @@ namespace gpu::video
         std::lock_guard lock(g_gpuNamesMutex);
         return g_activeGpuDeviceName;
     }
+    static std::vector<std::string> g_displayNames;
+    std::vector<std::string> DisplayNames() {
+        std::lock_guard lock(g_gpuNamesMutex);
+        return g_displayNames;
+    }
+    // Window owner thread only: SDL's display list is not thread-safe.
+    static std::vector<std::string> QueryDisplayNames() {
+        std::vector<std::string> names;
+        const int count = SDL_GetNumVideoDisplays();
+        for (int i = 0; i < count; ++i) {
+            const char* name = SDL_GetDisplayName(i);
+            names.emplace_back(name && *name ? std::string(name) : "Display " + std::to_string(i + 1));
+        }
+        std::lock_guard lock(g_gpuNamesMutex);
+        g_displayNames = names;
+        return names;
+    }
+    // SDL display index for the saved display, or -1 for system placement.
+    static int ChosenDisplay(const settings::Config& config, const std::vector<std::string>& names) {
+        const int display = display_choice::Resolve(names, config.displayName, config.displayIndex);
+        if (display < 0 && !config.displayName.empty())
+            LOG_WARNING("video: display \"{}\" #{} is not connected; using automatic placement",
+                config.displayName, config.displayIndex + 1);
+        return display;
+    }
 
     // The command thread calls this only before guest startup, or after all
     // rendering has stopped. The window/event thread is deliberately retained
@@ -1906,7 +1932,11 @@ namespace gpu::video
 #elif !defined(_WIN32)
             flags |= SDL_WINDOW_VULKAN;
 #endif
-            g_window = SDL_CreateWindow(lo_version::WindowTitle, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+            // Fullscreen later uses the display the window was created on.
+            const int display = ChosenDisplay(config, QueryDisplayNames());
+            const int position = display >= 0 ? int(SDL_WINDOWPOS_CENTERED_DISPLAY(display)) : int(SDL_WINDOWPOS_CENTERED);
+            if (display >= 0) LOG_INFO("video: window on display {} \"{}\"", display, config.displayName);
+            g_window = SDL_CreateWindow(lo_version::WindowTitle, position, position,
                 config.width, config.height, flags);
             if (!g_window)
             {
@@ -2861,7 +2891,10 @@ namespace gpu::video
         }
         if (state.shortcutMode) config.windowMode = *state.shortcutMode;
         const bool reapply = g_reapplyWindow.exchange(false);
-        if(reapply || !state.initialized || config.width!=state.applied.width || config.height!=state.applied.height || config.windowMode!=state.applied.windowMode) {
+        // Startup already created the window on the saved display.
+        const bool displayChanged = state.initialized &&
+            (config.displayName != state.applied.displayName || config.displayIndex != state.applied.displayIndex);
+        if(reapply || displayChanged || !state.initialized || config.width!=state.applied.width || config.height!=state.applied.height || config.windowMode!=state.applied.windowMode) {
 #if (defined(_WIN32) && (defined(LO_ENABLE_STREAMLINE_FG) || defined(LO_ENABLE_D3D12_FG) || defined(LO_ENABLE_VULKAN_FSR_FG))) || (defined(__APPLE__) && defined(LO_ENABLE_METALFX_FG))
             if (g_fgWindowSynchronization && g_fgWindowChange.load() != 2) {
                 g_fgWindowChange = 1;
@@ -2875,6 +2908,19 @@ namespace gpu::video
             const auto mode=getenv("LO_BACKGROUND")?settings::WindowMode::Windowed:config.windowMode;
             const bool wasWindowed = !state.initialized || state.applied.windowMode == settings::WindowMode::Windowed;
             const bool sizeChanged = !state.initialized || config.width != state.applied.width || config.height != state.applied.height;
+            if (displayChanged) {
+                const auto displays = QueryDisplayNames();
+                const int target = ChosenDisplay(config, displays);
+                if (target >= 0 && target != SDL_GetWindowDisplayIndex(g_window)) {
+                    // SDL only records the position of a fullscreen window, and
+                    // fullscreen covers the display the window is on: leave it,
+                    // move, and let the mode below enter it again.
+                    if (SDL_GetWindowFlags(g_window) & SDL_WINDOW_FULLSCREEN) SDL_SetWindowFullscreen(g_window, 0);
+                    SDL_SetWindowPosition(g_window, SDL_WINDOWPOS_CENTERED_DISPLAY(target), SDL_WINDOWPOS_CENTERED_DISPLAY(target));
+                    state.placement.valid = false; // The windowed rectangle was on the old display.
+                    LOG_INFO("video: window moved to display {} \"{}\"", target, displays[size_t(target)]);
+                }
+            }
             if (wasWindowed && mode != settings::WindowMode::Windowed) state.placement.Capture(g_window);
             int result=SDL_SetWindowFullscreen(g_window,mode==settings::WindowMode::Borderless?SDL_WINDOW_FULLSCREEN_DESKTOP:0);
             if (result == 0 && mode == settings::WindowMode::Windowed) {
@@ -2937,6 +2983,9 @@ namespace gpu::video
                  (event.window.event == SDL_WINDOWEVENT_MOVED || event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED ||
                   event.window.event == SDL_WINDOWEVENT_DISPLAY_CHANGED || event.window.event == SDL_WINDOWEVENT_FOCUS_GAINED)))
                 g_nextRefreshPoll = {};
+            if (event.type == SDL_DISPLAYEVENT &&
+                (event.display.event == SDL_DISPLAYEVENT_CONNECTED || event.display.event == SDL_DISPLAYEVENT_DISCONNECTED))
+                QueryDisplayNames(); // Refreshes the menu's display list.
             const bool pointerActivity =
                 event.type == SDL_MOUSEMOTION ||
                 event.type == SDL_MOUSEBUTTONDOWN ||

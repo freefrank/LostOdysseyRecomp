@@ -14,6 +14,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - The game downloads a list of the pipelines that maps, cutscenes and battles use, recorded ahead of time, so even first visits stutter less; it is kept up to date in the background.
 - Exclusive fullscreen was removed; the display mode is windowed or borderless fullscreen, and a saved exclusive fullscreen choice starts in borderless fullscreen.
 - A new GPU setting picks the graphics card to render with on PCs that have more than one; it applies after a restart (#202).
+- A new Display setting picks the monitor the game uses, windowed or in borderless fullscreen (#201).
 
 ### 简体中文
 
@@ -23,6 +24,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - 游戏会下载一份预先录好的地图、过场和战斗所用管线列表，第一次进入时卡顿也更少；这份列表会在后台自动更新。
 - 移除独占全屏；显示模式只有窗口和无边框全屏，之前保存为独占全屏的设置改为以无边框全屏启动。
 - 新增 GPU 设置，在有多张显卡的电脑上可选择用哪一张渲染，重启后生效（#202）。
+- 新增显示器设置，可选择游戏在窗口或无边框全屏下使用的显示器（#201）。
 
 ## [v0.8.44](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.8.44) — 2026-10-06
 

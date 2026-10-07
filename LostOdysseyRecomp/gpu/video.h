@@ -43,6 +43,8 @@ namespace gpu::video
     // in use; empty before device creation. Safe to call from the menu thread.
     std::vector<std::string> GpuDeviceNames();
     std::string ActiveGpuDeviceName();
+    // Connected displays in SDL order, published by the window owner thread.
+    std::vector<std::string> DisplayNames();
     // Latest committed device capability. Callers receive a copy and do not
     // read NGX reports or device pointers. The device owner publishes it.
     upscaling::BackendDeviceSnapshot BackendDeviceState();

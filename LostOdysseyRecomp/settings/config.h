@@ -58,6 +58,10 @@ struct Config
     // Adapter name as the backend lists it; empty selects automatically.
     // Applied on the next process start.
     std::string gpuDevice;
+    // SDL display name, plus its index to tell equal names apart. An empty name
+    // leaves window placement to the system. Applied when saved.
+    std::string displayName;
+    uint32_t displayIndex = 0;
     uint32_t antialiasing = 0; // 0 Off, 1 FXAA, 2 SMAA, 3 experimental camera-based TAA.
     uint32_t shadowResolution = 1; // Shadow map width and height multiplier: 1/2/4.
     uint32_t ambientOcclusion = 0; // 0 Off, 1 SSAO, 2 GTAO.
