@@ -2,7 +2,7 @@ name: Discord notifications
 
 on:
   push:
-    branches: [main]
+    branches: ['**']
   # pull_request_target so fork PRs also get the bot token; the job only reads the event
   # payload and checks out the base branch, never the PR's code.
   pull_request_target:

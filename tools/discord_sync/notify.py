@@ -1,4 +1,4 @@
-"""Post GitHub pushes to main, pull requests and published releases to Discord through the sync bot.
+"""Post GitHub pushes (any branch), pull requests and published releases to Discord through the sync bot.
 
 Reads the Actions event from GITHUB_EVENT_PATH. Pushes go to DISCORD_COMMITS_CHANNEL as one
 embed listing the commits, and so do opened, reopened or closed-unmerged pull requests
@@ -24,12 +24,25 @@ def clip(text, limit):
 
 
 def push_message(event):
-    commits = [c for c in event.get('commits') or [] if c.get('distinct', True)]
-    if not commits:
-        return None
-    branch = event['ref'].rsplit('/', 1)[-1]
+    if event.get('deleted') or not event['ref'].startswith('refs/heads/'):
+        return None  # branch deletions follow every merge; not worth a message
+    branch = event['ref'].removeprefix('refs/heads/')
     repo_url = event['repository']['html_url']
+    commits = [c for c in event.get('commits') or [] if c.get('distinct', True)]
+    count = f'{len(commits)} new commit{"s" if len(commits) != 1 else ""}'
+    if event.get('created'):
+        heading = f'New branch {branch}' + (f' · {count}' if commits else '')
+    elif commits:
+        heading = f'{count} on {branch}'
+    else:
+        return None
+    if event.get('forced') and not event.get('created'):
+        heading += ' (force-pushed)'
     lines = []
+    head = event.get('head_commit')
+    if not commits and head:  # a branch created at an existing commit
+        lines.append(f'from [`{head["id"][:7]}`]({head["url"]}) '
+                     + clip(head['message'].splitlines()[0], 150).replace('[', '(').replace(']', ')'))
     for commit in commits[-MAX_COMMITS:]:
         title = commit['message'].splitlines()[0].strip()
         sha = f'[`{commit["id"][:7]}`]({commit["url"]})'
@@ -46,7 +59,7 @@ def push_message(event):
     return {
         'allowed_mentions': NO_PINGS,
         'embeds': [{
-            'title': f'{len(commits)} new commit{"s" if len(commits) != 1 else ""} on {branch}',
+            'title': clip(heading, 256),
             'url': event.get('compare') or repo_url,
             'description': '\n'.join(lines),
             'color': 0x5865F2,
