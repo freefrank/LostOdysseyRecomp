@@ -3,7 +3,9 @@ namespace gpu::ao {
 inline constexpr char Shader[] = R"HLSL(
 Texture2D<float4> sceneColor : register(t0);
 Texture2D<float> sceneDepth : register(t1);
-Texture2D<float> visibilityImage : register(t2);
+// x: visibility, y: view depth of the full-resolution pixel it was computed at (0 = none).
+Texture2D<float2> visibilityImage : register(t2);
+Texture2D<float4> hdrSceneColor : register(t4);
 #ifdef __spirv__
 [[vk::binding(3,0)]]
 #endif
@@ -110,42 +112,67 @@ float gtao(int2 pixel, float3 p, float3 n) {
     }
     return saturate(visibility/3);
 }
-float visibility(float4 pos:SV_Position):SV_Target0 {
+float2 visibility(float4 pos:SV_Position):SV_Target0 {
     int2 pixel=min(int2(pos.xy*extent.xy/extent.zw),int2(extent.xy)-1);
     float3 p;
-    if(!positionAt(pixel,p)) return 1;
+    if(!positionAt(pixel,p)) return float2(1,0);
     float3 n=normalAt(pixel,p);
     // FP32 bias toward the eye suppresses self-occlusion on reconstructed slopes.
-    return mode==1 ? ssao(pixel,p,n) : gtao(pixel,p*.99999,n);
+    // The view depth lets composite() skip a depth load and division per tap.
+    return float2(mode==1 ? ssao(pixel,p,n) : gtao(pixel,p*.99999,n), p.z);
 }
-float4 composite(float4 pos:SV_Position):SV_Target0 {
+// Filtered visibility at a full-resolution pixel; false where depth has no surface.
+bool filteredVisibility(float4 pos, out float3 p, out float3 n, out float ao) {
     int2 pixel=int2(pos.xy);
-    float4 color=sceneColor.Load(int3(pixel,0));
-    float3 p;
-    if(!positionAt(pixel,p)) return debugView!=0 ? float4(1,1,1,color.a) : color;
-    float3 n=normalAt(pixel,p);
-    if(debugView==2) return float4(n*.5+.5,color.a);
-    if(debugView==3) return float4((p.z/(p.z+radius*10)).xxx,color.a);
+    n=0; ao=1;
+    if(!positionAt(pixel,p)) return false;
+    n=normalAt(pixel,p);
     int2 center=int2(pos.xy*extent.zw/extent.xy);
     float total=0, weights=0;
     [unroll] for(int y=-2;y<=2;++y) [unroll] for(int x=-2;x<=2;++x) {
         int2 q=center+int2(x,y);
         if(any(q<0)||any(q>=int2(extent.zw))) continue;
+        // visibility() resolved this tap's pixel (same mapping); rebuild its
+        // position from the stored view depth exactly as positionAt() does.
+        float2 tap=visibilityImage.Load(int3(q,0));
+        if(!(tap.y>0)) continue;
         int2 full=min(int2((float2(q)+.5)*extent.xy/extent.zw),int2(extent.xy)-1);
-        float3 other;
-        if(!positionAt(full,other)) continue;
+        float2 ndc=(float2(full)+.5)/extent.xy*float2(2,-2)+float2(-1,1)+raster.xy;
+        float3 other=float3(ndc*projection.zw*float2(1,raster.z),1)*tap.y;
         float plane=abs(dot(other-p,n));
         float tolerance=max(radius*.06,p.z*.001);
         float weight=exp2(-float(x*x+y*y)*.5-plane/tolerance*8);
-        total+=visibilityImage.Load(int3(q,0))*weight;
+        total+=tap.x*weight;
         weights+=weight;
     }
-    float ao=weights>1e-5 ? saturate(total/weights) : 1;
+    ao=weights>1e-5 ? saturate(total/weights) : 1;
+    return true;
+}
+float4 applyVisibility(float4 color, bool surface, float3 p, float3 n, float ao) {
+    if(!surface) return debugView!=0 ? float4(1,1,1,color.a) : color;
+    if(debugView==2) return float4(n*.5+.5,color.a);
+    if(debugView==3) return float4((p.z/(p.z+radius*10)).xxx,color.a);
     if(debugView==1) return float4(ao.xxx,color.a);
     // Scene-copy and HDR sidecar are gamma encoded. Apply a bounded visibility
     // in approximate linear light, preserve alpha and extended HDR values.
     color.rgb*=pow(lerp(1,ao,strength),1.0/2.2);
     return color;
+}
+float4 composite(float4 pos:SV_Position):SV_Target0 {
+    float3 p,n; float ao;
+    const bool surface=filteredVisibility(pos,p,n,ao);
+    return applyVisibility(sceneColor.Load(int3(int2(pos.xy),0)),surface,p,n,ao);
+}
+// The RGBA8 scene and its HDR companion share one filtered visibility.
+struct CompositePair { float4 color:SV_Target0; float4 hdr:SV_Target1; };
+CompositePair compositePair(float4 pos:SV_Position) {
+    float3 p,n; float ao;
+    const bool surface=filteredVisibility(pos,p,n,ao);
+    const int3 pixel=int3(int2(pos.xy),0);
+    CompositePair o;
+    o.color=applyVisibility(sceneColor.Load(pixel),surface,p,n,ao);
+    o.hdr=applyVisibility(hdrSceneColor.Load(pixel),surface,p,n,ao);
+    return o;
 }
 )HLSL";
 }

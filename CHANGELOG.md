@@ -15,6 +15,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Supporters on Ko-fi and Buy Me a Coffee are thanked in the Discord #supporters channel.
 - When startup stops for more than 10 seconds, the log names the step and where it waits; `LO_TRACE_STARTUP=1` adds graphics adapter and add-on software details (#282).
 - Controllers, audio and the game window run on SDL 3.4.18 instead of SDL2, with newer controller mappings and drivers (#289).
+- Ambient occlusion (SSAO/GTAO) takes less GPU time with identical output: about 2.4 ms less per frame on an Adreno 840 phone, about 7 ms with HDR on.
 
 ### 简体中文
 
@@ -25,6 +26,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - 在 Ko-fi 和 Buy Me a Coffee 上支持项目的朋友会在 Discord #supporters 频道收到感谢。
 - 启动卡住超过 10 秒时，日志会记下卡住的步骤和等待位置；`LO_TRACE_STARTUP=1` 会额外记录显卡适配器和第三方软件信息（#282）。
 - 手柄、音频和游戏窗口从 SDL2 换成 SDL 3.4.18，带来更新的手柄映射和驱动（#289）。
+- 环境光遮蔽（SSAO/GTAO）画面不变，占用的 GPU 时间更少：Adreno 840 手机上每帧约少 2.4 毫秒，开启 HDR 时约少 7 毫秒。
 
 ## [v0.8.53](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.8.53) — 2026-10-07
 
