@@ -78,27 +78,24 @@ namespace gpu::geometry_prepare
         }
     }
 
-    // Read exactly one sample block with unaligned SIMD loads. An explicit
-    // comparison avoids compiler-dependent expansion of constant-size memcmp.
+    // OR of the XOR of exactly one 64-byte sample block, zero when equal.
+    // Explicit loads avoid compiler-dependent expansion of constant-size
+    // memcmp and let callers fold many blocks into one branch.
+    inline uint64_t SampleBlockDiff64(const uint8_t* left, const uint8_t* right)
+    {
+        uint64_t diff = 0;
+        for (size_t i = 0; i < 64; i += 8)
+        {
+            uint64_t a, b;
+            std::memcpy(&a, left + i, 8);
+            std::memcpy(&b, right + i, 8);
+            diff |= a ^ b;
+        }
+        return diff;
+    }
     inline bool EqualSampleBlock64(const uint8_t* left, const uint8_t* right)
     {
-#if defined(__SSE2__)
-        __m128i equal = _mm_cmpeq_epi8(
-            _mm_loadu_si128(reinterpret_cast<const __m128i*>(left)),
-            _mm_loadu_si128(reinterpret_cast<const __m128i*>(right)));
-        equal = _mm_and_si128(equal, _mm_cmpeq_epi8(
-            _mm_loadu_si128(reinterpret_cast<const __m128i*>(left + 16)),
-            _mm_loadu_si128(reinterpret_cast<const __m128i*>(right + 16))));
-        equal = _mm_and_si128(equal, _mm_cmpeq_epi8(
-            _mm_loadu_si128(reinterpret_cast<const __m128i*>(left + 32)),
-            _mm_loadu_si128(reinterpret_cast<const __m128i*>(right + 32))));
-        equal = _mm_and_si128(equal, _mm_cmpeq_epi8(
-            _mm_loadu_si128(reinterpret_cast<const __m128i*>(left + 48)),
-            _mm_loadu_si128(reinterpret_cast<const __m128i*>(right + 48))));
-        return _mm_movemask_epi8(equal) == 0xFFFF;
-#else
-        return std::memcmp(left, right, 64) == 0;
-#endif
+        return SampleBlockDiff64(left, right) == 0;
     }
 
     // Guest PPC stores are not all instrumented with a write generation yet.
@@ -138,13 +135,12 @@ namespace gpu::geometry_prepare
             if (std::memcmp(data, snapshot.data(), 512) != 0 ||
                 std::memcmp(data + bytes - 512, snapshot.data() + bytes - 512, 512) != 0)
                 return false;
+            // One branch for all windows: the loads of scattered windows overlap.
             const size_t step = (bytes - 1024) / 64;
+            uint64_t diff = 0;
             for (size_t i = 0; i < 64; ++i)
-            {
-                const size_t offset = 512 + i * step;
-                if (!EqualSampleBlock64(data + offset, snapshot.data() + offset)) return false;
-            }
-            return true;
+                diff |= SampleBlockDiff64(data + 512 + i * step, snapshot.data() + 512 + i * step);
+            return diff == 0;
         }
     };
     // Source compatibility for diagnostics that used the old helper name.
