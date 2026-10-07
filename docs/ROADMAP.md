@@ -91,7 +91,7 @@ Parallel tracks:
 
 ## Later backlog
 
-DX11, HDR coverage beyond the experimental output of v0.7.35, v0.8.0 and v0.8.5, higher-resolution shadows, SSAO/depth access, GI/reflections, ray tracing, WMV playback, Linux AArch64 packaging (moved past v1.0.0 on 2026-10-06), PM4 translator removal and the paused Switch work retain their individual Project scope. Deferred research and the SDK synchronization exception are recorded as Paused / Deferred rather than active Todo; they are not cancelled.
+DX11, HDR coverage beyond the experimental output of v0.7.35, v0.8.0 and v0.8.5, higher-resolution shadows, SSAO/depth access, GI/reflections, ray tracing, WMV playback, Linux AArch64 packaging (moved past v1.0.0 on 2026-10-06), the remaining temporal P0 coverage (physical-display classification, failure injection and settings restart; moved out of v0.9.0 on 2026-10-07), PM4 translator removal and the paused Switch work retain their individual Project scope. Deferred research and the SDK synchronization exception are recorded as Paused / Deferred rather than active Todo; they are not cancelled.
 
 See the [Project](https://github.com/users/freefrank/projects/3) for individual evidence and the [historical roadmap](archive/ROADMAP-2026-09-10.md) for earlier detail. This reconciliation did not rerun builds, games or tests.
 

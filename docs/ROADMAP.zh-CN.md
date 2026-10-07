@@ -91,7 +91,7 @@ Gate 1 backlog：调查已知 SDK `PRESENT-AFTER-WRITE` 同步例外并补充显
 
 ## 后续积压
 
-DX11、超出 v0.7.35、v0.8.0 和 v0.8.5 实验性输出的 HDR 覆盖、高分辨率阴影、SSAO／深度访问、GI／反射、光追、WMV 播放、Linux AArch64 打包（2026-10-06 挪到 v1.0.0 之后）、移除 PM4 转换器与暂停的 Switch 工作保留各自 Project 范围。明确延期的研究与 SDK 同步例外使用 Paused／Deferred，移出当前 Todo，但不代表取消。
+DX11、超出 v0.7.35、v0.8.0 和 v0.8.5 实验性输出的 HDR 覆盖、高分辨率阴影、SSAO／深度访问、GI／反射、光追、WMV 播放、Linux AArch64 打包（2026-10-06 挪到 v1.0.0 之后）、时域 P0 剩余的覆盖（物理显示器分类、故障注入和改设置后重启；2026-10-07 移出 v0.9.0）、移除 PM4 转换器与暂停的 Switch 工作保留各自 Project 范围。明确延期的研究与 SDK 同步例外使用 Paused／Deferred，移出当前 Todo，但不代表取消。
 
 逐项证据见 [Project](https://github.com/users/freefrank/projects/3)，早期细节见[历史路线图](archive/ROADMAP-2026-09-10.md)。本轮整理没有重跑构建、游戏或测试。
 

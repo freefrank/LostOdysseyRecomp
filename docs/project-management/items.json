@@ -3989,16 +3989,16 @@
     {
       "key": "temporal-phased-p0-common-contracts-probe",
       "title": "P0: Implement common upscaler/FG contracts and evaluate coexistence architecture",
-      "body": "<!-- lo-project:temporal-phased-p0-common-contracts-probe -->\n\n## P0 Gate 1 accepted — 2026-09-27\n\nThe common temporal-upscaler and frame-generation contracts are implemented. The maintainer accepted P0 Gate 1 after the foreground run recorded 1,980 generated intervals, zero SDK errors, and normal cleanup.\n\n## Remaining scope\n\nP0 remains In Progress because physical-display classification, failure injection, and settings-restart coverage remain open. The known Vulkan `PRESENT-AFTER-WRITE` validation exception is separately tracked as `streamline-vulkan-present-after-write` with Delivery `Deferred`.\n\n## Sources\n\n- docs/notes/gate1-host-repair-20260927.md\n- docs/notes/v0.8.0-fg-sdk-sync-attribution-20260926.md\n- https://github.com/freefrank/LostOdysseyRecomp/commit/39bbda6ff1cb8216582798bebab21a3a5395a36e",
+      "body": "<!-- lo-project:temporal-phased-p0-common-contracts-probe -->\n\n## P0 Gate 1 accepted — 2026-09-27\n\nThe common temporal-upscaler and frame-generation contracts are implemented. The maintainer accepted P0 Gate 1 after the foreground run recorded 1,980 generated intervals, zero SDK errors, and normal cleanup.\n\n## Remaining scope\n\nP0 remains In Progress because physical-display classification, failure injection, and settings-restart coverage remain open. The known Vulkan `PRESENT-AFTER-WRITE` validation exception is separately tracked as `streamline-vulkan-present-after-write` with Delivery `Deferred`.\n\n## Sources\n\n- docs/notes/gate1-host-repair-20260927.md\n- docs/notes/v0.8.0-fg-sdk-sync-attribution-20260926.md\n- https://github.com/freefrank/LostOdysseyRecomp/commit/39bbda6ff1cb8216582798bebab21a3a5395a36e\n\n## Backlog - 2026-10-07\n\nThe maintainer moved this item out of v0.9.0 into the backlog on 2026-10-07. Gate 1 stays accepted; physical-display classification, failure injection and settings-restart coverage remain open as backlog work.\n",
       "issue_url": null,
       "fields": {
         "Kind": "Infrastructure",
         "Area": "Temporal rendering",
-        "Status": "In Progress",
-        "Delivery": "Validated",
-        "Release": "v0.9.0",
+        "Status": "Paused",
+        "Delivery": "Deferred",
+        "Release": null,
         "Start date": "2026-09-22",
-        "Evidence": "P0 Gate 1 PASSED by maintainer acceptance on 2026-09-27. The known Streamline Vulkan PRESENT-AFTER-WRITE exception is separately deferred under streamline-vulkan-present-after-write. The foreground run recorded 1,980 generated intervals, zero SDK errors and normal cleanup. Physical-display classification, failure injection and settings-restart coverage remain separate follow-up validation.",
+        "Evidence": "P0 Gate 1 PASSED by maintainer acceptance on 2026-09-27. The known Streamline Vulkan PRESENT-AFTER-WRITE exception is separately deferred under streamline-vulkan-present-after-write. The foreground run recorded 1,980 generated intervals, zero SDK errors and normal cleanup. Physical-display classification, failure injection and settings-restart coverage remain separate follow-up validation. Moved to the backlog by the maintainer on 2026-10-07: the remaining coverage does not block v0.9.0.",
         "Source key": "temporal-phased-p0-common-contracts-probe"
       },
       "source_refs": [
@@ -5885,7 +5885,7 @@
       "fields": {
         "Kind": "Feature",
         "Area": "Input",
-        "Status": "In Progress",
+        "Status": "Done",
         "Delivery": "Released",
         "Release": "v0.7.0",
         "Start date": "2026-09-16",
@@ -7002,7 +7002,7 @@
       "fields": {
         "Kind": "Bug",
         "Area": "Installation",
-        "Status": "Awaiting validation",
+        "Status": "Done",
         "Delivery": "Released",
         "Release": "v0.8.44",
         "Start date": "2026-10-06",
@@ -7292,7 +7292,7 @@
       "fields": {
         "Kind": "Feature",
         "Area": "User interface",
-        "Status": "Todo",
+        "Status": "Done",
         "Delivery": "Not started",
         "Release": null,
         "Start date": null,
