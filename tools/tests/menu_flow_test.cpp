@@ -1756,6 +1756,17 @@ int main(int argc, char** argv)
                         fgText.find("frame_generation_multiplier=6\n") != std::string::npos,
                         "real INI writes FG provider and multiplier");
             }
+            writeIni("width=1600\ndisplay_name=M27P20\ndisplay_index=2\ngpu_device=GPU B\nwindow_mode=2\n");
+            {
+                const auto names = settings::Read();
+                Require(names.displayName == "M27P20" && names.displayIndex == 2 && names.gpuDevice == "GPU B" &&
+                        names.windowMode == settings::WindowMode::Borderless,
+                        "display/GPU names read from INI; saved exclusive fullscreen loads as Fullscreen");
+            }
+            Require(settings::SaveDisplayChoice("M27P20", 1), "display choice of a player move saves");
+            Require(settings::Read().displayIndex == 1 && settings::Read().displayName == "M27P20" &&
+                    settings::Read().width == 1600 && settings::Read().gpuDevice == "GPU B" &&
+                    settings::GetConfig().displayIndex == 1, "a player move saves only the display choice");
             std::puts("PASS FG settings.ini provider and multiplier validation, FSR normalization, and min/max save/reload");
             std::filesystem::current_path(originalDir);
             std::filesystem::remove_all(sandbox);

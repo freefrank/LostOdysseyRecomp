@@ -75,6 +75,10 @@ uint64_t displayMovesBefore = 0;
 std::chrono::steady_clock::time_point displayConfirmDeadline;
 std::atomic<bool> displayConfirmOpen{false}, displayConfirmEscape{false};
 std::chrono::steady_clock::duration menuClockOffset{}; // Tests advance the menu clock.
+// Saved display choice the menu last saw; the window thread changes it when the
+// player moves the window (Win+Shift+arrow).
+std::string syncedDisplayName;
+uint32_t syncedDisplayIndex = 0;
 std::chrono::steady_clock::time_point MenuNow() { return std::chrono::steady_clock::now() + menuClockOffset; }
 bool collectionPrompt = false;
 int collectionChoice = 1;
@@ -1568,6 +1572,11 @@ PPC_FUNC(sub_822F19B0)
         importLaunchPending = false;
         displayConfirm = displayReverting = false;
         displayConfirmOpen = false;
+        {
+            const auto saved = GetConfig();
+            syncedDisplayName = saved.displayName;
+            syncedDisplayIndex = saved.displayIndex;
+        }
         status.clear();
         Publish(base, config);
         LOG_INFO("settings: replacement opened at guest menu {:#x}", menu);
@@ -1576,6 +1585,21 @@ PPC_FUNC(sub_822F19B0)
             LOG_INFO("settings: voice option {} -> language {}", i, VoiceLanguage(base, i));
     }
     uint16_t input = pending.exchange(0);
+    {
+        // Follow a display the player moved the window to while the menu is
+        // open, unless the Display row was changed here.
+        const auto saved = GetConfig();
+        if (saved.displayName != syncedDisplayName || saved.displayIndex != syncedDisplayIndex)
+        {
+            if (edit.displayName == syncedDisplayName && edit.displayIndex == syncedDisplayIndex)
+            {
+                edit.displayName = saved.displayName;
+                edit.displayIndex = saved.displayIndex;
+            }
+            syncedDisplayName = saved.displayName;
+            syncedDisplayIndex = saved.displayIndex;
+        }
+    }
     if (int selected = mouseTab.exchange(-1); selected >= 0)
     {
         tab = selected;

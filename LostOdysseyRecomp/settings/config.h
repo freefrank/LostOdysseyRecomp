@@ -115,5 +115,8 @@ bool SaveSaveAnywhere(bool enabled);
 bool SaveNoRandomEncounters(bool enabled);
 bool SaveFastForward(bool enabled, uint32_t mode, uint32_t rate);
 bool SaveAudioOutput(uint32_t output);
+// The player moved the window to another display (Win+Shift+arrow, dragging):
+// saves only the display choice, merged with the persisted settings.
+bool SaveDisplayChoice(const std::string &name, uint32_t index);
 uint32_t GameLanguage();
 } // namespace settings

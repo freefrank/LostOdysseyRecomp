@@ -391,6 +391,19 @@ bool SaveAudioOutput(uint32_t output)
     Current().audioOutput = persisted.audioOutput;
     return true;
 }
+bool SaveDisplayChoice(const std::string &name, uint32_t index)
+{
+    std::lock_guard lock(mutex);
+    // Merge with the persisted settings, not a pending graphics preview.
+    auto persisted = Read();
+    persisted.displayName = name;
+    persisted.displayIndex = index;
+    persisted = Validate(persisted);
+    if (!WriteConfig(persisted)) return false;
+    Current().displayName = persisted.displayName;
+    Current().displayIndex = persisted.displayIndex;
+    return true;
+}
 bool SaveDebugLanguage(uint32_t language)
 {
     std::lock_guard lock(mutex);

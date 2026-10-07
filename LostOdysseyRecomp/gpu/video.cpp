@@ -376,6 +376,13 @@ namespace gpu::video
             std::optional<settings::WindowMode> shortcutMode, shortcutPrevious;
             window_mode::Placement placement;
             SDL_Scancode consumedKey = SDL_SCANCODE_UNKNOWN;
+            // Display our own placement left the window on. Any other display
+            // change came from the system (Win+Shift+arrow, dragging, snapping).
+            int expectedDisplay = -1;
+            std::chrono::steady_clock::time_point topologyChanged{};
+            // Win+Shift+arrow in fullscreen, if Windows itself does not move the window.
+            int hotkeyDirection = 0, hotkeyFrom = -1, hotkeyTarget = -1;
+            std::chrono::steady_clock::time_point hotkeyAt{};
         } g_windowDisplay;
         std::vector<uint32_t> g_menuPixels;
         uint64_t g_menuRevision=0;
@@ -1768,6 +1775,30 @@ namespace gpu::video
                 config.displayName, config.displayIndex);
         return display;
     }
+    // Window owner thread: the player moved the window to `display` (Win+Shift+
+    // arrow, dragging). A saved display choice follows it without asking;
+    // Automatic stays Automatic.
+    static void OnSystemDisplayMove(int display, const char* how) {
+        auto& state = g_windowDisplay;
+        state.expectedDisplay = display;
+        const auto displays = QueryDisplays();
+        if (display < 0 || size_t(display) >= displays.size()) return;
+        // SDL restores a fullscreen window to its windowed rectangle, which is
+        // still on the old display: put that rectangle on this one.
+        if (SDL_GetWindowFlags(g_window) & SDL_WINDOW_FULLSCREEN)
+            SDL_SetWindowPosition(g_window, SDL_WINDOWPOS_CENTERED_DISPLAY(display), SDL_WINDOWPOS_CENTERED_DISPLAY(display));
+        state.placement.valid = false;
+        const auto& name = displays[size_t(display)].name;
+        const bool automatic = settings::GetConfig().displayName.empty();
+        bool saved = false;
+        if (!automatic) {
+            saved = settings::SaveDisplayChoice(name, uint32_t(display));
+            state.applied.displayName = name;
+            state.applied.displayIndex = uint32_t(display);
+        }
+        LOG_INFO("video: window moved by the system to display {} \"{}\" ({}); {}", display, name, how,
+            automatic ? "display choice stays Automatic" : saved ? "display choice saved" : "display choice could not be saved");
+    }
 
     // The command thread calls this only before guest startup, or after all
     // rendering has stopped. The window/event thread is deliberately retained
@@ -1958,6 +1989,7 @@ namespace gpu::video
                 LOG_WARNING("video: window creation failed: {}", SDL_GetError());
                 return false;
             }
+            g_windowDisplay.expectedDisplay = SDL_GetWindowDisplayIndex(g_window);
 #if defined(__ANDROID__)
             const auto nativeWindow = CurrentAndroidNativeWindow();
             g_androidNativeWindowIdentity = nativeWindow;
@@ -2955,6 +2987,13 @@ namespace gpu::video
                         config.displayName, config.displayIndex, target, current);
                 }
             }
+            // Win+Shift+arrow in fullscreen that Windows did not carry out itself:
+            // move to the adjacent display and let the mode below re-enter fullscreen.
+            const int hotkeyTarget = std::exchange(state.hotkeyTarget, -1);
+            if (hotkeyTarget >= 0 && hotkeyTarget != SDL_GetWindowDisplayIndex(g_window)) {
+                if (SDL_GetWindowFlags(g_window) & SDL_WINDOW_FULLSCREEN) SDL_SetWindowFullscreen(g_window, 0);
+                SDL_SetWindowPosition(g_window, SDL_WINDOWPOS_CENTERED_DISPLAY(hotkeyTarget), SDL_WINDOWPOS_CENTERED_DISPLAY(hotkeyTarget));
+            }
             if (wasWindowed && mode != settings::WindowMode::Windowed) state.placement.Capture(g_window);
             int result=SDL_SetWindowFullscreen(g_window,mode==settings::WindowMode::Borderless?SDL_WINDOW_FULLSCREEN_DESKTOP:0);
             if (result == 0 && mode == settings::WindowMode::Windowed) {
@@ -2971,12 +3010,24 @@ namespace gpu::video
             g_displayMode.store(int(mode));
             LOG_INFO("video: window mode={} display={} result={}", int(mode), SDL_GetWindowDisplayIndex(g_window), result);
             state.applied=config; state.initialized=true;
+            if (hotkeyTarget >= 0) OnSystemDisplayMove(SDL_GetWindowDisplayIndex(g_window), "Win+Shift+arrow in fullscreen");
+            state.expectedDisplay = SDL_GetWindowDisplayIndex(g_window);
             g_nextRefreshPoll = {}; // Re-query after a mode transition on the next window pump.
             g_windowResizeRequested = true;
             g_displayChanges.WindowComplete(ticket, result == 0);
 #if (defined(_WIN32) && (defined(LO_ENABLE_STREAMLINE_FG) || defined(LO_ENABLE_D3D12_FG) || defined(LO_ENABLE_VULKAN_FSR_FG))) || (defined(__APPLE__) && defined(LO_ENABLE_METALFX_FG))
             g_fgWindowChange = 0;
 #endif
+        }
+        // Windows normally moves the window itself on Win+Shift+arrow (seen as a
+        // display change below). If it has not after a moment, do it here.
+        if (state.hotkeyDirection && now - state.hotkeyAt >= std::chrono::milliseconds(300)) {
+            const int direction = std::exchange(state.hotkeyDirection, 0);
+            const int display = SDL_GetWindowDisplayIndex(g_window);
+            if (display == state.hotkeyFrom && (SDL_GetWindowFlags(g_window) & SDL_WINDOW_FULLSCREEN)) {
+                state.hotkeyTarget = display_choice::Adjacent(QueryDisplays(), display, direction);
+                if (state.hotkeyTarget >= 0) g_reapplyWindow = true;
+            }
         }
         debug_menu::Update();
         hid::PumpHostInput();
@@ -3019,8 +3070,13 @@ namespace gpu::video
                   event.window.event == SDL_WINDOWEVENT_DISPLAY_CHANGED || event.window.event == SDL_WINDOWEVENT_FOCUS_GAINED)))
                 g_nextRefreshPoll = {};
             if (event.type == SDL_DISPLAYEVENT &&
-                (event.display.event == SDL_DISPLAYEVENT_CONNECTED || event.display.event == SDL_DISPLAYEVENT_DISCONNECTED))
+                (event.display.event == SDL_DISPLAYEVENT_CONNECTED || event.display.event == SDL_DISPLAYEVENT_DISCONNECTED)) {
                 LOG_INFO("video: displays changed: {}", DescribeDisplays(QueryDisplays())); // Refreshes the menu's list.
+                // Indices shift and Windows may move the window off a removed
+                // display; that is not the player choosing a display.
+                state.topologyChanged = now;
+                state.expectedDisplay = SDL_GetWindowDisplayIndex(g_window);
+            }
             const bool pointerActivity =
                 event.type == SDL_MOUSEMOTION ||
                 event.type == SDL_MOUSEBUTTONDOWN ||
@@ -3062,6 +3118,18 @@ namespace gpu::video
                 continue;
             }
             if (event.type == SDL_KEYDOWN && event.key.keysym.scancode == state.consumedKey) continue;
+            // Win+Shift+Left/Right: Windows moves windowed windows to the next
+            // display; fullscreen is followed up after a moment if it did not move.
+            if (event.type == SDL_KEYDOWN && !event.key.repeat &&
+                (event.key.keysym.sym == SDLK_LEFT || event.key.keysym.sym == SDLK_RIGHT) &&
+                (event.key.keysym.mod & KMOD_GUI) && (event.key.keysym.mod & KMOD_SHIFT)) {
+                if ((SDL_GetWindowFlags(g_window) & SDL_WINDOW_FULLSCREEN) && !getenv("LO_BACKGROUND")) {
+                    state.hotkeyDirection = event.key.keysym.sym == SDLK_LEFT ? -1 : 1;
+                    state.hotkeyFrom = SDL_GetWindowDisplayIndex(g_window);
+                    state.hotkeyAt = now;
+                }
+                continue; // A window shortcut, not game input.
+            }
             if (event.type == SDL_KEYDOWN && window_mode::IsToggleChord(event.key) &&
                 window_mode::TargetsGameWindow(event.key, SDL_GetWindowID(g_window))) {
                 state.consumedKey = event.key.keysym.scancode ? event.key.keysym.scancode : SDL_SCANCODE_RETURN;
@@ -3114,6 +3182,17 @@ namespace gpu::video
                     window_mode::FitBorderless(g_nativeWindow);
 #endif
                 g_windowResizeRequested = true;
+            }
+            // Our own placements set expectedDisplay; any other display change is
+            // the player's (Win+Shift+arrow, dragging, snapping).
+            if (event.type == SDL_WINDOWEVENT && event.window.windowID == SDL_GetWindowID(g_window) &&
+                event.window.event == SDL_WINDOWEVENT_DISPLAY_CHANGED && state.initialized && !getenv("LO_BACKGROUND")) {
+                const int display = SDL_GetWindowDisplayIndex(g_window);
+                if (display >= 0 && display != state.expectedDisplay) {
+                    if (now - state.topologyChanged < std::chrono::seconds(3)) state.expectedDisplay = display;
+                    else OnSystemDisplayMove(display, "moved by the player or Windows");
+                    state.hotkeyDirection = 0; // Windows carried out Win+Shift+arrow itself.
+                }
             }
             if(event.type==SDL_MOUSEBUTTONDOWN) {
                 if (!debug_menu::IsOverlayVisible()) {

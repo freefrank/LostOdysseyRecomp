@@ -265,6 +265,11 @@ int main(int argc, char** argv) {
         Check(Resolve(gpu::video::displays,"M27P20",2)==2 && Resolve(gpu::video::displays,"M27P20",1)==1 &&
               Resolve(gpu::video::displays,"M27P20",7)==0 && Resolve(gpu::video::displays,"Other",0)==-1 &&
               Resolve(gpu::video::displays,"",1)==-1,"identical names resolve by saved index");
+        using gpu::display_choice::Adjacent;
+        Check(Adjacent(gpu::video::displays,0,1)==1 && Adjacent(gpu::video::displays,0,-1)==2 &&
+              Adjacent(gpu::video::displays,1,1)==2 && Adjacent(gpu::video::displays,2,-1)==1 &&
+              Adjacent({{"A",0,0,1920,1080}},0,1)==-1 && Adjacent(gpu::video::displays,5,1)==-1,
+              "Win+Shift+arrow picks the display to the left or right, wrapping around");
         settings::savedConfig=afSaved;settings::edit=afSaved;
         settings::row=int(GraphicsRow::Display);tick();
         const auto& displayRow=settings::snapshot.rows[int(GraphicsRow::Display)];
@@ -330,6 +335,14 @@ int main(int argc, char** argv) {
         // Saving an unchanged display does not ask again.
         settings::row=int(GraphicsRow::Save);tick(0x1000);tick();
         Check(!settings::displayConfirm,"unchanged display saves without the prompt");
+        // The player moves the window (Win+Shift+arrow) while the menu is open: the
+        // window thread saves the new display, the menu follows, Save does not move back.
+        settings::savedConfig.displayIndex=2;tick();
+        Check(settings::edit.displayIndex==2,"menu follows a display the player moved the window to");
+        const auto requestsBeforeSave=gpu::video::displayRequests;
+        settings::row=int(GraphicsRow::Save);tick(0x1000);tick();
+        Check(!settings::displayConfirm && gpu::video::displayRequests==requestsBeforeSave,
+              "saving after a player move does not move the window back");
         settings::savedConfig.displayIndex=5;settings::edit=settings::savedConfig;settings::row=int(GraphicsRow::Display);tick();
         Check(settings::snapshot.rows[int(GraphicsRow::Display)].selectedChoice==1,"a missing index falls back to the first same-named display");
         settings::menuClockOffset={};
