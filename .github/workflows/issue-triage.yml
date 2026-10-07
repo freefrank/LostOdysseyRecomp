@@ -36,7 +36,7 @@ jobs:
       contains(github.event.comment.body, '@codex') &&
       contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
@@ -45,15 +45,20 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Install Claude Code
+        run: |
+          curl -fsSL https://claude.ai/install.sh | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: Analyze issue
         env:
           GITHUB_TOKEN: ${{ github.token }}
           ISSUE_NUMBER: ${{ github.event.issue.number || inputs.issue_number }}
           ISSUE_COMMENT_ID: ${{ github.event.comment.id || inputs.comment_id }}
           ISSUE_TRIAGE_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
-          ISSUE_TRIAGE_API_KEY: ${{ secrets.ISSUE_TRIAGE_API_KEY }}
-          ISSUE_TRIAGE_BASE_URL: ${{ vars.ISSUE_TRIAGE_BASE_URL || 'https://api.zkx.ca/v1' }}
-          ISSUE_TRIAGE_MODEL: ${{ vars.ISSUE_TRIAGE_MODEL || 'gpt-5.6-luna' }}
+          # Subscription token created by the Claude GitHub App (also used by claude.yml).
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ISSUE_TRIAGE_MODEL: ${{ vars.ISSUE_TRIAGE_MODEL || 'claude-sonnet-5-5' }}
+          ISSUE_TRIAGE_EFFORT: ${{ vars.ISSUE_TRIAGE_EFFORT || 'medium' }}
         run: |
           export SOURCE_REVISION="$(git rev-parse HEAD)"
           python tools/issue_triage/triage.py
