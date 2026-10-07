@@ -12,6 +12,8 @@
 
 `apu/xma.cpp` 从交替输入缓冲中的2048字节包组装压缩帧，调用 XMAFRAMES 解码器，将512样本解码结果转成客体需要的大端交错 int16，按128样本子帧写入输出环。`apu/audio.cpp` 将游戏最终提交的6声道 planar 大端 float 下混成48kHz双声道 PCM，通过 SDL 队列输出。设备缓冲有上限，回调追赶有界，非有限值归零。
 
+2026-10-07 更新（已合并到 main，尚未发布；最新发布 v0.8.44）：上面的下混是默认的「立体声」输出，字节级保持不变。声音设置新增「音频输出：立体声／5.1 环绕声」（`audio_output`，即时切换，[PR #271](https://github.com/freefrank/LostOdysseyRecomp/pull/271)，2026-10-07T03:35:13Z 合并为 `a5fa8961`，Issue #174 已关闭）：5.1 把游戏的六个声道（FL、FR、FC、LFE、BL、BR，与 SDL 的 6 声道顺序一致）交错后直接送出，不下混；设备声道数不足 6 时回到立体声下混并写日志，7.1 设备由 SDL 映射。该 PR 在 psvita（Proton/WASAPI，空输出录音）上检查了六声道输出、折叠结果与立体声录音在 0.1 dB 内一致、两声道设备回退和 7.1 设备路径；真实 5.1 扬声器和原生 Linux／macOS／Android 音频未测，Issue 中有用户表示可以测试。详见[设置菜单](settings-menu.md)。
+
 FFmpeg 来自 `https://github.com/xenia-project/FFmpeg`，固定提交 `15ece0882e8d5875051ff5b73c5a8326f7cee9f5`。CMake FetchContent 获取源码，`thirdparty/ffmpeg.cmake` 的显式源文件列表构建 avcodec/avutil，沿用其配置和原始版权头；许可证原文位于获取源码中的 COPYING.LGPLv2.1，各源文件保留自身许可证。发布打包阶段尚未完成，需携带依赖的许可证及对应源码/重链接材料；当前没有发布二进制。
 
 ## 已验证

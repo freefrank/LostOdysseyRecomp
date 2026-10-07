@@ -510,6 +510,13 @@ from the menu, validation layers, image quality and presentation cadence on the
 physical display. New paths are not certified by historical DLSS 2× probe
 results.
 
+Update, 2026-10-07: the "exclusive fullscreen" item above no longer applies.
+PR [#274](https://github.com/freefrank/LostOdysseyRecomp/pull/274) (merged
+2026-10-07T03:42:11Z as `475d8c65`, on `main`, not yet in a release) removed
+exclusive fullscreen; the display modes are Windowed and Fullscreen (borderless).
+This note records no separate acceptance run for frame generation in Fullscreen
+(borderless).
+
 ## Primary sources
 
 - [Streamline 2.14.1 release](https://github.com/NVIDIA-RTX/Streamline/releases/tag/v2.14.1) and [pinned DLSS-G programming guide, fixed/dynamic MFG](https://github.com/NVIDIA-RTX/Streamline/blob/2122257e0fce486f91b385aa63b9a09b0a34b363/docs/ProgrammingGuideDLSS_G.md#62-enabling-multi-frame-generation).

@@ -149,3 +149,32 @@ Plan and apply: 0 created, 1 updated, 289 unchanged, 0 conflicts, 4 operations; 
 ## First-use pipeline stalls accepted, 2026-10-06 (Android)
 
 After the tablet run (TB321FU, Turnip, debug build of main `2b5044af`; numbers in the plan note's "Android 实测" section) the maintainer accepted the effect and asked for no further tuning ("能生效就可以"). `pipeline-first-use-stalls`: Awaiting validation / Implemented / v0.9.0 → Done / Implemented / v0.9.0 (Delivery stays Implemented until a release carries it); Evidence and a dated body section record the Android result. Both roadmaps mark the item `[x]` with a dated update. Plan: 1 updated, 289 unchanged, 0 conflicts, 3 operations; `--apply` succeeded, the re-plan showed 0 operations, and the Project read the item back as Done / Implemented / v0.9.0.
+
+## Settings batch merged, 2026-10-07 (#104, #198, #174, #202, #201)
+
+Receipt for the five request items after PRs #269, #270, #271, #274 and #276 merged on 2026-10-07 (not released, latest release v0.8.44, published 2026-10-06T17:34:21Z). Manifest and documentation changes only; `sync-state.json` was not edited, **the sync tool was not run (no plan, no `--apply`)**, the Project was not written, no Issue, pull request or comment was touched, and no build or game run was made. The plan and apply are for the maintainer's session.
+
+Live state read with `gh` at about 07:20 UTC on 2026-10-07: `gh pr view` for #269 (merged 03:01:14Z, `35e22a28`), #270 (03:17:30Z, `3182adab`), #271 (03:35:13Z, `a5fa8961`), #274 (03:42:11Z, `475d8c65`) and #276 (07:08:08Z, `6ed90748`), all MERGED; `gh issue view` for #104 (closed 03:01:15Z), #198 (03:17:31Z), #174 (03:35:15Z), #202 (03:42:13Z) and #201 (07:08:30Z), all CLOSED as completed; `gh release list` (v0.8.44 is the latest). A read-only `gh project item-list` shows Status Done for all five items already (set after the Issues closed; the manifest still said Todo for four of them), with Delivery Not started and no Release.
+
+| Key | Status / Delivery / Release (manifest) |
+| --- | --- |
+| `issue-104-faster-menu-animation` | Done / Not started → Implemented / none; Evidence rewritten: the menu-animation request was declined, the delivered follow-up is the saved fast-forward settings (PR #269) |
+| `issue-174-surround-5-1-audio` | Todo / Not started → Done / Implemented / none (PR #271) |
+| `issue-198-rumble-intensity` | Todo / Not started → Done / Implemented / none (PR #270) |
+| `issue-201-display-choice` | Todo / Not started → Done / Implemented / none (PRs #274, #276; the maintainer's three-monitor test accepted 2026-10-07) |
+| `issue-202-gpu-choice` | Todo / Not started → Done / Implemented / none (PR #274) |
+
+All Evidence fields are under 1,024 characters.
+
+Judgment calls, each a one-field change if the maintainer's convention differs:
+
+- **Status Done for all five.** The Project already holds Done and the Issues are closed, and the maintainer's own Project values win (the 2026-10-07 decisions above). Done is not acceptance: #174 (no real 5.1 speakers; a commenter offered to test), #198 (no physical controller) and #202 (no Optimus or multi-adapter Direct3D 12 run) carry their gaps in the Evidence, as `issue-199-android-fullscreen` and `issue-251-android-iso-importer-error` do. `Awaiting validation` is the alternative for these three; it would differ from the Project.
+- **Delivery Implemented, Release none.** Merged, not released, the `issue-200-taa-proton-silent-exit` and `issue-179-sdr-white-levels` convention. "Next release" is not used (it went stale for the anti-aliasing item). Release is set when a release carries the work.
+- **#201 acceptance.** The maintainer's three-monitor Windows test and acceptance on 2026-10-07 comes from the maintainer's report to the session. No Issue or PR comment records it (PR #276's body says the maintainer was retesting), so the Evidence says so.
+- **#104.** Done here records the maintainer's closure and the saved fast-forward settings, not a faster menu animation; the maintainer declined that on 2026-09-30 and 2026-10-06.
+- **Start date** stays unset for all five, like the other merged-unreleased Issue items.
+- **Not itemized.** The removal of exclusive fullscreen (PR #274) and the rename to Fullscreen (PR #276) have no Issue or item of their own; they stay in the CHANGELOG and the notes (the "not itemized" precedent of the 2026-10-03 receipt).
+
+Expected plan before the `sync-state.json` fix: 1 updated (#104) and 4 Status conflicts. The last-synced Statuses of #174, #198, #201 and #202 in `sync-state.json` are still Todo while the Project reads Done (the Project values are the maintainer's, and the manifest already matches them). After copying Done for those four into `sync-state.json`, as on the 2026-10-07 decisions above, the plan should report 0 created and 5 updated, writing Delivery and Evidence.
+
+Plan and apply (maintainer's session, 2026-10-07 about 07:35 UTC): `sync-state.json` took the Project's Done for #174, #198, #201 and #202 first, as the section above says. The plan then reported 0 created, 5 updated, 285 unchanged, 0 conflicts, 10 operations; `--apply` wrote them, the re-plan showed 0 operations over 290 items, and `gh project item-list` read #104, #174, #198, #201 and #202 back as Done / Implemented / no Release.

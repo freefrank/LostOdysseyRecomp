@@ -23,6 +23,15 @@ left). Mouse action buttons still confirm. Start/Enter still focuses Save
 without submitting it on the same tick. F1 Cheats confirmation controls are not
 changed by this patch.
 
+Update, 2026-10-07 (merged to `main`, not yet in a release; latest release
+v0.8.44): Start/Enter on the focused Save row now saves, and on other rows it
+still only moves the focus to Save
+([PR #276](https://github.com/freefrank/LostOdysseyRecomp/pull/276), merged
+2026-10-07T07:08:08Z as `6ed90748`; Enter had only moved the focus, so a display
+choice was never written). The Graphics tab has also gained GPU and Display rows
+(hidden with one adapter or display), so "all 11 graphics rows" above is the
+2026-09-24 count. See [settings menu](settings-menu.md).
+
 ## Redraw cost
 
 Inspection found no fixed one-second wait for a fresh input edge. `FilterInput`

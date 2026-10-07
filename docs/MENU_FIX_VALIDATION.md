@@ -54,7 +54,8 @@ saves/settings. Test Windows D3D12, Windows Vulkan, and native Linux Vulkan:
    and press again. Keep the menu open for 30 seconds and confirm responsiveness.
 2. Repeat Alt+Enter while paused; minimize/restore and resize. On D3D12 test
    exclusive entry/exit as well as borderless mode. Check actual window mode, not
-   only a success status.
+   only a success status. (2026-10-07: exclusive fullscreen was removed in PR
+   #274; check Windowed and Fullscreen only.)
 3. Edit Z, refill current coordinates, and verify all XYZ. Capture menus after
    switching from GPU scene presentation; test 720p and larger output dimensions.
 

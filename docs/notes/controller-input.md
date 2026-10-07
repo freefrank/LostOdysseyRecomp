@@ -12,6 +12,8 @@ Status: **2026-09-06, released in v0.2.1; not included in v0.2**. The input upda
 - E/R provide full left/right trigger input. Existing arrow, Enter/Backspace, Z/X/A/S and Q/W mappings remain unchanged.
 - Each `GetState` clears the caller state before constructing the current combined input. Rumble is enabled by default and requests are sent to all opened pads. `LO_CONTROLLER_RUMBLE=0` explicitly disables host rumble. Non-zero motor state is kept active until the guest changes or clears it, matching XInput/Xam state semantics instead of truncating every request to 100 ms.
 
+Update, 2026-10-07 (merged to `main`, not yet in a release; latest release v0.8.44): rumble strength is now a setting. The **Vibration** slider in the Audio settings (0–100 %, default 100, saved as `vibration`) scales the guest's motor speeds before SDL rumble, applies at once and rescales a rumble that is already running; the minimum turns rumble off, and `LO_CONTROLLER_RUMBLE=0` still disables it entirely ([PR #270](https://github.com/freefrank/LostOdysseyRecomp/pull/270), merged 2026-10-07T03:17:30Z as `3182adab`; Issue #198 closed). It was checked with `LoHidTest` on a virtual SDL pad; no physical controller (for example a DualSense) was used to judge the strength levels. See [settings menu](settings-menu.md).
+
 Implementation: [hid.cpp](../../LostOdysseyRecomp/hid/hid.cpp), [hid.h](../../LostOdysseyRecomp/hid/hid.h) and [video event pump](../../LostOdysseyRecomp/gpu/video.cpp).
 
 ## Validation and boundaries

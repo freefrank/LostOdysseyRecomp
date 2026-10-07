@@ -36,6 +36,21 @@ a selector or confirmation before closing F1.
   not the prototype debug menu and does not implement the CT's five native
   instruction patches. Actual editor reachability still needs game validation.
 
+Update, 2026-10-07 (merged to `main`, not yet in a release; latest release
+v0.8.44): the fast-forward switch, Speed mode and rate are no longer reset every
+process. PR [#269](https://github.com/freefrank/LostOdysseyRecomp/pull/269)
+(merged 2026-10-07T03:01:14Z as `35e22a28`; Issue #104 closed) saves them to
+`settings.ini` as `fast_forward`, `fast_forward_mode` and `fast_forward_rate` when
+they are changed and restores them before the first trigger poll. The defaults
+stay off, Hold and 2×, invalid values fall back to them, and the in-memory
+turn-off at shutdown is not written. Memory edits and the other cheats are not
+saved and still start OFF every process. Checked with `LoSaveAnywhereConfigTest`,
+`LoDebugMenuInteractionTest` and `LoDebugOverlayTest`, and on psvita (Proton
+D3D12): set on, Toggle, 4× through F1, restart, and the log shows
+`debug menu: fast-forward on (toggle, 4x)`; the in-game quit path was not run.
+The "defaults to Hold each process" sentence above and the speed part of the next
+paragraph describe the earlier behavior.
+
 Both speed and memory edits start OFF every process. Speed does not require
 memory-edit permission. Enabling edits and destructive/batch actions require a
 confirmation with **Cancel selected by default**. Turning edits off cancels a

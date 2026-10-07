@@ -100,12 +100,13 @@ Turn on **HDR** in Graphics and save; it switches right away (with frame generat
 | :--- | :--- |
 | Import | Folder, XEX, ISO and GOD sources, DLC and disc replacement. Your original files are not changed. |
 | Languages | English, Japanese, Korean, Traditional Chinese and Simplified Chinese menus. Game languages depend on your edition. |
-| Display | 16:9 and 21:9 resolutions; taller screens such as 16:10 and 4:3 are filled with the 3D scene. Off/FXAA/SMAA/TAA (experimental), DLSS, FSR 3.1, XeSS (Windows Direct3D 12) or MetalFX upscaling, and [HDR](#hdr-experimental). **Brightness / Gamma** in Graphics adjusts the picture next to the game's default, on the last game scene or a test pattern. |
+| Display | Windowed or Fullscreen; on PCs with several monitors or graphics cards, you pick the monitor and the GPU. 16:9 and 21:9 resolutions; taller screens such as 16:10 and 4:3 are filled with the 3D scene. Off/FXAA/SMAA/TAA (experimental), DLSS, FSR 3.1, XeSS (Windows Direct3D 12) or MetalFX upscaling, and [HDR](#hdr-experimental). **Brightness / Gamma** in Graphics adjusts the picture next to the game's default, on the last game scene or a test pattern. |
 | Shadows and AO | Shadow resolution 1×/2×/4× and experimental SSAO/GTAO. |
 | Frame rate | 30/60/90/120 FPS targets and FreeSync / G-SYNC Compatible VRR. |
 | Frame generation | Windows Direct3D 12: DLSS (the multipliers your GPU supports), FSR 2× or XeSS 2×. Windows Vulkan: DLSS 2×–6×. Changing the provider may need a restart. |
 | Shaders | Precompiled shader download on first start; otherwise compiled once and cached. |
 | Mods | Texture, menu and font replacements and PlayStation button prompts. See the [modding guide](docs/wiki/Modding.md). |
+| Audio | Stereo or 5.1 surround output; 5.1 falls back to stereo when the audio device has fewer than six channels. |
 | Input | Controllers, keyboard and rumble; touch controls on Android. |
 | Debug Menu | Render captures, Save Anywhere, No Random Encounters, Encounter Every Step, teleport, fast-forward and cheats. See [Debug menu](#debug-menu). |
 
@@ -174,7 +175,7 @@ To report a rendering problem, select **Capture render state**, confirm, then **
 | **Party** | Experimental party members, rows and field character. Some changes need a reload. |
 | **Developer** | Experimental access to the original **EDIT MENU**: enable it, close F1, press **LT+RT**. Turn it off afterwards. |
 
-**Fast-forward** needs a controller or Android's on-screen controls: hold **LT** (**Hold**) or press it to toggle (**Toggle**), at 2×–8×. It pauses while a menu is open.
+**Fast-forward** needs a controller or Android's on-screen controls: hold **LT** (**Hold**) or press it to toggle (**Toggle**), at 2×–8×. It pauses while a menu is open. Your Fast-forward choices are kept after a restart.
 
 **Memory edits** are off by default. Back up your save first and stand somewhere you can move, outside battle. Turn on **Allow memory edits**, choose an action, confirm **Yes**, then close F1 so it runs. Edited values can end up in your normal saves.
 
