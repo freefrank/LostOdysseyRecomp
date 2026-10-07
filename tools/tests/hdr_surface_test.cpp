@@ -1,4 +1,4 @@
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include <plume_render_interface.h>
 #include <cstdio>
 #include <cstring>
@@ -9,9 +9,9 @@ int main(int argc, char** argv)
 {
     using namespace plume;
     const bool expectSdr = argc == 2 && std::strcmp(argv[1], "--expect-sdr") == 0;
-    if (SDL_Init(SDL_INIT_VIDEO) != 0) { std::fprintf(stderr,"SDL: %s\n",SDL_GetError()); return 1; }
-    SDL_Window* window=SDL_CreateWindow("HDR surface probe",SDL_WINDOWPOS_UNDEFINED,SDL_WINDOWPOS_UNDEFINED,
-        320,180,SDL_WINDOW_VULKAN|SDL_WINDOW_HIDDEN|SDL_WINDOW_RESIZABLE);
+    if (!SDL_Init(SDL_INIT_VIDEO)) { std::fprintf(stderr,"SDL: %s\n",SDL_GetError()); return 1; }
+    SDL_Window* window=SDL_CreateWindow("HDR surface probe",320,180,
+        SDL_WINDOW_VULKAN|SDL_WINDOW_HIDDEN|SDL_WINDOW_RESIZABLE);
     if (!window) { std::fprintf(stderr,"Window: %s\n",SDL_GetError()); SDL_Quit(); return 1; }
     bool pass=false;
     {

@@ -13,7 +13,7 @@
 #include <os/capture_archive.h>
 #include <settings/config.h>
 #include <settings/restart.h>
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #undef main
 
 namespace fixture {

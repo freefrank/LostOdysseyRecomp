@@ -9,7 +9,7 @@ set(LO_RUNTIME "${LO_ROOT}/LostOdysseyRecomp")
 set(LO_TESTS "${LO_ROOT}/tools/tests")
 option(LO_REVIEW_SANITIZE "Enable AddressSanitizer and UndefinedBehaviorSanitizer" ON)
 option(LO_REVIEW_SDL_TESTS "Build both SDL updater implementations" ON)
-set(LO_REVIEW_SDL_LIBRARY "" CACHE FILEPATH "Optional existing SDL2 library (uses pinned headers)")
+set(LO_REVIEW_SDL_LIBRARY "" CACHE FILEPATH "Optional existing SDL3 library (uses pinned headers)")
 
 function(lo_review_test name source)
     add_executable(${name} "${LO_TESTS}/${source}" ${ARGN})
@@ -68,9 +68,12 @@ if(LO_REVIEW_SDL_TESTS)
         set_target_properties(lo_review_sdl PROPERTIES
             IMPORTED_LOCATION "${LO_REVIEW_SDL_LIBRARY}"
             INTERFACE_INCLUDE_DIRECTORIES "${LO_ROOT}/thirdparty/SDL/include")
+        if(WIN32)
+            target_link_libraries(lo_review_sdl INTERFACE winmm setupapi cfgmgr32 version imm32)
+        endif()
     else()
-        find_package(SDL2 REQUIRED CONFIG)
-        add_library(lo_review_sdl ALIAS SDL2::SDL2)
+        find_package(SDL3 REQUIRED CONFIG)
+        add_library(lo_review_sdl ALIAS SDL3::SDL3)
     endif()
     lo_review_test(LoUpdaterSdlUiTest updater_sdl_ui_test.cpp
         "${LO_RUNTIME}/install/installer_font.cpp"

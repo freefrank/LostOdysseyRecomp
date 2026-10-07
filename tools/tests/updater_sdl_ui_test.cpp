@@ -2,9 +2,14 @@
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #ifdef _WIN32
+#if defined(_MSC_VER) && !defined(__clang__)
+#include <intrin.h>
+#else
 #include <x86intrin.h>
 #endif
-#include <SDL.h>
+#endif
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_main.h>
 #include "updater/update.h"
 #include "updater/posix_ui.h"
 #include "updater/external_update_notice.h"

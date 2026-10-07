@@ -13,7 +13,7 @@
 #include <gpu/fsr_upscaler.h>
 #include <settings/config.h>
 #include <settings/restart.h>
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #undef main
 
 namespace fixture {
@@ -38,12 +38,12 @@ template<class F> auto Owner(F fn) {
 }
 
 // Included rather than reimplemented: enables observation of private resources.
-SDL_Window* TestCreateWindow(const char* title,int x,int y,int w,int h,Uint32 flags) {
+SDL_Window* TestCreateWindow(const char* title,int w,int h,SDL_WindowFlags flags) {
     if(fixture::failWindow) {
-        if(fixture::extraVideoReference) fixture::Check(SDL_InitSubSystem(SDL_INIT_VIDEO)==0,"extra SDL reference failed");
+        if(fixture::extraVideoReference) fixture::Check(SDL_InitSubSystem(SDL_INIT_VIDEO),"extra SDL reference failed");
         SDL_SetError("fixture-injected SDL_CreateWindow failure"); return nullptr;
     }
-    return SDL_CreateWindow(title,x,y,w,h,flags);
+    return SDL_CreateWindow(title,w,h,flags);
 }
 void TestQuitSubSystem(Uint32 flags) {
     SDL_QuitSubSystem(flags);
@@ -176,7 +176,7 @@ void Record(const char* phase) {
 void Inspect(const char* phase) {
     Owner([=] {
         Check(video::g_window && video::g_nativeWindow,"missing actual window");
-        Check(!(SDL_GetWindowFlags(video::g_window)&SDL_WINDOW_SHOWN),"SDL window shown");
+        Check((SDL_GetWindowFlags(video::g_window)&SDL_WINDOW_HIDDEN),"SDL window shown");
         Check(!IsWindowVisible(video::g_nativeWindow),"native window visible");
         Check(GetForegroundWindow()!=video::g_nativeWindow,"fixture took foreground");
         Check(GetWindowThreadProcessId(video::g_nativeWindow,nullptr)==GetCurrentThreadId(),"wrong window owner");
@@ -257,7 +257,7 @@ int main(int argc,char** argv) {
             fixture::Check(xenos::GetDxcStatistics().calls==0,"close/restart source recompiled warm presentation cache");
             std::ofstream("source-pid.txt")<<GetCurrentProcessId();
             if(mode=="restart") settings::restart::Request();
-            else fixture::Owner([]{SDL_Event event{};event.type=SDL_QUIT;SDL_PushEvent(&event);});
+            else fixture::Owner([]{SDL_Event event{};event.type=SDL_EVENT_QUIT;SDL_PushEvent(&event);});
             // Only the production close/restart path, finished on the GPU owner, exits successfully.
             std::this_thread::sleep_for(std::chrono::seconds(20));
             throw std::runtime_error("production close/restart did not exit");

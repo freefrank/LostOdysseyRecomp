@@ -1,6 +1,6 @@
 #include "updater/game_prompt.h"
 #include "host_ui/rasterizer.h"
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 #include <chrono>
 #include <future>
@@ -37,7 +37,7 @@ int main()
     if (!WaitForOffer()) return 4;
     updater::game_prompt::Render(rasterizer);
     SDL_Event click{};
-    click.type = SDL_MOUSEBUTTONDOWN;
+    click.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
     click.button.windowID = 7;
     click.button.x = 1400; // 1920x1080 letterboxed scaling of Install button.
     click.button.y = 960;
@@ -50,12 +50,12 @@ int main()
     });
     if (!WaitForOffer()) return 8;
     SDL_Event escape{};
-    escape.type = SDL_KEYDOWN;
+    escape.type = SDL_EVENT_KEY_DOWN;
     escape.key.windowID = 7;
-    escape.key.keysym.sym = SDLK_ESCAPE;
+    escape.key.key = SDLK_ESCAPE;
     if (!updater::game_prompt::HandleEvent(escape, 7, 1280, 720)) return 9;
     if (declined.wait_for(1s) != std::future_status::ready || declined.get()) return 10;
-    SDL_setenv("SDL_VIDEODRIVER", "dummy", 1);
+    SDL_setenv_unsafe("SDL_VIDEODRIVER", "dummy", 1);
     if (updater::game_prompt::ConfirmBeforeImport("v0.7.0", "No display", 0)) return 11;
     std::cout << "startup update prompt: render, install, later and headless guard passed\n";
     return 0;

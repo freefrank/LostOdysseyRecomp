@@ -16,10 +16,14 @@ import subprocess
 HARNESS = r"""
 #define SDL_MAIN_HANDLED
 #define NOMINMAX
+#if defined(_MSC_VER) && !defined(__clang__)
+#include <intrin.h>
+#else
 #include <x86intrin.h>
+#endif
 #include <windows.h>
-#include <SDL.h>
-#include <SDL_syswm.h>
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_main.h>
 #include <atomic>
 #include <cstdio>
 #include <thread>
@@ -69,20 +73,19 @@ bool Probe(UINT message) {
 }
 int main() {
     SDL_SetMainReady();
-    if (SDL_Init(SDL_INIT_VIDEO) != 0) {
+    if (!SDL_Init(SDL_INIT_VIDEO)) {
         std::fprintf(stderr, "SDL_Init: %s\n", SDL_GetError()); return 2;
     }
-    video::g_window = SDL_CreateWindow("LO exit pump fixture", 0, 0, 64, 64, SDL_WINDOW_HIDDEN);
+    video::g_window = SDL_CreateWindow("LO exit pump fixture", 64, 64, SDL_WINDOW_HIDDEN);
     if (!video::g_window) {
         std::fprintf(stderr, "SDL_CreateWindow: %s\n", SDL_GetError()); SDL_Quit(); return 2;
     }
-    SDL_SysWMinfo info{};
-    SDL_VERSION(&info.version);
-    if (!SDL_GetWindowWMInfo(video::g_window, &info)) {
-        std::fprintf(stderr, "SDL_GetWindowWMInfo: %s\n", SDL_GetError());
+    hwnd = reinterpret_cast<HWND>(SDL_GetPointerProperty(SDL_GetWindowProperties(video::g_window),
+        SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr));
+    if (!hwnd) {
+        std::fprintf(stderr, "SDL native window property: %s\n", SDL_GetError());
         SDL_DestroyWindow(video::g_window); SDL_Quit(); return 2;
     }
-    hwnd = info.info.win.window;
     originalProc = reinterpret_cast<WNDPROC>(SetWindowLongPtrW(hwnd, GWLP_WNDPROC,
         reinterpret_cast<LONG_PTR>(&WindowProc)));
     if (!originalProc) {
@@ -92,15 +95,15 @@ int main() {
     SDL_FlushEvents(SDL_FIRSTEVENT, SDL_LASTEVENT);
     video::PumpWindowEvents();
     Check(video::ordinaryWork == 1 && video::displayWork == 1, "normal application work");
-    SDL_Event quit{}; quit.type = SDL_QUIT;
-    Check(SDL_PushEvent(&quit) == 1, "queue quit event");
+    SDL_Event quit{}; quit.type = SDL_EVENT_QUIT;
+    Check(SDL_PushEvent(&quit), "queue quit event");
     video::PumpWindowEvents();
     Check(video::ExitRequested() && video::ordinaryWork == 1, "quit skips application work");
-    SDL_Event input{}; input.type = SDL_USEREVENT;
-    Check(SDL_PushEvent(&input) == 1, "queue late input event");
+    SDL_Event input{}; input.type = SDL_EVENT_USER;
+    Check(SDL_PushEvent(&input), "queue late input event");
     Check(Probe(kProbe), "native synchronous message completes after exit request");
     Check(video::ordinaryWork == 1 && video::displayWork == 2, "no shutdown UI/display work");
-    Check(SDL_HasEvent(SDL_USEREVENT) == SDL_FALSE, "shutdown discards late SDL events");
+    Check(!SDL_HasEvent(SDL_EVENT_USER), "shutdown discards late SDL events");
     video::exitRequested = false;
     Check(Probe(kExit), "native callback requests exit during pump");
     Check(video::ordinaryWork + video::displayWork == workAtNativeExit,
@@ -125,7 +128,7 @@ def main() -> int:
     if os.name != 'nt':
         parser.error('This is a Windows native-message fixture.')
     source = args.source.read_text(encoding='utf-8-sig')
-    # Compile the actual production gate, including SDL_QUIT handling. Replace
+    # Compile the actual production gate, including SDL quit handling. Replace
     # the unrelated graphics/UI body with an observable counter.
     begin = source.index('    void PumpWindowEvents()\n    {')
     end = source.index('        static uint64_t shownProgress = 0;', begin)

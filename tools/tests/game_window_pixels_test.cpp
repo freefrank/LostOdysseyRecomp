@@ -1,4 +1,4 @@
-// Standalone Windows/SDL fixture; link the existing SDL2 library and Win32 libs.
+// Standalone Windows/SDL fixture; link the existing SDL3 library and Win32 libs.
 // It never shows a window, changes a display mode/DPI, or launches the game.
 // Actual display DPI observations and synthetic DPI messages are reported
 // separately: sending a DPI message does not change a monitor's real DPI.
@@ -6,12 +6,16 @@
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 // Match the runtime PCH's intrinsic declarations before SDL's Clang shim.
+#if defined(_MSC_VER) && !defined(__clang__)
+#include <intrin.h>
+#else
 #include <x86intrin.h>
+#endif
 #include "../../LostOdysseyRecomp/gpu/window_pixels.h"
 #include "../../LostOdysseyRecomp/gpu/window_mode.h"
 #include "../../LostOdysseyRecomp/gpu/display_change.h"
 #include "../../thirdparty/plume/plume_render_interface_types.h"
-#include <SDL_syswm.h>
+#include <SDL3/SDL_main.h>
 #include <array>
 #include <cstdio>
 #include <exception>
@@ -43,12 +47,16 @@ void Pump()
     while (SDL_PollEvent(&event)) {}
 }
 
+HWND NativeWindow(SDL_Window* window)
+{
+    return reinterpret_cast<HWND>(SDL_GetPointerProperty(SDL_GetWindowProperties(window),
+        SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr));
+}
+
 void CheckPhysicalSize(SDL_Window* window, int expectedWidth, int expectedHeight)
 {
-    SDL_SysWMinfo info{};
-    SDL_VERSION(&info.version);
-    Check(SDL_GetWindowWMInfo(window, &info) == SDL_TRUE, "SDL native window lookup failed");
-    const HWND native = info.info.win.window;
+    const HWND native = NativeWindow(window);
+    Check(native != nullptr, "SDL native window lookup failed");
     Check(!IsWindowVisible(native), "fixture window became visible");
     Check(GetForegroundWindow() != native, "fixture window took focus");
     Check(AreDpiAwarenessContextsEqual(GetWindowDpiAwarenessContext(native),
@@ -89,7 +97,7 @@ void CheckPhysicalSize(SDL_Window* window, int expectedWidth, int expectedHeight
     inspector.join();
     if (error) std::rethrow_exception(error);
     std::printf("physical display=%d dpi=%u client=%dx%d drawable=%dx%d hidden=1\n",
-        SDL_GetWindowDisplayIndex(window), GetDpiForWindow(native), expectedWidth, expectedHeight,
+        SDL_GetDisplayForWindow(window), GetDpiForWindow(native), expectedWidth, expectedHeight,
         drawableWidth, drawableHeight);
 }
 
@@ -97,14 +105,14 @@ void RunRenderingFixes()
 {
     using namespace gpu::video;
     SDL_KeyboardEvent key{};
-    key.type = SDL_KEYDOWN; key.keysym.sym = SDLK_RETURN; key.keysym.mod = KMOD_LALT;
+    key.type = SDL_EVENT_KEY_DOWN; key.key = SDLK_RETURN; key.mod = SDL_KMOD_LALT;
     Check(window_mode::IsToggleChord(key), "Alt+Enter rejected");
-    key.keysym.sym = SDLK_KP_ENTER;
+    key.key = SDLK_KP_ENTER;
     Check(window_mode::IsToggleChord(key), "Alt+keypad Enter rejected");
     key = {};
-    key.type = SDL_KEYDOWN;
-    key.keysym.scancode = SDL_SCANCODE_RETURN;
-    key.keysym.mod = KMOD_LALT;
+    key.type = SDL_EVENT_KEY_DOWN;
+    key.scancode = SDL_SCANCODE_RETURN;
+    key.mod = SDL_KMOD_LALT;
     Check(window_mode::IsToggleChord(key), "SYSKEY scancode Alt+Enter rejected");
     Check(window_mode::TargetsGameWindow(key, 7), "unfocused SYSKEY ignored");
     key.windowID = 7;
@@ -114,23 +122,23 @@ void RunRenderingFixes()
     key.windowID = 0;
     key.repeat = 1;
     Check(!window_mode::IsToggleChord(key), "repeat toggles fullscreen");
-    key.repeat = 0; key.type = SDL_KEYUP;
+    key.repeat = 0; key.type = SDL_EVENT_KEY_UP;
     Check(!window_mode::IsToggleChord(key), "key release toggles fullscreen");
-    key.type = SDL_KEYDOWN;
-    key.keysym.mod = KMOD_RALT;
+    key.type = SDL_EVENT_KEY_DOWN;
+    key.mod = SDL_KMOD_RALT;
     Check(window_mode::IsToggleChord(key), "Right Alt+Enter rejected");
-    key.keysym.scancode = SDL_SCANCODE_RETURN;
-    key.keysym.sym = SDLK_UNKNOWN;
+    key.scancode = SDL_SCANCODE_RETURN;
+    key.key = SDLK_UNKNOWN;
     Check(window_mode::IsToggleChord(key), "SYSKEY Right Alt+Enter rejected");
-    for (auto extra : {KMOD_SHIFT, KMOD_GUI}) {
-        key.keysym.mod = Uint16(KMOD_LALT | extra);
+    for (auto extra : {SDL_KMOD_SHIFT, SDL_KMOD_GUI}) {
+        key.mod = SDL_Keymod(SDL_KMOD_LALT | extra);
         Check(!window_mode::IsToggleChord(key), "extra modifier toggles fullscreen");
     }
-    key.keysym.mod = Uint16(KMOD_RALT | KMOD_CTRL);
+    key.mod = SDL_Keymod(SDL_KMOD_RALT | SDL_KMOD_CTRL);
     Check(window_mode::IsToggleChord(key), "AltGr+Enter rejected");
-    key.keysym.mod = KMOD_MODE;
+    key.mod = SDL_KMOD_MODE;
     Check(window_mode::IsToggleChord(key), "AltGr MODE+Enter rejected");
-    key.keysym.mod = Uint16(KMOD_LALT | KMOD_CAPS | KMOD_NUM);
+    key.mod = SDL_Keymod(SDL_KMOD_LALT | SDL_KMOD_CAPS | SDL_KMOD_NUM);
     Check(window_mode::IsToggleChord(key), "lock keys suppress shortcut");
     DisplayChangeTracker tracker;
     const auto menu = tracker.Begin(1280, 720, 1);
@@ -149,51 +157,52 @@ void RunRenderingFixes()
     const ThreadAwareness inherited(DPI_AWARENESS_CONTEXT_UNAWARE);
     const window_pixels::Context pixels;
     Check(pixels.Ready(), "physical-pixel context failed");
-    Check(SDL_InitSubSystem(SDL_INIT_VIDEO) == 0, SDL_GetError());
+    Check(SDL_InitSubSystem(SDL_INIT_VIDEO), SDL_GetError());
     struct Cleanup { ~Cleanup() { SDL_QuitSubSystem(SDL_INIT_VIDEO); } } cleanup;
-    const int count = SDL_GetNumVideoDisplays();
+    int count = 0;
+    SDL_DisplayID* displays = SDL_GetDisplays(&count);
     Check(count > 0, "no displays available");
     for (int display = 0; display < count; ++display) {
         const auto destroy = [](SDL_Window* window) { SDL_DestroyWindow(window); };
         std::unique_ptr<SDL_Window, decltype(destroy)> window(SDL_CreateWindow("Lost Odyssey rendering window fixture",
-            SDL_WINDOWPOS_CENTERED_DISPLAY(display), SDL_WINDOWPOS_CENTERED_DISPLAY(display),
             1280, 720, SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE), destroy);
+        if (window) SDL_SetWindowPosition(window.get(), SDL_WINDOWPOS_CENTERED_DISPLAY(displays[display]),
+                                           SDL_WINDOWPOS_CENTERED_DISPLAY(displays[display]));
         Check(window != nullptr, SDL_GetError()); Pump();
         CheckPhysicalSize(window.get(), 1280, 720);
         SDL_SetWindowSize(window.get(), 3840, 2160); Pump();
         CheckPhysicalSize(window.get(), 3840, 2160);
         SDL_SetWindowSize(window.get(), 1136, 684); Pump();
         window_mode::Placement original; original.Capture(window.get());
-        SDL_SysWMinfo info{}; SDL_VERSION(&info.version);
-        Check(SDL_GetWindowWMInfo(window.get(), &info), "native window lookup failed");
-        SDL_SetWindowBordered(window.get(), SDL_FALSE); Pump();
-        Check(window_mode::FitBorderless(info.info.win.window), "borderless bounds correction failed"); Pump();
+        const HWND native = NativeWindow(window.get());
+        Check(native != nullptr, "native window lookup failed");
+        SDL_SetWindowBordered(window.get(), false); Pump();
+        Check(window_mode::FitBorderless(native), "borderless bounds correction failed"); Pump();
         MONITORINFO monitor{}; monitor.cbSize = sizeof(monitor); RECT bounds{};
-        Check(GetMonitorInfoW(MonitorFromWindow(info.info.win.window, MONITOR_DEFAULTTONEAREST), &monitor), "monitor lookup failed");
-        Check(GetWindowRect(info.info.win.window, &bounds) && EqualRect(&bounds, &monitor.rcMonitor), "borderless window does not fill its monitor");
+        Check(GetMonitorInfoW(MonitorFromWindow(native, MONITOR_DEFAULTTONEAREST), &monitor), "monitor lookup failed");
+        Check(GetWindowRect(native, &bounds) && EqualRect(&bounds, &monitor.rcMonitor), "borderless window does not fill its monitor");
         CheckPhysicalSize(window.get(), monitor.rcMonitor.right - monitor.rcMonitor.left, monitor.rcMonitor.bottom - monitor.rcMonitor.top);
-        Check(window_mode::FitBorderless(info.info.win.window), "repeated borderless correction failed");
-        SDL_SetWindowBordered(window.get(), SDL_TRUE); original.Restore(window.get()); Pump();
+        Check(window_mode::FitBorderless(native), "repeated borderless correction failed");
+        SDL_SetWindowBordered(window.get(), true); original.Restore(window.get()); Pump();
         window_mode::Placement restored; restored.Capture(window.get());
         Check(restored.x == original.x && restored.y == original.y && restored.width == original.width && restored.height == original.height,
               "windowed position or size was not restored");
         CheckPhysicalSize(window.get(), 1136, 684);
         if (count > 1) {
             const int next = (display + 1) % count;
-            SDL_SetWindowPosition(window.get(), SDL_WINDOWPOS_CENTERED_DISPLAY(next), SDL_WINDOWPOS_CENTERED_DISPLAY(next)); Pump();
+            SDL_SetWindowPosition(window.get(), SDL_WINDOWPOS_CENTERED_DISPLAY(displays[next]), SDL_WINDOWPOS_CENTERED_DISPLAY(displays[next])); Pump();
             CheckPhysicalSize(window.get(), 1136, 684);
         }
         std::printf("borderless display=%d physical=%ldx%ld windowed-placement-restored=1\n", display,
             monitor.rcMonitor.right - monitor.rcMonitor.left, monitor.rcMonitor.bottom - monitor.rcMonitor.top);
     }
+    SDL_free(displays);
 }
 
 void CheckDpiMessages(SDL_Window* window, int width, int height)
 {
-    SDL_SysWMinfo info{};
-    SDL_VERSION(&info.version);
-    Check(SDL_GetWindowWMInfo(window, &info) == SDL_TRUE, "SDL native window lookup failed");
-    const HWND native = info.info.win.window;
+    const HWND native = NativeWindow(window);
+    Check(native != nullptr, "SDL native window lookup failed");
     const DWORD style = DWORD(GetWindowLongPtrW(native, GWL_STYLE));
     const DWORD extended = DWORD(GetWindowLongPtrW(native, GWL_EXSTYLE));
     const UINT actualDpi = GetDpiForWindow(native);
@@ -224,21 +233,21 @@ void RunCycle(int cycle)
     const ThreadAwareness inherited(DPI_AWARENESS_CONTEXT_UNAWARE);
     // Exercise an inherited/env-like conflicting SDL preference. The game's
     // policy must win before video initialization, including a second lifecycle.
-    Check(SDL_SetHintWithPriority(SDL_HINT_WINDOWS_DPI_SCALING, "1", SDL_HINT_OVERRIDE) == SDL_TRUE,
-          "could not arrange SDL scaling conflict");
     {
         const gpu::video::window_pixels::Context pixels;
         Check(pixels.Ready(), "physical-pixel context initialization failed");
-        Check(SDL_InitSubSystem(SDL_INIT_VIDEO) == 0, SDL_GetError());
+        Check(SDL_InitSubSystem(SDL_INIT_VIDEO), SDL_GetError());
         struct VideoCleanup { ~VideoCleanup() { SDL_QuitSubSystem(SDL_INIT_VIDEO); } } cleanup;
-        const int count = SDL_GetNumVideoDisplays();
+        int count = 0;
+        SDL_DisplayID* displays = SDL_GetDisplays(&count);
         Check(count > 0, "no displays available");
         for (int display = 0; display < count; ++display)
         {
             const auto destroy = [](SDL_Window* window) { SDL_DestroyWindow(window); };
             std::unique_ptr<SDL_Window, decltype(destroy)> window(SDL_CreateWindow("Lost Odyssey pixel fixture",
-                SDL_WINDOWPOS_CENTERED_DISPLAY(display), SDL_WINDOWPOS_CENTERED_DISPLAY(display),
                 640, 360, SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE), destroy);
+            if (window) SDL_SetWindowPosition(window.get(), SDL_WINDOWPOS_CENTERED_DISPLAY(displays[display]),
+                                               SDL_WINDOWPOS_CENTERED_DISPLAY(displays[display]));
             Check(window != nullptr, SDL_GetError());
             Pump();
             CheckPhysicalSize(window.get(), 640, 360);
@@ -249,11 +258,12 @@ void RunCycle(int cycle)
             if (count > 1)
             {
                 const int next = (display + 1) % count;
-                SDL_SetWindowPosition(window.get(), SDL_WINDOWPOS_CENTERED_DISPLAY(next), SDL_WINDOWPOS_CENTERED_DISPLAY(next));
+                SDL_SetWindowPosition(window.get(), SDL_WINDOWPOS_CENTERED_DISPLAY(displays[next]), SDL_WINDOWPOS_CENTERED_DISPLAY(displays[next]));
                 Pump();
                 CheckPhysicalSize(window.get(), 1280, 720);
             }
         }
+        SDL_free(displays);
     }
     Check(AreDpiAwarenessContextsEqual(GetThreadDpiAwarenessContext(), DPI_AWARENESS_CONTEXT_UNAWARE),
           "window lifecycle did not restore its prior thread awareness");

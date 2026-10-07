@@ -1,6 +1,6 @@
 #include <install/installer_ui.h>
 #include <settings/config.h>
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -40,7 +40,7 @@ bool install::WriteGamePath(const std::filesystem::path&, const std::filesystem:
 
 int main()
 {
-    SDL_setenv("SDL_VIDEODRIVER", "dummy", 1);
+    SDL_setenv_unsafe("SDL_VIDEODRIVER", "dummy", 1);
     const auto output = std::filesystem::current_path() / "out" / "import-menu-preview";
     std::filesystem::create_directories(output);
     // A four-disc rejection like #251: longer than one 1280 px line, so the
@@ -58,14 +58,14 @@ int main()
         std::fprintf(stderr, "render review language %u\n", pair.first);
         language = pair.first;
         const auto bmp = output / pair.second;
-        SDL_setenv("LO_IMPORTER_PREVIEW_BMP", bmp.string().c_str(), 1);
-        SDL_setenv("LO_IMPORTER_PREVIEW_SCROLL", pair.second == std::string_view("review-scrolled.bmp") ? "1" : "", 1);
-        SDL_setenv("LO_IMPORTER_PREVIEW_ERROR", pair.second == std::string_view("review-error.bmp") ? kScanError : "", 1);
+        SDL_setenv_unsafe("LO_IMPORTER_PREVIEW_BMP", bmp.string().c_str(), 1);
+        SDL_setenv_unsafe("LO_IMPORTER_PREVIEW_SCROLL", pair.second == std::string_view("review-scrolled.bmp") ? "1" : "", 1);
+        SDL_setenv_unsafe("LO_IMPORTER_PREVIEW_ERROR", pair.second == std::string_view("review-error.bmp") ? kScanError : "", 1);
         const auto result = install::ShowInstallerUI(output, output, output / "unused-fixture-root");
         if (!result.cancelled || result.success || !std::filesystem::is_regular_file(bmp) ||
             std::filesystem::file_size(bmp) < 1280 * 720 * 3)
             return 1;
     }
-    SDL_setenv("LO_IMPORTER_PREVIEW_BMP", "", 1);
+    SDL_setenv_unsafe("LO_IMPORTER_PREVIEW_BMP", "", 1);
     return 0;
 }

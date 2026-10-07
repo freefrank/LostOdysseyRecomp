@@ -102,7 +102,7 @@ int main()
     ctx.r4.u32 = 1;
     Dispatch(ctx, quitEvent, recover, originalAction);
     Check(pushed == 1 && recovered == 0 && original == 1,
-        "observed System task Yes only queues SDL_QUIT");
+        "observed System task Yes only queues SDL_EVENT_QUIT");
     canPush = false;
     Dispatch(ctx, quitEvent, recover, originalAction);
     Check(pushed == 2 && recovered == 0 && original == 1,
@@ -112,7 +112,7 @@ int main()
     canPush = true;
     Dispatch(ctx, quitEvent, recover, originalAction);
     Check(pushed == 3 && recovered == 0 && original == 1,
-        "separate modal-16 Yes also queues SDL_QUIT");
+        "separate modal-16 Yes also queues SDL_EVENT_QUIT");
     canPush = false;
     Dispatch(ctx, quitEvent, recover, originalAction);
     Check(pushed == 4 && recovered == 1 && original == 1,

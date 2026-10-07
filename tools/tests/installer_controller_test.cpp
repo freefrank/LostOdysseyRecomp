@@ -107,7 +107,7 @@ int main()
         if (std::string_view(error.what()).find("game-path.txt: denied") == std::string_view::npos) return 32;
     }
 
-    // SDL_QUIT requests cancellation while the worker is still copying. The
+    // SDL_EVENT_QUIT requests cancellation while the worker is still copying. The
     // final joined worker event decides whether it cancelled or committed.
     using Outcome = install::InstallerSessionState::ImportOutcome;
     session.userCancelled = true;

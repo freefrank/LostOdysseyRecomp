@@ -4,7 +4,7 @@
 #include <gpu/video.h>
 #include <settings/config.h>
 #define SDL_MAIN_HANDLED // This host fixture supplies its own main and does not initialize SDL.
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include <fstream>
 #include <stdexcept>
 #include <tuple>
@@ -1431,11 +1431,11 @@ int main(int argc, char** argv)
             settings::pending = 0; Tick(base);
             Require(mainMenuRequests == 1 && quitEventAttempts == 0 && saves == beforeSaves &&
                     applies == beforeApplies + 1 && closes == beforeCloses + 1,
-                    "native completion requests title exactly once without SDL_QUIT or settings file writes");
+                    "native completion requests title exactly once without SDL_EVENT_QUIT or settings file writes");
             settings::pending = 0; Tick(base);
             Require(mainMenuRequests == 1 && quitEventAttempts == 0,
-                    "repeated native ticks do not request title or SDL_QUIT again");
-            std::puts("PASS System Settings Quit to Main Menu: cancellation, Chinese labels, native close then one title request, no SDL_QUIT");
+                    "repeated native ticks do not request title or SDL_EVENT_QUIT again");
+            std::puts("PASS System Settings Quit to Main Menu: cancellation, Chinese labels, native close then one title request, no SDL_EVENT_QUIT");
         }
         // The importer is launched only after the safe restart child waits for
         // this process to stop reading installed content. The fixture exercises

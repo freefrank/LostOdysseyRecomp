@@ -6,7 +6,7 @@
 #include <hid/android_touch.h>
 #endif
 #include <debug/menu_overlay.h>
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include <condition_variable>
 #include <future>
 
@@ -50,19 +50,29 @@ static void Check(bool value, const char* message)
 
 // Last motor speeds SDL sent to the virtual rumble pad (SDL skips repeats).
 static int g_rumbleLow = -1, g_rumbleHigh = -1;
-static int SDLCALL RecordRumble(void*, Uint16 low, Uint16 high)
+static bool SDLCALL RecordRumble(void*, Uint16 low, Uint16 high)
 {
     g_rumbleLow = low;
     g_rumbleHigh = high;
-    return 0;
+    return true;
+}
+
+static SDL_JoystickID AttachVirtualGamepad()
+{
+    SDL_VirtualJoystickDesc desc{};
+    SDL_INIT_INTERFACE(&desc);
+    desc.type = SDL_JOYSTICK_TYPE_GAMEPAD;
+    desc.naxes = SDL_GAMEPAD_AXIS_COUNT;
+    desc.nbuttons = SDL_GAMEPAD_BUTTON_COUNT;
+    return SDL_AttachVirtualJoystick(&desc);
 }
 
 int main()
 {
     using namespace hid::prompts;
-    Check(IsPlayStation(SDL_CONTROLLER_TYPE_PS3) && IsPlayStation(SDL_CONTROLLER_TYPE_PS4) &&
-          IsPlayStation(SDL_CONTROLLER_TYPE_PS5), "PlayStation SDL types");
-    Check(!IsPlayStation(SDL_CONTROLLER_TYPE_XBOXONE) && !IsPlayStation(SDL_CONTROLLER_TYPE_UNKNOWN),
+    Check(IsPlayStation(SDL_GAMEPAD_TYPE_PS3) && IsPlayStation(SDL_GAMEPAD_TYPE_PS4) &&
+          IsPlayStation(SDL_GAMEPAD_TYPE_PS5), "PlayStation SDL types");
+    Check(!IsPlayStation(SDL_GAMEPAD_TYPE_XBOXONE) && !IsPlayStation(SDL_GAMEPAD_TYPE_UNKNOWN),
           "non-PlayStation SDL types");
     Check(Symbol(Face::Y) == L'\u25b3' && Symbol(Face::B) == L'\u25cb' &&
           Symbol(Face::A) == L'\u00d7' && Symbol(Face::X) == L'\u25a1', "four physical face mappings");
@@ -78,10 +88,10 @@ int main()
     Check(lines(Face::A).size() == 2 && lines(Face::A)[0] == std::array{3, 3, 17, 17}, "cross strokes");
     Check(lines(Face::X).size() == 4 && lines(Face::X)[0] == std::array{3, 3, 17, 3}, "square strokes");
     ActiveController prompts;
-    prompts.Connected(11, SDL_CONTROLLER_TYPE_PS4);
+    prompts.Connected(11, SDL_GAMEPAD_TYPE_PS4);
     Check(prompts.PlayStation(), "PS4 connected");
-    prompts.Connected(12, SDL_CONTROLLER_TYPE_XBOXONE);
-    prompts.Observe(12, 1u << SDL_CONTROLLER_BUTTON_A, false);
+    prompts.Connected(12, SDL_GAMEPAD_TYPE_XBOXONE);
+    prompts.Observe(12, 1u << SDL_GAMEPAD_BUTTON_SOUTH, false);
     Check(!prompts.PlayStation(), "Xbox activity takes over");
     prompts.Observe(11, 0, true);
     Check(prompts.PlayStation(), "PS4 stick takes over");
@@ -90,12 +100,12 @@ int main()
     prompts.Observe(11, 0, true);
     Check(!prompts.PlayStation(), "held PS4 stick does not override keyboard");
     prompts.Observe(11, 0, false);
-    prompts.Observe(11, 1u << SDL_CONTROLLER_BUTTON_B, false);
+    prompts.Observe(11, 1u << SDL_GAMEPAD_BUTTON_EAST, false);
     Check(prompts.PlayStation(), "new PS4 button press takes over");
     prompts.Disconnected(11);
     Check(!prompts.PlayStation(), "PS4 removal falls back to Xbox");
-    prompts.Connected(13, SDL_CONTROLLER_TYPE_PS5);
-    prompts.Observe(13, 1u << SDL_CONTROLLER_BUTTON_Y, false);
+    prompts.Connected(13, SDL_GAMEPAD_TYPE_PS5);
+    prompts.Observe(13, 1u << SDL_GAMEPAD_BUTTON_NORTH, false);
     Check(prompts.PlayStation(), "PS5 button takes over");
     prompts.Disconnected(13);
     Check(!prompts.PlayStation(), "PS5 removal falls back to Xbox");
@@ -103,14 +113,14 @@ int main()
     Check(!prompts.PlayStation(), "all controllers removed");
 
     hid::Init();
-    const int first = SDL_JoystickAttachVirtual(SDL_JOYSTICK_TYPE_GAMECONTROLLER, SDL_CONTROLLER_AXIS_MAX, SDL_CONTROLLER_BUTTON_MAX, 0);
-    const int second = SDL_JoystickAttachVirtual(SDL_JOYSTICK_TYPE_GAMECONTROLLER, SDL_CONTROLLER_AXIS_MAX, SDL_CONTROLLER_BUTTON_MAX, 0);
-    Check(first >= 0 && second >= 0, "attach two controllers");
-    auto* a = SDL_JoystickOpen(first);
-    auto* b = SDL_JoystickOpen(second);
+    const SDL_JoystickID first = AttachVirtualGamepad();
+    const SDL_JoystickID second = AttachVirtualGamepad();
+    Check(first != 0 && second != 0, "attach two controllers");
+    auto* a = SDL_OpenJoystick(first);
+    auto* b = SDL_OpenJoystick(second);
     Check(a && b, "open virtual joysticks");
     auto sample = [] {
-        SDL_JoystickUpdate();
+        SDL_UpdateJoysticks();
         XAMINPUT_STATE state;
         memset(&state, 0xff, sizeof(state)); // GetState must clear old caller state.
         Check(hid::GetState(0, &state) == 0, "get state");
@@ -121,10 +131,10 @@ int main()
     Check(!hid::HasConnectedController(), "SDL virtual pads do not trigger physical-controller hiding");
 #endif
     Check(!hid::UsesPlayStationPrompts(), "virtual non-PS controller retains regular prompts");
-    SDL_JoystickSetVirtualButton(a, SDL_CONTROLLER_BUTTON_A, 1);
+    SDL_SetJoystickVirtualButton(a, SDL_GAMEPAD_BUTTON_SOUTH, 1);
     Check(sample().wButtons & XAMINPUT_GAMEPAD_A, "first controller A");
-    SDL_JoystickSetVirtualButton(a, SDL_CONTROLLER_BUTTON_A, 0);
-    SDL_JoystickSetVirtualButton(b, SDL_CONTROLLER_BUTTON_B, 1);
+    SDL_SetJoystickVirtualButton(a, SDL_GAMEPAD_BUTTON_SOUTH, 0);
+    SDL_SetJoystickVirtualButton(b, SDL_GAMEPAD_BUTTON_EAST, 1);
     auto state = sample();
     Check((state.wButtons & XAMINPUT_GAMEPAD_B) && !(state.wButtons & XAMINPUT_GAMEPAD_A), "second controller takes over");
     hid::HandleKeyboardEvent(SDL_SCANCODE_Z, true);
@@ -133,39 +143,39 @@ int main()
     Check((state.wButtons & (XAMINPUT_GAMEPAD_A | XAMINPUT_GAMEPAD_B)) == (XAMINPUT_GAMEPAD_A | XAMINPUT_GAMEPAD_B), "keyboard with connected controllers");
     hid::HandleKeyboardEvent(SDL_SCANCODE_Z, false);
     Check(!(sample().wButtons & XAMINPUT_GAMEPAD_A), "keyboard release");
-    SDL_JoystickSetVirtualButton(b, SDL_CONTROLLER_BUTTON_B, 0);
-    SDL_JoystickSetVirtualAxis(a, SDL_CONTROLLER_AXIS_LEFTX, 1000);
-    SDL_JoystickSetVirtualAxis(b, SDL_CONTROLLER_AXIS_LEFTX, 20000);
+    SDL_SetJoystickVirtualButton(b, SDL_GAMEPAD_BUTTON_EAST, 0);
+    SDL_SetJoystickVirtualAxis(a, SDL_GAMEPAD_AXIS_LEFTX, 1000);
+    SDL_SetJoystickVirtualAxis(b, SDL_GAMEPAD_AXIS_LEFTX, 20000);
     Check(sample().sThumbLX == 20000, "idle pad does not overwrite moving pad");
     hid::HandleKeyboardEvent(SDL_SCANCODE_J, true);
     Check(sample().sThumbLX == -32768, "keyboard stick overrides pad while held");
     hid::HandleKeyboardEvent(SDL_SCANCODE_J, false);
     Check(sample().sThumbLX == 20000, "pad resumes after keyboard release");
-    SDL_JoystickSetVirtualAxis(b, SDL_CONTROLLER_AXIS_LEFTX, 0);
+    SDL_SetJoystickVirtualAxis(b, SDL_GAMEPAD_AXIS_LEFTX, 0);
     Check(sample().sThumbLX == 0, "idle drift deadzone");
-    SDL_JoystickSetVirtualAxis(b, SDL_CONTROLLER_AXIS_TRIGGERRIGHT, 32767);
+    SDL_SetJoystickVirtualAxis(b, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER, 32767);
     Check(sample().bRightTrigger == 255, "second pad trigger");
-    SDL_JoystickSetVirtualAxis(b, SDL_CONTROLLER_AXIS_TRIGGERRIGHT, -32768);
+    SDL_SetJoystickVirtualAxis(b, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER, -32768);
     hid::HandleKeyboardEvent(SDL_SCANCODE_R, true);
     Check(sample().bRightTrigger == 255, "keyboard trigger");
     hid::ClearKeyboardState();
     Check(sample().bRightTrigger == 0, "focus loss releases keyboard");
 
 #if LO_PLATFORM_ANDROID
-    SDL_JoystickSetVirtualButton(a, SDL_CONTROLLER_BUTTON_A, 1);
-    SDL_JoystickSetVirtualAxis(b, SDL_CONTROLLER_AXIS_LEFTX, 20000);
-    SDL_JoystickSetVirtualAxis(a, SDL_CONTROLLER_AXIS_RIGHTX, 16000);
-    SDL_JoystickSetVirtualAxis(b, SDL_CONTROLLER_AXIS_TRIGGERLEFT, 28000);
-    SDL_JoystickSetVirtualAxis(a, SDL_CONTROLLER_AXIS_TRIGGERRIGHT, 14000);
+    SDL_SetJoystickVirtualButton(a, SDL_GAMEPAD_BUTTON_SOUTH, 1);
+    SDL_SetJoystickVirtualAxis(b, SDL_GAMEPAD_AXIS_LEFTX, 20000);
+    SDL_SetJoystickVirtualAxis(a, SDL_GAMEPAD_AXIS_RIGHTX, 16000);
+    SDL_SetJoystickVirtualAxis(b, SDL_GAMEPAD_AXIS_LEFT_TRIGGER, 28000);
+    SDL_SetJoystickVirtualAxis(a, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER, 14000);
     hid::android_touch::Update(XAMINPUT_GAMEPAD_B, 160, 210, 1000, 0, 25000, 0);
     state = sample();
-    auto controllerTrigger = [](SDL_Joystick* joystick, SDL_GameControllerAxis axis) {
-        auto* controller = SDL_GameControllerFromInstanceID(SDL_JoystickInstanceID(joystick));
+    auto controllerTrigger = [](SDL_Joystick* joystick, SDL_GamepadAxis axis) {
+        auto* controller = SDL_GetGamepadFromID(SDL_GetJoystickID(joystick));
         Check(controller != nullptr, "find virtual game controller");
-        return uint8_t(std::max(0, int(SDL_GameControllerGetAxis(controller, axis))) >> 7);
+        return uint8_t(std::max(0, int(SDL_GetGamepadAxis(controller, axis))) >> 7);
     };
-    const auto controllerLeftTrigger = controllerTrigger(b, SDL_CONTROLLER_AXIS_TRIGGERLEFT);
-    const auto controllerRightTrigger = controllerTrigger(a, SDL_CONTROLLER_AXIS_TRIGGERRIGHT);
+    const auto controllerLeftTrigger = controllerTrigger(b, SDL_GAMEPAD_AXIS_LEFT_TRIGGER);
+    const auto controllerRightTrigger = controllerTrigger(a, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER);
     Check(controllerLeftTrigger > 160 && controllerRightTrigger < 210,
           "controller and touch trigger strength setup");
     Check((state.wButtons & (XAMINPUT_GAMEPAD_A | XAMINPUT_GAMEPAD_B)) ==
@@ -185,20 +195,20 @@ int main()
     Check(state.bLeftTrigger == controllerLeftTrigger && state.bRightTrigger == controllerRightTrigger &&
           state.sThumbLX == 20000 && state.sThumbRX == 16000,
           "clearing touch leaves SDL triggers and sticks held");
-    SDL_JoystickSetVirtualButton(a, SDL_CONTROLLER_BUTTON_A, 0);
-    SDL_JoystickSetVirtualAxis(b, SDL_CONTROLLER_AXIS_LEFTX, 0);
-    SDL_JoystickSetVirtualAxis(a, SDL_CONTROLLER_AXIS_RIGHTX, 0);
-    SDL_JoystickSetVirtualAxis(b, SDL_CONTROLLER_AXIS_TRIGGERLEFT, -32768);
-    SDL_JoystickSetVirtualAxis(a, SDL_CONTROLLER_AXIS_TRIGGERRIGHT, -32768);
+    SDL_SetJoystickVirtualButton(a, SDL_GAMEPAD_BUTTON_SOUTH, 0);
+    SDL_SetJoystickVirtualAxis(b, SDL_GAMEPAD_AXIS_LEFTX, 0);
+    SDL_SetJoystickVirtualAxis(a, SDL_GAMEPAD_AXIS_RIGHTX, 0);
+    SDL_SetJoystickVirtualAxis(b, SDL_GAMEPAD_AXIS_LEFT_TRIGGER, -32768);
+    SDL_SetJoystickVirtualAxis(a, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER, -32768);
     sample();
 #endif
 
     g_overlayVisible = true;
     g_settingsFilterCalls = 0;
-    SDL_JoystickSetVirtualButton(a, SDL_CONTROLLER_BUTTON_A, 1);
+    SDL_SetJoystickVirtualButton(a, SDL_GAMEPAD_BUTTON_SOUTH, 1);
     Check(sample().wButtons == 0, "debug overlay did not consume game input");
     Check(g_settingsFilterCalls.load() == 0, "settings menu consumed debug overlay input");
-    SDL_JoystickSetVirtualButton(a, SDL_CONTROLLER_BUTTON_A, 0);
+    SDL_SetJoystickVirtualButton(a, SDL_GAMEPAD_BUTTON_SOUTH, 0);
     sample();
     Check(g_settingsFilterCalls.load() == 0, "settings menu ran while debug overlay was visible");
     g_overlayVisible = false;
@@ -211,8 +221,8 @@ int main()
         g_blockOverlay = true;
         g_overlayEntered = false;
     }
-    SDL_JoystickSetVirtualButton(a, SDL_CONTROLLER_BUTTON_LEFTSHOULDER, 1);
-    SDL_JoystickSetVirtualButton(a, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER, 1);
+    SDL_SetJoystickVirtualButton(a, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER, 1);
+    SDL_SetJoystickVirtualButton(a, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER, 1);
     auto menuAction = std::async(std::launch::async, sample);
     {
         std::unique_lock lock(g_overlayStubMutex);
@@ -230,50 +240,50 @@ int main()
     menuAction.get();
     keyboardEvent.get();
     hid::ClearKeyboardState();
-    SDL_JoystickSetVirtualButton(a, SDL_CONTROLLER_BUTTON_LEFTSHOULDER, 0);
-    SDL_JoystickSetVirtualButton(a, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER, 0);
+    SDL_SetJoystickVirtualButton(a, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER, 0);
+    SDL_SetJoystickVirtualButton(a, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER, 0);
     sample();
 
-    SDL_JoystickSetVirtualButton(b, SDL_CONTROLLER_BUTTON_B, 1);
+    SDL_SetJoystickVirtualButton(b, SDL_GAMEPAD_BUTTON_EAST, 1);
     sample();
-    SDL_JoystickClose(b);
-    Check(SDL_JoystickDetachVirtual(second) == 0, "detach second");
+    SDL_CloseJoystick(b);
+    Check(SDL_DetachVirtualJoystick(second), "detach second");
     Check(!(sample().wButtons & XAMINPUT_GAMEPAD_B), "disconnect releases state");
-    SDL_JoystickSetVirtualButton(a, SDL_CONTROLLER_BUTTON_A, 1);
+    SDL_SetJoystickVirtualButton(a, SDL_GAMEPAD_BUTTON_SOUTH, 1);
     Check(sample().wButtons & XAMINPUT_GAMEPAD_A, "remaining controller works");
-    SDL_JoystickClose(a);
-    Check(SDL_JoystickDetachVirtual(first) == 0, "detach first");
+    SDL_CloseJoystick(a);
+    Check(SDL_DetachVirtualJoystick(first), "detach first");
     sample();
     hid::HandleKeyboardEvent(SDL_SCANCODE_Z, true);
     Check(sample().wButtons & XAMINPUT_GAMEPAD_A, "keyboard with no controllers");
     hid::ClearKeyboardState();
     Check(sample().wButtons == 0, "neutral state does not retain caller bits");
-    const int reconnected = SDL_JoystickAttachVirtual(SDL_JOYSTICK_TYPE_GAMECONTROLLER, SDL_CONTROLLER_AXIS_MAX, SDL_CONTROLLER_BUTTON_MAX, 0);
-    Check(reconnected >= 0, "reattach controller");
-    auto* c = SDL_JoystickOpen(reconnected);
+    const SDL_JoystickID reconnected = AttachVirtualGamepad();
+    Check(reconnected != 0, "reattach controller");
+    auto* c = SDL_OpenJoystick(reconnected);
     Check(c != nullptr, "open reattached controller");
     // Runtime mode: another thread pumps and forwards events to HID.
     hid::SetExternalEventPump(true);
-    hid::HandleControllerEvent(SDL_CONTROLLERDEVICEADDED, reconnected);
-    hid::HandleControllerEvent(SDL_CONTROLLERDEVICEADDED, reconnected); // duplicate notification
-    SDL_JoystickSetVirtualButton(c, SDL_CONTROLLER_BUTTON_Y, 1);
+    hid::HandleControllerEvent(SDL_EVENT_GAMEPAD_ADDED, reconnected);
+    hid::HandleControllerEvent(SDL_EVENT_GAMEPAD_ADDED, reconnected); // duplicate notification
+    SDL_SetJoystickVirtualButton(c, SDL_GAMEPAD_BUTTON_NORTH, 1);
     Check(sample().wButtons & XAMINPUT_GAMEPAD_Y, "reattached controller with external event pump");
-    const auto instance = SDL_JoystickInstanceID(c);
-    SDL_JoystickClose(c);
-    SDL_JoystickDetachVirtual(reconnected);
-    hid::HandleControllerEvent(SDL_CONTROLLERDEVICEREMOVED, instance);
+    const auto instance = SDL_GetJoystickID(c);
+    SDL_CloseJoystick(c);
+    SDL_DetachVirtualJoystick(reconnected);
+    hid::HandleControllerEvent(SDL_EVENT_GAMEPAD_REMOVED, instance);
     Check(sample().wButtons == 0, "external hot-unplug clears held input");
 
     // The Vibration setting scales the guest's motor speeds and rescales a running rumble.
     SDL_VirtualJoystickDesc rumbleDesc{};
-    rumbleDesc.version = SDL_VIRTUAL_JOYSTICK_DESC_VERSION;
-    rumbleDesc.type = SDL_JOYSTICK_TYPE_GAMECONTROLLER;
-    rumbleDesc.naxes = SDL_CONTROLLER_AXIS_MAX;
-    rumbleDesc.nbuttons = SDL_CONTROLLER_BUTTON_MAX;
+    SDL_INIT_INTERFACE(&rumbleDesc);
+    rumbleDesc.type = SDL_JOYSTICK_TYPE_GAMEPAD;
+    rumbleDesc.naxes = SDL_GAMEPAD_AXIS_COUNT;
+    rumbleDesc.nbuttons = SDL_GAMEPAD_BUTTON_COUNT;
     rumbleDesc.Rumble = RecordRumble;
-    const int rumblePad = SDL_JoystickAttachVirtualEx(&rumbleDesc);
-    Check(rumblePad >= 0, "attach rumble controller");
-    hid::HandleControllerEvent(SDL_CONTROLLERDEVICEADDED, rumblePad);
+    const SDL_JoystickID rumblePad = SDL_AttachVirtualJoystick(&rumbleDesc);
+    Check(rumblePad != 0, "attach rumble controller");
+    hid::HandleControllerEvent(SDL_EVENT_GAMEPAD_ADDED, rumblePad);
     XAMINPUT_VIBRATION vibration{};
     vibration.wLeftMotorSpeed = 0xFFFF;
     vibration.wRightMotorSpeed = 0x8000;
@@ -302,7 +312,7 @@ int main()
     hid::PreviewVibration();
     Check(g_rumbleLow == 19660 && g_rumbleHigh == 19660, "preview pulses at the strongest guest level times strength");
     hid::SetVibrationStrength(100);
-    SDL_JoystickDetachVirtual(rumblePad);
+    SDL_DetachVirtualJoystick(rumblePad);
     SDL_Quit();
     puts("PASS: SDL PS types, PS/nonPS active device, keyboard, hotplug, four face mappings; virtual input merger; rumble strength");
     return 0;
