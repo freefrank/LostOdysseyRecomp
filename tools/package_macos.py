@@ -87,7 +87,7 @@ def stage_licenses(licenses):
     shutil.copy2(ROOT / "thirdparty/nlohmann-json-LICENSE.txt", licenses / "nlohmann-json-LICENSE.txt")
     shutil.copy2(ROOT / "thirdparty/lzokay/LICENSE", licenses / "lzokay-LICENSE.txt")
     shutil.copy2(ROOT / "LostOdysseyRecomp/install/FONT-PROVENANCE.md", licenses / "FONT-PROVENANCE.md")
-    shutil.copy2(ROOT / "thirdparty/SDL/test/unifont-13.0.06-license.txt", licenses / "Unifont-OFL-1.1.txt")
+    shutil.copy2(ROOT / "thirdparty/SDL/test/unifont-15.1.05-license.txt", licenses / "Unifont-OFL-1.1.txt")
     shutil.copytree(ROOT / "thirdparty/dxc-licenses", licenses / "DXC")
     # Statically linked on macOS: FFmpeg (LGPL, XMA decoder) and SPIRV-Cross (Metal shaders).
     shutil.copy2(ROOT / "thirdparty/ffmpeg-LICENSE.txt", licenses / "ffmpeg-LICENSE.txt")

@@ -127,7 +127,7 @@ def main():
         shutil.copy2(ROOT / 'thirdparty/nlohmann-json-LICENSE.txt', licenses / 'nlohmann-json-LICENSE.txt')
         shutil.copy2(ROOT / 'thirdparty/lzokay/LICENSE', licenses / 'lzokay-LICENSE.txt')
         shutil.copy2(ROOT / 'LostOdysseyRecomp/install/FONT-PROVENANCE.md', licenses / 'FONT-PROVENANCE.md')
-        shutil.copy2(ROOT / 'thirdparty/SDL/test/unifont-13.0.06-license.txt',
+        shutil.copy2(ROOT / 'thirdparty/SDL/test/unifont-15.1.05-license.txt',
                      licenses / 'Unifont-OFL-1.1.txt')
         for dll in ('dxcompiler.dll', 'dxil.dll'):
             shutil.copy2(runtime.parent / dll, package / dll)
