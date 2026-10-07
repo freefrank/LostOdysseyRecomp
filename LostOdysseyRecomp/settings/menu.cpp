@@ -926,8 +926,14 @@ void Publish(uint8_t *base, uint32_t config)
                        L"關閉遊戲並重新匯入所選光碟或 DLC；其他內容與存檔保留。");
     if (tab == 1 && row == 4 && status.empty())
         next.help = edit.audioOutput == AudioOutputSurround && apu::OutputChannels() == 2
+#ifdef _WIN32
+            // The speaker layout is only in the classic Sound control panel.
+            ? Tr(L"Windows reports a stereo device. Open Control Panel → Sound → Playback, select the device, click Configure and choose 5.1 or 7.1 Surround, then select 5.1 again.",
+                 L"Windows 將此裝置視為立體聲。開啟 控制台 → 音效 → 播放，選取裝置，按「設定」並選擇 5.1 或 7.1 環繞，再重新選擇 5.1。")
+#else
             ? Tr(L"The output device is not set to 5.1, so the stereo mix is in use. Set the system speakers to 5.1 or 7.1 and select 5.1 again.",
                  L"輸出裝置未設定為 5.1，正在使用立體聲混音。請將系統喇叭設定為 5.1 或 7.1 後重新選擇 5.1。")
+#endif
             : Tr(L"5.1 sends the game's surround mix to a 5.1 or 7.1 speaker setup. Applies immediately.",
                  L"5.1 會將遊戲的環繞聲混音輸出到 5.1 或 7.1 喇叭，立即套用。");
     if (tab == 2)
