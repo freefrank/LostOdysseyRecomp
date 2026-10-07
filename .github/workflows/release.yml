@@ -286,6 +286,7 @@ jobs:
             libxi-dev \
             libxfixes-dev \
             libxss-dev \
+            libxtst-dev \
             libasound2-dev \
             libpulse-dev \
             libpipewire-0.3-dev \

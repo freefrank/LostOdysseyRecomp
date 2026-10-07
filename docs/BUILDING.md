@@ -126,7 +126,10 @@ Building the native Linux ELF works on Linux distributions (such as Ubuntu or Ma
 - Typical C++ build development packages
 - Running `vulkaninfo` is useful for verifying your driver setup, though not strictly required by CMake
 
-SDL 3.4.18 build dependencies are already vendored in the repository tree.
+SDL 3.4.18 itself is vendored in the repository tree. Its CMake stops when X11
+is found without the extension headers it uses, so install the X11, Wayland and
+audio development packages from [SDL's Linux build dependencies](https://wiki.libsdl.org/SDL3/README-linux#build-dependencies);
+the Linux job in `.gitea/workflows/release.yml` lists the Ubuntu set.
 
 ### Linux PowerPC source generation
 
