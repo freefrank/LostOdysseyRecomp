@@ -81,6 +81,11 @@ if(LO_REVIEW_SDL_TESTS)
             set(SDL_STATIC ON CACHE BOOL "" FORCE)
             set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
             set(SDL_TESTS OFF CACHE BOOL "" FORCE)
+            # The fixtures use the dummy video driver. SDL3 stops configuring
+            # when only some X11 extension headers are installed.
+            set(SDL_X11 OFF CACHE BOOL "" FORCE)
+            set(SDL_WAYLAND OFF CACHE BOOL "" FORCE)
+            set(SDL_UNIX_CONSOLE_BUILD ON CACHE BOOL "" FORCE)
             add_subdirectory("${LO_ROOT}/thirdparty/SDL" sdl EXCLUDE_FROM_ALL)
             add_library(lo_review_sdl ALIAS SDL3::SDL3-static)
         endif()
