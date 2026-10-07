@@ -244,6 +244,7 @@ Environment variables override the saved settings for one run:
 | `LO_MODS` | `0` or `false` disables mods. |
 | `LO_LOG_FILE` | Write the log to this path, or `0` for no log file. |
 | `LO_AUDIO_MUTE`, `LO_CONTROLLER_RUMBLE` | `LO_AUDIO_MUTE=1` mutes audio; `LO_CONTROLLER_RUMBLE=0` turns rumble off. |
+| `LO_TRACE_STARTUP` | Windows: `1` adds startup details to the log: graphics adapters, add-on software loaded into the game (overlays, capture tools), and window and swap chain timing. |
 
 ### How the game is found
 
@@ -269,5 +270,7 @@ To update by hand, close the game first, keep a copy of your saves and settings,
 ## Reporting a startup or rendering failure
 
 Attach the newest `logs/runtime-<timestamp>.log` (on Android, see [Android logs](#android-logs)) and write down the package version, graphics backend, GPU and driver, game edition, disc and scene.
+
+If the game stops during startup, the log shows which step is stuck after 10 seconds. Run once more with `LO_TRACE_STARTUP=1` and attach that log too.
 
 For a rendering problem, open **F1 → Overview → Capture render state**, confirm, then **close F1** so the game keeps rendering. Reopen F1 to see where the archive was saved, look through it and attach it.

@@ -248,6 +248,7 @@ LostOdysseyRecomp.app/Contents/MacOS/LostOdysseyRecomp --game ~/Games/LostOdysse
 | `LO_MODS` | `0` 或 `false` 关闭 Mod。 |
 | `LO_LOG_FILE` | 把日志写到指定路径；设为 `0` 则不写日志文件。 |
 | `LO_AUDIO_MUTE`、`LO_CONTROLLER_RUMBLE` | `LO_AUDIO_MUTE=1` 静音；`LO_CONTROLLER_RUMBLE=0` 关闭震动。 |
+| `LO_TRACE_STARTUP` | 仅 Windows：设为 `1` 时日志会多记录启动细节：显卡适配器、加载进游戏的第三方软件（悬浮窗、录屏工具等），以及窗口与交换链耗时。 |
 
 ### 游戏目录的查找顺序
 
@@ -273,5 +274,7 @@ LostOdysseyRecomp.app/Contents/MacOS/LostOdysseyRecomp --game ~/Games/LostOdysse
 ## 报告启动或画面问题
 
 附上最新的 `logs/runtime-<timestamp>.log`（Android 见 [Android 日志](#android-logs)），并写明安装包版本、图形后端、GPU 和驱动、游戏版本、光盘和场景。
+
+如果游戏卡在启动阶段，10 秒后日志会记下卡住的步骤。请再用 `LO_TRACE_STARTUP=1` 运行一次，并一并附上那份日志。
 
 画面问题请打开 **F1 → Overview → Capture render state（捕获渲染状态）**，确认后**关闭 F1** 让游戏继续渲染。重新打开 F1 查看归档保存的位置，检查内容后附上。
