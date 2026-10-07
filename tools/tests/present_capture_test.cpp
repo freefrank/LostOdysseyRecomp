@@ -9,6 +9,7 @@
 #include <iostream>
 #include <gpu/shader/dxc_compiler.h>
 #include <gpu/fsr_upscaler.h>
+#include <gpu/xess_upscaler.h>
 #include <gpu/present_capture.h>
 #include <os/capture_archive.h>
 #include <settings/config.h>
@@ -47,6 +48,8 @@ bool CalibrationKey(uint32_t) { return false; }
 void SetHdrDisplayInfo(HdrDisplayInfo) {}
 void SetHdrCalibrationSceneAvailable(bool) {}
 HdrCalibration GetHdrCalibration() { return {}; }
+BrightnessCalibration GetBrightnessCalibration() { return {}; }
+bool SaveDisplayChoice(const std::string&, uint32_t) { return false; }
 }
 namespace hid {
 void Init() {}
@@ -76,7 +79,7 @@ CommandProcessor g_commandProcessor;
 void CommandProcessor::RequestStopForExit() {}
 TemporalUpscaler::TemporalUpscaler(dlss::Controller& controller) : dlss_(&controller) {}
 // This fixture never constructs an SDK adapter.
-TemporalUpscaler::~TemporalUpscaler() { fsr_.release(); }
+TemporalUpscaler::~TemporalUpscaler() { fsr_.release(); xess_.release(); }
 void TemporalUpscaler::ReleaseCompleted(uint64_t) {}
 void TemporalUpscaler::AbandonAfterDeviceLoss() {}
 void TemporalUpscaler::ShutdownAfterGpuDrain() {}
@@ -105,6 +108,8 @@ bool DrainForFrameGenerationReconfigure() { return true; }
 void SetHdrSceneEnabled(bool) {}
 plume::RenderTexture* AcquireHdrResolvedSurface(uint32_t, uint32_t&, uint32_t&) { return nullptr; }
 plume::RenderTexture* AcquireHdrGainSurface(uint32_t, uint32_t&, uint32_t&) { return nullptr; }
+bool ResolvedScene(uint32_t, uint64_t&) { return false; }
+plume::RenderTexture* AcquireResolvedWrite(uint32_t, uint64_t, bool, uint32_t&, uint32_t&, uint32_t&) { return nullptr; }
 bool ReadbackResolvedSurface(uint32_t, std::vector<uint32_t>&, uint32_t&, uint32_t&) { return false; }
 std::vector<uint32_t> GetResolvedAddresses() { return {}; }
 void DumpRenderTargets(const char*) {}
