@@ -1,7 +1,8 @@
-"""Post GitHub pushes to main and published releases to Discord through the sync bot.
+"""Post GitHub pushes to main, pull requests and published releases to Discord through the sync bot.
 
 Reads the Actions event from GITHUB_EVENT_PATH. Pushes go to DISCORD_COMMITS_CHANNEL as one
-embed listing the commits; releases go to DISCORD_RELEASES_CHANNEL (an announcement channel)
+embed listing the commits, and so do opened, reopened or closed-unmerged pull requests
+(merged ones appear as commits); releases go to DISCORD_RELEASES_CHANNEL (an announcement channel)
 and are crossposted to following servers. Nothing in a commit message or release note can
 ping anyone. A manual run takes RELEASE_TAG to (re)post an existing release; DRY_RUN=true
 only prints the message.
@@ -53,6 +54,29 @@ def push_message(event):
     }
 
 
+def pr_message(event):
+    """Opened, reopened or closed-unmerged PRs; merged ones show up in the commit feed."""
+    pr, action = event['pull_request'], event.get('action')
+    if action == 'closed' and pr.get('merged'):
+        return None
+    what = {'opened': 'opened', 'reopened': 'reopened', 'closed': 'closed without merging'}.get(action)
+    if not what:
+        return None
+    if action == 'opened' and pr.get('draft'):
+        what = 'opened as draft'
+    title = clip(pr['title'], 200).replace('[', '(').replace(']', ')')
+    actor = (event.get('sender') or pr['user'])['login']
+    return {
+        'allowed_mentions': NO_PINGS,
+        'embeds': [{
+            'title': clip(f'#{pr["number"]} {title}', 256),
+            'url': pr['html_url'],
+            'description': f'{what} by {actor} · `{pr["head"]["label"]}` → `{pr["base"]["ref"]}`',
+            'color': 0x9CA3AF if action == 'closed' else 0x3BA55D,
+        }],
+    }
+
+
 def release_message(release, repo_name):
     name = release.get('name') or release['tag_name']
     notes = clip(release.get('body'), 3500)
@@ -82,6 +106,8 @@ def main():
 
     if event_name == 'push':
         channel, message = env('DISCORD_COMMITS_CHANNEL'), push_message(event)
+    elif event_name in ('pull_request', 'pull_request_target'):
+        channel, message = env('DISCORD_COMMITS_CHANNEL'), pr_message(event)
     elif event_name == 'release' or tag:
         release = event.get('release') if event_name == 'release' else http_json(
             f'{GITHUB_API}/repos/{env("GITHUB_REPOSITORY")}/releases/tags/{tag}',
@@ -94,7 +120,7 @@ def main():
         print(f'Nothing to post for {event_name}.')
         return 0
     if message is None:
-        print('No new commits; nothing to post.')
+        print('Nothing new to post.')
         return 0
 
     print(json.dumps(message, ensure_ascii=False, indent=2))
