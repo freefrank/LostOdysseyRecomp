@@ -128,6 +128,7 @@ The catalog below lists maintained groups and representative root utilities. `th
 | `tools/issue_triage/triage.py` | Automated triage script for GitHub Issues using LLM code context matching. | **REMOTE I/O**: Queries GitHub API; may invoke LLM model APIs and post comments if authorized. |
 | `tools/issue_triage/code_context.py` | Extracts codebase symbol context for issue reports. | Read-only: Scans repository code. |
 | `tools/project_management/` | Helper scripts for syncing GitHub Project fields, items, and roadmap mirrors. | Workflow integration: Updates project tracking state. |
+| `tools/discord_sync/discord_sync.py` | Copies new posts and replies from the Discord `#help` forum into GitHub Discussions (Q&A, `discord` label); run every 15 minutes by `.github/workflows/discord-discussions-sync.yml`. One-way; edits, deletions and attachments are not copied (attachments link back to Discord). | **REMOTE I/O**: Reads Discord with `DISCORD_BOT_TOKEN`; creates, comments on, updates and closes Discussions. `DRY_RUN=true` only prints. Exits quietly when the token is not set. |
 
 ### 10. Private feedback archive
 

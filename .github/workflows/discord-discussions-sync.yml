@@ -1,0 +1,41 @@
+name: Discord to Discussions
+
+on:
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Print what would be copied without writing to GitHub
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+  discussions: write
+
+concurrency:
+  group: discord-discussions-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Copy new #help posts to GitHub Discussions
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_GUILD_ID: '1557289510436601899'
+          DISCORD_FORUM_ID: '1557291045346213958'
+          DISCUSSION_CATEGORY: q-a
+          DISCUSSION_LABEL: discord
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+        run: python tools/discord_sync/discord_sync.py
