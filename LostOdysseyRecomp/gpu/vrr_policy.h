@@ -11,7 +11,7 @@ namespace gpu::vrr
 inline constexpr uint32_t kRefreshHeadroom = 3;
 constexpr uint32_t OutputLimit(uint32_t refreshHz)
 {
-    // SDL reports integer Hz here; leave room for fractional modes and pacing error.
+    // Refresh rates arrive rounded to whole Hz; leave room for fractional modes and pacing error.
     return refreshHz >= 24 && refreshHz <= 1000 ? refreshHz - kRefreshHeadroom : 0;
 }
 constexpr bool HostVsyncEnabled(uint32_t nativeFps, bool baselineVsync,
