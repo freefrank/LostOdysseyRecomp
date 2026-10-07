@@ -1,0 +1,39 @@
+name: Discord notifications
+
+on:
+  push:
+    branches: [main]
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing release tag to post to #announcements
+        required: true
+        type: string
+      dry_run:
+        description: Print the message without posting it
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: tools/discord_sync
+      - name: Post to Discord
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_COMMITS_CHANNEL: '1557291580367577118'  # #development
+          DISCORD_RELEASES_CHANNEL: '1557291653658836993'  # #announcements
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+        run: python3 tools/discord_sync/notify.py
