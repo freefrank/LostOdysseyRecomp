@@ -39,6 +39,10 @@ namespace gpu::video
     bool TextureCompressionBC();
     // Actual committed backend; absent before readiness or after shutdown.
     std::optional<backend::Backend> SelectedBackend();
+    // Adapter names the running backend lists (duplicates removed) and the one
+    // in use; empty before device creation. Safe to call from the menu thread.
+    std::vector<std::string> GpuDeviceNames();
+    std::string ActiveGpuDeviceName();
     // Latest committed device capability. Callers receive a copy and do not
     // read NGX reports or device pointers. The device owner publishes it.
     upscaling::BackendDeviceSnapshot BackendDeviceState();

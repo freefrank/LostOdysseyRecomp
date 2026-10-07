@@ -69,6 +69,7 @@ inline bool Required(const Config &before, const Config &after)
     // HDR replaces the swap chain live, except with frame generation, whose
     // SDKs own or hook the swap chain.
     return before.gameLanguage != after.gameLanguage || before.graphicsBackend != after.graphicsBackend ||
+           before.gpuDevice != after.gpuDevice ||
            (before.hdr != after.hdr &&
             (before.frameGenerationProvider != framegen::Provider::Off ||
              after.frameGenerationProvider != framegen::Provider::Off)) ||

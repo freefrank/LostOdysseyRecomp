@@ -26,6 +26,9 @@ struct MenuRow
     // Hidden rows keep their logical index (input dispatch stays stable) but
     // are skipped by navigation, drawing and mouse hit-testing.
     bool hidden = false;
+    // Show only the selected choice between arrows, as rows with more than
+    // five choices do; for long names such as GPUs and displays.
+    bool singleValue = false;
     bool operator==(const MenuRow &) const = default;
 };
 struct MenuSnapshot

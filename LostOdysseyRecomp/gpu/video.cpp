@@ -1718,6 +1718,17 @@ namespace gpu::video
         const auto selected = g_selectedBackend.load();
         return selected < 0 ? std::nullopt : std::optional(static_cast<backend::Backend>(selected));
     }
+    static std::mutex g_gpuNamesMutex;
+    static std::vector<std::string> g_gpuDeviceNames;
+    static std::string g_activeGpuDeviceName;
+    std::vector<std::string> GpuDeviceNames() {
+        std::lock_guard lock(g_gpuNamesMutex);
+        return g_gpuDeviceNames;
+    }
+    std::string ActiveGpuDeviceName() {
+        std::lock_guard lock(g_gpuNamesMutex);
+        return g_activeGpuDeviceName;
+    }
 
     // The command thread calls this only before guest startup, or after all
     // rendering has stopped. The window/event thread is deliberately retained
@@ -2074,27 +2085,63 @@ namespace gpu::video
                     fg.Enabled() && fg.config.provider == framegen::Provider::Fsr;
             }
 #endif
-            g_device = g_interface->createDevice();
+            // The GPU setting names an adapter as this backend lists it. Plume
+            // picks automatically for an empty name or an adapter it cannot open.
+            std::string preferredGpu = settings::GetConfig().gpuDevice;
+            const auto adapterNames = g_interface->getDeviceNames();
+            {
+                std::string listed;
+                for (const auto& name : adapterNames) listed += (listed.empty() ? "\"" : ", \"") + name + "\"";
+                LOG_INFO("video: {} adapters: {} configured=\"{}\"", backend::Name(candidate),
+                    listed.empty() ? std::string("none") : listed, preferredGpu);
+            }
+            if (!preferredGpu.empty() && std::find(adapterNames.begin(), adapterNames.end(), preferredGpu) == adapterNames.end()) {
+                LOG_WARNING("video: GPU \"{}\" is not listed by {}; using automatic selection", preferredGpu, backend::Name(candidate));
+                preferredGpu.clear();
+            }
+            g_device = g_interface->createDevice(preferredGpu);
 #if defined(__ANDROID__) && defined(LO_HAS_ADRENOTOOLS)
             if (!g_device && RetryWithSystemVulkanDriver("device creation")) {
                 g_interface.reset();
                 g_interface = plume::CreateVulkanInterface(g_window, g_dlssController->ExtensionHooks());
                 if (!g_interface) return "API/loader initialization failed";
                 LogVulkanPhysicalDevices(static_cast<plume::VulkanInterface*>(g_interface.get())->instance);
-                g_device = g_interface->createDevice();
+                g_device = g_interface->createDevice(preferredGpu);
             }
 #endif
-            if (g_device) {
-                const uint64_t nextEpoch = g_deviceEpoch.fetch_add(1, std::memory_order_acq_rel) + 1;
-                frame_plan::ResetSizing(nextEpoch);
+            const auto openedDevice = [&] {
+                if (g_device) {
+                    const uint64_t nextEpoch = g_deviceEpoch.fetch_add(1, std::memory_order_acq_rel) + 1;
+                    frame_plan::ResetSizing(nextEpoch);
+                    const auto& description = g_device->getDescription();
+                    LOG_INFO("video device: backend={} name={} driver_raw={} vendor_enum={} type_enum={} reported_device_memory_bytes={}",
+                        backend::Name(candidate), description.name, description.driverVersion,
+                        uint32_t(description.vendor), uint32_t(description.type), description.dedicatedVideoMemory);
+                }
+                return backend::Inspect(candidate, g_device.get());
+            };
+            auto capabilities = openedDevice();
+            if (!preferredGpu.empty()) {
+                const auto missing = backend::Missing(candidate, capabilities);
+                if (g_device && g_device->getDescription().name != preferredGpu) {
+                    LOG_WARNING("video: GPU \"{}\" could not be opened; automatic selection chose \"{}\"",
+                        preferredGpu, g_device->getDescription().name);
+                } else if (!missing.empty()) { // Includes a failed creation.
+                    // The chosen adapter must not end the only candidate (Linux/macOS).
+                    LOG_WARNING("video: GPU \"{}\" is unusable ({}); using automatic selection", preferredGpu, missing);
+                    g_device.reset();
+                    g_device = g_interface->createDevice();
+                    capabilities = openedDevice();
+                }
             }
-            if (g_device) {
-                const auto& description = g_device->getDescription();
-                LOG_INFO("video device: backend={} name={} driver_raw={} vendor_enum={} type_enum={} reported_device_memory_bytes={}",
-                    backend::Name(candidate), description.name, description.driverVersion,
-                    uint32_t(description.vendor), uint32_t(description.type), description.dedicatedVideoMemory);
+            {
+                std::vector<std::string> names;
+                for (const auto& name : g_interface->getDeviceNames())
+                    if (std::find(names.begin(), names.end(), name) == names.end()) names.push_back(name);
+                std::lock_guard lock(g_gpuNamesMutex);
+                g_gpuDeviceNames = std::move(names);
+                g_activeGpuDeviceName = g_device ? g_device->getDescription().name : std::string{};
             }
-            const auto capabilities = backend::Inspect(candidate, g_device.get());
             g_textureCompressionBC.store(capabilities.textureCompressionBC, std::memory_order_relaxed);
             if (g_device && candidate == backend::Backend::Vulkan)
                 LOG_INFO("vulkan limits: sets={} samplers={} sampled_images={} storage_buffers={} push_constants={} bc={}",

@@ -179,6 +179,53 @@ const wchar_t *Tr(const wchar_t *en, const wchar_t *zh)
 {
     return Translate(edit.uiLanguage, en, zh);
 }
+// Adapter and display names arrive as UTF-8.
+std::wstring Widen(std::string_view text)
+{
+    std::wstring result;
+    for (size_t i = 0; i < text.size();)
+    {
+        const auto lead = uint8_t(text[i]);
+        const size_t length = lead < 0x80 ? 1 : (lead >> 5) == 6 ? 2 : (lead >> 4) == 14 ? 3 : (lead >> 3) == 30 ? 4 : 0;
+        if (!length || i + length > text.size())
+        {
+            result.push_back(L'?');
+            ++i;
+            continue;
+        }
+        uint32_t code = length == 1 ? lead : lead & (0x7f >> length);
+        for (size_t k = 1; k < length; ++k)
+            code = (code << 6) | (uint8_t(text[i + k]) & 0x3f);
+        i += length;
+        if (sizeof(wchar_t) == 2 && code >= 0x10000)
+        {
+            code -= 0x10000;
+            result.push_back(wchar_t(0xd800 + (code >> 10)));
+            result.push_back(wchar_t(0xdc00 + (code & 0x3ff)));
+        }
+        else
+            result.push_back(wchar_t(code));
+    }
+    return result;
+}
+// Menu choice 0 is Automatic; choice i names[i - 1]. A saved name that is not
+// listed stays as the last choice, so the row shows the saved value.
+struct NameChoices
+{
+    std::vector<std::string> names;
+    uint32_t selected = 0;
+};
+NameChoices GpuChoices()
+{
+    NameChoices result{gpu::video::GpuDeviceNames()};
+    if (!edit.gpuDevice.empty())
+    {
+        auto found = std::find(result.names.begin(), result.names.end(), edit.gpuDevice);
+        if (found == result.names.end()) found = result.names.insert(result.names.end(), edit.gpuDevice);
+        result.selected = uint32_t(found - result.names.begin()) + 1;
+    }
+    return result;
+}
 uint32_t ConfigAddress(uint8_t *base)
 {
     uint32_t object = PPC_LOAD_U32(0x8326A068);
@@ -458,7 +505,7 @@ bool GraphicsRowHidden(int r)
 #if LO_PLATFORM_ANDROID
     // Android owns the native surface; the renderer derives aspect from its drawable.
     // NGX and frame generation have no Android providers in this build.
-    if (r == int(GraphicsRow::Backend) || r == int(GraphicsRow::DisplayMode) ||
+    if (r == int(GraphicsRow::Backend) || r == int(GraphicsRow::Gpu) || r == int(GraphicsRow::DisplayMode) ||
         r == int(GraphicsRow::Widescreen) || r == int(GraphicsRow::OutputResolution) ||
         r == int(GraphicsRow::VariableRefreshRate) || r == int(GraphicsRow::FrameGeneration) ||
         r == int(GraphicsRow::FrameGenerationMultiplier))
@@ -466,6 +513,9 @@ bool GraphicsRowHidden(int r)
     if (r == int(GraphicsRow::DlssQuality) || r == int(GraphicsRow::FsrSharpness))
         return !graphics_menu::AndroidFsrAvailable || edit.upscaler != gpu::upscaling::Upscaler::Fsr;
 #endif
+    // A single adapter leaves nothing to choose.
+    if (r == int(GraphicsRow::Gpu))
+        return gpu::video::GpuDeviceNames().size() <= 1;
     return (r == int(GraphicsRow::DlssQuality) && edit.upscaler == gpu::upscaling::Upscaler::Off) ||
            (r == int(GraphicsRow::FsrSharpness) && edit.upscaler != gpu::upscaling::Upscaler::Fsr) ||
            (r == int(GraphicsRow::FrameGenerationMultiplier) && edit.frameGenerationProvider != framegen::Provider::Dlss);
@@ -513,7 +563,7 @@ static_assert(int(GraphicsRow::Save) + 1 == int(GraphicsRow::Count));
 void Publish(uint8_t *base, uint32_t config)
 {
 #if LO_PLATFORM_ANDROID
-    // The first four graphics ids are hidden; enter the tab on a visible row.
+    // The first graphics ids are hidden; enter the tab on a visible row.
     if (tab == 2)
         for (int i = 0; i < int(GraphicsRow::Count) && GraphicsRowHidden(row); ++i)
             row = (row + 1) % int(GraphicsRow::Count);
@@ -598,6 +648,14 @@ void Publish(uint8_t *base, uint32_t config)
 #else
         placeGraphics(GraphicsRow::Backend, makeChoices(L"Graphics backend", L"圖形後端", {L"Vulkan"}, 0));
 #endif
+        {
+            const auto gpus = GpuChoices();
+            std::vector<std::wstring> labels{Tr(L"Automatic", L"自動")};
+            for (const auto& name : gpus.names) labels.push_back(Widen(name));
+            auto gpuRow = makeChoices(L"GPU", L"GPU", std::move(labels), gpus.selected);
+            gpuRow.singleValue = true;
+            placeGraphics(GraphicsRow::Gpu, std::move(gpuRow));
+        }
         placeGraphics(GraphicsRow::DisplayMode, makeChoices(L"Display mode", L"顯示模式",
                    {Tr(L"Windowed", L"視窗"), Tr(L"Borderless fullscreen", L"無邊框全螢幕")},
                    uint32_t(edit.windowMode)));
@@ -793,6 +851,14 @@ void Publish(uint8_t *base, uint32_t config)
             next.help += selected == gpu::backend::Backend::Vulkan ? L"Vulkan" :
                 selected == gpu::backend::Backend::D3D12 ? L"Direct3D 12" :
                 selected == gpu::backend::Backend::Metal ? L"Metal" : L"-";
+            break;
+        }
+        case GraphicsRow::Gpu: {
+            next.help = Tr(L"Applies after restarting. Lists the GPUs of the running graphics backend.",
+                           L"重新啟動後套用。列出目前圖形後端的 GPU。");
+            next.help += Tr(L" Running: ", L" 目前使用：");
+            const auto active = gpu::video::ActiveGpuDeviceName();
+            next.help += active.empty() ? std::wstring(L"-") : Widen(active);
             break;
         }
         case GraphicsRow::Widescreen:
@@ -1255,7 +1321,7 @@ void PointerClick(float x, float y, bool reverse)
         mouseAction = snapshot.tab == 2 && hit == size_t(GraphicsRow::HdrPeak) &&
                       x >= 600 && x < 820 ? 0x1000 : graphics_menu::IsAction(snapshot.tab, int(hit))
             ? (reverse ? 0 : 0x1000) : (reverse || (hdrLevel && x < 600) ||
-               (snapshot.rows[hit].choices.size() > 5 && x < 458) ? 4 : 8);
+               ((snapshot.rows[hit].singleValue || snapshot.rows[hit].choices.size() > 5) && x < 458) ? 4 : 8);
     }
 }
 } // namespace settings
@@ -1931,6 +1997,13 @@ PPC_FUNC(sub_822F19B0)
                 edit.graphicsBackend = GraphicsBackend::Vulkan;
 #endif
                 break;
+            case GraphicsRow::Gpu:
+            {
+                const auto gpus = GpuChoices();
+                const auto choice = cycle(gpus.selected, uint32_t(gpus.names.size() + 1));
+                edit.gpuDevice = choice ? gpus.names[choice - 1] : std::string{};
+                break;
+            }
             case GraphicsRow::DisplayMode:
                 edit.windowMode = WindowMode(cycle(uint32_t(edit.windowMode), 2));
                 break;

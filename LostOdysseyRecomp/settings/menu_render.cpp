@@ -717,7 +717,7 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
             }
             continue;
         }
-        if (choices->size() > 5)
+        if (row.singleValue || choices->size() > 5)
         {
             constexpr int arrowWidth = 72;
             cell(choiceLeft, y, arrowWidth, rowHeight - 2, false);

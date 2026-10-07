@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <span>
+#include <string>
 #include "gpu/backend_selection.h"
 #include "gpu/upscaling_plan.h"
 #include "../../shared/frame_generation/core.h"
@@ -54,6 +55,9 @@ struct Config
 #else
     GraphicsBackend graphicsBackend = GraphicsBackend::Vulkan; // Applied on the next process start.
 #endif
+    // Adapter name as the backend lists it; empty selects automatically.
+    // Applied on the next process start.
+    std::string gpuDevice;
     uint32_t antialiasing = 0; // 0 Off, 1 FXAA, 2 SMAA, 3 experimental camera-based TAA.
     uint32_t shadowResolution = 1; // Shadow map width and height multiplier: 1/2/4.
     uint32_t ambientOcclusion = 0; // 0 Off, 1 SSAO, 2 GTAO.

@@ -11,8 +11,15 @@ namespace settings
 namespace
 {
 std::mutex mutex;
+// One settings.ini line: no line breaks, bounded like the adapter/display names it stores.
+std::string TextValue(std::string text)
+{
+    while (!text.empty() && (text.back() == '\r' || text.back() == '\n')) text.pop_back();
+    return text.size() <= 256 && text.find_first_of("\r\n") == std::string::npos ? text : std::string{};
+}
 Config Validate(Config value)
 {
+    value.gpuDevice = TextValue(std::move(value.gpuDevice));
     if (value.internalResolution != 0 && value.internalResolution != InternalResolutionNative &&
         value.internalResolution != 720 && value.internalResolution != 1080 &&
         value.internalResolution != 1440 && value.internalResolution != 2160)
@@ -101,6 +108,11 @@ Config Read()
         if (name == "anisotropic_filtering") value.anisotropicFiltering = 0;
         uint32_t number = 0;
         const auto digits = key.substr(equal + 1);
+        if (name == "gpu_device")
+        {
+            value.gpuDevice = TextValue(digits);
+            continue;
+        }
         if (name == "display_brightness")
         {
             // The only signed value.
@@ -272,6 +284,7 @@ static bool WriteConfig(const Config &value)
     output << "ui_language=" << value.uiLanguage << "\ngame_language=" << value.gameLanguage
            << "\nwidth=" << value.width << "\nheight=" << value.height << "\nwindow_mode=" << uint32_t(value.windowMode)
            << "\ngraphics_backend=" << uint32_t(value.graphicsBackend)
+           << "\ngpu_device=" << value.gpuDevice
            << "\ndebug_language=" << value.debugLanguage
            << "\nantialiasing=" << value.antialiasing << "\nframe_rate=" << value.frameRate
            << "\nshadow_resolution=" << value.shadowResolution

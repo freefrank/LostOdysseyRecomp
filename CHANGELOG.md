@@ -13,6 +13,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - DirectX 12: shorter stalls in the first frames of a new scene; when a pipeline is missing, pipelines that share its shaders are built on other CPU cores at the same time.
 - The game downloads a list of the pipelines that maps, cutscenes and battles use, recorded ahead of time, so even first visits stutter less; it is kept up to date in the background.
 - Exclusive fullscreen was removed; the display mode is windowed or borderless fullscreen, and a saved exclusive fullscreen choice starts in borderless fullscreen.
+- A new GPU setting picks the graphics card to render with on PCs that have more than one; it applies after a restart (#202).
 
 ### 简体中文
 
@@ -21,6 +22,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - DirectX 12：新场景开头几帧的卡顿更短；缺少某个管线时，和它共用着色器的管线会同时在其他 CPU 核心上建好。
 - 游戏会下载一份预先录好的地图、过场和战斗所用管线列表，第一次进入时卡顿也更少；这份列表会在后台自动更新。
 - 移除独占全屏；显示模式只有窗口和无边框全屏，之前保存为独占全屏的设置改为以无边框全屏启动。
+- 新增 GPU 设置，在有多张显卡的电脑上可选择用哪一张渲染，重启后生效（#202）。
 
 ## [v0.8.44](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.8.44) — 2026-10-06
 
