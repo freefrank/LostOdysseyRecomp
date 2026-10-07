@@ -319,6 +319,7 @@ jobs:
         run: |
           git -C tools/XenonRecomp apply --reverse --check ../patches/XenonRecomp-lostodyssey.patch >/dev/null 2>&1 || git -C tools/XenonRecomp apply ../patches/XenonRecomp-lostodyssey.patch
           git -C thirdparty/plume apply --reverse --check ../../tools/patches/plume-lostodyssey.patch >/dev/null 2>&1 || git -C thirdparty/plume apply ../../tools/patches/plume-lostodyssey.patch
+          git -C thirdparty/plume apply --reverse --check ../../tools/patches/plume-sdl3.patch >/dev/null 2>&1 || git -C thirdparty/plume apply ../../tools/patches/plume-sdl3.patch
       - name: Build recompiler tools
         run: |
           cmake -S tools/xexdump -B out/build/tools -G Ninja \
@@ -346,8 +347,8 @@ jobs:
             -DLO_FSR_SDK_ROOT="$GITHUB_WORKSPACE/out/deps/fidelityfx-sdk" \
             -DLO_FSR_SHADER_DIR="$GITHUB_WORKSPACE/out/fsr-shaders-vk" \
             -DSDL_PIPEWIRE=ON -DSDL_PIPEWIRE_SHARED=ON
-          grep -q '^#define SDL_AUDIO_DRIVER_PIPEWIRE 1' out/build/linux/thirdparty/SDL/include-config-release/SDL2/SDL_config.h
-          grep -q '^#define SDL_AUDIO_DRIVER_PIPEWIRE_DYNAMIC ' out/build/linux/thirdparty/SDL/include-config-release/SDL2/SDL_config.h
+          grep -q '^#define SDL_AUDIO_DRIVER_PIPEWIRE 1' out/build/linux/thirdparty/SDL/include-config-release/build_config/SDL_build_config.h
+          grep -q '^#define SDL_AUDIO_DRIVER_PIPEWIRE_DYNAMIC ' out/build/linux/thirdparty/SDL/include-config-release/build_config/SDL_build_config.h
           cmake --build out/build/linux --target LostOdysseyRecomp --parallel 2
       # Packages carry no shader pack: the game downloads the one for its
       # renderer from the shader-packs prerelease. A version needs packs for

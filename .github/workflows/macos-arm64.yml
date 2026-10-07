@@ -57,6 +57,7 @@ jobs:
         run: |
           git -C tools/XenonRecomp apply --reverse --check ../patches/XenonRecomp-lostodyssey.patch >/dev/null 2>&1 || git -C tools/XenonRecomp apply ../patches/XenonRecomp-lostodyssey.patch
           git -C thirdparty/plume apply --reverse --check ../../tools/patches/plume-lostodyssey.patch >/dev/null 2>&1 || git -C thirdparty/plume apply ../../tools/patches/plume-lostodyssey.patch
+          git -C thirdparty/plume apply --reverse --check ../../tools/patches/plume-sdl3.patch >/dev/null 2>&1 || git -C thirdparty/plume apply ../../tools/patches/plume-sdl3.patch
           git -C thirdparty/plume apply --reverse --check ../../tools/patches/plume-macos.patch >/dev/null 2>&1 || git -C thirdparty/plume apply ../../tools/patches/plume-macos.patch
       - name: Build recompiler tools
         run: |
@@ -87,7 +88,7 @@ jobs:
           # Targets that include the generated PPC headers need game data too. Build past them and fail
           # only when some other compile, link or build step breaks.
           set +e
-          ninja -C out/build/macos -k 0 plume spirv-cross-msl SDL2-static XenonUtils lo_portable_shader_pack lo_menu_lzo \
+          ninja -C out/build/macos -k 0 plume spirv-cross-msl SDL3-static XenonUtils lo_portable_shader_pack lo_menu_lzo \
             lo_avcodec lo_avutil o1heap $(cat out/build/macos/ci-candidates.txt) 2>&1 | tee out/build/macos/ci-build.log
           status=${PIPESTATUS[0]}
           set -e
