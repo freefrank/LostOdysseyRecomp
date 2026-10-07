@@ -89,6 +89,8 @@ const wchar_t* Message(uint32_t){return L"Message";}
 int Consent(){return 0;} bool Enabled(){return false;}
 bool SetConsent(bool){++consents;return true;}
 }
+namespace apu { bool surround=false; void SetSurround(bool s){surround=s;} uint32_t OutputChannels(){return surround?6:2;} }
+namespace settings { bool SaveAudioOutput(uint32_t o){savedConfig.audioOutput=o;return true;} }
 '''
 TEST = r'''
 extern "C" PPC_FUNC(__imp__sub_822F19B0) {}
@@ -117,7 +119,7 @@ int main(int argc, char** argv) {
     // A must not cycle ANY ordinary setting, not just the new graphics choice.
     for(int tab=0;tab<4;++tab){
         settings::tab=tab;
-        const int count=tab==0?7:tab==1?3:tab==2?int(settings::GraphicsRow::Count):3;
+        const int count=tab==0?7:tab==1?4:tab==2?int(settings::GraphicsRow::Count):3;
         for(int row=0;row<count;++row){
             // A on HDR peak opens its calibration page by design.
             if(settings::graphics_menu::IsAction(tab,row) || (tab==2 && row==int(settings::GraphicsRow::HdrPeak)))continue;
@@ -131,6 +133,9 @@ int main(int argc, char** argv) {
     }
     settings::tab=0;settings::row=0;tick(8);
     Check(PPC_LOAD_U32(ConfigData)==1 && applies==1,"right still applies gameplay setting");
+    settings::tab=1;settings::row=3;tick(8);
+    Check(settings::edit.audioOutput==1 && settings::savedConfig.audioOutput==1 && apu::surround && applies==1,
+          "audio output switches live and saves without a guest apply");
     using settings::GraphicsRow;using gpu::upscaling::Upscaler;
     settings::tab=2;settings::row=int(GraphicsRow::AntiAliasing);settings::edit={};
     settings::edit.dlssQuality=gpu::upscaling::DlssQuality::Dlaa;
