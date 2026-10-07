@@ -1931,6 +1931,9 @@ namespace gpu::renderer
                 // Snapshot version each uploaded ALU bank came from; 0 when
                 // unknown or when the draw modified its copy (jitter).
                 uint64_t vsGeneration = 0, psGeneration = 0;
+                // vs/ps hold the bytes at vsOffset/psOffset. Versioned uploads
+                // skip the copy: a new version almost never repeats old bytes.
+                bool vsCopy = false, psCopy = false;
             };
             UploadedConstants uploadedConstants[kGpuSlots];
 
@@ -1954,7 +1957,8 @@ namespace gpu::renderer
                     return lastOffset;
                 const void* last = bank == 0 ? static_cast<const void*>(before.vs) :
                     bank == 1 ? static_cast<const void*>(before.ps) : static_cast<const void*>(&before.shared);
-                if (lastOffset != UINT64_MAX && std::memcmp(last, data, size) == 0) {
+                const bool lastCopy = bank == 0 ? before.vsCopy : bank == 1 ? before.psCopy : true;
+                if (lastOffset != UINT64_MAX && lastCopy && std::memcmp(last, data, size) == 0) {
                     if (bank == 0) before.vsGeneration = generation;
                     else if (bank == 1) before.psGeneration = generation;
                     return lastOffset;
@@ -1963,9 +1967,13 @@ namespace gpu::renderer
                 auto& after = uploadedConstants[gpuSlot];
                 if (offset != UINT64_MAX)
                 {
-                    if (bank == 0) { std::memcpy(after.vs, data, size); after.vsOffset = offset; after.vsGeneration = generation; }
-                    else if (bank == 1) { std::memcpy(after.ps, data, size); after.psOffset = offset; after.psGeneration = generation; }
-                    else { std::memcpy(&after.shared, data, size); after.sharedOffset = offset; }
+                    if (bank == 0) {
+                        if (!generation) std::memcpy(after.vs, data, size);
+                        after.vsCopy = !generation; after.vsOffset = offset; after.vsGeneration = generation;
+                    } else if (bank == 1) {
+                        if (!generation) std::memcpy(after.ps, data, size);
+                        after.psCopy = !generation; after.psOffset = offset; after.psGeneration = generation;
+                    } else { std::memcpy(&after.shared, data, size); after.sharedOffset = offset; }
                 }
                 return offset;
             }
@@ -7865,10 +7873,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         const uint64_t generation = g_commandProcessor.ConstantGeneration(bank);
                         auto& snapshot = constantSnapshot[bank];
                         const bool refresh = generation != constantSnapshotGeneration[bank];
-                        const uint64_t changedBlocks = g_commandProcessor.UpdateConstantSnapshot(bank, snapshot);
-                        bool snapshotChanged = refresh || changedBlocks;
+                        uint64_t changedBlocks = g_commandProcessor.UpdateConstantSnapshot(bank, snapshot);
                         constantSnapshotGeneration[bank] = generation;
-                        if (snapshotChanged) ++constantSnapshotVersion[bank];
+                        if (refresh || changedBlocks) ++constantSnapshotVersion[bank];
                         if (verifyConstants) {
                             uint32_t check[256 * 4];
                             g_commandProcessor.ReadRegisters(REG_ALU_CONSTANTS + bank * 256 * 4, 256 * 4, check);
@@ -7880,12 +7887,19 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                 std::memcpy(snapshot.values, check, sizeof(check));
                                 snapshot.valid = false;
                                 ++constantSnapshotVersion[bank];
-                                snapshotChanged = true;
+                                changedBlocks = ~0ull;
                             }
                         }
-                        if (snapshotChanged || drawConstantsModified[bank]) {
+                        if (drawConstantsModified[bank]) {
                             std::memcpy(drawConstants[bank], snapshot.values, sizeof(drawConstants[bank]));
                             drawConstantsModified[bank] = false;
+                        } else {
+                            // An unmodified copy equals the snapshot outside the changed blocks.
+                            constexpr size_t kBlock = ConstantBankSnapshot::kBlockWords;
+                            for (uint64_t blocks = changedBlocks; blocks; blocks &= blocks - 1) {
+                                const size_t first = size_t(std::countr_zero(blocks)) * kBlock;
+                                std::memcpy(drawConstants[bank] + first, snapshot.values + first, kBlock * sizeof(uint32_t));
+                            }
                         }
                         constantGeneration[bank] = constantSnapshotVersion[bank];
                     }
