@@ -13,6 +13,7 @@
 [![最近提交](https://img.shields.io/github/last-commit/freefrank/LostOdysseyRecomp?label=%E6%9C%80%E8%BF%91%E6%8F%90%E4%BA%A4)](https://github.com/freefrank/LostOdysseyRecomp/commits/main)
 [![未关闭的问题](https://img.shields.io/github/issues/freefrank/LostOdysseyRecomp?label=%E9%97%AE%E9%A2%98)](https://github.com/freefrank/LostOdysseyRecomp/issues)
 [![Ko-fi 赞助](https://img.shields.io/badge/Ko--fi-%E8%B5%9E%E5%8A%A9-FF5E5B?logo=kofi&logoColor=white)](https://ko-fi.com/dotslash)
+[![Discord](https://img.shields.io/badge/Discord-%E5%8A%A0%E5%85%A5-5865F2?logo=discord&logoColor=white)](https://discord.gg/z2yPct6z2w)
 
 ![Windows x64](https://img.shields.io/badge/Windows-x64-0078D6)
 ![Linux x64](https://img.shields.io/badge/Linux-x64-FCC624?logo=linux&logoColor=black)
@@ -24,7 +25,7 @@
 
 ### [下载](https://github.com/freefrank/LostOdysseyRecomp/releases/latest) · [安装指南](docs/INSTALLING.zh-CN.md) · [English](README.md)
 
-[更新日志](CHANGELOG.md) · [反馈问题](https://github.com/freefrank/LostOdysseyRecomp/issues) · [项目看板](https://github.com/users/freefrank/projects/3) · [从源码构建](docs/BUILDING.md)
+[更新日志](CHANGELOG.md) · [反馈问题](https://github.com/freefrank/LostOdysseyRecomp/issues) · [Discord](https://discord.gg/z2yPct6z2w) · [项目看板](https://github.com/users/freefrank/projects/3) · [从源码构建](docs/BUILDING.md)
 
 </div>
 

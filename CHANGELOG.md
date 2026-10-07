@@ -20,6 +20,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - A new Display setting picks the monitor the game uses, windowed or fullscreen; monitors of the same model are listed by number and position; after a switch the game asks to keep the new display and returns to the previous one after 5 seconds without an answer (#201).
 - Keyboard: in the settings, Enter jumps to the Save button and a second Enter saves.
 - Windows: Win+Shift+Left/Right moves the game to the next monitor, also in fullscreen, and a chosen Display setting follows it.
+- The project has a Discord server: https://discord.gg/z2yPct6z2w
 
 ### 简体中文
 
@@ -35,6 +36,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - 新增显示器设置，可选择游戏在窗口或全屏下使用的显示器；同型号的多台显示器按编号和位置区分；切换后会询问是否保留新显示器，5 秒内未回应则回到之前的显示器（#201）。
 - 键盘：设置中按 Enter 跳到“保存”按钮，再按一次 Enter 即保存。
 - Windows：Win+Shift+左/右方向键可把游戏移到相邻显示器，全屏时也可以；已选择的显示器设置会随之更新。
+- 项目开设了 Discord 服务器：https://discord.gg/z2yPct6z2w
 
 ## [v0.8.44](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.8.44) — 2026-10-06
 

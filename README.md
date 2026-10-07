@@ -13,6 +13,7 @@
 [![Last commit](https://img.shields.io/github/last-commit/freefrank/LostOdysseyRecomp?label=last%20commit)](https://github.com/freefrank/LostOdysseyRecomp/commits/main)
 [![Open issues](https://img.shields.io/github/issues/freefrank/LostOdysseyRecomp?label=issues)](https://github.com/freefrank/LostOdysseyRecomp/issues)
 [![Support on Ko-fi](https://img.shields.io/badge/Ko--fi-support-FF5E5B?logo=kofi&logoColor=white)](https://ko-fi.com/dotslash)
+[![Discord](https://img.shields.io/badge/Discord-join-5865F2?logo=discord&logoColor=white)](https://discord.gg/z2yPct6z2w)
 
 ![Windows x64](https://img.shields.io/badge/Windows-x64-0078D6)
 ![Linux x64](https://img.shields.io/badge/Linux-x64-FCC624?logo=linux&logoColor=black)
@@ -25,7 +26,7 @@
 
 ### [Download](https://github.com/freefrank/LostOdysseyRecomp/releases/latest) · [Installation guide](docs/INSTALLING.md) · [简体中文](README.zh-CN.md)
 
-[Changelog](CHANGELOG.md) · [Report an issue](https://github.com/freefrank/LostOdysseyRecomp/issues) · [Project board](https://github.com/users/freefrank/projects/3) · [Build from source](docs/BUILDING.md)
+[Changelog](CHANGELOG.md) · [Report an issue](https://github.com/freefrank/LostOdysseyRecomp/issues) · [Discord](https://discord.gg/z2yPct6z2w) · [Project board](https://github.com/users/freefrank/projects/3) · [Build from source](docs/BUILDING.md)
 
 </div>
 
