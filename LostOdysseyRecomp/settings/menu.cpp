@@ -582,6 +582,7 @@ void Publish(uint8_t *base, uint32_t config)
         }
         addSlider(L"Music", L"音樂音量", PPC_LOAD_U32(config + 8));
         addSlider(L"Sound effects", L"音效音量", PPC_LOAD_U32(config + 12));
+        addSlider(L"Vibration", L"震動", edit.vibrationPercent);
     }
     else if (tab == 2)
     {
@@ -776,6 +777,9 @@ void Publish(uint8_t *base, uint32_t config)
     if (status.empty() && (flags & 0x02000000))
         next.help = Tr(L"LB / RB: category     D-pad: select / change     B: confirm     A: back",
                        L"LB / RB：分類     方向鍵：選擇 / 調整     B：確認     A：返回");
+    if (tab == 1 && row == 3)
+        next.help = Tr(L"Controller vibration strength. Min turns it off. Applies immediately.",
+                       L"控制器震動強度。調到最小即關閉。立即套用。");
     if (tab == 3 && row == 1)
         next.help = Tr(L"Game language takes effect after restarting. Requires matching language assets.",
                        L"遊戲語言重新啟動後生效，需要對應語言資源。中文遊戲文本需要亞洲版資源。");
@@ -1855,7 +1859,7 @@ PPC_FUNC(sub_822F19B0)
         row = 0;
         status.clear();
     }
-    const int count = tab == 0 ? GameImportRow + 1 : tab == 1 ? 3 : tab == 2 ? int(GraphicsRow::Count) : 5;
+    const int count = tab == 0 ? GameImportRow + 1 : tab == 1 ? 4 : tab == 2 ? int(GraphicsRow::Count) : 5;
     // Provider-specific rows keep their logical ids and navigation skips them
     // when unavailable. Keyboard Enter reaches the menu as GAMEPAD_START
     // (hid.cpp), so one branch covers gamepad Start and Enter.
@@ -1900,6 +1904,21 @@ PPC_FUNC(sub_822F19B0)
                 PPC_STORE_U32(config + 4, PPC_LOAD_U32(config + 4) ^ masks[row]);
             }
             changed = true;
+        }
+        else if (tab == 1 && row == 3)
+        {
+            // Host setting beside the retail sliders: applied and saved at once,
+            // merged into the saved settings so unsaved Graphics edits stay unsaved.
+            const auto strength = uint32_t(std::clamp(int(edit.vibrationPercent) + delta * 10, 0, 100));
+            if (strength != edit.vibrationPercent)
+            {
+                edit.vibrationPercent = strength;
+                Config saved = GetConfig();
+                saved.vibrationPercent = strength;
+                if (!SaveConfig(saved)) status = Tr(L"Could not save settings.", L"無法儲存設定。");
+                hid::SetVibrationStrength(strength);
+                hid::PreviewVibration();
+            }
         }
         else if (tab == 1)
         {

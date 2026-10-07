@@ -113,6 +113,7 @@ static int RunGuest(uint32_t entry)
     apu::xma::Init();
     if (getenv("LO_HEADLESS"))
         hid::Init(); // otherwise the video thread initialises it
+    hid::SetVibrationStrength(settings::GetConfig().vibrationPercent);
 
     LOG_INFO("starting guest at {:#x}", entry);
     os::SetCurrentThreadName("Guest Main");

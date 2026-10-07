@@ -86,7 +86,15 @@ DlssEffectSnapshot menuFlowDlssEffect{};
 DlssEffectSnapshot CurrentDlssEffect() { return menuFlowDlssEffect; }
 std::optional<UpscalerExecutionObservation> CurrentUpscalerExecution() { return menuFlowDlssEffect.execution; }
 }
-namespace hid { bool UsesPlayStationPrompts() { return false; } }
+namespace {
+uint32_t vibrationStrength = 100;
+unsigned vibrationPreviews = 0;
+}
+namespace hid {
+bool UsesPlayStationPrompts() { return false; }
+void SetVibrationStrength(uint32_t percent) { vibrationStrength = percent; }
+void PreviewVibration() { ++vibrationPreviews; }
+}
 
 namespace {
 constexpr uint32_t Menu = 0x10000, ConfigData = 0x21000;
@@ -1295,6 +1303,38 @@ int main(int argc, char** argv)
             Require(saves == beforeSave + 1 && diskConfig.fsrSharpnessPercent == 64 &&
                     currentConfig.fsrSharpnessPercent == 64, "existing Save action persists FSR sharpness");
             std::puts("PASS FSR sharpness menu visibility, 0/100 bounds, description, stable ids and Save");
+        }
+        // Vibration sits below the retail audio sliders. It applies and saves at
+        // once, stays within 0-100 and never commits unsaved Graphics edits.
+        {
+            settings::tab = 1;
+            settings::row = 2;
+            settings::status.clear();
+            currentConfig.vibrationPercent = diskConfig.vibrationPercent = 100;
+            settings::edit = currentConfig;
+            settings::edit.uiLanguage = 0;
+            settings::edit.width = currentConfig.width == 2560 ? 1920 : 2560;
+            const unsigned beforeSaves = saves, beforeApplies = applies, beforePreviews = vibrationPreviews;
+            settings::pending = 2; Tick(base);
+            Require(settings::row == 3 && settings::snapshot.rows.size() == 4 &&
+                    settings::snapshot.rows[3].name == L"Vibration" && settings::snapshot.rows[3].sliderPercent == 100,
+                    "Audio tab ends with the Vibration slider");
+            Require(settings::snapshot.help.find(L"Min turns it off") != std::wstring::npos, "Vibration help");
+            settings::pending = 8; Tick(base);
+            Require(settings::edit.vibrationPercent == 100 && saves == beforeSaves, "right at 100 clamps without saving");
+            settings::pending = 4; Tick(base);
+            Require(settings::edit.vibrationPercent == 90 && saves == beforeSaves + 1 && diskConfig.vibrationPercent == 90 &&
+                    vibrationStrength == 90 && vibrationPreviews == beforePreviews + 1 && applies == beforeApplies,
+                    "left lowers, saves, applies live and previews without a guest apply");
+            Require(diskConfig.width != settings::edit.width, "vibration save leaves unsaved Graphics edits unsaved");
+            Require(settings::snapshot.rows[3].sliderPercent == 90, "slider follows the strength");
+            settings::edit.vibrationPercent = currentConfig.vibrationPercent = 0;
+            settings::pending = 4; Tick(base);
+            Require(settings::edit.vibrationPercent == 0 && saves == beforeSaves + 1, "left at 0 does not wrap");
+            settings::pending = 2; Tick(base);
+            Require(settings::row == 0, "down from Vibration wraps to Voice language");
+            settings::edit = currentConfig;
+            std::puts("PASS Audio Vibration slider: bounds, immediate save, live apply and preview, Graphics edits untouched");
         }
         // The host Settings game tab is reached from the retail System menu.
         // Only explicit dialog confirmation may request the guest title transition.

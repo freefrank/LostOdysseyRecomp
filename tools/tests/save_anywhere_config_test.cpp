@@ -77,6 +77,14 @@ int wmain(int argc, wchar_t** argv)
     Write("no_random_encounters=2\n");
     Check(!settings::Read().noRandomEncounters, "invalid no random encounters value defaults off");
 
+    Check(settings::Read().vibrationPercent == 100, "missing vibration key keeps retail strength");
+    Write("vibration=40\n");
+    Check(settings::Read().vibrationPercent == 40, "vibration strength read from INI");
+    Write("vibration=250\n");
+    Check(settings::Read().vibrationPercent == 100, "vibration strength is bounded to 100");
+    Write("vibration=-5\n");
+    Check(settings::Read().vibrationPercent == 100, "malformed vibration keeps retail strength");
+
     Write("shadow_resolution=2\nambient_occlusion=1\n");
     Check(settings::Read().shadowResolution == 2 && settings::Read().ambientOcclusion == 1,
         "shadow 2x and SSAO read from INI");
@@ -116,10 +124,13 @@ int wmain(int argc, wchar_t** argv)
     graphics.width = 1800;
     graphics.shadowResolution = 4;
     graphics.ambientOcclusion = 2;
+    graphics.vibrationPercent = 30;
     Check(settings::SaveConfig(graphics), "save ordinary settings");
     Check(settings::Read().shadowResolution == 4 && settings::Read().ambientOcclusion == 2 &&
           Contents().find("shadow_resolution=4\nambient_occlusion=2\n") != std::string::npos,
         "shadow and AO choices roundtrip through stable INI keys");
+    Check(settings::GetConfig().vibrationPercent == 30 && settings::Read().vibrationPercent == 30 &&
+          Contents().find("vibration=30\n") != std::string::npos, "vibration strength roundtrips");
     Check(settings::Read().saveAnywhere, "ordinary save retains debug-only preference");
     Check(settings::Read().noRandomEncounters, "ordinary save retains no random encounters");
     Check(settings::SaveDebugLanguage(1) && settings::Read().saveAnywhere,

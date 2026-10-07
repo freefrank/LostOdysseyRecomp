@@ -48,6 +48,15 @@ static void Check(bool value, const char* message)
     if (!value) { fprintf(stderr, "FAIL: %s (%s)\n", message, SDL_GetError()); std::exit(1); }
 }
 
+// Last motor speeds SDL sent to the virtual rumble pad (SDL skips repeats).
+static int g_rumbleLow = -1, g_rumbleHigh = -1;
+static int SDLCALL RecordRumble(void*, Uint16 low, Uint16 high)
+{
+    g_rumbleLow = low;
+    g_rumbleHigh = high;
+    return 0;
+}
+
 int main()
 {
     using namespace hid::prompts;
@@ -254,7 +263,47 @@ int main()
     SDL_JoystickDetachVirtual(reconnected);
     hid::HandleControllerEvent(SDL_CONTROLLERDEVICEREMOVED, instance);
     Check(sample().wButtons == 0, "external hot-unplug clears held input");
+
+    // The Vibration setting scales the guest's motor speeds and rescales a running rumble.
+    SDL_VirtualJoystickDesc rumbleDesc{};
+    rumbleDesc.version = SDL_VIRTUAL_JOYSTICK_DESC_VERSION;
+    rumbleDesc.type = SDL_JOYSTICK_TYPE_GAMECONTROLLER;
+    rumbleDesc.naxes = SDL_CONTROLLER_AXIS_MAX;
+    rumbleDesc.nbuttons = SDL_CONTROLLER_BUTTON_MAX;
+    rumbleDesc.Rumble = RecordRumble;
+    const int rumblePad = SDL_JoystickAttachVirtualEx(&rumbleDesc);
+    Check(rumblePad >= 0, "attach rumble controller");
+    hid::HandleControllerEvent(SDL_CONTROLLERDEVICEADDED, rumblePad);
+    XAMINPUT_VIBRATION vibration{};
+    vibration.wLeftMotorSpeed = 0xFFFF;
+    vibration.wRightMotorSpeed = 0x8000;
+    Check(hid::SetState(0, &vibration) == 0 && g_rumbleLow == 0xFFFF && g_rumbleHigh == 0x8000,
+          "default strength passes the guest speeds through");
+    hid::SetVibrationStrength(50);
+    Check(g_rumbleLow == 0x7FFF && g_rumbleHigh == 0x4000, "strength change rescales the running rumble");
+    vibration.wLeftMotorSpeed = 0x2000;
+    hid::SetState(0, &vibration);
+    Check(g_rumbleLow == 0x1000 && g_rumbleHigh == 0x4000, "new guest request uses the strength");
+    hid::SetVibrationStrength(0);
+    Check(g_rumbleLow == 0 && g_rumbleHigh == 0, "zero strength stops the running rumble");
+    vibration.wLeftMotorSpeed = 0xFFFF;
+    hid::SetState(0, &vibration);
+    Check(g_rumbleLow == 0 && g_rumbleHigh == 0, "zero strength keeps rumble off");
+    hid::PreviewVibration();
+    Check(g_rumbleLow == 0 && g_rumbleHigh == 0, "preview does not interrupt a guest rumble");
+    hid::SetVibrationStrength(250);
+    Check(g_rumbleLow == 0xFFFF && g_rumbleHigh == 0x8000, "strength is bounded to retail");
+    vibration = {};
+    hid::SetState(0, &vibration);
+    Check(g_rumbleLow == 0 && g_rumbleHigh == 0, "guest stop clears rumble");
+    g_rumbleLow = g_rumbleHigh = -1;
+    hid::SetVibrationStrength(30);
+    Check(g_rumbleLow == -1, "strength change without guest rumble sends nothing");
+    hid::PreviewVibration();
+    Check(g_rumbleLow == 19660 && g_rumbleHigh == 19660, "preview pulses at the strongest guest level times strength");
+    hid::SetVibrationStrength(100);
+    SDL_JoystickDetachVirtual(rumblePad);
     SDL_Quit();
-    puts("PASS: SDL PS types, PS/nonPS active device, keyboard, hotplug, four face mappings; virtual input merger");
+    puts("PASS: SDL PS types, PS/nonPS active device, keyboard, hotplug, four face mappings; virtual input merger; rumble strength");
     return 0;
 }
