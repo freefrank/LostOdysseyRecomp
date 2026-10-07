@@ -46,9 +46,31 @@ Packs are assets of the `shader-packs` GitHub prerelease, named `<file stem>-<fi
 
 `renderer` is `vulkan` or `d3d12`. The `metal` entry stays for v0.7.35 and older macOS builds, which read a separate `-O1` pack; newer runtimes skip it. A runtime ignores renderers it does not know. A malformed entry, a duplicate renderer and contract or another schema makes the runtime reject the whole index.
 
+### Pipeline recipe corpus
+
+The same release carries the pipeline recipe corpus (`pipelines_corpus.bin`, file version 2 of `gpu/pipeline_cache.h`): the pipelines the automated map, cutscene and battle tours recorded, tagged by scene, which the renderer prebuilds or prefetches while a scene loads ([P3 notes](notes/pipeline-first-use-stalls.md)). The index lists it like a pack:
+
+```json
+{
+  "renderer": "pipeline-corpus",
+  "contract": "1d7f0a17386480c1fcfa5e912f7fb8db7359c5ceb6e8957b9b1045628233fec2",
+  "file": "pipelines_corpus-80afef9497d4bb14.bin",
+  "size": 409184,
+  "sha256": "80afef9497d4bb14b600c91693d48e9f876fcb6f00c546f44f634b377fac24dc"
+}
+```
+
+The contract is the SHA-256 of `lo-pipeline-recipes-v2`; a new recipe format gets a new string and its own entry. The file name carries the first 16 digits of the file's SHA-256. Runtimes before the corpus skip the entry as an unknown renderer and still find their packs.
+
+After the pack check the runtime starts a thread for it (`updater/pipeline_corpus_download.cpp`) and goes on at once:
+
+- With no `shaders/pipelines_corpus.bin` in the install folder it reads the index and downloads the listed file. With one, it checks again only with automatic updates on and at most once a day (`shaders/pipelines_corpus.checked` records the last check), and downloads when the index lists another SHA-256.
+- The file is downloaded beside its target as `<name>.download-<pid>`; size and SHA-256 must match the index before it replaces the old file. On any failure the old file stays. The renderer reads the corpus when it starts, so a new file takes effect at the next start.
+- There is no window. `LO_SHADER_PACK_DOWNLOAD=0` and headless runs skip it, background runs skip it unless `LO_SHADER_PACK_DOWNLOAD=1`, which also skips the once-a-day limit. `LO_PIPELINE_CORPUS` (a corpus chosen by hand) skips it. `LO_SHADER_PACK_INDEX_URL` applies as for packs. The log line `pipeline corpus: …` records the outcome.
+
 ### Publishing
 
-`LoShaderPackTool contract <xexdump image>` prints the contract of each renderer (`vulkan`, `d3d12`). `tools/release/publish_shader_packs.py --tool <LoShaderPackTool> --image <image> <packs>` maps each pack to its renderer by contract, runs `verify-runtime`, stages the renamed packs and the merged index in `out/shader-packs`, and uploads them with `--publish`: packs first, then the index. Entries for other contracts stay, so older runtimes keep finding their packs. After uploading it checks that the latest release is still a version. `--check` only reports whether the published index covers both contracts of the image.
+`LoShaderPackTool contract <xexdump image>` prints the contract of each renderer (`vulkan`, `d3d12`). `tools/release/publish_shader_packs.py --tool <LoShaderPackTool> --image <image> <packs>` maps each pack to its renderer by contract, runs `verify-runtime`, stages the renamed packs and the merged index in `out/shader-packs`, and uploads them with `--publish`: packs first, then the index. Entries for other contracts stay, so older runtimes keep finding their packs. After uploading it checks that the latest release is still a version. `--check` only reports whether the published index covers both contracts of the image (and whether it lists a corpus). `--corpus <pipelines_corpus.bin>` stages the corpus and its entry the same way, alone or together with packs; without packs it needs neither `--tool` nor `--image`.
 
 ### Building packs
 

@@ -233,7 +233,7 @@ GPU 多出的时间不随分辨率变，是每次绘制的固定开销（没有�
 
 **预取。** 地图或战斗开始加载时，渲染线程在帧末把这个场景所有还没建的已知配方交给 worker 线程（线程数为逻辑核数一半）。建好的管线在渲染线程收进管线表；绘制碰到排队中的任务就自己建，碰到正在编译的任务就等它（Vulkan 有 pipeline library 时直接 fast-link）。`LO_NO_PIPELINE_PREFETCH=1` 关闭预取。
 
-**语料。** 可选的 `shaders/pipelines_corpus.bin`（打开的 shader pack 旁边或 pack 的安装位置，`LO_PIPELINE_CORPUS` 可指定）并入已知配方，不写进玩家的文件，也不检查翻译器版本。
+**语料。** 可选的 `shaders/pipelines_corpus.bin`（打开的 shader pack 旁边或 pack 的安装位置，`LO_PIPELINE_CORPUS` 可指定）并入已知配方，不写进玩家的文件，也不检查翻译器版本。语料作为 `shader-packs` 预发布里的单独文件发布，`index.json` 里以 `pipeline-corpus` 条目列出；运行时在 shader pack 检查之后用后台线程把它下载到安装目录的 `shaders/pipelines_corpus.bin`，缺失时下载，已有时开着自动更新每天最多检查一次，哈希不同就替换，下次启动生效（见 [PORTABLE_SHADER_PACK.md](../PORTABLE_SHADER_PACK.md#pipeline-recipe-corpus)）。第一版语料 3934 条：地图、过场和战斗巡游合并，去掉了 4 条启动预建时永远建不出来的 rect list 配方（rect list 的 VS 变体要到第一次这种绘制时才生成）。过场的 646 条没有场景标签，会在启动时全部预建；以后可以用带场景标签的构建重录过场，让它们改走场景预取。
 
 **启动预建。** 默认预建玩家学到的全部配方，加上语料里没有标签、在场景外画过、或出现在至少 4 个场景（`LO_PIPELINE_PREBUILD_SCENES`）的配方；其余交给场景预取。`LO_PIPELINE_PREBUILD=all` 全部预建，`=common` 对学到的配方也用同一规则。Vulkan 的 pipeline library 预编译覆盖全部已知配方。
 

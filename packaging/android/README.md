@@ -215,6 +215,9 @@ missing or made for another shader contract, offers the published pack from the
 `shader-packs` release in the same window as the desktop (press A or B on the
 on-screen controller, or use a physical controller). The download goes to `files/shaders/` and is checked
 against the index size, SHA-256 and the contract before it replaces anything.
+The pipeline recipe corpus from the same release goes to
+`files/shaders/pipelines_corpus.bin` in the background, without a window, through
+the same `HttpURLConnection` path.
 
 Packs are built on Windows or Linux with one entry,
 `tools/shader_pack/build_packs.py` ([portable shader packs](../../docs/PORTABLE_SHADER_PACK.md)).

@@ -12,7 +12,7 @@ namespace updater::shader_pack
 {
 namespace
 {
-constexpr std::string_view Renderers[] = {"vulkan", "d3d12", "metal"};
+constexpr std::string_view Renderers[] = {"vulkan", "d3d12", "metal", CorpusRenderer};
 
 bool KnownRenderer(std::string_view renderer)
 {

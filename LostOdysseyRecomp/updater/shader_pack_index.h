@@ -15,10 +15,18 @@ inline constexpr std::string_view ReleaseTag = "shader-packs";
 inline constexpr std::string_view IndexFileName = "index.json";
 inline constexpr size_t MaxIndexBytes = 1u << 20;
 inline constexpr uint64_t MaxPackBytes = 8ull << 30;
+// The pipeline recipe corpus (gpu/pipeline_cache.h, file version 2) is listed
+// like a pack under this renderer name; runtimes before it skip the entry. The
+// contract is the SHA-256 of "lo-pipeline-recipes-v2": a new recipe format gets
+// a new string, and the index keeps one corpus per format.
+inline constexpr std::string_view CorpusRenderer = "pipeline-corpus";
+inline constexpr std::string_view CorpusContract = "1d7f0a17386480c1fcfa5e912f7fb8db7359c5ceb6e8957b9b1045628233fec2";
+inline constexpr std::string_view CorpusFileName = "pipelines_corpus.bin";
+inline constexpr uint64_t MaxCorpusBytes = 64ull << 20;
 
 struct IndexEntry
 {
-    std::string renderer; // vulkan, d3d12 or metal
+    std::string renderer; // vulkan, d3d12, metal or pipeline-corpus
     std::string contract; // 64 lowercase hex digits
     std::string file;     // asset name on the same release
     std::string sha256;   // 64 lowercase hex digits

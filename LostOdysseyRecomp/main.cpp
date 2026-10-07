@@ -31,6 +31,7 @@
 #include "updater/update.h"
 #include "updater/game_prompt.h"
 #include "updater/shader_pack_download.h"
+#include "updater/pipeline_corpus_download.h"
 #include "updater/apply_mode.h"
 #include "version.h"
 #include "install/host.h"
@@ -453,6 +454,8 @@ int main(int argc, char* argv[])
         packRequest.uiLanguage = settings::GetConfig().uiLanguage;
         packRequest.unboundXex = XexLoader::UnboundIdentityPrefix();
         LOG_INFO("shader pack: {}", updater::shader_pack::PrepareAtStartup(packRequest));
+        // The pipeline recipe corpus comes from the same index, on its own thread.
+        updater::shader_pack::StartCorpusDownload(settings::GetConfig().automaticUpdates);
     }
 
     // Exercise the same renderer preparation as ordinary startup, without

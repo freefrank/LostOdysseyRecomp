@@ -63,6 +63,22 @@ int main()
         Check(!Select(*index, "vulkan", ContractB) && !Select(*index, "metal", ContractA),
               "another contract or renderer selects nothing");
 
+        // The recipe corpus is listed like a pack. Runtimes before it skip the entry
+        // as an unknown renderer (the "webgpu" case above), so packs still select.
+        Check(LowerHex64(CorpusContract), "corpus contract is a lowercase SHA-256");
+        const auto withCorpus = ParseIndex(Index(Entry("vulkan", ContractA, "portable_vk-aaaaaaaaaaaaaaaa.lospv") + "," +
+                                                 Entry(std::string(CorpusRenderer), std::string(CorpusContract),
+                                                       "pipelines_corpus-0123456789abcdef.bin", "409184")),
+                                           error);
+        const auto *corpus = withCorpus ? Select(*withCorpus, CorpusRenderer, CorpusContract) : nullptr;
+        Check(corpus && corpus->file == "pipelines_corpus-0123456789abcdef.bin" && corpus->size == 409184 &&
+                  Select(*withCorpus, "vulkan", ContractA),
+              "the corpus entry parses and selects beside the packs");
+        Check(withCorpus && !Select(*withCorpus, CorpusRenderer, ContractA),
+              "a corpus of another recipe format selects nothing");
+        Check(Rejects(Index(Entry(std::string(CorpusRenderer), std::string(CorpusContract), "../c.bin")), "malformed"),
+              "a malformed corpus entry is rejected like a pack");
+
         Check(Rejects(Index(Entry("vulkan", ContractA, "a.lospv") + "," + Entry("vulkan", ContractA, "b.lospv")), "twice"),
               "duplicate renderer and contract is rejected");
         Check(Rejects(Index(Entry("vulkan", std::string(64, 'A'), "a.lospv")), "malformed"),
