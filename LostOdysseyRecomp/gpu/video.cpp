@@ -362,7 +362,6 @@ namespace gpu::video
             }
         }
         std::atomic<int> g_displayMode{-1};
-        std::atomic<uint64_t> g_displaySize{0};
         std::atomic<bool> g_displayFailed{false},g_reapplyWindow{false};
         std::atomic<bool> g_windowResizeRequested{false};
         std::atomic<uint64_t> g_settingsDisplayEpoch{0};
@@ -575,10 +574,6 @@ namespace gpu::video
             bool nativeVsyncBaseline = true, nativeVsyncRequested = true;
             bool nativeVsyncReportPending = false;
             double metalMinimumPresentDuration = 0.0;
-#ifdef _WIN32
-            int appliedMode = -1;
-            uint64_t appliedSize = 0, appliedTicket = 0;
-#endif
         } g_presentationDisplay;
         constexpr plume::RenderFormat kSwapChainFormat = plume::RenderFormat::R8G8B8A8_UNORM;
         constexpr uint32_t kSwapChainBuffers = 3;
@@ -1796,12 +1791,6 @@ namespace gpu::video
         // Renderer and presentation work have already been drained.
         if (g_d3dFg) g_d3dFg->ReleaseFeatureAfterGpuDrain();
 #endif
-#ifdef _WIN32
-        if (g_swapChain && !g_vulkan) {
-            auto* swap = static_cast<plume::D3D12SwapChain*>(g_swapChain.get());
-            if (swap->d3d) swap->d3d->SetFullscreenState(FALSE, nullptr);
-        }
-#endif
         g_swapChain.reset(); g_presentSemaphores.clear();
         if (g_temporalUpscaler) {
             g_temporalUpscaler->ShutdownAfterGpuDrain();
@@ -2627,8 +2616,8 @@ namespace gpu::video
         g_nextRefreshPoll = now + std::chrono::milliseconds(500);
         uint32_t refresh = 0;
 #ifdef _WIN32
-        // DXGI exclusive fullscreen can change the mode outside SDL's cache.
-        // Query the actual monitor containing this window, not the primary one.
+        // The display mode can change outside SDL's cache. Query the actual
+        // monitor containing this window, not the primary one.
         MONITORINFOEXW monitor{};
         monitor.cbSize = sizeof(monitor);
         DEVMODEW mode{};
@@ -2840,13 +2829,11 @@ namespace gpu::video
             const bool wasWindowed = !state.initialized || state.applied.windowMode == settings::WindowMode::Windowed;
             const bool sizeChanged = !state.initialized || config.width != state.applied.width || config.height != state.applied.height;
             if (wasWindowed && mode != settings::WindowMode::Windowed) state.placement.Capture(g_window);
-            int result=SDL_SetWindowFullscreen(g_window,mode==settings::WindowMode::Borderless?SDL_WINDOW_FULLSCREEN_DESKTOP:(g_vulkan && mode==settings::WindowMode::Exclusive?SDL_WINDOW_FULLSCREEN:0));
+            int result=SDL_SetWindowFullscreen(g_window,mode==settings::WindowMode::Borderless?SDL_WINDOW_FULLSCREEN_DESKTOP:0);
             if (result == 0 && mode == settings::WindowMode::Windowed) {
                 if ((!wasWindowed || reapply) && !sizeChanged && state.placement.valid) state.placement.Restore(g_window);
                 else if (sizeChanged) SDL_SetWindowSize(g_window,config.width,config.height);
             }
-            else if (result == 0 && mode == settings::WindowMode::Exclusive)
-                SDL_SetWindowSize(g_window,config.width,config.height);
 #ifdef _WIN32
             // SDL owns the fullscreen transition. A failed bounds repair must
             // not roll the shortcut back to windowed.
@@ -2854,7 +2841,6 @@ namespace gpu::video
                 window_mode::FitBorderless(g_nativeWindow);
 #endif
             g_displayFailed=result!=0;
-            g_displaySize.store(uint64_t(config.width)<<32|config.height);
             g_displayMode.store(int(mode));
             state.applied=config; state.initialized=true;
             g_nextRefreshPoll = {}; // Re-query after a mode transition on the next window pump.
@@ -3122,8 +3108,6 @@ namespace gpu::video
         g_presentedSnapshot.reset();
         g_snapshotWidth = g_snapshotHeight = 0;
         g_snapshotFormat = plume::RenderFormat::UNKNOWN;
-        auto* oldSwap = static_cast<plume::D3D12SwapChain*>(g_swapChain.get());
-        if (oldSwap->d3d) oldSwap->d3d->SetFullscreenState(FALSE, nullptr);
         g_swapChain.reset();
         g_presentSemaphores.clear();
         g_d3dFg.reset();
@@ -3330,12 +3314,6 @@ namespace gpu::video
         // The frozen scene copies keep the format they were made in.
         g_hdrCalibrationCache = {};
         settings::SetHdrCalibrationSceneAvailable(false);
-#ifdef _WIN32
-        if (!g_vulkan) {
-            auto* oldSwap = static_cast<plume::D3D12SwapChain*>(g_swapChain.get());
-            if (oldSwap->d3d) oldSwap->d3d->SetFullscreenState(FALSE, nullptr);
-        }
-#endif
         g_swapChain.reset();
         g_presentSemaphores.clear();
         g_hdrSwapchain = desired;
@@ -3468,43 +3446,6 @@ namespace gpu::video
             g_forceSwapResize = true;
             g_presentationDisplay.resizedTicket = displayTicket;
         }
-#ifdef _WIN32
-        const int mode = g_displayMode.load();
-        const uint64_t size = g_displaySize.load();
-        auto& applied = g_presentationDisplay;
-        if (!g_vulkan && mode >= 0 && (mode != applied.appliedMode || size != applied.appliedSize ||
-            (displayTicket && displayTicket != applied.appliedTicket))) {
-            if (!WaitForPresentGpu()) return false;
-#if defined(LO_ENABLE_D3D12_FG)
-            if (g_d3dFg) g_d3dFg->Quiesce();
-#endif
-            auto* swap = static_cast<plume::D3D12SwapChain*>(g_swapChain.get());
-            const plume::WindowPixelContext pixels;
-            HRESULT result = swap->d3d->SetFullscreenState(FALSE, nullptr);
-            if (SUCCEEDED(result) && mode == int(settings::WindowMode::Exclusive)) {
-                DXGI_MODE_DESC target{};
-                target.Width = uint32_t(size >> 32); target.Height = uint32_t(size);
-                target.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-                result = swap->d3d->ResizeTarget(&target);
-                if (SUCCEEDED(result)) result = swap->d3d->SetFullscreenState(TRUE, nullptr);
-            }
-            BOOL exclusive = FALSE;
-            const HRESULT queryResult = swap->d3d->GetFullscreenState(&exclusive, nullptr);
-            const bool modeApplied = SUCCEEDED(result) && SUCCEEDED(queryResult) &&
-                bool(exclusive) == (mode == int(settings::WindowMode::Exclusive));
-            if (applied.appliedMode == int(settings::WindowMode::Exclusive) && mode != applied.appliedMode)
-                g_reapplyWindow = true;
-            LOG_INFO("display mode: requested={} exclusive={} result={:#x}", mode, bool(exclusive), uint32_t(result));
-            // Flip-model buffers must be resized even for an equal-size transition.
-            g_forceSwapResize = true;
-            applied.appliedMode = mode; applied.appliedSize = size; applied.appliedTicket = displayTicket;
-            if (!modeApplied) {
-                g_displayFailed = true;
-                g_displayChanges.Complete(displayTicket, false);
-                return false;
-            }
-        }
-#endif
         // Empty is recoverable: minimized Vulkan surfaces may have zero extent.
         // Never return for isEmpty() before giving resize() a chance to recover.
 #if defined(__ANDROID__)

@@ -60,7 +60,7 @@ Config Validate(Config value)
         value.uiLanguage = 0;
     if (GameLanguageIds[GameLanguageIndex(value.gameLanguage)] != value.gameLanguage)
         value.gameLanguage = 1;
-    if (uint32_t(value.windowMode) > 2)
+    if (uint32_t(value.windowMode) > 1)
         value.windowMode = WindowMode::Windowed;
     if (!gpu::backend::Known(value.graphicsBackend))
 #ifdef _WIN32
@@ -127,7 +127,7 @@ Config Read()
         else if (key == "internal_resolution")
             value.internalResolution = number <= 2160 ? int(number) : 0;
         else if (key == "window_mode")
-            value.windowMode = WindowMode(number);
+            value.windowMode = number == 2 ? WindowMode::Borderless : WindowMode(number); // 2 was exclusive fullscreen.
         else if (key == "graphics_backend")
             value.graphicsBackend = GraphicsBackend(number);
         else if (key == "antialiasing")

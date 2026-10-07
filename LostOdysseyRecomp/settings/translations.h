@@ -233,7 +233,6 @@ static inline const wchar_t *Translate(uint32_t language, const wchar_t *en, con
         {L"Sound effects", L"効果音の音量", L"효과음 음량", L"音效音量"},
         {L"Windowed", L"ウィンドウ", L"창 모드", L"窗口"},
         {L"Borderless fullscreen", L"ボーダーレス全画面", L"테두리 없는 전체 화면", L"无边框全屏"},
-        {L"Exclusive fullscreen", L"排他全画面", L"독점 전체 화면", L"独占全屏"},
         {L"Display mode", L"表示モード", L"화면 모드", L"显示模式"},
         {L"Graphics backend", L"グラフィックス API", L"그래픽 API", L"图形后端"},
         {L"The graphics backend is changed after restarting. LO_GRAPHICS_API remains a diagnostic override.",

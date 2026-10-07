@@ -7,11 +7,11 @@
 #include "../../shared/frame_generation/core.h"
 namespace settings
 {
+// Persisted 2 (the removed exclusive fullscreen) loads as Borderless.
 enum class WindowMode : uint32_t
 {
     Windowed,
-    Borderless,
-    Exclusive
+    Borderless
 };
 using GraphicsBackend = gpu::backend::Backend;
 // Stable persisted IDs: retain the original EN/TW UI values.

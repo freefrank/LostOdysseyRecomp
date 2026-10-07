@@ -599,8 +599,7 @@ void Publish(uint8_t *base, uint32_t config)
         placeGraphics(GraphicsRow::Backend, makeChoices(L"Graphics backend", L"圖形後端", {L"Vulkan"}, 0));
 #endif
         placeGraphics(GraphicsRow::DisplayMode, makeChoices(L"Display mode", L"顯示模式",
-                   {Tr(L"Windowed", L"視窗"), Tr(L"Borderless fullscreen", L"無邊框全螢幕"),
-                    Tr(L"Exclusive fullscreen", L"獨占全螢幕")},
+                   {Tr(L"Windowed", L"視窗"), Tr(L"Borderless fullscreen", L"無邊框全螢幕")},
                    uint32_t(edit.windowMode)));
         const bool ultrawide = IsUltrawideAspect(edit.width, edit.height);
         placeGraphics(GraphicsRow::Widescreen, makeChoices(L"Widescreen", L"寬螢幕", onOff(), ultrawide ? 0 : 1));
@@ -1933,7 +1932,7 @@ PPC_FUNC(sub_822F19B0)
 #endif
                 break;
             case GraphicsRow::DisplayMode:
-                edit.windowMode = WindowMode(cycle(uint32_t(edit.windowMode), 3));
+                edit.windowMode = WindowMode(cycle(uint32_t(edit.windowMode), 2));
                 break;
             case GraphicsRow::Widescreen:
             {
