@@ -9379,8 +9379,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 // Index buffer / primitive conversion. Static geometry skips
                 // ConvertIndices and primitive expansion on an exact-content
                 // hit; the cached output is already post-expansion.
-                auto& indices = indexScratch;
-                if (!info.indexed) indices.clear();
+                auto& converted = indexScratch;
+                if (!info.indexed) converted.clear();
                 bool useIndices = false;
                 RenderFormat indexFormat = RenderFormat::R32_UINT;
                 uint32_t indexCount = info.indexCount;
@@ -9402,7 +9402,6 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         auto it = indexCache.find(indexKey);
                         if (it != indexCache.end() && it->second.content.Matches(indexSrc, indexSrcBytes))
                         {
-                            indices = it->second.data;
                             cachedIndexEntry = &it->second;
                             it->second.lastFrame = frame;
                             if (cpuTimingEnabled) ++indexCacheHits;
@@ -9412,15 +9411,15 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         else
                         {
                             // Convert below, then replace the cached result.
-                            indices.resize(indexSrcCount);
-                            geometry_prepare::ConvertIndices(indexSrc, indices.data(), indexSrcCount, info.index32, info.indexEndian);
+                            converted.resize(indexSrcCount);
+                            geometry_prepare::ConvertIndices(indexSrc, converted.data(), indexSrcCount, info.index32, info.indexEndian);
                             useIndices = true;
                         }
                     }
                     else
                     {
-                        indices.resize(indexSrcCount);
-                        geometry_prepare::ConvertIndices(indexSrc, indices.data(), indexSrcCount, info.index32, info.indexEndian);
+                        converted.resize(indexSrcCount);
+                        geometry_prepare::ConvertIndices(indexSrc, converted.data(), indexSrcCount, info.index32, info.indexEndian);
                         useIndices = true;
                     }
                 }
@@ -9429,13 +9428,13 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 {
                 case 13: // quad list -> triangle list
                 {
-                    geometry_prepare::ExpandQuadList(indices, primitiveScratch, useIndices, info.indexCount);
+                    geometry_prepare::ExpandQuadList(converted, primitiveScratch, useIndices, info.indexCount);
                     break;
                 }
                 case 8: // rect list -> six encoded corners per rectangle
                 {
                     if (!rectListExpansion) break;
-                    const uint32_t skipped = xenos::rect_list::ExpandIndices(indices, primitiveScratch, useIndices,
+                    const uint32_t skipped = xenos::rect_list::ExpandIndices(converted, primitiveScratch, useIndices,
                         info.indexCount, Reg(REG_VGT_INDX_OFFSET));
                     if (skipped && rectListSkipped++ < 8)
                         LOG_WARNING("renderer: rect list skipped {} rectangle(s) (non-consecutive indices or vertex range)", skipped);
@@ -9445,14 +9444,14 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 {
                     auto& out = primitiveScratch;
                     out.clear();
-                    uint32_t n = useIndices ? uint32_t(indices.size()) : info.indexCount;
+                    uint32_t n = useIndices ? uint32_t(converted.size()) : info.indexCount;
                     out.reserve(n > 2 ? size_t(n - 2) * 3 : 0);
                     for (uint32_t i = 2; i < n; i++)
                     {
-                        uint32_t a = useIndices ? indices[0] : 0, b = useIndices ? indices[i - 1] : i - 1, c = useIndices ? indices[i] : i;
+                        uint32_t a = useIndices ? converted[0] : 0, b = useIndices ? converted[i - 1] : i - 1, c = useIndices ? converted[i] : i;
                         out.insert(out.end(), { a, b, c });
                     }
-                    indices.swap(out);
+                    converted.swap(out);
                     useIndices = true;
                     break;
                 }
@@ -9467,12 +9466,14 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     // Store the post-expansion result against the exact source
                     // bytes; a later identical draw copies it verbatim.
                     geometry_prepare::IndexEntry entry;
-                    entry.data = indices;
+                    entry.data = converted;
                     entry.content.Capture(indexSrc, indexSrcBytes);
                     entry.lastFrame = frame;
                     indexCache.emplace(indexKey, std::move(entry));
                     if (cpuTimingEnabled) ++indexCacheMisses;
                 }
+                // A hit uses the cached entry in place, as cachedIndexEntry already does.
+                const std::vector<uint32_t>& indices = cachedIndexEntry ? cachedIndexEntry->data : converted;
                 if (useIndices)
                     indexCount = uint32_t(indices.size());
                 if (indexCount == 0)
