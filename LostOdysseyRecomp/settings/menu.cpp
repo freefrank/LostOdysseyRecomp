@@ -216,12 +216,10 @@ struct NameChoices
 {
     std::vector<std::string> names;
     uint32_t selected = 0;
-    size_t listed = 0; // Entries before the unlisted saved name.
 };
 NameChoices GpuChoices()
 {
     NameChoices result{gpu::video::GpuDeviceNames()};
-    result.listed = result.names.size();
     if (!edit.gpuDevice.empty())
     {
         auto found = std::find(result.names.begin(), result.names.end(), edit.gpuDevice);
@@ -230,15 +228,33 @@ NameChoices GpuChoices()
     }
     return result;
 }
-NameChoices DisplayChoices()
+// Choice 0 is Automatic, choice i the connected display i - 1. Monitors of one
+// model share a name, so each label also carries its number, size and position.
+// A saved display that is not connected stays as the last choice.
+struct DisplayChoiceList
 {
-    NameChoices result{gpu::video::DisplayNames()};
-    result.listed = result.names.size();
+    std::vector<gpu::display_choice::Display> displays;
+    std::vector<std::wstring> labels;
+    uint32_t selected = 0;
+};
+DisplayChoiceList DisplayChoices()
+{
+    DisplayChoiceList result{gpu::video::Displays()};
+    result.labels.push_back(Tr(L"Automatic", L"自動"));
+    for (size_t i = 0; i < result.displays.size(); ++i)
+    {
+        const auto &display = result.displays[i];
+        std::wstring label = std::to_wstring(i + 1) + L": " + Widen(display.name);
+        if (display.width > 0 && display.height > 0)
+            label += L" · " + std::to_wstring(display.width) + L"×" + std::to_wstring(display.height) +
+                     L" (" + std::to_wstring(display.x) + L", " + std::to_wstring(display.y) + L")";
+        result.labels.push_back(std::move(label));
+    }
     if (!edit.displayName.empty())
     {
-        const int found = gpu::display_choice::Resolve(result.names, edit.displayName, edit.displayIndex);
-        if (found < 0) result.names.push_back(edit.displayName);
-        result.selected = found < 0 ? uint32_t(result.names.size()) : uint32_t(found) + 1;
+        const int found = gpu::display_choice::Resolve(result.displays, edit.displayName, edit.displayIndex);
+        if (found < 0) result.labels.push_back(Widen(edit.displayName));
+        result.selected = found < 0 ? uint32_t(result.labels.size() - 1) : uint32_t(found) + 1;
     }
     return result;
 }
@@ -533,7 +549,7 @@ bool GraphicsRowHidden(int r)
     if (r == int(GraphicsRow::Gpu))
         return gpu::video::GpuDeviceNames().size() <= 1;
     if (r == int(GraphicsRow::Display))
-        return gpu::video::DisplayNames().size() <= 1;
+        return gpu::video::Displays().size() <= 1;
     return (r == int(GraphicsRow::DlssQuality) && edit.upscaler == gpu::upscaling::Upscaler::Off) ||
            (r == int(GraphicsRow::FsrSharpness) && edit.upscaler != gpu::upscaling::Upscaler::Fsr) ||
            (r == int(GraphicsRow::FrameGenerationMultiplier) && edit.frameGenerationProvider != framegen::Provider::Dlss);
@@ -678,15 +694,11 @@ void Publish(uint8_t *base, uint32_t config)
             placeGraphics(GraphicsRow::Gpu, std::move(gpuRow));
         }
         placeGraphics(GraphicsRow::DisplayMode, makeChoices(L"Display mode", L"顯示模式",
-                   {Tr(L"Windowed", L"視窗"), Tr(L"Borderless fullscreen", L"無邊框全螢幕")},
+                   {Tr(L"Windowed", L"視窗"), Tr(L"Fullscreen", L"全螢幕")},
                    uint32_t(edit.windowMode)));
         {
-            const auto displays = DisplayChoices();
-            std::vector<std::wstring> labels{Tr(L"Automatic", L"自動")};
-            for (size_t i = 0; i < displays.names.size(); ++i)
-                labels.push_back(i < displays.listed ? std::to_wstring(i + 1) + L". " + Widen(displays.names[i])
-                                                     : Widen(displays.names[i]));
-            auto displayRow = makeChoices(L"Display", L"顯示器", std::move(labels), displays.selected);
+            auto displays = DisplayChoices();
+            auto displayRow = makeChoices(L"Display", L"顯示器", std::move(displays.labels), displays.selected);
             displayRow.singleValue = true;
             placeGraphics(GraphicsRow::Display, std::move(displayRow));
         }
@@ -910,8 +922,8 @@ void Publish(uint8_t *base, uint32_t config)
                            L"在 16:9 與 21:9 寬螢幕規格之間切換解析度選項。");
             break;
         case GraphicsRow::OutputResolution:
-            next.help = Tr(L"Sets the output size. Borderless fullscreen uses the desktop size.",
-                           L"設定輸出尺寸；無邊框全螢幕使用桌面尺寸。");
+            next.help = Tr(L"Sets the output size. Fullscreen uses the desktop size.",
+                           L"設定輸出尺寸；全螢幕使用桌面尺寸。");
             break;
         case GraphicsRow::RenderResolution:
 #if LO_PLATFORM_MACOS
@@ -1977,13 +1989,17 @@ PPC_FUNC(sub_822F19B0)
         do { row = (row + 1) % count; } while (rowHidden(row));
     if (input & 0x10)
     {
-        if (tab == 2)
-            row = int(GraphicsRow::Save);
-        else if (tab == 3)
-            row = 3;
-        // Start / Enter only shifts focus to Save; inhibit confirm on the same tick
-        // so simultaneous input (or key bindings sending both) cannot trigger saving.
-        input &= ~0x1000;
+        const int saveRow = tab == 2 ? int(GraphicsRow::Save) : tab == 3 ? 3 : -1;
+        // Start / Enter shifts focus to Save; inhibit confirm on the same tick so
+        // simultaneous input (or key bindings sending both) cannot save from another
+        // row. Pressed again on Save it saves, so keyboard Enter confirms like A.
+        if (saveRow >= 0 && row == saveRow)
+            input |= 0x1000;
+        else
+        {
+            if (saveRow >= 0) row = saveRow;
+            input &= ~0x1000;
+        }
     }
     if (tab == 3 && row == 4 && (input & 0x000c)) {
         if (gpu::taa_collection::Enabled()) {
@@ -2077,15 +2093,15 @@ PPC_FUNC(sub_822F19B0)
             case GraphicsRow::Display:
             {
                 const auto displays = DisplayChoices();
-                const auto choice = cycle(displays.selected, uint32_t(displays.names.size() + 1));
+                const auto choice = cycle(displays.selected, uint32_t(displays.labels.size()));
                 if (!choice)
                 {
                     edit.displayName.clear();
                     edit.displayIndex = 0;
                 }
-                else if (choice <= displays.listed)
+                else if (choice <= displays.displays.size())
                 {
-                    edit.displayName = displays.names[choice - 1];
+                    edit.displayName = displays.displays[choice - 1].name;
                     edit.displayIndex = choice - 1;
                 }
                 // The last choice keeps a saved display that is not connected.

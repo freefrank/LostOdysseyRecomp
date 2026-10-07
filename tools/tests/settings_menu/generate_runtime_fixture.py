@@ -78,12 +78,14 @@ FrameGenerationStatus fgStatus{};
 FrameGenerationStatus GetFrameGenerationStatus(){return fgStatus;}
 std::optional<gpu::backend::Backend> SelectedBackend(){return gpu::backend::Backend::Vulkan;}
 DisplayChangeResult QueryDisplayChange(uint64_t){return DisplayChangeResult::Applied;}
-uint64_t BeginDisplayChange(const settings::Config&){return 1;}
+settings::Config displayRequest; unsigned displayRequests=0;
+uint64_t BeginDisplayChange(const settings::Config& c){displayRequest=c;++displayRequests;return 1;}
 bool DisplayModeFailed(){return false;}
 bool WindowModeOverridden(){return false;}
 std::vector<std::string> GpuDeviceNames(){return {"GPU A","GPU B"};}
 std::string ActiveGpuDeviceName(){return "GPU A";}
-std::vector<std::string> DisplayNames(){return {"Display 1"};}
+std::vector<display_choice::Display> displays{{"Display 1",0,0,1920,1080}};
+std::vector<display_choice::Display> Displays(){return displays;}
 }
 namespace gpu::frame_plan {
 DlssEffectSnapshot CurrentDlssEffect(){return {};}
@@ -249,6 +251,40 @@ int main(int argc, char** argv) {
     settings::row=int(GraphicsRow::Save);tick(0x1000);tick();
     Check(settings::restartPrompt && settings::GetConfig().gpuDevice=="GPU B","GPU change saves and asks for a restart");
     settings::restartPrompt=settings::savedRestartPrompt=false;settings::displayTicket=0;
+    // Three monitors of one model: each is its own choice, told apart by number
+    // and position, and Save asks the window thread to move to the chosen one.
+    {
+        using gpu::display_choice::Resolve;
+        gpu::video::displays={{"M27P20",0,0,3840,2160},{"M27P20",3840,0,3840,2160},{"M27P20",-3840,0,3840,2160}};
+        Check(Resolve(gpu::video::displays,"M27P20",2)==2 && Resolve(gpu::video::displays,"M27P20",1)==1 &&
+              Resolve(gpu::video::displays,"M27P20",7)==0 && Resolve(gpu::video::displays,"Other",0)==-1 &&
+              Resolve(gpu::video::displays,"",1)==-1,"identical names resolve by saved index");
+        settings::savedConfig=afSaved;settings::edit=afSaved;
+        settings::row=int(GraphicsRow::Display);tick();
+        const auto& displayRow=settings::snapshot.rows[int(GraphicsRow::Display)];
+        Check(!displayRow.hidden && displayRow.choices.size()==4,"three identical displays give Automatic plus three choices");
+        Check(displayRow.choices[1]!=displayRow.choices[2] && displayRow.choices[2]!=displayRow.choices[3] &&
+              displayRow.choices[1]!=displayRow.choices[3],"identical displays have distinct labels");
+        Check(displayRow.choices[2].find(L"2: M27P20")==0 && displayRow.choices[2].find(L"3840, 0")!=std::wstring::npos,
+              "display label carries number, name and position");
+        tick(8);Check(settings::edit.displayName=="M27P20" && settings::edit.displayIndex==0,"first display chosen");
+        tick(8);Check(settings::edit.displayIndex==1,"second identical display chosen");
+        tick(8);Check(settings::edit.displayIndex==2,"third identical display chosen");
+        Check(settings::snapshot.rows[int(GraphicsRow::Display)].selectedChoice==3,"third display shown as selected");
+        const auto requests=gpu::video::displayRequests;
+        settings::row=int(GraphicsRow::Save);tick(0x1000);
+        Check(gpu::video::displayRequests==requests+1 && gpu::video::displayRequest.displayIndex==2 &&
+              gpu::video::displayRequest.displayName=="M27P20","Save requests the move to the third display");
+        Check(settings::GetConfig().displayIndex==2,"display choice saved");
+        tick();Check(!settings::restartPrompt,"display choice needs no restart");
+        settings::row=int(GraphicsRow::Display);tick();
+        Check(settings::snapshot.rows[int(GraphicsRow::Display)].selectedChoice==3,"saved third display stays selected");
+        tick(8);Check(settings::edit.displayName.empty() && settings::edit.displayIndex==0,"cycle returns to Automatic");
+        settings::savedConfig.displayIndex=5;settings::edit=settings::savedConfig;tick();
+        Check(settings::snapshot.rows[int(GraphicsRow::Display)].selectedChoice==1,"a missing index falls back to the first same-named display");
+        gpu::video::displays={{"Display 1",0,0,1920,1080}};
+        settings::restartPrompt=settings::savedRestartPrompt=false;settings::displayTicket=0;
+    }
     settings::savedConfig=afSaved;settings::edit=afSaved;
     settings::edit.upscaler=Upscaler::Fsr;settings::row=int(GraphicsRow::AntiAliasing);tick();
     auto click=[&](int row,float x,bool reverse){
@@ -265,6 +301,8 @@ int main(int argc, char** argv) {
     auto oldSaves=saves;
     tick(0x1010);Check(settings::row==int(GraphicsRow::Save) && saves==oldSaves,"Start+A focuses Save without saving");
     tick(0x1000);Check(saves==oldSaves+1,"A on Save still confirms");
+    settings::restartPrompt=settings::savedRestartPrompt=false;settings::displayTicket=0;
+    tick(0x10);Check(saves==oldSaves+2,"Start on the focused Save row saves (keyboard Enter)");
     // No changed display or backend in subsequent mouse Save.
     settings::restartPrompt=false;settings::savedRestartPrompt=false;settings::displayTicket=0;
     tick();oldSaves=saves;click(int(GraphicsRow::Save),700,false);

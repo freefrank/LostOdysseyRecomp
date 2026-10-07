@@ -1730,26 +1730,39 @@ namespace gpu::video
         std::lock_guard lock(g_gpuNamesMutex);
         return g_activeGpuDeviceName;
     }
-    static std::vector<std::string> g_displayNames;
-    std::vector<std::string> DisplayNames() {
+    static std::vector<display_choice::Display> g_displays;
+    std::vector<display_choice::Display> Displays() {
         std::lock_guard lock(g_gpuNamesMutex);
-        return g_displayNames;
+        return g_displays;
+    }
+    static std::string DescribeDisplays(const std::vector<display_choice::Display>& displays) {
+        std::string text;
+        for (size_t i = 0; i < displays.size(); ++i) {
+            const auto& d = displays[i];
+            text += fmt::format("{}#{} \"{}\" {}x{} at {},{}", i ? "; " : "", i, d.name, d.width, d.height, d.x, d.y);
+        }
+        return text.empty() ? std::string("none") : text;
     }
     // Window owner thread only: SDL's display list is not thread-safe.
-    static std::vector<std::string> QueryDisplayNames() {
-        std::vector<std::string> names;
+    static std::vector<display_choice::Display> QueryDisplays() {
+        std::vector<display_choice::Display> displays;
         const int count = SDL_GetNumVideoDisplays();
         for (int i = 0; i < count; ++i) {
             const char* name = SDL_GetDisplayName(i);
-            names.emplace_back(name && *name ? std::string(name) : "Display " + std::to_string(i + 1));
+            display_choice::Display display{name && *name ? std::string(name) : "Display " + std::to_string(i + 1)};
+            SDL_Rect bounds{};
+            if (SDL_GetDisplayBounds(i, &bounds) == 0) {
+                display.x = bounds.x; display.y = bounds.y; display.width = bounds.w; display.height = bounds.h;
+            }
+            displays.push_back(std::move(display));
         }
         std::lock_guard lock(g_gpuNamesMutex);
-        g_displayNames = names;
-        return names;
+        g_displays = displays;
+        return displays;
     }
     // SDL display index for the saved display, or -1 for system placement.
-    static int ChosenDisplay(const settings::Config& config, const std::vector<std::string>& names) {
-        const int display = display_choice::Resolve(names, config.displayName, config.displayIndex);
+    static int ChosenDisplay(const settings::Config& config, const std::vector<display_choice::Display>& displays) {
+        const int display = display_choice::Resolve(displays, config.displayName, config.displayIndex);
         if (display < 0 && !config.displayName.empty())
             LOG_WARNING("video: display \"{}\"#{} is not connected; using automatic placement",
                 config.displayName, config.displayIndex);
@@ -1933,11 +1946,9 @@ namespace gpu::video
             flags |= SDL_WINDOW_VULKAN;
 #endif
             // Fullscreen later uses the display the window was created on.
-            const auto displays = QueryDisplayNames();
-            std::string listed;
-            for (const auto& name : displays) listed += (listed.empty() ? "\"" : ", \"") + name + "\"";
+            const auto displays = QueryDisplays();
             const int display = ChosenDisplay(config, displays);
-            LOG_INFO("video: displays: {} configured=\"{}\"#{} chosen={}", listed.empty() ? std::string("none") : listed,
+            LOG_INFO("video: displays: {}; configured=\"{}\"#{} chosen={}", DescribeDisplays(displays),
                 config.displayName, config.displayIndex, display);
             const int position = display >= 0 ? int(SDL_WINDOWPOS_CENTERED_DISPLAY(display)) : int(SDL_WINDOWPOS_CENTERED);
             g_window = SDL_CreateWindow(lo_version::WindowTitle, position, position,
@@ -2913,16 +2924,21 @@ namespace gpu::video
             const bool wasWindowed = !state.initialized || state.applied.windowMode == settings::WindowMode::Windowed;
             const bool sizeChanged = !state.initialized || config.width != state.applied.width || config.height != state.applied.height;
             if (displayChanged) {
-                const auto displays = QueryDisplayNames();
+                const auto displays = QueryDisplays();
                 const int target = ChosenDisplay(config, displays);
-                if (target >= 0 && target != SDL_GetWindowDisplayIndex(g_window)) {
+                const int current = SDL_GetWindowDisplayIndex(g_window);
+                if (target >= 0 && target != current) {
                     // SDL only records the position of a fullscreen window, and
                     // fullscreen covers the display the window is on: leave it,
                     // move, and let the mode below enter it again.
                     if (SDL_GetWindowFlags(g_window) & SDL_WINDOW_FULLSCREEN) SDL_SetWindowFullscreen(g_window, 0);
                     SDL_SetWindowPosition(g_window, SDL_WINDOWPOS_CENTERED_DISPLAY(target), SDL_WINDOWPOS_CENTERED_DISPLAY(target));
                     state.placement.valid = false; // The windowed rectangle was on the old display.
-                    LOG_INFO("video: window moved to display {} \"{}\"", target, displays[size_t(target)]);
+                    LOG_INFO("video: window moved from display {} to display {} \"{}\"; displays: {}",
+                        current, target, displays[size_t(target)].name, DescribeDisplays(displays));
+                } else {
+                    LOG_INFO("video: display choice \"{}\"#{} -> {}; window stays on display {}",
+                        config.displayName, config.displayIndex, target, current);
                 }
             }
             if (wasWindowed && mode != settings::WindowMode::Windowed) state.placement.Capture(g_window);
@@ -2990,7 +3006,7 @@ namespace gpu::video
                 g_nextRefreshPoll = {};
             if (event.type == SDL_DISPLAYEVENT &&
                 (event.display.event == SDL_DISPLAYEVENT_CONNECTED || event.display.event == SDL_DISPLAYEVENT_DISCONNECTED))
-                QueryDisplayNames(); // Refreshes the menu's display list.
+                LOG_INFO("video: displays changed: {}", DescribeDisplays(QueryDisplays())); // Refreshes the menu's list.
             const bool pointerActivity =
                 event.type == SDL_MOUSEMOTION ||
                 event.type == SDL_MOUSEBUTTONDOWN ||

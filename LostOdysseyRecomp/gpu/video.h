@@ -4,6 +4,7 @@
 #include <cstdint>
 #include "backend_selection.h"
 #include "display_change.h"
+#include "display_choice.h"
 #include "present_capture.h"
 #include "upscaling_plan.h"
 #include "frame_generation_status.h"
@@ -44,7 +45,7 @@ namespace gpu::video
     std::vector<std::string> GpuDeviceNames();
     std::string ActiveGpuDeviceName();
     // Connected displays in SDL order, published by the window owner thread.
-    std::vector<std::string> DisplayNames();
+    std::vector<display_choice::Display> Displays();
     // Latest committed device capability. Callers receive a copy and do not
     // read NGX reports or device pointers. The device owner publishes it.
     upscaling::BackendDeviceSnapshot BackendDeviceState();
