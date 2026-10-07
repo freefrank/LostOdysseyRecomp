@@ -2780,7 +2780,7 @@ namespace gpu::video
             EnumDisplaySettingsW(monitor.szDevice, ENUM_CURRENT_SETTINGS, &mode))
             refresh = mode.dmDisplayFrequency;
 #else
-        const auto display = WindowDisplayIndex(g_window);
+        const SDL_DisplayID display = SDL_GetDisplayForWindow(g_window);
         const SDL_DisplayMode* mode = display ? SDL_GetCurrentDisplayMode(display) : nullptr;
         if (mode && mode->refresh_rate > 0)
             refresh = uint32_t(mode->refresh_rate);

@@ -76,11 +76,11 @@ jobs:
           persist-credentials: false
       - name: Initialize fixture dependencies
         run: |
-          git submodule update --init --depth 1 tools/XenonRecomp
+          git submodule update --init --depth 1 tools/XenonRecomp thirdparty/SDL
           git -C tools/XenonRecomp submodule update --init --depth 1 thirdparty/xxHash thirdparty/tomlplusplus
           SUDO=$(command -v sudo || true)
           $SUDO apt-get update
-          $SUDO apt-get install -y --no-install-recommends cmake g++ python3 libsdl2-dev
+          $SUDO apt-get install -y --no-install-recommends cmake g++ python3
       - name: Configure
         run: cmake -S tools/tests/review_regressions -B build/review-regressions -DCMAKE_BUILD_TYPE=Debug -DLO_REVIEW_SANITIZE=ON
       - name: Build

@@ -9,10 +9,12 @@ This is a target catalog and a record of earlier focused results. Versioned chec
 The independent suite below builds without private game data, generated PPC
 sources, a GPU or the full runtime dependency tree. It covers the 13 confirmed
 issues described in [the fix record](../../docs/notes/PROJECT_REVIEW_FIXES_20260930.md).
-Use GCC/Clang, Python 3.11+, CMake 3.20+ and SDL3 development files on Linux:
+Use GCC/Clang, Python 3.11+ and CMake 3.20+ on Linux. The SDL fixtures use an
+installed SDL3 package when CMake finds one and otherwise build the pinned
+`thirdparty/SDL` submodule:
 
 ```bash
-git submodule update --init --depth 1 tools/XenonRecomp
+git submodule update --init --depth 1 tools/XenonRecomp thirdparty/SDL
 git -C tools/XenonRecomp submodule update --init --depth 1 thirdparty/xxHash thirdparty/tomlplusplus
 cmake -S tools/tests/review_regressions -B out/review-regressions -DCMAKE_BUILD_TYPE=Debug
 cmake --build out/review-regressions --parallel 2
@@ -21,8 +23,8 @@ ctest --test-dir out/review-regressions --output-on-failure --parallel 2
 
 ASan/UBSan are enabled by default; `-DLO_REVIEW_SANITIZE=OFF` disables them for
 native targets and selectable Python fixtures (the allocator fixture always
-uses them). `-DLO_REVIEW_SDL_TESTS=OFF` omits the SDL fixtures when development
-files are unavailable. An existing SDL library can be supplied with
+uses them). `-DLO_REVIEW_SDL_TESTS=OFF` omits the SDL fixtures. An existing
+SDL library can be supplied with
 `-DLO_REVIEW_SDL_LIBRARY=/absolute/path/to/libSDL3.so`; that mode requires the
 pinned `thirdparty/SDL` headers. The SDL tests cover both `posix_ui.cpp` and
 the actual production `progress.cpp` implementation, using the dummy driver.

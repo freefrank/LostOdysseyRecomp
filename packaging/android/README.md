@@ -197,8 +197,10 @@ after draining queued GPU work instead of presenting to the abandoned Surface.
 The Android build uses the repository's pinned SDL 3.4.18 revision. This brings
 the current controller mappings and HIDAPI drivers to the APK, but does not
 establish Android compatibility for every controller or USB/Bluetooth mode.
-The former SDL2 native-window patch is not applied to SDL3; surface ownership
-must be verified by the foreground-return and Vulkan recreation device test.
+`tools/android/build-runtime.sh` also applies
+`tools/patches/sdl-android-surface-lock.patch`: Vulkan surface creation reads
+and retains the native window under SDL's Activity mutex while calling the
+driver. Direct CMake invocations must apply this patch first.
 
 ## Shader pack
 

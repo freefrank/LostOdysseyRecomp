@@ -1,0 +1,44 @@
+diff --git a/src/video/android/SDL_androidvulkan.c b/src/video/android/SDL_androidvulkan.c
+index cd946fe..bf19401 100644
+--- a/src/video/android/SDL_androidvulkan.c
++++ b/src/video/android/SDL_androidvulkan.c
+@@ -127,7 +127,8 @@ bool Android_Vulkan_CreateSurface(SDL_VideoDevice *_this,
+                                  const struct VkAllocationCallbacks *allocator,
+                                  VkSurfaceKHR *surface)
+ {
+-    SDL_WindowData *windowData = window->internal;
++    SDL_WindowData *windowData;
++    ANativeWindow *nativeWindow;
+     PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr =
+         (PFN_vkGetInstanceProcAddr)_this->vulkan_config.vkGetInstanceProcAddr;
+     PFN_vkCreateAndroidSurfaceKHR vkCreateAndroidSurfaceKHR =
+@@ -146,7 +147,17 @@ bool Android_Vulkan_CreateSurface(SDL_VideoDevice *_this,
+                             " extension is not enabled in the Vulkan instance.");
+     }
+ 
+-    if (!windowData->native_window) {
++    // The Java UI thread releases the native window under the Activity mutex
++    // when the Surface is destroyed; hold a reference across surface creation.
++    Android_LockActivityMutex();
++    windowData = window->internal;
++    nativeWindow = windowData ? windowData->native_window : NULL;
++    if (nativeWindow) {
++        ANativeWindow_acquire(nativeWindow);
++    }
++    Android_UnlockActivityMutex();
++
++    if (!nativeWindow) {
+         // passing a NULL window violates Vulkan spec
+         return SDL_SetError("Android native window is not available for surface creation, usually because of backgrounding");
+     }
+@@ -155,8 +166,9 @@ bool Android_Vulkan_CreateSurface(SDL_VideoDevice *_this,
+     createInfo.sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR;
+     createInfo.pNext = NULL;
+     createInfo.flags = 0;
+-    createInfo.window = windowData->native_window;
++    createInfo.window = nativeWindow;
+     result = vkCreateAndroidSurfaceKHR(instance, &createInfo, allocator, surface);
++    ANativeWindow_release(nativeWindow);
+     if (result != VK_SUCCESS) {
+         if (result == VK_ERROR_NATIVE_WINDOW_IN_USE_KHR) {
+             return SDL_SetError("vkCreateAndroidSurfaceKHR failed: %s, was the window created with SDL_WINDOW_VULKAN?", SDL_Vulkan_GetResultString(result));
