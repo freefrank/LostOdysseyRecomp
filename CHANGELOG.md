@@ -12,6 +12,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Closing or reopening a #help issue on GitHub adds or removes the Solved tag on the Discord post, and the Solved tag closes or reopens the issue.
 - Automatic first replies on new issues are back on and now written by Claude, for issues opened on GitHub and those copied from Discord.
 - New releases are announced in the Discord #announcements channel, and new commits, new branches and new pull requests are listed in #development.
+- Controllers, audio and the game window run on SDL 3.4.18 instead of SDL2, with newer controller mappings and drivers (#289).
 
 ### 简体中文
 
@@ -19,6 +20,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - 在 GitHub 上关闭或重新打开 #help 对应的 issue，会给 Discord 帖子加上或去掉 Solved 标签；反过来，Solved 标签也会关闭或重新打开 issue。
 - 新 issue 的自动初步分析重新开启，改由 Claude 撰写；GitHub 上直接开的和从 Discord 复制来的 issue 都适用。
 - 新版本发布会在 Discord #announcements 频道公告，各分支的新提交、新建分支和新开的 pull request 会列在 #development。
+- 手柄、音频和游戏窗口从 SDL2 换成 SDL 3.4.18，带来更新的手柄映射和驱动（#289）。
 
 ## [v0.8.53](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.8.53) — 2026-10-07
 
