@@ -84,6 +84,8 @@ struct Config
     uint32_t anisotropicFiltering = 0; // 0 Off, otherwise 2/4/8/16x. Applied live by the renderer.
     uint32_t depthOfFieldPercent = 100; // Tone-map DoF strength; 0 Off, 100 retail. Applied live.
     bool bloom = true; // Tone-map bloom. Applied live by the renderer.
+    bool motionBlur = true; // The game's motion blur pass. Applied live.
+    bool dynamicShadows = true; // The game's shadow-map rendering. Applied live.
     gpu::upscaling::Upscaler upscaler = gpu::upscaling::Upscaler::Off;
     gpu::upscaling::DlssQuality dlssQuality = gpu::upscaling::DlssQuality::Quality;
     gpu::upscaling::FsrQuality fsrQuality = gpu::upscaling::FsrQuality::Quality;

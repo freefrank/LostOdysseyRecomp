@@ -818,6 +818,8 @@ void Publish(uint8_t *base, uint32_t config)
         placeGraphics(GraphicsRow::DepthOfField, makeChoices(L"Depth of field", L"景深", std::move(dofChoices),
                    (std::min(edit.depthOfFieldPercent, 100u) + 5) / 10));
         placeGraphics(GraphicsRow::Bloom, makeChoices(L"Bloom", L"光暈", onOff(), edit.bloom ? 0 : 1));
+        placeGraphics(GraphicsRow::MotionBlur, makeChoices(L"Motion blur", L"動態模糊", onOff(), edit.motionBlur ? 0 : 1));
+        placeGraphics(GraphicsRow::DynamicShadows, makeChoices(L"Dynamic shadows", L"動態陰影", onOff(), edit.dynamicShadows ? 0 : 1));
 #if LO_PLATFORM_MACOS
         placeGraphics(GraphicsRow::ScalingQuality, makeChoices(L"Scaling filter", L"縮放濾鏡",
                    {Tr(L"Standard", L"標準"), Tr(L"High", L"高"), L"MetalFX"},
@@ -1033,6 +1035,14 @@ void Publish(uint8_t *base, uint32_t config)
         case GraphicsRow::Bloom:
             next.help = Tr(L"The game's glow around bright areas. Off removes it and the image gets slightly darker. Applies immediately after saving.",
                            L"遊戲中亮部周圍的光暈。關閉後光暈消失，畫面會稍暗。儲存後立即套用。");
+            break;
+        case GraphicsRow::MotionBlur:
+            next.help = Tr(L"The game's blur during fast camera and character movement. Off keeps moving scenes sharp. Applies immediately after saving.",
+                           L"遊戲在鏡頭與角色快速移動時的模糊。關閉後移動畫面保持清晰。儲存後立即套用。");
+            break;
+        case GraphicsRow::DynamicShadows:
+            next.help = Tr(L"Real-time shadows cast by characters and objects. Off removes them and can raise the frame rate. Applies immediately after saving.",
+                           L"角色與物件投射的即時陰影。關閉後陰影消失，可提升影格率。儲存後立即套用。");
             break;
         case GraphicsRow::ScalingQuality:
 #if LO_PLATFORM_MACOS
@@ -2293,6 +2303,12 @@ PPC_FUNC(sub_822F19B0)
                 break;
             case GraphicsRow::Bloom:
                 edit.bloom = !edit.bloom;
+                break;
+            case GraphicsRow::MotionBlur:
+                edit.motionBlur = !edit.motionBlur;
+                break;
+            case GraphicsRow::DynamicShadows:
+                edit.dynamicShadows = !edit.dynamicShadows;
                 break;
             case GraphicsRow::ScalingQuality:
 #if LO_PLATFORM_MACOS
