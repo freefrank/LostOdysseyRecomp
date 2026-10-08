@@ -52,10 +52,12 @@ BrightnessCalibration GetBrightnessCalibration();
 // the calibration page consumes this host key before game input mapping.
 bool CalibrationKey(uint32_t key);
 void PointerDrag(float x, float y, bool held);
-// Game tab actions follow the seven adjustable retail settings.
-inline constexpr int GameRestoreRow = 7;
-inline constexpr int GameMainMenuRow = 8;
-inline constexpr int GameImportRow = 9;
+// The host button-prompt row follows the seven adjustable retail settings;
+// the Game tab actions come last.
+inline constexpr int GamePromptRow = 7;
+inline constexpr int GameRestoreRow = 8;
+inline constexpr int GameMainMenuRow = 9;
+inline constexpr int GameImportRow = 10;
 // Logical ids for the graphics tab. MenuSnapshot::row stores these as int.
 // Count is the tab length, not the on-screen viewport.
 enum class GraphicsRow : int

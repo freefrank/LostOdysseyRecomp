@@ -98,10 +98,12 @@ std::optional<UpscalerExecutionObservation> CurrentUpscalerExecution() { return 
 namespace {
 uint32_t vibrationStrength = 100;
 unsigned vibrationPreviews = 0;
+uint32_t promptStyle = 0;
 }
 namespace hid {
 bool UsesPlayStationPrompts() { return false; }
 void SetVibrationStrength(uint32_t percent) { vibrationStrength = percent; }
+void SetPromptStyle(uint32_t style) { promptStyle = style; }
 void PreviewVibration() { ++vibrationPreviews; }
 }
 namespace apu {
@@ -1325,6 +1327,30 @@ int main(int argc, char** argv)
                     currentConfig.fsrSharpnessPercent == 64, "existing Save action persists FSR sharpness");
             std::puts("PASS FSR sharpness menu visibility, 0/100 bounds, description, stable ids and Save");
         }
+        // Button prompts follow the seven retail Game settings. Right cycles
+        // Auto, Xbox, PlayStation, applies live and saves at once.
+        {
+            settings::tab = 0;
+            settings::row = settings::GamePromptRow;
+            settings::status.clear();
+            currentConfig.buttonPrompts = diskConfig.buttonPrompts = 0;
+            settings::edit = currentConfig;
+            settings::edit.uiLanguage = 0;
+            const unsigned beforeSaves = saves;
+            promptStyle = 0;
+            settings::pending = 8; Tick(base);
+            Require(settings::snapshot.rows[settings::GamePromptRow].name == L"Button prompts" &&
+                    settings::snapshot.rows[settings::GamePromptRow].choices.size() == 3 &&
+                    settings::snapshot.rows[settings::GamePromptRow].selectedChoice == 1 &&
+                    promptStyle == 1 && diskConfig.buttonPrompts == 1 && saves == beforeSaves + 1,
+                    "Button prompts cycles to Xbox, applies live and saves");
+            settings::pending = 8; Tick(base);
+            Require(promptStyle == 2 && diskConfig.buttonPrompts == 2, "Button prompts cycles to PlayStation");
+            settings::pending = 8; Tick(base);
+            Require(promptStyle == 0 && diskConfig.buttonPrompts == 0, "Button prompts wraps back to Auto");
+            Require(settings::snapshot.help.find(L"Auto follows the controller") != std::wstring::npos, "Button prompts help");
+            std::puts("PASS Button prompts row");
+        }
         // Vibration sits below the retail audio sliders. It applies and saves at
         // once, stays within 0-100 and never commits unsaved Graphics edits.
         {
@@ -1373,7 +1399,7 @@ int main(int argc, char** argv)
             settings::edit.uiLanguage = 0;
             settings::status.clear();
             settings::pending = 0; Tick(base);
-            Require(settings::snapshot.rows.size() == 10 &&
+            Require(settings::snapshot.rows.size() == 11 &&
                     settings::snapshot.rows[settings::GameRestoreRow].name == L"Restore game defaults" &&
                     settings::snapshot.rows[settings::GameMainMenuRow].name == L"Quit to Main Menu" &&
                     settings::snapshot.rows[settings::GameMainMenuRow].value == L"Return",
@@ -1450,7 +1476,7 @@ int main(int argc, char** argv)
             settings::edit.uiLanguage = 0;
             settings::pending = 2; Tick(base);
             Require(settings::row == settings::GameImportRow && settings::snapshot.scroll == 0 &&
-                    settings::snapshot.rows.size() == 10 &&
+                    settings::snapshot.rows.size() == 11 &&
                     settings::snapshot.rows[settings::GameImportRow].name == L"Import discs & DLC" &&
                     settings::snapshot.rows[settings::GameImportRow].value == L"Open" &&
                     settings::graphics_menu::IsAction(0, settings::GameImportRow),

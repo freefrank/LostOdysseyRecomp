@@ -93,6 +93,7 @@ struct Config
     uint32_t frameGenerationMultiplier = 2; // Requested total output frames per rendered frame.
     uint32_t frameGenerationTargetFps = 0; // Dynamic mode: 0 asks the SDK to use the display rate.
     uint32_t vibrationPercent = 100; // Controller rumble strength; 0 Off, 100 retail. Applied live.
+    uint32_t buttonPrompts = 0; // Button icons: 0 Auto (last active controller), 1 Xbox, 2 PlayStation. Applied live.
     bool fxaa = false; // Legacy serialized mirror; antialiasing is authoritative.
     bool automaticUpdates = true;
     uint32_t audioOutput = AudioOutputStereo; // Applied live; saved by SaveAudioOutput.

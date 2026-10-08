@@ -13,6 +13,8 @@ namespace hid
     void PumpHostInput();
     // Atomic presentation hint for host UI; does not change the guest's buttons.
     bool UsesPlayStationPrompts();
+    // Button icon style: 0 Auto (follow the last active controller), 1 Xbox, 2 PlayStation.
+    void SetPromptStyle(uint32_t style);
     // Physical SDL controllers may be discovered through HIDAPI without an Android InputDevice.
     bool HasConnectedController();
     // Player rumble strength, 0-100 percent of the guest's motor speeds (100 = retail).

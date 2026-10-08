@@ -55,6 +55,7 @@ namespace hid {
 bool playStationPrompts = false;
 bool UsesPlayStationPrompts() { return playStationPrompts; }
 void SetVibrationStrength(uint32_t) {}
+void SetPromptStyle(uint32_t) {}
 void PreviewVibration() {}
 }
 namespace settings {

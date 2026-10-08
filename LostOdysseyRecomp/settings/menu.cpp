@@ -685,6 +685,8 @@ void Publish(uint8_t *base, uint32_t config)
         addChoices(L"Confirmation button", L"確認按鍵", {L"A / B", L"B / A"},
                    (flags & 0x02000000) ? 1 : 0);
         next.rows.back().controllerButtons = true;
+        addChoices(L"Button prompts", L"按鍵提示", {Tr(L"Auto", L"自動"), L"Xbox", L"PlayStation"},
+                   std::min(edit.buttonPrompts, 2u));
         addAction(L"Restore game defaults", L"恢復遊戲預設設定", Tr(L"Restore", L"恢復"));
         addAction(L"Quit to Main Menu", L"退出到主選單", Tr(L"Return", L"返回"));
         addAction(L"Import discs & DLC", L"匯入光碟與 DLC", Tr(L"Open", L"開啟"));
@@ -921,6 +923,9 @@ void Publish(uint8_t *base, uint32_t config)
     if (tab == 3 && row == 1)
         next.help = Tr(L"Game language takes effect after restarting. Requires matching language assets.",
                        L"遊戲語言重新啟動後生效，需要對應語言資源。中文遊戲文本需要亞洲版資源。");
+    if (tab == 0 && row == GamePromptRow)
+        next.help = Tr(L"Which button icons the game shows. Auto follows the controller you use.",
+                       L"遊戲顯示的按鍵圖示。自動會跟隨你使用的控制器。");
     if (tab == 0 && row == GameImportRow)
         next.help = Tr(L"Close the game to import selected discs or DLC again. Other content and saves stay intact.",
                        L"關閉遊戲並重新匯入所選光碟或 DLC；其他內容與存檔保留。");
@@ -2138,7 +2143,17 @@ PPC_FUNC(sub_822F19B0)
     };
     if (delta)
     {
-        if (tab == 0 && row < GameRestoreRow)
+        if (tab == 0 && row == GamePromptRow)
+        {
+            // Host setting: applied and saved at once, like Vibration.
+            const uint32_t style = cycle(std::min(edit.buttonPrompts, 2u), 3);
+            edit.buttonPrompts = style;
+            Config saved = GetConfig();
+            saved.buttonPrompts = style;
+            if (!SaveConfig(saved)) status = Tr(L"Could not save settings.", L"無法儲存設定。");
+            hid::SetPromptStyle(style);
+        }
+        else if (tab == 0 && row < GameRestoreRow)
         {
             if (row == 0)
                 PPC_STORE_U32(config, cycle(PPC_LOAD_U32(config), 3));

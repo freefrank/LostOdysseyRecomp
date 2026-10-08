@@ -114,6 +114,7 @@ static int RunGuest(uint32_t entry)
     if (getenv("LO_HEADLESS"))
         hid::Init(); // otherwise the video thread initialises it
     hid::SetVibrationStrength(settings::GetConfig().vibrationPercent);
+    hid::SetPromptStyle(settings::GetConfig().buttonPrompts);
 
     LOG_INFO("starting guest at {:#x}", entry);
     os::SetCurrentThreadName("Guest Main");

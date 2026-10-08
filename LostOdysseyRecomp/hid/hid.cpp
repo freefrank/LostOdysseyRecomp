@@ -25,6 +25,7 @@ namespace
     std::atomic<uint32_t> g_physicalControllerCount{0};
     hid::prompts::ActiveController g_promptController;
     std::atomic<bool> g_playStationPrompts{false};
+    std::atomic<uint32_t> g_promptStyle{0};
     void PublishPromptStyle() { g_playStationPrompts.store(g_promptController.PlayStation(), std::memory_order_relaxed); }
 
     void ObserveController(SDL_Gamepad* controller)
@@ -176,7 +177,12 @@ void hid::HandleKeyboardEvent(int32_t scancode, bool pressed)
     }
 }
 
-bool hid::UsesPlayStationPrompts() { return g_playStationPrompts.load(std::memory_order_relaxed); }
+bool hid::UsesPlayStationPrompts()
+{
+    const uint32_t style = g_promptStyle.load(std::memory_order_relaxed);
+    return style == 0 ? g_playStationPrompts.load(std::memory_order_relaxed) : style == 2;
+}
+void hid::SetPromptStyle(uint32_t style) { g_promptStyle.store(style <= 2 ? style : 0, std::memory_order_relaxed); }
 bool hid::HasConnectedController() { return g_physicalControllerCount.load(std::memory_order_relaxed) != 0; }
 
 void hid::ClearKeyboardState()
