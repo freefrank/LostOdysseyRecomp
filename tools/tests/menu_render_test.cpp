@@ -232,12 +232,51 @@ int main(int argc, char **argv)
         for(auto p:pixels) { const char rgb[]={char(p),char(p>>8),char(p>>16)};f.write(rgb,3); }
     }
     std::puts("English audio reference rendered at 1280x720");
+    const auto audioPixels = pixels;
     snapshot.dialogTitle = L"需要重新启动 / Restart required";
     snapshot.dialogMessage = L"保存这些设置并立即重新启动吗？";
     snapshot.dialogChoices = {L"立即重新启动", L"稍后", L"取消"};
     snapshot.dialogSelection = 1;
     Require(settings::RasterizeMenu(snapshot,1280,720,pixels), "restart dialog rasterization failed");
     Require(pixels[250*1280+300] != 0xff000000u, "restart dialog surface missing");
+    // Menu motion (#151): quarter-step frames of the open, a tab switch and a
+    // dialog, written as motion-<name>-<step>.ppm. The last frame is the target.
+    {
+        settings::MenuSnapshot panels;
+        panels.assets = snapshot.assets;
+        panels.backdropOnly = true;
+        std::vector<uint32_t> panelPixels;
+        Require(settings::RasterizeMenu(panels,1280,720,panelPixels), "panel backdrop rasterization failed");
+        const struct { const char *name; const std::vector<uint32_t> *from, *to; std::chrono::milliseconds length; } cases[] = {
+            {"open", &panelPixels, &regularPixels, settings::kMenuOpenFade},
+            {"tab", &regularPixels, &audioPixels, settings::kMenuChangeFade},
+            {"dialog", &audioPixels, &pixels, settings::kMenuChangeFade}};
+        for (const auto &c : cases)
+        {
+            settings::MenuTransition motion;
+            std::vector<uint32_t> shown = *c.from, target = *c.to;
+            const auto start = settings::MenuTransition::Clock::time_point{} + std::chrono::seconds(10);
+            Require(motion.Start(shown, target, 1280, start, c.length), "menu transition did not start");
+            for (int step = 0; step <= 4; ++step)
+            {
+                const bool easing = motion.Advance(shown, start + c.length * step / 4);
+                Require(easing == (step < 4), "menu transition does not settle at its duration");
+                if (step == 2)
+                    Require(shown != *c.from && shown != *c.to, "halfway menu frame does not blend both images");
+                Require(std::all_of(shown.begin(), shown.end(), [](uint32_t p) { return (p >> 24) == 255; }),
+                        "menu transition frame not opaque");
+                if (argc > 1)
+                {
+                    std::ofstream f(std::filesystem::path(argv[1]) / (std::string("motion-") + c.name + "-" + std::to_string(step) + ".ppm"),
+                                    std::ios::binary);
+                    f << "P6\n1280 720\n255\n";
+                    for (auto p : shown) { const char rgb[] = {char(p), char(p >> 8), char(p >> 16)}; f.write(rgb, 3); }
+                }
+            }
+            Require(shown == *c.to, "menu transition did not land on its target");
+        }
+        std::puts("menu motion: open, tab switch and dialog ease frames passed");
+    }
     if (argc>1) {
         std::filesystem::create_directories(argv[1]);
         std::ofstream f(std::filesystem::path(argv[1])/"restart-dialog.ppm",std::ios::binary);

@@ -74,9 +74,14 @@ never culls. A record without a reported owner keys on its slot as before.
   before the query, uses `PRECISE` when the device supports it, and reads results
   with availability. The defaults return no pool, so Metal compiles unchanged and
   the renderer falls back to the fake counts.
-- Renderer: each GPU slot owns a 1024-query pool, reset when its command list
-  opens. A guest draw inside a guest query is wrapped in its own host query; the
-  results are read when the slot's fence has completed (`RecycleSlot`).
+- Renderer: each GPU slot owns four 1024-query pools (4096 measured draws per
+  batch; v0.8.53 had one pool of 1024, which the White Boa's Queen's Room
+  filled). Pools used since their last reset are reset when the slot's command
+  list opens. A guest draw inside a guest query is wrapped in its own host query;
+  the results are read when the slot's fence has completed (`RecycleSlot`), from
+  the pools in use only: reading a pool costs time for every query in it, used
+  or not (RADV on a Radeon 8060S: 110–290 µs per frame for one 4096-query pool,
+  30–60 µs for the pools in use).
 - `gpu/occlusion_queries.h` keeps the bookkeeping, tested by
   `tools/tests/occlusion_queries_test.cpp` (review-regressions):
   - Host samples are converted with the target's guest/host size ratio times the
@@ -92,13 +97,48 @@ never culls. A record without a reported owner keys on its slot as before.
 
 | Value | END record | Culling | Uhra cost (D3D12, 2560x1440, uncapped, ABBA) |
 |---|---|---|---|
-| unset / `host` (default) | Written at the event with the last measured count of the same record; 1 when that was zero or unknown | Never: no query reads zero | 128.8 FPS vs 130.3 fake (about 1%) |
+| unset / `host` (default) | Fast, Strict while most queried objects read zero (below) | Only in Strict stretches | as `fast` in Uhra (it stays Fast) |
+| `fast` (the default before adaptive) | Written at the event with the last measured count of the same record; 1 when that was zero or unknown | Never: no query reads zero | 128.8 FPS vs 130.3 fake (about 1%) |
 | `strict` | Written once the host GPU has counted it; the guest waits | With exact counts | 111.2 FPS vs 131.7 fake (about 15%) |
 | `grow`, `xenia`, `begin0`, `none` | Old fake counts, no host queries | Never | baseline |
 
-The default follows Xenia's default `fast` mode: counts used as magnitudes, such
-as flare visibility, follow the real ones a frame or two late, while culling is
+Fast follows Xenia's default `fast` mode: counts used as magnitudes, such as
+flare visibility, follow the real ones a frame or two late, while culling is
 unchanged from the fake counts, so a stale zero can never hide an object.
+
+### Adaptive (default since 2026-10-08)
+
+Fast never culls, so the game draws every object its occlusion pass tests, also
+those the console would skip. In most places that costs little (Uhra: 15% of
+about 350 queries read zero). In a room seen from its doorway it dominates: the
+White Boa's Queen's Room spawn issues about 950 queries per frame with 80% zero,
+and its "You wanna go back?" conversation camera in the Guest Area about 1140
+with 81% zero. Strict there draws 60–65% fewer objects (3411 → 1206 and 4599 →
+1847 draws), and the render thread, which is the limit in these views, gets that
+much faster. Where few objects are hidden, Strict's mid-frame wait for the host
+GPU costs more than it saves.
+
+`gpu::occlusion::AdaptiveMode` decides once per guest frame from the queries
+completed over 32-frame windows; frames that complete no queries (menus,
+loading screens, fades) do not count. Fast switches to Strict after two windows
+in a row in which at least 50% of the queries read zero with at least 256 zeros
+per frame; Strict switches back after two windows below 20% zero (with Strict
+the game tests hidden objects in batches, so the same room reads about 35%
+zero). After leaving Strict, Fast holds for 240 frames, doubling (up to 16x)
+each time Strict lasted under four windows. Queries left waiting by Strict keep
+waiting after a switch until their batch completes; the command processor is
+woken for a waiting guest only while such a record exists.
+
+Radeon 8060S (psvita), native Linux Vulkan, 1280x720 output, FSR native AA,
+120 FPS target, average frame time and draws per view, two runs each:
+
+| View | Fast | Adaptive | Strict |
+|---|---|---|---|
+| Uhra boot view (15% zero) | 10.2 / 10.1 ms, 2142 draws | 9.8 / 9.7 ms, stays Fast | 11.7 ms, 1973 draws |
+| Queen's Room spawn (80%) | 10.0 / 10.7 ms, 3411 draws | 8.6 / 8.6 ms (at the cap), 1206 draws | 8.6 ms, 1206 draws |
+| Queen's Room, inside (5%) | 9.0 / 9.2 ms, 2110 draws | 8.8 / 9.0 ms, stays Fast | 10.4 ms, 2033 draws |
+| Queen's Room stairs (44%) | 9.6 / 9.6 ms, 2986 draws | 9.6 / 9.6 ms, stays Fast | 9.2 ms, 1924 draws |
+| Guest Area conversation (81%) | 14.1 / 13.9 ms, 4599 draws | 10.2 / 10.0 ms, 1847 draws | 10.3 ms, 1847 draws |
 
 Strict needs the command processor to complete records while the guest polls:
 the `GetData` hook (`debug/query_trace.cpp`) flags a waiting guest, and the

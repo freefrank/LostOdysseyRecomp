@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstring>
 
 #ifdef LO_MENU_RENDER_TRACE
 // Only the direct raster fixture enables this observer; no runtime tracing.
@@ -625,6 +626,8 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
         backdrop.assets = current.assets;
         backdrop.pixels = pixels;
     }
+    if (current.backdropOnly)
+        return true;
     text(130, 42, 234, 43, Translate(current.language, L"Settings", L"設定"), 31, ink, false);
     text(70, 122, 260, 28, L"Menu", 18, ink, false);
 
@@ -805,4 +808,70 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
     }
 
     return true;
+}
+
+bool settings::MenuTransition::Start(const std::vector<uint32_t> &shown, std::vector<uint32_t> &target,
+                                     uint32_t width, Clock::time_point now, Clock::duration length)
+{
+    running = false;
+    spans.clear();
+    if (!width || shown.empty() || shown.size() != target.size() || shown.size() % width)
+        return false;
+    from.assign(shown.begin(), shown.end());
+    to.swap(target);
+    // Rows equal in both images stay untouched for the whole transition: a
+    // moved highlight or a changed value blends a few rows, not the screen.
+    for (size_t row = 0; row < from.size(); row += width)
+    {
+        if (std::memcmp(&from[row], &to[row], width * sizeof(uint32_t)) == 0)
+            continue;
+        if (!spans.empty() && spans.back().second == row)
+            spans.back().second = row + width;
+        else
+            spans.emplace_back(row, row + width);
+    }
+    start = now;
+    duration = length;
+    running = !spans.empty() && length.count() > 0;
+    return true;
+}
+
+bool settings::MenuTransition::Advance(std::vector<uint32_t> &pixels, Clock::time_point now)
+{
+    if (!running)
+        return false;
+    if (pixels.size() != to.size())
+    {
+        running = false;
+        return false;
+    }
+    const auto elapsed = now - start;
+    const double t = elapsed.count() < 0 ? 1.0 : std::min(1.0, double(elapsed.count()) / double(duration.count()));
+    if (t >= 1.0)
+    {
+        for (const auto [first, last] : spans)
+            std::copy(to.begin() + first, to.begin() + last, pixels.begin() + first);
+        running = false;
+        return false;
+    }
+    // Ease out: most of the change lands in the first frames after the input.
+    const double eased = 1.0 - (1.0 - t) * (1.0 - t) * (1.0 - t);
+    const uint32_t w = uint32_t(std::lround(eased * 256.0)), keep = 256 - w;
+    for (const auto [first, last] : spans)
+        for (size_t i = first; i < last; ++i)
+        {
+            const uint32_t a = from[i], b = to[i];
+            const uint32_t rb = (((a & 0x00ff00ffu) * keep + (b & 0x00ff00ffu) * w) >> 8) & 0x00ff00ffu;
+            const uint32_t ga = (((a >> 8) & 0x00ff00ffu) * keep + ((b >> 8) & 0x00ff00ffu) * w) & 0xff00ff00u;
+            pixels[i] = rb | ga;
+        }
+    return true;
+}
+
+void settings::MenuTransition::Reset()
+{
+    running = false;
+    std::vector<uint32_t>().swap(from);
+    std::vector<uint32_t>().swap(to);
+    std::vector<std::pair<size_t, size_t>>().swap(spans);
 }
