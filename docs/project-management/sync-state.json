@@ -2957,10 +2957,10 @@
       "fields": {
         "Kind": "Feature",
         "Area": "Graphics features",
-        "Status": "Todo",
+        "Status": "Cancelled",
         "Delivery": "Not started",
         "Release": null,
-        "Evidence": "Planned for next release after v0.6.19 (version unspecified); implementation and verification not started. Removes standalone experimental TAA user option while retaining Off, FXAA, spatial SMAA, DLSS, and FSR. FXAA/SMAA paths disable temporal camera jitter and in-house TAA history accumulation; DLSS/FSR retain common jitter, depth, and motion vector inputs. Legacy TAA settings migrate to stable spatial AA. User reported ground flickering in capture render-17903110123692464-f2548.zip. Structural checks on f2548 are complete; specific ground draw/shader, flickering stage, and root cause remain undetermined. Acceptance requires separate DLSS and FSR ground-flicker verification; removing standalone TAA does not claim ground-flicker resolution. 2026-10-08: still not started; v0.8.61 (PR #321) only drops the '(Experimental)' label from TAA, and the standalone TAA option remains; the stale Release text 'Next release' was cleared on 2026-10-06; unscheduled.",
+        "Evidence": "Cancelled 2026-10-08 by the maintainer: standalone TAA stays because Android may still need it; v0.8.61 only dropped its Experimental label. Planned for next release after v0.6.19 (version unspecified); implementation and verification not started. Removes standalone experimental TAA user option while retaining Off, FXAA, spatial SMAA, DLSS, and FSR. FXAA/SMAA paths disable temporal camera jitter and in-house TAA history accumulation; DLSS/FSR retain common jitter, depth, and motion vector inputs. Legacy TAA settings migrate to stable spatial AA. User reported ground flickering in capture render-17903110123692464-f2548.zip. Structural checks on f2548 are complete; specific ground draw/shader, flickering stage, and root cause remain undetermined. Acceptance requires separate DLSS and FSR ground-flicker verification; removing standalone TAA does not claim ground-flicker resolution. 2026-10-08: still not started; v0.8.61 (PR #321) only drops the '(Experimental)' label from TAA, and the sta",
         "Source key": "anti-aliasing-consolidation-remove-experimental-taa"
       },
       "title": "Consolidate anti-aliasing options and remove standalone experimental TAA",
