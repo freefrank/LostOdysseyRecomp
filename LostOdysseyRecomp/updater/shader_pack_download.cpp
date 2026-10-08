@@ -418,6 +418,12 @@ std::string PrepareAtStartup(const StartupRequest &request)
     const std::string_view choice = mode ? mode : "";
     if (choice == "0") return "check disabled by LO_SHADER_PACK_DOWNLOAD=0";
     if (std::getenv("LO_HEADLESS")) return "check skipped: headless";
+#if LO_PLATFORM_SWITCH
+    // No network download or SDL window on the console: the Vulkan pack is
+    // copied to the SD card (docs/SWITCH.md) and the renderer finds it there.
+    (void)request;
+    return "check skipped: Switch (copy portable_vk.lospv to the shaders folder)";
+#endif
     if (pack::DistributionPacksDisabled() || pack::ConfiguredPackPath())
         return "check skipped: developer shader settings";
     const auto flavor = ExpectedFlavor(request.configuredBackend);

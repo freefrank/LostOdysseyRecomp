@@ -1,5 +1,6 @@
 #include "main_thread.h"
 #include <os/platform.h>
+#include <os/guest_code_thread.h>
 
 #if LO_PLATFORM_MACOS
 #include <chrono>
@@ -125,6 +126,21 @@ int RunServing(const std::function<int()>& body, const std::function<void()>& id
     lock.unlock();
     pthread_join(thread, nullptr);
     return state.result;
+}
+#elif LO_PLATFORM_SWITCH
+// No main-thread rule on Horizon, but the main thread's stack comes from the
+// homebrew loader. Run the guest's main thread with the guest-code stack size.
+int RunServing(const std::function<int()>& body, const std::function<void()>&)
+{
+    int result = 0;
+    os::GuestCodeThread thread([&] { result = body(); });
+    thread.join();
+    return result;
+}
+
+void Run(const std::function<void()>& task)
+{
+    task();
 }
 #else
 int RunServing(const std::function<int()>& body, const std::function<void()>&)

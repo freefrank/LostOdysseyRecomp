@@ -130,6 +130,7 @@ void StartCorpusDownload(bool automaticUpdates)
     std::string skipped;
     if (choice == "0") skipped = "check disabled by LO_SHADER_PACK_DOWNLOAD=0";
     else if (std::getenv("LO_HEADLESS")) skipped = "check skipped: headless";
+    else if (LO_PLATFORM_SWITCH) skipped = "check skipped: Switch (no network download)";
     else if (const char *corpus = std::getenv("LO_PIPELINE_CORPUS"); corpus && *corpus)
         skipped = "check skipped: LO_PIPELINE_CORPUS is set";
     else if (std::getenv("LO_BACKGROUND") && choice != "1") skipped = "check skipped: background run";

@@ -6,7 +6,7 @@
 #ifdef _WIN32
 #include <windows.h>
 #include <memoryapi.h>
-#else
+#elif !LO_PLATFORM_SWITCH
 #include <sys/mman.h>
 #include <sys/syscall.h>
 #include <unistd.h>
@@ -47,6 +47,11 @@ const char* FailureApiName(FailureOperation operation)
     case FailureOperation::CreateBacking: return "CreateFileMappingW";
     case FailureOperation::MapView: return "MapViewOfFile3";
     case FailureOperation::ProtectNull: return "VirtualProtect";
+#elif LO_PLATFORM_SWITCH
+    case FailureOperation::ReservePreferred:
+    case FailureOperation::ReserveAny: return "virtmemFindAslr";
+    case FailureOperation::CreateBacking: return "svcMapProcessCodeMemory";
+    case FailureOperation::MapView: return "svcMapProcessMemory";
 #elif LO_PLATFORM_MACOS
     case FailureOperation::ReservePreferred:
     case FailureOperation::ReserveAny:
@@ -123,7 +128,7 @@ void RecordFailure(FailureOperation operation, uint32_t error, int32_t viewIndex
 
 // macOS: 16 KiB host pages cannot express the E view's 4 KiB offset; see
 // guest_address_space_macos.cpp.
-#if !LO_PLATFORM_MACOS
+#if !LO_PLATFORM_MACOS && !LO_PLATFORM_SWITCH
 uint8_t* Allocate()
 {
     failure = {};

@@ -55,6 +55,17 @@ extern char** environ;
 #if LO_PLATFORM_ANDROID
 #include <SDL3/SDL_system.h>
 #endif
+#if LO_PLATFORM_SWITCH
+#include <os/switch_platform.h>
+
+// What the player sees when the game folder is missing or incomplete.
+static const char* kSwitchGameHelp =
+    "Copy your extracted Lost Odyssey discs to the SD card:\n\n"
+    "  " LO_SWITCH_DATA_ROOT "/game/disc1/default.xex\n"
+    "  " LO_SWITCH_DATA_ROOT "/game/disc2 ... disc4\n\n"
+    "Use the folders the PC version's importer creates (default.xex, LO.fpi, *.fpd).\n"
+    "Disc 1 is required to start; the shader pack goes to " LO_SWITCH_DATA_ROOT "/shaders/.";
+#endif
 
 // Runtime entry: set up guest memory, load default.xex and run its entry point
 // on the first guest thread. Everything else is driven by the game through the
@@ -62,7 +73,11 @@ extern char** environ;
 
 static std::filesystem::path ExecutableDirectory()
 {
-#if LO_PLATFORM_ANDROID
+#if LO_PLATFORM_SWITCH
+    // The NRO can be anywhere on the SD card; game data, settings, caches and
+    // logs live in one fixed folder (user_paths.h).
+    return std::filesystem::path(LO_SWITCH_DATA_ROOT);
+#elif LO_PLATFORM_ANDROID
     // app_process is the executable on Android. SDL supplies the app-owned
     // writable directory, independent of the APK/native library installation.
     const char* path = SDL_GetAndroidInternalStoragePath();
@@ -116,6 +131,11 @@ static int RunGuest(uint32_t entry)
     hid::SetVibrationStrength(settings::GetConfig().vibrationPercent);
     hid::SetPromptStyle(settings::GetConfig().buttonPrompts);
 
+#if LO_PLATFORM_SWITCH
+    os::switch_platform::SetLoadingBoost(false);
+    LOG_INFO("switch: {} mode, guest memory committed {} MiB", os::switch_platform::IsDocked() ? "docked" : "handheld",
+             GuestAddressSpace::CommittedBytes() >> 20);
+#endif
     LOG_INFO("starting guest at {:#x}", entry);
     os::SetCurrentThreadName("Guest Main");
     GuestThread::Start({ entry, 0, 0 });
@@ -202,6 +222,12 @@ int main(int argc, char* argv[])
         requestedInstall |= strcmp(argv[i],"--install")==0;
     }
     const auto executableDirectory = ExecutableDirectory();
+#if LO_PLATFORM_SWITCH
+    os::switch_platform::Initialize(executableDirectory);
+    // Loading is CPU-bound (XEX, archives, shader pack); RunGuest turns it off.
+    os::switch_platform::SetLoadingBoost(true);
+    std::filesystem::current_path(executableDirectory);
+#endif
 #if LO_PLATFORM_ANDROID
     if (executableDirectory.empty()) return 1;
     // Relative caches and diagnostics must never be written into app_process's
@@ -370,6 +396,15 @@ int main(int argc, char* argv[])
 #endif
     }
 
+#if LO_PLATFORM_SWITCH
+    // No importer on the console: the discs are copied over from a PC.
+    if (!std::filesystem::exists(gameRoot / "default.xex"))
+    {
+        LOG_ERROR("missing default.xex in game root {}", FileSystem::PathUtf8(gameRoot));
+        os::switch_platform::ShowError("Lost Odyssey game files not found.", kSwitchGameHelp);
+        return 1;
+    }
+#endif
     if (!explicitGame && !std::filesystem::exists(gameRoot / "default.xex"))
     {
         if (getenv("LO_HEADLESS") || getenv("LO_BACKGROUND"))
@@ -428,6 +463,13 @@ int main(int argc, char* argv[])
                       memoryStatus.ullTotalPhys, memoryStatus.ullAvailVirtual);
         if (failure.error == ERROR_COMMITMENT_LIMIT)
             LOG_ERROR("Windows reported its commit limit was reached. Close memory-heavy applications or increase Windows paging-file capacity, then retry.");
+#elif LO_PLATFORM_SWITCH
+        LOG_ERROR("guest address space: Horizon result={:#x} api={}", failure.error,
+                  GuestAddressSpace::FailureApiName(failure.operation));
+        os::switch_platform::ShowError("Lost Odyssey Recomp could not reserve its memory.",
+            "The game needs the full console memory and the process memory syscalls.\n\n"
+            "Start the Homebrew Menu through title takeover: hold R while launching any game, "
+            "then start Lost Odyssey Recomp. Starting from the Album applet does not work.");
 #else
         LOG_ERROR("guest address space: errno={}: {}", failure.error, std::strerror(int(failure.error)));
 #endif

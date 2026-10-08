@@ -1,0 +1,96 @@
+diff --git a/XenonUtils/ppc_context.h b/XenonUtils/ppc_context.h
+index f83caf2..4b0fa08 100644
+--- a/XenonUtils/ppc_context.h
++++ b/XenonUtils/ppc_context.h
+@@ -30,6 +30,27 @@
+ #define PPC_EXTERN_FUNC(x) extern PPC_FUNC(x)
+ #define PPC_WEAK_FUNC(x) __attribute__((weak,noinline)) PPC_FUNC(x)
+ 
++// GCC (devkitA64, Nintendo Switch) does not provide the Clang builtins that
++// XenonRecomp emits. Same shims as UnleashedRecomp-NX.
++#if defined(__GNUC__) && !defined(__clang__)
++static inline uint32_t PPCRotateLeft32(uint32_t value, unsigned int shift) noexcept
++{
++    const unsigned int amount = shift & 31;
++    return (value << amount) | (value >> ((32 - amount) & 31));
++}
++
++static inline uint64_t PPCRotateLeft64(uint64_t value, unsigned int shift) noexcept
++{
++    const unsigned int amount = shift & 63;
++    return (value << amount) | (value >> ((64 - amount) & 63));
++}
++
++#define __builtin_assume(x) do { if (!(x)) __builtin_unreachable(); } while (0)
++#define __builtin_debugtrap() __builtin_trap()
++#define __builtin_rotateleft32(x, y) PPCRotateLeft32(static_cast<uint32_t>(x), static_cast<unsigned int>(y))
++#define __builtin_rotateleft64(x, y) PPCRotateLeft64(static_cast<uint64_t>(x), static_cast<unsigned int>(y))
++#endif
++
+ #define PPC_FUNC_PROLOGUE() __builtin_assume(((size_t)base & 0x1F) == 0)
+ 
+ #ifndef PPC_LOAD_U8
+@@ -733,7 +754,12 @@ inline simde__m128i simde_mm_vsr(simde__m128i a, simde__m128i b)
+ inline uint64_t __rdtsc()
+ {
+     uint64_t ret;
++#if defined(__SWITCH__)
++    // Horizon exposes the physical counter to user mode (libnx armGetSystemTick).
++    asm volatile("mrs %0, cntpct_el0\n\t"
++#else
+     asm volatile("mrs %0, cntvct_el0\n\t"
++#endif
+                  : "=r"(ret)::"memory");
+     return ret;
+ }
+diff --git a/XenonUtils/xbox.h b/XenonUtils/xbox.h
+index 0361b0f..9b38b3d 100644
+--- a/XenonUtils/xbox.h
++++ b/XenonUtils/xbox.h
+@@ -241,6 +241,13 @@ typedef struct _XOVERLAPPED {
+ 
+ // this name is so dumb
+ typedef struct _XXOVERLAPPED {
++#if defined(__GNUC__) && !defined(__clang__)
++    // GCC (Nintendo Switch build) rejects members with constructors in an
++    // anonymous aggregate. Same layout; the raw InternalLow/InternalHigh view
++    // is not used by the runtime.
++    be<uint32_t> Error;
++    be<uint32_t> Length;
++#else
+     union
+     {
+         struct
+@@ -255,6 +262,7 @@ typedef struct _XXOVERLAPPED {
+             uint32_t InternalHigh;
+         };
+     };
++#endif
+     uint32_t InternalContext;
+     be<uint32_t> hEvent;
+     be<uint32_t> pCompletionRoutine;
+diff --git a/XenonUtils/xdbf.h b/XenonUtils/xdbf.h
+index 347ac2c..9a71cc6 100644
+--- a/XenonUtils/xdbf.h
++++ b/XenonUtils/xdbf.h
+@@ -128,11 +128,20 @@ struct XACHEntry
+ 
+ union XDBFTitleID
+ {
++#if defined(__GNUC__) && !defined(__clang__)
++    // GCC: no members with constructors in an anonymous struct (see xbox.h).
++    struct Parts
++    {
++        be<uint16_t> u16;
++        char u8[0x02];
++    } parts;
++#else
+     struct
+     {
+         be<uint16_t> u16;
+         char u8[0x02];
+     };
++#endif
+ 
+     be<uint32_t> u32;
+ };

@@ -1,4 +1,4 @@
-#if !defined(_WIN32) && !defined(__ANDROID__)
+#if !defined(_WIN32) && !defined(__ANDROID__) && !defined(__SWITCH__)
 #include "http.h"
 #include "progress.h"
 

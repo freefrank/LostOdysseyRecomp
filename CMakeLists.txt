@@ -67,6 +67,13 @@ option(LO_BUILD_RUNTIME "Build the LostOdysseyRecomp runtime executable" ON)
 option(LO_BUILD_GPU "Build the plume-based GPU backend" ON)
 option(LO_BUILD_ANDROID_RUNTIME "Enable the experimental Android game runtime shared library" OFF)
 
+if(LO_TARGET_PLATFORM STREQUAL "switch")
+    if(LO_BUILD_TOOLS)
+        message(FATAL_ERROR "Switch builds use host-generated PPC sources; build XenonRecomp/XenosRecomp separately for the host")
+    endif()
+    include(cmake/LoSwitch.cmake)
+endif()
+
 if(ANDROID)
     if(NOT LO_TARGET_ISA STREQUAL "aarch64")
         message(FATAL_ERROR "Android currently requires the NDK arm64-v8a toolchain")
@@ -94,7 +101,9 @@ if(LO_BUILD_RUNTIME)
     if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
         message(FATAL_ERROR "The runtime requires a 64-bit target")
     endif()
-    if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    # The Switch build uses devkitA64's GCC (the only toolchain libnx supports);
+    # every other target requires Clang.
+    if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND NOT LO_TARGET_PLATFORM STREQUAL "switch")
         message(FATAL_ERROR "The runtime requires Clang")
     endif()
     # XenonRecomp's tree provides XenonUtils (XEX loading), fmt, xxHash and simde.
@@ -113,7 +122,7 @@ if(LO_BUILD_RUNTIME)
                 ${CMAKE_SOURCE_DIR}/LostOdysseyRecomp/modding/mod_api.cpp)
         endif()
     endforeach()
-    if(LO_BUILD_GPU AND NOT ANDROID AND NOT LO_TARGET_PLATFORM STREQUAL "macos")
+    if(LO_BUILD_GPU AND NOT ANDROID AND NOT LO_TARGET_PLATFORM MATCHES "^(macos|switch)$")
         add_subdirectory(tools/tests/native_dlss)
     endif()
     if(TARGET LoPpcAutoSync)
@@ -140,7 +149,7 @@ if(LO_BUILD_MOD_TESTS)
     add_test(NAME LoModApiTest COMMAND LoModApiTest)
 endif()
 
-if(UNIX AND NOT ANDROID AND LO_BUILD_RUNTIME)
+if(UNIX AND NOT ANDROID AND LO_BUILD_RUNTIME AND NOT LO_TARGET_PLATFORM STREQUAL "switch")
     install(TARGETS LostOdysseyRecomp RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
     install(FILES
         packaging/linux/io.github.freefrank.LostOdysseyRecomp.desktop

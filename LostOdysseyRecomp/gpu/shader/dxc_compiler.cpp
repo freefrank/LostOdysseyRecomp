@@ -24,7 +24,9 @@
 #include <objidl.h>
 #include <dxcapi.h>
 #else
+#if !LO_PLATFORM_SWITCH
 #include <dlfcn.h>
+#endif
 #include <type_traits>
 #ifndef __EMULATE_UUID
 #define __EMULATE_UUID 1
@@ -153,6 +155,12 @@ namespace xenos
 #else
         void LoadDxc()
         {
+#if LO_PLATFORM_SWITCH
+            // No dynamic libraries on Horizon and no DXC build for it: the
+            // console renders from the prebuilt SPIR-V pack (docs/SWITCH.md).
+            g_loadError = "not available on Nintendo Switch (install the Vulkan shader pack)";
+            return;
+#else
 #if LO_PLATFORM_MACOS
             constexpr const char* kLibrary = "libdxcompiler.dylib";
 #else
@@ -214,6 +222,7 @@ namespace xenos
                     module = nullptr;
                 }
             }
+#endif // LO_PLATFORM_SWITCH
         }
 #endif
 
@@ -236,6 +245,14 @@ namespace xenos
 
     const std::string& DxcIdentity()
     {
+#if LO_PLATFORM_SWITCH
+        // No DXC on the console, but SPIR-V compiled on a PC by the pinned DXC
+        // (tools/XenosRecomp/thirdparty/dxc-bin, v1.8) is valid here: the
+        // PC Vulkan shader cache (builtin host shaders, local shader store,
+        // startup bundle) copied to the SD card is keyed by this identity.
+        static const std::string identity = LO_SWITCH_DXC_IDENTITY;
+        return identity;
+#else
         static const std::string identity = []() -> std::string {
             if (!DxcAvailable()) return {};
             // Compiler version is cache compatibility metadata. Do not reread
@@ -250,6 +267,7 @@ namespace xenos
             return "dxc-" + std::to_string(major) + "." + std::to_string(minor);
         }();
         return identity;
+#endif
     }
 
     DxcStatistics GetDxcStatistics()

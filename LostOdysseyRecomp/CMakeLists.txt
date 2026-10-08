@@ -21,7 +21,7 @@ function(lo_add_header_test name source)
         target_compile_options(${name} PRIVATE -UNDEBUG)
     endif()
 endfunction()
-if(NOT ANDROID)
+if(NOT ANDROID AND NOT LO_TARGET_PLATFORM STREQUAL "switch")
 lo_add_header_test(LoPollWaitTest ${CMAKE_SOURCE_DIR}/tools/tests/poll_wait_test.cpp)
 lo_add_header_test(LoHdrOutputTest ${CMAKE_SOURCE_DIR}/tools/tests/hdr_output_test.cpp)
 lo_add_header_test(LoShadowResolutionTest ${CMAKE_SOURCE_DIR}/tools/tests/shadow_resolution_test.cpp)
@@ -150,6 +150,35 @@ if(ANDROID)
         target_link_libraries(LostOdysseyRecomp PRIVATE adrenotools)
         target_compile_definitions(LostOdysseyRecomp PRIVATE LO_HAS_ADRENOTOOLS=1)
         add_dependencies(LostOdysseyRecomp main_hook file_redirect_hook gsl_alloc_hook hook_impl)
+    endif()
+elseif(LO_TARGET_PLATFORM STREQUAL "switch")
+    # os/switch/nvk_switch_stubs.c: symbols the static NVK driver references
+    # that neither libnx nor newlib provide (from UnleashedRecomp-NX).
+    add_executable(LostOdysseyRecomp ${LO_RUNTIME_SOURCES} ${LO_IMPORT_STUBS}
+        ${LO_RUNTIME_ROOT}/os/switch/nvk_switch_stubs.c)
+    # These include libnx's <switch.h>, whose Mutex/Event typedefs collide with
+    # the runtime's precompiled header (stdafx.h, mutex.h).
+    file(GLOB LO_SWITCH_NATIVE_SOURCES CONFIGURE_DEPENDS
+        "${LO_RUNTIME_ROOT}/os/switch/*.cpp" "${LO_RUNTIME_ROOT}/os/switch/*.c"
+        "${LO_RUNTIME_ROOT}/kernel/guest_address_space_switch.cpp")
+    set_source_files_properties(${LO_SWITCH_NATIVE_SOURCES} PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+    set_target_properties(LostOdysseyRecomp PROPERTIES SUFFIX ".elf")
+    target_compile_definitions(LostOdysseyRecomp PRIVATE
+        LO_SWITCH_DATA_ROOT="${LO_SWITCH_DATA_ROOT}"
+        LO_SWITCH_DXC_IDENTITY="${LO_SWITCH_DXC_IDENTITY}")
+    if(NOT LO_SWITCH_CHECK_ONLY)
+        target_link_libraries(LostOdysseyRecomp PRIVATE nx)
+        if(NOT LO_SWITCH_ELF2NRO OR NOT LO_SWITCH_NACPTOOL)
+            message(FATAL_ERROR "elf2nro/nacptool not found (devkitPro switch-tools)")
+        endif()
+        set(LO_SWITCH_NACP "${CMAKE_CURRENT_BINARY_DIR}/LostOdysseyRecomp.nacp")
+        set(LO_SWITCH_NRO "${CMAKE_CURRENT_BINARY_DIR}/LostOdysseyRecomp.nro")
+        add_custom_command(TARGET LostOdysseyRecomp POST_BUILD
+            COMMAND "${LO_SWITCH_NACPTOOL}" --create "${LO_SWITCH_APP_TITLE}" "${LO_SWITCH_APP_AUTHOR}"
+                "${LO_SWITCH_APP_VERSION}" "${LO_SWITCH_NACP}"
+            COMMAND "${LO_SWITCH_ELF2NRO}" "$<TARGET_FILE:LostOdysseyRecomp>" "${LO_SWITCH_NRO}"
+                "--icon=${LO_SWITCH_APP_ICON}" "--nacp=${LO_SWITCH_NACP}"
+            COMMENT "Packaging LostOdysseyRecomp.nro" VERBATIM)
     endif()
 else()
     add_executable(LostOdysseyRecomp ${LO_RUNTIME_SOURCES} ${LO_IMPORT_STUBS})

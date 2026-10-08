@@ -1,6 +1,6 @@
 #include "guest_code_thread.h"
 
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_MACOS || LO_PLATFORM_SWITCH
 #include <exception>
 #include <future>
 #include <pthread.h>
@@ -36,9 +36,11 @@ void GuestCodeThread::Start(std::function<void()> body)
     pthread_attr_t attributes;
     pthread_attr_init(&attributes);
     pthread_attr_setstacksize(&attributes, kGuestCodeStackSize);
+#if LO_PLATFORM_MACOS
     // Guest code is the game loop, audio callback and GPU interrupts; keep it on
     // performance cores rather than letting default QoS drift to efficiency cores.
     pthread_attr_set_qos_class_np(&attributes, QOS_CLASS_USER_INTERACTIVE, 0);
+#endif
     pthread_t thread{};
     const int error = pthread_create(&thread, &attributes, RunLaunch, launch);
     pthread_attr_destroy(&attributes);

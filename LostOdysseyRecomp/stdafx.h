@@ -19,6 +19,14 @@ using Microsoft::WRL::ComPtr;
 #define _strnicmp strncasecmp
 #define _fseeki64 fseeko
 #define _ftelli64 ftello
+#elif LO_PLATFORM_SWITCH
+// newlib: POSIX strings and 64-bit file offsets, but no mmap.
+#include <unistd.h>
+#include <strings.h>
+#define _stricmp strcasecmp
+#define _strnicmp strncasecmp
+#define _fseeki64 fseeko
+#define _ftelli64 ftello
 #endif
 
 #include <algorithm>

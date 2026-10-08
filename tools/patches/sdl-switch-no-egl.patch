@@ -1,0 +1,166 @@
+diff --git a/src/video/switch/SDL_switchopengles.c b/src/video/switch/SDL_switchopengles.c
+index 523d89171d..d5ea80a7ef 100644
+--- a/src/video/switch/SDL_switchopengles.c
++++ b/src/video/switch/SDL_switchopengles.c
+@@ -20,7 +20,7 @@
+ */
+ #include "../../SDL_log_c.h"
+ 
+-#if SDL_VIDEO_DRIVER_SWITCH
++#if SDL_VIDEO_DRIVER_SWITCH && defined(SDL_VIDEO_OPENGL_EGL)
+ 
+ #include "SDL_switchopengles.h"
+ #include "SDL_switchvideo.h"
+diff --git a/src/video/switch/SDL_switchopengles.h b/src/video/switch/SDL_switchopengles.h
+index 005423accd..e9a7733630 100644
+--- a/src/video/switch/SDL_switchopengles.h
++++ b/src/video/switch/SDL_switchopengles.h
+@@ -23,7 +23,7 @@
+ #ifndef SDL_switchteopengles_h_
+ #define SDL_switchteopengles_h_
+ 
+-#if SDL_VIDEO_DRIVER_SWITCH
++#if SDL_VIDEO_DRIVER_SWITCH && defined(SDL_VIDEO_OPENGL_EGL)
+ 
+ #include "../SDL_egl_c.h"
+ #include "../SDL_sysvideo.h"
+diff --git a/src/video/switch/SDL_switchvideo.c b/src/video/switch/SDL_switchvideo.c
+index 87428777bb..06c9422345 100644
+--- a/src/video/switch/SDL_switchvideo.c
++++ b/src/video/switch/SDL_switchvideo.c
+@@ -99,6 +99,7 @@ static SDL_VideoDevice *SWITCH_CreateDevice()
+     device->RestoreWindow = SWITCH_RestoreWindow;
+     device->DestroyWindow = SWITCH_DestroyWindow;
+ 
++#ifdef SDL_VIDEO_OPENGL_EGL
+     device->GL_LoadLibrary = SWITCH_GLES_LoadLibrary;
+     device->GL_GetProcAddress = SWITCH_GLES_GetProcAddress;
+     device->GL_UnloadLibrary = SWITCH_GLES_UnloadLibrary;
+@@ -109,6 +110,7 @@ static SDL_VideoDevice *SWITCH_CreateDevice()
+     device->GL_SwapWindow = SWITCH_GLES_SwapWindow;
+     device->GL_DestroyContext = SWITCH_GLES_DestroyContext;
+     device->GL_DefaultProfileConfig = SWITCH_GLES_DefaultProfileConfig;
++#endif
+ 
+     device->StartTextInput = SWITCH_StartTextInput;
+     device->StopTextInput = SWITCH_StopTextInput;
+@@ -170,10 +172,12 @@ void SWITCH_VideoQuit(SDL_VideoDevice *_this)
+ {
+     // this should not be needed if user code is right (SDL_GL_LoadLibrary/SDL_GL_UnloadLibrary calls match)
+     // this (user) error doesn't have the same effect on switch thought, as the driver needs to be unloaded (crash)
++#ifdef SDL_VIDEO_OPENGL_EGL
+     if (_this->gl_config.driver_loaded > 0) {
+         SWITCH_GLES_UnloadLibrary(_this);
+         _this->gl_config.driver_loaded = 0;
+     }
++#endif
+ 
+     // exit touch
+     SWITCH_QuitTouch();
+@@ -217,9 +221,12 @@ bool SWITCH_SetDisplayMode(SDL_VideoDevice *_this, SDL_VideoDisplay *display, SD
+         return true;
+     }
+ 
++    NWindow *nWindow = nwindowGetDefault();
++#ifndef SDL_VIDEO_OPENGL_EGL
++    nwindowSetDimensions(nWindow, mode->w, mode->h);
++#else
+     SDL_WindowData *data = (SDL_WindowData *)switch_window->internal;
+     SDL_GLContext ctx = SDL_GL_GetCurrentContext();
+-    NWindow *nWindow = nwindowGetDefault();
+ 
+     if (data != NULL && data->egl_surface != EGL_NO_SURFACE) {
+         SDL_EGL_MakeCurrent(_this, NULL, NULL);
+@@ -228,6 +235,7 @@ bool SWITCH_SetDisplayMode(SDL_VideoDevice *_this, SDL_VideoDisplay *display, SD
+         data->egl_surface = SDL_EGL_CreateSurface(_this, switch_window, nWindow);
+         SDL_EGL_MakeCurrent(_this, data->egl_surface, ctx);
+     }
++#endif
+ 
+     return true;
+ }
+@@ -242,9 +250,11 @@ static bool SWITCH_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_
+         return SDL_SetError("Switch only supports one window");
+     }
+ 
++#ifdef SDL_VIDEO_OPENGL_EGL
+     if (!_this->egl_data) {
+         return SDL_SetError("EGL not initialized");
+     }
++#endif
+ 
+     window_data = (SDL_WindowData *)SDL_calloc(1, sizeof(SDL_WindowData));
+     if (window_data == NULL) {
+@@ -258,10 +268,12 @@ static bool SWITCH_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_
+         return SDL_SetError("Could not set NWindow dimensions: 0x%x", rc);
+     }
+ 
++#ifdef SDL_VIDEO_OPENGL_EGL
+     window_data->egl_surface = SDL_EGL_CreateSurface(_this, window, nWindow);
+     if (window_data->egl_surface == EGL_NO_SURFACE) {
+         return SDL_SetError("Could not create GLES window surface");
+     }
++#endif
+ 
+     /* Setup driver data for this window */
+     window->internal = window_data;
+@@ -284,10 +296,12 @@ static void SWITCH_DestroyWindow(SDL_VideoDevice *_this, SDL_Window *window)
+ 
+     if (window == switch_window) {
+         if (data != NULL) {
++#ifdef SDL_VIDEO_OPENGL_EGL
+             if (data->egl_surface != EGL_NO_SURFACE) {
+                 SDL_EGL_MakeCurrent(_this, NULL, NULL);
+                 SDL_EGL_DestroySurface(_this, data->egl_surface);
+             }
++#endif
+ 
+             SDL_free(window->internal);
+             window->internal = NULL;
+@@ -313,9 +327,13 @@ static bool SWITCH_SetWindowPosition(SDL_VideoDevice *_this, SDL_Window *window)
+ static void SWITCH_SetWindowSize(SDL_VideoDevice *_this, SDL_Window *window)
+ {
+     u32 w = 0, h = 0;
++    NWindow *nWindow = nwindowGetDefault();
++#ifndef SDL_VIDEO_OPENGL_EGL
++    (void)w; (void)h;
++    nwindowSetDimensions(nWindow, window->w, window->h);
++#else
+     SDL_WindowData *data = (SDL_WindowData *)window->internal;
+     SDL_GLContext ctx = SDL_GL_GetCurrentContext();
+-    NWindow *nWindow = nwindowGetDefault();
+ 
+     if (window->w != w || window->h != h) {
+         if (data != NULL && data->egl_surface != EGL_NO_SURFACE) {
+@@ -326,6 +344,7 @@ static void SWITCH_SetWindowSize(SDL_VideoDevice *_this, SDL_Window *window)
+             SDL_EGL_MakeCurrent(_this, data->egl_surface, ctx);
+         }
+     }
++#endif
+ }
+ 
+ static void SWITCH_ShowWindow(SDL_VideoDevice *_this, SDL_Window *window)
+diff --git a/src/video/switch/SDL_switchvideo.h b/src/video/switch/SDL_switchvideo.h
+index 3d37d2c7f3..64ae9d0a98 100644
+--- a/src/video/switch/SDL_switchvideo.h
++++ b/src/video/switch/SDL_switchvideo.h
+@@ -27,11 +27,19 @@
+ 
+ #include <switch.h>
+ 
++#ifdef SDL_VIDEO_OPENGL_EGL
+ #include "../SDL_egl_c.h"
++#endif
+ 
+ typedef struct SDL_WindowData
+ {
++#ifdef SDL_VIDEO_OPENGL_EGL
+     EGLSurface egl_surface;
++#else
++    // LostOdysseyRecomp: built without EGL; the application renders with
++    // Vulkan (VK_NN_vi_surface) on nwindowGetDefault() itself.
++    int unused;
++#endif
+ } SDL_WindowData;
+ 
+ #endif /* SDL_VIDEO_DRIVER_SWITCH */
