@@ -52,3 +52,28 @@ Opened after the release: [#323](https://github.com/freefrank/LostOdysseyRecomp/
 Plan (read-only, from the worktree at about 16:25 UTC): `{"created": 5, "updated": 5, "unchanged": 286, "conflicts": 1, "operations": 55}`. Created: the three Issue items, `sdl3-runtime-migration` and `release-v0-8-61`. Updated: `issue-151-animated-options-menu` (Delivery, Release, Evidence), `issue-48-motion-sickness-qol` (Delivery, Release, Evidence) and Evidence only for the three others. The one conflict is not from this change: `issue-167-cutscene-audio-desync` Status, Project `In Progress` against manifest `Done` (the previous section of this file wrote Done to the manifest after reading Done back, and #167 was closed as completed on 2026-10-07 at 19:28:19Z and never reopened). Someone set the Project value after that readback. It needs the maintainer's decision before `--apply`: either set Done on the Project, or copy `In Progress` into `items.json` and `sync-state.json`. The Status of #151 and #48 matches the Project (Done), so `sync-state.json` needs no hand edit.
 
 Apply, readback and the README item count (296 in the manifest after this change; the README still says 290) are for the maintainer's session.
+
+## v0.9.0 release
+
+Receipt for the v0.9.0 release record (published 2026-10-08T18:31:57Z, tag commit `8d33c146`, not accepted). Manifest and documentation changes only; `sync-state.json` and the Project README were not edited and **`--apply` was not run**. A read-only plan was run (its report was written outside the repository). No Issue, pull request or comment was touched, and no build or game run was made.
+
+Live state read on 2026-10-08, the last read at about 18:47 UTC: `gh release view v0.9.0` (not draft, not prerelease, five assets with digests) and `gh release list` (Latest); `git ls-remote origin` for the tag object `83c48bb5` and the tag commit; `git log --first-parent v0.8.61..v0.9.0` (nine commits) with `git merge-base --is-ancestor` for #324 to #329 (all in the tag) and #331 (not in the tag: merged 18:28:56Z, after the tag push); `gh pr list --state merged`; `gh issue view` for #172, #323, #330 and #332 and `gh issue list --state open`; the Gitea API through `tea api` for run 511 (API id 904), its jobs and the logs of the Linux and publish jobs; `gh release view shader-packs`. The release body was compared with `tools/release/extract_release_notes.py` and differs only in a trailing newline.
+
+| Key | Change |
+| --- | --- |
+| `release-v0-9-0` (new) | Kind Release, Done / Released / v0.9.0, 2026-10-08. Publication facts, run 511, the five assets with sizes and SHA-256 values, the macOS image checks, the PRs and the open acceptance items. The shape follows `release-v0-8-61` |
+| `aspect-ratio-setting` (new) | Draft without an Issue for PR #326 (Kind Feature, Area Graphics presentation), Done / Released / v0.9.0, with a Chinese body |
+| `issue-172-fsr-scaling-performance` | Evidence only: the reporter's rerun on v0.8.61 (no change beyond the margin of error) replaces "no reply is recorded", and the v1.0.0 plan is named; Release stays v0.8.44 |
+| `ultrawide-fov-layout` | Evidence only: PR #326 replaces the Widescreen switch; Release stays v0.6.7 |
+
+All Evidence fields are under 1,000 characters (the new and changed ones).
+
+Judgment calls, each a one-field change if the maintainer's convention differs:
+
+- **#326 is Done / Released, not Awaiting validation**, as the v0.8.61 items were, although the in-game Save path was not run; the Evidence and the body say so.
+- **#331 is outside the release.** It merged after the tag, and its item `sr-motion-replay-moving-only` (Todo, v1.0.0) is unchanged.
+- **Not itemized.** #323, #330 and #332 (open Issues, opened on 2026-10-08), the triage and bug-template changes (#327, #328), the documentation and Project PRs (#324, #325, #329) and the deletion of `HANDOFF.md`. They stay in STATUS and the Roadmap.
+
+Evidence gaps, kept open: no game run with any v0.9.0 package and no download of the four CI packages; the hold on publication (the `HOLD.txt` asset, removed before publishing), the manual `gh release edit` and the Mac-side checks (build time, VALID, signature, bundle version, equal digests, `publish_shader_packs.py --check`) are the maintainer's session account (the publish job's log shows the package-set assertion failing, not the asset name); the crash log attached to #323 was not read.
+
+Plan (read-only, from the worktree at about 18:45 UTC): `{"created": 2, "updated": 2, "unchanged": 295, "conflicts": 0, "operations": 21}`; the plan before the edit was `{"created": 0, "updated": 0, "unchanged": 297, "conflicts": 0, "operations": 0}`. Created: `release-v0-9-0` and `aspect-ratio-setting`. Updated: Evidence of `issue-172-fsr-scaling-performance` and `ultrawide-fov-layout`. Apply, readback and the README item count (297 now, 299 after the apply) are for the maintainer's session.

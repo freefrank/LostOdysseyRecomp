@@ -1626,7 +1626,7 @@
         "Status": "Done",
         "Delivery": "Released",
         "Source key": "ultrawide-fov-layout",
-        "Evidence": "v0.6.7 published 2026-09-20T20:09:28Z (source f92c24d, CI 35533399325; Win ZIP 211105409 SHA-256 37232481…, Linux AppImage 220846584 SHA-256 de99f9ee…, sidecars/API digests match, 4 assets HTTP 200, manifest v0.6.7 clean). Adds in-game Graphics Widescreen toggle above Output resolution (1720x720, 2560x1080, 3440x1440, 3840x1600, 5120x2160; Off reverts 16:9) with nearest-height mapping (equidistant upper-tier tie), 5 languages, first-run sync, passing menu tests and 10/10 build. User verified and accepted delivery; Issue #17 closed. Exhaustive multi-GPU/scene coverage not claimed; future regressions track separately.",
+        "Evidence": "v0.6.7 published 2026-09-20T20:09:28Z (source f92c24d, CI 35533399325; Win ZIP 211105409 SHA-256 37232481…, Linux AppImage 220846584 SHA-256 de99f9ee…, sidecars/API digests match, 4 assets HTTP 200, manifest v0.6.7 clean). Adds in-game Graphics Widescreen toggle above Output resolution (1720x720, 2560x1080, 3440x1440, 3840x1600, 5120x2160; Off reverts 16:9) with nearest-height mapping (equidistant upper-tier tie), 5 languages, first-run sync, passing menu tests and 10/10 build. User verified and accepted delivery; Issue #17 closed. Exhaustive multi-GPU/scene coverage not claimed; future regressions track separately. Update 2026-10-08: v0.9.0 (PR #326) replaces the Widescreen switch with an Aspect ratio setting (Auto, 16:9, 21:9, 4:3); Release stays v0.6.7.",
         "Release": "v0.6.7"
       },
       "title": "Support ultrawide output and FOV changes",
@@ -3738,7 +3738,7 @@
         "Delivery": "Released",
         "Release": "v0.8.44",
         "Start date": "2026-10-03",
-        "Evidence": "Reported on v0.8.0 (RX 6600, 4K, GTAO): FSR Quality, Balanced and Performance all ran at about the same frame rate. PR #189 (shipped in v0.8.10) stopped recreating the SR images every frame; PR #250 (shipped in v0.8.44) cut one full-resolution copy and blend per frame; PR #305 (merged 2026-10-08T00:39:50Z as 26ad776c, shipped in v0.8.61, published 08:33:11Z, not accepted) folds the FSR encode into the composite and defers the restore resample (psvita, 12 W, 4K FSR Performance: 51.66 to 48.64 ms GPU). Measured on psvita (AMD) and, for #305, also checked with DLSS on an RTX 5080; not on the reporter's machine. The maintainer closed the Issue as completed on 2026-10-07 at 22:59:34 UTC; on 2026-10-08 the reporter was asked to rerun after the next release, which is v0.8.61; no reply is recorded. No reporter confirmation is recorded.",
+        "Evidence": "Reported on v0.8.0 (RX 6600, 4K, GTAO): FSR Quality, Balanced and Performance all ran at about the same frame rate. PR #189 (shipped in v0.8.10) stopped recreating the SR images every frame; PR #250 (shipped in v0.8.44) cut one full-resolution copy and blend per frame; PR #305 (merged 2026-10-08T00:39:50Z as 26ad776c, shipped in v0.8.61, published 08:33:11Z, not accepted) folds the FSR encode into the composite and defers the restore resample (psvita, 12 W, 4K FSR Performance: 51.66 to 48.64 ms GPU). Measured on psvita (AMD) and, for #305, also checked with DLSS on an RTX 5080; not on the reporter's machine. The maintainer closed the Issue as completed on 2026-10-07 at 22:59:34 UTC; on 2026-10-08 the reporter was asked to rerun on v0.8.61 and did (18:21 UTC: Native AA 24 fps, FSR Quality 38, Balanced 43, Performance 50), seeing no change beyond the margin of error. No reporter confirmation is recorded. Moving-only motion replay is scheduled for v1.0.0.",
         "Source key": "issue-172-fsr-scaling-performance",
         "Status": "Done"
       }
@@ -4109,6 +4109,37 @@
       },
       "title": "v1.0.0: Replay upscaler motion only for geometry that moved",
       "body_sha256": "1ce57d74cfd8b7dc82f2c33cc585ca35f6297c4124732ddbff20e6768bea7d7a"
+    },
+    "aspect-ratio-setting": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg_ebdI",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Graphics presentation",
+        "Status": "Done",
+        "Delivery": "Released",
+        "Release": "v0.9.0",
+        "Start date": "2026-10-08",
+        "Evidence": "PR #326 (merged 2026-10-08T16:59:18Z as 207f137c, shipped in v0.9.0, published 18:31:57Z, not accepted) replaces the Graphics Widescreen switch with Aspect ratio: Auto, 16:9, 21:9 or 4:3. Auto renders at the window's shape as before; the other modes frame the scene, HUD, menus and movies for that shape and show them centred with black bars, never stretched; frame generation stays off while bars show; a saved change applies without a restart; Android keeps Auto. Checked with LoMenuFlowTest, LoAspectLayoutTest, LoFramePlanTest, CPU and settings_menu contracts, Gitea checks on 5cfc3e26 and one psvita boot per mode (2560x1600, Proton Vulkan, Uhra). Not validated: the in-game Save path, other scenes, GPUs and platforms; no run with the v0.9.0 packages. No Issue is linked and no reporter confirmation is recorded.",
+        "Source key": "aspect-ratio-setting"
+      },
+      "title": "Replace the Widescreen switch with an Aspect ratio setting (PR #326)",
+      "body_sha256": "962e6c78d5ad449be90afec9b4f51b8a75e4634bfa8ef1b6afcb6ab79c9198ff"
+    },
+    "release-v0-9-0": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg_ebek",
+      "fields": {
+        "Kind": "Release",
+        "Area": "Release Engineering",
+        "Status": "Done",
+        "Delivery": "Released",
+        "Release": "v0.9.0",
+        "Start date": "2026-10-08",
+        "Target date": "2026-10-08",
+        "Evidence": "Published v0.9.0 at 2026-10-08T18:31:57Z: latest release, annotated tag at commit 8d33c146 on main, built by Gitea Actions run 511 (API id 904). The build jobs succeeded; the publish job failed on purpose at the package-set check because publication was on hold, and the release was published by hand with gh release edit. Assets: Windows ZIP 150,994,241 B (SHA-256 0a0c07ca...), AppImage 76,995,064 B (5bcd0eb1...), Flatpak 54,695,088 B (9a572a5d...), Android APK 45,768,558 B (2984417c...; CI-built) and macOS DMG 61,190,962 B (4b5bd0e0...; built on the maintainer's M1 Max from the tag, hdiutil verify valid, ad-hoc signature, uploaded by hand). Shader-pack contracts unchanged; no pack published. Published, not accepted: PRs #324 to #329 (one game change, #326); no game run with the v0.9.0 packages and no player acceptance is recorded.",
+        "Source key": "release-v0-9-0"
+      },
+      "title": "Publish the Aspect ratio setting in v0.9.0",
+      "body_sha256": "a315e58387624b8cc21a3b4c2b097c706a1720050382789364db5cd78bebc025"
     }
   },
   "project_id": "PVT_kwHOAAsUY84Biy1a"

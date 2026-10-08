@@ -3577,7 +3577,7 @@
         "Release": "v0.6.7",
         "Start date": null,
         "Target date": null,
-        "Evidence": "v0.6.7 published 2026-09-20T20:09:28Z (source f92c24d, CI 35533399325; Win ZIP 211105409 SHA-256 37232481…, Linux AppImage 220846584 SHA-256 de99f9ee…, sidecars/API digests match, 4 assets HTTP 200, manifest v0.6.7 clean). Adds in-game Graphics Widescreen toggle above Output resolution (1720x720, 2560x1080, 3440x1440, 3840x1600, 5120x2160; Off reverts 16:9) with nearest-height mapping (equidistant upper-tier tie), 5 languages, first-run sync, passing menu tests and 10/10 build. User verified and accepted delivery; Issue #17 closed. Exhaustive multi-GPU/scene coverage not claimed; future regressions track separately."
+        "Evidence": "v0.6.7 published 2026-09-20T20:09:28Z (source f92c24d, CI 35533399325; Win ZIP 211105409 SHA-256 37232481…, Linux AppImage 220846584 SHA-256 de99f9ee…, sidecars/API digests match, 4 assets HTTP 200, manifest v0.6.7 clean). Adds in-game Graphics Widescreen toggle above Output resolution (1720x720, 2560x1080, 3440x1440, 3840x1600, 5120x2160; Off reverts 16:9) with nearest-height mapping (equidistant upper-tier tie), 5 languages, first-run sync, passing menu tests and 10/10 build. User verified and accepted delivery; Issue #17 closed. Exhaustive multi-GPU/scene coverage not claimed; future regressions track separately. Update 2026-10-08: v0.9.0 (PR #326) replaces the Widescreen switch with an Aspect ratio setting (Auto, 16:9, 21:9, 4:3); Release stays v0.6.7."
       },
       "source_refs": [
         "https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.6",
@@ -7023,7 +7023,7 @@
         "Release": "v0.8.44",
         "Start date": "2026-10-03",
         "Target date": null,
-        "Evidence": "Reported on v0.8.0 (RX 6600, 4K, GTAO): FSR Quality, Balanced and Performance all ran at about the same frame rate. PR #189 (shipped in v0.8.10) stopped recreating the SR images every frame; PR #250 (shipped in v0.8.44) cut one full-resolution copy and blend per frame; PR #305 (merged 2026-10-08T00:39:50Z as 26ad776c, shipped in v0.8.61, published 08:33:11Z, not accepted) folds the FSR encode into the composite and defers the restore resample (psvita, 12 W, 4K FSR Performance: 51.66 to 48.64 ms GPU). Measured on psvita (AMD) and, for #305, also checked with DLSS on an RTX 5080; not on the reporter's machine. The maintainer closed the Issue as completed on 2026-10-07 at 22:59:34 UTC; on 2026-10-08 the reporter was asked to rerun after the next release, which is v0.8.61; no reply is recorded. No reporter confirmation is recorded."
+        "Evidence": "Reported on v0.8.0 (RX 6600, 4K, GTAO): FSR Quality, Balanced and Performance all ran at about the same frame rate. PR #189 (shipped in v0.8.10) stopped recreating the SR images every frame; PR #250 (shipped in v0.8.44) cut one full-resolution copy and blend per frame; PR #305 (merged 2026-10-08T00:39:50Z as 26ad776c, shipped in v0.8.61, published 08:33:11Z, not accepted) folds the FSR encode into the composite and defers the restore resample (psvita, 12 W, 4K FSR Performance: 51.66 to 48.64 ms GPU). Measured on psvita (AMD) and, for #305, also checked with DLSS on an RTX 5080; not on the reporter's machine. The maintainer closed the Issue as completed on 2026-10-07 at 22:59:34 UTC; on 2026-10-08 the reporter was asked to rerun on v0.8.61 and did (18:21 UTC: Native AA 24 fps, FSR Quality 38, Balanced 43, Performance 50), seeing no change beyond the margin of error. No reporter confirmation is recorded. Moving-only motion replay is scheduled for v1.0.0."
       }
     },
     {
@@ -7506,6 +7506,54 @@
         "Area": "Graphics performance",
         "Source key": "sr-motion-replay-moving-only"
       }
+    },
+    {
+      "key": "aspect-ratio-setting",
+      "title": "Replace the Widescreen switch with an Aspect ratio setting (PR #326)",
+      "body": "<!-- lo-project:aspect-ratio-setting -->\n\n[PR #326](https://github.com/freefrank/LostOdysseyRecomp/pull/326)（2026-10-08T16:59:18Z 合并为 `207f137c`，没有关联 Issue）把图形设置里的“宽屏”开关换成“画面比例”：自动、16:9、21:9 或 4:3。v0.9.0 于 2026-10-08T18:31:57Z 发布并包含它；发布不等于验收。\n\n## Scope and completion criteria\n\n- [x] “自动”（默认）按窗口的形状渲染，和之前一样（更宽或更高的输出用 Hor+）\n- [x] 16:9、21:9（64:27）和 4:3 把场景、HUD、菜单和视频按该比例排版，居中显示并加黑边，从不拉伸；窗口与该比例相差 2% 以内时铺满、不加黑边；4:3 缩窄水平视野（垂直视野与 16:9 相同）\n- [x] 出现黑边时帧生成保持关闭（它的运动数据只覆盖画面部分）\n- [x] 保存后立即生效，不需要重启；输出分辨率列表跟随比例（新增 4:3 列表）；`settings.ini` 新增 `aspect_ratio`（0 到 3），没有该键的设置在已保存分辨率为 21:9 形状时迁移为 21:9，否则为自动；Android 保持“自动”（该行隐藏，和原来的“宽屏”一样）\n- [x] 已在 v0.9.0 发布\n- [ ] 取得玩家对 v0.9.0 的确认\n- [ ] 补测：游戏内的保存路径、战斗、视频和帧生成在黑边下的表现，以及其他 GPU 和平台\n\n## Validation and acceptance\n\nPR 正文：`LoMenuFlowTest`、`settings_menu` 和 CPU contracts（33/33）、`LoAspectLayoutTest`、`LoFramePlanTest`、`LoDlssStatusLogTest`、`LoRenderResolutionTest` 和 `LoNativeDlaaTest`；Gitea 检查在 `5cfc3e26` 上通过；psvita（2560×1600，Proton Vulkan）上在 Uhra 每种比例各启动一次，黑边和视野符合预期，HUD 在画面内。游戏内的保存路径没有运行过。没有用 v0.9.0 的安装包运行过游戏，也没有玩家确认。\n\nstage_detail: Published; not accepted\n\n## Sources\n\n- [PR #326](https://github.com/freefrank/LostOdysseyRecomp/pull/326)\n- [v0.9.0 发布页](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.0)\n- docs/STATUS.md（“Aspect ratio setting”一行）\n",
+      "issue_url": null,
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Graphics presentation",
+        "Status": "Done",
+        "Delivery": "Released",
+        "Release": "v0.9.0",
+        "Start date": "2026-10-08",
+        "Target date": null,
+        "Evidence": "PR #326 (merged 2026-10-08T16:59:18Z as 207f137c, shipped in v0.9.0, published 18:31:57Z, not accepted) replaces the Graphics Widescreen switch with Aspect ratio: Auto, 16:9, 21:9 or 4:3. Auto renders at the window's shape as before; the other modes frame the scene, HUD, menus and movies for that shape and show them centred with black bars, never stretched; frame generation stays off while bars show; a saved change applies without a restart; Android keeps Auto. Checked with LoMenuFlowTest, LoAspectLayoutTest, LoFramePlanTest, CPU and settings_menu contracts, Gitea checks on 5cfc3e26 and one psvita boot per mode (2560x1600, Proton Vulkan, Uhra). Not validated: the in-game Save path, other scenes, GPUs and platforms; no run with the v0.9.0 packages. No Issue is linked and no reporter confirmation is recorded."
+      },
+      "source_refs": [
+        "https://github.com/freefrank/LostOdysseyRecomp/pull/326",
+        "https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.0",
+        "docs/STATUS.md"
+      ],
+      "source_lines": [],
+      "record_type": "backlog"
+    },
+    {
+      "key": "release-v0-9-0",
+      "title": "Publish the Aspect ratio setting in v0.9.0",
+      "body": "<!-- lo-project:release-v0-9-0 -->\n\nv0.9.0 于 2026-10-08T18:31:57Z 发布。它不是草稿或预发布版本，是当前最新的正式版本，包含 v0.8.61 之后进入 tag 的全部工作（PR #324 到 #329）。发布不等于验收：没有玩家验收，维护者尚未验收 v0.9.0，也没有用 v0.9.0 的安装包运行过游戏。\n\n## Scope and completion criteria\n\n- [x] 带注释的 tag `v0.9.0`（tag 对象 `83c48bb5`）指向 `main` 上的提交 `8d33c146`（`docs: prepare v0.9.0 release notes`）；`6cbb17b8` 先把源码版本号改为 0.9.0\n- [x] Gitea Actions [run 511](https://git.zkx.ca/freefrank/LostOdysseyRecomp/actions/runs/511)（API id 904，链接用 run 编号）于 18:02:04Z 随 tag 推送创建：创建草稿、Android、Windows 和 Linux 四个 job（加上准备 FSR Vulkan 构建输入的 job）成功；最后的发布 job 在 “Verify package set and publish draft” 一步按预期失败（维护者要求暂缓发布，草稿里临时加了 `HOLD.txt`，这是维护者会话的说法，附件在发布前已移除，GitHub 上看不到）；失败日志已读取，断言报错，但日志没有列出多出的附件名\n- [x] 18:31:57Z 手动发布：`gh release edit v0.9.0 --draft=false --latest`（会话的说法；GitHub 显示非草稿、非预发布、Latest），从推送 tag 到公开约 30 分钟，其中构建约 23 分钟\n- [x] macOS 磁盘映像（DMG）在维护者的 M1 Max 上从 tag 构建（`mac-release-sdl3.sh v0.9.0 v0.9.0 tag package`，增量构建 37 秒），手工上传到草稿（GitHub 记录 18:05:33Z），早于 CI 安装包：`hdiutil verify` 有效，`codesign --verify` 通过（ad hoc 签名），`CFBundleShortVersionString` 为 0.9.0，Mac 上和上传副本的 SHA-256 一致（维护者会话的说法，输出没有重新运行）\n- [x] 着色器包契约不变（d3d12 `613e43ca…`、vulkan `bd9404c9…`），没有发布新包；tag 构建上 Linux job 的 “Check published shader packs” 步骤成功，日志列出这两个契约；维护者说 `publish_shader_packs.py --check` 在 `main` 的 `83c43d0f` 上于 Mac 通过\n- [x] 发布页说明与 CHANGELOG 的 v0.9.0 一节一致（用 `tools/release/extract_release_notes.py` 比较，只差末尾换行）\n- [ ] 取得玩家对 v0.9.0 的确认\n- [ ] 维护者验收 v0.9.0\n\n## Delivery verification\n\n发布页 [v0.9.0](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.0) 的五个附件（大小和 SHA-256 为 GitHub API 在 2026-10-08 发布后读取的值）：\n\n| 附件 | 字节数 | SHA-256 |\n| --- | ---: | --- |\n| `LostOdysseyRecomp-windows-x64-v0.9.0.zip` | 150,994,241 | `0a0c07caf3b21b041ac9a1a34be59272f27985ce7270f71531bcbbb0b320379b` |\n| `LostOdysseyRecomp-linux-x64-v0.9.0.AppImage` | 76,995,064 | `5bcd0eb1d46da100a5ec7a787eb9812bfb7e8410a006f5fbf692342477bf5e5d` |\n| `LostOdysseyRecomp-linux-x64-v0.9.0.flatpak` | 54,695,088 | `9a572a5d3895067c75e8800002b0a7d319e9f55a08e5f09ca138bc3b65b25724` |\n| `LostOdysseyRecomp-android-arm64-v0.9.0.apk` | 45,768,558 | `2984417c9b44ed13b772cb6c529e9a54744c12759cd765feb5b32c4c3dbadf25` |\n| `LostOdysseyRecomp-macos-arm64-v0.9.0.dmg` | 61,190,962 | `4b5bd0e055795257ebf28c3c6ec2b70afe5f619ed83e38b0a986e1ec669f0700` |\n\nDMG 的摘要与 Mac 和上传副本上的值一致（维护者会话的说法）。四个 CI 安装包没有下载、解包或运行过。APK 由 CI 构建，用项目的调试密钥库签名，是实验性的。\n\n## 本版本包含的工作\n\n`git log --first-parent v0.8.61..v0.9.0` 列出 9 个提交：6 个已合并的 PR（#324 到 #329，全部是 tag 提交的祖先）和 3 个非 PR 提交（`5d1958b4` 删除 `HANDOFF.md`、`6cbb17b8` 源码版本号、`8d33c146` 发布说明）：\n\n- 游戏：[PR #326](https://github.com/freefrank/LostOdysseyRecomp/pull/326)（2026-10-08T16:59:18Z 合并，“画面比例”设置取代“宽屏”开关），这是 CHANGELOG 里唯一的一条\n- 不在游戏行为里：v0.8.61 的发布记录和 Project 同步（#324、#325）、取消独立 TAA 移除的 Project 记录（#329）、Issue 分类提示和 bug 模板只索取运行日志（#327、#328）\n\nPR #331（把只重放移动物体的运动数据排进 v1.0.0）在 tag 之后、发布之前合并（18:28:56Z），不在这个版本里。\n\n## Validation and acceptance\n\n没有用 v0.9.0 安装包本身做过游戏运行，macOS 映像也没有从下载安装。发布前的验证是 PR 层面的：#326 的 Gitea PR 检查、本地测试和 psvita 上每种比例各启动一次；游戏内的保存路径没有运行过。发布不是玩家确认，也不是维护者验收。\n\nstage_detail: Published; not accepted\n\n## Sources\n\n- [v0.9.0 发布页](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.0)\n- [v0.8.61…v0.9.0 对比](https://github.com/freefrank/LostOdysseyRecomp/compare/v0.8.61...v0.9.0)\n- [Gitea Actions run 511](https://git.zkx.ca/freefrank/LostOdysseyRecomp/actions/runs/511)\n- [CHANGELOG.md](https://github.com/freefrank/LostOdysseyRecomp/blob/8d33c146e9f1800493b4bc02d3be97d4fbf4cb7d/CHANGELOG.md)\n",
+      "issue_url": null,
+      "fields": {
+        "Kind": "Release",
+        "Area": "Release Engineering",
+        "Status": "Done",
+        "Delivery": "Released",
+        "Release": "v0.9.0",
+        "Start date": "2026-10-08",
+        "Target date": "2026-10-08",
+        "Evidence": "Published v0.9.0 at 2026-10-08T18:31:57Z: latest release, annotated tag at commit 8d33c146 on main, built by Gitea Actions run 511 (API id 904). The build jobs succeeded; the publish job failed on purpose at the package-set check because publication was on hold, and the release was published by hand with gh release edit. Assets: Windows ZIP 150,994,241 B (SHA-256 0a0c07ca...), AppImage 76,995,064 B (5bcd0eb1...), Flatpak 54,695,088 B (9a572a5d...), Android APK 45,768,558 B (2984417c...; CI-built) and macOS DMG 61,190,962 B (4b5bd0e0...; built on the maintainer's M1 Max from the tag, hdiutil verify valid, ad-hoc signature, uploaded by hand). Shader-pack contracts unchanged; no pack published. Published, not accepted: PRs #324 to #329 (one game change, #326); no game run with the v0.9.0 packages and no player acceptance is recorded."
+      },
+      "source_refs": [
+        "https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.0",
+        "https://github.com/freefrank/LostOdysseyRecomp/compare/v0.8.61...v0.9.0",
+        "https://git.zkx.ca/freefrank/LostOdysseyRecomp/actions/runs/511",
+        "8d33c146e9f1800493b4bc02d3be97d4fbf4cb7d",
+        "CHANGELOG.md"
+      ],
+      "source_lines": [],
+      "record_type": "backlog"
     }
   ]
 }
