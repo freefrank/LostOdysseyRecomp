@@ -2484,10 +2484,9 @@ namespace gpu::video
             startupWatch.Step("swap chain creation");
 #ifdef _WIN32
             // The swap chain takes the window's current size, so a resize the
-            // startup window-mode apply requested has nothing left to do. NVIDIA's
-            // Vulkan driver, presenting through DXGI, crashed right after that
-            // same-size rebuild at the first present (#323). Later window events
-            // still request one, and needsResize() still compares the sizes.
+            // startup window-mode apply requested has nothing left to do and would
+            // only rebuild it at the same size on the first present. Later window
+            // events still request one, and needsResize() still compares the sizes.
             g_windowResizeRequested = false;
 #endif
             g_swapChain = g_queue->createSwapChain(SwapChainDescription());

@@ -40,6 +40,7 @@
 #ifdef _WIN32
 #include <timeapi.h>
 #include <shellapi.h>
+#include <fstream>
 #endif
 #include <os/host_scheduling.h>
 #include <os/main_thread.h>
@@ -92,6 +93,39 @@ static std::filesystem::path ExecutableDirectory()
 #endif
     return std::filesystem::current_path();
 }
+
+#ifdef _WIN32
+// ReShade and similar tools install their own dxgi.dll beside the exe for
+// D3D12. Vulkan never uses it, but SDL3 loads DXGI.DLL by name at video init,
+// which picks that copy, and NVIDIA's Vulkan driver then presents through it
+// and crashes (#323). On Vulkan, load the system copy first: later loads by
+// name bind to the module already loaded. Runs before any SDL window.
+static void PreferSystemDxgiOnVulkan(const std::filesystem::path& executableDirectory)
+{
+    std::error_code error;
+    const auto local = executableDirectory / "dxgi.dll";
+    if (!std::filesystem::exists(local, error)) return;
+    auto configured = settings::GraphicsBackend::D3D12;
+    std::ifstream input(os::user_paths::SettingsPath());
+    for (std::string line; std::getline(input, line);)
+        if (line.rfind("graphics_backend=", 0) == 0)
+            configured = settings::GraphicsBackend(std::strtoul(line.c_str() + 17, nullptr, 10));
+    if (gpu::backend::Requested(configured, getenv("LO_GRAPHICS_API")) != gpu::backend::Backend::Vulkan) return;
+    const HMODULE dxgi = LoadLibraryExW(L"dxgi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    wchar_t loaded[MAX_PATH]{};
+    if (!dxgi || !GetModuleFileNameW(dxgi, loaded, MAX_PATH)) {
+        LOG_WARNING("Vulkan: system dxgi.dll could not be loaded first (error {}); {} may load instead",
+            GetLastError(), FileSystem::PathUtf8(local));
+        return;
+    }
+    if (std::filesystem::equivalent(loaded, local, error))
+        LOG_WARNING("Vulkan: {} (ReShade or another D3D tool) was already loaded and may crash Vulkan presentation",
+            FileSystem::PathUtf8(local));
+    else
+        LOG_INFO("Vulkan: {} (ReShade or another D3D tool) is not loaded; it only works with Direct3D 12",
+            FileSystem::PathUtf8(local));
+}
+#endif
 
 static settings::game_path::Resolution FindGameRoot(
     const std::filesystem::path& executableDirectory,
@@ -298,6 +332,9 @@ int main(int argc, char* argv[])
         LOG_INFO("LO_* switches:{}", switches.empty() ? " (none)" : switches.c_str());
     }
     os::diagnostics::LogStartupEnvironment();
+#ifdef _WIN32
+    PreferSystemDxgiOnVulkan(executableDirectory);
+#endif
 
 #if defined(_WIN32) || defined(__linux__) || defined(__APPLE__)
     // Check for a newer runtime before opening the content importer or setup.
