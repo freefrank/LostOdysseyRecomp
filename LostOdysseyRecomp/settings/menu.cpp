@@ -633,6 +633,8 @@ std::wstring FgNotice()
     return text;
 }
 static_assert(int(GraphicsRow::Save) + 1 == int(GraphicsRow::Count));
+// Only Graphics scrolls; the other tabs fit the visible rows (menu.h layout rules).
+static_assert(GameRowCount <= kMenuVisibleRows && AudioRowCount <= kMenuVisibleRows && SystemRowCount <= kMenuVisibleRows);
 void Publish(uint8_t *base, uint32_t config)
 {
 #if LO_PLATFORM_ANDROID
@@ -690,7 +692,6 @@ void Publish(uint8_t *base, uint32_t config)
         addSlider(L"Vibration", L"震動", edit.vibrationPercent);
         addAction(L"Restore game defaults", L"恢復遊戲預設設定", Tr(L"Restore", L"恢復"));
         addAction(L"Quit to Main Menu", L"退出到主選單", Tr(L"Return", L"返回"));
-        addAction(L"Import discs & DLC", L"匯入光碟與 DLC", Tr(L"Open", L"開啟"));
     }
     else if (tab == 1)
     {
@@ -777,12 +778,12 @@ void Publish(uint8_t *base, uint32_t config)
                    {L"1×", L"2×", L"4×"}, graphics_menu::ShadowResolutionChoice(edit)));
         placeGraphics(GraphicsRow::DynamicShadows, makeChoices(L"Dynamic shadows", L"動態陰影", onOff(), edit.dynamicShadows ? 0 : 1));
 #if LO_PLATFORM_MACOS
-        std::vector<std::wstring> aaChoices{Tr(L"Off", L"關"), L"FXAA", L"SMAA", Tr(L"TAA (Experimental)", L"TAA（實驗性）"), L"MetalFX Temporal"};
+        std::vector<std::wstring> aaChoices{Tr(L"Off", L"關"), L"FXAA", L"SMAA", L"TAA", L"MetalFX Temporal"};
 #elif LO_PLATFORM_ANDROID
-        std::vector<std::wstring> aaChoices{Tr(L"Off", L"關"), L"FXAA", L"SMAA", Tr(L"TAA (Experimental)", L"TAA（實驗性）")};
+        std::vector<std::wstring> aaChoices{Tr(L"Off", L"關"), L"FXAA", L"SMAA", L"TAA"};
         if (graphics_menu::AndroidFsrAvailable) aaChoices.emplace_back(L"FSR 3.1");
 #else
-        std::vector<std::wstring> aaChoices{Tr(L"Off", L"關"), L"FXAA", L"SMAA", Tr(L"TAA (Experimental)", L"TAA（實驗性）"), L"DLSS", L"FSR 3.1", L"XeSS"};
+        std::vector<std::wstring> aaChoices{Tr(L"Off", L"關"), L"FXAA", L"SMAA", L"TAA", L"DLSS", L"FSR 3.1", L"XeSS"};
 #endif
         aaChoices.resize(graphics_menu::AaChoiceCount);
         placeGraphics(GraphicsRow::AntiAliasing, makeChoices(L"Anti-aliasing / Upscaling", L"抗鋸齒 / 超解析度",
@@ -834,11 +835,8 @@ void Publish(uint8_t *base, uint32_t config)
         placeGraphics(GraphicsRow::RgbRange, makeChoices(L"RGB Range", L"RGB 範圍",
                    {Tr(L"Off", L"關"), Tr(L"Expanded", L"擴展")}, edit.expandRgbRange ? 1 : 0));
         std::vector<std::wstring> frameRates;
-        for (const auto fps : gpu::frame_rate::kNativeRates) {
-            auto label = std::to_wstring(fps) + L" FPS";
-            if (fps > 30) label += Tr(L" (experimental)", L"（實驗性）");
-            frameRates.push_back(std::move(label));
-        }
+        for (const auto fps : gpu::frame_rate::kNativeRates)
+            frameRates.push_back(std::to_wstring(fps) + L" FPS");
         placeGraphics(GraphicsRow::FrameRate, makeChoices(L"Frame rate", L"影格率",
                    std::move(frameRates), gpu::frame_rate::MenuIndex(edit.frameRate)));
 #if LO_PLATFORM_MACOS
@@ -893,6 +891,7 @@ void Publish(uint8_t *base, uint32_t config)
         addChoices(L"Game language", L"遊戲語言", std::move(gameLanguages), GameLanguageIndex(edit.gameLanguage));
         addChoices(L"Automatic updates", L"自動更新", onOff(), edit.automaticUpdates ? 0 : 1);
         next.rows.push_back({gpu::taa_collection::Label(edit.uiLanguage), gpu::taa_collection::Enabled() ? Tr(L"On", L"開") : Tr(L"Off", L"關"), true, {}, 0});
+        addAction(L"Import discs & DLC", L"匯入光碟與 DLC", Tr(L"Open", L"開啟"));
         addAction(L"Save settings", L"儲存設定", Tr(L"Save", L"儲存"));
     }
     // Keep the focused row inside the visible window. Scroll persists per tab
@@ -928,7 +927,7 @@ void Publish(uint8_t *base, uint32_t config)
     if (tab == 0 && row == GamePromptRow)
         next.help = Tr(L"Which button icons the game shows. Auto follows the controller you use.",
                        L"遊戲顯示的按鍵圖示。自動會跟隨你使用的控制器。");
-    if (tab == 0 && row == GameImportRow)
+    if (tab == 3 && row == SystemImportRow)
         next.help = Tr(L"Close the game to import selected discs or DLC again. Other content and saves stay intact.",
                        L"關閉遊戲並重新匯入所選光碟或 DLC；其他內容與存檔保留。");
     if (tab == 1 && row == AudioOutputRow && status.empty())
@@ -1099,8 +1098,8 @@ void Publish(uint8_t *base, uint32_t config)
                 next.help = Tr(L"Includes the rendered frame. Available multipliers depend on the GPU and driver.",
                                L"倍數包含原始渲染影格。可用倍數取決於顯示卡與驅動程式。");
             else if (edit.graphicsBackend == GraphicsBackend::Metal)
-                next.help = Tr(L"Experimental MetalFX frame generation uses 2× on supported GPUs with macOS 26 or later.",
-                               L"實驗性 MetalFX 影格生成在 macOS 26 或更新版本及支援的 GPU 上使用 2×。");
+                next.help = Tr(L"MetalFX frame generation uses 2× on supported GPUs with macOS 26 or later.",
+                               L"MetalFX 影格生成在 macOS 26 或更新版本及支援的 GPU 上使用 2×。");
             else if (edit.graphicsBackend == GraphicsBackend::Vulkan)
                 next.help = dlss && fsr
                     ? Tr(L"Vulkan supports DLSS fixed multipliers and FSR 2×. Enabling or changing the FG provider requires a restart.",
@@ -2421,7 +2420,7 @@ PPC_FUNC(sub_822F19B0)
         mainMenuChoice = 1; // Require an explicit selection of Return; Back always cancels.
         status.clear();
     }
-    if ((input & 0x1000) && tab == 0 && row == GameImportRow)
+    if ((input & 0x1000) && tab == 3 && row == SystemImportRow)
     {
         importPrompt = true;
         importChoice = 1;
@@ -2489,7 +2488,7 @@ PPC_FUNC(sub_822F19B0)
             restartAfter = languages;
         }
         else
-            status = SaveConfig(languages) ? Tr(L"Language settings saved.", L"語言設定已儲存。")
+            status = SaveConfig(languages) ? Tr(L"System settings saved.", L"系統設定已儲存。")
                                            : Tr(L"Could not save settings.", L"無法儲存設定。");
     }
     // Back in the same poll wins, as it does over every other action.

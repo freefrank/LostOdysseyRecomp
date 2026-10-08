@@ -28,7 +28,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - The Settings menu fades in when it opens and eases tab switches, cursor moves, value changes and prompts instead of cutting; input still responds at once (#151).
 - New Motion blur and Dynamic shadows switches in the graphics settings turn off the game's motion blur and real-time shadows (after boma's Xenia Canary patches).
 - A Button prompts setting in the Gameplay tab chooses Auto, Xbox or PlayStation button icons; Auto follows the controller you use (#275).
-- Settings menu tidied: Vibration moved to the Gameplay tab under Button prompts, the Language tab is now System with the TAA shader collection switch above Save settings, and Dynamic shadows sits under Shadow resolution.
+- Settings menu tidied: Vibration moved to the Gameplay tab under Button prompts; the Language tab is now System, with the TAA shader collection switch and Import discs & DLC above Save settings; Dynamic shadows sits under Shadow resolution; TAA, frame rates above 30 FPS and MetalFX frame generation are no longer marked experimental.
 
 ### 简体中文
 
@@ -52,7 +52,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - 设置菜单打开时会淡入，切换分类、移动光标、修改选项和弹出提示时改为平滑过渡，不再生硬跳变；按键仍然立即响应（#151）。
 - 图形设置新增“动态模糊”和“动态阴影”开关，可关闭游戏的动态模糊和实时阴影（参照 boma 的 Xenia Canary 补丁）。
 - 玩法页新增“按键提示”设置，可选自动、Xbox 或 PlayStation 按键图标；自动会跟随你使用的控制器（#275）。
-- 设置菜单重新整理：“震动”移到“游戏”页的“按键提示”下方，“语言”页改名为“系统”，“TAA 着色器收集”开关移到“保存设置”上方，“动态阴影”移到“阴影分辨率”下方。
+- 设置菜单重新整理：“震动”移到“游戏”页的“按键提示”下方；“语言”页改名为“系统”，“TAA 着色器收集”开关和“导入光盘与 DLC”放在“保存设置”上方；“动态阴影”移到“阴影分辨率”下方；TAA、30 FPS 以上的帧率和 MetalFX 帧生成不再标为实验性。
 
 ## [v0.8.53](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.8.53) — 2026-10-07
 

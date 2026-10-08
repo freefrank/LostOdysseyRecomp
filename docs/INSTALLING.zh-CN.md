@@ -12,8 +12,8 @@
 - [Linux 安装包](#running-on-linux)
   - [AppImage](#appimage)
   - [Flatpak](#flatpak)
-- [macOS（Apple Silicon，实验性）](#macos)
-- [Android（实验性）](#android)
+- [macOS（Apple Silicon）](#macos)
+- [Android](#android)
 - [首次设置和普通设置](#首次设置和普通设置)
   - [着色器准备](#shader-preparation)
 - [文件位置](#file-locations)
@@ -59,7 +59,7 @@
 
 ## 追加或替换光盘和 DLC
 
-从**设置 → 游戏 → 导入光盘与 DLC**（Settings → Gameplay → Import discs & DLC）重新打开导入器。选择要添加或替换的光盘或 DLC，检查结果后确认。其他光盘、存档和设置保持不变。DLC 可以直接选择，也可以放在扫描的文件夹里；下载包不含 DLC。
+从**设置 → 系统 → 导入光盘与 DLC**（Settings → System → Import discs & DLC）重新打开导入器。选择要添加或替换的光盘或 DLC，检查结果后确认。其他光盘、存档和设置保持不变。DLC 可以直接选择，也可以放在扫描的文件夹里；下载包不含 DLC。
 
 导入器只复制文件，不会移动或修改原文件；确认游戏可用前请保留原始文件。导入取消或失败时重新导入即可。
 
@@ -108,7 +108,7 @@ flatpak run io.github.freefrank.LostOdysseyRecomp
 
 <a id="macos"></a>
 
-## macOS（Apple Silicon，实验性）
+## macOS（Apple Silicon）
 
 需要 macOS 15 或更高版本的 Apple Silicon Mac。应用未经公证，macOS 会拦截首次启动。
 
@@ -123,7 +123,7 @@ flatpak run io.github.freefrank.LostOdysseyRecomp
 
 <a id="android"></a>
 
-## Android（实验性）
+## Android
 
 需要支持 Vulkan 的 64 位 Android 8.0 或更高版本设备，四张光盘约需 20 GB 空闲空间。
 
@@ -177,8 +177,8 @@ Windows 上，首次设置页面用来选择界面语言、游戏语言和图形
 | Windows ZIP | 全部在 `LostOdysseyRecomp.exe` 旁边：`save/`、`profile/`、`cache/`、`logs/`、`settings.ini`、`game-path.txt`，导入的游戏在 `game/`。 |
 | Linux AppImage | 存档、个人配置、缓存和游戏：`~/.local/share/lost-odyssey-recomp/`。设置：`~/.config/lost-odyssey-recomp/`。日志：`~/.local/state/lost-odyssey-recomp/logs/`。 |
 | Linux Flatpak | 在 `~/.var/app/io.github.freefrank.LostOdysseyRecomp/` 下：存档、个人配置、缓存和游戏在 `data/`（沙盒内为 `/var/data`）；设置在 `config/lost-odyssey-recomp/`；日志在 `.local/state/lost-odyssey-recomp/logs/`。 |
-| macOS（实验性） | 存档、个人配置、缓存、游戏和设置：`~/Library/Application Support/LostOdysseyRecomp/`。日志：`~/Library/Logs/LostOdysseyRecomp/logs/`。 |
-| Android（实验性） | 游戏：`Android/data/io.github.freefrank.lostodyssey/files/game/`（或在 **Game folder** 页面选择的文件夹）。日志：`Android/data/io.github.freefrank.lostodyssey/files/logs/`。存档和设置保存在应用内部；用 **CTRL → Saves** 导出和导入存档。 |
+| macOS | 存档、个人配置、缓存、游戏和设置：`~/Library/Application Support/LostOdysseyRecomp/`。日志：`~/Library/Logs/LostOdysseyRecomp/logs/`。 |
+| Android | 游戏：`Android/data/io.github.freefrank.lostodyssey/files/game/`（或在 **Game folder** 页面选择的文件夹）。日志：`Android/data/io.github.freefrank.lostodyssey/files/logs/`。存档和设置保存在应用内部；用 **CTRL → Saves** 导出和导入存档。 |
 
 渲染捕获保存在 `captures/`，Mod 放在 `mods/`：Windows ZIP 都在程序旁边；其他安装包的捕获在设置目录，Mod 在数据目录。下载的着色器放在 `shaders/`，位置和 Mod 相同。
 
@@ -242,7 +242,7 @@ LostOdysseyRecomp.app/Contents/MacOS/LostOdysseyRecomp --game ~/Games/LostOdysse
 | `LO_GRAPHICS_API` | Windows 上为 `d3d12` 或 `vulkan`。 |
 | `LO_FPS` | 帧率上限，0 到 1000；`0` 表示不限制。 |
 | `LO_FG_PROVIDER`、`LO_FG_MODE`、`LO_FG_MULTIPLIER`、`LO_FG_TARGET_FPS` | 插帧：`off`/`dlss`/`fsr`/`xess`；`off`/`fixed`/`dynamic`；2–6 倍；目标帧率（[详情](notes/vulkan-fg-fsr4-metalfx.md)）。 |
-| `LO_OPTISCALER_PATH` | 实验性，仅 Windows：自备 `OptiScaler.dll` 的完整路径（[配置方法](notes/vulkan-fg-fsr4-metalfx.md#optional-optiscaler-loading-on-windows)）。 |
+| `LO_OPTISCALER_PATH` | 仅 Windows：自备 `OptiScaler.dll` 的完整路径（[配置方法](notes/vulkan-fg-fsr4-metalfx.md#optional-optiscaler-loading-on-windows)）。 |
 | `LO_NO_UPDATE` | 设为 `0` 以外的任何值即跳过更新检查。 |
 | `LO_PROFILE_DIR`、`LO_SHADER_CACHE_DIR`、`LO_MODS_DIR` | 使用其他个人配置、着色器缓存或 Mod 目录。`LO_SHADER_CACHE_DIR` 设为空值会关闭着色器缓存。 |
 | `LO_MODS` | `0` 或 `false` 关闭 Mod。 |

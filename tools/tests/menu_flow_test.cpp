@@ -334,6 +334,9 @@ void CheckBr03DlssMenu(uint8_t* base)
     Require(settings::snapshot.notice == needsVulkan, "D3D12 DLSS shows Vulkan restart");
     Require(settings::snapshot.rows.size() == size_t(GraphicsRow::Count), "BR-03 keeps every graphics row");
     Require(settings::snapshot.rows[int(GraphicsRow::AntiAliasing)].enabled && settings::snapshot.rows[int(GraphicsRow::AntiAliasing)].choices.size() == 6, "DLSS and FSR choices stay enabled on D3D12");
+    Require(settings::snapshot.rows[int(GraphicsRow::AntiAliasing)].choices[3] == L"TAA" &&
+            settings::snapshot.rows[int(GraphicsRow::FrameRate)].choices.back().find(L"(") == std::wstring::npos,
+            "TAA and frame-rate choices carry no experimental label");
     Require(!settings::snapshot.rows[int(GraphicsRow::DlssQuality)].hidden && settings::snapshot.rows[int(GraphicsRow::DlssQuality)].enabled, "quality row stays available");
     Require(settings::snapshot.rows[int(GraphicsRow::Backend)].enabled && settings::snapshot.rows[int(GraphicsRow::Backend)].choices.size() == 3, "backend choices stay available");
     const auto& shadow = settings::snapshot.rows[int(GraphicsRow::ShadowResolution)];
@@ -1240,6 +1243,8 @@ int main(int argc, char** argv)
                     "System Save does not apply a pending Graphics FG change");
             Require(settings::edit.frameGenerationProvider == Provider::Fsr,
                     "System Save keeps the unsaved FG selection");
+            Require(settings::status == (settings::edit.uiLanguage == 4 ? L"系统设置已保存。" : L"System settings saved."),
+                    "System Save acknowledges with the System page name");
 
             settings::tab = 0;
             settings::row = 0;
@@ -1490,16 +1495,22 @@ int main(int argc, char** argv)
             settings::row = settings::GameMainMenuRow;
             settings::edit.uiLanguage = 0;
             settings::pending = 2; Tick(base);
-            // Twelve Gameplay rows: the last action scrolls the list by one row.
-            Require(settings::row == settings::GameImportRow && settings::snapshot.scroll == 1 &&
-                    settings::snapshot.rows.size() == size_t(settings::GameRowCount) &&
-                    settings::snapshot.rows[settings::GameImportRow].name == L"Import discs & DLC" &&
-                    settings::snapshot.rows[settings::GameImportRow].value == L"Open" &&
-                    settings::graphics_menu::IsAction(0, settings::GameImportRow),
-                    "gamepad reaches visible importer action after Main Menu");
+            Require(settings::row == 0 && settings::snapshot.scroll == 0 &&
+                    settings::snapshot.rows.size() == size_t(settings::GameRowCount),
+                    "Gameplay ends with Quit to Main Menu and fits without scrolling");
+            settings::tab = 3;
+            settings::row = settings::SystemCollectionRow;
+            settings::pending = 2; Tick(base);
+            Require(settings::row == settings::SystemImportRow && settings::snapshot.scroll == 0 &&
+                    settings::snapshot.rows.size() == size_t(settings::SystemRowCount) &&
+                    settings::snapshot.rows[settings::SystemImportRow].name == L"Import discs & DLC" &&
+                    settings::snapshot.rows[settings::SystemImportRow].value == L"Open" &&
+                    settings::snapshot.rows[settings::SystemSaveRow].name == L"Save settings" &&
+                    settings::graphics_menu::IsAction(3, settings::SystemImportRow),
+                    "gamepad reaches the importer action on System, just before Save settings");
             settings::pending = 8; Tick(base);
             Require(!settings::importPrompt && !settings::restart::Requested(), "right arrow cannot launch importer");
-            settings::PointerClick(500, float(150 + (settings::GameImportRow - settings::snapshot.scroll) * 43 + 20), false);
+            settings::PointerClick(500, float(150 + (settings::SystemImportRow - settings::snapshot.scroll) * 43 + 20), false);
             Tick(base);
             Require(settings::importPrompt && settings::snapshot.dialogSelection == 1 &&
                     settings::snapshot.dialogChoices == std::vector<std::wstring>{L"Open importer", L"Cancel"} &&
@@ -1516,7 +1527,7 @@ int main(int argc, char** argv)
             {
                 settings::edit.uiLanguage = language;
                 settings::pending = 0; Tick(base);
-                Require(settings::snapshot.rows[settings::GameImportRow].name == name, "translated importer action");
+                Require(settings::snapshot.rows[settings::SystemImportRow].name == name, "translated importer action");
             }
             settings::edit.uiLanguage = 0;
             settings::pending = 0; Tick(base);

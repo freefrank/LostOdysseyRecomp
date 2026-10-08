@@ -150,7 +150,7 @@ struct Setup
         const int backend = selection(2), mode = selection(4), aa = selection(5);
         items(2, {L"Direct3D 12", L"Vulkan", Translate(config.uiLanguage, L"Direct3D 11 (unsupported)", L"Direct3D 11（尚未支援）")}, backend);
         items(4, {tr(L"Windowed", L"視窗"), tr(L"Fullscreen", L"全螢幕")}, mode);
-        items(5, {tr(L"Off", L"關"), L"FXAA", L"SMAA", tr(L"TAA (Experimental)", L"TAA（實驗性）")}, aa);
+        items(5, {tr(L"Off", L"關"), L"FXAA", L"SMAA", L"TAA"}, aa);
     }
 
     void create()
