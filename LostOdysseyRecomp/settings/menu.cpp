@@ -687,6 +687,7 @@ void Publish(uint8_t *base, uint32_t config)
         next.rows.back().controllerButtons = true;
         addChoices(L"Button prompts", L"按鍵提示", {Tr(L"Auto", L"自動"), L"Xbox", L"PlayStation"},
                    std::min(edit.buttonPrompts, 2u));
+        addSlider(L"Vibration", L"震動", edit.vibrationPercent);
         addAction(L"Restore game defaults", L"恢復遊戲預設設定", Tr(L"Restore", L"恢復"));
         addAction(L"Quit to Main Menu", L"退出到主選單", Tr(L"Return", L"返回"));
         addAction(L"Import discs & DLC", L"匯入光碟與 DLC", Tr(L"Open", L"開啟"));
@@ -707,7 +708,6 @@ void Publish(uint8_t *base, uint32_t config)
         }
         addSlider(L"Music", L"音樂音量", PPC_LOAD_U32(config + 8));
         addSlider(L"Sound effects", L"音效音量", PPC_LOAD_U32(config + 12));
-        addSlider(L"Vibration", L"震動", edit.vibrationPercent);
         addChoices(L"Audio output", L"音訊輸出", {Tr(L"Stereo", L"立體聲"), Tr(L"5.1 surround", L"5.1 環繞聲")},
                    edit.audioOutput);
     }
@@ -775,6 +775,7 @@ void Publish(uint8_t *base, uint32_t config)
                    std::move(renderChoices), graphics_menu::RenderResolutionChoice(edit)));
         placeGraphics(GraphicsRow::ShadowResolution, makeChoices(L"Shadow resolution", L"陰影解析度",
                    {L"1×", L"2×", L"4×"}, graphics_menu::ShadowResolutionChoice(edit)));
+        placeGraphics(GraphicsRow::DynamicShadows, makeChoices(L"Dynamic shadows", L"動態陰影", onOff(), edit.dynamicShadows ? 0 : 1));
 #if LO_PLATFORM_MACOS
         std::vector<std::wstring> aaChoices{Tr(L"Off", L"關"), L"FXAA", L"SMAA", Tr(L"TAA (Experimental)", L"TAA（實驗性）"), L"MetalFX Temporal"};
 #elif LO_PLATFORM_ANDROID
@@ -821,7 +822,6 @@ void Publish(uint8_t *base, uint32_t config)
                    (std::min(edit.depthOfFieldPercent, 100u) + 5) / 10));
         placeGraphics(GraphicsRow::Bloom, makeChoices(L"Bloom", L"光暈", onOff(), edit.bloom ? 0 : 1));
         placeGraphics(GraphicsRow::MotionBlur, makeChoices(L"Motion blur", L"動態模糊", onOff(), edit.motionBlur ? 0 : 1));
-        placeGraphics(GraphicsRow::DynamicShadows, makeChoices(L"Dynamic shadows", L"動態陰影", onOff(), edit.dynamicShadows ? 0 : 1));
 #if LO_PLATFORM_MACOS
         placeGraphics(GraphicsRow::ScalingQuality, makeChoices(L"Scaling filter", L"縮放濾鏡",
                    {Tr(L"Standard", L"標準"), Tr(L"High", L"高"), L"MetalFX"},
@@ -892,8 +892,8 @@ void Publish(uint8_t *base, uint32_t config)
         for (const auto name : GameLanguageNames) gameLanguages.emplace_back(name);
         addChoices(L"Game language", L"遊戲語言", std::move(gameLanguages), GameLanguageIndex(edit.gameLanguage));
         addChoices(L"Automatic updates", L"自動更新", onOff(), edit.automaticUpdates ? 0 : 1);
-        addAction(L"Save settings", L"儲存設定", Tr(L"Save", L"儲存"));
         next.rows.push_back({gpu::taa_collection::Label(edit.uiLanguage), gpu::taa_collection::Enabled() ? Tr(L"On", L"開") : Tr(L"Off", L"關"), true, {}, 0});
+        addAction(L"Save settings", L"儲存設定", Tr(L"Save", L"儲存"));
     }
     // Keep the focused row inside the visible window. Scroll persists per tab
     // so returning to a long list restores its position.
@@ -919,10 +919,10 @@ void Publish(uint8_t *base, uint32_t config)
     if (status.empty() && (flags & 0x02000000))
         next.help = Tr(L"LB / RB: category     D-pad: select / change     B: confirm     A: back",
                        L"LB / RB：分類     方向鍵：選擇 / 調整     B：確認     A：返回");
-    if (tab == 1 && row == 3)
+    if (tab == 0 && row == GameVibrationRow)
         next.help = Tr(L"Controller vibration strength. Min turns it off. Applies immediately.",
                        L"控制器震動強度。調到最小即關閉。立即套用。");
-    if (tab == 3 && row == 1)
+    if (tab == 3 && row == SystemGameLanguageRow)
         next.help = Tr(L"Game language takes effect after restarting. Requires matching language assets.",
                        L"遊戲語言重新啟動後生效，需要對應語言資源。中文遊戲文本需要亞洲版資源。");
     if (tab == 0 && row == GamePromptRow)
@@ -931,7 +931,7 @@ void Publish(uint8_t *base, uint32_t config)
     if (tab == 0 && row == GameImportRow)
         next.help = Tr(L"Close the game to import selected discs or DLC again. Other content and saves stay intact.",
                        L"關閉遊戲並重新匯入所選光碟或 DLC；其他內容與存檔保留。");
-    if (tab == 1 && row == 4 && status.empty())
+    if (tab == 1 && row == AudioOutputRow && status.empty())
         next.help = edit.audioOutput == AudioOutputSurround && apu::OutputChannels() == 2
 #ifdef _WIN32
             // The speaker layout is only in the classic Sound control panel.
@@ -990,6 +990,10 @@ void Publish(uint8_t *base, uint32_t config)
             next.help = Tr(L"Shadow-map resolution multiplier. Higher values need more GPU memory and rendering time. Applies after saving.",
                            L"陰影貼圖解析度倍數。較高倍數需要更多 GPU 記憶體與渲染時間。儲存後套用。");
             break;
+        case GraphicsRow::DynamicShadows:
+            next.help = Tr(L"Real-time shadows cast by characters and objects. Off removes them and can raise the frame rate. Applies immediately after saving.",
+                           L"角色與物件投射的即時陰影。關閉後陰影消失，可提升影格率。儲存後立即套用。");
+            break;
         case GraphicsRow::AntiAliasing:
 #if LO_PLATFORM_ANDROID
             if (graphics_menu::AndroidFsrAvailable && edit.upscaler == gpu::upscaling::Upscaler::Fsr)
@@ -1044,10 +1048,6 @@ void Publish(uint8_t *base, uint32_t config)
         case GraphicsRow::MotionBlur:
             next.help = Tr(L"The game's blur during fast camera and character movement. Off keeps moving scenes sharp. Applies immediately after saving.",
                            L"遊戲在鏡頭與角色快速移動時的模糊。關閉後移動畫面保持清晰。儲存後立即套用。");
-            break;
-        case GraphicsRow::DynamicShadows:
-            next.help = Tr(L"Real-time shadows cast by characters and objects. Off removes them and can raise the frame rate. Applies immediately after saving.",
-                           L"角色與物件投射的即時陰影。關閉後陰影消失，可提升影格率。儲存後立即套用。");
             break;
         case GraphicsRow::ScalingQuality:
 #if LO_PLATFORM_MACOS
@@ -2115,7 +2115,7 @@ PPC_FUNC(sub_822F19B0)
         row = 0;
         status.clear();
     }
-    const int count = tab == 0 ? GameImportRow + 1 : tab == 1 ? 5 : tab == 2 ? int(GraphicsRow::Count) : 5;
+    const int count = tab == 0 ? GameRowCount : tab == 1 ? AudioRowCount : tab == 2 ? int(GraphicsRow::Count) : SystemRowCount;
     // Provider-specific rows keep their logical ids and navigation skips them
     // when unavailable. Keyboard Enter reaches the menu as GAMEPAD_START
     // (hid.cpp), so one branch covers gamepad Start and Enter.
@@ -2128,7 +2128,7 @@ PPC_FUNC(sub_822F19B0)
         do { row = (row + 1) % count; } while (rowHidden(row));
     if (input & 0x10)
     {
-        const int saveRow = tab == 2 ? int(GraphicsRow::Save) : tab == 3 ? 3 : -1;
+        const int saveRow = tab == 2 ? int(GraphicsRow::Save) : tab == 3 ? SystemSaveRow : -1;
         // Start / Enter shifts focus to Save; inhibit confirm on the same tick so
         // simultaneous input (or key bindings sending both) cannot save from another
         // row. Pressed again on Save it saves, so keyboard Enter confirms like A.
@@ -2140,7 +2140,7 @@ PPC_FUNC(sub_822F19B0)
             input &= ~0x1000;
         }
     }
-    if (tab == 3 && row == 4 && (input & 0x000c)) {
+    if (tab == 3 && row == SystemCollectionRow && (input & 0x000c)) {
         if (gpu::taa_collection::Enabled()) {
             if (!gpu::taa_collection::SetConsent(false)) status = Tr(L"Settings could not be saved.", L"無法儲存設定。");
         } else { collectionPrompt = true; collectionChoice = 1; }
@@ -2163,30 +2163,10 @@ PPC_FUNC(sub_822F19B0)
             if (!SaveConfig(saved)) status = Tr(L"Could not save settings.", L"無法儲存設定。");
             hid::SetPromptStyle(style);
         }
-        else if (tab == 0 && row < GameRestoreRow)
+        else if (tab == 0 && row == GameVibrationRow)
         {
-            if (row == 0)
-                PPC_STORE_U32(config, cycle(PPC_LOAD_U32(config), 3));
-            else
-            {
-                constexpr uint32_t masks[] = {0,          0x40000000, 0x10000000, 0x00800000,
-                                              0x08000000, 0x04000000, 0x02000000};
-                PPC_STORE_U32(config + 4, PPC_LOAD_U32(config + 4) ^ masks[row]);
-            }
-            changed = true;
-        }
-        else if (tab == 1 && row == 4)
-        {
-            // Host setting: applied and saved at once, like the rows above it.
-            edit.audioOutput = cycle(edit.audioOutput, 2);
-            apu::SetSurround(edit.audioOutput == AudioOutputSurround);
-            if (!SaveAudioOutput(edit.audioOutput))
-                status = Tr(L"Could not save settings.", L"無法儲存設定。");
-        }
-        else if (tab == 1 && row == 3)
-        {
-            // Host setting beside the retail sliders: applied and saved at once,
-            // merged into the saved settings so unsaved Graphics edits stay unsaved.
+            // Host setting: applied and saved at once, merged into the saved
+            // settings so unsaved Graphics edits stay unsaved. Min turns it off.
             const auto strength = uint32_t(std::clamp(int(edit.vibrationPercent) + delta * 10, 0, 100));
             if (strength != edit.vibrationPercent)
             {
@@ -2198,9 +2178,29 @@ PPC_FUNC(sub_822F19B0)
                 hid::PreviewVibration();
             }
         }
-        else if (tab == 1)
+        else if (tab == 0 && row < GameRetailRowCount)
         {
             if (row == 0)
+                PPC_STORE_U32(config, cycle(PPC_LOAD_U32(config), 3));
+            else
+            {
+                constexpr uint32_t masks[] = {0,          0x40000000, 0x10000000, 0x00800000,
+                                              0x08000000, 0x04000000, 0x02000000};
+                PPC_STORE_U32(config + 4, PPC_LOAD_U32(config + 4) ^ masks[row]);
+            }
+            changed = true;
+        }
+        else if (tab == 1 && row == AudioOutputRow)
+        {
+            // Host setting beside the retail rows: applied and saved at once.
+            edit.audioOutput = cycle(edit.audioOutput, 2);
+            apu::SetSurround(edit.audioOutput == AudioOutputSurround);
+            if (!SaveAudioOutput(edit.audioOutput))
+                status = Tr(L"Could not save settings.", L"無法儲存設定。");
+        }
+        else if (tab == 1)
+        {
+            if (row == AudioVoiceRow)
             {
                 if (PPC_LOAD_U32(config + 24) >= VoiceCount(base))
                 {
@@ -2211,7 +2211,7 @@ PPC_FUNC(sub_822F19B0)
             }
             else
             {
-                auto offset = row == 1 ? 8 : 12;
+                auto offset = row == AudioMusicRow ? 8 : 12;
                 PPC_STORE_U32(config + offset, std::clamp(int(PPC_LOAD_U32(config + offset)) + delta * 4, 0, 100));
             }
             changed = true;
@@ -2289,6 +2289,9 @@ PPC_FUNC(sub_822F19B0)
                 edit.shadowResolution = graphics_menu::ShadowResolutions[
                     cycle(graphics_menu::ShadowResolutionChoice(edit), uint32_t(std::size(graphics_menu::ShadowResolutions)))];
                 break;
+            case GraphicsRow::DynamicShadows:
+                edit.dynamicShadows = !edit.dynamicShadows;
+                break;
             case GraphicsRow::AntiAliasing:
                 graphics_menu::SelectAa(edit, cycle(graphics_menu::AaChoice(edit), graphics_menu::AaChoiceCount));
                 break;
@@ -2321,9 +2324,6 @@ PPC_FUNC(sub_822F19B0)
                 break;
             case GraphicsRow::MotionBlur:
                 edit.motionBlur = !edit.motionBlur;
-                break;
-            case GraphicsRow::DynamicShadows:
-                edit.dynamicShadows = !edit.dynamicShadows;
                 break;
             case GraphicsRow::ScalingQuality:
 #if LO_PLATFORM_MACOS
@@ -2387,11 +2387,11 @@ PPC_FUNC(sub_822F19B0)
         }
         else
         {
-            if (row == 0)
+            if (row == SystemUiLanguageRow)
                 edit.uiLanguage = cycle(edit.uiLanguage, 5);
-            if (row == 1)
+            if (row == SystemGameLanguageRow)
                 edit.gameLanguage = GameLanguageIds[cycle(GameLanguageIndex(edit.gameLanguage), uint32_t(GameLanguageIds.size()))];
-            if (row == 2)
+            if (row == SystemUpdatesRow)
                 edit.automaticUpdates = !edit.automaticUpdates;
         }
     }
@@ -2472,7 +2472,7 @@ PPC_FUNC(sub_822F19B0)
         Publish(base, config);
         return;
     }
-    if ((input & 0x1000) && tab == 3 && row == 3)
+    if ((input & 0x1000) && tab == 3 && row == SystemSaveRow)
     {
         Config languages = GetConfig();
         languages.uiLanguage = edit.uiLanguage;

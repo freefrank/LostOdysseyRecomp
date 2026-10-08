@@ -52,13 +52,46 @@ BrightnessCalibration GetBrightnessCalibration();
 // the calibration page consumes this host key before game input mapping.
 bool CalibrationKey(uint32_t key);
 void PointerDrag(float x, float y, bool held);
-// The host button-prompt row follows the seven adjustable retail settings;
-// the Game tab actions come last.
+// Settings menu layout rules. Follow them when adding or moving a row:
+// - Tabs: 0 Gameplay (retail game options, controller options, game actions),
+//   1 Audio (voice, volumes, audio output), 2 Graphics (display, rendering,
+//   frame rate, HDR), 3 System (interface and game language, updates, TAA
+//   shader collection, Save).
+// - Gameplay starts with the seven retail guest settings in their retail order;
+//   host rows follow them.
+// - Host rows are grouped by topic. Controller rows (button prompts, vibration,
+//   future ones) go to Gameplay, not Audio.
+// - Actions come last on their tab: Restore / Quit to Main Menu / Import on
+//   Gameplay, Brightness / Save on Graphics, Save on System.
+// - Graphics order: display -> resolution and shadows -> anti-aliasing and
+//   upscaling -> effects -> frame rate -> HDR and brightness -> Save.
+// Input, help text, pointer hits and the tests use these constants, never
+// literal row numbers.
+inline constexpr int MenuTabCount = 4;
+// Gameplay tab (0).
+inline constexpr int GameRetailRowCount = 7;
 inline constexpr int GamePromptRow = 7;
-inline constexpr int GameRestoreRow = 8;
-inline constexpr int GameMainMenuRow = 9;
-inline constexpr int GameImportRow = 10;
-// Logical ids for the graphics tab. MenuSnapshot::row stores these as int.
+inline constexpr int GameVibrationRow = 8;
+inline constexpr int GameRestoreRow = 9;
+inline constexpr int GameMainMenuRow = 10;
+inline constexpr int GameImportRow = 11;
+inline constexpr int GameRowCount = 12;
+// Audio tab (1).
+inline constexpr int AudioVoiceRow = 0;
+inline constexpr int AudioMusicRow = 1;
+inline constexpr int AudioEffectsRow = 2;
+inline constexpr int AudioOutputRow = 3;
+inline constexpr int AudioRowCount = 4;
+// System tab (3).
+inline constexpr int SystemUiLanguageRow = 0;
+inline constexpr int SystemGameLanguageRow = 1;
+inline constexpr int SystemUpdatesRow = 2;
+inline constexpr int SystemCollectionRow = 3;
+inline constexpr int SystemSaveRow = 4;
+inline constexpr int SystemRowCount = 5;
+static_assert(GamePromptRow == GameRetailRowCount && GameImportRow + 1 == GameRowCount);
+static_assert(AudioOutputRow + 1 == AudioRowCount && SystemSaveRow + 1 == SystemRowCount);
+// Logical ids for the graphics tab (2). MenuSnapshot::row stores these as int.
 // Count is the tab length, not the on-screen viewport.
 enum class GraphicsRow : int
 {
@@ -70,15 +103,15 @@ enum class GraphicsRow : int
     OutputResolution = 5,
     RenderResolution = 6,
     ShadowResolution = 7,
-    AntiAliasing = 8,
-    AmbientOcclusion = 9,
-    DlssQuality = 10,
-    FsrSharpness = 11,
-    AnisotropicFiltering = 12,
-    DepthOfField = 13,
-    Bloom = 14,
-    MotionBlur = 15,
-    DynamicShadows = 16,
+    DynamicShadows = 8,
+    AntiAliasing = 9,
+    AmbientOcclusion = 10,
+    DlssQuality = 11,
+    FsrSharpness = 12,
+    AnisotropicFiltering = 13,
+    DepthOfField = 14,
+    Bloom = 15,
+    MotionBlur = 16,
     ScalingQuality = 17,
     RgbRange = 18,
     FrameRate = 19,
@@ -92,7 +125,6 @@ enum class GraphicsRow : int
     Save = 27,
     Count = 28,
 };
-inline constexpr int MenuTabCount = 4;
 inline constexpr int MenuTabWidth = 640 / MenuTabCount;
 // Called by input polling before returning the guest-facing controller state.
 bool FilterInput(uint16_t &buttons, int16_t leftX, int16_t leftY);

@@ -506,7 +506,7 @@ static inline const wchar_t *Translate(uint32_t language, const wchar_t *en, con
         {L"Gameplay", L"ゲーム", L"게임", L"游戏"},
         {L"Audio", L"サウンド", L"오디오", L"声音"},
         {L"Graphics", L"グラフィックス", L"그래픽", L"图像"},
-        {L"Language", L"言語", L"언어", L"语言"},
+        {L"System", L"システム", L"시스템", L"系统"},
         {L"DLSS is off.", L"DLSS はオフです。", L"DLSS가 꺼져 있습니다.", L"DLSS 已关闭。"},
         {L"DLSS is not in use.", L"DLSS は現在使われていません。", L"DLSS는 현재 사용 중이 아닙니다.", L"DLSS 目前未启用。"},
         {L"DLSS needs Vulkan and a restart.", L"DLSS には Vulkan と再起動が必要です。",

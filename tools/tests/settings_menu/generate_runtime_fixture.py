@@ -134,7 +134,7 @@ int main(int argc, char** argv) {
     // A must not cycle ANY ordinary setting, not just the new graphics choice.
     for(int tab=0;tab<4;++tab){
         settings::tab=tab;
-        const int count=tab==0?7:tab==1?5:tab==2?int(settings::GraphicsRow::Count):3;
+        const int count=tab==0?settings::GameRowCount:tab==1?settings::AudioRowCount:tab==2?int(settings::GraphicsRow::Count):settings::SystemRowCount;
         for(int row=0;row<count;++row){
             // A on HDR peak opens its calibration page by design.
             if(settings::graphics_menu::IsAction(tab,row) || (tab==2 && row==int(settings::GraphicsRow::HdrPeak)))continue;
@@ -148,9 +148,13 @@ int main(int argc, char** argv) {
     }
     settings::tab=0;settings::row=0;tick(8);
     Check(PPC_LOAD_U32(ConfigData)==1 && applies==1,"right still applies gameplay setting");
-    settings::tab=1;settings::row=4;tick(8);
+    settings::tab=1;settings::row=settings::AudioOutputRow;tick(8);
     Check(settings::edit.audioOutput==1 && settings::savedConfig.audioOutput==1 && apu::surround && applies==1,
           "audio output switches live and saves without a guest apply");
+    settings::tab=0;settings::row=settings::GameVibrationRow;settings::edit.vibrationPercent=100;tick(4);
+    Check(settings::edit.vibrationPercent==90 && settings::savedConfig.vibrationPercent==90 && applies==1 &&
+          settings::snapshot.rows[settings::GameVibrationRow].sliderPercent==90,
+          "Gameplay vibration lowers, saves at once and needs no guest apply");
     using settings::GraphicsRow;using gpu::upscaling::Upscaler;
     settings::tab=2;settings::row=int(GraphicsRow::AntiAliasing);settings::edit={};
     settings::edit.dlssQuality=gpu::upscaling::DlssQuality::Dlaa;
@@ -385,7 +389,7 @@ int main(int argc, char** argv) {
     input=0x2000;settings::FilterInput(input,0,0);Check(settings::pending.exchange(0)==0x1000,"swapped B is confirm");
     input=0;settings::FilterInput(input,0,0);input=0x1000;settings::FilterInput(input,0,0);
     Check(settings::pending.exchange(0)==0x2000,"swapped A is back");settings::swapConfirm=false;
-    settings::tab=3;settings::row=4;tick(0x1000);Check(!settings::collectionPrompt && !consents,"A does not toggle collection");
+    settings::tab=3;settings::row=settings::SystemCollectionRow;tick(0x1000);Check(!settings::collectionPrompt && !consents,"A does not toggle collection");
     tick(8);Check(settings::collectionPrompt,"right enables collection confirmation");
     settings::collectionChoice=1;tick(0x1000);Check(!settings::collectionPrompt && consents==1,"A still confirms modal dialog");
     // A controller-style change must invalidate the raster cache without a guest tick.

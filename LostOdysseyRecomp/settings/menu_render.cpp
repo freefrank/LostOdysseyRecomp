@@ -631,8 +631,8 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
     text(130, 42, 234, 43, Translate(current.language, L"Settings", L"設定"), 31, ink, false);
     text(70, 122, 260, 28, L"Menu", 18, ink, false);
 
-    const wchar_t *enTabs[] = {L"Gameplay", L"Audio", L"Graphics", L"Language"};
-    const wchar_t *zhTabs[] = {L"遊戲", L"聲音", L"圖像", L"語言"};
+    const wchar_t *enTabs[] = {L"Gameplay", L"Audio", L"Graphics", L"System"};
+    const wchar_t *zhTabs[] = {L"遊戲", L"聲音", L"圖像", L"系統"};
     for (int i = 0; i < MenuTabCount; ++i)
     {
         constexpr int tabWidth = MenuTabWidth;
