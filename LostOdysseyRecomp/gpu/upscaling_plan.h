@@ -1,5 +1,6 @@
 #pragma once
 
+#include "aspect_ratio.h"
 #include "backend_selection.h"
 #include "render_resolution.h"
 
@@ -101,11 +102,15 @@ struct OutputRegion {
     bool operator==(const OutputRegion&) const = default;
 };
 
-inline constexpr OutputRegion ResolveOutputRegion(resolution::Size drawable) {
+inline constexpr OutputRegion ResolveOutputRegion(resolution::Size drawable,
+    aspect_ratio::Mode aspect = aspect_ratio::Mode::Auto) {
     if (!drawable.width || !drawable.height) return {{}, 0, 0, 0, 0};
-    // The scene fills the drawable. Menus and movies fit their own 16:9
+    // Auto: the scene fills the drawable. Menus and movies fit their own 16:9
     // content inside it; their bars must not constrain the 3D render target.
-    return {drawable, 0, 0, drawable.width, drawable.height};
+    // A chosen aspect ratio sizes the scene for that shape; presentation centres
+    // it in the drawable, so the region keeps a zero origin.
+    const auto content = aspect_ratio::Fit(aspect, drawable.width, drawable.height);
+    return {drawable, 0, 0, content.width, content.height};
 }
 
 struct SizingKey {

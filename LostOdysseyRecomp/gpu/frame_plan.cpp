@@ -32,6 +32,7 @@ namespace gpu::frame_plan
     namespace
     {
         std::atomic<uint64_t> drawable{ (uint64_t(1280) << 32) | 720 };
+        std::atomic<bool> narrowTallView{false};
         PlannerState planner;
         struct StatusIdentity {
             upscaling::Upscaler upscaler = upscaling::Upscaler::Off;
@@ -96,7 +97,8 @@ namespace gpu::frame_plan
 #else
         if (config.internalResolution == settings::InternalResolutionNative) config.internalResolution = 0;
 #endif
-        const auto output = upscaling::ResolveOutputRegion({uint32_t(extent >> 32), uint32_t(extent)});
+        const auto output = upscaling::ResolveOutputRegion({uint32_t(extent >> 32), uint32_t(extent)}, config.aspectRatio);
+        narrowTallView.store(aspect_ratio::NarrowsView(config.aspectRatio), std::memory_order_relaxed);
         const auto device = video::BackendDeviceState();
         std::optional<upscaling::OutputSizing> sizing;
         if (config.upscaler != upscaling::Upscaler::Off && device.deviceReady)
@@ -113,6 +115,7 @@ namespace gpu::frame_plan
             NoteDlssRuntime(CurrentDlssEffect());
     }
     FramePlan CpuPlan() { return cpuPlan; }
+    bool NarrowTallView() { return narrowTallView.load(std::memory_order_relaxed); }
     DlssEffectSnapshot CurrentDlssEffect()
     {
         const auto device = upscaling::PublishedDeviceCapability();

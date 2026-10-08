@@ -257,6 +257,27 @@ int main()
         Require(output.x == 0 && output.y == 0 && output.width == drawable.width && output.height == drawable.height,
             "scene output uses the full drawable at tall and wide aspects");
     }
+    {
+        // Aspect ratio setting: the scene output takes the chosen shape inside the
+        // drawable; presentation centres it with bars.
+        using gpu::aspect_ratio::Mode;
+        struct Case { gpu::resolution::Size drawable; Mode mode; uint32_t width, height; };
+        for (const auto& c : {Case{{1920, 1080}, Mode::Standard, 1440, 1080}, Case{{1920, 1080}, Mode::Ultrawide, 1920, 810},
+                              Case{{2560, 1080}, Mode::Wide, 1920, 1080}, Case{{2560, 1600}, Mode::Wide, 2560, 1440},
+                              Case{{1280, 800}, Mode::Standard, 1066, 800}, Case{{3440, 1440}, Mode::Ultrawide, 3440, 1440},
+                              Case{{1366, 768}, Mode::Wide, 1366, 768}, Case{{2560, 1600}, Mode::Auto, 2560, 1600},
+                              Case{{1600, 1200}, Mode::Standard, 1600, 1200}}) {
+            const auto output = gpu::upscaling::ResolveOutputRegion(c.drawable, c.mode);
+            Require(output.drawable == c.drawable && output.x == 0 && output.y == 0 &&
+                output.width == c.width && output.height == c.height, "aspect ratio fits its shape inside the drawable");
+            const auto plan = Choose(9, 9, 0, output.width, output.height);
+            Require(plan.width == c.width && plan.height == c.height, "follow-output scene renders the fitted shape");
+        }
+        Require(gpu::aspect_ratio::Migrated(2560, 1080) == Mode::Ultrawide && gpu::aspect_ratio::Migrated(3440, 1440) == Mode::Ultrawide &&
+            gpu::aspect_ratio::Migrated(1720, 720) == Mode::Ultrawide && gpu::aspect_ratio::Migrated(1920, 1080) == Mode::Auto &&
+            gpu::aspect_ratio::Migrated(1366, 768) == Mode::Auto && gpu::aspect_ratio::Migrated(5120, 1440) == Mode::Auto,
+            "only 21:9-shaped resolutions migrate to 21:9");
+    }
     gpu::upscaling::SizingCache cache;
     const gpu::upscaling::SizingKey key{3, 1280, 720};
     Require(cache.LookupOrRequestSizing(key).modes[0].state == gpu::upscaling::SizingState::Pending && cache.TakeSizingRequest() == key, "sizing miss requests exact output without waiting");

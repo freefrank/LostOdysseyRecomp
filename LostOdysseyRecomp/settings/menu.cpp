@@ -162,6 +162,9 @@ constexpr uint32_t resolutions16_9[][2] = {
     {1280, 720}, {1600, 900}, {1920, 1080}, {2560, 1440}, {3840, 2160}};
 constexpr uint32_t resolutions21_9[][2] = {
     {1720, 720}, {2560, 1080}, {3440, 1440}, {3840, 1600}, {5120, 2160}};
+constexpr uint32_t resolutions4_3[][2] = {
+    {960, 720}, {1440, 1080}, {1920, 1440}, {2880, 2160}};
+using AspectMode = gpu::aspect_ratio::Mode;
 // Menu positions are independent of the persisted quality IDs (Quality=0, Balanced=1, Performance=2, native AA=3).
 constexpr uint32_t qualityMenuIds[] = {2, 1, 0, 3};
 constexpr uint32_t QualityMenuIndex(uint32_t id)
@@ -171,6 +174,17 @@ constexpr uint32_t QualityMenuIndex(uint32_t id)
 inline bool IsUltrawideAspect(uint32_t width, uint32_t height)
 {
     return width && height && (uint64_t(width) * 9 > uint64_t(height) * 16);
+}
+// Output resolution choices follow the Aspect ratio setting. Auto keeps the
+// list of the current resolution's shape.
+std::span<const uint32_t[2]> OutputResolutions(AspectMode mode, uint32_t width, uint32_t height)
+{
+    if (mode == AspectMode::Auto)
+        mode = IsUltrawideAspect(width, height) ? AspectMode::Ultrawide
+             : uint64_t(width) * 2 < uint64_t(height) * 3 ? AspectMode::Standard : AspectMode::Wide;
+    if (mode == AspectMode::Ultrawide) return resolutions21_9;
+    if (mode == AspectMode::Standard) return resolutions4_3;
+    return resolutions16_9;
 }
 inline uint32_t FindNearestResolutionIndex(const uint32_t list[][2], size_t count, uint32_t currentWidth, uint32_t currentHeight)
 {
@@ -577,7 +591,7 @@ bool GraphicsRowHidden(int r)
     // Android owns the native surface; the renderer derives aspect from its drawable.
     // NGX and frame generation have no Android providers in this build.
     if (r == int(GraphicsRow::Backend) || r == int(GraphicsRow::Gpu) || r == int(GraphicsRow::DisplayMode) ||
-        r == int(GraphicsRow::Display) || r == int(GraphicsRow::Widescreen) || r == int(GraphicsRow::OutputResolution) ||
+        r == int(GraphicsRow::Display) || r == int(GraphicsRow::AspectRatio) || r == int(GraphicsRow::OutputResolution) ||
         r == int(GraphicsRow::VariableRefreshRate) || r == int(GraphicsRow::FrameGeneration) ||
         r == int(GraphicsRow::FrameGenerationMultiplier))
         return true;
@@ -744,27 +758,15 @@ void Publish(uint8_t *base, uint32_t config)
             displayRow.singleValue = true;
             placeGraphics(GraphicsRow::Display, std::move(displayRow));
         }
-        const bool ultrawide = IsUltrawideAspect(edit.width, edit.height);
-        placeGraphics(GraphicsRow::Widescreen, makeChoices(L"Widescreen", L"寬螢幕", onOff(), ultrawide ? 0 : 1));
+        placeGraphics(GraphicsRow::AspectRatio, makeChoices(L"Aspect ratio", L"畫面比例",
+                   {Tr(L"Auto", L"自動"), L"16:9", L"21:9", L"4:3"}, uint32_t(edit.aspectRatio)));
         std::vector<std::wstring> outputChoices;
         uint32_t outputChoice = 0;
-        if (ultrawide)
+        const auto resolutions = OutputResolutions(edit.aspectRatio, edit.width, edit.height);
+        for (uint32_t i = 0; i < resolutions.size(); ++i)
         {
-            for (uint32_t i = 0; i < std::size(resolutions21_9); ++i)
-            {
-                outputChoices.push_back(std::to_wstring(resolutions21_9[i][0]) + L" × " +
-                                        std::to_wstring(resolutions21_9[i][1]));
-                if (edit.width == resolutions21_9[i][0] && edit.height == resolutions21_9[i][1]) outputChoice = i;
-            }
-        }
-        else
-        {
-            for (uint32_t i = 0; i < std::size(resolutions16_9); ++i)
-            {
-                outputChoices.push_back(std::to_wstring(resolutions16_9[i][0]) + L" × " +
-                                        std::to_wstring(resolutions16_9[i][1]));
-                if (edit.width == resolutions16_9[i][0] && edit.height == resolutions16_9[i][1]) outputChoice = i;
-            }
+            outputChoices.push_back(std::to_wstring(resolutions[i][0]) + L" × " + std::to_wstring(resolutions[i][1]));
+            if (edit.width == resolutions[i][0] && edit.height == resolutions[i][1]) outputChoice = i;
         }
         placeGraphics(GraphicsRow::OutputResolution, makeChoices(L"Output resolution", L"輸出解析度", std::move(outputChoices), outputChoice));
         std::vector<std::wstring> renderChoices;
@@ -968,9 +970,9 @@ void Publish(uint8_t *base, uint32_t config)
             next.help = Tr(L"Moves the game window to this display when saved; fullscreen uses it too. Automatic leaves the window where it is.",
                            L"儲存後將遊戲視窗移到這台顯示器，全螢幕也會使用它。自動則讓視窗留在原處。");
             break;
-        case GraphicsRow::Widescreen:
-            next.help = Tr(L"Switches resolution choices between 16:9 and 21:9 ultrawide.",
-                           L"在 16:9 與 21:9 寬螢幕規格之間切換解析度選項。");
+        case GraphicsRow::AspectRatio:
+            next.help = Tr(L"Auto fills the window. 16:9, 21:9 and 4:3 keep that shape with black bars; frame generation is off while bars show. Applies immediately after saving.",
+                           L"自動會填滿視窗。16:9、21:9 與 4:3 保持該比例並加上黑邊；有黑邊時影格生成關閉。儲存後立即套用。");
             break;
         case GraphicsRow::OutputResolution:
             next.help = Tr(L"Sets the output size. Fullscreen uses the desktop size.",
@@ -2255,27 +2257,28 @@ PPC_FUNC(sub_822F19B0)
                 // The last choice keeps a saved display that is not connected.
                 break;
             }
-            case GraphicsRow::Widescreen:
+            case GraphicsRow::AspectRatio:
             {
-                const bool currentUltrawide = IsUltrawideAspect(edit.width, edit.height);
-                const bool newUltrawide = !currentUltrawide;
-                const auto &targetList = newUltrawide ? resolutions21_9 : resolutions16_9;
-                const size_t targetCount = newUltrawide ? std::size(resolutions21_9) : std::size(resolutions16_9);
-                uint32_t targetIndex = FindNearestResolutionIndex(targetList, targetCount, edit.width, edit.height);
-                edit.width = targetList[targetIndex][0];
-                edit.height = targetList[targetIndex][1];
+                // A fixed shape also moves the output resolution to that shape's
+                // list, so a window of that size shows no bars. Auto keeps it.
+                edit.aspectRatio = AspectMode(cycle(uint32_t(edit.aspectRatio), gpu::aspect_ratio::ModeCount));
+                if (edit.aspectRatio != AspectMode::Auto)
+                {
+                    const auto list = OutputResolutions(edit.aspectRatio, edit.width, edit.height);
+                    const uint32_t index = FindNearestResolutionIndex(list.data(), list.size(), edit.width, edit.height);
+                    edit.width = list[index][0];
+                    edit.height = list[index][1];
+                }
                 break;
             }
             case GraphicsRow::OutputResolution:
             {
-                const bool ultrawide = IsUltrawideAspect(edit.width, edit.height);
-                const auto &list = ultrawide ? resolutions21_9 : resolutions16_9;
-                const size_t listCount = ultrawide ? std::size(resolutions21_9) : std::size(resolutions16_9);
+                const auto list = OutputResolutions(edit.aspectRatio, edit.width, edit.height);
                 uint32_t index = 0;
-                for (size_t i = 0; i < listCount; ++i)
+                for (size_t i = 0; i < list.size(); ++i)
                     if (edit.width == list[i][0] && edit.height == list[i][1])
                         index = uint32_t(i);
-                index = cycle(index, uint32_t(listCount));
+                index = cycle(index, uint32_t(list.size()));
                 edit.width = list[index][0];
                 edit.height = list[index][1];
                 break;

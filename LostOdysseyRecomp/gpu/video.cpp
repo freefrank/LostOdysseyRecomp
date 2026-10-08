@@ -2520,7 +2520,8 @@ namespace gpu::video
 #endif
             startupWatch.Step("DLSS output sizing");
             if (g_temporalUpscaler && settings::GetConfig().upscaler == upscaling::Upscaler::Dlss) {
-                const auto output = upscaling::ResolveOutputRegion({g_swapChain->getWidth(), g_swapChain->getHeight()});
+                const auto output = upscaling::ResolveOutputRegion({g_swapChain->getWidth(), g_swapChain->getHeight()},
+                    settings::GetConfig().aspectRatio);
                 const upscaling::SizingKey key{g_deviceEpoch.load(std::memory_order_acquire), output.width, output.height,
                     upscaling::Upscaler::Dlss, output.x, output.y};
                 auto sizing = upscaling::OutputSizing{};
@@ -4349,9 +4350,13 @@ namespace gpu::video
                     // queue submission order alone does not order untracked textures.
                     if (g_metalFg && !renderer::DrainForFrameGenerationReconfigure()) return;
 #endif
+                    // The Aspect ratio setting's black bars: the SDKs would generate the
+                    // whole swapchain from motion that covers only the picture.
+                    const bool barred = sourcePlan.cpuSerial && (sourcePlan.output.width < sourcePlan.output.drawable.width ||
+                        sourcePlan.output.height < sourcePlan.output.drawable.height);
                     const bool matched = renderer::AcquireFgCompositeInputs(physicalAddress & 0x1FFFFFFF, composite) &&
                         composite.ReadyForOrderedSubmission() && composite.outputWidth == sourceWidth && composite.outputHeight == sourceHeight &&
-                        (!g_vulkan || dlss_fg::FullFramePresentation(sourceWidth, sourceHeight,
+                        ((!g_vulkan && !barred) || dlss_fg::FullFramePresentation(sourceWidth, sourceHeight,
                             g_swapChain->getWidth(), g_swapChain->getHeight()));
                     if (std::getenv("LO_MV_LOG") && composite.frame % 120 == 119)
                         LOG_INFO("video FG admission: frame={} matched={} window_change={} source={}x{} swapchain={}x{} composite={}x{}",

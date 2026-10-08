@@ -727,6 +727,9 @@ namespace gpu::frame_plan
     void PublishDrawable(uint32_t width, uint32_t height);
     void BeginCpuFrame();
     FramePlan CpuPlan();
+    // The Aspect ratio setting asks for the console's narrower 4:3 view
+    // (aspect_ratio::NarrowsView) rather than Hor+. Updated by BeginCpuFrame.
+    bool NarrowTallView();
     // Copy of the committed device, the last CPU plan, the cached sizing, and
     // the newest matching GPU execution. Safe on the UI thread. Do not call it
     // from inside PlannerState::Begin or while already holding the sizing or

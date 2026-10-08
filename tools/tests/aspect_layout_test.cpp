@@ -132,6 +132,20 @@ int main()
                     "canvas fit preserves the guest half-pixel centre through composed transforms");
         }
     }
+    // The Aspect ratio setting's 4:3 keeps the native vertical view and narrows
+    // the horizontal one; Auto and wide outputs keep the Hor+ scale.
+    {
+        const auto narrow = ForScene(4.0f/3.0f, true);
+        Require(Near(narrow.x, 4.0 / 3.0) && narrow.y == 1.0f, "4:3 narrows the horizontal view by 4/3");
+        const double fx = narrow.x / NativeAspect, fy = narrow.y;
+        Require(Near(fy / fx, 4.0 / 3.0), "narrowed perspective matches the 4:3 raster");
+        const auto vertPlus = ForScene(4.0f/3.0f, false), auto43 = ForAspect(4.0f/3.0f);
+        Require(vertPlus.x == auto43.x && vertPlus.y == auto43.y, "Auto on a 4:3 output keeps Hor+");
+        const auto wide = ForScene(64.0f/27.0f, true), wideAuto = ForAspect(64.0f/27.0f);
+        Require(wide.x == wideAuto.x && wide.y == wideAuto.y, "a wide output is unaffected by the narrow view");
+        Require(ForScene(NativeAspect, true).IsIdentity() && ForScene(0.0f, true).IsIdentity(),
+                "16:9 and invalid aspects keep the native view");
+    }
     const auto tall = ForAspect(4.0f/3.0f);
     Require(Near(FitBoundary(0, NativeHeight, tall.y), 90) &&
             Near(FitBoundary(NativeHeight, NativeHeight, tall.y), 630), "4:3 movie bars cover the expected 90 guest pixels on each side");

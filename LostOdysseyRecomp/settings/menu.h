@@ -101,7 +101,7 @@ enum class GraphicsRow : int
     Gpu = 1,
     DisplayMode = 2,
     Display = 3,
-    Widescreen = 4,
+    AspectRatio = 4,
     OutputResolution = 5,
     RenderResolution = 6,
     ShadowResolution = 7,

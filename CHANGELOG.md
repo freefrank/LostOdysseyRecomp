@@ -4,6 +4,16 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 按新到旧记录简短更新，日期采用 UTC。技术验证见[开发状态](docs/STATUS.md)，后续计划见[路线图](docs/ROADMAP.zh-CN.md)。
 
+## Unreleased
+
+### English
+
+- New Aspect ratio setting in Settings → Graphics: Auto, 16:9, 21:9 or 4:3, with black bars when the screen has another shape. It replaces the Widescreen switch.
+
+### 简体中文
+
+- 设置 → 图形新增“画面比例”：自动、16:9、21:9 或 4:3，屏幕比例不同时加黑边。它取代了原来的“宽屏”开关。
+
 ## [v0.8.61](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.8.61) — 2026-10-08
 
 ### English

@@ -97,13 +97,20 @@ Config Validate(Config value)
         value.width = 1280;
         value.height = 720;
     }
+#if LO_PLATFORM_ANDROID
+    // The phone owns the surface and the menu hides the setting.
+    value.aspectRatio = gpu::aspect_ratio::Mode::Auto;
+#else
+    if (uint32_t(value.aspectRatio) >= gpu::aspect_ratio::ModeCount)
+        value.aspectRatio = gpu::aspect_ratio::Mode::Auto;
+#endif
     return value;
 }
 Config Read()
 {
     Config value;
     bool hasAntialiasing = false;
-    bool hasHdrPeakAuto = false, hasHdrPeakNits = false;
+    bool hasHdrPeakAuto = false, hasHdrPeakNits = false, hasAspectRatio = false;
     const auto path = os::user_paths::SettingsPath();
     std::ifstream input(path);
     std::string key;
@@ -117,6 +124,7 @@ Config Read()
         if (name == "antialiasing") { hasAntialiasing = true; value.antialiasing = 0; }
         if (name == "internal_resolution") value.internalResolution = 0;
         if (name == "anisotropic_filtering") value.anisotropicFiltering = 0;
+        if (name == "aspect_ratio") hasAspectRatio = true;
         uint32_t number = 0;
         const auto digits = key.substr(equal + 1);
         if (name == "gpu_device" || name == "display_name")
@@ -147,6 +155,8 @@ Config Read()
             value.width = number;
         else if (key == "height")
             value.height = number;
+        else if (key == "aspect_ratio")
+            value.aspectRatio = gpu::aspect_ratio::Mode(number);
         else if (key == "internal_resolution")
             value.internalResolution = number <= 2160 ? int(number) : 0;
         else if (key == "window_mode")
@@ -243,6 +253,9 @@ Config Read()
     // Profiles written before automatic peak detection use their stored peak
     // as an explicit choice. A fresh profile follows the current display.
     if (hasHdrPeakNits && !hasHdrPeakAuto) value.hdrPeakAutomatic = false;
+    // Before the Aspect ratio setting, a 21:9 output resolution was the
+    // Widescreen switch; keep that shape.
+    if (!hasAspectRatio) value.aspectRatio = gpu::aspect_ratio::Migrated(value.width, value.height);
     return Validate(value);
 }
 Config &Current()
@@ -321,6 +334,7 @@ static bool WriteConfig(const Config &value)
     std::ofstream output(temporary, std::ios::trunc);
     output << "ui_language=" << value.uiLanguage << "\ngame_language=" << value.gameLanguage
            << "\nwidth=" << value.width << "\nheight=" << value.height << "\nwindow_mode=" << uint32_t(value.windowMode)
+           << "\naspect_ratio=" << uint32_t(value.aspectRatio)
            << "\ndisplay_name=" << value.displayName << "\ndisplay_index=" << value.displayIndex
            << "\ngraphics_backend=" << uint32_t(value.graphicsBackend)
            << "\ngpu_device=" << value.gpuDevice

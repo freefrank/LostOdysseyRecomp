@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <span>
 #include <string>
+#include "gpu/aspect_ratio.h"
 #include "gpu/backend_selection.h"
 #include "gpu/upscaling_plan.h"
 #include "../../shared/frame_generation/core.h"
@@ -48,6 +49,9 @@ struct Config
     uint32_t debugLanguage = 0; // Independent tool UI: 0 English, 1 Simplified Chinese.
     uint32_t gameLanguage = 1;
     uint32_t width = 1280, height = 720;
+    // Shape of the game image; a fixed one is centred in the window with black
+    // bars. Applied live. Android always uses Auto.
+    gpu::aspect_ratio::Mode aspectRatio = gpu::aspect_ratio::Mode::Auto;
     int internalResolution = 0; // 0 follows output (up to 4K); 720/1080/1440/2160 select scene height;
                                 // InternalResolutionNative renders at the drawable's pixel size.
     WindowMode windowMode = WindowMode::Windowed;

@@ -32,6 +32,7 @@ PREAMBLE = r'''
 #include <gpu/video.h>
 #include <gpu/display_change.h>
 #include <gpu/display_choice.h>
+#include <gpu/aspect_ratio.h>
 #ifdef _WIN32
 #include <windows.h>
 #else
@@ -250,6 +251,26 @@ int main(int argc, char** argv) {
     Check(!settings::restart::Required(afSaved,afAfter),"AF needs no restart");
     settings::edit=afAfter;settings::row=int(GraphicsRow::Save);tick(0x1000);
     Check(settings::GetConfig().anisotropicFiltering==16,"Save applies AF");
+    // Aspect ratio: a fixed shape moves the output resolution onto its list,
+    // Auto keeps the size, and Save applies it without a restart.
+    {
+        using gpu::aspect_ratio::Mode;
+        settings::savedConfig=afSaved;settings::edit=afSaved;settings::edit.width=1920;settings::edit.height=1080;
+        settings::row=int(GraphicsRow::AspectRatio);tick(4);
+        Check(settings::edit.aspectRatio==Mode::Standard && settings::edit.width==1440 && settings::edit.height==1080,
+              "4:3 moves 1920x1080 to 1440x1080");
+        Check(settings::snapshot.rows[int(GraphicsRow::AspectRatio)].value==L"4:3" &&
+              settings::snapshot.rows[int(GraphicsRow::OutputResolution)].choices.size()==4,"4:3 lists its four resolutions");
+        tick(8);Check(settings::edit.aspectRatio==Mode::Auto && settings::edit.width==1440,"Auto keeps the window size");
+        tick(8);tick(8);Check(settings::edit.aspectRatio==Mode::Ultrawide && settings::edit.width==2560 && settings::edit.height==1080,
+              "21:9 keeps the 1080 height");
+        settings::row=int(GraphicsRow::Save);tick(0x1000);tick();
+        Check(settings::GetConfig().aspectRatio==Mode::Ultrawide && !settings::restartPrompt,
+              "Save applies the aspect ratio without a restart");
+        auto aspectAfter=afSaved;aspectAfter.aspectRatio=Mode::Standard;
+        Check(!settings::restart::Required(afSaved,aspectAfter),"aspect ratio needs no restart");
+        settings::displayTicket=0;
+    }
     // GPU choice: Automatic plus each adapter; a change saves and asks for a restart.
     settings::savedConfig=afSaved;settings::edit=afSaved;
     settings::row=int(GraphicsRow::Gpu);tick();

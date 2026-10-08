@@ -26,6 +26,16 @@ inline Scale ForAspect(float aspect)
                                  : Scale{1.0f, aspect / NativeAspect};
 }
 
+// The 3D view. narrowTall keeps the 16:9 height on a tall output and narrows
+// the horizontal view instead, like a console's 4:3 output; UI and movies still
+// use ForAspect.
+inline Scale ForScene(float aspect, bool narrowTall)
+{
+    if (narrowTall && std::isfinite(aspect) && aspect > 0.0f && aspect < NativeAspect)
+        return {NativeAspect / aspect, 1.0f};
+    return ForAspect(aspect);
+}
+
 inline float FitBoundary(float value, float extent, float scale, float anchor = 0.5f)
 {
     return (1.0f - scale) * extent * anchor + value * scale;

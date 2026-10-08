@@ -42,6 +42,13 @@ gpu::aspect_layout::Scale OutputScale()
     return gpu::aspect_layout::ForAspect(gpu::renderer::ActiveOutputAspect());
 }
 
+// The camera: Hor+ like OutputScale, or the narrower 4:3 view the Aspect ratio
+// setting asks for. HUD, menus and movies keep OutputScale.
+gpu::aspect_layout::Scale SceneScale()
+{
+    return gpu::aspect_layout::ForScene(gpu::renderer::ActiveOutputAspect(), gpu::frame_plan::NarrowTallView());
+}
+
 bool IsMainPerspectiveView(uint32_t view)
 {
     // The common constructor is also used for subordinate orthographic views.
@@ -162,7 +169,7 @@ void EmitMovieBars(uint32_t device, uint32_t surfaceInfo, uint32_t colorInfo,
 void HorPlusViewProjection(PPCRegister& r1, PPCRegister& r31)
 {
     const uint32_t caller = LoadWord(r1.u32 + 0x1D8);
-    const auto scale = OutputScale();
+    const auto scale = SceneScale();
     if ((caller == 0x82300AFC || caller == 0x82307BEC) && IsMainPerspectiveView(r31.u32))
         ScaleProjection(r31.u32 + 0x80, scale);
 }
@@ -173,7 +180,7 @@ PPC_FUNC(sub_82300E50)
 {
     const uint32_t caller = uint32_t(ctx.lr);
     const uint32_t projection = ctx.r3.u32;
-    const auto scale = OutputScale();
+    const auto scale = SceneScale();
     __imp__sub_82300E50(ctx, base);
     if (caller == 0x82988684)
         ScaleProjection(projection, scale);
