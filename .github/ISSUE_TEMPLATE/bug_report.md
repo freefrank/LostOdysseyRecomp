@@ -6,18 +6,11 @@ labels: ''
 assignees: ''
 ---
 
-## Required attachments
+## Log
 
-**Game running issues:** Attach the latest log from the affected run. Logs are in the **`logs` folder inside your game folder** (for example, `logs/runtime-<timestamp>.log`). Include the complete file, not just a screenshot or a few lines.
+Attach the latest log from the affected run. Logs are in the **`logs` folder inside your game folder** (for example, `logs/runtime-<timestamp>.log`). Include the complete file, not just a screenshot or a few lines. For a visual issue, a screenshot or video helps too.
 
-**Visual bugs:** Also attach a render-state capture archive (`.zip` on Windows or `.tar.gz` on Linux):
-
-1. While the visual issue is visible, press **F1** to open the **Debug Menu**.
-2. Scroll to the bottom and click **Capture render state** to save frame information.
-3. Wait for capture and automatic archive compression to finish. The status displays the saved archive path.
-4. Upload that **archive** here. A screenshot or video can help show the issue, but does not replace the archive.
-
-If no log was created, or a crash/freeze prevents capture, explain that here and attach any available evidence.
+If no log was created, say so here.
 
 <!-- Drag and drop files here. -->
 
@@ -38,15 +31,6 @@ Map name/ID or story progress, if known:
 - Expected:
 - Actual:
 
-## Environment
-
-- LostOdysseyRecomp version or commit:
-- OS and version:
-- CPU:
-- GPU and driver version:
-- Game language:
-- Relevant settings or modifications:
-
 ## Additional context
 
-<!-- Optional. -->
+<!-- Optional: mods or settings you changed. -->
