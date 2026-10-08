@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -16,9 +17,11 @@
 // Its GetData (sub_823CF3F0) waits until the GPU fence has passed the query and
 // END ZPass A and B no longer both hold the sentinel it stamped. Lost Odyssey
 // reads its queries in the same frame, right after issuing them, so an exact
-// result costs a GPU sync in the middle of every frame (Mode::Strict). The
-// default writes the last measured count of the same record instead
-// (Mode::Fast), as Xenia's default "fast" mode does.
+// result costs a GPU sync in the middle of every frame (Mode::Strict). Mode::Fast
+// writes the last measured count of the same record instead, as Xenia's default
+// "fast" mode does, and never culls. The default (Policy::Adaptive) runs Fast and
+// switches to Strict while most queried objects read zero, where culling saves
+// more than the sync costs (AdaptiveMode).
 //
 // The game hands out its query objects from a pool in allocation order every
 // frame (sub_823CCCE8), so a record belongs to a different object whenever the
@@ -64,13 +67,18 @@ namespace gpu::occlusion
         Strict,
     };
 
-    // LO_ZPD_MODE: unset or "host" selects Mode::Fast, "strict" Mode::Strict.
-    // The command processor's fake modes (grow, xenia, begin0, none) turn
-    // host queries off.
-    inline std::optional<Mode> HostMode(const char* mode)
+    // Which Mode answers the queries: one of them throughout, or AdaptiveMode's
+    // choice frame by frame.
+    enum class Policy { Adaptive, Fast, Strict };
+
+    // LO_ZPD_MODE: unset or "host" selects Policy::Adaptive, "fast" and
+    // "strict" pin one mode. The command processor's fake modes (grow, xenia,
+    // begin0, none) turn host queries off.
+    inline std::optional<Policy> HostPolicy(const char* mode)
     {
-        if (!mode || !*mode || std::strcmp(mode, "host") == 0) return Mode::Fast;
-        if (std::strcmp(mode, "strict") == 0) return Mode::Strict;
+        if (!mode || !*mode || std::strcmp(mode, "host") == 0) return Policy::Adaptive;
+        if (std::strcmp(mode, "fast") == 0) return Policy::Fast;
+        if (std::strcmp(mode, "strict") == 0) return Policy::Strict;
         return std::nullopt;
     }
 
@@ -121,7 +129,10 @@ namespace gpu::occlusion
     {
     public:
         explicit Tracker(Mode mode = Mode::Fast) : mode_(mode) {}
+        // Applies from the next END event; queries already waiting for host
+        // results keep waiting until their batch completes.
         void SetMode(Mode mode) { mode_ = mode; }
+        Mode CurrentMode() const { return mode_; }
 
         // BEGIN event: the record to write now. `owner` (OwnerKey) names the
         // guest object whose earlier counts answer this query in Mode::Fast;
@@ -163,6 +174,7 @@ namespace gpu::occlusion
                 counter_ = query.begin + samples;
                 query.written = true;
             }
+            else ++unwritten_;
             pending_.push_back(std::move(query));
             return write;
         }
@@ -194,12 +206,7 @@ namespace gpu::occlusion
         }
 
         // A guest may be waiting on an END record that is not written yet.
-        bool HasAwaited() const
-        {
-            for (const auto& query : pending_)
-                if (!query.written) return true;
-            return false;
-        }
+        bool HasAwaited() const { return unwritten_ != 0; }
 
         // An unwritten END record waits on host queries in `batch`.
         bool Waiting(uint64_t batch) const
@@ -273,6 +280,7 @@ namespace gpu::occlusion
                     writes.push_back({it->end, Counts(it->begin + samples), samples, !it->failed, !it->written});
                     if (!it->written && it->begin + samples - counter_ < 0x80000000u) counter_ = it->begin + samples;
                 }
+                if (!it->written) --unwritten_;
                 it = pending_.erase(it);
             }
             return writes;
@@ -280,9 +288,93 @@ namespace gpu::occlusion
 
         Mode mode_;
         uint32_t counter_ = 0;
+        size_t unwritten_ = 0; // pending queries whose END record waits for host results
         std::optional<Query> active_;
         std::deque<Query> pending_;
         std::unordered_map<uint32_t, uint32_t> generations_;
         std::unordered_map<uint64_t, uint32_t> last_; // last measured count per owner
+    };
+
+    // Policy::Adaptive: the Mode for the next frame, from the zero share of the
+    // queries that completed over a window of frames.
+    //
+    // Strict hides what the console hides, but each frame waits for the host GPU
+    // to count the queries the guest reads mid-frame. That pays off only when
+    // most queried objects are hidden: a room seen through a doorway, where
+    // about 80% of a thousand queries read zero, drops about 60% of the draws
+    // and renders faster, while a street with 15% zeros renders slower. With
+    // Strict the guest tests hidden objects in batches, so the zero share falls
+    // (about 80% in Fast reads as 35% in Strict in the same view); Strict
+    // therefore leaves at a lower share than Fast enters at. A switch takes two
+    // windows in a row, and frames without completed queries (menus, loading
+    // screens, fades) do not count, so a scene change does not switch on its
+    // transition frames. After leaving, Fast holds for a cooldown that doubles
+    // each time Strict lasted only briefly, so a view on the edge settles in
+    // Fast instead of switching back and forth.
+    class AdaptiveMode
+    {
+    public:
+        static constexpr uint32_t kWindowFrames = 32;
+        static constexpr uint32_t kSwitchWindows = 2;
+        static constexpr double kEnterZeroShare = 0.5;
+        static constexpr uint32_t kEnterZerosPerFrame = 256;
+        static constexpr double kLeaveZeroShare = 0.2;
+        static constexpr uint32_t kCooldownFrames = 240;
+        static constexpr uint32_t kMaxCooldownFrames = kCooldownFrames * 16;
+        static constexpr uint32_t kBriefStrictFrames = kWindowFrames * kSwitchWindows * 2;
+
+        Mode Current() const { return mode_; }
+        // The last evaluated window, for logs.
+        double ZeroShare() const { return share_; }
+        double ZerosPerFrame() const { return zerosPerFrame_; }
+        uint32_t Cooldown() const { return cooldown_; }
+
+        // Queries that completed with host results, `zero` of them reading 0.
+        void Add(uint32_t measured, uint32_t zero)
+        {
+            measured_ += measured;
+            zero_ += zero;
+        }
+
+        // Once per guest frame. Returns true when the mode changed.
+        bool EndFrame()
+        {
+            if (mode_ == Mode::Strict) ++strictFrames_;
+            if (cooldown_) {
+                --cooldown_;
+                measured_ = zero_ = counted_ = 0;
+                return false;
+            }
+            if (measured_ == counted_) return false; // no queries completed this frame
+            counted_ = measured_;
+            if (++frames_ < kWindowFrames) return false;
+            share_ = double(zero_) / double(measured_);
+            zerosPerFrame_ = double(zero_) / double(frames_);
+            frames_ = 0;
+            measured_ = zero_ = counted_ = 0;
+            const bool other = mode_ == Mode::Fast
+                ? share_ >= kEnterZeroShare && zerosPerFrame_ >= kEnterZerosPerFrame
+                : share_ < kLeaveZeroShare;
+            votes_ = other ? votes_ + 1 : 0;
+            if (votes_ < kSwitchWindows) return false;
+            votes_ = 0;
+            if (mode_ == Mode::Fast) {
+                mode_ = Mode::Strict;
+                strictFrames_ = 0;
+                return true;
+            }
+            mode_ = Mode::Fast;
+            if (strictFrames_ >= kBriefStrictFrames) hold_ = kCooldownFrames;
+            cooldown_ = hold_;
+            hold_ = std::min(hold_ * 2, kMaxCooldownFrames);
+            return true;
+        }
+
+    private:
+        Mode mode_ = Mode::Fast;
+        uint64_t measured_ = 0, zero_ = 0, counted_ = 0;
+        uint32_t frames_ = 0, votes_ = 0, strictFrames_ = 0;
+        uint32_t cooldown_ = 0, hold_ = kCooldownFrames;
+        double share_ = 0.0, zerosPerFrame_ = 0.0;
     };
 }

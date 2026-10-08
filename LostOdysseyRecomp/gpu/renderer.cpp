@@ -231,10 +231,12 @@ namespace gpu::renderer
 
     namespace
     {
-        // A guest waits in GetData (NoteOcclusionWait); only Mode::Strict
-        // leaves END records for the command processor to complete.
+        // A guest waits in GetData (NoteOcclusionWait). Only Mode::Strict leaves
+        // END records for the command processor to complete; g_occlusionAwaited
+        // is set while any is unwritten. The guest polls GetData in a loop, so a
+        // poll that misses the flag is repeated.
         std::atomic<bool> g_occlusionWait{false};
-        std::atomic<bool> g_occlusionStrict{false};
+        std::atomic<bool> g_occlusionAwaited{false};
         // Owner of each guest query record slot, as the pool allocation hook
         // last reported it (NoteOcclusionQueryOwner).
         std::mutex g_occlusionOwnerMutex;
@@ -534,9 +536,12 @@ namespace gpu::renderer
                 std::unique_ptr<RenderCommandFence> fence;
                 std::unique_ptr<RenderQueryPool> timingQueries;
                 // Host queries around guest draws inside guest occlusion
-                // queries, reset when the slot's list opens.
-                std::unique_ptr<RenderQueryPool> occlusionQueries;
+                // queries, reset when the slot's list opens. Query i lives in
+                // pool i / kOcclusionPoolQueries; only pools in use are read.
+                std::vector<std::unique_ptr<RenderQueryPool>> occlusionQueries;
+                std::vector<uint64_t> occlusionResults;
                 uint32_t occlusionUsed = 0;
+                uint32_t occlusionPoolsDirty = 0; // pools [0, n) need a reset before use
                 uint64_t occlusionBatch = 0;
                 draw_timing::Probe drawProbe;
                 std::unique_ptr<RenderBuffer> uploadRing;
@@ -619,9 +624,16 @@ namespace gpu::renderer
             // Guest occlusion queries counted by host queries (see
             // occlusion_queries.h). Off when LO_ZPD_MODE selects a fake mode or
             // the backend has no occlusion queries; the command processor then
-            // writes its fake counts instead.
-            static constexpr uint32_t kOcclusionQueriesPerSlot = 1024;
+            // writes its fake counts instead. A batch can measure up to
+            // kOcclusionQueriesPerSlot draws; later ones read as visible. Reading
+            // a pool's results costs time for every query in it, used or not,
+            // so the queries come in pools of kOcclusionPoolQueries.
+            static constexpr uint32_t kOcclusionPoolQueries = 1024;
+            static constexpr uint32_t kOcclusionPoolsPerSlot = 4;
+            static constexpr uint32_t kOcclusionQueriesPerSlot = kOcclusionPoolQueries * kOcclusionPoolsPerSlot;
             gpu::occlusion::Tracker occlusion;
+            gpu::occlusion::Policy occlusionPolicy = gpu::occlusion::Policy::Adaptive;
+            gpu::occlusion::AdaptiveMode occlusionAdaptive;
             uint64_t nextOcclusionBatch = 1;
             bool hostOcclusion = false;
 
@@ -2184,16 +2196,19 @@ namespace gpu::renderer
                     LOG_WARNING("renderer: optional position evidence collection unavailable: {}",error.what());
                 }
 
-                const auto occlusionMode = gpu::occlusion::HostMode(getenv("LO_ZPD_MODE"));
-                hostOcclusion = occlusionMode && device->getCapabilities().occlusionQueries;
-                if (occlusionMode) occlusion.SetMode(*occlusionMode);
+                const auto occlusionHostPolicy = gpu::occlusion::HostPolicy(getenv("LO_ZPD_MODE"));
+                hostOcclusion = occlusionHostPolicy && device->getCapabilities().occlusionQueries;
+                if (occlusionHostPolicy) occlusionPolicy = *occlusionHostPolicy;
+                occlusion.SetMode(occlusionPolicy == gpu::occlusion::Policy::Strict ? gpu::occlusion::Mode::Strict : gpu::occlusion::Mode::Fast);
                 for (uint32_t i = 0; i < kGpuSlots; ++i) {
                     auto& g = gpuSlots[i];
                     // Optional: without these pools the command processor keeps its fake counts.
-                    if (hostOcclusion) {
-                        g.occlusionQueries = device->createOcclusionQueryPool(kOcclusionQueriesPerSlot);
-                        hostOcclusion = g.occlusionQueries && g.occlusionQueries->getCount() == kOcclusionQueriesPerSlot;
+                    for (uint32_t p = 0; hostOcclusion && p < kOcclusionPoolsPerSlot; ++p) {
+                        auto pool = device->createOcclusionQueryPool(kOcclusionPoolQueries);
+                        hostOcclusion = pool && pool->getCount() == kOcclusionPoolQueries;
+                        g.occlusionQueries.push_back(std::move(pool));
                     }
+                    g.occlusionPoolsDirty = kOcclusionPoolsPerSlot; // new queries start undefined
                     g.list = queue->createCommandList();
                     if (!g.list) return InitFailure("command_list.create", 0, i);
                     if (dlssController || temporalUpscaler) {
@@ -2225,11 +2240,12 @@ namespace gpu::renderer
                     g.uploadGeneration = ++uploadGenerations;
                 }
                 if (!hostOcclusion)
-                    for (auto& g : gpuSlots) g.occlusionQueries.reset();
-                g_occlusionStrict.store(hostOcclusion && occlusionMode == gpu::occlusion::Mode::Strict, std::memory_order_relaxed);
-                LOG_INFO("renderer: occlusion queries {} (precise={} LO_ZPD_MODE={})",
-                    !hostOcclusion ? "fake" : occlusionMode == gpu::occlusion::Mode::Strict ? "host-strict" : "host-fast",
-                    device->getCapabilities().occlusionQueryPrecise, getenv("LO_ZPD_MODE") ? getenv("LO_ZPD_MODE") : "unset");
+                    for (auto& g : gpuSlots) g.occlusionQueries.clear();
+                LOG_INFO("renderer: occlusion queries {} (precise={} per_batch={} LO_ZPD_MODE={})",
+                    !hostOcclusion ? "fake" : occlusionPolicy == gpu::occlusion::Policy::Strict ? "host-strict" :
+                    occlusionPolicy == gpu::occlusion::Policy::Fast ? "host-fast" : "host-adaptive",
+                    device->getCapabilities().occlusionQueryPrecise, kOcclusionQueriesPerSlot,
+                    getenv("LO_ZPD_MODE") ? getenv("LO_ZPD_MODE") : "unset");
                 BindGpuSlot();
                 const auto vertexFlags = RenderBufferFlag::STORAGE |
                     (vulkan ? RenderBufferFlag::DEVICE_ADDRESSABLE : RenderBufferFlag::NONE);
@@ -4060,40 +4076,82 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     WriteOcclusionRecords({occlusion.Begin(address, owner)});
                 }
                 else if (auto end = occlusion.End(address)) WriteOcclusionRecords({*end});
+                PublishOcclusionAwaited();
                 return true;
+            }
+
+            // NoteOcclusionWait wakes the command processor only while an END
+            // record waits for host results.
+            bool occlusionAwaitedPublished = false;
+            void PublishOcclusionAwaited()
+            {
+                const bool awaited = occlusion.HasAwaited();
+                if (awaited == occlusionAwaitedPublished) return;
+                occlusionAwaitedPublished = awaited;
+                g_occlusionAwaited.store(awaited, std::memory_order_release);
             }
 
             // The host query for a draw inside a guest occlusion query, or ~0u.
             uint32_t OcclusionQueryForDraw()
             {
-                if (!hostOcclusion || !occlusion.Active() || Gpu().occlusionUsed >= kOcclusionQueriesPerSlot) return ~0u;
-                return Gpu().occlusionUsed++;
+                if (!hostOcclusion || !occlusion.Active()) return ~0u;
+                if (Gpu().occlusionUsed >= kOcclusionQueriesPerSlot) { ++occlusionStats.capped; return ~0u; }
+                const uint32_t index = Gpu().occlusionUsed++;
+                Gpu().occlusionPoolsDirty = std::max(Gpu().occlusionPoolsDirty, index / kOcclusionPoolQueries + 1);
+                return index;
             }
 
             // The slot's fence has completed, so its host queries are final.
             void CompleteOcclusionQueries(GpuSlot& s)
             {
                 if (!s.occlusionUsed) return;
-                s.occlusionQueries->queryResults();
-                const auto writes = occlusion.Complete(s.occlusionBatch,
-                    std::span<const uint64_t>(s.occlusionQueries->getResults(), s.occlusionUsed));
+                const auto readStart = std::chrono::steady_clock::now();
+                s.occlusionResults.resize(s.occlusionUsed);
+                for (uint32_t first = 0; first < s.occlusionUsed; first += kOcclusionPoolQueries) {
+                    auto& pool = *s.occlusionQueries[first / kOcclusionPoolQueries];
+                    pool.queryResults();
+                    std::copy_n(pool.getResults(), std::min(kOcclusionPoolQueries, s.occlusionUsed - first),
+                        s.occlusionResults.begin() + first);
+                }
+                occlusionStats.readbackUs += uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(
+                    std::chrono::steady_clock::now() - readStart).count());
+                const auto writes = occlusion.Complete(s.occlusionBatch, s.occlusionResults);
                 WriteOcclusionRecords(writes);
+                PublishOcclusionAwaited();
                 s.occlusionUsed = 0;
+                uint32_t measured = 0, zero = 0;
                 for (const auto& write : writes) {
                     ++occlusionStats.resolved;
+                    measured += write.measured;
+                    zero += write.measured && !write.samples;
                     occlusionStats.zero += write.measured && !write.samples;
                     occlusionStats.fallback += !write.measured;
                     if (occlusionStats.resolved <= 16 || occlusionStats.resolved % 4096 == 0)
-                        LOG_INFO("renderer: occlusion result f{} record={:#x} samples={} measured={} fast={} resolved={} zero={} fallback={} guest_waits={} wait_flushes={} wait_ms={:.1f}",
+                        LOG_INFO("renderer: occlusion result f{} record={:#x} samples={} measured={} fast={} resolved={} zero={} fallback={} capped={} guest_waits={} wait_flushes={} wait_ms={:.1f} readback_ms={:.1f} mode={}",
                             frame, write.address, write.samples, write.measured, !write.apply, occlusionStats.resolved,
-                            occlusionStats.zero, occlusionStats.fallback, occlusionStats.waits,
-                            occlusionStats.flushes, occlusionStats.waitUs / 1000.0);
+                            occlusionStats.zero, occlusionStats.fallback, occlusionStats.capped, occlusionStats.waits,
+                            occlusionStats.flushes, occlusionStats.waitUs / 1000.0, occlusionStats.readbackUs / 1000.0,
+                            occlusion.CurrentMode() == gpu::occlusion::Mode::Strict ? "strict" : "fast");
                 }
+                occlusionAdaptive.Add(measured, zero);
             }
 
             struct {
-                uint64_t resolved = 0, zero = 0, fallback = 0, waits = 0, flushes = 0, waitUs = 0;
+                uint64_t resolved = 0, zero = 0, fallback = 0, capped = 0, waits = 0, flushes = 0, waitUs = 0, readbackUs = 0;
             } occlusionStats;
+
+            // End of a guest frame: Policy::Adaptive picks the next frame's mode.
+            void OcclusionFrameEnd()
+            {
+                if (!hostOcclusion || occlusionPolicy != gpu::occlusion::Policy::Adaptive || !occlusionAdaptive.EndFrame()) return;
+                const auto mode = occlusionAdaptive.Current();
+                occlusion.SetMode(mode);
+                static uint64_t switches = 0;
+                if (++switches <= 32 || switches % 64 == 0)
+                    LOG_INFO("renderer: occlusion mode {} f{} zero_share={:.2f} zeros_per_frame={:.0f} cooldown={} switches={}",
+                        mode == gpu::occlusion::Mode::Strict ? "strict" : "fast", frame, occlusionAdaptive.ZeroShare(),
+                        occlusionAdaptive.ZerosPerFrame(), occlusionAdaptive.Cooldown(), switches);
+            }
 
             void LogOcclusionDraw(uint32_t index, bool pixelShader, const HostTexture* target)
             {
@@ -4110,6 +4168,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             {
                 for (auto& s : gpuSlots) s.occlusionUsed = 0;
                 WriteOcclusionRecords(occlusion.AbandonAll());
+                PublishOcclusionAwaited();
             }
 
             // A guest waits in GetData. Submit the open batch when a waiting
@@ -4312,7 +4371,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     }
                     if (hostOcclusion) {
                         // Outside any render pass, before this batch's first query.
-                        commandList->resetQueryPool(Gpu().occlusionQueries.get(), 0, kOcclusionQueriesPerSlot);
+                        // Pools untouched since their last reset need none.
+                        for (uint32_t p = 0; p < Gpu().occlusionPoolsDirty; ++p)
+                            commandList->resetQueryPool(Gpu().occlusionQueries[p].get(), 0, kOcclusionPoolQueries);
+                        Gpu().occlusionPoolsDirty = 0;
                         Gpu().occlusionUsed = 0;
                         Gpu().occlusionBatch = nextOcclusionBatch++;
                     }
@@ -10016,8 +10078,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
                 // Inside a guest occlusion query, count exactly this draw's samples.
                 const uint32_t occlusionIndex = OcclusionQueryForDraw();
-                if (occlusionIndex != ~0u)
-                    commandList->beginOcclusionQuery(Gpu().occlusionQueries.get(), occlusionIndex);
+                RenderQueryPool* occlusionPool = occlusionIndex != ~0u
+                    ? Gpu().occlusionQueries[occlusionIndex / kOcclusionPoolQueries].get() : nullptr;
+                if (occlusionPool)
+                    commandList->beginOcclusionQuery(occlusionPool, occlusionIndex % kOcclusionPoolQueries);
                 if (useIndices)
                 {
                     RenderIndexBufferView view(RenderBufferReference(uploadRing, preparedIndexOffset), uint32_t(indices.size() * 4), RenderFormat::R32_UINT);
@@ -10028,8 +10092,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 {
                     commandList->drawInstanced(indexCount, 1, uint32_t(baseVertex), 0);
                 }
-                if (occlusionIndex != ~0u) {
-                    commandList->endOcclusionQuery(Gpu().occlusionQueries.get(), occlusionIndex);
+                if (occlusionPool) {
+                    commandList->endOcclusionQuery(occlusionPool, occlusionIndex % kOcclusionPoolQueries);
                     const HostTexture* measured = depth ? depth : color;
                     occlusion.DrawMeasured({Gpu().occlusionBatch, occlusionIndex, gpu::occlusion::SampleScale(
                         measured->guestWidth, measured->guestHeight, measured->width, measured->height, (surfaceInfo >> 16) & 3)});
@@ -11805,6 +11869,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             void AdvanceAfterPublicFlush() {
                 if (fgUiCapture && fgUiCapture->frame == frame && !fgUiCapture->finalRecorded)
                     ExportFgUiCapture(fgUiCapture);
+                OcclusionFrameEnd();
                 ++frame; drawsThisFrame = 0; drops = {};
             }
             frame_generation::ResolveIdentity FgIdentity(const ResolvedSurface& rs) const
@@ -12724,7 +12789,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 
     void NoteOcclusionWait()
     {
-        if (g_occlusionStrict.load(std::memory_order_relaxed) &&
+        if (g_occlusionAwaited.load(std::memory_order_acquire) &&
             !g_occlusionWait.exchange(true, std::memory_order_acq_rel))
             g_commandProcessor.Wake();
     }
