@@ -2918,11 +2918,12 @@
       "fields": {
         "Kind": "Feature",
         "Area": "Graphics features",
-        "Status": "Todo",
-        "Delivery": "Not started",
+        "Status": "Done",
+        "Delivery": "Released",
         "Start date": "2026-09-19",
-        "Evidence": "Feature request for camera head-bobbing toggle and motion blur toggle for motion sickness reduction. In backlog; implementation not started.",
-        "Source key": "issue-48-motion-sickness-qol"
+        "Evidence": "Feature request for a camera head-bob toggle and a motion blur toggle to reduce motion sickness. PR #318 (merged 2026-10-08T06:12:21Z as 6278cc08, shipped in v0.8.61, published 08:33:11Z, not accepted) adds Settings > Graphics > Motion blur (off returns through the motion-blur proxy's early exit; ported from boma's Xenia patch; a saved change applies on the next frame). The exploration camera head-bob is unchanged, as the maintainer's release comment (2026-10-08 at 08:39:53Z) says, so half of the request is not delivered. The maintainer closed the Issue as completed by hand at 08:40:14Z, after the release; the item keeps that Done. PR #318 was not run in game. No reporter confirmation is recorded.",
+        "Source key": "issue-48-motion-sickness-qol",
+        "Release": "v0.8.61"
       }
     },
     "issue-40-controller-mod-support": {
@@ -2946,7 +2947,7 @@
         "Status": "Done",
         "Delivery": "Released",
         "Start date": "2026-09-14",
-        "Evidence": "Depth of field (Off to 100%) and Bloom settings shipped in v0.8.30 (PR #228, thanks @cngjd); the Issue was closed on 2026-10-05. No reporter confirmation is recorded.",
+        "Evidence": "Depth of field (Off to 100%) and Bloom settings shipped in v0.8.30 (PR #228, thanks @cngjd); the Issue was closed on 2026-10-05. No reporter confirmation is recorded. Follow-up: v0.8.61 (PR #318, not run in game) adds Motion blur and Dynamic shadows switches in Settings > Graphics; the maintainer commented the release on 2026-10-08 at 08:34:54Z. Release stays v0.8.30, the first release that carried the delivery.",
         "Source key": "issue-30-dof-toggle-slider",
         "Release": "v0.8.30"
       }
@@ -2959,7 +2960,7 @@
         "Status": "Todo",
         "Delivery": "Not started",
         "Release": null,
-        "Evidence": "Planned for next release after v0.6.19 (version unspecified); implementation and verification not started. Removes standalone experimental TAA user option while retaining Off, FXAA, spatial SMAA, DLSS, and FSR. FXAA/SMAA paths disable temporal camera jitter and in-house TAA history accumulation; DLSS/FSR retain common jitter, depth, and motion vector inputs. Legacy TAA settings migrate to stable spatial AA. User reported ground flickering in capture render-17903110123692464-f2548.zip. Structural checks on f2548 are complete; specific ground draw/shader, flickering stage, and root cause remain undetermined. Acceptance requires separate DLSS and FSR ground-flicker verification; removing standalone TAA does not claim ground-flicker resolution. 2026-10-06: still not started thirteen releases later (v0.7.0 to v0.8.44); the 'TAA (Experimental)' option remains in the settings menu, and the stale Release text 'Next release' was cleared; unscheduled.",
+        "Evidence": "Planned for next release after v0.6.19 (version unspecified); implementation and verification not started. Removes standalone experimental TAA user option while retaining Off, FXAA, spatial SMAA, DLSS, and FSR. FXAA/SMAA paths disable temporal camera jitter and in-house TAA history accumulation; DLSS/FSR retain common jitter, depth, and motion vector inputs. Legacy TAA settings migrate to stable spatial AA. User reported ground flickering in capture render-17903110123692464-f2548.zip. Structural checks on f2548 are complete; specific ground draw/shader, flickering stage, and root cause remain undetermined. Acceptance requires separate DLSS and FSR ground-flicker verification; removing standalone TAA does not claim ground-flicker resolution. 2026-10-08: still not started; v0.8.61 (PR #321) only drops the '(Experimental)' label from TAA, and the standalone TAA option remains; the stale Release text 'Next release' was cleared on 2026-10-06; unscheduled.",
         "Source key": "anti-aliasing-consolidation-remove-experimental-taa"
       },
       "title": "Consolidate anti-aliasing options and remove standalone experimental TAA",
@@ -3737,7 +3738,7 @@
         "Delivery": "Released",
         "Release": "v0.8.44",
         "Start date": "2026-10-03",
-        "Evidence": "Reported on v0.8.0 (RX 6600, 4K, GTAO): FSR Quality, Balanced and Performance all ran at about the same frame rate. PR #189 (shipped in v0.8.10) stopped recreating the SR images every frame; PR #250 (shipped in v0.8.44) cut one full-resolution copy and blend per frame; PR #305 (merged 2026-10-08T00:39:50Z as 26ad776c, not yet released) folds the FSR encode into the composite and defers the restore resample (psvita, 12 W, 4K FSR Performance: 51.66 to 48.64 ms GPU). Measured on psvita (AMD) and, for #305, also checked with DLSS on an RTX 5080; not on the reporter's machine. The maintainer closed the Issue as completed on 2026-10-07 at 22:59:34 UTC; on 2026-10-08 the reporter was asked to rerun after the next release. No reporter confirmation is recorded.",
+        "Evidence": "Reported on v0.8.0 (RX 6600, 4K, GTAO): FSR Quality, Balanced and Performance all ran at about the same frame rate. PR #189 (shipped in v0.8.10) stopped recreating the SR images every frame; PR #250 (shipped in v0.8.44) cut one full-resolution copy and blend per frame; PR #305 (merged 2026-10-08T00:39:50Z as 26ad776c, shipped in v0.8.61, published 08:33:11Z, not accepted) folds the FSR encode into the composite and defers the restore resample (psvita, 12 W, 4K FSR Performance: 51.66 to 48.64 ms GPU). Measured on psvita (AMD) and, for #305, also checked with DLSS on an RTX 5080; not on the reporter's machine. The maintainer closed the Issue as completed on 2026-10-07 at 22:59:34 UTC; on 2026-10-08 the reporter was asked to rerun after the next release, which is v0.8.61; no reply is recorded. No reporter confirmation is recorded.",
         "Source key": "issue-172-fsr-scaling-performance",
         "Status": "Done"
       }
@@ -3955,10 +3956,11 @@
       "fields": {
         "Kind": "Feature",
         "Area": "User interface",
-        "Status": "Todo",
-        "Delivery": "Not started",
-        "Evidence": "Request (2026-10-02): add simple animations to the options menu. No maintainer decision or implementation is recorded.",
-        "Source key": "issue-151-animated-options-menu"
+        "Status": "Done",
+        "Delivery": "Released",
+        "Evidence": "Request (2026-10-02): the host Settings menu has no animations. PR #317 (merged 2026-10-08T06:07:26Z as 07e2de78, shipped in v0.8.61, published 08:33:11Z, not accepted) eases the menu, presentation only: the content fades in over 220 ms on open, and tab switches, cursor moves, value changes, dialogs and the display countdown cross-fade over 150 ms; closing stays instant. Checked with LoMenuRenderTest, LoMenuFlowTest, CPU contracts 33/33 and settings_menu contracts 5/5; in game only one psvita run before the timer fix, none on the merged code. The Issue was closed with the merge at 06:07:27Z; the maintainer commented the release on 2026-10-08 at 08:34:55Z. No reporter confirmation is recorded.",
+        "Source key": "issue-151-animated-options-menu",
+        "Release": "v0.8.61"
       }
     },
     "issue-174-surround-5-1-audio": {
@@ -4024,6 +4026,76 @@
       },
       "title": "Publish the first-use pipeline stall fixes, display and audio settings in v0.8.53",
       "body_sha256": "165c5cc740731fc649cdc7a8d8443577a0dc993a69c5d2047f04c3de13665124"
+    },
+    "issue-275-button-prompt-style": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg_cyQw",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Input",
+        "Status": "Done",
+        "Delivery": "Released",
+        "Release": "v0.8.61",
+        "Start date": "2026-10-07",
+        "Evidence": "Request (2026-10-07): choose the button prompt type instead of following the last active controller. PR #320 (merged 2026-10-08T06:16:20Z as 91b66823, shipped in v0.8.61, published 08:33:11Z, not accepted) adds Settings > Gameplay > Button prompts: Auto (as before), Xbox or PlayStation; the in-game button atlas, the debug overlay and the menu glyphs follow it, applied and saved at once. Checked with the runtime build, LoMenuFlowTest (new row check), settings_menu contracts 5/5 and CPU contracts; not run in game. The Issue was closed with the merge at 06:16:22Z; the maintainer commented the release on 2026-10-08 at 08:34:56Z. No reporter confirmation is recorded.",
+        "Source key": "issue-275-button-prompt-style"
+      }
+    },
+    "issue-282-startup-black-screen": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg_cyTM",
+      "fields": {
+        "Kind": "Bug",
+        "Area": "Diagnostics",
+        "Status": "Done",
+        "Delivery": "Released",
+        "Release": "v0.8.61",
+        "Start date": "2026-10-07",
+        "Evidence": "Report (2026-10-07): the game starts to a black screen after the settings are chosen. A diagnostic build showed the NVIDIA driver walking its shader cache folder inside Direct3D 12 device creation (PR #300 body). On 2026-10-07 at 18:16 UTC the reporter was told to empty the NVIDIA DXCache and GLCache folders; the Issue was closed as completed at 18:49:36Z and no reporter reply after that is recorded. PR #300 (merged 19:22:49Z as cdf0b297, shipped in v0.8.61, published 2026-10-08T08:33:11Z, not accepted) keeps the diagnostics, not a workaround: a silent startup hang watch that logs the stuck step after 10 s, and LO_TRACE_STARTUP=1 for verbose lines (Windows x64). Checked with LoHangWatchTest (8/8), CPU contracts and psvita Proton starts; no run on a machine that hangs. No reporter confirmation is recorded.",
+        "Source key": "issue-282-startup-black-screen"
+      }
+    },
+    "issue-307-flickering-boat": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg_cyV0",
+      "fields": {
+        "Kind": "Bug",
+        "Area": "Temporal rendering",
+        "Status": "Done",
+        "Delivery": "Released",
+        "Release": "v0.8.61",
+        "Start date": "2026-10-08",
+        "Evidence": "Report (2026-10-08): the boats at Experimental Staff Marine Division flicker. The boats are drawn with a jittered depth pre-pass and then unjittered passes on the same geometry (GEQUAL depth test), half a pixel apart, so part of the hull fails the test under TAA, FSR and DLSS. PR #312 (merged 2026-10-08T02:04:38Z as e08b2111, shipped in v0.8.61, published 08:33:11Z, not accepted) adds the four exact shader pairs to the reviewed jitter list. LoTemporalJitterTest --captured-issue307-boat passes against the reporter's banks; on psvita (Proton D3D12, FSR Quality, 1080p) pixels changing by more than 8/255 between frames at the boats went from 3.74% to 0.02%. Not checked on the reporter's NVIDIA DLAA setup; the animated water in that map is a separate, smaller item. Closed with the merge at 02:04:39Z. No reporter confirmation is recorded.",
+        "Source key": "issue-307-flickering-boat"
+      }
+    },
+    "sdl3-runtime-migration": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg_cyYE",
+      "fields": {
+        "Kind": "Infrastructure",
+        "Area": "Runtime",
+        "Status": "Done",
+        "Delivery": "Released",
+        "Release": "v0.8.61",
+        "Start date": "2026-10-07",
+        "Evidence": "PR #289 (contributed by Xarishark; merged 2026-10-07T19:38:44Z as e59bfa24, shipped in v0.8.61, published 2026-10-08T08:33:11Z, not accepted) moves gamepads, keyboard, mouse, audio, window and display handling, the installer and updater UIs, the plume Vulkan surface path and the Android SDLActivity to the pinned SDL 3.4.18 submodule; Linux uses native Wayland where available. Maintainer's runs on the merged content (2026-10-07): Windows x64 with a three-monitor mixed-DPI test, native Linux on an AMD host under GNOME Wayland and the Windows build under GE-Proton, macOS arm64 on an M1 Max (new-game-battle scenario) and an Android arm64 APK on an OPPO foldable. Not validated: controller hotplug on Android and macOS, Android rumble, an X11-only Linux session, a 2x Retina or HDR display on macOS. No run with the v0.8.61 packages and no reporter confirmation is recorded.",
+        "Source key": "sdl3-runtime-migration"
+      },
+      "title": "Migrate the runtime from SDL2 to SDL 3.4.18 (PR #289)",
+      "body_sha256": "250aca5c42ec2e143efbe967577d40097856a8e41dfa175ebfaca38897e1e6d9"
+    },
+    "release-v0-8-61": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg_cyaM",
+      "fields": {
+        "Kind": "Release",
+        "Area": "Release Engineering",
+        "Status": "Done",
+        "Delivery": "Released",
+        "Release": "v0.8.61",
+        "Start date": "2026-10-08",
+        "Target date": "2026-10-08",
+        "Evidence": "Published v0.8.61 at 2026-10-08T08:33:11Z: latest release, annotated tag at commit 787fed28 on main, built and published by Gitea Actions run 504 (API id 896; six jobs succeeded, about 22.5 minutes from the tag push). An earlier run 500 (API id 892) on 66a83ec0 failed in the Linux job and published nothing; the tag was moved to the build fix. Assets: Windows ZIP 150,982,005 B (SHA-256 9b306ba2...), Linux AppImage 76,986,872 B (3978fc63...), Flatpak 54,691,336 B (2fff8046...), Android APK 45,766,306 B (a3d0b574...; CI-built) and macOS DMG 61,177,380 B (4b6aa771...; built on the maintainer's M1 Max from the tag, hdiutil verify valid, ad-hoc signature, uploaded by hand; first SDL 3 image). The release published no shader pack; the contracts changed with #313 and #315 and their packs were published on 2026-10-08 before the tag. Published, not accepted: 35 PRs (#281, the v0.8.53 record, and #283 to #322); no game run with the v0.8.61 packages and no player acceptance is recorded.",
+        "Source key": "release-v0-8-61"
+      },
+      "title": "Publish the settings menu, SDL 3, adaptive culling and rendering speed-ups in v0.8.61",
+      "body_sha256": "794c7d5780757b3e40f3e046b28309497eae55ad7c9cad08dde7d58a498b303b"
     }
   },
   "project_id": "PVT_kwHOAAsUY84Biy1a"
