@@ -243,7 +243,8 @@ private:
     // Its failures stay here and never fail SR.
     // Vulkan: the snippet's device extensions were enabled. D3D12: always.
     bool nrSupported_ = false;
-    std::string nrUnsupportedReason_;
+    bool nrMissingAtDeviceCreation_ = false;
+    std::string nrUnsupportedReason_ = "the Vulkan device extensions were not queried";
     bool nrSnippetInitialized_ = false;
     bool nrFailed_ = false;
     bool nrReset_ = true;

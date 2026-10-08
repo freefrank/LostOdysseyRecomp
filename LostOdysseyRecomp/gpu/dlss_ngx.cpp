@@ -1217,6 +1217,7 @@ void Controller::QueryNeuralRenderingExtensions(VkPhysicalDevice device, std::ve
     // Only a player who supplied the DLL gets the extra device extensions.
     std::error_code error;
     if (!std::filesystem::is_regular_file(nr::SnippetPath(runtimePath_), error)) {
+        nrMissingAtDeviceCreation_ = true;
         nrUnsupportedReason_ = "nvngx_dlssnr.dll was not there when the Vulkan device was created; restart the game";
         return;
     }
@@ -1272,7 +1273,8 @@ const nr::Snippet* Controller::NeuralRenderingSnippet(const SrConfig& config) {
     }
     if (backend_ != Backend::D3D12 && !nrSupported_) {
         nrFailed_ = true;
-        g_neuralRenderingState.store(NeuralRenderingState::Unsupported, std::memory_order_relaxed);
+        g_neuralRenderingState.store(nrMissingAtDeviceCreation_ ? NeuralRenderingState::MissingRuntime :
+            NeuralRenderingState::Unsupported, std::memory_order_relaxed);
         nr::Log("DLSS NR: off, %s", nrUnsupportedReason_.c_str());
         return nullptr;
     }
