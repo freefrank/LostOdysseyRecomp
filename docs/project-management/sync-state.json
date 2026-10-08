@@ -4096,6 +4096,19 @@
       },
       "title": "Publish the settings menu, SDL 3, adaptive culling and rendering speed-ups in v0.8.61",
       "body_sha256": "794c7d5780757b3e40f3e046b28309497eae55ad7c9cad08dde7d58a498b303b"
+    },
+    "sr-motion-replay-moving-only": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg_eJNo",
+      "fields": {
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Kind": "Feature",
+        "Release": "v1.0.0",
+        "Area": "Graphics performance",
+        "Source key": "sr-motion-replay-moving-only"
+      },
+      "title": "v1.0.0: Replay upscaler motion only for geometry that moved",
+      "body_sha256": "1ce57d74cfd8b7dc82f2c33cc585ca35f6297c4124732ddbff20e6768bea7d7a"
     }
   },
   "project_id": "PVT_kwHOAAsUY84Biy1a"

@@ -7493,6 +7493,19 @@
       ],
       "source_lines": [],
       "record_type": "backlog"
+    },
+    {
+      "key": "sr-motion-replay-moving-only",
+      "title": "v1.0.0: Replay upscaler motion only for geometry that moved",
+      "body": "<!-- lo-project:sr-motion-replay-moving-only -->\n\n## Summary and objectives\n\nUpscaler motion vectors come from replaying every scene draw a second time. On the #172 reporter's RX 6600 / i7-8700K, FSR Performance at 4K (50 FPS on v0.8.61) stays about a third slower than the same 1080p internal image without FSR; most of that gap is FSR itself and the motion replay. Replay only the draws that moved since the previous frame and take the rest from camera reprojection of depth (the existing hybrid fallback).\n\n## Scope and completion criteria\n\n- [ ] Measure first: share of static draws per frame and the CPU/GPU the replay costs in towns, fields, battles and cutscenes.\n- [ ] Classify a draw as moving when its transforms, bone or other vertex-shader constants, or vertex data changed; misclassification must err towards replaying.\n- [ ] No new ghosting on moving characters, NPCs, enemies, boats, animated foliage or particles with FSR, DLSS, XeSS and TAA.\n- [ ] Measured gain with FSR on a CPU-limited setup.\n\n## Status — 2026-10-08\n\nScheduled by the maintainer for before v1.0.0 after the #172 reporter's v0.8.61 numbers. Not started.\n\n## Sources\n\n- https://github.com/freefrank/LostOdysseyRecomp/issues/172#issuecomment-6066318946\n- LostOdysseyRecomp/gpu/sr_hybrid_motion.h\n",
+      "fields": {
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Kind": "Feature",
+        "Release": "v1.0.0",
+        "Area": "Graphics performance",
+        "Source key": "sr-motion-replay-moving-only"
+      }
     }
   ]
 }

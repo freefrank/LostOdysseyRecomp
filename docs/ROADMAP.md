@@ -89,6 +89,7 @@ Parallel tracks:
 
 ## v1.0.0 deferred plan
 
+- [ ] **Cheaper upscaler motion data:** replay only the draws that moved since the previous frame and take static geometry from camera reprojection, without new ghosting on moving characters ([#172](https://github.com/freefrank/LostOdysseyRecomp/issues/172); scheduled on 2026-10-08).
 - [ ] **Production HUDless/UI separation handoff:** establish and validate a dedicated scene/UI composition contract independently of v0.8.0 composited-backbuffer FG.
 
 ## Later backlog

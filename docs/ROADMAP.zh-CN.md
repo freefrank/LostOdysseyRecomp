@@ -89,6 +89,7 @@ Gate 1 backlog：调查已知 SDK `PRESENT-AFTER-WRITE` 同步例外并补充显
 
 ## v1.0.0 延后计划
 
+- [ ] **更省的超分运动信息：**只重画上一帧之后动过的物体，静止几何改用相机重投影，且移动角色不能出现新的鬼影（[#172](https://github.com/freefrank/LostOdysseyRecomp/issues/172)；2026-10-08 排期）。
 - [ ] **生产级 HUDless／UI 分离交接：**独立于 v0.8.0 的合成 backbuffer FG，建立并验证专用 scene／UI 合成契约。
 
 ## 后续积压
