@@ -4,6 +4,16 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 按新到旧记录简短更新，日期采用 UTC。技术验证见[开发状态](docs/STATUS.md)，后续计划见[路线图](docs/ROADMAP.zh-CN.md)。
 
+## Unreleased
+
+### English
+
+- Fixed a Vulkan crash a few seconds after startup on some NVIDIA GPUs (#323).
+
+### 简体中文
+
+- 修复部分 NVIDIA 显卡使用 Vulkan 时启动几秒后崩溃的问题（#323）。
+
 ## [v0.9.0](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.0) — 2026-10-08
 
 ### English
