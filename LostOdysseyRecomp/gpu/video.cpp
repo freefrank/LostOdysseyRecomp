@@ -2482,6 +2482,14 @@ namespace gpu::video
                 LOG_WARNING("HDR: SDR swap chain retained; frame generation keeps its SDR swap chain on this backend");
             }
             startupWatch.Step("swap chain creation");
+#ifdef _WIN32
+            // The swap chain takes the window's current size, so a resize the
+            // startup window-mode apply requested has nothing left to do. NVIDIA's
+            // Vulkan driver, presenting through DXGI, crashed right after that
+            // same-size rebuild at the first present (#323). Later window events
+            // still request one, and needsResize() still compares the sizes.
+            g_windowResizeRequested = false;
+#endif
             g_swapChain = g_queue->createSwapChain(SwapChainDescription());
 #ifdef _WIN32
             if (os::hang_watch::StartupTrace())

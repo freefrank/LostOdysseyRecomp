@@ -173,6 +173,10 @@ def main():
         if release.get('draft'):
             print('Draft release; nothing to post.')
             return 0
+        # Test builds for issues are prereleases; only a manual dispatch announces one.
+        if release.get('prerelease') and event_name == 'release':
+            print('Prerelease; nothing to post.')
+            return 0
         channel, message = env('DISCORD_RELEASES_CHANNEL'), release_message(release, repo_name)
     else:
         print(f'Nothing to post for {event_name}.')
