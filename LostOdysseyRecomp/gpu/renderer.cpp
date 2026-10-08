@@ -7880,7 +7880,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
                 key.colorMask = colorWrites ? (Reg(REG_RB_COLOR_MASK) & 0xF) : 0;
                 key.prim = info.primitiveType;
-                key.rtFormat = uint32_t(draw_attachment::DepthOnly(key.colorMask, depth != nullptr)
+                key.rtFormat = uint32_t(draw_attachment::DepthOnly(key.colorMask, depth != nullptr) &&
+                    !(depth && draw_attachment::KeepColorForDepthOnly() &&
+                      color->width == depth->width && color->height == depth->height)
                     ? RenderFormat::UNKNOWN : color->format);
                 key.depthFormat = depth ? uint32_t(depth->format) : 0;
                     pipelineLookupTimer.AddTo(tPipelineLookup);
@@ -7898,6 +7900,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 // catalog mapping while the pixel shader still writes depth.
                 const bool depthOnlyRaster = draw_attachment::DepthOnly(key.colorMask, depth != nullptr);
                 HostTexture* rasterTarget = depthOnlyRaster ? depth : color;
+                // Same-size targets may keep the color attachment (see KeepColorForDepthOnly).
+                const bool depthOnlyKeepsColor = depthOnlyRaster && draw_attachment::KeepColorForDepthOnly() &&
+                    color->width == depth->width && color->height == depth->height;
 
                 // Constants.
                 render_batch::CpuTimer<> tConst0(cpuTimingEnabled);
@@ -9618,7 +9623,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 // 2x-scaled while the actual depth raster target is fixed-size.
                 // Keeping that unused attachment makes VkFramebuffer invalid
                 // (04533/04534); reducing the depth draw's viewport would hide it.
-                RenderFramebuffer* framebuffer = GetFramebuffer(depthOnlyRaster ? nullptr : color, depth);
+                RenderFramebuffer* framebuffer = GetFramebuffer(depthOnlyRaster && !depthOnlyKeepsColor ? nullptr : color, depth);
                 commandList->setFramebuffer(framebuffer);
                 commandList->setViewports(&rasterViewport, 1);
                 commandList->setScissors(&scissor, 1);

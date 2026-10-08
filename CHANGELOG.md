@@ -18,6 +18,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Ambient occlusion (SSAO/GTAO) takes less GPU time with identical output: its full-screen pass costs about 40% less, which is about 8% of the frame's GPU time on an Adreno 840 phone (about 20% with HDR on).
 - The renderer thread spends about a fifth less CPU time per frame on graphics constants, index buffers and texture checks: about 8 ms less on an Adreno 840 phone and 3 ms less on an M1 Max.
 - Upscaling takes less GPU time with the same image: FSR 3.1 drops one full-screen pass and every upscaler skips another, about 3 ms per frame with FSR Performance at 4K on a Radeon 8060S limited to 12 W (14.4 → 15.2 FPS) (#172).
+- macOS: about 15% higher frame rate in busy scenes on an M1 Max with identical output: depth-only draws no longer split Metal render passes.
 
 ### 简体中文
 
@@ -31,6 +32,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - 环境光遮蔽（SSAO/GTAO）画面不变，占用的 GPU 时间更少：它的全屏 pass 耗时少约 40%，在 Adreno 840 手机上约占整帧 GPU 时间的 8%（开启 HDR 时约 20%）。
 - 渲染线程每帧在图形常量、索引缓冲和纹理校验上少花约五分之一的 CPU 时间：Adreno 840 手机上约少 8 毫秒，M1 Max 上约少 3 毫秒。
 - 超分画面不变，占用的 GPU 时间更少：FSR 3.1 少一个全屏 pass，所有超分方案再省掉一个；在功耗限制为 12 W 的 Radeon 8060S 上，4K FSR Performance 每帧约少 3 毫秒（14.4 → 15.2 FPS）（#172）。
+- macOS：画面不变，繁重场景下 M1 Max 帧率提高约 15%：只写深度的 draw 不再打断 Metal 的渲染 pass。
 
 ## [v0.8.53](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.8.53) — 2026-10-07
 
