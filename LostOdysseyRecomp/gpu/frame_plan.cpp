@@ -87,17 +87,35 @@ namespace gpu::frame_plan
         return 720;
     }
 #endif
+    namespace
+    {
+        uint32_t PlannedInternalResolution(const settings::Config& config)
+        {
+#if LO_PLATFORM_MACOS
+            return InternalResolutionMode(uint32_t(config.internalResolution));
+#else
+            return config.internalResolution == settings::InternalResolutionNative ? 0 : uint32_t(config.internalResolution);
+#endif
+        }
+    }
+
+    upscaling::OutputRegion PlannedOutputRegion(resolution::Size drawableSize, const settings::Config& config)
+    {
+        const auto output = upscaling::ResolveOutputRegion(drawableSize, config.aspectRatio);
+        return config.upscaler == upscaling::Upscaler::Off ? output :
+            upscaling::SupersampledOutputRegion(output, PlannedInternalResolution(config));
+    }
 
     void BeginCpuFrame()
     {
         const uint64_t extent = drawable.load(std::memory_order_acquire);
         auto config = settings::GetConfig();
-#if LO_PLATFORM_MACOS
-        config.internalResolution = int(InternalResolutionMode(uint32_t(config.internalResolution)));
-#else
-        if (config.internalResolution == settings::InternalResolutionNative) config.internalResolution = 0;
-#endif
-        const auto output = upscaling::ResolveOutputRegion({uint32_t(extent >> 32), uint32_t(extent)}, config.aspectRatio);
+        const bool readback = getenv("LO_RESOLVE_READBACK") != nullptr;
+        const resolution::Size drawableSize{uint32_t(extent >> 32), uint32_t(extent)};
+        // The resolve-readback path renders the native raster and never supersamples.
+        const auto output = readback ? upscaling::ResolveOutputRegion(drawableSize, config.aspectRatio) :
+            PlannedOutputRegion(drawableSize, config);
+        config.internalResolution = int(PlannedInternalResolution(config));
         narrowTallView.store(aspect_ratio::NarrowsView(config.aspectRatio), std::memory_order_relaxed);
         const auto device = video::BackendDeviceState();
         std::optional<upscaling::OutputSizing> sizing;
@@ -106,7 +124,7 @@ namespace gpu::frame_plan
                 config.upscaler, output.x, output.y});
         cpuPlan = planner.Begin({uint32_t(config.internalResolution), config.antialiasing, config.scalingQuality,
             config.upscaler, config.dlssQuality, output, device, sizing ? &*sizing : nullptr,
-            getenv("LO_RESOLVE_READBACK") != nullptr, getenv("LO_DLSS_INPUT_PROBE") && std::string_view(getenv("LO_DLSS_INPUT_PROBE")) == "1",
+            readback, getenv("LO_DLSS_INPUT_PROBE") && std::string_view(getenv("LO_DLSS_INPUT_PROBE")) == "1",
             config.fsrQuality});
         const auto identity = StatusIdentityOf(cpuPlan);
         const bool planChanged = identity != loggedStatusPlan;

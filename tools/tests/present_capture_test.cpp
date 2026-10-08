@@ -123,6 +123,7 @@ namespace gpu::frame_plan {
 void NoteCurrentDlssStatus() {}
 void ResetSizing(uint64_t) {}
 void PublishSizing(upscaling::OutputSizing) {}
+upscaling::OutputRegion PlannedOutputRegion(resolution::Size drawable, const settings::Config&) { return upscaling::ResolveOutputRegion(drawable); }
 std::optional<upscaling::SizingKey> TakeSizingRequest() { return {}; }
 }
 namespace gpu::dlss {

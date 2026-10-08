@@ -278,6 +278,33 @@ int main()
             gpu::aspect_ratio::Migrated(1366, 768) == Mode::Auto && gpu::aspect_ratio::Migrated(5120, 1440) == Mode::Auto,
             "only 21:9-shaped resolutions migrate to 21:9");
     }
+    {
+        // Supersampling (#332): an upscaler outputs at a Render resolution above the
+        // content area and presentation scales it down; lower values keep the output.
+        using gpu::upscaling::ResolveOutputRegion;
+        using gpu::upscaling::SupersampledOutputRegion;
+        using gpu::upscaling::Letterboxed;
+        using gpu::aspect_ratio::Mode;
+        const auto full = ResolveOutputRegion({1920, 1080});
+        const auto uhd = SupersampledOutputRegion(full, 2160);
+        Require(uhd.drawable == full.drawable && uhd.x == 0 && uhd.y == 0 && uhd.width == 3840 && uhd.height == 2160,
+            "2160p makes a 1080p drawable's upscaler output 4K");
+        const auto qhd = SupersampledOutputRegion(full, 1440);
+        Require(qhd.width == 2560 && qhd.height == 1440, "1440p supersamples a 1080p drawable");
+        for (const uint32_t mode : {0u, 720u, 1080u})
+            Require(SupersampledOutputRegion(full, mode) == full, "follow output and lower values keep the drawable");
+        const auto ultrawide = ResolveOutputRegion({1920, 1080}, Mode::Ultrawide);
+        const auto wide = SupersampledOutputRegion(ultrawide, 2160);
+        Require(wide.width == 5120 && wide.height == 2160, "a 21:9 picture supersamples to 2160 rows");
+        const auto odd = SupersampledOutputRegion(ResolveOutputRegion({1366, 768}), 2160);
+        Require(odd.width == 3842 && odd.height == 2160, "a near-16:9 drawable keeps its own shape");
+        Require(!Letterboxed(full) && !Letterboxed(uhd) && !Letterboxed(qhd) && !Letterboxed(odd),
+            "a supersampled full picture has no bars");
+        Require(Letterboxed(ultrawide) && Letterboxed(wide) && Letterboxed(ResolveOutputRegion({1920, 1080}, Mode::Standard)),
+            "fixed shapes keep their bars, supersampled or not");
+        Require(Letterboxed({{1366, 768}, 0, 0, 1365, 768}) && !Letterboxed({{1920, 1080}, 0, 0, 0, 0}),
+            "a one-pixel bar counts; an empty region has none");
+    }
     gpu::upscaling::SizingCache cache;
     const gpu::upscaling::SizingKey key{3, 1280, 720};
     Require(cache.LookupOrRequestSizing(key).modes[0].state == gpu::upscaling::SizingState::Pending && cache.TakeSizingRequest() == key, "sizing miss requests exact output without waiting");

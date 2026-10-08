@@ -725,6 +725,9 @@ namespace gpu::frame_plan
     }
 
     void PublishDrawable(uint32_t width, uint32_t height);
+    // The scene output region for this drawable and config: the aspect ratio's
+    // shape, enlarged to the Render resolution when an upscaler supersamples.
+    upscaling::OutputRegion PlannedOutputRegion(resolution::Size drawable, const settings::Config& config);
     void BeginCpuFrame();
     FramePlan CpuPlan();
     // The Aspect ratio setting asks for the console's narrower 4:3 view

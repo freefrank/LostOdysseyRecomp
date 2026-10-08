@@ -986,6 +986,8 @@ void Publish(uint8_t *base, uint32_t config)
             next.help = Tr(L"Scene resolution before scaling to the output. Follow output matches the output size.",
                            L"縮放至輸出前的場景解析度。跟隨輸出與輸出尺寸相同。");
 #endif
+            next.help += Tr(L" With an upscaler, a value above the output supersamples: the upscaler outputs at it and the image is scaled down.",
+                            L" 開啟縮放器時，高於輸出的值會超取樣：縮放器以此解析度輸出，再縮小顯示。");
             break;
         case GraphicsRow::ShadowResolution:
             next.help = Tr(L"Shadow-map resolution multiplier. Higher values need more GPU memory and rendering time. Applies after saving.",

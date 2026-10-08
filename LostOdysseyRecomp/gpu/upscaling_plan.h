@@ -113,6 +113,28 @@ inline constexpr OutputRegion ResolveOutputRegion(resolution::Size drawable,
     return {drawable, 0, 0, content.width, content.height};
 }
 
+// Supersampling (#332): with a temporal upscaler, a Render resolution above the
+// content area becomes the upscaler's output size. Presentation scales the
+// result down into the drawable, as it does a native scene of that size.
+inline constexpr OutputRegion SupersampledOutputRegion(OutputRegion region, uint32_t internalResolution) {
+    if (!internalResolution || !region.width || !region.height) return region;
+    const auto size = resolution::ResolveInternalSize(internalResolution, region.width, region.height);
+    if (size.width < region.width || size.height <= region.height) return region;
+    region.width = size.width;
+    region.height = size.height;
+    return region;
+}
+
+// Black bars: the content, scaled uniformly to fit the drawable, leaves at least
+// a pixel uncovered. A supersampled region is larger than the drawable.
+inline constexpr bool Letterboxed(const OutputRegion& region) {
+    if (!region.width || !region.height || !region.drawable.width || !region.drawable.height) return false;
+    const uint64_t content = uint64_t(region.width) * region.drawable.height;
+    const uint64_t drawable = uint64_t(region.drawable.width) * region.height;
+    // Wider content leaves bars above and below it, taller content at its sides.
+    return content > drawable ? content - drawable >= region.width : drawable - content >= region.height;
+}
+
 struct SizingKey {
     uint64_t deviceEpoch = 0;
     uint32_t outputWidth = 0, outputHeight = 0;
