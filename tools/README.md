@@ -96,6 +96,7 @@ The catalog below lists maintained groups and representative root utilities. `th
 | `tools/build_runtime.bat` | Windows | Fast incremental build for the primary runtime target `LostOdysseyRecomp`. |
 | `tools/build_tools.bat` | Windows | Builds offline developer tools (`LoShaderPackTool`, `LoShaderTool`, etc.). |
 | `tools/build_target.bat` | Windows | Configures and builds a specific CMake target with specified arguments. |
+| `tools/build_worktree.bat` | Windows | Configures and builds a target in a git worktree, taking the SDKs, FSR shaders and dependency checkouts from the main checkout (`LO_MAIN_CHECKOUT`, `LO_DEPS_DIR`, `LO_BUILD_JOBS`; the main checkout defaults to the first `git worktree list` entry). The worktree must be prepared first; see the header of the script. |
 | `tools/build_linux.sh` | Linux | Native Linux Clang build script for runtime and tools. |
 | `tools/build_wsl.bat` | Windows/WSL | Dispatches Linux builds inside Windows Subsystem for Linux. |
 
@@ -147,6 +148,14 @@ The catalog below lists maintained groups and representative root utilities. `th
 | `tools/opencode/install.py` | Installs the maintained `lo-render-flicker` skill and three render investigation agents into `.opencode/`. | Local write: creates or updates only the four managed Markdown files under the explicit output directory. | [`tools/opencode/README.md`](opencode/README.md) |
 
 Install from the repository root with `python -B tools/opencode/install.py --output .opencode`; add `--overwrite` only when updating those managed files. The installed `.opencode/` state is ignored.
+
+### 12. Recipe tour patches, corpus builder and settings driver
+
+| Tool / Path | Purpose | Type & side effects | Reference |
+|---|---|---|---|
+| `tools/tours/diag-tour.patch`, `mac-tour.patch` | Never-merged source patches for a diagnostic build: map jump, disc request and package probe command files that `recipe_tour.py maps` and `battles --disc` use. | Patch files only; apply to a worktree, never the main checkout. Neither applies cleanly to current main (see the reference). | [`tools/tours/README.md`](tours/README.md) |
+| `tools/tours/build_corpus.py` | Merges per-scene tour recipe files into the scene-tagged `pipelines_corpus.bin` with `tools/pipeline_recipes.py`. | Input read-only; writes `group-*.bin` and the corpus to the explicit `--out` folder. | [`tools/tours/README.md`](tours/README.md) |
+| `tools/settings_driver/` (`boot.py`, `drive.py`, `burst.py`) | Boot a build into the field of a staged save, press buttons, take presented screenshots and frame bursts, to check the host settings menu. Windows only, needs Pillow. | **ACTIVE GAME DRIVER**: copies a run folder, launches the exe, sends inputs, writes screenshots, kills the process. Paths come from options or `LO_SETTINGS_*` variables. | [`tools/settings_driver/README.md`](settings_driver/README.md) |
 
 ---
 

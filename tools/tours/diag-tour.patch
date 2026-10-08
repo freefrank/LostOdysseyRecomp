@@ -1,0 +1,193 @@
+diff --git a/LostOdysseyRecomp/debug/diag_tour.cpp b/LostOdysseyRecomp/debug/diag_tour.cpp
+new file mode 100644
+index 00000000..703cbe5c
+--- /dev/null
++++ b/LostOdysseyRecomp/debug/diag_tour.cpp
+@@ -0,0 +1,168 @@
++// DIAGNOSTIC ONLY (never commit): map jump, disc request and package probe
++// command files for the recipe tours, ported from the 2026-10-01 map tour
++// patch (out/map-tour-20261001/diag-tour-and-hitcam.patch).
++#include <stdafx.h>
++#include <kernel/heap.h>
++#include <kernel/memory.h>
++#include <os/logger.h>
++#include <chrono>
++#include <fstream>
++#include <string>
++
++extern "C" PPC_FUNC(__imp__sub_82827580);
++extern "C" PPC_FUNC(__imp__sub_82320428);
++PPC_FUNC(sub_82821E90);
++PPC_FUNC(sub_82298938);
++
++namespace
++{
++bool ObjectAddress(uint32_t p) { return p >= 0x100000 && p < 0x7C000000 && (p & 3) == 0; }
++
++bool Due(std::chrono::steady_clock::time_point& next)
++{
++    const auto now = std::chrono::steady_clock::now();
++    if (now < next) return false;
++    next = now + std::chrono::milliseconds(250);
++    return true;
++}
++
++bool ValidName(const std::string& name, size_t limit)
++{
++    return !name.empty() && name.size() <= limit &&
++        name.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789_") == std::string::npos;
++}
++
++void MapJump(PPCContext& ctx, uint8_t* base)
++{
++    static const char* path = getenv("LO_DIAG_MAPJUMP_COMMAND_FILE");
++    static unsigned last = 0;
++    static std::chrono::steady_clock::time_point next{};
++    if (!path || !Due(next)) return;
++    std::ifstream input(path);
++    unsigned serial = 0;
++    std::string map;
++    if (!(input >> serial >> map) || serial == last) return;
++    last = serial;
++    if (!ValidName(map, 32)) { LOG_INFO("diag mapjump rejected: invalid map name"); return; }
++    const auto engine = PPC_LOAD_U32(0x83315FB4);
++    const auto pendingMap = PPC_LOAD_U32(0x83263E50);
++    if (!ObjectAddress(engine) || pendingMap != 0)
++    {
++        LOG_INFO("diag mapjump rejected: engine={:#x} pending={}", engine, pendingMap);
++        return;
++    }
++    constexpr uint32_t nativeMapText = 0x821573D8;
++    constexpr char16_t expected[] = u"xxx_x_scrw";
++    for (uint32_t i = 0; i < std::size(expected); ++i)
++        if (PPC_LOAD_U16(nativeMapText + i * 2) != expected[i])
++        {
++            LOG_INFO("diag mapjump rejected: native map constant mismatch");
++            return;
++        }
++    void* memory = g_userHeap.Alloc(96);
++    if (!memory) return;
++    const auto descriptor = g_memory.MapVirtual(memory);
++    const auto text = descriptor + 16;
++    for (uint32_t i = 0; i < map.size(); ++i)
++        PPC_STORE_U16(text + i * 2, uint16_t(uint8_t(map[i])));
++    PPC_STORE_U16(text + uint32_t(map.size()) * 2, 0);
++    PPC_STORE_U32(descriptor, text);
++    PPC_STORE_U32(descriptor + 4, uint32_t(map.size() + 1));
++    PPC_STORE_U32(descriptor + 8, uint32_t(map.size() + 1));
++    const PPCContext saved = ctx;
++    LOG_INFO("diag mapjump begin target={} engine={:#x}", map, engine);
++    ctx.r3.u64 = engine;
++    ctx.r4.u64 = descriptor;
++    __imp__sub_82827580(ctx, base);
++    const int32_t result = ctx.r3.s32;
++    ctx = saved;
++    g_userHeap.Free(memory);
++    LOG_INFO("diag mapjump end result={} pending={}", result, PPC_LOAD_U32(0x83263E50));
++}
++
++// Package cache lookup (vtable +8 of 0x83302A18, as sub_8237D258 calls it).
++void Probe(PPCContext& ctx, uint8_t* base)
++{
++    static const char* path = getenv("LO_DIAG_PROBE_COMMAND_FILE");
++    static unsigned last = 0;
++    static std::chrono::steady_clock::time_point next{};
++    if (!path || !Due(next)) return;
++    std::ifstream input(path);
++    unsigned serial = 0;
++    if (!(input >> serial) || serial == last) return;
++    last = serial;
++    const uint32_t cache = PPC_LOAD_U32(0x83302A18);
++    if (!ObjectAddress(cache)) { LOG_INFO("diag probe rejected: cache={:#x}", cache); return; }
++    auto* find = g_memory.FindFunction(PPC_LOAD_U32(PPC_LOAD_U32(cache) + 8));
++    void* scratch = g_userHeap.Alloc(256);
++    if (!find || !scratch) return;
++    const uint32_t text = g_memory.MapVirtual(scratch), out = text + 160;
++    unsigned total = 0, found = 0;
++    std::string name;
++    while (input >> name)
++    {
++        if (!ValidName(name, 64)) continue;
++        for (uint32_t i = 0; i < name.size(); ++i)
++            PPC_STORE_U16(text + i * 2, uint16_t(uint8_t(name[i])));
++        PPC_STORE_U16(text + uint32_t(name.size()) * 2, 0);
++        PPC_STORE_U32(out, 0);
++        PPC_STORE_U32(out + 4, 0);
++        PPC_STORE_U32(out + 8, 0);
++        const PPCContext saved = ctx;
++        ctx.r3.u64 = cache;
++        ctx.r4.u64 = text;
++        ctx.r5.u64 = 0;
++        ctx.r6.u64 = out;
++        ctx.r7.u64 = 0;
++        find(ctx, base);
++        const bool resolved = ctx.r3.u32 != 0;
++        if (PPC_LOAD_U32(out))
++        {
++            ctx.r3.u64 = out;
++            sub_82298938(ctx, base);
++        }
++        ctx = saved;
++        LOG_INFO("diag probe package={} found={}", name, resolved ? 1 : 0);
++        ++total;
++        found += resolved;
++    }
++    g_userHeap.Free(scratch);
++    LOG_INFO("diag probe done total={} found={}", total, found);
++}
++}
++
++void DiagTourTick(PPCContext& ctx, uint8_t* base)
++{
++    MapJump(ctx, base);
++    Probe(ctx, base);
++}
++
++// The LoDiscRuntimeTest probe's original disc request 82821E90 on the
++// manager at 0x832640B0, from its own update.
++PPC_FUNC(sub_82320428)
++{
++    const uint32_t manager = ctx.r3.u32;
++    __imp__sub_82320428(ctx, base);
++    static const char* path = getenv("LO_DIAG_DISC_COMMAND_FILE");
++    static unsigned last = 0, tick = 0, pending = 0;
++    if (!path) return;
++    if (pending && PPC_LOAD_U16(manager + 8) == pending && !PPC_LOAD_U32(manager + 4) && !PPC_LOAD_U32(manager + 24))
++    {
++        LOG_INFO("diag disc completed disc={}", pending);
++        pending = 0;
++    }
++    if (++tick % 30 || pending) return;
++    unsigned serial = 0, disc = 0;
++    std::ifstream input(path);
++    if (!(input >> serial >> disc) || serial == last || disc < 1 || disc > 4) return;
++    last = serial;
++    LOG_INFO("diag disc request disc={} current={} manager={:#x}", disc, PPC_LOAD_U16(manager + 8), manager);
++    const PPCContext saved = ctx;
++    ctx.r3.u64 = manager;
++    ctx.r4.u64 = disc;
++    sub_82821E90(ctx, base);
++    const int32_t result = ctx.r3.s32;
++    ctx = saved;
++    pending = disc;
++    LOG_INFO("diag disc request returned {}", result);
++}
+diff --git a/LostOdysseyRecomp/debug/teleport.cpp b/LostOdysseyRecomp/debug/teleport.cpp
+index 3e6e755d..65b31ab0 100644
+--- a/LostOdysseyRecomp/debug/teleport.cpp
++++ b/LostOdysseyRecomp/debug/teleport.cpp
+@@ -15,6 +15,7 @@
+ #include "battle_tour.h"
+ 
+ extern "C" PPC_FUNC(__imp__sub_82290B60);
++void DiagTourTick(PPCContext& ctx, uint8_t* base); // DIAGNOSTIC ONLY
+ extern "C" PPC_FUNC(__imp__sub_822FA548);
+ // Original RequestMapJump(engine, FString* map), as used by the Issue #12 bridge.
+ extern "C" PPC_FUNC(__imp__sub_82827580);
+@@ -511,5 +512,5 @@ PPC_FUNC(sub_82290B60)
+     const bool engine = ctx.r3.u32 == PPC_LOAD_U32(0x83315FB4);
+     if (engine) { debug_menu::cheats::Tick(ctx, base); gpu::frame_plan::BeginCpuFrame(); frame_timing::EngineTick(ctx.f1.f64); }
+     __imp__sub_82290B60(ctx, base);
+-    if (engine) { debug_menu::UpdateMapInfo(base); debug_menu::PartySwitchTick(base); Tick(ctx, base); MapJumpTick(ctx, base); debug_menu::battle_tour::Poll(base); }
++    if (engine) { debug_menu::UpdateMapInfo(base); debug_menu::PartySwitchTick(base); Tick(ctx, base); MapJumpTick(ctx, base); debug_menu::battle_tour::Poll(base); DiagTourTick(ctx, base); }
+ }
