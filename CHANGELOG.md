@@ -25,6 +25,8 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - The renderer thread spends about 8% less CPU time per frame on GPU commands and per-draw checks (M1 Max), with identical output.
 - Vulkan and macOS: scene draws take about 5% less GPU time on an Adreno 840 phone with identical output: shaders spend less work per draw computing constant addresses.
 - Views where walls hide most of the scene, such as the White Boa's Queen's Room, render faster: objects hidden there are skipped as on the console (Radeon 8060S: 72 → 101 FPS in a White Boa conversation).
+- The Settings menu fades in when it opens and eases tab switches, cursor moves, value changes and prompts instead of cutting; input still responds at once (#151).
+- New Motion blur and Dynamic shadows switches in the graphics settings turn off the game's motion blur and real-time shadows (after boma's Xenia Canary patches).
 - A Button prompts setting in the Gameplay tab chooses Auto, Xbox or PlayStation button icons; Auto follows the controller you use (#275).
 
 ### 简体中文
@@ -46,6 +48,8 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - 渲染线程每帧在 GPU 命令和逐 draw 检查上少花约 8% 的 CPU 时间（M1 Max），画面不变。
 - Vulkan 和 macOS：画面不变，Adreno 840 手机上场景 draw 的 GPU 时间再少约 5%：着色器每个 draw 计算常量地址的开销更小。
 - 大部分场景被墙挡住的视角（例如 White Boa 的 Queen's Room）渲染更快：这些地方被挡住的物体现在会像主机版一样跳过（Radeon 8060S 上 White Boa 的一段对话从 72 FPS 提高到 101 FPS）。
+- 设置菜单打开时会淡入，切换分类、移动光标、修改选项和弹出提示时改为平滑过渡，不再生硬跳变；按键仍然立即响应（#151）。
+- 图形设置新增“动态模糊”和“动态阴影”开关，可关闭游戏的动态模糊和实时阴影（参照 boma 的 Xenia Canary 补丁）。
 - 玩法页新增“按键提示”设置，可选自动、Xbox 或 PlayStation 按键图标；自动会跟随你使用的控制器（#275）。
 
 ## [v0.8.53](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.8.53) — 2026-10-07

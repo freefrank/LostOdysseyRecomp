@@ -820,6 +820,8 @@ void Publish(uint8_t *base, uint32_t config)
         placeGraphics(GraphicsRow::DepthOfField, makeChoices(L"Depth of field", L"景深", std::move(dofChoices),
                    (std::min(edit.depthOfFieldPercent, 100u) + 5) / 10));
         placeGraphics(GraphicsRow::Bloom, makeChoices(L"Bloom", L"光暈", onOff(), edit.bloom ? 0 : 1));
+        placeGraphics(GraphicsRow::MotionBlur, makeChoices(L"Motion blur", L"動態模糊", onOff(), edit.motionBlur ? 0 : 1));
+        placeGraphics(GraphicsRow::DynamicShadows, makeChoices(L"Dynamic shadows", L"動態陰影", onOff(), edit.dynamicShadows ? 0 : 1));
 #if LO_PLATFORM_MACOS
         placeGraphics(GraphicsRow::ScalingQuality, makeChoices(L"Scaling filter", L"縮放濾鏡",
                    {Tr(L"Standard", L"標準"), Tr(L"High", L"高"), L"MetalFX"},
@@ -1038,6 +1040,14 @@ void Publish(uint8_t *base, uint32_t config)
         case GraphicsRow::Bloom:
             next.help = Tr(L"The game's glow around bright areas. Off removes it and the image gets slightly darker. Applies immediately after saving.",
                            L"遊戲中亮部周圍的光暈。關閉後光暈消失，畫面會稍暗。儲存後立即套用。");
+            break;
+        case GraphicsRow::MotionBlur:
+            next.help = Tr(L"The game's blur during fast camera and character movement. Off keeps moving scenes sharp. Applies immediately after saving.",
+                           L"遊戲在鏡頭與角色快速移動時的模糊。關閉後移動畫面保持清晰。儲存後立即套用。");
+            break;
+        case GraphicsRow::DynamicShadows:
+            next.help = Tr(L"Real-time shadows cast by characters and objects. Off removes them and can raise the frame rate. Applies immediately after saving.",
+                           L"角色與物件投射的即時陰影。關閉後陰影消失，可提升影格率。儲存後立即套用。");
             break;
         case GraphicsRow::ScalingQuality:
 #if LO_PLATFORM_MACOS
@@ -2309,6 +2319,12 @@ PPC_FUNC(sub_822F19B0)
             case GraphicsRow::Bloom:
                 edit.bloom = !edit.bloom;
                 break;
+            case GraphicsRow::MotionBlur:
+                edit.motionBlur = !edit.motionBlur;
+                break;
+            case GraphicsRow::DynamicShadows:
+                edit.dynamicShadows = !edit.dynamicShadows;
+                break;
             case GraphicsRow::ScalingQuality:
 #if LO_PLATFORM_MACOS
                 edit.scalingQuality = cycle(edit.scalingQuality, ScalingMetalFx + 1);
@@ -2506,8 +2522,24 @@ bool settings::IsOpen()
 
 bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint32_t width, uint32_t height)
 {
+    // This cache belongs to the sole presentation thread. Dimensions must be
+    // checked independently: portrait and landscape buffers can have equal area.
+    static uint32_t cachedWidth = 0, cachedHeight = 0;
+    static bool cachedPlayStation = false, cachedPreviewPage = false, shown = false;
+    // Motion is presentation only: input and menu state change at once, and the
+    // shown image eases toward the newest raster (#151).
+    static MenuTransition motion;
+    static std::vector<uint32_t> raster;
     if (!active.load())
+    {
+        if (shown)
+        {
+            shown = false;
+            motion.Reset();
+            std::vector<uint32_t>().swap(raster);
+        }
         return false;
+    }
     MenuSnapshot current;
     {
         std::lock_guard lock(snapshotMutex);
@@ -2515,19 +2547,46 @@ bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint3
     }
     // Input style can change without a guest menu tick (hot-plug or keyboard).
     current.playStationPrompts = hid::UsesPlayStationPrompts();
-    // This cache belongs to the sole presentation thread. Dimensions must be
-    // checked independently: portrait and landscape buffers can have equal area.
-    static uint32_t cachedWidth = 0, cachedHeight = 0;
-    static bool cachedPlayStation = false;
-    if (revision == current.revision && cachedWidth == width && cachedHeight == height &&
+    const bool opened = !shown;
+    if (!opened && revision == current.revision && cachedWidth == width && cachedHeight == height &&
         cachedPlayStation == current.playStationPrompts && !pixels.empty())
+    {
+        motion.Advance(pixels, MenuNow());
         return true;
+    }
     current.assets = menu_assets::Cached(FileSystem::GetGameRoot(), current.language);
-    if (!RasterizeMenu(current, width, height, pixels))
+    if (!RasterizeMenu(current, width, height, raster))
         return false;
+    // Ease what the player did: opening (content over the panels) and a new
+    // revision at the same size and prompt style. A resize, a controller style
+    // change and the calibration pages, whose preview presentation paints
+    // into the frame, switch at once. The clock starts after rasterizing (tens
+    // of milliseconds at 4K, more on the first open) so no part of it is lost.
+    const bool previewPage = current.calibration.open || current.brightness.open;
+    bool eased = false;
+    if (opened && !previewPage)
+    {
+        MenuSnapshot panels;
+        panels.assets = current.assets;
+        panels.backdropOnly = true;
+        eased = RasterizeMenu(panels, width, height, pixels) &&
+                motion.Start(pixels, raster, width, MenuNow(), kMenuOpenFade);
+    }
+    else if (!opened && revision != current.revision && cachedWidth == width && cachedHeight == height &&
+             cachedPlayStation == current.playStationPrompts && !previewPage && !cachedPreviewPage)
+        eased = motion.Start(pixels, raster, width, MenuNow(), kMenuChangeFade);
+    if (eased)
+        motion.Advance(pixels, MenuNow());
+    else
+    {
+        motion.Stop();
+        pixels.swap(raster);
+    }
+    shown = true;
     cachedWidth = width;
     cachedHeight = height;
     cachedPlayStation = current.playStationPrompts;
+    cachedPreviewPage = previewPage;
     revision = current.revision;
     return true;
 }

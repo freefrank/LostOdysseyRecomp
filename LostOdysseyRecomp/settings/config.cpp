@@ -173,6 +173,10 @@ Config Read()
             value.depthOfFieldPercent = number;
         else if (key == "bloom" && number <= 1)
             value.bloom = number == 1;
+        else if (key == "motion_blur" && number <= 1)
+            value.motionBlur = number == 1;
+        else if (key == "dynamic_shadows" && number <= 1)
+            value.dynamicShadows = number == 1;
         else if (key == "vibration")
             value.vibrationPercent = number;
         else if (key == "button_prompts")
@@ -331,6 +335,8 @@ static bool WriteConfig(const Config &value)
            << "\nanisotropic_filtering=" << value.anisotropicFiltering
            << "\ndepth_of_field=" << value.depthOfFieldPercent
            << "\nbloom=" << (value.bloom ? 1 : 0)
+           << "\nmotion_blur=" << (value.motionBlur ? 1 : 0)
+           << "\ndynamic_shadows=" << (value.dynamicShadows ? 1 : 0)
            << "\nvibration=" << value.vibrationPercent
            << "\nbutton_prompts=" << value.buttonPrompts
             << "\nupscaler=" << uint32_t(value.upscaler) << "\ndlss_quality=" << uint32_t(value.dlssQuality)

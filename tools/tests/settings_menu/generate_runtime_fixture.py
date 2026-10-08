@@ -391,7 +391,12 @@ int main(int argc, char** argv) {
     // A controller-style change must invalidate the raster cache without a guest tick.
     std::vector<uint32_t> promptPixels;
     uint64_t promptRevision = UINT64_MAX;
+    Check(settings::DrawMenu(promptPixels,promptRevision,1280,720),"menu opens");
+    const auto openingPixels = promptPixels;
+    // The opening fade is presentation only and settles once its time has passed.
+    settings::menuClockOffset+=std::chrono::seconds(1);
     Check(settings::DrawMenu(promptPixels,promptRevision,1280,720),"Xbox prompts render");
+    Check(promptPixels != openingPixels,"opening fade settles on the menu");
     const auto xboxPixels = promptPixels;
     const auto sameRevision = promptRevision;
     hid::playStationPrompts = true;
@@ -402,6 +407,7 @@ int main(int argc, char** argv) {
     Check(settings::DrawMenu(promptPixels,promptRevision,1280,720),"Xbox prompts restore");
     Check(promptRevision == sameRevision && promptPixels == xboxPixels,
         "controller style round trip restores original pixels");
+    settings::menuClockOffset-=std::chrono::seconds(1);
     // Exercise the real Vulkan FG menu and Save/restart flow without an SDK.
     settings::tab=2;settings::row=int(GraphicsRow::FrameGeneration);
     settings::edit=settings::savedConfig;
