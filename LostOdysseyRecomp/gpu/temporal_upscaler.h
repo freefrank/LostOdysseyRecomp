@@ -59,6 +59,7 @@ struct SrResult {
 struct SrDispatchOptions {
     bool fsrSharpening = false;
     float fsrSharpness = 0.0f;
+    uint32_t dlssNeuralRenderingPasses = 0;
 };
 
 struct SrRequest {

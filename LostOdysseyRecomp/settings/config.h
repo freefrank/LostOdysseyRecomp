@@ -42,6 +42,8 @@ inline constexpr int InternalResolutionNative = 1;
 // Audio output: the stereo downmix, or the game's 5.1 channels passed through.
 inline constexpr uint32_t AudioOutputStereo = 0;
 inline constexpr uint32_t AudioOutputSurround = 1;
+// DLSS 5 Neural Rendering runs at most this many passes after DLSS.
+inline constexpr uint32_t DlssNeuralRenderingMaxPasses = 4;
 
 struct Config
 {
@@ -94,6 +96,9 @@ struct Config
     gpu::upscaling::DlssQuality dlssQuality = gpu::upscaling::DlssQuality::Quality;
     gpu::upscaling::FsrQuality fsrQuality = gpu::upscaling::FsrQuality::Quality;
     uint32_t fsrSharpnessPercent = 0; // 0 disables FSR RCAS; 1-100 sets its strength.
+    // DLSS 5 Neural Rendering passes on the DLSS output: 0 Off, 1-4. Needs the
+    // player's nvngx_dlssnr.dll; Windows only. Applied after saving.
+    uint32_t dlssNeuralRendering = 0;
     framegen::Provider frameGenerationProvider = framegen::Provider::Off; // Reconciled at presentation; Vulkan hooks need startup opt-in.
     framegen::Mode frameGenerationMode = framegen::Mode::Fixed;
     uint32_t frameGenerationMultiplier = 2; // Requested total output frames per rendered frame.

@@ -47,20 +47,32 @@ NGX 按设置时的类型保存参数，读取时类型不一致会读到默认�
 
 本机的几份 `nvngx_dlssnr.dll`（310.8.0.0）全部签名失效，分两种改版：`8270B350…`（Swapper 2.2.9、reblue，9 月 2 日起）和 `4B8D19BC…`（ryujinx、Downloads、nds，8 月 30 日）。两者在 GPU 架构分派代码和压缩的 kernel 数据上不同，都不是 NVIDIA 原版。NGX OTA 缓存里也没有 DLSSNR。测试用较新的 `8270B350…`。
 
-## Vulkan 实现
+## 实现
 
-在 `gpu/dlss_ngx.cpp` 的 `Controller` 里，`LO_DLSS_NR=1` 打开，只在 Windows：
+设置 → 图形的“DLSS 5 神经渲染”（`dlss_neural_rendering`，0 关闭，1–4 为 pass 数）打开，只在 Windows、开 DLSS 时显示。代码在 `gpu/dlss_ngx.cpp`（共用部分和 Vulkan）、`gpu/dlss_ngx_d3d12.cpp`（D3D12）和 `gpu/dlss_nr.h`：
 
 - DLL 默认在 SR 运行库旁边（`nvngx_dlss.dll` 所在目录），也可以用 `LO_DLSS_NR_PATH` 指定完整路径。进程内只加载一次，不卸载。
-- 建设备时把 `VK_NVX_binary_import`、`VK_NVX_image_view_handle`、`VK_KHR_push_descriptor`、`VK_KHR_buffer_device_address` 并入 SR 的扩展列表；设备缺任何一个就不开 NR，SR 照常。
-- core 会话起来后，snippet 用 `Init_Ext2`（app id 0，显式传 `vkGetInstanceProcAddr`/`vkGetDeviceProcAddr`）初始化；参数袋取自 core 的 `GetCapabilityParameters`。关闭时先 snippet `Shutdown1`，再关 core。
-- SR evaluate 之后，在同一个隔离 list 里：SR 输出 blit 到 FP16 输入图，NR evaluate 写 FP16 输出图，再 blit 回 SR 输出。之后的合成不变。每一步之间加全局 memory barrier，图像都留在 GENERAL。
-- feature 在一帧里创建，下一帧开始 evaluate，第一次带 Reset。输出尺寸变化跟着 SR 的排空重建一起释放和重建。
+- pass 数是 `SrConfig` 的一部分：改设置后 SR 和 NR 一起在排空点重建，feature 在一帧里创建，下一帧开始 evaluate，第一次带 Reset。输出尺寸变化同理。
+- 多 pass：每帧连跑 N 次，每次以上一次的输出为输入，每个 pass 用自己的 feature（时序状态互不干扰），两张 FP16 图来回交替，同一帧所有 pass 用同一个 Reset。第二个 pass 起 `LocalToneStrength` 为 0，照 wilsjo2 的多 pass 实现的默认值，没针对本游戏调过。社区实现最多 3（解锁 30）或 10 次，NVIDIA 没有对应参数。
 - MV 用渲染分辨率像素、`MVecScale = 1`，subrect 用渲染尺寸，和 SR 一致。
-- 场景颜色是 HDR 线性时跳过并记日志。
-- NR 的任何失败只关掉 NR，不影响 SR。
+- 菜单帮助行显示状态：运行中、找不到 DLL、显卡/驱动不支持、出错停止（`gpu/dlss_nr_state.h`）。NR 的任何失败只关掉 NR，不影响 SR；下一次排空重建会再试一次。
 
-D3D12 用同一套参数，只差资源类型，后续再做。
+Vulkan：
+
+- 建设备时如果 DLL 在，就把 `VK_NVX_binary_import`、`VK_NVX_image_view_handle`、`VK_KHR_push_descriptor`、`VK_KHR_buffer_device_address` 并入 SR 的扩展列表；DLL 不在或设备缺任何一个就不开 NR，SR 和以前完全一样。游戏运行中才放入 DLL 的要重启。
+- snippet 用 `Init_Ext2` 初始化。参数顺序以反汇编为准：`(…, GIPA, GDPA, Version, const NVSDK_NGX_Parameter*)`，和 SDK 头文件一致。第一版和社区实现把最后两个参数传反了（版本 0、指针 0x15），碰巧能跑；现在改为 `(NVSDK_NGX_Version_API, nullptr)`。
+- SR evaluate 之后，在同一个隔离 list 里：SR 输出 blit 到 FP16 图，NR 各 pass evaluate，最后一个 pass 的结果 blit 回 SR 输出。每一步之间加全局 memory barrier，图像都留在 GENERAL。
+
+D3D12：
+
+- 导出 `NVSDK_NGX_D3D12_Init_Ext(appId, dataPath, device, Version, const NVSDK_NGX_Parameter*)`（反汇编确认，第 4 个参数按 32 位读）、`CreateFeature`、`EvaluateFeature`、`ReleaseFeature`、`Shutdown1`。资源用 `SetD3d12Resource`。
+- D3D12 没有能转格式的 blit：SR 输出（RGBA8）先 `CopyResource` 到同格式的中转图，一个小 compute shader 转成 FP16 给 NR，结果再转回中转图、拷回 SR 输出（保留原 alpha）。shader 运行时由 DXC 编译（`SetComputeShaderCompiler`），描述符集固定绑定中转图和 FP16 图。
+- 拷贝、转换和状态切换都走 plume，状态跟踪保持一致；NR 输入是 SHADER_READ，输出是 UAV，结束时 SR 输出回到 UAV/GENERAL。每次 NGX 调用后 `invalidateCachedNativeState()`，plume 才会重新绑定自己的 descriptor heap。
+
+HDR：
+
+- 开 HDR 输出时，DLSS 的输入仍是 8 位、显示编码的场景（`renderer.cpp` 里 DLSS 的 `qualifiedEncoding` 只会是 `Sdr`），高光由呈现阶段用超分前的 FP16 场景按亮度增益加回来。所以 NR 在 HDR 下照常运行，不需要额外的色调映射。
+- `SrColorSpace::Linear` 的路径在本游戏里不会出现，遇到时跳过 NR 并记日志。
 
 ## 风险
 

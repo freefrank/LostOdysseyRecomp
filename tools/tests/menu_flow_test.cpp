@@ -1360,6 +1360,32 @@ int main(int argc, char** argv)
                     currentConfig.fsrSharpnessPercent == 64, "existing Save action persists FSR sharpness");
             std::puts("PASS FSR sharpness menu visibility, 0/100 bounds, description, stable ids and Save");
         }
+        // DLSS 5 neural rendering shows with DLSS only and cycles Off, 1x-4x.
+        {
+            const auto nr = int(GraphicsRow::DlssNeuralRendering);
+            settings::tab = 2;
+            settings::edit = currentConfig;
+            settings::edit.upscaler = gpu::upscaling::Upscaler::Fsr;
+            settings::edit.dlssNeuralRendering = 0;
+            settings::row = int(GraphicsRow::AntiAliasing);
+            settings::pending = 0; Tick(base);
+            Require(settings::snapshot.rows[nr].hidden, "FSR hides DLSS neural rendering");
+            settings::edit.upscaler = gpu::upscaling::Upscaler::Dlss;
+            settings::row = nr;
+            settings::pending = 0; Tick(base);
+            Require(!settings::snapshot.rows[nr].hidden && settings::snapshot.rows[nr].value == L"Off" &&
+                    settings::snapshot.rows[nr].choices.size() == 5, "DLSS shows neural rendering Off and 1x-4x");
+            for (uint32_t passes = 1; passes <= 4; ++passes) {
+                settings::pending = 8; Tick(base);
+                Require(settings::edit.dlssNeuralRendering == passes, "right adds one pass");
+            }
+            settings::pending = 8; Tick(base);
+            Require(settings::edit.dlssNeuralRendering == 0, "right after 4x wraps to Off");
+            settings::pending = 4; Tick(base);
+            Require(settings::edit.dlssNeuralRendering == 4 && settings::snapshot.rows[nr].value == L"4×",
+                    "left from Off wraps to 4x");
+            std::puts("PASS DLSS neural rendering visibility and pass cycling");
+        }
         // Button prompts follow the seven retail Game settings. Right cycles
         // Auto, Xbox, PlayStation, applies live and saves at once.
         {

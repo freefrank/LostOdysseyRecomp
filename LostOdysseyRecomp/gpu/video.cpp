@@ -10,6 +10,7 @@
 #include "vulkan_command_recording.h"
 #if !defined(LO_VIDEO_SUBMISSION_UNIT)
 #include "dlss_ngx.h"
+#include "shader/dxc_compiler.h"
 #include "temporal_upscaler.h"
 #endif
 #endif
@@ -2240,6 +2241,14 @@ namespace gpu::video
 #endif
 #ifdef _WIN32
             dlss::SetLogSink([](const char* line) { LOG_INFO("{}", line); });
+#if !defined(LO_VIDEO_SUBMISSION_UNIT)
+            dlss::SetComputeShaderCompiler([](const char* source, std::vector<uint8_t>& dxil) {
+                auto compiled = xenos::CompileCachedHlsl(source, "main", "cs_6_0", xenos::ShaderBinaryFormat::Dxil);
+                if (!compiled.ok) LOG_WARNING("DLSS NR: bridge shader: {}", compiled.errors);
+                else dxil = std::move(compiled.bytecode);
+                return compiled.ok;
+            });
+#endif
             if (g_vulkan) {
                 g_dlssController = std::make_unique<dlss::Controller>(DlssApplicationDataPath(), DlssRuntimePath());
                 g_temporalUpscaler = std::make_unique<TemporalUpscaler>(*g_dlssController);

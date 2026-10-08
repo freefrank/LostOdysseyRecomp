@@ -8175,6 +8175,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     if (activePlan.requestedUpscaler == upscaling::Upscaler::Fsr) {
                         const uint32_t percent = std::min(settings::GetConfig().fsrSharpnessPercent, 100u);
                         frameSrOptions = {percent != 0, float(percent) / 100.0f};
+                    } else if (activePlan.requestedUpscaler == upscaling::Upscaler::Dlss) {
+                        frameSrOptions.dlssNeuralRenderingPasses = settings::GetConfig().dlssNeuralRendering;
                     }
                     PollTaaDiagnostic();
                     PollTaaLive();

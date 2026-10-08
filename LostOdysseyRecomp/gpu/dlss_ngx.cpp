@@ -4,6 +4,8 @@
 
 #include "dlss_ngx.h"
 #include "dlss_evaluate_capture.h"
+#include "dlss_nr.h"
+#include "dlss_nr_state.h"
 #include "sr_hybrid_mask.h"
 #if defined(_WIN32) && defined(LO_GPU_PLUME)
 #include <plume_d3d12.h>
@@ -21,6 +23,7 @@
 #include <codecvt>
 #include <iterator>
 #include <locale>
+#include <type_traits>
 #if defined(_WIN32)
 #include <windows.h>
 #endif
@@ -37,16 +40,9 @@ constexpr char kSdkVersion[] = "310.9.1";
 constexpr size_t kMaxRecordedCalls = 128;
 
 LogSink g_logSink = nullptr;
-
-[[maybe_unused]] void Log(const char* format, ...) {
-    char line[512];
-    va_list args;
-    va_start(args, format);
-    std::vsnprintf(line, sizeof(line), format, args);
-    va_end(args);
-    if (g_logSink) g_logSink(line);
-    else std::fprintf(stderr, "%s\n", line);
-}
+#if defined(_WIN32)
+ComputeShaderCompiler g_computeShaderCompiler = nullptr;
+#endif
 
 #if defined(LO_DLSS_SDK)
 std::wstring ToWide(const std::filesystem::path& path) {
@@ -95,40 +91,16 @@ bool CopyExtensions(NVSDK_NGX_Result result, uint32_t count, VkExtensionProperti
 }
 
 #if defined(_WIN32)
-// DLSS 5 Neural Rendering. NVIDIA has published no header for it; the feature
-// id is the SDK's reserved slot 18, and the parameter names are the ones the
-// signed Streamline 2.13 sl.dlss_nr plugin passes to the same NGX feature.
-constexpr NVSDK_NGX_Feature kNeuralRenderingFeature = NVSDK_NGX_Feature_Reserved18;
-
-// The snippet loads its kernels through these; the list comes from the
-// integrations that drive it directly. Only extensions the device has are added.
+// The NR snippet loads its kernels through these; the list comes from the
+// integrations that drive it directly.
 constexpr const char* kNeuralRenderingDeviceExtensions[] = {
     VK_NVX_BINARY_IMPORT_EXTENSION_NAME, VK_NVX_IMAGE_VIEW_HANDLE_EXTENSION_NAME,
     VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME, VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME};
 
-// The user's nvngx_dlssnr.dll. Community copies are modified, so the driver's
-// NGX core refuses to load them; the snippet's own NGX exports are called here.
-struct NeuralRenderingSnippet {
-    // Not the SDK's snippet-build declaration: the snippet's Init_Ext2 ends with
-    // the FeatureCommonInfo/Version pair of the regular Init, as the working
-    // dxvk-remix and Vapourkit integrations call it.
-    using Init = NVSDK_NGX_Result (NVSDK_CONV*)(unsigned long long, const wchar_t*, VkInstance, VkPhysicalDevice,
-        VkDevice, PFN_vkGetInstanceProcAddr, PFN_vkGetDeviceProcAddr, const NVSDK_NGX_FeatureCommonInfo*,
-        NVSDK_NGX_Version);
-    using Create = NVSDK_NGX_Result (NVSDK_CONV*)(VkDevice, VkCommandBuffer, NVSDK_NGX_Feature,
-        NVSDK_NGX_Parameter*, NVSDK_NGX_Handle**);
-    using Evaluate = NVSDK_NGX_Result (NVSDK_CONV*)(VkCommandBuffer, const NVSDK_NGX_Handle*,
-        const NVSDK_NGX_Parameter*, PFN_NVSDK_NGX_ProgressCallback);
-    using Release = NVSDK_NGX_Result (NVSDK_CONV*)(NVSDK_NGX_Handle*);
-    using Shutdown = NVSDK_NGX_Result (NVSDK_CONV*)(VkDevice);
-
-    HMODULE module = nullptr;
-    Init init = nullptr;
-    Create create = nullptr;
-    Evaluate evaluate = nullptr;
-    Release release = nullptr;
-    Shutdown shutdown = nullptr;
-};
+// Per-pass model tuning. Passes after the first skip local tone, the default of
+// the multipass integration this follows (wilsjo2/OptiScaler-DLSSNR-PreSR-Multipass);
+// not tuned for this game.
+constexpr float kLocalToneStrength[kMaxNeuralRenderingPasses] = {1.0f, 0.0f, 0.0f, 0.0f};
 
 // The snippet only serves callers whose module is named nvngx.dll, the NGX
 // core's name, and reads that name through GetModuleFileNameW. Its import is
@@ -181,50 +153,6 @@ bool RedirectSnippetModuleName(HMODULE snippet) {
         }
     }
     return false;
-}
-
-// Loaded once per process and never unloaded: its import now points here.
-const NeuralRenderingSnippet* LoadNeuralRenderingSnippet(const std::filesystem::path& runtimeDirectory,
-                                                         std::string& reason) {
-    static NeuralRenderingSnippet snippet;
-    static std::string failure;
-    static bool attempted = false;
-    if (attempted) {
-        reason = failure;
-        return snippet.module ? &snippet : nullptr;
-    }
-    attempted = true;
-    std::filesystem::path path = runtimeDirectory / L"nvngx_dlssnr.dll";
-    wchar_t configured[MAX_PATH] = {};
-    const DWORD configuredLength = GetEnvironmentVariableW(L"LO_DLSS_NR_PATH", configured, MAX_PATH);
-    if (configuredLength && configuredLength < MAX_PATH) path = configured;
-    // A file that is not a valid DLL would show a modal "Bad Image" dialog.
-    DWORD previousMode = 0;
-    const BOOL quiet = SetThreadErrorMode(GetThreadErrorMode() | SEM_FAILCRITICALERRORS, &previousMode);
-    const HMODULE module = LoadLibraryExW(path.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
-    const DWORD error = GetLastError();
-    if (quiet) SetThreadErrorMode(previousMode, nullptr);
-    if (!module) {
-        failure = "nvngx_dlssnr.dll did not load from " + path.string() + " (error " + std::to_string(error) + ")";
-        reason = failure;
-        return nullptr;
-    }
-    snippet.init = reinterpret_cast<NeuralRenderingSnippet::Init>(GetProcAddress(module, "NVSDK_NGX_VULKAN_Init_Ext2"));
-    snippet.create = reinterpret_cast<NeuralRenderingSnippet::Create>(GetProcAddress(module, "NVSDK_NGX_VULKAN_CreateFeature1"));
-    snippet.evaluate = reinterpret_cast<NeuralRenderingSnippet::Evaluate>(GetProcAddress(module, "NVSDK_NGX_VULKAN_EvaluateFeature"));
-    snippet.release = reinterpret_cast<NeuralRenderingSnippet::Release>(GetProcAddress(module, "NVSDK_NGX_VULKAN_ReleaseFeature"));
-    snippet.shutdown = reinterpret_cast<NeuralRenderingSnippet::Shutdown>(GetProcAddress(module, "NVSDK_NGX_VULKAN_Shutdown1"));
-    if (!snippet.init || !snippet.create || !snippet.evaluate || !snippet.release) {
-        failure = "nvngx_dlssnr.dll lacks the Vulkan NGX exports";
-    } else if (!RedirectSnippetModuleName(module)) {
-        failure = "nvngx_dlssnr.dll does not import GetModuleFileNameW as expected";
-    } else {
-        snippet.module = module;
-        reason.clear();
-        return &snippet;
-    }
-    reason = failure;
-    return nullptr;
 }
 #endif
 
@@ -331,6 +259,121 @@ std::optional<VkResult> EndIsolatedCommandList(plume::VulkanCommandList& list) {
 }
 
 void SetLogSink(LogSink sink) { g_logSink = sink; }
+#if defined(_WIN32)
+void SetComputeShaderCompiler(ComputeShaderCompiler compiler) { g_computeShaderCompiler = compiler; }
+#endif
+
+#if defined(_WIN32) && defined(LO_DLSS_SDK)
+namespace nr {
+void Log(const char* format, ...) {
+    char line[512];
+    va_list args;
+    va_start(args, format);
+    std::vsnprintf(line, sizeof(line), format, args);
+    va_end(args);
+    if (g_logSink) g_logSink(line);
+    else std::fprintf(stderr, "%s\n", line);
+}
+
+ComputeShaderCompiler ShaderCompiler() { return g_computeShaderCompiler; }
+
+std::filesystem::path SnippetPath(const std::filesystem::path& runtimeDirectory) {
+    wchar_t configured[MAX_PATH] = {};
+    const DWORD length = GetEnvironmentVariableW(L"LO_DLSS_NR_PATH", configured, MAX_PATH);
+    if (length && length < MAX_PATH) return configured;
+    return runtimeDirectory / L"nvngx_dlssnr.dll";
+}
+
+const Snippet* LoadSnippet(const std::filesystem::path& runtimeDirectory, std::string& reason) {
+    static Snippet snippet;
+    static std::string failure;
+    static bool attempted = false, loaded = false;
+    if (attempted) {
+        reason = failure;
+        return loaded ? &snippet : nullptr;
+    }
+    attempted = true;
+    const auto path = SnippetPath(runtimeDirectory);
+    // A file that is not a valid DLL would show a modal "Bad Image" dialog.
+    DWORD previousMode = 0;
+    const BOOL quiet = SetThreadErrorMode(GetThreadErrorMode() | SEM_FAILCRITICALERRORS, &previousMode);
+    const HMODULE module = LoadLibraryExW(path.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
+    const DWORD error = GetLastError();
+    if (quiet) SetThreadErrorMode(previousMode, nullptr);
+    if (!module) {
+        failure = "nvngx_dlssnr.dll did not load from " + path.string() + " (error " + std::to_string(error) + ")";
+        reason = failure;
+        return nullptr;
+    }
+    const auto get = [&](auto& function, const char* name) {
+        function = reinterpret_cast<std::remove_reference_t<decltype(function)>>(GetProcAddress(module, name));
+    };
+    get(snippet.vk.init, "NVSDK_NGX_VULKAN_Init_Ext2");
+    get(snippet.vk.create, "NVSDK_NGX_VULKAN_CreateFeature1");
+    get(snippet.vk.evaluate, "NVSDK_NGX_VULKAN_EvaluateFeature");
+    get(snippet.vk.release, "NVSDK_NGX_VULKAN_ReleaseFeature");
+    get(snippet.vk.shutdown, "NVSDK_NGX_VULKAN_Shutdown1");
+    get(snippet.d3d12.init, "NVSDK_NGX_D3D12_Init_Ext");
+    get(snippet.d3d12.create, "NVSDK_NGX_D3D12_CreateFeature");
+    get(snippet.d3d12.evaluate, "NVSDK_NGX_D3D12_EvaluateFeature");
+    get(snippet.d3d12.release, "NVSDK_NGX_D3D12_ReleaseFeature");
+    get(snippet.d3d12.shutdown, "NVSDK_NGX_D3D12_Shutdown1");
+    if (!snippet.vk.Complete() && !snippet.d3d12.Complete()) {
+        failure = "nvngx_dlssnr.dll lacks the NGX exports";
+    } else if (!RedirectSnippetModuleName(module)) {
+        failure = "nvngx_dlssnr.dll does not import GetModuleFileNameW as expected";
+    } else {
+        // Its import now points into this executable, so it is never unloaded.
+        loaded = true;
+        reason.clear();
+        return &snippet;
+    }
+    reason = failure;
+    return nullptr;
+}
+
+// NGX keeps each value under the type it was set with; a reader using another
+// type sees the default. The types follow the integrations that drive it.
+void SetControls(NVSDK_NGX_Parameter* parameters, uint32_t width, uint32_t height, bool depthInverted,
+                 uint32_t pass) {
+    NVSDK_NGX_Parameter_SetI(parameters, "DLSSNR.Enabled", 1);
+    NVSDK_NGX_Parameter_SetUI(parameters, "DLSSNR.Width", width);
+    NVSDK_NGX_Parameter_SetUI(parameters, "DLSSNR.Height", height);
+    NVSDK_NGX_Parameter_SetI(parameters, "DLSSNR.DepthInverted", depthInverted ? 1 : 0);
+    NVSDK_NGX_Parameter_SetUI(parameters, "DLSSNR.Style", 0);
+    NVSDK_NGX_Parameter_SetF(parameters, "DLSSNR.Intensity", 1.0f);
+    NVSDK_NGX_Parameter_SetF(parameters, "DLSSNR.LocalToneStrength", kLocalToneStrength[pass]);
+    NVSDK_NGX_Parameter_SetF(parameters, "DLSSNR.LocalStructureStrength", 1.0f);
+    NVSDK_NGX_Parameter_SetI(parameters, "DLSSNR.UseAutoMask", 1);
+    NVSDK_NGX_Parameter_SetI(parameters, "DLSSNR.UICorrection", 0);
+    NVSDK_NGX_Parameter_SetI(parameters, "DLSSNR.Hint.Render.Preset", 0);
+    NVSDK_NGX_Parameter_SetUI(parameters, NVSDK_NGX_Parameter_CreationNodeMask, 1);
+    NVSDK_NGX_Parameter_SetUI(parameters, NVSDK_NGX_Parameter_VisibilityNodeMask, 1);
+}
+
+void SetFrame(NVSDK_NGX_Parameter* parameters, const SrConfig& config, const temporal::TemporalFrameInputs& inputs,
+              bool reset) {
+    const uint32_t width = config.outputExtent.width, height = config.outputExtent.height;
+    NVSDK_NGX_Parameter_SetI(parameters, "DLSSNR.Reset", reset ? 1 : 0);
+    const auto subrect = [&](const char* name, uint32_t x, uint32_t y, uint32_t w, uint32_t h) {
+        char key[64];
+        const struct { const char* field; uint32_t value; } fields[] = {
+            {"BaseX", x}, {"BaseY", y}, {"Width", w}, {"Height", h}};
+        for (const auto& field : fields) {
+            std::snprintf(key, sizeof(key), "DLSSNR.%sSubrect%s", name, field.field);
+            NVSDK_NGX_Parameter_SetI(parameters, key, int(field.value));
+        }
+    };
+    subrect("Color", 0, 0, width, height);
+    subrect("Output", 0, 0, width, height);
+    subrect("Depth", inputs.depth.x, inputs.depth.y, config.renderExtent.width, config.renderExtent.height);
+    subrect("MVec", inputs.motion.x, inputs.motion.y, config.renderExtent.width, config.renderExtent.height);
+    // Render-resolution pixel vectors over the declared MVec subrect, as for SR.
+    NVSDK_NGX_Parameter_SetF(parameters, "DLSSNR.MVecScaleX", 1.0f);
+    NVSDK_NGX_Parameter_SetF(parameters, "DLSSNR.MVecScaleY", 1.0f);
+}
+} // namespace nr
+#endif
 
 const char* ProbeStateName(ProbeState state) {
     switch (state) {
@@ -398,8 +441,6 @@ Controller::Controller(std::filesystem::path applicationDataPath, std::filesyste
     applicationDataPath_(std::move(applicationDataPath)), runtimePath_(std::move(runtimePath)) {
     report_.sdkVersion = kSdkVersion;
     report_.runtimePath = runtimePath_.string();
-    const char* neuralRendering = std::getenv("LO_DLSS_NR");
-    nrRequested_ = neuralRendering && std::strcmp(neuralRendering, "1") == 0;
 #if !defined(LO_DLSS_SDK)
     report_.state = ProbeState::SdkDisabled;
     report_.reason = "built without LO_ENABLE_DLSS and a usable local NGX SDK";
@@ -493,7 +534,7 @@ bool Controller::QueryDeviceExtensions(VkInstance instance, VkPhysicalDevice dev
     const bool failed = NVSDK_NGX_FAILED(result);
     RecordCall("GetFeatureDeviceExtensionRequirements", int32_t(result), failed);
     const bool copied = CopyExtensions(result, count, extensions, required, reason);
-    if (copied && nrRequested_) QueryNeuralRenderingExtensions(instance, device, required);
+    if (copied) QueryNeuralRenderingExtensions(device, required);
     CopyExtensionNames(required, report_.deviceExtensions.required);
     report_.deviceExtensions.reason = copied ? "" : reason;
     return copied;
@@ -1171,10 +1212,14 @@ SrAttempt Controller::RecordIsolated(plume::VulkanCommandList& isolatedCommandLi
 #endif
 }
 
-void Controller::QueryNeuralRenderingExtensions(VkInstance instance, VkPhysicalDevice device,
-                                                std::vector<VkExtensionProperties>& required) {
+void Controller::QueryNeuralRenderingExtensions(VkPhysicalDevice device, std::vector<VkExtensionProperties>& required) {
 #if defined(_WIN32) && defined(LO_DLSS_SDK)
-    (void)instance;
+    // Only a player who supplied the DLL gets the extra device extensions.
+    std::error_code error;
+    if (!std::filesystem::is_regular_file(nr::SnippetPath(runtimePath_), error)) {
+        nrUnsupportedReason_ = "nvngx_dlssnr.dll was not there when the Vulkan device was created; restart the game";
+        return;
+    }
     uint32_t count = 0;
     vkEnumerateDeviceExtensionProperties(device, nullptr, &count, nullptr);
     std::vector<VkExtensionProperties> available(count);
@@ -1183,97 +1228,115 @@ void Controller::QueryNeuralRenderingExtensions(VkInstance instance, VkPhysicalD
     std::string missing;
     for (const char* name : kNeuralRenderingDeviceExtensions) {
         const auto has = [&](const VkExtensionProperties& extension) { return std::strcmp(extension.extensionName, name) == 0; };
-        const auto found = std::find_if(available.begin(), available.end(), has);
-        if (found == available.end()) { missing += missing.empty() ? name : std::string(", ") + name; continue; }
-        if (std::none_of(required.begin(), required.end(), has)) required.push_back(*found);
+        if (std::none_of(available.begin(), available.end(), has))
+            missing += missing.empty() ? name : std::string(", ") + name;
     }
     nrSupported_ = missing.empty();
-    if (!nrSupported_) Log("DLSS NR: off, the device lacks %s", missing.c_str());
+    if (!nrSupported_) {
+        nrUnsupportedReason_ = "the device lacks " + missing;
+        return;
+    }
+    for (const char* name : kNeuralRenderingDeviceExtensions) {
+        const auto has = [&](const VkExtensionProperties& extension) { return std::strcmp(extension.extensionName, name) == 0; };
+        if (std::none_of(required.begin(), required.end(), has))
+            required.push_back(*std::find_if(available.begin(), available.end(), has));
+    }
 #else
-    (void)instance; (void)device; (void)required;
+    (void)device; (void)required;
+#endif
+}
+
+const nr::Snippet* Controller::NeuralRenderingSnippet(const SrConfig& config) {
+#if defined(_WIN32) && defined(LO_DLSS_SDK)
+    if (!config.neuralRenderingPasses) {
+        g_neuralRenderingState.store(NeuralRenderingState::Off, std::memory_order_relaxed);
+        return nullptr;
+    }
+    if (nrFailed_) return nullptr;
+    // The model is trained on display-encoded 0..1 frames. The game's DLSS input
+    // is its 8-bit scene even with HDR output; presentation adds the highlights back.
+    if (config.colorSpace != SrColorSpace::DisplayEncoded) {
+        if (!nrSkipLogged_) nr::Log("DLSS NR: skipped while the scene color is HDR linear");
+        nrSkipLogged_ = true;
+        return nullptr;
+    }
+    std::string reason;
+    const auto* snippet = nr::LoadSnippet(runtimePath_, reason);
+    if (snippet && !(backend_ == Backend::D3D12 ? snippet->d3d12.Complete() : snippet->vk.Complete()))
+        reason = "nvngx_dlssnr.dll lacks this backend's NGX exports";
+    if (!reason.empty()) {
+        nrFailed_ = true;
+        g_neuralRenderingState.store(NeuralRenderingState::MissingRuntime, std::memory_order_relaxed);
+        nr::Log("DLSS NR: off, %s", reason.c_str());
+        return nullptr;
+    }
+    if (backend_ != Backend::D3D12 && !nrSupported_) {
+        nrFailed_ = true;
+        g_neuralRenderingState.store(NeuralRenderingState::Unsupported, std::memory_order_relaxed);
+        nr::Log("DLSS NR: off, %s", nrUnsupportedReason_.c_str());
+        return nullptr;
+    }
+    return snippet;
+#else
+    (void)config;
+    return nullptr;
+#endif
+}
+
+void Controller::FailNeuralRendering(const char* operation, int32_t result) {
+    nrFailed_ = true;
+    g_neuralRenderingState.store(NeuralRenderingState::Failed, std::memory_order_relaxed);
+#if defined(_WIN32) && defined(LO_DLSS_SDK)
+    nr::Log("DLSS NR: %s failed (0x%08x); off until the next reconfigure, DLSS SR continues", operation, unsigned(result));
+#else
+    (void)operation; (void)result;
 #endif
 }
 
 void Controller::RecordNeuralRendering(VkCommandBuffer commandBuffer, const SrConfig& config,
     const temporal::TemporalFrameInputs& inputs, plume::VulkanTexture& output, bool reset) {
 #if defined(_WIN32) && defined(LO_DLSS_SDK)
-    if (!nrRequested_ || nrFailed_) return;
-    const auto fail = [&](const char* operation, int32_t result) {
-        nrFailed_ = true;
-        Log("DLSS NR: %s failed (0x%08x); off for this session, DLSS SR continues", operation, unsigned(result));
-    };
-    if (!nrSupported_) {
-        nrFailed_ = true; // The extension query logged why.
-        return;
-    }
-    // The model is trained on display-encoded 0..1 frames.
-    if (config.colorSpace != SrColorSpace::DisplayEncoded) {
-        if (!nrSkipLogged_) Log("DLSS NR: skipped while the scene color is HDR linear");
-        nrSkipLogged_ = true;
-        return;
-    }
-    std::string reason;
-    const auto* snippet = LoadNeuralRenderingSnippet(runtimePath_, reason);
-    if (!snippet) {
-        nrFailed_ = true;
-        Log("DLSS NR: off, %s", reason.c_str());
-        return;
-    }
+    const auto* snippet = NeuralRenderingSnippet(config);
+    if (!snippet) return;
     if (!nrSnippetInitialized_) {
         // The core session is already up; the snippet keeps its own state.
         const auto dataPath = ToWide(applicationDataPath_);
-        const auto result = snippet->init(0, dataPath.c_str(), sessionInstance_, sessionDevice_->physicalDevice,
-            sessionDevice_->vk, vkGetInstanceProcAddr, vkGetDeviceProcAddr, nullptr, NVSDK_NGX_Version_API);
+        const auto result = snippet->vk.init(0, dataPath.c_str(), sessionInstance_, sessionDevice_->physicalDevice,
+            sessionDevice_->vk, vkGetInstanceProcAddr, vkGetDeviceProcAddr, NVSDK_NGX_Version_API, nullptr);
         RecordCall("NR_Init_Ext2", int32_t(result));
-        if (NVSDK_NGX_FAILED(result)) return fail("snippet Init_Ext2", int32_t(result));
+        if (NVSDK_NGX_FAILED(result)) return FailNeuralRendering("snippet Init_Ext2", int32_t(result));
         nrSnippetInitialized_ = true;
-        Log("DLSS NR: snippet initialized");
+        nr::Log("DLSS NR: snippet initialized");
     }
-    const uint32_t width = config.outputExtent.width, height = config.outputExtent.height;
     if (!nrParameters_) {
         NVSDK_NGX_Parameter* allocated = nullptr;
         const auto result = NVSDK_NGX_VULKAN_GetCapabilityParameters(&allocated);
         RecordCall("NR_GetCapabilityParameters", int32_t(result));
-        if (NVSDK_NGX_FAILED(result) || !allocated) return fail("GetCapabilityParameters", int32_t(result));
+        if (NVSDK_NGX_FAILED(result) || !allocated) return FailNeuralRendering("GetCapabilityParameters", int32_t(result));
         nrParameters_ = allocated;
     }
     auto* parameters = static_cast<NVSDK_NGX_Parameter*>(nrParameters_);
-    // NGX keeps each value under the type it was set with; a reader using
-    // another type sees the default. Tuning is latched when the feature is made.
-    const auto setControls = [&] {
-        NVSDK_NGX_Parameter_SetI(parameters, "DLSSNR.Enabled", 1);
-        NVSDK_NGX_Parameter_SetUI(parameters, "DLSSNR.Width", width);
-        NVSDK_NGX_Parameter_SetUI(parameters, "DLSSNR.Height", height);
-        NVSDK_NGX_Parameter_SetI(parameters, "DLSSNR.DepthInverted", config.depthInverted ? 1 : 0);
-        NVSDK_NGX_Parameter_SetUI(parameters, "DLSSNR.Style", 0);
-        NVSDK_NGX_Parameter_SetF(parameters, "DLSSNR.Intensity", 1.0f);
-        NVSDK_NGX_Parameter_SetF(parameters, "DLSSNR.LocalToneStrength", 1.0f);
-        NVSDK_NGX_Parameter_SetF(parameters, "DLSSNR.LocalStructureStrength", 1.0f);
-        NVSDK_NGX_Parameter_SetI(parameters, "DLSSNR.UseAutoMask", 1);
-        NVSDK_NGX_Parameter_SetI(parameters, "DLSSNR.UICorrection", 0);
-    };
+    const uint32_t width = config.outputExtent.width, height = config.outputExtent.height;
+    const uint32_t passes = config.neuralRenderingPasses;
 
-    if (!nrFeature_) {
+    if (!HasNeuralRenderingFeature()) {
         // Creation records initialization work; the first evaluate waits for
         // the next recording. The model's images are FP16, the format the
         // known integrations feed it.
-        const auto image = [&] {
-            return output.device->createTexture(plume::RenderTextureDesc::Texture2D(width, height, 1,
+        for (auto& image : nrImages_) {
+            image = output.device->createTexture(plume::RenderTextureDesc::Texture2D(width, height, 1,
                 plume::RenderFormat::R16G16B16A16_FLOAT,
                 plume::RenderTextureFlag::STORAGE | plume::RenderTextureFlag::UNORDERED_ACCESS));
-        };
-        nrInput_ = image();
-        nrOutput_ = image();
-        if (!nrInput_ || !nrOutput_) return fail("image allocation", 0);
-        setControls();
-        NVSDK_NGX_Parameter_SetI(parameters, "DLSSNR.Hint.Render.Preset", 0);
-        NVSDK_NGX_Parameter_SetUI(parameters, NVSDK_NGX_Parameter_CreationNodeMask, 1);
-        NVSDK_NGX_Parameter_SetUI(parameters, NVSDK_NGX_Parameter_VisibilityNodeMask, 1);
-        NVSDK_NGX_Handle* handle = nullptr;
-        const auto result = snippet->create(sessionDevice_->vk, commandBuffer, kNeuralRenderingFeature, parameters, &handle);
-        RecordCall("NR_CreateFeature1", int32_t(result));
-        if (handle) nrFeature_ = handle; // A partial create is released at the drained boundary.
-        if (NVSDK_NGX_FAILED(result) || !handle) return fail("CreateFeature1", int32_t(result));
+            if (!image) return FailNeuralRendering("image allocation", 0);
+        }
+        for (uint32_t pass = 0; pass < passes; ++pass) {
+            nr::SetControls(parameters, width, height, config.depthInverted, pass);
+            NVSDK_NGX_Handle* handle = nullptr;
+            const auto result = snippet->vk.create(sessionDevice_->vk, commandBuffer, nr::kFeature, parameters, &handle);
+            RecordCall("NR_CreateFeature1", int32_t(result));
+            nrFeatures_[pass] = handle; // A partial create is released at the drained boundary.
+            if (NVSDK_NGX_FAILED(result) || !handle) return FailNeuralRendering("CreateFeature1", int32_t(result));
+        }
         VkImageMemoryBarrier barriers[2] = {};
         for (int i = 0; i < 2; ++i) {
             auto& barrier = barriers[i];
@@ -1282,60 +1345,49 @@ void Controller::RecordNeuralRendering(VkCommandBuffer commandBuffer, const SrCo
             barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
             barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
             barrier.srcQueueFamilyIndex = barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            barrier.image = static_cast<plume::VulkanTexture*>((i ? nrOutput_ : nrInput_).get())->vk;
+            barrier.image = static_cast<plume::VulkanTexture*>(nrImages_[i].get())->vk;
             barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
         }
         vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
             0, 0, nullptr, 0, nullptr, 2, barriers);
+        nrPasses_ = passes;
         nrWidth_ = width;
         nrHeight_ = height;
         nrReset_ = true;
-        Log("DLSS NR: feature created for %ux%u", width, height);
+        nr::Log("DLSS NR: %u feature(s) created for %ux%u", passes, width, height);
         return;
     }
-    // An output change is a drained SR reconfigure, which recreates the feature.
-    if (width != nrWidth_ || height != nrHeight_) return;
+    // An output or pass-count change is a drained SR reconfigure, which recreates the features.
+    if (width != nrWidth_ || height != nrHeight_ || passes != nrPasses_) return;
 
-    auto& input = *static_cast<plume::VulkanTexture*>(nrInput_.get());
-    auto& answer = *static_cast<plume::VulkanTexture*>(nrOutput_.get());
+    // Pass n reads image n % 2 and answers into the other one.
+    plume::VulkanTexture* images[2] = {static_cast<plume::VulkanTexture*>(nrImages_[0].get()),
+                                       static_cast<plume::VulkanTexture*>(nrImages_[1].get())};
     FullBarrier(commandBuffer);
-    BlitGeneral(commandBuffer, output.vk, input.vk, width, height);
+    BlitGeneral(commandBuffer, output.vk, images[0]->vk, width, height);
     FullBarrier(commandBuffer);
-
-    auto colorResource = ImageResource(input, false);
-    auto outputResource = ImageResource(answer, true);
     auto depthResource = ImageResource(*static_cast<const plume::VulkanTexture*>(inputs.depth.texture), false);
     auto motionResource = ImageResource(*static_cast<const plume::VulkanTexture*>(inputs.motion.texture), false);
-    setControls();
-    NVSDK_NGX_Parameter_SetVoidPointer(parameters, "DLSSNR.Color", &colorResource);
-    NVSDK_NGX_Parameter_SetVoidPointer(parameters, "DLSSNR.Output", &outputResource);
     NVSDK_NGX_Parameter_SetVoidPointer(parameters, "DLSSNR.Depth", &depthResource);
     NVSDK_NGX_Parameter_SetVoidPointer(parameters, "DLSSNR.MVec", &motionResource);
-    NVSDK_NGX_Parameter_SetI(parameters, "DLSSNR.Reset", reset || nrReset_ ? 1 : 0);
-    const auto subrect = [&](const char* name, uint32_t x, uint32_t y, uint32_t w, uint32_t h) {
-        char key[64];
-        const struct { const char* field; uint32_t value; } fields[] = {
-            {"BaseX", x}, {"BaseY", y}, {"Width", w}, {"Height", h}};
-        for (const auto& field : fields) {
-            std::snprintf(key, sizeof(key), "DLSSNR.%sSubrect%s", name, field.field);
-            NVSDK_NGX_Parameter_SetI(parameters, key, int(field.value));
-        }
-    };
-    subrect("Color", 0, 0, width, height);
-    subrect("Output", 0, 0, width, height);
-    subrect("Depth", inputs.depth.x, inputs.depth.y, config.renderExtent.width, config.renderExtent.height);
-    subrect("MVec", inputs.motion.x, inputs.motion.y, config.renderExtent.width, config.renderExtent.height);
-    // Render-resolution pixel vectors over the declared MVec subrect, as for SR.
-    NVSDK_NGX_Parameter_SetF(parameters, "DLSSNR.MVecScaleX", 1.0f);
-    NVSDK_NGX_Parameter_SetF(parameters, "DLSSNR.MVecScaleY", 1.0f);
-    const auto result = snippet->evaluate(commandBuffer, static_cast<NVSDK_NGX_Handle*>(nrFeature_), parameters, nullptr);
-    RecordCall("NR_EvaluateFeature", int32_t(result));
-    if (NVSDK_NGX_FAILED(result)) return fail("EvaluateFeature", int32_t(result));
+    nr::SetFrame(parameters, config, inputs, reset || nrReset_);
+    for (uint32_t pass = 0; pass < passes; ++pass) {
+        auto colorResource = ImageResource(*images[pass % 2], false);
+        auto outputResource = ImageResource(*images[(pass + 1) % 2], true);
+        nr::SetControls(parameters, width, height, config.depthInverted, pass);
+        NVSDK_NGX_Parameter_SetVoidPointer(parameters, "DLSSNR.Color", &colorResource);
+        NVSDK_NGX_Parameter_SetVoidPointer(parameters, "DLSSNR.Output", &outputResource);
+        const auto result = snippet->vk.evaluate(commandBuffer, static_cast<NVSDK_NGX_Handle*>(nrFeatures_[pass]),
+            parameters, nullptr);
+        RecordCall("NR_EvaluateFeature", int32_t(result));
+        if (NVSDK_NGX_FAILED(result)) return FailNeuralRendering("EvaluateFeature", int32_t(result));
+        FullBarrier(commandBuffer);
+    }
+    BlitGeneral(commandBuffer, images[passes % 2]->vk, output.vk, width, height);
     FullBarrier(commandBuffer);
-    BlitGeneral(commandBuffer, answer.vk, output.vk, width, height);
-    FullBarrier(commandBuffer);
-    if (nrReset_) Log("DLSS NR: first evaluate recorded for %ux%u", width, height);
+    if (nrReset_) nr::Log("DLSS NR: first evaluate recorded for %ux%u, %u pass(es)", width, height, passes);
     nrReset_ = false;
+    g_neuralRenderingState.store(NeuralRenderingState::Active, std::memory_order_relaxed);
 #else
     (void)commandBuffer; (void)config; (void)inputs; (void)output; (void)reset;
 #endif
@@ -1343,19 +1395,34 @@ void Controller::RecordNeuralRendering(VkCommandBuffer commandBuffer, const SrCo
 
 void Controller::ReleaseNeuralRendering() {
 #if defined(_WIN32) && defined(LO_DLSS_SDK)
-    if (nrFeature_) {
+    if (HasNeuralRenderingFeature()) {
         std::string reason;
-        if (const auto* snippet = LoadNeuralRenderingSnippet(runtimePath_, reason)) {
-            const auto result = snippet->release(static_cast<NVSDK_NGX_Handle*>(nrFeature_));
-            RecordCall("NR_ReleaseFeature", int32_t(result));
+        const auto* snippet = nr::LoadSnippet(runtimePath_, reason);
+        const auto release = !snippet ? nullptr : backend_ == Backend::D3D12 ? snippet->d3d12.release : snippet->vk.release;
+        for (auto& feature : nrFeatures_) {
+            if (feature && release) {
+                const auto result = release(static_cast<NVSDK_NGX_Handle*>(feature));
+                RecordCall("NR_ReleaseFeature", int32_t(result));
+            }
+            feature = nullptr;
         }
-        nrFeature_ = nullptr;
     }
 #endif
-    nrInput_.reset();
-    nrOutput_.reset();
+    for (auto& image : nrImages_) image.reset();
+#if defined(_WIN32)
+    nrEncodeSet_.reset();
+    nrDecodeSet_.reset();
+    nrBridgePipeline_.reset();
+    nrBridgeShader_.reset();
+    nrBridgeLayout_.reset();
+    nrStage_.reset();
+#endif
+    nrPasses_ = 0;
     nrWidth_ = nrHeight_ = 0;
     nrReset_ = true;
+    // A drained reconfigure retries NR; the DLL load result stays cached.
+    nrFailed_ = false;
+    nrSkipLogged_ = false;
 }
 
 void Controller::OnBatchSubmitted(uint64_t useId, uint64_t submissionSerial) {
@@ -1408,16 +1475,24 @@ void Controller::ShutdownAfterGpuDrain() {
     // The snippet shuts down before the core session it was initialized beside.
     if (nrSnippetInitialized_) {
         std::string reason;
-        const auto* snippet = LoadNeuralRenderingSnippet(runtimePath_, reason);
-        if (snippet && snippet->shutdown && sessionDevice_) {
-            const auto result = snippet->shutdown(sessionDevice_->vk);
-            RecordCall("NR_Shutdown1", int32_t(result));
+        if (const auto* snippet = nr::LoadSnippet(runtimePath_, reason)) {
+            std::optional<NVSDK_NGX_Result> result;
+            if (backend_ == Backend::D3D12) {
+                if (snippet->d3d12.shutdown && sessionDeviceD3D12_) result = snippet->d3d12.shutdown(sessionDeviceD3D12_->d3d);
+            } else if (snippet->vk.shutdown && sessionDevice_) {
+                result = snippet->vk.shutdown(sessionDevice_->vk);
+            }
+            if (result) RecordCall("NR_Shutdown1", int32_t(*result));
         }
         nrSnippetInitialized_ = false;
     }
 #endif
     if (nrParameters_) {
-        const auto result = NVSDK_NGX_VULKAN_DestroyParameters(static_cast<NVSDK_NGX_Parameter*>(nrParameters_));
+        const auto result =
+#if defined(_WIN32)
+            backend_ == Backend::D3D12 ? NVSDK_NGX_D3D12_DestroyParameters(static_cast<NVSDK_NGX_Parameter*>(nrParameters_)) :
+#endif
+            NVSDK_NGX_VULKAN_DestroyParameters(static_cast<NVSDK_NGX_Parameter*>(nrParameters_));
         RecordCall("NR_DestroyParameters", int32_t(result));
         nrParameters_ = nullptr;
     }

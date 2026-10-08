@@ -5,6 +5,7 @@
 #include "config.h"
 #include "graphics_menu.h"
 #include <gpu/frame_rate.h>
+#include <gpu/dlss_nr_state.h>
 #include "restart.h"
 #include "translations.h"
 #include <gpu/video.h>
@@ -603,6 +604,14 @@ bool GraphicsRowHidden(int r)
         return gpu::video::GpuDeviceNames().size() <= 1;
     if (r == int(GraphicsRow::Display))
         return gpu::video::Displays().size() <= 1;
+#ifdef _WIN32
+    if (r == int(GraphicsRow::DlssNeuralRendering))
+        return edit.upscaler != gpu::upscaling::Upscaler::Dlss;
+#else
+    // nvngx_dlssnr.dll is Windows-only.
+    if (r == int(GraphicsRow::DlssNeuralRendering))
+        return true;
+#endif
     return (r == int(GraphicsRow::DlssQuality) && edit.upscaler == gpu::upscaling::Upscaler::Off) ||
            (r == int(GraphicsRow::FsrSharpness) && edit.upscaler != gpu::upscaling::Upscaler::Fsr) ||
            (r == int(GraphicsRow::FrameGenerationMultiplier) && edit.frameGenerationProvider != framegen::Provider::Dlss);
@@ -814,6 +823,11 @@ void Publish(uint8_t *base, uint32_t config)
                                         std::min(edit.fsrSharpnessPercent, 100u));
         fsrSharpness.hidden = GraphicsRowHidden(int(GraphicsRow::FsrSharpness));
         placeGraphics(GraphicsRow::FsrSharpness, std::move(fsrSharpness));
+        auto neuralRendering = makeChoices(L"DLSS 5 neural rendering", L"DLSS 5 神經渲染",
+                   {Tr(L"Off", L"關"), L"1×", L"2×", L"3×", L"4×"},
+                   std::min(edit.dlssNeuralRendering, DlssNeuralRenderingMaxPasses));
+        neuralRendering.hidden = GraphicsRowHidden(int(GraphicsRow::DlssNeuralRendering));
+        placeGraphics(GraphicsRow::DlssNeuralRendering, std::move(neuralRendering));
         const uint32_t afChoice = edit.anisotropicFiltering == 16 ? 4 : edit.anisotropicFiltering == 8 ? 3 :
                                   edit.anisotropicFiltering == 4 ? 2 : edit.anisotropicFiltering == 2 ? 1 : 0;
         placeGraphics(GraphicsRow::AnisotropicFiltering, makeChoices(L"Anisotropic filtering", L"各向異性過濾",
@@ -1036,6 +1050,20 @@ void Publish(uint8_t *base, uint32_t config)
             next.help = Tr(L"FSR sharpening: Off disables RCAS; 1-100% sets sharpening strength.",
                            L"FSR 銳化：關閉會停用 RCAS；1-100% 調整銳化強度。");
             break;
+        case GraphicsRow::DlssNeuralRendering:
+        {
+            next.help = Tr(L"NVIDIA's DLSS 5 neural rendering on the DLSS image. 1×-4× runs it that many times: stronger, but each pass costs frame rate. Needs an RTX GPU and nvngx_dlssnr.dll next to the game (not included). Applies after saving.",
+                           L"在 DLSS 畫面上執行 NVIDIA 的 DLSS 5 神經渲染。1×-4× 為執行次數：次數越多效果越強，但每次都會降低影格率。需要 RTX 顯示卡，並將 nvngx_dlssnr.dll 放在遊戲旁（不隨附）。儲存後套用。");
+            using gpu::dlss::NeuralRenderingState;
+            const auto state = gpu::dlss::g_neuralRenderingState.load(std::memory_order_relaxed);
+            const wchar_t *status =
+                state == NeuralRenderingState::Active ? Tr(L"Running.", L"執行中。") :
+                state == NeuralRenderingState::MissingRuntime ? Tr(L"nvngx_dlssnr.dll is missing or unusable.", L"找不到 nvngx_dlssnr.dll 或無法使用。") :
+                state == NeuralRenderingState::Unsupported ? Tr(L"This GPU or driver cannot run it.", L"此顯示卡或驅動程式無法執行。") :
+                state == NeuralRenderingState::Failed ? Tr(L"It stopped after an error; see the log.", L"發生錯誤後已停止，請查看記錄檔。") : nullptr;
+            if (status) next.help = next.help + L" " + status;
+            break;
+        }
         case GraphicsRow::AnisotropicFiltering:
             next.help = Tr(L"Improves texture clarity at oblique viewing angles. Changes apply immediately after saving.",
                            L"提升斜角觀看時的紋理清晰度。儲存後立即套用。");
@@ -2311,6 +2339,10 @@ PPC_FUNC(sub_822F19B0)
                 break;
             case GraphicsRow::FsrSharpness:
                 edit.fsrSharpnessPercent = uint32_t(std::clamp(int(edit.fsrSharpnessPercent) + delta, 0, 100));
+                break;
+            case GraphicsRow::DlssNeuralRendering:
+                edit.dlssNeuralRendering = cycle(std::min(edit.dlssNeuralRendering, DlssNeuralRenderingMaxPasses),
+                                                 DlssNeuralRenderingMaxPasses + 1);
                 break;
             case GraphicsRow::AnisotropicFiltering:
             {
