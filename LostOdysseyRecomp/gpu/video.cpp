@@ -2239,6 +2239,7 @@ namespace gpu::video
             os::hang_watch::Watch startupWatch("DLSS controller creation", nullptr);
 #endif
 #ifdef _WIN32
+            dlss::SetLogSink([](const char* line) { LOG_INFO("{}", line); });
             if (g_vulkan) {
                 g_dlssController = std::make_unique<dlss::Controller>(DlssApplicationDataPath(), DlssRuntimePath());
                 g_temporalUpscaler = std::make_unique<TemporalUpscaler>(*g_dlssController);
@@ -2288,6 +2289,7 @@ namespace gpu::video
             g_temporalUpscaler = std::make_unique<TemporalUpscaler>(static_cast<dlss::Controller*>(nullptr));
             g_interface = plume::CreateMetalInterface();
 #else
+            dlss::SetLogSink([](const char* line) { LOG_INFO("{}", line); });
             g_dlssController = std::make_unique<dlss::Controller>(DlssApplicationDataPath(), DlssRuntimePath());
             g_temporalUpscaler = std::make_unique<TemporalUpscaler>(*g_dlssController);
             LoadCustomVulkanDriver();

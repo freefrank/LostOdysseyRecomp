@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -18,6 +19,11 @@ namespace plume { struct D3D12Device; struct D3D12CommandList; struct D3D12Textu
 
 namespace gpu::dlss {
 struct EvaluateCapture;
+
+// Runtime events after the probe report. Without a sink they go to stderr.
+using LogSink = void (*)(const char* line);
+void SetLogSink(LogSink sink);
+
 enum class ProbeState : uint8_t {
     NotProbed,
     SdkDisabled,
@@ -121,7 +127,7 @@ public:
     SrStatus EnsureSession(const plume::VulkanDevice& device);
     bool NeedsFeatureRecreate(const SrConfig& config) const;
     // Persistent capability/parameter blocks alone do not require a drain.
-    bool HasFeatureState() const { return feature_ || featureConfigValid_ || featureFailed_ || !srUses_.Empty(); }
+    bool HasFeatureState() const { return feature_ || nrFeature_ || featureConfigValid_ || featureFailed_ || !srUses_.Empty(); }
 
     // Lane B owns one prefix, isolated NGX, and continuation primary list per
     // GPU slot. This method exclusively begins, records, and ends the isolated
@@ -150,7 +156,7 @@ public:
     void ReleaseFeatureAfterGpuDrain();
     void ShutdownAfterGpuDrain();
     bool ShutdownComplete() const {
-        return srUses_.Empty() && !feature_ && !featureParameters_ &&
+        return srUses_.Empty() && !feature_ && !featureParameters_ && !nrFeature_ && !nrParameters_ && !nrSnippetInitialized_ &&
             !capabilityParameters_ && !sessionInitialized_ && !runtimeRetainedForFg_;
     }
     void AbandonUsesAfterDeviceLoss();
@@ -169,6 +175,11 @@ private:
 #if defined(_WIN32)
     SrStatus AllocateParametersD3D12();
 #endif
+    void QueryNeuralRenderingExtensions(VkInstance instance, VkPhysicalDevice device,
+                                        std::vector<VkExtensionProperties>& required);
+    void RecordNeuralRendering(VkCommandBuffer commandBuffer, const SrConfig& config,
+                               const temporal::TemporalFrameInputs& inputs, plume::VulkanTexture& output, bool reset);
+    void ReleaseNeuralRendering();
 
     enum class Backend : uint8_t { None, Vulkan, D3D12 };
 
@@ -202,6 +213,22 @@ private:
     bool sessionRetryable_ = false;
     bool featureFailed_ = false;
     uint64_t lastSrAttemptFrameId_ = 0;
+
+    // DLSS 5 Neural Rendering (NGX feature 18) on the Vulkan SR output,
+    // requested with LO_DLSS_NR=1. The user supplies nvngx_dlssnr.dll beside
+    // the SR runtime or names it with LO_DLSS_NR_PATH; Windows only. Its
+    // failures stay here and never fail SR.
+    bool nrRequested_ = false;
+    bool nrSupported_ = false;
+    bool nrSnippetInitialized_ = false;
+    bool nrFailed_ = false;
+    bool nrReset_ = true;
+    bool nrSkipLogged_ = false;
+    void* nrParameters_ = nullptr;
+    void* nrFeature_ = nullptr;
+    // FP16 copies of the SR output and the model's answer, both in GENERAL.
+    std::unique_ptr<plume::RenderTexture> nrInput_, nrOutput_;
+    uint32_t nrWidth_ = 0, nrHeight_ = 0;
 };
 } // namespace gpu::dlss
 #endif
