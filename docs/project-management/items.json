@@ -5864,12 +5864,12 @@
       "fields": {
         "Kind": "Feature",
         "Area": "Graphics features",
-        "Status": "Todo",
-        "Delivery": "Not started",
-        "Release": null,
+        "Status": "Done",
+        "Delivery": "Released",
+        "Release": "v0.8.61",
         "Start date": "2026-09-19",
         "Target date": null,
-        "Evidence": "Feature request for camera head-bobbing toggle and motion blur toggle for motion sickness reduction. In backlog; implementation not started."
+        "Evidence": "Feature request for a camera head-bob toggle and a motion blur toggle to reduce motion sickness. PR #318 (merged 2026-10-08T06:12:21Z as 6278cc08, shipped in v0.8.61, published 08:33:11Z, not accepted) adds Settings > Graphics > Motion blur (off returns through the motion-blur proxy's early exit; ported from boma's Xenia patch; a saved change applies on the next frame). The exploration camera head-bob is unchanged, as the maintainer's release comment (2026-10-08 at 08:39:53Z) says, so half of the request is not delivered. The maintainer closed the Issue as completed by hand at 08:40:14Z, after the release; the item keeps that Done. PR #318 was not run in game. No reporter confirmation is recorded."
       },
       "source_refs": [
         "https://github.com/freefrank/LostOdysseyRecomp/issues/48"
@@ -5933,7 +5933,7 @@
         "Release": "v0.8.30",
         "Start date": "2026-09-14",
         "Target date": null,
-        "Evidence": "Depth of field (Off to 100%) and Bloom settings shipped in v0.8.30 (PR #228, thanks @cngjd); the Issue was closed on 2026-10-05. No reporter confirmation is recorded."
+        "Evidence": "Depth of field (Off to 100%) and Bloom settings shipped in v0.8.30 (PR #228, thanks @cngjd); the Issue was closed on 2026-10-05. No reporter confirmation is recorded. Follow-up: v0.8.61 (PR #318, not run in game) adds Motion blur and Dynamic shadows switches in Settings > Graphics; the maintainer commented the release on 2026-10-08 at 08:34:54Z. Release stays v0.8.30, the first release that carried the delivery."
       },
       "source_refs": [
         "https://github.com/freefrank/LostOdysseyRecomp/issues/30"
@@ -5954,7 +5954,7 @@
         "Release": null,
         "Start date": null,
         "Target date": null,
-        "Evidence": "Planned for next release after v0.6.19 (version unspecified); implementation and verification not started. Removes standalone experimental TAA user option while retaining Off, FXAA, spatial SMAA, DLSS, and FSR. FXAA/SMAA paths disable temporal camera jitter and in-house TAA history accumulation; DLSS/FSR retain common jitter, depth, and motion vector inputs. Legacy TAA settings migrate to stable spatial AA. User reported ground flickering in capture render-17903110123692464-f2548.zip. Structural checks on f2548 are complete; specific ground draw/shader, flickering stage, and root cause remain undetermined. Acceptance requires separate DLSS and FSR ground-flicker verification; removing standalone TAA does not claim ground-flicker resolution. 2026-10-06: still not started thirteen releases later (v0.7.0 to v0.8.44); the 'TAA (Experimental)' option remains in the settings menu, and the stale Release text 'Next release' was cleared; unscheduled."
+        "Evidence": "Planned for next release after v0.6.19 (version unspecified); implementation and verification not started. Removes standalone experimental TAA user option while retaining Off, FXAA, spatial SMAA, DLSS, and FSR. FXAA/SMAA paths disable temporal camera jitter and in-house TAA history accumulation; DLSS/FSR retain common jitter, depth, and motion vector inputs. Legacy TAA settings migrate to stable spatial AA. User reported ground flickering in capture render-17903110123692464-f2548.zip. Structural checks on f2548 are complete; specific ground draw/shader, flickering stage, and root cause remain undetermined. Acceptance requires separate DLSS and FSR ground-flicker verification; removing standalone TAA does not claim ground-flicker resolution. 2026-10-08: still not started; v0.8.61 (PR #321) only drops the '(Experimental)' label from TAA, and the standalone TAA option remains; the stale Release text 'Next release' was cleared on 2026-10-06; unscheduled."
       },
       "source_refs": [
         "docs/ROADMAP.md",
@@ -7023,7 +7023,7 @@
         "Release": "v0.8.44",
         "Start date": "2026-10-03",
         "Target date": null,
-        "Evidence": "Reported on v0.8.0 (RX 6600, 4K, GTAO): FSR Quality, Balanced and Performance all ran at about the same frame rate. PR #189 (shipped in v0.8.10) stopped recreating the SR images every frame; PR #250 (shipped in v0.8.44) cut one full-resolution copy and blend per frame; PR #305 (merged 2026-10-08T00:39:50Z as 26ad776c, not yet released) folds the FSR encode into the composite and defers the restore resample (psvita, 12 W, 4K FSR Performance: 51.66 to 48.64 ms GPU). Measured on psvita (AMD) and, for #305, also checked with DLSS on an RTX 5080; not on the reporter's machine. The maintainer closed the Issue as completed on 2026-10-07 at 22:59:34 UTC; on 2026-10-08 the reporter was asked to rerun after the next release. No reporter confirmation is recorded."
+        "Evidence": "Reported on v0.8.0 (RX 6600, 4K, GTAO): FSR Quality, Balanced and Performance all ran at about the same frame rate. PR #189 (shipped in v0.8.10) stopped recreating the SR images every frame; PR #250 (shipped in v0.8.44) cut one full-resolution copy and blend per frame; PR #305 (merged 2026-10-08T00:39:50Z as 26ad776c, shipped in v0.8.61, published 08:33:11Z, not accepted) folds the FSR encode into the composite and defers the restore resample (psvita, 12 W, 4K FSR Performance: 51.66 to 48.64 ms GPU). Measured on psvita (AMD) and, for #305, also checked with DLSS on an RTX 5080; not on the reporter's machine. The maintainer closed the Issue as completed on 2026-10-07 at 22:59:34 UTC; on 2026-10-08 the reporter was asked to rerun after the next release, which is v0.8.61; no reply is recorded. No reporter confirmation is recorded."
       }
     },
     {
@@ -7308,12 +7308,12 @@
       "fields": {
         "Kind": "Feature",
         "Area": "User interface",
-        "Status": "Todo",
-        "Delivery": "Not started",
-        "Release": null,
+        "Status": "Done",
+        "Delivery": "Released",
+        "Release": "v0.8.61",
         "Start date": null,
         "Target date": null,
-        "Evidence": "Request (2026-10-02): add simple animations to the options menu. No maintainer decision or implementation is recorded."
+        "Evidence": "Request (2026-10-02): the host Settings menu has no animations. PR #317 (merged 2026-10-08T06:07:26Z as 07e2de78, shipped in v0.8.61, published 08:33:11Z, not accepted) eases the menu, presentation only: the content fades in over 220 ms on open, and tab switches, cursor moves, value changes, dialogs and the display countdown cross-fade over 150 ms; closing stays instant. Checked with LoMenuRenderTest, LoMenuFlowTest, CPU contracts 33/33 and settings_menu contracts 5/5; in game only one psvita run before the timer fix, none on the merged code. The Issue was closed with the merge at 06:07:27Z; the maintainer commented the release on 2026-10-08 at 08:34:55Z. No reporter confirmation is recorded."
       }
     },
     {
@@ -7396,6 +7396,99 @@
         "https://github.com/freefrank/LostOdysseyRecomp/compare/v0.8.44...v0.8.53",
         "https://git.zkx.ca/freefrank/LostOdysseyRecomp/actions/runs/401",
         "c3bce0851b4e9f786050b3f656a85ba567a48663",
+        "CHANGELOG.md"
+      ],
+      "source_lines": [],
+      "record_type": "backlog"
+    },
+    {
+      "key": "issue-275-button-prompt-style",
+      "title": "[Feature] Choose button prompt type",
+      "issue_url": "https://github.com/freefrank/LostOdysseyRecomp/issues/275",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Input",
+        "Status": "Done",
+        "Delivery": "Released",
+        "Release": "v0.8.61",
+        "Start date": "2026-10-07",
+        "Target date": null,
+        "Evidence": "Request (2026-10-07): choose the button prompt type instead of following the last active controller. PR #320 (merged 2026-10-08T06:16:20Z as 91b66823, shipped in v0.8.61, published 08:33:11Z, not accepted) adds Settings > Gameplay > Button prompts: Auto (as before), Xbox or PlayStation; the in-game button atlas, the debug overlay and the menu glyphs follow it, applied and saved at once. Checked with the runtime build, LoMenuFlowTest (new row check), settings_menu contracts 5/5 and CPU contracts; not run in game. The Issue was closed with the merge at 06:16:22Z; the maintainer commented the release on 2026-10-08 at 08:34:56Z. No reporter confirmation is recorded."
+      }
+    },
+    {
+      "key": "issue-282-startup-black-screen",
+      "title": "[Bug] game launches to black screen after settings chosen-",
+      "issue_url": "https://github.com/freefrank/LostOdysseyRecomp/issues/282",
+      "fields": {
+        "Kind": "Bug",
+        "Area": "Diagnostics",
+        "Status": "Done",
+        "Delivery": "Released",
+        "Release": "v0.8.61",
+        "Start date": "2026-10-07",
+        "Target date": null,
+        "Evidence": "Report (2026-10-07): the game starts to a black screen after the settings are chosen. A diagnostic build showed the NVIDIA driver walking its shader cache folder inside Direct3D 12 device creation (PR #300 body). On 2026-10-07 at 18:16 UTC the reporter was told to empty the NVIDIA DXCache and GLCache folders; the Issue was closed as completed at 18:49:36Z and no reporter reply after that is recorded. PR #300 (merged 19:22:49Z as cdf0b297, shipped in v0.8.61, published 2026-10-08T08:33:11Z, not accepted) keeps the diagnostics, not a workaround: a silent startup hang watch that logs the stuck step after 10 s, and LO_TRACE_STARTUP=1 for verbose lines (Windows x64). Checked with LoHangWatchTest (8/8), CPU contracts and psvita Proton starts; no run on a machine that hangs. No reporter confirmation is recorded."
+      }
+    },
+    {
+      "key": "issue-307-flickering-boat",
+      "title": "[Bug] Flickering boat Experimental Staff",
+      "issue_url": "https://github.com/freefrank/LostOdysseyRecomp/issues/307",
+      "fields": {
+        "Kind": "Bug",
+        "Area": "Temporal rendering",
+        "Status": "Done",
+        "Delivery": "Released",
+        "Release": "v0.8.61",
+        "Start date": "2026-10-08",
+        "Target date": null,
+        "Evidence": "Report (2026-10-08): the boats at Experimental Staff Marine Division flicker. The boats are drawn with a jittered depth pre-pass and then unjittered passes on the same geometry (GEQUAL depth test), half a pixel apart, so part of the hull fails the test under TAA, FSR and DLSS. PR #312 (merged 2026-10-08T02:04:38Z as e08b2111, shipped in v0.8.61, published 08:33:11Z, not accepted) adds the four exact shader pairs to the reviewed jitter list. LoTemporalJitterTest --captured-issue307-boat passes against the reporter's banks; on psvita (Proton D3D12, FSR Quality, 1080p) pixels changing by more than 8/255 between frames at the boats went from 3.74% to 0.02%. Not checked on the reporter's NVIDIA DLAA setup; the animated water in that map is a separate, smaller item. Closed with the merge at 02:04:39Z. No reporter confirmation is recorded."
+      }
+    },
+    {
+      "key": "sdl3-runtime-migration",
+      "title": "Migrate the runtime from SDL2 to SDL 3.4.18 (PR #289)",
+      "body": "<!-- lo-project:sdl3-runtime-migration -->\n\n[PR #289](https://github.com/freefrank/LostOdysseyRecomp/pull/289)（Xarishark 贡献，2026-10-07T19:38:44Z 合并为 `e59bfa24`，没有关联 Issue）把运行时的 SDL 从 SDL2 迁移到固定的 `thirdparty/SDL` 子模块 SDL 3.4.18。v0.8.61 于 2026-10-08T08:33:11Z 发布并包含它；发布不等于验收。\n\n## Scope and completion criteria\n\n- [x] 手柄、键盘、鼠标、热插拔和震动，音频（排队音频改为 SDL3 音频流，保留 512 帧设备缓冲），窗口和显示器处理，安装器和更新器界面，plume 的 Vulkan 表面路径（`tools/patches/plume-sdl3.patch`），以及 Android 的 `SDLActivity` 和 JNI 包都改用 SDL 3\n- [x] Linux 在可用时使用原生 Wayland 并请求高像素密度；Windows 在不同 DPI 的显示器之间保留窗口大小；Android 折叠、展开或旋转后不再拉伸画面\n- [x] CI 和打包跟进：`review-regressions` 在找不到 SDL3 包时构建固定的 SDL，Linux 发布工作流安装 `libxtst-dev`，Android lint 使用 `packaging/android/lint.xml`\n- [x] 已在 v0.8.61 发布；macOS 磁盘映像是第一个基于 SDL 3 构建的\n- [ ] 取得玩家对 v0.8.61 的确认\n- [ ] 补测：Android 和 macOS 的控制器热插拔、Android 控制器震动、只有 X11 的 Linux 会话、macOS 的 2x Retina 或 HDR 显示器\n\n## Validation and acceptance\n\nPR 正文和维护者的报告：Windows x64（clang-cl）上游戏、DInput 和 XInput 手柄、热插拔、震动、音频和干净退出；2026-10-07 维护者在合并内容上的运行：Windows x64 构建和 SDL 单元测试（含三显示器混合 DPI 的 `LoGameWindowPixelsTest`）、AMD Strix Halo 上的原生 Linux（GNOME Wayland，进入游戏，PipeWire 音频，Xbox Series X 和 DualSense 手柄）和 GE-Proton 下的 Windows 可执行文件（Direct3D 12 和 Vulkan）、M1 Max 上的 macOS arm64（new-game-battle 场景通过，30 FPS）、OPPO 折叠屏（Adreno 840）上的 Android arm64 APK，以及一次只构建不运行的 Gitea 发布打包。没有用 v0.8.61 的安装包运行过游戏，也没有玩家确认。\n\nstage_detail: Published; not accepted\n\n## Sources\n\n- [PR #289](https://github.com/freefrank/LostOdysseyRecomp/pull/289)\n- [v0.8.61 发布页](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.8.61)\n- docs/STATUS.md（SDL 3.4.18 迁移一行）\n",
+      "issue_url": null,
+      "fields": {
+        "Kind": "Infrastructure",
+        "Area": "Runtime",
+        "Status": "Done",
+        "Delivery": "Released",
+        "Release": "v0.8.61",
+        "Start date": "2026-10-07",
+        "Target date": null,
+        "Evidence": "PR #289 (contributed by Xarishark; merged 2026-10-07T19:38:44Z as e59bfa24, shipped in v0.8.61, published 2026-10-08T08:33:11Z, not accepted) moves gamepads, keyboard, mouse, audio, window and display handling, the installer and updater UIs, the plume Vulkan surface path and the Android SDLActivity to the pinned SDL 3.4.18 submodule; Linux uses native Wayland where available. Maintainer's runs on the merged content (2026-10-07): Windows x64 with a three-monitor mixed-DPI test, native Linux on an AMD host under GNOME Wayland and the Windows build under GE-Proton, macOS arm64 on an M1 Max (new-game-battle scenario) and an Android arm64 APK on an OPPO foldable. Not validated: controller hotplug on Android and macOS, Android rumble, an X11-only Linux session, a 2x Retina or HDR display on macOS. No run with the v0.8.61 packages and no reporter confirmation is recorded."
+      },
+      "source_refs": [
+        "https://github.com/freefrank/LostOdysseyRecomp/pull/289",
+        "https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.8.61",
+        "docs/STATUS.md"
+      ],
+      "source_lines": [],
+      "record_type": "backlog"
+    },
+    {
+      "key": "release-v0-8-61",
+      "title": "Publish the settings menu, SDL 3, adaptive culling and rendering speed-ups in v0.8.61",
+      "body": "<!-- lo-project:release-v0-8-61 -->\n\nv0.8.61 于 2026-10-08T08:33:11Z 发布。它不是草稿或预发布版本，是当前最新的正式版本，包含 v0.8.53 之后合并到 `main` 的全部工作。发布不等于验收：没有玩家验收，维护者尚未验收 v0.8.61，也没有用 v0.8.61 的安装包运行过游戏。\n\n## Scope and completion criteria\n\n- [x] 带注释的 tag `v0.8.61`（tag 对象 `4d83681b`）指向 `main` 上的提交 `787fed28`（`fix(renderer): give the framebuffer cache key one pair type`）；版本号是 v0.8.53 加 0.0.8，按维护者的选择（`29fd353b` 先改为 0.8.58，`66a83ec0` 改为 0.8.61）\n- [x] Gitea Actions [run 504](https://git.zkx.ca/freefrank/LostOdysseyRecomp/actions/runs/504)（API id 896，链接用 run 编号）构建并发布 Windows ZIP、Linux AppImage、Linux Flatpak 和 Android APK：六个 job 全部成功，run 于 08:10:36Z 随 tag 推送创建，08:33:12Z 完成，从推送 tag 到公开约 22.5 分钟\n- [x] 第一次发布 run 500（API id 892，tag 在 `66a83ec0`，07:49:44Z 创建）的 Linux job 在 08:07:24Z 因 libstdc++ 13 不接受 PR #314 之后出现的 `pair<T*, T*>` 与 `pair<const T*, const T*>` 比较而失败，发布 job 被跳过，没有公开任何东西；维护者删除了未发布的草稿并把 tag 移到修复提交 `787fed28`（维护者的说法，未重新从 GitHub 读取）\n- [x] macOS 磁盘映像（DMG）在维护者的 M1 Max 上从 tag 在 `build/macos-sdl3` 构建，手工上传到草稿（GitHub 记录 08:14:21Z），早于 CI 安装包，不是 CI 产物，是第一个基于 SDL 3 的映像：`hdiutil verify` 有效，`codesign --verify` 通过（ad hoc 签名），`CFBundleShortVersionString` 为 0.8.61；构建命令和耗时没有记录，也没有记录映像是用 `66a83ec0` 还是 `787fed28` 构建的\n- [x] 着色器包契约随 PR #313 和 #315 改变（d3d12 `613e43ca…`、vulkan `bd9404c9…`，之前为 `48cf14e3…` 和 `a7d1ab94…`）；新的包在 2026-10-08 03:52Z 发布到 `shader-packs` 预发布，早于 tag，发布本身没有发布新包；tag 构建上 Linux job 的 \"Check published shader packs\" 步骤成功，日志列出这两个新契约；维护者说 `publish_shader_packs.py --check` 在 Mac 上也通过了\n- [x] 发布页说明与 CHANGELOG 的 v0.8.61 一节一致（用 `tools/release/extract_release_notes.py` 比较，只差末尾换行）\n- [ ] 取得玩家对 v0.8.61 的确认（相关 Issue 的报告者均未确认）\n- [ ] 维护者验收 v0.8.61\n\n## Delivery verification\n\n发布页 [v0.8.61](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.8.61) 的五个附件（大小和 SHA-256 为 GitHub API 在 2026-10-08 发布后读取的值）：\n\n| 附件 | 字节数 | SHA-256 |\n| --- | ---: | --- |\n| `LostOdysseyRecomp-windows-x64-v0.8.61.zip` | 150,982,005 | `9b306ba2dccb904f443d4734b93fb9b8c8a659aa31ab644683ea47c8093a2669` |\n| `LostOdysseyRecomp-linux-x64-v0.8.61.AppImage` | 76,986,872 | `3978fc637b71a48eee15947ee5480f06ed6385744e386f76966634a24ae662dc` |\n| `LostOdysseyRecomp-linux-x64-v0.8.61.flatpak` | 54,691,336 | `2fff8046b5a826355d66ea8ed82927515019d03337bb8156d93b439417f6cfda` |\n| `LostOdysseyRecomp-android-arm64-v0.8.61.apk` | 45,766,306 | `a3d0b574b7d2c4b0c71636e481008f822069cc6f5820d1f39744114039e9b794` |\n| `LostOdysseyRecomp-macos-arm64-v0.8.61.dmg` | 61,177,380 | `4b6aa7716074500ebba7ec2f0a7302c1cd130b493a0576eb554f2edea71eca3f` |\n\nDMG 只有 GitHub 的摘要，没有记录它与 Mac 上拷贝的哈希对照。四个 CI 安装包没有下载、解包或运行过。APK 由 CI 构建，用项目的调试密钥库签名，是实验性的。\n\n## 本版本包含的工作\n\n`git log --first-parent v0.8.53..v0.8.61` 列出 41 个提交：35 个已合并的 PR（#281 是 v0.8.53 的发布记录，其余为 #283 到 #322，缺 #284、#286、#287、#291 和 #319（GitHub 报告它们不存在或已删除）以及 #307（是 Issue，不是 PR）），全部是 tag 提交的祖先，另有 6 个非 PR 提交（`29fd353b` 源码版本号、`59e9e66c` 发布说明、`66a83ec0` 按 0.8.61 发布、`9afaa3c1` 和 `eccb38fe` 发布说明修改、`787fed28` Linux 构建修复）：\n\n- 设置：[PR #317](https://github.com/freefrank/LostOdysseyRecomp/pull/317)（2026-10-08T06:07:26Z 合并，菜单过渡动画，#151）、[PR #318](https://github.com/freefrank/LostOdysseyRecomp/pull/318)（06:12:21Z，动态模糊和动态阴影开关）、[PR #320](https://github.com/freefrank/LostOdysseyRecomp/pull/320)（06:16:20Z，按键提示，#275）、[PR #321](https://github.com/freefrank/LostOdysseyRecomp/pull/321)（06:52:08Z，菜单布局和标注）\n- 渲染：[PR #316](https://github.com/freefrank/LostOdysseyRecomp/pull/316)（05:46:17Z，自适应遮挡剔除）、[PR #305](https://github.com/freefrank/LostOdysseyRecomp/pull/305)（00:39:50Z，超分少两次全屏 pass，#172）、[PR #306](https://github.com/freefrank/LostOdysseyRecomp/pull/306)（00:59:54Z，Metal 的只写深度绘制）、[PR #312](https://github.com/freefrank/LostOdysseyRecomp/pull/312)（02:04:38Z，Marine Division 的船抖动，#307），以及渲染线程 CPU 和 GPU pass 的精简 PR #302、#303、#304、#310、#313、#314 和 #315（#313 和 #315 同时改变了着色器包契约）\n- 平台和诊断：[PR #289](https://github.com/freefrank/LostOdysseyRecomp/pull/289)（2026-10-07T19:38:44Z，SDL 3.4.18 迁移，Xarishark 贡献）、[PR #300](https://github.com/freefrank/LostOdysseyRecomp/pull/300)（19:22:49Z，启动卡住监视，#282）\n- 不在游戏行为里：Discord、Ko-fi 和 issue 分类工具（#283、#285、#288、#290、#292 到 #298）、工具归档 #311、测试构建修复 #299，以及文档 PR #281、#301、#308、#309 和 #322（README 精简）\n\n各项的验证范围和限制记录在 docs/STATUS.md。\n\n## Validation and acceptance\n\n没有用 v0.8.61 安装包本身做过游戏运行，macOS 映像也没有从下载安装。发布前的验证是 PR 层面的：Gitea 的 PR 检查（CPU contracts、review regressions，路径匹配时还有 game-integration）、本地菜单测试、psvita 上 #312 和 #316 的运行、Adreno 840 和 M1 Max 上的性能测量，以及 #313 和 #315 在 M1 Max 上带新包的战斗场景。#318、#320 和 #321 没有在游戏里运行过，#317 只在修复计时器之前运行过一次。#151、#275 和 #307 随合并关闭，#282 在 #300 合并之前由维护者关闭，#48 在发布后由维护者手动关闭，#30 早已关闭；维护者在 #30、#151、#275 和 #48 下留了发布链接的评论。没有玩家确认，维护者尚未验收 v0.8.61；发布不是玩家确认，也不是维护者验收。\n\nstage_detail: Published; not accepted\n\n## Sources\n\n- [v0.8.61 发布页](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.8.61)\n- [v0.8.53…v0.8.61 对比](https://github.com/freefrank/LostOdysseyRecomp/compare/v0.8.53...v0.8.61)\n- [Gitea Actions run 504](https://git.zkx.ca/freefrank/LostOdysseyRecomp/actions/runs/504)\n- [CHANGELOG.md](https://github.com/freefrank/LostOdysseyRecomp/blob/787fed28edda09ebc3acab5c9e743390b9ac5eb1/CHANGELOG.md)\n",
+      "issue_url": null,
+      "fields": {
+        "Kind": "Release",
+        "Area": "Release Engineering",
+        "Status": "Done",
+        "Delivery": "Released",
+        "Release": "v0.8.61",
+        "Start date": "2026-10-08",
+        "Target date": "2026-10-08",
+        "Evidence": "Published v0.8.61 at 2026-10-08T08:33:11Z: latest release, annotated tag at commit 787fed28 on main, built and published by Gitea Actions run 504 (API id 896; six jobs succeeded, about 22.5 minutes from the tag push). An earlier run 500 (API id 892) on 66a83ec0 failed in the Linux job and published nothing; the tag was moved to the build fix. Assets: Windows ZIP 150,982,005 B (SHA-256 9b306ba2...), Linux AppImage 76,986,872 B (3978fc63...), Flatpak 54,691,336 B (2fff8046...), Android APK 45,766,306 B (a3d0b574...; CI-built) and macOS DMG 61,177,380 B (4b6aa771...; built on the maintainer's M1 Max from the tag, hdiutil verify valid, ad-hoc signature, uploaded by hand; first SDL 3 image). The release published no shader pack; the contracts changed with #313 and #315 and their packs were published on 2026-10-08 before the tag. Published, not accepted: 35 PRs (#281, the v0.8.53 record, and #283 to #322); no game run with the v0.8.61 packages and no player acceptance is recorded."
+      },
+      "source_refs": [
+        "https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.8.61",
+        "https://github.com/freefrank/LostOdysseyRecomp/compare/v0.8.53...v0.8.61",
+        "https://git.zkx.ca/freefrank/LostOdysseyRecomp/actions/runs/504",
+        "787fed28edda09ebc3acab5c9e743390b9ac5eb1",
         "CHANGELOG.md"
       ],
       "source_lines": [],
