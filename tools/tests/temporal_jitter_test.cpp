@@ -19,6 +19,7 @@
 #include "issue203_sky_jitter_capture.h"
 #include "issue212_light_jitter_capture.h"
 #include "tour_cutscene_20261004_capture.h"
+#include "issue307_boat_capture.h"
 #include "f12139_sky_jitter_capture.h"
 #include "f25276_cave_jitter_capture.h"
 #include "tour_sky_20261001_capture.h"
@@ -1933,25 +1934,25 @@ static void CapturedIssue212Light()
     std::printf("Captured #212 light passes: %u checks, three draws, 32 phases, 626p/1440p/4K; old separation %.6f px, max floor error %.6f px\n",
         checks-startChecks,oldSeparation,maxPixelError);
 }
-// Cutscene tour 2026-10-04: the 45 reviewed pairs with their first logged banks
-// (PC, psvita and Mac). Each maps to the slot the runtime found the camera in,
-// jitters only the x/y of that matrix's rows, leaves every other constant and
-// the PS bank exact, and gets the same matrix as its jittered depth companion.
-static void CapturedCutsceneTour()
+// Reviewed exact pairs with their first logged banks. Each maps to the slot the
+// runtime found the camera in, jitters only the x/y of that matrix's rows,
+// leaves every other constant and the PS bank exact, and gets the same matrix
+// as its jittered depth companion. Returns how many carry such a companion.
+template<size_t N>
+static unsigned CheckLoggedPairs(const tour_cutscene::Draw (&draws)[N])
 {
-    const auto startChecks=checks;
     unsigned companions=0;
-    for (const auto& draw:tour_cutscene::draws)
+    for (const auto& draw:draws)
     {
-        Check(DrawPositionVPSlot(draw.vs,draw.ps)==int(draw.slot),"tour pair maps to its logged camera slot");
+        Check(DrawPositionVPSlot(draw.vs,draw.ps)==int(draw.slot),"logged pair maps to its logged camera slot");
         Check(RequiresEarlierSceneAnchor(draw.vs,draw.ps)==(FindSkyMaterialPair(draw.vs,draw.ps)!=nullptr),
-            "tour pair keeps its table's anchor policy");
+            "logged pair keeps its table's anchor policy");
         Constants original{},originalPs{};
         std::copy(draw.vertex.begin(),draw.vertex.end(),original.begin());
         std::copy(draw.late.begin(),draw.late.end(),original.begin()+254*4);
         if (draw.slot<=60)
             Check(std::equal(draw.camera.begin(),draw.camera.end(),original.begin()+draw.slot*4),
-                "tour camera bank matches the logged vertex bank");
+                "logged camera bank matches the logged vertex bank");
         std::copy(draw.camera.begin(),draw.camera.end(),original.begin()+draw.slot*4);
         std::copy(draw.pixel.begin(),draw.pixel.end(),originalPs.begin());
         std::array<uint32_t,16> vp{};
@@ -1967,10 +1968,10 @@ static void CapturedCutsceneTour()
                 auto layer=original,ps=originalPs;
                 const auto result=ApplyDrawJitter(draw.vs,draw.ps,phase,true,true,&anchor,31,extent,layer.data(),ps.data());
                 Check(result.applied && result.slot==int(draw.slot) && !result.shadowCompensated && ps==originalPs,
-                    "tour pair jitters its slot without changing PS constants");
+                    "logged pair jitters its slot without changing PS constants");
                 for (unsigned i=0;i<layer.size();++i)
                     if (i<draw.slot*4 || i>=draw.slot*4+16 || i%4>=2)
-                        Check(layer[i]==original[i],"tour pair leaves every other constant exact");
+                        Check(layer[i]==original[i],"logged pair leaves every other constant exact");
                 if (companion)
                 {
                     Constants depth{},depthPs{};
@@ -1978,19 +1979,46 @@ static void CapturedCutsceneTour()
                     std::copy_n(draw.depth.begin()+16,16,depth.begin()+depthSlot*4);
                     Check(ApplyDrawJitter(draw.depthVs,0,phase,true,true,&anchor,31,extent,depth.data(),depthPs.data()).applied &&
                         std::equal(depth.begin()+depthSlot*4,depth.begin()+depthSlot*4+16,layer.begin()+draw.slot*4),
-                        "tour pair and its depth companion get the same jittered camera");
+                        "logged pair and its depth companion get the same jittered camera");
                 }
                 auto rejected=original,rejectedPs=originalPs;
                 rejected[draw.slot*4]^=1;
                 const auto before=rejected;
                 const auto failure=ApplyDrawJitter(draw.vs,draw.ps,phase,true,true,&anchor,31,extent,rejected.data(),rejectedPs.data());
                 Check(!failure.applied && failure.rejection==JitterRejection::CameraMismatch && rejected==before,
-                    "tour pair with another camera stays unjittered");
+                    "logged pair with another camera stays unjittered");
             }
     }
+    return companions;
+}
+// Cutscene tour 2026-10-04: the 45 reviewed pairs (PC, psvita and Mac).
+static void CapturedCutsceneTour()
+{
+    const auto startChecks=checks;
+    const unsigned companions=CheckLoggedPairs(tour_cutscene::draws);
     Check(companions>=30,"most tour pairs carry a mapped depth companion with the same camera");
     std::printf("Captured cutscene tour: %u checks, %zu pairs, %u with a depth companion\n",
         checks-startChecks,std::size(tour_cutscene::draws),companions);
+}
+// #307 Experimental Staff Marine Division boats: c189 and 3305 are e7b3 and
+// 6742 (slot 7) with a 14-dword vertex stride. All four pairs draw over the
+// jittered 52e4/f964 depth with GEQUAL; the c189 base passes without a depth
+// write, 3305 with one. Only these four exact pairs are mapped.
+static void CapturedIssue307Boat()
+{
+    const auto startChecks=checks;
+    const unsigned companions=CheckLoggedPairs(issue307_boat::draws);
+    Check(std::size(issue307_boat::draws)==4 && companions==4,
+        "#307 all four boat pairs draw over a jittered 52e4/f964 depth companion with the same camera");
+    for (const auto& draw:issue307_boat::draws)
+        Check(draw.slot==7 && !RequiresEarlierSceneAnchor(draw.vs,draw.ps) && !RetainsMotionFallback(draw.vs,draw.ps) &&
+            DrawPositionVPSlot(draw.vs,0x0123456789abcdefull)==-1,
+            "#307 boat pair keeps the ordinary anchor and motion policy; other PS partners stay held");
+    Check(PositionVPSlot(0xc1896d4be9e73859ull)==-1 && PositionVPSlot(0x330542fa74d064deull)==-1 &&
+        PositionVPSlot(0xe7b38eb08c70e5e1ull)==7 && PositionVPSlot(0x6742ec1abe49589eull)==7,
+        "#307 boat VS are not mapped as a whole; their 10-dword twins keep slot 7");
+    std::printf("Captured #307 boats: %u checks, %zu pairs, %u with a depth companion\n",
+        checks-startChecks,std::size(issue307_boat::draws),companions);
 }
 // Opening battle 2026-10-01: depth writers 7def (HLSL 534-543) and c511 (540-549)
 // end with oPos = P.x*c11 + P.w*c10 + P.z*c9 + P.y*c8 for a position P built from
@@ -2362,6 +2390,7 @@ static const NamedCase namedCases[]{
     {"--captured-issue203-sky",CapturedIssue203Sky,true},
     {"--captured-issue212-light",CapturedIssue212Light,true},
     {"--captured-cutscene-tour",CapturedCutsceneTour,true},
+    {"--captured-issue307-boat",CapturedIssue307Boat,true},
     {"--captured-battle-depth",CapturedBattleDepthWriters,true},
     {"--suspect-tracker",SuspectLocator,true},
     {"--feedback-mapping-batch",FeedbackMappingBatch,true},

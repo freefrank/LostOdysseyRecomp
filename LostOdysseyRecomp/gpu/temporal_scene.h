@@ -241,10 +241,10 @@ inline bool IsScreenLightPair(uint64_t vs, uint64_t ps) {
         if (pair.vs == vs && pair.ps == ps) return true;
     return false;
 }
-// Other reviewed exact pairs from the 2026-10-04 cutscene tour, with the slot
-// the runtime found the scene camera in. Each VS feeds that matrix only to oPos
-// and plain clip copies; each PS reads at most clip W or samples a same-frame
-// buffer at the pixel. Notes: docs/notes/jitter-cutscene-tour-2026-10-04.md.
+// Other reviewed exact pairs (the 2026-10-04 cutscene tour and later reports),
+// with the slot the runtime found the scene camera in. Each VS feeds that matrix
+// only to oPos and plain clip copies; each PS reads at most clip W or samples a
+// same-frame buffer at the pixel. Notes: docs/notes/jitter-cutscene-tour-2026-10-04.md.
 struct ReviewedPair { uint64_t vs, ps; int slot; };
 inline constexpr ReviewedPair ReviewedPairs[]{
     // Depth writers and materials that read only clip W (or no clip copy).
@@ -259,6 +259,13 @@ inline constexpr ReviewedPair ReviewedPairs[]{
     {0x258051387347ab2full, 0x957d8f92546fe31aull, 233}, {0x258051387347ab2full, 0x8724d5f1834d7842ull, 233},
     {0x6261e0eb6b69ec62ull, 0xaab158a074b29bcfull, 233}, {0x6261e0eb6b69ec62ull, 0x0aa1c2c4ec7933c1ull, 233},
     {0x69605181e9299128ull, 0xc4689958cc72c568ull, 233},
+    // Experimental Staff Marine Division boats (#307): c189 and 3305 are e7b3 and
+    // 6742 with a 14-dword vertex stride, HLSL otherwise identical. The c189 base
+    // passes draw over the jittered 52e4/f964 depth (GEQUAL, no depth write) and
+    // sample the light attenuation at their o4 clip copy, as e7b3 does with the
+    // same two PS. 3305 writes depth; its PS read only W of the o1 clip copy.
+    {0xc1896d4be9e73859ull, 0x6ad300f19bb477d0ull, 7}, {0xc1896d4be9e73859ull, 0xb3bdd4cd8b83a350ull, 7},
+    {0x330542fa74d064deull, 0x8a7a046c63f1213eull, 7}, {0x330542fa74d064deull, 0x8116c07a39250830ull, 7},
 };
 inline int ReviewedPairSlot(uint64_t vs, uint64_t ps) {
     for (const auto& pair : ReviewedPairs)
