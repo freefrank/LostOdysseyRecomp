@@ -2491,8 +2491,24 @@ bool settings::IsOpen()
 
 bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint32_t width, uint32_t height)
 {
+    // This cache belongs to the sole presentation thread. Dimensions must be
+    // checked independently: portrait and landscape buffers can have equal area.
+    static uint32_t cachedWidth = 0, cachedHeight = 0;
+    static bool cachedPlayStation = false, cachedPreviewPage = false, shown = false;
+    // Motion is presentation only: input and menu state change at once, and the
+    // shown image eases toward the newest raster (#151).
+    static MenuTransition motion;
+    static std::vector<uint32_t> raster;
     if (!active.load())
+    {
+        if (shown)
+        {
+            shown = false;
+            motion.Reset();
+            std::vector<uint32_t>().swap(raster);
+        }
         return false;
+    }
     MenuSnapshot current;
     {
         std::lock_guard lock(snapshotMutex);
@@ -2500,19 +2516,46 @@ bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint3
     }
     // Input style can change without a guest menu tick (hot-plug or keyboard).
     current.playStationPrompts = hid::UsesPlayStationPrompts();
-    // This cache belongs to the sole presentation thread. Dimensions must be
-    // checked independently: portrait and landscape buffers can have equal area.
-    static uint32_t cachedWidth = 0, cachedHeight = 0;
-    static bool cachedPlayStation = false;
-    if (revision == current.revision && cachedWidth == width && cachedHeight == height &&
+    const bool opened = !shown;
+    if (!opened && revision == current.revision && cachedWidth == width && cachedHeight == height &&
         cachedPlayStation == current.playStationPrompts && !pixels.empty())
+    {
+        motion.Advance(pixels, MenuNow());
         return true;
+    }
     current.assets = menu_assets::Cached(FileSystem::GetGameRoot(), current.language);
-    if (!RasterizeMenu(current, width, height, pixels))
+    if (!RasterizeMenu(current, width, height, raster))
         return false;
+    // Ease what the player did: opening (content over the panels) and a new
+    // revision at the same size and prompt style. A resize, a controller style
+    // change and the calibration pages, whose preview presentation paints
+    // into the frame, switch at once. The clock starts after rasterizing (tens
+    // of milliseconds at 4K, more on the first open) so no part of it is lost.
+    const bool previewPage = current.calibration.open || current.brightness.open;
+    bool eased = false;
+    if (opened && !previewPage)
+    {
+        MenuSnapshot panels;
+        panels.assets = current.assets;
+        panels.backdropOnly = true;
+        eased = RasterizeMenu(panels, width, height, pixels) &&
+                motion.Start(pixels, raster, width, MenuNow(), kMenuOpenFade);
+    }
+    else if (!opened && revision != current.revision && cachedWidth == width && cachedHeight == height &&
+             cachedPlayStation == current.playStationPrompts && !previewPage && !cachedPreviewPage)
+        eased = motion.Start(pixels, raster, width, MenuNow(), kMenuChangeFade);
+    if (eased)
+        motion.Advance(pixels, MenuNow());
+    else
+    {
+        motion.Stop();
+        pixels.swap(raster);
+    }
+    shown = true;
     cachedWidth = width;
     cachedHeight = height;
     cachedPlayStation = current.playStationPrompts;
+    cachedPreviewPage = previewPage;
     revision = current.revision;
     return true;
 }

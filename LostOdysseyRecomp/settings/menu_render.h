@@ -1,5 +1,6 @@
 #pragma once
 #include "menu.h"
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -50,8 +51,42 @@ struct MenuSnapshot
     HdrCalibration calibration;
     BrightnessCalibration brightness;
     std::shared_ptr<const menu_assets::Assets> assets;
+    // Only the panels, without title, tabs, rows or help: what the content
+    // fades in over when the menu opens.
+    bool backdropOnly = false;
 };
 // Render glyphs at output resolution, fitting the existing 1280x720 logical layout.
 bool RasterizeMenu(const MenuSnapshot &snapshot, uint32_t width, uint32_t height,
                    std::vector<uint32_t> &pixels);
+
+// Presentation-only menu motion (#151): the shown image eases from what was on
+// screen to the newest raster. Menu logic and input never wait for it; a newer
+// raster restarts the ease from whatever is on screen at that moment.
+inline constexpr auto kMenuOpenFade = std::chrono::milliseconds(220);
+inline constexpr auto kMenuChangeFade = std::chrono::milliseconds(150);
+class MenuTransition
+{
+  public:
+    using Clock = std::chrono::steady_clock;
+    // shown: the opaque image on screen now; target: the new raster of the same
+    // size, swapped in (its buffer comes back as scratch). Returns false, with
+    // target untouched, when the sizes do not match. Only rows that differ are
+    // blended afterwards.
+    bool Start(const std::vector<uint32_t> &shown, std::vector<uint32_t> &target, uint32_t width,
+               Clock::time_point now, Clock::duration duration);
+    // Writes the frame for `now` into pixels, which must still hold this
+    // transition's previous frame. Returns true while easing; the last frame is
+    // exactly the target. A clock that moved backwards settles at once.
+    bool Advance(std::vector<uint32_t> &pixels, Clock::time_point now);
+    bool Running() const { return running; }
+    void Stop() { running = false; }
+    void Reset();
+
+  private:
+    std::vector<uint32_t> from, to;
+    std::vector<std::pair<size_t, size_t>> spans; // pixel ranges of the rows that differ
+    Clock::time_point start{};
+    Clock::duration duration{};
+    bool running = false;
+};
 }
