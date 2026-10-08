@@ -24,6 +24,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Vulkan and macOS: scene geometry takes about 12% less GPU time on an Adreno 840 phone with identical output: shaders read vertex data with fewer memory round trips.
 - The renderer thread spends about 8% less CPU time per frame on GPU commands and per-draw checks (M1 Max), with identical output.
 - Vulkan and macOS: scene draws take about 5% less GPU time on an Adreno 840 phone with identical output: shaders spend less work per draw computing constant addresses.
+- Views where walls hide most of the scene, such as the White Boa's Queen's Room, render faster: objects hidden there are skipped as on the console (Radeon 8060S: 72 → 101 FPS in a White Boa conversation).
 - The Settings menu fades in when it opens and eases tab switches, cursor moves, value changes and prompts instead of cutting; input still responds at once (#151).
 
 ### 简体中文
@@ -44,6 +45,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Vulkan 和 macOS：画面不变，Adreno 840 手机上场景几何体的 GPU 时间少约 12%：着色器读取顶点数据时的内存往返更少。
 - 渲染线程每帧在 GPU 命令和逐 draw 检查上少花约 8% 的 CPU 时间（M1 Max），画面不变。
 - Vulkan 和 macOS：画面不变，Adreno 840 手机上场景 draw 的 GPU 时间再少约 5%：着色器每个 draw 计算常量地址的开销更小。
+- 大部分场景被墙挡住的视角（例如 White Boa 的 Queen's Room）渲染更快：这些地方被挡住的物体现在会像主机版一样跳过（Radeon 8060S 上 White Boa 的一段对话从 72 FPS 提高到 101 FPS）。
 - 设置菜单打开时会淡入，切换分类、移动光标、修改选项和弹出提示时改为平滑过渡，不再生硬跳变；按键仍然立即响应（#151）。
 
 ## [v0.8.53](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.8.53) — 2026-10-07

@@ -1425,8 +1425,10 @@ namespace gpu
                 // 64-byte slots, END record at the slot base, BEGIN record at +0x20;
                 // D3D stamps 0xFFFFFEED into ZPass_A (or ZFail_A) of a record it is
                 // waiting for. LO_ZPD_MODE selects the counts:
-                //   host  - (default) host GPU queries, answered with the last
-                //           measured count; grow when the backend has none
+                //   host  - (default) host GPU queries; fast answers, exact ones
+                //           while most queried objects are hidden; grow when the
+                //           backend has none
+                //   fast  - host GPU queries, answered with the last measured count
                 //   strict- host GPU queries, exact results the game waits for
                 //   grow  - every event overwrites its record with a growing count
                 //           (previous behaviour; BEGIN records get clobbered too)
