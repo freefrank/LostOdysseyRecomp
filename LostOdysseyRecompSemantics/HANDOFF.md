@@ -2,7 +2,7 @@
 
 ## Latest workspace checkpoint — 2026-10-09
 
-Last verified published checkpoint: `f9c957e706afb584d6d2bbe90af66e017323a06c`.
+Last verified published checkpoint: `d1b014ffd8b11bedc902b4ed03c1e967f6d50f14`.
 Separate unresolved paired traversal WIP: `44ea9971`.
 The current continuation adds seven selected-case validated units (23 cases):
 `crt_random_thread61` (4), `transform_owner_build61` (3),
@@ -45,6 +45,9 @@ malformed blobs and alternate modes remain untested. Mapping credit and runtime
 additions remain zero. Bounded direct-caller lookup found none for B9DD90 and one for BA60F8:
 B9CBC0, now recovered in `grid_blob_forward61`. Its two dimension-2/4 tail-call
 cases pass, including SP/LR and borrowed state forwarding, with library PASS.
+A targeted search found no static direct callers of B9CBC0 either. This chain
+now needs concrete XEX vtable/registration/function-pointer xrefs before another
+upper can be recovered; absence of direct calls does not establish unreachability.
 
 ## Active checkpoint — 2026-10-09, private inputs restored
 

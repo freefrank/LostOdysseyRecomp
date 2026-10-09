@@ -459,5 +459,17 @@
     "status": "partial_known_host_csr_mismatch",
     "mapping_credit": 0,
     "next_breakpoint": "Case 1 recovered host CSR 0x9fc1 versus original 0x9fc0; Full72/VMX/RAM/callbacks agree. Case 2 unexecuted."
+  },
+  "current_dependency_breakpoint": {
+    "completed_chain": [
+      "82B9DF18",
+      "82B9DFA0",
+      "82B9DD90",
+      "82BA60F8",
+      "82B9CBC0"
+    ],
+    "evidence": "Targeted generated-source searches found no static direct callers for B9DF18, B9DFA0, B9DD90 or B9CBC0. BA60F8 direct caller B9CBC0 is implemented and focused-case validated.",
+    "next_input": "Concrete vtable, registration or function-pointer call-site xrefs; do not infer unreachable code or invent upper callers.",
+    "independent_limit": "82BD5910 paired VMX host invalid flag discrepancy remains partial; no validated credit."
   }
 }
