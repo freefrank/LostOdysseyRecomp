@@ -248,18 +248,22 @@ int main(int argc, char **argv)
         std::vector<uint32_t> panelPixels;
         Require(settings::RasterizeMenu(panels,1280,720,panelPixels), "panel backdrop rasterization failed");
         const struct { const char *name; const std::vector<uint32_t> *from, *to; std::chrono::milliseconds length; } cases[] = {
-            {"open", &panelPixels, &regularPixels, settings::kMenuOpenFade},
-            {"tab", &regularPixels, &audioPixels, settings::kMenuChangeFade},
-            {"dialog", &audioPixels, &pixels, settings::kMenuChangeFade}};
+            {"open", &panelPixels, &regularPixels, {}},
+            {"tab", &regularPixels, &audioPixels, settings::menu_motion::PageFade},
+            {"dialog", &audioPixels, &pixels, settings::menu_motion::DialogFade}};
         for (const auto &c : cases)
         {
             settings::MenuTransition motion;
             std::vector<uint32_t> shown = *c.from, target = *c.to;
             const auto start = settings::MenuTransition::Clock::time_point{} + std::chrono::seconds(10);
-            Require(motion.Start(shown, target, 1280, start, c.length), "menu transition did not start");
+            // The open cascades the list rows over the panels; the others fade linearly.
+            Require(c.length.count() ? motion.Start(shown, target, 1280, start, c.length)
+                                     : motion.StartCascade(shown, target, 1280, start, settings::MenuOpenCascade(1280, 720)),
+                    "menu transition did not start");
+            const auto length = motion.Duration();
             for (int step = 0; step <= 4; ++step)
             {
-                const bool easing = motion.Advance(shown, start + c.length * step / 4);
+                const bool easing = motion.Advance(shown, start + length * step / 4);
                 Require(easing == (step < 4), "menu transition does not settle at its duration");
                 if (step == 2)
                     Require(shown != *c.from && shown != *c.to, "halfway menu frame does not blend both images");
@@ -275,7 +279,33 @@ int main(int argc, char **argv)
             }
             Require(shown == *c.to, "menu transition did not land on its target");
         }
-        std::puts("menu motion: open, tab switch and dialog ease frames passed");
+        // The list arrow is a layer: the raster without it plus the arrow drawn
+        // at the reported spot is the raster with it, and Erase takes it off again.
+        settings::MenuSnapshot listOnly = snapshot;
+        listOnly.dialogChoices.clear();
+        std::vector<uint32_t> baked, layered;
+        settings::MenuArrow arrow;
+        Require(settings::RasterizeMenu(listOnly, 1280, 720, baked), "baked arrow raster failed");
+        Require(settings::RasterizeMenu(listOnly, 1280, 720, layered, &arrow) && arrow.visible, "list arrow not reported");
+        Require(baked != layered, "arrow layer still drawn into the raster");
+        const auto clean = layered;
+        settings::DrawMenuArrow(layered, 1280, 720, arrow.x, arrow.y);
+        Require(baked == layered, "arrow layer differs from the baked arrow");
+        settings::MenuTransition still;
+        std::vector<uint32_t> shown, target = clean;
+        still.Cut(shown, target, 1280);
+        settings::DrawMenuArrow(shown, 1280, 720, arrow.x + 3, arrow.y - 20);
+        still.Erase(shown, settings::MenuArrowBounds(1280, 720, arrow.x + 3, arrow.y - 20));
+        Require(shown == clean, "erasing the arrow leaves pixels behind");
+        // Under a prompt the arrow stays in the raster, dimmed with the page.
+        settings::MenuArrow underPrompt;
+        std::vector<uint32_t> prompt;
+        Require(settings::RasterizeMenu(snapshot, 1280, 720, prompt, &underPrompt) && !underPrompt.visible && prompt == pixels,
+                "prompt raster moved its arrow to the layer");
+        Require(settings::menu_motion::RowFade(0) == 0 && settings::menu_motion::RowFade(0.1) > 0.2 &&
+                    settings::menu_motion::RowFade(0.3) < settings::menu_motion::RowFade(0.6) && settings::menu_motion::RowFade(1.0) == 1,
+                "list row fade curve");
+        std::puts("menu motion: open, tab switch and dialog frames and the arrow layer passed");
     }
     if (argc>1) {
         std::filesystem::create_directories(argv[1]);

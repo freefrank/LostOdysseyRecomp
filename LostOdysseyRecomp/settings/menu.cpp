@@ -2780,20 +2780,77 @@ bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint3
     // This cache belongs to the sole presentation thread. Dimensions must be
     // checked independently: portrait and landscape buffers can have equal area.
     static uint32_t cachedWidth = 0, cachedHeight = 0;
-    static bool cachedPlayStation = false, cachedPreviewPage = false, shown = false;
+    static bool cachedPlayStation = false, cachedPreviewPage = false, cachedDialog = false, shown = false, closing = false;
+    static int cachedTab = -1;
+    static std::shared_ptr<const menu_assets::Assets> cachedAssets;
     // Motion is presentation only: input and menu state change at once, and the
-    // shown image eases toward the newest raster (#151).
+    // shown image moves toward the newest raster (#151), timed like the retail menus.
     static MenuTransition motion;
     static std::vector<uint32_t> raster;
+    // The list arrow is a layer over the raster: it slides between rows and sways.
+    static MenuArrow arrow;
+    static MenuRect arrowDrawn;
+    static double arrowY = 0;
+    static bool arrowPlaced = false;
+    static MenuTransition::Clock::time_point openTime{}, arrowTime{};
+    const auto seconds = [](MenuTransition::Clock::duration value) { return std::chrono::duration<double>(value).count(); };
+    // Removes the arrow from pixels; Advance must already have run this frame.
+    const auto eraseArrow = [&] {
+        if (arrowDrawn.x1 > arrowDrawn.x0)
+            motion.Erase(pixels, arrowDrawn);
+        arrowDrawn = {};
+    };
+    const auto drawArrow = [&](MenuTransition::Clock::time_point now) {
+        if (!arrow.visible || closing)
+            return;
+        // It waits above the first row while an open starts, then follows its row.
+        if (now < openTime + menu_motion::ArrowOpenDelay)
+        {
+            arrowTime = now;
+            return;
+        }
+        const double dt = std::clamp(seconds(now - arrowTime), 0.0, 1.0);
+        arrowTime = now;
+        arrowY += (arrow.y - arrowY) * std::clamp(dt * menu_motion::ArrowSpeed, 0.0, 1.0);
+        if (std::abs(arrow.y - arrowY) < 0.5)
+            arrowY = arrow.y;
+        const double phase = seconds(now - openTime) / seconds(menu_motion::ArrowSwayPeriod);
+        const int x = arrow.x + int(std::lround(menu_motion::ArrowSway * (0.5 - 0.5 * std::cos(6.283185307179586 * phase))));
+        const int y = int(std::lround(arrowY));
+        DrawMenuArrow(pixels, width, height, x, y);
+        arrowDrawn = MenuArrowBounds(width, height, x, y);
+    };
     if (!active.load())
     {
+        // Closing: the content fades off the panels before the game's own exit
+        // animation shows. The arrow fades with it.
+        if (shown && !closing && !cachedPreviewPage && cachedWidth == width && cachedHeight == height && !pixels.empty())
+        {
+            MenuSnapshot panels;
+            panels.assets = cachedAssets;
+            panels.backdropOnly = true;
+            motion.Advance(pixels, MenuNow());
+            arrowDrawn = {};
+            closing = RasterizeMenu(panels, width, height, raster) &&
+                      motion.Start(pixels, raster, width, MenuNow(), menu_motion::CloseFade) && motion.Running();
+        }
+        if (closing && motion.Advance(pixels, MenuNow()))
+            return true;
         if (shown)
         {
-            shown = false;
+            shown = closing = arrowPlaced = false;
+            arrowDrawn = {};
+            cachedAssets.reset();
             motion.Reset();
             std::vector<uint32_t>().swap(raster);
         }
         return false;
+    }
+    if (closing)
+    {
+        // Reopened while the close was fading: start over.
+        shown = closing = arrowPlaced = false;
+        motion.Reset();
     }
     MenuSnapshot current;
     {
@@ -2806,18 +2863,24 @@ bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint3
     if (!opened && revision == current.revision && cachedWidth == width && cachedHeight == height &&
         cachedPlayStation == current.playStationPrompts && !pixels.empty())
     {
-        motion.Advance(pixels, MenuNow());
+        const auto now = MenuNow();
+        motion.Advance(pixels, now);
+        eraseArrow();
+        drawArrow(now);
         return true;
     }
     current.assets = menu_assets::Cached(FileSystem::GetGameRoot(), current.language);
-    if (!RasterizeMenu(current, width, height, raster))
+    MenuArrow nextArrow;
+    if (!RasterizeMenu(current, width, height, raster, &nextArrow))
         return false;
     // Ease what the player did: opening (content over the panels) and a new
     // revision at the same size and prompt style. A resize, a controller style
     // change and the calibration pages, whose preview presentation paints
     // into the frame, switch at once. The clock starts after rasterizing (tens
     // of milliseconds at 4K, more on the first open) so no part of it is lost.
+    const auto now = MenuNow();
     const bool previewPage = current.calibration.open || current.brightness.open || current.neuralRendering.open;
+    const bool dialog = !current.dialogChoices.empty();
     bool eased = false;
     if (opened && !previewPage)
     {
@@ -2825,23 +2888,47 @@ bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint3
         panels.assets = current.assets;
         panels.backdropOnly = true;
         eased = RasterizeMenu(panels, width, height, pixels) &&
-                motion.Start(pixels, raster, width, MenuNow(), kMenuOpenFade);
+                motion.StartCascade(pixels, raster, width, now, MenuOpenCascade(width, height));
     }
-    else if (!opened && revision != current.revision && cachedWidth == width && cachedHeight == height &&
+    else if (!opened && cachedWidth == width && cachedHeight == height &&
              cachedPlayStation == current.playStationPrompts && !previewPage && !cachedPreviewPage)
-        eased = motion.Start(pixels, raster, width, MenuNow(), kMenuChangeFade);
-    if (eased)
-        motion.Advance(pixels, MenuNow());
-    else
     {
-        motion.Stop();
-        pixels.swap(raster);
+        // Settle this frame's image first. The arrow goes into the outgoing
+        // image only when the new raster draws it itself (under a prompt).
+        motion.Advance(pixels, now);
+        if (nextArrow.visible)
+            eraseArrow();
+        arrowDrawn = {};
+        const auto fade = current.tab != cachedTab ? menu_motion::PageFade
+                        : dialog != cachedDialog   ? menu_motion::DialogFade
+                                                   : menu_motion::ChangeFade;
+        eased = motion.Start(pixels, raster, width, now, fade);
     }
+    if (eased)
+        motion.Advance(pixels, now);
+    else
+        motion.Cut(pixels, raster, width);
+    arrowDrawn = {};
+    if (opened)
+    {
+        openTime = arrowTime = now;
+        arrowPlaced = false;
+    }
+    arrow = nextArrow;
+    if (arrow.visible && !arrowPlaced)
+    {
+        arrowY = arrow.y - (opened ? menu_motion::ArrowOpenDrop : 0);
+        arrowPlaced = true;
+    }
+    drawArrow(now);
     shown = true;
     cachedWidth = width;
     cachedHeight = height;
     cachedPlayStation = current.playStationPrompts;
     cachedPreviewPage = previewPage;
+    cachedDialog = dialog;
+    cachedTab = current.tab;
+    cachedAssets = current.assets;
     revision = current.revision;
     return true;
 }

@@ -420,21 +420,27 @@ int main(int argc, char** argv) {
     uint64_t promptRevision = UINT64_MAX;
     Check(settings::DrawMenu(promptPixels,promptRevision,1280,720),"menu opens");
     const auto openingPixels = promptPixels;
-    // The opening fade is presentation only and settles once its time has passed.
-    settings::menuClockOffset+=std::chrono::seconds(1);
+    // The opening cascade is presentation only and settles once its time has passed.
+    settings::menuClockOffset+=std::chrono::seconds(2);
     Check(settings::DrawMenu(promptPixels,promptRevision,1280,720),"Xbox prompts render");
     Check(promptPixels != openingPixels,"opening fade settles on the menu");
+    // The list arrow keeps swaying with the clock; compare the rest of the page.
+    auto sameBesideArrow=[](const std::vector<uint32_t>& a,const std::vector<uint32_t>& b){
+        if(a.size()!=b.size()) return false;
+        for(size_t i=0;i<a.size();++i) if(a[i]!=b[i] && (i%1280<30 || i%1280>=80)) return false;
+        return true;
+    };
     const auto xboxPixels = promptPixels;
     const auto sameRevision = promptRevision;
     hid::playStationPrompts = true;
     Check(settings::DrawMenu(promptPixels,promptRevision,1280,720),"PlayStation prompts render");
-    Check(promptRevision == sameRevision && promptPixels != xboxPixels,
+    Check(promptRevision == sameRevision && !sameBesideArrow(promptPixels,xboxPixels),
         "controller style changes pixels with unchanged menu revision");
     hid::playStationPrompts = false;
     Check(settings::DrawMenu(promptPixels,promptRevision,1280,720),"Xbox prompts restore");
-    Check(promptRevision == sameRevision && promptPixels == xboxPixels,
+    Check(promptRevision == sameRevision && sameBesideArrow(promptPixels,xboxPixels),
         "controller style round trip restores original pixels");
-    settings::menuClockOffset-=std::chrono::seconds(1);
+    settings::menuClockOffset-=std::chrono::seconds(2);
     // Exercise the real Vulkan FG menu and Save/restart flow without an SDK.
     settings::tab=2;settings::row=int(GraphicsRow::FrameGeneration);
     settings::edit=settings::savedConfig;
