@@ -1,4 +1,5 @@
 #include "pipeline_corpus_download.h"
+#include <os/detach_thread.h>
 #include "shader_pack_index.h"
 #include "http.h"
 
@@ -130,6 +131,7 @@ void StartCorpusDownload(bool automaticUpdates)
     std::string skipped;
     if (choice == "0") skipped = "check disabled by LO_SHADER_PACK_DOWNLOAD=0";
     else if (std::getenv("LO_HEADLESS")) skipped = "check skipped: headless";
+    else if (LO_PLATFORM_SWITCH) skipped = "check skipped: Switch (no network download)";
     else if (const char *corpus = std::getenv("LO_PIPELINE_CORPUS"); corpus && *corpus)
         skipped = "check skipped: LO_PIPELINE_CORPUS is set";
     else if (std::getenv("LO_BACKGROUND") && choice != "1") skipped = "check skipped: background run";
@@ -139,7 +141,7 @@ void StartCorpusDownload(bool automaticUpdates)
         return;
     }
     // LO_SHADER_PACK_DOWNLOAD=1 checks now even when the corpus was checked recently.
-    std::thread([automaticUpdates, forced = choice == "1"] {
+    os::DetachThread(std::thread([automaticUpdates, forced = choice == "1"] {
         try
         {
             LOG_INFO("pipeline corpus: {}", Check(automaticUpdates, forced));
@@ -148,6 +150,6 @@ void StartCorpusDownload(bool automaticUpdates)
         {
             LOG_WARNING("pipeline corpus: check failed: {}", exception.what());
         }
-    }).detach();
+    }));
 }
 }

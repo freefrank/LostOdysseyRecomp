@@ -1,4 +1,5 @@
 #include <stdafx.h>
+#include <os/detach_thread.h>
 #include "xex_loader.h"
 #include "xex_identity.h"
 #include "memory.h"
@@ -227,5 +228,5 @@ void XexLoader::StartTimeStampThread()
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
     });
-    g_timeStampThread.detach();
+    os::DetachThread(g_timeStampThread);
 }

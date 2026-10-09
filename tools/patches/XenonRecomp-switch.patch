@@ -1,0 +1,227 @@
+diff --git a/XenonUtils/memory_mapped_file.cpp b/XenonUtils/memory_mapped_file.cpp
+index ba3c5d8..0936217 100644
+--- a/XenonUtils/memory_mapped_file.cpp
++++ b/XenonUtils/memory_mapped_file.cpp
+@@ -1,6 +1,9 @@
+ #include "memory_mapped_file.h"
+ 
+-#if !defined(_WIN32)
++#if defined(__SWITCH__)
++#   include <fstream>
++#elif !defined(_WIN32)
++#   include <cerrno>
+ #   include <cstring>
+ #   include <cstdio>
+ #   include <fcntl.h>
+@@ -34,6 +37,11 @@ MemoryMappedFile::MemoryMappedFile(MemoryMappedFile &&other)
+     other.fileMappingHandle = nullptr;
+     other.fileView = nullptr;
+     other.fileSize.QuadPart = 0;
++#elif defined(__SWITCH__)
++    fileData = std::move(other.fileData);
++    opened = other.opened;
++
++    other.opened = false;
+ #else
+     fileHandle = other.fileHandle;
+     fileView = other.fileView;
+@@ -84,6 +92,41 @@ bool MemoryMappedFile::open(const std::filesystem::path &path)
+         return false;
+     }
+ 
++    return true;
++#elif defined(__SWITCH__)
++    close();
++
++    const auto pathU8 = path.u8string();
++    const std::string pathString(reinterpret_cast<const char*>(pathU8.c_str()));
++    std::ifstream file(pathString, std::ios::binary | std::ios::ate);
++    if (!file.is_open())
++    {
++        fprintf(stderr, "open for %s failed.\n", pathString.c_str());
++        return false;
++    }
++
++    const auto endPosition = file.tellg();
++    if (endPosition < 0)
++    {
++        fprintf(stderr, "tellg failed for %s.\n", pathString.c_str());
++        return false;
++    }
++
++    fileData.resize(static_cast<size_t>(endPosition));
++    file.seekg(0, std::ios::beg);
++
++    if (!fileData.empty())
++    {
++        file.read(reinterpret_cast<char*>(fileData.data()), fileData.size());
++        if (!file)
++        {
++            fprintf(stderr, "read for %s failed.\n", pathString.c_str());
++            fileData.clear();
++            return false;
++        }
++    }
++
++    opened = true;
+     return true;
+ #else
+     fileHandle = ::open(path.c_str(), O_RDONLY);
+@@ -132,6 +175,9 @@ void MemoryMappedFile::close()
+     {
+         CloseHandle(fileHandle);
+     }
++#elif defined(__SWITCH__)
++    fileData.clear();
++    opened = false;
+ #else
+     if (fileView != MAP_FAILED)
+     {
+@@ -149,6 +195,8 @@ bool MemoryMappedFile::isOpen() const
+ {
+ #if defined(_WIN32)
+     return (fileView != nullptr);
++#elif defined(__SWITCH__)
++    return opened;
+ #else
+     return (fileView != MAP_FAILED);
+ #endif
+@@ -156,13 +204,19 @@ bool MemoryMappedFile::isOpen() const
+ 
+ uint8_t *MemoryMappedFile::data() const
+ {
++#if defined(__SWITCH__)
++    return const_cast<uint8_t*>(fileData.data());
++#else
+     return reinterpret_cast<uint8_t *>(fileView);
++#endif
+ }
+ 
+ size_t MemoryMappedFile::size() const
+ {
+ #if defined(_WIN32)
+     return fileSize.QuadPart;
++#elif defined(__SWITCH__)
++    return fileData.size();
+ #else
+     return static_cast<size_t>(fileSize);
+ #endif
+diff --git a/XenonUtils/memory_mapped_file.h b/XenonUtils/memory_mapped_file.h
+index a3de88b..f1b42c4 100644
+--- a/XenonUtils/memory_mapped_file.h
++++ b/XenonUtils/memory_mapped_file.h
+@@ -4,6 +4,8 @@
+ 
+ #if defined(_WIN32)
+ #   include <Windows.h>
++#elif defined(__SWITCH__)
++#   include <vector>
+ #else
+ #   include <sys/mman.h>
+ #endif
+@@ -14,6 +16,9 @@ struct MemoryMappedFile {
+     HANDLE fileMappingHandle = nullptr;
+     LPVOID fileView = nullptr;
+     LARGE_INTEGER fileSize = {};
++#elif defined(__SWITCH__)
++    std::vector<uint8_t> fileData;
++    bool opened = false;
+ #else
+     int fileHandle = -1;
+     void *fileView = MAP_FAILED;
+diff --git a/XenonUtils/ppc_context.h b/XenonUtils/ppc_context.h
+index f83caf2..4b0fa08 100644
+--- a/XenonUtils/ppc_context.h
++++ b/XenonUtils/ppc_context.h
+@@ -30,6 +30,27 @@
+ #define PPC_EXTERN_FUNC(x) extern PPC_FUNC(x)
+ #define PPC_WEAK_FUNC(x) __attribute__((weak,noinline)) PPC_FUNC(x)
+ 
++// GCC (devkitA64, Nintendo Switch) does not provide the Clang builtins that
++// XenonRecomp emits. Same shims as UnleashedRecomp-NX.
++#if defined(__GNUC__) && !defined(__clang__)
++static inline uint32_t PPCRotateLeft32(uint32_t value, unsigned int shift) noexcept
++{
++    const unsigned int amount = shift & 31;
++    return (value << amount) | (value >> ((32 - amount) & 31));
++}
++
++static inline uint64_t PPCRotateLeft64(uint64_t value, unsigned int shift) noexcept
++{
++    const unsigned int amount = shift & 63;
++    return (value << amount) | (value >> ((64 - amount) & 63));
++}
++
++#define __builtin_assume(x) do { if (!(x)) __builtin_unreachable(); } while (0)
++#define __builtin_debugtrap() __builtin_trap()
++#define __builtin_rotateleft32(x, y) PPCRotateLeft32(static_cast<uint32_t>(x), static_cast<unsigned int>(y))
++#define __builtin_rotateleft64(x, y) PPCRotateLeft64(static_cast<uint64_t>(x), static_cast<unsigned int>(y))
++#endif
++
+ #define PPC_FUNC_PROLOGUE() __builtin_assume(((size_t)base & 0x1F) == 0)
+ 
+ #ifndef PPC_LOAD_U8
+@@ -733,7 +754,12 @@ inline simde__m128i simde_mm_vsr(simde__m128i a, simde__m128i b)
+ inline uint64_t __rdtsc()
+ {
+     uint64_t ret;
++#if defined(__SWITCH__)
++    // Horizon exposes the physical counter to user mode (libnx armGetSystemTick).
++    asm volatile("mrs %0, cntpct_el0\n\t"
++#else
+     asm volatile("mrs %0, cntvct_el0\n\t"
++#endif
+                  : "=r"(ret)::"memory");
+     return ret;
+ }
+diff --git a/XenonUtils/xbox.h b/XenonUtils/xbox.h
+index 0361b0f..9b38b3d 100644
+--- a/XenonUtils/xbox.h
++++ b/XenonUtils/xbox.h
+@@ -241,6 +241,13 @@ typedef struct _XOVERLAPPED {
+ 
+ // this name is so dumb
+ typedef struct _XXOVERLAPPED {
++#if defined(__GNUC__) && !defined(__clang__)
++    // GCC (Nintendo Switch build) rejects members with constructors in an
++    // anonymous aggregate. Same layout; the raw InternalLow/InternalHigh view
++    // is not used by the runtime.
++    be<uint32_t> Error;
++    be<uint32_t> Length;
++#else
+     union
+     {
+         struct
+@@ -255,6 +262,7 @@ typedef struct _XXOVERLAPPED {
+             uint32_t InternalHigh;
+         };
+     };
++#endif
+     uint32_t InternalContext;
+     be<uint32_t> hEvent;
+     be<uint32_t> pCompletionRoutine;
+diff --git a/XenonUtils/xdbf.h b/XenonUtils/xdbf.h
+index 347ac2c..9a71cc6 100644
+--- a/XenonUtils/xdbf.h
++++ b/XenonUtils/xdbf.h
+@@ -128,11 +128,20 @@ struct XACHEntry
+ 
+ union XDBFTitleID
+ {
++#if defined(__GNUC__) && !defined(__clang__)
++    // GCC: no members with constructors in an anonymous struct (see xbox.h).
++    struct Parts
++    {
++        be<uint16_t> u16;
++        char u8[0x02];
++    } parts;
++#else
+     struct
+     {
+         be<uint16_t> u16;
+         char u8[0x02];
+     };
++#endif
+ 
+     be<uint32_t> u32;
+ };
