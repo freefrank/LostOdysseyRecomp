@@ -279,6 +279,126 @@ struct Channels {
         s.r[3] = SplitBody() ? 1 : 0;
         Leave(27, 144);
     }
+    void WriteBufferWord(bool addressOrder = false) {
+        auto &r = s.r;
+        r[11] = Word(r[31] + 4);
+        r[10] = Word(r[1] + 80);
+        if (addressOrder)
+            r[11] = Shift(r[11], 2);
+        r[9] = Word(r[31] + 8);
+        if (!addressOrder)
+            r[11] = Shift(r[11], 2);
+        Word(r[11] + r[9], r[10]);
+    }
+    void Grow(GuestAddress cont) {
+        auto &r = s.r;
+        if (s.cr6.eq) {
+            r[4] = 1;
+            r[3] = r[31];
+            Lower(0x82bd2870u, cont);
+        }
+    }
+    void ExportTriples(bool first) {
+        auto &r = s.r;
+        const unsigned pointer = first ? 236 : 244, count = first ? 212 : 220,
+                       option = first ? 285 : 287, buffer = first ? 80 : 112;
+        r[11] = Word(r[30] + pointer);
+        Compare(r[11]);
+        if (s.cr6.eq)
+            return;
+        r[11] = m.ReadU8(Address(r[30] + option));
+        Compare(r[11]);
+        if (s.cr6.eq)
+            return;
+        r[11] = Word(r[30] + count);
+        r[29] = 0;
+        Compare(r[11]);
+        if (!s.cr6.gt)
+            return;
+        r[28] = r[30] + buffer;
+        r[31] = 0;
+        do {
+            r[11] = Word(r[30] + pointer);
+            r[3] = r[28];
+            r[4] = first ? r[31] + r[11] : r[11] + r[31];
+            Lower(0x82bb3c00u, first ? 0x82bbf258u : 0x82bbf3d8u);
+            r[11] = Word(r[30] + count);
+            ++r[29];
+            r[31] += 12;
+            Compare(r[29], r[11]);
+        } while (s.cr6.lt);
+    }
+    void ExportAttributes() {
+        auto &r = s.r;
+        r[11] = Word(r[30] + 240);
+        Compare(r[11]);
+        if (s.cr6.eq)
+            return;
+        r[11] = m.ReadU8(Address(r[30] + 286));
+        Compare(r[11]);
+        if (s.cr6.eq)
+            return;
+        r[11] = Word(r[30] + 216);
+        r[28] = 0;
+        Compare(r[11]);
+        if (!s.cr6.gt)
+            return;
+        r[31] = r[30] + 96;
+        r[29] = 0;
+        do {
+            r[11] = Word(r[30] + 240);
+            r[10] = Word(r[31] + 4);
+            Load(r[11] + r[29]);
+            r[11] = Word(r[31]);
+            Store(r[1] + 80);
+            Compare(r[10], r[11]);
+            Grow(0x82bbf2c4u);
+            WriteBufferWord(true);
+            r[11] = Word(r[31] + 4);
+            r[10] = Word(r[31]);
+            ++r[11];
+            Compare(r[11], r[10]);
+            Word(r[31] + 4, r[11]);
+            r[11] = Word(r[30] + 240);
+            r[11] += r[29];
+            Load(r[11] + 4);
+            Store(r[1] + 80);
+            Grow(0x82bbf30cu);
+            WriteBufferWord();
+            r[11] = Word(r[31] + 4);
+            ++r[11];
+            Word(r[31] + 4, r[11]);
+            r[11] = m.ReadU8(Address(r[30] + 281));
+            Compare(r[11]);
+            if (!s.cr6.eq) {
+                r[11] = Word(r[30] + 240);
+                r[10] = Word(r[31] + 4);
+                r[11] += r[29];
+                Load(r[11] + 8);
+                r[11] = Word(r[31]);
+                Store(r[1] + 80);
+                Compare(r[10], r[11]);
+                Grow(0x82bbf364u);
+                WriteBufferWord();
+                r[11] = Word(r[31] + 4);
+                ++r[11];
+                Word(r[31] + 4, r[11]);
+            }
+            r[11] = Word(r[30] + 216);
+            ++r[28];
+            r[29] += 12;
+            Compare(r[28], r[11]);
+        } while (s.cr6.lt);
+    }
+    void Export() {
+        Enter(28, 128, 0x82bbf210u);
+        s.r[30] = s.r[3];
+        ExportTriples(true);
+        ExportAttributes();
+        ExportTriples(false);
+        s.r[3] = 1;
+        Leave(28, 128);
+    }
     void Deduplicate() {
         Enter(28, 160, 0x82bbebe8u);
         auto &r = s.r;
@@ -365,6 +485,9 @@ struct Channels {
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     Channels c{m, d, s};
     switch (e) {
+    case 0x82bbf208u:
+        c.Export();
+        break;
     case 0x82bb3c00u:
         c.Append();
         break;

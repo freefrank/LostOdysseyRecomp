@@ -25,13 +25,22 @@
       "instruction_count": 80,
       "body_sha256": "c9ca45f51bd8800e02f6d20a7d4550b1ae954bdf5266e5eedce2e2cf509a6905",
       "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BBF208",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 25034,
+      "instruction_count": 124,
+      "body_sha256": "dde12123f071cef3028db313511ca0913f878528abd544a2fb1040a20b602c95",
+      "status": "focused_original_ppc_validated"
     }
   ],
   "implementation": {
     "entries": [
       "82BB3C00",
       "82BBE948",
-      "82BBEBE0"
+      "82BBEBE0",
+      "82BBF208"
     ],
     "header": "include/lo_semantics/mesh_indexed_channels61.h",
     "source": "src/mesh_indexed_channels61.cpp",
@@ -43,9 +52,9 @@
     "runtime_validated": false,
     "complete": false,
     "date": "2026-10-09",
-    "focused_original_ppc_cases": 6,
+    "focused_original_ppc_cases": 9,
     "library_validated": true,
-    "case_scope": "Six original local-chain/shared concrete buffer and dedup cases: xyz append with growth/room, splitting enabled/suppressed/disabled, corner tuple dedup. Full72/RAM/CSR/events/ownership, independent copied values/remaps/counts and complete shared-concrete teardown. No allocation-fault or full indexed pipeline claim.",
+    "case_scope": "Six original local-chain/shared concrete buffer and dedup cases: xyz append with growth/room, splitting enabled/suppressed/disabled, corner tuple dedup. Full72/RAM/CSR/events/ownership, independent copied values/remaps/counts and complete shared-concrete teardown. No allocation-fault or full indexed pipeline claim. Three original export/append-chain cases cover all output channels, 2D/3D packed attributes and disabled flags, independent word counts/values and teardown.",
     "platform": "Linux x64 Clang19; pinned PPC; mmap guest overlay"
   }
 }

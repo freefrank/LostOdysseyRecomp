@@ -213,6 +213,88 @@ void Check(unsigned mode) {
     original = nullptr;
     memory = nullptr;
 }
+
+void Export(unsigned mode) {
+    struct Restore {
+        std::uint32_t csr = PPCFPSCRRegister{}.getcsr();
+        ~Restore() { PPCFPSCRRegister{}.setcsr(csr); }
+    } restore;
+    test::GuestWindow before(Regions), after(Regions);
+    auto seed = [&](test::GuestWindow &w) {
+        w.Fill(0);
+        auto m = w.Memory();
+        m.WriteU32(0x83216624, AllocatorTable);
+        m.WriteU32(AllocatorTable, Allocate | 1);
+        m.WriteU32(AllocatorTable + 12, Free | 3);
+        m.WriteU32(0x821baa74, std::bit_cast<std::uint32_t>(2.f));
+        m.WriteU8(Owner + 281, mode == 1);
+        for (unsigned channel = 0; channel < 3; ++channel) {
+            m.WriteU32(Owner + 236 + 4 * channel, 0x60000 + 256 * channel);
+            m.WriteU32(Owner + 212 + 4 * channel, 2);
+            m.WriteU8(Owner + 285 + channel, mode != 2);
+            m.WriteU32(Owner + 80 + 16 * channel + 12, std::bit_cast<std::uint32_t>(2.f));
+            for (unsigned i = 0; i < 6; ++i)
+                m.WriteU32(0x60000 + 256 * channel + 4 * i,
+                           std::bit_cast<std::uint32_t>(float(10 * channel + i + 1)));
+        }
+    };
+    seed(before);
+    seed(after);
+    Environment expected(before), actual(after);
+    auto s = sort_engine61_oracle::Initial(0);
+    s.r[3] = Owner;
+    auto om = before.Memory(), m = after.Memory();
+    original = &expected;
+    memory = &om;
+    PPCContext c{};
+    crt_full_oracle::ToPpc(c, s);
+    PPCFPSCRRegister{}.setcsr(s.cached_fp_control);
+    __imp__sub_82BBF208(c, before.Bytes());
+    auto host = PPCFPSCRRegister{}.getcsr();
+    PPCFPSCRRegister{}.setcsr(s.cached_fp_control);
+    (void)mesh_indexed_channels61::Apply(0x82bbf208u, m, actual.Deps(), s);
+    auto a = crt_full_oracle::Snapshot(crt_full_oracle::FromPpc(c)),
+         b = crt_full_oracle::Snapshot(s);
+    if (a != b || !before.EqualCommitted(after) || expected.guest.events != actual.guest.events ||
+        expected.guest.live != actual.guest.live || host != PPCFPSCRRegister{}.getcsr()) {
+        std::fprintf(stderr, "export%u Full%d RAM%d events%d host%d\n", mode, a == b,
+                     before.EqualCommitted(after), expected.guest.events == actual.guest.events,
+                     host == PPCFPSCRRegister{}.getcsr());
+        for (unsigned i = 0; i < a.size(); ++i)
+            if (a[i] != b[i])
+                std::fprintf(stderr, "field%u %llx/%llx\n", i, (unsigned long long)a[i],
+                             (unsigned long long)b[i]);
+        throw std::runtime_error("channel export mismatch");
+    }
+    if (s.r[3] != 1)
+        throw std::runtime_error("channel export result");
+    for (unsigned channel = 0; channel < 3; ++channel) {
+        unsigned dims = channel == 1 && mode == 0 ? 2 : 3;
+        auto desc = Owner + 80 + 16 * channel, p = m.ReadU32(desc + 8);
+        if (m.ReadU32(desc + 4) != (mode == 2 ? 0 : 2 * dims))
+            throw std::runtime_error("export packed dimensions");
+        if (mode != 2)
+            for (unsigned i = 0; i < 2 * dims; ++i)
+                if (m.ReadU32(p + 4 * i) !=
+                    m.ReadU32(0x60000 + 256 * channel + 12 * (i / dims) + 4 * (i % dims)))
+                    throw std::runtime_error("export packed values");
+    }
+    auto os = crt_full_oracle::FromPpc(c);
+    for (unsigned channel = 0; channel < 3; ++channel) {
+        os.r[3] = Owner + 80 + 16 * channel;
+        s.r[3] = os.r[3];
+        PPCFPSCRRegister{}.setcsr(os.cached_fp_control);
+        (void)object_sort_support61::Apply(0x82bd2c08u, om, {expected.guest, expected.accepted.fp},
+                                           os);
+        PPCFPSCRRegister{}.setcsr(s.cached_fp_control);
+        (void)object_sort_support61::Apply(0x82bd2c08u, m, {actual.guest, actual.accepted.fp}, s);
+    }
+    if (!actual.guest.live.empty() || !expected.guest.live.empty() ||
+        !before.EqualCommitted(after) || expected.guest.events != actual.guest.events)
+        throw std::runtime_error("export teardown");
+    original = nullptr;
+    memory = nullptr;
+}
 } // namespace channels_oracle
 void ChannelsIndirect(std::uint32_t e, PPCContext &c, std::uint8_t *) {
     auto s = crt_full_oracle::FromPpc(c);
@@ -244,7 +326,9 @@ int main() {
     try {
         for (unsigned i = 0; i < 6; ++i)
             channels_oracle::Check(i);
-        std::puts("PASS mesh-indexed-channels61 6 original-local-chain/shared-concrete-buffer and "
+        for (unsigned i = 0; i < 3; ++i)
+            channels_oracle::Export(i);
+        std::puts("PASS mesh-indexed-channels61 9 original-local-chain/shared-concrete-buffer and "
                   "dedup cases");
         return 0;
     } catch (const std::exception &e) {

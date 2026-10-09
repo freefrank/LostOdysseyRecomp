@@ -1,3 +1,7 @@
+## Root direct continuation: indexed output channel packing (2026-10-09)
+
+`mesh_indexed_channels61` adds BBF208, appending selected position/attribute channels and preserving two- versus three-component attribute packing. Nine family cases now pass, including three complete-original export/append chains with shared concrete growth. Independent output counts/values, Full72/RAM/CSR/events/ownership and teardown pass for 2D, 3D and disabled output flags. Full library passes.
+
 ## Root direct continuation: indexed channel splitting and deduplication (2026-10-09)
 
 `mesh_indexed_channels61` closes BB3C00 xyz append, BBE948 zero-smoothing face position splitting and BBEBE0 corner tuple deduplication/remapping. Six original local-chain/shared concrete buffer/dedup cases pass: append with growth or spare room, split enabled/suppressed/disabled, and duplicate corner tuples. Full72/RAM/CSR/events/ownership, independent copied xyz, remaps/counts/markers and complete workspace teardown pass. Full library passes. Face-normal/attribute processing and final indexed pipeline composition remain.
