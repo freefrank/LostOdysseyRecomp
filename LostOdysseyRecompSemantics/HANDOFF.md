@@ -1,3 +1,7 @@
+## Root direct continuation: compact adjacency streams (2026-10-09)
+
+`mesh_valence_stream61` closes BD8360 degree maximum, BD83A0 byte/halfword packing and BBCC28 ICE/VALE output. Five composed-original local-chain cases pass Full72/RAM/callbacks and independent native/swapped compact/wide/empty stream bytes and temporary-allocation release-before-payload ordering. Header/scalar/growable/allocator lowers are concrete shared implementations; full Clang library passes. Three implementation addresses only, original allocation/count preconditions retained.
+
 ## Root direct continuation: nested support-map streams (2026-10-09)
 
 `mesh_stream_write61` now shares NXS/ICE header construction and adds BD7DB0 virtual word output (11 focused cases total). `mesh_support_stream61` closes the borrowed BB3408/BB3420 adapter and BB3818/BB36F0 nested GAUS/SUPM serialization, including two counts and two byte arrays. Four composed-original cases pass Full72/RAM/callbacks and independent complete stream bytes in both endian modes, with actual shared header/scalar/growable components. Full Clang library passes. Six new implementation addresses; source aliases remain borrowed, no runtime or historical mapping credit.

@@ -1,0 +1,52 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Compact degree and adjacency stream output.",
+  "entries": [
+    {
+      "address": "82BD8360",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 20698,
+      "instruction_count": 15,
+      "body_sha256": "b4279a11347688069c84507b23cb12ef956118d10fee71a137036d1adfa0cb52",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD83A0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 20735,
+      "instruction_count": 49,
+      "body_sha256": "101d722d64979533017e594a8a698ed972473ae51bb6c74b1c2e3939d20645f4",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BBCC28",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 19645,
+      "instruction_count": 85,
+      "body_sha256": "491e45f02c9266b071c7debb3188b5801f72622b46d2a0b3e8ae73858b1f8cf3",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BD8360",
+      "82BD83A0",
+      "82BBCC28"
+    ],
+    "header": "include/lo_semantics/mesh_valence_stream61.h",
+    "source": "src/mesh_valence_stream61.cpp",
+    "oracle": "tests/mesh_valence_stream61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 5,
+    "library_validated": true,
+    "case_scope": "VALE degree maximum, compact8/wide16 output, native/swapped and empty cases, temporary allocation/free before adjacency payload. Composed original local chain shares concrete header/scalar/growable/allocator lowers. Full72/RAM/callback and independent bytes/lifetime.",
+    "platform": "Linux x64 Clang 19.1.7; pinned regenerated PPC; mmap guest overlay",
+    "mapping_limit": "Historical catalog membership unverified; no baseline mapping credit."
+  }
+}
