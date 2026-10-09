@@ -1,3 +1,7 @@
+## Root direct continuation: normal angle encoding (2026-10-09)
+
+`mesh_normal_encode61` closes 325048 guest-table arcsine and BB8FA0 sign/order masks plus two quantized angles. Four complete original encoder/arcsine cases pass Full72/RAM/host CSR and independent masks/angle values. The encoded components retain min(max(abs(x),abs(y)),abs(z)) and min(abs(x),abs(y)), rather than a sorted pair. Full Clang library passes. LO_NORMAL_ENCODING_CONSTANTS supplies a private 144-byte bundle (128 bytes at83214E08, then four float words820D60A8/820D6454/82000E40/822181C4); none is checked in. Broad nonfinite/precision-edge cases remain untested.
+
 ## Root direct continuation: adaptive mesh stream widths (2026-10-09)
 
 Shared mesh stream code now includes BD7D00 halfword, BD7E70 alternate float scalar and BD7FF0 alternate float span; 14 cases total pass. Valence code adds BADFA0 word maximum and BD8668 adaptive byte/halfword/full-word output; eight cases total pass. The full-word path preserves the original float staging rather than assuming integer memcpy. Full72/RAM/host CSR/callbacks and independent bytes pass; complete Clang library passes. Five implementation entries, no extra runtime/mapping claim.

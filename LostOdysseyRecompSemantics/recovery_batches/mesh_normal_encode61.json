@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "mesh-normal-encode61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/mesh_normal_encode61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/mesh_normal_encode61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nvoid NormalSave(PPCContext&,std::uint8_t*);\nvoid NormalRestore(PPCContext&,std::uint8_t*);\nvoid NormalSaveFp(PPCContext&,std::uint8_t*);\nvoid NormalRestoreFp(PPCContext&,std::uint8_t*);\n#define __savegprlr_28 NormalSave\n#define __restgprlr_28 NormalRestore\n#define __savefpr_25 NormalSaveFp\n#define __restfpr_25 NormalRestoreFp\n#define sub_82325048 __imp__sub_82325048\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/mesh_normal_encode61.cpp"
+      ]
+    }
+  ]
+}

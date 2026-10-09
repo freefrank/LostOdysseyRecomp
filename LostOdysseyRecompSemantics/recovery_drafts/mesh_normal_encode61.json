@@ -1,0 +1,43 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Guest arcsine and ordered normal angle encoding.",
+  "entries": [
+    {
+      "address": "82325048",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.5.cpp",
+      "source_line": 44793,
+      "instruction_count": 50,
+      "body_sha256": "ba91bb76d3062ab75de11cb2440819b6115ac2fd7cacb1aaf6ddcf1ce599358d",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BB8FA0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 11009,
+      "instruction_count": 112,
+      "body_sha256": "774dbbfae2373015b9cfe3094093a9fac7ddd45fa6254c561e67486a3ae1576a",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82325048",
+      "82BB8FA0"
+    ],
+    "header": "include/lo_semantics/mesh_normal_encode61.h",
+    "source": "src/mesh_normal_encode61.cpp",
+    "oracle": "tests/mesh_normal_encode61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 4,
+    "library_validated": true,
+    "case_scope": "Normal component sign/order and two quantized angles, composed original encoder plus original arcsine. Full72/RAM/CSR and independent masks/angles. Private 144-byte table bundle required via LO_NORMAL_ENCODING_CONSTANTS.",
+    "platform": "Linux x64 Clang 19.1.7; pinned regenerated PPC; mmap guest overlay",
+    "mapping_limit": "Historical catalog membership unverified; no baseline mapping credit."
+  }
+}
