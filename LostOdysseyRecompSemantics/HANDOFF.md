@@ -1,3 +1,7 @@
+## Root direct continuation: indexed vertex output and smoothing (2026-10-09)
+
+`mesh_indexed_vertex_output61` closes BC0108: face-batch remapping, indexed or expanded position/attribute output, smoothing-mask normal accumulation with optional guest-atan2 angle weighting, optional incidence records, final indices and batch metadata. Four original-upper/shared-concrete-geometry cases pass for expanded 2D attributes/unweighted normals, indexed attributes/angle weighting, disabled normal generation and an empty batch. Full72/RAM/CSR/events/ownership, independent emitted channel values/indices, normalized vectors, batch counts and complete teardown pass. LO_MESH_MATH_CONSTANTS stays external. Full library passes. Batch grouping and final indexed pipeline orchestration remain.
+
 ## Root direct continuation: indexed channel compaction (2026-10-09)
 
 `mesh_indexed_compact61` closes BBF7F0 and BC0058: remove unused channel values, merge exact xyz duplicates, remap corner IDs and remove newly repeated-index position faces while preserving full retained face records. Six original-upper/local-wrapper cases pass with shared concrete dedup/growth/CRT: unique positions, merged positions, both attributes, all channels and position-preservation flag. Full72/RAM/CSR/events/ownership, independent compacted values/remaps/face counts/metadata and complete workspace teardown pass. Full library passes. Smoothing/output vertex construction and final indexed orchestration remain.

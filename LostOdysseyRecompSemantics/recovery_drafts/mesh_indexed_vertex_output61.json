@@ -1,0 +1,33 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Indexed vertex output, attribute expansion/index channels, smoothed normals and face batch metadata.",
+  "entries": [
+    {
+      "address": "82BC0108",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 27188,
+      "instruction_count": 522,
+      "body_sha256": "232fd7b0e44529317f89978c23743ac288cfad9e4c046f6ba2d3098f4270b01f",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BC0108"
+    ],
+    "header": "include/lo_semantics/mesh_indexed_vertex_output61.h",
+    "source": "src/mesh_indexed_vertex_output61.cpp",
+    "oracle": "tests/mesh_indexed_vertex_output61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 4,
+    "library_validated": true,
+    "case_scope": "Four original-upper/shared concrete remap/append/growth/atan2 cases: expanded 2D channels/unweighted normals, indexed channels/angle-weighted normals, normal generation disabled, empty batch. Full72/RAM/CSR/events/ownership plus independent emitted indices/channel values, normalized normals, batch counts and complete teardown. External LO_MESH_MATH_CONSTANTS. No whole indexed pipeline claim.",
+    "platform": "Linux x64 Clang19; pinned PPC; mmap guest overlay"
+  }
+}

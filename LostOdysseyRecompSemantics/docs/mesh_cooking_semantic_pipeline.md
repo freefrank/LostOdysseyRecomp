@@ -240,3 +240,7 @@ BBF3F8/BBFEA8 now convert referenced corner tuples to final vertex IDs using a t
 ### Indexed channel compaction
 
 BBF7F0 removes unused values and merges exact xyz duplicates for one selected channel, updating corner IDs. Position merges additionally remove newly repeated-index faces while copying retained metadata. BC0058 sequences the three channels and respects the position-preservation flag. Six focused original-upper/local-wrapper cases pass with complete teardown.
+
+### Indexed vertex output and smoothing
+
+BC0108 emits indexed or expanded vertex channels, smoothing-mask normals with optional angle weights using the recovered guest atan2, optional incidence lists, final triangle indices and batch metadata. Four original-upper/shared-concrete cases pass independent emitted values/indices/vector normalization and complete workspace teardown. Grouping and final pipeline orchestration remain.

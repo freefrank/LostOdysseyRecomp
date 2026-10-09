@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "mesh-indexed-vertex-output61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/mesh_indexed_vertex_output61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/mesh_indexed_vertex_output61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nvoid VertexLower(std::uint32_t,PPCContext&,std::uint8_t*);\nvoid VertexSave(unsigned,PPCContext&,std::uint8_t*);\nvoid VertexRestore(unsigned,PPCContext&,std::uint8_t*);\nvoid VertexSaveFpr(unsigned,PPCContext&,std::uint8_t*);\nvoid VertexRestoreFpr(unsigned,PPCContext&,std::uint8_t*);\n#define __savegprlr_17(c,b) VertexSave(17,c,b)\n#define __restgprlr_17(c,b) VertexRestore(17,c,b)\n#define __savefpr_27(c,b) VertexSaveFpr(27,c,b)\n#define __restfpr_27(c,b) VertexRestoreFpr(27,c,b)\n#define sub_82BD2870(c,b) VertexLower(0x82bd2870u,c,b)\n#define sub_82BD2A08(c,b) VertexLower(0x82bd2a08u,c,b)\n#define sub_82BD2C08(c,b) VertexLower(0x82bd2c08u,c,b)\n#define sub_82BB3C00(c,b) VertexLower(0x82bb3c00u,c,b)\n#define sub_82BBFEA8(c,b) VertexLower(0x82bbfea8u,c,b)\n#define sub_822DA388(c,b) VertexLower(0x822da388u,c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/mesh_indexed_vertex_output61.cpp"
+      ]
+    }
+  ]
+}
