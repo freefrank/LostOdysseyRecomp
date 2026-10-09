@@ -35,8 +35,16 @@ recursive original-body cases pass Full72/RAM/host CSR and independent layout
 assertions; the complete library builds. All storage is borrowed; no allocation,
 algorithm callback stub or new failure guard is introduced.
 
-Next: recover unresolved concrete split targets and the BDBD90 strategy binder,
-now that its recursive BDBC18 lower is available. BD5910's host FP exception
+Directly recovered `tree_flat_strategy61` (BDBD90), binding a borrowed tree to
+owned count-prefixed flat-node storage. Count changes free/reallocate; matching
+counts reuse. Three actual binder+recursive-lower cases pass Full72/RAM/host CSR,
+mutable allocator callback traces, ownership and independent flat layout. No
+failure rollback is invented. Complete library builds; failed-allocation and
+overflow branches remain untested.
+
+Next: recover BB3B60/BB3B88 concrete split policies, then integrate the concrete
+callbacks without confusing the earlier borrowed-service upper check with a
+fully closed mesh build. BD5910's host FP exception
 flag difference remains an independent unresolved draft.
 
 ## Independent corpus continuation — 2026-10-09

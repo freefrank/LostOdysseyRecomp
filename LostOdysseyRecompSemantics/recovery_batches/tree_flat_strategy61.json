@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "tree-flat-strategy61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/tree_flat_strategy61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/tree_flat_strategy61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nvoid StrategySave(unsigned,PPCContext&,std::uint8_t*);\nvoid StrategyRestore(unsigned,PPCContext&,std::uint8_t*);\n#define __savegprlr_27(c,b) StrategySave(27,c,b)\n#define __restgprlr_27(c,b) StrategyRestore(27,c,b)\n#define __savegprlr_28(c,b) StrategySave(28,c,b)\n#define __restgprlr_28(c,b) StrategyRestore(28,c,b)\n#define sub_82BDBC18 __imp__sub_82BDBC18\nvoid StrategyAllocator(PPCContext&,std::uint8_t*);\n#define sub_82BD0798 StrategyAllocator\nvoid StrategyIndirect(std::uint32_t,PPCContext&,std::uint8_t*);\n#undef PPC_CALL_INDIRECT_FUNC\n#define PPC_CALL_INDIRECT_FUNC(t) StrategyIndirect((t),ctx,base)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/tree_flat_strategy61.cpp"
+      ]
+    }
+  ]
+}

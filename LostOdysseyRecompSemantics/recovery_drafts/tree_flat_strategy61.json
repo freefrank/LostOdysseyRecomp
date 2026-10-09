@@ -1,0 +1,42 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Original binder and original recursive flattener; shared complete allocator lookup with mutable allocation service boundary.",
+  "entries": [
+    {
+      "address": "82BDBC18",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 29225,
+      "instruction_count": 80,
+      "body_sha256": "e3cad74f60eca3993d902d866de789a3fc0f738e50d3986c3d90932b3bc627b0",
+      "status": "already_validated_composed_lower"
+    },
+    {
+      "address": "82BDBD90",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 29454,
+      "instruction_count": 71,
+      "body_sha256": "082d1dd3f0f0372fd7425c2b27ece2e9c5b4cd50874f2862b40e8ac3a2884218",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BDBD90"
+    ],
+    "header": "include/lo_semantics/tree_flat_strategy61.h",
+    "source": "src/tree_flat_strategy61.cpp",
+    "oracle": "tests/tree_flat_strategy61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 3,
+    "library_validated": true,
+    "platform": "Linux x64 Clang 19.1.7; pinned regenerated original bodies; mmap guest window",
+    "case_scope": "Null tree, count-change free/reallocate and matching-count reuse. Actual original binder plus recursive original flattener with shared complete allocator lookup; mutable allocation/free service boundary. Full72/RAM/host CSR/callback trace/ownership and independent flat-layout expectations agree. Allocation failure/overflow, malformed tree and runtime untested.",
+    "mapping_limit": "Historical catalog membership unverified; no new baseline mapping credit."
+  }
+}
