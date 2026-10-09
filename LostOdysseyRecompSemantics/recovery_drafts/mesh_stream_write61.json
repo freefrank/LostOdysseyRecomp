@@ -1,6 +1,6 @@
 {
   "schema": "semantic-recovery-draft-v1",
-  "scope": "Mesh float and section header virtual stream output.",
+  "scope": "Mesh float/word virtual output and NXS/ICE section headers.",
   "entries": [
     {
       "address": "82BADA70",
@@ -25,13 +25,31 @@
       "instruction_count": 77,
       "body_sha256": "1bf46430ec467ca84cfa56d5371f80a15af49e3344db751ce234a37fc14299f8",
       "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD8078",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 20285,
+      "instruction_count": 77,
+      "body_sha256": "6949661b369f1711fcaa6cb9781a900bc8a9007c21934ff211dd6e86397bbaba",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD7DB0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 19852,
+      "instruction_count": 25,
+      "body_sha256": "5b3ddda566534fa1ff89661e9764f0fb6fcffd485139bccc835554a518f624cf",
+      "status": "focused_original_ppc_validated"
     }
   ],
   "implementation": {
     "entries": [
       "82BADA70",
       "82BADCD0",
-      "82BADD60"
+      "82BADD60",
+      "82BD8078",
+      "82BD7DB0"
     ],
     "header": "include/lo_semantics/mesh_stream_write61.h",
     "source": "src/mesh_stream_write61.cpp",
@@ -43,9 +61,9 @@
     "runtime_validated": false,
     "complete": false,
     "date": "2026-10-09",
-    "focused_original_ppc_cases": 7,
+    "focused_original_ppc_cases": 11,
     "library_validated": true,
-    "case_scope": "Scalar/span native and reversed float writes, empty span, and NXS tagged version headers. Original uppers share actual recovered growable output. Full72/RAM/host CSR/callback and independent output bytes.",
+    "case_scope": "Scalar/span native and reversed float writes, empty span, and NXS tagged version headers. Original uppers share actual recovered growable output. Full72/RAM/host CSR/callback and independent output bytes. ICE header and virtual scalar word, both endian modes.",
     "platform": "Linux x64 Clang 19.1.7; pinned regenerated PPC; mmap guest overlay",
     "mapping_limit": "Historical catalog membership unverified; no baseline mapping credit."
   }

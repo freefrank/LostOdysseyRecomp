@@ -1,0 +1,61 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Support-map borrowed serializer adapter.",
+  "entries": [
+    {
+      "address": "82BB3408",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 57327,
+      "instruction_count": 6,
+      "body_sha256": "72de9949eb84de93257687918a0e2b0aa5815d3ce14433a164376e297d103cad",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BB3420",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 57344,
+      "instruction_count": 4,
+      "body_sha256": "51d8c7e987bf8534d89a25bb8551c69735bc572950c8119559f17e3ad9a4599b",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BB3818",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 57948,
+      "instruction_count": 34,
+      "body_sha256": "48e409f330b801c71c1a95aeed7def66c97455b53399cf007732139cded164de",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BB36F0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 57775,
+      "instruction_count": 50,
+      "body_sha256": "17b6475c220bee267a76c032f207c57b95c846b587f9494bf36d1390e2a0c52f",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BB3408",
+      "82BB3420",
+      "82BB3818",
+      "82BB36F0"
+    ],
+    "header": "include/lo_semantics/mesh_support_stream61.h",
+    "source": "src/mesh_support_stream61.cpp",
+    "oracle": "tests/mesh_support_stream61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 4,
+    "library_validated": true,
+    "case_scope": "Borrowed constructor/destructor, nested SUPM/GAUS count and dual byte-array output, native and swapped. Composed originals share independently checked concrete header/scalar/growable components; Full72/RAM/callback and independent stream bytes.",
+    "platform": "Linux x64 Clang 19.1.7; pinned regenerated PPC; mmap guest overlay",
+    "mapping_limit": "Historical catalog membership unverified; no baseline mapping credit."
+  }
+}

@@ -216,6 +216,7 @@ add_library(LostOdysseyRecompSemantics STATIC
     src/mesh_auxiliary_storage61.cpp
     src/mesh_cook_storage61.cpp
     src/mesh_stream_write61.cpp
+    src/mesh_support_stream61.cpp
     src/projection_extrema61.cpp
     src/grid_blob_forward61.cpp
     src/grid_blob_routes61.cpp

@@ -52,7 +52,11 @@ void Check(unsigned mode) {
     s.lr = 0x9988776681234567ull;
     s.xer_so = 1;
     s.cached_fp_control = 0x9fc0;
-    auto entry = mode < 2 ? 0x82bada70u : mode < 5 ? 0x82badcd0u : 0x82badd60u;
+    auto entry = mode < 2   ? 0x82bada70u
+                 : mode < 5 ? 0x82badcd0u
+                 : mode < 7 ? 0x82badd60u
+                 : mode < 9 ? 0x82bd8078u
+                            : 0x82bd7db0u;
     if (mode < 2) {
         s.r[4] = mode;
         s.r[5] = Writer;
@@ -62,13 +66,17 @@ void Check(unsigned mode) {
         s.r[4] = mode == 4 ? 0 : 2;
         s.r[5] = mode == 3 ? 1 : 0;
         s.r[6] = Writer;
+    } else if (mode >= 9) {
+        s.r[3] = 0x12345678;
+        s.r[4] = mode == 10;
+        s.r[5] = Writer;
     } else {
         s.r[3] = 'M';
         s.r[4] = 'E';
         s.r[5] = 'S';
         s.r[6] = 'H';
         s.r[7] = 0x12345678;
-        s.r[8] = mode == 6 ? 1 : 0;
+        s.r[8] = (mode == 6 || mode == 8) ? 1 : 0;
         s.r[9] = Writer;
     }
     Guest expected, actual;
@@ -82,8 +90,12 @@ void Check(unsigned mode) {
         __imp__sub_82BADA70(c, before.Bytes());
     else if (mode < 5)
         __imp__sub_82BADCD0(c, before.Bytes());
-    else
+    else if (mode < 7)
         __imp__sub_82BADD60(c, before.Bytes());
+    else if (mode < 9)
+        __imp__sub_82BD8078(c, before.Bytes());
+    else
+        __imp__sub_82BD7DB0(c, before.Bytes());
     auto csr = PPCFPSCRRegister{}.getcsr();
     memory = nullptr;
     guest = nullptr;
@@ -95,7 +107,7 @@ void Check(unsigned mode) {
         csr != PPCFPSCRRegister{}.getcsr())
         throw std::runtime_error("mesh stream Full72/RAM/CSR/callback mismatch mode " +
                                  std::to_string(mode));
-    const auto size = mode < 2 ? 4u : mode == 4 ? 0u : mode < 5 ? 8u : 12u;
+    const auto size = (mode < 2 || mode >= 9) ? 4u : mode == 4 ? 0u : mode < 5 ? 8u : 12u;
     if (m.ReadU32(Writer + 4) != size)
         throw std::runtime_error("mesh stream output size");
     if (mode < 4) {
@@ -105,11 +117,15 @@ void Check(unsigned mode) {
         if (mode >= 2 && m.ReadU32(Buffer + 4) != (swap ? 0x000020c0u : 0xc0200000u))
             throw std::runtime_error("mesh stream span bytes");
     }
-    if (mode >= 5 &&
-        (m.ReadU32(Buffer) != (mode == 6 ? 0x4e585301u : 0x4e585300u) ||
+    if (mode >= 5 && mode < 9 &&
+        (m.ReadU32(Buffer) != (mode >= 7 ? (mode == 8 ? 0x49434501u : 0x49434500u)
+                                         : (mode == 6 ? 0x4e585301u : 0x4e585300u)) ||
          m.ReadU32(Buffer + 4) != 0x4d455348u ||
-         m.ReadU32(Buffer + 8) != (mode == 6 ? 0x78563412u : 0x12345678u) || s.r[3] != 1))
+         m.ReadU32(Buffer + 8) != ((mode == 6 || mode == 8) ? 0x78563412u : 0x12345678u) ||
+         s.r[3] != 1))
         throw std::runtime_error("mesh section header bytes");
+    if (mode >= 9 && m.ReadU32(Buffer) != (mode == 10 ? 0x78563412u : 0x12345678u))
+        throw std::runtime_error("mesh scalar word bytes");
 }
 } // namespace mesh_stream_oracle
 void MeshStreamIndirect(std::uint32_t e, PPCContext &c, std::uint8_t *) {
@@ -135,9 +151,9 @@ void MeshStreamRestore(unsigned first, PPCContext &c, std::uint8_t *) {
 }
 int main() {
     try {
-        for (unsigned i = 0; i < 7; ++i)
+        for (unsigned i = 0; i < 11; ++i)
             mesh_stream_oracle::Check(i);
-        std::puts("PASS mesh-stream-write61 7 original-upper/shared-concrete-writer cases");
+        std::puts("PASS mesh-stream-write61 11 original-upper/shared-concrete-writer cases");
         return 0;
     } catch (const std::exception &e) {
         std::fprintf(stderr, "%s\n", e.what());

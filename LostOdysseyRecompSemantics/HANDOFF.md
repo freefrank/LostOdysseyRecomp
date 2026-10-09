@@ -1,3 +1,7 @@
+## Root direct continuation: nested support-map streams (2026-10-09)
+
+`mesh_stream_write61` now shares NXS/ICE header construction and adds BD7DB0 virtual word output (11 focused cases total). `mesh_support_stream61` closes the borrowed BB3408/BB3420 adapter and BB3818/BB36F0 nested GAUS/SUPM serialization, including two counts and two byte arrays. Four composed-original cases pass Full72/RAM/callbacks and independent complete stream bytes in both endian modes, with actual shared header/scalar/growable components. Full Clang library passes. Six new implementation addresses; source aliases remain borrowed, no runtime or historical mapping credit.
+
 ## Root direct continuation: mesh stream payloads (2026-10-09)
 
 `mesh_stream_write61` recovers BADA70 scalar float, BADCD0 float spans and BADD60 NXS section headers with four-byte tags and endian-aware versions. Seven original-upper/shared-concrete-growable-writer cases pass Full72/RAM/host CSR/callbacks and independent bytes/counts, including empty spans. Full Clang library passes. Three implementation entries; no new boundary guards, historical mapping/runtime credit or complete upper serializer claim.

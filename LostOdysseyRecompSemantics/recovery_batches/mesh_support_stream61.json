@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "mesh-support-stream61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/mesh_support_stream61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/mesh_support_stream61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nvoid SupportStreamIndirect(std::uint32_t,PPCContext&,std::uint8_t*);\nvoid SupportStreamLower(std::uint32_t,PPCContext&,std::uint8_t*);\nvoid SupportStreamSave(PPCContext&,std::uint8_t*);\nvoid SupportStreamRestore(PPCContext&,std::uint8_t*);\n#undef PPC_CALL_INDIRECT_FUNC\n#define PPC_CALL_INDIRECT_FUNC(t) SupportStreamIndirect((t),ctx,base)\n#define __savegprlr_29 SupportStreamSave\n#define __restgprlr_29 SupportStreamRestore\n#define sub_82BB3818 __imp__sub_82BB3818\n#define sub_82B9CB70(c,b) SupportStreamLower(0x82b9cb70u,c,b)\n#define sub_82BD8078(c,b) SupportStreamLower(0x82bd8078u,c,b)\n#define sub_82BD7DB0(c,b) SupportStreamLower(0x82bd7db0u,c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/mesh_support_stream61.cpp"
+      ]
+    }
+  ]
+}

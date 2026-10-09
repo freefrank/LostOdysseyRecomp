@@ -114,8 +114,29 @@ struct Stream {
         s.r[11] = Word(s.r[11] + 28);
         Call(continuation);
     }
-    void Header() {
-        Enter(24, 160, 0x82badd68u);
+    void WordScalar() {
+        Enter(32, 96);
+        auto &r = s.r;
+        r[11] = Address(r[4]) & 255u;
+        Store(r[1] + 116, r[3]);
+        Compare(r[11]);
+        if (!s.cr6.eq)
+            for (unsigned i = 0; i < 2; ++i) {
+                r[11] = m.ReadU8(Address(r[1] + 116 + i));
+                r[10] = m.ReadU8(Address(r[1] + 119 - i));
+                m.WriteU8(Address(r[1] + 119 - i), std::uint8_t(r[11]));
+                m.WriteU8(Address(r[1] + 116 + i), std::uint8_t(r[10]));
+            }
+        r[11] = Word(r[5]);
+        r[3] = r[5];
+        r[4] = Word(r[1] + 116);
+        r[11] = Word(r[11] + 36);
+        Call(0x82bd7e04u);
+        Leave(32, 96);
+    }
+    void Header(bool ice) {
+        const auto delta = ice ? 0x2a318u : 0u;
+        Enter(24, 160, 0x82badd68u + delta);
         auto &r = s.r;
         r[24] = r[7];
         r[30] = Address(r[8]) & 255u;
@@ -130,25 +151,43 @@ struct Stream {
         if (!s.cr6.eq)
             r[29] = 1;
         r[3] = r[31];
-        Byte(78, 0x82baddb4u);
-        Byte(88, 0x82baddc8u);
-        Byte(83, 0x82badddcu);
-        Byte(r[29], 0x82baddf0u);
+        Byte(ice ? 73 : 78, 0x82baddb4u + delta);
+        Byte(ice ? 67 : 88, 0x82baddc8u + delta);
+        Byte(ice ? 69 : 83, 0x82badddcu + delta);
+        Byte(r[29], 0x82baddf0u + delta);
         r[3] = r[31];
-        Byte(r[28], 0x82bade08u);
-        Byte(r[27], 0x82bade1cu);
-        Byte(r[26], 0x82bade30u);
-        Byte(r[25], 0x82bade44u);
-        r[4] = r[24];
-        Compare(r[30]);
-        if (!s.cr6.eq) {
-            Reverse(r[1] + 212, r[1] + 80);
+        Byte(r[28], 0x82bade08u + delta);
+        Byte(r[27], 0x82bade1cu + delta);
+        Byte(r[26], 0x82bade30u + delta);
+        Byte(r[25], 0x82bade44u + delta);
+        if (ice) {
+            Store(r[1] + 80, r[24]);
+            Compare(r[30]);
+            if (!s.cr6.eq) {
+                r[10] = m.ReadU8(Address(r[1] + 82));
+                r[11] = m.ReadU8(Address(r[1] + 81));
+                m.WriteU8(Address(r[1] + 81), std::uint8_t(r[10]));
+                r[10] = m.ReadU8(Address(r[1] + 215));
+                m.WriteU8(Address(r[1] + 82), std::uint8_t(r[11]));
+                m.WriteU8(Address(r[1] + 80), std::uint8_t(r[10]));
+                r[10] = m.ReadU8(Address(r[1] + 212));
+                m.WriteU8(Address(r[1] + 83), std::uint8_t(r[10]));
+            }
+            r[11] = Word(r[31]);
+            r[3] = r[31];
             r[4] = Word(r[1] + 80);
+        } else {
+            r[4] = r[24];
+            Compare(r[30]);
+            if (!s.cr6.eq) {
+                Reverse(r[1] + 212, r[1] + 80);
+                r[4] = Word(r[1] + 80);
+            }
+            r[11] = Word(r[31]);
+            r[3] = r[31];
         }
-        r[11] = Word(r[31]);
-        r[3] = r[31];
         r[11] = Word(r[11] + 36);
-        Call(0x82bade88u);
+        Call(ice ? 0x82bd81a0u : 0x82bade88u);
         r[3] = 1;
         Leave(24, 160);
     }
@@ -164,7 +203,13 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
         w.Span();
         return true;
     case 0x82badd60u:
-        w.Header();
+        w.Header(false);
+        return true;
+    case 0x82bd8078u:
+        w.Header(true);
+        return true;
+    case 0x82bd7db0u:
+        w.WordScalar();
         return true;
     default:
         return false;
