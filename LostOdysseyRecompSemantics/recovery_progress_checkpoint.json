@@ -90,7 +90,7 @@
     "full_library_validated": true,
     "mapping_delta": 1,
     "runtime_replacement_delta": 0,
-    "next": "Finish current BB06D8 spatial sampling . BB2638 remains blocked by diagnostic MSR/reservation/native synchronization state; BB03B0 depends on unclosed BD7258 geometry chain; BDB260 needs full-register 823F3340 boundary. Do not substitute no-op services."
+    "next": "BB2638 remains dependent on diagnostic MSR/reservation/native synchronization state; BB03B0 depends on unclosed BD7258 geometry chain; BDB260 needs full-register 823F3340 boundary. BB06D8 and BDAC88 now built and focused-original validated. Do not substitute no-op services."
   },
   "historical_accepted_data_commit": "f066d61adf2a18afad5d7a3f23e7431284ff7675",
   "new_validated_zero_credit_units": [
@@ -106,6 +106,7 @@
     "grid_transform_routes61",
     "grid_transform_support61",
     "geometry_support61",
-    "owned_tree_cleanup61"
+    "owned_tree_cleanup61",
+    "object_grid_transform61"
   ]
 }

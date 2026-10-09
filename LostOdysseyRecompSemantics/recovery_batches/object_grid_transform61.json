@@ -1,0 +1,15 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "object-grid-transform61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/object_grid_transform61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/object_grid_transform61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nextern \"C\" PPC_FUNC(__imp__sub_82BD78C0);\n#define sub_82BD78C0(c,b) __imp__sub_82BD78C0(c,b)\nextern \"C\" PPC_FUNC(__imp__sub_82BD78D8);\n#define sub_82BD78D8(c,b) __imp__sub_82BD78D8(c,b)\nextern \"C\" PPC_FUNC(__imp__sub_82BD78E8);\n#define sub_82BD78E8(c,b) __imp__sub_82BD78E8(c,b)\nvoid OriginalGridTransform61Save(unsigned,PPCContext&,std::uint8_t*);\nvoid OriginalGridTransform61Restore(unsigned,PPCContext&,std::uint8_t*);\n#define __savegprlr_17(c,b) OriginalGridTransform61Save(17,c,b)\n#define __restgprlr_17(c,b) OriginalGridTransform61Restore(17,c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/object_grid_transform61.cpp",
+        "LostOdysseyRecompSemantics/src/grid_transform_support61.cpp"
+      ]
+    }
+  ]
+}

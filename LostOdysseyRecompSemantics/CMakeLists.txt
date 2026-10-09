@@ -165,6 +165,7 @@ add_library(LostOdysseyRecompSemantics STATIC
     src/object_grid_read61.cpp
     src/grid_transform_routes61.cpp
     src/grid_transform_support61.cpp
+    src/object_grid_transform61.cpp
     src/geometry_support61.cpp
     src/owned_tree_cleanup61.cpp
     src/reader_buffer_growth61.cpp

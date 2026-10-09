@@ -1,0 +1,60 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Private generated bodies are pinned by SHA256 of UTF-8 with LF line endings and no final newline; no generated code is embedded.",
+  "entries": [
+    {
+      "address": "82BB06D8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 50638,
+      "instruction_count": 570,
+      "body_sha256": "26f87756648e848b863463ad77013444f0759249b3dc301314a0c65ba180759b",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD78C0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 19083,
+      "instruction_count": 6,
+      "body_sha256": "96cb040ecd5f38328babe842459596a179cccf4a34ce33a620449a7f7e8d8749",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD78D8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 19100,
+      "instruction_count": 4,
+      "body_sha256": "225e6a80474a5d6f0dee937be99e95ada9ad4dc86d249acbd60726a12d80af51",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD78E8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 19113,
+      "instruction_count": 7,
+      "body_sha256": "795de7ad862257cc4c4c3ddb18d941207a59487bc31fa9dca68daf68a915d55a",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 4,
+    "library_validated": true,
+    "library": "PASS incremental complete Clang 19 CMake static library; existing unused-function warning exception retained.",
+    "platform": "Linux x64; Clang 19.1.7; genuine XEX regenerated with pinned XenonRecomp ddd128bc plus tracked patch; existing oracle guest-window allocation overlaid with mmap/mprotect only",
+    "mapping_credit": 0,
+    "mapping_limit": "Fixed historical catalog.sqlite unavailable; do not infer membership from regenerated sources. 82BB25D0 is explicitly external in prior handoff.",
+    "runtime_validated": false,
+    "complete": false,
+    "limits": "Selected finite inputs, ordinary RAM, Full72 state, callbacks and host CSR only. No Windows revalidation, nonfinite matrix, faults/MMIO, concurrency, runtime or gameplay acceptance.",
+    "case_scope": "Empty grid, all-unmarked 2-cube, and two mixed 2-cubes covering all eight physical-coordinate layouts. Genuine original upper and three leaf bodies. Borrowed grid object, word buffer and metadata do not overlap the 608-byte guest frame; reordered temporary loads/stores do not establish arbitrary alias equivalence."
+  },
+  "implementation": {
+    "entries": [
+      "82BB06D8"
+    ],
+    "header": "include/lo_semantics/object_grid_transform61.h",
+    "source": "src/object_grid_transform61.cpp",
+    "oracle": "tests/object_grid_transform61_oracle.cpp"
+  }
+}

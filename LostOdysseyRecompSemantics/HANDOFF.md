@@ -79,10 +79,20 @@ order in the rounding helper; its nine cases were rerun. Borrowed objects,
 tagged child ownership, release order and live callback state are explicit.
 These remain zero-credit drafts pending historical catalog membership.
 
+Support/owned-tree stage was pushed as `eb2a5eda` and remote-verified.
+`object_grid_transform61` now implements BB06D8: three-dimensional grid traversal,
+eight corner layouts, staged coordinate conversion and visit-record lifetime.
+Four original-upper-plus-leaf cases and incremental library build pass. The first
+comparison exposed inverted complement-bit tests; all sixteen tests and eight
+high-bit writes were corrected and reviewed before the final four-case PASS.
+The ordinary-object contract excludes overlap between borrowed grid object,
+word buffer/metadata and the 608-byte guest frame. No arbitrary-alias, extreme-size,
+nonfinite, alternate-rounding-mode or gameplay claim is made; no mapping credit.
+
 Current dependency frontier is BB2638 (not yet implemented). Its diagnostic path
 B9C298→BC8B78 depends on 822B29A0/822B3438 locking helpers with MSR/reservation/CAS
 and native critical-section state absent from Full72; do not replace them with
-ordinary RAM/no-op locks. Closed next work is BB06D8 spatial sampling. BB03B0 remains dependent on
+ordinary RAM/no-op locks. BB06D8 is now closed as described above. BB03B0 remains dependent on
 BD7258 and its substantial unclosed geometry children; the small constructor
 cluster above does not close that parent. BDB260/823F3340 also has an unresolved full-register free-facade
 boundary; retain it explicitly. Implement and verify closed units before parents. BD2870 is implemented by
