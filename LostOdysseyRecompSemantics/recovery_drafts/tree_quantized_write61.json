@@ -1,0 +1,50 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Quantized-node output with complete original scalar wrappers, shared actual append lowers.",
+  "entries": [
+    {
+      "address": "82BD7D58",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 19798,
+      "instruction_count": 22,
+      "body_sha256": "d02ce220f0b939afb0b97b225dbac3dafd68d63a522d3a7e7903c1ab5f69931e",
+      "status": "already_validated_composed_lower"
+    },
+    {
+      "address": "82BD7E18",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 19912,
+      "instruction_count": 22,
+      "body_sha256": "a3b2ca65e2231b99fe9be3c7134969fb733db23148bd02b927c1204dcff34c35",
+      "status": "already_validated_composed_lower"
+    },
+    {
+      "address": "82BDC838",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 31028,
+      "instruction_count": 110,
+      "body_sha256": "1076c9d3025285a9620ca3431c93a3f8bebbab4809acbbbe21972530b665ea79",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BDC838"
+    ],
+    "header": "include/lo_semantics/tree_quantized_write61.h",
+    "source": "src/tree_quantized_write61.cpp",
+    "oracle": "tests/tree_quantized_write61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 2,
+    "library_validated": true,
+    "case_scope": "Two-node native/swapped streams, actual original scalar adapters plus shared append lowers. Full72/RAM/host CSR and independent count, mixed-width records, six scales and unchanged source. Spare writer capacity, no growth/MMIO/nonfinite claims.",
+    "platform": "Linux x64 Clang 19.1.7; pinned regenerated PPC; mmap guest overlay",
+    "mapping_limit": "Historical catalog membership unverified; no baseline mapping credit."
+  }
+}

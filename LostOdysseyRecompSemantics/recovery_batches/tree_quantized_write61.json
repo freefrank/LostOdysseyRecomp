@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "tree-quantized-write61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/tree_quantized_write61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/tree_quantized_write61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\n#include <cstdint>\nvoid QuantWriteLower(std::uint32_t,PPCContext&,std::uint8_t*);\n#define sub_82BD1050(c,b) QuantWriteLower(0x82bd1050u,c,b)\n#define sub_82BD10D8(c,b) QuantWriteLower(0x82bd10d8u,c,b)\nvoid QuantWriteSave(PPCContext&,std::uint8_t*);\nvoid QuantWriteRestore(PPCContext&,std::uint8_t*);\n#define __savegprlr_25 QuantWriteSave\n#define __restgprlr_25 QuantWriteRestore\n#define sub_82BD7D58 __imp__sub_82BD7D58\n#define sub_82BD7E18 __imp__sub_82BD7E18\n#define sub_82BD1160(c,b) QuantWriteLower(0x82bd1160u,c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/tree_quantized_write61.cpp"
+      ]
+    }
+  ]
+}

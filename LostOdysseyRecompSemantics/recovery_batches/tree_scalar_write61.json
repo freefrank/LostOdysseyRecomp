@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "tree-scalar-write61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/tree_scalar_write61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/tree_scalar_write61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\n#include <cstdint>\nvoid ScalarWriteLower(std::uint32_t,PPCContext&,std::uint8_t*);\n#define sub_82BD1050(c,b) ScalarWriteLower(0x82bd1050u,c,b)\n#define sub_82BD10D8(c,b) ScalarWriteLower(0x82bd10d8u,c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/tree_scalar_write61.cpp"
+      ]
+    }
+  ]
+}

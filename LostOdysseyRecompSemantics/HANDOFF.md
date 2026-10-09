@@ -1,3 +1,7 @@
+## Root direct continuation: quantized tree output (2026-10-09)
+
+`tree_scalar_write61` adds BD7D58/BD7E18 integer/float endian append adapters, preserving the real float reinterpret-and-append route. Four original-upper/shared-writer cases pass. `tree_quantized_write61` adds BDC838, emitting count, mixed-width 24-byte nodes and six scales through recovered append lowers. Two original-upper plus original-scalar-wrapper cases pass Full72/RAM/host CSR and independent stream/source assertions. Full Clang library passes. Together with C208 construction and C9F0 import, quantized representation now has implementation coverage across build/read/write; no end-to-end gameplay, refreshed catalog or nonfinite claim.
+
 ## Root direct continuation: quantized tree import (2026-10-09)
 
 `tree_quantized_load61` recovers BDC9F0: replace count-prefixed 24-byte node storage, optionally swap six 16-bit coordinates and three 32-bit topology fields per node, then read six float decoding scales. Three focused original-upper/shared-allocator cases pass Full72/RAM/host CSR/callbacks and independent payload/scales/ownership assertions, including allocation failure; full Clang library passes. Reader return behavior and existing failure ordering are preserved, no new defensive policy, baseline or runtime credit.
