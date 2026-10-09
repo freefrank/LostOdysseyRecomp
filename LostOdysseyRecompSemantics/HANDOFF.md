@@ -1,3 +1,7 @@
+## Root direct continuation: quantized tree strategy (2026-10-09)
+
+`tree_quantized_strategy61` recovers BDC208: flatten to temporary 36-byte nodes, compute six global coordinate maxima, emit 24-byte nodes with signed 16-bit centers/unsigned half extents and preserved topology, and save six reconstruction scales. The existing conservative option uses 15-bit extents and enlarges quantized extents until decoded bounds contain source bounds. Original allocation/failure ordering is retained. Three pinned original-binder plus original-recursive-lower cases (null and both finite modes, differing child boxes) pass Full72/RAM/host CSR/callback/live ownership and independent topology/coverage checks. Full Clang library passes; nonfinite/failure paths and gameplay untested, no baseline mapping credit.
+
 ## Root direct continuation: flat-node import (2026-10-09)
 
 `tree_flat_load61` recovers BDBED8 reader-driven replacement of count-prefixed 36-byte nodes. Count and every node word optionally swap endianness; owner count changes and old storage frees before replacement allocation. Reader payload return remains ignored as in PPC. Three original-upper/shared-allocator cases pass Full72/RAM/callback traces with independent native/swapped payload and allocation-failure assertions; complete Clang library passes. No new rollback, validation guard, baseline credit or runtime hook.

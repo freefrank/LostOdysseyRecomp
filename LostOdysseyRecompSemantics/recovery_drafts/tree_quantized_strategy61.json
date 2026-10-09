@@ -1,0 +1,42 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Quantized 24-byte tree strategy with complete original binder and recursive flattener, mutable allocator boundary.",
+  "entries": [
+    {
+      "address": "82BDBC18",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 29225,
+      "instruction_count": 80,
+      "body_sha256": "e3cad74f60eca3993d902d866de789a3fc0f738e50d3986c3d90932b3bc627b0",
+      "status": "already_validated_composed_lower"
+    },
+    {
+      "address": "82BDC208",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 30090,
+      "instruction_count": 390,
+      "body_sha256": "1e3699b0037db83a1b6b5bf524ea0619a98fdd8cd107953aba231ef2945929c3",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BDC208"
+    ],
+    "header": "include/lo_semantics/tree_quantized_strategy61.h",
+    "source": "src/tree_quantized_strategy61.cpp",
+    "oracle": "tests/tree_quantized_strategy61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 3,
+    "library_validated": true,
+    "platform": "Linux x64 Clang 19.1.7; pinned regenerated original bodies; mmap guest window",
+    "case_scope": "Null input, finite three-node uncorrected quantization, conservative extent correction. Full original binder plus recursive lower. Full72/RAM/host CSR/callback/live ownership, independent topology and conservative bounds coverage. Nonfinite and failure allocation paths not exercised.",
+    "mapping_limit": "Historical catalog membership unverified; no new baseline mapping credit."
+  }
+}
