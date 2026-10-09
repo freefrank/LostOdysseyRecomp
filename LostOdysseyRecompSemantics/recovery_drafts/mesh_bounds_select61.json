@@ -57,12 +57,93 @@
       "instruction_count": 114,
       "body_sha256": "47b3c0f06c8923f8578a132a6ee05bfb65a0dfc4e939febac12dac365f3de58f",
       "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82B9EA90",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 9117,
+      "instruction_count": 50,
+      "body_sha256": "92b5f4f26c0871c2bcd28d392dec95f8204c6d0f34bcb85adf91ac54794b2459",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82B7E668",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.175.cpp",
+      "source_line": 16979,
+      "instruction_count": 27,
+      "body_sha256": "c4c625159e63ce98058a9ddde25a5b5090c191d2ead2847583fff0f0405ee74e",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82B822F0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.176.cpp",
+      "source_line": 5619,
+      "instruction_count": 6,
+      "body_sha256": "8dc71e21b22e45a3b5574ff4c13623ef001c45cc5a5e87059731e7ac66ac4b4a",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82B822C8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.176.cpp",
+      "source_line": 5592,
+      "instruction_count": 10,
+      "body_sha256": "3a95b04554beadcd3c3080a5d0e9f8d7bbcff0f0c6d5fd619b8669ea3eeaf8b3",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82B823C8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.176.cpp",
+      "source_line": 5748,
+      "instruction_count": 57,
+      "body_sha256": "9f05526e99b1f8d2df41dd1cfccfd10c00272b48e2f1095aa19067ec30de2371",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82B7E6D8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.175.cpp",
+      "source_line": 17045,
+      "instruction_count": 98,
+      "body_sha256": "3779d7bfbabbeacfc09a0c2bc912d4aabac61bc442878da067c115b3c022bd83",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82301A68",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.4.cpp",
+      "source_line": 21475,
+      "instruction_count": 95,
+      "body_sha256": "7939b0bb1bc2340954ad5d6a32f96f4649a46d9acdaaf70cf835475b2b5e2d83",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82B7E860",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.175.cpp",
+      "source_line": 17274,
+      "instruction_count": 319,
+      "body_sha256": "50272f2a7d8e2b0622f85cd6e91ec5bc43f4163468d2d9ef60724124fedbfd79",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82B7DEF0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.175.cpp",
+      "source_line": 15730,
+      "instruction_count": 13,
+      "body_sha256": "531afb8a7545d705ade0dc90011b76cb281a87b831fedcf20c5d80a7a01d6121",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BCA410",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 51674,
+      "instruction_count": 49,
+      "body_sha256": "b35b242c6a70ca8f09e1ac9e5c9f14de9473f41da838b91ecda3928eb5fa699b",
+      "status": "focused_original_ppc_validated"
     }
   ],
   "implementation": {
     "entries": [
       "82BC9AF0",
-      "82BC9C68"
+      "82BC9C68",
+      "82B9EA90"
     ],
     "header": "include/lo_semantics/mesh_bounds_select61.h",
     "source": "src/mesh_bounds_select61.cpp",
@@ -74,9 +155,9 @@
     "runtime_validated": false,
     "complete": false,
     "date": "2026-10-09",
-    "focused_original_ppc_cases": 5,
+    "focused_original_ppc_cases": 7,
     "library_validated": true,
-    "case_scope": "Complete actual original sphere graph, shared accepted classifier only. Recursive allocation/free, axis fallback, selected recursive candidate and invalid empty/null input. Full72/RAM/CSR/events/ownership and independent enclosure/known planar sphere. External eight-byte LO_BOUNDS_CONSTANTS; no allocation fault matrix or gameplay claim.",
+    "case_scope": "Complete actual original sphere graph, shared accepted classifier only. Recursive allocation/free, axis fallback, selected recursive candidate and invalid empty/null input. Full72/RAM/CSR/events/ownership and independent enclosure/known planar sphere. External eight-byte LO_BOUNDS_CONSTANTS; no allocation fault matrix or gameplay claim. Two cooked-owner cases compose original bounds, complete pow and complete sphere graph. Independent min/max, selected sphere, max-coordinate*2^-22 tolerance, no leaked temporaries. LO_POWER_CONSTANTS1448bytes includes trailing cooking exponent.",
     "platform": "Linux x64 Clang19; pinned PPC; mmap guest overlay"
   }
 }

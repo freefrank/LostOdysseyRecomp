@@ -1,6 +1,7 @@
 #include "lo_semantics/mesh_bounds_select61.h"
 #include "lo_semantics/mesh_bounds_math61.h"
 #include "lo_semantics/mesh_mass_cache61.h"
+#include "lo_semantics/power_math61.h"
 #include "lo_semantics/recovery_abi.h"
 #include <bit>
 #include <cmath>
@@ -242,6 +243,61 @@ struct Select {
             Store(31, r[31] + 12);
         }
     }
+    void Cook() {
+        auto &r = s.r;
+        r[12] = s.lr;
+        Word(r[1] - 8, r[12]);
+        recovery_abi::WriteU64(m, Address(r[1] - 16), r[31]);
+        auto old = r[1];
+        r[1] -= 128;
+        Word(r[1], old);
+        r[31] = r[3];
+        r[4] = r[1] + 80;
+        r[3] = r[1] + 96;
+        r[6] = Word(r[31] + 172);
+        r[5] = Word(r[31] + 168);
+        s.lr = 0x82b9eab8u;
+        (void)geometry_primitives61::Apply(0x82bca410u, m, d.fp, s);
+        r[11] = 0xffffffff820d0000ull;
+        Gradual();
+        s.fpr_bits[2] = recovery_abi::ReadU64(m, Address(r[11] + 24112));
+        r[11] = 0xffffffff82000000ull;
+        s.fpr_bits[1] = recovery_abi::ReadU64(m, Address(r[11] + 4112));
+        s.lr = 0x82b9eaccu;
+        (void)power_math61::Apply(0x82b7e860u, m, d.fp, s);
+        Load(13, r[1] + 80);
+        Single(10, F(1));
+        Load(11, r[1] + 84);
+        Store(13, r[31] + 152);
+        Compare(F(13), F(11));
+        Move(0, s.cr6.gt ? 13 : 11);
+        Load(12, r[1] + 88);
+        Store(0, r[31] + 152);
+        Compare(F(0), F(12));
+        if (!s.cr6.gt)
+            Move(0, 12);
+        r[11] = r[31] + 112;
+        Single(0, F(0) * F(10));
+        Store(0, r[31] + 152);
+        r[3] = r[31] + 136;
+        Load(0, r[1] + 96);
+        Load(10, r[1] + 100);
+        Load(9, r[1] + 104);
+        Store(0, r[11]);
+        Store(10, r[11] + 4);
+        Store(9, r[11] + 8);
+        Store(13, r[11] + 12);
+        Store(11, r[11] + 16);
+        Store(12, r[11] + 20);
+        r[5] = Word(r[31] + 172);
+        r[4] = Word(r[31] + 168);
+        s.lr = 0x82b9eb44u;
+        Choose();
+        r[1] += 128;
+        r[12] = Word(r[1] - 8);
+        s.lr = r[12];
+        r[31] = recovery_abi::ReadU64(m, Address(r[1] - 16));
+    }
     void Choose() {
         auto &r = s.r;
         r[12] = s.lr;
@@ -269,6 +325,9 @@ struct Select {
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     Select x{m, d, s};
     switch (e) {
+    case 0x82b9ea90u:
+        x.Cook();
+        break;
     case 0x82bc9af0u:
         x.RecursiveCandidate();
         break;

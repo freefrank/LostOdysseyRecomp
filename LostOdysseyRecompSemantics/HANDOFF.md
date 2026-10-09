@@ -1,3 +1,7 @@
+## Root direct continuation: cooked owner bounds closed (2026-10-09)
+
+`mesh_bounds_select61` adds B9EA90, publishing owner min/max, the selected bounding sphere and max-coordinate-scaled 2^-22 tolerance through the actual guest pow path. Seven family cases now include two complete original cooked-owner graphs with all bounds, pow and sphere bodies composed. Full72/RAM/CSR/events/ownership plus independent min/max, sphere enclosure and exact tolerance pass. Full library passes. LO_POWER_CONSTANTS is 1448 bytes for this graph, with trailing cooking exponent; lower tests still use their required prefix. Overall B9F198 still needs convex/input-build dependencies, and BA5CF8 preprocessing remains.
+
 ## Root direct continuation: complete guest power graph (2026-10-09)
 
 `power_math61` closes B7E860 with integer exponentiation, tabulated logarithm/exponential reduction, sign/parity, zero and nonfinite routing. Twelve cases compose the complete actual original graph, including baseline copysign. Full72/RAM/CSR and independent power/domain/sign checks pass; the cooking input 2^-22 is bit-exact. Constants remain external through LO_POWER_CONSTANTS (1440 bytes). No host pow replacement, duplicate copysign credit, exhaustive IEEE matrix or gameplay claim. Full Clang library passes. B9EA90 cooked bounds now has concrete lowers available.
