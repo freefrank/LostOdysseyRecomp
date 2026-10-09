@@ -95,8 +95,10 @@ void PointerDrag(float x, float y, bool held);
 //   Brightness / Save on Graphics, Import / Save on System.
 // - Gameplay, Audio and System fit the visible rows (kMenuVisibleRows) and never
 //   scroll; only Graphics scrolls.
-// - Graphics order: display -> resolution and shadows -> anti-aliasing and
-//   upscaling -> effects -> frame rate -> HDR and brightness -> Save.
+// - Graphics order: display -> resolution and shadows -> anti-aliasing,
+//   upscaling, DLSS neural rendering and frame generation -> effects -> frame
+//   rate -> HDR and brightness -> Save. A divider opens each group after the
+//   first (menu_render.cpp).
 // Input, help text, pointer hits and the tests use these constants, never
 // literal row numbers.
 inline constexpr int MenuTabCount = 4;
@@ -137,19 +139,19 @@ enum class GraphicsRow : int
     ShadowResolution = 7,
     DynamicShadows = 8,
     AntiAliasing = 9,
-    AmbientOcclusion = 10,
-    DlssQuality = 11,
-    FsrSharpness = 12,
-    DlssNeuralRendering = 13,
-    AnisotropicFiltering = 14,
-    DepthOfField = 15,
-    Bloom = 16,
-    MotionBlur = 17,
-    ScalingQuality = 18,
-    RgbRange = 19,
-    FrameRate = 20,
-    FrameGeneration = 21,
-    FrameGenerationMultiplier = 22,
+    DlssQuality = 10,
+    FsrSharpness = 11,
+    DlssNeuralRendering = 12,
+    FrameGeneration = 13,
+    FrameGenerationMultiplier = 14,
+    AmbientOcclusion = 15,
+    AnisotropicFiltering = 16,
+    DepthOfField = 17,
+    Bloom = 18,
+    MotionBlur = 19,
+    ScalingQuality = 20,
+    RgbRange = 21,
+    FrameRate = 22,
     VariableRefreshRate = 23,
     Hdr = 24,
     HdrPaperWhite = 25,

@@ -776,7 +776,9 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
         const int y = rowTop + slot * rowHeight;
         if (y + rowHeight > 640) break;
         const bool focused = int(index) == current.row;
-        if (current.tab == 2 && (index == size_t(GraphicsRow::FrameGeneration) ||
+        if (current.tab == 2 && (index == size_t(GraphicsRow::AntiAliasing) ||
+                                 index == size_t(GraphicsRow::AmbientOcclusion) ||
+                                 index == size_t(GraphicsRow::FrameRate) ||
                                  index == size_t(GraphicsRow::Hdr) ||
                                  index == size_t(GraphicsRow::Brightness)))
             line(labelLeft, y - 3, choiceLeft + choiceWidth, y - 3, MakeColor(255, 173, 176, 177));
