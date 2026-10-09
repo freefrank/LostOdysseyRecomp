@@ -39,6 +39,8 @@ struct BrightnessCalibration
     int brightness = 0;
     uint32_t gamma = 100;
     int focus = 0;
+    // The retail calibration screen ("Original pattern") can open.
+    bool originalPattern = true;
     bool operator==(const BrightnessCalibration &) const = default;
 };
 // DLSS 5 neural rendering page, opened from its Graphics row. Presentation
@@ -179,7 +181,8 @@ bool IsOpen();
 inline constexpr uint16_t TitleSettingsButton = 0x8000; // XINPUT_GAMEPAD_Y
 bool ConsumeTitleShortcut(bool titleMenuIdle);
 // The retail Settings task was just opened from the title menu. Until that task
-// is idle again, Gameplay hides the retail options, Restore game defaults and
-// Quit to Main Menu.
+// is idle again, the per-save options are hidden (Gameplay's retail rows,
+// Restore game defaults and Quit to Main Menu; Audio's Voice, Music and Sound
+// effects) and the brightness page cannot open the retail calibration screen.
 void MarkTitleEntry();
 } // namespace settings

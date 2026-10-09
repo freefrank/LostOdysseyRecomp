@@ -1788,8 +1788,9 @@ int main(int argc, char** argv)
             std::puts("PASS import action: gamepad/mouse focus, cancel-first dialog, translations, guarded restart request, previews");
         }
         // Opened from the title menu (title_entry.cpp) no game is loaded: the
-        // retail Gameplay options, Restore and Quit are hidden, focus lands on
-        // Button prompts and nothing reaches the guest config.
+        // retail Gameplay and Audio options, Restore, Quit and the retail
+        // calibration are out of reach, focus lands on visible rows and nothing
+        // reaches the guest config.
         {
             settings::edit.uiLanguage = 0;
             settings::status.clear();
@@ -1824,6 +1825,55 @@ int main(int argc, char** argv)
                     applies == beforeApplies && defaultsCalls == beforeDefaults &&
                     !settings::mainMenuPrompt && settings::snapshot.dialogChoices.empty(),
                     "hidden rows write nothing to the guest config");
+            // Audio keeps Audio output and Rear angle: Voice, Music and Sound
+            // effects live in the save as well.
+            const uint32_t voice = PPC_LOAD_U32(ConfigData + 24), music = PPC_LOAD_U32(ConfigData + 8),
+                           effects = PPC_LOAD_U32(ConfigData + 12), brightness = PPC_LOAD_U32(ConfigData + 16),
+                           contrast = PPC_LOAD_U32(ConfigData + 20);
+            settings::pending = 0x200; Tick(base);
+            Require(settings::tab == 1 && settings::row == settings::AudioOutputRow, "Audio opens on Audio output");
+            for (int r = 0; r < settings::AudioRowCount; ++r)
+                Require(settings::snapshot.rows[size_t(r)].hidden == (r < settings::AudioOutputRow),
+                        "title mode hides Voice, Music and Sound effects");
+            settings::pending = 1; Tick(base);
+            Require(settings::row == settings::AudioRearAngleRow, "Up from Audio output wraps past the hidden rows");
+            for (int r : {settings::AudioVoiceRow, settings::AudioMusicRow, settings::AudioEffectsRow})
+                for (uint16_t press : {uint16_t(4), uint16_t(8)})
+                {
+                    settings::row = r;
+                    settings::pending = press; Tick(base);
+                    Require(settings::row == settings::AudioOutputRow, "focus leaves a hidden Audio row");
+                }
+            Require(PPC_LOAD_U32(ConfigData + 24) == voice && PPC_LOAD_U32(ConfigData + 8) == music &&
+                    PPC_LOAD_U32(ConfigData + 12) == effects && applies == beforeApplies,
+                    "hidden Audio rows write nothing to the guest config");
+            // The brightness page stays, but Original pattern would hand input
+            // to the retail list, which writes the save's brightness.
+            settings::pending = 0x200; Tick(base);
+            settings::row = int(GraphicsRow::Brightness);
+            settings::pending = 0x1000; Tick(base);
+            Require(settings::brightnessOpen && !settings::snapshot.brightness.originalPattern,
+                    "title mode brightness page marks Original pattern unavailable");
+            settings::brightnessFocus = 2;
+            settings::pending = 8; Tick(base);
+            Require(settings::brightnessFocus == 4, "Right steps over Original pattern");
+            settings::pending = 4; Tick(base);
+            Require(settings::brightnessFocus == 2, "Left steps over Original pattern");
+            settings::pending = 2; Tick(base);
+            Require(settings::brightnessFocus == 4, "Down steps over Original pattern");
+            settings::brightnessClick = 3; Tick(base);
+            Require(settings::brightnessOpen && settings::brightnessFocus == 4, "a click on Original pattern does nothing");
+            settings::brightnessFocus = 3;
+            settings::pending = 0x1000; Tick(base);
+            Require(settings::brightnessOpen && settings::active && !settings::bypass && settings::cancelPolls == 0 &&
+                    !settings::returnToBrightness && PPC_LOAD_U32(ConfigData + 16) == brightness &&
+                    PPC_LOAD_U32(ConfigData + 20) == contrast,
+                    "the retail calibration list is never reached");
+            settings::pending = 0x2000; Tick(base);
+            Require(!settings::brightnessOpen && settings::active, "B leaves the brightness page");
+            settings::pending = 0x100; Tick(base);
+            settings::pending = 0x100; Tick(base);
+            Require(settings::tab == 0 && settings::row == settings::GamePromptRow, "back on Gameplay's first visible row");
             settings::pending = 0x200; Tick(base);
             settings::pending = 0x100; Tick(base);
             Require(settings::tab == 0 && settings::row == settings::GamePromptRow, "a tab switch lands on a visible row");
@@ -1839,7 +1889,7 @@ int main(int argc, char** argv)
                                  [](const settings::MenuRow& row) { return row.hidden; }) &&
                     mainMenuRequests == beforeRequests,
                     "a later open from a game shows every Gameplay row");
-            std::puts("PASS title-menu Settings: hidden retail rows, Restore and Quit, visible focus, guest config untouched");
+            std::puts("PASS title-menu Settings: hidden retail Gameplay and Audio rows, Restore, Quit and Original pattern, visible focus, guest config untouched");
         }
         if (argc == 3)
         {

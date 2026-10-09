@@ -36,13 +36,16 @@ std::atomic<bool> swapConfirm{false};
 std::atomic<bool> waitForRelease{true};
 std::atomic<bool> releaseToParent{false};
 // Title menu entry: the title tick reports an idle menu, input polling records
-// a fresh Y there, and the opened task hides Quit to Main Menu.
+// a fresh Y there, and the opened task hides what a game would replace.
 std::atomic<bool> titleMenuIdle{false}, titleShortcut{false}, titleEntry{false};
-// With no game loaded, the retail Gameplay options and their Restore would be
-// replaced by the next save or New Game, and there is no game to quit.
-bool GameRowHidden(int r)
+// With no game loaded, the retail options (Gameplay, and Voice, Music and Sound
+// effects on Audio) and their Restore would be replaced by the next save or by
+// New Game's defaults (828710A0), and there is no game to quit.
+bool TitleModeHidden(int tab, int r)
 {
-    return titleEntry.load() && (r < GameRetailRowCount || r == GameRestoreRow || r == GameMainMenuRow);
+    if (!titleEntry.load()) return false;
+    if (tab == 0) return r < GameRetailRowCount || r == GameRestoreRow || r == GameMainMenuRow;
+    return tab == 1 && (r == AudioVoiceRow || r == AudioMusicRow || r == AudioEffectsRow);
 }
 std::atomic<int> mouseTab{-1}, mouseRow{-1};
 std::atomic<int> mouseDialog{-1};
@@ -153,6 +156,7 @@ BrightnessCalibration MakeBrightnessCalibration(const Config &config, bool open)
     result.sceneAvailable = calibrationSceneAvailable.load(std::memory_order_relaxed);
     result.scenePreview = calibrationScenePreview.load(std::memory_order_relaxed);
     if (open) result.focus = brightnessFocus;
+    result.originalPattern = !titleEntry.load();
     return result;
 }
 float BrightnessSliderFraction(float x)
@@ -794,10 +798,13 @@ void Publish(uint8_t *base, uint32_t config)
     // The first graphics ids are hidden; enter the tab on a visible row.
     SkipHiddenGraphicsRow();
 #endif
-    // Opened from the title menu, Gameplay starts with hidden rows.
-    if (tab == 0)
-        for (int i = 0; i < GameRowCount && GameRowHidden(row); ++i)
-            row = (row + 1) % GameRowCount;
+    // Opened from the title menu, Gameplay and Audio start with hidden rows.
+    if (tab == 0 || tab == 1)
+    {
+        const int count = tab == 0 ? GameRowCount : AudioRowCount;
+        for (int i = 0; i < count && TitleModeHidden(tab, row); ++i)
+            row = (row + 1) % count;
+    }
     // Speaker test noise while Rear angle is focused and adjustable; it
     // stops by itself once the menu stops publishing. The speaker layout is
     // drawn under the rows; DrawMenu moves the marker with the sound.
@@ -856,7 +863,7 @@ void Publish(uint8_t *base, uint32_t config)
         addAction(L"Restore game defaults", L"恢復遊戲預設設定", Tr(L"Restore", L"恢復"));
         addAction(L"Quit to Main Menu", L"退出到主選單", Tr(L"Return", L"返回"));
         for (int i = 0; i < GameRowCount; ++i)
-            next.rows[i].hidden = GameRowHidden(i);
+            next.rows[i].hidden = TitleModeHidden(0, i);
     }
     else if (tab == 1)
     {
@@ -882,6 +889,8 @@ void Publish(uint8_t *base, uint32_t config)
             angles.push_back(std::to_wstring(degrees) + L"°");
         addChoices(L"Rear angle", L"後方角度", std::move(angles), (edit.audioMatrixRear - 90) / 10,
                    edit.audioOutput == AudioOutputMatrix);
+        for (int i = 0; i < AudioRowCount; ++i)
+            if (TitleModeHidden(1, i)) next.rows[i].hidden = true;
     }
     else if (tab == 2)
     {
@@ -2311,18 +2320,25 @@ PPC_FUNC(sub_822F19B0)
         {
             if (clicked >= 7)
                 calibrationScenePreview = clicked == 7;
-            else
+            else if (clicked != 3 || !titleEntry.load())
             {
                 brightnessFocus = clicked;
                 input |= 0x1000;
             }
         }
         bool close = (input & 0x2000) != 0;
+        // The original pattern hands input to the retail list, which writes the
+        // save's own brightness: not from the title menu, where a click on it
+        // does nothing (above) and focus steps over it.
+        const bool noOriginal = titleEntry.load();
+        if (noOriginal && brightnessFocus == 3) brightnessFocus = 2;
         // LB / RB pick scene or pattern, like the tab bar.
         if (input & 0x100) calibrationScenePreview = true;
         if (input & 0x200) calibrationScenePreview = false;
-        if (input & 1) brightnessFocus = (brightnessFocus + 5) % 6;
-        if (input & 2) brightnessFocus = (brightnessFocus + 1) % 6;
+        if (input & 1)
+            do brightnessFocus = (brightnessFocus + 5) % 6; while (noOriginal && brightnessFocus == 3);
+        if (input & 2)
+            do brightnessFocus = (brightnessFocus + 1) % 6; while (noOriginal && brightnessFocus == 3);
         if (const int delta = (input & 4) ? -1 : (input & 8) ? 1 : 0)
         {
             if (brightnessFocus == 0)
@@ -2330,7 +2346,7 @@ PPC_FUNC(sub_822F19B0)
             else if (brightnessFocus == 1)
                 edit.displayGamma = uint32_t(std::clamp(int(edit.displayGamma) + delta * 5, 50, 150));
             else
-                brightnessFocus = 2 + (brightnessFocus - 2 + 4 + delta) % 4;
+                do brightnessFocus = 2 + (brightnessFocus - 2 + 4 + delta) % 4; while (noOriginal && brightnessFocus == 3);
         }
         bool original = false;
         if (input & 0x1000)
@@ -2340,7 +2356,7 @@ PPC_FUNC(sub_822F19B0)
                 edit.displayBrightness = 0;
                 edit.displayGamma = 100;
             }
-            else if (brightnessFocus == 3) original = true;
+            else if (brightnessFocus == 3) original = !noOriginal;
             else if (brightnessFocus == 4) close = true;
             else if (brightnessFocus == 5) cancel = true;
         }
@@ -2453,8 +2469,7 @@ PPC_FUNC(sub_822F19B0)
     // when unavailable. Keyboard Enter reaches the menu as GAMEPAD_START
     // (hid.cpp), so one branch covers gamepad Start and Enter.
     auto rowHidden = [&](int r) {
-        return (tab == 2 && GraphicsRowHidden(r)) ||
-               (tab == 0 && GameRowHidden(r));
+        return (tab == 2 && GraphicsRowHidden(r)) || TitleModeHidden(tab, r);
     };
     if (input & 1)
         do { row = (row + count - 1) % count; } while (rowHidden(row));
@@ -2512,7 +2527,7 @@ PPC_FUNC(sub_822F19B0)
                 hid::PreviewVibration();
             }
         }
-        else if (tab == 0 && row < GameRetailRowCount && !GameRowHidden(row))
+        else if (tab == 0 && row < GameRetailRowCount && !TitleModeHidden(0, row))
         {
             if (row == 0)
                 PPC_STORE_U32(config, cycle(PPC_LOAD_U32(config), 3));
@@ -2548,7 +2563,7 @@ PPC_FUNC(sub_822F19B0)
                 apu::SetMatrixRearAngle(rear);
             }
         }
-        else if (tab == 1)
+        else if (tab == 1 && !TitleModeHidden(1, row))
         {
             if (row == AudioVoiceRow)
             {
@@ -2766,7 +2781,7 @@ PPC_FUNC(sub_822F19B0)
         __imp__sub_82870E38(call, base);
         language::TraceConfig(base, config, "menu-after-apply");
     }
-    if ((input & 0x1000) && tab == 0 && row == GameRestoreRow && !GameRowHidden(row))
+    if ((input & 0x1000) && tab == 0 && row == GameRestoreRow && !TitleModeHidden(0, row))
     {
         PPCContext call = ctx;
         call.r3.u32 = config;
@@ -2778,7 +2793,7 @@ PPC_FUNC(sub_822F19B0)
         language::TraceConfig(base, config, "menu-after-defaults");
         status = Tr(L"Game defaults restored.", L"遊戲預設設定已恢復。");
     }
-    if ((input & 0x1000) && tab == 0 && row == GameMainMenuRow && !GameRowHidden(row))
+    if ((input & 0x1000) && tab == 0 && row == GameMainMenuRow && !TitleModeHidden(0, row))
     {
         mainMenuPrompt = true;
         mainMenuChoice = 1; // Require an explicit selection of Return; Back always cancels.

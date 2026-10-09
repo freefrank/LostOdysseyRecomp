@@ -778,7 +778,8 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
         for (int i = 0; i < 4; ++i)
         {
             cell(buttons[i].x, 610, buttons[i].w, 40, page.focus == i + 2);
-            text(buttons[i].x + 8, 610, buttons[i].w - 16, 40, buttons[i].label, 19, ink, false, 1, outline, 14);
+            text(buttons[i].x + 8, 610, buttons[i].w - 16, 40, buttons[i].label, 19,
+                 i == 1 && !page.originalPattern ? muted : ink, false, 1, outline, 14);
         }
         text(160, 666, 960, 32,
              Translate(current.language, L"D-pad: select / adjust · A: choose · B: back · LB / RB: scene / pattern",
