@@ -236,3 +236,7 @@ BBED20 derives normalized face vectors and optionally emits them through the nor
 ### Indexed batch remapping
 
 BBF3F8/BBFEA8 now convert referenced corner tuples to final vertex IDs using a temporary sentinel map, preserving per-batch reset policy and shared corners. They emit four-word channel/smoothing records and face/new-vertex counts, then free the map. Three focused original-local-chain cases and complete teardown pass.
+
+### Indexed channel compaction
+
+BBF7F0 removes unused values and merges exact xyz duplicates for one selected channel, updating corner IDs. Position merges additionally remove newly repeated-index faces while copying retained metadata. BC0058 sequences the three channels and respects the position-preservation flag. Six focused original-upper/local-wrapper cases pass with complete teardown.

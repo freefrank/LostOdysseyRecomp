@@ -1,0 +1,42 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Remove unused indexed channel values, merge duplicates, remap corners and drop newly degenerate position faces.",
+  "entries": [
+    {
+      "address": "82BBF7F0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 25887,
+      "instruction_count": 429,
+      "body_sha256": "0813677dd2daea4acad5b06cef166664ba9b9476af67d36c297a97572f3a4873",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BC0058",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 27089,
+      "instruction_count": 43,
+      "body_sha256": "3d4ebe277aedfa44569cbc3f1acf2593edbb6719f196f8e4a508366337afa7fd",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BBF7F0",
+      "82BC0058"
+    ],
+    "header": "include/lo_semantics/mesh_indexed_compact61.h",
+    "source": "src/mesh_indexed_compact61.cpp",
+    "oracle": "tests/mesh_indexed_compact61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 6,
+    "library_validated": true,
+    "case_scope": "Six original upper/local-wrapper cases with shared concrete dedup/growth/CRT: unique positions, merged positions with face removal, both attribute selectors, all channels and preserved-position flag. Full72/RAM/CSR/events/ownership, independent compacted values/remaps/face metadata and complete workspace teardown. No allocator failure matrix or whole indexed pipeline claim.",
+    "platform": "Linux x64 Clang19; pinned PPC; mmap guest overlay"
+  }
+}

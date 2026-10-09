@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "mesh-indexed-compact61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/mesh_indexed_compact61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/mesh_indexed_compact61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nvoid CompactIndirect(std::uint32_t,PPCContext&,std::uint8_t*);\n#undef PPC_CALL_INDIRECT_FUNC\n#define PPC_CALL_INDIRECT_FUNC(t) CompactIndirect((t),ctx,base)\nvoid CompactLower(std::uint32_t,PPCContext&,std::uint8_t*);\nvoid CompactSave(unsigned,PPCContext&,std::uint8_t*);\nvoid CompactRestore(unsigned,PPCContext&,std::uint8_t*);\n#define __savegprlr_23(c,b) CompactSave(23,c,b)\n#define __restgprlr_23(c,b) CompactRestore(23,c,b)\nPPC_FUNC_IMPL(__imp__sub_82BBF7F0);\n#define sub_82BBF7F0 __imp__sub_82BBF7F0\nPPC_FUNC_IMPL(__imp__sub_82BC0058);\n#define sub_82BC0058 __imp__sub_82BC0058\n#define sub_82BD0798(c,b) CompactLower(0x82bd0798u,c,b)\n#define sub_82B7BC40(c,b) CompactLower(0x82b7bc40u,c,b)\n#define sub_82B7A0B0(c,b) CompactLower(0x82b7a0b0u,c,b)\n#define sub_82BD2870(c,b) CompactLower(0x82bd2870u,c,b)\n#define sub_82BD2A08(c,b) CompactLower(0x82bd2a08u,c,b)\n#define sub_82BD2C08(c,b) CompactLower(0x82bd2c08u,c,b)\n#define sub_82BC2D28(c,b) CompactLower(0x82bc2d28u,c,b)\n#define sub_82BC2DD0(c,b) CompactLower(0x82bc2dd0u,c,b)\n#define sub_82BC38E0(c,b) CompactLower(0x82bc38e0u,c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/mesh_indexed_compact61.cpp"
+      ]
+    }
+  ]
+}

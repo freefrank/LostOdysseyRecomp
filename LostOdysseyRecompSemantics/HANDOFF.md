@@ -1,3 +1,7 @@
+## Root direct continuation: indexed channel compaction (2026-10-09)
+
+`mesh_indexed_compact61` closes BBF7F0 and BC0058: remove unused channel values, merge exact xyz duplicates, remap corner IDs and remove newly repeated-index position faces while preserving full retained face records. Six original-upper/local-wrapper cases pass with shared concrete dedup/growth/CRT: unique positions, merged positions, both attributes, all channels and position-preservation flag. Full72/RAM/CSR/events/ownership, independent compacted values/remaps/face counts/metadata and complete workspace teardown pass. Full library passes. Smoothing/output vertex construction and final indexed orchestration remain.
+
 ## Root direct continuation: indexed batch vertex remapping (2026-10-09)
 
 `mesh_indexed_remap61` closes BBF3F8 and BBFEA8. A temporary sentinel map gives each referenced corner tuple a final vertex index, appends four-word channel/smoothing records, rewrites final face indices and emits batch face/new-vertex counts. Three complete-original local-chain cases pass with shared concrete growth/memset: carried vertex base, reset base and empty batch. Full72/RAM/CSR/events/ownership, independent packed records/final indices/counters and complete workspace teardown pass. Full library passes.
