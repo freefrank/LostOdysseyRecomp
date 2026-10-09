@@ -38,6 +38,12 @@ struct GeometryStream {
         case 0x82b9cb70u:
             (void)serialization_control61::Apply(e, m, stream, s);
             break;
+        case 0x82bb3130u:
+            (void)mesh_cache_build61::Apply(e, m, d, s);
+            break;
+        case 0x82bbcc28u:
+            (void)mesh_valence_stream61::Apply(e, m, stream, s);
+            break;
         case 0x82bbb728u:
             (void)mesh_polygon_topology61::Apply(e, m, d, s);
             break;
@@ -556,6 +562,59 @@ struct GeometryStream {
         r[4] = Word(r[10] + 68);
         Call(11, 0x82bbc9a8u);
     }
+    void AdapterRun() {
+        auto &r = s.r;
+        r[12] = s.lr;
+        Store(r[1] - 8, r[12]);
+        recovery_abi::WriteU64(m, Address(r[1] - 24), r[30]);
+        recovery_abi::WriteU64(m, Address(r[1] - 16), r[31]);
+        auto old = r[1];
+        r[1] -= 112;
+        Store(r[1], old);
+        r[31] = r[3];
+        r[30] = r[4];
+        Lower(0x82b9cb70u, 0x82bb3240u);
+        r[8] = r[3];
+        r[9] = r[30];
+        r[7] = 0;
+        r[6] = 'L';
+        r[5] = 'H';
+        r[4] = 'L';
+        r[3] = 'C';
+        Lower(0x82bd8078u, 0x82bb3260u);
+        r[11] = r[3] & 255u;
+        Compare(r[11]);
+        if (!s.cr6.eq) {
+            r[4] = r[30];
+            r[3] = r[31];
+            s.lr = 0x82bb3280u;
+            Run();
+            r[11] = r[3] & 255u;
+            Compare(r[11]);
+            if (!s.cr6.eq) {
+                r[11] = Word(r[31] + 16);
+                Compare(r[11]);
+                if (s.cr6.eq) {
+                    r[3] = r[31];
+                    Lower(0x82bb3130u, 0x82bb32a0u);
+                }
+                r[4] = r[30];
+                r[3] = Word(r[31] + 16);
+                Lower(0x82bbcc28u, 0x82bb32acu);
+                r[11] = r[3] & 255u;
+                r[11] = std::countl_zero(Address(r[11]));
+                r[11] = (r[11] >> 5) & 1u;
+                r[3] = r[11] ^ 1u;
+            } else
+                r[3] = 0;
+        } else
+            r[3] = 0;
+        r[1] += 112;
+        r[12] = Word(r[1] - 8);
+        s.lr = r[12];
+        r[30] = recovery_abi::ReadU64(m, Address(r[1] - 24));
+        r[31] = recovery_abi::ReadU64(m, Address(r[1] - 16));
+    }
     void Run() {
         auto &r = s.r;
         r[12] = s.lr;
@@ -576,6 +635,10 @@ struct GeometryStream {
 };
 } // namespace
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
+    if (e == 0x82bb3220u) {
+        GeometryStream{m, d, s}.AdapterRun();
+        return true;
+    }
     if (e != 0x82bbc110u)
         return false;
     GeometryStream{m, d, s}.Run();

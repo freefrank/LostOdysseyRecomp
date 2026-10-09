@@ -1,3 +1,7 @@
+## Root direct continuation: CLHL geometry and valence wrapper (2026-10-09)
+
+`mesh_geometry_stream61` adds BB3220: ICE/CLHL v0, complete CVHL geometry and lazily constructed ICE/VALE v2 cache. Six focused cases now pass; two compose the actual original CLHL and CVHL bodies with shared concrete cache/stream lowers. Independent nested field parsing, borrowed cache publication and twelve retained mesh/cache allocations pass. Full Clang library passes. Next dependency is B9F418 mass properties; no historical mapping or gameplay credit.
+
 ## Root direct continuation: complete CVHL geometry stream (2026-10-09)
 
 `mesh_geometry_stream61` closes BBC110 ICE/CVHL v5: lazy polygon/topology/vertex-normal construction, adaptive triangle/edge indices, packed or raw normals, relocated polygon records and temporary incidence arrays. Four original-upper/shared-concrete-lower cases pass Full72/RAM/CSR/events and independent complete cube-stream parsing for both byte orders and both normal modes. Packed stream is 598 bytes, raw stream 798; nine mesh-owned arrays remain and both serializer temporaries are released. Full Clang library passes. No gameplay/all-original-chain claim or mapping credit. Next: BB3220 wrapper and B9F418 cached mass properties before aggregate B9F6F0.

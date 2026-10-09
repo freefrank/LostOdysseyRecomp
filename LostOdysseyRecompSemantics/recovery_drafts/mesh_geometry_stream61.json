@@ -1,6 +1,6 @@
 {
   "schema": "semantic-recovery-draft-v1",
-  "scope": "ICE/CVHL v5 complete geometry serialization with lazy polygon/topology/normals and temporary incidence arrays.",
+  "scope": "ICE/CVHL v5 complete geometry serialization with lazy polygon/topology/normals and temporary incidence arrays. CLHL adapter wrapper appends lazily built VALE cache.",
   "entries": [
     {
       "address": "82BBC110",
@@ -9,11 +9,20 @@
       "instruction_count": 553,
       "body_sha256": "4192fa500b0df01e1e274fda2403772cc2e1603b91bf0633225c736383c0bc28",
       "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BB3220",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 57032,
+      "instruction_count": 45,
+      "body_sha256": "b03a5e2d75d495858051f183dfd529ef015239245a4f389649c5860899d63f7b",
+      "status": "focused_original_ppc_validated"
     }
   ],
   "implementation": {
     "entries": [
-      "82BBC110"
+      "82BBC110",
+      "82BB3220"
     ],
     "header": "include/lo_semantics/mesh_geometry_stream61.h",
     "source": "src/mesh_geometry_stream61.cpp",
@@ -25,9 +34,9 @@
     "runtime_validated": false,
     "complete": false,
     "date": "2026-10-09",
-    "focused_original_ppc_cases": 4,
+    "focused_original_ppc_cases": 6,
     "library_validated": true,
-    "case_scope": "Original BBC110 with shared concrete recovered lower graph; native/swapped endian and packed/raw normals; Full72/RAM/CSR/callbacks/ownership plus independent stream field parsing. No gameplay, fault injection or all-original lower-chain claim.",
+    "case_scope": "Original BBC110 with shared concrete recovered lower graph; native/swapped endian and packed/raw normals; Full72/RAM/CSR/callbacks/ownership plus independent stream field parsing. No gameplay, fault injection or all-original lower-chain claim. Two additional CLHL cases compose original BBC110 and share concrete lazy cache/VALE lowers, with independent nested headers, cache publication, counts, neighbor bytes and twelve retained allocations.",
     "platform": "Linux x64 Clang19; pinned PPC; mmap guest overlay"
   }
 }

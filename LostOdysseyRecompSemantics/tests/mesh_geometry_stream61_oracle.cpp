@@ -120,6 +120,12 @@ void Lower(GuestAddress e, GuestMemory &m, Environment &env, Registers &s) {
     case 0x82b9cb70u:
         (void)serialization_control61::Apply(e, m, stream, s);
         break;
+    case 0x82bb3130u:
+        (void)mesh_cache_build61::Apply(e, m, d, s);
+        break;
+    case 0x82bbcc28u:
+        (void)mesh_valence_stream61::Apply(e, m, stream, s);
+        break;
     case 0x82bbb728u:
         (void)mesh_polygon_topology61::Apply(e, m, d, s);
         break;
@@ -144,6 +150,8 @@ void Lower(GuestAddress e, GuestMemory &m, Environment &env, Registers &s) {
     }
 }
 void Check(unsigned mode) {
+    const bool wrapped = mode >= 4;
+    const unsigned normalMode = wrapped ? mode - 4 : mode >> 1;
     struct Restore {
         std::uint32_t csr = PPCFPSCRRegister{}.getcsr();
         ~Restore() { PPCFPSCRRegister{}.setcsr(csr); }
@@ -156,12 +164,13 @@ void Check(unsigned mode) {
         m.WriteU32(AllocatorTable, Allocate | 1);
         m.WriteU32(AllocatorTable + 12, Free | 3);
         m.WriteU32(Owner + 4, Source);
+        m.WriteU32(Owner + 12, Source);
         m.WriteU32(Source + 4, 12);
         m.WriteU32(Source + 8, Input);
         m.WriteU32(Source + 12, 8);
         m.WriteU32(Source + 16, Positions);
         m.WriteU32(Count, 99);
-        m.WriteU16(Owner + 8, mode >> 1);
+        m.WriteU16(Owner + 8, normalMode);
         m.WriteU32(0x832dc180, (mode & 1) ? 0 : 1);
         m.WriteU32(Writer, Table);
         m.WriteU32(Writer + 8, 8192);
@@ -220,13 +229,16 @@ void Check(unsigned mode) {
     PPCContext c{};
     crt_full_oracle::ToPpc(c, s);
     PPCFPSCRRegister{}.setcsr(s.cached_fp_control);
-    __imp__sub_82BBC110(c, before.Bytes());
+    if (wrapped)
+        __imp__sub_82BB3220(c, before.Bytes());
+    else
+        __imp__sub_82BBC110(c, before.Bytes());
     auto csr = PPCFPSCRRegister{}.getcsr();
     original = nullptr;
     memory = nullptr;
     auto m = after.Memory();
     PPCFPSCRRegister{}.setcsr(s.cached_fp_control);
-    (void)mesh_geometry_stream61::Apply(0x82bbc110u, m, actual.Deps(), s);
+    (void)mesh_geometry_stream61::Apply(wrapped ? 0x82bb3220u : 0x82bbc110u, m, actual.Deps(), s);
     if (crt_full_oracle::Snapshot(crt_full_oracle::FromPpc(c)) != crt_full_oracle::Snapshot(s) ||
         !before.EqualCommitted(after) || expected.guest.events != actual.guest.events ||
         expected.guest.live != actual.guest.live || csr != PPCFPSCRRegister{}.getcsr())
@@ -237,9 +249,17 @@ void Check(unsigned mode) {
          tris = m.ReadU32(Source + 8), map = m.ReadU32(Source + 48), pairs = m.ReadU32(Source + 56),
          normals = m.ReadU32(Source + 60), inc = m.ReadU32(Source + 64),
          owners = m.ReadU32(Source + 68), vertexNormals = m.ReadU32(Source + 20);
-    if (s.r[3] != 1 ||
-        actual.guest.live != std::set<GuestAddress>{records, bytes, tris, map, pairs, normals, inc,
-                                                    owners, vertexNormals})
+    std::set<GuestAddress> owned{records, bytes, tris,   map,          pairs,
+                                 normals, inc,   owners, vertexNormals};
+    auto cache = m.ReadU32(Owner + 16);
+    if (wrapped) {
+        owned.insert(cache);
+        owned.insert(m.ReadU32(cache + 12));
+        owned.insert(m.ReadU32(cache + 16));
+        if (m.ReadU32(Source + 84) != cache + 4)
+            throw std::runtime_error("published valence cache");
+    }
+    if (s.r[3] != 1 || actual.guest.live != owned)
         throw std::runtime_error("serialized geometry retained ownership");
     unsigned pos = 0;
     bool little = mode & 1;
@@ -254,6 +274,18 @@ void Check(unsigned mode) {
         }
         return v;
     };
+    if (wrapped) {
+        for (unsigned b : {'I', 'C', 'E'})
+            if (number(1) != b)
+                throw std::runtime_error("wrapper ICE");
+        if (number(1) != unsigned(little))
+            throw std::runtime_error("wrapper endian");
+        for (unsigned b : {'C', 'L', 'H', 'L'})
+            if (number(1) != b)
+                throw std::runtime_error("CLHL tag");
+        if (number(4) != 0)
+            throw std::runtime_error("CLHL version");
+    }
     for (unsigned b : {'I', 'C', 'E'})
         if (number(1) != b)
             throw std::runtime_error("ICE header");
@@ -273,9 +305,9 @@ void Check(unsigned mode) {
     for (unsigned i = 0; i < 36; ++i)
         if (number(1) != m.ReadU32(tris + 4 * i))
             throw std::runtime_error("triangle stream");
-    if (number(2) != (mode >> 1))
+    if (number(2) != (normalMode))
         throw std::runtime_error("normal mode");
-    if (mode >> 1) {
+    if (normalMode) {
         for (unsigned i = 0; i < 24; ++i)
             if (number(4) != m.ReadU32(vertexNormals + 4 * i))
                 throw std::runtime_error("raw vertex normals");
@@ -308,7 +340,7 @@ void Check(unsigned mode) {
     for (unsigned i = 0; i < 24; ++i)
         if (number(1) != m.ReadU8(pairs + i))
             throw std::runtime_error("edge endpoints");
-    if (mode >> 1) {
+    if (normalMode) {
         for (unsigned i = 0; i < 36; ++i)
             if (number(4) != m.ReadU32(normals + 4 * i))
                 throw std::runtime_error("raw edge normals");
@@ -331,8 +363,34 @@ void Check(unsigned mode) {
     for (unsigned i = 0; i < 24; ++i)
         if (number(1) != m.ReadU8(owners + i))
             throw std::runtime_error("incidence owner bytes");
-    if (pos != m.ReadU32(Writer + 4) || pos != (mode >> 1 ? 798u : 598u))
-        throw std::runtime_error("CVHL total bytes " + std::to_string(pos));
+    if (pos != (normalMode ? 798u : 598u) + (wrapped ? 12u : 0u))
+        throw std::runtime_error("CVHL size");
+    if (wrapped) {
+        for (unsigned b : {'I', 'C', 'E'})
+            if (number(1) != b)
+                throw std::runtime_error("valence ICE");
+        if (number(1) != unsigned(little))
+            throw std::runtime_error("valence endian");
+        for (unsigned b : {'V', 'A', 'L', 'E'})
+            if (number(1) != b)
+                throw std::runtime_error("VALE tag");
+        if (number(4) != 2 || number(4) != 8 || number(4) != 36)
+            throw std::runtime_error("VALE counts");
+        auto degrees = m.ReadU32(cache + 12), neighbors = m.ReadU32(cache + 16);
+        unsigned max = 0;
+        for (unsigned i = 0; i < 8; ++i)
+            max = std::max(max, unsigned(m.ReadU16(degrees + 4 * i)));
+        if (number(4) != max)
+            throw std::runtime_error("VALE max degree");
+        for (unsigned i = 0; i < 8; ++i)
+            if (number(1) != m.ReadU16(degrees + 4 * i))
+                throw std::runtime_error("VALE degrees");
+        for (unsigned i = 0; i < 36; ++i)
+            if (number(1) != m.ReadU8(neighbors + i))
+                throw std::runtime_error("VALE neighbors");
+    }
+    if (pos != m.ReadU32(Writer + 4))
+        throw std::runtime_error("stream total bytes");
 }
 } // namespace geometry_stream_oracle
 void GeometryStreamIndirect(std::uint32_t e, PPCContext &c, std::uint8_t *) {
@@ -379,9 +437,9 @@ int main() {
         nf.read(reinterpret_cast<char *>(geometry_stream_oracle::normal_constants.data()), 144);
         if (nf.gcount() != 144)
             throw std::runtime_error("normal constant size");
-        for (unsigned i = 0; i < 4; ++i)
+        for (unsigned i = 0; i < 6; ++i)
             geometry_stream_oracle::Check(i);
-        std::puts("PASS mesh-geometry-stream61 4 original-upper/shared-concrete-lowers "
+        std::puts("PASS mesh-geometry-stream61 6 original-CVHL/CLHL shared-concrete-lower "
                   "endian/normal cases");
         return 0;
     } catch (const std::exception &e) {

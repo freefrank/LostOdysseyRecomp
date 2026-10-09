@@ -121,6 +121,10 @@ retains mesh-owned outputs; two incidence scratch allocations are released.
 Rust should separate this owned mesh from a borrowed writer and serialized
 relative offsets, preserving the original field widths and endian choice.
 
+BB3220 wraps the geometry in ICE/CLHL v0 and appends ICE/VALE v2. It lazily
+constructs the adapter +16 cache and publishes its borrowed payload at source
++84; the adapter retains ownership of that cache and its two arrays.
+
 ## Remaining upper dependencies
 
 82B9C7D8 (mesh cooking orchestration) is still incomplete. Its constructor,
@@ -129,7 +133,7 @@ B9F198 validation/build and B9F6F0 aggregate serialization remain open.
 
 B9F6F0 already has recovered scalar/header/support and owner cleanup components.
 Its main mesh section BBC110 is recovered; cached geometry calculation B9F418
-and BB3220 adapter serialization still need completion. Lazy-cache construction BB3130/BBC9F0 is now recovered. The BBD4E8 edge-filter path and its normalized-plane BD92C0 / guest-table
+still needs completion. BB3220 adapter serialization is recovered. Lazy-cache construction BB3130/BBC9F0 is now recovered. The BBD4E8 edge-filter path and its normalized-plane BD92C0 / guest-table
 atan2 822DA388 math lowers are recovered. BBDDF0 now orchestrates the requested components and releases
 unretained auxiliary arrays. Do not infer upper completion from a
 working lower stream or topology fixture.
