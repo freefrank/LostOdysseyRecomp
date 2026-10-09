@@ -11,6 +11,8 @@ struct Dependencies {
 // +12 triangle-side to edge map,+16/+20 later auxiliary arrays. Input r4 is
 // triangle count; r5/r6 select borrowed u32/u16 indices. Normalize endpoints,
 // stable-sort twice, deduplicate and retain side mapping. Existing mapping is
-// reused. Original partial-allocation ownership/failure order is unchanged.
+// reused. BBD1E0 adds eight-byte edge records (u16 degree at +2, u32 list
+// offset at +4) and flat u32 incident-triangle IDs at descriptor +20.
+// Original partial-allocation ownership/failure order is unchanged.
 [[nodiscard]] bool Apply(GuestAddress, GuestMemory &, Dependencies, Registers &);
 } // namespace lo::semantic::gpu::mesh_edge_build61

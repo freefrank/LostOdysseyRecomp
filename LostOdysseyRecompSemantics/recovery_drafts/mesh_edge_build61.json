@@ -17,12 +17,21 @@
       "instruction_count": 225,
       "body_sha256": "8dc51294635e0e18fda54f8d06fdb4a5b332674716077c5390330a25d6ed145a",
       "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BBD1E0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 20473,
+      "instruction_count": 184,
+      "body_sha256": "87ace71d97a745e79451dd04fe8e1e69bfac69e8ac28cbe61610fa96a6e0dabf",
+      "status": "focused_original_ppc_validated"
     }
   ],
   "implementation": {
     "entries": [
       "82BBD4C0",
-      "82BBCE58"
+      "82BBCE58",
+      "82BBD1E0"
     ],
     "header": "include/lo_semantics/mesh_edge_build61.h",
     "source": "src/mesh_edge_build61.cpp",
@@ -34,9 +43,9 @@
     "runtime_validated": false,
     "complete": false,
     "date": "2026-10-09",
-    "focused_original_ppc_cases": 4,
+    "focused_original_ppc_cases": 6,
     "library_validated": true,
-    "case_scope": "Descriptor initialization and u32/u16 triangle endpoint normalization, shared-edge deduplication/mapping and existing-map reuse. Original upper shares actual sorter/copy/allocator. Full72/RAM/callback, independent edge pairs and triangle-side map. Diagnostic and allocation-failure paths not exercised.",
+    "case_scope": "Descriptor initialization and u32/u16 triangle endpoint normalization, shared-edge deduplication/mapping and existing-map reuse. Original upper shares actual sorter/copy/allocator. Full72/RAM/callback, independent edge pairs and triangle-side map. Diagnostic and allocation-failure paths not exercised. Two original caller-plus-original edge-builder cases cover incident-triangle counts, prefix offsets and lists for both index widths.",
     "platform": "Linux x64 Clang 19.1.7; pinned regenerated PPC; mmap guest overlay",
     "mapping_limit": "Historical catalog membership unverified; no baseline mapping credit."
   }

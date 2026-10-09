@@ -1,3 +1,7 @@
+## Root direct continuation: edge-to-triangle adjacency (2026-10-09)
+
+`mesh_edge_build61` now also closes BBD1E0: count triangle incidence per unique edge, build prefix offsets, scatter triangle IDs and restore prefixes. Two original-caller-plus-original-edge-builder cases raise the family to six focused cases, both u32/u16 input widths; Full72/RAM/callbacks and independent degree/offset/incident-list/owned-allocation assertions pass. Full Clang library passes. One additional implementation address; partial allocation behavior retained and broad failure tests intentionally omitted.
+
 ## Root direct continuation: unique triangle edges (2026-10-09)
 
 `mesh_edge_build61` closes BBD4C0 descriptor initialization and BBCE58 edge normalization, two stable-sort passes, unique undirected pairs and triangle-side mapping. Four original-upper/shared-concrete-sort cases pass Full72/RAM/callbacks and independent pairs, mapping, ownership and reuse assertions for u32/u16 indices. Full Clang library passes. Diagnostic/partial-allocation paths retain original behavior but are not exercised. No new fallback or historical/runtime mapping claim.

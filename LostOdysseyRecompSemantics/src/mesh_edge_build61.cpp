@@ -1,5 +1,6 @@
 #include "lo_semantics/mesh_edge_build61.h"
 #include "lo_semantics/crt_copy_full_context.h"
+#include "lo_semantics/crt_reader_chain61.h"
 #include "lo_semantics/crt_reader_follow61.h"
 #include "lo_semantics/object_sort_support61.h"
 #include "lo_semantics/recovery_abi.h"
@@ -161,6 +162,165 @@ struct Edges {
             Store(r[9] + r[5], r[11]);
         } while (!s.cr6.eq);
     }
+    void Prefix() {
+        auto &r = s.r;
+        r[11] = Word(r[31] + 16);
+        r[10] = 1;
+        Store(r[11] + 4, r[28]);
+        r[11] = Word(r[31]);
+        Compare(r[11], 1);
+        if (s.cr6.gt) {
+            r[9] = 8;
+            do {
+                r[11] = Word(r[31] + 16);
+                ++r[10];
+                r[11] += r[9];
+                r[9] += 8;
+                r[8] = m.ReadU16(Address(r[11] - 6));
+                r[7] = Word(r[11] - 4);
+                r[8] += r[7];
+                Store(r[11] + 4, r[8]);
+                r[11] = Word(r[31]);
+                Compare(r[10], r[11]);
+            } while (s.cr6.lt);
+        }
+    }
+    void Adjacency() {
+        auto &r = s.r;
+        r[31] = r[3];
+        r[29] = r[4];
+        s.lr = 0x82bbd1f8u;
+        (void)Apply(0x82bbce58u, m, d, s);
+        r[11] = Address(r[3]) & 255u;
+        Compare(r[11]);
+        if (s.cr6.eq) {
+            r[3] = 0;
+            return;
+        }
+        Lower(0x82bd0798u, 0x82bbd214u);
+        r[11] = Word(r[31]);
+        r[5] = 8;
+        r[4] = Shift(r[11], 3);
+        r[11] = Word(r[3]);
+        r[11] = Word(r[11]);
+        Call(11, 0x82bbd230u);
+        Compare(r[3]);
+        Store(r[31] + 16, r[3]);
+        if (s.cr6.eq) {
+            r[3] = 0;
+            return;
+        }
+        r[11] = Word(r[31]);
+        r[4] = 0;
+        r[5] = Shift(r[11], 3);
+        s.lr = 0x82bbd24cu;
+        crt_reader_chain61::ApplySupport_B7BC40(m, d.engine.sort.accepted, s);
+        r[28] = 0;
+        Compare(r[29]);
+        if (!s.cr6.eq) {
+            r[11] = r[28];
+            r[10] = r[29];
+            do {
+                r[9] = Word(r[31] + 12);
+                --r[10];
+                r[8] = Word(r[31] + 16);
+                Compare(r[10]);
+                r[9] = Word(r[11] + r[9]);
+                r[9] = Shift(r[9], 3);
+                r[9] += r[8];
+                r[8] = m.ReadU16(Address(r[9] + 2));
+                ++r[8];
+                m.WriteU16(Address(r[9] + 2), std::uint16_t(r[8]));
+                for (unsigned side = 1; side < 3; ++side) {
+                    r[9] = Word(r[31] + 12);
+                    r[8] = Word(r[31] + 16);
+                    r[9] += r[11];
+                    if (side == 2)
+                        r[11] += 12;
+                    r[9] = Word(r[9] + 4 * side);
+                    r[9] = Shift(r[9], 3);
+                    r[9] += r[8];
+                    r[8] = m.ReadU16(Address(r[9] + 2));
+                    ++r[8];
+                    m.WriteU16(Address(r[9] + 2), std::uint16_t(r[8]));
+                }
+            } while (!s.cr6.eq);
+        }
+        Prefix();
+        r[11] = Word(r[31]);
+        r[10] = Word(r[31] + 16);
+        r[11] = Shift(r[11], 3);
+        r[11] += r[10];
+        r[10] = m.ReadU16(Address(r[11] - 6));
+        r[11] = Word(r[11] - 4);
+        r[30] = r[10] + r[11];
+        Lower(0x82bd0798u, 0x82bbd340u);
+        r[11] = Word(r[3]);
+        r[5] = 53;
+        r[4] = Shift(r[30], 2);
+        r[11] = Word(r[11]);
+        Call(11, 0x82bbd358u);
+        Compare(r[3]);
+        Store(r[31] + 20, r[3]);
+        if (s.cr6.eq) {
+            r[3] = 0;
+            return;
+        }
+        r[10] = r[28];
+        Compare(r[29]);
+        if (!s.cr6.eq) {
+            r[11] = r[28];
+            do {
+                r[9] = Word(r[31] + 12);
+                r[7] = r[10];
+                r[8] = Word(r[31] + 16);
+                r[6] = r[10];
+                r[5] = Word(r[31] + 20);
+                r[4] = r[10];
+                ++r[10];
+                r[9] = Word(r[11] + r[9]);
+                Compare(r[10], r[29]);
+                r[9] = Shift(r[9], 3);
+                r[9] += r[8];
+                r[9] = Word(r[9] + 4);
+                r[9] = Shift(r[9], 2);
+                Store(r[9] + r[5], r[7]);
+                r[9] = Word(r[31] + 12);
+                r[8] = Word(r[31] + 16);
+                r[9] = Word(r[11] + r[9]);
+                r[9] = Shift(r[9], 3);
+                r[9] += r[8];
+                r[8] = Word(r[9] + 4);
+                ++r[8];
+                Store(r[9] + 4, r[8]);
+                for (unsigned side = 1; side < 3; ++side) {
+                    r[9] = Word(r[31] + 12);
+                    r[8] = Word(r[31] + 16);
+                    r[9] += r[11];
+                    r[7] = Word(r[31] + 20);
+                    r[9] = Word(r[9] + 4 * side);
+                    r[9] = Shift(r[9], 3);
+                    r[9] += r[8];
+                    r[9] = Word(r[9] + 4);
+                    r[9] = Shift(r[9], 2);
+                    Store(r[9] + r[7], r[side == 1 ? 6 : 4]);
+                    r[9] = Word(r[31] + 12);
+                    r[8] = Word(r[31] + 16);
+                    r[9] += r[11];
+                    if (side == 2)
+                        r[11] += 12;
+                    r[9] = Word(r[9] + 4 * side);
+                    r[9] = Shift(r[9], 3);
+                    r[9] += r[8];
+                    r[8] = Word(r[9] + 4);
+                    ++r[8];
+                    Store(r[9] + 4, r[8]);
+                }
+            } while (s.cr6.lt);
+        }
+        Prefix();
+        r[3] = 1;
+    }
     void Build() {
         auto &r = s.r;
         r[28] = r[4];
@@ -291,20 +451,24 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
         v.Initialize();
         return true;
     }
-    if (e != 0x82bbce58u)
+    if (e != 0x82bbce58u && e != 0x82bbd1e0u)
         return false;
+    const unsigned first = e == 0x82bbce58u ? 24u : 28u, frame = e == 0x82bbce58u ? 176u : 128u;
     auto &r = s.r;
     r[12] = s.lr;
-    s.lr = 0x82bbce60u;
-    for (unsigned i = 24; i < 32; ++i)
+    s.lr = e == 0x82bbce58u ? 0x82bbce60u : 0x82bbd1e8u;
+    for (unsigned i = first; i < 32; ++i)
         recovery_abi::WriteU64(m, Address(r[1] - 16 - 8 * (31 - i)), r[i]);
     m.WriteU32(Address(r[1] - 8), Address(r[12]));
     auto old = r[1];
-    r[1] -= 176;
+    r[1] -= frame;
     m.WriteU32(Address(r[1]), Address(old));
-    v.Build();
-    r[1] += 176;
-    for (unsigned i = 24; i < 32; ++i)
+    if (e == 0x82bbce58u)
+        v.Build();
+    else
+        v.Adjacency();
+    r[1] += frame;
+    for (unsigned i = first; i < 32; ++i)
         r[i] = recovery_abi::ReadU64(m, Address(r[1] - 16 - 8 * (31 - i)));
     r[12] = m.ReadU32(Address(r[1] - 8));
     s.lr = r[12];

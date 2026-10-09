@@ -1,4 +1,5 @@
 #include "lo_semantics/crt_copy_full_context.h"
+#include "lo_semantics/crt_reader_chain61.h"
 #include "lo_semantics/mesh_edge_build61.h"
 #include "lo_semantics/recovery_abi.h"
 #include "object_sort_engine61_oracle_fixture.h"
@@ -86,6 +87,9 @@ void Lower(GuestAddress e, GuestMemory &m, Environment &env, Registers &s) {
     case 0x82bd2df0u:
         (void)crt_reader_bucket_sort61::Apply(e, m, d.engine.sort, s);
         break;
+    case 0x82b7bc40u:
+        crt_reader_chain61::ApplySupport_B7BC40(m, d.engine.sort.accepted, s);
+        break;
     case 0x82b7a0b0u:
         (void)crt_copy_full_context::Apply(e, m, s);
         break;
@@ -111,7 +115,7 @@ void Check(unsigned mode) {
                 m.WriteU32(Owner + 4 * i, 0xa5a5a5a5);
         unsigned tri[]{0, 1, 2, 2, 1, 3};
         for (unsigned i = 0; i < 6; ++i)
-            if (mode == 1)
+            if ((mode == 1 || mode == 5))
                 m.WriteU16(Input + 2 * i, tri[i]);
             else
                 m.WriteU32(Input + 4 * i, tri[i]);
@@ -122,8 +126,8 @@ void Check(unsigned mode) {
     auto s = sort_engine61_oracle::Initial(0);
     s.r[3] = Owner;
     s.r[4] = 2;
-    s.r[5] = mode == 1 ? 0 : Input;
-    s.r[6] = mode == 1 ? Input : 0;
+    s.r[5] = (mode == 1 || mode == 5) ? 0 : Input;
+    s.r[6] = (mode == 1 || mode == 5) ? Input : 0;
     auto om = before.Memory();
     original = &expected;
     memory = &om;
@@ -131,12 +135,17 @@ void Check(unsigned mode) {
     crt_full_oracle::ToPpc(c, s);
     if (mode == 3)
         __imp__sub_82BBD4C0(c, before.Bytes());
+    else if (mode >= 4)
+        __imp__sub_82BBD1E0(c, before.Bytes());
     else
         __imp__sub_82BBCE58(c, before.Bytes());
     original = nullptr;
     memory = nullptr;
     auto m = after.Memory();
-    if (!mesh_edge_build61::Apply(mode == 3 ? 0x82bbd4c0u : 0x82bbce58u, m, actual.Deps(), s) ||
+    if (!mesh_edge_build61::Apply(mode == 3   ? 0x82bbd4c0u
+                                  : mode >= 4 ? 0x82bbd1e0u
+                                              : 0x82bbce58u,
+                                  m, actual.Deps(), s) ||
         crt_full_oracle::Snapshot(crt_full_oracle::FromPpc(c)) != crt_full_oracle::Snapshot(s) ||
         !before.EqualCommitted(after) || expected.guest.events != actual.guest.events ||
         expected.guest.live != actual.guest.live)
@@ -155,7 +164,8 @@ void Check(unsigned mode) {
         return;
     }
     if (s.r[3] != 1 || m.ReadU32(Owner) != 5 || m.ReadU32(Owner + 8) != 2 ||
-        actual.guest.live.size() != 2 || !actual.guest.live.contains(m.ReadU32(Owner + 4)) ||
+        actual.guest.live.size() != (mode >= 4 ? 4u : 2u) ||
+        !actual.guest.live.contains(m.ReadU32(Owner + 4)) ||
         !actual.guest.live.contains(m.ReadU32(Owner + 12)))
         throw std::runtime_error("edge counts/ownership");
     unsigned pairs[]{0, 1, 0, 2, 1, 2, 1, 3, 2, 3};
@@ -166,6 +176,19 @@ void Check(unsigned mode) {
     for (unsigned i = 0; i < 6; ++i)
         if (m.ReadU32(m.ReadU32(Owner + 12) + 4 * i) != map[i])
             throw std::runtime_error("triangle side mapping");
+    if (mode >= 4) {
+        unsigned counts[]{1, 1, 2, 1, 1}, offsets[]{0, 1, 2, 4, 5}, triangles[]{0, 0, 0, 1, 1, 1};
+        auto records = m.ReadU32(Owner + 16), items = m.ReadU32(Owner + 20);
+        if (!actual.guest.live.contains(records) || !actual.guest.live.contains(items))
+            throw std::runtime_error("edge adjacency ownership");
+        for (unsigned i = 0; i < 5; ++i)
+            if (m.ReadU16(records + 8 * i + 2) != counts[i] ||
+                m.ReadU32(records + 8 * i + 4) != offsets[i])
+                throw std::runtime_error("edge degree/prefix records");
+        for (unsigned i = 0; i < 6; ++i)
+            if (m.ReadU32(items + 4 * i) != triangles[i])
+                throw std::runtime_error("edge incident triangle list");
+    }
 }
 } // namespace mesh_edge_oracle
 void MeshEdgeIndirect(std::uint32_t e, PPCContext &c, std::uint8_t *) {
@@ -178,17 +201,17 @@ void MeshEdgeLower(std::uint32_t e, PPCContext &c, std::uint8_t *) {
     mesh_edge_oracle::Lower(e, *mesh_edge_oracle::memory, *mesh_edge_oracle::original, s);
     crt_full_oracle::ToPpc(c, s);
 }
-void MeshEdgeSave(PPCContext &c, std::uint8_t *) {
+void MeshEdgeSave(unsigned first, PPCContext &c, std::uint8_t *) {
     auto s = crt_full_oracle::FromPpc(c);
     auto &m = *mesh_edge_oracle::memory;
-    for (unsigned i = 24; i < 32; ++i)
+    for (unsigned i = first; i < 32; ++i)
         recovery_abi::WriteU64(m, std::uint32_t(s.r[1] - 16 - 8 * (31 - i)), s.r[i]);
     m.WriteU32(std::uint32_t(s.r[1] - 8), std::uint32_t(s.r[12]));
 }
-void MeshEdgeRestore(PPCContext &c, std::uint8_t *) {
+void MeshEdgeRestore(unsigned first, PPCContext &c, std::uint8_t *) {
     auto s = crt_full_oracle::FromPpc(c);
     auto &m = *mesh_edge_oracle::memory;
-    for (unsigned i = 24; i < 32; ++i)
+    for (unsigned i = first; i < 32; ++i)
         s.r[i] = recovery_abi::ReadU64(m, std::uint32_t(s.r[1] - 16 - 8 * (31 - i)));
     s.r[12] = m.ReadU32(std::uint32_t(s.r[1] - 8));
     s.lr = s.r[12];
@@ -196,9 +219,9 @@ void MeshEdgeRestore(PPCContext &c, std::uint8_t *) {
 }
 int main() {
     try {
-        for (unsigned i = 0; i < 4; ++i)
+        for (unsigned i = 0; i < 6; ++i)
             mesh_edge_oracle::Check(i);
-        std::puts("PASS mesh-edge-build61 4 original-upper/shared-concrete-sort cases");
+        std::puts("PASS mesh-edge-build61 6 original-chain/shared-concrete-sort cases");
         return 0;
     } catch (const std::exception &e) {
         std::fprintf(stderr, "%s\n", e.what());
