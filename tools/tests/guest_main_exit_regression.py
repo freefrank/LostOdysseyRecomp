@@ -47,6 +47,7 @@ HARNESS = r'''
 #define LOG_INFO(...) ((void)0)
 #define LOG_NOTICE(...) ((void)0)
 #define LOG_ERROR(...) ((void)0)
+#define LOG_NOTICE(...) ((void)0)
 template <typename T> using be = T;
 static const char* mode = nullptr;
 static std::thread::id gpuOwner;
