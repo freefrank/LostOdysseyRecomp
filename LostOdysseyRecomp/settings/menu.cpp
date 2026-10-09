@@ -1,4 +1,4 @@
-#include <gpu/taa_collection.h>
+#include <os/log_collection.h>
 #include "menu.h"
 #include "menu_render.h"
 #include "menu_assets.h"
@@ -1019,7 +1019,11 @@ void Publish(uint8_t *base, uint32_t config)
         for (const auto name : GameLanguageNames) gameLanguages.emplace_back(name);
         addChoices(L"Game language", L"遊戲語言", std::move(gameLanguages), GameLanguageIndex(edit.gameLanguage));
         addChoices(L"Automatic updates", L"自動更新", onOff(), edit.automaticUpdates ? 0 : 1);
-        next.rows.push_back({gpu::taa_collection::Label(edit.uiLanguage), gpu::taa_collection::Enabled() ? Tr(L"On", L"開") : Tr(L"Off", L"關"), true, {}, 0});
+        addChoices(L"Debug log", L"除錯日誌", onOff(), edit.debugLog ? 0 : 1);
+        const bool logUpload = os::log_collection::Supported();
+        next.rows.push_back({os::log_collection::Label(edit.uiLanguage),
+            !logUpload ? Tr(L"Windows only", L"僅限 Windows") : os::log_collection::Enabled() ? Tr(L"On", L"開") : Tr(L"Off", L"關"),
+            logUpload, {}, 0});
         addAction(L"Import discs & DLC", L"匯入光碟與 DLC", Tr(L"Open", L"開啟"));
         addAction(L"Save settings", L"儲存設定", Tr(L"Save", L"儲存"));
     }
@@ -1056,6 +1060,9 @@ void Publish(uint8_t *base, uint32_t config)
     if (tab == 0 && row == GamePromptRow)
         next.help = Tr(L"Which button icons the game shows. Auto follows the controller you use.",
                        L"遊戲顯示的按鍵圖示。自動會跟隨你使用的控制器。");
+    if (tab == 3 && row == SystemDebugLogRow)
+        next.help = Tr(L"Writes every message to the log in logs/. Turn it on when you report a problem. Applies when saved.",
+                       L"把所有訊息寫入 logs/ 中的日誌。回報問題時請開啟。儲存後生效。");
     if (tab == 3 && row == SystemImportRow)
         next.help = Tr(L"Close the game to import selected discs or DLC again. Other content and saves stay intact.",
                        L"關閉遊戲並重新匯入所選光碟或 DLC；其他內容與存檔保留。");
@@ -1328,8 +1335,8 @@ void Publish(uint8_t *base, uint32_t config)
         next.dialogSelection = restartChoice;
     }
     if (collectionPrompt) {
-        next.dialogTitle = gpu::taa_collection::Label(edit.uiLanguage);
-        next.dialogMessage = gpu::taa_collection::Message(edit.uiLanguage);
+        next.dialogTitle = os::log_collection::Label(edit.uiLanguage);
+        next.dialogMessage = os::log_collection::Message(edit.uiLanguage);
         next.dialogChoices = {Tr(L"Yes", L"是"), Tr(L"No", L"否")};
         next.dialogSelection = collectionChoice;
     }
@@ -1782,7 +1789,7 @@ PPC_FUNC(sub_822F19B0)
         calibrationNumber.clear();
         calibrationClick = -1;
         calibrationDragNits = -1;
-        collectionPrompt = gpu::taa_collection::Consent() < 0;
+        collectionPrompt = os::log_collection::Supported() && os::log_collection::Consent() < 0;
         collectionChoice = 1;
         pending = 0;
         waitForRelease = true;
@@ -1900,7 +1907,7 @@ PPC_FUNC(sub_822F19B0)
         if (input & 3) collectionChoice = 1 - collectionChoice;
         if (input & 0x2000) collectionChoice = 1;
         if (input & 0x3000) {
-            if (gpu::taa_collection::SetConsent(collectionChoice == 0)) { collectionPrompt = false; status.clear(); }
+            if (os::log_collection::SetConsent(collectionChoice == 0)) { collectionPrompt = false; status.clear(); }
             else status = Tr(L"Settings could not be saved.", L"無法儲存設定。");
         }
         Publish(base, config);
@@ -2390,9 +2397,9 @@ PPC_FUNC(sub_822F19B0)
             input &= ~0x1000;
         }
     }
-    if (tab == 3 && row == SystemCollectionRow && (input & 0x000c)) {
-        if (gpu::taa_collection::Enabled()) {
-            if (!gpu::taa_collection::SetConsent(false)) status = Tr(L"Settings could not be saved.", L"無法儲存設定。");
+    if (tab == 3 && row == SystemCollectionRow && (input & 0x000c) && os::log_collection::Supported()) {
+        if (os::log_collection::Enabled()) {
+            if (!os::log_collection::SetConsent(false)) status = Tr(L"Settings could not be saved.", L"無法儲存設定。");
         } else { collectionPrompt = true; collectionChoice = 1; }
         Publish(base, config); return;
     }
@@ -2651,6 +2658,8 @@ PPC_FUNC(sub_822F19B0)
                 edit.gameLanguage = GameLanguageIds[cycle(GameLanguageIndex(edit.gameLanguage), uint32_t(GameLanguageIds.size()))];
             if (row == SystemUpdatesRow)
                 edit.automaticUpdates = !edit.automaticUpdates;
+            if (row == SystemDebugLogRow)
+                edit.debugLog = !edit.debugLog;
         }
     }
     if (changed)
@@ -2706,6 +2715,7 @@ PPC_FUNC(sub_822F19B0)
         graphics.uiLanguage = previousDisplay.uiLanguage;
         graphics.gameLanguage = previousDisplay.gameLanguage;
         graphics.automaticUpdates = previousDisplay.automaticUpdates;
+        graphics.debugLog = previousDisplay.debugLog;
         if (graphics.frameGenerationProvider == framegen::Provider::Fsr || graphics.frameGenerationProvider == framegen::Provider::MetalFx)
             graphics.frameGenerationMultiplier = 2;
         if (!SaveConfig(graphics))
@@ -2716,6 +2726,7 @@ PPC_FUNC(sub_822F19B0)
             graphics.uiLanguage = edit.uiLanguage;
             graphics.gameLanguage = edit.gameLanguage;
             graphics.automaticUpdates = edit.automaticUpdates;
+            graphics.debugLog = edit.debugLog;
             edit = graphics;
             if (edit.width != previousDisplay.width || edit.height != previousDisplay.height ||
                 edit.windowMode != previousDisplay.windowMode || edit.displayName != previousDisplay.displayName ||
@@ -2736,6 +2747,7 @@ PPC_FUNC(sub_822F19B0)
         languages.uiLanguage = edit.uiLanguage;
         languages.gameLanguage = edit.gameLanguage;
         languages.automaticUpdates = edit.automaticUpdates;
+        languages.debugLog = edit.debugLog;
         const Config before = GetConfig();
         if (restart::Required(before, languages))
         {

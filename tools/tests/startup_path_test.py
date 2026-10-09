@@ -18,7 +18,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix='lo-startup-path-') as temporary:
         root = Path(temporary).resolve()
         print(f'Fixtures and logs: {root}')
-        env = dict(os.environ, LO_HEADLESS='1', LO_LOG_FILE='runtime.log')
+        env = dict(os.environ, LO_HEADLESS='1', LO_DEBUG_LOG='1', LO_LOG_FILE='runtime.log')
         for name in ('ascii', 'acute\u00b4game', 'prime\u2032game', '\u5b58\u6863 game'):
             directory = root / name
             game = directory / 'game' / 'disc1'

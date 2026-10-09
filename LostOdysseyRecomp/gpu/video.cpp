@@ -2352,7 +2352,7 @@ namespace gpu::video
                     const uint64_t nextEpoch = g_deviceEpoch.fetch_add(1, std::memory_order_acq_rel) + 1;
                     frame_plan::ResetSizing(nextEpoch);
                     const auto& description = g_device->getDescription();
-                    LOG_INFO("video device: backend={} name={} driver_raw={} vendor_enum={} type_enum={} reported_device_memory_bytes={}",
+                    LOG_NOTICE("video device: backend={} name={} driver_raw={} vendor_enum={} type_enum={} reported_device_memory_bytes={}",
                         backend::Name(candidate), description.name, description.driverVersion,
                         uint32_t(description.vendor), uint32_t(description.type), description.dedicatedVideoMemory);
                 }
@@ -2603,7 +2603,7 @@ namespace gpu::video
             }
 #endif
             PublishOwnedDeviceCapability();
-            LOG_INFO("video: {} on {}", backend::Name(*selection.selected), g_device->getDescription().name);
+            LOG_NOTICE("video: {} on {}", backend::Name(*selection.selected), g_device->getDescription().name);
         } else {
             LOG_ERROR("video: no usable backend; guest startup aborted: {}", selection.Describe());
 #if defined(__ANDROID__) && !defined(LO_VIDEO_SUBMISSION_UNIT)
@@ -2796,7 +2796,7 @@ namespace gpu::video
         renderer::WaitDebugCaptureArchive();
         LOG_INFO("video: shutdown stage=capture-archive complete");
         Shutdown(); // Failed native/SDK drains terminate with EXIT_FAILURE.
-        LOG_INFO("video: owner shutdown complete native_ngx_cleanup=complete streamline_cleanup=complete exit_code=0");
+        LOG_NOTICE("video: owner shutdown complete native_ngx_cleanup=complete streamline_cleanup=complete exit_code=0");
         os::shaderlog::CloseForExit();
         std::fflush(nullptr);
         std::_Exit(EXIT_SUCCESS);

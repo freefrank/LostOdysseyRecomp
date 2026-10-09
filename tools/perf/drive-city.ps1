@@ -44,6 +44,7 @@ $origPlayerSaves = Get-ChildItem $playerSave -Recurse -File -ErrorAction Silentl
 # Proven Continue load from encounter-animation.md, plus extra A for Last Saved Game.
 # Do not send Down: that opens 千年之梦. Last saved is user01 (second slot, city).
 $env:LO_BACKGROUND = '1'
+$env:LO_DEBUG_LOG = '1'
 $env:LO_AUDIO_MUTE = '1'
 $env:LO_RENDER_TIMING = '1'
 $env:LO_GPU_STATS = '1'

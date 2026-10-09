@@ -99,7 +99,6 @@ bool ShaderPreparationSkipped() { return skipped; }
 void SetShaderPreparationProgress(uint32_t,uint32_t,PreparationStage=PreparationStage::CachedShaders,
     PreparationUnit=PreparationUnit::Shaders) {}
 }
-namespace taa_collection { template<class... T> void ObserveProgram(T&&...) {} }
 struct Capture {template<class... T> void Observe(T&&...) {}};
 struct Device {
     bool fail=false,nullModule=false;size_t calls=0;
@@ -127,7 +126,6 @@ struct Host {
     struct ScopedTimer {ScopedTimer(uint64_t&,bool){}};
     void ResetTimers() {}
     static void CheckPreparationCancel() { video::PumpEvents(); if(video::ShaderPreparationSkipped()) throw xenos::preparation::Cancelled{}; }
-    void PreparePositionEvidence(Shader&,const uint32_t*,uint32_t,uint64_t) {}
     #include <gpu/shader/portable_shader_pack_renderer.inl>
 '''
 TAIL = r'''

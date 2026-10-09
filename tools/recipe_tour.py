@@ -74,7 +74,7 @@ class Game:
         self.log = r / "logs" / f"runtime-{self.index:02d}.log"
         env = {k: v for k, v in os.environ.items() if not k.startswith("LO_")}
         env.update(LO_AUDIO_MUTE="1", LO_BACKGROUND="1", LO_SHADER_PACK_DOWNLOAD="0", LO_TRACE_MAP_INFO="1",
-                   LO_PIPELINE_MISS_LOG="1", LO_LOG_FILE=p(self.log), LO_SHADER_CACHE_DIR=p(r / "shader-cache"),
+                   LO_PIPELINE_MISS_LOG="1", LO_DEBUG_LOG="1", LO_LOG_FILE=p(self.log), LO_SHADER_CACHE_DIR=p(r / "shader-cache"),
                    LO_AUTO_BUTTONS="s@120,a@240,a@360,a@480,a@700,a@900", LO_AUTO_PULSE="6",
                    LO_TEST_INPUT_FILE=p(r / "input.txt"), LO_TEST_INPUT_TICKS="1",
                    LO_DEBUG_BATTLE_FILE=p(r / "battle.txt"), LO_DIAG_MAPJUMP_COMMAND_FILE=p(r / "mapjump.txt"),

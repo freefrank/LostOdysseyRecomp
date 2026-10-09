@@ -131,6 +131,7 @@ class Run:
             "LO_BACKGROUND": "1", "LO_AUDIO_MUTE": "1", "LO_NO_UPDATE": "1",
             "LO_FRAME_TIMING": "1", "LO_RENDER_TIMING": "1",
             "LO_LOG_FILE": str(self.log),
+            "LO_DEBUG_LOG": "1",
             "LO_TEST_INPUT_FILE": str(self.input),
             "LO_SCREENSHOT_REQUEST": str(self.shot_request),
             "LO_SCREENSHOT_PATH": str(self.shots / "shot.ppm"),

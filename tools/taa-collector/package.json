@@ -4,11 +4,7 @@
   "type": "module",
   "scripts": {
     "test": "node --test worker.test.js",
-    "deploy": "wrangler deploy",
-    "test:temporal": "node --test temporal.test.js",
-    "test:shader-sources": "node --test shader-source.test.js",
-    "test:taa-bindings": "node --test taa-binding.test.js",
-    "test:collection-diagnostics": "node --test collection-diagnostics.test.js"
+    "deploy": "wrangler deploy"
   },
   "devDependencies": {
     "wrangler": "4.130.0"

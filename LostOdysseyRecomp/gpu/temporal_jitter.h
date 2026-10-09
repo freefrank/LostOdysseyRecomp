@@ -1,5 +1,9 @@
 #pragma once
 #include "temporal_scene.h"
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <iterator>
 
 namespace gpu::temporal
 {
@@ -39,6 +43,51 @@ enum class JitterRejection
 {
     None, Disabled, UnknownShader, IncompatibleViewport, MissingCamera,
     CameraMismatch, DepthMismatch, InvalidExtent, InvalidConstants, ShadowDepthMismatch
+};
+
+inline const char* JitterRejectionName(JitterRejection rejection)
+{
+    static constexpr const char* names[] = {
+        "none", "disabled", "unknown_shader", "incompatible_viewport", "missing_camera",
+        "camera_mismatch", "depth_mismatch", "invalid_extent", "invalid_constants", "shadow_depth_mismatch"};
+    const auto index = static_cast<size_t>(rejection);
+    return index < std::size(names) ? names[index] : "unknown";
+}
+
+// Remembers which known-scene VS/PS pairs were left unjittered, so the renderer
+// logs each pair and reason once. Fixed storage: no allocation on a draw, and
+// after MaxReports distinct entries every call returns false at once.
+class JitterMissLog
+{
+public:
+    static constexpr size_t MaxReports = 64;
+    bool Done() const { return count_ >= MaxReports; }
+    // True the first time this VS/PS/reason is seen.
+    bool First(uint64_t vs, uint64_t ps, JitterRejection rejection)
+    {
+        if (Done()) return false;
+        uint64_t h = (vs ^ (ps * 0x9e3779b97f4a7c15ull) ^ uint64_t(rejection)) * 0xc2b2ae3d27d4eb4full;
+        for (size_t i = size_t(h ^ (h >> 29)) & (TableSize - 1);; i = (i + 1) & (TableSize - 1)) {
+            auto& entry = table_[i];
+            if (!entry.used) {
+                entry = {vs, ps, rejection, true};
+                ++count_;
+                return true;
+            }
+            if (entry.vs == vs && entry.ps == ps && entry.rejection == rejection) return false;
+        }
+    }
+private:
+    // At most half full, so a probe ends quickly at a free slot.
+    static constexpr size_t TableSize = 2 * MaxReports;
+    struct Entry
+    {
+        uint64_t vs = 0, ps = 0;
+        JitterRejection rejection = JitterRejection::None;
+        bool used = false;
+    };
+    std::array<Entry, TableSize> table_{};
+    size_t count_ = 0;
 };
 
 inline bool IsSceneDepthSample(uint64_t frame, const SceneResolve* sceneDepth, const SceneResolve* sampledDepth)

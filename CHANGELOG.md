@@ -17,6 +17,8 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - The Settings menu now moves like the game's own menus: the cursor arrow slides between rows and sways while idle, the rows fade in one after another when it opens, prompts dim the screen behind them, and it fades out before closing (#151).
 - Mod authors can export the game's textures (PNG with their mod keys) and CG movies from their own game data with `--export-assets`, or from a new Mod Organizer 2 tool.
 - New Culling setting in Settings → Graphics, 0%–200%. 100% is the original. Lower values keep characters and objects at the screen edges visible until they are fully off screen; higher values hide them sooner (#342).
+- Optional diagnostics on Windows now send a short summary of the previous session's log (errors, crashes, hangs, rendering mismatches and map names) instead of TAA shader data. The game asks again before sending anything.
+- The log now keeps only notices, warnings and errors. Turn on Settings → System → Debug log for the full log.
 
 ### 简体中文
 
@@ -29,6 +31,8 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - 设置菜单的动画现在和游戏原版菜单一致：光标箭头在行间滑动、停住时左右轻摆，打开时各行依次淡入，弹出提示时背后画面变暗，关闭前先淡出（#151）。
 - Mod 作者可以用 `--export-assets` 从自己的游戏数据导出纹理（PNG，附 Mod key）和 CG 视频，也可以用新的 Mod Organizer 2 工具导出。
 - 设置 → 图形新增“剔除”，0%–200%。100% 为原版。调低后，画面边缘的角色和物体会一直显示到完全离开画面；调高则更早隐藏（#342）。
+- Windows 上的可选诊断改为发送上一次运行日志的摘要（错误、崩溃、卡死、渲染不匹配和地图名），不再发送 TAA 着色器数据。发送前会重新询问。
+- 日志默认只保留提示、警告和错误。需要完整日志时，在设置 → 系统打开“调试日志”。
 
 ## [v0.9.0](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.0) — 2026-10-08
 

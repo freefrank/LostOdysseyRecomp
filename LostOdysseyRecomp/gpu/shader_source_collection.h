@@ -2,26 +2,18 @@
 
 #include <cstddef>
 #include <array>
-#include <atomic>
 #include <cstdint>
 #include <cstring>
-#include <iomanip>
 #include <memory>
-#include <mutex>
-#include <sstream>
-#include <string>
-#include <string_view>
 #include <utility>
 #include <vector>
 
 namespace gpu::taa_collection::shader_sources {
 
 inline constexpr size_t MaxProgramBytes = 64 * 1024;
-inline constexpr size_t MaxRequestBytes = 256 * 1024;
 inline constexpr size_t MaxBatchPrograms = 32;
 inline constexpr size_t MaxTrackedPrograms = 8192;
 inline constexpr size_t MaxPendingBytes = 4 * 1024 * 1024;
-inline constexpr const char* Build = "0.5.0-shader-sources-1";
 
 using Key = std::pair<bool, uint64_t>; // Vertex/pixel stage and renderer byte FNV-1a.
 using Bytes = std::vector<uint8_t>;
@@ -35,73 +27,19 @@ struct Batch {
     std::vector<Program> programs;
 };
 
-inline std::string Base64(const Bytes& bytes) {
-    static constexpr char alphabet[] =
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    std::string result;
-    result.reserve(4 * ((bytes.size() + 2) / 3));
-    for (size_t i = 0; i < bytes.size(); i += 3) {
-        const uint32_t value = (uint32_t(bytes[i]) << 16) |
-            (i + 1 < bytes.size() ? uint32_t(bytes[i + 1]) << 8 : 0) |
-            (i + 2 < bytes.size() ? uint32_t(bytes[i + 2]) : 0);
-        result += alphabet[(value >> 18) & 63];
-        result += alphabet[(value >> 12) & 63];
-        result += i + 1 < bytes.size() ? alphabet[(value >> 6) & 63] : '=';
-        result += i + 2 < bytes.size() ? alphabet[value & 63] : '=';
-    }
-    return result;
-}
-
-// Device strings have already passed the collection allowlist. Called by the
-// uploader, never the render thread. No filesystem paths or compiled GPU blobs.
-inline std::string RequestStart(std::string_view backend, std::string_view gpu,
-    std::string_view driver) {
-    return "{\"schema\":1,\"build\":\"" + std::string(Build) + "\",\"backend\":\"" +
-        std::string(backend) + "\",\"gpu\":\"" + std::string(gpu) + "\",\"driver\":\"" +
-        std::string(driver) + "\",\"programs\":[";
-}
-
-inline std::string Request(std::string start, const Batch& batch) {
-    if (batch.programs.empty() || batch.programs.size() > MaxBatchPrograms) return {};
-    for (const auto& program : batch.programs) {
-        if (!program.bytes || program.bytes->empty() ||
-            program.bytes->size() > MaxProgramBytes || program.bytes->size() % 4) return {};
-        std::ostringstream record;
-        record << "{\"stage\":\"" << (program.key.first ? "vs" : "ps") <<
-            "\",\"hash\":\"" << std::hex << std::setfill('0') << std::setw(16) <<
-            program.key.second << "\",\"data\":\"" << Base64(*program.bytes) << "\"}";
-        if (&program != &batch.programs.front()) start += ',';
-        start += record.str();
-        if (start.size() + 2 > MaxRequestBytes) return {};
-    }
-    start += "]}";
-    return start;
-}
-
-// Synchronization belongs to taa_collection's mutex. Observe is called only
-// after try_lock. Initialization reserves the payload slab before rendering;
-// Observe performs no allocation, deallocation, hashing or I/O.
-// Pending source data is held until HTTP 200; acknowledged programs keep only
-// their small stage/hash key for this process. No disk acknowledgement cache.
+// Pending shader microcode for the off-thread position evidence analyzer
+// (position_evidence_collection.h), which owns synchronization. Initialization
+// reserves the payload slab before rendering; Observe performs no allocation,
+// deallocation, hashing or I/O. Acknowledged programs keep only their small
+// stage/hash key for this process.
 class Queue {
 public:
-    enum class Observation { Queued, Known, Invalid, Full, Disabled, Busy };
+    enum class Observation { Queued, Known, Invalid, Full };
     explicit Queue(size_t trackedLimit = MaxTrackedPrograms,
         size_t byteLimit = MaxPendingBytes) : trackedLimit_(trackedLimit), byteLimit_(byteLimit) {}
 
     void Initialize() {
         if (!storage_) storage_ = std::make_unique<uint8_t[]>(MaxPendingBytes);
-    }
-
-    Observation TryObserve(std::mutex& mutex, const std::atomic<int>& consent,
-        bool vertex, uint64_t hash, const uint32_t* words, size_t count) noexcept {
-        if (consent.load(std::memory_order_relaxed) != 1) return Observation::Disabled;
-        try {
-            std::unique_lock lock(mutex, std::try_to_lock);
-            if (!lock) return Observation::Busy;
-            if (consent.load(std::memory_order_relaxed) != 1) return Observation::Disabled;
-            return Observe(vertex, hash, words, count);
-        } catch (...) { return Observation::Busy; }
     }
 
     Observation Observe(bool vertex, uint64_t hash, const uint32_t* words, size_t count) {
@@ -127,20 +65,15 @@ public:
         return Observation::Queued;
     }
 
-    Batch Pending(size_t headerBytes) const {
+    // Copies up to MaxBatchPrograms pending programs; allocation happens only
+    // on the consumer thread.
+    Batch Pending() const {
         Batch batch{epoch_, {}};
-        if (headerBytes > MaxRequestBytes - 2) return batch;
-        size_t wireBytes = headerBytes + 2;
         for (const auto& program : programs_) {
             if (!program.size) continue;
-            // 64 covers the fixed JSON keys, 16 hash digits and separator.
-            const size_t recordBytes = 64 + 4 * ((program.size + 2) / 3);
-            if (recordBytes > MaxRequestBytes - wireBytes) continue;
-            // Allocation and serialization occur only on the uploader thread.
             const auto* first = storage_.get() + program.firstPage * PageBytes;
             batch.programs.push_back({program.key,
                 std::make_shared<Bytes>(first, first + program.size), program.token});
-            wireBytes += recordBytes;
             if (batch.programs.size() == MaxBatchPrograms) break;
         }
         return batch;
@@ -170,9 +103,6 @@ public:
     }
     size_t PendingBytes() const { return pendingBytes_; }
     size_t Tracked() const { return tracked_; }
-    size_t PendingCount() const noexcept {
-        size_t count=0;for(const auto& program:programs_)if(program.size)++count;return count;
-    }
     uint64_t Epoch() const { return epoch_; }
 
 private:

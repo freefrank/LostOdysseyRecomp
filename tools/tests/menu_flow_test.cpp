@@ -17,7 +17,8 @@ inline std::optional<gpu::backend::Backend> SelectedBackend() { return gpu::back
 }
 #include <kernel/io/file_system.h>
 inline std::filesystem::path FileSystem::GetGameRoot() { return {}; }
-namespace gpu::taa_collection {
+namespace os::log_collection {
+inline bool Supported() { return true; }
 inline const wchar_t* Label(uint32_t) { return L"Collection"; }
 inline const wchar_t* Message(uint32_t) { return L"Message"; }
 inline bool Enabled() { return false; }

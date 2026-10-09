@@ -100,7 +100,8 @@ namespace gpu::frame_plan {
 DlssEffectSnapshot CurrentDlssEffect(){return {};}
 std::optional<UpscalerExecutionObservation> CurrentUpscalerExecution(){return {};}
 }
-namespace gpu::taa_collection {
+namespace os::log_collection {
+bool Supported(){return true;}
 const wchar_t* Label(uint32_t){return L"Collection";}
 const wchar_t* Message(uint32_t){return L"Message";}
 int Consent(){return 0;} bool Enabled(){return false;}

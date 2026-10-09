@@ -93,7 +93,6 @@ void ReportDlssExecution(const DlssExecutionObservation& observation) {
     if (fixture::statusPlanner) fixture::statusPlanner->ReportExecution(observation);
 }
 }
-namespace gpu::taa_collection { bool Enabled() { return false; } }
 // Only the resolve's swap-red/blue MMIO bit is used by the new asset-free case.
 // Register setup is synthetic; actual resolve/copy and handoff code is unchanged.
 namespace gpu {

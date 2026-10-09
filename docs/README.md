@@ -60,7 +60,7 @@ Use the [tool catalog](../tools/README.md) to choose a tool and check its side e
 | Performance | [Assembly profiler](../tools/asm-profiler/README.md) / [中文](../tools/asm-profiler/README.zh-CN.md), [City capture](../tools/perf/README.md) |
 | Rendering and resources | [F1 analysis](../tools/capture_analysis/README.md), [Shader analysis](../tools/shader_analysis/README.md), [UI export](../tools/ui_assets/README.md) |
 | Reverse engineering | [Ghidra](../tools/ghidra/README.md), [Issue #12 diagnostics](../tools/diagnostics/issue12/README.md) |
-| Automated collection | [TAA collector](../tools/taa-collector/README.md), [Private feedback archive](../tools/feedback_archive/README.md) |
+| Automated collection | [Log collector](../tools/taa-collector/README.md), [Private feedback archive](../tools/feedback_archive/README.md) |
 | Feedback workflow | [Triage skill](../tools/feedback_archive/skills/lo-feedback-triage/SKILL.md), [Review rules](../tools/feedback_archive/skills/lo-feedback-triage/references/review-rules.md), [Compact diagnostics](../tools/feedback_archive/skills/lo-feedback-triage/references/compact-diagnostics.md) |
 | OpenCode workflow | [Setup](../tools/opencode/README.md), [Render skill](../tools/opencode/skills/lo-render-flicker/SKILL.md), [Investigator](../tools/opencode/agents/lo-render-investigator.md), [Fixer](../tools/opencode/agents/lo-render-fixer.md), [Reviewer](../tools/opencode/agents/lo-render-reviewer.md) |
 | Focused fixtures | [Test catalog](../tools/tests/README.md), [Controller atlas](../tools/tests/controller_atlas/README.md), [Streamline probe](../tools/tests/streamline_fg/README.md) |

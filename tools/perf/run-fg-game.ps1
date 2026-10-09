@@ -124,6 +124,7 @@ if ($CaptureScreenshots) {
     $start.Environment['LO_SCREENSHOT_PATH'] = Join-Path $run 'scene.ppm'
 }
 $start.Environment['LO_LOG_FILE'] = Join-Path $run 'runtime.log'
+$start.Environment['LO_DEBUG_LOG'] = '1'
 $start.Environment['LO_SHADER_CACHE_DIR'] = Join-Path $run 'shader-cache'
 $start.Environment['LO_AUTO_BUTTONS'] = 's@120,a@240,a@360,a@480,a@700,a@900'
 $start.Environment['LO_AUTO_PULSE'] = '6'

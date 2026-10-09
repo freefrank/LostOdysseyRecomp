@@ -120,6 +120,7 @@ struct Config
     uint32_t buttonPrompts = 0; // Button icons: 0 Auto (last active controller), 1 Xbox, 2 PlayStation. Applied live.
     bool fxaa = false; // Legacy serialized mirror; antialiasing is authoritative.
     bool automaticUpdates = true;
+    bool debugLog = false; // Writes info and kernel lines to the runtime log. Applied live.
     uint32_t audioOutput = AudioOutputStereo; // Applied live; saved by SaveAudioOutput.
     bool skipShaderPrebuild = false;
     bool saveAnywhere = false; // Debug-only preference; defaults off for existing profiles.

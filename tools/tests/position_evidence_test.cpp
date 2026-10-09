@@ -1,5 +1,4 @@
-#include "../../LostOdysseyRecomp/gpu/temporal_evidence.h"
-#include "../../LostOdysseyRecomp/gpu/taa_collection_format.h"
+#include "../../LostOdysseyRecomp/gpu/shader/position_evidence.h"
 #include <fstream>
 #include <iostream>
 #include <iterator>
@@ -20,13 +19,6 @@ std::string Matrix(int slot=7) {
         "xePV.xyzw = r4.xxxx * XeConst("+std::to_string(slot)+").xyzw + r0.xyzw;\noPos.xyzw = xePV.xyzw;\n";
 }
 int main(int argc,char** argv) {
-    if(argc==3 && std::string_view(argv[1])=="--fixture") {
-        const auto p=Analyze(Wrap(Matrix()));
-        std::ofstream out(argv[2]);
-        out<<gpu::taa_collection::RequestStart("vulkan","Position Evidence Fixture","0")<<
-            gpu::taa_collection::RecordJson(0xe8ec18f1d3eac4df,0x9f93020766683e78,3840,2160,-1,20,27,2,44,p,31)<<"]}";
-        return out.good()?0:1;
-    }
     if(argc>1) {
         for(int i=1;i<argc;++i) {
             std::ifstream f(argv[i],std::ios::binary);if(!f)throw std::runtime_error("missing input");
@@ -54,20 +46,5 @@ int main(int argc,char** argv) {
     Check(Analyze(Wrap("oPos.xyzw = rcp(r4.xyzw);\n")).kind==0,"nonlinear output");
     Check(Analyze(Wrap("oPos.xyzw = somethingUnknown(r4);\n")).kind==0,"unsupported output");
     Check(Analyze("other translator dialect").kind==0,"dialect boundary");
-    std::array<uint32_t,1024> constants{};gpu::temporal::SceneAnchor anchor;
-    for(unsigned i=0;i<16;++i)anchor.vpBits[i]=constants[7*4+i]=std::bit_cast<uint32_t>(float(i+1));
-    anchor.viewport={0,0,3840,2160};anchor.depthAllocation=42;
-    const auto proof=Analyze(Wrap(Matrix()));
-    using gpu::temporal::PositionGuards;
-    Check(PositionGuards(proof,true,&anchor,42,anchor.viewport,constants.data())==31,"independent guards all match");
-    Check(!(PositionGuards(proof,true,&anchor,99,anchor.viewport,constants.data())&8),"depth mismatch");
-    auto vp=anchor.viewport;vp.x=1;
-    Check(!(PositionGuards(proof,true,&anchor,42,vp,constants.data())&4),"full viewport differs despite compatible flag");
-    constants[28]^=1;
-    Check(!(PositionGuards(proof,true,&anchor,42,anchor.viewport,constants.data())&2),"bitwise camera mismatch");
-    constants[28]=0x7fc00000;
-    Check(!(PositionGuards(proof,true,&anchor,42,anchor.viewport,constants.data())&16),"nonfinite matrix");
-    const auto noProof=Analyze(Wrap("oPos.xyzw = r4.xyzw;\n"));
-    Check(!(PositionGuards(noProof,true,&anchor,42,anchor.viewport,constants.data())&2),"residual candidate not position proof");
-    std::cout<<checks<<" position evidence and independent-guard checks passed\n";
+    std::cout<<checks<<" position evidence checks passed\n";
 }
