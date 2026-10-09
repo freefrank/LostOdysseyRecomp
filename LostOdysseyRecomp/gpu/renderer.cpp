@@ -7478,7 +7478,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         {
                             HostTexture* result = tex.get();
                             textures.emplace(key, std::move(tex));
-                            return SelectControllerAtlas(result, bindingInfo, bindingEpoch);
+                            return SelectControllerAtlas(result, bindingInfo);
                         }
                         textureReplacementFailures.insert(fingerprint);
                     }
