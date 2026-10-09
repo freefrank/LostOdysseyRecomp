@@ -1,0 +1,43 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Complete original box merge and indexed box reduction; no original body published.",
+  "entries": [
+    {
+      "address": "82BDDE70",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 34324,
+      "instruction_count": 37,
+      "body_sha256": "3138d49dfb6bb7fcc03cf56ef88d2ace0fb8a5b093396208b76eca6d3ae5c7ac",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD8EE0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 22436,
+      "instruction_count": 49,
+      "body_sha256": "89571f2a6a8144732ecbb134814e82f5cd5908eb96546bf8d48ac97e78a70d6f",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BDDE70",
+      "82BD8EE0"
+    ],
+    "header": "include/lo_semantics/tree_box_bounds61.h",
+    "source": "src/tree_box_bounds61.cpp",
+    "oracle": "tests/tree_box_bounds61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 4,
+    "library_validated": true,
+    "case_scope": "Zero-count reduction, single box, two-box reduction and direct box merge. Complete original caller and lower bodies are composed together; Full72/RAM/host CSR and independent finite expected bounds agree. No mocked algorithm lower, allocation or dynamic guest callback. Nonfinite/invalid-address/partial-alias matrix and gameplay untested.",
+    "platform": "Linux x64 Clang 19.1.7; pinned regenerated original bodies with mmap guest window",
+    "mapping_limit": "Historical catalog membership unverified; no additional baseline mapping credit."
+  }
+}

@@ -21,8 +21,15 @@ comparisons pass Full72/RAM/host CSR, including output overlapping the input
 box. All six input loads precede writes; separate binary32 arithmetic stages
 and borrowed-buffer ownership are explicit. The complete library builds.
 
-Next: recover unresolved concrete second-tree bounds/split targets and
-strategy binding from their pinned original bodies. BD5910's host FP exception
+Directly recovered `tree_box_bounds61` (BDDE70/BD8EE0): merge two min/max
+boxes and reduce an indexed box selection for the second-tree bounds callback.
+Four genuine composed-original cases pass Full72/RAM/host CSR and independent
+finite results. The lower merge is complete, with no algorithm stub. Empty
+selection preserves output; merge reads before writes, while the first-box
+copy retains original coordinate-by-coordinate order. Complete library builds.
+
+Next: recover unresolved concrete split targets and strategy binding from their
+pinned original bodies. BD5910's host FP exception
 flag difference remains an independent unresolved draft.
 
 ## Independent corpus continuation — 2026-10-09

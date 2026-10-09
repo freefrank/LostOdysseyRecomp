@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "tree-box-bounds61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/tree_box_bounds61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/tree_box_bounds61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nvoid BoxBoundsSave(PPCContext&,std::uint8_t*);\nvoid BoxBoundsRestore(PPCContext&,std::uint8_t*);\n#define __savegprlr_28(c,b) BoxBoundsSave(c,b)\n#define __restgprlr_28(c,b) BoxBoundsRestore(c,b)\n#define sub_82BDDE70 __imp__sub_82BDDE70\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/tree_box_bounds61.cpp"
+      ]
+    }
+  ]
+}
