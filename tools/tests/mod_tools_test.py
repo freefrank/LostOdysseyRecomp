@@ -117,6 +117,32 @@ class ModToolsTest(unittest.TestCase):
         self.assertEqual(json.loads(output.read_text())["images"][0]["key"], KEY)
         self.assertEqual(mod.pack(output, self.root / "initialized.zip", "standalone"), 1)
 
+    def test_init_from_export_index(self):
+        textures = self.root / "export" / "textures"
+        atlas_key = "bin/xenon/loc/int/menu/rpmenurescommon_int.xxx#5:UI_MAIN_00"
+        (textures / "pkg").mkdir(parents=True)
+        Image.new("RGBA", (512, 1024), (1, 2, 3, 4)).save(textures / "pkg" / "UI_MAIN_00.5.png")
+        Image.new("RGBA", (2, 1)).save(textures / "pkg" / "Icon_Page_0.21.png")
+        index = textures / "index.csv"
+        index.write_text("key,file,width,height,format\n"
+                         f"{atlas_key},pkg/UI_MAIN_00.5.png,512,1024,DXT5\n"
+                         f"{KEY},pkg/Icon_Page_0.21.png,2,1,A8R8G8B8\n", encoding="utf-8")
+        output = self.root / "from-export" / "mod.json"
+        args = ["init", "--export-index", str(index), "--id", "export", "--output", str(output)]
+        self.assertEqual(mod.main(args + ["--object", "UI_MAIN_00"]), 0)
+        art = output.parent / "art" / "UI_MAIN_00.png"
+        self.assertEqual(art.read_bytes(), (textures / "pkg" / "UI_MAIN_00.5.png").read_bytes())
+        image = json.loads(output.read_text())["images"][0]
+        self.assertEqual((image["key"], image["source"], image["width"], image["height"]),
+                         (atlas_key, "art/UI_MAIN_00.png", 512, 1024))
+        self.assertEqual(mod.main(args + ["--object", "UI_MAIN_00"]), 2)  # Never overwrites.
+        other = self.root / "other" / "mod.json"
+        args[-1] = str(other)
+        self.assertEqual(mod.main(args + ["--object", "Icon_Page_0"]), 2)  # No runtime consumer.
+        self.assertFalse((other.parent / "art").exists())
+        self.assertEqual(mod.main(args + ["--object", "Icon_Page_0", "--allow-unwired"]), 0)
+        self.assertEqual(mod.main(args + ["--object", "Missing"]), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

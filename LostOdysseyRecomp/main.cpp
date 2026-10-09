@@ -36,6 +36,7 @@
 #include "version.h"
 #include "install/host.h"
 #include "modding/mod_api.h"
+#include "modding/asset_export.h"
 
 #ifdef _WIN32
 #include <timeapi.h>
@@ -264,6 +265,13 @@ int main(int argc, char* argv[])
     }
 #endif
     os::user_paths::Initialize(executableDirectory);
+#if !LO_PLATFORM_ANDROID
+    // --export-assets copies game files for mod authors, then exits. It runs
+    // before the working-directory change (relative output folders), logs,
+    // update check, mods, installer, window and GPU device.
+    if (const auto exportRequest = modding::asset_export::ParseArguments(argc, argv))
+        return modding::asset_export::Run(*exportRequest, FindGameRoot(executableDirectory, explicitGamePath).root);
+#endif
     // Direct launches keep all portable data beside the executable. Explicit
     // --game launches retain their caller's working directory for isolated tests.
     if(!explicitGame && os::user_paths::UsePortableLayout()) {

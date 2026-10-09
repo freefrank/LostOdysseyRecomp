@@ -1,5 +1,6 @@
 #include "menu_assets.h"
 #include <modding/image_mod.h>
+#include <modding/xenos_texture.h>
 #include <gpu/shader/cpx_decode.h>
 #include <lzokay.hpp>
 #include <algorithm>
@@ -112,48 +113,6 @@ struct Package
         throw std::runtime_error("menu property count");
     }
 };
-size_t TiledOffset(uint32_t x, uint32_t y, uint32_t pitch)
-{
-    // Same Xenos 2D addressing as gpu/video.cpp; pitch is in 16-byte BC3 blocks.
-    const uint32_t outer = (((y >> 5) * (pitch >> 5)) + (x >> 5)) << 6;
-    const uint32_t inner = (((y >> 1) & 7) << 3) | (x & 7);
-    const uint32_t v = (outer | inner) << 4;
-    const uint32_t bank = (y >> 4) & 1, pipe = ((x >> 3) & 3) ^ (((y >> 3) & 1) << 1);
-    return ((y & 1) << 4) | (pipe << 6) | (bank << 11) | (v & 15) |
-           (((v >> 4) & 1) << 5) | (((v >> 5) & 7) << 8) | ((v >> 8) << 12);
-}
-void Bc3(const uint8_t *b, Image &image, uint32_t x, uint32_t y)
-{
-    uint32_t alpha[8] = {b[0], b[1]};
-    if (alpha[0] > alpha[1])
-        for (uint32_t i = 1; i <= 6; ++i) alpha[i + 1] = ((7 - i) * alpha[0] + i * alpha[1]) / 7;
-    else
-    {
-        for (uint32_t i = 1; i <= 4; ++i) alpha[i + 1] = ((5 - i) * alpha[0] + i * alpha[1]) / 5;
-        alpha[6] = 0; alpha[7] = 255;
-    }
-    uint64_t abits = 0;
-    for (unsigned i = 0; i < 6; ++i) abits |= uint64_t(b[i + 2]) << (8 * i);
-    uint32_t colors[4][3]{};
-    for (unsigned i = 0; i < 2; ++i)
-    {
-        const auto c = uint32_t(b[8 + 2 * i]) | uint32_t(b[9 + 2 * i]) << 8;
-        const auto r = (c >> 11) & 31, g = (c >> 5) & 63, bl = c & 31;
-        colors[i][0] = (r << 3) | (r >> 2); colors[i][1] = (g << 2) | (g >> 4); colors[i][2] = (bl << 3) | (bl >> 2);
-    }
-    for (unsigned c = 0; c < 3; ++c)
-    {
-        colors[2][c] = (2 * colors[0][c] + colors[1][c]) / 3;
-        colors[3][c] = (colors[0][c] + 2 * colors[1][c]) / 3;
-    }
-    uint32_t cbits = uint32_t(b[12]) | uint32_t(b[13]) << 8 | uint32_t(b[14]) << 16 | uint32_t(b[15]) << 24;
-    for (unsigned i = 0; i < 16; ++i)
-    {
-        const auto *c = colors[(cbits >> (2 * i)) & 3];
-        image.pixels[size_t(y + i / 4) * image.width + x + i % 4] =
-            alpha[(abits >> (3 * i)) & 7] << 24 | c[0] << 16 | c[1] << 8 | c[2];
-    }
-}
 Image Texture(const Package &package, const Export &e, std::string_view packagePath)
 {
     auto object = package.Read(e); auto r = object.native;
@@ -199,11 +158,15 @@ Image Texture(const Package &package, const Export &e, std::string_view packageP
     for (uint32_t by = 0; by < uint32_t(height) / 4; ++by)
         for (uint32_t bx = 0; bx < uint32_t(width) / 4; ++bx)
         {
-            const auto address = TiledOffset(bx, by, uint32_t(width) / 4);
+            // Pitch in 16-byte BC3 blocks; DXT data is 8in16 endian.
+            const auto address = modding::xenos_texture::TiledOffset2D(bx, by, uint32_t(width) / 4, 4);
             Check(address <= raw.size() && 16 <= raw.size() - address);
             uint8_t block[16];
             for (unsigned i = 0; i < 16; ++i) block[i] = raw[address + (i ^ 1)];
-            Bc3(block, image, bx * 4, by * 4);
+            uint32_t texels[16];
+            modding::xenos_texture::DecodeBcBlock(block, 3, texels);
+            for (unsigned i = 0; i < 16; ++i)
+                image.pixels[size_t(by * 4 + i / 4) * image.width + bx * 4 + i % 4] = texels[i];
         }
     return image;
 }

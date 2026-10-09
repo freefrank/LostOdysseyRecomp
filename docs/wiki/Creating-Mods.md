@@ -17,6 +17,31 @@ The catalog labels the native settings atlas `UI_MAIN_00` and a native font-page
 
 Select the package for the language used by the game. `int`, `chi`, `jpn`, `kor` and `sch` are separate localized package namespaces.
 
+## 1b. Export the original artwork (optional)
+
+The game can export its own textures and movies from your game data as a starting point. The export is for your reference only: it comes from your copy of the game and must not be redistributed or bundled in a mod.
+
+```sh
+LostOdysseyRecomp.exe --export-assets my-export --export-kinds textures,movies --export-filter UI_MAIN
+```
+
+The output folder must not exist or must be empty. `--export-kinds` (default: both) and `--export-filter` (only names containing the text) are optional. No window opens; the program prints progress and exits (exit code 1 on a fatal error). With [Mod Organizer 2](Mod-Organizer-2.md), the **Export Lost Odyssey assets** tool in the Tools menu does the same from a dialog.
+
+```text
+my-export/textures/<package path>/<object>.<export index>.png
+my-export/textures/index.csv        key,file,width,height,format
+my-export/movies/<name>.wmv         original videos, unchanged
+my-export/export-summary.txt
+```
+
+`index.csv` holds the mod key of every texture, so no catalog is needed. Select one texture and copy its PNG into a new mod:
+
+```sh
+python tools/modding/lo_mod.py init --export-index my-export/textures/index.csv --object UI_MAIN_00 --package bin/xenon/loc/int/menu/rpmenurescommon_int.xxx --id my-menu --output my-menu/mod.json
+```
+
+This writes `mod.json` and copies the PNG to `my-menu/art/<object>.png` (use `--image` to pick another path inside the mod folder). It never overwrites an existing file, and it follows the same consumer rule as `--database`: only confirmed consumers such as `UI_MAIN_00` unless you pass `--allow-unwired`. Edit the copied PNG, then continue with step 3. Today only the native settings-menu atlas and font pages are replaceable in-game; other exported textures are reference material until the general texture path exists.
+
 ## 2. Prepare artwork and a specification
 
 Copy your own edited PNG into an authoring directory, for example `my-menu/art/UI_MAIN_00.png`. The inventory contains metadata and dimensions only; it does not export artwork. Keep the original image dimensions, alpha channel and atlas layout. The native menu's verified `UI_MAIN_00` layout is 512x1024; larger atlases are rejected by this consumer.
