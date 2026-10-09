@@ -1,0 +1,45 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Complete genuine bodies pinned by UTF-8 LF SHA256 without final newline; no original code embedded.",
+  "entries": [
+    {
+      "address": "82B9DF18",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 7335,
+      "instruction_count": 33,
+      "body_sha256": "f1017b00e4237dab2b2870cc7582dd55e9dc5903407fe0a800f157ff12fd5d59",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82B9DFA0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 7414,
+      "instruction_count": 42,
+      "body_sha256": "cf1655e31d502f6aea3eaf1013892c1ae0fb9527bf8eaa701ee76abd64f159bf",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 4,
+    "library_validated": true,
+    "library": "PASS incremental complete Clang 19 CMake static library; existing unused-function warning exception retained.",
+    "platform": "Linux x64; Clang 19.1.7; genuine XEX regenerated with pinned XenonRecomp ddd128bc plus tracked patch; existing oracle guest-window allocation overlaid with mmap/mprotect only",
+    "mapping_credit": 0,
+    "mapping_limit": "Fixed historical catalog.sqlite unavailable; do not infer membership from regenerated sources. 82BB25D0 is explicitly external in prior handoff.",
+    "runtime_validated": false,
+    "complete": false,
+    "limits": "Selected finite inputs, ordinary RAM, Full72 state, callbacks and host CSR only. No Windows revalidation, nonfinite matrix, faults/MMIO, concurrency, runtime or gameplay acceptance.",
+    "case_scope": "Four actual-upper/shared-complete-lower cases: absent object, empty-object encoded size, exact-size mismatch and matching flatten/copy. Full72/RAM/callback/host CSR compared. Empty-object payload only; dispatcher/CRT lowers shared. Native file output, faults, concurrency and gameplay unverified."
+  },
+  "implementation": {
+    "entries": [
+      "82B9DF18",
+      "82B9DFA0"
+    ],
+    "header": "include/lo_semantics/object_sort_export61.h",
+    "source": "src/object_sort_export61.cpp",
+    "oracle": "tests/object_sort_export61_oracle.cpp"
+  }
+}

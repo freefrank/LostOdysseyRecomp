@@ -2,7 +2,8 @@
 
 ## Latest workspace checkpoint — 2026-10-09
 
-Last verified published HEAD: `ac384e8b930bcdb03125aae82afc7e71eec1901f`.
+Last verified published checkpoint: `c2d034056b8558bd2f12a86cdbe5d4ea4cb88f7b`.
+Separate unresolved paired traversal WIP: `44ea9971`.
 The current continuation adds seven selected-case validated units (23 cases):
 `crt_random_thread61` (4), `transform_owner_build61` (3),
 `geometry_quantized_unbounded61` (3), `geometry_tree_range61` (3),
@@ -30,6 +31,14 @@ zero. See per-unit drafts for untested branches, ownership/callback boundaries,
 and host-status comparison limits. No new tests beyond focused cases, runtime
 replacements or Rust port were introduced. Staged publication is authorized. The unresolved paired traversal is preserved
 in a separate WIP commit; the seven passing units form the following checkpoint.
+
+Additional validated export unit: `object_sort_export61` recovers B9DF18 and
+B9DFA0 (4 actual-upper/shared-lower cases, library PASS). The output descriptor
+borrows the destination and requires an exact encoded length; temporary writer
+storage is released on either path. Cases use an empty-object payload. A bounded
+search found no direct callers of these exports; further upward recovery needs
+virtual-table/function-pointer call-site evidence. Grid blob routes are in
+progress independently. Mapping credit and runtime additions remain zero.
 
 ## Active checkpoint — 2026-10-09, private inputs restored
 
