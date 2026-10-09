@@ -95,8 +95,12 @@ int wmain(int argc, wchar_t** argv)
     Check(settings::Read().audioOutput == settings::AudioOutputStereo, "missing audio output key keeps stereo");
     Write("audio_output=1\n");
     Check(settings::Read().audioOutput == settings::AudioOutputSurround, "5.1 audio output read from INI");
-    Write("audio_output=2\n");
-    Check(settings::Read().audioOutput == settings::AudioOutputStereo, "unknown audio output falls back to stereo");
+    Write("audio_output=2\naudio_matrix_phase=50\n");
+    Check(settings::Read().audioOutput == settings::AudioOutputMatrix && settings::Read().audioMatrixPhase == 45,
+          "matrix surround read from INI, phase rounded to a 15 degree step");
+    Write("audio_output=3\naudio_matrix_phase=400\n");
+    Check(settings::Read().audioOutput == settings::AudioOutputStereo && settings::Read().audioMatrixPhase == 180,
+          "unknown audio output falls back to stereo, phase capped at 180");
 
     Write("shadow_resolution=2\nambient_occlusion=1\n");
     Check(settings::Read().shadowResolution == 2 && settings::Read().ambientOcclusion == 1,

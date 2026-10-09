@@ -37,6 +37,7 @@ Config Validate(Config value)
     value.depthOfFieldPercent = std::min(value.depthOfFieldPercent, 100u);
     value.cullingPercent = std::min(value.cullingPercent, 200u);
     value.vibrationPercent = std::min(value.vibrationPercent, 100u);
+    value.audioMatrixPhase = std::min((value.audioMatrixPhase + 7) / 15 * 15, 180u);
     if (value.buttonPrompts > 2) value.buttonPrompts = 0;
     value.hdrPaperWhiteNits = std::clamp(value.hdrPaperWhiteNits, 80u, 400u);
     value.hdrPeakNits = std::clamp(value.hdrPeakNits, 80u, 10000u);
@@ -85,7 +86,7 @@ Config Validate(Config value)
         value.gameLanguage = 1;
     if (uint32_t(value.windowMode) > 1)
         value.windowMode = WindowMode::Windowed;
-    if (value.audioOutput > AudioOutputSurround)
+    if (value.audioOutput > AudioOutputMatrix)
         value.audioOutput = AudioOutputStereo;
     if (!gpu::backend::Known(value.graphicsBackend))
 #ifdef _WIN32
@@ -268,6 +269,8 @@ Config Read()
             value.fastForwardRate = number;
         else if (key == "audio_output")
             value.audioOutput = number;
+        else if (key == "audio_matrix_phase")
+            value.audioMatrixPhase = number;
         else if (key == "automatic_updates")
         {
             // Unknown values keep the safe package default (enabled).
@@ -402,6 +405,7 @@ static bool WriteConfig(const Config &value)
            << "\nfxaa=" << value.fxaa << "\nautomatic_updates=" << value.automaticUpdates
            << "\ndebug_log=" << (value.debugLog ? 1 : 0)
            << "\naudio_output=" << value.audioOutput
+           << "\naudio_matrix_phase=" << value.audioMatrixPhase
            << "\nskip_shader_prebuild=" << (value.skipShaderPrebuild ? 1 : 0)
            << "\nsave_anywhere=" << (value.saveAnywhere ? 1 : 0)
            << "\nno_random_encounters=" << (value.noRandomEncounters ? 1 : 0)
@@ -445,7 +449,7 @@ bool SaveAudioOutput(uint32_t output)
     std::lock_guard lock(mutex);
     // Merge with the persisted settings, not a pending graphics preview.
     auto persisted = Read();
-    persisted.audioOutput = output <= AudioOutputSurround ? output : AudioOutputStereo;
+    persisted.audioOutput = output <= AudioOutputMatrix ? output : AudioOutputStereo;
     if (!WriteConfig(persisted)) return false;
     Current().audioOutput = persisted.audioOutput;
     return true;

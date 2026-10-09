@@ -13,11 +13,18 @@
 
 namespace apu
 {
-    // surround: pass the guest's 5.1 channels through when the output device
-    // has at least six; otherwise the stereo downmix is used.
-    void Init(bool surround);
-    // Live output change; the driver thread reopens the device between frames.
-    void SetSurround(bool surround);
+    // Output layouts, numbered like settings::AudioOutput*. Surround passes
+    // the guest's 5.1 channels through when the output device mixes at least
+    // six, otherwise the stereo downmix is used; Matrix encodes 5.1 into
+    // stereo for a receiver's surround decoding (see matrix_surround.h).
+    enum class Output : uint32_t { Stereo, Surround, Matrix };
+    void Init(Output output);
+    // Live output change; a change to or from Surround reopens the device on
+    // the driver thread between frames.
+    void SetOutput(Output output);
+    // Matrix surround: phase of the surrounds against the fronts, 0-180
+    // degrees (90 is Pro Logic II). Applied from the next frame.
+    void SetMatrixPhase(uint32_t degrees);
     // Channels of the open device: 6 (5.1), 2 (stereo), or 0 without a device
     // or while a change is pending.
     uint32_t OutputChannels();

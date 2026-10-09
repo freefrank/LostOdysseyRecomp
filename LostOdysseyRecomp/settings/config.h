@@ -39,9 +39,11 @@ inline uint32_t GameLanguageIndex(uint32_t id)
 // Scaling filter: MetalFX spatial upscaling before presentation (macOS only).
 inline constexpr uint32_t ScalingMetalFx = 2;
 inline constexpr int InternalResolutionNative = 1;
-// Audio output: the stereo downmix, or the game's 5.1 channels passed through.
+// Audio output: the stereo downmix, the game's 5.1 channels passed through,
+// or 5.1 matrix-encoded into stereo for a receiver to decode.
 inline constexpr uint32_t AudioOutputStereo = 0;
 inline constexpr uint32_t AudioOutputSurround = 1;
+inline constexpr uint32_t AudioOutputMatrix = 2;
 // DLSS 5 Neural Rendering runs at most this many passes after DLSS.
 inline constexpr uint32_t DlssNeuralRenderingMaxPasses = 4;
 
@@ -122,6 +124,7 @@ struct Config
     bool automaticUpdates = true;
     bool debugLog = false; // Writes info and kernel lines to the runtime log. Applied live.
     uint32_t audioOutput = AudioOutputStereo; // Applied live; saved by SaveAudioOutput.
+    uint32_t audioMatrixPhase = 90; // Matrix surround phase shift, 0-180 degrees in 15 degree steps. Applied live.
     bool skipShaderPrebuild = false;
     bool saveAnywhere = false; // Debug-only preference; defaults off for existing profiles.
     bool noRandomEncounters = false; // Debug-only preference, persisted like saveAnywhere.
