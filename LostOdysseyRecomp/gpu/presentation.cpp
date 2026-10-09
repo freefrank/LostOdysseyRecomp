@@ -37,6 +37,8 @@ struct Presentation::Impl
     std::unique_ptr<RenderShader> overlayVs, overlayPs;
     std::unique_ptr<RenderPipeline> overlayPipeline;
     std::unique_ptr<RenderDescriptorSet> overlayDescriptors;
+    // A failed compile or pipeline creation is not retried until Init.
+    bool overlayFailed = false;
     std::unique_ptr<RenderSampler> sampler;
     struct Pass
     {
@@ -159,6 +161,7 @@ bool Presentation::Init(RenderDevice *device, RenderFormat swapchainFormat)
     p.uiPs.reset();
     p.uiLayout.reset();
     p.overlayPipeline.reset();
+    p.overlayFailed = false;
     const auto binaryFormat = p.vulkan ? xenos::ShaderBinaryFormat::Spirv : xenos::ShaderBinaryFormat::Dxil;
     const auto renderFormat = p.vulkan ? RenderShaderFormat::SPIRV : RenderShaderFormat::DXIL;
     const char *source = R"(
@@ -547,6 +550,8 @@ float4 pixelUi(float4 position : SV_Position) : SV_Target {
 bool Presentation::Impl::EnsureOverlayPipeline()
 {
     if (overlayPipeline) return true;
+    if (overlayFailed) return false;
+    overlayFailed = true;
     const char *overlaySource = R"(
 #ifdef __spirv__
 [[vk::binding(0,0)]]
@@ -595,7 +600,10 @@ float4 pixelOverlay(float4 position : SV_Position) : SV_Target {
                                               "vertexOverlay", renderFormat);
     auto pixelShader = device->createShader(psResult.bytecode.data(), psResult.bytecode.size(),
                                              "pixelOverlay", renderFormat);
-    if (!vertexShader || !pixelShader) return false;
+    if (!vertexShader || !pixelShader) {
+        LOG_WARNING("presentation overlay: shader creation failed");
+        return false;
+    }
     RenderDescriptorSetBuilder set;
     set.begin(); set.addTexture(0); set.end();
     RenderPipelineLayoutBuilder builder;
@@ -603,7 +611,10 @@ float4 pixelOverlay(float4 position : SV_Position) : SV_Target {
     builder.addDescriptorSet(set); builder.end();
     auto pipelineLayout = builder.create(device);
     auto descriptors = set.create(device);
-    if (!pipelineLayout || !descriptors) return false;
+    if (!pipelineLayout || !descriptors) {
+        LOG_WARNING("presentation overlay: layout creation failed");
+        return false;
+    }
     RenderGraphicsPipelineDesc desc;
     desc.pipelineLayout = pipelineLayout.get();
     desc.vertexShader = vertexShader.get();
@@ -613,13 +624,21 @@ float4 pixelOverlay(float4 position : SV_Position) : SV_Target {
     desc.renderTargetBlend[0] = RenderBlendDesc::AlphaBlend();
     desc.cullMode = RenderCullMode::NONE;
     auto pipeline = device->createGraphicsPipeline(desc);
-    if (!pipeline) return false;
+    if (!pipeline) {
+        LOG_WARNING("presentation overlay: pipeline creation failed");
+        return false;
+    }
     overlayVs = std::move(vertexShader);
     overlayPs = std::move(pixelShader);
     overlayLayout = std::move(pipelineLayout);
     overlayDescriptors = std::move(descriptors);
     overlayPipeline = std::move(pipeline);
+    overlayFailed = false;
     return true;
+}
+bool Presentation::PrewarmOverlay()
+{
+    return impl->initialized && impl->EnsureOverlayPipeline();
 }
 void Presentation::DrawOverlay(RenderCommandList *commands, RenderTexture *overlay, RenderTexture *target,
                                uint32_t x, uint32_t y, uint32_t width, uint32_t height,
@@ -932,6 +951,10 @@ std::shared_ptr<Presentation::UiCompositionLease> Presentation::DrawSeparatedUi(
 void Presentation::DrawOverlay(plume::RenderCommandList *, plume::RenderTexture *, plume::RenderTexture *,
                                uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, float)
 {
+}
+bool Presentation::PrewarmOverlay()
+{
+    return false;
 }
 plume::RenderTexture* Presentation::ComposeHdrGain(plume::RenderCommandList *, plume::RenderTexture *, plume::RenderTexture *,
                                                    uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t)

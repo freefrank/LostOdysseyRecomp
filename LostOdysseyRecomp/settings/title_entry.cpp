@@ -52,6 +52,19 @@ bool MenuIdle(uint8_t* base, uint32_t title)
 void OpenSettings(PPCContext& ctx, uint8_t* base, uint32_t title)
 {
     const PPCContext saved = ctx;
+    // Queue the title menu first: once Settings closes, New Game's wait state
+    // pops it. Without a slot, Settings stays closed.
+    ctx.r3.u64 = 4;
+    ctx.r4.u64 = title + 0x18;
+    __imp__sub_824C0658(ctx, base);
+    const uint32_t next = ctx.r3.u32;
+    ctx = saved;
+    if (!next)
+    {
+        LOG_WARNING("settings: title entry could not queue the title menu");
+        return;
+    }
+    PPC_STORE_U32(next, TitleMenuState);
     ctx.r3.u64 = SettingsMenu;
     ctx.r4.u64 = 0;
     ctx.f1.f64 = std::bit_cast<float>(PPC_LOAD_U32(CampOpenTime));
@@ -59,24 +72,14 @@ void OpenSettings(PPCContext& ctx, uint8_t* base, uint32_t title)
     ctx = saved;
     if (PPC_LOAD_U32(SettingsMenu + 4) == 1)
     {
+        // Drop the queued title menu again (the array's count).
+        PPC_STORE_U32(title + 0x1C, PPC_LOAD_U32(title + 0x1C) - 1);
         LOG_WARNING("settings: title entry could not open Settings");
         return;
     }
     settings::MarkTitleEntry();
-    // Back to the title menu once Settings closes, through New Game's wait state.
-    ctx.r3.u64 = 4;
-    ctx.r4.u64 = title + 0x18;
-    __imp__sub_824C0658(ctx, base);
-    const uint32_t next = ctx.r3.u32;
-    ctx = saved;
-    if (next)
-    {
-        PPC_STORE_U32(next, TitleMenuState);
-        PPC_STORE_U32(title + 0x14, WaitForSettingsState);
-        entered = true;
-    }
-    else
-        LOG_WARNING("settings: title entry could not queue the title menu; it stays in state {}", TitleMenuState);
+    PPC_STORE_U32(title + 0x14, WaitForSettingsState);
+    entered = true;
     ctx.r3.u64 = PPC_LOAD_U32(SoundPlayer);
     ctx.r4.u64 = ConfirmSound;
     ctx.r5.u64 = 0;
@@ -91,6 +94,9 @@ using Clock = std::chrono::steady_clock;
 constexpr auto HintDelay = std::chrono::milliseconds(200);
 constexpr auto HintFade = std::chrono::milliseconds(250);
 constexpr auto HintStale = std::chrono::milliseconds(250);
+// A drag-resize changes the output size every frame: the legend waits until
+// the size holds this long before it is rasterized again.
+constexpr auto ResizeSettle = std::chrono::milliseconds(150);
 std::atomic<Clock::rep> hintIdleSince{0}, hintTick{0};
 
 void ReportHint(bool idle)
@@ -104,14 +110,19 @@ void ReportHint(bool idle)
 }
 }
 
-float settings::title_entry::HintOpacity()
+bool settings::title_entry::HintShown()
 {
     const auto since = hintIdleSince.load(), tick = hintTick.load();
-    if (!since || settings::IsOpen())
+    return since && !settings::IsOpen() &&
+           Clock::duration(Clock::now().time_since_epoch().count() - tick) <= HintStale;
+}
+
+float settings::title_entry::HintOpacity()
+{
+    if (!HintShown())
         return 0.0f;
+    const auto since = hintIdleSince.load();
     const auto now = Clock::now().time_since_epoch().count();
-    if (Clock::duration(now - tick) > HintStale)
-        return 0.0f;
     const double shown = std::chrono::duration<double>(Clock::duration(now - since) - HintDelay) /
                          std::chrono::duration<double>(HintFade);
     return float(std::clamp(shown, 0.0, 1.0));
@@ -123,6 +134,22 @@ const settings::title_entry::Hint* settings::title_entry::DrawHint(uint32_t outp
     static uint32_t cachedWidth = 0, cachedHeight = 0, cachedLanguage = ~0u;
     static int cachedPrompts = -1;
     static std::shared_ptr<const menu_assets::Assets> cachedAssets;
+    static uint32_t pendingWidth = 0, pendingHeight = 0;
+    static Clock::time_point pendingSince;
+    if (cachedWidth && (outputWidth != cachedWidth || outputHeight != cachedHeight))
+    {
+        const auto now = Clock::now();
+        if (outputWidth != pendingWidth || outputHeight != pendingHeight)
+        {
+            pendingWidth = outputWidth;
+            pendingHeight = outputHeight;
+            pendingSince = now;
+        }
+        if (now - pendingSince < ResizeSettle)
+            return nullptr;
+    }
+    else
+        pendingWidth = pendingHeight = 0;
     const uint32_t language = GetConfig().uiLanguage;
     const bool keyboard = hid::UsesKeyboardPrompts();
     const int prompts = keyboard ? 2 : hid::UsesPlayStationPrompts() ? 1 : 0;
@@ -147,29 +174,17 @@ const settings::title_entry::Hint* settings::title_entry::DrawHint(uint32_t outp
         snapshot.help = Translate(language, L"Y: Settings", L"Y：設定");
         if (keyboard)
             snapshot.help[0] = L'S';
-        std::vector<uint32_t> full;
-        if (RasterizeMenu(snapshot, outputWidth, outputHeight, full))
+        // Only the legend's own rectangle of the output is rasterized.
+        const auto bounds = TitleHintBounds(outputWidth, outputHeight);
+        std::vector<uint32_t> pixels;
+        if (RasterizeMenu(snapshot, outputWidth, outputHeight, pixels) &&
+            pixels.size() == (bounds.x1 - bounds.x0) * (bounds.y1 - bounds.y0))
         {
-            uint32_t x0 = outputWidth, y0 = outputHeight, x1 = 0, y1 = 0;
-            for (uint32_t y = 0; y < outputHeight; ++y)
-                for (uint32_t x = 0; x < outputWidth; ++x)
-                    if (full[size_t(y) * outputWidth + x] >> 24)
-                    {
-                        x0 = std::min(x0, x);
-                        y0 = std::min(y0, y);
-                        x1 = std::max(x1, x + 1);
-                        y1 = std::max(y1, y + 1);
-                    }
-            if (x0 < x1)
-            {
-                hint.x = x0;
-                hint.y = y0;
-                hint.width = x1 - x0;
-                hint.height = y1 - y0;
-                hint.pixels.resize(size_t(hint.width) * hint.height);
-                for (uint32_t y = 0; y < hint.height; ++y)
-                    std::copy_n(&full[size_t(y0 + y) * outputWidth + x0], hint.width, &hint.pixels[size_t(y) * hint.width]);
-            }
+            hint.x = uint32_t(bounds.x0);
+            hint.y = uint32_t(bounds.y0);
+            hint.width = uint32_t(bounds.x1 - bounds.x0);
+            hint.height = uint32_t(bounds.y1 - bounds.y0);
+            hint.pixels = std::move(pixels);
         }
     }
     return hint.width ? &hint : nullptr;

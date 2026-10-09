@@ -2575,6 +2575,7 @@ namespace gpu::video
             if (!g_uploadBuffer) return "presentation upload allocation failed";
             g_presentation = std::make_unique<Presentation>();
             if (!g_presentation->Init(g_device.get(), g_swapChain->getFormat())) return "presentation shader/pipeline initialization failed";
+            g_presentation->PrewarmOverlay();
             g_presentationFormat = g_swapChain->getFormat();
             startupWatch.Step("renderer initialization");
             if (!getenv("LO_NO_RENDERER") && !renderer::Init()) return "renderer initialization failed";
@@ -3940,6 +3941,7 @@ namespace gpu::video
                 }
                 g_presentation = std::move(replacement);
                 g_presentationFormat = g_swapChain->getFormat();
+                g_presentation->PrewarmOverlay();
             }
             UpdateHdrOutput(true);
             LogOutputPixels("resized");
@@ -4075,13 +4077,13 @@ namespace gpu::video
     }
 
     // The title menu's Settings legend over the presented frame, on the GPU
-    // path. The previous present has completed, so its texture and upload
-    // buffer can be replaced.
+    // path. It is rasterized and uploaded during its delay, before it fades in.
+    // The previous present has completed, so its texture and upload buffer can
+    // be replaced.
     static void DrawTitleHint(plume::RenderTexture* backBuffer)
     {
 #ifdef LO_GPU_PLUME
-        const float opacity = settings::title_entry::HintOpacity();
-        if (!(opacity > 0.0f) || !g_presentation) return;
+        if (!settings::title_entry::HintShown() || !g_presentation) return;
         const uint32_t outputWidth = g_swapChain->getWidth(), outputHeight = g_swapChain->getHeight();
         const auto* hint = settings::title_entry::DrawHint(outputWidth, outputHeight);
         if (!hint) return;
@@ -4102,8 +4104,9 @@ namespace gpu::video
                     hint->width, hint->height, 1, rowPitch / 4), 0, 0, 0, nullptr);
             g_titleHint.revision = hint->revision;
         }
-        g_presentation->DrawOverlay(g_commandList.get(), g_titleHint.texture.get(), backBuffer, hint->x, hint->y,
-            hint->width, hint->height, outputWidth, outputHeight, opacity);
+        if (const float opacity = settings::title_entry::HintOpacity(); opacity > 0.0f)
+            g_presentation->DrawOverlay(g_commandList.get(), g_titleHint.texture.get(), backBuffer, hint->x, hint->y,
+                hint->width, hint->height, outputWidth, outputHeight, opacity);
 #else
         (void)backBuffer;
 #endif
