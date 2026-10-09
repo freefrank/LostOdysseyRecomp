@@ -947,6 +947,11 @@ void Publish(uint8_t *base, uint32_t config)
                    (std::min(edit.depthOfFieldPercent, 100u) + 5) / 10));
         placeGraphics(GraphicsRow::Bloom, makeChoices(L"Bloom", L"光暈", onOff(), edit.bloom ? 0 : 1));
         placeGraphics(GraphicsRow::MotionBlur, makeChoices(L"Motion blur", L"動態模糊", onOff(), edit.motionBlur ? 0 : 1));
+        std::vector<std::wstring> cullingChoices;
+        for (uint32_t percent = 0; percent <= 200; percent += 10)
+            cullingChoices.push_back(std::to_wstring(percent) + L"%");
+        placeGraphics(GraphicsRow::Culling, makeChoices(L"Culling", L"剔除", std::move(cullingChoices),
+                   (std::min(edit.cullingPercent, 200u) + 5) / 10));
 #if LO_PLATFORM_MACOS
         placeGraphics(GraphicsRow::ScalingQuality, makeChoices(L"Scaling filter", L"縮放濾鏡",
                    {Tr(L"Standard", L"標準"), Tr(L"High", L"高"), L"MetalFX"},
@@ -1188,6 +1193,10 @@ void Publish(uint8_t *base, uint32_t config)
         case GraphicsRow::MotionBlur:
             next.help = Tr(L"The game's blur during fast camera and character movement. Off keeps moving scenes sharp. Applies immediately after saving.",
                            L"遊戲在鏡頭與角色快速移動時的模糊。關閉後移動畫面保持清晰。儲存後立即套用。");
+            break;
+        case GraphicsRow::Culling:
+            next.help = Tr(L"How soon the game stops drawing characters and objects at the screen edges. 100% is the original; lower keeps them until they are fully off screen but costs frame rate, higher hides them sooner. Applies immediately after saving.",
+                           L"遊戲在畫面邊緣停止繪製角色與物件的時機。100% 為原版；數值越低越晚隱藏，直到完全離開畫面，但會降低影格率；數值越高越早隱藏。儲存後立即套用。");
             break;
         case GraphicsRow::ScalingQuality:
 #if LO_PLATFORM_MACOS
@@ -2570,6 +2579,9 @@ PPC_FUNC(sub_822F19B0)
                 break;
             case GraphicsRow::MotionBlur:
                 edit.motionBlur = !edit.motionBlur;
+                break;
+            case GraphicsRow::Culling:
+                edit.cullingPercent = uint32_t(std::clamp(int(std::min(edit.cullingPercent, 200u) + 5) / 10 * 10 + delta * 10, 0, 200));
                 break;
             case GraphicsRow::ScalingQuality:
 #if LO_PLATFORM_MACOS

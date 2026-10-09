@@ -4,10 +4,13 @@
 #include "gpu/movie_clear.h"
 #include "gpu/frame_plan.h"
 #include "gpu/aspect_layout.h"
+#include "settings/config.h"
 #include "cpu/ppc_context.h"
 #include "kernel/memory.h"
 
 extern "C" PPC_FUNC(__imp__sub_82300E50);
+extern "C" PPC_FUNC(__imp__sub_823BC220);
+extern "C" PPC_FUNC(__imp__sub_823BDA78);
 extern "C" PPC_FUNC(__imp__sub_82303990);
 extern "C" PPC_FUNC(__imp__sub_82309408);
 extern "C" PPC_FUNC(__imp__sub_8230B308);
@@ -184,6 +187,56 @@ PPC_FUNC(sub_82300E50)
     __imp__sub_82300E50(ctx, base);
     if (caller == 0x82988684)
         ScaleProjection(projection, scale);
+}
+
+namespace
+{
+// World units the Culling setting adds to each half extent of a primitive's
+// box for the view-frustum test: +200 at 0%, none at 100%, -200 at 200%. A
+// shrinking box stops at its centre, so a large object that crosses the view
+// is never dropped, only the parts of the scene near the edges.
+float CullingMargin(uint32_t percent)
+{
+    return (100.0f - float(std::min(percent, 200u))) * 2.0f;
+}
+
+// The margin for the InitViews pass in progress, read once per pass.
+thread_local float initViewsMargin = 0.0f;
+}
+
+// FSceneRenderer::InitViews.
+PPC_FUNC(sub_823BC220)
+{
+    const float previous = initViewsMargin;
+    initViewsMargin = CullingMargin(settings::GetConfig().cullingPercent);
+    __imp__sub_823BC220(ctx, base);
+    initViewsMargin = previous;
+}
+
+// FConvexVolume::IntersectBox(r3 volume, r4 origin, r5 extent). At 823BC980
+// InitViews tests each primitive's bounds (scene info +40 origin, +52 extent)
+// against the view's ViewFrustum at view+0x190. Seated characters reach past
+// their bounds, so at 100% they vanish while still partly on screen (#342).
+// Only that test sees the adjusted box; the frustum itself and the other
+// volume tests (lights, shadows) are unchanged.
+PPC_FUNC(sub_823BDA78)
+{
+    const float margin = initViewsMargin;
+    const uint32_t extent = ctx.r5.u32;
+    if (uint32_t(ctx.lr) != 0x823BC984 || margin == 0.0f || !ValidRange(extent, 12) ||
+        !IsMainPerspectiveView(ctx.r3.u32 - 0x190))
+    {
+        __imp__sub_823BDA78(ctx, base);
+        return;
+    }
+    // The test is a leaf without a stack frame, so the adjusted extent can sit
+    // just below the caller's stack pointer.
+    const uint32_t adjusted = (ctx.r1.u32 - 32) & ~0xFu;
+    for (uint32_t axis = 0; axis < 3; ++axis)
+        StoreFloat(adjusted + axis * 4, std::max(std::abs(LoadFloat(extent + axis * 4)) + margin, 0.0f));
+    StoreWord(adjusted + 12, 0);
+    ctx.r5.u64 = adjusted;
+    __imp__sub_823BDA78(ctx, base);
 }
 
 // Keep the game HUD at 16:9 in the physical scene target.  The flush copies
