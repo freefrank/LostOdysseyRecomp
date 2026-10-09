@@ -249,3 +249,8 @@ BC0108 emits indexed or expanded vertex channels, smoothing-mask normals with op
 ### Indexed grouping and pipeline
 
 BC0930 uses two stable word-sort passes (smoothing, then face label) before BC0108 batch emission. BC0BA8 composes recovered channel compaction, splitting, tuple deduplication, normal/incidence construction, channel packing and grouped emission. It publishes borrowed pointers, aggregates four-word label summaries, remaps incidence references and exposes an original-face map only when nonidentity. Eleven focused family cases pass with original uppers and concrete shared lowers; no runtime replacement credit or gameplay claim.
+
+
+### Logic-first input/cook integration
+
+BB9800 now adapts packed input through the concrete indexed pipeline and copies retained arrays back. BBB0A8 owns geometry and derives polygon planes/validation; BB3060 publishes its adapter metadata; B9E8A0 copies strided vertices and u16/u32 triangles. Two tetrahedron smoke paths pass. B9F198 validates descriptors and composes hull/indexed geometry, tree, bounds and support construction; it is compiled/source-reviewed but not yet exercised as a whole. The high-level entries preserve ABI/guest layouts/ownership but do not promise volatile-register equivalence. Original diagnostics, partial-failure ownership and ignored tree-build return are preserved. No gameplay acceptance.

@@ -62,6 +62,15 @@ struct Output {
         case 0x82bc0108u:
             Run();
             break;
+        case 0x82bbdf60u:
+        case 0x82bbf628u:
+        case 0x82bbe310u:
+        case 0x82bbf590u:
+            (void)mesh_indexed_workspace61::Apply(e, m, d, s);
+            break;
+        case 0x82bc0ba8u:
+            Pipeline();
+            break;
         case 0x82bc0930u:
             Groups();
             break;
@@ -517,6 +526,165 @@ struct Output {
             r[3] = 0;
         r[1] += 208;
         for (unsigned i = 17; i < 32; ++i)
+            r[i] = recovery_abi::ReadU64(m, Address(r[1] - 16 - 8 * (31 - i)));
+        r[12] = Word(r[1] - 8);
+        s.lr = r[12];
+    }
+    bool IndexedInputBody() {
+        auto &r = s.r;
+        r[31] = 0;
+        r[11] = r[1] + 80;
+        r[27] = r[3];
+        r[26] = r[4];
+        r[28] = 1;
+        r[24] = r[5];
+        recovery_abi::WriteU64(m, Address(r[11]), r[31]);
+        r[3] = r[1] + 272;
+        recovery_abi::WriteU64(m, Address(r[11] + 8), r[31]);
+        r[23] = r[6];
+        for (unsigned off : {16, 24, 32})
+            recovery_abi::WriteU64(m, Address(r[11] + off), r[31]);
+        r[11] = Word(r[27]);
+        Word(r[1] + 88, r[31]);
+        Word(r[1] + 92, r[31]);
+        Word(r[1] + 96, r[24]);
+        Word(r[1] + 100, r[31]);
+        Word(r[1] + 80, r[11]);
+        r[11] = Word(r[26]);
+        Word(r[1] + 104, r[31]);
+        m.WriteU8(Address(r[1] + 108), std::uint8_t(r[28]));
+        m.WriteU8(Address(r[1] + 109), std::uint8_t(r[31]));
+        m.WriteU8(Address(r[1] + 110), std::uint8_t(r[31]));
+        Word(r[1] + 84, r[11]);
+        for (unsigned off : {111, 112, 117, 119})
+            m.WriteU8(Address(r[1] + off), std::uint8_t(r[31]));
+        for (unsigned off : {113, 114, 115, 116, 118})
+            m.WriteU8(Address(r[1] + off), std::uint8_t(r[28]));
+        Lower(0x82bbdf60u, 0x82bb9898u);
+        r[4] = r[1] + 80;
+        r[3] = r[1] + 272;
+        Lower(0x82bbf628u, 0x82bb98a4u);
+        r[11] = r[3] & 255;
+        Compare(r[11]);
+        if (s.cr6.eq)
+            return false;
+        r[11] = Word(r[26]);
+        r[29] = r[31];
+        Compare(r[11]);
+        if (s.cr6.gt) {
+            r[30] = r[23] + 8;
+            r[25] = ~std::uint64_t(0);
+            do {
+                r[11] = Word(r[30] - 8);
+                r[4] = r[1] + 144;
+                r[3] = r[1] + 272;
+                Word(r[1] + 144, r[29]);
+                Word(r[1] + 148, r[25]);
+                Word(r[1] + 152, r[28]);
+                Word(r[1] + 160, r[31]);
+                Word(r[1] + 120, r[11]);
+                r[11] = Word(r[30] - 4);
+                Word(r[1] + 164, r[31]);
+                m.WriteU8(Address(r[1] + 168), std::uint8_t(r[31]));
+                Word(r[1] + 124, r[11]);
+                r[11] = Word(r[30]);
+                Word(r[1] + 128, r[11]);
+                r[11] = r[1] + 120;
+                Word(r[1] + 156, r[11]);
+                Lower(0x82bbe310u, 0x82bb9920u);
+                r[11] = Word(r[26]);
+                ++r[29];
+                r[30] += 12;
+                Compare(r[29], r[11]);
+            } while (s.cr6.lt);
+        }
+        r[11] = r[1] + 176;
+        r[5] = 56;
+        r[4] = 0;
+        r[3] = r[1] + 208;
+        for (unsigned off : {0, 8, 16, 24})
+            recovery_abi::WriteU64(m, Address(r[11] + off), r[31]);
+        Lower(0x82b7bc40u, 0x82bb9958u);
+        r[4] = r[1] + 176;
+        r[3] = r[1] + 272;
+        Word(r[1] + 264, r[31]);
+        Word(r[1] + 268, r[31]);
+        Lower(0x82bc0ba8u, 0x82bb996cu);
+        r[11] = r[3] & 255;
+        Compare(r[11]);
+        if (s.cr6.eq)
+            return false;
+        r[11] = Word(r[1] + 220);
+        r[8] = r[31];
+        r[10] = Word(r[1] + 176);
+        Word(r[27], r[11]);
+        Word(r[26], r[10]);
+        r[11] = Word(r[27]);
+        Compare(r[11]);
+        if (s.cr6.gt) {
+            r[9] = Word(r[1] + 224);
+            r[11] = r[24] + 8;
+            r[6] = Word(r[1] + 236);
+            do {
+                r[10] = Word(r[9]);
+                ++r[8];
+                r[9] += 4;
+                r[7] = Shift(r[10], 1);
+                r[10] += r[7];
+                r[10] = Shift(r[10], 2);
+                r[10] += r[6];
+                Load(0, r[10]);
+                Store(0, r[11] - 8);
+                Load(0, r[10] + 4);
+                Store(0, r[11] - 4);
+                Load(0, r[10] + 8);
+                Store(0, r[11]);
+                r[10] = Word(r[27]);
+                r[11] += 12;
+                Compare(r[8], r[10]);
+            } while (s.cr6.lt);
+        }
+        r[11] = Word(r[26]);
+        Compare(r[11]);
+        if (s.cr6.gt) {
+            r[10] = Word(r[1] + 188);
+            r[11] = r[23] + 4;
+            r[9] = r[10] - r[23];
+            do {
+                r[8] = Word(r[10]);
+                ++r[31];
+                Word(r[11] - 4, r[8]);
+                r[8] = Word(r[9] + r[11]);
+                Word(r[11], r[8]);
+                r[8] = Word(r[10] + 8);
+                r[10] += 12;
+                Word(r[11] + 4, r[8]);
+                r[11] += 12;
+                r[8] = Word(r[26]);
+                Compare(r[31], r[8]);
+            } while (s.cr6.lt);
+        }
+        return true;
+    }
+    // Adapts mutable count pointers and packed xyz/u32 triangle arrays to the
+    // temporary indexed workspace; copies only retained geometry back before
+    // destroying all borrowed views and owned temporary buffers.
+    void IndexedInput() {
+        auto &r = s.r;
+        r[12] = s.lr;
+        s.lr = 0x82bb9808u;
+        for (unsigned i = 23; i < 32; ++i)
+            recovery_abi::WriteU64(m, Address(r[1] - 16 - 8 * (31 - i)), r[i]);
+        Word(r[1] - 8, r[12]);
+        auto old = r[1];
+        r[1] -= 656;
+        Word(r[1], old);
+        bool ok = IndexedInputBody();
+        r[3] = r[1] + 272;
+        Lower(0x82bbf590u, ok ? 0x82bb9a38u : 0x82bb98b8u);
+        r[3] = ok ? 1 : 0;
+        r[1] += 656;
+        for (unsigned i = 23; i < 32; ++i)
             r[i] = recovery_abi::ReadU64(m, Address(r[1] - 16 - 8 * (31 - i)));
         r[12] = Word(r[1] - 8);
         s.lr = r[12];
@@ -1035,7 +1203,9 @@ struct Output {
 };
 } // namespace
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
-    if (e == 0x82bc0108u)
+    if (e == 0x82bb9800u)
+        Output{m, d, s}.IndexedInput();
+    else if (e == 0x82bc0108u)
         Output{m, d, s}.Run();
     else if (e == 0x82bc0930u)
         Output{m, d, s}.Groups();

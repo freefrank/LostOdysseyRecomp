@@ -25,13 +25,22 @@
       "instruction_count": 338,
       "body_sha256": "99586b23b0b7cc7f0b40a4c1d3a5ea879be8b1c5df347f8a0cf8611a40b9b639",
       "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BB9800",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 12238,
+      "instruction_count": 145,
+      "body_sha256": "885cdace8a3f204776a36e8cde4675e951ae2e345ae0dbfb6654ab5666be595d",
+      "status": "focused_original_ppc_validated"
     }
   ],
   "implementation": {
     "entries": [
       "82BC0108",
       "82BC0930",
-      "82BC0BA8"
+      "82BC0BA8",
+      "82BB9800"
     ],
     "header": "include/lo_semantics/mesh_indexed_vertex_output61.h",
     "source": "src/mesh_indexed_vertex_output61.cpp",
@@ -43,9 +52,9 @@
     "runtime_validated": false,
     "complete": false,
     "date": "2026-10-09",
-    "focused_original_ppc_cases": 11,
+    "focused_original_ppc_cases": 12,
     "library_validated": true,
-    "case_scope": "Four original-upper/shared concrete remap/append/growth/atan2 cases: expanded 2D channels/unweighted normals, indexed channels/angle-weighted normals, normal generation disabled, empty batch. Full72/RAM/CSR/events/ownership plus independent emitted indices/channel values, normalized normals, batch counts and complete teardown. External LO_MESH_MATH_CONSTANTS. Earlier four cases cover batch emission only. Three original grouping-upper/shared concrete sort/emission cases: one equal-key group, reverse face labels, equal labels with reverse smoothing masks. Full state/RAM/events/ownership and independent sorted face IDs/batch keys/counts plus teardown. Four final-pipeline original-upper/shared-concrete-lower cases: one label with normals/incidence, reverse labels, indexed channels with normals disabled, empty input rejection; full state/RAM/events/ownership plus independent published counts, label summaries, face permutation and teardown. Not gameplay validation.",
+    "case_scope": "Four original-upper/shared concrete remap/append/growth/atan2 cases: expanded 2D channels/unweighted normals, indexed channels/angle-weighted normals, normal generation disabled, empty batch. Full72/RAM/CSR/events/ownership plus independent emitted indices/channel values, normalized normals, batch counts and complete teardown. External LO_MESH_MATH_CONSTANTS. Earlier four cases cover batch emission only. Three original grouping-upper/shared concrete sort/emission cases: one equal-key group, reverse face labels, equal labels with reverse smoothing masks. Full state/RAM/events/ownership and independent sorted face IDs/batch keys/counts plus teardown. Four final-pipeline original-upper/shared-concrete-lower cases: one label with normals/incidence, reverse labels, indexed channels with normals disabled, empty input rejection; full state/RAM/events/ownership plus independent published counts, label summaries, face permutation and teardown. Not gameplay validation. One indexed-input adapter original-upper/shared-concrete full pipeline case merges a duplicate tetrahedron point, copies retained geometry back, and frees all temporary ownership.",
     "platform": "Linux x64 Clang19; pinned PPC; mmap guest overlay"
   }
 }

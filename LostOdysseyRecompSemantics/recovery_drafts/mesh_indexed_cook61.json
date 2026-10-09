@@ -1,0 +1,59 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Logic-first indexed cooking and validation orchestration, preserving guest layouts, branch order and ownership. Volatile-register/callback-scratch equivalence is deliberately not claimed.",
+  "entries": [
+    {
+      "address": "82BBB0A8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 15745,
+      "instruction_count": 415,
+      "body_sha256": "14451a1021402c42c3c850e66651bf100eadd00d1badd2413c9e692d3e4b0c33",
+      "status": "logical_implementation_compile_validated"
+    },
+    {
+      "address": "82BB3060",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 56778,
+      "instruction_count": 51,
+      "body_sha256": "b7d915bfe01ca7d4164a8250bfb4828794552a42586f9eb124c5eedf98bf1eba",
+      "status": "logical_implementation_compile_validated"
+    },
+    {
+      "address": "82B9E8A0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 8837,
+      "instruction_count": 124,
+      "body_sha256": "9ae830f5dee5cc6baf1a48bd1e88a1c10769fcb69d90eee191e381fcc9e4efcc",
+      "status": "logical_implementation_compile_validated"
+    },
+    {
+      "address": "82B9F198",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 10243,
+      "instruction_count": 159,
+      "body_sha256": "821f431fd83097e8695a2ed76dabb30b33bf1e45659530c2a0a49fe081293ba3",
+      "status": "logical_implementation_compile_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BBB0A8",
+      "82BB3060",
+      "82B9E8A0",
+      "82B9F198"
+    ],
+    "header": "include/lo_semantics/mesh_indexed_cook61.h",
+    "source": "src/mesh_indexed_cook61.cpp",
+    "smoke": "tests/mesh_indexed_cook61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-09",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_cases": 2,
+    "case_scope": "Strided u32/u16 tetrahedron paths through B9E8A0, BB3060, BBB0A8, BB9800 and recovered indexed/polygon lowers. Checks result counts, preserved GPR/stack/LR, adapter metadata and retained ownership. B9F198 upper orchestration is compiled and source-reviewed, not executed end-to-end. Supplied external polygon path is source-reviewed, not exercised. No original Full72 differential claim for these high-level entries."
+  }
+}

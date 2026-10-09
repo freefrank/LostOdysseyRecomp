@@ -65,6 +65,15 @@ Environment *original = nullptr;
 GuestMemory *memory = nullptr;
 void Lower(GuestAddress e, GuestMemory &m, Environment &env, Registers &s) {
     switch (e) {
+    case 0x82bbdf60u:
+    case 0x82bbf628u:
+    case 0x82bbe310u:
+    case 0x82bbf590u:
+        (void)mesh_indexed_workspace61::Apply(e, m, env.Deps(), s);
+        break;
+    case 0x82bc0ba8u:
+        (void)mesh_indexed_vertex_output61::Apply(e, m, env.Deps(), s);
+        break;
     case 0x82b7bc40u:
         crt_reader_chain61::ApplySupport_B7BC40(m, env.Deps().sort.accepted, s);
         break;
@@ -358,6 +367,55 @@ void Check(unsigned mode) {
     original = nullptr;
     memory = nullptr;
 }
+
+void CheckInput() {
+    test::GuestWindow before(Regions), after(Regions);
+    for (auto *w : {&before, &after}) {
+        w->Fill(0);
+        auto m = w->Memory();
+        m.WriteU32(0x83216624, AllocatorTable);
+        m.WriteU32(AllocatorTable, Allocate | 1);
+        m.WriteU32(AllocatorTable + 12, Free | 3);
+        m.WriteU32(0x821baa74, std::bit_cast<std::uint32_t>(2.f));
+        m.WriteU32(0x82007784, std::bit_cast<std::uint32_t>(1.f));
+        m.WriteU32(Owner, 5);
+        m.WriteU32(Owner + 4, 4);
+        constexpr float xyz[]{0, 0, 0, 2, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0};
+        constexpr unsigned ids[]{4, 2, 1, 0, 1, 3, 1, 2, 3, 2, 0, 3};
+        for (unsigned i = 0; i < 15; ++i)
+            m.WriteU32(0x60000 + 4 * i, std::bit_cast<std::uint32_t>(xyz[i]));
+        for (unsigned i = 0; i < 12; ++i)
+            m.WriteU32(0x61000 + 4 * i, ids[i]);
+    }
+    Environment expected(before), actual(after);
+    auto om = before.Memory(), m = after.Memory();
+    original = &expected;
+    memory = &om;
+    auto s = sort_engine61_oracle::Initial(0);
+    s.r[3] = Owner;
+    s.r[4] = Owner + 4;
+    s.r[5] = 0x60000;
+    s.r[6] = 0x61000;
+    PPCContext c{};
+    crt_full_oracle::ToPpc(c, s);
+    PPCFPSCRRegister{}.setcsr(s.cached_fp_control);
+    __imp__sub_82BB9800(c, before.Bytes());
+    auto host = PPCFPSCRRegister{}.getcsr();
+    PPCFPSCRRegister{}.setcsr(s.cached_fp_control);
+    (void)mesh_indexed_vertex_output61::Apply(0x82bb9800u, m, actual.Deps(), s);
+    if (crt_full_oracle::Snapshot(crt_full_oracle::FromPpc(c)) != crt_full_oracle::Snapshot(s) ||
+        !before.EqualCommitted(after) || expected.guest.events != actual.guest.events ||
+        !expected.guest.live.empty() || !actual.guest.live.empty() ||
+        host != PPCFPSCRRegister{}.getcsr())
+        throw std::runtime_error("indexed input original/ownership mismatch");
+    if (s.r[3] != 1 || m.ReadU32(Owner) != 4 || m.ReadU32(Owner + 4) != 4)
+        throw std::runtime_error("indexed input retained counts");
+    for (unsigned i = 0; i < 12; ++i)
+        if (m.ReadU32(0x61000 + 4 * i) > 3)
+            throw std::runtime_error("indexed input bounds");
+    original = nullptr;
+    memory = nullptr;
+}
 } // namespace vertex_output_oracle
 void VertexIndirect(std::uint32_t e, PPCContext &c, std::uint8_t *) {
     auto s = crt_full_oracle::FromPpc(c);
@@ -413,8 +471,9 @@ int main() {
             throw std::runtime_error("atan2 constants size");
         for (unsigned i = 0; i < 11; ++i)
             vertex_output_oracle::Check(i);
+        vertex_output_oracle::CheckInput();
         std::puts(
-            "PASS mesh-indexed-vertex-output61 11 original-upper/shared-concrete-geometry cases");
+            "PASS mesh-indexed-vertex-output61 12 original-upper/shared-concrete-geometry cases");
         return 0;
     } catch (const std::exception &e) {
         std::fprintf(stderr, "%s\n", e.what());
