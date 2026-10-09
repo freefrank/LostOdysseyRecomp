@@ -63,6 +63,42 @@ int main() {
                 throw std::runtime_error("stream cursor/ownership");
             if (s.r[1] != initial.r[1] || s.lr != Address(initial.lr))
                 throw std::runtime_error("codec ABI");
+            constexpr unsigned view = 0x62000, viewTable = 0x63000;
+            constexpr unsigned adapters[]{0x82b9d4c8u, 0x824b9f18u, 0x824b9f30u,
+                                          0x82b9c788u, 0x82b9c7a0u, 0x82b9d4e0u};
+            m.WriteU32(view, viewTable);
+            m.WriteU32(view + 4, reader);
+            for (unsigned j = 0; j < 6; ++j)
+                m.WriteU32(viewTable + 4 + 4 * j, adapters[j]);
+            m.WriteU8(cook_main_smoke::Buffer, 'I');
+            m.WriteU8(cook_main_smoke::Buffer + 1, 'C');
+            m.WriteU8(cook_main_smoke::Buffer + 2, 'E');
+            m.WriteU32(reader + 4, cook_main_smoke::Buffer);
+            call(0x82bd81b0,
+                 {'C', 'V', 'X', 'M', cook_main_smoke::Count, cook_main_smoke::Count + 4, view});
+            if (s.r[3] != 1 || m.ReadU32(cook_main_smoke::Count) != 7)
+                throw std::runtime_error("ICE borrowed adapter header");
+            for (unsigned width : {1u, 2u, 4u}) {
+                unsigned maximum = width == 1 ? 255 : (width == 2 ? 65535 : 65536);
+                for (unsigned j = 0; j < 3; ++j) {
+                    unsigned value = j + 1;
+                    if (width == 1)
+                        m.WriteU8(Positions + j, value);
+                    else if (width == 2)
+                        m.WriteU16(Positions + 2 * j,
+                                   swap ? __builtin_bswap16(std::uint16_t(value)) : value);
+                    else
+                        m.WriteU32(Positions + 4 * j, swap ? __builtin_bswap32(value) : value);
+                }
+                m.WriteU32(reader + 4, Positions);
+                call(0x82bd8748, {maximum, 3, Triangles, view, swap});
+                for (unsigned j = 0; j < 3; ++j)
+                    if (m.ReadU32(Triangles + 4 * j) != j + 1)
+                        throw std::runtime_error("adaptive index decode");
+            }
+            m.WriteU8(cook_main_smoke::Buffer, 'N');
+            m.WriteU8(cook_main_smoke::Buffer + 1, 'X');
+            m.WriteU8(cook_main_smoke::Buffer + 2, 'S');
             m.WriteU32(reader + 4, cook_main_smoke::Buffer);
             call(0x82bade98,
                  {'B', 'A', 'D', '!', cook_main_smoke::Count, cook_main_smoke::Count + 4, reader});

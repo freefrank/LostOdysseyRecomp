@@ -2,6 +2,7 @@
 
 #include "lo_semantics/mesh_indexed_cook61.h"
 #include "lo_semantics/memory_input61.h"
+#include "lo_semantics/mesh_stream_codec61.h"
 #include "lo_semantics/owned_tree_mesh_build61.h"
 #include "lo_semantics/tree_mesh_callbacks61.h"
 #include "lo_semantics/crt_copy_full_context.h"
@@ -84,6 +85,8 @@ struct Guest final : manager_release_context61::GuestServices {
             s.r[3] = m.ReadU32(Address(s.r[3]) + (e == 0x82b9f188u ? 168 : 160));
             return;
         }
+        if (mesh_stream_codec61::Apply(e, m, {*this, native}, s))
+            return;
         if (memory_input61::Apply(e, m, native, s))
             return;
         if (owned_tree_mesh_build61::Apply(e, m, {*this, native}, s) ||

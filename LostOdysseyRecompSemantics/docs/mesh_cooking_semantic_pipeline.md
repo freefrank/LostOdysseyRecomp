@@ -304,3 +304,8 @@ B9EC98 scales geometry and derived quantities, then refreshes/rebuilds the tree 
 ### Format readers and endian roundtrips
 
 The NXS reader and scalar/array codec are concrete. Both endian modes round-trip headers and values through actual memory-stream helpers; wrong tags reject after the original8-byte prefix/tag consumption. These low-level results enable the pending cooked-mesh loader; no complete load/scale/export path is claimed yet.
+
+
+### Borrowed ICE readers and packed indices
+
+Six input adapter tails and ICE header parsing are concrete. Adaptive indices decode u8/u16/u32 sources through live block-read callbacks and guest stack scratch. Both byte orders and all input widths pass the focused word-output smoke. Geometry/valence parser composition is pending.

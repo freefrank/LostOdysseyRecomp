@@ -159,7 +159,7 @@
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
     "unit_count": 124,
-    "distinct_entries": 368,
+    "distinct_entries": 379,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -1274,10 +1274,21 @@
           "82BADA00",
           "82BADAE0",
           "82BADC58",
-          "82BADE98"
+          "82BADE98",
+          "82B9D4C8",
+          "824B9F18",
+          "824B9F30",
+          "82B9C788",
+          "82B9C7A0",
+          "82B9D4E0",
+          "82BD81B0",
+          "82BD7ED8",
+          "82BD7F58",
+          "82BD8468",
+          "82BD8748"
         ],
         "focused_smoke_paths": 2,
-        "validation": "Both endian NXS/scalar/array roundtrips with concrete memory streams; wrong-tag consumption; logical/ABI only"
+        "validation": "Both endian NXS/scalar/array roundtrips with concrete memory streams; wrong-tag consumption; logical/ABI only; ICE through borrowed input adapter and all three adaptive input widths into words"
       }
     ]
   },

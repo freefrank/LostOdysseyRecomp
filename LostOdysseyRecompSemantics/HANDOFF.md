@@ -1,3 +1,7 @@
+## Root direct continuation: ICE/adaptive index input (2026-10-09)
+
+Eleven additional mesh_stream_codec61 entries cover six borrowed reader tailcalls, ICE header parsing, halfword/word spans and adaptive u8/u16/u32 index decoding. Existing two-endian smoke paths now parse ICE through actual wrapper tails and exercise all three input widths into word output. Halfword-output adaptive mode and floating adapter tails remain compile/source-reviewed. Stack probing is reused for temporary widening buffers. No extra input bounds/rollback policy. Geometry/valence loading remains next.
+
 ## Root direct continuation: mesh stream codec for load integration (2026-10-09)
 
 `mesh_stream_codec61` adds nine logical NXS header/scalar/array read-write entries and forwards three existing float/header writers to mesh_stream_write61. Both endian modes round-trip header/version, u16/u32/f32 and a float array through concrete memory input/growable output; wrong format tag stops after8 bytes. No new stream bounds, rollback or error policy. u16-array writer is compiled/source-reviewed; no full-RAM/volatile/nonfinite/bitwiseFP matrix. Next load integration targets BC4D80 tree binding and BC5270 overall cooked-mesh load, with geometry/valence reader dependencies still to recover.

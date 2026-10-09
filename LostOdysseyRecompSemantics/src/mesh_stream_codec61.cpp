@@ -1,5 +1,6 @@
 #include "lo_semantics/mesh_stream_codec61.h"
 #include "lo_semantics/mesh_stream_write61.h"
+#include "lo_semantics/mesh_polygon_collect61.h"
 #include "lo_semantics/recovery_abi.h"
 #include <array>
 #include <bit>
@@ -61,10 +62,73 @@ struct Codec {
         return true;
     }
 
-    void ReadWords(unsigned out, unsigned count, bool swap, unsigned stream) {
+    bool IceHeader(const std::array<unsigned, 4> &magic, unsigned versionOut, unsigned endianOut,
+                   unsigned stream) {
+        constexpr unsigned first[]{0x82bd81ecu, 0x82bd8204u, 0x82bd821cu, 0x82bd8234u},
+            second[]{0x82bd8274u, 0x82bd828cu, 0x82bd82a4u, 0x82bd82bcu};
+        std::array<unsigned, 4> bytes;
+        for (unsigned i = 0; i < 4; ++i) {
+            Virtual(stream, 4, first[i]);
+            bytes[i] = Address(s.r[3]) & 255u;
+        }
+        if (bytes[0] != 'I' || bytes[1] != 'C' || bytes[2] != 'E')
+            return false;
+        m.WriteU8(endianOut, bytes[3] & 1u);
+        for (unsigned i = 0; i < 4; ++i) {
+            Virtual(stream, 4, second[i]);
+            bytes[i] = Address(s.r[3]) & 255u;
+        }
+        for (unsigned i = 0; i < 4; ++i)
+            if (bytes[i] != (magic[i] & 255u))
+                return false;
+        auto version = Scalar(stream, m.ReadU8(endianOut) != 0, false, 0x82bd8314u);
+        m.WriteU32(versionOut, version);
+        return true;
+    }
+    void ReadHalves(unsigned out, unsigned count, bool swap, unsigned stream) {
+        s.r[4] = out;
+        s.r[5] = count * 2u;
+        Virtual(stream, 24, 0x82bd7f0cu);
+        if (swap)
+            for (unsigned i = 0; i < count; ++i)
+                m.WriteU16(out + 2 * i, __builtin_bswap16(m.ReadU16(out + 2 * i)));
+        s.r[3] = 1;
+    }
+    void Adaptive(unsigned maximum, unsigned count, unsigned out, unsigned stream, bool swap,
+                  bool half) {
+        unsigned width =
+            (half ? (maximum & 65535u) : maximum) <= 255 ? 1 : ((half || maximum <= 65535) ? 2 : 4);
+        if (width == 4) {
+            ReadWords(out, count, swap, stream, 0x82bd7f8cu);
+            return;
+        }
+        auto old = s.r[1];
+        s.r[12] = std::uint32_t(0 - width * count) & 0xfffffff0u;
+        mesh_polygon_collect61::ProbeStack(m, s);
+        auto back = Word(Address(s.r[1]));
+        s.r[1] += s.r[12];
+        m.WriteU32(Address(s.r[1]), back);
+        auto temporary = Address(s.r[1] + 80);
+        if (width == 1) {
+            s.r[4] = temporary;
+            s.r[5] = count;
+            Virtual(stream, 24, half ? 0x82bd84c0u : 0x82bd87a0u);
+        } else
+            ReadHalves(temporary, count, swap, stream);
+        for (unsigned i = 0; i < count; ++i) {
+            unsigned value = width == 1 ? m.ReadU8(temporary + i) : m.ReadU16(temporary + 2 * i);
+            if (half)
+                m.WriteU16(out + 2 * i, value);
+            else
+                m.WriteU32(out + 4 * i, value);
+        }
+        s.r[1] = old;
+    }
+    void ReadWords(unsigned out, unsigned count, bool swap, unsigned stream,
+                   unsigned ret = 0x82badb14u) {
         s.r[4] = out;
         s.r[5] = count * 4u;
-        Virtual(stream, 24, 0x82badb14u);
+        Virtual(stream, 24, ret);
         if (swap)
             for (unsigned i = 0; i < count; ++i)
                 m.WriteU32(out + 4 * i, __builtin_bswap32(Word(out + 4 * i)));
@@ -73,9 +137,44 @@ struct Codec {
 };
 } // namespace
 bool Apply(GuestAddress entry, GuestMemory &m, Dependencies d, Registers &s) {
+    unsigned slot = 0;
+    switch (entry) {
+    case 0x82b9d4c8u:
+        slot = 4;
+        break;
+    case 0x824b9f18u:
+        slot = 8;
+        break;
+    case 0x824b9f30u:
+        slot = 12;
+        break;
+    case 0x82b9c788u:
+        slot = 16;
+        break;
+    case 0x82b9c7a0u:
+        slot = 20;
+        break;
+    case 0x82b9d4e0u:
+        slot = 24;
+        break;
+    default:
+        break;
+    }
+    if (slot) {
+        s.r[3] = m.ReadU32(Address(s.r[3]) + 4);
+        s.r[11] = m.ReadU32(m.ReadU32(Address(s.r[3])) + slot);
+        s.ctr = s.r[11];
+        d.guest.CallIndirect(Address(s.ctr) & ~3u, m, s);
+        return true;
+    }
     if (entry == 0x82bada70u || entry == 0x82badcd0u || entry == 0x82badd60u)
         return mesh_stream_write61::Apply(entry, m, d, s);
     switch (entry) {
+    case 0x82bd81b0u:
+    case 0x82bd7ed8u:
+    case 0x82bd7f58u:
+    case 0x82bd8468u:
+    case 0x82bd8748u:
     case 0x82bad7c0u:
     case 0x82bad858u:
     case 0x82bad8b8u:
@@ -93,6 +192,23 @@ bool Apply(GuestAddress entry, GuestMemory &m, Dependencies d, Registers &s) {
     Codec c{m, d, s};
     c.Enter();
     switch (entry) {
+    case 0x82bd81b0u:
+        s.r[3] = c.IceHeader({Address(a[3]), Address(a[4]), Address(a[5]), Address(a[6])},
+                             Address(a[7]), Address(a[8]), Address(a[9]))
+                     ? 1
+                     : 0;
+        break;
+    case 0x82bd7ed8u:
+        c.ReadHalves(Address(a[3]), Address(a[4]), (a[5] & 255) != 0, Address(a[6]));
+        break;
+    case 0x82bd7f58u:
+        c.ReadWords(Address(a[3]), Address(a[4]), (a[5] & 255) != 0, Address(a[6]), 0x82bd7f8cu);
+        break;
+    case 0x82bd8468u:
+    case 0x82bd8748u:
+        c.Adaptive(Address(a[3]), Address(a[4]), Address(a[5]), Address(a[6]), (a[7] & 255) != 0,
+                   entry == 0x82bd8468u);
+        break;
     case 0x82bad7c0u:
         c.FourBytes({Address(a[3]), Address(a[4]), Address(a[5]), Address(a[6])}, Address(a[7]));
         break;
