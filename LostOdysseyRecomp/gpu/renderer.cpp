@@ -376,7 +376,8 @@ namespace gpu::renderer
 
         // ---- host resources -------------------------------------------------
         // What cleared a target's verified tone-map producer after the tone-map
-        // drew it, logged per SR scene fallback segment.
+        // drew it, logged per SR scene fallback segment. toneFrame also limits the
+        // full-screen alpha quad check to draws after this frame's tone-map.
         // Keeps the first loss after the latest tone-map; count includes later ones.
         struct SdrLossTrace
         {
@@ -9182,9 +9183,17 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         static uint32_t fadeLogs = 0;
                         if (fadeLogs++ < 4) LOG_INFO("renderer: AO scene fade frame={} alpha={} left={}", frame, alpha, sceneFadeTransmittance);
                     }
-                    // SR fallback trace: is a writer after the tone-map a full-screen alpha quad?
+                    // A full-screen alpha quad over this frame's tone-map output (the game's
+                    // 0.3-0.45 s camera/menu crossfade) keeps the scene SDR-qualified.
                     if (!fullSceneCopy && color && color->sdrLoss.toneFrame == frame && key.vs == 0x8bbd4da701845d16ull)
                         alphaQuad = fullScreenQuad(key.ps, RenderBlend::SRC_ALPHA, RenderBlend::INV_SRC_ALPHA, 0) ? 1 : 2 + fullCopyReason;
+                    // The crossfade quad (PS 2ef7: captured RGB, alpha c0.x) covers the live
+                    // scene that AO darkens later; AO fades out under it like under 234e.
+                    if (alphaQuad == 1 && key.ps == 0x2ef725fa9031545bull) {
+                        if (sceneFadeFrame != frame) { sceneFadeFrame = frame; sceneFadeTransmittance = 1; }
+                        const float alpha = std::bit_cast<float>(psConstants[0]);
+                        sceneFadeTransmittance *= 1 - (alpha > 0 ? std::min(alpha, 1.0f) : 0.0f);
+                    }
                 if(key.vs==0x8bbd4da701845d16ull&&key.ps==0xcda578aef1724fdcull) {
                     static const uint64_t start=getenv("LO_SCENE_AA_LOG_START_FRAME")?strtoull(getenv("LO_SCENE_AA_LOG_START_FRAME"),nullptr,10):~0ull;
                     if(frame>=start&&frame-start<128)SHADER_LOG_INFO("scene-aa", None, "renderer scene AA guard f{} full={} reason={} mode={} jitter={} blend={:#x} mask={} vtx={} prim={} n={} cull={:#x} ctl={:#x} vp=({},{},{},{}) extent={}x{} fetch95={:08x},{:08x} quad={} ",frame,fullSceneCopy,fullCopyReason,sceneAAMode,temporalJitter,key.blend,key.colorMask,shared.vtxFmt,info.primitiveType,info.indexCount,key.modeCull,Reg(REG_RB_COLORCONTROL),viewport.x,viewport.y,viewport.width,viewport.height,pitch,rtHeight,Reg(REG_FETCH_CONSTANTS+190),Reg(REG_FETCH_CONSTANTS+191),fullCopyVertices);
@@ -11845,8 +11854,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                     slot95ArenaOffset, slot95StreamBytes);
                             }
                         }
-                    } else if ((key.colorMask & 7) != 0) {
-                        // Any other draw writing RGB invalidates producer status
+                    } else if ((key.colorMask & 7) != 0 && alphaQuad != 1) {
+                        // Any other draw writing RGB invalidates producer status. A
+                        // full-screen alpha quad (crossfade) leaves it display-encoded SDR.
                         color_qualification::InvalidateHostTextureProducer(
                             color->sdrProducerFrame, color->qualifiedSdrWidth, color->qualifiedSdrHeight);
                         if (color->sdrLoss.Lost(frame, SdrLossTrace::Draw, Reg(REG_FETCH_CONSTANTS + 1))) {
