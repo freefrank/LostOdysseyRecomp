@@ -372,7 +372,7 @@ int main(int argc, char* argv[])
             std::string ids;
             for (const auto& id : modding::ModIds()) ids += fmt::format("{}{}", ids.empty() ? "" : ", ", id);
             const auto mode = modding::Mode();
-            LOG_INFO("mods: {} (mode {}), standalone mods: {}, overlay folder: {}",
+            LOG_NOTICE("mods: {} (mode {}), standalone mods: {}, overlay folder: {}",
                 FileSystem::PathUtf8(modding::Root()),
                 mode == modding::ResolutionMode::Overlay ? "overlay"
                     : mode == modding::ResolutionMode::Standalone ? "standalone" : "combined",
