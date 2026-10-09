@@ -123,12 +123,12 @@ void Check() {
     if (!bundle)
         throw std::runtime_error("hull incremental constants required");
     std::ifstream privateConstants(bundle, std::ios::binary);
-    std::array<unsigned char, 188> data{};
+    std::array<unsigned char, 192> data{};
     privateConstants.read(reinterpret_cast<char *>(data.data()), data.size());
-    if (privateConstants.gcount() != 188)
+    if (privateConstants.gcount() != 192)
         throw std::runtime_error("hull incremental constants size");
     unsigned offset = 0;
-    for (auto region : std::array<test::Region, 16>{{{0x83214d80, 120},
+    for (auto region : std::array<test::Region, 17>{{{0x83214d80, 120},
                                                      {0x83215508, 8},
                                                      {0x82000f28, 8},
                                                      {0x82000de0, 4},
@@ -143,7 +143,8 @@ void Check() {
                                                      {0x82218644, 4},
                                                      {0x82000e40, 4},
                                                      {0x82000d6c, 4},
-                                                     {0x82000da4, 4}}})
+                                                     {0x82000da4, 4},
+                                                     {0x83216164, 4}}})
         for (unsigned i = 0; i < region.size; ++i)
             m.WriteU8(region.base + i, data[offset++]);
     auto st = sort_engine61_oracle::Initial(0);
@@ -328,6 +329,30 @@ void Check() {
     }
     if (!env.guest.live.empty())
         throw std::runtime_error("prepared cube cleanup");
+    env.guest.allocations = 0;
+    for (unsigned off : {0, 4, 8})
+        m.WriteU32(Count + off, 0);
+    st.fpr_bits[1] = std::bit_cast<std::uint64_t>(120.);
+    call(0x82ba4bf8, {Positions, 8, 0, Count});
+    if (st.r[3] != 1 || m.ReadU32(Count + 4) != 6 || m.ReadU32(0x832dc424) != 0)
+        throw std::runtime_error("cube six support planes");
+    for (auto descriptor : {Count, 0x832dc420u}) {
+        st.r[3] = descriptor;
+        (void)mesh_hull_preprocess61::Apply(0x82ba0d68, m, env.Deps(), st);
+    }
+    if (!env.guest.live.empty())
+        throw std::runtime_error("support plane cleanup");
+    env.guest.allocations = 0;
+    st.fpr_bits[1] = std::bit_cast<std::uint64_t>(45.);
+    call(0x82ba4bf8, {Positions, 8, 0, Count});
+    if (st.r[3] != 1 || m.ReadU32(Count + 4) != 18)
+        throw std::runtime_error("cube bevel support planes");
+    for (auto descriptor : {Count, 0x832dc420u}) {
+        st.r[3] = descriptor;
+        (void)mesh_hull_preprocess61::Apply(0x82ba0d68, m, env.Deps(), st);
+    }
+    if (!env.guest.live.empty())
+        throw std::runtime_error("bevel support plane cleanup");
 }
 } // namespace incremental_smoke
 int main() {

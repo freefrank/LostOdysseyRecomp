@@ -1,3 +1,7 @@
+## Root direct continuation: support planes for inflated hulls (2026-10-09)
+
+BA4BF8 now concretely builds plain hull faces, adds edge support planes for sharp dihedrals, removes parallel redundant faces by area, appends unique support planes and releases the face objects. BA0DD0, BA1078 and BA1EE0 provide unfiltered support and four-word plane arrays. Cube checks produce six axis planes with a 120-degree edge threshold and eighteen axis/bevel planes at 45 degrees, followed by complete tracked cleanup. The global registry buffer intentionally remains owned by the caller until release. BA5480 clipping/output composition is still pending. Logical/ABI scope only.
+
 ## Root direct continuation: plain incremental hull connected (2026-10-09)
 
 Five additional entries in `mesh_hull_incremental61` recover guest sine/cosine polynomial, stable perturbed support, simplex selection and BA40B8 incremental hull construction. BA4A88 now calls the concrete main. Tetrahedron and cube produce 4/12 faces; BA5CF8 normalizes, compacts and packs the cube into 8 points/12 faces/36 indices, with no tracked ownership leaks. High-level scratch frames were enlarged to prevent overlap with saved nonvolatile registers; a focused ABI preservation check passes. Full library and prior preprocessing smoke pass. These are logical/ABI checks, not volatile-register/bitwise-FP or gameplay equivalence. Inflated hull BA4BF8/BA5480 remains pending. Private trig/support constants are user-XEX inputs, never repository content.

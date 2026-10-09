@@ -1,6 +1,6 @@
 {
   "schema": "semantic-recovery-draft-v1",
-  "scope": "Incremental convex hull construction: guest sine/cosine polynomial, perturbed support, simplex, face visibility/adjacency/extrusion and cleanup.",
+  "scope": "Incremental convex hull construction: guest sine/cosine polynomial, perturbed support, simplex, face visibility/adjacency/extrusion and cleanup. Support-plane collection and coplanar-face reduction for inflation.",
   "entries": [
     {
       "address": "82B9F928",
@@ -145,6 +145,38 @@
       "instruction_count": 628,
       "body_sha256": "f0e112330f0bb9608d6f732b9f89f8ab68e31be6023ecddf6e3964dd9b08cccd",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82BA0DD0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 14581,
+      "instruction_count": 126,
+      "body_sha256": "86741003963db4c00de7b66524bc6edf41f19a408d6e22f080d960ea357b6d8a",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82BA1078",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 14999,
+      "instruction_count": 47,
+      "body_sha256": "77a53cd245e97cb57e72200f74d408f0c1185f957d4b655f58d3b675f10496f5",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82BA1EE0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 17177,
+      "instruction_count": 42,
+      "body_sha256": "8025ea2ca4a6715112fc8552f14fcdc4693e2c507c2ae17ed71eb8b02fcff021",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82BA4BF8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 23673,
+      "instruction_count": 546,
+      "body_sha256": "4503853c38766eb0ca80a1f63a921c5195c7dd68efb96ba7e63bd02412afd4cd",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -166,7 +198,11 @@
       "822A2FE0",
       "82BA2010",
       "82BA3BE0",
-      "82BA40B8"
+      "82BA40B8",
+      "82BA0DD0",
+      "82BA1078",
+      "82BA1EE0",
+      "82BA4BF8"
     ],
     "header": "include/lo_semantics/mesh_hull_incremental61.h",
     "source": "src/mesh_hull_incremental61.cpp",
@@ -179,9 +215,9 @@
     "library_validated": true,
     "runtime_validated": false,
     "complete": false,
-    "focused_smoke_paths": 8,
-    "case_scope": "Prior vector/visibility, edge/support, registry and extrusion paths; finite sine/cosine and tetrahedron simplex; full plain tetrahedron and cube hulls (4 and 12 faces), plus BA5CF8 normalized cube preparation/output packing (8 points, 12 faces, 36 indices). Plain tetrahedron checks preserved GPR14..31, stack and LR. All retained output allocations explicitly released. No Full72, bitwise FP, nonfinite matrix, allocation-fault matrix or gameplay claim.",
+    "focused_smoke_paths": 10,
+    "case_scope": "Prior vector/visibility, edge/support, registry and extrusion paths; finite sine/cosine and tetrahedron simplex; full plain tetrahedron and cube hulls (4 and 12 faces), plus BA5CF8 normalized cube preparation/output packing (8 points, 12 faces, 36 indices). Plain tetrahedron checks preserved GPR14..31, stack and LR. All retained output allocations explicitly released. No Full72, bitwise FP, nonfinite matrix, allocation-fault matrix or gameplay claim. Cube support-plane collection: six axis planes at 120 degrees, eighteen axis/bevel planes at 45 degrees, with released face/plane/registry ownership.",
     "remaining_boundary": "Zero-vector diagnostic 82B85300 remains an explicit accepted guest boundary. Inflated hull is separately pending in preprocess.",
-    "private_constants": "LO_HULL_INCREMENTAL_CONSTANTS: 188 private bytes: 120@83214D80, 8@83215508, 8@82000F28, then 4 bytes each at 82000DE0,82000B7C,82000E44,82000DC0,820D57F0,820009C8,82000D7C,82000B58,822183E8,82218644,82000E40,82000D6C,82000DA4. Never publish extracted data."
+    "private_constants": "LO_HULL_INCREMENTAL_CONSTANTS: 192 private bytes: 120@83214D80, 8@83215508, 8@82000F28, then 4 bytes each at 82000DE0,82000B7C,82000E44,82000DC0,820D57F0,820009C8,82000D7C,82000B58,822183E8,82218644,82000E40,82000D6C,82000DA4,83216164. Never publish extracted data."
   }
 }

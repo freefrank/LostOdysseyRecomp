@@ -274,3 +274,8 @@ Normals, visibility/coplanarity predicates, eligible support search, face regist
 ### Plain incremental hull composition
 
 BA40B8 now composes perturbed support/simplex selection with live face extrusion and repair. BA4A88 has no remaining algorithm callback in plain mode; BA5CF8 plain cube preparation and packing execute through concrete helpers. Focused tetrahedron/cube results and ownership cleanup pass. Guest trig polynomials read private guest coefficients. Inflated modes still call BA4BF8/BA5480. Full gameplay and bitwise floating-point equivalence remain unclaimed.
+
+
+### Inflation support planes
+
+BA4BF8 is concrete: support-plane collection with sharp-edge bevels, coplanar-face pruning, normal deduplication and face cleanup. Cube smoke covers six-plane and eighteen-plane results. BA5480 polyhedron clipping remains the only preprocess algorithm boundary.

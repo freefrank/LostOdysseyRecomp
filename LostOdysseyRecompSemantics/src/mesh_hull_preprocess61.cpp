@@ -283,7 +283,7 @@ struct Preprocess {
             s.r[6] = sp + 112;
             s.fpr_bits[1] = std::bit_cast<std::uint64_t>(double(Float(0x8204fc20u)));
             s.lr = 0x82ba5b28u;
-            d.lifetime.guest.CallDirect(0x82ba4bf8u, m, s);
+            (void)mesh_hull_incremental61::Apply(0x82ba4bf8u, m, d, s);
             if (Address(s.r[3]) != 0) {
                 s.r[3] = Word(sp + 112);
                 s.r[4] = Word(sp + 116);

@@ -159,7 +159,7 @@
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
     "unit_count": 121,
-    "distinct_entries": 338,
+    "distinct_entries": 342,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -1223,10 +1223,14 @@
           "822A2FE0",
           "82BA2010",
           "82BA3BE0",
-          "82BA40B8"
+          "82BA40B8",
+          "82BA0DD0",
+          "82BA1078",
+          "82BA1EE0",
+          "82BA4BF8"
         ],
-        "focused_smoke_paths": 8,
-        "validation": "Logical plain tetrahedron/cube hull construction and normalized cube output packing; no gameplay/Full72 claim"
+        "focused_smoke_paths": 10,
+        "validation": "Logical plain tetrahedron/cube hull construction and normalized cube output packing; no gameplay/Full72 claim; support/bevel plane collection passes"
       }
     ]
   },

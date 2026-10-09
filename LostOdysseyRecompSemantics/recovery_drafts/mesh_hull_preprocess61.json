@@ -101,7 +101,6 @@
     "focused_smoke_cases": 4,
     "case_scope": "Normalized duplicate points, degenerate planar box fallback, first-use remapping with temporary map release, and triangle-array grow/append/release. Indexed B9C7D8 regression still produces 564 NXS/CVXM bytes with zero live allocations. No Full72 differential or gameplay claim. Hull-mode driver/output packaging compiled/source-reviewed; its algorithm boundaries are not replaced in the smoke. Subsequent incremental smoke now executes concrete BA40B8, BA4A88 and BA5CF8 plain cube packing with complete ownership cleanup.",
     "remaining_boundaries": [
-      "82BA4BF8",
       "82BA5480"
     ]
   }

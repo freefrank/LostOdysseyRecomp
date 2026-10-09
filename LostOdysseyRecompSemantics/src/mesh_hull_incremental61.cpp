@@ -381,6 +381,155 @@ struct Hull {
         ArrayRelease(used);
         return true;
     }
+    float Dot(const Vec &a, const Vec &b) {
+        float value = float(a[1] * b[1]);
+        value = float(double(a[2]) * b[2] + value);
+        return float(double(a[0]) * b[0] + value);
+    }
+    std::uint32_t UnfilteredSupport(std::uint32_t vertices, std::int32_t count,
+                                    const Vec &direction) {
+        unsigned best = 0;
+        for (std::int32_t i = 1; i < count; ++i)
+            if (Dot(Point(vertices + 12 * unsigned(i)), direction) >
+                Dot(Point(vertices + 12 * best), direction))
+                best = unsigned(i);
+        return best;
+    }
+    void ReservePlanes(std::uint32_t descriptor, unsigned capacity) {
+        auto old = Word(descriptor);
+        Word(descriptor + 8, capacity);
+        s.r[3] = Word(0x832df548u);
+        s.r[4] = 16 * capacity;
+        s.r[5] = 254;
+        s.ctr = Word(Word(s.r[3]) + 8);
+        s.lr = 0x82ba10b4u;
+        d.edge.engine.sort.guest.CallIndirect(Address(s.ctr) & ~3u, m, s);
+        auto buffer = Address(s.r[3]);
+        Word(descriptor, buffer);
+        for (unsigned i = 0; i < Word(descriptor + 4); ++i)
+            for (unsigned j = 0; j < 16; j += 4)
+                Word(buffer + 16 * i + j, Word(old + 16 * i + j));
+        if (old) {
+            s.r[3] = Word(0x832df548u);
+            s.r[4] = old;
+            s.ctr = Word(Word(s.r[3]) + 20);
+            s.lr = 0x82ba112cu;
+            d.edge.engine.sort.guest.CallIndirect(Address(s.ctr) & ~3u, m, s);
+        }
+    }
+    std::uint32_t AppendPlaneWords(std::uint32_t descriptor,
+                                   const std::array<std::uint32_t, 4> &words) {
+        auto count = Word(descriptor + 4), capacity = Word(descriptor + 8);
+        if (count == capacity)
+            ReservePlanes(descriptor, capacity ? 2 * capacity : 16);
+        auto out = Word(descriptor) + 16 * count;
+        for (unsigned j = 0; j < 4; ++j)
+            Word(out + 4 * j, words[j]);
+        Word(descriptor + 4, count + 1);
+        return out;
+    }
+    void AppendPlane(std::uint32_t descriptor, const Vec &normal, float offset) {
+        AppendPlaneWords(descriptor, {std::bit_cast<std::uint32_t>(normal[0]),
+                                      std::bit_cast<std::uint32_t>(normal[1]),
+                                      std::bit_cast<std::uint32_t>(normal[2]),
+                                      std::bit_cast<std::uint32_t>(offset)});
+    }
+    bool Planes(std::uint32_t vertices, unsigned count, std::int32_t limit, std::uint32_t output,
+                double angle) {
+        auto temporary = Address(s.r[1] + 80);
+        for (unsigned off : {0, 4, 8})
+            Word(temporary + off, 0);
+        Word(output + 4, 0);
+        Enter();
+        bool built = Build(vertices, std::int32_t(count), limit);
+        Leave();
+        if (!built) {
+            ArrayRelease(temporary);
+            return false;
+        }
+        const auto radians = Float(0x820009c8u), zero = Float(0x82000e50u);
+        const auto mergeCos = float(Trig(float(Float(0x83216164u) * radians), true)),
+                   edgeCos = float(Trig(float(angle * radians), true));
+        auto normal = [&](unsigned face) {
+            return TriangleNormal(Point(vertices + 12 * Word(face)),
+                                  Point(vertices + 12 * Word(face + 4)),
+                                  Point(vertices + 12 * Word(face + 8)));
+        };
+        for (unsigned i = 0; i < Word(0x832dc424u); ++i) {
+            auto face = FaceAt(i);
+            if (!face)
+                continue;
+            auto n = normal(face);
+            for (unsigned slot = 0; slot < 3; ++slot) {
+                auto adjacent = Word(face + 12 + 4 * slot);
+                if (adjacent < Word(face + 24))
+                    continue;
+                auto other = normal(FaceAt(adjacent));
+                if (Dot(n, other) >= edgeCos)
+                    continue;
+                auto edge = Sub(Point(vertices + 12 * Word(face + 4 * ((slot + 2) % 3))),
+                                Point(vertices + 12 * Word(face + 4 * ((slot + 1) % 3))));
+                Vec candidate;
+                if (edge[0] != zero || edge[1] != zero || edge[2] != zero) {
+                    auto left = Cross(edge, n), right = Cross(other, edge);
+                    for (unsigned a = 0; a < 3; ++a)
+                        candidate[a] = float(left[a] + right[a]);
+                } else
+                    for (unsigned a = 0; a < 3; ++a)
+                        candidate[a] = float(n[a] + other[a]);
+                if (candidate[0] == zero && candidate[1] == zero && candidate[2] == zero) {
+                    ArrayRelease(temporary);
+                    return false;
+                }
+                candidate = Unit(candidate);
+                auto support = UnfilteredSupport(vertices, std::int32_t(count), candidate);
+                AppendPlane(temporary, candidate, -Dot(Point(vertices + 12 * support), candidate));
+            }
+        }
+        auto areaSquared = [&](unsigned face) {
+            auto a = Point(vertices + 12 * Word(face)), b = Point(vertices + 12 * Word(face + 4)),
+                 c = Point(vertices + 12 * Word(face + 8));
+            auto cross = Cross(Sub(c, a), Sub(a, b));
+            return Dot(cross, cross);
+        };
+        for (unsigned i = 0; i < Word(0x832dc424u); ++i)
+            for (unsigned j = i + 1; j < Word(0x832dc424u); ++j) {
+                auto a = FaceAt(i), b = FaceAt(j);
+                if (!a || !b)
+                    continue;
+                if (Dot(normal(a), normal(b)) > mergeCos) {
+                    if (areaSquared(a) < areaSquared(b))
+                        FreeFace(a, 0x82ba51d0u);
+                    else
+                        FreeFace(b, 0x82ba5248u);
+                }
+            }
+        for (unsigned i = 0; i < Word(0x832dc424u); ++i) {
+            auto face = FaceAt(i);
+            if (face) {
+                auto n = normal(face);
+                AppendPlane(output, n, -Dot(Point(vertices + 12 * Word(face)), n));
+            }
+        }
+        for (unsigned i = 0; i < Word(temporary + 4); ++i) {
+            auto candidate = Word(temporary) + 16 * i;
+            auto n = Point(candidate);
+            bool duplicate = false;
+            for (unsigned j = 0; j < Word(output + 4); ++j)
+                if (Dot(n, Point(Word(output) + 16 * j)) > mergeCos) {
+                    duplicate = true;
+                    break;
+                }
+            if (!duplicate)
+                AppendPlane(output, n, Float(candidate + 12));
+        }
+        for (unsigned i = 0; i < Word(0x832dc424u); ++i)
+            if (auto face = FaceAt(i))
+                FreeFace(face, 0x82ba542cu);
+        Word(0x832dc424u, 0);
+        ArrayRelease(temporary);
+        return true;
+    }
     std::uint32_t EdgeSlot(std::uint32_t face, std::uint32_t a, std::uint32_t b) {
         for (unsigned i = 0; i < 3; ++i) {
             auto x = Word(face + 4 * i), y = Word(face + 4 * ((i + 1) % 3));
@@ -507,6 +656,10 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     case 0x822a2f08u:
     case 0x822a2fe0u:
     case 0x82ba2010u:
+    case 0x82ba0dd0u:
+    case 0x82ba1078u:
+    case 0x82ba1ee0u:
+    case 0x82ba4bf8u:
     case 0x82ba40b8u:
     case 0x82ba3be0u:
     case 0x82b9f928u:
@@ -537,6 +690,20 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
         break;
     case 0x82ba2010u:
         s.r[3] = h.StableSupport(Address(a[3]), Address(a[4]), Address(a[5]), Address(a[6]));
+        break;
+    case 0x82ba0dd0u:
+        s.r[3] = h.UnfilteredSupport(Address(a[3]), std::int32_t(a[4]), h.Point(Address(a[5])));
+        break;
+    case 0x82ba1078u:
+        h.ReservePlanes(Address(a[3]), Address(a[4]));
+        break;
+    case 0x82ba1ee0u:
+        s.r[3] = h.AppendPlaneWords(Address(a[3]), {unsigned(a[4] >> 32), unsigned(a[4]),
+                                                    unsigned(a[5] >> 32), unsigned(a[5])});
+        break;
+    case 0x82ba4bf8u:
+        s.r[3] =
+            h.Planes(Address(a[3]), Address(a[4]), std::int32_t(a[5]), Address(a[6]), f1) ? 1 : 0;
         break;
     case 0x82ba40b8u:
         s.r[3] = h.Build(Address(a[3]), std::int32_t(a[4]), std::int32_t(a[5])) ? 1 : 0;
