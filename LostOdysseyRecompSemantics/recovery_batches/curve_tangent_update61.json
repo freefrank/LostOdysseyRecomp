@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "curve-tangent-update61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/curve_tangent_update61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/curve_tangent_update61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/curve_tangent_update61.cpp"
+      ]
+    }
+  ]
+}

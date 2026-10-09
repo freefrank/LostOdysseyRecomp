@@ -26,6 +26,19 @@ Vtable 820D6280 slots +4/+8/+12 were confirmed as BB3430/BB34F8/822D3068;
 private bytes are excluded. Resolution1, nonfinite and allocation failure remain
 untested; original guest ownership and failure behavior are retained.
 
+`curve_tangent_update61` recovers 8262B498 (94 instructions): a readable
+control-point loop updates or retains tangents according to modes and tension.
+Three complete-body Full72/RAM/host CSR cases pass, including mixed modes and
+independent finite-result assertions. Pointer/count reloads and FP stages remain
+explicit. No guest lower, allocation or ownership transfer is introduced.
+
+`owned_tree_visit61` recovers BDA0A8/BDA1A0 (103 instructions): depth-first
+visiting/pruning, and a distinct both-child-callback traversal with right-tail
+iteration. Three genuine recursive-body Full72/RAM/callback/host CSR cases pass,
+including callback-driven child rewiring. A leaf return r3 overwrite was fixed
+at its actual branch boundary. Visitors are mutable guest service boundaries;
+acyclic valid child pairs are the selected contract. Both libraries build.
+
 Bounded private-image investigation establishes vtables at 820D58A0 (installed
 by B9CC00) and 820D5C58 (installed by B9E220/B9E2D8/B9E388). Their slots +0C,
 +14 and +18 point to B9DD90, B9DF18 and B9DFA0 respectively. B9CBC0 occurs at

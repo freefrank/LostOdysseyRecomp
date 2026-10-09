@@ -1,0 +1,45 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Complete genuine bodies pinned by UTF-8 LF SHA256 without final newline; no original code embedded.",
+  "entries": [
+    {
+      "address": "82BDA0A8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 25073,
+      "instruction_count": 61,
+      "body_sha256": "9daa01d602d6b5be57583ad57bee744f49026287191d3f84c36ef7e10fab6e96",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BDA1A0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 25213,
+      "instruction_count": 42,
+      "body_sha256": "14d6aabe3b7570aad1df63a7ce9193f01e82f48235e2f603c40f4a2d02642eab",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BDA0A8",
+      "82BDA1A0"
+    ],
+    "header": "include/lo_semantics/owned_tree_visit61.h",
+    "source": "src/owned_tree_visit61.cpp",
+    "oracle": "tests/owned_tree_visit61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 3,
+    "library_validated": true,
+    "library": "PASS incremental complete Clang 19 CMake static library; existing unused-function warning exception retained.",
+    "platform": "Linux x64; Clang 19.1.7; genuine XEX regenerated with pinned XenonRecomp ddd128bc plus tracked patch; existing oracle guest-window allocation overlaid with mmap/mprotect only",
+    "mapping_credit": 0,
+    "mapping_limit": "Fixed historical catalog.sqlite unavailable; do not infer membership from regenerated sources. 82BB25D0 is explicitly external in prior handoff.",
+    "runtime_validated": false,
+    "complete": false,
+    "limits": "Selected finite inputs, ordinary RAM, Full72 state, callbacks and host CSR only. No Windows revalidation, nonfinite matrix, faults/MMIO, concurrency, runtime or gameplay acceptance.",
+    "case_scope": "Three genuine recursive-body cases: depth-first order, low-byte false pruning with child-pair rewiring and right-pointer reload, both-child callbacks followed by recursive local pruning. Full72/RAM/callback/host CSR compared; original recursion invokes original entries. Guest visitor scripts are explicit mutable boundaries, not validation of native visitor internals. Borrowed acyclic valid child pairs only; exception/fault/concurrent/runtime behavior unverified."
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "owned-tree-visit61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/owned_tree_visit61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/owned_tree_visit61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nvoid OriginalTreeVisit61Save(unsigned,PPCContext&,std::uint8_t*);\nvoid OriginalTreeVisit61Restore(unsigned,PPCContext&,std::uint8_t*);\nvoid OriginalTreeVisit61Guest(std::uint32_t,PPCContext&,std::uint8_t*);\n#define __savegprlr_27(c,b) OriginalTreeVisit61Save(27u,c,b)\n#define __restgprlr_27(c,b) OriginalTreeVisit61Restore(27u,c,b)\n#define __savegprlr_28(c,b) OriginalTreeVisit61Save(28u,c,b)\n#define __restgprlr_28(c,b) OriginalTreeVisit61Restore(28u,c,b)\n#undef PPC_CALL_INDIRECT_FUNC\n#define PPC_CALL_INDIRECT_FUNC(t) OriginalTreeVisit61Guest((t),ctx,base)\nextern \"C\" PPC_FUNC(__imp__sub_82BDA0A8);\n#define sub_82BDA0A8(c,b) __imp__sub_82BDA0A8(c,b)\nextern \"C\" PPC_FUNC(__imp__sub_82BDA1A0);\n#define sub_82BDA1A0(c,b) __imp__sub_82BDA1A0(c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/owned_tree_visit61.cpp"
+      ]
+    }
+  ]
+}
