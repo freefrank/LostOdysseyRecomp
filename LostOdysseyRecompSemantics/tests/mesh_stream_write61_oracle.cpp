@@ -22,7 +22,11 @@ struct Guest final : crt_close_recursive_buffer_context::GuestServices {
 };
 Guest *guest = nullptr;
 GuestMemory *memory = nullptr;
-void Check(unsigned mode) {
+void Check(unsigned requested) {
+    const unsigned mode = requested == 11   ? 10u
+                          : requested == 12 ? 1u
+                          : requested == 13 ? 3u
+                                            : requested;
     struct Restore {
         std::uint32_t csr = PPCFPSCRRegister{}.getcsr();
         ~Restore() { PPCFPSCRRegister{}.setcsr(csr); }
@@ -35,6 +39,7 @@ void Check(unsigned mode) {
         m.WriteU32(Writer + 8, 256);
         m.WriteU32(Writer + 12, Buffer);
         m.WriteU32(Table + 28, 0x82bde331);
+        m.WriteU32(Table + 32, 0x82bde379);
         m.WriteU32(Table + 36, 0x82bde3c1);
         m.WriteU32(Table + 40, 0x82bde409);
         m.WriteU32(Table + 48, 0x82bde49b);
@@ -79,6 +84,12 @@ void Check(unsigned mode) {
         s.r[8] = (mode == 6 || mode == 8) ? 1 : 0;
         s.r[9] = Writer;
     }
+    if (requested == 11)
+        entry = 0x82bd7d00u;
+    else if (requested == 12)
+        entry = 0x82bd7e70u;
+    else if (requested == 13)
+        entry = 0x82bd7ff0u;
     Guest expected, actual;
     auto om = before.Memory();
     memory = &om;
@@ -86,7 +97,13 @@ void Check(unsigned mode) {
     PPCContext c{};
     crt_full_oracle::ToPpc(c, s);
     PPCFPSCRRegister{}.setcsr(s.cached_fp_control);
-    if (mode < 2)
+    if (requested == 11)
+        __imp__sub_82BD7D00(c, before.Bytes());
+    else if (requested == 12)
+        __imp__sub_82BD7E70(c, before.Bytes());
+    else if (requested == 13)
+        __imp__sub_82BD7FF0(c, before.Bytes());
+    else if (mode < 2)
         __imp__sub_82BADA70(c, before.Bytes());
     else if (mode < 5)
         __imp__sub_82BADCD0(c, before.Bytes());
@@ -107,6 +124,11 @@ void Check(unsigned mode) {
         csr != PPCFPSCRRegister{}.getcsr())
         throw std::runtime_error("mesh stream Full72/RAM/CSR/callback mismatch mode " +
                                  std::to_string(mode));
+    if (requested == 11) {
+        if (m.ReadU32(Writer + 4) != 2 || m.ReadU16(Buffer) != 0x7856)
+            throw std::runtime_error("virtual halfword endian bytes");
+        return;
+    }
     const auto size = (mode < 2 || mode >= 9) ? 4u : mode == 4 ? 0u : mode < 5 ? 8u : 12u;
     if (m.ReadU32(Writer + 4) != size)
         throw std::runtime_error("mesh stream output size");
@@ -151,9 +173,9 @@ void MeshStreamRestore(unsigned first, PPCContext &c, std::uint8_t *) {
 }
 int main() {
     try {
-        for (unsigned i = 0; i < 11; ++i)
+        for (unsigned i = 0; i < 14; ++i)
             mesh_stream_oracle::Check(i);
-        std::puts("PASS mesh-stream-write61 11 original-upper/shared-concrete-writer cases");
+        std::puts("PASS mesh-stream-write61 14 original-upper/shared-concrete-writer cases");
         return 0;
     } catch (const std::exception &e) {
         std::fprintf(stderr, "%s\n", e.what());

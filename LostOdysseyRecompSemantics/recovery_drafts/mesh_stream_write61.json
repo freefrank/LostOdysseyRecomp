@@ -41,6 +41,30 @@
       "instruction_count": 25,
       "body_sha256": "5b3ddda566534fa1ff89661e9764f0fb6fcffd485139bccc835554a518f624cf",
       "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD7D00",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 19746,
+      "instruction_count": 21,
+      "body_sha256": "38768fafaa323e804f73da93ead0b38b6798a7a0114c26ce7897f3466171ecb0",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD7E70",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 19970,
+      "instruction_count": 25,
+      "body_sha256": "f36d8c5a0916f4c5dffb167f5962c8a3cb7a922883630a17a8acde7d640abae5",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD7FF0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 20200,
+      "instruction_count": 33,
+      "body_sha256": "02b31e3c2afad87c26e219930bc1fafdbe2797fb88ab169b1c69f4a4674ca233",
+      "status": "focused_original_ppc_validated"
     }
   ],
   "implementation": {
@@ -49,7 +73,10 @@
       "82BADCD0",
       "82BADD60",
       "82BD8078",
-      "82BD7DB0"
+      "82BD7DB0",
+      "82BD7D00",
+      "82BD7E70",
+      "82BD7FF0"
     ],
     "header": "include/lo_semantics/mesh_stream_write61.h",
     "source": "src/mesh_stream_write61.cpp",
@@ -61,9 +88,9 @@
     "runtime_validated": false,
     "complete": false,
     "date": "2026-10-09",
-    "focused_original_ppc_cases": 11,
+    "focused_original_ppc_cases": 14,
     "library_validated": true,
-    "case_scope": "Scalar/span native and reversed float writes, empty span, and NXS tagged version headers. Original uppers share actual recovered growable output. Full72/RAM/host CSR/callback and independent output bytes. ICE header and virtual scalar word, both endian modes.",
+    "case_scope": "Scalar/span native and reversed float writes, empty span, and NXS tagged version headers. Original uppers share actual recovered growable output. Full72/RAM/host CSR/callback and independent output bytes. ICE header and virtual scalar word, both endian modes. Alternate in-place float staging and halfword scalar.",
     "platform": "Linux x64 Clang 19.1.7; pinned regenerated PPC; mmap guest overlay",
     "mapping_limit": "Historical catalog membership unverified; no baseline mapping credit."
   }

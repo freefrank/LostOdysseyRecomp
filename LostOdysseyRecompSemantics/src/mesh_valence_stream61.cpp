@@ -47,7 +47,7 @@ struct Valence {
         s.lr = cont;
         d.guest.CallIndirect(Address(s.ctr) & ~3u, m, s);
     }
-    void Maximum() {
+    void Maximum(bool words = false) {
         auto &r = s.r;
         r[11] = r[3];
         r[3] = 0;
@@ -55,46 +55,70 @@ struct Valence {
         if (s.cr6.eq)
             return;
         do {
-            r[10] = m.ReadU16(Address(r[11]));
-            r[9] = Address(r[3]) & 65535u;
-            --r[4];
-            r[8] = r[10];
-            r[11] += 2;
-            Compare(r[8], r[9]);
+            r[10] = words ? Word(r[11]) : m.ReadU16(Address(r[11]));
+            if (words) {
+                --r[4];
+                r[11] += 4;
+                Compare(r[10], r[3]);
+            } else {
+                r[9] = Address(r[3]) & 65535u;
+                --r[4];
+                r[8] = r[10];
+                r[11] += 2;
+                Compare(r[8], r[9]);
+            }
             if (s.cr6.gt)
                 r[3] = r[10];
             Compare(r[4]);
         } while (!s.cr6.eq);
     }
-    void Packed() {
-        Enter(28, 0x82bd83a8u);
+    void Packed(bool words = false) {
+        Enter(28, words ? 0x82bd8670u : 0x82bd83a8u);
         auto &r = s.r;
-        r[11] = Address(r[3]) & 65535u;
-        r[29] = r[6];
-        Compare(r[11], 255);
-        const bool wide = s.cr6.gt;
+        if (words) {
+            r[31] = r[5];
+            r[29] = r[6];
+            Compare(r[3], 255);
+        } else {
+            r[11] = Address(r[3]) & 65535u;
+            r[29] = r[6];
+            Compare(r[11], 255);
+        }
+        bool wide = s.cr6.gt;
+        if (words && wide) {
+            Compare(r[3], 65535);
+            if (s.cr6.gt) {
+                r[6] = r[29];
+                r[5] = r[7];
+                r[3] = r[31];
+                Lower(0x82bd7ff0u, 0x82bd8740u);
+                Leave(28);
+                return;
+            }
+        }
         Compare(r[4]);
         if (!s.cr6.eq) {
             if (!wide) {
-                r[30] = r[5];
+                r[30] = words ? r[31] : r[5];
                 r[31] = r[4];
                 do {
                     r[11] = Word(r[29]);
                     r[3] = r[29];
-                    r[10] = m.ReadU16(Address(r[30]));
+                    r[10] = words ? Word(r[30]) : m.ReadU16(Address(r[30]));
                     r[4] = Address(r[10]) & 255u;
                     r[11] = Word(r[11] + 28);
-                    Call(0x82bd83e8u);
+                    Call(words ? 0x82bd86b0u : 0x82bd83e8u);
                     --r[31];
-                    r[30] += 2;
+                    r[30] += words ? 4 : 2;
                     Compare(r[31]);
                 } while (!s.cr6.eq);
             } else {
                 r[28] = Address(r[7]) & 255u;
-                r[31] = r[5];
+                if (!words)
+                    r[31] = r[5];
                 r[30] = r[4];
                 do {
-                    r[11] = m.ReadU16(Address(r[31]));
+                    r[11] = words ? Word(r[31]) : m.ReadU16(Address(r[31]));
                     Compare(r[28]);
                     m.WriteU16(Address(r[1] + 80), std::uint16_t(r[11]));
                     if (!s.cr6.eq) {
@@ -107,9 +131,9 @@ struct Valence {
                     r[3] = r[29];
                     r[4] = m.ReadU16(Address(r[1] + 80));
                     r[11] = Word(r[11] + 32);
-                    Call(0x82bd844cu);
+                    Call(words ? 0x82bd8718u : 0x82bd844cu);
                     --r[30];
-                    r[31] += 2;
+                    r[31] += words ? 4 : 2;
                     Compare(r[30]);
                 } while (!s.cr6.eq);
             }
@@ -217,6 +241,12 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
         return true;
     case 0x82bbcc28u:
         v.Write();
+        return true;
+    case 0x82badfa0u:
+        v.Maximum(true);
+        return true;
+    case 0x82bd8668u:
+        v.Packed(true);
         return true;
     default:
         return false;

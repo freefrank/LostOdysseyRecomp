@@ -60,26 +60,39 @@ struct Stream {
         s.lr = continuation;
         deps.guest.CallIndirect(Address(s.ctr) & ~3u, m, s);
     }
-    void Scalar() {
+    void Swap(std::uint64_t p, unsigned width) {
+        auto &r = s.r;
+        for (unsigned i = 0; i < width / 2; ++i) {
+            r[11] = m.ReadU8(Address(p + i));
+            r[10] = m.ReadU8(Address(p + width - 1 - i));
+            m.WriteU8(Address(p + width - 1 - i), std::uint8_t(r[11]));
+            m.WriteU8(Address(p + i), std::uint8_t(r[10]));
+        }
+    }
+    void Scalar(bool inplace = false) {
         Enter(32, 96);
         auto &r = s.r;
         r[11] = Address(r[4]) & 255u;
         Save(1, r[1] + 116);
         Compare(r[11]);
         if (!s.cr6.eq) {
-            Reverse(r[1] + 116, r[1] + 80);
-            r[11] = Word(r[1] + 80);
-            Store(r[1] + 116, r[11]);
+            if (inplace)
+                Swap(r[1] + 116, 4);
+            else {
+                Reverse(r[1] + 116, r[1] + 80);
+                r[11] = Word(r[1] + 80);
+                Store(r[1] + 116, r[11]);
+            }
         }
         r[11] = Word(r[5]);
         Load(1, r[1] + 116);
         r[3] = r[5];
         r[11] = Word(r[11] + 40);
-        Call(0x82badaccu);
+        Call(inplace ? 0x82bd7ec4u : 0x82badaccu);
         Leave(32, 96);
     }
-    void Span() {
-        Enter(28, 128, 0x82badcd8u);
+    void Span(bool inplace = false) {
+        Enter(28, 128, inplace ? 0x82bd7ff8u : 0x82badcd8u);
         auto &r = s.r;
         r[31] = r[4];
         r[30] = r[3];
@@ -94,15 +107,19 @@ struct Stream {
                 r[30] += 4;
                 Compare(r[29]);
                 if (!s.cr6.eq) {
-                    Reverse(r[1] + 80, r[1] + 84);
-                    r[11] = Word(r[1] + 84);
-                    Store(r[1] + 80, r[11]);
+                    if (inplace)
+                        Swap(r[1] + 80, 4);
+                    else {
+                        Reverse(r[1] + 80, r[1] + 84);
+                        r[11] = Word(r[1] + 84);
+                        Store(r[1] + 80, r[11]);
+                    }
                 }
                 r[11] = Word(r[28]);
                 Load(1, r[1] + 80);
                 r[3] = r[28];
                 r[11] = Word(r[11] + 40);
-                Call(0x82badd4cu);
+                Call(inplace ? 0x82bd8064u : 0x82badd4cu);
                 Compare(r[31]);
             } while (!s.cr6.eq);
         }
@@ -114,24 +131,23 @@ struct Stream {
         s.r[11] = Word(s.r[11] + 28);
         Call(continuation);
     }
-    void WordScalar() {
+    void WordScalar(bool half = false) {
         Enter(32, 96);
         auto &r = s.r;
         r[11] = Address(r[4]) & 255u;
-        Store(r[1] + 116, r[3]);
+        const auto slot = r[1] + (half ? 118u : 116u);
+        if (half)
+            m.WriteU16(Address(slot), std::uint16_t(r[3]));
+        else
+            Store(slot, r[3]);
         Compare(r[11]);
         if (!s.cr6.eq)
-            for (unsigned i = 0; i < 2; ++i) {
-                r[11] = m.ReadU8(Address(r[1] + 116 + i));
-                r[10] = m.ReadU8(Address(r[1] + 119 - i));
-                m.WriteU8(Address(r[1] + 119 - i), std::uint8_t(r[11]));
-                m.WriteU8(Address(r[1] + 116 + i), std::uint8_t(r[10]));
-            }
+            Swap(slot, half ? 2 : 4);
         r[11] = Word(r[5]);
         r[3] = r[5];
-        r[4] = Word(r[1] + 116);
-        r[11] = Word(r[11] + 36);
-        Call(0x82bd7e04u);
+        r[4] = half ? m.ReadU16(Address(slot)) : Word(slot);
+        r[11] = Word(r[11] + (half ? 32 : 36));
+        Call(half ? 0x82bd7d44u : 0x82bd7e04u);
         Leave(32, 96);
     }
     void Header(bool ice) {
@@ -210,6 +226,15 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
         return true;
     case 0x82bd7db0u:
         w.WordScalar();
+        return true;
+    case 0x82bd7d00u:
+        w.WordScalar(true);
+        return true;
+    case 0x82bd7e70u:
+        w.Scalar(true);
+        return true;
+    case 0x82bd7ff0u:
+        w.Span(true);
         return true;
     default:
         return false;

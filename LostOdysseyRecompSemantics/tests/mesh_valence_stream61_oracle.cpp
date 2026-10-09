@@ -134,6 +134,89 @@ void Check(unsigned mode) {
         if (m.ReadU8(Buffer + 24 + size + i) != 20 + i)
             throw std::runtime_error("valence raw adjacency output");
 }
+void CheckWords(unsigned mode) {
+    struct Restore {
+        std::uint32_t csr = PPCFPSCRRegister{}.getcsr();
+        ~Restore() { PPCFPSCRRegister{}.setcsr(csr); }
+    } restore;
+    test::GuestWindow before(Regions), after(Regions);
+    unsigned values[]{mode == 2 ? 0x3f800000u : 2u,
+                      mode == 2   ? 0x40000000u
+                      : mode == 1 ? 300u
+                                  : 7u,
+                      mode == 2 ? 0xc0000000u : 1u};
+    auto seed = [&](test::GuestWindow &w) {
+        w.Fill(0);
+        auto m = w.Memory();
+        m.WriteU32(Writer, Table);
+        m.WriteU32(Writer + 8, 256);
+        m.WriteU32(Writer + 12, Buffer);
+        m.WriteU32(Table + 28, 0x82bde331);
+        m.WriteU32(Table + 32, 0x82bde379);
+        m.WriteU32(Table + 40, 0x82bde409);
+        m.WriteU32(Table + 48, 0x82bde49b);
+        for (unsigned i = 0; i < 3; ++i)
+            m.WriteU32(Input + 4 * i, values[i]);
+    };
+    seed(before);
+    seed(after);
+    Registers s{};
+    for (unsigned i = 0; i < 32; ++i) {
+        s.r[i] = 0x1122334400000000ull + i;
+        s.fpr_bits[i] = 0x3ff0000000000000ull + i;
+    }
+    s.r[1] = 0x8877665500080000ull;
+    s.lr = 0x9988776681234567ull;
+    s.xer_so = 1;
+    s.cached_fp_control = 0x9fc0;
+    s.r[3] = Input;
+    s.r[4] = 3;
+    Guest expected, actual;
+    auto om = before.Memory();
+    memory = &om;
+    guest = &expected;
+    PPCContext c{};
+    crt_full_oracle::ToPpc(c, s);
+    PPCFPSCRRegister{}.setcsr(s.cached_fp_control);
+    __imp__sub_82BADFA0(c, before.Bytes());
+    auto max = c.r3.u32;
+    c.r4.u64 = 3;
+    c.r5.u64 = Input;
+    c.r6.u64 = Writer;
+    c.r7.u64 = mode == 1 ? 1 : 0;
+    __imp__sub_82BD8668(c, before.Bytes());
+    auto csr = PPCFPSCRRegister{}.getcsr();
+    memory = nullptr;
+    guest = nullptr;
+    auto m = after.Memory();
+    PPCFPSCRRegister{}.setcsr(s.cached_fp_control);
+    (void)mesh_valence_stream61::Apply(0x82badfa0u, m, {actual, native}, s);
+    if (s.r[3] != max || max != *std::max_element(values, values + 3))
+        throw std::runtime_error("word maximum");
+    s.r[4] = 3;
+    s.r[5] = Input;
+    s.r[6] = Writer;
+    s.r[7] = mode == 1 ? 1 : 0;
+    (void)mesh_valence_stream61::Apply(0x82bd8668u, m, {actual, native}, s);
+    if (crt_full_oracle::Snapshot(crt_full_oracle::FromPpc(c)) != crt_full_oracle::Snapshot(s) ||
+        !before.EqualCommitted(after) || expected.events != actual.events ||
+        csr != PPCFPSCRRegister{}.getcsr())
+        throw std::runtime_error("word packing Full72/RAM/CSR/callback");
+    unsigned width = mode == 0 ? 1 : mode == 1 ? 2 : 4;
+    if (m.ReadU32(Writer + 4) != 3 * width)
+        throw std::runtime_error("word packing size");
+    for (unsigned i = 0; i < 3; ++i) {
+        auto v = values[i];
+        if (mode == 0) {
+            if (m.ReadU8(Buffer + i) != v)
+                throw std::runtime_error("packed byte");
+        } else if (mode == 1) {
+            if (m.ReadU16(Buffer + 2 * i) != (((v & 255) << 8) | (v >> 8)))
+                throw std::runtime_error("packed halfword");
+        } else if (m.ReadU32(Buffer + 4 * i) != v)
+            throw std::runtime_error("word float-path bit staging");
+    }
+}
 } // namespace valence_oracle
 void ValenceIndirect(std::uint32_t e, PPCContext &c, std::uint8_t *) {
     auto s = crt_full_oracle::FromPpc(c);
@@ -172,7 +255,9 @@ int main() {
     try {
         for (unsigned i = 0; i < 5; ++i)
             valence_oracle::Check(i);
-        std::puts("PASS mesh-valence-stream61 5 original-chain/shared-concrete-output cases");
+        for (unsigned i = 0; i < 3; ++i)
+            valence_oracle::CheckWords(i);
+        std::puts("PASS mesh-valence-stream61 8 original-chain/shared-concrete-output cases");
         return 0;
     } catch (const std::exception &e) {
         std::fprintf(stderr, "%s\n", e.what());

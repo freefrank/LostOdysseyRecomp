@@ -25,13 +25,31 @@
       "instruction_count": 85,
       "body_sha256": "491e45f02c9266b071c7debb3188b5801f72622b46d2a0b3e8ae73858b1f8cf3",
       "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BADFA0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 45010,
+      "instruction_count": 13,
+      "body_sha256": "ec9d9dd2bc5cf264a23751ee8d7d3b4d8bac2bde106b71a11817df6f02770030",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD8668",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 21149,
+      "instruction_count": 56,
+      "body_sha256": "3193737749c54246ec2c78ada7c3500802c6aad2438560c2c386f0131f87b929",
+      "status": "focused_original_ppc_validated"
     }
   ],
   "implementation": {
     "entries": [
       "82BD8360",
       "82BD83A0",
-      "82BBCC28"
+      "82BBCC28",
+      "82BADFA0",
+      "82BD8668"
     ],
     "header": "include/lo_semantics/mesh_valence_stream61.h",
     "source": "src/mesh_valence_stream61.cpp",
@@ -43,9 +61,9 @@
     "runtime_validated": false,
     "complete": false,
     "date": "2026-10-09",
-    "focused_original_ppc_cases": 5,
+    "focused_original_ppc_cases": 8,
     "library_validated": true,
-    "case_scope": "VALE degree maximum, compact8/wide16 output, native/swapped and empty cases, temporary allocation/free before adjacency payload. Composed original local chain shares concrete header/scalar/growable/allocator lowers. Full72/RAM/callback and independent bytes/lifetime.",
+    "case_scope": "VALE degree maximum, compact8/wide16 output, native/swapped and empty cases, temporary allocation/free before adjacency payload. Composed original local chain shares concrete header/scalar/growable/allocator lowers. Full72/RAM/callback and independent bytes/lifetime. Word maximum and three packed widths, retaining original float path for full words.",
     "platform": "Linux x64 Clang 19.1.7; pinned regenerated PPC; mmap guest overlay",
     "mapping_limit": "Historical catalog membership unverified; no baseline mapping credit."
   }

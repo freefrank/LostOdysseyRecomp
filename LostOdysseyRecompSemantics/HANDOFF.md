@@ -1,3 +1,7 @@
+## Root direct continuation: adaptive mesh stream widths (2026-10-09)
+
+Shared mesh stream code now includes BD7D00 halfword, BD7E70 alternate float scalar and BD7FF0 alternate float span; 14 cases total pass. Valence code adds BADFA0 word maximum and BD8668 adaptive byte/halfword/full-word output; eight cases total pass. The full-word path preserves the original float staging rather than assuming integer memcpy. Full72/RAM/host CSR/callbacks and independent bytes pass; complete Clang library passes. Five implementation entries, no extra runtime/mapping claim.
+
 ## Root direct continuation: topology and lazy valence construction (2026-10-09)
 
 `mesh_cache_build61` closes BBDDF0 topology/filter orchestration, BBC9F0 per-vertex degree/neighbor cache and BB3130 lazy descriptor ownership/publication. Three composed-original upper-chain cases pass Full72/RAM/host CSR/callbacks and independent degrees, offsets, byte neighbors, borrowed published view and release-unretained ownership; all topology, sorting, geometry, allocator and lifetime lowers are concrete shared implementations. Full Clang library passes. Three addresses; partial-failure order remains unchanged, upper whole-mesh serialization still incomplete.
