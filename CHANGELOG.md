@@ -8,6 +8,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 ### English
 
+- DLSS, FSR, XeSS and MetalFX no longer switch off during the game's screen fades (camera cuts, menus, battle intros, victory shots), so the picture stays sharp and ambient occlusion and frame generation stay on.
 - Fixed short stutters with DLSS frame generation, mostly in battles, on Vulkan and Direct3D 12.
 - Fixed a Vulkan crash a few seconds after startup on NVIDIA GPUs when ReShade's `dxgi.dll` is in the game folder; ReShade still works with Direct3D 12 (#323).
 - With DLSS, FSR, XeSS or MetalFX on, a Render resolution above the output now supersamples: the upscaler outputs at that resolution and the picture is scaled down to the window or screen (#332).
@@ -26,6 +27,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 ### 简体中文
 
+- 游戏画面淡化时（镜头切换、菜单、战斗开场、胜利镜头），DLSS、FSR、XeSS 和 MetalFX 不再中断，画面保持清晰，环境光遮蔽和帧生成也不再中断。
 - 修复开启 DLSS 帧生成时的短暂卡顿（多见于战斗），Vulkan 和 Direct3D 12 都已修复。
 - 修复游戏目录里有 ReShade 的 `dxgi.dll` 时，NVIDIA 显卡使用 Vulkan 启动几秒后崩溃的问题；ReShade 在 Direct3D 12 下仍可使用（#323）。
 - 开启 DLSS、FSR、XeSS 或 MetalFX 时，高于输出的渲染分辨率现在会超采样：超分输出为该分辨率，再缩小到窗口或屏幕（#332）。
