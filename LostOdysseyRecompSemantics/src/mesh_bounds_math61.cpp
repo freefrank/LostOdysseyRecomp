@@ -258,6 +258,252 @@ struct Sphere {
             Enclose();
         r[3] = 1;
     }
+    void SaveSupport(GuestAddress continuation) {
+        auto &r = s.r;
+        r[12] = s.lr;
+        m.WriteU32(Address(r[1] - 8), Address(r[12]));
+        r[12] = r[1] - 8;
+        s.lr = continuation;
+        for (unsigned i = 23; i < 32; ++i)
+            recovery_abi::WriteU64(m, Address(r[12] - 8 * (32 - i)), s.fpr_bits[i]);
+    }
+    void RestoreSupport(GuestAddress continuation) {
+        auto &r = s.r;
+        r[12] = r[1] - 8;
+        s.lr = continuation;
+        for (unsigned i = 23; i < 32; ++i)
+            s.fpr_bits[i] = recovery_abi::ReadU64(m, Address(r[12] - 8 * (32 - i)));
+        r[12] = m.ReadU32(Address(r[1] - 8));
+        s.lr = r[12];
+    }
+    void Radius(unsigned x, unsigned y, unsigned z) {
+        Single(11, F(x) * F(x));
+        Single(11, F(y) * F(y) + F(11));
+        Single(11, F(z) * F(z) + F(11));
+        Single(10, std::sqrt(F(11)));
+        Load(11, s.r[11] + 27160);
+        Single(11, F(10) + F(11));
+        Store(11, s.r[3] + 12);
+    }
+    void Pair() {
+        auto &r = s.r;
+        Load(0, r[5]);
+        r[11] = 0xffffffff82020000ull;
+        Load(13, r[4]);
+        Single(13, F(0) - F(13));
+        Load(11, r[4] + 8);
+        Load(12, r[5] + 8);
+        Single(12, F(12) - F(11));
+        Load(0, r[5] + 4);
+        Load(11, r[4] + 4);
+        Single(11, F(0) - F(11));
+        Load(0, r[11] - 1552);
+        r[11] = 0xffffffff820d0000ull;
+        Single(13, F(13) * F(0));
+        Single(12, F(12) * F(0));
+        Single(0, F(11) * F(0));
+        Radius(13, 12, 0);
+        Load(11, r[4]);
+        Single(13, F(11) + F(13));
+        Load(10, r[4] + 4);
+        Load(11, r[4] + 8);
+        Single(0, F(0) + F(10));
+        Single(12, F(11) + F(12));
+        Store(13, r[3]);
+        Store(0, r[3] + 4);
+        Store(12, r[3] + 8);
+    }
+    void Triangle() {
+        SaveSupport(0x82bc9610u);
+        auto &r = s.r;
+        // Edge vectors and their cross product; retain staged products because
+        // changing evaluation order changes binary32 circumcenter rounding.
+        Load(13, r[4]);
+        r[11] = 0xffffffff821c0000ull;
+        Load(9, r[4] + 4);
+        Load(10, r[4] + 8);
+        Load(0, r[5]);
+        Load(12, r[5] + 4);
+        Single(0, F(0) - F(13));
+        Load(11, r[5] + 8);
+        Single(12, F(12) - F(9));
+        Load(8, r[6]);
+        Single(11, F(11) - F(10));
+        Load(7, r[6] + 4);
+        Single(13, F(8) - F(13));
+        Load(6, r[6] + 8);
+        Single(9, F(7) - F(9));
+        Single(10, F(6) - F(10));
+        Single(2, F(12) * F(12));
+        Single(8, F(12) * F(13));
+        Single(5, F(9) * F(11));
+        Single(3, F(9) * F(0));
+        Single(6, F(10) * F(12));
+        Single(4, F(10) * F(0));
+        Single(7, F(11) * F(13));
+        Single(1, F(9) * F(9));
+        Single(2, F(11) * F(11) + F(2));
+        Single(29, F(3) - F(8));
+        Single(28, F(6) - F(5));
+        Single(31, F(6) - F(5));
+        Single(30, F(7) - F(4));
+        Single(27, F(7) - F(4));
+        Single(7, F(7) - F(4));
+        Single(1, F(10) * F(10) + F(1));
+        Single(26, F(3) - F(8));
+        Single(6, F(6) - F(5));
+        Single(2, F(0) * F(0) + F(2));
+        Single(4, F(29) * F(13));
+        Single(24, F(11) * F(28));
+        Single(8, F(3) - F(8));
+        Single(5, F(30) * F(10));
+        Single(23, F(27) * F(0));
+        Single(3, F(9) * F(31));
+        Single(1, F(13) * F(13) + F(1));
+        Single(25, F(26) * F(12));
+        Single(10, F(10) * F(31) - F(4));
+        Single(0, F(26) * F(0) - F(24));
+        Single(9, F(29) * F(9) - F(5));
+        Single(12, F(28) * F(12) - F(23));
+        Single(13, F(30) * F(13) - F(3));
+        Single(11, F(27) * F(11) - F(25));
+        Single(10, F(10) * F(2));
+        Single(0, F(0) * F(1));
+        Single(9, F(9) * F(2));
+        Single(12, F(12) * F(1));
+        Single(13, F(13) * F(2));
+        Single(11, F(11) * F(1));
+        Single(10, F(0) + F(10));
+        Single(0, F(7) * F(7));
+        Single(13, F(12) + F(13));
+        Single(11, F(11) + F(9));
+        Single(0, F(8) * F(8) + F(0));
+        Single(12, F(6) * F(6) + F(0));
+        // Divide the cross-product numerator by twice the squared normal.
+        Load(0, r[11] - 21900);
+        r[11] = 0xffffffff82000000ull;
+        Single(12, F(12) * F(0));
+        Load(0, r[11] + 30596);
+        r[11] = 0xffffffff820d0000ull;
+        Single(0, F(0) / F(12));
+        Single(12, F(10) * F(0));
+        Single(13, F(13) * F(0));
+        Single(0, F(11) * F(0));
+        Radius(12, 13, 0);
+        Load(11, r[4]);
+        Single(0, F(11) + F(0));
+        Load(10, r[4] + 4);
+        Load(11, r[4] + 8);
+        Single(12, F(12) + F(10));
+        Store(0, r[3]);
+        Single(13, F(11) + F(13));
+        Store(12, r[3] + 4);
+        Store(13, r[3] + 8);
+        RestoreSupport(0x82bc9770u);
+    }
+    void Tetrahedron() {
+        SaveSupport(0x82bc9790u);
+        auto &r = s.r;
+        // Three edges from the first point. Cofactors solve the equal-distance
+        // equations; the determinant and each numerator keep guest rounding.
+        Load(10, r[4] + 4);
+        r[11] = 0xffffffff821c0000ull;
+        Load(7, r[6] + 4);
+        Single(7, F(7) - F(10));
+        Load(12, r[4]);
+        Load(0, r[7]);
+        Load(9, r[5]);
+        Single(13, F(0) - F(12));
+        Load(8, r[6]);
+        Single(0, F(9) - F(12));
+        Load(11, r[5] + 4);
+        Single(9, F(8) - F(12));
+        Load(6, r[4] + 8);
+        Single(8, F(11) - F(10));
+        Load(3, r[7] + 8);
+        Single(11, F(3) - F(6));
+        Load(5, r[6] + 8);
+        Single(12, F(5) - F(6));
+        Load(4, r[7] + 4);
+        Load(2, r[5] + 8);
+        Single(10, F(4) - F(10));
+        Single(1, F(7) * F(7));
+        Single(6, F(2) - F(6));
+        Single(29, F(7) * F(13));
+        Single(5, F(0) * F(0));
+        Single(4, F(13) * F(8));
+        Single(31, F(11) * F(9));
+        Single(28, F(11) * F(8));
+        Single(2, F(10) * F(12));
+        Single(26, F(12) * F(12) + F(1));
+        Single(27, F(6) * F(13));
+        Single(1, F(7) * F(6));
+        Single(5, F(6) * F(6) + F(5));
+        Single(29, F(10) * F(9) - F(29));
+        Single(23, F(10) * F(10));
+        Single(3, F(11) * F(7));
+        Single(30, F(12) * F(13) - F(31));
+        Single(28, F(10) * F(6) - F(28));
+        Single(31, F(6) * F(9));
+        Single(6, F(9) * F(8));
+        Single(9, F(9) * F(9) + F(26));
+        Single(26, -(F(10) * F(0) - F(4)));
+        Single(4, F(4) * F(12));
+        Single(27, F(11) * F(0) - F(27));
+        Single(5, F(8) * F(8) + F(5));
+        Single(8, F(12) * F(8) - F(1));
+        Single(25, F(3) - F(2));
+        Single(24, -(F(12) * F(0) - F(31)));
+        Single(7, F(7) * F(0) - F(6));
+        Single(28, F(28) * F(9));
+        Single(10, F(31) * F(10) + F(4));
+        Single(27, F(27) * F(9));
+        Single(9, F(26) * F(9));
+        Single(26, F(11) * F(11) + F(23));
+        Single(30, F(30) * F(5));
+        Single(29, F(29) * F(5));
+        Single(5, F(25) * F(5));
+        Single(10, F(3) * F(0) + F(10));
+        Single(12, F(13) * F(13) + F(26));
+        Single(13, -(F(1) * F(13) - F(10)));
+        Single(13, -(F(6) * F(11) - F(13)));
+        Single(11, F(7) * F(12));
+        Single(10, -(F(2) * F(0) - F(13)));
+        Load(0, r[11] - 21900);
+        Single(13, F(24) * F(12));
+        r[11] = 0xffffffff82000000ull;
+        Single(12, F(8) * F(12));
+        Single(11, F(11) + F(9));
+        Single(10, F(10) * F(0));
+        Load(0, r[11] + 30596);
+        Single(13, F(13) + F(27));
+        Single(12, F(12) + F(28));
+        Single(11, F(11) + F(29));
+        Single(0, F(0) / F(10));
+        Single(13, F(13) + F(30));
+        Single(10, F(12) + F(5));
+        Single(12, F(11) * F(0));
+        Single(13, F(13) * F(0));
+        Single(0, F(10) * F(0));
+        Single(11, F(13) * F(13));
+        Single(11, F(12) * F(12) + F(11));
+        Single(11, F(0) * F(0) + F(11));
+        r[11] = 0xffffffff820d0000ull;
+        Single(10, std::sqrt(F(11)));
+        Load(11, r[11] + 27160);
+        Single(11, F(10) + F(11));
+        Store(11, r[3] + 12);
+        Load(11, r[4]);
+        Single(0, F(11) + F(0));
+        Load(10, r[4] + 4);
+        Load(11, r[4] + 8);
+        Single(13, F(13) + F(10));
+        Single(12, F(11) + F(12));
+        Store(0, r[3]);
+        Store(13, r[3] + 4);
+        Store(12, r[3] + 8);
+        RestoreSupport(0x82bc9918u);
+    }
     void Run() {
         auto &r = s.r;
         r[12] = s.lr;
@@ -278,9 +524,23 @@ struct Sphere {
 } // namespace
 bool Apply(GuestAddress e, GuestMemory &m, float_triplet_transfer::NativeServices &fp,
            Registers &s) {
-    if (e != 0x82bc9040u)
+    Sphere x{m, fp, s};
+    switch (e) {
+    case 0x82bc9040u:
+        x.Run();
+        break;
+    case 0x82bc9580u:
+        x.Pair();
+        break;
+    case 0x82bc9600u:
+        x.Triangle();
+        break;
+    case 0x82bc9780u:
+        x.Tetrahedron();
+        break;
+    default:
         return false;
-    Sphere{m, fp, s}.Run();
+    }
     return true;
 }
 } // namespace lo::semantic::gpu::mesh_bounds_math61

@@ -5,7 +5,7 @@
       "name": "mesh-bounds-math61",
       "manifest": "LostOdysseyRecompSemantics/recovery_drafts/mesh_bounds_math61.json",
       "harness": "LostOdysseyRecompSemantics/tests/mesh_bounds_math61_oracle.cpp",
-      "prelude": "#include \"ppc_context.h\"\nvoid SphereSave(PPCContext&,std::uint8_t*);\nvoid SphereRestore(PPCContext&,std::uint8_t*);\n#define __savefpr_19 SphereSave\n#define __restfpr_19 SphereRestore\n",
+      "prelude": "#include \"ppc_context.h\"\nvoid SphereSave(unsigned,PPCContext&,std::uint8_t*);\nvoid SphereRestore(unsigned,PPCContext&,std::uint8_t*);\n#define __savefpr_19(c,b) SphereSave(19,c,b)\n#define __restfpr_19(c,b) SphereRestore(19,c,b)\n#define __savefpr_23(c,b) SphereSave(23,c,b)\n#define __restfpr_23(c,b) SphereRestore(23,c,b)\n",
       "sources": [
         "LostOdysseyRecompSemantics/src/mesh_bounds_math61.cpp"
       ]

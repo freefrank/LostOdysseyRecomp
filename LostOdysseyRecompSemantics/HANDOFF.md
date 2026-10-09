@@ -1,3 +1,7 @@
+## Root direct continuation: support-point circumspheres (2026-10-09)
+
+`mesh_bounds_math61` adds BC9580/BC9600/BC9780 two-, three-, and four-point sphere constructors. Midpoint, cross-product circumcenter, and determinant/cofactor arithmetic preserve binary32 stages, radius epsilon, and red-zone FPR state. Eight family cases pass complete original leaves with independent known circumcenters/radii and enclosure. Four-byte radius epsilon is supplied externally through LO_BOUNDS_CONSTANTS; no image-derived bundle committed. Degenerate support sets are not part of focused validation. Full library passes. These close BC9928 recursive solver leaves; recursive orchestration and bounds-wrapper fallback still remain.
+
 ## Root direct continuation: expanding bounding sphere (2026-10-09)
 
 `mesh_bounds_math61` closes BC9040: retain six axis-extreme points, choose the widest pair, initialize its midpoint sphere, and expand in input order. Five complete-original-leaf cases pass Full72/RAM/CSR, independent enclosure and known single/planar spheres. Includes null input, one/three/four/seven finite points, four-point batches and tail, and expansion. FPR red-zone saves and binary32 stages retained. No nonfinite or nonnull-zero-count claim. Full Clang library passes. BC9AF0/BC9928 fallback and B7E860 pow remain before the cooked bounds wrapper can close.

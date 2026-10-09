@@ -9,11 +9,38 @@
       "instruction_count": 336,
       "body_sha256": "346c8f6cf198587c28d2f5fbcc03a2b886100eef0e70bce404c0cd0fe722d528",
       "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BC9580",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 49376,
+      "instruction_count": 32,
+      "body_sha256": "68ebae899c2259ccff3fcd6a3a321ce78f2061c8cb90cda2d9cd93452bf2f9a1",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BC9600",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 49462,
+      "instruction_count": 95,
+      "body_sha256": "b9a5bdb49609da59c11bcab10b7c89266051a19298d085359433dd14d2af75f2",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BC9780",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 49680,
+      "instruction_count": 105,
+      "body_sha256": "9ab7470c2a2382b1f66e4b203ef48fb516335b71d7f6441131c10bf3701b9858",
+      "status": "focused_original_ppc_validated"
     }
   ],
   "implementation": {
     "entries": [
-      "82BC9040"
+      "82BC9040",
+      "82BC9580",
+      "82BC9600",
+      "82BC9780"
     ],
     "header": "include/lo_semantics/mesh_bounds_math61.h",
     "source": "src/mesh_bounds_math61.cpp",
@@ -25,9 +52,9 @@
     "runtime_validated": false,
     "complete": false,
     "date": "2026-10-09",
-    "focused_original_ppc_cases": 5,
+    "focused_original_ppc_cases": 8,
     "library_validated": true,
-    "case_scope": "Complete original leaf: null input, one/three/four/seven finite points; batch/tail scans, expansion, Full72/RAM/CSR, independent enclosure and known single/planar spheres. No nonfinite or zero-count nonnull validation, no gameplay claim.",
+    "case_scope": "Complete original leaf: null input, one/three/four/seven finite points; batch/tail scans, expansion, Full72/RAM/CSR, independent enclosure and known single/planar spheres. No nonfinite or zero-count nonnull validation, no gameplay claim. Two-/three-/four-point support spheres checked against independent circumcenters/radii. Private epsilon via external four-byte LO_BOUNDS_CONSTANTS; degenerate support sets untested.",
     "platform": "Linux x64 Clang19; pinned PPC; mmap guest overlay"
   }
 }
