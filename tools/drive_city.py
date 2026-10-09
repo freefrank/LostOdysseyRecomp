@@ -225,6 +225,7 @@ def main() -> int:
         "LO_AUTO_BUTTONS": args.auto_buttons,
         "LO_AUTO_PULSE": args.auto_pulse,
         "LO_LOG_FILE": str(session_log),
+        "LO_DEBUG_LOG": "1",
         # Foreground runs must not stop at the startup shader-pack offer.
         "LO_SHADER_PACK_DOWNLOAD": "0",
         # NOTE: no LO_AUTO_STICK here — walk input is sent only on city entry,

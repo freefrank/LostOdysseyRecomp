@@ -69,9 +69,9 @@ inline void LogHostMemory(const char* stage)
 inline void LogStartupEnvironment()
 {
 #ifdef LO_BUILD_REVISION
-    LOG_INFO("build: source={} revision={} pointer_bits={}", lo_version::Source, LO_BUILD_REVISION, sizeof(void*) * 8);
+    LOG_NOTICE("build: source={} revision={} pointer_bits={}", lo_version::Source, LO_BUILD_REVISION, sizeof(void*) * 8);
 #else
-    LOG_INFO("build: source={} revision=unavailable pointer_bits={}", lo_version::Source, sizeof(void*) * 8);
+    LOG_NOTICE("build: source={} revision=unavailable pointer_bits={}", lo_version::Source, sizeof(void*) * 8);
 #endif
 #ifdef __clang__
     LOG_INFO("build compiler: clang {}", __clang_version__);
@@ -88,7 +88,7 @@ inline void LogStartupEnvironment()
         version.dwOSVersionInfoSize = sizeof(version);
         const auto result = getVersion(reinterpret_cast<OSVERSIONINFOW*>(&version));
         if (result == 0)
-            LOG_INFO("host OS: api=RtlGetVersion version={}.{}.{} platform={} product_type={} service_pack={}.{}",
+            LOG_NOTICE("host OS: api=RtlGetVersion version={}.{}.{} platform={} product_type={} service_pack={}.{}",
                 version.dwMajorVersion, version.dwMinorVersion, version.dwBuildNumber, version.dwPlatformId,
                 version.wProductType, version.wServicePackMajor, version.wServicePackMinor);
         else LOG_WARNING("host OS: api=RtlGetVersion NTSTATUS={:#010x}", uint32_t(result));
@@ -102,7 +102,7 @@ inline void LogStartupEnvironment()
     const auto getArchitecture = reinterpret_cast<IsWow64Process2Fn>(GetProcAddress(kernel, "IsWow64Process2"));
     USHORT processMachine = 0, nativeMachine = 0;
     if (getArchitecture && getArchitecture(GetCurrentProcess(), &processMachine, &nativeMachine)) {
-        LOG_INFO("host architecture: api=IsWow64Process2 process_machine={:#06x} native_machine={:#06x} emulated={}",
+        LOG_NOTICE("host architecture: api=IsWow64Process2 process_machine={:#06x} native_machine={:#06x} emulated={}",
             processMachine ? processMachine : nativeMachine, nativeMachine, processMachine != 0);
     } else {
         const auto error = GetLastError();
@@ -113,7 +113,7 @@ inline void LogStartupEnvironment()
     }
     using WineVersionFn = const char* (__cdecl*)();
     const auto wineVersion = reinterpret_cast<WineVersionFn>(GetProcAddress(ntdll, "wine_get_version"));
-    if (wineVersion) LOG_INFO("host compatibility: wine_version={}", wineVersion());
+    if (wineVersion) LOG_NOTICE("host compatibility: wine_version={}", wineVersion());
 
     // Loaded-image metadata complements the revision, but is not an artifact
     // hash. The COFF timestamp is raw metadata, not a wall-clock claim.
@@ -129,7 +129,7 @@ inline void LogStartupEnvironment()
     }
 #endif
 #ifdef __APPLE__
-    LOG_INFO("host OS: macOS version={} build={} kernel={}", SysctlString("kern.osproductversion"),
+    LOG_NOTICE("host OS: macOS version={} build={} kernel={}", SysctlString("kern.osproductversion"),
         SysctlString("kern.osversion"), SysctlString("kern.osrelease"));
     // sysctl.proc_translated is 1 under Rosetta 2 (an x86_64 build on Apple Silicon).
     LOG_INFO("host architecture: machine={} arm64={} rosetta={}", SysctlString("hw.machine"),

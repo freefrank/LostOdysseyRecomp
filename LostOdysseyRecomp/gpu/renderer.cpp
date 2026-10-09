@@ -1,7 +1,5 @@
-#include "taa_collection.h"
 #include <source_location>
-#include "taa_binding_producer.h"
-#include "temporal_evidence.h"
+#include "taa_binding_evidence.h"
 #include "scene_aa_provenance.h"
 #include "scene_copy_promotion_policy.h"
 #include "scene_copy_promotion_shaders.h"
@@ -384,7 +382,6 @@ namespace gpu::renderer
             // binding invalidates the SR lineage, even for a same-layout write.
             uint64_t fgWriteGeneration = 0;
             std::weak_ptr<frame_generation::ProducerSnapshot> fgSnapshot;
-            binding::Producer bindingProducer;
             uint32_t bindingWidth = 0, bindingHeight = 0; // Actual uploaded allocation extent, when block-padded.
             scene_aa::Provenance aaProvenance;
             uint32_t aaValidWidth=0,aaValidHeight=0; // Proven scene domain; allocation may contain padding.
@@ -879,11 +876,10 @@ namespace gpu::renderer
                 return !value || std::string_view(value) != "0";
             }();
             uint32_t resolveCopiesRecorded = 0, resolveCopiesSkipped = 0;
-            std::array<uint64_t, 2> bindingRecordedFrame{~0ull, ~0ull};
             temporal::SceneObservation temporalScene;
-            std::shared_ptr<taa_collection::SparseDepthGPU> sparseCollector;
             temporal::DrawTemporalTracker drawTemporalTracker;
             temporal::SuspectTracker suspectTracker;
+            temporal::JitterMissLog jitterMissLog;
             double mvTrackCpuMs = 0;
             uint64_t mvScratchBytes = 0;
             const temporal::MotionOptions motionOptions = temporal::MotionOptions::Environment();
@@ -1438,7 +1434,6 @@ namespace gpu::renderer
             struct RelativeDrawStats { uint32_t draws = 0, indices = 0; };
             std::map<RelativeDrawKey, RelativeDrawStats> relativeDraws;
             uint32_t frame = 0;
-            uint64_t collectionFrame = ~0ull;
             uint32_t captureFrame = 0;
             uint64_t captureRequest = 0;
             std::string debugCaptureDir;
@@ -2177,22 +2172,6 @@ namespace gpu::renderer
                 cacheIdentity = xenos::cache::MakeIdentity(vulkan ? backend::Backend::Vulkan : backend::Backend::D3D12, xenos::DxcIdentity());
                 // Metal translates the same SPIR-V as Vulkan, so both read one pack.
 
-                // Optional collection resources are prepared before the game loop.
-                // Enabling collection later never compiles or maps on a draw; an
-                // unprepared collector waits for the next renderer startup.
-                try {
-                    if(taa_collection::Enabled()&&!vulkan) {
-                        auto collector=std::make_shared<taa_collection::SparseDepthGPU>();
-                        if(collector->Prepare(device))sparseCollector=std::move(collector);
-                        else LOG_WARNING("renderer: sparse GPU collection unavailable; VS/PS and summary collection remain available");
-                    } else if(taa_collection::Enabled()&&vulkan) {
-                        LOG_INFO("renderer: {} sparse GPU collection skipped: coherent nonblocking readback unavailable; VS/PS and summary collection remain available",
-                            nativeVulkan ? "Vulkan" : "Metal");
-                    }
-                } catch(const std::exception& error) {
-                    sparseCollector.reset();
-                    LOG_WARNING("renderer: optional sparse GPU collection preparation failed: {}",error.what());
-                }
                 try {
                     positionEvidence=std::make_unique<position_evidence::Collection>([](std::span<const uint8_t> raw) {
                         std::vector<uint32_t> swapped(raw.size()/sizeof(uint32_t));
@@ -2305,7 +2284,7 @@ namespace gpu::renderer
                 }
                 if(temporalExperiment) {
                     temporalHistory=std::make_unique<temporal::HistoryOwner>();
-                    if(!temporalHistory->Init(device,sparseCollector)) {temporalHistory.reset();temporalExperiment=false;return InitFailure("temporal_history.init");}
+                    if(!temporalHistory->Init(device)) {temporalHistory.reset();temporalExperiment=false;return InitFailure("temporal_history.init");}
                     else LOG_INFO("renderer: temporal pre-UI experiment enabled, camera_history={} jitter={} stable_grid={} (known scene VS only; no object motion vectors)",temporalAllowHistory,temporalJitter,temporalStableGrid);
                 }
                 dummyBuffer = device->createBuffer(RenderBufferDesc::DefaultBuffer(256));
@@ -2407,7 +2386,6 @@ namespace gpu::renderer
                 if (initializationModuleFailure) return InitFailure("known_shaders.prepare");
                 PrepareKnownPipelines();
                 StartLibraryPrecompile();
-                taa_collection::SetDevice(nativeVulkan ? "vulkan" : vulkan ? "metal" : "d3d12", device->getDescription().name, device->getDescription().driverVersion);
                 const auto dxcStats = xenos::GetDxcStatistics();
                 LOG_INFO("renderer: startup DXC actual calls {}, succeeded {}, deterministic rejections {}, infrastructure failures {}",
                     dxcStats.calls, dxcStats.succeeded, dxcStats.rejected, dxcStats.infrastructureFailed);
@@ -2587,9 +2565,6 @@ namespace gpu::renderer
 #if defined(LO_GPU_PLUME)
                 HandleFsrAlphaRgbWriter(dst, "tile_owner_transfer");
 #endif
-                if (taa_collection::Enabled())
-                    dst.bindingProducer.Copy(src.bindingProducer, taa_collection::ConsentEpoch(), frame,
-                        w == dst.width && h == dst.height);
                 transfers++;
             }
             uint32_t transfers = 0;
@@ -4316,7 +4291,6 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 s.aoUses.clear();
                 if (ambientOcclusion) ambientOcclusion->ReleaseCompletedThrough(s.aoSerial);
                 if(temporalHistory)temporalHistory->ReleaseCompletedThrough(s.temporalSerial);
-                else if(sparseCollector)sparseCollector->ReleaseCompleted();
                 if(hdrTemporalHistory)hdrTemporalHistory->ReleaseCompletedThrough(s.hdrTemporalSerial);
                 if(sceneTaaHdrHistory)sceneTaaHdrHistory->ReleaseCompletedThrough(s.sceneTaaHdrSerial);
 #if defined(LO_GPU_PLUME)
@@ -6319,18 +6293,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 
             std::unique_ptr<position_evidence::Collection> positionEvidence;
 
-            void PreparePositionEvidence(Shader& entry, const uint32_t* words, uint32_t count, uint64_t hash)
-            {
-                if(entry.positionReady || !entry.valid || !positionEvidence)return;
-                if(!taa_collection::Enabled()&&debugCaptureDir.empty())return;
-                // Busy, full, or pending diagnostics remain unproven. A later draw
-                // can consume the finished CPU result without changing GPU shaders.
-                entry.positionReady=positionEvidence->TryGet(hash,words,count,entry.position);
-            }
-
             Shader* GetShader(bool pixel, const uint32_t* words, uint32_t count, uint64_t hash)
             {
-                taa_collection::ObserveProgram(!pixel, hash, words, count);
                 if (debugShaderSources && !debugCaptureDir.empty())
                     debugShaderSources->Observe(!pixel, hash, words, count, frame);
                 auto& cache = shaders[pixel ? 1 : 0];
@@ -6346,7 +6310,6 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         for (uint32_t i = 0; i < count; ++i) swapped[i] = ByteSwap(words[i]);
                         it->second.info.hlsl = xenos::TranslateShader(swapped.data(), count, pixel).hlsl;
                     }
-                    if(!pixel)PreparePositionEvidence(it->second,words,count,hash);
                     return it->second.valid ? &it->second : nullptr;
                 }
 
@@ -6437,7 +6400,6 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     vulkan ? "spirv" : "dxil", count, dxil.size(), frame);
                 if (!entry.info.errors.empty())
                     SHADER_LOG_WARNING("translation-notes", RendererByteFnv, "renderer: {} shader {:016x} notes: {}", pixel ? "pixel" : "vertex", hash, entry.info.errors);
-                if(!pixel)PreparePositionEvidence(entry,words,count,hash);
                 return entry.valid ? &entry : nullptr;
             }
 
@@ -7105,22 +7067,20 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             }
 
             void DescribeBindingTexture(binding::Texture* output, const HostTexture& texture,
-                binding::TextureKind kind, uint64_t epoch) const noexcept
+                binding::TextureKind kind) const noexcept
             {
                 if (!output) return;
                 output->kind = kind;
-                output->hostFormat = uint32_t(texture.format);
                 output->hostExtent = {texture.bindingWidth ? texture.bindingWidth : texture.width,
                     texture.bindingHeight ? texture.bindingHeight : texture.height};
                 output->parentExtent = output->hostExtent;
-                texture.bindingProducer.Describe(*output, epoch, frame);
             }
 
-            HostTexture* SelectControllerAtlas(HostTexture* source, binding::Texture* bindingInfo, uint64_t epoch)
+            HostTexture* SelectControllerAtlas(HostTexture* source, binding::Texture* bindingInfo)
             {
                 if (!source) return nullptr;
                 if (source->atlasState == HostTexture::AtlasState::None) {
-                    DescribeBindingTexture(bindingInfo, *source, binding::TextureKind::GuestUpload, epoch);
+                    DescribeBindingTexture(bindingInfo, *source, binding::TextureKind::GuestUpload);
                     return source;
                 }
                 if (controllerAtlasFamilyFrame != frame) {
@@ -7173,7 +7133,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (video::GpuWorkStopped()) return nullptr;
                 HostTexture* selected = controllerAtlasPlayStationFamily && source->atlasPlayStation
                     ? source->atlasPlayStation.get() : source;
-                DescribeBindingTexture(bindingInfo, *selected, binding::TextureKind::GuestUpload, epoch);
+                DescribeBindingTexture(bindingInfo, *selected, binding::TextureKind::GuestUpload);
                 return selected;
             }
 
@@ -7199,7 +7159,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             }
 
             HostTexture* GetTexture(const uint32_t* fetch, uint32_t dimension,
-                binding::Texture* bindingInfo = nullptr, uint64_t bindingEpoch = 0)
+                binding::Texture* bindingInfo = nullptr)
             {
                 uint32_t format = fetch[1] & 0x3F;
                 uint32_t endian = (fetch[1] >> 6) & 3;
@@ -7228,8 +7188,6 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (bindingInfo) {
                     *bindingInfo = {};
                     bindingInfo->guestFormat = format;
-                    bindingInfo->dimension = dimension;
-                    bindingInfo->sourceMip = sourceMip;
                     bindingInfo->guestExtent = {originalWidth, originalHeight};
                 }
                 TextureKey key{ sourceAddress, format, width, height, (tiled ? 1u : 0u) | (endian << 1) | (pitch32 << 3) | (dimension << 12) | (uint32_t(packedMips) << 14) | (sourceMip << 15) | (mipLevels << 19), mipLevels ? mipAddress : 0 };
@@ -7237,16 +7195,15 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 // depth, to tell depth-driven artefacts from shading ones.
                 static const bool noDepthFetch = getenv("LO_NO_DEPTH_FETCH") != nullptr;
                 if (noDepthFetch && (format == 22 || format == 23)) {
-                    DescribeBindingTexture(bindingInfo, dummyTexture2D, binding::TextureKind::Dummy, bindingEpoch);
+                    DescribeBindingTexture(bindingInfo, dummyTexture2D, binding::TextureKind::Dummy);
                     return &dummyTexture2D;
                 }
                 if (ResolvedSurface* rs = FindResolved(base, format))
                 {
-                    DescribeBindingTexture(bindingInfo, *rs->tex, binding::TextureKind::Resolved, bindingEpoch);
+                    DescribeBindingTexture(bindingInfo, *rs->tex, binding::TextureKind::Resolved);
                     if (bindingInfo && rs->writeOrdinal) {
                         bindingInfo->resolveFrameAge = binding::RelativeAge(frame, rs->frame);
                         bindingInfo->resolveGap = binding::RelativeAge(resolveWriteOrdinal, rs->writeOrdinal);
-                        bindingInfo->resolveRect = {rs->writeX, rs->writeY, rs->writeWidth, rs->writeHeight};
                     }
                     const uint32_t physicalWidth = std::max(1u, rs->tex->ScaleX(width));
                     const uint32_t physicalHeight = std::max(1u, rs->tex->ScaleY(height));
@@ -7292,8 +7249,6 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             view->viewSource = rs->tex->texture.get();
                             view->viewSourceAllocation = rs->tex->allocationSerial;
                         }
-                        if (taa_collection::Enabled())
-                            view->bindingProducer.Copy(rs->tex->bindingProducer, taa_collection::ConsentEpoch(), frame, true);
                         Transition(*view, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
                         if (bindingInfo) {
                             bindingInfo->kind = binding::TextureKind::CroppedResolve;
@@ -7312,7 +7267,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     // it, so a cached upload can be all zeroes forever. Re-hash the
                     // guest bytes once per frame and re-upload when they change.
                     if (!textureRevalidate || cached->checkedFrame == frame || cached->guestBytes == 0) {
-                        return SelectControllerAtlas(cached, bindingInfo, bindingEpoch);
+                        return SelectControllerAtlas(cached, bindingInfo);
                     }
                     cached->checkedFrame = frame;
                     bool changed = SampledGuestHash(*cached) != cached->guestHash;
@@ -7321,7 +7276,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         changed = FullGuestHash(*cached) != cached->guestFullHash;
                     }
                     if (!changed) {
-                        return SelectControllerAtlas(cached, bindingInfo, bindingEpoch);
+                        return SelectControllerAtlas(cached, bindingInfo);
                     }
                     textureReuploads++;
                     Gpu().retiredTextures.push_back(std::move(it->second));
@@ -7596,7 +7551,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 
                 HostTexture* result = tex.get();
                 textures.emplace(key, std::move(tex));
-                return SelectControllerAtlas(result, bindingInfo, bindingEpoch);
+                return SelectControllerAtlas(result, bindingInfo);
             }
 
             void InvalidateRange(uint32_t address, uint32_t size)
@@ -7967,7 +7922,6 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             void Draw(const DrawInfo& info)
             {
                 ScopedTimer timer{ tDraw, cpuTimingEnabled };
-                if(collectionFrame!=frame){collectionFrame=frame;taa_collection::BeginDiagnosticsFrame(frame);}
                 if (!debugCaptureDir.empty())
                 {
                     debugTrace << fmt::format("draw {} prim={} indices={} indexed={} base={:#x} words={} endian={} index32={}\n",
@@ -8068,8 +8022,6 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
                 RefreshAnisotropicFiltering();
                 samplerState.BeginDraw();
-                const bool trackBinding = taa_collection::Enabled();
-                const uint64_t bindingEpoch = trackBinding ? taa_collection::ConsentEpoch() : 0;
 
                 // Shaders come from the command processor's last IM_LOAD.
                 uint32_t vsCount = 0, psCount = 0;
@@ -8170,7 +8122,6 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 #if defined(LO_GPU_PLUME)
                         HandleFsrAlphaRgbWriter(*color, "debug_clear_rt");
 #endif
-                        if (trackBinding) color->bindingProducer.Clear(bindingEpoch, frame, true);
                         color->aaProvenance.Invalidate(frame,color->allocationSerial,true);
                         color->sdrProducerFrame = ~0ull;
                         if (loud)
@@ -8407,19 +8358,19 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     const bool temporalActive = temporal::TemporalConsumerActive(temporalExperiment, temporalInputProbe, dlssSrRequested, nativeFgInputs);
                     if(temporalActive&&!temporalHistory&&!temporalInitFailed) {
                         temporalHistory=std::make_unique<temporal::HistoryOwner>();
-                        if(!temporalHistory->Init(device,sparseCollector)) {temporalHistory.reset();temporalInitFailed=true;LOG_ERROR("renderer: TAA initialization failed; SMAA fallback");}
+                        if(!temporalHistory->Init(device)) {temporalHistory.reset();temporalInitFailed=true;LOG_ERROR("renderer: TAA initialization failed; SMAA fallback");}
                     }
                     if(!temporalHistory) { temporalExperiment=false; temporalInputProbe=false; dlssSrRequested=false; nativeFgInputs=false; }
                     if (temporalExperiment && taaDiagnosticHDR == 1 && !hdrTemporalHistory && !hdrTemporalInitFailed) {
                         hdrTemporalHistory = std::make_unique<temporal::HistoryOwner>();
-                        if (!hdrTemporalHistory->Init(device, {}, true)) {
+                        if (!hdrTemporalHistory->Init(device, true)) {
                             hdrTemporalHistory.reset(); hdrTemporalInitFailed = true;
                             LOG_ERROR("renderer: HDR temporal candidate initialization failed");
                         }
                     }
                     if (temporalExperiment && hdrSceneEnabled.load(std::memory_order_relaxed) && !sceneTaaHdrHistory && !sceneTaaHdrInitFailed) {
                         sceneTaaHdrHistory = std::make_unique<temporal::HistoryOwner>();
-                        if (!sceneTaaHdrHistory->Init(device, {}, true)) {
+                        if (!sceneTaaHdrHistory->Init(device, true)) {
                             sceneTaaHdrHistory.reset(); sceneTaaHdrInitFailed = true;
                             LOG_ERROR("renderer: HDR scene TAA twin initialization failed; HDR pauses under TAA");
                         }
@@ -8480,7 +8431,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     static const bool withTrace = getenv("LO_TEMPORAL_DRAW_LOG_WITH_RESOLVE_TRACE") &&
                         strcmp(getenv("LO_TEMPORAL_DRAW_LOG_WITH_RESOLVE_TRACE"), "1") == 0;
                     temporalHistory->BeginFrame(frame,temporalEpoch,
-                        taa_collection::DiagnosticsActive() || (diagnosticStart&&frame>=diagnosticFrame&&temporalFramesLogged<256) || (withTrace&&resolveTraceRemaining));
+                        (diagnosticStart&&frame>=diagnosticFrame&&temporalFramesLogged<256) || (withTrace&&resolveTraceRemaining));
                     if (hdrTemporalHistory) hdrTemporalHistory->BeginFrame(frame, temporalEpoch, resolveTraceRemaining != 0);
                     if (sceneTaaHdrHistory) sceneTaaHdrHistory->BeginFrame(frame, temporalEpoch, false);
                     const bool gpuTiming = motionOptions.timing || (taaLiveApplied && taaLiveOptions.gpu_timing);
@@ -8621,26 +8572,6 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             source->writeX == 0 && source->writeY == 0 &&
                             source->writeWidth == source->tex->width && source->writeHeight == source->tex->height};
                 }
-                uint32_t collectionCandidates = 0;
-                if (taa_collection::Enabled() && temporalExperiment && jitterAnchor && temporalViewport) {
-                    constexpr int slots[] = {0,4,7,8,230,233};
-                    for (unsigned i=0; i<6; ++i)
-                        if (memcmp(vsConstants+slots[i]*4,jitterAnchor->vpBits.data(),16*sizeof(uint32_t))==0) collectionCandidates |= 1u<<i;
-                }
-                const uint32_t positionGuards=temporalExperiment && (taa_collection::Enabled() || temporalSlot<0) ?
-                    temporal::PositionGuards(vs->position,temporalViewport,jitterAnchor,depth?depth->allocationSerial:0,
-                        {rasterViewport.x,rasterViewport.y,rasterViewport.width,rasterViewport.height},vsConstants):0;
-                binding::Transform bindingTransform;
-                if (trackBinding) {
-                    bindingTransform.slot = temporalSlot >= 0 ? temporalSlot :
-                        (vs->positionReady && vs->position.kind == 1 && vs->position.issues == 0 ? vs->position.slot : -1);
-                    bindingTransform.phase = uint32_t(frame % 32 + 1);
-                    bindingTransform.viewport = {std::bit_cast<uint32_t>(float(rasterViewport.x)),
-                        std::bit_cast<uint32_t>(float(rasterViewport.y)), std::bit_cast<uint32_t>(float(rasterViewport.width)),
-                        std::bit_cast<uint32_t>(float(rasterViewport.height))};
-                    if (bindingTransform.slot >= 0 && bindingTransform.slot <= 252)
-                        std::copy_n(vsConstants + bindingTransform.slot * 4, 16, bindingTransform.guestVP.begin());
-                }
                 // Motion follows the proven main scene allocation. The same shader
                 // hash in a shadow/offscreen view never authorizes replay.
                 // MetalFX uses camera/depth motion only unless LO_METALFX_OBJECT_MV=1:
@@ -8716,37 +8647,6 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         actualRasterJitterCaptured = false;
                     }
                 }
-                const uint32_t collectionFlags=(temporalViewport?1u:0u)|(temporalJitter?2u:0u)|
-                    (drawJitter.applied?4u:0u)|((depthControl&4)?8u:0u)|
-                    (jitterAnchor&&depth&&depth->allocationSerial==jitterAnchor->depthAllocation?16u:0u);
-                if (trackBinding) {
-                    bindingTransform.applied = drawJitter.applied;
-                    if (bindingTransform.slot >= 0 && bindingTransform.slot <= 252)
-                        std::copy_n(vsConstants + bindingTransform.slot * 4, 16, bindingTransform.uploadedVP.begin());
-                    if (drawJitter.applied) bindingTransform.jitterNdc = {
-                        std::bit_cast<uint32_t>(drawJitter.sample.ndcX), std::bit_cast<uint32_t>(drawJitter.sample.ndcY)};
-                }
-                std::optional<binding::Record> bindingRecord;
-                const uint32_t bindingPair = key.ps == 0x78a5c96b2d7eaa91ull ? 1 : 0;
-                if (trackBinding && bindingRecordedFrame[bindingPair] != frame && key.vs == 0xe810cfacc107fd3cull &&
-                    (key.ps == 0x5b11f88a8bb293dfull || key.ps == 0x78a5c96b2d7eaa91ull) &&
-                    rasterViewport.width >= 1 && rasterViewport.width <= 7680 &&
-                    rasterViewport.height >= 1 && rasterViewport.height <= 4320 &&
-                    ps && (ps->info.textureSlotMask & 1) && taa_collection::WantBinding()) {
-                    auto& record = bindingRecord.emplace();
-                    record.vs = key.vs; record.ps = key.ps;
-                    record.width = uint32_t(rasterViewport.width); record.height = uint32_t(rasterViewport.height);
-                    record.slot = temporalSlot; record.candidates = collectionCandidates;
-                    record.flags = collectionFlags; record.rejection = uint32_t(drawJitter.rejection);
-                    record.position = vs->position; record.guards = positionGuards;
-                    record.consumer = bindingTransform;
-                    std::copy_n(psConstants, 4, record.psC0.begin());
-                    record.texture.bank = ps->info.textureDimension[0] == 2 ? 1 : ps->info.textureDimension[0] == 3 ? 2 : 0;
-                }
-                if (taa_collection::Enabled() && temporalExperiment)
-                    taa_collection::Observe(frame,key.vs,key.ps,uint32_t(rasterViewport.width),uint32_t(rasterViewport.height),
-                        temporalSlot,collectionCandidates,collectionFlags,uint32_t(drawJitter.rejection),vs->position,positionGuards);
-                // After telemetry: position evidence requested here must not change this draw's record.
                 if (suspectScene && !suspectTracker.Done()) {
                     suspectTracker.BeginFrame(frame);
                     if (suspectCompanion && drawJitter.applied)
@@ -8770,8 +8670,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                 const auto lines = temporal::FormatSuspect({key.vs, key.ps, frame, drawsThisFrame, depthControl,
                                     decision.cameraSlot, decision.positionKind, decision.evidenceSlot,
                                     suspectGeometry, companion, vsConstants, psConstants});
-                                LOG_INFO("{}", lines[0]);
-                                LOG_INFO("{}", lines[1]);
+                                LOG_NOTICE("{}", lines[0]);
+                                LOG_NOTICE("{}", lines[1]);
                             }
                         }
                     }
@@ -8780,7 +8680,14 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     ++temporalJitterUnknowns;
                 }
                 if (drawJitter.applied) ++temporalJitterDraws;
-                else if (temporalExperiment && temporalJitter && temporalSlot >= 0 && temporalViewport) ++temporalJitterMisses;
+                else if (temporalExperiment && temporalJitter && temporalSlot >= 0 && temporalViewport) {
+                    ++temporalJitterMisses;
+                    // A known scene shader left unjittered; each VS/PS/reason once per session.
+                    if (jitterMissLog.First(key.vs, key.ps, drawJitter.rejection))
+                        LOG_NOTICE("temporal jitter miss: vs={:016x} ps={:016x} slot={} rejection={} frame={} draw={} viewport={}x{}",
+                            key.vs, key.ps, temporalSlot, temporal::JitterRejectionName(drawJitter.rejection), frame, drawsThisFrame,
+                            uint32_t(rasterViewport.width), uint32_t(rasterViewport.height));
+                }
                 taaJitter.AddTo(tTaa);
                 // Range of the bound colour format, clamped in the shader epilogue.
                 {
@@ -8971,12 +8878,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
                 // Textures used by the pixel and vertex shaders.
                 render_batch::CpuTimer<> tBind0(cpuTimingEnabled);
-                const uint32_t bindingBank = bindingRecord ? bindingRecord->texture.bank : 0;
                 const uint32_t sceneCopyBank = ps && ps->info.textureDimension[0] == 2 ? 1 :
                     ps && ps->info.textureDimension[0] == 3 ? 2 : 0;
-                std::optional<binding::Producer> boundSceneProducer;
-                // F1 records the actual texture0 binding even when opt-in
-                // feedback collection is disabled or the PS pair is not sampled.
+                // F1 records the actual texture0 binding.
                 std::optional<binding::Texture> captureTexture0;
                 bool failedPlan = false;
                 static const bool traceControllerAtlas = getenv("LO_CONTROLLER_ATLAS_TRACE") != nullptr;
@@ -9026,11 +8930,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         HostTexture* dummy = declared == 2 ? &dummyTexture3D : declared == 3 ? &dummyTextureCube : &dummyTexture2D;
                         uint32_t dimension = (fetch[5] >> 9) & 3; // 0 1D, 1 2D, 2 3D, 3 cube
                         std::optional<binding::Texture> selectedBinding;
-                        if (slot == 0 && ((bindingRecord && bank == bindingBank) ||
-                            (!debugCaptureDir.empty() && ps && (ps->info.textureSlotMask & 1) && bank == sceneCopyBank)))
+                        if (slot == 0 && !debugCaptureDir.empty() && ps && (ps->info.textureSlotMask & 1) && bank == sceneCopyBank)
                             selectedBinding.emplace();
                         HostTexture* tex = (fetch[0] & 3) == 2 ? GetTexture(fetch, dimension,
-                            selectedBinding ? &*selectedBinding : nullptr, bindingEpoch) : nullptr;
+                            selectedBinding ? &*selectedBinding : nullptr) : nullptr;
                         if (!tex)
                         {
                             if (PlanSuppressed())
@@ -9046,15 +8949,11 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             shared.textureInfo[slot] = 0x68800u;
                             if (selectedBinding) {
                                 *selectedBinding = {};
-                                DescribeBindingTexture(&*selectedBinding, *dummy, binding::TextureKind::Dummy, bindingEpoch);
-                                selectedBinding->dimension = dimension;
+                                DescribeBindingTexture(&*selectedBinding, *dummy, binding::TextureKind::Dummy);
                                 selectedBinding->bank = bank;
                                 selectedBinding->guestExtent = {1, 1};
-                                if (bindingRecord && bank == bindingBank) bindingRecord->texture = *selectedBinding;
-                                if (!debugCaptureDir.empty() && bank == sceneCopyBank) captureTexture0 = *selectedBinding;
+                                captureTexture0 = *selectedBinding;
                             }
-                            if (trackBinding && fullSceneCopy && slot == 0 && bank == sceneCopyBank)
-                                boundSceneProducer.emplace().Unknown(bindingEpoch, frame);
 #if defined(LO_GPU_PLUME)
                             if (fsrAlphaBridge && activePlan.requestedUpscaler == upscaling::Upscaler::Fsr &&
                                 s == ps && fsr_alpha::AuditedPostprocessPs(key.ps)) {
@@ -9644,25 +9543,14 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                 selectedBinding->kind = temporalDisplay ?
                                     (temporalDisplayFromHistory ? binding::TextureKind::TemporalDisplay : binding::TextureKind::SpatialAA) :
                                     binding::TextureKind::Unknown;
-                                // This output combines/filter samples; its source's matrix is not its producer proof.
-                                selectedBinding->producerState = binding::ProducerState::Unknown;
-                                selectedBinding->producer = {};
-                                selectedBinding->producerFrameAge = -1;
-                                selectedBinding->producerDraws = 0;
                                 if (bloomFiltered && !temporalDisplay) {
                                     selectedBinding->hostExtent = {1280, 720};
                                     selectedBinding->parentExtent = {1280, 720};
-                                    selectedBinding->resolveRect = {};
                                     selectedBinding->resolveFrameAge = -1;
                                     selectedBinding->resolveGap = -1;
                                 }
                             }
-                            if (bindingRecord && bank == bindingBank) bindingRecord->texture = *selectedBinding;
-                            if (!debugCaptureDir.empty() && bank == sceneCopyBank) captureTexture0 = *selectedBinding;
-                        }
-                        if (trackBinding && fullSceneCopy && slot == 0 && bank == sceneCopyBank) {
-                            boundSceneProducer = tex->bindingProducer;
-                            if (temporalDisplay) boundSceneProducer->Unknown(bindingEpoch, frame);
+                            captureTexture0 = *selectedBinding;
                         }
                     }
                 };
@@ -9770,17 +9658,6 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     set1 = AcquireTextureSet(1, textureBindings[0], activeTextureSlots[0]);
                     set2 = AcquireTextureSet(2, textureBindings[1], activeTextureSlots[1]);
                     set3 = AcquireTextureSet(3, textureBindings[2], activeTextureSlots[2]);
-                }
-                if (bindingRecord) {
-                    // Shared sign/swizzle/sampler constants may also have been written by VS texture0.
-                    auto& texture = bindingRecord->texture;
-                    texture.sign = shared.textureInfo[0] & 0xff;
-                    texture.swizzle = (shared.textureInfo[0] >> 8) & 0xfff;
-                    texture.swapRedBlue = (shared.textureInfo[0] & (1u << 20)) != 0;
-                    const uint64_t actualSampler = ActualSamplerKey(shared.samplerIndex[0]);
-                    texture.sampler = {uint32_t((actualSampler >> 6) & 7), uint32_t((actualSampler >> 9) & 7),
-                        uint32_t((actualSampler >> 12) & 7), uint32_t((actualSampler >> 2) & 3),
-                        uint32_t(actualSampler & 3), uint32_t((actualSampler >> 4) & 3)};
                 }
                 tBind0.AddTo(tBind);
                 render_batch::CpuTimer<> tIndex0(cpuTimingEnabled);
@@ -11448,26 +11325,11 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         const auto& texture = *captureTexture0;
                         const uint32_t fetchBase = (Reg(REG_FETCH_CONSTANTS + 1) >> 12) << 12;
                         const uint32_t fetchAddress = fetchBase ? fetchBase : (Reg(REG_FETCH_CONSTANTS + 5) >> 12) << 12;
-                        debugTrace << fmt::format("texture_binding slot=0 bank={} kind={} guest_width={} guest_height={} host_width={} host_height={} parent_width={} parent_height={} resolve_age={} resolve_gap={} producer_state={} producer_age={} producer_draws={} resolve_counter={} guest_fetch_address={:#x} guest_format={}\n",
+                        debugTrace << fmt::format("texture_binding slot=0 bank={} kind={} guest_width={} guest_height={} host_width={} host_height={} parent_width={} parent_height={} resolve_age={} resolve_gap={} resolve_counter={} guest_fetch_address={:#x} guest_format={}\n",
                             texture.bank, uint32_t(texture.kind), texture.guestExtent[0], texture.guestExtent[1],
                             texture.hostExtent[0], texture.hostExtent[1], texture.parentExtent[0], texture.parentExtent[1],
-                            texture.resolveFrameAge, texture.resolveGap, uint32_t(texture.producerState),
-                            texture.producerFrameAge, texture.producerDraws, resolveWriteOrdinal,
+                            texture.resolveFrameAge, texture.resolveGap, resolveWriteOrdinal,
                             fetchAddress, texture.guestFormat);
-                    }
-                }
-                if (trackBinding) {
-                    if (key.colorMask) {
-                        if (fullSceneCopy && boundSceneProducer)
-                            color->bindingProducer.Copy(*boundSceneProducer, bindingEpoch, frame,
-                                rasterViewport.x == 0 && rasterViewport.y == 0 &&
-                                rasterViewport.width == color->width && rasterViewport.height == color->height);
-                        else color->bindingProducer.Draw(bindingEpoch, frame, bindingTransform);
-                    }
-                    if (depth && (key.depthControl & 6) == 6) depth->bindingProducer.Draw(bindingEpoch, frame, bindingTransform);
-                    if (bindingRecord) {
-                        bindingRecordedFrame[bindingPair] = frame;
-                        taa_collection::ObserveBinding(*bindingRecord, bindingEpoch, frame);
                     }
                 }
                 // Opt-in, bounded diagnostics of constants actually uploaded for
@@ -11772,7 +11634,6 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                     tex->allocationSerial, tex->width, tex->height, drawsThisFrame,
                                     {0, 0, tex->width, tex->height}, "depth_color_tile_clear");
 #endif
-                            if (trackBinding) tex->bindingProducer.Clear(bindingEpoch, frame, true);
                             tex->aaProvenance.Invalidate(frame,tex->allocationSerial,true);
                             tex->sdrProducerFrame = ~0ull;
                             if (loggedFills++ < 12)
@@ -11816,11 +11677,6 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                     LOG_INFO("clear begin f{} base={} pitch={} size={}x{} count={} z={}", frame, k.base, k.pitch, target->width, target->height, clearRects.size(), rectZ);
                                 FlushMotionReplayQueue();
                                 commandList->clearDepthStencil(true, false, rectZ, 0, clearRects.data(), uint32_t(clearRects.size()));
-                                if (trackBinding) {
-                                    const bool full = clearRects.size() == 1 && clearRects[0].left == 0 && clearRects[0].top == 0 &&
-                                        clearRects[0].right == int32_t(target->width) && clearRects[0].bottom == int32_t(target->height);
-                                    target->bindingProducer.Clear(bindingEpoch, frame, full);
-                                }
                                 if (traceClearCall) LOG_INFO("clear end");
                             }
                             if (logged++ < 8 || frame == captureFrame)
@@ -11864,11 +11720,6 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         if ((key.colorMask & 7) != 0) {
                             target->sdrProducerFrame = ~0ull;
                             target->hdrValid = false;
-                        }
-                        if (trackBinding) {
-                            // Replayed clear geometry uses a stretched viewport, so do not reuse the original transform.
-                            if (key.colorMask) target->bindingProducer.Mixed(bindingEpoch, frame);
-                            if (otherDepth && (key.depthControl & 6) == 6) otherDepth->bindingProducer.Mixed(bindingEpoch, frame);
                         }
                         if (logged++ < 8)
                             LOG_INFO("renderer: colour clear rect (pitch {}, {} rows) replayed into base={:#x} pitch={} {}x{} rows", pitch, clearedRows, k.base, k.pitch, target->width, mappedRows);
@@ -12384,9 +12235,6 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 rs.writeX = x0; rs.writeY = y0; rs.writeWidth = w; rs.writeHeight = h;
                 rs.sceneDraws = 0;
                 WriteP2ResolveEvent("depth", depth, destBase, rs, vulkan ? "blit" : "copy");
-                if (taa_collection::Enabled())
-                    rs.tex->bindingProducer.Copy(depth.bindingProducer, taa_collection::ConsentEpoch(), frame,
-                        x0 == 0 && y0 == 0 && w == texW && h == texH);
                 if (!debugCaptureDir.empty() || temporalExperiment || temporalInputProbe || dlssSrRequested || nativeFgInputs || activeSpatialAA || aoActive) {
                     temporalScene.ObserveDepth(depth.allocationSerial, {frame, rs.writeOrdinal, destBase, destFormat,
                         texW, texH, x0 == 0 && y0 == 0 && w == texW && h == texH});
@@ -12459,8 +12307,6 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     Transition(*rs.tex, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
                     commandList->setFramebuffer(GetFramebuffer(rs.tex.get(), nullptr));
                     commandList->clearColor(0, RenderColor(0, 0, 0, 0));
-                    if (taa_collection::Enabled())
-                        rs.tex->bindingProducer.Clear(taa_collection::ConsentEpoch(), frame, true);
                     static uint32_t created = 0;
                     if (created++ < 16)
                         LOG_INFO("renderer: resolved surface {:#x} guest={}x{} physical={}x{} host fmt={} dest fmt={}", destBase, guestW, guestH, texW, texH, uint32_t(color.format), destFormat);
@@ -12598,9 +12444,6 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 RecordFgResolve(color, rs);
                 RecordFgCompositeResolve(color, rs);
                 RecordFgUiFinal(color, rs, destBase);
-                if (taa_collection::Enabled())
-                    rs.tex->bindingProducer.Copy(color.bindingProducer, taa_collection::ConsentEpoch(), frame,
-                        x0 == 0 && y0 == 0 && w == texW && h == texH);
                 auto sourceCoverage=color.aaProvenance.Get(frame,color.allocationSerial);
                 if(sourceCoverage==scene_aa::Coverage::Full && (uint64_t(x0)+w>color.aaValidWidth || uint64_t(y0)+h>color.aaValidHeight))
                     sourceCoverage=scene_aa::Coverage::Mixed;
@@ -12816,9 +12659,6 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 #if defined(LO_GPU_PLUME)
                     HandleFsrAlphaRgbWriter(*color, "resolve_color_clear");
 #endif
-                    if (taa_collection::Enabled())
-                        color->bindingProducer.Clear(taa_collection::ConsentEpoch(), frame,
-                            x0 == 0 && y0 == 0 && x1 == color->guestWidth && y1 == color->guestHeight);
                     color->aaProvenance.Invalidate(frame,color->allocationSerial,x0==0&&y0==0&&x1==color->guestWidth&&y1==color->guestHeight);
                     color->sdrProducerFrame = ~0ull;
                 }
@@ -12837,7 +12677,6 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 commandList->setFramebuffer(GetFramebuffer(nullptr, depth));
                 uint32_t clear = Reg(REG_RB_DEPTH_CLEAR);
                 commandList->clearDepthStencil(true, true, float(clear >> 8) / 16777215.0f, clear & 0xFF);
-                if (taa_collection::Enabled()) depth->bindingProducer.Clear(taa_collection::ConsentEpoch(), frame, true);
             }
 
             void ClearMovieBars(uint32_t surfaceInfo, uint32_t colorInfo,
@@ -12897,8 +12736,6 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 #if defined(LO_GPU_PLUME)
                 HandleFsrAlphaRgbWriter(*color, "movie_bars_clear");
 #endif
-                if (taa_collection::Enabled())
-                    color->bindingProducer.Clear(taa_collection::ConsentEpoch(), frame, false);
                 color->aaProvenance.Invalidate(frame, color->allocationSerial, false);
                 color->sdrProducerFrame = ~0ull;
             }
@@ -13216,9 +13053,6 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
         const uint32_t completedFrames = close.completedFrames;
         r.debugCaptureCompleted = 0;
         r.captureFrame = 0;
-        // Optional diagnostics use the existing consent and background uploader.
-        // This signal never uploads the local archive, logs or paths.
-        taa_collection::RequestUpload();
         std::lock_guard lock(captureMutex);
         if (ok || shaderSources)
         {
@@ -13454,14 +13288,6 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             }
             const bool temporalTraceActive = g_renderer->resolveTraceRemaining != 0;
             g_renderer->FinishResolveTraceFrame();
-            auto& collectionRenderer=*g_renderer;
-            if(collectionRenderer.collectionFrame!=collectionRenderer.frame){collectionRenderer.collectionFrame=collectionRenderer.frame;taa_collection::BeginDiagnosticsFrame(collectionRenderer.frame);}
-            taa_collection::diagnostics::Frame collectionFrame;
-            collectionFrame.taa=collectionRenderer.temporalExperiment;
-            collectionFrame.ready=collectionRenderer.temporalScene.Frame()==collectionRenderer.frame&&collectionRenderer.temporalScene.Ready();
-            if(collectionRenderer.temporalScene.Frame()==collectionRenderer.frame)
-                collectionFrame.sceneRejection=uint32_t(collectionRenderer.temporalScene.Reason());
-            collectionFrame.sparseReady=collectionRenderer.sparseCollector&&collectionRenderer.sparseCollector->Ready();
             if (auto& owner = g_renderer->temporalHistory; owner) {
                 auto& r = *g_renderer;
                 const auto now = std::chrono::steady_clock::now();
@@ -13474,19 +13300,6 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     r.evaluatePage->resetAtFrameEnd = temporalEnd.reset;
                 const bool gap = temporalEnd.gap;
                 const bool complete = temporalEnd.complete;
-                collectionFrame.completed=complete;
-                collectionFrame.reused=complete&&owner->Reused();
-                collectionFrame.resetAfterFrame=temporalEnd.reset||temporalEnd.gapAlreadyReset;
-                const auto& collectionHistory=owner->Diagnostics();
-                collectionFrame.historyCaptured=collectionHistory.captured&&collectionHistory.state.currentFrame==r.frame&&collectionHistory.state.currentEpoch==r.temporalEpoch;
-                if(collectionFrame.historyCaptured) {
-                    collectionFrame.historyRejection=collectionHistory.rejected;
-                    collectionFrame.cameraChecks=collectionHistory.cameraChecksAvailable;
-                    const auto& state=collectionHistory.state;
-                    collectionFrame.sameEpoch=state.currentEpoch==state.previousEpoch;
-                    if(state.currentFrame>=state.previousFrame&&state.currentFrame-state.previousFrame<=65535)
-                        collectionFrame.previousFrameDelta=int32_t(state.currentFrame-state.previousFrame);
-                }
                 static const uint32_t temporalLogStart=getenv("LO_TEMPORAL_LOG_START_FRAME")?strtoul(getenv("LO_TEMPORAL_LOG_START_FRAME"),nullptr,10):0;
                 static const bool temporalDetailsRequested=getenv("LO_TEMPORAL_LOG_START_FRAME")!=nullptr;
                 static const bool withTrace = getenv("LO_TEMPORAL_DRAW_LOG_WITH_RESOLVE_TRACE") &&
@@ -13550,7 +13363,6 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
                 page.closed = true;
             }
-            taa_collection::EndDiagnosticsFrame(collectionRenderer.frame,collectionFrame);
             g_renderer->ReportPipelineMisses();
             g_renderer->UpdateSceneTag();
             g_renderer->HarvestPrefetch();

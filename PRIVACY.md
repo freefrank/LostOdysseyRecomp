@@ -1,23 +1,32 @@
 # Privacy and diagnostic collection
 
-Lost Odyssey Recomp's automatic diagnostic collection is optional. Consent is off by default, is requested through the existing five-language consent setting, and can be withdrawn in the existing Settings control. When automatic collection is disabled, queued automatic-upload samples are discarded; a request already in progress may finish. The application does not create a cross-session player or device identity.
+Lost Odyssey Recomp's log collection is optional and off until you agree. The game asks once, in five languages, and **Settings → System → Log collection** turns it on or off at any time. It is available in Windows builds only. The game creates no player, installation or device identifier.
 
-Manual F1 capture writes a local diagnostic package; the source extension adds program-produced original VS/PS microcode to that package and provides a separate automatic incremental upload path. F1 capture is manually initiated and independent of automatic collection consent. The automatic payload may contain GPU model, driver and backend labels, build and resolution metadata, renderer-derived VS/PS shader hashes, original microcode, shader-state flags, and sparse camera/depth/motion samples with jitter and matrices where the supported path produces them.
+## What is sent
 
-The application upload payload and the structured diagnostic records persisted in D1 do not include account usernames, email addresses, machine hostnames, local file paths, serial numbers, disk serial numbers, MAC addresses, device UUIDs, installation IDs, cookies or tracking IDs. They do not include saves, personal files or shader source written by the user. The original microcode in the source extension is program-produced capture data, not project source code or a user's personal file. Original shader microcode is stored once per content stage and SHA-256 identity; other structured diagnostic records use their own content-deduplication identities. GPU model is associated as diagnostic metadata; records are not partitioned by user or physical device. D1 records inactive for 30 days are deleted.
+When the game starts, a background thread sends one request to `lo.dotslash.pro` with a filtered summary of the previous session's runtime log:
 
-The Worker reads `CF-Connecting-IP` only to pass it to the platform's temporary rate limiter; it does not store that value in D1 or use it to track users. Persistent Workers Logs, invocation logs and traces are disabled for this collection Worker. Cloudflare still processes source IP and normal HTTPS request metadata for transport and security; this document does not promise that all Cloudflare or other infrastructure logs are disabled.
+- build version, Windows version, Wine version under Proton, GPU name and driver, and a one-line summary of the graphics settings;
+- map and battle loads;
+- rendering mismatch records: shader IDs and draw state for depth writers the TAA mapping does not know, and for mapped shaders whose jitter was rejected;
+- error lines, crash reports and hang reports, and whether the game shut down cleanly.
 
-Manual F1 capture is a user-triggered local package written for the user to inspect and share. It may include `runtime.log` and therefore local paths or other diagnostic text; inspect the package before sharing it. Automatic collection is a separate opt-in upload path with bounded records, content deduplication and the retention limit above. Automatic collection is designed to avoid blocking the game: it uses preallocated bounded memory, skips recording when a try-lock is busy or storage is full, performs no I/O, allocation or wait on the render hot path, and uses independent upload state. Stopping or exiting does not join a network request. These bounds do not promise zero CPU cost.
+Repeated errors are sent once and the summary is limited to 60 KB. Before sending, the game replaces your user profile folder, your account name, your computer name and any folder name after `Users\` or `home/`. Other folder names in paths, such as where the game is installed, can remain. Information-level and kernel lines are never sent, even with **Debug log** on.
 
-F1 local capture is a separate user action and does not enable automatic uploads. After a manual capture, any automatic D1 attempt for its pending VS/PS and structured batch is made only when automatic collection is already enabled; the capture never changes the consent setting.
+The request does not contain saves, profiles, screenshots, render captures, personal files, account names, email addresses, serial numbers, MAC addresses or device IDs.
 
-The schema 3 binding record is covered by the same opt-in. It adds bounded consumer, texture and producer-state evidence for TAA diagnosis, including matrix values and frame-age/resolve-gap fields, but no pointer, address, path, identity or image data. It is used for renderer research.
+## Storage
 
-The compact automatic diagnostic stream is also covered by the same opt-in. Its contract samples up to 32 frames at most once every 180 seconds, with up to 24 VS/PS pairs and eight binding records, plus TAA history and rejection booleans, coverage counters, pending counts and delivery results. It may include the existing stage/FNV shader references and structured schema 2/3 records, but it does not include color previews, raw F1 ZIP contents or random, session, player or device identifiers. The compact stream is a separate opt-in upload path; the existing F1 capture remains a separate manual action.
+Records are stored in Cloudflare D1, keyed by the SHA-256 of the text. A record is deleted 30 days after it was last uploaded. The private GitHub repository `LostOdysseyRecomp-build-inputs`, open only to the maintainers and CI, keeps copies for research. These copies do not expire, and removing a file later does not erase Git history.
 
-D1's 30-day inactive-record expiry is an operational retention rule for the live diagnostic service. The private GitHub research archive at `LostOdysseyRecomp-build-inputs` receives daily content-addressed snapshots for long-term research, with access limited to maintainers and CI. These private Git copies do not inherit D1's automatic expiry; deleting a file from the latest tree does not erase earlier Git history.
+The Worker reads `CF-Connecting-IP` only for the platform's temporary rate limiter and does not store it. Workers Logs, invocation logs and traces are off. Cloudflare still processes your IP address and normal HTTPS metadata to deliver and protect the service.
 
-See the [Chinese privacy mirror](PRIVACY.zh-CN.md).
+## Earlier TAA collection
 
-See the [TAA collector description](tools/taa-collector/README.md) for the current fields and validation boundaries. The collection is diagnostic research and does not establish a rendering fix or gameplay acceptance.
+Until 2026-10-09 the same consent sent TAA shader data (shader hashes, original VS/PS microcode, GPU and driver, matrices and sparse depth samples). That collection has ended: the server now rejects it, and an earlier "yes" does not turn on log collection. Its D1 records expire within 30 days; the private archive keeps its copies.
+
+## Local files
+
+Runtime logs in `logs/` and **Capture render state** archives in `captures/` stay on your computer unless you share them. They can contain local paths, so look through them before attaching them to a report.
+
+See the [Chinese privacy statement](PRIVACY.zh-CN.md) and the [log collector description](tools/taa-collector/README.md).

@@ -34,6 +34,7 @@ def main():
         assert not root.exists(), "use a new evidence directory"
         root.mkdir(parents=True)
     env = os.environ.copy()
+    env["LO_DEBUG_LOG"] = "1"
     env.pop("LO_SHADER_LOG_FILE", None)
     env["LO_DXC_PATH"] = str(args.dxc.resolve())
     outputs = {}

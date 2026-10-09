@@ -129,7 +129,7 @@ void debug_menu::UpdateMapInfo(uint8_t* base) {
     if ((changed && getenv("LO_TRACE_MAP_INFO")) || edge) {
         const auto name = std::filesystem::path(current.name).u8string();
         const auto package = std::filesystem::path(current.package).u8string();
-        LOG_INFO("current map available={} id={} name={} package={}", current.available, current.id,
+        LOG_NOTICE("current map available={} id={} name={} package={}", current.available, current.id,
             reinterpret_cast<const char*>(name.c_str()), reinterpret_cast<const char*>(package.c_str()));
         loggedAvailable = current.available;
         loggedId = current.id;
@@ -161,7 +161,7 @@ void debug_menu::PollSceneLoads(uint8_t* base) {
             if (const auto found = definitions.find(name); found != definitions.end()) id = found->second;
         }
         const auto text = std::filesystem::path(name).u8string();
-        LOG_INFO("scene load: map {} id={}", reinterpret_cast<const char*>(text.c_str()), id ? std::to_string(*id) : "-");
+        LOG_NOTICE("scene load: map {} id={}", reinterpret_cast<const char*>(text.c_str()), id ? std::to_string(*id) : "-");
         if (id) {
             pendingScene = MapScene(*id);
             NotifySceneLoad(MapScene(*id));
@@ -173,7 +173,7 @@ void debug_menu::PollSceneLoads(uint8_t* base) {
     const uint32_t id = PPC_LOAD_U32(BattleSlot + 16);
     if (requested > 0 && (battlePhase <= 0 || id != battleId)) {
         const auto tag = gpu::pipeline_cache::SceneTag(gpu::pipeline_cache::kSceneBattle, id);
-        LOG_INFO("scene load: battle id={}", int32_t(id));
+        LOG_NOTICE("scene load: battle id={}", int32_t(id));
         battleId = id;
         battleScene = tag;
         pendingScene = tag;

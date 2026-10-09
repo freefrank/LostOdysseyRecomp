@@ -44,7 +44,7 @@ public:
                     taa_collection::shader_sources::Batch batch;
                     {
                         std::lock_guard lock(state->mutex);
-                        batch = state->pending.Pending(0);
+                        batch = state->pending.Pending();
                     }
                     if (batch.programs.empty()) { control.Wait(std::chrono::milliseconds(250)); continue; }
                     for (const auto& program : batch.programs) {

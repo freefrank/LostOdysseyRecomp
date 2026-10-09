@@ -195,7 +195,7 @@ flatpak run io.github.freefrank.LostOdysseyRecomp --game ~/Games/LostOdyssey
 
 ## 反馈问题
 
-[提交 issue](https://github.com/freefrank/LostOdysseyRecomp/issues) 时请写明版本、操作系统、图形后端、GPU 和驱动、游戏版本和光盘，以及出现问题的步骤或场景，并附上最新的 `logs/runtime-<timestamp>.log`。
+[提交 issue](https://github.com/freefrank/LostOdysseyRecomp/issues) 时请写明版本、操作系统、图形后端、GPU 和驱动、游戏版本和光盘，以及出现问题的步骤或场景，并附上最新的 `logs/runtime-<timestamp>.log`。需要完整日志时，先在**设置 → 系统**打开“调试日志”并保存，再重现一次问题后附上。
 
 画面问题请在问题出现时做一次[渲染捕获](#overview捕获与游戏操作)。不要附上游戏文件、存档或个人数据。
 

@@ -4,7 +4,6 @@
 #include <chrono>
 #include <cstdint>
 #include <memory>
-#include <optional>
 #include <semaphore>
 #include <thread>
 #include <os/thread_name.h>
@@ -12,34 +11,8 @@
 
 namespace gpu::taa_collection {
 
-// One pending F1 flush per consent generation. A revoke/re-enable cannot turn a
-// previously requested flush into a request under the new consent epoch.
-class UploadRequestGate {
-public:
-    bool Request(const std::atomic<int>& consent, const std::atomic<uint64_t>& generation) noexcept {
-        const auto epoch = generation.load();
-        if (consent.load(std::memory_order_relaxed) != 1) return false;
-        auto queued = requested_.load();
-        for (;;) {
-            // A delayed producer from an older epoch must not overwrite a
-            // newer F1 request that was queued after revoke/re-enable.
-            if (queued != None && queued >= epoch) return queued == epoch;
-            if (requested_.compare_exchange_weak(queued, epoch)) return true;
-        }
-    }
-    std::optional<uint64_t> Consume(const std::atomic<int>& consent, const std::atomic<uint64_t>& generation) noexcept {
-        const auto requested = requested_.exchange(None);
-        if (requested != None && requested == generation.load() &&
-            consent.load(std::memory_order_relaxed) == 1) return requested;
-        return {};
-    }
-private:
-    static constexpr uint64_t None = ~uint64_t{};
-    std::atomic<uint64_t> requested_{None};
-};
-
-// Collection is expendable. Stop/destruction must never make the game wait for
-// a stalled network request. The detached thread owns its control and captured
+// Background analysis is expendable. Stop/destruction must never make the game
+// wait for a stalled callback. The detached thread owns its control and captured
 // state until its callback exits; callbacks must not refer to application globals.
 class CollectionWorker {
 public:

@@ -119,10 +119,11 @@ inline constexpr int AudioRowCount = 4;
 inline constexpr int SystemUiLanguageRow = 0;
 inline constexpr int SystemGameLanguageRow = 1;
 inline constexpr int SystemUpdatesRow = 2;
-inline constexpr int SystemCollectionRow = 3;
-inline constexpr int SystemImportRow = 4;
-inline constexpr int SystemSaveRow = 5;
-inline constexpr int SystemRowCount = 6;
+inline constexpr int SystemDebugLogRow = 3;
+inline constexpr int SystemCollectionRow = 4;
+inline constexpr int SystemImportRow = 5;
+inline constexpr int SystemSaveRow = 6;
+inline constexpr int SystemRowCount = 7;
 static_assert(GamePromptRow == GameRetailRowCount && GameMainMenuRow + 1 == GameRowCount);
 static_assert(AudioOutputRow + 1 == AudioRowCount && SystemSaveRow + 1 == SystemRowCount);
 // Logical ids for the graphics tab (2). MenuSnapshot::row stores these as int.

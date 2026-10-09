@@ -1,4 +1,4 @@
-#include <gpu/taa_collection.h>
+#include <os/log_collection.h>
 #include <stdafx.h>
 #include <cpu/guest_thread.h>
 #include <kernel/function.h>
@@ -284,8 +284,11 @@ int main(int argc, char* argv[])
         std::filesystem::create_directories(os::user_paths::ConfigDir(), ec);
         std::filesystem::current_path(os::user_paths::ConfigDir(), ec);
     }
+    // Info and kernel lines only with the Debug log setting.
+    os::logger::SetDebugLog(updater::ReadStartupPreferences(os::user_paths::SettingsPath()).debugLog);
     // Keep each run separately, including launches without a terminal. Tests
     // can select a path or disable the duplicate sink with LO_LOG_FILE=0.
+    std::filesystem::path sessionLog; // default runtime-<digits>.log, for log collection
     const char* logOverride = getenv("LO_LOG_FILE");
     if (!logOverride || strcmp(logOverride, "0") != 0)
     {
@@ -303,7 +306,10 @@ int main(int argc, char* argv[])
         if (os::logger::OpenFile(logPath))
         {
             if (!logOverride)
+            {
                 os::logger::PruneDefaultLogs(logPath);
+                sessionLog = logPath;
+            }
             LOG_INFO("log file: {}", FileSystem::PathUtf8(logPath));
         }
         else LOG_WARNING("could not open log file: {}", FileSystem::PathUtf8(logPath));
@@ -321,7 +327,10 @@ int main(int argc, char* argv[])
     for (int i = 1; i < argc; i++)
     {
         if (strcmp(argv[i], "--quiet-kernel") == 0)
+        {
+            os::logger::g_quietKernel = true;
             os::logger::g_kernelTrace = false;
+        }
     }
 
     {
@@ -338,12 +347,12 @@ int main(int argc, char* argv[])
         for (int i = 0; i < argc; i++)
             cmdline += fmt::format("{}{}", i ? " " : "", argv[i]);
         LOG_INFO("LostOdysseyRecomp starting at {} : {}", stamp, cmdline);
-        LOG_INFO("source version: {}", lo_version::Source);
+        LOG_NOTICE("source version: {}", lo_version::Source);
         std::string switches;
         for (char** e = environ; e && *e; e++)
             if (strncmp(*e, "LO_", 3) == 0)
                 switches += fmt::format(" {}", *e);
-        LOG_INFO("LO_* switches:{}", switches.empty() ? " (none)" : switches.c_str());
+        LOG_NOTICE("LO_* switches:{}", switches.empty() ? " (none)" : switches.c_str());
     }
     os::diagnostics::LogStartupEnvironment();
 #ifdef _WIN32
@@ -459,15 +468,20 @@ int main(int argc, char* argv[])
             return 1;
     }
     settings::ConfigureGameLanguages(gameRoot / "default.xex");
-    gpu::taa_collection::Initialize();
-    struct CollectionShutdown
-    {
-        ~CollectionShutdown() { gpu::taa_collection::Shutdown(); }
-    } collectionShutdown;
+    os::log_collection::Initialize();
     if(requestedSetup || (!getenv("LO_BACKGROUND") && !getenv("LO_HEADLESS") && !std::filesystem::exists(os::user_paths::SettingsPath()))) {
         if(!settings::FirstRunSetup(&gameRoot)) return 0;
-        gpu::taa_collection::PromptFirstRun(settings::GetConfig().uiLanguage);
+        os::log_collection::PromptFirstRun(settings::GetConfig().uiLanguage);
         if(setupOnly) return 0;
+    }
+    os::log_collection::StartUpload(sessionLog);
+    {
+        const auto& c = settings::GetConfig();
+        LOG_NOTICE("settings: backend={} output={}x{} window={} render_resolution={} aa={} upscaler={} dlss_quality={} fsr_quality={} "
+                   "frame_rate={} fg_provider={} fg_multiplier={} hdr={} ao={} shadow_resolution={} debug_log={}",
+                   int(c.graphicsBackend), c.width, c.height, int(c.windowMode), c.internalResolution, c.antialiasing,
+                   int(c.upscaler), int(c.dlssQuality), int(c.fsrQuality), c.frameRate, int(c.frameGenerationProvider),
+                   c.frameGenerationMultiplier, c.hdr, c.ambientOcclusion, c.shadowResolution, c.debugLog);
     }
     if (g_memory.base == nullptr)
     {

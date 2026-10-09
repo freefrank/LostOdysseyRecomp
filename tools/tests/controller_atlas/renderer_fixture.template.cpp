@@ -114,7 +114,7 @@ struct Harness {
         return uploadOffset;
     }
     void Transition(HostTexture& tex, RenderTextureLayout, RenderBarrierStage) { assert(tex.texture); }
-    void DescribeBindingTexture(binding::Texture* b, const HostTexture& tex, binding::TextureKind, uint64_t) {
+    void DescribeBindingTexture(binding::Texture* b, const HostTexture& tex, binding::TextureKind) {
         if (b) { b->format = tex.format; b->ps = tex.controllerAtlasPlayStationVariant; }
     }
 /* PRODUCTION_SELECT */
@@ -145,12 +145,12 @@ int main() {
     const auto originalRgba = origin->atlasPendingRgba;
     harness.textures.emplace(GuestKey{0x100000, 256, 128}, std::move(source));
     binding::Texture binding{};
-    assert(harness.SelectControllerAtlas(origin, &binding, 0) == origin);
-    assert(harness.SelectControllerAtlas(origin, &binding, 0) == origin);
+    assert(harness.SelectControllerAtlas(origin, &binding) == origin);
+    assert(harness.SelectControllerAtlas(origin, &binding) == origin);
     assert(hid::reads == 1 && harness.uploads == 0 && !binding.ps);
     hid::family = true; ++harness.frame;
     harness.rollover = true;
-    auto* ps = harness.SelectControllerAtlas(origin, &binding, 0);
+    auto* ps = harness.SelectControllerAtlas(origin, &binding);
     assert(ps != origin && binding.ps && ps->texture && ps->texture->id == 1);
     assert(ps->controllerAtlasIdentity == origin->controllerAtlasIdentity);
     assert(harness.uploads == 1 && harness.dev.creates == 1);
@@ -191,11 +191,11 @@ int main() {
     assert(harness.first.copies == 0 && harness.second.copies == 1);
     assert(harness.second.last.ring == reinterpret_cast<void*>(2) && harness.second.last.pitch == 256);
     assert(origin->atlasPendingRgba.empty());
-    assert(harness.SelectControllerAtlas(origin, &binding, 0) == ps && harness.uploads == 1);
+    assert(harness.SelectControllerAtlas(origin, &binding) == ps && harness.uploads == 1);
     hid::family = false; ++harness.frame;
-    assert(harness.SelectControllerAtlas(origin, &binding, 0) == origin && !binding.ps);
+    assert(harness.SelectControllerAtlas(origin, &binding) == origin && !binding.ps);
     hid::family = true; ++harness.frame;
-    assert(harness.SelectControllerAtlas(origin, &binding, 0) == ps && harness.uploads == 1);
+    assert(harness.SelectControllerAtlas(origin, &binding) == ps && harness.uploads == 1);
     assert(hid::reads == 4);
     const auto destroyedBefore = destroyedTextures;
     harness.InvalidateRange(0x100020, 1);
@@ -208,20 +208,20 @@ int main() {
     failed.atlasPendingRgba.resize(size_t(256) * 128 * 4);
     harness.failUpload = true;
     ++harness.frame;
-    assert(harness.SelectControllerAtlas(&failed, &binding, 0) == &failed && !binding.ps);
+    assert(harness.SelectControllerAtlas(&failed, &binding) == &failed && !binding.ps);
     assert(failed.atlasState == HostTexture::AtlasState::Failed && failed.atlasPendingRgba.empty());
     const auto failedUploads = harness.uploads;
-    assert(harness.SelectControllerAtlas(&failed, &binding, 0) == &failed && harness.uploads == failedUploads);
+    assert(harness.SelectControllerAtlas(&failed, &binding) == &failed && harness.uploads == failedUploads);
     HostTexture allocationFailed;
     allocationFailed.atlasState = HostTexture::AtlasState::Pending;
     allocationFailed.atlasPendingRgba.resize(size_t(256) * 128 * 4);
     harness.dev.fail = true;
-    assert(harness.SelectControllerAtlas(&allocationFailed, &binding, 0) == &allocationFailed);
+    assert(harness.SelectControllerAtlas(&allocationFailed, &binding) == &allocationFailed);
     assert(allocationFailed.atlasState == HostTexture::AtlasState::Failed && harness.uploads == failedUploads);
     HostTexture patchFailed;
     patchFailed.atlasState = HostTexture::AtlasState::Pending;
     harness.dev.fail = false;
-    assert(harness.SelectControllerAtlas(&patchFailed, &binding, 0) == &patchFailed);
+    assert(harness.SelectControllerAtlas(&patchFailed, &binding) == &patchFailed);
     assert(patchFailed.atlasState == HostTexture::AtlasState::Failed && harness.uploads == failedUploads);
     HostTexture stopped;
     stopped.atlasState = HostTexture::AtlasState::Pending;
@@ -231,7 +231,7 @@ int main() {
     ++harness.frame;
     RenderTexture* originalAtStop = stopped.texture.get();
     const auto drawsAtStop = harness.drawsThisFrame;
-    HostTexture* stoppedResult = harness.SelectControllerAtlas(&stopped, &binding, 0);
+    HostTexture* stoppedResult = harness.SelectControllerAtlas(&stopped, &binding);
     // Mirrors the production GetTexture caller's if (!tex) / PlanSuppressed
     // branch, whose exact source ordering is checked by the generator.
     if (stoppedResult || !harness.PlanSuppressed()) ++harness.drawsThisFrame;
@@ -239,7 +239,7 @@ int main() {
     assert(stopped.texture.get() == originalAtStop); // source remains owned
     video::stopped = false;
     harness.failUpload = false;
-    assert(harness.SelectControllerAtlas(&stopped, &binding, 0) == &stopped);
+    assert(harness.SelectControllerAtlas(&stopped, &binding) == &stopped);
 
     // Extracted production trace method: an aborted draw never calls it;
     // superseded bindings cannot be reported as recorded.

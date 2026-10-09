@@ -47,7 +47,7 @@ def stage(source, run):
                 shutil.copy2(item, run / item.name)
     for name in ("save", "profile", "shaders", "shader-cache"):
         shutil.copytree(source / name, run / name)
-    for name in ("settings.ini", "taa-collection.ini"):
+    for name in ("settings.ini", "log-collection.ini"):
         if (source / name).exists():
             shutil.copy2(source / name, run / name)
 
@@ -84,7 +84,7 @@ def main():
     (run / "shots").mkdir()
 
     env = {k: v for k, v in os.environ.items() if not k.upper().startswith("LO_")}
-    env.update(LO_AUDIO_MUTE="1", LO_TRACE_MAP_INFO="1", LO_LOG_FILE=str(log),
+    env.update(LO_AUDIO_MUTE="1", LO_TRACE_MAP_INFO="1", LO_DEBUG_LOG="1", LO_LOG_FILE=str(log),
                LO_AUTO_BUTTONS="s@120,a@240,a@360,a@480,a@700,a@900", LO_AUTO_PULSE="6",
                LO_TEST_INPUT_FILE=str(run / "input.txt"), LO_TEST_INPUT_TICKS="1",
                LO_SCREENSHOT_REQUEST=str(run / "shots.txt"), LO_SCREENSHOT_PATH=str(run / "shots" / "shot.ppm"),

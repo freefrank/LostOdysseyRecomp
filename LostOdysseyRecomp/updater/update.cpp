@@ -300,6 +300,7 @@ StartupPreferences ReadStartupPreferences(const std::filesystem::path &settingsP
         const auto key = line.substr(0, equal);
         if (key == "ui_language") result.uiLanguage = value;
         else if (key == "automatic_updates" && value <= 1) result.automaticUpdates = value == 1;
+        else if (key == "debug_log" && value <= 1) result.debugLog = value == 1;
     }
     return result;
 }

@@ -308,14 +308,6 @@ Build `LoStorageTest` only when the affected native inputs change. Its `dlc <new
 
 ## Selected native targets
 
-### TAA shader-source upload fixture
-
-The focused `collection_upload_request_test.cpp` fixture covers the nonblocking F1 upload request contract: bounded ownership, busy/full skip behavior, zero hot-path allocation, stalled HTTP completion, stop/destruction and retry-state boundaries. The current recorded run passed 124 checks; its retained output is [the F1 upload fixture log](../../out/tests/shader-source-collection/f1-upload-request/test.log). It reuses the existing 168 source-collection and 3,104 summary-collection checks rather than repeating them. This is client/helper contract evidence and does not establish a production client build, game runtime or player acceptance. The live service roundtrip is recorded separately in `out/v0.5.0/shader-source-collection/live-roundtrip.json`.
-
-### TAA binding evidence fixtures
-
-The standalone CPU fixtures `taa_binding_collection_test.cpp` and `taa_binding_producer_test.cpp` cover the bounded schema 3 queue, producer snapshots, revocation and zero-allocation producer paths. Compile and run them from isolated output directories when the binding contract changes. The Worker protocol fixture is run with `npm run test:taa-bindings` from `tools/taa-collector`; it covers schema 3 serialization, validation, canonicalization and deduplication. These checks do not launch the game or establish visual acceptance.
-
 ### TAA crowd coverage follow-up
 
 
@@ -402,10 +394,6 @@ Vulkan offscreen rasterization then matched clip-coordinate bits and color/depth
 coverage across all 32 jitter phases for those four 84-index pairs. A later
 report included additional 144-index eyes outside that capture, so complete
 scene coverage remains unestablished. Existing GPU fixture results are reused.
-
-### Compact diagnostic receiver fixture
-
-The compact receiver checks are run from `tools/taa-collector` with `node --test collection-diagnostics.test.js`. The recorded 9/9 run covers schema 4 bounds, canonicalization, privacy allowlists, backend capabilities, references, receipt handling, deduplication, HTTP failures and compatibility with older receipts. The C++ fixture passed 68 checks with zero allocations, and the ledger/archive checks passed separately. These checks do not launch the game or establish visual acceptance.
 
 The following CMake targets are `EXCLUDE_FROM_ALL`; they are not `tools/test.bat` suite names and are never run implicitly. Select only the target relevant to the change, build it explicitly, and run the resulting executable from an isolated working directory when it writes captures or caches:
 
@@ -548,7 +536,7 @@ The development targets below are excluded from default builds and are not suite
 | `LoTemporalMathTest` | CPU camera-reference math with independent analytic point, translation/yaw, viewport/Y-sign/half-pixel and invalid-input checks. No GPU, guest generation or runtime PCH required. Static round trips and these fixtures do not establish runtime frame association, motion vectors or TAA. |
 | `LoTemporalSceneTest` | CPU scene-observation ordering, frame reset, depth-allocation identity, full extents and ambiguity rejection. No GPU, guest generation or runtime PCH required. It does not validate the renderer's actual scene/UI selection. |
 | `LoTemporalJitterTest` | CPU production jitter and shadow-reconstruction checks across all 32 phases at 720p/1080p/1440p/4K, including the current Map16 extension (20,635 recorded checks total; 3,348 Map16 checks). Retained constant fixtures independently emulate tire and battle depth/material/lighting position paths, skinned transforms and shadow reconstruction, including negative controls, clip-derived sampling coordinates, preserved Z/W and depth UV, and Off/atlas/identity rejection guards. No GPU, game assets, guest generation or runtime PCH required; this does not establish actual draw coverage or player-visible stability. |
-| `LoPositionEvidenceTest` | Native C++ rule/guard checks, retained capture-corpus classification, schema 2 Worker protocol acceptance and source-0.5.0 incremental build passed. The generated 343B JSON was accepted, schema 1 behavior remained compatible, and no D1 migration was needed. No game launch or visual acceptance is included; see `out/v0.5.0/performance-fix/position-evidence-0.5.0/REPORT.md`. |
+| `LoPositionEvidenceTest` | Native C++ checks of the translated-VS position classifier that the temporal suspect check uses; pass HLSL files as arguments to classify a capture corpus. No GPU, game launch or visual acceptance. |
 | `LoRegisterSnapshotTest` | CPU ordered bulk-register snapshot and MMIO fallback/bounds checks used by the renderer's constant reads. No game, GPU or performance claim. Evidence: `out/v0.5.0/rendering-fixes/performance/register-snapshot-result.json`. |
 | `render-timing` fixture | CPU contract checks for accepted-present intervals, renderer GPU-batch timestamp aggregation, invalid/stale query handling and timing scope labels. No game or display-latency claim. Evidence: `out/v0.5.0/rendering-fixes/render-timing/result.json`. |
 | `LoGameWindowPixelsTest` | Hidden Windows/SDL physical client and drawable-pixel checks, scoped DPI context, display transitions, placement restoration and session-only Alt+Enter state. The corrected fixture passed its recorded physical 150% DPI checks; this does not establish live fullscreen or gameplay acceptance. Evidence: `out/v0.5.0/rendering-fixes/window/REPORT.md`. |

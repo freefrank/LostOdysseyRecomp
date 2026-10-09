@@ -148,7 +148,6 @@ inline HistoryReuseDiagnostic InspectHistoryReuse(const HistoryReuseState& state
 }
 #ifdef LO_GPU_PLUME
 #include <plume_render_interface.h>
-#include "temporal_collection_gpu.h"
 #include <vector>
 
 namespace gpu::temporal {
@@ -172,8 +171,6 @@ class HistoryOwner {
     };
     plume::RenderDevice* device_=nullptr;
     TemporalAA aa_;
-    std::shared_ptr<taa_collection::SparseDepthGPU> sparse_;
-    uint64_t sparseReleaseSerial_=0;
     std::array<Image,2> depth_,history_;
     Image source_,display_;
     MotionFrameView motionView_{};
@@ -253,8 +250,8 @@ class HistoryOwner {
 public:
     // The instance selects the source domain, which never changes at runtime.
     // SDR may independently retain FP16 history; HDR stays FP16 throughout.
-    bool Init(plume::RenderDevice* device,std::shared_ptr<taa_collection::SparseDepthGPU> sparse={},bool hdrColor=false) {
-        device_=device;sparse_=std::move(sparse);
+    bool Init(plume::RenderDevice* device,bool hdrColor=false) {
+        device_=device;
         sourceFormat_=historyFormat_=hdrColor?plume::RenderFormat::R16G16B16A16_FLOAT:plume::RenderFormat::R8G8B8A8_UNORM;
         captureFailure_=InputCaptureFailure::None;
         // Input-only DLSS collection owns only current depth/color. TAA shaders,
@@ -472,14 +469,6 @@ public:
         // history when tracking/coverage/epoch validation failed. nullptr alone
         // selects the established camera-only baseline.
         in.rejectAllHistory=!allowHistory||(motion&&!motionVectorValid_);
-        if(sparse_&&!sparseReleaseSerial_&&sparse_->Ready()&&taa_collection::WantSparse()) {
-            taa_collection::SparseFrame f;f.frame=frame_;f.epoch=epoch_;f.width=width_;f.height=height_;
-            f.current=current.camera;f.previous=previous.camera;
-            f.flags=(previous.completed&&previous.number+1==frame_&&previous.epoch==epoch_&&previous.camera&&SameRaster(*current.camera,*previous.camera)?1u:0u)|(reuse?2u:0u)|(allowHistory?4u:0u)|(stableGrid?8u:0u);
-            f.jitter[0]=float(jx);f.jitter[1]=float(jy);f.jitter[2]=float(previous.jx);f.jitter[3]=float(previous.jy);
-            sparse_->Record(commands,in.currentDepth,std::move(f));
-            aa_.RecordExternalUse();sparseReleaseSerial_=aa_.RecordedSerial();
-        }
         if(!aa_.Resolve(commands,in)){Reset();return nullptr;}
         Transition(commands,history_[frame_%2],plume::RenderTextureLayout::SHADER_READ);
         // Diagnose the same inputs without feeding diagnostic colors into history.
@@ -519,12 +508,9 @@ public:
     plume::RenderTexture* CurrentMotionVector() const {return motionVectorValid_?motionView_.velocity:nullptr;}
     plume::RenderTexture* CurrentMotionDepths() const {return motionVectorValid_?motionView_.depths:nullptr;}
     plume::RenderTexture* CurrentReactiveMask() const {return motionVectorValid_?motionView_.reactive:nullptr;}
-    void ReleaseCompleted() {if(sparse_)sparse_->ReleaseCompleted();sparseReleaseSerial_=0;hybridMotion_.ReleaseCompletedThrough(aa_.RecordedSerial());aa_.ReleaseCompleted();retired_.clear();}
+    void ReleaseCompleted() {hybridMotion_.ReleaseCompletedThrough(aa_.RecordedSerial());aa_.ReleaseCompleted();retired_.clear();}
     uint64_t RecordedSerial() const {return aa_.RecordedSerial();}
     void ReleaseCompletedThrough(uint64_t serial) {
-        if(sparse_&&sparseReleaseSerial_&&sparseReleaseSerial_<=serial) {
-            sparse_->ReleaseCompleted();sparseReleaseSerial_=0;
-        }
         aa_.ReleaseCompletedThrough(serial);
         hybridMotion_.ReleaseCompletedThrough(serial);
         std::erase_if(retired_,[serial](const RetiredImage& image){return image.serial<=serial;});

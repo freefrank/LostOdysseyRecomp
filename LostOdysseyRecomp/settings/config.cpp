@@ -273,6 +273,8 @@ Config Read()
             // Unknown values keep the safe package default (enabled).
             if (number <= 1) value.automaticUpdates = number == 1;
         }
+        else if (key == "debug_log" && number <= 1)
+            value.debugLog = number == 1;
     }
     if (!hasAntialiasing) value.antialiasing = value.fxaa ? 1u : 0u;
     // Profiles written before automatic peak detection use their stored peak
@@ -327,7 +329,7 @@ void ConfigureGameLanguages(const std::filesystem::path &xexPath)
     }
     GameLanguageIds = europe ? std::span<const uint32_t>(EuropeLanguageIds) : std::span<const uint32_t>(AsiaLanguageIds);
     GameLanguageNames = europe ? std::span<const wchar_t *const>(EuropeLanguageNames) : std::span<const wchar_t *const>(AsiaLanguageNames);
-    LOG_INFO("game edition: {}; {} game languages", europe ? "USA/Europe" : "Asia/default", GameLanguageIds.size());
+    LOG_NOTICE("game edition: {}; {} game languages", europe ? "USA/Europe" : "Asia/default", GameLanguageIds.size());
 }
 Config GetConfig()
 {
@@ -398,6 +400,7 @@ static bool WriteConfig(const Config &value)
            << "\nframe_generation_target_fps=" << value.frameGenerationTargetFps
            << "\ninternal_resolution=" << value.internalResolution
            << "\nfxaa=" << value.fxaa << "\nautomatic_updates=" << value.automaticUpdates
+           << "\ndebug_log=" << (value.debugLog ? 1 : 0)
            << "\naudio_output=" << value.audioOutput
            << "\nskip_shader_prebuild=" << (value.skipShaderPrebuild ? 1 : 0)
            << "\nsave_anywhere=" << (value.saveAnywhere ? 1 : 0)
@@ -434,6 +437,7 @@ bool SaveConfig(const Config &requested)
     value.audioOutput = Current().audioOutput;
     if (!WriteConfig(value)) return false;
     Current() = value;
+    os::logger::SetDebugLog(value.debugLog);
     return true;
 }
 bool SaveAudioOutput(uint32_t output)

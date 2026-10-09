@@ -26,8 +26,8 @@ invalidate = source[source.index('            void InvalidateRange('):
                     source.index('            // ---- pipeline state', source.index('            void InvalidateRange('))]
 get = source[source.index('            HostTexture* GetTexture('):
              source.index('            void InvalidateRange(', source.index('            HostTexture* GetTexture('))]
-assert get.count('return SelectControllerAtlas(cached, bindingInfo, bindingEpoch);') == 2
-assert 'return SelectControllerAtlas(result, bindingInfo, bindingEpoch);' in get
+assert get.count('return SelectControllerAtlas(cached, bindingInfo);') == 2
+assert 'return SelectControllerAtlas(result, bindingInfo);' in get
 assert 'controller_atlas::Candidate(dimension, format, originalWidth, originalHeight,' in get
 assert 'controller_atlas::Identify(rgba)' in get
 # A rebuilt atlas must carry its content hash into the cache, or a guest rewrite never re-identifies it.
