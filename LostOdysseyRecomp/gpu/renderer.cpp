@@ -93,6 +93,18 @@
 #include <debug/battle_menu.h>
 #include <version.h>
 
+// Logical CPUs for the renderer's worker pools. libnx reports none, which left
+// pipeline preparation on one worker (over three minutes at first launch);
+// Horizon gives applications cores 0-2.
+static unsigned HostLogicalThreads()
+{
+#if LO_PLATFORM_SWITCH
+    return 3;
+#else
+    return std::thread::hardware_concurrency();
+#endif
+}
+
 #ifdef LO_GPU_PLUME
 #include <plume_render_interface.h>
 #include <plume_render_interface_builders.h>
@@ -788,7 +800,7 @@ namespace gpu::renderer
             // LO_PIPELINE_MISS_WORKERS=0 turns siblings and skipped draws off.
             const size_t drawWorkerCap = [] {
                 if (const char* value = getenv("LO_PIPELINE_MISS_WORKERS")) return size_t(std::clamp(atoi(value), 0, 16));
-                return size_t(std::clamp(std::thread::hardware_concurrency() / 4, 2u, 6u));
+                return size_t(std::clamp(HostLogicalThreads() / 4, 2u, 6u));
             }();
             const bool pipelineSiblings = drawWorkerCap && !getenv("LO_NO_PIPELINE_SIBLINGS");
             const bool pipelineAsync = drawWorkerCap && getenv("LO_PIPELINE_ASYNC") &&
@@ -1935,7 +1947,8 @@ namespace gpu::renderer
                 uint64_t vertexArenaAddress; // SPIR-V vertex fetch (common_hlsl.h)
             };
             static_assert(offsetof(SharedConstants,vertexArenaAddress)==xenos::VertexArenaAddressOffset);
-            static_assert(gpu::render_arena::kVertexArenaSize == 1073741824ull);
+            // The shaders clamp vertex fetches at 1 GiB (common_hlsl.h).
+            static_assert(gpu::render_arena::kVertexArenaSize <= 1073741824ull);
 
             static_assert(offsetof(SharedConstants,ndcScale)==160);
             static_assert(offsetof(SharedConstants,transfer)==240);
@@ -2377,7 +2390,18 @@ namespace gpu::renderer
                     } else LOG_INFO("renderer: shader cache {}", shaderCacheDir);
                 }
 
-                rectListExpansion = !(getenv("LO_RECT_LIST_GS") && device->getCapabilities().geometryShader);
+#if LO_PLATFORM_SWITCH
+                // Vertex expansion compiles a variant of every rect-list vertex
+                // shader at run time, and the console has no DXC. The geometry
+                // shader is one fixed, precompiled shader (os/switch/builtin_spirv.inc).
+                // LO_RECT_LIST_GS=0 restores vertex expansion.
+                const char* rectListGsSetting = getenv("LO_RECT_LIST_GS");
+                const bool wantRectListGs = !rectListGsSetting || std::strcmp(rectListGsSetting, "0") != 0;
+#else
+                const bool wantRectListGs = getenv("LO_RECT_LIST_GS") != nullptr;
+#endif
+                rectListExpansion = !(wantRectListGs && device->getCapabilities().geometryShader);
+                LOG_INFO("renderer: rect lists via {}", rectListExpansion ? "vertex expansion" : "geometry shader");
                 if (!rectListExpansion) CompileRectListGs();
                 CompileBlitShaders();
                 CompileSceneCopyPromotionShaders();
@@ -4950,7 +4974,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         }
                     }
                 };
-                const unsigned logical = std::max(1u, std::thread::hardware_concurrency());
+                const unsigned logical = std::max(1u, HostLogicalThreads());
                 std::vector<std::thread> threads;
                 for (size_t t = 1; t < std::min<size_t>(logical, wanted.size()); ++t) threads.emplace_back(work);
                 work();
@@ -5021,7 +5045,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         if (FindRecipeShaders(key, vs, ps, nullptr) != RecipeShaderState::Ready) { ++missingShaders; continue; }
                         jobs.push_back({key, vs, ps, {}});
                     }
-                    const unsigned logical = std::thread::hardware_concurrency();
+                    const unsigned logical = HostLogicalThreads();
                     const size_t count = xenos::preparation::WorkerCount(logical, jobs.size(),
                         getenv("LO_PIPELINE_PREPARE_SERIAL") != nullptr,
                         unsigned(xenos::preparation::HostWorkerCap(logical)), "LO_PIPELINE_WORKERS");
@@ -5148,8 +5172,12 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (driverCachePath.empty()) return;
                 if (driverCacheWrite.valid()) {
                     if (!wait && driverCacheWrite.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
-                    if (const auto error = driverCacheWrite.get(); !error.empty())
-                        LOG_WARNING("renderer: driver pipeline cache write: {}", error);
+                    // The writer's exceptions (bad_alloc copying a large driver
+                    // cache) surface here; a cache that cannot be saved is not fatal.
+                    try {
+                        if (const auto error = driverCacheWrite.get(); !error.empty())
+                            LOG_WARNING("renderer: driver pipeline cache write: {}", error);
+                    } catch (const std::exception& e) { LOG_WARNING("renderer: driver pipeline cache write: {}", e.what()); }
                 }
                 try {
                     driverCacheWrite = std::async(std::launch::async, [this] { return WriteDriverPipelineCache(); });
@@ -5426,7 +5454,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             {
                 if (!prefetchPool.workers.empty()) return;
                 // Half the threads: the game keeps loading and running beside them.
-                const unsigned logical = std::thread::hardware_concurrency();
+                const unsigned logical = HostLogicalThreads();
                 size_t count = std::max<size_t>(1, std::min<size_t>(xenos::preparation::HostWorkerCap(logical), logical / 2));
                 if (const char* value = getenv("LO_PIPELINE_PREFETCH_WORKERS")) count = std::max<size_t>(1, strtoul(value, nullptr, 10));
                 prefetchPool.smallCap = std::max<size_t>(1, std::min(drawWorkerCap, count));
@@ -5861,7 +5889,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             }
                         };
                         const size_t workers = std::min<size_t>(pendingModules.size(),
-                            std::max(1u, std::thread::hardware_concurrency()));
+                            std::max(1u, HostLogicalThreads()));
                         std::vector<std::thread> threads;
                         for (size_t t = 1; t < workers; ++t) threads.emplace_back(work);
                         work();
@@ -6056,7 +6084,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 // MTLDevice is thread-safe, so Metal modules are built in parallel on
                 // the workers. Vulkan and D3D12 keep creating them at install.
                 const bool modulesInWorkers = video::IsMetal();
-                const unsigned logicalThreads = std::thread::hardware_concurrency();
+                const unsigned logicalThreads = HostLogicalThreads();
                 const auto workerCap = xenos::preparation::HostWorkerCap(logicalThreads);
                 const auto workerCount = xenos::preparation::WorkerCount(logicalThreads, jobs.size(),
                     getenv("LO_SHADER_PREPARE_SERIAL") != nullptr, static_cast<unsigned>(workerCap));

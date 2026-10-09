@@ -2,7 +2,9 @@
 
 #include <os/platform.h>
 #include <cstddef>
+#include <atomic>
 #include <functional>
+#include <memory>
 #include <thread>
 #include <utility>
 
@@ -48,6 +50,7 @@ private:
     void Start(std::function<void()> body);
 
     void* m_handle = nullptr; // pthread_t
+    std::shared_ptr<std::atomic<bool>> m_done; // set when the body has returned
     std::thread::id m_id{};
     bool m_joinable = false;
 };

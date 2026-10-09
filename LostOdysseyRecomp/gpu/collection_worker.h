@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <os/detach_thread.h>
 #include <chrono>
 #include <cstdint>
 #include <memory>
@@ -69,10 +70,10 @@ public:
 
     template<class Function> explicit CollectionWorker(Function function)
         : control_(std::make_shared<Control>()) {
-        std::thread([control = control_, function = std::move(function)]() mutable {
+        os::DetachThread(std::thread([control = control_, function = std::move(function)]() mutable {
             os::SetCurrentThreadName("Collect Worker");
             try { function(*control); } catch (...) { /* Optional collection cannot crash the game. */ }
-        }).detach();
+        }));
     }
     ~CollectionWorker() { Stop(); }
     CollectionWorker(const CollectionWorker&) = delete;

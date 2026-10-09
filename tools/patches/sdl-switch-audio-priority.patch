@@ -1,0 +1,159 @@
+diff --git a/src/audio/switch/SDL_switchaudio.c b/src/audio/switch/SDL_switchaudio.c
+index 83c0d7c385..fead3792c6 100644
+--- a/src/audio/switch/SDL_switchaudio.c
++++ b/src/audio/switch/SDL_switchaudio.c
+@@ -86,14 +86,21 @@ static bool SWITCHAUDIO_OpenDevice(SDL_AudioDevice *device)
+         return SDL_SetError("Mixing buffer is too large.");
+     }
+ 
+-    size = (u32)((device->buffer_size * 2) + 0xfff) & ~0xfff;
++    size = (u32)((device->buffer_size * SWITCHAUDIO_BUFFERS) + 0xfff) & ~0xfff;
+     device->hidden->pool = memalign(0x1000, size);
+-    for (int i = 0; i < 2; i++) {
++    if (device->hidden->pool == NULL) {
++        return SDL_OutOfMemory();
++    }
++    SDL_memset(device->hidden->pool, 0, size);
++    for (int i = 0; i < SWITCHAUDIO_BUFFERS; i++) {
+         device->hidden->buffer[i].data_raw = device->hidden->pool;
+-        device->hidden->buffer[i].size = device->buffer_size * 2;
++        device->hidden->buffer[i].size = device->buffer_size * SWITCHAUDIO_BUFFERS;
+         device->hidden->buffer[i].start_sample_offset = i * device->sample_frames;
+         device->hidden->buffer[i].end_sample_offset = device->hidden->buffer[i].start_sample_offset + device->sample_frames;
+-        device->hidden->buffer_tmp = SDL_malloc(device->buffer_size);
++    }
++    device->hidden->buffer_tmp = SDL_malloc(device->buffer_size);
++    if (device->hidden->buffer_tmp == NULL) {
++        return SDL_OutOfMemory();
+     }
+ 
+     mpid = audrvMemPoolAdd(&device->hidden->driver, device->hidden->pool, size);
+@@ -123,55 +130,44 @@ static bool SWITCHAUDIO_OpenDevice(SDL_AudioDevice *device)
+     return true;
+ }
+ 
+-static bool SWITCHAUDIO_PlayDevice(SDL_AudioDevice *device, const Uint8 *buffer, int buflen)
++static int SWITCHAUDIO_FreeBuffer(SDL_AudioDevice *device)
+ {
+-    int current = -1;
+-    for (int i = 0; i < 2; i++) {
+-        if (device->hidden->buffer[i].state == AudioDriverWaveBufState_Free || device->hidden->buffer[i].state == AudioDriverWaveBufState_Done) {
+-            current = i;
+-            break;
++    for (int i = 0; i < SWITCHAUDIO_BUFFERS; i++) {
++        const AudioDriverWaveBufState state = device->hidden->buffer[i].state;
++        if (state == AudioDriverWaveBufState_Free || state == AudioDriverWaveBufState_Done) {
++            return i;
+         }
+     }
++    return -1;
++}
+ 
+-    /* paranoia */
+-    SDL_assert(buffer == device->hidden->buffer_tmp);
+-    SDL_assert(buflen == device->buffer_size);
++// Queues the mixed buffer behind the ones still playing; never waits.
++static bool SWITCHAUDIO_PlayDevice(SDL_AudioDevice *device, const Uint8 *buffer, int buflen)
++{
++    const int current = SWITCHAUDIO_FreeBuffer(device);
++    if (current < 0) {
++        return true; // WaitDevice guarantees a free buffer; drop rather than block
++    }
+ 
+-    if (current >= 0) {
+-        Uint8 *ptr = (Uint8 *)(device->hidden->pool + (current * device->buffer_size));
+-        memcpy(ptr, device->hidden->buffer_tmp, device->buffer_size);
+-        armDCacheFlush(ptr, device->buffer_size);
+-        audrvVoiceAddWaveBuf(&device->hidden->driver, 0, &device->hidden->buffer[current]);
+-    } else if (!audrvVoiceIsPlaying(&device->hidden->driver, 0)) {
++    Uint8 *ptr = (Uint8 *)device->hidden->pool + (current * device->buffer_size);
++    SDL_memcpy(ptr, buffer, buflen);
++    armDCacheFlush(ptr, device->buffer_size);
++    audrvVoiceAddWaveBuf(&device->hidden->driver, 0, &device->hidden->buffer[current]);
++    if (!audrvVoiceIsPlaying(&device->hidden->driver, 0)) {
+         audrvVoiceStart(&device->hidden->driver, 0);
+     }
+-
+     audrvUpdate(&device->hidden->driver);
+-
+-    if (current >= 0) {
+-        while (device->hidden->buffer[current].state != AudioDriverWaveBufState_Playing) {
+-            audrvUpdate(&device->hidden->driver);
+-            audrenWaitFrame();
+-        }
+-    } else {
+-        current = -1;
+-        for (int i = 0; i < 2; i++) {
+-            if (device->hidden->buffer[i].state == AudioDriverWaveBufState_Playing) {
+-                current = i;
+-                break;
+-            }
+-        }
+-        while (device->hidden->buffer[current].state == AudioDriverWaveBufState_Playing) {
+-            audrvUpdate(&device->hidden->driver);
+-            audrenWaitFrame();
+-        }
+-    }
+-
+     return true;
+ }
+ 
++// Blocks (one audio renderer frame at a time, 5 ms) until a buffer is free.
+ static bool SWITCHAUDIO_WaitDevice(SDL_AudioDevice *device)
+ {
++    audrvUpdate(&device->hidden->driver);
++    while (SWITCHAUDIO_FreeBuffer(device) < 0) {
++        audrenWaitFrame();
++        audrvUpdate(&device->hidden->driver);
++    }
+     return true;
+ }
+ 
+@@ -190,6 +186,10 @@ static void SWITCHAUDIO_CloseDevice(SDL_AudioDevice *device)
+         audrenExit();
+     }
+ 
++    if (device->hidden->pool) {
++        free(device->hidden->pool);
++    }
++
+     if (device->hidden->buffer_tmp) {
+         free(device->hidden->buffer_tmp);
+     }
+diff --git a/src/audio/switch/SDL_switchaudio.h b/src/audio/switch/SDL_switchaudio.h
+index b8107e5519..681cb0af63 100644
+--- a/src/audio/switch/SDL_switchaudio.h
++++ b/src/audio/switch/SDL_switchaudio.h
+@@ -26,10 +26,14 @@
+ 
+ #include <switch.h>
+ 
++// Wave buffers queued to the voice. Two, with PlayDevice blocking until the
++// newest one started, played at ~85% of real time (gaps between buffers).
++#define SWITCHAUDIO_BUFFERS 4
++
+ struct SDL_PrivateAudioData
+ {
+     AudioDriver driver;
+-    AudioDriverWaveBuf buffer[2];
++    AudioDriverWaveBuf buffer[SWITCHAUDIO_BUFFERS];
+     void *buffer_tmp;
+     void *pool;
+     bool audr_device;
+diff --git a/src/thread/pthread/SDL_systhread.c b/src/thread/pthread/SDL_systhread.c
+index 1df1d55480..2bd8d32109 100644
+--- a/src/thread/pthread/SDL_systhread.c
++++ b/src/thread/pthread/SDL_systhread.c
+@@ -194,7 +194,11 @@ bool SDL_SYS_SetThreadPriority(SDL_ThreadPriority priority)
+     return true;
+ #elif SDL_PLATFORM_SWITCH
+     Result res;
+-    if (priority == SDL_THREAD_PRIORITY_HIGH) {
++    if (priority == SDL_THREAD_PRIORITY_TIME_CRITICAL) {
++        // Audio playback threads ask for this; it used to fall through to
++        // 0x3B and be starved by busy game threads (choppy, then no sound).
++        res = svcSetThreadPriority(CUR_THREAD_HANDLE, 0x2A);
++    } else if (priority == SDL_THREAD_PRIORITY_HIGH) {
+         res = svcSetThreadPriority(CUR_THREAD_HANDLE, 0x2B);
+     } else {
+         // 0x3B = preemptive threading

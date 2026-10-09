@@ -154,8 +154,12 @@ if(ANDROID)
 elseif(LO_TARGET_PLATFORM STREQUAL "switch")
     # os/switch/nvk_switch_stubs.c: symbols the static NVK driver references
     # that neither libnx nor newlib provide (from UnleashedRecomp-NX).
+    # os/switch/rename_switch.c: rename() that replaces existing files
+    # (Horizon's file system does not), wired in with --wrap=rename.
     add_executable(LostOdysseyRecomp ${LO_RUNTIME_SOURCES} ${LO_IMPORT_STUBS}
-        ${LO_RUNTIME_ROOT}/os/switch/nvk_switch_stubs.c)
+        ${LO_RUNTIME_ROOT}/os/switch/nvk_switch_stubs.c
+        ${LO_RUNTIME_ROOT}/os/switch/rename_switch.c)
+    target_link_options(LostOdysseyRecomp PRIVATE "-Wl,--wrap=rename")
     # These include libnx's <switch.h>, whose Mutex/Event typedefs collide with
     # the runtime's precompiled header (stdafx.h, mutex.h).
     file(GLOB LO_SWITCH_NATIVE_SOURCES CONFIGURE_DEPENDS
@@ -163,6 +167,9 @@ elseif(LO_TARGET_PLATFORM STREQUAL "switch")
         "${LO_RUNTIME_ROOT}/kernel/guest_address_space_switch.cpp")
     set_source_files_properties(${LO_SWITCH_NATIVE_SOURCES} PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
     set_target_properties(LostOdysseyRecomp PROPERTIES SUFFIX ".elf")
+    # Stand-ins for POSIX headers newlib lacks but third-party headers include
+    # (dxcapi.h -> dlfcn.h). Runtime only: SDL's own configure checks must not see them.
+    target_include_directories(LostOdysseyRecomp BEFORE PRIVATE ${LO_RUNTIME_ROOT}/os/switch/include)
     target_compile_definitions(LostOdysseyRecomp PRIVATE
         LO_SWITCH_DATA_ROOT="${LO_SWITCH_DATA_ROOT}"
         LO_SWITCH_DXC_IDENTITY="${LO_SWITCH_DXC_IDENTITY}")

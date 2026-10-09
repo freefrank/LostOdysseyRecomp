@@ -1,4 +1,5 @@
 #include <stdafx.h>
+#include <os/detach_thread.h>
 #include "xma.h"
 #include "xma_loop.h"
 #include "xma_decode_reporting.h"
@@ -607,7 +608,7 @@ namespace apu::xma
         }
         g_running = true;
         g_worker = std::thread(WorkerMain);
-        g_worker.detach();
+        os::DetachThread(g_worker);
         LOG_INFO("xma: {} contexts at {:#x} (physical {:#x}), FFmpeg XMA frame decoder", kContextCount, g_arrayGuest, g_arrayGuest & 0x1FFFFFFF);
     }
 

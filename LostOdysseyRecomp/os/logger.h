@@ -71,11 +71,31 @@ namespace os::logger
         const auto line = func
             ? fmt::format("[{:9.3f} t{:04x}] {} {}: {}\n", ElapsedSeconds(), ThreadTag(), Prefix(type), func, msg)
             : fmt::format("[{:9.3f} t{:04x}] {} {}\n", ElapsedSeconds(), ThreadTag(), Prefix(type), msg);
+#if defined(__SWITCH__)
+        // Each flush is an SD card write taken under g_mutex, which every
+        // logging thread waits on: buffer, flush warnings and errors at once and
+        // the rest at least every second. The crash handlers flush on exit.
+        // No stderr copy once the runtime log is open (stderr.log keeps the
+        // driver's, profiler's and crash output).
+        if (g_file)
+        {
+            fwrite(line.data(), 1, line.size(), g_file);
+            static auto lastFlush = std::chrono::steady_clock::now();
+            const auto now = std::chrono::steady_clock::now();
+            if (type == LogType::Error || type == LogType::Warning || now - lastFlush >= std::chrono::seconds(1))
+            {
+                fflush(g_file);
+                lastFlush = now;
+            }
+            return;
+        }
+#else
         if (g_file)
         {
             fwrite(line.data(), 1, line.size(), g_file);
             fflush(g_file);
         }
+#endif
 #ifdef __ANDROID__
         // Android stderr is a file (native-stderr.log); logcat replaces the
         // terminal copy, and stderr keeps only lines without a log file.

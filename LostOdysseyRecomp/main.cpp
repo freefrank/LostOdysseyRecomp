@@ -16,6 +16,10 @@
 #include <hid/hid.h>
 #include <os/logger.h>
 #include <os/thread_name.h>
+#include <os/detach_thread.h>
+#if LO_PLATFORM_SWITCH
+#include <os/switch_cpu_profiler.h>
+#endif
 #include <os/user_paths.h>
 #include <os/shader_log.h>
 #include <os/log_file.h>
@@ -133,8 +137,29 @@ static int RunGuest(uint32_t entry)
 
 #if LO_PLATFORM_SWITCH
     os::switch_platform::SetLoadingBoost(false);
-    LOG_INFO("switch: {} mode, guest memory committed {} MiB", os::switch_platform::IsDocked() ? "docked" : "handheld",
-             GuestAddressSpace::CommittedBytes() >> 20);
+    os::switch_platform::StartHandheldGpuBoost();
+    {
+        std::error_code ec;
+        const char* profile = getenv("LO_CPU_PROFILE"); // env.txt
+        const bool sampler = (profile && *profile && std::strcmp(profile, "0") != 0) ||
+            std::filesystem::exists(std::filesystem::path(LO_SWITCH_DATA_ROOT) / "cpu-profile", ec);
+        os::switch_cpu_profiler::Start(sampler);
+        LOG_INFO("switch: CPU profiler sampler {}", sampler ? "on" : "off");
+    }
+    LOG_INFO("switch: {} mode, guest memory committed {} MiB, {}", os::switch_platform::IsDocked() ? "docked" : "handheld",
+             GuestAddressSpace::CommittedBytes() >> 20, os::switch_platform::MemorySummary());
+    // Memory over time: the console has no swap, and the GPU shares this RAM.
+    os::DetachThread(std::thread([] {
+        os::SetCurrentThreadName("Memory Monitor");
+        for (;;)
+        {
+            std::this_thread::sleep_for(std::chrono::seconds(30));
+            std::string cpu;
+            os::switch_cpu_profiler::AppendThreadCpuUsage(cpu);
+            LOG_INFO("switch: {}, guest committed {} MiB; CPU {}", os::switch_platform::MemorySummary(),
+                     GuestAddressSpace::CommittedBytes() >> 20, cpu);
+        }
+    }));
 #endif
     LOG_INFO("starting guest at {:#x}", entry);
     os::SetCurrentThreadName("Guest Main");
@@ -301,6 +326,10 @@ int main(int argc, char* argv[])
         if (strcmp(argv[i], "--quiet-kernel") == 0)
             os::logger::g_kernelTrace = false;
     }
+#if LO_PLATFORM_SWITCH
+    // One SD card line per guest file read and allocation: opt in (env.txt).
+    os::logger::g_kernelTrace = getenv("LO_KERNEL_TRACE") != nullptr;
+#endif
 
     {
         const auto now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());

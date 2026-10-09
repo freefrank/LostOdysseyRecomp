@@ -59,23 +59,28 @@ the Album applet it stops with a message that says so.
 The console has no shader compiler (DXC). It renders from shaders compiled on
 a PC, which it can use as they are: SPIR-V is the same for every Vulkan
 platform, and the port reports the PC's pinned compiler (`dxc-1.8`) so PC-made
-caches match. Two things go on the SD card:
+caches match.
 
-1. **The shader pack** (game shaders), `shaders/portable_vk.lospv`:
-   - from a PC installation that has run with Vulkan: its
-     `shaders/portable_vk.lospv`, or
-   - the `vulkan` pack listed in `index.json` of the
-     [`shader-packs` release](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/shader-packs),
-     renamed to `portable_vk.lospv`.
-2. **The PC's Vulkan shader cache**, `cache/shaders/`: the runtime's own host
-   shaders (presentation, menus, post-processing) are compiled at run time and
-   are not in the pack. Run the PC version **with the Vulkan renderer** (graphics
-   settings, or `LO_GRAPHICS_API=vulkan`), play past the title screen and into a scene, quit,
-   then copy its `cache/shaders` folder (next to `LostOdysseyRecomp.exe`) to
-   `sdmc:/switch/LostOdysseyRecomp/cache/shaders`. Game shaders the PC compiled
-   that the pack lacks are in there too.
+- **Host shaders** (presentation, menus, blits, SMAA, TAA, AO) are built into
+  the NRO as SPIR-V: `LostOdysseyRecomp/os/switch/builtin_spirv.inc`, made by
+  `tools/switch/gen-builtin-spirv.py` (Linux x64, pinned DXC). Re-run it after
+  changing one of those shaders. A host shader the table lacks is written to
+  `state/logs/missing-shaders/` on the SD card; copy it unchanged into
+  `tools/switch/extra-builtin-shaders/` and re-run the script.
+- **Rect lists** are drawn with the precompiled geometry shader rather than
+  the PC default (a vertex-shader variant compiled per game shader), which
+  would need DXC. `LO_RECT_LIST_GS=0` switches back.
+- **Game shaders** come from the shader pack, `shaders/portable_vk.lospv`:
+  - from a PC installation that has run with Vulkan: its
+    `shaders/portable_vk.lospv`, or
+  - the `vulkan` pack listed in `index.json` of the
+    [`shader-packs` release](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/shader-packs),
+    renamed to `portable_vk.lospv`.
+- Optional: a PC's Vulkan shader cache (`cache/shaders/`, after a Vulkan run)
+  copied to `sdmc:/switch/LostOdysseyRecomp/cache/shaders` adds game shaders
+  the PC compiled that the pack lacks.
 
-Both must come from the same game edition. A shader missing from both cannot be
+The pack and any PC cache must come from the same game edition. A shader missing from all of them cannot be
 compiled on the console: the renderer logs it (`shader pack: …`, shader
 compile failures in the log) and that draw does not render.
 
@@ -141,6 +146,32 @@ In `sdmc:/switch/LostOdysseyRecomp/`:
 - `crash.log`: written on a CPU exception, with registers and a host
   backtrace. Addresses marked `elf+0x…` resolve with
   `aarch64-none-elf-addr2line -e LostOdysseyRecomp.elf 0x…`.
+
+### Diagnostics switches (env.txt)
+
+The PC build reads its `LO_*` diagnostic switches from the environment. On the
+console put them in `sdmc:/switch/LostOdysseyRecomp/env.txt`, one `KEY=VALUE`
+per line (`#` starts a comment); `stderr.log` lists the ones applied. Useful
+ones: `LO_CPU_PROFILE=1` (below), `LO_FRAME_TIMING=1` (one line per second:
+command flush, waits, present), `LO_RENDER_TIMING=1` (per-frame timing with GPU
+timestamps), `LO_GPU_DRAW_TIMING_EVERY=300` (GPU time of every group of four
+draws, every 300th frame), `LO_KERNEL_TRACE=1` (guest kernel calls such as file
+reads; off by default on the console).
+
+The runtime log (`state/logs/runtime-*.log`) is buffered on the console and
+written at least once a second; warnings and errors are written at once.
+
+### CPU profile
+
+Put `LO_CPU_PROFILE=1` in env.txt (or create an empty file named
+`cpu-profile` in `sdmc:/switch/LostOdysseyRecomp/`) and play: every 30 s `stderr.log` gets a `[cpu profile]` block with the
+hottest code of each thread (sampled every 2 ms; costs a little speed). Then,
+on the PC, with the `.elf` of the same build:
+
+    python tools/switch/switch-cpu-profile.py stderr.log --elf out/switch/LostOdysseyRecomp.elf
+
+Delete the file to turn sampling off. Per-thread CPU shares are logged every
+30 s either way (`switch: ... CPU ...` lines).
 
 ## How the port works
 

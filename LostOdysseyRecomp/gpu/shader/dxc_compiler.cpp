@@ -10,6 +10,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstring>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -376,6 +377,40 @@ namespace xenos
     }
 }
 
+#if LO_PLATFORM_SWITCH
+namespace
+{
+    // Builtin host shaders precompiled to SPIR-V (tools/switch/gen-builtin-spirv.py):
+    // Horizon has no DXC, so these replace the first-run compile of the PC build.
+    struct BuiltinSpirv { uint64_t key; const char* entry; const char* profile; const uint32_t* words; size_t bytes; };
+#include <os/switch/builtin_spirv.inc>
+
+    const BuiltinSpirv* FindBuiltinSpirv(uint64_t key, const char* entry, const char* profile)
+    {
+        for (const auto& shader : kBuiltinSpirv)
+            if (shader.key == key && std::strcmp(shader.entry, entry) == 0 && std::strcmp(shader.profile, profile) == 0)
+                return &shader;
+        return nullptr;
+    }
+
+    // A builtin shader that is not in the table (changed source, or one built
+    // from a guest shader at run time): keep its source so it can be added.
+    void DumpMissingBuiltin(const std::string& source, uint64_t key, const char* entry, const char* profile)
+    {
+        std::error_code ec;
+        const auto folder = os::user_paths::StateDir() / "logs" / "missing-shaders";
+        std::filesystem::create_directories(folder, ec);
+        char name[160];
+        std::snprintf(name, sizeof(name), "%016llx_%s_%s.hlsl", static_cast<unsigned long long>(key), entry, profile);
+        const auto path = folder / name;
+        if (std::filesystem::exists(path, ec))
+            return;
+        std::ofstream file(path, std::ios::binary);
+        file.write(source.data(), std::streamsize(source.size()));
+    }
+}
+#endif
+
 namespace xenos
 {
     CompiledShader CompileHlsl(const std::string& source, const char* entry, const char* profile, ShaderBinaryFormat format, bool debugInfo)
@@ -409,6 +444,19 @@ namespace xenos
         uint64_t hash = 0xcbf29ce484222325ull;
         for (uint8_t byte : key) { hash ^= byte; hash *= 0x100000001b3ull; }
         const bool spirv = format == ShaderBinaryFormat::Spirv;
+#if LO_PLATFORM_SWITCH
+        if (spirv)
+        {
+            if (const auto* builtin = FindBuiltinSpirv(hash, entry, profile))
+            {
+                CompiledShader embedded;
+                const auto* bytes = reinterpret_cast<const uint8_t*>(builtin->words);
+                embedded.bytecode.assign(bytes, bytes + builtin->bytes);
+                embedded.ok = true;
+                return embedded;
+            }
+        }
+#endif
         auto identity = cache::MakeIdentity(spirv ? cache::Backend::Vulkan : cache::Backend::D3D12, DxcIdentity());
         identity.variant = "builtin:" + std::to_string(std::strlen(entry)) + ":" + entry +
             ":" + std::to_string(std::strlen(profile)) + ":" + profile;
@@ -438,6 +486,10 @@ namespace xenos
             SHADER_LOG_INFO("cache-miss", BuiltinKeyFnv, "builtin key={:016x} profile={} entry={} format={}",
                 hash, profile, entry, spirv ? "spirv" : "dxil");
         result = CompileHlsl(source, entry, profile, format);
+#if LO_PLATFORM_SWITCH
+        if (!result.ok)
+            DumpMissingBuiltin(source, hash, entry, profile);
+#endif
         if (result.ok && store) {
             if (store->Writable()) store->Add(pixel, hash, digest, result.bytecode);
         } else if (result.ok && cacheEnabled) {

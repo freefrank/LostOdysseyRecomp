@@ -1,4 +1,5 @@
 #include "pipeline_corpus_download.h"
+#include <os/detach_thread.h>
 #include "shader_pack_index.h"
 #include "http.h"
 
@@ -140,7 +141,7 @@ void StartCorpusDownload(bool automaticUpdates)
         return;
     }
     // LO_SHADER_PACK_DOWNLOAD=1 checks now even when the corpus was checked recently.
-    std::thread([automaticUpdates, forced = choice == "1"] {
+    os::DetachThread(std::thread([automaticUpdates, forced = choice == "1"] {
         try
         {
             LOG_INFO("pipeline corpus: {}", Check(automaticUpdates, forced));
@@ -149,6 +150,6 @@ void StartCorpusDownload(bool automaticUpdates)
         {
             LOG_WARNING("pipeline corpus: check failed: {}", exception.what());
         }
-    }).detach();
+    }));
 }
 }

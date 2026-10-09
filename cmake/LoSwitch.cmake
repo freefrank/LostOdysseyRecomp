@@ -40,7 +40,9 @@ set(LO_SWITCH_APP_ICON "${CMAKE_SOURCE_DIR}/packaging/switch/icon.jpg" CACHE FIL
 
 # Game data and user files on the SD card. The game folder holds disc1..disc4
 # exactly as the PC importer writes them (default.xex, LO.fpi, *.fpd).
-set(LO_SWITCH_DATA_ROOT "sdmc:/switch/LostOdysseyRecomp" CACHE STRING "SD card folder for game data, settings and logs")
+# "/switch/..." rather than "sdmc:/switch/...": libnx maps absolute paths to the
+# SD card, while std::filesystem treats "sdmc:" as a relative folder name.
+set(LO_SWITCH_DATA_ROOT "/switch/LostOdysseyRecomp" CACHE STRING "SD card folder for game data, settings and logs" FORCE)
 
 # Compiler identity the console reports for shader caches made on a PC: the
 # pinned DXC of tools/XenosRecomp/thirdparty/dxc-bin ("dxc-<major>.<minor>").

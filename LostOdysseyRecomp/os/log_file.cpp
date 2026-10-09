@@ -151,7 +151,15 @@ namespace os::logger
             fclose(file);
             return false;
         }
+#if LO_PLATFORM_SWITCH
+        // Fewer, larger SD card writes (os/logger.h flushes on its own schedule).
+        setvbuf(file, nullptr, _IOFBF, 64 * 1024);
+        // Horizon's file system refuses a second write handle to a file that
+        // is already open for writing: the crash path writes to the same one.
+        const int emergency = fileno(file);
+#else
         const int emergency = open(absolutePath.c_str(), O_WRONLY | O_APPEND | O_CLOEXEC);
+#endif
         if (emergency == -1)
         {
             fclose(file);
