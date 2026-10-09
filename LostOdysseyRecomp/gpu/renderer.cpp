@@ -375,6 +375,43 @@ namespace gpu::renderer
         }
 
         // ---- host resources -------------------------------------------------
+        // What cleared a target's verified tone-map producer after the tone-map
+        // drew it, logged per SR scene fallback segment. toneFrame also limits the
+        // full-screen alpha quad check to draws after this frame's tone-map.
+        // Keeps the first loss after the latest tone-map; count includes later ones.
+        struct SdrLossTrace
+        {
+            enum Kind : uint32_t { Other = 0, Draw = 1, TileTransfer = 2, ToneRejected = 3, Clear = 4, Promotion = 5 };
+            uint64_t toneFrame = ~0ull; // Last frame a tone-map drew the target.
+            uint64_t frame = ~0ull;     // First loss after that tone-map.
+            uint64_t vs = 0, ps = 0;
+            uint32_t kind = Other, blend = 0, fetch = 0, count = 0;
+            uint32_t colorMask = 0, depth = 0, quad = 0; // quad: 1 full-screen alpha quad, else 2 + reject code
+            void Tone(uint64_t now) { toneFrame = now; frame = ~0ull; count = 0; }
+            // True for the first loss after the tone-map; the caller adds detail.
+            bool Lost(uint64_t now, uint32_t why, uint32_t site = 0)
+            {
+                if (toneFrame != now) return false;
+                ++count;
+                if (frame == now) return false;
+                frame = now; kind = why; vs = ps = 0; blend = colorMask = depth = quad = 0; fetch = site;
+                return true;
+            }
+        };
+        const char* SdrLossName(const SdrLossTrace& loss, uint64_t frame)
+        {
+            if (loss.toneFrame != frame) return "no_tone_map";
+            if (loss.frame != frame) return "none";
+            switch (loss.kind) {
+            case SdrLossTrace::Draw: return "draw";
+            case SdrLossTrace::TileTransfer: return "tile_transfer";
+            case SdrLossTrace::ToneRejected: return "tone_rejected";
+            case SdrLossTrace::Clear: return "clear";
+            case SdrLossTrace::Promotion: return "promotion";
+            default: return "other";
+            }
+        }
+
         struct HostTexture
         {
             uint64_t allocationSerial = 0; // Render-target identity, never a recycled host pointer.
@@ -418,6 +455,7 @@ namespace gpu::renderer
             uint64_t sdrProducerFrame = ~0ull;
             uint32_t qualifiedSdrWidth = 0;
             uint32_t qualifiedSdrHeight = 0;
+            SdrLossTrace sdrLoss;
             std::unique_ptr<HostTexture> hdrSidecar;
             uint64_t hdrFrame = ~0ull;
             bool hdrValid = false;
@@ -843,6 +881,10 @@ namespace gpu::renderer
                 // Depth-writing draws in the frame that wrote it (depthDraws).
                 uint32_t sceneDraws = 0;
                 uint64_t sdrWriteOrdinal = 0;
+                // Source target state when the write was not SDR-qualified.
+                SdrLossTrace sdrLoss;
+                uint64_t sdrProducerFrame = ~0ull;
+                uint32_t sdrQualifiedWidth = 0, sdrQualifiedHeight = 0;
                 std::unique_ptr<HostTexture> hdrTex;
                 uint64_t hdrWriteOrdinal = 0;
                 uint64_t hdrFrame = ~0ull;
@@ -2599,6 +2641,8 @@ namespace gpu::renderer
             {
                 FlushMotionReplayQueue();
                 dst.sdrProducerFrame = ~0ull;
+                if (dst.sdrLoss.Lost(frame, SdrLossTrace::TileTransfer, (srcClass << 8) | dstClass))
+                    dst.sdrLoss.vs = src.allocationSerial;
                 dst.hdrValid = false;
                 consecutiveResolveCopies.Invalidate();
                 // Only the 32-bit classes share a word layout; wider ones are left alone.
@@ -2862,6 +2906,7 @@ namespace gpu::renderer
                 std::span<const RenderRect> rects = {}, bool limitToRects = false)
             {
                 destination.sdrProducerFrame = ~0ull;
+                destination.sdrLoss.Lost(frame, SdrLossTrace::Promotion, rgb ? 1 : 2);
                 auto* pipeline = GetSceneCopyPromotionPipeline(destination.format, rgb);
                 if (!pipeline || !set) return false;
                 Transition(destination, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
@@ -2991,6 +3036,7 @@ namespace gpu::renderer
                 if (!SettleRestoreDebt()) return fail();
                 auto& low = *promotion.parkedLow;
                 low.sdrProducerFrame = ~0ull;
+                low.sdrLoss.Lost(frame, SdrLossTrace::Promotion, 3);
 #if defined(LO_GPU_PLUME)
                 HandleFsrAlphaRgbWriter(low, "promotion_resample_rgb");
 #endif
@@ -9082,6 +9128,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 // cannot justify treating an arbitrary fullscreen-looking draw as a copy.
                 uint32_t fullCopyReason=0;std::string fullCopyVertices;float fullCopyBounds[4]{};
                 bool fullSceneCopy = false;
+                uint32_t alphaQuad = 0; // SdrLossTrace::quad for a later tone-map loss.
                 {
                     render_batch::CpuTimer<> sceneCopyTimer(cpuTimingEnabled);
                     // The fade quad (PS 234e writes c0) is depth tested against the scene.
@@ -9136,6 +9183,17 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         sceneFadeTransmittance *= 1 - (alpha > 0 ? std::min(alpha, 1.0f) : 0.0f);
                         static uint32_t fadeLogs = 0;
                         if (fadeLogs++ < 4) LOG_INFO("renderer: AO scene fade frame={} alpha={} left={}", frame, alpha, sceneFadeTransmittance);
+                    }
+                    // A full-screen alpha quad over this frame's tone-map output (the game's
+                    // 0.3-0.45 s camera/menu crossfade) keeps the scene SDR-qualified.
+                    if (!fullSceneCopy && color && color->sdrLoss.toneFrame == frame && key.vs == 0x8bbd4da701845d16ull)
+                        alphaQuad = fullScreenQuad(key.ps, RenderBlend::SRC_ALPHA, RenderBlend::INV_SRC_ALPHA, 0) ? 1 : 2 + fullCopyReason;
+                    // The crossfade quad (PS 2ef7: captured RGB, alpha c0.x) covers the live
+                    // scene that AO darkens later; AO fades out under it like under 234e.
+                    if (alphaQuad == 1 && key.ps == 0x2ef725fa9031545bull) {
+                        if (sceneFadeFrame != frame) { sceneFadeFrame = frame; sceneFadeTransmittance = 1; }
+                        const float alpha = std::bit_cast<float>(psConstants[0]);
+                        sceneFadeTransmittance *= 1 - (alpha > 0 ? std::min(alpha, 1.0f) : 0.0f);
                     }
                 if(key.vs==0x8bbd4da701845d16ull&&key.ps==0xcda578aef1724fdcull) {
                     static const uint64_t start=getenv("LO_SCENE_AA_LOG_START_FRAME")?strtoull(getenv("LO_SCENE_AA_LOG_START_FRAME"),nullptr,10):~0ull;
@@ -9461,20 +9519,48 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                 const bool frameMatches = source && source->frame == frame;
                                 const bool extentMatches = tex->width == rasterViewport.width && tex->height == rasterViewport.height;
 
+                                // A run of rejected scene copies is one fallback segment:
+                                // its first two frames name what cleared the producer.
+                                // Bounded: a scene that alternates every frame stops here.
+                                static uint64_t sdrRejectFirst = ~0ull, sdrRejectLast = ~0ull;
+                                static uint32_t sdrRejectLogs = 0;
+                                const auto sdrRejectLog = [] {
+                                    if (sdrRejectLogs >= 256) return false;
+                                    if (++sdrRejectLogs == 256)
+                                        LOG_INFO("renderer: DLSS SDR consumer segment logging stopped after 256 lines");
+                                    return true;
+                                };
                                 if (viewMatches && frameMatches && ordinalMatches && extentMatches && isRbSwapIdentity) {
                                     qualifiedEncoding = temporal::ColorEncoding::Sdr;
+                                    if (sdrRejectLast != ~0ull) {
+                                        if (sdrRejectLog()) LOG_INFO("renderer: DLSS SDR consumer resumed frame={} rejected_frames={} first={} last={}",
+                                            frame, sdrRejectLast - sdrRejectFirst + 1, sdrRejectFirst, sdrRejectLast);
+                                        sdrRejectFirst = sdrRejectLast = ~0ull;
+                                    }
                                 } else {
-                                    const uint32_t rejectKey =
-                                        (uint32_t(viewMatches) << 0) | (uint32_t(frameMatches) << 1) |
-                                        (uint32_t(ordinalMatches) << 2) | (uint32_t(extentMatches) << 3) |
-                                        (uint32_t(isRbSwapIdentity) << 4);
-                                    static uint32_t lastLoggedConsumerRejectKey = ~0u;
-                                    if (lastLoggedConsumerRejectKey != rejectKey) {
-                                        lastLoggedConsumerRejectKey = rejectKey;
-                                        LOG_INFO("renderer: DLSS SDR consumer rejected frame={} view_match={} frame_match={} ordinal_match={} extent_match={} rb_identity={} sdr_ord={} ord={} copy_ord={}",
-                                            frame, viewMatches, frameMatches, ordinalMatches, extentMatches, isRbSwapIdentity,
+                                    if (sdrRejectLast == ~0ull || frame > sdrRejectLast + 1) {
+                                        if (sdrRejectLast != ~0ull && sdrRejectLog())
+                                            LOG_INFO("renderer: DLSS SDR consumer gap frame={} rejected_frames={} first={} last={}",
+                                                frame, sdrRejectLast - sdrRejectFirst + 1, sdrRejectFirst, sdrRejectLast);
+                                        sdrRejectFirst = frame;
+                                    }
+                                    sdrRejectLast = frame;
+                                    if (frame - sdrRejectFirst < 2 && sdrRejectLog()) {
+                                        const SdrLossTrace loss = source ? source->sdrLoss : SdrLossTrace{};
+                                        const uint64_t lossFrame = source ? source->frame : frame;
+                                        LOG_INFO("renderer: DLSS SDR consumer rejected frame={} segment_frame={} view_match={} frame_match={} ordinal_match={} extent_match={} rb_identity={} sdr_ord={} ord={} copy_ord={} loss={} losses={} loss_vs={:016x} loss_ps={:016x} loss_blend={:#x} loss_fetch={:#x} loss_mask={} loss_depth={:#x} loss_quad={} producer_this_frame={} qualified={}x{} resolve={}x{} write=({},{} {}x{}) dest_fmt={} hdr_extended={}",
+                                            frame, frame - sdrRejectFirst, viewMatches, frameMatches, ordinalMatches, extentMatches, isRbSwapIdentity,
                                             source ? source->sdrWriteOrdinal : 0, source ? source->writeOrdinal : 0,
-                                            temporalSceneCopy ? temporalSceneCopy->ordinal : 0);
+                                            temporalSceneCopy ? temporalSceneCopy->ordinal : 0,
+                                            SdrLossName(loss, lossFrame), loss.toneFrame == lossFrame ? loss.count : 0,
+                                            loss.vs, loss.ps, loss.blend, loss.fetch, loss.colorMask, loss.depth, loss.quad,
+                                            source && source->sdrProducerFrame == lossFrame,
+                                            source ? source->sdrQualifiedWidth : 0, source ? source->sdrQualifiedHeight : 0,
+                                            source && source->tex ? source->tex->width : 0, source && source->tex ? source->tex->height : 0,
+                                            source ? source->writeX : 0, source ? source->writeY : 0,
+                                            source ? source->writeWidth : 0, source ? source->writeHeight : 0,
+                                            source ? source->destFormat : 0,
+                                            source && source->hdrTex && source->hdrWriteOrdinal == source->writeOrdinal);
                                     }
                                 }
 
@@ -11747,6 +11833,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                 }
                             }
                         }
+                        color->sdrLoss.Tone(frame);
                         if (quadOk) {
                             color_qualification::MarkHostTextureProducer(
                                 color->sdrProducerFrame, color->qualifiedSdrWidth, color->qualifiedSdrHeight,
@@ -11755,6 +11842,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             if (color->hdrFrame == frame) color->hdrValid = false;
                             color_qualification::InvalidateHostTextureProducer(
                                 color->sdrProducerFrame, color->qualifiedSdrWidth, color->qualifiedSdrHeight);
+                            if (color->sdrLoss.Lost(frame, SdrLossTrace::ToneRejected, uint32_t(rejectReason))) {
+                                color->sdrLoss.vs = key.vs; color->sdrLoss.ps = key.ps; color->sdrLoss.blend = key.blend;
+                            }
                             static color_qualification::ProducerRejectReason lastLoggedProducerReject = color_qualification::ProducerRejectReason::None;
                             if (lastLoggedProducerReject != rejectReason) {
                                 lastLoggedProducerReject = rejectReason;
@@ -11765,10 +11855,16 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                     slot95ArenaOffset, slot95StreamBytes);
                             }
                         }
-                    } else if ((key.colorMask & 7) != 0) {
-                        // Any other draw writing RGB invalidates producer status
+                    } else if ((key.colorMask & 7) != 0 && alphaQuad != 1) {
+                        // Any other draw writing RGB invalidates producer status. A
+                        // full-screen alpha quad (crossfade) leaves it display-encoded SDR.
                         color_qualification::InvalidateHostTextureProducer(
                             color->sdrProducerFrame, color->qualifiedSdrWidth, color->qualifiedSdrHeight);
+                        if (color->sdrLoss.Lost(frame, SdrLossTrace::Draw, Reg(REG_FETCH_CONSTANTS + 1))) {
+                            auto& loss = color->sdrLoss;
+                            loss.vs = key.vs; loss.ps = key.ps; loss.blend = key.blend;
+                            loss.colorMask = key.colorMask; loss.depth = key.depthControl; loss.quad = alphaQuad;
+                        }
                     }
                 }
                 if(sceneAARecorded||temporalAARecorded) {
@@ -11903,6 +11999,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 #endif
                             tex->aaProvenance.Invalidate(frame,tex->allocationSerial,true);
                             tex->sdrProducerFrame = ~0ull;
+                            tex->sdrLoss.Lost(frame, SdrLossTrace::Clear, 1);
                             if (loggedFills++ < 12)
                                 LOG_INFO("renderer: depth fill (base={:#x} pitch={} msaa={} rect {}x{} z={} word={:#x}) wiped colour view class {} pitch {} to ({:g},{:g},{:g},{:g})",
                                     depthInfo & 0xFFF, pitch, (surfaceInfo >> 16) & 3, maxX, maxY, rectZ, word, k.format, k.pitch, value.r, value.g, value.b, value.a);
@@ -11986,6 +12083,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 #endif
                         if ((key.colorMask & 7) != 0) {
                             target->sdrProducerFrame = ~0ull;
+                            target->sdrLoss.Lost(frame, SdrLossTrace::Clear, 2);
                             target->hdrValid = false;
                         }
                         if (logged++ < 8)
@@ -12623,6 +12721,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 } else {
                     color_qualification::InvalidateSurfaceResolved(rs.sdrWriteOrdinal);
                 }
+                rs.sdrLoss = color.sdrLoss;
+                rs.sdrProducerFrame = color.sdrProducerFrame;
+                rs.sdrQualifiedWidth = color.qualifiedSdrWidth;
+                rs.sdrQualifiedHeight = color.qualifiedSdrHeight;
                 rs.hdrWriteOrdinal = 0;
                 rs.hdrGain = false;
                 // A promoted (upscaled) target has no sidecar of its own; keep the
@@ -12928,6 +13030,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 #endif
                     color->aaProvenance.Invalidate(frame,color->allocationSerial,x0==0&&y0==0&&x1==color->guestWidth&&y1==color->guestHeight);
                     color->sdrProducerFrame = ~0ull;
+                    color->sdrLoss.Lost(frame, SdrLossTrace::Clear, 3);
                 }
                 if (copyControl & 0x200)
                     ClearDepthTarget(pitch, rtHeight);
@@ -13005,6 +13108,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 #endif
                 color->aaProvenance.Invalidate(frame, color->allocationSerial, false);
                 color->sdrProducerFrame = ~0ull;
+                color->sdrLoss.Lost(frame, SdrLossTrace::Clear, 4);
             }
         };
 
