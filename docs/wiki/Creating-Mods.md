@@ -84,12 +84,13 @@ python tools/modding/lo_mod.py texture-pack --index my-export/textures/index.csv
 
 - `--images-index` maps keys to PNG files (default: `index.csv` in the `--images` folder).
 - `--filter <text>` keeps keys that contain the text. `--fingerprints <log.csv>` keeps only fingerprints a game run logged.
-- `--mips` writes the whole mip chain; by default one level is written and the game builds the rest.
+- `--payload dds` (recommended) compresses the textures to BC1, BC4 or BC7 and always writes the full mip chain. It needs Microsoft's `texconv` (Windows; download it from the [DirectXTex releases](https://github.com/microsoft/DirectXTex/releases)). Pass `--texconv <path>` or put it on `PATH`. DXT1 originals become BC1, DXT3 and DXT5 originals BC7, A8R8G8B8 originals BC7 (red and blue are swapped first, as the game stores B, G, R, A) and G8 originals BC4. `--bc7-all` uses BC7 for DXT1 originals too, which looks better but is twice the size. Textures whose size is not a multiple of 4 are skipped.
+- `--mips` writes the whole mip chain with the default `--payload rgba8`; by default one level is written and the game builds the rest.
 - Existing files are never overwritten, so you can add to an existing mods folder.
 - `--test tint` (red up, green and blue down) and `--test nearest4` (plain 4x enlargement, which must look unchanged in game) transform the original exported PNGs, to check in game that replacement works.
 - `lo_mod.py inspect <file>` prints and validates a `.lotex2` header.
 
-Payloads are uncompressed RGBA8 for now, so 4x packs are large (a 2048x2048 texture is 16 MiB) and use as much video memory. Levels larger than about 72 MiB (above 4096x4096) are skipped. Block-compressed DDS payloads come later. The run log has one `[mods] texture <fingerprint> replaced` line for each texture it replaced.
+The default `--payload rgba8` stores uncompressed pixels, so 4x packs are large (a 2048x2048 texture is 16 MiB) and use as much video memory. DDS payloads are about 4 to 8 times smaller on disk and in video memory than RGBA8 (and a full mip chain adds only a third), so a 4x upscale of the textures used in one play session shrinks from about 1.9 GB to about 340 MB. Levels larger than about 72 MiB (above 4096x4096) are skipped for RGBA8. With Settings > System > Debug log on (or `LO_DEBUG_LOG=1`), the run log has one `[mods] texture <fingerprint> replaced` line for each texture it replaced; failures are always logged.
 
 ## 2. Prepare artwork and a specification
 

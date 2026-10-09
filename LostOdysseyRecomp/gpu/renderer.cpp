@@ -1314,6 +1314,7 @@ namespace gpu::renderer
             // Mod texture replacements (LOTEX2): fingerprints whose payload
             // failed keep the original for the run; each success logs once.
             std::unordered_set<uint64_t> textureReplacementFailures, textureReplacementsLogged;
+            bool textureBcReplacementWarned = false; // one warning when BC replacements are skipped
             uint32_t textureReplacements = 0; // per stats window
             uint64_t textureReplacementsTotal = 0;
             uint64_t controllerAtlasFamilyFrame = ~0ull;
@@ -6976,10 +6977,19 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             {
                 if (textureReplacementFailures.contains(fingerprint)) return {};
                 std::string error;
+                bool bcSkipped = false;
                 // Every level must fit the upload ring with the draw headroom free.
+                // Without device BC (textureBcFallback) DDS payloads stay unread.
                 auto data = modding::ReadTextureReplacement(fingerprint, format, width, height,
-                    kUploadRingSize - kUploadHeadroom, &error);
-                if (!data && !error.empty())
+                    kUploadRingSize - kUploadHeadroom, &error, !textureBcFallback, &bcSkipped);
+                if (bcSkipped)
+                {
+                    textureReplacementFailures.insert(fingerprint);
+                    if (!std::exchange(textureBcReplacementWarned, true))
+                        LOG_WARNING("[mods] BC texture replacements (LOTEX2 type 2) skipped, keeping the originals: {} (first {:016x})",
+                            video::TextureCompressionBC() ? "LO_TEXTURE_BC=0" : "device has no BC support", fingerprint);
+                }
+                else if (!data && !error.empty())
                 {
                     textureReplacementFailures.insert(fingerprint);
                     LOG_WARNING("[mods] {}", error);
@@ -6995,20 +7005,44 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             ReplacementUpload UploadTextureReplacement(HostTexture& tex, const modding::TextureData& data,
                 uint64_t fingerprint, uint32_t format, uint32_t width, uint32_t height, uint32_t guestLevels)
             {
-                // G8 stays R8_UNORM with the payload's red channel. DXT1/3/5 become
-                // RGBA8 as is. A8R8G8B8 uploads the guest's 8in32-swapped memory
-                // without conversion, which is B,G,R,A (asset_export.cpp Untile), so
-                // the replacement is stored in that order and the fetch swizzle
-                // (XeDecodeTexture) reads both alike.
-                const RenderFormat hostFormat = format == 2 ? RenderFormat::R8_UNORM : RenderFormat::R8G8B8A8_UNORM;
-                const uint32_t bpp = format == 2 ? 1 : 4;
+                // Type 1 (RGBA8): G8 stays R8_UNORM with the payload's red channel.
+                // DXT1/3/5 become RGBA8 as is. A8R8G8B8 uploads the guest's
+                // 8in32-swapped memory without conversion, which is B,G,R,A
+                // (asset_export.cpp Untile), so the replacement is stored in that
+                // order and the fetch swizzle (XeDecodeTexture) reads both alike.
+                // Type 2 (DDS): the packer already matched those channels, so the
+                // BC1/BC3/BC4/BC7 blocks upload unchanged.
+                const bool bc = data.dxgiFormat != 0;
+                RenderFormat hostFormat = format == 2 ? RenderFormat::R8_UNORM : RenderFormat::R8G8B8A8_UNORM;
+                switch (data.dxgiFormat)
+                {
+                case modding::kTextureBc1: hostFormat = RenderFormat::BC1_UNORM; break;
+                case modding::kTextureBc3: hostFormat = RenderFormat::BC3_UNORM; break;
+                case modding::kTextureBc4: hostFormat = RenderFormat::BC4_UNORM; break;
+                case modding::kTextureBc7: hostFormat = RenderFormat::BC7_UNORM; break;
+                default: break;
+                }
+                const uint32_t block = bc ? 4 : 1;
+                const uint32_t bytesPerBlock = bc ? modding::TextureBcBytesPerBlock(data.dxgiFormat) : format == 2 ? 1 : 4;
                 // The guest chain depth plus the extra top levels: minification
                 // never goes below the original's smallest level.
-                const uint32_t levelCount = std::min<uint32_t>(uint32_t(data.levels.size()),
+                uint32_t levelCount = std::min<uint32_t>(uint32_t(data.levels.size()),
                     guestLevels + uint32_t(std::countr_zero(data.scale)));
-                auto pitch = [&](uint32_t level) { return (std::max(1u, data.width >> level) * bpp + 255) & ~255u; };
+                // Block-compressed chains stop before a level stops being whole
+                // blocks, as guest uploads do, so every footprint is valid on
+                // D3D12 and Vulkan. Level 0 is a multiple of 4 (reader).
+                if (bc)
+                    for (uint32_t level = 1; level < levelCount; level++)
+                        if (const uint32_t w = data.width >> level, h = data.height >> level; !w || !h || w % 4 || h % 4)
+                        {
+                            levelCount = level;
+                            break;
+                        }
+                auto blocksX = [&](uint32_t level) { return (std::max(1u, data.width >> level) + block - 1) / block; };
+                auto blockRows = [&](uint32_t level) { return (std::max(1u, data.height >> level) + block - 1) / block; };
+                auto pitch = [&](uint32_t level) { return (blocksX(level) * bytesPerBlock + 255) & ~255u; };
                 for (uint32_t level = 0; level < levelCount; level++)
-                    if (uint64_t(pitch(level)) * std::max(1u, data.height >> level) + kUploadHeadroom > kUploadRingSize)
+                    if (uint64_t(pitch(level)) * blockRows(level) + kUploadHeadroom > kUploadRingSize)
                     {
                         LOG_WARNING("[mods] texture {:016x} replacement {}x{} exceeds the upload ring; using original", fingerprint, data.width, data.height);
                         return ReplacementUpload::Skipped;
@@ -7024,16 +7058,22 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 for (uint32_t level = 0; level < levelCount; level++)
                 {
                     const uint32_t w = std::max(1u, data.width >> level), h = std::max(1u, data.height >> level);
-                    const uint32_t rowPitch = pitch(level);
+                    const uint32_t rowPitch = pitch(level), rows = blockRows(level);
                     // One level at a time: a large one may Flush/Begin, which swaps
                     // the ring, mapping and command list read below.
-                    const uint64_t offset = Upload(nullptr, size_t(rowPitch) * h, 512, kUploadHeadroom);
+                    const uint64_t offset = Upload(nullptr, size_t(rowPitch) * rows, 512, kUploadHeadroom);
                     if (offset == UINT64_MAX)
                         return ReplacementUpload::Failed;
-                    for (uint32_t y = 0; y < h; y++)
+                    for (uint32_t y = 0; y < rows; y++)
                     {
-                        const uint8_t* src = data.levels[level].data() + size_t(y) * w * 4;
                         uint8_t* dst = uploadMapped + offset + size_t(y) * rowPitch;
+                        if (bc)
+                        {
+                            const size_t rowBytes = size_t(blocksX(level)) * bytesPerBlock;
+                            memcpy(dst, data.levels[level].data() + y * rowBytes, rowBytes);
+                            continue;
+                        }
+                        const uint8_t* src = data.levels[level].data() + size_t(y) * w * 4;
                         if (format == 2)
                             for (uint32_t x = 0; x < w; x++) dst[x] = src[x * 4];
                         else if (format == 6)
@@ -7041,10 +7081,11 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         else
                             memcpy(dst, src, size_t(w) * 4);
                     }
-                    texBytes += size_t(rowPitch) * h;
+                    texBytes += size_t(rowPitch) * rows;
                     Transition(tex, RenderTextureLayout::COPY_DEST, RenderBarrierStage::COPY);
+                    // The footprint row width is in texels: blocks per pitch times the block width.
                     commandList->copyTextureRegion(RenderTextureCopyLocation::Subresource(tex.texture.get(), level, 0),
-                        RenderTextureCopyLocation::PlacedFootprint(uploadRing, hostFormat, w, h, 1, rowPitch / bpp, offset));
+                        RenderTextureCopyLocation::PlacedFootprint(uploadRing, hostFormat, w, h, 1, rowPitch / bytesPerBlock * block, offset));
                 }
                 Transition(tex, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
                 // Shaders keep the original logical size: xeTextureSize (bindTextures)
@@ -7059,9 +7100,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (textureReplacementsLogged.insert(fingerprint).second)
                 {
                     const auto path = data.path.generic_u8string();
-                    LOG_INFO("[mods] texture {:016x} replaced: key={} fmt={} original={}x{} payload={}x{} levels={} mod={} file={} total={}",
-                        fingerprint, data.key, format, width, height, data.width, data.height, levelCount, data.modId,
-                        std::string(path.begin(), path.end()), textureReplacementsTotal);
+                    LOG_INFO("[mods] texture {:016x} replaced: key={} fmt={} original={}x{} payload={}x{} type={} ({}) levels={}/{} mod={} file={} total={}",
+                        fingerprint, data.key, format, width, height, data.width, data.height, data.type, modding::TexturePayloadName(data),
+                        levelCount, data.levels.size(), data.modId, std::string(path.begin(), path.end()), textureReplacementsTotal);
                 }
                 return ReplacementUpload::Uploaded;
             }

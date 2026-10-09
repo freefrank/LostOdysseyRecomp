@@ -1,6 +1,6 @@
 # General runtime texture replacement: remaining work
 
-> Update 2026-10-09: textures drawn by the game are now replaced at upload by fingerprint from LOTEX2 files, including larger ones (see [Modding API](Modding-API.md) and `docs/notes/texture-import-research.zh-CN.md`). Still open: block-compressed payloads, a video memory budget, devices without BC support, and shimmer where the game samples only the top level. The rest of this page is the earlier plan.
+> Update 2026-10-09: textures drawn by the game are now replaced at upload by fingerprint from LOTEX2 files, including larger ones (see [Modding API](Modding-API.md) and `docs/notes/texture-import-research.zh-CN.md`). Payloads can be uncompressed RGBA8 or block-compressed DDS (BC1/BC3/BC4/BC7). Across 86 disc-1 field maps and 19 battles, 98.1% of eligible uploads matched an exported texture. Still open: a video memory budget, textures on devices without BC support (they keep the originals), and shimmer where the game samples only the top level. The rest of this page is the earlier plan.
 
 ## Implemented versus pending
 

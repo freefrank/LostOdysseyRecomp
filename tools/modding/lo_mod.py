@@ -9,8 +9,11 @@ import re
 import shutil
 import sqlite3
 import struct
+import subprocess
 import sys
+import tempfile
 import zipfile
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 from pathlib import Path, PurePosixPath
 
@@ -21,6 +24,10 @@ MAX_FILE = HEADER.size + 4096 + 4 * MAX_PIXELS
 MAGIC2 = b"LOTEX2\r\n"
 HEADER2 = struct.Struct("<8sIIQIIIIIIQII")  # 64 bytes
 XENOS_FORMATS = {"G8": 2, "A8R8G8B8": 6, "DXT1": 18, "DXT3": 19, "DXT5": 20}
+DEFAULT_TEXCONV = Path("C:/Users/freefrank/worktrees/LostOdysseyRecomp/_keep/tools/texconv-may2026/texconv.exe")
+# DDS payloads: DXGI format -> (texconv name, bytes per 4x4 block).
+BC_FORMATS = {71: ("BC1_UNORM", 8), 77: ("BC3_UNORM", 16), 80: ("BC4_UNORM", 8), 98: ("BC7_UNORM", 16)}
+BC_FOURCC = {b"DXT1": 71, b"DXT5": 77, b"ATI1": 80, b"BC4U": 80}
 FOLDERS = {"image": "images", "font": "fonts", "model": "models", "movie": "movies"}
 
 
@@ -97,21 +104,62 @@ def mip_bytes(width: int, height: int, mips: int) -> int:
     return sum(max(1, width >> i) * max(1, height >> i) * 4 for i in range(mips))
 
 
+def parse_dds(data: bytes) -> dict:
+    """Validate a BC1/BC3/BC4/BC7 UNORM 2D single-slice DDS file and return its shape."""
+    if len(data) < 128 or data[:4] != b"DDS " or struct.unpack_from("<I", data, 4)[0] != 124:
+        raise ValueError("payload is not a DDS file")
+    height, width = struct.unpack_from("<II", data, 12)
+    depth, mips = struct.unpack_from("<II", data, 24)
+    mips = mips or 1
+    fourcc = data[84:88]
+    caps2 = struct.unpack_from("<I", data, 112)[0]
+    offset = 128
+    if fourcc == b"DX10":
+        if len(data) < 148:
+            raise ValueError("truncated DDS DX10 header")
+        dxgi, dimension, misc, array = struct.unpack_from("<IIII", data, 128)
+        if dimension != 3 or misc & 4 or array != 1:
+            raise ValueError("DDS must be a 2D texture with one slice and no cube map")
+        offset = 148
+    elif fourcc in BC_FOURCC:
+        dxgi = BC_FOURCC[fourcc]
+    else:
+        raise ValueError("unsupported DDS pixel format")
+    if dxgi not in BC_FORMATS:
+        raise ValueError(f"unsupported DDS format {dxgi}")
+    if caps2 & 0xfe00 or depth > 1:
+        raise ValueError("DDS must not be a cube map or volume")
+    if width % 4 or height % 4 or not width or not height:
+        raise ValueError("DDS level 0 must be a multiple of 4")
+    block = BC_FORMATS[dxgi][1]
+    expected = sum(((max(1, width >> i) + 3) // 4) * ((max(1, height >> i) + 3) // 4) * block for i in range(mips))
+    if len(data) != offset + expected:
+        raise ValueError("DDS size does not match its header")
+    return {"dxgi": dxgi, "format": BC_FORMATS[dxgi][0], "width": width, "height": height, "mips": mips}
+
+
 def encode2(fingerprint: int, xenos_format: int, original: tuple[int, int], size: tuple[int, int],
-            mips: list[bytes], key: str = "") -> bytes:
-    """LOTEX2 type 1 (RGBA8) file; `mips` are the top-first level byte strings."""
+            mips: list[bytes], key: str = "", dds: bytes | None = None) -> bytes:
+    """LOTEX2 type 1 (RGBA8) file; `mips` are the top-first level byte strings.
+    With `dds` (a complete BC DDS file) it writes type 2 instead and `mips` is ignored."""
     if xenos_format not in XENOS_FORMATS.values():
         raise ValueError("unsupported Xenos format")
     scale = size[0] // original[0] if original[0] else 0
     if (scale not in (1, 2, 4, 8) or size != (original[0] * scale, original[1] * scale)
             or max(size) > 8192):
         raise ValueError(f"invalid scale {size} for original {original}")
-    if not 1 <= len(mips) <= max(size).bit_length() or sum(map(len, mips)) != mip_bytes(*size, len(mips)):
-        raise ValueError("mip chain does not match the payload dimensions")
     key_bytes = key.encode("utf-8")
-    payload = b"".join(mips)
-    return (HEADER2.pack(MAGIC2, HEADER2.size + len(key_bytes), 1, fingerprint, xenos_format,
-                         *original, *size, len(mips), len(payload), len(key_bytes), 0)
+    if dds is not None:
+        info = parse_dds(dds)
+        if (info["width"], info["height"]) != size or not 1 <= info["mips"] <= max(size).bit_length():
+            raise ValueError("DDS size or mip count does not match the payload dimensions")
+        payload_type, count, payload = 2, info["mips"], dds
+    else:
+        if not 1 <= len(mips) <= max(size).bit_length() or sum(map(len, mips)) != mip_bytes(*size, len(mips)):
+            raise ValueError("mip chain does not match the payload dimensions")
+        payload_type, count, payload = 1, len(mips), b"".join(mips)
+    return (HEADER2.pack(MAGIC2, HEADER2.size + len(key_bytes), payload_type, fingerprint, xenos_format,
+                         *original, *size, count, len(payload), len(key_bytes), 0)
             + key_bytes + payload)
 
 
@@ -122,7 +170,7 @@ def inspect2(data: bytes) -> dict:
      key_size, reserved) = HEADER2.unpack_from(data)
     if magic != MAGIC2 or reserved != 0 or header_size != HEADER2.size + key_size:
         raise ValueError("invalid LOTEX2 magic, header size or reserved field")
-    if payload_type != 1:
+    if payload_type not in (1, 2):
         raise ValueError(f"unsupported LOTEX2 payload type {payload_type}")
     names = {v: k for k, v in XENOS_FORMATS.items()}
     if xenos_format not in names:
@@ -132,11 +180,18 @@ def inspect2(data: bytes) -> dict:
         raise ValueError("invalid payload scale")
     if not 1 <= mips <= max(pw, ph).bit_length():
         raise ValueError("invalid mip count")
-    if payload_size != mip_bytes(pw, ph, mips) or len(data) != header_size + payload_size:
-        raise ValueError("payload size mismatch (truncated data or trailing bytes)")
+    if (payload_size != mip_bytes(pw, ph, mips) if payload_type == 1 else pw % 4 or ph % 4) \
+            or len(data) != header_size + payload_size:
+        raise ValueError("payload size mismatch or level 0 not a multiple of 4 (truncated data or trailing bytes)")
+    extra = {}
+    if payload_type == 2:
+        dds = parse_dds(data[header_size:])
+        if (dds["width"], dds["height"], dds["mips"]) != (pw, ph, mips):
+            raise ValueError("DDS size or mip count does not match the LOTEX2 header")
+        extra = {"payload_type": "DDS", "dds_format": dds["format"]}
     return {"format": "LOTEX2", "fingerprint": f"{fingerprint:016x}", "original_format": names[xenos_format],
             "original": f"{ow}x{oh}", "payload": f"{pw}x{ph}", "scale": pw // ow, "mips": mips,
-            "payload_bytes": payload_size, "key": data[HEADER2.size:header_size].decode("utf-8")}
+            "payload_bytes": payload_size, "key": data[HEADER2.size:header_size].decode("utf-8"), **extra}
 
 
 def inspect(data: bytes) -> dict:
@@ -411,9 +466,50 @@ def test_transform(image, name: str):
     raise ValueError("unknown --test transform")
 
 
+def find_texconv(path: Path | None) -> Path:
+    found = path if path is not None else (DEFAULT_TEXCONV if DEFAULT_TEXCONV.is_file()
+                                           else (Path(shutil.which("texconv")) if shutil.which("texconv") else None))
+    if found is None or not Path(found).is_file():
+        raise ValueError("--payload dds needs Microsoft texconv (https://github.com/microsoft/DirectXTex/releases); "
+                         "pass --texconv <path> or put it on PATH")
+    return Path(found)
+
+
+def convert_dds(texconv: Path, folder: Path, jobs: list[dict], batch: int = 128, workers: int = 4) -> None:
+    """Compress folder/fp-<hex>.png to .dds next to it, one texconv call per format batch."""
+    groups: dict[str, list[dict]] = {}
+    for job in jobs:
+        groups.setdefault(job["format"], []).append(job)
+    calls = []
+    for fmt, items in groups.items():
+        for start in range(0, len(items), batch):
+            calls.append((fmt, items[start:start + batch], len(calls)))
+
+    def run(call) -> None:
+        fmt, items, number = call
+        listing = folder / f"list-{number}.txt"
+        listing.write_text("".join(f"{folder / ('fp-%016x.png' % item['fingerprint'])}\n" for item in items),
+                           encoding="utf-8", newline="\n")
+        result = subprocess.run([str(texconv), "-nologo", "-y", "-m", "0", "-f", fmt, "-o", str(folder),
+                                 "-flist", str(listing)], capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
+        if result.returncode != 0:
+            raise ValueError(f"texconv failed ({result.returncode}): {(result.stdout + result.stderr)[-400:]}")
+        for item in items:
+            if not (folder / f"fp-{item['fingerprint']:016x}.dds").is_file():
+                raise ValueError(f"texconv produced no output for {item['key']}: {result.stdout[-400:]}")
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        list(pool.map(run, calls))
+
+
 def texture_pack(index: Path, images: Path, images_index: Path | None, output: Path, layout: str,
                  identity: str | None, priority: int = 0, name_filter: str | None = None,
-                 fingerprints: Path | None = None, test: str | None = None, mips: bool = False) -> dict:
+                 fingerprints: Path | None = None, test: str | None = None, mips: bool = False,
+                 payload: str = "rgba8", texconv: Path | None = None, bc7_all: bool = False) -> dict:
+    if payload not in ("rgba8", "dds"):
+        raise ValueError("payload must be rgba8 or dds")
+    if payload == "dds":
+        texconv = find_texconv(texconv)
     try:
         from PIL import Image
     except ImportError as exc:
@@ -441,6 +537,8 @@ def texture_pack(index: Path, images: Path, images_index: Path | None, output: P
 
     done: set[int] = set()
     manifest = []
+    jobs: list[dict] = []
+    scratch = tempfile.TemporaryDirectory(prefix="lo_mod_") if payload == "dds" else None
     for row in read_rows(index, {"key", "width", "height", "format", "fingerprint"}):
         key = canonical_key(row["key"])
         if name_filter and name_filter.lower() not in key.lower():
@@ -475,6 +573,23 @@ def texture_pack(index: Path, images: Path, images_index: Path | None, output: P
                 or max(rgba.size) > 8192):
             skip("bad_scale"); continue
         size = rgba.size
+        if payload == "dds":
+            if size[0] % 4 or size[1] % 4:
+                skip("not_multiple_of_4"); continue
+            name = f"fp-{fingerprint:016x}.lotex2"
+            target = folder / name
+            if target.exists():
+                skip("exists"); continue
+            done.add(fingerprint)
+            if row["format"] == "A8R8G8B8":  # Host texture is B, G, R, A.
+                r, g, b, a = rgba.split()
+                rgba = Image.merge("RGBA", (b, g, r, a))
+            fmt = "BC4_UNORM" if row["format"] == "G8" else (
+                "BC1_UNORM" if row["format"] == "DXT1" and not bc7_all else "BC7_UNORM")
+            rgba.save(Path(scratch.name) / f"fp-{fingerprint:016x}.png", compress_level=1)
+            jobs.append({"fingerprint": fingerprint, "xenos": xenos, "original": original, "size": size,
+                         "key": key, "format": fmt, "name": name, "target": target})
+            continue
         levels = [rgba.tobytes()]
         while mips and max(rgba.size) > 1:
             rgba = rgba.resize((max(1, rgba.width >> 1), max(1, rgba.height >> 1)), Image.BOX)
@@ -491,6 +606,27 @@ def texture_pack(index: Path, images: Path, images_index: Path | None, output: P
         stats["written"] += 1
         stats["bytes"] += len(data)
         manifest.append(f"texture:{fingerprint:016x}=textures/{name}")
+    if payload == "dds":
+        try:
+            convert_dds(texconv, Path(scratch.name), jobs)
+            for job in jobs:
+                with open(Path(scratch.name) / f"fp-{job['fingerprint']:016x}.dds", "rb") as file:
+                    dds = file.read()
+                info = parse_dds(dds)
+                if info["format"] != job["format"]:
+                    raise ValueError(f"texconv wrote {info['format']}, expected {job['format']}")
+                data = encode2(job["fingerprint"], job["xenos"], job["original"], job["size"], [], job["key"], dds)
+                job["target"].parent.mkdir(parents=True, exist_ok=True)
+                try:
+                    with job["target"].open("xb") as file:
+                        file.write(data)
+                except FileExistsError:
+                    skip("exists"); continue
+                stats["written"] += 1
+                stats["bytes"] += len(data)
+                manifest.append(f"texture:{job['fingerprint']:016x}=textures/{job['name']}")
+        finally:
+            scratch.cleanup()
     if layout == "standalone" and manifest:
         ini = base / "mod.ini"
         if ini.exists():
@@ -544,7 +680,11 @@ def main(argv: list[str] | None = None) -> int:
     tex_parser.add_argument("--filter", help="case-insensitive substring of the texture key")
     tex_parser.add_argument("--fingerprints", type=Path, help="runtime fingerprint log csv; keep only fingerprints seen in game")
     tex_parser.add_argument("--test", choices=("tint", "nearest4"), help="transform the original PNGs for runtime verification")
-    tex_parser.add_argument("--mips", action="store_true", help="write the full mip chain (default: 1 level)")
+    tex_parser.add_argument("--mips", action="store_true", help="rgba8 only: write the full mip chain (default: 1 level; dds always has the full chain)")
+    tex_parser.add_argument("--payload", choices=("rgba8", "dds"), default="rgba8",
+                            help="rgba8 (default, large) or dds: BC1/BC4/BC7 compressed via Microsoft texconv")
+    tex_parser.add_argument("--texconv", type=Path, help="path to texconv.exe (default: the known local copy, else PATH)")
+    tex_parser.add_argument("--bc7-all", action="store_true", help="dds: use BC7 for DXT1 originals too (default BC1)")
     inspect_parser = sub.add_parser("inspect", help="validate a LOTEX1/LOTEX2 file and print its identity")
     inspect_parser.add_argument("file", type=Path)
     args = parser.parse_args(argv)
@@ -605,7 +745,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Packed {count} image(s): {args.output} ({args.layout})")
         elif args.command == "texture-pack":
             stats = texture_pack(args.index, args.images, args.images_index, args.output, args.layout, args.id,
-                                 args.priority, args.filter, args.fingerprints, args.test, args.mips)
+                                 args.priority, args.filter, args.fingerprints, args.test, args.mips,
+                                 args.payload, args.texconv, args.bc7_all)
             written, total = stats.pop("written"), stats.pop("bytes")
             skipped = ", ".join(f"{k}={v}" for k, v in sorted(stats.items())) or "none"
             print(f"Wrote {written} texture(s), {total} bytes ({total / 1048576:.1f} MiB) to {args.output} ({args.layout})")

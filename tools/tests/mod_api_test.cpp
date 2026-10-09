@@ -176,12 +176,81 @@ void Validation(const fs::path& root, const fs::path& outside) {
     for (int i = 0; i != 20; ++i) Reload();
     reader.get();
 }
-std::string Lotex2(uint64_t fingerprint, uint32_t format, uint32_t w, uint32_t h, const std::string& payload) {
+std::string Lotex2(uint64_t fingerprint, uint32_t format, uint32_t w, uint32_t h, const std::string& payload,
+    uint32_t type = 1, uint32_t mips = 1) {
     std::string data("LOTEX2\r\n", 8);
     auto u32 = [&](uint32_t value) { for (int i = 0; i != 4; ++i) data.push_back(char(value >> (8 * i))); };
-    u32(64 + 4); u32(1); u32(uint32_t(fingerprint)); u32(uint32_t(fingerprint >> 32));
-    u32(format); u32(w); u32(h); u32(w); u32(h); u32(1); u32(uint32_t(payload.size())); u32(0); u32(4); u32(0);
+    u32(64 + 4); u32(type); u32(uint32_t(fingerprint)); u32(uint32_t(fingerprint >> 32));
+    u32(format); u32(w); u32(h); u32(w); u32(h); u32(mips); u32(uint32_t(payload.size())); u32(0); u32(4); u32(0);
     return data + "test" + payload;
+}
+// DDS header for a type-2 payload; dxgi != 0 appends the DX10 header.
+std::string Dds(uint32_t w, uint32_t h, uint32_t mips, const char* fourCC, uint32_t dxgi = 0,
+    uint32_t caps2 = 0, uint32_t miscFlag = 0) {
+    std::string data("DDS ", 4);
+    auto u32 = [&](uint32_t value) { for (int i = 0; i != 4; ++i) data.push_back(char(value >> (8 * i))); };
+    u32(124); u32(0x21007); u32(h); u32(w); u32(0); u32(0); u32(mips);
+    for (int i = 0; i != 11; ++i) u32(0);
+    u32(32); u32(4); data.append(fourCC, 4); for (int i = 0; i != 5; ++i) u32(0);
+    u32(0x401008); u32(caps2); u32(0); u32(0); u32(0);
+    if (dxgi) { u32(dxgi); u32(3); u32(miscFlag); u32(1); u32(0); }
+    return data;
+}
+void BlockCompressedTextures(const fs::path& root, uint64_t fingerprint) {
+    // Manifest entries need the file at load time; each case rewrites it.
+    Write(root / "tex/t.lotex2", "");
+    Write(root / "tex/mod.ini", "api_version=1\nid=tex\ntexture:0123456789abcdef=t.lotex2\n");
+    Reload();
+    std::string error;
+    auto read = [&](const std::string& file, uint32_t format = 18, uint32_t size = 8, uint64_t maxLevelBytes = UINT64_MAX) {
+        Write(root / "tex/t.lotex2", file);
+        error.clear();
+        return ReadTextureReplacement(fingerprint, format, size, size, maxLevelBytes, &error);
+    };
+    // 8x8 BC1, two levels: 2x2 blocks then one block, 8 bytes each.
+    std::string bc1(40, '\0');
+    for (size_t i = 0; i != bc1.size(); ++i) bc1[i] = char(i * 7 + 1);
+    for (const auto& dds : {Dds(8, 8, 2, "DXT1"), Dds(8, 8, 2, "DX10", kTextureBc1)}) {
+        const auto data = read(Lotex2(fingerprint, 18, 8, 8, dds + bc1, 2, 2));
+        assert(data && error.empty() && data->type == 2 && data->dxgiFormat == kTextureBc1 && data->scale == 1);
+        assert(data->key == "test" && std::string(TexturePayloadName(*data)) == "BC1" && data->levels.size() == 2);
+        assert(std::string(data->levels[0].begin(), data->levels[0].end()) == bc1.substr(0, 32));
+        assert(std::string(data->levels[1].begin(), data->levels[1].end()) == bc1.substr(32));
+    }
+    // The size cap applies to level 0's compressed bytes (32), not RGBA8 (256),
+    // so the renderer's 72 MiB level cap admits 8192x8192 BC7 (64 MiB).
+    assert(TextureBcLevelBytes(8192, 8192, kTextureBc7) == 64ull << 20 && TextureBcLevelBytes(4, 4, kTextureBc4) == 8);
+    assert(read(Lotex2(fingerprint, 18, 8, 8, Dds(8, 8, 2, "DXT1") + bc1, 2, 2), 18, 8, 32));
+    assert(!read(Lotex2(fingerprint, 18, 8, 8, Dds(8, 8, 2, "DXT1") + bc1, 2, 2), 18, 8, 31) && !error.empty());
+    // BC7 (16-byte blocks) for a DXT5 original and BC4 (ATI1, one level, no mip count) for G8.
+    const auto bc7 = read(Lotex2(fingerprint, 20, 8, 8, Dds(8, 8, 2, "DX10", kTextureBc7) + std::string(80, 'x'), 2, 2), 20);
+    assert(bc7 && bc7->dxgiFormat == kTextureBc7 && bc7->levels[0].size() == 64 && bc7->levels[1].size() == 16);
+    const auto bc4 = read(Lotex2(fingerprint, 2, 8, 8, Dds(8, 8, 0, "ATI1") + std::string(32, 'y'), 2, 1), 2);
+    assert(bc4 && bc4->dxgiFormat == kTextureBc4 && bc4->levels.size() == 1);
+    // Rejections keep the original and report why.
+    const std::string rejected[] = {
+        Lotex2(fingerprint, 18, 8, 8, Dds(4, 8, 2, "DXT1") + bc1, 2, 2),               // DDS width differs
+        Lotex2(fingerprint, 18, 8, 8, Dds(8, 8, 1, "DXT1") + bc1, 2, 2),               // DDS mip count differs
+        Lotex2(fingerprint, 18, 8, 8, Dds(8, 8, 2, "DXT1", 0, 0xFE00) + bc1, 2, 2),    // cube map (legacy)
+        Lotex2(fingerprint, 18, 8, 8, Dds(8, 8, 2, "DX10", kTextureBc1, 0, 4) + bc1, 2, 2), // cube map (DX10)
+        Lotex2(fingerprint, 18, 8, 8, Dds(8, 8, 2, "DX10", 72) + bc1, 2, 2),           // BC1 sRGB
+        Lotex2(fingerprint, 18, 8, 8, Dds(8, 8, 2, "DXT3") + std::string(80, 'z'), 2, 2), // BC2
+        Lotex2(fingerprint, 18, 8, 8, Dds(8, 8, 2, "DXT1") + bc1.substr(1), 2, 2),     // truncated level
+        Lotex2(fingerprint, 18, 8, 8, Dds(8, 8, 2, "DXT1") + bc1 + "!", 2, 2),         // trailing data
+        Lotex2(fingerprint, 18, 8, 8, bc1, 2, 2),                                      // no DDS header
+        Lotex2(fingerprint, 18, 8, 8, Dds(8, 8, 2, "DXT1") + bc1, 3, 2),               // unknown payload type
+    };
+    for (const auto& file : rejected) assert(!read(file) && !error.empty());
+    // Level 0 must be whole blocks: a 6x6 A8R8G8B8 original cannot use type 2.
+    assert(!read(Lotex2(fingerprint, 6, 6, 6, Dds(6, 6, 1, "DXT1") + std::string(32, 'w'), 2, 1), 6, 6) && !error.empty());
+    // Devices without BC skip type 2 without reading or reporting it; type 1 still loads.
+    Write(root / "tex/t.lotex2", Lotex2(fingerprint, 18, 8, 8, Dds(8, 8, 2, "DXT1") + bc1, 2, 2));
+    bool skipped = false;
+    error.clear();
+    assert(!ReadTextureReplacement(fingerprint, 18, 8, 8, UINT64_MAX, &error, false, &skipped) && skipped && error.empty());
+    Write(root / "tex/t.lotex2", Lotex2(fingerprint, 18, 8, 8, std::string(256, 'r')));
+    assert(ReadTextureReplacement(fingerprint, 18, 8, 8, UINT64_MAX, &error, false, &skipped) && !skipped);
+    fs::remove_all(root / "tex");
 }
 void Textures(const fs::path& root) {
     constexpr uint64_t fingerprint = 0x0123456789abcdefull;
@@ -206,6 +275,7 @@ void Textures(const fs::path& root) {
     Write(overlay, Lotex2(fingerprint, 18, 2, 2, pixels.substr(1)));
     assert(Resolve(texture)->modId == "@overlay" && !ReadTextureReplacement(fingerprint, 18, 2, 2, UINT64_MAX, &error));
     fs::remove_all(root / "tex"); fs::remove_all(overlay.parent_path());
+    BlockCompressedTextures(root, fingerprint);
     Env("LO_MODS_MODE", "overlay"); Reload(); assert(!HasTextureReplacements());
     Env("LO_MODS_MODE", nullptr); Reload();
 }
