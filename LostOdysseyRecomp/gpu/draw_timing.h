@@ -21,6 +21,25 @@ namespace gpu::draw_timing
         return frame;
     }
 
+    // LO_GPU_DRAW_TIMING_EVERY=N: probe every Nth frame as well (N >= 2), for
+    // scenes whose frame number is not known in advance (the console reads it
+    // from env.txt). A probe still covers one frame and is read back before
+    // the next one starts.
+    inline uint64_t Every()
+    {
+        static const uint64_t every = [] {
+            const char* value = std::getenv("LO_GPU_DRAW_TIMING_EVERY");
+            const uint64_t n = value ? std::strtoull(value, nullptr, 10) : 0ull;
+            return n >= 2 ? n : 0ull;
+        }();
+        return every;
+    }
+
+    inline bool IsTarget(uint64_t frame)
+    {
+        return (TargetFrame() && TargetFrame() == frame) || (Every() && frame && frame % Every() == 0);
+    }
+
     class Probe
     {
         static constexpr uint32_t kQueryCount = 2048;
@@ -44,7 +63,7 @@ namespace gpu::draw_timing
     public:
         void Begin(plume::RenderDevice* device, plume::RenderCommandList* list, uint64_t currentFrame)
         {
-            if (!TargetFrame() || TargetFrame() != currentFrame) return;
+            if (pending || !IsTarget(currentFrame)) return;
             if (!pool) pool = device->createQueryPool(kQueryCount);
             if (!pool || pool->getCount() != kQueryCount) {
                 LOG_WARNING("gpu draw probe: query pool unavailable frame={}", currentFrame);

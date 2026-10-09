@@ -2,7 +2,9 @@
 
 #include <os/platform.h>
 #include <cstddef>
+#include <atomic>
 #include <functional>
+#include <memory>
 #include <thread>
 #include <utility>
 
@@ -11,9 +13,16 @@ namespace os
 // Host stack for threads that execute recompiled guest code. Guest call depth
 // becomes host call depth; the runtime is validated with the Windows 1 MiB
 // thread default, while macOS gives secondary threads only 512 KiB.
+#if LO_PLATFORM_SWITCH
+// libnx gives threads 128 KiB unless told otherwise, and GCC lays out the
+// recompiled code's frames differently from Clang: use UnleashedRecomp-NX's
+// generous margin (it runs guest threads with 8 MiB).
+inline constexpr size_t kGuestCodeStackSize = 4 * 1024 * 1024;
+#else
 inline constexpr size_t kGuestCodeStackSize = 1024 * 1024;
+#endif
 
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_MACOS || LO_PLATFORM_SWITCH
 // The std::thread subset the runtime uses, created with kGuestCodeStackSize
 // (std::thread cannot set a stack size).
 class GuestCodeThread
@@ -41,6 +50,7 @@ private:
     void Start(std::function<void()> body);
 
     void* m_handle = nullptr; // pthread_t
+    std::shared_ptr<std::atomic<bool>> m_done; // set when the body has returned
     std::thread::id m_id{};
     bool m_joinable = false;
 };

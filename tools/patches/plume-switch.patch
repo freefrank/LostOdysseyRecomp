@@ -1,0 +1,150 @@
+diff --git a/plume_render_interface_types.h b/plume_render_interface_types.h
+index 937edec..274ce9e 100644
+--- a/plume_render_interface_types.h
++++ b/plume_render_interface_types.h
+@@ -15,7 +15,11 @@
+ #include <cfloat>
+ #include <cstdint>
+ 
+-#if defined(_WIN64)
++#if defined(__SWITCH__)
++// libnx's <switch.h> is not included here: its Mutex/Event/Thread typedefs
++// collide with host code that includes plume. NWindow is forward declared.
++struct NWindow;
++#elif defined(_WIN64)
+ #include <Windows.h>
+ #elif defined(__ANDROID__)
+ #include "android/native_window.h"
+@@ -34,7 +38,10 @@
+ #endif
+ 
+ namespace plume {
+-#if defined(_WIN64)
++#if defined(__SWITCH__)
++    // libnx native window (nwindowGetDefault()), used with VK_NN_vi_surface.
++    typedef ::NWindow* RenderWindow;
++#elif defined(_WIN64)
+     // Native HWND handle to the target window.
+     typedef HWND RenderWindow;
+ 
+diff --git a/plume_vulkan.cpp b/plume_vulkan.cpp
+index a8cbdd4..a3db631 100644
+--- a/plume_vulkan.cpp
++++ b/plume_vulkan.cpp
+@@ -20,6 +20,16 @@
+ #include <string>
+ #include <unordered_map>
+ 
++#if defined(__SWITCH__)
++// Mesa NVK is linked statically (no Vulkan loader on Horizon): resolve the
++// entry points through its ICD interface. Same as UnleashedRecomp-NX.
++#include <switch.h>
++extern "C" {
++    VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vk_icdGetInstanceProcAddr(VkInstance instance, const char *pName);
++    VKAPI_ATTR VkResult VKAPI_CALL vk_icdNegotiateLoaderICDInterfaceVersion(uint32_t *pSupportedVersion);
++}
++#endif
++
+ #if DLSS_ENABLED
+ #   include "render/plume_dlss.h"
+ #endif
+@@ -53,7 +63,9 @@ namespace plume {
+ #   ifdef VULKAN_OBJECT_NAMES_ENABLED
+         VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
+ #   endif
+-#   if defined(_WIN64)
++#   if defined(__SWITCH__)
++        VK_NN_VI_SURFACE_EXTENSION_NAME,
++#   elif defined(_WIN64)
+         VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
+ #   elif defined(__ANDROID__)
+         VK_KHR_ANDROID_SURFACE_EXTENSION_NAME,
+@@ -93,8 +105,10 @@ namespace plume {
+         VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
+         VK_EXT_SAMPLE_LOCATIONS_EXTENSION_NAME,
+         VK_EXT_LOAD_STORE_OP_NONE_EXTENSION_NAME,
++#   if !defined(__SWITCH__)
+         VK_KHR_PRESENT_ID_EXTENSION_NAME,
+         VK_KHR_PRESENT_WAIT_EXTENSION_NAME,
++#   endif
+         VK_GOOGLE_DISPLAY_TIMING_EXTENSION_NAME,
+         // Vulkan spec requires this to be enabled if supported by the driver.
+         VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME,
+@@ -2569,7 +2583,19 @@ namespace plume {
+ 
+         VkResult res;
+ 
+-#   ifdef _WIN64
++#   if defined(__SWITCH__)
++        assert(desc.renderWindow != nullptr);
++        VkViSurfaceCreateInfoNN surfaceCreateInfo = {};
++        surfaceCreateInfo.sType = VK_STRUCTURE_TYPE_VI_SURFACE_CREATE_INFO_NN;
++        surfaceCreateInfo.window = desc.renderWindow;
++
++        VulkanInterface *renderInterface = commandQueue->device->renderInterface;
++        res = vkCreateViSurfaceNN(renderInterface->instance, &surfaceCreateInfo, nullptr, &surface);
++        if (res != VK_SUCCESS) {
++            PLUME_LOG_ERROR("Vulkan", "vkCreateViSurfaceNN", LogErrorDomain::VkResult, res, "");
++            return;
++        }
++#   elif defined(_WIN64)
+         const WindowPixelContext pixels;
+         if (!pixels.ready()) return;
+         assert(desc.renderWindow != 0);
+@@ -3039,7 +3065,18 @@ namespace plume {
+     }
+ 
+     void VulkanSwapChain::getWindowSize(uint32_t &dstWidth, uint32_t &dstHeight) const {
+-#   if defined(_WIN64)
++#   if defined(__SWITCH__)
++        u32 nativeWidth = 0;
++        u32 nativeHeight = 0;
++        if (desc.renderWindow != nullptr && R_SUCCEEDED(nwindowGetDimensions(desc.renderWindow, &nativeWidth, &nativeHeight))) {
++            dstWidth = nativeWidth;
++            dstHeight = nativeHeight;
++        }
++        else {
++            dstWidth = 1280;
++            dstHeight = 720;
++        }
++#   elif defined(_WIN64)
+         GetWindowClientPixels(desc.renderWindow, dstWidth, dstHeight);
+ #   elif defined(PLUME_SDL_VULKAN_ENABLED)
+         SDL_GetWindowSizeInPixels(desc.renderWindow, (int *)(&dstWidth), (int *)(&dstHeight));
+@@ -5576,7 +5613,21 @@ namespace plume {
+         this->extensionHooks = extensionHooks;
+         // A host may have initialised volk from a custom loader (Android
+         // libadrenotools); keep that entry point instead of the system one.
++#   if defined(__SWITCH__)
++        VkResult res = VK_SUCCESS;
++        if (volkGetInstanceVersion() == 0) {
++            uint32_t icdVersion = 7;
++            vk_icdNegotiateLoaderICDInterfaceVersion(&icdVersion);
++            PFN_vkGetInstanceProcAddr getInstanceProcAddr = reinterpret_cast<PFN_vkGetInstanceProcAddr>(
++                vk_icdGetInstanceProcAddr(VK_NULL_HANDLE, "vkGetInstanceProcAddr"));
++            if (getInstanceProcAddr == nullptr) {
++                getInstanceProcAddr = reinterpret_cast<PFN_vkGetInstanceProcAddr>(&vk_icdGetInstanceProcAddr);
++            }
++            volkInitializeCustom(getInstanceProcAddr);
++        }
++#   else
+         VkResult res = volkGetInstanceVersion() != 0 ? VK_SUCCESS : volkInitialize();
++#   endif
+         if (res != VK_SUCCESS) {
+             PLUME_LOG_ERROR("Vulkan", "volkInitialize", LogErrorDomain::VkResult, res, "");
+             return;
+diff --git a/plume_vulkan.h b/plume_vulkan.h
+index cfe428d..0f52f0c 100644
+--- a/plume_vulkan.h
++++ b/plume_vulkan.h
+@@ -15,7 +15,9 @@
+ #include <unordered_map>
+ #include <unordered_set>
+ 
+-#if defined(_WIN64)
++#if defined(__SWITCH__)
++#define VK_USE_PLATFORM_VI_NN
++#elif defined(_WIN64)
+ #define VK_USE_PLATFORM_WIN32_KHR
+ #elif defined(__ANDROID__)
+ #define VK_USE_PLATFORM_ANDROID_KHR

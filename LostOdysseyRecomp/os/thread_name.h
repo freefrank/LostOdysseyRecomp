@@ -11,6 +11,8 @@
 #include <windows.h>
 #elif defined(__linux__) || defined(__APPLE__)
 #include <pthread.h>
+#elif defined(__SWITCH__)
+#include <os/switch_cpu_profiler.h>
 #endif
 
 namespace os {
@@ -34,6 +36,9 @@ inline void SetCurrentThreadName(const char* name) noexcept
     for (unsigned i = 0; i < 63 && name[i]; ++i)
         truncated[i] = name[i];
     (void)pthread_setname_np(truncated);
+#elif defined(__SWITCH__)
+    // Named threads are the ones the CPU profiler accounts for.
+    os::switch_cpu_profiler::RegisterCurrentThread(name);
 #else
     (void)name;
 #endif
