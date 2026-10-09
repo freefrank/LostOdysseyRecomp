@@ -11,6 +11,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Fixed short stutters with DLSS frame generation, mostly in battles, on Vulkan and Direct3D 12.
 - Fixed a Vulkan crash a few seconds after startup on NVIDIA GPUs when ReShade's `dxgi.dll` is in the game folder; ReShade still works with Direct3D 12 (#323).
 - With DLSS, FSR, XeSS or MetalFX on, a Render resolution above the output now supersamples: the upscaler outputs at that resolution and the picture is scaled down to the window or screen (#332).
+- On Windows, 5.1 surround no longer drops to stereo on outputs that report stereo but take a 5.1 mix, such as optical outputs with Dolby Digital Live or DTS, or after the speaker setup changes while the game runs (#174).
 - The HDR page's scene preview now follows the peak brightness with DLSS, FSR or XeSS on.
 - New DLSS 5 neural rendering setting in Settings → Graphics on Windows with DLSS: Off or 1×–4× passes. Confirm on it opens a tuning page with model, intensity, tone, structure, skin and character mask, previewed live on the current scene. It needs an RTX GPU and your own nvngx_dlssnr.dll next to the game; the game does not include it.
 - Settings → Graphics now lists upscaling, DLSS 5 neural rendering and frame generation together in one group.
@@ -27,6 +28,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - 修复开启 DLSS 帧生成时的短暂卡顿（多见于战斗），Vulkan 和 Direct3D 12 都已修复。
 - 修复游戏目录里有 ReShade 的 `dxgi.dll` 时，NVIDIA 显卡使用 Vulkan 启动几秒后崩溃的问题；ReShade 在 Direct3D 12 下仍可使用（#323）。
 - 开启 DLSS、FSR、XeSS 或 MetalFX 时，高于输出的渲染分辨率现在会超采样：超分输出为该分辨率，再缩小到窗口或屏幕（#332）。
+- Windows 上，报告为立体声但接受 5.1 混音的输出（如开启 Dolby Digital Live 或 DTS 的光纤输出），以及游戏运行中改了扬声器配置后，5.1 环绕声不再退回立体声（#174）。
 - 开启 DLSS、FSR 或 XeSS 时，HDR 页的场景预览现在会随峰值亮度变化。
 - Windows 上开启 DLSS 时，设置 → 图形新增“DLSS 5 神经渲染”：关闭或 1×–4× 次。在这一行按确认会打开调整页，可调模型、强度、色调、结构、皮肤和角色遮罩，并在当前场景上实时预览。需要 RTX 显卡，并把自备的 nvngx_dlssnr.dll 放在游戏旁边，游戏不附带。
 - 设置 → 图形里，超分、DLSS 5 神经渲染和帧生成现在排在同一组。
