@@ -1,3 +1,7 @@
+## Root direct continuation: expanding bounding sphere (2026-10-09)
+
+`mesh_bounds_math61` closes BC9040: retain six axis-extreme points, choose the widest pair, initialize its midpoint sphere, and expand in input order. Five complete-original-leaf cases pass Full72/RAM/CSR, independent enclosure and known single/planar spheres. Includes null input, one/three/four/seven finite points, four-point batches and tail, and expansion. FPR red-zone saves and binary32 stages retained. No nonfinite or nonnull-zero-count claim. Full Clang library passes. BC9AF0/BC9928 fallback and B7E860 pow remain before the cooked bounds wrapper can close.
+
 ## Root direct continuation: packed point bounds (2026-10-09)
 
 `geometry_primitives61` adds BCA410 packed xyz min/max reduction, an input to B9EA90 cooked bounds. Eleven family cases pass, including independent four-point extrema and original zero-count/null-input no-write behavior. Full72/RAM/CSR and full Clang library pass. Bounding sphere and the original pow dependency remain open; this does not close B9EA90.

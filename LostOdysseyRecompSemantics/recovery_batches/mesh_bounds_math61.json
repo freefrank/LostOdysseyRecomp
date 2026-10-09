@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "mesh-bounds-math61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/mesh_bounds_math61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/mesh_bounds_math61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\nvoid SphereSave(PPCContext&,std::uint8_t*);\nvoid SphereRestore(PPCContext&,std::uint8_t*);\n#define __savefpr_19 SphereSave\n#define __restfpr_19 SphereRestore\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/mesh_bounds_math61.cpp"
+      ]
+    }
+  ]
+}

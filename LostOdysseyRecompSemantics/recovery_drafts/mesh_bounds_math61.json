@@ -1,0 +1,33 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Axis-extreme seeded, input-order expanding mesh bounding sphere.",
+  "entries": [
+    {
+      "address": "82BC9040",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 48496,
+      "instruction_count": 336,
+      "body_sha256": "346c8f6cf198587c28d2f5fbcc03a2b886100eef0e70bce404c0cd0fe722d528",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BC9040"
+    ],
+    "header": "include/lo_semantics/mesh_bounds_math61.h",
+    "source": "src/mesh_bounds_math61.cpp",
+    "oracle": "tests/mesh_bounds_math61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 5,
+    "library_validated": true,
+    "case_scope": "Complete original leaf: null input, one/three/four/seven finite points; batch/tail scans, expansion, Full72/RAM/CSR, independent enclosure and known single/planar spheres. No nonfinite or zero-count nonnull validation, no gameplay claim.",
+    "platform": "Linux x64 Clang19; pinned PPC; mmap guest overlay"
+  }
+}
