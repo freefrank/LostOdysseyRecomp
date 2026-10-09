@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "mesh-polygon-plane61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/mesh_polygon_plane61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/mesh_polygon_plane61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\nvoid PolygonPlaneSave(PPCContext&,std::uint8_t*);\nvoid PolygonPlaneRestore(PPCContext&,std::uint8_t*);\nvoid PolygonPlaneSaveFp(PPCContext&,std::uint8_t*);\nvoid PolygonPlaneRestoreFp(PPCContext&,std::uint8_t*);\n#define __savegprlr_26 PolygonPlaneSave\n#define __restgprlr_26 PolygonPlaneRestore\n#define __savefpr_21 PolygonPlaneSaveFp\n#define __restfpr_21 PolygonPlaneRestoreFp\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/mesh_polygon_plane61.cpp"
+      ]
+    }
+  ]
+}

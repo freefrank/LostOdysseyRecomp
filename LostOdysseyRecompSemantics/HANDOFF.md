@@ -1,3 +1,7 @@
+## Root direct continuation: polygon planes and byte winding (2026-10-09)
+
+`mesh_polygon_plane61` closes BD9390 Newell plane accumulation and BC3880 byte-index reversal. Five complete-original-body cases cover scalar triangle, four-edge quad, quad plus scalar tail, invalid count and odd reversal. Full72/RAM/CSR and independent plane values pass; full Clang library passes. The plane offset uses vertex arithmetic mean, distinct from the surface-area centroid. Two implementation entries, no baseline/runtime claim.
+
 ## Root direct continuation: face and vertex normal construction (2026-10-09)
 
 `mesh_vertex_normals61` closes 82656EB8/BC30A0 two-array ownership, BC3250 normalized face/vertex construction with optional angle weighting, and BB9160 mesh installation with final sign reversal. Five composed-original-chain cases pass Full72/RAM/CSR/callbacks and independent folded-mesh normal directions, borrowed u16/implicit indices, invalid positions, allocation and cleanup. Shared angle/memory/allocator lowers are concrete. Full Clang library passes; private constants external. Four implementation entries, no mapping/runtime claim.

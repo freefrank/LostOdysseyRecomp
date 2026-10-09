@@ -1,0 +1,42 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Byte-index polygon Newell plane with four-edge accumulation and scalar tail; byte-index reversal.",
+  "entries": [
+    {
+      "address": "82BD9390",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 23160,
+      "instruction_count": 236,
+      "body_sha256": "260d8dca194c8d6e0445287bf205855fc7327a40f407ebd7e238e49b75a05d71",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BC3880",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 35187,
+      "instruction_count": 23,
+      "body_sha256": "22b8fdb4f7ba92deaa9c84c8607bb686f544edd4b7902793b89706ba32b9e7d7",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BD9390",
+      "82BC3880"
+    ],
+    "header": "include/lo_semantics/mesh_polygon_plane61.h",
+    "source": "src/mesh_polygon_plane61.cpp",
+    "oracle": "tests/mesh_polygon_plane61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 5,
+    "library_validated": true,
+    "case_scope": "Complete original bodies: scalar triangle, four-edge quad, quad plus tail pentagon, invalid count and odd byte reversal. Full72/RAM/CSR plus independent plane/winding output. Broad nonfinite/degenerate cases untested.",
+    "platform": "Linux x64 Clang19; pinned PPC; mmap guest overlay"
+  }
+}
