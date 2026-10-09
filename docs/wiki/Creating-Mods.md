@@ -42,6 +42,34 @@ python tools/modding/lo_mod.py init --export-index my-export/textures/index.csv 
 
 This writes `mod.json` and copies the PNG to `my-menu/art/<object>.png` (use `--image` to pick another path inside the mod folder). It never overwrites an existing file, and it follows the same consumer rule as `--database`: only confirmed consumers such as `UI_MAIN_00` unless you pass `--allow-unwired`. Edit the copied PNG, then continue with step 3. Today only the native settings-menu atlas and font pages are replaceable in-game; other exported textures are reference material until the general texture path exists.
 
+## 1c. Upscale exported textures (optional, preparation)
+
+`tools/modding/texture_prep.py` upscales an export in bulk with AI upscaling models. Run it with a Python that has PyTorch, spandrel and Pillow (ComfyUI's Python works). Download the models it names into one folder:
+
+- `1x_DEDXT.pth` (removes DXT block artifacts)
+- `4x-PBRify_RPLKSRd_V3.pth` (material textures)
+- `4x-Normal-RG0-BC1.pth` (normal maps)
+- `1x-BC1-smooth2.pth` and `4xNomos2_realplksr_dysample.safetensors` (UI and effects)
+
+All of them are on [OpenModelDB](https://openmodeldb.info).
+
+```sh
+python tools/modding/texture_prep.py --export my-export --output my-upscale --dry-run
+python tools/modding/texture_prep.py --export my-export --output my-upscale --models <model folder> --review 8
+```
+
+Each texture is sorted into a class: color, normal, data, ui, vfx, or skipped (light and shadow maps, engine icons, tiny images). `plan.csv` lists the class of every texture.
+
+- **Color, UI and effects:** artifact removal, then the 4x model, then a color fix so the result scales back down to the original.
+- **Normal maps:** the model upscales only X and Y. The large-scale slopes are kept, half of the added detail is used, and Z is rebuilt.
+- **Data maps (specular, masks):** plain resampling only.
+- **Edges:** tiling textures wrap at the edges, so no seams appear.
+- **Alpha:** upscaled separately; cutouts stay hard.
+
+Results go to `my-upscale/textures/` with the same file names, plus `index.csv` (new and original sizes) and `review/<class>.png`, which shows before and after crops. Runs resume where they stopped. Use `--classes`, `--filter` and `--limit` for a sample first. `--write-config` writes the defaults (models per class, scale, maximum size) for editing; pass the edited file back with `--config`.
+
+The game cannot load textures larger than the originals yet. Keep the results until the general texture path supports them.
+
 ## 2. Prepare artwork and a specification
 
 Copy your own edited PNG into an authoring directory, for example `my-menu/art/UI_MAIN_00.png`. The inventory contains metadata and dimensions only; it does not export artwork. Keep the original image dimensions, alpha channel and atlas layout. The native menu's verified `UI_MAIN_00` layout is 512x1024; larger atlases are rejected by this consumer.
