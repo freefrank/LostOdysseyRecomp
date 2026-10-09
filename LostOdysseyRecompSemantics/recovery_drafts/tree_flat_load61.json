@@ -1,0 +1,34 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Complete pinned flat-node reader upper with shared allocator lookup and mutable reader/allocation service boundaries.",
+  "entries": [
+    {
+      "address": "82BDBED8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 29650,
+      "instruction_count": 190,
+      "body_sha256": "0bcf28090734ba41ec55705d02463a55ba9080219058f06e140d6a009aa057b4",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BDBED8"
+    ],
+    "header": "include/lo_semantics/tree_flat_load61.h",
+    "source": "src/tree_flat_load61.cpp",
+    "oracle": "tests/tree_flat_load61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 3,
+    "library_validated": true,
+    "case_scope": "Native and swapped-endian two-node reads, replace-old storage, allocation failure. Full72/RAM/callback comparison and independent payload/count/ownership assertions. Reader return ignored as original; no new defensive behavior.",
+    "platform": "Linux x64 Clang 19.1.7; pinned regenerated PPC; mmap guest overlay",
+    "mapping_limit": "Historical catalog membership unverified; no baseline mapping credit."
+  }
+}

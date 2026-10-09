@@ -1,3 +1,7 @@
+## Root direct continuation: flat-node import (2026-10-09)
+
+`tree_flat_load61` recovers BDBED8 reader-driven replacement of count-prefixed 36-byte nodes. Count and every node word optionally swap endianness; owner count changes and old storage frees before replacement allocation. Reader payload return remains ignored as in PPC. Three original-upper/shared-allocator cases pass Full72/RAM/callback traces with independent native/swapped payload and allocation-failure assertions; complete Clang library passes. No new rollback, validation guard, baseline credit or runtime hook.
+
 ## Root direct continuation: mesh owner lifetime (2026-10-09)
 
 `tree_mesh_lifetime61` adds BD2200 borrowed-mesh attachment and BD2268/BD27F8 nondeleting/deleting cleanup routes. Validation happens before releasing old state. Cleanup frees owned raw storage and the count-prefixed map, restores the base table and conditionally frees the owner while retaining its original return pointer. Five pinned-original-upper/shared-recovered-lower cases pass Full72/RAM/callback traces and independent release order; complete Clang library passes. External build and allocator callbacks remain borrowed. No baseline mapping or gameplay credit.

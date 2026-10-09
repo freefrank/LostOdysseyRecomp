@@ -1,0 +1,15 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "tree-flat-load61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/tree_flat_load61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/tree_flat_load61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nvoid FlatLoadIndirect(std::uint32_t,PPCContext&,std::uint8_t*);\nvoid FlatLoadAllocator(PPCContext&,std::uint8_t*);\nvoid FlatLoadSave(PPCContext&,std::uint8_t*);\nvoid FlatLoadRestore(PPCContext&,std::uint8_t*);\n#undef PPC_CALL_INDIRECT_FUNC\n#define PPC_CALL_INDIRECT_FUNC(t) FlatLoadIndirect((t),ctx,base)\n#define __savegprlr_26 FlatLoadSave\n#define __restgprlr_26 FlatLoadRestore\n#define sub_82BD0798 FlatLoadAllocator\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/tree_flat_strategy61.cpp",
+        "LostOdysseyRecompSemantics/src/tree_flat_load61.cpp"
+      ]
+    }
+  ]
+}
