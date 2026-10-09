@@ -5,7 +5,7 @@
       "name": "mesh-bounds-math61",
       "manifest": "LostOdysseyRecompSemantics/recovery_drafts/mesh_bounds_math61.json",
       "harness": "LostOdysseyRecompSemantics/tests/mesh_bounds_math61_oracle.cpp",
-      "prelude": "#include \"ppc_context.h\"\nvoid SphereSave(unsigned,PPCContext&,std::uint8_t*);\nvoid SphereRestore(unsigned,PPCContext&,std::uint8_t*);\n#define __savefpr_19(c,b) SphereSave(19,c,b)\n#define __restfpr_19(c,b) SphereRestore(19,c,b)\n#define __savefpr_23(c,b) SphereSave(23,c,b)\n#define __restfpr_23(c,b) SphereRestore(23,c,b)\n",
+      "prelude": "#include \"ppc_context.h\"\nvoid SphereSave(unsigned,PPCContext&,std::uint8_t*);\nvoid SphereRestore(unsigned,PPCContext&,std::uint8_t*);\n#define __savefpr_19(c,b) SphereSave(19,c,b)\n#define __restfpr_19(c,b) SphereRestore(19,c,b)\n#define __savefpr_23(c,b) SphereSave(23,c,b)\n#define __restfpr_23(c,b) SphereRestore(23,c,b)\nvoid SphereGprSave(PPCContext&,std::uint8_t*);\nvoid SphereGprRestore(PPCContext&,std::uint8_t*);\n#define __savegprlr_26 SphereGprSave\n#define __restgprlr_26 SphereGprRestore\nPPC_FUNC_IMPL(__imp__sub_82BC9580);\n#define sub_82BC9580 __imp__sub_82BC9580\nPPC_FUNC_IMPL(__imp__sub_82BC9600);\n#define sub_82BC9600 __imp__sub_82BC9600\nPPC_FUNC_IMPL(__imp__sub_82BC9780);\n#define sub_82BC9780 __imp__sub_82BC9780\nPPC_FUNC_IMPL(__imp__sub_82BC9928);\n#define sub_82BC9928 __imp__sub_82BC9928\n",
       "sources": [
         "LostOdysseyRecompSemantics/src/mesh_bounds_math61.cpp"
       ]

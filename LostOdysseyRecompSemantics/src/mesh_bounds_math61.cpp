@@ -504,6 +504,149 @@ struct Sphere {
         Store(12, r[3] + 8);
         RestoreSupport(0x82bc9918u);
     }
+    void ReadSphere(std::uint64_t p) {
+        Load(0, p + 12);
+        Load(13, p);
+        Load(12, p + 4);
+        Load(11, p + 8);
+    }
+    void Recursive() {
+        // Move an outside point to the support prefix, solve the earlier points
+        // with that additional boundary constraint, then resume the scan.
+        auto &r = s.r;
+        r[12] = s.lr;
+        s.lr = 0x82bc9930u;
+        for (unsigned i = 26; i < 32; ++i)
+            recovery_abi::WriteU64(m, Address(r[1] - 16 - 8 * (31 - i)), r[i]);
+        m.WriteU32(Address(r[1] - 8), Address(r[12]));
+        Gradual();
+        recovery_abi::WriteU64(m, Address(r[1] - 64), s.fpr_bits[31]);
+        auto old = r[1];
+        r[1] -= 192;
+        m.WriteU32(Address(r[1]), Address(old));
+        r[11] = 0xffffffff82000000ull;
+        r[28] = r[6];
+        r[27] = r[3];
+        r[30] = r[4];
+        r[26] = r[5];
+        Load(0, r[11] + 3440);
+        r[11] = 0xffffffff82000000ull;
+        Integer(r[28], 4);
+        Load(31, r[11] + 3664);
+        Move(11, 31);
+        Move(12, 31);
+        Move(13, 31);
+        bool complete = false;
+        if (!s.cr6.gt) {
+            r[12] = 0xffffffff82bc9984ull;
+            r[0] = Address(r[28]) << 2;
+            r[0] = m.ReadU32(Address(r[12] + r[0]));
+            s.ctr = r[0];
+            switch (Address(r[28])) {
+            case 0:
+                Move(13, 31);
+                Move(12, 31);
+                Move(11, 31);
+                break;
+            case 1:
+                r[11] = m.ReadU32(Address(r[30] - 4));
+                r[10] = 0xffffffff820d0000ull;
+                Load(0, r[10] + 27160);
+                Load(13, r[11]);
+                Load(12, r[11] + 4);
+                Load(11, r[11] + 8);
+                break;
+            case 2:
+                r[3] = r[1] + 80;
+                r[5] = m.ReadU32(Address(r[30] - 8));
+                r[4] = m.ReadU32(Address(r[30] - 4));
+                s.lr = 0x82bc99d4u;
+                Pair();
+                ReadSphere(r[3]);
+                break;
+            case 3:
+                r[3] = r[1] + 96;
+                r[6] = m.ReadU32(Address(r[30] - 12));
+                r[5] = m.ReadU32(Address(r[30] - 8));
+                r[4] = m.ReadU32(Address(r[30] - 4));
+                s.lr = 0x82bc9abcu;
+                Triangle();
+                ReadSphere(r[3]);
+                break;
+            case 4:
+                r[3] = r[1] + 112;
+                r[7] = m.ReadU32(Address(r[30] - 16));
+                r[6] = m.ReadU32(Address(r[30] - 12));
+                r[5] = m.ReadU32(Address(r[30] - 8));
+                r[4] = m.ReadU32(Address(r[30] - 4));
+                s.lr = 0x82bc9ad8u;
+                Tetrahedron();
+                r[11] = r[3];
+                ReadSphere(r[11]);
+                complete = true;
+                break;
+            }
+        }
+        if (!complete) {
+            r[31] = 0;
+            Integer(r[26]);
+            if (!s.cr6.eq) {
+                r[29] = r[30];
+                do {
+                    r[11] = m.ReadU32(Address(r[29]));
+                    Load(10, r[11] + 4);
+                    Single(10, F(10) - F(12));
+                    Load(9, r[11] + 8);
+                    Single(9, F(9) - F(11));
+                    Load(8, r[11]);
+                    Single(8, F(8) - F(13));
+                    Single(10, F(10) * F(10));
+                    Single(10, F(9) * F(9) + F(10));
+                    Single(10, F(8) * F(8) + F(10));
+                    Single(10, -(F(0) * F(0) - F(10)));
+                    Compare(F(10), F(31));
+                    if (s.cr6.gt) {
+                        s.ctr = r[31];
+                        Integer(r[31]);
+                        if (!s.cr6.eq) {
+                            r[11] = r[29];
+                            do {
+                                r[10] = r[11] - 4;
+                                r[9] = m.ReadU32(Address(r[11]));
+                                r[8] = m.ReadU32(Address(r[10]));
+                                m.WriteU32(Address(r[10]), Address(r[9]));
+                                m.WriteU32(Address(r[11]), Address(r[8]));
+                                r[11] -= 4;
+                                --s.ctr;
+                            } while (Address(s.ctr));
+                        }
+                        r[6] = r[28] + 1;
+                        r[5] = r[31];
+                        r[4] = r[30] + 4;
+                        r[3] = r[1] + 112;
+                        s.lr = 0x82bc9a68u;
+                        Recursive();
+                        ReadSphere(r[3]);
+                    }
+                    ++r[31];
+                    r[29] += 4;
+                    Integer(r[31], r[26]);
+                } while (s.cr6.lt);
+            }
+        }
+        Gradual();
+        Store(11, r[27] + 8);
+        r[3] = r[27];
+        Store(12, r[27] + 4);
+        Store(13, r[27]);
+        Store(0, r[27] + 12);
+        r[1] += 192;
+        s.fpr_bits[31] = recovery_abi::ReadU64(m, Address(r[1] - 64));
+        for (unsigned i = 26; i < 32; ++i)
+            r[i] = recovery_abi::ReadU64(m, Address(r[1] - 16 - 8 * (31 - i)));
+        r[12] = m.ReadU32(Address(r[1] - 8));
+        s.lr = r[12];
+    }
     void Run() {
         auto &r = s.r;
         r[12] = s.lr;
@@ -526,6 +669,9 @@ bool Apply(GuestAddress e, GuestMemory &m, float_triplet_transfer::NativeService
            Registers &s) {
     Sphere x{m, fp, s};
     switch (e) {
+    case 0x82bc9928u:
+        x.Recursive();
+        break;
     case 0x82bc9040u:
         x.Run();
         break;

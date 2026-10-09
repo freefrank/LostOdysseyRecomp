@@ -2,6 +2,8 @@
 #include "lo_semantics/geometry_primitives61.h"
 namespace lo::semantic::gpu::mesh_bounds_math61 {
 using Registers = geometry_primitives61::Registers;
+// BC9928 recursively solves a mutable point-pointer array with a support
+// prefix of up to four points; moving an outside point changes that ordering.
 // BC9580/BC9600/BC9780 construct spheres through two/three/four points,
 // preserving the guest radius epsilon and circumcenter arithmetic stages.
 // BC9040 uses six axis-extreme points to seed a sphere, then expands it in

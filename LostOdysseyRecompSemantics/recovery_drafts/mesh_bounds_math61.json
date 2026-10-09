@@ -33,6 +33,14 @@
       "instruction_count": 105,
       "body_sha256": "9ab7470c2a2382b1f66e4b203ef48fb516335b71d7f6441131c10bf3701b9858",
       "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BC9928",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 49921,
+      "instruction_count": 114,
+      "body_sha256": "47b3c0f06c8923f8578a132a6ee05bfb65a0dfc4e939febac12dac365f3de58f",
+      "status": "focused_original_ppc_validated"
     }
   ],
   "implementation": {
@@ -40,7 +48,8 @@
       "82BC9040",
       "82BC9580",
       "82BC9600",
-      "82BC9780"
+      "82BC9780",
+      "82BC9928"
     ],
     "header": "include/lo_semantics/mesh_bounds_math61.h",
     "source": "src/mesh_bounds_math61.cpp",
@@ -52,9 +61,9 @@
     "runtime_validated": false,
     "complete": false,
     "date": "2026-10-09",
-    "focused_original_ppc_cases": 8,
+    "focused_original_ppc_cases": 11,
     "library_validated": true,
-    "case_scope": "Complete original leaf: null input, one/three/four/seven finite points; batch/tail scans, expansion, Full72/RAM/CSR, independent enclosure and known single/planar spheres. No nonfinite or zero-count nonnull validation, no gameplay claim. Two-/three-/four-point support spheres checked against independent circumcenters/radii. Private epsilon via external four-byte LO_BOUNDS_CONSTANTS; degenerate support sets untested.",
+    "case_scope": "Complete original leaf: null input, one/three/four/seven finite points; batch/tail scans, expansion, Full72/RAM/CSR, independent enclosure and known single/planar spheres. No nonfinite or zero-count nonnull validation, no gameplay claim. Two-/three-/four-point support spheres checked against independent circumcenters/radii. Private epsilon via external four-byte LO_BOUNDS_CONSTANTS; degenerate support sets untested. Recursive support-prefix solver: 1/4/7 points, composed actual original support leaves and mutable pointer ordering. External LO_BOUNDS_CONSTANTS now 8 bytes: radius epsilon then empty radius sentinel.",
     "platform": "Linux x64 Clang19; pinned PPC; mmap guest overlay"
   }
 }

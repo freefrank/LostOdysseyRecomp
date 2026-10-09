@@ -7,17 +7,18 @@
 namespace bounds_oracle {
 using Registers = mesh_bounds_math61::Registers;
 constexpr GuestAddress Output = 0x30000, Points = 0x31000;
-constexpr std::array<test::Region, 5> Regions{{{0, 0x120000},
+constexpr std::array<test::Region, 6> Regions{{{0, 0x120000},
                                                {0x82000000, 0x10000},
                                                {0x8201f000, 0x1000},
                                                {0x820d6000, 0x1000},
-                                               {0x821ba000, 0x1000}}};
-std::array<unsigned char, 4> constants{};
+                                               {0x821ba000, 0x1000},
+                                               {0x82bc9000, 0x1000}}};
+std::array<unsigned char, 8> constants{};
 GuestMemory *original_memory = nullptr;
 struct Native final : float_triplet_transfer::NativeServices {
     void SetHostFpControl(std::uint32_t v) override { PPCFPSCRRegister{}.setcsr(v); }
 };
-void Check(unsigned count, bool support = false) {
+void Check(unsigned count, bool support = false, bool recursive = false) {
     struct Restore {
         std::uint32_t csr = PPCFPSCRRegister{}.getcsr();
         ~Restore() { PPCFPSCRRegister{}.setcsr(csr); }
@@ -31,6 +32,15 @@ void Check(unsigned count, bool support = false) {
             m.WriteU32(Points + 4 * i, std::bit_cast<std::uint32_t>(points[i]));
         for (unsigned i = 0; i < 4; ++i)
             m.WriteU8(0x820d6a18 + i, constants[i]);
+        for (unsigned i = 0; i < 4; ++i)
+            m.WriteU8(0x82000d70 + i, constants[4 + i]);
+        m.WriteU32(0x82000e50, 0);
+        constexpr GuestAddress cases[]{0x82bc9998u, 0x82bc99a8u, 0x82bc99c4u, 0x82bc9aa8u,
+                                       0x82bc9ac0u};
+        for (unsigned i = 0; i < 5; ++i)
+            m.WriteU32(0x82bc9984 + 4 * i, cases[i]);
+        for (unsigned i = 0; i < count; ++i)
+            m.WriteU32(0x33000 + 4 * i, Points + 12 * i);
         m.WriteU32(0x821baa74, std::bit_cast<std::uint32_t>(2.f));
         if (support) {
             constexpr float basis[]{0, 0, 0, 2, 0, 0, 0, 2, 0, 0, 0, 2};
@@ -56,15 +66,21 @@ void Check(unsigned count, bool support = false) {
     s.lr = 0x9988776681234567ull;
     s.xer_so = 1;
     s.cached_fp_control = 0x9fc0;
-    const GuestAddress entry = support ? (count == 2   ? 0x82bc9580u
-                                          : count == 3 ? 0x82bc9600u
-                                                       : 0x82bc9780u)
-                                       : 0x82bc9040u;
+    const GuestAddress entry = recursive ? 0x82bc9928u
+                               : support ? (count == 2   ? 0x82bc9580u
+                                            : count == 3 ? 0x82bc9600u
+                                                         : 0x82bc9780u)
+                                         : 0x82bc9040u;
     if (support) {
         s.r[4] = Points;
         s.r[5] = Points + 12;
         s.r[6] = Points + 24;
         s.r[7] = Points + 36;
+    }
+    if (recursive) {
+        s.r[4] = 0x33000;
+        s.r[5] = count;
+        s.r[6] = 0;
     }
     PPCContext c{};
     crt_full_oracle::ToPpc(c, s);
@@ -72,6 +88,9 @@ void Check(unsigned count, bool support = false) {
     original_memory = &om;
     PPCFPSCRRegister{}.setcsr(s.cached_fp_control);
     switch (entry) {
+    case 0x82bc9928u:
+        __imp__sub_82BC9928(c, before.Bytes());
+        break;
     case 0x82bc9580u:
         __imp__sub_82BC9580(c, before.Bytes());
         break;
@@ -101,7 +120,7 @@ void Check(unsigned count, bool support = false) {
                              (unsigned long long)b[i]);
         throw std::runtime_error("sphere original mismatch");
     }
-    if (s.r[3] != (support ? Output : count ? 1u : 0u))
+    if (s.r[3] != ((support || recursive) ? Output : count ? 1u : 0u))
         throw std::runtime_error("sphere result");
     auto value = [&](GuestAddress p) { return std::bit_cast<float>(m.ReadU32(p)); };
     if (count) {
@@ -123,11 +142,11 @@ void Check(unsigned count, bool support = false) {
             if (std::sqrt(d) > radius + 1e-5)
                 throw std::runtime_error("sphere enclosure");
         }
-        if (!support && count == 1 &&
+        if (!support && !recursive && count == 1 &&
             (value(Output) != -2 || value(Output + 4) != 1 || value(Output + 8) != 0 ||
              radius != 0))
             throw std::runtime_error("single point sphere");
-        if (!support && count == 4 &&
+        if (!support && !recursive && count == 4 &&
             (value(Output) != 2 || value(Output + 4) != 1 || value(Output + 8) != 0 || radius != 4))
             throw std::runtime_error("planar four point sphere");
     }
@@ -144,20 +163,38 @@ void SphereRestore(unsigned first, PPCContext &c, std::uint8_t *) {
         s.fpr_bits[i] = ReadU64(*bounds_oracle::original_memory, Address(s.r[12] - 8 * (32 - i)));
     crt_full_oracle::ToPpc(c, s);
 }
+void SphereGprSave(PPCContext &c, std::uint8_t *) {
+    auto s = crt_full_oracle::FromPpc(c);
+    auto &m = *bounds_oracle::original_memory;
+    for (unsigned i = 26; i < 32; ++i)
+        WriteU64(m, Address(s.r[1] - 16 - 8 * (31 - i)), s.r[i]);
+    m.WriteU32(Address(s.r[1] - 8), Address(s.r[12]));
+}
+void SphereGprRestore(PPCContext &c, std::uint8_t *) {
+    auto s = crt_full_oracle::FromPpc(c);
+    auto &m = *bounds_oracle::original_memory;
+    for (unsigned i = 26; i < 32; ++i)
+        s.r[i] = ReadU64(m, Address(s.r[1] - 16 - 8 * (31 - i)));
+    s.r[12] = m.ReadU32(Address(s.r[1] - 8));
+    s.lr = s.r[12];
+    crt_full_oracle::ToPpc(c, s);
+}
 int main() {
     try {
         const char *path = std::getenv("LO_BOUNDS_CONSTANTS");
         if (!path)
             throw std::runtime_error("LO_BOUNDS_CONSTANTS required");
         std::ifstream f(path, std::ios::binary);
-        f.read(reinterpret_cast<char *>(bounds_oracle::constants.data()), 4);
-        if (f.gcount() != 4)
+        f.read(reinterpret_cast<char *>(bounds_oracle::constants.data()), 8);
+        if (f.gcount() != 8)
             throw std::runtime_error("bounds constant bundle size");
         for (unsigned n : {0u, 1u, 3u, 4u, 7u})
             bounds_oracle::Check(n);
         for (unsigned n : {2u, 3u, 4u})
             bounds_oracle::Check(n, true);
-        std::puts("PASS mesh-bounds-math61 8 original leaf / independent sphere cases");
+        for (unsigned n : {1u, 4u, 7u})
+            bounds_oracle::Check(n, false, true);
+        std::puts("PASS mesh-bounds-math61 11 original local-chain / independent sphere cases");
         return 0;
     } catch (const std::exception &e) {
         std::fprintf(stderr, "%s\n", e.what());

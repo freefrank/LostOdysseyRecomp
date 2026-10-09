@@ -1,3 +1,7 @@
+## Root direct continuation: recursive support sphere (2026-10-09)
+
+`mesh_bounds_math61` adds BC9928 mutable support-prefix recursion. Outside points move to the front, join the boundary constraint, and recursively enclose earlier points; four support points terminate through the tetrahedral constructor. Eleven family cases now compose the actual original recursive and support leaf bodies, checking Full72/RAM/CSR, mutated pointer ordering and independent enclosure. External LO_BOUNDS_CONSTANTS is now eight bytes: radius epsilon and empty-radius sentinel. Full Clang library passes. BC9AF0 allocation/orchestration and BC9C68 candidate selection remain next.
+
 ## Root direct continuation: support-point circumspheres (2026-10-09)
 
 `mesh_bounds_math61` adds BC9580/BC9600/BC9780 two-, three-, and four-point sphere constructors. Midpoint, cross-product circumcenter, and determinant/cofactor arithmetic preserve binary32 stages, radius epsilon, and red-zone FPR state. Eight family cases pass complete original leaves with independent known circumcenters/radii and enclosure. Four-byte radius epsilon is supplied externally through LO_BOUNDS_CONSTANTS; no image-derived bundle committed. Degenerate support sets are not part of focused validation. Full library passes. These close BC9928 recursive solver leaves; recursive orchestration and bounds-wrapper fallback still remain.
