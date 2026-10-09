@@ -1,3 +1,7 @@
+## Root direct continuation: eight-word flat import (2026-10-09)
+
+`tree_flat_load61` now also handles BDB350 32-byte records, sharing the 36-byte endian/read flow while retaining distinct size arithmetic, allocation registers and call continuations. Six total pinned-original native/swapped/allocation-failure cases pass Full72/RAM/callbacks and independent payload/count/owner assertions; full Clang library passes. No new test framework or defensive behavior. Historical baseline and runtime remain unchanged.
+
 ## Root direct continuation: compact quantized format (2026-10-09)
 
 Existing quantized codecs now also recover BDB7F8 import and BDB660 export for 20-byte records (six halfwords, two topology words, six owner scales). Shared implementations select format-specific size arithmetic, register/frame layout and continuation addresses rather than duplicate the codecs. Both original 24-byte cases remain passing; six import and four export cases total pass Full72/RAM/host CSR and independent endian output/scale assertions. Full Clang library passes. Two additional implementation addresses only; historical baseline and runtime stay unchanged.

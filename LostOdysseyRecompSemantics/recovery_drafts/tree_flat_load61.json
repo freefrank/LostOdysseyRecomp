@@ -9,11 +9,20 @@
       "instruction_count": 190,
       "body_sha256": "0bcf28090734ba41ec55705d02463a55ba9080219058f06e140d6a009aa057b4",
       "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BDB350",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 27977,
+      "instruction_count": 175,
+      "body_sha256": "2bc67b13c67cfa978d8ed51008ca76311835d3aff9b256d52c1a67c193c4e662",
+      "status": "focused_original_ppc_validated"
     }
   ],
   "implementation": {
     "entries": [
-      "82BDBED8"
+      "82BDBED8",
+      "82BDB350"
     ],
     "header": "include/lo_semantics/tree_flat_load61.h",
     "source": "src/tree_flat_load61.cpp",
@@ -25,9 +34,9 @@
     "runtime_validated": false,
     "complete": false,
     "date": "2026-10-09",
-    "focused_original_ppc_cases": 3,
+    "focused_original_ppc_cases": 6,
     "library_validated": true,
-    "case_scope": "Native and swapped-endian two-node reads, replace-old storage, allocation failure. Full72/RAM/callback comparison and independent payload/count/ownership assertions. Reader return ignored as original; no new defensive behavior.",
+    "case_scope": "Native and swapped-endian two-node reads, replace-old storage, allocation failure. Full72/RAM/callback comparison and independent payload/count/ownership assertions. Reader return ignored as original; no new defensive behavior. Includes eight-word 32-byte sibling BDB350 with native/swapped and allocation-failure cases; original nine-word format remains passing.",
     "platform": "Linux x64 Clang 19.1.7; pinned regenerated PPC; mmap guest overlay",
     "mapping_limit": "Historical catalog membership unverified; no baseline mapping credit."
   }
