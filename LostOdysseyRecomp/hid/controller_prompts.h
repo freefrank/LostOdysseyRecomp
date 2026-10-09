@@ -60,5 +60,6 @@ public:
             if (device.id == active_) return IsPlayStation(device.type);
         return false;
     }
+    bool KeyboardActive() const { return active_ == UINT32_MAX; }
 };
 }

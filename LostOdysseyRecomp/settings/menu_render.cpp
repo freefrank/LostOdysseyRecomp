@@ -578,6 +578,39 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
         else text(x, y, 24, 24, std::wstring(1, letter), 15, ink, true, 1, outline, 12);
     };
 
+    if (current.titleHint)
+    {
+        // The key on its own, so a PlayStation face does not move the label off
+        // the menu font. Drawn over black and over white: the difference is
+        // the coverage, so the legend keeps the font's outline in straight alpha.
+        constexpr int x = 1036, y = 646, key = 22, w = 180, h = 28;
+        const auto [x0, y0, x1, y1] = rect(x - 8, y - 4, w + 16, h + 8);
+        const uint32_t face = MakeColor(255, 196, 197, 194);
+        const auto legend = [&] {
+            text(x, y, key, h, current.help.substr(0, 1), 18, face, false, 1, outline, 12);
+            text(x + key, y, w - key, h, current.help.substr(1), 18, face, false, 0, outline, 12);
+        };
+        legend();
+        const std::vector<uint32_t> overBlack(pixels.begin() + size_t(y0) * width, pixels.begin() + size_t(y1) * width);
+        fill(x - 8, y - 4, w + 16, h + 8, 0xFFFFFFFFu);
+        legend();
+        for (int py = 0; py < int(height); ++py)
+            for (int px = 0; px < int(width); ++px)
+            {
+                auto &p = pixels[size_t(py) * width + px];
+                if (py < y0 || py >= y1 || px < x0 || px >= x1) { p = 0; continue; }
+                const uint32_t b = overBlack[size_t(py - y0) * width + px];
+                int spread = 0;
+                for (int c = 0; c < 3; ++c) spread += int((p >> (8 * c)) & 255) - int((b >> (8 * c)) & 255);
+                const int alpha = std::clamp(255 - spread / 3, 0, 255);
+                const auto channel = [&](int c) {
+                    return uint8_t(alpha ? std::min(255, int((b >> (8 * c)) & 255) * 255 / alpha) : 0);
+                };
+                p = host_ui::PackRgba(channel(0), channel(1), channel(2), uint8_t(alpha));
+            }
+        return true;
+    }
+
     if (current.neuralRendering.open)
     {
         // Presentation paints the DLSS / DLSS + NR comparison in the transparent

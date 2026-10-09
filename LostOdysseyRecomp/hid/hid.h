@@ -13,6 +13,8 @@ namespace hid
     void PumpHostInput();
     // Atomic presentation hint for host UI; does not change the guest's buttons.
     bool UsesPlayStationPrompts();
+    // Auto prompts after a key press: host UI names keyboard keys instead.
+    bool UsesKeyboardPrompts();
     // Button icon style: 0 Auto (follow the last active controller), 1 Xbox, 2 PlayStation.
     void SetPromptStyle(uint32_t style);
     // Physical SDL controllers may be discovered through HIDAPI without an Android InputDevice.

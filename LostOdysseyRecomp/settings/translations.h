@@ -643,6 +643,7 @@ static inline const wchar_t *Translate(uint32_t language, const wchar_t *en, con
         {L"Yes", L"はい", L"예", L"是"},
         {L"No", L"いいえ", L"아니요", L"否"},
         {L"Settings", L"設定", L"설정", L"设置"},
+        {L"Y: Settings", L"Y：設定", L"Y: 설정", L"Y：设置"},
         {L"Gameplay", L"ゲーム", L"게임", L"游戏"},
         {L"Audio", L"サウンド", L"오디오", L"声音"},
         {L"Graphics", L"グラフィックス", L"그래픽", L"图像"},

@@ -60,6 +60,9 @@ struct MenuSnapshot
     // Only the panels, without title, tabs, rows or help: what the content
     // fades in over when the menu opens.
     bool backdropOnly = false;
+    // Only help, a key then its label, at the title menu's lower right as
+    // straight alpha over transparency: the Settings legend (title_entry.cpp).
+    bool titleHint = false;
 };
 // The list cursor arrow, top-left corner in the 1280x720 layout.
 struct MenuArrow
