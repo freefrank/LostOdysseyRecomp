@@ -1,0 +1,52 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Original aligned scratch reserve, counting mode and scoped arena mode, with original reserve lower composed.",
+  "entries": [
+    {
+      "address": "82BDE628",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 35613,
+      "instruction_count": 67,
+      "body_sha256": "6923e9a22d1b0b42d5a5a0ec7a2d8e97299b08b6e83e0bd25743157aed16cd6f",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BDE738",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 35767,
+      "instruction_count": 54,
+      "body_sha256": "33727274a010efde4556dc5d3070af55c37247f94f079a6f47466cbfcfef4054",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BDE810",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 35889,
+      "instruction_count": 77,
+      "body_sha256": "417bb0d7f43a8a6674592936cbfee14ca72ffee605c06c49c9ec98e4b7a6b49c",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BDE628",
+      "82BDE738",
+      "82BDE810"
+    ],
+    "header": "include/lo_semantics/scratch_arena61.h",
+    "source": "src/scratch_arena61.cpp",
+    "oracle": "tests/scratch_arena61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 8,
+    "library_validated": true,
+    "case_scope": "Spare capacity, fresh/reallocation, active-cursor diagnostic, counting begin/end, scoped begin/end. Full72/RAM/callbacks and independent alignment/global-state assertions. External allocator/logger boundaries; no concurrency or failure rollback claim.",
+    "platform": "Linux x64 Clang 19.1.7; pinned regenerated PPC; mmap guest overlay",
+    "mapping_limit": "Historical catalog membership unverified; no baseline mapping credit."
+  }
+}

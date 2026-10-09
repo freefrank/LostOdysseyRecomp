@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "scratch-arena61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/scratch_arena61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/scratch_arena61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nvoid ArenaIndirect(std::uint32_t,PPCContext&,std::uint8_t*);\nvoid ArenaSave(unsigned,PPCContext&,std::uint8_t*);\nvoid ArenaRestore(unsigned,PPCContext&,std::uint8_t*);\n#undef PPC_CALL_INDIRECT_FUNC\n#define PPC_CALL_INDIRECT_FUNC(t) ArenaIndirect((t),ctx,base)\n#define sub_82BDE628 __imp__sub_82BDE628\n#define __savegprlr_29(c,b) ArenaSave(29,c,b)\n#define __restgprlr_29(c,b) ArenaRestore(29,c,b)\n#define __savegprlr_28(c,b) ArenaSave(28,c,b)\n#define __restgprlr_28(c,b) ArenaRestore(28,c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/scratch_arena61.cpp"
+      ]
+    }
+  ]
+}

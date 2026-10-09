@@ -1,3 +1,7 @@
+## Root direct continuation: global scratch arena (2026-10-09)
+
+`scratch_arena61` recovers E628 aligned reusable reserve, E738 counting/high-water mode and E810 scoped region/alignment switching. Original allocation/reallocation, diagnostic and global field ordering remain explicit; no new rollback or free is added. Eight composed-original cases pass Full72/RAM/callbacks and independent alignment/counting/scope-state assertions. Full Clang library passes. Global concurrency and failure paths remain unvalidated; three implementation addresses, no historical mapping/runtime credit.
+
 ## Root direct continuation: growable output stream (2026-10-09)
 
 `growable_output61` recovers E330/E378/E3C0/E408/E450 scalar virtual writers, E498 concrete buffer append and E2C8 payload cleanup. Shared append grows capacity to required plus 4096, copies used bytes and frees old allocation before appending; no new failure guard is added. Nine original scalar/append/cleanup cases pass Full72/RAM/host CSR/callback traces and independent byte/capacity/owner assertions with the actual shared copy lower. Full Clang library passes. Seven implementation addresses added, no historical baseline/runtime claim.
