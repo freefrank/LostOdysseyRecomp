@@ -1,3 +1,7 @@
+## Root direct continuation: complete sphere candidate selection (2026-10-09)
+
+`mesh_bounds_select61` closes BC9AF0 temporary pointer-array allocation/recursive candidate and BC9C68 finite, nonnegative, smaller-radius selection against the axis-extreme sphere. Five cases compose the complete original sphere graph (shared accepted classifier only), checking Full72/RAM/CSR/callbacks/ownership and independent enclosure: standalone candidate, exact planar fallback, tighter tetrahedral candidate, empty input, null input. Temporary array is freed through the actual context slots +8/+20. Full library passes. The initial symmetric seven-point fixture naturally selected the original sphere; changed only that fixture to asymmetric tetrahedral points to exercise the tighter-candidate branch. No implementation change was needed. B9EA90 still awaits original pow handling.
+
 ## Root direct continuation: recursive support sphere (2026-10-09)
 
 `mesh_bounds_math61` adds BC9928 mutable support-prefix recursion. Outside points move to the front, join the boundary constraint, and recursively enclose earlier points; four support points terminate through the tetrahedral constructor. Eleven family cases now compose the actual original recursive and support leaf bodies, checking Full72/RAM/CSR, mutated pointer ordering and independent enclosure. External LO_BOUNDS_CONSTANTS is now eight bytes: radius epsilon and empty-radius sentinel. Full Clang library passes. BC9AF0 allocation/orchestration and BC9C68 candidate selection remain next.

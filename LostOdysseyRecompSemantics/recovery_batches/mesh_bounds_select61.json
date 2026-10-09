@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "mesh-bounds-select61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/mesh_bounds_select61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/mesh_bounds_select61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nvoid SelectIndirect(std::uint32_t,PPCContext&,std::uint8_t*);\n#undef PPC_CALL_INDIRECT_FUNC\n#define PPC_CALL_INDIRECT_FUNC(t) SelectIndirect((t),ctx,base)\nvoid SelectClassify(PPCContext&,std::uint8_t*);\n#define sub_82B7DFC0 SelectClassify\nvoid SelectGprSave(PPCContext&,std::uint8_t*);\nvoid SelectGprRestore(PPCContext&,std::uint8_t*);\n#define __savegprlr_26 SelectGprSave\n#define __restgprlr_26 SelectGprRestore\nvoid SelectFpSave(unsigned,PPCContext&,std::uint8_t*);\nvoid SelectFpRestore(unsigned,PPCContext&,std::uint8_t*);\n#define __savefpr_19(c,b) SelectFpSave(19,c,b)\n#define __restfpr_19(c,b) SelectFpRestore(19,c,b)\n#define __savefpr_23(c,b) SelectFpSave(23,c,b)\n#define __restfpr_23(c,b) SelectFpRestore(23,c,b)\n#define __savefpr_27(c,b) SelectFpSave(27,c,b)\n#define __restfpr_27(c,b) SelectFpRestore(27,c,b)\nPPC_FUNC_IMPL(__imp__sub_82BC9AF0);\n#define sub_82BC9AF0 __imp__sub_82BC9AF0\nPPC_FUNC_IMPL(__imp__sub_82BC9C68);\n#define sub_82BC9C68 __imp__sub_82BC9C68\nPPC_FUNC_IMPL(__imp__sub_82BC9040);\n#define sub_82BC9040 __imp__sub_82BC9040\nPPC_FUNC_IMPL(__imp__sub_82BC9580);\n#define sub_82BC9580 __imp__sub_82BC9580\nPPC_FUNC_IMPL(__imp__sub_82BC9600);\n#define sub_82BC9600 __imp__sub_82BC9600\nPPC_FUNC_IMPL(__imp__sub_82BC9780);\n#define sub_82BC9780 __imp__sub_82BC9780\nPPC_FUNC_IMPL(__imp__sub_82BC9928);\n#define sub_82BC9928 __imp__sub_82BC9928\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/mesh_bounds_select61.cpp"
+      ]
+    }
+  ]
+}

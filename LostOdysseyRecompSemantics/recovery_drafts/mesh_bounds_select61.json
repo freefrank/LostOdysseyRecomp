@@ -1,0 +1,82 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Allocated recursive candidate and finite/smaller sphere selection.",
+  "entries": [
+    {
+      "address": "82BC9AF0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 50222,
+      "instruction_count": 94,
+      "body_sha256": "060d091b33f52103c51b43c5501537d7c9ebe34b637bc24fff4652cbb62c4334",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BC9C68",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 50450,
+      "instruction_count": 72,
+      "body_sha256": "1fb6fce3becd60aaa0c987c8c9b076df78808d6d9b1c44a605acb7a6c5ac157f",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BC9040",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 48496,
+      "instruction_count": 336,
+      "body_sha256": "346c8f6cf198587c28d2f5fbcc03a2b886100eef0e70bce404c0cd0fe722d528",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BC9580",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 49376,
+      "instruction_count": 32,
+      "body_sha256": "68ebae899c2259ccff3fcd6a3a321ce78f2061c8cb90cda2d9cd93452bf2f9a1",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BC9600",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 49462,
+      "instruction_count": 95,
+      "body_sha256": "b9a5bdb49609da59c11bcab10b7c89266051a19298d085359433dd14d2af75f2",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BC9780",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 49680,
+      "instruction_count": 105,
+      "body_sha256": "9ab7470c2a2382b1f66e4b203ef48fb516335b71d7f6441131c10bf3701b9858",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BC9928",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 49921,
+      "instruction_count": 114,
+      "body_sha256": "47b3c0f06c8923f8578a132a6ee05bfb65a0dfc4e939febac12dac365f3de58f",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BC9AF0",
+      "82BC9C68"
+    ],
+    "header": "include/lo_semantics/mesh_bounds_select61.h",
+    "source": "src/mesh_bounds_select61.cpp",
+    "oracle": "tests/mesh_bounds_select61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 5,
+    "library_validated": true,
+    "case_scope": "Complete actual original sphere graph, shared accepted classifier only. Recursive allocation/free, axis fallback, selected recursive candidate and invalid empty/null input. Full72/RAM/CSR/events/ownership and independent enclosure/known planar sphere. External eight-byte LO_BOUNDS_CONSTANTS; no allocation fault matrix or gameplay claim.",
+    "platform": "Linux x64 Clang19; pinned PPC; mmap guest overlay"
+  }
+}
