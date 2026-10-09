@@ -230,6 +230,7 @@ add_library(LostOdysseyRecompSemantics STATIC
     src/mesh_vertex_normals61.cpp
     src/mesh_polygon_triangulate61.cpp
     src/mesh_geometry_math61.cpp
+    src/mesh_mass_math61.cpp
     src/mesh_edge_flags61.cpp
     src/mesh_cache_build61.cpp
     src/mesh_normal_encode61.cpp

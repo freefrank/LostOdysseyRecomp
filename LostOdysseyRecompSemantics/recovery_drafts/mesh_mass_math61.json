@@ -1,0 +1,42 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Strided triangle plane and density-scaled centroid inertia from volume moments.",
+  "entries": [
+    {
+      "address": "82BCD300",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 58550,
+      "instruction_count": 63,
+      "body_sha256": "7a521cca6220731c4d6f2b4a3b309c90eb8ad548c6aa25f18ec4e49b4c6e9e18",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BCCCA8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 57698,
+      "instruction_count": 103,
+      "body_sha256": "bf199f0004a1c666e40fa4a7c5397ebe9097a5c6ee531df9799eb2878cd58fd0",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BCD300",
+      "82BCCCA8"
+    ],
+    "header": "include/lo_semantics/mesh_mass_math61.h",
+    "source": "src/mesh_mass_math61.cpp",
+    "oracle": "tests/mesh_mass_math61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 4,
+    "library_validated": true,
+    "case_scope": "Complete original leaves; Full72/RAM/CSR plus independent strided plane, degenerate plane, translated uniform cube inertia and zero-volume branch. No mass integration or gameplay claim.",
+    "platform": "Linux x64 Clang19; pinned PPC; mmap guest overlay"
+  }
+}

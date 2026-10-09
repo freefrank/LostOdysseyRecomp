@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "mesh-mass-math61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/mesh_mass_math61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/mesh_mass_math61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/mesh_mass_math61.cpp"
+      ]
+    }
+  ]
+}

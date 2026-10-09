@@ -1,3 +1,7 @@
+## Root direct continuation: mass-property plane and inertia (2026-10-09)
+
+`mesh_mass_math61` closes BCD300 strided triangle plane and BCCCA8 density-scaled inertia with parallel-axis correction. Four complete-original-leaf cases pass Full72/RAM/CSR and independent strided/degenerate planes, translated uniform cube inertia and zero-volume handling. Full Clang library passes. Projection/face/volume integration and cached owner assembly remain next, so this is not a complete mass-properties pipeline or gameplay claim.
+
 ## Root direct continuation: CLHL geometry and valence wrapper (2026-10-09)
 
 `mesh_geometry_stream61` adds BB3220: ICE/CLHL v0, complete CVHL geometry and lazily constructed ICE/VALE v2 cache. Six focused cases now pass; two compose the actual original CLHL and CVHL bodies with shared concrete cache/stream lowers. Independent nested field parsing, borrowed cache publication and twelve retained mesh/cache allocations pass. Full Clang library passes. Next dependency is B9F418 mass properties; no historical mapping or gameplay credit.

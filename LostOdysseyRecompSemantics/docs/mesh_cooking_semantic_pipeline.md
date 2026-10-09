@@ -125,6 +125,15 @@ BB3220 wraps the geometry in ICE/CLHL v0 and appends ICE/VALE v2. It lazily
 constructs the adapter +16 cache and publishes its borrowed payload at source
 +84; the adapter retains ownership of that cache and its two arrays.
 
+## Mass-property math
+
+BCD300 reads positions at descriptor +80 with byte stride +72, preserving
+binary32 geometry operations while exporting four binary64 plane coefficients.
+BCCCA8 consumes volume/first/second/product moments at +288..360 and density
+at +56, writes mass +48, and emits a symmetric binary64 inertia tensor about
+the centroid. Centroid and parallel-axis products intentionally round through
+binary32. Projection, face and volume integration are still open.
+
 ## Remaining upper dependencies
 
 82B9C7D8 (mesh cooking orchestration) is still incomplete. Its constructor,
