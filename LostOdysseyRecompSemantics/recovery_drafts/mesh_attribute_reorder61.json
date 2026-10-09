@@ -1,0 +1,36 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Private complete original body pinned by SHA256; ordinary guest allocator/release callbacks remain borrowed full-state boundaries.",
+  "entries": [
+    {
+      "address": "82BB3CF8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 58718,
+      "instruction_count": 272,
+      "body_sha256": "ee1bc69c7f350dc9767b49d3b5c8f8087673a11b064518a33d6f18d5c1733684",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 3,
+    "library_validated": true,
+    "library": "PASS incremental complete Clang 19 CMake static library; existing unused-function warning exception retained.",
+    "platform": "Linux x64; Clang 19.1.7; genuine XEX regenerated with pinned XenonRecomp ddd128bc plus tracked patch; existing oracle guest-window allocation overlaid with mmap/mprotect only",
+    "mapping_credit": 0,
+    "mapping_limit": "Fixed historical catalog.sqlite unavailable; do not infer membership from regenerated sources. 82BB25D0 is explicitly external in prior handoff.",
+    "runtime_validated": false,
+    "complete": false,
+    "limits": "Full72/RAM and allocation/free call boundaries for selected valid indices only. No independent host CSR, allocation failure, fault/MMIO, concurrency or runtime acceptance.",
+    "case_scope": "Three complete original-body cases: empty; byte categories with optional halfword columns and composed IDs; wide categories with absent original IDs. Repeated nonidentity gather indices 2,0,2,1. Full72/RAM/allocator-free callbacks plus live-allocation and frame assertions compared. Actual host CSR not independently compared by integer-copy fixture. Guest allocations transfer to columns after prior buffers are freed; malformed indices, allocation failure, callback mutation matrix and runtime untested."
+  },
+  "implementation": {
+    "entries": [
+      "82BB3CF8"
+    ],
+    "header": "include/lo_semantics/mesh_attribute_reorder61.h",
+    "source": "src/mesh_attribute_reorder61.cpp",
+    "oracle": "tests/mesh_attribute_reorder61_oracle.cpp"
+  }
+}

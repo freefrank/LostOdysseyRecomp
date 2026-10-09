@@ -39,6 +39,15 @@ including callback-driven child rewiring. A leaf return r3 overwrite was fixed
 at its actual branch boundary. Visitors are mutable guest service boundaries;
 acyclic valid child pairs are the selected contract. Both libraries build.
 
+`mesh_attribute_reorder61` recovers BB3CF8 (272 instructions): gather packed
+coordinates and optional halfword/ID/category columns by index, free each old
+buffer, reload the live owner and install the replacement allocation. Three
+original-body cases pass Full72/RAM/allocation/free traces and ownership checks,
+including repeated nonidentity indices and byte/halfword category layouts.
+Library build passes. Count reload and zero-count scratch ordering after allocator
+callbacks were corrected in review. Host CSR is not independently compared by
+this integer-copy fixture; allocation failures/invalid indices remain untested.
+
 Bounded private-image investigation establishes vtables at 820D58A0 (installed
 by B9CC00) and 820D5C58 (installed by B9E220/B9E2D8/B9E388). Their slots +0C,
 +14 and +18 point to B9DD90, B9DF18 and B9DFA0 respectively. B9CBC0 occurs at
