@@ -159,7 +159,7 @@
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
     "unit_count": 119,
-    "distinct_entries": 310,
+    "distinct_entries": 311,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -1181,10 +1181,11 @@
           "82BBB0A8",
           "82BB3060",
           "82B9E8A0",
-          "82B9F198"
+          "82B9F198",
+          "82B9C7D8"
         ],
-        "focused_smoke_cases": 2,
-        "validation": "logic/ABI smoke for indexed path; upper B9F198 compile/source-review only; not Full72 differential"
+        "focused_smoke_cases": 3,
+        "validation": "logic-first indexed cooking main path executes through serialization/teardown; 3 smoke cases; no Full72 claim; BA5CF8 remains explicit guest boundary"
       }
     ]
   },
@@ -1246,7 +1247,7 @@
     "path": "triangle threshold8 -> leaf bounds export -> box threshold1 -> range remap -> full/compact float/quantized strategy -> complete owned allocation teardown",
     "external_services": "guest allocation/free and native FP control",
     "limits": "Original upper shares recovered lowers; teardown checked for complete tracked ownership release. No independent all-original whole-chain or gameplay proof; no baseline credit.",
-    "indexed_pipeline_continuation": "BB9800 adapter full-state focused case passed. BBB0A8/BB3060/B9E8A0 logic-first implementations pass strided u32/u16 smoke; B9F198 validation/tree/bounds/support orchestration compiled, full run pending. BA5CF8 preprocessing remains before overall B9C7D8."
+    "indexed_pipeline_continuation": "B9C7D8 indexed tetrahedron path now runs through B9F198, concrete geometry/tree/bounds/support, serialization and cleanup: 564 NXS/CVXM bytes and zero live allocations. BA5CF8 hull preprocessing remains an explicit guest CallDirect boundary."
   },
   "implementation_count_audit_at_8e653d9": {
     "commit": "8e653d91fb1f3b5174f0355fecf1fa752f450869",

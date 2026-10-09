@@ -33,6 +33,14 @@
       "instruction_count": 159,
       "body_sha256": "821f431fd83097e8695a2ed76dabb30b33bf1e45659530c2a0a49fe081293ba3",
       "status": "logical_implementation_compile_validated"
+    },
+    {
+      "address": "82B9C7D8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 3941,
+      "instruction_count": 200,
+      "body_sha256": "9e910184fb748b29083c4ad45afc4131c94fdd520cb7fb1d8894d1abe5fe19d9",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -40,11 +48,13 @@
       "82BBB0A8",
       "82BB3060",
       "82B9E8A0",
-      "82B9F198"
+      "82B9F198",
+      "82B9C7D8"
     ],
     "header": "include/lo_semantics/mesh_indexed_cook61.h",
     "source": "src/mesh_indexed_cook61.cpp",
-    "smoke": "tests/mesh_indexed_cook61_smoke.cpp"
+    "smoke": "tests/mesh_indexed_cook61_smoke.cpp",
+    "main_smoke": "tests/mesh_cook_main61_smoke.cpp"
   },
   "validation": {
     "status": "compiled_with_focused_logic_smoke",
@@ -53,7 +63,8 @@
     "library_validated": true,
     "runtime_validated": false,
     "complete": false,
-    "focused_smoke_cases": 2,
-    "case_scope": "Strided u32/u16 tetrahedron paths through B9E8A0, BB3060, BBB0A8, BB9800 and recovered indexed/polygon lowers. Checks result counts, preserved GPR/stack/LR, adapter metadata and retained ownership. B9F198 upper orchestration is compiled and source-reviewed, not executed end-to-end. Supplied external polygon path is source-reviewed, not exercised. No original Full72 differential claim for these high-level entries."
+    "focused_smoke_cases": 3,
+    "case_scope": "Two strided u32/u16 tetrahedron paths check result counts, preserved ABI, adapter metadata and retained ownership. One B9C7D8 indexed tetrahedron path executes construction, B9F198 geometry/tree/bounds/support, NXS/CVXM serialization and destruction: 564 output bytes, NXS header and zero live allocations. Concrete recovered lowers are used. Not original Full72 differential or gameplay validation. Supplied polygon input and point-only alternative-preprocessing paths are not smoke-tested.",
+    "remaining_boundary": "B9C7D8 hull preprocessing BA5CF8 remains an explicit CallDirect guest boundary. This is not a recovered/credited entry and is never substituted with a no-op or success."
   }
 }

@@ -8,6 +8,8 @@
 #include "lo_semantics/mesh_polygon_plane61.h"
 #include "lo_semantics/mesh_vertex_dedup61.h"
 #include "lo_semantics/recovery_abi.h"
+#include "lo_semantics/mesh_cook_storage61.h"
+#include "lo_semantics/mesh_cook_stream61.h"
 #include <bit>
 #include <initializer_list>
 namespace lo::semantic::gpu::mesh_indexed_cook61 {
@@ -90,6 +92,23 @@ struct Cook {
             break;
         case 0x82bb3060u:
             Adapter();
+            break;
+        case 0x82b9e4b0u:
+        case 0x82b9e518u:
+        case 0x82ba01c0u:
+            (void)mesh_cook_storage61::Apply(e, m, d.lifetime, s);
+            break;
+        case 0x82b9f6f0u:
+            (void)mesh_cook_stream61::Apply(e, m, d, s);
+            break;
+        case 0x82b9f198u:
+            ValidateBuild();
+            break;
+        case 0x82ba5cf8u:
+            // The alternative hull preprocessing subsystem is not recovered
+            // here. Keep its existing guest implementation as an explicit,
+            // mutable boundary; never substitute success or skip its output.
+            d.lifetime.guest.CallDirect(e, m, s);
             break;
         case 0x82b9e8a0u:
             Strided();
@@ -284,6 +303,89 @@ struct Cook {
         Word(s.r[1], back);
         return Address(s.r[1] + 80);
     }
+    bool ValidDescriptor(std::uint32_t input) {
+        const auto count = Word(input), flags = Word(input + 24);
+        if (count < 3 || (count > 65535 && (flags & 2)) || !Word(input + 16) ||
+            Word(input + 8) < 12)
+            return false;
+        if (Word(input + 20))
+            return Word(input + 4) >= 2 && Word(input + 12) >= ((flags & 2) ? 6u : 12u);
+        return (flags & 4) != 0;
+    }
+    std::uint32_t ContextAllocate(std::uint32_t bytes, unsigned tag, GuestAddress ret) {
+        s.r[3] = Word(0x832df548u);
+        s.r[4] = bytes;
+        s.r[5] = tag;
+        s.ctr = Word(Word(s.r[3]) + 8);
+        s.lr = ret;
+        d.edge.engine.sort.guest.CallIndirect(Address(s.ctr) & ~3u, m, s);
+        return Address(s.r[3]);
+    }
+    void ContextFree(std::uint32_t pointer, GuestAddress ret) {
+        s.r[3] = Word(0x832df548u);
+        s.r[4] = pointer;
+        s.ctr = Word(Word(s.r[3]) + 20);
+        s.lr = ret;
+        d.edge.engine.sort.guest.CallIndirect(Address(s.ctr) & ~3u, m, s);
+    }
+    bool MainBody(std::uint32_t input, std::uint32_t stream) {
+        constexpr std::uint32_t settings = 0x832dc180u;
+        if (!Word(settings + 660) || !ValidDescriptor(input))
+            return false;
+        const auto sp = Address(s.r[1]), descriptor = sp + 128, temporary = sp + 96,
+                   preprocess = sp + 160;
+        for (unsigned i = 0; i < 7; ++i)
+            Word(descriptor + 4 * i, Word(input + 4 * i));
+        const auto flags = Word(descriptor + 24);
+        bool inflate = (flags & 4) && (flags & 8), alternate = (flags & 4) && (flags & 16);
+        if (alternate)
+            Call(0x82b9c298u, 0x82b9c914u,
+                 {1, 0xffffffff820d5880ull, 335, 0, 0xffffffff820d5910ull});
+        auto owner = ContextAllocate(348, 14, 0x82b9c934u);
+        if (!owner)
+            return false;
+        Call(0x82b9e4b0u, 0x82b9c940u, {owner});
+        owner = Address(s.r[3]);
+        if (!owner)
+            return false;
+        for (unsigned off : {160, 164, 168, 172, 100, 104, 108, 112, 116})
+            Word(sp + off, 0);
+        Float(sp + 176, Float(0x82000d6cu));
+        Float(sp + 180, Float(0x82000d7cu));
+        Word(sp + 184, 4096);
+        m.WriteU8(temporary, 1);
+        if (!alternate && (flags & 4)) {
+            Word(preprocess, 5);
+            Word(preprocess + 4, Word(descriptor));
+            Word(preprocess + 8, Word(descriptor + 16));
+            Word(preprocess + 12, Word(descriptor + 8));
+            Float(preprocess + 20, Float(inflate ? settings + 4 : 0x82000e50u));
+            Call(0x82ba5cf8u, 0x82b9ca20u, {sp + 80, preprocess, temporary});
+            if (Address(s.r[3]) == 0) {
+                Word(descriptor + 16, Word(temporary + 8));
+                Word(descriptor, Word(temporary + 4));
+                Word(descriptor + 4, Word(temporary + 12));
+                Word(descriptor + 8, 12);
+                Word(descriptor + 12, 12);
+                Word(descriptor + 24, Word(descriptor + 24) & ~4u);
+                Word(descriptor + 20, Word(temporary + 20));
+            }
+        }
+        Call(0x82b9f198u, 0x82b9ca6cu, {owner, descriptor});
+        bool ok = Success();
+        if (ok)
+            Call(0x82b9f6f0u, 0x82b9cac0u, {owner, stream, Word(descriptor + 24) & 32u});
+        Call(0x82b9e518u, ok ? 0x82b9cac8u : 0x82b9ca80u, {owner});
+        ContextFree(owner, ok ? 0x82b9cae0u : 0x82b9ca98u);
+        Call(0x82ba01c0u, ok ? 0x82b9caecu : 0x82b9caa4u, {sp + 80, temporary});
+        return ok;
+    }
+    void Main() {
+        auto input = Address(s.r[3]), stream = Address(s.r[4]);
+        Enter(25, 256);
+        s.r[3] = MainBody(input, stream) ? 1 : 0;
+        Leave(25, 256);
+    }
     bool ValidateBuildBody(std::uint32_t owner, std::uint32_t input) {
         const auto count = Word(input), flags = Word(input + 24);
         bool valid = count >= 3 && !(count > 65535 && (flags & 2)) && Word(input + 16) &&
@@ -400,6 +502,9 @@ struct Cook {
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     Cook c{m, d, s};
     switch (e) {
+    case 0x82b9c7d8u:
+        c.Main();
+        break;
     case 0x82b9f198u:
         c.ValidateBuild();
         break;
