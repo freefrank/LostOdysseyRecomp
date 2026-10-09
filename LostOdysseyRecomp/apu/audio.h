@@ -29,6 +29,9 @@ namespace apu
     // it every frame while the test should play; it stops by itself 0.3 s
     // after the last call with true.
     void SetTestSignal(bool on);
+    // Guest channel the speaker test is on (0 FL, 1 FR, 2 FC, 4 BL, 5 BR), or
+    // -1 while no test plays.
+    int TestSignalChannel();
     // Channels of the open device: 6 (5.1), 2 (stereo), or 0 without a device
     // or while a change is pending.
     uint32_t OutputChannels();

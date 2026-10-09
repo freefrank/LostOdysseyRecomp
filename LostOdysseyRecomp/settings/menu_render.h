@@ -51,6 +51,11 @@ struct MenuSnapshot
     HdrCalibration calibration;
     BrightnessCalibration brightness;
     NeuralRenderingTuning neuralRendering;
+    // Audio tab speaker test (Matrix phase row): the 5.1 layout is drawn under
+    // the rows, with speakerLit the guest channel the test noise is on (0 FL,
+    // 1 FR, 2 FC, 4 BL, 5 BR) or -1 for none.
+    bool speakerLayout = false;
+    int speakerLit = -1;
     std::shared_ptr<const menu_assets::Assets> assets;
     // Only the panels, without title, tabs, rows or help: what the content
     // fades in over when the menu opens.

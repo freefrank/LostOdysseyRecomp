@@ -30,6 +30,9 @@ namespace apu
 
         void Reset() { *this = {}; }
 
+        // Guest channel of the current step (its burst and the gap after it).
+        int Speaker() const { return Order[m_sample / (Burst + Gap)]; }
+
     private:
         // Paul Kellet's economy pink filter over a linear congruential source,
         // scaled to about -20 dBFS RMS.

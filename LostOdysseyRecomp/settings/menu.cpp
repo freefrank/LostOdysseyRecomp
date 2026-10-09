@@ -774,11 +774,15 @@ void Publish(uint8_t *base, uint32_t config)
             row = (row + 1) % int(GraphicsRow::Count);
 #endif
     // Speaker test noise while Matrix phase is focused and adjustable; it
-    // stops by itself once the menu stops publishing.
-    apu::SetTestSignal(tab == 1 && row == AudioMatrixPhaseRow && edit.audioOutput == AudioOutputMatrix);
+    // stops by itself once the menu stops publishing. The layout under the
+    // rows lights the speaker it is on.
+    const bool speakerTest = tab == 1 && row == AudioMatrixPhaseRow && edit.audioOutput == AudioOutputMatrix;
+    apu::SetTestSignal(speakerTest);
     Snapshot next;
     next.tab = tab;
     next.row = row;
+    next.speakerLayout = speakerTest;
+    next.speakerLit = speakerTest ? apu::TestSignalChannel() : -1;
     next.language = edit.uiLanguage;
     next.calibration = MakeHdrCalibration(edit, calibrationOpen.load());
     next.brightness = MakeBrightnessCalibration(edit, brightnessOpen.load());
@@ -1414,7 +1418,8 @@ void Publish(uint8_t *base, uint32_t config)
         next.neuralRendering == snapshot.neuralRendering &&
         next.rows == snapshot.rows && next.help == snapshot.help && next.notice == snapshot.notice && next.dialogTitle == snapshot.dialogTitle &&
         next.dialogMessage == snapshot.dialogMessage && next.dialogChoices == snapshot.dialogChoices &&
-        next.dialogSelection == snapshot.dialogSelection)
+        next.dialogSelection == snapshot.dialogSelection && next.speakerLayout == snapshot.speakerLayout &&
+        next.speakerLit == snapshot.speakerLit)
         return;
     next.revision = snapshot.revision + 1;
     snapshot = std::move(next);

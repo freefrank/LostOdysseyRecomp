@@ -79,5 +79,15 @@ int main() {
     Check(worker.get() == fallback, "separate presentation threads do not share mutable cache");
     std::vector<uint32_t> empty;
     Check(!settings::RasterizeMenu(s,0,720,empty), "invalid size still rejected");
+    // Audio-tab speaker test: the layout draws under the rows and the lit speaker moves.
+    auto audio = Snapshot();
+    audio.tab = 1; audio.row = 0; audio.rows.resize(2);
+    const auto plain = Draw(audio,1280,720);
+    audio.speakerLayout = true;
+    const auto unlit = Draw(audio,1280,720);
+    audio.speakerLit = 2;
+    const auto center = Draw(audio,1280,720);
+    audio.speakerLit = 4;
+    Check(plain != unlit && unlit != center && center != Draw(audio,1280,720), "speaker layout draws and lights each speaker");
     std::printf("PASS: %u native-resolution backdrop cache checks\n",checks);
 }

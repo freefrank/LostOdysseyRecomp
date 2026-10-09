@@ -940,6 +940,34 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
         }
     }
 
+    // Speaker test under the Audio rows: a 5.1 layout around the listener with
+    // the speaker the test noise is on lit.
+    if (current.speakerLayout)
+    {
+        const int top = rowTop + visible * rowHeight + 18;
+        cell(choiceLeft, top, choiceWidth, 640 - 8 - top, false);
+        const int centerX = choiceLeft + choiceWidth / 2, centerY = top + 132;
+        fill(centerX - 9, centerY - 9, 18, 18, muted); // listener
+        struct Speaker { int channel, dx, dy; const wchar_t *label; };
+        constexpr Speaker speakers[] = {{0, -172, -90, L"L"}, {2, 0, -104, L"C"}, {1, 172, -90, L"R"},
+                                        {4, -212, 68, L"SL"}, {5, 212, 68, L"SR"}};
+        for (const auto &speaker : speakers)
+        {
+            const bool lit = speaker.channel == current.speakerLit;
+            const int x = centerX + speaker.dx - 36, y = centerY + speaker.dy - 20;
+            cell(x, y, 72, 40, lit);
+            if (lit)
+            {
+                line(x - 4, y - 4, x + 76, y - 4, ink, 2);
+                line(x - 4, y + 43, x + 76, y + 43, ink, 2);
+                line(x - 4, y - 4, x - 4, y + 44, ink, 2);
+                line(x + 75, y - 4, x + 75, y + 44, ink, 2);
+            }
+            text(x, y, 72, 40, speaker.label, 22, lit ? selectedInk : muted, lit, 1,
+                 lit ? MakeColor(255, 222, 223, 219) : outline, 13);
+        }
+    }
+
     // Understated overflow indicators when rows exceed the visible viewport.
     if (current.scroll > 0)
         text( choiceLeft + choiceWidth - 40, rowTop - 24, 40, 20, L"▲", 13, muted, false, 1);

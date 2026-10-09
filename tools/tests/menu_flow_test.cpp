@@ -111,9 +111,11 @@ namespace apu {
 Output menuFlowOutput = Output::Stereo;
 uint32_t menuFlowMatrixPhase = 90;
 bool menuFlowTestSignal = false;
+int menuFlowTestChannel = -1;
 void SetOutput(Output output) { menuFlowOutput = output; }
 void SetMatrixPhase(uint32_t degrees) { menuFlowMatrixPhase = degrees; }
 void SetTestSignal(bool on) { menuFlowTestSignal = on; }
+int TestSignalChannel() { return menuFlowTestSignal ? menuFlowTestChannel : -1; }
 uint32_t OutputChannels() { return menuFlowOutput == Output::Surround ? 6 : 2; }
 }
 
@@ -1578,8 +1580,12 @@ int main(int argc, char** argv)
             Require(settings::edit.audioOutput == settings::AudioOutputMatrix && apu::menuFlowOutput == apu::Output::Matrix &&
                     diskConfig.audioOutput == settings::AudioOutputMatrix && saves == beforeSaves + 3 && !apu::menuFlowTestSignal,
                     "Right again selects Matrix surround; no test noise on Audio output");
+            apu::menuFlowTestChannel = 4;
             settings::pending = 2; Tick(base);
             Require(apu::menuFlowTestSignal, "test noise plays while Matrix phase is focused");
+            settings::pending = 0; Tick(base);
+            Require(settings::snapshot.speakerLayout && settings::snapshot.speakerLit == 4,
+                    "the speaker layout shows under the rows and lights the channel the noise is on");
             settings::pending = 8; Tick(base);
             Require(settings::snapshot.rows[settings::AudioMatrixPhaseRow].enabled &&
                     settings::snapshot.rows[settings::AudioMatrixPhaseRow].value == L"105°" &&
@@ -1587,8 +1593,8 @@ int main(int argc, char** argv)
                     saves == beforeSaves + 4 && applies == beforeApplies && diskConfig.width != settings::edit.width,
                     "Matrix phase steps 15 degrees, applies live and saves alone");
             settings::pending = 2; Tick(base);
-            Require(settings::row == settings::AudioVoiceRow && !apu::menuFlowTestSignal,
-                    "down from Matrix phase wraps to Voice language and stops the test noise");
+            Require(settings::row == settings::AudioVoiceRow && !apu::menuFlowTestSignal && !settings::snapshot.speakerLayout,
+                    "down from Matrix phase wraps to Voice language and stops the test noise and layout");
             settings::edit = currentConfig;
             std::puts("PASS Gameplay Vibration slider and Audio output: bounds, immediate save, live apply, Graphics edits untouched");
         }
