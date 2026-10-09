@@ -38,8 +38,17 @@ membership is available. Full semantic acceptance remains zero; runtime addition
 remain zero. Finite ordinary-RAM checks do not establish Windows, nonfinite,
 fault/MMIO, concurrency or gameplay behavior.
 
-Next active work: BAF600 grid-delta stream decoder and BAE200 related bitstream
-engine, using the newly closed lower boundaries. BD2870 is implemented by
+Validated lower stage was pushed as `92a49089` and remote-verified. BAF600 is
+now recovered as `object_sort_reader61`: 559 original instructions become an
+MSB-first bit reader, a 26-neighbor delta table, six explicit-coordinate escapes,
+and output growth/append. Four actual-body cases pass Full72/RAM/callback/host-CSR
+comparison (empty, all neighbor opcodes, explicit coordinate opcodes, mid-loop
+growth), with incremental library PASS. Coordinate widths 6/7/8, malformed input
+and trap paths remain untested. This new upper also stays zero-credit pending
+fixed cached catalog membership; no runtime replacement.
+
+Next active work: BAE200 Morton-sort/grid-delta bitstream encoder, using the
+newly closed lower boundaries and the recovered BAF600 decoder as its partner. BD2870 is implemented by
 `reader_buffer_growth61`; small initialization/tail helpers by
 `object_sort_support61`; object initialization/cleanup by `object_sort_lifecycle61`.
 Integrate one complete upper at a time, perform narrowly selected original-body

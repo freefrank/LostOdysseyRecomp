@@ -1,0 +1,18 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "object-sort-reader61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/object_sort_reader61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/object_sort_reader61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nextern \"C\" PPC_FUNC(__imp__sub_82BD09C0);\n#define sub_82BD09C0(c,b) __imp__sub_82BD09C0(c,b)\nextern \"C\" PPC_FUNC(__imp__sub_82BD2870);\n#define sub_82BD2870(c,b) __imp__sub_82BD2870(c,b)\nextern \"C\" PPC_FUNC(__imp__sub_82BD0798);\n#define sub_82BD0798(c,b) __imp__sub_82BD0798(c,b)\nextern \"C\" PPC_FUNC(__imp__sub_82B7A0B0);\n#define sub_82B7A0B0(c,b) __imp__sub_82B7A0B0(c,b)\nvoid OriginalObjectReader61Indirect(std::uint32_t,PPCContext&,std::uint8_t*);\n#undef PPC_CALL_INDIRECT_FUNC\n#define PPC_CALL_INDIRECT_FUNC(t) OriginalObjectReader61Indirect((t),ctx,base)\nvoid OriginalObjectReader61Save(unsigned,PPCContext&,std::uint8_t*);\nvoid OriginalObjectReader61Restore(unsigned,PPCContext&,std::uint8_t*);\n#define __savegprlr_21(c,b) OriginalObjectReader61Save(21,c,b)\n#define __restgprlr_21(c,b) OriginalObjectReader61Restore(21,c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/object_sort_reader61.cpp",
+        "LostOdysseyRecompSemantics/src/reader_buffer_growth61.cpp",
+        "LostOdysseyRecompSemantics/src/crt_reader_units61.cpp",
+        "LostOdysseyRecompSemantics/src/crt_close_recursive_buffer_context.cpp",
+        "LostOdysseyRecompSemantics/src/crt_copy_full_context.cpp"
+      ]
+    }
+  ]
+}
