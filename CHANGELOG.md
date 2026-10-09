@@ -13,6 +13,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - The HDR page's scene preview now follows the peak brightness with DLSS, FSR or XeSS on.
 - New DLSS 5 neural rendering setting in Settings → Graphics on Windows with DLSS: Off or 1×–4× passes. Confirm on it opens a tuning page with model, intensity, tone, structure, skin and character mask, previewed live on the current scene. It needs an RTX GPU and your own nvngx_dlssnr.dll next to the game; the game does not include it.
 - Settings → Graphics now lists upscaling, DLSS 5 neural rendering and frame generation together in one group.
+- Mod Organizer 2 support: a game plugin lets MO2 manage the mods in the game's `mods/` folder. Mod folders reached through symbolic links now load too.
 
 ### 简体中文
 
@@ -21,6 +22,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - 开启 DLSS、FSR 或 XeSS 时，HDR 页的场景预览现在会随峰值亮度变化。
 - Windows 上开启 DLSS 时，设置 → 图形新增“DLSS 5 神经渲染”：关闭或 1×–4× 次。在这一行按确认会打开调整页，可调模型、强度、色调、结构、皮肤和角色遮罩，并在当前场景上实时预览。需要 RTX 显卡，并把自备的 nvngx_dlssnr.dll 放在游戏旁边，游戏不附带。
 - 设置 → 图形里，超分、DLSS 5 神经渲染和帧生成现在排在同一组。
+- 支持 Mod Organizer 2：游戏插件让 MO2 管理游戏 `mods/` 文件夹里的 Mod。通过符号链接放入的 Mod 文件夹现在也能加载。
 
 ## [v0.9.0](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.0) — 2026-10-08
 

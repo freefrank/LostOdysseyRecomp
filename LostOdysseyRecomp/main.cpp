@@ -234,6 +234,16 @@ int main(int argc, char* argv[])
         setupOnly |= strcmp(argv[i],"--setup-only")==0;
         prepareShadersOnly |= strcmp(argv[i],"--prepare-shaders-only")==0;
         requestedInstall |= strcmp(argv[i],"--install")==0;
+        // Mod Organizer 2 cannot set environment variables for the game, so
+        // its executable arguments carry the mod mode instead.
+        if (strcmp(argv[i], "--mods-mode") == 0 && i + 1 < argc)
+        {
+#ifdef _WIN32
+            _putenv_s("LO_MODS_MODE", argv[i + 1]);
+#else
+            setenv("LO_MODS_MODE", argv[i + 1], 1);
+#endif
+        }
     }
     const auto executableDirectory = ExecutableDirectory();
 #if LO_PLATFORM_ANDROID
@@ -254,10 +264,6 @@ int main(int argc, char* argv[])
     }
 #endif
     os::user_paths::Initialize(executableDirectory);
-    const auto modsRoot = os::user_paths::UsePortableLayout()
-        ? executableDirectory / "mods"
-        : os::user_paths::DataDir() / "mods";
-    modding::Initialize(modsRoot);
     // Direct launches keep all portable data beside the executable. Explicit
     // --game launches retain their caller's working directory for isolated tests.
     if(!explicitGame && os::user_paths::UsePortableLayout()) {
@@ -335,6 +341,30 @@ int main(int argc, char* argv[])
 #ifdef _WIN32
     PreferSystemDxgiOnVulkan(executableDirectory);
 #endif
+    {
+        const auto modsRoot = os::user_paths::UsePortableLayout()
+            ? executableDirectory / "mods"
+            : os::user_paths::DataDir() / "mods";
+        // The folder shows players where mods go and gives Mod Organizer 2 an
+        // existing data directory to map its virtual files onto.
+        std::error_code ec;
+        std::filesystem::create_directories(modsRoot, ec);
+        modding::Initialize(modsRoot);
+        if (modding::Enabled())
+        {
+            std::string ids;
+            for (const auto& id : modding::ModIds()) ids += fmt::format("{}{}", ids.empty() ? "" : ", ", id);
+            const auto mode = modding::Mode();
+            LOG_INFO("mods: {} (mode {}), standalone mods: {}, overlay folder: {}",
+                FileSystem::PathUtf8(modding::Root()),
+                mode == modding::ResolutionMode::Overlay ? "overlay"
+                    : mode == modding::ResolutionMode::Standalone ? "standalone" : "combined",
+                ids.empty() ? "none" : ids,
+                std::filesystem::is_directory(modding::Root() / "overlay", ec) ? "yes" : "no");
+        }
+        for (const auto& d : modding::Diagnostics())
+            LOG_WARNING("mods: {}:{}: {}", FileSystem::PathUtf8(d.manifest), d.line, d.message);
+    }
 
 #if defined(_WIN32) || defined(__linux__) || defined(__APPLE__)
     // Check for a newer runtime before opening the content importer or setup.

@@ -11,18 +11,18 @@ These pages document the API v1 implementation developed in PR #68. A published 
 | Arbitrary textures drawn by the guest game | Not wired into the GPU upload path. Packaging a manifest row does not make that texture replaceable in-game. |
 | Font files/metrics, models and movies | Resource kinds and provider extension points reserved; no runtime consumers yet. |
 | External manager overlay | Implemented deterministic paths and isolated resolution mode. |
-| Turnkey MO2 game support | No bundled MO2 game plugin. Real MO2/USVFS acceptance remains required. |
+| Mod Organizer 2 | Game plugin in `tools/modding/mo2`; MO2 maps mods onto `mods/`. See [Mod Organizer 2](Mod-Organizer-2.md). |
 
 Mods do not modify `LO.fpi`, FPD archives or other imported game files. Mod packages contain data, not automatically loaded native libraries.
 
 ## Start here
 
-[Create and install a mod](Creating-Mods.md) explains the manifest-to-PNG-to-ZIP workflow. [API reference](Modding-API.md) defines identities, resolution, the binary image format and extension points. [Asset inventory](Asset-Inventory.md) explains the read-only four-disc resource catalog and its counting limits. [Mod Organizer 2](Mod-Organizer-2.md) describes the external-manager contract and its current limitations. [Validation](Modding-Validation.md) separates automated checks from game/MO2 acceptance. [Runtime texture replacement](Runtime-Texture-Replacement.md) records the remaining general GPU work.
+[Create and install a mod](Creating-Mods.md) explains the manifest-to-PNG-to-ZIP workflow. [API reference](Modding-API.md) defines identities, resolution, the binary image format and extension points. [Asset inventory](Asset-Inventory.md) explains the read-only four-disc resource catalog and its counting limits. [Mod Organizer 2](Mod-Organizer-2.md) covers MO2 setup and which mod wins. [Validation](Modding-Validation.md) separates automated checks from game/MO2 acceptance. [Runtime texture replacement](Runtime-Texture-Replacement.md) records the remaining general GPU work.
 
 ## Installation essentials
 
 The portable layout uses `mods/` next to the executable. Other layouts use the application's data directory plus `mods/`. Set `LO_MODS_DIR` to an absolute path to choose an explicit root. ZIPs produced by the packer contain a top-level `mods/` folder; deploy the contents of that folder into the selected root, without adding another `mods/` level.
 
-Restart after changing installed mods. Host integrations may call `modding::Reload()`, but there is no file watcher or player-facing reload button in this implementation. `LO_MODS=0` disables every replacement, including trusted providers.
+With Mod Organizer 2, install packages through MO2 instead; see [Mod Organizer 2](Mod-Organizer-2.md). Restart after changing installed mods. Host integrations may call `modding::Reload()`, but there is no file watcher or player-facing reload button in this implementation. `LO_MODS=0` disables every replacement, including trusted providers.
 
 Use only artwork you may distribute. Do not bundle the original game archives, executable, extraction catalog or unrelated extracted artwork with a mod.

@@ -180,7 +180,7 @@ Windows 上，首次设置页面用来选择界面语言、游戏语言和图形
 | macOS | 存档、个人配置、缓存、游戏和设置：`~/Library/Application Support/LostOdysseyRecomp/`。日志：`~/Library/Logs/LostOdysseyRecomp/logs/`。 |
 | Android | 游戏：`Android/data/io.github.freefrank.lostodyssey/files/game/`（或在 **Game folder** 页面选择的文件夹）。日志：`Android/data/io.github.freefrank.lostodyssey/files/logs/`。存档和设置保存在应用内部；用 **CTRL → Saves** 导出和导入存档。 |
 
-渲染捕获保存在 `captures/`，Mod 放在 `mods/`：Windows ZIP 都在程序旁边；其他安装包的捕获在设置目录，Mod 在数据目录。下载的着色器放在 `shaders/`，位置和 Mod 相同。
+渲染捕获保存在 `captures/`，Mod 放在 `mods/`：Windows ZIP 都在程序旁边；其他安装包的捕获在设置目录，Mod 在数据目录。下载的着色器放在 `shaders/`，位置和 Mod 相同。用 Mod Organizer 2 管理 Mod 见 [Mod Organizer 2](wiki/Mod-Organizer-2.md)。
 
 Linux 上可以用 `XDG_CONFIG_HOME`、`XDG_DATA_HOME` 和 `XDG_STATE_HOME` 改变 AppImage 的目录。放在可写目录里的 Linux 构建会像 Windows ZIP 一样把所有文件放在程序旁边。用 `--game` 启动 Windows ZIP 时，存档和设置跟随启动时所在的目录，请始终从同一个目录启动。
 

@@ -1,48 +1,31 @@
-# Mod Organizer 2 and external managers
+# Mod Organizer 2
 
-The runtime implements a manager-neutral overlay contract. It does not ship a LostOdysseyRecomp MO2 game plugin, and real Windows MO2/USVFS operation has not been established by the standalone tests. Treat this page as the integration contract and acceptance checklist, not a claim of turnkey MO2 support.
+LostOdysseyRecomp has a Mod Organizer 2 (MO2) game plugin. MO2 maps the mods you enable onto the game's `mods/` folder through its virtual file system, so nothing is copied into the game folder and disabling a mod removes it on the next launch.
 
-## Package contract
+## Setup
 
-Compile an overlay package:
+1. Use MO2 2.5 or newer on Windows. It already includes the `basic_games` plugin.
+2. Download [game_lostodysseyrecomp.py](https://github.com/freefrank/LostOdysseyRecomp/blob/main/tools/modding/mo2/game_lostodysseyrecomp.py) and put it in `<MO2>/plugins/basic_games/games/`.
+3. Start MO2 and create a new instance. Pick **Lost Odyssey Recomp** and browse to the folder that holds `LostOdysseyRecomp.exe` (the extracted Windows ZIP). If that folder has no `mods/` subfolder yet, start the game once or create the folder.
+4. Install mod archives with MO2's install button, enable them, and start the game with MO2's **Run** button. Restart the game after you change mods.
 
-```sh
-python tools/modding/lo_mod.py pack my-menu/mod.json --layout overlay --output my-menu-overlay.zip
-```
+Both package layouts made by `lo_mod.py pack` install as they are. The plugin removes the outer `mods/` folder of those ZIPs, so the archive's contents land in the game's `mods/`.
 
-The ZIP contains paths such as:
+## Which mod wins
 
-```text
-mods/overlay/images/key-fnv1a64-<16 lowercase hex digits>.lotex
-```
+- **Overlay packages** (`--layout overlay`): two mods that replace the same asset ship the same file path. MO2 shows the conflict, and the mod lower in MO2's left pane wins.
+- **Standalone packages** (the default layout): each mod has its own folder and `mod.ini`. The `priority` in `mod.ini` decides between them, not MO2's order. An overlay file beats any standalone mod.
 
-The hash is derived from the canonical resource key, not from texture contents or a runtime fingerprint. Two mods targeting the same identity use the same path. There is no shared `manifest.ini` that competing packages can accidentally replace. The runtime validates the embedded full key after selecting the visible file.
+To let MO2's order decide everything, open **Modify Executables** in MO2 and add `--mods-mode overlay` to the game's arguments. Standalone packages are then ignored.
 
-## Runtime setup
+## What stays outside MO2
 
-A MO2 game integration/root mapping must project the package's `mods/` directory into the root actually opened by LostOdysseyRecomp. Launch the actual game executable through that managed process so the VFS applies. Installing files into an unrelated conventional `Data/` directory will not work.
+Only `mods/` is virtual. Settings, saves (`profile/`), logs and shader caches stay in the game folder, so MO2 profiles do not separate saves.
 
-Set the managed process environment to:
+## Checking what loaded
 
-```text
-LO_MODS_MODE=overlay
-LO_MODS_DIR=<absolute path to the runtime-visible mods directory>
-```
+Every run writes `logs/runtime-*.log` in the game folder. Its `mods:` line shows the mods folder, the mode, the standalone mods it loaded and whether an `overlay` folder was visible; warnings about broken `mod.ini` files follow it. If an MO2 mod is missing there, make sure the game was started from MO2.
 
-The directory override is optional only when the mapping exactly matches the application's portable or installed default. It points to `mods`, not `mods/overlay` and not MO2's directory holding separate installed mod packages. The project does not currently include a plugin or installer to configure this mapping automatically.
+## Other managers
 
-In overlay mode, the runtime sees the external manager's winning file. It ignores standalone `mod.ini` priorities and trusted providers entirely. A missing visible overlay falls back to the original asset, preventing a second standalone installation from silently reviving a disabled mod. Invalid selected payloads also use the original.
-
-Close/restart the game after enable/disable/order changes. The runtime has no filesystem watcher. A future integrated manager may call the host reload API at a safe boundary.
-
-## Other managers and Steam Deck
-
-A manager may materialize the same overlay on disk without a VFS. For Linux/Steam Deck, deploy files under the selected mods root and use overlay mode. Remove no-longer-enabled winning files when updating the materialized view, and update it while the game is closed. Preserve unrelated mods and imported game data.
-
-This describes native filesystem deployment; it does not claim that Windows USVFS works with a native Linux executable. Mod installation tooling and runtime image consumers are separate compatibility requirements.
-
-## Windows acceptance still required
-
-Use two deliberately different replacements for the same supported native-menu key. Verify that launching through a real MO2 instance exposes the mapped file, changing MO2 order selects the other artwork, disabling both restores the original, and a standalone/provider copy cannot reappear in overlay mode. Repeat with a non-ASCII installation path. Confirm imported archive hashes do not change, and verify a normal un-managed launch separately.
-
-The runtime rejects symlinks that escape the selected root. VFS filesystem-query behavior must be tested with these containment checks; do not disable path validation merely to claim compatibility. General guest GPU textures still require the separate renderer work described in [runtime texture replacement](Runtime-Texture-Replacement.md).
+Managers that deploy with hard links or symbolic links (Vortex, or a script on Linux and Steam Deck) work too: put the files under the game's `mods/` folder while the game is closed. Symlinked mod folders are followed. MO2 itself runs only the Windows build.

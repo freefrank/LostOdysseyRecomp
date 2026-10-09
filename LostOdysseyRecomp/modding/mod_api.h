@@ -31,13 +31,16 @@ public:
 // LO_MODS_DIR overrides root; LO_MODS=0 disables all resolution, including providers.
 // LO_MODS_MODE=overlay isolates external managers from manifests AND providers.
 // The default combined mode preserves overlay > provider > standalone precedence.
+// Containment is lexical: files may resolve through a VFS (MO2) or symlinks.
 void Initialize(const std::filesystem::path& root);
 void Reload();
 void Shutdown();
 uint64_t Generation();
 std::filesystem::path Root();
 ResolutionMode Mode();
+bool Enabled();
 std::vector<Diagnostic> Diagnostics();
+std::vector<std::string> ModIds(); // Enabled standalone mods, sorted.
 std::optional<ResolvedAsset> Resolve(const AssetRequest& request);
 // Providers are trusted host extensions, not DLLs loaded from mod packages.
 // Shared ownership keeps an in-flight callback alive during unregistration.
