@@ -1,3 +1,7 @@
+## Root direct continuation: convex geometry predicates and orientation (2026-10-09)
+
+`mesh_convex_check61` closes indexed winding reversal BD8FA8, duplicate-index predicate BD91E0, point sidedness BD90A0, centroid-based triangle orientation/correction BB86C8 and polygon halfspace validation BB8E88. Fifteen cases compare complete original leaves/local chains with Full72/RAM/CSR and independent index/side/halfspace outcomes. Includes centroid four-wide and tail paths, correction enabled/disabled, already correct winding and invalid positions. No allocations or additional guards; original geometry/tolerance semantics retained. Full library passes. Convex construction/vertex deduplication still remain.
+
 ## Root direct continuation: cooked owner bounds closed (2026-10-09)
 
 `mesh_bounds_select61` adds B9EA90, publishing owner min/max, the selected bounding sphere and max-coordinate-scaled 2^-22 tolerance through the actual guest pow path. Seven family cases now include two complete original cooked-owner graphs with all bounds, pow and sphere bodies composed. Full72/RAM/CSR/events/ownership plus independent min/max, sphere enclosure and exact tolerance pass. Full library passes. LO_POWER_CONSTANTS is 1448 bytes for this graph, with trailing cooking exponent; lower tests still use their required prefix. Overall B9F198 still needs convex/input-build dependencies, and BA5CF8 preprocessing remains.

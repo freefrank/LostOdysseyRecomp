@@ -1,0 +1,69 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Indexed triangle predicates and borrowed polygon halfspace validation.",
+  "entries": [
+    {
+      "address": "82BD8FA8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 22562,
+      "instruction_count": 12,
+      "body_sha256": "6f323c3f789c35d6985cd554b3f35712928f63c7d14e4970fd331f3beb1fc7c0",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD91E0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 22895,
+      "instruction_count": 13,
+      "body_sha256": "b283cc4de37d0502df1e9bd15dea695e32da2a899445d1c0e130575c3902dafb",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD90A0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 22709,
+      "instruction_count": 57,
+      "body_sha256": "1f844db2002d0d492c29c17dcf13b32bce631e9a52387592acf36288e03f605b",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BB8E88",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 10843,
+      "instruction_count": 69,
+      "body_sha256": "5374c8bfcb3ab80719d0d40014d24201e72cd6b4ad65672e62faa9916c8a6343",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BB86C8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 9700,
+      "instruction_count": 119,
+      "body_sha256": "7acbc242a2426054f0b558f835791e5645c70e9ae3fc9aa9b44a8d1cb5ff76af",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BD8FA8",
+      "82BD91E0",
+      "82BD90A0",
+      "82BB8E88",
+      "82BB86C8"
+    ],
+    "header": "include/lo_semantics/mesh_convex_check61.h",
+    "source": "src/mesh_convex_check61.cpp",
+    "oracle": "tests/mesh_convex_check61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 15,
+    "library_validated": true,
+    "case_scope": "Complete original leaves Full72/RAM/CSR; flip, each repeated-index pairing, unique triangle, both sidedness signs, null positions, valid/invalid polygon halfspace and missing positions. Synthetic geometry/tolerance, independent results. No whole convex build or gameplay claim. Four actual original centroid-orientation/side/flip chain cases with optional correction, already correct winding and batch+tail centroid paths.",
+    "platform": "Linux x64 Clang19; pinned PPC; mmap guest overlay"
+  }
+}

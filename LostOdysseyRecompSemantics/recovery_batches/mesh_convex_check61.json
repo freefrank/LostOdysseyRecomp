@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "mesh-convex-check61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/mesh_convex_check61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/mesh_convex_check61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\nvoid ConvexSave(PPCContext&,std::uint8_t*);\nvoid ConvexRestore(PPCContext&,std::uint8_t*);\n#define __savegprlr_27 ConvexSave\n#define __restgprlr_27 ConvexRestore\nPPC_FUNC_IMPL(__imp__sub_82BD90A0);\nPPC_FUNC_IMPL(__imp__sub_82BD8FA8);\n#define sub_82BD90A0 __imp__sub_82BD90A0\n#define sub_82BD8FA8 __imp__sub_82BD8FA8\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/mesh_convex_check61.cpp"
+      ]
+    }
+  ]
+}
