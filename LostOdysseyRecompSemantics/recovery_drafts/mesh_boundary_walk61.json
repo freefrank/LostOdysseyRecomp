@@ -1,0 +1,60 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Connected triangle collection, duplicate edge cancellation and boundary chain ordering with owned word-array copy/capacity.",
+  "entries": [
+    {
+      "address": "82BD2988",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 7509,
+      "instruction_count": 31,
+      "body_sha256": "f781b392133caaf8c44e04f312509153400e87a012f6f0f72a9f8b8f7476dee6",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD2B90",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 7817,
+      "instruction_count": 30,
+      "body_sha256": "883bc509449f229ddc21b0ed40284dd984dc608bea1363fb0055d0ce9aa3c2a7",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BB8498",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 9380,
+      "instruction_count": 58,
+      "body_sha256": "24c5f3648b1ac531f2493f3e095286eea764e927595540d54888b4ecac7b0ba3",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BC2A18",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 33041,
+      "instruction_count": 196,
+      "body_sha256": "b57cf1d774e23a4b7bb373581a672995d7c179fc7f1401104327986d583e2513",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BD2988",
+      "82BD2B90",
+      "82BB8498",
+      "82BC2A18"
+    ],
+    "header": "include/lo_semantics/mesh_boundary_walk61.h",
+    "source": "src/mesh_boundary_walk61.cpp",
+    "oracle": "tests/mesh_boundary_walk61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 4,
+    "library_validated": true,
+    "case_scope": "Composed original recursive walk and chain/copy/capacity bodies with concrete shared growth/copy/release. Full72/RAM/CSR/events and independent visited/order/ownership checks: recursive plus tail component, already visited, duplicate-pair cancellation closed loop, disconnected partial output. Allocation failures untested.",
+    "platform": "Linux x64 Clang19; pinned PPC; mmap guest overlay"
+  }
+}

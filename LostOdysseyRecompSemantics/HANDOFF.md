@@ -1,3 +1,7 @@
+## Root direct continuation: components and ordered boundary chains (2026-10-09)
+
+`mesh_boundary_walk61` closes BB8498 recursive/tail component collection, BC2A18 duplicate-undirected-edge cancellation and chain ordering, plus BD2988/BD2B90 owned word capacity/copy. Four composed-original cases pass Full72/RAM/CSR/events with independent visits, output order, closed loop and disconnected partial-output ownership. Concrete shared growth/copy/release retained; full Clang library passes. Four implementation entries, no mapping/runtime claim.
+
 ## Root direct continuation: packed triangle adjacency (2026-10-09)
 
 `mesh_triangle_links61` closes BC38E8/BC3970/BD9218/BC3EC0/BC3B10/BC3CB0/BC3F20: emit normalized edge records, stable-group owners, write reciprocal packed triangle links, optionally tag geometric boundaries and release prefixed storage. Ten focused original-local-chain/shared-sort-and-topology cases pass Full72/RAM/CSR/callbacks plus independent packed links, boundary count and ownership. Both index widths and optional coplanar filter pass; diagnostics/nonmanifold/failure matrices omitted. Full Clang library passes; seven implementation entries, no historical mapping/runtime claim.

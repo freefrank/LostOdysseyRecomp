@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "mesh-boundary-walk61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/mesh_boundary_walk61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/mesh_boundary_walk61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\nvoid BoundaryIndirect(std::uint32_t,PPCContext&,std::uint8_t*);\nvoid BoundaryLower(std::uint32_t,PPCContext&,std::uint8_t*);\nvoid BoundarySave(PPCContext&,std::uint8_t*);\nvoid BoundaryRestore(PPCContext&,std::uint8_t*);\n#undef PPC_CALL_INDIRECT_FUNC\n#define PPC_CALL_INDIRECT_FUNC(t) BoundaryIndirect((t),ctx,base)\n#define __savegprlr_27 BoundarySave\n#define __restgprlr_27 BoundaryRestore\n#define sub_82BD2988 __imp__sub_82BD2988\n#define sub_82BD2B90 __imp__sub_82BD2B90\n#define sub_82BB8498 __imp__sub_82BB8498\n#define sub_82BD0798(c,b) BoundaryLower(0x82bd0798u,c,b)\n#define sub_82BD2A28(c,b) BoundaryLower(0x82bd2a28u,c,b)\n#define sub_82BD2C08(c,b) BoundaryLower(0x82bd2c08u,c,b)\n#define sub_82BD2870(c,b) BoundaryLower(0x82bd2870u,c,b)\n#define sub_82B7A0B0(c,b) BoundaryLower(0x82b7a0b0u,c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/mesh_boundary_walk61.cpp"
+      ]
+    }
+  ]
+}
