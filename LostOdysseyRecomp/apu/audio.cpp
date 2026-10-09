@@ -2,6 +2,7 @@
 #include "audio.h"
 #include "audio_callback.h"
 #include "matrix_surround.h"
+#include "test_signal.h"
 #include <cpu/guest_thread.h>
 #include <kernel/memory.h>
 #include <os/guest_code_thread.h>
@@ -31,6 +32,8 @@ namespace apu
         bool g_surroundOpen = false; // driver thread after Init
         std::atomic<bool> g_matrix{ false }; // matrix-encode the stereo frames
         std::atomic<uint32_t> g_matrixPhase{ 90 };
+        // steady_clock time until which the speaker test plays
+        std::atomic<std::chrono::steady_clock::rep> g_testSignalUntil{ 0 };
         std::atomic<uint32_t> g_outputChannels{ 0 };
 
         uint32_t FrameBytes() { return XAUDIO_NUM_SAMPLES * g_channels * sizeof(float); }
@@ -229,6 +232,12 @@ namespace apu
         g_matrixPhase = std::min(degrees, 180u);
     }
 
+    void SetTestSignal(bool on)
+    {
+        const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds(300);
+        g_testSignalUntil = on ? until.time_since_epoch().count() : 0;
+    }
+
     uint32_t OutputChannels()
     {
         return g_outputChannels;
@@ -264,6 +273,11 @@ namespace apu
             matrix.SetPhase(float(phase));
             matrixPhase = phase;
         }
+        static ChannelWalk walk;
+        static bool testOn = false;
+        const bool test = std::chrono::steady_clock::now().time_since_epoch().count() < g_testSignalUntil;
+        if (test && !testOn) walk.Reset(); // each test starts at front left
+        testOn = test;
         float peak = 0;
         for (uint32_t i = 0; i < XAUDIO_NUM_SAMPLES; ++i)
         {
@@ -272,8 +286,10 @@ namespace apu
             {
                 const float value = std::bit_cast<float>(ByteSwap(words[c * XAUDIO_NUM_SAMPLES + i]));
                 channel[c] = std::isfinite(value) ? value : 0;
-                surround[i * 6 + c] = std::clamp(channel[c], -1.0f, 1.0f);
             }
+            if (testOn) walk.Next(channel);
+            for (uint32_t c = 0; c < 6; ++c)
+                surround[i * 6 + c] = std::clamp(channel[c], -1.0f, 1.0f);
             float left, right;
             if (matrixOn)
                 matrix.Encode(channel, left, right);

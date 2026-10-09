@@ -773,6 +773,9 @@ void Publish(uint8_t *base, uint32_t config)
         for (int i = 0; i < int(GraphicsRow::Count) && GraphicsRowHidden(row); ++i)
             row = (row + 1) % int(GraphicsRow::Count);
 #endif
+    // Speaker test noise while Matrix phase is focused and adjustable; it
+    // stops by itself once the menu stops publishing.
+    apu::SetTestSignal(tab == 1 && row == AudioMatrixPhaseRow && edit.audioOutput == AudioOutputMatrix);
     Snapshot next;
     next.tab = tab;
     next.row = row;
@@ -1089,8 +1092,8 @@ void Publish(uint8_t *base, uint32_t config)
                  L"5.1 會將遊戲的環繞聲混音輸出到 5.1 或 7.1 喇叭，立即套用。");
     if (tab == 1 && row == AudioMatrixPhaseRow && status.empty())
         next.help = edit.audioOutput == AudioOutputMatrix
-            ? Tr(L"Phase of the rear channels in Matrix surround. 90° is Pro Logic II; try others if the rear sounds weak or vague. Applies immediately.",
-                 L"矩陣環繞聲中後方聲道的相移。90° 為 Pro Logic II；後方聲音偏弱或模糊時可試其他值。立即套用。")
+            ? Tr(L"Test noise circles the speakers while this row is selected. 90° is Pro Logic II; change it if the rear sounds weak or vague.",
+                 L"選取此行時，測試噪音會依序繞各喇叭播放。90° 為 Pro Logic II；後方聲音偏弱或模糊時可調整。")
             : Tr(L"Select Matrix surround in Audio output to adjust this.",
                  L"在音訊輸出選擇矩陣環繞聲後才能調整。");
     if (tab == 2)
