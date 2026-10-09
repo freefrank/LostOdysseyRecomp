@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "mesh-indexed-remap61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/mesh_indexed_remap61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/mesh_indexed_remap61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nvoid RemapIndirect(std::uint32_t,PPCContext&,std::uint8_t*);\n#undef PPC_CALL_INDIRECT_FUNC\n#define PPC_CALL_INDIRECT_FUNC(t) RemapIndirect((t),ctx,base)\nvoid RemapLower(std::uint32_t,PPCContext&,std::uint8_t*);\nvoid RemapSave(unsigned,PPCContext&,std::uint8_t*);\nvoid RemapRestore(unsigned,PPCContext&,std::uint8_t*);\n#define __savegprlr_23(c,b) RemapSave(23,c,b)\n#define __restgprlr_23(c,b) RemapRestore(23,c,b)\n#define __savegprlr_24(c,b) RemapSave(24,c,b)\n#define __restgprlr_24(c,b) RemapRestore(24,c,b)\nPPC_FUNC_IMPL(__imp__sub_82BBF3F8);\n#define sub_82BBF3F8 __imp__sub_82BBF3F8\nPPC_FUNC_IMPL(__imp__sub_82BBFEA8);\n#define sub_82BBFEA8 __imp__sub_82BBFEA8\n#define sub_82BD0798(c,b) RemapLower(0x82bd0798u,c,b)\n#define sub_82B7BC40(c,b) RemapLower(0x82b7bc40u,c,b)\n#define sub_82BD2870(c,b) RemapLower(0x82bd2870u,c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/mesh_indexed_remap61.cpp"
+      ]
+    }
+  ]
+}

@@ -232,3 +232,7 @@ BBF208 now packs the selected output channels, including 2D/3D attributes accord
 ### Indexed face normals and incidence
 
 BBED20 derives normalized face vectors and optionally emits them through the normal buffer, then builds position-to-face counts, offsets and adjacency. Five focused original-upper cases pass known-vector and incidence checks with complete workspace teardown. Original zero-area behavior is retained.
+
+### Indexed batch remapping
+
+BBF3F8/BBFEA8 now convert referenced corner tuples to final vertex IDs using a temporary sentinel map, preserving per-batch reset policy and shared corners. They emit four-word channel/smoothing records and face/new-vertex counts, then free the map. Three focused original-local-chain cases and complete teardown pass.

@@ -1,0 +1,42 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Batch-local corner remapping, packed four-word vertex descriptors and final face indices.",
+  "entries": [
+    {
+      "address": "82BBF3F8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 25316,
+      "instruction_count": 101,
+      "body_sha256": "3106cbd3d90c5fb245d888703fd01e39d7a3058c830043a2858089d5f137813f",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BBFEA8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 26849,
+      "instruction_count": 107,
+      "body_sha256": "1ef219cacfd548408dd11baa79263ce702d94e490f0767800617989c3932a09c",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BBF3F8",
+      "82BBFEA8"
+    ],
+    "header": "include/lo_semantics/mesh_indexed_remap61.h",
+    "source": "src/mesh_indexed_remap61.cpp",
+    "oracle": "tests/mesh_indexed_remap61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 3,
+    "library_validated": true,
+    "case_scope": "Three actual-original batch/corner chains with shared concrete growth/memset: carried/reset vertex base and empty batch. Shared corners reuse mapping, new corners append channel IDs plus smoothing, owned map freed. Full72/RAM/CSR/events/ownership, independent record/index/batch counters and complete workspace teardown. No allocator-fault or complete indexed pipeline claim.",
+    "platform": "Linux x64 Clang19; pinned PPC; mmap guest overlay"
+  }
+}

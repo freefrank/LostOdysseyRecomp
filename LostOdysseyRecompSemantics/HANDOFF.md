@@ -1,3 +1,7 @@
+## Root direct continuation: indexed batch vertex remapping (2026-10-09)
+
+`mesh_indexed_remap61` closes BBF3F8 and BBFEA8. A temporary sentinel map gives each referenced corner tuple a final vertex index, appends four-word channel/smoothing records, rewrites final face indices and emits batch face/new-vertex counts. Three complete-original local-chain cases pass with shared concrete growth/memset: carried vertex base, reset base and empty batch. Full72/RAM/CSR/events/ownership, independent packed records/final indices/counters and complete workspace teardown pass. Full library passes.
+
 ## Root direct continuation: indexed face normals and incidence (2026-10-09)
 
 `mesh_indexed_normals61` closes BBED20: normalized per-face vectors, optional packed normal output, and owned per-position face counts/prefixes/adjacency. Five original-upper/shared-concrete-buffer cases pass for output on/off, all processing disabled, invalid count and a zero-area face. Full72/RAM/CSR/events/ownership, independent known vectors and incidence arrays, and complete workspace teardown pass. The fixture initially omitted the 82007784 constant page; expanding the guest mapping fixed the fixture without an implementation change. Full library passes. Vertex normal smoothing/reindexing and the final indexed pipeline remain.
