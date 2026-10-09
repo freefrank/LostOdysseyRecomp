@@ -1,0 +1,33 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Cooked triangle mesh tree orchestration and global quantization settings.",
+  "entries": [
+    {
+      "address": "82B9E6A8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 8544,
+      "instruction_count": 65,
+      "body_sha256": "dd3e44023c2bd239d82af05122148362dc7b838989f9451de297b0c6e2a0143a",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82B9E6A8"
+    ],
+    "header": "include/lo_semantics/mesh_cook_tree61.h",
+    "source": "src/mesh_cook_tree61.cpp",
+    "oracle": "tests/mesh_cook_tree61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 2,
+    "library_validated": true,
+    "case_scope": "Original orchestration/shared concrete tree graph. Two global quantization modes; Full72/RAM/CSR/callbacks/ownership, independent counts and compact tree storage, full teardown. No allocation fault/diagnostic matrix or gameplay claim.",
+    "platform": "Linux x64 Clang19; pinned PPC; mmap guest overlay"
+  }
+}

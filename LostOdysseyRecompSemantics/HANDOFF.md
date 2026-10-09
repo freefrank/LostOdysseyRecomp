@@ -1,3 +1,7 @@
+## Root direct continuation: cooked mesh tree orchestration (2026-10-09)
+
+`mesh_cook_tree61` closes B9E6A8: release prior tree, refresh borrowed source descriptor using existing virtual count getters, construct compact settings with global quantization toggle, invoke the concrete tree builder, preserve diagnostic failure routing. Two original-upper/shared-concrete-tree cases pass Full72/RAM/CSR/callbacks/ownership, independent nine-triangle descriptor and compact storage checks, and complete teardown. Both quantization choices pass. Existing accessor and integer leaves receive no duplicate inventory credit. No diagnostic/fault matrix or gameplay claim. Overall preprocessing and validation/build remain open.
+
 ## Root direct continuation: aggregate cooked-mesh serializer (2026-10-09)
 
 `mesh_cook_stream61` closes B9F6F0 NXS/CVXM aggregate output. Two original-upper cases use the concrete recovered graph: stack writer forwarding, lazy CLHL/CVHL/VALE, linked OPC/HBM staging and flat strategy payload, owner mass cache, optional SUPM/GAUS and temporary-cache cleanup. Full72/RAM/CSR/events/ownership pass; independently checked tags, tree size, scalar/mass fields, cube volume, support bytes and nine retained mesh allocations. The strategy is a prepared synthetic one-record input, not a new tree-build proof. Both endian and normal modes pass. Initial harness unmapped adapter-vtable page corrected; implementation unchanged. Full Clang library passes. B9C7D8 overall cooking still needs BA5CF8 preprocessing and B9F198 validation/build.

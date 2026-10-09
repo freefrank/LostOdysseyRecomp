@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "mesh-cook-tree61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/mesh_cook_tree61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/mesh_cook_tree61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nvoid CookTreeIndirect(std::uint32_t,PPCContext&,std::uint8_t*);\n#undef PPC_CALL_INDIRECT_FUNC\n#define PPC_CALL_INDIRECT_FUNC(t) CookTreeIndirect((t),ctx,base)\nvoid CookTreeSave(unsigned,PPCContext&,std::uint8_t*);\nvoid CookTreeRestore(unsigned,PPCContext&,std::uint8_t*);\n#define __savegprlr_29(c,b) CookTreeSave(29,c,b)\n#define __restgprlr_29(c,b) CookTreeRestore(29,c,b)\nvoid CookTreeLower(std::uint32_t,PPCContext&,std::uint8_t*);\n#define sub_82BD20F0(c,b) CookTreeLower(0x82bd20f0u,c,b)\n#define sub_82BD18C0(c,b) CookTreeLower(0x82bd18c0u,c,b)\n#define sub_82BD1278(c,b) CookTreeLower(0x82bd1278u,c,b)\n#define sub_82B9CB60(c,b) CookTreeLower(0x82b9cb60u,c,b)\n#define sub_82B9C298(c,b) CookTreeLower(0x82b9c298u,c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/mesh_cook_tree61.cpp"
+      ]
+    }
+  ]
+}
