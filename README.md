@@ -174,7 +174,7 @@ More detail is in [file locations](docs/INSTALLING.md#file-locations).
 | :--- | :--- |
 | `--game <path>` | Use this game folder (with `default.xex` or `disc1/`) or `default.xex` file, skipping the importer. |
 | `--install` | Open the importer even when a game is already set up. |
-| `--setup` | Windows: run the first-launch setup again, then start the game. |
+| `--setup` | Windows: open the setup page, then start the game. |
 | `--prepare-shaders-only` | Prepare all shaders, then exit without starting the game. |
 
 ```bash

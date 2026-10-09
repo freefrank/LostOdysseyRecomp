@@ -149,7 +149,7 @@ Only one tablet has been tested so far.
 
 ## First launch and settings
 
-On Windows, the first-launch page sets the interface language, game language and graphics options; run `LostOdysseyRecomp.exe --setup` to open it again. Linux and macOS start with default settings, which you change on the in-game Settings page. Settings tells you when a change needs a restart.
+The game starts with default settings, which you change on the in-game Settings page. On Windows, `LostOdysseyRecomp.exe --setup` opens a setup page for the interface language, game language and graphics options before the game starts. Settings tells you when a change needs a restart.
 
 In Graphics, **Display mode** is Windowed or Fullscreen. On a PC with several monitors or graphics cards, **Display** picks the monitor and **GPU** the graphics card (a GPU change applies after a restart). After you switch the display, the game asks whether to keep it and goes back after 5 seconds without an answer. On Windows, Win+Shift+Left/Right also moves the game to the next monitor. **Aspect ratio** is Auto, where the game fills the window, or 16:9, 21:9 or 4:3, which keep that shape and add black bars when the screen has another shape. In Gameplay, **Vibration** sets the rumble strength. In Audio, **Audio output** chooses Stereo or 5.1 surround; for 5.1, set your speakers to 5.1 or 7.1 in the system sound settings first, otherwise the game stays on stereo. On Windows that option is only in Control Panel → Sound → Playback: select the device, click Configure and choose 5.1 or 7.1 Surround. **Matrix surround** needs no speaker setup: it encodes the 5.1 mix into stereo for an AV receiver's Pro Logic II, Dolby Surround or Neural:X mode, and **Matrix phase** sets the phase of the rear channels (90° by default); while that row is selected, test noise circles the speakers.
 
@@ -217,7 +217,7 @@ Saves cannot be moved back to a console.
 | :--- | :--- |
 | `--game <path>` | Use this game: a folder with `default.xex` or `disc1/`, or the `default.xex` file. Skips the importer; exits with an error if no `default.xex` is found. |
 | `--install` | Open the importer even when a game is set up, then exit. |
-| `--setup` | Run the first-launch setup again, then start the game (Windows; elsewhere it only saves the current settings). |
+| `--setup` | Open the setup page, then start the game (Windows; elsewhere it only saves the current settings). |
 | `--setup-only` | Like `--setup`, then exit. |
 | `--prepare-shaders-only` | Prepare all shaders, then exit without starting the game. |
 | `--quiet-kernel` | Leave kernel trace lines out of the log. |
