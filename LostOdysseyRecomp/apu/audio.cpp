@@ -34,7 +34,7 @@ namespace apu
         std::atomic<uint32_t> g_matrixPhase{ 90 };
         // steady_clock time until which the speaker test plays
         std::atomic<std::chrono::steady_clock::rep> g_testSignalUntil{ 0 };
-        std::atomic<int> g_testChannel{ -1 };
+        std::atomic<float> g_testAngle{ -1.0f };
         std::atomic<uint32_t> g_outputChannels{ 0 };
 
         uint32_t FrameBytes() { return XAUDIO_NUM_SAMPLES * g_channels * sizeof(float); }
@@ -239,9 +239,9 @@ namespace apu
         g_testSignalUntil = on ? until.time_since_epoch().count() : 0;
     }
 
-    int TestSignalChannel()
+    float TestSignalAngle()
     {
-        return g_testChannel;
+        return g_testAngle;
     }
 
     uint32_t OutputChannels()
@@ -279,10 +279,10 @@ namespace apu
             matrix.SetPhase(float(phase));
             matrixPhase = phase;
         }
-        static ChannelWalk walk;
+        static SpeakerPan pan;
         static bool testOn = false;
         const bool test = std::chrono::steady_clock::now().time_since_epoch().count() < g_testSignalUntil;
-        if (test && !testOn) walk.Reset(); // each test starts at front left
+        if (test && !testOn) pan.Reset(); // each test starts at front left
         testOn = test;
         float peak = 0;
         for (uint32_t i = 0; i < XAUDIO_NUM_SAMPLES; ++i)
@@ -293,7 +293,7 @@ namespace apu
                 const float value = std::bit_cast<float>(ByteSwap(words[c * XAUDIO_NUM_SAMPLES + i]));
                 channel[c] = std::isfinite(value) ? value : 0;
             }
-            if (testOn) walk.Next(channel);
+            if (testOn) pan.Next(channel);
             for (uint32_t c = 0; c < 6; ++c)
                 surround[i * 6 + c] = std::clamp(channel[c], -1.0f, 1.0f);
             float left, right;
@@ -310,7 +310,7 @@ namespace apu
             stereo[i * 2 + 1] = std::clamp(right, -1.0f, 1.0f);
             peak = std::max({peak, std::abs(stereo[i * 2]), std::abs(stereo[i * 2 + 1])});
         }
-        g_testChannel = testOn ? walk.Speaker() : -1;
+        g_testAngle = testOn ? pan.Angle() : -1.0f;
         uint32_t n = ++g_framesSubmitted;
         CaptureRequested(stereo.data(), n);
         // Bounded diagnostic capture, before mute; raw f32le, 48 kHz stereo.

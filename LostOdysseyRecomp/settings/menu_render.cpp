@@ -4,6 +4,7 @@
 #include "translations.h"
 #include "../host_ui/rasterizer.h"
 #include "../hid/controller_glyphs.h"
+#include "../apu/test_signal.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -113,6 +114,50 @@ namespace
 
     // Visible list slots, as drawn below.
     constexpr int ListTop = 150, ListRowHeight = 43, ListArrowX = 38, ListArrowOffset = 10, ListColumnRight = 366;
+
+    // Speaker test layout in the free space under the Audio rows: a ring
+    // around the listener with an anchor and a label box per speaker, at the
+    // test sound's angles (degrees clockwise from the front).
+    constexpr int SpeakerDivider = ListTop + settings::AudioRowCount * ListRowHeight + 13;
+    constexpr double RingX = 706, RingY = SpeakerDivider + 129, RingRadiusX = 160, RingRadiusY = 80;
+    constexpr double LabelRadiusX = 196, LabelRadiusY = 104, LabelWidth = 52, LabelHeight = 28;
+    constexpr const wchar_t *SpeakerLabels[5] = {L"L", L"C", L"R", L"SR", L"SL"}; // apu::SpeakerPan order
+
+    std::array<double, 2> RingPoint(double degrees, double rx, double ry)
+    {
+        const double radians = degrees * 0.017453292519943295;
+        return {RingX + rx * std::sin(radians), RingY - ry * std::cos(radians)};
+    }
+
+    // Coverage-blended ellipse in layout coordinates: a band `thickness` wide
+    // along the outline, or filled when thickness is 0.
+    void Ellipse(const Canvas &c, double cx, double cy, double rx, double ry, double thickness, uint32_t color)
+    {
+        const double reach = thickness / 2 + 1;
+        const auto span = [&](double from, double to, double offset, uint32_t limit) {
+            return std::array<int, 2>{std::clamp(int(std::floor(offset + from * c.scale)), 0, int(limit)),
+                                      std::clamp(int(std::ceil(offset + to * c.scale)), 0, int(limit))};
+        };
+        const auto [x0, x1] = span(cx - rx - reach, cx + rx + reach, c.offsetX, c.width);
+        const auto [y0, y1] = span(cy - ry - reach, cy + ry + reach, c.offsetY, c.height);
+        const uint32_t alpha = color >> 24, rgb = color & 0xFFFFFFu;
+        for (int py = y0; py < y1; ++py)
+            for (int px = x0; px < x1; ++px)
+            {
+                const double x = (px + 0.5 - c.offsetX) / c.scale - cx, y = (py + 0.5 - c.offsetY) / c.scale - cy;
+                const double k = std::sqrt(x * x / (rx * rx) + y * y / (ry * ry));
+                const double g = std::sqrt(x * x / (rx * rx * rx * rx) + y * y / (ry * ry * ry * ry));
+                // First-order distance to the outline, negative inside.
+                double d = g > 0 ? (k - 1) * k / g : -std::min(rx, ry);
+                if (thickness > 0)
+                    d = std::abs(d) - thickness / 2;
+                const double coverage = std::clamp(0.5 - d * c.scale, 0.0, 1.0);
+                if (coverage <= 0)
+                    continue;
+                uint32_t &p = c.dib[size_t(py) * c.width + px];
+                p = ColorBlend(p, rgb | (uint32_t(alpha * coverage + 0.5) << 24));
+            }
+    }
 }
 
 void settings::DrawMenuArrow(std::vector<uint32_t> &pixels, uint32_t width, uint32_t height, int x, int y)
@@ -131,6 +176,40 @@ settings::MenuRect settings::MenuArrowBounds(uint32_t width, uint32_t height, in
     };
     return {edge(std::floor(c.offsetX + (x - 1) * c.scale), width), edge(std::floor(c.offsetY + (y - 1) * c.scale), height),
             edge(std::ceil(c.offsetX + (x + 38) * c.scale), width), edge(std::ceil(c.offsetY + (y + 24) * c.scale), height)};
+}
+
+settings::MenuRect settings::DrawSpeakerMarker(std::vector<uint32_t> &pixels, uint32_t width, uint32_t height, float degrees)
+{
+    if (!width || !height || pixels.size() != size_t(width) * height)
+        return {};
+    const Canvas c(pixels.data(), width, height);
+    const uint32_t ink = MakeColor(255, 242, 242, 237);
+    double left = 1e9, top = 1e9, right = -1e9, bottom = -1e9;
+    const auto cover = [&](double x0, double y0, double x1, double y1) {
+        left = std::min(left, x0); top = std::min(top, y0);
+        right = std::max(right, x1); bottom = std::max(bottom, y1);
+    };
+    // Resting on a speaker: frame its label.
+    for (int i = 0; i < 5; ++i)
+        if (std::abs(degrees - apu::SpeakerPan::Angles[i]) < 0.5f)
+        {
+            const auto [x, y] = RingPoint(apu::SpeakerPan::Angles[i], LabelRadiusX, LabelRadiusY);
+            const int x0 = int(std::lround(x - LabelWidth / 2)) - 4, y0 = int(std::lround(y - LabelHeight / 2)) - 4;
+            const int x1 = x0 + int(LabelWidth) + 8, y1 = y0 + int(LabelHeight) + 8;
+            Line(c, x0, y0, x1, y0, ink, 2);
+            Line(c, x0, y1, x1, y1, ink, 2);
+            Line(c, x0, y0, x0, y1, ink, 2);
+            Line(c, x1, y0, x1, y1 + 1, ink, 2);
+            cover(x0 - 2, y0 - 2, x1 + 3, y1 + 3);
+        }
+    // A bright dot with a soft halo on the ring.
+    const auto [x, y] = RingPoint(degrees, RingRadiusX, RingRadiusY);
+    Ellipse(c, x, y, 15, 15, 0, (ink & 0xFFFFFFu) | (70u << 24));
+    Ellipse(c, x, y, 6.5, 6.5, 0, ink);
+    cover(x - 17, y - 17, x + 17, y + 17);
+    const auto edge = [](double value, uint32_t limit) { return size_t(std::clamp(value, 0.0, double(limit))); };
+    return {edge(std::floor(c.offsetX + left * c.scale), width), edge(std::floor(c.offsetY + top * c.scale), height),
+            edge(std::ceil(c.offsetX + right * c.scale), width), edge(std::ceil(c.offsetY + bottom * c.scale), height)};
 }
 
 double settings::menu_motion::RowFade(double t)
@@ -940,31 +1019,25 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
         }
     }
 
-    // Speaker test under the Audio rows: a 5.1 layout around the listener with
-    // the speaker the test noise is on lit.
+    // Speaker test under the Audio rows: a ring around the listener with the
+    // five speakers; DrawSpeakerMarker adds the dot that follows the sound.
     if (current.speakerLayout)
     {
-        const int top = rowTop + visible * rowHeight + 18;
-        cell(choiceLeft, top, choiceWidth, 640 - 8 - top, false);
-        const int centerX = choiceLeft + choiceWidth / 2, centerY = top + 132;
-        fill(centerX - 9, centerY - 9, 18, 18, muted); // listener
-        struct Speaker { int channel, dx, dy; const wchar_t *label; };
-        constexpr Speaker speakers[] = {{0, -172, -90, L"L"}, {2, 0, -104, L"C"}, {1, 172, -90, L"R"},
-                                        {4, -212, 68, L"SL"}, {5, 212, 68, L"SR"}};
-        for (const auto &speaker : speakers)
+        line(choiceLeft, SpeakerDivider, choiceLeft + choiceWidth, SpeakerDivider, MakeColor(255, 173, 176, 177));
+        Ellipse(canvas, RingX, RingY, RingRadiusX, RingRadiusY, 2, MakeColor(255, 128, 131, 130));
+        // The listener from above, facing the center speaker.
+        Ellipse(canvas, RingX, RingY + 4, 15, 7, 0, muted);
+        Ellipse(canvas, RingX, RingY - 3, 6.5, 6.5, 0, ink);
+        for (int i = 0; i < 5; ++i)
         {
-            const bool lit = speaker.channel == current.speakerLit;
-            const int x = centerX + speaker.dx - 36, y = centerY + speaker.dy - 20;
-            cell(x, y, 72, 40, lit);
-            if (lit)
-            {
-                line(x - 4, y - 4, x + 76, y - 4, ink, 2);
-                line(x - 4, y + 43, x + 76, y + 43, ink, 2);
-                line(x - 4, y - 4, x - 4, y + 44, ink, 2);
-                line(x + 75, y - 4, x + 75, y + 44, ink, 2);
-            }
-            text(x, y, 72, 40, speaker.label, 22, lit ? selectedInk : muted, lit, 1,
-                 lit ? MakeColor(255, 222, 223, 219) : outline, 13);
+            const double angle = apu::SpeakerPan::Angles[i];
+            const auto [ax, ay] = RingPoint(angle, RingRadiusX, RingRadiusY);
+            Ellipse(canvas, ax, ay, 4, 4, 0, muted);
+            const auto [lx, ly] = RingPoint(angle, LabelRadiusX, LabelRadiusY);
+            const int x = int(std::lround(lx - LabelWidth / 2)), y = int(std::lround(ly - LabelHeight / 2));
+            fill(x, y, int(LabelWidth), int(LabelHeight), MakeColor(255, 66, 69, 69));
+            cell(x, y, int(LabelWidth), int(LabelHeight), false);
+            text(x, y, int(LabelWidth), int(LabelHeight), SpeakerLabels[i], 18, ink, false, 1, outline, 12);
         }
     }
 
