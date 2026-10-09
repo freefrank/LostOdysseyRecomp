@@ -70,6 +70,11 @@ bool CalibrationKey(uint32_t) { return false; }
 HdrCalibration GetHdrCalibration() { return {}; }
 BrightnessCalibration GetBrightnessCalibration() { return {}; }
 bool SaveDisplayChoice(const std::string&,uint32_t) { return false; }
+namespace title_entry {
+bool HintShown() { return false; }
+float HintOpacity() { return 0.0f; }
+const Hint* DrawHint(uint32_t,uint32_t) { return nullptr; }
+}
 }
 namespace hid {
 void Init() {} // No real controllers, keyboard state, or SDL joystick thread.
@@ -130,6 +135,8 @@ void DumpRenderTargets(const char*) {}
 namespace settings {
 void SetHdrDisplayInfo(HdrDisplayInfo) {}
 void SetHdrCalibrationSceneAvailable(bool) {}
+void SetNeuralRenderingPreviewAvailable(bool) {}
+NeuralRenderingTuning GetNeuralRenderingTuning() { return {}; }
 }
 namespace gpu {
 TemporalUpscaler::TemporalUpscaler(dlss::Controller& controller) : dlss_(&controller) {}
@@ -164,6 +171,9 @@ void Controller::ReleaseCompletedThrough(uint64_t) {}
 void Controller::AbandonUsesAfterDeviceLoss() {}
 void Controller::ShutdownAfterGpuDrain() {}
 const char* ProbeStateName(ProbeState) { return "stub"; }
+void Controller::ReleaseNeuralRenderingPreview() {}
+void SetLogSink(LogSink) {}
+void SetComputeShaderCompiler(ComputeShaderCompiler) {}
 }
 
 namespace fixture {
