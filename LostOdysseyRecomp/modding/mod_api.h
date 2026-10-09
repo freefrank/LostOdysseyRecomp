@@ -10,7 +10,8 @@
 
 namespace modding {
 inline constexpr uint32_t kModApiVersion = 1;
-enum class AssetKind : uint32_t { Image = 1, Font = 2, Model = 3, Movie = 4 };
+// Texture keys are renderer fingerprints: exactly 16 lowercase hex digits.
+enum class AssetKind : uint32_t { Image = 1, Font = 2, Model = 3, Movie = 4, Texture = 5 };
 enum class ResolutionMode : uint32_t { Combined, Standalone, Overlay };
 struct AssetId { AssetKind kind = AssetKind::Image; std::string key; };
 struct AssetRequest { AssetId id; std::filesystem::path originalPath; };
@@ -41,6 +42,9 @@ ResolutionMode Mode();
 bool Enabled();
 std::vector<Diagnostic> Diagnostics();
 std::vector<std::string> ModIds(); // Enabled standalone mods, sorted.
+// Cheap pre-check before fingerprinting uploads: a manifest texture entry, a
+// texture provider or an overlay/textures folder existed at Initialize.
+bool HasTextureReplacements();
 std::optional<ResolvedAsset> Resolve(const AssetRequest& request);
 // Providers are trusted host extensions, not DLLs loaded from mod packages.
 // Shared ownership keeps an in-flight callback alive during unregistration.
@@ -50,5 +54,6 @@ void UnregisterProvider(AssetKind kind, const AssetProvider* provider);
 // Zero-based extractor export index. Package separators/ASCII case are normalized;
 // object case and UTF-8 bytes are preserved. Invalid identities return empty.
 std::string MakeManifestKey(std::string_view package, uint32_t exportIndex, std::string_view object);
+// Textures: overlay/textures/fp-<16 hex digits>.lotex2; other kinds hash the key.
 std::filesystem::path OverlayRelativePath(const AssetId& id);
 }

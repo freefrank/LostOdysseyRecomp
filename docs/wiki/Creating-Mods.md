@@ -68,7 +68,28 @@ Each texture is sorted into a class: color, normal, data, ui, vfx, or skipped (l
 
 Results go to `my-upscale/textures/` with the same file names, plus `index.csv` (new and original sizes) and `review/<class>.png`, which shows before and after crops. Runs resume where they stopped. Use `--classes`, `--filter` and `--limit` for a sample first. `--write-config` writes the defaults (models per class, scale, maximum size) for editing; pass the edited file back with `--config`.
 
-The game cannot load textures larger than the originals yet. Keep the results until the general texture path supports them.
+Pack the results with `texture-pack` (next section) to use them in game.
+
+## 1d. Pack textures for the game (experimental)
+
+`lo_mod.py texture-pack` turns PNGs into `.lotex2` files for runtime texture replacement. Textures are matched by fingerprint (the `fingerprint` column of the export's `index.csv`), not by key, so one file covers every package that cooks the same image. Replacements can be the original size or 2x, 4x or 8x larger (see [Modding API](Modding-API#runtime-textures-lotex2)).
+
+```sh
+# Overlay layout: files go to <output>/overlay/textures/fp-<fingerprint>.lotex2
+python tools/modding/lo_mod.py texture-pack --index my-export/textures/index.csv --images my-upscale/textures --images-index my-upscale/index.csv --output mods
+
+# Standalone layout: <output>/<id>/mod.ini with texture: lines plus <id>/textures/
+python tools/modding/lo_mod.py texture-pack --index my-export/textures/index.csv --images my-upscale/textures --images-index my-upscale/index.csv --output mods --layout standalone --id my-textures
+```
+
+- `--images-index` maps keys to PNG files (default: `index.csv` in the `--images` folder).
+- `--filter <text>` keeps keys that contain the text. `--fingerprints <log.csv>` keeps only fingerprints a game run logged.
+- `--mips` writes the whole mip chain; by default one level is written and the game builds the rest.
+- Existing files are never overwritten, so you can add to an existing mods folder.
+- `--test tint` (red up, green and blue down) and `--test nearest4` (plain 4x enlargement, which must look unchanged in game) transform the original exported PNGs, to check in game that replacement works.
+- `lo_mod.py inspect <file>` prints and validates a `.lotex2` header.
+
+Payloads are uncompressed RGBA8 for now, so 4x packs are large (a 2048x2048 texture is 16 MiB) and use as much video memory. Levels larger than about 72 MiB (above 4096x4096) are skipped. Block-compressed DDS payloads come later. The run log has one `[mods] texture <fingerprint> replaced` line for each texture it replaced.
 
 ## 2. Prepare artwork and a specification
 

@@ -57,6 +57,7 @@
 #include <settings/config.h>
 #include <hid/hid.h>
 #include <hid/controller_atlas_glyphs.h>
+#include <modding/texture_mod.h>
 #include "shader/xenos_translator.h"
 #include "shader/dxc_compiler.h"
 #include "shader/cache.h"
@@ -1314,6 +1315,11 @@ namespace gpu::renderer
             // texture, to match against --export-assets fingerprints.
             FILE* textureFingerprintLog = nullptr;
             std::unordered_set<uint64_t> textureFingerprintsSeen;
+            // Mod texture replacements (LOTEX2): fingerprints whose payload
+            // failed keep the original for the run; each success logs once.
+            std::unordered_set<uint64_t> textureReplacementFailures, textureReplacementsLogged;
+            uint32_t textureReplacements = 0; // per stats window
+            uint64_t textureReplacementsTotal = 0;
             uint64_t controllerAtlasFamilyFrame = ~0ull;
             bool controllerAtlasPlayStationFamily = false;
             uint64_t controllerAtlasTraceFrame = ~0ull;
@@ -4625,17 +4631,19 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             }
 
             // Returns an offset into the upload ring or UINT64_MAX when full.
-            uint64_t Upload(const void* data, size_t size, uint32_t alignment = 256)
+            // keepFree: bytes that must stay free after this allocation, so a
+            // large upload inside a draw leaves that draw its kUploadHeadroom.
+            uint64_t Upload(const void* data, size_t size, uint32_t alignment = 256, size_t keepFree = 0)
             {
                 if (video::GpuWorkStopped()) return UINT64_MAX;
                 uint64_t offset = (Gpu().uploadOffset + alignment - 1) & ~uint64_t(alignment - 1);
-                if (offset + size > kUploadRingSize)
+                if (offset + size + keepFree > kUploadRingSize)
                 {
                     // Out of space mid-frame: finish what we have and start over.
                     if (!Flush() || !Begin()) return UINT64_MAX;
                     offset = 0;
                     Gpu().uploadGeneration = ++uploadGenerations; // Rewound even if Begin did not recycle the slot.
-                    if (size > kUploadRingSize)
+                    if (size + keepFree > kUploadRingSize)
                         return UINT64_MAX;
                 }
                 if (data)
@@ -6976,6 +6984,126 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 
             static uint32_t Expand(uint32_t v, uint32_t bits) { return bits == 0 ? 255 : (v * 255 + ((1u << bits) - 1) / 2) / ((1u << bits) - 1); }
 
+            // The texture-import identity, as modding/asset_export.cpp Fingerprints
+            // computes it from package data: XXH3-64 of the base level's blocks in
+            // row order after the guest endian swap.
+            static uint64_t TextureFingerprint(const uint8_t* rows, uint32_t rowPitch, size_t rowBytes, uint32_t rowCount)
+            {
+                XXH3_state_t* state = XXH3_createState();
+                XXH3_64bits_reset(state);
+                for (uint32_t row = 0; row < rowCount; row++)
+                    XXH3_64bits_update(state, rows + size_t(row) * rowPitch, rowBytes);
+                const uint64_t fingerprint = XXH3_64bits_digest(state);
+                XXH3_freeState(state);
+                return fingerprint;
+            }
+
+            // A texture the title has not streamed in yet is all zero; it must
+            // not match a mod made from a black image.
+            static bool AnyNonZero(const uint8_t* rows, uint32_t rowPitch, size_t rowBytes, uint32_t rowCount)
+            {
+                for (uint32_t row = 0; row < rowCount; row++)
+                {
+                    const uint8_t* p = rows + size_t(row) * rowPitch;
+                    if (std::any_of(p, p + rowBytes, [](uint8_t b) { return b != 0; })) return true;
+                }
+                return false;
+            }
+
+            std::optional<modding::TextureData> LoadTextureReplacement(uint64_t fingerprint, uint32_t format, uint32_t width, uint32_t height)
+            {
+                if (textureReplacementFailures.contains(fingerprint)) return {};
+                std::string error;
+                // Every level must fit the upload ring with the draw headroom free.
+                auto data = modding::ReadTextureReplacement(fingerprint, format, width, height,
+                    kUploadRingSize - kUploadHeadroom, &error);
+                if (!data && !error.empty())
+                {
+                    textureReplacementFailures.insert(fingerprint);
+                    LOG_WARNING("[mods] {}", error);
+                }
+                return data;
+            }
+
+            enum class ReplacementUpload { Uploaded, Skipped, Failed };
+            // Gives a fresh guest upload the payload's host texture. The guest
+            // fields (address, bytes, mips, hashes) stay as read from guest memory,
+            // so revalidation keeps the entry until the title rewrites the data.
+            // Failed: commands may already reference tex.texture; retire it.
+            ReplacementUpload UploadTextureReplacement(HostTexture& tex, const modding::TextureData& data,
+                uint64_t fingerprint, uint32_t format, uint32_t width, uint32_t height, uint32_t guestLevels)
+            {
+                // G8 stays R8_UNORM with the payload's red channel. DXT1/3/5 become
+                // RGBA8 as is. A8R8G8B8 uploads the guest's 8in32-swapped memory
+                // without conversion, which is B,G,R,A (asset_export.cpp Untile), so
+                // the replacement is stored in that order and the fetch swizzle
+                // (XeDecodeTexture) reads both alike.
+                const RenderFormat hostFormat = format == 2 ? RenderFormat::R8_UNORM : RenderFormat::R8G8B8A8_UNORM;
+                const uint32_t bpp = format == 2 ? 1 : 4;
+                // The guest chain depth plus the extra top levels: minification
+                // never goes below the original's smallest level.
+                const uint32_t levelCount = std::min<uint32_t>(uint32_t(data.levels.size()),
+                    guestLevels + uint32_t(std::countr_zero(data.scale)));
+                auto pitch = [&](uint32_t level) { return (std::max(1u, data.width >> level) * bpp + 255) & ~255u; };
+                for (uint32_t level = 0; level < levelCount; level++)
+                    if (uint64_t(pitch(level)) * std::max(1u, data.height >> level) + kUploadHeadroom > kUploadRingSize)
+                    {
+                        LOG_WARNING("[mods] texture {:016x} replacement {}x{} exceeds the upload ring; using original", fingerprint, data.width, data.height);
+                        return ReplacementUpload::Skipped;
+                    }
+                tex.texture = device->createTexture(RenderTextureDesc::Texture2D(data.width, data.height, levelCount, hostFormat));
+                tex.layout = RenderTextureLayout::UNKNOWN;
+                if (!tex.texture)
+                {
+                    LOG_WARNING("[mods] texture {:016x} replacement creation failed {}x{} levels={}; using original", fingerprint, data.width, data.height, levelCount);
+                    return ReplacementUpload::Skipped;
+                }
+                tex.format = hostFormat;
+                for (uint32_t level = 0; level < levelCount; level++)
+                {
+                    const uint32_t w = std::max(1u, data.width >> level), h = std::max(1u, data.height >> level);
+                    const uint32_t rowPitch = pitch(level);
+                    // One level at a time: a large one may Flush/Begin, which swaps
+                    // the ring, mapping and command list read below.
+                    const uint64_t offset = Upload(nullptr, size_t(rowPitch) * h, 512, kUploadHeadroom);
+                    if (offset == UINT64_MAX)
+                        return ReplacementUpload::Failed;
+                    for (uint32_t y = 0; y < h; y++)
+                    {
+                        const uint8_t* src = data.levels[level].data() + size_t(y) * w * 4;
+                        uint8_t* dst = uploadMapped + offset + size_t(y) * rowPitch;
+                        if (format == 2)
+                            for (uint32_t x = 0; x < w; x++) dst[x] = src[x * 4];
+                        else if (format == 6)
+                            for (uint32_t x = 0; x < w; x++, src += 4, dst += 4) { dst[0] = src[2]; dst[1] = src[1]; dst[2] = src[0]; dst[3] = src[3]; }
+                        else
+                            memcpy(dst, src, size_t(w) * 4);
+                    }
+                    texBytes += size_t(rowPitch) * h;
+                    Transition(tex, RenderTextureLayout::COPY_DEST, RenderBarrierStage::COPY);
+                    commandList->copyTextureRegion(RenderTextureCopyLocation::Subresource(tex.texture.get(), level, 0),
+                        RenderTextureCopyLocation::PlacedFootprint(uploadRing, hostFormat, w, h, 1, rowPitch / bpp, offset));
+                }
+                Transition(tex, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
+                // Shaders keep the original logical size: xeTextureSize (bindTextures)
+                // replaces GetDimensions in XeTextureDimensions, so texel offsets,
+                // unnormalized coordinates and getWeights stay on the original grid.
+                tex.guestWidth = width;
+                tex.guestHeight = height;
+                tex.width = tex.bindingWidth = data.width;
+                tex.height = tex.bindingHeight = data.height;
+                textureReplacements++;
+                textureReplacementsTotal++;
+                if (textureReplacementsLogged.insert(fingerprint).second)
+                {
+                    const auto path = data.path.generic_u8string();
+                    LOG_INFO("[mods] texture {:016x} replaced: key={} fmt={} original={}x{} payload={}x{} levels={} mod={} file={} total={}",
+                        fingerprint, data.key, format, width, height, data.width, data.height, levelCount, data.modId,
+                        std::string(path.begin(), path.end()), textureReplacementsTotal);
+                }
+                return ReplacementUpload::Uploaded;
+            }
+
             void DescribeBindingTexture(binding::Texture* output, const HostTexture& texture,
                 binding::TextureKind kind, uint64_t epoch) const noexcept
             {
@@ -7300,17 +7428,20 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
                 };
                 decode(src, pitchBlocks, packedOffset, blocksX, blocksY, faces, staging.data(), rowPitch);
-                if (textureFingerprintLog && dimension == 1 && !fi.convertToRgba8)
+                // Mod replacements (docs/wiki/Modding-API.md, Runtime textures) match
+                // tiled 2D base levels by fingerprint. Resolves returned earlier;
+                // packed-tail and partial-block base levels never qualify.
+                const bool replaceable = dimension == 1 && tiled && base != 0 && sourceMip == 0 &&
+                    (format == 2 || format == 6 || format == 18 || format == 19 || format == 20) &&
+                    std::min(width, height) > 16 && width % fi.blockWidth == 0 && height % fi.blockHeight == 0 &&
+                    modding::HasTextureReplacements();
+                const bool logFingerprint = textureFingerprintLog && dimension == 1 && !fi.convertToRgba8;
+                const size_t baseRowBytes = size_t(blocksX) * fi.bytesPerBlock;
+                const uint64_t fingerprint = replaceable || logFingerprint
+                    ? TextureFingerprint(staging.data(), rowPitch, baseRowBytes, blocksY) : 0;
+                if (logFingerprint)
                 {
-                    // fingerprint: the base level's blocks in row order after the
-                    // endian swap, as asset_export.cpp computes it from package
-                    // data. fingerprint_tiled: the guest's tiled extent as stored.
-                    XXH3_state_t* state = XXH3_createState();
-                    XXH3_64bits_reset(state);
-                    for (uint32_t by = 0; by < blocksY; by++)
-                        XXH3_64bits_update(state, staging.data() + size_t(by) * rowPitch, size_t(blocksX) * fi.bytesPerBlock);
-                    const uint64_t fingerprint = XXH3_64bits_digest(state);
-                    XXH3_freeState(state);
+                    // fingerprint_tiled: the guest's tiled extent as stored.
                     const uint64_t tiledBytes = uint64_t(pitchBlocks) * blocksYAligned * fi.bytesPerBlock;
                     const uint64_t identity = fingerprint ^ (uint64_t(format) << 56) ^ (uint64_t(width) << 32) ^ height;
                     if (textureFingerprintsSeen.insert(identity).second)
@@ -7375,6 +7506,27 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     tex->mipAddress = mipAddress;
                     tex->mipBytes = std::max(tex->mipBytes, uint32_t(mipBytes));
                 }
+                tex->guestHash = SampledGuestHash(*tex);
+                tex->guestFullHash = FullGuestHash(*tex);
+                tex->nextFullScanFrame = texture_cache::FirstFullScanFrame(frame, tex->guestAddress);
+                if (replaceable && !tex->controllerAtlasRecognized && AnyNonZero(staging.data(), rowPitch, baseRowBytes, blocksY))
+                    if (auto replacement = LoadTextureReplacement(fingerprint, format, width, height))
+                    {
+                        const auto uploaded = UploadTextureReplacement(*tex, *replacement, fingerprint, format, width, height,
+                            uint32_t(levels.size()));
+                        if (uploaded == ReplacementUpload::Failed)
+                        {
+                            Gpu().retiredTextures.push_back(std::move(tex));
+                            return nullptr;
+                        }
+                        if (uploaded == ReplacementUpload::Uploaded)
+                        {
+                            HostTexture* result = tex.get();
+                            textures.emplace(key, std::move(tex));
+                            return SelectControllerAtlas(result, bindingInfo, bindingEpoch);
+                        }
+                        textureReplacementFailures.insert(fingerprint);
+                    }
                 // Without device BC support the guest side above stays on 4x4
                 // blocks; each uploaded level is decoded into an RGBA8 staging
                 // of the same texel size and the host texture is RGBA8 (#214).
@@ -7414,9 +7566,6 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
                 const std::vector<uint8_t>& upload = expandBc ? expanded : staging;
                 tex->format = hostFormat;
-                tex->guestHash = SampledGuestHash(*tex);
-                tex->guestFullHash = FullGuestHash(*tex);
-                tex->nextFullScanFrame = texture_cache::FirstFullScanFrame(frame, tex->guestAddress);
                 if (dimension == 3)
                     tex->texture = device->createTexture(RenderTextureDesc::Texture(RenderTextureDimension::TEXTURE_2D, texWidth, texHeight, 1, 1, 6, hostFormat, RenderTextureFlag::CUBE));
                 else
@@ -13296,6 +13445,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (stats && r.textureReuploads)
                     LOG_INFO("renderer frame {}: {} textures re-uploaded after a guest write", r.frame, r.textureReuploads);
                 r.textureReuploads = 0;
+                if (stats && r.textureReplacements)
+                    LOG_INFO("renderer frame {}: {} textures replaced by mods ({} total)", r.frame, r.textureReplacements, r.textureReplacementsTotal);
+                r.textureReplacements = 0;
                 r.ResetTimers();
                 r.vertexUploads = r.vertexRevalidations = 0;
                 r.vertexBytesUploaded = 0;

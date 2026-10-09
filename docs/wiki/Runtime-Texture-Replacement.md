@@ -1,5 +1,7 @@
 # General runtime texture replacement: remaining work
 
+> Update 2026-10-09: textures drawn by the game are now replaced at upload by fingerprint from LOTEX2 files, including larger ones (see [Modding API](Modding-API.md) and `docs/notes/texture-import-research.zh-CN.md`). Still open: block-compressed payloads, a video memory budget, devices without BC support, and shimmer where the game samples only the top level. The rest of this page is the earlier plan.
+
 ## Implemented versus pending
 
 PR #68 connects LOTEX1 image replacements to the native settings-menu asset decoder. This path already knows the UE3 package, export index and object name. It can resolve canonical keys before decoding the original menu/font-page image.

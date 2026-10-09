@@ -8,7 +8,7 @@ These pages document the API v1 implementation developed in PR #68. A published 
 | --- | --- |
 | Native settings-menu `UI_MAIN_00` atlas | Replacement is wired into `settings/menu_assets.cpp`; preserve the original 512x1024 dimensions and layout. |
 | Texture pages used by native menu fonts | Image replacement is wired at the same decoder; preserve each page's dimensions and glyph positions. Font metrics are unchanged. |
-| Arbitrary textures drawn by the guest game | Not wired into the GPU upload path. Packaging a manifest row does not make that texture replaceable in-game. |
+| Textures drawn by the game | Replaced at upload by fingerprint from `.lotex2` files, at the original size or 2x/4x/8x larger (experimental, uncompressed RGBA8). See [Creating mods](Creating-Mods.md) and [Modding API](Modding-API.md). |
 | Font files/metrics, models and movies | Resource kinds and provider extension points reserved; no runtime consumers yet. |
 | External manager overlay | Implemented deterministic paths and isolated resolution mode. |
 | Exporting original artwork | `LostOdysseyRecomp.exe --export-assets <folder>` writes your game's textures (PNG plus `index.csv` with mod keys) and movies, also from an MO2 tool. Reference only; see [Creating mods](Creating-Mods.md). |

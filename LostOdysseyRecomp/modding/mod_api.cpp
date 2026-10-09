@@ -25,6 +25,7 @@ struct Snapshot {
     std::vector<Diagnostic> diagnostics;
     ResolutionMode mode = ResolutionMode::Combined;
     bool enabled = false;
+    bool textureEntries = false, textureOverlay = false;
 };
 std::mutex gMutex;
 std::shared_ptr<const Snapshot> gSnapshot = std::make_shared<Snapshot>();
@@ -46,13 +47,14 @@ std::string_view Trim(std::string_view s) {
     return s.substr(first, s.find_last_not_of(" \t\r\n") - first + 1);
 }
 bool KindValid(AssetKind kind) {
-    return kind >= AssetKind::Image && kind <= AssetKind::Movie;
+    return kind >= AssetKind::Image && kind <= AssetKind::Texture;
 }
 std::optional<AssetKind> ParseKind(std::string_view s) {
     if (s == "image") return AssetKind::Image;
     if (s == "font") return AssetKind::Font;
     if (s == "model") return AssetKind::Model;
     if (s == "movie") return AssetKind::Movie;
+    if (s == "texture") return AssetKind::Texture;
     return {};
 }
 template<class T> bool Number(std::string_view s, T& value) {
@@ -91,6 +93,13 @@ std::string CanonicalKey(std::string_view key) {
     uint32_t index = 0;
     if (colon == key.npos || !Number(key.substr(hash + 1, colon - hash - 1), index)) return {};
     return MakeManifestKey(key.substr(0, hash), index, key.substr(colon + 1));
+}
+// Texture fingerprints are matched exactly, never normalized.
+std::string CanonicalKey(AssetKind kind, std::string_view key) {
+    if (kind != AssetKind::Texture) return CanonicalKey(key);
+    const bool hex = key.size() == 16 && std::all_of(key.begin(), key.end(),
+        [](char c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'); });
+    return hex ? std::string(key) : std::string{};
 }
 std::string LookupKey(const AssetId& id) {
     return std::to_string(static_cast<uint32_t>(id.kind)) + ":" + id.key;
@@ -163,13 +172,14 @@ void LoadManifest(Snapshot& snapshot, const std::filesystem::path& manifest, std
         const auto colon = left.find(':');
         if (colon == left.npos) continue;
         const auto kind = ParseKind(Trim(left.substr(0, colon)));
-        const auto key = CanonicalKey(Trim(left.substr(colon + 1)));
+        const auto key = kind ? CanonicalKey(*kind, Trim(left.substr(colon + 1))) : std::string{};
         const auto relative = Relative(Trim(std::string_view(text).substr(equal + 1)));
         if (!kind || key.empty() || !relative) { Diagnose(snapshot, manifest, n, "invalid asset kind, identity or relative path"); continue; }
         Entry entry{{*kind, key}, manifest.parent_path(), manifest.parent_path() / *relative, id, priority};
         if (!ContainedFile(entry.base, entry.file) || !ContainedFile(snapshot.root, entry.file)) {
             Diagnose(snapshot, manifest, n, "replacement is missing or escapes the mod directory"); continue;
         }
+        snapshot.textureEntries |= *kind == AssetKind::Texture;
         const auto lookup = LookupKey(entry.id);
         const auto it = snapshot.entries.find(lookup);
         // Sorted directories: later directory wins ties, last entry wins in a file.
@@ -192,8 +202,11 @@ std::string MakeManifestKey(std::string_view package, uint32_t exportIndex, std:
 }
 std::filesystem::path OverlayRelativePath(const AssetId& id) {
     if (!KindValid(id.kind)) return {};
-    const auto key = CanonicalKey(id.key);
+    const auto key = CanonicalKey(id.kind, id.key);
     if (key.empty()) return {};
+    // A fingerprint is already a fixed-size name, so two manager mods that
+    // replace the same image collide on the same path.
+    if (id.kind == AssetKind::Texture) return std::filesystem::path("overlay") / "textures" / ("fp-" + key + ".lotex2");
     uint64_t hash = 14695981039346656037ull;
     for (unsigned char c : key) { hash ^= c; hash *= 1099511628211ull; }
     char name[40];
@@ -223,6 +236,8 @@ void Initialize(const std::filesystem::path& requestedRoot) {
         }
         if (const auto* flag = std::getenv("LO_MODS"); flag && (std::string_view(flag) == "0" || std::string_view(flag) == "false"))
             snapshot->enabled = false;
+        if (snapshot->enabled && snapshot->mode != ResolutionMode::Standalone)
+            snapshot->textureOverlay = std::filesystem::is_directory(snapshot->root / "overlay" / "textures", ec);
         if (snapshot->enabled && snapshot->mode != ResolutionMode::Overlay && std::filesystem::is_directory(snapshot->root, ec)) {
             std::vector<std::filesystem::path> dirs;
             std::filesystem::directory_iterator it(snapshot->root, ec), end;
@@ -266,9 +281,15 @@ ResolutionMode Mode() { std::lock_guard lock(gMutex); return gSnapshot->mode; }
 std::vector<Diagnostic> Diagnostics() { std::lock_guard lock(gMutex); return gSnapshot->diagnostics; }
 std::vector<std::string> ModIds() { std::lock_guard lock(gMutex); return gSnapshot->modIds; }
 bool Enabled() { std::lock_guard lock(gMutex); return gSnapshot->enabled; }
+bool HasTextureReplacements() {
+    std::lock_guard lock(gMutex);
+    const auto& s = *gSnapshot;
+    return s.enabled && (s.textureOverlay || (s.mode != ResolutionMode::Overlay &&
+        (s.textureEntries || gProviders.count(AssetKind::Texture))));
+}
 std::optional<ResolvedAsset> Resolve(const AssetRequest& request) {
     if (!KindValid(request.id.kind)) return {};
-    const auto key = CanonicalKey(request.id.key);
+    const auto key = CanonicalKey(request.id.kind, request.id.key);
     if (key.empty()) return {};
     const AssetRequest normalized{{request.id.kind, key}, request.originalPath};
     std::shared_ptr<const Snapshot> snapshot;
@@ -291,7 +312,7 @@ std::optional<ResolvedAsset> Resolve(const AssetRequest& request) {
         try {
             auto result = provider->Resolve(normalized);
             std::error_code ec;
-            if (result && result->id.kind == normalized.id.kind && CanonicalKey(result->id.key) == normalized.id.key &&
+            if (result && result->id.kind == normalized.id.kind && CanonicalKey(result->id.kind, result->id.key) == normalized.id.key &&
                 std::filesystem::is_regular_file(result->path, ec) && !ec) { result->id = normalized.id; return result; }
         } catch (...) { /* Optional providers must not prevent vanilla loading. */ }
     }

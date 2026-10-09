@@ -1,4 +1,5 @@
 #include <modding/image_mod.h>
+#include <modding/texture_mod.h>
 #include <cassert>
 #include <chrono>
 #include <cstdlib>
@@ -175,6 +176,39 @@ void Validation(const fs::path& root, const fs::path& outside) {
     for (int i = 0; i != 20; ++i) Reload();
     reader.get();
 }
+std::string Lotex2(uint64_t fingerprint, uint32_t format, uint32_t w, uint32_t h, const std::string& payload) {
+    std::string data("LOTEX2\r\n", 8);
+    auto u32 = [&](uint32_t value) { for (int i = 0; i != 4; ++i) data.push_back(char(value >> (8 * i))); };
+    u32(64 + 4); u32(1); u32(uint32_t(fingerprint)); u32(uint32_t(fingerprint >> 32));
+    u32(format); u32(w); u32(h); u32(w); u32(h); u32(1); u32(uint32_t(payload.size())); u32(0); u32(4); u32(0);
+    return data + "test" + payload;
+}
+void Textures(const fs::path& root) {
+    constexpr uint64_t fingerprint = 0x0123456789abcdefull;
+    const AssetRequest texture{{AssetKind::Texture, "0123456789abcdef"}, {}};
+    assert(OverlayRelativePath(texture.id) == fs::path("overlay/textures/fp-0123456789abcdef.lotex2"));
+    for (const auto* bad : {"0123456789ABCDEF", "0123456789abcde", "0123456789abcdef0", "0123456789abcdeg", key.c_str()})
+        assert(OverlayRelativePath({AssetKind::Texture, bad}).empty() && !Resolve({{AssetKind::Texture, bad}, {}}));
+    Reload(); assert(!HasTextureReplacements());
+    // One 2x2 level: the reader derives the 1x1 box-filtered level.
+    const std::string pixels("\x00\x04\x08\x0c\x04\x08\x0c\x10\x08\x0c\x10\x14\x0c\x10\x14\x18", 16);
+    Write(root / "tex/t.lotex2", Lotex2(fingerprint, 18, 2, 2, pixels));
+    Write(root / "tex/mod.ini", "api_version=1\nid=tex\ntexture:0123456789abcdef=t.lotex2\n");
+    Reload();
+    assert(HasTextureReplacements() && Resolve(texture)->modId == "tex");
+    const auto data = ReadTextureReplacement(fingerprint, 18, 2, 2, UINT64_MAX);
+    assert(data && data->scale == 1 && data->key == "test" && data->levels.size() == 2);
+    assert((data->levels[1] == std::vector<uint8_t>{6, 10, 14, 18}));
+    std::string error;
+    assert(!ReadTextureReplacement(fingerprint, 6, 2, 2, UINT64_MAX, &error) && !error.empty());
+    assert(!ReadTextureReplacement(fingerprint, 18, 2, 2, 15, &error));
+    const auto overlay = root / OverlayRelativePath(texture.id);
+    Write(overlay, Lotex2(fingerprint, 18, 2, 2, pixels.substr(1)));
+    assert(Resolve(texture)->modId == "@overlay" && !ReadTextureReplacement(fingerprint, 18, 2, 2, UINT64_MAX, &error));
+    fs::remove_all(root / "tex"); fs::remove_all(overlay.parent_path());
+    Env("LO_MODS_MODE", "overlay"); Reload(); assert(!HasTextureReplacements());
+    Env("LO_MODS_MODE", nullptr); Reload();
+}
 }
 int main() {
     Environment environment;
@@ -183,6 +217,7 @@ int main() {
     const auto root = temp.path / "mods";
     Resolution(root);
     Validation(root, temp.path / "outside");
+    Textures(root);
     Shutdown(); assert(!Resolve(request));
-    std::cout << "Mod API, image contract, manager isolation and reload tests passed\n";
+    std::cout << "Mod API, image and texture contracts, manager isolation and reload tests passed\n";
 }
