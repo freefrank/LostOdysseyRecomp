@@ -10,6 +10,7 @@
 #include "vulkan_command_recording.h"
 #if !defined(LO_VIDEO_SUBMISSION_UNIT)
 #include "dlss_ngx.h"
+#include "shader/dxc_compiler.h"
 #include "temporal_upscaler.h"
 #endif
 #endif
@@ -2239,6 +2240,15 @@ namespace gpu::video
             os::hang_watch::Watch startupWatch("DLSS controller creation", nullptr);
 #endif
 #ifdef _WIN32
+            dlss::SetLogSink([](const char* line) { LOG_INFO("{}", line); });
+#if !defined(LO_VIDEO_SUBMISSION_UNIT)
+            dlss::SetComputeShaderCompiler([](const char* source, std::vector<uint8_t>& dxil) {
+                auto compiled = xenos::CompileCachedHlsl(source, "main", "cs_6_0", xenos::ShaderBinaryFormat::Dxil);
+                if (!compiled.ok) LOG_WARNING("DLSS NR: bridge shader: {}", compiled.errors);
+                else dxil = std::move(compiled.bytecode);
+                return compiled.ok;
+            });
+#endif
             if (g_vulkan) {
                 g_dlssController = std::make_unique<dlss::Controller>(DlssApplicationDataPath(), DlssRuntimePath());
                 g_temporalUpscaler = std::make_unique<TemporalUpscaler>(*g_dlssController);
@@ -2288,6 +2298,7 @@ namespace gpu::video
             g_temporalUpscaler = std::make_unique<TemporalUpscaler>(static_cast<dlss::Controller*>(nullptr));
             g_interface = plume::CreateMetalInterface();
 #else
+            dlss::SetLogSink([](const char* line) { LOG_INFO("{}", line); });
             g_dlssController = std::make_unique<dlss::Controller>(DlssApplicationDataPath(), DlssRuntimePath());
             g_temporalUpscaler = std::make_unique<TemporalUpscaler>(*g_dlssController);
             LoadCustomVulkanDriver();
@@ -4022,6 +4033,24 @@ namespace gpu::video
         cache.copied = now;
     }
 
+    // The DLSS 5 neural rendering page: whether a DLSS frame is held for its
+    // preview, and the preview's features released once the page closes.
+    // Callers have waited for the present GPU.
+    static void TrackNeuralRenderingPreview()
+    {
+#if defined(_WIN32) && defined(LO_GPU_PLUME) && !defined(LO_VIDEO_SUBMISSION_UNIT)
+        static bool available = false, open = false;
+        const bool nowAvailable = g_dlssController && g_dlssController->NeuralRenderingPreviewAvailable();
+        if (nowAvailable != available) {
+            available = nowAvailable;
+            settings::SetNeuralRenderingPreviewAvailable(available);
+        }
+        const bool nowOpen = settings::GetNeuralRenderingTuning().open;
+        if (open && !nowOpen && g_dlssController) g_dlssController->ReleaseNeuralRenderingPreview();
+        open = nowOpen;
+#endif
+    }
+
     // Copies stop refreshing and the previews may sample the older one.
     static void FreezeScene()
     {
@@ -4080,6 +4109,7 @@ namespace gpu::video
             if (!WaitForPresentGpu()) return false;
             // A host menu opened straight over gameplay freezes the last copy.
             if (isMenu) FreezeScene();
+            TrackNeuralRenderingPreview();
             // Stage allocations before acquiring an image or opening a command
             // list. Failed resizing keeps the previous usable resources intact.
             std::unique_ptr<plume::RenderBuffer> upload;
@@ -4152,6 +4182,29 @@ namespace gpu::video
                     options.calibrationDisplayGammaRamp = true;
                 }
             }
+#if defined(_WIN32) && defined(LO_GPU_PLUME) && !defined(LO_VIDEO_SUBMISSION_UNIT)
+            // The DLSS 5 neural rendering page runs the model on the held DLSS
+            // frame with its unsaved values: DLSS on the left, DLSS + NR on the right.
+            const auto neuralRendering = settings::GetNeuralRenderingTuning();
+            if (isMenu && neuralRendering.open && g_dlssController) {
+                const dlss::NeuralRenderingTuning tuning{neuralRendering.style, neuralRendering.intensity / 100.0f,
+                    neuralRendering.globalTone / 100.0f, neuralRendering.localTone / 100.0f,
+                    neuralRendering.structure / 100.0f, neuralRendering.skin / 100.0f, neuralRendering.autoMask};
+                if (auto* preview = g_dlssController->RecordNeuralRenderingPreview(*g_commandList,
+                        neuralRendering.passes, neuralRendering.preset, tuning)) {
+                    const float scale = std::min(width/1280.0f,height/720.0f);
+                    const float x = (width-1280*scale)*0.5f, y = (height-720*scale)*0.5f;
+                    options.brightnessPreview = true;
+                    options.calibrationSplitScene = true;
+                    options.calibrationScene = preview;
+                    options.calibrationDisplayGammaRamp = true;
+                    options.calibrationRect[0] = (x+settings::NrPreviewLeft*scale)/width;
+                    options.calibrationRect[1] = (y+settings::NrPreviewTop*scale)/height;
+                    options.calibrationRect[2] = (x+settings::NrPreviewRight*scale)/width;
+                    options.calibrationRect[3] = (y+settings::NrPreviewBottom*scale)/height;
+                }
+            }
+#endif
             g_presentation->Draw(g_commandList.get(),g_cpuFrame.get(),backBuffer,width,height,
                 g_swapChain->getWidth(),g_swapChain->getHeight(),options);
         }
@@ -4347,6 +4400,7 @@ namespace gpu::video
                     return;
                 DisplayCompletion completion(g_displayChanges, displayTicket);
                 if (!WaitForPresentGpu()) return;
+                TrackNeuralRenderingPreview();
                 // Calibration previews: scene frames refresh the copy (no earlier
                 // frame still samples it after the wait); the first frame without
                 // the scene freezes it.

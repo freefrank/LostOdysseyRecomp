@@ -21,6 +21,9 @@ namespace gpu::dlss {
 // fallback until it can prove the scene boundary's color encoding.
 enum class SrColorSpace : uint8_t { Unknown, Linear, DisplayEncoded };
 
+// DLSS 5 Neural Rendering runs this many times in a row on the SR output.
+inline constexpr uint32_t kMaxNeuralRenderingPasses = 4;
+
 // Feature-creation key. The renderer supplies the device epoch with the frame
 // configuration; Controller does not own output textures or renderer extents.
 struct SrConfig {
@@ -31,6 +34,10 @@ struct SrConfig {
     uint64_t deviceEpoch = 0;
     bool depthInverted = false;
     bool autoExposure = false;
+    // 0 is off. A change recreates the SR and NR features at a drained boundary,
+    // as does the model preset hint, which a feature reads when it is created.
+    uint8_t neuralRenderingPasses = 0;
+    uint8_t neuralRenderingPreset = 0;
 
     bool operator==(const SrConfig&) const = default;
 };

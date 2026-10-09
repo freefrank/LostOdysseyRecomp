@@ -28,6 +28,7 @@ PREAMBLE = r'''
 #include <settings/language_selection.h>
 #include <gpu/frame_plan.h>
 #include <gpu/frame_rate.h>
+#include <gpu/dlss_nr_state.h>
 #include <gpu/frame_generation_settings.h>
 #include <gpu/video.h>
 #include <gpu/display_change.h>

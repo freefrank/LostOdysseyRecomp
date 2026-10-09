@@ -100,7 +100,8 @@ static_assert(int(GraphicsRow::RenderResolution) + 1 == int(GraphicsRow::ShadowR
 static_assert(int(GraphicsRow::ShadowResolution) + 1 == int(GraphicsRow::DynamicShadows));
 static_assert(int(GraphicsRow::AntiAliasing) + 1 == int(GraphicsRow::AmbientOcclusion));
 static_assert(int(GraphicsRow::AmbientOcclusion) + 1 == int(GraphicsRow::DlssQuality));
-static_assert(int(GraphicsRow::FsrSharpness) + 1 == int(GraphicsRow::AnisotropicFiltering));
+static_assert(int(GraphicsRow::FsrSharpness) + 1 == int(GraphicsRow::DlssNeuralRendering));
+static_assert(int(GraphicsRow::DlssNeuralRendering) + 1 == int(GraphicsRow::AnisotropicFiltering));
 static_assert(int(GraphicsRow::FrameRate) + 1 == int(GraphicsRow::FrameGeneration));
 static_assert(int(GraphicsRow::FrameGeneration) + 1 == int(GraphicsRow::FrameGenerationMultiplier));
 static_assert(int(GraphicsRow::FrameGenerationMultiplier) + 1 == int(GraphicsRow::VariableRefreshRate));

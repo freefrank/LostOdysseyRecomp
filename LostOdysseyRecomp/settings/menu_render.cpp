@@ -427,6 +427,120 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
         else text(x, y, 24, 24, std::wstring(1, letter), 15, ink, true, 1, outline, 12);
     };
 
+    if (current.neuralRendering.open)
+    {
+        // Presentation paints the DLSS / DLSS + NR comparison in the transparent
+        // preview rectangle; everything around it is opaque UI.
+        pixels.assign(size_t(width) * height, 0u);
+        const auto &page = current.neuralRendering;
+        const auto tr = [&](const wchar_t *en, const wchar_t *zh) { return std::wstring(Translate(current.language, en, zh)); };
+        const uint32_t backdrop = MakeColor(255, 27, 31, 35);
+        fill(0, 0, 1280, NrPreviewTop, backdrop);
+        fill(0, NrPreviewBottom, 1280, 720 - NrPreviewBottom, backdrop);
+        fill(0, NrPreviewTop, NrPreviewLeft, NrPreviewBottom - NrPreviewTop, backdrop);
+        fill(NrPreviewRight, NrPreviewTop, 1280 - NrPreviewRight, NrPreviewBottom - NrPreviewTop, backdrop);
+        text(160, 10, 960, 42, tr(L"DLSS 5 neural rendering", L"DLSS 5 神經渲染"), 29, ink, false, 1, outline, 19);
+        const int mid = (NrPreviewLeft + NrPreviewRight) / 2;
+        text(NrPreviewLeft, 52, mid - NrPreviewLeft, 26, L"DLSS", 18, ink, false, 1, outline, 13);
+        text(mid, 52, NrPreviewRight - mid, 26, tr(L"DLSS + NR", L"DLSS + NR"), 18, ink, false, 1, outline, 13);
+        if (!page.sceneAvailable)
+        {
+            fill(NrPreviewLeft, NrPreviewTop, NrPreviewRight - NrPreviewLeft, NrPreviewBottom - NrPreviewTop,
+                 MakeColor(255, 40, 45, 50));
+            text(NrPreviewLeft + 20, NrPreviewTop + 100, NrPreviewRight - NrPreviewLeft - 40, 70,
+                 tr(L"Play a scene with DLSS on to see a preview.", L"請在開啟 DLSS 的情況下進入遊戲場景以預覽。"),
+                 20, muted, false, 1, outline, 14);
+        }
+        const auto percent = [](uint32_t value) { return std::to_wstring(value) + L"%"; };
+        const std::wstring skin = page.skin > 0 ? L"+" + std::to_wstring(page.skin) : std::to_wstring(page.skin);
+        const struct { const wchar_t *en, *zh; } labels[NrControlCount] = {
+            {L"Passes", L"次數"}, {L"Model", L"模型"}, {L"Preset", L"預設組"},
+            {L"Intensity", L"強度"}, {L"Global tone", L"整體色調"}, {L"Local tone", L"局部色調"},
+            {L"Structure", L"結構"}, {L"Skin structure", L"皮膚結構"}, {L"Character mask", L"角色遮罩"},
+        };
+        const std::wstring combos[3] = {
+            page.passes == 0 ? tr(L"Off", L"關") : std::to_wstring(page.passes) + L"×",
+            page.style == 1 ? tr(L"Natural", L"自然") : page.style == 2 ? tr(L"Cinematic", L"電影感") : tr(L"Default", L"預設"),
+            page.preset == 0 ? tr(L"Default", L"預設") : tr(L"Preset", L"預設組") + L" " + std::to_wstring(page.preset),
+        };
+        // Slider fraction and value text for focus 3-7.
+        const float fractions[5] = {page.intensity / 200.0f, page.globalTone / 200.0f, page.localTone / 200.0f,
+                                    page.structure / 200.0f, (page.skin + 100) / 200.0f};
+        const std::wstring values[5] = {percent(page.intensity), percent(page.globalTone), percent(page.localTone),
+                                        percent(page.structure), skin};
+        for (int focus = 0; focus < NrControlCount; ++focus)
+        {
+            const int column = focus >= 5 ? 1 : 0;
+            const int x = NrColumnX[column], y = NrRowTop + (focus - column * 5) * NrRowHeight;
+            const int controlX = x + NrControlOffset;
+            const bool focused = page.focus == focus;
+            text(x, y, NrControlOffset - 6, 36, tr(labels[focus].en, labels[focus].zh), 18, ink, false, 0, outline, 12);
+            if (focus >= 3 && focus <= 7)
+            {
+                const int sliderY = y + 8;
+                cell(controlX, sliderY, NrSliderWidth, 20, focused);
+                const float fraction = std::clamp(fractions[focus - 3], 0.0f, 1.0f);
+                const int marker = int(std::lround(controlX + 4 + (NrSliderWidth - 8) * fraction));
+                // Default tick: 100% for the tones, 0 for the skin range.
+                const int tick = int(std::lround(controlX + 4 + (NrSliderWidth - 8) * 0.5));
+                fill(tick, sliderY + 3, 2, 14, MakeColor(255, 120, 124, 126));
+                fill(controlX + 4, sliderY + 6, std::max(0, marker - controlX - 4), 8, MakeColor(255, 167, 200, 214));
+                fill(marker - 4, sliderY - 5, 8, 30, MakeColor(255, 234, 238, 234));
+                text(controlX + NrSliderWidth + 10, y, NrColumnWidth - NrControlOffset - NrSliderWidth - 10, 36,
+                     values[focus - 3], 18, ink, false, 2, outline, 13);
+            }
+            else
+            {
+                const std::wstring value = focus == 8 ? (page.autoMask ? tr(L"On", L"開") : tr(L"Off", L"關"))
+                                                      : combos[focus];
+                const int w = NrColumnWidth - NrControlOffset;
+                cell(controlX, y, w, 36, focused);
+                text(controlX + 6, y, 28, 36, L"<", 18, ink, false, 1, outline, 13);
+                text(controlX + w - 34, y, 28, 36, L">", 18, ink, false, 1, outline, 13);
+                text(controlX + 36, y, w - 72, 36, value, 18, ink, false, 1, outline, 13);
+            }
+        }
+        const wchar_t *buttonEn[3] = {L"Default", L"Done", L"Cancel"};
+        const wchar_t *buttonZh[3] = {L"預設值", L"完成", L"取消"};
+        for (int i = 0; i < 3; ++i)
+        {
+            const int x = NrColumnX[0] + i * (NrButtonWidth + NrButtonGap);
+            cell(x, NrButtonTop, NrButtonWidth, NrButtonHeight, page.focus == 9 + i);
+            text(x + 8, NrButtonTop, NrButtonWidth - 16, NrButtonHeight, tr(buttonEn[i], buttonZh[i]),
+                 19, ink, false, 1, outline, 14);
+        }
+        const wchar_t *helpEn[NrFocusCount] = {
+            L"How many times the model runs on each frame. More passes look stronger and cost more frame time.",
+            L"The look the model renders. Default lets the model choose; Cinematic is experimental.",
+            L"Model preset hint. Its effect is unverified; keep Default unless you are experimenting.",
+            L"Overall strength of the effect. 100% is the model's default.",
+            L"Strength of whole-image tone changes. Some nvngx_dlssnr.dll versions ignore it.",
+            L"Strength of local light and shadow changes. With more than one pass it applies to the first pass only.",
+            L"Strength of the surface detail the model adds.",
+            L"Detail on faces and skin. Below 0 it follows Structure.",
+            L"Lets the model find characters and treat them separately.",
+            L"Restores the model settings to their defaults.",
+            L"Keeps these values. Save them on the Graphics tab.",
+            L"Discards the changes made on this page.",
+        };
+        const wchar_t *helpZh[NrFocusCount] = {
+            L"模型在每個影格上執行的次數。次數越多效果越強，影格耗時也越高。",
+            L"模型呈現的風格。預設由模型自行決定；電影感為實驗性質。",
+            L"模型預設組提示。實際效果未經驗證，除非要實驗，否則請維持預設。",
+            L"整體效果強度。100% 為模型預設值。",
+            L"整張畫面的色調變化強度。部分版本的 nvngx_dlssnr.dll 會忽略此項。",
+            L"局部光影變化的強度。執行多次時，只作用於第一次。",
+            L"模型所加入表面細節的強度。",
+            L"臉部與皮膚的細節。低於 0 時跟隨「結構」。",
+            L"讓模型辨識角色並單獨處理。",
+            L"將模型設定還原為預設值。",
+            L"保留這些數值。請在「圖像」分頁儲存。",
+            L"捨棄在此頁所做的變更。",
+        };
+        const int helpFocus = std::clamp(page.focus, 0, NrFocusCount - 1);
+        text(160, 666, 960, 32, tr(helpEn[helpFocus], helpZh[helpFocus]), 16, ink, false, 1, outline, 12);
+        return true;
+    }
     if (current.brightness.open)
     {
         // Same frame as the HDR page: presentation paints the comparison in
