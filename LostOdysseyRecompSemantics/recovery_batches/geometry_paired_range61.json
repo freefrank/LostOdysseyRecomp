@@ -1,0 +1,19 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "geometry-paired-range61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/geometry_paired_range61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/geometry_paired_range61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nvoid OriginalPairedRange61Save(PPCContext&,std::uint8_t*);\nvoid OriginalPairedRange61Restore(PPCContext&,std::uint8_t*);\nvoid OriginalPairedRange61Lower(PPCContext&,std::uint8_t*);\n#define __savegprlr_26(c,b) OriginalPairedRange61Save(c,b)\n#define __restgprlr_26(c,b) OriginalPairedRange61Restore(c,b)\n#define sub_82BD4448(c,b) OriginalPairedRange61Lower(c,b)\nextern \"C\" PPC_FUNC(__imp____savevmx_119);\n#define __savevmx_119(c,b) __imp____savevmx_119(c,b)\nextern \"C\" PPC_FUNC(__imp____restvmx_119);\n#define __restvmx_119(c,b) __imp____restvmx_119(c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/geometry_paired_range61.cpp",
+        "LostOdysseyRecompSemantics/src/geometry_unbounded_range61.cpp",
+        "LostOdysseyRecompSemantics/src/geometry_math61.cpp",
+        "LostOdysseyRecompSemantics/src/reader_buffer_growth61.cpp",
+        "LostOdysseyRecompSemantics/src/crt_copy_full_context.cpp",
+        "LostOdysseyRecompSemantics/src/crt_close_recursive_buffer_context.cpp"
+      ]
+    }
+  ]
+}

@@ -159,7 +159,13 @@ def validate_manifests(paths: list[Path], ppc_root: Path = DEFAULT_PPC,
                 source_lines[name] = (Path(ppc_root) / name).read_text(encoding="utf-8").splitlines(keepends=True)
             lines = source_lines[name]
             start = line_number - 1
-            header = f"PPC_FUNC_IMPL(__imp__sub_{address}) {{"
+            symbol = entry.get("symbol")
+            if symbol is None:
+                symbol = f"__imp__sub_{address}"
+            elif not isinstance(symbol, str) or not re.fullmatch(
+                    r"__imp____(?:save|rest)vmx_[0-9]{1,3}", symbol):
+                raise ValueError(f"unsupported named compiler helper: {symbol}")
+            header = f"PPC_FUNC_IMPL({symbol}) {{"
             if start >= len(lines) or lines[start].rstrip("\r\n") != header:
                 raise ValueError(f"PPC source location changed: {address} {name}:{line_number}")
             end = start + 1

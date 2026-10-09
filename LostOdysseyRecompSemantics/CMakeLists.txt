@@ -170,6 +170,7 @@ add_library(LostOdysseyRecompSemantics STATIC
     src/manager_release_context61.cpp
     src/transform_owner_routes61.cpp
     src/geometry_math61.cpp
+    src/geometry_paired_range61.cpp
     src/geometry_unbounded_range61.cpp
     src/geometry_triangle_range61.cpp
     src/geometry_box61.cpp

@@ -1,0 +1,53 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Private generated bodies are pinned by SHA256 of UTF-8 with LF line endings and no final newline; no generated code is embedded.",
+  "entries": [
+    {
+      "address": "82BD5910",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 14389,
+      "instruction_count": 139,
+      "body_sha256": "34bee4ad079e1d9143b632a993beb5f09d05566c518811d2f3fa86da53dd32f0",
+      "status": "validation_pending"
+    },
+    {
+      "address": "82DF2D4C",
+      "symbol": "__imp____savevmx_119",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.202.cpp",
+      "source_line": 17043,
+      "instruction_count": 19,
+      "body_sha256": "f1a7af32f21af25fef025dc65b6de46abd26aa92865c63bb1ded27cbeba1648e",
+      "status": "validation_pending",
+      "support_only": true
+    },
+    {
+      "address": "82DF2FE4",
+      "symbol": "__imp____restvmx_119",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.202.cpp",
+      "source_line": 26621,
+      "instruction_count": 19,
+      "body_sha256": "4fb1b09ef8e248fa64c2733a1f6a1ea952e08f192b85919634f0db9b376e97cc",
+      "status": "validation_pending",
+      "support_only": true
+    }
+  ],
+  "validation": {
+    "status": "partial_known_host_csr_mismatch",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "library_build": "passed",
+    "original_body_check": "passed",
+    "case_scope": "Case 0 passes; case 1 Full72/all 128 vectors/RAM/callbacks agree but host CSR is 0x9fc1 recovered vs 0x9fc0 original (invalid flag). Run stops before case 2. Instrumented probes alter optimizer behavior and do not establish acceptance. Preserve uninstrumented mismatch; no forced flag clearing.",
+    "focused_original_ppc_cases_passed": 1,
+    "planned_cases": 3
+  },
+  "implementation": {
+    "entries": [
+      "82BD5910"
+    ],
+    "header": "include/lo_semantics/geometry_paired_range61.h",
+    "source": "src/geometry_paired_range61.cpp",
+    "oracle": "tests/geometry_paired_range61_oracle.cpp"
+  }
+}
