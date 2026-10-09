@@ -1,3 +1,7 @@
+## Root direct continuation: owned polygon geometry rebuild (2026-10-09)
+
+`mesh_polygon_build61` closes BB9AA8: replace 36-byte polygon records and packed byte indices, derive/orient planes against source faces and centroid, expand supporting planes, calculate projection intervals and regenerate triangle fans. Three original-upper/shared-concrete-chain cases pass Full72/RAM/CSR/events and independent six cube faces/planes/ranges/triangle membership, existing-storage replacement and open-mesh rejection. Exactly three owned outputs remain; full Clang library passes. Main CVHL serialization still awaits BBB728 topology finalization and BBC110.
+
 ## Root direct continuation: closed-mesh polygon collection (2026-10-09)
 
 `mesh_polygon_collect61` closes BB9318 component-to-polygon collection and B7E504 guest stack probe. Three original-upper/shared-concrete-chain cases pass Full72/RAM/CSR/events: a twelve-triangle cube yields six four-vertex polygons, optional triangle membership covers all twelve IDs, and an open mesh is rejected. All temporary allocations are released. Full Clang library passes. Large stack probes and diagnostic/failure paths remain untested; two implementation entries, no historical mapping/runtime claim.

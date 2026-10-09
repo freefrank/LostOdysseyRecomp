@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "mesh-polygon-build61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/mesh_polygon_build61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/mesh_polygon_build61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\nvoid PolygonBuildLower(std::uint32_t,PPCContext&,std::uint8_t*);\nvoid PolygonBuildIndirect(std::uint32_t,PPCContext&,std::uint8_t*);\nvoid PolygonBuildSave(PPCContext&,std::uint8_t*);\nvoid PolygonBuildRestore(PPCContext&,std::uint8_t*);\n#define __savegprlr_20 PolygonBuildSave\n#define __restgprlr_20 PolygonBuildRestore\n#undef PPC_CALL_INDIRECT_FUNC\n#define PPC_CALL_INDIRECT_FUNC(t) PolygonBuildIndirect((t),ctx,base)\n#define sub_82BD0798(c,b) PolygonBuildLower(0x82bd0798u,c,b)\n#define sub_82BD2A08(c,b) PolygonBuildLower(0x82bd2a08u,c,b)\n#define sub_82BD2C08(c,b) PolygonBuildLower(0x82bd2c08u,c,b)\n#define sub_82BB9318(c,b) PolygonBuildLower(0x82bb9318u,c,b)\n#define sub_82B7BC40(c,b) PolygonBuildLower(0x82b7bc40u,c,b)\n#define sub_82BC65F8(c,b) PolygonBuildLower(0x82bc65f8u,c,b)\n#define sub_82BD92C0(c,b) PolygonBuildLower(0x82bd92c0u,c,b)\n#define sub_82BD9390(c,b) PolygonBuildLower(0x82bd9390u,c,b)\n#define sub_82BC3880(c,b) PolygonBuildLower(0x82bc3880u,c,b)\n#define sub_82BB8C08(c,b) PolygonBuildLower(0x82bb8c08u,c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/mesh_polygon_build61.cpp"
+      ]
+    }
+  ]
+}

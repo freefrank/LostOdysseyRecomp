@@ -91,6 +91,16 @@ geometric selection flag. Stable endpoint sorting groups manifold pairs;
 original nonmanifold diagnostics remain in place. The owned payload follows
 a four-byte count prefix and cleanup releases payload minus four.
 
+## Rebuilt polygon geometry
+
+BB9318 collects connected triangle components and ordered boundaries from a
+closed mesh. BB9AA8 owns the resulting record and byte-index arrays. Each
+36-byte record stores u16 degree at +0, borrowed byte slice at +4, normalized
+plane at +12..24, and min/max vertex projection at +28/+32. Winding is aligned
+with source triangles and checked against the surface centroid. Supporting
+planes expand to cover all source vertices, then polygon fans replace the
+owned triangle array. Component/edge/ordering scratch arrays are released.
+
 ## Remaining upper dependencies
 
 82B9C7D8 (mesh cooking orchestration) is still incomplete. Its constructor,
