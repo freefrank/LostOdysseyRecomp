@@ -1,24 +1,23 @@
 {
   "schema": "semantic-recovery-progress-checkpoint-v1",
-  "date": "2026-10-04",
-  "accepted_data_commit": "f066d61adf2a18afad5d7a3f23e7431284ff7675",
+  "date": "2026-10-09",
   "branch": "trail/semantic-recovery",
-  "goal_status": "paused",
+  "goal_status": "active",
   "quota_at_stop": {
     "used_percent": 98,
     "remaining_percent": 2,
     "goal_status": "paused"
   },
   "progress": {
-    "source": "HEAD tracked JSON only",
+    "source": "tracked manifests in this checkpoint commit",
     "individual": 82,
-    "family_count": 238,
-    "family_entries": 5436,
-    "family_unique": 5436,
+    "family_count": 239,
+    "family_entries": 5437,
+    "family_unique": 5437,
     "overlaps": 2,
-    "unique": 5516,
+    "unique": 5517,
     "cached_total": 62627,
-    "cached_entry_mapping_percent": 8.808,
+    "cached_entry_mapping_percent": 8.809,
     "scope_note": "entry address mapping against fixed cached baseline, not a refreshed whole-game census or full semantic completion",
     "runtime_wrappers_supplied": 3168
   },
@@ -72,25 +71,31 @@
     "name": "crt_reader_sort_float61",
     "address": "82BD2A28",
     "instruction_count": 31,
-    "files_present": 5,
-    "harness_present": false,
-    "cmake": false,
-    "status": "uncompiled, oracle missing, mapping credit 0",
-    "next": "Complete harness for the 3 planned finite threshold/payload paths, then focused original-PPC comparison plus library PASS before promotion."
+    "files_present": 6,
+    "harness_present": true,
+    "cmake": true,
+    "status": "promoted BD2A28 only after genuine regenerated-body comparison and Linux library PASS",
+    "next": "See active continuation and HANDOFF."
   },
-  "validation_limits": "Entry mapping against fixed cached baseline; selected original-PPC comparisons and ordinary RAM only. Full72 comparisons do not expand typed lower ABI. Native internals, fault/MMIO, concurrency, exception/unwind, ARM FP, runtime and gameplay remain unvalidated by these batches. Windows x64 float append checks cover selected finite inputs and host CSR restore only. New runtime replacement count 0; supplied gated wrappers 3168 are historical.",
+  "validation_limits": "Selected finite inputs, ordinary RAM, Full72 state, callbacks and host CSR only. No Windows revalidation, nonfinite matrix, faults/MMIO, concurrency, runtime or gameplay acceptance.",
   "workspace_continuation": {
     "date": "2026-10-09",
     "base_commit": "958bcbe3f3e44fdce863b1b3c15540817e2fe146",
     "unit": "82BD2A28",
-    "status": "implementation_ready_original_validation_blocked",
+    "status": "focused_original_ppc_and_linux_library_passed",
     "harness_present": true,
     "cmake": true,
     "logic_only_cases_passed": 3,
-    "focused_original_ppc_cases": 0,
-    "full_library_validated": false,
-    "mapping_delta": 0,
+    "focused_original_ppc_cases": 3,
+    "full_library_validated": true,
+    "mapping_delta": 1,
     "runtime_replacement_delta": 0,
-    "next": "Run narrowed crt_reader_sort_float61 batch against genuine ppc_recomp.181.cpp in Windows native environment; require family and library PASS before promotion."
-  }
+    "next": "Continue 82BAF600 and 82BAE200 bitstream chains; newly validated lower units remain zero-credit until original cached catalog membership can be established."
+  },
+  "historical_accepted_data_commit": "f066d61adf2a18afad5d7a3f23e7431284ff7675",
+  "new_validated_zero_credit_units": [
+    "object_sort_lifecycle61",
+    "object_sort_support61",
+    "reader_buffer_growth61"
+  ]
 }

@@ -1,0 +1,69 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Private generated bodies are pinned by SHA256 of UTF-8 with LF line endings and no final newline; no generated code is embedded.",
+  "entries": [
+    {
+      "address": "82BD0798",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 2461,
+      "instruction_count": 8,
+      "body_sha256": "9d0a302b60cd8bfd0afafd0f70b0027dc487d849edb04825e3a9f67994d1d4c8",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD2A28",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 7609,
+      "instruction_count": 31,
+      "body_sha256": "e13b86b50d6ceabf2bfd889e742d4d87d8e0b1d104544d56dc4bc8c3280368bc",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD2A08",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 7584,
+      "instruction_count": 8,
+      "body_sha256": "77a335948da3f9330db2d2e430d0dd9f25da5674adfefc64c3ebc6dbc0fc95ee",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD2C08",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 7890,
+      "instruction_count": 1,
+      "body_sha256": "701726b8927c3255b6e96a97bda285f0fe2115d991ea6ca4033a4d02c2f907c7",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD2C50",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 7948,
+      "instruction_count": 10,
+      "body_sha256": "001563e178243fabcbf0e94623aeb09a2dab759b26e373e6a65bd7e4fbb7674a",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 3,
+    "library_validated": true,
+    "library": "PASS complete CMake static library and three added units, --parallel 1; -Wall -Wextra -Werror with -Wno-error=unused-function for existing formatter warnings. GCC attempt blocked by existing Clang-only rotate builtins.",
+    "platform": "Linux x64; Clang 19.1.7; genuine XEX regenerated with pinned XenonRecomp ddd128bc plus tracked patch; existing oracle guest-window allocation overlaid with mmap/mprotect only",
+    "mapping_credit": 0,
+    "mapping_limit": "Fixed historical catalog.sqlite unavailable; do not infer membership from regenerated sources. 82BB25D0 is explicitly external in prior handoff.",
+    "runtime_validated": false,
+    "complete": false,
+    "limits": "Selected finite inputs, ordinary RAM, Full72 state, callbacks and host CSR only. No Windows revalidation, nonfinite matrix, faults/MMIO, concurrency, runtime or gameplay acceptance."
+  },
+  "implementation": {
+    "entries": [
+      "82BD2A08",
+      "82BD2C08",
+      "82BD2C50"
+    ],
+    "header": "include/lo_semantics/object_sort_support61.h",
+    "source": "src/object_sort_support61.cpp",
+    "oracle": "tests/object_sort_support61_oracle.cpp"
+  }
+}

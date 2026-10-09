@@ -66,7 +66,14 @@
       "scope": "Direct Registers and explicit reader/node fields replace local Context, unions, macros and goto. Shared mutable lower state and live FPR31 preserved.",
       "validation": "Linux x64 GCC C++20 -Wall -Wextra -Werror compile/link PASS; two finite no-growth/growth comparisons against baseline implementation PASS for Full72, RAM, callbacks and host CSR.",
       "limits": "The validation receipt above is historical, predating this refactor. No new original-PPC, Windows library, nonfinite FP or runtime validation.",
-      "mapping_delta": 0
+      "mapping_delta": 0,
+      "followup_original_validation": {
+        "date": "2026-10-09",
+        "focused_original_ppc_cases": 2,
+        "platform": "Linux x64; Clang 19.1.7; genuine XEX regenerated with pinned XenonRecomp ddd128bc plus tracked patch; existing oracle guest-window allocation overlaid with mmap/mprotect only",
+        "library": "PASS complete CMake static library and three added units, --parallel 1; -Wall -Wextra -Werror with -Wno-error=unused-function for existing formatter warnings. GCC attempt blocked by existing Clang-only rotate builtins.",
+        "limits": "Selected finite inputs, ordinary RAM, Full72 state, callbacks and host CSR only. No Windows revalidation, nonfinite matrix, faults/MMIO, concurrency, runtime or gameplay acceptance."
+      }
     }
   }
 }

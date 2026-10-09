@@ -23,5 +23,11 @@
     "runtime_validated": false,
     "complete": false,
     "limits": "Selected finite inputs, ordinary RAM, Full72 state, callbacks and host CSR only. No Windows revalidation, nonfinite matrix, faults/MMIO, concurrency, runtime or gameplay acceptance."
+  },
+  "scope": "Reader float threshold/reset, accepted table getter and mutable table+12 guest disposal. One documented cached-baseline entry; no runtime replacement.",
+  "implementation": {
+    "header": "include/lo_semantics/crt_reader_sort_float61.h",
+    "source": "src/crt_reader_sort_float61.cpp",
+    "oracle": "tests/crt_reader_sort_float61_oracle.cpp"
   }
 }

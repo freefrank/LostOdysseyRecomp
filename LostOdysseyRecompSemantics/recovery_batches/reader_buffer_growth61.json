@@ -1,0 +1,16 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "reader-buffer-growth61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/reader_buffer_growth61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/reader_buffer_growth61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nextern \"C\" PPC_FUNC(__imp__sub_82BD0798);\n#define sub_82BD0798(c,b) __imp__sub_82BD0798(c,b)\nextern \"C\" PPC_FUNC(__imp__sub_82B7A0B0);\n#define sub_82B7A0B0(c,b) __imp__sub_82B7A0B0(c,b)\nvoid OriginalReaderGrowth61Indirect(std::uint32_t,PPCContext&,std::uint8_t*);\n#undef PPC_CALL_INDIRECT_FUNC\n#define PPC_CALL_INDIRECT_FUNC(t) OriginalReaderGrowth61Indirect((t),ctx,base)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/reader_buffer_growth61.cpp",
+        "LostOdysseyRecompSemantics/src/crt_close_recursive_buffer_context.cpp",
+        "LostOdysseyRecompSemantics/src/crt_copy_full_context.cpp"
+      ]
+    }
+  ]
+}

@@ -1,5 +1,54 @@
 # Semantic recovery handoff
 
+## Active checkpoint — 2026-10-09, private inputs restored
+
+The user authorized sustained dependency-ordered recovery, parallel workers and
+staged commit/push to `trail/semantic-recovery`. The October 4 paused state below
+is historical. Earlier October 9 stages: `7afb8031` and `7cc7a21e`, both pushed.
+
+Private inputs were fetched into ignored `out/private-inputs`; the verified XEX
+was copied to ignored `LostOdysseyRecompLib/private/disc1/default.xex`. Its digest
+matches the supplied input. Generator gitlink `ddd128bc` plus the tracked project
+patch was built with Clang 19.1.7; `ppc_codegen.py` produced the genuine sources.
+Most cache fingerprint differences are CRLF. Config, build wrapper, codegen and
+FP header differ materially from the private cache; the cache is not reused.
+Selected complete bodies match the old pins exactly, with changed source lines:
+BD0798 is now chunk181:2461 and BD2A28 is chunk181:7609. Current pins retain only
+body SHA256 (UTF-8, LF, no final newline), source locations and instruction counts;
+the checker supports these without publishing generated bodies or instruction dumps.
+
+Validated this stage against genuine regenerated bodies: BD2A28 cleanup (3 cases),
+BD10D8 append refactor (2), object lifecycle BB25D0/BAE1A0 (3), support
+BD2A08/BD2C08/BD2C50 (3), buffer growth BD2870 (4). All pass selected Full72/RAM,
+callback and actual host-CSR comparisons. Linux uses temporary copied fixture
+headers under `/tmp/semantic-linux-oracle`, replacing only Windows guest-window
+allocation with mmap/mprotect. It does not emulate PPC operations. Generated
+fixtures stay in ignored `out/private-inputs`; executables/logs stay under `/tmp`.
+
+The complete standalone CMake semantics library passed with Clang 19, single-job
+build, `-Wall -Wextra -Werror -Wno-error=unused-function`. The warning exception is
+for pre-existing unused formatter helpers. The first GCC build was blocked by
+pre-existing Clang-only rotate builtins; no unrelated source repairs were made.
+Library path: `/tmp/semantic-library-clang/libLostOdysseyRecompSemantics.a`.
+
+Only the historically documented baseline member BD2A28 gains mapping credit:
+**5,517/62,627 (8.809%)**. BB25D0 is external; the other newly validated lowers
+stay in drafts with zero credit until the original cached `catalog.sqlite`
+membership is available. Full semantic acceptance remains zero; runtime additions
+remain zero. Finite ordinary-RAM checks do not establish Windows, nonfinite,
+fault/MMIO, concurrency or gameplay behavior.
+
+Next active work: BAF600 grid-delta stream decoder and BAE200 related bitstream
+engine, using the newly closed lower boundaries. BD2870 is implemented by
+`reader_buffer_growth61`; small initialization/tail helpers by
+`object_sort_support61`; object initialization/cleanup by `object_sort_lifecycle61`.
+Integrate one complete upper at a time, perform narrowly selected original-body
+comparisons and an incremental library build, then commit/push. Do not publish
+private XEX, generated CPP/headers, compiled cache or credentials. Existing Windows
+batch commands still require native Windows tools; Linux validation currently
+uses a temporary fixture overlay rather than changing the shared runner platform.
+
+
 Current checkpoint: **2026-10-04**, accepted recovery commit `f066d61a`, branch `trail/semantic-recovery`. The user requested stopping at about 2% remaining weekly quota, then documenting and delivering progress. Live usage reached 98%; the recovery goal is **paused**, all three `gpt-6.1-sol` workers stopped and the persistent runner exited. Documentation/draft delivery follows the accepted commit. Resume recovery only when the user resumes it.
 
 Checkout: `C:/Users/freefrank/.codex/worktrees/semantic-recovery/LostOdysseyRecomp`. Delivery target: `origin/trail/semantic-recovery` on `https://github.com/freefrank/LostOdysseyRecomp.git`.

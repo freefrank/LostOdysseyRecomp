@@ -7,6 +7,7 @@ used to decide whether an original body is still the selected one.
 from __future__ import annotations
 
 import argparse
+import hashlib
 from collections import Counter
 import json
 from pathlib import Path
@@ -65,12 +66,18 @@ def _metadata(entry: dict, body: str) -> None:
     comments = [line.split("// ", 1)[1].rstrip() for line in body.splitlines()
                 if re.match(r"^\s*// ", line)]
     instructions = entry.get("instructions", entry.get("instruction_sequence"))
-    if not isinstance(instructions, list) or any(not isinstance(x, str) for x in instructions):
-        raise ValueError(f"missing instruction list: {address}")
-    if comments != [x.rstrip() for x in instructions]:
-        raise ValueError(f"instruction sequence changed: {address}")
-    if "instruction_count" in entry and entry["instruction_count"] != len(instructions):
-        raise ValueError(f"instruction count changed: {address}")
+    # Digest pins keep private generated code out of public manifests. The
+    # verified complete body supplies the instruction sequence in that mode.
+    if instructions is None and "body_sha256" in entry:
+        if entry.get("instruction_count") != len(comments):
+            raise ValueError(f"instruction count changed: {address}")
+    else:
+        if not isinstance(instructions, list) or any(not isinstance(x, str) for x in instructions):
+            raise ValueError(f"missing instruction list: {address}")
+        if comments != [x.rstrip() for x in instructions]:
+            raise ValueError(f"instruction sequence changed: {address}")
+        if "instruction_count" in entry and entry["instruction_count"] != len(instructions):
+            raise ValueError(f"instruction count changed: {address}")
 
     cfg = entry.get("cfg")
     if cfg is not None:
@@ -166,8 +173,18 @@ def validate_manifests(paths: list[Path], ppc_root: Path = DEFAULT_PPC,
             body = entry.get("translated_body")
             # Older manifests include the closing line's newline; newer ones
             # omit it. The complete interior and closing brace must still match.
-            if body not in (source_body, source_body.removesuffix("\n")):
-                raise ValueError(f"complete translated body changed: {address} {name}:{line_number}")
+            digest = entry.get("body_sha256")
+            if digest is not None:
+                # read_text normalizes CRLF; omit only the final newline.
+                actual = hashlib.sha256(source_body.removesuffix("\n").encode("utf-8")).hexdigest()
+                if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest) or digest != actual:
+                    raise ValueError(f"complete body digest changed: {address} {name}:{line_number}")
+            if body is not None:
+                if body not in (source_body, source_body.removesuffix("\n")):
+                    raise ValueError(f"complete translated body changed: {address} {name}:{line_number}")
+            elif digest is None:
+                raise ValueError(f"missing complete body pin: {address}")
+            body = source_body.removesuffix("\n")
             _metadata(entry, body)
             bodies.append(body)
             pin_identities[address] = (name, line_number, source_body)

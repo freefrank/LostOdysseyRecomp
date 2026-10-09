@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "object-sort-lifecycle61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/object_sort_lifecycle61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/object_sort_lifecycle61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nvoid OriginalObjectSortLifecycle61Indirect(std::uint32_t,PPCContext&,std::uint8_t*);\n#undef PPC_CALL_INDIRECT_FUNC\n#define PPC_CALL_INDIRECT_FUNC(t) OriginalObjectSortLifecycle61Indirect((t),ctx,base)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/object_sort_lifecycle61.cpp"
+      ]
+    }
+  ]
+}

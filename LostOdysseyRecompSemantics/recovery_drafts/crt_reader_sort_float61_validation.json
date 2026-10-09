@@ -4,77 +4,32 @@
     {
       "address": "82BD0798",
       "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
-      "source_line": 2508,
+      "source_line": 2461,
       "instruction_count": 8,
-      "instructions": [
-        "lis r11,-31954",
-        "lwz r3,-2732(r11)",
-        "cmplwi cr6,r3,0",
-        "bnelr cr6",
-        "lis r10,-31967",
-        "addi r3,r10,26148",
-        "stw r3,-2732(r11)",
-        "blr "
-      ],
-      "translated_body": "PPC_FUNC_IMPL(__imp__sub_82BD0798) {\n\tPPC_FUNC_PROLOGUE();\n\t// lis r11,-31954\n\tctx.r11.s64 = -2094137344;\n\t// lwz r3,-2732(r11)\n\tctx.r3.u64 = PPC_LOAD_U32(ctx.r11.u32 + -2732);\n\t// cmplwi cr6,r3,0\n\tctx.cr6.compare<uint32_t>(ctx.r3.u32, 0, ctx.xer);\n\t// bnelr cr6\n\tif (!ctx.cr6.eq) return;\n\t// lis r10,-31967\n\tctx.r10.s64 = -2094989312;\n\t// addi r3,r10,26148\n\tctx.r3.s64 = ctx.r10.s64 + 26148;\n\t// stw r3,-2732(r11)\n\tPPC_STORE_U32(ctx.r11.u32 + -2732, ctx.r3.u32);\n\t// blr \n\treturn;\n}",
-      "status": "original_ppc_validated"
+      "status": "focused_original_ppc_validated",
+      "body_sha256": "9d0a302b60cd8bfd0afafd0f70b0027dc487d849edb04825e3a9f67994d1d4c8"
     },
     {
       "address": "82BD2A28",
       "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
-      "source_line": 7818,
+      "source_line": 7609,
       "instruction_count": 31,
-      "instructions": [
-        "mflr r12",
-        "stw r12,-8(r1)",
-        "std r30,-24(r1)",
-        "std r31,-16(r1)",
-        "stwu r1,-112(r1)",
-        "mr r31,r3",
-        "lis r11,-32256",
-        "li r30,0",
-        "lfs f13,12(r31)",
-        "lfs f0,3664(r11)",
-        "fcmpu cr6,f13,f0",
-        "blt cr6,0x82bd2a80",
-        "lwz r11,8(r31)",
-        "cmplwi cr6,r11,0",
-        "beq cr6,0x82bd2a80",
-        "bl 0x82bd0798",
-        "lwz r11,0(r3)",
-        "lwz r4,8(r31)",
-        "lwz r11,12(r11)",
-        "mtctr r11",
-        "bctrl ",
-        "stw r30,8(r31)",
-        "mr r3,r31",
-        "stw r30,0(r31)",
-        "stw r30,4(r31)",
-        "addi r1,r1,112",
-        "lwz r12,-8(r1)",
-        "mtlr r12",
-        "ld r30,-24(r1)",
-        "ld r31,-16(r1)",
-        "blr "
-      ],
-      "translated_body": "PPC_FUNC_IMPL(__imp__sub_82BD2A28) {\n\tPPC_FUNC_PROLOGUE();\n\tPPCRegister temp{};\n\t// mflr r12\n\tctx.r12.u64 = ctx.lr;\n\t// stw r12,-8(r1)\n\tPPC_STORE_U32(ctx.r1.u32 + -8, ctx.r12.u32);\n\t// std r30,-24(r1)\n\tPPC_STORE_U64(ctx.r1.u32 + -24, ctx.r30.u64);\n\t// std r31,-16(r1)\n\tPPC_STORE_U64(ctx.r1.u32 + -16, ctx.r31.u64);\n\t// stwu r1,-112(r1)\n\ttemp.u64 = ctx.r1.u64 + uint64_t(-112);\n\tPPC_STORE_U32(temp.u32, ctx.r1.u32);\n\tctx.r1.u64 = temp.u64;\n\t// mr r31,r3\n\tctx.r31.u64 = ctx.r3.u64;\n\t// lis r11,-32256\n\tctx.r11.s64 = -2113929216;\n\t// li r30,0\n\tctx.r30.s64 = 0;\n\t// lfs f13,12(r31)\n\tctx.fpscr.disableFlushMode();\n\ttemp.u32 = PPC_LOAD_U32(ctx.r31.u32 + 12);\n\tctx.f13.f64 = double(temp.f32);\n\t// lfs f0,3664(r11)\n\ttemp.u32 = PPC_LOAD_U32(ctx.r11.u32 + 3664);\n\tctx.f0.f64 = double(temp.f32);\n\t// fcmpu cr6,f13,f0\n\tctx.cr6.compare(ctx.f13.f64, ctx.f0.f64);\n\t// blt cr6,0x82bd2a80\n\tif (ctx.cr6.lt) goto loc_82BD2A80;\n\t// lwz r11,8(r31)\n\tctx.r11.u64 = PPC_LOAD_U32(ctx.r31.u32 + 8);\n\t// cmplwi cr6,r11,0\n\tctx.cr6.compare<uint32_t>(ctx.r11.u32, 0, ctx.xer);\n\t// beq cr6,0x82bd2a80\n\tif (ctx.cr6.eq) goto loc_82BD2A80;\n\t// bl 0x82bd0798\n\tctx.lr = 0x82BD2A68;\n\tsub_82BD0798(ctx, base);\n\t// lwz r11,0(r3)\n\tctx.r11.u64 = PPC_LOAD_U32(ctx.r3.u32 + 0);\n\t// lwz r4,8(r31)\n\tctx.r4.u64 = PPC_LOAD_U32(ctx.r31.u32 + 8);\n\t// lwz r11,12(r11)\n\tctx.r11.u64 = PPC_LOAD_U32(ctx.r11.u32 + 12);\n\t// mtctr r11\n\tctx.ctr.u64 = ctx.r11.u64;\n\t// bctrl \n\tctx.lr = 0x82BD2A7C;\n\tPPC_CALL_INDIRECT_FUNC(ctx.ctr.u32 & ~3u);\n\t// stw r30,8(r31)\n\tPPC_STORE_U32(ctx.r31.u32 + 8, ctx.r30.u32);\nloc_82BD2A80:\n\t// mr r3,r31\n\tctx.r3.u64 = ctx.r31.u64;\n\t// stw r30,0(r31)\n\tPPC_STORE_U32(ctx.r31.u32 + 0, ctx.r30.u32);\n\t// stw r30,4(r31)\n\tPPC_STORE_U32(ctx.r31.u32 + 4, ctx.r30.u32);\n\t// addi r1,r1,112\n\tctx.r1.s64 = ctx.r1.s64 + 112;\n\t// lwz r12,-8(r1)\n\tctx.r12.u64 = PPC_LOAD_U32(ctx.r1.u32 + -8);\n\t// mtlr r12\n\tctx.lr = ctx.r12.u64;\n\t// ld r30,-24(r1)\n\tctx.r30.u64 = PPC_LOAD_U64(ctx.r1.u32 + -24);\n\t// ld r31,-16(r1)\n\tctx.r31.u64 = PPC_LOAD_U64(ctx.r1.u32 + -16);\n\t// blr \n\treturn;\n}",
-      "status": "validation_pending"
+      "status": "focused_original_ppc_validated",
+      "body_sha256": "e13b86b50d6ceabf2bfd889e742d4d87d8e0b1d104544d56dc4bc8c3280368bc"
     }
   ],
   "validation": {
-    "status": "implementation_ready_original_validation_blocked",
-    "focused_original_ppc_cases": 0,
+    "status": "passed_focused_linux",
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 3,
     "harness_present": true,
-    "library_validated": false,
-    "mapping_credit": 0,
+    "cmake": true,
+    "library_validated": true,
+    "library": "PASS complete CMake static library and three added units, --parallel 1; -Wall -Wextra -Werror with -Wno-error=unused-function for existing formatter warnings. GCC attempt blocked by existing Clang-only rotate builtins.",
+    "platform": "Linux x64; Clang 19.1.7; genuine XEX regenerated with pinned XenonRecomp ddd128bc plus tracked patch; existing oracle guest-window allocation overlaid with mmap/mprotect only",
+    "mapping_credit": 1,
     "runtime_validated": false,
     "complete": false,
-    "cmake": true,
-    "logic_only_cases": 3,
-    "local_check": "2026-10-09 Linux x64 GCC C++20 -Wall -Wextra -Werror: cleanup and accepted table source compile, linked three-case logic-only extraction PASS. No original PPC comparison; Windows oracle harness not compiled.",
-    "blocked_by": [
-      "Missing original LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp (BD0798 line 2508, BD2A28 line 7818).",
-      "Windows native compiler/SDK and generated PPC headers unavailable; full library and canonical oracle receipt pending."
-    ]
+    "limits": "Selected finite inputs, ordinary RAM, Full72 state, callbacks and host CSR only. No Windows revalidation, nonfinite matrix, faults/MMIO, concurrency, runtime or gameplay acceptance."
   }
 }

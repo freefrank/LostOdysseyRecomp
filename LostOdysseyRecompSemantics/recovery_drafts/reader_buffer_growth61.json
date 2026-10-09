@@ -1,0 +1,51 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Private generated bodies are pinned by SHA256 of UTF-8 with LF line endings and no final newline; no generated code is embedded.",
+  "entries": [
+    {
+      "address": "82B7A0B0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.175.cpp",
+      "source_line": 4184,
+      "instruction_count": 290,
+      "body_sha256": "2b75cd7c5f78f0353174594e4acacff4d36ef7c9e99136d1980541668080b1b0",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD0798",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 2461,
+      "instruction_count": 8,
+      "body_sha256": "9d0a302b60cd8bfd0afafd0f70b0027dc487d849edb04825e3a9f67994d1d4c8",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD2870",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 7344,
+      "instruction_count": 70,
+      "body_sha256": "994ac25b03e24e9f29d92d3d67df0e6395b44dfb2d3b1f97694493d5bf37e0ca",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 4,
+    "library_validated": true,
+    "library": "PASS complete CMake static library and three added units, --parallel 1; -Wall -Wextra -Werror with -Wno-error=unused-function for existing formatter warnings. GCC attempt blocked by existing Clang-only rotate builtins.",
+    "platform": "Linux x64; Clang 19.1.7; genuine XEX regenerated with pinned XenonRecomp ddd128bc plus tracked patch; existing oracle guest-window allocation overlaid with mmap/mprotect only",
+    "mapping_credit": 0,
+    "mapping_limit": "Fixed historical catalog.sqlite unavailable; do not infer membership from regenerated sources. 82BB25D0 is explicitly external in prior handoff.",
+    "runtime_validated": false,
+    "complete": false,
+    "limits": "Selected finite inputs, ordinary RAM, Full72 state, callbacks and host CSR only. No Windows revalidation, nonfinite matrix, faults/MMIO, concurrency, runtime or gameplay acceptance."
+  },
+  "implementation": {
+    "entries": [
+      "82BD2870"
+    ],
+    "header": "include/lo_semantics/reader_buffer_growth61.h",
+    "source": "src/reader_buffer_growth61.cpp",
+    "oracle": "tests/reader_buffer_growth61_oracle.cpp"
+  }
+}

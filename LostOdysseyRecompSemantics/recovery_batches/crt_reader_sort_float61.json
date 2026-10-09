@@ -1,6 +1,6 @@
 {
   "schema": "semantic-recovery-batch-v1",
-  "scope": "Draft: three finite threshold/payload paths, complete pinned BD2A28 and accepted BD0798, mutable table+12 callback. Original-source comparison and Windows library PASS still required; mapping credit 0.",
+  "scope": "Three finite threshold/payload paths compared against genuine regenerated bodies. Linux x64 focused PASS plus full library PASS; native internals and runtime unvalidated.",
   "families": [
     {
       "name": "crt-reader-sort-float61",
