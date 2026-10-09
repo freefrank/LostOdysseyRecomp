@@ -1,0 +1,45 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Private original upper bodies pinned by complete SHA256; shared complete accepted lowers are not revalidated by this caller comparison.",
+  "entries": [
+    {
+      "address": "82B9DD90",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 7107,
+      "instruction_count": 92,
+      "body_sha256": "002ff3a28ec50a84c1b8686e8c35dcbcf7c092e08bdf04dd8dae8db05496a52f",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BA60F8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 26747,
+      "instruction_count": 58,
+      "body_sha256": "6efc2d54eaf5b0d000488b53d0b0298c3d8b38955a444cdb0d09ab0c04191c16",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 2,
+    "library_validated": true,
+    "library": "PASS incremental complete Clang 19 CMake static library; existing unused-function warning exception retained.",
+    "platform": "Linux x64; Clang 19.1.7; genuine XEX regenerated with pinned XenonRecomp ddd128bc plus tracked patch; existing oracle guest-window allocation overlaid with mmap/mprotect only",
+    "mapping_credit": 0,
+    "mapping_limit": "Fixed historical catalog.sqlite unavailable; do not infer membership from regenerated sources. 82BB25D0 is explicitly external in prior handoff.",
+    "runtime_validated": false,
+    "complete": false,
+    "limits": "Selected finite inputs, ordinary RAM, Full72 state, callbacks and host CSR only. No Windows revalidation, nonfinite matrix, faults/MMIO, concurrency, runtime or gameplay acceptance.",
+    "case_scope": "Two connected actual-upper/shared-complete-lower cases serialize and then deserialize a dimension-2 single-triangle grid. Full72/all vectors/RAM/callback/MachineState/host CSR agree; independent PMAP header and loaded dimensions checked. Blob layout is count then pointer; returned allocation transfers to caller. Existing-grid deletion, allocation failure, malformed blob and alternate modes untested. Unexercised paired VMX lower retains its known host invalid-flag discrepancy."
+  },
+  "implementation": {
+    "entries": [
+      "82B9DD90",
+      "82BA60F8"
+    ],
+    "header": "include/lo_semantics/grid_blob_routes61.h",
+    "source": "src/grid_blob_routes61.cpp",
+    "oracle": "tests/grid_blob_routes61_oracle.cpp"
+  }
+}

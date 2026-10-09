@@ -2,7 +2,7 @@
 
 ## Latest workspace checkpoint — 2026-10-09
 
-Last verified published checkpoint: `c2d034056b8558bd2f12a86cdbe5d4ea4cb88f7b`.
+Last verified published checkpoint: `2c9535f4e61c0324da8ae675499f8b1b668e84a9`.
 Separate unresolved paired traversal WIP: `44ea9971`.
 The current continuation adds seven selected-case validated units (23 cases):
 `crt_random_thread61` (4), `transform_owner_build61` (3),
@@ -37,8 +37,12 @@ B9DFA0 (4 actual-upper/shared-lower cases, library PASS). The output descriptor
 borrows the destination and requires an exact encoded length; temporary writer
 storage is released on either path. Cases use an empty-object payload. A bounded
 search found no direct callers of these exports; further upward recovery needs
-virtual-table/function-pointer call-site evidence. Grid blob routes are in
-progress independently. Mapping credit and runtime additions remain zero.
+virtual-table/function-pointer call-site evidence. `grid_blob_routes61` additionally recovers B9DD90/BA60F8 with 2 connected
+serialize/deserialize cases and library PASS. Blob descriptors are {count,pointer};
+the output allocation transfers to the caller. Full scalar/vector/memory, callback,
+machine and host CSR comparisons pass. Prior-grid deletion, failed allocation,
+malformed blobs and alternate modes remain untested. Mapping credit and runtime
+additions remain zero. Next inspect bounded direct callers of these blob routes.
 
 ## Active checkpoint — 2026-10-09, private inputs restored
 
