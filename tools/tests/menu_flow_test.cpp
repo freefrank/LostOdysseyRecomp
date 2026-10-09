@@ -126,7 +126,7 @@ std::vector<char> calls;
 settings::Config currentConfig{}, diskConfig{};
 unsigned saves = 0, previews = 0, requests = 0;
 bool saveFails = false, modeFailed = false;
-unsigned quitEventAttempts = 0, mainMenuRequests = 0;
+unsigned quitEventAttempts = 0, mainMenuRequests = 0, defaultsCalls = 0;
 gpu::video::DisplayChangeTracker displayChanges;
 void Require(bool condition, const char* message)
 {
@@ -235,7 +235,7 @@ extern "C" PPC_FUNC(MenuFlowClose)
     ctx.r3.u64 = 0; ctx.r31.u64 = 0;
 }
 extern "C" PPC_FUNC(MenuFlowOriginalLanguage) { (void)ctx; (void)base; }
-extern "C" PPC_FUNC(MenuFlowDefaults) { (void)ctx; (void)base; }
+extern "C" PPC_FUNC(MenuFlowDefaults) { (void)ctx; (void)base; ++defaultsCalls; }
 
 std::string Utf8(const std::wstring& text)
 {
@@ -1786,6 +1786,60 @@ int main(int argc, char** argv)
             Require(!settings::restart::Requested() && !settings::importPrompt,
                     "idle ticks do not create a second import request");
             std::puts("PASS import action: gamepad/mouse focus, cancel-first dialog, translations, guarded restart request, previews");
+        }
+        // Opened from the title menu (title_entry.cpp) no game is loaded: the
+        // retail Gameplay options, Restore and Quit are hidden, focus lands on
+        // Button prompts and nothing reaches the guest config.
+        {
+            settings::edit.uiLanguage = 0;
+            settings::status.clear();
+            settings::tab = 0;
+            settings::row = 0;
+            settings::MarkTitleEntry();
+            const uint32_t textSpeed = PPC_LOAD_U32(ConfigData), flags = PPC_LOAD_U32(ConfigData + 4);
+            const unsigned beforeApplies = applies, beforeDefaults = defaultsCalls, beforeRequests = mainMenuRequests;
+            settings::pending = 0; Tick(base);
+            Require(settings::row == settings::GamePromptRow, "title mode focuses the first visible Gameplay row");
+            for (int r = 0; r < settings::GameRowCount; ++r)
+                Require(settings::snapshot.rows[size_t(r)].hidden ==
+                            (r != settings::GamePromptRow && r != settings::GameVibrationRow),
+                        "title mode hides the retail options, Restore and Quit");
+            settings::pending = 1; Tick(base);
+            Require(settings::row == settings::GameVibrationRow, "Up wraps past the hidden rows");
+            settings::pending = 2; Tick(base);
+            Require(settings::row == settings::GamePromptRow, "Down wraps past the hidden rows");
+            settings::row = settings::GameVibrationRow;
+            settings::PointerClick(100, 150 + 20, false); Tick(base);
+            Require(settings::row == settings::GamePromptRow, "the first list slot is Button prompts");
+            // A stale focus on a hidden row edits nothing and moves to a visible row.
+            for (int r : {0, settings::GameRetailRowCount - 1, settings::GameRestoreRow, settings::GameMainMenuRow})
+            {
+                settings::row = r;
+                settings::pending = 8; Tick(base);
+                Require(settings::row == settings::GamePromptRow, "focus leaves a hidden row");
+                settings::row = r;
+                settings::pending = 0x1000; Tick(base);
+            }
+            Require(PPC_LOAD_U32(ConfigData) == textSpeed && PPC_LOAD_U32(ConfigData + 4) == flags &&
+                    applies == beforeApplies && defaultsCalls == beforeDefaults &&
+                    !settings::mainMenuPrompt && settings::snapshot.dialogChoices.empty(),
+                    "hidden rows write nothing to the guest config");
+            settings::pending = 0x200; Tick(base);
+            settings::pending = 0x100; Tick(base);
+            Require(settings::tab == 0 && settings::row == settings::GamePromptRow, "a tab switch lands on a visible row");
+            settings::pending = 0x2000; Tick(base);
+            Require(settings::closing && !settings::active && applies == beforeApplies + 1,
+                    "Back closes with the usual apply");
+            Tick(base); Tick(base);
+            Poll(0, true); Poll(0, false);
+            Require(PPC_LOAD_U32(Menu + 4) == 1 && !settings::titleEntry, "the idle task ends title mode");
+            PPC_STORE_U32(Menu + 4, 4); Tick(base); Poll(0, true);
+            Require(settings::active && settings::row == settings::GamePromptRow &&
+                    std::none_of(settings::snapshot.rows.begin(), settings::snapshot.rows.end(),
+                                 [](const settings::MenuRow& row) { return row.hidden; }) &&
+                    mainMenuRequests == beforeRequests,
+                    "a later open from a game shows every Gameplay row");
+            std::puts("PASS title-menu Settings: hidden retail rows, Restore and Quit, visible focus, guest config untouched");
         }
         if (argc == 3)
         {

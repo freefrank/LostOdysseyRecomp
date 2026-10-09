@@ -178,7 +178,8 @@ bool IsOpen();
 // takes a fresh press made there, if any.
 inline constexpr uint16_t TitleSettingsButton = 0x8000; // XINPUT_GAMEPAD_Y
 bool ConsumeTitleShortcut(bool titleMenuIdle);
-// The retail Settings task was just opened from the title menu. Quit to Main
-// Menu stays hidden until that task is idle again.
+// The retail Settings task was just opened from the title menu. Until that task
+// is idle again, Gameplay hides the retail options, Restore game defaults and
+// Quit to Main Menu.
 void MarkTitleEntry();
 } // namespace settings

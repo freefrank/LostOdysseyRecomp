@@ -38,6 +38,12 @@ std::atomic<bool> releaseToParent{false};
 // Title menu entry: the title tick reports an idle menu, input polling records
 // a fresh Y there, and the opened task hides Quit to Main Menu.
 std::atomic<bool> titleMenuIdle{false}, titleShortcut{false}, titleEntry{false};
+// With no game loaded, the retail Gameplay options and their Restore would be
+// replaced by the next save or New Game, and there is no game to quit.
+bool GameRowHidden(int r)
+{
+    return titleEntry.load() && (r < GameRetailRowCount || r == GameRestoreRow || r == GameMainMenuRow);
+}
 std::atomic<int> mouseTab{-1}, mouseRow{-1};
 std::atomic<int> mouseDialog{-1};
 std::atomic<uint16_t> mouseAction{0};
@@ -788,6 +794,10 @@ void Publish(uint8_t *base, uint32_t config)
     // The first graphics ids are hidden; enter the tab on a visible row.
     SkipHiddenGraphicsRow();
 #endif
+    // Opened from the title menu, Gameplay starts with hidden rows.
+    if (tab == 0)
+        for (int i = 0; i < GameRowCount && GameRowHidden(row); ++i)
+            row = (row + 1) % GameRowCount;
     // Speaker test noise while Rear angle is focused and adjustable; it
     // stops by itself once the menu stops publishing. The speaker layout is
     // drawn under the rows; DrawMenu moves the marker with the sound.
@@ -845,8 +855,8 @@ void Publish(uint8_t *base, uint32_t config)
         addSlider(L"Vibration", L"震動", edit.vibrationPercent);
         addAction(L"Restore game defaults", L"恢復遊戲預設設定", Tr(L"Restore", L"恢復"));
         addAction(L"Quit to Main Menu", L"退出到主選單", Tr(L"Return", L"返回"));
-        // Opened from the title menu: there is no game to quit.
-        next.rows.back().hidden = titleEntry.load();
+        for (int i = 0; i < GameRowCount; ++i)
+            next.rows[i].hidden = GameRowHidden(i);
     }
     else if (tab == 1)
     {
@@ -1841,8 +1851,6 @@ PPC_FUNC(sub_822F19B0)
             brightnessOpen = false;
         }
         else brightnessOpen = true;
-        if (titleEntry.load() && tab == 0 && row == GameMainMenuRow)
-            row = GameRestoreRow;
         brightnessClick = -1;
         brightnessDragBrightness = INT_MIN;
         brightnessDragGamma = -1;
@@ -2446,7 +2454,7 @@ PPC_FUNC(sub_822F19B0)
     // (hid.cpp), so one branch covers gamepad Start and Enter.
     auto rowHidden = [&](int r) {
         return (tab == 2 && GraphicsRowHidden(r)) ||
-               (tab == 0 && r == GameMainMenuRow && titleEntry.load());
+               (tab == 0 && GameRowHidden(r));
     };
     if (input & 1)
         do { row = (row + count - 1) % count; } while (rowHidden(row));
@@ -2504,7 +2512,7 @@ PPC_FUNC(sub_822F19B0)
                 hid::PreviewVibration();
             }
         }
-        else if (tab == 0 && row < GameRetailRowCount)
+        else if (tab == 0 && row < GameRetailRowCount && !GameRowHidden(row))
         {
             if (row == 0)
                 PPC_STORE_U32(config, cycle(PPC_LOAD_U32(config), 3));
@@ -2758,7 +2766,7 @@ PPC_FUNC(sub_822F19B0)
         __imp__sub_82870E38(call, base);
         language::TraceConfig(base, config, "menu-after-apply");
     }
-    if ((input & 0x1000) && tab == 0 && row == GameRestoreRow)
+    if ((input & 0x1000) && tab == 0 && row == GameRestoreRow && !GameRowHidden(row))
     {
         PPCContext call = ctx;
         call.r3.u32 = config;
@@ -2770,7 +2778,7 @@ PPC_FUNC(sub_822F19B0)
         language::TraceConfig(base, config, "menu-after-defaults");
         status = Tr(L"Game defaults restored.", L"遊戲預設設定已恢復。");
     }
-    if ((input & 0x1000) && tab == 0 && row == GameMainMenuRow && !titleEntry.load())
+    if ((input & 0x1000) && tab == 0 && row == GameMainMenuRow && !GameRowHidden(row))
     {
         mainMenuPrompt = true;
         mainMenuChoice = 1; // Require an explicit selection of Return; Back always cancels.
