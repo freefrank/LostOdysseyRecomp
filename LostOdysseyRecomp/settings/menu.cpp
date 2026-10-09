@@ -701,7 +701,7 @@ bool GraphicsRowHidden(int r)
     if (r == int(GraphicsRow::Backend) || r == int(GraphicsRow::Gpu) || r == int(GraphicsRow::DisplayMode) ||
         r == int(GraphicsRow::Display) || r == int(GraphicsRow::AspectRatio) || r == int(GraphicsRow::OutputResolution) ||
         r == int(GraphicsRow::VariableRefreshRate) || r == int(GraphicsRow::FrameGeneration) ||
-        r == int(GraphicsRow::FrameGenerationMultiplier))
+        r == int(GraphicsRow::FrameGenerationMultiplier) || r == int(GraphicsRow::DlssModel))
         return true;
     if (r == int(GraphicsRow::DlssQuality) || r == int(GraphicsRow::FsrSharpness))
         return !graphics_menu::AndroidFsrAvailable || edit.upscaler != gpu::upscaling::Upscaler::Fsr;
@@ -719,7 +719,13 @@ bool GraphicsRowHidden(int r)
     if (r == int(GraphicsRow::DlssNeuralRendering))
         return true;
 #endif
+#if LO_PLATFORM_MACOS
+    // No NGX on macOS; a DLSS value from another platform's settings is not run here.
+    if (r == int(GraphicsRow::DlssModel))
+        return true;
+#endif
     return (r == int(GraphicsRow::DlssQuality) && edit.upscaler == gpu::upscaling::Upscaler::Off) ||
+           (r == int(GraphicsRow::DlssModel) && edit.upscaler != gpu::upscaling::Upscaler::Dlss) ||
            (r == int(GraphicsRow::FsrSharpness) && edit.upscaler != gpu::upscaling::Upscaler::Fsr) ||
            (r == int(GraphicsRow::FrameGenerationMultiplier) && edit.frameGenerationProvider != framegen::Provider::Dlss);
 }
@@ -765,13 +771,18 @@ std::wstring FgNotice()
 static_assert(int(GraphicsRow::Save) + 1 == int(GraphicsRow::Count));
 // Only Graphics scrolls; the other tabs fit the visible rows (menu.h layout rules).
 static_assert(GameRowCount <= kMenuVisibleRows && AudioRowCount <= kMenuVisibleRows && SystemRowCount <= kMenuVisibleRows);
+// Moves graphics focus off a hidden row to the next visible one.
+void SkipHiddenGraphicsRow()
+{
+    if (tab == 2)
+        for (int i = 0; i < int(GraphicsRow::Count) && GraphicsRowHidden(row); ++i)
+            row = (row + 1) % int(GraphicsRow::Count);
+}
 void Publish(uint8_t *base, uint32_t config)
 {
 #if LO_PLATFORM_ANDROID
     // The first graphics ids are hidden; enter the tab on a visible row.
-    if (tab == 2)
-        for (int i = 0; i < int(GraphicsRow::Count) && GraphicsRowHidden(row); ++i)
-            row = (row + 1) % int(GraphicsRow::Count);
+    SkipHiddenGraphicsRow();
 #endif
     // Speaker test noise while Matrix phase is focused and adjustable; it
     // stops by itself once the menu stops publishing.
@@ -929,6 +940,8 @@ void Publish(uint8_t *base, uint32_t config)
         // Hidden instead of removed so this logical id stays stable for input, drawing and hit-testing.
         dlssQuality.hidden = GraphicsRowHidden(int(GraphicsRow::DlssQuality));
         placeGraphics(GraphicsRow::DlssQuality, std::move(dlssQuality));
+        placeGraphics(GraphicsRow::DlssModel, makeChoices(L"DLSS model", L"DLSS 模型", {L"M", L"L"},
+                   std::min(edit.dlssModel, 1u)));
         // Reuse the existing many-choice control: it shows the selected percentage
         // between arrows without adding another renderer layout or shifting row IDs.
         std::vector<std::wstring> sharpnessChoices;
@@ -1183,6 +1196,10 @@ void Publish(uint8_t *base, uint32_t config)
             next.help = gpu::upscaling::UsesFsrQuality(edit.upscaler) ?
                 Tr(L"Performance, Balanced, Quality, or Native AA. Native AA keeps the output resolution.", L"效能、平衡、品質或 Native AA。Native AA 維持輸出解析度。") : Tr(L"Performance, Balanced, Quality, or DLAA. The status line shows the submitted mode.",
                            L"效能、平衡、品質或 DLAA。狀態列顯示已提交的模式。");
+            break;
+        case GraphicsRow::DlssModel:
+            next.help = Tr(L"M: steadier and sharper than older DLSS models at a moderate cost. L: the steadiest image with the least ghosting, but slower, especially on RTX 20 and 30 series.",
+                           L"M：比舊版 DLSS 模型更穩定、更清晰，開銷適中。L：畫面最穩定、拖影最少，但較慢，在 RTX 20/30 系列顯示卡上尤其明顯。");
             break;
         case GraphicsRow::FsrSharpness:
             next.help = Tr(L"FSR sharpening: Off disables RCAS; 1-100% sets sharpening strength.",
@@ -1826,6 +1843,8 @@ PPC_FUNC(sub_822F19B0)
             syncedDisplayIndex = saved.displayIndex;
         }
         status.clear();
+        // The menu reopens on the last row; unsaved choices that showed it are gone.
+        SkipHiddenGraphicsRow();
         Publish(base, config);
         LOG_INFO("settings: replacement opened at guest menu {:#x}", menu);
         language::TraceConfig(base, config, "menu-open");
@@ -2596,6 +2615,9 @@ PPC_FUNC(sub_822F19B0)
                         qualityMenuIds[cycle(QualityMenuIndex(uint32_t(edit.fsrQuality)), std::size(qualityMenuIds))]);
                 else edit.dlssQuality = gpu::upscaling::DlssQuality(
                     qualityMenuIds[cycle(QualityMenuIndex(uint32_t(edit.dlssQuality)), std::size(qualityMenuIds))]);
+                break;
+            case GraphicsRow::DlssModel:
+                edit.dlssModel = cycle(std::min(edit.dlssModel, 1u), 2);
                 break;
             case GraphicsRow::FsrSharpness:
                 edit.fsrSharpnessPercent = uint32_t(std::clamp(int(edit.fsrSharpnessPercent) + delta, 0, 100));

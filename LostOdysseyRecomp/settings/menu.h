@@ -96,9 +96,11 @@ void PointerDrag(float x, float y, bool held);
 // - Gameplay, Audio and System fit the visible rows (kMenuVisibleRows) and never
 //   scroll; only Graphics scrolls.
 // - Graphics order: display -> resolution and shadows -> anti-aliasing,
-//   upscaling, DLSS neural rendering and frame generation -> effects -> frame
-//   rate -> HDR and brightness -> Save. A divider opens each group after the
-//   first (menu_render.cpp).
+//   upscaling (quality, DLSS model, FSR sharpness), DLSS neural rendering and
+//   frame generation -> effects -> frame rate -> HDR and brightness -> Save. A
+//   divider opens each group after the first (menu_render.cpp).
+// - Rows that only apply to one choice (DLSS model) are hidden while that
+//   choice is off (GraphicsRowHidden in menu.cpp).
 // Input, help text, pointer hits and the tests use these constants, never
 // literal row numbers.
 inline constexpr int MenuTabCount = 4;
@@ -142,26 +144,27 @@ enum class GraphicsRow : int
     DynamicShadows = 8,
     AntiAliasing = 9,
     DlssQuality = 10,
-    FsrSharpness = 11,
-    DlssNeuralRendering = 12,
-    FrameGeneration = 13,
-    FrameGenerationMultiplier = 14,
-    AmbientOcclusion = 15,
-    AnisotropicFiltering = 16,
-    DepthOfField = 17,
-    Bloom = 18,
-    MotionBlur = 19,
-    Culling = 20,
-    ScalingQuality = 21,
-    RgbRange = 22,
-    FrameRate = 23,
-    VariableRefreshRate = 24,
-    Hdr = 25,
-    HdrPaperWhite = 26,
-    HdrPeak = 27,
-    Brightness = 28,
-    Save = 29,
-    Count = 30,
+    DlssModel = 11, // shown with DLSS
+    FsrSharpness = 12,
+    DlssNeuralRendering = 13,
+    FrameGeneration = 14,
+    FrameGenerationMultiplier = 15,
+    AmbientOcclusion = 16,
+    AnisotropicFiltering = 17,
+    DepthOfField = 18,
+    Bloom = 19,
+    MotionBlur = 20,
+    Culling = 21,
+    ScalingQuality = 22,
+    RgbRange = 23,
+    FrameRate = 24,
+    VariableRefreshRate = 25,
+    Hdr = 26,
+    HdrPaperWhite = 27,
+    HdrPeak = 28,
+    Brightness = 29,
+    Save = 30,
+    Count = 31,
 };
 inline constexpr int MenuTabWidth = 640 / MenuTabCount;
 // Called by input polling before returning the guest-facing controller state.

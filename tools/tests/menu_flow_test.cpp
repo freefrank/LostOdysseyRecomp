@@ -400,6 +400,26 @@ void CheckBr03DlssMenu(uint8_t* base)
     settings::pending = 4; Tick(base);
     Require(settings::edit.dlssQuality == DlssQuality::Balanced, "DLSS left from Quality selects Balanced");
     settings::edit.dlssQuality = DlssQuality::Quality;
+    settings::pending = 2; Tick(base);
+    Require(settings::row == int(GraphicsRow::DlssModel), "DLSS model directly follows DLSS quality");
+    {
+        const auto& model = settings::snapshot.rows[int(GraphicsRow::DlssModel)];
+        Require(!model.hidden && model.enabled && model.choices == std::vector<std::wstring>{L"M", L"L"} &&
+                model.selectedChoice == 0 && model.value == L"M", "DLSS model offers M (default) and L with DLSS");
+    }
+    Require(settings::snapshot.help == L"M: steadier and sharper than older DLSS models at a moderate cost. L: the steadiest image with the least ghosting, but slower, especially on RTX 20 and 30 series.",
+            "DLSS model help explains the cost of each model");
+    settings::pending = 8; Tick(base);
+    Require(settings::edit.dlssModel == 1 && settings::snapshot.rows[int(GraphicsRow::DlssModel)].value == L"L",
+            "DLSS model right selects L");
+    settings::pending = 8; Tick(base);
+    Require(settings::edit.dlssModel == 0, "DLSS model right wraps to M");
+    settings::pending = 4; Tick(base);
+    Require(settings::edit.dlssModel == 1, "DLSS model left wraps to L");
+    settings::edit.dlssModel = 0;
+    settings::pending = 2; Tick(base);
+    Require(settings::row == int(GraphicsRow::DlssNeuralRendering),
+            "down from the DLSS model skips the hidden FSR sharpness to DLSS 5 neural rendering");
     settings::row = int(GraphicsRow::AntiAliasing);
     settings::pending = 0;
     Tick(base);
@@ -407,6 +427,7 @@ void CheckBr03DlssMenu(uint8_t* base)
     Tick(base);
     Require(settings::edit.upscaler == Upscaler::Fsr && !settings::snapshot.rows[int(GraphicsRow::DlssQuality)].hidden,
             "FSR can be selected independently on D3D12");
+    Require(settings::snapshot.rows[int(GraphicsRow::DlssModel)].hidden, "FSR hides the DLSS model");
     settings::row = int(GraphicsRow::DlssQuality);
     settings::edit.fsrQuality = gpu::upscaling::FsrQuality::Quality;
     settings::pending = 0; Tick(base);
@@ -428,7 +449,8 @@ void CheckBr03DlssMenu(uint8_t* base)
     settings::row = int(GraphicsRow::AntiAliasing);
     settings::pending = 8;
     Tick(base);
-    Require(settings::edit.upscaler == Upscaler::Off && settings::snapshot.rows[int(GraphicsRow::DlssQuality)].hidden, "DLSS can be turned off on D3D12");
+    Require(settings::edit.upscaler == Upscaler::Off && settings::snapshot.rows[int(GraphicsRow::DlssQuality)].hidden &&
+            settings::snapshot.rows[int(GraphicsRow::DlssModel)].hidden, "DLSS can be turned off on D3D12");
     Require(settings::snapshot.notice == needsVulkan + L" The Off choice is not applied yet.",
             "turning DLSS off before it is applied does not claim the plan is off");
     for (int i = 0; i < 4; ++i) { settings::pending = 8; Tick(base); } // Off -> FXAA -> SMAA -> TAA -> DLSS
@@ -1223,7 +1245,7 @@ int main(int argc, char** argv)
             settings::row = int(GraphicsRow::AntiAliasing);
             settings::pending = 2; Tick(base); // D-pad down
             Require(settings::row == int(GraphicsRow::FrameGeneration),
-                    "down from Upscaler skips hidden quality, sharpness and neural rendering rows to FG");
+                    "down from Upscaler skips hidden quality, model, sharpness and neural rendering rows to FG");
             settings::pending = 1; Tick(base); // D-pad up
             Require(settings::row == int(GraphicsRow::AntiAliasing),
                     "up from FG skips the hidden upscaler rows back to Upscaler");
@@ -1426,11 +1448,12 @@ int main(int argc, char** argv)
             diskConfig = priorDisk;
             std::puts("PASS Graphics FG section: provider/input navigation, DLSS multiplier bounds, FSR fixed 2x, shared Save, System isolation, mouse/scroll and four-tab navigation");
         }
-        // FSR sharpness follows quality; Save is always last. Off disables
-        // RCAS, and percent changes are bounded.
+        // FSR sharpness follows quality and the DLSS-only model row; Save is
+        // always last. Off disables RCAS, and percent changes are bounded.
         {
             static_assert(int(GraphicsRow::Save) + 1 == int(GraphicsRow::Count) &&
-                          int(GraphicsRow::FsrSharpness) == int(GraphicsRow::DlssQuality) + 1);
+                          int(GraphicsRow::DlssModel) == int(GraphicsRow::DlssQuality) + 1 &&
+                          int(GraphicsRow::FsrSharpness) == int(GraphicsRow::DlssModel) + 1);
             settings::tab = 2;
             settings::status.clear();
             settings::edit = currentConfig;
@@ -1444,7 +1467,8 @@ int main(int argc, char** argv)
             Require(settings::row == int(GraphicsRow::Backend), "navigation skips hidden FSR sharpness");
             settings::edit.upscaler = gpu::upscaling::Upscaler::Dlss;
             settings::pending = 0; Tick(base);
-            Require(settings::snapshot.rows[int(GraphicsRow::FsrSharpness)].hidden, "DLSS hides FSR sharpness");
+            Require(settings::snapshot.rows[int(GraphicsRow::FsrSharpness)].hidden &&
+                    !settings::snapshot.rows[int(GraphicsRow::DlssModel)].hidden, "DLSS hides FSR sharpness and shows the model");
             settings::edit.upscaler = gpu::upscaling::Upscaler::Fsr;
             settings::row = int(GraphicsRow::FsrSharpness);
             settings::pending = 0; Tick(base);
@@ -1474,6 +1498,20 @@ int main(int argc, char** argv)
             Require(saves == beforeSave + 1 && diskConfig.fsrSharpnessPercent == 64 &&
                     currentConfig.fsrSharpnessPercent == 64, "existing Save action persists FSR sharpness");
             std::puts("PASS FSR sharpness menu visibility, 0/100 bounds, description, stable ids and Save");
+        }
+        // Reopening drops an unsaved DLSS choice; focus leaves the now hidden model row.
+        {
+            const auto priorCurrent = currentConfig;
+            currentConfig.upscaler = gpu::upscaling::Upscaler::Off;
+            settings::tab = 2;
+            settings::row = int(GraphicsRow::DlssModel);
+            settings::active = false;
+            PPC_STORE_U32(Menu + 4, 4);
+            settings::pending = 0; Tick(base);
+            Require(settings::active && settings::row == int(GraphicsRow::FrameGeneration),
+                    "reopening on the hidden DLSS model row moves focus to the next visible row");
+            currentConfig = priorCurrent;
+            settings::edit = currentConfig;
         }
         // DLSS 5 neural rendering shows with DLSS only and cycles Off, 1x-4x.
         {
@@ -1956,6 +1994,14 @@ int main(int argc, char** argv)
             sharpness.fsrSharpnessPercent = 0;
             Require(settings::SaveConfig(sharpness) && settings::Read().fsrSharpnessPercent == 0,
                     "Off roundtrips as zero");
+            writeIni("upscaler=1\n");
+            Require(settings::Read().dlssModel == 0, "a missing dlss_model defaults to M");
+            writeIni("upscaler=1\ndlss_model=2\n");
+            Require(settings::Read().dlssModel == 0, "an unknown DLSS model falls back to M");
+            settings::Config model{};
+            model.upscaler = gpu::upscaling::Upscaler::Dlss;
+            model.dlssModel = 1;
+            Require(settings::SaveConfig(model) && settings::Read().dlssModel == 1, "DLSS model L roundtrips through the INI");
             writeIni("frame_generation_provider=1\nframe_generation_mode=0\nframe_generation_multiplier=6\n");
             const auto maxFg = settings::Read();
             Require(maxFg.frameGenerationProvider == framegen::Provider::Dlss &&

@@ -63,6 +63,7 @@ struct SrDispatchOptions {
     uint32_t dlssNeuralRenderingPasses = 0;
     uint32_t dlssNeuralRenderingPreset = 0;
     dlss::NeuralRenderingTuning dlssNeuralRenderingTuning{};
+    uint32_t dlssModel = 0; // Settings dlss_model: 0 M, 1 L.
 };
 
 struct SrRequest {

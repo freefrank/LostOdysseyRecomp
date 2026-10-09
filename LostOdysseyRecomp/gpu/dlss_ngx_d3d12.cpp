@@ -55,6 +55,14 @@ int FeatureFlags(const SrConfig& config) {
     if (config.autoExposure) flags|=NVSDK_NGX_DLSS_Feature_Flags_AutoExposure;
     return flags;
 }
+// The SR model for every quality mode; NGX reads it when the feature is created.
+// The parameter block outlives the feature, so all modes are rewritten each time.
+void SetRenderPreset(NVSDK_NGX_Parameter* params, uint8_t preset) {
+    for (const char* key : {NVSDK_NGX_Parameter_DLSS_Hint_Render_Preset_DLAA, NVSDK_NGX_Parameter_DLSS_Hint_Render_Preset_Quality,
+             NVSDK_NGX_Parameter_DLSS_Hint_Render_Preset_Balanced, NVSDK_NGX_Parameter_DLSS_Hint_Render_Preset_Performance,
+             NVSDK_NGX_Parameter_DLSS_Hint_Render_Preset_UltraPerformance, NVSDK_NGX_Parameter_DLSS_Hint_Render_Preset_UltraQuality})
+        NVSDK_NGX_Parameter_SetUI(params,key,preset);
+}
 bool ValidTexture(const plume::D3D12Texture& texture, const plume::D3D12Device& device,
     D3D12_RESOURCE_STATES state, plume::RenderFormat format=plume::RenderFormat::UNKNOWN) {
     return texture.device==&device && texture.d3d && texture.allocation &&
@@ -428,6 +436,7 @@ SrAttempt Controller::RecordIsolated(plume::D3D12CommandList& isolated, const Sr
         create.Feature.InPerfQualityValue=Quality(config.quality);
         create.InFeatureCreateFlags=FeatureFlags(config);
         create.InEnableOutputSubrects=false;
+        SetRenderPreset(params,config.renderPreset);
         NVSDK_NGX_Handle* handle=nullptr;
         const auto result=NGX_D3D12_CREATE_DLSS_EXT(isolated.d3d,1,1,&handle,params,&create);
         RecordCall("D3D12_CREATE_DLSS_EXT",int32_t(result),NVSDK_NGX_FAILED(result));
@@ -440,6 +449,9 @@ SrAttempt Controller::RecordIsolated(plume::D3D12CommandList& isolated, const Sr
         }
         featureConfig_=config; featureConfigValid_=true; created=true;
         report_.srImplemented=true;
+        nr::Log("DLSS SR feature created: backend=d3d12 %ux%u->%ux%u quality=%u preset=%c flags=0x%x",
+            config.renderExtent.width,config.renderExtent.height,config.outputExtent.width,config.outputExtent.height,
+            unsigned(config.quality),RenderPresetLetter(config.renderPreset),unsigned(create.InFeatureCreateFlags));
     }
     NVSDK_NGX_D3D12_DLSS_Eval_Params evaluate{};
     evaluate.Feature.pInColor=static_cast<plume::D3D12Texture*>(inputs.color.texture)->d3d;

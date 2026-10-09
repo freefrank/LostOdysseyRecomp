@@ -8584,6 +8584,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         frameSrOptions.dlssNeuralRenderingTuning = {config.dlssNrStyle, config.dlssNrIntensity / 100.0f,
                             config.dlssNrGlobalTone / 100.0f, config.dlssNrLocalTone / 100.0f, config.dlssNrStructure / 100.0f,
                             config.dlssNrSkin / 100.0f, config.dlssNrAutoMask};
+                        frameSrOptions.dlssModel = config.dlssModel;
                     }
                     PollTaaDiagnostic();
                     PollTaaLive();
