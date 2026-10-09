@@ -1,3 +1,7 @@
+## Root direct continuation: all four concrete mesh strategies (2026-10-09)
+
+The mesh callback adapter now connects full/compact and float/quantized binders plus all strategy cleanup/deleting routes. Four nine-triangle integrations pass original-upper/shared-recovered-lower Full72/RAM/host CSR/callback/live ownership comparisons and independent representation topology/count assertions. Each then runs recovered mesh teardown: all tracked allocations release and owner storage slots clear. Three earlier borrowed-service cases remain passing. Full library passes; adapter/integration adds no addresses, runtime hooks or gameplay acceptance.
+
 ## Root direct continuation: compact quantization and strategy lifetime (2026-10-09)
 
 Quantization now also handles D1E8 internal-only trees: shared six-axis quantization/conservative correction, CE38 32-byte staging, 20-byte output and two topology words. Six original binder/recursive-lower cases total pass for both representations. `tree_strategy_release61` adds CFE0/D170/D7F0/DA48 cleanup and DAC0/DCD8/DD38/DD98 deleting wrappers with shared lifecycle code; six composed-original cases pass, including free order, retain/empty paths and base-table restoration. Full Clang library passes. Nine implementation addresses added; no historical mapping/runtime or gameplay credit.

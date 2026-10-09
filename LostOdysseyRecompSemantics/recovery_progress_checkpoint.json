@@ -594,7 +594,7 @@
         "entries": [
           "82BD22A8"
         ],
-        "focused_cases": 4
+        "focused_cases": 7
       },
       {
         "unit": "tree_triangle_split61",
@@ -772,11 +772,11 @@
   "concrete_mesh_integration": {
     "entry": "82BD22A8",
     "adapter": "tree_mesh_callbacks61",
-    "cases": 1,
+    "cases": 4,
     "triangles": 9,
-    "result": "passed_original_upper_shared_recovered_lowers",
-    "path": "triangle bounds and threshold 8 split -> leaf bounds export -> box threshold 1 split -> range remap -> flat strategy binding",
+    "result": "passed_original_upper_shared_recovered_lowers_and_teardown_ownership",
+    "path": "triangle threshold8 -> leaf bounds export -> box threshold1 -> range remap -> full/compact float/quantized strategy -> complete owned allocation teardown",
     "external_services": "guest allocation/free and native FP control",
-    "limits": "No independent all-original lower-chain comparison; no runtime or catalog credit."
+    "limits": "Original upper shares recovered lowers; teardown checked for complete tracked ownership release. No independent all-original whole-chain or gameplay proof; no baseline credit."
   }
 }

@@ -143,7 +143,12 @@
         "LostOdysseyRecompSemantics/src/tree_box_centroid61.cpp",
         "LostOdysseyRecompSemantics/src/tree_split_policy61.cpp",
         "LostOdysseyRecompSemantics/src/tree_flat_strategy61.cpp",
-        "LostOdysseyRecompSemantics/src/tree_flatten36_61.cpp"
+        "LostOdysseyRecompSemantics/src/tree_flatten36_61.cpp",
+        "LostOdysseyRecompSemantics/src/tree_mesh_lifetime61.cpp",
+        "LostOdysseyRecompSemantics/src/tree_compact_flatten61.cpp",
+        "LostOdysseyRecompSemantics/src/tree_compact_strategy61.cpp",
+        "LostOdysseyRecompSemantics/src/tree_quantized_strategy61.cpp",
+        "LostOdysseyRecompSemantics/src/tree_strategy_release61.cpp"
       ]
     }
   ]
