@@ -56,9 +56,24 @@ high-word arithmetic check, rerun oracle and incremental library passed. These
 remain zero-credit without the historical catalog. Ordinary finite small-grid
 checks do not cover extreme sizes, nonfinite inputs or alternate FP modes.
 
-Next active work: BAE200 Morton-sort/grid-delta bitstream encoder and BAFEC0
-PMAP/color-group dispatcher, using the closed lower boundaries and BAF600 decoder.
-Both are being implemented independently; neither is validated or counted yet. BD2870 is implemented by
+Grid initialization/tagging stage was pushed as `15535c9e` and remote-verified.
+The upper chain is now also compared and built: BAE200 Morton-sort/delta encoder
+(7 cases), BAFEC0 PMAP/color-group dispatcher (3), BB2098 grid reader plus
+BD0A30 bounded seek (3 group/path + 2 seek cases). Encoder/dispatcher compare
+original upper bodies against shared complete previously accepted lowers; they
+are not fresh original-lower comparisons. Grid reader includes genuine selected
+lower bodies; actual file I/O remains untested. Source review corrected encoder
+post-store count reloads; actual comparisons corrected empty-input scratch/setup
+state. All final comparisons and incremental library builds passed. These units
+remain zero-credit pending the historical catalog; no runtime replacement.
+
+Current dependency frontier is BB2638 (not yet implemented). Its diagnostic path
+B9C298→BC8B78 depends on 822B29A0/822B3438 locking helpers with MSR/reservation/CAS
+and native critical-section state absent from Full72; do not replace them with
+ordinary RAM/no-op locks. Closed next work is six transform leaves, BB06D8 spatial
+sampling, BD7950 construction, BD9740 recursive cleanup and the BB03B0 geometry
+support cluster. BDB260/823F3340 also has an unresolved full-register free-facade
+boundary; retain it explicitly. Implement and verify closed units before parents. BD2870 is implemented by
 `reader_buffer_growth61`; small initialization/tail helpers by
 `object_sort_support61`; object initialization/cleanup by `object_sort_lifecycle61`.
 Integrate one complete upper at a time, perform narrowly selected original-body

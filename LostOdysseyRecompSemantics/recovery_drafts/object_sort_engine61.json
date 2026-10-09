@@ -1,0 +1,36 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Private generated bodies are pinned by SHA256 of UTF-8 with LF line endings and no final newline; no generated code is embedded.",
+  "entries": [
+    {
+      "address": "82BAE200",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 45369,
+      "instruction_count": 1279,
+      "body_sha256": "7ec437f0fe0156edc2be656a57995ad1f75d2eb0907ca5710ce67433d9fb3d63",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 7,
+    "library_validated": true,
+    "library": "PASS incremental complete Clang 19 CMake static library; existing unused-function warning exception retained.",
+    "platform": "Linux x64; Clang 19.1.7; genuine XEX regenerated with pinned XenonRecomp ddd128bc plus tracked patch; existing oracle guest-window allocation overlaid with mmap/mprotect only",
+    "mapping_credit": 0,
+    "mapping_limit": "Fixed historical catalog.sqlite unavailable; do not infer membership from regenerated sources. 82BB25D0 is explicitly external in prior handoff.",
+    "runtime_validated": false,
+    "complete": false,
+    "limits": "Selected finite inputs, ordinary RAM, Full72 state, callbacks and host CSR only. No Windows revalidation, nonfinite matrix, faults/MMIO, concurrency, runtime or gameplay acceptance.",
+    "case_scope": "Genuine original upper compared with shared complete accepted lower implementations, not a revalidation of original lower bodies. Empty, representative deltas/escapes/Morton ordering and selected dimension widths; ordinary RAM, Full72, callbacks, host CSR, independent bitstream expectations. Division traps and malformed input untested."
+  },
+  "implementation": {
+    "entries": [
+      "82BAE200"
+    ],
+    "header": "include/lo_semantics/object_sort_engine61.h",
+    "source": "src/object_sort_engine61.cpp",
+    "oracle": "tests/object_sort_engine61_oracle.cpp"
+  }
+}
