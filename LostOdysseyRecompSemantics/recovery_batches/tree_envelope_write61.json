@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "tree-envelope-write61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/tree_envelope_write61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/tree_envelope_write61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\nvoid EnvelopeLower(std::uint32_t,PPCContext&,std::uint8_t*);\nvoid EnvelopeIndirect(std::uint32_t,PPCContext&,std::uint8_t*);\nvoid EnvelopeSave(unsigned,PPCContext&,std::uint8_t*);\nvoid EnvelopeRestore(unsigned,PPCContext&,std::uint8_t*);\n#undef PPC_CALL_INDIRECT_FUNC\n#define PPC_CALL_INDIRECT_FUNC(t) EnvelopeIndirect((t),ctx,base)\n#define __savegprlr_28(c,b) EnvelopeSave(28,c,b)\n#define __restgprlr_28(c,b) EnvelopeRestore(28,c,b)\n#define __savegprlr_29(c,b) EnvelopeSave(29,c,b)\n#define __restgprlr_29(c,b) EnvelopeRestore(29,c,b)\n#define sub_82BD7CB8 __imp__sub_82BD7CB8\n#define sub_82BD8550 __imp__sub_82BD8550\n#define sub_82BD14B8 __imp__sub_82BD14B8\n#define sub_82BD1BF8 __imp__sub_82BD1BF8\n#define sub_82BD0938(c,b) EnvelopeLower(0x82bd0938u,c,b)\n#define sub_82BD0FC8(c,b) EnvelopeLower(0x82bd0fc8u,c,b)\n#define sub_82BD1050(c,b) EnvelopeLower(0x82bd1050u,c,b)\n#define sub_82BD7D58(c,b) EnvelopeLower(0x82bd7d58u,c,b)\n#define sub_82BADFA0(c,b) EnvelopeLower(0x82badfa0u,c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/tree_envelope_write61.cpp"
+      ]
+    }
+  ]
+}

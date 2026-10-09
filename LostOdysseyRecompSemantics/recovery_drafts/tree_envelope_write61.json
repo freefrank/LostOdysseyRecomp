@@ -1,0 +1,60 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "OPC base strategy envelope, HBM mesh mapping envelope and linked-stream header/adaptive word helpers.",
+  "entries": [
+    {
+      "address": "82BD7CB8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 19696,
+      "instruction_count": 18,
+      "body_sha256": "1ce42aebedee56a3456868c121be075886d880719675304dc8e3f0b4f91e13dd",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD8550",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 20988,
+      "instruction_count": 69,
+      "body_sha256": "0293ca81505cc9e94360a8646fa7011a5b5d556f2d96cc92fc1ddf83d08ffc5a",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD14B8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 4446,
+      "instruction_count": 40,
+      "body_sha256": "4c09855c94522befded99bea77d398a1ce781db02e736ceda343f91dfb79ed15",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD1BF8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 5516,
+      "instruction_count": 68,
+      "body_sha256": "12898ceec9f3817ca6cfd505c2d90892b2cededd5e2629ad77b962d6e1f989f1",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BD7CB8",
+      "82BD8550",
+      "82BD14B8",
+      "82BD1BF8"
+    ],
+    "header": "include/lo_semantics/tree_envelope_write61.h",
+    "source": "src/tree_envelope_write61.cpp",
+    "oracle": "tests/tree_envelope_write61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 4,
+    "library_validated": true,
+    "case_scope": "Complete original local envelope/header/adaptive chain, shared concrete flat strategy and linked append lowers. Full72/RAM/CSR/events plus independent native/swapped envelope and u16/u32 map bytes, missing-strategy failure and u8 adaptive output. Allocation-growth cases not exercised.",
+    "platform": "Linux x64 Clang19; pinned PPC; mmap guest overlay"
+  }
+}

@@ -1,3 +1,7 @@
+## Root direct continuation: tree envelope serialization (2026-10-09)
+
+`tree_envelope_write61` closes BD14B8 OPC base header/strategy dispatch, BD1BF8 HBM leaf/triangle mappings, BD7CB8 linked-stream tag and BD8550 adaptive u8/u16/u32 indices. Four complete original local-chain cases pass Full72/RAM/CSR/events with concrete flat-strategy output and actual linked append lowers. Independent native/swapped envelope bytes, u16/u32 mappings, u8 payload and missing-strategy failure pass. Full library passes. This closes the previously missing indirect tree-writer boundary under B9F6F0; aggregate serialization is next.
+
 ## Root direct continuation: borrowed stream forwarding (2026-10-09)
 
 `mesh_stream_write61` adds six B9E528..B9E668 methods used by the aggregate serializer's stack adapter. Each forwards the matching byte/u16/u32/float/double/block operation through its borrowed writer at +4 and returns the adapter. Twenty family cases now pass, including six complete-original forwarding bodies with concrete growable writers. Full library passes. Tracing B9F6F0's indirect object writer found BD1BF8/BD14B8 tree envelope and BD7CB8/BD8550 linked-stream helpers still to recover; do not claim every indirect lower was already closed.

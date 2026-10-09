@@ -104,3 +104,13 @@ all-original whole-chain comparison. The per-unit draft manifests record the
 precise cases. Nonfinite, fault/MMIO, concurrency, Windows and gameplay coverage
 are not implied. Historical catalog mapping and runtime wrapper counts remain
 unchanged.
+
+## Owner envelopes and linked output
+
+BD14B8 emits OPC plus endian byte, version 1 and owner flags before dispatching
+the selected strategy through slot +20. Without a strategy, flag bit 2 is the
+original success condition. BD1BF8 appends HBM version 0, leaf count and its
+adaptive map when count exceeds one, then triangle count and optional map.
+BD7CB8 and BD8550 use the linked writer rather than virtual scalar slots.
+These layouts compose below BB44A8, which stages the linked payload before
+writing its length and bytes to the caller's virtual stream.
