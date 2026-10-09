@@ -64,6 +64,7 @@ struct Guest final : manager_release_context61::GuestServices {
     std::vector<std::array<std::uint64_t, 73>> events;
     std::set<GuestAddress> live;
     unsigned allocations = 0;
+    unsigned refreshCalls = 0;
     void CallDirect(GuestAddress, GuestMemory &, Registers &) override {
         throw std::runtime_error("cache build direct boundary");
     }
@@ -73,6 +74,11 @@ struct Guest final : manager_release_context61::GuestServices {
         std::copy(snap.begin(), snap.end(), ev.begin());
         ev.back() = e;
         events.push_back(ev);
+        if (e == 0x2008u) {
+            ++refreshCalls;
+            s.r[3] = 1;
+            return;
+        }
         if (e == 0x82b9f188u || e == 0x82b9f190u) {
             s.r[3] = m.ReadU32(Address(s.r[3]) + (e == 0x82b9f188u ? 168 : 160));
             return;

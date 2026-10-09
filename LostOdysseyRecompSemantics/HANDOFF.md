@@ -1,3 +1,7 @@
+## Root direct continuation: cooked geometry scaling (2026-10-09)
+
+`mesh_cook_scale61` recovers B9EC98 uniform scaling, B9F188/B9F190 count getters and B9CAF8 active settings update. Positions, face quantities, bounds, radius and centroid use the scale factor; inertia uses its square, while relative tolerance uses recovered guest power. Source settings choose explicit virtual refresh or concrete tree rebuild. One focused synthetic scale2 path checks derived data, getters/settings, ABI and a recorded accepted refresh boundary. B9C670 load/scale/export wrapper and BC5270 load are the next related integration targets. No Full72/bitwiseFP/gameplay claim.
+
 ## Root direct continuation: hull scratch registration and exit callbacks (2026-10-09)
 
 First-use clip registration now checks the actual signed-addi callback targets830D9990/830D9930. Earlier untested constants incorrectly used830E9990/830E9930; corrected. Both original scratch destructors are concrete and release/zero their respective arrays. Focused smoke enters with unset registration flags, records exactly two accepted CRT registration calls, runs repeated clipping, then allocates/destructs both scratch arrays. CRT registry internals remain an explicit82B7BE48 boundary, not a no-op implementation. Full library passes.

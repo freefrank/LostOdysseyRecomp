@@ -225,6 +225,7 @@ add_library(LostOdysseyRecompSemantics STATIC
     src/mesh_geometry_stream61.cpp
     src/mesh_cook_stream61.cpp
     src/mesh_cook_tree61.cpp
+    src/mesh_cook_scale61.cpp
     src/mesh_cook_support61.cpp
     src/mesh_bounds_math61.cpp
     src/mesh_bounds_select61.cpp

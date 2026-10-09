@@ -294,3 +294,8 @@ The three B9C7D8 paths now run through concrete helpers: indexed tetrahedron564 
 ### Scratch exit registration
 
 First-use callback targets are verified as830D9990 and830D9930, including signed-address formation. The two scratch destructors are concrete. The fixture records registration calls and verifies no duplicate registration on repeated clipping, then executes both destructors. CRT registration internals remain an accepted boundary.
+
+
+### Cooked geometry rescaling
+
+B9EC98 scales geometry and derived quantities, then refreshes/rebuilds the tree according to settings. The focused scale2 path checks squared inertia, bounds/radius/centroid, guest-power tolerance and the explicit refresh event. B9F188/B9F190 count getters and B9CAF8 settings update are also concrete. Stream-load/scale/export integration remains pending.
