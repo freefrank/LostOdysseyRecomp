@@ -11,14 +11,12 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Fixed a Vulkan crash a few seconds after startup on NVIDIA GPUs when ReShade's `dxgi.dll` is in the game folder; ReShade still works with Direct3D 12 (#323).
 - With DLSS, FSR, XeSS or MetalFX on, a Render resolution above the output now supersamples: the upscaler outputs at that resolution and the picture is scaled down to the window or screen (#332).
 - New DLSS 5 neural rendering setting in Settings → Graphics on Windows with DLSS: Off or 1×–4× passes. Confirm on it opens a tuning page with model, intensity, tone, structure, skin and character mask, previewed live on the current scene. It needs an RTX GPU and your own nvngx_dlssnr.dll next to the game; the game does not include it.
-- The HDR page's scene preview now follows the peak brightness with DLSS, FSR or XeSS on.
 
 ### 简体中文
 
 - 修复游戏目录里有 ReShade 的 `dxgi.dll` 时，NVIDIA 显卡使用 Vulkan 启动几秒后崩溃的问题；ReShade 在 Direct3D 12 下仍可使用（#323）。
 - 开启 DLSS、FSR、XeSS 或 MetalFX 时，高于输出的渲染分辨率现在会超采样：超分输出为该分辨率，再缩小到窗口或屏幕（#332）。
 - Windows 上开启 DLSS 时，设置 → 图形新增“DLSS 5 神经渲染”：关闭或 1×–4× 次。在这一行按确认会打开调整页，可调模型、强度、色调、结构、皮肤和角色遮罩，并在当前场景上实时预览。需要 RTX 显卡，并把自备的 nvngx_dlssnr.dll 放在游戏旁边，游戏不附带。
-- 开启 DLSS、FSR 或 XeSS 时，HDR 页的场景预览现在会随峰值亮度变化。
 
 ## [v0.9.0](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.0) — 2026-10-08
 
