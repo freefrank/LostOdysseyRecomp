@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "mesh-cook-hull61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/mesh_cook_hull61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/mesh_cook_hull61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nvoid CookHullIndirect(std::uint32_t,PPCContext&,std::uint8_t*);\n#undef PPC_CALL_INDIRECT_FUNC\n#define PPC_CALL_INDIRECT_FUNC(t) CookHullIndirect((t),ctx,base)\nvoid CookHullLower(std::uint32_t,PPCContext&,std::uint8_t*);\nvoid CookHullSave(unsigned,PPCContext&,std::uint8_t*);\nvoid CookHullRestore(unsigned,PPCContext&,std::uint8_t*);\n#define __savegprlr_24(c,b) CookHullSave(24,c,b)\n#define __restgprlr_24(c,b) CookHullRestore(24,c,b)\nPPC_FUNC_IMPL(__imp__sub_82BB3350);\n#define sub_82BB3350 __imp__sub_82BB3350\nPPC_FUNC_IMPL(__imp__sub_82B9E3F8);\n#define sub_82B9E3F8 __imp__sub_82B9E3F8\nPPC_FUNC_IMPL(__imp__sub_82B9E7B0);\n#define sub_82B9E7B0 __imp__sub_82B9E7B0\n#define sub_82BBA028(c,b) CookHullLower(0x82bba028u,c,b)\n#define sub_82BB3130(c,b) CookHullLower(0x82bb3130u,c,b)\n#define sub_82BB3008(c,b) CookHullLower(0x82bb3008u,c,b)\n#define sub_82BB32D8(c,b) CookHullLower(0x82bb32d8u,c,b)\n#define sub_82B7E504(c,b) CookHullLower(0x82b7e504u,c,b)\n#define sub_82B7A0B0(c,b) CookHullLower(0x82b7a0b0u,c,b)\n#define sub_82B9CB60(c,b) CookHullLower(0x82b9cb60u,c,b)\n#define sub_82B9C298(c,b) CookHullLower(0x82b9c298u,c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/mesh_cook_hull61.cpp"
+      ]
+    }
+  ]
+}

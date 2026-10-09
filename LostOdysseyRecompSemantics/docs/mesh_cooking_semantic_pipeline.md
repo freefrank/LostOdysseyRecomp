@@ -210,3 +210,7 @@ BB88A8 now supplies the area-validation and shortest-edge-collapse gate used by 
 ### Point-cloud convex construction
 
 BBA028 now composes deduplication, deterministic guest perturbation, tetrahedral cavity insertion/circumspheres, hull triangle extraction, used-vertex compaction, orientation and area repair, polygon derivation, centroid and convexity. Its intermediate point/cell/face allocations are released in original order. Three focused original-upper/shared-concrete cases produce closed tetrahedron/cube hulls, including duplicate input, with zero allocations after auxiliary teardown. Private 40-byte hull constants remain external. BB3350 and upper owner orchestration still need connection; the separate indexed-input route remains.
+
+### Cooked point input
+
+BB3350 composes hull and valence, B9E3F8 owns the temporary adapter/cache, and B9E7B0 copies arbitrary-stride xyz input to guest stack before constructing owner+156 geometry. Its +108 bit0 records success. Four focused upper/local-wrapper cases pass, including a padded 20-byte input stride and complete teardown. Indexed input and B9F198 orchestration remain pending.

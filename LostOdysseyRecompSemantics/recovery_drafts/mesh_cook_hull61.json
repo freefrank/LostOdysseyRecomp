@@ -1,0 +1,51 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Hull/valence composition, temporary adapter ownership and strided cooked-owner input.",
+  "entries": [
+    {
+      "address": "82BB3350",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 57212,
+      "instruction_count": 22,
+      "body_sha256": "a628daee6927cfe824a00854874474abf4a61a0c3ec81ab1daf11756626ee6cd",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82B9E3F8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 8112,
+      "instruction_count": 45,
+      "body_sha256": "3364f27090cba98cc02db45fc53cf24d00ecbd8d03f70bc9e90d2eb49ac12a3c",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82B9E7B0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 8694,
+      "instruction_count": 60,
+      "body_sha256": "a819bd0ed388c4b97db235cb44d2c6f785c3893b6b1303bdff0efcb11f154d00",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BB3350",
+      "82B9E3F8",
+      "82B9E7B0"
+    ],
+    "header": "include/lo_semantics/mesh_cook_hull61.h",
+    "source": "src/mesh_cook_hull61.cpp",
+    "oracle": "tests/mesh_cook_hull61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 4,
+    "library_validated": true,
+    "case_scope": "Four actual-original upper wrapper/local-chain cases with shared concrete hull, valence, copying and cleanup: retained adapter, temporary adapter, packed owner input and 20-byte stride. Full72/RAM/CSR/events, independent closed geometry/owner flag and complete teardown. No diagnostic failure matrix or full cooking graph claim.",
+    "platform": "Linux x64 Clang19; pinned PPC; mmap guest overlay"
+  }
+}
