@@ -27,6 +27,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Optional diagnostics on Windows now send a short summary of the previous session's log (errors, crashes, hangs, rendering mismatches and map names) instead of TAA shader data. The game asks again before sending anything.
 - The log now keeps only notices, warnings and errors. Turn on Settings → System → Debug log for the full log.
 - Windows no longer opens the setup page at the first launch: the game starts with default settings, which Settings changes (`--setup` still opens the page). Opening Settings no longer asks about log collection; the first launch still asks once.
+- Settings opens from the title menu with Y (S on the keyboard), shown at the bottom right, so settings can be changed before loading a save. Options stored in the save are hidden there.
 
 ### 简体中文
 
@@ -49,6 +50,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Windows 上的可选诊断改为发送上一次运行日志的摘要（错误、崩溃、卡死、渲染不匹配和地图名），不再发送 TAA 着色器数据。发送前会重新询问。
 - 日志默认只保留提示、警告和错误。需要完整日志时，在设置 → 系统打开“调试日志”。
 - Windows 第一次启动不再打开设置页面：游戏以默认设置启动，在设置里修改（`--setup` 仍可打开该页面）。打开设置时不再询问日志收集；第一次启动仍会询问一次。
+- 标题菜单按 Y（键盘 S）可打开设置，提示显示在右下角，不用先读档。存在存档里的选项在这里隐藏。
 
 ## [v0.9.0](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.0) — 2026-10-08
 
