@@ -1,0 +1,43 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Triangle unique undirected edges and side mapping.",
+  "entries": [
+    {
+      "address": "82BBD4C0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 20868,
+      "instruction_count": 7,
+      "body_sha256": "60cc72427641279628f22b17038efc8c1252f8ee4e5cbce521332639e5e62263",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BBCE58",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 19968,
+      "instruction_count": 225,
+      "body_sha256": "8dc51294635e0e18fda54f8d06fdb4a5b332674716077c5390330a25d6ed145a",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BBD4C0",
+      "82BBCE58"
+    ],
+    "header": "include/lo_semantics/mesh_edge_build61.h",
+    "source": "src/mesh_edge_build61.cpp",
+    "oracle": "tests/mesh_edge_build61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 4,
+    "library_validated": true,
+    "case_scope": "Descriptor initialization and u32/u16 triangle endpoint normalization, shared-edge deduplication/mapping and existing-map reuse. Original upper shares actual sorter/copy/allocator. Full72/RAM/callback, independent edge pairs and triangle-side map. Diagnostic and allocation-failure paths not exercised.",
+    "platform": "Linux x64 Clang 19.1.7; pinned regenerated PPC; mmap guest overlay",
+    "mapping_limit": "Historical catalog membership unverified; no baseline mapping credit."
+  }
+}

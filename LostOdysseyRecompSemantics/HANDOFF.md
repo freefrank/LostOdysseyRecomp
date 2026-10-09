@@ -1,3 +1,7 @@
+## Root direct continuation: unique triangle edges (2026-10-09)
+
+`mesh_edge_build61` closes BBD4C0 descriptor initialization and BBCE58 edge normalization, two stable-sort passes, unique undirected pairs and triangle-side mapping. Four original-upper/shared-concrete-sort cases pass Full72/RAM/callbacks and independent pairs, mapping, ownership and reuse assertions for u32/u16 indices. Full Clang library passes. Diagnostic/partial-allocation paths retain original behavior but are not exercised. No new fallback or historical/runtime mapping claim.
+
 ## Root direct continuation: compact adjacency streams (2026-10-09)
 
 `mesh_valence_stream61` closes BD8360 degree maximum, BD83A0 byte/halfword packing and BBCC28 ICE/VALE output. Five composed-original local-chain cases pass Full72/RAM/callbacks and independent native/swapped compact/wide/empty stream bytes and temporary-allocation release-before-payload ordering. Header/scalar/growable/allocator lowers are concrete shared implementations; full Clang library passes. Three implementation addresses only, original allocation/count preconditions retained.
