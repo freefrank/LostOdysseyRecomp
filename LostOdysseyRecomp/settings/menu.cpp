@@ -782,6 +782,7 @@ void Publish(uint8_t *base, uint32_t config)
     next.tab = tab;
     next.row = row;
     next.speakerLayout = speakerTest;
+    next.speakerPhase = int(edit.audioMatrixPhase);
     next.language = edit.uiLanguage;
     next.calibration = MakeHdrCalibration(edit, calibrationOpen.load());
     next.brightness = MakeBrightnessCalibration(edit, brightnessOpen.load());
@@ -1095,8 +1096,8 @@ void Publish(uint8_t *base, uint32_t config)
                  L"5.1 會將遊戲的環繞聲混音輸出到 5.1 或 7.1 喇叭，立即套用。");
     if (tab == 1 && row == AudioMatrixPhaseRow && status.empty())
         next.help = edit.audioOutput == AudioOutputMatrix
-            ? Tr(L"A sound circles the speakers while this row is selected; adjust until it moves smoothly between front and rear.",
-                 L"選取此行時，聲音會繞著喇叭轉圈；調整到聲音在前後之間平順移動。")
+            ? Tr(L"A sound circles the speakers; the dots show where a decoder would place it. Adjust until it moves smoothly front to rear.",
+                 L"聲音會繞著喇叭轉圈，圓點顯示解碼器會把聲音放在哪裡；調整到聲音在前後之間平順移動。")
             : Tr(L"Select Matrix surround in Audio output to adjust this.",
                  L"在音訊輸出選擇矩陣環繞聲後才能調整。");
     if (tab == 2)
@@ -1417,7 +1418,8 @@ void Publish(uint8_t *base, uint32_t config)
         next.neuralRendering == snapshot.neuralRendering &&
         next.rows == snapshot.rows && next.help == snapshot.help && next.notice == snapshot.notice && next.dialogTitle == snapshot.dialogTitle &&
         next.dialogMessage == snapshot.dialogMessage && next.dialogChoices == snapshot.dialogChoices &&
-        next.dialogSelection == snapshot.dialogSelection && next.speakerLayout == snapshot.speakerLayout)
+        next.dialogSelection == snapshot.dialogSelection && next.speakerLayout == snapshot.speakerLayout &&
+        next.speakerPhase == snapshot.speakerPhase)
         return;
     next.revision = snapshot.revision + 1;
     snapshot = std::move(next);
@@ -2926,9 +2928,9 @@ bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint3
         markerDrawn = {};
     };
     const auto drawMarker = [&] {
-        const float degrees = current.speakerLayout && current.dialogChoices.empty() ? apu::TestSignalAngle() : -1.0f;
-        if (degrees >= 0)
-            markerDrawn = DrawSpeakerMarker(pixels, width, height, degrees);
+        const float position = current.speakerLayout && current.dialogChoices.empty() ? apu::TestSignalPosition() : -1.0f;
+        if (position >= 0)
+            markerDrawn = DrawSpeakerMarker(pixels, width, height, position, float(current.speakerPhase));
     };
     // Input style can change without a guest menu tick (hot-plug or keyboard).
     current.playStationPrompts = hid::UsesPlayStationPrompts();

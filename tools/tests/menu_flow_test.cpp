@@ -114,7 +114,7 @@ bool menuFlowTestSignal = false;
 void SetOutput(Output output) { menuFlowOutput = output; }
 void SetMatrixPhase(uint32_t degrees) { menuFlowMatrixPhase = degrees; }
 void SetTestSignal(bool on) { menuFlowTestSignal = on; }
-float TestSignalAngle() { return menuFlowTestSignal ? 0.0f : -1.0f; }
+float TestSignalPosition() { return menuFlowTestSignal ? 0.0f : -1.0f; }
 uint32_t OutputChannels() { return menuFlowOutput == Output::Surround ? 6 : 2; }
 }
 
@@ -1586,6 +1586,7 @@ int main(int argc, char** argv)
             Require(settings::snapshot.rows[settings::AudioMatrixPhaseRow].enabled &&
                     settings::snapshot.rows[settings::AudioMatrixPhaseRow].value == L"105°" &&
                     settings::edit.audioMatrixPhase == 105 && diskConfig.audioMatrixPhase == 105 && apu::menuFlowMatrixPhase == 105 &&
+                    settings::snapshot.speakerPhase == 105 &&
                     saves == beforeSaves + 4 && applies == beforeApplies && diskConfig.width != settings::edit.width,
                     "Matrix phase steps 15 degrees, applies live and saves alone");
             settings::pending = 2; Tick(base);

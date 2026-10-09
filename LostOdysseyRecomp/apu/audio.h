@@ -29,9 +29,10 @@ namespace apu
     // it every frame while the test should play; it stops by itself 0.3 s
     // after the last call with true.
     void SetTestSignal(bool on);
-    // Where the speaker test sound is, degrees clockwise from the front, or a
+    // Where the speaker test sound is along its circle (SpeakerPan::Position:
+    // 0 front left ... 4 left surround, fractions while gliding), or a
     // negative value while no test plays.
-    float TestSignalAngle();
+    float TestSignalPosition();
     // Channels of the open device: 6 (5.1), 2 (stereo), or 0 without a device
     // or while a change is pending.
     uint32_t OutputChannels();

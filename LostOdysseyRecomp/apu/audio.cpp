@@ -34,7 +34,7 @@ namespace apu
         std::atomic<uint32_t> g_matrixPhase{ 90 };
         // steady_clock time until which the speaker test plays
         std::atomic<std::chrono::steady_clock::rep> g_testSignalUntil{ 0 };
-        std::atomic<float> g_testAngle{ -1.0f };
+        std::atomic<float> g_testPosition{ -1.0f };
         std::atomic<uint32_t> g_outputChannels{ 0 };
 
         uint32_t FrameBytes() { return XAUDIO_NUM_SAMPLES * g_channels * sizeof(float); }
@@ -239,9 +239,9 @@ namespace apu
         g_testSignalUntil = on ? until.time_since_epoch().count() : 0;
     }
 
-    float TestSignalAngle()
+    float TestSignalPosition()
     {
-        return g_testAngle;
+        return g_testPosition;
     }
 
     uint32_t OutputChannels()
@@ -310,7 +310,7 @@ namespace apu
             stereo[i * 2 + 1] = std::clamp(right, -1.0f, 1.0f);
             peak = std::max({peak, std::abs(stereo[i * 2]), std::abs(stereo[i * 2 + 1])});
         }
-        g_testAngle = testOn ? pan.Angle() : -1.0f;
+        g_testPosition = testOn ? pan.Position() : -1.0f;
         uint32_t n = ++g_framesSubmitted;
         CaptureRequested(stereo.data(), n);
         // Bounded diagnostic capture, before mute; raw f32le, 48 kHz stereo.

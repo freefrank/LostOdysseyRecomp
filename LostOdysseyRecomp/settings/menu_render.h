@@ -52,8 +52,10 @@ struct MenuSnapshot
     BrightnessCalibration brightness;
     NeuralRenderingTuning neuralRendering;
     // Audio tab speaker test (Matrix phase row): the 5.1 layout is drawn under
-    // the rows; the marker that follows the sound is a layer (DrawSpeakerMarker).
+    // the rows with the path a matrix decoder gives the test sound at
+    // speakerPhase; the marker that follows the sound is a layer (DrawSpeakerMarker).
     bool speakerLayout = false;
+    int speakerPhase = 90;
     std::shared_ptr<const menu_assets::Assets> assets;
     // Only the panels, without title, tabs, rows or help: what the content
     // fades in over when the menu opens.
@@ -77,9 +79,10 @@ struct MenuRect
 // The list arrow at a layout position, and the output pixels it can cover.
 void DrawMenuArrow(std::vector<uint32_t> &pixels, uint32_t width, uint32_t height, int x, int y);
 MenuRect MenuArrowBounds(uint32_t width, uint32_t height, int x, int y);
-// The speaker test marker on the layout's ring at `degrees` clockwise from the
-// front, lighting the speaker it rests on, and the output pixels it covers.
-MenuRect DrawSpeakerMarker(std::vector<uint32_t> &pixels, uint32_t width, uint32_t height, float degrees);
+// The speaker test marker where a matrix decoder puts the test sound at
+// `position` along its circle (apu::SpeakerPan) with the encoder at `phase`,
+// framing the speaker it rests on, and the output pixels it covers.
+MenuRect DrawSpeakerMarker(std::vector<uint32_t> &pixels, uint32_t width, uint32_t height, float position, float phase);
 
 // Presentation-only menu motion (#151), timed like the retail Configuration and
 // camp menus (recorded frame by frame on psvita, 2026-10-09). Menu logic and

@@ -8,8 +8,11 @@
 // carry it at once, which is where the matrix phase is heard: at the right
 // phase the sound moves smoothly from front to rear.
 
+#include "matrix_surround.h"
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <complex>
 #include <cstdint>
 
 namespace apu
@@ -23,38 +26,96 @@ namespace apu
         static constexpr int Order[5] = {0, 2, 1, 5, 4};
         static constexpr float Angles[5] = {330, 0, 30, 110, 250};
 
+        // Gains in guest order (FL, FR, FC, LFE, BL, BR) at `position` along the
+        // circle: 0 front left, 1 center, 2 front right, 3 right surround,
+        // 4 left surround, fractions while gliding to the next.
+        static void Gains(float position, float (&gain)[6])
+        {
+            std::fill(std::begin(gain), std::end(gain), 0.0f);
+            const float wrapped = std::fmod(std::fmod(position, 5.0f) + 5.0f, 5.0f);
+            const int leg = std::min(int(wrapped), 4);
+            const float turn = (wrapped - float(leg)) * 1.5707963f;
+            gain[Order[leg]] = std::cos(turn);
+            gain[Order[(leg + 1) % 5]] = std::sin(turn);
+        }
+
+        struct Direction
+        {
+            float degrees, focus;
+        };
+        // Where a passive matrix decoder would put the sound at `position` with
+        // the encoder at `phase` degrees, from ideal Lt/Rt (the all-pass pair
+        // taken as an exact 90 degree shift): degrees around the listener,
+        // calibrated so a speaker alone lands on its own angle, and focus, 1 on
+        // a speaker and smaller where Lt and Rt spread the sound out.
+        static Direction Decoded(float position, float phase)
+        {
+            float gain[6];
+            Gains(position, gain);
+            const Direction steer = Steer(gain, phase);
+            // Each speaker alone, by steering angle, maps to its drawn angle.
+            struct Anchor { float steering, drawn; };
+            std::array<Anchor, 5> anchors;
+            for (int i = 0; i < 5; ++i)
+            {
+                float alone[6] = {};
+                alone[Order[i]] = 1;
+                anchors[i] = {Steer(alone, phase).degrees, Angles[i]};
+            }
+            std::sort(anchors.begin(), anchors.end(), [](const Anchor &a, const Anchor &b) { return a.steering < b.steering; });
+            const float psi = steer.degrees < anchors[0].steering ? steer.degrees + 360 : steer.degrees;
+            for (int i = 0; i < 5; ++i)
+            {
+                const Anchor &from = anchors[i], &next = anchors[(i + 1) % 5];
+                const float to = i < 4 ? next.steering : next.steering + 360;
+                if (psi <= to || i == 4)
+                {
+                    const float span = std::fmod(next.drawn - from.drawn + 360.0f, 360.0f);
+                    const float t = std::clamp((psi - from.steering) / std::max(to - from.steering, 1e-6f), 0.0f, 1.0f);
+                    return {std::fmod(from.drawn + span * t, 360.0f), std::min(steer.focus, 1.0f)};
+                }
+            }
+            return steer;
+        }
+
         // Overwrites one sample frame in guest order FL, FR, FC, LFE, BL, BR.
         void Next(float (&channel)[6])
         {
-            const uint32_t leg = m_sample / Step, step = m_sample % Step;
+            float gain[6];
+            Gains(Position(), gain);
             m_sample = (m_sample + 1) % (Step * 5);
-            std::fill(std::begin(channel), std::end(channel), 0.0f);
             float noise = Pink();
             if (m_started < FadeIn)
                 noise *= float(m_started++) / FadeIn;
-            if (step < Hold)
-                channel[Order[leg]] = noise;
-            else
-            {
-                const float turn = float(step - Hold) / Glide * 1.5707963f;
-                channel[Order[leg]] = noise * std::cos(turn);
-                channel[Order[(leg + 1) % 5]] = noise * std::sin(turn);
-            }
+            for (int c = 0; c < 6; ++c)
+                channel[c] = noise * gain[c];
         }
 
-        // Where the sound is, degrees clockwise from the front.
-        float Angle() const
+        // Where the sound is along the circle (see Gains).
+        float Position() const
         {
             const uint32_t leg = m_sample / Step, step = m_sample % Step;
-            if (step < Hold)
-                return Angles[leg];
-            const float span = std::fmod(Angles[(leg + 1) % 5] - Angles[leg] + 360.0f, 360.0f);
-            return std::fmod(Angles[leg] + span * float(step - Hold) / Glide, 360.0f);
+            return float(leg) + (step < Hold ? 0.0f : float(step - Hold) / Glide);
         }
 
         void Reset() { *this = {}; }
 
     private:
+        // Steering from the Lt/Rt powers: left/right and center/surround
+        // dominance as an angle (0 center, 90 right, 180 surround) and length.
+        static Direction Steer(const float (&gain)[6], float phase)
+        {
+            using M = MatrixSurround;
+            const std::complex<float> rotate = std::polar(1.0f, phase * 0.017453292f);
+            const std::complex<float> lt = gain[0] + M::Center * gain[2] - rotate * (M::Major * gain[4] + M::Minor * gain[5]);
+            const std::complex<float> rt = gain[1] + M::Center * gain[2] + rotate * (M::Minor * gain[4] + M::Major * gain[5]);
+            const float l2 = std::norm(lt), r2 = std::norm(rt), s2 = std::norm(lt + rt), d2 = std::norm(lt - rt);
+            if (l2 + r2 <= 1e-12f)
+                return {0, 0};
+            const float lr = (r2 - l2) / (l2 + r2), cs = (s2 - d2) / (s2 + d2);
+            return {std::fmod(std::atan2(lr, cs) * 57.29578f + 360.0f, 360.0f), std::hypot(lr, cs)};
+        }
+
         // Paul Kellet's economy pink filter over a linear congruential source,
         // scaled to about -20 dBFS RMS.
         float Pink()

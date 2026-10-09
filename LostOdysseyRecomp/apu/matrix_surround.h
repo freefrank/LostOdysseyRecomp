@@ -20,19 +20,20 @@ namespace apu
     class MatrixSurround
     {
     public:
+        static constexpr float Center = 0.7071f, Lfe = 0.5f, Major = 0.8718f, Minor = 0.4899f, Gain = 0.5f;
+
         // channel: FL, FR, FC, LFE, BL, BR. Writes Lt and Rt at the stereo
         // fold-down's level, before clamping.
         void Encode(const float (&channel)[6], float& lt, float& rt)
         {
-            constexpr float center = 0.7071f, lfe = 0.5f, major = 0.8718f, minor = 0.4899f, gain = 0.5f;
-            const float frontLeft = channel[0] + center * channel[2] + lfe * channel[3];
-            const float frontRight = channel[1] + center * channel[2] + lfe * channel[3];
-            const float rearLeft = major * channel[4] + minor * channel[5];
-            const float rearRight = minor * channel[4] + major * channel[5];
+            const float frontLeft = channel[0] + Center * channel[2] + Lfe * channel[3];
+            const float frontRight = channel[1] + Center * channel[2] + Lfe * channel[3];
+            const float rearLeft = Major * channel[4] + Minor * channel[5];
+            const float rearRight = Minor * channel[4] + Major * channel[5];
             const float shiftedLeft = m_cos * m_rearLeft.Process(rearLeft) + m_sin * m_rearLeftQuadrature.Process(rearLeft);
             const float shiftedRight = m_cos * m_rearRight.Process(rearRight) + m_sin * m_rearRightQuadrature.Process(rearRight);
-            lt = gain * (m_frontLeft.Process(frontLeft) - shiftedLeft);
-            rt = gain * (m_frontRight.Process(frontRight) + shiftedRight);
+            lt = Gain * (m_frontLeft.Process(frontLeft) - shiftedLeft);
+            rt = Gain * (m_frontRight.Process(frontRight) + shiftedRight);
         }
 
         // Surround phase relative to the fronts, in degrees; 90 by default.
