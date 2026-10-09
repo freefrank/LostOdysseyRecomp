@@ -186,6 +186,101 @@ void Check(unsigned mode) {
     original = nullptr;
     memory = nullptr;
 }
+
+void Insert(unsigned mode) {
+    struct Restore {
+        std::uint32_t csr = PPCFPSCRRegister{}.getcsr();
+        ~Restore() { PPCFPSCRRegister{}.setcsr(csr); }
+    } restore;
+    test::GuestWindow before(Regions), after(Regions);
+    auto seed = [&](test::GuestWindow &w) {
+        w.Fill(0);
+        auto m = w.Memory();
+        m.WriteU32(Owner + 248, 0x50000);
+        m.WriteU32(Owner + 252, 0x51000);
+        m.WriteU32(Owner + 208, 4);
+        m.WriteU32(Owner + 224, mode == 5 ? 4 : 1);
+        m.WriteU32(Owner + 228, 3);
+        m.WriteU32(Owner + 236, 0x34000);
+        m.WriteU32(Owner + 212, 3);
+        m.WriteU32(Owner + 216, 3);
+        m.WriteU32(Owner + 220, 3);
+        m.WriteU8(Owner + 280, mode == 6 ? 0 : 1);
+        m.WriteU8(Owner + 282, mode == 6 ? 0 : 1);
+        m.WriteU32(Input, 3);
+        m.WriteU32(Input + 4, 11);
+        m.WriteU32(Input + 8, 9);
+        m.WriteU8(Input + 24, mode == 1);
+        for (unsigned j = 0; j < 3; ++j)
+            m.WriteU32(Input + 12 + 4 * j, mode == 2 ? 0 : 0x35000 + 16 * j);
+        constexpr float points[]{0, 0, 0, 1, 0, 0, 0, 1, 0};
+        for (unsigned i = 0; i < 9; ++i)
+            m.WriteU32(0x34000 + 4 * i, std::bit_cast<std::uint32_t>(points[i]));
+        if (mode == 4) {
+            m.WriteU32(0x34018, std::bit_cast<std::uint32_t>(2.f));
+            m.WriteU32(0x3401c, 0);
+        }
+        for (unsigned j = 0; j < 3; ++j) {
+            m.WriteU32(0x35000 + 16 * j, 0);
+            m.WriteU32(0x35004 + 16 * j, mode == 3 && j == 0 ? 0 : 1);
+            m.WriteU32(0x35008 + 16 * j, j == 0 ? (mode == 6 ? 99 : 2) : 99);
+        }
+    };
+    seed(before);
+    seed(after);
+    Environment expected(before), actual(after);
+    auto s = sort_engine61_oracle::Initial(0);
+    s.r[3] = Owner;
+    s.r[4] = Input;
+    auto om = before.Memory(), m = after.Memory();
+    original = &expected;
+    memory = &om;
+    PPCContext c{};
+    crt_full_oracle::ToPpc(c, s);
+    PPCFPSCRRegister{}.setcsr(s.cached_fp_control);
+    __imp__sub_82BBE310(c, before.Bytes());
+    auto host = PPCFPSCRRegister{}.getcsr();
+    PPCFPSCRRegister{}.setcsr(s.cached_fp_control);
+    (void)mesh_indexed_workspace61::Apply(0x82bbe310u, m, actual.Deps(), s);
+    auto a = crt_full_oracle::Snapshot(crt_full_oracle::FromPpc(c)),
+         b = crt_full_oracle::Snapshot(s);
+    if (a != b || !before.EqualCommitted(after) || host != PPCFPSCRRegister{}.getcsr()) {
+        std::fprintf(stderr, "insert%u Full%d RAM%d host%d\n", mode, a == b,
+                     before.EqualCommitted(after), host == PPCFPSCRRegister{}.getcsr());
+        for (unsigned i = 0; i < a.size(); ++i)
+            if (a[i] != b[i])
+                std::fprintf(stderr, "field%u %llx/%llx\n", i, (unsigned long long)a[i],
+                             (unsigned long long)b[i]);
+        throw std::runtime_error("insert original mismatch");
+    }
+    bool skipped = mode == 3 || mode == 4, full = mode == 5;
+    if (s.r[3] != (full ? 0u : 1u) ||
+        m.ReadU32(Owner + 224) != (full      ? 4u
+                                   : skipped ? 1u
+                                             : 2u) ||
+        m.ReadU32(Owner + 228) != (full || skipped ? 3u : 6u))
+        throw std::runtime_error("face insertion counts");
+    if (!skipped && !full) {
+        auto face = 0x50030u, corner = 0x51024u;
+        if (m.ReadU32(face + 24) != 11 || m.ReadU32(face + 28) != (mode == 6 ? 1u : 9u) ||
+            m.ReadU32(face + 44) != 3)
+            throw std::runtime_error("face metadata");
+        for (unsigned j = 0; j < 3; ++j) {
+            if (m.ReadU32(face + 12 + 4 * j) != 3 + j)
+                throw std::runtime_error("face corner offsets");
+            unsigned index = mode == 1 ? (j == 1 ? 2 : j == 2 ? 1 : 0) : j;
+            for (unsigned channel = 0; channel < 3; ++channel) {
+                unsigned want = mode == 2    ? 0xffffffffu
+                                : index == 2 ? (channel == 0 && mode != 6 ? 2 : 0)
+                                             : index;
+                if (m.ReadU32(corner + 12 * j + 4 * channel) != want)
+                    throw std::runtime_error("face orientation/clamped channel index");
+            }
+        }
+    }
+    original = nullptr;
+    memory = nullptr;
+}
 } // namespace workspace_oracle
 void WorkspaceIndirect(std::uint32_t e, PPCContext &c, std::uint8_t *) {
     auto s = crt_full_oracle::FromPpc(c);
@@ -217,8 +312,10 @@ int main() {
     try {
         for (unsigned i = 0; i < 4; ++i)
             workspace_oracle::Check(i);
-        std::puts(
-            "PASS mesh-indexed-workspace61 4 original-local-chain/shared-concrete-buffer cases");
+        for (unsigned i = 0; i < 7; ++i)
+            workspace_oracle::Insert(i);
+        std::puts("PASS mesh-indexed-workspace61 11 original local-chain/leaf and "
+                  "shared-concrete-buffer cases");
         return 0;
     } catch (const std::exception &e) {
         std::fprintf(stderr, "%s\n", e.what());

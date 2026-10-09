@@ -1,3 +1,7 @@
+## Root direct continuation: indexed face insertion (2026-10-09)
+
+`mesh_indexed_workspace61` adds BBE310. Face metadata, corner position/attribute IDs, winding reversal, missing-channel sentinels and supplied-ID clamping follow the original layout. Enabled repeated-index/exact-zero-area filtering succeeds without consuming a face slot; full capacity fails. Eleven family cases now pass, including seven complete-original leaf cases covering those branches and independent metadata/corner/count checks. Full library passes. Indexed channel processing and BB9800 orchestration remain.
+
 ## Root direct continuation: indexed-mesh workspace ownership (2026-10-09)
 
 `mesh_indexed_workspace61` closes BBDF60, BBE070, BBE278, BBF590 and BBF628. Thirteen dynamic buffers, copied/zero-filled xyz channels, option bytes and per-face arrays retain the original reset/destruction order and partial-failure ownership. Four complete-original local lifecycle/configuration chains pass with shared concrete buffer/CRT lowers: 2D/3D attributes, zero-fill/zero-count channel, replacement of prior buffers/arrays, and zero-face rejection. Full72/RAM/CSR/events, independent bytes/counts/options and complete teardown pass. Full library passes. Indexed face insertion and workspace processing are next.

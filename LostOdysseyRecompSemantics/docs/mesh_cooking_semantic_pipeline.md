@@ -218,3 +218,7 @@ BB3350 composes hull and valence, B9E3F8 owns the temporary adapter/cache, and B
 ### Indexed input workspace
 
 BBDF60/BBE070/BBE278/BBF590/BBF628 provide the owned workspace lifecycle and input channels beneath BB9800. Configuration copies or zero-fills xyz channels, optionally clears the third attribute component, and allocates 48-/36-byte-per-face arrays. Zero-face rejection keeps already-acquired channels until cleanup. Four focused original-local-chain cases and complete teardown pass; face insertion/processing remain.
+
+### Indexed face insertion
+
+BBE310 fills a 48-byte face record and three 12-byte corner channel tuples. Optional degeneracy filtering skips duplicate-index/zero-area faces without consuming capacity. It preserves caller winding, missing-channel -1 sentinels and original supplied-ID clamping. Seven new complete-original leaf cases pass, bringing the workspace family to eleven.

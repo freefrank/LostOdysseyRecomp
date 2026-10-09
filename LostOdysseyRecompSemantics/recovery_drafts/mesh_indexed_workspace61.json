@@ -41,6 +41,14 @@
       "instruction_count": 113,
       "body_sha256": "7dfc4afe11cc46b5e54335033ea71482d13050a6b8a50e4f3b46fa5619b64ef7",
       "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BBE310",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 22951,
+      "instruction_count": 398,
+      "body_sha256": "c300492f76890154c619f86de32107026e8faf290669bc83f712e2e2e058aa1e",
+      "status": "focused_original_ppc_validated"
     }
   ],
   "implementation": {
@@ -49,7 +57,8 @@
       "82BBE070",
       "82BBE278",
       "82BBF590",
-      "82BBF628"
+      "82BBF628",
+      "82BBE310"
     ],
     "header": "include/lo_semantics/mesh_indexed_workspace61.h",
     "source": "src/mesh_indexed_workspace61.cpp",
@@ -61,9 +70,9 @@
     "runtime_validated": false,
     "complete": false,
     "date": "2026-10-09",
-    "focused_original_ppc_cases": 4,
+    "focused_original_ppc_cases": 11,
     "library_validated": true,
-    "case_scope": "Four actual-original local lifecycle/configuration/copy chains with shared concrete buffers/CRT: 2D/3D attributes, null input zero-fill and zero-count channel, replacement of all owned arrays and buffers, zero-face partial failure. Full72/RAM/CSR/events/ownership plus independent copied bytes/options/counts and complete teardown. No allocator fault matrix or indexed pipeline completion claim.",
+    "case_scope": "Four actual-original local lifecycle/configuration/copy chains with shared concrete buffers/CRT: 2D/3D attributes, null input zero-fill and zero-count channel, replacement of all owned arrays and buffers, zero-face partial failure. Full72/RAM/CSR/events/ownership plus independent copied bytes/options/counts and complete teardown. No allocator fault matrix or indexed pipeline completion claim. Seven complete original BBE310 leaf cases: normal/reversed corners, missing channels, repeated indices, zero area, full capacity and disabled area filtering with out-of-range index clamping. Independent face/corner metadata and counts.",
     "platform": "Linux x64 Clang19; pinned PPC; mmap guest overlay"
   }
 }
