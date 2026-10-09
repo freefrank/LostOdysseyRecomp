@@ -1,0 +1,33 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "ICE/CVHL v5 complete geometry serialization with lazy polygon/topology/normals and temporary incidence arrays.",
+  "entries": [
+    {
+      "address": "82BBC110",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 18075,
+      "instruction_count": 553,
+      "body_sha256": "4192fa500b0df01e1e274fda2403772cc2e1603b91bf0633225c736383c0bc28",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BBC110"
+    ],
+    "header": "include/lo_semantics/mesh_geometry_stream61.h",
+    "source": "src/mesh_geometry_stream61.cpp",
+    "oracle": "tests/mesh_geometry_stream61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 4,
+    "library_validated": true,
+    "case_scope": "Original BBC110 with shared concrete recovered lower graph; native/swapped endian and packed/raw normals; Full72/RAM/CSR/callbacks/ownership plus independent stream field parsing. No gameplay, fault injection or all-original lower-chain claim.",
+    "platform": "Linux x64 Clang19; pinned PPC; mmap guest overlay"
+  }
+}

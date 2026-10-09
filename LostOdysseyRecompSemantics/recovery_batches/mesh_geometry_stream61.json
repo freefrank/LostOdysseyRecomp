@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "mesh-geometry-stream61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/mesh_geometry_stream61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/mesh_geometry_stream61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\nvoid GeometryStreamLower(std::uint32_t,PPCContext&,std::uint8_t*);\nvoid GeometryStreamIndirect(std::uint32_t,PPCContext&,std::uint8_t*);\nvoid GeometryStreamSave(PPCContext&,std::uint8_t*);\nvoid GeometryStreamRestore(PPCContext&,std::uint8_t*);\n#define __savegprlr_22 GeometryStreamSave\n#define __restgprlr_22 GeometryStreamRestore\n#undef PPC_CALL_INDIRECT_FUNC\n#define PPC_CALL_INDIRECT_FUNC(t) GeometryStreamIndirect((t),ctx,base)\n#define sub_82B9CB70(c,b) GeometryStreamLower(0x82b9cb70u,c,b)\n#define sub_82BADFA0(c,b) GeometryStreamLower(0x82badfa0u,c,b)\n#define sub_82BB8FA0(c,b) GeometryStreamLower(0x82bb8fa0u,c,b)\n#define sub_82BB9160(c,b) GeometryStreamLower(0x82bb9160u,c,b)\n#define sub_82BB9AA8(c,b) GeometryStreamLower(0x82bb9aa8u,c,b)\n#define sub_82BBB728(c,b) GeometryStreamLower(0x82bbb728u,c,b)\n#define sub_82BD0798(c,b) GeometryStreamLower(0x82bd0798u,c,b)\n#define sub_82BD7D00(c,b) GeometryStreamLower(0x82bd7d00u,c,b)\n#define sub_82BD7DB0(c,b) GeometryStreamLower(0x82bd7db0u,c,b)\n#define sub_82BD7E70(c,b) GeometryStreamLower(0x82bd7e70u,c,b)\n#define sub_82BD7FF0(c,b) GeometryStreamLower(0x82bd7ff0u,c,b)\n#define sub_82BD8078(c,b) GeometryStreamLower(0x82bd8078u,c,b)\n#define sub_82BD8360(c,b) GeometryStreamLower(0x82bd8360u,c,b)\n#define sub_82BD83A0(c,b) GeometryStreamLower(0x82bd83a0u,c,b)\n#define sub_82BD8668(c,b) GeometryStreamLower(0x82bd8668u,c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/mesh_geometry_stream61.cpp"
+      ]
+    }
+  ]
+}

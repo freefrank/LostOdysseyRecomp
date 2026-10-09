@@ -107,6 +107,20 @@ incidence records (u16 count +2, u32 prefix +4), +68 owned polygon-ID bytes,
 and +60 owned xyz edge bisectors from adjacent polygon normals. Polygon
 record +8 borrows its corresponding edge-ID slice.
 
+## CVHL version 5 stream
+
+BBC110 emits ICE/CVHL v5 with endian flag, counts, vertices, adaptive-width
+triangle indices, normal mode, vertex normals, centroid, and 36-byte polygon
+records. In the output copy, record +4/+8 become byte offsets relative to the
+mesh byte-index/u16-edge arrays; in-memory borrowed pointers stay intact.
+The rest contains polygon vertex bytes, adaptive edge IDs, reserved words,
+endpoint pairs, edge normals, both incidence halfword fields, incidence
+prefixes and owner bytes. Normal mode zero packs two five-bit angle fields
+and two three-bit masks; nonzero writes xyz binary32. Lazy construction
+retains mesh-owned outputs; two incidence scratch allocations are released.
+Rust should separate this owned mesh from a borrowed writer and serialized
+relative offsets, preserving the original field widths and endian choice.
+
 ## Remaining upper dependencies
 
 82B9C7D8 (mesh cooking orchestration) is still incomplete. Its constructor,
@@ -114,8 +128,8 @@ destructor and temporary-array release now exist, but BA5CF8 preprocessing,
 B9F198 validation/build and B9F6F0 aggregate serialization remain open.
 
 B9F6F0 already has recovered scalar/header/support and owner cleanup components.
-Its main mesh section BBC110 and cached geometry calculation B9F418 still
-need completion. Lazy-cache construction BB3130/BBC9F0 is now recovered. The BBD4E8 edge-filter path and its normalized-plane BD92C0 / guest-table
+Its main mesh section BBC110 is recovered; cached geometry calculation B9F418
+and BB3220 adapter serialization still need completion. Lazy-cache construction BB3130/BBC9F0 is now recovered. The BBD4E8 edge-filter path and its normalized-plane BD92C0 / guest-table
 atan2 822DA388 math lowers are recovered. BBDDF0 now orchestrates the requested components and releases
 unretained auxiliary arrays. Do not infer upper completion from a
 working lower stream or topology fixture.

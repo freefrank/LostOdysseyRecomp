@@ -1,3 +1,7 @@
+## Root direct continuation: complete CVHL geometry stream (2026-10-09)
+
+`mesh_geometry_stream61` closes BBC110 ICE/CVHL v5: lazy polygon/topology/vertex-normal construction, adaptive triangle/edge indices, packed or raw normals, relocated polygon records and temporary incidence arrays. Four original-upper/shared-concrete-lower cases pass Full72/RAM/CSR/events and independent complete cube-stream parsing for both byte orders and both normal modes. Packed stream is 598 bytes, raw stream 798; nine mesh-owned arrays remain and both serializer temporaries are released. Full Clang library passes. No gameplay/all-original-chain claim or mapping credit. Next: BB3220 wrapper and B9F418 cached mass properties before aggregate B9F6F0.
+
 ## Root direct continuation: polygon topology finalization (2026-10-09)
 
 `mesh_polygon_topology61` closes BBB728: unique polygon edges, per-polygon u16 edge slices, edge-to-polygon incidence and normalized adjacent-normal sums. Two complete-original-upper/shared-build-and-sort cases pass Full72/RAM/CSR/events and independent cube topology, both lazy fresh build and prebuilt replacement. Exactly eight retained outputs match ownership. Full Clang library passes. Failure/recursive repair paths untested; original partial-allocation ordering retained. The main BBC110 CVHL writer is now the next direct target.
