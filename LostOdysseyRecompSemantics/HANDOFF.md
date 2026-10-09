@@ -1,3 +1,7 @@
+## Root direct continuation: compact quantization and strategy lifetime (2026-10-09)
+
+Quantization now also handles D1E8 internal-only trees: shared six-axis quantization/conservative correction, CE38 32-byte staging, 20-byte output and two topology words. Six original binder/recursive-lower cases total pass for both representations. `tree_strategy_release61` adds CFE0/D170/D7F0/DA48 cleanup and DAC0/DCD8/DD38/DD98 deleting wrappers with shared lifecycle code; six composed-original cases pass, including free order, retain/empty paths and base-table restoration. Full Clang library passes. Nine implementation addresses added; no historical mapping/runtime or gameplay credit.
+
 ## Root direct continuation: compact internal-node construction (2026-10-09)
 
 `tree_compact_flatten61` recovers CE38, emitting only internal nodes into 32-byte records, ordering a sole leaf child first and folding leaf IDs/flags into the record. Three original-recursive cases cover leaf pairs, swapping and both-internal recursion. `tree_compact_strategy61` recovers D058, validating full-tree size and storing leaf-count minus one records, with replace/reuse ownership. Three original-binder plus original-recursive cases pass. Full72/RAM/host CSR, appropriate allocation traces and independent layouts agree; full Clang library passes. Valid internal-tree preconditions retained, no new leaf guard or historical/runtime credit.

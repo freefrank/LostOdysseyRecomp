@@ -17,11 +17,28 @@
       "instruction_count": 390,
       "body_sha256": "1e3699b0037db83a1b6b5bf524ea0619a98fdd8cd107953aba231ef2945929c3",
       "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BDCE38",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 31887,
+      "instruction_count": 105,
+      "body_sha256": "f467f566d87ea4895a8385230aa5d707d5a0af258bf2da67c6af72e23ec7d5ed",
+      "status": "already_validated_composed_lower"
+    },
+    {
+      "address": "82BDD1E8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 32439,
+      "instruction_count": 385,
+      "body_sha256": "0849ee299d4843cc207bb78c10e5767186ece615fc3596b6c15410ec6fc02929",
+      "status": "focused_original_ppc_validated"
     }
   ],
   "implementation": {
     "entries": [
-      "82BDC208"
+      "82BDC208",
+      "82BDD1E8"
     ],
     "header": "include/lo_semantics/tree_quantized_strategy61.h",
     "source": "src/tree_quantized_strategy61.cpp",
@@ -33,10 +50,10 @@
     "runtime_validated": false,
     "complete": false,
     "date": "2026-10-09",
-    "focused_original_ppc_cases": 3,
+    "focused_original_ppc_cases": 6,
     "library_validated": true,
     "platform": "Linux x64 Clang 19.1.7; pinned regenerated original bodies; mmap guest window",
-    "case_scope": "Null input, finite three-node uncorrected quantization, conservative extent correction. Full original binder plus recursive lower. Full72/RAM/host CSR/callback/live ownership, independent topology and conservative bounds coverage. Nonfinite and failure allocation paths not exercised.",
+    "case_scope": "Null input, finite three-node uncorrected quantization, conservative extent correction. Full original binder plus recursive lower. Full72/RAM/host CSR/callback/live ownership, independent topology and conservative bounds coverage. Nonfinite and failure allocation paths not exercised. Also covers internal-only D1E8 using original CE38, 32-byte staging and 20-byte output. Both quantization modes and null input pass for both formats.",
     "mapping_limit": "Historical catalog membership unverified; no new baseline mapping credit."
   }
 }

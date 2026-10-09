@@ -1,0 +1,97 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Four complete strategy cleanup bodies plus their four original deleting wrappers, shared allocator lookup.",
+  "entries": [
+    {
+      "address": "82BDCFE0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 32137,
+      "instruction_count": 29,
+      "body_sha256": "ecfc4808ed40d5ae56c33fd36df5917cdf1de1cbb4f1c54e30c5699cd2750808",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BDD170",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 32370,
+      "instruction_count": 29,
+      "body_sha256": "6f14c276ba5ce42b3c9f85a198a6b3c168de34783e867302e395dd2985a3f4ad",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BDD7F0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 33350,
+      "instruction_count": 29,
+      "body_sha256": "6720c0bc3cc0182da7c12914bd0091fd837a3fe81f08682c862b421adb4f57ac",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BDDA48",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 33687,
+      "instruction_count": 29,
+      "body_sha256": "e8191b809a17593a1f50623b69a4eabbf78d9b55c813e287d83ac6fbfff8e3a2",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BDDAC0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 33756,
+      "instruction_count": 24,
+      "body_sha256": "2b1bccab4dede35b326b871d1524d00bdb497cd31092ce189932a10bed4f679c",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BDDCD8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 34064,
+      "instruction_count": 24,
+      "body_sha256": "91dd44e6e7a4c7afed12f3eb12c5fa0415492ea4a7d573a0dd155d899229d845",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BDDD38",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 34124,
+      "instruction_count": 24,
+      "body_sha256": "f2095f8588572128afe9758f75b3877e484e9d3588c28b58c089dc043dce56f5",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BDDD98",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 34184,
+      "instruction_count": 24,
+      "body_sha256": "36f251d1d56087dfaf569fce64f9786e4a79bb2112a5480e551d964f4062f6cb",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BDCFE0",
+      "82BDD170",
+      "82BDD7F0",
+      "82BDDA48",
+      "82BDDAC0",
+      "82BDDCD8",
+      "82BDDD38",
+      "82BDDD98"
+    ],
+    "header": "include/lo_semantics/tree_strategy_release61.h",
+    "source": "src/tree_strategy_release61.cpp",
+    "oracle": "tests/tree_strategy_release61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 6,
+    "library_validated": true,
+    "case_scope": "Each of four deleting variants with payload, direct empty cleanup and retaining wrapper. Full72/RAM/callback traces plus independent payload-before-owner free order, common base table, unchanged count and return pointer. Actual original wrapper+cleanup; allocator lookup shared.",
+    "platform": "Linux x64 Clang 19.1.7; pinned regenerated PPC; mmap guest overlay",
+    "mapping_limit": "Historical catalog membership unverified; no baseline mapping credit."
+  }
+}

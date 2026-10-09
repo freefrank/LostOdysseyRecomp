@@ -18,6 +18,7 @@ struct Native final : float_triplet_transfer::NativeServices {
 };
 struct Guest final : crt_close_recursive_buffer_context::GuestServices {
     unsigned allocations = 0;
+    bool compact = false;
     std::set<GuestAddress> live{Old};
     std::vector<std::array<std::uint64_t, 73>> events;
     void CallIndirect(GuestAddress target, GuestMemory &, Registers &s) override {
@@ -27,7 +28,8 @@ struct Guest final : crt_close_recursive_buffer_context::GuestServices {
         e[72] = target;
         events.push_back(e);
         if (target == Allocate) {
-            if (s.r[4] != (allocations ? 76u : 112u) || s.r[5] != (allocations ? 32u : 30u))
+            if (s.r[4] != (compact ? (allocations ? 24u : 36u) : (allocations ? 76u : 112u)) ||
+                s.r[5] != (compact ? (allocations ? 38u : 31u) : (allocations ? 32u : 30u)))
                 throw std::runtime_error("quantized allocation contract");
             s.r[3] = allocations++ ? Final : New;
             live.insert(Address(s.r[3]));
@@ -44,7 +46,7 @@ struct Guest final : crt_close_recursive_buffer_context::GuestServices {
 };
 GuestMemory *originalMemory = nullptr;
 Guest *originalGuest = nullptr;
-void Check(unsigned mode) {
+void Check(unsigned mode, bool compact) {
     struct Restore {
         std::uint32_t csr = PPCFPSCRRegister{}.getcsr();
         ~Restore() { PPCFPSCRRegister{}.setcsr(csr); }
@@ -85,6 +87,7 @@ void Check(unsigned mode) {
     seed(before);
     seed(after);
     Guest expected, actual;
+    expected.compact = actual.compact = compact;
     Registers s{};
     for (unsigned i = 0; i < 32; ++i) {
         s.r[i] = 0x1122334400000000ull + i;
@@ -103,14 +106,20 @@ void Check(unsigned mode) {
     originalMemory = &om;
     originalGuest = &expected;
     PPCFPSCRRegister{}.setcsr(s.cached_fp_control);
-    __imp__sub_82BDC208(c, before.Bytes());
+    if (compact)
+        __imp__sub_82BDD1E8(c, before.Bytes());
+    else
+        __imp__sub_82BDC208(c, before.Bytes());
     auto host = PPCFPSCRRegister{}.getcsr();
     originalMemory = nullptr;
     originalGuest = nullptr;
     auto m = after.Memory();
     Native native;
     PPCFPSCRRegister{}.setcsr(initial.cached_fp_control);
-    if (!tree_quantized_strategy61::Apply(0x82bdc208, m, {actual, native}, s) ||
+    if (!tree_quantized_strategy61::Apply(compact   ? 0x82bdd1e8u
+                                          : compact ? 0x82bdd1e8u
+                                                    : 0x82bdc208u,
+                                          m, {actual, native}, s) ||
         crt_full_oracle::Snapshot(crt_full_oracle::FromPpc(c)) != crt_full_oracle::Snapshot(s) ||
         !before.EqualCommitted(after) || expected.events != actual.events ||
         expected.live != actual.live || host != PPCFPSCRRegister{}.getcsr())
@@ -119,8 +128,10 @@ void Check(unsigned mode) {
         throw std::runtime_error("strategy result");
     if (mode) {
         const auto output = m.ReadU32(Owner + 8);
-        if (output != Final + 4 || m.ReadU32(Owner + 4) != 3 || m.ReadU32(output + 12) != 1 ||
-            m.ReadU32(output + 16) != 2 || m.ReadU32(output + 20) != 2)
+        if (output != Final + 4 || m.ReadU32(Owner + 4) != (compact ? 1u : 3u) ||
+            m.ReadU32(output + 12) != (compact ? 0xc000000bu : 1u) ||
+            m.ReadU32(output + 16) != (compact ? 0u : 2u) ||
+            (!compact && m.ReadU32(output + 20) != 2u))
             throw std::runtime_error("quantized topology/owner");
         if (actual.live != std::set<GuestAddress>{Final} || actual.events.size() != 4u)
             throw std::runtime_error("quantized temporary/final allocation lifetime");
@@ -169,8 +180,10 @@ void QuantizedIndirect(std::uint32_t target, PPCContext &c, std::uint8_t *) {
 int main() {
     try {
         for (unsigned mode = 0; mode < 3; ++mode)
-            quantized_oracle::Check(mode);
-        std::puts("PASS tree-quantized-strategy61 3 original binder/recursive-lower cases");
+            for (bool compact : {false, true})
+                quantized_oracle::Check(mode, compact);
+        std::puts("PASS tree-quantized-strategy61 6 original binder/recursive-lower cases "
+                  "(20/24-byte formats)");
         return 0;
     } catch (const std::exception &e) {
         std::fprintf(stderr, "%s\n", e.what());

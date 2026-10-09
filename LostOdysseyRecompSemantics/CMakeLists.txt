@@ -206,6 +206,7 @@ add_library(LostOdysseyRecompSemantics STATIC
     src/tree_quantized_write61.cpp
     src/tree_compact_flatten61.cpp
     src/tree_compact_strategy61.cpp
+    src/tree_strategy_release61.cpp
     src/projection_extrema61.cpp
     src/grid_blob_forward61.cpp
     src/grid_blob_routes61.cpp

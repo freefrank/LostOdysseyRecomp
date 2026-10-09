@@ -10,5 +10,7 @@ using Dependencies = tree_flat_strategy61::Dependencies;
 // extent enlargement and reduces extent quantization to 15 bits. Temporary
 // and final buffers have a four-byte count prefix. Preserve original failure
 // ordering, including temporary allocation lifetime on a later failure.
+// D1E8 shares quantization but emits internal-only 20-byte records from CE38
+// 32-byte staging; count is leaf-count minus one and topology has two words.
 [[nodiscard]] bool Apply(GuestAddress, GuestMemory &, Dependencies, Registers &);
 } // namespace lo::semantic::gpu::tree_quantized_strategy61

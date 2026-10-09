@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "tree-strategy-release61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/tree_strategy_release61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/tree_strategy_release61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nvoid StrategyReleaseAllocator(PPCContext&,std::uint8_t*);\nvoid StrategyReleaseIndirect(std::uint32_t,PPCContext&,std::uint8_t*);\n#define sub_82BD0798 StrategyReleaseAllocator\n#undef PPC_CALL_INDIRECT_FUNC\n#define PPC_CALL_INDIRECT_FUNC(t) StrategyReleaseIndirect((t),ctx,base)\n#define sub_82BDCFE0 __imp__sub_82BDCFE0\n#define sub_82BDD170 __imp__sub_82BDD170\n#define sub_82BDD7F0 __imp__sub_82BDD7F0\n#define sub_82BDDA48 __imp__sub_82BDDA48\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/tree_strategy_release61.cpp"
+      ]
+    }
+  ]
+}

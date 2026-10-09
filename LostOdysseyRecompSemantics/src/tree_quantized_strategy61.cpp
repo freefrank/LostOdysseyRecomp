@@ -1,5 +1,6 @@
 #include "lo_semantics/tree_quantized_strategy61.h"
 #include "lo_semantics/recovery_abi.h"
+#include "lo_semantics/tree_compact_flatten61.h"
 #include "lo_semantics/tree_flatten36_61.h"
 #include <bit>
 #include <cfenv>
@@ -14,6 +15,7 @@ struct Quantize {
     GuestMemory &m;
     Dependencies deps;
     Registers &s;
+    bool compact;
     std::uint32_t Word(std::uint64_t a) { return m.ReadU32(Address(a)); }
     void Store(std::uint64_t a, std::uint64_t v) { m.WriteU32(Address(a), Address(v)); }
     double F(unsigned f) { return std::bit_cast<double>(s.fpr_bits[f]); }
@@ -65,53 +67,85 @@ struct Quantize {
     }
     bool Storage() {
         auto &r = s.r;
-        r[10] = Word(r[26] + 4u);
-        r[11] = Word(r[26] + 16u);
-        r[10] = Word(r[10] + 36u);
-        r[10] = (r[10] << 1u) & 0xfffffffeu;
-        --r[10];
-        Compare(r[11], r[10]);
-        if (!s.cr6.eq)
-            return false;
-        r[30] = Word(r[31] + 8u);
-        Store(r[31] + 4u, r[11]);
-        Compare(r[30]);
+        if (compact) {
+            r[11] = Word(r[26] + 4u);
+            r[9] = Word(r[26] + 16u);
+            r[11] = Word(r[11] + 36u);
+            r[10] = (r[11] << 1u) & 0xfffffffeu;
+            --r[10];
+            Compare(r[9], r[10]);
+            if (!s.cr6.eq)
+                return false;
+            --r[11];
+            r[30] = Word(r[31] + 8u);
+            Compare(r[30]);
+            Store(r[31] + 4u, r[11]);
+        } else {
+            r[10] = Word(r[26] + 4u);
+            r[11] = Word(r[26] + 16u);
+            r[10] = Word(r[10] + 36u);
+            r[10] = (r[10] << 1u) & 0xfffffffeu;
+            --r[10];
+            Compare(r[11], r[10]);
+            if (!s.cr6.eq)
+                return false;
+            r[30] = Word(r[31] + 8u);
+            Store(r[31] + 4u, r[11]);
+            Compare(r[30]);
+        }
         if (!s.cr6.eq) {
-            Allocator(0x82bdc260u);
+            Allocator((compact ? 0x82bdd244u : 0x82bdc260u));
             r[11] = Word(r[3]);
             r[4] = r[30] - 4u;
             r[11] = Word(r[11] + 12u);
-            Indirect(0x82bdc274u);
+            Indirect((compact ? 0x82bdd258u : 0x82bdc274u));
             r[11] = 0;
             Store(r[31] + 8u, r[11]);
         }
-        r[11] = 119275520u;
-        r[30] = Word(r[31] + 4u);
-        r[29] = ~std::uint64_t(0);
-        r[11] |= 29127u;
-        r[27] = std::uint64_t(-5);
-        Compare(r[30], r[11]);
-        if (!s.cr6.gt) {
-            r[11] = (r[30] << 3u) & 0xfffffff8u;
-            r[11] += r[30];
-            r[11] = (r[11] << 2u) & 0xfffffffcu;
-            Compare(r[11], r[27]);
-            r[28] = r[11] + 4u;
-            if (s.cr6.gt)
+        if (compact) {
+            r[11] = 134152192u;
+            r[28] = Word(r[31] + 4u);
+            r[29] = ~std::uint64_t(0);
+            r[11] |= 65535u;
+            r[27] = std::uint64_t(-5);
+            Compare(r[28], r[11]);
+            if (!s.cr6.gt) {
+                r[11] = (r[28] << 5u) & 0xffffffe0u;
+                Compare(r[11], r[27]);
+                r[30] = r[11] + 4u;
+                if (s.cr6.gt)
+                    r[30] = r[29];
+            } else
+                r[30] = r[29];
+        } else {
+            r[11] = 119275520u;
+            r[30] = Word(r[31] + 4u);
+            r[29] = ~std::uint64_t(0);
+            r[11] |= 29127u;
+            r[27] = std::uint64_t(-5);
+            Compare(r[30], r[11]);
+            if (!s.cr6.gt) {
+                r[11] = (r[30] << 3u) & 0xfffffff8u;
+                r[11] += r[30];
+                r[11] = (r[11] << 2u) & 0xfffffffcu;
+                Compare(r[11], r[27]);
+                r[28] = r[11] + 4u;
+                if (s.cr6.gt)
+                    r[28] = r[29];
+            } else
                 r[28] = r[29];
-        } else
-            r[28] = r[29];
-        Allocator(0x82bdc2b8u);
+        }
+        Allocator((compact ? 0x82bdd294u : 0x82bdc2b8u));
         r[11] = Word(r[3]);
-        r[5] = 30;
-        r[4] = r[28];
+        r[5] = compact ? 31u : 30u;
+        r[4] = compact ? r[30] : r[28];
         r[11] = Word(r[11]);
-        Indirect(0x82bdc2d0u);
+        Indirect((compact ? 0x82bdd2acu : 0x82bdc2d0u));
         Compare(r[3]);
         if (s.cr6.eq)
             return false;
         r[22] = r[3] + 4u;
-        Store(r[3], r[30]);
+        Store(r[3], compact ? r[28] : r[30]);
         Compare(r[22]);
         if (s.cr6.eq)
             return false;
@@ -121,26 +155,29 @@ struct Quantize {
         r[4] = 0;
         r[3] = r[22];
         Store(r[1] + 80u, r[23]);
-        s.lr = 0x82bdc304u;
-        (void)tree_flatten36_61::Apply(0x82bdbc18u, m, deps.fp, s);
-        r[11] = 178913280u;
+        s.lr = (compact ? 0x82bdd2e0u : 0x82bdc304u);
+        if (compact)
+            (void)tree_compact_flatten61::Apply(0x82bdce38u, m, deps.fp, s);
+        else
+            (void)tree_flatten36_61::Apply(0x82bdbc18u, m, deps.fp, s);
+        r[11] = compact ? 214695936u : 178913280u;
         r[30] = Word(r[31] + 4u);
-        r[11] |= 43690u;
+        r[11] |= compact ? 52428u : 43690u;
         Compare(r[30], r[11]);
         if (!s.cr6.gt) {
-            r[11] = (r[30] << 1u) & 0xfffffffeu;
+            r[11] = compact ? ((r[30] << 2u) & 0xfffffffcu) : ((r[30] << 1u) & 0xfffffffeu);
             r[11] += r[30];
-            r[11] = (r[11] << 3u) & 0xfffffff8u;
+            r[11] = compact ? ((r[11] << 2u) & 0xfffffffcu) : ((r[11] << 3u) & 0xfffffff8u);
             Compare(r[11], r[27]);
             if (!s.cr6.gt)
                 r[29] = r[11] + 4u;
         }
-        Allocator(0x82bdc334u);
+        Allocator((compact ? 0x82bdd310u : 0x82bdc334u));
         r[11] = Word(r[3]);
-        r[5] = 32;
+        r[5] = compact ? 38u : 32u;
         r[4] = r[29];
         r[11] = Word(r[11]);
-        Indirect(0x82bdc34cu);
+        Indirect((compact ? 0x82bdd328u : 0x82bdc34cu));
         Compare(r[3]);
         if (!s.cr6.eq) {
             r[11] = r[3] + 4u;
@@ -172,7 +209,7 @@ struct Quantize {
                         F(maxima[axis], std::abs(F(0)));
                 }
                 --r[10];
-                r[11] += 36u;
+                r[11] += compact ? 32u : 36u;
                 Compare(r[10]);
             } while (!s.cr6.eq);
         }
@@ -338,7 +375,9 @@ struct Quantize {
                 Load(0, r[9] - 20u + 4u * i);
                 if (i == 0)
                     r[11] = Word(r[31] + 8u);
-                Single(0, (i == 3 || i == 5) ? F(factors[i]) * F(0) : F(0) * F(factors[i]));
+                Single(0, (compact ? (i == 2 || i == 4) : (i == 3 || i == 5))
+                              ? F(factors[i]) * F(0)
+                              : F(0) * F(factors[i]));
                 if (i == 0)
                     Compare(r[24]);
                 else {
@@ -362,14 +401,21 @@ struct Quantize {
             Store(r[11] + 12u, r[10]);
             r[11] = Word(r[31] + 8u);
             r[10] = Word(r[9] + 8u);
-            r[11] += r[5];
-            Store(r[11] + 16u, r[10]);
-            r[11] = Word(r[31] + 8u);
-            r[10] = Word(r[9] + 12u);
-            r[9] += 36u;
-            r[11] += r[5];
-            r[5] += 24u;
-            Store(r[11] + 20u, r[10]);
+            if (compact) {
+                r[9] += 32u;
+                r[11] += r[5];
+                r[5] += 20u;
+                Store(r[11] + 16u, r[10]);
+            } else {
+                r[11] += r[5];
+                Store(r[11] + 16u, r[10]);
+                r[11] = Word(r[31] + 8u);
+                r[10] = Word(r[9] + 12u);
+                r[9] += 36u;
+                r[11] += r[5];
+                r[5] += 24u;
+                Store(r[11] + 20u, r[10]);
+            }
             r[11] = Word(r[31] + 4u);
             Compare(r[26], r[11]);
         } while (s.cr6.lt);
@@ -377,7 +423,7 @@ struct Quantize {
     void Run() {
         auto &r = s.r;
         r[12] = s.lr;
-        s.lr = 0x82bdc210u;
+        s.lr = (compact ? 0x82bdd1f0u : 0x82bdc210u);
         for (unsigned i = 22; i < 32; ++i)
             WriteU64(m, Address(r[1] - 16u - 8u * (31u - i)), r[i]);
         Store(r[1] - 8u, r[12]);
@@ -391,11 +437,11 @@ struct Quantize {
         if (!s.cr6.eq && Storage()) {
             Scales();
             Pack();
-            Allocator(0x82bdc800u);
+            Allocator((compact ? 0x82bdd7ccu : 0x82bdc800u));
             r[11] = Word(r[3]);
             r[4] = r[22] - 4u;
             r[11] = Word(r[11] + 12u);
-            Indirect(0x82bdc814u);
+            Indirect((compact ? 0x82bdd7e0u : 0x82bdc814u));
             success = true;
         }
         r[3] = success ? 1u : 0u;
@@ -408,9 +454,9 @@ struct Quantize {
 };
 } // namespace
 bool Apply(GuestAddress entry, GuestMemory &memory, Dependencies deps, Registers &state) {
-    if (entry != 0x82bdc208u)
+    if (entry != 0x82bdc208u && entry != 0x82bdd1e8u)
         return false;
-    Quantize{memory, deps, state}.Run();
+    Quantize{memory, deps, state, entry == 0x82bdd1e8u}.Run();
     return true;
 }
 } // namespace lo::semantic::gpu::tree_quantized_strategy61
