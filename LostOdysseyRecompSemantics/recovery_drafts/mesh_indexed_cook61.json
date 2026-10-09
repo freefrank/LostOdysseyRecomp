@@ -65,6 +65,6 @@
     "complete": false,
     "focused_smoke_cases": 3,
     "case_scope": "Two strided u32/u16 tetrahedron paths check result counts, preserved ABI, adapter metadata and retained ownership. One B9C7D8 indexed tetrahedron path executes construction, B9F198 geometry/tree/bounds/support, NXS/CVXM serialization and destruction: 564 output bytes, NXS header and zero live allocations. Concrete recovered lowers are used. Not original Full72 differential or gameplay validation. Supplied polygon input and point-only alternative-preprocessing paths are not smoke-tested.",
-    "remaining_boundary": "B9C7D8 hull preprocessing BA5CF8 remains an explicit CallDirect guest boundary. This is not a recovered/credited entry and is never substituted with a no-op or success."
+    "remaining_boundary": "BA5CF8 now composes concrete mesh_hull_preprocess61. Its deep algorithms BA40B8/BA4BF8/BA5480 remain explicit guest CallDirect boundaries; not substituted with success, not exercised by indexed smoke."
   }
 }

@@ -9,6 +9,7 @@
 #include "lo_semantics/mesh_vertex_dedup61.h"
 #include "lo_semantics/recovery_abi.h"
 #include "lo_semantics/mesh_cook_storage61.h"
+#include "lo_semantics/mesh_hull_preprocess61.h"
 #include "lo_semantics/mesh_cook_stream61.h"
 #include <bit>
 #include <initializer_list>
@@ -105,10 +106,7 @@ struct Cook {
             ValidateBuild();
             break;
         case 0x82ba5cf8u:
-            // The alternative hull preprocessing subsystem is not recovered
-            // here. Keep its existing guest implementation as an explicit,
-            // mutable boundary; never substitute success or skip its output.
-            d.lifetime.guest.CallDirect(e, m, s);
+            (void)mesh_hull_preprocess61::Apply(e, m, d, s);
             break;
         case 0x82b9e8a0u:
             Strided();

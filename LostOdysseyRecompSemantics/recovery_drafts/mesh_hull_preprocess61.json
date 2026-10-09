@@ -1,0 +1,109 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Logic-first hull preprocessing: normalize/deduplicate strided points, degenerate box fallback, referenced-point compaction, dynamic arrays, hull mode selection and owned output assembly.",
+  "entries": [
+    {
+      "address": "82BA0230",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 12825,
+      "instruction_count": 473,
+      "body_sha256": "4b88acf993a5716feeaeb65c700dba054b42766876b2c176aed361c7d02ab677",
+      "status": "logical_implementation_compile_validated"
+    },
+    {
+      "address": "82BA0998",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 13970,
+      "instruction_count": 243,
+      "body_sha256": "83961090664e2c73c23b64ae8d91692d6f9bb0fb2502026a84fc22805f58e579",
+      "status": "logical_implementation_compile_validated"
+    },
+    {
+      "address": "82BA0D68",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 14519,
+      "instruction_count": 26,
+      "body_sha256": "dc3c3d2951ba1fa4d61261ed31af408f0fa4d7e1488d74581b11e6042364c65e",
+      "status": "logical_implementation_compile_validated"
+    },
+    {
+      "address": "82BA1138",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 15108,
+      "instruction_count": 39,
+      "body_sha256": "b5636838825462d37c3ad379a4f403503639af1b81199fad02fb720e6bec153c",
+      "status": "logical_implementation_compile_validated"
+    },
+    {
+      "address": "82BA11D8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 15201,
+      "instruction_count": 46,
+      "body_sha256": "807248488431ecfb4aeff62d876cf5ebecfd94fa7bba0c579472c22ad190fac6",
+      "status": "logical_implementation_compile_validated"
+    },
+    {
+      "address": "82BA2280",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 17727,
+      "instruction_count": 43,
+      "body_sha256": "62a4900b4c8bc6337ac0d32c3d1fa4dab2540704a02a435906845acbfd266ae5",
+      "status": "logical_implementation_compile_validated"
+    },
+    {
+      "address": "82BA4A88",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 23466,
+      "instruction_count": 92,
+      "body_sha256": "9631fc18ad367ad6dbc7d5d7b1fe0fb0013c57fbcee1c4a17586e84385f7bb38",
+      "status": "logical_implementation_compile_validated"
+    },
+    {
+      "address": "82BA5A70",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 25815,
+      "instruction_count": 162,
+      "body_sha256": "06b3489e786b96c96a8612d91d8c23a837202b041f4c8ae1126d5bf4705a94c1",
+      "status": "logical_implementation_compile_validated"
+    },
+    {
+      "address": "82BA5CF8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 26179,
+      "instruction_count": 255,
+      "body_sha256": "f00707dc1490daea6c911e5cef0d93a7d349a8b1ef461ae001f712d9d2ea225e",
+      "status": "logical_implementation_compile_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BA0230",
+      "82BA0998",
+      "82BA0D68",
+      "82BA1138",
+      "82BA11D8",
+      "82BA2280",
+      "82BA4A88",
+      "82BA5A70",
+      "82BA5CF8"
+    ],
+    "header": "include/lo_semantics/mesh_hull_preprocess61.h",
+    "source": "src/mesh_hull_preprocess61.cpp",
+    "smoke": "tests/mesh_hull_preprocess61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-09",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_cases": 4,
+    "case_scope": "Normalized duplicate points, degenerate planar box fallback, first-use remapping with temporary map release, and triangle-array grow/append/release. Indexed B9C7D8 regression still produces 564 NXS/CVXM bytes with zero live allocations. No Full72 differential or gameplay claim. Hull-mode driver/output packaging compiled/source-reviewed; its algorithm boundaries are not replaced in the smoke.",
+    "remaining_boundaries": [
+      "82BA40B8",
+      "82BA4BF8",
+      "82BA5480"
+    ]
+  }
+}

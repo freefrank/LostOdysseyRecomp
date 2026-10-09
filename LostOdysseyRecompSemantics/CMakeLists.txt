@@ -233,6 +233,7 @@ add_library(LostOdysseyRecompSemantics STATIC
     src/power_math61.cpp
     src/mesh_indexed_vertex_output61.cpp
     src/mesh_indexed_cook61.cpp
+    src/mesh_hull_preprocess61.cpp
     src/mesh_indexed_compact61.cpp
     src/mesh_indexed_remap61.cpp
     src/mesh_indexed_normals61.cpp
