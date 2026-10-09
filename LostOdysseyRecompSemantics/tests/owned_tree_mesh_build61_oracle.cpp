@@ -72,7 +72,12 @@ void Check(unsigned mode){
   throw std::runtime_error("mesh builder state mismatch");}
  if(s.r[1]!=initial.r[1]||s.lr!=Address(initial.lr)||s.r[3]!=(mode?1u:0u))throw std::runtime_error("mesh builder frame/result");
  if(mode&&m.ReadU32(Owner+20)!=(mode==2?2u:1u))throw std::runtime_error("mesh leaf count");
- if(mode==2){auto map=m.ReadU32(Owner+24);if(m.ReadU32(map)!=0||m.ReadU32(map+4)!=1||m.ReadU32(Owner+32)!=0||actual.live.size()!=5u){std::fprintf(stderr,"mesh map %u,%u preserved %08x live %zu\n",m.ReadU32(map),m.ReadU32(map+4),m.ReadU32(Owner+32),actual.live.size());throw std::runtime_error("mesh final map/owned storage");}}
+ // BD2168 packs (index-array byte offset << 2) with (count - 1).
+ // These leaves each contain one uint32 index: offsets 0 and 4 bytes
+ // therefore encode as 0 and 16, not ordinal leaf IDs 0 and 1.
+ constexpr std::uint32_t firstPackedRange = 0u;
+ constexpr std::uint32_t secondPackedRange = (sizeof(std::uint32_t) << 2u);
+ if(mode==2){auto map=m.ReadU32(Owner+24);if(m.ReadU32(map)!=firstPackedRange||m.ReadU32(map+4)!=secondPackedRange||m.ReadU32(Owner+32)!=0||actual.live.size()!=5u){std::fprintf(stderr,"mesh map %u,%u preserved %08x live %zu\n",m.ReadU32(map),m.ReadU32(map+4),m.ReadU32(Owner+32),actual.live.size());throw std::runtime_error("mesh final map/owned storage");}}
 }
 }
 void OriginalMeshBuild61Indirect(std::uint32_t t,PPCContext& c,std::uint8_t*){auto s=crt_full_oracle::FromPpc(c);mesh_build61_oracle::original->CallIndirect(t,*mesh_build61_oracle::original_memory,s);crt_full_oracle::ToPpc(c,s);}

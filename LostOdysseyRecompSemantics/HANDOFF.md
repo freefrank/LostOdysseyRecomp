@@ -1,3 +1,15 @@
+## Direct continuation — 2026-10-09
+
+Parallel recovery workers are stopped. The direct continuation corrects the
+BD22A8 oracle's independent packed-range expectation: accepted BD2168 exports
+`((index_pointer - index_base) << 2) & 0xfffffff0` plus `(count - 1) & 15`.
+For the fixture's single-index leaves at byte offsets 0 and 4, the expected
+words are therefore 0 and 16. This is a fixture correction, not a change to
+recovered runtime logic. The original-PPC oracle has NOT been rerun in the
+new executor: private XEX acquisition is currently blocked there. Both WIP
+families remain unpromoted with zero additional mapping credit until that
+focused check is repeated. Prior executor receipts remain historical evidence.
+
 # Semantic recovery handoff
 
 ## Transfer-only WIP pause
