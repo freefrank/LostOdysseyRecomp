@@ -1,3 +1,7 @@
+## Root direct continuation: aggregate cooked-mesh serializer (2026-10-09)
+
+`mesh_cook_stream61` closes B9F6F0 NXS/CVXM aggregate output. Two original-upper cases use the concrete recovered graph: stack writer forwarding, lazy CLHL/CVHL/VALE, linked OPC/HBM staging and flat strategy payload, owner mass cache, optional SUPM/GAUS and temporary-cache cleanup. Full72/RAM/CSR/events/ownership pass; independently checked tags, tree size, scalar/mass fields, cube volume, support bytes and nine retained mesh allocations. The strategy is a prepared synthetic one-record input, not a new tree-build proof. Both endian and normal modes pass. Initial harness unmapped adapter-vtable page corrected; implementation unchanged. Full Clang library passes. B9C7D8 overall cooking still needs BA5CF8 preprocessing and B9F198 validation/build.
+
 ## Root direct continuation: tree envelope serialization (2026-10-09)
 
 `tree_envelope_write61` closes BD14B8 OPC base header/strategy dispatch, BD1BF8 HBM leaf/triangle mappings, BD7CB8 linked-stream tag and BD8550 adaptive u8/u16/u32 indices. Four complete original local-chain cases pass Full72/RAM/CSR/events with concrete flat-strategy output and actual linked append lowers. Independent native/swapped envelope bytes, u16/u32 mappings, u8 payload and missing-strategy failure pass. Full library passes. This closes the previously missing indirect tree-writer boundary under B9F6F0; aggregate serialization is next.

@@ -1,0 +1,33 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Complete NXS/CVXM aggregate serialization, borrowed stack writer adapters, prepared tree payload, mass properties and optional support map.",
+  "entries": [
+    {
+      "address": "82B9F6F0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 11073,
+      "instruction_count": 141,
+      "body_sha256": "0b5ec07ad62e34527f06d1ee53b37a6cd928580a2d2b5f26a9e07749bef0fba7",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82B9F6F0"
+    ],
+    "header": "include/lo_semantics/mesh_cook_stream61.h",
+    "source": "src/mesh_cook_stream61.cpp",
+    "oracle": "tests/mesh_cook_stream61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 2,
+    "library_validated": true,
+    "case_scope": "Original aggregate upper with concrete recovered geometry, valence, writer forwarding, linked tree staging/envelopes, mass and support graph. Prepared synthetic one-record flat tree, not a tree build claim. Full72/RAM/CSR/events/ownership plus independent outer/nested tags, tree length, scalar/mass fields, optional support bytes, cube volume and retained mesh arrays. Both endian/normal modes; no fault matrix or gameplay claim.",
+    "platform": "Linux x64 Clang19; pinned PPC; mmap guest overlay"
+  }
+}

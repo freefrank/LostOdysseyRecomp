@@ -149,11 +149,21 @@ and +332 float centroid. It classifies results through the existing CRT
 helper, rejects unsupported nonfinite categories, and logs/corrects negative
 mass and tensor signs. An already nonnegative cached mass bypasses rebuild.
 
+## Aggregate cooked mesh output
+
+B9F6F0 emits NXS/CVXM with version from guest state, then the CLHL/CVHL/VALE
+geometry bundle, length-prefixed OPC/HBM tree bundle, eleven scalar fields,
+cached mass/origin-inertia/centroid and optional SUPM/GAUS support map. Its
+stack writer adapters borrow the caller's stream and forward six scalar/block
+slots. The temporary geometry adapter releases its valence cache and arrays
+before returning; newly built geometry remains owned by the caller's mesh.
+The original borrowed cache-payload publication is not an ownership transfer.
+
 ## Remaining upper dependencies
 
 82B9C7D8 (mesh cooking orchestration) is still incomplete. Its constructor,
 destructor and temporary-array release now exist, but BA5CF8 preprocessing,
-B9F198 validation/build and B9F6F0 aggregate serialization remain open.
+B9F198 validation/build remain open. B9F6F0 aggregate serialization is recovered.
 
 B9F6F0 already has recovered scalar/header/support and owner cleanup components.
 Its main mesh section BBC110, cached geometry calculation B9F418 and

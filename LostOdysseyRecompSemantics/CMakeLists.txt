@@ -223,6 +223,7 @@ add_library(LostOdysseyRecompSemantics STATIC
     src/mesh_cache_lifetime61.cpp
     src/mesh_polygon_topology61.cpp
     src/mesh_geometry_stream61.cpp
+    src/mesh_cook_stream61.cpp
     src/mesh_polygon_build61.cpp
     src/mesh_polygon_collect61.cpp
     src/mesh_boundary_walk61.cpp

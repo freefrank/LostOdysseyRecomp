@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "mesh-cook-stream61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/mesh_cook_stream61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/mesh_cook_stream61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\nvoid CookStreamLower(std::uint32_t,PPCContext&,std::uint8_t*);\nvoid CookStreamSave(PPCContext&,std::uint8_t*);\nvoid CookStreamRestore(PPCContext&,std::uint8_t*);\n#define __savegprlr_27 CookStreamSave\n#define __restgprlr_27 CookStreamRestore\n#define sub_82B9CB70(c,b) CookStreamLower(0x82b9cb70u,c,b)\n#define sub_82B9F418(c,b) CookStreamLower(0x82b9f418u,c,b)\n#define sub_82BADA00(c,b) CookStreamLower(0x82bada00u,c,b)\n#define sub_82BADA70(c,b) CookStreamLower(0x82bada70u,c,b)\n#define sub_82BADCD0(c,b) CookStreamLower(0x82badcd0u,c,b)\n#define sub_82BADD60(c,b) CookStreamLower(0x82badd60u,c,b)\n#define sub_82BB3008(c,b) CookStreamLower(0x82bb3008u,c,b)\n#define sub_82BB3220(c,b) CookStreamLower(0x82bb3220u,c,b)\n#define sub_82BB32D8(c,b) CookStreamLower(0x82bb32d8u,c,b)\n#define sub_82BB3408(c,b) CookStreamLower(0x82bb3408u,c,b)\n#define sub_82BB3420(c,b) CookStreamLower(0x82bb3420u,c,b)\n#define sub_82BB36F0(c,b) CookStreamLower(0x82bb36f0u,c,b)\n#define sub_82BB44A8(c,b) CookStreamLower(0x82bb44a8u,c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/mesh_cook_stream61.cpp"
+      ]
+    }
+  ]
+}
