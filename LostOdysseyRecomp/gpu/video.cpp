@@ -3994,6 +3994,24 @@ namespace gpu::video
         return cache.copies[0] && cache.copies[1] ? source : nullptr;
     }
 
+    // An upscaled HDR frame has its highlights only after the presentation gain
+    // pass; its resolve is SDR, so the HDR page's peak preview had nothing to map.
+    // It copies the gain pass's FP16 result instead, once that is recorded.
+    static bool PrepareGainSceneCopy(uint32_t width, uint32_t height)
+    {
+        auto& cache = g_hdrCalibrationCache;
+        if (!cache.copies[0] || cache.width != width || cache.height != height || !cache.extended) {
+            for (auto& copy : cache.copies)
+                copy = g_device->createTexture(plume::RenderTextureDesc::Texture2D(width, height, 1,
+                    plume::RenderFormat::R16G16B16A16_FLOAT));
+            cache.width = width;
+            cache.height = height;
+            cache.extended = true;
+            cache.filled[0] = cache.filled[1] = false;
+        }
+        return cache.copies[0] && cache.copies[1];
+    }
+
     static void RecordSceneCopy(plume::RenderTexture* source)
     {
         const auto& cache = g_hdrCalibrationCache;
@@ -4387,6 +4405,7 @@ namespace gpu::video
                 // frame still samples it after the wait); the first frame without
                 // the scene freezes it.
                 plume::RenderTexture* sceneCopySource = nullptr;
+                bool sceneCopyFromGain = false;
                 uint64_t sceneOrdinal = 0;
                 const auto now = std::chrono::steady_clock::now();
                 if (renderer::ResolvedScene(physicalAddress & 0x1FFFFFFF, sceneOrdinal)) {
@@ -4397,8 +4416,10 @@ namespace gpu::video
                         g_hdrCalibrationCache.filled[0] = g_hdrCalibrationCache.filled[1] = false;
                         settings::SetHdrCalibrationSceneAvailable(false);
                     }
-                    if (now - g_hdrCalibrationCache.copied >= std::chrono::milliseconds(250))
-                        sceneCopySource = PrepareSceneCopy(physicalAddress & 0x1FFFFFFF, sceneOrdinal, sourceWidth, sourceHeight);
+                    if (now - g_hdrCalibrationCache.copied >= std::chrono::milliseconds(250)) {
+                        if (hdrGainSource && g_presentation) sceneCopyFromGain = PrepareGainSceneCopy(sourceWidth, sourceHeight);
+                        else sceneCopySource = PrepareSceneCopy(physicalAddress & 0x1FFFFFFF, sceneOrdinal, sourceWidth, sourceHeight);
+                    }
                 }
                 else FreezeScene();
 #if (defined(_WIN32) && (defined(LO_ENABLE_STREAMLINE_FG) || defined(LO_ENABLE_D3D12_FG) || defined(LO_ENABLE_VULKAN_FSR_FG))) || (defined(__APPLE__) && defined(LO_ENABLE_METALFX_FG))
@@ -4502,6 +4523,10 @@ namespace gpu::video
                             sourceWidth, sourceHeight, hdrGainValidWidth, hdrGainValidHeight, hdrGainWidth, hdrGainHeight)) {
                         source = gained;
                         hdrScene = true;
+                        if (sceneCopyFromGain) {
+                            RecordSceneCopy(gained);
+                            sceneCopySource = gained;
+                        }
                         static uint32_t gainLogs = 0;
                         if (gainLogs++ < 8)
                             LOG_INFO("HDR: highlight gain applied address={:#x} scene={}x{} (valid {}x{}) output={}x{}",
