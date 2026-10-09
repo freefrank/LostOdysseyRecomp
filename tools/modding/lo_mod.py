@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build v1 image mod ZIPs without modifying imported game files (Python 3.10+)."""
+"""Build v1 image mod ZIPs and LOTEX2 runtime texture packs without modifying imported game files (Python 3.10+)."""
 from __future__ import annotations
 
 import argparse
@@ -18,6 +18,9 @@ MAGIC = b"LOTEX1\r\n"
 HEADER = struct.Struct("<8sIIII")
 MAX_PIXELS = 16 * 1024 * 1024
 MAX_FILE = HEADER.size + 4096 + 4 * MAX_PIXELS
+MAGIC2 = b"LOTEX2\r\n"
+HEADER2 = struct.Struct("<8sIIQIIIIIIQII")  # 64 bytes
+XENOS_FORMATS = {"G8": 2, "A8R8G8B8": 6, "DXT1": 18, "DXT3": 19, "DXT5": 20}
 FOLDERS = {"image": "images", "font": "fonts", "model": "models", "movie": "movies"}
 
 
@@ -90,7 +93,55 @@ def encode(key: str, width: int, height: int, rgba: bytes) -> bytes:
     return HEADER.pack(MAGIC, width, height, len(key_bytes), 1) + key_bytes + rgba
 
 
+def mip_bytes(width: int, height: int, mips: int) -> int:
+    return sum(max(1, width >> i) * max(1, height >> i) * 4 for i in range(mips))
+
+
+def encode2(fingerprint: int, xenos_format: int, original: tuple[int, int], size: tuple[int, int],
+            mips: list[bytes], key: str = "") -> bytes:
+    """LOTEX2 type 1 (RGBA8) file; `mips` are the top-first level byte strings."""
+    if xenos_format not in XENOS_FORMATS.values():
+        raise ValueError("unsupported Xenos format")
+    scale = size[0] // original[0] if original[0] else 0
+    if (scale not in (1, 2, 4, 8) or size != (original[0] * scale, original[1] * scale)
+            or max(size) > 8192):
+        raise ValueError(f"invalid scale {size} for original {original}")
+    if not 1 <= len(mips) <= max(size).bit_length() or sum(map(len, mips)) != mip_bytes(*size, len(mips)):
+        raise ValueError("mip chain does not match the payload dimensions")
+    key_bytes = key.encode("utf-8")
+    payload = b"".join(mips)
+    return (HEADER2.pack(MAGIC2, HEADER2.size + len(key_bytes), 1, fingerprint, xenos_format,
+                         *original, *size, len(mips), len(payload), len(key_bytes), 0)
+            + key_bytes + payload)
+
+
+def inspect2(data: bytes) -> dict:
+    if len(data) < HEADER2.size:
+        raise ValueError("truncated LOTEX2 header")
+    (magic, header_size, payload_type, fingerprint, xenos_format, ow, oh, pw, ph, mips, payload_size,
+     key_size, reserved) = HEADER2.unpack_from(data)
+    if magic != MAGIC2 or reserved != 0 or header_size != HEADER2.size + key_size:
+        raise ValueError("invalid LOTEX2 magic, header size or reserved field")
+    if payload_type != 1:
+        raise ValueError(f"unsupported LOTEX2 payload type {payload_type}")
+    names = {v: k for k, v in XENOS_FORMATS.items()}
+    if xenos_format not in names:
+        raise ValueError(f"unknown Xenos format {xenos_format}")
+    if not (ow and oh and pw % ow == 0 and pw // ow in (1, 2, 4, 8) and ph == oh * (pw // ow)
+            and max(pw, ph) <= 8192):
+        raise ValueError("invalid payload scale")
+    if not 1 <= mips <= max(pw, ph).bit_length():
+        raise ValueError("invalid mip count")
+    if payload_size != mip_bytes(pw, ph, mips) or len(data) != header_size + payload_size:
+        raise ValueError("payload size mismatch (truncated data or trailing bytes)")
+    return {"format": "LOTEX2", "fingerprint": f"{fingerprint:016x}", "original_format": names[xenos_format],
+            "original": f"{ow}x{oh}", "payload": f"{pw}x{ph}", "scale": pw // ow, "mips": mips,
+            "payload_bytes": payload_size, "key": data[HEADER2.size:header_size].decode("utf-8")}
+
+
 def inspect(data: bytes) -> dict:
+    if data[:8] == MAGIC2:
+        return inspect2(data)
     if not HEADER.size <= len(data) <= MAX_FILE:
         raise ValueError("invalid LOTEX1 file length")
     magic, width, height, key_size, pixel_format = HEADER.unpack_from(data)
@@ -330,6 +381,129 @@ def pack(spec_path: Path, output: Path, layout: str) -> int:
     return len(entries)
 
 
+def hex16(value: object) -> int:
+    value = str(value).strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{16}", value):
+        raise ValueError("expected a 16 digit hex fingerprint")
+    return int(value, 16)
+
+
+def read_rows(path: Path, needed: set[str]) -> list[dict]:
+    with path.open(encoding="utf-8-sig", newline="") as file:
+        reader = csv.DictReader(file)
+        missing = needed - set(reader.fieldnames or [])
+        if missing:
+            raise ValueError(f"{path} is missing columns: " + ", ".join(sorted(missing)))
+        return list(reader)
+
+
+def test_transform(image, name: str):
+    """RGBA image transformed for runtime verification (tint keeps size, nearest4 is 4x)."""
+    from PIL import Image
+    if name == "tint":
+        r, g, b, a = image.split()
+        r = r.point([min(255, int(v * 1.6 + 0.5)) for v in range(256)])
+        g = g.point([int(v * 0.5 + 0.5) for v in range(256)])
+        b = b.point([int(v * 0.5 + 0.5) for v in range(256)])
+        return Image.merge("RGBA", (r, g, b, a))
+    if name == "nearest4":
+        return image.resize((image.width * 4, image.height * 4), Image.NEAREST)
+    raise ValueError("unknown --test transform")
+
+
+def texture_pack(index: Path, images: Path, images_index: Path | None, output: Path, layout: str,
+                 identity: str | None, priority: int = 0, name_filter: str | None = None,
+                 fingerprints: Path | None = None, test: str | None = None, mips: bool = False) -> dict:
+    try:
+        from PIL import Image
+    except ImportError as exc:
+        raise ValueError("PNG conversion requires Pillow: python -m pip install Pillow") from exc
+    if layout == "standalone":
+        identity = mod_id(identity)
+        priority = integer(priority, -(1 << 31), (1 << 31) - 1)
+        base = output / identity
+        folder = base / "textures"
+    elif layout == "overlay":
+        folder = output / "overlay" / "textures"
+    else:
+        raise ValueError("layout must be standalone or overlay")
+    seen = None
+    if fingerprints is not None:
+        seen = {hex16(row["fingerprint"]) for row in read_rows(fingerprints, {"fingerprint"})}
+    files = {}
+    for row in read_rows(images_index or images / "index.csv", {"key", "file"}):
+        if row["file"]:
+            files[canonical_key(row["key"])] = relative(row["file"])
+    stats: dict[str, int] = {"written": 0, "bytes": 0}
+
+    def skip(reason: str) -> None:
+        stats[reason] = stats.get(reason, 0) + 1
+
+    done: set[int] = set()
+    manifest = []
+    for row in read_rows(index, {"key", "width", "height", "format", "fingerprint"}):
+        key = canonical_key(row["key"])
+        if name_filter and name_filter.lower() not in key.lower():
+            continue
+        if not row["fingerprint"].strip():
+            skip("no_fingerprint"); continue
+        fingerprint = hex16(row["fingerprint"])
+        if seen is not None and fingerprint not in seen:
+            skip("not_in_log"); continue
+        if fingerprint in done:
+            skip("duplicate_fingerprint"); continue
+        xenos = XENOS_FORMATS.get(row["format"])
+        if xenos is None:
+            skip("unsupported_format"); continue
+        source = files.get(key)
+        if source is None:
+            skip("no_image"); continue
+        path = images / source
+        if not path.is_file():
+            skip("missing_file"); continue
+        original = dimensions(int(row["width"]), int(row["height"]))
+        with Image.open(path) as png:
+            if png.format != "PNG":
+                skip("not_png"); continue
+            rgba = png.convert("RGBA")
+        if test:
+            if rgba.size != original:
+                skip("size_mismatch"); continue
+            rgba = test_transform(rgba, test)
+        scale = rgba.width // original[0]
+        if (scale not in (1, 2, 4, 8) or rgba.size != (original[0] * scale, original[1] * scale)
+                or max(rgba.size) > 8192):
+            skip("bad_scale"); continue
+        size = rgba.size
+        levels = [rgba.tobytes()]
+        while mips and max(rgba.size) > 1:
+            rgba = rgba.resize((max(1, rgba.width >> 1), max(1, rgba.height >> 1)), Image.BOX)
+            levels.append(rgba.tobytes())
+        data = encode2(fingerprint, xenos, original, size, levels, key)
+        name = f"fp-{fingerprint:016x}.lotex2"
+        done.add(fingerprint)
+        target = folder / name
+        if target.exists():
+            skip("exists"); continue
+        folder.mkdir(parents=True, exist_ok=True)
+        with target.open("xb") as file:
+            file.write(data)
+        stats["written"] += 1
+        stats["bytes"] += len(data)
+        manifest.append(f"texture:{fingerprint:016x}=textures/{name}")
+    if layout == "standalone" and manifest:
+        ini = base / "mod.ini"
+        if ini.exists():
+            have = ini.read_text(encoding="utf-8").splitlines()
+            with ini.open("a", encoding="utf-8", newline="\n") as file:
+                file.write("".join(line + "\n" for line in manifest if line not in have))
+        else:
+            with ini.open("x", encoding="utf-8", newline="\n") as file:
+                file.write("\n".join(["api_version=1", f"id={identity}", f"priority={priority}",
+                                      "enabled=true"] + manifest) + "\n")
+    return stats
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -359,7 +533,19 @@ def main(argv: list[str] | None = None) -> int:
     pack_parser.add_argument("spec", type=Path)
     pack_parser.add_argument("--output", type=Path, required=True)
     pack_parser.add_argument("--layout", choices=("standalone", "overlay"), default="standalone")
-    inspect_parser = sub.add_parser("inspect", help="validate a LOTEX1 file and print its identity")
+    tex_parser = sub.add_parser("texture-pack", help="write LOTEX2 runtime texture replacements (experimental)")
+    tex_parser.add_argument("--index", type=Path, required=True, help="export textures/index.csv with a fingerprint column")
+    tex_parser.add_argument("--images", type=Path, required=True, help="PNG root mirroring the export layout")
+    tex_parser.add_argument("--images-index", type=Path, help="index.csv with key,file columns (default: <images>/index.csv)")
+    tex_parser.add_argument("--output", type=Path, required=True, help="mods root; existing files are never overwritten")
+    tex_parser.add_argument("--layout", choices=("overlay", "standalone"), default="overlay")
+    tex_parser.add_argument("--id", help="standalone mod id")
+    tex_parser.add_argument("--priority", type=int, default=0)
+    tex_parser.add_argument("--filter", help="case-insensitive substring of the texture key")
+    tex_parser.add_argument("--fingerprints", type=Path, help="runtime fingerprint log csv; keep only fingerprints seen in game")
+    tex_parser.add_argument("--test", choices=("tint", "nearest4"), help="transform the original PNGs for runtime verification")
+    tex_parser.add_argument("--mips", action="store_true", help="write the full mip chain (default: 1 level)")
+    inspect_parser = sub.add_parser("inspect", help="validate a LOTEX1/LOTEX2 file and print its identity")
     inspect_parser.add_argument("file", type=Path)
     args = parser.parse_args(argv)
     try:
@@ -417,6 +603,13 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "pack":
             count = pack(args.spec, args.output, args.layout)
             print(f"Packed {count} image(s): {args.output} ({args.layout})")
+        elif args.command == "texture-pack":
+            stats = texture_pack(args.index, args.images, args.images_index, args.output, args.layout, args.id,
+                                 args.priority, args.filter, args.fingerprints, args.test, args.mips)
+            written, total = stats.pop("written"), stats.pop("bytes")
+            skipped = ", ".join(f"{k}={v}" for k, v in sorted(stats.items())) or "none"
+            print(f"Wrote {written} texture(s), {total} bytes ({total / 1048576:.1f} MiB) to {args.output} ({args.layout})")
+            print(f"Skipped: {skipped}")
         elif args.command == "inspect":
             with args.file.open("rb") as file:
                 data = file.read(MAX_FILE + 1)

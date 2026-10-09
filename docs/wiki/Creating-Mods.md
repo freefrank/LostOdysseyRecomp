@@ -70,6 +70,27 @@ Results go to `my-upscale/textures/` with the same file names, plus `index.csv` 
 
 The game cannot load textures larger than the originals yet. Keep the results until the general texture path supports them.
 
+## 1d. Pack textures for the game (experimental)
+
+`lo_mod.py texture-pack` turns PNGs into `.lotex2` files for runtime texture replacement. Textures are matched by fingerprint (the `fingerprint` column of the export's `index.csv`), not by key, so one file covers every package that cooks the same image. Replacements can be the original size or 2x, 4x or 8x larger (see [Modding API](Modding-API#runtime-textures-lotex2)).
+
+```sh
+# Overlay layout: files go to <output>/overlay/textures/fp-<fingerprint>.lotex2
+python tools/modding/lo_mod.py texture-pack --index my-export/textures/index.csv --images my-upscale/textures --images-index my-upscale/index.csv --output mods
+
+# Standalone layout: <output>/<id>/mod.ini with texture: lines plus <id>/textures/
+python tools/modding/lo_mod.py texture-pack --index my-export/textures/index.csv --images my-upscale/textures --images-index my-upscale/index.csv --output mods --layout standalone --id my-textures
+```
+
+- `--images-index` maps keys to PNG files (default: `index.csv` in the `--images` folder).
+- `--filter <text>` keeps keys that contain the text. `--fingerprints <log.csv>` keeps only fingerprints a game run logged.
+- `--mips` writes the whole mip chain; by default one level is written and the game builds the rest.
+- Existing files are never overwritten, so you can add to an existing mods folder.
+- `--test tint` (red up, green and blue down) and `--test nearest4` (plain 4x enlargement, which must look unchanged in game) transform the original exported PNGs, to check in game that replacement works.
+- `lo_mod.py inspect <file>` prints and validates a `.lotex2` header.
+
+DDS and block-compressed payloads come later.
+
 ## 2. Prepare artwork and a specification
 
 Copy your own edited PNG into an authoring directory, for example `my-menu/art/UI_MAIN_00.png`. The inventory contains metadata and dimensions only; it does not export artwork. Keep the original image dimensions, alpha channel and atlas layout. The native menu's verified `UI_MAIN_00` layout is 512x1024; larger atlases are rejected by this consumer.

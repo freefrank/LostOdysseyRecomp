@@ -143,6 +143,36 @@ class ModToolsTest(unittest.TestCase):
         self.assertEqual(mod.main(args + ["--object", "Icon_Page_0", "--allow-unwired"]), 0)
         self.assertEqual(mod.main(args + ["--object", "Missing"]), 2)
 
+    def test_texture_pack(self):
+        textures = self.root / "export" / "textures"
+        (textures / "pkg").mkdir(parents=True)
+        Image.new("RGBA", (2, 2), (100, 100, 100, 200)).save(textures / "pkg" / "Icon_Page_0.21.png")
+        index = textures / "index.csv"
+        index.write_text("key,file,width,height,format,fingerprint,fingerprint_tiled\n"
+                         f"{KEY},pkg/Icon_Page_0.21.png,2,2,DXT5,00000000000000ab,0\n"
+                         f"{KEY.replace('#21', '#22')},pkg/Icon_Page_0.21.png,2,2,DXT5,00000000000000ab,0\n",
+                         encoding="utf-8")
+        images = ["--index", str(index), "--images", str(textures), "--images-index", str(index)]
+        out = self.root / "packs"
+        self.assertEqual(mod.main(["texture-pack", *images, "--output", str(out), "--mips"]), 0)
+        data = (out / "overlay" / "textures" / "fp-00000000000000ab.lotex2").read_bytes()
+        info = mod.inspect(data)
+        self.assertEqual((info["fingerprint"], info["original_format"], info["scale"], info["mips"], info["key"]),
+                         ("00000000000000ab", "DXT5", 1, 2, KEY))
+        self.assertEqual(len(data), 64 + len(KEY) + 16 + 4)
+        self.assertEqual(data[:8], b"LOTEX2\r\n")
+        self.assertEqual(mod.main(["texture-pack", *images, "--output", str(out)]), 0)  # Never overwrites.
+        self.assertEqual(len(list((out / "overlay" / "textures").iterdir())), 1)
+        out4 = self.root / "nearest4"
+        self.assertEqual(mod.main(["texture-pack", *images, "--output", str(out4), "--layout", "standalone",
+                                   "--id", "t4", "--test", "nearest4"]), 0)
+        info = mod.inspect((out4 / "t4" / "textures" / "fp-00000000000000ab.lotex2").read_bytes())
+        self.assertEqual((info["scale"], info["payload"]), (4, "8x8"))
+        self.assertIn("texture:00000000000000ab=textures/fp-00000000000000ab.lotex2",
+                      (out4 / "t4" / "mod.ini").read_text())
+        with self.assertRaises(ValueError):
+            mod.inspect(data + b"\0")
+
 
 if __name__ == "__main__":
     unittest.main()
