@@ -229,6 +229,7 @@ add_library(LostOdysseyRecompSemantics STATIC
     src/mesh_bounds_math61.cpp
     src/mesh_bounds_select61.cpp
     src/power_fp_support61.cpp
+    src/power_log61.cpp
     src/mesh_polygon_build61.cpp
     src/mesh_polygon_collect61.cpp
     src/mesh_boundary_walk61.cpp

@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "power-log61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/power_log61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/power_log61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/power_log61.cpp"
+      ]
+    }
+  ]
+}

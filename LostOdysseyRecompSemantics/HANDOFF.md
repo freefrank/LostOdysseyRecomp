@@ -1,3 +1,7 @@
+## Root direct continuation: guest natural logarithm (2026-10-09)
+
+`power_log61` closes 82301A68, including normal/subnormal reduction, guest rational coefficients and split exponent contribution. Seven complete-original-leaf cases pass Full72/RAM/CSR and independent log/domain checks: identity, normal inputs on both sides of one, minimum subnormal, zero, negative and positive infinity. Constants stay external via LO_POWER_CONSTANTS (1296 bytes). Independent zero-domain checking caught an incorrectly seeded fixture special-value address: corrected 83215400 to 83215500; implementation unchanged. Full library passes. Pow orchestration still remains.
+
 ## Root direct continuation: power-function bit helpers (2026-10-09)
 
 `power_fp_support61` closes B7E668 integer parity, B822F0 exponent extraction, B822C8 exponent replacement and B823C8 mantissa/exponent decomposition with subnormal shifts. Twelve complete-original-leaf cases pass Full72/RAM/CSR and independent parity, exponent and frexp/ldexp results for finite normal, zero and signed subnormal inputs. Full library passes. B9EA90 reads exponent -22 and base 2 from its guest constants, but the original pow state still must be recovered before claiming its upper chain exact; no host pow substitution.

@@ -1,0 +1,33 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Guest natural logarithm with exact rational approximation stages.",
+  "entries": [
+    {
+      "address": "82301A68",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.4.cpp",
+      "source_line": 21475,
+      "instruction_count": 95,
+      "body_sha256": "7939b0bb1bc2340954ad5d6a32f96f4649a46d9acdaaf70cf835475b2b5e2d83",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82301A68"
+    ],
+    "header": "include/lo_semantics/power_log61.h",
+    "source": "src/power_log61.cpp",
+    "oracle": "tests/power_log61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 7,
+    "library_validated": true,
+    "case_scope": "Complete original leaf Full72/RAM/CSR; identity, >1/<1 normal, minimum subnormal, zero, negative, +infinity. Independent log/domain results. Guest constants external via 1296-byte LO_POWER_CONSTANTS; no whole pow or gameplay claim.",
+    "platform": "Linux x64 Clang19; pinned PPC; mmap guest overlay"
+  }
+}
