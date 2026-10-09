@@ -6,6 +6,7 @@ import argparse
 import csv
 import json
 import re
+import shutil
 import sqlite3
 import struct
 import sys
@@ -145,6 +146,42 @@ def image_consumer(row: sqlite3.Row, key: str, width: int, height: int) -> str:
             # Ownership is indexed; the Font native page-reference array is not.
             return "native_font_page_candidate"
     return "no_runtime_consumer"
+
+
+def export_consumer(key: str, width: int, height: int) -> str:
+    """Routing evidence for exported rows; fonts cannot be confirmed without the inventory."""
+    package, _, tail = key.partition("#")
+    if (re.fullmatch(r"bin/xenon/loc/(int|chi|jpn|kor|sch)/menu/rpmenurescommon_\1\.xxx", package)
+            and tail.partition(":")[2] == "UI_MAIN_00" and (width, height) == (512, 1024)):
+        return "native_menu_atlas"
+    return "no_runtime_consumer"
+
+
+def export_catalog(path: Path, object_name: str | None = None, package: str | None = None) -> list[dict]:
+    """Read the textures/index.csv written by --export-assets (PNG paths are relative to it)."""
+    wanted = make_key(package, 0, "Object").partition("#")[0] if package is not None else None
+    result: dict[str, dict] = {}
+    with path.open(encoding="utf-8-sig", newline="") as file:
+        reader = csv.DictReader(file)
+        needed = {"key", "file", "width", "height"}
+        if not needed.issubset(reader.fieldnames or []):
+            raise ValueError("index.csv is missing required columns: " + ", ".join(sorted(needed)))
+        for line, row in enumerate(reader, 2):
+            try:
+                key = canonical_key(row["key"])
+                if object_name is not None and key.rpartition(":")[2] != object_name:
+                    continue
+                if wanted is not None and key.partition("#")[0] != wanted:
+                    continue
+                width, height = dimensions(int(row["width"]), int(row["height"]))
+                image = (path.resolve().parent / relative(row["file"])).resolve()
+            except (ValueError, TypeError) as exc:
+                raise ValueError(f"{path}:{line}: {exc}") from exc
+            if key in result and (result[key]["width"], result[key]["height"]) != (width, height):
+                raise ValueError("index.csv contains inconsistent dimensions for " + key)
+            result[key] = {"key": key, "width": width, "height": height, "image_path": str(image),
+                           "consumer": export_consumer(key, width, height)}
+    return [result[key] for key in sorted(result)]
 
 
 def database_catalog(path: Path, object_name: str | None = None, package: str | None = None,
@@ -305,6 +342,7 @@ def main(argv: list[str] | None = None) -> int:
         source = command_parser.add_mutually_exclusive_group(required=True)
         source.add_argument("--manifest", type=Path, help="legacy exported-image manifest.csv")
         source.add_argument("--database", type=Path, help="read-only asset inventory catalog.sqlite")
+        source.add_argument("--export-index", type=Path, help="textures/index.csv from LostOdysseyRecomp.exe --export-assets")
         command_parser.add_argument("--object")
         command_parser.add_argument("--package")
         command_parser.add_argument("--content-sha256", help="database only: select one package-content variant")
@@ -312,8 +350,8 @@ def main(argv: list[str] | None = None) -> int:
             command_parser.add_argument("--runtime-only", action="store_true", help="database only: native menu atlas/font-page candidates")
             command_parser.add_argument("--limit", type=int, help="database only: maximum results (default 100; max 10000)")
         if command == "init":
-            command_parser.add_argument("--allow-unwired", action="store_true", help="database only: allow experimental images, including unverified font-page candidates")
-            command_parser.add_argument("--image", required=True, help="PNG path relative to the new JSON specification")
+            command_parser.add_argument("--allow-unwired", action="store_true", help="database or export index: allow experimental images, including unverified font-page candidates")
+            command_parser.add_argument("--image", help="PNG path relative to the new JSON specification (required unless --export-index; then the exported PNG is copied there, default art/<object>.png)")
             command_parser.add_argument("--id", required=True)
             command_parser.add_argument("--priority", type=int, default=100)
             command_parser.add_argument("--output", type=Path, required=True)
@@ -334,10 +372,14 @@ def main(argv: list[str] | None = None) -> int:
                 items = database_catalog(args.database, args.object, args.package, args.content_sha256,
                                          getattr(args, "runtime_only", False),
                                          (args.limit if args.limit is not None else 100) if args.command == "catalog" else None)
+            elif args.export_index:
+                if args.content_sha256 or getattr(args, "runtime_only", False) or getattr(args, "limit", None) is not None:
+                    raise ValueError("--content-sha256, --runtime-only and --limit require --database")
+                items = export_catalog(args.export_index, args.object, args.package)
             else:
                 if (args.content_sha256 or getattr(args, "runtime_only", False)
                         or getattr(args, "limit", None) is not None or getattr(args, "allow_unwired", False)):
-                    raise ValueError("--content-sha256, --runtime-only, --limit and --allow-unwired require --database")
+                    raise ValueError("--content-sha256, --runtime-only, --limit and --allow-unwired require --database or --export-index")
                 items = catalog(args.manifest, args.object, args.package)
             if args.command == "catalog":
                 print(json.dumps(items, ensure_ascii=False, indent=2))
@@ -345,15 +387,30 @@ def main(argv: list[str] | None = None) -> int:
                 if len(items) != 1:
                     raise ValueError(f"matched {len(items)} eligible resources/content variants; select exactly one with --object, --package and (for database variants) --content-sha256")
                 item = items[0]
-                if args.database and item["consumer"] == "no_runtime_consumer" and not args.allow_unwired:
+                if (args.database or args.export_index) and item["consumer"] == "no_runtime_consumer" and not args.allow_unwired:
                     raise ValueError("selected image has no current runtime consumer; --allow-unwired permits experimental packaging only")
                 if args.database and item["consumer"] == "native_font_page_candidate" and not args.allow_unwired:
                     raise ValueError("font-page reference is unverified; --allow-unwired permits experimental packaging only")
+                if args.image is None and not args.export_index:
+                    raise ValueError("--image is required")
+                image = args.image or "art/" + re.sub(r"[^A-Za-z0-9_.-]", "_", item["key"].rpartition(":")[2]) + ".png"
                 spec = {"api_version": 1, "id": mod_id(args.id),
                         "priority": integer(args.priority, -(1 << 31), (1 << 31) - 1),
-                        "images": [{"key": item["key"], "source": relative(args.image),
+                        "images": [{"key": item["key"], "source": relative(image),
                                     "width": item["width"], "height": item["height"]}]}
+                if args.output.exists():
+                    raise FileExistsError(f"{args.output} already exists")
                 args.output.parent.mkdir(parents=True, exist_ok=True)
+                if args.export_index:
+                    # Start from the exported artwork; never replace the author's own file.
+                    base = args.output.resolve().parent
+                    target = (base / spec["images"][0]["source"]).resolve()
+                    if not target.is_relative_to(base):
+                        raise ValueError("--image must stay inside the specification directory")
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    with open(item["image_path"], "rb") as src, target.open("xb") as dst:
+                        shutil.copyfileobj(src, dst)
+                    print(f"Copied {target}")
                 with args.output.open("x", encoding="utf-8") as file:
                     file.write(json.dumps(spec, ensure_ascii=False, indent=2) + "\n")
                 print(f"Created {args.output}")

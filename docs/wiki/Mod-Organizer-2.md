@@ -11,6 +11,16 @@ LostOdysseyRecomp has a Mod Organizer 2 (MO2) game plugin. MO2 maps the mods you
 
 Both package layouts made by `lo_mod.py pack` install as they are. The plugin removes the outer `mods/` folder of those ZIPs, so the archive's contents land in the game's `mods/`.
 
+## Export the original artwork
+
+An optional tool plugin adds **Tools > Export Lost Odyssey assets**.
+
+1. Download [lostodysseyrecomp_export.py](https://github.com/freefrank/LostOdysseyRecomp/blob/main/tools/modding/mo2/lostodysseyrecomp_export.py) and put it in `<MO2>/plugins/` (not in `basic_games`). Restart MO2.
+2. With a Lost Odyssey Recomp instance open, choose the tool, pick a new or empty output folder, tick Textures and/or Movies, optionally enter a filter, and press **Start**.
+3. When it finishes, open the folder. See [Creating mods](Creating-Mods.md) for the layout and how to start a mod from an exported texture.
+
+The export runs the game program directly in the game folder, outside MO2's virtual file system, and reads your own game data. Keep the result for reference; do not redistribute it.
+
 ## Which mod wins
 
 - **Overlay packages** (`--layout overlay`): two mods that replace the same asset ship the same file path. MO2 shows the conflict, and the mod lower in MO2's left pane wins.
