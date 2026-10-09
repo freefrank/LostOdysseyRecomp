@@ -90,7 +90,7 @@
     "full_library_validated": true,
     "mapping_delta": 1,
     "runtime_replacement_delta": 0,
-    "next": "BB2638 remains dependent on diagnostic MSR/reservation/native synchronization state; BB03B0 depends on unclosed BD7258 geometry chain; BDB260 needs full-register 823F3340 boundary. BB06D8 and BDAC88 now built and focused-original validated. Do not substitute no-op services."
+    "next": "Continue BB2638 diagnostic synchronization with explicit local machine state; geometry BD4448/BD4C40 lower chains; BD1558/BD1770/BD7A20 owner routes. Manager free Full72 boundary is closed; initializer allocation/construction internals remain explicit guest calls."
   },
   "historical_accepted_data_commit": "f066d61adf2a18afad5d7a3f23e7431284ff7675",
   "new_validated_zero_credit_units": [
@@ -107,6 +107,145 @@
     "grid_transform_support61",
     "geometry_support61",
     "owned_tree_cleanup61",
-    "object_grid_transform61"
-  ]
+    "object_grid_transform61",
+    "grid_transform_buffer61",
+    "manager_release_context61"
+  ],
+  "post_resume_implementation_inventory": {
+    "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
+    "unit_count": 16,
+    "distinct_entries": 34,
+    "units": [
+      {
+        "unit": "object_sort_lifecycle61",
+        "entries": [
+          "82BB25D0",
+          "82BAE1A0"
+        ],
+        "focused_cases": 3
+      },
+      {
+        "unit": "object_sort_support61",
+        "entries": [
+          "82BD2A08",
+          "82BD2C08",
+          "82BD2C50"
+        ],
+        "focused_cases": 3
+      },
+      {
+        "unit": "reader_buffer_growth61",
+        "entries": [
+          "82BD2870"
+        ],
+        "focused_cases": 4
+      },
+      {
+        "unit": "object_sort_reader61",
+        "entries": [
+          "82BAF600"
+        ],
+        "focused_cases": 4
+      },
+      {
+        "unit": "grid_neighbor_update61",
+        "entries": [
+          "82BB23C0"
+        ],
+        "focused_cases": 4
+      },
+      {
+        "unit": "grid_storage_initialize61",
+        "entries": [
+          "82BB1E58"
+        ],
+        "focused_cases": 3
+      },
+      {
+        "unit": "object_sort_engine61",
+        "entries": [
+          "82BAE200"
+        ],
+        "focused_cases": 7
+      },
+      {
+        "unit": "object_sort_dispatch61",
+        "entries": [
+          "82BAFEC0"
+        ],
+        "focused_cases": 3
+      },
+      {
+        "unit": "object_grid_read61",
+        "entries": [
+          "82BB2098",
+          "82BD0A30"
+        ],
+        "focused_cases": 5
+      },
+      {
+        "unit": "grid_transform_routes61",
+        "entries": [
+          "82BD7950"
+        ],
+        "focused_cases": 1
+      },
+      {
+        "unit": "grid_transform_support61",
+        "entries": [
+          "822C5128",
+          "82F2B308",
+          "82BD1278",
+          "82BD78C0",
+          "82BD78D8",
+          "82BD78E8"
+        ],
+        "focused_cases": 9
+      },
+      {
+        "unit": "geometry_support61",
+        "entries": [
+          "82BD43F8",
+          "82BD3D80",
+          "82BDDDF8",
+          "82BD4438",
+          "82BDDE18"
+        ],
+        "focused_cases": 3
+      },
+      {
+        "unit": "owned_tree_cleanup61",
+        "entries": [
+          "82BD9740",
+          "82BDAC88"
+        ],
+        "focused_cases": 6
+      },
+      {
+        "unit": "object_grid_transform61",
+        "entries": [
+          "82BB06D8"
+        ],
+        "focused_cases": 4
+      },
+      {
+        "unit": "grid_transform_buffer61",
+        "entries": [
+          "82BD17F0",
+          "82BD1830",
+          "82BDAC60"
+        ],
+        "focused_cases": 4
+      },
+      {
+        "unit": "manager_release_context61",
+        "entries": [
+          "823F3340",
+          "82388B58",
+          "82BDB260"
+        ],
+        "focused_cases": 4
+      }
+    ]
+  }
 }

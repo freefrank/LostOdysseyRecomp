@@ -1,0 +1,102 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Private generated bodies are pinned by SHA256 of UTF-8 with LF line endings and no final newline; no generated code is embedded.",
+  "entries": [
+    {
+      "address": "827C5F38",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.75.cpp",
+      "source_line": 10920,
+      "instruction_count": 45,
+      "body_sha256": "48e4b60654cdc9db936d96a4363ab85abc21753c32383593b62fbc24720e71a3",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82388B58",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.10.cpp",
+      "source_line": 16214,
+      "instruction_count": 1,
+      "body_sha256": "d96cd9773b81eca22d5a44f90819aaa994fd9472ca13a59a2f13455984989785",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "823F3340",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.14.cpp",
+      "source_line": 29958,
+      "instruction_count": 23,
+      "body_sha256": "947f113be41bd9678d0ae38003b2c7a58195b6a4dffa665c6cbc28bf34e0e7c0",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BDB260",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 27825,
+      "instruction_count": 20,
+      "body_sha256": "73f4640ad6a9cce8fa6b4ffe0a8c7e0939e8001e182c2b4f59bcd56b84bc57ea",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD9740",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 23697,
+      "instruction_count": 70,
+      "body_sha256": "f7b24566badea46c688154677515dce771bd522dcb22289c9cfd29434a4c2b62",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD0798",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 2461,
+      "instruction_count": 8,
+      "body_sha256": "9d0a302b60cd8bfd0afafd0f70b0027dc487d849edb04825e3a9f67994d1d4c8",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BDAC88",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 26973,
+      "instruction_count": 35,
+      "body_sha256": "5a71b917e5d0c087daa11a111f41950f6eeca103702fc5d3199ed34783525be5",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD2C08",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 7890,
+      "instruction_count": 1,
+      "body_sha256": "701726b8927c3255b6e96a97bda285f0fe2115d991ea6ca4033a4d02c2f907c7",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD2A28",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 7609,
+      "instruction_count": 31,
+      "body_sha256": "e13b86b50d6ceabf2bfd889e742d4d87d8e0b1d104544d56dc4bc8c3280368bc",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 4,
+    "library_validated": true,
+    "library": "PASS incremental complete Clang 19 CMake static library; existing unused-function warning exception retained.",
+    "platform": "Linux x64; Clang 19.1.7; genuine XEX regenerated with pinned XenonRecomp ddd128bc plus tracked patch; existing oracle guest-window allocation overlaid with mmap/mprotect only",
+    "mapping_credit": 0,
+    "mapping_limit": "Fixed historical catalog.sqlite unavailable; do not infer membership from regenerated sources. 82BB25D0 is explicitly external in prior handoff.",
+    "runtime_validated": false,
+    "complete": false,
+    "limits": "Selected finite inputs, ordinary RAM, Full72 state, callbacks and host CSR only. No Windows revalidation, nonfinite matrix, faults/MMIO, concurrency, runtime or gameplay acceptance.",
+    "case_scope": "Ready manager tail, two lazy initialization paths and owner cleanup. Genuine original 827C5F38 initialization is included; its allocator and concrete constructors 823ACBD0/827C5970/827C4ED0 remain mutable guest boundaries. Full-state bridge composes the existing narrower initializer without dropping unrepresented callback fields."
+  },
+  "implementation": {
+    "entries": [
+      "823F3340",
+      "82388B58",
+      "82BDB260"
+    ],
+    "header": "include/lo_semantics/manager_release_context61.h",
+    "source": "src/manager_release_context61.cpp",
+    "oracle": "tests/manager_release_context61_oracle.cpp"
+  }
+}

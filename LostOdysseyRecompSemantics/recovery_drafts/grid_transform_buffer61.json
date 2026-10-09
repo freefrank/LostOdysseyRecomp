@@ -1,0 +1,54 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Private generated bodies are pinned by SHA256 of UTF-8 with LF line endings and no final newline; no generated code is embedded.",
+  "entries": [
+    {
+      "address": "82BD17F0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 4930,
+      "instruction_count": 15,
+      "body_sha256": "55691283e1873e8085fb2789a80ef03ff4d2513c69ecd049c4c213300e91bb41",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD1830",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 4966,
+      "instruction_count": 35,
+      "body_sha256": "e0c62822974438bab3f4a57461544184593c3e7dc001528a42dcb4d02739cabf",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BDAC60",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 26950,
+      "instruction_count": 9,
+      "body_sha256": "9c28aaf4bd7d5c8d831248ae59c628f65430f2d2df3a431ba4d0686b688467cf",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 4,
+    "library_validated": true,
+    "library": "PASS incremental complete Clang 19 CMake static library; existing unused-function warning exception retained.",
+    "platform": "Linux x64; Clang 19.1.7; genuine XEX regenerated with pinned XenonRecomp ddd128bc plus tracked patch; existing oracle guest-window allocation overlaid with mmap/mprotect only",
+    "mapping_credit": 0,
+    "mapping_limit": "Fixed historical catalog.sqlite unavailable; do not infer membership from regenerated sources. 82BB25D0 is explicitly external in prior handoff.",
+    "runtime_validated": false,
+    "complete": false,
+    "limits": "Selected finite inputs, ordinary RAM, Full72 state, callbacks and host CSR only. No Windows revalidation, nonfinite matrix, faults/MMIO, concurrency, runtime or gameplay acceptance.",
+    "case_scope": "Two storage-predicate paths, mixed repeated triangle-index addresses including a wrapped 32-bit collision, and exact descriptor clear range. Genuine original leaf bodies; no vertex-storage dereference."
+  },
+  "implementation": {
+    "entries": [
+      "82BD17F0",
+      "82BD1830",
+      "82BDAC60"
+    ],
+    "header": "include/lo_semantics/grid_transform_buffer61.h",
+    "source": "src/grid_transform_buffer61.cpp",
+    "oracle": "tests/grid_transform_buffer61_oracle.cpp"
+  }
+}

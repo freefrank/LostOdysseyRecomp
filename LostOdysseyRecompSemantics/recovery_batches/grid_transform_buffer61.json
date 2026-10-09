@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "grid-transform-buffer61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/grid_transform_buffer61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/grid_transform_buffer61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/grid_transform_buffer61.cpp"
+      ]
+    }
+  ]
+}

@@ -89,13 +89,27 @@ The ordinary-object contract excludes overlap between borrowed grid object,
 word buffer/metadata and the 608-byte guest frame. No arbitrary-alias, extreme-size,
 nonfinite, alternate-rounding-mode or gameplay claim is made; no mapping credit.
 
+The BB06D8 stage was pushed as `beafccd9` and remote-verified. Recovery continues.
+`grid_transform_buffer61` adds BD17F0 storage predicate, BD1830 repeated vertex-
+address counting and BDAC60 descriptor clear. Four genuine-body cases plus
+incremental library build pass; wrapped address comparison is explicit. A separate
+address inventory in the checkpoint now records zero-credit implementations
+without adding them to the fixed historical denominator.
+
+`manager_release_context61` closes the Full72 boundary for 823F3340, its true
+82388B58 tail alias and BDB260 owner teardown. Four original-body cases and
+incremental library build pass, including genuine 827C5F38 lazy initialization.
+The initializer composes the accepted narrower implementation through a live
+full-state bridge; its allocator/concrete constructors remain explicit mutable
+guest calls. Their internals are not claimed recovered.
+
 Current dependency frontier is BB2638 (not yet implemented). Its diagnostic path
 B9C298→BC8B78 depends on 822B29A0/822B3438 locking helpers with MSR/reservation/CAS
 and native critical-section state absent from Full72; do not replace them with
 ordinary RAM/no-op locks. BB06D8 is now closed as described above. BB03B0 remains dependent on
 BD7258 and its substantial unclosed geometry children; the small constructor
-cluster above does not close that parent. BDB260/823F3340 also has an unresolved full-register free-facade
-boundary; retain it explicitly. Implement and verify closed units before parents. BD2870 is implemented by
+cluster above does not close that parent. BDB260/823F3340 now has the explicit full-register boundary above;
+its allocation/construction internals remain lower guest boundaries. Implement and verify closed units before parents. BD2870 is implemented by
 `reader_buffer_growth61`; small initialization/tail helpers by
 `object_sort_support61`; object initialization/cleanup by `object_sort_lifecycle61`.
 Integrate one complete upper at a time, perform narrowly selected original-body
