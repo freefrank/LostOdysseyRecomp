@@ -5,7 +5,7 @@
       "name": "power-fp-support61",
       "manifest": "LostOdysseyRecompSemantics/recovery_drafts/power_fp_support61.json",
       "harness": "LostOdysseyRecompSemantics/tests/power_fp_support61_oracle.cpp",
-      "prelude": "#include \"ppc_context.h\"\n",
+      "prelude": "#include \"ppc_context.h\"\n#define sub_82B7E668 __imp__sub_82B7E668\nPPC_FUNC_IMPL(__imp__sub_82B7E668);\n",
       "sources": [
         "LostOdysseyRecompSemantics/src/power_fp_support61.cpp"
       ]

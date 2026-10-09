@@ -33,6 +33,14 @@
       "instruction_count": 57,
       "body_sha256": "9f05526e99b1f8d2df41dd1cfccfd10c00272b48e2f1095aa19067ec30de2371",
       "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82B7E6D8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.175.cpp",
+      "source_line": 17045,
+      "instruction_count": 98,
+      "body_sha256": "3779d7bfbabbeacfc09a0c2bc912d4aabac61bc442878da067c115b3c022bd83",
+      "status": "focused_original_ppc_validated"
     }
   ],
   "implementation": {
@@ -40,7 +48,8 @@
       "82B7E668",
       "82B822F0",
       "82B822C8",
-      "82B823C8"
+      "82B823C8",
+      "82B7E6D8"
     ],
     "header": "include/lo_semantics/power_fp_support61.h",
     "source": "src/power_fp_support61.cpp",
@@ -52,9 +61,9 @@
     "runtime_validated": false,
     "complete": false,
     "date": "2026-10-09",
-    "focused_original_ppc_cases": 12,
+    "focused_original_ppc_cases": 20,
     "library_validated": true,
-    "case_scope": "Complete original leaves, Full72/RAM/CSR; independent zero/odd/even/fraction/subnormal parity, exponent read/write and signed normal/zero/subnormal decomposition. Finite fixture values only, no whole pow or gameplay claim.",
+    "case_scope": "Complete original leaves, Full72/RAM/CSR; independent zero/odd/even/fraction/subnormal parity, exponent read/write and signed normal/zero/subnormal decomposition. Finite fixture values only, no whole pow or gameplay claim. Eight original special-power/actual parity cases cover infinite exponent magnitude comparisons, negative infinite exponent indeterminate flag, positive/negative infinite bases and signed-zero odd negative exponent. External LO_POWER_CONSTANTS 1320 bytes; special constants begin at guest83215500.",
     "platform": "Linux x64 Clang19; pinned PPC; mmap guest overlay"
   }
 }

@@ -1,3 +1,7 @@
+## Root direct continuation: infinite power cases (2026-10-09)
+
+`power_fp_support61` adds B7E6D8 infinite-base/exponent handling with actual parity composition. Twenty family cases pass, including signed zero from an odd negative exponent, negative infinite bases, magnitude comparisons for infinite exponents and the original indeterminate flag. Full72/RAM/CSR and independent value/sign checks pass; original guest NaN behavior is retained rather than normalized to host pow. LO_POWER_CONSTANTS now provides 1320 bytes, extending the special block at 83215500 to 40 bytes. Full library passes. All direct lower implementations for B7E860 are now available, including baseline copysign; main pow remains to assemble.
+
 ## Root direct continuation: guest natural logarithm (2026-10-09)
 
 `power_log61` closes 82301A68, including normal/subnormal reduction, guest rational coefficients and split exponent contribution. Seven complete-original-leaf cases pass Full72/RAM/CSR and independent log/domain checks: identity, normal inputs on both sides of one, minimum subnormal, zero, negative and positive infinity. Constants stay external via LO_POWER_CONSTANTS (1296 bytes). Independent zero-domain checking caught an incorrectly seeded fixture special-value address: corrected 83215400 to 83215500; implementation unchanged. Full library passes. Pow orchestration still remains.

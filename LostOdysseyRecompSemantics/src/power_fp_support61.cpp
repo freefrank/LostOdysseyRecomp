@@ -79,6 +79,146 @@ struct Support {
         Compare(F(13), F(0));
         r[3] = s.cr6.eq ? 2 : 1;
     }
+    void Unsigned(std::uint64_t a, std::uint64_t b) {
+        auto x = Address(a), y = Address(b);
+        s.cr6 = {std::uint8_t(x < y), std::uint8_t(x > y), std::uint8_t(x == y), s.xer_so};
+    }
+    void Infinity() {
+        s.r[11] = 0xffffffff83210000ull;
+        Load(0, s.r[11] + 21760);
+    }
+    void ZeroValue() {
+        s.r[11] = 0xffffffff82000000ull;
+        Load(0, s.r[11] + 4072);
+    }
+    bool SpecialBody() {
+        auto &r = s.r;
+        s.fpr_bits[31] = s.fpr_bits[2];
+        Save(31, r[1] + 136);
+        r[9] = 0x7ff00000;
+        Save(1, r[1] + 128);
+        r[31] = r[5];
+        s.fpr_bits[0] = s.fpr_bits[1] & 0x7fffffffffffffffull;
+        r[30] = 0;
+        r[10] = 0xfffffffffff00000ull;
+        r[11] = m.ReadU32(Address(r[1] + 136));
+        Unsigned(r[11], r[9]);
+        if (s.cr6.eq) {
+            r[11] = m.ReadU32(Address(r[1] + 140));
+            Zero(r[11]);
+            if (s.cr6.eq) {
+                r[11] = 0xffffffff82000000ull;
+                Load(13, r[11] + 3880);
+                Compare(F(0), F(13));
+                if (s.cr6.gt) {
+                    Infinity();
+                    return true;
+                }
+                Compare(F(0), F(13));
+                if (s.cr6.lt) {
+                    ZeroValue();
+                    return true;
+                }
+                Save(13, r[31]);
+                return false;
+            }
+        } else {
+            Unsigned(r[11], r[10]);
+            if (s.cr6.eq) {
+                r[11] = m.ReadU32(Address(r[1] + 140));
+                Zero(r[11]);
+                if (s.cr6.eq) {
+                    r[11] = 0xffffffff82000000ull;
+                    Load(13, r[11] + 3880);
+                    Compare(F(0), F(13));
+                    if (s.cr6.gt) {
+                        ZeroValue();
+                        return true;
+                    }
+                    Compare(F(0), F(13));
+                    if (s.cr6.lt) {
+                        Infinity();
+                        return true;
+                    }
+                    r[11] = 0xffffffff83210000ull;
+                    r[30] = 1;
+                    Load(0, r[11] + 21768);
+                    return true;
+                }
+            }
+        }
+        r[11] = m.ReadU32(Address(r[1] + 128));
+        Unsigned(r[11], r[9]);
+        if (s.cr6.eq) {
+            r[11] = m.ReadU32(Address(r[1] + 132));
+            Zero(r[11]);
+            if (!s.cr6.eq)
+                return false;
+            ZeroValue();
+            Compare(F(31), F(0));
+            if (s.cr6.gt) {
+                Infinity();
+                return true;
+            }
+            r[11] = 0xffffffff82000000ull;
+            Load(13, r[11] + 3880);
+            Value(0, F(31) >= 0 ? F(13) : F(0));
+            return true;
+        }
+        Unsigned(r[11], r[10]);
+        if (!s.cr6.eq)
+            return false;
+        r[11] = m.ReadU32(Address(r[1] + 132));
+        Zero(r[11]);
+        if (!s.cr6.eq)
+            return false;
+        Gradual();
+        s.fpr_bits[1] = s.fpr_bits[31];
+        s.lr = 0x82b7e7f0u;
+        Parity();
+        ZeroValue();
+        Compare(F(31), F(0));
+        if (s.cr6.gt) {
+            r[11] = 0xffffffff83210000ull;
+            Unsigned(r[3], 1);
+            Load(0, r[11] + 21760);
+            if (s.cr6.eq)
+                s.fpr_bits[0] ^= 0x8000000000000000ull;
+            return true;
+        }
+        Compare(F(31), F(0));
+        if (s.cr6.lt) {
+            Unsigned(r[3], 1);
+            if (s.cr6.eq) {
+                r[11] = 0xffffffff83210000ull;
+                Load(0, r[11] + 21792);
+            }
+            return true;
+        }
+        r[11] = 0xffffffff82000000ull;
+        Load(0, r[11] + 3880);
+        return true;
+    }
+    void Special() {
+        auto &r = s.r;
+        r[12] = s.lr;
+        m.WriteU32(Address(r[1] - 8), Address(r[12]));
+        recovery_abi::WriteU64(m, Address(r[1] - 24), r[30]);
+        recovery_abi::WriteU64(m, Address(r[1] - 16), r[31]);
+        Save(31, r[1] - 32);
+        auto old = r[1];
+        r[1] -= 112;
+        m.WriteU32(Address(r[1]), Address(old));
+        if (SpecialBody())
+            Save(0, r[31]);
+        r[3] = r[30];
+        r[1] += 112;
+        r[12] = m.ReadU32(Address(r[1] - 8));
+        s.lr = r[12];
+        Load(31, r[1] - 32);
+        r[30] = recovery_abi::ReadU64(m, Address(r[1] - 24));
+        r[31] = recovery_abi::ReadU64(m, Address(r[1] - 16));
+    }
     void Exponent() {
         auto &r = s.r;
         Save(1, r[1] + 16);
@@ -183,6 +323,9 @@ bool Apply(GuestAddress e, GuestMemory &m, float_triplet_transfer::NativeService
            Registers &s) {
     Support x{m, fp, s};
     switch (e) {
+    case 0x82b7e6d8u:
+        x.Special();
+        break;
     case 0x82b7e668u:
         x.Parity();
         break;
