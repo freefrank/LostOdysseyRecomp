@@ -1,5 +1,36 @@
 # Semantic recovery handoff
 
+## Latest workspace checkpoint — 2026-10-09
+
+Last verified published HEAD: `ac384e8b930bcdb03125aae82afc7e71eec1901f`.
+The current continuation adds seven selected-case validated units (23 cases):
+`crt_random_thread61` (4), `transform_owner_build61` (3),
+`geometry_quantized_unbounded61` (3), `geometry_tree_range61` (3),
+`geometry_query_dispatch61` (4), `object_grid_probe61` (3), and
+`grid_transform_pipeline61` (3). The full standalone library builds with the
+existing Clang 19 configuration. These are genuine original-upper comparisons
+with the shared lower boundaries described in each draft; they do not validate
+all dependency routes. Direct TLS-record return restored the missing r12; the
+pipeline callback required r28 initialization at the common entry. Both fixes
+passed their existing targeted cases.
+
+`geometry_paired_range61` (BD5910) remains partial: case 0 passes, case 1 agrees
+on Full72, all vectors, RAM and callbacks, but recovered host CSR is 0x9fc1
+versus original 0x9fc0. Case 2 is not reached. Instrumentation changes compiler
+behavior, so its passing result is not acceptance. No status clearing was added.
+Its source is buildable and linked by upper dispatchers; the validated upper
+cases do not exercise this unresolved route. Next breakpoint is this precise
+host invalid-flag difference, then the uncovered paired dispatcher route.
+The body checker now accepts narrowly restricted named VMX save/restore helper
+pins; genuine helpers are support-only and receive no mapping credit.
+
+Baseline mapping stays **5,517/62,627 (8.809%)**; historical catalog membership
+remains unavailable. Full semantic acceptance and new runtime replacements stay
+zero. See per-unit drafts for untested branches, ownership/callback boundaries,
+and host-status comparison limits. No new tests beyond focused cases, runtime
+replacements or Rust port were introduced. Staged publication is authorized. The unresolved paired traversal is preserved
+in a separate WIP commit; the seven passing units form the following checkpoint.
+
 ## Active checkpoint — 2026-10-09, private inputs restored
 
 The user authorized sustained dependency-ordered recovery, parallel workers and

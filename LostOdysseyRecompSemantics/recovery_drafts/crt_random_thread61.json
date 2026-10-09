@@ -1,0 +1,63 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Private generated bodies are pinned by SHA256 of UTF-8 with LF line endings and no final newline; no generated code is embedded.",
+  "entries": [
+    {
+      "address": "822C9FC0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.2.cpp",
+      "source_line": 40053,
+      "instruction_count": 17,
+      "body_sha256": "3571bcb2304047c8870b0996cb81376e6f2108fd951e7ea60152598f7ff84264",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "822CA008",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.2.cpp",
+      "source_line": 40096,
+      "instruction_count": 15,
+      "body_sha256": "8728ca3e0a15fcba37bdb2192445056a24f7d31a11e3a58103cddebbefbd304e",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "822CA048",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.2.cpp",
+      "source_line": 40138,
+      "instruction_count": 45,
+      "body_sha256": "495063c714c504192403313d8d794064e5fd4ea2c3f4e8403d8504f3e1d64418",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD2C48",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 7940,
+      "instruction_count": 1,
+      "body_sha256": "313ccc0315e33d2844d1b784c64b4a4636db20af957ab86efcea3db73acb8dad",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 4,
+    "library_validated": true,
+    "library": "PASS incremental complete Clang 19 CMake static library; existing unused-function warning exception retained.",
+    "platform": "Linux x64; Clang 19.1.7; genuine XEX regenerated with pinned XenonRecomp ddd128bc plus tracked patch; existing oracle guest-window allocation overlaid with mmap/mprotect only",
+    "mapping_credit": 0,
+    "mapping_limit": "Fixed historical catalog.sqlite unavailable; do not infer membership from regenerated sources. 82BB25D0 is explicitly external in prior handoff.",
+    "runtime_validated": false,
+    "complete": false,
+    "limits": "Selected finite inputs, ordinary RAM, Full72 state, callbacks and host CSR only. No Windows revalidation, nonfinite matrix, faults/MMIO, concurrency, runtime or gameplay acceptance.",
+    "case_scope": "Four actual-upper/shared-lower cases: existing TLS, allocate/install, wrapping seed and direct existing ThreadRecord r12 restoration. Native TLS and fatal boundaries remain mutable services. Allocation/TLS failure and concurrency unverified; host CSR not independently compared."
+  },
+  "implementation": {
+    "entries": [
+      "82BD2C48",
+      "822C9FC0",
+      "822CA008",
+      "822CA048"
+    ],
+    "header": "include/lo_semantics/crt_random_thread61.h",
+    "source": "src/crt_random_thread61.cpp",
+    "oracle": "tests/crt_random_thread61_oracle.cpp"
+  }
+}

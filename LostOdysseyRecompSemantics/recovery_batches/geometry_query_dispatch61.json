@@ -1,0 +1,26 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "geometry-query-dispatch61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/geometry_query_dispatch61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/geometry_query_dispatch61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nvoid OriginalQueryDispatch61Lower(std::uint32_t,PPCContext&,std::uint8_t*);\n#define sub_82BD5F28(c,b) OriginalQueryDispatch61Lower(0x82BD5F28u,c,b)\n#define sub_82BD5550(c,b) OriginalQueryDispatch61Lower(0x82BD5550u,c,b)\n#define sub_82BD56D8(c,b) OriginalQueryDispatch61Lower(0x82BD56D8u,c,b)\n#define sub_82BD5B40(c,b) OriginalQueryDispatch61Lower(0x82BD5B40u,c,b)\n#define sub_82BD5CB0(c,b) OriginalQueryDispatch61Lower(0x82BD5CB0u,c,b)\n#define sub_82BD5910(c,b) OriginalQueryDispatch61Lower(0x82BD5910u,c,b)\n#define sub_82BD6C58(c,b) OriginalQueryDispatch61Lower(0x82BD6C58u,c,b)\n#define sub_82BD6E28(c,b) OriginalQueryDispatch61Lower(0x82BD6E28u,c,b)\n#define sub_82BD6FD0(c,b) OriginalQueryDispatch61Lower(0x82BD6FD0u,c,b)\n#define sub_82BD2870(c,b) OriginalQueryDispatch61Lower(0x82BD2870u,c,b)\n#define sub_82B7A0B0(c,b) OriginalQueryDispatch61Lower(0x82B7A0B0u,c,b)\nvoid OriginalQueryDispatch61Save(bool,PPCContext&,std::uint8_t*);\nvoid OriginalQueryDispatch61Restore(bool,PPCContext&,std::uint8_t*);\n#define __savegprlr_25(c,b) OriginalQueryDispatch61Save(false,c,b)\n#define __restgprlr_25(c,b) OriginalQueryDispatch61Restore(false,c,b)\n#define __savefpr_27(c,b) OriginalQueryDispatch61Save(true,c,b)\n#define __restfpr_27(c,b) OriginalQueryDispatch61Restore(true,c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/crt_close_recursive_buffer_context.cpp",
+        "LostOdysseyRecompSemantics/src/crt_copy_full_context.cpp",
+        "LostOdysseyRecompSemantics/src/geometry_box61.cpp",
+        "LostOdysseyRecompSemantics/src/geometry_math61.cpp",
+        "LostOdysseyRecompSemantics/src/geometry_paired_range61.cpp",
+        "LostOdysseyRecompSemantics/src/geometry_quantized_box61.cpp",
+        "LostOdysseyRecompSemantics/src/geometry_quantized_unbounded61.cpp",
+        "LostOdysseyRecompSemantics/src/geometry_query_dispatch61.cpp",
+        "LostOdysseyRecompSemantics/src/geometry_query_prepare61.cpp",
+        "LostOdysseyRecompSemantics/src/geometry_tree_range61.cpp",
+        "LostOdysseyRecompSemantics/src/geometry_triangle_range61.cpp",
+        "LostOdysseyRecompSemantics/src/geometry_unbounded_range61.cpp",
+        "LostOdysseyRecompSemantics/src/reader_buffer_growth61.cpp"
+      ]
+    }
+  ]
+}

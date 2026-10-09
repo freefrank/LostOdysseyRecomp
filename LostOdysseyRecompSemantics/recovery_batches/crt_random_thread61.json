@@ -1,0 +1,42 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "crt-random-thread61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/crt_random_thread61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/crt_random_thread61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nextern \"C\" PPC_FUNC(__imp__sub_822C9FC0);\n#define sub_822C9FC0(c,b) __imp__sub_822C9FC0(c,b)\nextern \"C\" PPC_FUNC(__imp__sub_822CA008);\n#define sub_822CA008(c,b) __imp__sub_822CA008(c,b)\nextern \"C\" PPC_FUNC(__imp__sub_822CA048);\n#define sub_822CA048(c,b) __imp__sub_822CA048(c,b)\nvoid OriginalRandomThread61Indirect(std::uint32_t,PPCContext&,std::uint8_t*);\n#undef PPC_CALL_INDIRECT_FUNC\n#define PPC_CALL_INDIRECT_FUNC(t) OriginalRandomThread61Indirect((t),ctx,base)\nvoid OriginalRandomThread61Lower(std::uint32_t,PPCContext&,std::uint8_t*);\n#define sub_822CA100(c,b) OriginalRandomThread61Lower(0x822CA100u,c,b)\n#define sub_822CA128(c,b) OriginalRandomThread61Lower(0x822CA128u,c,b)\n#define sub_822CA180(c,b) OriginalRandomThread61Lower(0x822CA180u,c,b)\n#define sub_82B81778(c,b) OriginalRandomThread61Lower(0x82B81778u,c,b)\n#define sub_823ADDC0(c,b) OriginalRandomThread61Lower(0x823ADDC0u,c,b)\n#define sub_82290AA8(c,b) OriginalRandomThread61Lower(0x82290AA8u,c,b)\n#define sub_82B7BED8(c,b) OriginalRandomThread61Lower(0x82B7BED8u,c,b)\nvoid OriginalRandomThread61Save(PPCContext&,std::uint8_t*);\nvoid OriginalRandomThread61Restore(PPCContext&,std::uint8_t*);\n#define __savegprlr_29(c,b) OriginalRandomThread61Save(c,b)\n#define __restgprlr_29(c,b) OriginalRandomThread61Restore(c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/allocation_failure.cpp",
+        "LostOdysseyRecompSemantics/src/crt_allocation.cpp",
+        "LostOdysseyRecompSemantics/src/crt_free_context.cpp",
+        "LostOdysseyRecompSemantics/src/crt_last_error.cpp",
+        "LostOdysseyRecompSemantics/src/crt_random_thread61.cpp",
+        "LostOdysseyRecompSemantics/src/crt_record_allocation_context.cpp",
+        "LostOdysseyRecompSemantics/src/crt_status_error.cpp",
+        "LostOdysseyRecompSemantics/src/crt_stream_error.cpp",
+        "LostOdysseyRecompSemantics/src/crt_stream_index_unlock.cpp",
+        "LostOdysseyRecompSemantics/src/crt_stream_io.cpp",
+        "LostOdysseyRecompSemantics/src/crt_stream_locks.cpp",
+        "LostOdysseyRecompSemantics/src/crt_stream_open_routes_context.cpp",
+        "LostOdysseyRecompSemantics/src/crt_stream_operations.cpp",
+        "LostOdysseyRecompSemantics/src/crt_stream_pointer_unlock.cpp",
+        "LostOdysseyRecompSemantics/src/crt_stream_state.cpp",
+        "LostOdysseyRecompSemantics/src/crt_thread_data.cpp",
+        "LostOdysseyRecompSemantics/src/crt_thread_error_routes.cpp",
+        "LostOdysseyRecompSemantics/src/heap.cpp",
+        "LostOdysseyRecompSemantics/src/heap_allocate.cpp",
+        "LostOdysseyRecompSemantics/src/heap_allocation_context.cpp",
+        "LostOdysseyRecompSemantics/src/heap_free.cpp",
+        "LostOdysseyRecompSemantics/src/heap_segment.cpp",
+        "LostOdysseyRecompSemantics/src/integer_leaf.cpp",
+        "LostOdysseyRecompSemantics/src/invalid_parameter.cpp",
+        "LostOdysseyRecompSemantics/src/memory_fill.cpp",
+        "LostOdysseyRecompSemantics/src/memory_services.cpp",
+        "LostOdysseyRecompSemantics/src/raw_allocation.cpp",
+        "LostOdysseyRecompSemantics/src/raw_allocation_context.cpp",
+        "LostOdysseyRecompSemantics/src/thread_state.cpp"
+      ]
+    }
+  ]
+}

@@ -123,12 +123,19 @@
     "diagnostic_format_routes61",
     "owned_tree_expand61",
     "owned_tree_construct61",
-    "geometry_unbounded_range61"
+    "geometry_unbounded_range61",
+    "crt_random_thread61",
+    "transform_owner_build61",
+    "geometry_quantized_unbounded61",
+    "geometry_tree_range61",
+    "geometry_query_dispatch61",
+    "object_grid_probe61",
+    "grid_transform_pipeline61"
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 30,
-    "distinct_entries": 56,
+    "unit_count": 37,
+    "distinct_entries": 66,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -365,7 +372,66 @@
           "82BD6E28"
         ],
         "focused_cases": 3
+      },
+      {
+        "unit": "crt_random_thread61",
+        "entries": [
+          "82BD2C48",
+          "822C9FC0",
+          "822CA008",
+          "822CA048"
+        ],
+        "focused_cases": 4
+      },
+      {
+        "unit": "transform_owner_build61",
+        "entries": [
+          "82BD7A60"
+        ],
+        "focused_cases": 3
+      },
+      {
+        "unit": "geometry_quantized_unbounded61",
+        "entries": [
+          "82BD6FD0"
+        ],
+        "focused_cases": 3
+      },
+      {
+        "unit": "geometry_tree_range61",
+        "entries": [
+          "82BD6C58"
+        ],
+        "focused_cases": 3
+      },
+      {
+        "unit": "geometry_query_dispatch61",
+        "entries": [
+          "82BD7258"
+        ],
+        "focused_cases": 4
+      },
+      {
+        "unit": "object_grid_probe61",
+        "entries": [
+          "82BB03B0"
+        ],
+        "focused_cases": 3
+      },
+      {
+        "unit": "grid_transform_pipeline61",
+        "entries": [
+          "82BB2638"
+        ],
+        "focused_cases": 3
       }
     ]
+  },
+  "current_workspace_pending_unit": {
+    "unit": "geometry_paired_range61",
+    "address": "82BD5910",
+    "status": "partial_known_host_csr_mismatch",
+    "mapping_credit": 0,
+    "next_breakpoint": "Case 1 recovered host CSR 0x9fc1 versus original 0x9fc0; Full72/VMX/RAM/callbacks agree. Case 2 unexecuted."
   }
 }

@@ -34,6 +34,7 @@ add_library(LostOdysseyRecompSemantics STATIC
     src/crt_thread_data.cpp
     src/crt_last_error.cpp
     src/crt_thread_error_routes.cpp
+    src/crt_random_thread61.cpp
     src/crt_status_error.cpp
     src/crt_lifecycle.cpp
     src/crt_stream_state.cpp
@@ -170,14 +171,20 @@ add_library(LostOdysseyRecompSemantics STATIC
     src/manager_release_context61.cpp
     src/transform_owner_routes61.cpp
     src/geometry_math61.cpp
-    src/geometry_paired_range61.cpp
     src/geometry_unbounded_range61.cpp
+    src/geometry_paired_range61.cpp
+    src/geometry_query_dispatch61.cpp
+    src/object_grid_probe61.cpp
+    src/grid_transform_pipeline61.cpp
+    src/geometry_tree_range61.cpp
+    src/geometry_quantized_unbounded61.cpp
     src/geometry_triangle_range61.cpp
     src/geometry_box61.cpp
     src/geometry_query_prepare61.cpp
     src/geometry_quantized_box61.cpp
     src/diagnostic_format_routes61.cpp
     src/transform_owner_initialize61.cpp
+    src/transform_owner_build61.cpp
     src/diagnostic_lock61.cpp
     src/geometry_support61.cpp
     src/owned_tree_cleanup61.cpp
