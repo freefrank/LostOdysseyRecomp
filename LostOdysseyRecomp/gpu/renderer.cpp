@@ -402,6 +402,8 @@ namespace gpu::renderer
             uint64_t guestHash = 0, guestFullHash = 0;
             uint64_t checkedFrame = ~0ull;
             uint64_t nextFullScanFrame = 0;
+            uint64_t replacementPending = 0; // fingerprint of a mod replacement still being read
+
             // The source remains BC3. Only a verified controller atlas owns an
             // optional, single-mip RGBA PlayStation child; retirement of the
             // source also retires its child after the GPU fence.
@@ -648,6 +650,7 @@ namespace gpu::renderer
             geometry_prepare::IndexCache indexCache;
             uint64_t indexCacheHits = 0, indexCacheMisses = 0;
             uint64_t uploadGenerations = 0; // Source of GpuSlot::uploadGeneration.
+            uint64_t uploadRingRewinds = 0; // Mid-frame Flush/Begin pairs forced by a full upload ring.
             std::array<uint64_t, kGpuSlots> motionArenaGeneration{};
             void ResetSlotArena(uint32_t i)
             {
@@ -1317,6 +1320,76 @@ namespace gpu::renderer
             bool textureBcReplacementWarned = false; // one warning when BC replacements are skipped
             uint32_t textureReplacements = 0; // per stats window
             uint64_t textureReplacementsTotal = 0;
+            // Render-thread time replacements took this frame (file lookups,
+            // reads, uploads); ReportReplacementCost logs a frame that may hitch.
+            struct ReplacementCost
+            {
+                uint32_t reads = 0, misses = 0, uploads = 0;
+                uint64_t readBytes = 0, ringRewinds = 0;
+                double readMs = 0, missMs = 0, uploadMs = 0;
+                uint64_t slowestFingerprint = 0, slowestBytes = 0;
+                double slowestMs = 0;
+                // Background reads collected this frame (not render-thread time).
+                uint32_t arrived = 0;
+                uint64_t arrivedBytes = 0;
+                double arrivedMs = 0, longestWaitMs = 0;
+            } replacementCost;
+            // LOTEX2 files are read on a worker thread: on a hard disk the first
+            // frame of a map read ~270 MB on the render thread, over a second.
+            // A texture keeps its original until the payload arrives and its next
+            // lookup re-creates it. LO_MODS_TEXTURE_SYNC=1 reads in GetTexture.
+            bool textureReplacementSync = false;
+            struct ReplacementRead
+            {
+                uint64_t fingerprint = 0;
+                uint32_t format = 0, width = 0, height = 0;
+                bool blockCompressed = true;
+                std::chrono::steady_clock::time_point queued;
+                std::optional<modding::TextureData> data;
+                std::string error;
+                bool bcSkipped = false;
+                double ms = 0;
+            };
+            struct ReplacementReader
+            {
+                std::mutex mutex;
+                std::condition_variable wake;
+                std::deque<ReplacementRead> queue, done;
+                std::thread thread;
+                bool stop = false;
+                void Run()
+                {
+                    std::unique_lock lock(mutex);
+                    for (;;)
+                    {
+                        wake.wait(lock, [&] { return stop || !queue.empty(); });
+                        if (stop) return;
+                        ReplacementRead read = std::move(queue.front());
+                        queue.pop_front();
+                        lock.unlock();
+                        const auto start = std::chrono::steady_clock::now();
+                        // Every level must fit the upload ring with the draw headroom free.
+                        read.data = modding::ReadTextureReplacement(read.fingerprint, read.format, read.width, read.height,
+                            kUploadRingSize - kUploadHeadroom, &read.error, read.blockCompressed, &read.bcSkipped);
+                        read.ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+                        lock.lock();
+                        done.push_back(std::move(read));
+                    }
+                }
+                ~ReplacementReader()
+                {
+                    { std::lock_guard lock(mutex); stop = true; queue.clear(); }
+                    wake.notify_all();
+                    if (thread.joinable()) thread.join();
+                }
+            } replacementReader;
+            // Render thread only. Queued: requested, result not collected yet.
+            // Ready: read, waiting for its texture's next lookup (dropped after
+            // kReplacementReadyFrames). Missing: no file for the fingerprint.
+            static constexpr uint64_t kReplacementReadyFrames = 300;
+            struct ReadyReplacement { modding::TextureData data; uint32_t format, width, height; uint64_t frame; };
+            std::unordered_set<uint64_t> replacementsQueued, replacementsMissing;
+            std::unordered_map<uint64_t, ReadyReplacement> replacementsReady;
             uint64_t controllerAtlasFamilyFrame = ~0ull;
             bool controllerAtlasPlayStationFamily = false;
             uint64_t controllerAtlasTraceFrame = ~0ull;
@@ -2249,6 +2322,8 @@ namespace gpu::renderer
                 if (!readback) return InitFailure("readback.create", kReadbackSize);
                 resolveReadback = getenv("LO_RESOLVE_READBACK") != nullptr;
                 textureRevalidate = getenv("LO_TEXTURE_STATIC") == nullptr;
+                if (const char* sync = getenv("LO_MODS_TEXTURE_SYNC"); sync && *sync && strcmp(sync, "0") != 0)
+                    textureReplacementSync = true;
                 if (const char* path = getenv("LO_TEXTURE_FINGERPRINT_LOG"); path && *path && !textureFingerprintLog) {
                     textureFingerprintLog = std::fopen(path, "w");
                     if (textureFingerprintLog)
@@ -4615,6 +4690,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (offset + size + keepFree > kUploadRingSize)
                 {
                     // Out of space mid-frame: finish what we have and start over.
+                    uploadRingRewinds++;
                     if (!Flush() || !Begin()) return UINT64_MAX;
                     offset = 0;
                     Gpu().uploadGeneration = ++uploadGenerations; // Rewound even if Begin did not recycle the slot.
@@ -6973,15 +7049,43 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 return false;
             }
 
-            std::optional<modding::TextureData> LoadTextureReplacement(uint64_t fingerprint, uint32_t format, uint32_t width, uint32_t height)
+            // A notice for each frame whose replacements held the render thread
+            // for 4 ms or more (half a 120 fps frame), so hitches can be lined
+            // up with mod file reads and uploads without Debug log.
+            void ReportReplacementCost()
             {
-                if (textureReplacementFailures.contains(fingerprint)) return {};
-                std::string error;
-                bool bcSkipped = false;
-                // Every level must fit the upload ring with the draw headroom free.
-                // Without device BC (textureBcFallback) DDS payloads stay unread.
-                auto data = modding::ReadTextureReplacement(fingerprint, format, width, height,
-                    kUploadRingSize - kUploadHeadroom, &error, !textureBcFallback, &bcSkipped);
+                auto& c = replacementCost;
+                if (const double ms = c.readMs + c.missMs + c.uploadMs; ms >= 4.0)
+                    LOG_NOTICE("[mods] frame {}: texture replacements took {:.1f} ms: {} read ({:.1f} MB in {:.1f} ms, slowest {:016x} {:.1f} MB in {:.1f} ms), "
+                        "{} without a file ({:.1f} ms), {} uploaded ({:.1f} ms, {} upload ring flushes)",
+                        frame, ms, c.reads, c.readBytes / 1048576.0, c.readMs, c.slowestFingerprint, c.slowestBytes / 1048576.0, c.slowestMs,
+                        c.misses, c.missMs, c.uploads, c.uploadMs, c.ringRewinds);
+                if (c.arrived)
+                    LOG_INFO("[mods] frame {}: {} texture replacements read in the background ({:.1f} MB in {:.1f} ms, slowest {:016x} {:.1f} MB in {:.1f} ms, longest wait {:.0f} ms), {} queued",
+                        frame, c.arrived, c.arrivedBytes / 1048576.0, c.arrivedMs, c.slowestFingerprint, c.slowestBytes / 1048576.0, c.slowestMs,
+                        c.longestWaitMs, replacementsQueued.size());
+                c = {};
+            }
+
+            static uint64_t ReplacementBytes(const modding::TextureData& data)
+            {
+                uint64_t bytes = 0;
+                for (const auto& level : data.levels) bytes += level.size();
+                return bytes;
+            }
+
+            void NoteSlowestReplacement(uint64_t fingerprint, uint64_t bytes, double ms)
+            {
+                auto& cost = replacementCost;
+                if (ms <= cost.slowestMs) return;
+                cost.slowestMs = ms;
+                cost.slowestFingerprint = fingerprint;
+                cost.slowestBytes = bytes;
+            }
+
+            // A read without a payload and with a reason keeps the original for the run.
+            void NoteReplacementFailure(uint64_t fingerprint, const std::string& error, bool bcSkipped)
+            {
                 if (bcSkipped)
                 {
                     textureReplacementFailures.insert(fingerprint);
@@ -6989,12 +7093,126 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         LOG_WARNING("[mods] BC texture replacements (LOTEX2 type 2) skipped, keeping the originals: {} (first {:016x})",
                             video::TextureCompressionBC() ? "LO_TEXTURE_BC=0" : "device has no BC support", fingerprint);
                 }
-                else if (!data && !error.empty())
+                else if (!error.empty())
                 {
                     textureReplacementFailures.insert(fingerprint);
                     LOG_WARNING("[mods] {}", error);
                 }
+            }
+
+            std::optional<modding::TextureData> LoadTextureReplacement(uint64_t fingerprint, uint32_t format, uint32_t width, uint32_t height)
+            {
+                if (textureReplacementFailures.contains(fingerprint)) return {};
+                std::string error;
+                bool bcSkipped = false;
+                // Every level must fit the upload ring with the draw headroom free.
+                // Without device BC (textureBcFallback) DDS payloads stay unread.
+                const auto start = std::chrono::steady_clock::now();
+                auto data = modding::ReadTextureReplacement(fingerprint, format, width, height,
+                    kUploadRingSize - kUploadHeadroom, &error, !textureBcFallback, &bcSkipped);
+                const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+                auto& cost = replacementCost;
+                if (data)
+                {
+                    const uint64_t bytes = ReplacementBytes(*data);
+                    cost.reads++;
+                    cost.readBytes += bytes;
+                    cost.readMs += ms;
+                    NoteSlowestReplacement(fingerprint, bytes, ms);
+                }
+                else
+                {
+                    cost.misses++; // mostly no file for this fingerprint
+                    cost.missMs += ms;
+                }
+                if (!data) NoteReplacementFailure(fingerprint, error, bcSkipped);
                 return data;
+            }
+
+            // The payload for a fresh upload of a replaceable texture, valid until
+            // the frame ends. In the background (the default) it is null until the
+            // reader has the file; the texture keeps the fingerprint meanwhile.
+            const modding::TextureData* FindTextureReplacement(HostTexture& tex, uint64_t fingerprint,
+                uint32_t format, uint32_t width, uint32_t height)
+            {
+                if (textureReplacementFailures.contains(fingerprint) || replacementsMissing.contains(fingerprint)) return nullptr;
+                auto it = replacementsReady.find(fingerprint);
+                if (it == replacementsReady.end() && textureReplacementSync)
+                {
+                    auto data = LoadTextureReplacement(fingerprint, format, width, height);
+                    if (!data)
+                    {
+                        if (!textureReplacementFailures.contains(fingerprint)) replacementsMissing.insert(fingerprint);
+                        return nullptr;
+                    }
+                    it = replacementsReady.insert_or_assign(fingerprint, ReadyReplacement{std::move(*data), format, width, height, frame}).first;
+                }
+                if (it != replacementsReady.end())
+                {
+                    // The reader checked the header against the first request.
+                    if (it->second.format != format || it->second.width != width || it->second.height != height) return nullptr;
+                    it->second.frame = frame; // textures sharing the image take it too
+                    return &it->second.data;
+                }
+                tex.replacementPending = fingerprint;
+                if (replacementsQueued.insert(fingerprint).second)
+                {
+                    auto& reader = replacementReader;
+                    {
+                        std::lock_guard lock(reader.mutex);
+                        // Without device BC (textureBcFallback) DDS payloads stay unread.
+                        reader.queue.push_back({fingerprint, format, width, height, !textureBcFallback, std::chrono::steady_clock::now()});
+                    }
+                    if (!reader.thread.joinable()) reader.thread = std::thread([&reader] { reader.Run(); });
+                    reader.wake.notify_one();
+                }
+                return nullptr;
+            }
+
+            // Whether a texture showing its original should be re-created, which
+            // takes the payload: read, or dropped unused and so requested again.
+            bool ReplacementArrived(HostTexture& tex)
+            {
+                const uint64_t fingerprint = tex.replacementPending;
+                if (replacementsQueued.contains(fingerprint)) return false;
+                if (replacementsMissing.contains(fingerprint) || textureReplacementFailures.contains(fingerprint))
+                {
+                    tex.replacementPending = 0;
+                    return false;
+                }
+                return true;
+            }
+
+            // Frame end: takes the reader's results and drops payloads no lookup
+            // used for kReplacementReadyFrames.
+            void CollectTextureReplacements()
+            {
+                std::deque<ReplacementRead> done;
+                {
+                    std::lock_guard lock(replacementReader.mutex);
+                    done.swap(replacementReader.done);
+                }
+                const auto now = std::chrono::steady_clock::now();
+                auto& cost = replacementCost;
+                for (auto& read : done)
+                {
+                    replacementsQueued.erase(read.fingerprint);
+                    if (!read.data)
+                    {
+                        if (read.bcSkipped || !read.error.empty()) NoteReplacementFailure(read.fingerprint, read.error, read.bcSkipped);
+                        else replacementsMissing.insert(read.fingerprint);
+                        continue;
+                    }
+                    const uint64_t bytes = ReplacementBytes(*read.data);
+                    cost.arrived++;
+                    cost.arrivedBytes += bytes;
+                    cost.arrivedMs += read.ms;
+                    cost.longestWaitMs = std::max(cost.longestWaitMs, std::chrono::duration<double, std::milli>(now - read.queued).count());
+                    NoteSlowestReplacement(read.fingerprint, bytes, read.ms);
+                    replacementsReady.insert_or_assign(read.fingerprint,
+                        ReadyReplacement{std::move(*read.data), read.format, read.width, read.height, frame});
+                }
+                std::erase_if(replacementsReady, [&](const auto& entry) { return frame - entry.second.frame > kReplacementReadyFrames; });
             }
 
             enum class ReplacementUpload { Uploaded, Skipped, Failed };
@@ -7304,14 +7522,16 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (it != textures.end())
                 {
                     HostTexture* cached = it->second.get();
+                    // An original whose mod replacement was read since: re-create it.
+                    const bool replacementArrived = cached->replacementPending && ReplacementArrived(*cached);
                     // Titles stream texture data in after the first draw that uses
                     // it, so a cached upload can be all zeroes forever. Re-hash the
                     // guest bytes once per frame and re-upload when they change.
-                    if (!textureRevalidate || cached->checkedFrame == frame || cached->guestBytes == 0) {
+                    if (!replacementArrived && (!textureRevalidate || cached->checkedFrame == frame || cached->guestBytes == 0)) {
                         return SelectControllerAtlas(cached, bindingInfo);
                     }
                     cached->checkedFrame = frame;
-                    bool changed = SampledGuestHash(*cached) != cached->guestHash;
+                    bool changed = replacementArrived || SampledGuestHash(*cached) != cached->guestHash;
                     if (!changed && frame >= cached->nextFullScanFrame) {
                         cached->nextFullScanFrame = frame + texture_cache::kFullScanInterval;
                         changed = FullGuestHash(*cached) != cached->guestFullHash;
@@ -7319,7 +7539,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     if (!changed) {
                         return SelectControllerAtlas(cached, bindingInfo);
                     }
-                    textureReuploads++;
+                    if (!replacementArrived) textureReuploads++;
                     Gpu().retiredTextures.push_back(std::move(it->second));
                     textures.erase(it);
                 }
@@ -7506,10 +7726,15 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 tex->guestFullHash = FullGuestHash(*tex);
                 tex->nextFullScanFrame = texture_cache::FirstFullScanFrame(frame, tex->guestAddress);
                 if (replaceable && !tex->controllerAtlasRecognized && AnyNonZero(staging.data(), rowPitch, baseRowBytes, blocksY))
-                    if (auto replacement = LoadTextureReplacement(fingerprint, format, width, height))
+                    if (const auto* replacement = FindTextureReplacement(*tex, fingerprint, format, width, height))
                     {
+                        const auto uploadStart = std::chrono::steady_clock::now();
+                        const uint64_t rewinds = uploadRingRewinds;
                         const auto uploaded = UploadTextureReplacement(*tex, *replacement, fingerprint, format, width, height,
                             uint32_t(levels.size()));
+                        replacementCost.uploads++;
+                        replacementCost.uploadMs += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - uploadStart).count();
+                        replacementCost.ringRewinds += uploadRingRewinds - rewinds;
                         if (uploaded == ReplacementUpload::Failed)
                         {
                             Gpu().retiredTextures.push_back(std::move(tex));
@@ -13196,6 +13421,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             static auto lastFrame = std::chrono::steady_clock::now();
             if (!g_renderer->Flush()) return;
             g_renderer->PublishDlssFrameOutcome();
+            g_renderer->CollectTextureReplacements();
+            g_renderer->ReportReplacementCost();
             {
                 auto& r = *g_renderer;
                 if (r.motionOptions.log && r.frame % 120 == 0) {
@@ -13289,7 +13516,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 double frameMs = std::chrono::duration<double, std::milli>(now - lastFrame).count();
                 lastFrame = now;
                 Renderer& r = *g_renderer;
-                if (frameMs > 150.0 || (r.frame % 60) == 0)
+                // LO_GPU_STATS_HITCH_MS: also log every frame slower than this.
+                static const double hitchMs = [] { const char* v = getenv("LO_GPU_STATS_HITCH_MS"); return v && *v ? std::max(1.0, atof(v)) : 150.0; }();
+                if (frameMs > hitchMs || (r.frame % 60) == 0)
                     LOG_INFO("renderer frame {}: {:.0f} ms, draws {} ({:.0f} ms: const {:.0f} sets {:.0f} vertex {:.0f} bind {:.0f} index {:.0f} record {:.0f} rt {:.0f} taa {:.0f} nested_flush {:.0f} shader_lookup {:.0f} pipeline_lookup {:.0f} scene_copy {:.0f}), shaders {} ({:.0f} ms), pipelines {} ({:.0f} ms), textures {} ({:.0f} ms, {} KB), vertex uploads {}+{} ({} KB, arena {} MB), resolves {} ({:.0f} ms), gpu wait {:.0f} ms",
                         r.frame, frameMs, r.drawsThisFrame, r.tDraw, r.tConst, r.tSets, r.tVertex, r.tBind, r.tIndex, r.tRecord, r.tRt, r.tTaa, r.tNestedFlush, r.tShaderLookup, r.tPipelineLookup, r.tSceneCopy, r.nShader, r.tShader, r.nPipeline, r.tPipeline, r.nTexture, r.tTexture, r.texBytes / 1024,
                         r.vertexUploads, r.vertexRevalidations, r.vertexBytesUploaded / 1024, r.Gpu().arenaOffset >> 20, r.nResolve, r.tResolve, r.tFlush);
