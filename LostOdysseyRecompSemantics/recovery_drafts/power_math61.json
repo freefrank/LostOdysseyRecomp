@@ -1,0 +1,89 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Complete guest binary64 power orchestration and polynomial core.",
+  "entries": [
+    {
+      "address": "82B7E668",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.175.cpp",
+      "source_line": 16979,
+      "instruction_count": 27,
+      "body_sha256": "c4c625159e63ce98058a9ddde25a5b5090c191d2ead2847583fff0f0405ee74e",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82B822F0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.176.cpp",
+      "source_line": 5619,
+      "instruction_count": 6,
+      "body_sha256": "8dc71e21b22e45a3b5574ff4c13623ef001c45cc5a5e87059731e7ac66ac4b4a",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82B822C8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.176.cpp",
+      "source_line": 5592,
+      "instruction_count": 10,
+      "body_sha256": "3a95b04554beadcd3c3080a5d0e9f8d7bbcff0f0c6d5fd619b8669ea3eeaf8b3",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82B823C8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.176.cpp",
+      "source_line": 5748,
+      "instruction_count": 57,
+      "body_sha256": "9f05526e99b1f8d2df41dd1cfccfd10c00272b48e2f1095aa19067ec30de2371",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82B7E6D8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.175.cpp",
+      "source_line": 17045,
+      "instruction_count": 98,
+      "body_sha256": "3779d7bfbabbeacfc09a0c2bc912d4aabac61bc442878da067c115b3c022bd83",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82301A68",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.4.cpp",
+      "source_line": 21475,
+      "instruction_count": 95,
+      "body_sha256": "7939b0bb1bc2340954ad5d6a32f96f4649a46d9acdaaf70cf835475b2b5e2d83",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82B7E860",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.175.cpp",
+      "source_line": 17274,
+      "instruction_count": 319,
+      "body_sha256": "50272f2a7d8e2b0622f85cd6e91ec5bc43f4163468d2d9ef60724124fedbfd79",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82B7DEF0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.175.cpp",
+      "source_line": 15730,
+      "instruction_count": 13,
+      "body_sha256": "531afb8a7545d705ade0dc90011b76cb281a87b831fedcf20c5d80a7a01d6121",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82B7E860"
+    ],
+    "header": "include/lo_semantics/power_math61.h",
+    "source": "src/power_math61.cpp",
+    "oracle": "tests/power_math61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 12,
+    "library_validated": true,
+    "case_scope": "Complete actual original graph including parity, decomposition, exponent, log, special-power and copysign leaves. Full72/RAM/CSR plus independent power/domain/sign results and exact cooking2^-22. External1440-byte LO_POWER_CONSTANTS. No exhaustive IEEE matrix or gameplay claim.",
+    "platform": "Linux x64 Clang19; pinned PPC; mmap guest overlay"
+  }
+}

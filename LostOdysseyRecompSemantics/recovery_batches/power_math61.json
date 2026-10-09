@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "power-math61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/power_math61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/power_math61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\nvoid PowerSave(unsigned,PPCContext&,std::uint8_t*);\nvoid PowerRestore(unsigned,PPCContext&,std::uint8_t*);\n#define __savefpr_25(c,b) PowerSave(25,c,b)\n#define __restfpr_25(c,b) PowerRestore(25,c,b)\nPPC_FUNC_IMPL(__imp__sub_82B7E668);\n#define sub_82B7E668 __imp__sub_82B7E668\nPPC_FUNC_IMPL(__imp__sub_82B822F0);\n#define sub_82B822F0 __imp__sub_82B822F0\nPPC_FUNC_IMPL(__imp__sub_82B822C8);\n#define sub_82B822C8 __imp__sub_82B822C8\nPPC_FUNC_IMPL(__imp__sub_82B823C8);\n#define sub_82B823C8 __imp__sub_82B823C8\nPPC_FUNC_IMPL(__imp__sub_82B7E6D8);\n#define sub_82B7E6D8 __imp__sub_82B7E6D8\nPPC_FUNC_IMPL(__imp__sub_82301A68);\n#define sub_82301A68 __imp__sub_82301A68\nPPC_FUNC_IMPL(__imp__sub_82B7E860);\n#define sub_82B7E860 __imp__sub_82B7E860\nPPC_FUNC_IMPL(__imp__sub_82B7DEF0);\n#define sub_82B7DEF0 __imp__sub_82B7DEF0\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/power_math61.cpp"
+      ]
+    }
+  ]
+}
