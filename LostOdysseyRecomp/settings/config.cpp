@@ -35,6 +35,7 @@ Config Validate(Config value)
     if (value.anisotropicFiltering != 0 && value.anisotropicFiltering != 2 && value.anisotropicFiltering != 4 &&
         value.anisotropicFiltering != 8 && value.anisotropicFiltering != 16) value.anisotropicFiltering = 0;
     value.depthOfFieldPercent = std::min(value.depthOfFieldPercent, 100u);
+    value.cullingPercent = std::min(value.cullingPercent, 200u);
     value.vibrationPercent = std::min(value.vibrationPercent, 100u);
     if (value.buttonPrompts > 2) value.buttonPrompts = 0;
     value.hdrPaperWhiteNits = std::clamp(value.hdrPaperWhiteNits, 80u, 400u);
@@ -193,6 +194,8 @@ Config Read()
             value.motionBlur = number == 1;
         else if (key == "dynamic_shadows" && number <= 1)
             value.dynamicShadows = number == 1;
+        else if (key == "culling")
+            value.cullingPercent = number;
         else if (key == "vibration")
             value.vibrationPercent = number;
         else if (key == "button_prompts")
@@ -373,6 +376,7 @@ static bool WriteConfig(const Config &value)
            << "\nbloom=" << (value.bloom ? 1 : 0)
            << "\nmotion_blur=" << (value.motionBlur ? 1 : 0)
            << "\ndynamic_shadows=" << (value.dynamicShadows ? 1 : 0)
+           << "\nculling=" << value.cullingPercent
            << "\nvibration=" << value.vibrationPercent
            << "\nbutton_prompts=" << value.buttonPrompts
             << "\nupscaler=" << uint32_t(value.upscaler) << "\ndlss_quality=" << uint32_t(value.dlssQuality)

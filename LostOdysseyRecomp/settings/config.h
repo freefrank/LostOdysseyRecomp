@@ -92,6 +92,9 @@ struct Config
     bool bloom = true; // Tone-map bloom. Applied live by the renderer.
     bool motionBlur = true; // The game's motion blur pass. Applied live.
     bool dynamicShadows = true; // The game's shadow-map rendering. Applied live.
+    // View-frustum culling, 0..200 in steps of 10: 100 retail, lower draws
+    // objects at the screen edges longer, higher hides them sooner. Applied live.
+    uint32_t cullingPercent = 100;
     gpu::upscaling::Upscaler upscaler = gpu::upscaling::Upscaler::Off;
     gpu::upscaling::DlssQuality dlssQuality = gpu::upscaling::DlssQuality::Quality;
     gpu::upscaling::FsrQuality fsrQuality = gpu::upscaling::FsrQuality::Quality;
