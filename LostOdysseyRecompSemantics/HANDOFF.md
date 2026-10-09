@@ -28,8 +28,15 @@ finite results. The lower merge is complete, with no algorithm stub. Empty
 selection preserves output; merge reads before writes, while the first-box
 copy retains original coordinate-by-coordinate order. Complete library builds.
 
-Next: recover unresolved concrete split targets and strategy binding from their
-pinned original bodies. BD5910's host FP exception
+Directly recovered `tree_flatten36_61` (BDBC18), the strategy-binding lower
+that flattens 40-byte source tree nodes into 36-byte center/extent records with
+explicit depth-first child indices, leaf tags and descendant counts. Three
+recursive original-body cases pass Full72/RAM/host CSR and independent layout
+assertions; the complete library builds. All storage is borrowed; no allocation,
+algorithm callback stub or new failure guard is introduced.
+
+Next: recover unresolved concrete split targets and the BDBD90 strategy binder,
+now that its recursive BDBC18 lower is available. BD5910's host FP exception
 flag difference remains an independent unresolved draft.
 
 ## Independent corpus continuation — 2026-10-09

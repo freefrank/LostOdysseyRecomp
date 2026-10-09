@@ -1,0 +1,34 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Complete recursively composed original node flattener; private body excluded.",
+  "entries": [
+    {
+      "address": "82BDBC18",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 29225,
+      "instruction_count": 80,
+      "body_sha256": "e3cad74f60eca3993d902d866de789a3fc0f738e50d3986c3d90932b3bc627b0",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BDBC18"
+    ],
+    "header": "include/lo_semantics/tree_flatten36_61.h",
+    "source": "src/tree_flatten36_61.cpp",
+    "oracle": "tests/tree_flatten36_61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 3,
+    "library_validated": true,
+    "platform": "Linux x64 Clang 19.1.7, regenerated pinned PPC and mmap guest overlay",
+    "case_scope": "Leaf, two-leaf branch and nested branch. Genuine recursive original body; Full72/RAM/host CSR and independent center/extent, child index, counter, untouched leaf fields and descendant-count assertions. No callback stubs or allocations. Valid finite acyclic trees only; alias/fault/nonfinite/runtime behavior not accepted.",
+    "mapping_limit": "Historical catalog membership unavailable; no baseline mapping credit."
+  }
+}

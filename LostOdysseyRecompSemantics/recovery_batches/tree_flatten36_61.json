@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "tree-flatten36-61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/tree_flatten36_61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/tree_flatten36_61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nvoid FlattenSave(PPCContext&,std::uint8_t*);\nvoid FlattenRestore(PPCContext&,std::uint8_t*);\n#define __savegprlr_27(c,b) FlattenSave(c,b)\n#define __restgprlr_27(c,b) FlattenRestore(c,b)\n#define sub_82BDBC18 __imp__sub_82BDBC18\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/tree_flatten36_61.cpp"
+      ]
+    }
+  ]
+}
