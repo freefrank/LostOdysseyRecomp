@@ -1,6 +1,6 @@
 {
   "schema": "semantic-recovery-draft-v1",
-  "scope": "Incremental hull vector/visibility primitives, eligible support points, edge/face registry, neighbor stitching and face extrusion.",
+  "scope": "Incremental convex hull construction: guest sine/cosine polynomial, perturbed support, simplex, face visibility/adjacency/extrusion and cleanup.",
   "entries": [
     {
       "address": "82B9F928",
@@ -105,6 +105,46 @@
       "instruction_count": 156,
       "body_sha256": "e0329ef7629b89f27f305e927ac40447d3603e854f66f5604b42801682d6c168",
       "status": "logical_implementation_compile_validated"
+    },
+    {
+      "address": "822A2F08",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.1.cpp",
+      "source_line": 3733,
+      "instruction_count": 54,
+      "body_sha256": "fcb4cfe7155a60d330633a8cc65afd132be257ab18ca47bb415439dfec263b17",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "822A2FE0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.1.cpp",
+      "source_line": 3855,
+      "instruction_count": 52,
+      "body_sha256": "cac86d0ca6517933a9287b8b2d966a1dde97bcc9c2397830c6cf4f0a66b818e5",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82BA2010",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 17351,
+      "instruction_count": 156,
+      "body_sha256": "f39bbc5f61275d5753cad254351ef63355ec24cd90357ead1b62cc38bc397fb5",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82BA3BE0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 21299,
+      "instruction_count": 309,
+      "body_sha256": "7360c44982de19a0993f21b14c77fcea402788ea9143b282eea98f3594516350",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82BA40B8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 22032,
+      "instruction_count": 628,
+      "body_sha256": "f0e112330f0bb9608d6f732b9f89f8ab68e31be6023ecddf6e3964dd9b08cccd",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -121,7 +161,12 @@
       "82BA3868",
       "82BA1BC0",
       "82BA38E0",
-      "82BA3970"
+      "82BA3970",
+      "822A2F08",
+      "822A2FE0",
+      "82BA2010",
+      "82BA3BE0",
+      "82BA40B8"
     ],
     "header": "include/lo_semantics/mesh_hull_incremental61.h",
     "source": "src/mesh_hull_incremental61.cpp",
@@ -134,8 +179,9 @@
     "library_validated": true,
     "runtime_validated": false,
     "complete": false,
-    "focused_smoke_paths": 4,
-    "case_scope": "Triangle normal/visibility/noncoplanarity, undirected edge lookup/eligible support, face registry/max-distance selection and tetrahedron-face extrusion with six resulting faces/reciprocal neighbor links/complete ownership cleanup. Other helper branches compiled/source-reviewed. No Full72 or bitwise floating-point equivalence, nonfinite matrix, allocation-fault matrix or gameplay claim.",
-    "remaining_boundary": "B9F928 zero-vector diagnostic keeps accepted guest 82B85300 as CallDirect; incremental main BA40B8 still not recovered."
+    "focused_smoke_paths": 8,
+    "case_scope": "Prior vector/visibility, edge/support, registry and extrusion paths; finite sine/cosine and tetrahedron simplex; full plain tetrahedron and cube hulls (4 and 12 faces), plus BA5CF8 normalized cube preparation/output packing (8 points, 12 faces, 36 indices). Plain tetrahedron checks preserved GPR14..31, stack and LR. All retained output allocations explicitly released. No Full72, bitwise FP, nonfinite matrix, allocation-fault matrix or gameplay claim.",
+    "remaining_boundary": "Zero-vector diagnostic 82B85300 remains an explicit accepted guest boundary. Inflated hull is separately pending in preprocess.",
+    "private_constants": "LO_HULL_INCREMENTAL_CONSTANTS: 188 private bytes: 120@83214D80, 8@83215508, 8@82000F28, then 4 bytes each at 82000DE0,82000B7C,82000E44,82000DC0,820D57F0,820009C8,82000D7C,82000B58,822183E8,82218644,82000E40,82000D6C,82000DA4. Never publish extracted data."
   }
 }

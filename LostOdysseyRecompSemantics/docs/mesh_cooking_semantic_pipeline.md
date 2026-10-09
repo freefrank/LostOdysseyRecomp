@@ -269,3 +269,8 @@ BA5CF8 now composes concrete normalization, epsilon deduplication, degenerate ei
 ### Incremental hull primitives
 
 Normals, visibility/coplanarity predicates, eligible support search, face registration/selection, edge lookup and neighbor stitching/extrusion are now implemented in mesh_hull_incremental61. Focused tetrahedron extrusion checks six resulting faces, reciprocal adjacency and complete tracked cleanup. Main hull generation and perturbed support/simplex selection remain pending; no bitwise floating-point or gameplay acceptance is asserted.
+
+
+### Plain incremental hull composition
+
+BA40B8 now composes perturbed support/simplex selection with live face extrusion and repair. BA4A88 has no remaining algorithm callback in plain mode; BA5CF8 plain cube preparation and packing execute through concrete helpers. Focused tetrahedron/cube results and ownership cleanup pass. Guest trig polynomials read private guest coefficients. Inflated modes still call BA4BF8/BA5480. Full gameplay and bitwise floating-point equivalence remain unclaimed.

@@ -119,6 +119,33 @@ void Check() {
     constexpr float xyz[]{0, 0, 0, 2, 0, 0, 0, 1, 0, 0, 0, 1};
     for (unsigned i = 0; i < 12; ++i)
         f(Positions + 4 * i, xyz[i]);
+    const char *bundle = std::getenv("LO_HULL_INCREMENTAL_CONSTANTS");
+    if (!bundle)
+        throw std::runtime_error("hull incremental constants required");
+    std::ifstream privateConstants(bundle, std::ios::binary);
+    std::array<unsigned char, 188> data{};
+    privateConstants.read(reinterpret_cast<char *>(data.data()), data.size());
+    if (privateConstants.gcount() != 188)
+        throw std::runtime_error("hull incremental constants size");
+    unsigned offset = 0;
+    for (auto region : std::array<test::Region, 16>{{{0x83214d80, 120},
+                                                     {0x83215508, 8},
+                                                     {0x82000f28, 8},
+                                                     {0x82000de0, 4},
+                                                     {0x82000b7c, 4},
+                                                     {0x82000e44, 4},
+                                                     {0x82000dc0, 4},
+                                                     {0x820d57f0, 4},
+                                                     {0x820009c8, 4},
+                                                     {0x82000d7c, 4},
+                                                     {0x82000b58, 4},
+                                                     {0x822183e8, 4},
+                                                     {0x82218644, 4},
+                                                     {0x82000e40, 4},
+                                                     {0x82000d6c, 4},
+                                                     {0x82000da4, 4}}})
+        for (unsigned i = 0; i < region.size; ++i)
+            m.WriteU8(region.base + i, data[offset++]);
     auto st = sort_engine61_oracle::Initial(0);
     auto call = [&](unsigned e, std::initializer_list<unsigned> args) {
         unsigned j = 3;
@@ -159,6 +186,22 @@ void Check() {
     call(0x82ba1290, {Positions, 4, Input, Count});
     if (st.r[3] != 1)
         throw std::runtime_error("support extremum");
+    st.fpr_bits[1] = std::bit_cast<std::uint64_t>(.5);
+    call(0x822a2fe0, {});
+    if (std::abs(std::bit_cast<double>(st.fpr_bits[1]) - std::sin(.5)) > 1e-12)
+        throw std::runtime_error("guest sine polynomial");
+    st.fpr_bits[1] = std::bit_cast<std::uint64_t>(.5);
+    call(0x822a2f08, {});
+    if (std::abs(std::bit_cast<double>(st.fpr_bits[1]) - std::cos(.5)) > 1e-12)
+        throw std::runtime_error("guest cosine polynomial");
+    for (unsigned i = 0; i < 4; ++i)
+        m.WriteU32(0x52000 + 4 * i, 1);
+    call(0x82ba3be0, {0x53000, Positions, 4, Count});
+    std::set<unsigned> simplex;
+    for (unsigned i = 0; i < 4; ++i)
+        simplex.insert(m.ReadU32(0x53000 + 4 * i));
+    if (simplex != std::set<unsigned>{0, 1, 2, 3})
+        throw std::runtime_error("tetrahedron simplex support");
     m.WriteU32(0x832df548, 0x50000);
     m.WriteU32(0x50000, 0x51000);
     m.WriteU32(0x51008, Allocate | 1);
@@ -229,13 +272,69 @@ void Check() {
     (void)mesh_hull_preprocess61::Apply(0x82ba0d68, m, env.Deps(), st);
     if (!env.guest.live.empty())
         throw std::runtime_error("extrusion cleanup");
+    const auto saved = st;
+    st.r[3] = Positions;
+    st.r[4] = 4;
+    st.r[5] = Count;
+    st.r[6] = Count + 4;
+    st.r[7] = 0;
+    if (!mesh_hull_preprocess61::Apply(0x82ba4a88, m, env.Deps(), st) || st.r[3] != 1 ||
+        m.ReadU32(Count + 4) != 4)
+        throw std::runtime_error("plain tetrahedron hull");
+    for (unsigned r = 14; r < 32; ++r)
+        if (st.r[r] != saved.r[r])
+            throw std::runtime_error("hull preserved register");
+    if (st.r[1] != saved.r[1] || st.lr != saved.lr)
+        throw std::runtime_error("hull stack/link preservation");
+    st.r[4] = m.ReadU32(Count);
+    env.guest.CallIndirect(Free, m, st);
+    if (!env.guest.live.empty())
+        throw std::runtime_error("plain hull cleanup");
+    for (unsigned i = 0; i < 8; ++i)
+        for (unsigned axis = 0; axis < 3; ++axis)
+            f(Positions + 12 * i + 4 * axis, float((i >> axis) & 1u));
+    st.r[3] = Positions;
+    st.r[4] = 8;
+    st.r[5] = Count;
+    st.r[6] = Count + 4;
+    st.r[7] = 0;
+    if (!mesh_hull_preprocess61::Apply(0x82ba4a88, m, env.Deps(), st) || st.r[3] != 1 ||
+        m.ReadU32(Count + 4) != 12)
+        throw std::runtime_error("plain cube hull");
+    st.r[4] = m.ReadU32(Count);
+    env.guest.CallIndirect(Free, m, st);
+    if (!env.guest.live.empty())
+        throw std::runtime_error("cube hull cleanup");
+    f(0x820a6b8c, 1e-6f);
+    f(0x82000e10, .01f);
+    f(0x82000d64, -std::numeric_limits<float>::max());
+    f(0x82000e0c, std::numeric_limits<float>::max());
+    m.WriteU32(Input, 1);
+    m.WriteU32(Input + 4, 8);
+    m.WriteU32(Input + 8, Positions);
+    m.WriteU32(Input + 12, 12);
+    f(Input + 16, .001f);
+    m.WriteU32(Input + 24, 0);
+    st.r[3] = Owner;
+    st.r[4] = Input;
+    st.r[5] = Polygons;
+    if (!mesh_hull_preprocess61::Apply(0x82ba5cf8, m, env.Deps(), st) || st.r[3] != 0 ||
+        m.ReadU32(Polygons + 4) != 8 || m.ReadU32(Polygons + 12) != 12 ||
+        m.ReadU32(Polygons + 16) != 36)
+        throw std::runtime_error("prepared cube output");
+    for (auto offset : {8u, 20u}) {
+        st.r[4] = m.ReadU32(Polygons + offset);
+        env.guest.CallIndirect(Free, m, st);
+    }
+    if (!env.guest.live.empty())
+        throw std::runtime_error("prepared cube cleanup");
 }
 } // namespace incremental_smoke
 int main() {
     try {
         incremental_smoke::Check();
-        std::puts("PASS incremental hull vector/visibility, edge/support, face registry and "
-                  "reciprocal extrusion paths");
+        std::puts("PASS incremental primitives, support/simplex, plain tetrahedron/cube hulls and "
+                  "prepared cube output");
         return 0;
     } catch (const std::exception &e) {
         std::fprintf(stderr, "%s\n", e.what());

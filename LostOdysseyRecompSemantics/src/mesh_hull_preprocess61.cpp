@@ -1,4 +1,5 @@
 #include "lo_semantics/mesh_hull_preprocess61.h"
+#include "lo_semantics/mesh_hull_incremental61.h"
 #include "lo_semantics/crt_copy_full_context.h"
 #include "lo_semantics/crt_reader_chain61.h"
 #include "lo_semantics/recovery_abi.h"
@@ -29,7 +30,7 @@ struct Preprocess {
         for (unsigned i = 14; i < 32; ++i)
             recovery_abi::WriteU64(m, Address(s.r[1] - 16 - 8 * (31 - i)), s.r[i]);
         auto old = s.r[1];
-        s.r[1] -= 256;
+        s.r[1] -= 512;
         Word(s.r[1], old);
         if (s.cached_fp_control & 0x8040u) {
             s.cached_fp_control &= ~0x8040u;
@@ -37,7 +38,7 @@ struct Preprocess {
         }
     }
     void Leave() {
-        s.r[1] += 256;
+        s.r[1] += 512;
         for (unsigned i = 14; i < 32; ++i)
             s.r[i] = recovery_abi::ReadU64(m, Address(s.r[1] - 16 - 8 * (31 - i)));
         s.r[12] = Word(s.r[1] - 8);
@@ -228,7 +229,7 @@ struct Preprocess {
         s.r[4] = count;
         s.r[5] = limit;
         s.lr = 0x82ba4aa4u;
-        d.lifetime.guest.CallDirect(0x82ba40b8u, m, s);
+        (void)mesh_hull_incremental61::Apply(0x82ba40b8u, m, d, s);
         if (Address(s.r[3]) == 0)
             return false;
         constexpr std::uint32_t global = 0x832dc420u;
