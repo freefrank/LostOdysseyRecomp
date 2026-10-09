@@ -2,7 +2,12 @@
 #include "lo_semantics/tree_box_bounds61.h"
 #include "lo_semantics/tree_box_centroid61.h"
 #include "lo_semantics/tree_compact_strategy61.h"
+#include "lo_semantics/tree_flat_load61.h"
+#include "lo_semantics/tree_flat_write61.h"
+#include "lo_semantics/tree_quantized_load61.h"
 #include "lo_semantics/tree_quantized_strategy61.h"
+#include "lo_semantics/tree_quantized_write61.h"
+#include "lo_semantics/tree_scalar_write61.h"
 #include "lo_semantics/tree_split_policy61.h"
 #include "lo_semantics/tree_strategy_release61.h"
 #include "lo_semantics/tree_triangle_bounds61.h"
@@ -40,6 +45,21 @@ bool Apply(GuestAddress entry, GuestMemory &memory, Dependencies deps, Registers
     case 0x82bddd38u:
     case 0x82bddd98u:
         return tree_strategy_release61::Apply(entry, memory, deps.guest, state);
+    case 0x82bdbed8u:
+    case 0x82bdb350u:
+        return tree_flat_load61::Apply(entry, memory, deps.guest, state);
+    case 0x82bdc9f0u:
+    case 0x82bdb7f8u:
+        return tree_quantized_load61::Apply(entry, memory, deps, state);
+    case 0x82bdc838u:
+    case 0x82bdb660u:
+        return tree_quantized_write61::Apply(entry, memory, {deps.guest, deps.fp}, state);
+    case 0x82bdd868u:
+    case 0x82bddb20u:
+        return tree_flat_write61::Apply(entry, memory, {deps.guest, deps.fp}, state);
+    case 0x82bd7d58u:
+    case 0x82bd7e18u:
+        return tree_scalar_write61::Apply(entry, memory, {deps.guest, deps.fp}, state);
     default:
         return false;
     }

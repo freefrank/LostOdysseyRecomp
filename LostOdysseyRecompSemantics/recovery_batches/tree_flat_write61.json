@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "tree-flat-write61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/tree_flat_write61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/tree_flat_write61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\n#include <cstdint>\nvoid FlatWriteLower(std::uint32_t,PPCContext&,std::uint8_t*);\n#define sub_82BD1050(c,b) FlatWriteLower(0x82bd1050u,c,b)\n#define sub_82BD10D8(c,b) FlatWriteLower(0x82bd10d8u,c,b)\nvoid FlatWriteSave(unsigned,PPCContext&,std::uint8_t*);\nvoid FlatWriteRestore(unsigned,PPCContext&,std::uint8_t*);\n#define __savegprlr_25(c,b) FlatWriteSave(25,c,b)\n#define __restgprlr_25(c,b) FlatWriteRestore(25,c,b)\n#define sub_82BD7D58 __imp__sub_82BD7D58\n#define sub_82BD7E18 __imp__sub_82BD7E18\n#define sub_82BD1160(c,b) FlatWriteLower(0x82bd1160u,c,b)\n#define __savegprlr_26(c,b) FlatWriteSave(26,c,b)\n#define __restgprlr_26(c,b) FlatWriteRestore(26,c,b)\n#define __savegprlr_27(c,b) FlatWriteSave(27,c,b)\n#define __restgprlr_27(c,b) FlatWriteRestore(27,c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/tree_flat_write61.cpp"
+      ]
+    }
+  ]
+}

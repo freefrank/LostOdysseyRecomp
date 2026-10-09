@@ -1,3 +1,7 @@
+## Root direct continuation: complete tree format codecs (2026-10-09)
+
+`tree_flat_write61` adds D868/DB20 output for full36-byte and compact32-byte float nodes, retaining FP staging and optional word-endian conversion. Four composed-original output/scalar cases pass Full72/RAM/host CSR and independent stream/source assertions. Concrete callback dispatch now also exposes every recovered read/write/scalar route. `docs/tree_semantic_pipeline.md` documents all four layouts, topology distinctions, ownership/failure ordering and Rust migration boundaries. Full Clang library passes. No runtime hooks or baseline mapping changes.
+
 ## Root direct continuation: all four concrete mesh strategies (2026-10-09)
 
 The mesh callback adapter now connects full/compact and float/quantized binders plus all strategy cleanup/deleting routes. Four nine-triangle integrations pass original-upper/shared-recovered-lower Full72/RAM/host CSR/callback/live ownership comparisons and independent representation topology/count assertions. Each then runs recovered mesh teardown: all tracked allocations release and owner storage slots clear. Three earlier borrowed-service cases remain passing. Full library passes; adapter/integration adds no addresses, runtime hooks or gameplay acceptance.

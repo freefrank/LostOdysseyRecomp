@@ -1,0 +1,51 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Full and compact flat-node output with actual original scalar word adapter and recovered shared append lowers.",
+  "entries": [
+    {
+      "address": "82BD7D58",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 19798,
+      "instruction_count": 22,
+      "body_sha256": "d02ce220f0b939afb0b97b225dbac3dafd68d63a522d3a7e7903c1ab5f69931e",
+      "status": "already_validated_composed_lower"
+    },
+    {
+      "address": "82BDD868",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 33419,
+      "instruction_count": 120,
+      "body_sha256": "5134fec696c98367b72cf4239f500675098011efcf08cbe4594cc066cdc52d20",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BDDB20",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 33816,
+      "instruction_count": 110,
+      "body_sha256": "a3687c9fe9f6411718c7cbc2f048452d88f318b1f59a1285189a2195471139ec",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BDD868",
+      "82BDDB20"
+    ],
+    "header": "include/lo_semantics/tree_flat_write61.h",
+    "source": "src/tree_flat_write61.cpp",
+    "oracle": "tests/tree_flat_write61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 4,
+    "library_validated": true,
+    "case_scope": "Native/swapped two-node streams for 32/36-byte records. Full original output and scalar adapter, shared actual word/block append lowers. Full72/RAM/host CSR and independent count, payload, unchanged source. Finite spare-capacity ordinary RAM only.",
+    "platform": "Linux x64 Clang 19.1.7; pinned regenerated PPC; mmap guest overlay",
+    "mapping_limit": "Historical catalog membership unverified; no baseline mapping credit."
+  }
+}
