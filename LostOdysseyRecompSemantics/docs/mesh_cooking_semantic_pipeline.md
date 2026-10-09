@@ -206,3 +206,7 @@ BB8580 is connected to the stable deduplicator. It copies input xyz to variable 
 ### Near-degenerate face repair
 
 BB88A8 now supplies the area-validation and shortest-edge-collapse gate used by convex construction. Repair rewrites indices and removes repeated-index triangles via tail swap; it does not move point coordinates. It refuses to continue with at most four surviving faces. Seven new original-chain cases pass; complete convex hull construction remains pending.
+
+### Point-cloud convex construction
+
+BBA028 now composes deduplication, deterministic guest perturbation, tetrahedral cavity insertion/circumspheres, hull triangle extraction, used-vertex compaction, orientation and area repair, polygon derivation, centroid and convexity. Its intermediate point/cell/face allocations are released in original order. Three focused original-upper/shared-concrete cases produce closed tetrahedron/cube hulls, including duplicate input, with zero allocations after auxiliary teardown. Private 40-byte hull constants remain external. BB3350 and upper owner orchestration still need connection; the separate indexed-input route remains.

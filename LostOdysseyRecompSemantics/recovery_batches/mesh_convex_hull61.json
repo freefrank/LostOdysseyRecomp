@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "mesh-convex-hull61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/mesh_convex_hull61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/mesh_convex_hull61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nvoid HullIndirect(std::uint32_t,PPCContext&,std::uint8_t*);\n#undef PPC_CALL_INDIRECT_FUNC\n#define PPC_CALL_INDIRECT_FUNC(t) HullIndirect((t),ctx,base)\nvoid HullLower(std::uint32_t,PPCContext&,std::uint8_t*);\nvoid HullSave(PPCContext&,std::uint8_t*);\nvoid HullRestore(PPCContext&,std::uint8_t*);\n#define __savegprlr_14 HullSave\n#define __restgprlr_14 HullRestore\n#define sub_82BD0798(c,b) HullLower(0x82bd0798u,c,b)\n#define sub_82BC2D28(c,b) HullLower(0x82bc2d28u,c,b)\n#define sub_82BC2DD0(c,b) HullLower(0x82bc2dd0u,c,b)\n#define sub_82BC38E0(c,b) HullLower(0x82bc38e0u,c,b)\n#define sub_82BB8580(c,b) HullLower(0x82bb8580u,c,b)\n#define sub_82BB86C8(c,b) HullLower(0x82bb86c8u,c,b)\n#define sub_82BB88A8(c,b) HullLower(0x82bb88a8u,c,b)\n#define sub_82BB8E88(c,b) HullLower(0x82bb8e88u,c,b)\n#define sub_82B7E504(c,b) HullLower(0x82b7e504u,c,b)\n#define sub_82B7BC40(c,b) HullLower(0x82b7bc40u,c,b)\n#define sub_82BB9AA8(c,b) HullLower(0x82bb9aa8u,c,b)\n#define sub_82BC65F8(c,b) HullLower(0x82bc65f8u,c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/mesh_convex_hull61.cpp"
+      ]
+    }
+  ]
+}

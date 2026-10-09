@@ -1,0 +1,33 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Point cloud convex hull through guest tetrahedral cavity construction, compact geometry and polygon validation.",
+  "entries": [
+    {
+      "address": "82BBA028",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 13439,
+      "instruction_count": 1055,
+      "body_sha256": "531781f80d7a66fb756f035a3c9a315f6b6253093dddd834b1cce852b013974a",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BBA028"
+    ],
+    "header": "include/lo_semantics/mesh_convex_hull61.h",
+    "source": "src/mesh_convex_hull61.cpp",
+    "oracle": "tests/mesh_convex_hull61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 3,
+    "library_validated": true,
+    "case_scope": "Original upper body with shared concrete geometry dependencies; tetrahedron, cube and duplicate cube point. Full72/RAM/CSR/callbacks/retained ownership and independent hull geometry counts. External private LO_HULL_CONSTANTS (40 bytes) and LO_MESH_MATH_CONSTANTS (184 bytes). No allocation-fault matrix or general gameplay claim. Independent closed-edge degree, polygon degree and all-input enclosure checks; shared concrete auxiliary teardown leaves zero allocations.",
+    "platform": "Linux x64 Clang19; pinned PPC; mmap guest overlay"
+  }
+}
