@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "memory-input61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/memory_input61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/memory_input61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nvoid MemoryInputCopy(PPCContext&,std::uint8_t*);\n#define sub_82B7A0B0 MemoryInputCopy\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/memory_input61.cpp"
+      ]
+    }
+  ]
+}

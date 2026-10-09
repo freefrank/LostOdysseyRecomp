@@ -1,0 +1,79 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Original borrowed cursor u8/u16/u32/f32/f64 and block reads, shared complete copy lower.",
+  "entries": [
+    {
+      "address": "82BDE550",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 35473,
+      "instruction_count": 6,
+      "body_sha256": "0a58c74f0a048d84ccb68fa94d84580722d858788344add88e5d7725f6888ac5",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BDE568",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 35490,
+      "instruction_count": 6,
+      "body_sha256": "e68b4884f50715a8c47369cb5f271e968ffc49244a57364bf84d75640a578bd3",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BDE580",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 35507,
+      "instruction_count": 6,
+      "body_sha256": "53075ac7196c64c0895eeaa22f8f79e4d1344a55b72aafa074e8604bcf29992f",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BDE598",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 35524,
+      "instruction_count": 7,
+      "body_sha256": "1a4f7ca9b01421deb640bdee54f6062ac4fde398e4a0ca97572e598012dd856c",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BDE5B8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 35546,
+      "instruction_count": 7,
+      "body_sha256": "7eb2e3da37f9f308c3e48d3f17256fa74c570d572215a959cc71ead6bf898560",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BDE5D8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 35566,
+      "instruction_count": 19,
+      "body_sha256": "394e9875e35884b2a06ad32fa8645db22339e81eca3baf80f11bb5f9b64166bf",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BDE550",
+      "82BDE568",
+      "82BDE580",
+      "82BDE598",
+      "82BDE5B8",
+      "82BDE5D8"
+    ],
+    "header": "include/lo_semantics/memory_input61.h",
+    "source": "src/memory_input61.cpp",
+    "oracle": "tests/memory_input61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 6,
+    "library_validated": true,
+    "case_scope": "One case per scalar width and block read, Full72/RAM/host CSR and independent value/cursor/result. Shared actual copy lower; no new bounds or invalid-address matrix.",
+    "platform": "Linux x64 Clang 19.1.7; pinned regenerated PPC; mmap guest overlay",
+    "mapping_limit": "Historical catalog membership unverified; no baseline mapping credit."
+  }
+}

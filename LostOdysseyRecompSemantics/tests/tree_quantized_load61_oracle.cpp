@@ -1,4 +1,5 @@
 #include "crt_full_context_oracle_fixture.h"
+#include "lo_semantics/memory_input61.h"
 #include "lo_semantics/tree_quantized_load61.h"
 namespace quant_load_oracle {
 using Registers = tree_quantized_load61::Registers;
@@ -6,6 +7,9 @@ constexpr GuestAddress Owner = 0x30000, Reader = 0x31000, Table = 0x32000, Old =
                        New = 0x34000, ReaderTable = 0x35000;
 constexpr GuestAddress Allocate = 0x2a00, Free = 0x2a04, Count = 0x2a08, Read = 0x2a0c;
 constexpr std::array<test::Region, 2> Regions{{{0, 0x120000}, {0x83216000, 0xca000}}};
+struct Native final : float_triplet_transfer::NativeServices {
+    void SetHostFpControl(std::uint32_t v) override { PPCFPSCRRegister{}.setcsr(v); }
+};
 struct Guest final : crt_close_recursive_buffer_context::GuestServices {
     unsigned mode = 0, words = 0;
     bool compact = false;
@@ -16,6 +20,11 @@ struct Guest final : crt_close_recursive_buffer_context::GuestServices {
         std::copy(snap.begin(), snap.end(), event.begin());
         event.back() = e;
         events.push_back(event);
+        if (e == 0x82bde580u || e == 0x82bde5d8u) {
+            Native native;
+            (void)memory_input61::Apply(e, m, native, s);
+            return;
+        }
         if (e == Count) {
             auto value = words++ == 0 ? 2u : std::bit_cast<std::uint32_t>(float(words));
             if (mode == 1)
@@ -42,9 +51,6 @@ struct Guest final : crt_close_recursive_buffer_context::GuestServices {
         s.cr7.eq ^= 1;
     }
 };
-struct Native final : float_triplet_transfer::NativeServices {
-    void SetHostFpControl(std::uint32_t v) override { PPCFPSCRRegister{}.setcsr(v); }
-};
 Guest *guest = nullptr;
 GuestMemory *memory = nullptr;
 void Check(unsigned mode, bool compact) {
@@ -64,6 +70,19 @@ void Check(unsigned mode, bool compact) {
         m.WriteU32(0x83216624, Table);
         m.WriteU32(Table, Allocate | 1);
         m.WriteU32(Table + 12, Free | 3);
+        if (mode == 3) {
+            constexpr GuestAddress stream = 0x36000;
+            const auto payload = compact ? 40u : 48u;
+            m.WriteU32(Reader + 4, stream);
+            m.WriteU32(ReaderTable + 12, 0x82bde580u);
+            m.WriteU32(ReaderTable + 24, 0x82bde5d8u);
+            m.WriteU32(stream, 2);
+            for (unsigned i = 0; i < payload; ++i)
+                m.WriteU8(stream + 4 + i, std::uint8_t(i + 1));
+            for (unsigned i = 0; i < 6; ++i)
+                m.WriteU32(stream + 4 + payload + 4 * i,
+                           std::bit_cast<std::uint32_t>(float(i + 2)));
+        }
     };
     seed(before);
     seed(after);
@@ -153,10 +172,11 @@ void QuantLoadRestore(PPCContext &c, std::uint8_t *) {
 }
 int main() {
     try {
-        for (unsigned mode = 0; mode < 3; ++mode)
+        for (unsigned mode = 0; mode < 4; ++mode)
             for (bool compact : {false, true})
                 quant_load_oracle::Check(mode, compact);
-        std::puts("PASS tree-quantized-load61 6 original-upper/shared-allocator cases (20/24-byte "
+        std::puts("PASS tree-quantized-load61 8 original-upper/shared-allocator cases, including "
+                  "concrete cursor reads (20/24-byte "
                   "formats)");
         return 0;
     } catch (const std::exception &e) {

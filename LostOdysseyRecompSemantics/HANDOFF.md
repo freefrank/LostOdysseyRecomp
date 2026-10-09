@@ -1,3 +1,7 @@
+## Root direct continuation: borrowed memory input (2026-10-09)
+
+`memory_input61` recovers E550/E568/E580/E598/E5B8/E5D8 scalar and block cursor reads with the actual copy lower. Six original-body cases pass Full72/RAM/host CSR and independent values/cursors. Callback dispatch exposes these reader targets; two additional 20/24-byte quantized import integrations consume count, payload and scales through concrete E580/E5D8 memory readers rather than synthetic read callbacks. The original upper shares these independently checked lowers. Eight import cases total and complete Clang library pass. No invented end-bound checks, mapping or runtime credit.
+
 ## Root direct continuation: global scratch arena (2026-10-09)
 
 `scratch_arena61` recovers E628 aligned reusable reserve, E738 counting/high-water mode and E810 scoped region/alignment switching. Original allocation/reallocation, diagnostic and global field ordering remain explicit; no new rollback or free is added. Eight composed-original cases pass Full72/RAM/callbacks and independent alignment/counting/scope-state assertions. Full Clang library passes. Global concurrency and failure paths remain unvalidated; three implementation addresses, no historical mapping/runtime credit.

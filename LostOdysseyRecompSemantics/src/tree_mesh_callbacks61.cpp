@@ -1,4 +1,5 @@
 #include "lo_semantics/tree_mesh_callbacks61.h"
+#include "lo_semantics/memory_input61.h"
 #include "lo_semantics/tree_box_bounds61.h"
 #include "lo_semantics/tree_box_centroid61.h"
 #include "lo_semantics/tree_compact_strategy61.h"
@@ -60,6 +61,13 @@ bool Apply(GuestAddress entry, GuestMemory &memory, Dependencies deps, Registers
     case 0x82bd7d58u:
     case 0x82bd7e18u:
         return tree_scalar_write61::Apply(entry, memory, {deps.guest, deps.fp}, state);
+    case 0x82bde550u:
+    case 0x82bde568u:
+    case 0x82bde580u:
+    case 0x82bde598u:
+    case 0x82bde5b8u:
+    case 0x82bde5d8u:
+        return memory_input61::Apply(entry, memory, deps.fp, state);
     default:
         return false;
     }

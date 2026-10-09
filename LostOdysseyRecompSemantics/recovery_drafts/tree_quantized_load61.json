@@ -34,9 +34,9 @@
     "runtime_validated": false,
     "complete": false,
     "date": "2026-10-09",
-    "focused_original_ppc_cases": 6,
+    "focused_original_ppc_cases": 8,
     "library_validated": true,
-    "case_scope": "Native/swapped two-node mixed-width records with six scales and allocation failure. Full72/RAM/host CSR/callbacks, independent payload/scales/owner assertions. External reader and allocator remain service boundaries. Extended to the 20-byte compact variant with two topology words; both formats pass the same bounded native/swapped paths.",
+    "case_scope": "Native/swapped two-node mixed-width records with six scales and allocation failure. Full72/RAM/host CSR/callbacks, independent payload/scales/owner assertions. External reader and allocator remain service boundaries. Extended to the 20-byte compact variant with two topology words; both formats pass the same bounded native/swapped paths. Two added native-layout integrations use actual E580/E5D8 borrowed-memory readers, shared between original upper and recovered upper, for count/payload/scales.",
     "platform": "Linux x64 Clang 19.1.7; pinned regenerated PPC; mmap guest overlay",
     "mapping_limit": "Historical catalog membership unverified; no baseline mapping credit."
   }

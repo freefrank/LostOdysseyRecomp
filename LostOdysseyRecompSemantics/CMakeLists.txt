@@ -211,6 +211,7 @@ add_library(LostOdysseyRecompSemantics STATIC
     src/geometry_primitives61.cpp
     src/growable_output61.cpp
     src/scratch_arena61.cpp
+    src/memory_input61.cpp
     src/projection_extrema61.cpp
     src/grid_blob_forward61.cpp
     src/grid_blob_routes61.cpp
