@@ -189,6 +189,7 @@ add_library(LostOdysseyRecompSemantics STATIC
     src/record_snapshot_gather61.cpp
     src/indexed_record_accumulate61.cpp
     src/tree_triangle_bounds61.cpp
+    src/owned_tree_reorder_support61.cpp
     src/projection_extrema61.cpp
     src/grid_blob_forward61.cpp
     src/grid_blob_routes61.cpp

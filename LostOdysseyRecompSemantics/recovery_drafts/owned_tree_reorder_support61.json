@@ -1,0 +1,81 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Complete genuine body pins, UTF-8 LF SHA256 without final newline; no original code embedded.",
+  "entries": [
+    {
+      "address": "82BDB1C0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 27727,
+      "instruction_count": 17,
+      "body_sha256": "87af666d5dd7c5c5ba348f3474c1e7fd5e3c3d116557eae8180fb09435ae1612",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BDB208",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 27770,
+      "instruction_count": 21,
+      "body_sha256": "6e7abe95bf3ea3fd7430a96d1f2d9a3bbf2d1973d683f32610209193f0a8fd2a",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD20F0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 6237,
+      "instruction_count": 30,
+      "body_sha256": "247324da60b0bf676d3473c57103593f9447cb709170308e01e4d09a2c8d7ca6",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD1B50",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 5418,
+      "instruction_count": 9,
+      "body_sha256": "903b69db5c925bbf1d7bf8fa36f5cd332a24e2e759f9a9eb1b37d278ca0c5a97",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD2168",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 6314,
+      "instruction_count": 38,
+      "body_sha256": "8506f25a4a3efa295adf94f03a395e7371562daaaecc931c4a313a1b0f146409",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD1B78",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 5441,
+      "instruction_count": 32,
+      "body_sha256": "c59763212ad67a98aac63c338d212b3bcb888ac449d82b3b95cda8e3da0be7cb",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BDB1C0",
+      "82BDB208",
+      "82BD20F0",
+      "82BD1B50",
+      "82BD2168",
+      "82BD1B78"
+    ],
+    "header": "include/lo_semantics/owned_tree_reorder_support61.h",
+    "source": "src/owned_tree_reorder_support61.cpp",
+    "oracle": "tests/owned_tree_reorder_support61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 4,
+    "library_validated": true,
+    "library": "PASS incremental complete Clang 19 CMake static library; existing unused-function warning exception retained.",
+    "platform": "Linux x64; Clang 19.1.7; genuine XEX regenerated with pinned XenonRecomp ddd128bc plus tracked patch; existing oracle guest-window allocation overlaid with mmap/mprotect only",
+    "mapping_credit": 0,
+    "mapping_limit": "Fixed historical catalog.sqlite unavailable; do not infer membership from regenerated sources. 82BB25D0 is explicitly external in prior handoff.",
+    "runtime_validated": false,
+    "complete": false,
+    "limits": "Selected finite inputs, ordinary RAM, Full72 state, callbacks and host CSR only. No Windows revalidation, nonfinite matrix, faults/MMIO, concurrency, runtime or gameplay acceptance.",
+    "case_scope": "Four genuine-upper cases cover count/depth traversal, packed leaf export, append with real growth, and cleanup with mutable clear. Fixed callback original-side dispatch uses genuine pinned callback bodies; previously accepted traversal/growth/release lowers are shared. Full72/RAM/callback/actual host CSR compared. Guest memory/allocator boundaries explicit; invalid trees/failed allocation/nonfinite/fault/concurrent/runtime behavior unverified. Six entries147ops, no concrete bounds/split strategy recovery claimed."
+  }
+}

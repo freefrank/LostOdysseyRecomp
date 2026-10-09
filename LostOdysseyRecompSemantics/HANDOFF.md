@@ -99,6 +99,15 @@ outputs and library build pass. These match table 820D6C54 slots +4/+12/+16,
 not scripted bounds results. BD8BF8 and the other concrete table/strategy targets
 remain separate work; this does not yet close the full tree-building callback set.
 
+`owned_tree_reorder_support61` recovers six required BD22A8 support entries
+(BDB1C0/BDB208/BD20F0/BD1B50/BD2168/BD1B78, 147 instructions): traversal
+adapters, depth/leaf count, packed leaf export, growable leaf-address append and
+owned cleanup. Four actual-upper cases pass Full72/RAM/callback/host CSR using
+genuine pinned fixed callbacks and shared accepted traversal/growth/release
+lowers. Library build passes. Review corrected export truncation/scratch, compare
+direction and conditional pointer clearing. BD22A8 upper remains pending its
+own comparison; no concrete bounds/split strategy closure is claimed here.
+
 Bounded private-image investigation establishes vtables at 820D58A0 (installed
 by B9CC00) and 820D5C58 (installed by B9E220/B9E2D8/B9E388). Their slots +0C,
 +14 and +18 point to B9DD90, B9DF18 and B9DFA0 respectively. B9CBC0 occurs at
