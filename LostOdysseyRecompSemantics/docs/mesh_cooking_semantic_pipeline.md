@@ -284,3 +284,8 @@ BA4BF8 is concrete: support-plane collection with sharp-edge bevels, coplanar-fa
 ### Inflated convex polyhedron output
 
 BA5480 now expands input planes, initializes a bounds polyhedron, selects and applies half-space cuts, and transfers point/polygon output ownership. BA5CF8 compacts and triangulates this output. Cube inflation by 0.1 produces the expected [-0.1,1.1] bounds with complete tracked cleanup. Host scratch containers implement the logical topology; original scratch/volatile/bitwise-FP equivalence is not asserted. First-use CRT destructor registration stays an explicit accepted guest boundary.
+
+
+### Current end-to-end cooking checkpoint
+
+The three B9C7D8 paths now run through concrete helpers: indexed tetrahedron564 bytes, plain point-only tetrahedron564 bytes, inflated point-only tetrahedron1025 bytes. NXS header, successful return, stack/low-LR restoration and complete tracked cleanup pass. This supersedes earlier chronological notes about unresolved hull algorithms. First-use CRT registration remains an accepted boundary and is seeded as initialized in the smoke. No byte-identical output or gameplay claim.

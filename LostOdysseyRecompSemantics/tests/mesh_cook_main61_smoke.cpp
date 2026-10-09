@@ -36,7 +36,7 @@ constexpr GuestAddress Owner = 0x30000, Source = Owner + 156, Input = 0x32000, P
                        AllocatorTable = 0x37000, PolygonData = 0x38000, TriangleData = 0x39000,
                        Allocate = 0x2000, Free = 0x2004;
 constexpr GuestAddress Writer = 0x40000, Table = 0x41000, Buffer = 0x42000;
-constexpr std::array<test::Region, 13> Regions{{{0, 0x180000},
+constexpr std::array<test::Region, 15> Regions{{{0, 0x400000},
                                                 {0x82000000, 0x10000},
                                                 {0x83214000, 0x3000},
                                                 {0x832df000, 0x1000},
@@ -48,12 +48,15 @@ constexpr std::array<test::Region, 13> Regions{{{0, 0x180000},
                                                 {0x82051000, 0x1000},
                                                 {0x82048000, 0x1000},
                                                 {0x820d2000, 0x2000},
-                                                {0x82bc9000, 0x1000}}};
+                                                {0x82bc9000, 0x1000},
+                                                {0x820a6000, 0x1000},
+                                                {0x8204f000, 0x1000}}};
 std::array<unsigned char, 184> constants{};
 std::array<unsigned char, 144> normal_constants{};
 std::array<unsigned char, 128> mass_constants{};
 std::array<unsigned char, 1448> power_constants{};
 std::array<unsigned char, 8> bounds_constants{};
+std::array<unsigned char, 192> hull_constants{};
 struct Native final : float_triplet_transfer::NativeServices {
     void SetHostFpControl(std::uint32_t v) override { PPCFPSCRRegister{}.setcsr(v); }
 } native;
@@ -136,7 +139,7 @@ struct Environment {
     mesh_cook_stream61::Dependencies Deps() { return {EdgeDeps(), {guest, accepted.fp}}; }
 };
 
-void Check() {
+void Check(unsigned mode) {
     test::GuestWindow w(Regions);
     w.Fill(0);
     auto m = w.Memory();
@@ -179,6 +182,35 @@ void Check() {
         m.WriteU8(0x820d6a18 + i, bounds_constants[i]);
         m.WriteU8(0x82000d70 + i, bounds_constants[i + 4]);
     }
+    offset = 0;
+    for (auto region : std::array<test::Region, 17>{{{0x83214d80, 120},
+                                                     {0x83215508, 8},
+                                                     {0x82000f28, 8},
+                                                     {0x82000de0, 4},
+                                                     {0x82000b7c, 4},
+                                                     {0x82000e44, 4},
+                                                     {0x82000dc0, 4},
+                                                     {0x820d57f0, 4},
+                                                     {0x820009c8, 4},
+                                                     {0x82000d7c, 4},
+                                                     {0x82000b58, 4},
+                                                     {0x822183e8, 4},
+                                                     {0x82218644, 4},
+                                                     {0x82000e40, 4},
+                                                     {0x82000d6c, 4},
+                                                     {0x82000da4, 4},
+                                                     {0x83216164, 4}}})
+        for (unsigned i = 0; i < region.size; ++i)
+            m.WriteU8(region.base + i, hull_constants[offset++]);
+    auto seed = [&](unsigned p, float v) { m.WriteU32(p, std::bit_cast<std::uint32_t>(v)); };
+    seed(0x82003660, 2.5f);
+    seed(0x8204fc20, 120.f);
+    seed(0x820a6b8c, 1e-6f);
+    seed(0x82000e10, .01f);
+    seed(0x820d5fb8, -.001f);
+    seed(0x820d5fbc, .001f);
+    seed(0x832dc184, .1f);
+    m.WriteU32(0x832dc444, 3);
     constexpr unsigned cases[]{0x82bc9994, 0x82bc99a0, 0x82bc99b8, 0x82bc99d4, 0x82bc99f4};
     for (unsigned i = 0; i < 5; ++i)
         m.WriteU32(0x82bc9984 + 4 * i, cases[i]);
@@ -225,8 +257,8 @@ void Check() {
     m.WriteU32(Input + 8, 12);
     m.WriteU32(Input + 12, 12);
     m.WriteU32(Input + 16, Positions);
-    m.WriteU32(Input + 20, TriangleData);
-    m.WriteU32(Input + 24, 0);
+    m.WriteU32(Input + 20, mode ? 0 : TriangleData);
+    m.WriteU32(Input + 24, mode);
     constexpr float xyz[]{0, 0, 0, 2, 0, 0, 0, 1, 0, 0, 0, 1};
     constexpr unsigned ix[]{0, 2, 1, 0, 1, 3, 1, 2, 3, 2, 0, 3};
     for (unsigned i = 0; i < 12; ++i) {
@@ -245,8 +277,8 @@ void Check() {
         throw std::runtime_error("NXS envelope");
     if (st.r[1] != initial.r[1] || st.lr != Address(initial.lr))
         throw std::runtime_error("main ABI");
-    std::printf("PASS indexed cook main tetrahedron -> %u bytes NXS/CVXM; zero live allocations\n",
-                m.ReadU32(Writer + 4));
+    std::printf("PASS cook main mode %u tetrahedron -> %u bytes NXS/CVXM; zero live allocations\n",
+                mode, m.ReadU32(Writer + 4));
 }
 } // namespace cook_main_smoke
 int main() {
@@ -266,7 +298,10 @@ int main() {
         load("LO_MASS_CONSTANTS", mass_constants);
         load("LO_POWER_CONSTANTS", power_constants);
         load("LO_BOUNDS_CONSTANTS", bounds_constants);
-        Check();
+        load("LO_HULL_INCREMENTAL_CONSTANTS", hull_constants);
+        Check(0);
+        Check(4);
+        Check(12);
         return 0;
     } catch (const std::exception &e) {
         std::fprintf(stderr, "%s\n", e.what());
