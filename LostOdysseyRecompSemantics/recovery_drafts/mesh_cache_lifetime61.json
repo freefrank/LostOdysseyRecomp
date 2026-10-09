@@ -1,0 +1,88 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Mesh adapter and owned valence cache lifetime.",
+  "entries": [
+    {
+      "address": "82BB8BD8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 10452,
+      "instruction_count": 7,
+      "body_sha256": "b20bc1b551be983445386acf323894539460e754df3256318a31155b90d1b238",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BB8BF8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 10471,
+      "instruction_count": 4,
+      "body_sha256": "20a472e7d80bcc5226fd26113906f53a35f4175470654e95b9cef62a0e732cb8",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BB3008",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 56727,
+      "instruction_count": 21,
+      "body_sha256": "338a1112df0efc8dbf551ade6048017373a127cb523699f73bf1ae5da1f3bb7f",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BB32D8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 57139,
+      "instruction_count": 30,
+      "body_sha256": "32db54378977ada5745010d07efc269a8e96526d1828b3d685ec34e90712117b",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BBC9B8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 19287,
+      "instruction_count": 12,
+      "body_sha256": "75e1996db60dd299e6083236e7c3200e4c0eabc3b384932a3b2abc6a182b0294",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BBC9E8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 19320,
+      "instruction_count": 1,
+      "body_sha256": "ff99bb03bcbb435a1361a30074d11f2ae919bfbf08f484cd71b8e04c092930ac",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BC7F48",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 45942,
+      "instruction_count": 20,
+      "body_sha256": "04acca2c664db2752ff0d7e46fa1e24a1f7559452d9538bc26c4bacb01c90561",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BB8BD8",
+      "82BB8BF8",
+      "82BB3008",
+      "82BB32D8",
+      "82BBC9B8",
+      "82BBC9E8",
+      "82BC7F48"
+    ],
+    "header": "include/lo_semantics/mesh_cache_lifetime61.h",
+    "source": "src/mesh_cache_lifetime61.cpp",
+    "oracle": "tests/mesh_cache_lifetime61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 5,
+    "library_validated": true,
+    "case_scope": "Borrowed/cache owner construction, populated/empty cleanup, descriptor construction and u16 prefix offsets. Composed original wrappers share concrete auxiliary and allocator lowers. Full72/RAM/callback, independent layout/free order/prefix assertions.",
+    "platform": "Linux x64 Clang 19.1.7; pinned regenerated PPC; mmap guest overlay",
+    "mapping_limit": "Historical catalog membership unverified; no baseline mapping credit."
+  }
+}

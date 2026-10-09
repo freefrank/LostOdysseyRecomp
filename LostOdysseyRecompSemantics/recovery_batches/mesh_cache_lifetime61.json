@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "mesh-cache-lifetime61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/mesh_cache_lifetime61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/mesh_cache_lifetime61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nvoid CacheIndirect(std::uint32_t,PPCContext&,std::uint8_t*);\nvoid CacheLower(std::uint32_t,PPCContext&,std::uint8_t*);\n#undef PPC_CALL_INDIRECT_FUNC\n#define PPC_CALL_INDIRECT_FUNC(t) CacheIndirect((t),ctx,base)\n#define sub_82BB8BD8 __imp__sub_82BB8BD8\n#define sub_82BB8BF8 __imp__sub_82BB8BF8\n#define sub_82BB3008 __imp__sub_82BB3008\n#define sub_82BB32D8 __imp__sub_82BB32D8\n#define sub_82BBC9B8 __imp__sub_82BBC9B8\n#define sub_82BBC9E8 __imp__sub_82BBC9E8\n#define sub_82BC7F48 __imp__sub_82BC7F48\n#define sub_82BD0798(c,b) CacheLower(0x82bd0798u,c,b)\n#define sub_82D33160(c,b) CacheLower(0x82d33160u,c,b)\n#define sub_82BC7E90(c,b) CacheLower(0x82bc7e90u,c,b)\n\nPPC_FUNC_IMPL(__imp__sub_82BBC9E8);\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/mesh_cache_lifetime61.cpp"
+      ]
+    }
+  ]
+}

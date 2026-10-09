@@ -1,3 +1,7 @@
+## Root direct continuation: mesh cache lifetime and porting map (2026-10-09)
+
+`mesh_cache_lifetime61` closes seven base/derived adapter, cache descriptor and prefix-offset entries. Five composed-original cases pass Full72/RAM/callbacks and independent borrowed fields, arrays-before-descriptor free order, empty cleanup and wrapping u16 prefix checks. Full Clang library passes. `docs/mesh_cooking_semantic_pipeline.md` records topology/stream layouts, ownership, Rust boundaries and explicitly unresolved upper dependencies. No complete cooking, runtime or historical mapping claim.
+
 ## Root direct continuation: edge-to-triangle adjacency (2026-10-09)
 
 `mesh_edge_build61` now also closes BBD1E0: count triangle incidence per unique edge, build prefix offsets, scatter triangle IDs and restore prefixes. Two original-caller-plus-original-edge-builder cases raise the family to six focused cases, both u32/u16 input widths; Full72/RAM/callbacks and independent degree/offset/incident-list/owned-allocation assertions pass. Full Clang library passes. One additional implementation address; partial allocation behavior retained and broad failure tests intentionally omitted.
