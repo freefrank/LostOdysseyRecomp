@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "mesh-cache-build61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/mesh_cache_build61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/mesh_cache_build61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nvoid CacheBuildIndirect(std::uint32_t,PPCContext&,std::uint8_t*);\nvoid CacheBuildLower(std::uint32_t,PPCContext&,std::uint8_t*);\nvoid CacheBuildSave(PPCContext&,std::uint8_t*);\nvoid CacheBuildRestore(PPCContext&,std::uint8_t*);\n#undef PPC_CALL_INDIRECT_FUNC\n#define PPC_CALL_INDIRECT_FUNC(t) CacheBuildIndirect((t),ctx,base)\n#define __savegprlr_29 CacheBuildSave\n#define __restgprlr_29 CacheBuildRestore\n#define sub_82BBDDF0 __imp__sub_82BBDDF0\n#define sub_82BBC9F0 __imp__sub_82BBC9F0\n#define sub_82BB3130 __imp__sub_82BB3130\n#define sub_82BD0798(c,b) CacheBuildLower(0x82bd0798u,c,b)\n#define sub_82BBCE58(c,b) CacheBuildLower(0x82bbce58u,c,b)\n#define sub_82BBD1E0(c,b) CacheBuildLower(0x82bbd1e0u,c,b)\n#define sub_82BBD4C0(c,b) CacheBuildLower(0x82bbd4c0u,c,b)\n#define sub_82BBD4E8(c,b) CacheBuildLower(0x82bbd4e8u,c,b)\n#define sub_82BBD4E0(c,b) CacheBuildLower(0x82bbd4e0u,c,b)\n#define sub_82B7BC40(c,b) CacheBuildLower(0x82b7bc40u,c,b)\n#define sub_82BBC9B8(c,b) CacheBuildLower(0x82bbc9b8u,c,b)\n#define sub_82BBC9E8(c,b) CacheBuildLower(0x82bbc9e8u,c,b)\n#define sub_82BC7F48(c,b) CacheBuildLower(0x82bc7f48u,c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/mesh_cache_build61.cpp"
+      ]
+    }
+  ]
+}

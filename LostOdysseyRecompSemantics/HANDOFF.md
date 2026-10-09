@@ -1,3 +1,7 @@
+## Root direct continuation: topology and lazy valence construction (2026-10-09)
+
+`mesh_cache_build61` closes BBDDF0 topology/filter orchestration, BBC9F0 per-vertex degree/neighbor cache and BB3130 lazy descriptor ownership/publication. Three composed-original upper-chain cases pass Full72/RAM/host CSR/callbacks and independent degrees, offsets, byte neighbors, borrowed published view and release-unretained ownership; all topology, sorting, geometry, allocator and lifetime lowers are concrete shared implementations. Full Clang library passes. Three addresses; partial-failure order remains unchanged, upper whole-mesh serialization still incomplete.
+
 ## Root direct continuation: boundary and angular edge flags (2026-10-09)
 
 `mesh_edge_flags61` closes BBD4E8: classify boundary/shared edges by incidence and signed plane/dihedral angle, tag selected sides and propagate touched vertices. Three original-upper/shared-concrete-geometry cases cover coplanar/folded meshes, angular thresholds and both index widths; Full72/RAM/host CSR/callbacks, independent side/vertex/edge flags and zero remaining temporary allocations pass. Full Clang library passes. Private angle constants remain external; diagnostics/allocation failures are not broadly exercised.

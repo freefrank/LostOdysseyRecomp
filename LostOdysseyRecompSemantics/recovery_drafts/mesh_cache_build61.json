@@ -1,0 +1,52 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Topology orchestration, valence cache and lazy cache owner.",
+  "entries": [
+    {
+      "address": "82BBDDF0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 22181,
+      "instruction_count": 91,
+      "body_sha256": "c5275b6c69719f0fa37782e41e3121964f610e2a37fe4103e80fa93cb1cbc1d8",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BBC9F0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 19328,
+      "instruction_count": 142,
+      "body_sha256": "307c05bb7fba5ff61e636fae22d1dfab7afa103fd8050cbc108d16cbeb38d65f",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BB3130",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 56890,
+      "instruction_count": 60,
+      "body_sha256": "0f744397833e63fc896492a9bd6b281b54798815d6d4c6258e93c7322766de6d",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BBDDF0",
+      "82BBC9F0",
+      "82BB3130"
+    ],
+    "header": "include/lo_semantics/mesh_cache_build61.h",
+    "source": "src/mesh_cache_build61.cpp",
+    "oracle": "tests/mesh_cache_build61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 3,
+    "library_validated": true,
+    "case_scope": "Lazy cache construction, u16 direct valence and filtered topology with unretained arrays released. Composed original upper chain shares concrete edge/sort/geometry/allocator/lifetime lowers. Full72/RAM/CSR/callback and independent degrees/neighbor bytes/ownership. Private angle constants required.",
+    "platform": "Linux x64 Clang 19.1.7; pinned regenerated PPC; mmap guest overlay",
+    "mapping_limit": "Historical catalog membership unverified; no baseline mapping credit."
+  }
+}

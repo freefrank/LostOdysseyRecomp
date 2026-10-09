@@ -27,7 +27,8 @@ A separate five-word valence cache stores vertex count at +4, adjacency-byte
 count at +8, degree/offset records at +12 and adjacent vertex bytes at +16.
 BC7F48 writes wrapping u16 prefix offsets into the second halfword of each
 four-byte record. Its original nonempty-record precondition is retained.
-Cache construction is not yet complete. `mesh_edge_flags61` now classifies
+`mesh_cache_build61` constructs per-vertex degree/neighbor caches and lazily
+publishes the borrowed descriptor+4 view into source+84. `mesh_edge_flags61` now classifies
 boundary and angle-selected edges: side bit31 selects the edge, side bit30
 marks its first vertex as touched by selected edges, and incidence-record
 bit0 mirrors edge selection. Two temporary byte masks are released in order.
@@ -71,10 +72,10 @@ destructor and temporary-array release now exist, but BA5CF8 preprocessing,
 B9F198 validation/build and B9F6F0 aggregate serialization remain open.
 
 B9F6F0 already has recovered scalar/header/support and owner cleanup components.
-Its main mesh section BBC110, lazy-cache build BB3130/BBC9F0 and cached geometry
-calculation B9F418 still need completion. The BBD4E8 edge-filter path and its normalized-plane BD92C0 / guest-table
-atan2 822DA388 math lowers are recovered. BBDDF0 orchestration still remains
-to be connected. Do not infer upper completion from a
+Its main mesh section BBC110 and cached geometry calculation B9F418 still
+need completion. Lazy-cache construction BB3130/BBC9F0 is now recovered. The BBD4E8 edge-filter path and its normalized-plane BD92C0 / guest-table
+atan2 822DA388 math lowers are recovered. BBDDF0 now orchestrates the requested components and releases
+unretained auxiliary arrays. Do not infer upper completion from a
 working lower stream or topology fixture.
 
 ## Evidence limits
