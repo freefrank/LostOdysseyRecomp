@@ -1,3 +1,7 @@
+## Root direct continuation: boundary and angular edge flags (2026-10-09)
+
+`mesh_edge_flags61` closes BBD4E8: classify boundary/shared edges by incidence and signed plane/dihedral angle, tag selected sides and propagate touched vertices. Three original-upper/shared-concrete-geometry cases cover coplanar/folded meshes, angular thresholds and both index widths; Full72/RAM/host CSR/callbacks, independent side/vertex/edge flags and zero remaining temporary allocations pass. Full Clang library passes. Private angle constants remain external; diagnostics/allocation failures are not broadly exercised.
+
 ## Root direct continuation: mesh plane and angle math (2026-10-09)
 
 `mesh_geometry_math61` closes BD92C0 normalized triangle planes and 2DA388 guest-table rational atan2, retaining FP stages and signed-zero handling. Eight complete-original-body cases pass Full72/RAM/host CSR and independent plane/angle assertions. Full Clang library passes. The angle harness requires LO_MESH_MATH_CONSTANTS pointing to a private 184-byte block from guest address 83214E88; image constants are not checked in. Two implementation addresses; NaN/infinity behavior is not broadly tested.

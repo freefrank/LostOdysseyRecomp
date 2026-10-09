@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "mesh-edge-flags61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/mesh_edge_flags61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/mesh_edge_flags61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nvoid MeshFlagsIndirect(std::uint32_t,PPCContext&,std::uint8_t*);\nvoid MeshFlagsLower(std::uint32_t,PPCContext&,std::uint8_t*);\nvoid MeshFlagsSave(PPCContext&,std::uint8_t*);\nvoid MeshFlagsRestore(PPCContext&,std::uint8_t*);\nvoid MeshFlagsSaveFp(PPCContext&,std::uint8_t*);\nvoid MeshFlagsRestoreFp(PPCContext&,std::uint8_t*);\n#undef PPC_CALL_INDIRECT_FUNC\n#define PPC_CALL_INDIRECT_FUNC(t) MeshFlagsIndirect((t),ctx,base)\n#define __savegprlr_14 MeshFlagsSave\n#define __restgprlr_14 MeshFlagsRestore\n#define __savefpr_25 MeshFlagsSaveFp\n#define __restfpr_25 MeshFlagsRestoreFp\n#define sub_82BD0798(c,b) MeshFlagsLower(0x82bd0798u,c,b)\n#define sub_82B7BC40(c,b) MeshFlagsLower(0x82b7bc40u,c,b)\n#define sub_82B9D328(c,b) MeshFlagsLower(0x82b9d328u,c,b)\n#define sub_82BD92C0(c,b) MeshFlagsLower(0x82bd92c0u,c,b)\n#define sub_822DA388(c,b) MeshFlagsLower(0x822da388u,c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/mesh_edge_flags61.cpp"
+      ]
+    }
+  ]
+}
