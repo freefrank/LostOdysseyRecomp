@@ -82,6 +82,39 @@ All integers are little-endian; the fixed header is exactly 24 bytes.
 
 Dimensions must be nonzero and at most 8192 per axis, with at most 16,777,216 pixels (64 MiB). Exact total size is required; truncated/extra data, unknown formats and identity mismatches fail. `ReadImageReplacement` accepts only `AssetKind::Image` and requires dimensions equal to those supplied by the consumer. Native menu/font atlases require their original extents and layout. File bytes are RGBA; returned native pixel words are `0xAARRGGBB`. Do not write host-endian ARGB words into the payload.
 
+## Runtime textures (LOTEX2)
+
+Textures the game draws are replaced by **fingerprint**, not by key. When the renderer uploads a texture, it computes the XXH3-64 of the base level's blocks in row order after the guest endian swap. This is the `fingerprint` column that `--export-assets` writes to `textures/index.csv`. Several keys can share a fingerprint, because the game cooks the same image into several packages, so one replacement covers all of them.
+
+- Identity: `AssetKind::Texture` (5). The key is the fingerprint as 16 lowercase hex digits.
+- Overlay path: `overlay/textures/fp-<16 hex digits>.lotex2`. The fingerprint is the file name, so two manager mods that replace the same image conflict on the same path.
+- Standalone manifest line: `texture:<16 hex digits>=textures/<name>.lotex2`.
+- Modes and precedence follow the image rules.
+
+All integers are little-endian. The fixed header is 64 bytes.
+
+| Byte offset | Size | Value |
+| --- | --- | --- |
+| 0 | 8 | ASCII `LOTEX2` followed by CR LF |
+| 8 | 4 | Header size: 64 + key length |
+| 12 | 4 | Payload type: `1` RGBA8, `2` DDS (reserved) |
+| 16 | 8 | Fingerprint; must equal the requested one |
+| 24 | 4 | Original Xenos format: `2` G8, `6` A8R8G8B8, `18` DXT1, `19` DXT3, `20` DXT5 |
+| 28 | 4 | Original width |
+| 32 | 4 | Original height |
+| 36 | 4 | Payload width (level 0) |
+| 40 | 4 | Payload height (level 0) |
+| 44 | 4 | Mip levels in the payload, at least 1 |
+| 48 | 8 | Payload size in bytes |
+| 56 | 4 | Key length in UTF-8 bytes; may be 0 (the key is informational) |
+| 60 | 4 | Reserved, 0 |
+| 64 | key length | Key bytes, no terminator |
+| Following key | payload size | Payload |
+
+Payload width and height are the original width and height times the same factor 1, 2, 4 or 8, and at most 8192 each. Type 1 stores the mip levels top first. Level *i* is max(1, w >> *i*) × max(1, h >> *i*) RGBA bytes, rows top to bottom, with no padding. The payload size must be exact, and the mip count may not exceed the full chain. With one level the game builds the rest of the chain itself. Channels are always plain RGBA: a G8 original reads the red channel, and the game maps A8R8G8B8 replacements to the original channel order. Any validation failure keeps the original texture.
+
+The game replaces only uploads it can match safely. These are tiled 2D base levels in the formats above, with a shorter side over 16 texels. Render targets, resolved surfaces, movie frames and the controller-prompt atlas are never replaced. Shaders keep seeing the original texture size, so a larger replacement samples like the original at a higher resolution.
+
 ## Trusted providers and future consumers
 
 `RegisterProvider(kind, shared_ptr<AssetProvider>)` registers at most one provider per type. It returns false for an invalid kind, null provider or occupied slot. Providers run outside the API mutex and retain shared ownership during callbacks. Exceptions, mismatched identities and non-file results are ignored. Recursive resolution skips providers to avoid recursion. `UnregisterProvider(kind, pointer)` removes only the matching instance; destruction happens outside the mutex. Providers are trusted host extensions and may resolve outside the mods root.
