@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "mesh-polygon-collect61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/mesh_polygon_collect61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/mesh_polygon_collect61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\nvoid CollectLower(std::uint32_t,PPCContext&,std::uint8_t*);\nvoid CollectSave(PPCContext&,std::uint8_t*);\nvoid CollectRestore(PPCContext&,std::uint8_t*);\n#define __savegprlr_18 CollectSave\n#define __restgprlr_18 CollectRestore\n#define sub_82B7E504 __imp__sub_82B7E504\n#define sub_82656EB8(c,b) CollectLower(0x82656eb8u,c,b)\n#define sub_82BC3F20(c,b) CollectLower(0x82bc3f20u,c,b)\n#define sub_82BC38E8(c,b) CollectLower(0x82bc38e8u,c,b)\n#define sub_82BC3EC0(c,b) CollectLower(0x82bc3ec0u,c,b)\n#define sub_82B7BC40(c,b) CollectLower(0x82b7bc40u,c,b)\n#define sub_82BD2A08(c,b) CollectLower(0x82bd2a08u,c,b)\n#define sub_82BD2C08(c,b) CollectLower(0x82bd2c08u,c,b)\n#define sub_82BB8498(c,b) CollectLower(0x82bb8498u,c,b)\n#define sub_82BC2A18(c,b) CollectLower(0x82bc2a18u,c,b)\n#define sub_82BD2870(c,b) CollectLower(0x82bd2870u,c,b)\n#define sub_82B7A0B0(c,b) CollectLower(0x82b7a0b0u,c,b)\n#define sub_82B9D328(c,b) CollectLower(0x82b9d328u,c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/mesh_polygon_collect61.cpp"
+      ]
+    }
+  ]
+}

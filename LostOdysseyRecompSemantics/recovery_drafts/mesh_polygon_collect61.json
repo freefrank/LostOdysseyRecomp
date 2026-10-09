@@ -1,0 +1,42 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Closed-mesh component boundary extraction to count-prefixed polygons and optional source-triangle lists; guest stack probe.",
+  "entries": [
+    {
+      "address": "82B7E504",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.175.cpp",
+      "source_line": 16748,
+      "instruction_count": 9,
+      "body_sha256": "f1f1e0c0ba40d2496814f32f5e5786a64dca70deeb6bd0a52dd4e9a21d008425",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BB9318",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 11532,
+      "instruction_count": 314,
+      "body_sha256": "25a5e6412c42c268dc73fb699902e121e90e6fdb00cda05ed372d7def79f61b1",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82B7E504",
+      "82BB9318"
+    ],
+    "header": "include/lo_semantics/mesh_polygon_collect61.h",
+    "source": "src/mesh_polygon_collect61.cpp",
+    "oracle": "tests/mesh_polygon_collect61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 3,
+    "library_validated": true,
+    "case_scope": "Original collector plus original stack probe with concrete shared adjacency/filter, component walk, boundary order and dynamic arrays. Full72/RAM/CSR/events and independent cube six-face membership, optional twelve source-triangle membership, open mesh rejection and zero temporary allocations. Large stack/failure/diagnostic paths untested.",
+    "platform": "Linux x64 Clang19; pinned PPC; mmap guest overlay"
+  }
+}

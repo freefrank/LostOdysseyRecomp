@@ -1,3 +1,7 @@
+## Root direct continuation: closed-mesh polygon collection (2026-10-09)
+
+`mesh_polygon_collect61` closes BB9318 component-to-polygon collection and B7E504 guest stack probe. Three original-upper/shared-concrete-chain cases pass Full72/RAM/CSR/events: a twelve-triangle cube yields six four-vertex polygons, optional triangle membership covers all twelve IDs, and an open mesh is rejected. All temporary allocations are released. Full Clang library passes. Large stack probes and diagnostic/failure paths remain untested; two implementation entries, no historical mapping/runtime claim.
+
 ## Root direct continuation: components and ordered boundary chains (2026-10-09)
 
 `mesh_boundary_walk61` closes BB8498 recursive/tail component collection, BC2A18 duplicate-undirected-edge cancellation and chain ordering, plus BD2988/BD2B90 owned word capacity/copy. Four composed-original cases pass Full72/RAM/CSR/events with independent visits, output order, closed loop and disconnected partial-output ownership. Concrete shared growth/copy/release retained; full Clang library passes. Four implementation entries, no mapping/runtime claim.
