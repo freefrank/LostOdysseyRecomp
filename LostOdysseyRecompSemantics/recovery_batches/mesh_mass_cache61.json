@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "mesh-mass-cache61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/mesh_mass_cache61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/mesh_mass_cache61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\nvoid MassCacheLower(std::uint32_t,PPCContext&,std::uint8_t*);\nvoid MassCacheSave(PPCContext&,std::uint8_t*);\nvoid MassCacheRestore(PPCContext&,std::uint8_t*);\n#define __savegprlr_29 MassCacheSave\n#define __restgprlr_29 MassCacheRestore\n#define sub_82BCD8A8(c,b) MassCacheLower(0x82bcd8a8u,c,b)\n#define sub_82B7DFC0(c,b) MassCacheLower(0x82b7dfc0u,c,b)\n#define sub_82B9C298(c,b) MassCacheLower(0x82b9c298u,c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/mesh_mass_cache61.cpp"
+      ]
+    }
+  ]
+}

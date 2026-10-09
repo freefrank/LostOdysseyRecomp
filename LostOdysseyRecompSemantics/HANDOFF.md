@@ -1,3 +1,7 @@
+## Root direct continuation: lazy owner mass properties (2026-10-09)
+
+`mesh_mass_cache61` closes B9F418 using the complete mass integration chain and an explicit Full72 adapter to the already recovered CRT classifier. Three original-upper/shared-concrete-math cases pass Full72/RAM/CSR and independent translated cube unit-density mass, origin inertia and centroid; existing cache bypass and disabled-integration failure pass. The owner retains signed-mass diagnostic/correction behavior, but that diagnostic and nonfinite rejection are not exercised. Full Clang library passes. B9F6F0 aggregate serialization now has all known lower implementations available.
+
 ## Root direct continuation: complete mass integration chain (2026-10-09)
 
 `mesh_mass_math61` adds BCCE48 projected polynomial integration, BCD0F8 plane lift, BCD400 signed-volume accumulation and BCD8A8 seven-word descriptor/density adapter. Eleven focused cases now compose the complete original local chain, comparing Full72/RAM/CSR and independent projected/face monomials plus translated cube volume, centroid and origin/centroid tensors. u32 direct and reversed-winding u16 wrapper paths pass, as does the disabled global gate. Constants are external/private via LO_MASS_CONSTANTS (128 bytes). Full Clang library passes. B9F418 cached-owner assembly remains next; no gameplay or historical mapping credit.

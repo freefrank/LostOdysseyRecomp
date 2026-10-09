@@ -144,6 +144,11 @@ that descriptor with binary64 density. Output stores xyz float centroid +0,
 binary64 mass +16, origin tensor +24 and centroid tensor +96. Keep guest
 integration-enable gate and signed-volume behavior for owner-level policy.
 
+B9F418 lazily fills owner +292 mass, +296 nine float origin-inertia values,
+and +332 float centroid. It classifies results through the existing CRT
+helper, rejects unsupported nonfinite categories, and logs/corrects negative
+mass and tensor signs. An already nonnegative cached mass bypasses rebuild.
+
 ## Remaining upper dependencies
 
 82B9C7D8 (mesh cooking orchestration) is still incomplete. Its constructor,
@@ -151,8 +156,8 @@ destructor and temporary-array release now exist, but BA5CF8 preprocessing,
 B9F198 validation/build and B9F6F0 aggregate serialization remain open.
 
 B9F6F0 already has recovered scalar/header/support and owner cleanup components.
-Its main mesh section BBC110 is recovered; cached geometry calculation B9F418
-still needs completion. BB3220 adapter serialization is recovered. Lazy-cache construction BB3130/BBC9F0 is now recovered. The BBD4E8 edge-filter path and its normalized-plane BD92C0 / guest-table
+Its main mesh section BBC110, cached geometry calculation B9F418 and
+BB3220 adapter serialization are recovered. Lazy-cache construction BB3130/BBC9F0 is now recovered. The BBD4E8 edge-filter path and its normalized-plane BD92C0 / guest-table
 atan2 822DA388 math lowers are recovered. BBDDF0 now orchestrates the requested components and releases
 unretained auxiliary arrays. Do not infer upper completion from a
 working lower stream or topology fixture.

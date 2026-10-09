@@ -1,0 +1,33 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Lazy owner mass/inertia/centroid cache with finite classification and signed-mass correction.",
+  "entries": [
+    {
+      "address": "82B9F418",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 10603,
+      "instruction_count": 181,
+      "body_sha256": "085ed9980455faca5cfac929b9cea074c4d1deff5a6f4aac9166186af0047aa3",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82B9F418"
+    ],
+    "header": "include/lo_semantics/mesh_mass_cache61.h",
+    "source": "src/mesh_mass_cache61.cpp",
+    "oracle": "tests/mesh_mass_cache61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 3,
+    "library_validated": true,
+    "case_scope": "Original upper with shared concrete volume chain and accepted classifier. Full72/RAM/CSR plus independent translated cube cached unit-density mass/origin inertia/centroid, existing-cache bypass and disabled-integration failure. Negative-volume diagnostics and nonfinite rejection branches not exercised.",
+    "platform": "Linux x64 Clang19; pinned PPC; mmap guest overlay"
+  }
+}
