@@ -264,3 +264,8 @@ B9C7D8 now allocates/constructs its owner, calls B9F198, serializes NXS/CVXM and
 ### Preprocessing data flow
 
 BA5CF8 now composes concrete normalization, epsilon deduplication, degenerate eight-corner fallback, first-use point compaction, plain/polygon index packaging and alias-aware cleanup. BA5A70 selects plain or inflated hull output and triangulates returned polygons. Dynamic word/triangle arrays and global scratch release are concrete. Four data/array smoke checks pass; the indexed main-path regression remains passing. Deep hull algorithms BA40B8/BA4BF8/BA5480 are still live guest boundaries, so this is not yet a standalone point-cloud preprocessing pipeline.
+
+
+### Incremental hull primitives
+
+Normals, visibility/coplanarity predicates, eligible support search, face registration/selection, edge lookup and neighbor stitching/extrusion are now implemented in mesh_hull_incremental61. Focused tetrahedron extrusion checks six resulting faces, reciprocal adjacency and complete tracked cleanup. Main hull generation and perturbed support/simplex selection remain pending; no bitwise floating-point or gameplay acceptance is asserted.

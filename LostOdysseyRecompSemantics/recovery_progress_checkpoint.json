@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 120,
-    "distinct_entries": 320,
+    "unit_count": 121,
+    "distinct_entries": 333,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -1202,6 +1202,26 @@
         ],
         "focused_smoke_cases": 4,
         "validation": "logical implementation; lower data/array paths smoke-tested; hull algorithms remain explicit guest boundaries"
+      },
+      {
+        "unit": "mesh_hull_incremental61",
+        "entries": [
+          "82B9F928",
+          "82B9FD50",
+          "82B9FE00",
+          "82B9FEB8",
+          "82B9FF70",
+          "82BA0030",
+          "82BA1290",
+          "82BA1CD8",
+          "82BA1F88",
+          "82BA3868",
+          "82BA1BC0",
+          "82BA38E0",
+          "82BA3970"
+        ],
+        "focused_smoke_paths": 4,
+        "validation": "logical/ABI primitives and reciprocal face extrusion smoke; incremental main remains pending"
       }
     ]
   },

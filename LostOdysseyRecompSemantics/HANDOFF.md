@@ -1,3 +1,7 @@
+## Root direct continuation: incremental hull primitives and extrusion (2026-10-09)
+
+`mesh_hull_incremental61` adds thirteen logical entries for vector normalization/orthogonal axes, triangle normals/visibility/noncoplanarity, eligible support search, edge slots, face registry/max-distance selection, neighbor stitching and face extrusion. Four focused paths pass, including extruding one tetrahedron face into three, retaining six faces with reciprocal adjacency and no leaked allocations after cleanup. Full library passes. These are logical/ABI implementations, not Full72/bitwise floating-point proofs. Zero-vector diagnostic remains an explicit accepted guest call. Deep incremental BA40B8, support perturbation BA2010 and simplex selection BA3BE0 still need composition.
+
 ## Root direct continuation: hull preprocessing data flow (2026-10-09)
 
 `mesh_hull_preprocess61` adds nine logic-first entries: BA0230 normalization/epsilon dedup/degenerate box, BA0998 first-use point remap, BA0D68/BA1138/BA11D8/BA2280 array ownership/growth/append, BA4A88 plain hull extraction, BA5A70 hull-mode selection and BA5CF8 output packing/cleanup. Four focused data/array smoke checks pass; indexed B9C7D8 still emits 564 bytes and frees all tracked allocations. Full library passes. BA40B8, BA4BF8 and BA5480 remain explicit mutable guest algorithm boundaries. Driver and packaging are compiled/source-reviewed, not a closed hull-path execution or original Full72 proof. Prepared hull and enclosing wrapper use separate stack scratch; retain that separation.
