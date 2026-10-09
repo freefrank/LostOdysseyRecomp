@@ -8,6 +8,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 ### English
 
+- Fixed short stutters with DLSS frame generation, mostly in battles, on Vulkan and Direct3D 12.
 - Fixed a Vulkan crash a few seconds after startup on NVIDIA GPUs when ReShade's `dxgi.dll` is in the game folder; ReShade still works with Direct3D 12 (#323).
 - With DLSS, FSR, XeSS or MetalFX on, a Render resolution above the output now supersamples: the upscaler outputs at that resolution and the picture is scaled down to the window or screen (#332).
 - On Windows, 5.1 surround no longer drops to stereo on outputs that report stereo but take a 5.1 mix, such as optical outputs with Dolby Digital Live or DTS, or after the speaker setup changes while the game runs (#174).
@@ -24,6 +25,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 ### 简体中文
 
+- 修复开启 DLSS 帧生成时的短暂卡顿（多见于战斗），Vulkan 和 Direct3D 12 都已修复。
 - 修复游戏目录里有 ReShade 的 `dxgi.dll` 时，NVIDIA 显卡使用 Vulkan 启动几秒后崩溃的问题；ReShade 在 Direct3D 12 下仍可使用（#323）。
 - 开启 DLSS、FSR、XeSS 或 MetalFX 时，高于输出的渲染分辨率现在会超采样：超分输出为该分辨率，再缩小到窗口或屏幕（#332）。
 - Windows 上，报告为立体声但接受 5.1 混音的输出（如开启 Dolby Digital Live 或 DTS 的光纤输出），以及游戏运行中改了扬声器配置后，5.1 环绕声不再退回立体声（#174）。

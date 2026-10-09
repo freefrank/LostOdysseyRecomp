@@ -126,6 +126,9 @@ bool D3D12Session::Quiesce(std::string& reason) {
     if (!initialized_ || closed_ || nativeFeatureReleased_) return true;
     if (!Drain(reason) || !Disable(reason) || !WaitNative(reason)) return false;
     if (queue_ && (!SignalFence(reason) || !WaitFence(reason))) return false;
+    // Input gaps only Disable. Settings, display and shutdown boundaries land
+    // here, so a feature that keeps its resources while off (DLSS-G) frees them.
+    if (!ReleaseNativeFeature(reason)) return false;
     blocked_.reset(); return true;
 }
 bool D3D12Session::Reconfigure(const Config& config,std::string& reason) {
