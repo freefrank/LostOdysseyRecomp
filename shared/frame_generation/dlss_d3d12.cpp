@@ -179,6 +179,10 @@ private:
         options_.numFramesToGenerate=requested_.generatedFrames;
         options_.dynamicTargetFrameRate=requested_.targetFrameRate;
         options_.queueParallelismMode=sl::DLSSGQueueParallelismMode::eBlockPresentingClientQueue;
+        // Frames without inputs turn DLSS-G off briefly; by default eOff frees the
+        // feature and eOn recreates it, a long frame each way (DLSS-G guide 6.4).
+        // Quiesce frees it at settings, display and shutdown boundaries.
+        options_.flags=sl::DLSSGFlags::eRetainResourcesWhenOff;
         options_.enableUserInterfaceRecomposition=sl::eFalse;
         options_.numBackBuffers=f.backBuffers; options_.colorWidth=f.width; options_.colorHeight=f.height;
         options_.colorBufferFormat=uint32_t(f.format); options_.mvecDepthWidth=f.inputWidth; options_.mvecDepthHeight=f.inputHeight;
