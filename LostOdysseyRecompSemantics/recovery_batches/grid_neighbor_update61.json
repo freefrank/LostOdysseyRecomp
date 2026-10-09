@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "grid-neighbor-update61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/grid_neighbor_update61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/grid_neighbor_update61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\nvoid OriginalGridNeighbor61Save(PPCContext&);\nvoid OriginalGridNeighbor61Restore(PPCContext&);\n#define __savegprlr_25(c,b) OriginalGridNeighbor61Save(c)\n#define __restgprlr_25(c,b) OriginalGridNeighbor61Restore(c)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/grid_neighbor_update61.cpp"
+      ]
+    }
+  ]
+}

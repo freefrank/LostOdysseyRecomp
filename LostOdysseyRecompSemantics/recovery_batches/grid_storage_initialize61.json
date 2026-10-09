@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "grid-storage-initialize61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/grid_storage_initialize61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/grid_storage_initialize61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nvoid OriginalGridInitialize61Indirect(std::uint32_t,PPCContext&,std::uint8_t*);\n#undef PPC_CALL_INDIRECT_FUNC\n#define PPC_CALL_INDIRECT_FUNC(t) OriginalGridInitialize61Indirect((t),ctx,base)\nvoid OriginalGridInitialize61Save(unsigned,PPCContext&,std::uint8_t*);\nvoid OriginalGridInitialize61Restore(unsigned,PPCContext&,std::uint8_t*);\n#define __savegprlr_29(c,b) OriginalGridInitialize61Save(29,c,b)\n#define __restgprlr_29(c,b) OriginalGridInitialize61Restore(29,c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/grid_storage_initialize61.cpp"
+      ]
+    }
+  ]
+}

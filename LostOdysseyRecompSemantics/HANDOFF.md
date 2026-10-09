@@ -47,8 +47,18 @@ growth), with incremental library PASS. Coordinate widths 6/7/8, malformed input
 and trap paths remain untested. This new upper also stays zero-credit pending
 fixed cached catalog membership; no runtime replacement.
 
-Next active work: BAE200 Morton-sort/grid-delta bitstream encoder, using the
-newly closed lower boundaries and the recovered BAF600 decoder as its partner. BD2870 is implemented by
+BAF600 decoder stage was pushed as `74b26b83` and remote-verified. Two independent
+grid units are now ready: `grid_storage_initialize61` (BB1E58 bounds/transforms,
+allocation and cell fill; 3 genuine-body cases), and `grid_neighbor_update61`
+(BB23C0 positive-corner occupancy tagging; 4 cases). Source review caught and
+fixed a premature 32-bit product truncation in the neighbor helper; its signed
+high-word arithmetic check, rerun oracle and incremental library passed. These
+remain zero-credit without the historical catalog. Ordinary finite small-grid
+checks do not cover extreme sizes, nonfinite inputs or alternate FP modes.
+
+Next active work: BAE200 Morton-sort/grid-delta bitstream encoder and BAFEC0
+PMAP/color-group dispatcher, using the closed lower boundaries and BAF600 decoder.
+Both are being implemented independently; neither is validated or counted yet. BD2870 is implemented by
 `reader_buffer_growth61`; small initialization/tail helpers by
 `object_sort_support61`; object initialization/cleanup by `object_sort_lifecycle61`.
 Integrate one complete upper at a time, perform narrowly selected original-body

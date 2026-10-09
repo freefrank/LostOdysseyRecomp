@@ -1,0 +1,36 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Private generated bodies are pinned by SHA256 of UTF-8 with LF line endings and no final newline; no generated code is embedded.",
+  "entries": [
+    {
+      "address": "82BB1E58",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 54126,
+      "instruction_count": 143,
+      "body_sha256": "c9d3e5eea4301de151088bf04914290c5bf60bc3b45bd38e67bc3218676bf33a",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 3,
+    "library_validated": true,
+    "library": "PASS incremental Clang 19 CMake static library after arithmetic correction; existing unused-function warning exception retained.",
+    "platform": "Linux x64; Clang 19.1.7; genuine XEX regenerated with pinned XenonRecomp ddd128bc plus tracked patch; existing oracle guest-window allocation overlaid with mmap/mprotect only",
+    "mapping_credit": 0,
+    "mapping_limit": "Fixed historical catalog.sqlite unavailable; do not infer membership from regenerated sources. 82BB25D0 is explicitly external in prior handoff.",
+    "runtime_validated": false,
+    "complete": false,
+    "limits": "Selected finite inputs, ordinary RAM, Full72 state, callbacks and host CSR only. No Windows revalidation, nonfinite matrix, faults/MMIO, concurrency, runtime or gameplay acceptance.",
+    "case_scope": "Finite three-cell-side bounds with successful allocation, allocation failure, and mutable allocation callback affecting fill sentinel/count/target. Nonfinite, extreme dimensions and alternate FP modes untested."
+  },
+  "implementation": {
+    "entries": [
+      "82BB1E58"
+    ],
+    "header": "include/lo_semantics/grid_storage_initialize61.h",
+    "source": "src/grid_storage_initialize61.cpp",
+    "oracle": "tests/grid_storage_initialize61_oracle.cpp"
+  }
+}

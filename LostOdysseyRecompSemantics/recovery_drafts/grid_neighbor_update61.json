@@ -1,0 +1,36 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Private generated bodies are pinned by SHA256 of UTF-8 with LF line endings and no final newline; no generated code is embedded.",
+  "entries": [
+    {
+      "address": "82BB23C0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 54948,
+      "instruction_count": 131,
+      "body_sha256": "b9354dc0545f9d319e454ed78dda92ccf48b94e00ddaad4d941647d6a25934f8",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 4,
+    "library_validated": true,
+    "library": "PASS incremental Clang 19 CMake static library after arithmetic correction; existing unused-function warning exception retained.",
+    "platform": "Linux x64; Clang 19.1.7; genuine XEX regenerated with pinned XenonRecomp ddd128bc plus tracked patch; existing oracle guest-window allocation overlaid with mmap/mprotect only",
+    "mapping_credit": 0,
+    "mapping_limit": "Fixed historical catalog.sqlite unavailable; do not infer membership from regenerated sources. 82BB25D0 is explicitly external in prior handoff.",
+    "runtime_validated": false,
+    "complete": false,
+    "limits": "Selected finite inputs, ordinary RAM, Full72 state, callbacks and host CSR only. No Windows revalidation, nonfinite matrix, faults/MMIO, concurrency, runtime or gameplay acceptance.",
+    "case_scope": "Empty grid, all-marked 2-cube, far-corner rejection, mixed neighbor rejection. Full signed-product high words were additionally checked after source review found and fixed a premature truncation; no huge-grid traversal claimed."
+  },
+  "implementation": {
+    "entries": [
+      "82BB23C0"
+    ],
+    "header": "include/lo_semantics/grid_neighbor_update61.h",
+    "source": "src/grid_neighbor_update61.cpp",
+    "oracle": "tests/grid_neighbor_update61_oracle.cpp"
+  }
+}

@@ -158,6 +158,8 @@ add_library(LostOdysseyRecompSemantics STATIC
     src/object_sort_lifecycle61.cpp
     src/object_sort_support61.cpp
     src/object_sort_reader61.cpp
+    src/grid_neighbor_update61.cpp
+    src/grid_storage_initialize61.cpp
     src/reader_buffer_growth61.cpp
     src/crt_error_text61_context.cpp
     src/crt_stream_output_upper61.cpp
