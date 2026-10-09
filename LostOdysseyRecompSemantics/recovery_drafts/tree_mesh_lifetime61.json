@@ -1,0 +1,52 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Mesh source attachment and nondeleting/deleting owner destruction, pinned original uppers with recovered shared cleanup lowers.",
+  "entries": [
+    {
+      "address": "82BD2200",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 6409,
+      "instruction_count": 25,
+      "body_sha256": "70c4fe2b947ed5e7d3287764e6aa7162d667aba46a30140e3b647e84fcbe27d3",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD2268",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 6474,
+      "instruction_count": 16,
+      "body_sha256": "6b401c44836a5e703b2103af9f99440288e798c50217842661867780b2047309",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD27F8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 7273,
+      "instruction_count": 29,
+      "body_sha256": "dab95c21c35e128b1203a86ff7bb04c9476d46b9ad4d045026f15741cbe73596",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BD2200",
+      "82BD2268",
+      "82BD27F8"
+    ],
+    "header": "include/lo_semantics/tree_mesh_lifetime61.h",
+    "source": "src/tree_mesh_lifetime61.cpp",
+    "oracle": "tests/tree_mesh_lifetime61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 5,
+    "library_validated": true,
+    "case_scope": "Invalid/valid borrowed mesh attachment; nondeleting cleanup; deleting cleanup with retain/free flag. Full72/RAM/callback comparison and independent disposal order. Original upper with shared recovered lowers; external allocator and build callback boundaries.",
+    "platform": "Linux x64 Clang 19.1.7; pinned regenerated PPC; mmap guest overlay",
+    "mapping_limit": "Historical catalog membership unverified; no baseline mapping credit."
+  }
+}

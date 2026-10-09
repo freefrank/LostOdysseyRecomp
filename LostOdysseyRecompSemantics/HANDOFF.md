@@ -1,3 +1,7 @@
+## Root direct continuation: mesh owner lifetime (2026-10-09)
+
+`tree_mesh_lifetime61` adds BD2200 borrowed-mesh attachment and BD2268/BD27F8 nondeleting/deleting cleanup routes. Validation happens before releasing old state. Cleanup frees owned raw storage and the count-prefixed map, restores the base table and conditionally frees the owner while retaining its original return pointer. Five pinned-original-upper/shared-recovered-lower cases pass Full72/RAM/callback traces and independent release order; complete Clang library passes. External build and allocator callbacks remain borrowed. No baseline mapping or gameplay credit.
+
 ## Root direct continuation: concrete mesh integration (2026-10-09)
 
 `tree_mesh_callbacks61` now resolves the ten recovered geometry/split/strategy callback addresses. A nine-triangle case passes through the actual first-tree threshold 8, second-tree threshold 1, packed remapping and owned flat strategy. Full72/RAM/host CSR/callback traces/live ownership agree with the original upper using the same independently recovered lowers; independent leaf counts, packed offsets and flat child indices also pass. The prior three borrowed-service cases remain unchanged. Only allocator services are synthetic in the new case. This adapter adds no PPC address credit or runtime hook; whole-chain original-lower independence and gameplay remain unverified.
