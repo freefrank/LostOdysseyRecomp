@@ -22,13 +22,17 @@ namespace apu
     // Live output change; a change to or from Surround reopens the device on
     // the driver thread between frames.
     void SetOutput(Output output);
-    // Matrix surround: phase of the surrounds against the fronts, 0-180
-    // degrees (90 is Pro Logic II). Applied from the next frame.
-    void SetMatrixPhase(uint32_t degrees);
+    // Matrix surround: where the surrounds are heard, 90-150 degrees from the
+    // front (110 is Pro Logic II). Applied from the next frame.
+    void SetMatrixRearAngle(uint32_t degrees);
     // Speaker test noise (test_signal.h) in place of the game's sound. Call
     // it every frame while the test should play; it stops by itself 0.3 s
     // after the last call with true.
     void SetTestSignal(bool on);
+    // Where the speaker test sound is along its circle (SpeakerPan::Position:
+    // 0 front left ... 4 left surround, fractions while gliding), or a
+    // negative value while no test plays.
+    float TestSignalPosition();
     // Channels of the open device: 6 (5.1), 2 (stereo), or 0 without a device
     // or while a change is pending.
     uint32_t OutputChannels();

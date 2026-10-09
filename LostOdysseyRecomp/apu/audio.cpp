@@ -31,9 +31,10 @@ namespace apu
         std::atomic<bool> g_surroundRequested{ false };
         bool g_surroundOpen = false; // driver thread after Init
         std::atomic<bool> g_matrix{ false }; // matrix-encode the stereo frames
-        std::atomic<uint32_t> g_matrixPhase{ 90 };
+        std::atomic<uint32_t> g_matrixRear{ 110 };
         // steady_clock time until which the speaker test plays
         std::atomic<std::chrono::steady_clock::rep> g_testSignalUntil{ 0 };
+        std::atomic<float> g_testPosition{ -1.0f };
         std::atomic<uint32_t> g_outputChannels{ 0 };
 
         uint32_t FrameBytes() { return XAUDIO_NUM_SAMPLES * g_channels * sizeof(float); }
@@ -227,15 +228,20 @@ namespace apu
             g_outputChannels = 0; // unknown until the driver thread has applied it
     }
 
-    void SetMatrixPhase(uint32_t degrees)
+    void SetMatrixRearAngle(uint32_t degrees)
     {
-        g_matrixPhase = std::min(degrees, 180u);
+        g_matrixRear = std::clamp(degrees, 90u, 150u);
     }
 
     void SetTestSignal(bool on)
     {
         const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds(300);
         g_testSignalUntil = on ? until.time_since_epoch().count() : 0;
+    }
+
+    float TestSignalPosition()
+    {
+        return g_testPosition;
     }
 
     uint32_t OutputChannels()
@@ -262,21 +268,21 @@ namespace apu
         // on the one thread that submits frames.
         static MatrixSurround matrix;
         static bool matrixOn = false;
-        static uint32_t matrixPhase = 90;
+        static uint32_t matrixRear = 110;
         if (const bool on = g_matrix; on != matrixOn)
         {
             matrix.Reset();
             matrixOn = on;
         }
-        if (const uint32_t phase = g_matrixPhase; phase != matrixPhase)
+        if (const uint32_t rear = g_matrixRear; rear != matrixRear)
         {
-            matrix.SetPhase(float(phase));
-            matrixPhase = phase;
+            matrix.SetRearAngle(float(rear));
+            matrixRear = rear;
         }
-        static ChannelWalk walk;
+        static SpeakerPan pan;
         static bool testOn = false;
         const bool test = std::chrono::steady_clock::now().time_since_epoch().count() < g_testSignalUntil;
-        if (test && !testOn) walk.Reset(); // each test starts at front left
+        if (test && !testOn) pan.Reset(); // each test starts at front left
         testOn = test;
         float peak = 0;
         for (uint32_t i = 0; i < XAUDIO_NUM_SAMPLES; ++i)
@@ -287,7 +293,7 @@ namespace apu
                 const float value = std::bit_cast<float>(ByteSwap(words[c * XAUDIO_NUM_SAMPLES + i]));
                 channel[c] = std::isfinite(value) ? value : 0;
             }
-            if (testOn) walk.Next(channel);
+            if (testOn) pan.Next(channel);
             for (uint32_t c = 0; c < 6; ++c)
                 surround[i * 6 + c] = std::clamp(channel[c], -1.0f, 1.0f);
             float left, right;
@@ -304,6 +310,7 @@ namespace apu
             stereo[i * 2 + 1] = std::clamp(right, -1.0f, 1.0f);
             peak = std::max({peak, std::abs(stereo[i * 2]), std::abs(stereo[i * 2 + 1])});
         }
+        g_testPosition = testOn ? pan.Position() : -1.0f;
         uint32_t n = ++g_framesSubmitted;
         CaptureRequested(stereo.data(), n);
         // Bounded diagnostic capture, before mute; raw f32le, 48 kHz stereo.

@@ -144,7 +144,7 @@ static int RunGuest(uint32_t entry)
         return 1;
     }
     XexLoader::StartTimeStampThread();
-    apu::SetMatrixPhase(settings::GetConfig().audioMatrixPhase);
+    apu::SetMatrixRearAngle(settings::GetConfig().audioMatrixRear);
     apu::Init(apu::Output(settings::GetConfig().audioOutput));
     apu::xma::Init();
     if (getenv("LO_HEADLESS"))

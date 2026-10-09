@@ -108,8 +108,8 @@ const wchar_t* Message(uint32_t){return L"Message";}
 int Consent(){return 0;} bool Enabled(){return false;}
 bool SetConsent(bool){++consents;return true;}
 }
-namespace apu { bool surround=false; uint32_t matrixPhase=90; void SetOutput(Output o){surround=o==Output::Surround;}
-void SetMatrixPhase(uint32_t d){matrixPhase=d;} void SetTestSignal(bool){} uint32_t OutputChannels(){return surround?6:2;} }
+namespace apu { bool surround=false; uint32_t matrixRear=110; void SetOutput(Output o){surround=o==Output::Surround;}
+void SetMatrixRearAngle(uint32_t d){matrixRear=d;} void SetTestSignal(bool){} float TestSignalPosition(){return -1.0f;} uint32_t OutputChannels(){return surround?6:2;} }
 namespace settings { bool SaveAudioOutput(uint32_t o){savedConfig.audioOutput=o;return true;} }
 '''
 TEST = r'''

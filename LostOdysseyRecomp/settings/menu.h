@@ -84,7 +84,7 @@ bool CalibrationKey(uint32_t key);
 void PointerDrag(float x, float y, bool held);
 // Settings menu layout rules. Follow them when adding or moving a row:
 // - Tabs: 0 Gameplay (retail game options, controller options, game actions),
-//   1 Audio (voice, volumes, audio output, matrix phase), 2 Graphics (display, rendering,
+//   1 Audio (voice, volumes, audio output, rear angle), 2 Graphics (display, rendering,
 //   frame rate, HDR), 3 System (interface and game language, updates, TAA
 //   shader collection, Import discs & DLC, Save).
 // - Gameplay starts with the seven retail guest settings in their retail order;
@@ -116,7 +116,7 @@ inline constexpr int AudioVoiceRow = 0;
 inline constexpr int AudioMusicRow = 1;
 inline constexpr int AudioEffectsRow = 2;
 inline constexpr int AudioOutputRow = 3;
-inline constexpr int AudioMatrixPhaseRow = 4; // enabled with Matrix surround
+inline constexpr int AudioRearAngleRow = 4; // enabled with Matrix surround
 inline constexpr int AudioRowCount = 5;
 // System tab (3).
 inline constexpr int SystemUiLanguageRow = 0;
@@ -128,7 +128,7 @@ inline constexpr int SystemImportRow = 5;
 inline constexpr int SystemSaveRow = 6;
 inline constexpr int SystemRowCount = 7;
 static_assert(GamePromptRow == GameRetailRowCount && GameMainMenuRow + 1 == GameRowCount);
-static_assert(AudioMatrixPhaseRow + 1 == AudioRowCount && SystemSaveRow + 1 == SystemRowCount);
+static_assert(AudioRearAngleRow + 1 == AudioRowCount && SystemSaveRow + 1 == SystemRowCount);
 // Logical ids for the graphics tab (2). MenuSnapshot::row stores these as int.
 // Count is the tab length, not the on-screen viewport.
 enum class GraphicsRow : int

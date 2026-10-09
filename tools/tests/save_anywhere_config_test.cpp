@@ -95,12 +95,13 @@ int wmain(int argc, wchar_t** argv)
     Check(settings::Read().audioOutput == settings::AudioOutputStereo, "missing audio output key keeps stereo");
     Write("audio_output=1\n");
     Check(settings::Read().audioOutput == settings::AudioOutputSurround, "5.1 audio output read from INI");
-    Write("audio_output=2\naudio_matrix_phase=50\n");
-    Check(settings::Read().audioOutput == settings::AudioOutputMatrix && settings::Read().audioMatrixPhase == 45,
-          "matrix surround read from INI, phase rounded to a 15 degree step");
-    Write("audio_output=3\naudio_matrix_phase=400\n");
-    Check(settings::Read().audioOutput == settings::AudioOutputStereo && settings::Read().audioMatrixPhase == 180,
-          "unknown audio output falls back to stereo, phase capped at 180");
+    Check(settings::Read().audioMatrixRear == 110, "missing rear angle keeps Pro Logic II's 110 degrees");
+    Write("audio_output=2\naudio_matrix_rear=124\n");
+    Check(settings::Read().audioOutput == settings::AudioOutputMatrix && settings::Read().audioMatrixRear == 120,
+          "matrix surround read from INI, rear angle rounded to a 10 degree step");
+    Write("audio_output=3\naudio_matrix_rear=400\n");
+    Check(settings::Read().audioOutput == settings::AudioOutputStereo && settings::Read().audioMatrixRear == 150,
+          "unknown audio output falls back to stereo, rear angle capped at 150");
 
     Write("shadow_resolution=2\nambient_occlusion=1\n");
     Check(settings::Read().shadowResolution == 2 && settings::Read().ambientOcclusion == 1,

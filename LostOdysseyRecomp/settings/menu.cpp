@@ -785,12 +785,16 @@ void Publish(uint8_t *base, uint32_t config)
     // The first graphics ids are hidden; enter the tab on a visible row.
     SkipHiddenGraphicsRow();
 #endif
-    // Speaker test noise while Matrix phase is focused and adjustable; it
-    // stops by itself once the menu stops publishing.
-    apu::SetTestSignal(tab == 1 && row == AudioMatrixPhaseRow && edit.audioOutput == AudioOutputMatrix);
+    // Speaker test noise while Rear angle is focused and adjustable; it
+    // stops by itself once the menu stops publishing. The speaker layout is
+    // drawn under the rows; DrawMenu moves the marker with the sound.
+    const bool speakerTest = tab == 1 && row == AudioRearAngleRow && edit.audioOutput == AudioOutputMatrix;
+    apu::SetTestSignal(speakerTest);
     Snapshot next;
     next.tab = tab;
     next.row = row;
+    next.speakerLayout = speakerTest;
+    next.speakerRear = int(edit.audioMatrixRear);
     next.language = edit.uiLanguage;
     next.calibration = MakeHdrCalibration(edit, calibrationOpen.load());
     next.brightness = MakeBrightnessCalibration(edit, brightnessOpen.load());
@@ -858,10 +862,10 @@ void Publish(uint8_t *base, uint32_t config)
         addChoices(L"Audio output", L"音訊輸出",
                    {Tr(L"Stereo", L"立體聲"), Tr(L"5.1 surround", L"5.1 環繞聲"), Tr(L"Matrix surround", L"矩陣環繞聲")},
                    edit.audioOutput);
-        std::vector<std::wstring> phases;
-        for (uint32_t degrees = 0; degrees <= 180; degrees += 15)
-            phases.push_back(std::to_wstring(degrees) + L"°");
-        addChoices(L"Matrix phase", L"矩陣相移", std::move(phases), edit.audioMatrixPhase / 15,
+        std::vector<std::wstring> angles;
+        for (uint32_t degrees = 90; degrees <= 150; degrees += 10)
+            angles.push_back(std::to_wstring(degrees) + L"°");
+        addChoices(L"Rear angle", L"後方角度", std::move(angles), (edit.audioMatrixRear - 90) / 10,
                    edit.audioOutput == AudioOutputMatrix);
     }
     else if (tab == 2)
@@ -1104,10 +1108,10 @@ void Publish(uint8_t *base, uint32_t config)
 #endif
             : Tr(L"5.1 sends the game's surround mix to a 5.1 or 7.1 speaker setup. Applies immediately.",
                  L"5.1 會將遊戲的環繞聲混音輸出到 5.1 或 7.1 喇叭，立即套用。");
-    if (tab == 1 && row == AudioMatrixPhaseRow && status.empty())
+    if (tab == 1 && row == AudioRearAngleRow && status.empty())
         next.help = edit.audioOutput == AudioOutputMatrix
-            ? Tr(L"Test noise circles the speakers while this row is selected. 90° is Pro Logic II; change it if the rear sounds weak or vague.",
-                 L"選取此行時，測試噪音會依序繞各喇叭播放。90° 為 Pro Logic II；後方聲音偏弱或模糊時可調整。")
+            ? Tr(L"A test sound circles the speakers. Sets where the rear channels sound; 110° is the Pro Logic II standard.",
+                 L"測試聲音會繞著喇叭轉圈。設定後方聲道的位置；110° 為 Pro Logic II 標準。")
             : Tr(L"Select Matrix surround in Audio output to adjust this.",
                  L"在音訊輸出選擇矩陣環繞聲後才能調整。");
     if (tab == 2)
@@ -1432,7 +1436,8 @@ void Publish(uint8_t *base, uint32_t config)
         next.neuralRendering == snapshot.neuralRendering &&
         next.rows == snapshot.rows && next.help == snapshot.help && next.notice == snapshot.notice && next.dialogTitle == snapshot.dialogTitle &&
         next.dialogMessage == snapshot.dialogMessage && next.dialogChoices == snapshot.dialogChoices &&
-        next.dialogSelection == snapshot.dialogSelection)
+        next.dialogSelection == snapshot.dialogSelection && next.speakerLayout == snapshot.speakerLayout &&
+        next.speakerRear == snapshot.speakerRear)
         return;
     next.revision = snapshot.revision + 1;
     snapshot = std::move(next);
@@ -2497,18 +2502,18 @@ PPC_FUNC(sub_822F19B0)
             if (!SaveAudioOutput(edit.audioOutput))
                 status = Tr(L"Could not save settings.", L"無法儲存設定。");
         }
-        else if (tab == 1 && row == AudioMatrixPhaseRow)
+        else if (tab == 1 && row == AudioRearAngleRow)
         {
             // Like Vibration: applied and saved at once, without unsaved
             // Graphics edits; only adjustable with Matrix surround.
-            const auto phase = uint32_t(std::clamp(int(edit.audioMatrixPhase) + delta * 15, 0, 180));
-            if (edit.audioOutput == AudioOutputMatrix && phase != edit.audioMatrixPhase)
+            const auto rear = uint32_t(std::clamp(int(edit.audioMatrixRear) + delta * 10, 90, 150));
+            if (edit.audioOutput == AudioOutputMatrix && rear != edit.audioMatrixRear)
             {
-                edit.audioMatrixPhase = phase;
+                edit.audioMatrixRear = rear;
                 Config saved = GetConfig();
-                saved.audioMatrixPhase = phase;
+                saved.audioMatrixRear = rear;
                 if (!SaveConfig(saved)) status = Tr(L"Could not save settings.", L"無法儲存設定。");
-                apu::SetMatrixPhase(phase);
+                apu::SetMatrixRearAngle(rear);
             }
         }
         else if (tab == 1)
@@ -2873,6 +2878,8 @@ bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint3
     // The list arrow is a layer over the raster: it slides between rows and sways.
     static MenuArrow arrow;
     static MenuRect arrowDrawn;
+    // The speaker test marker is another layer: it follows the sound every frame.
+    static MenuRect markerDrawn;
     static double arrowY = 0;
     static bool arrowPlaced = false;
     static MenuTransition::Clock::time_point openTime{}, arrowTime{};
@@ -2913,7 +2920,7 @@ bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint3
             panels.assets = cachedAssets;
             panels.backdropOnly = true;
             motion.Advance(pixels, MenuNow());
-            arrowDrawn = {};
+            arrowDrawn = markerDrawn = {};
             closing = RasterizeMenu(panels, width, height, raster) &&
                       motion.Start(pixels, raster, width, MenuNow(), menu_motion::CloseFade) && motion.Running();
         }
@@ -2922,7 +2929,7 @@ bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint3
         if (shown)
         {
             shown = closing = arrowPlaced = false;
-            arrowDrawn = {};
+            arrowDrawn = markerDrawn = {};
             cachedAssets.reset();
             motion.Reset();
             std::vector<uint32_t>().swap(raster);
@@ -2940,6 +2947,16 @@ bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint3
         std::lock_guard lock(snapshotMutex);
         current = snapshot;
     }
+    const auto eraseMarker = [&] {
+        if (markerDrawn.x1 > markerDrawn.x0)
+            motion.Erase(pixels, markerDrawn);
+        markerDrawn = {};
+    };
+    const auto drawMarker = [&] {
+        const float position = current.speakerLayout && current.dialogChoices.empty() ? apu::TestSignalPosition() : -1.0f;
+        if (position >= 0)
+            markerDrawn = DrawSpeakerMarker(pixels, width, height, position, float(current.speakerRear));
+    };
     // Input style can change without a guest menu tick (hot-plug or keyboard).
     current.playStationPrompts = hid::UsesPlayStationPrompts();
     const bool opened = !shown;
@@ -2949,6 +2966,8 @@ bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint3
         const auto now = MenuNow();
         motion.Advance(pixels, now);
         eraseArrow();
+        eraseMarker();
+        drawMarker();
         drawArrow(now);
         return true;
     }
@@ -2982,6 +3001,7 @@ bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint3
         if (nextArrow.visible)
             eraseArrow();
         arrowDrawn = {};
+        eraseMarker();
         const auto fade = current.tab != cachedTab ? menu_motion::PageFade
                         : dialog != cachedDialog   ? menu_motion::DialogFade
                                                    : menu_motion::ChangeFade;
@@ -2991,7 +3011,7 @@ bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint3
         motion.Advance(pixels, now);
     else
         motion.Cut(pixels, raster, width);
-    arrowDrawn = {};
+    arrowDrawn = markerDrawn = {};
     if (opened)
     {
         openTime = arrowTime = now;
@@ -3003,6 +3023,7 @@ bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint3
         arrowY = arrow.y - (opened ? menu_motion::ArrowOpenDrop : 0);
         arrowPlaced = true;
     }
+    drawMarker();
     drawArrow(now);
     shown = true;
     cachedWidth = width;
