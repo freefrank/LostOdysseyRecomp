@@ -228,3 +228,7 @@ BBE310 fills a 48-byte face record and three 12-byte corner channel tuples. Opti
 BB3C00 appends xyz words through existing buffer growth. BBE948 optionally gives zero-smoothing faces private position IDs and marks their smoothing value, preserving suppression flags. BBEBE0 merges identical corner-channel tuples and rewrites the face corner references before replacing the owned tuple buffer. Six focused original/local-chain cases pass with complete shared-concrete teardown.
 
 BBF208 now packs the selected output channels, including 2D/3D attributes according to the original option byte. Three export cases pass original-chain comparison and independent dimensions/values with teardown; channel family total is nine.
+
+### Indexed face normals and incidence
+
+BBED20 derives normalized face vectors and optionally emits them through the normal buffer, then builds position-to-face counts, offsets and adjacency. Five focused original-upper cases pass known-vector and incidence checks with complete workspace teardown. Original zero-area behavior is retained.

@@ -1,0 +1,33 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Indexed face normals and per-position incident-face counts, prefixes and adjacency.",
+  "entries": [
+    {
+      "address": "82BBED20",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 24346,
+      "instruction_count": 314,
+      "body_sha256": "b9298be6909dfd01595f7d63f1548271b9ea23a5e30da1ff1fcaec88c48e5449",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BBED20"
+    ],
+    "header": "include/lo_semantics/mesh_indexed_normals61.h",
+    "source": "src/mesh_indexed_normals61.cpp",
+    "oracle": "tests/mesh_indexed_normals61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 5,
+    "library_validated": true,
+    "case_scope": "Five original-upper/shared concrete append/growth/memset cases: normal output enabled/disabled, all processing disabled, invalid count and zero-area face. Full72/RAM/CSR/events/ownership plus independent known normals, incident counts/prefix/face lists and complete workspace teardown. No allocation fault matrix or whole indexed pipeline claim.",
+    "platform": "Linux x64 Clang19; pinned PPC; mmap guest overlay"
+  }
+}

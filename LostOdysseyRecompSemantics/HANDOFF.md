@@ -1,3 +1,7 @@
+## Root direct continuation: indexed face normals and incidence (2026-10-09)
+
+`mesh_indexed_normals61` closes BBED20: normalized per-face vectors, optional packed normal output, and owned per-position face counts/prefixes/adjacency. Five original-upper/shared-concrete-buffer cases pass for output on/off, all processing disabled, invalid count and a zero-area face. Full72/RAM/CSR/events/ownership, independent known vectors and incidence arrays, and complete workspace teardown pass. The fixture initially omitted the 82007784 constant page; expanding the guest mapping fixed the fixture without an implementation change. Full library passes. Vertex normal smoothing/reindexing and the final indexed pipeline remain.
+
 ## Root direct continuation: indexed output channel packing (2026-10-09)
 
 `mesh_indexed_channels61` adds BBF208, appending selected position/attribute channels and preserving two- versus three-component attribute packing. Nine family cases now pass, including three complete-original export/append chains with shared concrete growth. Independent output counts/values, Full72/RAM/CSR/events/ownership and teardown pass for 2D, 3D and disabled output flags. Full library passes.

@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "mesh-indexed-normals61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/mesh_indexed_normals61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/mesh_indexed_normals61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nvoid NormalsIndirect(std::uint32_t,PPCContext&,std::uint8_t*);\n#undef PPC_CALL_INDIRECT_FUNC\n#define PPC_CALL_INDIRECT_FUNC(t) NormalsIndirect((t),ctx,base)\nvoid NormalsLower(std::uint32_t,PPCContext&,std::uint8_t*);\nvoid NormalsSave(unsigned,PPCContext&,std::uint8_t*);\nvoid NormalsRestore(unsigned,PPCContext&,std::uint8_t*);\n#define __savegprlr_27(c,b) NormalsSave(27,c,b)\n#define __restgprlr_27(c,b) NormalsRestore(27,c,b)\n#define sub_82BD0798(c,b) NormalsLower(0x82bd0798u,c,b)\n#define sub_82B7BC40(c,b) NormalsLower(0x82b7bc40u,c,b)\n#define sub_82BB3C00(c,b) NormalsLower(0x82bb3c00u,c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/mesh_indexed_normals61.cpp"
+      ]
+    }
+  ]
+}
