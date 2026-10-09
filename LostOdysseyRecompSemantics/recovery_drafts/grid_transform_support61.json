@@ -1,0 +1,81 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Private generated bodies are pinned by SHA256 of UTF-8 with LF line endings and no final newline; no generated code is embedded.",
+  "entries": [
+    {
+      "address": "822C5128",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.2.cpp",
+      "source_line": 28191,
+      "instruction_count": 15,
+      "body_sha256": "3825e20efa1dca86bfb4270a1027c87d42b4221a7461301299d3f64ef1f8a8e4",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82F2B308",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.214.cpp",
+      "source_line": 99976,
+      "instruction_count": 8,
+      "body_sha256": "8b54d318c74438982c60361120d34aa26ddba97204e056278b0b220bc14871ce",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD1278",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 4103,
+      "instruction_count": 21,
+      "body_sha256": "6375f9af74cd327574fc8dd83eaf68117e8610efe615b1a410f16a63a63843d1",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD78C0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 19083,
+      "instruction_count": 6,
+      "body_sha256": "96cb040ecd5f38328babe842459596a179cccf4a34ce33a620449a7f7e8d8749",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD78D8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 19100,
+      "instruction_count": 4,
+      "body_sha256": "225e6a80474a5d6f0dee937be99e95ada9ad4dc86d249acbd60726a12d80af51",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD78E8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 19113,
+      "instruction_count": 7,
+      "body_sha256": "795de7ad862257cc4c4c3ddb18d941207a59487bc31fa9dca68daf68a915d55a",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 9,
+    "library_validated": true,
+    "library": "PASS incremental complete Clang 19 CMake static library; existing unused-function warning exception retained.",
+    "platform": "Linux x64; Clang 19.1.7; genuine XEX regenerated with pinned XenonRecomp ddd128bc plus tracked patch; existing oracle guest-window allocation overlaid with mmap/mprotect only",
+    "mapping_credit": 0,
+    "mapping_limit": "Fixed historical catalog.sqlite unavailable; do not infer membership from regenerated sources. 82BB25D0 is explicitly external in prior handoff.",
+    "runtime_validated": false,
+    "complete": false,
+    "limits": "Selected finite inputs, ordinary RAM, Full72 state, callbacks and host CSR only. No Windows revalidation, nonfinite matrix, faults/MMIO, concurrency, runtime or gameplay acceptance.",
+    "case_scope": "Finite rounding including signed zero, six-word clear, format defaults, visitor init/reset, optional copy; out-of-range conversion excluded."
+  },
+  "implementation": {
+    "entries": [
+      "822C5128",
+      "82F2B308",
+      "82BD1278",
+      "82BD78C0",
+      "82BD78D8",
+      "82BD78E8"
+    ],
+    "header": "include/lo_semantics/grid_transform_support61.h",
+    "source": "src/grid_transform_support61.cpp",
+    "oracle": "tests/grid_transform_support61_oracle.cpp"
+  }
+}

@@ -1,0 +1,69 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Private generated bodies are pinned by SHA256 of UTF-8 with LF line endings and no final newline; no generated code is embedded.",
+  "entries": [
+    {
+      "address": "82BD9740",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 23697,
+      "instruction_count": 70,
+      "body_sha256": "f7b24566badea46c688154677515dce771bd522dcb22289c9cfd29434a4c2b62",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD0798",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 2461,
+      "instruction_count": 8,
+      "body_sha256": "9d0a302b60cd8bfd0afafd0f70b0027dc487d849edb04825e3a9f67994d1d4c8",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BDAC88",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 26973,
+      "instruction_count": 35,
+      "body_sha256": "5a71b917e5d0c087daa11a111f41950f6eeca103702fc5d3199ed34783525be5",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD2C08",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 7890,
+      "instruction_count": 1,
+      "body_sha256": "701726b8927c3255b6e96a97bda285f0fe2115d991ea6ca4033a4d02c2f907c7",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD2A28",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 7609,
+      "instruction_count": 31,
+      "body_sha256": "e13b86b50d6ceabf2bfd889e742d4d87d8e0b1d104544d56dc4bc8c3280368bc",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 6,
+    "library_validated": true,
+    "library": "PASS incremental complete Clang 19 CMake static library; existing unused-function warning exception retained.",
+    "platform": "Linux x64; Clang 19.1.7; genuine XEX regenerated with pinned XenonRecomp ddd128bc plus tracked patch; existing oracle guest-window allocation overlaid with mmap/mprotect only",
+    "mapping_credit": 0,
+    "mapping_limit": "Fixed historical catalog.sqlite unavailable; do not infer membership from regenerated sources. 82BB25D0 is explicitly external in prior handoff.",
+    "runtime_validated": false,
+    "complete": false,
+    "limits": "Selected finite inputs, ordinary RAM, Full72 state, callbacks and host CSR only. No Windows revalidation, nonfinite matrix, faults/MMIO, concurrency, runtime or gameplay acceptance.",
+    "case_scope": "Four recursive node/array flag cases and two owner teardown cases, including nested release order and live callback register changes. Genuine closed selected original bodies."
+  },
+  "implementation": {
+    "entries": [
+      "82BD9740",
+      "82BDAC88"
+    ],
+    "header": "include/lo_semantics/owned_tree_cleanup61.h",
+    "source": "src/owned_tree_cleanup61.cpp",
+    "oracle": "tests/owned_tree_cleanup61_oracle.cpp"
+  }
+}

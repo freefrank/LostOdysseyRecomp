@@ -1,0 +1,15 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "grid-transform-routes61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/grid_transform_routes61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/grid_transform_routes61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nextern \"C\" PPC_FUNC(__imp__sub_82BD12D0);\n#define sub_82BD12D0(c,b) __imp__sub_82BD12D0(c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/grid_transform_routes61.cpp",
+        "LostOdysseyRecompSemantics/src/pointer_fields.cpp"
+      ]
+    }
+  ]
+}

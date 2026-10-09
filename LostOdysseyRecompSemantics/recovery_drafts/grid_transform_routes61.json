@@ -1,0 +1,44 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Private generated bodies are pinned by SHA256 of UTF-8 with LF line endings and no final newline; no generated code is embedded.",
+  "entries": [
+    {
+      "address": "82BD7950",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 19178,
+      "instruction_count": 15,
+      "body_sha256": "2aebe43aa54ce33f06d41175c454e4d08f7bb813229f4a16a87f2e961038e732",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD12D0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 4155,
+      "instruction_count": 9,
+      "body_sha256": "469c0063665b72a405c5a92c36091f32448fee5768ef928de0331da11f1eb120",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 1,
+    "library_validated": true,
+    "library": "PASS incremental complete Clang 19 CMake static library; existing unused-function warning exception retained.",
+    "platform": "Linux x64; Clang 19.1.7; genuine XEX regenerated with pinned XenonRecomp ddd128bc plus tracked patch; existing oracle guest-window allocation overlaid with mmap/mprotect only",
+    "mapping_credit": 0,
+    "mapping_limit": "Fixed historical catalog.sqlite unavailable; do not infer membership from regenerated sources. 82BB25D0 is explicitly external in prior handoff.",
+    "runtime_validated": false,
+    "complete": false,
+    "limits": "Selected finite inputs, ordinary RAM, Full72 state, callbacks and host CSR only. No Windows revalidation, nonfinite matrix, faults/MMIO, concurrency, runtime or gameplay acceptance.",
+    "case_scope": "Constructor full-register/RAM case; already mapped BD12D0 is a composed dependency, not new mapping."
+  },
+  "implementation": {
+    "entries": [
+      "82BD7950"
+    ],
+    "header": "include/lo_semantics/grid_transform_routes61.h",
+    "source": "src/grid_transform_routes61.cpp",
+    "oracle": "tests/grid_transform_routes61_oracle.cpp"
+  }
+}

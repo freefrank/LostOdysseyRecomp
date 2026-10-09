@@ -67,12 +67,24 @@ post-store count reloads; actual comparisons corrected empty-input scratch/setup
 state. All final comparisons and incremental library builds passed. These units
 remain zero-credit pending the historical catalog; no runtime replacement.
 
+Encoder/dispatcher/grid-reader stage was pushed as `84d90e1f` and remote-verified.
+The next closed support cohort is built and compared: `grid_transform_routes61`
+(BD7950 constructor over already mapped BD12D0; 1 case),
+`grid_transform_support61` (six leaves: 822C5128/F2B308/BD1278/BD78C0/BD78D8/BD78E8;
+9 cases), `geometry_support61` (BD43F8/BD3D80/BDDDF8/BD4438/BDDE18; 3 cases), and
+`owned_tree_cleanup61` (BD9740 recursive reverse-array cleanup and BDAC88 composed
+owner teardown; 6 cases). Original body pins, Full72/RAM/callback comparisons and
+incremental full-library build passed. Review restored original floating-stage
+order in the rounding helper; its nine cases were rerun. Borrowed objects,
+tagged child ownership, release order and live callback state are explicit.
+These remain zero-credit drafts pending historical catalog membership.
+
 Current dependency frontier is BB2638 (not yet implemented). Its diagnostic path
 B9C298→BC8B78 depends on 822B29A0/822B3438 locking helpers with MSR/reservation/CAS
 and native critical-section state absent from Full72; do not replace them with
-ordinary RAM/no-op locks. Closed next work is six transform leaves, BB06D8 spatial
-sampling, BD7950 construction, BD9740 recursive cleanup and the BB03B0 geometry
-support cluster. BDB260/823F3340 also has an unresolved full-register free-facade
+ordinary RAM/no-op locks. Closed next work is BB06D8 spatial sampling. BB03B0 remains dependent on
+BD7258 and its substantial unclosed geometry children; the small constructor
+cluster above does not close that parent. BDB260/823F3340 also has an unresolved full-register free-facade
 boundary; retain it explicitly. Implement and verify closed units before parents. BD2870 is implemented by
 `reader_buffer_growth61`; small initialization/tail helpers by
 `object_sort_support61`; object initialization/cleanup by `object_sort_lifecycle61`.

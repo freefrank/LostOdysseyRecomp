@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "geometry-support61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/geometry_support61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/geometry_support61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nextern \"C\" PPC_FUNC(__imp__sub_82BDDDF8);\n#define sub_82BDDDF8(c,b) __imp__sub_82BDDDF8(c,b)\nextern \"C\" PPC_FUNC(__imp__sub_82BDDE18);\n#define sub_82BDDE18(c,b) __imp__sub_82BDDE18(c,b)\nextern \"C\" PPC_FUNC(__imp__sub_82BD3D80);\n#define sub_82BD3D80(c,b) __imp__sub_82BD3D80(c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/geometry_support61.cpp"
+      ]
+    }
+  ]
+}

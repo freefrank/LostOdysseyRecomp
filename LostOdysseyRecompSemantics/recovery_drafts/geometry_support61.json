@@ -1,0 +1,72 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Private generated bodies are pinned by SHA256 of UTF-8 with LF line endings and no final newline; no generated code is embedded.",
+  "entries": [
+    {
+      "address": "82BD43F8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 11292,
+      "instruction_count": 15,
+      "body_sha256": "bb3a4a304054430035fe48ebad702b00752e7869f6ffb5bbbf507b44a63527af",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD3D80",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 10317,
+      "instruction_count": 29,
+      "body_sha256": "a5c0f1ca797bfa73d9a6ead0e0eff45f0c71faeb518d1293dd0ff12caa04c976",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BDDDF8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 34244,
+      "instruction_count": 8,
+      "body_sha256": "5e037cbf74a899014855ffae92cfe2e6cd3fe4f8c028830958166461528e24a0",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD4438",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 11331,
+      "instruction_count": 4,
+      "body_sha256": "123dbf6f98d293005889de02df5d5aadb7eade4502b2f5601374d46e96333cd7",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BDDE18",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 34265,
+      "instruction_count": 4,
+      "body_sha256": "16a22c052014a8e8db5843556aa393b573e849e615eb0ff0805ae5b1239cd56d",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 3,
+    "library_validated": true,
+    "library": "PASS incremental complete Clang 19 CMake static library; existing unused-function warning exception retained.",
+    "platform": "Linux x64; Clang 19.1.7; genuine XEX regenerated with pinned XenonRecomp ddd128bc plus tracked patch; existing oracle guest-window allocation overlaid with mmap/mprotect only",
+    "mapping_credit": 0,
+    "mapping_limit": "Fixed historical catalog.sqlite unavailable; do not infer membership from regenerated sources. 82BB25D0 is explicitly external in prior handoff.",
+    "runtime_validated": false,
+    "complete": false,
+    "limits": "Selected finite inputs, ordinary RAM, Full72 state, callbacks and host CSR only. No Windows revalidation, nonfinite matrix, faults/MMIO, concurrency, runtime or gameplay acceptance.",
+    "case_scope": "Nested and inner construction and outer teardown against genuine closed original dependency bodies."
+  },
+  "implementation": {
+    "entries": [
+      "82BD43F8",
+      "82BD3D80",
+      "82BDDDF8",
+      "82BD4438",
+      "82BDDE18"
+    ],
+    "header": "include/lo_semantics/geometry_support61.h",
+    "source": "src/geometry_support61.cpp",
+    "oracle": "tests/geometry_support61_oracle.cpp"
+  }
+}
