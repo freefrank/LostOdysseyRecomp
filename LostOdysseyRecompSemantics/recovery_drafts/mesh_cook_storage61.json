@@ -1,0 +1,97 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Original mesh processing owner construction and teardown, shared recovered tree/auxiliary components.",
+  "entries": [
+    {
+      "address": "82BBCD80",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 19842,
+      "instruction_count": 53,
+      "body_sha256": "c523627077d7dd8863b6f9313f5201c5766eb43eb99385502e09809045f70ba6",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BBD4E0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 20887,
+      "instruction_count": 1,
+      "body_sha256": "024e1d190db7e5cfabe0938a37af56fc426367cbc964e13f61b0a0b244257d3c",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BC51E8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 39159,
+      "instruction_count": 33,
+      "body_sha256": "4ac37acfd7f182e8dfdf2c86ab5d3a5fb27ec9376e404fa893e363024ca5ba58",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BC58A0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 40223,
+      "instruction_count": 44,
+      "body_sha256": "3cead605eb1712f02ed7a22f9a901fc6c9b6b78b4624cf9601b7ea46c394fe60",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BC5950",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 40334,
+      "instruction_count": 23,
+      "body_sha256": "7527d83b1f89b204c690c42cbde7b0772caf939ad71aab9d3e627724b53cb1b3",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82B9E4B0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 8218,
+      "instruction_count": 15,
+      "body_sha256": "64fb0d50be790d75560b5589dfc9584801cdd29d5be8e1f77bcb7ddd93971b2a",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82B9E518",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 8284,
+      "instruction_count": 4,
+      "body_sha256": "75bf7e4ad40f02b94eae0239c3397fdeccc9c696603a8c84d22cb294777ad3f4",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BA01C0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 12757,
+      "instruction_count": 27,
+      "body_sha256": "52d6849be753686deae4943f279aeab8c3605a116c9eee5ea5a8a5f8c589f878",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BBCD80",
+      "82BBD4E0",
+      "82BC51E8",
+      "82BC58A0",
+      "82BC5950",
+      "82B9E4B0",
+      "82B9E518",
+      "82BA01C0"
+    ],
+    "header": "include/lo_semantics/mesh_cook_storage61.h",
+    "source": "src/mesh_cook_storage61.cpp",
+    "oracle": "tests/mesh_cook_storage61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 5,
+    "library_validated": true,
+    "case_scope": "Base/derived construction, populated/empty owner destruction and temporary-array disposal. Composed original uppers with shared actual tree/auxiliary/allocator components. Full72/RAM/host CSR/callbacks and independent structure/free order. No extra defensive or concurrent lifetime policy.",
+    "platform": "Linux x64 Clang 19.1.7; pinned regenerated PPC; mmap guest overlay",
+    "mapping_limit": "Historical catalog membership unverified; no baseline mapping credit."
+  }
+}

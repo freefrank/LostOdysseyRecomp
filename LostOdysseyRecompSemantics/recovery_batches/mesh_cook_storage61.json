@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "mesh-cook-storage61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/mesh_cook_storage61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/mesh_cook_storage61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nvoid CookStorageIndirect(std::uint32_t,PPCContext&,std::uint8_t*);\nvoid CookStorageLower(std::uint32_t,PPCContext&,std::uint8_t*);\nvoid CookStorageSave(PPCContext&,std::uint8_t*);\nvoid CookStorageRestore(PPCContext&,std::uint8_t*);\n#undef PPC_CALL_INDIRECT_FUNC\n#define PPC_CALL_INDIRECT_FUNC(t) CookStorageIndirect((t),ctx,base)\n#define __savegprlr_29 CookStorageSave\n#define __restgprlr_29 CookStorageRestore\n#define sub_82BBCD80 __imp__sub_82BBCD80\n#define sub_82BBD4E0 __imp__sub_82BBD4E0\n#define sub_82BC51E8 __imp__sub_82BC51E8\n#define sub_82BC58A0 __imp__sub_82BC58A0\n#define sub_82BC5950 __imp__sub_82BC5950\n#define sub_82B9E4B0 __imp__sub_82B9E4B0\n#define sub_82B9E518 __imp__sub_82B9E518\n#define sub_82BA01C0 __imp__sub_82BA01C0\n#define sub_82BD0798(c,b) CookStorageLower(0x82bd0798u,c,b)\n#define sub_82BD1AA8(c,b) CookStorageLower(0x82bd1aa8u,c,b)\n#define sub_82F2B308(c,b) CookStorageLower(0x82f2b308u,c,b)\n#define sub_82BC8588(c,b) CookStorageLower(0x82bc8588u,c,b)\n#define sub_82BC85F0(c,b) CookStorageLower(0x82bc85f0u,c,b)\n#define sub_82BD20F0(c,b) CookStorageLower(0x82bd20f0u,c,b)\n#define sub_82BD2268(c,b) CookStorageLower(0x82bd2268u,c,b)\n#define sub_822D3068(c,b) CookStorageLower(0x822d3068u,c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/mesh_cook_storage61.cpp"
+      ]
+    }
+  ]
+}
