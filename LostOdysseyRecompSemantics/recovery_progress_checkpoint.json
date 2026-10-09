@@ -78,5 +78,19 @@
     "status": "uncompiled, oracle missing, mapping credit 0",
     "next": "Complete harness for the 3 planned finite threshold/payload paths, then focused original-PPC comparison plus library PASS before promotion."
   },
-  "validation_limits": "Entry mapping against fixed cached baseline; selected original-PPC comparisons and ordinary RAM only. Full72 comparisons do not expand typed lower ABI. Native internals, fault/MMIO, concurrency, exception/unwind, ARM FP, runtime and gameplay remain unvalidated by these batches. Windows x64 float append checks cover selected finite inputs and host CSR restore only. New runtime replacement count 0; supplied gated wrappers 3168 are historical."
+  "validation_limits": "Entry mapping against fixed cached baseline; selected original-PPC comparisons and ordinary RAM only. Full72 comparisons do not expand typed lower ABI. Native internals, fault/MMIO, concurrency, exception/unwind, ARM FP, runtime and gameplay remain unvalidated by these batches. Windows x64 float append checks cover selected finite inputs and host CSR restore only. New runtime replacement count 0; supplied gated wrappers 3168 are historical.",
+  "workspace_continuation": {
+    "date": "2026-10-09",
+    "base_commit": "958bcbe3f3e44fdce863b1b3c15540817e2fe146",
+    "unit": "82BD2A28",
+    "status": "implementation_ready_original_validation_blocked",
+    "harness_present": true,
+    "cmake": true,
+    "logic_only_cases_passed": 3,
+    "focused_original_ppc_cases": 0,
+    "full_library_validated": false,
+    "mapping_delta": 0,
+    "runtime_replacement_delta": 0,
+    "next": "Run narrowed crt_reader_sort_float61 batch against genuine ppc_recomp.181.cpp in Windows native environment; require family and library PASS before promotion."
+  }
 }

@@ -4,6 +4,39 @@ Current checkpoint: **2026-10-04**, accepted recovery commit `f066d61a`, branch 
 
 Checkout: `C:/Users/freefrank/.codex/worktrees/semantic-recovery/LostOdysseyRecomp`. Delivery target: `origin/trail/semantic-recovery` on `https://github.com/freefrank/LostOdysseyRecomp.git`.
 
+## Workspace continuation — 2026-10-09
+
+Resumed from `958bcbe3` on `trail/semantic-recovery`; no main merge.
+The user subsequently authorized staged commits and pushes to this branch.
+`82BD2A28` now has a readable direct-Registers implementation, explicit borrowed
+memory/payload-disposal contract, CMake source registration and a three-path oracle
+harness. The batch now pins only `82BD0798` and `82BD2A28`; unrelated float-append
+bodies and repeated prelude aliases were removed. Callback state remains live,
+including reset-store r30/r31, FP bits/control and guest memory.
+
+Local evidence: GCC C++20 `-Wall -Wextra -Werror` compilation of the cleanup and
+accepted recursive-buffer source passed. A temporary Linux logic-only extraction
+of the harness passed three finite cases (below threshold/nonempty, equal/empty,
+equal/nonempty with mutable callback). This is **not a PPC oracle PASS**. The
+Windows harness itself and the whole library have not been built here. Temporary
+check files: `/tmp/run_sort_float_logic.py`, `/tmp/crt_reader_sort_float61_logic.cpp`
+and `/tmp/crt_reader_sort_float61_logic` (outside the checkout).
+
+`semantic_recovery.py check --manifest
+LostOdysseyRecompSemantics/recovery_drafts/crt_reader_sort_float61_validation.json`
+was blocked by the absent original `ppc_recomp.181.cpp`. Needed source locations:
+`82BD0798` at 2508 and `82BD2A28` at 7818. Also missing are the Windows native
+compiler/SDK and generated PPC oracle headers. Do not reconstruct an “original”
+source file from the pin just to make validation pass. Run the narrowed batch
+against genuine inputs and require library PASS before promoting this draft.
+
+No new accepted mapping or runtime replacement: **5,516/62,627 (8.808%)**, full
+semantic acceptance still zero. Adjacent `82BAE200` / FP helpers / `82BAFEC0`
+remain the next chain; their original bodies/catalog are unavailable here and
+no sufficient committed draft was found. The older saved-work paragraph below
+records the pre-continuation state; this section supersedes its missing-harness
+and CMake claims.
+
 ## Accepted progress and connected chains
 
 Generated from HEAD-tracked JSON by `python -B tools/ghidra/semantic_recovery.py progress --runtime-wrappers 3168`: **5,516/62,627 unique mapped addresses (8.808%)**, 82 individual records, 238 families, 5,436 family addresses and two individual/family overlaps. Delta: **+275** over the previous recorded handoff (5,241 at `5c6ad0d2`), including **+57** since recorded continuation checkpoint `ca50df36` (5,459). These are entry mappings against the fixed cached baseline; full semantic completion remains zero.

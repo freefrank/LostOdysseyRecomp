@@ -44,13 +44,19 @@
     }
   ],
   "validation": {
-    "status": "draft",
-    "paused_reason": "User quota threshold: used98 / remaining2; restoration goal paused",
+    "status": "implementation_ready_original_validation_blocked",
     "focused_original_ppc_cases": 0,
-    "harness_present": false,
+    "harness_present": true,
     "library_validated": false,
     "mapping_credit": 0,
     "runtime_validated": false,
-    "complete": false
+    "complete": false,
+    "cmake": true,
+    "logic_only_cases": 3,
+    "local_check": "2026-10-09 Linux x64 GCC C++20 -Wall -Wextra -Werror: cleanup and accepted table source compile, linked three-case logic-only extraction PASS. No original PPC comparison; Windows oracle harness not compiled.",
+    "blocked_by": [
+      "Missing original LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp (BD0798 line 2508, BD2A28 line 7818).",
+      "Windows native compiler/SDK and generated PPC headers unavailable; full library and canonical oracle receipt pending."
+    ]
   }
 }
