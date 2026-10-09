@@ -222,3 +222,7 @@ BBDF60/BBE070/BBE278/BBF590/BBF628 provide the owned workspace lifecycle and inp
 ### Indexed face insertion
 
 BBE310 fills a 48-byte face record and three 12-byte corner channel tuples. Optional degeneracy filtering skips duplicate-index/zero-area faces without consuming capacity. It preserves caller winding, missing-channel -1 sentinels and original supplied-ID clamping. Seven new complete-original leaf cases pass, bringing the workspace family to eleven.
+
+### Indexed channel splitting and tuple deduplication
+
+BB3C00 appends xyz words through existing buffer growth. BBE948 optionally gives zero-smoothing faces private position IDs and marks their smoothing value, preserving suppression flags. BBEBE0 merges identical corner-channel tuples and rewrites the face corner references before replacing the owned tuple buffer. Six focused original/local-chain cases pass with complete shared-concrete teardown.

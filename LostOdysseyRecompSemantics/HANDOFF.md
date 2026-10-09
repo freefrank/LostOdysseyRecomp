@@ -1,3 +1,7 @@
+## Root direct continuation: indexed channel splitting and deduplication (2026-10-09)
+
+`mesh_indexed_channels61` closes BB3C00 xyz append, BBE948 zero-smoothing face position splitting and BBEBE0 corner tuple deduplication/remapping. Six original local-chain/shared concrete buffer/dedup cases pass: append with growth or spare room, split enabled/suppressed/disabled, and duplicate corner tuples. Full72/RAM/CSR/events/ownership, independent copied xyz, remaps/counts/markers and complete workspace teardown pass. Full library passes. Face-normal/attribute processing and final indexed pipeline composition remain.
+
 ## Root direct continuation: indexed face insertion (2026-10-09)
 
 `mesh_indexed_workspace61` adds BBE310. Face metadata, corner position/attribute IDs, winding reversal, missing-channel sentinels and supplied-ID clamping follow the original layout. Enabled repeated-index/exact-zero-area filtering succeeds without consuming a face slot; full capacity fails. Eleven family cases now pass, including seven complete-original leaf cases covering those branches and independent metadata/corner/count checks. Full library passes. Indexed channel processing and BB9800 orchestration remain.

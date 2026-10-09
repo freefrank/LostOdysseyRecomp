@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "mesh-indexed-channels61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/mesh_indexed_channels61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/mesh_indexed_channels61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nvoid ChannelsIndirect(std::uint32_t,PPCContext&,std::uint8_t*);\n#undef PPC_CALL_INDIRECT_FUNC\n#define PPC_CALL_INDIRECT_FUNC(t) ChannelsIndirect((t),ctx,base)\nvoid ChannelsLower(std::uint32_t,PPCContext&,std::uint8_t*);\nvoid ChannelsSave(unsigned,PPCContext&,std::uint8_t*);\nvoid ChannelsRestore(unsigned,PPCContext&,std::uint8_t*);\n#define __savegprlr_27(c,b) ChannelsSave(27,c,b)\n#define __restgprlr_27(c,b) ChannelsRestore(27,c,b)\n#define __savegprlr_28(c,b) ChannelsSave(28,c,b)\n#define __restgprlr_28(c,b) ChannelsRestore(28,c,b)\nPPC_FUNC_IMPL(__imp__sub_82BB3C00);\n#define sub_82BB3C00 __imp__sub_82BB3C00\nPPC_FUNC_IMPL(__imp__sub_82BBE948);\n#define sub_82BBE948 __imp__sub_82BBE948\nPPC_FUNC_IMPL(__imp__sub_82BBEBE0);\n#define sub_82BBEBE0 __imp__sub_82BBEBE0\n#define sub_82BD0798(c,b) ChannelsLower(0x82bd0798u,c,b)\n#define sub_82BD2A08(c,b) ChannelsLower(0x82bd2a08u,c,b)\n#define sub_82BD2C08(c,b) ChannelsLower(0x82bd2c08u,c,b)\n#define sub_82B7A0B0(c,b) ChannelsLower(0x82b7a0b0u,c,b)\n#define sub_82BD2870(c,b) ChannelsLower(0x82bd2870u,c,b)\n#define sub_82BC2D28(c,b) ChannelsLower(0x82bc2d28u,c,b)\n#define sub_82BC2DD0(c,b) ChannelsLower(0x82bc2dd0u,c,b)\n#define sub_82BC38E0(c,b) ChannelsLower(0x82bc38e0u,c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/mesh_indexed_channels61.cpp"
+      ]
+    }
+  ]
+}

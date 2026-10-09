@@ -1,0 +1,51 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Append xyz channels, split zero-smoothing face positions and deduplicate indexed corner tuples.",
+  "entries": [
+    {
+      "address": "82BB3C00",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 58571,
+      "instruction_count": 62,
+      "body_sha256": "96c264656dcfc14ca99749a39d2adcfeedd9ba1d25836bb51b17902f1c50c1e2",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BBE948",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 23799,
+      "instruction_count": 166,
+      "body_sha256": "65a82d4f531dbcbcc7b7ba1902a9153e8fe8b43ef8c2e4e7c9dbaf7de4134469",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BBEBE0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 24162,
+      "instruction_count": 80,
+      "body_sha256": "c9ca45f51bd8800e02f6d20a7d4550b1ae954bdf5266e5eedce2e2cf509a6905",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BB3C00",
+      "82BBE948",
+      "82BBEBE0"
+    ],
+    "header": "include/lo_semantics/mesh_indexed_channels61.h",
+    "source": "src/mesh_indexed_channels61.cpp",
+    "oracle": "tests/mesh_indexed_channels61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 6,
+    "library_validated": true,
+    "case_scope": "Six original local-chain/shared concrete buffer and dedup cases: xyz append with growth/room, splitting enabled/suppressed/disabled, corner tuple dedup. Full72/RAM/CSR/events/ownership, independent copied values/remaps/counts and complete shared-concrete teardown. No allocation-fault or full indexed pipeline claim.",
+    "platform": "Linux x64 Clang19; pinned PPC; mmap guest overlay"
+  }
+}
