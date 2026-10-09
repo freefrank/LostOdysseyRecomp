@@ -10,6 +10,8 @@ struct Load {
     GuestMemory &m;
     Dependencies deps;
     Registers &s;
+    bool compact;
+    unsigned Stride() const { return compact ? 20u : 24u; }
     std::uint32_t Word(std::uint64_t p) { return m.ReadU32(Address(p)); }
     void Store(std::uint64_t p, std::uint64_t v) { m.WriteU32(Address(p), Address(v)); }
     void Compare(std::uint64_t a, std::uint64_t b = 0) {
@@ -37,42 +39,42 @@ struct Load {
     }
     bool ReplaceStorage() {
         auto &r = s.r;
-        r[11] = (r[3] << 1u) & 0xfffffffeu;
+        r[11] = compact ? ((r[3] << 2u) & 0xfffffffcu) : ((r[3] << 1u) & 0xfffffffeu);
         r[30] = Word(r[31] + 8u);
         Store(r[31] + 4u, r[3]);
         r[11] += r[3];
         Compare(r[30]);
-        r[28] = (r[11] << 3u) & 0xfffffff8u;
+        r[28] = compact ? ((r[11] << 2u) & 0xfffffffcu) : ((r[11] << 3u) & 0xfffffff8u);
         if (!s.cr6.eq) {
-            Allocator(0x82bdca70u);
+            Allocator((compact ? 0x82bdb878u : 0x82bdca70u));
             r[11] = Word(r[3]);
             r[4] = r[30] - 4u;
             r[11] = Word(r[11] + 12u);
-            Indirect(0x82bdca84u);
+            Indirect((compact ? 0x82bdb88cu : 0x82bdca84u));
             r[11] = 0;
             Store(r[31] + 8u, r[11]);
         }
-        r[11] = 178913280u;
+        r[11] = compact ? 214695936u : 178913280u;
         r[30] = Word(r[31] + 4u);
-        r[11] |= 43690u;
+        r[11] |= compact ? 52428u : 43690u;
         Compare(r[30], r[11]);
         if (!s.cr6.gt) {
-            r[11] = (r[30] << 1u) & 0xfffffffeu;
+            r[11] = compact ? ((r[30] << 2u) & 0xfffffffcu) : ((r[30] << 1u) & 0xfffffffeu);
             r[10] = std::uint64_t(-5);
             r[11] += r[30];
-            r[11] = (r[11] << 3u) & 0xfffffff8u;
+            r[11] = compact ? ((r[11] << 2u) & 0xfffffffcu) : ((r[11] << 3u) & 0xfffffff8u);
             Compare(r[11], r[10]);
             r[29] = r[11] + 4u;
             if (s.cr6.gt)
                 r[29] = ~std::uint64_t(0);
         } else
             r[29] = ~std::uint64_t(0);
-        Allocator(0x82bdcac4u);
+        Allocator((compact ? 0x82bdb8ccu : 0x82bdcac4u));
         r[11] = Word(r[3]);
         r[5] = 30;
         r[4] = r[29];
         r[11] = Word(r[11]);
-        Indirect(0x82bdcadcu);
+        Indirect((compact ? 0x82bdb8e4u : 0x82bdcadcu));
         Compare(r[3]);
         if (!s.cr6.eq) {
             r[4] = r[3] + 4u;
@@ -103,11 +105,11 @@ struct Load {
                 m.WriteU8(Address(r[10] + 1u), std::uint8_t(r[8]));
                 m.WriteU8(Address(r[10]), std::uint8_t(r[7]));
             }
-            for (unsigned offset = 12; offset < 24u; offset += 4u) {
+            for (unsigned offset = 12; offset < Stride(); offset += 4u) {
                 r[10] = Word(r[31] + 8u);
                 r[10] += r[11];
-                if (offset == 20u)
-                    r[11] += 24u;
+                if (offset + 4u == Stride())
+                    r[11] += Stride();
                 r[10] += offset;
                 if (offset == 16u) {
                     r[7] = m.ReadU8(Address(r[10] + 3u));
@@ -137,13 +139,15 @@ struct Load {
         auto &r = s.r;
         constexpr GuestAddress returns[]{0x82bdcc90u, 0x82bdccd8u, 0x82bdcd20u,
                                          0x82bdcd68u, 0x82bdcdb0u, 0x82bdcdf8u};
+        constexpr GuestAddress compactReturns[]{0x82bdba6cu, 0x82bdbab4u, 0x82bdbafcu,
+                                                0x82bdbb44u, 0x82bdbb8cu, 0x82bdbbd4u};
         r[11] = Word(r[27]);
         r[3] = r[27];
         for (unsigned axis = 0; axis < 6; ++axis) {
             if (axis)
                 r[11] = Word(r[27]);
             r[11] = Word(r[11] + 12u);
-            Indirect(returns[axis]);
+            Indirect(compact ? compactReturns[axis] : returns[axis]);
             Store(r[1] + 80u, r[3]);
             Compare(r[26]);
             if (!s.cr6.eq) {
@@ -168,7 +172,7 @@ struct Load {
     void Run() {
         auto &r = s.r;
         r[12] = s.lr;
-        s.lr = 0x82bdc9f8u;
+        s.lr = (compact ? 0x82bdb800u : 0x82bdc9f8u);
         for (unsigned i = 26; i < 32; ++i)
             WriteU64(m, Address(r[1] - 16u - 8u * (31u - i)), r[i]);
         Store(r[1] - 8u, r[12]);
@@ -181,7 +185,7 @@ struct Load {
         r[3] = r[27];
         r[11] = Word(r[27]);
         r[11] = Word(r[11] + 12u);
-        Indirect(0x82bdca1cu);
+        Indirect((compact ? 0x82bdb824u : 0x82bdca1cu));
         r[26] = Address(r[30]) & 255u;
         Store(r[1] + 80u, r[3]);
         Compare(r[26]);
@@ -192,7 +196,7 @@ struct Load {
             r[5] = r[28];
             r[3] = r[27];
             r[11] = Word(r[11] + 24u);
-            Indirect(0x82bdcb24u);
+            Indirect((compact ? 0x82bdb92cu : 0x82bdcb24u));
             Compare(r[26]);
             if (!s.cr6.eq)
                 SwapNodes();
@@ -208,9 +212,9 @@ struct Load {
 };
 } // namespace
 bool Apply(GuestAddress entry, GuestMemory &memory, Dependencies deps, Registers &state) {
-    if (entry != 0x82bdc9f0u)
+    if (entry != 0x82bdc9f0u && entry != 0x82bdb7f8u)
         return false;
-    Load{memory, deps, state}.Run();
+    Load{memory, deps, state, entry == 0x82bdb7f8u}.Run();
     return true;
 }
 } // namespace lo::semantic::gpu::tree_quantized_load61

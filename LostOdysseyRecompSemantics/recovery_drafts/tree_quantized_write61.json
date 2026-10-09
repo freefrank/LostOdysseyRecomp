@@ -1,6 +1,6 @@
 {
   "schema": "semantic-recovery-draft-v1",
-  "scope": "Quantized-node output with complete original scalar wrappers, shared actual append lowers.",
+  "scope": "Quantized-node output with complete original scalar wrappers, shared actual append lowers. Includes compact 20-byte sibling via explicit format-dependent layout and continuations.",
   "entries": [
     {
       "address": "82BD7D58",
@@ -25,11 +25,20 @@
       "instruction_count": 110,
       "body_sha256": "1076c9d3025285a9620ca3431c93a3f8bebbab4809acbbbe21972530b665ea79",
       "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BDB660",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 28404,
+      "instruction_count": 102,
+      "body_sha256": "4dd1e68e9e01af639a4c7f39361092f871bad48aeb12957559b1f7c50f6580d7",
+      "status": "focused_original_ppc_validated"
     }
   ],
   "implementation": {
     "entries": [
-      "82BDC838"
+      "82BDC838",
+      "82BDB660"
     ],
     "header": "include/lo_semantics/tree_quantized_write61.h",
     "source": "src/tree_quantized_write61.cpp",
@@ -41,9 +50,9 @@
     "runtime_validated": false,
     "complete": false,
     "date": "2026-10-09",
-    "focused_original_ppc_cases": 2,
+    "focused_original_ppc_cases": 4,
     "library_validated": true,
-    "case_scope": "Two-node native/swapped streams, actual original scalar adapters plus shared append lowers. Full72/RAM/host CSR and independent count, mixed-width records, six scales and unchanged source. Spare writer capacity, no growth/MMIO/nonfinite claims.",
+    "case_scope": "Two-node native/swapped streams, actual original scalar adapters plus shared append lowers. Full72/RAM/host CSR and independent count, mixed-width records, six scales and unchanged source. Spare writer capacity, no growth/MMIO/nonfinite claims. Extended to the 20-byte compact variant with two topology words; both formats pass the same bounded native/swapped paths.",
     "platform": "Linux x64 Clang 19.1.7; pinned regenerated PPC; mmap guest overlay",
     "mapping_limit": "Historical catalog membership unverified; no baseline mapping credit."
   }

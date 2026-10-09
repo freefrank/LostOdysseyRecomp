@@ -8,6 +8,7 @@ constexpr GuestAddress Allocate = 0x2a00, Free = 0x2a04, Count = 0x2a08, Read = 
 constexpr std::array<test::Region, 2> Regions{{{0, 0x120000}, {0x83216000, 0xca000}}};
 struct Guest final : crt_close_recursive_buffer_context::GuestServices {
     unsigned mode = 0, words = 0;
+    bool compact = false;
     std::vector<std::array<std::uint64_t, 73>> events;
     void CallIndirect(GuestAddress e, GuestMemory &m, Registers &s) override {
         std::array<std::uint64_t, 73> event{};
@@ -26,13 +27,13 @@ struct Guest final : crt_close_recursive_buffer_context::GuestServices {
                 throw std::runtime_error("flat load free base");
             s.r[3] = 0;
         } else if (e == Allocate) {
-            if (s.r[4] != 52u || s.r[5] != 30u)
+            if (s.r[4] != (compact ? 44u : 52u) || s.r[5] != 30u)
                 throw std::runtime_error("flat load allocation shape");
             s.r[3] = mode == 2 ? 0 : New;
         } else if (e == Read) {
-            if (s.r[4] != New + 4u || s.r[5] != 48u)
+            if (s.r[4] != New + 4u || s.r[5] != (compact ? 40u : 48u))
                 throw std::runtime_error("flat payload request");
-            for (unsigned i = 0; i < 48; ++i)
+            for (unsigned i = 0; i < (compact ? 40u : 48u); ++i)
                 m.WriteU8(New + 4u + i, std::uint8_t(i + 1u));
             s.r[3] = 0;
         } else
@@ -46,7 +47,7 @@ struct Native final : float_triplet_transfer::NativeServices {
 };
 Guest *guest = nullptr;
 GuestMemory *memory = nullptr;
-void Check(unsigned mode) {
+void Check(unsigned mode, bool compact) {
     struct Restore {
         std::uint32_t csr = PPCFPSCRRegister{}.getcsr();
         ~Restore() { PPCFPSCRRegister{}.setcsr(csr); }
@@ -80,20 +81,25 @@ void Check(unsigned mode) {
     s.cached_fp_control = 0x9fc0;
     Guest expected, actual;
     expected.mode = actual.mode = mode;
+    expected.compact = actual.compact = compact;
     auto om = before.Memory();
     guest = &expected;
     memory = &om;
     PPCContext c{};
     crt_full_oracle::ToPpc(c, s);
     PPCFPSCRRegister{}.setcsr(s.cached_fp_control);
-    __imp__sub_82BDC9F0(c, before.Bytes());
+    if (compact)
+        __imp__sub_82BDB7F8(c, before.Bytes());
+    else
+        __imp__sub_82BDC9F0(c, before.Bytes());
     auto host = PPCFPSCRRegister{}.getcsr();
     guest = nullptr;
     memory = nullptr;
     auto m = after.Memory();
     Native native;
     PPCFPSCRRegister{}.setcsr(s.cached_fp_control);
-    if (!tree_quantized_load61::Apply(0x82bdc9f0u, m, {actual, native}, s) ||
+    if (!tree_quantized_load61::Apply(compact ? 0x82bdb7f8u : 0x82bdc9f0u, m, {actual, native},
+                                      s) ||
         crt_full_oracle::Snapshot(crt_full_oracle::FromPpc(c)) != crt_full_oracle::Snapshot(s) ||
         !before.EqualCommitted(after) || expected.events != actual.events ||
         host != PPCFPSCRRegister{}.getcsr())
@@ -108,8 +114,8 @@ void Check(unsigned mode) {
                 throw std::runtime_error("quantized decoded scales");
         if (m.ReadU32(New) != 2u)
             throw std::runtime_error("flat load count prefix");
-        for (unsigned i = 0; i < 48; ++i) {
-            const auto width = i % 24u < 12u ? 2u : 4u;
+        for (unsigned i = 0; i < (compact ? 40u : 48u); ++i) {
+            const auto width = i % (compact ? 20u : 24u) < 12u ? 2u : 4u;
             auto expectedByte =
                 mode == 1 ? ((i / width) * width + (width - 1u - i % width) + 1u) : i + 1u;
             if (m.ReadU8(New + 4u + i) != expectedByte)
@@ -147,9 +153,11 @@ void QuantLoadRestore(PPCContext &c, std::uint8_t *) {
 }
 int main() {
     try {
-        for (unsigned mode = 0, words = 0; mode < 3; ++mode)
-            quant_load_oracle::Check(mode);
-        std::puts("PASS tree-quantized-load61 3 original-upper/shared-allocator cases");
+        for (unsigned mode = 0; mode < 3; ++mode)
+            for (bool compact : {false, true})
+                quant_load_oracle::Check(mode, compact);
+        std::puts("PASS tree-quantized-load61 6 original-upper/shared-allocator cases (20/24-byte "
+                  "formats)");
         return 0;
     } catch (const std::exception &e) {
         std::fprintf(stderr, "%s\n", e.what());

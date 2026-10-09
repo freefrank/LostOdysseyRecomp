@@ -1,6 +1,6 @@
 {
   "schema": "semantic-recovery-draft-v1",
-  "scope": "Complete pinned quantized-node reader plus six reconstruction scales; shared allocator lookup and mutable reader boundary.",
+  "scope": "Complete pinned quantized-node reader plus six reconstruction scales; shared allocator lookup and mutable reader boundary. Includes compact 20-byte sibling via explicit format-dependent layout and continuations.",
   "entries": [
     {
       "address": "82BDC9F0",
@@ -9,11 +9,20 @@
       "instruction_count": 274,
       "body_sha256": "259d5088cac30e67ebab9458130014cc6b7b6a3b1b17d95724213456cb447c50",
       "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BDB7F8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 28643,
+      "instruction_count": 263,
+      "body_sha256": "cec7e9bb2a40843865256ba5cb92f5c3850d88d16a7327a218bf136214423c83",
+      "status": "focused_original_ppc_validated"
     }
   ],
   "implementation": {
     "entries": [
-      "82BDC9F0"
+      "82BDC9F0",
+      "82BDB7F8"
     ],
     "header": "include/lo_semantics/tree_quantized_load61.h",
     "source": "src/tree_quantized_load61.cpp",
@@ -25,9 +34,9 @@
     "runtime_validated": false,
     "complete": false,
     "date": "2026-10-09",
-    "focused_original_ppc_cases": 3,
+    "focused_original_ppc_cases": 6,
     "library_validated": true,
-    "case_scope": "Native/swapped two-node mixed-width records with six scales and allocation failure. Full72/RAM/host CSR/callbacks, independent payload/scales/owner assertions. External reader and allocator remain service boundaries.",
+    "case_scope": "Native/swapped two-node mixed-width records with six scales and allocation failure. Full72/RAM/host CSR/callbacks, independent payload/scales/owner assertions. External reader and allocator remain service boundaries. Extended to the 20-byte compact variant with two topology words; both formats pass the same bounded native/swapped paths.",
     "platform": "Linux x64 Clang 19.1.7; pinned regenerated PPC; mmap guest overlay",
     "mapping_limit": "Historical catalog membership unverified; no baseline mapping credit."
   }

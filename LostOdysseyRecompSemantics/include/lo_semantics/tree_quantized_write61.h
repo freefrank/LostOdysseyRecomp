@@ -8,5 +8,6 @@ using Dependencies = tree_scalar_write61::Dependencies;
 // six 16-bit coordinates and three 32-bit topology words per node. Each node
 // is staged on the guest stack, leaving owned storage unchanged. Known word,
 // float and block append lowers execute directly; allocation stays borrowed.
+// B660 writes the 20-byte variant: six halfwords plus two topology words.
 [[nodiscard]] bool Apply(GuestAddress, GuestMemory &, Dependencies, Registers &);
 } // namespace lo::semantic::gpu::tree_quantized_write61

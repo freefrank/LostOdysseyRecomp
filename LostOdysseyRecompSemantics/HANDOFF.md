@@ -1,3 +1,7 @@
+## Root direct continuation: compact quantized format (2026-10-09)
+
+Existing quantized codecs now also recover BDB7F8 import and BDB660 export for 20-byte records (six halfwords, two topology words, six owner scales). Shared implementations select format-specific size arithmetic, register/frame layout and continuation addresses rather than duplicate the codecs. Both original 24-byte cases remain passing; six import and four export cases total pass Full72/RAM/host CSR and independent endian output/scale assertions. Full Clang library passes. Two additional implementation addresses only; historical baseline and runtime stay unchanged.
+
 ## Root direct continuation: quantized tree output (2026-10-09)
 
 `tree_scalar_write61` adds BD7D58/BD7E18 integer/float endian append adapters, preserving the real float reinterpret-and-append route. Four original-upper/shared-writer cases pass. `tree_quantized_write61` adds BDC838, emitting count, mixed-width 24-byte nodes and six scales through recovered append lowers. Two original-upper plus original-scalar-wrapper cases pass Full72/RAM/host CSR and independent stream/source assertions. Full Clang library passes. Together with C208 construction and C9F0 import, quantized representation now has implementation coverage across build/read/write; no end-to-end gameplay, refreshed catalog or nonfinite claim.
