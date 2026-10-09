@@ -1,0 +1,36 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Private generated bodies are pinned by SHA256 of UTF-8 with LF line endings and no final newline; no generated code is embedded.",
+  "entries": [
+    {
+      "address": "824002F0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.15.cpp",
+      "source_line": 29782,
+      "instruction_count": 97,
+      "body_sha256": "a9fbd2863e1c223e12b898cfe33281be9538aaf7b06631776ad293c4e20c9210",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 3,
+    "library_validated": true,
+    "library": "PASS incremental complete Clang 19 CMake static library; existing unused-function warning exception retained.",
+    "platform": "Linux x64; Clang 19.1.7; genuine XEX regenerated with pinned XenonRecomp ddd128bc plus tracked patch; existing oracle guest-window allocation overlaid with mmap/mprotect only",
+    "mapping_credit": 0,
+    "mapping_limit": "Fixed historical catalog.sqlite unavailable; do not infer membership from regenerated sources. 82BB25D0 is explicitly external in prior handoff.",
+    "runtime_validated": false,
+    "complete": false,
+    "limits": "Selected ordinary-RAM integer cases and Full72 only; no independent host CSR comparison, faults/MMIO, concurrency, runtime or gameplay acceptance.",
+    "case_scope": "Three complete original-body cases: no dirty phases, cache-only dirty and both dirty. Full72 and committed RAM compared, with explicit checks for bit58 retention, null targets, cross-owner reciprocal unlink and untouched links. Integer-only leaf; actual host CSR is not independently compared. No dynamic lowers, allocations or ownership transfer; concurrency/faults/gameplay unverified."
+  },
+  "implementation": {
+    "entries": [
+      "824002F0"
+    ],
+    "header": "include/lo_semantics/manager_cached_links61.h",
+    "source": "src/manager_cached_links61.cpp",
+    "oracle": "tests/manager_cached_links61_oracle.cpp"
+  }
+}

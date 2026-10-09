@@ -21,7 +21,11 @@ Manager candidate 823262B8 remains blocked on actual recursive registration:
 8256F6B8 is a typed external getter boundary, not a complete implementation.
 Its lower 823FFDD8 reaches open 8229C948/823FF338/82400620 subtrees. Existing
 mapped typed interfaces cannot be promoted to complete mutable Full ABI by
-assumption. Independent bounds/cache leaves are being recovered instead.
+assumption. `manager_cached_links61` now independently recovers 824002F0 (97 instructions):
+two dirty phases invalidate cached links and unlink reciprocal owner/index
+references while retaining bit58-marked targets. Three genuine-body Full72/RAM
+cases and the library build pass. The integer-only fixture does not independently
+compare host CSR. This leaf does not close the recursive manager parent.
 
 ## Latest workspace checkpoint — 2026-10-09
 

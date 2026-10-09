@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "manager-cached-links61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/manager_cached_links61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/manager_cached_links61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nvoid OriginalManagerCachedLinks61Save(unsigned,PPCContext&,std::uint8_t*);\nvoid OriginalManagerCachedLinks61Restore(unsigned,PPCContext&,std::uint8_t*);\n#define __savegprlr_27(c,b) OriginalManagerCachedLinks61Save(27u,(c),(b))\n#define __restgprlr_27(c,b) OriginalManagerCachedLinks61Restore(27u,(c),(b))\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/manager_cached_links61.cpp"
+      ]
+    }
+  ]
+}
