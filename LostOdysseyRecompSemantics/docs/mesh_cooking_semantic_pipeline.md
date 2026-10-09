@@ -202,3 +202,7 @@ BC2DD0 borrows input count +0 and packed xyz pointer +4, retains unique count +8
 ### Input uniqueness gate
 
 BB8580 is connected to the stable deduplicator. It copies input xyz to variable guest stack storage, checks exact uniqueness, optionally compacts the original array and updates its count, then releases dedup ownership. A repaired duplicate input still returns zero; callers must retain this distinction. Seven focused family cases pass. The stack probe is reused from mesh_polygon_collect61.
+
+### Near-degenerate face repair
+
+BB88A8 now supplies the area-validation and shortest-edge-collapse gate used by convex construction. Repair rewrites indices and removes repeated-index triangles via tail swap; it does not move point coordinates. It refuses to continue with at most four surviving faces. Seven new original-chain cases pass; complete convex hull construction remains pending.

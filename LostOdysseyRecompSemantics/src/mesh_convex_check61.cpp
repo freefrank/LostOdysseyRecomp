@@ -30,6 +30,243 @@ struct Check {
         s.cr6 = {std::uint8_t(a < b), std::uint8_t(a > b), std::uint8_t(a == b),
                  std::uint8_t(std::isnan(a) || std::isnan(b))};
     }
+    // Near-zero-area faces collapse their shortest edge, rewrite every index,
+    // and remove repeated-index faces by swapping from the array tail.
+    bool CollapseBody() {
+        auto &r = s.r;
+        r[27] = r[3];
+        r[28] = r[4];
+        r[31] = r[5];
+        r[26] = r[6];
+        r[4] = Word(r[27]);
+        Integer(r[4]);
+        if (s.cr6.eq)
+            return false;
+        Integer(r[28]);
+        if (s.cr6.eq)
+            return false;
+        Integer(r[31]);
+        if (s.cr6.eq)
+            return false;
+        r[11] = 0xffffffff82210000ull;
+        Load(31, r[11] + 22344);
+        for (;;) {
+            r[3] = 0;
+            r[5] = 0;
+            Integer(r[4]);
+            if (s.cr6.eq) {
+                r[11] = Address(r[3]) & 255u;
+                Integer(r[11]);
+                return true;
+            }
+            r[30] = r[28] + 8;
+            r[8] = r[30];
+            bool small = false;
+            do {
+                r[11] = Word(r[8] - 4);
+                r[10] = Word(r[8] - 8);
+                r[7] = Address(r[11]) << 1;
+                r[9] = Word(r[8]);
+                r[6] = Address(r[10]) << 1;
+                r[11] += r[7];
+                r[7] = Address(r[9]) << 1;
+                r[10] += r[6];
+                r[9] += r[7];
+                r[11] = Address(r[11]) << 2;
+                r[10] = Address(r[10]) << 2;
+                r[9] = Address(r[9]) << 2;
+                r[11] += r[31];
+                r[10] += r[31];
+                r[9] += r[31];
+                Load(0, r[11]);
+                Load(11, r[10]);
+                Load(12, r[11] + 8);
+                Single(11, F(11) - F(0));
+                Load(8, r[9]);
+                Load(9, r[10] + 8);
+                Single(0, F(8) - F(0));
+                Single(9, F(9) - F(12));
+                Load(13, r[11] + 4);
+                Load(6, r[9] + 8);
+                Load(10, r[10] + 4);
+                Single(12, F(6) - F(12));
+                Load(7, r[9] + 4);
+                Single(10, F(10) - F(13));
+                Single(13, F(7) - F(13));
+                Single(8, F(9) * F(0));
+                Single(6, F(12) * F(10));
+                Single(7, F(13) * F(11));
+                Single(12, F(12) * F(11) - F(8));
+                Single(13, F(13) * F(9) - F(6));
+                Single(0, F(0) * F(10) - F(7));
+                Single(12, F(12) * F(12));
+                Single(0, F(0) * F(0) + F(12));
+                Single(0, F(13) * F(13) + F(0));
+                Single(0, std::sqrt(F(0)));
+                Compare(F(0), F(31));
+                if (s.cr6.lt) {
+                    small = true;
+                    break;
+                }
+                r[11] = Word(r[27]);
+                ++r[5];
+                r[8] += 12;
+                Integer(r[5], r[11]);
+            } while (s.cr6.lt);
+            if (!small) {
+                r[11] = Address(r[3]) & 255u;
+                Integer(r[11]);
+                return true;
+            }
+            r[11] = Address(r[26]) & 255u;
+            Integer(r[11]);
+            if (s.cr6.eq)
+                return false;
+            r[11] = Address(r[5]) << 1;
+            r[4] = 0;
+            r[11] += r[5];
+            r[11] = Address(r[11]) << 2;
+            r[11] += r[28];
+            r[10] = Word(r[11]);
+            r[9] = Word(r[11] + 4);
+            r[7] = Address(r[10]) << 1;
+            r[8] = Word(r[11] + 8);
+            r[6] = Address(r[9]) << 1;
+            r[10] += r[7];
+            r[7] = Address(r[8]) << 1;
+            r[9] += r[6];
+            r[8] += r[7];
+            r[10] = Address(r[10]) << 2;
+            r[9] = Address(r[9]) << 2;
+            r[8] = Address(r[8]) << 2;
+            r[10] += r[31];
+            r[9] += r[31];
+            r[8] += r[31];
+            Load(0, r[10] + 4);
+            Load(11, r[9] + 4);
+            Load(9, r[8] + 4);
+            Single(5, F(0) - F(11));
+            Single(0, F(0) - F(9));
+            Load(13, r[10] + 8);
+            Load(10, r[9] + 8);
+            Single(11, F(11) - F(9));
+            Load(8, r[8] + 8);
+            Single(4, F(13) - F(10));
+            Single(13, F(13) - F(8));
+            Load(12, r[10]);
+            Single(10, F(10) - F(8));
+            Load(7, r[9]);
+            Load(6, r[8]);
+            Single(3, F(12) - F(7));
+            Single(12, F(12) - F(6));
+            Single(9, F(7) - F(6));
+            Single(8, F(5) * F(5));
+            Single(0, F(0) * F(0));
+            Single(11, F(11) * F(11));
+            Single(0, F(13) * F(13) + F(0));
+            Single(13, F(4) * F(4) + F(8));
+            Single(11, F(10) * F(10) + F(11));
+            Single(0, F(12) * F(12) + F(0));
+            Single(12, F(3) * F(3) + F(13));
+            Single(11, F(9) * F(9) + F(11));
+            Single(13, std::sqrt(F(0)));
+            Single(0, std::sqrt(F(12)));
+            Single(12, std::sqrt(F(11)));
+            Compare(F(13), F(0));
+            if (s.cr6.lt) {
+                s.fpr_bits[0] = s.fpr_bits[13];
+                r[4] = 1;
+            }
+            Compare(F(12), F(0));
+            if (s.cr6.lt) {
+                r[9] = Word(r[11] + 4);
+                r[10] = Word(r[11] + 8);
+            } else {
+                Integer(r[4]);
+                if (s.cr6.eq) {
+                    r[10] = Word(r[11] + 4);
+                    r[9] = Word(r[11]);
+                } else {
+                    Integer(r[4], 1);
+                    r[9] = Word(r[11] + (s.cr6.eq ? 0 : 4));
+                    r[10] = Word(r[11] + 8);
+                }
+            }
+            r[8] = 0;
+            r[11] = r[30];
+            do {
+                for (int offset : {-8, -4, 0}) {
+                    r[7] = Word(r[11] + offset);
+                    Integer(r[7], r[10]);
+                    if (s.cr6.eq)
+                        Word(r[11] + offset, r[9]);
+                }
+                r[7] = Word(r[27]);
+                ++r[8];
+                r[11] += 12;
+                Integer(r[8], r[7]);
+            } while (s.cr6.lt);
+            r[11] = Address(r[7]);
+            Integer(r[11]);
+            if (!s.cr6.eq) {
+                r[30] = r[28];
+                r[29] = r[11];
+                do {
+                    r[3] = r[30];
+                    s.lr = 0x82bb8b44u;
+                    Repeated();
+                    r[11] = Address(r[3]) & 255u;
+                    Integer(r[11]);
+                    if (!s.cr6.eq) {
+                        r[11] = Word(r[27]);
+                        --r[11];
+                        r[10] = Address(r[11]) << 1;
+                        r[10] += r[11];
+                        Word(r[27], r[11]);
+                        r[10] = Address(r[10]) << 2;
+                        r[10] += r[28];
+                        for (unsigned offset : {0u, 4u, 8u}) {
+                            r[11] = Word(r[10] + offset);
+                            Word(r[30] + offset, r[11]);
+                        }
+                    } else
+                        r[30] += 12;
+                    --r[29];
+                    Integer(r[29]);
+                } while (!s.cr6.eq);
+            }
+            r[4] = Word(r[27]);
+            Integer(r[4], 4);
+            if (!s.cr6.gt)
+                return false;
+            r[3] = 1;
+            r[11] = Address(r[3]) & 255u;
+            Integer(r[11]);
+        }
+    }
+    void Collapse() {
+        auto &r = s.r;
+        r[12] = s.lr;
+        s.lr = 0x82bb88b0u;
+        for (unsigned i = 26; i < 32; ++i)
+            recovery_abi::WriteU64(m, Address(r[1] - 16 - 8 * (31 - i)), r[i]);
+        Word(r[1] - 8, r[12]);
+        if (s.cached_fp_control & 0x8040u) {
+            s.cached_fp_control &= ~0x8040u;
+            fp.SetHostFpControl(s.cached_fp_control);
+        }
+        recovery_abi::WriteU64(m, Address(r[1] - 64), s.fpr_bits[31]);
+        auto old = r[1];
+        r[1] -= 144;
+        Word(r[1], old);
+        r[3] = CollapseBody() ? 1 : 0;
+        r[1] += 144;
+        s.fpr_bits[31] = recovery_abi::ReadU64(m, Address(r[1] - 64));
+        for (unsigned i = 26; i < 32; ++i)
+            r[i] = recovery_abi::ReadU64(m, Address(r[1] - 16 - 8 * (31 - i)));
+        r[12] = Word(r[1] - 8);
+        s.lr = r[12];
+    }
     void Reverse() {
         auto &r = s.r;
         r[10] = Word(r[3] + 4);
@@ -371,6 +608,9 @@ bool Apply(GuestAddress e, GuestMemory &m, float_triplet_transfer::NativeService
            Registers &s) {
     Check x{m, fp, s};
     switch (e) {
+    case 0x82bb88a8u:
+        x.Collapse();
+        break;
     case 0x82bb86c8u:
         x.Orient();
         break;

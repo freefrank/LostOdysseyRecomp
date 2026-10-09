@@ -41,6 +41,14 @@
       "instruction_count": 119,
       "body_sha256": "7acbc242a2426054f0b558f835791e5645c70e9ae3fc9aa9b44a8d1cb5ff76af",
       "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BB88A8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 9991,
+      "instruction_count": 203,
+      "body_sha256": "4f993b9fdf268eebbbcc63825264b7bb13b537dac8c23d7f625b1c3fd6061852",
+      "status": "focused_original_ppc_validated"
     }
   ],
   "implementation": {
@@ -49,7 +57,8 @@
       "82BD91E0",
       "82BD90A0",
       "82BB8E88",
-      "82BB86C8"
+      "82BB86C8",
+      "82BB88A8"
     ],
     "header": "include/lo_semantics/mesh_convex_check61.h",
     "source": "src/mesh_convex_check61.cpp",
@@ -61,9 +70,9 @@
     "runtime_validated": false,
     "complete": false,
     "date": "2026-10-09",
-    "focused_original_ppc_cases": 15,
+    "focused_original_ppc_cases": 22,
     "library_validated": true,
-    "case_scope": "Complete original leaves Full72/RAM/CSR; flip, each repeated-index pairing, unique triangle, both sidedness signs, null positions, valid/invalid polygon halfspace and missing positions. Synthetic geometry/tolerance, independent results. No whole convex build or gameplay claim. Four actual original centroid-orientation/side/flip chain cases with optional correction, already correct winding and batch+tail centroid paths.",
+    "case_scope": "Complete original leaves Full72/RAM/CSR; flip, each repeated-index pairing, unique triangle, both sidedness signs, null positions, valid/invalid polygon halfspace and missing positions. Synthetic geometry/tolerance, independent results. No whole convex build or gameplay claim. Four actual original centroid-orientation/side/flip chain cases with optional correction, already correct winding and batch+tail centroid paths. Seven actual-original BB88A8/BD91E0 collapse cases cover all three shortest-edge choices, check-only refusal, good faces, empty input and too-few surviving faces. Synthetic area threshold; Full72/RAM/CSR and independent count/indices.",
     "platform": "Linux x64 Clang19; pinned PPC; mmap guest overlay"
   }
 }

@@ -1,3 +1,7 @@
+## Root direct continuation: degenerate face collapse (2026-10-09)
+
+`mesh_convex_check61` adds BB88A8. It measures cross-product magnitude, selects a shortest edge for near-zero-area faces, rewrites that vertex index across the mesh, removes repeated-index faces by tail swap, and repeats only while more than four faces survive. Check-only and insufficient-survivor paths return false. Twenty-two family cases pass, including seven complete-original collapse/BD91E0 cases covering three edge selections, check-only, good, empty and exhausted meshes. Full72/RAM/CSR, independent count and retained indices pass with a synthetic guest threshold; no allocation or exhaustive geometry suite. Full library passes.
+
 ## Root direct continuation: input uniqueness and compaction (2026-10-09)
 
 `mesh_vertex_dedup61` adds BB8580, preserving the variable guest-stack point copy, check-only mode and optional in-place compaction/count update. Duplicate input still returns false even after successful repair. Seven family cases now pass original local dedup-chain comparisons with shared concrete sort/probe/initializer, Full72/RAM/CSR/callbacks and complete temporary cleanup. Added cases cover repair, check-only, already unique and empty. Existing B7E504 stack probe is exposed from its original family without duplicate recovery credit. Full library passes. Convex hull construction remains.
