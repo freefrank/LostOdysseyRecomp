@@ -108,9 +108,11 @@ void SetPromptStyle(uint32_t style) { promptStyle = style; }
 void PreviewVibration() { ++vibrationPreviews; }
 }
 namespace apu {
-bool menuFlowSurround = false;
-void SetSurround(bool surround) { menuFlowSurround = surround; }
-uint32_t OutputChannels() { return menuFlowSurround ? 6 : 2; }
+Output menuFlowOutput = Output::Stereo;
+uint32_t menuFlowMatrixPhase = 90;
+void SetOutput(Output output) { menuFlowOutput = output; }
+void SetMatrixPhase(uint32_t degrees) { menuFlowMatrixPhase = degrees; }
+uint32_t OutputChannels() { return menuFlowOutput == Output::Surround ? 6 : 2; }
 }
 
 namespace {
@@ -1551,20 +1553,37 @@ int main(int argc, char** argv)
             Require(settings::edit.vibrationPercent == 0 && saves == beforeSaves + 1, "left at 0 does not wrap");
             settings::pending = 2; Tick(base);
             Require(settings::row == settings::GameRestoreRow, "the game actions follow Vibration");
-            // Audio output closes the Audio tab: Right switches to 5.1 live and saves at once.
+            // Audio output follows Sound effects: Right switches to 5.1 live and saves at once.
             settings::tab = 1;
             settings::row = settings::AudioEffectsRow;
             settings::pending = 2; Tick(base);
             Require(settings::row == settings::AudioOutputRow && settings::snapshot.rows.size() == size_t(settings::AudioRowCount) &&
                     settings::snapshot.rows[settings::AudioOutputRow].name == L"Audio output" &&
                     settings::snapshot.rows[settings::AudioOutputRow].selectedChoice == 0,
-                    "Audio tab ends with Audio output after Sound effects, Stereo by default");
+                    "Audio output follows Sound effects, Stereo by default");
             settings::pending = 8; Tick(base);
             Require(settings::edit.audioOutput == settings::AudioOutputSurround && diskConfig.audioOutput == settings::AudioOutputSurround &&
-                    apu::menuFlowSurround && saves == beforeSaves + 2 && applies == beforeApplies &&
+                    apu::menuFlowOutput == apu::Output::Surround && saves == beforeSaves + 2 && applies == beforeApplies &&
                     diskConfig.width != settings::edit.width, "audio output switches live and saves alone");
+            // Matrix phase closes the Audio tab and only moves with Matrix surround.
             settings::pending = 2; Tick(base);
-            Require(settings::row == settings::AudioVoiceRow, "down from Audio output wraps to Voice language");
+            Require(settings::row == settings::AudioMatrixPhaseRow && !settings::snapshot.rows[settings::AudioMatrixPhaseRow].enabled,
+                    "Matrix phase follows Audio output, disabled without Matrix surround");
+            settings::pending = 8; Tick(base);
+            Require(settings::edit.audioMatrixPhase == 90 && saves == beforeSaves + 2, "disabled Matrix phase ignores Right");
+            settings::pending = 1; Tick(base);
+            settings::pending = 8; Tick(base);
+            Require(settings::edit.audioOutput == settings::AudioOutputMatrix && apu::menuFlowOutput == apu::Output::Matrix &&
+                    diskConfig.audioOutput == settings::AudioOutputMatrix && saves == beforeSaves + 3, "Right again selects Matrix surround");
+            settings::pending = 2; Tick(base);
+            settings::pending = 8; Tick(base);
+            Require(settings::snapshot.rows[settings::AudioMatrixPhaseRow].enabled &&
+                    settings::snapshot.rows[settings::AudioMatrixPhaseRow].value == L"105°" &&
+                    settings::edit.audioMatrixPhase == 105 && diskConfig.audioMatrixPhase == 105 && apu::menuFlowMatrixPhase == 105 &&
+                    saves == beforeSaves + 4 && applies == beforeApplies && diskConfig.width != settings::edit.width,
+                    "Matrix phase steps 15 degrees, applies live and saves alone");
+            settings::pending = 2; Tick(base);
+            Require(settings::row == settings::AudioVoiceRow, "down from Matrix phase wraps to Voice language");
             settings::edit = currentConfig;
             std::puts("PASS Gameplay Vibration slider and Audio output: bounds, immediate save, live apply, Graphics edits untouched");
         }

@@ -1,6 +1,7 @@
 #include <stdafx.h>
 #include "audio.h"
 #include "audio_callback.h"
+#include "matrix_surround.h"
 #include <cpu/guest_thread.h>
 #include <kernel/memory.h>
 #include <os/guest_code_thread.h>
@@ -28,6 +29,8 @@ namespace apu
         bool g_audioReady = false;
         std::atomic<bool> g_surroundRequested{ false };
         bool g_surroundOpen = false; // driver thread after Init
+        std::atomic<bool> g_matrix{ false }; // matrix-encode the stereo frames
+        std::atomic<uint32_t> g_matrixPhase{ 90 };
         std::atomic<uint32_t> g_outputChannels{ 0 };
 
         uint32_t FrameBytes() { return XAUDIO_NUM_SAMPLES * g_channels * sizeof(float); }
@@ -189,8 +192,10 @@ namespace apu
         }
     }
 
-    void Init(bool surround)
+    void Init(Output output)
     {
+        const bool surround = output == Output::Surround;
+        g_matrix = output == Output::Matrix;
         g_surroundRequested = g_surroundOpen = surround;
         // SDL3 picks 1024-frame device buffers at 48 kHz; keep SDL2's 512.
         SDL_SetHint(SDL_HINT_AUDIO_DEVICE_SAMPLE_FRAMES, "512");
@@ -211,10 +216,17 @@ namespace apu
         g_client.Register(callback, param);
     }
 
-    void SetSurround(bool surround)
+    void SetOutput(Output output)
     {
-        g_surroundRequested = surround;
-        g_outputChannels = 0; // unknown until the driver thread has applied it
+        g_matrix = output == Output::Matrix; // stereo frames, same device
+        const bool surround = output == Output::Surround;
+        if (g_surroundRequested.exchange(surround) != surround)
+            g_outputChannels = 0; // unknown until the driver thread has applied it
+    }
+
+    void SetMatrixPhase(uint32_t degrees)
+    {
+        g_matrixPhase = std::min(degrees, 180u);
     }
 
     uint32_t OutputChannels()
@@ -237,6 +249,21 @@ namespace apu
         // Guest planes FL, FR, FC, LFE, BL, BR match SDL's 6-channel order
         // FL, FR, FC, LFE, SL/BL, SR/BR, so 5.1 interleaves them unchanged.
         std::array<float, XAUDIO_NUM_SAMPLES * XAUDIO_NUM_CHANNELS> surround;
+        // The encoder's filters carry state from frame to frame; this runs
+        // on the one thread that submits frames.
+        static MatrixSurround matrix;
+        static bool matrixOn = false;
+        static uint32_t matrixPhase = 90;
+        if (const bool on = g_matrix; on != matrixOn)
+        {
+            matrix.Reset();
+            matrixOn = on;
+        }
+        if (const uint32_t phase = g_matrixPhase; phase != matrixPhase)
+        {
+            matrix.SetPhase(float(phase));
+            matrixPhase = phase;
+        }
         float peak = 0;
         for (uint32_t i = 0; i < XAUDIO_NUM_SAMPLES; ++i)
         {
@@ -247,10 +274,18 @@ namespace apu
                 channel[c] = std::isfinite(value) ? value : 0;
                 surround[i * 6 + c] = std::clamp(channel[c], -1.0f, 1.0f);
             }
-            // Guest order: FL, FR, FC, LFE, BL, BR. Include center dialogue
-            // and rear effects in the stereo fold-down, with headroom.
-            stereo[i * 2] = std::clamp((channel[0] + 0.7071f * (channel[2] + channel[4]) + 0.5f * channel[3]) * 0.5f, -1.0f, 1.0f);
-            stereo[i * 2 + 1] = std::clamp((channel[1] + 0.7071f * (channel[2] + channel[5]) + 0.5f * channel[3]) * 0.5f, -1.0f, 1.0f);
+            float left, right;
+            if (matrixOn)
+                matrix.Encode(channel, left, right);
+            else
+            {
+                // Guest order: FL, FR, FC, LFE, BL, BR. Include center dialogue
+                // and rear effects in the stereo fold-down, with headroom.
+                left = (channel[0] + 0.7071f * (channel[2] + channel[4]) + 0.5f * channel[3]) * 0.5f;
+                right = (channel[1] + 0.7071f * (channel[2] + channel[5]) + 0.5f * channel[3]) * 0.5f;
+            }
+            stereo[i * 2] = std::clamp(left, -1.0f, 1.0f);
+            stereo[i * 2 + 1] = std::clamp(right, -1.0f, 1.0f);
             peak = std::max({peak, std::abs(stereo[i * 2]), std::abs(stereo[i * 2 + 1])});
         }
         uint32_t n = ++g_framesSubmitted;

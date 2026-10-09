@@ -840,8 +840,14 @@ void Publish(uint8_t *base, uint32_t config)
         }
         addSlider(L"Music", L"音樂音量", PPC_LOAD_U32(config + 8));
         addSlider(L"Sound effects", L"音效音量", PPC_LOAD_U32(config + 12));
-        addChoices(L"Audio output", L"音訊輸出", {Tr(L"Stereo", L"立體聲"), Tr(L"5.1 surround", L"5.1 環繞聲")},
+        addChoices(L"Audio output", L"音訊輸出",
+                   {Tr(L"Stereo", L"立體聲"), Tr(L"5.1 surround", L"5.1 環繞聲"), Tr(L"Matrix surround", L"矩陣環繞聲")},
                    edit.audioOutput);
+        std::vector<std::wstring> phases;
+        for (uint32_t degrees = 0; degrees <= 180; degrees += 15)
+            phases.push_back(std::to_wstring(degrees) + L"°");
+        addChoices(L"Matrix phase", L"矩陣相移", std::move(phases), edit.audioMatrixPhase / 15,
+                   edit.audioOutput == AudioOutputMatrix);
     }
     else if (tab == 2)
     {
@@ -1067,7 +1073,10 @@ void Publish(uint8_t *base, uint32_t config)
         next.help = Tr(L"Close the game to import selected discs or DLC again. Other content and saves stay intact.",
                        L"關閉遊戲並重新匯入所選光碟或 DLC；其他內容與存檔保留。");
     if (tab == 1 && row == AudioOutputRow && status.empty())
-        next.help = edit.audioOutput == AudioOutputSurround && apu::OutputChannels() == 2
+        next.help = edit.audioOutput == AudioOutputMatrix
+            ? Tr(L"Encodes 5.1 into stereo for an AV receiver's Pro Logic II, Dolby Surround or Neural:X mode; plays as stereo elsewhere. Applies immediately.",
+                 L"把 5.1 編入立體聲，供 AV 擴大機的 Pro Logic II、Dolby Surround 或 Neural:X 模式還原；其他裝置照常播放立體聲。立即套用。")
+            : edit.audioOutput == AudioOutputSurround && apu::OutputChannels() == 2
 #ifdef _WIN32
             // The speaker layout is only in the classic Sound control panel.
             ? Tr(L"Windows reports a stereo device. Open Control Panel → Sound → Playback, select the device, click Configure and choose 5.1 or 7.1 Surround, then select 5.1 again.",
@@ -1078,6 +1087,12 @@ void Publish(uint8_t *base, uint32_t config)
 #endif
             : Tr(L"5.1 sends the game's surround mix to a 5.1 or 7.1 speaker setup. Applies immediately.",
                  L"5.1 會將遊戲的環繞聲混音輸出到 5.1 或 7.1 喇叭，立即套用。");
+    if (tab == 1 && row == AudioMatrixPhaseRow && status.empty())
+        next.help = edit.audioOutput == AudioOutputMatrix
+            ? Tr(L"Phase of the rear channels in Matrix surround. 90° is Pro Logic II; try others if the rear sounds weak or vague. Applies immediately.",
+                 L"矩陣環繞聲中後方聲道的相移。90° 為 Pro Logic II；後方聲音偏弱或模糊時可試其他值。立即套用。")
+            : Tr(L"Select Matrix surround in Audio output to adjust this.",
+                 L"在音訊輸出選擇矩陣環繞聲後才能調整。");
     if (tab == 2)
     {
         switch (GraphicsRow(row))
@@ -2450,10 +2465,26 @@ PPC_FUNC(sub_822F19B0)
         else if (tab == 1 && row == AudioOutputRow)
         {
             // Host setting beside the retail rows: applied and saved at once.
-            edit.audioOutput = cycle(edit.audioOutput, 2);
-            apu::SetSurround(edit.audioOutput == AudioOutputSurround);
+            static_assert(uint32_t(apu::Output::Surround) == AudioOutputSurround &&
+                          uint32_t(apu::Output::Matrix) == AudioOutputMatrix);
+            edit.audioOutput = cycle(edit.audioOutput, 3);
+            apu::SetOutput(apu::Output(edit.audioOutput));
             if (!SaveAudioOutput(edit.audioOutput))
                 status = Tr(L"Could not save settings.", L"無法儲存設定。");
+        }
+        else if (tab == 1 && row == AudioMatrixPhaseRow)
+        {
+            // Like Vibration: applied and saved at once, without unsaved
+            // Graphics edits; only adjustable with Matrix surround.
+            const auto phase = uint32_t(std::clamp(int(edit.audioMatrixPhase) + delta * 15, 0, 180));
+            if (edit.audioOutput == AudioOutputMatrix && phase != edit.audioMatrixPhase)
+            {
+                edit.audioMatrixPhase = phase;
+                Config saved = GetConfig();
+                saved.audioMatrixPhase = phase;
+                if (!SaveConfig(saved)) status = Tr(L"Could not save settings.", L"無法儲存設定。");
+                apu::SetMatrixPhase(phase);
+            }
         }
         else if (tab == 1)
         {
