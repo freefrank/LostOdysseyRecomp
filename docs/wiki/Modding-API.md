@@ -97,7 +97,7 @@ All integers are little-endian. The fixed header is 64 bytes.
 | --- | --- | --- |
 | 0 | 8 | ASCII `LOTEX2` followed by CR LF |
 | 8 | 4 | Header size: 64 + key length |
-| 12 | 4 | Payload type: `1` RGBA8, `2` DDS (reserved) |
+| 12 | 4 | Payload type: `1` RGBA8, `2` DDS |
 | 16 | 8 | Fingerprint; must equal the requested one |
 | 24 | 4 | Original Xenos format: `2` G8, `6` A8R8G8B8, `18` DXT1, `19` DXT3, `20` DXT5 |
 | 28 | 4 | Original width |
@@ -112,6 +112,15 @@ All integers are little-endian. The fixed header is 64 bytes.
 | Following key | payload size | Payload |
 
 Payload width and height are the original width and height times the same factor 1, 2, 4 or 8, and at most 8192 each. Type 1 stores the mip levels top first. Level *i* is max(1, w >> *i*) × max(1, h >> *i*) RGBA bytes, rows top to bottom, with no padding. The payload size must be exact, and the mip count may not exceed the full chain. With one level the game builds the rest of the chain itself. Channels are always plain RGBA: a G8 original reads the red channel, and the game maps A8R8G8B8 replacements to the original channel order. Any validation failure keeps the original texture.
+
+Type 2 stores a complete DDS file with block-compressed levels:
+
+- Formats: BC1, BC3, BC4 or BC7, all UNORM. The DDS can use the DX10 header (DXGI formats 71, 77, 80, 98) or the legacy FourCC `DXT1`, `DXT5` or `ATI1`/`BC4U`.
+- Shape: 2D, one array slice, not a cube map.
+- Size: the DDS width, height and mip count must equal the LOTEX2 header's payload width, height and mip count. Level 0 must be a multiple of 4 on both sides.
+- Channels follow the original's host texture rather than plain RGBA. A G8 original uses BC4 (one channel). An A8R8G8B8 original stores B, G, R, A, so the packer swaps red and blue before compressing. DXT originals use plain RGBA.
+- The game uploads the blocks unchanged. Devices without BC support (some Mali GPUs) keep the original texture.
+- Levels the device cannot address as whole blocks are dropped, as for the original uploads.
 
 The game replaces only uploads it can match safely. These are tiled 2D base levels in the formats above, with a shorter side over 16 texels. Render targets, resolved surfaces, movie frames and the controller-prompt atlas are never replaced. Shaders keep seeing the original texture size, so a larger replacement samples like the original at a higher resolution.
 
