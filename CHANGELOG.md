@@ -26,6 +26,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - New Culling setting in Settings → Graphics, 0%–200%. 100% is the original. Lower values keep characters and objects at the screen edges visible until they are fully off screen; higher values hide them sooner (#342).
 - Optional diagnostics on Windows now send a short summary of the previous session's log (errors, crashes, hangs, rendering mismatches and map names) instead of TAA shader data. The game asks again before sending anything.
 - The log now keeps only notices, warnings and errors. Turn on Settings → System → Debug log for the full log.
+- Windows no longer opens the setup page at the first launch: the game starts with default settings, which Settings changes (`--setup` still opens the page). Opening Settings no longer asks about log collection; the first launch still asks once.
 
 ### 简体中文
 
@@ -47,6 +48,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - 设置 → 图形新增“剔除”，0%–200%。100% 为原版。调低后，画面边缘的角色和物体会一直显示到完全离开画面；调高则更早隐藏（#342）。
 - Windows 上的可选诊断改为发送上一次运行日志的摘要（错误、崩溃、卡死、渲染不匹配和地图名），不再发送 TAA 着色器数据。发送前会重新询问。
 - 日志默认只保留提示、警告和错误。需要完整日志时，在设置 → 系统打开“调试日志”。
+- Windows 第一次启动不再打开设置页面：游戏以默认设置启动，在设置里修改（`--setup` 仍可打开该页面）。打开设置时不再询问日志收集；第一次启动仍会询问一次。
 
 ## [v0.9.0](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.0) — 2026-10-08
 

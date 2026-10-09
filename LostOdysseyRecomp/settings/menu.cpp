@@ -1825,7 +1825,9 @@ PPC_FUNC(sub_822F19B0)
         calibrationNumber.clear();
         calibrationClick = -1;
         calibrationDragNits = -1;
-        collectionPrompt = os::log_collection::Supported() && os::log_collection::Consent() < 0;
+        // Log collection is asked at the first launch and from its System
+        // row; opening Settings does not ask.
+        collectionPrompt = false;
         collectionChoice = 1;
         pending = 0;
         waitForRelease = true;

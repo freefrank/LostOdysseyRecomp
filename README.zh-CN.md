@@ -174,7 +174,7 @@ Windows ZIP 是**便携式**的，所有文件都留在解压目录里。AppImag
 | :--- | :--- |
 | `--game <路径>` | 使用指定的游戏文件夹（含 `default.xex` 或 `disc1/`）或 `default.xex` 文件，跳过导入器。 |
 | `--install` | 即使已经设置好游戏也打开导入器。 |
-| `--setup` | Windows：重新运行首次启动设置，然后进入游戏。 |
+| `--setup` | Windows：打开设置页面，然后进入游戏。 |
 | `--prepare-shaders-only` | 预先准备全部着色器，然后不启动游戏直接退出。 |
 
 ```bash

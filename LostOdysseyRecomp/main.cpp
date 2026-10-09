@@ -470,11 +470,17 @@ int main(int argc, char* argv[])
     }
     settings::ConfigureGameLanguages(gameRoot / "default.xex");
     os::log_collection::Initialize();
-    if(requestedSetup || (!getenv("LO_BACKGROUND") && !getenv("LO_HEADLESS") && !std::filesystem::exists(os::user_paths::SettingsPath()))) {
-        if(!settings::FirstRunSetup(&gameRoot)) return 0;
+    // The setup window opens only on request (--setup, --setup-only). A first
+    // launch starts with the defaults, which the in-game Settings change, and
+    // still asks about log collection once.
+    const bool firstLaunch = !getenv("LO_BACKGROUND") && !getenv("LO_HEADLESS") &&
+                             !std::filesystem::exists(os::user_paths::SettingsPath());
+    if(requestedSetup && !settings::FirstRunSetup(&gameRoot)) return 0;
+    if(firstLaunch && !requestedSetup && !settings::SaveConfig(settings::GetConfig()))
+        LOG_WARNING("settings: the default settings could not be written");
+    if(requestedSetup || firstLaunch)
         os::log_collection::PromptFirstRun(settings::GetConfig().uiLanguage);
-        if(setupOnly) return 0;
-    }
+    if(setupOnly) return 0;
     os::log_collection::StartUpload(sessionLog);
     {
         const auto& c = settings::GetConfig();
