@@ -179,6 +179,7 @@ add_library(LostOdysseyRecompSemantics STATIC
     src/metadata_descriptor_construct61.cpp
     src/manager_cached_links61.cpp
     src/owned_tree_refit61.cpp
+    src/cube_projection_table61.cpp
     src/projection_extrema61.cpp
     src/grid_blob_forward61.cpp
     src/grid_blob_routes61.cpp

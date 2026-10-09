@@ -137,12 +137,13 @@
     "projection_extrema61",
     "manager_cached_links61",
     "metadata_descriptor_construct61",
-    "owned_tree_refit61"
+    "owned_tree_refit61",
+    "cube_projection_table61"
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 44,
-    "distinct_entries": 77,
+    "unit_count": 45,
+    "distinct_entries": 79,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -482,6 +483,14 @@
         "entries": [
           "82BDA248",
           "82BDA5F0"
+        ],
+        "focused_cases": 3
+      },
+      {
+        "unit": "cube_projection_table61",
+        "entries": [
+          "82BB3430",
+          "82BB38A0"
         ],
         "focused_cases": 3
       }

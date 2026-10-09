@@ -16,6 +16,15 @@ empty/multiple-item leaves, paired children and cross-word dirty bits. Guest
 arrays/nodes remain borrowed; no guest lower or allocation is introduced.
 Finite bounds and valid indices are the selected scope; nonfinite/invalid input
 and runtime remain unverified.
+`cube_projection_table61` adds BB3430/BB38A0 (50+176 instructions): allocate
+consumer index tables, sample and normalize directions over six cube faces,
+and invoke the concrete projection slots. Three resolutions (0/2/3) pass original
+sampler/preparer versus recovered logic with shared accepted extrema, comparing
+Full72/RAM/callbacks/directions/host CSR. Library build passes. A zero-resolution
+callback r25 placement discrepancy was corrected at the actual branch boundary.
+Vtable 820D6280 slots +4/+8/+12 were confirmed as BB3430/BB34F8/822D3068;
+private bytes are excluded. Resolution1, nonfinite and allocation failure remain
+untested; original guest ownership and failure behavior are retained.
 
 Bounded private-image investigation establishes vtables at 820D58A0 (installed
 by B9CC00) and 820D5C58 (installed by B9E220/B9E2D8/B9E388). Their slots +0C,

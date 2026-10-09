@@ -1,0 +1,55 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Private bodies pinned by SHA256; original sampler uses original preparation slot, shared accepted extrema/allocator and mapped empty finalizer.",
+  "entries": [
+    {
+      "address": "82BB3430",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 57357,
+      "instruction_count": 50,
+      "body_sha256": "acd191cc01d83a0119cddc803bc7f887f9ab91b490e21c70f193a9099e9abe31",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BB38A0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 58032,
+      "instruction_count": 176,
+      "body_sha256": "d97d235d39489c1d94d8c8582ecee486e0db117aa217ca805094ad7cb3c38685",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "provenance": {
+    "vtable_address": "820D6280",
+    "selected_slots": {
+      "+4": "82BB3430",
+      "+8": "82BB34F8",
+      "+12": "822D3068"
+    },
+    "evidence": "Verified address/slot targets in locally dumped private image; no image bytes embedded.",
+    "jump_table": "82BB3988 contains two targets each for X/Y/Z face branches, matching the generated switch."
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 3,
+    "library_validated": true,
+    "library": "PASS incremental complete Clang 19 CMake static library; existing unused-function warning exception retained.",
+    "platform": "Linux x64; Clang 19.1.7; genuine XEX regenerated with pinned XenonRecomp ddd128bc plus tracked patch; existing oracle guest-window allocation overlaid with mmap/mprotect only",
+    "mapping_credit": 0,
+    "mapping_limit": "Fixed historical catalog.sqlite unavailable; do not infer membership from regenerated sources. 82BB25D0 is explicitly external in prior handoff.",
+    "runtime_validated": false,
+    "complete": false,
+    "limits": "Selected finite inputs, ordinary RAM, Full72 state, callbacks and host CSR only. No Windows revalidation, nonfinite matrix, faults/MMIO, concurrency, runtime or gameplay acceptance.",
+    "case_scope": "Three resolutions 0/2/3 compare genuine original sampler and original table allocation with shared accepted projection-extrema and mapped empty finalizer. Full72/RAM/callbacks/direction outputs/actual host CSR checked. Actual private vtable and jump-table metadata retained as address-level provenance. Resolution1, nonfinite values, point count above255, allocation failure and runtime untested. Tables are guest allocations attached to consumer storage; no extra disposal or guards."
+  },
+  "implementation": {
+    "entries": [
+      "82BB3430",
+      "82BB38A0"
+    ],
+    "header": "include/lo_semantics/cube_projection_table61.h",
+    "source": "src/cube_projection_table61.cpp",
+    "oracle": "tests/cube_projection_table61_oracle.cpp"
+  }
+}
