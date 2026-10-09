@@ -32,9 +32,15 @@ namespace apu
 
         uint32_t FrameBytes() { return XAUDIO_NUM_SAMPLES * g_channels * sizeof(float); }
 
-        // Caller holds g_deviceMutex. 5.1 probes the device layout first:
-        // WASAPI reports its endpoint mix format here, while PulseAudio,
-        // PipeWire and Core Audio accept six channels and remix them.
+        // Caller holds g_deviceMutex. 5.1 needs a device that mixes six or
+        // more channels. PulseAudio, PipeWire and Core Audio accept six on
+        // any device and remix them, so their layout is checked before
+        // opening. Before opening, WASAPI reports the endpoint's hardware
+        // format as of startup: it stays stereo when an encoder (Dolby
+        // Digital Live, DTS Interactive over S/PDIF) takes a 5.1 mix, and
+        // misses a speaker layout changed while the game runs. The open
+        // device reports the live mix format, so WASAPI opens six and
+        // checks that.
         void OpenDevice(bool surround)
         {
             if (g_stream) SDL_DestroyAudioStream(g_stream);
@@ -44,30 +50,33 @@ namespace apu
             g_channels = 2;
             SDL_AudioSpec desired{SDL_AUDIO_F32, 2, XAUDIO_SAMPLES_HZ};
             SDL_AudioSpec preferred{};
-            const bool havePreferred = SDL_GetAudioDeviceFormat(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &preferred, nullptr);
-            if (surround && havePreferred && preferred.channels >= 6)
-            {
+            const int listedChannels = SDL_GetAudioDeviceFormat(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &preferred, nullptr)
+                ? preferred.channels : 0;
+            int mixChannels = 0;
+            const char* driver = SDL_GetCurrentAudioDriver();
+            const bool wasapi = driver && SDL_strcmp(driver, "wasapi") == 0;
+            if (surround && (wasapi || listedChannels >= 6))
                 desired.channels = 6;
-            }
-            else if (surround)
-                LOG_WARNING("5.1 output unavailable (device channels {}); using the stereo downmix",
-                    havePreferred ? preferred.channels : 0);
             g_device = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &desired);
             if (g_device)
             {
                 SDL_AudioSpec obtained{};
-                if (!SDL_GetAudioDeviceFormat(g_device, &obtained, nullptr) ||
-                    (desired.channels == 6 && obtained.channels < 6))
+                if (!SDL_GetAudioDeviceFormat(g_device, &obtained, nullptr))
                 {
                     SDL_CloseAudioDevice(g_device);
                     g_device = 0;
                 }
+                else if ((mixChannels = obtained.channels) < 6)
+                    desired.channels = 2; // the open device takes the stereo downmix
             }
             if (!g_device && desired.channels == 6)
             {
                 desired.channels = 2;
                 g_device = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &desired);
             }
+            if (surround && desired.channels != 6)
+                LOG_WARNING("5.1 output unavailable (device channels listed {} mix {}); using the stereo downmix",
+                    listedChannels, mixChannels);
             if (g_device)
             {
                 SDL_AudioSpec obtained{};
@@ -88,7 +97,8 @@ namespace apu
                 else SDL_ResumeAudioDevice(g_device);
             }
             if (!g_device) LOG_WARNING("audio device unavailable: {}", SDL_GetError());
-            else LOG_INFO("audio output: 48000 Hz {} float, SDL driver {}", g_channels == 6 ? "5.1" : "stereo", SDL_GetCurrentAudioDriver());
+            else LOG_INFO("audio output: 48000 Hz {} float, device channels listed {} mix {}, SDL driver {}",
+                g_channels == 6 ? "5.1" : "stereo", listedChannels, mixChannels, driver ? driver : "none");
             g_outputChannels = g_device ? g_channels : 0;
         }
 
