@@ -5,7 +5,6 @@
 #include <cstdlib>
 #include <cstring>
 
-extern "C" PPC_FUNC(__imp__sub_8234B9B8);
 extern "C" PPC_FUNC(__imp__sub_8282B540);
 
 bool debug_menu::AutoContinueEnabled()
@@ -141,8 +140,7 @@ namespace
     }
 }
 
-PPC_FUNC(sub_8234B9B8)
+void debug_menu::AutoContinueAdvance(PPCContext& ctx, uint8_t* base)
 {
-    if (debug_menu::AutoContinueEnabled()) Advance(ctx, base);
-    __imp__sub_8234B9B8(ctx, base);
+    if (AutoContinueEnabled()) Advance(ctx, base);
 }

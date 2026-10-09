@@ -35,6 +35,9 @@ std::atomic<uint16_t> cancelButton{0x2000};
 std::atomic<bool> swapConfirm{false};
 std::atomic<bool> waitForRelease{true};
 std::atomic<bool> releaseToParent{false};
+// Title menu entry: the title tick reports an idle menu, input polling records
+// a fresh Y there, and the opened task hides Quit to Main Menu.
+std::atomic<bool> titleMenuIdle{false}, titleShortcut{false}, titleEntry{false};
 std::atomic<int> mouseTab{-1}, mouseRow{-1};
 std::atomic<int> mouseDialog{-1};
 std::atomic<uint16_t> mouseAction{0};
@@ -842,6 +845,8 @@ void Publish(uint8_t *base, uint32_t config)
         addSlider(L"Vibration", L"震動", edit.vibrationPercent);
         addAction(L"Restore game defaults", L"恢復遊戲預設設定", Tr(L"Restore", L"恢復"));
         addAction(L"Quit to Main Menu", L"退出到主選單", Tr(L"Return", L"返回"));
+        // Opened from the title menu: there is no game to quit.
+        next.rows.back().hidden = titleEntry.load();
     }
     else if (tab == 1)
     {
@@ -1573,6 +1578,19 @@ bool FilterInput(uint16_t &buttons, int16_t x, int16_t y)
         buttons = cancelButton.load();
         return false;
     }
+    {
+        // Y pressed on the idle title menu. A button already held when the
+        // menu became idle is not a press.
+        static uint16_t titlePrevious = 0xFFFF;
+        if (titleMenuIdle.load())
+        {
+            if ((buttons & TitleSettingsButton) && !(titlePrevious & TitleSettingsButton))
+                titleShortcut = true;
+            titlePrevious = buttons;
+        }
+        else
+            titlePrevious = 0xFFFF;
+    }
     if (!active.load())
         return false;
     if (swapConfirm.load())
@@ -1751,6 +1769,9 @@ PPC_FUNC(sub_822F19B0)
     const uint32_t menu = ctx.r3.u32;
     const uint32_t state = PPC_LOAD_U32(menu + 4);
     const uint32_t modal = PPC_LOAD_U32(menu + 0x1804);
+    // The task is idle again (1): a later open comes from a loaded game.
+    if (state <= 1)
+        titleEntry = false;
     if (menu != lastMenu)
     {
         lastMenu = menu;
@@ -1820,6 +1841,8 @@ PPC_FUNC(sub_822F19B0)
             brightnessOpen = false;
         }
         else brightnessOpen = true;
+        if (titleEntry.load() && tab == 0 && row == GameMainMenuRow)
+            row = GameRestoreRow;
         brightnessClick = -1;
         brightnessDragBrightness = INT_MIN;
         brightnessDragGamma = -1;
@@ -2422,7 +2445,8 @@ PPC_FUNC(sub_822F19B0)
     // when unavailable. Keyboard Enter reaches the menu as GAMEPAD_START
     // (hid.cpp), so one branch covers gamepad Start and Enter.
     auto rowHidden = [&](int r) {
-        return tab == 2 && GraphicsRowHidden(r);
+        return (tab == 2 && GraphicsRowHidden(r)) ||
+               (tab == 0 && r == GameMainMenuRow && titleEntry.load());
     };
     if (input & 1)
         do { row = (row + count - 1) % count; } while (rowHidden(row));
@@ -2746,7 +2770,7 @@ PPC_FUNC(sub_822F19B0)
         language::TraceConfig(base, config, "menu-after-defaults");
         status = Tr(L"Game defaults restored.", L"遊戲預設設定已恢復。");
     }
-    if ((input & 0x1000) && tab == 0 && row == GameMainMenuRow)
+    if ((input & 0x1000) && tab == 0 && row == GameMainMenuRow && !titleEntry.load())
     {
         mainMenuPrompt = true;
         mainMenuChoice = 1; // Require an explicit selection of Return; Back always cancels.
@@ -2861,6 +2885,22 @@ PPC_FUNC(sub_822F19B0)
 bool settings::IsOpen()
 {
     return active.load();
+}
+
+bool settings::ConsumeTitleShortcut(bool idle)
+{
+    titleMenuIdle = idle;
+    if (!idle)
+    {
+        titleShortcut = false;
+        return false;
+    }
+    return titleShortcut.exchange(false);
+}
+
+void settings::MarkTitleEntry()
+{
+    titleEntry = true;
 }
 
 bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint32_t width, uint32_t height)

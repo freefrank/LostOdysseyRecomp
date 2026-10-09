@@ -173,4 +173,12 @@ bool FilterInput(uint16_t &buttons, int16_t leftX, int16_t leftY);
 bool DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint32_t width = 1280, uint32_t height = 720);
 void PointerClick(float x, float y, bool reverse);
 bool IsOpen();
+// Title menu entry (title_entry.cpp): Y on the idle title menu opens Settings
+// before a game is loaded. The title tick reports whether its menu is idle and
+// takes a fresh press made there, if any.
+inline constexpr uint16_t TitleSettingsButton = 0x8000; // XINPUT_GAMEPAD_Y
+bool ConsumeTitleShortcut(bool titleMenuIdle);
+// The retail Settings task was just opened from the title menu. Quit to Main
+// Menu stays hidden until that task is idle again.
+void MarkTitleEntry();
 } // namespace settings
