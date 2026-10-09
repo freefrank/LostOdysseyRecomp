@@ -1,0 +1,45 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Private generated bodies are pinned by SHA256 of UTF-8 with LF line endings and no final newline; no generated code is embedded.",
+  "entries": [
+    {
+      "address": "8240CC58",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.16.cpp",
+      "source_line": 7938,
+      "instruction_count": 55,
+      "body_sha256": "50cc51f13cbe5123bcad834143df2a69b88e6eb5c77f0a2f33879e777a1475e1",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82410A28",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.16.cpp",
+      "source_line": 16959,
+      "instruction_count": 90,
+      "body_sha256": "b1bf038c59cc10c809dd2f781054fbf325d8aa91265a7816b7f117d31369ee63",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 3,
+    "library_validated": true,
+    "library": "PASS incremental complete Clang 19 CMake static library; existing unused-function warning exception retained.",
+    "platform": "Linux x64; Clang 19.1.7; genuine XEX regenerated with pinned XenonRecomp ddd128bc plus tracked patch; existing oracle guest-window allocation overlaid with mmap/mprotect only",
+    "mapping_credit": 0,
+    "mapping_limit": "Fixed historical catalog.sqlite unavailable; do not infer membership from regenerated sources. 82BB25D0 is explicitly external in prior handoff.",
+    "runtime_validated": false,
+    "complete": false,
+    "limits": "Ordinary RAM and Full72 only; actual host CSR not independently compared. No fault/MMIO, concurrency, runtime or gameplay validation.",
+    "case_scope": "Three complete original-body cases (both genuine entries included): base pending-list registration, negative gate skips registration, derived descriptor with multiple caller-stack arguments. Full72/RAM plus explicit field/list/gap assertions compared. Integer-only fixture does not independently compare host CSR. Guest object and pending-list links explicit; no allocation, callback, concurrency or runtime acceptance."
+  },
+  "implementation": {
+    "entries": [
+      "8240CC58",
+      "82410A28"
+    ],
+    "header": "include/lo_semantics/metadata_descriptor_construct61.h",
+    "source": "src/metadata_descriptor_construct61.cpp",
+    "oracle": "tests/metadata_descriptor_construct61_oracle.cpp"
+  }
+}

@@ -26,6 +26,12 @@ two dirty phases invalidate cached links and unlink reciprocal owner/index
 references while retaining bit58-marked targets. Three genuine-body Full72/RAM
 cases and the library build pass. The integer-only fixture does not independently
 compare host CSR. This leaf does not close the recursive manager parent.
+`metadata_descriptor_construct61` also recovers complete 8240CC58/82410A28
+(55+90 instructions): base/derived metadata fields and pending-list registration.
+Three full original-body Full72/RAM cases and library build pass; stack arguments,
+64-bit flags and preserved field gaps are explicit. Actual host CSR is not
+independently compared by this integer-only fixture. Registration callbacks and
+the remaining recursive manager subtrees are still outside these constructors.
 
 ## Latest workspace checkpoint — 2026-10-09
 

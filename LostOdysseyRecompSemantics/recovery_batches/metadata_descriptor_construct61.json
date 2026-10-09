@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "metadata-descriptor-construct61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/metadata_descriptor_construct61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/metadata_descriptor_construct61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nextern \"C\" PPC_FUNC(__imp__sub_8240CC58);\n#define sub_8240CC58(c,b) __imp__sub_8240CC58(c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/metadata_descriptor_construct61.cpp"
+      ]
+    }
+  ]
+}

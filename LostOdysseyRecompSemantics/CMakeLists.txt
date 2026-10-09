@@ -176,6 +176,7 @@ add_library(LostOdysseyRecompSemantics STATIC
     src/geometry_query_dispatch61.cpp
     src/object_grid_probe61.cpp
     src/object_sort_export61.cpp
+    src/metadata_descriptor_construct61.cpp
     src/manager_cached_links61.cpp
     src/projection_extrema61.cpp
     src/grid_blob_forward61.cpp

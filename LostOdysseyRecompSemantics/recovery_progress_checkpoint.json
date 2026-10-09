@@ -135,12 +135,13 @@
     "grid_blob_routes61",
     "grid_blob_forward61",
     "projection_extrema61",
-    "manager_cached_links61"
+    "manager_cached_links61",
+    "metadata_descriptor_construct61"
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 42,
-    "distinct_entries": 73,
+    "unit_count": 43,
+    "distinct_entries": 75,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -464,6 +465,14 @@
         "unit": "manager_cached_links61",
         "entries": [
           "824002F0"
+        ],
+        "focused_cases": 3
+      },
+      {
+        "unit": "metadata_descriptor_construct61",
+        "entries": [
+          "8240CC58",
+          "82410A28"
         ],
         "focused_cases": 3
       }
