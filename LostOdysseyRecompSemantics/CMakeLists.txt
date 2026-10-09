@@ -192,6 +192,7 @@ add_library(LostOdysseyRecompSemantics STATIC
     src/owned_tree_reorder_support61.cpp
     src/owned_tree_mesh_build61.cpp
     src/tree_triangle_split61.cpp
+    src/tree_box_centroid61.cpp
     src/projection_extrema61.cpp
     src/grid_blob_forward61.cpp
     src/grid_blob_routes61.cpp

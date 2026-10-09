@@ -1,0 +1,43 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Complete pinned original box centroid callbacks, second-tree vtable slots +12/+16. No original body published.",
+  "entries": [
+    {
+      "address": "82BD8848",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 21436,
+      "instruction_count": 15,
+      "body_sha256": "e3b1e6ed9600151efd2b06c4344c79a2f96a97bf1f6bcd32eae909e2a663b40a",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD8888",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 21476,
+      "instruction_count": 23,
+      "body_sha256": "1dc43ebe96f77804df90df2a11d143f9a92735af0a41bb7eafb18c1eec27d8f2",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BD8848",
+      "82BD8888"
+    ],
+    "header": "include/lo_semantics/tree_box_centroid61.h",
+    "source": "src/tree_box_centroid61.cpp",
+    "oracle": "tests/tree_box_centroid61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 3,
+    "library_validated": true,
+    "case_scope": "Axis coordinate, xyz centroid and overlapping output/input. Complete original bodies compared on Full72/RAM/host CSR; independent finite result assertions. No guest lower or allocation. Nonfinite and invalid addresses untested.",
+    "platform": "Linux x64 Clang 19.1.7; pinned regenerated PPC; mmap guest overlay",
+    "mapping_limit": "Historical catalog membership unverified; no baseline mapping credit."
+  }
+}

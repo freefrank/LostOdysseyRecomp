@@ -15,7 +15,13 @@ passed here. The complete Clang 19.1.7 Release static library builds. Both units
 are recorded as selected-case validated with zero baseline mapping credit;
 no runtime replacement or gameplay acceptance is implied.
 
-Next: recover unresolved concrete second-tree bounds/centroid/split targets and
+Directly recovered `tree_box_centroid61` (BD8848/BD8888), the second-tree
+vtable's axis and xyz box-centroid callbacks. Three complete original-body
+comparisons pass Full72/RAM/host CSR, including output overlapping the input
+box. All six input loads precede writes; separate binary32 arithmetic stages
+and borrowed-buffer ownership are explicit. The complete library builds.
+
+Next: recover unresolved concrete second-tree bounds/split targets and
 strategy binding from their pinned original bodies. BD5910's host FP exception
 flag difference remains an independent unresolved draft.
 

@@ -150,12 +150,13 @@
     "tree_triangle_bounds61",
     "owned_tree_reorder_support61",
     "owned_tree_mesh_build61",
-    "tree_triangle_split61"
+    "tree_triangle_split61",
+    "tree_box_centroid61"
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 57,
-    "distinct_entries": 100,
+    "unit_count": 58,
+    "distinct_entries": 102,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -596,6 +597,14 @@
         "unit": "tree_triangle_split61",
         "entries": [
           "82BD8BF8"
+        ],
+        "focused_cases": 3
+      },
+      {
+        "unit": "tree_box_centroid61",
+        "entries": [
+          "82BD8848",
+          "82BD8888"
         ],
         "focused_cases": 3
       }
