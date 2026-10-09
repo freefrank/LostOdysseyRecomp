@@ -1,3 +1,7 @@
+## Root direct continuation: mesh stream codec for load integration (2026-10-09)
+
+`mesh_stream_codec61` adds nine logical NXS header/scalar/array read-write entries and forwards three existing float/header writers to mesh_stream_write61. Both endian modes round-trip header/version, u16/u32/f32 and a float array through concrete memory input/growable output; wrong format tag stops after8 bytes. No new stream bounds, rollback or error policy. u16-array writer is compiled/source-reviewed; no full-RAM/volatile/nonfinite/bitwiseFP matrix. Next load integration targets BC4D80 tree binding and BC5270 overall cooked-mesh load, with geometry/valence reader dependencies still to recover.
+
 ## Root direct continuation: cooked geometry scaling (2026-10-09)
 
 `mesh_cook_scale61` recovers B9EC98 uniform scaling, B9F188/B9F190 count getters and B9CAF8 active settings update. Positions, face quantities, bounds, radius and centroid use the scale factor; inertia uses its square, while relative tolerance uses recovered guest power. Source settings choose explicit virtual refresh or concrete tree rebuild. One focused synthetic scale2 path checks derived data, getters/settings, ABI and a recorded accepted refresh boundary. B9C670 load/scale/export wrapper and BC5270 load are the next related integration targets. No Full72/bitwiseFP/gameplay claim.

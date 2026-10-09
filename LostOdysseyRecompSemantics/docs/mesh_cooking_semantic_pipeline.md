@@ -299,3 +299,8 @@ First-use callback targets are verified as830D9990 and830D9930, including signed
 ### Cooked geometry rescaling
 
 B9EC98 scales geometry and derived quantities, then refreshes/rebuilds the tree according to settings. The focused scale2 path checks squared inertia, bounds/radius/centroid, guest-power tolerance and the explicit refresh event. B9F188/B9F190 count getters and B9CAF8 settings update are also concrete. Stream-load/scale/export integration remains pending.
+
+
+### Format readers and endian roundtrips
+
+The NXS reader and scalar/array codec are concrete. Both endian modes round-trip headers and values through actual memory-stream helpers; wrong tags reject after the original8-byte prefix/tag consumption. These low-level results enable the pending cooked-mesh loader; no complete load/scale/export path is claimed yet.
