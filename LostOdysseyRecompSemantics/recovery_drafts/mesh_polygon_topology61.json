@@ -1,0 +1,33 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Polygon edge deduplication, edge-ID slices, edge-to-polygon incidence and adjacent-normal bisectors.",
+  "entries": [
+    {
+      "address": "82BBB728",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 16679,
+      "instruction_count": 633,
+      "body_sha256": "9870b2bcda6e64f171c3b12db4e297052b7dd37d86835607ce48dfb7a29b576b",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BBB728"
+    ],
+    "header": "include/lo_semantics/mesh_polygon_topology61.h",
+    "source": "src/mesh_polygon_topology61.cpp",
+    "oracle": "tests/mesh_polygon_topology61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 2,
+    "library_validated": true,
+    "case_scope": "Complete original upper with concrete shared polygon build and stable sort. Full72/RAM/CSR/events and independent cube twelve unique edges, polygon edge slices, two-face incidence/prefixes, bisector directions and eight retained allocations. Fresh lazy build and prebuilt polygons with replacement of old topology arrays. Allocation/recursive-repair failures untested.",
+    "platform": "Linux x64 Clang19; pinned PPC; mmap guest overlay"
+  }
+}

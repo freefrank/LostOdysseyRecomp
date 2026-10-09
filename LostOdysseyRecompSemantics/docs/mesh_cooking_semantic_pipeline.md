@@ -101,6 +101,12 @@ with source triangles and checked against the surface centroid. Supporting
 planes expand to cover all source vertices, then polygon fans replace the
 owned triangle array. Component/edge/ordering scratch arrays are released.
 
+BBB728 finalizes unique polygon edges: mesh +52 edge count, +56 owned byte
+endpoint pairs, +48 owned u16 polygon-to-edge map, +64 owned eight-byte
+incidence records (u16 count +2, u32 prefix +4), +68 owned polygon-ID bytes,
+and +60 owned xyz edge bisectors from adjacent polygon normals. Polygon
+record +8 borrows its corresponding edge-ID slice.
+
 ## Remaining upper dependencies
 
 82B9C7D8 (mesh cooking orchestration) is still incomplete. Its constructor,

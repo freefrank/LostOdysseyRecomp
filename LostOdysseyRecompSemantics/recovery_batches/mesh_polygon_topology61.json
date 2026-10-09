@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "mesh-polygon-topology61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/mesh_polygon_topology61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/mesh_polygon_topology61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\nvoid PolygonTopologyLower(std::uint32_t,PPCContext&,std::uint8_t*);\nvoid PolygonTopologyIndirect(std::uint32_t,PPCContext&,std::uint8_t*);\nvoid PolygonTopologySave(PPCContext&,std::uint8_t*);\nvoid PolygonTopologyRestore(PPCContext&,std::uint8_t*);\n#define __savegprlr_14 PolygonTopologySave\n#define __restgprlr_14 PolygonTopologyRestore\n#undef PPC_CALL_INDIRECT_FUNC\n#define PPC_CALL_INDIRECT_FUNC(t) PolygonTopologyIndirect((t),ctx,base)\n#define sub_82BBB728 __imp__sub_82BBB728\n#define sub_82BD0798(c,b) PolygonTopologyLower(0x82bd0798u,c,b)\n#define sub_82BB9AA8(c,b) PolygonTopologyLower(0x82bb9aa8u,c,b)\n#define sub_82BD2C50(c,b) PolygonTopologyLower(0x82bd2c50u,c,b)\n#define sub_82BD2DF0(c,b) PolygonTopologyLower(0x82bd2df0u,c,b)\n#define sub_82BD2C78(c,b) PolygonTopologyLower(0x82bd2c78u,c,b)\n#define sub_82B7A0B0(c,b) PolygonTopologyLower(0x82b7a0b0u,c,b)\n#define sub_82B7BC40(c,b) PolygonTopologyLower(0x82b7bc40u,c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/mesh_polygon_topology61.cpp"
+      ]
+    }
+  ]
+}

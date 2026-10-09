@@ -1,3 +1,7 @@
+## Root direct continuation: polygon topology finalization (2026-10-09)
+
+`mesh_polygon_topology61` closes BBB728: unique polygon edges, per-polygon u16 edge slices, edge-to-polygon incidence and normalized adjacent-normal sums. Two complete-original-upper/shared-build-and-sort cases pass Full72/RAM/CSR/events and independent cube topology, both lazy fresh build and prebuilt replacement. Exactly eight retained outputs match ownership. Full Clang library passes. Failure/recursive repair paths untested; original partial-allocation ordering retained. The main BBC110 CVHL writer is now the next direct target.
+
 ## Root direct continuation: owned polygon geometry rebuild (2026-10-09)
 
 `mesh_polygon_build61` closes BB9AA8: replace 36-byte polygon records and packed byte indices, derive/orient planes against source faces and centroid, expand supporting planes, calculate projection intervals and regenerate triangle fans. Three original-upper/shared-concrete-chain cases pass Full72/RAM/CSR/events and independent six cube faces/planes/ranges/triangle membership, existing-storage replacement and open-mesh rejection. Exactly three owned outputs remain; full Clang library passes. Main CVHL serialization still awaits BBB728 topology finalization and BBC110.
