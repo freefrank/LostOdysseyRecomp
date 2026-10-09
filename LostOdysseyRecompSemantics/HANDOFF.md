@@ -117,13 +117,32 @@ about PPC hardware exclusive monitors or arbitrary concurrency. Source review
 confirmed MSR merging, raw reservation bits, CAS branches and live cleanup state.
 No runtime replacement is enabled; no historical mapping credit is inferred.
 
-Current dependency frontier is BB2638 (not yet implemented). The synchronization
-state gap is addressed locally by `diagnostic_lock61`, without widening Full72.
-B9C298/BC8B78 diagnostic format composition is next. BB03B0 still requires geometry
-box/traversal and query preparation above the new triangle leaves. BB06D8 is closed.
-BDB260/823F3340 has an explicit full-register boundary; manager allocation and
-concrete constructor internals remain guest calls. The owned-tree build chain
-BD9928→BDAA48→BDAD18 is next, using the new BD9858 partition helper.
+Triangle/synchronization stage was pushed as `b6c7269f` and remote-verified.
+Next built and compared units: `geometry_box61` BD5550/BD5B40 (4 cases),
+`geometry_quantized_box61` BD56D8/BD5CB0 (4), `geometry_query_prepare61` BD5F28
+(4), `transform_owner_initialize61` BD12F8 (3), `owned_tree_build61` BD9928
+(4) and `diagnostic_format_routes61` BC8B78/B9C298/B9D328/BD18C0 (6).
+Geometry and diagnostic routes compare original uppers using shared previously
+validated complete lowers. Query preparation's return means traversal is resolved,
+not necessarily that a hit exists. Quantized layouts preserve signed centers and
+unsigned extents. Tree building preserves five partition strategies, arena vs heap
+ownership and live allocation state; recursive upper will cover direct half split.
+Diagnostic fixture initially omitted locale classification data; after seeding it,
+all six cases passed. Existing xexdump produced ignored `private/image_disc1.bin`
+from the verified XEX; only digest metadata is public. Above-160-byte formatter
+growth remains unexercised. No baseline mapping or runtime replacement added.
+
+Current upper frontier is BB2638. Its only remaining direct semantic dependencies
+are BD7A60 owner build and BB03B0 spatial query. BD7A60 awaits recursive tree
+BDAA48/BDAD18 above the validated BD9928. BB03B0 awaits BD7258 dispatch, four VMX
+walkers (BD5910/BD6C58/BD6E28/BD6FD0), and the BD2C48 random-number/TLS chain.
+BD2C48 is a rand tail, not merely an error path. The vector walkers need local
+borrowed 128-vector raw state and CR0/CR6/FP control; do not drop them into Full72
+or silently replace unbounded SIMD routes with scalar ones. BD6E28 is the smallest
+planned vector unit. Diagnostic MachineState remains caller-owned; the eventual
+upper must share machine/vector state across guest calls. 822D3068 is an already
+mapped empty leaf and adds no credit. Manager allocation/construction internals
+remain explicit guest boundaries.
 Implement and verify closed units before parents. BD2870 is implemented by
 `reader_buffer_growth61`; small initialization/tail helpers by
 `object_sort_support61`; object initialization/cleanup by `object_sort_lifecycle61`.

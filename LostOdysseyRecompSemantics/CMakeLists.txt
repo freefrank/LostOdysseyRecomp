@@ -171,10 +171,16 @@ add_library(LostOdysseyRecompSemantics STATIC
     src/transform_owner_routes61.cpp
     src/geometry_math61.cpp
     src/geometry_triangle_range61.cpp
+    src/geometry_box61.cpp
+    src/geometry_query_prepare61.cpp
+    src/geometry_quantized_box61.cpp
+    src/diagnostic_format_routes61.cpp
+    src/transform_owner_initialize61.cpp
     src/diagnostic_lock61.cpp
     src/geometry_support61.cpp
     src/owned_tree_cleanup61.cpp
     src/owned_tree_storage61.cpp
+    src/owned_tree_build61.cpp
     src/reader_buffer_growth61.cpp
     src/crt_error_text61_context.cpp
     src/crt_stream_output_upper61.cpp

@@ -90,7 +90,7 @@
     "full_library_validated": true,
     "mapping_delta": 1,
     "runtime_replacement_delta": 0,
-    "next": "BB2638 remains upper frontier: diagnostic format routes above validated locks; geometry box/query preparation above BD4448/BD4C40; owned-tree build BD9928/BDAA48/BDAD18 above validated BD9858. Manager initialization allocator/concrete constructors remain explicit guest boundaries."
+    "next": "BB2638 direct gaps: BD7A60 awaiting recursive tree BDAA48/BDAD18; BB03B0 awaiting BD7258, four VMX walkers with local borrowed VectorState and BD2C48 random/TLS chain. Diagnostic routes/locks closed with local MachineState; keep state live across composition."
   },
   "historical_accepted_data_commit": "f066d61adf2a18afad5d7a3f23e7431284ff7675",
   "new_validated_zero_credit_units": [
@@ -114,12 +114,18 @@
     "geometry_triangle_range61",
     "diagnostic_lock61",
     "transform_owner_routes61",
-    "owned_tree_storage61"
+    "owned_tree_storage61",
+    "geometry_box61",
+    "geometry_quantized_box61",
+    "geometry_query_prepare61",
+    "transform_owner_initialize61",
+    "owned_tree_build61",
+    "diagnostic_format_routes61"
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 21,
-    "distinct_entries": 42,
+    "unit_count": 27,
+    "distinct_entries": 53,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -288,6 +294,53 @@
           "82BD9858"
         ],
         "focused_cases": 3
+      },
+      {
+        "unit": "geometry_box61",
+        "entries": [
+          "82BD5550",
+          "82BD5B40"
+        ],
+        "focused_cases": 4
+      },
+      {
+        "unit": "geometry_quantized_box61",
+        "entries": [
+          "82BD56D8",
+          "82BD5CB0"
+        ],
+        "focused_cases": 4
+      },
+      {
+        "unit": "geometry_query_prepare61",
+        "entries": [
+          "82BD5F28"
+        ],
+        "focused_cases": 4
+      },
+      {
+        "unit": "transform_owner_initialize61",
+        "entries": [
+          "82BD12F8"
+        ],
+        "focused_cases": 3
+      },
+      {
+        "unit": "owned_tree_build61",
+        "entries": [
+          "82BD9928"
+        ],
+        "focused_cases": 4
+      },
+      {
+        "unit": "diagnostic_format_routes61",
+        "entries": [
+          "82BC8B78",
+          "82B9C298",
+          "82B9D328",
+          "82BD18C0"
+        ],
+        "focused_cases": 6
       }
     ]
   }

@@ -1,0 +1,69 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Private generated bodies are pinned by SHA256 of UTF-8 with LF line endings and no final newline; no generated code is embedded.",
+  "entries": [
+    {
+      "address": "82BC8B78",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 47775,
+      "instruction_count": 100,
+      "body_sha256": "d02cca7b2fee650772d5877dfe9d85c0e8f0469b1089277d039c075e10eeda99",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82B9C298",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 3128,
+      "instruction_count": 23,
+      "body_sha256": "ced57835c5d8fbc8b9256d9f37500b19bf523d927330b031ae3ff9cc0d667b0a",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82B9D328",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 5599,
+      "instruction_count": 12,
+      "body_sha256": "371a71c04e28b1052b8bc5502577443f6aadd11e92b4e0e4f8069440733a8571",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD18C0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 5044,
+      "instruction_count": 15,
+      "body_sha256": "eb7eaf19ee2c0c4ad2914a559305643e45c3e36c5650984f6a4e3e90208a8daa",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 6,
+    "library_validated": true,
+    "library": "PASS incremental complete Clang 19 CMake static library; existing unused-function warning exception retained.",
+    "platform": "Linux x64; Clang 19.1.7; genuine XEX regenerated with pinned XenonRecomp ddd128bc plus tracked patch; existing oracle guest-window allocation overlaid with mmap/mprotect only",
+    "mapping_credit": 0,
+    "mapping_limit": "Fixed historical catalog.sqlite unavailable; do not infer membership from regenerated sources. 82BB25D0 is explicitly external in prior handoff.",
+    "runtime_validated": false,
+    "complete": false,
+    "limits": "Selected finite inputs, ordinary RAM, Full72 state, callbacks and host CSR only. No Windows revalidation, nonfinite matrix, faults/MMIO, concurrency, runtime or gameplay acceptance.",
+    "case_scope": "Six original-upper/shared-accepted-lock-and-formatter cases: null sink, two mode107 replies, mode208 actual formatter, valid and invalid BD18C0 prefix. Private image pages d3000..d6fff loaded from verified XEX xexdump, never embedded. Formatter growth above 160 bytes is implemented/reviewed but not exercised; no fresh original-lower validation.",
+    "private_image": {
+      "path": "LostOdysseyRecompLib/private/image_disc1.bin",
+      "bytes": 20709376,
+      "sha256": "cb756b46092e448923517bf660b44ad1a0651c2860882b43ae021f4ad4290f71",
+      "generation": "existing xexdump from verified private disc1 XEX; ignored local artifact; no embedded image bytes"
+    }
+  },
+  "implementation": {
+    "entries": [
+      "82BC8B78",
+      "82B9C298",
+      "82B9D328",
+      "82BD18C0"
+    ],
+    "header": "include/lo_semantics/diagnostic_format_routes61.h",
+    "source": "src/diagnostic_format_routes61.cpp",
+    "oracle": "tests/diagnostic_format_routes61_oracle.cpp"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "geometry-quantized-box61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/geometry_quantized_box61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/geometry_quantized_box61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nvoid OriginalGeometryQuantizedBox61Lower(PPCContext&,std::uint8_t*);\nvoid OriginalGeometryQuantizedBox61Save(unsigned,PPCContext&);\nvoid OriginalGeometryQuantizedBox61Restore(unsigned,PPCContext&);\n#define sub_82BD4C40(c,b) OriginalGeometryQuantizedBox61Lower(c,b)\n#define __savegprlr_27(c,b) OriginalGeometryQuantizedBox61Save(27,c)\n#define __restgprlr_27(c,b) OriginalGeometryQuantizedBox61Restore(27,c)\n#define __savegprlr_29(c,b) OriginalGeometryQuantizedBox61Save(29,c)\n#define __restgprlr_29(c,b) OriginalGeometryQuantizedBox61Restore(29,c)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/geometry_quantized_box61.cpp",
+        "LostOdysseyRecompSemantics/src/geometry_triangle_range61.cpp",
+        "LostOdysseyRecompSemantics/src/reader_buffer_growth61.cpp",
+        "LostOdysseyRecompSemantics/src/crt_copy_full_context.cpp",
+        "LostOdysseyRecompSemantics/src/crt_close_recursive_buffer_context.cpp"
+      ]
+    }
+  ]
+}

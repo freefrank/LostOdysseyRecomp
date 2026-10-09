@@ -1,0 +1,45 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Private generated bodies are pinned by SHA256 of UTF-8 with LF line endings and no final newline; no generated code is embedded.",
+  "entries": [
+    {
+      "address": "82BD5550",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 13841,
+      "instruction_count": 98,
+      "body_sha256": "43f1e3e11824fb0f480f8b745662581b87f560933f133221e7cba8a2d605691c",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD5B40",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 14709,
+      "instruction_count": 91,
+      "body_sha256": "6d545582f505104a04b561d5dceb1dc97aa355a826cef5dfd704a1065428a85f",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 4,
+    "library_validated": true,
+    "library": "PASS incremental complete Clang 19 CMake static library; existing unused-function warning exception retained.",
+    "platform": "Linux x64; Clang 19.1.7; genuine XEX regenerated with pinned XenonRecomp ddd128bc plus tracked patch; existing oracle guest-window allocation overlaid with mmap/mprotect only",
+    "mapping_credit": 0,
+    "mapping_limit": "Fixed historical catalog.sqlite unavailable; do not infer membership from regenerated sources. 82BB25D0 is explicitly external in prior handoff.",
+    "runtime_validated": false,
+    "complete": false,
+    "limits": "Selected finite inputs, ordinary RAM, Full72 state, callbacks and host CSR only. No Windows revalidation, nonfinite matrix, faults/MMIO, concurrency, runtime or gameplay acceptance.",
+    "case_scope": "Paired leaves, 32-byte subtree pruning, 36-byte first-hit stop and subtree pruning. Original upper bodies share previously validated BD4C40 lower. Finite ordinary ray/box inputs; not a new original-lower validation."
+  },
+  "implementation": {
+    "entries": [
+      "82BD5550",
+      "82BD5B40"
+    ],
+    "header": "include/lo_semantics/geometry_box61.h",
+    "source": "src/geometry_box61.cpp",
+    "oracle": "tests/geometry_box61_oracle.cpp"
+  }
+}

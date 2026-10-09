@@ -1,0 +1,52 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Private generated bodies are pinned by SHA256 of UTF-8 with LF line endings and no final newline; no generated code is embedded.",
+  "entries": [
+    {
+      "address": "82BD9928",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 23982,
+      "instruction_count": 411,
+      "body_sha256": "1e8305c58aea15911ee646b5ee8b86cc00ab99061c1b91d621792d7e031808cb",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD9858",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 23861,
+      "instruction_count": 51,
+      "body_sha256": "1e2e65fb371d0309984306389a725ccc0b11c6635d51a35eb2a08d1165a49ebe",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD0798",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 2461,
+      "instruction_count": 8,
+      "body_sha256": "9d0a302b60cd8bfd0afafd0f70b0027dc487d849edb04825e3a9f67994d1d4c8",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 4,
+    "library_validated": true,
+    "library": "PASS incremental complete Clang 19 CMake static library; existing unused-function warning exception retained.",
+    "platform": "Linux x64; Clang 19.1.7; genuine XEX regenerated with pinned XenonRecomp ddd128bc plus tracked patch; existing oracle guest-window allocation overlaid with mmap/mprotect only",
+    "mapping_credit": 0,
+    "mapping_limit": "Fixed historical catalog.sqlite unavailable; do not infer membership from regenerated sources. 82BB25D0 is explicitly external in prior handoff.",
+    "runtime_validated": false,
+    "complete": false,
+    "limits": "Selected finite inputs, ordinary RAM, Full72 state, callbacks and host CSR only. No Windows revalidation, nonfinite matrix, faults/MMIO, concurrency, runtime or gameplay acceptance.",
+    "case_scope": "Four original build plus partition/table-body cases: extent/heap allocation with live callback mutation; variance/borrowed arena; balanced partition/allocation failure; axis retries then forced half split. All five strategies implemented; direct-half path awaits the recursive upper fixture. No hardware/runtime/gameplay claim."
+  },
+  "implementation": {
+    "entries": [
+      "82BD9928"
+    ],
+    "header": "include/lo_semantics/owned_tree_build61.h",
+    "source": "src/owned_tree_build61.cpp",
+    "oracle": "tests/owned_tree_build61_oracle.cpp"
+  }
+}
