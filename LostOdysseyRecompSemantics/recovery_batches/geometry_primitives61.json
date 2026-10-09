@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "geometry-primitives61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/geometry_primitives61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/geometry_primitives61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/geometry_primitives61.cpp"
+      ]
+    }
+  ]
+}

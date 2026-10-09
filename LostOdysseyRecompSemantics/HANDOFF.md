@@ -1,3 +1,7 @@
+## Root direct continuation: box and triangle primitives (2026-10-09)
+
+`geometry_primitives61` adds DF08 centered bounding cube, DFC8 box containment, E040 eight-corner export, E108 triangle winding reversal, E140 area and E1B8 centroid-relative/normalized expansion. Eight complete original-body comparisons pass Full72/RAM/host CSR and independent finite geometry assertions; full Clang library passes. Methods preserve FP stages and scratch state without allocation, new guards or runtime hooks. Six implementation addresses added, historical mapping unchanged.
+
 ## Root direct continuation: complete tree format codecs (2026-10-09)
 
 `tree_flat_write61` adds D868/DB20 output for full36-byte and compact32-byte float nodes, retaining FP staging and optional word-endian conversion. Four composed-original output/scalar cases pass Full72/RAM/host CSR and independent stream/source assertions. Concrete callback dispatch now also exposes every recovered read/write/scalar route. `docs/tree_semantic_pipeline.md` documents all four layouts, topology distinctions, ownership/failure ordering and Rust migration boundaries. Full Clang library passes. No runtime hooks or baseline mapping changes.

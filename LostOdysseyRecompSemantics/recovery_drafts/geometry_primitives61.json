@@ -1,0 +1,79 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Complete pinned box and triangle leaf geometry operations; no guest service calls.",
+  "entries": [
+    {
+      "address": "82BDDF08",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 34435,
+      "instruction_count": 48,
+      "body_sha256": "034e01d8354dd026890363035682f0c877b3a4c26eb4503eb98d0ae8a282e050",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BDDFC8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 34562,
+      "instruction_count": 29,
+      "body_sha256": "f619ae61b8e831471f0d7d8cd811df98b2afb727e915861c44d91d396b1a829b",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BDE040",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 34642,
+      "instruction_count": 37,
+      "body_sha256": "3455d2ccd8b8309084ec5ebe7a4743e46a21ac804888e16814ad77aa84343890",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BDE108",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 34787,
+      "instruction_count": 13,
+      "body_sha256": "483e88d1ffdb83a02e5688ddfdec3fb7f947cdbf7e71d7acda9eab39870d0069",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BDE140",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 34832,
+      "instruction_count": 29,
+      "body_sha256": "c75f8b469ebfbe47eedaf7a2e9a508f87f575a6a5d803069a2228ea3174c1cbf",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BDE1B8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 34907,
+      "instruction_count": 64,
+      "body_sha256": "ecb3252bbf2a9b6995409c30da1aa204f9655d381aeae07c0f830175440d82a5",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BDDF08",
+      "82BDDFC8",
+      "82BDE040",
+      "82BDE108",
+      "82BDE140",
+      "82BDE1B8"
+    ],
+    "header": "include/lo_semantics/geometry_primitives61.h",
+    "source": "src/geometry_primitives61.cpp",
+    "oracle": "tests/geometry_primitives61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 8,
+    "library_validated": true,
+    "case_scope": "Centered cube, contained/rejected boxes, eight corners, triangle winding, area and relative/normalized expansion. Full72/RAM/host CSR plus independent finite geometry results. No exhaustive degenerate/nonfinite/alias/fault cases.",
+    "platform": "Linux x64 Clang 19.1.7; pinned regenerated PPC; mmap guest overlay",
+    "mapping_limit": "Historical catalog membership unverified; no baseline mapping credit."
+  }
+}
