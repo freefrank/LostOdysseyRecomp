@@ -74,6 +74,14 @@ HDR：
 - 开 HDR 输出时，DLSS 的输入仍是 8 位、显示编码的场景（`renderer.cpp` 里 DLSS 的 `qualifiedEncoding` 只会是 `Sdr`），高光由呈现阶段用超分前的 FP16 场景按亮度增益加回来。所以 NR 在 HDR 下照常运行，不需要额外的色调映射。
 - `SrColorSpace::Linear` 的路径在本游戏里不会出现，遇到时跳过 NR 并记日志。
 
+## 调整页与实时预览
+
+图形页“DLSS 5 神经渲染”一行按确认打开调整页，控件照 RenoDX 的 ReShade 插件（`renodx-dlss5.addon64`，闭源；控件名和范围来自 DLSS5-Feeder、DLSS5-Swapper 对它的镜像）：次数、模型（Default / Natural / Cinematic，即 `DLSSNR.Style` 0–2）、预设组（`Hint.Render.Preset` 0–3，效果未证实）、强度、整体色调、局部色调、结构（0–200%，即 0–2）、皮肤结构（−100–100，负值跟随结构）、角色遮罩。省略了深度/运动矢量覆盖和 Diffuse White（我们的输入是 SDR）、UI Correction（HUD 在超分之后才画）。值随图形页的保存一起保存（`dlss_nr_*`）。
+
+- 参数实验（2026-10-08，5080，Vulkan，`LO_DLSS_NR_SWEEP` 临时开关，每 5 秒换一组、不重建 feature、换组时打一次 Reset）：Intensity 0、LocalTone 0、Style 2 都让画面明显变化（静态区域平均差 4–7，噪声 1–2），GlobalTone 2 和 Intensity 2 看不出变化（310.8.0.0 不读 GlobalTone，Intensity 大概在 1 封顶）。所以 style、强度、色调、结构、皮肤、遮罩每次 evaluate 都读，游戏里改这些不重建 feature，只在变化时打一次 Reset；预设组仍属于 `SrConfig`，变化时排空重建。Dagherbou 说"参数在建 feature 时锁定"，在我们这条路径上不成立。
+- 预览：游戏里每四帧 DLSS 抓一次 NR 之前的帧（输出尺寸的颜色、渲染尺寸的深度和运动矢量，偏移 0），只在 DLL 存在时抓。调整页打开时，呈现路径（和渲染器同一线程，菜单帧本来就会等上一帧呈现完成）用页面上未保存的值在这帧上跑预览专用的 feature，运动矢量缩放为 0，每次改值后跑 8 次让静态帧稳定，然后保持。结果拼成左右两半的一张图（左 DLSS，右 DLSS + NR），呈现端用新标志 8192 分半采样，两半都不套玩家亮度曲线。次数或预设组变化时重建预览 feature；页面关闭后释放。
+- 验证（2026-10-08，设置驱动脚本 `tools/settings_driver`，5080，2560×1440，Uhra）：Vulkan 和 D3D12 都能打开页面，左右两半差约 7；强度调到 0 时两半完全相同（差 0.0）；Cinematic 约 7.7；2× 约 10.7；取消还原，保存写入 `dlss_nr_intensity=50` 且游戏里无需重建。D3D12 120 帧时驱动脚本连续按键会丢键或错位，按键之间要等 0.3 秒，进设置后等 3–4 秒再按 RB。
+
 ## 风险
 
 - 官方只支持 RTX 50。20/30/40 系是否能用取决于用户手里的改版，我们不保证。
