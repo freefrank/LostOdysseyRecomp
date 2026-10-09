@@ -1,3 +1,7 @@
+## Root direct continuation: serialization control (2026-10-09)
+
+`serialization_control61` recovers E948 endian-aware virtual word output, E9B8 global context registration/duplicate diagnostic and B9CB70 mode selection, including its original caller-scratch fallback. Nine original-upper/shared-concrete-writer cases pass Full72/RAM/callbacks and independent values, output bytes and registration state. Full Clang library passes. No duplicate-registration policy or host-endian fallback is invented; concurrency unvalidated, historical mapping/runtime unchanged.
+
 ## Root direct continuation: borrowed memory input (2026-10-09)
 
 `memory_input61` recovers E550/E568/E580/E598/E5B8/E5D8 scalar and block cursor reads with the actual copy lower. Six original-body cases pass Full72/RAM/host CSR and independent values/cursors. Callback dispatch exposes these reader targets; two additional 20/24-byte quantized import integrations consume count, payload and scales through concrete E580/E5D8 memory readers rather than synthetic read callbacks. The original upper shares these independently checked lowers. Eight import cases total and complete Clang library pass. No invented end-bound checks, mapping or runtime credit.

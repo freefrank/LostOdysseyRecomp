@@ -1,0 +1,52 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Original virtual endian word output, single-context registration and endian-mode selection.",
+  "entries": [
+    {
+      "address": "82BDE948",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 36063,
+      "instruction_count": 27,
+      "body_sha256": "132adad2ee084632733a192f59c495ae8fc230a2d4f28f420c30bd3ccefb84e2",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BDE9B8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 36127,
+      "instruction_count": 39,
+      "body_sha256": "12132423e4f4b83617b10a689b20b5b6e9b532c5cd340f251ea9ea86fb581d73",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82B9CB70",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 4461,
+      "instruction_count": 13,
+      "body_sha256": "2a57645f034b270b3d48045228bdf20f8fe1642c9d75c2e8fb920b6251b03e84",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BDE948",
+      "82BDE9B8",
+      "82B9CB70"
+    ],
+    "header": "include/lo_semantics/serialization_control61.h",
+    "source": "src/serialization_control61.cpp",
+    "oracle": "tests/serialization_control61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 9,
+    "library_validated": true,
+    "case_scope": "Native/swapped output via concrete shared growable writer; null/fresh/duplicate registration; four endian modes including original caller-scratch fallback. Full72/RAM/callbacks and independent results. No concurrent registration claim.",
+    "platform": "Linux x64 Clang 19.1.7; pinned regenerated PPC; mmap guest overlay",
+    "mapping_limit": "Historical catalog membership unverified; no baseline mapping credit."
+  }
+}

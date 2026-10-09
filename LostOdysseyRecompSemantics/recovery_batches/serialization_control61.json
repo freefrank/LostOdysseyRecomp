@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "serialization-control61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/serialization_control61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/serialization_control61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nvoid SerialControlIndirect(std::uint32_t,PPCContext&,std::uint8_t*);\n#undef PPC_CALL_INDIRECT_FUNC\n#define PPC_CALL_INDIRECT_FUNC(t) SerialControlIndirect((t),ctx,base)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/serialization_control61.cpp"
+      ]
+    }
+  ]
+}
