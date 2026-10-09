@@ -1217,17 +1217,11 @@ int main(int argc, char** argv)
 
             settings::row = int(GraphicsRow::AntiAliasing);
             settings::pending = 2; Tick(base); // D-pad down
-            Require(settings::row == int(GraphicsRow::AmbientOcclusion),
-                    "down from Upscaler reaches ambient occlusion");
-            settings::pending = 2; Tick(base); // D-pad down
-            Require(settings::row == int(GraphicsRow::AnisotropicFiltering),
-                    "down from ambient occlusion skips hidden quality and sharpness rows");
-            settings::pending = 1; Tick(base); // D-pad up
-            Require(settings::row == int(GraphicsRow::AmbientOcclusion),
-                    "up from anisotropic filtering skips hidden quality and sharpness rows");
+            Require(settings::row == int(GraphicsRow::FrameGeneration),
+                    "down from Upscaler skips hidden quality, sharpness and neural rendering rows to FG");
             settings::pending = 1; Tick(base); // D-pad up
             Require(settings::row == int(GraphicsRow::AntiAliasing),
-                    "up from ambient occlusion reaches Upscaler");
+                    "up from FG skips the hidden upscaler rows back to Upscaler");
 
             // Start (0x10) jumps focus to Save graphics settings without saving
             settings::pending = 0x10; Tick(base);
@@ -1310,7 +1304,7 @@ int main(int argc, char** argv)
                     "FG status exposes fallback and diagnostic override");
             gpu::video::menuFlowFgStatus = {};
             settings::pending = 2; Tick(base);
-            Require(settings::row == int(GraphicsRow::VariableRefreshRate), "Off navigation skips hidden multiplier");
+            Require(settings::row == int(GraphicsRow::AmbientOcclusion), "Off navigation skips hidden multiplier");
 
             settings::row = int(GraphicsRow::FrameGeneration);
             settings::pending = 8; Tick(base);
@@ -1335,7 +1329,7 @@ int main(int argc, char** argv)
                     settings::snapshot.rows[int(GraphicsRow::FrameGenerationMultiplier)].hidden,
                     "FSR uses fixed 2x and hides multiplier");
             settings::pending = 2; Tick(base);
-            Require(settings::row == int(GraphicsRow::VariableRefreshRate), "FSR navigation skips hidden multiplier");
+            Require(settings::row == int(GraphicsRow::AmbientOcclusion), "FSR navigation skips hidden multiplier");
             settings::row = int(GraphicsRow::FrameGeneration);
             settings::pending = 4; Tick(base);
             Require(settings::edit.frameGenerationProvider == Provider::Dlss, "FG provider cycles back to DLSS");

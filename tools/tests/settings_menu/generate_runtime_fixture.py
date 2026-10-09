@@ -187,10 +187,11 @@ int main(int argc, char** argv) {
     settings::edit.fsrSharpnessPercent=0;tick(4);Check(!settings::edit.fsrSharpnessPercent,"sharpness lower bound");
     tick(8);Check(settings::edit.fsrSharpnessPercent==1,"sharpness increments");
     settings::edit.fsrSharpnessPercent=100;tick(8);Check(settings::edit.fsrSharpnessPercent==100,"sharpness upper bound");
-    settings::edit.upscaler=Upscaler::Off;settings::row=int(GraphicsRow::AntiAliasing);tick(2);
-    Check(settings::row==int(GraphicsRow::AmbientOcclusion),"AO follows anti-aliasing");
-    tick(2);Check(settings::row==int(GraphicsRow::AnisotropicFiltering),"navigation skips hidden provider rows to AF");
-    tick(1);Check(settings::row==int(GraphicsRow::AmbientOcclusion),"reverse navigation skips hidden provider rows");
+    settings::edit.upscaler=Upscaler::Off;settings::edit.frameGenerationProvider=framegen::Provider::Off;
+    settings::row=int(GraphicsRow::AntiAliasing);tick(2);
+    Check(settings::row==int(GraphicsRow::FrameGeneration),"FG follows anti-aliasing past hidden provider rows");
+    tick(2);Check(settings::row==int(GraphicsRow::AmbientOcclusion),"navigation skips the hidden FG multiplier to AO");
+    tick(1);Check(settings::row==int(GraphicsRow::FrameGeneration),"reverse navigation skips the hidden FG multiplier");
     settings::row=int(GraphicsRow::ShadowResolution);settings::edit.shadowResolution=1;
     for(uint32_t multiplier:{2u,4u,1u}) {
         tick(8);Check(settings::edit.shadowResolution==multiplier,"shadow multiplier cycles 1/2/4");

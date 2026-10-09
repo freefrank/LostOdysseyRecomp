@@ -304,8 +304,8 @@ int main(int argc, char **argv)
     }
     std::puts("Language reference (with Korean 한국어) rendered at 1280x720");
 
-    // FG occupies a separated section inside the four-tab Graphics page.
-    // The hidden logical rows model scrolling to the section without changing
+    // Upscaling and FG share one divided group inside the four-tab Graphics page.
+    // The hidden logical rows model scrolling to the group without changing
     // row IDs; FSR hides the multiplier and compacts the visible list.
     snapshot.tab = 2;
     snapshot.language = 0;
@@ -313,6 +313,8 @@ int main(int argc, char **argv)
     snapshot.rows.assign(size_t(settings::GraphicsRow::Count), {});
     for (int i = 0; i < int(settings::GraphicsRow::FrameGeneration); ++i)
         snapshot.rows[size_t(i)].hidden = true;
+    snapshot.rows[size_t(settings::GraphicsRow::AntiAliasing)] =
+        {L"Anti-aliasing", L"DLSS", true, {L"TAA", L"DLSS"}, 1};
     snapshot.rows[size_t(settings::GraphicsRow::FrameGeneration)] =
         {L"Frame generation", L"DLSS", true, {L"Off", L"DLSS", L"FSR"}, 1};
     snapshot.rows[size_t(settings::GraphicsRow::FrameGenerationMultiplier)] =
@@ -334,7 +336,7 @@ int main(int argc, char **argv)
     int sectionPixels = 0;
     for (int x = 65; x < 1026; ++x)
         sectionPixels += fgPixels[size_t(147) * 1280 + x] != pixels[size_t(147) * 1280 + x];
-    Require(sectionPixels > 20, "FG section divider is not visible");
+    Require(sectionPixels > 20, "upscaling and FG group divider is not visible");
     snapshot.tab = 2;
     auto& providerRow = snapshot.rows[size_t(settings::GraphicsRow::FrameGeneration)];
     providerRow.value = L"FSR";
@@ -352,7 +354,7 @@ int main(int argc, char **argv)
         writeFg("fg-dlss-reference.ppm", fgPixels);
         writeFg("fg-fsr-reference.ppm", pixels);
     }
-    std::puts("four-tab Graphics FG section divider and DLSS/FSR row layouts rendered at 1280x720");
+    std::puts("four-tab Graphics upscaling and FG group divider and DLSS/FSR row layouts rendered at 1280x720");
 
     snapshot.calibration.open = true;
     snapshot.calibration.hdrActive = true;

@@ -98,12 +98,13 @@ inline bool IsAction(int tab, int row)
 static_assert(int(GraphicsRow::DlssQuality) + 1 == int(GraphicsRow::FsrSharpness));
 static_assert(int(GraphicsRow::RenderResolution) + 1 == int(GraphicsRow::ShadowResolution));
 static_assert(int(GraphicsRow::ShadowResolution) + 1 == int(GraphicsRow::DynamicShadows));
-static_assert(int(GraphicsRow::AntiAliasing) + 1 == int(GraphicsRow::AmbientOcclusion));
-static_assert(int(GraphicsRow::AmbientOcclusion) + 1 == int(GraphicsRow::DlssQuality));
+// Upscaling, neural rendering and frame generation stay one group.
+static_assert(int(GraphicsRow::AntiAliasing) + 1 == int(GraphicsRow::DlssQuality));
 static_assert(int(GraphicsRow::FsrSharpness) + 1 == int(GraphicsRow::DlssNeuralRendering));
-static_assert(int(GraphicsRow::DlssNeuralRendering) + 1 == int(GraphicsRow::AnisotropicFiltering));
-static_assert(int(GraphicsRow::FrameRate) + 1 == int(GraphicsRow::FrameGeneration));
+static_assert(int(GraphicsRow::DlssNeuralRendering) + 1 == int(GraphicsRow::FrameGeneration));
 static_assert(int(GraphicsRow::FrameGeneration) + 1 == int(GraphicsRow::FrameGenerationMultiplier));
-static_assert(int(GraphicsRow::FrameGenerationMultiplier) + 1 == int(GraphicsRow::VariableRefreshRate));
+static_assert(int(GraphicsRow::FrameGenerationMultiplier) + 1 == int(GraphicsRow::AmbientOcclusion));
+static_assert(int(GraphicsRow::AmbientOcclusion) + 1 == int(GraphicsRow::AnisotropicFiltering));
+static_assert(int(GraphicsRow::FrameRate) + 1 == int(GraphicsRow::VariableRefreshRate));
 static_assert(int(GraphicsRow::Save) + 1 == int(GraphicsRow::Count));
 }
