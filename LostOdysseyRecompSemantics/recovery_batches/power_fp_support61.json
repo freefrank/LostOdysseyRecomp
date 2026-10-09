@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "power-fp-support61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/power_fp_support61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/power_fp_support61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/power_fp_support61.cpp"
+      ]
+    }
+  ]
+}
