@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "mesh-stream-write61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/mesh_stream_write61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/mesh_stream_write61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nvoid MeshStreamIndirect(std::uint32_t,PPCContext&,std::uint8_t*);\nvoid MeshStreamSave(unsigned,PPCContext&,std::uint8_t*);\nvoid MeshStreamRestore(unsigned,PPCContext&,std::uint8_t*);\n#undef PPC_CALL_INDIRECT_FUNC\n#define PPC_CALL_INDIRECT_FUNC(t) MeshStreamIndirect((t),ctx,base)\n#define __savegprlr_24(c,b) MeshStreamSave(24,c,b)\n#define __savegprlr_28(c,b) MeshStreamSave(28,c,b)\n#define __restgprlr_24(c,b) MeshStreamRestore(24,c,b)\n#define __restgprlr_28(c,b) MeshStreamRestore(28,c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/mesh_stream_write61.cpp"
+      ]
+    }
+  ]
+}

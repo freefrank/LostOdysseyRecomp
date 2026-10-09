@@ -1,3 +1,7 @@
+## Root direct continuation: mesh stream payloads (2026-10-09)
+
+`mesh_stream_write61` recovers BADA70 scalar float, BADCD0 float spans and BADD60 NXS section headers with four-byte tags and endian-aware versions. Seven original-upper/shared-concrete-growable-writer cases pass Full72/RAM/host CSR/callbacks and independent bytes/counts, including empty spans. Full Clang library passes. Three implementation entries; no new boundary guards, historical mapping/runtime credit or complete upper serializer claim.
+
 ## Root direct continuation: mesh cooking owner storage (2026-10-09)
 
 `mesh_cook_storage61` closes eight constructor, teardown and temporary-array disposal entries used by upper mesh cooking. Original cleanup order includes the four-array descriptor, embedded tree, optional virtual owner and auxiliary buffers. Five composed-original cases pass Full72/RAM/host CSR/callbacks and independent layout/free-order checks; existing recovered tree/auxiliary components are shared by the comparison. Full Clang library passes. No new defensive lifetime policy, runtime hook or historical mapping credit; upper mesh cooking itself remains incomplete.

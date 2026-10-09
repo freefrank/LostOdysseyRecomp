@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 79,
-    "distinct_entries": 172,
+    "unit_count": 80,
+    "distinct_entries": 175,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -806,6 +806,15 @@
           "82BA01C0"
         ],
         "focused_cases": 5
+      },
+      {
+        "unit": "mesh_stream_write61",
+        "entries": [
+          "82BADA70",
+          "82BADCD0",
+          "82BADD60"
+        ],
+        "focused_cases": 7
       }
     ]
   },

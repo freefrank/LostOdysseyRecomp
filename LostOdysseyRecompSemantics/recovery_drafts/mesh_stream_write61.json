@@ -1,0 +1,52 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Mesh float and section header virtual stream output.",
+  "entries": [
+    {
+      "address": "82BADA70",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 44260,
+      "instruction_count": 27,
+      "body_sha256": "9712edf5a6c26cf939cedfbd51d26de85c64bfe17c1c5ca4287c3efb6a6c7912",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BADCD0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 44601,
+      "instruction_count": 35,
+      "body_sha256": "174b35e282d0309b5eecce6be70b858a2d6439a81737383193d19b734c3ac5ea",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BADD60",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 44690,
+      "instruction_count": 77,
+      "body_sha256": "1bf46430ec467ca84cfa56d5371f80a15af49e3344db751ce234a37fc14299f8",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BADA70",
+      "82BADCD0",
+      "82BADD60"
+    ],
+    "header": "include/lo_semantics/mesh_stream_write61.h",
+    "source": "src/mesh_stream_write61.cpp",
+    "oracle": "tests/mesh_stream_write61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 7,
+    "library_validated": true,
+    "case_scope": "Scalar/span native and reversed float writes, empty span, and NXS tagged version headers. Original uppers share actual recovered growable output. Full72/RAM/host CSR/callback and independent output bytes.",
+    "platform": "Linux x64 Clang 19.1.7; pinned regenerated PPC; mmap guest overlay",
+    "mapping_limit": "Historical catalog membership unverified; no baseline mapping credit."
+  }
+}
