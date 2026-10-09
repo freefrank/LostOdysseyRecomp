@@ -29,12 +29,12 @@
   },
   "validation": {
     "status": "passed_focused_linux_mapping_pending",
-    "focused_original_ppc_cases": 3,
+    "focused_original_ppc_cases": 4,
     "library_validated": true,
     "mapping_credit": 0,
     "runtime_validated": false,
     "complete": false,
-    "case_scope": "Three original-upper/shared-lower cases: absent descriptor, one leaf and two leaves. Full72, RAM, host CSR, callback traces and allocation ownership agree. Concrete geometry/split/strategy targets remain borrowed fixture services, not fully recovered game targets.",
+    "case_scope": "Three original-upper/shared-lower borrowed-service cases plus a nine-triangle concrete-vtable integration: threshold 8 first-tree split, bounds export, threshold 1 second-tree split, packed leaf remap and flat strategy ownership. Full72/RAM/host CSR/callback traces/live allocations agree; independent range counts and flat child layout checked. Concrete recovered lower bodies are shared between original upper and semantic upper: this is integration evidence, not independent whole-chain proof. Alloc/free services remain fixture boundaries.",
     "date": "2026-10-09",
     "library": "PASS complete Clang 19.1.7 Release static library in direct executor",
     "platform": "Linux x64 Clang 19.1.7; locally regenerated pinned original bodies and mmap guest-window overlay"

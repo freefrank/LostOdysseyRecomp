@@ -135,7 +135,15 @@
         "LostOdysseyRecompSemantics/src/record_snapshot_gather61.cpp",
         "LostOdysseyRecompSemantics/src/owned_tree_reorder_support61.cpp",
         "LostOdysseyRecompSemantics/src/owned_tree_mesh_build61.cpp",
-        "LostOdysseyRecompSemantics/src/owned_tree_visit61.cpp"
+        "LostOdysseyRecompSemantics/src/owned_tree_visit61.cpp",
+        "LostOdysseyRecompSemantics/src/tree_mesh_callbacks61.cpp",
+        "LostOdysseyRecompSemantics/src/tree_triangle_bounds61.cpp",
+        "LostOdysseyRecompSemantics/src/tree_triangle_split61.cpp",
+        "LostOdysseyRecompSemantics/src/tree_box_bounds61.cpp",
+        "LostOdysseyRecompSemantics/src/tree_box_centroid61.cpp",
+        "LostOdysseyRecompSemantics/src/tree_split_policy61.cpp",
+        "LostOdysseyRecompSemantics/src/tree_flat_strategy61.cpp",
+        "LostOdysseyRecompSemantics/src/tree_flatten36_61.cpp"
       ]
     }
   ]

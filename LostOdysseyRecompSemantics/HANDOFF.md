@@ -1,3 +1,7 @@
+## Root direct continuation: concrete mesh integration (2026-10-09)
+
+`tree_mesh_callbacks61` now resolves the ten recovered geometry/split/strategy callback addresses. A nine-triangle case passes through the actual first-tree threshold 8, second-tree threshold 1, packed remapping and owned flat strategy. Full72/RAM/host CSR/callback traces/live ownership agree with the original upper using the same independently recovered lowers; independent leaf counts, packed offsets and flat child indices also pass. The prior three borrowed-service cases remain unchanged. Only allocator services are synthetic in the new case. This adapter adds no PPC address credit or runtime hook; whole-chain original-lower independence and gameplay remain unverified.
+
 ## Root direct continuation: concrete split policies (2026-10-09)
 
 `tree_split_policy61` recovers `82BB3B60` bounds-axis midpoint and `82BB3B88` unsigned count/threshold decision. Four pinned original-body cases pass Full72/RAM/host CSR plus independent results; full Linux Clang library builds. No historical catalog or runtime credit. Concrete bounds, centroids, split policies and flat strategy are now separately available for integration; the existing mesh upper oracle still uses borrowed geometry/strategy services.

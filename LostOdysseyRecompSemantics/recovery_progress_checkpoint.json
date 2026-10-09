@@ -594,7 +594,7 @@
         "entries": [
           "82BD22A8"
         ],
-        "focused_cases": 3
+        "focused_cases": 4
       },
       {
         "unit": "tree_triangle_split61",
@@ -691,5 +691,15 @@
       "table_base_and_installer": "unproven"
     },
     "remaining_gap": "Receiver-typed indirect call-site evidence; do not infer reachability from table slots alone."
+  },
+  "concrete_mesh_integration": {
+    "entry": "82BD22A8",
+    "adapter": "tree_mesh_callbacks61",
+    "cases": 1,
+    "triangles": 9,
+    "result": "passed_original_upper_shared_recovered_lowers",
+    "path": "triangle bounds and threshold 8 split -> leaf bounds export -> box threshold 1 split -> range remap -> flat strategy binding",
+    "external_services": "guest allocation/free and native FP control",
+    "limits": "No independent all-original lower-chain comparison; no runtime or catalog credit."
   }
 }

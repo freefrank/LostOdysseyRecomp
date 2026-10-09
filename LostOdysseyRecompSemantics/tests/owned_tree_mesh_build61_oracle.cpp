@@ -1,4 +1,7 @@
 // Original upper and original BD1AF8 cleanup; shared accepted direct lowers.
+// Mode 3 resolves actual vtable addresses through recovered geometry/strategy
+// callbacks; only allocator services remain synthetic. Lower bodies are shared
+// with original upper, so this is integration, not independent whole-chain proof.
 // Bounds/split/strategy are explicit borrowed services, not stand-ins claimed
 // as recovered concrete game vtable targets. Their finite fixture geometry
 // exercises upper allocation, snapshot gather, leaf remap and cleanup order.
@@ -11,19 +14,22 @@
 #include "lo_semantics/record_snapshot_gather61.h"
 #include "lo_semantics/object_sort_support61.h"
 #include "lo_semantics/crt_copy_full_context.h"
+#include "lo_semantics/tree_mesh_callbacks61.h"
 #include <set>
 #include <limits>
 namespace mesh_build61_oracle {
 using Full=owned_tree_mesh_build61::Registers;
 constexpr GuestAddress Owner=0x30000,Settings=0x31000,Source=0x32000,Triangles=0x33000,Vertices=0x34000,Table=0x35000;
 constexpr GuestAddress Allocate=0x2a00,Release=0x2a04,TriangleBounds=0x2b00,BoxBounds=0x2b04,Split=0x2b08,Bind=0x2b0c;
-constexpr std::array<test::Region,5> Regions{{{0,0x180000},{0x82000000,0x10000},{0x820d6000,0x1000},{0x821ba000,0x1000},{0x83216000,0xca000}}};
+constexpr std::array<test::Region,6> Regions{{{0,0x180000},{0x82000000,0x10000},{0x8201f000,0x1000},{0x820d6000,0x1000},{0x821ba000,0x1000},{0x83216000,0xca000}}};
 struct Native final:float_triplet_transfer::NativeServices{void SetHostFpControl(std::uint32_t v)override{PPCFPSCRRegister{}.setcsr(v);}};
 struct Guest final:manager_release_context61::GuestServices {
  unsigned allocations=0;std::set<GuestAddress> live;std::vector<std::array<std::uint64_t,73>> events;
  void CallDirect(GuestAddress,GuestMemory&,Full&)override{throw std::runtime_error("unexpected mesh builder direct boundary");}
  void CallIndirect(GuestAddress target,GuestMemory& m,Full& s)override{
   std::array<std::uint64_t,73> e{};auto snap=crt_full_oracle::Snapshot(s);std::copy(snap.begin(),snap.end(),e.begin());e[72]=target;events.push_back(e);
+  Native fp;
+  if(tree_mesh_callbacks61::Apply(target,m,{*this,fp},s))return;
   if(target==Allocate){if(s.r[4]>4096u)throw std::runtime_error("oversized mesh fixture allocation");auto p=0x90000u+0x1000u*allocations++;live.insert(p);s.r[3]=p;}
   else if(target==Release){if(!live.erase(Address(s.r[4])))throw std::runtime_error("mesh builder double/unowned release");s.r[3]=0;}
   else if(target==Split)s.r[3]=Address(s.r[5])>1?1:0;
@@ -55,10 +61,20 @@ void Lower(GuestAddress e,GuestMemory& m,Guest& guest,Full& s){switch(e){
 void Check(unsigned mode){
  struct Restore{std::uint32_t csr=PPCFPSCRRegister{}.getcsr();~Restore(){PPCFPSCRRegister{}.setcsr(csr);}} restore;
  test::GuestWindow before(Regions),after(Regions);
- const auto seed=[&](test::GuestWindow& w){w.Fill(0);auto m=w.Memory();m.WriteU32(Settings,mode?Source:0);m.WriteU32(Settings+4,1);m.WriteU32(Settings+8,16);m.WriteU32(Settings+16,0xffffffffu);m.WriteU8(Settings+26,1);m.WriteU8(Settings+27,1);
-  m.WriteU32(Source+8,mode==2?2:1);m.WriteU32(Source+12,1);m.WriteU32(Source+16,Triangles);m.WriteU32(Source+20,Vertices);
-  for(unsigned i=0;i<6;++i){m.WriteU32(Triangles+4*i,i);for(unsigned j=0;j<3;++j)m.WriteU32(Vertices+12*i+4*j,std::bit_cast<std::uint32_t>(float(i*2+j)));}
+ const auto seed=[&](test::GuestWindow& w){w.Fill(0);auto m=w.Memory();m.WriteU32(Settings,mode?Source:0);m.WriteU32(Settings+4,1);m.WriteU32(Settings+8,mode==3?1:16);m.WriteU32(Settings+16,0xffffffffu);m.WriteU8(Settings+26,1);m.WriteU8(Settings+27,1);
+  m.WriteU32(Source+8,mode==3?9:mode==2?2:1);m.WriteU32(Source+12,1);m.WriteU32(Source+16,Triangles);m.WriteU32(Source+20,Vertices);
+  for(unsigned i=0;i<(mode==3?27u:6u);++i){m.WriteU32(Triangles+4*i,i);for(unsigned j=0;j<3;++j)m.WriteU32(Vertices+12*i+4*j,std::bit_cast<std::uint32_t>(float(i*2+j)));}
   m.WriteU32(0x820d6c54+4,TriangleBounds|1);m.WriteU32(0x820d6c54+20,Split|3);m.WriteU32(0x820d6300+4,BoxBounds|1);m.WriteU32(0x820d6300+20,Split|3);m.WriteU32(0x820d6ebc+4,Bind|1);
+  if(mode==3){
+   constexpr std::array<GuestAddress,5> triangle{0x82bd88e8u,0x82bd8bf8u,0x82bd8ac0u,0x82bd8b40u,0x82bb3b88u};
+   constexpr std::array<GuestAddress,5> boxes{0x82bd8ee0u,0x82bb3b60u,0x82bd8848u,0x82bd8888u,0x82bb3b88u};
+   for(unsigned i=0;i<5;++i){m.WriteU32(0x820d6c58+4*i,triangle[i]);m.WriteU32(0x820d6304+4*i,boxes[i]);}
+   m.WriteU32(0x820d6ec0,0x82bdbd90u);
+   m.WriteU32(0x82000e0cu,std::bit_cast<std::uint32_t>(std::numeric_limits<float>::infinity()));
+   m.WriteU32(0x82000d64u,std::bit_cast<std::uint32_t>(-std::numeric_limits<float>::infinity()));
+   m.WriteU32(0x82000f20u,std::bit_cast<std::uint32_t>(1.f/3.f));
+   m.WriteU32(0x8201f9f0u,std::bit_cast<std::uint32_t>(0.5f));
+  }
   m.WriteU32(0x83216624,Table);m.WriteU32(Table,Allocate|1);m.WriteU32(Table+12,Release|3);m.WriteU32(0x821baa74,std::bit_cast<std::uint32_t>(2.f));
  };seed(before);seed(after);Guest expected,actual;Full s{};for(unsigned i=0;i<32;++i){s.r[i]=0x1122334400000000ull+i;s.fpr_bits[i]=0x3ff0000000000000ull+i;}
  s.r[1]=0x8877665500080000ull;s.r[3]=Owner;s.r[4]=Settings;s.lr=0x9988776681234567ull;s.xer_so=1;s.cached_fp_control=0x9fc0;
@@ -71,17 +87,28 @@ void Check(unsigned mode){
   for(std::size_t i=0;i<std::min(expected.events.size(),actual.events.size());++i)if(expected.events[i]!=actual.events[i]){for(unsigned j=0;j<73;++j)if(expected.events[i][j]!=actual.events[i][j])std::fprintf(stderr,"event%zu field%u %llx/%llx\n",i,j,(unsigned long long)expected.events[i][j],(unsigned long long)actual.events[i][j]);break;}
   throw std::runtime_error("mesh builder state mismatch");}
  if(s.r[1]!=initial.r[1]||s.lr!=Address(initial.lr)||s.r[3]!=(mode?1u:0u))throw std::runtime_error("mesh builder frame/result");
- if(mode&&m.ReadU32(Owner+20)!=(mode==2?2u:1u))throw std::runtime_error("mesh leaf count");
+ if(mode&&m.ReadU32(Owner+20)!=(mode>=2?2u:1u))throw std::runtime_error("mesh leaf count");
  // BD2168 packs (index-array byte offset << 2) with (count - 1).
  // These leaves each contain one uint32 index: offsets 0 and 4 bytes
  // therefore encode as 0 and 16, not ordinal leaf IDs 0 and 1.
  constexpr std::uint32_t firstPackedRange = 0u;
  constexpr std::uint32_t secondPackedRange = (sizeof(std::uint32_t) << 2u);
  if(mode==2){auto map=m.ReadU32(Owner+24);if(m.ReadU32(map)!=firstPackedRange||m.ReadU32(map+4)!=secondPackedRange||m.ReadU32(Owner+32)!=0||actual.live.size()!=5u){std::fprintf(stderr,"mesh map %u,%u preserved %08x live %zu\n",m.ReadU32(map),m.ReadU32(map+4),m.ReadU32(Owner+32),actual.live.size());throw std::runtime_error("mesh final map/owned storage");}}
+ if(mode==3){
+  const auto map=m.ReadU32(Owner+24), strategy=m.ReadU32(Owner+16), flat=m.ReadU32(strategy+8);
+  const auto first=m.ReadU32(map),second=m.ReadU32(map+4);
+  const auto countA=(first&15u)+1u,countB=(second&15u)+1u;
+  if(countA+countB!=9u || (first>>4u)!=0u || (second>>4u)!=countA ||
+     m.ReadU32(strategy+4)!=3u || !actual.live.contains(flat-4u))
+   throw std::runtime_error("concrete mesh remap/flat owner");
+  if(m.ReadU32(flat+24)!=1u || m.ReadU32(flat+28)!=2u || m.ReadU32(flat+32)!=2u)
+   throw std::runtime_error("concrete flat root child indices");
+ }
+
 }
 }
 void OriginalMeshBuild61Indirect(std::uint32_t t,PPCContext& c,std::uint8_t*){auto s=crt_full_oracle::FromPpc(c);mesh_build61_oracle::original->CallIndirect(t,*mesh_build61_oracle::original_memory,s);crt_full_oracle::ToPpc(c,s);}
 void OriginalMeshBuild61Lower(std::uint32_t t,PPCContext& c,std::uint8_t*){auto s=crt_full_oracle::FromPpc(c);mesh_build61_oracle::Lower(t,*mesh_build61_oracle::original_memory,*mesh_build61_oracle::original,s);crt_full_oracle::ToPpc(c,s);}
 void OriginalMeshBuild61Save(unsigned first,PPCContext& c,std::uint8_t*){auto s=crt_full_oracle::FromPpc(c);auto& m=*mesh_build61_oracle::original_memory;for(unsigned i=first;i<32;++i)WriteU64(m,Address(s.r[1]-16u-8u*(31u-i)),s.r[i]);m.WriteU32(Address(s.r[1]-8u),Address(s.r[12]));}
 void OriginalMeshBuild61Restore(unsigned first,PPCContext& c,std::uint8_t*){auto s=crt_full_oracle::FromPpc(c);auto& m=*mesh_build61_oracle::original_memory;for(unsigned i=first;i<32;++i)s.r[i]=ReadU64(m,Address(s.r[1]-16u-8u*(31u-i)));s.r[12]=m.ReadU32(Address(s.r[1]-8u));s.lr=s.r[12];crt_full_oracle::ToPpc(c,s);}
-int main(){try{for(unsigned mode:{0u,1u,2u})mesh_build61_oracle::Check(mode);std::puts("PASS owned-tree-mesh-build61 3 original-upper/shared-lower borrowed-service cases");return 0;}catch(const std::exception& e){std::fprintf(stderr,"%s\n",e.what());return 1;}}
+int main(){try{for(unsigned mode:{0u,1u,2u,3u})mesh_build61_oracle::Check(mode);std::puts("PASS owned-tree-mesh-build61 3 borrowed-service cases + 1 concrete nine-triangle integration case");return 0;}catch(const std::exception& e){std::fprintf(stderr,"%s\n",e.what());return 1;}}
