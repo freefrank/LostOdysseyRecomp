@@ -24,7 +24,7 @@ if (auto image = modding::ReadImageReplacement(request, width, height)) {
 
 ## Root, modes and precedence
 
-`Initialize(defaultRoot)` snapshots standalone manifests; `LO_MODS_DIR` overrides the root. Use an absolute override for reproducibility. `LO_MODS=0` or `LO_MODS=false` disables all resolution. An invalid nonempty `LO_MODS_MODE` disables resolution and emits a diagnostic.
+`Initialize(defaultRoot)` snapshots standalone manifests; `LO_MODS_DIR` overrides the root. The game's `--mods-mode <mode>` argument sets `LO_MODS_MODE` for launchers that cannot set environment variables, such as Mod Organizer 2. Use an absolute override for reproducibility. `LO_MODS=0` or `LO_MODS=false` disables all resolution. An invalid nonempty `LO_MODS_MODE` disables resolution and emits a diagnostic.
 
 | `LO_MODS_MODE` | Lookup order before the original asset |
 | --- | --- |
@@ -50,7 +50,7 @@ enabled=true
 
 `api_version=1` is mandatory. ID defaults to the directory name and must contain 1-128 ASCII letters, digits, `.`, `_` or `-`, excluding `.` and `..`. Priority defaults to zero and is a signed 32-bit integer. Enabled defaults to true; accepted values are `true`, `false`, `1`, `0`. Unknown/duplicate/invalid metadata rejects the manifest. Disabled mods do not participate. Enabled duplicate IDs reject the later directory.
 
-Resource kinds are `image`, `font`, `model`, `movie`. Invalid resource lines are diagnosed and skipped. Payloads must exist inside both the mod directory and the mods root, including after symlink resolution. Metadata is parsed before resources, so a trailing priority or enabled field applies to the whole mod.
+Resource kinds are `image`, `font`, `model`, `movie`. Invalid resource lines are diagnosed and skipped. Payload paths are relative to the mod directory and may not be absolute or contain `..`. Containment is checked on the path as written, not after symlink resolution, so symlinked mod folders and a manager's virtual file system work. Metadata is parsed before resources, so a trailing priority or enabled field applies to the whole mod.
 
 Higher priority wins. Equal priority uses the lexically later directory in UTF-8 byte order. Within the same manifest, the last declaration of an identity wins. These priorities do not override a merged overlay.
 

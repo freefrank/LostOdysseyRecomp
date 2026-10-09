@@ -93,6 +93,7 @@ void Resolution(const fs::path& root) {
     Mod(root, "c", "disabled", 200, false);
     Initialize(root);
     assert(Mode() == ResolutionMode::Combined);
+    assert((ModIds() == std::vector<std::string>{"first", "second"}));
     assert(Resolve(request)->modId == "second");
     auto decoded = ReadImageReplacement(request, 2, 1);
     assert(decoded && decoded->pixels == std::vector<uint32_t>({0x78123456, 0x78123456}));
@@ -157,7 +158,8 @@ void Validation(const fs::path& root, const fs::path& outside) {
     fs::create_directory_symlink(outside, root / "symlink", ec);
     if (!ec) {
         Write(outside / "mod.ini", "api_version=1\nid=symlink\npriority=10000\nimage:" + key + "=outside.lotex\n");
-        Reload(); assert(Resolve(request)->modId == "first");
+        // Symlinked mod folders (Vortex, Steam Deck deployments) are followed.
+        Reload(); assert(Resolve(request)->modId == "symlink");
     }
     // Environment root changes must not permanently replace the default root.
     auto path = outside.generic_u8string(); const std::string utf8(path.begin(), path.end());
