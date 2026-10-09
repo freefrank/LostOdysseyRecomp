@@ -222,6 +222,8 @@ target_include_directories(LostOdysseyRecomp PRIVATE
     ${CMAKE_SOURCE_DIR}/tools/XenonRecomp/thirdparty/simde
     ${CMAKE_SOURCE_DIR}/thirdparty/unordered_dense/include
     ${CMAKE_SOURCE_DIR}/thirdparty/o1heap/o1heap
+    # miniz.h for modding/asset_export.cpp; updater/stage.cpp holds the definitions.
+    ${LO_MINIZ_DIR}
     # gpu/shader/dxc_compiler.cpp is part of every runtime build, GPU or not.
     ${CMAKE_SOURCE_DIR}/tools/XenosRecomp/thirdparty/dxc-bin/inc)
 
@@ -681,8 +683,7 @@ if(WIN32)
         target_compile_definitions(LoAmbientOcclusionGpuTest PRIVATE LO_GPU_PLUME NOMINMAX)
         target_link_libraries(LoAmbientOcclusionGpuTest PRIVATE plume d3d12 dxgi fmt::fmt)
         # HistoryOwner capture uses the same TAA/DXC objects as LoTemporalAATest.
-        # platform_stub supplies the offline collection hooks. D3D12 is Windows-only;
-        # this block is already inside WIN32 and LO_BUILD_GPU.
+        # D3D12 is Windows-only; this block is already inside WIN32 and LO_BUILD_GPU.
         add_executable(LoTemporalLifecycleBr01OwnerTest EXCLUDE_FROM_ALL
             ${CMAKE_SOURCE_DIR}/tools/tests/temporal_lifecycle_br01_owner_test.cpp
             ${LO_RUNTIME_ROOT}/gpu/temporal_aa.cpp
