@@ -58,26 +58,7 @@ struct Collect {
             break;
         }
     }
-    void Probe() {
-        auto &r = s.r;
-        r[11] = 0 - r[12];
-        r[0] = r[11] + 4095;
-        auto v = std::int32_t(r[0]);
-        s.xer_ca = (v < 0) && ((Address(r[0]) & 4095u) != 0);
-        r[0] = std::uint64_t(std::int64_t(v >> 12));
-        auto n = std::int32_t(r[0]);
-        s.cr0 = {std::uint8_t(n < 0), std::uint8_t(n > 0), std::uint8_t(n == 0), s.xer_so};
-        if (!s.cr0.gt)
-            return;
-        r[11] = r[1];
-        s.ctr = r[0];
-        do {
-            auto p = r[11] - 4096;
-            r[0] = Word(p);
-            r[11] = p;
-            --s.ctr;
-        } while (Address(s.ctr));
-    }
+    void Probe() { ProbeStack(m, s); }
     void Run() {
         auto &r = s.r;
         r[12] = s.lr;
@@ -410,6 +391,27 @@ struct Collect {
     }
 };
 } // namespace
+void ProbeStack(GuestMemory &m, Registers &s) {
+    auto &r = s.r;
+    r[11] = 0 - r[12];
+    r[0] = r[11] + 4095;
+    auto v = std::int32_t(r[0]);
+    s.xer_ca = (v < 0) && ((Address(r[0]) & 4095u) != 0);
+    r[0] = std::uint64_t(std::int64_t(v >> 12));
+    auto n = std::int32_t(r[0]);
+    s.cr0 = {std::uint8_t(n < 0), std::uint8_t(n > 0), std::uint8_t(n == 0), s.xer_so};
+    if (!s.cr0.gt)
+        return;
+    r[11] = r[1];
+    s.ctr = r[0];
+    do {
+        auto p = r[11] - 4096;
+        r[0] = m.ReadU32(Address(p));
+        r[11] = p;
+        --s.ctr;
+    } while (Address(s.ctr));
+}
+
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     Collect c{m, d, s};
     if (e == 0x82bb9318u) {

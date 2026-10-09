@@ -1,3 +1,7 @@
+## Root direct continuation: input uniqueness and compaction (2026-10-09)
+
+`mesh_vertex_dedup61` adds BB8580, preserving the variable guest-stack point copy, check-only mode and optional in-place compaction/count update. Duplicate input still returns false even after successful repair. Seven family cases now pass original local dedup-chain comparisons with shared concrete sort/probe/initializer, Full72/RAM/CSR/callbacks and complete temporary cleanup. Added cases cover repair, check-only, already unique and empty. Existing B7E504 stack probe is exposed from its original family without duplicate recovery credit. Full library passes. Convex hull construction remains.
+
 ## Root direct continuation: stable vertex deduplication (2026-10-09)
 
 `mesh_vertex_dedup61` closes BC2DD0, BC2D48 and cleanup tail alias BC38E0. Three coordinate-word sort passes preserve stable ranks, merge exact xyz bit matches, retain unique vertices and original-to-unique mapping, and optionally publish borrowed aliases. Three original-local-chain/shared-concrete-sort cases pass Full72/RAM/CSR/callbacks/ownership, independent remap/content and actual original tail cleanup: result present/absent and replacement of prior allocations. Mode 1 orders coordinate words, so negative float bits follow positive bits; the initial independent expected map incorrectly assumed numerical float ordering and was corrected, with no implementation change. Existing BC2D28 initializer uses the accepted field-assignment helper and receives no duplicate credit. Full library passes.

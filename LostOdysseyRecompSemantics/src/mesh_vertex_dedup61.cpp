@@ -1,6 +1,7 @@
 #include "lo_semantics/mesh_vertex_dedup61.h"
 #include "lo_semantics/crt_reader_follow61.h"
 #include "lo_semantics/global_assignments.h"
+#include "lo_semantics/mesh_polygon_collect61.h"
 #include "lo_semantics/object_sort_support61.h"
 #include "lo_semantics/recovery_abi.h"
 #include <bit>
@@ -299,6 +300,99 @@ struct Dedup {
         (void)crt_reader_follow61::Apply(0x82bd2c78u, m, d.sort.guest, s);
         r[3] = 1;
     }
+    // BB8580 reports whether input was already unique. When requested it also
+    // compacts duplicate input in place, but still returns false for that call.
+    void CheckInput() {
+        auto &r = s.r;
+        // The stable frame base precedes the variable-size stack point copy.
+        auto frame = r[1] - 160;
+        Enter(28, 160, 0x82bb8588u);
+        r[31] = frame;
+        r[30] = r[3];
+        r[29] = r[4];
+        r[28] = r[5];
+        r[10] = Word(r[30]);
+        Integer(r[10]);
+        if (!s.cr6.eq) {
+            Integer(r[29]);
+            if (!s.cr6.eq) {
+                r[11] = Address(r[10]) << 1;
+                r[11] += r[10];
+                r[11] = Address(r[11]) << 2;
+                r[11] = 0 - r[11];
+                r[12] = Address(r[11]) & 0xfffffff0u;
+                s.lr = 0x82bb85c8u;
+                mesh_polygon_collect61::ProbeStack(m, s);
+                r[11] = Word(r[1]);
+                r[9] = 0;
+                Integer(r[10]);
+                r[1] += r[12];
+                Word(r[1], r[11]);
+                r[4] = r[1] + 80;
+                if (!s.cr6.eq) {
+                    r[10] = r[29];
+                    r[11] = r[4] + 4;
+                    r[8] = r[29] - r[4];
+                    CopyInput();
+                }
+                r[3] = r[31] + 96;
+                r[5] = Word(r[30]);
+                s.lr = 0x82bb8628u;
+                Initialize(m, s);
+                r[4] = r[31] + 80;
+                r[3] = r[31] + 96;
+                s.lr = 0x82bb8634u;
+                Build();
+                r[10] = Word(r[30]);
+                r[11] = Word(r[31] + 84);
+                Integer(r[11], r[10]);
+                if (s.cr6.lt) {
+                    r[10] = Address(r[28]) & 255u;
+                    Integer(r[10]);
+                    if (!s.cr6.eq) {
+                        r[9] = 0;
+                        Word(r[30], r[11]);
+                        Integer(r[11]);
+                        if (!s.cr6.eq) {
+                            r[10] = Word(r[31] + 80);
+                            r[11] = r[29] + 4;
+                            r[8] = r[10] - r[29];
+                            CopyInput();
+                        }
+                    }
+                    r[3] = r[31] + 96;
+                    s.lr = 0x82bb86a4u;
+                    Cleanup();
+                    r[3] = 0;
+                    r[1] = r[31];
+                    Leave(28, 160);
+                    return;
+                }
+                r[3] = r[31] + 96;
+                s.lr = 0x82bb86b8u;
+                Cleanup();
+            }
+        }
+        r[3] = 1;
+        r[1] = r[31];
+        Leave(28, 160);
+    }
+    void CopyInput() {
+        auto &r = s.r;
+        do {
+            r[7] = Word(r[10]);
+            ++r[9];
+            Word(r[11] - 4, r[7]);
+            r[7] = Word(r[8] + r[11]);
+            Word(r[11], r[7]);
+            r[7] = Word(r[10] + 8);
+            r[10] += 12;
+            Word(r[11] + 4, r[7]);
+            r[11] += 12;
+            r[7] = Word(r[30]);
+            Integer(r[9], r[7]);
+        } while (s.cr6.lt);
+    }
     void Build() {
         Enter(28, 160, 0x82bc2dd8u);
         BuildBody();
@@ -309,6 +403,9 @@ struct Dedup {
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     Dedup x{m, d, s};
     switch (e) {
+    case 0x82bb8580u:
+        x.CheckInput();
+        break;
     case 0x82bc2d48u:
     case 0x82bc38e0u:
         x.Cleanup();

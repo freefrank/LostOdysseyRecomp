@@ -198,3 +198,7 @@ B9EA90 is now closed: min xyz at owner +112, max xyz at +124, chosen center/radi
 ## Vertex deduplication ownership
 
 BC2DD0 borrows input count +0 and packed xyz pointer +4, retains unique count +8, owned unique xyz +12 and owned original-index remap +16. Three stable coordinate-word sorts group exact bitwise xyz matches; do not replace this with epsilon welding or numerical float ordering. Optional output aliases {xyz,count,map} do not transfer ownership. Cleanup releases +16 then +12 and leaves the count/borrowed input unchanged. Rust should retain the exact-byte equality and distinguish owned arrays from borrowed result aliases.
+
+### Input uniqueness gate
+
+BB8580 is connected to the stable deduplicator. It copies input xyz to variable guest stack storage, checks exact uniqueness, optionally compacts the original array and updates its count, then releases dedup ownership. A repaired duplicate input still returns zero; callers must retain this distinction. Seven focused family cases pass. The stack probe is reused from mesh_polygon_collect61.

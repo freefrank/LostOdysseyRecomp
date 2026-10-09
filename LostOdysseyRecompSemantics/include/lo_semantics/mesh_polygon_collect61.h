@@ -7,5 +7,6 @@ using Dependencies = mesh_triangle_links61::Dependencies;
 // component's boundary, appends count-prefixed polygon vertex IDs and optional
 // component triangle IDs. r3 is polygon count, r4/r6 are word-array outputs,
 // r5 borrows the mesh adapter. B7E504 probes ordinary guest stack pages.
+void ProbeStack(GuestMemory &, Registers &);
 [[nodiscard]] bool Apply(GuestAddress, GuestMemory &, Dependencies, Registers &);
 } // namespace lo::semantic::gpu::mesh_polygon_collect61

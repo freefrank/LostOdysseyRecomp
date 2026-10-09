@@ -25,13 +25,22 @@
       "instruction_count": 179,
       "body_sha256": "25d7a1d83ecee18084af18b8cbe0bff467e335c7608bf2938e96722f21708a1e",
       "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BB8580",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 9514,
+      "instruction_count": 81,
+      "body_sha256": "538b57cae6a5de7c13ffdfb2e7cb0ac665e9679f151cf8cc9d289fbffb789097",
+      "status": "focused_original_ppc_validated"
     }
   ],
   "implementation": {
     "entries": [
       "82BC2D48",
       "82BC38E0",
-      "82BC2DD0"
+      "82BC2DD0",
+      "82BB8580"
     ],
     "header": "include/lo_semantics/mesh_vertex_dedup61.h",
     "source": "src/mesh_vertex_dedup61.cpp",
@@ -43,9 +52,9 @@
     "runtime_validated": false,
     "complete": false,
     "date": "2026-10-09",
-    "focused_original_ppc_cases": 3,
+    "focused_original_ppc_cases": 7,
     "library_validated": true,
-    "case_scope": "Complete original local build/cleanup/tail-alias chain with shared concrete radix sort. Six finite vertices, duplicates and negative coordinate; optional result, replacement of old allocations. Full72/RAM/CSR/events/ownership, independent stable remap/content, complete teardown. No allocation fault matrix or whole convex build claim.",
+    "case_scope": "Complete original local build/cleanup/tail-alias chain with shared concrete radix sort. Six finite vertices, duplicates and negative coordinate; optional result, replacement of old allocations. Full72/RAM/CSR/events/ownership, independent stable remap/content, complete teardown. No allocation fault matrix or whole convex build claim. Four BB8580 uniqueness/optional in-place compaction cases: duplicates with repair, check-only, already unique and empty; original local dedup graph/shared concrete sort, stack probe and baseline initializer. All temporary ownership freed.",
     "platform": "Linux x64 Clang19; pinned PPC; mmap guest overlay"
   }
 }
