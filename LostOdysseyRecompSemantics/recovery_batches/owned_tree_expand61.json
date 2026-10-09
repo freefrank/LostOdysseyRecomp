@@ -1,0 +1,17 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "owned-tree-expand61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/owned_tree_expand61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/owned_tree_expand61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nextern \"C\" PPC_FUNC(__imp__sub_82BD9858);\n#define sub_82BD9858(c,b) __imp__sub_82BD9858(c,b)\nextern \"C\" PPC_FUNC(__imp__sub_82BD0798);\n#define sub_82BD0798(c,b) __imp__sub_82BD0798(c,b)\nvoid OriginalTreeExpand61Indirect(std::uint32_t,PPCContext&,std::uint8_t*);\n#undef PPC_CALL_INDIRECT_FUNC\n#define PPC_CALL_INDIRECT_FUNC(t) OriginalTreeExpand61Indirect((t),ctx,base)\nvoid OriginalTreeExpand61Save(unsigned,PPCContext&,std::uint8_t*);\nvoid OriginalTreeExpand61Restore(unsigned,PPCContext&,std::uint8_t*);\nvoid OriginalTreeExpand61SaveFpr(unsigned,PPCContext&,std::uint8_t*);\nvoid OriginalTreeExpand61RestoreFpr(unsigned,PPCContext&,std::uint8_t*);\n#define __savegprlr_25(c,b) OriginalTreeExpand61Save(25,c,b)\n#define __restgprlr_25(c,b) OriginalTreeExpand61Restore(25,c,b)\n#define __savefpr_25(c,b) OriginalTreeExpand61SaveFpr(25,c,b)\n#define __restfpr_25(c,b) OriginalTreeExpand61RestoreFpr(25,c,b)\nextern \"C\" PPC_FUNC(__imp__sub_82BDAA48);\n#define sub_82BDAA48(c,b) __imp__sub_82BDAA48(c,b)\nextern \"C\" PPC_FUNC(__imp__sub_82BD9928);\n#define sub_82BD9928(c,b) __imp__sub_82BD9928(c,b)\n#define __savegprlr_29(c,b) OriginalTreeExpand61Save(29,c,b)\n#define __restgprlr_29(c,b) OriginalTreeExpand61Restore(29,c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/owned_tree_build61.cpp",
+        "LostOdysseyRecompSemantics/src/owned_tree_storage61.cpp",
+        "LostOdysseyRecompSemantics/src/crt_close_recursive_buffer_context.cpp",
+        "LostOdysseyRecompSemantics/src/owned_tree_expand61.cpp"
+      ]
+    }
+  ]
+}

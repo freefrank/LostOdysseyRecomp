@@ -3,6 +3,14 @@
   "scope": "Private generated bodies are pinned by SHA256 of UTF-8 with LF line endings and no final newline; no generated code is embedded.",
   "entries": [
     {
+      "address": "82BDAA48",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 26601,
+      "instruction_count": 133,
+      "body_sha256": "2ee56b7f6f4b8f2205206d8de9521b40c4ab0468b12763bbd51fafd7e5013863",
+      "status": "focused_original_ppc_validated"
+    },
+    {
       "address": "82BD9928",
       "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
       "source_line": 23982,
@@ -30,7 +38,7 @@
   "validation": {
     "status": "passed_focused_linux_mapping_pending",
     "date": "2026-10-09",
-    "focused_original_ppc_cases": 4,
+    "focused_original_ppc_cases": 2,
     "library_validated": true,
     "library": "PASS incremental complete Clang 19 CMake static library; existing unused-function warning exception retained.",
     "platform": "Linux x64; Clang 19.1.7; genuine XEX regenerated with pinned XenonRecomp ddd128bc plus tracked patch; existing oracle guest-window allocation overlaid with mmap/mprotect only",
@@ -39,14 +47,14 @@
     "runtime_validated": false,
     "complete": false,
     "limits": "Selected finite inputs, ordinary RAM, Full72 state, callbacks and host CSR only. No Windows revalidation, nonfinite matrix, faults/MMIO, concurrency, runtime or gameplay acceptance.",
-    "case_scope": "Four original build plus partition/table-body cases: extent/heap allocation with live callback mutation; variance/borrowed arena; balanced partition/allocation failure; axis retries then forced half split. All five strategies implemented; direct-half path is additionally exercised by owned_tree_expand61. No hardware/runtime/gameplay claim."
+    "case_scope": "Original recursive upper plus original build/partition/table bodies. Bounds snapshot, plane extension/margin leaf, and arena half split with two recursive child leaves/parent links/item and node counts. Direct-half strategy additionally exercised here; ordinary finite inputs and host CSR checks."
   },
   "implementation": {
     "entries": [
-      "82BD9928"
+      "82BDAA48"
     ],
-    "header": "include/lo_semantics/owned_tree_build61.h",
-    "source": "src/owned_tree_build61.cpp",
-    "oracle": "tests/owned_tree_build61_oracle.cpp"
+    "header": "include/lo_semantics/owned_tree_expand61.h",
+    "source": "src/owned_tree_expand61.cpp",
+    "oracle": "tests/owned_tree_expand61_oracle.cpp"
   }
 }

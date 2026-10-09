@@ -1,0 +1,36 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Private generated bodies are pinned by SHA256 of UTF-8 with LF line endings and no final newline; no generated code is embedded.",
+  "entries": [
+    {
+      "address": "82BD6E28",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 17513,
+      "instruction_count": 105,
+      "body_sha256": "d98fb142221516e44f3ffda634f5c225c025bd828dd98de61e10a79ddaea1629",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 3,
+    "library_validated": true,
+    "library": "PASS incremental complete Clang 19 CMake static library; existing unused-function warning exception retained.",
+    "platform": "Linux x64; Clang 19.1.7; genuine XEX regenerated with pinned XenonRecomp ddd128bc plus tracked patch; existing oracle guest-window allocation overlaid with mmap/mprotect only",
+    "mapping_credit": 0,
+    "mapping_limit": "Fixed historical catalog.sqlite unavailable; do not infer membership from regenerated sources. 82BB25D0 is explicitly external in prior handoff.",
+    "runtime_validated": false,
+    "complete": false,
+    "limits": "Selected finite inputs, ordinary RAM, Full72 state, callbacks and host CSR only. No Windows revalidation, nonfinite matrix, faults/MMIO, concurrency, runtime or gameplay acceptance.",
+    "case_scope": "Three genuine original-upper/shared-BD4448 cases: empty range; rejected internal subtree then leaf hit with growth and vector-mutating callback; internal hit then rejected and accepted leaves. Compare Full72, all 128 vectors, RAM, callback states and host CSR. Selected little-endian x64 lane mapping; ordinary finite values, not nonfinite/vector-exception or gameplay acceptance."
+  },
+  "implementation": {
+    "entries": [
+      "82BD6E28"
+    ],
+    "header": "include/lo_semantics/geometry_unbounded_range61.h",
+    "source": "src/geometry_unbounded_range61.cpp",
+    "oracle": "tests/geometry_unbounded_range61_oracle.cpp"
+  }
+}

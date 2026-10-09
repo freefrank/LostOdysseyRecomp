@@ -46,7 +46,7 @@
     "mapping_limit": "Fixed historical catalog.sqlite unavailable; do not infer membership from regenerated sources. 82BB25D0 is explicitly external in prior handoff.",
     "runtime_validated": false,
     "complete": false,
-    "limits": "Selected finite inputs, ordinary RAM, Full72 state, callbacks and host CSR only. No Windows revalidation, nonfinite matrix, faults/MMIO, concurrency, runtime or gameplay acceptance.",
+    "limits": "Selected finite ordinary-RAM routes compare Full72, local MSR/reservation, callback traces and output. Actual host CSR is not independently compared by this fixture. No Windows, formatter growth, hardware concurrency, runtime or gameplay acceptance.",
     "case_scope": "Six original-upper/shared-accepted-lock-and-formatter cases: null sink, two mode107 replies, mode208 actual formatter, valid and invalid BD18C0 prefix. Private image pages d3000..d6fff loaded from verified XEX xexdump, never embedded. Formatter growth above 160 bytes is implemented/reviewed but not exercised; no fresh original-lower validation.",
     "private_image": {
       "path": "LostOdysseyRecompLib/private/image_disc1.bin",

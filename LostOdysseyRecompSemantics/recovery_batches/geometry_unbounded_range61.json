@@ -1,0 +1,18 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "geometry-unbounded-range61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/geometry_unbounded_range61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/geometry_unbounded_range61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nvoid OriginalUnboundedRange61Save(PPCContext&,std::uint8_t*);\nvoid OriginalUnboundedRange61Restore(PPCContext&,std::uint8_t*);\nvoid OriginalUnboundedRange61Lower(PPCContext&,std::uint8_t*);\n#define __savegprlr_26(c,b) OriginalUnboundedRange61Save(c,b)\n#define __restgprlr_26(c,b) OriginalUnboundedRange61Restore(c,b)\n#define sub_82BD4448(c,b) OriginalUnboundedRange61Lower(c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/geometry_unbounded_range61.cpp",
+        "LostOdysseyRecompSemantics/src/geometry_math61.cpp",
+        "LostOdysseyRecompSemantics/src/reader_buffer_growth61.cpp",
+        "LostOdysseyRecompSemantics/src/crt_copy_full_context.cpp",
+        "LostOdysseyRecompSemantics/src/crt_close_recursive_buffer_context.cpp"
+      ]
+    }
+  ]
+}

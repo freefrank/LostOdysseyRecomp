@@ -90,7 +90,7 @@
     "full_library_validated": true,
     "mapping_delta": 1,
     "runtime_replacement_delta": 0,
-    "next": "BB2638 direct gaps: BD7A60 awaiting recursive tree BDAA48/BDAD18; BB03B0 awaiting BD7258, four VMX walkers with local borrowed VectorState and BD2C48 random/TLS chain. Diagnostic routes/locks closed with local MachineState; keep state live across composition."
+    "next": "Compose BD7A60 now recursive tree lowers passed. Complete remaining VMX walkers BD5910/BD6C58/BD6FD0 with the validated local VectorState; finish BD2C48 random/TLS chain, then BD7258/BB03B0 and BB2638. Keep borrowed machine/vector state live across lower callbacks."
   },
   "historical_accepted_data_commit": "f066d61adf2a18afad5d7a3f23e7431284ff7675",
   "new_validated_zero_credit_units": [
@@ -120,12 +120,15 @@
     "geometry_query_prepare61",
     "transform_owner_initialize61",
     "owned_tree_build61",
-    "diagnostic_format_routes61"
+    "diagnostic_format_routes61",
+    "owned_tree_expand61",
+    "owned_tree_construct61",
+    "geometry_unbounded_range61"
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 27,
-    "distinct_entries": 53,
+    "unit_count": 30,
+    "distinct_entries": 56,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -341,6 +344,27 @@
           "82BD18C0"
         ],
         "focused_cases": 6
+      },
+      {
+        "unit": "owned_tree_expand61",
+        "entries": [
+          "82BDAA48"
+        ],
+        "focused_cases": 2
+      },
+      {
+        "unit": "owned_tree_construct61",
+        "entries": [
+          "82BDAD18"
+        ],
+        "focused_cases": 3
+      },
+      {
+        "unit": "geometry_unbounded_range61",
+        "entries": [
+          "82BD6E28"
+        ],
+        "focused_cases": 3
       }
     ]
   }

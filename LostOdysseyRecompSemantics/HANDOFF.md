@@ -132,14 +132,25 @@ all six cases passed. Existing xexdump produced ignored `private/image_disc1.bin
 from the verified XEX; only digest metadata is public. Above-160-byte formatter
 growth remains unexercised. No baseline mapping or runtime replacement added.
 
+Query/tree/diagnostic stage was pushed as `5f0d857e` and remote-verified.
+`owned_tree_expand61` BDAA48 now passes two complete original recursive-chain
+cases, additionally exercising BD9928's direct half split; `owned_tree_construct61`
+BDAD18 passes three original-upper/shared-lower cases. Second allocation failure
+is preserved without a new guard but unexercised. `geometry_unbounded_range61`
+BD6E28 passes three Full72 + all-128-vector cases with RAM, callback and host-CSR
+comparison. Local borrowed VectorState and mutable vector-aware guest service
+preserve extra state without extending the common ABI. Review confirmed lane
+shuffle/mask/endian behavior, CR6 aggregation and recursive parent/count updates.
+The diagnostic route receipt now explicitly notes that its fixture does not
+independently compare actual host CSR; no added test infrastructure was needed.
+
 Current upper frontier is BB2638. Its only remaining direct semantic dependencies
-are BD7A60 owner build and BB03B0 spatial query. BD7A60 awaits recursive tree
-BDAA48/BDAD18 above the validated BD9928. BB03B0 awaits BD7258 dispatch, four VMX
-walkers (BD5910/BD6C58/BD6E28/BD6FD0), and the BD2C48 random-number/TLS chain.
+are BD7A60 owner build and BB03B0 spatial query. BD7A60 now has its recursive tree lowers and is being composed. BB03B0 awaits BD7258 dispatch, the remaining VMX
+walkers (BD5910/BD6C58/BD6FD0), and the BD2C48 random-number/TLS chain.
 BD2C48 is a rand tail, not merely an error path. The vector walkers need local
 borrowed 128-vector raw state and CR0/CR6/FP control; do not drop them into Full72
-or silently replace unbounded SIMD routes with scalar ones. BD6E28 is the smallest
-planned vector unit. Diagnostic MachineState remains caller-owned; the eventual
+or silently replace unbounded SIMD routes with scalar ones. BD6E28 is the first
+validated vector unit. Diagnostic MachineState remains caller-owned; the eventual
 upper must share machine/vector state across guest calls. 822D3068 is an already
 mapped empty leaf and adds no credit. Manager allocation/construction internals
 remain explicit guest boundaries.

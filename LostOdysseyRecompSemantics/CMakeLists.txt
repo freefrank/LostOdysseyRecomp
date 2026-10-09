@@ -170,6 +170,7 @@ add_library(LostOdysseyRecompSemantics STATIC
     src/manager_release_context61.cpp
     src/transform_owner_routes61.cpp
     src/geometry_math61.cpp
+    src/geometry_unbounded_range61.cpp
     src/geometry_triangle_range61.cpp
     src/geometry_box61.cpp
     src/geometry_query_prepare61.cpp
@@ -181,6 +182,8 @@ add_library(LostOdysseyRecompSemantics STATIC
     src/owned_tree_cleanup61.cpp
     src/owned_tree_storage61.cpp
     src/owned_tree_build61.cpp
+    src/owned_tree_expand61.cpp
+    src/owned_tree_construct61.cpp
     src/reader_buffer_growth61.cpp
     src/crt_error_text61_context.cpp
     src/crt_stream_output_upper61.cpp
