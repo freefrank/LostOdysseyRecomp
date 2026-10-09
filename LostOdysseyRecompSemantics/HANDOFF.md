@@ -1,3 +1,7 @@
+## Root direct continuation: mesh plane and angle math (2026-10-09)
+
+`mesh_geometry_math61` closes BD92C0 normalized triangle planes and 2DA388 guest-table rational atan2, retaining FP stages and signed-zero handling. Eight complete-original-body cases pass Full72/RAM/host CSR and independent plane/angle assertions. Full Clang library passes. The angle harness requires LO_MESH_MATH_CONSTANTS pointing to a private 184-byte block from guest address 83214E88; image constants are not checked in. Two implementation addresses; NaN/infinity behavior is not broadly tested.
+
 ## Root direct continuation: mesh cache lifetime and porting map (2026-10-09)
 
 `mesh_cache_lifetime61` closes seven base/derived adapter, cache descriptor and prefix-offset entries. Five composed-original cases pass Full72/RAM/callbacks and independent borrowed fields, arrays-before-descriptor free order, empty cleanup and wrapping u16 prefix checks. Full Clang library passes. `docs/mesh_cooking_semantic_pipeline.md` records topology/stream layouts, ownership, Rust boundaries and explicitly unresolved upper dependencies. No complete cooking, runtime or historical mapping claim.

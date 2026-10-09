@@ -1,0 +1,43 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Triangle plane and guest-table atan2.",
+  "entries": [
+    {
+      "address": "82BD92C0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 23023,
+      "instruction_count": 52,
+      "body_sha256": "f0c7945b7aea2e4afed3a04a2044dc7404ca49e76bec02071e6f3b45d87c93c4",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "822DA388",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.3.cpp",
+      "source_line": 23924,
+      "instruction_count": 76,
+      "body_sha256": "9158d4e1d3e04bb5719c7e29e3a9a599ebad518090f34471f81a692e665c419f",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BD92C0",
+      "822DA388"
+    ],
+    "header": "include/lo_semantics/mesh_geometry_math61.h",
+    "source": "src/mesh_geometry_math61.cpp",
+    "oracle": "tests/mesh_geometry_math61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 8,
+    "library_validated": true,
+    "case_scope": "Normalized/degenerate triangle planes and atan2 ordinary quadrants/signed zero. Original-body Full72/RAM/host CSR and independent plane/angle values. Private guest constant block supplied by LO_MESH_MATH_CONSTANTS; no image data checked in.",
+    "platform": "Linux x64 Clang 19.1.7; pinned regenerated PPC; mmap guest overlay",
+    "mapping_limit": "Historical catalog membership unverified; no baseline mapping credit."
+  }
+}

@@ -69,8 +69,8 @@ B9F198 validation/build and B9F6F0 aggregate serialization remain open.
 
 B9F6F0 already has recovered scalar/header/support and owner cleanup components.
 Its main mesh section BBC110, lazy-cache build BB3130/BBC9F0 and cached geometry
-calculation B9F418 still need completion. The edge-filter path BBD4E8 and its
-geometry lower BD92C0 are also open. Do not infer upper completion from a
+calculation B9F418 still need completion. The edge-filter path BBD4E8 is also open; its normalized-plane BD92C0
+and guest-table atan2 822DA388 math lowers are now recovered. Do not infer upper completion from a
 working lower stream or topology fixture.
 
 ## Evidence limits
