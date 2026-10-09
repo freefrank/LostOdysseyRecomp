@@ -81,7 +81,7 @@ Turn on **HDR** in Graphics and save. **HDR peak brightness** opens a calibratio
 | Shaders | Precompiled shaders downloaded on the first start, or compiled once and cached. |
 | Audio | Stereo or 5.1 surround. |
 | Input | Controllers, keyboard and rumble; touch controls on Android. |
-| Mods | Texture, menu and font replacements and PlayStation button prompts, installed by hand or with Mod Organizer 2. See the [modding guide](docs/wiki/Modding.md). |
+| Mods | Windows only: texture, menu and font replacements and PlayStation button prompts, installed by hand or with Mod Organizer 2. Other platforms may load mods but are not supported. See the [modding guide](docs/wiki/Modding.md). |
 | Debug menu | Render captures, Save Anywhere, encounter switches, teleport, fast-forward and cheats. See [Debug menu](#debug-menu). |
 
 ## Controls
