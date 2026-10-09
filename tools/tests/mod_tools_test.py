@@ -2,6 +2,7 @@
 import csv
 import importlib.util
 import json
+import subprocess
 import tempfile
 import unittest
 import zipfile
@@ -172,6 +173,41 @@ class ModToolsTest(unittest.TestCase):
                       (out4 / "t4" / "mod.ini").read_text())
         with self.assertRaises(ValueError):
             mod.inspect(data + b"\0")
+
+    @unittest.skipUnless(mod.DEFAULT_TEXCONV.is_file(), "texconv not available")
+    def test_texture_pack_dds(self):
+        textures = self.root / "export" / "textures"
+        textures.mkdir(parents=True)
+        Image.new("RGBA", (16, 16), (200, 0, 0, 255)).save(textures / "a.png")
+        rows = [("DXT1", "01"), ("G8", "02"), ("A8R8G8B8", "03"), ("DXT5", "04")]
+        index = textures / "index.csv"
+        index.write_text("key,file,width,height,format,fingerprint\n" + "".join(
+            f"{KEY.replace('#21', '#' + str(i))},a.png,16,16,{fmt},00000000000000{fp}\n"
+            for i, (fmt, fp) in enumerate(rows)), encoding="utf-8")
+        args = ["texture-pack", "--index", str(index), "--images", str(textures), "--images-index", str(index),
+                "--payload", "dds", "--texconv", str(mod.DEFAULT_TEXCONV)]
+        out = self.root / "dds"
+        self.assertEqual(mod.main([*args, "--output", str(out)]), 0)
+        folder = out / "overlay" / "textures"
+        infos = {fp: mod.inspect((folder / f"fp-00000000000000{fp}.lotex2").read_bytes()) for _, fp in rows}
+        self.assertEqual([infos[fp]["dds_format"] for _, fp in rows], ["BC1_UNORM", "BC4_UNORM", "BC7_UNORM", "BC7_UNORM"])
+        for info in infos.values():
+            self.assertEqual((info["payload"], info["mips"], info["scale"]), ("16x16", 5, 1))
+        data = (folder / "fp-0000000000000004.lotex2").read_bytes()
+        self.assertEqual(int.from_bytes(data[12:16], "little"), 2)
+        self.assertEqual(int.from_bytes(data[44:48], "little"), 5)
+        # A8R8G8B8 stores B, G, R, A: the red source ends up in the blue channel.
+        dds = folder.parent / "swap.dds"
+        raw = (folder / "fp-0000000000000003.lotex2").read_bytes()
+        dds.write_bytes(raw[int.from_bytes(raw[8:12], "little"):])
+        subprocess.run([str(mod.DEFAULT_TEXCONV), "-nologo", "-y", "-ft", "png", "-f", "R8G8B8A8_UNORM",
+                        "-o", str(folder.parent), str(dds)], check=True, capture_output=True)
+        with Image.open(folder.parent / "swap.png") as decoded:
+            r, g, b, a = decoded.convert("RGBA").getpixel((0, 0))
+        self.assertTrue(b > 150 and r < 50 and a > 200, (r, g, b, a))
+        self.assertEqual(mod.main([*args, "--output", str(out)]), 0)  # Never overwrites.
+        with self.assertRaises(ValueError):
+            mod.inspect(data[:-4])
 
 
 if __name__ == "__main__":
