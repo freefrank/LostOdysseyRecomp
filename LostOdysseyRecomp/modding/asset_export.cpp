@@ -4,6 +4,7 @@
 #include <gpu/shader/cpx_decode.h>
 #include <gpu/texture_layout.h>
 #include <lzokay.hpp>
+#include <xxhash.h>
 
 #include <algorithm>
 #include <atomic>
@@ -19,6 +20,8 @@
 #include <span>
 #include <stdexcept>
 #include <thread>
+#include <tuple>
+#include <utility>
 #include <vector>
 
 #ifdef _WIN32
@@ -375,6 +378,7 @@ struct Image
     uint32_t width = 0, height = 0, channels = 0;
     const Format *format = nullptr;
     std::vector<uint8_t> pixels;
+    uint64_t fingerprint = 0, fingerprintTiled = 0;
 };
 
 std::vector<uint8_t> DecompressLzo(std::span<const uint8_t> stored, uint32_t expected)
@@ -500,6 +504,37 @@ Image Untile(const Format &format, uint32_t w, uint32_t h, std::span<const uint8
     return image;
 }
 
+// The texture-import identity, as the renderer logs it with
+// LO_TEXTURE_FINGERPRINT_LOG (gpu/renderer.cpp GetTexture): XXH3-64 of the
+// base level's blocks in row order after the guest endian swap (DXT 8in16,
+// A8R8G8B8 8in32, G8 none), and of the tiled extent as stored (0 when the
+// package holds less than that extent).
+std::pair<uint64_t, uint64_t> Fingerprints(const Format &format, uint32_t w, uint32_t h, std::span<const uint8_t> raw,
+                                           gpu::TextureBlockOffset origin, uint32_t pitch)
+{
+    const uint32_t bw = format.block, bpb = format.bytes;
+    const uint32_t blocksX = (w + bw - 1) / bw, blocksY = (h + bw - 1) / bw, log2 = uint32_t(std::countr_zero(bpb));
+    std::vector<uint8_t> row(size_t(blocksX) * bpb);
+    XXH3_state_t *state = XXH3_createState();
+    XXH3_64bits_reset(state);
+    for (uint32_t by = 0; by < blocksY; ++by)
+    {
+        for (uint32_t bx = 0; bx < blocksX; ++bx)
+        {
+            const size_t address = xenos_texture::TiledOffset2D(bx + origin.x, by + origin.y, pitch, log2);
+            uint8_t *block = row.data() + size_t(bx) * bpb;
+            std::memcpy(block, raw.data() + address, bpb); // Untile already checked the extent.
+            if (format.bc) for (uint32_t i = 0; i < bpb; i += 2) std::swap(block[i], block[i + 1]);
+            else if (bpb == 4) { std::swap(block[0], block[3]); std::swap(block[1], block[2]); }
+        }
+        XXH3_64bits_update(state, row.data(), row.size());
+    }
+    const uint64_t linear = XXH3_64bits_digest(state);
+    XXH3_freeState(state);
+    const uint64_t tiledBytes = uint64_t(pitch) * ((origin.y + blocksY + 31) & ~31u) * bpb;
+    return {linear, raw.size() >= tiledBytes ? XXH3_64bits(raw.data(), size_t(tiledBytes)) : 0};
+}
+
 Image DecodeTexture(const Package &package, const Export &e)
 {
     const auto top = ReadTopMip(package, e);
@@ -512,6 +547,7 @@ Image DecodeTexture(const Package &package, const Export &e)
                                      : gpu::TextureBlockOffset{};
     const uint32_t pitch = (origin.x + (top.width + format.block - 1) / format.block + 31) & ~31u;
     auto image = Untile(format, top.width, top.height, top.raw, origin, pitch);
+    std::tie(image.fingerprint, image.fingerprintTiled) = Fingerprints(format, top.width, top.height, top.raw, origin, pitch);
     if (image.channels == 4)
     {
         // Opaque images are written as RGB.
@@ -555,7 +591,7 @@ std::string FileStem(std::string_view object)
 
 // ---- Export run ------------------------------------------------------------
 
-struct Row { std::string key, file; uint32_t width = 0, height = 0; const char *format = ""; };
+struct Row { std::string key, file; uint32_t width = 0, height = 0; const char *format = ""; uint64_t fingerprint = 0, fingerprintTiled = 0; };
 struct Stats
 {
     std::vector<Row> rows;
@@ -595,7 +631,7 @@ struct Job
     std::string movieName; // output file name for movies
 };
 
-void ExportPackage(const Job &job, const fs::path &textures, Stats &stats)
+void ExportPackage(const Job &job, const fs::path &textures, Stats &stats, bool pngs)
 {
     std::vector<uint8_t> bytes;
     try
@@ -633,10 +669,16 @@ void ExportPackage(const Job &job, const fs::path &textures, Stats &stats)
         try { image = DecodeTexture(*package, e); }
         catch (const Skip &skip) { stats.Skipped(skip.reason, key + ": " + skip.what()); continue; }
         catch (const std::exception &error) { stats.Skipped("decode_error", key + ": " + error.what()); continue; }
-        if (!created) { CreateDirectories(directory); created = true; }
-        const auto name = FileStem(e.name) + "." + std::to_string(index) + ".png";
-        stats.textureBytes += WritePng(directory / FromUtf8(name), image);
-        stats.rows.push_back({key, job.path + "/" + name, image.width, image.height, image.format->name});
+        std::string file;
+        if (pngs)
+        {
+            if (!created) { CreateDirectories(directory); created = true; }
+            const auto name = FileStem(e.name) + "." + std::to_string(index) + ".png";
+            stats.textureBytes += WritePng(directory / FromUtf8(name), image);
+            file = job.path + "/" + name;
+        }
+        stats.rows.push_back({key, file, image.width, image.height, image.format->name,
+                              image.fingerprint, image.fingerprintTiled});
         ++stats.formats[image.format->name];
     }
 }
@@ -765,15 +807,16 @@ std::optional<Request> ParseArguments(int argc, char **argv)
         else if (argument == "--export-filter") parsed.filter = Lower(value);
         else
         {
-            parsed.textures = parsed.movies = false;
+            parsed.textures = parsed.movies = parsed.pngs = false;
             size_t begin = 0;
             while (begin <= value.size())
             {
                 const auto end = std::min(value.find(',', begin), value.size());
                 const auto kind = Lower(value.substr(begin, end - begin));
-                if (kind == "textures") parsed.textures = true;
+                if (kind == "textures") parsed.textures = parsed.pngs = true;
+                else if (kind == "fingerprints") parsed.textures = true; // index.csv without PNG files
                 else if (kind == "movies") parsed.movies = true;
-                else parsed.error = "unknown export kind '" + kind + "' (expected textures,movies)";
+                else parsed.error = "unknown export kind '" + kind + "' (expected textures,fingerprints,movies)";
                 begin = end + 1;
             }
         }
@@ -899,7 +942,7 @@ int Run(const Request &request, const fs::path &gameRoot)
             Stats local;
             try
             {
-                if (jobs[index].kind == Job::Kind::Package) ExportPackage(jobs[index], textures, local);
+                if (jobs[index].kind == Job::Kind::Package) ExportPackage(jobs[index], textures, local, request.pngs);
                 else ExportMovie(jobs[index], movies, local);
             }
             catch (const std::exception &failure)
@@ -932,10 +975,15 @@ int Run(const Request &request, const fs::path &gameRoot)
         if (request.textures)
         {
             std::sort(total.rows.begin(), total.rows.end(), [](const Row &a, const Row &b) { return a.key < b.key; });
-            std::string csv = "key,file,width,height,format\n";
+            std::string csv = "key,file,width,height,format,fingerprint,fingerprint_tiled\n";
+            char hex[40];
             for (const auto &row : total.rows)
+            {
+                std::snprintf(hex, sizeof(hex), "%016llx,%016llx", static_cast<unsigned long long>(row.fingerprint),
+                              static_cast<unsigned long long>(row.fingerprintTiled));
                 csv += Csv(row.key) + "," + Csv(row.file) + "," + std::to_string(row.width) + "," +
-                       std::to_string(row.height) + "," + row.format + "\n";
+                       std::to_string(row.height) + "," + row.format + "," + hex + "\n";
+            }
             WriteFile(textures / "index.csv", csv.data(), csv.size());
         }
         const auto elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();

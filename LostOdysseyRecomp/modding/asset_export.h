@@ -3,7 +3,7 @@
 #include <optional>
 #include <string>
 
-// `--export-assets <dir> [--export-kinds textures,movies] [--export-filter <text>]`
+// `--export-assets <dir> [--export-kinds textures,fingerprints,movies] [--export-filter <text>]`
 // copies the player's own game data into a folder for mod authors: textures as
 // PNG (keyed like image mods) and movies as the original WMV bytes. Reads game
 // files only: no window, GPU device, installer, logs or guest code.
@@ -13,6 +13,7 @@ struct Request
 {
     std::filesystem::path output;
     bool textures = true, movies = true;
+    bool pngs = true; // false with --export-kinds fingerprints: index.csv only
     std::string filter; // ASCII lower case; matched against package / file paths
     std::string error;  // malformed arguments; Run reports it and fails
 };

@@ -25,11 +25,11 @@ The game can export its own textures and movies from your game data as a startin
 LostOdysseyRecomp.exe --export-assets my-export --export-kinds textures,movies --export-filter UI_MAIN
 ```
 
-The output folder must not exist or must be empty. `--export-kinds` (default: both) and `--export-filter` (only names containing the text) are optional. No window opens; the program prints progress and exits (exit code 1 on a fatal error). With [Mod Organizer 2](Mod-Organizer-2.md), the **Export Lost Odyssey assets** tool in the Tools menu does the same from a dialog.
+The output folder must not exist or must be empty. `--export-kinds` (`textures`, `movies`, or `fingerprints` for the index without PNG files; default: textures and movies) and `--export-filter` (only names containing the text) are optional. No window opens; the program prints progress and exits (exit code 1 on a fatal error). With [Mod Organizer 2](Mod-Organizer-2.md), the **Export Lost Odyssey assets** tool in the Tools menu does the same from a dialog.
 
 ```text
 my-export/textures/<package path>/<object>.<export index>.png
-my-export/textures/index.csv        key,file,width,height,format
+my-export/textures/index.csv        key,file,width,height,format,fingerprint,fingerprint_tiled
 my-export/movies/<name>.wmv         original videos, unchanged
 my-export/export-summary.txt
 ```

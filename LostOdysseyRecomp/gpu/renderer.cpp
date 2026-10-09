@@ -1310,6 +1310,10 @@ namespace gpu::renderer
             bool resolveReadback = false; // LO_RESOLVE_READBACK=1: legacy CPU write-back into guest memory
             bool textureRevalidate = true; // LO_TEXTURE_STATIC=1 disables re-hashing cached textures
             bool textureBcFallback = false; // BC1-BC3 decoded to RGBA8 on the CPU (no device support, or LO_TEXTURE_BC=0)
+            // LO_TEXTURE_FINGERPRINT_LOG=<file>: one CSV row per distinct uploaded
+            // texture, to match against --export-assets fingerprints.
+            FILE* textureFingerprintLog = nullptr;
+            std::unordered_set<uint64_t> textureFingerprintsSeen;
             uint64_t controllerAtlasFamilyFrame = ~0ull;
             bool controllerAtlasPlayStationFamily = false;
             uint64_t controllerAtlasTraceFrame = ~0ull;
@@ -2259,6 +2263,14 @@ namespace gpu::renderer
                 if (!readback) return InitFailure("readback.create", kReadbackSize);
                 resolveReadback = getenv("LO_RESOLVE_READBACK") != nullptr;
                 textureRevalidate = getenv("LO_TEXTURE_STATIC") == nullptr;
+                if (const char* path = getenv("LO_TEXTURE_FINGERPRINT_LOG"); path && *path && !textureFingerprintLog) {
+                    textureFingerprintLog = std::fopen(path, "w");
+                    if (textureFingerprintLog)
+                        std::fputs("fingerprint,fingerprint_tiled,format,endian,width,height,guest_width,guest_height,"
+                                   "pitch_blocks,packed_x,packed_y,mip_levels,source_mip,tiled,address,frame\n", textureFingerprintLog);
+                    else
+                        LOG_WARNING("renderer: cannot open LO_TEXTURE_FINGERPRINT_LOG {}", path);
+                }
                 {
                     // Mali Vulkan drivers cannot create BC images (#214).
                     // LO_TEXTURE_BC=0 forces the CPU decode on any device.
@@ -7288,6 +7300,30 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
                 };
                 decode(src, pitchBlocks, packedOffset, blocksX, blocksY, faces, staging.data(), rowPitch);
+                if (textureFingerprintLog && dimension == 1 && !fi.convertToRgba8)
+                {
+                    // fingerprint: the base level's blocks in row order after the
+                    // endian swap, as asset_export.cpp computes it from package
+                    // data. fingerprint_tiled: the guest's tiled extent as stored.
+                    XXH3_state_t* state = XXH3_createState();
+                    XXH3_64bits_reset(state);
+                    for (uint32_t by = 0; by < blocksY; by++)
+                        XXH3_64bits_update(state, staging.data() + size_t(by) * rowPitch, size_t(blocksX) * fi.bytesPerBlock);
+                    const uint64_t fingerprint = XXH3_64bits_digest(state);
+                    XXH3_freeState(state);
+                    const uint64_t tiledBytes = uint64_t(pitchBlocks) * blocksYAligned * fi.bytesPerBlock;
+                    const uint64_t identity = fingerprint ^ (uint64_t(format) << 56) ^ (uint64_t(width) << 32) ^ height;
+                    if (textureFingerprintsSeen.insert(identity).second)
+                    {
+                        std::fprintf(textureFingerprintLog, "%016llx,%016llx,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%#x,%llu\n",
+                            static_cast<unsigned long long>(fingerprint),
+                            static_cast<unsigned long long>(texture_cache::ContentHash(src, size_t(tiledBytes))),
+                            format, endian, width, height, originalWidth, originalHeight, pitchBlocks,
+                            packedOffset.x, packedOffset.y, mipLevels, sourceMip, tiled ? 1u : 0u, sourceAddress,
+                            static_cast<unsigned long long>(frame));
+                        std::fflush(textureFingerprintLog);
+                    }
+                }
 
                 auto tex = std::make_unique<HostTexture>();
                 tex->width = width;
