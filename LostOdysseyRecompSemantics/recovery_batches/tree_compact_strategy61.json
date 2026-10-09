@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "tree-compact-strategy61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/tree_compact_strategy61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/tree_compact_strategy61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nvoid CompactStrategySave(unsigned,PPCContext&,std::uint8_t*);\nvoid CompactStrategyRestore(unsigned,PPCContext&,std::uint8_t*);\n#define __savegprlr_27(c,b) CompactStrategySave(27,c,b)\n#define __restgprlr_27(c,b) CompactStrategyRestore(27,c,b)\n#define __savegprlr_28(c,b) CompactStrategySave(28,c,b)\n#define __restgprlr_28(c,b) CompactStrategyRestore(28,c,b)\n#define sub_82BDCE38 __imp__sub_82BDCE38\nvoid CompactStrategyAllocator(PPCContext&,std::uint8_t*);\n#define sub_82BD0798 CompactStrategyAllocator\nvoid CompactStrategyIndirect(std::uint32_t,PPCContext&,std::uint8_t*);\n#undef PPC_CALL_INDIRECT_FUNC\n#define PPC_CALL_INDIRECT_FUNC(t) CompactStrategyIndirect((t),ctx,base)\n#define __savegprlr_26(c,b) CompactStrategySave(26,c,b)\n#define __restgprlr_26(c,b) CompactStrategyRestore(26,c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/tree_compact_strategy61.cpp"
+      ]
+    }
+  ]
+}

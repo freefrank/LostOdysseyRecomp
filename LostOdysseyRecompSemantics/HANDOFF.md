@@ -1,3 +1,7 @@
+## Root direct continuation: compact internal-node construction (2026-10-09)
+
+`tree_compact_flatten61` recovers CE38, emitting only internal nodes into 32-byte records, ordering a sole leaf child first and folding leaf IDs/flags into the record. Three original-recursive cases cover leaf pairs, swapping and both-internal recursion. `tree_compact_strategy61` recovers D058, validating full-tree size and storing leaf-count minus one records, with replace/reuse ownership. Three original-binder plus original-recursive cases pass. Full72/RAM/host CSR, appropriate allocation traces and independent layouts agree; full Clang library passes. Valid internal-tree preconditions retained, no new leaf guard or historical/runtime credit.
+
 ## Root direct continuation: eight-word flat import (2026-10-09)
 
 `tree_flat_load61` now also handles BDB350 32-byte records, sharing the 36-byte endian/read flow while retaining distinct size arithmetic, allocation registers and call continuations. Six total pinned-original native/swapped/allocation-failure cases pass Full72/RAM/callbacks and independent payload/count/owner assertions; full Clang library passes. No new test framework or defensive behavior. Historical baseline and runtime remain unchanged.

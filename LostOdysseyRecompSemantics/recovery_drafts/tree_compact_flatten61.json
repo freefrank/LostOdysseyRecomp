@@ -1,0 +1,34 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Complete recursive internal-only compact tree flattener, leaf folding and child-order normalization.",
+  "entries": [
+    {
+      "address": "82BDCE38",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 31887,
+      "instruction_count": 105,
+      "body_sha256": "f467f566d87ea4895a8385230aa5d707d5a0af258bf2da67c6af72e23ec7d5ed",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BDCE38"
+    ],
+    "header": "include/lo_semantics/tree_compact_flatten61.h",
+    "source": "src/tree_compact_flatten61.cpp",
+    "oracle": "tests/tree_compact_flatten61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 3,
+    "library_validated": true,
+    "case_scope": "Leaf pair, internal-left/leaf-right requiring swap, both internal children; full original recursive body compared on Full72/RAM/host CSR with independent folded leaf flags and descendant/counter values. Valid internal source nodes only.",
+    "platform": "Linux x64 Clang 19.1.7; pinned regenerated PPC; mmap guest overlay",
+    "mapping_limit": "Historical catalog membership unverified; no baseline mapping credit."
+  }
+}
