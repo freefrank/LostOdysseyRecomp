@@ -41,7 +41,7 @@
       "82BDB208 (21 instructions, BDA1A0 dependency)"
     ],
     "recheck": [
-      "82BD1AA8 and 82BD1AF8 existing typed implementations need full mutable boundary review before composition"
+      "82BD1AA8 and 82BD1AF8 existing Full-register adapters need prior validation/callback scope review before composition"
     ]
   }
 }

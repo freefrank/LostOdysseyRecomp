@@ -80,6 +80,18 @@ Host CSR is not independently compared; allocation failure and invalid indices
 are untested. Next substantive parent BD22A8 additionally needs BD20F0 and its
 BDB1C0/BDB208 visitor adapters; it is not yet claimed recovered.
 
+`indexed_record_accumulate61` recovers 822CD290 (225 instructions): reverse
+indexed record traversal with skip flags, scaled three-component accumulation
+into two field groups, and a source reload between groups preserving aliases.
+Three complete-body Full72/RAM/host CSR cases and library build pass, including
+unrolled/tail paths and source/output overlap. Storage stays borrowed; no guest
+lower or allocation is introduced. Finite valid records are the tested scope.
+
+BD22A8 upper recovery is now in progress independently. Besides BD20F0 and the
+two traversal adapters, its concrete callback targets BD1B50/BD2168/BD1B78 also
+need complete implementations (last one calls accepted growth BD2870). These
+are being recovered together; none is replaced with a fixture algorithm result.
+
 Bounded private-image investigation establishes vtables at 820D58A0 (installed
 by B9CC00) and 820D5C58 (installed by B9E220/B9E2D8/B9E388). Their slots +0C,
 +14 and +18 point to B9DD90, B9DF18 and B9DFA0 respectively. B9CBC0 occurs at

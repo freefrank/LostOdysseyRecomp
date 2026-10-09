@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "indexed-record-accumulate61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/indexed_record_accumulate61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/indexed_record_accumulate61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/indexed_record_accumulate61.cpp"
+      ]
+    }
+  ]
+}
