@@ -59,6 +59,14 @@
   "implementation": {
     "header": "include/lo_semantics/crt_reader_float61.h",
     "source": "src/crt_reader_float61.cpp",
-    "oracle": "tests/crt_reader_float61_oracle.cpp"
+    "oracle": "tests/crt_reader_float61_oracle.cpp",
+    "readability_refactor": {
+      "date": "2026-10-09",
+      "baseline_commit": "7afb80314ef1b3083bfdff68c91a6efebdf4eb81",
+      "scope": "Direct Registers and explicit reader/node fields replace local Context, unions, macros and goto. Shared mutable lower state and live FPR31 preserved.",
+      "validation": "Linux x64 GCC C++20 -Wall -Wextra -Werror compile/link PASS; two finite no-growth/growth comparisons against baseline implementation PASS for Full72, RAM, callbacks and host CSR.",
+      "limits": "The validation receipt above is historical, predating this refactor. No new original-PPC, Windows library, nonfinite FP or runtime validation.",
+      "mapping_delta": 0
+    }
   }
 }

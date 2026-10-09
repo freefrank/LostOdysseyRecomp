@@ -30,6 +30,17 @@ compiler/SDK and generated PPC oracle headers. Do not reconstruct an “original
 source file from the pin just to make validation pass. Run the narrowed batch
 against genuine inputs and require library PASS before promoting this draft.
 
+The first draft-completion stage was pushed as `7afb8031` and verified on the
+remote. An adjacent `82BD10D8` readability refactor now also removes the local
+Context/union/macros, exposes reader/node fields, and shares explicit mutable
+Registers with accepted flush/growth lowers. Two finite no-growth/growth cases
+passed against the pre-refactor implementation, comparing Full72/RAM/callbacks
+and actual x64 host CSR; both implementations compiled with GCC C++20
+`-Wall -Wextra -Werror`. This is a baseline comparison, not a new original-PPC
+receipt. Temporary comparator: `/tmp/crt_reader_float61_comparison.cpp` and
+`/tmp/make_float_comparison.py`. Its canonical manifest preserves historical
+acceptance and separately records this refactor's narrower evidence.
+
 No new accepted mapping or runtime replacement: **5,516/62,627 (8.808%)**, full
 semantic acceptance still zero. Adjacent `82BAE200` / FP helpers / `82BAFEC0`
 remain the next chain; their original bodies/catalog are unavailable here and
