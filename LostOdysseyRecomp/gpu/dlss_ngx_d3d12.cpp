@@ -700,7 +700,7 @@ plume::RenderTexture* Controller::RecordNeuralRenderingPreview(plume::D3D12Comma
                 RecordCall("NR_Preview_D3D12_CreateFeature",int32_t(result));
                 nrPreviewFeatures_[pass]=handle;
                 if (NVSDK_NGX_FAILED(result) || !handle) {
-                    FailNeuralRendering("preview CreateFeature",int32_t(result));
+                    FailNeuralRenderingPreview("CreateFeature",int32_t(result));
                     break;
                 }
             }
@@ -710,7 +710,7 @@ plume::RenderTexture* Controller::RecordNeuralRenderingPreview(plume::D3D12Comma
             nrPreviewSettle_=nr::kPreviewSettleEvaluates;
             nrPreviewReset_=true;
         }
-    } else if (passes && HasNeuralRenderingPreviewFeature() && !nrFailed_ && nrPreviewEncodeSet_ && nrPreviewDecodeSet_) {
+    } else if (passes && HasNeuralRenderingPreviewFeature() && nrPreviewEncodeSet_ && nrPreviewDecodeSet_) {
         right=nullptr; // The last answer stays once the frame has settled.
         if (nrPreviewSettle_) {
             plume::RenderTexture* images[2]={nrPreviewImages_[0].get(),nrPreviewImages_[1].get()};
@@ -741,7 +741,7 @@ plume::RenderTexture* Controller::RecordNeuralRenderingPreview(plume::D3D12Comma
                 RecordCall("NR_Preview_D3D12_EvaluateFeature",int32_t(result));
                 list.invalidateCachedNativeState();
                 if (NVSDK_NGX_FAILED(result)) {
-                    FailNeuralRendering("preview EvaluateFeature",int32_t(result));
+                    FailNeuralRenderingPreview("EvaluateFeature",int32_t(result));
                     ran=false;
                 }
             }

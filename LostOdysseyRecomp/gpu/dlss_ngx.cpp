@@ -1346,6 +1346,15 @@ void Controller::FailNeuralRendering(const char* operation, int32_t result) {
 #endif
 }
 
+void Controller::FailNeuralRenderingPreview(const char* operation, int32_t result) {
+    nrPreviewFailed_ = true;
+#if defined(_WIN32) && defined(LO_DLSS_SDK)
+    nr::Log("DLSS NR: preview %s failed (0x%08x); the preview stays off until the page closes", operation, unsigned(result));
+#else
+    (void)operation; (void)result;
+#endif
+}
+
 void Controller::SetNeuralRenderingTuning(const NeuralRenderingTuning& tuning) {
     if (tuning == nrTuning_) return;
     nrTuning_ = tuning;
@@ -1503,23 +1512,18 @@ void Controller::RecordNeuralRendering(VkCommandBuffer commandBuffer, const SrCo
 #endif
 }
 
-bool Controller::NeuralRenderingPreviewNeedsRebuild(uint32_t passes, uint32_t preset) const {
-    return HasNeuralRenderingPreviewFeature() &&
-        (std::min(passes, kMaxNeuralRenderingPasses) != nrPreviewPasses_ || std::min(preset, 3u) != nrPreviewPreset_);
-}
-
 plume::RenderTexture* Controller::RecordNeuralRenderingPreview(plume::RenderCommandList& list, uint32_t passes,
     uint32_t preset, const NeuralRenderingTuning& tuning) {
 #if defined(_WIN32) && defined(LO_DLSS_SDK)
     if (!nrCaptured_) return nullptr;
-    passes = nrFailed_ ? 0 : std::min(passes, kMaxNeuralRenderingPasses);
+    passes = nrPreviewFailed_ ? 0 : std::min(passes, kMaxNeuralRenderingPasses);
     preset = std::min(preset, 3u);
     if (tuning != nrPreviewTuning_) {
         nrPreviewTuning_ = tuning;
         nrPreviewSettle_ = nr::kPreviewSettleEvaluates;
         nrPreviewReset_ = true;
     }
-    // The caller waited for the present GPU when NeuralRenderingPreviewNeedsRebuild said so.
+    // The present paths waited for the present GPU, so nothing still uses the old features.
     if (HasNeuralRenderingPreviewFeature() && (passes != nrPreviewPasses_ || preset != nrPreviewPreset_))
         ReleaseNeuralRenderingPreviewFeatures();
     if (passes && !InitializedNeuralRenderingSnippet()) passes = 0;
@@ -1585,7 +1589,7 @@ plume::RenderTexture* Controller::RecordNeuralRenderingPreview(plume::VulkanComm
                 RecordCall("NR_Preview_CreateFeature1", int32_t(result));
                 nrPreviewFeatures_[pass] = handle;
                 if (NVSDK_NGX_FAILED(result) || !handle) {
-                    FailNeuralRendering("preview CreateFeature1", int32_t(result));
+                    FailNeuralRenderingPreview("CreateFeature1", int32_t(result));
                     break;
                 }
             }
@@ -1594,7 +1598,7 @@ plume::RenderTexture* Controller::RecordNeuralRenderingPreview(plume::VulkanComm
             nrPreviewSettle_ = nr::kPreviewSettleEvaluates;
             nrPreviewReset_ = true;
         }
-    } else if (passes && HasNeuralRenderingPreviewFeature() && !nrFailed_) {
+    } else if (passes && HasNeuralRenderingPreviewFeature()) {
         plume::VulkanTexture* images[2] = {static_cast<plume::VulkanTexture*>(nrPreviewImages_[0].get()),
                                            static_cast<plume::VulkanTexture*>(nrPreviewImages_[1].get())};
         right = VK_NULL_HANDLE; // The last answer stays once the frame has settled.
@@ -1620,7 +1624,7 @@ plume::RenderTexture* Controller::RecordNeuralRenderingPreview(plume::VulkanComm
                     static_cast<NVSDK_NGX_Handle*>(nrPreviewFeatures_[pass]), parameters, nullptr);
                 RecordCall("NR_Preview_EvaluateFeature", int32_t(result));
                 if (NVSDK_NGX_FAILED(result)) {
-                    FailNeuralRendering("preview EvaluateFeature", int32_t(result));
+                    FailNeuralRenderingPreview("EvaluateFeature", int32_t(result));
                     ran = false;
                 }
                 FullBarrier(commandBuffer);
@@ -1672,6 +1676,7 @@ void Controller::ReleaseNeuralRenderingPreview() {
     nrPreviewTuning_ = {};
     nrPreviewSettle_ = 0;
     nrPreviewReset_ = true;
+    nrPreviewFailed_ = false;
 }
 
 void Controller::ReleaseNeuralRendering() {

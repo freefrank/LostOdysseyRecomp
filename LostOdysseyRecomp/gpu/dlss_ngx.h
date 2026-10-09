@@ -170,10 +170,9 @@ public:
     // records the present, between BeginGpuCommands and the presentation draw.
     // It returns a texture with that frame on its left half and the model's
     // answer on its right, or null without a held frame. A pass-count or preset
-    // change rebuilds the preview features: wait for the present GPU first when
-    // NeuralRenderingPreviewNeedsRebuild says so.
+    // change rebuilds the preview features in place: the present paths wait for
+    // the present GPU before they record, so nothing still uses the old ones.
     bool NeuralRenderingPreviewAvailable() const { return nrCaptured_; }
-    bool NeuralRenderingPreviewNeedsRebuild(uint32_t passes, uint32_t preset) const;
     plume::RenderTexture* RecordNeuralRenderingPreview(plume::RenderCommandList& list, uint32_t passes,
         uint32_t preset, const NeuralRenderingTuning& tuning);
     // After the present GPU is idle, once the page has closed.
@@ -219,6 +218,8 @@ private:
     // Null keeps NR off this frame; the reason is logged once.
     const nr::Snippet* NeuralRenderingSnippet(const SrConfig& config);
     void FailNeuralRendering(const char* operation, int32_t result);
+    // A preview failure stops the preview only; gameplay NR keeps running.
+    void FailNeuralRenderingPreview(const char* operation, int32_t result);
     void RecordNeuralRendering(VkCommandBuffer commandBuffer, const SrConfig& config,
                                const temporal::TemporalFrameInputs& inputs, plume::VulkanTexture& output, bool reset);
     void CaptureNeuralRenderingInput(VkCommandBuffer commandBuffer, const SrConfig& config,
@@ -312,7 +313,7 @@ private:
     NeuralRenderingTuning nrPreviewTuning_{};
     // Evaluates still to run before the static frame's answer settles.
     uint32_t nrPreviewSettle_ = 0;
-    bool nrPreviewReset_ = true, nrPreviewCreated_ = false;
+    bool nrPreviewReset_ = true, nrPreviewFailed_ = false;
 #if defined(_WIN32)
     // D3D12 has no format-converting blit: the SR output is copied to nrStage_
     // and converted to and from the FP16 images by a small compute pass.
