@@ -56,6 +56,13 @@ including negative seed and output/flag aliasing; independent seed/components
 are checked. Library build and review pass. No statistical or concurrency claim
 is made, and these entries retain zero catalog credit.
 
+`indexed_record_retire61` recovers 822CBA60 (187 instructions): reverse-scan
+active halfword indices, retire over-threshold records by swapping the final
+index into the removed slot, decrement count and clear the exact five-float
+record region. Three original-body Full72/RAM/host CSR cases pass with independent
+index/count/clearing assertions, spanning the four-item loop and tail. Library
+build/review pass. Storage is borrowed; no allocator or broad guards are added.
+
 Bounded private-image investigation establishes vtables at 820D58A0 (installed
 by B9CC00) and 820D5C58 (installed by B9E220/B9E2D8/B9E388). Their slots +0C,
 +14 and +18 point to B9DD90, B9DF18 and B9DFA0 respectively. B9CBC0 occurs at

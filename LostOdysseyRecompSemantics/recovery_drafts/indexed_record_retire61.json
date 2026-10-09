@@ -1,0 +1,36 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Private generated bodies are pinned by SHA256 of UTF-8 with LF line endings and no final newline; no generated code is embedded.",
+  "entries": [
+    {
+      "address": "822CBA60",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.2.cpp",
+      "source_line": 44233,
+      "instruction_count": 187,
+      "body_sha256": "f872e70a1d66f25fb6209a7f67002cd6e1ecf548eaa7264177599577411ff478",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 3,
+    "library_validated": true,
+    "library": "PASS incremental complete Clang 19 CMake static library; existing unused-function warning exception retained.",
+    "platform": "Linux x64; Clang 19.1.7; genuine XEX regenerated with pinned XenonRecomp ddd128bc plus tracked patch; existing oracle guest-window allocation overlaid with mmap/mprotect only",
+    "mapping_credit": 0,
+    "mapping_limit": "Fixed historical catalog.sqlite unavailable; do not infer membership from regenerated sources. 82BB25D0 is explicitly external in prior handoff.",
+    "runtime_validated": false,
+    "complete": false,
+    "limits": "Selected finite inputs, ordinary RAM, Full72 state, callbacks and host CSR only. No Windows revalidation, nonfinite matrix, faults/MMIO, concurrency, runtime or gameplay acceptance.",
+    "case_scope": "Three complete original-body cases: empty, three-item tail, seven-item mixed unrolled/tail retirement. Full72/RAM/actual host CSR plus independent swapped-last index order, active count and exact five-float clearing region assertions. Borrowed record/index arrays; no allocation/free or guest lowers. Original full-width products, reloads and halfword stores retained. Finite valid records only; nonfinite/fault/concurrent/runtime behavior unverified."
+  },
+  "implementation": {
+    "entries": [
+      "822CBA60"
+    ],
+    "header": "include/lo_semantics/indexed_record_retire61.h",
+    "source": "src/indexed_record_retire61.cpp",
+    "oracle": "tests/indexed_record_retire61_oracle.cpp"
+  }
+}
