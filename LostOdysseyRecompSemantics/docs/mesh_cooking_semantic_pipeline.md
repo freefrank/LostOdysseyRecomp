@@ -82,6 +82,15 @@ two-word owner records newly allocated destinations only. BB9160 replaces mesh
 +20 with sign-reversed angle-weighted normals and releases temporary face data.
 Keep face and vertex ownership separate in a Rust port.
 
+## Packed triangle links
+
+BC3F20 builds three adjacency words per triangle, using side order (0,1),
+(0,2), (1,2). Low 29 bits hold the neighboring triangle ID; all-ones indicates
+a boundary. Top two bits hold its edge slot. Bit 29 carries the optional
+geometric selection flag. Stable endpoint sorting groups manifold pairs;
+original nonmanifold diagnostics remain in place. The owned payload follows
+a four-byte count prefix and cleanup releases payload minus four.
+
 ## Remaining upper dependencies
 
 82B9C7D8 (mesh cooking orchestration) is still incomplete. Its constructor,

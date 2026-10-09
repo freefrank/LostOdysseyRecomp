@@ -1,3 +1,7 @@
+## Root direct continuation: packed triangle adjacency (2026-10-09)
+
+`mesh_triangle_links61` closes BC38E8/BC3970/BD9218/BC3EC0/BC3B10/BC3CB0/BC3F20: emit normalized edge records, stable-group owners, write reciprocal packed triangle links, optionally tag geometric boundaries and release prefixed storage. Ten focused original-local-chain/shared-sort-and-topology cases pass Full72/RAM/CSR/callbacks plus independent packed links, boundary count and ownership. Both index widths and optional coplanar filter pass; diagnostics/nonmanifold/failure matrices omitted. Full Clang library passes; seven implementation entries, no historical mapping/runtime claim.
+
 ## Root direct continuation: polygon planes and byte winding (2026-10-09)
 
 `mesh_polygon_plane61` closes BD9390 Newell plane accumulation and BC3880 byte-index reversal. Five complete-original-body cases cover scalar triangle, four-edge quad, quad plus scalar tail, invalid count and odd reversal. Full72/RAM/CSR and independent plane values pass; full Clang library passes. The plane offset uses vertex arithmetic mean, distinct from the surface-area centroid. Two implementation entries, no baseline/runtime claim.

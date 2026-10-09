@@ -1,0 +1,87 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Triangle adjacency construction, stable edge grouping, reciprocal packed links, optional geometric flags, boundary counting and prefixed ownership.",
+  "entries": [
+    {
+      "address": "82BC38E8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 35249,
+      "instruction_count": 34,
+      "body_sha256": "fe5d82cfcb479226a3e9ca749c8a377ab7f417abdb7171c238200ccc50514ce0",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BC3970",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 35327,
+      "instruction_count": 104,
+      "body_sha256": "1178e7226d3c84706e0e544636d158c550b55526c9ffa40a6fb95c6800d4517b",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD9218",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 22928,
+      "instruction_count": 41,
+      "body_sha256": "01a730d9b0cfed6c50464fbfa0d1c4857deceaa7455a5ff38d2fa1ebf4dea354",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BC3EC0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 36072,
+      "instruction_count": 23,
+      "body_sha256": "40240b51f9ab42b2e189b328eea80f79e50aa3f6b0325018784a9a2a04468fe4",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BC3B10",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 35546,
+      "instruction_count": 103,
+      "body_sha256": "b6f7c857757017df3b6780f6a7dc1c01e9b2a778516d7f82d23dbb49a595a497",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BC3CB0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 35772,
+      "instruction_count": 132,
+      "body_sha256": "02b48fcf011781d7520a2e50bf3ca9248e9c43a4b66ac281f88dc1f57455ed84",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BC3F20",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 36129,
+      "instruction_count": 206,
+      "body_sha256": "229070461d1ebfea17bc4d9ff973e04f2cf0bd00a0d6f807522023bcc739dad5",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BC38E8",
+      "82BC3970",
+      "82BD9218",
+      "82BC3EC0",
+      "82BC3B10",
+      "82BC3CB0",
+      "82BC3F20"
+    ],
+    "header": "include/lo_semantics/mesh_triangle_links61.h",
+    "source": "src/mesh_triangle_links61.cpp",
+    "oracle": "tests/mesh_triangle_links61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 10,
+    "library_validated": true,
+    "case_scope": "Actual original local build/sort/link/side chain with shared concrete stable-sort, allocator and optional topology filter lowers. Full72/RAM/CSR/events/ownership; u32/u16 builds, coplanar filtering, independent packed links/boundary count, side lookup, prefixed release. Diagnostics/nonmanifold/partial-allocation failures not exercised.",
+    "platform": "Linux x64 Clang19; pinned PPC; mmap guest overlay"
+  }
+}

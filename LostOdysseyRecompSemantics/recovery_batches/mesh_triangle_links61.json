@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "mesh-triangle-links61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/mesh_triangle_links61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/mesh_triangle_links61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\nvoid LinksIndirect(std::uint32_t,PPCContext&,std::uint8_t*);\nvoid LinksLower(std::uint32_t,PPCContext&,std::uint8_t*);\nvoid LinksSave(PPCContext&,std::uint8_t*);\nvoid LinksRestore(PPCContext&,std::uint8_t*);\n#undef PPC_CALL_INDIRECT_FUNC\n#define PPC_CALL_INDIRECT_FUNC(t) LinksIndirect((t),ctx,base)\n#define __savegprlr_26 LinksSave\n#define __restgprlr_26 LinksRestore\n#define sub_82BD0798(c,b) LinksLower(0x82bd0798u,c,b)\n#define sub_82B9D328(c,b) LinksLower(0x82b9d328u,c,b)\n#define sub_82BD9218 __imp__sub_82BD9218\nvoid LinksSave24(PPCContext&,std::uint8_t*);\nvoid LinksRestore24(PPCContext&,std::uint8_t*);\n#define __savegprlr_24 LinksSave24\n#define __restgprlr_24 LinksRestore24\n#define sub_82BC3970 __imp__sub_82BC3970\n#define sub_82BC3B10 __imp__sub_82BC3B10\n#define sub_82BC3CB0 __imp__sub_82BC3CB0\n#define sub_82BD2C50(c,b) LinksLower(0x82bd2c50u,c,b)\n#define sub_82BD2C78(c,b) LinksLower(0x82bd2c78u,c,b)\n#define sub_82BD2DF0(c,b) LinksLower(0x82bd2df0u,c,b)\n#define sub_82BBD4C0(c,b) LinksLower(0x82bbd4c0u,c,b)\n#define sub_82BBDDF0(c,b) LinksLower(0x82bbddf0u,c,b)\n#define sub_82BBD4E0(c,b) LinksLower(0x82bbd4e0u,c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/mesh_triangle_links61.cpp"
+      ]
+    }
+  ]
+}
