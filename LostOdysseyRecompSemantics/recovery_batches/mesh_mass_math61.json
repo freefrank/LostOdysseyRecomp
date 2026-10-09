@@ -5,7 +5,7 @@
       "name": "mesh-mass-math61",
       "manifest": "LostOdysseyRecompSemantics/recovery_drafts/mesh_mass_math61.json",
       "harness": "LostOdysseyRecompSemantics/tests/mesh_mass_math61_oracle.cpp",
-      "prelude": "#include \"ppc_context.h\"\n",
+      "prelude": "#include \"ppc_context.h\"\nvoid MassSaveGpr(unsigned,PPCContext&,std::uint8_t*);\nvoid MassRestoreGpr(unsigned,PPCContext&,std::uint8_t*);\nvoid MassSaveFpr(unsigned,PPCContext&,std::uint8_t*);\nvoid MassRestoreFpr(unsigned,PPCContext&,std::uint8_t*);\n#define __savegprlr_29(c,b) MassSaveGpr(29,c,b)\n#define __restgprlr_29(c,b) MassRestoreGpr(29,c,b)\n#define __savefpr_15(c,b) MassSaveFpr(15,c,b)\n#define __restfpr_15(c,b) MassRestoreFpr(15,c,b)\n#define __savefpr_23(c,b) MassSaveFpr(23,c,b)\n#define __restfpr_23(c,b) MassRestoreFpr(23,c,b)\n#define sub_82BCCE48 __imp__sub_82BCCE48\n#define __savegprlr_26(c,b) MassSaveGpr(26,c,b)\n#define __restgprlr_26(c,b) MassRestoreGpr(26,c,b)\n#define sub_82BCD0F8 __imp__sub_82BCD0F8\n#define sub_82BCD300 __imp__sub_82BCD300\n#define sub_82BCCCA8 __imp__sub_82BCCCA8\n#define sub_82BCD400 __imp__sub_82BCD400\n",
       "sources": [
         "LostOdysseyRecompSemantics/src/mesh_mass_math61.cpp"
       ]

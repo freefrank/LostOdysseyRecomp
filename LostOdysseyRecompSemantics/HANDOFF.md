@@ -1,3 +1,7 @@
+## Root direct continuation: complete mass integration chain (2026-10-09)
+
+`mesh_mass_math61` adds BCCE48 projected polynomial integration, BCD0F8 plane lift, BCD400 signed-volume accumulation and BCD8A8 seven-word descriptor/density adapter. Eleven focused cases now compose the complete original local chain, comparing Full72/RAM/CSR and independent projected/face monomials plus translated cube volume, centroid and origin/centroid tensors. u32 direct and reversed-winding u16 wrapper paths pass, as does the disabled global gate. Constants are external/private via LO_MASS_CONSTANTS (128 bytes). Full Clang library passes. B9F418 cached-owner assembly remains next; no gameplay or historical mapping credit.
+
 ## Root direct continuation: mass-property plane and inertia (2026-10-09)
 
 `mesh_mass_math61` closes BCD300 strided triangle plane and BCCCA8 density-scaled inertia with parallel-axis correction. Four complete-original-leaf cases pass Full72/RAM/CSR and independent strided/degenerate planes, translated uniform cube inertia and zero-volume handling. Full Clang library passes. Projection/face/volume integration and cached owner assembly remain next, so this is not a complete mass-properties pipeline or gameplay claim.

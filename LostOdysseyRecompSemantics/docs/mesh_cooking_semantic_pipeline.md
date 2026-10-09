@@ -132,7 +132,17 @@ binary32 geometry operations while exporting four binary64 plane coefficients.
 BCCCA8 consumes volume/first/second/product moments at +288..360 and density
 at +56, writes mass +48, and emits a symmetric binary64 inertia tensor about
 the centroid. Centroid and parallel-axis products intentionally round through
-binary32. Projection, face and volume integration are still open.
+binary32.
+
+BCCE48 integrates ten projected monomials through degree three; BCD0F8 lifts
+them through the dominant-axis plane to twelve face moments. BCD400 uses
+those moments for signed volume, first/second/product integrals, centroid and
+tensors about both the origin and centroid. The seven-word descriptor is
+vertex count, triangle count, position stride, index-record stride, positions,
+indices and flags (bit 1: u16 indices; bit 0: reverse winding). BCD8A8 wraps
+that descriptor with binary64 density. Output stores xyz float centroid +0,
+binary64 mass +16, origin tensor +24 and centroid tensor +96. Keep guest
+integration-enable gate and signed-volume behavior for owner-level policy.
 
 ## Remaining upper dependencies
 
