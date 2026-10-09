@@ -38,6 +38,10 @@ bool Session::Initialize() {
     if (vkCreateFence(device_.vk, &info, nullptr, &completion_) != VK_SUCCESS) return false;
     options_.numFramesToGenerate = 1;
     options_.queueParallelismMode = sl::DLSSGQueueParallelismMode::eBlockPresentingClientQueue;
+    // Frames without inputs (SR frame fallbacks) turn DLSS-G off briefly. By
+    // default eOff frees the feature and eOn recreates it at Present, a long
+    // frame each way (DLSS-G guide 6.4). Quiesce frees it at real boundaries.
+    options_.flags = sl::DLSSGFlags::eRetainResourcesWhenOff;
     creationFailuresSeen_ = runtime_.FeatureCreationFailureCount();
     ready_ = true;
     return Mode(false);
@@ -387,19 +391,26 @@ void Session::Quiesce() {
     Disable();
     const auto result = vkDeviceWaitIdle(device_.vk);
     if (result != VK_SUCCESS) FailClosed("SDK quiesce failed", int32_t(result));
+    // With eRetainResourcesWhenOff, eOff keeps the feature's memory. Settings,
+    // window/swapchain changes and shutdown free it after eOff (guide 6.4).
+    const bool held = used_;
+    if (held && !runtime_.FreeResources(sl::kFeatureDLSS_G, viewport_))
+        LOG_ERROR("DLSS FG: feature release failed at resource boundary; shutdown retries it");
+    else used_ = false;
     runtimeState_.ResourceBoundary();
     presentCounter_.Reset();
     token_ = nullptr;
-    LOG_INFO("DLSS FG quiesce: submitted_input_serial={} completed_input_serial={} pending=false retained=false",
-        inputCompletion_.SubmittedSerial(), inputCompletion_.CompletedSerial());
+    LOG_INFO("DLSS FG quiesce: submitted_input_serial={} completed_input_serial={} pending=false retained=false feature_freed={}",
+        inputCompletion_.SubmittedSerial(), inputCompletion_.CompletedSerial(), held && !used_);
 }
 void Session::Shutdown() {
     if (!ready_) return;
     // Off applies at a later Present. Do not issue a fake frame. First retire
     // inputs by their checked marker, then drain before SDK/device teardown.
     Quiesce();
-    // Release the FG feature while both Streamline and native NGX sessions
-    // are alive. A local fence drain does not prove SDK destruction succeeded.
+    // Quiesce released the FG feature while both Streamline and native NGX
+    // sessions are alive. Retry a failed release once, then fail closed: a
+    // local fence drain does not prove SDK destruction succeeded.
     if (used_ && !runtime_.FreeResources(sl::kFeatureDLSS_G, viewport_))
         FailClosed("FG feature release failed");
     used_ = false;
