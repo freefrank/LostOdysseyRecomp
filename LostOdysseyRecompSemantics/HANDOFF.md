@@ -1,3 +1,7 @@
+## Root direct continuation: hull scratch registration and exit callbacks (2026-10-09)
+
+First-use clip registration now checks the actual signed-addi callback targets830D9990/830D9930. Earlier untested constants incorrectly used830E9990/830E9930; corrected. Both original scratch destructors are concrete and release/zero their respective arrays. Focused smoke enters with unset registration flags, records exactly two accepted CRT registration calls, runs repeated clipping, then allocates/destructs both scratch arrays. CRT registry internals remain an explicit82B7BE48 boundary, not a no-op implementation. Full library passes.
+
 ## Root direct continuation: three complete cook-main paths (2026-10-09)
 
 B9C7D8 now executes indexed, plain point-only and inflated point-only tetrahedron paths through concrete geometry, tree/bounds/support, NXS/CVXM serialization and complete owner/temporary cleanup. Flags0 and4 each emit564 bytes; flags12 emits1025 bytes. All return success with NXS headers, stack/low-LR preservation and zero tracked surviving allocations. Expanded smoke bump-allocation guest window accommodates the longer inflated pipeline; no implementation guard was added. Hull scratch first-use registration flags are explicitly seeded. These are logical main-path smoke checks, not original Full72, byte-identical cooked files or gameplay acceptance. Existing warnings/diagnostics and source failure ownership remain.

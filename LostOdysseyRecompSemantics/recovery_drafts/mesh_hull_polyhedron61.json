@@ -89,6 +89,22 @@
       "instruction_count": 379,
       "body_sha256": "afacd8197dddceb1d7f6f1d196fa04249cd29c67afaeffbfad0874d449d99553",
       "status": "logical_implementation_compile_validated"
+    },
+    {
+      "address": "830D9990",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.244.cpp",
+      "source_line": 3553,
+      "instruction_count": 24,
+      "body_sha256": "c9e9bb87aa8b14852123173cda23df66b1ef4d9ab25f737543ac79f3235fec3e",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "830D9930",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.244.cpp",
+      "source_line": 3495,
+      "instruction_count": 24,
+      "body_sha256": "d1be7fca84940f83b91dc102a24a1a2619e9522ac2ded41e6e92adea81d17582",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -103,7 +119,9 @@
       "82BA2330",
       "82BA29D8",
       "82BA2E00",
-      "82BA5480"
+      "82BA5480",
+      "830D9990",
+      "830D9930"
     ],
     "header": "include/lo_semantics/mesh_hull_polyhedron61.h",
     "source": "src/mesh_hull_polyhedron61.cpp",
@@ -117,9 +135,9 @@
     "runtime_validated": false,
     "complete": false,
     "focused_smoke_paths": 4,
-    "case_scope": "Unit cube with 8 vertices/24 reciprocal half edges/6 planes passes topology, plane distances and winding. Cutting-plane selection picks x=0.5 and skips existing x=1. Half-cube clipping returns valid topology and bounded x. Full BA5CF8 inflated cube path returns 8 points and 12 triangles spanning [-0.1,1.1] on each axis; output ownership and input cube completely released. Nonvolatile GPR/stack and low-word LR preservation checked. No full-memory/volatile-register/bitwise-FP comparison or gameplay acceptance.",
+    "case_scope": "Unit cube with 8 vertices/24 reciprocal half edges/6 planes passes topology, plane distances and winding. Cutting-plane selection picks x=0.5 and skips existing x=1. Half-cube clipping returns valid topology and bounded x. Full BA5CF8 inflated cube path returns 8 points and 12 triangles spanning [-0.1,1.1] on each axis; output ownership and input cube completely released. Nonvolatile GPR/stack and low-word LR preservation checked. No full-memory/volatile-register/bitwise-FP comparison or gameplay acceptance. First-use registration now checks both callback addresses against source and confirms single registration; both scratch destructors release allocated buffers and zero their descriptors.",
     "implementation_limits": "Logical high-level clipping uses host temporary vectors/maps while retaining guest output layouts and explicit guest allocation/lifetime. Source scratch byte ordering and all floating-point evaluation order are not claimed equivalent. Failure/degenerate/nonfinite/allocator-fault matrices not exercised.",
-    "remaining_boundary": "First-use clip scratch registers original callbacks through accepted guest 82B7BE48. Smoke seeds existing registration flags; registration execution itself is not tested.",
+    "remaining_boundary": "82B7BE48 accepted guest CRT registration remains explicit; the focused smoke records its two callback arguments and returns successful registration, without claiming CRT registry implementation.",
     "private_constants": "Uses LO_HULL_INCREMENTAL_CONSTANTS (192 bytes), as documented by mesh_hull_incremental61. No original binary, generated body or extracted coefficients are published."
   }
 }

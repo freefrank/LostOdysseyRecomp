@@ -289,3 +289,8 @@ BA5480 now expands input planes, initializes a bounds polyhedron, selects and ap
 ### Current end-to-end cooking checkpoint
 
 The three B9C7D8 paths now run through concrete helpers: indexed tetrahedron564 bytes, plain point-only tetrahedron564 bytes, inflated point-only tetrahedron1025 bytes. NXS header, successful return, stack/low-LR restoration and complete tracked cleanup pass. This supersedes earlier chronological notes about unresolved hull algorithms. First-use CRT registration remains an accepted boundary and is seeded as initialized in the smoke. No byte-identical output or gameplay claim.
+
+
+### Scratch exit registration
+
+First-use callback targets are verified as830D9990 and830D9930, including signed-address formation. The two scratch destructors are concrete. The fixture records registration calls and verifies no duplicate registration on repeated clipping, then executes both destructors. CRT registration internals remain an accepted boundary.

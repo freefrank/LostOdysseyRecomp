@@ -73,7 +73,7 @@ int main() {
         call(0x82ba17e8, {Input, 1, box});
         if (std::int32_t(s.r[3]) != 0)
             throw std::runtime_error("select cutting plane");
-        m.WriteU32(0x832dc444, 3);
+        env.guest.acceptExitRegistration = true;
         call(0x82ba2e00, {box, Input});
         auto clipped = Address(s.r[3]);
         if (!clipped || m.ReadU32(clipped + 4) != 8 || m.ReadU32(clipped + 28) != 6)
@@ -129,6 +129,18 @@ int main() {
         for (auto off : {8u, 20u}) {
             s.r[4] = m.ReadU32(Polygons + off);
             env.guest.CallIndirect(Free, m, s);
+        }
+        if (env.guest.exitCallbacks != std::vector<GuestAddress>{0x830d9990u, 0x830d9930u})
+            throw std::runtime_error("first-use exit callbacks");
+        for (auto pair : std::array<std::pair<unsigned, unsigned>, 2>{
+                 {{0x830d9990u, 0x832dc438u}, {0x830d9930u, 0x832dc42cu}}}) {
+            s.r[3] = pair.second;
+            s.r[4] = 4;
+            (void)mesh_hull_preprocess61::Apply(0x82ba1138u, m, env.Deps(), s);
+            m.WriteU32(pair.second + 4, 1);
+            call(pair.first, {});
+            if (m.ReadU32(pair.second) || m.ReadU32(pair.second + 4) || m.ReadU32(pair.second + 8))
+                throw std::runtime_error("scratch destructor state");
         }
         call(0x82ba1e30, {box});
         s.r[4] = box;

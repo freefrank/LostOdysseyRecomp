@@ -201,7 +201,7 @@ struct Polyhedron {
     void InitClipScratch() {
         constexpr unsigned flag = 0x832dc444u;
         constexpr unsigned descriptors[]{0x832dc438u, 0x832dc42cu};
-        constexpr unsigned callbacks[]{0x830e9990u, 0x830e9930u};
+        constexpr unsigned callbacks[]{0x830d9990u, 0x830d9930u};
         for (unsigned i = 0; i < 2; ++i) {
             auto bits = Word(flag);
             if (!(bits & (1u << i))) {
@@ -529,6 +529,8 @@ bool Apply(GuestAddress entry, GuestMemory &m, Dependencies d, Registers &s) {
     case 0x82b9fc58u:
     case 0x82ba2e00u:
     case 0x82ba5480u:
+    case 0x830d9990u:
+    case 0x830d9930u:
     case 0x82ba0fc8u:
     case 0x82ba2330u:
     case 0x82ba29d8u:
@@ -566,6 +568,14 @@ bool Apply(GuestAddress entry, GuestMemory &m, Dependencies d, Registers &s) {
                      ? 1
                      : 0;
         break;
+    case 0x830d9990u:
+    case 0x830d9930u: {
+        auto descriptor = entry == 0x830d9990u ? 0x832dc438u : 0x832dc42cu;
+        p.Free(p.Word(descriptor), entry == 0x830d9990u ? 0x830d99ccu : 0x830d996cu);
+        for (unsigned off : {0, 4, 8})
+            p.Word(descriptor + off, 0);
+        break;
+    }
     case 0x82ba0fc8u:
         p.ReserveEdges(Address(a[3]), Address(a[4]));
         break;
