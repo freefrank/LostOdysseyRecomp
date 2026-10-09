@@ -93,6 +93,9 @@ endif()
 # miniz (XenosRecomp submodule) writes the asset exporter's PNG files.
 set(LO_MINIZ_DIR "${CMAKE_SOURCE_DIR}/tools/XenosRecomp/thirdparty/smol-v/testing/external/miniz" CACHE PATH
     "miniz sources used by the asset exporter")
+# xxHash for the exporter's texture fingerprints (the runtime links xxHash::xxhash).
+set(LO_XXHASH_DIR "${CMAKE_SOURCE_DIR}/tools/XenosRecomp/thirdparty/xxHash" CACHE PATH
+    "xxHash sources used by the focused LoAssetExport target")
 
 if(LO_BUILD_RUNTIME)
     if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
@@ -149,8 +152,9 @@ if(LO_BUILD_MOD_TESTS)
             LostOdysseyRecomp/modding/asset_export.cpp
             LostOdysseyRecomp/modding/mod_api.cpp
             thirdparty/lzokay/lzokay.cpp
-            ${LO_MINIZ_DIR}/miniz.c)
-        target_include_directories(LoAssetExport PRIVATE LostOdysseyRecomp thirdparty/lzokay ${LO_MINIZ_DIR})
+            ${LO_MINIZ_DIR}/miniz.c
+            ${LO_XXHASH_DIR}/xxhash.c)
+        target_include_directories(LoAssetExport PRIVATE LostOdysseyRecomp thirdparty/lzokay ${LO_MINIZ_DIR} ${LO_XXHASH_DIR})
         target_compile_features(LoAssetExport PRIVATE cxx_std_20)
         target_compile_definitions(LoAssetExport PRIVATE NOMINMAX)
         target_link_libraries(LoAssetExport PRIVATE Threads::Threads)
