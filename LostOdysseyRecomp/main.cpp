@@ -1,4 +1,4 @@
-#include <gpu/taa_collection.h>
+#include <os/log_collection.h>
 #include <stdafx.h>
 #include <cpu/guest_thread.h>
 #include <kernel/function.h>
@@ -40,10 +40,12 @@
 #include "version.h"
 #include "install/host.h"
 #include "modding/mod_api.h"
+#include "modding/asset_export.h"
 
 #ifdef _WIN32
 #include <timeapi.h>
 #include <shellapi.h>
+#include <fstream>
 #endif
 #include <os/host_scheduling.h>
 #include <os/main_thread.h>
@@ -111,6 +113,39 @@ static std::filesystem::path ExecutableDirectory()
 #endif
     return std::filesystem::current_path();
 }
+
+#ifdef _WIN32
+// ReShade and similar tools install their own dxgi.dll beside the exe for
+// D3D12. Vulkan never uses it, but SDL3 loads DXGI.DLL by name at video init,
+// which picks that copy, and NVIDIA's Vulkan driver then presents through it
+// and crashes (#323). On Vulkan, load the system copy first: later loads by
+// name bind to the module already loaded. Runs before any SDL window.
+static void PreferSystemDxgiOnVulkan(const std::filesystem::path& executableDirectory)
+{
+    std::error_code error;
+    const auto local = executableDirectory / "dxgi.dll";
+    if (!std::filesystem::exists(local, error)) return;
+    auto configured = settings::GraphicsBackend::D3D12;
+    std::ifstream input(os::user_paths::SettingsPath());
+    for (std::string line; std::getline(input, line);)
+        if (line.rfind("graphics_backend=", 0) == 0)
+            configured = settings::GraphicsBackend(std::strtoul(line.c_str() + 17, nullptr, 10));
+    if (gpu::backend::Requested(configured, getenv("LO_GRAPHICS_API")) != gpu::backend::Backend::Vulkan) return;
+    const HMODULE dxgi = LoadLibraryExW(L"dxgi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    wchar_t loaded[MAX_PATH]{};
+    if (!dxgi || !GetModuleFileNameW(dxgi, loaded, MAX_PATH)) {
+        LOG_WARNING("Vulkan: system dxgi.dll could not be loaded first (error {}); {} may load instead",
+            GetLastError(), FileSystem::PathUtf8(local));
+        return;
+    }
+    if (std::filesystem::equivalent(loaded, local, error))
+        LOG_WARNING("Vulkan: {} (ReShade or another D3D tool) was already loaded and may crash Vulkan presentation",
+            FileSystem::PathUtf8(local));
+    else
+        LOG_INFO("Vulkan: {} (ReShade or another D3D tool) is not loaded; it only works with Direct3D 12",
+            FileSystem::PathUtf8(local));
+}
+#endif
 
 static settings::game_path::Resolution FindGameRoot(
     const std::filesystem::path& executableDirectory,
@@ -245,6 +280,16 @@ int main(int argc, char* argv[])
         setupOnly |= strcmp(argv[i],"--setup-only")==0;
         prepareShadersOnly |= strcmp(argv[i],"--prepare-shaders-only")==0;
         requestedInstall |= strcmp(argv[i],"--install")==0;
+        // Mod Organizer 2 cannot set environment variables for the game, so
+        // its executable arguments carry the mod mode instead.
+        if (strcmp(argv[i], "--mods-mode") == 0 && i + 1 < argc)
+        {
+#ifdef _WIN32
+            _putenv_s("LO_MODS_MODE", argv[i + 1]);
+#else
+            setenv("LO_MODS_MODE", argv[i + 1], 1);
+#endif
+        }
     }
     const auto executableDirectory = ExecutableDirectory();
 #if LO_PLATFORM_SWITCH
@@ -271,10 +316,13 @@ int main(int argc, char* argv[])
     }
 #endif
     os::user_paths::Initialize(executableDirectory);
-    const auto modsRoot = os::user_paths::UsePortableLayout()
-        ? executableDirectory / "mods"
-        : os::user_paths::DataDir() / "mods";
-    modding::Initialize(modsRoot);
+#if !LO_PLATFORM_ANDROID
+    // --export-assets copies game files for mod authors, then exits. It runs
+    // before the working-directory change (relative output folders), logs,
+    // update check, mods, installer, window and GPU device.
+    if (const auto exportRequest = modding::asset_export::ParseArguments(argc, argv))
+        return modding::asset_export::Run(*exportRequest, FindGameRoot(executableDirectory, explicitGamePath).root);
+#endif
     // Direct launches keep all portable data beside the executable. Explicit
     // --game launches retain their caller's working directory for isolated tests.
     if(!explicitGame && os::user_paths::UsePortableLayout()) {
@@ -287,8 +335,11 @@ int main(int argc, char* argv[])
         std::filesystem::create_directories(os::user_paths::ConfigDir(), ec);
         std::filesystem::current_path(os::user_paths::ConfigDir(), ec);
     }
+    // Info and kernel lines only with the Debug log setting.
+    os::logger::SetDebugLog(updater::ReadStartupPreferences(os::user_paths::SettingsPath()).debugLog);
     // Keep each run separately, including launches without a terminal. Tests
     // can select a path or disable the duplicate sink with LO_LOG_FILE=0.
+    std::filesystem::path sessionLog; // default runtime-<digits>.log, for log collection
     const char* logOverride = getenv("LO_LOG_FILE");
     if (!logOverride || strcmp(logOverride, "0") != 0)
     {
@@ -306,7 +357,10 @@ int main(int argc, char* argv[])
         if (os::logger::OpenFile(logPath))
         {
             if (!logOverride)
+            {
                 os::logger::PruneDefaultLogs(logPath);
+                sessionLog = logPath;
+            }
             LOG_INFO("log file: {}", FileSystem::PathUtf8(logPath));
         }
         else LOG_WARNING("could not open log file: {}", FileSystem::PathUtf8(logPath));
@@ -324,7 +378,10 @@ int main(int argc, char* argv[])
     for (int i = 1; i < argc; i++)
     {
         if (strcmp(argv[i], "--quiet-kernel") == 0)
+        {
+            os::logger::g_quietKernel = true;
             os::logger::g_kernelTrace = false;
+        }
     }
 #if LO_PLATFORM_SWITCH
     // One SD card line per guest file read and allocation: opt in (env.txt).
@@ -345,14 +402,41 @@ int main(int argc, char* argv[])
         for (int i = 0; i < argc; i++)
             cmdline += fmt::format("{}{}", i ? " " : "", argv[i]);
         LOG_INFO("LostOdysseyRecomp starting at {} : {}", stamp, cmdline);
-        LOG_INFO("source version: {}", lo_version::Source);
+        LOG_NOTICE("source version: {}", lo_version::Source);
         std::string switches;
         for (char** e = environ; e && *e; e++)
             if (strncmp(*e, "LO_", 3) == 0)
                 switches += fmt::format(" {}", *e);
-        LOG_INFO("LO_* switches:{}", switches.empty() ? " (none)" : switches.c_str());
+        LOG_NOTICE("LO_* switches:{}", switches.empty() ? " (none)" : switches.c_str());
     }
     os::diagnostics::LogStartupEnvironment();
+#ifdef _WIN32
+    PreferSystemDxgiOnVulkan(executableDirectory);
+#endif
+    {
+        const auto modsRoot = os::user_paths::UsePortableLayout()
+            ? executableDirectory / "mods"
+            : os::user_paths::DataDir() / "mods";
+        // The folder shows players where mods go and gives Mod Organizer 2 an
+        // existing data directory to map its virtual files onto.
+        std::error_code ec;
+        std::filesystem::create_directories(modsRoot, ec);
+        modding::Initialize(modsRoot);
+        if (modding::Enabled())
+        {
+            std::string ids;
+            for (const auto& id : modding::ModIds()) ids += fmt::format("{}{}", ids.empty() ? "" : ", ", id);
+            const auto mode = modding::Mode();
+            LOG_NOTICE("mods: {} (mode {}), standalone mods: {}, overlay folder: {}",
+                FileSystem::PathUtf8(modding::Root()),
+                mode == modding::ResolutionMode::Overlay ? "overlay"
+                    : mode == modding::ResolutionMode::Standalone ? "standalone" : "combined",
+                ids.empty() ? "none" : ids,
+                std::filesystem::is_directory(modding::Root() / "overlay", ec) ? "yes" : "no");
+        }
+        for (const auto& d : modding::Diagnostics())
+            LOG_WARNING("mods: {}:{}: {}", FileSystem::PathUtf8(d.manifest), d.line, d.message);
+    }
 
 #if defined(_WIN32) || defined(__linux__) || defined(__APPLE__)
     // Check for a newer runtime before opening the content importer or setup.
@@ -448,15 +532,20 @@ int main(int argc, char* argv[])
             return 1;
     }
     settings::ConfigureGameLanguages(gameRoot / "default.xex");
-    gpu::taa_collection::Initialize();
-    struct CollectionShutdown
-    {
-        ~CollectionShutdown() { gpu::taa_collection::Shutdown(); }
-    } collectionShutdown;
+    os::log_collection::Initialize();
     if(requestedSetup || (!getenv("LO_BACKGROUND") && !getenv("LO_HEADLESS") && !std::filesystem::exists(os::user_paths::SettingsPath()))) {
         if(!settings::FirstRunSetup(&gameRoot)) return 0;
-        gpu::taa_collection::PromptFirstRun(settings::GetConfig().uiLanguage);
+        os::log_collection::PromptFirstRun(settings::GetConfig().uiLanguage);
         if(setupOnly) return 0;
+    }
+    os::log_collection::StartUpload(sessionLog);
+    {
+        const auto& c = settings::GetConfig();
+        LOG_NOTICE("settings: backend={} output={}x{} window={} render_resolution={} aa={} upscaler={} dlss_quality={} fsr_quality={} "
+                   "frame_rate={} fg_provider={} fg_multiplier={} hdr={} ao={} shadow_resolution={} debug_log={}",
+                   int(c.graphicsBackend), c.width, c.height, int(c.windowMode), c.internalResolution, c.antialiasing,
+                   int(c.upscaler), int(c.dlssQuality), int(c.fsrQuality), c.frameRate, int(c.frameGenerationProvider),
+                   c.frameGenerationMultiplier, c.hdr, c.ambientOcclusion, c.shadowResolution, c.debugLog);
     }
     if (g_memory.base == nullptr)
     {
