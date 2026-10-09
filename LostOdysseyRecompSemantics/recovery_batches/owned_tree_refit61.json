@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "owned-tree-refit61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/owned_tree_refit61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/owned_tree_refit61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nvoid OriginalTreeRefit61Save(PPCContext&,std::uint8_t*);\nvoid OriginalTreeRefit61Restore(PPCContext&,std::uint8_t*);\n#define __savegprlr_26(c,b) OriginalTreeRefit61Save(c,b)\n#define __restgprlr_26(c,b) OriginalTreeRefit61Restore(c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/owned_tree_refit61.cpp"
+      ]
+    }
+  ]
+}

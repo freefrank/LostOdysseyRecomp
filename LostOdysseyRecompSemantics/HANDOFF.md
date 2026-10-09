@@ -9,6 +9,13 @@ cases pass Full72/RAM/host CSR, including four-point unrolling plus tail and
 first-index ties. Full library build passes. Original byte index truncation and
 FP stage ordering are retained; nonfinite/large-index behavior is untested.
 This is a zero-credit implementation pending historical catalog membership.
+`owned_tree_refit61` recovers BDA248/BDA5F0 (330 instructions) as a shared
+node-bounds update plus full reverse traversal or dirty-bit traversal. Three
+complete original-body Full72/RAM/host CSR cases and library build pass, covering
+empty/multiple-item leaves, paired children and cross-word dirty bits. Guest
+arrays/nodes remain borrowed; no guest lower or allocation is introduced.
+Finite bounds and valid indices are the selected scope; nonfinite/invalid input
+and runtime remain unverified.
 
 Bounded private-image investigation establishes vtables at 820D58A0 (installed
 by B9CC00) and 820D5C58 (installed by B9E220/B9E2D8/B9E388). Their slots +0C,

@@ -1,0 +1,45 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Complete genuine bodies pinned by UTF-8 LF SHA256 without final newline; no original code embedded.",
+  "entries": [
+    {
+      "address": "82BDA248",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 25316,
+      "instruction_count": 152,
+      "body_sha256": "fa9f1f6bc40d1287111d12a9e1edb71239fa74c13e07eda828dee180e87afc41",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BDA5F0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 25906,
+      "instruction_count": 178,
+      "body_sha256": "73226bd0ae46f8227d50357822c2ffb10fef96f984edf69dbf39c6f0fd4fedf8",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BDA248",
+      "82BDA5F0"
+    ],
+    "header": "include/lo_semantics/owned_tree_refit61.h",
+    "source": "src/owned_tree_refit61.cpp",
+    "oracle": "tests/owned_tree_refit61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 3,
+    "library_validated": true,
+    "library": "PASS incremental complete Clang 19 CMake static library; existing unused-function warning exception retained.",
+    "platform": "Linux x64; Clang 19.1.7; genuine XEX regenerated with pinned XenonRecomp ddd128bc plus tracked patch; existing oracle guest-window allocation overlaid with mmap/mprotect only",
+    "mapping_credit": 0,
+    "mapping_limit": "Fixed historical catalog.sqlite unavailable; do not infer membership from regenerated sources. 82BB25D0 is explicitly external in prior handoff.",
+    "runtime_validated": false,
+    "complete": false,
+    "limits": "Selected finite inputs, ordinary RAM, Full72 state, callbacks and host CSR only. No Windows revalidation, nonfinite matrix, faults/MMIO, concurrency, runtime or gameplay acceptance.",
+    "case_scope": "Three complete original-body Full72/RAM/host CSR cases: full reverse refit with multi/single/empty leaves and tagged parent pair; dirty low word with empty high word; dirty high-word node32. Independent parent-bounds and consumed-bit checks. Finite ordinary bounds and valid indices only; no nonfinite/fault/MMIO/concurrency/runtime acceptance. No guest lower or allocation."
+  }
+}
