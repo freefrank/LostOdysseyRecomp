@@ -90,6 +90,10 @@ if(LO_BUILD_RECOMP_LIB)
     add_subdirectory(LostOdysseyRecompLib)
 endif()
 
+# miniz (XenosRecomp submodule) writes the asset exporter's PNG files.
+set(LO_MINIZ_DIR "${CMAKE_SOURCE_DIR}/tools/XenosRecomp/thirdparty/smol-v/testing/external/miniz" CACHE PATH
+    "miniz sources used by the asset exporter")
+
 if(LO_BUILD_RUNTIME)
     if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
         message(FATAL_ERROR "The runtime requires a 64-bit target")
@@ -138,6 +142,23 @@ if(LO_BUILD_MOD_TESTS)
         target_compile_options(LoModApiTest PRIVATE -UNDEBUG)
     endif()
     add_test(NAME LoModApiTest COMMAND LoModApiTest)
+    # The runtime's --export-assets mode without game code, GPU or SDL.
+    if(EXISTS "${LO_MINIZ_DIR}/miniz.c")
+        add_executable(LoAssetExport
+            tools/tests/asset_export_cli.cpp
+            LostOdysseyRecomp/modding/asset_export.cpp
+            LostOdysseyRecomp/modding/mod_api.cpp
+            thirdparty/lzokay/lzokay.cpp
+            ${LO_MINIZ_DIR}/miniz.c)
+        target_include_directories(LoAssetExport PRIVATE LostOdysseyRecomp thirdparty/lzokay ${LO_MINIZ_DIR})
+        target_compile_features(LoAssetExport PRIVATE cxx_std_20)
+        target_compile_definitions(LoAssetExport PRIVATE NOMINMAX)
+        target_link_libraries(LoAssetExport PRIVATE Threads::Threads)
+        if(WIN32 AND MSVC)
+            # The runtime's subsystem, so redirected stdout is exercised as shipped.
+            target_link_options(LoAssetExport PRIVATE /SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup)
+        endif()
+    endif()
 endif()
 
 if(UNIX AND NOT ANDROID AND LO_BUILD_RUNTIME)

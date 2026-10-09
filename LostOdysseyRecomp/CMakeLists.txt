@@ -186,6 +186,8 @@ target_include_directories(LostOdysseyRecomp PRIVATE
     ${CMAKE_SOURCE_DIR}/tools/XenonRecomp/thirdparty/simde
     ${CMAKE_SOURCE_DIR}/thirdparty/unordered_dense/include
     ${CMAKE_SOURCE_DIR}/thirdparty/o1heap/o1heap
+    # miniz.h for modding/asset_export.cpp; updater/stage.cpp holds the definitions.
+    ${LO_MINIZ_DIR}
     # gpu/shader/dxc_compiler.cpp is part of every runtime build, GPU or not.
     ${CMAKE_SOURCE_DIR}/tools/XenosRecomp/thirdparty/dxc-bin/inc)
 
