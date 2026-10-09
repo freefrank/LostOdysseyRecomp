@@ -92,6 +92,13 @@ two traversal adapters, its concrete callback targets BD1B50/BD2168/BD1B78 also
 need complete implementations (last one calls accepted growth BD2870). These
 are being recovered together; none is replaced with a fixture algorithm result.
 
+`tree_triangle_bounds61` recovers actual first-table targets BD88E8/BD8AC0/
+BD8B40 (196 instructions): indexed triangle bounds, axis centroid and xyz
+centroid. Four complete-body Full72/RAM/host CSR cases with independent finite
+outputs and library build pass. These match table 820D6C54 slots +4/+12/+16,
+not scripted bounds results. BD8BF8 and the other concrete table/strategy targets
+remain separate work; this does not yet close the full tree-building callback set.
+
 Bounded private-image investigation establishes vtables at 820D58A0 (installed
 by B9CC00) and 820D5C58 (installed by B9E220/B9E2D8/B9E388). Their slots +0C,
 +14 and +18 point to B9DD90, B9DF18 and B9DFA0 respectively. B9CBC0 occurs at

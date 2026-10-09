@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "tree-triangle-bounds61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/tree_triangle_bounds61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/tree_triangle_bounds61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/tree_triangle_bounds61.cpp"
+      ]
+    }
+  ]
+}

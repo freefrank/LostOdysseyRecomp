@@ -1,0 +1,54 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Private generated bodies are pinned by SHA256 of UTF-8 with LF line endings and no final newline; no generated code is embedded.",
+  "entries": [
+    {
+      "address": "82BD88E8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 21539,
+      "instruction_count": 118,
+      "body_sha256": "03c2e8174fee7e768b2cb882b35aea71d170dc60a05c1c16de8444c542615dd8",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD8AC0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 21839,
+      "instruction_count": 32,
+      "body_sha256": "455755d97c86d10394aee6c29ae14928e5385d0086ec2906c0cd531e69e5ba25",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD8B40",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 21914,
+      "instruction_count": 46,
+      "body_sha256": "54027cee5d605e4dacf6d8a3cb1e4e2762fba9649da8323c3c48832e4d3d4a65",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 4,
+    "library_validated": true,
+    "library": "PASS incremental complete Clang 19 CMake static library; existing unused-function warning exception retained.",
+    "platform": "Linux x64; Clang 19.1.7; genuine XEX regenerated with pinned XenonRecomp ddd128bc plus tracked patch; existing oracle guest-window allocation overlaid with mmap/mprotect only",
+    "mapping_credit": 0,
+    "mapping_limit": "Fixed historical catalog.sqlite unavailable; do not infer membership from regenerated sources. 82BB25D0 is explicitly external in prior handoff.",
+    "runtime_validated": false,
+    "complete": false,
+    "limits": "Selected finite inputs, ordinary RAM, Full72 state, callbacks and host CSR only. No Windows revalidation, nonfinite matrix, faults/MMIO, concurrency, runtime or gameplay acceptance.",
+    "case_scope": "Four complete original-body cases: empty bounds, multiple indexed triangle bounds, axis centroid and xyz centroid. Full72/RAM/actual host CSR plus independent finite outputs compared. Real firsttable820D6C54 targets at+4/+12/+16, borrowed triangle/index/vertex data and FP service only. No dynamic guest lowers or allocations. Nonfinite/invalid-index/fault/concurrent/runtime behavior unverified; BD8BF8 axis split remains separate."
+  },
+  "implementation": {
+    "entries": [
+      "82BD88E8",
+      "82BD8AC0",
+      "82BD8B40"
+    ],
+    "header": "include/lo_semantics/tree_triangle_bounds61.h",
+    "source": "src/tree_triangle_bounds61.cpp",
+    "oracle": "tests/tree_triangle_bounds61_oracle.cpp"
+  }
+}
