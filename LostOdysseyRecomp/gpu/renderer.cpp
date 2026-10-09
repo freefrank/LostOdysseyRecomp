@@ -648,6 +648,7 @@ namespace gpu::renderer
             geometry_prepare::IndexCache indexCache;
             uint64_t indexCacheHits = 0, indexCacheMisses = 0;
             uint64_t uploadGenerations = 0; // Source of GpuSlot::uploadGeneration.
+            uint64_t uploadRingRewinds = 0; // Mid-frame Flush/Begin pairs forced by a full upload ring.
             std::array<uint64_t, kGpuSlots> motionArenaGeneration{};
             void ResetSlotArena(uint32_t i)
             {
@@ -1317,6 +1318,16 @@ namespace gpu::renderer
             bool textureBcReplacementWarned = false; // one warning when BC replacements are skipped
             uint32_t textureReplacements = 0; // per stats window
             uint64_t textureReplacementsTotal = 0;
+            // Render-thread time replacements took this frame (file lookups,
+            // reads, uploads); ReportReplacementCost logs a frame that may hitch.
+            struct ReplacementCost
+            {
+                uint32_t reads = 0, misses = 0, uploads = 0;
+                uint64_t readBytes = 0, ringRewinds = 0;
+                double readMs = 0, missMs = 0, uploadMs = 0;
+                uint64_t slowestFingerprint = 0, slowestBytes = 0;
+                double slowestMs = 0;
+            } replacementCost;
             uint64_t controllerAtlasFamilyFrame = ~0ull;
             bool controllerAtlasPlayStationFamily = false;
             uint64_t controllerAtlasTraceFrame = ~0ull;
@@ -4615,6 +4626,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (offset + size + keepFree > kUploadRingSize)
                 {
                     // Out of space mid-frame: finish what we have and start over.
+                    uploadRingRewinds++;
                     if (!Flush() || !Begin()) return UINT64_MAX;
                     offset = 0;
                     Gpu().uploadGeneration = ++uploadGenerations; // Rewound even if Begin did not recycle the slot.
@@ -6973,6 +6985,20 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 return false;
             }
 
+            // A notice for each frame whose replacements held the render thread
+            // for 4 ms or more (half a 120 fps frame), so hitches can be lined
+            // up with mod file reads and uploads without Debug log.
+            void ReportReplacementCost()
+            {
+                auto& c = replacementCost;
+                if (const double ms = c.readMs + c.missMs + c.uploadMs; ms >= 4.0)
+                    LOG_NOTICE("[mods] frame {}: texture replacements took {:.1f} ms: {} read ({:.1f} MB in {:.1f} ms, slowest {:016x} {:.1f} MB in {:.1f} ms), "
+                        "{} without a file ({:.1f} ms), {} uploaded ({:.1f} ms, {} upload ring flushes)",
+                        frame, ms, c.reads, c.readBytes / 1048576.0, c.readMs, c.slowestFingerprint, c.slowestBytes / 1048576.0, c.slowestMs,
+                        c.misses, c.missMs, c.uploads, c.uploadMs, c.ringRewinds);
+                c = {};
+            }
+
             std::optional<modding::TextureData> LoadTextureReplacement(uint64_t fingerprint, uint32_t format, uint32_t width, uint32_t height)
             {
                 if (textureReplacementFailures.contains(fingerprint)) return {};
@@ -6980,8 +7006,30 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 bool bcSkipped = false;
                 // Every level must fit the upload ring with the draw headroom free.
                 // Without device BC (textureBcFallback) DDS payloads stay unread.
+                const auto start = std::chrono::steady_clock::now();
                 auto data = modding::ReadTextureReplacement(fingerprint, format, width, height,
                     kUploadRingSize - kUploadHeadroom, &error, !textureBcFallback, &bcSkipped);
+                const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+                auto& cost = replacementCost;
+                if (data)
+                {
+                    uint64_t bytes = 0;
+                    for (const auto& level : data->levels) bytes += level.size();
+                    cost.reads++;
+                    cost.readBytes += bytes;
+                    cost.readMs += ms;
+                    if (ms > cost.slowestMs)
+                    {
+                        cost.slowestMs = ms;
+                        cost.slowestFingerprint = fingerprint;
+                        cost.slowestBytes = bytes;
+                    }
+                }
+                else
+                {
+                    cost.misses++; // mostly no file for this fingerprint
+                    cost.missMs += ms;
+                }
                 if (bcSkipped)
                 {
                     textureReplacementFailures.insert(fingerprint);
@@ -7508,8 +7556,13 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (replaceable && !tex->controllerAtlasRecognized && AnyNonZero(staging.data(), rowPitch, baseRowBytes, blocksY))
                     if (auto replacement = LoadTextureReplacement(fingerprint, format, width, height))
                     {
+                        const auto uploadStart = std::chrono::steady_clock::now();
+                        const uint64_t rewinds = uploadRingRewinds;
                         const auto uploaded = UploadTextureReplacement(*tex, *replacement, fingerprint, format, width, height,
                             uint32_t(levels.size()));
+                        replacementCost.uploads++;
+                        replacementCost.uploadMs += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - uploadStart).count();
+                        replacementCost.ringRewinds += uploadRingRewinds - rewinds;
                         if (uploaded == ReplacementUpload::Failed)
                         {
                             Gpu().retiredTextures.push_back(std::move(tex));
@@ -13196,6 +13249,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             static auto lastFrame = std::chrono::steady_clock::now();
             if (!g_renderer->Flush()) return;
             g_renderer->PublishDlssFrameOutcome();
+            g_renderer->ReportReplacementCost();
             {
                 auto& r = *g_renderer;
                 if (r.motionOptions.log && r.frame % 120 == 0) {
@@ -13289,7 +13343,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 double frameMs = std::chrono::duration<double, std::milli>(now - lastFrame).count();
                 lastFrame = now;
                 Renderer& r = *g_renderer;
-                if (frameMs > 150.0 || (r.frame % 60) == 0)
+                // LO_GPU_STATS_HITCH_MS: also log every frame slower than this.
+                static const double hitchMs = [] { const char* v = getenv("LO_GPU_STATS_HITCH_MS"); return v && *v ? std::max(1.0, atof(v)) : 150.0; }();
+                if (frameMs > hitchMs || (r.frame % 60) == 0)
                     LOG_INFO("renderer frame {}: {:.0f} ms, draws {} ({:.0f} ms: const {:.0f} sets {:.0f} vertex {:.0f} bind {:.0f} index {:.0f} record {:.0f} rt {:.0f} taa {:.0f} nested_flush {:.0f} shader_lookup {:.0f} pipeline_lookup {:.0f} scene_copy {:.0f}), shaders {} ({:.0f} ms), pipelines {} ({:.0f} ms), textures {} ({:.0f} ms, {} KB), vertex uploads {}+{} ({} KB, arena {} MB), resolves {} ({:.0f} ms), gpu wait {:.0f} ms",
                         r.frame, frameMs, r.drawsThisFrame, r.tDraw, r.tConst, r.tSets, r.tVertex, r.tBind, r.tIndex, r.tRecord, r.tRt, r.tTaa, r.tNestedFlush, r.tShaderLookup, r.tPipelineLookup, r.tSceneCopy, r.nShader, r.tShader, r.nPipeline, r.tPipeline, r.nTexture, r.tTexture, r.texBytes / 1024,
                         r.vertexUploads, r.vertexRevalidations, r.vertexBytesUploaded / 1024, r.Gpu().arenaOffset >> 20, r.nResolve, r.tResolve, r.tFlush);
