@@ -320,6 +320,7 @@ float4 finishFrame(float3 color) {
 float2 fitScene(float2 tile) {
     uint sceneWidth,sceneHeight;
     calibrationScene.GetDimensions(sceneWidth,sceneHeight);
+    if ((outputFlags & 8192) != 0) sceneWidth/=2;
     float sceneAspect=float(sceneWidth)/float(sceneHeight);
     float2 tileSize=(calibrationRect.zw-calibrationRect.xy)*imageSize*float2(0.5,1);
     float tileAspect=tileSize.x/tileSize.y;
@@ -337,6 +338,8 @@ float4 pixel(float4 position : SV_Position) : SV_Target {
         if ((outputFlags & 1024) != 0) {
             tile=fitScene(tile);
             if (any(tile<0) || any(tile>1)) return float4(0,0,0,1);
+            // Split scene: each tile samples its own half of the texture.
+            if ((outputFlags & 8192) != 0) tile.x=tile.x*0.5+(local.x>=0.5 ? 0.5 : 0.0);
             color=calibrationScene.SampleLevel(linearClamp,tile,0).rgb;
             if ((outputFlags & 128) != 0) color=applyGammaRamp(color);
             if ((outputFlags & 32) != 0) {
@@ -741,7 +744,8 @@ void Presentation::Draw(RenderCommandList *commands, RenderTexture *source, Rend
                 (finalPass && options.brightnessPreview ? 512u : 0u) |
                 (finalPass && options.brightnessPreview && options.calibrationScene ? 1024u : 0u) |
                 (options.calibrationSceneExtended ? 2048u : 0u) |
-                ((options.brightnessPreview || options.hdrCalibration) && p.curveActive ? 4096u : 0u),
+                (((options.brightnessPreview && !options.calibrationSplitScene) || options.hdrCalibration) && p.curveActive ? 4096u : 0u) |
+                (options.calibrationSplitScene ? 8192u : 0u),
                 p.output.scale,p.output.peakRatio,
                 {options.calibrationRect[0],options.calibrationRect[1],options.calibrationRect[2],options.calibrationRect[3]}};
         commands->setGraphicsPipelineLayout(p.layout.get());commands->setPipeline(pipe);

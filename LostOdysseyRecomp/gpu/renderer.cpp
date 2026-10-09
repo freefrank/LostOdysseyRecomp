@@ -8176,7 +8176,12 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         const uint32_t percent = std::min(settings::GetConfig().fsrSharpnessPercent, 100u);
                         frameSrOptions = {percent != 0, float(percent) / 100.0f};
                     } else if (activePlan.requestedUpscaler == upscaling::Upscaler::Dlss) {
-                        frameSrOptions.dlssNeuralRenderingPasses = settings::GetConfig().dlssNeuralRendering;
+                        const auto& config = settings::GetConfig();
+                        frameSrOptions.dlssNeuralRenderingPasses = config.dlssNeuralRendering;
+                        frameSrOptions.dlssNeuralRenderingPreset = config.dlssNrPreset;
+                        frameSrOptions.dlssNeuralRenderingTuning = {config.dlssNrStyle, config.dlssNrIntensity / 100.0f,
+                            config.dlssNrGlobalTone / 100.0f, config.dlssNrLocalTone / 100.0f, config.dlssNrStructure / 100.0f,
+                            config.dlssNrSkin / 100.0f, config.dlssNrAutoMask};
                     }
                     PollTaaDiagnostic();
                     PollTaaLive();

@@ -407,6 +407,73 @@ int main(int argc, char **argv)
             "inactive HDR comparison must explain why the pattern cannot render");
     snapshot.calibration.open = false;
 
+    // DLSS 5 neural rendering page: the preview rectangle stays transparent for
+    // presentation while a scene is held, and shows an opaque notice otherwise.
+    {
+        settings::MenuSnapshot page;
+        page.tab = 2;
+        page.neuralRendering.open = true;
+        page.neuralRendering.passes = 2;
+        page.neuralRendering.style = 1;
+        page.neuralRendering.preset = 2;
+        page.neuralRendering.intensity = 130;
+        page.neuralRendering.globalTone = 100;
+        page.neuralRendering.localTone = 60;
+        page.neuralRendering.structure = 100;
+        page.neuralRendering.skin = 20;
+        page.neuralRendering.focus = 3;
+        std::vector<uint32_t> nrPixels;
+        auto write = [&](const char *name) {
+            if (argc <= 1) return;
+            std::ofstream f(std::filesystem::path(argv[1]) / name, std::ios::binary);
+            f << "P6\n1280 720\n255\n";
+            for (auto p : nrPixels) {
+                if ((p >> 24) == 0) p = 0xff202020u; // Preview background; production paints the NGX preview here.
+                const char rgb[] = {char(p), char(p >> 8), char(p >> 16)};
+                f.write(rgb, 3);
+            }
+            Require(bool(f), "neural rendering page preview write failed");
+        };
+        for (const uint32_t language : {0u, 1u, 4u})
+        {
+            page.language = language;
+            page.neuralRendering.sceneAvailable = true;
+            Require(settings::RasterizeMenu(page, 1280, 720, nrPixels), "neural rendering page rasterization failed");
+            for (const auto [x, y] : {std::pair{settings::NrPreviewLeft, settings::NrPreviewTop},
+                                      std::pair{640, 200},
+                                      std::pair{settings::NrPreviewRight - 1, settings::NrPreviewBottom - 1}})
+                Require(nrPixels[size_t(y) * 1280 + x] == 0, "neural rendering preview rectangle must stay transparent");
+            Require((nrPixels[size_t(200) * 1280 + settings::NrPreviewLeft - 1] >> 24) == 255 &&
+                    (nrPixels[size_t(settings::NrPreviewBottom) * 1280 + 640] >> 24) == 255,
+                    "backdrop must surround the neural rendering preview");
+            Require((nrPixels[size_t(380) * 1280 + 240] >> 24) == 255 && (nrPixels[size_t(620) * 1280 + 300] >> 24) == 255 &&
+                    (nrPixels[size_t(680) * 1280 + 640] >> 24) == 255, "neural rendering controls must be opaque");
+            if (language == 0) write("nr-page-scene.ppm");
+            if (language == 4) write("nr-page-scene-zh-hans.ppm");
+            const auto withScene = nrPixels;
+            page.neuralRendering.sceneAvailable = false;
+            Require(settings::RasterizeMenu(page, 1280, 720, nrPixels), "neural rendering no-scene rasterization failed");
+            Require((nrPixels[size_t(200) * 1280 + 640] >> 24) == 255, "no-scene panel must cover the preview rectangle");
+            Require(!std::equal(nrPixels.begin() + 100 * 1280, nrPixels.begin() + 340 * 1280, withScene.begin() + 100 * 1280),
+                    "no-scene notice differs from the transparent preview");
+            Require(std::equal(nrPixels.begin() + 360 * 1280, nrPixels.end(), withScene.begin() + 360 * 1280),
+                    "scene availability leaves the controls unchanged");
+            if (language == 0) write("nr-page-no-scene.ppm");
+        }
+        // Each focus draws a different frame (help line and focused cell).
+        page.language = 0;
+        std::vector<std::vector<uint32_t>> frames;
+        for (int focus = 0; focus < settings::NrFocusCount; ++focus)
+        {
+            page.neuralRendering.focus = focus;
+            Require(settings::RasterizeMenu(page, 1280, 720, nrPixels), "neural rendering focus rasterization failed");
+            for (const auto &other : frames)
+                Require(other != nrPixels, "every neural rendering focus must render differently");
+            frames.push_back(nrPixels);
+        }
+        std::puts("DLSS 5 neural rendering page: transparent preview, no-scene panel, opaque controls in en/zh-Hant/zh-Hans");
+    }
+
     // Synthetic overflowing menu (>11 visible rows) to verify scroll clipping, hidden rows and overflow indicators.
     {
         // Reference snapshot: exactly 11 rows (the visible window), representing Option 3 through Option 13.

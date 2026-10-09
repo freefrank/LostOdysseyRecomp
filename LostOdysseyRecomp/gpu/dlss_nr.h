@@ -18,6 +18,9 @@ namespace gpu::dlss::nr {
 // slot 18, and the parameter names are the ones the signed Streamline 2.13
 // sl.dlss_nr plugin passes to the same NGX feature.
 inline constexpr NVSDK_NGX_Feature kFeature = NVSDK_NGX_Feature_Reserved18;
+// The settings page's preview runs a held frame again; it settles after a few
+// evaluates, and each change runs them again.
+inline constexpr uint32_t kPreviewSettleEvaluates = 8;
 
 // The user's nvngx_dlssnr.dll. Community copies are modified, so the driver's
 // NGX core refuses to load them; the snippet's own NGX exports are called here.
@@ -55,13 +58,18 @@ std::filesystem::path SnippetPath(const std::filesystem::path& runtimeDirectory)
 // is missing or is not a usable copy.
 const Snippet* LoadSnippet(const std::filesystem::path& runtimeDirectory, std::string& reason);
 
-// Tuning the model latches when a feature is created.
+// Every evaluate reads the model controls; a feature takes the preset when it
+// is created.
 void SetControls(NVSDK_NGX_Parameter* parameters, uint32_t width, uint32_t height, bool depthInverted,
-                 uint32_t pass);
-// Depth and motion subrects, motion scale and Reset for one evaluate; color and
-// output cover the whole output size.
-void SetFrame(NVSDK_NGX_Parameter* parameters, const SrConfig& config, const temporal::TemporalFrameInputs& inputs,
-              bool reset);
+                 uint32_t preset, const NeuralRenderingTuning& tuning, uint32_t pass);
+// Color and output cover the output size; depth and motion the render size.
+struct FrameRegions {
+    uint32_t outputWidth = 0, outputHeight = 0, renderWidth = 0, renderHeight = 0;
+    uint32_t depthX = 0, depthY = 0, motionX = 0, motionY = 0;
+    float motionScale = 1.0f;
+};
+void SetFrame(NVSDK_NGX_Parameter* parameters, const FrameRegions& regions, bool reset);
+FrameRegions GameFrame(const SrConfig& config, const temporal::TemporalFrameInputs& inputs);
 
 void Log(const char* format, ...);
 // The one SetComputeShaderCompiler installed, or null.

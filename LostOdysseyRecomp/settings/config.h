@@ -99,6 +99,16 @@ struct Config
     // DLSS 5 Neural Rendering passes on the DLSS output: 0 Off, 1-4. Needs the
     // player's nvngx_dlssnr.dll; Windows only. Applied after saving.
     uint32_t dlssNeuralRendering = 0;
+    // Its model tuning, laid out like the RenoDX ReShade add-on. Percents are the
+    // model's 0..2 strengths (100 = 1.0). Applied after saving.
+    uint32_t dlssNrPreset = 0; // 0 Default, 1-3 Preset #1-#3
+    uint32_t dlssNrStyle = 0; // 0 Default, 1 Natural, 2 Cinematic
+    uint32_t dlssNrIntensity = 100; // 0-200
+    uint32_t dlssNrGlobalTone = 100; // 0-200
+    uint32_t dlssNrLocalTone = 100; // 0-200
+    uint32_t dlssNrStructure = 100; // 0-200
+    int dlssNrSkin = -100; // -100..100; below 0 follows Structure
+    bool dlssNrAutoMask = true; // Character mask
     framegen::Provider frameGenerationProvider = framegen::Provider::Off; // Reconciled at presentation; Vulkan hooks need startup opt-in.
     framegen::Mode frameGenerationMode = framegen::Mode::Fixed;
     uint32_t frameGenerationMultiplier = 2; // Requested total output frames per rendered frame.

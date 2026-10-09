@@ -59,6 +59,15 @@ uint32_t gammaStart = 100;
 // The original calibration screen returns to the page with the unsaved edit.
 bool returnToBrightness = false;
 constexpr int kBrightnessSliderX = 380, kBrightnessSliderWidth = 620;
+// DLSS 5 neural rendering page. Focus: 0 passes, 1 model, 2 preset, 3-6 tones and
+// structure, 7 skin, 8 character mask, 9-11 Default / Done / Cancel.
+std::atomic<bool> nrOpen{false};
+std::atomic<bool> nrSceneAvailable{false};
+// Pending pointer action: valid bit, kind (1 focus, 2 step down, 3 step up,
+// 4 set value, 5 focus + confirm), focus in bits 4-7, value + 100 from bit 8.
+std::atomic<uint32_t> nrAction{0};
+int nrFocus = 0;
+Config nrStart; // NR fields (and passes) as the page opened
 std::mutex snapshotMutex;
 using Row = MenuRow;
 using Snapshot = MenuSnapshot;
@@ -144,6 +153,104 @@ float BrightnessSliderFraction(float x)
 std::wstring BrightnessValue(int brightness)
 {
     return brightness > 0 ? L"+" + std::to_wstring(brightness) : std::to_wstring(brightness);
+}
+constexpr uint32_t NrAction(int kind, int focus, int value = 0)
+{
+    return 0x80000000u | uint32_t(kind) | (uint32_t(focus) << 4) | (uint32_t(value + 100) << 8);
+}
+NeuralRenderingTuning MakeNeuralRenderingTuning(const Config &config, bool open)
+{
+    NeuralRenderingTuning result;
+    result.open = open;
+    result.sceneAvailable = nrSceneAvailable.load(std::memory_order_relaxed);
+    result.passes = std::min(config.dlssNeuralRendering, DlssNeuralRenderingMaxPasses);
+    result.preset = config.dlssNrPreset;
+    result.style = config.dlssNrStyle;
+    result.intensity = config.dlssNrIntensity;
+    result.globalTone = config.dlssNrGlobalTone;
+    result.localTone = config.dlssNrLocalTone;
+    result.structure = config.dlssNrStructure;
+    result.skin = config.dlssNrSkin;
+    result.autoMask = config.dlssNrAutoMask;
+    if (open) result.focus = nrFocus;
+    return result;
+}
+void ResetNeuralRenderingTuning(Config &config)
+{
+    const Config defaults;
+    config.dlssNrPreset = defaults.dlssNrPreset;
+    config.dlssNrStyle = defaults.dlssNrStyle;
+    config.dlssNrIntensity = defaults.dlssNrIntensity;
+    config.dlssNrGlobalTone = defaults.dlssNrGlobalTone;
+    config.dlssNrLocalTone = defaults.dlssNrLocalTone;
+    config.dlssNrStructure = defaults.dlssNrStructure;
+    config.dlssNrSkin = defaults.dlssNrSkin;
+    config.dlssNrAutoMask = defaults.dlssNrAutoMask;
+}
+void RestoreNeuralRenderingTuning(Config &config, const Config &start)
+{
+    config.dlssNeuralRendering = start.dlssNeuralRendering;
+    config.dlssNrPreset = start.dlssNrPreset;
+    config.dlssNrStyle = start.dlssNrStyle;
+    config.dlssNrIntensity = start.dlssNrIntensity;
+    config.dlssNrGlobalTone = start.dlssNrGlobalTone;
+    config.dlssNrLocalTone = start.dlssNrLocalTone;
+    config.dlssNrStructure = start.dlssNrStructure;
+    config.dlssNrSkin = start.dlssNrSkin;
+    config.dlssNrAutoMask = start.dlssNrAutoMask;
+}
+// Percent sliders (focus 3-6, 0-200) and skin (focus 7, -100..100) step by 5.
+bool NrIsSlider(int focus) { return focus >= 3 && focus <= 7; }
+uint32_t *NrPercentField(Config &config, int focus)
+{
+    switch (focus)
+    {
+    case 3: return &config.dlssNrIntensity;
+    case 4: return &config.dlssNrGlobalTone;
+    case 5: return &config.dlssNrLocalTone;
+    case 6: return &config.dlssNrStructure;
+    default: return nullptr;
+    }
+}
+void SetNrValue(Config &config, int focus, int value)
+{
+    if (uint32_t *percent = NrPercentField(config, focus))
+        *percent = uint32_t(std::clamp(value, 0, 200));
+    else if (focus == 7)
+        config.dlssNrSkin = std::clamp(value, -100, 100);
+}
+// Left/right on a control: combos cycle with wrap, sliders step by 5, the toggle flips.
+void StepNrControl(Config &config, int focus, int delta)
+{
+    auto wrap = [&](uint32_t value, uint32_t count) {
+        return uint32_t((int(value) + delta + int(count)) % int(count));
+    };
+    if (focus == 0)
+        config.dlssNeuralRendering = wrap(std::min(config.dlssNeuralRendering, DlssNeuralRenderingMaxPasses),
+                                          DlssNeuralRenderingMaxPasses + 1);
+    else if (focus == 1) config.dlssNrStyle = wrap(std::min(config.dlssNrStyle, 2u), 3);
+    else if (focus == 2) config.dlssNrPreset = wrap(std::min(config.dlssNrPreset, 3u), 4);
+    else if (const uint32_t *percent = NrPercentField(config, focus))
+        SetNrValue(config, focus, int(*percent) + delta * 5);
+    else if (focus == 7) SetNrValue(config, focus, config.dlssNrSkin + delta * 5);
+    else if (focus == 8) config.dlssNrAutoMask = !config.dlssNrAutoMask;
+}
+// Pointer position to the control row it lands on (focus 0-8). `value` is the
+// stepped slider value for x; `controlSide` is 0 over the label, else 2 / 3 for
+// the left / right half of a combo or toggle.
+bool NrControlAt(float x, float y, int &focus, bool &onTrack, int &value, int &controlSide)
+{
+    const int column = x >= NrColumnX[1] - 10 ? 1 : 0;
+    const int slot = int(std::floor((y - NrRowTop) / float(NrRowHeight)));
+    if (y < NrRowTop || slot < 0 || slot >= (column ? NrControlCount - 5 : 5)) return false;
+    if (x < NrColumnX[column] || x >= NrColumnX[column] + NrColumnWidth) return false;
+    focus = column ? 5 + slot : slot;
+    const float controlX = float(NrColumnX[column] + NrControlOffset);
+    onTrack = NrIsSlider(focus) && x >= controlX - 6 && x < controlX + NrSliderWidth + 6;
+    const float fraction = std::clamp((x - controlX) / float(NrSliderWidth), 0.0f, 1.0f);
+    value = int(std::lround(fraction * 40.0f)) * 5 - (focus == 7 ? 100 : 0);
+    controlSide = x < controlX ? 0 : x < controlX + (NrColumnWidth - NrControlOffset) * 0.5f ? 2 : 3;
+    return true;
 }
 std::wstring GammaValue(uint32_t gamma)
 {
@@ -672,6 +779,7 @@ void Publish(uint8_t *base, uint32_t config)
     next.language = edit.uiLanguage;
     next.calibration = MakeHdrCalibration(edit, calibrationOpen.load());
     next.brightness = MakeBrightnessCalibration(edit, brightnessOpen.load());
+    next.neuralRendering = MakeNeuralRenderingTuning(edit, nrOpen.load());
     const uint32_t flags = PPC_LOAD_U32(config + 4);
     auto makeChoices = [&](const wchar_t *en, const wchar_t *zh, std::vector<std::wstring> choices,
                            uint32_t selected, bool enabled = true) {
@@ -1054,6 +1162,7 @@ void Publish(uint8_t *base, uint32_t config)
         {
             next.help = Tr(L"NVIDIA's DLSS 5 neural rendering on the DLSS image. 1×-4× runs it that many times: stronger, but each pass costs frame rate. Needs an RTX GPU and nvngx_dlssnr.dll next to the game (not included). Applies after saving.",
                            L"在 DLSS 畫面上執行 NVIDIA 的 DLSS 5 神經渲染。1×-4× 為執行次數：次數越多效果越強，但每次都會降低影格率。需要 RTX 顯示卡，並將 nvngx_dlssnr.dll 放在遊戲旁（不隨附）。儲存後套用。");
+            next.help = next.help + L" " + Tr(L"Confirm opens the tuning page.", L"按確認開啟調整頁面。");
             using gpu::dlss::NeuralRenderingState;
             const auto state = gpu::dlss::g_neuralRenderingState.load(std::memory_order_relaxed);
             const wchar_t *status =
@@ -1265,8 +1374,10 @@ void Publish(uint8_t *base, uint32_t config)
     // Presentation may have published availability while this snapshot was built.
     next.calibration.sceneAvailable = calibrationSceneAvailable.load(std::memory_order_relaxed);
     next.brightness.sceneAvailable = next.calibration.sceneAvailable;
+    next.neuralRendering.sceneAvailable = nrSceneAvailable.load(std::memory_order_relaxed);
     if (next.tab == snapshot.tab && next.row == snapshot.row && next.scroll == snapshot.scroll && next.language == snapshot.language &&
         next.calibration == snapshot.calibration && next.brightness == snapshot.brightness &&
+        next.neuralRendering == snapshot.neuralRendering &&
         next.rows == snapshot.rows && next.help == snapshot.help && next.notice == snapshot.notice && next.dialogTitle == snapshot.dialogTitle &&
         next.dialogMessage == snapshot.dialogMessage && next.dialogChoices == snapshot.dialogChoices &&
         next.dialogSelection == snapshot.dialogSelection)
@@ -1291,6 +1402,29 @@ void SetHdrCalibrationSceneAvailable(bool available)
         snapshot.calibration.sceneAvailable = snapshot.brightness.sceneAvailable = available;
         ++snapshot.revision;
     }
+}
+void SetNeuralRenderingPreviewAvailable(bool available)
+{
+    nrSceneAvailable.store(available, std::memory_order_relaxed);
+    std::lock_guard lock(snapshotMutex);
+    if (snapshot.neuralRendering.sceneAvailable != available)
+    {
+        snapshot.neuralRendering.sceneAvailable = available;
+        ++snapshot.revision;
+    }
+}
+NeuralRenderingTuning GetNeuralRenderingTuning()
+{
+    NeuralRenderingTuning result;
+    {
+        std::lock_guard lock(snapshotMutex);
+        result = snapshot.neuralRendering;
+    }
+    // The open menu previews its unsaved values; gameplay uses the saved ones.
+    if (!active.load())
+        return MakeNeuralRenderingTuning(GetConfig(), false);
+    result.sceneAvailable = nrSceneAvailable.load(std::memory_order_relaxed);
+    return result;
 }
 BrightnessCalibration GetBrightnessCalibration()
 {
@@ -1333,7 +1467,7 @@ bool CalibrationKey(uint32_t key)
         displayConfirmEscape = true;
         return true;
     }
-    const bool brightnessKey = brightnessOpen.load() && (key == 13 || key == 27);
+    const bool brightnessKey = (brightnessOpen.load() || nrOpen.load()) && (key == 13 || key == 27);
     if (!brightnessKey && (!calibrationOpen.load() || !(key == 8 || key == 13 || key == 27 || (key >= '0' && key <= '9'))))
         return false;
     std::lock_guard lock(calibrationKeyMutex);
@@ -1342,6 +1476,14 @@ bool CalibrationKey(uint32_t key)
 }
 void PointerDrag(float x, float y, bool held)
 {
+    if (held && nrOpen.load())
+    {
+        int focus = 0, value = 0, side = 0;
+        bool track = false;
+        if (NrControlAt(x, y, focus, track, value, side) && NrIsSlider(focus))
+            nrAction = NrAction(4, focus, value);
+        return;
+    }
     if (held && brightnessOpen.load())
     {
         if (y >= 516 && y < 552)
@@ -1415,6 +1557,24 @@ void PointerClick(float x, float y, bool reverse)
     if (!active.load())
         return;
     std::lock_guard lock(snapshotMutex);
+    if (snapshot.neuralRendering.open)
+    {
+        int focus = 0, value = 0, side = 0;
+        bool track = false;
+        if (y >= NrButtonTop && y < NrButtonTop + NrButtonHeight)
+        {
+            for (int i = 0; i < 3; ++i)
+            {
+                const int left = NrColumnX[0] + i * (NrButtonWidth + NrButtonGap);
+                if (x >= left && x < left + NrButtonWidth) nrAction = NrAction(5, 9 + i);
+            }
+        }
+        else if (NrControlAt(x, y, focus, track, value, side))
+            nrAction = track ? NrAction(4, focus, value)
+                     : (side == 0 || NrIsSlider(focus)) ? NrAction(1, focus)
+                     : NrAction(side, focus);
+        return;
+    }
     if (snapshot.brightness.open)
     {
         // Same top toggle and button row as the HDR page; sliders take the pointer x.
@@ -1606,6 +1766,8 @@ PPC_FUNC(sub_822F19B0)
         brightnessClick = -1;
         brightnessDragBrightness = INT_MIN;
         brightnessDragGamma = -1;
+        nrOpen = false;
+        nrAction = 0;
         calibrationOpen = false;
         calibrationNumberEditing = false;
         calibrationNumber.clear();
@@ -1677,6 +1839,7 @@ PPC_FUNC(sub_822F19B0)
         active = false;
         calibrationOpen = false;
         brightnessOpen = false;
+        nrOpen = false;
         cancelPolls = 0;
         pending = 0;
         PPCContext apply = ctx;
@@ -1978,6 +2141,53 @@ PPC_FUNC(sub_822F19B0)
             calibrationNumber.clear();
             calibrationClick = -1;
             calibrationDragNits = -1;
+        }
+        Publish(base, config);
+        return;
+    }
+    if (nrOpen.load())
+    {
+        std::vector<uint32_t> keys;
+        {
+            std::lock_guard lock(calibrationKeyMutex);
+            keys.swap(calibrationKeys);
+        }
+        bool cancel = (input & 0x2000) != 0, close = false;
+        for (const uint32_t key : keys)
+        {
+            if (key == 13) input |= 0x1000;
+            else if (key == 27) cancel = true;
+        }
+        if (const uint32_t action = nrAction.exchange(0); action & 0x80000000u)
+        {
+            const int kind = int(action & 15), focus = int((action >> 4) & 15), value = int((action >> 8) & 0xFFFFF) - 100;
+            if (focus < NrFocusCount)
+            {
+                nrFocus = focus;
+                if (kind == 2 || kind == 3) StepNrControl(edit, focus, kind == 3 ? 1 : -1);
+                else if (kind == 4) SetNrValue(edit, focus, value);
+                else if (kind == 5) input |= 0x1000;
+            }
+        }
+        if (input & 1) nrFocus = (nrFocus + NrFocusCount - 1) % NrFocusCount;
+        if (input & 2) nrFocus = (nrFocus + 1) % NrFocusCount;
+        if (const int delta = (input & 4) ? -1 : (input & 8) ? 1 : 0)
+        {
+            if (nrFocus < NrControlCount) StepNrControl(edit, nrFocus, delta);
+            else nrFocus = 9 + (nrFocus - 9 + 3 + delta) % 3;
+        }
+        if (input & 0x1000)
+        {
+            if (nrFocus == 9) ResetNeuralRenderingTuning(edit);
+            else if (nrFocus == 10) close = true;
+            else if (nrFocus == 11) cancel = true;
+        }
+        if (cancel)
+            RestoreNeuralRenderingTuning(edit, nrStart);
+        if (cancel || close)
+        {
+            nrOpen = false;
+            nrAction = 0;
         }
         Publish(base, config);
         return;
@@ -2539,6 +2749,15 @@ PPC_FUNC(sub_822F19B0)
         Publish(base, config);
         return;
     }
+    if ((input & 0x1000) && !(input & 0x2000) && tab == 2 && row == int(GraphicsRow::DlssNeuralRendering) &&
+        !GraphicsRowHidden(row))
+    {
+        nrStart = edit;
+        nrFocus = 0;
+        nrOpen = true;
+        Publish(base, config);
+        return;
+    }
     if (input & 0x2000)
     {
         closeSettings();
@@ -2598,7 +2817,7 @@ bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint3
     // change and the calibration pages, whose preview presentation paints
     // into the frame, switch at once. The clock starts after rasterizing (tens
     // of milliseconds at 4K, more on the first open) so no part of it is lost.
-    const bool previewPage = current.calibration.open || current.brightness.open;
+    const bool previewPage = current.calibration.open || current.brightness.open || current.neuralRendering.open;
     bool eased = false;
     if (opened && !previewPage)
     {

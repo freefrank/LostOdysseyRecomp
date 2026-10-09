@@ -87,21 +87,44 @@ HRESULT EndIsolated(plume::D3D12CommandList& list) {
     list.invalidateCachedNativeState();
     return result;
 }
-// DLSS 5 NR format bridge: the SR output's copy (stage) to and from the model's
-// FP16 images, both display-encoded. Decoding keeps the output's alpha, which
-// the stage still holds.
+// DLSS 5 NR format bridge: an RGBA8 frame (stage, from column stageX on) to
+// and from the model's FP16 images, both display-encoded. Decoding keeps the
+// stage's alpha.
 constexpr char kNeuralRenderingBridge[]=R"(
 RWTexture2D<float4> stage : register(u0);
 RWTexture2D<float4> model : register(u1);
-cbuffer Parameters : register(b0) { uint width; uint height; uint decode; uint pad; };
+cbuffer Parameters : register(b0) { uint width; uint height; uint decode; uint stageX; };
 [numthreads(8, 8, 1)]
 void main(uint3 id : SV_DispatchThreadID) {
     if (id.x >= width || id.y >= height) return;
-    if (decode != 0) stage[id.xy] = float4(saturate(model[id.xy].rgb), stage[id.xy].a);
-    else model[id.xy] = stage[id.xy];
+    uint2 s = uint2(id.x + stageX, id.y);
+    if (decode != 0) stage[s] = float4(saturate(model[id.xy].rgb), stage[s].a);
+    else model[id.xy] = stage[s];
 }
 )";
-struct BridgeParameters { uint32_t width,height,decode,pad; };
+struct BridgeParameters { uint32_t width,height,decode,stageX; };
+void DescribeBridgeSet(plume::RenderDescriptorSetBuilder& set) {
+    set.begin(); set.addReadWriteTexture(0); set.addReadWriteTexture(1); set.end();
+}
+std::unique_ptr<plume::RenderDescriptorSet> BridgeSet(plume::RenderDevice& device, plume::RenderTexture* stage,
+    plume::RenderTexture* model) {
+    plume::RenderDescriptorSetBuilder builder;
+    DescribeBridgeSet(builder);
+    auto set=builder.create(&device);
+    if (!set) return set;
+    set->setTexture(0,stage,plume::RenderTextureLayout::GENERAL);
+    set->setTexture(1,model,plume::RenderTextureLayout::GENERAL);
+    return set;
+}
+void RecordBridge(plume::D3D12CommandList& list, const plume::RenderPipelineLayout& layout,
+    const plume::RenderPipeline& pipeline, plume::RenderDescriptorSet& set, const BridgeParameters& constants) {
+    list.setComputePipelineLayout(&layout);
+    list.setPipeline(&pipeline);
+    list.setComputePushConstants(0,&constants,0,sizeof(constants));
+    list.setComputeDescriptorSet(&set,0);
+    list.dispatch((constants.width+7)/8,(constants.height+7)/8,1);
+}
+ID3D12Resource* NativeResource(plume::RenderTexture* texture) { return static_cast<plume::D3D12Texture*>(texture)->d3d; }
 #endif
 }
 
@@ -111,6 +134,10 @@ void Controller::ProbeOnce(const plume::D3D12Device& device) {
     backend_=Backend::D3D12;
     sessionDeviceD3D12_=&device;
 #if defined(LO_DLSS_SDK)
+    // NR needs no device setup on D3D12; the settings preview only keeps
+    // frames for a player who supplied the DLL.
+    std::error_code missing;
+    nrSupported_=std::filesystem::is_regular_file(nr::SnippetPath(runtimePath_),missing);
     if (!device.d3d || !device.adapter) {
         report_.state=ProbeState::Unavailable; report_.reason="D3D12 device or adapter unavailable"; return;
     }
@@ -449,7 +476,10 @@ SrAttempt Controller::RecordIsolated(plume::D3D12CommandList& isolated, const Sr
         static_cast<NVSDK_NGX_Handle*>(feature_),params,&evaluate);
     RecordCall("D3D12_EVALUATE_DLSS_EXT",int32_t(result),NVSDK_NGX_FAILED(result));
     if (capture) { capture->vendorResult=int32_t(result); capture->evaluated=true; }
-    if (!NVSDK_NGX_FAILED(result)) RecordNeuralRendering(isolated,config,inputs,output,evaluate.InReset!=0);
+    if (!NVSDK_NGX_FAILED(result)) {
+        CaptureNeuralRenderingInput(isolated,config,inputs,output);
+        RecordNeuralRendering(isolated,config,inputs,output,evaluate.InReset!=0);
+    }
     const HRESULT close=EndIsolated(isolated);
     RecordCall("D3D12_CloseIsolated",int32_t(close),FAILED(close));
     if (FAILED(close)) return failed("isolated_end_failed",int32_t(result),close);
@@ -460,17 +490,17 @@ SrAttempt Controller::RecordIsolated(plume::D3D12CommandList& isolated, const Sr
 #endif
 }
 
-bool Controller::CreateNeuralRenderingBridge(plume::RenderDevice& device, plume::RenderFormat format,
-    uint32_t width, uint32_t height, uint32_t passes) {
+bool Controller::CreateNeuralRenderingBridgePipeline(plume::RenderDevice& device) {
 #if !defined(LO_DLSS_SDK)
-    (void)device; (void)format; (void)width; (void)height; (void)passes;
+    (void)device;
     return false;
 #else
+    if (nrBridgePipeline_) return true;
     const auto compile=nr::ShaderCompiler();
     std::vector<uint8_t> dxil;
     if (!compile || !compile(kNeuralRenderingBridge,dxil)) return false;
     plume::RenderDescriptorSetBuilder set;
-    set.begin(); set.addReadWriteTexture(0); set.addReadWriteTexture(1); set.end();
+    DescribeBridgeSet(set);
     plume::RenderPipelineLayoutBuilder layout;
     layout.begin(false,false);
     layout.addPushConstant(0,0,sizeof(BridgeParameters),plume::RenderShaderStageFlag::COMPUTE);
@@ -481,17 +511,65 @@ bool Controller::CreateNeuralRenderingBridge(plume::RenderDevice& device, plume:
     if (!nrBridgeLayout_ || !nrBridgeShader_) return false;
     nrBridgePipeline_=device.createComputePipeline(
         plume::RenderComputePipelineDesc(nrBridgeLayout_.get(),nrBridgeShader_.get(),8,8,1));
+    return bool(nrBridgePipeline_);
+#endif
+}
+
+bool Controller::CreateNeuralRenderingBridge(plume::RenderDevice& device, plume::RenderFormat format,
+    uint32_t width, uint32_t height, uint32_t passes) {
+#if !defined(LO_DLSS_SDK)
+    (void)device; (void)format; (void)width; (void)height; (void)passes;
+    return false;
+#else
+    if (!CreateNeuralRenderingBridgePipeline(device)) return false;
     nrStage_=device.createTexture(plume::RenderTextureDesc::Texture2D(width,height,1,format,
         plume::RenderTextureFlag::UNORDERED_ACCESS));
-    nrEncodeSet_=set.create(&device);
-    nrDecodeSet_=set.create(&device);
-    if (!nrBridgePipeline_ || !nrStage_ || !nrEncodeSet_ || !nrDecodeSet_) return false;
+    if (!nrStage_) return false;
     // Encoding feeds the first pass; decoding reads the last pass's answer.
-    nrEncodeSet_->setTexture(0,nrStage_.get(),plume::RenderTextureLayout::GENERAL);
-    nrEncodeSet_->setTexture(1,nrImages_[0].get(),plume::RenderTextureLayout::GENERAL);
-    nrDecodeSet_->setTexture(0,nrStage_.get(),plume::RenderTextureLayout::GENERAL);
-    nrDecodeSet_->setTexture(1,nrImages_[passes%2].get(),plume::RenderTextureLayout::GENERAL);
-    return true;
+    nrEncodeSet_=BridgeSet(device,nrStage_.get(),nrImages_[0].get());
+    nrDecodeSet_=BridgeSet(device,nrStage_.get(),nrImages_[passes%2].get());
+    return nrEncodeSet_ && nrDecodeSet_;
+#endif
+}
+
+void Controller::CaptureNeuralRenderingInput(plume::D3D12CommandList& list, const SrConfig& config,
+    const temporal::TemporalFrameInputs& inputs, plume::D3D12Texture& output) {
+#if !defined(LO_DLSS_SDK)
+    (void)list; (void)config; (void)inputs; (void)output;
+#else
+    // Only a player with the DLL pays for the copies, every fourth frame.
+    if (!nrSupported_ || config.colorSpace!=SrColorSpace::DisplayEncoded) return;
+    if (nrCaptured_ && ++nrCaptureCount_%4) return;
+    auto& depth=*static_cast<plume::D3D12Texture*>(inputs.depth.texture);
+    auto& motion=*static_cast<plume::D3D12Texture*>(inputs.motion.texture);
+    if (!nrCaptureColor_ &&
+        !CreateNeuralRenderingCapture(*output.device,config,output.desc.format,depth.desc.format,motion.desc.format))
+        return;
+    using plume::RenderTextureBarrier;
+    using Layout=plume::RenderTextureLayout;
+    namespace Stage=plume::RenderBarrierStage;
+    plume::RenderCommandList& commands=list;
+    list.invalidateCachedNativeState();
+    const RenderTextureBarrier copy[]={RenderTextureBarrier(&output,Layout::COPY_SOURCE),
+        RenderTextureBarrier(&depth,Layout::COPY_SOURCE),RenderTextureBarrier(&motion,Layout::COPY_SOURCE),
+        RenderTextureBarrier(nrCaptureColor_.get(),Layout::COPY_DEST),RenderTextureBarrier(nrCaptureDepth_.get(),Layout::COPY_DEST),
+        RenderTextureBarrier(nrCaptureMotion_.get(),Layout::COPY_DEST)};
+    commands.barriers(Stage::COPY,copy,6);
+    const auto region=[&](plume::RenderTexture* destination, plume::RenderTexture* source, uint32_t x, uint32_t y,
+                          uint32_t width, uint32_t height) {
+        const plume::RenderBox box(int32_t(x),int32_t(y),int32_t(x+width),int32_t(y+height),0,1);
+        commands.copyTextureRegion(plume::RenderTextureCopyLocation::Subresource(destination),
+            plume::RenderTextureCopyLocation::Subresource(source),0,0,0,&box);
+    };
+    region(nrCaptureColor_.get(),&output,0,0,config.outputExtent.width,config.outputExtent.height);
+    region(nrCaptureDepth_.get(),&depth,inputs.depth.x,inputs.depth.y,config.renderExtent.width,config.renderExtent.height);
+    region(nrCaptureMotion_.get(),&motion,inputs.motion.x,inputs.motion.y,config.renderExtent.width,config.renderExtent.height);
+    // Back to the states SR and NR expect: the output as a UAV, the inputs readable by any stage.
+    commands.barriers(Stage::COMPUTE,RenderTextureBarrier(&output,Layout::GENERAL));
+    const RenderTextureBarrier back[]={RenderTextureBarrier(&depth,Layout::SHADER_READ),
+        RenderTextureBarrier(&motion,Layout::SHADER_READ)};
+    commands.barriers(Stage::GRAPHICS|Stage::COMPUTE,back,2);
+    nrCaptured_=true;
 #endif
 }
 
@@ -502,22 +580,6 @@ void Controller::RecordNeuralRendering(plume::D3D12CommandList& list, const SrCo
 #else
     const auto* snippet=NeuralRenderingSnippet(config);
     if (!snippet) return;
-    if (!nrSnippetInitialized_) {
-        // The core session is already up; the snippet keeps its own state.
-        const auto dataPath=applicationDataPath_.wstring();
-        const auto result=snippet->d3d12.init(0,dataPath.c_str(),sessionDeviceD3D12_->d3d,NVSDK_NGX_Version_API,nullptr);
-        RecordCall("NR_D3D12_Init_Ext",int32_t(result));
-        if (NVSDK_NGX_FAILED(result)) return FailNeuralRendering("snippet D3D12 Init_Ext",int32_t(result));
-        nrSnippetInitialized_=true;
-        nr::Log("DLSS NR: snippet initialized");
-    }
-    if (!nrParameters_) {
-        NVSDK_NGX_Parameter* allocated=nullptr;
-        const auto result=NVSDK_NGX_D3D12_GetCapabilityParameters(&allocated);
-        RecordCall("NR_D3D12_GetCapabilityParameters",int32_t(result));
-        if (NVSDK_NGX_FAILED(result) || !allocated) return FailNeuralRendering("GetCapabilityParameters",int32_t(result));
-        nrParameters_=allocated;
-    }
     auto* parameters=static_cast<NVSDK_NGX_Parameter*>(nrParameters_);
     const uint32_t width=config.outputExtent.width, height=config.outputExtent.height;
     const uint32_t passes=config.neuralRenderingPasses;
@@ -534,7 +596,7 @@ void Controller::RecordNeuralRendering(plume::D3D12CommandList& list, const SrCo
         if (!CreateNeuralRenderingBridge(device,output.desc.format,width,height,passes))
             return FailNeuralRendering("format bridge creation",0);
         for (uint32_t pass=0;pass<passes;++pass) {
-            nr::SetControls(parameters,width,height,config.depthInverted,pass);
+            nr::SetControls(parameters,width,height,config.depthInverted,config.neuralRenderingPreset,nrTuning_,pass);
             NVSDK_NGX_Handle* handle=nullptr;
             const auto result=snippet->d3d12.create(list.d3d,nr::kFeature,parameters,&handle);
             RecordCall("NR_D3D12_CreateFeature",int32_t(result));
@@ -556,15 +618,6 @@ void Controller::RecordNeuralRendering(plume::D3D12CommandList& list, const SrCo
     plume::RenderTexture* stage=nrStage_.get();
     // The base class carries the barrier overloads.
     plume::RenderCommandList& commands=list;
-    const auto bridge=[&](plume::RenderDescriptorSet* set, uint32_t decode) {
-        const BridgeParameters constants{width,height,decode,0};
-        list.setComputePipelineLayout(nrBridgeLayout_.get());
-        list.setPipeline(nrBridgePipeline_.get());
-        list.setComputePushConstants(0,&constants,0,sizeof(constants));
-        list.setComputeDescriptorSet(set,0);
-        list.dispatch((width+7)/8,(height+7)/8,1);
-    };
-    const auto native=[](plume::RenderTexture* texture) { return static_cast<plume::D3D12Texture*>(texture)->d3d; };
     // NGX left its own heaps and root signature on the list. The output goes
     // back to UNORDERED_ACCESS right after each copy, so a failure leaves it as SR did.
     list.invalidateCachedNativeState();
@@ -574,20 +627,21 @@ void Controller::RecordNeuralRendering(plume::D3D12CommandList& list, const SrCo
     const RenderTextureBarrier encode[]={RenderTextureBarrier(&output,Layout::GENERAL),
         RenderTextureBarrier(stage,Layout::GENERAL),RenderTextureBarrier(images[0],Layout::GENERAL)};
     commands.barriers(Stage::COMPUTE,encode,3);
-    bridge(nrEncodeSet_.get(),0);
+    RecordBridge(list,*nrBridgeLayout_,*nrBridgePipeline_,*nrEncodeSet_,{width,height,0,0});
 
     NVSDK_NGX_Parameter_SetD3d12Resource(parameters,"DLSSNR.Depth",static_cast<plume::D3D12Texture*>(inputs.depth.texture)->d3d);
     NVSDK_NGX_Parameter_SetD3d12Resource(parameters,"DLSSNR.MVec",static_cast<plume::D3D12Texture*>(inputs.motion.texture)->d3d);
-    nr::SetFrame(parameters,config,inputs,reset || nrReset_);
+    nr::SetFrame(parameters,nr::GameFrame(config,inputs),reset || nrReset_ || nrTuningChanged_);
+    nrTuningChanged_=false;
     for (uint32_t pass=0;pass<passes;++pass) {
         // Pass n reads image n % 2 and answers into the other one.
         plume::RenderTexture* input=images[pass%2];
         plume::RenderTexture* answer=images[(pass+1)%2];
         const RenderTextureBarrier evaluate[]={RenderTextureBarrier(input,Layout::SHADER_READ),RenderTextureBarrier(answer,Layout::GENERAL)};
         commands.barriers(Stage::COMPUTE,evaluate,2);
-        nr::SetControls(parameters,width,height,config.depthInverted,pass);
-        NVSDK_NGX_Parameter_SetD3d12Resource(parameters,"DLSSNR.Color",native(input));
-        NVSDK_NGX_Parameter_SetD3d12Resource(parameters,"DLSSNR.Output",native(answer));
+        nr::SetControls(parameters,width,height,config.depthInverted,config.neuralRenderingPreset,nrTuning_,pass);
+        NVSDK_NGX_Parameter_SetD3d12Resource(parameters,"DLSSNR.Color",NativeResource(input));
+        NVSDK_NGX_Parameter_SetD3d12Resource(parameters,"DLSSNR.Output",NativeResource(answer));
         const auto result=snippet->d3d12.evaluate(list.d3d,static_cast<NVSDK_NGX_Handle*>(nrFeatures_[pass]),parameters,nullptr);
         RecordCall("NR_D3D12_EvaluateFeature",int32_t(result));
         list.invalidateCachedNativeState();
@@ -595,7 +649,7 @@ void Controller::RecordNeuralRendering(plume::D3D12CommandList& list, const SrCo
     }
     const RenderTextureBarrier decode[]={RenderTextureBarrier(images[passes%2],Layout::GENERAL),RenderTextureBarrier(stage,Layout::GENERAL)};
     commands.barriers(Stage::COMPUTE,decode,2);
-    bridge(nrDecodeSet_.get(),1);
+    RecordBridge(list,*nrBridgeLayout_,*nrBridgePipeline_,*nrDecodeSet_,{width,height,1,0});
     const RenderTextureBarrier toOutput[]={RenderTextureBarrier(stage,Layout::COPY_SOURCE),RenderTextureBarrier(&output,Layout::COPY_DEST)};
     commands.barriers(Stage::COPY,toOutput,2);
     commands.copyTexture(&output,stage);
@@ -603,6 +657,114 @@ void Controller::RecordNeuralRendering(plume::D3D12CommandList& list, const SrCo
     if (nrReset_) nr::Log("DLSS NR: first evaluate recorded for %ux%u, %u pass(es)", width, height, passes);
     nrReset_=false;
     g_neuralRenderingState.store(NeuralRenderingState::Active,std::memory_order_relaxed);
+#endif
+}
+
+plume::RenderTexture* Controller::RecordNeuralRenderingPreview(plume::D3D12CommandList& list, uint32_t passes,
+    uint32_t preset, const NeuralRenderingTuning& tuning) {
+#if !defined(LO_DLSS_SDK)
+    (void)list; (void)passes; (void)preset; (void)tuning;
+    return nullptr;
+#else
+    const auto& config=nrCaptureConfig_;
+    const uint32_t width=config.outputExtent.width, height=config.outputExtent.height;
+    plume::RenderTexture* color=nrCaptureColor_.get();
+    auto& device=*static_cast<plume::D3D12Texture*>(color)->device;
+    if (!nrPreviewComposite_) {
+        nrPreviewComposite_=device.createTexture(plume::RenderTextureDesc::Texture2D(width*2,height,1,
+            static_cast<plume::D3D12Texture*>(color)->desc.format,plume::RenderTextureFlag::UNORDERED_ACCESS));
+        if (!nrPreviewComposite_) return nullptr;
+    }
+    plume::RenderTexture* composite=nrPreviewComposite_.get();
+    using plume::RenderTextureBarrier;
+    using Layout=plume::RenderTextureLayout;
+    namespace Stage=plume::RenderBarrierStage;
+    plume::RenderCommandList& commands=list;
+    auto* parameters=static_cast<NVSDK_NGX_Parameter*>(nrParameters_);
+    std::string reason;
+    const auto* snippet=passes ? nr::LoadSnippet(runtimePath_,reason) : nullptr;
+    plume::RenderTexture* right=color; // What the right half shows when the model did not answer.
+    if (passes && !HasNeuralRenderingPreviewFeature()) {
+        // As in gameplay, the features evaluate from the next recording on.
+        for (auto& image:nrPreviewImages_) {
+            if (!image) image=device.createTexture(plume::RenderTextureDesc::Texture2D(width,height,1,
+                plume::RenderFormat::R16G16B16A16_FLOAT,plume::RenderTextureFlag::UNORDERED_ACCESS));
+        }
+        if (nrPreviewImages_[0] && nrPreviewImages_[1] && CreateNeuralRenderingBridgePipeline(device)) {
+            nrPreviewEncodeSet_=BridgeSet(device,color,nrPreviewImages_[0].get());
+            nrPreviewDecodeSet_=BridgeSet(device,composite,nrPreviewImages_[passes%2].get());
+            for (uint32_t pass=0;pass<passes;++pass) {
+                nr::SetControls(parameters,width,height,config.depthInverted,preset,tuning,pass);
+                NVSDK_NGX_Handle* handle=nullptr;
+                const auto result=snippet->d3d12.create(list.d3d,nr::kFeature,parameters,&handle);
+                RecordCall("NR_Preview_D3D12_CreateFeature",int32_t(result));
+                nrPreviewFeatures_[pass]=handle;
+                if (NVSDK_NGX_FAILED(result) || !handle) {
+                    FailNeuralRendering("preview CreateFeature",int32_t(result));
+                    break;
+                }
+            }
+            list.invalidateCachedNativeState();
+            nrPreviewPasses_=passes;
+            nrPreviewPreset_=preset;
+            nrPreviewSettle_=nr::kPreviewSettleEvaluates;
+            nrPreviewReset_=true;
+        }
+    } else if (passes && HasNeuralRenderingPreviewFeature() && !nrFailed_ && nrPreviewEncodeSet_ && nrPreviewDecodeSet_) {
+        right=nullptr; // The last answer stays once the frame has settled.
+        if (nrPreviewSettle_) {
+            plume::RenderTexture* images[2]={nrPreviewImages_[0].get(),nrPreviewImages_[1].get()};
+            const RenderTextureBarrier encode[]={RenderTextureBarrier(color,Layout::GENERAL),
+                RenderTextureBarrier(images[0],Layout::GENERAL)};
+            commands.barriers(Stage::COMPUTE,encode,2);
+            RecordBridge(list,*nrBridgeLayout_,*nrBridgePipeline_,*nrPreviewEncodeSet_,{width,height,0,0});
+            const RenderTextureBarrier inputs[]={RenderTextureBarrier(nrCaptureDepth_.get(),Layout::SHADER_READ),
+                RenderTextureBarrier(nrCaptureMotion_.get(),Layout::SHADER_READ)};
+            commands.barriers(Stage::COMPUTE,inputs,2);
+            NVSDK_NGX_Parameter_SetD3d12Resource(parameters,"DLSSNR.Depth",NativeResource(nrCaptureDepth_.get()));
+            NVSDK_NGX_Parameter_SetD3d12Resource(parameters,"DLSSNR.MVec",NativeResource(nrCaptureMotion_.get()));
+            // The same frame again: no motion.
+            nr::SetFrame(parameters,{width,height,config.renderExtent.width,config.renderExtent.height,0,0,0,0,0.0f},
+                nrPreviewReset_);
+            bool ran=true;
+            for (uint32_t pass=0;pass<passes && ran;++pass) {
+                plume::RenderTexture* input=images[pass%2];
+                plume::RenderTexture* answer=images[(pass+1)%2];
+                const RenderTextureBarrier evaluate[]={RenderTextureBarrier(input,Layout::SHADER_READ),
+                    RenderTextureBarrier(answer,Layout::GENERAL)};
+                commands.barriers(Stage::COMPUTE,evaluate,2);
+                nr::SetControls(parameters,width,height,config.depthInverted,preset,tuning,pass);
+                NVSDK_NGX_Parameter_SetD3d12Resource(parameters,"DLSSNR.Color",NativeResource(input));
+                NVSDK_NGX_Parameter_SetD3d12Resource(parameters,"DLSSNR.Output",NativeResource(answer));
+                const auto result=snippet->d3d12.evaluate(list.d3d,
+                    static_cast<NVSDK_NGX_Handle*>(nrPreviewFeatures_[pass]),parameters,nullptr);
+                RecordCall("NR_Preview_D3D12_EvaluateFeature",int32_t(result));
+                list.invalidateCachedNativeState();
+                if (NVSDK_NGX_FAILED(result)) {
+                    FailNeuralRendering("preview EvaluateFeature",int32_t(result));
+                    ran=false;
+                }
+            }
+            if (ran) {
+                const RenderTextureBarrier decode[]={RenderTextureBarrier(images[passes%2],Layout::GENERAL),
+                    RenderTextureBarrier(composite,Layout::GENERAL)};
+                commands.barriers(Stage::COMPUTE,decode,2);
+                RecordBridge(list,*nrBridgeLayout_,*nrBridgePipeline_,*nrPreviewDecodeSet_,{width,height,1,width});
+            } else right=color;
+            --nrPreviewSettle_;
+            nrPreviewReset_=false;
+        }
+    }
+    // The held frame on the left, and on the right when the model did not answer.
+    const RenderTextureBarrier copy[]={RenderTextureBarrier(color,Layout::COPY_SOURCE),
+        RenderTextureBarrier(composite,Layout::COPY_DEST)};
+    commands.barriers(Stage::COPY,copy,2);
+    const plume::RenderBox box(0,0,int32_t(width),int32_t(height),0,1);
+    commands.copyTextureRegion(plume::RenderTextureCopyLocation::Subresource(composite),
+        plume::RenderTextureCopyLocation::Subresource(color),0,0,0,&box);
+    if (right) commands.copyTextureRegion(plume::RenderTextureCopyLocation::Subresource(composite),
+        plume::RenderTextureCopyLocation::Subresource(right),width,0,0,&box);
+    return composite;
 #endif
 }
 } // namespace gpu::dlss

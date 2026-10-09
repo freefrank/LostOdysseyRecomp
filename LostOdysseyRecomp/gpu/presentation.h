@@ -48,6 +48,10 @@ struct PresentationOptions
     // calibrationSceneExtended marks an FP16 extended-gamma scene.
     bool brightnessPreview = false;
     bool calibrationSceneExtended = false;
+    // With brightnessPreview: calibrationScene holds two images side by side,
+    // the left one for the left tile and the right one for the right tile, and
+    // neither gets the curve (the DLSS 5 neural rendering page).
+    bool calibrationSplitScene = false;
 };
 // Owned by the presentation thread. Resources stay alive until the present fence.
 class Presentation

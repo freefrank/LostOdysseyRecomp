@@ -871,6 +871,122 @@ int main(int argc, char** argv)
         PPC_STORE_U32(Menu + 4, 4); Tick(base);
         Require(settings::active && !settings::bypass && !settings::brightnessOpen &&
                 settings::edit.displayBrightness == savedBrightness, "idle address reuse clears stale handoff");
+        // DLSS 5 neural rendering tuning page.
+        {
+            const settings::Config savedEdit = settings::edit;
+            auto press = [&](uint16_t bits) { settings::pending = bits; Tick(base); };
+            auto openPage = [&] {
+                settings::nrFocus = 0;
+                press(0x1000);
+                Require(settings::nrOpen && settings::active && settings::nrFocus == 0, "A opens the neural rendering page");
+            };
+            settings::tab = 2; settings::row = int(GraphicsRow::DlssNeuralRendering);
+            settings::edit.upscaler = gpu::upscaling::Upscaler::Off;
+            press(0x1000);
+            Require(!settings::nrOpen, "the page needs the DLSS upscaler");
+            settings::edit.upscaler = gpu::upscaling::Upscaler::Dlss;
+            settings::edit.dlssNeuralRendering = 2;
+            settings::edit.dlssNrStyle = 0;
+            settings::edit.dlssNrIntensity = 100;
+            settings::edit.dlssNrSkin = -100;
+            press(8);
+            Require(settings::edit.dlssNeuralRendering == 3 && !settings::nrOpen, "right on the row still cycles passes");
+            press(4);
+            Require(settings::edit.dlssNeuralRendering == 2, "left on the row still cycles passes");
+            Require(settings::snapshot.help.find(L"tuning page") != std::wstring::npos ||
+                    settings::snapshot.help.find(L"調整頁面") != std::wstring::npos, "the row help mentions the tuning page");
+
+            // Cancel restores every field, passes included.
+            openPage();
+            Require(settings::snapshot.neuralRendering.open && settings::snapshot.neuralRendering.passes == 2, "snapshot carries the open page");
+            press(8);
+            Require(settings::edit.dlssNeuralRendering == 3, "focus 0 edits passes");
+            press(2); press(2); press(2);
+            Require(settings::nrFocus == 3, "down moves focus");
+            press(8); press(8);
+            Require(settings::edit.dlssNrIntensity == 110, "intensity steps by 5");
+            const auto live = settings::GetNeuralRenderingTuning();
+            Require(live.open && live.intensity == 110 && live.passes == 3 && live.focus == 3,
+                    "the live tuning returns unsaved values while the page is open");
+            settings::nrFocus = 11;
+            press(0x1000);
+            Require(!settings::nrOpen && settings::edit.dlssNrIntensity == 100 && settings::edit.dlssNeuralRendering == 2,
+                    "Cancel restores the start values and closes");
+            Require(!settings::GetNeuralRenderingTuning().open && settings::GetNeuralRenderingTuning().intensity == 100,
+                    "closed page reports saved values");
+
+            // Done keeps the edit.
+            openPage();
+            press(2); press(8);
+            Require(settings::edit.dlssNrStyle == 1, "focus 1 cycles the model");
+            settings::nrFocus = 10;
+            press(0x1000);
+            Require(!settings::nrOpen && settings::edit.dlssNrStyle == 1, "Done keeps the edit and closes");
+
+            // Default resets the tuning but keeps passes; Back then behaves like Cancel.
+            openPage();
+            press(8);
+            settings::nrFocus = 3; press(8);
+            settings::nrFocus = 7; press(8);
+            Require(settings::edit.dlssNrIntensity == 105 && settings::edit.dlssNrSkin == -95 && settings::edit.dlssNeuralRendering == 3,
+                    "edits before Default");
+            settings::nrFocus = 9;
+            press(0x1000);
+            Require(settings::nrOpen && settings::edit.dlssNrStyle == 0 && settings::edit.dlssNrIntensity == 100 &&
+                    settings::edit.dlssNrSkin == -100 && settings::edit.dlssNeuralRendering == 3,
+                    "Default resets the tuning and keeps passes");
+            press(0x2000);
+            Require(!settings::nrOpen && settings::active && settings::edit.dlssNrStyle == 1 && settings::edit.dlssNeuralRendering == 2,
+                    "Back closes like Cancel");
+
+            // Percent bounds, the toggle, button navigation and wrap.
+            openPage();
+            settings::nrFocus = 3;
+            for (int i = 0; i < 30; ++i) press(8);
+            Require(settings::edit.dlssNrIntensity == 200, "percent clamps at 200");
+            settings::nrFocus = 8; press(4);
+            Require(!settings::edit.dlssNrAutoMask, "left flips the character mask");
+            settings::nrFocus = 0; press(1);
+            Require(settings::nrFocus == 11, "up wraps from the first control to Cancel");
+            press(8);
+            Require(settings::nrFocus == 9, "right wraps between the buttons");
+            settings::nrFocus = 11; press(2);
+            Require(settings::nrFocus == 0, "down wraps from Cancel to the first control");
+
+            // Pointer: a slider click sets the value and focus, a button click activates.
+            settings::nrFocus = 0;
+            settings::PointerClick(476, 515, false); // intensity track at 75% of its width
+            press(0);
+            Require(settings::nrFocus == 3 && settings::edit.dlssNrIntensity == 150, "slider click sets the value");
+            settings::PointerDrag(settings::NrColumnX[0] + 155 + 215 + 40, 515, true);
+            press(0);
+            Require(settings::edit.dlssNrIntensity == 200, "dragging clamps at the track end");
+            settings::PointerClick(300, 620, false); // Default
+            press(0);
+            Require(settings::nrOpen && settings::edit.dlssNrIntensity == 100, "button click runs Default");
+            settings::PointerClick(settings::NrColumnX[0] + 30 + 2 * 330 + 10, 620, false); // Cancel
+            press(0);
+            Require(!settings::nrOpen, "Cancel button click closes");
+
+            // Escape cancels like Back.
+            openPage();
+            press(8);
+            Require(settings::CalibrationKey(27), "the open page takes Escape");
+            press(0);
+            Require(!settings::nrOpen && settings::edit.dlssNeuralRendering == 2, "Escape cancels");
+
+            // Preview availability reaches the snapshot at once.
+            settings::SetNeuralRenderingPreviewAvailable(false);
+            const uint64_t revision = settings::snapshot.revision;
+            settings::SetNeuralRenderingPreviewAvailable(true);
+            Require(settings::snapshot.revision == revision + 1 && settings::snapshot.neuralRendering.sceneAvailable &&
+                    settings::GetNeuralRenderingTuning().sceneAvailable, "preview availability bumps the revision");
+            settings::SetNeuralRenderingPreviewAvailable(true);
+            Require(settings::snapshot.revision == revision + 1, "unchanged availability does not bump it");
+            settings::SetNeuralRenderingPreviewAvailable(false);
+            settings::edit = savedEdit;
+            std::puts("PASS neural rendering page: open gate, steps, Cancel/Done/Default/Back/Escape, pointer, preview availability");
+        }
         deviceReady = false;
         const auto oldTicks = ticks; Tick(base);
         Require(ticks == oldTicks + 1, "no-device retail fallback retained");

@@ -105,6 +105,7 @@ dlss::SrConfig DlssConfig(const SrRequest& request) {
         dlss::SrColorSpace::DisplayEncoded : dlss::SrColorSpace::Linear;
     config.neuralRenderingPasses = uint8_t(std::min(request.options.dlssNeuralRenderingPasses,
         dlss::kMaxNeuralRenderingPasses));
+    config.neuralRenderingPreset = uint8_t(std::min(request.options.dlssNeuralRenderingPreset, 3u));
     return config;
 }
 }
@@ -168,6 +169,7 @@ SrResult TemporalUpscaler::RecordIsolated(plume::VulkanCommandList& commands,
         return result;
     }
     if (!dlss_) return result;
+    dlss_->SetNeuralRenderingTuning(request.options.dlssNeuralRenderingTuning);
     const auto attempt = dlss_->RecordIsolated(commands, DlssConfig(request), request.inputs, output, capture);
     result.actualProvider = upscaling::Upscaler::Dlss;
     result.status = Convert(attempt.status);
@@ -246,6 +248,7 @@ SrResult TemporalUpscaler::RecordIsolated(plume::D3D12CommandList& commands,
         return result;
     }
     if (!dlss_) return result;
+    dlss_->SetNeuralRenderingTuning(request.options.dlssNeuralRenderingTuning);
     const auto attempt = dlss_->RecordIsolated(commands, DlssConfig(request), request.inputs, output, capture);
     result.actualProvider = upscaling::Upscaler::Dlss;
     result.status = Convert(attempt.status);

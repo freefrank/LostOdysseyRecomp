@@ -47,6 +47,11 @@ Config Validate(Config value)
     value.fsrQuality = gpu::upscaling::NormalizeFsrQuality(value.fsrQuality);
     value.fsrSharpnessPercent = std::min(value.fsrSharpnessPercent, 100u);
     value.dlssNeuralRendering = std::min(value.dlssNeuralRendering, DlssNeuralRenderingMaxPasses);
+    value.dlssNrPreset = std::min(value.dlssNrPreset, 3u);
+    value.dlssNrStyle = std::min(value.dlssNrStyle, 2u);
+    for (uint32_t *percent : {&value.dlssNrIntensity, &value.dlssNrGlobalTone, &value.dlssNrLocalTone, &value.dlssNrStructure})
+        *percent = std::min(*percent, 200u);
+    value.dlssNrSkin = std::clamp(value.dlssNrSkin, -100, 100);
     if (!framegen::KnownProvider(value.frameGenerationProvider))
         value.frameGenerationProvider = framegen::Provider::Off;
     if (value.frameGenerationMode != framegen::Mode::Fixed && value.frameGenerationMode != framegen::Mode::Dynamic)
@@ -133,13 +138,13 @@ Config Read()
             (name == "gpu_device" ? value.gpuDevice : value.displayName) = TextValue(digits);
             continue;
         }
-        if (name == "display_brightness")
+        if (name == "display_brightness" || name == "dlss_nr_skin")
         {
-            // The only signed value.
-            int brightness = 0;
-            auto parsed = std::from_chars(digits.data(), digits.data() + digits.size(), brightness);
+            // The signed values.
+            int signedNumber = 0;
+            auto parsed = std::from_chars(digits.data(), digits.data() + digits.size(), signedNumber);
             if (parsed.ec == std::errc{} && parsed.ptr == digits.data() + digits.size())
-                value.displayBrightness = brightness;
+                (name == "display_brightness" ? value.displayBrightness : value.dlssNrSkin) = signedNumber;
             continue;
         }
         auto parsed = std::from_chars(digits.data(), digits.data() + digits.size(), number);
@@ -202,6 +207,20 @@ Config Read()
             value.fsrSharpnessPercent = number;
         else if (key == "dlss_neural_rendering")
             value.dlssNeuralRendering = number;
+        else if (key == "dlss_nr_preset")
+            value.dlssNrPreset = number;
+        else if (key == "dlss_nr_style")
+            value.dlssNrStyle = number;
+        else if (key == "dlss_nr_intensity")
+            value.dlssNrIntensity = number;
+        else if (key == "dlss_nr_global_tone")
+            value.dlssNrGlobalTone = number;
+        else if (key == "dlss_nr_local_tone")
+            value.dlssNrLocalTone = number;
+        else if (key == "dlss_nr_structure")
+            value.dlssNrStructure = number;
+        else if (key == "dlss_nr_auto_mask" && number <= 1)
+            value.dlssNrAutoMask = number == 1;
         else if (key == "frame_generation_provider")
             value.frameGenerationProvider = number <= uint32_t(framegen::Provider::Xess)
                 ? framegen::Provider(number) : framegen::Provider::Off;
@@ -360,6 +379,10 @@ static bool WriteConfig(const Config &value)
            << "\nfsr_quality=" << uint32_t(value.fsrQuality)
            << "\nfsr_sharpness=" << value.fsrSharpnessPercent
            << "\ndlss_neural_rendering=" << value.dlssNeuralRendering
+           << "\ndlss_nr_preset=" << value.dlssNrPreset << "\ndlss_nr_style=" << value.dlssNrStyle
+           << "\ndlss_nr_intensity=" << value.dlssNrIntensity << "\ndlss_nr_global_tone=" << value.dlssNrGlobalTone
+           << "\ndlss_nr_local_tone=" << value.dlssNrLocalTone << "\ndlss_nr_structure=" << value.dlssNrStructure
+           << "\ndlss_nr_skin=" << value.dlssNrSkin << "\ndlss_nr_auto_mask=" << (value.dlssNrAutoMask ? 1 : 0)
            << "\nvariable_refresh_rate=" << (value.variableRefreshRate ? 1 : 0)
            << "\nhdr=" << (value.hdr ? 1 : 0)
            << "\nhdr_paper_white_nits=" << value.hdrPaperWhiteNits

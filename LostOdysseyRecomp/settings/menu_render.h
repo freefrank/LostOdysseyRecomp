@@ -50,6 +50,7 @@ struct MenuSnapshot
     uint64_t revision = 0;
     HdrCalibration calibration;
     BrightnessCalibration brightness;
+    NeuralRenderingTuning neuralRendering;
     std::shared_ptr<const menu_assets::Assets> assets;
     // Only the panels, without title, tabs, rows or help: what the content
     // fades in over when the menu opens.

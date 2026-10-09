@@ -34,8 +34,10 @@ struct SrConfig {
     uint64_t deviceEpoch = 0;
     bool depthInverted = false;
     bool autoExposure = false;
-    // 0 is off. A change recreates the SR and NR features at a drained boundary.
+    // 0 is off. A change recreates the SR and NR features at a drained boundary,
+    // as does the model preset hint, which a feature reads when it is created.
     uint8_t neuralRenderingPasses = 0;
+    uint8_t neuralRenderingPreset = 0;
 
     bool operator==(const SrConfig&) const = default;
 };

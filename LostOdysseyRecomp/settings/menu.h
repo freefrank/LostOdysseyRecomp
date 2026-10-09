@@ -41,6 +41,36 @@ struct BrightnessCalibration
     int focus = 0;
     bool operator==(const BrightnessCalibration &) const = default;
 };
+// DLSS 5 neural rendering page, opened from its Graphics row. Presentation
+// shows the NGX controller's preview of the last DLSS frame with these values
+// inside the NrPreview rectangle: DLSS on the left, DLSS + NR on the right.
+// Percents are the model's 0..2 strengths, as in settings::Config.
+struct NeuralRenderingTuning
+{
+    bool open = false;
+    bool sceneAvailable = false; // a DLSS frame is held for the preview
+    uint32_t passes = 0;
+    uint32_t preset = 0, style = 0;
+    uint32_t intensity = 100, globalTone = 100, localTone = 100, structure = 100;
+    int skin = -100;
+    bool autoMask = true;
+    int focus = 0;
+    bool operator==(const NeuralRenderingTuning &) const = default;
+};
+// The page's preview rectangle in the 1280x720 menu layout; each half is 16:9.
+inline constexpr int NrPreviewLeft = 160, NrPreviewTop = 80, NrPreviewRight = 1120, NrPreviewBottom = 350;
+// Page layout (1280x720) shared by the renderer and pointer hit-testing. Focus
+// 0-4 fill the left column, 5-8 the right one; 9 Default, 10 Done, 11 Cancel.
+inline constexpr int NrControlCount = 9, NrFocusCount = 12;
+inline constexpr int NrColumnX[2] = {160, 650}, NrColumnWidth = 470;
+inline constexpr int NrRowTop = 365, NrRowHeight = 44;
+inline constexpr int NrControlOffset = 155; // label width inside a column
+inline constexpr int NrSliderWidth = 215;   // percent slider; the value text follows it
+inline constexpr int NrButtonTop = 600, NrButtonHeight = 45, NrButtonWidth = 300, NrButtonGap = 30;
+// Called by presentation when a DLSS frame for the preview appears or goes.
+void SetNeuralRenderingPreviewAvailable(bool available);
+// Unsaved values while the settings menu is open, saved values otherwise.
+NeuralRenderingTuning GetNeuralRenderingTuning();
 void SetHdrDisplayInfo(HdrDisplayInfo info);
 // Called by presentation when its owned, frozen game scene (HDR or SDR)
 // becomes available.
