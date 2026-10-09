@@ -109,10 +109,10 @@ void PreviewVibration() { ++vibrationPreviews; }
 }
 namespace apu {
 Output menuFlowOutput = Output::Stereo;
-uint32_t menuFlowMatrixPhase = 90;
+uint32_t menuFlowMatrixRear = 110;
 bool menuFlowTestSignal = false;
 void SetOutput(Output output) { menuFlowOutput = output; }
-void SetMatrixPhase(uint32_t degrees) { menuFlowMatrixPhase = degrees; }
+void SetMatrixRearAngle(uint32_t degrees) { menuFlowMatrixRear = degrees; }
 void SetTestSignal(bool on) { menuFlowTestSignal = on; }
 float TestSignalPosition() { return menuFlowTestSignal ? 0.0f : -1.0f; }
 uint32_t OutputChannels() { return menuFlowOutput == Output::Surround ? 6 : 2; }
@@ -1568,30 +1568,30 @@ int main(int argc, char** argv)
             Require(settings::edit.audioOutput == settings::AudioOutputSurround && diskConfig.audioOutput == settings::AudioOutputSurround &&
                     apu::menuFlowOutput == apu::Output::Surround && saves == beforeSaves + 2 && applies == beforeApplies &&
                     diskConfig.width != settings::edit.width, "audio output switches live and saves alone");
-            // Matrix phase closes the Audio tab and only moves with Matrix surround.
+            // Rear angle closes the Audio tab and only moves with Matrix surround.
             settings::pending = 2; Tick(base);
-            Require(settings::row == settings::AudioMatrixPhaseRow && !settings::snapshot.rows[settings::AudioMatrixPhaseRow].enabled &&
-                    !apu::menuFlowTestSignal, "Matrix phase follows Audio output, disabled and silent without Matrix surround");
+            Require(settings::row == settings::AudioRearAngleRow && !settings::snapshot.rows[settings::AudioRearAngleRow].enabled &&
+                    !apu::menuFlowTestSignal, "Rear angle follows Audio output, disabled and silent without Matrix surround");
             settings::pending = 8; Tick(base);
-            Require(settings::edit.audioMatrixPhase == 90 && saves == beforeSaves + 2, "disabled Matrix phase ignores Right");
+            Require(settings::edit.audioMatrixRear == 110 && saves == beforeSaves + 2, "disabled Rear angle ignores Right");
             settings::pending = 1; Tick(base);
             settings::pending = 8; Tick(base);
             Require(settings::edit.audioOutput == settings::AudioOutputMatrix && apu::menuFlowOutput == apu::Output::Matrix &&
                     diskConfig.audioOutput == settings::AudioOutputMatrix && saves == beforeSaves + 3 && !apu::menuFlowTestSignal,
                     "Right again selects Matrix surround; no test noise on Audio output");
             settings::pending = 2; Tick(base);
-            Require(apu::menuFlowTestSignal, "test noise plays while Matrix phase is focused");
+            Require(apu::menuFlowTestSignal, "test noise plays while Rear angle is focused");
             Require(settings::snapshot.speakerLayout, "the speaker layout shows under the rows");
             settings::pending = 8; Tick(base);
-            Require(settings::snapshot.rows[settings::AudioMatrixPhaseRow].enabled &&
-                    settings::snapshot.rows[settings::AudioMatrixPhaseRow].value == L"105°" &&
-                    settings::edit.audioMatrixPhase == 105 && diskConfig.audioMatrixPhase == 105 && apu::menuFlowMatrixPhase == 105 &&
-                    settings::snapshot.speakerPhase == 105 &&
+            Require(settings::snapshot.rows[settings::AudioRearAngleRow].enabled &&
+                    settings::snapshot.rows[settings::AudioRearAngleRow].value == L"120°" &&
+                    settings::edit.audioMatrixRear == 120 && diskConfig.audioMatrixRear == 120 && apu::menuFlowMatrixRear == 120 &&
+                    settings::snapshot.speakerRear == 120 &&
                     saves == beforeSaves + 4 && applies == beforeApplies && diskConfig.width != settings::edit.width,
-                    "Matrix phase steps 15 degrees, applies live and saves alone");
+                    "Rear angle steps 10 degrees, applies live and saves alone");
             settings::pending = 2; Tick(base);
             Require(settings::row == settings::AudioVoiceRow && !apu::menuFlowTestSignal && !settings::snapshot.speakerLayout,
-                    "down from Matrix phase wraps to Voice language and stops the test noise and layout");
+                    "down from Rear angle wraps to Voice language and stops the test noise and layout");
             settings::edit = currentConfig;
             std::puts("PASS Gameplay Vibration slider and Audio output: bounds, immediate save, live apply, Graphics edits untouched");
         }

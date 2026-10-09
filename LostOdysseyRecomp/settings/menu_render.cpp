@@ -179,7 +179,7 @@ settings::MenuRect settings::MenuArrowBounds(uint32_t width, uint32_t height, in
 }
 
 settings::MenuRect settings::DrawSpeakerMarker(std::vector<uint32_t> &pixels, uint32_t width, uint32_t height, float position,
-                                               float phase)
+                                               float rearAngle)
 {
     if (!width || !height || pixels.size() != size_t(width) * height)
         return {};
@@ -193,7 +193,7 @@ settings::MenuRect settings::DrawSpeakerMarker(std::vector<uint32_t> &pixels, ui
     // Resting on a speaker: frame its label.
     if (const float rest = std::round(position); std::abs(position - rest) < 1e-4f)
     {
-        const auto [x, y] = RingPoint(apu::SpeakerPan::Angles[int(rest) % 5], LabelRadiusX, LabelRadiusY);
+        const auto [x, y] = RingPoint(apu::SpeakerPan::SpeakerAngle(int(rest) % 5, rearAngle), LabelRadiusX, LabelRadiusY);
         const int x0 = int(std::lround(x - LabelWidth / 2)) - 4, y0 = int(std::lround(y - LabelHeight / 2)) - 4;
         const int x1 = x0 + int(LabelWidth) + 8, y1 = y0 + int(LabelHeight) + 8;
         Line(c, x0, y0, x1, y0, ink, 2);
@@ -204,7 +204,7 @@ settings::MenuRect settings::DrawSpeakerMarker(std::vector<uint32_t> &pixels, ui
     }
     // A bright dot with a soft halo where the decoder puts the sound: on the
     // ring when focused, nearer the listener when spread out.
-    const auto decoded = apu::SpeakerPan::Decoded(position, phase);
+    const auto decoded = apu::SpeakerPan::Decoded(position, rearAngle);
     const auto [x, y] = RingPoint(decoded.degrees, RingRadiusX * decoded.focus, RingRadiusY * decoded.focus);
     Ellipse(c, x, y, 15, 15, 0, (ink & 0xFFFFFFu) | (70u << 24));
     Ellipse(c, x, y, 6.5, 6.5, 0, ink);
@@ -1032,7 +1032,7 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
         double travelled = 0, lastX = 0, lastY = 0;
         for (int i = 0; i <= 2000; ++i)
         {
-            const auto decoded = apu::SpeakerPan::Decoded(i / 400.0f, float(current.speakerPhase));
+            const auto decoded = apu::SpeakerPan::Decoded(i / 400.0f, float(current.speakerRear));
             const auto [x, y] = RingPoint(decoded.degrees, RingRadiusX * decoded.focus, RingRadiusY * decoded.focus);
             const double step = i ? std::hypot(x - lastX, y - lastY) : 7;
             travelled = step > 30 ? 7 : travelled + step;
@@ -1048,7 +1048,7 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
         Ellipse(canvas, RingX, RingY - 3, 6.5, 6.5, 0, ink);
         for (int i = 0; i < 5; ++i)
         {
-            const double angle = apu::SpeakerPan::Angles[i];
+            const double angle = apu::SpeakerPan::SpeakerAngle(i, float(current.speakerRear));
             const auto [ax, ay] = RingPoint(angle, RingRadiusX, RingRadiusY);
             Ellipse(canvas, ax, ay, 4, 4, 0, muted);
             const auto [lx, ly] = RingPoint(angle, LabelRadiusX, LabelRadiusY);

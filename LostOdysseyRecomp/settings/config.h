@@ -124,7 +124,7 @@ struct Config
     bool automaticUpdates = true;
     bool debugLog = false; // Writes info and kernel lines to the runtime log. Applied live.
     uint32_t audioOutput = AudioOutputStereo; // Applied live; saved by SaveAudioOutput.
-    uint32_t audioMatrixPhase = 90; // Matrix surround phase shift, 0-180 degrees in 15 degree steps. Applied live.
+    uint32_t audioMatrixRear = 110; // Matrix surround rear angle, 90-150 degrees in 10 degree steps. Applied live.
     bool skipShaderPrebuild = false;
     bool saveAnywhere = false; // Debug-only preference; defaults off for existing profiles.
     bool noRandomEncounters = false; // Debug-only preference, persisted like saveAnywhere.

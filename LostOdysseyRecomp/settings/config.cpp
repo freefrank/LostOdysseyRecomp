@@ -37,7 +37,7 @@ Config Validate(Config value)
     value.depthOfFieldPercent = std::min(value.depthOfFieldPercent, 100u);
     value.cullingPercent = std::min(value.cullingPercent, 200u);
     value.vibrationPercent = std::min(value.vibrationPercent, 100u);
-    value.audioMatrixPhase = std::min((value.audioMatrixPhase + 7) / 15 * 15, 180u);
+    value.audioMatrixRear = std::clamp((value.audioMatrixRear + 5) / 10 * 10, 90u, 150u);
     if (value.buttonPrompts > 2) value.buttonPrompts = 0;
     value.hdrPaperWhiteNits = std::clamp(value.hdrPaperWhiteNits, 80u, 400u);
     value.hdrPeakNits = std::clamp(value.hdrPeakNits, 80u, 10000u);
@@ -269,8 +269,8 @@ Config Read()
             value.fastForwardRate = number;
         else if (key == "audio_output")
             value.audioOutput = number;
-        else if (key == "audio_matrix_phase")
-            value.audioMatrixPhase = number;
+        else if (key == "audio_matrix_rear")
+            value.audioMatrixRear = number;
         else if (key == "automatic_updates")
         {
             // Unknown values keep the safe package default (enabled).
@@ -405,7 +405,7 @@ static bool WriteConfig(const Config &value)
            << "\nfxaa=" << value.fxaa << "\nautomatic_updates=" << value.automaticUpdates
            << "\ndebug_log=" << (value.debugLog ? 1 : 0)
            << "\naudio_output=" << value.audioOutput
-           << "\naudio_matrix_phase=" << value.audioMatrixPhase
+           << "\naudio_matrix_rear=" << value.audioMatrixRear
            << "\nskip_shader_prebuild=" << (value.skipShaderPrebuild ? 1 : 0)
            << "\nsave_anywhere=" << (value.saveAnywhere ? 1 : 0)
            << "\nno_random_encounters=" << (value.noRandomEncounters ? 1 : 0)

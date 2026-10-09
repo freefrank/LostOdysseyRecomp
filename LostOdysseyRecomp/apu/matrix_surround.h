@@ -9,9 +9,10 @@
 //   Rt = R + 0.707 C + j (0.4899 Ls + 0.8718 Rs)
 // The 90 degree shift is the phase difference between two all-pass chains
 // (Olli Niemitalo's coefficients): within 0.7 degrees from 30 Hz to 23.9 kHz
-// at 48 kHz. Mixing the surrounds' outputs of both chains as cos/sin gives any
-// other shift for tuning by ear; 0 degrees is the plain anti-phase matrix.
+// at 48 kHz. How each surround splits between Lt and Rt sets where a decoder
+// hears it; SetRearAngle moves the surrounds from that split.
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 
@@ -20,6 +21,7 @@ namespace apu
     class MatrixSurround
     {
     public:
+        // Pro Logic II coefficients; Major/Minor are the standard surround split.
         static constexpr float Center = 0.7071f, Lfe = 0.5f, Major = 0.8718f, Minor = 0.4899f, Gain = 0.5f;
 
         // channel: FL, FR, FC, LFE, BL, BR. Writes Lt and Rt at the stereo
@@ -28,29 +30,43 @@ namespace apu
         {
             const float frontLeft = channel[0] + Center * channel[2] + Lfe * channel[3];
             const float frontRight = channel[1] + Center * channel[2] + Lfe * channel[3];
-            const float rearLeft = Major * channel[4] + Minor * channel[5];
-            const float rearRight = Minor * channel[4] + Major * channel[5];
-            const float shiftedLeft = m_cos * m_rearLeft.Process(rearLeft) + m_sin * m_rearLeftQuadrature.Process(rearLeft);
-            const float shiftedRight = m_cos * m_rearRight.Process(rearRight) + m_sin * m_rearRightQuadrature.Process(rearRight);
-            lt = Gain * (m_frontLeft.Process(frontLeft) - shiftedLeft);
-            rt = Gain * (m_frontRight.Process(frontRight) + shiftedRight);
+            const float rearLeft = m_major * channel[4] + m_minor * channel[5];
+            const float rearRight = m_minor * channel[4] + m_major * channel[5];
+            lt = Gain * (m_frontLeft.Process(frontLeft) - m_rearLeft.Process(rearLeft));
+            rt = Gain * (m_frontRight.Process(frontRight) + m_rearRight.Process(rearRight));
         }
 
-        // Surround phase relative to the fronts, in degrees; 90 by default.
-        void SetPhase(float degrees)
+        // A surround split as cos/sin of an angle: Pro Logic II's 0.8718/0.4899
+        // (29.3 degrees) is heard about 110 degrees from the front, an even
+        // split (45) at the back center and none (0) at the front speakers.
+        // Maps a rear angle (degrees from the front, 30-180) to the split
+        // through the steering a passive decoder reads (SpeakerPan::Decoded),
+        // linear between front right (30), Pro Logic II (110) and the back (180).
+        static float SplitForRearAngle(float degrees)
         {
-            const float radians = degrees * 3.14159265f / 180.0f;
-            m_cos = std::cos(radians);
-            m_sin = std::sin(radians);
+            // A right surround alone steers to 90 + 2 * split.
+            const float standard = 90 + 2 * std::atan2(Minor, Major) * 57.29578f;
+            const float angle = std::clamp(degrees, 30.0f, 180.0f);
+            const float steering = angle <= 110 ? 90 + (angle - 30) / 80 * (standard - 90)
+                                                : standard + (angle - 110) / 70 * (180 - standard);
+            return (steering - 90) / 2;
         }
 
-        // Clears the filters; keeps the phase.
+        // Where the surrounds are heard, degrees from the front; 110 is Pro Logic II.
+        void SetRearAngle(float degrees)
+        {
+            const float split = SplitForRearAngle(degrees) * 0.017453292f;
+            m_major = std::cos(split);
+            m_minor = std::sin(split);
+        }
+
+        // Clears the filters; keeps the rear angle.
         void Reset()
         {
-            const float c = m_cos, s = m_sin;
+            const float major = m_major, minor = m_minor;
             *this = {};
-            m_cos = c;
-            m_sin = s;
+            m_major = major;
+            m_minor = minor;
         }
 
     private:
@@ -89,10 +105,9 @@ namespace apu
             float previous = 0;
         };
 
-        // Chain<false> runs 90 degrees ahead of Chain<true>, which the fronts
-        // and the in-phase part of the surrounds go through.
-        Chain<true> m_frontLeft, m_frontRight, m_rearLeft, m_rearRight;
-        Chain<false> m_rearLeftQuadrature, m_rearRightQuadrature;
-        float m_cos = 0, m_sin = 1;
+        // The fronts go through the chain 90 degrees behind the surrounds'.
+        Chain<true> m_frontLeft, m_frontRight;
+        Chain<false> m_rearLeft, m_rearRight;
+        float m_major = Major, m_minor = Minor;
     };
 }

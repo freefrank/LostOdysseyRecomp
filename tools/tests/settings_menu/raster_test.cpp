@@ -79,20 +79,21 @@ int main() {
     Check(worker.get() == fallback, "separate presentation threads do not share mutable cache");
     std::vector<uint32_t> empty;
     Check(!settings::RasterizeMenu(s,0,720,empty), "invalid size still rejected");
-    // Audio-tab speaker test: the layout draws under the rows with a path that
-    // follows the phase; the marker layer changes pixels only inside the bounds
-    // it reports, wider when it frames a speaker.
+    // Audio-tab speaker test: the layout draws under the rows and follows the
+    // rear angle; the marker layer changes pixels only inside the bounds it
+    // reports, wider when it frames a speaker.
     auto audio = Snapshot();
     audio.tab = 1; audio.row = 0; audio.rows.resize(2);
     const auto plain = Draw(audio,1920,1080);
     audio.speakerLayout = true;
     const auto layout = Draw(audio,1920,1080);
     Check(plain != layout, "speaker layout draws under the rows");
-    audio.speakerPhase = 180;
-    Check(Draw(audio,1920,1080) != layout, "the decoded path follows the phase");
+    audio.speakerRear = 150;
+    Check(Draw(audio,1920,1080) != layout, "the rear speakers and the path follow the rear angle");
+    audio.speakerRear = 110;
     for (float position : {1.0f, 2.5f, 4.0f}) {
         auto marked = layout;
-        const auto r = settings::DrawSpeakerMarker(marked,1920,1080,position,90.0f);
+        const auto r = settings::DrawSpeakerMarker(marked,1920,1080,position,110.0f);
         bool inside = true, changed = false;
         for (size_t y = 0; y < 1080; ++y)
             for (size_t x = 0; x < 1920; ++x)

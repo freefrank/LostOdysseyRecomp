@@ -1,12 +1,11 @@
 #pragma once
 
-// Speaker test for the Matrix phase row: pink noise circles the listener
+// Speaker test for the Rear angle row: pink noise circles the listener
 // clockwise (front left, center, front right, right surround, left surround),
 // holding 0.5 s on each speaker and gliding 1.2 s to the next with a
 // constant-power pan. It replaces the game's 5.1 mix, so it goes through the
-// same encoding. While it glides between a front and a surround speaker both
-// carry it at once, which is where the matrix phase is heard: at the right
-// phase the sound moves smoothly from front to rear.
+// same encoding, so the rear angle setting moves where the surround stops
+// sound.
 
 #include "matrix_surround.h"
 #include <algorithm>
@@ -22,9 +21,17 @@ namespace apu
     public:
         static constexpr uint32_t Hold = 24000, Glide = 57600, Step = Hold + Glide, FadeIn = 480;
         // Guest planes in order around the listener and their angles, degrees
-        // clockwise from the front (ITU-R BS.775: fronts at 30, surrounds at 110).
+        // clockwise from the front (ITU-R BS.775: fronts at 30, surrounds at
+        // 110, where Pro Logic II's surround split is heard).
         static constexpr int Order[5] = {0, 2, 1, 5, 4};
         static constexpr float Angles[5] = {330, 0, 30, 110, 250};
+
+        // Where speaker `index` (Order) is heard with the surrounds encoded
+        // for `rearAngle` (MatrixSurround::SetRearAngle).
+        static float SpeakerAngle(int index, float rearAngle)
+        {
+            return index == 3 ? rearAngle : index == 4 ? 360 - rearAngle : Angles[index];
+        }
 
         // Gains in guest order (FL, FR, FC, LFE, BL, BR) at `position` along the
         // circle: 0 front left, 1 center, 2 front right, 3 right surround,
@@ -44,23 +51,25 @@ namespace apu
             float degrees, focus;
         };
         // Where a passive matrix decoder would put the sound at `position` with
-        // the encoder at `phase` degrees, from ideal Lt/Rt (the all-pass pair
-        // taken as an exact 90 degree shift): degrees around the listener,
-        // calibrated so a speaker alone lands on its own angle, and focus, 1 on
-        // a speaker and smaller where Lt and Rt spread the sound out.
-        static Direction Decoded(float position, float phase)
+        // the surrounds encoded for `rearAngle`, from ideal Lt/Rt (the all-pass
+        // pair taken as an exact 90 degree shift): degrees around the listener,
+        // calibrated so each speaker alone with the Pro Logic II split lands on
+        // its standard angle, and focus, 1 on a speaker and smaller where Lt
+        // and Rt spread the sound out.
+        static Direction Decoded(float position, float rearAngle)
         {
             float gain[6];
             Gains(position, gain);
-            const Direction steer = Steer(gain, phase);
-            // Each speaker alone, by steering angle, maps to its drawn angle.
+            const float split = MatrixSurround::SplitForRearAngle(rearAngle) * 0.017453292f;
+            const Direction steer = Steer(gain, std::cos(split), std::sin(split));
+            // Each speaker alone, by steering angle, maps to its standard angle.
             struct Anchor { float steering, drawn; };
             std::array<Anchor, 5> anchors;
             for (int i = 0; i < 5; ++i)
             {
                 float alone[6] = {};
                 alone[Order[i]] = 1;
-                anchors[i] = {Steer(alone, phase).degrees, Angles[i]};
+                anchors[i] = {Steer(alone, MatrixSurround::Major, MatrixSurround::Minor).degrees, Angles[i]};
             }
             std::sort(anchors.begin(), anchors.end(), [](const Anchor &a, const Anchor &b) { return a.steering < b.steering; });
             const float psi = steer.degrees < anchors[0].steering ? steer.degrees + 360 : steer.degrees;
@@ -101,14 +110,15 @@ namespace apu
         void Reset() { *this = {}; }
 
     private:
-        // Steering from the Lt/Rt powers: left/right and center/surround
-        // dominance as an angle (0 center, 90 right, 180 surround) and length.
-        static Direction Steer(const float (&gain)[6], float phase)
+        // Steering from the Lt/Rt powers with the surrounds split major/minor:
+        // left/right and center/surround dominance as an angle (0 center,
+        // 90 right, 180 surround) and length.
+        static Direction Steer(const float (&gain)[6], float major, float minor)
         {
-            using M = MatrixSurround;
-            const std::complex<float> rotate = std::polar(1.0f, phase * 0.017453292f);
-            const std::complex<float> lt = gain[0] + M::Center * gain[2] - rotate * (M::Major * gain[4] + M::Minor * gain[5]);
-            const std::complex<float> rt = gain[1] + M::Center * gain[2] + rotate * (M::Minor * gain[4] + M::Major * gain[5]);
+            const std::complex<float> j(0, 1);
+            const float center = MatrixSurround::Center * gain[2];
+            const std::complex<float> lt = gain[0] + center - j * (major * gain[4] + minor * gain[5]);
+            const std::complex<float> rt = gain[1] + center + j * (minor * gain[4] + major * gain[5]);
             const float l2 = std::norm(lt), r2 = std::norm(rt), s2 = std::norm(lt + rt), d2 = std::norm(lt - rt);
             if (l2 + r2 <= 1e-12f)
                 return {0, 0};

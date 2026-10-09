@@ -773,16 +773,16 @@ void Publish(uint8_t *base, uint32_t config)
         for (int i = 0; i < int(GraphicsRow::Count) && GraphicsRowHidden(row); ++i)
             row = (row + 1) % int(GraphicsRow::Count);
 #endif
-    // Speaker test noise while Matrix phase is focused and adjustable; it
+    // Speaker test noise while Rear angle is focused and adjustable; it
     // stops by itself once the menu stops publishing. The speaker layout is
     // drawn under the rows; DrawMenu moves the marker with the sound.
-    const bool speakerTest = tab == 1 && row == AudioMatrixPhaseRow && edit.audioOutput == AudioOutputMatrix;
+    const bool speakerTest = tab == 1 && row == AudioRearAngleRow && edit.audioOutput == AudioOutputMatrix;
     apu::SetTestSignal(speakerTest);
     Snapshot next;
     next.tab = tab;
     next.row = row;
     next.speakerLayout = speakerTest;
-    next.speakerPhase = int(edit.audioMatrixPhase);
+    next.speakerRear = int(edit.audioMatrixRear);
     next.language = edit.uiLanguage;
     next.calibration = MakeHdrCalibration(edit, calibrationOpen.load());
     next.brightness = MakeBrightnessCalibration(edit, brightnessOpen.load());
@@ -850,10 +850,10 @@ void Publish(uint8_t *base, uint32_t config)
         addChoices(L"Audio output", L"音訊輸出",
                    {Tr(L"Stereo", L"立體聲"), Tr(L"5.1 surround", L"5.1 環繞聲"), Tr(L"Matrix surround", L"矩陣環繞聲")},
                    edit.audioOutput);
-        std::vector<std::wstring> phases;
-        for (uint32_t degrees = 0; degrees <= 180; degrees += 15)
-            phases.push_back(std::to_wstring(degrees) + L"°");
-        addChoices(L"Matrix phase", L"矩陣相移", std::move(phases), edit.audioMatrixPhase / 15,
+        std::vector<std::wstring> angles;
+        for (uint32_t degrees = 90; degrees <= 150; degrees += 10)
+            angles.push_back(std::to_wstring(degrees) + L"°");
+        addChoices(L"Rear angle", L"後方角度", std::move(angles), (edit.audioMatrixRear - 90) / 10,
                    edit.audioOutput == AudioOutputMatrix);
     }
     else if (tab == 2)
@@ -1094,10 +1094,10 @@ void Publish(uint8_t *base, uint32_t config)
 #endif
             : Tr(L"5.1 sends the game's surround mix to a 5.1 or 7.1 speaker setup. Applies immediately.",
                  L"5.1 會將遊戲的環繞聲混音輸出到 5.1 或 7.1 喇叭，立即套用。");
-    if (tab == 1 && row == AudioMatrixPhaseRow && status.empty())
+    if (tab == 1 && row == AudioRearAngleRow && status.empty())
         next.help = edit.audioOutput == AudioOutputMatrix
-            ? Tr(L"A sound circles the speakers; the dots show where a decoder would place it. Adjust until it moves smoothly front to rear.",
-                 L"聲音會繞著喇叭轉圈，圓點顯示解碼器會把聲音放在哪裡；調整到聲音在前後之間平順移動。")
+            ? Tr(L"A test sound circles the speakers. Sets where the rear channels sound; 110° is the Pro Logic II standard.",
+                 L"測試聲音會繞著喇叭轉圈。設定後方聲道的位置；110° 為 Pro Logic II 標準。")
             : Tr(L"Select Matrix surround in Audio output to adjust this.",
                  L"在音訊輸出選擇矩陣環繞聲後才能調整。");
     if (tab == 2)
@@ -1419,7 +1419,7 @@ void Publish(uint8_t *base, uint32_t config)
         next.rows == snapshot.rows && next.help == snapshot.help && next.notice == snapshot.notice && next.dialogTitle == snapshot.dialogTitle &&
         next.dialogMessage == snapshot.dialogMessage && next.dialogChoices == snapshot.dialogChoices &&
         next.dialogSelection == snapshot.dialogSelection && next.speakerLayout == snapshot.speakerLayout &&
-        next.speakerPhase == snapshot.speakerPhase)
+        next.speakerRear == snapshot.speakerRear)
         return;
     next.revision = snapshot.revision + 1;
     snapshot = std::move(next);
@@ -2480,18 +2480,18 @@ PPC_FUNC(sub_822F19B0)
             if (!SaveAudioOutput(edit.audioOutput))
                 status = Tr(L"Could not save settings.", L"無法儲存設定。");
         }
-        else if (tab == 1 && row == AudioMatrixPhaseRow)
+        else if (tab == 1 && row == AudioRearAngleRow)
         {
             // Like Vibration: applied and saved at once, without unsaved
             // Graphics edits; only adjustable with Matrix surround.
-            const auto phase = uint32_t(std::clamp(int(edit.audioMatrixPhase) + delta * 15, 0, 180));
-            if (edit.audioOutput == AudioOutputMatrix && phase != edit.audioMatrixPhase)
+            const auto rear = uint32_t(std::clamp(int(edit.audioMatrixRear) + delta * 10, 90, 150));
+            if (edit.audioOutput == AudioOutputMatrix && rear != edit.audioMatrixRear)
             {
-                edit.audioMatrixPhase = phase;
+                edit.audioMatrixRear = rear;
                 Config saved = GetConfig();
-                saved.audioMatrixPhase = phase;
+                saved.audioMatrixRear = rear;
                 if (!SaveConfig(saved)) status = Tr(L"Could not save settings.", L"無法儲存設定。");
-                apu::SetMatrixPhase(phase);
+                apu::SetMatrixRearAngle(rear);
             }
         }
         else if (tab == 1)
@@ -2930,7 +2930,7 @@ bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint3
     const auto drawMarker = [&] {
         const float position = current.speakerLayout && current.dialogChoices.empty() ? apu::TestSignalPosition() : -1.0f;
         if (position >= 0)
-            markerDrawn = DrawSpeakerMarker(pixels, width, height, position, float(current.speakerPhase));
+            markerDrawn = DrawSpeakerMarker(pixels, width, height, position, float(current.speakerRear));
     };
     // Input style can change without a guest menu tick (hot-plug or keyboard).
     current.playStationPrompts = hid::UsesPlayStationPrompts();

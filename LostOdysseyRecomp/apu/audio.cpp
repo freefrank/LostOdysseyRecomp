@@ -31,7 +31,7 @@ namespace apu
         std::atomic<bool> g_surroundRequested{ false };
         bool g_surroundOpen = false; // driver thread after Init
         std::atomic<bool> g_matrix{ false }; // matrix-encode the stereo frames
-        std::atomic<uint32_t> g_matrixPhase{ 90 };
+        std::atomic<uint32_t> g_matrixRear{ 110 };
         // steady_clock time until which the speaker test plays
         std::atomic<std::chrono::steady_clock::rep> g_testSignalUntil{ 0 };
         std::atomic<float> g_testPosition{ -1.0f };
@@ -228,9 +228,9 @@ namespace apu
             g_outputChannels = 0; // unknown until the driver thread has applied it
     }
 
-    void SetMatrixPhase(uint32_t degrees)
+    void SetMatrixRearAngle(uint32_t degrees)
     {
-        g_matrixPhase = std::min(degrees, 180u);
+        g_matrixRear = std::clamp(degrees, 90u, 150u);
     }
 
     void SetTestSignal(bool on)
@@ -268,16 +268,16 @@ namespace apu
         // on the one thread that submits frames.
         static MatrixSurround matrix;
         static bool matrixOn = false;
-        static uint32_t matrixPhase = 90;
+        static uint32_t matrixRear = 110;
         if (const bool on = g_matrix; on != matrixOn)
         {
             matrix.Reset();
             matrixOn = on;
         }
-        if (const uint32_t phase = g_matrixPhase; phase != matrixPhase)
+        if (const uint32_t rear = g_matrixRear; rear != matrixRear)
         {
-            matrix.SetPhase(float(phase));
-            matrixPhase = phase;
+            matrix.SetRearAngle(float(rear));
+            matrixRear = rear;
         }
         static SpeakerPan pan;
         static bool testOn = false;
