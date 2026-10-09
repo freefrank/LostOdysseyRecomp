@@ -151,6 +151,8 @@ if(LO_BUILD_MOD_TESTS)
             tools/tests/asset_export_cli.cpp
             LostOdysseyRecomp/modding/asset_export.cpp
             LostOdysseyRecomp/modding/mod_api.cpp
+            LostOdysseyRecomp/modding/text_format.cpp
+            LostOdysseyRecomp/modding/text_menu.cpp
             thirdparty/lzokay/lzokay.cpp
             ${LO_MINIZ_DIR}/miniz.c
             ${LO_XXHASH_DIR}/xxhash.c)

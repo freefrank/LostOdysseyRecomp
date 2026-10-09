@@ -19,7 +19,7 @@ int main(int argc, char **argv)
     if (!request)
     {
         std::fputs("usage: LoAssetExport --export-assets <dir> --game <disc1> "
-                   "[--export-kinds textures,movies] [--export-filter <text>]\n", stderr);
+                   "[--export-kinds textures,fingerprints,movies,text] [--export-filter <text>]\n", stderr);
         return 1;
     }
     return modding::asset_export::Run(*request, game);

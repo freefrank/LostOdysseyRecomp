@@ -19,20 +19,24 @@ Select the package for the language used by the game. `int`, `chi`, `jpn`, `kor`
 
 ## 1b. Export the original artwork (optional)
 
-The game can export its own textures and movies from your game data as a starting point. The export is for your reference only: it comes from your copy of the game and must not be redistributed or bundled in a mod.
+The game can export its own textures, movies and text from your game data as a starting point. The export is for your reference only: it comes from your copy of the game and must not be redistributed or bundled in a mod.
 
 ```sh
 LostOdysseyRecomp.exe --export-assets my-export --export-kinds textures,movies --export-filter UI_MAIN
 ```
 
-The output folder must not exist or must be empty. `--export-kinds` (`textures`, `movies`, or `fingerprints` for the index without PNG files; default: textures and movies) and `--export-filter` (only names containing the text) are optional. No window opens; the program prints progress and exits (exit code 1 on a fatal error). With [Mod Organizer 2](Mod-Organizer-2.md), the **Export Lost Odyssey assets** tool in the Tools menu does the same from a dialog.
+The output folder must not exist or must be empty. `--export-kinds` (`textures`, `movies`, `text`, or `fingerprints` for the texture index without PNG files; default: textures, movies and text) and `--export-filter` (only names containing the text) are optional. No window opens; the program prints progress and exits (exit code 1 on a fatal error). With [Mod Organizer 2](Mod-Organizer-2.md), the **Export Lost Odyssey assets** tool in the Tools menu does the same from a dialog.
 
 ```text
 my-export/textures/<package path>/<object>.<export index>.png
 my-export/textures/index.csv        key,file,width,height,format,fingerprint,fingerprint_tiled
 my-export/movies/<name>.wmv         original videos, unchanged
+my-export/text/<file path>.json     {"key": "text"} for one game text file
+my-export/text/index.csv            path,language,format,source,entries,round_trip
 my-export/export-summary.txt
 ```
+
+Text covers the menus, item and skill names and descriptions, battle messages, field dialogue, cutscene subtitles, the credits and the engine's own messages, for every language on your discs. Each game file becomes one UTF-8 JSON file with its own path plus `.json`, for example `text/bin/xenon/scr/mes/int/u3b_0_scrw.jmd.json`. Codes that are not text appear as tokens such as `{E001}` (a line break in dialogue) or `{E10D:0500}` (a code with its value); keep them where they are. `source` in `index.csv` is `base`, or the DLC whose version the game uses instead of the disc's (`lodlc002`, `lodlc003`). `round_trip` is `ok` when the file was rebuilt from its exported text byte for byte; only those files can take translations. Importing translated text is planned ([#369](https://github.com/freefrank/LostOdysseyRecomp/issues/369)); the export is the starting point. The Thousand Years of Dreams stories and place names in `name_data.xmb` are not exported yet.
 
 `index.csv` holds the mod key of every texture, so no catalog is needed. Select one texture and copy its PNG into a new mod:
 
