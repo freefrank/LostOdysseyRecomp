@@ -5,7 +5,7 @@
       "name": "mesh-geometry-math61",
       "manifest": "LostOdysseyRecompSemantics/recovery_drafts/mesh_geometry_math61.json",
       "harness": "LostOdysseyRecompSemantics/tests/mesh_geometry_math61_oracle.cpp",
-      "prelude": "#include \"ppc_context.h\"\n",
+      "prelude": "#include \"ppc_context.h\"\n#define sub_822DA388 __imp__sub_822DA388\nvoid MeshMathSave(PPCContext&,std::uint8_t*);\nvoid MeshMathRestore(PPCContext&,std::uint8_t*);\nvoid MeshMathSaveFp(PPCContext&,std::uint8_t*);\nvoid MeshMathRestoreFp(PPCContext&,std::uint8_t*);\n#define __savegprlr_28 MeshMathSave\n#define __restgprlr_28 MeshMathRestore\n#define __savefpr_27 MeshMathSaveFp\n#define __restfpr_27 MeshMathRestoreFp\n#define sub_82BD8FD8 __imp__sub_82BD8FD8\n",
       "sources": [
         "LostOdysseyRecompSemantics/src/mesh_geometry_math61.cpp"
       ]

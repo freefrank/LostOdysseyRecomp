@@ -1,3 +1,7 @@
+## Root direct continuation: mesh area, corners and surface centroid (2026-10-09)
+
+`mesh_geometry_math61` adds BD8FD8 indexed triangle area, BC3128 corner angle and BC65F8 surface-area weighted centroid. Thirteen focused cases total pass Full72/RAM/host CSR and independent values, including unequal-area triangles and invalid mesh. Original corner/centroid bodies compose original atan2/area lowers. Full Clang library passes; private constants stay external. Three implementation entries, no historical mapping or gameplay claim. These close geometry dependencies for polygon triangulation and mesh serialization.
+
 ## Root direct continuation: normal angle encoding (2026-10-09)
 
 `mesh_normal_encode61` closes 325048 guest-table arcsine and BB8FA0 sign/order masks plus two quantized angles. Four complete original encoder/arcsine cases pass Full72/RAM/host CSR and independent masks/angle values. The encoded components retain min(max(abs(x),abs(y)),abs(z)) and min(abs(x),abs(y)), rather than a sorted pair. Full Clang library passes. LO_NORMAL_ENCODING_CONSTANTS supplies a private 144-byte bundle (128 bytes at83214E08, then four float words820D60A8/820D6454/82000E40/822181C4); none is checked in. Broad nonfinite/precision-edge cases remain untested.

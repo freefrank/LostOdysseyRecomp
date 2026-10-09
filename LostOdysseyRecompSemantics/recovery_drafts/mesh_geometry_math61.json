@@ -1,6 +1,6 @@
 {
   "schema": "semantic-recovery-draft-v1",
-  "scope": "Triangle plane and guest-table atan2.",
+  "scope": "Triangle planes, indexed area, corner angles, surface-area weighted centroid and guest-table atan2.",
   "entries": [
     {
       "address": "82BD92C0",
@@ -17,12 +17,39 @@
       "instruction_count": 76,
       "body_sha256": "9158d4e1d3e04bb5719c7e29e3a9a599ebad518090f34471f81a692e665c419f",
       "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BD8FD8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 22591,
+      "instruction_count": 49,
+      "body_sha256": "bba524e4b874e11fa2caee0247dd86b6a8d952c6f5861d86acbcd40484cbc188",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BC3128",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 34066,
+      "instruction_count": 74,
+      "body_sha256": "2c310e78b3ab2a9c3e2261f21ed756e8ad3c1362563bceccef68764e33bebb30",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BC65F8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 42261,
+      "instruction_count": 116,
+      "body_sha256": "3b041525433db3f089be235cbd4d4ce70bfb02bb1db19501d1ebfc806082d299",
+      "status": "focused_original_ppc_validated"
     }
   ],
   "implementation": {
     "entries": [
       "82BD92C0",
-      "822DA388"
+      "822DA388",
+      "82BD8FD8",
+      "82BC3128",
+      "82BC65F8"
     ],
     "header": "include/lo_semantics/mesh_geometry_math61.h",
     "source": "src/mesh_geometry_math61.cpp",
@@ -34,9 +61,9 @@
     "runtime_validated": false,
     "complete": false,
     "date": "2026-10-09",
-    "focused_original_ppc_cases": 8,
+    "focused_original_ppc_cases": 13,
     "library_validated": true,
-    "case_scope": "Normalized/degenerate triangle planes and atan2 ordinary quadrants/signed zero. Original-body Full72/RAM/host CSR and independent plane/angle values. Private guest constant block supplied by LO_MESH_MATH_CONSTANTS; no image data checked in.",
+    "case_scope": "Normalized/degenerate planes; atan2 quadrants/signed zero; indexed area; corner angles; unequal-area surface centroid and invalid mesh. Original-body Full72/RAM/host CSR and independent values. Corner/centroid compose actual original atan2/area bodies. Private LO_MESH_MATH_CONSTANTS remains external; broad nonfinite and runtime behavior untested.",
     "platform": "Linux x64 Clang 19.1.7; pinned regenerated PPC; mmap guest overlay",
     "mapping_limit": "Historical catalog membership unverified; no baseline mapping credit."
   }
