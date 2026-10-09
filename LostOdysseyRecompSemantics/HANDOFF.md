@@ -1,3 +1,7 @@
+## Root direct continuation: face and vertex normal construction (2026-10-09)
+
+`mesh_vertex_normals61` closes 82656EB8/BC30A0 two-array ownership, BC3250 normalized face/vertex construction with optional angle weighting, and BB9160 mesh installation with final sign reversal. Five composed-original-chain cases pass Full72/RAM/CSR/callbacks and independent folded-mesh normal directions, borrowed u16/implicit indices, invalid positions, allocation and cleanup. Shared angle/memory/allocator lowers are concrete. Full Clang library passes; private constants external. Four implementation entries, no mapping/runtime claim.
+
 ## Root direct continuation: polygon fans and orientation (2026-10-09)
 
 `mesh_polygon_triangulate61` closes BB8C08: replace owned triangle indices with polygon fans, compute the surface centroid and flip inward-facing triangles. Three original-upper/shared-concrete-geometry cases pass Full72/RAM/CSR/callbacks plus independent cube fan connectivity, outward winding and old-buffer replacement. Full Clang library passes. Original count/allocation preconditions retained; no broad failure matrix or runtime claim.

@@ -1,0 +1,60 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Owned/borrowed face and vertex normal construction, optional angle weighting and mesh adapter installation.",
+  "entries": [
+    {
+      "address": "82656EB8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.53.cpp",
+      "source_line": 22534,
+      "instruction_count": 4,
+      "body_sha256": "1537a63bf0b5400650838307bbb121d9a2384b8f362b0cc0582702ae367425a1",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BC30A0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 33986,
+      "instruction_count": 33,
+      "body_sha256": "4b3c31a9818c53e76776400a821bb79f0f86e96450cff8c92d8102a64376ef37",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BC3250",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 34241,
+      "instruction_count": 395,
+      "body_sha256": "cd33512864bca377dd6ae4e9fa60f6b919396aa3d4d83f62dedb1739ed342fd4",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BB9160",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 11285,
+      "instruction_count": 109,
+      "body_sha256": "a6a75d449e8424ea09e05a29779c574d17a16d4febff470d963a68d0633a34b5",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82656EB8",
+      "82BC30A0",
+      "82BC3250",
+      "82BB9160"
+    ],
+    "header": "include/lo_semantics/mesh_vertex_normals61.h",
+    "source": "src/mesh_vertex_normals61.cpp",
+    "oracle": "tests/mesh_vertex_normals61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 5,
+    "library_validated": true,
+    "case_scope": "Composed original constructor/build/cleanup/mesh adapter with shared concrete corner-angle, allocator and memset lowers. Full72/RAM/CSR/callbacks; folded weighted/unweighted mesh, borrowed u16/implicit inputs, invalid positions, allocation ownership/release. Independent unit normal directions. Broad failures/nonfinite untested.",
+    "platform": "Linux x64 Clang19; pinned PPC; mmap guest overlay"
+  }
+}

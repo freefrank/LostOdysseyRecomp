@@ -75,6 +75,13 @@ recovered alongside plane/atan2 math. BB8FA0 packs sign/order flags and two
 quantized angles using the guest arcsine approximation 82325048. These stages
 retain single-precision rounding and original component selection.
 
+BC3250 builds normalized face normals, accumulates uniform or angle-weighted
+vertex normals, then normalizes each vertex. Its descriptor borrows positions
+and u32/u16 indices; optional face/vertex destinations remain borrowed. The
+two-word owner records newly allocated destinations only. BB9160 replaces mesh
++20 with sign-reversed angle-weighted normals and releases temporary face data.
+Keep face and vertex ownership separate in a Rust port.
+
 ## Remaining upper dependencies
 
 82B9C7D8 (mesh cooking orchestration) is still incomplete. Its constructor,

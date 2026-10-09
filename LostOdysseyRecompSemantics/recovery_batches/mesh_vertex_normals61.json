@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "mesh-vertex-normals61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/mesh_vertex_normals61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/mesh_vertex_normals61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\nvoid NormalsIndirect(std::uint32_t,PPCContext&,std::uint8_t*);\nvoid NormalsLower(std::uint32_t,PPCContext&,std::uint8_t*);\nvoid NormalsSave(PPCContext&,std::uint8_t*);\nvoid NormalsRestore(PPCContext&,std::uint8_t*);\n#undef PPC_CALL_INDIRECT_FUNC\n#define PPC_CALL_INDIRECT_FUNC(t) NormalsIndirect((t),ctx,base)\n#define __savegprlr_23 NormalsSave\n#define __restgprlr_23 NormalsRestore\n#define sub_82BD0798(c,b) NormalsLower(0x82bd0798u,c,b)\n#define sub_82B7BC40(c,b) NormalsLower(0x82b7bc40u,c,b)\n#define sub_82BC3128(c,b) NormalsLower(0x82bc3128u,c,b)\n#define sub_82656EB8 __imp__sub_82656EB8\n#define sub_82BC30A0 __imp__sub_82BC30A0\n#define sub_82BC3250 __imp__sub_82BC3250\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/mesh_vertex_normals61.cpp"
+      ]
+    }
+  ]
+}
