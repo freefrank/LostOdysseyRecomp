@@ -1,25 +1,23 @@
 ## Direct continuation — 2026-10-09
 
-Parallel recovery workers are stopped. The direct continuation corrects the
-BD22A8 oracle's independent packed-range expectation: accepted BD2168 exports
-`((index_pointer - index_base) << 2) & 0xfffffff0` plus `(count - 1) & 15`.
-For the fixture's single-index leaves at byte offsets 0 and 4, the expected
-words are therefore 0 and 16. This is a fixture correction, not a change to
-recovered runtime logic. The original-PPC oracle has NOT been rerun in the
-new executor: private XEX acquisition is currently blocked there. Both WIP
-families remain unpromoted with zero additional mapping credit until that
-focused check is repeated. Prior executor receipts remain historical evidence.
+Parallel recovery workers are stopped. The direct executor received the user's
+private XEX upload and verified the expected SHA256 before regenerating PPC with
+the pinned XenonRecomp plus repository patch. Private inputs remain ignored.
 
-# Semantic recovery handoff
+BD22A8's independent fixture assertion was corrected from ordinal leaf IDs to
+packed ranges: BD2168 exports `((index_pointer - index_base) << 2) & 0xfffffff0`
+plus `(count - 1) & 15`. Single-index leaves at byte offsets 0 and 4 therefore
+encode as 0 and 16. All three original-upper/shared-lower cases now pass,
+including Full72, RAM, host CSR, callback traces and ownership. Concrete
+bounds/split/strategy callbacks remain borrowed services, not full-target proof.
+BD8BF8's three complete original-body cases were independently repeated and
+passed here. The complete Clang 19.1.7 Release static library builds. Both units
+are recorded as selected-case validated with zero baseline mapping credit;
+no runtime replacement or gameplay acceptance is implied.
 
-## Transfer-only WIP pause
-
-All delegated workers are stopped. Two unfinished families and their CMake entries
-are preserved without fixing the remaining assertion or changing draft status.
-See [execution transfer packet](handoff/linux_oracle_20261009/README.md) for exact
-state, private-input acquisition provenance, prerequisites and safe runner transfer.
-The parent executor is separate; these local paths are not shared with it.
-
+Next: recover unresolved concrete second-tree bounds/centroid/split targets and
+strategy binding from their pinned original bodies. BD5910's host FP exception
+flag difference remains an independent unresolved draft.
 
 ## Independent corpus continuation — 2026-10-09
 

@@ -8,13 +8,27 @@
       "source_line": 22026,
       "instruction_count": 186,
       "body_sha256": "259bf952eeebbc0f7e8958765bb0fa8fcdf7aecc5a94b538235f7776d176a831",
-      "status": "validation_pending"
+      "status": "focused_original_ppc_validated"
     }
   ],
   "validation": {
-    "status": "pending",
+    "status": "passed_focused_linux_mapping_pending",
     "mapping_credit": 0,
     "runtime_validated": false,
-    "complete": false
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 3,
+    "library_validated": true,
+    "library": "PASS complete Clang 19.1.7 Release static library in direct executor",
+    "platform": "Linux x64 Clang 19.1.7; locally regenerated pinned original bodies and mmap guest-window overlay",
+    "case_scope": "Three complete original-body cases. Finite valid triangle/index data; no malformed-index or nonfinite matrix, runtime or gameplay acceptance."
+  },
+  "implementation": {
+    "entries": [
+      "82BD8BF8"
+    ],
+    "header": "include/lo_semantics/tree_triangle_split61.h",
+    "source": "src/tree_triangle_split61.cpp",
+    "oracle": "tests/tree_triangle_split61_oracle.cpp"
   }
 }
