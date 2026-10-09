@@ -1,3 +1,7 @@
+## Root direct continuation: packed point bounds (2026-10-09)
+
+`geometry_primitives61` adds BCA410 packed xyz min/max reduction, an input to B9EA90 cooked bounds. Eleven family cases pass, including independent four-point extrema and original zero-count/null-input no-write behavior. Full72/RAM/CSR and full Clang library pass. Bounding sphere and the original pow dependency remain open; this does not close B9EA90.
+
 ## Root direct continuation: cooked support-map generation (2026-10-09)
 
 `mesh_cook_support61` closes B9EB58 and BC61B0/BC6210/BC63C8 support construction/destruction. Preserve byte-index limits, replace old owner, sample 16x16 directions per cube face only above 32 vertices, and distinguish one loaded block from two independent generated arrays. Four complete-original-local-chain cases pass Full72/RAM/CSR/events/ownership and independent dimensions/index ranges/full teardown: small mesh, fresh large mesh, replacement of split arrays, replacement of loaded combined block. Cube sampling/extrema are shared concrete recovered lowers. Diagnostic and allocation failures are implemented but not in this focused set. Existing BC8310/BC8330 pointer-field leaves receive no duplicate credit. Full Clang library passes.

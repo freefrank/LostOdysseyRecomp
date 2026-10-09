@@ -49,6 +49,14 @@
       "instruction_count": 64,
       "body_sha256": "ecb3252bbf2a9b6995409c30da1aa204f9655d381aeae07c0f830175440d82a5",
       "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BCA410",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 51674,
+      "instruction_count": 49,
+      "body_sha256": "b35b242c6a70ca8f09e1ac9e5c9f14de9473f41da838b91ecda3928eb5fa699b",
+      "status": "focused_original_ppc_validated"
     }
   ],
   "implementation": {
@@ -58,7 +66,8 @@
       "82BDE040",
       "82BDE108",
       "82BDE140",
-      "82BDE1B8"
+      "82BDE1B8",
+      "82BCA410"
     ],
     "header": "include/lo_semantics/geometry_primitives61.h",
     "source": "src/geometry_primitives61.cpp",
@@ -70,9 +79,9 @@
     "runtime_validated": false,
     "complete": false,
     "date": "2026-10-09",
-    "focused_original_ppc_cases": 8,
+    "focused_original_ppc_cases": 11,
     "library_validated": true,
-    "case_scope": "Centered cube, contained/rejected boxes, eight corners, triangle winding, area and relative/normalized expansion. Full72/RAM/host CSR plus independent finite geometry results. No exhaustive degenerate/nonfinite/alias/fault cases.",
+    "case_scope": "Centered cube, contained/rejected boxes, eight corners, triangle winding, area and relative/normalized expansion. Full72/RAM/host CSR plus independent finite geometry results. No exhaustive degenerate/nonfinite/alias/fault cases. Packed point min/max bounds, zero-count and null input added; original leaves, Full72/RAM/CSR and independent extrema.",
     "platform": "Linux x64 Clang 19.1.7; pinned regenerated PPC; mmap guest overlay",
     "mapping_limit": "Historical catalog membership unverified; no baseline mapping credit."
   }

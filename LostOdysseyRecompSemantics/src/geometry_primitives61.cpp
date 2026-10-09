@@ -33,6 +33,45 @@ struct Geometry {
         const auto x = Address(v);
         s.cr6 = {0u, std::uint8_t(x != 0), std::uint8_t(x == 0), s.xer_so};
     }
+    void PointBounds() {
+        auto &r = s.r;
+        Zero(r[5]);
+        if (s.cr6.eq)
+            return;
+        Zero(r[6]);
+        if (s.cr6.eq)
+            return;
+        r[11] = 0xffffffff82000000ull;
+        Load(0, r[11] + 3428);
+        r[11] = 0xffffffff82000000ull;
+        for (unsigned a = 0; a < 3; ++a)
+            Store(0, r[4] + 4 * a);
+        Load(13, r[11] + 3596);
+        for (unsigned a = 0; a < 3; ++a)
+            Store(13, r[3] + 4 * a);
+        do {
+            for (unsigned a = 0; a < 3; ++a) {
+                if (a == 0) {
+                    Load(0, r[6]);
+                    --r[5];
+                    Load(13, r[4]);
+                } else {
+                    Load(13, r[4] + 4 * a);
+                    Load(0, r[6] + 4 * a);
+                }
+                Compare(F(0), F(13));
+                if (s.cr6.gt)
+                    Store(0, r[4] + 4 * a);
+                Load(0, r[6] + 4 * a);
+                Load(13, r[3] + 4 * a);
+                Compare(F(0), F(13));
+                if (s.cr6.lt)
+                    Store(0, r[3] + 4 * a);
+            }
+            r[6] += 12;
+            Zero(r[5]);
+        } while (!s.cr6.eq);
+    }
     void Cube() {
         auto &r = s.r;
         Load(0, r[3] + 16u);
@@ -239,6 +278,9 @@ bool Apply(GuestAddress entry, GuestMemory &m, float_triplet_transfer::NativeSer
            Registers &s) {
     Geometry g{m, native, s};
     switch (entry) {
+    case 0x82bca410u:
+        g.PointBounds();
+        return true;
     case 0x82bddf08u:
         g.Cube();
         return true;

@@ -31,6 +31,13 @@ void Check(unsigned mode) {
         m.WriteU32(0x82000f20, std::bit_cast<std::uint32_t>(1.f / 3.f));
         m.WriteU32(0x82007784, std::bit_cast<std::uint32_t>(1.f));
         m.WriteU32(0x82000e50, 0);
+        m.WriteU32(0x82000d64, 0xff7fffff);
+        m.WriteU32(0x82000e0c, 0x7f7fffff);
+        if (mode >= 8) {
+            constexpr float points[]{2, -3, 4, -2, 5, 1, 0, 2, -6, 3, -1, 9};
+            for (unsigned i = 0; i < 12; ++i)
+                m.WriteU32(0x32000 + 4 * i, std::bit_cast<std::uint32_t>(points[i]));
+        }
     };
     seed(before);
     seed(after);
@@ -47,12 +54,22 @@ void Check(unsigned mode) {
     s.lr = 0x9988776681234567ull;
     s.xer_so = 1;
     s.cached_fp_control = 0x9fc0;
+    if (mode >= 8) {
+        s.r[5] = mode == 9 ? 0 : 4;
+        s.r[6] = mode == 10 ? 0 : 0x32000;
+    }
     PPCContext c{};
     crt_full_oracle::ToPpc(c, s);
     PPCFPSCRRegister{}.setcsr(s.cached_fp_control);
     constexpr GuestAddress entries[]{0x82bddf08, 0x82bddfc8, 0x82bddfc8, 0x82bde040,
-                                     0x82bde108, 0x82bde140, 0x82bde1b8, 0x82bde1b8};
+                                     0x82bde108, 0x82bde140, 0x82bde1b8, 0x82bde1b8,
+                                     0x82bca410, 0x82bca410, 0x82bca410};
     switch (mode) {
+    case 8:
+    case 9:
+    case 10:
+        __imp__sub_82BCA410(c, before.Bytes());
+        break;
     case 0:
         __imp__sub_82BDDF08(c, before.Bytes());
         break;
@@ -104,7 +121,13 @@ void Check(unsigned mode) {
         throw std::runtime_error("triangle winding swap");
     if (mode == 5 && std::bit_cast<double>(s.fpr_bits[1]) != 6.)
         throw std::runtime_error("triangle area");
-    if (mode >= 6) {
+    if (mode == 8) {
+        constexpr float lo[]{-2, -3, -6}, hi[]{3, 5, 9};
+        for (unsigned a = 0; a < 3; ++a)
+            if (value(Input + 4 * a) != lo[a] || value(Output + 4 * a) != hi[a])
+                throw std::runtime_error("point bounds");
+    }
+    if (mode >= 6 && mode < 8) {
         constexpr float original[3][3]{{0, 0, 0}, {3, 0, 0}, {0, 4, 0}};
         for (unsigned n = 0; n < 3; ++n) {
             double distance = 0;
@@ -125,9 +148,9 @@ void Check(unsigned mode) {
 } // namespace primitives_oracle
 int main() {
     try {
-        for (unsigned mode = 0; mode < 8; ++mode)
+        for (unsigned mode = 0; mode < 11; ++mode)
             primitives_oracle::Check(mode);
-        std::puts("PASS geometry-primitives61 8 original-body cases");
+        std::puts("PASS geometry-primitives61 11 original-body cases");
         return 0;
     } catch (const std::exception &e) {
         std::fprintf(stderr, "%s\n", e.what());

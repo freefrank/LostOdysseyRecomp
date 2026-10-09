@@ -2,6 +2,8 @@
 #include "lo_semantics/tree_box_centroid61.h"
 namespace lo::semantic::gpu::geometry_primitives61 {
 using Registers = tree_box_centroid61::Registers;
+// BCA410 reduces r5 packed xyz positions at r6 into min r3 / max r4;
+// zero count or null input leaves outputs untouched.
 // DF08 expands borrowed min/max box r3 to a centered cube at r4, returning
 // largest half extent in f1. DFC8 tests whether box r4 contains box r3.
 // E040 exports eight xyz corners to r4 (null output returns false).
