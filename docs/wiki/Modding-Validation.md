@@ -30,7 +30,15 @@ A synthetic payload test proves the wire contract and loader behavior. It does n
 
 ## External-manager acceptance
 
-Follow [MO2 acceptance](Mod-Organizer-2.md). Real VFS mounting, order changes and disable restoration require a real managed game process. Materialized overlays on Linux/Steam Deck are a separate deployment path.
+Set up MO2 as described in [Mod Organizer 2](Mod-Organizer-2.md), then use two overlay packages with different artwork for the same native-menu key:
+
+1. Start the game from MO2 and check the `mods:` log line shows `overlay folder: yes`, then that the menu shows the winning mod's artwork.
+2. Swap the two mods in MO2's order and restart: the other artwork appears.
+3. Disable both and restart: the original artwork returns.
+4. Install a standalone package through MO2 and check its id in the `mods:` line. With `--mods-mode overlay` in the executable's arguments it is ignored.
+5. Start the game once without MO2 and check that only files really in `mods/` load.
+
+Repeat once from a game folder with a non-ASCII path. Linux and Steam Deck use copied or symlinked files instead of a virtual file system.
 
 ## Wiki publication
 

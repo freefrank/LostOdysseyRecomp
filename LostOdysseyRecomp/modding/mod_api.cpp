@@ -21,6 +21,7 @@ struct Entry {
 struct Snapshot {
     std::filesystem::path root, defaultRoot;
     std::map<std::string, Entry> entries;
+    std::vector<std::string> modIds;
     std::vector<Diagnostic> diagnostics;
     ResolutionMode mode = ResolutionMode::Combined;
     bool enabled = false;
@@ -73,14 +74,14 @@ std::optional<std::filesystem::path> Relative(std::string_view text) {
     for (const auto& part : path) if (part == "..") return {};
     return path.lexically_normal();
 }
+// Lexical containment only. MO2's virtual file system and symlink deployments
+// (Vortex, Steam Deck) place the real files outside the root by design, so
+// canonical paths must not decide whether a mod file is visible.
 bool ContainedFile(const std::filesystem::path& root, const std::filesystem::path& file) {
-    std::error_code ec;
-    const auto base = std::filesystem::weakly_canonical(root, ec);
-    if (ec || base.empty()) return false;
-    const auto path = std::filesystem::weakly_canonical(file, ec);
-    if (ec) return false;
+    const auto base = root.lexically_normal(), path = file.lexically_normal();
     auto b = base.begin(), p = path.begin();
-    for (; b != base.end(); ++b, ++p) if (p == path.end() || *b != *p) return false;
+    for (; b != base.end() && !b->empty(); ++b, ++p) if (p == path.end() || *b != *p) return false;
+    std::error_code ec;
     return p != path.end() && std::filesystem::is_regular_file(file, ec) && !ec;
 }
 std::string CanonicalKey(std::string_view key) {
@@ -237,10 +238,9 @@ void Initialize(const std::filesystem::path& requestedRoot) {
                 try { LoadManifest(*snapshot, dir / "mod.ini", ids); }
                 catch (const std::exception& e) { Diagnose(*snapshot, dir / "mod.ini", 0, e.what()); }
             }
+            snapshot->modIds.assign(ids.begin(), ids.end());
         }
     } catch (const std::exception& e) { snapshot->enabled = false; Diagnose(*snapshot, requestedRoot, 0, e.what()); }
-    for (const auto& d : snapshot->diagnostics)
-        std::fprintf(stderr, "[mods] %s:%zu: %s\n", Utf8(d.manifest).c_str(), d.line, d.message.c_str());
     std::lock_guard lock(gMutex);
     gSnapshot = std::move(snapshot);
     ++gGeneration;
@@ -264,6 +264,8 @@ uint64_t Generation() { std::lock_guard lock(gMutex); return gGeneration; }
 std::filesystem::path Root() { std::lock_guard lock(gMutex); return gSnapshot->root; }
 ResolutionMode Mode() { std::lock_guard lock(gMutex); return gSnapshot->mode; }
 std::vector<Diagnostic> Diagnostics() { std::lock_guard lock(gMutex); return gSnapshot->diagnostics; }
+std::vector<std::string> ModIds() { std::lock_guard lock(gMutex); return gSnapshot->modIds; }
+bool Enabled() { std::lock_guard lock(gMutex); return gSnapshot->enabled; }
 std::optional<ResolvedAsset> Resolve(const AssetRequest& request) {
     if (!KindValid(request.id.kind)) return {};
     const auto key = CanonicalKey(request.id.key);

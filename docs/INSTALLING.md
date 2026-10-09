@@ -176,7 +176,7 @@ After an update that changes the shaders, the first start offers the download ag
 | macOS | Saves, profiles, cache, games and settings: `~/Library/Application Support/LostOdysseyRecomp/`. Logs: `~/Library/Logs/LostOdysseyRecomp/logs/`. |
 | Android | Game: `Android/data/io.github.freefrank.lostodyssey/files/game/` (or the folder chosen on the **Game folder** page). Logs: `Android/data/io.github.freefrank.lostodyssey/files/logs/`. Saves and settings stay inside the app; **CTRL → Saves** exports and imports saves. |
 
-Render captures go to `captures/` and mods to `mods/`: beside the program for the Windows ZIP, otherwise captures in the settings folder and mods in the data folder. Downloaded shaders go to `shaders/` in the same place as mods.
+Render captures go to `captures/` and mods to `mods/`: beside the program for the Windows ZIP, otherwise captures in the settings folder and mods in the data folder. Downloaded shaders go to `shaders/` in the same place as mods. To manage mods with Mod Organizer 2, see [Mod Organizer 2](wiki/Mod-Organizer-2.md).
 
 On Linux, `XDG_CONFIG_HOME`, `XDG_DATA_HOME` and `XDG_STATE_HOME` move the AppImage folders. A Linux build in a writable folder keeps everything beside the program, like the Windows ZIP. When you start the Windows ZIP with `--game`, saves and settings follow the folder you start from, so always start from the same folder.
 
