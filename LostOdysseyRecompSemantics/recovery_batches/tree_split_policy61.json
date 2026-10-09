@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "tree-split-policy61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/tree_split_policy61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/tree_split_policy61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/tree_split_policy61.cpp"
+      ]
+    }
+  ]
+}

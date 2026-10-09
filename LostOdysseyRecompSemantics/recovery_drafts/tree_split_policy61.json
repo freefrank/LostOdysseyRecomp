@@ -1,0 +1,43 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Pinned concrete midpoint and unsigned threshold policies used by tree builders. No original bodies published.",
+  "entries": [
+    {
+      "address": "82BB3B60",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 58465,
+      "instruction_count": 10,
+      "body_sha256": "7952ff05ca483e77269c71bce41c4264aeef927c9886a00b80986cfad85989e0",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BB3B88",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 58495,
+      "instruction_count": 5,
+      "body_sha256": "6367a36659cc2ebd669b5819da108033036360c23e8eca7aae2bfbb4bd21c5b1",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BB3B60",
+      "82BB3B88"
+    ],
+    "header": "include/lo_semantics/tree_split_policy61.h",
+    "source": "src/tree_split_policy61.cpp",
+    "oracle": "tests/tree_split_policy61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 4,
+    "library_validated": true,
+    "case_scope": "Midpoint and counts below/equal/above threshold; Full72/RAM/host CSR and independent results.",
+    "platform": "Linux x64 Clang 19.1.7; pinned regenerated PPC; mmap guest overlay",
+    "mapping_limit": "Historical catalog membership unverified; no baseline mapping credit."
+  }
+}

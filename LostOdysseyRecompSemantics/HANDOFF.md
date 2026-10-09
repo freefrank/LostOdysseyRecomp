@@ -1,3 +1,7 @@
+## Root direct continuation: concrete split policies (2026-10-09)
+
+`tree_split_policy61` recovers `82BB3B60` bounds-axis midpoint and `82BB3B88` unsigned count/threshold decision. Four pinned original-body cases pass Full72/RAM/host CSR plus independent results; full Linux Clang library builds. No historical catalog or runtime credit. Concrete bounds, centroids, split policies and flat strategy are now separately available for integration; the existing mesh upper oracle still uses borrowed geometry/strategy services.
+
 ## Direct continuation — 2026-10-09
 
 Parallel recovery workers are stopped. The direct executor received the user's

@@ -196,6 +196,7 @@ add_library(LostOdysseyRecompSemantics STATIC
     src/tree_box_bounds61.cpp
     src/tree_flatten36_61.cpp
     src/tree_flat_strategy61.cpp
+    src/tree_split_policy61.cpp
     src/projection_extrema61.cpp
     src/grid_blob_forward61.cpp
     src/grid_blob_routes61.cpp
