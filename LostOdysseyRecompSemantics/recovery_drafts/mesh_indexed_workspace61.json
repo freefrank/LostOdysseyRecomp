@@ -1,0 +1,69 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Indexed-mesh workspace initialization/reset/destruction, owned xyz channels and face-capacity arrays.",
+  "entries": [
+    {
+      "address": "82BBDF60",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 22395,
+      "instruction_count": 67,
+      "body_sha256": "61806c0a1ec12305a5e405621ea2e544c8115d19a9111cd7f0b099d8d66f2d5e",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BBE070",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 22550,
+      "instruction_count": 129,
+      "body_sha256": "8ee183cbbcb98c4d02c8e8fa31a4ba49940c9abae02f585638b03977e6959d54",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BBE278",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 22856,
+      "instruction_count": 38,
+      "body_sha256": "fc3840239ceb71ea593d9662ade02631124aad8631e6742dd43a1de19f138385",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BBF590",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 25538,
+      "instruction_count": 37,
+      "body_sha256": "6ece6c2d3867d41c0de944ee127e34471d22a95c11af6bfa9fb535d438d2d7b2",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BBF628",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 25634,
+      "instruction_count": 113,
+      "body_sha256": "7dfc4afe11cc46b5e54335033ea71482d13050a6b8a50e4f3b46fa5619b64ef7",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BBDF60",
+      "82BBE070",
+      "82BBE278",
+      "82BBF590",
+      "82BBF628"
+    ],
+    "header": "include/lo_semantics/mesh_indexed_workspace61.h",
+    "source": "src/mesh_indexed_workspace61.cpp",
+    "oracle": "tests/mesh_indexed_workspace61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 4,
+    "library_validated": true,
+    "case_scope": "Four actual-original local lifecycle/configuration/copy chains with shared concrete buffers/CRT: 2D/3D attributes, null input zero-fill and zero-count channel, replacement of all owned arrays and buffers, zero-face partial failure. Full72/RAM/CSR/events/ownership plus independent copied bytes/options/counts and complete teardown. No allocator fault matrix or indexed pipeline completion claim.",
+    "platform": "Linux x64 Clang19; pinned PPC; mmap guest overlay"
+  }
+}

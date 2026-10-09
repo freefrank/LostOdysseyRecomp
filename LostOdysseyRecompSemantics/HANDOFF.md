@@ -1,3 +1,7 @@
+## Root direct continuation: indexed-mesh workspace ownership (2026-10-09)
+
+`mesh_indexed_workspace61` closes BBDF60, BBE070, BBE278, BBF590 and BBF628. Thirteen dynamic buffers, copied/zero-filled xyz channels, option bytes and per-face arrays retain the original reset/destruction order and partial-failure ownership. Four complete-original local lifecycle/configuration chains pass with shared concrete buffer/CRT lowers: 2D/3D attributes, zero-fill/zero-count channel, replacement of prior buffers/arrays, and zero-face rejection. Full72/RAM/CSR/events, independent bytes/counts/options and complete teardown pass. Full library passes. Indexed face insertion and workspace processing are next.
+
 ## Root direct continuation: cooked hull input adapters (2026-10-09)
 
 `mesh_cook_hull61` closes BB3350 hull-plus-valence, B9E3F8 temporary adapter/cache ownership and B9E7B0 strided input copying into the cooked owner. Four original-upper/local-wrapper-chain cases pass with shared concrete hull/valence/copying: retained adapter, temporary adapter, packed input and 20-byte stride. Full72/RAM/CSR/events, independent closed hull geometry, owner flag preservation and complete teardown pass. Owner +108 bit0 is cleared before work and set on success. The temporary adapter cache is released in original order; do not retain its borrowed view beyond that lifetime. Full library passes. Indexed input and final B9F198 validation/orchestration remain.

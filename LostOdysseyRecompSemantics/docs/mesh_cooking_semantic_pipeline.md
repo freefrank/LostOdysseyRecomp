@@ -214,3 +214,7 @@ BBA028 now composes deduplication, deterministic guest perturbation, tetrahedral
 ### Cooked point input
 
 BB3350 composes hull and valence, B9E3F8 owns the temporary adapter/cache, and B9E7B0 copies arbitrary-stride xyz input to guest stack before constructing owner+156 geometry. Its +108 bit0 records success. Four focused upper/local-wrapper cases pass, including a padded 20-byte input stride and complete teardown. Indexed input and B9F198 orchestration remain pending.
+
+### Indexed input workspace
+
+BBDF60/BBE070/BBE278/BBF590/BBF628 provide the owned workspace lifecycle and input channels beneath BB9800. Configuration copies or zero-fills xyz channels, optionally clears the third attribute component, and allocates 48-/36-byte-per-face arrays. Zero-face rejection keeps already-acquired channels until cleanup. Four focused original-local-chain cases and complete teardown pass; face insertion/processing remain.

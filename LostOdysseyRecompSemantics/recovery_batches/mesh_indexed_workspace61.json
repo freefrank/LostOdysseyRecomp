@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "mesh-indexed-workspace61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/mesh_indexed_workspace61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/mesh_indexed_workspace61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nvoid WorkspaceIndirect(std::uint32_t,PPCContext&,std::uint8_t*);\n#undef PPC_CALL_INDIRECT_FUNC\n#define PPC_CALL_INDIRECT_FUNC(t) WorkspaceIndirect((t),ctx,base)\nvoid WorkspaceLower(std::uint32_t,PPCContext&,std::uint8_t*);\nvoid WorkspaceSave(unsigned,PPCContext&,std::uint8_t*);\nvoid WorkspaceRestore(unsigned,PPCContext&,std::uint8_t*);\n#define __savegprlr_28(c,b) WorkspaceSave(28,c,b)\n#define __restgprlr_28(c,b) WorkspaceRestore(28,c,b)\n#define __savegprlr_29(c,b) WorkspaceSave(29,c,b)\n#define __restgprlr_29(c,b) WorkspaceRestore(29,c,b)\nPPC_FUNC_IMPL(__imp__sub_82BBDF60);\n#define sub_82BBDF60 __imp__sub_82BBDF60\nPPC_FUNC_IMPL(__imp__sub_82BBE070);\n#define sub_82BBE070 __imp__sub_82BBE070\nPPC_FUNC_IMPL(__imp__sub_82BBE278);\n#define sub_82BBE278 __imp__sub_82BBE278\nPPC_FUNC_IMPL(__imp__sub_82BBF590);\n#define sub_82BBF590 __imp__sub_82BBF590\nPPC_FUNC_IMPL(__imp__sub_82BBF628);\n#define sub_82BBF628 __imp__sub_82BBF628\n#define sub_82BD0798(c,b) WorkspaceLower(0x82bd0798u,c,b)\n#define sub_82BD2A08(c,b) WorkspaceLower(0x82bd2a08u,c,b)\n#define sub_82BD2A28(c,b) WorkspaceLower(0x82bd2a28u,c,b)\n#define sub_82BD2C08(c,b) WorkspaceLower(0x82bd2c08u,c,b)\n#define sub_82B7A0B0(c,b) WorkspaceLower(0x82b7a0b0u,c,b)\n#define sub_82B7BC40(c,b) WorkspaceLower(0x82b7bc40u,c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/mesh_indexed_workspace61.cpp"
+      ]
+    }
+  ]
+}
