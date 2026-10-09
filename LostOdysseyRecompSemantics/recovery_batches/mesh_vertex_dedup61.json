@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "mesh-vertex-dedup61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/mesh_vertex_dedup61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/mesh_vertex_dedup61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nvoid DedupIndirect(std::uint32_t,PPCContext&,std::uint8_t*);\n#undef PPC_CALL_INDIRECT_FUNC\n#define PPC_CALL_INDIRECT_FUNC(t) DedupIndirect((t),ctx,base)\nvoid DedupLower(std::uint32_t,PPCContext&,std::uint8_t*);\nvoid DedupSave(unsigned,PPCContext&,std::uint8_t*);\nvoid DedupRestore(unsigned,PPCContext&,std::uint8_t*);\n#define __savegprlr_28(c,b) DedupSave(28,c,b)\n#define __restgprlr_28(c,b) DedupRestore(28,c,b)\nPPC_FUNC_IMPL(__imp__sub_82BC2D48);\n#define sub_82BC2D48 __imp__sub_82BC2D48\nPPC_FUNC_IMPL(__imp__sub_82BC38E0);\n#define sub_82BC38E0 __imp__sub_82BC38E0\nPPC_FUNC_IMPL(__imp__sub_82BC2DD0);\n#define sub_82BC2DD0 __imp__sub_82BC2DD0\n#define sub_82BD0798(c,b) DedupLower(0x82bd0798u,c,b)\n#define sub_82BD2C50(c,b) DedupLower(0x82bd2c50u,c,b)\n#define sub_82BD2C78(c,b) DedupLower(0x82bd2c78u,c,b)\n#define sub_82BD2DF0(c,b) DedupLower(0x82bd2df0u,c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/mesh_vertex_dedup61.cpp"
+      ]
+    }
+  ]
+}

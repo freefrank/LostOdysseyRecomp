@@ -1,0 +1,51 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Stable xyz vertex deduplication and retained map/vertices ownership.",
+  "entries": [
+    {
+      "address": "82BC2D48",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 33492,
+      "instruction_count": 34,
+      "body_sha256": "13bf94afc4f52251c5283488ed15735ac4fe05ac51bcf666992265d526d17f89",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BC38E0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 35241,
+      "instruction_count": 1,
+      "body_sha256": "c36a8f6e6d36f651b458ab8ae100d5dd01c8979dccb62d07ac031e9f55b9f76c",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BC2DD0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 33574,
+      "instruction_count": 179,
+      "body_sha256": "25d7a1d83ecee18084af18b8cbe0bff467e335c7608bf2938e96722f21708a1e",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BC2D48",
+      "82BC38E0",
+      "82BC2DD0"
+    ],
+    "header": "include/lo_semantics/mesh_vertex_dedup61.h",
+    "source": "src/mesh_vertex_dedup61.cpp",
+    "oracle": "tests/mesh_vertex_dedup61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 3,
+    "library_validated": true,
+    "case_scope": "Complete original local build/cleanup/tail-alias chain with shared concrete radix sort. Six finite vertices, duplicates and negative coordinate; optional result, replacement of old allocations. Full72/RAM/CSR/events/ownership, independent stable remap/content, complete teardown. No allocation fault matrix or whole convex build claim.",
+    "platform": "Linux x64 Clang19; pinned PPC; mmap guest overlay"
+  }
+}
