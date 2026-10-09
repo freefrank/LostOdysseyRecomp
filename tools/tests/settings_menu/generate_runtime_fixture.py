@@ -193,6 +193,16 @@ int main(int argc, char** argv) {
     tick(8);Check(settings::edit.dlssModel==0,"DLSS model wraps to M");
     settings::edit.upscaler=Upscaler::Fsr;
 #endif
+    // HDR paper white and peak brightness show only with HDR on.
+    settings::edit.hdr=false;settings::row=int(GraphicsRow::Hdr);tick();
+    Check(settings::snapshot.rows[int(GraphicsRow::HdrPaperWhite)].hidden &&
+          settings::snapshot.rows[int(GraphicsRow::HdrPeak)].hidden,"HDR off hides its levels");
+    tick(2);Check(settings::row==int(GraphicsRow::Brightness),"down from HDR off reaches Brightness");
+    settings::edit.hdr=true;settings::row=int(GraphicsRow::Hdr);tick();
+    Check(!settings::snapshot.rows[int(GraphicsRow::HdrPaperWhite)].hidden &&
+          !settings::snapshot.rows[int(GraphicsRow::HdrPeak)].hidden,"HDR on shows its levels");
+    tick(2);Check(settings::row==int(GraphicsRow::HdrPaperWhite),"down from HDR on reaches paper white");
+    settings::edit.hdr=false;
     // The scroll origin depends on the rows a platform shows; moving from
     // quality to sharpness must never scroll.
     settings::row=int(GraphicsRow::DlssQuality);tick();

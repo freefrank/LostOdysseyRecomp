@@ -1857,15 +1857,29 @@ int main(int argc, char** argv)
             settings::edit.antialiasing = 0;
             settings::edit.upscaler = gpu::upscaling::Upscaler::Off;
             settings::edit.frameGenerationProvider = framegen::Provider::Off;
+            settings::edit.hdr = false;
             settings::row = int(GraphicsRow::Hdr);
             settings::pending = 0; Tick(base);
             Require(settings::snapshot.rows[int(GraphicsRow::Hdr)].enabled &&
                     settings::snapshot.rows[int(GraphicsRow::HdrPaperWhite)].enabled &&
                     settings::snapshot.rows[int(GraphicsRow::HdrPeak)].enabled,
                     "D3D12 exposes HDR controls");
+            Require(!settings::snapshot.rows[int(GraphicsRow::Hdr)].hidden &&
+                    settings::snapshot.rows[int(GraphicsRow::HdrPaperWhite)].hidden &&
+                    settings::snapshot.rows[int(GraphicsRow::HdrPeak)].hidden,
+                    "HDR off hides paper white and peak brightness");
+            settings::pending = 2; Tick(base);
+            Require(settings::row == int(GraphicsRow::Brightness), "down from HDR off skips the hidden HDR levels");
+            settings::pending = 1; Tick(base);
+            Require(settings::row == int(GraphicsRow::Hdr), "up from Brightness skips the hidden HDR levels");
             settings::pending = 8; Tick(base);
             Require(settings::edit.hdr && settings::snapshot.rows[int(GraphicsRow::Hdr)].value == L"On",
                     "HDR toggle updates the pending preference");
+            Require(!settings::snapshot.rows[int(GraphicsRow::HdrPaperWhite)].hidden &&
+                    !settings::snapshot.rows[int(GraphicsRow::HdrPeak)].hidden,
+                    "turning HDR on shows its levels before saving");
+            settings::pending = 2; Tick(base);
+            Require(settings::row == int(GraphicsRow::HdrPaperWhite), "down from HDR on reaches paper white");
             settings::row = int(GraphicsRow::HdrPaperWhite);
             settings::edit.hdrPaperWhiteNits = 400;
             settings::pending = 8; Tick(base);
@@ -1953,6 +1967,24 @@ int main(int argc, char** argv)
                     "Vulkan HDR controls are available for runtime capability detection");
             settings::pending = 8; Tick(base);
             Require(!settings::edit.hdr, "Vulkan HDR preference can be changed");
+            Require(settings::snapshot.rows[int(GraphicsRow::HdrPaperWhite)].hidden &&
+                    settings::snapshot.rows[int(GraphicsRow::HdrPeak)].hidden, "turning HDR off hides its levels");
+            // Reopening drops an unsaved HDR choice; focus leaves the now hidden peak row.
+            {
+                const auto priorCurrent = currentConfig;
+                currentConfig.hdr = false;
+                settings::edit.hdr = true;
+                settings::row = int(GraphicsRow::HdrPeak);
+                settings::pending = 0; Tick(base);
+                Require(settings::row == int(GraphicsRow::HdrPeak) && !settings::snapshot.rows[int(GraphicsRow::HdrPeak)].hidden,
+                        "unsaved HDR on keeps focus on peak brightness");
+                settings::active = false;
+                PPC_STORE_U32(Menu + 4, 4);
+                settings::pending = 0; Tick(base);
+                Require(settings::active && !settings::edit.hdr && settings::row == int(GraphicsRow::Brightness),
+                        "reopening with HDR off moves focus from peak brightness to Brightness");
+                currentConfig = priorCurrent;
+            }
             settings::SetHdrDisplayInfo({});
             settings::edit = previousEdit;
             settings::pending = 0; Tick(base);

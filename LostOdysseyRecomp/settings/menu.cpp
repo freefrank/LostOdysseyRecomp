@@ -727,7 +727,8 @@ bool GraphicsRowHidden(int r)
     return (r == int(GraphicsRow::DlssQuality) && edit.upscaler == gpu::upscaling::Upscaler::Off) ||
            (r == int(GraphicsRow::DlssModel) && edit.upscaler != gpu::upscaling::Upscaler::Dlss) ||
            (r == int(GraphicsRow::FsrSharpness) && edit.upscaler != gpu::upscaling::Upscaler::Fsr) ||
-           (r == int(GraphicsRow::FrameGenerationMultiplier) && edit.frameGenerationProvider != framegen::Provider::Dlss);
+           (r == int(GraphicsRow::FrameGenerationMultiplier) && edit.frameGenerationProvider != framegen::Provider::Dlss) ||
+           ((r == int(GraphicsRow::HdrPaperWhite) || r == int(GraphicsRow::HdrPeak)) && !edit.hdr);
 }
 std::vector<framegen::Provider> FgProviders()
 {
