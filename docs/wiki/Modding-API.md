@@ -124,6 +124,8 @@ Type 2 stores a complete DDS file with block-compressed levels:
 
 The game replaces only uploads it can match safely. These are tiled 2D base levels in the formats above, with a shorter side over 16 texels. Render targets, resolved surfaces, movie frames and the controller-prompt atlas are never replaced. Shaders keep seeing the original texture size, so a larger replacement samples like the original at a higher resolution.
 
+Replacement files are read on a background thread. A texture shows the original until its file has been read, usually a few frames later, and then switches to the replacement. `LO_MODS_TEXTURE_SYNC=1` reads each file during the upload instead, so the replacement shows in the first frame but large files on a slow disk stall the game.
+
 ## Trusted providers and future consumers
 
 `RegisterProvider(kind, shared_ptr<AssetProvider>)` registers at most one provider per type. It returns false for an invalid kind, null provider or occupied slot. Providers run outside the API mutex and retain shared ownership during callbacks. Exceptions, mismatched identities and non-file results are ignored. Recursive resolution skips providers to avoid recursion. `UnregisterProvider(kind, pointer)` removes only the matching instance; destruction happens outside the mutex. Providers are trusted host extensions and may resolve outside the mods root.
