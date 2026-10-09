@@ -172,6 +172,8 @@ int main(int argc, char** argv) {
         Check(settings::snapshot.rows.back().name==L"Save graphics settings","Save is last");
         Check(settings::snapshot.rows[int(GraphicsRow::DlssQuality)].hidden==(i%aaChoices<4),"quality visibility");
         Check(settings::snapshot.rows[int(GraphicsRow::FsrSharpness)].hidden==(i%aaChoices!=5),"FSR sharpness visibility");
+        Check(settings::snapshot.rows[int(GraphicsRow::DlssModel)].hidden==(settings::edit.upscaler!=Upscaler::Dlss),
+              "DLSS model shows only with DLSS");
     }
     tick(4);Check(settings::edit.upscaler==(aaChoices>6?Upscaler::Xess:Upscaler::Fsr),"left from Off selects the last provider");
     if(aaChoices>6){
@@ -181,6 +183,26 @@ int main(int argc, char** argv) {
     }
     Check(settings::edit.dlssQuality==gpu::upscaling::DlssQuality::Dlaa &&
           settings::edit.fsrQuality==gpu::upscaling::FsrQuality::Balanced,"provider-specific qualities preserved");
+#if !LO_PLATFORM_MACOS && !LO_PLATFORM_ANDROID
+    // With DLSS the model row follows quality: M by default, L, and back.
+    settings::edit.upscaler=Upscaler::Dlss;settings::row=int(GraphicsRow::DlssQuality);tick();
+    tick(2);Check(settings::row==int(GraphicsRow::DlssModel),"DLSS model directly follows quality");
+    Check(settings::snapshot.rows[int(GraphicsRow::DlssModel)].value==L"M","DLSS model defaults to M");
+    tick(8);Check(settings::edit.dlssModel==1 && settings::snapshot.rows[int(GraphicsRow::DlssModel)].value==L"L",
+                  "DLSS model selects L");
+    tick(8);Check(settings::edit.dlssModel==0,"DLSS model wraps to M");
+    settings::edit.upscaler=Upscaler::Fsr;
+#endif
+    // HDR paper white and peak brightness show only with HDR on.
+    settings::edit.hdr=false;settings::row=int(GraphicsRow::Hdr);tick();
+    Check(settings::snapshot.rows[int(GraphicsRow::HdrPaperWhite)].hidden &&
+          settings::snapshot.rows[int(GraphicsRow::HdrPeak)].hidden,"HDR off hides its levels");
+    tick(2);Check(settings::row==int(GraphicsRow::Brightness),"down from HDR off reaches Brightness");
+    settings::edit.hdr=true;settings::row=int(GraphicsRow::Hdr);tick();
+    Check(!settings::snapshot.rows[int(GraphicsRow::HdrPaperWhite)].hidden &&
+          !settings::snapshot.rows[int(GraphicsRow::HdrPeak)].hidden,"HDR on shows its levels");
+    tick(2);Check(settings::row==int(GraphicsRow::HdrPaperWhite),"down from HDR on reaches paper white");
+    settings::edit.hdr=false;
     // The scroll origin depends on the rows a platform shows; moving from
     // quality to sharpness must never scroll.
     settings::row=int(GraphicsRow::DlssQuality);tick();

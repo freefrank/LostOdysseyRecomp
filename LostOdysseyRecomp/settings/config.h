@@ -99,6 +99,7 @@ struct Config
     uint32_t cullingPercent = 100;
     gpu::upscaling::Upscaler upscaler = gpu::upscaling::Upscaler::Off;
     gpu::upscaling::DlssQuality dlssQuality = gpu::upscaling::DlssQuality::Quality;
+    uint32_t dlssModel = 0; // DLSS SR model (render preset): 0 M, 1 L. Applied after saving.
     gpu::upscaling::FsrQuality fsrQuality = gpu::upscaling::FsrQuality::Quality;
     uint32_t fsrSharpnessPercent = 0; // 0 disables FSR RCAS; 1-100 sets its strength.
     // DLSS 5 Neural Rendering passes on the DLSS output: 0 Off, 1-4. Needs the

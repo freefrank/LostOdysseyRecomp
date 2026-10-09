@@ -478,10 +478,10 @@ int main(int argc, char* argv[])
     os::log_collection::StartUpload(sessionLog);
     {
         const auto& c = settings::GetConfig();
-        LOG_NOTICE("settings: backend={} output={}x{} window={} render_resolution={} aa={} upscaler={} dlss_quality={} fsr_quality={} "
-                   "frame_rate={} fg_provider={} fg_multiplier={} hdr={} ao={} shadow_resolution={} debug_log={}",
+        LOG_NOTICE("settings: backend={} output={}x{} window={} render_resolution={} aa={} upscaler={} dlss_quality={} dlss_model={} "
+                   "fsr_quality={} frame_rate={} fg_provider={} fg_multiplier={} hdr={} ao={} shadow_resolution={} debug_log={}",
                    int(c.graphicsBackend), c.width, c.height, int(c.windowMode), c.internalResolution, c.antialiasing,
-                   int(c.upscaler), int(c.dlssQuality), int(c.fsrQuality), c.frameRate, int(c.frameGenerationProvider),
+                   int(c.upscaler), int(c.dlssQuality), c.dlssModel ? 'L' : 'M', int(c.fsrQuality), c.frameRate, int(c.frameGenerationProvider),
                    c.frameGenerationMultiplier, c.hdr, c.ambientOcclusion, c.shadowResolution, c.debugLog);
     }
     if (g_memory.base == nullptr)

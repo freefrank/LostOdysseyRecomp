@@ -46,6 +46,7 @@ Config Validate(Config value)
     value.displayGamma = std::clamp(value.displayGamma, 50u, 150u);
     if (!gpu::upscaling::KnownUpscaler(value.upscaler)) value.upscaler = gpu::upscaling::Upscaler::Off;
     value.dlssQuality = gpu::upscaling::NormalizeDlssQuality(value.dlssQuality);
+    if (value.dlssModel > 1) value.dlssModel = 0;
     value.fsrQuality = gpu::upscaling::NormalizeFsrQuality(value.fsrQuality);
     value.fsrSharpnessPercent = std::min(value.fsrSharpnessPercent, 100u);
     value.dlssNeuralRendering = std::min(value.dlssNeuralRendering, DlssNeuralRenderingMaxPasses);
@@ -205,6 +206,8 @@ Config Read()
             value.upscaler = gpu::upscaling::Upscaler(number);
         else if (key == "dlss_quality")
             value.dlssQuality = gpu::upscaling::DlssQuality(number);
+        else if (key == "dlss_model")
+            value.dlssModel = number;
         else if (key == "fsr_quality")
             value.fsrQuality = gpu::upscaling::FsrQuality(number);
         else if (key == "fsr_sharpness")
@@ -385,6 +388,7 @@ static bool WriteConfig(const Config &value)
            << "\nvibration=" << value.vibrationPercent
            << "\nbutton_prompts=" << value.buttonPrompts
             << "\nupscaler=" << uint32_t(value.upscaler) << "\ndlss_quality=" << uint32_t(value.dlssQuality)
+           << "\ndlss_model=" << value.dlssModel
            << "\nfsr_quality=" << uint32_t(value.fsrQuality)
            << "\nfsr_sharpness=" << value.fsrSharpnessPercent
            << "\ndlss_neural_rendering=" << value.dlssNeuralRendering

@@ -216,6 +216,16 @@ int DlssFlags(const SrConfig& config) {
     return flags;
 }
 
+// The SR model for every quality mode; NGX reads it when the feature is created.
+// The parameter block outlives the feature, so all modes are rewritten each time.
+static_assert(kRenderPresetL == NVSDK_NGX_DLSS_Hint_Render_Preset_L && kRenderPresetM == NVSDK_NGX_DLSS_Hint_Render_Preset_M);
+void SetRenderPreset(NVSDK_NGX_Parameter* parameters, uint8_t preset) {
+    for (const char* key : {NVSDK_NGX_Parameter_DLSS_Hint_Render_Preset_DLAA, NVSDK_NGX_Parameter_DLSS_Hint_Render_Preset_Quality,
+             NVSDK_NGX_Parameter_DLSS_Hint_Render_Preset_Balanced, NVSDK_NGX_Parameter_DLSS_Hint_Render_Preset_Performance,
+             NVSDK_NGX_Parameter_DLSS_Hint_Render_Preset_UltraPerformance, NVSDK_NGX_Parameter_DLSS_Hint_Render_Preset_UltraQuality})
+        NVSDK_NGX_Parameter_SetUI(parameters, key, preset);
+}
+
 struct BeginCommandResult {
     std::optional<VkResult> reset;
     std::optional<VkResult> begin;
@@ -1110,6 +1120,7 @@ SrAttempt Controller::RecordIsolated(plume::VulkanCommandList& isolatedCommandLi
         create.Feature.InPerfQualityValue = ToNgxQuality(config.quality);
         create.InFeatureCreateFlags = DlssFlags(config);
         create.InEnableOutputSubrects = false;
+        SetRenderPreset(parameters, config.renderPreset);
         NVSDK_NGX_Handle* handle = nullptr;
         const auto createResult = NGX_VULKAN_CREATE_DLSS_EXT1(sessionDevice_->vk, commandBuffer, 1, 1,
             &handle, parameters, &create);
@@ -1127,6 +1138,12 @@ SrAttempt Controller::RecordIsolated(plume::VulkanCommandList& isolatedCommandLi
         featureConfigValid_ = true;
         created = true;
         report_.srImplemented = true;
+        char line[160];
+        std::snprintf(line, sizeof(line), "DLSS SR feature created: backend=vulkan %ux%u->%ux%u quality=%u preset=%c flags=0x%x",
+            config.renderExtent.width, config.renderExtent.height, config.outputExtent.width, config.outputExtent.height,
+            unsigned(config.quality), RenderPresetLetter(config.renderPreset), unsigned(create.InFeatureCreateFlags));
+        if (g_logSink) g_logSink(line);
+        else std::fprintf(stderr, "%s\n", line);
     }
 
     const auto& color = *static_cast<const plume::VulkanTexture*>(inputs.color.texture);

@@ -8,6 +8,8 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 ### English
 
+- DLSS now uses its newer model (M by default) and no longer flickers on light shafts and caustics, such as underwater on the world map. Settings → Graphics adds DLSS model (M or L).
+- HDR settings are hidden while HDR is off.
 - DLSS, FSR, XeSS and MetalFX no longer switch off during the game's screen fades (camera cuts, menus, battle intros, victory shots), so the picture stays sharp and ambient occlusion and frame generation stay on.
 - Fixed short stutters with DLSS frame generation, mostly in battles, on Vulkan and Direct3D 12.
 - Fixed a Vulkan crash a few seconds after startup on NVIDIA GPUs when ReShade's `dxgi.dll` is in the game folder; ReShade still works with Direct3D 12 (#323).
@@ -27,6 +29,8 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 ### 简体中文
 
+- DLSS 改用新模型（默认 M），光柱、焦散等不再闪烁（例如世界地图的水下）。设置 → 图形新增“DLSS 模型”（M 或 L）。
+- HDR 关闭时不再显示 HDR 的子设置。
 - 游戏画面淡化时（镜头切换、菜单、战斗开场、胜利镜头），DLSS、FSR、XeSS 和 MetalFX 不再中断，画面保持清晰，环境光遮蔽和帧生成也不再中断。
 - 修复开启 DLSS 帧生成时的短暂卡顿（多见于战斗），Vulkan 和 Direct3D 12 都已修复。
 - 修复游戏目录里有 ReShade 的 `dxgi.dll` 时，NVIDIA 显卡使用 Vulkan 启动几秒后崩溃的问题；ReShade 在 Direct3D 12 下仍可使用（#323）。
