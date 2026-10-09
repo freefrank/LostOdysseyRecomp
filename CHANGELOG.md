@@ -15,6 +15,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Settings → Graphics now lists upscaling, DLSS 5 neural rendering and frame generation together in one group.
 - Mod Organizer 2 support: a game plugin lets MO2 manage the mods in the game's `mods/` folder. Mod folders reached through symbolic links now load too.
 - The Settings menu now moves like the game's own menus: the cursor arrow slides between rows and sways while idle, the rows fade in one after another when it opens, prompts dim the screen behind them, and it fades out before closing (#151).
+- Mod authors can export the game's textures (PNG with their mod keys) and CG movies from their own game data with `--export-assets`, or from a new Mod Organizer 2 tool.
 
 ### 简体中文
 
@@ -25,6 +26,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - 设置 → 图形里，超分、DLSS 5 神经渲染和帧生成现在排在同一组。
 - 支持 Mod Organizer 2：游戏插件让 MO2 管理游戏 `mods/` 文件夹里的 Mod。通过符号链接放入的 Mod 文件夹现在也能加载。
 - 设置菜单的动画现在和游戏原版菜单一致：光标箭头在行间滑动、停住时左右轻摆，打开时各行依次淡入，弹出提示时背后画面变暗，关闭前先淡出（#151）。
+- Mod 作者可以用 `--export-assets` 从自己的游戏数据导出纹理（PNG，附 Mod key）和 CG 视频，也可以用新的 Mod Organizer 2 工具导出。
 
 ## [v0.9.0](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.0) — 2026-10-08
 
