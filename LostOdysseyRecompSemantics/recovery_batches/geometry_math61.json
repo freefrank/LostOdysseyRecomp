@@ -1,0 +1,17 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "geometry-math61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/geometry_math61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/geometry_math61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nvoid OriginalGeometryMath61Lower(std::uint32_t,PPCContext&,std::uint8_t*);\n#define sub_82BD2870(c,b) OriginalGeometryMath61Lower(0x82BD2870u,c,b)\n#define sub_82B7A0B0(c,b) OriginalGeometryMath61Lower(0x82B7A0B0u,c,b)\nvoid OriginalGeometryMath61SaveGpr(PPCContext&);\n#define __savegprlr_25(c,b) OriginalGeometryMath61SaveGpr(c)\nvoid OriginalGeometryMath61RestoreGpr(PPCContext&);\n#define __restgprlr_25(c,b) OriginalGeometryMath61RestoreGpr(c)\nvoid OriginalGeometryMath61SaveFpr(PPCContext&);\n#define __savefpr_27(c,b) OriginalGeometryMath61SaveFpr(c)\nvoid OriginalGeometryMath61RestoreFpr(PPCContext&);\n#define __restfpr_27(c,b) OriginalGeometryMath61RestoreFpr(c)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/geometry_math61.cpp",
+        "LostOdysseyRecompSemantics/src/reader_buffer_growth61.cpp",
+        "LostOdysseyRecompSemantics/src/crt_copy_full_context.cpp",
+        "LostOdysseyRecompSemantics/src/crt_close_recursive_buffer_context.cpp"
+      ]
+    }
+  ]
+}

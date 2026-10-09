@@ -90,7 +90,7 @@
     "full_library_validated": true,
     "mapping_delta": 1,
     "runtime_replacement_delta": 0,
-    "next": "Continue BB2638 diagnostic synchronization with explicit local machine state; geometry BD4448/BD4C40 lower chains; BD1558/BD1770/BD7A20 owner routes. Manager free Full72 boundary is closed; initializer allocation/construction internals remain explicit guest calls."
+    "next": "BB2638 remains upper frontier: diagnostic format routes above validated locks; geometry box/query preparation above BD4448/BD4C40; owned-tree build BD9928/BDAA48/BDAD18 above validated BD9858. Manager initialization allocator/concrete constructors remain explicit guest boundaries."
   },
   "historical_accepted_data_commit": "f066d61adf2a18afad5d7a3f23e7431284ff7675",
   "new_validated_zero_credit_units": [
@@ -109,12 +109,17 @@
     "owned_tree_cleanup61",
     "object_grid_transform61",
     "grid_transform_buffer61",
-    "manager_release_context61"
+    "manager_release_context61",
+    "geometry_math61",
+    "geometry_triangle_range61",
+    "diagnostic_lock61",
+    "transform_owner_routes61",
+    "owned_tree_storage61"
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 16,
-    "distinct_entries": 34,
+    "unit_count": 21,
+    "distinct_entries": 42,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -245,6 +250,44 @@
           "82BDB260"
         ],
         "focused_cases": 4
+      },
+      {
+        "unit": "geometry_math61",
+        "entries": [
+          "82BD4448"
+        ],
+        "focused_cases": 4
+      },
+      {
+        "unit": "geometry_triangle_range61",
+        "entries": [
+          "82BD4C40"
+        ],
+        "focused_cases": 4
+      },
+      {
+        "unit": "diagnostic_lock61",
+        "entries": [
+          "822B29A0",
+          "822B3438"
+        ],
+        "focused_cases": 2
+      },
+      {
+        "unit": "transform_owner_routes61",
+        "entries": [
+          "82BD1558",
+          "82BD1770",
+          "82BD7A20"
+        ],
+        "focused_cases": 7
+      },
+      {
+        "unit": "owned_tree_storage61",
+        "entries": [
+          "82BD9858"
+        ],
+        "focused_cases": 3
       }
     ]
   }

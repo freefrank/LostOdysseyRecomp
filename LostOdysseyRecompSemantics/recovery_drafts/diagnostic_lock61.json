@@ -1,0 +1,45 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Private generated bodies are pinned by SHA256 of UTF-8 with LF line endings and no final newline; no generated code is embedded.",
+  "entries": [
+    {
+      "address": "822B29A0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.1.cpp",
+      "source_line": 41592,
+      "instruction_count": 32,
+      "body_sha256": "124cef5a9ca28787fea4cf4343b728001746826f3cc4469b3984ae32a00f1595",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "822B3438",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.1.cpp",
+      "source_line": 43112,
+      "instruction_count": 25,
+      "body_sha256": "9fec71359496a83a0a24f5540eb73b6f69988ea24e4f05b665b320efc750b6a2",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 2,
+    "library_validated": true,
+    "library": "PASS incremental complete Clang 19 CMake static library; existing unused-function warning exception retained.",
+    "platform": "Linux x64; Clang 19.1.7; genuine XEX regenerated with pinned XenonRecomp ddd128bc plus tracked patch; existing oracle guest-window allocation overlaid with mmap/mprotect only",
+    "mapping_credit": 0,
+    "mapping_limit": "Fixed historical catalog.sqlite unavailable; do not infer membership from regenerated sources. 82BB25D0 is explicitly external in prior handoff.",
+    "runtime_validated": false,
+    "complete": false,
+    "limits": "Selected finite inputs, ordinary RAM, Full72 state, callbacks and host CSR only. No Windows revalidation, nonfinite matrix, faults/MMIO, concurrency, runtime or gameplay acceptance.",
+    "case_scope": "Two paired original acquire/release scenarios, Full72 plus explicit MSR/reserved bits, RAM and CAS/native event traces. Real recursive mutex and atomic_ref CAS; a real store before first CAS induces one retry. Accepted TLS identity logic is shared. Selected little-endian x64 generated CAS-reservation model only; no hardware PPC exclusive-monitor/granule or general concurrent scheduling claim."
+  },
+  "implementation": {
+    "entries": [
+      "822B29A0",
+      "822B3438"
+    ],
+    "header": "include/lo_semantics/diagnostic_lock61.h",
+    "source": "src/diagnostic_lock61.cpp",
+    "oracle": "tests/diagnostic_lock61_oracle.cpp"
+  }
+}

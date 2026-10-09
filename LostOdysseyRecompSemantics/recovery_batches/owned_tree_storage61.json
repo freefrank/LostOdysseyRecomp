@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "owned-tree-storage61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/owned_tree_storage61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/owned_tree_storage61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nvoid OriginalTreeStorage61Indirect(std::uint32_t,PPCContext&,std::uint8_t*);\n#undef PPC_CALL_INDIRECT_FUNC\n#define PPC_CALL_INDIRECT_FUNC(t) OriginalTreeStorage61Indirect((t),ctx,base)\nvoid OriginalTreeStorage61Save(unsigned,PPCContext&,std::uint8_t*);\nvoid OriginalTreeStorage61Restore(unsigned,PPCContext&,std::uint8_t*);\n#define __savegprlr_25(c,b) OriginalTreeStorage61Save(25,c,b)\n#define __restgprlr_25(c,b) OriginalTreeStorage61Restore(25,c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/owned_tree_storage61.cpp"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "diagnostic-lock61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/diagnostic_lock61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/diagnostic_lock61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nvoid OriginalDiagnosticLock61Enter(PPCContext&,std::uint8_t*);\nvoid OriginalDiagnosticLock61Leave(PPCContext&,std::uint8_t*);\nvoid OriginalDiagnosticLock61ThreadIdentity(PPCContext&,std::uint8_t*);\nbool OriginalDiagnosticLock61Cas(std::uint32_t*,std::uint32_t,std::uint32_t,PPCContext&);\n#define __imp__RtlEnterCriticalSection(c,b) OriginalDiagnosticLock61Enter(c,b)\n#define __imp__RtlLeaveCriticalSection(c,b) OriginalDiagnosticLock61Leave(c,b)\n#define sub_82290AA8(c,b) OriginalDiagnosticLock61ThreadIdentity(c,b)\n#define __sync_bool_compare_and_swap(p,e,d) OriginalDiagnosticLock61Cas((p),(e),(d),ctx)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/diagnostic_lock61.cpp"
+      ]
+    }
+  ]
+}

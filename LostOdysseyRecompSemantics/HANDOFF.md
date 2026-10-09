@@ -103,13 +103,28 @@ The initializer composes the accepted narrower implementation through a live
 full-state bridge; its allocator/concrete constructors remain explicit mutable
 guest calls. Their internals are not claimed recovered.
 
-Current dependency frontier is BB2638 (not yet implemented). Its diagnostic path
-B9C298→BC8B78 depends on 822B29A0/822B3438 locking helpers with MSR/reservation/CAS
-and native critical-section state absent from Full72; do not replace them with
-ordinary RAM/no-op locks. BB06D8 is now closed as described above. BB03B0 remains dependent on
-BD7258 and its substantial unclosed geometry children; the small constructor
-cluster above does not close that parent. BDB260/823F3340 now has the explicit full-register boundary above;
-its allocation/construction internals remain lower guest boundaries. Implement and verify closed units before parents. BD2870 is implemented by
+Manager-release/descriptor stage was pushed as `f1c99579` and remote-verified.
+Five more closed units are now built and compared: `geometry_math61` BD4448 (4
+finite ray/triangle cases), `geometry_triangle_range61` BD4C40 (4),
+`diagnostic_lock61` 822B29A0/822B3438 (2 acquire/release scenarios),
+`transform_owner_routes61` BD1558/BD1770/BD7A20 (3 cleanup cases plus 4 already
+mapped constructors), and `owned_tree_storage61` BD9858 (3 callback partition
+cases). Geometry compares original uppers with shared validated growth/copy lowers.
+Lock comparisons include Full72 plus local MSR/reserved state, genuine CAS and
+recursive mutex operations, including a real competing store and failed retry.
+This matches the selected little-endian generated reservation model, not a claim
+about PPC hardware exclusive monitors or arbitrary concurrency. Source review
+confirmed MSR merging, raw reservation bits, CAS branches and live cleanup state.
+No runtime replacement is enabled; no historical mapping credit is inferred.
+
+Current dependency frontier is BB2638 (not yet implemented). The synchronization
+state gap is addressed locally by `diagnostic_lock61`, without widening Full72.
+B9C298/BC8B78 diagnostic format composition is next. BB03B0 still requires geometry
+box/traversal and query preparation above the new triangle leaves. BB06D8 is closed.
+BDB260/823F3340 has an explicit full-register boundary; manager allocation and
+concrete constructor internals remain guest calls. The owned-tree build chain
+BD9928→BDAA48→BDAD18 is next, using the new BD9858 partition helper.
+Implement and verify closed units before parents. BD2870 is implemented by
 `reader_buffer_growth61`; small initialization/tail helpers by
 `object_sort_support61`; object initialization/cleanup by `object_sort_lifecycle61`.
 Integrate one complete upper at a time, perform narrowly selected original-body
