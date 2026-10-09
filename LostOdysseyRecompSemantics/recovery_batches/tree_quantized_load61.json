@@ -1,0 +1,15 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "tree-quantized-load61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/tree_quantized_load61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/tree_quantized_load61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nvoid QuantLoadIndirect(std::uint32_t,PPCContext&,std::uint8_t*);\nvoid QuantLoadAllocator(PPCContext&,std::uint8_t*);\nvoid QuantLoadSave(PPCContext&,std::uint8_t*);\nvoid QuantLoadRestore(PPCContext&,std::uint8_t*);\n#undef PPC_CALL_INDIRECT_FUNC\n#define PPC_CALL_INDIRECT_FUNC(t) QuantLoadIndirect((t),ctx,base)\n#define __savegprlr_26 QuantLoadSave\n#define __restgprlr_26 QuantLoadRestore\n#define sub_82BD0798 QuantLoadAllocator\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/tree_flat_strategy61.cpp",
+        "LostOdysseyRecompSemantics/src/tree_quantized_load61.cpp"
+      ]
+    }
+  ]
+}

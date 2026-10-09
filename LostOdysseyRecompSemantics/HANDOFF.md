@@ -1,3 +1,7 @@
+## Root direct continuation: quantized tree import (2026-10-09)
+
+`tree_quantized_load61` recovers BDC9F0: replace count-prefixed 24-byte node storage, optionally swap six 16-bit coordinates and three 32-bit topology fields per node, then read six float decoding scales. Three focused original-upper/shared-allocator cases pass Full72/RAM/host CSR/callbacks and independent payload/scales/ownership assertions, including allocation failure; full Clang library passes. Reader return behavior and existing failure ordering are preserved, no new defensive policy, baseline or runtime credit.
+
 ## Root direct continuation: quantized tree strategy (2026-10-09)
 
 `tree_quantized_strategy61` recovers BDC208: flatten to temporary 36-byte nodes, compute six global coordinate maxima, emit 24-byte nodes with signed 16-bit centers/unsigned half extents and preserved topology, and save six reconstruction scales. The existing conservative option uses 15-bit extents and enlarges quantized extents until decoded bounds contain source bounds. Original allocation/failure ordering is retained. Three pinned original-binder plus original-recursive-lower cases (null and both finite modes, differing child boxes) pass Full72/RAM/host CSR/callback/live ownership and independent topology/coverage checks. Full Clang library passes; nonfinite/failure paths and gameplay untested, no baseline mapping credit.

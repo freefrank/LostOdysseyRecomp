@@ -1,0 +1,34 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Complete pinned quantized-node reader plus six reconstruction scales; shared allocator lookup and mutable reader boundary.",
+  "entries": [
+    {
+      "address": "82BDC9F0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 31283,
+      "instruction_count": 274,
+      "body_sha256": "259d5088cac30e67ebab9458130014cc6b7b6a3b1b17d95724213456cb447c50",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BDC9F0"
+    ],
+    "header": "include/lo_semantics/tree_quantized_load61.h",
+    "source": "src/tree_quantized_load61.cpp",
+    "oracle": "tests/tree_quantized_load61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 3,
+    "library_validated": true,
+    "case_scope": "Native/swapped two-node mixed-width records with six scales and allocation failure. Full72/RAM/host CSR/callbacks, independent payload/scales/owner assertions. External reader and allocator remain service boundaries.",
+    "platform": "Linux x64 Clang 19.1.7; pinned regenerated PPC; mmap guest overlay",
+    "mapping_limit": "Historical catalog membership unverified; no baseline mapping credit."
+  }
+}
