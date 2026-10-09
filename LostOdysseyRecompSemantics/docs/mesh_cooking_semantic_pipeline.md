@@ -244,3 +244,8 @@ BBF7F0 removes unused values and merges exact xyz duplicates for one selected ch
 ### Indexed vertex output and smoothing
 
 BC0108 emits indexed or expanded vertex channels, smoothing-mask normals with optional angle weights using the recovered guest atan2, optional incidence lists, final triangle indices and batch metadata. Four original-upper/shared-concrete cases pass independent emitted values/indices/vector normalization and complete workspace teardown. Grouping and final pipeline orchestration remain.
+
+
+### Indexed grouping and pipeline
+
+BC0930 uses two stable word-sort passes (smoothing, then face label) before BC0108 batch emission. BC0BA8 composes recovered channel compaction, splitting, tuple deduplication, normal/incidence construction, channel packing and grouped emission. It publishes borrowed pointers, aggregates four-word label summaries, remaps incidence references and exposes an original-face map only when nonidentity. Eleven focused family cases pass with original uppers and concrete shared lowers; no runtime replacement credit or gameplay claim.

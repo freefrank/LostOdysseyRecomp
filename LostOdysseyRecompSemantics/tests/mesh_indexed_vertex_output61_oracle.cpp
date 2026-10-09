@@ -3,6 +3,8 @@
 #include "lo_semantics/crt_reader_sort_float61.h"
 #include "lo_semantics/mesh_geometry_math61.h"
 #include "lo_semantics/mesh_indexed_channels61.h"
+#include "lo_semantics/mesh_indexed_compact61.h"
+#include "lo_semantics/mesh_indexed_normals61.h"
 #include "lo_semantics/mesh_indexed_remap61.h"
 #include "lo_semantics/mesh_indexed_vertex_output61.h"
 #include "lo_semantics/mesh_indexed_workspace61.h"
@@ -63,6 +65,38 @@ Environment *original = nullptr;
 GuestMemory *memory = nullptr;
 void Lower(GuestAddress e, GuestMemory &m, Environment &env, Registers &s) {
     switch (e) {
+    case 0x82b7bc40u:
+        crt_reader_chain61::ApplySupport_B7BC40(m, env.Deps().sort.accepted, s);
+        break;
+    case 0x82bc0058u:
+        (void)mesh_indexed_compact61::Apply(e, m, env.Deps(), s);
+        break;
+    case 0x82bbed20u:
+        (void)mesh_indexed_normals61::Apply(e, m, env.Deps(), s);
+        break;
+    case 0x82bbe948u:
+    case 0x82bbebe0u:
+    case 0x82bbf208u:
+        (void)mesh_indexed_channels61::Apply(e, m, env.Deps(), s);
+        break;
+    case 0x82bc0930u:
+        (void)mesh_indexed_vertex_output61::Apply(e, m, env.Deps(), s);
+        break;
+    case 0x82bd0798u:
+        (void)crt_close_recursive_buffer_context::Apply(e, m, env.guest, s);
+        break;
+    case 0x82bd2c50u:
+        (void)object_sort_support61::Apply(e, m, {env.guest, env.accepted.fp}, s);
+        break;
+    case 0x82bd2c78u:
+        (void)crt_reader_follow61::Apply(e, m, env.guest, s);
+        break;
+    case 0x82bd2df0u:
+        (void)crt_reader_bucket_sort61::Apply(e, m, env.Deps().sort, s);
+        break;
+    case 0x82bc0108u:
+        (void)mesh_indexed_vertex_output61::Apply(e, m, env.Deps(), s);
+        break;
     case 0x82bd2870u:
         (void)reader_buffer_growth61::Apply(e, m, {env.guest, env.accepted.fp}, s);
         break;
@@ -143,6 +177,29 @@ void Check(unsigned mode) {
         }
         for (unsigned i = 0; i < 6; ++i)
             m.WriteU32(0x69000 + 4 * i, adj[i]);
+        if (mode >= 4) {
+            m.WriteU32(0x64000 + 24, mode == 5 ? 7 : 4);
+            m.WriteU32(0x64000 + 48 + 24, 4);
+            m.WriteU32(0x64000 + 28, mode == 6 ? 3 : 1);
+            m.WriteU32(0x64000 + 48 + 28, 1);
+            m.WriteU32(0x64000 + 44, 0);
+            m.WriteU32(0x64000 + 48 + 44, 1);
+        }
+        if (mode >= 7) {
+            m.WriteU32(Owner + 208, 2);
+            for (unsigned off : {256, 264, 268, 272})
+                m.WriteU32(Owner + off, 0);
+            if (mode == 8)
+                m.WriteU32(0x64000 + 24, 7);
+            if (mode == 9) {
+                m.WriteU8(Owner + 282, 0);
+                m.WriteU8(Owner + 284, 0);
+                for (unsigned off : {285, 286, 287})
+                    m.WriteU8(Owner + off, 1);
+            }
+            if (mode == 10)
+                m.WriteU32(Owner + 224, 0);
+        }
         m.WriteU32(Input, 0);
         m.WriteU32(Input + 4, 1);
     };
@@ -151,6 +208,9 @@ void Check(unsigned mode) {
     Environment expected(before), actual(after);
     expected.guest.live = {0x60000, 0x61000, 0x62000, 0x64000, 0x65000,
                            0x66000, 0x67000, 0x68000, 0x69000};
+    if (mode >= 7)
+        for (unsigned p : {0x66000, 0x67000, 0x68000, 0x69000})
+            expected.guest.live.erase(p);
     actual.guest.live = expected.guest.live;
     auto s = sort_engine61_oracle::Initial(0);
     s.r[3] = Owner;
@@ -164,10 +224,18 @@ void Check(unsigned mode) {
     PPCContext c{};
     crt_full_oracle::ToPpc(c, s);
     PPCFPSCRRegister{}.setcsr(s.cached_fp_control);
-    __imp__sub_82BC0108(c, before.Bytes());
+    if (mode < 4)
+        __imp__sub_82BC0108(c, before.Bytes());
+    else if (mode < 7)
+        __imp__sub_82BC0930(c, before.Bytes());
+    else
+        __imp__sub_82BC0BA8(c, before.Bytes());
     auto host = PPCFPSCRRegister{}.getcsr();
     PPCFPSCRRegister{}.setcsr(s.cached_fp_control);
-    (void)mesh_indexed_vertex_output61::Apply(0x82bc0108u, m, actual.Deps(), s);
+    (void)mesh_indexed_vertex_output61::Apply(mode < 4   ? 0x82bc0108u
+                                              : mode < 7 ? 0x82bc0930u
+                                                         : 0x82bc0ba8u,
+                                              m, actual.Deps(), s);
     auto a = crt_full_oracle::Snapshot(crt_full_oracle::FromPpc(c)),
          b = crt_full_oracle::Snapshot(s);
     if (a != b || !before.EqualCommitted(after) || expected.guest.events != actual.guest.events ||
@@ -192,43 +260,89 @@ void Check(unsigned mode) {
             }
         throw std::runtime_error("indexed vertex original mismatch");
     }
-    unsigned faces = mode == 3 ? 0 : 2, vertices = mode == 3 ? 0 : 4;
-    if (s.r[3] != faces || m.ReadU32(Owner + 4) != 3 * faces || m.ReadU32(Owner + 20) != 1 ||
-        m.ReadU32(m.ReadU32(Owner + 24)) != faces || m.ReadU32(Owner + 180) != 5)
-        throw std::runtime_error("vertex batch counts");
-    constexpr unsigned ids[]{0, 1, 2, 0, 2, 3};
-    for (unsigned i = 0; i < 3 * faces; ++i)
-        if (m.ReadU32(m.ReadU32(Owner + 8) + 4 * i) != ids[i])
-            throw std::runtime_error("emitted face indices");
-    auto batch = m.ReadU32(Owner + 184);
-    unsigned words[]{7, 9, faces, vertices, 0};
-    for (unsigned i = 0; i < 5; ++i)
-        if (m.ReadU32(batch + 4 * i) != words[i])
-            throw std::runtime_error("batch descriptor");
-    if (m.ReadU32(Owner + 132) != (mode == 2 ? 0u : 3 * vertices) ||
-        m.ReadU32(Owner + 260) != faces)
-        throw std::runtime_error("normal count/face map");
-    if (mode != 2)
-        for (unsigned i = 0; i < vertices; ++i) {
-            auto p = m.ReadU32(Owner + 136) + 12 * i;
-            float x = std::bit_cast<float>(m.ReadU32(p)),
-                  y = std::bit_cast<float>(m.ReadU32(p + 4)),
-                  z = std::bit_cast<float>(m.ReadU32(p + 8));
-            if (std::abs(x * x + y * y + z * z - 1) > 1e-5f || y != 0 || x < 0 || z < 0)
-                throw std::runtime_error("normalized smooth vector");
+    if (mode < 4) {
+        unsigned faces = mode == 3 ? 0 : 2, vertices = mode == 3 ? 0 : 4;
+        if (s.r[3] != faces || m.ReadU32(Owner + 4) != 3 * faces || m.ReadU32(Owner + 20) != 1 ||
+            m.ReadU32(m.ReadU32(Owner + 24)) != faces || m.ReadU32(Owner + 180) != 5)
+            throw std::runtime_error("vertex batch counts");
+        constexpr unsigned ids[]{0, 1, 2, 0, 2, 3};
+        for (unsigned i = 0; i < 3 * faces; ++i)
+            if (m.ReadU32(m.ReadU32(Owner + 8) + 4 * i) != ids[i])
+                throw std::runtime_error("emitted face indices");
+        auto batch = m.ReadU32(Owner + 184);
+        unsigned words[]{7, 9, faces, vertices, 0};
+        for (unsigned i = 0; i < 5; ++i)
+            if (m.ReadU32(batch + 4 * i) != words[i])
+                throw std::runtime_error("batch descriptor");
+        if (m.ReadU32(Owner + 132) != (mode == 2 ? 0u : 3 * vertices) ||
+            m.ReadU32(Owner + 260) != faces)
+            throw std::runtime_error("normal count/face map");
+        if (mode != 2)
+            for (unsigned i = 0; i < vertices; ++i) {
+                auto p = m.ReadU32(Owner + 136) + 12 * i;
+                float x = std::bit_cast<float>(m.ReadU32(p)),
+                      y = std::bit_cast<float>(m.ReadU32(p + 4)),
+                      z = std::bit_cast<float>(m.ReadU32(p + 8));
+                if (std::abs(x * x + y * y + z * z - 1) > 1e-5f || y != 0 || x < 0 || z < 0)
+                    throw std::runtime_error("normalized smooth vector");
+            }
+        for (unsigned ch = 0; ch < 3; ++ch) {
+            unsigned desc = Owner + (mode == 1 ? 32 + 16 * ch : 80 + 16 * ch), dims = mode == 1 ? 1
+                                                                                      : ch == 1 ? 2
+                                                                                                : 3;
+            if (m.ReadU32(desc + 4) != vertices * dims)
+                throw std::runtime_error("emitted channel dimensions");
+            auto p = m.ReadU32(desc + 8);
+            for (unsigned i = 0; i < vertices * dims; ++i) {
+                unsigned want =
+                    mode == 1 ? i
+                              : m.ReadU32(0x60000 + 0x1000 * ch + 12 * (i / dims) + 4 * (i % dims));
+                if (m.ReadU32(p + 4 * i) != want)
+                    throw std::runtime_error("emitted channel values");
+            }
         }
-    for (unsigned ch = 0; ch < 3; ++ch) {
-        unsigned desc = Owner + (mode == 1 ? 32 + 16 * ch : 80 + 16 * ch), dims = mode == 1 ? 1
-                                                                                  : ch == 1 ? 2
-                                                                                            : 3;
-        if (m.ReadU32(desc + 4) != vertices * dims)
-            throw std::runtime_error("emitted channel dimensions");
-        auto p = m.ReadU32(desc + 8);
-        for (unsigned i = 0; i < vertices * dims; ++i) {
-            unsigned want =
-                mode == 1 ? i : m.ReadU32(0x60000 + 0x1000 * ch + 12 * (i / dims) + 4 * (i % dims));
-            if (m.ReadU32(p + 4 * i) != want)
-                throw std::runtime_error("emitted channel values");
+
+    } else if (mode < 7) {
+        unsigned batches = mode == 4 ? 1 : 2;
+        if (s.r[3] != 1 || m.ReadU32(Owner + 20) != batches ||
+            m.ReadU32(Owner + 180) != 5 * batches || m.ReadU32(Owner + 260) != 2 ||
+            m.ReadU32(Owner + 4) != 6)
+            throw std::runtime_error("sorted batch counts");
+        auto batch = m.ReadU32(Owner + 184), ids = m.ReadU32(Owner + 256);
+        if (m.ReadU32(batch) != 4 || m.ReadU32(batch + 4) != 1 ||
+            m.ReadU32(batch + 8) != (mode == 4 ? 2 : 1))
+            throw std::runtime_error("first sorted batch");
+        if (m.ReadU32(ids) != (mode == 4 ? 0 : 1) || m.ReadU32(ids + 4) != (mode == 4 ? 1 : 0))
+            throw std::runtime_error("stable sorted face IDs");
+        if (batches == 2 && (m.ReadU32(batch + 20) != (mode == 5 ? 7 : 4) ||
+                             m.ReadU32(batch + 24) != (mode == 6 ? 3 : 1)))
+            throw std::runtime_error("second sorted batch");
+    }
+    if (mode >= 7) {
+        if (mode == 10) {
+            if (s.r[3] != 0 || !actual.guest.events.empty())
+                throw std::runtime_error("empty pipeline rejected");
+        } else {
+            unsigned groups = mode == 8 ? 2 : 1;
+            if (s.r[3] != 1 || m.ReadU32(Input) != 2 || m.ReadU32(Input + 4) != 2 ||
+                m.ReadU32(Input + 8) != groups || m.ReadU32(Input + 88) != groups ||
+                m.ReadU32(Input + 44) != (mode == 8 ? 6 : 4))
+                throw std::runtime_error("pipeline result counts");
+            auto labels = m.ReadU32(Input + 92);
+            if (m.ReadU32(labels) != 4 || m.ReadU32(labels + 4) != (mode == 8 ? 1 : 2) ||
+                m.ReadU32(labels + 8) != (mode == 8 ? 3 : 4) || m.ReadU32(labels + 12) != 1)
+                throw std::runtime_error("label summary");
+            auto map = m.ReadU32(Input + 28);
+            if (mode == 8) {
+                if (!map || m.ReadU32(map) != 1 || m.ReadU32(map + 4) != 0)
+                    throw std::runtime_error("original face permutation");
+            } else if (map)
+                throw std::runtime_error("identity face permutation elided");
+            for (unsigned off : {12, 16, 24, 60, 64, 68})
+                if (!m.ReadU32(Input + off))
+                    throw std::runtime_error("published channel view");
+            if (mode != 9 && (!m.ReadU32(Input + 72) || !m.ReadU32(Input + 80)))
+                throw std::runtime_error("normal and incidence output");
         }
     }
     auto os = crt_full_oracle::FromPpc(c);
@@ -297,10 +411,10 @@ int main() {
         f.read(reinterpret_cast<char *>(vertex_output_oracle::constants.data()), 184);
         if (f.gcount() != 184)
             throw std::runtime_error("atan2 constants size");
-        for (unsigned i = 0; i < 4; ++i)
+        for (unsigned i = 0; i < 11; ++i)
             vertex_output_oracle::Check(i);
         std::puts(
-            "PASS mesh-indexed-vertex-output61 4 original-upper/shared-concrete-geometry cases");
+            "PASS mesh-indexed-vertex-output61 11 original-upper/shared-concrete-geometry cases");
         return 0;
     } catch (const std::exception &e) {
         std::fprintf(stderr, "%s\n", e.what());

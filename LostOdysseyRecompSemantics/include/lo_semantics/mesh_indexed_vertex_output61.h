@@ -3,6 +3,8 @@
 namespace lo::semantic::gpu::mesh_indexed_vertex_output61 {
 using Registers = mesh_indexed_workspace61::Registers;
 using Dependencies = mesh_indexed_workspace61::Dependencies;
+// BC0930 groups faces by label/smoothing; BC0BA8 runs the indexed pipeline,
+// publishes borrowed channel views and translates incidence/original face IDs.
 // BC0108 emits one face batch: indexed or expanded channels, smoothing-mask
 // normals with optional angle weighting and incidence records, final indices
 // and batch metadata. Guest constants/atan2 and source ownership are retained.

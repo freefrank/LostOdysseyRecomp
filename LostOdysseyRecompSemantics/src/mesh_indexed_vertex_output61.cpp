@@ -1,6 +1,10 @@
 #include "lo_semantics/mesh_indexed_vertex_output61.h"
+#include "lo_semantics/crt_reader_chain61.h"
+#include "lo_semantics/crt_reader_follow61.h"
 #include "lo_semantics/mesh_geometry_math61.h"
 #include "lo_semantics/mesh_indexed_channels61.h"
+#include "lo_semantics/mesh_indexed_compact61.h"
+#include "lo_semantics/mesh_indexed_normals61.h"
 #include "lo_semantics/mesh_indexed_remap61.h"
 #include "lo_semantics/object_sort_support61.h"
 #include "lo_semantics/reader_buffer_growth61.h"
@@ -43,6 +47,38 @@ struct Output {
     void Lower(GuestAddress e, GuestAddress c) {
         s.lr = c;
         switch (e) {
+        case 0x82bd0798u:
+            (void)crt_close_recursive_buffer_context::Apply(e, m, d.sort.guest, s);
+            break;
+        case 0x82bd2c50u:
+            (void)object_sort_support61::Apply(e, m, {d.sort.guest, d.fp}, s);
+            break;
+        case 0x82bd2c78u:
+            (void)crt_reader_follow61::Apply(e, m, d.sort.guest, s);
+            break;
+        case 0x82bd2df0u:
+            (void)crt_reader_bucket_sort61::Apply(e, m, d.sort, s);
+            break;
+        case 0x82bc0108u:
+            Run();
+            break;
+        case 0x82bc0930u:
+            Groups();
+            break;
+        case 0x82b7bc40u:
+            crt_reader_chain61::ApplySupport_B7BC40(m, d.sort.accepted, s);
+            break;
+        case 0x82bc0058u:
+            (void)mesh_indexed_compact61::Apply(e, m, d, s);
+            break;
+        case 0x82bbed20u:
+            (void)mesh_indexed_normals61::Apply(e, m, d, s);
+            break;
+        case 0x82bbe948u:
+        case 0x82bbebe0u:
+        case 0x82bbf208u:
+            (void)mesh_indexed_channels61::Apply(e, m, d, s);
+            break;
         case 0x82bd2870u:
             (void)reader_buffer_growth61::Apply(e, m, {d.sort.guest, d.fp}, s);
             break;
@@ -60,6 +96,430 @@ struct Output {
             (void)mesh_geometry_math61::Apply(e, m, d.fp, s);
             break;
         }
+    }
+    void Call(GuestAddress c) {
+        s.ctr = s.r[11];
+        s.lr = c;
+        d.sort.guest.CallIndirect(Address(s.ctr) & ~3u, m, s);
+    }
+    void FreeArray(unsigned reg, GuestAddress allocator, GuestAddress call) {
+        Lower(0x82bd0798u, allocator);
+        s.r[11] = Word(s.r[3]);
+        s.r[4] = s.r[reg];
+        s.r[11] = Word(s.r[11] + 12);
+        Call(call);
+    }
+    // Stable sorting by smoothing mask, then face label, preserves input
+    // ordering within each equal-key batch. Emission's return is ignored.
+    void Groups() {
+        auto &r = s.r;
+        r[12] = s.lr;
+        s.lr = 0x82bc0938u;
+        for (unsigned i = 24; i < 32; ++i)
+            recovery_abi::WriteU64(m, Address(r[1] - 16 - 8 * (31 - i)), r[i]);
+        Word(r[1] - 8, r[12]);
+        auto old = r[1];
+        r[1] -= 176;
+        Word(r[1], old);
+        r[31] = r[3];
+        Lower(0x82bd0798u, 0x82bc0944u);
+        r[11] = Word(r[3]);
+        r[5] = 1;
+        r[10] = Word(r[31] + 224);
+        r[4] = Shift(r[10], 2);
+        r[11] = Word(r[11]);
+        Call(0x82bc0960u);
+        r[26] = r[3];
+        Lower(0x82bd0798u, 0x82bc0968u);
+        r[11] = Word(r[31] + 224);
+        r[5] = 1;
+        r[4] = Shift(r[11], 2);
+        r[11] = Word(r[3]);
+        r[11] = Word(r[11]);
+        Call(0x82bc0984u);
+        r[28] = r[3];
+        Lower(0x82bd0798u, 0x82bc098cu);
+        r[11] = Word(r[31] + 224);
+        r[5] = 1;
+        r[4] = Shift(r[11], 2);
+        r[11] = Word(r[3]);
+        r[11] = Word(r[11]);
+        Call(0x82bc09a8u);
+        r[29] = r[3];
+        Compare(r[26]);
+        bool failed = s.cr6.eq;
+        if (!failed) {
+            Compare(r[28]);
+            failed = s.cr6.eq;
+        }
+        if (!failed) {
+            Compare(r[29]);
+            failed = s.cr6.eq;
+        }
+        if (failed) {
+            Compare(r[29]);
+            if (!s.cr6.eq)
+                FreeArray(29, 0x82bc0b48u, 0x82bc0b5cu);
+            Compare(r[28]);
+            if (!s.cr6.eq)
+                FreeArray(28, 0x82bc0b68u, 0x82bc0b7cu);
+            Compare(r[26]);
+            if (!s.cr6.eq)
+                FreeArray(26, 0x82bc0b88u, 0x82bc0b9cu);
+            r[3] = 0;
+        } else {
+            r[11] = Word(r[31] + 224);
+            r[9] = 0;
+            Compare(r[11]);
+            if (s.cr6.gt) {
+                r[11] = 0;
+                r[10] = r[29];
+                r[7] = r[28] - r[29];
+                do {
+                    r[8] = Word(r[31] + 248);
+                    ++r[9];
+                    r[8] += r[11];
+                    r[8] = Word(r[8] + 24);
+                    Word(r[7] + r[10], r[8]);
+                    r[8] = Word(r[31] + 248);
+                    r[8] += r[11];
+                    r[11] += 48;
+                    r[8] = Word(r[8] + 28);
+                    Word(r[10], r[8]);
+                    r[10] += 4;
+                    r[8] = Word(r[31] + 224);
+                    Compare(r[9], r[8]);
+                } while (s.cr6.lt);
+            }
+            r[3] = r[1] + 80;
+            Lower(0x82bd2c50u, 0x82bc0a20u);
+            r[30] = Word(r[31] + 224);
+            r[6] = 1;
+            r[4] = r[29];
+            r[3] = r[1] + 80;
+            r[5] = r[30];
+            Lower(0x82bd2df0u, 0x82bc0a38u);
+            r[4] = r[28];
+            r[5] = r[30];
+            r[6] = 1;
+            Lower(0x82bd2df0u, 0x82bc0a48u);
+            r[10] = Word(r[3] + 4);
+            r[11] = Word(r[31] + 224);
+            r[5] = 0;
+            r[24] = 0;
+            Compare(r[11]);
+            // Original requires a nonempty input and reads the first rank here.
+            r[11] = Shift(Word(r[10]), 2);
+            r[6] = Word(r[11] + r[28]);
+            r[7] = Word(r[11] + r[29]);
+            if (s.cr6.gt) {
+                r[25] = r[10];
+                do {
+                    r[27] = Word(r[25]);
+                    r[30] = Shift(r[27], 2);
+                    r[11] = Word(r[30] + r[28]);
+                    Compare(r[11], r[6]);
+                    if (s.cr6.eq) {
+                        r[11] = Word(r[30] + r[29]);
+                        Compare(r[11], r[7]);
+                    }
+                    if (s.cr6.eq) {
+                        r[11] = Shift(r[5], 2);
+                        ++r[5];
+                        Word(r[11] + r[26], r[27]);
+                    } else {
+                        r[4] = r[26];
+                        r[3] = r[31];
+                        Lower(0x82bc0108u, 0x82bc0ab0u);
+                        r[6] = Word(r[30] + r[28]);
+                        r[7] = Word(r[30] + r[29]);
+                        r[5] = 1;
+                        Word(r[26], r[27]);
+                    }
+                    r[11] = Word(r[31] + 224);
+                    ++r[24];
+                    r[25] += 4;
+                    Compare(r[24], r[11]);
+                } while (s.cr6.lt);
+            }
+            r[4] = r[26];
+            r[3] = r[31];
+            Lower(0x82bc0108u, 0x82bc0ae0u);
+            FreeArray(29, 0x82bc0ae4u, 0x82bc0af8u);
+            FreeArray(28, 0x82bc0afcu, 0x82bc0b10u);
+            FreeArray(26, 0x82bc0b14u, 0x82bc0b28u);
+            r[3] = r[1] + 80;
+            Lower(0x82bd2c78u, 0x82bc0b30u);
+            r[3] = 1;
+        }
+        r[1] += 176;
+        for (unsigned i = 24; i < 32; ++i)
+            r[i] = recovery_abi::ReadU64(m, Address(r[1] - 16 - 8 * (31 - i)));
+        r[12] = Word(r[1] - 8);
+        s.lr = r[12];
+    }
+    void SignedCompare(std::uint64_t a, std::uint64_t b) {
+        auto x = std::int32_t(a), y = std::int32_t(b);
+        s.cr6 = {std::uint8_t(x < y), std::uint8_t(x > y), std::uint8_t(x == y), s.xer_so};
+    }
+    // Per-label summary: label, face count, vertex count, smoothing-batch count.
+    void LabelSummary(bool final) {
+        auto &r = s.r;
+        r[30] = r[31] + 192;
+        Capacity(30);
+        constexpr GuestAddress middle[]{0x82bc0d74u, 0x82bc0da8u, 0x82bc0ddcu, 0x82bc0e10u};
+        constexpr GuestAddress last[]{0x82bc0e90u, 0x82bc0ec4u, 0x82bc0ef8u, 0x82bc0f2cu};
+        constexpr unsigned values[]{22, 28, 27};
+        for (unsigned i = 0; i < 3; ++i) {
+            Grow(30, final ? last[i] : middle[i]);
+            Push(30, values[i]);
+            r[11] = Word(r[30] + 4);
+            r[10] = Word(r[30]);
+            ++r[11];
+            Compare(r[11], r[10]);
+            Word(r[30] + 4, r[11]);
+        }
+        Grow(30, final ? last[3] : middle[3]);
+        if (final)
+            Push(30, 25);
+        else {
+            r[11] = Word(r[30] + 4);
+            r[10] = r[25];
+            r[9] = Word(r[30] + 8);
+            r[25] = 0;
+            r[11] = Shift(r[11], 2);
+            r[28] = 0;
+            r[27] = 0;
+            Word(r[11] + r[9], r[10]);
+        }
+        Increment(30);
+    }
+    bool PipelineBody() {
+        auto &r = s.r;
+        r[31] = r[3];
+        r[29] = r[4];
+        r[11] = Word(r[31] + 224);
+        Compare(r[11]);
+        if (s.cr6.eq)
+            return false;
+        Lower(0x82bd0798u, 0x82bc0bd8u);
+        r[11] = Word(r[31] + 224);
+        r[5] = 0;
+        r[4] = Shift(r[11], 2);
+        r[11] = Word(r[3]);
+        r[11] = Word(r[11]);
+        Call(0x82bc0bf4u);
+        Compare(r[3]);
+        Word(r[31] + 256, r[3]);
+        if (s.cr6.eq)
+            return false;
+        r[11] = Word(r[31] + 224);
+        r[4] = 255;
+        r[5] = Shift(r[11], 2);
+        Lower(0x82b7bc40u, 0x82bc0c10u);
+        r[11] = 0;
+        r[3] = r[31];
+        Word(r[31] + 260, r[11]);
+        constexpr GuestAddress stages[]{0x82bc0058u, 0x82bbe948u, 0x82bbebe0u,
+                                        0x82bbed20u, 0x82bbf208u, 0x82bc0930u};
+        constexpr GuestAddress returns[]{0x82bc0c20u, 0x82bc0c34u, 0x82bc0c48u,
+                                         0x82bc0c5cu, 0x82bc0c70u, 0x82bc0c84u};
+        for (unsigned i = 0; i < 6; ++i) {
+            r[3] = r[31];
+            Lower(stages[i], returns[i]);
+            r[11] = r[3] & 255;
+            Compare(r[11]);
+            if (s.cr6.eq)
+                return false;
+        }
+        r[11] = Word(r[31] + 8);
+        r[10] = std::uint64_t(std::int64_t(-859045888));
+        r[18] = Word(r[31] + 20);
+        r[22] = ~std::uint64_t(0);
+        r[17] = Word(r[31] + 164);
+        r[9] = r[10] | 52429;
+        r[28] = 0;
+        r[27] = 0;
+        Word(r[29] + 12, r[11]);
+        r[25] = 0;
+        r[11] = Word(r[31] + 24);
+        r[21] = 0;
+        r[20] = 0;
+        Word(r[29] + 16, r[11]);
+        r[10] = Word(r[31] + 152);
+        Word(r[29] + 20, r[10]);
+        r[10] = Word(r[31] + 184);
+        Word(r[29] + 24, r[10]);
+        constexpr unsigned source[]{40, 88, 56, 104}, dest[]{48, 60, 52, 64};
+        for (unsigned i = 0; i < 4; ++i) {
+            r[8] = Word(r[31] + source[i]);
+            Word(r[29] + dest[i], r[8]);
+        }
+        r[8] = m.ReadU8(Address(r[31] + 281));
+        m.WriteU8(Address(r[29] + 84), std::uint8_t(r[8]));
+        constexpr unsigned source2[]{72, 120, 136, 168}, dest2[]{56, 68, 72, 80};
+        for (unsigned i = 0; i < 4; ++i) {
+            r[8] = Word(r[31] + source2[i]);
+            Word(r[29] + dest2[i], r[8]);
+        }
+        r[8] = Word(r[31] + 180);
+        r[9] = (std::uint64_t(Address(r[8])) * Address(r[9])) >> 32;
+        r[9] = Address(r[9]) >> 2;
+        Compare(r[9]);
+        if (!s.cr6.eq) {
+            r[23] = r[11];
+            r[26] = r[10] + 12;
+            r[24] = r[9];
+            do {
+                r[19] = Word(r[26] - 12);
+                SignedCompare(r[19], r[22]);
+                if (!s.cr6.eq) {
+                    SignedCompare(r[22], ~std::uint64_t(0));
+                    if (!s.cr6.eq)
+                        LabelSummary(false);
+                    r[22] = r[19];
+                }
+                r[11] = Word(r[23]);
+                --r[24];
+                r[10] = Word(r[26]);
+                ++r[25];
+                r[23] += 4;
+                r[26] += 20;
+                r[28] += r[11];
+                r[27] += r[10];
+                r[21] += r[11];
+                r[20] += r[10];
+                Compare(r[24]);
+            } while (!s.cr6.eq);
+        }
+        LabelSummary(true);
+        r[11] = Word(r[31] + 196);
+        r[30] = Word(r[29] + 80);
+        r[11] = Address(r[11]) >> 2;
+        Compare(r[30]);
+        Word(r[29] + 88, r[11]);
+        r[11] = Word(r[31] + 200);
+        Word(r[29], r[21]);
+        Word(r[29] + 92, r[11]);
+        r[11] = Word(r[31] + 208);
+        Word(r[29] + 8, r[18]);
+        Word(r[29] + 44, r[20]);
+        Word(r[29] + 4, r[11]);
+        r[11] = Word(r[31] + 212);
+        Word(r[29] + 32, r[11]);
+        r[11] = Word(r[31] + 216);
+        Word(r[29] + 36, r[11]);
+        r[11] = Word(r[31] + 220);
+        Word(r[29] + 76, r[17]);
+        Word(r[29] + 40, r[11]);
+        if (!s.cr6.eq) {
+            Lower(0x82bd0798u, 0x82bc0f9cu);
+            r[11] = Word(r[31] + 224);
+            r[5] = 0;
+            r[4] = Shift(r[11], 2);
+            r[11] = Word(r[3]);
+            r[11] = Word(r[11]);
+            Call(0x82bc0fb8u);
+            r[28] = r[3];
+            Compare(r[28]);
+            if (s.cr6.eq)
+                return false;
+            r[10] = Word(r[31] + 260);
+            r[11] = 0;
+            Compare(r[10]);
+            if (s.cr6.gt) {
+                r[10] = 0;
+                do {
+                    r[8] = Word(r[31] + 256);
+                    r[9] = r[11];
+                    ++r[11];
+                    r[8] = Word(r[8] + r[10]);
+                    r[10] += 4;
+                    r[8] = Shift(r[8], 2);
+                    Word(r[8] + r[28], r[9]);
+                    r[9] = Word(r[31] + 260);
+                    Compare(r[11], r[9]);
+                } while (s.cr6.lt);
+            }
+            r[11] = Word(r[31] + 276);
+            r[10] = 0;
+            Compare(r[11]);
+            if (s.cr6.gt) {
+                do {
+                    r[11] = Word(r[30]);
+                    r[30] += 4;
+                    Compare(r[11]);
+                    if (!s.cr6.eq) {
+                        do {
+                            r[9] = Word(r[30]);
+                            --r[11];
+                            r[9] = Shift(r[9], 2);
+                            Compare(r[11]);
+                            r[9] = Word(r[9] + r[28]);
+                            Word(r[30], r[9]);
+                            r[30] += 4;
+                        } while (!s.cr6.eq);
+                    }
+                    r[11] = Word(r[31] + 276);
+                    ++r[10];
+                    Compare(r[10], r[11]);
+                } while (s.cr6.lt);
+            }
+            FreeArray(28, 0x82bc1054u, 0x82bc1068u);
+        }
+        r[11] = Word(r[31] + 224);
+        r[5] = 1;
+        r[6] = 0;
+        Compare(r[11]);
+        if (s.cr6.gt) {
+            r[10] = Word(r[31] + 256);
+            r[11] = 0;
+            do {
+                r[9] = Word(r[10] + r[11]);
+                r[8] = Word(r[31] + 248);
+                r[7] = Shift(r[9], 1);
+                r[9] += r[7];
+                r[9] = Shift(r[9], 4);
+                r[9] += r[8];
+                r[9] = Word(r[9] + 44);
+                Word(r[10] + r[11], r[9]);
+                r[10] = Word(r[31] + 256);
+                r[9] = Word(r[10] + r[11]);
+                Compare(r[9], r[6]);
+                if (!s.cr6.eq)
+                    r[5] = 0;
+                r[9] = Word(r[31] + 224);
+                ++r[6];
+                r[11] += 4;
+                Compare(r[6], r[9]);
+            } while (s.cr6.lt);
+        }
+        r[11] = r[5] & 255;
+        Compare(r[11]);
+        r[11] = 0;
+        if (s.cr6.eq)
+            r[11] = Word(r[31] + 256);
+        r[3] = 1;
+        Word(r[29] + 28, r[11]);
+        return true;
+    }
+    void Pipeline() {
+        auto &r = s.r;
+        r[12] = s.lr;
+        s.lr = 0x82bc0bb0u;
+        for (unsigned i = 17; i < 32; ++i)
+            recovery_abi::WriteU64(m, Address(r[1] - 16 - 8 * (31 - i)), r[i]);
+        Word(r[1] - 8, r[12]);
+        auto old = r[1];
+        r[1] -= 208;
+        Word(r[1], old);
+        if (!PipelineBody())
+            r[3] = 0;
+        r[1] += 208;
+        for (unsigned i = 17; i < 32; ++i)
+            r[i] = recovery_abi::ReadU64(m, Address(r[1] - 16 - 8 * (31 - i)));
+        r[12] = Word(r[1] - 8);
+        s.lr = r[12];
     }
     void Capacity(unsigned desc) {
         auto &r = s.r;
@@ -575,9 +1035,14 @@ struct Output {
 };
 } // namespace
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
-    if (e != 0x82bc0108u)
+    if (e == 0x82bc0108u)
+        Output{m, d, s}.Run();
+    else if (e == 0x82bc0930u)
+        Output{m, d, s}.Groups();
+    else if (e == 0x82bc0ba8u)
+        Output{m, d, s}.Pipeline();
+    else
         return false;
-    Output{m, d, s}.Run();
     return true;
 }
 } // namespace lo::semantic::gpu::mesh_indexed_vertex_output61
