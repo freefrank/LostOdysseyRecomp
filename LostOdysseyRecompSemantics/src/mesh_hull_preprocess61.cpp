@@ -1,5 +1,6 @@
 #include "lo_semantics/mesh_hull_preprocess61.h"
 #include "lo_semantics/mesh_hull_incremental61.h"
+#include "lo_semantics/mesh_hull_polyhedron61.h"
 #include "lo_semantics/crt_copy_full_context.h"
 #include "lo_semantics/crt_reader_chain61.h"
 #include "lo_semantics/recovery_abi.h"
@@ -296,7 +297,7 @@ struct Preprocess {
                 Word(sp + 84, sp + 108);
                 s.fpr_bits[1] = std::bit_cast<std::uint64_t>(inflation);
                 s.lr = 0x82ba5b6cu;
-                d.lifetime.guest.CallDirect(0x82ba5480u, m, s);
+                (void)mesh_hull_polyhedron61::Apply(0x82ba5480u, m, d, s);
                 ok = Address(s.r[3]) != 0;
             }
             ReleaseArray(sp + 112, ok ? 0x82ba5b78u : 0x82ba5b38u);

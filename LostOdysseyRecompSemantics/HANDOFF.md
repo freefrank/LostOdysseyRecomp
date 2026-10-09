@@ -1,3 +1,7 @@
+## Root direct continuation: inflated hull clipping connected (2026-10-09)
+
+`mesh_hull_polyhedron61` adds eleven logical entries for matrix operations/three-plane intersection, compact half-edge box construction, validity checks, clipping-plane selection, clipping, inflation/output packing and release. BA5480 is connected in preprocessing. Focused box/half-box tests pass; BA5CF8 with cube inflation 0.1 returns 8 points and 12 triangles spanning [-0.1,1.1] in all axes, with complete tracked ownership cleanup. Clipping uses high-level host temporary vectors/maps and concrete guest outputs, not original scratch/volatile/bitwise-FP equivalence. First-use scratch callback registration remains explicit accepted guest 82B7BE48; smoke starts with registration flags already set. Full library and prior hull smokes pass. No gameplay acceptance.
+
 ## Root direct continuation: support planes for inflated hulls (2026-10-09)
 
 BA4BF8 now concretely builds plain hull faces, adds edge support planes for sharp dihedrals, removes parallel redundant faces by area, appends unique support planes and releases the face objects. BA0DD0, BA1078 and BA1EE0 provide unfiltered support and four-word plane arrays. Cube checks produce six axis planes with a 120-degree edge threshold and eighteen axis/bevel planes at 45 degrees, followed by complete tracked cleanup. The global registry buffer intentionally remains owned by the caller until release. BA5480 clipping/output composition is still pending. Logical/ABI scope only.

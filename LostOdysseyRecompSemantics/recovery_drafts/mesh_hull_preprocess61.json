@@ -99,9 +99,7 @@
     "runtime_validated": false,
     "complete": false,
     "focused_smoke_cases": 4,
-    "case_scope": "Normalized duplicate points, degenerate planar box fallback, first-use remapping with temporary map release, and triangle-array grow/append/release. Indexed B9C7D8 regression still produces 564 NXS/CVXM bytes with zero live allocations. No Full72 differential or gameplay claim. Hull-mode driver/output packaging compiled/source-reviewed; its algorithm boundaries are not replaced in the smoke. Subsequent incremental smoke now executes concrete BA40B8, BA4A88 and BA5CF8 plain cube packing with complete ownership cleanup.",
-    "remaining_boundaries": [
-      "82BA5480"
-    ]
+    "case_scope": "Normalized duplicate points, degenerate planar box fallback, first-use remapping with temporary map release, and triangle-array grow/append/release. Indexed B9C7D8 regression still produces 564 NXS/CVXM bytes with zero live allocations. No Full72 differential or gameplay claim. Hull-mode driver/output packaging compiled/source-reviewed; its algorithm boundaries are not replaced in the smoke. Subsequent incremental smoke now executes concrete BA40B8, BA4A88 and BA5CF8 plain cube packing with complete ownership cleanup. Polyhedron smoke also executes inflated BA5CF8 cube preparation through concrete support-plane and clipping helpers, with output extents and ownership checked. The underlying clip first-use CRT registration remains an accepted guest callback.",
+    "remaining_boundaries": []
   }
 }

@@ -7,6 +7,7 @@ using Dependencies=mesh_indexed_cook61::Dependencies;
 // BA0998 compacts referenced points and remaps indices in first-use order.
 // BA5CF8 owns preparation/output buffers; BA5A70 selects plain/inflated hull
 // and packs triangulated output. Dynamic word/triangle arrays are concrete.
-// BA5480 remains a live guest algorithm boundary; hull/support planes are concrete. Logical/ABI only.
+// Plain and inflated hull algorithms are concrete. Logical/ABI only;
+// clip first-use destructor registration remains an accepted CRT boundary.
 [[nodiscard]] bool Apply(GuestAddress,GuestMemory&,Dependencies,Registers&);
 }

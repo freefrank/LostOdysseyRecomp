@@ -279,3 +279,8 @@ BA40B8 now composes perturbed support/simplex selection with live face extrusion
 ### Inflation support planes
 
 BA4BF8 is concrete: support-plane collection with sharp-edge bevels, coplanar-face pruning, normal deduplication and face cleanup. Cube smoke covers six-plane and eighteen-plane results. BA5480 polyhedron clipping remains the only preprocess algorithm boundary.
+
+
+### Inflated convex polyhedron output
+
+BA5480 now expands input planes, initializes a bounds polyhedron, selects and applies half-space cuts, and transfers point/polygon output ownership. BA5CF8 compacts and triangulates this output. Cube inflation by 0.1 produces the expected [-0.1,1.1] bounds with complete tracked cleanup. Host scratch containers implement the logical topology; original scratch/volatile/bitwise-FP equivalence is not asserted. First-use CRT destructor registration stays an explicit accepted guest boundary.
