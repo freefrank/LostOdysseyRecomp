@@ -2,7 +2,7 @@
 
 ## Latest workspace checkpoint — 2026-10-09
 
-Last verified published checkpoint: `2c9535f4e61c0324da8ae675499f8b1b668e84a9`.
+Last verified published checkpoint: `f9c957e706afb584d6d2bbe90af66e017323a06c`.
 Separate unresolved paired traversal WIP: `44ea9971`.
 The current continuation adds seven selected-case validated units (23 cases):
 `crt_random_thread61` (4), `transform_owner_build61` (3),
@@ -42,7 +42,9 @@ serialize/deserialize cases and library PASS. Blob descriptors are {count,pointe
 the output allocation transfers to the caller. Full scalar/vector/memory, callback,
 machine and host CSR comparisons pass. Prior-grid deletion, failed allocation,
 malformed blobs and alternate modes remain untested. Mapping credit and runtime
-additions remain zero. Next inspect bounded direct callers of these blob routes.
+additions remain zero. Bounded direct-caller lookup found none for B9DD90 and one for BA60F8:
+B9CBC0, now recovered in `grid_blob_forward61`. Its two dimension-2/4 tail-call
+cases pass, including SP/LR and borrowed state forwarding, with library PASS.
 
 ## Active checkpoint — 2026-10-09, private inputs restored
 

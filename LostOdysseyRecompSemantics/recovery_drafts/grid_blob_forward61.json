@@ -1,0 +1,36 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Private original tail body pinned by SHA256; complete accepted serializer shared by both sides.",
+  "entries": [
+    {
+      "address": "82B9CBC0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 4515,
+      "instruction_count": 5,
+      "body_sha256": "efeea1a25e24a63cabc900211b94b7851a4e89961b71822421f871e3fece5469",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 2,
+    "library_validated": true,
+    "library": "PASS incremental complete Clang 19 CMake static library; existing unused-function warning exception retained.",
+    "platform": "Linux x64; Clang 19.1.7; genuine XEX regenerated with pinned XenonRecomp ddd128bc plus tracked patch; existing oracle guest-window allocation overlaid with mmap/mprotect only",
+    "mapping_credit": 0,
+    "mapping_limit": "Fixed historical catalog.sqlite unavailable; do not infer membership from regenerated sources. 82BB25D0 is explicitly external in prior handoff.",
+    "runtime_validated": false,
+    "complete": false,
+    "limits": "Selected finite inputs, ordinary RAM, Full72 state, callbacks and host CSR only. No Windows revalidation, nonfinite matrix, faults/MMIO, concurrency, runtime or gameplay acceptance.",
+    "case_scope": "Two genuine five-instruction original upper cases tail-call the shared full serializer for dimensions 2 and 4. Full72/all vectors/RAM/callback/MachineState/host CSR plus caller SP/LR and output descriptor checked. This validates parameter forwarding, not fresh original-lower equivalence. Allocation failure, malformed inputs and unexercised paired VMX route remain outside scope."
+  },
+  "implementation": {
+    "entries": [
+      "82B9CBC0"
+    ],
+    "header": "include/lo_semantics/grid_blob_forward61.h",
+    "source": "src/grid_blob_forward61.cpp",
+    "oracle": "tests/grid_blob_forward61_oracle.cpp"
+  }
+}
