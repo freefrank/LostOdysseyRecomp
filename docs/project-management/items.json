@@ -7554,6 +7554,21 @@
       ],
       "source_lines": [],
       "record_type": "backlog"
+    },
+    {
+      "key": "issue-369-more-language-options",
+      "title": "[Feature] More language options for text",
+      "issue_url": "https://github.com/freefrank/LostOdysseyRecomp/issues/369",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Localization",
+        "Status": "In Progress",
+        "Delivery": null,
+        "Release": null,
+        "Start date": null,
+        "Target date": null,
+        "Evidence": "Maintainer accepted this as a planned feature on 2026-10-09; research started the same day. Scope: language packs for modders. Export the game's text to editable files, import translated text back into the game, and add new languages selectable in Settings, first target Brazilian Portuguese, plus font glyph additions. Planned phases: research (text formats, archive read path, language selection, font glyph coverage), export, import, new language and font additions. No implementation, validation or reporter acceptance is recorded. Mods are supported on Windows only (PR #357)."
+      }
     }
   ]
 }
