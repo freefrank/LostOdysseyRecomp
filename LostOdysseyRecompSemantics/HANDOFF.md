@@ -1,5 +1,28 @@
 # Semantic recovery handoff
 
+## Independent corpus continuation — 2026-10-09
+
+Prior published checkpoint: `a5e492aa40f5947f07f5346c032e0ece44607ec8`.
+`projection_extrema61` recovers BB34F8 (125 instructions) as explicit point
+projection and strict min/max index selection. Three genuine complete-body
+cases pass Full72/RAM/host CSR, including four-point unrolling plus tail and
+first-index ties. Full library build passes. Original byte index truncation and
+FP stage ordering are retained; nonfinite/large-index behavior is untested.
+This is a zero-credit implementation pending historical catalog membership.
+
+Bounded private-image investigation establishes vtables at 820D58A0 (installed
+by B9CC00) and 820D5C58 (installed by B9E220/B9E2D8/B9E388). Their slots +0C,
++14 and +18 point to B9DD90, B9DF18 and B9DFA0 respectively. B9CBC0 occurs at
+pointer slot 820D5990, but its actual table base/installer remains unproven.
+No receiver-typed call-site was established; these facts do not establish
+reachability. No private image bytes or original bodies are published.
+
+Manager candidate 823262B8 remains blocked on actual recursive registration:
+8256F6B8 is a typed external getter boundary, not a complete implementation.
+Its lower 823FFDD8 reaches open 8229C948/823FF338/82400620 subtrees. Existing
+mapped typed interfaces cannot be promoted to complete mutable Full ABI by
+assumption. Independent bounds/cache leaves are being recovered instead.
+
 ## Latest workspace checkpoint — 2026-10-09
 
 Last verified published checkpoint: `d1b014ffd8b11bedc902b4ed03c1e967f6d50f14`.

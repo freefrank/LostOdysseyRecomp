@@ -1,0 +1,36 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Private complete original body pinned by SHA256; no original code embedded.",
+  "entries": [
+    {
+      "address": "82BB34F8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 57471,
+      "instruction_count": 125,
+      "body_sha256": "e333e16feda931ced8199b771fac47e3c4e02b67ebb3b5faa821f1a6b35eb422",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 3,
+    "library_validated": true,
+    "library": "PASS incremental complete Clang 19 CMake static library; existing unused-function warning exception retained.",
+    "platform": "Linux x64; Clang 19.1.7; genuine XEX regenerated with pinned XenonRecomp ddd128bc plus tracked patch; existing oracle guest-window allocation overlaid with mmap/mprotect only",
+    "mapping_credit": 0,
+    "mapping_limit": "Fixed historical catalog.sqlite unavailable; do not infer membership from regenerated sources. 82BB25D0 is explicitly external in prior handoff.",
+    "runtime_validated": false,
+    "complete": false,
+    "limits": "Selected finite inputs, ordinary RAM, Full72 state, callbacks and host CSR only. No Windows revalidation, nonfinite matrix, faults/MMIO, concurrency, runtime or gameplay acceptance.",
+    "case_scope": "Three complete original-body cases: empty, three-point tail, five-point unrolled plus tail with equal extrema verifying first-index ties. Full72/RAM and actual host CSR compared. Finite values only; nonfinite inputs, indices beyond255, faults/MMIO and gameplay unverified. Original byte truncation remains explicit; no new guards."
+  },
+  "implementation": {
+    "entries": [
+      "82BB34F8"
+    ],
+    "header": "include/lo_semantics/projection_extrema61.h",
+    "source": "src/projection_extrema61.cpp",
+    "oracle": "tests/projection_extrema61_oracle.cpp"
+  }
+}
