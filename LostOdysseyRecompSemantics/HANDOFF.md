@@ -63,6 +63,23 @@ record region. Three original-body Full72/RAM/host CSR cases pass with independe
 index/count/clearing assertions, spanning the four-item loop and tail. Library
 build/review pass. Storage is borrowed; no allocator or broad guards are added.
 
+`owned_tree_plane_query61` recovers BDA8B8 (99 instructions): reject against
+active planes, clear fully-contained plane bits, aggregate whole-node indices
+when the mask becomes zero, or recurse and visit intersecting leaves. Three
+genuine recursive-body Full72/RAM/callback/host CSR cases and library build pass.
+The existing guest frame+80 scratch is explicitly seeded and retained; no extra
+argument is invented. Valid child pairs and finite small plane masks are the
+selected scope. Caller F46DB0 is observed but not recovered in this unit.
+
+`record_snapshot_gather61` recovers BD1900 (105 instructions): optional mutable
+pre-callback, temporary owned snapshot of packed 12-byte records, permutation
+gather back into borrowed storage, and temporary release. Three actual-upper
+cases with shared complete allocator lookup pass Full72/RAM/callback and lifetime
+checks (repeat gather/rejected callback/count mismatch), plus library build.
+Host CSR is not independently compared; allocation failure and invalid indices
+are untested. Next substantive parent BD22A8 additionally needs BD20F0 and its
+BDB1C0/BDB208 visitor adapters; it is not yet claimed recovered.
+
 Bounded private-image investigation establishes vtables at 820D58A0 (installed
 by B9CC00) and 820D5C58 (installed by B9E220/B9E2D8/B9E388). Their slots +0C,
 +14 and +18 point to B9DD90, B9DF18 and B9DFA0 respectively. B9CBC0 occurs at

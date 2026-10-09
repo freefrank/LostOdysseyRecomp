@@ -1,0 +1,44 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Complete genuine body pinned by UTF-8 LF SHA256 without final newline; no original code embedded.",
+  "entries": [
+    {
+      "address": "82BDA8B8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 26364,
+      "instruction_count": 99,
+      "body_sha256": "7d59d2f90edf27a1e7877d557844f7fd7242757da1b22781be05a3839aef2ba3",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BDA8B8"
+    ],
+    "header": "include/lo_semantics/owned_tree_plane_query61.h",
+    "source": "src/owned_tree_plane_query61.cpp",
+    "oracle": "tests/owned_tree_plane_query61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 3,
+    "library_validated": true,
+    "library": "PASS incremental complete Clang 19 CMake static library; existing unused-function warning exception retained.",
+    "platform": "Linux x64; Clang 19.1.7; genuine XEX regenerated with pinned XenonRecomp ddd128bc plus tracked patch; existing oracle guest-window allocation overlaid with mmap/mprotect only",
+    "mapping_credit": 0,
+    "mapping_limit": "Fixed historical catalog.sqlite unavailable; do not infer membership from regenerated sources. 82BB25D0 is explicitly external in prior handoff.",
+    "runtime_validated": false,
+    "complete": false,
+    "limits": "Selected finite inputs, ordinary RAM, Full72 state, callbacks and host CSR only. No Windows revalidation, nonfinite matrix, faults/MMIO, concurrency, runtime or gameplay acceptance.",
+    "case_scope": "Three complete genuine recursive-body cases: outside reject, fully-contained aggregate callback and sparse-plane-mask intersection with leaf callback/right rejection. Full72/RAM/callback/actual host CSR compared. Prior guest frame+80 scratch is explicitly seeded and read; it is not an invented argument. Finite small masks and valid borrowed child pairs only; callback internals, nonfinite/fault/concurrent/runtime behavior unverified."
+  },
+  "dependency_evidence": {
+    "direct": [
+      "82BDA8B8 (self recursion)"
+    ],
+    "indirect": "Borrowed visitor target from r6; count, index pointer, inside/intersect flag and user data passed through explicit mutable Full72 boundary.",
+    "bounded_caller": "82F46DB0 in ppc_recomp.215.cpp; not implemented by this family.",
+    "stack_contract": "Initial r30 reads frame+80 (callerSP-64) as existing guest scratch; not a caller argument."
+  }
+}

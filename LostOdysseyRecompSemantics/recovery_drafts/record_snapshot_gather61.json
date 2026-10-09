@@ -1,0 +1,47 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Complete original upper with shared accepted BD0798 allocator-table getter; full mutable approval/allocation/release callbacks.",
+  "entries": [
+    {
+      "address": "82BD1900",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 5081,
+      "instruction_count": 105,
+      "body_sha256": "740d245b7297b8d2975d92f10bc5af151f088b1bec7b46ee09090b9245487402",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 3,
+    "library_validated": true,
+    "library": "PASS incremental complete Clang 19 CMake static library; existing unused-function warning exception retained.",
+    "platform": "Linux x64; Clang 19.1.7; genuine XEX regenerated with pinned XenonRecomp ddd128bc plus tracked patch; existing oracle guest-window allocation overlaid with mmap/mprotect only",
+    "mapping_credit": 0,
+    "mapping_limit": "Fixed historical catalog.sqlite unavailable; do not infer membership from regenerated sources. 82BB25D0 is explicitly external in prior handoff.",
+    "runtime_validated": false,
+    "complete": false,
+    "limits": "Selected ordinary-RAM Full72/callback/lifetime cases. Host CSR is not independently compared. No allocation failure, invalid index, faults/MMIO, concurrency or runtime validation.",
+    "case_scope": "Three original-upper/shared-complete-allocator cases: nonidentity repeated gather, pre-callback low-byte rejection and count mismatch. Full72/RAM/callback snapshots plus temporary-allocation lifetime and independent result checks compared. Original inline12-byte snapshot/gather loops preserved. Integer-copy fixture does not independently compare actual host CSR. Allocation failure/invalid indices/fault/concurrent/runtime behavior unverified."
+  },
+  "implementation": {
+    "entries": [
+      "82BD1900"
+    ],
+    "header": "include/lo_semantics/record_snapshot_gather61.h",
+    "source": "src/record_snapshot_gather61.cpp",
+    "oracle": "tests/record_snapshot_gather61_oracle.cpp"
+  },
+  "next_dependency_queue": {
+    "82BD22A8": "339 instructions, builder dispatched from BB4160 via vtable820D6C34+8; do not infer completeness from mapped entries",
+    "missing_full_boundaries": [
+      "82BD20F0 (30 instructions, BD1558/BD0798 dependencies)",
+      "82BDB1C0 (17 instructions, BDA0A8 dependency)",
+      "82BDB208 (21 instructions, BDA1A0 dependency)"
+    ],
+    "recheck": [
+      "82BD1AA8 and 82BD1AF8 existing typed implementations need full mutable boundary review before composition"
+    ]
+  }
+}
