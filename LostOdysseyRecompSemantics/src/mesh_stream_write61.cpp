@@ -150,6 +150,17 @@ struct Stream {
         Call(half ? 0x82bd7d44u : 0x82bd7e04u);
         Leave(32, 96);
     }
+    void Forward(GuestAddress entry, unsigned slot) {
+        Enter(31, 96);
+        auto &r = s.r;
+        r[31] = r[3];
+        r[3] = Word(r[31] + 4);
+        r[11] = Word(r[3]);
+        r[11] = Word(r[11] + slot);
+        Call(entry + 40);
+        r[3] = r[31];
+        Leave(31, 96);
+    }
     void Header(bool ice) {
         const auto delta = ice ? 0x2a318u : 0u;
         Enter(24, 160, 0x82badd68u + delta);
@@ -212,6 +223,25 @@ struct Stream {
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     Stream w{m, d, s};
     switch (e) {
+    case 0x82b9e528u:
+        w.Forward(e, 28);
+        return true;
+    case 0x82b9e568u:
+        w.Forward(e, 32);
+        return true;
+    case 0x82b9e5a8u:
+        w.Forward(e, 36);
+        return true;
+    case 0x82b9e5e8u:
+        w.Forward(e, 40);
+        return true;
+    case 0x82b9e628u:
+        w.Forward(e, 44);
+        return true;
+    case 0x82b9e668u:
+        w.Forward(e, 48);
+        return true;
+
     case 0x82bada70u:
         w.Scalar();
         return true;

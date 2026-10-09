@@ -1,3 +1,7 @@
+## Root direct continuation: borrowed stream forwarding (2026-10-09)
+
+`mesh_stream_write61` adds six B9E528..B9E668 methods used by the aggregate serializer's stack adapter. Each forwards the matching byte/u16/u32/float/double/block operation through its borrowed writer at +4 and returns the adapter. Twenty family cases now pass, including six complete-original forwarding bodies with concrete growable writers. Full library passes. Tracing B9F6F0's indirect object writer found BD1BF8/BD14B8 tree envelope and BD7CB8/BD8550 linked-stream helpers still to recover; do not claim every indirect lower was already closed.
+
 ## Root direct continuation: lazy owner mass properties (2026-10-09)
 
 `mesh_mass_cache61` closes B9F418 using the complete mass integration chain and an explicit Full72 adapter to the already recovered CRT classifier. Three original-upper/shared-concrete-math cases pass Full72/RAM/CSR and independent translated cube unit-density mass, origin inertia and centroid; existing cache bypass and disabled-integration failure pass. The owner retains signed-mass diagnostic/correction behavior, but that diagnostic and nonfinite rejection are not exercised. Full Clang library passes. B9F6F0 aggregate serialization now has all known lower implementations available.

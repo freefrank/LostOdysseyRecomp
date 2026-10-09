@@ -149,6 +149,87 @@ void Check(unsigned requested) {
     if (mode >= 9 && m.ReadU32(Buffer) != (mode == 10 ? 0x78563412u : 0x12345678u))
         throw std::runtime_error("mesh scalar word bytes");
 }
+void CheckForward(unsigned mode) {
+    struct Restore {
+        std::uint32_t csr = PPCFPSCRRegister{}.getcsr();
+        ~Restore() { PPCFPSCRRegister{}.setcsr(csr); }
+    } restore;
+    test::GuestWindow before(Regions), after(Regions);
+    constexpr GuestAddress Adapter = 0x34000;
+    auto seed = [](test::GuestWindow &w) {
+        w.Fill(0);
+        auto m = w.Memory();
+        m.WriteU32(Adapter + 4, Writer);
+        m.WriteU32(Writer, Table);
+        m.WriteU32(Writer + 8, 256);
+        m.WriteU32(Writer + 12, Buffer);
+        constexpr GuestAddress targets[]{0x82bde330, 0x82bde378, 0x82bde3c0,
+                                         0x82bde408, 0x82bde450, 0x82bde498};
+        for (unsigned i = 0; i < 6; ++i)
+            m.WriteU32(Table + 28 + 4 * i, targets[i] | 1);
+        m.WriteU32(Input, 0x12345678);
+    };
+    seed(before);
+    seed(after);
+    Registers s{};
+    for (unsigned i = 0; i < 32; ++i) {
+        s.r[i] = 0x1122334400000000ull + i;
+        s.fpr_bits[i] = 0x3ff0000000000000ull + i;
+    }
+    s.r[1] = 0x8877665500080000ull;
+    s.lr = 0x9988776681234567ull;
+    s.cached_fp_control = 0x9fc0;
+    s.xer_so = 1;
+    s.r[3] = Adapter;
+    s.r[4] = mode == 5 ? Input : 0x12345678;
+    s.r[5] = 4;
+    s.fpr_bits[1] = std::bit_cast<std::uint64_t>(1.5);
+    Guest expected, actual;
+    auto om = before.Memory();
+    memory = &om;
+    guest = &expected;
+    PPCContext c{};
+    crt_full_oracle::ToPpc(c, s);
+    PPCFPSCRRegister{}.setcsr(s.cached_fp_control);
+    switch (mode) {
+    case 0:
+        __imp__sub_82B9E528(c, before.Bytes());
+        break;
+    case 1:
+        __imp__sub_82B9E568(c, before.Bytes());
+        break;
+    case 2:
+        __imp__sub_82B9E5A8(c, before.Bytes());
+        break;
+    case 3:
+        __imp__sub_82B9E5E8(c, before.Bytes());
+        break;
+    case 4:
+        __imp__sub_82B9E628(c, before.Bytes());
+        break;
+    default:
+        __imp__sub_82B9E668(c, before.Bytes());
+        break;
+    }
+    auto csr = PPCFPSCRRegister{}.getcsr();
+    memory = nullptr;
+    guest = nullptr;
+    auto m = after.Memory();
+    PPCFPSCRRegister{}.setcsr(s.cached_fp_control);
+    (void)mesh_stream_write61::Apply(0x82b9e528 + 64 * mode, m, {actual, native}, s);
+    if (crt_full_oracle::Snapshot(crt_full_oracle::FromPpc(c)) != crt_full_oracle::Snapshot(s) ||
+        !before.EqualCommitted(after) || expected.events != actual.events ||
+        csr != PPCFPSCRRegister{}.getcsr())
+        throw std::runtime_error("forward writer Full72/RAM/CSR/callback");
+    constexpr unsigned count[]{1, 2, 4, 4, 8, 4};
+    if (s.r[3] != Adapter || m.ReadU32(Writer + 4) != count[mode])
+        throw std::runtime_error("forward return/count");
+    if ((mode == 0 && m.ReadU8(Buffer) != 0x78) || (mode == 1 && m.ReadU16(Buffer) != 0x5678) ||
+        ((mode == 2 || mode == 5) && m.ReadU32(Buffer) != 0x12345678) ||
+        (mode == 3 && m.ReadU32(Buffer) != 0x3fc00000) ||
+        (mode == 4 && recovery_abi::ReadU64(m, Buffer) != 0x3ff8000000000000ull))
+        throw std::runtime_error("forward payload");
+}
 } // namespace mesh_stream_oracle
 void MeshStreamIndirect(std::uint32_t e, PPCContext &c, std::uint8_t *) {
     auto s = crt_full_oracle::FromPpc(c);
@@ -175,7 +256,9 @@ int main() {
     try {
         for (unsigned i = 0; i < 14; ++i)
             mesh_stream_oracle::Check(i);
-        std::puts("PASS mesh-stream-write61 14 original-upper/shared-concrete-writer cases");
+        for (unsigned i = 0; i < 6; ++i)
+            mesh_stream_oracle::CheckForward(i);
+        std::puts("PASS mesh-stream-write61 20 original-upper/shared-concrete-writer cases");
         return 0;
     } catch (const std::exception &e) {
         std::fprintf(stderr, "%s\n", e.what());

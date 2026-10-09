@@ -1,6 +1,6 @@
 {
   "schema": "semantic-recovery-draft-v1",
-  "scope": "Mesh float/word virtual output and NXS/ICE section headers.",
+  "scope": "Mesh float/word virtual output and NXS/ICE section headers. Six borrowed-writer forwarding methods.",
   "entries": [
     {
       "address": "82BADA70",
@@ -65,6 +65,54 @@
       "instruction_count": 33,
       "body_sha256": "02b31e3c2afad87c26e219930bc1fafdbe2797fb88ab169b1c69f4a4674ca233",
       "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82B9E528",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 8298,
+      "instruction_count": 16,
+      "body_sha256": "c7d3dcee0ccb7534331a61b16b432d8fe33fec78899c961821cb845f0e45a938",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82B9E568",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 8339,
+      "instruction_count": 16,
+      "body_sha256": "c7299e8f8d778638f1f545a658ac9181cdbd11c1e3c545729f78dc9eec0d6608",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82B9E5A8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 8380,
+      "instruction_count": 16,
+      "body_sha256": "e33993e2fb0f88f477979df283c0056197ac9794032dae6b66a76af3a2255ca5",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82B9E5E8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 8421,
+      "instruction_count": 16,
+      "body_sha256": "46fb270362abdb288ff420603045bc76e9d673f2eb4fd966cf353f6a1fb197e7",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82B9E628",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 8462,
+      "instruction_count": 16,
+      "body_sha256": "0a86bada58a6e5ab88d0219a10d536b5856683b391aca41a39701be5340f2252",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82B9E668",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 8503,
+      "instruction_count": 16,
+      "body_sha256": "0274d3ab0f5fa73e22f211554573c8892f654b67a7805ff56a1345e41fd8551e",
+      "status": "focused_original_ppc_validated"
     }
   ],
   "implementation": {
@@ -76,7 +124,13 @@
       "82BD7DB0",
       "82BD7D00",
       "82BD7E70",
-      "82BD7FF0"
+      "82BD7FF0",
+      "82B9E528",
+      "82B9E568",
+      "82B9E5A8",
+      "82B9E5E8",
+      "82B9E628",
+      "82B9E668"
     ],
     "header": "include/lo_semantics/mesh_stream_write61.h",
     "source": "src/mesh_stream_write61.cpp",
@@ -88,9 +142,9 @@
     "runtime_validated": false,
     "complete": false,
     "date": "2026-10-09",
-    "focused_original_ppc_cases": 14,
+    "focused_original_ppc_cases": 20,
     "library_validated": true,
-    "case_scope": "Scalar/span native and reversed float writes, empty span, and NXS tagged version headers. Original uppers share actual recovered growable output. Full72/RAM/host CSR/callback and independent output bytes. ICE header and virtual scalar word, both endian modes. Alternate in-place float staging and halfword scalar.",
+    "case_scope": "Scalar/span native and reversed float writes, empty span, and NXS tagged version headers. Original uppers share actual recovered growable output. Full72/RAM/host CSR/callback and independent output bytes. ICE header and virtual scalar word, both endian modes. Alternate in-place float staging and halfword scalar. Six actual-original forwarding cases use concrete growable byte/u16/u32/float/double/block writers; Full72/RAM/CSR/events and independent payload/return/count pass.",
     "platform": "Linux x64 Clang 19.1.7; pinned regenerated PPC; mmap guest overlay",
     "mapping_limit": "Historical catalog membership unverified; no baseline mapping credit."
   }
