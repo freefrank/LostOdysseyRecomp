@@ -36,7 +36,7 @@ DEFAULT_CONFIG = {
         "normal": {"chain": ["4x-Normal-RG0-BC1.pth"], "pad": "wrap", "normal": True, "detail": 0.5},
         "data": {"chain": [], "pad": "wrap"},
         "ui": {"chain": ["1x-BC1-smooth2.pth", "4xNomos2_realplksr_dysample.safetensors"], "pad": "reflect"},
-        "vfx": {"chain": ["4xNomos2_realplksr_dysample.safetensors"], "pad": "reflect"},
+        "vfx": {"chain": ["1x-BC1-smooth2.pth", "4xNomos2_realplksr_dysample.safetensors"], "pad": "reflect"},
     },
 }
 SKIP_CLASSES = ("skip-lightmap", "skip-engine", "skip-tiny")
@@ -192,6 +192,9 @@ def process(image: Image.Image, spec: dict, upscaler: Upscaler | None, config: d
         vec = np.concatenate([xy, z[..., None]], -1)
         vec /= np.maximum(np.linalg.norm(vec, axis=-1, keepdims=True), 1e-6)
         result = vec * 0.5 + 0.5
+        # Near-black areas are unused UV space, not vectors: keep them black.
+        unused = np.repeat(np.repeat(rgb.max(-1) < 0.05, target, 0), target, 1)
+        result[unused] = 0
     out = Image.fromarray((result * 255 + 0.5).clip(0, 255).astype("uint8"), "RGB")
     if grey:
         out = out.convert("L")
