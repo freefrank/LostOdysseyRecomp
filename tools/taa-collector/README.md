@@ -10,10 +10,10 @@ At startup, five seconds in, a background thread picks the newest `logs/runtime-
 
 The text sent contains only:
 
-- `[note]` lines: build, host OS, Wine version, GPU and driver, settings summary, map and battle loads, temporal suspects (unmapped depth writers while jitter is on), temporal jitter misses (mapped shaders whose jitter was rejected) and the clean-shutdown line;
+- `[note]` lines: build, host OS, Wine version, GPU and driver, settings summary, current map, map and battle loads, temporal suspects (unmapped depth writers while jitter is on), temporal jitter misses (mapped shaders whose jitter was rejected) and the clean-shutdown line;
 - `[error]` lines, `[crash]` reports and `hang watch:` warnings.
 
-Repeated messages are sent once. `%USERPROFILE%`, the account name, the computer name and any folder after `Users\` or `home/` are replaced. Each line is capped at 2,000 bytes and the text at 60,000 bytes (the first quarter and the end are kept). `LO_LOG_COLLECTION_URL` points a test build at a local `wrangler dev`.
+Repeated errors and warnings are sent once; notices keep their order. `%USERPROFILE%`, the account name, the computer name and any folder after `Users\` or `home/` are replaced. Each line is capped at 2,000 bytes and the text at 60,000 bytes (the first quarter and the end are kept). `LO_LOG_COLLECTION_URL` points a test build at a local `wrangler dev`.
 
 The `Debug log` setting (or `LO_DEBUG_LOG=1`) writes `[info]` and kernel lines as well; without it the runtime log holds only notices, warnings and errors.
 

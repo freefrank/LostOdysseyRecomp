@@ -302,8 +302,9 @@ std::string Filter(std::string_view log, std::span<const Replacement> replacemen
         if (line.ends_with('\r')) line.remove_suffix(1);
         const auto key = Selected(line);
         if (!key) continue;
-        // Crash reports are kept whole; other repeats only count.
-        if (!line.starts_with("[crash]") && !seen.insert(*key).second)
+        // Notices are bounded where they are written and keep their order (a
+        // map can be entered twice); repeated errors and warnings only count.
+        if ((key->starts_with("[error]") || key->starts_with("[warn]")) && !seen.insert(*key).second)
         {
             ++repeated;
             continue;

@@ -129,7 +129,7 @@ void debug_menu::UpdateMapInfo(uint8_t* base) {
     if ((changed && getenv("LO_TRACE_MAP_INFO")) || edge) {
         const auto name = std::filesystem::path(current.name).u8string();
         const auto package = std::filesystem::path(current.package).u8string();
-        LOG_INFO("current map available={} id={} name={} package={}", current.available, current.id,
+        LOG_NOTICE("current map available={} id={} name={} package={}", current.available, current.id,
             reinterpret_cast<const char*>(name.c_str()), reinterpret_cast<const char*>(package.c_str()));
         loggedAvailable = current.available;
         loggedId = current.id;

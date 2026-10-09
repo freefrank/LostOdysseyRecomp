@@ -11,7 +11,7 @@ When the game starts, a background thread sends one request to `lo.dotslash.pro`
 - rendering mismatch records: shader IDs and draw state for depth writers the TAA mapping does not know, and for mapped shaders whose jitter was rejected;
 - error lines, crash reports and hang reports, and whether the game shut down cleanly.
 
-Repeated lines are sent once and the summary is limited to 60 KB. Before sending, the game replaces your user profile folder, your account name, your computer name and any folder name after `Users\` or `home/`. Other folder names in paths, such as where the game is installed, can remain. Information-level and kernel lines are never sent, even with **Debug log** on.
+Repeated errors are sent once and the summary is limited to 60 KB. Before sending, the game replaces your user profile folder, your account name, your computer name and any folder name after `Users\` or `home/`. Other folder names in paths, such as where the game is installed, can remain. Information-level and kernel lines are never sent, even with **Debug log** on.
 
 The request does not contain saves, profiles, screenshots, render captures, personal files, account names, email addresses, serial numbers, MAC addresses or device IDs.
 
