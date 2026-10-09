@@ -1,0 +1,8 @@
+{
+  "family": "owned_tree_mesh_build61",
+  "status": "failed",
+  "platform": "Linux x64 Clang19 + mmap guest-window overlay",
+  "summary": "mesh map 0,16 preserved 00000000 live 5\nmesh final map/owned storage\n",
+  "original_body_check": "passed",
+  "library": "/tmp/semantic-library-clang/libLostOdysseyRecompSemantics.a"
+}

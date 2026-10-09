@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "tree-triangle-split61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/tree_triangle_split61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/tree_triangle_split61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nvoid OriginalTriangleSplit61Save(PPCContext&,std::uint8_t*);\nvoid OriginalTriangleSplit61Restore(PPCContext&,std::uint8_t*);\n#define __savegprlr_22(c,b) OriginalTriangleSplit61Save(c,b)\n#define __restgprlr_22(c,b) OriginalTriangleSplit61Restore(c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/tree_triangle_split61.cpp"
+      ]
+    }
+  ]
+}

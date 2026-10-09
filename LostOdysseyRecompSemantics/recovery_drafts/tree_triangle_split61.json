@@ -1,0 +1,20 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Private generated bodies are pinned by SHA256 of UTF-8 with LF line endings and no final newline; no generated code is embedded.",
+  "entries": [
+    {
+      "address": "82BD8BF8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 22026,
+      "instruction_count": 186,
+      "body_sha256": "259bf952eeebbc0f7e8958765bb0fa8fcdf7aecc5a94b538235f7776d176a831",
+      "status": "validation_pending"
+    }
+  ],
+  "validation": {
+    "status": "pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false
+  }
+}

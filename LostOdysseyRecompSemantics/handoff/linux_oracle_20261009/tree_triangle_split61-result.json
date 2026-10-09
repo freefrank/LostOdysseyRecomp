@@ -1,0 +1,8 @@
+{
+  "family": "tree_triangle_split61",
+  "status": "passed",
+  "platform": "Linux x64 Clang19 + mmap guest-window overlay",
+  "summary": "PASS tree-triangle-split61 3 actual-body cases\n",
+  "original_body_check": "passed",
+  "library": "/tmp/semantic-library-clang/libLostOdysseyRecompSemantics.a"
+}

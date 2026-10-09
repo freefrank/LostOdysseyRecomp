@@ -1,5 +1,14 @@
 # Semantic recovery handoff
 
+## Transfer-only WIP pause
+
+All delegated workers are stopped. Two unfinished families and their CMake entries
+are preserved without fixing the remaining assertion or changing draft status.
+See [execution transfer packet](handoff/linux_oracle_20261009/README.md) for exact
+state, private-input acquisition provenance, prerequisites and safe runner transfer.
+The parent executor is separate; these local paths are not shared with it.
+
+
 ## Independent corpus continuation — 2026-10-09
 
 Prior published checkpoint: `a5e492aa40f5947f07f5346c032e0ece44607ec8`.

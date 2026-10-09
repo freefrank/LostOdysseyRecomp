@@ -1,0 +1,66 @@
+--- semantic_oracle_support.h
++++ semantic_oracle_support.h
+@@ -1,8 +1,6 @@
+ #pragma once
+ 
+-#ifndef _WIN32
+-#error "Semantic oracle guest windows require Windows VirtualAlloc"
+-#endif
++// Temporary Linux allocation overlay; oracle logic and region checks unchanged.
+ 
+ #include "lo_semantics/guest_memory.h"
+ 
+@@ -12,7 +10,8 @@
+ #include <span>
+ #include <stdexcept>
+ #include <vector>
+-#include <windows.h>
++#include <sys/mman.h>
++#include <unistd.h>
+ 
+ namespace lo::semantic::gpu::test
+ {
+@@ -34,13 +33,12 @@
+     explicit GuestWindow(std::span<const Region> regions)
+         : regions_(regions.begin(), regions.end())
+     {
+-        SYSTEM_INFO info{};
+-        GetSystemInfo(&info);
+-        const auto page = static_cast<std::size_t>(info.dwPageSize);
+-        bytes_ = static_cast<std::uint8_t*>(
+-            VirtualAlloc(nullptr, Space, MEM_RESERVE, PAGE_NOACCESS));
+-        if (!bytes_)
++        const auto page = static_cast<std::size_t>(sysconf(_SC_PAGESIZE));
++        void* reservation = mmap(nullptr, Space, PROT_NONE,
++            MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
++        if (reservation == MAP_FAILED)
+             throw std::runtime_error("reserve guest address window");
++        bytes_ = static_cast<std::uint8_t*>(reservation);
+ 
+         try
+         {
+@@ -49,20 +47,20 @@
+                 if (!region.size || region.size > Space - region.base ||
+                     region.base % page || region.size % page)
+                     throw std::invalid_argument("invalid guest region");
+-                if (!VirtualAlloc(bytes_ + region.base, region.size,
+-                        MEM_COMMIT, PAGE_READWRITE))
++                if (mprotect(bytes_ + region.base, region.size,
++                        PROT_READ | PROT_WRITE) != 0)
+                     throw std::runtime_error("commit guest region");
+             }
+         }
+         catch (...)
+         {
+-            VirtualFree(bytes_, 0, MEM_RELEASE);
++            munmap(bytes_, Space);
+             bytes_ = nullptr;
+             throw;
+         }
+     }
+ 
+-    ~GuestWindow() { if (bytes_) VirtualFree(bytes_, 0, MEM_RELEASE); }
++    ~GuestWindow() { if (bytes_) munmap(bytes_, Space); }
+     GuestWindow(const GuestWindow&) = delete;
+     GuestWindow& operator=(const GuestWindow&) = delete;
+ 

@@ -1,0 +1,59 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Original BD22A8 upper plus original BD1AF8 cleanup; complete shared direct lowers and fixed traversal callbacks. Concrete bounds/split/strategy guest targets remain borrowed services, NOT recovered original targets.",
+  "entries": [
+    {
+      "address": "82BD22A8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 6516,
+      "instruction_count": 339,
+      "body_sha256": "9bd71f3c48079c56291547d90df0a644936e6912cffcc4a0b76c26523e132f46",
+      "status": "implementation_pending_focused_validation"
+    },
+    {
+      "address": "82BD1AF8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 5365,
+      "instruction_count": 21,
+      "body_sha256": "0d1d809066fb70a6e39d148b02297cce791c1ce89d0a62b487197263412c5d26",
+      "status": "already_mapped_composed_dependency_no_new_credit"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BD22A8"
+    ],
+    "header": "include/lo_semantics/owned_tree_mesh_build61.h",
+    "source": "src/owned_tree_mesh_build61.cpp",
+    "oracle": "tests/owned_tree_mesh_build61_oracle.cpp"
+  },
+  "validation": {
+    "status": "pending",
+    "focused_original_ppc_cases": 0,
+    "library_validated": false,
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "case_scope": "Three planned cases: absent descriptor; single leaf; two leaves through snapshot gather, second-tree build, leaf remap, strategy borrowed callback and temporary cleanup. Full72/RAM/host CSR/callback traces and allocation ownership compared. Geometry bounds/split/strategy fixture services are scoped mutable contracts, not validation of game vtable targets. No allocation failure matrix or malformed/aliased buffers."
+  },
+  "unresolved_concrete_guest_targets": {
+    "820D6C54": {
+      "4": "82BD88E8",
+      "8": "82BD8BF8",
+      "12": "82BD8AC0",
+      "16": "82BD8B40",
+      "20": "82BB3B88"
+    },
+    "820D6300": {
+      "4": "82BD8EE0",
+      "8": "82BB3B60",
+      "12": "82BD8848",
+      "16": "82BD8888",
+      "20": "82BB3B88"
+    },
+    "820D6EBC": {
+      "4": "82BDBD90"
+    }
+  },
+  "provenance": "Vtable addresses and slot targets checked against private image_disc1.bin; no private image bytes included."
+}
