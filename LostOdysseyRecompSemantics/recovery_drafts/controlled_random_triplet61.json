@@ -1,0 +1,45 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Private generated bodies are pinned by SHA256 of UTF-8 with LF line endings and no final newline; no generated code is embedded.",
+  "entries": [
+    {
+      "address": "8261E470",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.50.cpp",
+      "source_line": 15548,
+      "instruction_count": 126,
+      "body_sha256": "bf1fb8666d19f4d378adae73b89bc65515fd4ad54afb8be921edac1334f9da2a",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82620F40",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.50.cpp",
+      "source_line": 22123,
+      "instruction_count": 126,
+      "body_sha256": "bb454a222ae6ef57060b7733af15449fda7a7febeb9b1eb083d40658cd77bfea",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 4,
+    "library_validated": true,
+    "library": "PASS incremental complete Clang 19 CMake static library; existing unused-function warning exception retained.",
+    "platform": "Linux x64; Clang 19.1.7; genuine XEX regenerated with pinned XenonRecomp ddd128bc plus tracked patch; existing oracle guest-window allocation overlaid with mmap/mprotect only",
+    "mapping_credit": 0,
+    "mapping_limit": "Fixed historical catalog.sqlite unavailable; do not infer membership from regenerated sources. 82BB25D0 is explicitly external in prior handoff.",
+    "runtime_validated": false,
+    "complete": false,
+    "limits": "Selected finite inputs, ordinary RAM, Full72 state, callbacks and host CSR only. No Windows revalidation, nonfinite matrix, faults/MMIO, concurrency, runtime or gameplay acceptance.",
+    "case_scope": "Four complete original-body cases cover mixed signs, all-zero axes, two-sided components, negative seed and output aliasing the object flags. Full72/RAM/actual host CSR plus independent final seed and axis assertions compared. Parameterized core preserves per-entry flag fields/bits, signed64 products, stored32 seeds and each-axis flag reload. Finite ordinary inputs only; no concurrency/randomness-quality/runtime acceptance."
+  },
+  "implementation": {
+    "entries": [
+      "8261E470",
+      "82620F40"
+    ],
+    "header": "include/lo_semantics/controlled_random_triplet61.h",
+    "source": "src/controlled_random_triplet61.cpp",
+    "oracle": "tests/controlled_random_triplet61_oracle.cpp"
+  }
+}

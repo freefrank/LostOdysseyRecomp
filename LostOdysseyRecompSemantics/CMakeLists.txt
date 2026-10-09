@@ -183,6 +183,7 @@ add_library(LostOdysseyRecompSemantics STATIC
     src/curve_tangent_update61.cpp
     src/owned_tree_visit61.cpp
     src/mesh_attribute_reorder61.cpp
+    src/controlled_random_triplet61.cpp
     src/projection_extrema61.cpp
     src/grid_blob_forward61.cpp
     src/grid_blob_routes61.cpp

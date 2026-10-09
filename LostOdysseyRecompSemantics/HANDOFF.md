@@ -48,6 +48,14 @@ Library build passes. Count reload and zero-count scratch ordering after allocat
 callbacks were corrected in review. Host CSR is not independently compared by
 this integer-copy fixture; allocation failures/invalid indices remain untested.
 
+`controlled_random_triplet61` recovers 8261E470/82620F40 (252 instructions)
+with a shared explicit core parameterized by flag offset/bit layout. It updates
+the global LCG seed and selects zero, one-sided or two-sided components, reloading
+flags after each output store. Four complete-body Full72/RAM/host CSR cases pass,
+including negative seed and output/flag aliasing; independent seed/components
+are checked. Library build and review pass. No statistical or concurrency claim
+is made, and these entries retain zero catalog credit.
+
 Bounded private-image investigation establishes vtables at 820D58A0 (installed
 by B9CC00) and 820D5C58 (installed by B9E220/B9E2D8/B9E388). Their slots +0C,
 +14 and +18 point to B9DD90, B9DF18 and B9DFA0 respectively. B9CBC0 occurs at

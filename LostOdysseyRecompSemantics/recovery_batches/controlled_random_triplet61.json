@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "controlled-random-triplet61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/controlled_random_triplet61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/controlled_random_triplet61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/controlled_random_triplet61.cpp"
+      ]
+    }
+  ]
+}
