@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "mesh-cook-support61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/mesh_cook_support61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/mesh_cook_support61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nvoid CookSupportIndirect(std::uint32_t,PPCContext&,std::uint8_t*);\n#undef PPC_CALL_INDIRECT_FUNC\n#define PPC_CALL_INDIRECT_FUNC(t) CookSupportIndirect((t),ctx,base)\nvoid CookSupportLower(std::uint32_t,PPCContext&,std::uint8_t*);\nPPC_FUNC_IMPL(__imp__sub_82B9EB58);\n#define sub_82B9EB58 __imp__sub_82B9EB58\nPPC_FUNC_IMPL(__imp__sub_82BC61B0);\n#define sub_82BC61B0 __imp__sub_82BC61B0\nPPC_FUNC_IMPL(__imp__sub_82BC6210);\n#define sub_82BC6210 __imp__sub_82BC6210\nPPC_FUNC_IMPL(__imp__sub_82BC63C8);\n#define sub_82BC63C8 __imp__sub_82BC63C8\nPPC_FUNC_IMPL(__imp__sub_82BC8310);\n#define sub_82BC8310 __imp__sub_82BC8310\nPPC_FUNC_IMPL(__imp__sub_82BC8330);\n#define sub_82BC8330 __imp__sub_82BC8330\n#define sub_82BD0798(c,b) CookSupportLower(0x82bd0798u,c,b)\n#define sub_82BB3408(c,b) CookSupportLower(0x82bb3408u,c,b)\n#define sub_82BB3420(c,b) CookSupportLower(0x82bb3420u,c,b)\n#define sub_82BB38A0(c,b) CookSupportLower(0x82bb38a0u,c,b)\n#define sub_82B9C298(c,b) CookSupportLower(0x82b9c298u,c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/mesh_cook_support61.cpp"
+      ]
+    }
+  ]
+}

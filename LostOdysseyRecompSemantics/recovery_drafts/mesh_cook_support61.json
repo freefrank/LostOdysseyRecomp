@@ -1,0 +1,76 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Cooked support-map ownership, construction, replacement and cube sampling.",
+  "entries": [
+    {
+      "address": "82B9EB58",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 9251,
+      "instruction_count": 80,
+      "body_sha256": "f4d29af1a2d6f30a054df01a86dc84bd19b2d38139911bdaa208c56f912afbe5",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BC61B0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 41613,
+      "instruction_count": 23,
+      "body_sha256": "918baed55fb84761cae4904d61fac7a3cd61284ced408427b56c1f8f29cd44c1",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BC6210",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 41668,
+      "instruction_count": 50,
+      "body_sha256": "cb0ccc6ecededa5e1cd8067a9ac0aa8ebbd7b054ac64bcb766cd4f152fc15e5e",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BC63C8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 41920,
+      "instruction_count": 24,
+      "body_sha256": "fa3b45305ca3916b6dbf886f8fdd28c9f2e50682c874a9fbb51c90336af9fb5b",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BC8310",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 46486,
+      "instruction_count": 7,
+      "body_sha256": "ee286900d370d737e6d612ce868ef898e60729ac052efd3b37d0da23b627436c",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BC8330",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 46505,
+      "instruction_count": 4,
+      "body_sha256": "e5631db006aede78ad42d777551c6b1ff4b467260ee93cdce7d2a813f9853b96",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82B9EB58",
+      "82BC61B0",
+      "82BC6210",
+      "82BC63C8"
+    ],
+    "header": "include/lo_semantics/mesh_cook_support61.h",
+    "source": "src/mesh_cook_support61.cpp",
+    "oracle": "tests/mesh_cook_support61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 4,
+    "library_validated": true,
+    "case_scope": "Complete original local orchestration/constructor/destructor chain with shared cube sampling. Small/large meshes, replaced split/combined allocations; Full72/RAM/CSR/events/ownership and dimensions/index ranges/full teardown. No diagnostic or allocation-fault matrix. Existing pointer leaves excluded from inventory.",
+    "platform": "Linux x64 Clang19; pinned PPC; mmap guest overlay"
+  }
+}

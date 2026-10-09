@@ -180,3 +180,9 @@ stream and auxiliary components. Independent expected topology, bytes and
 ownership checks accompany those comparisons. Full Clang library compilation
 passes; this is not independent all-original whole-chain proof, a gameplay
 check, a Rust implementation or additional historical mapping credit.
+
+## Cooked tree and support owners
+
+B9E6A8 refreshes the borrowed descriptor at cook-owner +84: triangle count +92, vertex count +96, indices +100, positions +104. The owned tree begins at +8. Compact settings use global 832DC188 to choose quantization. The count getters and global accessor remain existing baseline leaves. Both modes compose concrete nine-triangle builds and ownership teardown.
+
+B9EB58 first bounds polygons and vertices to byte indices, destroys existing +288 support owner, and creates a replacement only above 32 vertices. BC61B0 stores a borrowed mesh view at support +32. Resolution +4 is 16; sample count +8 is 1536. Generated +24/+28 tables are independently owned; loaded +12 owns one combined block, with +24/+28 aliases. Destruction frees either the single block or the two arrays, never both ownership forms. Rust should represent this ownership distinction explicitly while keeping original guest offsets and callback-visible state; do not infer ownership of +32. Original allocation-failure ordering is intentionally unchanged.

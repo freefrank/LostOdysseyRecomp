@@ -1,3 +1,7 @@
+## Root direct continuation: cooked support-map generation (2026-10-09)
+
+`mesh_cook_support61` closes B9EB58 and BC61B0/BC6210/BC63C8 support construction/destruction. Preserve byte-index limits, replace old owner, sample 16x16 directions per cube face only above 32 vertices, and distinguish one loaded block from two independent generated arrays. Four complete-original-local-chain cases pass Full72/RAM/CSR/events/ownership and independent dimensions/index ranges/full teardown: small mesh, fresh large mesh, replacement of split arrays, replacement of loaded combined block. Cube sampling/extrema are shared concrete recovered lowers. Diagnostic and allocation failures are implemented but not in this focused set. Existing BC8310/BC8330 pointer-field leaves receive no duplicate credit. Full Clang library passes.
+
 ## Root direct continuation: cooked mesh tree orchestration (2026-10-09)
 
 `mesh_cook_tree61` closes B9E6A8: release prior tree, refresh borrowed source descriptor using existing virtual count getters, construct compact settings with global quantization toggle, invoke the concrete tree builder, preserve diagnostic failure routing. Two original-upper/shared-concrete-tree cases pass Full72/RAM/CSR/callbacks/ownership, independent nine-triangle descriptor and compact storage checks, and complete teardown. Both quantization choices pass. Existing accessor and integer leaves receive no duplicate inventory credit. No diagnostic/fault matrix or gameplay claim. Overall preprocessing and validation/build remain open.
