@@ -1,0 +1,88 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Original scalar virtual append wrappers, concrete dynamic buffer append and payload destructor; shared actual memory-copy lower.",
+  "entries": [
+    {
+      "address": "82BDE2C8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 35079,
+      "instruction_count": 25,
+      "body_sha256": "4d477208b9f2b7c401c16b4d5c5c6736f8ff783351aa8ad57dc18e07a16982b1",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BDE330",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 35139,
+      "instruction_count": 18,
+      "body_sha256": "cd430d006771ec3b3c91c974c1c43c943038b464bec9d89b2b0115d2fbc9896a",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BDE378",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 35184,
+      "instruction_count": 18,
+      "body_sha256": "d830f30cebd45903dec9596c6d31380b9858723f57e4e85520b097560199b1d9",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BDE3C0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 35229,
+      "instruction_count": 18,
+      "body_sha256": "00771fab2a53a43522c510dd4ce47d467120de4a0e958f14523efae23c634e2c",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BDE408",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 35274,
+      "instruction_count": 18,
+      "body_sha256": "4f8c184155d03d9f758e8849cce242d855a3c538eac4bf5462801504c9ffe101",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BDE450",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 35321,
+      "instruction_count": 18,
+      "body_sha256": "3466c82ac6026b97a5fac085599bcb2eda4e876e6bcca1be58bbc228fadfda0e",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BDE498",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 35367,
+      "instruction_count": 45,
+      "body_sha256": "627926df39b919049479ceeb00807024dd79e68f2f4ab773511e8ee346edbedd",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BDE2C8",
+      "82BDE330",
+      "82BDE378",
+      "82BDE3C0",
+      "82BDE408",
+      "82BDE450",
+      "82BDE498"
+    ],
+    "header": "include/lo_semantics/growable_output61.h",
+    "source": "src/growable_output61.cpp",
+    "oracle": "tests/growable_output61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 9,
+    "library_validated": true,
+    "case_scope": "Five scalar widths through actual original append, initial/replacement growth, empty/populated cleanup. Full72/RAM/host CSR/callbacks and independent bytes/capacity/ownership; shared actual copy lower. No added allocation-failure or overlap guards.",
+    "platform": "Linux x64 Clang 19.1.7; pinned regenerated PPC; mmap guest overlay",
+    "mapping_limit": "Historical catalog membership unverified; no baseline mapping credit."
+  }
+}

@@ -1,3 +1,7 @@
+## Root direct continuation: growable output stream (2026-10-09)
+
+`growable_output61` recovers E330/E378/E3C0/E408/E450 scalar virtual writers, E498 concrete buffer append and E2C8 payload cleanup. Shared append grows capacity to required plus 4096, copies used bytes and frees old allocation before appending; no new failure guard is added. Nine original scalar/append/cleanup cases pass Full72/RAM/host CSR/callback traces and independent byte/capacity/owner assertions with the actual shared copy lower. Full Clang library passes. Seven implementation addresses added, no historical baseline/runtime claim.
+
 ## Root direct continuation: box and triangle primitives (2026-10-09)
 
 `geometry_primitives61` adds DF08 centered bounding cube, DFC8 box containment, E040 eight-corner export, E108 triangle winding reversal, E140 area and E1B8 centroid-relative/normalized expansion. Eight complete original-body comparisons pass Full72/RAM/host CSR and independent finite geometry assertions; full Clang library passes. Methods preserve FP stages and scratch state without allocation, new guards or runtime hooks. Six implementation addresses added, historical mapping unchanged.
