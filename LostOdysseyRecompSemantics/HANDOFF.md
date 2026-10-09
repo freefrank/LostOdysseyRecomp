@@ -1,3 +1,7 @@
+## Root direct continuation: mesh auxiliary storage (2026-10-09)
+
+`mesh_auxiliary_storage61` closes BC6428/D33160/BC8588 construction and BC7E90/BC67C8/BC85F0 teardown. Aggregate storage frees once while individual storage frees its original ordered slots; optional descriptor cleanup uses the existing actual lower. Four composed-original cases cover constructor, aggregate, individual and empty destruction with Full72/RAM/host CSR/callback and independent layout/free-order checks. Full Clang library passes. Six implementation addresses; interior aliases remain untouched where PPC leaves them, no extra defensive behavior or runtime/mapping credit.
+
 ## Root direct continuation: serialization control (2026-10-09)
 
 `serialization_control61` recovers E948 endian-aware virtual word output, E9B8 global context registration/duplicate diagnostic and B9CB70 mode selection, including its original caller-scratch fallback. Nine original-upper/shared-concrete-writer cases pass Full72/RAM/callbacks and independent values, output bytes and registration state. Full Clang library passes. No duplicate-registration policy or host-endian fallback is invented; concurrency unvalidated, historical mapping/runtime unchanged.

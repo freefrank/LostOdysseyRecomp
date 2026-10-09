@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "mesh-auxiliary-storage61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/mesh_auxiliary_storage61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/mesh_auxiliary_storage61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\n#include <cstdint>\nvoid MeshAuxIndirect(std::uint32_t,PPCContext&,std::uint8_t*);\nvoid MeshAuxLower(std::uint32_t,PPCContext&,std::uint8_t*);\nvoid MeshAuxSave(PPCContext&,std::uint8_t*);\nvoid MeshAuxRestore(PPCContext&,std::uint8_t*);\n#undef PPC_CALL_INDIRECT_FUNC\n#define PPC_CALL_INDIRECT_FUNC(t) MeshAuxIndirect((t),ctx,base)\n#define sub_82BD0798(c,b) MeshAuxLower(0x82bd0798u,c,b)\n#define sub_82BD2C08(c,b) MeshAuxLower(0x82bd2c08u,c,b)\n#define __savegprlr_29 MeshAuxSave\n#define __restgprlr_29 MeshAuxRestore\n#define sub_82D33160 __imp__sub_82D33160\n#define sub_82BC6428 __imp__sub_82BC6428\n#define sub_82BC7E90 __imp__sub_82BC7E90\n#define sub_82BC67C8 __imp__sub_82BC67C8\n#define sub_82BC8588 __imp__sub_82BC8588\n#define sub_82BC85F0 __imp__sub_82BC85F0\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/mesh_auxiliary_storage61.cpp"
+      ]
+    }
+  ]
+}

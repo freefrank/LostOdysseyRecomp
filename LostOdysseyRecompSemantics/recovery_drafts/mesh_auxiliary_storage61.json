@@ -1,0 +1,79 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Original auxiliary base/derived construction and aggregate-versus-individual buffer teardown, composed original lowers.",
+  "entries": [
+    {
+      "address": "82D33160",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.194.cpp",
+      "source_line": 61312,
+      "instruction_count": 7,
+      "body_sha256": "14c290d76e0f9ecbb21f65eee186146445d7c82ad6391b413747c9ecfd690977",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BC6428",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 41980,
+      "instruction_count": 26,
+      "body_sha256": "4271fd3c0bad73d290cf3ca217c6b80765672c89734871b1b4109fb75a3ca19a",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BC7E90",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 45835,
+      "instruction_count": 45,
+      "body_sha256": "7763a24da0deaf30c832d1882bc2f5af7d45122745ed3a9d95b2a90eea5435cb",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BC67C8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 42546,
+      "instruction_count": 134,
+      "body_sha256": "831d1036091a4409608cd264b4e68634179165c9d822779977df01b47fb84682",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BC8588",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 46853,
+      "instruction_count": 26,
+      "body_sha256": "09f0ac94ce8e0ea7a3991cabb7bfeee654a831b4f4d7142d5ee09ec06ee608ba",
+      "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BC85F0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 46917,
+      "instruction_count": 17,
+      "body_sha256": "6ddd853455719311c95a3534c92f023d805a4d723ff6034b87a8fa982bd3c3c9",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82D33160",
+      "82BC6428",
+      "82BC7E90",
+      "82BC67C8",
+      "82BC8588",
+      "82BC85F0"
+    ],
+    "header": "include/lo_semantics/mesh_auxiliary_storage61.h",
+    "source": "src/mesh_auxiliary_storage61.cpp",
+    "oracle": "tests/mesh_auxiliary_storage61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 4,
+    "library_validated": true,
+    "case_scope": "Derived constructor, individual payload teardown, aggregate teardown and empty teardown. Actual original constructors/destructors composed, shared actual allocator lookup/word-array cleanup. Full72/RAM/host CSR/callbacks and independent release order/layout assertions. Interior aliases intentionally remain after aggregate free, matching PPC.",
+    "platform": "Linux x64 Clang 19.1.7; pinned regenerated PPC; mmap guest overlay",
+    "mapping_limit": "Historical catalog membership unverified; no baseline mapping credit."
+  }
+}
