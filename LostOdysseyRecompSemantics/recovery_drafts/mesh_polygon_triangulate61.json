@@ -1,0 +1,33 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Polygon fan triangulation with centroid-relative outward orientation and owned triangle replacement.",
+  "entries": [
+    {
+      "address": "82BB8C08",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 10484,
+      "instruction_count": 160,
+      "body_sha256": "0ac62a88051fe71bee8084ad8fb5b0e018a3c9016d6cc9da4345759dd0431213",
+      "status": "focused_original_ppc_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BB8C08"
+    ],
+    "header": "include/lo_semantics/mesh_polygon_triangulate61.h",
+    "source": "src/mesh_polygon_triangulate61.cpp",
+    "oracle": "tests/mesh_polygon_triangulate61_oracle.cpp"
+  },
+  "validation": {
+    "status": "passed_focused_linux_mapping_pending",
+    "mapping_credit": 0,
+    "runtime_validated": false,
+    "complete": false,
+    "date": "2026-10-09",
+    "focused_original_ppc_cases": 3,
+    "library_validated": true,
+    "case_scope": "Empty mesh, cube polygon fans and existing-triangle replacement. Full72/RAM/CSR/callbacks with original upper and shared concrete geometry/allocator lowers; independent fan connectivity, outward orientation and ownership. Allocation failure not exercised.",
+    "platform": "Linux x64 Clang19; pinned PPC; mmap guest overlay"
+  }
+}

@@ -65,6 +65,16 @@ and ordering in the compatibility layer before introducing idiomatic APIs.
 Do not add bounds, rollback or concurrency policies as part of a mechanical
 semantic port; those would be separate behavior changes.
 
+## Polygon and normal support
+
+BB8C08 replaces mesh +8 owned u32 triangles by fans from borrowed 36-byte
+polygon records (count +36, records +40; u16 vertex count at record +0 and
+byte-index pointer +4). It orients each triangle away from the surface-area
+centroid. BD8FD8 area, BC3128 corner angle and BC65F8 weighted centroid are
+recovered alongside plane/atan2 math. BB8FA0 packs sign/order flags and two
+quantized angles using the guest arcsine approximation 82325048. These stages
+retain single-precision rounding and original component selection.
+
 ## Remaining upper dependencies
 
 82B9C7D8 (mesh cooking orchestration) is still incomplete. Its constructor,

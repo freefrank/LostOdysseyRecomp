@@ -1,0 +1,14 @@
+{
+  "schema": "semantic-recovery-batch-v1",
+  "families": [
+    {
+      "name": "mesh-polygon-triangulate61",
+      "manifest": "LostOdysseyRecompSemantics/recovery_drafts/mesh_polygon_triangulate61.json",
+      "harness": "LostOdysseyRecompSemantics/tests/mesh_polygon_triangulate61_oracle.cpp",
+      "prelude": "#include \"ppc_context.h\"\nvoid PolygonIndirect(std::uint32_t,PPCContext&,std::uint8_t*);\nvoid PolygonLower(std::uint32_t,PPCContext&,std::uint8_t*);\nvoid PolygonSave(PPCContext&,std::uint8_t*);\nvoid PolygonRestore(PPCContext&,std::uint8_t*);\n#undef PPC_CALL_INDIRECT_FUNC\n#define PPC_CALL_INDIRECT_FUNC(t) PolygonIndirect((t),ctx,base)\n#define __savegprlr_28 PolygonSave\n#define __restgprlr_28 PolygonRestore\n#define sub_82BD0798(c,b) PolygonLower(0x82bd0798u,c,b)\n#define sub_82BC65F8(c,b) PolygonLower(0x82bc65f8u,c,b)\n#define sub_82BD92C0(c,b) PolygonLower(0x82bd92c0u,c,b)\n",
+      "sources": [
+        "LostOdysseyRecompSemantics/src/mesh_polygon_triangulate61.cpp"
+      ]
+    }
+  ]
+}

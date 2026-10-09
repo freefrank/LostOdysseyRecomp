@@ -1,3 +1,7 @@
+## Root direct continuation: polygon fans and orientation (2026-10-09)
+
+`mesh_polygon_triangulate61` closes BB8C08: replace owned triangle indices with polygon fans, compute the surface centroid and flip inward-facing triangles. Three original-upper/shared-concrete-geometry cases pass Full72/RAM/CSR/callbacks plus independent cube fan connectivity, outward winding and old-buffer replacement. Full Clang library passes. Original count/allocation preconditions retained; no broad failure matrix or runtime claim.
+
 ## Root direct continuation: mesh area, corners and surface centroid (2026-10-09)
 
 `mesh_geometry_math61` adds BD8FD8 indexed triangle area, BC3128 corner angle and BC65F8 surface-area weighted centroid. Thirteen focused cases total pass Full72/RAM/host CSR and independent values, including unequal-area triangles and invalid mesh. Original corner/centroid bodies compose original atan2/area lowers. Full Clang library passes; private constants stay external. Three implementation entries, no historical mapping or gameplay claim. These close geometry dependencies for polygon triangulation and mesh serialization.

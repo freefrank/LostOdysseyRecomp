@@ -220,6 +220,7 @@ add_library(LostOdysseyRecompSemantics STATIC
     src/mesh_valence_stream61.cpp
     src/mesh_edge_build61.cpp
     src/mesh_cache_lifetime61.cpp
+    src/mesh_polygon_triangulate61.cpp
     src/mesh_geometry_math61.cpp
     src/mesh_edge_flags61.cpp
     src/mesh_cache_build61.cpp
