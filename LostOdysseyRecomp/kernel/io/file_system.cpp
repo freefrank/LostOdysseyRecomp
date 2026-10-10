@@ -10,6 +10,7 @@
 #include <kernel/xam.h>
 #include <kernel/xdm.h>
 #include <kernel/function.h>
+#include <modding/text_overlay.h>
 #include <os/logger.h>
 #include <os/user_paths.h>
 #ifdef _WIN32
@@ -223,6 +224,10 @@ struct FileHandle : KernelObject
     bool isDirectory = false;
     uint64_t position = 0;
     uint64_t size = 0;
+    // Language packs: bytes served from memory over and after the file
+    // (modding/text_overlay.h); size then includes them, fileSize does not.
+    std::vector<modding::text_overlay::Range> ranges;
+    uint64_t fileSize = 0;
     bool writable = false;
     // Writable save file: synced to disk before it closes.
     bool durable = false;
@@ -615,8 +620,14 @@ static uint32_t OpenFileHandle(be<uint32_t>* FileHandleOut, uint32_t DesiredAcce
             handle->durable = !relative.empty() && *relative.begin() != "..";
         }
         _fseeki64(handle->file, 0, SEEK_END);
-        handle->size = uint64_t(_ftelli64(handle->file));
+        handle->size = handle->fileSize = uint64_t(_ftelli64(handle->file));
         _fseeki64(handle->file, 0, SEEK_SET);
+        if (!wantWrite)
+        {
+            handle->ranges = modding::text_overlay::RangesFor(hostPath);
+            for (const auto &range : handle->ranges)
+                handle->size = std::max<uint64_t>(handle->size, range.offset + range.bytes->size());
+        }
     }
 
     *FileHandleOut = GetKernelHandle(handle);
@@ -654,6 +665,36 @@ uint32_t NtOpenFile(be<uint32_t>* FileHandle, uint32_t DesiredAccess, XOBJECT_AT
     return OpenFileHandle(FileHandle, DesiredAccess, Attributes, IoStatusBlock, FILE_OPEN, OpenOptions);
 }
 
+// Reads a handle that has language-pack ranges: the file's bytes up to its
+// real end, zeros after it, and the ranges' bytes over both.
+static uint32_t ReadWithRanges(FileHandle& handle, uint64_t offset, uint8_t* out, size_t length, size_t& read)
+{
+    read = 0;
+    if (offset >= handle.size)
+        return STATUS_END_OF_FILE;
+    length = size_t(std::min<uint64_t>(length, handle.size - offset));
+    size_t fromFile = 0;
+    if (offset < handle.fileSize)
+    {
+        fromFile = size_t(std::min<uint64_t>(length, handle.fileSize - offset));
+        clearerr(handle.file);
+        if (_fseeki64(handle.file, int64_t(offset), SEEK_SET) != 0)
+            return FileIoError(errno);
+        if (fread(out, 1, fromFile, handle.file) != fromFile)
+            return ferror(handle.file) ? FileIoError(errno) : STATUS_END_OF_FILE;
+    }
+    std::memset(out + fromFile, 0, length - fromFile);
+    for (const auto& range : handle.ranges)
+    {
+        const uint64_t begin = std::max(offset, range.offset);
+        const uint64_t end = std::min<uint64_t>(offset + length, range.offset + range.bytes->size());
+        if (begin < end)
+            std::memcpy(out + (begin - offset), range.bytes->data() + (begin - range.offset), size_t(end - begin));
+    }
+    read = length;
+    return STATUS_SUCCESS;
+}
+
 uint32_t NtReadFile(uint32_t handleValue, uint32_t Event, uint32_t ApcRoutine, uint32_t ApcContext,
     XIO_STATUS_BLOCK* IoStatusBlock, void* Buffer, uint32_t Length, be<uint64_t>* ByteOffset)
 {
@@ -684,6 +725,12 @@ uint32_t NtReadFile(uint32_t handleValue, uint32_t Event, uint32_t ApcRoutine, u
         trace.SetResolvedOffset(offset);
         if (!IsValidFileOffset(offset) || (!Buffer && Length))
             status = STATUS_INVALID_PARAMETER;
+        else if (Length && !handle->ranges.empty())
+        {
+            status = ReadWithRanges(*handle, offset, static_cast<uint8_t*>(Buffer), Length, read);
+            if (read)
+                handle->position = offset + read;
+        }
         else if (Length)
         {
             clearerr(handle->file);
@@ -1199,6 +1246,30 @@ uint32_t NtReadFileScatter(uint32_t handleValue, uint32_t Event, uint32_t ApcRou
         trace.SetResolvedOffset(offset);
         if (!IsValidFileOffset(offset) || (!SegmentArray && Length))
             status = STATUS_INVALID_PARAMETER;
+        else if (Length && !handle->ranges.empty())
+        {
+            // Same segment rules as below, through the language-pack reader.
+            for (uint32_t remaining = Length, i = 0; remaining > 0; i++)
+            {
+                const uint32_t chunk = std::min<uint32_t>(remaining, 0x1000);
+                const uint64_t guestPtr = uint32_t(uint64_t(SegmentArray[i]));
+                if (!guestPtr || chunk > PPC_MEMORY_SIZE - guestPtr)
+                {
+                    status = STATUS_INVALID_PARAMETER;
+                    break;
+                }
+                size_t read = 0;
+                status = ReadWithRanges(*handle, offset + total, static_cast<uint8_t*>(g_memory.Translate(size_t(guestPtr))), chunk, read);
+                total += uint32_t(read);
+                remaining -= chunk;
+                if (status == STATUS_END_OF_FILE && total)
+                    status = STATUS_SUCCESS;
+                if (status != STATUS_SUCCESS || read < chunk)
+                    break;
+            }
+            if (total)
+                handle->position = offset + total;
+        }
         else if (Length)
         {
             clearerr(handle->file);

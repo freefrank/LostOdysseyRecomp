@@ -1,4 +1,5 @@
 #include "asset_export.h"
+#include "fpi_index.h"
 #include "mod_api.h"
 #include "text_format.h"
 #include "xenos_texture.h"
@@ -100,16 +101,6 @@ void WriteFile(const fs::path &file, const void *data, size_t size)
     if (!output || !output.write(static_cast<const char *>(data), std::streamsize(size)) || !output.flush())
         throw OutputError("cannot write " + Utf8(file));
 }
-uint32_t Le32(std::span<const uint8_t> b, size_t p)
-{
-    Require(p <= b.size() && 4 <= b.size() - p, "FPI read out of bounds");
-    return uint32_t(b[p]) | uint32_t(b[p + 1]) << 8 | uint32_t(b[p + 2]) << 16 | uint32_t(b[p + 3]) << 24;
-}
-uint16_t Le16(std::span<const uint8_t> b, size_t p)
-{
-    Require(p <= b.size() && 2 <= b.size() - p, "FPI read out of bounds");
-    return uint16_t(b[p] | uint16_t(b[p + 1]) << 8);
-}
 
 // ---- Disc index (LO.fpi) -------------------------------------------------
 
@@ -121,39 +112,6 @@ struct Disc
     std::vector<fs::path> archives; // empty path: archive file missing
     std::vector<uint64_t> archiveSizes;
     std::vector<Entry> entries;
-};
-
-struct FpiNames
-{
-    std::span<const uint8_t> bytes;
-    uint32_t dictionary = 0, extensions = 0;
-    std::string Unpack(size_t offset) const
-    {
-        // Base-40 filename alphabet of the FPI dictionary (see settings/menu_assets.cpp).
-        constexpr char alphabet[] = "\0" "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_.\\";
-        auto word = Le16(bytes, offset); const auto count = word % 40;
-        Require(word / 1600 < 40, "invalid FPI name");
-        std::string value;
-        value += alphabet[word / 40 % 40]; value += alphabet[word / 1600];
-        for (unsigned i = 0; i < count; ++i)
-        {
-            word = Le16(bytes, offset + 2 + 2 * i); Require(word / 1600 < 40, "invalid FPI name");
-            value += alphabet[word % 40]; value += alphabet[word / 40 % 40]; value += alphabet[word / 1600];
-        }
-        if (const auto end = value.find('\0'); end != std::string::npos) value.resize(end);
-        return Lower(std::move(value));
-    }
-    std::string Name(uint32_t bits) const
-    {
-        if (!(bits & 0x3ffff)) return {};
-        constexpr const char *suffix[] = {"", "_sndw", "_scrw", "_mapw", "_lvdw", "_navw", "_colw", "_camw",
-            "_map", "_cam", "_bx", "_mw", "_a", "_d", "_f", "_m", "_p", "_u", "_w", "_0", "_1", "_2", "_00", "_01",
-            "_0mw", "_nav", "_elgt", "_000a0", "_010a0", "_020a0", "_030a0", "_040a0"};
-        auto name = Unpack(size_t(dictionary) + (bits & 0x3ffff) * 2) + suffix[(bits >> 18) & 31];
-        if (const auto ext = (bits >> 23) & 31)
-            name += "." + Unpack(size_t(dictionary) + Le16(bytes, size_t(extensions) + (ext - 1) * 2) * 2);
-        return name;
-    }
 };
 
 bool SafeRelative(std::string_view path)
@@ -183,55 +141,26 @@ Disc ReadDisc(const fs::path &root, const fs::path &index = "LO.fpi")
     std::ifstream input(fpi, std::ios::binary);
     Require(input && input.read(reinterpret_cast<char *>(bytes.data()), 64), "FPI index unreadable");
     // The index is the first `used` sectors; a DLC's file goes on with its data.
-    const uint64_t used = uint64_t(Le16(bytes, 12)) * 2048;
-    Require(used >= 64 && used <= 4 * 1024 * 1024 && used <= size, "FPI index missing or invalid");
+    const auto used = fpi::IndexSize(bytes);
+    Require(used <= size, "FPI index missing or invalid");
     bytes.resize(size_t(used));
     Require(bool(input.read(reinterpret_cast<char *>(bytes.data()) + 64, std::streamsize(used - 64))), "FPI index unreadable");
-    Require(Le32(bytes, 8) == 0x10000, "unsupported LO.fpi version");
-    disc.number = bytes[20];
-    FpiNames names{bytes, Le32(bytes, 40), Le32(bytes, 44)};
-    const uint32_t count = Le16(bytes, 26), begin = Le32(bytes, 32);
-    Require(count && count <= 64 && begin >= 64 && begin <= bytes.size() && size_t(count) * 48 <= bytes.size() - begin,
-            "invalid LO.fpi archive table");
+    const auto parsed = fpi::Read(bytes);
+    disc.number = parsed.disc;
     // Archive names are lower case; match files case-insensitively for case-sensitive file systems.
     std::map<std::string, fs::path> files;
     for (const auto &item : fs::directory_iterator(root, error))
         files.emplace(Lower(Utf8(item.path().filename())), item.path());
-    for (uint32_t i = 0; i < count; ++i)
+    for (const auto &name : parsed.archives)
     {
-        const auto ar = size_t(begin) + i * 48;
-        const auto it = files.find(names.Name(Le32(bytes, ar + 24)));
+        const auto it = files.find(name);
         uint64_t archiveSize = 0;
         if (it != files.end()) archiveSize = fs::file_size(it->second, error);
         const bool present = it != files.end() && !error;
         disc.archives.push_back(present ? it->second : fs::path{});
         disc.archiveSizes.push_back(present ? archiveSize : 0);
-        const auto base = ar + Le32(bytes, ar + 4);
-        Require(base <= bytes.size(), "invalid LO.fpi archive record");
-        struct Folder { uint32_t index, count, depth; std::string path; };
-        const auto prefix = names.Name(Le32(bytes, ar + 20));
-        std::vector<Folder> pending{{0, Le16(bytes, ar + 2), 0, prefix.empty() ? "" : prefix + "/"}};
-        std::set<uint32_t> visited;
-        while (!pending.empty())
-        {
-            const auto folder = std::move(pending.back()); pending.pop_back();
-            Require(folder.depth < 64 && uint64_t(folder.index) + folder.count <= 65536, "invalid LO.fpi folder");
-            for (uint32_t j = 0; j < folder.count; ++j)
-            {
-                const auto index = folder.index + j;
-                Require(visited.insert(index).second, "LO.fpi folder cycle");
-                const auto p = base + size_t(index) * 24;
-                Require(p <= bytes.size() && 24 <= bytes.size() - p, "LO.fpi record out of bounds");
-                const auto bits = Le32(bytes, p);
-                auto path = folder.path + names.Name(bits);
-                std::replace(path.begin(), path.end(), '\\', '/');
-                if (bits & 0x10000000)
-                    pending.push_back({Le32(bytes, p + 20), Le16(bytes, p + 14), folder.depth + 1, path + "/"});
-                else
-                    disc.entries.push_back({std::move(path), i, uint64_t(Le32(bytes, p + 8) & 0xffffff) * 2048, Le32(bytes, p + 16)});
-            }
-        }
     }
+    for (const auto &file : parsed.files) disc.entries.push_back({file.path, file.archive, file.offset, file.size});
     return disc;
 }
 
