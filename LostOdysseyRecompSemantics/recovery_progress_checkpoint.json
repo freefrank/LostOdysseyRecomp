@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 176,
-    "distinct_entries": 585,
+    "unit_count": 177,
+    "distinct_entries": 597,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -1860,6 +1860,25 @@
         ],
         "focused_smoke_paths": 1,
         "validation": "A focused synthetic fixture checks literal code-unit byte preservation, signed scratch numbers, current/other actor names, three seven-column name-table fields, scratch-indirect indices, consumed reserved tokens, repeated spacing, unknown control skipping, null/offset failure, presentation callback, cursor and stack restoration. Original capacity only initializes output; no append bounds protection is invented. Presentation and actor-list services remain guest boundaries. Logical/ABI only"
+      },
+      {
+        "unit": "battle_script_services61",
+        "entries": [
+          "82A9D570",
+          "82A9ECC0",
+          "82A9EDD0",
+          "82A9D638",
+          "82A9D6F0",
+          "82A9D758",
+          "82A9D7C0",
+          "82A9D828",
+          "82A9D8A8",
+          "82A9D920",
+          "82A9D9B8",
+          "82A9EF08"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "One compact fixture covers four actor stat reads, four set/add modes, missing-resource zero, indexed play-table write, eight virtual service argument/result contracts, chained global query, cursor and nonvolatile stack preservation. Concrete virtual service implementations remain guest boundaries; the fixture supplies synthetic float scale, resource and service data. This is handler logic, not native combat or gameplay acceptance. Logical/ABI only"
       }
     ]
   },

@@ -1,0 +1,131 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Actor numeric state and play-data service opcodes.",
+  "entries": [
+    {
+      "address": "82A9D570",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.156.cpp",
+      "source_line": 13818,
+      "instruction_count": 33,
+      "body_sha256": "98b1a4ce0a3e7d56fdb3738bece99fbe6fc5daac37d986690ec81db2e184d8e1",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9ECC0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.157.cpp",
+      "source_line": 3082,
+      "instruction_count": 67,
+      "body_sha256": "9319e5e6b4fd4f9be842f4246f09c1d1003c0b3306b891c1df2c26400d8845d8",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9EDD0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.157.cpp",
+      "source_line": 3257,
+      "instruction_count": 78,
+      "body_sha256": "628b102dba5b98a70069a7107ac72aab75471fbeef9a5d5adf2c679b54f5634f",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9D638",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.156.cpp",
+      "source_line": 13934,
+      "instruction_count": 45,
+      "body_sha256": "e703a3e3ad1bda9ed3c0c33d1cfc97f07836458e0ca9d7e90e9df2f926d2d1ec",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9D6F0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.156.cpp",
+      "source_line": 14042,
+      "instruction_count": 26,
+      "body_sha256": "a07e00c7871d1c5e1bfda9c085169f91341c2437f4ad6e8e8595d6444c9ee291",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9D758",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.156.cpp",
+      "source_line": 14104,
+      "instruction_count": 26,
+      "body_sha256": "9aa167d12496cd4af462534f624193c62c63209ac0a6717dcf0e21a0a11b2c9b",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9D7C0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.157.cpp",
+      "source_line": 4,
+      "instruction_count": 25,
+      "body_sha256": "14b2cab4ba20422998bcd837a924e0f6e125dec3834230d5ece2772f0d855a08",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9D828",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.157.cpp",
+      "source_line": 67,
+      "instruction_count": 32,
+      "body_sha256": "4b378228ff66ef42f88d997bece76c1ab090d2266f1702729c5532e07726e12d",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9D8A8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.157.cpp",
+      "source_line": 143,
+      "instruction_count": 29,
+      "body_sha256": "225523b7ea73114eb006b39a0d4216cd461728525ba1be438345114c97cb1f62",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9D920",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.157.cpp",
+      "source_line": 212,
+      "instruction_count": 37,
+      "body_sha256": "07fd978c711affb0dab8a1876e76986c688907c6b97aed9f836b04392fe21c6e",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9D9B8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.157.cpp",
+      "source_line": 299,
+      "instruction_count": 25,
+      "body_sha256": "c62a9f2b79088b77b1c0054386bf9411d98b37de36add2b1b9de1cf4f3bc2e89",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9EF08",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.157.cpp",
+      "source_line": 3457,
+      "instruction_count": 29,
+      "body_sha256": "fdec065badc86df620abbba1f3af82ff4266bfa6e5b949dc478d23ec87d583fe",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82A9D570",
+      "82A9ECC0",
+      "82A9EDD0",
+      "82A9D638",
+      "82A9D6F0",
+      "82A9D758",
+      "82A9D7C0",
+      "82A9D828",
+      "82A9D8A8",
+      "82A9D920",
+      "82A9D9B8",
+      "82A9EF08"
+    ],
+    "header": "include/lo_semantics/battle_script_services61.h",
+    "source": "src/battle_script_services61.cpp",
+    "smoke": "tests/battle_script_services61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "One compact fixture covers four actor stat reads, four set/add modes, missing-resource zero, indexed play-table write, eight virtual service argument/result contracts, chained global query, cursor and nonvolatile stack preservation. Concrete virtual service implementations remain guest boundaries; the fixture supplies synthetic float scale, resource and service data. This is handler logic, not native combat or gameplay acceptance. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+  }
+}
