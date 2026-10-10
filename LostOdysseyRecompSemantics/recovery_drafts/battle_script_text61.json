@@ -1,0 +1,59 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Battle script text token expansion, raw UTF16 concatenation, little-endian field reader and message opcode.",
+  "entries": [
+    {
+      "address": "82834FE0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.89.cpp",
+      "source_line": 12162,
+      "instruction_count": 17,
+      "body_sha256": "3aa291673fb550c85c1a485fadfa4640f58cfdf4806d7a32a8505928ba960e9b",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "823A46C8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.11.cpp",
+      "source_line": 7421,
+      "instruction_count": 14,
+      "body_sha256": "d3a4136d06e5c38e5880fd81175b8ddd69189a9ead1e99ec99168714f9a07ef2",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9F1C0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.157.cpp",
+      "source_line": 3860,
+      "instruction_count": 226,
+      "body_sha256": "d8a06964c1fb805d5698aa46174ddfa14d4e3bf3718b82925fb45e52e7ee5f39",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9F718",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.157.cpp",
+      "source_line": 4648,
+      "instruction_count": 29,
+      "body_sha256": "fe8c90ead9bc5453a814e550f6ed07697fc3a4f69b613a4ab64b26dcf0f0ed35",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82834FE0",
+      "823A46C8",
+      "82A9F1C0",
+      "82A9F718"
+    ],
+    "header": "include/lo_semantics/battle_script_text61.h",
+    "source": "src/battle_script_text61.cpp",
+    "smoke": "tests/battle_script_text61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "A focused synthetic fixture checks literal code-unit byte preservation, signed scratch numbers, current/other actor names, three seven-column name-table fields, scratch-indirect indices, consumed reserved tokens, repeated spacing, unknown control skipping, null/offset failure, presentation callback, cursor and stack restoration. Original capacity only initializes output; no append bounds protection is invented. Presentation and actor-list services remain guest boundaries. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+  }
+}
