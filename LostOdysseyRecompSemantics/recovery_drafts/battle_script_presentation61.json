@@ -1,0 +1,50 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Presentation numeric/command mode dispatch and service state get/set handlers.",
+  "entries": [
+    {
+      "address": "82AFBEA0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 18825,
+      "instruction_count": 350,
+      "body_sha256": "b171a473f7a9f6d5b2663484a162cc869d825e771157e0d97ba137b6fdecf903",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFB880",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 17887,
+      "instruction_count": 391,
+      "body_sha256": "366de96872fb58128a969ecebe2af747104297e278344fc29fc6737e0b3a9ea7",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFB788",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 17731,
+      "instruction_count": 62,
+      "body_sha256": "fd71ab9ea704d338aec1142e4a4abdf821f7854709b2e4dd247dfe870db1e928",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82AFBEA0",
+      "82AFB880",
+      "82AFB788"
+    ],
+    "header": "include/lo_semantics/battle_script_presentation61.h",
+    "source": "src/battle_script_presentation61.cpp",
+    "smoke": "tests/battle_script_presentation61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "A compact table-driven fixture checks ten numeric mode targets, representative command families including original range defaults, packed float/color register byte order, global get/set and service result writeback, cursor and preserved nonvolatile state. Concrete presentation services remain guest boundaries. Float-to-integer roundtrips retain the original conversion rather than forwarding the input integer unchanged. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+  }
+}
