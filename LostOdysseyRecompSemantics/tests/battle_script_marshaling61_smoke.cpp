@@ -29,8 +29,8 @@ struct MarshalGuest final : manager_release_context61::GuestServices {
       prepared = unsigned(s.r[4]) + 1;
       return;
     }
-    if (e == 0x82ac9aa8) {
-      s.r[3] = ok;
+    if (e == 0x82ac1af0) {
+      s.r[3] = ok ? 0 : 20;
       return;
     }
     if (e == 0x82ad0c10) {
@@ -103,6 +103,7 @@ int main() {
     std::vector<test::Region> regions(cook_main_smoke::Regions.begin(),
                                       cook_main_smoke::Regions.end());
     regions.push_back({0x83213000, 0x1000});
+    regions.push_back({0x83291000, 0x1000});
     regions.push_back({0x83264000, 0x1000});
     regions.push_back({0x832c9000, 0x4000});
     test::GuestWindow w(regions);
@@ -122,6 +123,7 @@ int main() {
     m.WriteU8(0x66000, 24);
     m.WriteU32(0x82007784, 0x3f800000);
     m.WriteU32(0x80000 + 232, 3);
+    m.WriteU32(0x80000 + 2616, 0x41200000);
     m.WriteU32(0x80000 + 15212, 19);
     m.WriteU32(0x83264984, 0x90000);
     m.WriteU32(0x90000 + 96 * 19 + 8, 8);
@@ -159,14 +161,14 @@ int main() {
       if (mode == 4)
         check(guest.kind == 30 && m.ReadU32(actor + 84) == 0);
       if (mode >= 1 && mode <= 3)
-        check(guest.kind == 7 && guest.detail == 19);
+        check(guest.kind == 6 && guest.detail == 19);
       if (mode == 5)
         check(guest.kind == 0 && guest.detail == 0);
     }
     m.WriteU32(0x70000 + 24, 1);
     m.WriteU32(vars, 4);
     op(0x82b00d08);
-    check(guest.picker == 0x82aff4e8 && guest.kind == 7);
+    check(guest.picker == 0x82aff4e8 && guest.kind == 6);
     guest.ok = 0;
     auto executions = guest.executed;
     m.WriteU32(vars, 2);

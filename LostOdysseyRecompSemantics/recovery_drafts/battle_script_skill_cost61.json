@@ -1,0 +1,41 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Skill-cost availability and signed action-kind classification.",
+  "entries": [
+    {
+      "address": "82AC9AA8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.160.cpp",
+      "source_line": 8744,
+      "instruction_count": 67,
+      "body_sha256": "2150b75ad3cfaaec48a54eeb3a817717ce3d96a4ad1597dbb03b92a96f5c5543",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B08B80",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.165.cpp",
+      "source_line": 16294,
+      "instruction_count": 13,
+      "body_sha256": "c94061b3733fcace11a535594ba778c8f55f89d150c88b2ebaca18ec7e547700",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82AC9AA8",
+      "82B08B80"
+    ],
+    "header": "include/lo_semantics/battle_script_skill_cost61.h",
+    "source": "src/battle_script_skill_cost61.cpp",
+    "smoke": "tests/battle_script_skill_cost61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "A compact fixture covers both categories, property-mask blocking, MP cost comparisons, negative cost, distinct unordered comparison behavior, fallback categories and signed kind thresholds. Picker and marshaling fixtures now pass through these recovered helpers. Cost adjustment remains an explicit service boundary. Logical floating-point behavior only; no bitwise FP or native gameplay validation. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+  }
+}

@@ -19,10 +19,8 @@ struct PickerGuest final : manager_release_context61::GuestServices {
       s.r[3] = s.r[4] == 20 ? 0x90000 : 0x80000;
       return;
     }
-    if (e == 0x82ac9aa8) {
-      if (s.r[3] != 0x80000 || s.r[4] != 2)
-        throw std::runtime_error("picker skill gate ABI");
-      s.r[3] = ++checks <= skip ? 0 : gate;
+    if (e == 0x82ac1af0) {
+      s.r[3] = ++checks <= skip || gate != 1 ? 20 : 0;
       return;
     }
     if (e == 0x82ad0c10) {
@@ -59,6 +57,7 @@ int main() {
     std::vector<test::Region> regions(cook_main_smoke::Regions.begin(),
                                       cook_main_smoke::Regions.end());
     regions.push_back({0x83213000, 0x1000});
+    regions.push_back({0x83291000, 0x1000});
     regions.push_back({0x83264000, 0x1000});
     regions.push_back({0x832c9000, 0x4000});
     test::GuestWindow w(regions);
@@ -89,6 +88,7 @@ int main() {
       m.WriteU32(p + 124, 0x08000000 | (i == 0 ? 0x40000000 : 0));
       m.WriteU32(p + 132, 1);
       m.WriteU32(p + 2588, 0x42c80000);
+      m.WriteU32(p + 2616, 0x41200000);
     }
     unsigned slot = 0;
     for (unsigned i = 0; i < 25; ++i) {
@@ -119,7 +119,7 @@ int main() {
     };
     m.WriteU32(0x90000 + 232, 3);
     run(0x82aff4e8);
-    check(s.r[3] == 1 && guest.tag == 90 && m.ReadU32(output) == 7 &&
+    check(s.r[3] == 1 && guest.tag == 90 && m.ReadU32(output) == 8 &&
           m.ReadU32(output + 4) == 120);
     m.WriteU32(0x90000 + 232, 1);
     for (unsigned i = 0; i < 5; ++i) {
