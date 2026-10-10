@@ -1,6 +1,6 @@
 {
   "schema": "semantic-recovery-draft-v1",
-  "scope": "Resource target-pool partitioning and battle-script candidate filtering/selection. Companion in-place target-list refinement.",
+  "scope": "Resource target-pool partitioning and battle-script candidate filtering/selection. Companion in-place target-list refinement. Companion availability-filter target selector.",
   "entries": [
     {
       "address": "8238DE58",
@@ -25,13 +25,22 @@
       "instruction_count": 934,
       "body_sha256": "8c4f48ec9be1a7aef6cde98764ec9b93dd271b637211648d4cdff2a68f27208c",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFE6B8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 24737,
+      "instruction_count": 261,
+      "body_sha256": "5166fb762495d3bc730538cf8b4ed5800405de606859d50c97ca238283b4cabd",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
     "entries": [
       "8238DE58",
       "8238D148",
-      "82AF86A8"
+      "82AF86A8",
+      "82AFE6B8"
     ],
     "header": "include/lo_semantics/battle_script_targets61.h",
     "source": "src/battle_script_targets61.cpp",
@@ -45,6 +54,6 @@
     "runtime_validated": false,
     "complete": false,
     "focused_smoke_paths": 1,
-    "case_scope": "A compact four-resource fixture checks category pool counts, stable candidate order, self exclusion, numeric threshold/min/max/group filters, duplicate field matches, pending-action filtering, inventory availability, random selection ABI, result writeback and nonvolatile state. Remaining filter arms are source-reviewed; concrete runtime resource lookup, property predicates and random service remain guest boundaries. Guest stack arrays retain source size assumptions and original duplicate/tie behavior, without new validation guards. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof. The companion target-refinement opcode now filters an existing byte-ID list without rebuilding runtime pools. It shares the original common filter logic while preserving its distinct category bit28, secondary-stat percentage filter5, 752-byte frame and random-service tag85. The focused fixture now composes initial selection with refinement, checks two team categories, secondary-stat thresholds, random tag and empty-list handling. Concrete game services and native combat remain unvalidated."
+    "case_scope": "A compact four-resource fixture checks category pool counts, stable candidate order, self exclusion, numeric threshold/min/max/group filters, duplicate field matches, pending-action filtering, inventory availability, random selection ABI, result writeback and nonvolatile state. Remaining filter arms are source-reviewed; concrete runtime resource lookup, property predicates and random service remain guest boundaries. Guest stack arrays retain source size assumptions and original duplicate/tie behavior, without new validation guards. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof. The companion target-refinement opcode now filters an existing byte-ID list without rebuilding runtime pools. It shares the original common filter logic while preserving its distinct category bit28, secondary-stat percentage filter5, 752-byte frame and random-service tag85. The focused fixture now composes initial selection with refinement, checks two team categories, secondary-stat thresholds, random tag and empty-list handling. Concrete game services and native combat remain unvalidated. The companion availability-filter selector now builds mode1 resource pools, retaining active resources even when HP is zero or a property mask would exclude them from the normal selector. It filters through the original resource virtual slot292 nonzero result and writes all selected IDs or one random choice with tag86. The existing compact fixture exercises both list and random paths with a zero-HP resource; concrete readiness semantics remain a guest service."
   }
 }

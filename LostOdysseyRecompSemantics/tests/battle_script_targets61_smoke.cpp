@@ -4,7 +4,7 @@
 #include "lo_semantics/battle_script_targets61.h"
 #include <iostream>
 struct TargetsGuest final : manager_release_context61::GuestServices {
-  unsigned randoms = 0, randomTag = 84;
+  unsigned randoms = 0, randomTag = 84, randomMax = 2;
   void CallDirect(GuestAddress e, GuestMemory &,
                   manager_release_context61::Registers &s) override {
     if (e == 0x82380a18 || e == 0x82389b78 || e == 0x8238e2f8) {
@@ -24,21 +24,23 @@ struct TargetsGuest final : manager_release_context61::GuestServices {
       return;
     }
     if (e == 0x82ac85e8) {
-      s.r[3] = 1;
+      s.r[3] = randomMax ? 1 : 0;
       return;
     }
     if (e == 0x82aa0740) {
-      if (s.r[4] || s.r[5] != 2 || s.r[6] != randomTag || s.r[7] != 1)
+      if (s.r[4] || s.r[5] != randomMax || s.r[6] != randomTag || s.r[7] != 1)
         throw std::runtime_error("target random arguments");
       ++randoms;
-      s.r[3] = 1;
+      s.r[3] = randomMax ? 1 : 0;
       return;
     }
     throw std::runtime_error("target direct boundary");
   }
-  void CallIndirect(GuestAddress, GuestMemory &,
-                    manager_release_context61::Registers &) override {
-    throw std::runtime_error("target indirect boundary");
+  void CallIndirect(GuestAddress e, GuestMemory &,
+                    manager_release_context61::Registers &s) override {
+    if (e != 0x2000)
+      throw std::runtime_error("target indirect boundary");
+    s.r[3] = s.r[3] == 0x8c000 ? 1 : 0;
   }
 };
 int main() {
@@ -192,6 +194,26 @@ int main() {
     select(0, 0, 0, 0);
     if (m.ReadU32(actor + 76))
       throw std::runtime_error("empty refinement result");
+    for (unsigned i = 0; i < 4; ++i)
+      m.WriteU32(0x80000 + 0x4000 * i, 0x73000);
+    m.WriteU32(0x73000 + 292, 0x2000);
+    auto unavailable = [&](unsigned selection) {
+      m.WriteU32(vars, 0);
+      m.WriteU32(vars + 4, selection);
+      m.WriteU32(actor + 52, 0);
+      s.r[3] = owner;
+      (void)battle_script_targets61::Apply(0x82afe6b8, m, {guest, native}, s);
+      if (m.ReadU32(actor + 76) != 1 || m.ReadU32(vars + 8) != 1 ||
+          m.ReadU8(0x66000) != 4 || m.ReadU32(actor + 52) != 7 ||
+          s.r[1] != initial.r[1] || s.r[23] != initial.r[23])
+        throw std::runtime_error("unavailable target pool and ABI");
+    };
+    unavailable(0);
+    guest.randomTag = 86;
+    guest.randomMax = 0;
+    unavailable(1);
+    if (guest.randoms != 3)
+      throw std::runtime_error("unavailable random service");
     std::cout << "battle_script_targets61 smoke passed\n";
     return 0;
   } catch (const std::exception &e) {

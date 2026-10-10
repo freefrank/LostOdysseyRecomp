@@ -112,6 +112,98 @@ struct Targets {
     }
     return false;
   }
+  void SelectUnavailable() {
+    auto pool = Get(1), selection = Get(3);
+    m.WriteU32(sp + 80, 0x8204a1d8);
+    s.r[3] = owner;
+    s.r[4] = sp + 896;
+    s.r[5] = sp + 1152;
+    s.r[6] = sp + 384;
+    s.r[7] = sp + 96;
+    s.r[8] = 1;
+    (void)battle_script_targets61::Apply(0x8238de58, m, d, s);
+    m.WriteU32(Actor() + 76, 0);
+    for (unsigned i = 0; i < 64; ++i) {
+      m.WriteU32(sp + 128 + 4 * i, 0);
+      m.WriteU32(sp + 640 + 4 * i, 0);
+    }
+    unsigned candidates = 0, selected = 0;
+    auto append = [&](unsigned source, unsigned count, bool omitSelf) {
+      auto resource = W(Actor() + 4);
+      for (unsigned i = 0; std::int32_t(i) < std::int32_t(count); ++i) {
+        auto id = W(source + 4 * i);
+        if (omitSelf && id == W(resource + 64))
+          continue;
+        m.WriteU32(sp + 128 + 4 * candidates++, id);
+      }
+    };
+    switch (pool) {
+    case 0:
+      append(sp + 384, W(sp + 116), false);
+      append(sp + 512, W(sp + 104), false);
+      break;
+    case 1:
+      append(sp + 512, W(sp + 104), false);
+      break;
+    case 2:
+      append(sp + 1024, W(sp + 96), false);
+      break;
+    case 3:
+      append(sp + 1280, W(sp + 100), false);
+      break;
+    case 4:
+      append(sp + 384, W(sp + 116), false);
+      break;
+    case 5:
+      append(sp + 896, W(sp + 108), false);
+      break;
+    case 6:
+      append(sp + 1152, W(sp + 112), false);
+      break;
+    case 7:
+      if (W(Actor() + 4)) {
+        append(sp + 384, W(sp + 116), true);
+        append(sp + 512, W(sp + 104), true);
+      }
+      break;
+    }
+    for (unsigned i = 0; i < candidates; ++i) {
+      auto id = W(sp + 128 + 4 * i), resource = Find(id);
+      s.r[3] = resource;
+      s.ctr = W(W(resource) + 292);
+      d.guest.CallIndirect(Address(s.ctr) & ~3u, m, s);
+      if (Address(s.r[3]))
+        m.WriteU32(sp + 640 + 4 * selected++, id);
+    }
+    unsigned result = 0;
+    if (pool <= 7 && selection == 0) {
+      for (unsigned i = 0; i < selected; ++i) {
+        auto actor = Actor();
+        m.WriteU8(W(actor + 72) + i, W(sp + 640 + 4 * i));
+        actor = Actor();
+        m.WriteU32(actor + 76, W(actor + 76) + 1);
+      }
+      result = W(Actor() + 76);
+    } else if (pool <= 7 && selection == 1 && std::int32_t(selected) > 0) {
+      auto resource = W(Actor() + 4);
+      s.r[3] = W(0x83264558);
+      s.r[4] = 0;
+      s.r[5] = selected - 1;
+      s.r[6] = 86;
+      s.r[7] = resource ? W(resource + 64) : 31;
+      Call(0x82aa0740);
+      m.WriteU8(W(Actor() + 72), W(sp + 640 + 4 * Address(s.r[3])));
+      m.WriteU32(Actor() + 76, 1);
+      result = 1;
+    }
+    s.r[3] = owner;
+    s.r[4] = 5;
+    s.r[5] = result;
+    (void)battle_script_extensions61::Apply(0x8238c208, m, d, s);
+    auto actor = Actor();
+    m.WriteU32(actor + 52, W(actor + 52) + 7);
+    m.WriteU32(sp + 80, 0x8204a1d8);
+  }
   void Select(bool refine) {
     auto filter = Get(1), parameter = Get(3), pool = Get(5), selection = Get(7);
     m.WriteU32(sp + 88, 0x8204a1d8);
@@ -349,16 +441,21 @@ struct Targets {
 };
 } // namespace
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
-  if (e != 0x8238de58 && e != 0x8238d148 && e != 0x82af86a8)
+  if (e != 0x8238de58 && e != 0x8238d148 && e != 0x82af86a8 && e != 0x82afe6b8)
     return false;
   auto owner = Address(s.r[3]), old = Address(s.r[1]);
-  unsigned first = e == 0x8238de58 ? 14 : 19, frame = e == 0x8238de58   ? 256
-                                                      : e == 0x82af86a8 ? 752
-                                                                        : 1552;
+  unsigned first = e == 0x8238de58   ? 14
+                   : e == 0x82afe6b8 ? 23
+                                     : 19,
+           frame = e == 0x8238de58   ? 256
+                   : e == 0x82af86a8 ? 752
+                                     : 1552;
   m.WriteU32(old - 8, Address(s.lr));
   for (unsigned i = first; i < 32; ++i)
     recovery_abi::WriteU64(m, old - 16 - 8 * (31 - i), s.r[i]);
-  unsigned ffirst = e == 0x8238de58 ? 31 : 30,
+  unsigned ffirst = e == 0x8238de58   ? 31
+                    : e == 0x82afe6b8 ? 32
+                                      : 30,
            foffset = e == 0x8238de58 ? 160 : 120;
   for (unsigned i = ffirst; i < 32; ++i)
     recovery_abi::WriteU64(m, old - foffset - 8 * (31 - i), s.fpr_bits[i]);
@@ -369,6 +466,8 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   if (e == 0x8238de58)
     t.Pools(Address(s.r[4]), Address(s.r[5]), Address(s.r[6]), Address(s.r[7]),
             Address(s.r[8]));
+  else if (e == 0x82afe6b8)
+    t.SelectUnavailable();
   else
     t.Select(e == 0x82af86a8);
   s.r[1] += frame;

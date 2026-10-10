@@ -81,3 +81,7 @@ The companion target-refinement opcode now filters an existing byte-ID list with
 ## Resource and reverse action queries
 
 Resource query handlers now count selected categories, trace pending action records back to actors targeting a selected resource, deduplicate their IDs and select through the original random service contract. Property/effect, target-byte, actor parameter and banked inventory queries are also recovered. The detail-only action-filter exclusion and special inventory field are preserved. A compact synthetic fixture passes; native action lists, readiness and inventory providers remain unvalidated guest services.
+
+## Availability-filter target selection
+
+The companion availability-filter selector now builds mode1 resource pools, retaining active resources even when HP is zero or a property mask would exclude them from the normal selector. It filters through the original resource virtual slot292 nonzero result and writes all selected IDs or one random choice with tag86. The existing compact fixture exercises both list and random paths with a zero-HP resource; concrete readiness semantics remain a guest service.
