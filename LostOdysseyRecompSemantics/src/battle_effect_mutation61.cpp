@@ -60,6 +60,10 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     first = 28;
     literal = 80;
     break;
+  case 0x82b0ad38:
+    frame = 128;
+    first = 29;
+    break;
   case 0x82b10e98:
     frame = 144;
     first = 27;
@@ -190,7 +194,54 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     s.r[6] = 0;
     Call(method, m, d, s);
   };
-  if (e == 0x82b10e98) {
+  if (e == 0x82b0ad38) {
+    m.WriteU8(owner + 203, 0);
+    if (!eligible(2, 0))
+      m.WriteU8(owner + 208, 0);
+    else {
+      auto source = m.ReadU32(owner + 4), target = m.ReadU32(owner + 8);
+      if (m.ReadU32(source + 64) != m.ReadU32(target + 64)) {
+        bool hp = m.ReadU32(owner + 108) != 0;
+        fp();
+        auto available =
+            trunc(std::bit_cast<float>(m.ReadU32(source + (hp ? 2588 : 2616))));
+        m.WriteU32(sp + 80, unsigned(available));
+        if (available) {
+          auto divisor = trunc(std::bit_cast<float>(m.ReadU32(owner + 80)));
+          m.WriteU32(sp + 80, unsigned(divisor));
+          auto quotient = available / divisor;
+          recovery_abi::WriteU64(m, sp + 80,
+                                 std::uint64_t(std::int64_t(quotient)));
+          float amount = float(quotient);
+          if (!(amount > std::bit_cast<float>(m.ReadU32(0x82000e50)))) {
+            recovery_abi::WriteU64(m, sp + 80,
+                                   std::uint64_t(std::int64_t(available)));
+            amount = float(available);
+          }
+          m.WriteU32(owner + 32, std::bit_cast<unsigned>(amount));
+          auto apply = [&](unsigned resource, unsigned mode, unsigned offset) {
+            auto result = m.ReadU32(0x832cb790);
+            s.r[3] = result;
+            s.r[4] = resource;
+            s.r[6] = mode;
+            fp();
+            s.fpr_bits[1] = std::bit_cast<std::uint64_t>(
+                double(std::bit_cast<float>(m.ReadU32(owner + 32))));
+            Call(0x82b2b9e0, m, d, s);
+            fp();
+            auto index =
+                116 * m.ReadU32(result + 12) + m.ReadU32(result + 24) + offset;
+            m.WriteU32(m.ReadU32(result + 20) + 4 * index,
+                       std::bit_cast<unsigned>(
+                           float(std::bit_cast<double>(s.fpr_bits[1]))));
+          };
+          apply(target, hp ? 1 : 3, hp ? 3730 : 3738);
+          apply(m.ReadU32(owner + 4), hp ? 0 : 2, hp ? 14 : 22);
+          mark();
+        }
+      }
+    }
+  } else if (e == 0x82b10e98) {
     if (chance(0x82b08e28)) {
       mark();
       if (!m.ReadU32(owner + 108)) {

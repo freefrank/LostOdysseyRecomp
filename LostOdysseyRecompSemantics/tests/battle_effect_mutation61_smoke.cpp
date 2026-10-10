@@ -420,6 +420,25 @@ int main() {
               m.ReadU32(target + 4 * 473) == 5 &&
               m.ReadU32(target + 4 * 474) == 0,
           "random target category and duration reset");
+    put(owner + 80, 2);
+    m.WriteU32(owner + 108, 0);
+    put(source + 2616, 60);
+    put(target + 2616, 10);
+    call(0x82b0ad38);
+    check(get(source + 2616) == 30 && get(target + 2616) == 40 &&
+              get(0x200000 + 88) == 30 && get(0x200000 + 14952) == 30,
+          "source to target MP transfer");
+    m.WriteU32(owner + 108, 1);
+    put(source + 2588, 100);
+    put(target + 2588, 20);
+    call(0x82b0ad38);
+    check(get(source + 2588) == 50 && get(target + 2588) == 70 &&
+              get(0x200000 + 56) == 50 && get(0x200000 + 14920) == 50,
+          "source to target HP transfer");
+    m.WriteU32(target + 64, m.ReadU32(source + 64));
+    call(0x82b0ad38);
+    check(get(source + 2588) == 50 && get(target + 2588) == 70,
+          "same ID transfer skipped");
     std::puts("PASS effect dispatch, eligibility, property payloads, HP cap "
               "results and gauge changes");
     return 0;
