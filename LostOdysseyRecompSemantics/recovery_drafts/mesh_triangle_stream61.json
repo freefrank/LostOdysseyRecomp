@@ -1,0 +1,51 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "NXS/MESH triangle owner write/load and scalar adaptive index input.",
+  "entries": [
+    {
+      "address": "82BA6B18",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 28321,
+      "instruction_count": 346,
+      "body_sha256": "a64c66dd25a3d7f3504b9e23fa890959c2fc596264b6676f58b8a4f707579720",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B9D4F8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 5884,
+      "instruction_count": 523,
+      "body_sha256": "f225423f8e260645ce39949f4c752527a7997c764d8886392bc9806e67cf0d97",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82BAE0C0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 45178,
+      "instruction_count": 56,
+      "body_sha256": "ae14a24a71e8d9e87e1eb39abeaa87af33f17e89db27996985a104fc030c402e",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BA6B18",
+      "82B9D4F8",
+      "82BAE0C0"
+    ],
+    "header": "include/lo_semantics/mesh_triangle_stream61.h",
+    "source": "src/mesh_triangle_stream61.cpp",
+    "smoke": "tests/mesh_triangle_stream61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 2,
+    "case_scope": "Both endian modes round-trip nine separated triangles, tree, material IDs, original face IDs, group/category arrays and edge flags with exact stream cursor and complete owner cleanup. The open-surface fixture seeds a cached zero mass and a synthetic version 17; it does not establish compatibility with an independently captured native asset. Byte indices are exercised; wider indices are source-reviewed only. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof.",
+    "private_constants": "Mass uses existing private user-XEX bundle; no private data is published."
+  }
+}

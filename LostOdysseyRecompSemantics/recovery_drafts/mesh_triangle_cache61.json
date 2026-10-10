@@ -1,0 +1,42 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Triangle origin inertia/centroid mass cache and owned edge cache.",
+  "entries": [
+    {
+      "address": "82BA6868",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 27871,
+      "instruction_count": 172,
+      "body_sha256": "89a1e97322306d2f7df5c858e1f55dca0b45cad53ecec49184164e98616c9156",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82BC5ED8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 41184,
+      "instruction_count": 50,
+      "body_sha256": "faee8c094064a1698ce70662950982274e75ab62eca4601c4e7b1eabd4caf1e5",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BA6868",
+      "82BC5ED8"
+    ],
+    "header": "include/lo_semantics/mesh_triangle_cache61.h",
+    "source": "src/mesh_triangle_cache61.cpp",
+    "smoke": "tests/mesh_triangle_cache61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "A closed tetrahedron computes mass 1/6 and centroid (1/4,1/4,1/4), reuses cached data, builds triangle edge topology and releases all tracked allocations. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof.",
+    "private_constants": "Mass uses existing private user-XEX bundle; no private data is published."
+  }
+}

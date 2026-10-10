@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 134,
-    "distinct_entries": 415,
+    "unit_count": 136,
+    "distinct_entries": 420,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -1396,6 +1396,25 @@
         ],
         "focused_smoke_paths": 2,
         "validation": "Both lifecycle samples verify bounds, enclosing sphere and complete cleanup. An axis-plane sample checks negative-plane bound extension and both side encodings (axis versus axis|8). A crossing-plane diagnostic remains unexercised. Logical/ABI only"
+      },
+      {
+        "unit": "mesh_triangle_cache61",
+        "entries": [
+          "82BA6868",
+          "82BC5ED8"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "A closed tetrahedron computes mass 1/6 and centroid (1/4,1/4,1/4), reuses cached data, builds triangle edge topology and releases all tracked allocations. Logical/ABI only"
+      },
+      {
+        "unit": "mesh_triangle_stream61",
+        "entries": [
+          "82BA6B18",
+          "82B9D4F8",
+          "82BAE0C0"
+        ],
+        "focused_smoke_paths": 2,
+        "validation": "Both endian modes round-trip nine separated triangles, tree, material IDs, original face IDs, group/category arrays and edge flags with exact stream cursor and complete owner cleanup. The open-surface fixture seeds a cached zero mass and a synthetic version 17; it does not establish compatibility with an independently captured native asset. Byte indices are exercised; wider indices are source-reviewed only. Logical/ABI only"
       }
     ]
   },

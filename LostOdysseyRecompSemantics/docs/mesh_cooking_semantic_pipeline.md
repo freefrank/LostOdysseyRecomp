@@ -354,3 +354,8 @@ BB4540 now composes existing indexed workspace cleanup, replaces position/triang
 ### Triangle edge flags and bounds
 
 BB42E8/BB4F40/BB5230 now sort and group triangle edges, retain incident face IDs and derive per-face flags. A coplanar quad gives expected diagonal bits with repeated replacement and full cleanup. BA6458/B9D410 reuse guest power and sphere solvers for bounds/tolerance and distinguish the two axis-plane sides. Negative-plane extension and both axis encodings pass. The descriptor option previously described as a nondefault leaf limit is an axis-plane option; corrected that earlier wording. No additional guards or full floating-point/gameplay claim.
+
+
+### Triangle owner serialization
+
+Triangle owner serialization now composes storage, tree envelopes, coupled material/remap arrays, optional group/category data, edge flags and mass cache. BA6868 computes tetrahedron mass/centroid and reuses the cache; BC5ED8 builds the owned edge topology. BA6B18/B9D4F8 round-trip a nine-triangle fixture in both endian modes with exact cursor and complete cleanup. BAE0C0 preserves scalar byte/half input callbacks. The open-surface I/O fixture uses a pre-existing zero mass cache and synthetic version 17; compatibility with an independent native asset is not claimed. Wider index and negative-mass paths remain source-reviewed. The full default triangle processing entry and graph partition stage are still pending.
