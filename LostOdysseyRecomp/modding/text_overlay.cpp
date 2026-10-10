@@ -11,6 +11,7 @@
 #include <fstream>
 #include <map>
 #include <mutex>
+#include <tuple>
 
 namespace modding::text_overlay
 {
@@ -119,11 +120,18 @@ void PatchIndex(const fs::path &folder, const std::map<std::string, fs::path> &n
                 std::map<std::string, std::pair<uint64_t, std::vector<uint8_t>>> &tails, Counts &counts)
 {
     const auto parsed = fpi::Read(index);
+    // In archive order, so the reads run forward through each file (slow disks).
+    std::vector<const fpi::File *> files;
     for (const auto &file : parsed.files)
+        if (gTexts.count(file.path) && text::Detect(file.path) != text::Format::None) files.push_back(&file);
+    std::sort(files.begin(), files.end(), [](const fpi::File *a, const fpi::File *b) {
+        return std::tie(a->archive, a->offset) < std::tie(b->archive, b->offset);
+    });
+    for (const auto *entry : files)
     {
+        const auto &file = *entry;
         const auto text = gTexts.find(file.path);
         const auto format = text::Detect(file.path);
-        if (text == gTexts.end() || format == text::Format::None) continue;
         try
         {
             const auto archive = names.find(parsed.archives.at(file.archive));
@@ -201,7 +209,9 @@ Folder Build(const fs::path &folder)
         if (!tail.second.empty())
             result.ranges[name].push_back({tail.first, std::make_shared<const std::vector<uint8_t>>(std::move(tail.second))});
     if (counts.files || counts.failed)
-        LOG_NOTICE("[mods] text: {} translated files in {} ({} failed, {} keys not in their file)",
+        // Keys a copy lacks are normal: a pack made from the DLC copy of a file
+        // also applies to the disc copy, which has fewer entries.
+        LOG_NOTICE("[mods] text: {} translated files in {} ({} failed; {} translation keys this copy does not have)",
                    counts.files, Utf8(folder), counts.failed, counts.unknownKeys);
     return result;
 }
