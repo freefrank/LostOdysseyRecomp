@@ -159,7 +159,7 @@
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
     "unit_count": 238,
-    "distinct_entries": 1122,
+    "distinct_entries": 1123,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -2914,13 +2914,15 @@
           "82B0A928",
           "82B0C880",
           "82B0AF88",
-          "82B110B8"
+          "82B110B8",
+          "82B10368"
         ],
         "focused_smoke_paths": 1,
         "validation": "Recovered nine descriptor effect callbacks: indexed dispatch and nested eligibility, property insert/remove and numeric payload, chance-gated source flag, fixed/quarter HP caps with recorded deltas, and percentage gauge addition/reset. Composes actual eligibility/chance/property/result/gauge semantics. Focused fixture passes dispatch limits, side rejection, property changes/truncation, failed-chance flag order, both HP caps and gauge effects. Descriptor constructor now has 42 of83 distinct callback targets recovered; remaining41 are not claimed complete. No gameplay/full ABI acceptance.",
         "descriptor_properties": "Recovered five additional descriptor property effects: dual-side gates, paired payload insertion/removal, mutually exclusive categories, bounded random payload with source attribution, and selected property-family clearing. Focused checks cover actual paired values and masks, source ID retention, family clearing and opposite side-gate failures. Descriptor callback coverage now47 of83 distinct targets; remaining36 unclaimed. Logical ABI checks only, not gameplay acceptance.",
         "restorative_effects": "Recovered four restorative descriptor callbacks using actual scaling, critical decision, jitter, normalization and result application: HP restore/full-HP sentinel, MP restore, combined HP/MP and HP-plus-property payload. Focused fixture checks restored values, result deltas, paired payload, full restore shortcut and side rejection. Descriptor callback coverage now51 of83 distinct targets; remaining32 unclaimed. No gameplay/full ABI or bitwise FP acceptance.",
-        "descriptor_conversion": "Recovered three more descriptor callbacks: fractional HP reduction with recorded delta, source HP-to-MP conversion, and randomized target class flags with fallback selection. Focused checks cover real result mutation, passive immunity, paired HP/MP outcomes and the source fallback quirk that treats the random index as a resource ID. Descriptor callback coverage now 54 of 83 distinct targets; remaining 29 unclaimed. Logical ABI checks only, not gameplay acceptance."
+        "descriptor_conversion": "Recovered three more descriptor callbacks: fractional HP reduction with recorded delta, source HP-to-MP conversion, and randomized target class flags with fallback selection. Focused checks cover real result mutation, passive immunity, paired HP/MP outcomes and the source fallback quirk that treats the random index as a resource ID. Descriptor callback coverage now 54 of 83 distinct targets; remaining 29 unclaimed. Logical ABI checks only, not gameplay acceptance.",
+        "descriptor_growth": "Recovered descriptor growth-refresh callback B10368: script actor level override, source growth counter, creature stats refresh, equipment and derived stats rebuild, full HP restoration, target property attempt and primary mask index. Focused integration exercises the real lower-level growth/stat implementations with a synthetic template and an immune target. Descriptor callback coverage now 55 of 83 distinct targets; remaining 28 unclaimed. Logical ABI checks only, not gameplay acceptance."
       },
       {
         "unit": "battle_effect_scaling61",
@@ -3017,7 +3019,7 @@
   "battle_semantic_runtime_composition": {
     "date": "2026-10-10",
     "routed_units": 74,
-    "routed_distinct_entries": 607,
+    "routed_distinct_entries": 608,
     "source": "src/battle_semantic_runtime61.cpp",
     "routes": "src/battle_semantic_routes.inc",
     "generator": "tools/generate_battle_semantic_routes.py",
@@ -3026,7 +3028,7 @@
     "runtime_gameplay_validated": false,
     "summary": "Added an opt-in battle semantic runtime entry that routes all 511 currently recovered battle entries across 64 units, including nested direct calls and known indirect targets. Unknown services still forward to the supplied guest implementation. The focused composition fixture crosses script completion into real manager/resource lookup, routes a known virtual target, and verifies unknown direct/indirect forwarding. This connects recovered logic without claiming game-runtime integration or gameplay acceptance; inventory entry counts are unchanged.",
     "routed_battle_units": 71,
-    "routed_battle_entries": 578,
+    "routed_battle_entries": 579,
     "shared_context_entries": 27,
     "accepted_copy_fill_entries": 2,
     "shared_support_summary": "Extended the composed battle runtime with existing manager-release, string-storage and string-conversion semantics, plus accepted full-context copy and fill support. The graph now routes 511 battle entries and 29 shared/support entries. Focused composition checks pass UTF-16 length and actual copy/fill memory effects without guest escapes. No new recovery credit is claimed and native game-runtime hooking remains pending.",
@@ -3044,6 +3046,7 @@
     "descriptor_properties": "Recovered five additional descriptor property effects: dual-side gates, paired payload insertion/removal, mutually exclusive categories, bounded random payload with source attribution, and selected property-family clearing. Focused checks cover actual paired values and masks, source ID retention, family clearing and opposite side-gate failures. Descriptor callback coverage now47 of83 distinct targets; remaining36 unclaimed. Logical ABI checks only, not gameplay acceptance.",
     "effect_scaling": "Recovered shared effect scaling, critical-property/chance decision, bounded magnitude jitter and final status/partner normalization. Uses guest-provided coefficients and source single-precision stages, with no embedded private constants. Focused synthetic checks cover stat scaling, target status multiplier, bypass, critical categories, jitter/zero handling, source/target status overrides, partner short-circuit and rounding. Logical ABI coverage only, not bitwise FP or gameplay acceptance.",
     "restorative_effects": "Recovered four restorative descriptor callbacks using actual scaling, critical decision, jitter, normalization and result application: HP restore/full-HP sentinel, MP restore, combined HP/MP and HP-plus-property payload. Focused fixture checks restored values, result deltas, paired payload, full restore shortcut and side rejection. Descriptor callback coverage now51 of83 distinct targets; remaining32 unclaimed. No gameplay/full ABI or bitwise FP acceptance.",
-    "descriptor_conversion": "Recovered three more descriptor callbacks: fractional HP reduction with recorded delta, source HP-to-MP conversion, and randomized target class flags with fallback selection. Focused checks cover real result mutation, passive immunity, paired HP/MP outcomes and the source fallback quirk that treats the random index as a resource ID. Descriptor callback coverage now 54 of 83 distinct targets; remaining 29 unclaimed. Logical ABI checks only, not gameplay acceptance."
+    "descriptor_conversion": "Recovered three more descriptor callbacks: fractional HP reduction with recorded delta, source HP-to-MP conversion, and randomized target class flags with fallback selection. Focused checks cover real result mutation, passive immunity, paired HP/MP outcomes and the source fallback quirk that treats the random index as a resource ID. Descriptor callback coverage now 54 of 83 distinct targets; remaining 29 unclaimed. Logical ABI checks only, not gameplay acceptance.",
+    "descriptor_growth": "Recovered descriptor growth-refresh callback B10368: script actor level override, source growth counter, creature stats refresh, equipment and derived stats rebuild, full HP restoration, target property attempt and primary mask index. Focused integration exercises the real lower-level growth/stat implementations with a synthetic template and an immune target. Descriptor callback coverage now 55 of 83 distinct targets; remaining 28 unclaimed. Logical ABI checks only, not gameplay acceptance."
   }
 }

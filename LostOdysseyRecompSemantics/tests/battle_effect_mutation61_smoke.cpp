@@ -3,6 +3,8 @@
 #undef main
 #include "lo_semantics/battle_effect_mutation61.h"
 #include "lo_semantics/battle_semantic_runtime61.h"
+#include "lo_semantics/recovery_abi.h"
+#include "battle_resource_growth_fixture.h"
 struct MutationGuest final : manager_release_context61::GuestServices {
   unsigned dispatches = 0;
   void CallDirect(GuestAddress e, GuestMemory &m,
@@ -37,6 +39,9 @@ int main() {
       regions.push_back({p, 0x1000});
     regions.push_back({0x832ca000, 0x1000});
     regions.push_back({0x831f3000, 0x21000});
+    growth_fixture::Regions(regions);
+    regions.push_back({0x832c9000, 0x1000});
+    regions.push_back({0x83291000, 0x1000});
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();
@@ -293,6 +298,28 @@ int main() {
               !(m.ReadU32(target + 124) & 0x40000000) &&
               (m.ReadU32(0xa0000 + 124) & 0x40000000),
           "random class flags and source ID fallback");
+    growth_fixture::Setup(m);
+    m.WriteU32(result + 20, 0x200000);
+    m.WriteU32(0x832c9c54 + 44, 0xc0000);
+    m.WriteU32(0xc0000 + 4, 0xc1000);
+    m.WriteU32(0xc0000 + 12, 1);
+    m.WriteU32(0xc1000 + 8, 24);
+    m.WriteU32(0xc1000 + 316, 7);
+    m.WriteU32(0x83291dc0, 0xd0000);
+    m.WriteU32(source + 124, 0x40000000);
+    m.WriteU32(source + 68, 2);
+    m.WriteU32(source + 140, 9);
+    m.WriteU32(source + 4952, 2);
+    m.WriteU32(target + 4876, 1);
+    m.WriteU32(owner + 100, 8);
+    m.WriteU32(owner + 92, 0);
+    m.WriteU32(owner + 168, 99);
+    m.WriteU32(0x140000 + 280, 7);
+    call(0x82b10368);
+    check(m.ReadU32(source + 4952) == 3 && get(source + 2588) == 100 &&
+              get(source + 2592) == 100 && m.ReadU32(owner + 168) == 3 &&
+              !(m.ReadU32(target + 232) & 1),
+          "growth effect refresh, heal and immune target");
     std::puts("PASS effect dispatch, eligibility, property payloads, HP cap "
               "results and gauge changes");
     return 0;
