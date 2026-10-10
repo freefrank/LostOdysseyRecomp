@@ -1,3 +1,7 @@
+## Root direct continuation: trait bonus calculations (2026-10-10 UTC)
+
+Recovered category-two and category-eight trait bonus calculations using actual trait matching and interpolation. The focused fixture checks overlap gating, selected multiplier, target-specific extra bonus, result-record flag, skip behavior and FPR28-31 restoration. No trait service mock remains in these paths. Guest constants are synthetic in the fixture; full floating-point and native gameplay equivalence remain unvalidated.
+
 ## Root direct continuation: trait matching and critical selection (2026-10-10 UTC)
 
 Recovered three-slot trait matching with wildcard filters, selected-trait state writes, effect-mode float interpolation and critical selection. Critical selection composes actual trait lookup, interpolation, target property scaling and deterministic random gates; skip paths preserve the existing output byte. Focused fixture checks wildcard/no-match state, interpolation modes and critical/skip paths. Synthetic constants only; native gameplay and bitwise floating-point equivalence remain unvalidated.

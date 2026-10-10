@@ -82,6 +82,11 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   }
   unsigned frame = 112, first = 31, literal = 0, saveFloat = 0;
   switch (e) {
+  case 0x82b20b30:
+  case 0x82b20d38:
+    frame = 144;
+    first = 30;
+    break;
   case 0x82b20270:
     frame = 144;
     first = 27;
@@ -153,6 +158,10 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   }
   if (e == 0x82b21148)
     recovery_abi::WriteU64(m, old - 48, s.fpr_bits[30]);
+  bool quad = e == 0x82b20b30 || e == 0x82b20d38;
+  if (quad)
+    for (unsigned i = 28; i < 32; ++i)
+      recovery_abi::WriteU64(m, old - 32 - 8 * (31 - i), s.fpr_bits[i]);
   s.r[1] -= frame;
   auto sp = Address(s.r[1]);
   m.WriteU32(sp, old);
@@ -185,7 +194,67 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     m.WriteU32(sp + offset, unsigned(n));
     return n;
   };
-  if (e == 0x82b20270) {
+  if (quad) {
+    bool matching = e == 0x82b20b30;
+    unsigned category = matching ? 2 : 8, offset = matching ? 76 : 80;
+    auto amount = readFloat(owner + 68, 28), zero = readFloat(0x82000e50, 29);
+    m.WriteU32(owner + offset, std::bit_cast<unsigned>(zero));
+    bool eligible = m.ReadU8(owner + 108) != 1;
+    if (eligible && matching)
+      eligible = (m.ReadU32(m.ReadU32(owner + 8) + 4888) &
+                  m.ReadU32(m.ReadU32(owner + 4) + 4828)) != 0;
+    if (eligible) {
+      auto baseline = readFloat(0x82007784, matching ? 30 : 31),
+           factor = baseline;
+      f(matching ? 31 : 30, double(factor));
+      constexpr unsigned traits[] = {13, 3, 12, 2, 11, 1};
+      for (unsigned i = 0; i < 6; ++i) {
+        s.r[3] = m.ReadU32(0x832cb784);
+        s.r[4] = m.ReadU32(owner + 4);
+        s.r[5] = category;
+        s.r[6] = 0xffffffffu;
+        s.r[7] = traits[i];
+        Call(0x82aa0890, m, d, s);
+        if ((Address(s.r[3]) & 255) != 1)
+          continue;
+        s.r[3] = m.ReadU32(0x832cb784);
+        s.r[4] = m.ReadU32(owner + 4);
+        unsigned constant = matching ? (i < 2   ? 0x82000de8
+                                        : i < 4 ? 0x821baa74
+                                                : 0x82000e1c)
+                                     : (i < 2   ? 0x820894f0
+                                        : i < 4 ? 0x82000e1c
+                                                : 0x82218674);
+        readFloat(constant, 2);
+        f(3, double(zero));
+        f(1, double(baseline));
+        s.r[7] = category;
+        Call(0x82aa0e10, m, d, s);
+        factor = float(std::bit_cast<double>(s.fpr_bits[1]));
+        f(matching ? 31 : 30, double(factor));
+        break;
+      }
+      if (matching && m.ReadU32(m.ReadU32(owner + 8) + 5092) == 2) {
+        auto bias = readFloat(0x82000da4, 0);
+        factor = float(factor + bias);
+        f(31, double(factor));
+      }
+      auto delta = float(factor - baseline);
+      f(0, double(delta));
+      if (!(delta <= zero)) {
+        auto result = float(delta * amount);
+        f(0, double(result));
+        m.WriteU32(owner + offset, std::bit_cast<unsigned>(result));
+        if (matching) {
+          s.r[3] = m.ReadU32(0x832cb790);
+          Call(0x82b2b410, m, d, s);
+        }
+      }
+    }
+    readFloat(owner + offset, 1);
+    if (matching)
+      m.WriteU32(owner + 84, m.ReadU32(m.ReadU32(owner + 4) + 4916));
+  } else if (e == 0x82b20270) {
     auto source = m.ReadU32(owner + 4), base = m.ReadU32(source + 4940);
     m.WriteU32(sp + 80, 0);
     if (m.ReadU8(owner + 45) != 1) {
@@ -511,6 +580,9 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   }
   if (e == 0x82b21148)
     s.fpr_bits[30] = recovery_abi::ReadU64(m, old - 48);
+  if (quad)
+    for (unsigned i = 28; i < 32; ++i)
+      s.fpr_bits[i] = recovery_abi::ReadU64(m, old - 32 - 8 * (31 - i));
   if (saveFloat)
     s.fpr_bits[31] = recovery_abi::ReadU64(m, old - saveFloat);
   s.lr = m.ReadU32(old - 8);

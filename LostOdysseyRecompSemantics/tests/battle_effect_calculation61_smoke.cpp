@@ -19,11 +19,12 @@ int main() {
     using namespace cook_main_smoke;
     std::vector<test::Region> regions(cook_main_smoke::Regions.begin(),
                                       cook_main_smoke::Regions.end());
+    regions.push_back({0x82089000, 0x1000});
+    regions.push_back({0x82218000, 0x1000});
     regions.push_back({0x8201f000, 0x1000});
     regions.push_back({0x821ba000, 0x1000});
     regions.push_back({0x832ae000, 0x1000});
     regions.push_back({0x8201d000, 0x1000});
-    regions.push_back({0x82218000, 0x1000});
     regions.push_back({0x83213000, 0x1000});
     regions.push_back({0x83264000, 0x1000});
     regions.push_back({0x832c9000, 0x4000});
@@ -204,6 +205,29 @@ int main() {
     m.WriteU32(0x80000 + 4940, 0);
     run(0x82b20270);
     check(m.ReadU8(0x73000 + 36) == 9);
+    m.WriteU8(0x73000 + 108, 0);
+    m.WriteU32(0x73000 + 68, 0x42c80000);
+    m.WriteU32(0x80000 + 4828, 1);
+    m.WriteU32(0x90000 + 4888, 1);
+    m.WriteU32(0x80000 + 4916, 7);
+    m.WriteU32(0x80000 + 76252, 2);
+    m.WriteU32(0x82000de8, 0x3fc00000);
+    run(0x82b20b30);
+    check(std::bit_cast<double>(s.fpr_bits[1]) == 50 &&
+          m.ReadU32(0x73000 + 84) == 7 &&
+          m.ReadU32(0x100000 + 4 * (116 + 3782)) == 1);
+    m.WriteU32(0x90000 + 5092, 2);
+    run(0x82b20b30);
+    check(std::bit_cast<double>(s.fpr_bits[1]) == 100);
+    m.WriteU32(0x80000 + 76252, 8);
+    m.WriteU32(0x820894f0, 0x40000000);
+    run(0x82b20d38);
+    check(std::bit_cast<double>(s.fpr_bits[1]) == 100);
+    m.WriteU8(0x73000 + 108, 1);
+    run(0x82b20d38);
+    check(std::bit_cast<double>(s.fpr_bits[1]) == 0);
+    for (unsigned i = 28; i < 32; ++i)
+      check(s.fpr_bits[i] == initial.fpr_bits[i]);
     check(!battle_effect_calculation61::Apply(0, m, {g, native}, s));
     std::cout << "battle_effect_calculation61 smoke passed\n";
     return 0;

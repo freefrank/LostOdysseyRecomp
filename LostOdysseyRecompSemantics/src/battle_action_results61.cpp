@@ -33,6 +33,9 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   case 0x82b2b310:
     offset = 3758;
     break;
+  case 0x82b2b410:
+    offset = 3782;
+    break;
   case 0x82b2b438:
     offset = 3782;
     value = 0;

@@ -73,6 +73,14 @@
       "instruction_count": 6,
       "body_sha256": "c721caa54fe1cfd1b5d7cbc0e90ff6df0a45303dd7df5739ae4c36ae347fac6e",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B2B410",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.168.cpp",
+      "source_line": 3488,
+      "instruction_count": 10,
+      "body_sha256": "aba5d77c659aea615cf33843fe06af9ba9a8e23cf5be908de245c3d30280849a",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -85,7 +93,8 @@
       "82B2B310",
       "82B2B438",
       "82B11230",
-      "82B2B3D8"
+      "82B2B3D8",
+      "82B2B410"
     ],
     "header": "include/lo_semantics/battle_action_results61.h",
     "source": "src/battle_action_results61.cpp",
@@ -100,6 +109,7 @@
     "complete": false,
     "focused_smoke_paths": 1,
     "case_scope": "Focused fixture checks all seven record flag operations and the global-manager tail adapter, row/index address calculation, exact store values and neighboring word preservation. The descriptor adapter is composed into evaluator dispatch. Runtime gameplay remains unvalidated. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof.",
-    "status_record": "Status payload store at record + 464*row + 15100 composed and checked through effect calculation fixture."
+    "status_record": "Status payload store at record + 464*row + 15100 composed and checked through effect calculation fixture.",
+    "trait_bonus_record": "Bonus flag at word offset3782 composed and checked through effect calculation fixture."
   }
 }
