@@ -5,15 +5,12 @@
 #include <iostream>
 #include "battle_action_record_fixture.h"
 struct ItemGuest final : manager_release_context61::GuestServices {
-  unsigned selected = 0, prepared = 0, executed = 0, last = 0, random = 0;
+  unsigned random = 0;
   void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
     if (ActionStorageDirectFixture(e, m, s))
       return;
 
-    if (e == 0x82acd3b0 || e == 0x82b21340 || e == 0x82b11df0 ||
-        e == 0x82b1f798)
-      return;
     if (e == 0x82aa0740) {
       if (s.r[3] != 0x72000 || s.r[4] != 0 || s.r[5] != 1 || s.r[6] != 88 ||
           s.r[7] != 24)
@@ -31,17 +28,6 @@ struct ItemGuest final : manager_release_context61::GuestServices {
     }
     if (e == 0x8238e308) {
       s.r[3] = 0x80000;
-      return;
-    }
-    if (e == 0x82acde40) {
-      if (s.r[4] != 0x80000 || m.ReadU32(0x62000 + 88) != 11)
-        throw std::runtime_error("item configuration ABI");
-      selected = m.ReadU32(0x62000 + 92);
-      if (selected)
-        ++prepared;
-      ++executed;
-      auto mode = m.ReadU32(0x62000 + 60);
-      last = s.r[6] == 0 ? 0x82b00698 : mode == 2 ? 0x82afdcf0 : 0x82afdb90;
       return;
     }
     if (e == 0x82b1f1d0)
@@ -66,6 +52,7 @@ int main() {
     regions.push_back({0x8330b000, 0x1000});
     regions.push_back({0x821a8000, 0x1000});
     regions.push_back({0x83213000, 0x1000});
+    regions.push_back({0x831f3000, 0x21000});
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();
@@ -120,38 +107,41 @@ int main() {
     }
     m.WriteU32(vars + 12, 0);
     op();
-    check(!m.ReadU32(vars) && guest.selected == 3 &&
+    check(!m.ReadU32(vars) && m.ReadU32(actor + 92) == 3 &&
           m.ReadU32(state + 200 + 12) == 99);
     m.WriteU32(vars + 12, 1);
     op();
-    check(guest.selected == 3);
+    check(m.ReadU32(actor + 92) == 3);
     m.WriteU32(vars + 12, 2);
     op();
-    check(guest.selected == 2 && guest.random == 1);
+    check(m.ReadU32(actor + 92) == 2 && guest.random == 1);
     m.WriteU32(vars + 12, 3);
-    auto prepared = guest.prepared;
+    auto prepared = m.ReadU32(actor + 336);
     op();
-    check(guest.selected == 0 && guest.prepared == prepared &&
+    check(m.ReadU32(actor + 92) == 0 && m.ReadU32(actor + 336) == prepared &&
           !m.ReadU32(vars));
     m.WriteU32(vars + 8, 3);
     m.WriteU32(vars + 12, 77);
     m.WriteU32(actor + 60, 2);
     op();
-    check(guest.selected == 77 && guest.last == 0x82afdcf0);
+    check(m.ReadU32(actor + 92) == 77 &&
+          m.ReadU32(resource + 156) == 0xfffffffe);
     m.WriteU32(actor + 60, 3);
     op();
-    check(guest.last == 0x82afdb90);
+    check(m.ReadU32(resource + 156) != 0xfffffffe);
     m.WriteU32(actor + 96, 1);
-    auto executed = guest.executed;
+    auto executed = m.ReadU32(0x72000 + 4 * (128 * 15 + 110 + 3));
     op(true);
-    check(m.ReadU32(vars) == 1 && guest.executed == executed);
+    check(m.ReadU32(vars) == 1 &&
+          m.ReadU32(0x72000 + 4 * (128 * 15 + 110 + 3)) == executed);
     m.WriteU32(actor + 64, 0x01000000);
     op(true);
     check(!m.ReadU32(vars));
     m.WriteU32(vars + 4, 2);
-    executed = guest.executed;
+    executed = m.ReadU32(0x72000 + 4 * (128 * 15 + 110 + 3));
     op();
-    check(m.ReadU32(vars) == 1 && guest.executed == executed);
+    check(m.ReadU32(vars) == 1 &&
+          m.ReadU32(0x72000 + 4 * (128 * 15 + 110 + 3)) == executed);
     m.WriteU32(actor + 96, 0);
     m.WriteU32(vars + 4, 1);
     m.WriteU32(vars + 8, 0);
@@ -160,7 +150,7 @@ int main() {
     m.WriteU32(state + 8260 + 200 + 8, 1);
     m.WriteU32(vars + 12, 0);
     op();
-    check(!m.ReadU32(vars) && guest.selected == 2);
+    check(!m.ReadU32(vars) && m.ReadU32(actor + 92) == 2);
     std::cout << "battle_script_item_action61 smoke passed\n";
     return 0;
   } catch (const std::exception &e) {

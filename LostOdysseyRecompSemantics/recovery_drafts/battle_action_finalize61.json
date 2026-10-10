@@ -27,6 +27,7 @@
     "runtime_validated": false,
     "complete": false,
     "focused_smoke_paths": 1,
-    "case_scope": "One focused fixture checks initial copy versus preservation/reset, both merge orderings and nonzero remainder rule, alternate bypass, raw property-scaling word arithmetic, global mode 242, script ordering, actor overrides and final state bits. Runtime lookup, property helpers and mask indexing are composed. Top-level effect composition is pending; unusual scaling arithmetic is preserved literally, not interpreted as a gameplay formula. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+    "case_scope": "One focused fixture checks initial copy versus preservation/reset, both merge orderings and nonzero remainder rule, alternate bypass, raw property-scaling word arithmetic, global mode 242, script ordering, actor overrides and final state bits. Runtime lookup, property helpers and mask indexing are composed. Top-level effect composition is pending; unusual scaling arithmetic is preserved literally, not interpreted as a gameplay formula. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof.",
+    "effect_chain_composition": "Top-level action effects now compose all recovered parameter handlers, percentage adjustments, manager setter and final resource application. The effect fixture executes all 32 kinds plus the default route and checks real resource fields. Five record/execution/opcode caller fixtures pass after removal of parameter/finalizer mocks, using actual actor fields and random cursors for observations. Imported character conversion, heap virtuals and linked-resource removal still remain platform/service boundaries; native gameplay is unvalidated."
   }
 }

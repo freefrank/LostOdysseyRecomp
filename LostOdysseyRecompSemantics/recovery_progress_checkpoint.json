@@ -2223,7 +2223,8 @@
           "82B1F1D0"
         ],
         "focused_smoke_paths": 1,
-        "validation": "One compact fixture covers all32 command kinds plus the default route, final reset/variant/special flags, reset field updates, actor-ID marking and the full resource-state cycle. Five affected caller fixtures pass with real actor/resource completion changes. Record-array resize/initialization and concrete effect services remain boundaries; native gameplay is unvalidated. Logical/ABI only"
+        "validation": "One compact fixture covers all32 command kinds plus the default route, final reset/variant/special flags, reset field updates, actor-ID marking and the full resource-state cycle. Five affected caller fixtures pass with real actor/resource completion changes. Record-array resize/initialization and concrete effect services remain boundaries; native gameplay is unvalidated. Logical/ABI only",
+        "effect_chain_composition": "Top-level action effects now compose all recovered parameter handlers, percentage adjustments, manager setter and final resource application. The effect fixture executes all 32 kinds plus the default route and checks real resource fields. Five record/execution/opcode caller fixtures pass after removal of parameter/finalizer mocks, using actual actor fields and random cursors for observations. Imported character conversion, heap virtuals and linked-resource removal still remain platform/service boundaries; native gameplay is unvalidated."
       },
       {
         "unit": "battle_action_storage61",
@@ -2293,7 +2294,8 @@
           "82AA0740"
         ],
         "focused_smoke_paths": 1,
-        "validation": "A compact fixture checks actor-group resolution, direct group mapping and clamping, inclusive signed range selection, independent per-tag cursors, the 32768-entry wrap and invalid/equal endpoints. Synthetic random values are used. Resource lookup remains a service boundary and existing callers are not yet composed; no statistical or native runtime validation is claimed. Logical/ABI only"
+        "validation": "A compact fixture checks actor-group resolution, direct group mapping and clamping, inclusive signed range selection, independent per-tag cursors, the 32768-entry wrap and invalid/equal endpoints. Synthetic random values are used. Resource lookup remains a service boundary and existing callers are not yet composed; no statistical or native runtime validation is claimed. Logical/ABI only",
+        "effect_chain_composition": "Top-level action effects now compose all recovered parameter handlers, percentage adjustments, manager setter and final resource application. The effect fixture executes all 32 kinds plus the default route and checks real resource fields. Five record/execution/opcode caller fixtures pass after removal of parameter/finalizer mocks, using actual actor fields and random cursors for observations. Imported character conversion, heap virtuals and linked-resource removal still remain platform/service boundaries; native gameplay is unvalidated."
       },
       {
         "unit": "battle_action_readiness61",
@@ -2317,7 +2319,8 @@
         "focused_smoke_paths": 1,
         "validation": "A compact fixture checks normal and alternate variants, truncating numeric input, doubled/clamped and halved/clamped property paths, kind-4 versus kind-5 setup, real random cursor selection and manager field writes. Recovered readiness, random-range and snapshot setter helpers are composed. Top-level effect dispatcher composition is pending; native meaning and gameplay are unvalidated. Logical/ABI only",
         "complex_parameters_update": "Added 82B11DF0 parameter setup for skill, item and special action branches, composing shared random selection and manager state writes. The focused fixture covers table fields, 25-unit normalization, value-99 cases, alternate override, resource-group override and mutable adjustment callbacks. Three adjustment helpers remain explicit guest boundaries; top-level effect-dispatch composition and native gameplay are unvalidated.",
-        "adjustment_composition": "All three parameter adjustment helpers now compose battle_action_adjustments61; the parameter fixture uses actual property-dependent scaling rather than mutable callback mocks."
+        "adjustment_composition": "All three parameter adjustment helpers now compose battle_action_adjustments61; the parameter fixture uses actual property-dependent scaling rather than mutable callback mocks.",
+        "effect_chain_composition": "Top-level action effects now compose all recovered parameter handlers, percentage adjustments, manager setter and final resource application. The effect fixture executes all 32 kinds plus the default route and checks real resource fields. Five record/execution/opcode caller fixtures pass after removal of parameter/finalizer mocks, using actual actor fields and random cursors for observations. Imported character conversion, heap virtuals and linked-resource removal still remain platform/service boundaries; native gameplay is unvalidated."
       },
       {
         "unit": "battle_action_adjustments61",
@@ -2329,7 +2332,8 @@
           "82ACDDA0"
         ],
         "focused_smoke_paths": 1,
-        "validation": "One focused fixture checks property mask indexing, pair and live-resource scaling, global mode 242 bypass, state-bit transition, item/special rates, skill reductions/boosts, zero-rate behavior and linked-resource virtual/removal paths. Parameter setup composes these implementations; its fixture passes with real adjustment state instead of mocks. Linked-resource removal and virtual behavior remain boundaries; native gameplay and exception behavior are unvalidated. Logical/ABI only"
+        "validation": "One focused fixture checks property mask indexing, pair and live-resource scaling, global mode 242 bypass, state-bit transition, item/special rates, skill reductions/boosts, zero-rate behavior and linked-resource virtual/removal paths. Parameter setup composes these implementations; its fixture passes with real adjustment state instead of mocks. Linked-resource removal and virtual behavior remain boundaries; native gameplay and exception behavior are unvalidated. Logical/ABI only",
+        "effect_chain_composition": "Top-level action effects now compose all recovered parameter handlers, percentage adjustments, manager setter and final resource application. The effect fixture executes all 32 kinds plus the default route and checks real resource fields. Five record/execution/opcode caller fixtures pass after removal of parameter/finalizer mocks, using actual actor fields and random cursors for observations. Imported character conversion, heap virtuals and linked-resource removal still remain platform/service boundaries; native gameplay is unvalidated."
       },
       {
         "unit": "battle_action_finalize61",
@@ -2337,7 +2341,8 @@
           "82ACDE40"
         ],
         "focused_smoke_paths": 1,
-        "validation": "One focused fixture checks initial copy versus preservation/reset, both merge orderings and nonzero remainder rule, alternate bypass, raw property-scaling word arithmetic, global mode 242, script ordering, actor overrides and final state bits. Runtime lookup, property helpers and mask indexing are composed. Top-level effect composition is pending; unusual scaling arithmetic is preserved literally, not interpreted as a gameplay formula. Logical/ABI only"
+        "validation": "One focused fixture checks initial copy versus preservation/reset, both merge orderings and nonzero remainder rule, alternate bypass, raw property-scaling word arithmetic, global mode 242, script ordering, actor overrides and final state bits. Runtime lookup, property helpers and mask indexing are composed. Top-level effect composition is pending; unusual scaling arithmetic is preserved literally, not interpreted as a gameplay formula. Logical/ABI only",
+        "effect_chain_composition": "Top-level action effects now compose all recovered parameter handlers, percentage adjustments, manager setter and final resource application. The effect fixture executes all 32 kinds plus the default route and checks real resource fields. Five record/execution/opcode caller fixtures pass after removal of parameter/finalizer mocks, using actual actor fields and random cursors for observations. Imported character conversion, heap virtuals and linked-resource removal still remain platform/service boundaries; native gameplay is unvalidated."
       }
     ]
   },

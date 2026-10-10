@@ -16,10 +16,6 @@ struct MarshalGuest final : manager_release_context61::GuestServices {
         throw std::runtime_error("marshaling service ABI " + std::to_string(e));
     };
 
-    if (e == 0x82acd3b0 || e == 0x82b21340 || e == 0x82b11df0 ||
-        e == 0x82b1f798)
-      return;
-
     if (e == 0x82af68d8)
       return;
     if (e == 0x82380a18 || e == 0x82389b78) {
@@ -62,8 +58,6 @@ struct MarshalGuest final : manager_release_context61::GuestServices {
       s.r[3] = 0x80000;
       return;
     }
-    if (e == 0x82acde40)
-      return;
     if (e == 0x82b1f1d0) {
       kind = m.ReadU32(0x62000 + 88);
       detail = m.ReadU32(0x62000 + 92);
@@ -117,6 +111,7 @@ int main() {
     regions.push_back({0x832c9000, 0x4000});
     regions.push_back({0x8330b000, 0x1000});
     regions.push_back({0x821a8000, 0x1000});
+    regions.push_back({0x831f3000, 0x21000});
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();

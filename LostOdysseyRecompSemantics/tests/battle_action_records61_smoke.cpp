@@ -5,22 +5,12 @@
 #include "battle_action_record_fixture.h"
 #include <iostream>
 struct RecordGuest final : manager_release_context61::GuestServices {
-  unsigned configured = 0, marked = 0, advanced = 0;
+  unsigned marked = 0, advanced = 0;
   void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
     if (ActionStorageDirectFixture(e, m, s))
       return;
 
-    if (e == 0x82acd3b0 || e == 0x82b21340 || e == 0x82b11df0 ||
-        e == 0x82b1f798)
-      return;
-
-    if (e == 0x82acde40) {
-      if (s.r[4] != 0x80000)
-        throw std::runtime_error("record configuration resource");
-      ++configured;
-      return;
-    }
     if (e == 0x82af68d8) {
       if (s.r[3] != 0x832c9c54 || s.r[4] != 0x80000)
         throw std::runtime_error("record actor marker");
@@ -49,6 +39,9 @@ int main() {
     regions.push_back({0x83245000, 0x1000});
     regions.push_back({0x8330b000, 0x1000});
     regions.push_back({0x821a8000, 0x1000});
+    regions.push_back({0x83213000, 0x1000});
+    regions.push_back({0x83264000, 0x1000});
+    regions.push_back({0x831f3000, 0x21000});
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();
@@ -117,7 +110,8 @@ int main() {
           m.ReadU32(0x80000 + 60) == 1);
     m.WriteU32(0x80000 + 60, 2);
     run(0x82ab36c8, 0xffffffff, 0xffffffff, 0xffffffff, 0);
-    check(m.ReadU32(0x80000 + 60) == 2 && guest.configured == 2);
+    check(m.ReadU32(0x80000 + 60) == 2 &&
+          m.ReadU32(0x74000 + 4 * (128 * 15 + 110 + 3)) == 2);
     std::cout << "battle_action_records61 smoke passed\n";
     return 0;
   } catch (const std::exception &e) {

@@ -54,6 +54,7 @@
     "runtime_validated": false,
     "complete": false,
     "focused_smoke_paths": 1,
-    "case_scope": "One compact fixture covers all32 command kinds plus the default route, final reset/variant/special flags, reset field updates, actor-ID marking and the full resource-state cycle. Five affected caller fixtures pass with real actor/resource completion changes. Record-array resize/initialization and concrete effect services remain boundaries; native gameplay is unvalidated. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+    "case_scope": "One compact fixture covers all32 command kinds plus the default route, final reset/variant/special flags, reset field updates, actor-ID marking and the full resource-state cycle. Five affected caller fixtures pass with real actor/resource completion changes. Record-array resize/initialization and concrete effect services remain boundaries; native gameplay is unvalidated. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof.",
+    "effect_chain_composition": "Top-level action effects now compose all recovered parameter handlers, percentage adjustments, manager setter and final resource application. The effect fixture executes all 32 kinds plus the default route and checks real resource fields. Five record/execution/opcode caller fixtures pass after removal of parameter/finalizer mocks, using actual actor fields and random cursors for observations. Imported character conversion, heap virtuals and linked-resource removal still remain platform/service boundaries; native gameplay is unvalidated."
   }
 }

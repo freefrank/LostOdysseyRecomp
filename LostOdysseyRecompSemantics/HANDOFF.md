@@ -1,3 +1,7 @@
+## Root direct continuation: compose final action-effect chain (2026-10-10 UTC)
+
+Top-level action effects now compose all recovered parameter handlers, percentage adjustments, manager setter and final resource application. The effect fixture executes all 32 kinds plus the default route and checks real resource fields. Five record/execution/opcode caller fixtures pass after removal of parameter/finalizer mocks, using actual actor fields and random cursors for observations. Imported character conversion, heap virtuals and linked-resource removal still remain platform/service boundaries; native gameplay is unvalidated.
+
 ## Root direct continuation: final action parameters (2026-10-10 UTC)
 
 Recovered final action parameter application, including merging, property scaling, global/script overrides and final resource flags. The focused fixture preserves the source explicit 600/15000 arithmetic without assigning gameplay meaning. Top-level effect-chain composition is next; native gameplay and bitwise equivalence remain unvalidated.

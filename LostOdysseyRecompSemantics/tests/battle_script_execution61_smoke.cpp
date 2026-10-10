@@ -5,15 +5,12 @@
 #include "battle_action_record_fixture.h"
 #include <iostream>
 struct ExecutionGuest final : manager_release_context61::GuestServices {
-  unsigned configured = 0, finalized = 0;
+  unsigned finalized = 0;
   void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
     if (ActionStorageDirectFixture(e, m, s))
       return;
 
-    if (e == 0x82acd3b0 || e == 0x82b21340 || e == 0x82b11df0 ||
-        e == 0x82b1f798)
-      return;
     if (e == 0x82380a18 || e == 0x82389b78) {
       s.r[3] = 0x70000;
       return;
@@ -27,12 +24,6 @@ struct ExecutionGuest final : manager_release_context61::GuestServices {
       return;
     }
 
-    if (e == 0x82acde40) {
-      if (s.r[4] != 0x80000)
-        throw std::runtime_error("execution configuration resource");
-      ++configured;
-      return;
-    }
     if (e == 0x82af68d8)
       return;
     if (e == 0x82b1f1d0) {
@@ -58,6 +49,8 @@ int main() {
     regions.push_back({0x832c9000, 0x4000});
     regions.push_back({0x8330b000, 0x1000});
     regions.push_back({0x821a8000, 0x1000});
+    regions.push_back({0x83264000, 0x1000});
+    regions.push_back({0x831f3000, 0x21000});
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();
@@ -118,9 +111,11 @@ int main() {
     run(0x82b00698, 7, 8);
     check(m.ReadU32(record) == 0 && m.ReadU32(record + 14884) == 24 &&
           m.ReadU32(record + 16) == 1);
-    auto busy = m.ReadU32(actor + 96), configured = guest.configured;
+    auto busy = m.ReadU32(actor + 96),
+         configured = m.ReadU32(0x74000 + 4 * (128 * 15 + 110 + 3));
     run(0x82afdcf0, 7, 8);
-    check(guest.configured == configured && m.ReadU32(actor + 96) == busy);
+    check(m.ReadU32(0x74000 + 4 * (128 * 15 + 110 + 3)) == configured &&
+          m.ReadU32(actor + 96) == busy);
     check(m.ReadU32(resource + 14668) == 0x200000 &&
           m.ReadU32(resource + 14672) == 1 &&
           m.ReadU32(0x200000 + 14884) == 24 &&

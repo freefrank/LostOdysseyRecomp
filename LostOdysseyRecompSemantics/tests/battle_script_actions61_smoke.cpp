@@ -5,15 +5,10 @@
 #include <iostream>
 #include "battle_action_record_fixture.h"
 struct ActionsGuest final : manager_release_context61::GuestServices {
-  unsigned mode = 4, predicate = 0, invoked = 0, reset = 0, effects = 0,
-           ready = 0;
+  unsigned mode = 4, predicate = 0, reset = 0, effects = 0, ready = 0;
   void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
     if (ActionStorageDirectFixture(e, m, s))
-      return;
-
-    if (e == 0x82acd3b0 || e == 0x82b21340 || e == 0x82b11df0 ||
-        e == 0x82b1f798)
       return;
 
     if (e == 0x82af68d8)
@@ -40,13 +35,6 @@ struct ActionsGuest final : manager_release_context61::GuestServices {
     }
     if (e == 0x82acd530) {
       ++reset;
-      return;
-    }
-    if (e == 0x82acde40) {
-      if (s.r[4] != 0x80000 || m.ReadU32(0x62000 + 88) != 0 ||
-          m.ReadU32(0x62000 + 92) != 9)
-        throw std::runtime_error("action configured arguments");
-      ++invoked;
       return;
     }
     if (e == 0x82b1f1d0)
@@ -83,6 +71,8 @@ int main() {
     regions.push_back({0x83213000, 0x1000});
     regions.push_back({0x8330b000, 0x1000});
     regions.push_back({0x821a8000, 0x1000});
+    regions.push_back({0x83264000, 0x1000});
+    regions.push_back({0x831f3000, 0x21000});
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();
@@ -158,7 +148,7 @@ int main() {
       m.WriteU32(actor + 96, 0);
       op(0x82b00888);
     }
-    if (guest.invoked != 3 || m.ReadU8(0x66000) != 24 ||
+    if (!(m.ReadU32(resource + 100) & 0x80000000u) || m.ReadU8(0x66000) != 24 ||
         m.ReadU32(actor + 84) != 1)
       throw std::runtime_error("action dispatch selection");
     guest.predicate = 1;

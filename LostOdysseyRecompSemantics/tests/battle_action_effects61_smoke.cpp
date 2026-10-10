@@ -5,36 +5,15 @@
 #include "battle_action_record_fixture.h"
 #include <iostream>
 struct EffectGuest final : manager_release_context61::GuestServices {
-  unsigned kind = 0, route = 0, finished = 0, reset = 0, special = 0;
   void Need(bool b) {
     if (!b)
-      throw std::runtime_error("action effect ABI");
+      throw std::runtime_error("action effect state");
   }
   void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
     if (ActionStorageDirectFixture(e, m, s))
       return;
-
-    if (e == 0x82acde40) {
-      Need(s.r[3] == 0x70000 && s.r[4] == 0x80000 && s.r[6] == 1);
-      reset = unsigned(s.r[5]);
-      special = unsigned(s.r[7]);
-      ++finished;
-      return;
-    }
-    route = e;
-    if (e == 0x82acd3b0) {
-      Need(s.r[3] == 0x70000 && s.r[4] == 0 &&
-           s.r[5] == (kind == 14                 ? 1
-                      : kind >= 25 && kind <= 29 ? 55
-                                                 : 24) &&
-           unsigned(s.r[6]) == (kind >= 25 && kind <= 29 ? 0xffffffffu : 0));
-      return;
-    }
-    Need((e == 0x82b21340 && s.r[3] == 0x71000) ||
-         (e == 0x82b11df0 && s.r[3] == 0x72000) ||
-         (e == 0x82b1f798 && s.r[3] == 0x73000));
-    Need(s.r[4] == 0x80000 && s.r[5] == kind && s.r[6] == 9 && s.r[7] == 1);
+    throw std::runtime_error("unexpected effect direct");
   }
   void CallIndirect(GuestAddress e, GuestMemory &m,
                     manager_release_context61::Registers &s) override {
@@ -52,6 +31,9 @@ int main() {
     regions.push_back({0x832c9000, 0x4000});
     regions.push_back({0x8330b000, 0x1000});
     regions.push_back({0x821a8000, 0x1000});
+    regions.push_back({0x83213000, 0x1000});
+    regions.push_back({0x83264000, 0x1000});
+    regions.push_back({0x831f3000, 0x21000});
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();
@@ -63,29 +45,45 @@ int main() {
     m.WriteU32(0x832ca0cc, 0x71000);
     m.WriteU32(0x832ca0d8, 0x72000);
     m.WriteU32(0x832cb78c, 0x73000);
-    constexpr unsigned routes[]{
-        0x82acd3b0, 0x82b21340, 0x82b11df0, 0x82b11df0, 0x82b1f798, 0x82b1f798,
-        0x82b11df0, 0x82b11df0, 0x82b11df0, 0x82b11df0, 0x82b11df0, 0x82b11df0,
-        0x82b21340, 0x82acd3b0, 0x82acd3b0, 0x82acd3b0, 0x82b21340, 0,
-        0x82acd3b0, 0x82acd3b0, 0,          0,          0x82b21340, 0,
-        0,          0x82acd3b0, 0x82acd3b0, 0x82acd3b0, 0x82acd3b0, 0x82acd3b0,
-        0x82b21340, 0x82b21340, 0};
+    m.WriteU32(0x80000 + 64, 24);
     for (unsigned kind = 0; kind < 33; ++kind) {
-      guest.kind = kind;
-      guest.route = 0;
+      m.WriteU32(0x70004, 6);
+      m.WriteU32(0x70008, 7);
+      m.WriteU32(0x7000c, 8);
+      m.WriteU32(0x80000 + 88, 0);
+      m.WriteU32(0x80000 + 92, 0);
+      m.WriteU32(0x80000 + 96, 0);
       s.r[3] = 0x80000;
       s.r[4] = kind;
       s.r[5] = 9;
       s.r[6] = 1;
       guest.Need(
           battle_action_effects61::Apply(0x82ab0d50, m, {guest, native}, s));
-      guest.Need(
-          guest.route == routes[kind] &&
-          guest.reset == unsigned(kind == 0 || kind == 13 || kind == 14 ||
-                                  kind == 15 || kind == 18 || kind == 19) &&
-          guest.special == unsigned(kind == 2 || (kind >= 6 && kind <= 9)) &&
-          s.r[1] == initial.r[1] && s.r[27] == initial.r[27] &&
-          s.r[31] == initial.r[31]);
+      unsigned group = 6, value = 7, extra = 8;
+      if (kind == 0 || kind == 13 || kind == 15 || kind == 18 || kind == 19) {
+        group = 0;
+        value = 24;
+        extra = 0;
+      } else if (kind == 14) {
+        group = 0;
+        value = 1;
+        extra = 0;
+      } else if (kind == 2 || kind == 3 || (kind >= 6 && kind <= 11)) {
+        group = 2;
+        value = 5;
+        extra = 0xffffffff;
+      } else if (kind == 1 || kind == 4 || kind == 5 || kind == 12 ||
+                 kind == 16 || kind == 22 || (kind >= 25 && kind <= 31)) {
+        group = 0;
+        value = 55;
+        extra = 0xffffffff;
+      }
+      guest.Need(m.ReadU32(0x80000 + 88) == group &&
+                 m.ReadU32(0x80000 + 92) == value &&
+                 m.ReadU32(0x80000 + 96) == extra &&
+                 (m.ReadU32(0x80000 + 100) & 0xc0000000u) == 0x80000000u &&
+                 s.r[1] == initial.r[1] && s.r[27] == initial.r[27] &&
+                 s.r[31] == initial.r[31]);
     }
     m.WriteU32(0x80000 + 124, 0x20009);
     m.WriteU32(0x80000 + 76316, 99);
