@@ -373,3 +373,7 @@ Recovered additional-effect application and orchestration after actual damage: s
 ## Trait probability
 
 Recovered trait probability scaling by battle mode and per-slot trait chance dispatch. Category3 details1/11,2/12,3/13 select thresholds30/60/100 and random tags58/59/60. Focused checks cover signed quarter scaling, full mode success and zero mode rejection; composed into post-hit follow-up orchestration.
+
+## Theft and evaluator dispatch coverage
+
+Recovered the theft evaluator and descriptor dispatch, source/target report labels, theft chance and inventory quantity removal. Focused checks cover relation rejection, missing loot, failed chance, actual inventory grant, already-looted state, equipment theft, inventory depletion and empty inventory, alongside stack/register restoration. The 97 statically recovered descriptor slots now have implementations for all 33 distinct callback targets; this is a dispatch-coverage milestone, not whole-game or runtime acceptance. Platform lookup, UI string assignment and equipment refresh remain external services.

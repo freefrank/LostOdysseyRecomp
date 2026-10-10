@@ -54,6 +54,38 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     s.r[3] = result;
     return true;
   }
+  if (e == 0x82b08f88) {
+    auto old = Address(s.r[1]);
+    m.WriteU32(old - 8, Address(s.lr));
+    for (unsigned i = 28; i < 32; ++i)
+      recovery_abi::WriteU64(m, old - 16 - 8 * (31 - i), s.r[i]);
+    s.r[1] -= 128;
+    auto sp = Address(s.r[1]);
+    m.WriteU32(sp, old);
+    m.WriteU32(sp + 84, 0x8204a1d8);
+    FloatMode(d, s);
+    auto threshold = Truncate(std::bit_cast<float>(m.ReadU32(owner + 88)));
+    s.fpr_bits[0] = std::bit_cast<std::uint64_t>(std::int64_t(threshold));
+    m.WriteU32(sp + 80, unsigned(threshold));
+    s.r[3] = m.ReadU32(owner + 4);
+    s.r[4] = 110;
+    (void)battle_action_readiness61::Apply(0x8238e368, m, d, s);
+    auto chance = m.ReadU32(sp + 80);
+    if ((Address(s.r[3]) & 255) == 1)
+      chance *= 2;
+    s.r[3] = m.ReadU32(0x83264558);
+    s.r[4] = chance;
+    s.r[5] = 4;
+    s.r[6] = m.ReadU32(m.ReadU32(owner + 4) + 64);
+    (void)battle_random_range61::Apply(0x82aa0838, m, d, s);
+    s.r[3] = (Address(s.r[3]) & 255) == 1;
+    m.WriteU32(sp + 84, 0x8204a1d8);
+    s.r[1] += 128;
+    for (unsigned i = 28; i < 32; ++i)
+      s.r[i] = recovery_abi::ReadU64(m, old - 16 - 8 * (31 - i));
+    s.lr = m.ReadU32(old - 8);
+    return true;
+  }
   if (e != 0x82b08d98 && e != 0x82b08e28 && e != 0x82b08ea8)
     return false;
   unsigned frame = e == 0x82b08d98   ? 128

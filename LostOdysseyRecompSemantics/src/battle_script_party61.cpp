@@ -66,6 +66,39 @@ struct Party {
     d.guest.CallIndirect(Address(s.ctr) & ~3u, m, s);
   }
   void Run(unsigned entry) {
+    if (entry == 0x82a9e6b8) {
+      auto item = Address(s.r[4]), count = Address(s.r[5]),
+           play = W(owner + 28) + 76;
+      d.guest.CallDirect(0x82380a18, m, s);
+      d.guest.CallDirect(0x82ab0110, m, s);
+      auto inventory = W(W(Address(s.r[3])) + 4) + 72;
+      recovery_abi::WriteU64(m, sp + 80,
+                             std::uint64_t(std::int64_t(std::int32_t(count))));
+      if (s.cached_fp_control & 0x8040) {
+        s.cached_fp_control &= ~0x8040u;
+        d.fp.SetHostFpControl(s.cached_fp_control);
+      }
+      auto quantity = float(std::int32_t(count)),
+           zero = std::bit_cast<float>(W(0x82000e50));
+      s.fpr_bits[0] = std::bit_cast<std::uint64_t>(double(zero));
+      s.fpr_bits[12] = std::bit_cast<std::uint64_t>(double(quantity));
+      auto subtract = [&](unsigned p, unsigned list) {
+        auto value = float(std::bit_cast<float>(W(p)) - quantity);
+        s.fpr_bits[13] = std::bit_cast<std::uint64_t>(double(value));
+        m.WriteU32(p, std::bit_cast<unsigned>(value));
+        if (!(value > zero)) {
+          m.WriteU32(p, std::bit_cast<unsigned>(zero));
+          for (unsigned i = 0; i < 1024; ++i)
+            if (W(list + 4 * i) == item) {
+              m.WriteU32(list + 4 * i, 0);
+              break;
+            }
+        }
+      };
+      subtract(play + 4 * (item + 39359), play + 4 * 40383);
+      subtract(inventory + 4 * item, inventory + 4096);
+      return;
+    }
     if (entry == 0x82a9e5e0) {
       Inventory(Address(s.r[4]), Address(s.r[5]));
       return;
@@ -149,18 +182,19 @@ struct Party {
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   if (e == 0x82a9da20 || e == 0x822d3068)
     return true;
-  if (e != 0x82a9e5e0 && e != 0x82a9ea80 && e != 0x82a9eae8 &&
-      e != 0x82a9d4e0 && e != 0x82a9d3c8 && e != 0x82a9d450 && e != 0x82a9d1b8)
+  if (e != 0x82a9e6b8 && e != 0x82a9e5e0 && e != 0x82a9ea80 &&
+      e != 0x82a9eae8 && e != 0x82a9d4e0 && e != 0x82a9d3c8 &&
+      e != 0x82a9d450 && e != 0x82a9d1b8)
     return false;
   auto owner = Address(s.r[3]), old = Address(s.r[1]);
   unsigned frame =
       (e == 0x82a9ea80 || e == 0x82a9d4e0 || e == 0x82a9d1b8) ? 96 : 128;
-  unsigned first = e == 0x82a9e5e0   ? 29
-                   : e == 0x82a9eae8 ? 30
-                   : e == 0x82a9d3c8 ? 28
-                   : e == 0x82a9d450 ? 27
-                   : e == 0x82a9d4e0 ? 32
-                                     : 31;
+  unsigned first = (e == 0x82a9e5e0 || e == 0x82a9e6b8) ? 29
+                   : e == 0x82a9eae8                    ? 30
+                   : e == 0x82a9d3c8                    ? 28
+                   : e == 0x82a9d450                    ? 27
+                   : e == 0x82a9d4e0                    ? 32
+                                                        : 31;
   m.WriteU32(old - 8, Address(s.lr));
   for (unsigned i = first; i < 32; ++i)
     recovery_abi::WriteU64(m, old - 16 - 8 * (31 - i), s.r[i]);

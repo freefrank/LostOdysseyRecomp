@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 222,
-    "distinct_entries": 923,
+    "unit_count": 223,
+    "distinct_entries": 929,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -1845,10 +1845,12 @@
           "82A9D450",
           "82A9D1B8",
           "82A9DA20",
-          "822D3068"
+          "822D3068",
+          "82A9E6B8"
         ],
         "focused_smoke_paths": 1,
-        "validation": "A focused fixture checks the original multiple-vacancy party insertion, removal compaction, five-slot read/write snapshots, party bit branches, inventory quantity cap and notification, scratch index16 behavior, no-op cursor preservation and stack/r31 restoration. Inventory lookup and play-data notification remain guest services. Reserved aliases intentionally do not advance the cursor; invalid bytecode and scratch bounds are not hardened. Logical/ABI only"
+        "validation": "A focused fixture checks the original multiple-vacancy party insertion, removal compaction, five-slot read/write snapshots, party bit branches, inventory quantity cap and notification, scratch index16 behavior, no-op cursor preservation and stack/r31 restoration. Inventory lookup and play-data notification remain guest services. Reserved aliases intentionally do not advance the cursor; invalid bytecode and scratch bounds are not hardened. Logical/ABI only",
+        "theft_pipeline": "Recovered the theft evaluator and descriptor dispatch, source/target report labels, theft chance and inventory quantity removal. Focused checks cover relation rejection, missing loot, failed chance, actual inventory grant, already-looted state, equipment theft, inventory depletion and empty inventory, alongside stack/register restoration. The 97 statically recovered descriptor slots now have implementations for all 33 distinct callback targets; this is a dispatch-coverage milestone, not whole-game or runtime acceptance. Platform lookup, UI string assignment and equipment refresh remain external services."
       },
       {
         "unit": "battle_script_text61",
@@ -2491,10 +2493,12 @@
           "82AC9858",
           "82B08D98",
           "82B08E28",
-          "82B08EA8"
+          "82B08EA8",
+          "82B08F88"
         ],
         "focused_smoke_paths": 1,
-        "validation": "Focused fixture checks actual numeric property lookup, bonus/subtraction path, generic auxiliary payload, five-times target penalty, random thresholds, explicit override and property-based rejection. Property and random helpers are composed. Logical/ABI recovery only; bitwise floating-point and native gameplay equivalence are not established. Logical/ABI only"
+        "validation": "Focused fixture checks actual numeric property lookup, bonus/subtraction path, generic auxiliary payload, five-times target penalty, random thresholds, explicit override and property-based rejection. Property and random helpers are composed. Logical/ABI recovery only; bitwise floating-point and native gameplay equivalence are not established. Logical/ABI only",
+        "theft_pipeline": "Recovered the theft evaluator and descriptor dispatch, source/target report labels, theft chance and inventory quantity removal. Focused checks cover relation rejection, missing loot, failed chance, actual inventory grant, already-looted state, equipment theft, inventory depletion and empty inventory, alongside stack/register restoration. The 97 statically recovered descriptor slots now have implementations for all 33 distinct callback targets; this is a dispatch-coverage milestone, not whole-game or runtime acceptance. Platform lookup, UI string assignment and equipment refresh remain external services."
       },
       {
         "unit": "battle_effect_calculation61",
@@ -2570,8 +2574,25 @@
         ],
         "focused_smoke_paths": 1,
         "validation": "Focused fixtures cover added status, existing-status skip, HP/MP return, same-side sharing, random eligible ally transfer, forced percentage, blocked response, actor pending-effect consumption, trait-driven healing, reward chance computation and label routing. Main execution now calls this implementation instead of mocking additional effects. Positive item grant and UI copy remain unvalidated service-composed paths; no native gameplay acceptance is claimed. Logical/ABI only"
+      },
+      {
+        "unit": "battle_evaluation_theft61",
+        "entries": [
+          "82B13380",
+          "82AA11F0",
+          "82AA1268",
+          "82A9B288"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "Recovered the theft evaluator and descriptor dispatch, source/target report labels, theft chance and inventory quantity removal. Focused checks cover relation rejection, missing loot, failed chance, actual inventory grant, already-looted state, equipment theft, inventory depletion and empty inventory, alongside stack/register restoration. The 97 statically recovered descriptor slots now have implementations for all 33 distinct callback targets; this is a dispatch-coverage milestone, not whole-game or runtime acceptance. Platform lookup, UI string assignment and equipment refresh remain external services."
       }
-    ]
+    ],
+    "evaluator_descriptor_coverage": {
+      "statically_resolved_slots": 97,
+      "distinct_targets": 33,
+      "implemented_targets": 33,
+      "scope": "Constructor 82AD1378 static callback targets only; descriptor90 remains unresolved. Not whole-game completeness or runtime verification."
+    }
   },
   "current_workspace_pending_unit": {
     "unit": "geometry_paired_range61",
