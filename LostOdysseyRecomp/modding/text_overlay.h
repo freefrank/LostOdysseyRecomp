@@ -30,4 +30,9 @@ std::vector<Range> RangesFor(const std::filesystem::path &file);
 // Whether a language pack has a translation for this key of this member
 // (for host text that replaces game text, such as the Quit to Desktop row).
 bool Translates(const std::string &memberPath, const std::string &key);
+
+// The selected language pack (mod_api.h LanguagePack id; empty for none). Its
+// files replace other mods' translations of the same files. Set before the
+// game opens its archives.
+void SelectLanguagePack(const std::string &id);
 }

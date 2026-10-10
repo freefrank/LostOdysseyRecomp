@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <span>
 #include <string>
+#include <vector>
 #include "gpu/aspect_ratio.h"
 #include "gpu/backend_selection.h"
 #include "gpu/upscaling_plan.h"
@@ -34,6 +35,36 @@ inline uint32_t GameLanguageIndex(uint32_t id)
             return i;
     return 0;
 }
+// Installed language packs (mods/<folder>/language.ini), registered at startup:
+// id (lower case), name (UTF-8) and the language ID the game runs as.
+struct LanguagePack
+{
+    std::string id, name;
+    uint32_t base = 1;
+};
+inline std::vector<LanguagePack> LanguagePacks;
+// The Game language list: this edition's languages, then each pack whose base
+// language this edition has. pack is empty for an edition language.
+struct GameLanguageChoice
+{
+    uint32_t id = 1;
+    std::string pack, name;
+};
+inline std::vector<GameLanguageChoice> GameLanguageChoices()
+{
+    std::vector<GameLanguageChoice> result;
+    for (const auto id : GameLanguageIds) result.push_back({id, {}, {}});
+    for (const auto &pack : LanguagePacks)
+        if (GameLanguageIds[GameLanguageIndex(pack.base)] == pack.base) result.push_back({pack.base, pack.id, pack.name});
+    return result;
+}
+inline uint32_t GameLanguageChoiceIndex(const std::vector<GameLanguageChoice> &choices, uint32_t id, const std::string &pack)
+{
+    for (uint32_t i = 0; i < choices.size(); ++i)
+        if (choices[i].id == id && choices[i].pack == pack)
+            return i;
+    return GameLanguageIndex(id);
+}
 // Native pixels: the drawable's backing size. On macOS "follow output" uses the
 // window's logical size instead (Retina renders 4x the pixels); elsewhere both match.
 // Scaling filter: MetalFX spatial upscaling before presentation (macOS only).
@@ -52,6 +83,9 @@ struct Config
     uint32_t uiLanguage = 0;
     uint32_t debugLanguage = 0; // Independent tool UI: 0 English, 1 Simplified Chinese.
     uint32_t gameLanguage = 1;
+    // Language pack id shown in place of gameLanguage's text (the game still
+    // runs as gameLanguage, the pack's base); empty for none. Applied on the next start.
+    std::string gameLanguagePack;
     uint32_t width = 1280, height = 720;
     // Shape of the game image; a fixed one is centred in the window with black
     // bars. Applied live. Android always uses Auto.
@@ -149,4 +183,7 @@ bool SaveAudioOutput(uint32_t output);
 // saves only the display choice, merged with the persisted settings.
 bool SaveDisplayChoice(const std::string &name, uint32_t index);
 uint32_t GameLanguage();
+// The selected language pack's id, if it is installed and its base is
+// GameLanguage(); empty otherwise. Fixed at the first call, after LanguagePacks.
+std::string GameLanguagePack();
 } // namespace settings

@@ -86,6 +86,7 @@ struct Folder
 
 std::mutex gMutex;
 bool gListed = false;
+std::string gLanguagePack;
 std::map<std::string, fs::path> gTexts;                     // member path -> translation file
 std::map<fs::path, std::optional<text::Replacements>> gFiles; // parsed translations
 std::map<fs::path, Folder> gFolders;
@@ -229,7 +230,17 @@ void List()
     if (gListed) return;
     gListed = true;
     for (auto &asset : ListTexts()) gTexts.emplace(asset.id.key, std::move(asset.path));
-    if (!gTexts.empty()) LOG_NOTICE("[mods] text: {} translation files", gTexts.size());
+    size_t packFiles = 0;
+    for (const auto &pack : LanguagePacks())
+        if (pack.id == gLanguagePack)
+            for (auto &asset : ListTexts(pack))
+            {
+                gTexts.insert_or_assign(asset.id.key, std::move(asset.path));
+                ++packFiles;
+            }
+    if (!gTexts.empty())
+        LOG_NOTICE("[mods] text: {} translation files ({} from language pack {})", gTexts.size(), packFiles,
+                   gLanguagePack.empty() ? "none" : gLanguagePack);
 }
 } // namespace
 
@@ -256,5 +267,11 @@ bool Translates(const std::string &memberPath, const std::string &key)
     if (text == gTexts.end()) return false;
     const auto *translation = Translation(text->second);
     return translation && translation->count(key);
+}
+
+void SelectLanguagePack(const std::string &id)
+{
+    std::lock_guard lock(gMutex);
+    gLanguagePack = id;
 }
 }

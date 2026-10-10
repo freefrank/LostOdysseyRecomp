@@ -38,6 +38,8 @@
 #include "install/host.h"
 #include "modding/mod_api.h"
 #include "modding/asset_export.h"
+#include "modding/text_overlay.h"
+#include "settings/language_selection.h"
 
 #ifdef _WIN32
 #include <timeapi.h>
@@ -383,6 +385,17 @@ int main(int argc, char* argv[])
         }
         for (const auto& d : modding::Diagnostics())
             LOG_WARNING("mods: {}:{}: {}", FileSystem::PathUtf8(d.manifest), d.line, d.message);
+        for (const auto& pack : modding::LanguagePacks())
+        {
+            const auto base = settings::language::IdFromCode(pack.base);
+            if (!base)
+            {
+                LOG_WARNING("mods: language pack {} skipped: base {} is not a game language code", pack.id, pack.base);
+                continue;
+            }
+            settings::LanguagePacks.push_back({pack.id, pack.name, base});
+            LOG_NOTICE("mods: language pack {} ({}, base {}) in {}", pack.id, pack.name, pack.base, FileSystem::PathUtf8(pack.folder));
+        }
     }
 
 #if defined(_WIN32) || defined(__linux__) || defined(__APPLE__)
@@ -490,6 +503,13 @@ int main(int argc, char* argv[])
                    int(c.graphicsBackend), c.width, c.height, int(c.windowMode), c.internalResolution, c.antialiasing,
                    int(c.upscaler), int(c.dlssQuality), c.dlssModel ? 'L' : 'M', int(c.fsrQuality), c.frameRate, int(c.frameGenerationProvider),
                    c.frameGenerationMultiplier, c.hdr, c.ambientOcclusion, c.shadowResolution, c.debugLog);
+        const auto pack = settings::GameLanguagePack();
+        modding::text_overlay::SelectLanguagePack(pack);
+        if (!pack.empty())
+            LOG_NOTICE("settings: game language {} with language pack {}", settings::GameLanguage(), pack);
+        else if (!c.gameLanguagePack.empty())
+            LOG_WARNING("settings: language pack {} is not installed for game language {}; using the game's text",
+                        c.gameLanguagePack, c.gameLanguage);
     }
     if (g_memory.base == nullptr)
     {

@@ -22,6 +22,7 @@ struct Snapshot {
     std::filesystem::path root, defaultRoot;
     std::map<std::string, Entry> entries;
     std::vector<std::string> modIds;
+    std::vector<LanguagePack> languagePacks;
     std::vector<Diagnostic> diagnostics;
     ResolutionMode mode = ResolutionMode::Combined;
     bool enabled = false;
@@ -198,6 +199,53 @@ void LoadManifest(Snapshot& snapshot, const std::filesystem::path& manifest, std
             snapshot.entries.insert_or_assign(lookup, std::move(entry));
     }
 }
+void LoadLanguagePack(Snapshot& snapshot, const std::filesystem::path& file, std::set<std::string>& ids) {
+    if (!ContainedFile(snapshot.root, file)) return;
+    std::error_code ec;
+    const auto size = std::filesystem::file_size(file, ec);
+    if (ec || size > 4096) { Diagnose(snapshot, file, 0, "language.ini exceeds 4 KiB or cannot be read"); return; }
+    std::ifstream input(file, std::ios::binary);
+    std::map<std::string, std::string, std::less<>> values;
+    std::string line;
+    size_t lineNo = 0;
+    while (std::getline(input, line)) {
+        ++lineNo;
+        if (lineNo == 1 && line.compare(0, 3, "\xef\xbb\xbf") == 0) line.erase(0, 3);
+        const auto text = Trim(line);
+        if (text.empty() || text.front() == '#' || text.front() == ';') continue;
+        const auto equal = text.find('=');
+        const auto key = equal == text.npos ? std::string_view{} : Trim(text.substr(0, equal));
+        if ((key != "id" && key != "name" && key != "base") ||
+            !values.emplace(std::string(key), std::string(Trim(text.substr(equal + 1)))).second) {
+            Diagnose(snapshot, file, lineNo, "expected one each of id=, name= and base="); return;
+        }
+    }
+    LanguagePack pack{values["id"], values["name"], values["base"], file.parent_path()};
+    for (auto* value : {&pack.id, &pack.base})
+        for (char& c : *value) if (c >= 'A' && c <= 'Z') c += 'a' - 'A';
+    const bool base = pack.base.size() == 3 &&
+        std::all_of(pack.base.begin(), pack.base.end(), [](char c) { return c >= 'a' && c <= 'z'; });
+    if (!ModIdValid(pack.id) || !SafeText(pack.name) || pack.name.size() > 64 || !base) {
+        Diagnose(snapshot, file, 0, "language.ini needs an id (letters, digits, - _ .), a name of up to 64 bytes and a base such as int");
+        return;
+    }
+    if (!ids.insert(pack.id).second) { Diagnose(snapshot, file, 0, "language pack id already used: " + pack.id); return; }
+    snapshot.languagePacks.push_back(std::move(pack));
+}
+// Translation JSON under a text folder; the member path is the relative path without .json.
+void ListTextFolder(const std::filesystem::path& folder, const std::string& modId, std::map<std::string, ResolvedAsset>& found) {
+    std::error_code ec;
+    std::filesystem::recursive_directory_iterator it(folder, ec), end;
+    for (; !ec && it != end; it.increment(ec)) {
+        std::error_code entryError;
+        if (!it->is_regular_file(entryError)) continue;
+        auto relative = Utf8(it->path().lexically_relative(folder));
+        if (relative.size() <= 5 || relative.compare(relative.size() - 5, 5, ".json") != 0) continue;
+        const auto key = CanonicalTextKey(std::string_view(relative).substr(0, relative.size() - 5));
+        if (!key.empty() && ContainedFile(folder, it->path()))
+            found.emplace(key, ResolvedAsset{{AssetKind::Text, key}, it->path(), modId, 0});
+    }
+}
 }
 
 std::string MakeManifestKey(std::string_view package, uint32_t exportIndex, std::string_view object) {
@@ -250,7 +298,7 @@ void Initialize(const std::filesystem::path& requestedRoot) {
             snapshot->enabled = false;
         if (snapshot->enabled && snapshot->mode != ResolutionMode::Standalone)
             snapshot->textureOverlay = std::filesystem::is_directory(snapshot->root / "overlay" / "textures", ec);
-        if (snapshot->enabled && snapshot->mode != ResolutionMode::Overlay && std::filesystem::is_directory(snapshot->root, ec)) {
+        if (snapshot->enabled && std::filesystem::is_directory(snapshot->root, ec)) {
             std::vector<std::filesystem::path> dirs;
             std::filesystem::directory_iterator it(snapshot->root, ec), end;
             for (; !ec && it != end; it.increment(ec)) {
@@ -260,10 +308,16 @@ void Initialize(const std::filesystem::path& requestedRoot) {
             }
             if (ec) Diagnose(*snapshot, snapshot->root, 0, "directory scan incomplete: " + ec.message());
             std::sort(dirs.begin(), dirs.end(), [](const auto& a, const auto& b) { return Utf8(a.filename()) < Utf8(b.filename()); });
-            std::set<std::string> ids;
+            std::set<std::string> ids, languages;
             for (const auto& dir : dirs) {
-                try { LoadManifest(*snapshot, dir / "mod.ini", ids); }
-                catch (const std::exception& e) { Diagnose(*snapshot, dir / "mod.ini", 0, e.what()); }
+                if (snapshot->mode != ResolutionMode::Overlay) {
+                    try { LoadManifest(*snapshot, dir / "mod.ini", ids); }
+                    catch (const std::exception& e) { Diagnose(*snapshot, dir / "mod.ini", 0, e.what()); }
+                }
+                // A pack applies only when the player selects it, so no load
+                // order is involved and every mode lists it.
+                try { LoadLanguagePack(*snapshot, dir / "language.ini", languages); }
+                catch (const std::exception& e) { Diagnose(*snapshot, dir / "language.ini", 0, e.what()); }
             }
             snapshot->modIds.assign(ids.begin(), ids.end());
         }
@@ -304,24 +358,26 @@ std::vector<ResolvedAsset> ListTexts() {
     { std::lock_guard lock(gMutex); snapshot = gSnapshot; }
     std::map<std::string, ResolvedAsset> found;
     if (!snapshot->enabled) return {};
-    if (snapshot->mode != ResolutionMode::Standalone) {
-        const auto overlay = snapshot->root / "overlay" / "text";
-        std::error_code ec;
-        std::filesystem::recursive_directory_iterator it(overlay, ec), end;
-        for (; !ec && it != end; it.increment(ec)) {
-            std::error_code entryError;
-            if (!it->is_regular_file(entryError)) continue;
-            auto relative = Utf8(it->path().lexically_relative(overlay));
-            if (relative.size() <= 5 || relative.compare(relative.size() - 5, 5, ".json") != 0) continue;
-            const auto key = CanonicalTextKey(std::string_view(relative).substr(0, relative.size() - 5));
-            if (!key.empty() && ContainedFile(overlay, it->path()))
-                found.emplace(key, ResolvedAsset{{AssetKind::Text, key}, it->path(), "@overlay", 0});
-        }
-    }
+    if (snapshot->mode != ResolutionMode::Standalone)
+        ListTextFolder(snapshot->root / "overlay" / "text", "@overlay", found);
     if (snapshot->mode != ResolutionMode::Overlay)
         for (const auto& [lookup, e] : snapshot->entries)
             if (e.id.kind == AssetKind::Text && ContainedFile(snapshot->root, e.file) && ContainedFile(e.base, e.file))
                 found.emplace(e.id.key, ResolvedAsset{e.id, e.file, e.modId, e.priority});
+    std::vector<ResolvedAsset> result;
+    for (auto& [key, asset] : found) result.push_back(std::move(asset));
+    return result;
+}
+std::vector<LanguagePack> LanguagePacks() {
+    std::lock_guard lock(gMutex);
+    return gSnapshot->enabled ? gSnapshot->languagePacks : std::vector<LanguagePack>{};
+}
+std::vector<ResolvedAsset> ListTexts(const LanguagePack& pack) {
+    std::shared_ptr<const Snapshot> snapshot;
+    { std::lock_guard lock(gMutex); snapshot = gSnapshot; }
+    std::map<std::string, ResolvedAsset> found;
+    if (!snapshot->enabled || !ContainedFile(snapshot->root, pack.folder / "language.ini")) return {};
+    ListTextFolder(pack.folder / "text", pack.id, found);
     std::vector<ResolvedAsset> result;
     for (auto& [key, asset] : found) result.push_back(std::move(asset));
     return result;

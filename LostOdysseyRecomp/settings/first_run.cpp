@@ -70,6 +70,7 @@ struct Setup
     Config config = GetConfig();
     std::filesystem::path selectedRoot;
     std::filesystem::path *outputRoot = nullptr;
+    std::vector<GameLanguageChoice> languageChoices;
     std::vector<std::pair<uint32_t, uint32_t>> resolutions{
         {1280, 720}, {1600, 900}, {1920, 1080}, {2560, 1440}, {3840, 2160},
         {1720, 720}, {2560, 1080}, {3440, 1440}, {3840, 1600}, {5120, 2160}};
@@ -111,11 +112,17 @@ struct Setup
     void rebuildGameLanguages()
     {
         SendMessageW(boxes[1], CB_RESETCONTENT, 0, 0);
-        for (const auto name : GameLanguageNames)
-            SendMessageW(boxes[1], CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(name));
+        languageChoices = GameLanguageChoices();
+        for (size_t i = 0; i < languageChoices.size(); ++i)
+        {
+            const auto &pack = languageChoices[i].name; // UTF-8
+            const std::wstring name = i < GameLanguageNames.size() ? std::wstring(GameLanguageNames[i])
+                : std::filesystem::path(std::u8string(pack.begin(), pack.end())).wstring();
+            SendMessageW(boxes[1], CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(name.c_str()));
+        }
         if (GameLanguageIds[GameLanguageIndex(config.gameLanguage)] != config.gameLanguage)
             config.gameLanguage = 1;
-        SendMessageW(boxes[1], CB_SETCURSEL, GameLanguageIndex(config.gameLanguage), 0);
+        SendMessageW(boxes[1], CB_SETCURSEL, GameLanguageChoiceIndex(languageChoices, config.gameLanguage, config.gameLanguagePack), 0);
     }
 
     void translate()
@@ -263,7 +270,9 @@ struct Setup
     {
         if (!readAndValidatePath()) return;
         config.uiLanguage = uint32_t(selection(0));
-        config.gameLanguage = GameLanguageIds[size_t(selection(1))];
+        const auto &language = languageChoices.at(size_t(selection(1)));
+        config.gameLanguage = language.id;
+        config.gameLanguagePack = language.pack;
         config.graphicsBackend = GraphicsBackend(selection(2));
         const auto [width, height] = resolutions.at(size_t(selection(3)));
         config.width = width;

@@ -76,6 +76,9 @@ int main()
     after = before;
     after.gameLanguage = 2;
     Require(settings::restart::Required(before, after), "game language change did not require restart");
+    after = before;
+    after.gameLanguagePack = "pt-br";
+    Require(settings::restart::Required(before, after), "language pack change did not require restart");
     before.graphicsBackend = settings::GraphicsBackend::D3D12;
     before.frameGenerationProvider = framegen::Provider::Dlss;
     after = before;
