@@ -31,6 +31,11 @@ void SetBe32(std::vector<uint8_t> &out, size_t p, uint32_t value)
 {
     for (int i = 0; i < 4; ++i) out[p + i] = uint8_t(value >> (24 - 8 * i));
 }
+void SetBe16(std::vector<uint8_t> &out, size_t p, uint16_t value)
+{
+    out[p] = uint8_t(value >> 8);
+    out[p + 1] = uint8_t(value);
+}
 
 const std::string *Find(const Replacements &replacements, const std::string &key)
 {
@@ -46,40 +51,97 @@ std::u16string DecodeString(const std::string &text)
     return units;
 }
 
+bool Blank(std::u16string_view units) { return units.find_first_not_of(u' ') == std::u16string_view::npos; }
+
+// Both formats store each distinct string once and point at it from every
+// place that shows it. Keys belong to those places (sites), so two text IDs
+// that share a string in one language can still be translated apart.
+struct Site
+{
+    std::string key; // empty: a name the game looks up; it keeps the original string
+    size_t string = 0;
+};
+
+// Strings after replacements: a string keeps its original text while any site
+// (or a name, `fixed`) still shows it, otherwise it takes its first site's
+// text; a site whose text differs points to a copy after the original strings.
+// Identical texts share one copy, and without changes nothing is copied, so
+// the file comes back byte for byte.
+struct Placement
+{
+    std::vector<std::u16string> strings; // the originals' slots, then the copies
+    std::vector<size_t> target;          // per site
+    size_t known = 0;                    // replacement keys a site used
+};
+
+Placement Place(const std::vector<std::u16string> &originals, const std::vector<bool> &fixed,
+                const std::vector<Site> &sites, const Replacements &replacements)
+{
+    Placement placement;
+    placement.strings = originals;
+    placement.target.resize(sites.size());
+    std::vector<std::u16string> texts(sites.size());
+    auto keep = fixed;
+    for (size_t i = 0; i < sites.size(); ++i)
+    {
+        const auto s = sites[i].string;
+        const auto text = sites[i].key.empty() ? nullptr : Find(replacements, sites[i].key);
+        placement.known += text != nullptr;
+        texts[i] = text ? DecodeString(*text) : originals[s];
+        if (texts[i] == originals[s]) keep[s] = true;
+    }
+    std::vector<bool> claimed(originals.size(), false);
+    for (size_t i = 0; i < sites.size(); ++i)
+    {
+        const auto s = sites[i].string;
+        if (keep[s] || claimed[s]) continue;
+        placement.strings[s] = texts[i];
+        claimed[s] = true;
+    }
+    std::map<std::u16string, size_t> copies;
+    for (size_t i = 0; i < sites.size(); ++i)
+    {
+        const auto s = sites[i].string;
+        if (texts[i] == placement.strings[s]) { placement.target[i] = s; continue; }
+        const auto [it, added] = copies.emplace(texts[i], placement.strings.size());
+        if (added) placement.strings.push_back(texts[i]);
+        placement.target[i] = it->second;
+    }
+    return placement;
+}
+
+std::vector<Entry> SiteEntries(const std::vector<std::u16string> &strings, const std::vector<Site> &sites)
+{
+    std::vector<Entry> entries;
+    for (const auto &site : sites)
+        if (!site.key.empty() && !Blank(strings[site.string]))
+            entries.push_back({site.key, EncodeUnits(strings[site.string])});
+    return entries;
+}
+
 // ---- menu_<l>.dat: "DAT$" relocatable block, big-endian ----
 // Header: +0x14 section count, +0x18 data base, +0x28 string pool, +0x2c pool size, +0x30 relocation
 // table, +0x34 relocation count. Sections at 0x40, 16 bytes each: name (pool pointer), data offset from
 // the data base, record count, u16 record size. Each relocation is (type << 24 | file offset of a u32).
 // Type 0x22 holds a pool offset to a UTF-16BE string; type 0x32 points into the data region (stored
 // little-endian) and never moves. The pool is padded with zeros to 16 bytes.
+//
+// Keys: "id.<text id>" for MStringDescData (the game looks texts up by ID), "<section>.<record>.<field
+// offset>" elsewhere. Section names and the MFontMap / MSpriteDescData entries (language codes, font
+// and sprite names) are identifiers the loader looks up, so they are not exported.
 
 constexpr size_t kSectionTable = 0x40;
 constexpr uint32_t kPoolPointer = 0x22, kDataPointer = 0x32;
 constexpr size_t kPoolAlignment = 16;
 
-struct PoolString
-{
-    uint32_t offset = 0;
-    std::u16string units;
-    std::string key;           // empty: not exported (names, strings no text pointer uses)
-    bool sectionName = false;
-    bool usedByData = false;
-    bool usedByName = false;   // also a font or sprite name, which must not change
-};
-
-struct PoolPointer
-{
-    uint32_t pos = 0;  // file offset of the u32
-    size_t string = 0;
-    bool name = false; // in MFontMap or MSpriteDescData
-};
-
 struct MenuDat
 {
     uint32_t poolOffset = 0, poolSize = 0, relocOffset = 0;
-    std::vector<PoolString> strings;          // pool order, padding excluded
-    std::vector<size_t> exported;             // strings indices, in order of first reference
-    std::vector<PoolPointer> pointers;        // every pool pointer outside the section table
+    std::vector<uint32_t> offsets;       // pool offset per string, pool order, padding excluded
+    std::vector<std::u16string> strings;
+    std::vector<bool> fixed;             // a section, font or sprite name uses the string
+    std::vector<Site> sites;             // every pool pointer, in relocation order
+    std::vector<uint32_t> positions;     // file offset of each site's u32
 };
 
 MenuDat ReadMenuDat(std::span<const uint8_t> d)
@@ -107,7 +169,8 @@ MenuDat ReadMenuDat(std::span<const uint8_t> d)
         while (e + 1 < pool.size() && (pool[e] | pool[e + 1])) e += 2;
         Require(e + 1 < pool.size(), "unterminated DAT$ string");
         at.emplace(uint32_t(o), dat.strings.size());
-        dat.strings.push_back({uint32_t(o), ReadUtf16Be(pool.subspan(o, e - o)), {}});
+        dat.offsets.push_back(uint32_t(o));
+        dat.strings.push_back(ReadUtf16Be(pool.subspan(o, e - o)));
         o = e + 2;
     }
     auto stringAt = [&](uint32_t value) {
@@ -115,6 +178,8 @@ MenuDat ReadMenuDat(std::span<const uint8_t> d)
         Require(it != at.end(), "DAT$ pointer is not at the start of a string");
         return it->second;
     };
+    dat.fixed.assign(dat.strings.size(), false);
+    std::vector<bool> sectionName(dat.strings.size(), false), usedByData(dat.strings.size(), false);
 
     struct Section
     {
@@ -128,7 +193,7 @@ MenuDat ReadMenuDat(std::span<const uint8_t> d)
         const size_t p = kSectionTable + 16 * i;
         Section section{dataBase + Be32(d, p + 4), Be32(d, p + 8), Be16(d, p + 12)};
         Require(section.size > 0 && section.begin + section.count * section.size <= dat.poolOffset, "invalid DAT$ section");
-        const auto &name = dat.strings[stringAt(Be32(d, p))].units;
+        const auto &name = dat.strings[stringAt(Be32(d, p))];
         section.texts = name == u"MStringDescData";
         section.names = name == u"MFontMap" || name == u"MSpriteDescData";
         Require(!section.texts || section.size >= 12, "invalid MStringDescData record");
@@ -149,7 +214,6 @@ MenuDat ReadMenuDat(std::span<const uint8_t> d)
         }
     }
 
-    // A string's key comes from its first pointer in relocation order.
     for (uint64_t i = 0; i < relocCount; ++i)
     {
         const auto raw = Be32(d, size_t(dat.relocOffset + 4 * i));
@@ -158,46 +222,47 @@ MenuDat ReadMenuDat(std::span<const uint8_t> d)
         if (type == kDataPointer) continue;
         Require(type == kPoolPointer, "unknown DAT$ relocation type");
         const auto index = stringAt(Be32(d, pos));
-        auto &string = dat.strings[index];
+        Site site{{}, index};
         if (pos < sectionsEnd)
         {
             Require((pos - kSectionTable) % 16 == 0, "unexpected DAT$ section table pointer");
-            string.sectionName = true;
-            dat.pointers.push_back({pos, index, true});
-            continue;
+            sectionName[index] = dat.fixed[index] = true;
         }
-        string.usedByData = true;
-        const auto section = std::find_if(table.begin(), table.end(), [&](const Section &s) {
-            return pos >= s.begin && pos < s.begin + s.count * s.size;
-        });
-        dat.pointers.push_back({pos, index, section != table.end() && section->names});
-        if (dat.pointers.back().name)
+        else
         {
-            string.usedByName = true;
-            continue;
+            usedByData[index] = true;
+            const auto section = std::find_if(table.begin(), table.end(), [&](const Section &s) {
+                return pos >= s.begin && pos < s.begin + s.count * s.size;
+            });
+            if (section == table.end()) site.key = "p." + std::to_string(pos);
+            else if (section->names) dat.fixed[index] = true;
+            else
+            {
+                const auto record = (pos - section->begin) / section->size, field = (pos - section->begin) % section->size;
+                site.key = section->texts && field == 8 ? idKeys.at({size_t(section - table.begin()), record}) :
+                           std::to_string(section - table.begin()) + "." + std::to_string(record) + "." + std::to_string(field);
+            }
         }
-        if (!string.key.empty()) continue;
-        if (section != table.end())
-        {
-            const auto record = (pos - section->begin) / section->size, field = (pos - section->begin) % section->size;
-            if (section->texts && field == 8) string.key = idKeys.at({size_t(section - table.begin()), record});
-            else string.key = std::to_string(section - table.begin()) + "." + std::to_string(record) + "." + std::to_string(field);
-        }
-        else string.key = "p." + std::to_string(string.offset);
-        dat.exported.push_back(index);
+        dat.sites.push_back(std::move(site));
+        dat.positions.push_back(pos);
     }
 
     // Section names are loader identifiers, not text; the loader would not find a translated one.
     size_t contentEnd = 0;
-    for (const auto &string : dat.strings)
+    for (size_t i = 0; i < dat.strings.size(); ++i)
     {
-        Require(!(string.sectionName && string.usedByData), "DAT$ section name shared with data");
-        if (string.sectionName || string.usedByData || !string.units.empty())
-            contentEnd = string.offset + 2 * string.units.size() + 2;
+        Require(!(sectionName[i] && usedByData[i]), "DAT$ section name shared with data");
+        if (sectionName[i] || usedByData[i] || !dat.strings[i].empty())
+            contentEnd = dat.offsets[i] + 2 * dat.strings[i].size() + 2;
     }
     // Unused empty strings after the last real one are the pool's alignment padding.
     Require((contentEnd + kPoolAlignment - 1) / kPoolAlignment * kPoolAlignment == dat.poolSize, "unexpected DAT$ pool padding");
-    while (!dat.strings.empty() && dat.strings.back().offset >= contentEnd) dat.strings.pop_back();
+    while (!dat.offsets.empty() && dat.offsets.back() >= contentEnd)
+    {
+        dat.offsets.pop_back();
+        dat.strings.pop_back();
+        dat.fixed.pop_back();
+    }
     return dat;
 }
 
@@ -208,17 +273,17 @@ MenuDat ReadMenuDat(std::span<const uint8_t> d)
 // banks, seven name columns for namedata. Table: (offset from the table, byte length incl. NUL) per
 // string, then the UTF-16BE strings.
 //
-// Keys are game IDs, "<record>" or "<record>.<column>" of the first record that uses a string. Table
-// indices are not stable: each language stores identical strings once, so the string count differs
-// (itemexplaindata 664-671), while the records are the same in every language and in the DLC copies.
+// Keys are game IDs, "<record>" or "<record>.<column>". Table indices are not stable: each language
+// stores identical strings once, so the string count differs (itemexplaindata 664-671), while the
+// records are the same in every language and in the DLC copies.
 
 struct StringBank
 {
     uint32_t table = 0, first = 0;            // first string, relative to the table
     size_t stringsEnd = 0;                    // absolute
-    std::vector<std::span<const uint8_t>> strings; // without the NUL
-    std::vector<std::string> keys;            // per string; empty when no record uses it
-    std::vector<size_t> exported;             // string indices, in order of first use
+    std::vector<std::u16string> strings;
+    std::vector<Site> sites;                  // every used record column, in record order
+    std::vector<size_t> positions;            // file offset of each site's u16 index
 };
 
 StringBank ReadStringBank(std::span<const uint8_t> d)
@@ -252,12 +317,11 @@ StringBank ReadStringBank(std::span<const uint8_t> d)
                 "invalid string bank table");
         const auto bytes = d.subspan(size_t(bank.table + pos), length);
         Require(bytes[length - 2] == 0 && bytes[length - 1] == 0, "unterminated string bank string");
-        bank.strings.push_back(bytes.first(length - 2));
+        bank.strings.push_back(ReadUtf16Be(bytes.first(length - 2)));
         pos += length;
     }
     bank.stringsEnd = size_t(bank.table + pos);
 
-    bank.keys.resize(bank.strings.size());
     for (size_t r = 0; r < (records - 16) / width; ++r)
     {
         const size_t o = 16 + r * width;
@@ -266,9 +330,8 @@ StringBank ReadStringBank(std::span<const uint8_t> d)
         {
             const auto index = Be16(d, o + 2 + 2 * c);
             Require(index < count, "string bank record points past the table");
-            if (!bank.keys[index].empty()) continue;
-            bank.keys[index] = columns == 1 ? std::to_string(r) : std::to_string(r) + "." + std::to_string(c);
-            bank.exported.push_back(index);
+            bank.sites.push_back({columns == 1 ? std::to_string(r) : std::to_string(r) + "." + std::to_string(c), index});
+            bank.positions.push_back(o + 2 + 2 * c);
         }
     }
     return bank;
@@ -278,49 +341,28 @@ StringBank ReadStringBank(std::span<const uint8_t> d)
 std::vector<Entry> ParseMenuDat(std::span<const uint8_t> member)
 {
     const auto dat = ReadMenuDat(member);
-    std::vector<Entry> entries;
-    for (const auto index : dat.exported) entries.push_back({dat.strings[index].key, EncodeUnits(dat.strings[index].units)});
-    return entries;
+    return SiteEntries(dat.strings, dat.sites);
 }
 
 std::vector<uint8_t> RebuildMenuDat(std::span<const uint8_t> member, const Replacements &replacements, size_t *unknownKeys)
 {
     const auto dat = ReadMenuDat(member);
-    // Repack the pool in its original order; only the pool pointers and two header words change.
-    // A translated string that is also a font or sprite name keeps its slot for the names, and
-    // the text pointers move to a translated copy after the last string.
+    const auto placement = Place(dat.strings, dat.fixed, dat.sites, replacements);
+    if (unknownKeys) *unknownKeys = replacements.size() - placement.known;
+    // Repack the pool (original order, then copies); only the pool pointers and two header words change.
     std::vector<uint8_t> pool;
-    std::vector<uint32_t> moved(dat.strings.size()), translated(dat.strings.size());
-    std::vector<std::pair<size_t, std::u16string>> copies;
-    size_t known = 0;
-    for (size_t i = 0; i < dat.strings.size(); ++i)
+    std::vector<uint32_t> offsets;
+    for (const auto &units : placement.strings)
     {
-        const auto &string = dat.strings[i];
-        moved[i] = translated[i] = uint32_t(pool.size());
-        const auto text = string.key.empty() ? nullptr : Find(replacements, string.key);
-        auto units = text ? DecodeString(*text) : string.units;
-        known += text != nullptr;
-        if (string.usedByName && units != string.units)
-        {
-            copies.emplace_back(i, std::move(units));
-            units = string.units;
-        }
-        AppendUtf16Be(pool, units);
-        pool.insert(pool.end(), 2, 0);
-    }
-    for (const auto &[i, units] : copies)
-    {
-        translated[i] = uint32_t(pool.size());
+        offsets.push_back(uint32_t(pool.size()));
         AppendUtf16Be(pool, units);
         pool.insert(pool.end(), 2, 0);
     }
     pool.resize((pool.size() + kPoolAlignment - 1) / kPoolAlignment * kPoolAlignment, 0);
     Require(uint64_t(dat.poolOffset) + pool.size() <= UINT32_MAX, "DAT$ string pool too large");
-    if (unknownKeys) *unknownKeys = replacements.size() - known;
 
     std::vector<uint8_t> out(member.begin(), member.begin() + dat.poolOffset);
-    for (const auto &pointer : dat.pointers)
-        SetBe32(out, pointer.pos, pointer.name ? moved[pointer.string] : translated[pointer.string]);
+    for (size_t i = 0; i < dat.sites.size(); ++i) SetBe32(out, dat.positions[i], offsets[placement.target[i]]);
     SetBe32(out, 0x2c, uint32_t(pool.size()));
     SetBe32(out, 0x30, uint32_t(dat.poolOffset + pool.size()));
     out.insert(out.end(), pool.begin(), pool.end());
@@ -331,36 +373,33 @@ std::vector<uint8_t> RebuildMenuDat(std::span<const uint8_t> member, const Repla
 std::vector<Entry> ParseStringBank(std::span<const uint8_t> member)
 {
     const auto bank = ReadStringBank(member);
-    std::vector<Entry> entries;
-    for (const auto index : bank.exported) entries.push_back({bank.keys[index], EncodeUnits(ReadUtf16Be(bank.strings[index]))});
-    return entries;
+    return SiteEntries(bank.strings, bank.sites);
 }
 
 std::vector<uint8_t> RebuildStringBank(std::span<const uint8_t> member, const Replacements &replacements, size_t *unknownKeys)
 {
     const auto bank = ReadStringBank(member);
+    const auto placement = Place(bank.strings, std::vector<bool>(bank.strings.size(), false), bank.sites, replacements);
+    if (unknownKeys) *unknownKeys = replacements.size() - placement.known;
+    Require(placement.strings.size() <= 0xffff, "string bank has too many strings");
+    // Copies extend the table (count at +8, records repointed); a gap before the first string stays.
+    const uint32_t first = uint32_t(8 * placement.strings.size()) + (bank.first - uint32_t(8 * bank.strings.size()));
     std::vector<uint8_t> table, strings;
-    size_t known = 0;
-    for (size_t i = 0; i < bank.strings.size(); ++i)
+    for (const auto &units : placement.strings)
     {
-        const auto text = bank.keys[i].empty() ? nullptr : Find(replacements, bank.keys[i]);
         const auto begin = strings.size();
-        if (text)
-        {
-            ++known;
-            AppendUtf16Be(strings, DecodeString(*text));
-        }
-        else strings.insert(strings.end(), bank.strings[i].begin(), bank.strings[i].end());
+        AppendUtf16Be(strings, units);
         strings.insert(strings.end(), 2, 0);
-        Require(bank.first + strings.size() <= UINT32_MAX, "string bank too large");
-        PutBe32(table, uint32_t(bank.first + begin));
+        Require(first + strings.size() <= UINT32_MAX, "string bank too large");
+        PutBe32(table, uint32_t(first + begin));
         PutBe32(table, uint32_t(strings.size() - begin));
     }
-    if (unknownKeys) *unknownKeys = replacements.size() - known;
     // Header, records and layout as they were; any gap before the first string and trailing bytes too.
     std::vector<uint8_t> out(member.begin(), member.begin() + bank.table);
+    SetBe32(out, 8, uint32_t(placement.strings.size()));
+    for (size_t i = 0; i < bank.sites.size(); ++i) SetBe16(out, bank.positions[i], uint16_t(placement.target[i]));
     out.insert(out.end(), table.begin(), table.end());
-    out.insert(out.end(), member.begin() + bank.table + table.size(), member.begin() + bank.table + bank.first);
+    out.insert(out.end(), member.begin() + bank.table + 8 * bank.strings.size(), member.begin() + bank.table + bank.first);
     out.insert(out.end(), strings.begin(), strings.end());
     out.insert(out.end(), member.begin() + bank.stringsEnd, member.end());
     return out;
