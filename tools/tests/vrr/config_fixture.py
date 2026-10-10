@@ -32,6 +32,8 @@ std::filesystem::path ConfigDir() { return {}; }
 std::filesystem::path SettingsPath() { return "settings.ini"; }
 }
 #define LOG_INFO(...) ((void)0)
+#define LOG_NOTICE(...) ((void)0)
+namespace os::logger { void SetDebugLog(bool) {} }
 namespace settings { void LogSettingsSaved(const Config&) {} }
 '''
 test = r'''
