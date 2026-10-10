@@ -1,0 +1,50 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Battle parameter evaluation, periodic actions and queued actor flags.",
+  "entries": [
+    {
+      "address": "8238BE38",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.10.cpp",
+      "source_line": 23990,
+      "instruction_count": 120,
+      "body_sha256": "af3cc5744a7ec6c7e076009782637b728728ab87c526eb178ff31236db3265ca",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "8238B4A8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.10.cpp",
+      "source_line": 22578,
+      "instruction_count": 61,
+      "body_sha256": "17b1b71fa2ecb5a3d2f8a0d70c6d3639a26a35f1d8b46cf7f1188db1266566bb",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "8238B5A0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.10.cpp",
+      "source_line": 22711,
+      "instruction_count": 172,
+      "body_sha256": "3cf5547cc4ce9575cf2c34d1d4d187554c68afeacb648add74407473be7d23e4",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "8238BE38",
+      "8238B4A8",
+      "8238B5A0"
+    ],
+    "header": "include/lo_semantics/battle_script_parameters61.h",
+    "source": "src/battle_script_parameters61.cpp",
+    "smoke": "tests/battle_script_parameters61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "A focused synthetic fixture checks local/global/script/bit/immediate parameter classes, actor float/word fields, periodic threshold and sentinel handling, and queued actor flags. The existing script lifecycle/update/wait fixture also passes after composing these helpers locally. Actor lookup and periodic action execution remain explicit guest boundaries; no full interpreter or gameplay acceptance is claimed. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+  }
+}

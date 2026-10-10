@@ -1,4 +1,5 @@
 #include "lo_semantics/battle_script61.h"
+#include "lo_semantics/battle_script_parameters61.h"
 #include "lo_semantics/recovery_abi.h"
 #include <bit>
 #include <cmath>
@@ -15,7 +16,8 @@ struct Script {
   unsigned State() { return W(owner + 44); }
   unsigned Call(unsigned e, unsigned a) {
     s.r[3] = a;
-    d.guest.CallDirect(e, m, s);
+    if (!battle_script_parameters61::Apply(e, m, d, s))
+      d.guest.CallDirect(e, m, s);
     return Address(s.r[3]);
   }
   unsigned Allocate(unsigned bytes) {
@@ -98,7 +100,7 @@ struct Script {
       s.r[4] = 1;
       s.r[5] = 0;
       s.lr = 0x82a9bf8c;
-      d.guest.CallDirect(0x8238be38, m, s);
+      (void)battle_script_parameters61::Apply(0x8238be38, m, d, s);
       m.WriteU32(WaitRecord(actor) + 8, Address(s.r[3]));
       // The original helper contract keeps its r6 manager live across the call.
       auto script = W(Address(s.r[6]) + 44);
