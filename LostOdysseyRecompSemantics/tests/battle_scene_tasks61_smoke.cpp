@@ -14,10 +14,11 @@ struct TasksGuest final : manager_release_context61::GuestServices {
       s.r[3] = m.ReadU16(unsigned(s.r[3])) != m.ReadU16(unsigned(s.r[4]));
       return;
     }
-    if (e == 0x82b08318) {
-      if (s.r[4] != 0x99000 || s.r[5])
-        throw std::runtime_error("secondary creation");
-      s.r[3] = 8;
+    if (e == 0x82b040d0) {
+      if (s.r[3] != 0x832cc05c || s.r[4] != 16 || s.r[5] || s.r[6] ||
+          s.r[7] != 0x99000 || (s.r[8] != 1 && s.r[8] != 12))
+        throw std::runtime_error("secondary activation");
+      s.r[3] = 99;
       return;
     }
     if (e == 0x82b1a7f0) {
@@ -117,6 +118,11 @@ int main() {
     m.WriteU32(0x73000 + 16, 0x123410);
     m.WriteU32(0x73000 + 36, 0x123424);
     m.WriteU32(0x73000 + 48, 0x123430);
+    m.WriteU32(0x73000 + 116, 0x123474);
+    m.WriteU32(0x73000 + 132, 0x123484);
+    m.WriteU32(0x832cb68c, 8);
+    m.WriteU32(0x832cb68c + 4, 0xa0000);
+    m.WriteU32(0x832cb68c + 12, 2);
     m.WriteU32(0x8330b608, 0x8e000);
     m.WriteU32(0x8e000, 0x8f000);
     m.WriteU32(0x8f008, 0x123408);
@@ -151,7 +157,7 @@ int main() {
     m.WriteU32(0x832cb68c + 8, 1);
     m.WriteU32(0x832cb68c + 12, 1);
     m.WriteU32(0xa0004, 8);
-    m.WriteU32(0xa0000 + 12, 0xffffffff);
+
     m.WriteU32(0x832cc0fc + 8, 0xa5000);
     m.WriteU32(0x832cc0fc + 12, 1);
     m.WriteU32(0xa5000, 0xa6000);
@@ -242,11 +248,24 @@ int main() {
     m.WriteU32(0xe0000 + 18016, 0x87654321);
     before = g.freed;
     run(0x82b35568, 0xd0000);
-    check(g.freed == before + 1 && g.rawFreed == 1 && g.virtualRemoved == 1 &&
+    check(g.freed == before + 1 && g.rawFreed == 1 && g.virtualRemoved == 2 &&
           !m.ReadU8(0xd0000) && m.ReadU32(0xd0000 + 12) == 0xffffffff &&
           !m.ReadU32(0xd0000 + 24));
     check(!m.ReadU32(0xe0000) && !m.ReadU32(0xe0000 + 18016) &&
           !m.ReadU32(0xd0000 + 18032));
+    m.WriteU32(0xe8000, 0xffff);
+    m.WriteU32(0xe8004, 0xf0000);
+    m.WriteU32(0xe8008, 1);
+    m.WriteU32(0xe800c, 3);
+    m.WriteU32(0xf0004, 0xffff);
+    s.r[3] = 0xe8000;
+    s.r[4] = 0x99000;
+    s.r[5] = 1;
+    check(battle_scene_tasks61::Apply(0x82b08318, m, {g, native}, s) &&
+          s.r[3] == 0 && m.ReadU32(0xe8008) == 2);
+    check(m.ReadU32(0xf0000 + 18044 + 4) == 0 &&
+          m.ReadU32(0xf0000 + 18044 + 12) == 99 &&
+          m.ReadU8(0xf0000 + 18044) == 1);
     std::cout << "battle scene tasks logic smoke passed\n";
   } catch (const std::exception &e) {
     std::cerr << e.what() << '\n';

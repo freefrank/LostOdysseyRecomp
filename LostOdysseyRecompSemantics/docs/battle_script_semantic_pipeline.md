@@ -461,3 +461,7 @@ Recovered event payload destruction and nested string-array cleanup, plus the ca
 ## Scene row cleanup
 
 Recovered large scene-row destruction, nested row-array reset/removal and virtual scene-handle release. Cancellation now composes real row cleanup instead of a destructor mock, reusing recovered memory fill and storage helpers. Focused scene-task checks pass actual buffer clearing, nested release, identifier reset and virtual removal arguments. Allocator and object-specific virtual methods remain explicit services; no native gameplay or full ABI acceptance is claimed.
+
+## Scene row creation
+
+Recovered secondary scene-row creation, zero/default initialization and activation forwarding. Profile preset loading now uses actual row allocation and identifier collision scanning, including 16-bit identifier wrap, rather than a row-factory mock. Library and focused scene-task checks pass creation, later cleanup and collision handling. Generic task activation remains an external boundary; inventory growth is not a game-completion percentage.

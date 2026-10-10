@@ -153,6 +153,30 @@
       "instruction_count": 22,
       "body_sha256": "715ddc50a7c85faee10cd73eac048fbf72ffc1b4af1702696e7d61f1fead0710",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B08318",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.165.cpp",
+      "source_line": 15020,
+      "instruction_count": 62,
+      "body_sha256": "fd5d08a1063d7b9be98672c4faa27d6fd9aa06b220028d54a451376e6f6bd0b1",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B34EE0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.168.cpp",
+      "source_line": 26969,
+      "instruction_count": 19,
+      "body_sha256": "cc43c221b720530642bdd8fcca4bbed2041d86d19cf46199962be246968c707d",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B355D8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.168.cpp",
+      "source_line": 28043,
+      "instruction_count": 26,
+      "body_sha256": "08b1691c1eec7c4f647c8cdbb01992890c0ccf882e1066b81714f422179fd2fb",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -175,7 +199,10 @@
       "82B35228",
       "82B354C0",
       "82B351B8",
-      "82B01ED0"
+      "82B01ED0",
+      "82B08318",
+      "82B34EE0",
+      "82B355D8"
     ],
     "header": "include/lo_semantics/battle_scene_tasks61.h",
     "source": "src/battle_scene_tasks61.cpp",
@@ -193,6 +220,7 @@
     "task_cancellation": "Recovered scene-task cancellation lookup, bulk row cleanup, paired membership lookup/removal and conditional task removal. Preset clear now executes these paths and real array compaction rather than mocking cancellation. Library and scene-task/runtime checks pass, including empty membership and clear-all release. Object destructors and final tracked-pointer removal remain lower service boundaries; no runtime acceptance is claimed.",
     "task_unlink": "Recovered final tracked-object unlinking and queue-reference cancellation for task types0/1/4/5/6. Cleanup now removes matching references from both 44-byte event queues, respects the mode13 second-queue exemption, invokes the object destructor and compacts the pointer list. Focused scene-task checks pass actual paired membership, repeated reference removal and array release. Event payload destructors remain explicit services; no gameplay or full ABI acceptance is claimed.",
     "event_payload_cleanup": "Recovered event payload destruction and nested string-array cleanup, plus the capacity-reset tail adapter. Queue-reference removal now destroys payload names and nested strings through existing storage semantics instead of a destructor mock. Library and focused scene-task/storage fixtures pass with actual header clearing and allocation-service release counts. Reuses existing typed reset/array semantics; allocator callbacks and full volatile ABI remain outside acceptance.",
-    "scene_row_cleanup": "Recovered large scene-row destruction, nested row-array reset/removal and virtual scene-handle release. Cancellation now composes real row cleanup instead of a destructor mock, reusing recovered memory fill and storage helpers. Focused scene-task checks pass actual buffer clearing, nested release, identifier reset and virtual removal arguments. Allocator and object-specific virtual methods remain explicit services; no native gameplay or full ABI acceptance is claimed."
+    "scene_row_cleanup": "Recovered large scene-row destruction, nested row-array reset/removal and virtual scene-handle release. Cancellation now composes real row cleanup instead of a destructor mock, reusing recovered memory fill and storage helpers. Focused scene-task checks pass actual buffer clearing, nested release, identifier reset and virtual removal arguments. Allocator and object-specific virtual methods remain explicit services; no native gameplay or full ABI acceptance is claimed.",
+    "scene_row_creation": "Recovered secondary scene-row creation, zero/default initialization and activation forwarding. Profile preset loading now uses actual row allocation and identifier collision scanning, including 16-bit identifier wrap, rather than a row-factory mock. Library and focused scene-task checks pass creation, later cleanup and collision handling. Generic task activation remains an external boundary; inventory growth is not a game-completion percentage."
   }
 }

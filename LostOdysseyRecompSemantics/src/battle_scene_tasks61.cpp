@@ -7,6 +7,86 @@
 namespace lo::semantic::gpu::battle_scene_tasks61 {
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   using recovery_abi::Address;
+  if (e == 0x82b08318 || e == 0x82b34ee0 || e == 0x82b355d8) {
+    auto old = Address(s.r[1]), owner = Address(s.r[3]), name = Address(s.r[4]),
+         mode = Address(s.r[5]);
+    unsigned frame = e == 0x82b08318   ? 128
+                     : e == 0x82b34ee0 ? 96
+                                       : 112,
+             first = e == 0x82b08318   ? 27
+                     : e == 0x82b34ee0 ? 31
+                                       : 29;
+    m.WriteU32(old - 8, Address(s.lr));
+    for (unsigned i = first; i < 32; ++i)
+      recovery_abi::WriteU64(m, old - 16 - 8 * (31 - i), s.r[i]);
+    s.r[1] -= frame;
+    m.WriteU32(Address(s.r[1]), old);
+    auto call = [&](unsigned a) {
+      if (!battle_scene_tasks61::Apply(a, m, d, s) &&
+          !string_storage_context61::Apply(a, m, d, s))
+        d.guest.CallDirect(a, m, s);
+    };
+    if (e == 0x82b34ee0) {
+      s.r[3] = FillGuestMemory(m, owner, 0, 18044);
+      for (auto off : {4u, 12u, 16u})
+        m.WriteU32(owner + off, 0xffffffff);
+      m.WriteU8(owner, 0);
+    } else if (e == 0x82b355d8) {
+      call(0x82b352e8);
+      s.r[3] = 0x832cc05c;
+      s.r[4] = 16;
+      s.r[5] = 0;
+      s.r[6] = 0;
+      s.r[7] = name;
+      s.r[8] = (mode & 255) ? 12 : 1;
+      call(0x82b040d0);
+      m.WriteU32(owner + 12, Address(s.r[3]));
+      if (std::int32_t(Address(s.r[3])) >= 0)
+        m.WriteU8(owner, 1);
+    } else {
+      auto before = m.ReadU32(owner + 8);
+      while (true) {
+        bool collision = false;
+        if (std::int32_t(before) > 0)
+          for (unsigned i = 0;
+               std::int32_t(i) < std::int32_t(m.ReadU32(owner + 8)); ++i)
+            if (m.ReadU32(m.ReadU32(owner + 4) + 18044 * i + 4) ==
+                m.ReadU32(owner)) {
+              collision = true;
+              break;
+            }
+        if (!collision)
+          break;
+        m.WriteU32(owner, m.ReadU32(owner) + 1);
+        m.WriteU16(owner, 0);
+      }
+      auto header = owner + 4, count = m.ReadU32(header + 4) + 1;
+      m.WriteU32(header + 4, count);
+      if (std::int32_t(count) > std::int32_t(m.ReadU32(header + 8))) {
+        auto capacity =
+            count + unsigned(std::int32_t(count + count * 2) / 8) + 32;
+        m.WriteU32(header + 8, capacity);
+        s.r[3] = header;
+        s.r[4] = 18044;
+        s.r[5] = 8;
+        call(0x8229f678);
+      }
+      s.r[3] = m.ReadU32(header) + 18044 * before;
+      call(0x82b34ee0);
+      auto row = m.ReadU32(header) + 18044 * before;
+      m.WriteU32(row + 4, m.ReadU32(owner));
+      s.r[3] = row;
+      s.r[4] = name;
+      s.r[5] = mode;
+      call(0x82b355d8);
+      s.r[3] = m.ReadU32(owner);
+    }
+    s.r[1] += frame;
+    for (unsigned i = first; i < 32; ++i)
+      s.r[i] = recovery_abi::ReadU64(m, old - 16 - 8 * (31 - i));
+    s.lr = m.ReadU32(old - 8);
+    return true;
+  }
   if (e == 0x82b35568 || e == 0x82b352e8 || e == 0x82b35228 ||
       e == 0x82b354c0 || e == 0x82b351b8 || e == 0x82b01ed0) {
     auto old = Address(s.r[1]), owner = Address(s.r[3]), arg4 = Address(s.r[4]),
