@@ -1,4 +1,5 @@
 #include "lo_semantics/battle_result_application61.h"
+#include "lo_semantics/battle_progression61.h"
 #include "lo_semantics/battle_property_mutation61.h"
 #include "lo_semantics/battle_random_range61.h"
 #include "lo_semantics/battle_action_readiness61.h"
@@ -11,6 +12,7 @@ namespace {
 using recovery_abi::Address;
 void Call(unsigned e, GuestMemory &m, Dependencies d, Registers &s) {
   if (!battle_result_application61::Apply(e, m, d, s) &&
+      !battle_progression61::Apply(e, m, d, s) &&
       !battle_property_mutation61::Apply(e, m, d, s) &&
       !battle_random_range61::Apply(e, m, d, s) &&
       !battle_action_readiness61::Apply(e, m, d, s) &&

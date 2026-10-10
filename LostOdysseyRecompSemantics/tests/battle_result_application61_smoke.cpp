@@ -3,22 +3,13 @@
 #undef main
 #include "lo_semantics/battle_result_application61.h"
 #include <iostream>
+#include "battle_progression_fixture.h"
 struct ApplicationGuest final : manager_release_context61::GuestServices {
-  unsigned low = 0, dead = 0, counter = 0;
-  void CallDirect(GuestAddress e, GuestMemory &,
+  void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
-    if (e == 0x82ac6348) {
-      if (s.r[4] != 0x80000)
-        throw std::runtime_error("death notification args");
-      ++dead;
+    if (progression_fixture::Direct(e, s))
       return;
-    }
-    if (e == 0x82ac34f8) {
-      if (s.r[4] != 2)
-        throw std::runtime_error("counter args");
-      ++counter;
-      return;
-    }
+
     if (e == 0x82380a18 || e == 0x82389b78) {
       s.r[3] = 0x76000;
       return;
@@ -29,8 +20,10 @@ struct ApplicationGuest final : manager_release_context61::GuestServices {
     }
     throw std::runtime_error("application direct " + std::to_string(e));
   }
-  void CallIndirect(GuestAddress, GuestMemory &,
-                    manager_release_context61::Registers &) override {
+  void CallIndirect(GuestAddress e, GuestMemory &m,
+                    manager_release_context61::Registers &s) override {
+    if (progression_fixture::Indirect(e, s))
+      return;
     throw std::runtime_error("application indirect");
   }
 };
@@ -45,9 +38,11 @@ int main() {
     regions.push_back({0x8201f000, 0x1000});
     regions.push_back({0x83264000, 0x1000});
     regions.push_back({0x831f3000, 0x21000});
+    regions.push_back({0x83315000, 0x1000});
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();
+    progression_fixture::Setup(m);
     ApplicationGuest g;
     auto s = sort_engine61_oracle::Initial(0), initial = s;
     auto check = [](bool b) {
@@ -111,20 +106,24 @@ int main() {
           std::bit_cast<double>(s.fpr_bits[1]) == 40);
     invoke(0x82b2b640, 80);
     check(get(resource + 2588) == 20 && (m.ReadU32(resource + 232) & 2) &&
-          g.counter == 1);
+          m.ReadU32(progression_fixture::Play + 170832) == 80);
     m.WriteU32(resource + 76348, 0x80000000);
     invoke(0x82b2b640, 50);
-    check(get(resource + 2588) == 20 && g.counter == 1);
+    check(get(resource + 2588) == 20 &&
+          m.ReadU32(progression_fixture::Play + 170832) == 80);
     m.WriteU32(resource + 76348, 0);
     m.WriteU32(resource + 4 * 272 + 232, 1u << 7);
     invoke(0x82b2b640, 30);
     check(get(resource + 2588) == 1 &&
-          m.ReadU32(resource + 4 * 272 + 232) == 0 && !g.dead);
+          m.ReadU32(resource + 4 * 272 + 232) == 0 &&
+          !m.ReadU32(progression_fixture::Play + 170836));
     invoke(0x82b2b640, 30);
-    check(get(resource + 2588) == 0 && g.dead == 1);
+    check(get(resource + 2588) == 0 &&
+          m.ReadU32(progression_fixture::Play + 170836) == 1);
     m.WriteU32(resource + 68, 279);
     invoke(0x82b2b640, 30);
-    check(get(resource + 2588) == 1 && g.dead == 1);
+    check(get(resource + 2588) == 1 &&
+          m.ReadU32(progression_fixture::Play + 170836) == 1);
     m.WriteU32(resource + 68, 0);
     m.WriteU32(resource + 232, 3);
     invoke(0x82b2b5e0, 60);

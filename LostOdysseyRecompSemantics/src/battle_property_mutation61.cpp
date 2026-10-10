@@ -3,6 +3,7 @@
 #include "lo_semantics/battle_script_dispatch61.h"
 #include "lo_semantics/battle_action_adjustments61.h"
 #include "lo_semantics/battle_property_mutation61.h"
+#include "lo_semantics/battle_progression61.h"
 #include "lo_semantics/recovery_abi.h"
 #include <bit>
 #include <initializer_list>
@@ -44,7 +45,7 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     }
     s.r[3] = m.ReadU32(0x83291dc0);
     s.r[4] = resource;
-    d.guest.CallDirect(0x82ac6348, m, s);
+    (void)battle_progression61::Apply(0x82ac6348, m, d, s);
     if (s.cached_fp_control & 0x8040) {
       s.cached_fp_control &= ~0x8040u;
       d.fp.SetHostFpControl(s.cached_fp_control);

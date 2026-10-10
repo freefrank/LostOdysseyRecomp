@@ -1,3 +1,7 @@
+## Root direct continuation: battle progression (2026-10-10 UTC)
+
+Recovered damage/defeat progression counters and achievement-service forwarding, including threshold crossing and defeat-record insertion/deduplication. Result application and actor death transition now compose real progression rather than mocking counters. Library build and focused progression/property/result/evaluator/execution checks pass. Platform achievement delivery and gameplay remain unvalidated; no Full72 or full ABI proof is claimed.
+
 ## Root direct continuation: report string integration (2026-10-10 UTC)
 
 Added guest-register adapters for the already recovered UTF-16 assignment and length semantics, reusing registered_metadata_string rather than duplicating its algorithms. Battle reward and source/target report labels now call real string assignment instead of a UI-copy mock. Focused checks cover copied text, alias no-op, empty assignment release, length and report-label integration. Allocation remains a guest service; no gameplay or full ABI acceptance is claimed.

@@ -3,10 +3,13 @@
 #undef main
 #include "lo_semantics/battle_effect_execution61.h"
 #include <iostream>
+#include "battle_progression_fixture.h"
 struct ExecutionGuest final : manager_release_context61::GuestServices {
   unsigned guarded = 0, listQueries = 0;
   void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
+    if (progression_fixture::Direct(e, s))
+      return;
     if (e == 0x82380a18 || e == 0x82389b78) {
       s.r[3] = 0x76000;
       return;
@@ -22,11 +25,7 @@ struct ExecutionGuest final : manager_release_context61::GuestServices {
       s.r[3] = s.r[4] == 24 ? 0x80000 : 0x90000;
       return;
     }
-    if (e == 0x82ac34f8) {
-      if (s.r[4] != 2)
-        throw std::runtime_error("damage counter category");
-      return;
-    }
+
     if (e == 0x82af6a48) {
       if (s.r[3] != 0x832c9c54 || s.r[4] != 0x90000)
         throw std::runtime_error("guard arguments");
@@ -35,8 +34,10 @@ struct ExecutionGuest final : manager_release_context61::GuestServices {
     }
     throw std::runtime_error("execution direct " + std::to_string(e));
   }
-  void CallIndirect(GuestAddress, GuestMemory &,
-                    manager_release_context61::Registers &) override {
+  void CallIndirect(GuestAddress e, GuestMemory &m,
+                    manager_release_context61::Registers &s) override {
+    if (progression_fixture::Indirect(e, s))
+      return;
     throw std::runtime_error("execution indirect");
   }
 };
@@ -51,9 +52,11 @@ int main() {
       regions.push_back({p, 0x1000});
     regions.push_back({0x832c9000, 0x4000});
     regions.push_back({0x831f3000, 0x21000});
+    regions.push_back({0x83315000, 0x1000});
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();
+    progression_fixture::Setup(m);
     ExecutionGuest g;
     auto s = sort_engine61_oracle::Initial(0), initial = s;
     auto check = [](bool b) {

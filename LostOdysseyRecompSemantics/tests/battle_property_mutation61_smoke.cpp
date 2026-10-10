@@ -3,24 +3,23 @@
 #undef main
 #include "lo_semantics/battle_property_mutation61.h"
 #include <iostream>
+#include "battle_progression_fixture.h"
 struct MutationGuest final : manager_release_context61::GuestServices {
-  unsigned notifications = 0;
-  void CallDirect(GuestAddress e, GuestMemory &,
+  void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
+    if (progression_fixture::Direct(e, s))
+      return;
     if (e == 0x82380a18 || e == 0x82389b78) {
       s.r[3] = 0x70000;
       return;
     }
-    if (e == 0x82ac6348) {
-      if (s.r[4] != 0x80000)
-        throw std::runtime_error("status notification ABI");
-      ++notifications;
-      return;
-    }
+
     throw std::runtime_error("property direct");
   }
-  void CallIndirect(GuestAddress, GuestMemory &,
-                    manager_release_context61::Registers &) override {
+  void CallIndirect(GuestAddress e, GuestMemory &m,
+                    manager_release_context61::Registers &s) override {
+    if (progression_fixture::Indirect(e, s))
+      return;
     throw std::runtime_error("property indirect");
   }
 };
@@ -32,9 +31,11 @@ int main() {
     regions.push_back({0x832c9000, 0x4000});
     regions.push_back({0x83213000, 0x1000});
     regions.push_back({0x83291000, 0x1000});
+    regions.push_back({0x83315000, 0x1000});
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();
+    progression_fixture::Setup(m);
     MutationGuest g;
     auto s = sort_engine61_oracle::Initial(0), initial = s;
     auto check = [](bool b) {
@@ -179,7 +180,8 @@ int main() {
     m.WriteU32(0x62000 + 64, 0x800000);
     m.WriteU32(resource + 232, 0);
     check(admission(0, 1, 1, 0));
-    check(g.notifications == 1 && m.ReadU32(0x62000 + 64) == 0xc0000c);
+    check(m.ReadU32(progression_fixture::Play + 170836) == 1 &&
+          m.ReadU32(0x62000 + 64) == 0xc0000c);
     auto stateRun = [&](unsigned e, unsigned bank, unsigned mask,
                         unsigned value, unsigned aux, unsigned mode,
                         unsigned option) {
@@ -231,11 +233,13 @@ int main() {
     m.WriteU32(resource + 4876, 1);
     m.WriteU32(0x62000 + 64, 0);
     insert(0x82ac9be0, 0);
-    check(m.ReadU32(resource + 232) == 0 && g.notifications == 1);
+    check(m.ReadU32(resource + 232) == 0 &&
+          m.ReadU32(progression_fixture::Play + 170836) == 1);
     insert(0x82ac9ee8, 0);
-    check(m.ReadU32(resource + 232) == 1 && g.notifications == 2);
+    check(m.ReadU32(resource + 232) == 1 &&
+          m.ReadU32(progression_fixture::Play + 170836) == 2);
     insert(0x82ac9ee8, 0);
-    check(g.notifications == 2);
+    check(m.ReadU32(progression_fixture::Play + 170836) == 2);
     m.WriteU32(resource + 232, 0);
     m.WriteU32(resource + 4876, 0);
     m.WriteU32(resource + 5088, 1);
@@ -244,7 +248,7 @@ int main() {
     m.WriteU32(0x62000 + 64, 0x800000);
     insert(0x82ac9ee8, 0);
     check(!m.ReadU32(resource + 232) && m.ReadU32(0x62000 + 64) == 0xc0000c &&
-          g.notifications == 3);
+          m.ReadU32(progression_fixture::Play + 170836) == 3);
     m.WriteU32(resource + 5088, 0);
     m.WriteU16(0x70000 + 148, 1);
     insert(0x82ac9be0, 1);
@@ -274,7 +278,8 @@ int main() {
     m.WriteU32(resource + 124, 0);
     m.WriteU32(0x62000 + 64, 0);
     insert(0x82ac9be0, 15);
-    check(m.ReadU32(resource + 232) == 0x8009 && g.notifications == 4);
+    check(m.ReadU32(resource + 232) == 0x8009 &&
+          m.ReadU32(progression_fixture::Play + 170836) == 4);
     m.WriteU32(0x62000 + 16, 2);
     m.WriteU32(0x62000 + 20, 0x65000);
     m.WriteU32(0x65000 + 8, 777);
