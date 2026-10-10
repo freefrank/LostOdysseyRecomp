@@ -8,13 +8,9 @@ struct ItemGuest final : manager_release_context61::GuestServices {
   unsigned selected = 0, prepared = 0, executed = 0, last = 0, random = 0;
   void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
-    if (e == 0x82a9b698) {
-      auto header = unsigned(s.r[3]);
-      if (!m.ReadU32(header))
-        m.WriteU32(header, 0x100000);
-      m.WriteU32(header + 4, 0);
+    if (ActionStorageDirectFixture(e, m, s))
       return;
-    }
+
     if (e == 0x82acd3b0 || e == 0x82b21340 || e == 0x82b11df0 ||
         e == 0x82b1f798)
       return;
@@ -26,10 +22,7 @@ struct ItemGuest final : manager_release_context61::GuestServices {
       s.r[3] = 0;
       return;
     }
-    if (e == 0x82ab31e0 || e == 0x82ab2d88) {
-      InitializeActionRecordFixture(m, unsigned(s.r[3]), e == 0x82ab31e0);
-      return;
-    }
+
     if (e == 0x82af68d8)
       return;
     if (e == 0x82380a18 || e == 0x82389b78) {
@@ -61,8 +54,10 @@ struct ItemGuest final : manager_release_context61::GuestServices {
       return;
     throw std::runtime_error("unexpected item service");
   }
-  void CallIndirect(GuestAddress, GuestMemory &m,
-                    manager_release_context61::Registers &) override {
+  void CallIndirect(GuestAddress e, GuestMemory &m,
+                    manager_release_context61::Registers &s) override {
+    if (ActionStorageIndirectFixture(e, s))
+      return;
     throw std::runtime_error("unexpected item indirect");
   }
 };
@@ -74,9 +69,11 @@ int main() {
     regions.push_back({0x83264000, 0x1000});
     regions.push_back({0x83245000, 0x1000});
     regions.push_back({0x832c9000, 0x4000});
+    regions.push_back({0x8330b000, 0x1000});
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();
+    SetupActionStorageFixture(m);
     ItemGuest guest;
     auto s = sort_engine61_oracle::Initial(0), initial = s;
     constexpr unsigned owner = 0x60000, actor = 0x62000, state = 0x63000,

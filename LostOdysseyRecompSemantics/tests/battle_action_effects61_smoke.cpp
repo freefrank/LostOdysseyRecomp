@@ -2,6 +2,7 @@
 #include "mesh_cook_main61_smoke.cpp"
 #undef main
 #include "lo_semantics/battle_action_effects61.h"
+#include "battle_action_record_fixture.h"
 #include <iostream>
 struct EffectGuest final : manager_release_context61::GuestServices {
   unsigned kind = 0, route = 0, finished = 0, reset = 0, special = 0;
@@ -11,16 +12,9 @@ struct EffectGuest final : manager_release_context61::GuestServices {
   }
   void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
-    if (e == 0x82a9b698) {
-      Need(s.r[3] == 0x80000 + 14656 && s.r[4] == 0);
-      m.WriteU32(unsigned(s.r[3]) + 4, 0);
+    if (ActionStorageDirectFixture(e, m, s))
       return;
-    }
-    if (e == 0x82ab2d88) {
-      Need(s.r[3] == 0x80000 && s.r[4] == 0);
-      m.WriteU32(0x80000 + 14660, 1);
-      return;
-    }
+
     if (e == 0x82acde40) {
       Need(s.r[3] == 0x70000 && s.r[4] == 0x80000 && s.r[6] == 1);
       reset = unsigned(s.r[5]);
@@ -42,8 +36,10 @@ struct EffectGuest final : manager_release_context61::GuestServices {
          (e == 0x82b1f798 && s.r[3] == 0x73000));
     Need(s.r[4] == 0x80000 && s.r[5] == kind && s.r[6] == 9 && s.r[7] == 1);
   }
-  void CallIndirect(GuestAddress, GuestMemory &,
-                    manager_release_context61::Registers &) override {
+  void CallIndirect(GuestAddress e, GuestMemory &m,
+                    manager_release_context61::Registers &s) override {
+    if (ActionStorageIndirectFixture(e, s))
+      return;
     throw std::runtime_error("unexpected effect indirect");
   }
 };
@@ -54,9 +50,11 @@ int main() {
                                       cook_main_smoke::Regions.end());
     regions.push_back({0x83245000, 0x1000});
     regions.push_back({0x832c9000, 0x4000});
+    regions.push_back({0x8330b000, 0x1000});
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();
+    SetupActionStorageFixture(m);
     EffectGuest guest;
     auto s = sort_engine61_oracle::Initial(0), initial = s;
     m.WriteU32(0x8324570c, 0x70000);

@@ -1,3 +1,7 @@
+## Root direct continuation: compose action storage (2026-10-10 UTC)
+
+Recovered action storage is now composed into record creation and the reset-effect wrapper. Six caller fixtures pass through real growth, zeroing and nested record initialization instead of the former synthetic initializer. Narrow allocator, empty-string and record-destructor services remain fixture boundaries. Native gameplay and bitwise floating-point acceptance remain unvalidated.
+
 ## Root direct continuation: battle action storage (2026-10-10 UTC)
 
 Four action-storage helpers now have logical implementations, including the 124208-byte record initializer and its nested defaults. A focused fixture verifies growth, repeated append, normal and alternate arrays, reset and ABI preservation. Existing ResizeArray logic is reused. String and destructor services remain boundaries; composition into the action execution chain is next. This is not native gameplay validation.

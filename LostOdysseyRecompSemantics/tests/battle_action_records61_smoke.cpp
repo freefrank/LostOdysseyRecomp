@@ -2,42 +2,19 @@
 #include "mesh_cook_main61_smoke.cpp"
 #undef main
 #include "lo_semantics/battle_action_records61.h"
+#include "battle_action_record_fixture.h"
 #include <iostream>
 struct RecordGuest final : manager_release_context61::GuestServices {
   unsigned configured = 0, marked = 0, advanced = 0;
-  void Init(GuestMemory &m, unsigned index) {
-    auto p = 0x100000 + 124208 * index;
-    for (unsigned i = 0; i < 124208; i += 4)
-      m.WriteU32(p + i, 0);
-    for (unsigned i = 0; i < 32; ++i) {
-      m.WriteU32(p + 36 + 464 * i, 0xffffffff);
-      m.WriteU32(p + 14884 + 464 * i, 0xffffffff);
-    }
-  }
   void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
-    if (e == 0x82a9b698) {
-      auto header = unsigned(s.r[3]);
-      if (!m.ReadU32(header))
-        m.WriteU32(header, 0x100000);
-      m.WriteU32(header + 4, 0);
+    if (ActionStorageDirectFixture(e, m, s))
       return;
-    }
+
     if (e == 0x82acd3b0 || e == 0x82b21340 || e == 0x82b11df0 ||
         e == 0x82b1f798)
       return;
-    if (e == 0x82ab31e0) {
-      m.WriteU32(0x80000 + 14656, 0x100000);
-      m.WriteU32(0x80000 + 14660, 1);
-      Init(m, 0);
-      return;
-    }
-    if (e == 0x82ab2d88) {
-      auto count = m.ReadU32(0x80000 + 14660);
-      Init(m, count);
-      m.WriteU32(0x80000 + 14660, count + 1);
-      return;
-    }
+
     if (e == 0x82acde40) {
       if (s.r[4] != 0x80000)
         throw std::runtime_error("record configuration resource");
@@ -56,8 +33,10 @@ struct RecordGuest final : manager_release_context61::GuestServices {
     }
     throw std::runtime_error("unexpected record service");
   }
-  void CallIndirect(GuestAddress, GuestMemory &,
-                    manager_release_context61::Registers &) override {
+  void CallIndirect(GuestAddress e, GuestMemory &m,
+                    manager_release_context61::Registers &s) override {
+    if (ActionStorageIndirectFixture(e, s))
+      return;
     throw std::runtime_error("unexpected record indirect");
   }
 };
@@ -68,9 +47,11 @@ int main() {
                                       cook_main_smoke::Regions.end());
     regions.push_back({0x832c9000, 0x4000});
     regions.push_back({0x83245000, 0x1000});
+    regions.push_back({0x8330b000, 0x1000});
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();
+    SetupActionStorageFixture(m);
     RecordGuest guest;
     auto s = sort_engine61_oracle::Initial(0), initial = s;
     m.WriteU32(0x832c9c54 + 44, 0x63000);

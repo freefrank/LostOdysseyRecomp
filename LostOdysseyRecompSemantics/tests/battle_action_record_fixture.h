@@ -1,7 +1,6 @@
 #pragma once
-// Synthetic replacement only for the still-external record-array reset/grow
-// services. This is not an implementation of guest allocation or the full
-// record initializer.
+// Synthetic initial state for isolated link scenarios. Runtime record creation
+// uses the recovered storage implementation and the service fixtures below.
 inline void InitializeActionRecordFixture(lo::semantic::gpu::GuestMemory &m,
                                           unsigned resource, bool reset) {
   auto base = m.ReadU32(resource + 14656);
@@ -18,4 +17,39 @@ inline void InitializeActionRecordFixture(lo::semantic::gpu::GuestMemory &m,
     m.WriteU32(record + 14884 + 464 * i, 0xffffffff);
   }
   m.WriteU32(resource + 14660, index + 1);
+}
+
+// Narrow synthetic boundaries only: empty strings, heap service, memset and
+// record destruction. Growth and nested record defaults execute recovered code.
+inline void SetupActionStorageFixture(lo::semantic::gpu::GuestMemory &m) {
+  m.WriteU32(0x8330b608, 0x78000);
+  m.WriteU32(0x78000, 0x78100);
+  m.WriteU32(0x78108, 0x123400);
+  m.WriteU32(0x82000e40, 0x3f800000);
+  m.WriteU32(0x82000e50, 0);
+}
+inline bool ActionStorageDirectFixture(
+    unsigned e, lo::semantic::gpu::GuestMemory &m,
+    lo::semantic::gpu::manager_release_context61::Registers &s) {
+  auto p = unsigned(s.r[3]);
+  if (e == 0x82b7bc40) {
+    for (unsigned i = 0; i < unsigned(s.r[5]); ++i)
+      m.WriteU8(p + i, unsigned(s.r[4]));
+    return true;
+  }
+  if (e == 0x822d02f8) {
+    for (unsigned i = 0; i < 12; i += 4)
+      m.WriteU32(p + i, 0);
+    return true;
+  }
+  if (e == 0x82298938 || e == 0x828ae428)
+    return true;
+  return false;
+}
+inline bool ActionStorageIndirectFixture(
+    unsigned e, lo::semantic::gpu::manager_release_context61::Registers &s) {
+  if (e != 0x123400)
+    return false;
+  s.r[3] = s.r[5] ? 0x100000 : 0;
+  return true;
 }

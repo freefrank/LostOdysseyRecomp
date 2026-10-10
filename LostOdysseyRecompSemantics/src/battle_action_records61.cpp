@@ -1,3 +1,4 @@
+#include "lo_semantics/battle_action_storage61.h"
 #include "lo_semantics/battle_action_records61.h"
 #include "lo_semantics/battle_script_extensions61.h"
 #include "lo_semantics/recovery_abi.h"
@@ -35,7 +36,8 @@ struct Runtime {
     m.WriteU32(a + 52, W(a + 52) + n);
   }
   void Call(unsigned e) {
-    if (!battle_action_effects61::Apply(e, m, d, s))
+    if (!battle_action_storage61::Apply(e, m, d, s) &&
+        !battle_action_effects61::Apply(e, m, d, s))
       d.guest.CallDirect(e, m, s);
   }
   unsigned Manager(unsigned method) {
