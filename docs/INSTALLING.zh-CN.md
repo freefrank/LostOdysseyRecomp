@@ -29,7 +29,7 @@
 
 需要 Windows x64 和支持 AVX 的 CPU。默认使用 Direct3D 12，也可以在设置中改用 Vulkan。
 
-1. 从[最新发布页](https://github.com/freefrank/LostOdysseyRecomp/releases/latest)下载 `LostOdysseyRecomp-windows-x64-v0.9.0.zip`。
+1. 从[最新发布页](https://github.com/freefrank/LostOdysseyRecomp/releases/latest)下载 `LostOdysseyRecomp-windows-x64-v0.9.22.zip`。
 2. 把整个 ZIP 解压到可写目录，不要放在 `Program Files` 下。
 3. 运行 `LostOdysseyRecomp.exe`。找不到游戏时会打开导入器。
 4. 选择语言和图形选项。游戏可能会先询问是否下载预编译着色器，见[着色器准备](#shader-preparation)。
@@ -73,17 +73,17 @@ Linux 使用 Vulkan。Steam Deck 和其他 Linux 硬件的测试还不多。从�
 
 ### AppImage
 
-下载 `LostOdysseyRecomp-linux-x64-v0.9.0.AppImage` 后运行：
+下载 `LostOdysseyRecomp-linux-x64-v0.9.22.AppImage` 后运行：
 
 ```bash
-chmod +x LostOdysseyRecomp-linux-x64-v0.9.0.AppImage
-./LostOdysseyRecomp-linux-x64-v0.9.0.AppImage
+chmod +x LostOdysseyRecomp-linux-x64-v0.9.22.AppImage
+./LostOdysseyRecomp-linux-x64-v0.9.22.AppImage
 ```
 
 可以在导入器里导入游戏，也可以直接指定游戏文件夹启动：
 
 ```bash
-./LostOdysseyRecomp-linux-x64-v0.9.0.AppImage --game /path/to/game
+./LostOdysseyRecomp-linux-x64-v0.9.22.AppImage --game /path/to/game
 ```
 
 AppImage 把存档和设置放在当前用户的目录，见[文件位置](#file-locations)。
@@ -100,7 +100,7 @@ flatpak install --user flathub org.freedesktop.Platform//26.08
 再安装并运行下载的 bundle：
 
 ```bash
-flatpak --user install --bundle LostOdysseyRecomp-linux-x64-v0.9.0.flatpak
+flatpak --user install --bundle LostOdysseyRecomp-linux-x64-v0.9.22.flatpak
 flatpak run io.github.freefrank.LostOdysseyRecomp
 ```
 
@@ -112,7 +112,7 @@ flatpak run io.github.freefrank.LostOdysseyRecomp
 
 需要 macOS 15 或更高版本的 Apple Silicon Mac。应用未经公证，macOS 会拦截首次启动。
 
-1. 下载 `LostOdysseyRecomp-macos-arm64-v0.9.0.dmg` 并打开。
+1. 下载 `LostOdysseyRecomp-macos-arm64-v0.9.22.dmg` 并打开。
 2. 把 `LostOdysseyRecomp.app` 拖到 Applications 链接上，然后推出磁盘映像。
 3. 从“应用程序”打开 `LostOdysseyRecomp`。macOS 第一次会拦截它。打开 **系统设置 → 隐私与安全性**，滚动到“安全性”，点击应用旁的 **仍要打开**（这个按钮只在启动被拦截后出现）。macOS 再次询问时点击 **打开**，可能需要输入密码。之后的启动不再需要批准。
 4. 找不到游戏时会打开导入器，见[导入游戏数据](#automatic-content-import)。
@@ -230,7 +230,7 @@ Xenia 的存档格式相同，不需要转换。
 
 ```bash
 LostOdysseyRecomp.exe --game "D:\Games\Lost Odyssey"
-./LostOdysseyRecomp-linux-x64-v0.9.0.AppImage --game ~/Games/LostOdyssey
+./LostOdysseyRecomp-linux-x64-v0.9.22.AppImage --game ~/Games/LostOdyssey
 flatpak run io.github.freefrank.LostOdysseyRecomp --game ~/Games/LostOdyssey
 LostOdysseyRecomp.app/Contents/MacOS/LostOdysseyRecomp --game ~/Games/LostOdyssey
 ```

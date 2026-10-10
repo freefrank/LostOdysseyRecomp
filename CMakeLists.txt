@@ -9,7 +9,7 @@ if(CMAKE_OSX_DEPLOYMENT_TARGET VERSION_LESS LO_MINIMUM_MACOS)
     message(STATUS "Raising CMAKE_OSX_DEPLOYMENT_TARGET from ${CMAKE_OSX_DEPLOYMENT_TARGET} to ${LO_MINIMUM_MACOS}")
     set(CMAKE_OSX_DEPLOYMENT_TARGET "${LO_MINIMUM_MACOS}" CACHE STRING "Minimum macOS deployment target" FORCE)
 endif()
-project(LostOdysseyRecomp VERSION 0.9.0 LANGUAGES C CXX)
+project(LostOdysseyRecomp VERSION 0.9.22 LANGUAGES C CXX)
 include(GNUInstallDirs)
 # Source version, not a release/commit or clean-checkout assertion.
 # Capture before nested projects can replace PROJECT_VERSION in their scope.

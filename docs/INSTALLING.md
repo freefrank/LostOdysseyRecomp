@@ -29,7 +29,7 @@ Download the package for your platform, import the game from your own discs, and
 
 You need Windows x64 and a CPU with AVX. The game uses Direct3D 12 by default; Vulkan can be chosen in the settings.
 
-1. Download `LostOdysseyRecomp-windows-x64-v0.9.0.zip` from the [latest release](https://github.com/freefrank/LostOdysseyRecomp/releases/latest).
+1. Download `LostOdysseyRecomp-windows-x64-v0.9.22.zip` from the [latest release](https://github.com/freefrank/LostOdysseyRecomp/releases/latest).
 2. Extract the whole ZIP to a writable folder outside `Program Files`.
 3. Run `LostOdysseyRecomp.exe`. The importer opens when no game is found.
 4. Choose the languages and graphics options. The game may offer to download precompiled shaders first; see [Shader preparation](#shader-preparation).
@@ -73,17 +73,17 @@ Linux uses Vulkan. Steam Deck and other Linux hardware have had limited testing.
 
 ### AppImage
 
-Download `LostOdysseyRecomp-linux-x64-v0.9.0.AppImage`, then run:
+Download `LostOdysseyRecomp-linux-x64-v0.9.22.AppImage`, then run:
 
 ```bash
-chmod +x LostOdysseyRecomp-linux-x64-v0.9.0.AppImage
-./LostOdysseyRecomp-linux-x64-v0.9.0.AppImage
+chmod +x LostOdysseyRecomp-linux-x64-v0.9.22.AppImage
+./LostOdysseyRecomp-linux-x64-v0.9.22.AppImage
 ```
 
 Import the game in the importer, or start it with a game folder directly:
 
 ```bash
-./LostOdysseyRecomp-linux-x64-v0.9.0.AppImage --game /path/to/game
+./LostOdysseyRecomp-linux-x64-v0.9.22.AppImage --game /path/to/game
 ```
 
 The AppImage keeps saves and settings in your user folders; see [file locations](#file-locations).
@@ -100,7 +100,7 @@ flatpak install --user flathub org.freedesktop.Platform//26.08
 Then install and run the downloaded bundle:
 
 ```bash
-flatpak --user install --bundle LostOdysseyRecomp-linux-x64-v0.9.0.flatpak
+flatpak --user install --bundle LostOdysseyRecomp-linux-x64-v0.9.22.flatpak
 flatpak run io.github.freefrank.LostOdysseyRecomp
 ```
 
@@ -112,7 +112,7 @@ The importer can read dumps anywhere on your computer, including `/media`, `/run
 
 You need an Apple Silicon Mac with macOS 15 or later. The app is not notarized, so macOS blocks the first launch.
 
-1. Download `LostOdysseyRecomp-macos-arm64-v0.9.0.dmg` and open it.
+1. Download `LostOdysseyRecomp-macos-arm64-v0.9.22.dmg` and open it.
 2. Drag `LostOdysseyRecomp.app` onto the Applications link, then eject the disk image.
 3. Open `LostOdysseyRecomp` from Applications. macOS blocks it the first time. Open **System Settings → Privacy & Security**, scroll to Security and choose **Open Anyway** next to the app (the button appears only after a blocked launch). Choose **Open** when macOS asks again; it may ask for your password. Later launches need no approval.
 4. The importer opens when no game is found; see [Importing game data](#automatic-content-import).
@@ -226,7 +226,7 @@ Write `--game <path>` as two arguments; `--game=<path>` and unknown arguments ar
 
 ```bash
 LostOdysseyRecomp.exe --game "D:\Games\Lost Odyssey"
-./LostOdysseyRecomp-linux-x64-v0.9.0.AppImage --game ~/Games/LostOdyssey
+./LostOdysseyRecomp-linux-x64-v0.9.22.AppImage --game ~/Games/LostOdyssey
 flatpak run io.github.freefrank.LostOdysseyRecomp --game ~/Games/LostOdyssey
 LostOdysseyRecomp.app/Contents/MacOS/LostOdysseyRecomp --game ~/Games/LostOdyssey
 ```
