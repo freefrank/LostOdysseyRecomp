@@ -683,3 +683,7 @@ Recovered B12D08 source-action flag shortcut or priced physical damage. The full
 ## Descriptor property transformations and reports
 
 Recovered B106B8 property-family conversion, duration masks and selected-target property assignment; AC8608 inserts, maximizes or accumulates property payloads. Recovered B11A20 temporary-immunity/category selection with real target-label binding and result reports. Focused checks cover family/value conversion, duration slots, random primary target, random immunity, empty-category no-mark behavior and category/class report selection. Descriptor callback coverage now 79 of 83 distinct targets; remaining 4 unclaimed. Logical ABI checks only, not gameplay acceptance.
+
+## Descriptor revival and action reset
+
+Recovered revival reset dependencies AC92B0, ACD3C0 and B0FF10, composing the existing AB31E0 action reset, plus B0FFF0 revival modes and B12870 paired HP/MP floor restoration. Reset preserves the designated bank-3 property payload, clears action timing, rebuilds stats/default actions and releases script flags. Focused checks cover real reset composition, activation-only and unconditional revival, paired floors, special full-HP report and same-actor action reset. Descriptor callback coverage now 81 of 83 distinct targets. Logical ABI checks only, not gameplay acceptance.

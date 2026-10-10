@@ -18,6 +18,10 @@ struct MutationGuest final : manager_release_context61::GuestServices {
   }
   void CallIndirect(GuestAddress e, GuestMemory &m,
                     manager_release_context61::Registers &s) override {
+    if (e == 0x123460) {
+      s.r[3] = s.r[5] ? 0x600000 : 0;
+      return;
+    }
     if (profile_fixture::Indirect(e, s))
       return;
     if (e == 0x123450) {
@@ -47,6 +51,7 @@ int main() {
     regions.push_back({0x83291000, 0x1000});
     regions.push_back({0x83315000, 0x1000});
     regions.push_back({0x832c1000, 0x1000});
+    regions.push_back({0x8330b000, 0x1000});
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();
@@ -824,6 +829,59 @@ int main() {
     call(0x82b11a20);
     check(m.ReadU32(target + 5092) == 2 && m.ReadU32(0xf9000 + 24) == 77,
           "highest flagged class report");
+    m.WriteU32(0xc0000 + 12, 2);
+    m.WriteU32(0xc1000 + 472 + 8, 25);
+    m.WriteU32(0xc1000 + 472 + 64, 0x0c000123);
+    m.WriteU32(0x8330b608, 0xdd000);
+    m.WriteU32(0xdd000, 0xdd100);
+    m.WriteU32(0xdd108, 0x123460);
+    m.WriteU32(target + 14656, 0);
+    m.WriteU32(target + 14660, 0);
+    m.WriteU32(target + 14664, 0);
+    m.WriteU32(target + 100, 0xc0000012);
+    m.WriteU32(target + 88, 3);
+    m.WriteU32(target + 92, 4);
+    m.WriteU32(target + 96, 5);
+    call(0x82b0ff10);
+    check(m.ReadU32(target + 100) == 0x12 && !m.ReadU32(target + 88) &&
+              m.ReadU32(target + 14660) == 1 && m.ReadU32(target + 60) == 6 &&
+              m.ReadU32(0xc1000 + 472 + 64) == 0x123,
+          "revival reset rebuilds stats, action queue and script flags");
+    m.WriteU32(owner + 24, 40);
+    m.WriteU32(owner + 112, 2);
+    m.WriteU32(source + 132, 0);
+    call(0x82b0fff0);
+    check(m.ReadU32(source + 132) == 1 && !m.ReadU8(owner + 203),
+          "revival callback activation-only mode");
+    m.WriteU32(owner + 112, 3);
+    m.WriteU32(owner + 108, 2);
+    put(target + 2588, 0);
+    put(target + 2592, 100);
+    call(0x82b0fff0);
+    check(get(0x200000 + 4 * 3730) == 50 && m.ReadU32(target + 60) == 6,
+          "unconditional revival records HP floor and resets action state");
+    m.WriteU32(owner + 112, 4);
+    put(target + 2588, 0);
+    put(target + 2592, 100);
+    put(target + 2616, 0);
+    put(target + 2620, 80);
+    call(0x82b12870);
+    check(get(target + 2588) == 50 && get(target + 2616) == 20 &&
+              get(0x200000 + 4 * 3730) == 50 && get(0x200000 + 4 * 3738) == 20,
+          "paired HP and MP restoration floors");
+    m.WriteU32(source + 124, 0x40000000);
+    m.WriteU32(source + 68, 238);
+    m.WriteU32(owner + 20, 8);
+    m.WriteU32(owner + 24, 130);
+    put(target + 2588, 10);
+    call(0x82b12870);
+    check(get(target + 2588) == 100 && get(0x200000 + 4 * 3730) == 100,
+          "special revival reports maximum HP");
+    m.WriteU32(target + 64, 24);
+    m.WriteU32(source + 188, 9);
+    call(0x82b12870);
+    check((m.ReadU32(source + 124) & 0x40000) && !m.ReadU32(source + 188),
+          "same-actor revival clears pending action");
     std::puts("PASS effect dispatch, eligibility, property payloads, HP cap "
               "results and gauge changes");
     return 0;

@@ -159,7 +159,7 @@
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
     "unit_count": 238,
-    "distinct_entries": 1162,
+    "distinct_entries": 1167,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -2253,11 +2253,13 @@
           "82AB2D88",
           "824061E0",
           "822C42D8",
-          "82A9B698"
+          "82A9B698",
+          "82ACD3C0"
         ],
         "focused_smoke_paths": 1,
         "validation": "One focused fixture checks capacity growth, append without reallocation, both record arrays, 512 string constructor/destructor calls per record, nested default fields, reset destruction order and register preservation. Allocator, string construction, destruction and memory services are fixture boundaries. Recovered action storage is now composed into record creation and the reset-effect wrapper. Six caller fixtures pass through real growth, zeroing and nested record initialization instead of the former synthetic initializer. Narrow allocator, empty-string and record-destructor services remain fixture boundaries. Native gameplay and bitwise floating-point acceptance remain unvalidated. Native gameplay is unvalidated. Logical/ABI only",
-        "composition_update": "Action creation and destruction now compose recovered string construction/reset/release. Empty record labels execute the constructor directly; record cleanup executes string release instead of synthetic destructor callbacks. The destruction fixture observes all 1024 actual manager releases in source order. Storage and six caller fixtures pass. Nonempty character conversion, allocator internals, exceptional cleanup continuation and native gameplay remain unvalidated boundaries."
+        "composition_update": "Action creation and destruction now compose recovered string construction/reset/release. Empty record labels execute the constructor directly; record cleanup executes string release instead of synthetic destructor callbacks. The destruction fixture observes all 1024 actual manager releases in source order. Storage and six caller fixtures pass. Nonempty character conversion, allocator internals, exceptional cleanup continuation and native gameplay remain unvalidated boundaries.",
+        "descriptor_revival": "Recovered revival reset dependencies AC92B0, ACD3C0 and B0FF10, composing the existing AB31E0 action reset, plus B0FFF0 revival modes and B12870 paired HP/MP floor restoration. Reset preserves the designated bank-3 property payload, clears action timing, rebuilds stats/default actions and releases script flags. Focused checks cover real reset composition, activation-only and unconditional revival, paired floors, special full-HP report and same-actor action reset. Descriptor callback coverage now 81 of 83 distinct targets. Logical ABI checks only, not gameplay acceptance."
       },
       {
         "unit": "battle_action_destruction61",
@@ -2428,7 +2430,8 @@
           "82ACA838",
           "82AC8988",
           "82AC9548",
-          "82AC8608"
+          "82AC8608",
+          "82AC92B0"
         ],
         "focused_smoke_paths": 1,
         "validation": "One focused fixture checks presence-only modes, exact low-byte removal mode, tail alias, removal of the mask and two indexed payloads, absent/out-of-range cases and red-zone ABI preservation. Action adjustments compose removal, and their fixture now verifies both linked properties are actually cleared instead of counting callbacks. Linked peer virtual behavior remains a service boundary; native gameplay is unvalidated. Logical/ABI only",
@@ -2444,7 +2447,8 @@
         "descriptor_random_clear": "Recovered B0F920 random property removal and AC91E0 ordinal clearing. The effect counts four candidate banks using source mask-presence behavior, cancels its result marker if none qualify, selects a nonempty candidate and clears one set bit with both payload words. Preserves source exclusion of bit31 and source random retry semantics. Focused checks cover actual random selection, payload clearing and no-eligible-bank cancellation. Descriptor callback coverage now 59 of 83 distinct targets; remaining 24 unclaimed. Logical ABI checks only, not gameplay acceptance.",
         "descriptor_shared_properties": "Recovered B10E98 shared-party property assignment or random target category selection, with ACA710/ACA830 shared-bank mutation, ACA838 shared payload clearing and AC8988 direct category insertion. Preserves source early return for already-set shared flags and first-full-mask payload indexing. Focused integration covers actual shared group lookup, source category and payload assignment, target category replacement and duration resets. Descriptor callback coverage now 60 of 83 distinct targets; remaining 23 unclaimed. Logical ABI checks only, not gameplay acceptance.",
         "descriptor_toggle": "Recovered B0FBD0 dual property toggling and AC9548 masked flag toggles. Existing flags are removed, while additions respect passive and temporary immunity masks. The effect preserves its asymmetric kind3/chance gate, passive-property7 exception, primary bit reporting and optional secondary bank. Focused checks cover toggling both banks, immune additions and passive gate suppression. Descriptor callback coverage now 63 of 83 distinct targets; remaining 20 unclaimed. Logical ABI checks only, not gameplay acceptance.",
-        "descriptor_property_reports": "Recovered B106B8 property-family conversion, duration masks and selected-target property assignment; AC8608 inserts, maximizes or accumulates property payloads. Recovered B11A20 temporary-immunity/category selection with real target-label binding and result reports. Focused checks cover family/value conversion, duration slots, random primary target, random immunity, empty-category no-mark behavior and category/class report selection. Descriptor callback coverage now 79 of 83 distinct targets; remaining 4 unclaimed. Logical ABI checks only, not gameplay acceptance."
+        "descriptor_property_reports": "Recovered B106B8 property-family conversion, duration masks and selected-target property assignment; AC8608 inserts, maximizes or accumulates property payloads. Recovered B11A20 temporary-immunity/category selection with real target-label binding and result reports. Focused checks cover family/value conversion, duration slots, random primary target, random immunity, empty-category no-mark behavior and category/class report selection. Descriptor callback coverage now 79 of 83 distinct targets; remaining 4 unclaimed. Logical ABI checks only, not gameplay acceptance.",
+        "descriptor_revival": "Recovered revival reset dependencies AC92B0, ACD3C0 and B0FF10, composing the existing AB31E0 action reset, plus B0FFF0 revival modes and B12870 paired HP/MP floor restoration. Reset preserves the designated bank-3 property payload, clears action timing, rebuilds stats/default actions and releases script flags. Focused checks cover real reset composition, activation-only and unconditional revival, paired floors, special full-HP report and same-actor action reset. Descriptor callback coverage now 81 of 83 distinct targets. Logical ABI checks only, not gameplay acceptance."
       },
       {
         "unit": "battle_preferred_target61",
@@ -2950,7 +2954,10 @@
           "82B0E300",
           "82B12D08",
           "82B106B8",
-          "82B11A20"
+          "82B11A20",
+          "82B0FF10",
+          "82B0FFF0",
+          "82B12870"
         ],
         "focused_smoke_paths": 1,
         "validation": "Recovered nine descriptor effect callbacks: indexed dispatch and nested eligibility, property insert/remove and numeric payload, chance-gated source flag, fixed/quarter HP caps with recorded deltas, and percentage gauge addition/reset. Composes actual eligibility/chance/property/result/gauge semantics. Focused fixture passes dispatch limits, side rejection, property changes/truncation, failed-chance flag order, both HP caps and gauge effects. Descriptor constructor now has 42 of83 distinct callback targets recovered; remaining41 are not claimed complete. No gameplay/full ABI acceptance.",
@@ -2977,7 +2984,8 @@
         "descriptor_bounded_properties": "Recovered B0BFD0 bounded random damage with dual property values. Preserves side/bank and chance gating, direct sentinel damage before normal mode suppression, property-only mode, common damage-mode resolution and both property payload applications. Focused integration covers bounded damage, primary/secondary payloads, property-only suppression and sentinel priority. Descriptor callback coverage now 74 of 83 distinct targets; remaining 9 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.",
         "descriptor_exhaustion_distribution": "Recovered B0DEB0 exhaustion damage and B0E300 distributed-source-HP damage. Exhaustion skips category amplification, consumes the source gauge, sets its action flag and applies chance-gated properties. Distributed damage divides source HP by target count, applies gauge reduction, and preserves the special mode8 healing-plus-MP-siphon behavior. Focused checks cover damage, source gauge/flag changes, property bookkeeping, HP distribution and mode8 siphoning. Descriptor callback coverage now 76 of 83 distinct targets; remaining 7 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.",
         "descriptor_priced_physical": "Recovered B12D08 source-action flag shortcut or priced physical damage. The full branch uses shared physical/critical/shield/MP resolution, optional MP siphon and source-width profile cost arithmetic capped by available balance. The shortcut marks the effect and sets the source flag without running damage or spending. Focused checks cover shortcut preservation and full damage/siphon/spending composition. Descriptor callback coverage now 77 of 83 distinct targets; remaining 6 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.",
-        "descriptor_property_reports": "Recovered B106B8 property-family conversion, duration masks and selected-target property assignment; AC8608 inserts, maximizes or accumulates property payloads. Recovered B11A20 temporary-immunity/category selection with real target-label binding and result reports. Focused checks cover family/value conversion, duration slots, random primary target, random immunity, empty-category no-mark behavior and category/class report selection. Descriptor callback coverage now 79 of 83 distinct targets; remaining 4 unclaimed. Logical ABI checks only, not gameplay acceptance."
+        "descriptor_property_reports": "Recovered B106B8 property-family conversion, duration masks and selected-target property assignment; AC8608 inserts, maximizes or accumulates property payloads. Recovered B11A20 temporary-immunity/category selection with real target-label binding and result reports. Focused checks cover family/value conversion, duration slots, random primary target, random immunity, empty-category no-mark behavior and category/class report selection. Descriptor callback coverage now 79 of 83 distinct targets; remaining 4 unclaimed. Logical ABI checks only, not gameplay acceptance.",
+        "descriptor_revival": "Recovered revival reset dependencies AC92B0, ACD3C0 and B0FF10, composing the existing AB31E0 action reset, plus B0FFF0 revival modes and B12870 paired HP/MP floor restoration. Reset preserves the designated bank-3 property payload, clears action timing, rebuilds stats/default actions and releases script flags. Focused checks cover real reset composition, activation-only and unconditional revival, paired floors, special full-HP report and same-actor action reset. Descriptor callback coverage now 81 of 83 distinct targets. Logical ABI checks only, not gameplay acceptance."
       },
       {
         "unit": "battle_effect_scaling61",
@@ -3084,7 +3092,7 @@
   "battle_semantic_runtime_composition": {
     "date": "2026-10-10",
     "routed_units": 74,
-    "routed_distinct_entries": 647,
+    "routed_distinct_entries": 652,
     "source": "src/battle_semantic_runtime61.cpp",
     "routes": "src/battle_semantic_routes.inc",
     "generator": "tools/generate_battle_semantic_routes.py",
@@ -3093,7 +3101,7 @@
     "runtime_gameplay_validated": false,
     "summary": "Added an opt-in battle semantic runtime entry that routes all 511 currently recovered battle entries across 64 units, including nested direct calls and known indirect targets. Unknown services still forward to the supplied guest implementation. The focused composition fixture crosses script completion into real manager/resource lookup, routes a known virtual target, and verifies unknown direct/indirect forwarding. This connects recovered logic without claiming game-runtime integration or gameplay acceptance; inventory entry counts are unchanged.",
     "routed_battle_units": 71,
-    "routed_battle_entries": 618,
+    "routed_battle_entries": 623,
     "shared_context_entries": 27,
     "accepted_copy_fill_entries": 2,
     "shared_support_summary": "Extended the composed battle runtime with existing manager-release, string-storage and string-conversion semantics, plus accepted full-context copy and fill support. The graph now routes 511 battle entries and 29 shared/support entries. Focused composition checks pass UTF-16 length and actual copy/fill memory effects without guest escapes. No new recovery credit is claimed and native game-runtime hooking remains pending.",
@@ -3133,6 +3141,7 @@
     "descriptor_bounded_properties": "Recovered B0BFD0 bounded random damage with dual property values. Preserves side/bank and chance gating, direct sentinel damage before normal mode suppression, property-only mode, common damage-mode resolution and both property payload applications. Focused integration covers bounded damage, primary/secondary payloads, property-only suppression and sentinel priority. Descriptor callback coverage now 74 of 83 distinct targets; remaining 9 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.",
     "descriptor_exhaustion_distribution": "Recovered B0DEB0 exhaustion damage and B0E300 distributed-source-HP damage. Exhaustion skips category amplification, consumes the source gauge, sets its action flag and applies chance-gated properties. Distributed damage divides source HP by target count, applies gauge reduction, and preserves the special mode8 healing-plus-MP-siphon behavior. Focused checks cover damage, source gauge/flag changes, property bookkeeping, HP distribution and mode8 siphoning. Descriptor callback coverage now 76 of 83 distinct targets; remaining 7 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.",
     "descriptor_priced_physical": "Recovered B12D08 source-action flag shortcut or priced physical damage. The full branch uses shared physical/critical/shield/MP resolution, optional MP siphon and source-width profile cost arithmetic capped by available balance. The shortcut marks the effect and sets the source flag without running damage or spending. Focused checks cover shortcut preservation and full damage/siphon/spending composition. Descriptor callback coverage now 77 of 83 distinct targets; remaining 6 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.",
-    "descriptor_property_reports": "Recovered B106B8 property-family conversion, duration masks and selected-target property assignment; AC8608 inserts, maximizes or accumulates property payloads. Recovered B11A20 temporary-immunity/category selection with real target-label binding and result reports. Focused checks cover family/value conversion, duration slots, random primary target, random immunity, empty-category no-mark behavior and category/class report selection. Descriptor callback coverage now 79 of 83 distinct targets; remaining 4 unclaimed. Logical ABI checks only, not gameplay acceptance."
+    "descriptor_property_reports": "Recovered B106B8 property-family conversion, duration masks and selected-target property assignment; AC8608 inserts, maximizes or accumulates property payloads. Recovered B11A20 temporary-immunity/category selection with real target-label binding and result reports. Focused checks cover family/value conversion, duration slots, random primary target, random immunity, empty-category no-mark behavior and category/class report selection. Descriptor callback coverage now 79 of 83 distinct targets; remaining 4 unclaimed. Logical ABI checks only, not gameplay acceptance.",
+    "descriptor_revival": "Recovered revival reset dependencies AC92B0, ACD3C0 and B0FF10, composing the existing AB31E0 action reset, plus B0FFF0 revival modes and B12870 paired HP/MP floor restoration. Reset preserves the designated bank-3 property payload, clears action timing, rebuilds stats/default actions and releases script flags. Focused checks cover real reset composition, activation-only and unconditional revival, paired floors, special full-HP report and same-actor action reset. Descriptor callback coverage now 81 of 83 distinct targets. Logical ABI checks only, not gameplay acceptance."
   }
 }

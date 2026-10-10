@@ -33,6 +33,14 @@
       "instruction_count": 48,
       "body_sha256": "106ed8a52ff2416da7f04d2cf0692d57b93a01647334f878b522638d9778f36a",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82ACD3C0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.160.cpp",
+      "source_line": 16951,
+      "instruction_count": 8,
+      "body_sha256": "e58fd5d2de3c713f59399d8443ef97cc6445ccdf4507bb44124e932cf3ede08c",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -40,7 +48,8 @@
       "82AB2D88",
       "824061E0",
       "822C42D8",
-      "82A9B698"
+      "82A9B698",
+      "82ACD3C0"
     ],
     "header": "include/lo_semantics/battle_action_storage61.h",
     "source": "src/battle_action_storage61.cpp",
@@ -55,6 +64,7 @@
     "complete": false,
     "focused_smoke_paths": 1,
     "case_scope": "One focused fixture checks capacity growth, append without reallocation, both record arrays, 512 string constructor/destructor calls per record, nested default fields, reset destruction order and register preservation. Allocator, string construction, destruction and memory services are fixture boundaries. Recovered action storage is now composed into record creation and the reset-effect wrapper. Six caller fixtures pass through real growth, zeroing and nested record initialization instead of the former synthetic initializer. Narrow allocator, empty-string and record-destructor services remain fixture boundaries. Native gameplay and bitwise floating-point acceptance remain unvalidated. Native gameplay is unvalidated. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof.",
-    "composition_update": "Action creation and destruction now compose recovered string construction/reset/release. Empty record labels execute the constructor directly; record cleanup executes string release instead of synthetic destructor callbacks. The destruction fixture observes all 1024 actual manager releases in source order. Storage and six caller fixtures pass. Nonempty character conversion, allocator internals, exceptional cleanup continuation and native gameplay remain unvalidated boundaries."
+    "composition_update": "Action creation and destruction now compose recovered string construction/reset/release. Empty record labels execute the constructor directly; record cleanup executes string release instead of synthetic destructor callbacks. The destruction fixture observes all 1024 actual manager releases in source order. Storage and six caller fixtures pass. Nonempty character conversion, allocator internals, exceptional cleanup continuation and native gameplay remain unvalidated boundaries.",
+    "descriptor_revival": "Recovered revival reset dependencies AC92B0, ACD3C0 and B0FF10, composing the existing AB31E0 action reset, plus B0FFF0 revival modes and B12870 paired HP/MP floor restoration. Reset preserves the designated bank-3 property payload, clears action timing, rebuilds stats/default actions and releases script flags. Focused checks cover real reset composition, activation-only and unconditional revival, paired floors, special full-HP report and same-actor action reset. Descriptor callback coverage now 81 of 83 distinct targets. Logical ABI checks only, not gameplay acceptance."
   }
 }

@@ -1,3 +1,5 @@
+#include "lo_semantics/battle_action_storage61.h"
+#include "lo_semantics/battle_action_effects61.h"
 #include "lo_semantics/battle_evaluation_theft61.h"
 #include "lo_semantics/battle_manager_access61.h"
 #include "lo_semantics/battle_resource_stats61.h"
@@ -25,6 +27,8 @@ using recovery_abi::Address;
 void Call(unsigned e, GuestMemory &m, Dependencies d, Registers &s) {
   if (!battle_effect_mutation61::Apply(e, m, d, s) &&
       !battle_script_runtime61::Apply(e, m, d, s) &&
+      !battle_action_storage61::Apply(e, m, d, s) &&
+      !battle_action_effects61::Apply(e, m, d, s) &&
       !battle_evaluation_theft61::Apply(e, m, d, s) &&
       !battle_manager_access61::Apply(e, m, d, s) &&
       !battle_resource_growth61::Apply(e, m, d, s) &&
@@ -57,6 +61,17 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   }
   unsigned frame = 112, first = 30, literal = 0;
   switch (e) {
+  case 0x82b0fff0:
+  case 0x82b12870:
+    frame = 160;
+    first = 26;
+    literal = 80;
+    break;
+  case 0x82b0ff10:
+    frame = 128;
+    first = 29;
+    literal = 80;
+    break;
   case 0x82b11a20:
     frame = 160;
     first = 25;
@@ -265,7 +280,130 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     s.r[6] = 0;
     Call(method, m, d, s);
   };
-  if (e == 0x82b11a20) {
+  if (e == 0x82b0fff0 || e == 0x82b12870) {
+    auto source = [&]() { return m.ReadU32(owner + 4); };
+    auto target = [&]() { return m.ReadU32(owner + 8); };
+    auto different = [&]() {
+      return m.ReadU32(source() + 64) != m.ReadU32(target() + 64);
+    };
+    auto reset = [&]() {
+      s.r[3] = owner;
+      Call(0x82b0ff10, m, d, s);
+    };
+    auto ready = [&]() {
+      s.r[3] = target();
+      s.ctr = m.ReadU32(m.ReadU32(target()) + 292);
+      d.guest.CallIndirect(Address(s.ctr) & ~3u, m, s);
+      return Address(s.r[3]) != 0;
+    };
+    auto record = [&](unsigned result, unsigned index, float value) {
+      m.WriteU32(m.ReadU32(result + 20) + 4 * (116 * m.ReadU32(result + 12) +
+                                               m.ReadU32(result + 24) + index),
+                 std::bit_cast<unsigned>(value));
+    };
+    auto restore = [&](unsigned mode, unsigned offset, unsigned index) {
+      auto result = m.ReadU32(0x832cb790);
+      auto value = std::int32_t(m.ReadU32(owner + offset));
+      recovery_abi::WriteU64(m, sp + 88, std::uint64_t(std::int64_t(value)));
+      fp();
+      s.fpr_bits[1] = std::bit_cast<std::uint64_t>(double(float(value)));
+      s.r[3] = result;
+      s.r[4] = target();
+      s.r[6] = mode;
+      Call(0x82b2b9e0, m, d, s);
+      record(result, index, float(std::bit_cast<double>(s.fpr_bits[1])));
+    };
+    if (e == 0x82b0fff0) {
+      m.WriteU8(owner + 203, 0);
+      if (!eligible(2, 0) && !m.ReadU32(owner + 116))
+        m.WriteU8(owner + 208, 0);
+      else {
+        if (m.ReadU32(owner + 120))
+          m.WriteU32(source() + 124, m.ReadU32(source() + 124) | 32);
+        auto type = m.ReadU32(owner + 24);
+        if (type == 40 || type == 194 || ready()) {
+          mark();
+          auto mode = m.ReadU32(owner + 112);
+          if ((mode == 0 || mode == 1 || mode == 4) && ready() && different()) {
+            restore(4, 108, 3730);
+            reset();
+          }
+          if (m.ReadU32(owner + 112) == 3) {
+            restore(4, 108, 3730);
+            reset();
+          }
+          if (m.ReadU32(owner + 112) == 5 && ready() && different()) {
+            restore(4, 108, 3730);
+            reset();
+            if (m.ReadU32(owner + 104)) {
+              s.r[3] = target();
+              s.r[4] = m.ReadU32(owner + 96);
+              s.r[5] = m.ReadU32(owner + 104);
+              s.r[6] = m.ReadU32(owner + 112);
+              s.r[7] = m.ReadU32(owner + 108);
+              s.r[8] = 1;
+              Call(0x82ac8ec8, m, d, s);
+            }
+          }
+          if (m.ReadU32(owner + 112) == 1)
+            m.WriteU32(source() + 132, 0);
+          mode = m.ReadU32(owner + 112);
+          if (mode == 2 || mode == 4)
+            m.WriteU32(source() + 132, 1);
+        }
+      }
+    } else if (!eligible(2, 0))
+      m.WriteU8(owner + 208, 0);
+    else {
+      mark();
+      if (!different()) {
+        m.WriteU32(source() + 124, m.ReadU32(source() + 124) | 0x40000);
+        m.WriteU32(source() + 188, 0);
+      } else {
+        s.r[3] = 0;
+        Call(0x8238aa80, m, d, s);
+        auto bank = Address(s.r[3]);
+        s.r[3] = 0;
+        Call(0x8238aab0, m, d, s);
+        if (m.ReadU32(target() + 272 * bank + 232) & Address(s.r[3]))
+          reset();
+        if (!(m.ReadU32(source() + 124) & 0x10000000) &&
+            m.ReadU32(owner + 20) == 8 && m.ReadU32(owner + 24) == 130 &&
+            m.ReadU32(source() + 68) == 238) {
+          auto maximum = m.ReadU32(target() + 2592);
+          record(m.ReadU32(0x832cb790), 3730, std::bit_cast<float>(maximum));
+          m.WriteU32(target() + 2588, m.ReadU32(target() + 2592));
+        } else
+          restore(4, 108, 3730);
+        restore(5, 112, 3738);
+      }
+    }
+  } else if (e == 0x82b0ff10) {
+    s.r[3] = m.ReadU32(owner + 8);
+    Call(0x82ac92b0, m, d, s);
+    auto different = [&]() {
+      return m.ReadU32(m.ReadU32(owner + 4) + 64) !=
+             m.ReadU32(m.ReadU32(owner + 8) + 64);
+    };
+    if (different()) {
+      s.r[3] = m.ReadU32(0x8324570c);
+      s.r[4] = m.ReadU32(owner + 8);
+      Call(0x82acd3c0, m, d, s);
+    }
+    s.r[3] = m.ReadU32(0x83291dc0);
+    s.r[4] = m.ReadU32(owner + 8);
+    Call(0x82ac3058, m, d, s);
+    if (different()) {
+      s.r[3] = m.ReadU32(owner + 8);
+      Call(0x82ab31e0, m, d, s);
+      m.WriteU32(m.ReadU32(owner + 8) + 60, 6);
+    }
+    s.r[3] = 0x832c9c54;
+    s.r[4] = m.ReadU32(owner + 8);
+    Call(0x82a9bdb0, m, d, s);
+    auto actor = Address(s.r[3]);
+    m.WriteU32(actor + 64, m.ReadU32(actor + 64) & 0xf3ffffffu);
+  } else if (e == 0x82b11a20) {
     bool randomStatus = m.ReadU32(owner + 108) == 0;
     if (!eligible(randomStatus ? 2 : 1, randomStatus ? 0 : 1))
       m.WriteU8(owner + 208, 0);

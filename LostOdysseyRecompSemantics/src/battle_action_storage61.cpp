@@ -224,6 +224,14 @@ struct Runtime {
 };
 } // namespace
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
+  if (e == 0x82acd3c0) {
+    auto resource = Address(s.r[4]);
+    m.WriteU32(resource + 88, 0);
+    m.WriteU32(resource + 92, 0);
+    m.WriteU32(resource + 96, 0);
+    m.WriteU32(resource + 100, m.ReadU32(resource + 100) & 0x3fffffffu);
+    return true;
+  }
   unsigned first = 28, frame = 128;
   switch (e) {
   case 0x822c42d8:

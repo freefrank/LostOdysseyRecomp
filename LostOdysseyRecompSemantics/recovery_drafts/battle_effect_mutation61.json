@@ -369,6 +369,30 @@
       "instruction_count": 234,
       "body_sha256": "e60e984977b41aa775a9332761307494ad2a47f5a6a972dc9fcdeca930b95aa5",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B0FF10",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.166.cpp",
+      "source_line": 8833,
+      "instruction_count": 43,
+      "body_sha256": "f22317e465ffdcd215a06de164eee2909830e565c3d27380de2b87cc1328e00e",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B0FFF0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.166.cpp",
+      "source_line": 8965,
+      "instruction_count": 173,
+      "body_sha256": "4ec5570519ec18cc752eeb56d1a8f1ad1e8967074bccb03d55874688bc753c6b",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B12870",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.166.cpp",
+      "source_line": 15067,
+      "instruction_count": 125,
+      "body_sha256": "51a76481a72d01406a7c1ba18417a94da6076dbd74ba427400bdecbf342f5f76",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -418,7 +442,10 @@
       "82B0E300",
       "82B12D08",
       "82B106B8",
-      "82B11A20"
+      "82B11A20",
+      "82B0FF10",
+      "82B0FFF0",
+      "82B12870"
     ],
     "header": "include/lo_semantics/battle_effect_mutation61.h",
     "source": "src/battle_effect_mutation61.cpp",
@@ -456,6 +483,7 @@
     "descriptor_bounded_properties": "Recovered B0BFD0 bounded random damage with dual property values. Preserves side/bank and chance gating, direct sentinel damage before normal mode suppression, property-only mode, common damage-mode resolution and both property payload applications. Focused integration covers bounded damage, primary/secondary payloads, property-only suppression and sentinel priority. Descriptor callback coverage now 74 of 83 distinct targets; remaining 9 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.",
     "descriptor_exhaustion_distribution": "Recovered B0DEB0 exhaustion damage and B0E300 distributed-source-HP damage. Exhaustion skips category amplification, consumes the source gauge, sets its action flag and applies chance-gated properties. Distributed damage divides source HP by target count, applies gauge reduction, and preserves the special mode8 healing-plus-MP-siphon behavior. Focused checks cover damage, source gauge/flag changes, property bookkeeping, HP distribution and mode8 siphoning. Descriptor callback coverage now 76 of 83 distinct targets; remaining 7 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.",
     "descriptor_priced_physical": "Recovered B12D08 source-action flag shortcut or priced physical damage. The full branch uses shared physical/critical/shield/MP resolution, optional MP siphon and source-width profile cost arithmetic capped by available balance. The shortcut marks the effect and sets the source flag without running damage or spending. Focused checks cover shortcut preservation and full damage/siphon/spending composition. Descriptor callback coverage now 77 of 83 distinct targets; remaining 6 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.",
-    "descriptor_property_reports": "Recovered B106B8 property-family conversion, duration masks and selected-target property assignment; AC8608 inserts, maximizes or accumulates property payloads. Recovered B11A20 temporary-immunity/category selection with real target-label binding and result reports. Focused checks cover family/value conversion, duration slots, random primary target, random immunity, empty-category no-mark behavior and category/class report selection. Descriptor callback coverage now 79 of 83 distinct targets; remaining 4 unclaimed. Logical ABI checks only, not gameplay acceptance."
+    "descriptor_property_reports": "Recovered B106B8 property-family conversion, duration masks and selected-target property assignment; AC8608 inserts, maximizes or accumulates property payloads. Recovered B11A20 temporary-immunity/category selection with real target-label binding and result reports. Focused checks cover family/value conversion, duration slots, random primary target, random immunity, empty-category no-mark behavior and category/class report selection. Descriptor callback coverage now 79 of 83 distinct targets; remaining 4 unclaimed. Logical ABI checks only, not gameplay acceptance.",
+    "descriptor_revival": "Recovered revival reset dependencies AC92B0, ACD3C0 and B0FF10, composing the existing AB31E0 action reset, plus B0FFF0 revival modes and B12870 paired HP/MP floor restoration. Reset preserves the designated bank-3 property payload, clears action timing, rebuilds stats/default actions and releases script flags. Focused checks cover real reset composition, activation-only and unconditional revival, paired floors, special full-HP report and same-actor action reset. Descriptor callback coverage now 81 of 83 distinct targets. Logical ABI checks only, not gameplay acceptance."
   }
 }

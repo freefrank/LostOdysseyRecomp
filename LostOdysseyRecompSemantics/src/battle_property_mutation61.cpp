@@ -11,6 +11,22 @@
 namespace lo::semantic::gpu::battle_property_mutation61 {
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   using recovery_abi::Address;
+  if (e == 0x82ac92b0) {
+    auto resource = Address(s.r[3]), preserved = m.ReadU32(0x832134cc);
+    unsigned preservedBit = 0;
+    while (preservedBit < 31 && !(preserved & (1u << preservedBit)))
+      ++preservedBit;
+    for (unsigned bank = 0; bank < 8; ++bank) {
+      auto base = resource + 272 * bank;
+      m.WriteU32(base + 232, bank == 3 ? m.ReadU32(base + 232) & preserved : 0);
+      for (unsigned bit = 0; bit < 32; ++bit)
+        if (bank != 3 || bit != preservedBit) {
+          m.WriteU32(base + 236 + 4 * bit, 0);
+          m.WriteU32(base + 364 + 4 * bit, 0);
+        }
+    }
+    return true;
+  }
   if (e == 0x82ac8608) {
     auto old = Address(s.r[1]), resource = Address(s.r[3]),
          value = Address(s.r[5]), mode = Address(s.r[6]) & 255;
