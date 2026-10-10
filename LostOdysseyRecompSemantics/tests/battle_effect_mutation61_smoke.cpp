@@ -635,6 +635,43 @@ int main() {
     call(0x82b0d418);
     check(get(target + 2588) == 85 && get(owner + 172) == 5,
           "creature level damage coefficient");
+    m.WriteU32(owner + 120, 1);
+    put(owner + 80, 20);
+    put(0x82000da4, .1f);
+    put(target + 2588, 100);
+    put(target + 2616, 5);
+    put(target + 2620, 100);
+    put(source + 2616, 10);
+    m.WriteU32(0xb0000 + 4 * (128 * 15 + 112 + 3), 100);
+    call(0x82b0b178);
+    check(get(target + 2588) == 80 && get(target + 2616) == 0 &&
+              get(source + 2616) == 15 && get(owner + 172) == 0,
+          "physical damage with capped MP siphon");
+    m.WriteU32(owner + 120, 0);
+    call(0x82b0b178);
+    check(get(target + 2588) == 60 && get(owner + 172) == 20,
+          "physical damage without MP siphon");
+    m.WriteU32(owner + 92, 7);
+    m.WriteU32(owner + 100, 4);
+    m.WriteU32(owner + 108, 4);
+    m.WriteU32(owner + 112, 5);
+    m.WriteU32(owner + 120, 7);
+    put(owner + 88, 100);
+    put(target + 2588, 100);
+    call(0x82b0b630);
+    check(get(target + 2588) == 80 && get(owner + 172) == 20 &&
+              m.ReadU32(target + 4 * (68 * 7 + 2 + 59)) == 4 &&
+              m.ReadU32(target + 4 * (68 * 7 + 2 + 91)) == 5,
+          "damage followed by paired property");
+    m.WriteU32(owner + 92, 0);
+    m.WriteU32(owner + 100, 16);
+    m.WriteU32(owner + 96, 3);
+    m.WriteU32(owner + 104, 8);
+    call(0x82b0b630);
+    check(get(target + 2588) == 60 && m.ReadU32(owner + 168) == 4 &&
+              m.ReadU32(owner + 196) == 24 && (m.ReadU32(target + 232) & 16) &&
+              (m.ReadU32(target + 3 * 272 + 232) & 8),
+          "damage property mask bookkeeping");
     std::puts("PASS effect dispatch, eligibility, property payloads, HP cap "
               "results and gauge changes");
     return 0;

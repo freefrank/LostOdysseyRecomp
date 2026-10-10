@@ -201,6 +201,8 @@ bool Route(GuestAddress entry, GuestMemory &memory, Dependencies dependencies, R
   case 0x82b0aa70u:
   case 0x82b0ad38u:
   case 0x82b0af88u:
+  case 0x82b0b178u:
+  case 0x82b0b630u:
   case 0x82b0c4e8u:
   case 0x82b0c880u:
   case 0x82b0c9e0u:

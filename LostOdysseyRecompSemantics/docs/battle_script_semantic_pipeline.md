@@ -659,3 +659,7 @@ Recovered B0C9E0 missing-HP damage with conditional physical fallback. Source HP
 ## Descriptor level damage
 
 Recovered B0D7F0 level-bounded random damage and B0D418 repeated level-scaled attack damage. Both use real effective-level lookup, side gating and shared damage-mode resolution. The repeated-attack variant preserves individual floating additions, creature coefficient, gauge/status reduction and its no-variance normalization. Focused checks cover bounded RNG damage, side rejection, repeated attack sum and creature coefficient. Descriptor callback coverage now 70 of 83 distinct targets; remaining 13 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.
+
+## Descriptor damage followups
+
+Recovered B0B178 physical damage with optional capped MP siphon and B0B630 damage followed by chance-gated property effects. The siphon caps against current target MP and writes both source/target results; the property variant preserves primary bank0 flags, bank7 paired payloads, secondary masks and owner bookkeeping. Shared damage resolution retains each callback stack layout and saved floating registers. Focused integration covers siphon on/off, paired-property application and primary/secondary mask reporting. Descriptor callback coverage now 72 of 83 distinct targets; remaining 11 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.
