@@ -603,3 +603,7 @@ Recovered descriptor growth-refresh callback B10368: script actor level override
 ## Descriptor cost effect
 
 Recovered descriptor B13220 with eligibility and chance gates, the real scaling/critical/variance/normalization pipeline, HP result application and profile balance consumption. The spent total increases by the amount actually available when requested cost exceeds balance. Focused integration covers regular and balance-capped costs and the source-specific result-record offset. Descriptor callback coverage now 56 of 83 distinct targets; remaining 27 unclaimed. Logical ABI checks only, not gameplay acceptance.
+
+## Descriptor gauge damage
+
+Recovered B0DB98 manager-scaled damage with B0A0D0 side-gauge attenuation, status normalization, shield absorption, blocked-damage mode and HP/result writeback. The attenuation helper preserves class bypass, disabled gauges and source comparison behavior; enabled attenuation marks the result record. Focused synthetic checks exercise both helpers together, actual shield depletion, HP changes and result slots. Descriptor callback coverage now 57 of 83 distinct targets; remaining 26 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.

@@ -32,6 +32,8 @@ int main() {
     for (unsigned p : {0x83213000u, 0x83264000u, 0x8201d000u})
       regions.push_back({p, 0x1000});
     regions.push_back({0x831f3000, 0x21000});
+    regions.push_back({0x832ae000, 0x1000});
+    regions.push_back({0x832cb000, 0x1000});
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();
@@ -129,6 +131,21 @@ int main() {
     call(0x82b0a3b0);
     check(get(owner + 32) == 9 && guest.peerQueries == 3,
           "both partners available");
+    m.WriteU32(0x832aeb00, 0xe0000);
+    m.WriteU32(0x832cb790, 0xe1000);
+    m.WriteU32(0xe1000 + 20, 0x100000);
+    m.WriteU32(target + 124, 0x10000000);
+    m.WriteU8(0xe0000 + 48, 1);
+    put(0xe0000 + 36, .25f);
+    put(0x82000fb0, 1);
+    put(owner + 28, 20);
+    check(call(0x82b0a0d0) == 15 && m.ReadU32(0x100000 + 15104) == 1,
+          "opposite gauge attenuation and result marker");
+    m.WriteU32(target + 124, 0x50000000);
+    check(call(0x82b0a0d0) == 20, "class gauge bypass");
+    m.WriteU32(target + 124, 0x10000000);
+    m.WriteU8(0xe0000 + 48, 0);
+    check(call(0x82b0a0d0) == 20, "disabled gauge");
     std::puts("PASS effect scaling, critical gates, jitter, status "
               "normalization and partner rounding");
     return 0;

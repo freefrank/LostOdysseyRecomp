@@ -201,6 +201,7 @@ bool Route(GuestAddress entry, GuestMemory &memory, Dependencies dependencies, R
   case 0x82b0af88u:
   case 0x82b0c880u:
   case 0x82b0d378u:
+  case 0x82b0db98u:
   case 0x82b0dd20u:
   case 0x82b0ddf8u:
   case 0x82b0ea88u:
@@ -220,6 +221,7 @@ bool Route(GuestAddress entry, GuestMemory &memory, Dependencies dependencies, R
     return battle_effect_mutation61::Apply(entry, memory, dependencies, state);
   case 0x82b097a0u:
   case 0x82b09b30u:
+  case 0x82b0a0d0u:
   case 0x82b0a188u:
   case 0x82b0a3b0u:
     return battle_effect_scaling61::Apply(entry, memory, dependencies, state);

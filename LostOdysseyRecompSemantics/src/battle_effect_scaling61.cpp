@@ -14,6 +14,33 @@ void Call(unsigned e, GuestMemory &m, Dependencies d, Registers &s) {
 }
 } // namespace
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
+  if (e == 0x82b0a0d0) {
+    if (s.cached_fp_control & 0x8040) {
+      s.cached_fp_control &= ~0x8040u;
+      d.fp.SetHostFpControl(s.cached_fp_control);
+    }
+    auto owner = Address(s.r[3]), target = m.ReadU32(owner + 8);
+    auto get = [&](unsigned p) { return std::bit_cast<float>(m.ReadU32(p)); };
+    float value = get(owner + 28);
+    auto flags = m.ReadU32(target + 124);
+    if (!(flags & 0x40000000u)) {
+      auto gauge = m.ReadU32(0x832aeb00) + 24 * ((flags >> 28) & 1);
+      auto enabled = m.ReadU8(gauge + 24) != 0;
+      auto current = get(enabled ? gauge + 12 : 0x82000e50);
+      auto factor = float(get(0x82000fb0) - current), cap = get(0x82007784);
+      if (factor > cap)
+        factor = cap;
+      value = float(factor * value);
+      if (enabled) {
+        auto result = m.ReadU32(0x832cb790);
+        auto index =
+            116 * m.ReadU32(result + 12) + m.ReadU32(result + 24) + 3776;
+        m.WriteU32(m.ReadU32(result + 20) + 4 * index, 1);
+      }
+    }
+    s.fpr_bits[1] = std::bit_cast<std::uint64_t>(double(value));
+    return true;
+  }
   unsigned frame, first, fpOffset = 0, literal = 0;
   switch (e) {
   case 0x82b09b30:

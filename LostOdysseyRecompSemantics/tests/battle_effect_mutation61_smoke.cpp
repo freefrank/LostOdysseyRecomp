@@ -343,6 +343,22 @@ int main() {
     check(get(target + 2588) == 60 && m.ReadU32(0x93000 + 76) == 0 &&
               m.ReadU32(0x93000 + 185200) == 130,
           "priced healing cost capped by balance");
+    m.WriteU32(0x832ca0e8 + 156, 2);
+    m.WriteU32(target + 124, 0x10000000);
+    m.WriteU8(gauge + 48, 1);
+    put(gauge + 36, .25f);
+    put(0x82000fb0, 1);
+    m.WriteU32(target + 2136, 1);
+    m.WriteU32(target + 2140, 5);
+    m.WriteU32(owner + 184, 0);
+    call(0x82b0db98);
+    check(get(target + 2588) == 50 && get(owner + 172) == 10 &&
+              get(0x200000 + 14968) == 5 && get(0x200000 + 14904) == 10,
+          "manager-scaled damage, gauge reduction and shield absorption");
+    m.WriteU32(owner + 184, 1);
+    call(0x82b0db98);
+    check(get(target + 2588) == 50 && get(owner + 32) == 0,
+          "blocked damage mode");
     std::puts("PASS effect dispatch, eligibility, property payloads, HP cap "
               "results and gauge changes");
     return 0;
