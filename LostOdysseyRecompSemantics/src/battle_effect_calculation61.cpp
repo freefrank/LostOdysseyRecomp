@@ -1,3 +1,4 @@
+#include "lo_semantics/battle_property_mutation61.h"
 #include "lo_semantics/battle_effect_calculation61.h"
 #include "lo_semantics/battle_evaluation_chance61.h"
 #include "lo_semantics/battle_action_readiness61.h"
@@ -14,6 +15,7 @@ void Call(unsigned e, GuestMemory &m, Dependencies d, Registers &s) {
       !battle_evaluation_chance61::Apply(e, m, d, s) &&
       !battle_action_readiness61::Apply(e, m, d, s) &&
       !battle_action_results61::Apply(e, m, d, s) &&
+      !battle_property_mutation61::Apply(e, m, d, s) &&
       !battle_random_range61::Apply(e, m, d, s))
     d.guest.CallDirect(e, m, s);
 }
@@ -84,6 +86,12 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   }
   unsigned frame = 112, first = 31, literal = 0, saveFloat = 0;
   switch (e) {
+  case 0x82b21480:
+    frame = 144;
+    first = 28;
+    literal = 88;
+    saveFloat = 48;
+    break;
   case 0x82b09470:
     frame = 160;
     first = 25;
@@ -208,7 +216,91 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     m.WriteU32(sp + offset, unsigned(n));
     return n;
   };
-  if (e == 0x82b09470) {
+  if (e == 0x82b21480) {
+    auto amount = readFloat(owner + 24, 31);
+    auto kind = m.ReadU32(owner + 60);
+    unsigned id = kind == 1   ? 198
+                  : kind == 2 ? 199
+                  : kind == 4 ? 200
+                  : kind == 8 ? 201
+                              : 0;
+    if (id) {
+      auto mask = m.ReadU32(0x8321343c + 8 * (id % 32));
+      unsigned index = 0;
+      for (; index < 31; ++index)
+        if (mask & (1u << index))
+          break;
+      auto address = m.ReadU32(owner + 8) + 4 * (index + 467),
+           value = m.ReadU32(address) - 1;
+      m.WriteU32(address, value);
+      if (std::int32_t(value) <= 0) {
+        s.r[3] = m.ReadU32(owner + 8);
+        s.r[4] = id;
+        Call(0x82ac9000, m, d, s);
+      }
+    }
+    s.r[3] = m.ReadU32(0x832ca0d8);
+    s.r[4] = m.ReadU32(owner + 60);
+    s.r[5] = m.ReadU32(owner + 4);
+    Call(0x82b096e8, m, d, s);
+    auto classification = Address(s.r[3]);
+    unsigned output = 34;
+    float value;
+    auto rounded = [&](float x) {
+      auto n = integer(x, 80);
+      recovery_abi::WriteU64(m, sp + 80, std::uint64_t(std::int64_t(n)));
+      auto v = float(n);
+      f(0, double(v));
+      return v;
+    };
+    if (classification == 7) {
+      value = readFloat(0x82000e50, 0);
+      output = 14;
+    } else {
+      if (classification == 0) {
+        auto source = m.ReadU32(owner + 4), weakness = m.ReadU32(source + 4880),
+             element = m.ReadU32(owner + 60);
+        bool weak = (weakness == 1 && element == 2) ||
+                    (weakness == 2 && element == 8) ||
+                    (weakness == 4 && element == 1) ||
+                    (weakness == 8 && element == 4);
+        auto bias = readFloat(0x8201f9f0, 13);
+        auto scale = weak ? bias : readFloat(0x82000da4, 0);
+        value = float(float(amount * scale) + bias);
+      } else {
+        auto scale =
+                 readFloat(classification == 8 ? 0x82000da4 : 0x82000b3c, 0),
+             bias = readFloat(0x8201f9f0, 13);
+        value = float(double(amount) * double(scale) + double(bias));
+      }
+      value = rounded(value);
+      auto zero = readFloat(0x82000e50, 13);
+      if (classification == 8) {
+        if (value == zero)
+          value = readFloat(0x82007784, 0);
+        output = 38;
+      } else {
+        auto one = readFloat(0x82007784, 11);
+        if (value == zero) {
+          value = one;
+          f(0, double(value));
+        }
+        auto hp = readFloat(m.ReadU32(owner + 4) + 2588, 12),
+             remaining = float(hp - value);
+        f(10, double(remaining));
+        if (!(remaining > zero)) {
+          value = float(hp - one);
+          f(0, double(value));
+        }
+      }
+    }
+    auto report = m.ReadU32(0x832cb790);
+    m.WriteU32(m.ReadU32(report + 20) + 4 * (116 * m.ReadU32(report + 12) +
+                                             m.ReadU32(report + 24) + output),
+               std::bit_cast<unsigned>(value));
+    s.r[3] = m.ReadU32(0x832cb790);
+    Call(0x82b2b270, m, d, s);
+  } else if (e == 0x82b09470) {
     auto mask = Address(s.r[4]), target = Address(s.r[5]);
     std::int32_t selected = -1, shared = -1;
     auto payload = [&](unsigned id) {

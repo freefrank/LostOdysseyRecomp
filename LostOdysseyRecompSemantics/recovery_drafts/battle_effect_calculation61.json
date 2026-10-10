@@ -161,6 +161,14 @@
       "instruction_count": 1,
       "body_sha256": "6b0f7ac63e788c5492c3b89a803142afba2facf749b4d695a9b8b758336764a3",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B21480",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.167.cpp",
+      "source_line": 12737,
+      "instruction_count": 244,
+      "body_sha256": "00d8d258dd9f9e783258cb9de1aff61ac2b4ec60bf23562ee897b29d08230a6c",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -184,7 +192,8 @@
       "82B1FDF8",
       "82B1FF20",
       "82B09470",
-      "82B096E8"
+      "82B096E8",
+      "82B21480"
     ],
     "header": "include/lo_semantics/battle_effect_calculation61.h",
     "source": "src/battle_effect_calculation61.cpp",
@@ -204,6 +213,7 @@
     "trait_critical_selection": "Recovered three-slot trait matching with wildcard filters, selected-trait state writes, effect-mode float interpolation and critical selection. Critical selection composes actual trait lookup, interpolation, target property scaling and deterministic random gates; skip paths preserve the existing output byte. Focused fixture checks wildcard/no-match state, interpolation modes and critical/skip paths. Synthetic constants only; native gameplay and bitwise floating-point equivalence remain unvalidated.",
     "trait_bonuses": "Recovered category-two and category-eight trait bonus calculations using actual trait matching and interpolation. The focused fixture checks overlap gating, selected multiplier, target-specific extra bonus, result-record flag, skip behavior and FPR28-31 restoration. No trait service mock remains in these paths. Guest constants are synthetic in the fixture; full floating-point and native gameplay equivalence remain unvalidated.",
     "element_response": "Recovered elemental cancellation/weakness bonus, property-backed guard chance and ordered target response selection. Existing property, trait, interpolation and random helpers are composed. Focused fixture checks elemental permission/neutral gates, weakness multiplier, early-return state preservation, response modes0-5 and guard bypass. The external response-classifier and duel manager remain explicit service boundaries. Logical/ABI recovery only; native gameplay and bitwise floating-point equivalence remain unvalidated.",
-    "response_classifier": "Recovered elemental response classification and its tail adapter. The classifier preserves source ordering across selected element bits and the shared property52 override, returning response codes6/7/8 for values0/1/2. Target response selection now uses actual classification instead of a service mock. Focused fixture checks codes, later-element overwrite and shared override. The duel manager remains a separate boundary; native gameplay remains unvalidated."
+    "response_classifier": "Recovered elemental response classification and its tail adapter. The classifier preserves source ordering across selected element bits and the shared property52 override, returning response codes6/7/8 for values0/1/2. Target response selection now uses actual classification instead of a service mock. Focused fixture checks codes, later-element overwrite and shared override. The duel manager remains a separate boundary; native gameplay remains unvalidated.",
+    "return_amount": "Recovered status-counter consumption and return-amount recording, composed with property removal, source response classification and result flags. Focused fixture checks counter expiry, weakness rounding including odd amounts, lethal-damage cap, absorption/zero-response record fields and source result marking. Guest constants remain synthetic in tests; full floating-point and native gameplay equivalence are unvalidated."
   }
 }

@@ -337,6 +337,38 @@ int main() {
     s.r[5] = 0x90000;
     check(battle_effect_calculation61::Apply(0x82b09470, m, {g, native}, s) &&
           s.r[3] == 8);
+    clearProperties();
+    m.WriteU32(0x73000 + 24, 0x42c80000);
+    m.WriteU32(0x73000 + 60, 1);
+    m.WriteU32(0x80000 + 4880, 4);
+    m.WriteU32(0x80000 + 2588, 0x447a0000);
+    m.WriteU32(0x82000da4, 0x3e800000);
+    m.WriteU32(0x8201f9f0, 0x3f000000);
+    m.WriteU32(0x82000b3c, 0x40000000);
+    m.WriteU32(0x90000 + 6 * 272 + 232, 1u << 6);
+    m.WriteU32(0x90000 + 4 * (467 + 6), 1);
+    run(0x82b21480);
+    check(std::bit_cast<float>(m.ReadU32(0x100000 + 4 * (116 + 34))) == 50 &&
+          !m.ReadU32(0x90000 + 6 * 272 + 232) &&
+          m.ReadU32(0x100000 + 4 * (116 + 10)) == 1);
+    m.WriteU32(0x73000 + 24, 0x42c60000);
+    run(0x82b21480);
+    check(std::bit_cast<float>(m.ReadU32(0x100000 + 4 * (116 + 34))) == 50);
+    m.WriteU32(0x73000 + 24, 0x42c80000);
+    m.WriteU32(0x80000 + 4880, 0);
+    m.WriteU32(0x80000 + 2588, 0x41a00000);
+    run(0x82b21480);
+    check(std::bit_cast<float>(m.ReadU32(0x100000 + 4 * (116 + 34))) == 19);
+    m.WriteU32(0x80000 + 272 + 232, 1u << 16);
+    m.WriteU32(0x80000 + 4 * (127 + 16), 2);
+    run(0x82b21480);
+    check(std::bit_cast<float>(m.ReadU32(0x100000 + 4 * (116 + 38))) == 25);
+    m.WriteU32(0x80000 + 4 * (127 + 16), 1);
+    run(0x82b21480);
+    check(!m.ReadU32(0x100000 + 4 * (116 + 14)));
+    m.WriteU32(0x80000 + 4 * (127 + 16), 0);
+    run(0x82b21480);
+    check(std::bit_cast<float>(m.ReadU32(0x100000 + 4 * (116 + 34))) == 19);
     check(!battle_effect_calculation61::Apply(0, m, {g, native}, s));
     std::cout << "battle_effect_calculation61 smoke passed\n";
     return 0;
