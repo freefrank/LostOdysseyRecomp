@@ -1,6 +1,7 @@
 #include "lo_semantics/battle_script_execution61.h"
 #include "lo_semantics/battle_script_extensions61.h"
 #include "lo_semantics/recovery_abi.h"
+#include "lo_semantics/battle_script_preparation61.h"
 #include "lo_semantics/battle_script_runtime61.h"
 namespace lo::semantic::gpu::battle_script_execution61 {
 namespace {
@@ -33,7 +34,10 @@ struct Runtime {
     auto a = Actor();
     m.WriteU32(a + 52, W(a + 52) + n);
   }
-  void Call(unsigned e) { d.guest.CallDirect(e, m, s); }
+  void Call(unsigned e) {
+    if (!battle_script_preparation61::Apply(e, m, d, s))
+      d.guest.CallDirect(e, m, s);
+  }
   unsigned Manager(unsigned method) {
     Call(0x82380a18);
     Call(method);
@@ -181,6 +185,8 @@ struct Runtime {
 };
 } // namespace
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
+  if (e == 0x82afde70)
+    return battle_script_preparation61::Apply(e, m, d, s);
   unsigned first = 24, frame = 160;
   switch (e) {
   case 0x82b00698:

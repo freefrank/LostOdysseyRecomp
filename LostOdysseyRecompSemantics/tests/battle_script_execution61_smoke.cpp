@@ -56,6 +56,7 @@ int main() {
     std::vector<test::Region> regions(cook_main_smoke::Regions.begin(),
                                       cook_main_smoke::Regions.end());
     regions.push_back({0x83245000, 0x1000});
+    regions.push_back({0x83213000, 0x1000});
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();
@@ -101,9 +102,13 @@ int main() {
           m.ReadU32(actor + 100) == 10 && m.ReadU32(actor + 96) == 5);
     m.WriteU32(actor + 300, 7);
     m.WriteU32(actor + 304, 8);
-    m.WriteU32(actor + 308, 77);
+    m.WriteU32(actor + 308, 13);
+    m.WriteU32(actor + 72, 0x65000);
+    m.WriteU32(actor + 76, 2);
+    m.WriteU8(0x65000, 25);
+    m.WriteU8(0x65001, 26);
     run(0x82b00698, 2, 3);
-    check(guest.overrides == 1 && guest.events[0].a == 7 &&
+    check(m.ReadU32(actor + 84) == 2 && guest.events[0].a == 7 &&
           guest.events[0].b == 8 && m.ReadU32(actor + 88) == 7);
     m.WriteU32(actor + 300, 0);
     guest.predicate = 1;

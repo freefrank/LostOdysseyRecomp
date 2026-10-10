@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 196,
-    "distinct_entries": 759,
+    "unit_count": 197,
+    "distinct_entries": 760,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -2174,6 +2174,14 @@
         ],
         "focused_smoke_paths": 1,
         "validation": "One focused execution fixture covers all five helpers, first/subsequent target arguments, delimiters, busy indices, kind1 counters, overrides, readiness bypass, ordered group links, target-group expansion and clamped stock decrement. The three affected opcode fixtures also pass after replacing mocked execution boundaries with the recovered chain. Lower-level resource action builders and target preparation remain service boundaries; native gameplay is unvalidated. Logical/ABI only"
+      },
+      {
+        "unit": "battle_script_preparation61",
+        "entries": [
+          "82AFDE70"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "One focused fixture covers all18 modes, mode1 property override and fallback, pool random tags78 through83, selected-list copying, side-dependent target modes, mode15 resource filtering, mode16 mask-to-random fallthrough, empty-pool failure and out-of-range mode. Three affected opcode/execution fixtures pass through the recovered chain. Mode3 retains its original unchecked empty-pool random call and mode17 retains retry-until-not-self; these pathological paths are not runtime validated. Native gameplay is unvalidated. Logical/ABI only"
       }
     ]
   },

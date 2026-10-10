@@ -12,6 +12,10 @@ struct ActionsGuest final : manager_release_context61::GuestServices {
       s.r[3] = 0x70000;
       return;
     }
+    if (e == 0x8238e2f8) {
+      s.r[3] = 0x71000;
+      return;
+    }
     if (e == 0x82389b48) {
       s.r[3] = mode;
       return;
@@ -144,8 +148,8 @@ int main() {
       throw std::runtime_error("action dispatch selection");
     guest.predicate = 1;
     op(0x82afe628);
-    if (m.ReadU32(vars + 4) != 1)
-      throw std::runtime_error("action predicate result");
+    if (m.ReadU32(vars + 4) != 0 || m.ReadU8(0x66000) != 24)
+      throw std::runtime_error("recovered self-target preparation result");
     guest.ready = 0;
     op(0x82af6e70);
     if (m.ReadU32(vars + 4) || m.ReadU32(actor + 336) != 8)

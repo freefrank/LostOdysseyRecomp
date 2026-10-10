@@ -16,6 +16,10 @@ struct MarshalGuest final : manager_release_context61::GuestServices {
       s.r[3] = 0x70000;
       return;
     }
+    if (e == 0x8238e2f8) {
+      s.r[3] = 0x71000;
+      return;
+    }
     if (e == 0x82acf108) {
       fail(s.r[3] == 0x70000);
       return;
@@ -42,16 +46,14 @@ struct MarshalGuest final : manager_release_context61::GuestServices {
       return;
     }
     if (e == 0x82ac9a28) {
+      ++executed;
       s.r[3] = 0;
       return;
     }
     if (e == 0x82ab36c8) {
-      if (unsigned(s.r[4]) == 0xffffffff)
-        return;
       fail(s.r[3] == 0x80000 && !m.ReadU32(0x80000 + 14680));
-      ++executed;
-      kind = unsigned(s.r[4]);
-      detail = unsigned(s.r[5]);
+      kind = m.ReadU32(0x62000 + 88);
+      detail = m.ReadU32(0x62000 + 92);
       return;
     }
     if (e == 0x82b2a138) {
@@ -130,9 +132,9 @@ int main() {
       op(0x82b00d08);
       check(!m.ReadU32(vars + 4) && m.ReadU32(actor + 52) == 5);
       if (mode == 0)
-        check(guest.prepared == 1 && guest.kind == 0);
+        check(guest.kind == 0 && m.ReadU32(actor + 84) == 1);
       if (mode == 4)
-        check(guest.prepared == 18 && guest.kind == 30);
+        check(guest.kind == 30 && m.ReadU32(actor + 84) == 0);
       if (mode >= 1 && mode <= 3)
         check(guest.kind == 7 && guest.detail == 19);
       if (mode == 5)
