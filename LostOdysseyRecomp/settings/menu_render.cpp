@@ -961,7 +961,15 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
 
     const wchar_t *enTabs[] = {L"Gameplay", L"Audio", L"Graphics", L"System"};
     const wchar_t *zhTabs[] = {L"遊戲", L"聲音", L"圖像", L"系統"};
-    for (int i = 0; i < MenuTabCount; ++i)
+    if (!current.pageTitle.empty())
+    {
+        // A page opened from a row: one selected cell in place of the tabs.
+        cell(386, 110, 640, 32, true);
+        text(394, 110, 624, 32, current.pageTitle, 17, selectedInk, true, 1, MakeColor(255, 222, 223, 219), 12);
+        if (!current.keyLegend.empty())
+            text(380, 52, 880, 32, current.keyLegend, 18, ink, false, 2, outline, 13);
+    }
+    for (int i = 0; i < MenuTabCount && current.pageTitle.empty(); ++i)
     {
         constexpr int tabWidth = MenuTabWidth;
         const int x = 386 + i * tabWidth;
@@ -1027,6 +1035,22 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
             continue;
         }
 
+        if (focused && current.reorder)
+        {
+            // Move up / move down for the pointer, beside the value column. The
+            // triangles are drawn: the menu fonts have no ▲ / ▼.
+            for (int i = 0; i < 2; ++i)
+            {
+                const int x = ModsMoveLeft + i * (ModsMoveWidth + ModsMoveGap);
+                cell(x, y, ModsMoveWidth, rowHeight - 2, false);
+                const int cx = x + ModsMoveWidth / 2, top = y + 13;
+                for (int step = 0; step < 14; ++step)
+                {
+                    const int half = (i ? 13 - step : step) * 3 / 4;
+                    line(cx - half, top + step, cx + half + 1, top + step, ink);
+                }
+            }
+        }
         std::vector<std::wstring> fallback;
         const std::vector<std::wstring> *choices = &row.choices;
         if (choices->empty())
@@ -1035,6 +1059,26 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
             choices = &fallback;
         }
         const int selected = std::clamp(row.selectedChoice, 0, int(choices->size()) - 1);
+        if (!row.detail.empty())
+        {
+            // Detail text first, then the choices in the last ModsCellsWidth.
+            const bool cells = !(row.choices.empty() && row.value.empty());
+            const int cellsLeft = choiceLeft + choiceWidth - (cells ? ModsCellsWidth : 0);
+            text(choiceLeft + 8, y, cellsLeft - choiceLeft - 16, rowHeight - 2, row.detail, 20,
+                 row.enabled ? muted : disabled, false, 0, outline, 13);
+            const int count = cells ? int(choices->size()) : 0;
+            for (int option = 0; option < count; ++option)
+            {
+                const int left = cellsLeft + ModsCellsWidth * option / count;
+                const int right = cellsLeft + ModsCellsWidth * (option + 1) / count;
+                const bool currentChoice = option == selected;
+                cell(left, y, right - left, rowHeight - 2, focused && currentChoice);
+                text(left + 7, y, right - left - 14, rowHeight - 2, (*choices)[option], 22,
+                     !row.enabled ? disabled : currentChoice ? (focused ? selectedInk : ink) : muted,
+                     false, 1, focused && currentChoice ? MakeColor(255, 222, 223, 219) : outline, 13);
+            }
+            continue;
+        }
         if (row.controllerButtons && choices->size() >= 2)
         {
             for (int option = 0; option < 2; ++option)

@@ -40,6 +40,10 @@ bool MenuFlowDisplayModeFailed();
 inline uint64_t DisplayMoveCount() { return 0; }
 inline uint64_t BeginDisplayRevert(const settings::Config& c) { return MenuFlowBeginDisplayChange(c); }
 }
+// The Mods page's Open mods folder records the request instead of starting Explorer.
+#include <settings/mods_page.h>
+namespace settings::mods_page { bool MenuFlowOpenFolder(const std::filesystem::path& folder); }
+#define OpenFolder MenuFlowOpenFolder
 #define GetConfig MenuFlowGetConfig
 #define SaveConfig MenuFlowSaveConfig
 #define SaveAudioOutput MenuFlowSaveAudioOutput
@@ -58,6 +62,7 @@ inline uint64_t BeginDisplayRevert(const settings::Config& c) { return MenuFlowB
 #include "../../LostOdysseyRecomp/settings/menu.cpp"
 #undef SDL_PushEvent
 #undef Translate
+#undef OpenFolder
 #undef GetConfig
 #undef SaveConfig
 #undef SaveAudioOutput
@@ -100,6 +105,14 @@ namespace {
 uint32_t vibrationStrength = 100;
 unsigned vibrationPreviews = 0;
 uint32_t promptStyle = 0;
+unsigned modsFolderOpens = 0;
+std::filesystem::path modsFolderOpened;
+}
+bool settings::mods_page::MenuFlowOpenFolder(const std::filesystem::path& folder)
+{
+    ++modsFolderOpens;
+    modsFolderOpened = folder;
+    return true;
 }
 namespace hid {
 bool UsesPlayStationPrompts() { return false; }
@@ -1723,6 +1736,11 @@ int main(int argc, char** argv)
             settings::tab = 3;
             settings::row = settings::SystemCollectionRow;
             settings::pending = 2; Tick(base);
+            Require(settings::row == settings::SystemModsRow && settings::snapshot.rows[settings::SystemModsRow].name == L"Mods" &&
+                    settings::snapshot.rows[settings::SystemModsRow].value == L"Open" &&
+                    settings::graphics_menu::IsAction(3, settings::SystemModsRow),
+                    "the Mods action follows the TAA collection row on System");
+            settings::pending = 2; Tick(base);
             Require(settings::row == settings::SystemImportRow && settings::snapshot.scroll == 0 &&
                     settings::snapshot.rows.size() == size_t(settings::SystemRowCount) &&
                     settings::snapshot.rows[settings::SystemImportRow].name == L"Import discs & DLC" &&
@@ -1786,6 +1804,173 @@ int main(int argc, char** argv)
             Require(!settings::restart::Requested() && !settings::importPrompt,
                     "idle ticks do not create a second import request");
             std::puts("PASS import action: gamepad/mouse focus, cancel-first dialog, translations, guarded restart request, previews");
+        }
+        // System → Mods over a real mods folder and mod-list.ini through the mod API.
+        {
+            const auto root = std::filesystem::temp_directory_path() / "lo-menu-flow-mods";
+            std::filesystem::remove_all(root);
+            const auto write = [&](const std::filesystem::path& file, const std::string& text) {
+                std::filesystem::create_directories(file.parent_path());
+                std::ofstream(file, std::ios::binary) << text;
+            };
+            write(root / "mods/alpha/mod.ini",
+                  "api_version=2\nid=alpha\nname=Alpha Pack\nversion=1.0\nauthor=Ann\ndescription=First test mod.\npriority=10\n");
+            write(root / "mods/alpha/overlay/textures/fp-0123456789abcdef.lotex2", "x");
+            write(root / "mods/beta/mod.ini", "api_version=2\nid=beta\nname=Beta\npriority=5\n");
+            write(root / "mods/gamma/mod.ini", "api_version=2\nid=gamma\nname=Gamma\nenabled=false\npriority=1\n");
+            write(root / "mods/broken/mod.ini", "api_version=9\n");
+            write(root / "mods/pt-br/language.ini", "id=pt-br\nname=Brasil\nbase=int\n");
+            const auto list = root / "mod-list.ini";
+            modding::Initialize(root / "mods", list);
+            const auto readList = [&] {
+                std::ifstream file(list, std::ios::binary);
+                std::string text, line, lines;
+                while (std::getline(file, line))
+                    if (!line.empty() && line[0] != '#') lines += line + "\n";
+                return lines;
+            };
+            const auto rowY = [](int row) { return float(150 + (row - settings::snapshot.scroll) * 43 + 20); };
+            PPC_STORE_U32(Menu + 4, 4);
+            settings::edit.uiLanguage = 0;
+            settings::tab = 3;
+            settings::row = settings::SystemModsRow;
+            settings::pending = 0x1000; Tick(base);
+            const int open = settings::mods_page::CanOpenFolder ? 5 : -1, save = open >= 0 ? 6 : 5;
+            {
+                const auto& rows = settings::snapshot.rows;
+                Require(settings::modsOpen && settings::snapshot.pageTitle == L"Mods" && settings::snapshot.row == 0 &&
+                        rows.size() == size_t(save + 1) && !settings::snapshot.keyLegend.empty(),
+                        "A on System Mods opens the Mods page");
+                Require(rows[0].name == L"Alpha Pack" && rows[0].detail == L"1.0 - Ann" &&
+                        rows[0].choices == std::vector<std::wstring>{L"On", L"Off"} && rows[0].selectedChoice == 0 &&
+                        rows[1].name == L"Beta" && rows[1].detail == L"beta" &&
+                        rows[2].name == L"Gamma" && !rows[2].enabled && rows[2].value == L"mod.ini: Off" && rows[2].detail == L"! gamma" &&
+                        rows[3].name == L"broken" && !rows[3].enabled && rows[3].value == L"Error" && rows[3].detail == L"! —" &&
+                        rows[4].name == L"Brasil" && rows[4].detail == L"Language pack: English" && rows[4].choices.empty() &&
+                        (open < 0 || rows[size_t(open)].name == L"Open mods folder") && rows[size_t(save)].name == L"Save mod list",
+                        "mods in effective order with version and author, a mod off in mod.ini, a rejected mod, the language pack, the actions");
+                Require(settings::snapshot.help == L"First test mod." &&
+                        settings::snapshot.notice == L"Folder: alpha     Overlay files: 1" && settings::snapshot.reorder,
+                        "help shows the description, the folder and the file count");
+            }
+            settings::pending = 2; Tick(base);
+            Require(settings::snapshot.help == L"No description." && settings::snapshot.notice == L"Folder: beta",
+                    "a mod without description");
+            settings::pending = 0x1000; Tick(base);
+            Require(settings::snapshot.rows[1].selectedChoice == 1, "A turns a mod off");
+            settings::pending = 0x100; Tick(base);
+            Require(settings::modsFocus == 0 && settings::snapshot.rows[0].name == L"Beta" &&
+                    settings::snapshot.rows[1].name == L"Alpha Pack", "LB moves the focused mod up and focus follows it");
+            settings::pending = 0x100; Tick(base);
+            Require(settings::snapshot.rows[0].name == L"Beta", "the first mod stays first");
+            settings::pending = 2; Tick(base);
+            settings::pending = 2; Tick(base);
+            Require(settings::snapshot.help == L"Its mod.ini turns it off (enabled=false)." && settings::snapshot.reorder,
+                    "a mod off in mod.ini says so and can still move");
+            settings::pending = 0x1000; Tick(base);
+            Require(settings::snapshot.rows[2].value == L"mod.ini: Off", "its switch does nothing");
+            settings::pending = 2; Tick(base);
+            Require(settings::snapshot.help == L"Not loaded: api_version must be 1 or 2" && !settings::snapshot.reorder,
+                    "a rejected mod shows its first problem and cannot move");
+            settings::pending = 0x1000; Tick(base);
+            settings::pending = 0x200; Tick(base);
+            Require(settings::snapshot.rows[3].name == L"broken" && settings::snapshot.rows[3].value == L"Error",
+                    "A and RB leave a rejected mod alone");
+            settings::pending = 2; Tick(base);
+            Require(settings::snapshot.help == L"A language pack. Choose it in System → Game language." &&
+                    settings::snapshot.notice == L"Folder: pt-br" && !settings::snapshot.reorder, "a language pack is read-only");
+            // Pointer: select Alpha, then its move up cell.
+            settings::PointerClick(200, rowY(1), false); Tick(base);
+            Require(settings::modsFocus == 1 && settings::snapshot.reorder, "pointer selects a mod");
+            settings::PointerClick(float(settings::ModsMoveLeft + 10), rowY(1), false); Tick(base);
+            Require(settings::modsFocus == 0 && settings::snapshot.rows[0].name == L"Alpha Pack", "the move up cell moves the mod");
+            settings::pending = 0x200; Tick(base);
+            Require(settings::modsFocus == 1 && settings::snapshot.rows[1].name == L"Alpha Pack", "RB moves it back down");
+            settings::PointerClick(700, rowY(0), false); Tick(base);
+            Require(settings::modsFocus == 0 && settings::snapshot.rows[0].selectedChoice == 0, "a click on the switch turns Beta on");
+            settings::pending = 8; Tick(base);
+            Require(settings::snapshot.rows[0].selectedChoice == 1, "right turns it off again");
+            // Leaving with changes asks first; Cancel is the default.
+            settings::pending = 0x2000; Tick(base);
+            Require(settings::modsDiscardPrompt && settings::snapshot.dialogSelection == 1 &&
+                    settings::snapshot.dialogChoices == std::vector<std::wstring>{L"Discard changes", L"Cancel"},
+                    "B with unsaved changes asks before leaving");
+            settings::pending = 0x1000; Tick(base);
+            Require(!settings::modsDiscardPrompt && settings::modsOpen, "Cancel keeps the page");
+            if (open >= 0)
+            {
+                settings::modsFocus = open;
+                settings::pending = 0x1000; Tick(base);
+                Require(modsFolderOpens == 1 && modsFolderOpened == modding::Root() &&
+                        settings::snapshot.notice == settings::PathText(modding::Root()), "Open mods folder opens the mods root");
+            }
+            // Start goes to Save, and saves when pressed there.
+            settings::modsFocus = 0;
+            settings::pending = 0x10; Tick(base);
+            Require(settings::modsFocus == save && !std::filesystem::exists(list), "Start moves to Save without saving");
+            settings::pending = 0x10; Tick(base);
+            Require(readList() == "beta=off\nalpha=on\ngamma=on\n", "Save writes the order and switches to mod-list.ini");
+#ifdef _WIN32
+            Require(settings::restartPrompt && settings::savedRestartPrompt && settings::restartForMods &&
+                    settings::snapshot.dialogMessage == L"Mod list saved. Restart now?" &&
+                    settings::snapshot.dialogChoices == std::vector<std::wstring>{L"Restart now", L"Later"},
+                    "a changed mod list offers the restart");
+            settings::pending = 2; Tick(base);
+            settings::pending = 0x1000; Tick(base);
+            Require(!settings::restartPrompt && !settings::restartForMods && !settings::restart::Requested() &&
+                    settings::modsOpen && settings::snapshot.help == L"Saved. Changes take effect after restarting.",
+                    "Later stays on the page");
+#else
+            Require(settings::restartPrompt && settings::snapshot.dialogMessage == L"Mod list saved. Restart the game to apply the changes.",
+                    "a changed mod list asks for a manual restart");
+            settings::pending = 0x1000; Tick(base);
+#endif
+            settings::pending = 0x2000; Tick(base);
+            Require(!settings::modsOpen && settings::tab == 3 && settings::row == settings::SystemModsRow,
+                    "B without changes returns to the System tab");
+            // Reopened before the restart, the page shows the saved order.
+            settings::pending = 0x1000; Tick(base);
+            Require(settings::snapshot.rows[0].name == L"Beta" && settings::snapshot.rows[0].selectedChoice == 1,
+                    "the saved order shows until the restart applies it");
+            // Back to the order this run started with: saved without a restart.
+            settings::pending = 0x1000; Tick(base);
+            settings::pending = 0x200; Tick(base);
+            settings::pending = 0x10; Tick(base);
+            settings::pending = 0x10; Tick(base);
+            Require(readList() == "alpha=on\nbeta=on\ngamma=on\n" && !settings::restartPrompt &&
+                    settings::snapshot.help == L"Mod list saved.", "saving the running order needs no restart");
+            // Escape leaves too.
+            Require(settings::CalibrationKey(27), "Escape belongs to the Mods page");
+            settings::pending = 0; Tick(base);
+            Require(!settings::modsOpen, "Escape leaves the Mods page");
+            for (const auto& [language, title] : {std::pair{1u, L"Mod"}, std::pair{2u, L"MOD"}, std::pair{3u, L"모드"}, std::pair{4u, L"Mod"}})
+            {
+                settings::edit.uiLanguage = language;
+                settings::pending = 0; Tick(base);
+                Require(settings::snapshot.rows[settings::SystemModsRow].name == title, "translated Mods row");
+            }
+            settings::edit.uiLanguage = 0;
+            settings::pending = 0x1000; Tick(base);
+            auto preview = settings::snapshot;
+            preview.assets.reset();
+            std::vector<uint32_t> pixels;
+            Require(settings::RasterizeMenu(preview, 1280, 720, pixels), "Mods page preview");
+            const auto evidence = std::filesystem::current_path() / "out" / "mods-page-preview";
+            std::filesystem::create_directories(evidence);
+            WriteBmp(evidence / "mods-page.bmp", pixels);
+            settings::pending = 0x2000; Tick(base);
+            // No mods: one line says where they go.
+            modding::Initialize(root / "empty", root / "empty-list.ini");
+            settings::pending = 0x1000; Tick(base);
+            Require(settings::snapshot.rows.size() == size_t(open >= 0 ? 2 : 1) && settings::snapshot.rows[0].name == L"No mods installed" &&
+                    settings::snapshot.help == L"Put each mod in its own folder inside the mods folder, then restart the game." &&
+                    !settings::snapshot.reorder, "the empty page says where mods go");
+            settings::pending = 0x10; Tick(base);
+            settings::pending = 0x2000; Tick(base);
+            Require(!settings::modsOpen, "the empty page has no Save and B leaves");
+            modding::Shutdown();
+            std::filesystem::remove_all(root);
+            std::puts("PASS Mods page: listing, switches, LB/RB and pointer moves, read-only rows, discard prompt, Open folder, Save + restart, saved order, empty page");
         }
         // Opened from the title menu (title_entry.cpp) no game is loaded: the
         // retail Gameplay and Audio options, Restore, Quit and the retail

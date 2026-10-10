@@ -78,7 +78,7 @@ To translate the game into a new language:
 
 ## Which mod wins
 
-- **Mod folders** (the default layout of `lo_mod.py`): each mod has its own folder and `mod.ini`, so MO2 shows no conflict between them. The game's own mod order decides which one wins for the same file (`mod-list.ini` next to `settings.ini`, outside MO2's virtual folder), then the `priority` in `mod.ini`. Disabling a mod in MO2 removes its folder, so it stops loading; it keeps its place in the game's order for when you enable it again.
+- **Mod folders** (the default layout of `lo_mod.py`): each mod has its own folder and `mod.ini`, so MO2 shows no conflict between them. The game's own mod order decides which one wins for the same file (Settings → System → Mods, saved in `mod-list.ini` next to `settings.ini`, outside MO2's virtual folder), then the `priority` in `mod.ini`. Disabling a mod in MO2 removes its folder, so it stops loading and leaves the game's Mods page; it keeps its place in the game's order for when you enable it again.
 - **Overlay packages** (`--layout overlay`): two mods that replace the same asset ship the same file path. MO2 shows the conflict, and the mod lower in MO2's left pane wins. An overlay file beats every mod folder.
 - **Language packs**: MO2's order does not matter. Only the pack picked in **Settings > System > Game language** is used.
 

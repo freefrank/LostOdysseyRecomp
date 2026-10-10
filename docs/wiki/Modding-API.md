@@ -87,7 +87,7 @@ Resource kinds are `image`, `font`, `model`, `movie`, `texture` and `text`. Inva
 
 ### Order and `mod-list.ini`
 
-The in-game mod manager keeps its order in `mod-list.ini` next to `settings.ini` (in the game folder for the portable Windows layout), outside `mods/`: Mod Organizer 2 virtualizes only `mods/` and would send writes there to its Overwrite folder. The game reads the file at startup. It writes it only when the manager saves.
+The in-game mod manager (Settings → System → Mods) keeps its order in `mod-list.ini` next to `settings.ini` (in the game folder for the portable Windows layout), outside `mods/`: Mod Organizer 2 virtualizes only `mods/` and would send writes there to its Overwrite folder. The game reads the file at startup. It writes it only when the manager saves.
 
 ```ini
 # First line = highest priority.
@@ -100,6 +100,8 @@ my-menu=off
 - Listed mods come first, in list order. Mods not in the list follow, by `priority` (higher first) and then folder name (lexically later first), and count as `on`. Without a list this is the v1 order.
 - Ids without an installed mod are ignored and stay in the file, so a mod disabled in MO2 (its folder disappears) returns to its place.
 - The list orders mod folders only. Language packs have no line in it; players choose one in Settings → System → Game language.
+
+The Mods page lists the mods in this order, each with its version, author and an on/off switch; LB / RB (or the arrows beside the selected mod) move it, and the language packs follow, read-only. A mod whose `mod.ini` is rejected or says `enabled=false` shows the reason in the help line and has no switch. Save writes the mods with a valid `mod.ini` to `mod-list.ini` (other lines stay) and offers a restart; Open mods folder (Windows) opens the mods root.
 
 For each resource, the first mod in this order that has it wins, with its resource line or else its overlay file. Examples, all for the texture `fp-…ab` in combined mode:
 

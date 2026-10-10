@@ -88,13 +88,13 @@ void PointerDrag(float x, float y, bool held);
 // - Tabs: 0 Gameplay (retail game options, controller options, game actions),
 //   1 Audio (voice, volumes, audio output, rear angle), 2 Graphics (display, rendering,
 //   frame rate, HDR), 3 System (interface and game language, updates, TAA
-//   shader collection, Import discs & DLC, Save).
+//   shader collection, Mods, Import discs & DLC, Save).
 // - Gameplay starts with the seven retail guest settings in their retail order;
 //   host rows follow them.
 // - Host rows are grouped by topic. Controller rows (button prompts, vibration,
 //   future ones) go to Gameplay, not Audio.
 // - Actions come last on their tab: Restore / Quit to Main Menu on Gameplay,
-//   Brightness / Save on Graphics, Import / Save on System.
+//   Brightness / Save on Graphics, Mods / Import / Save on System.
 // - Gameplay, Audio and System fit the visible rows (kMenuVisibleRows) and never
 //   scroll; only Graphics scrolls.
 // - Graphics order: display -> resolution and shadows -> anti-aliasing,
@@ -126,9 +126,10 @@ inline constexpr int SystemGameLanguageRow = 1;
 inline constexpr int SystemUpdatesRow = 2;
 inline constexpr int SystemDebugLogRow = 3;
 inline constexpr int SystemCollectionRow = 4;
-inline constexpr int SystemImportRow = 5;
-inline constexpr int SystemSaveRow = 6;
-inline constexpr int SystemRowCount = 7;
+inline constexpr int SystemModsRow = 5; // opens the Mods page
+inline constexpr int SystemImportRow = 6;
+inline constexpr int SystemSaveRow = 7;
+inline constexpr int SystemRowCount = 8;
 static_assert(GamePromptRow == GameRetailRowCount && GameMainMenuRow + 1 == GameRowCount);
 static_assert(AudioRearAngleRow + 1 == AudioRowCount && SystemSaveRow + 1 == SystemRowCount);
 // Logical ids for the graphics tab (2). MenuSnapshot::row stores these as int.
@@ -169,6 +170,11 @@ enum class GraphicsRow : int
     Count = 31,
 };
 inline constexpr int MenuTabWidth = 640 / MenuTabCount;
+// Mods page (System → Mods): a list page in the tab layout. A row with a detail
+// text keeps its choice cells in the last ModsCellsWidth of the value column;
+// the focused mod has move up / move down cells beside the value column.
+inline constexpr int ModsCellsWidth = 240;
+inline constexpr int ModsMoveLeft = 1112, ModsMoveWidth = 64, ModsMoveGap = 8;
 // Called by input polling before returning the guest-facing controller state.
 bool FilterInput(uint16_t &buttons, int16_t leftX, int16_t leftY);
 // Snapshot rendered on the presentation thread, never accessing guest memory.
