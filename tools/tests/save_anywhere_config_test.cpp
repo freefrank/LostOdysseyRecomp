@@ -102,6 +102,11 @@ int wmain(int argc, wchar_t** argv)
     Write("audio_output=3\naudio_matrix_rear=400\n");
     Check(settings::Read().audioOutput == settings::AudioOutputStereo && settings::Read().audioMatrixRear == 150,
           "unknown audio output falls back to stereo, rear angle capped at 150");
+    Check(settings::Read().voiceVolume == 100, "missing voice volume keeps 100");
+    Write("voice_volume=64\n");
+    Check(settings::Read().voiceVolume == 64, "voice volume read from INI");
+    Write("voice_volume=300\n");
+    Check(settings::Read().voiceVolume == 100, "voice volume is bounded to 100");
 
     Write("shadow_resolution=2\nambient_occlusion=1\n");
     Check(settings::Read().shadowResolution == 2 && settings::Read().ambientOcclusion == 1,

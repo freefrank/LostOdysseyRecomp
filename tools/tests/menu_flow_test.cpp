@@ -123,9 +123,11 @@ void PreviewVibration() { ++vibrationPreviews; }
 namespace apu {
 Output menuFlowOutput = Output::Stereo;
 uint32_t menuFlowMatrixRear = 110;
+uint32_t menuFlowVoiceVolume = 100;
 bool menuFlowTestSignal = false;
 void SetOutput(Output output) { menuFlowOutput = output; }
 void SetMatrixRearAngle(uint32_t degrees) { menuFlowMatrixRear = degrees; }
+void SetVoiceVolume(uint32_t percent) { menuFlowVoiceVolume = percent; }
 void SetTestSignal(bool on) { menuFlowTestSignal = on; }
 float TestSignalPosition() { return menuFlowTestSignal ? 0.0f : -1.0f; }
 uint32_t OutputChannels() { return menuFlowOutput == Output::Surround ? 6 : 2; }
@@ -1607,28 +1609,44 @@ int main(int argc, char** argv)
             Require(settings::edit.vibrationPercent == 0 && saves == beforeSaves + 1, "left at 0 does not wrap");
             settings::pending = 2; Tick(base);
             Require(settings::row == settings::GameRestoreRow, "the game actions follow Vibration");
-            // Audio output follows Sound effects: Right switches to 5.1 live and saves at once.
+            // Voice volume follows Sound effects: a host slider in the retail volume
+            // steps, saved at once, with a guest apply so the game refreshes its gains.
             settings::tab = 1;
             settings::row = settings::AudioEffectsRow;
             settings::pending = 2; Tick(base);
-            Require(settings::row == settings::AudioOutputRow && settings::snapshot.rows.size() == size_t(settings::AudioRowCount) &&
+            Require(settings::row == settings::AudioVoiceVolumeRow && settings::snapshot.rows.size() == size_t(settings::AudioRowCount) &&
+                    settings::snapshot.rows[settings::AudioVoiceVolumeRow].name == L"Voice volume" &&
+                    settings::snapshot.rows[settings::AudioVoiceVolumeRow].sliderPercent == 100,
+                    "Voice volume follows Sound effects at 100%");
+            Require(settings::snapshot.help.find(L"Spoken dialogue in cutscenes") != std::wstring::npos, "Voice volume help");
+            settings::pending = 8; Tick(base);
+            Require(settings::edit.voiceVolume == 100 && saves == beforeSaves + 1 && applies == beforeApplies,
+                    "right at 100 clamps without saving");
+            settings::pending = 4; Tick(base);
+            Require(settings::edit.voiceVolume == 96 && diskConfig.voiceVolume == 96 && apu::menuFlowVoiceVolume == 96 &&
+                    saves == beforeSaves + 2 && applies == beforeApplies + 1 && diskConfig.width != settings::edit.width &&
+                    settings::snapshot.rows[settings::AudioVoiceVolumeRow].sliderPercent == 96,
+                    "left lowers by 4, saves alone, applies live and re-applies the guest volumes");
+            // Audio output follows Voice volume: Right switches to 5.1 live and saves at once.
+            settings::pending = 2; Tick(base);
+            Require(settings::row == settings::AudioOutputRow &&
                     settings::snapshot.rows[settings::AudioOutputRow].name == L"Audio output" &&
                     settings::snapshot.rows[settings::AudioOutputRow].selectedChoice == 0,
-                    "Audio output follows Sound effects, Stereo by default");
+                    "Audio output follows Voice volume, Stereo by default");
             settings::pending = 8; Tick(base);
             Require(settings::edit.audioOutput == settings::AudioOutputSurround && diskConfig.audioOutput == settings::AudioOutputSurround &&
-                    apu::menuFlowOutput == apu::Output::Surround && saves == beforeSaves + 2 && applies == beforeApplies &&
+                    apu::menuFlowOutput == apu::Output::Surround && saves == beforeSaves + 3 && applies == beforeApplies + 1 &&
                     diskConfig.width != settings::edit.width, "audio output switches live and saves alone");
             // Rear angle closes the Audio tab and only moves with Matrix surround.
             settings::pending = 2; Tick(base);
             Require(settings::row == settings::AudioRearAngleRow && !settings::snapshot.rows[settings::AudioRearAngleRow].enabled &&
                     !apu::menuFlowTestSignal, "Rear angle follows Audio output, disabled and silent without Matrix surround");
             settings::pending = 8; Tick(base);
-            Require(settings::edit.audioMatrixRear == 110 && saves == beforeSaves + 2, "disabled Rear angle ignores Right");
+            Require(settings::edit.audioMatrixRear == 110 && saves == beforeSaves + 3, "disabled Rear angle ignores Right");
             settings::pending = 1; Tick(base);
             settings::pending = 8; Tick(base);
             Require(settings::edit.audioOutput == settings::AudioOutputMatrix && apu::menuFlowOutput == apu::Output::Matrix &&
-                    diskConfig.audioOutput == settings::AudioOutputMatrix && saves == beforeSaves + 3 && !apu::menuFlowTestSignal,
+                    diskConfig.audioOutput == settings::AudioOutputMatrix && saves == beforeSaves + 4 && !apu::menuFlowTestSignal,
                     "Right again selects Matrix surround; no test noise on Audio output");
             settings::pending = 2; Tick(base);
             Require(apu::menuFlowTestSignal, "test noise plays while Rear angle is focused");
@@ -1638,13 +1656,13 @@ int main(int argc, char** argv)
                     settings::snapshot.rows[settings::AudioRearAngleRow].value == L"120°" &&
                     settings::edit.audioMatrixRear == 120 && diskConfig.audioMatrixRear == 120 && apu::menuFlowMatrixRear == 120 &&
                     settings::snapshot.speakerRear == 120 &&
-                    saves == beforeSaves + 4 && applies == beforeApplies && diskConfig.width != settings::edit.width,
+                    saves == beforeSaves + 5 && applies == beforeApplies + 1 && diskConfig.width != settings::edit.width,
                     "Rear angle steps 10 degrees, applies live and saves alone");
             settings::pending = 2; Tick(base);
             Require(settings::row == settings::AudioVoiceRow && !apu::menuFlowTestSignal && !settings::snapshot.speakerLayout,
                     "down from Rear angle wraps to Voice language and stops the test noise and layout");
             settings::edit = currentConfig;
-            std::puts("PASS Gameplay Vibration slider and Audio output: bounds, immediate save, live apply, Graphics edits untouched");
+            std::puts("PASS Gameplay Vibration, Voice volume and Audio output: bounds, immediate save, live apply, Graphics edits untouched");
         }
         // The host Settings game tab is reached from the retail System menu.
         // Only explicit dialog confirmation may request the guest title transition.
@@ -2010,27 +2028,30 @@ int main(int argc, char** argv)
                     applies == beforeApplies && defaultsCalls == beforeDefaults &&
                     !settings::mainMenuPrompt && settings::snapshot.dialogChoices.empty(),
                     "hidden rows write nothing to the guest config");
-            // Audio keeps Audio output and Rear angle: Voice, Music and Sound
-            // effects live in the save as well.
+            // Audio keeps Voice volume, Audio output and Rear angle, which are
+            // in settings.ini: Voice language, Music and Sound effects live in
+            // the save as well.
             const uint32_t voice = PPC_LOAD_U32(ConfigData + 24), music = PPC_LOAD_U32(ConfigData + 8),
                            effects = PPC_LOAD_U32(ConfigData + 12), brightness = PPC_LOAD_U32(ConfigData + 16),
                            contrast = PPC_LOAD_U32(ConfigData + 20);
+            const uint32_t voiceVolume = settings::edit.voiceVolume;
             settings::pending = 0x200; Tick(base);
-            Require(settings::tab == 1 && settings::row == settings::AudioOutputRow, "Audio opens on Audio output");
+            Require(settings::tab == 1 && settings::row == settings::AudioVoiceVolumeRow, "Audio opens on Voice volume");
             for (int r = 0; r < settings::AudioRowCount; ++r)
-                Require(settings::snapshot.rows[size_t(r)].hidden == (r < settings::AudioOutputRow),
-                        "title mode hides Voice, Music and Sound effects");
+                Require(settings::snapshot.rows[size_t(r)].hidden == (r < settings::AudioVoiceVolumeRow),
+                        "title mode hides Voice language, Music and Sound effects");
             settings::pending = 1; Tick(base);
-            Require(settings::row == settings::AudioRearAngleRow, "Up from Audio output wraps past the hidden rows");
+            Require(settings::row == settings::AudioRearAngleRow, "Up from Voice volume wraps past the hidden rows");
             for (int r : {settings::AudioVoiceRow, settings::AudioMusicRow, settings::AudioEffectsRow})
                 for (uint16_t press : {uint16_t(4), uint16_t(8)})
                 {
                     settings::row = r;
                     settings::pending = press; Tick(base);
-                    Require(settings::row == settings::AudioOutputRow, "focus leaves a hidden Audio row");
+                    Require(settings::row == settings::AudioVoiceVolumeRow, "focus leaves a hidden Audio row");
                 }
             Require(PPC_LOAD_U32(ConfigData + 24) == voice && PPC_LOAD_U32(ConfigData + 8) == music &&
-                    PPC_LOAD_U32(ConfigData + 12) == effects && applies == beforeApplies,
+                    PPC_LOAD_U32(ConfigData + 12) == effects && applies == beforeApplies &&
+                    settings::edit.voiceVolume == voiceVolume,
                     "hidden Audio rows write nothing to the guest config");
             // The brightness page stays, but Original pattern would hand input
             // to the retail list, which writes the save's brightness.

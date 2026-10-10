@@ -39,8 +39,8 @@ std::atomic<bool> releaseToParent{false};
 // Title menu entry: the title tick reports an idle menu, input polling records
 // a fresh Y there, and the opened task hides what a game would replace.
 std::atomic<bool> titleMenuIdle{false}, titleShortcut{false}, titleEntry{false};
-// With no game loaded, the retail options (Gameplay, and Voice, Music and Sound
-// effects on Audio) and their Restore would be replaced by the next save or by
+// With no game loaded, the retail options (Gameplay, and Voice language, Music and
+// Sound effects on Audio) and their Restore would be replaced by the next save or by
 // New Game's defaults (828710A0), and there is no game to quit.
 bool TitleModeHidden(int tab, int r)
 {
@@ -1023,6 +1023,7 @@ void Publish(uint8_t *base, uint32_t config)
         }
         addSlider(L"Music", L"音樂音量", PPC_LOAD_U32(config + 8));
         addSlider(L"Sound effects", L"音效音量", PPC_LOAD_U32(config + 12));
+        addSlider(L"Voice volume", L"語音音量", edit.voiceVolume);
         addChoices(L"Audio output", L"音訊輸出",
                    {Tr(L"Stereo", L"立體聲"), Tr(L"5.1 surround", L"5.1 環繞聲"), Tr(L"Matrix surround", L"矩陣環繞聲")},
                    edit.audioOutput);
@@ -1273,6 +1274,9 @@ void Publish(uint8_t *base, uint32_t config)
     if (tab == 3 && row == SystemImportRow)
         next.help = Tr(L"Close the game to import selected discs or DLC again. Other content and saves stay intact.",
                        L"關閉遊戲並重新匯入所選光碟或 DLC；其他內容與存檔保留。");
+    if (tab == 1 && row == AudioVoiceVolumeRow && status.empty())
+        next.help = Tr(L"Spoken dialogue in cutscenes, set apart from Sound effects. Voices in battle follow Sound effects. Applies from the next scene.",
+                       L"過場動畫中的對白音量，與音效音量分開。戰鬥中的語音仍跟隨音效音量。從下一個場景起套用。");
     if (tab == 1 && row == AudioOutputRow && status.empty())
         next.help = edit.audioOutput == AudioOutputMatrix
             ? Tr(L"Encodes 5.1 into stereo for an AV receiver's Pro Logic II, Dolby Surround or Neural:X mode; plays as stereo elsewhere. Applies immediately.",
@@ -2831,6 +2835,22 @@ PPC_FUNC(sub_822F19B0)
             apu::SetOutput(apu::Output(edit.audioOutput));
             if (!SaveAudioOutput(edit.audioOutput))
                 status = Tr(L"Could not save settings.", L"無法儲存設定。");
+        }
+        else if (tab == 1 && row == AudioVoiceVolumeRow)
+        {
+            // Like Vibration: applied and saved at once, in the retail volume
+            // rows' steps. Re-applying the retail volumes makes the game
+            // refresh its channels' gains.
+            const auto volume = uint32_t(std::clamp(int(edit.voiceVolume) + delta * 4, 0, 100));
+            if (volume != edit.voiceVolume)
+            {
+                edit.voiceVolume = volume;
+                Config saved = GetConfig();
+                saved.voiceVolume = volume;
+                if (!SaveConfig(saved)) status = Tr(L"Could not save settings.", L"無法儲存設定。");
+                apu::SetVoiceVolume(volume);
+                changed = true;
+            }
         }
         else if (tab == 1 && row == AudioRearAngleRow)
         {

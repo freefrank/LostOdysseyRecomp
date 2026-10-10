@@ -86,7 +86,7 @@ bool CalibrationKey(uint32_t key);
 void PointerDrag(float x, float y, bool held);
 // Settings menu layout rules. Follow them when adding or moving a row:
 // - Tabs: 0 Gameplay (retail game options, controller options, game actions),
-//   1 Audio (voice, volumes, audio output, rear angle), 2 Graphics (display, rendering,
+//   1 Audio (voice language, volumes, audio output, rear angle), 2 Graphics (display, rendering,
 //   frame rate, HDR), 3 System (interface and game language, updates, TAA
 //   shader collection, Mods, Import discs & DLC, Save).
 // - Gameplay starts with the seven retail guest settings in their retail order;
@@ -117,9 +117,10 @@ inline constexpr int GameRowCount = 11;
 inline constexpr int AudioVoiceRow = 0;
 inline constexpr int AudioMusicRow = 1;
 inline constexpr int AudioEffectsRow = 2;
-inline constexpr int AudioOutputRow = 3;
-inline constexpr int AudioRearAngleRow = 4; // enabled with Matrix surround
-inline constexpr int AudioRowCount = 5;
+inline constexpr int AudioVoiceVolumeRow = 3; // host setting, kept in settings.ini
+inline constexpr int AudioOutputRow = 4;
+inline constexpr int AudioRearAngleRow = 5; // enabled with Matrix surround
+inline constexpr int AudioRowCount = 6;
 // System tab (3).
 inline constexpr int SystemUiLanguageRow = 0;
 inline constexpr int SystemGameLanguageRow = 1;
@@ -188,7 +189,7 @@ inline constexpr uint16_t TitleSettingsButton = 0x8000; // XINPUT_GAMEPAD_Y
 bool ConsumeTitleShortcut(bool titleMenuIdle);
 // The retail Settings task was just opened from the title menu. Until that task
 // is idle again, the per-save options are hidden (Gameplay's retail rows,
-// Restore game defaults and Quit to Main Menu; Audio's Voice, Music and Sound
-// effects) and the brightness page cannot open the retail calibration screen.
+// Restore game defaults and Quit to Main Menu; Audio's Voice language, Music and
+// Sound effects) and the brightness page cannot open the retail calibration screen.
 void MarkTitleEntry();
 } // namespace settings
