@@ -7,56 +7,56 @@
       "label": "RenderingThreadMain",
       "category": "render-thread",
       "confidence": "documented",
-      "evidence": [{"path": "docs/notes/cpu-performance-optimization-guide.md", "line": 99, "note": "Existing semantic attribution for the guest render thread; not a symbol recovered from a retail PDB."}]
+      "evidence": [{"path": "docs/notes/cpu-performance-optimization-guide.md", "line": 99, "note": "Existing semantic attribution for the guest render thread; not a symbol recovered from a retail PDB."}, {"path": "docs/notes/guest-function-findings.md", "line": 577, "note": "Additional findings consolidated in the ledger; sources: docs/notes/issue12-root-cause.md:41 (#12); docs/notes/cpu-recomp-deep-2026-09-13.md:21."}]
     },
     {
       "address": "825B2A20",
       "label": "FSceneRenderer::Render",
       "category": "render-thread",
       "confidence": "documented",
-      "evidence": [{"path": "docs/notes/cpu-recomp-deep-2026-09-13.md", "line": 21, "note": "Historical guest-render stack attribution. Sample share is not a current bottleneck measurement or recoverable frame-time estimate."}]
+      "evidence": [{"path": "docs/notes/cpu-recomp-deep-2026-09-13.md", "line": 21, "note": "Historical guest-render stack attribution. Sample share is not a current bottleneck measurement or recoverable frame-time estimate."}, {"path": "docs/notes/guest-function-findings.md", "line": 585, "note": "Additional findings consolidated in the ledger; sources: docs/notes/issue12-root-cause.md:41 (#12); docs/notes/cpu-recomp-deep-2026-09-13.md:21."}]
     },
     {
       "address": "823B62A0",
       "label": "GPU completion timestamp wait",
       "category": "gpu-query",
       "confidence": "documented",
-      "evidence": [{"path": "docs/notes/third-map-hang.md", "line": 60, "note": "Requested timestamp compared with device +0x2A9C and completion through +0x2A90; stack wait state starts with device pointer. Preserve wait semantics."}]
+      "evidence": [{"path": "docs/notes/third-map-hang.md", "line": 60, "note": "Requested timestamp compared with device +0x2A9C and completion through +0x2A90; stack wait state starts with device pointer. Preserve wait semantics."}, {"path": "docs/notes/guest-function-findings.md", "line": 308, "note": "Additional findings consolidated in the ledger; sources: LostOdysseyRecomp/debug/gpu_wait_trace.cpp:25."}]
     },
     {
       "address": "827B6278",
       "label": "GPU completion wait-state poll",
       "category": "gpu-query",
       "confidence": "documented",
-      "evidence": [{"path": "docs/notes/third-map-hang.md", "line": 60, "note": "Reads device from wait state and monitors a 5000-tick timeout. Historical invalid pointer observation does not identify its writer."}]
+      "evidence": [{"path": "docs/notes/third-map-hang.md", "line": 60, "note": "Reads device from wait state and monitors a 5000-tick timeout. Historical invalid pointer observation does not identify its writer."}, {"path": "docs/notes/guest-function-findings.md", "line": 318, "note": "Additional findings consolidated in the ledger; sources: LostOdysseyRecomp/cpu/poll_wait.h:136; LostOdysseyRecomp/debug/gpu_wait_trace.cpp:43."}]
     },
     {
       "address": "823CF3F0",
       "label": "Type-9 query completion data",
       "category": "gpu-query",
       "confidence": "documented",
-      "evidence": [{"path": "docs/notes/third-map-hang.md", "line": 74, "note": "Historical query layout: +0 device, +4 type, +24 bytes (0x18) timestamp; the legacy decompilation reads int element 6. Invalid small device pointer was observed, not a confirmed common cause."}]
+      "evidence": [{"path": "docs/notes/third-map-hang.md", "line": 74, "note": "Historical query layout: +0 device, +4 type, +24 bytes (0x18) timestamp; the legacy decompilation reads int element 6. Invalid small device pointer was observed, not a confirmed common cause."}, {"path": "docs/notes/guest-function-findings.md", "line": 314, "note": "Additional findings consolidated in the ledger; sources: LostOdysseyRecomp/gpu/occlusion_queries.h:17; LostOdysseyRecomp/debug/query_trace.cpp:63; docs/notes/occlusion-queries.md:22 (#118); docs/notes/physical-alias-rendering.md:28."}]
     },
     {
       "address": "827B7408",
       "label": "Create type-9 GPU query",
       "category": "gpu-query",
       "confidence": "documented",
-      "evidence": [{"path": "docs/notes/third-map-hang.md", "line": 80, "note": "Creates 0x9c-byte query; +0 device, +4 type 9, +0xc reference count 1."}]
+      "evidence": [{"path": "docs/notes/third-map-hang.md", "line": 80, "note": "Creates 0x9c-byte query; +0 device, +4 type 9, +0xc reference count 1."}, {"path": "docs/notes/guest-function-findings.md", "line": 319, "note": "Additional findings consolidated in the ledger; sources: LostOdysseyRecomp/debug/query_trace.cpp:94."}]
     },
     {
       "address": "823CCCE8",
       "label": "GPU query reuse-array ownership",
       "category": "gpu-query",
       "confidence": "documented",
-      "evidence": [{"path": "docs/notes/third-map-hang.md", "line": 80, "note": "Reuse array through global 83235AB8; takes a reference on insertion and releases its local reference through 823CDCA8."}]
+      "evidence": [{"path": "docs/notes/third-map-hang.md", "line": 80, "note": "Reuse array through global 83235AB8; takes a reference on insertion and releases its local reference through 823CDCA8."}, {"path": "docs/notes/guest-function-findings.md", "line": 309, "note": "Additional findings consolidated in the ledger; sources: LostOdysseyRecomp/debug/query_trace.cpp:34; LostOdysseyRecomp/gpu/occlusion_queries.h:27; docs/notes/occlusion-queries.md:37 (#118); docs/notes/occlusion-queries.md:59."}]
     },
     {
       "address": "823CDCA8",
       "label": "Release GPU query reference",
       "category": "gpu-query",
       "confidence": "documented",
-      "evidence": [{"path": "docs/notes/third-map-hang.md", "line": 80, "note": "Decrements +0xc; only frees on zero, setting +8 to 0x78787878 before 827C9DB0. No confirmed early release in that investigation."}]
+      "evidence": [{"path": "docs/notes/third-map-hang.md", "line": 80, "note": "Decrements +0xc; only frees on zero, setting +8 to 0x78787878 before 827C9DB0. No confirmed early release in that investigation."}, {"path": "docs/notes/guest-function-findings.md", "line": 310, "note": "Additional findings consolidated in the ledger; sources: LostOdysseyRecomp/debug/query_trace.cpp:110; docs/notes/cpu-live-profile-2026-09-13.md:72; docs/notes/third-map-hang.md:80."}]
     },
     {
       "address": "824C4EC0",
@@ -99,6 +99,2344 @@
       "category": "loading",
       "confidence": "historical_candidate",
       "evidence": [{"path": "docs/OPTIMIZATION_PLAN.md", "line": 61, "note": "Historical macOS fork observation; requires current on-CPU/wait measurement and synchronization analysis."}]
+    },
+    {
+      "address": "822B5938",
+      "label": "skeletal pose evaluation",
+      "category": "animation",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 14, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/debug/animation_trace.cpp:7; docs/notes/encounter-animation.md:49 (2026-09-04)."}]
+    },
+    {
+      "address": "8258D648",
+      "label": "SetSkeletalMesh",
+      "category": "animation",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 15, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/issue12-handoff-2026-09-09.md:102 (#12)."}]
+    },
+    {
+      "address": "8258E0E8",
+      "label": "find animation by name",
+      "category": "animation",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 16, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/debug/animation_trace.cpp:33; docs/notes/encounter-animation.md:30 (2026-09-04); docs/notes/encounter-animation.md:49."}]
+    },
+    {
+      "address": "828BB378",
+      "label": "actor created",
+      "category": "animation",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 17, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/debug/animation_trace.cpp:80; docs/notes/encounter-animation.md:50 (2026-09-04)."}]
+    },
+    {
+      "address": "829B7A98",
+      "label": "load animation asset by path",
+      "category": "animation",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 18, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/debug/animation_trace.cpp:49."}]
+    },
+    {
+      "address": "82AB9E08",
+      "label": "battle animation load caller",
+      "category": "animation",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 19, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/encounter-animation.md:32 (2026-09-04)."}]
+    },
+    {
+      "address": "82B26518",
+      "label": "actor resource assignment",
+      "category": "animation",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 21, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/debug/animation_trace.cpp:67; docs/notes/encounter-animation.md:32."}]
+    },
+    {
+      "address": "823F3C48",
+      "label": "LO.FPI load chain root",
+      "category": "archive-io",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 27, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/formats-report.md:16 (#369, 2026-10-09); BM \"LORecomp 语言包逆向记录 #369 2026-10-09\"."}]
+    },
+    {
+      "address": "828491C8",
+      "label": "Read whole archive member",
+      "category": "archive-io",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 28, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/namedata-re/ (#369, 2026-10-09)."}]
+    },
+    {
+      "address": "8284B468",
+      "label": "Open archive index by name",
+      "category": "archive-io",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 29, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/formats-report.md:16 (#369)."}]
+    },
+    {
+      "address": "8284CEE8",
+      "label": "File existence check",
+      "category": "archive-io",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 30, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/fonts-language-report.md:78 (#369)."}]
+    },
+    {
+      "address": "8284E6B8",
+      "label": "In-place CPX decompression",
+      "category": "archive-io",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 31, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/namedata-re/fn_8284E6B8.txt (#369, 2026-10-09)."}]
+    },
+    {
+      "address": "828521F0",
+      "label": "Stream read request handler",
+      "category": "archive-io",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 32, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/formats-report.md:40 (#369)."}]
+    },
+    {
+      "address": "828527A0",
+      "label": "FPI pack timestamp to FILETIME",
+      "category": "archive-io",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 33, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/formats-report.md:26 (#369)."}]
+    },
+    {
+      "address": "82852BC8",
+      "label": "Build game:\\ root path for FPI",
+      "category": "archive-io",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 34, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/formats-report.md:16 (#369)."}]
+    },
+    {
+      "address": "82852C90",
+      "label": "Locked ReadFile (FPI module)",
+      "category": "archive-io",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 35, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/formats-report.md:17 (#369)."}]
+    },
+    {
+      "address": "82853208",
+      "label": "FPI record byte-swap (archive)",
+      "category": "archive-io",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 36, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/formats-report.md:17 (#369)."}]
+    },
+    {
+      "address": "82853A10",
+      "label": "FPI record byte-swap (archive, second)",
+      "category": "archive-io",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 37, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/formats-report.md:17 (#369)."}]
+    },
+    {
+      "address": "82853B28",
+      "label": "Match member name, fill file info",
+      "category": "archive-io",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 38, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/formats-report.md:35 (#369); docs/notes/language-pack-research.zh-CN.md:21 (#369)."}]
+    },
+    {
+      "address": "82853DA8",
+      "label": "Select candidate archives by prefix",
+      "category": "archive-io",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 39, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/formats-report.md:35 (#369)."}]
+    },
+    {
+      "address": "82853F58",
+      "label": "Archive FindFirst/FindNext enumeration",
+      "category": "archive-io",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 40, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/formats-report.md:39 (#369)."}]
+    },
+    {
+      "address": "82854400",
+      "label": "FPI archive index loader",
+      "category": "archive-io",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 41, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/formats-report.md:17 (#369, 2026-10-09); BM \"LORecomp 语言包逆向记录 #369 2026-10-09\"; docs/notes/language-pack-research.zh-CN.md:19 (#369)."}]
+    },
+    {
+      "address": "828548A0",
+      "label": "Archive member lookup",
+      "category": "archive-io",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 42, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/formats-report.md:35 (#369); docs/notes/language-pack-research.zh-CN.md:21 (#369)."}]
+    },
+    {
+      "address": "82854CF8",
+      "label": "Startup FPI load wrapper",
+      "category": "archive-io",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 43, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/formats-report.md:19 (#369)."}]
+    },
+    {
+      "address": "82854D98",
+      "label": "DLC FPI load (LODLC00x.fpi)",
+      "category": "archive-io",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 44, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/formats-report.md:39 (#369)."}]
+    },
+    {
+      "address": "828551E8",
+      "label": "Open archive member (overlay then base)",
+      "category": "archive-io",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 45, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/formats-report.md:35 (#369); BM \"LORecomp 语言包逆向记录 #369 2026-10-09\"; docs/notes/language-pack-research.zh-CN.md:21 (#369)."}]
+    },
+    {
+      "address": "828571B8",
+      "label": "CPX in-place reserve size",
+      "category": "archive-io",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 46, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/namedata-re/reserve_survey.py (#369, 2026-10-09)."}]
+    },
+    {
+      "address": "82857B00",
+      "label": "CPX block decoder",
+      "category": "archive-io",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 47, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/namedata-re/stored.py (#369, 2026-10-09)."}]
+    },
+    {
+      "address": "8285AEF0",
+      "label": "HDD cache writer (FPI module)",
+      "category": "archive-io",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 48, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/formats-report.md:41 (#369)."}]
+    },
+    {
+      "address": "82DD1C30",
+      "label": "DLC mount state machine",
+      "category": "archive-io",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 49, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/formats-report.md:39 (#369)."}]
+    },
+    {
+      "address": "82B617B8",
+      "label": "play sound",
+      "category": "audio",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 55, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/settings/title_entry.cpp:86."}]
+    },
+    {
+      "address": "822A2FE0",
+      "label": "callee in feelring size update",
+      "category": "battle",
+      "confidence": "historical_candidate",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 66, "note": "Unverified candidate; confirm against the binary before relying on it. Sources: docs/notes/battle-ring-resource.md:109 (2026-09-05)."}]
+    },
+    {
+      "address": "82384CC0",
+      "label": "bhHUD execBattleUpdate",
+      "category": "battle",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 67, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/debug-teleport.md:53 (2026-09-04)."}]
+    },
+    {
+      "address": "82384D78",
+      "label": "battle HUD path",
+      "category": "battle",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 68, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/debug-teleport.md:53 (2026-09-04)."}]
+    },
+    {
+      "address": "82388BE0",
+      "label": "battle HUD update chain",
+      "category": "battle",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 69, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/battle-ring-resource.md:96; docs/notes/debug-teleport.md:53."}]
+    },
+    {
+      "address": "8238A5C0",
+      "label": "battle HUD update chain callee",
+      "category": "battle",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 70, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/battle-ring-resource.md:96 (2026-09-05)."}]
+    },
+    {
+      "address": "8238A640",
+      "label": "battle core tick",
+      "category": "battle",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 71, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/debug/battle_menu.cpp:84; LostOdysseyRecomp/patches/battle_script_timer.cpp:43; docs/notes/issue-148-battle-dialogue-timing.md:9 (#148)."}]
+    },
+    {
+      "address": "8238ACC8",
+      "label": "battle script manager update",
+      "category": "battle",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 72, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/patches/battle_script_timer.cpp:44."}]
+    },
+    {
+      "address": "8238AE08",
+      "label": "battle script step",
+      "category": "battle",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 74, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/patches/battle_script_timer.cpp:41; docs/notes/issue-148-battle-dialogue-timing.md:13 (#148); docs/STATUS.md:618."}]
+    },
+    {
+      "address": "82907A68",
+      "label": "initial character table init",
+      "category": "battle",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 75, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/encounter-animation.md:41 (2026-09-04)."}]
+    },
+    {
+      "address": "829E6AF8",
+      "label": "SetBattleCharaResource",
+      "category": "battle",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 76, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/debug/animation_trace.cpp:93; docs/notes/encounter-animation.md:41 (2026-09-04)."}]
+    },
+    {
+      "address": "82A9BF40",
+      "label": "timed wait opcode",
+      "category": "battle",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 77, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/patches/battle_script_timer.cpp:47; docs/notes/issue-148-battle-dialogue-timing.md:9 (#148)."}]
+    },
+    {
+      "address": "82A9DBB8",
+      "label": "battle script init",
+      "category": "battle",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 78, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/patches/battle_script_timer.cpp:83; docs/notes/issue-148-battle-dialogue-timing.md:13 (#148)."}]
+    },
+    {
+      "address": "82A9E3B8",
+      "label": "battle script release",
+      "category": "battle",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 79, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/patches/battle_script_timer.cpp:90; docs/notes/issue-148-battle-dialogue-timing.md:13 (#148)."}]
+    },
+    {
+      "address": "82AAA7C8",
+      "label": "enter battle phase",
+      "category": "battle",
+      "confidence": "historical_candidate",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 80, "note": "Unverified candidate; confirm against the binary before relying on it. Sources: LostOdysseyRecomp/debug/battle_menu.cpp:128."}]
+    },
+    {
+      "address": "82AC6D88",
+      "label": "battle result initializer",
+      "category": "battle",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 81, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/debug/battle_menu.cpp:129."}]
+    },
+    {
+      "address": "82AF5D18",
+      "label": "battle character config write",
+      "category": "battle",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 82, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/encounter-animation.md:40 (2026-09-04)."}]
+    },
+    {
+      "address": "82AF6290",
+      "label": "battle entry with battle core",
+      "category": "battle",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 83, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/debug/opening_state.cpp:31; docs/notes/encounter-animation.md:40 (2026-09-04)."}]
+    },
+    {
+      "address": "82B00398",
+      "label": "opening flow Kaim resource write",
+      "category": "battle",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 84, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/debug/opening_state.cpp:15; docs/notes/encounter-animation.md:10 (2026-09-04)."}]
+    },
+    {
+      "address": "82B14428",
+      "label": "feelring size update",
+      "category": "battle",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 86, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/battle-ring-resource.md:109 (2026-09-05)."}]
+    },
+    {
+      "address": "82B146A8",
+      "label": "battle ring UI state dispatch",
+      "category": "battle",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 88, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecompLib/config/switch_tables_manual.toml:3; docs/notes/battle-ring-resource.md:68; docs/notes/battle-ring-resource.md:82."}]
+    },
+    {
+      "address": "82B15960",
+      "label": "battle ring update",
+      "category": "battle",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 99, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/debug/battle_menu.cpp:14; docs/notes/battle-ring-resource.md:82; docs/notes/battle-ring-resource.md:117."}]
+    },
+    {
+      "address": "82B16310",
+      "label": "ring resource name formatting",
+      "category": "battle",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 100, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/battle-ring-resource.md:41 (2026-09-04)."}]
+    },
+    {
+      "address": "82B165D8",
+      "label": "outer ring vertex generation",
+      "category": "battle",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 103, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/battle-ring-resource.md:113 (2026-09-05)."}]
+    },
+    {
+      "address": "82390A70",
+      "label": "Battle camera Update (vtable slot 3)",
+      "category": "battle-camera",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 117, "note": "Search label from a documented finding, not a recovered symbol. Sources: memory guest-logic-re-techniques.md (#117, 2026-10-01); LostOdysseyRecomp/patches/battle_camera_smoother.cpp:15 (#117); docs/notes/battle-camera-120fps-2026-10-01.md:16 (#117)."}]
+    },
+    {
+      "address": "82396FC0",
+      "label": "battle camera raw rotation",
+      "category": "battle-camera",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 118, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/battle-camera-120fps-2026-10-01.md:17 (#117)."}]
+    },
+    {
+      "address": "82397198",
+      "label": "Rotation smoother SetInput",
+      "category": "battle-camera",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 119, "note": "Search label from a documented finding, not a recovered symbol. Sources: BM \"LORecomp Issue 117 战斗相机高帧率旋转 2026-10-01\" (PR #132); LostOdysseyRecomp/patches/battle_camera_smoother.cpp:17 (#117); docs/notes/battle-camera-120fps-2026-10-01.md:18 (#117)."}]
+    },
+    {
+      "address": "82397840",
+      "label": "Rotation smoother Update",
+      "category": "battle-camera",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 120, "note": "Search label from a documented finding, not a recovered symbol. Sources: BM \"LORecomp Issue 117 战斗相机高帧率旋转 2026-10-01\" (PR #132); LostOdysseyRecomp/patches/battle_camera_smoother.cpp:18 (#117); docs/notes/battle-camera-120fps-2026-10-01.md:18 (#117)."}]
+    },
+    {
+      "address": "82397FA8",
+      "label": "Rotation smoother update step",
+      "category": "battle-camera",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 121, "note": "Search label from a documented finding, not a recovered symbol. Sources: BM \"LORecomp Issue 117 战斗相机高帧率旋转 2026-10-01\"; docs/notes/battle-camera-120fps-2026-10-01.md:18 (#117)."}]
+    },
+    {
+      "address": "82398458",
+      "label": "Fixed 12.5 ms rotation resampler",
+      "category": "battle-camera",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 122, "note": "Search label from a documented finding, not a recovered symbol. Sources: memory guest-logic-re-techniques.md (#117); BM \"LORecomp Issue 117 战斗相机高帧率旋转 2026-10-01\"; LostOdysseyRecomp/patches/battle_camera_smoother.cpp:21 (#117); docs/notes/battle-camera-120fps-2026-10-01.md:23 (#117)."}]
+    },
+    {
+      "address": "82399518",
+      "label": "smoother offset reader",
+      "category": "battle-camera",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 123, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/battle-camera-120fps-2026-10-01.md:18 (#117)."}]
+    },
+    {
+      "address": "82300E50",
+      "label": "Build projection (secondary frustum)",
+      "category": "camera",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 132, "note": "Search label from a documented finding, not a recovered symbol. Sources: BM \"LORecomp Issue 342 视锥剔除与图元包围盒\"; BM \"LORecomp Issue 17 实验性宽屏与 v0.6.6 发布接续\"; LostOdysseyRecomp/gpu/hor_plus.cpp:180."}]
+    },
+    {
+      "address": "829DFD58",
+      "label": "switch dispatch (u64 selector bug)",
+      "category": "crash",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 141, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/issue7-cutscene-crash.md:23 (#7); docs/notes/issues14-16-triage.md:15 (#14)."}]
+    },
+    {
+      "address": "82B7A6B0",
+      "label": "savegprlr_14",
+      "category": "crt",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 147, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecompLib/config/LostOdysseyRecomp.toml:21; docs/notes/recomp.md:30."}]
+    },
+    {
+      "address": "82B7A700",
+      "label": "restgprlr_14",
+      "category": "crt",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 148, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecompLib/config/LostOdysseyRecomp.toml:20; docs/notes/recomp.md:29."}]
+    },
+    {
+      "address": "82B7A940",
+      "label": "C++ frame handler",
+      "category": "crt",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 149, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecompLib/config/LostOdysseyRecomp.toml:159; docs/notes/recomp.md:47."}]
+    },
+    {
+      "address": "82B7B130",
+      "label": "savefpr_14",
+      "category": "crt",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 150, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecompLib/config/LostOdysseyRecomp.toml:23; docs/notes/recomp.md:32."}]
+    },
+    {
+      "address": "82B7B17C",
+      "label": "restfpr_14",
+      "category": "crt",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 151, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecompLib/config/LostOdysseyRecomp.toml:22; docs/notes/recomp.md:31."}]
+    },
+    {
+      "address": "82DF2B00",
+      "label": "savevmx_14",
+      "category": "crt",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 152, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecompLib/config/LostOdysseyRecomp.toml:25; docs/notes/recomp.md:34."}]
+    },
+    {
+      "address": "82DF2D98",
+      "label": "restvmx_14",
+      "category": "crt",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 154, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecompLib/config/LostOdysseyRecomp.toml:24; docs/notes/recomp.md:33."}]
+    },
+    {
+      "address": "82DF3060",
+      "label": "longjmp",
+      "category": "crt",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 156, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecompLib/config/LostOdysseyRecomp.toml:29; docs/notes/recomp.md:119."}]
+    },
+    {
+      "address": "82DF34A0",
+      "label": "setjmp",
+      "category": "crt",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 157, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecompLib/config/LostOdysseyRecomp.toml:30; docs/notes/recomp.md:119."}]
+    },
+    {
+      "address": "822D7388",
+      "label": "Primitive proxy ctor copies CullDistance",
+      "category": "culling",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 164, "note": "Search label from a documented finding, not a recovered symbol. Sources: memory draw-distance-investigation.md (2026-10-05); BM \"LORecomp Issue 219 战斗敌人淡入 blend constant 2026-10-05\"."}]
+    },
+    {
+      "address": "82301D28",
+      "label": "FSceneView constructor",
+      "category": "culling",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 165, "note": "Search label from a documented finding, not a recovered symbol. Sources: BM \"LORecomp Issue 342 视锥剔除与图元包围盒\" (#342, 2026-10-09); LostOdysseyRecomp/debug/temporal_inputs.cpp:185; LostOdysseyRecomp/gpu/hor_plus.cpp:57; docs/notes/v0.4.0-development.md:67 (2026-09-07)."}]
+    },
+    {
+      "address": "823024C8",
+      "label": "GetViewFrustumBounds",
+      "category": "culling",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 167, "note": "Search label from a documented finding, not a recovered symbol. Sources: BM \"LORecomp Issue 342 视锥剔除与图元包围盒\" (#342)."}]
+    },
+    {
+      "address": "82302948",
+      "label": "TArray AddItem (frustum plane)",
+      "category": "culling",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 168, "note": "Search label from a documented finding, not a recovered symbol. Sources: BM \"LORecomp Issue 342 视锥剔除与图元包围盒\" (#342)."}]
+    },
+    {
+      "address": "823029C8",
+      "label": "FConvexVolume::Init",
+      "category": "culling",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 169, "note": "Search label from a documented finding, not a recovered symbol. Sources: BM \"LORecomp Issue 342 视锥剔除与图元包围盒\" (#342)."}]
+    },
+    {
+      "address": "823030D8",
+      "label": "Copy frustum plane arrays",
+      "category": "culling",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 170, "note": "Search label from a documented finding, not a recovered symbol. Sources: BM \"LORecomp Issue 342 视锥剔除与图元包围盒\" (#342)."}]
+    },
+    {
+      "address": "823B7000",
+      "label": "Primitive bounds vs convex volume array",
+      "category": "culling",
+      "confidence": "historical_candidate",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 171, "note": "Unverified candidate; confirm against the binary before relying on it. Sources: BM \"LORecomp Issue 342 视锥剔除与图元包围盒\" (#342)."}]
+    },
+    {
+      "address": "823BC220",
+      "label": "InitViews",
+      "category": "culling",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 172, "note": "Search label from a documented finding, not a recovered symbol. Sources: BM \"LORecomp Issue 342 视锥剔除与图元包围盒\" (#342); memory draw-distance-investigation.md; LostOdysseyRecomp/gpu/hor_plus.cpp:207 (#342); docs/notes/v0.4.0-development.md:55 (2026-09-07)."}]
+    },
+    {
+      "address": "823BDA78",
+      "label": "FConvexVolume::IntersectBox",
+      "category": "culling",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 175, "note": "Search label from a documented finding, not a recovered symbol. Sources: BM \"LORecomp Issue 342 视锥剔除与图元包围盒\" (#342, PR #348); LostOdysseyRecomp/gpu/hor_plus.cpp:216 (#342)."}]
+    },
+    {
+      "address": "823BE570",
+      "label": "IntersectBox vs object +276 volume",
+      "category": "culling",
+      "confidence": "historical_candidate",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 176, "note": "Unverified candidate; confirm against the binary before relying on it. Sources: BM \"LORecomp Issue 342 视锥剔除与图元包围盒\" (#342)."}]
+    },
+    {
+      "address": "824C3F00",
+      "label": "IntersectBox caller (non-frustum)",
+      "category": "culling",
+      "confidence": "historical_candidate",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 177, "note": "Unverified candidate; confirm against the binary before relying on it. Sources: BM \"LORecomp Issue 342 视锥剔除与图元包围盒\" (#342)."}]
+    },
+    {
+      "address": "824DF028",
+      "label": "Static mesh draw distance range",
+      "category": "culling",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 178, "note": "Search label from a documented finding, not a recovered symbol. Sources: memory draw-distance-investigation.md; BM \"LORecomp Issue 219 战斗敌人淡入 blend constant 2026-10-05\"."}]
+    },
+    {
+      "address": "82702408",
+      "label": "Destroy temporary plane array",
+      "category": "culling",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 179, "note": "Search label from a documented finding, not a recovered symbol. Sources: BM \"LORecomp Issue 342 视锥剔除与图元包围盒\" (#342)."}]
+    },
+    {
+      "address": "82986A00",
+      "label": "Test 80-byte region entries",
+      "category": "culling",
+      "confidence": "historical_candidate",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 180, "note": "Unverified candidate; confirm against the binary before relying on it. Sources: BM \"LORecomp Issue 342 视锥剔除与图元包围盒\" (#342)."}]
+    },
+    {
+      "address": "82988210",
+      "label": "Secondary game frustum (purpose unknown)",
+      "category": "culling",
+      "confidence": "historical_candidate",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 181, "note": "Unverified candidate; confirm against the binary before relying on it. Sources: BM \"LORecomp Issue 342 视锥剔除与图元包围盒\" (#342, purpose unknown)."}]
+    },
+    {
+      "address": "823E4B50",
+      "label": "Screen rect draw helper (movie quad)",
+      "category": "cutscene-fmv",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 187, "note": "Search label from a documented finding, not a recovered symbol. Sources: BM \"LORecomp Mod 支持与 MO2 接入 2026-10-08\" (PR #345); BM \"LORecomp Issue 17 实验性宽屏与 v0.6.6 发布接续\"; LostOdysseyRecomp/gpu/hor_plus.cpp:392; docs/notes/hd-cutscene-replacement.zh-CN.md:26 (#265, 2026-10-09)."}]
+    },
+    {
+      "address": "823EFC08",
+      "label": "FLO_MOVIE render",
+      "category": "cutscene-fmv",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 188, "note": "Search label from a documented finding, not a recovered symbol. Sources: BM \"LORecomp Mod 支持与 MO2 接入 2026-10-08\" (PR #345); BM \"LORecomp Issue 17 实验性宽屏与 v0.6.6 发布接续\"; LostOdysseyRecomp/gpu/hor_plus.cpp:386; docs/notes/hd-cutscene-replacement.zh-CN.md:26 (#265, 2026-10-09)."}]
+    },
+    {
+      "address": "823F0038",
+      "label": "movie texture update (render thread)",
+      "category": "cutscene-fmv",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 191, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/hd-cutscene-replacement.zh-CN.md:25 (#265, 2026-10-09)."}]
+    },
+    {
+      "address": "827E2DD0",
+      "label": "UInterpTrackMovie::UpdateTrack",
+      "category": "cutscene-fmv",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 192, "note": "Search label from a documented finding, not a recovered symbol. Sources: BM \"LORecomp Mod 支持与 MO2 接入 2026-10-08\" (PR #345, 2026-10-09, static only); docs/notes/hd-cutscene-replacement.zh-CN.md:21 (#265, 2026-10-09)."}]
+    },
+    {
+      "address": "82813888",
+      "label": "movie pause path",
+      "category": "cutscene-fmv",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 193, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/hd-cutscene-replacement.zh-CN.md:36 (#265)."}]
+    },
+    {
+      "address": "82813D38",
+      "label": "movie texture creation",
+      "category": "cutscene-fmv",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 194, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/hd-cutscene-replacement.zh-CN.md:25 (#265)."}]
+    },
+    {
+      "address": "828140C8",
+      "label": "movie file open",
+      "category": "cutscene-fmv",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 195, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/hd-cutscene-replacement.zh-CN.md:22 (#265)."}]
+    },
+    {
+      "address": "82814570",
+      "label": "movie release command",
+      "category": "cutscene-fmv",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 196, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/hd-cutscene-replacement.zh-CN.md:37 (#265)."}]
+    },
+    {
+      "address": "82814B68",
+      "label": "Movie start (FMV voice track pick)",
+      "category": "cutscene-fmv",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 197, "note": "Search label from a documented finding, not a recovered symbol. Sources: memory issue220-cgi-voice-case.md (#220, #54, PR #242, 2026-10-05)."}]
+    },
+    {
+      "address": "82815010",
+      "label": "movie pause path",
+      "category": "cutscene-fmv",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 199, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/hd-cutscene-replacement.zh-CN.md:36 (#265)."}]
+    },
+    {
+      "address": "82815060",
+      "label": "movie video track select",
+      "category": "cutscene-fmv",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 200, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/hd-cutscene-replacement.zh-CN.md:50 (#265)."}]
+    },
+    {
+      "address": "82815248",
+      "label": "Start movie by name",
+      "category": "cutscene-fmv",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 201, "note": "Search label from a documented finding, not a recovered symbol. Sources: BM \"LORecomp Mod 支持与 MO2 接入 2026-10-08\" (PR #345, static only); docs/notes/hd-cutscene-replacement.zh-CN.md:21 (#265); docs/notes/hd-cutscene-replacement.zh-CN.md:34."}]
+    },
+    {
+      "address": "82815640",
+      "label": "movie release (render thread)",
+      "category": "cutscene-fmv",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 202, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/hd-cutscene-replacement.zh-CN.md:37 (#265)."}]
+    },
+    {
+      "address": "82CF8C38",
+      "label": "movie GetNextFrame",
+      "category": "cutscene-fmv",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 203, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/hd-cutscene-replacement.zh-CN.md:25 (#265, 2026-10-09)."}]
+    },
+    {
+      "address": "829005F0",
+      "label": "Debug Edit Menu handler",
+      "category": "debug-menu",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 209, "note": "Search label from a documented finding, not a recovered symbol. Sources: memory minimap-navi-guest.md (#85)."}]
+    },
+    {
+      "address": "82320428",
+      "label": "Disc manager update",
+      "category": "disc",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 216, "note": "Search label from a documented finding, not a recovered symbol. Sources: memory test-save-generation.md (2026-10-01); docs/notes/disc-selection.md:18 (2026-09-06)."}]
+    },
+    {
+      "address": "825F72C0",
+      "label": "DirtyDisc digest check caller",
+      "category": "disc",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 217, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/battle-ring-resource.md:30 (2026-09-04)."}]
+    },
+    {
+      "address": "82820488",
+      "label": "DirtyDisc error thread",
+      "category": "disc",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 218, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/battle-ring-resource.md:28 (2026-09-04)."}]
+    },
+    {
+      "address": "82821E90",
+      "label": "Original disc request",
+      "category": "disc",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 223, "note": "Search label from a documented finding, not a recovered symbol. Sources: memory test-save-generation.md (2026-10-01); docs/notes/disc-selection.md:18 (2026-09-06)."}]
+    },
+    {
+      "address": "82BE1C00",
+      "label": "guest disc failure handler",
+      "category": "disc",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 224, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/debug/asset_failure.cpp:7; docs/notes/battle-ring-resource.md:28 (2026-09-04)."}]
+    },
+    {
+      "address": "82826E80",
+      "label": "Battle request complete/cancel",
+      "category": "encounter",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 231, "note": "Search label from a documented finding, not a recovered symbol. Sources: BM \"LORecomp 待跟进事项与证据缺口\" (#114, 2026-10-02); LostOdysseyRecomp/patches/encounter_defer.cpp:80 (#114); docs/notes/ISSUE_114_FIELD_INTERACTION_20261001.md:49 (#114)."}]
+    },
+    {
+      "address": "82826F40",
+      "label": "cancel battle request",
+      "category": "encounter",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 232, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/patches/encounter_defer.cpp:76 (#114); docs/notes/ISSUE_114_FIELD_INTERACTION_20261001.md:50 (#114)."}]
+    },
+    {
+      "address": "828278A0",
+      "label": "RequestBattle",
+      "category": "encounter",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 233, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/patches/encounter_defer.cpp:7 (#114); LostOdysseyRecomp/debug/battle_tour.cpp:17; docs/notes/ISSUE_114_FIELD_INTERACTION_20261001.md:46 (#114); docs/notes/pipeline-first-use-stalls.md:319."}]
+    },
+    {
+      "address": "82828698",
+      "label": "Battle request path (second)",
+      "category": "encounter",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 234, "note": "Search label from a documented finding, not a recovered symbol. Sources: BM \"LORecomp 待跟进事项与证据缺口\" (#114, 2026-10-02); LostOdysseyRecomp/patches/encounter_defer.cpp:89 (#114); docs/notes/ISSUE_114_FIELD_INTERACTION_20261001.md:51 (#114)."}]
+    },
+    {
+      "address": "8285E380",
+      "label": "post-request call in walking update",
+      "category": "encounter",
+      "confidence": "historical_candidate",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 235, "note": "Unverified candidate; confirm against the binary before relying on it. Sources: docs/notes/pipeline-first-use-stalls.md:319 (2026-10-06)."}]
+    },
+    {
+      "address": "8298D830",
+      "label": "world map battle stage override",
+      "category": "encounter",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 236, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/debug/battle_tour.cpp:127."}]
+    },
+    {
+      "address": "829E3048",
+      "label": "walking encounter update",
+      "category": "encounter",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 237, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/debug/no_encounters.cpp:67; LostOdysseyRecomp/patches/encounter_defer.cpp:6 (#114); docs/notes/pipeline-first-use-stalls.md:319; docs/notes/ISSUE_114_FIELD_INTERACTION_20261001.md:21 (#114)."}]
+    },
+    {
+      "address": "829E3268",
+      "label": "encounter draw",
+      "category": "encounter",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 240, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/debug/no_encounters.cpp:74; docs/notes/pipeline-first-use-stalls.md:319 (2026-10-06)."}]
+    },
+    {
+      "address": "829E54F0",
+      "label": "C1 touch battle predicate",
+      "category": "encounter",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 241, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/patches/encounter_defer.cpp:9 (#114); docs/notes/ISSUE_114_FIELD_INTERACTION_20261001.md:22 (#114)."}]
+    },
+    {
+      "address": "82A4CC70",
+      "label": "script battle request",
+      "category": "encounter",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 242, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/ISSUE_114_FIELD_INTERACTION_20261001.md:47 (#114)."}]
+    },
+    {
+      "address": "82A4CE30",
+      "label": "script battle request",
+      "category": "encounter",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 243, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/ISSUE_114_FIELD_INTERACTION_20261001.md:48 (#114)."}]
+    },
+    {
+      "address": "82290B60",
+      "label": "GEngine Tick",
+      "category": "engine",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 256, "note": "Search label from a documented finding, not a recovered symbol. Sources: memory test-save-generation.md (#118, 2026-10-01); LostOdysseyRecomp/debug/teleport.cpp:507; docs/notes/debug-teleport.md:55 (2026-09-04); docs/notes/ISSUE_114_FIELD_INTERACTION_20261001.md:28 (#114)."}]
+    },
+    {
+      "address": "82290DD8",
+      "label": "UWorld::Tick caller (engine tick path)",
+      "category": "engine",
+      "confidence": "historical_candidate",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 257, "note": "Unverified candidate; confirm against the binary before relying on it. Sources: docs/notes/issue12-root-cause.md:42 (#12)."}]
+    },
+    {
+      "address": "82299818",
+      "label": "UWorld::Tick",
+      "category": "engine",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 258, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/issue12-root-cause.md:42 (#12); docs/notes/issue12-handoff-2026-09-09.md:34."}]
+    },
+    {
+      "address": "822A6020",
+      "label": "GetViewTarget",
+      "category": "engine",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 259, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/debug/teleport.cpp:139; docs/notes/debug-teleport.md:23 (2026-09-04)."}]
+    },
+    {
+      "address": "822A95C8",
+      "label": "state frame to state name",
+      "category": "engine",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 260, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/debug/teleport.cpp:77; docs/notes/debug-teleport.md:68."}]
+    },
+    {
+      "address": "822A9668",
+      "label": "FName to text",
+      "category": "engine",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 261, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/debug/teleport.cpp:84; docs/notes/debug-teleport.md:68."}]
+    },
+    {
+      "address": "822D6810",
+      "label": "BeginDeferredReattach",
+      "category": "engine",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 262, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/fire-hit-rendering.md:43 (2026-09-05); docs/notes/issue12-handoff-2026-09-09.md:102."}]
+    },
+    {
+      "address": "822FA548",
+      "label": "native actor move (SetLocation)",
+      "category": "engine",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 263, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/debug/teleport.cpp:69; LostOdysseyRecomp/debug/teleport.cpp:338; docs/notes/debug-teleport.md:29 (2026-09-04); docs/notes/debug-teleport.md:47."}]
+    },
+    {
+      "address": "8231EE68",
+      "label": "world update / scene change",
+      "category": "engine",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 264, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/debug-teleport.md:55; docs/notes/issue12-root-cause.md:42 (#12)."}]
+    },
+    {
+      "address": "82470DA8",
+      "label": "AActor::execSetLocation",
+      "category": "engine",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 265, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/debug/teleport.cpp:338; docs/notes/debug-teleport.md:29 (2026-09-04)."}]
+    },
+    {
+      "address": "8250E158",
+      "label": "LocalPlayerControllers",
+      "category": "engine",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 266, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/debug/teleport.cpp:125; docs/notes/debug-teleport.md:13 (2026-09-04)."}]
+    },
+    {
+      "address": "8229DDE8",
+      "label": "event VM operand/ref reader",
+      "category": "field-script",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 277, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/issue12-funeral-crash.md:34 (#12); docs/notes/issue-74-save-anywhere-party-split.md:69 (#74)."}]
+    },
+    {
+      "address": "8229E280",
+      "label": "event VM ref writer",
+      "category": "field-script",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 278, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/issue-74-save-anywhere-party-split.md:69 (#74, 2026-09-30)."}]
+    },
+    {
+      "address": "8235FCA0",
+      "label": "player control gate",
+      "category": "field-script",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 279, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/debug/teleport.cpp:134; docs/notes/debug-teleport.md:95."}]
+    },
+    {
+      "address": "823607A0",
+      "label": "VM hint-group create (F0 6D path)",
+      "category": "field-script",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 280, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/issue-74-save-anywhere-party-split.md:69 (#74)."}]
+    },
+    {
+      "address": "82846128",
+      "label": "script opcode 0x0B handler",
+      "category": "field-script",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 281, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/patches/hungry_man_timer.cpp:11."}]
+    },
+    {
+      "address": "828472F8",
+      "label": "VM core27 handler",
+      "category": "field-script",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 282, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/issue-74-save-anywhere-party-split.md:65 (#74)."}]
+    },
+    {
+      "address": "829FD850",
+      "label": "story VM loop",
+      "category": "field-script",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 283, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/issue12-funeral-crash.md:34 (#12)."}]
+    },
+    {
+      "address": "829FD9F0",
+      "label": "story VM scheduler",
+      "category": "field-script",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 284, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/issue12-funeral-crash.md:34 (#12)."}]
+    },
+    {
+      "address": "829FDB40",
+      "label": "story/event VM dispatcher",
+      "category": "field-script",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 285, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/issue12-funeral-crash.md:34 (#12); docs/notes/issue-74-save-anywhere-party-split.md:69 (#74)."}]
+    },
+    {
+      "address": "829FF7C8",
+      "label": "VM handler table constructor",
+      "category": "field-script",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 288, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/issue-74-save-anywhere-party-split.md:69 (#74)."}]
+    },
+    {
+      "address": "82A151D8",
+      "label": "player control gate",
+      "category": "field-script",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 289, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/debug/teleport.cpp:134; docs/notes/debug-teleport.md:95."}]
+    },
+    {
+      "address": "82A15868",
+      "label": "script DD player control",
+      "category": "field-script",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 290, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/patches/encounter_defer.cpp:31 (#114); docs/notes/ISSUE_114_FIELD_INTERACTION_20261001.md:23 (#114)."}]
+    },
+    {
+      "address": "82A1C0C8",
+      "label": "SetPlayerControl",
+      "category": "field-script",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 291, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/debug/teleport.cpp:90; docs/notes/debug-teleport.md:66."}]
+    },
+    {
+      "address": "82A4B468",
+      "label": "VM opcode DD handler",
+      "category": "field-script",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 292, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/ISSUE_114_FIELD_INTERACTION_20261001.md:23 (#114)."}]
+    },
+    {
+      "address": "82A4BE28",
+      "label": "VM C3 handler",
+      "category": "field-script",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 293, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/issue12-funeral-crash.md:30 (#12)."}]
+    },
+    {
+      "address": "82A4E2C8",
+      "label": "VM opcode ED handler",
+      "category": "field-script",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 294, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/issue-74-save-anywhere-party-split.md:65 (#74)."}]
+    },
+    {
+      "address": "82A4FA38",
+      "label": "C1 touch query",
+      "category": "field-script",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 295, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/ISSUE_114_FIELD_INTERACTION_20261001.md:70 (#114)."}]
+    },
+    {
+      "address": "82A5F650",
+      "label": "VM F0 6E handler",
+      "category": "field-script",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 297, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/issue-74-save-anywhere-party-split.md:69 (#74)."}]
+    },
+    {
+      "address": "82A5FF28",
+      "label": "VM F0 6D handler",
+      "category": "field-script",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 298, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/issue-74-save-anywhere-party-split.md:69 (#74)."}]
+    },
+    {
+      "address": "82A63FC0",
+      "label": "VM D0 prompt A check",
+      "category": "field-script",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 299, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/ISSUE_114_FIELD_INTERACTION_20261001.md:59 (#114)."}]
+    },
+    {
+      "address": "823CDEF8",
+      "label": "query path internal call site",
+      "category": "gpu-query",
+      "confidence": "historical_candidate",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 311, "note": "Unverified candidate; confirm against the binary before relying on it. Sources: docs/notes/third-map-hang.md:90 (2026-09-05)."}]
+    },
+    {
+      "address": "823CF390",
+      "label": "query result retry loop",
+      "category": "gpu-query",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 313, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/cpu/poll_wait.cpp:9; LostOdysseyRecomp/cpu/poll_wait.h:116; docs/notes/occlusion-queries.md:28 (#118); docs/notes/perf-complete-analysis.md:125."}]
+    },
+    {
+      "address": "8248AE80",
+      "label": "worker in GPU wait crash",
+      "category": "gpu-query",
+      "confidence": "historical_candidate",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 317, "note": "Unverified candidate; confirm against the binary before relying on it. Sources: docs/notes/third-map-hang.md:56 (2026-09-05); docs/notes/fire-hit-rendering.md:79."}]
+    },
+    {
+      "address": "822A7E38",
+      "label": "Button tap/hold classifier",
+      "category": "input",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 325, "note": "Search label from a documented finding, not a recovered symbol. Sources: memory minimap-navi-guest.md (#85, 2026-10-05)."}]
+    },
+    {
+      "address": "822F7470",
+      "label": "Button held query",
+      "category": "input",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 326, "note": "Search label from a documented finding, not a recovered symbol. Sources: memory minimap-navi-guest.md (#85)."}]
+    },
+    {
+      "address": "828173B0",
+      "label": "rpBaseController.XPad_RB",
+      "category": "input",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 327, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/issue-74-save-anywhere-party-split.md:16 (#74)."}]
+    },
+    {
+      "address": "8296A610",
+      "label": "Button pressed query",
+      "category": "input",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 328, "note": "Search label from a documented finding, not a recovered symbol. Sources: memory minimap-navi-guest.md (#85)."}]
+    },
+    {
+      "address": "829EB0D8",
+      "label": "execSetPlayerControl",
+      "category": "input",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 329, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/debug-teleport.md:66 (2026-09-04)."}]
+    },
+    {
+      "address": "82A18080",
+      "label": "Set player control-disable (game menu)",
+      "category": "input",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 330, "note": "Search label from a documented finding, not a recovered symbol. Sources: memory minimap-navi-guest.md (#85); LostOdysseyRecomp/debug/teleport.cpp:133; docs/notes/debug-teleport.md:95."}]
+    },
+    {
+      "address": "82A184D0",
+      "label": "Player field input handler",
+      "category": "input",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 331, "note": "Search label from a documented finding, not a recovered symbol. Sources: memory minimap-navi-guest.md (#85, 2026-10-05); BM \"LORecomp 原生 System 菜单文本与退出调用链\"."}]
+    },
+    {
+      "address": "823490A8",
+      "label": "ExGetXConfigSetting caller (non-language)",
+      "category": "kernel",
+      "confidence": "historical_candidate",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 338, "note": "Unverified candidate; confirm against the binary before relying on it. Sources: _keep/language-pack-re/fonts-language-report.md:22 (#369)."}]
+    },
+    {
+      "address": "827BA418",
+      "label": "ExGetXConfigSetting caller (non-language)",
+      "category": "kernel",
+      "confidence": "historical_candidate",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 339, "note": "Unverified candidate; confirm against the binary before relying on it. Sources: _keep/language-pack-re/fonts-language-report.md:22 (#369)."}]
+    },
+    {
+      "address": "827CA048",
+      "label": "sleep",
+      "category": "kernel",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 340, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/battle-ring-resource.md:28 (2026-09-04)."}]
+    },
+    {
+      "address": "827CA258",
+      "label": "ExGetXConfigSetting caller (non-language)",
+      "category": "kernel",
+      "confidence": "historical_candidate",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 341, "note": "Unverified candidate; confirm against the binary before relying on it. Sources: _keep/language-pack-re/fonts-language-report.md:22 (#369)."}]
+    },
+    {
+      "address": "827CA440",
+      "label": "XEX entry point",
+      "category": "kernel",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 342, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/recomp.md:8; docs/notes/xex.md:48."}]
+    },
+    {
+      "address": "82BE2BE0",
+      "label": "CreateFile wrapper (FPI loader)",
+      "category": "kernel",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 343, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/formats-report.md:17 (#369)."}]
+    },
+    {
+      "address": "82BE2DD8",
+      "label": "ReadFile wrapper (FPI header read)",
+      "category": "kernel",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 344, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/formats-report.md:17 (#369)."}]
+    },
+    {
+      "address": "82BE2F60",
+      "label": "FILETIME conversion helper",
+      "category": "kernel",
+      "confidence": "historical_candidate",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 345, "note": "Unverified candidate; confirm against the binary before relying on it. Sources: _keep/language-pack-re/formats-report.md:26 (#369)."}]
+    },
+    {
+      "address": "82CC3FD0",
+      "label": "CS release/reacquire loop",
+      "category": "kernel",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 347, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/critical-section-endian.md:12 (2026-09-05)."}]
+    },
+    {
+      "address": "82341C40",
+      "label": "GLanguage getter",
+      "category": "language",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 358, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/battle-ring-resource.md:41 (2026-09-04)."}]
+    },
+    {
+      "address": "823FAF48",
+      "label": "Localised path format %s\\%s\\%s.%s",
+      "category": "language",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 359, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/fonts-language-report.md:67 (#369)."}]
+    },
+    {
+      "address": "82402F30",
+      "label": "Set language (UE3 SetLanguage-like)",
+      "category": "language",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 360, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/fonts-language-report.md:60 (#369)."}]
+    },
+    {
+      "address": "8245B918",
+      "label": "Localised folder path builder",
+      "category": "language",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 361, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/fonts-language-report.md:68 (#369)."}]
+    },
+    {
+      "address": "8245BC48",
+      "label": "Localised folder path builder (second)",
+      "category": "language",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 362, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/fonts-language-report.md:68 (#369)."}]
+    },
+    {
+      "address": "8247C470",
+      "label": "Localised path format (second)",
+      "category": "language",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 363, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/fonts-language-report.md:67 (#369)."}]
+    },
+    {
+      "address": "824800B0",
+      "label": "Startup language selection",
+      "category": "language",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 364, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/fonts-language-report.md:56 (#369, 2026-10-09)."}]
+    },
+    {
+      "address": "82481A98",
+      "label": "Open loc\\system.ini",
+      "category": "language",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 365, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/formats-report.md:100 (#369)."}]
+    },
+    {
+      "address": "82481BE8",
+      "label": "Language code by ID",
+      "category": "language",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 366, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/fonts-language-report.md:50 (#369); memory issue220-cgi-voice-case.md (#220); LostOdysseyRecomp/settings/menu.cpp:1748 (#220); docs/notes/settings-menu.md:113; docs/STATUS.md:594 (PR #242, #220)."}]
+    },
+    {
+      "address": "82481C58",
+      "label": "Language ID by code",
+      "category": "language",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 367, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/fonts-language-report.md:51 (#369)."}]
+    },
+    {
+      "address": "82481CD0",
+      "label": "Resolve text/sound language code",
+      "category": "language",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 368, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/fonts-language-report.md:52 (#369)."}]
+    },
+    {
+      "address": "82481E78",
+      "label": "Resolve and cache voice language code",
+      "category": "language",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 369, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/fonts-language-report.md:54 (#369); LostOdysseyRecomp/settings/language_trace.h:65; LostOdysseyRecomp/settings/language_hooks.cpp:7; docs/notes/settings-menu.md:38 (#54, 2026-09-19)."}]
+    },
+    {
+      "address": "82481EE8",
+      "label": "Current voice language code",
+      "category": "language",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 370, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/fonts-language-report.md:54 (#369)."}]
+    },
+    {
+      "address": "82481F40",
+      "label": "Current voice language ID",
+      "category": "language",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 371, "note": "Search label from a documented finding, not a recovered symbol. Sources: memory issue220-cgi-voice-case.md (#220, #54, 2026-10-05); _keep/language-pack-re/fonts-language-report.md:54; LostOdysseyRecomp/settings/language_hooks.cpp:14; docs/STATUS.md:594 (PR #242, #220); docs/notes/settings-menu.md:38."}]
+    },
+    {
+      "address": "82481F78",
+      "label": "Text language code for subtitles",
+      "category": "language",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 372, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/fonts-language-report.md:78 (#369)."}]
+    },
+    {
+      "address": "82481F88",
+      "label": "Current text language ID",
+      "category": "language",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 373, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/fonts-language-report.md:53 (#369)."}]
+    },
+    {
+      "address": "82481FD8",
+      "label": "Voice folder from system language",
+      "category": "language",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 374, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/fonts-language-report.md:21 (#369)."}]
+    },
+    {
+      "address": "82482028",
+      "label": "voice list accessor",
+      "category": "language",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 375, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/settings/menu.cpp:445; docs/notes/settings-menu.md:123 (2026-09-06)."}]
+    },
+    {
+      "address": "82482038",
+      "label": "SoundFolders code by index",
+      "category": "language",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 376, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/fonts-language-report.md:55 (#369); LostOdysseyRecomp/settings/menu.cpp:445; docs/notes/settings-menu.md:123 (2026-09-06)."}]
+    },
+    {
+      "address": "824820C0",
+      "label": "system.ini language registry parser",
+      "category": "language",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 377, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/fonts-language-report.md:26 (#369); BM \"LORecomp 语言包逆向记录 #369 2026-10-09\"."}]
+    },
+    {
+      "address": "8248EA48",
+      "label": "Coalesced.<lang> path builder",
+      "category": "language",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 379, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/fonts-language-report.md:69 (#369)."}]
+    },
+    {
+      "address": "825D7578",
+      "label": "MPSounds _LOC package name",
+      "category": "language",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 380, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/fonts-language-report.md:70 (#369)."}]
+    },
+    {
+      "address": "82BE45F8",
+      "label": "XGetLanguage wrapper",
+      "category": "language",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 381, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/fonts-language-report.md:21 (#369)."}]
+    },
+    {
+      "address": "82290D28",
+      "label": "async worker (streaming) thread",
+      "category": "loading",
+      "confidence": "historical_candidate",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 392, "note": "Unverified candidate; confirm against the binary before relying on it. Sources: docs/notes/cpu-performance-optimization-guide.md:100; docs/notes/cpu-recomp-deep-2026-09-13.md:21."}]
+    },
+    {
+      "address": "8231F010",
+      "label": "loader pick caller",
+      "category": "loading",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 393, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/ISSUE_114_FIELD_INTERACTION_20261001.md:28 (#114)."}]
+    },
+    {
+      "address": "8231F5E0",
+      "label": "loader pick",
+      "category": "loading",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 394, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/patches/encounter_defer.cpp:11 (#114); LostOdysseyRecomp/patches/encounter_defer.h:26; docs/notes/ISSUE_114_FIELD_INTERACTION_20261001.md:52 (#114); docs/STATUS.md:595 (PR #243, v0.8.37)."}]
+    },
+    {
+      "address": "8237CC40",
+      "label": "pre-GC async loading flush",
+      "category": "loading",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 395, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/issue12-root-cause.md:43 (#12)."}]
+    },
+    {
+      "address": "8237D258",
+      "label": "resource lookup with fatal fallback",
+      "category": "loading",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 396, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/battle-ring-resource.md:26 (2026-09-04)."}]
+    },
+    {
+      "address": "823B0E98",
+      "label": "resource manager lookup (vtable +8)",
+      "category": "loading",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 399, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/battle-ring-resource.md:24 (2026-09-04)."}]
+    },
+    {
+      "address": "828212E0",
+      "label": "fatal resource lookup error",
+      "category": "loading",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 400, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/debug/asset_failure.cpp:13; docs/notes/battle-ring-resource.md:28; docs/notes/battle-ring-resource.md:26."}]
+    },
+    {
+      "address": "8284CD80",
+      "label": "movie file open/read",
+      "category": "loading",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 401, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/hd-cutscene-replacement.zh-CN.md:22 (#265)."}]
+    },
+    {
+      "address": "82827580",
+      "label": "Native RequestMapJump",
+      "category": "map-jump",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 412, "note": "Search label from a documented finding, not a recovered symbol. Sources: memory test-save-generation.md (2026-10-01); BM \"LORecomp TAA 闪烁修复流程与地图巡游 2026-10-01\"; LostOdysseyRecomp/debug/teleport.cpp:19 (#12); docs/notes/issue12-funeral-crash.md:44 (#12)."}]
+    },
+    {
+      "address": "82987D20",
+      "label": "world map load read fault",
+      "category": "map-jump",
+      "confidence": "historical_candidate",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 413, "note": "Unverified candidate; confirm against the binary before relying on it. Sources: docs/notes/jitter-cutscene-tour-2026-10-04.md:17."}]
+    },
+    {
+      "address": "82A0D648",
+      "label": "map definition insert",
+      "category": "map-jump",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 414, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/debug/map_info.cpp:55; docs/notes/debug-map-info.md:9 (2026-09-05)."}]
+    },
+    {
+      "address": "82298990",
+      "label": "pool allocator free",
+      "category": "memory",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 427, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/issue12-funeral-crash.md:62 (#12, 2026-09-08)."}]
+    },
+    {
+      "address": "8229F678",
+      "label": "allocator",
+      "category": "memory",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 431, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/settings/quit_text_hook.h:100."}]
+    },
+    {
+      "address": "822D6BB0",
+      "label": "begin render fence",
+      "category": "memory",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 432, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/issue12-root-cause.md:45 (#12)."}]
+    },
+    {
+      "address": "822FD0A8",
+      "label": "UObject::IncrementalPurgeGarbage",
+      "category": "memory",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 433, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/cpu/gc_render_flush.cpp:4 (#12); docs/notes/issue12-root-cause.md:44 (#12); docs/notes/issue12-handoff-2026-09-09.md:47."}]
+    },
+    {
+      "address": "823F3298",
+      "label": "Allocator used for FPI index buffer",
+      "category": "memory",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 434, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/formats-report.md:17 (#369)."}]
+    },
+    {
+      "address": "823F89F8",
+      "label": "ConditionalFinishDestroy",
+      "category": "memory",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 435, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/issue12-root-cause.md:44 (#12)."}]
+    },
+    {
+      "address": "82499518",
+      "label": "GC mark phase",
+      "category": "memory",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 436, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/issue12-root-cause.md:43 (#12)."}]
+    },
+    {
+      "address": "8249A568",
+      "label": "UObject::CollectGarbage",
+      "category": "memory",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 437, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/cpu/gc_render_flush.cpp:4 (#12); docs/notes/issue12-root-cause.md:43 (#12); docs/notes/issue12-handoff-2026-09-09.md:47."}]
+    },
+    {
+      "address": "824C0658",
+      "label": "array add slot",
+      "category": "memory",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 438, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/settings/title_entry.cpp:59."}]
+    },
+    {
+      "address": "82523870",
+      "label": "60 s periodic purge",
+      "category": "memory",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 439, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/issue12-root-cause.md:42 (#12)."}]
+    },
+    {
+      "address": "825B32E8",
+      "label": "request deferred full GC",
+      "category": "memory",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 440, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/issue12-root-cause.md:42 (#12); docs/notes/issue12-handoff-2026-09-09.md:34."}]
+    },
+    {
+      "address": "825B51D8",
+      "label": "pre-GC callback",
+      "category": "memory",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 441, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/issue12-root-cause.md:43 (#12)."}]
+    },
+    {
+      "address": "82702098",
+      "label": "UMaterialInstance::BeginDestroy",
+      "category": "memory",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 442, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/issue12-root-cause.md:45 (#12)."}]
+    },
+    {
+      "address": "827020F8",
+      "label": "UMaterialInstance::IsReadyForFinishDestroy",
+      "category": "memory",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 443, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/issue12-root-cause.md:45 (#12)."}]
+    },
+    {
+      "address": "827C9DB0",
+      "label": "free call after query release",
+      "category": "memory",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 444, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/third-map-hang.md:80 (2026-09-05)."}]
+    },
+    {
+      "address": "82820478",
+      "label": "CollectGarbage thunk",
+      "category": "memory",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 445, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/issue12-root-cause.md:42 (#12)."}]
+    },
+    {
+      "address": "82309408",
+      "label": "field minimap draw",
+      "category": "minimap",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 461, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/gpu/hor_plus.cpp:341."}]
+    },
+    {
+      "address": "829E75A0",
+      "label": "Navi reopen path",
+      "category": "minimap",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 462, "note": "Search label from a documented finding, not a recovered symbol. Sources: memory minimap-navi-guest.md (#85)."}]
+    },
+    {
+      "address": "829E8AB0",
+      "label": "Navi reopen path",
+      "category": "minimap",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 463, "note": "Search label from a documented finding, not a recovered symbol. Sources: memory minimap-navi-guest.md (#85)."}]
+    },
+    {
+      "address": "82A60168",
+      "label": "Navi reopen path",
+      "category": "minimap",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 464, "note": "Search label from a documented finding, not a recovered symbol. Sources: memory minimap-navi-guest.md (#85)."}]
+    },
+    {
+      "address": "82B53A80",
+      "label": "Navi open",
+      "category": "minimap",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 465, "note": "Search label from a documented finding, not a recovered symbol. Sources: memory minimap-navi-guest.md (#85)."}]
+    },
+    {
+      "address": "82B53AD8",
+      "label": "Navi close",
+      "category": "minimap",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 466, "note": "Search label from a documented finding, not a recovered symbol. Sources: memory minimap-navi-guest.md (#85); docs/notes/pipeline-first-use-stalls.md:319 (2026-10-06)."}]
+    },
+    {
+      "address": "82B53DA0",
+      "label": "Navi present check",
+      "category": "minimap",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 467, "note": "Search label from a documented finding, not a recovered symbol. Sources: memory minimap-navi-guest.md (#85)."}]
+    },
+    {
+      "address": "82B53DE8",
+      "label": "Navi zoom cycle",
+      "category": "minimap",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 468, "note": "Search label from a documented finding, not a recovered symbol. Sources: memory minimap-navi-guest.md (#85)."}]
+    },
+    {
+      "address": "823CBF68",
+      "label": "primitive occlusion pass",
+      "category": "occlusion",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 479, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/occlusion-queries.md:46 (#118)."}]
+    },
+    {
+      "address": "823CD718",
+      "label": "batched box occlusion queries",
+      "category": "occlusion",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 481, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/occlusion-queries.md:47 (#118)."}]
+    },
+    {
+      "address": "823CE960",
+      "label": "UE3 occlusion query processing",
+      "category": "occlusion",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 483, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/occlusion-queries.md:28 (#118); docs/notes/physical-alias-rendering.md:26."}]
+    },
+    {
+      "address": "823D5430",
+      "label": "sun flare occlusion query",
+      "category": "occlusion",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 484, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/gpu/occlusion_queries.h:28; docs/notes/occlusion-queries.md:48 (#118)."}]
+    },
+    {
+      "address": "822C7388",
+      "label": "distribution evaluator",
+      "category": "particle",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 498, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/fire-hit-rendering.md:47 (2026-09-05); docs/notes/fire-hit-rendering.md:53."}]
+    },
+    {
+      "address": "822C73E8",
+      "label": "cooked lookup distribution eval",
+      "category": "particle",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 499, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/fire-hit-rendering.md:53 (2026-09-05)."}]
+    },
+    {
+      "address": "822C9150",
+      "label": "ordinary sprite particle builder",
+      "category": "particle",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 500, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/cpu/particle_material_compat.cpp:3 (#16); docs/notes/issues14-16-triage.md:32 (#16)."}]
+    },
+    {
+      "address": "822C9498",
+      "label": "particle material compatibility gate",
+      "category": "particle",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 502, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/cpu/particle_material_compat.cpp:25 (#16)."}]
+    },
+    {
+      "address": "822D9088",
+      "label": "light update with particle matrix",
+      "category": "particle",
+      "confidence": "historical_candidate",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 503, "note": "Unverified candidate; confirm against the binary before relying on it. Sources: docs/notes/fire-hit-rendering.md:55 (2026-09-05)."}]
+    },
+    {
+      "address": "824E5290",
+      "label": "build vertex factory shader lookup",
+      "category": "particle",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 505, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/cpu/particle_material_compat.h:28 (#16)."}]
+    },
+    {
+      "address": "82614AE8",
+      "label": "raw material constant-true leaf",
+      "category": "particle",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 506, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/cpu/particle_material_compat.cpp:32 (#16)."}]
+    },
+    {
+      "address": "82912B00",
+      "label": "particle color to light color",
+      "category": "particle",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 507, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/fire-hit-rendering.md:69 (2026-09-05)."}]
+    },
+    {
+      "address": "8292AC08",
+      "label": "particle light tick",
+      "category": "particle",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 508, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/fire-hit-rendering.md:69 (2026-09-05)."}]
+    },
+    {
+      "address": "8292AFF8",
+      "label": "particle light tick",
+      "category": "particle",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 509, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/fire-hit-rendering.md:69 (2026-09-05)."}]
+    },
+    {
+      "address": "8292B3F0",
+      "label": "emitter light update (+0x90)",
+      "category": "particle",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 510, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/fire-hit-rendering.md:55 (2026-09-05)."}]
+    },
+    {
+      "address": "8292B9D0",
+      "label": "light emitter constructor",
+      "category": "particle",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 511, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/fire-hit-rendering.md:55; docs/notes/fire-hit-rendering.md:47."}]
+    },
+    {
+      "address": "82944870",
+      "label": "light module emitter factory",
+      "category": "particle",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 512, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/fire-hit-rendering.md:47 (2026-09-05)."}]
+    },
+    {
+      "address": "826E1860",
+      "label": "Motion blur render",
+      "category": "post-process",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 528, "note": "Search label from a documented finding, not a recovered symbol. Sources: memory graphics-effect-toggles.md (PR #318, 2026-10-08); LostOdysseyRecomp/patches/graphics_effects.cpp:28; docs/STATUS.md:565 (PR #318, v0.8.61)."}]
+    },
+    {
+      "address": "8274C318",
+      "label": "velocity shader setup A",
+      "category": "post-process",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 531, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/full-game-motion-vector-audit.md:41 (2026-09-18); docs/notes/v0.7.0-frame-generation-plan.md:28."}]
+    },
+    {
+      "address": "8274C478",
+      "label": "view VP shader parameter upload",
+      "category": "post-process",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 532, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/debug/temporal_inputs.cpp:171; docs/notes/v0.4.0-development.md:55 (2026-09-07); docs/notes/full-game-motion-vector-audit.md:45."}]
+    },
+    {
+      "address": "8274C8A0",
+      "label": "velocity shader setup B",
+      "category": "post-process",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 535, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/full-game-motion-vector-audit.md:42 (2026-09-18); docs/notes/v0.7.0-frame-generation-plan.md:28."}]
+    },
+    {
+      "address": "8274CCB8",
+      "label": "primitive LocalToWorld parameter upload",
+      "category": "post-process",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 536, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/debug/temporal_inputs.cpp:179; docs/notes/v0.4.0-development.md:55 (2026-09-07); docs/notes/full-game-motion-vector-audit.md:44."}]
+    },
+    {
+      "address": "8274CEA8",
+      "label": "motion blur eligibility gate",
+      "category": "post-process",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 537, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/full-game-motion-vector-audit.md:43 (2026-09-18)."}]
+    },
+    {
+      "address": "82306660",
+      "label": "pdata function that swallowed 823067C0",
+      "category": "recomp",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 543, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/recomp.md:63."}]
+    },
+    {
+      "address": "823067C0",
+      "label": "pointer-only function (vtable slot 67)",
+      "category": "recomp",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 544, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/recomp.md:63."}]
+    },
+    {
+      "address": "827C39F8",
+      "label": "small stub before 827C3A10",
+      "category": "recomp",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 545, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecompLib/config/function_bounds_manual.txt:2; LostOdysseyRecompLib/config/LostOdysseyRecomp.toml:86; docs/notes/recomp.md:60."}]
+    },
+    {
+      "address": "827C3A10",
+      "label": "pdata function with jump table",
+      "category": "recomp",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 546, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/recomp.md:61."}]
+    },
+    {
+      "address": "82AFA2E8",
+      "label": "indirect-only leaf entry",
+      "category": "recomp",
+      "confidence": "historical_candidate",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 547, "note": "Unverified candidate; confirm against the binary before relying on it. Sources: LostOdysseyRecompLib/config/LostOdysseyRecomp.toml:118 (#5)."}]
+    },
+    {
+      "address": "82AFA388",
+      "label": "indirect-only leaf entry",
+      "category": "recomp",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 548, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecompLib/config/LostOdysseyRecomp.toml:119 (#5); docs/notes/handoff-v0.4.0-followup.md:90 (#5)."}]
+    },
+    {
+      "address": "82AFD150",
+      "label": "split indirect-call entry (#5)",
+      "category": "recomp",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 549, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/handoff-v0.4.0-followup.md:90 (#5)."}]
+    },
+    {
+      "address": "82B7BC40",
+      "label": "memset (CRT)",
+      "category": "recomp",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 550, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/recomp.md:103."}]
+    },
+    {
+      "address": "82CF21C0",
+      "label": "runtime-only function (materialized address)",
+      "category": "recomp",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 554, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/recomp.md:74."}]
+    },
+    {
+      "address": "82290AB8",
+      "label": "Render command tag reservation",
+      "category": "render-thread",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 566, "note": "Search label from a documented finding, not a recovered symbol. Sources: BM \"LORecomp Issue 17 实验性宽屏与 v0.6.6 发布接续\" (#17); LostOdysseyRecomp/gpu/frame_plan.cpp:311."}]
+    },
+    {
+      "address": "823BAB50",
+      "label": "main render flow",
+      "category": "render-thread",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 568, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/physical-alias-rendering.md:25 (2026-09-04); docs/notes/issue12-root-cause.md:41."}]
+    },
+    {
+      "address": "823BC138",
+      "label": "render target table change point",
+      "category": "render-thread",
+      "confidence": "historical_candidate",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 569, "note": "Unverified candidate; confirm against the binary before relying on it. Sources: LostOdysseyRecomp/gpu/frame_plan.cpp:392."}]
+    },
+    {
+      "address": "823C1BD8",
+      "label": "D3D register block writer",
+      "category": "render-thread",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 570, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/gpu/frame_plan.cpp:305."}]
+    },
+    {
+      "address": "823C87D8",
+      "label": "skeletal submit lead",
+      "category": "render-thread",
+      "confidence": "historical_candidate",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 571, "note": "Unverified candidate; confirm against the binary before relying on it. Sources: docs/notes/v0.7.0-frame-generation-plan.md:29."}]
+    },
+    {
+      "address": "823CB350",
+      "label": "FSkeletalMeshSceneProxy::DrawDynamicElements",
+      "category": "render-thread",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 572, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/issue12-root-cause.md:37 (#12); docs/notes/issue12-handoff-2026-09-09.md:30."}]
+    },
+    {
+      "address": "823D0500",
+      "label": "base pass",
+      "category": "render-thread",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 575, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/physical-alias-rendering.md:29 (2026-09-04); docs/notes/issue12-root-cause.md:41."}]
+    },
+    {
+      "address": "82485AF8",
+      "label": "flush + deferred RHI release",
+      "category": "render-thread",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 580, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/issue12-root-cause.md:43 (#12)."}]
+    },
+    {
+      "address": "82485C18",
+      "label": "FlushRenderingCommands",
+      "category": "render-thread",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 581, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/cpu/gc_render_flush.cpp:49 (#12); docs/notes/issue12-root-cause.md:72 (#12); docs/notes/issue12-handoff-2026-09-09.md:47."}]
+    },
+    {
+      "address": "82559980",
+      "label": "skeletal scene proxy constructor",
+      "category": "render-thread",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 582, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/issue12-root-cause.md:38 (#12)."}]
+    },
+    {
+      "address": "8255B620",
+      "label": "SkeletalMeshComponent CreateSceneProxy",
+      "category": "render-thread",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 583, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/issue12-root-cause.md:38 (#12)."}]
+    },
+    {
+      "address": "8258A958",
+      "label": "SkeletalMeshComponent GetMaterial",
+      "category": "render-thread",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 584, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/issue12-root-cause.md:38 (#12)."}]
+    },
+    {
+      "address": "825B2AC8",
+      "label": "FDrawSceneCommand::Execute",
+      "category": "render-thread",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 587, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/issue12-root-cause.md:41 (#12)."}]
+    },
+    {
+      "address": "827ACD90",
+      "label": "shader constant upload",
+      "category": "render-thread",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 588, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/full-game-motion-vector-audit.md:44 (2026-09-18)."}]
+    },
+    {
+      "address": "827B6E48",
+      "label": "device command stream setup",
+      "category": "render-thread",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 589, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/gpu/frame_plan.cpp:319."}]
+    },
+    {
+      "address": "827BA640",
+      "label": "device command stream teardown",
+      "category": "render-thread",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 590, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/gpu/frame_plan.cpp:326."}]
+    },
+    {
+      "address": "822A7F38",
+      "label": "UrpPlayData NaviShow get (slot 93)",
+      "category": "save",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 603, "note": "Search label from a documented finding, not a recovered symbol. Sources: memory minimap-navi-guest.md (#85)."}]
+    },
+    {
+      "address": "82860008",
+      "label": "enter save screen",
+      "category": "save",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 606, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/save-anywhere.md:14 (2026-09-05)."}]
+    },
+    {
+      "address": "8287C8F8",
+      "label": "System Save selected",
+      "category": "save",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 607, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/save-anywhere.md:14 (2026-09-05)."}]
+    },
+    {
+      "address": "828F1A68",
+      "label": "EasySave native",
+      "category": "save",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 608, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/save-anywhere.md:15 (2026-09-05)."}]
+    },
+    {
+      "address": "829062E0",
+      "label": "UrpPlayData NaviShow set (slot 91)",
+      "category": "save",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 609, "note": "Search label from a documented finding, not a recovered symbol. Sources: memory minimap-navi-guest.md (#85)."}]
+    },
+    {
+      "address": "82906E18",
+      "label": "EasySave implementation",
+      "category": "save",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 610, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/issue-74-save-anywhere-party-split.md:23 (#74); docs/notes/save-anywhere.md:15."}]
+    },
+    {
+      "address": "82908308",
+      "label": "MaskMember",
+      "category": "save",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 611, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/issue-74-save-anywhere-party-split.md:24 (#74)."}]
+    },
+    {
+      "address": "829087B0",
+      "label": "ChangeCtrlChara",
+      "category": "save",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 612, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/issue-74-save-anywhere-party-split.md:25 (#74)."}]
+    },
+    {
+      "address": "822F19B0",
+      "label": "Retail Settings (Configuration) task",
+      "category": "settings",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 620, "note": "Search label from a documented finding, not a recovered symbol. Sources: BM \"LORecomp 设置与调试菜单开发经验 2026-09-24\"; LostOdysseyRecomp/settings/menu.cpp:1776; docs/notes/settings-menu.md:62 (2026-09-05)."}]
+    },
+    {
+      "address": "82860028",
+      "label": "Open Settings from title (state 42)",
+      "category": "settings",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 623, "note": "Search label from a documented finding, not a recovered symbol. Sources: memory title-settings-entry.md (PR #373)."}]
+    },
+    {
+      "address": "82860040",
+      "label": "Wait for Settings close (state 43)",
+      "category": "settings",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 624, "note": "Search label from a documented finding, not a recovered symbol. Sources: memory title-settings-entry.md (PR #373)."}]
+    },
+    {
+      "address": "82870E38",
+      "label": "apply guest configuration",
+      "category": "settings",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 625, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/settings/menu.cpp:1949; docs/notes/settings-menu.md:62."}]
+    },
+    {
+      "address": "828710A0",
+      "label": "Reset retail game options",
+      "category": "settings",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 626, "note": "Search label from a documented finding, not a recovered symbol. Sources: BM \"LORecomp 设置与调试菜单开发经验 2026-09-24\" (2026-10-09); LostOdysseyRecomp/settings/menu.cpp:43; docs/notes/settings-menu.md:62."}]
+    },
+    {
+      "address": "8287C9D0",
+      "label": "Camp System opens Settings (mode 0)",
+      "category": "settings",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 627, "note": "Search label from a documented finding, not a recovered symbol. Sources: memory title-settings-entry.md (PR #373); LostOdysseyRecomp/settings/title_entry.cpp:35."}]
+    },
+    {
+      "address": "82889E50",
+      "label": "Settings close (refresh language)",
+      "category": "settings",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 628, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/settings/menu.cpp:1933."}]
+    },
+    {
+      "address": "8288AC10",
+      "label": "Open retail Settings task",
+      "category": "settings",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 629, "note": "Search label from a documented finding, not a recovered symbol. Sources: memory title-settings-entry.md (PR #373); BM \"LORecomp 设置与调试菜单开发经验 2026-09-24\"; LostOdysseyRecomp/settings/title_entry.cpp:34."}]
+    },
+    {
+      "address": "823D5E50",
+      "label": "Per-light shadow depth render",
+      "category": "shadow",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 639, "note": "Search label from a documented finding, not a recovered symbol. Sources: memory graphics-effect-toggles.md (PR #318, 2026-10-08); LostOdysseyRecomp/patches/graphics_effects.cpp:41; docs/STATUS.md:565 (PR #318, v0.8.61)."}]
+    },
+    {
+      "address": "824DD6F8",
+      "label": "render target table setup",
+      "category": "shadow",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 642, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/gpu/frame_plan.h:45; LostOdysseyRecomp/gpu/frame_plan.cpp:387."}]
+    },
+    {
+      "address": "822A9748",
+      "label": "vswprintf wrapper",
+      "category": "text",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 648, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/battle-ring-resource.md:41 (2026-09-04)."}]
+    },
+    {
+      "address": "8230BA20",
+      "label": "Menu text lookup by ID",
+      "category": "text",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 650, "note": "Search label from a documented finding, not a recovered symbol. Sources: BM \"LORecomp 原生 System 菜单文本与退出调用链\" (2026-09-24); _keep/language-pack-re/formats-report.md:10 (#369); LostOdysseyRecomp/settings/quit_text_hook.cpp:9; LostOdysseyRecomp/settings/quit_text_hook.h:97; docs/notes/language-pack-research.zh-CN...."}]
+    },
+    {
+      "address": "823577E8",
+      "label": "Compare first 3 characters",
+      "category": "text",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 651, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/fonts-language-report.md:78 (#369)."}]
+    },
+    {
+      "address": "827E4928",
+      "label": "Load RPFontsSubtitles package",
+      "category": "text",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 652, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/fonts-language-report.md:137 (#369)."}]
+    },
+    {
+      "address": "827E4A10",
+      "label": "Subtitle path resolver",
+      "category": "text",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 653, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/fonts-language-report.md:76 (#369)."}]
+    },
+    {
+      "address": "827F2118",
+      "label": "Subtitle load caller",
+      "category": "text",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 654, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/fonts-language-report.md:78 (#369)."}]
+    },
+    {
+      "address": "82863338",
+      "label": "menu_<lang>.dat loader",
+      "category": "text",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 655, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/formats-report.md:91 (#369)."}]
+    },
+    {
+      "address": "828FABD0",
+      "label": "Field message _scrw.jmd loader",
+      "category": "text",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 656, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/formats-report.md:94 (#369)."}]
+    },
+    {
+      "address": "82A037F0",
+      "label": "Field message _scrw.jmd loader (second)",
+      "category": "text",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 657, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/formats-report.md:94 (#369)."}]
+    },
+    {
+      "address": "82A051A8",
+      "label": "name_data.xmb loader",
+      "category": "text",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 658, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/formats-report.md:95 (#369)."}]
+    },
+    {
+      "address": "82AAFA40",
+      "label": "JMD text loader (battle text)",
+      "category": "text",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 659, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/formats-report.md:93 (#369)."}]
+    },
+    {
+      "address": "8283A080",
+      "label": "NameData.bin loader",
+      "category": "text-bank",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 665, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/formats-report.md:92 (#369); BM \"LORecomp 语言包逆向记录 #369 2026-10-09\"."}]
+    },
+    {
+      "address": "8283AA28",
+      "label": "ItemExplainData.bin loader",
+      "category": "text-bank",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 666, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/formats-report.md:92 (#369)."}]
+    },
+    {
+      "address": "8283F220",
+      "label": "Build NameData entries",
+      "category": "text-bank",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 667, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/namedata-re/sim.py (#369, 2026-10-09, loader simulation matched in-game strings); BM \"LORecomp 语言包逆向记录 #369 2026-10-09\"."}]
+    },
+    {
+      "address": "8283FBE8",
+      "label": "Battle string bank reader (second)",
+      "category": "text-bank",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 668, "note": "Search label from a documented finding, not a recovered symbol. Sources: BM \"LORecomp 语言包逆向记录 #369 2026-10-09\"."}]
+    },
+    {
+      "address": "82AA1B50",
+      "label": "Parse battle string bank table",
+      "category": "text-bank",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 669, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/namedata-re/sim.py (#369, 2026-10-09); BM \"LORecomp 语言包逆向记录 #369 2026-10-09\"."}]
+    },
+    {
+      "address": "82322478",
+      "label": "Sleep(0) shared-value wait loop",
+      "category": "timing",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 675, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/cpu/poll_wait.cpp:14; docs/notes/issue12-handoff-2026-09-09.md:97 (#12); docs/notes/perf-complete-analysis.md:125."}]
+    },
+    {
+      "address": "8238AC40",
+      "label": "battle millisecond delta",
+      "category": "timing",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 676, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/patches/battle_script_timer.cpp:43; docs/notes/issue-148-battle-dialogue-timing.md:9 (#148)."}]
+    },
+    {
+      "address": "827B6AD8",
+      "label": "present with interval",
+      "category": "timing",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 679, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/debug/frame_timing.cpp:129; LostOdysseyRecomp/gpu/frame_pacer.h:84."}]
+    },
+    {
+      "address": "82E74250",
+      "label": "battle delta read",
+      "category": "timing",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 680, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/issue-148-battle-dialogue-timing.md:9 (#148)."}]
+    },
+    {
+      "address": "8234B9B8",
+      "label": "Title state machine",
+      "category": "title",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 687, "note": "Search label from a documented finding, not a recovered symbol. Sources: memory title-settings-entry.md (PR #373, 2026-10-09); _keep/language-pack-re/formats-report.md:99; LostOdysseyRecomp/settings/title_entry.cpp:26; LostOdysseyRecomp/debug/auto_continue.h:12."}]
+    },
+    {
+      "address": "8282B180",
+      "label": "Pop queued title state",
+      "category": "title",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 688, "note": "Search label from a documented finding, not a recovered symbol. Sources: memory title-settings-entry.md (PR #373); LostOdysseyRecomp/settings/title_entry.cpp:27."}]
+    },
+    {
+      "address": "8282B540",
+      "label": "Title menu A handler",
+      "category": "title",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 689, "note": "Search label from a documented finding, not a recovered symbol. Sources: memory title-settings-entry.md (PR #373); LostOdysseyRecomp/debug/auto_continue.cpp:35; LostOdysseyRecomp/settings/title_entry.cpp:37."}]
+    },
+    {
+      "address": "82DCF580",
+      "label": "native profile initialization",
+      "category": "title",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 690, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/debug/auto_continue.cpp:80."}]
+    },
+    {
+      "address": "822A7CF8",
+      "label": "Read menu exit code",
+      "category": "ui-menu",
+      "confidence": "historical_candidate",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 699, "note": "Unverified candidate; confirm against the binary before relying on it. Sources: BM \"LORecomp 原生 System 菜单文本与退出调用链\" (2026-09-24)."}]
+    },
+    {
+      "address": "822B3F50",
+      "label": "Deep-copy menu text structure",
+      "category": "ui-menu",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 700, "note": "Search label from a documented finding, not a recovered symbol. Sources: BM \"LORecomp 原生 System 菜单文本与退出调用链\" (2026-09-24); LostOdysseyRecomp/settings/quit_text_hook.h:99."}]
+    },
+    {
+      "address": "822DBD90",
+      "label": "Top-level menu subtask dispatcher",
+      "category": "ui-menu",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 701, "note": "Search label from a documented finding, not a recovered symbol. Sources: BM \"LORecomp 原生 System 菜单文本与退出调用链\" (2026-09-24, report not independently verified); LostOdysseyRecomp/settings/quit_action_hook.cpp:13."}]
+    },
+    {
+      "address": "822E0E10",
+      "label": "Native Camp/System menu task",
+      "category": "ui-menu",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 702, "note": "Search label from a documented finding, not a recovered symbol. Sources: BM \"LORecomp 原生 System 菜单文本与退出调用链\" (2026-09-24); LostOdysseyRecomp/debug/save_anywhere.cpp:117; docs/notes/save-anywhere.md:14 (2026-09-05); docs/notes/save-anywhere.md:30."}]
+    },
+    {
+      "address": "82303990",
+      "label": "FCanvas flush",
+      "category": "ui-menu",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 709, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/gpu/hor_plus.cpp:242."}]
+    },
+    {
+      "address": "8230B308",
+      "label": "Canvas draw tile",
+      "category": "ui-menu",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 710, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/gpu/hor_plus.cpp:330."}]
+    },
+    {
+      "address": "8230B6D8",
+      "label": "Format menu text (vswprintf)",
+      "category": "ui-menu",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 711, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/namedata-re/fn_8230B6D8.txt (#369, 2026-10-09)."}]
+    },
+    {
+      "address": "8230D6B8",
+      "label": "full menu dispatcher",
+      "category": "ui-menu",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 712, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/gpu/hor_plus.cpp:375."}]
+    },
+    {
+      "address": "8230EC88",
+      "label": "field menu body",
+      "category": "ui-menu",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 714, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/gpu/hor_plus.cpp:362."}]
+    },
+    {
+      "address": "82347698",
+      "label": "Camp character status page",
+      "category": "ui-menu",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 715, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/namedata-re/fn_82347698.txt (#369, 2026-10-09)."}]
+    },
+    {
+      "address": "82360800",
+      "label": "control prompt group create",
+      "category": "ui-menu",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 716, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/issue-74-save-anywhere-party-split.md:69 (#74)."}]
+    },
+    {
+      "address": "82876EA8",
+      "label": "set menu row permission",
+      "category": "ui-menu",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 717, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/debug/save_anywhere.cpp:109; docs/notes/save-anywhere.md:12; docs/notes/save-anywhere.md:30."}]
+    },
+    {
+      "address": "82877110",
+      "label": "menu entry visible/enable query",
+      "category": "ui-menu",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 718, "note": "Search label from a documented finding, not a recovered symbol. Sources: docs/notes/save-anywhere.md:12 (2026-09-05)."}]
+    },
+    {
+      "address": "82878CB8",
+      "label": "System menu list builder",
+      "category": "ui-menu",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 719, "note": "Search label from a documented finding, not a recovered symbol. Sources: BM \"LORecomp 原生 System 菜单文本与退出调用链\" (2026-09-24, report not independently verified); LostOdysseyRecomp/settings/quit_action_hook.cpp:68; docs/notes/save-anywhere.md:13 (2026-09-05)."}]
+    },
+    {
+      "address": "82878EF0",
+      "label": "modal-16 cancel step 1",
+      "category": "ui-menu",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 720, "note": "Search label from a documented finding, not a recovered symbol. Sources: LostOdysseyRecomp/settings/quit_action_hook.cpp:59."}]
+    },
+    {
+      "address": "8287A188",
+      "label": "Close menu with exit code (return to title)",
+      "category": "ui-menu",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 721, "note": "Search label from a documented finding, not a recovered symbol. Sources: BM \"LORecomp 原生 System 菜单文本与退出调用链\" (2026-09-24); LostOdysseyRecomp/settings/quit_action_hook.cpp:27."}]
+    },
+    {
+      "address": "8287CBA0",
+      "label": "Copy System menu row table",
+      "category": "ui-menu",
+      "confidence": "historical_candidate",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 722, "note": "Unverified candidate; confirm against the binary before relying on it. Sources: BM \"LORecomp 原生 System 菜单文本与退出调用链\" (2026-09-24, report not independently verified)."}]
+    },
+    {
+      "address": "828B6968",
+      "label": "System menu list row text consumer",
+      "category": "ui-menu",
+      "confidence": "documented",
+      "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 723, "note": "Search label from a documented finding, not a recovered symbol. Sources: BM \"LORecomp 原生 System 菜单文本与退出调用链\" (2026-09-24, fixer verified); LostOdysseyRecomp/settings/quit_text_hook.h:99; docs/notes/save-anywhere.md:13 (2026-09-05)."}]
     }
   ]
 }

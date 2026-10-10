@@ -2,7 +2,7 @@
 
 [文档总入口](../README.md) · [当前状态](../STATUS.md) · [路线图](../ROADMAP.zh-CN.md) · [历史归档](../archive/README.md)
 
-2026-10-02 整理：本目录收录全部 **162 篇**专项笔记，按主题列出，每篇只出现一次。文件名和原始证据继续保留，目录不重复维护版本发布或任务进度。
+2026-10-02 整理：本目录收录全部 **163 篇**专项笔记，按主题列出，每篇只出现一次。文件名和原始证据继续保留，目录不重复维护版本发布或任务进度。
 
 ## 如何使用
 
@@ -13,7 +13,7 @@
 | 调查 | 问题分析及其证据边界；此标记不等于对应 Issue 仍开放，现状以 STATUS / 路线图为准。 |
 | 草案 | 设计、研究、需求或发布文案；不代表已实施，也不因年代久远自动取消。 |
 
-分类合计：参考 29、历史 106、调查 17、草案 10。
+分类合计：参考 30、历史 106、调查 17、草案 10。
 
 先用当前状态确认实施、验证、验收和发布，再从下方进入证据。旧命令执行前核对源码、工具及输入；`out/`、本机绝对路径和截图编号是原调查的定位信息，不随仓库分发。已缺失的本地产物标为历史路径，不能视作本次复验。
 
@@ -177,6 +177,7 @@
 | [音频输出与对白修复（2026-09-05）](audio-output.md) | 历史 |
 | [戒指战斗资源名缺少语言后缀（2026-09-04）](battle-ring-resource.md) | 历史 |
 | [Guest critical-section byte order](critical-section-endian.md) | 参考 |
+| [Guest function findings ledger (2026-10-09)](guest-function-findings.md) | 参考 |
 | [Automatic selection of imported discs](disc-selection.md) | 参考 |
 | [DLC 目录枚举与 `FindNext` pattern 诊断](dlc-directory-enumeration.md) | 历史 |
 | [随机遇敌动画与战斗停滞调查（2026-09-04，主角与战斗停滞已修复，敌人待查）](encounter-animation.md) | 历史 |
