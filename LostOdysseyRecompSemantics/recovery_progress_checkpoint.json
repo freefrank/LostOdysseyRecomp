@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 226,
-    "distinct_entries": 959,
+    "unit_count": 227,
+    "distinct_entries": 965,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -2646,6 +2646,19 @@
         ],
         "focused_smoke_paths": 1,
         "validation": "Recovered common battle manager accessors, resource-ID roster search and scene-object search, including lazy-root forwarding and fixed global manager selection. Main execution composes actual roster/list lookup; focused manager and execution fixtures pass. Lazy singleton construction remains a guest boundary; no gameplay or full ABI acceptance is claimed."
+      },
+      {
+        "unit": "battle_completion61",
+        "entries": [
+          "82B03428",
+          "82AAD200",
+          "82B07E80",
+          "82B1A100",
+          "82B02F08",
+          "82B1A168"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "Recovered battle completion predicates, tracked-ID lookup and subordinate state checks. Script conditional branches now compose actual completion logic. Focused fixtures cover rank bounds, optional task gates, pending/completed states, missing IDs and stale row removal routing; library and completion/runtime fixtures pass. Array erasure and platform profile lookup remain guest boundaries. Logical recovery only, not gameplay or full ABI acceptance."
       }
     ],
     "evaluator_descriptor_coverage": {

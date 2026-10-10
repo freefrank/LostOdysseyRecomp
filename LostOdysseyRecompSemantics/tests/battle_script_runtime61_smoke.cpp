@@ -5,7 +5,7 @@
 #include <iostream>
 struct RuntimeGuest final : manager_release_context61::GuestServices {
   unsigned commands = 0, virtuals = 0, toggles = 0, predicate = 1;
-  void CallDirect(GuestAddress e, GuestMemory &,
+  void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
     if (e == 0x82380a18 || e == 0x82389b78) {
       s.r[3] = 0x70000;
@@ -36,8 +36,9 @@ struct RuntimeGuest final : manager_release_context61::GuestServices {
       ++toggles;
       return;
     }
-    if (e == 0x82b03428 || e == 0x82aad200) {
-      s.r[3] = predicate;
+    if (e == 0x82389aa0) {
+      m.WriteU8(0x74000 + 133, predicate);
+      s.r[3] = 0x74000;
       return;
     }
     throw std::runtime_error("runtime direct boundary");
@@ -63,6 +64,10 @@ int main() {
     auto s = sort_engine61_oracle::Initial(0), initial = s;
     constexpr unsigned owner = 0x60000, actor = 0x62000, state = 0x63000,
                        code = 0x64000, vars = 0x65000;
+    m.WriteU32(0x832ca0d0, 0x75000);
+    m.WriteU32(0x75000 + 452, 2);
+    m.WriteU32(0x832cc05c + 116, 0xffffffff);
+    m.WriteU32(0x832cc05c + 120, 0xffffffff);
     m.WriteU32(owner + 24, actor);
     m.WriteU32(owner + 44, state);
     m.WriteU32(state + 4, actor);
